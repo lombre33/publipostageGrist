@@ -172,6 +172,12 @@ const VariableLoop = (function () {
       emptyLabelEl, emptySelect, emptyTextRow, emptyText, currentLine, statsLine, removeBtn, cancelBtn, saveBtn,
     };
 
+    wireModal();
+  }
+
+  // Les réactions de la fenêtre.
+  function wireModal() {
+    const { sourceEdit, sortColumn, sortDirection, emptySelect, emptyText, removeBtn, cancelBtn, saveBtn } = refs;
     sourceEdit.addEventListener('click', async () => {
       if (!state) return;
       const changed = await Variables.editLinkRule(state.source.table);
@@ -339,14 +345,18 @@ const VariableLoop = (function () {
     if (GristAPI.getColumnType(table, column) === 'Attachments') return I18n.t('varCond.debug.imageValue');
     return Variables.resolveVariable(table, column, tableId, record, format, { loop: LoopRules.itemBinding(loop, item, null) });
   }
-  async function currentSummary(loop, tableId, record, result) {
+  // Le début de la ligne d'aperçu : combien de lignes liées, combien le filtre en garde.
+  function summaryHead(loop, record, result) {
     const count = result.items.length;
     const total = result.total;
-    let head;
-    if (!total) head = I18n.t('varLoop.preview.noneLinked', { id: record.id });
-    else if (!count) head = I18n.t('varLoop.preview.noneKept', { id: record.id, total });
-    else if (loop.filter) head = I18n.t('varLoop.preview.kept', { id: record.id, count, total });
-    else head = I18n.t('varLoop.preview.linked', { id: record.id, count });
+    if (!total) return I18n.t('varLoop.preview.noneLinked', { id: record.id });
+    if (!count) return I18n.t('varLoop.preview.noneKept', { id: record.id, total });
+    if (loop.filter) return I18n.t('varLoop.preview.kept', { id: record.id, count, total });
+    return I18n.t('varLoop.preview.linked', { id: record.id, count });
+  }
+  async function currentSummary(loop, tableId, record, result) {
+    const count = result.items.length;
+    const head = summaryHead(loop, record, result);
     if (!count) return { text: head + ' ' + emptyEffect(loop, state.place), good: false };
     if (loop.repeat === 'inline') {
       const values = [];
@@ -441,6 +451,27 @@ const VariableLoop = (function () {
     if (editor) editor.view.focus();
   }
 
+  // Une boucle déplacée depuis (d'un tableau vers un paragraphe, par exemple) reprend le premier choix permis de son nouvel endroit.
+  function repeatFor(existing, place) {
+    return existing && place.repeats.indexOf(existing.repeat) !== -1 ? existing.repeat : place.repeats.find(r => !(r === 'row' && place.rowMerged));
+  }
+  // La copie de travail de la fenêtre : la boucle déjà posée (`existing`, normalisée), ou les choix par défaut de l'endroit.
+  function workingCopy(existing, repeat, place) {
+    const keepEmpty = existing && LoopRules.EMPTY_MODES[repeat].indexOf(existing.empty) !== -1;
+    const filter = existing && existing.filter;
+    return {
+      repeat,
+      filterMode: filter ? filter.mode : 'all',
+      rules: filter ? JSON.parse(JSON.stringify(filter.rules)) : [],
+      sortColumn: existing ? existing.sort.column : '',
+      sortDirection: existing ? existing.sort.direction : 'asc',
+      empty: keepEmpty ? existing.empty : LoopRules.defaultEmpty(repeat, place.inCell),
+      emptyText: existing ? existing.emptyText : '',
+      separator: existing ? existing.separator : ', ',
+      lastSeparator: existing ? (existing.lastSeparator == null ? '' : existing.lastSeparator) : I18n.t('varLoop.lastSeparatorDefault'),
+    };
+  }
+
   // `pos` : position de la bulle dans le document, capturée au clic sur l'icône (la sélection de l'éditeur est une NodeSelection sur elle).
   function open(editor, pos) {
     const node = editor && editor.state.doc.nodeAt(pos);
@@ -450,24 +481,7 @@ const VariableLoop = (function () {
     if (!source) return;
     ensureModal();
     const place = placeOf(editor.state, pos);
-    // Une boucle déplacée depuis (d'un tableau vers un paragraphe, par exemple) reprend le premier choix permis de son nouvel endroit.
-    const repeat = existing && place.repeats.indexOf(existing.repeat) !== -1 ? existing.repeat : place.repeats.find(r => !(r === 'row' && place.rowMerged));
-    const keepEmpty = existing && LoopRules.EMPTY_MODES[repeat].indexOf(existing.empty) !== -1;
-    state = {
-      editor, pos, node, place, source,
-      had: !!existing,
-      working: {
-        repeat,
-        filterMode: existing && existing.filter ? existing.filter.mode : 'all',
-        rules: existing && existing.filter ? JSON.parse(JSON.stringify(existing.filter.rules)) : [],
-        sortColumn: existing ? existing.sort.column : '',
-        sortDirection: existing ? existing.sort.direction : 'asc',
-        empty: keepEmpty ? existing.empty : LoopRules.defaultEmpty(repeat, place.inCell),
-        emptyText: existing ? existing.emptyText : '',
-        separator: existing ? existing.separator : ', ',
-        lastSeparator: existing ? (existing.lastSeparator == null ? '' : existing.lastSeparator) : I18n.t('varLoop.lastSeparatorDefault'),
-      },
-    };
+    state = { editor, pos, node, place, source, had: !!existing, working: workingCopy(existing, repeatFor(existing, place), place) };
     const r = refs;
     r.title.textContent = I18n.t('varLoop.title', { table: source.table });
     r.sourceLabel.textContent = I18n.t('varLoop.section.source');

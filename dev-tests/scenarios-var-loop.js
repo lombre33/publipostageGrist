@@ -488,6 +488,192 @@
     },
   });
 
+  // Les réglages de la fenêtre (js/variable-loop.js : `wireModal`, `workingCopy`, `repeatFor`) : chacun doit arriver dans la boucle enregistrée, et la fenêtre rouverte sur cette boucle le montre.
+  cases.push({
+    id: 'loop_window_every_control_reaches_the_saved_loop_and_the_window_reopens_with_it',
+    description: 'Fenêtre Boucle : « Ce qui se répète », « Si aucune ligne » et son texte, séparateurs, filtre (colonne, valeur, « au moins une »), colonne et sens du tri arrivent tous dans la boucle enregistrée ; rouverte, la fenêtre les montre tels quels, Retirer compris ; une boucle sans dernier séparateur rouvre avec ce champ vide',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML(`<p>Ont participé : ${badgeHtml('LpParticipants', 'NomComplet')}.</p>`);
+      let ed = await selectBadge(h, 'LpParticipants.NomComplet');
+      pressToolbarButton('var-loop');
+      await h.sleep(150);
+      const m = modal();
+      const field = selector => m.querySelector(selector);
+      const repeatButton = repeat => Array.from(m.querySelectorAll('.var-loop-seg button')).find(b => b.dataset.repeat === repeat);
+      const typeInto = (selector, value) => { const input = field(selector); input.value = value; input.dispatchEvent(new Event('input', { bubbles: true })); };
+      const sortRow = () => field('.var-loop-sort-row');
+      const zone = repeat => ({
+        pressed: repeatButton(repeat).getAttribute('aria-pressed'),
+        separatorsHidden: field('.var-loop-seps').hidden,
+        emptyChoices: Array.from(field('#var-loop-empty').options).map(o => o.value),
+        empty: field('#var-loop-empty').value,
+        introMarked: !!field('.var-modal-intro [data-loop-repeat]'),
+      });
+      const shown = () => {
+        const rule = field('.var-loop-filter .macro-rule-row');
+        return {
+          repeat: Array.from(m.querySelectorAll('.var-loop-seg button')).filter(b => b.getAttribute('aria-pressed') === 'true').map(b => b.dataset.repeat),
+          filterMode: field('.var-loop-filter .var-condition-mode select') && field('.var-loop-filter .var-condition-mode select').value,
+          rule: rule ? [rule.querySelector('select.macro-rule-column').value, rule.querySelector('select.macro-rule-value').value] : null,
+          sort: [field('#var-loop-sort').value, sortRow().querySelectorAll('select')[1].value],
+          empty: field('#var-loop-empty').value,
+          emptyTextShown: !field('.var-loop-empty-text').hidden,
+          emptyText: field('#var-loop-empty-text').value,
+          separators: [field('#var-loop-sep').value, field('#var-loop-last').value],
+          removeShown: !field('.var-modal-danger').hidden,
+        };
+      };
+      // Une autre zone, puis la phrase de nouveau : « Si aucune ligne » reprend les choix de la zone, les séparateurs ne se montrent que dans la phrase.
+      const fresh = zone('inline');
+      repeatButton('paragraph').click();
+      await h.sleep(60);
+      const asParagraph = zone('paragraph');
+      repeatButton('inline').click();
+      await h.sleep(60);
+      const asInline = zone('inline');
+      // « Si aucune ligne » : le texte à afficher ne se montre que pour ce choix.
+      const emptyRowHiddenBefore = field('.var-loop-empty-text').hidden;
+      setSelect(field('#var-loop-empty'), 'text');
+      await h.sleep(40);
+      const emptyRowShownAfter = !field('.var-loop-empty-text').hidden;
+      typeInto('#var-loop-empty-text', 'Personne');
+      typeInto('#var-loop-sep', ' / ');
+      typeInto('#var-loop-last', ' & ');
+      m.querySelector('.var-loop-filter .var-condition-add').click();
+      await h.sleep(50);
+      setSelect(field('.var-loop-filter .macro-rule-row select.macro-rule-column'), 'Presence');
+      await h.sleep(50);
+      setSelect(field('.var-loop-filter .macro-rule-row select.macro-rule-value'), 'Présent');
+      setSelect(field('.var-loop-filter .var-condition-mode select'), 'any');
+      await h.sleep(30);
+      setSelect(field('#var-loop-sort'), 'Nom');
+      await h.sleep(30);
+      setSelect(sortRow().querySelectorAll('select')[1], 'desc');
+      await h.sleep(30);
+      const beforeSave = shown();
+      actionButton(I18n.t('common.save')).click();
+      await h.sleep(100);
+      const saved = badgeNodes(ed).find(b => b.node.attrs.key === 'LpParticipants.NomComplet').node.attrs.loop;
+      ed = await selectBadge(h, 'LpParticipants.NomComplet');
+      pressToolbarButton('var-loop');
+      await h.sleep(300);
+      const reopened = shown();
+      actionButton(I18n.t('common.cancel')).click();
+      await h.sleep(60);
+      // Une boucle posée sans dernier séparateur : le champ reste vide, le premier garde sa valeur par défaut.
+      Editor.setHTML(`<p>${badgeHtml('LpParticipants', 'NomComplet', { repeat: 'inline', table: 'LpParticipants', empty: 'hide' })}</p>`);
+      ed = await selectBadge(h, 'LpParticipants.NomComplet');
+      pressToolbarButton('var-loop');
+      await h.sleep(300);
+      const withoutLast = shown();
+      actionButton(I18n.t('common.cancel')).click();
+      await h.sleep(60);
+      const observed = { fresh, asParagraph, asInline, emptyRowHiddenBefore, emptyRowShownAfter, beforeSave, saved, reopened, withoutLast };
+      const inlineZone = { pressed: 'true', separatorsHidden: false, emptyChoices: ['hide', 'text', 'blank'], empty: 'hide', introMarked: true };
+      const filled = { repeat: ['inline'], filterMode: 'any', rule: ['Presence', 'Présent'], sort: ['Nom', 'desc'], empty: 'text', emptyTextShown: true, emptyText: 'Personne', separators: [' / ', ' & '] };
+      const expected = {
+        fresh: inlineZone,
+        asParagraph: { pressed: 'true', separatorsHidden: true, emptyChoices: ['hide', 'text', 'blank'], empty: 'hide', introMarked: false },
+        asInline: inlineZone,
+        emptyRowHiddenBefore: true,
+        emptyRowShownAfter: true,
+        beforeSave: Object.assign({}, filled, { removeShown: false }),
+        saved: { repeat: 'inline', table: 'LpParticipants', filter: { mode: 'any', rules: [{ column: 'Presence', operator: '=', value: 'Présent' }] }, sort: { column: 'Nom', direction: 'desc' }, empty: 'text', emptyText: 'Personne', separator: ' / ', lastSeparator: ' & ' },
+        reopened: Object.assign({}, filled, { removeShown: true }),
+        withoutLast: { repeat: ['inline'], filterMode: null, rule: null, sort: ['', 'asc'], empty: 'hide', emptyTextShown: false, emptyText: '', separators: [', ', ''], removeShown: true },
+      };
+      return { pass: sameLists(observed, expected), notes: JSON.stringify(observed) };
+    },
+  });
+
+  // L'aperçu de la ligne sélectionnée (js/variable-loop.js : `summaryHead`, `currentSummary`) dans chaque situation de données.
+  cases.push({
+    id: 'loop_window_preview_of_the_selected_row_in_every_situation',
+    description: 'Fenêtre Boucle, aperçu de la ligne sélectionnée : aucune ligne liée, liées mais aucune gardée par le filtre, valeurs toutes vides dans la phrase, plus de trois valeurs (« … »), valeur vide, titre, paragraphe et élément de liste ; chaque fois la phrase de « Si aucune ligne » ou la liste des valeurs',
+    run: async (h) => {
+      await seed(h);
+      const stub = window.__gristStub;
+      const lineOf = async (html, key, record) => {
+        if (record) { stub.fireRecord(record, 'LpFactures'); await h.sleep(50); }
+        Editor.setHTML(html);
+        await selectBadge(h, key);
+        pressToolbarButton('var-loop');
+        await h.sleep(600);
+        const line = previewLines()[0];
+        actionButton(I18n.t('common.cancel')).click();
+        await h.sleep(60);
+        return line;
+      };
+      const participants = names => names.map((name, i) => ({ id: i + 1, Facture: 1, NomComplet: name, Nom: name, Presence: 'Présent' }));
+      const observed = {};
+      observed.noneLinked = await lineOf(linesTable('Designation'), 'LpLignes.Designation', { id: 3, Numero: 'F-2026-043', Client: 'Cabinet Morel', Formateurs: null });
+      const kept = { repeat: 'row', table: 'LpLignes', filter: { mode: 'all', rules: [{ column: 'Qte', operator: '>', value: '1000' }] }, empty: 'text', emptyText: 'Rien' };
+      observed.noneKept = await lineOf(linesTable('Designation', kept), 'LpLignes.Designation', Object.assign({}, RECORD_1));
+      const inline = { repeat: 'inline', table: 'LpParticipants', empty: 'text', emptyText: 'Personne' };
+      stub.setRows('LpParticipants', participants(['', '', '']));
+      observed.emptyValuesInline = await lineOf(`<p>${badgeHtml('LpParticipants', 'NomComplet', inline)}</p>`, 'LpParticipants.NomComplet');
+      stub.setRows('LpParticipants', participants(['Anne', 'Bob', 'Carl', 'Dora', 'Eve']));
+      observed.manyRows = await lineOf(`<p>${badgeHtml('LpParticipants', 'NomComplet', { repeat: 'paragraph', table: 'LpParticipants', empty: 'hide' })}</p>`, 'LpParticipants.NomComplet');
+      observed.heading = await lineOf(`<h2>${badgeHtml('LpParticipants', 'NomComplet', { repeat: 'paragraph', table: 'LpParticipants', empty: 'hide' })}</h2>`, 'LpParticipants.NomComplet');
+      stub.setRows('LpParticipants', participants(['Anne', '', 'Carl']));
+      observed.oneEmptyValue = await lineOf(`<p>${badgeHtml('LpParticipants', 'NomComplet', { repeat: 'paragraph', table: 'LpParticipants', empty: 'hide' })}</p>`, 'LpParticipants.NomComplet');
+      observed.listItem = await lineOf(`<ul><li><p>${badgeHtml('LpParticipants', 'NomComplet', { repeat: 'item', table: 'LpParticipants', empty: 'none' })}</p></li></ul>`, 'LpParticipants.NomComplet');
+      observed.inlineWithValues = await lineOf(`<p>${badgeHtml('LpParticipants', 'NomComplet', { repeat: 'inline', table: 'LpParticipants', empty: 'hide', separator: ' | ', lastSeparator: ' + ' })}</p>`, 'LpParticipants.NomComplet');
+      const linked = count => I18n.t('varLoop.preview.linked', { id: 1, count }) + ' ';
+      const firstThree = 'Anne, Bob, Carl, …';
+      const withHole = 'Anne, ' + I18n.t('varCond.debug.emptyValue') + ', Carl';
+      const expected = {
+        noneLinked: I18n.t('varLoop.preview.noneLinked', { id: 3 }) + ' ' + I18n.t('varLoop.effect.header'),
+        noneKept: I18n.t('varLoop.preview.noneKept', { id: 1, total: 3 }) + ' ' + I18n.t('varLoop.effect.rowText', { text: 'Rien' }),
+        emptyValuesInline: linked(3) + I18n.t('varLoop.preview.inline', { text: 'Personne' }),
+        manyRows: linked(5) + I18n.t('varLoop.preview.paragraph', { count: 5, values: firstThree }),
+        heading: linked(5) + I18n.t('varLoop.preview.heading', { count: 5, values: firstThree }),
+        oneEmptyValue: linked(3) + I18n.t('varLoop.preview.paragraph', { count: 3, values: withHole }),
+        listItem: linked(3) + I18n.t('varLoop.preview.item', { count: 3, values: withHole }),
+        inlineWithValues: linked(3) + I18n.t('varLoop.preview.inline', { text: 'Anne + Carl' }),
+      };
+      return { pass: sameLists(observed, expected), notes: JSON.stringify(observed) };
+    },
+  });
+
+  // `VariableLoop.open` (js/variable-loop.js) : rien à ouvrir sans bulle ni source ; une boucle déplacée reprend le premier choix permis de son nouvel endroit.
+  cases.push({
+    id: 'loop_window_does_not_open_without_a_variable_or_a_source_and_a_moved_loop_takes_the_first_choice_of_its_place',
+    description: 'Ouvrir la fenêtre Boucle sans éditeur, sur du texte, ou sur une colonne ordinaire de la page (aucune ligne à parcourir) : rien ne s’ouvre ; une boucle « ligne du tableau » posée hors d’un tableau rouvre sur « Dans la phrase », avec les choix de « Si aucune ligne » de cette zone',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML(`<p>Texte</p><p>${badgeHtml('LpFactures', 'Numero')} ${badgeHtml('LpLignes', 'Designation', ROW_LOOP)}</p>`);
+      const ed = EditorCore.getEditor();
+      const found = badgeNodes(ed);
+      const page = found.find(b => b.node.attrs.key === 'LpFactures.Numero');
+      const moved = found.find(b => b.node.attrs.key === 'LpLignes.Designation');
+      const attempts = [[null, 0], [ed, 1], [ed, page.pos]];
+      const opened = attempts.map(([editor, pos]) => { VariableLoop.open(editor, pos); return VariableLoop.isOpen() || (!!modal() && visible(modal())); });
+      VariableLoop.open(ed, moved.pos);
+      await h.sleep(300);
+      const m = modal();
+      const observed = {
+        opened,
+        isOpen: VariableLoop.isOpen(),
+        pressed: Array.from(m.querySelectorAll('.var-loop-seg button')).filter(b => b.getAttribute('aria-pressed') === 'true').map(b => b.dataset.repeat),
+        choices: Array.from(m.querySelectorAll('.var-loop-seg button')).map(b => b.dataset.repeat),
+        emptyChoices: Array.from(m.querySelector('#var-loop-empty').options).map(o => o.value),
+        empty: m.querySelector('#var-loop-empty').value,
+        separators: [m.querySelector('#var-loop-sep').value, m.querySelector('#var-loop-last').value],
+        removeShown: !m.querySelector('.var-modal-danger').hidden,
+      };
+      actionButton(I18n.t('common.cancel')).click();
+      await h.sleep(60);
+      observed.closed = !VariableLoop.isOpen();
+      const expected = {
+        opened: [false, false, false], isOpen: true, pressed: ['inline'], choices: ['inline', 'paragraph'], emptyChoices: ['hide', 'text', 'blank'], empty: 'hide',
+        separators: [', ', ''], removeShown: true, closed: true,
+      };
+      return { pass: sameLists(observed, expected), notes: JSON.stringify(observed) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.varLoop = cases;
 })();
