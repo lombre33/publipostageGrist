@@ -373,5 +373,44 @@ const ConditionFields = (function () {
     return { columnWrap: columnField.wrap, operatorSelect, valueSlot, typeHint: columnField.typeHint };
   }
 
-  return { appendColumnOption, ensureTableLinked, buildConditionFields };
+  // Options de buildConditionFields pour une règle « condition → modèle » : la colonne se choisit dans une seule liste avec recherche qui réunit
+  // celles de toutes les tables, à la suite et sans groupes (celles de la page en nom nu, les autres en « Table.Colonne »). Choisir une colonne d'une
+  // table pas encore liée ouvre la fenêtre de choix de la clé, qui l'enregistre ; Annuler remet la colonne précédente.
+  const TEMPLATE_RULE_OPTIONS = { allTables: true, onColumnChosen: ref => ensureTableLinked(ref) };
+
+  // La règle « condition → modèle » des macro-modèles et du réglage « Selon la ligne », sur deux lignes (cinq contrôles sur une seule se
+  // chevauchaient dans une fenêtre de 520 px : la liste des colonnes recouvrait l'opérateur) : `connector` (« Si », « Sinon si »), la colonne et
+  // l'opérateur ; puis, sous la colonne, la valeur et, après une flèche, le modèle choisi parmi `templates`. La croix à droite retire la règle
+  // (`onRemove`). La condition d'une bulle et le filtre d'une boucle (js/variable-condition.js, js/variable-loop.js) construisent leur ligne avec les
+  // mêmes classes .macro-rule-* et gardent une seule ligne. Rend la ligne et la liste des modèles, que l'appelant coiffe de sa liste avec recherche.
+  function buildTemplateRule(rule, { connector, templates, onRemove }) {
+    const fields = buildConditionFields(rule, TEMPLATE_RULE_OPTIONS);
+    const label = el('span', 'macro-rule-connector');
+    label.textContent = connector;
+    const arrow = el('span', 'macro-rule-arrow');
+    arrow.setAttribute('aria-hidden', 'true');
+    arrow.textContent = '→';
+    const modeleSelect = el('select', 'macro-rule-modele');
+    modeleSelect.append(makeOption('', I18n.t('macro.modal.choosePlaceholder')), ...templates.map(t => makeOption(String(t.id), t.nom)));
+    modeleSelect.value = rule.modeleId != null ? String(rule.modeleId) : '';
+    modeleSelect.addEventListener('change', () => { rule.modeleId = modeleSelect.value || null; });
+    const lineOne = el('div', 'macro-rule-line');
+    lineOne.append(label, fields.columnWrap, fields.operatorSelect);
+    const lineTwo = el('div', 'macro-rule-line macro-rule-line-detail');
+    lineTwo.append(fields.valueSlot, arrow, modeleSelect);
+    const body = el('div', 'macro-rule-body');
+    body.append(lineOne, lineTwo);
+    const remove = el('button', 'macro-rule-remove');
+    remove.type = 'button';
+    remove.setAttribute('aria-label', I18n.t('macro.modal.removeRule'));
+    remove.addEventListener('click', onRemove);
+    // fields.typeHint vient en dernier : `.macro-rule-column-type` a flex-basis:100% (css/toolbar-v2.css), il prend toujours sa propre ligne en
+    // pleine largeur de la règle, où qu'il soit dans le HTML ; dans le tiers de largeur de fields.columnWrap, l'avertissement « colonne absente »
+    // écrasait le reste de la ligne.
+    const row = el('div', 'macro-rule-row');
+    row.append(body, remove, fields.typeHint);
+    return { row, modeleSelect };
+  }
+
+  return { appendColumnOption, ensureTableLinked, buildConditionFields, buildTemplateRule };
 })();

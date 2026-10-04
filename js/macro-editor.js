@@ -28,13 +28,6 @@ const MacroEditor = (function () {
   function coverSelect() { return document.getElementById('macro-editor-cover'); }
   function slotsContainer() { return document.getElementById('macro-editor-slots'); }
 
-  // Champs Colonne / Opérateur / Valeur d'une règle (liste des colonnes, choix réels d'une colonne Choice, indication de type, avertissement
-  // « colonne absente de la ligne ») : js/condition-fields.js, partagé avec les variables conditionnelles, jamais recopié ici. La colonne se choisit
-  // dans une seule liste avec recherche qui réunit celles de toutes les tables, à la suite et sans groupes (on trouve une colonne par son nom, sans
-  // séparer celles de la table en cours des autres) : celles de la page en nom nu, les autres en « Table.Colonne ». Choisir une colonne d'une table
-  // pas encore liée ouvre la fenêtre de choix de la clé, qui l'enregistre ; Annuler remet la colonne précédente.
-  const COLUMN_FIELD_OPTIONS = { allTables: true, onColumnChosen: ref => ConditionFields.ensureTableLinked(ref) };
-
   // Liste avec recherche (js/search-select.js) : un modèle se cherche comme une colonne. Le <select> reste la source de la valeur, et la liste native
   // si le composant est indisponible (rend alors null) ; l'appelant appelle `sync()` après l'avoir rempli à nouveau. Rappelé sur un <select> déjà
   // équipé (la page de garde, posée dans index.html), `attach` rend le même contrôleur : un échec d'une ouverture est retenté à la suivante.
@@ -71,35 +64,21 @@ const MacroEditor = (function () {
     return btn;
   }
 
-  function fillModeleSelect(select, selectedId, placeholderKey) {
+  function fillModeleSelect(select, selectedId) {
     select.innerHTML = '';
-    select.appendChild(option('', I18n.t(placeholderKey)));
+    select.appendChild(option('', I18n.t('macro.modal.choosePlaceholder')));
     availableTemplates().forEach(t => select.appendChild(option(String(t.id), t.nom)));
     select.value = selectedId != null ? String(selectedId) : '';
   }
 
-  // Une règle sur deux lignes (cinq contrôles sur une ligne se chevauchaient dans une fenêtre de 520 px : la liste des colonnes recouvrait
-  // l'opérateur, dont le « = » disparaissait) : « Si », la colonne et l'opérateur ; puis, sous la colonne, la valeur et le modèle choisi (→).
-  // La croix, à droite, retire la règle entière. Propre à cette fenêtre : la condition d'une bulle et le filtre d'une boucle
-  // (js/variable-condition.js, js/variable-loop.js) construisent leur ligne avec les mêmes classes .macro-rule-* et gardent une seule ligne.
+  // Une règle de l'annexe : les champs et la mise en page sont ceux de ConditionFields.buildTemplateRule, partagés avec le réglage « Selon la
+  // ligne ».
   function ruleRow(slot, rule, ruleIndex) {
-    const fields = ConditionFields.buildConditionFields(rule, COLUMN_FIELD_OPTIONS);
-    const connector = node('span', 'macro-rule-connector', I18n.t(ruleIndex === 0 ? 'macro.modal.ruleIf' : 'macro.modal.ruleOrIf'));
-    const arrow = node('span', 'macro-rule-arrow', '→');
-    arrow.setAttribute('aria-hidden', 'true');
-    const modeleSelect = node('select', 'macro-rule-modele');
-    fillModeleSelect(modeleSelect, rule.modeleId, 'macro.modal.choosePlaceholder');
-    modeleSelect.addEventListener('change', () => { rule.modeleId = modeleSelect.value || null; });
-    const lineOne = node('div', 'macro-rule-line', null, [connector, fields.columnWrap, fields.operatorSelect]);
-    const lineTwo = node('div', 'macro-rule-line macro-rule-line-detail', null, [fields.valueSlot, arrow, modeleSelect]);
+    const connector = I18n.t(ruleIndex === 0 ? 'macro.modal.ruleIf' : 'macro.modal.ruleOrIf');
+    const onRemove = () => { slot.rules.splice(ruleIndex, 1); renderSlots(); };
+    const { row, modeleSelect } = ConditionFields.buildTemplateRule(rule, { connector, templates: availableTemplates(), onRemove });
     searchable(modeleSelect, { inline: true });
-    const removeRule = () => { slot.rules.splice(ruleIndex, 1); renderSlots(); };
-    const remove = iconButton('macro-rule-remove', I18n.t('macro.modal.removeRule'), removeRule);
-    const body = node('div', 'macro-rule-body', null, [lineOne, lineTwo]);
-    // fields.typeHint vient en dernier, pas avec fields.columnWrap : `.macro-rule-column-type` a flex-basis:100% (css/toolbar-v2.css), donc prend
-    // toujours sa propre ligne en pleine largeur de la règle, quelle que soit sa position dans le HTML ; dans le tiers de largeur de
-    // fields.columnWrap, l'avertissement « colonne absente » (400 px et plus) écrasait tout le reste de la ligne.
-    return node('div', 'macro-rule-row', null, [body, remove, fields.typeHint]);
+    return row;
   }
 
   // Le modèle de « Si aucune règle ne correspond » : un des modèles, ou aucun.
@@ -150,7 +129,7 @@ const MacroEditor = (function () {
     coverKept = cover ? JSON.parse(JSON.stringify(cover)) : null;
     if (nameInput()) nameInput().value = tpl ? tpl.nom : '';
     if (coverSelect()) {
-      fillModeleSelect(coverSelect(), cover ? cover.modeleId : null, 'macro.modal.choosePlaceholder');
+      fillModeleSelect(coverSelect(), cover ? cover.modeleId : null);
       const coverSearch = searchable(coverSelect());
       if (coverSearch) coverSearch.sync();
     }

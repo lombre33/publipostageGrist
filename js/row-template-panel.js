@@ -1,15 +1,15 @@
-// Onglet Réglages > Selon la ligne (point 16 d'Antoine, 2026-10-02) : relier un modèle à une condition sur la ligne de la table du widget. Le réglage et son évaluation sont
-// dans js/row-template.js ; ici seulement l'écran. Les lignes de règle sont celles des macro-modèles (js/macro-editor.js : mêmes classes .macro-rule-*, mêmes champs
-// Colonne / Opérateur / Valeur de js/condition-fields.js, colonnes de toutes les tables, clé de correspondance ouverte si la table n'est pas liée), sur deux lignes : « Si »,
-// la colonne et l'opérateur ; puis la valeur et le modèle choisi (→). Les modèles se cherchent dans la liste avec recherche (js/search-select.js).
+// Onglet Réglages > Selon la ligne : relier un modèle à une condition sur la ligne de la table du widget. Le réglage et son évaluation sont dans
+// js/row-template.js ; ici seulement l'écran. Les règles sont celles des macro-modèles (ConditionFields.buildTemplateRule : mêmes champs Colonne /
+// Opérateur / Valeur, colonnes de toutes les tables, clé de correspondance ouverte si la table n'est pas liée). Les modèles se cherchent dans la
+// liste avec recherche (js/search-select.js).
 //
-// Chaque saisie enregistre le réglage (brouillon de la vue, cf. js/row-template.js:save) mais n'ouvre rien : la ligne courante n'est relue qu'à la fermeture des Réglages,
-// pour ne pas voir surgir la question « Enregistrer / Abandonner / Annuler » en pleine saisie d'une règle. Décoché, l'écran reste visible mais grisé (rien ne disparaît) ;
-// en lecture seule il est verrouillé, comme l'onglet Accès, et suit les droits en direct : dès qu'ils changent Réglages ouverts (choix dans l'onglet Accès, case cochée dans la table
-// des droits, relecture de 10 s), il se grise ou se dégrise sans qu'on les rouvre (choix d'Antoine du 2026-10-02, « Dégriser tout de suite »). Seul le verrou est rejoué
-// (applyLock) : les règles et le brouillon ne sont pas redessinés, la saisie en cours garde son champ, son curseur et sa valeur.
+// Chaque saisie enregistre le réglage (brouillon de la vue, cf. js/row-template.js:save) mais n'ouvre rien : la ligne courante n'est relue qu'à la
+// fermeture des Réglages, pour ne pas voir surgir la question « Enregistrer / Abandonner / Annuler » en pleine saisie. Décoché, l'écran reste visible
+// mais grisé (rien ne disparaît) ; en lecture seule il est verrouillé, comme l'onglet Accès, et suit les droits en direct : dès qu'ils changent
+// Réglages ouverts (choix dans l'onglet Accès, case cochée dans la table des droits, relecture de 10 s), il se grise ou se dégrise sans qu'on le
+// rouvre. Seul le verrou est rejoué (applyLock) : les règles et le brouillon ne sont pas redessinés, la saisie en cours garde son champ, son curseur
+// et sa valeur.
 const RowTemplatePanel = (function () {
-  const COLUMN_FIELD_OPTIONS = { allTables: true, onColumnChosen: ref => ConditionFields.ensureTableLinked(ref) };
   const PERSIST_DELAY_MS = 250;
 
   let draft = null;           // { enabled, rules, otherwise } en cours d'édition ; recopié des options à chaque ouverture des Réglages
@@ -29,70 +29,17 @@ const RowTemplatePanel = (function () {
     catch (e) { console.warn('[RowTemplatePanel] recherche de modèle indisponible, liste native conservée', e); return null; }
   }
 
-  function fillModeleSelect(select, selectedId) {
-    select.innerHTML = '';
-    const empty = document.createElement('option');
-    empty.value = '';
-    empty.textContent = I18n.t('macro.modal.choosePlaceholder');
-    select.appendChild(empty);
-    templates().forEach(t => {
-      const opt = document.createElement('option');
-      opt.value = String(t.id);
-      opt.textContent = t.nom;
-      select.appendChild(opt);
-    });
-    select.value = selectedId != null ? String(selectedId) : '';
-  }
-
+  // La règle d'une ligne : les champs et la mise en page sont ceux de ConditionFields.buildTemplateRule, partagés avec les macro-modèles.
   function buildRuleRow(rule, ruleIndex) {
-    const row = document.createElement('div');
-    row.className = 'macro-rule-row';
-    const body = document.createElement('div');
-    body.className = 'macro-rule-body';
-    const lineOne = document.createElement('div');
-    lineOne.className = 'macro-rule-line';
-    const lineTwo = document.createElement('div');
-    lineTwo.className = 'macro-rule-line macro-rule-line-detail';
-    body.appendChild(lineOne);
-    body.appendChild(lineTwo);
-    row.appendChild(body);
-
-    const connector = document.createElement('span');
-    connector.className = 'macro-rule-connector';
-    connector.textContent = I18n.t(ruleIndex === 0 ? 'macro.modal.ruleIf' : 'settings.rowTemplate.ruleElseIf');
-    lineOne.appendChild(connector);
-
-    const fields = ConditionFields.buildConditionFields(rule, COLUMN_FIELD_OPTIONS);
-    lineOne.appendChild(fields.columnWrap);
-    lineOne.appendChild(fields.operatorSelect);
-    lineTwo.appendChild(fields.valueSlot);
-
-    const arrow = document.createElement('span');
-    arrow.className = 'macro-rule-arrow';
-    arrow.setAttribute('aria-hidden', 'true');
-    arrow.textContent = '→';
-    lineTwo.appendChild(arrow);
-
-    const modeleSelect = document.createElement('select');
-    modeleSelect.className = 'macro-rule-modele';
-    fillModeleSelect(modeleSelect, rule.modeleId);
-    modeleSelect.addEventListener('change', () => { rule.modeleId = modeleSelect.value || null; });
-    lineTwo.appendChild(modeleSelect);
-    searchable(modeleSelect, { inline: true });
-
-    const removeBtn = document.createElement('button');
-    removeBtn.type = 'button';
-    removeBtn.className = 'macro-rule-remove';
-    removeBtn.setAttribute('aria-label', I18n.t('macro.modal.removeRule'));
-    removeBtn.addEventListener('click', () => {
+    const connector = I18n.t(ruleIndex === 0 ? 'macro.modal.ruleIf' : 'settings.rowTemplate.ruleElseIf');
+    const onRemove = () => {
       touched = true;
       draft.rules.splice(ruleIndex, 1);
       render();
       schedulePersist();
-    });
-    row.appendChild(removeBtn);
-    // Dernier, comme dans la fenêtre des macro-modèles : l'indication de colonne prend sa propre ligne en pleine largeur.
-    row.appendChild(fields.typeHint);
+    };
+    const { row, modeleSelect } = ConditionFields.buildTemplateRule(rule, { connector, templates: templates(), onRemove });
+    searchable(modeleSelect, { inline: true });
     return row;
   }
 
@@ -134,8 +81,9 @@ const RowTemplatePanel = (function () {
     applyLock();
   }
 
-  // Grisé, jamais retiré : décoché, ou verrouillé pour qui est en lecture seule (sans quoi l'onglet suffirait à contourner le verrou de l'onglet Accès). Ne touche ni aux règles ni au
-  // brouillon : rappelé seul quand les droits changent Réglages ouverts, pour ne pas redessiner une saisie en cours (ni son focus, ni son curseur).
+  // Grisé, jamais retiré : décoché, ou verrouillé pour qui est en lecture seule (sans quoi l'onglet suffirait à contourner le verrou de l'onglet
+  // Accès). Ne touche ni aux règles ni au brouillon : rappelé seul quand les droits changent Réglages ouverts, pour ne pas redessiner une saisie en
+  // cours (ni son focus, ni son curseur).
   function applyLock() {
     if (!draft) return;
     const locked = isReadOnly();
@@ -185,7 +133,8 @@ const RowTemplatePanel = (function () {
       render();
     });
     otherwise.addEventListener('change', () => { touched = true; draft.otherwise = otherwise.value || RowTemplate.DEFAULT; schedulePersist(); });
-    // Les champs d'une règle (colonne, opérateur, valeur, modèle) modifient la règle sur place puis laissent l'évènement remonter : on n'enregistre qu'ensuite.
+    // Les champs d'une règle (colonne, opérateur, valeur, modèle) modifient la règle sur place puis laissent l'évènement remonter : on n'enregistre
+    // qu'ensuite.
     ['change', 'input'].forEach(type => rules.addEventListener(type, () => { touched = true; schedulePersist(); }));
 
     const openBtn = el('v2-btn-settings');
@@ -196,7 +145,8 @@ const RowTemplatePanel = (function () {
       // Schéma relu à chaque ouverture (une colonne a pu être ajoutée depuis), comme l'onglet Accès.
       GristAPI.refreshSchema().then(() => { if (!touched) render(); }).catch(() => {});
     });
-    // Fermeture des Réglages (bouton ou autre chemin : on regarde la fenêtre, pas le bouton) : le réglage est écrit, puis la ligne courante est relue.
+    // Fermeture des Réglages (bouton ou autre chemin : on regarde la fenêtre, pas le bouton) : le réglage est écrit, puis la ligne courante est
+    // relue.
     const modal = el('settings-modal');
     if (modal && typeof MutationObserver === 'function') {
       let wasOpen = modal.style.display === 'flex';
@@ -207,7 +157,8 @@ const RowTemplatePanel = (function () {
       }).observe(modal, { attributes: true, attributeFilter: ['style'] });
     }
     I18n.onChange(() => { if (draft) render(); });
-    // Droits changés pendant que les Réglages sont ouverts : le verrou suit tout de suite. Sans brouillon (Réglages jamais ouverts), rien à faire : l'ouverture dessine l'onglet.
+    // Droits changés pendant que les Réglages sont ouverts : le verrou suit tout de suite. Sans brouillon (Réglages jamais ouverts), rien à faire :
+    // l'ouverture dessine l'onglet.
     if (typeof AccessRights !== 'undefined') AccessRights.onChange(applyLock);
   }
 
