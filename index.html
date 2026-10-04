@@ -2,6 +2,20 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8"><title>Publipostage Grist</title><meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Politique de sécurité du contenu (contrôle du 04/10, AUDIT_CODE.md §3.2) : même si du HTML piégé échappait au filtre (js/html-sanitize.js), le navigateur refuse tout script en ligne, tout
+     gestionnaire d'événement, toute adresse javascript:, tout script d'une autre adresse que celles-ci (l'adresse entière quand la bibliothèque est figée), tout cadre, objet, formulaire et toute
+     balise de base. Les trois scripts en ligne de cette page y sont cités par leur empreinte : en modifier un (la carte d'importation comprise) change son empreinte, et dev-tests/verify-code-hygiene.mjs
+     (groupe codeHygiene) dit laquelle écrire. esm.sh est ouvert en entier : le chemin de ses modules change à chaque nouvelle version de leur fabrication. 'unsafe-eval' reste, faute de mieux : le fichier
+     que Grist sert (docs.getgrist.com/grist-plugin-api.js) est un bundle de développement dont chaque module s'évalue par eval(), et sans lui l'objet grist n'existe pas (dev-tests/verify-csp.mjs charge
+     le vrai fichier). Styles, polices (Google Fonts, css/style.css), images et connexions ne sont pas limités : le widget lit des images et des pièces jointes de n'importe quel site. -->
+<meta http-equiv="Content-Security-Policy" content="
+  script-src 'self' 'unsafe-eval' https://esm.sh https://docs.getgrist.com/grist-plugin-api.js
+    https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.min.js
+    https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js
+    https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js
+    https://cdn.jsdelivr.net/npm/docx@9.7.1/dist/index.iife.js
+    'sha256-oL7hcWNReCnK8lxGRlbj0IXTGZm4dxBoOerWyA01uig=' 'sha256-QiCHlcX781nb04G2fDoZHC2TVBI4ztYMrMBu6LN+Vsk=' 'sha256-dr2nJ9qlSEpVpFpN01rgQ3bZHAcSZWrebqvX0xSlX7I=';
+  object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'">
 <!-- Enregistrement automatique coupé (pp_autosave_enabled = 'false', cf. js/main.js:isAutosaveEnabled) : le bouton Enregistrer est noir et blanc dès le PREMIER affichage, pas bleu le temps que
      les scripts finissent de se charger puis en fondu vers le noir. La classe est posée ICI, sur <html>, avant les feuilles de style et le corps : un script placé après le bouton attend que les
      feuilles de style soient chargées, et une image bleue passait parfois avant lui. js/main.js:syncSaveButtonLook garde ensuite cette classe et celle du bouton à jour (css/style.css). -->
@@ -85,6 +99,7 @@
 </script>
 <link rel="stylesheet" href="css/roboto-fonts.css?v=0.68">
 <link rel="stylesheet" href="css/style.css?v=0.86">
+<link rel="stylesheet" href="css/reader-guide.css?v=0.1">
 <link rel="stylesheet" href="css/editor-v2.css?v=0.96">
 <link rel="stylesheet" href="css/toolbar-v2.css?v=0.53">
 <link rel="stylesheet" href="css/grid.css?v=0.6">
@@ -615,9 +630,9 @@
     <div class="pp-modal-actions modal-actions"><button id="settings-close" data-i18n="common.close">Fermer</button></div>
   </div></div>
 </div>
-<script src="js/html-sanitize.js?v=0.3"></script>
+<script src="js/html-sanitize.js?v=0.4"></script>
 <script src="js/page-tree.js?v=0.2"></script>
-<script src="js/grist-api.js?v=0.89"></script>
+<script src="js/grist-api.js?v=0.91"></script>
 <script src="js/templates.js?v=0.83"></script>
 <script>
   // Démarrage anticipé (mesure d'ouverture du 2026-10-02) : Grist et la lecture des modèles ne dépendent d'aucun des scripts qui suivent, ils partent ici pendant que ceux-ci
@@ -630,8 +645,9 @@
     window.__earlyStart = { grist: gristInit, templates: templatesLoaded };
   } catch (e) { console.error('[boot] démarrage anticipé impossible', e); }
 </script>
-<script src="js/reader-mode.js?v=0.116"></script>
-<script src="js/i18n.js?v=0.99"></script>
+<script src="js/reader-mode.js?v=0.118"></script>
+<script src="js/reader-guide.js?v=0.1"></script>
+<script src="js/i18n.js?v=0.101"></script>
 <script src="js/shortcuts.js?v=0.8"></script>
 <script src="js/page-layout.js?v=0.7"></script>
 <script src="js/page-layer.js?v=0.3"></script>
@@ -642,16 +658,16 @@
 <script src="js/layers.js?v=0.3"></script>
 <script src="js/viewport-fit.js?v=0.5"></script>
 <script src="js/search-select.js?v=0.10"></script>
-<script src="js/variables.js?v=0.49"></script>
+<script src="js/variables.js?v=0.50"></script>
 <script src="js/icons.js?v=0.39"></script>
 <script src="js/editor-core.js?v=0.14"></script>
 <script src="js/header-footer-preview.js?v=1.15"></script>
-<script src="js/editor-nodes.js?v=1.12"></script>
+<script src="js/editor-nodes.js?v=1.13"></script>
 <script src="js/floating-toolbars.js?v=0.35"></script>
 <script src="js/main-toolbar.js?v=1.07"></script>
 <script src="js/format-painter.js?v=0.2"></script>
 <script src="js/comments.js?v=0.8"></script>
-<script src="js/track-changes.js?v=0.8"></script>
+<script src="js/track-changes.js?v=0.9"></script>
 <script src="js/table-borders.js?v=0.1"></script>
 <script src="js/grid-table.js?v=0.3"></script>
 <script src="js/grid-editor.js?v=0.11"></script>

@@ -120,9 +120,11 @@ const GROUPS = {
   emailExport: 'scenarios-email-export', // texte et lien du mode Email (js/mailto-export.js) : puces et numéros comme l'éditeur, retraits sous le texte de l'item, citations en « > », le vrai chemin éditeur -> Lecture -> texte, l'URL construite et sa jauge
   cleanReading: 'scenarios-clean-reading', // Lecture épurée (js/clean-reading.js) : ligne « Lecture épurée » sous Mode lecture, barre du haut cachée, bouton de sortie, Échap, retour au mode d'origine, focus, langue
   readerReads: 'scenarios-reader-reads', // la Lecture lit chaque table une seule fois par rendu (js/grist-api.js:withReadPass) et suit une image qui change de taille après la mesure (js/reader-mode.js:watchGeometry)
+  readerGuide: 'scenarios-reader-guide', // guide de la Lecture sans ligne (js/reader-guide.js, img/reader-guide/) : guide en trois étapes sans « Sélectionner par », court message quand le widget est relié, captures FR / EN, mise à jour sans recharger, clic sur une capture, contrastes clair et sombre
   imageText: 'scenarios-image-text', // image « Au cœur du texte » et texte autour (js/editor-nodes.js, css/editor-v2.css, js/reader-mode.js, js/pdf-export.js, js/docx-export.js) : l'image seule sur sa ligne, l'habillage gauche / droite, l'image dans la ligne, la bascule en ligne / bloc, mesurés dans l'éditeur, la Lecture, le PDF et le Word
   formatPainter: 'scenarios-format-painter', // pinceau de mise en forme (js/format-painter.js, bouton après le surlignage, Alt+Maj+C / V) : ce qui est copié et posé, le paragraphe sur un curseur ou un paragraphe entier, une étape d'historique, armé par un clic ou un double-clic, grisé en e-mail et en macro-modèle, les touches
   tableCells: 'scenarios-table-cells', // sélection de plusieurs cases d'un tableau (CellSelection) : gras, taille, police, couleurs, surlignage, puces, numéros, citation, retrait et retrait inverse sur toutes les cases choisies (et leurs touches Ctrl+Maj+B, Ctrl+Maj+8, Ctrl+Maj+7, Ctrl+Maj+9), la sélection reste, un seul Annuler ; copier, couper, coller en tableau tabulé
+  htmlSanitize: 'scenarios-html-sanitize', // HTML qui ne vient pas de l'éditeur (js/html-sanitize.js, Editor.setHTML) : rien ne s'exécute, rien d'actif ne survit, tout ce que l'éditeur écrit reste
 };
 
 // Scripts Node autonomes (page.mouse réel, pas de page.evaluate) : structurellement à part de GROUPS
@@ -132,6 +134,7 @@ const GROUPS = {
 // [[project-publipostage-scroll-chaining-popup-fix]].
 const NODE_SCRIPTS = {
   wheelScroll: 'verify-wheel-scroll.mjs',
+  readerGuideMouse: 'verify-reader-guide-mouse.mjs', // guide de la Lecture sans ligne à la vraie souris à 700x400, clair et sombre, français et anglais : titre et première étape dans le panneau, trois étapes atteignables à la molette, clic sur une vraie capture, lien changé en direct, ligne arrivée
   varToolbarMouse: 'verify-var-toolbar-mouse.mjs',
   varBoolMouse: 'verify-var-bool-mouse.mjs', // barre d'une bulle Oui / Non à la vraie souris : quatre boutons atteignables, bouton enfoncé, Lecture mesurée aux pixels d'une vraie capture ; 700x400 clair, sombre et anglais
   varListMouse: 'verify-var-list-mouse.mjs', // fenêtre « Liste » d'une variable à la vraie souris et au vrai clavier : bouton de la barre (entre Boucle et Colonne, grisé pour un texte), fenêtre entière dans 700x400, choix, numéro et séparateurs tapés, aperçu, Enregistrer, Lecture, Remettre par défaut, Échap ; clair, sombre et anglais
@@ -212,7 +215,10 @@ const NODE_SCRIPTS = {
   formulaUnit: 'unit-formula.mjs', // Node pur (vm) : js/formula.js, le moteur des bulles « Calcul » (variables calculées) : opérations, listes de lignes, fonctions, fautes de syntaxe, écriture saisie et enregistrée
   formatPainterMouse: 'verify-format-painter-mouse.mjs', // pinceau de mise en forme à la vraie souris et au vrai clavier à 700x400 : le bouton sur la 2e rangée sans en ajouter, un mot, un glissé, un triple-clic, des cases de tableau, le double-clic qui garde le pinceau, Échap, Alt+Maj+C / V, clair, sombre et anglais
   startupReadsUnit: 'unit-startup-reads.mjs', // Node pur (vm + faux docApi qui compte ses appels) : ce que l'ouverture lit dans Grist - Templates.loadAll (une lecture), GristAPI.init (aucune table du document), GristAPI.refreshSchema (colonnes exactes, une passe à la fois), câblage d'index.html et de js/main.js
+  userIdentityUnit: 'unit-user-identity.mjs', // Node pur (vm + faux docApi) : js/grist-api.js, la lecture du nom et de l'email de la personne - table-sonde d'avant la puce Nom migrée UNE fois, aucune écriture de schéma pour l'email seul, plusieurs puces = une lecture et une colonne ajoutée, compte sans nom, colonne refusée, lecteur du document
+  userNameChipMouse: 'verify-user-name-chip-mouse.mjs', // puce « Nom de l’utilisateur » à la vraie souris à 700x400, en français et en anglais : ligne juste après l'email dans la liste « # » (Calcul reste atteignable), un clic la pose, le nom en Lecture à côté de l'email, « [Nom indisponible] » / « [Name unavailable] » en rouge sans nom
   startupOpenMouse: 'verify-startup-open-mouse.mjs', // ouverture sur un document aux tables lentes, vrai navigateur à 700x400, vraie souris et vrai clavier : table des modèles lue une fois, modèle affiché avant la lecture complète des tables, bulles jugées tout de suite, « # » liste les colonnes, colonnes exactes ensuite
+  cspLoad: 'verify-csp.mjs', // politique de sécurité du contenu de index.html SANS contournement : le widget démarre, s'écrit, se lit et exporte sous la politique ; un script en ligne, un gestionnaire, une adresse javascript:, une balise de base, un cadre, un objet, un formulaire ne passent plus ; le vrai fichier d'API de Grist (réseau) s'évalue ; cadre à bac à sable
 };
 
 const argv = process.argv.slice(2);
@@ -320,7 +326,7 @@ const DEV_FILES = ['helpers', 'runner'];
 
 async function runGroup(name, probeExpr) {
   const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hinting=none'] });
-  const context = await browser.newContext({ viewport: { width: viewportWidth, height: viewportHeight } });
+  const context = await browser.newContext({ bypassCSP: true, viewport: { width: viewportWidth, height: viewportHeight } });
   const page = await context.newPage();
   const consoleErrors = [];
   page.on('console', m => { if (m.type() === 'error') consoleErrors.push(m.text()); });

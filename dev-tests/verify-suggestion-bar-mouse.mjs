@@ -84,7 +84,7 @@ const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hi
 const pageErrors = [];
 // Une page neuve par thème : même panneau ~700x400, mêmes routes hors-ligne.
 async function openPage(dark) {
-  const context = await browser.newContext({ viewport: { width: WIDTH, height: HEIGHT }, colorScheme: dark ? 'dark' : 'light' });
+  const context = await browser.newContext({ bypassCSP: true, viewport: { width: WIDTH, height: HEIGHT }, colorScheme: dark ? 'dark' : 'light' });
   const page = await context.newPage();
   page.on('pageerror', e => { pageErrors.push(e.message); console.log('[pageerror]', e.message); });
   if (OFFLINE) {

@@ -91,7 +91,7 @@ const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hi
 const pageErrors = [];
 
 async function openWidget(colorScheme) {
-  const context = await browser.newContext({ viewport: { width: WIDTH, height: HEIGHT }, colorScheme });
+  const context = await browser.newContext({ bypassCSP: true, viewport: { width: WIDTH, height: HEIGHT }, colorScheme });
   const page = await context.newPage();
   page.on('pageerror', e => { pageErrors.push(e.message); console.log('[pageerror]', e.message); });
   page.on('dialog', d => { pageErrors.push('boîte inattendue : ' + d.message()); d.accept().catch(() => {}); });
@@ -313,8 +313,8 @@ async function placeChip(page, label, entryName) {
   const entry = await hitByText(page, '#autocomplete-box .ac-item', entryName);
   check(`${label} - la ligne « ${entryName} » est dans l'onglet Chips, visible et au premier plan`, entry.found && entry.inViewport && entry.onTop, entry);
   const items = await page.evaluate(() => Array.from(document.querySelectorAll('#autocomplete-box .ac-item')).map(i => i.textContent.trim()));
-  // Huit lignes depuis « Valeur conditionnelle » (js/conditional-value.js) et « Calcul » (js/variable-calc.js) : la case conditionnelle est la septième, juste avant « Calcul ».
-  check(`${label} - elle vient après « Texte conditionnel » et « Valeur conditionnelle » : huit lignes, « Calcul » en dernier`, items.length === 8 && items[6] === entryName && /^(Valeur conditionnelle|Conditional value)$/.test(items[5]) && /^(Calcul|Calculation)$/.test(items[7]), items);
+  // Neuf lignes depuis « Nom de l'utilisateur » (juste après l'email), « Valeur conditionnelle » (js/conditional-value.js) et « Calcul » (js/variable-calc.js) : la case conditionnelle est la huitième, juste avant « Calcul ».
+  check(`${label} - elle vient après « Texte conditionnel » et « Valeur conditionnelle » : neuf lignes, « Calcul » en dernier`, items.length === 9 && items[7] === entryName && /^(Valeur conditionnelle|Conditional value)$/.test(items[6]) && /^(Calcul|Calculation)$/.test(items[8]), items);
   if (entry.found) await realClick(page, entry);
   await page.waitForTimeout(350);
   return entry;

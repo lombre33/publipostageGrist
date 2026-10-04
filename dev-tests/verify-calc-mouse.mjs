@@ -93,7 +93,7 @@ const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hi
 const pageErrors = [];
 
 async function openWidget(colorScheme, lang) {
-  const context = await browser.newContext({ viewport: { width: WIDTH, height: HEIGHT }, colorScheme });
+  const context = await browser.newContext({ bypassCSP: true, viewport: { width: WIDTH, height: HEIGHT }, colorScheme });
   const page = await context.newPage();
   // La langue choisie est lue au démarrage (localStorage `pp_lang`) : la barre flottante d'une bulle est construite une fois, dans la langue du moment.
   if (lang) await page.addInitScript(code => { try { localStorage.setItem('pp_lang', code); } catch (e) { /* sans stockage, la page démarre en français */ } }, lang);

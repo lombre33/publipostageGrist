@@ -122,7 +122,7 @@ async function waitForScrollSettle(page, prop) {
 async function runAt(width, height) {
   console.log(`\n=== ${width}x${height} ===`);
   const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hinting=none'] });
-  const context = await browser.newContext({ viewport: { width, height } });
+  const context = await browser.newContext({ bypassCSP: true, viewport: { width, height } });
   const page = await context.newPage();
   page.on('pageerror', e => console.log('[pageerror]', e.message));
 

@@ -643,9 +643,35 @@ const I18n = (function () {
     // --- Mode Lecture (js/reader-mode.js:render) : état vide (aucune ligne sélectionnée) et avertissement quand une variable n'a pas pu être résolue ---
     'reader.empty.title': { fr: 'Aucune ligne sélectionnée', en: 'No row selected' },
     'reader.empty.hint': { fr: 'Sélectionnez une ligne dans la table Grist pour voir le document avec ses données.', en: 'Select a row in the Grist table to see the document filled with its data.' },
+    // Guide de la Lecture sans ligne (js/reader-guide.js, demande d'Antoine du 2026-10-04) : trois étapes pour relier le widget à un tableau avec « Sélectionner par » de Grist. Les libellés de Grist cités
+    // (« Ajouter », « Sélectionner par », « Données source »...) sont ceux de ses fichiers de langue (grist-core, static/locales/{fr,en}.client.json, relevés le 2026-10-04) ; « Ajouter à la Page » prend sa majuscule en français.
+    'readerGuide.title': { fr: 'Reliez ce widget à votre tableau', en: 'Link this widget to your table' },
+    'readerGuide.intro': { fr: 'En mode Lecture, le modèle se remplit avec la ligne choisie dans un tableau de cette page. Aucune ligne n’arrive à ce widget : il doit être relié à ce tableau par le réglage « Sélectionner par » de Grist.', en: 'In Reading mode, the template is filled with the row picked in a table on this page. No row reaches this widget: it must be linked to that table with Grist’s “Select by” setting.' },
+    'readerGuide.step': { fr: 'Étape {n}', en: 'Step {n}' },
+    'readerGuide.add.title': { fr: 'Mettez votre tableau sur cette page', en: 'Put your table on this page' },
+    'readerGuide.add.lead': { fr: 'Il y est déjà ? Passez à l’étape 2. Sinon, dans Grist, ouvrez « Ajouter », puis « Ajouter une vue à la page ».', en: 'Already there? Go to step 2. Otherwise, in Grist, open “Add new”, then “Add widget to page”.' },
+    'readerGuide.add.mark1': { fr: 'Choisissez « Table »', en: 'Pick “Table”' },
+    'readerGuide.add.mark2': { fr: 'Choisissez vos données', en: 'Pick your data' },
+    'readerGuide.add.mark3': { fr: 'Cliquez sur « Ajouter à la Page »', en: 'Click “Add to page”' },
+    'readerGuide.add.alt': { fr: 'La boîte « Ajouter une vue à la page » de Grist : « Table » (1), vos données (2), puis « Ajouter à la Page » (3).', en: 'Grist’s “Add widget to page” box: “Table” (1), your data (2), then “Add to page” (3).' },
+    'readerGuide.link.title': { fr: 'Reliez ce widget au tableau', en: 'Link this widget to the table' },
+    'readerGuide.link.lead': { fr: 'Cliquez sur ce widget pour le sélectionner, puis ouvrez le panneau de droite de Grist.', en: 'Click this widget to select it, then open Grist’s right-hand panel.' },
+    'readerGuide.link.mark1': { fr: 'Ouvrez l’onglet « Données source »', en: 'Open the “Data” tab' },
+    'readerGuide.link.mark2': { fr: 'Ouvrez la liste « Sélectionner par »', en: 'Open the “Select by” list' },
+    'readerGuide.link.mark3': { fr: 'Choisissez votre tableau', en: 'Pick your table' },
+    'readerGuide.link.alt': { fr: 'Le panneau de droite de Grist : l’onglet « Données source » (1), la liste « Sélectionner par » (2) et, dans cette liste, le tableau (3).', en: 'Grist’s right-hand panel: the “Data” tab (1), the “Select by” list (2) and, in that list, the table (3).' },
+    'readerGuide.pick.title': { fr: 'Cliquez sur une ligne du tableau', en: 'Click a row of the table' },
+    'readerGuide.pick.mark1': { fr: 'Cliquez sur une ligne', en: 'Click a row' },
+    'readerGuide.pick.mark2': { fr: 'Le modèle s’affiche avec les données de cette ligne', en: 'The template shows that row’s data' },
+    'readerGuide.pick.alt': { fr: 'Une ligne choisie dans le tableau (1) et le modèle rempli avec ses données (2).', en: 'A row picked in the table (1) and the template filled with its data (2).' },
+    'readerGuide.zoom': { fr: 'Cliquer pour agrandir la capture', en: 'Click to enlarge the screenshot' },
+    'readerGuide.unzoom': { fr: 'Cliquer pour réduire la capture', en: 'Click to shrink the screenshot' },
+    'readerGuide.unsure': { fr: 'Ce widget est déjà relié ? Cliquez simplement sur une ligne du tableau.', en: 'Is this widget already linked? Just click a row of the table.' },
     'reader.unresolvedVariables': { fr: 'Attention : certaines variables n’ont pas pu être résolues.', en: 'Warning: some variables could not be resolved.' },
     // Écrit à la place du chip « Email de l'utilisateur » quand l'adresse ne peut pas être lue (js/reader-mode.js:resolveSmartChips) : en Lecture et dans les exports.
     'reader.emailUnavailable': { fr: '[Email indisponible]', en: '[Email unavailable]' },
+    // Pareil pour le chip « Nom de l'utilisateur » : nom illisible, ou que Grist ne donne pas à cette personne.
+    'reader.nameUnavailable': { fr: '[Nom indisponible]', en: '[Name unavailable]' },
 
     // --- Messages de statut (js/main.js:setStatus) ---
     'status.ready': { fr: 'Widget prêt.', en: 'Widget ready.' },
@@ -789,6 +815,7 @@ const I18n = (function () {
     'chips.date': { fr: 'Date du jour', en: 'Today’s date' },
     'chips.time': { fr: 'Heure actuelle', en: 'Current time' },
     'chips.email': { fr: 'Email de l’utilisateur', en: 'User’s email' },
+    'chips.name': { fr: 'Nom de l’utilisateur', en: 'User’s name' },
 
     // --- Modale de configuration de correspondance (js/variables.js:showLinkConfigModal) ---
     'linkConfig.columnPlaceholder': { fr: '— Choisir une colonne —', en: '— Choose a column —' },

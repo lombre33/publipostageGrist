@@ -16,6 +16,8 @@
 //   9. un z-index de 100 ou plus écrit en dur sur une couche flottante (barre, menu, liste, popup, info-bulle) au lieu d'un jeton --z-* de css/style.css (retour d'Antoine du 01/10) ;
 //      un jeton --z-* déclaré dans une autre feuille, un z-index en `!important` (un popup de fenêtre passe par Layers.raise(popup, fenêtre)), un z-index posé en ligne hors js/layers.js.
 //  10. un texte rouge posé avec --danger (4,37:1 sur blanc) au lieu de --danger-ink (4,5:1 au moins sur tous les fonds) : seuls quatre boutons à icône seule gardent --danger (contrôle du 03/10).
+//  11. la politique de sécurité du contenu d'index.html qui ne dit plus ce que la page charge : un script en ligne (la carte d'importation comprise) dont l'empreinte n'est plus la sienne, une bibliothèque
+//      d'un CDN qu'elle ne permet pas, une empreinte ou une adresse que plus rien n'utilise (contrôle de sécurité du 04/10).
 //
 // Volontairement PERMISSIF : un nom cité seulement dans un commentaire compte comme utilisé, un préfixe construit (`'toc-level-' + n`) couvre toute la
 // famille. Le but est de ne jamais faire échouer un changement légitime, seulement d'attraper ce qui n'a plus AUCUN point d'entrée. Une classe posée
@@ -24,6 +26,7 @@
 // Lancer : node dev-tests/verify-code-hygiene.mjs
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import vm from 'node:vm';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { check, summarizeAndExit } from './unit-harness.mjs';
@@ -357,6 +360,66 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const style = stripComments(read('css/style.css'));
   const declarations = [...style.matchAll(/--danger-ink\s*:\s*(#[0-9a-fA-F]{3,8})\s*;/g)].map(m => m[1].toLowerCase());
   check('texte rouge : css/style.css déclare --danger-ink trois fois (thème clair, thème sombre choisi, thème sombre du système), d\'un rouge plus foncé que --danger en clair', declarations.length === 3 && declarations[0] === '#c53030', JSON.stringify(declarations));
+}
+
+// ============================================================================
+// 11. Politique de sécurité du contenu : ses empreintes et ses adresses disent ce que la page charge
+// ============================================================================
+// Contrôle de sécurité du 04/10 (choix d'Antoine « Tout corriger », correction 6) : index.html porte une politique (<meta http-equiv="Content-Security-Policy">) qui refuse tout script en ligne, tout gestionnaire
+// d'événement, tout script d'une autre adresse que celles qu'elle cite, tout cadre, objet, formulaire et toute balise de base. Elle ne protège que si elle reste juste, et ce qui la dérègle ne se voit pas dans
+// les tests (ils tournent avec bypassCSP) : (a) un script en ligne modifié d'une lettre, la carte d'importation comprise, n'a plus la même empreinte : le navigateur le refuse et le widget ne démarre plus chez
+// Antoine ; (b) une bibliothèque chargée depuis une adresse que la politique ne cite pas échoue sans bruit au premier export qui la demande ; (c) une empreinte ou une adresse que plus rien n'utilise est un reste
+// qui ouvre la politique pour rien. dev-tests/verify-csp.mjs (script Node `cspLoad`) joue la politique dans un vrai navigateur, ce contrôle-ci garde ses deux listes à jour sans navigateur.
+{
+  // Chargé seulement par du code qu'aucun parcours n'appelle : le contrôle ne le compte ni comme permis ni comme manquant.
+  const NEVER_LOADED = new Set([
+    'js/pdf-export-alt.js',     // les qualités raster et l'impression navigateur, grisées dans l'interface, chargent html2pdf.js depuis cdnjs
+  ]);
+  const CDN_SCRIPT_HOSTS = 'cdnjs\\.cloudflare\\.com|cdn\\.jsdelivr\\.net|esm\\.sh|unpkg\\.com|docs\\.getgrist\\.com';
+  const raw = read('index.html');
+  // Les commentaires d'index.html parlent de <script> et d'adresses : blanchis à longueur égale, ils ne comptent pas, et les positions restent celles du texte brut (dont on prend le contenu à hacher).
+  const page = raw.replace(/<!--[\s\S]*?-->/g, m => m.replace(/[^\n]/g, ' '));
+  const meta = page.match(/<meta http-equiv="Content-Security-Policy" content="([^"]*)"/);
+  check('politique : index.html porte une politique de sécurité du contenu, avant son premier script', !!meta && meta.index < page.indexOf('<script'), meta ? 'la balise vient après le premier <script>' : '<meta http-equiv="Content-Security-Policy"> introuvable');
+
+  const policy = meta ? meta[1] : '';
+  const scriptSrc = (policy.split(';').map(d => d.trim().split(/\s+/)).find(d => d[0] === 'script-src') || []).slice(1);
+  const cited = scriptSrc.filter(source => /^'sha256-/.test(source));
+  const hostSources = scriptSrc.filter(source => /^https:\/\//.test(source));
+
+  // (a) Chaque script en ligne est cité par son empreinte SHA-256 (celle du texte entre les balises, espaces compris), et chaque empreinte citée correspond à un script en ligne.
+  const inline = new Map();
+  for (const m of page.matchAll(/<script\b([^>]*)>[\s\S]*?<\/script>/gi)) {
+    if (/\bsrc\s*=/i.test(m[1])) continue;
+    const body = raw.slice(m.index + m[0].indexOf('>') + 1, m.index + m[0].length - '</script>'.length);
+    const hash = `'sha256-${createHash('sha256').update(body, 'utf8').digest('base64')}'`;
+    inline.set(hash, `${/type\s*=\s*["']?importmap/i.test(m[1]) ? 'la carte d\'importation' : 'un script en ligne'} « ${body.trim().replace(/\s+/g, ' ').slice(0, 40)}… »`);
+  }
+  const uncited = [...inline].filter(([hash]) => !cited.includes(hash)).map(([hash, what]) => `${hash} (${what})`);
+  check('politique : chaque script en ligne d\'index.html, la carte d\'importation comprise, est cité dans script-src par son empreinte (modifié, il en a une nouvelle : l\'écrire)', inline.size >= 3 && uncited.length === 0, '\n    à ajouter à script-src : ' + uncited.join('\n    à ajouter à script-src : '));
+  const stale = cited.filter(hash => !inline.has(hash));
+  check('politique : aucune empreinte de script-src ne correspond à plus aucun script en ligne (celle d\'un script modifié est à remplacer, pas à garder)', stale.length === 0, '\n    à retirer de script-src : ' + stale.join(' '));
+
+  // (b) Chaque adresse de bibliothèque que le widget charge est permise ; (c) chaque adresse permise sert encore. Une source avec un chemin est exacte, une source sans chemin ouvre tout son hôte (esm.sh).
+  const permits = (source, address) => {
+    const s = new URL(source);
+    const u = new URL(address);
+    return s.origin === u.origin && (s.pathname === '/' || (s.pathname.endsWith('/') ? u.pathname.startsWith(s.pathname) : u.pathname === s.pathname));
+  };
+  const loaded = new Map();
+  const noteLoaded = (address, file) => { if (!loaded.has(address)) loaded.set(address, file); };
+  // La politique cite ses propres adresses : sans la blanchir, chacune se compterait comme chargée par la page.
+  const policyTag = meta ? page.slice(meta.index, page.indexOf('>', meta.index) + 1) : '';
+  const pageOutsidePolicy = page.replace(policyTag, policyTag.replace(/[^\n]/g, ' '));
+  for (const m of pageOutsidePolicy.matchAll(new RegExp(`https://(?:${CDN_SCRIPT_HOSTS})/[^\\s"'<>)\\\\]*`, 'g'))) noteLoaded(m[0], 'index.html');
+  for (const rel of jsFiles) {
+    if (NEVER_LOADED.has(rel)) continue;
+    for (const m of noCommentsJs(read(rel)).matchAll(new RegExp(`https://(?:${CDN_SCRIPT_HOSTS})/[^\\s"'\`)\\\\]*\\.m?js`, 'g'))) noteLoaded(m[0], rel);
+  }
+  const refused = [...loaded].filter(([address]) => !hostSources.some(source => permits(source, address))).map(([address, file]) => `${file} : ${address}`);
+  check('politique : chaque bibliothèque que le widget charge depuis un CDN (index.html, js/) est permise par script-src - sinon sa fonction échoue sans bruit chez Antoine', loaded.size >= 10 && refused.length === 0, '\n    ' + refused.join('\n    ') + '\n    à ajouter à script-src : l\'adresse entière (esm.sh : l\'hôte)');
+  const unused = hostSources.filter(source => ![...loaded.keys()].some(address => permits(source, address)));
+  check('politique : aucune adresse de script-src que plus aucun script ne charge', unused.length === 0, '\n    à retirer de script-src : ' + unused.join(' '));
 }
 
 summarizeAndExit();

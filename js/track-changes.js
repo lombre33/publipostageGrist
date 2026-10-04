@@ -445,9 +445,8 @@ const TrackChanges = (function () {
           loadTrackedDocument: html => ({ editor, dispatch, tr }) => {
             if (!dispatch) return true;
             tr.setMeta('preventDispatch', true);
-            const wrapper = document.createElement('div');
-            wrapper.innerHTML = html || '';
-            const docNode = PMDOMParser.fromSchema(editor.schema).parse(wrapper);
+            // Document inerte, nettoyé, jamais sérialisé : un <div> du widget, même détaché, ferait charger ses images (et courir leurs onerror) au premier innerHTML.
+            const docNode = PMDOMParser.fromSchema(editor.schema).parse(HtmlSanitize.parseInert(html));
             editor.view.dispatch(
               editor.state.tr
                 .setMeta(suggestChangesKey, { skip: true })
