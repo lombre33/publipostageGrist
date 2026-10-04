@@ -246,6 +246,37 @@
     },
   });
 
+  // Les largeurs que l'écran montre (celles du DOM, pas celles du document).
+  const shownWidths = () => Array.from(document.querySelectorAll('.tiptap tr')).map(tr => Array.from(tr.children).map(cell => Math.round(cell.getBoundingClientRect().width)));
+  cases.push({
+    id: 'table_automatic_columns_show_their_original_width_again_after_undo',
+    description: "Tableau aux largeurs jamais fixées dont on tire un bord (le widget fige aussitôt les autres colonnes) : Annuler rend la largeur d'avant À L'ÉCRAN, pas seulement dans le document - Tiptap posait `min-width` sur le <col> d'une colonne redevenue « automatique » mais gardait son ancien `width` (createTableView, js/editor-nodes.js)",
+    run: async (h) => {
+      await h.resetEditor();
+      if (Editor.isTrackChangesOn()) Editor.setTrackChanges(false);
+      Editor.setHTML(tableSeed([0, 0, 0]));
+      await h.sleep(250);
+      const ed = EditorCore.getEditor();
+      const original = shownWidths();
+      // La première colonne tirée à 120 px : la première case de chaque ligne, comme le fait la poignée de bord (prosemirror-tables).
+      const firstOfEachRow = [];
+      ed.state.doc.descendants((node, pos) => { if (node.type.name === 'tableRow') firstOfEachRow.push(pos + 1); return true; });
+      const pull = ed.state.tr;
+      firstOfEachRow.forEach(pos => pull.setNodeMarkup(pos, undefined, Object.assign({}, ed.state.doc.nodeAt(pos).attrs, { colwidth: [120] })));
+      ed.view.dispatch(pull);
+      await h.sleep(700);
+      const pulled = shownWidths();
+      ed.commands.undo();
+      await h.sleep(500);
+      const undone = shownWidths();
+      const same = (a, b) => a.length === b.length && a.every((row, i) => row.length === b[i].length && row.every((w, j) => Math.abs(w - b[i][j]) <= 2));
+      return {
+        pass: pulled[0][0] === 120 && same(undone, original) && !/colwidth/.test(Editor.getHTML()),
+        notes: 'origine=' + JSON.stringify(original) + ' tiré=' + JSON.stringify(pulled) + ' annulé=' + JSON.stringify(undone),
+      };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.tables = cases;
 })();

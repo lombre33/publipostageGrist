@@ -6,6 +6,7 @@
 // dessine en <ins> / <del> directement dans le <tr> : sans règle d'affichage la case sortait de la ligne, d'où les mesures de géométrie ci-dessous (cases bord à bord,
 // dans le tableau). Le HTML enregistré porte la marque en attribut de la case, parce qu'un <ins> posé autour d'un <td> ne survit pas à l'analyseur HTML du navigateur.
 // Le fond d'une cellule et la largeur d'une colonne posent aussi une marque de modification sur les cases touchées : « Tout refuser » doit les rendre et « Tout accepter » les garder (section 7, 04/10).
+// La barre « Accepter / Refuser » les propose aussi, un par un, et la largeur d'une colonne se résout sur toute la colonne (sections 9 et 10, 04/10, carte « Corriger »).
 // Lancé par run-headless.mjs (groupe Node "trackColumnsMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-track-columns-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -163,6 +164,12 @@ async function clickCell(index) {
   await page.click(`.tiptap td >> nth=${index}`);
   await sleep(300);
 }
+// Un clic sur une case, la souris garée d'abord au bas du panneau : les menus de la barre d'outils s'ouvrent au survol (celui des listes, après un clic sur la barre du tableau tout en haut) et recouvriraient la case visée.
+async function clickCellAway(index) {
+  await page.mouse.move(WIDTH / 2, HEIGHT - 6);
+  await sleep(350);
+  await clickCell(index);
+}
 async function clickBar(action) {
   await page.click(`.v2-floating-toolbar.visible button[data-action="${action}"]`);
   await settle();
@@ -180,6 +187,46 @@ async function resolveAll(button) {
 async function undo() { await page.keyboard.press('Control+z'); await settle(); }
 async function redo() { await page.keyboard.press('Control+y'); await settle(); }
 const barButton = action => page.evaluate(a => { const b = document.querySelector(`.v2-floating-toolbar button[data-action="${a}"]`); return { visible: b.closest('.v2-floating-toolbar').classList.contains('visible'), aria: b.getAttribute('aria-disabled'), disabled: b.classList.contains('is-disabled'), title: b.title }; }, action);
+// La barre « Accepter / Refuser » (js/floating-toolbars.js:wireSuggestionFloatingToolbar) : ouverte ou non, son cadre, et si la souris atteint bien chaque bouton (rien ne la recouvre, pas même la barre du tableau).
+const suggestBar = () => page.evaluate(() => {
+  const el = document.querySelector('.v2-suggest-toolbar');
+  if (!el) return { visible: false, buttons: [], overlapsTableBar: false };
+  const r = el.getBoundingClientRect();
+  const buttons = [...el.querySelectorAll('button')].map(b => {
+    const br = b.getBoundingClientRect();
+    const hit = document.elementFromPoint(br.left + br.width / 2, br.top + br.height / 2);
+    return { action: b.dataset.action, title: b.title, x: br.left + br.width / 2, y: br.top + br.height / 2, reachable: hit === b };
+  });
+  const others = [...document.querySelectorAll('.v2-floating-toolbar.visible')].filter(o => o !== el).map(o => o.getBoundingClientRect());
+  const overlapsTableBar = others.some(o => r.left < o.right && r.right > o.left && r.top < o.bottom && r.bottom > o.top);
+  return { visible: el.classList.contains('visible'), left: r.left, top: r.top, right: r.right, bottom: r.bottom, buttons, overlapsTableBar };
+});
+// Un vrai clic de souris sur un bouton de la barre « Accepter / Refuser ».
+async function clickSuggestBar(action) {
+  const b = (await suggestBar()).buttons.find(btn => btn.action === action);
+  if (b) await page.mouse.click(b.x, b.y);
+  await settle();
+  return !!b;
+}
+// Le fond d'une case et la largeur d'une colonne posés à la vraie souris : la puce « Fond de cellule » de la barre du tableau puis une nuance, le bord droit de la première colonne glissé de `dx` pixels.
+async function pickFill(color) {
+  await page.click('#v2-table-fill-btn');
+  await sleep(250);
+  await page.click(`.v2-color-dropdown.visible button[data-action="pick:${color}"]`);
+  await settle();
+}
+async function dragFirstColumnBorder(dx) {
+  const border = await page.evaluate(() => { const r = document.querySelector('.tiptap td').getBoundingClientRect(); return { x: r.right - 1, y: r.top + r.height / 2 }; });
+  await page.mouse.move(border.x - 30, border.y);
+  await page.mouse.move(border.x, border.y, { steps: 4 });
+  await sleep(200);
+  await page.mouse.down();
+  await page.mouse.move(border.x + dx, border.y, { steps: 6 });
+  await page.mouse.up();
+  await settle();
+}
+const colwidths = html => (html.match(/colwidth="(\d+)"/g) || []).map(w => Number(w.match(/\d+/)[0]));
+const modificationMarks = html => (html.match(/data-tc-modification/g) || []).length;
 
 for (const dark of [false, true]) {
   const theme = dark ? 'sombre' : 'clair';
@@ -320,8 +367,8 @@ for (const dark of [false, true]) {
     const firstWidth = Number((dragged.html.match(/colwidth="(\d+)"/) || [])[1]);
     check(`[${theme}] largeur de colonne (bord glissé à la vraie souris) avec le suivi : la première colonne est plus étroite, une marque par case touchée (3 en tout avec le fond)`,
       firstWidth > 0 && firstWidth < 150 && (dragged.html.match(/data-tc-modification/g) || []).length === 3 && dragged.pending, { firstWidth, html: dragged.html });
-    check(`[${theme}] la barre « Accepter / Refuser » ne propose rien pour ces réglages (curseur dans la case)`,
-      await page.evaluate(() => TrackChanges.selectionSuggestionIds(EditorCore.getEditor().state).length === 0));
+    check(`[${theme}] la barre « Accepter / Refuser » propose le fond de la case b1 (curseur dedans), pas la largeur de la colonne d'à côté`,
+      await page.evaluate(() => TrackChanges.selectionSuggestionIds(EditorCore.getEditor().state).length === 1));
     await resolveAll('v2-btn-reject-all');
     const answers = await Promise.race([page.evaluate(() => true), sleep(5000).then(() => false)]);
     check(`[${theme}] « Tout refuser » (vraie souris) : la page répond, elle ne se fige pas`, answers === true);
@@ -348,6 +395,126 @@ for (const dark of [false, true]) {
     const grey = await barButton('col-del');
     check('[anglais] « Supprimer la colonne » grisé : l\'explication est en anglais', grey.aria === 'true' && /merged cell/.test(grey.title), grey);
     await page.evaluate(() => I18n.setLang('fr'));
+    await page.evaluate(() => Editor.setTrackChanges(false));
+  }
+  if (!dark) {
+    // 9) Le fond d'une cellule, un par un (demande d'Antoine du 04/10, carte « Corriger ») : la barre « Accepter / Refuser » s'ouvre sous le curseur dans une case colorée, « Refuser » rend la case sans fond et laisse
+    // l'autre en attente, « Accepter » garde l'autre ; la barre est atteignable à la souris dans le panneau 700x400, sans recouvrir la barre du tableau. Avant, la barre ne voyait pas ces marques.
+    await loadDoc(FIXED);
+    const fillOriginal = plain((await tableState()).html);
+    await trackOn();
+    await clickCellAway(1);
+    await pickFill('#fff2a8');
+    await clickCellAway(3);
+    await pickFill('#c8f7c5');
+    const colored = await tableState();
+    check(`[${theme}] deux cases colorées (puce « Fond de cellule », vraie souris) : b1 jaune, a2 verte, deux marques en attente`,
+      colored.rows[0][1].bg === 'rgb(255, 242, 168)' && colored.rows[1][0].bg === 'rgb(200, 247, 197)' && modificationMarks(colored.html) === 2 && colored.pending, { bg: [colored.rows[0][1].bg, colored.rows[1][0].bg], html: colored.html });
+    await clickCellAway(2);
+    check(`[${theme}] curseur dans une case sans réglage en attente (c1) : la barre « Accepter / Refuser » reste fermée`, !(await suggestBar()).visible);
+    await clickCellAway(1);
+    const onYellow = await suggestBar();
+    check(`[${theme}] curseur dans la case jaune (vrai clic) : la barre s'ouvre, dans le panneau 700x400, atteinte par la souris, sans recouvrir la barre du tableau`,
+      onYellow.visible && onYellow.left >= 0 && onYellow.right <= WIDTH && onYellow.top >= 0 && onYellow.bottom <= HEIGHT && onYellow.buttons.length === 2 && onYellow.buttons.every(b => b.reachable) && !onYellow.overlapsTableBar, onYellow);
+    await clickSuggestBar('reject');
+    const refusedYellow = await tableState();
+    check(`[${theme}] « Refuser » (vraie souris) : b1 n'a plus de fond, a2 reste verte en attente (une marque), la barre se ferme`,
+      refusedYellow.rows[0][1].bg === 'rgba(0, 0, 0, 0)' && refusedYellow.rows[1][0].bg === 'rgb(200, 247, 197)' && modificationMarks(refusedYellow.html) === 1 && refusedYellow.pending && !(await suggestBar()).visible, { bg: [refusedYellow.rows[0][1].bg, refusedYellow.rows[1][0].bg], html: refusedYellow.html });
+    await clickCellAway(3);
+    check(`[${theme}] curseur dans la case verte : la barre s'ouvre`, (await suggestBar()).visible);
+    await clickSuggestBar('accept');
+    const acceptedGreen = await tableState();
+    check(`[${theme}] « Accepter » (vraie souris) : a2 garde son vert, plus aucune marque ni suggestion`,
+      acceptedGreen.rows[1][0].bg === 'rgb(200, 247, 197)' && modificationMarks(acceptedGreen.html) === 0 && !acceptedGreen.pending, { html: acceptedGreen.html });
+    await undo();
+    const undoneGreen = await tableState();
+    check(`[${theme}] un seul Ctrl+Z (vraie touche) remet le vert de a2 en attente`, undoneGreen.rows[1][0].bg === 'rgb(200, 247, 197)' && modificationMarks(undoneGreen.html) === 1 && undoneGreen.pending, { html: undoneGreen.html });
+    await clickCellAway(3);
+    await clickSuggestBar('reject');
+    const allRefused = await tableState();
+    check(`[${theme}] tout refusé un par un : le tableau d'origine, plus aucune suggestion`, plain(allRefused.html) === fillOriginal && !allRefused.pending, { html: allRefused.html });
+    await page.evaluate(() => Editor.setTrackChanges(false));
+
+    // 10) La largeur d'une colonne tirée à la souris : la barre s'ouvre depuis n'importe quelle case de la colonne et résout toute la colonne (une marque par case, un id chacune) ; une colonne d'à côté, tirée aussi, reste en attente.
+    await loadDoc(FIXED);
+    const widthOriginal = plain((await tableState()).html);
+    await trackOn();
+    await clickCellAway(0);
+    await dragFirstColumnBorder(-40);
+    const pulled = await tableState();
+    const pulledWidths = colwidths(pulled.html);
+    check(`[${theme}] bord de la première colonne glissé (vraie souris) : la colonne est plus étroite sur ses deux cases, une marque par case`,
+      pulledWidths.length === 6 && pulledWidths[0] < 150 && pulledWidths[0] === pulledWidths[3] && pulledWidths.slice(1, 3).concat(pulledWidths.slice(4)).every(w => w === 150) && modificationMarks(pulled.html) === 2 && pulled.pending, { pulledWidths, html: pulled.html });
+    await clickCellAway(3);
+    const onBottom = await suggestBar();
+    check(`[${theme}] curseur dans la case du BAS de la colonne tirée (vrai clic) : la barre s'ouvre, dans le panneau, atteinte par la souris, sans recouvrir la barre du tableau`,
+      onBottom.visible && onBottom.left >= 0 && onBottom.right <= WIDTH && onBottom.top >= 0 && onBottom.bottom <= HEIGHT && onBottom.buttons.every(b => b.reachable) && !onBottom.overlapsTableBar, onBottom);
+    await clickSuggestBar('reject');
+    const widthRefused = await tableState();
+    const cellWidth = c => c.right - c.left;
+    check(`[${theme}] « Refuser » (vraie souris) rend la largeur d'avant à TOUTE la colonne : six largeurs de 150, cases alignées sur leur largeur d'origine, plus aucune marque`,
+      colwidths(widthRefused.html).join() === '150,150,150,150,150,150' && modificationMarks(widthRefused.html) === 0 && !widthRefused.pending
+        && widthRefused.rows.every(cells => Math.abs(cellWidth(cells[0]) - cellWidth(cells[1])) < 3) && plain(widthRefused.html) === widthOriginal, { widths: colwidths(widthRefused.html), html: widthRefused.html });
+    await dragFirstColumnBorder(-40);
+    await clickCellAway(0);
+    check(`[${theme}] la colonne retirée de nouveau : la barre s'ouvre depuis la case du HAUT`, (await suggestBar()).visible);
+    await clickSuggestBar('accept');
+    const widthKept = await tableState();
+    const keptWidths = colwidths(widthKept.html);
+    check(`[${theme}] « Accepter » (vraie souris) garde la largeur sur toute la colonne, sans marque`,
+      keptWidths.length === 6 && keptWidths[0] < 150 && keptWidths[0] === keptWidths[3] && modificationMarks(widthKept.html) === 0 && !widthKept.pending, { keptWidths, html: widthKept.html });
+    await undo();
+    const widthUndone = await tableState();
+    check(`[${theme}] un seul Ctrl+Z (vraie touche) remet la largeur de la colonne entière en attente (deux marques)`, modificationMarks(widthUndone.html) === 2 && colwidths(widthUndone.html)[0] === keptWidths[0] && widthUndone.pending, { html: widthUndone.html });
+    await page.evaluate(() => Editor.setTrackChanges(false));
+  }
+  if (!dark) {
+    // 11) « Refuser » rend la valeur d'ORIGINE même après plusieurs glissés du même bord, et, sur un tableau inséré à la main (largeurs jamais fixées : le widget fige les autres colonnes dès le premier glissé, hors
+    // suivi), la mise en page d'origine - toutes les colonnes de nouveau « automatiques », à la largeur d'avant. Avant, le refus rendait la largeur d'entre-deux, puis le widget figeait de nouveau la colonne.
+    const widthsOfRows = state => state.rows.map(cells => cells.map(c => Math.round(c.right - c.left)));
+    const closeTo = (a, b) => a.length === b.length && a.every((row, i) => row.length === b[i].length && row.every((w, j) => Math.abs(w - b[i][j]) <= 2));
+    await loadDoc(AUTO);
+    const autoState = await tableState();
+    const autoOriginal = plain(autoState.html);
+    const autoOriginalWidths = widthsOfRows(autoState);
+    await trackOn();
+    await clickCellAway(0);
+    await dragFirstColumnBorder(-40);
+    await dragFirstColumnBorder(-30);
+    const autoPulled = await tableState();
+    check(`[${theme}] tableau aux largeurs jamais fixées, bord glissé deux fois (vraie souris) : la première colonne est plus étroite, les autres figées par le widget, une marque par case de la colonne`,
+      widthsOfRows(autoPulled)[0][0] < autoOriginalWidths[0][0] - 30 && colwidths(autoPulled.html).length === 6 && modificationMarks(autoPulled.html) === 2 && autoPulled.pending, { widths: widthsOfRows(autoPulled), html: autoPulled.html });
+    await clickCellAway(3);
+    await clickSuggestBar('reject');
+    const autoRefused = await tableState();
+    check(`[${theme}] « Refuser » (vraie souris) : le tableau d'origine - aucune largeur fixée, colonnes de leur largeur d'avant (à 2 px près), plus aucune suggestion`,
+      plain(autoRefused.html) === autoOriginal && colwidths(autoRefused.html).length === 0 && closeTo(widthsOfRows(autoRefused), autoOriginalWidths) && !autoRefused.pending,
+      { widths: widthsOfRows(autoRefused), original: autoOriginalWidths, html: autoRefused.html });
+    await undo();
+    const autoUndone = await tableState();
+    check(`[${theme}] un seul Ctrl+Z (vraie touche) remet la largeur tirée en attente, les autres colonnes figées comme avant`, modificationMarks(autoUndone.html) === 2 && colwidths(autoUndone.html).length === 6 && autoUndone.pending, { html: autoUndone.html });
+    await resolveAll('v2-btn-reject-all');
+    const autoAllRefused = await tableState();
+    check(`[${theme}] « Tout refuser » (vraie souris) rend de même le tableau d'origine, largeurs comprises`,
+      plain(autoAllRefused.html) === autoOriginal && colwidths(autoAllRefused.html).length === 0 && closeTo(widthsOfRows(autoAllRefused), autoOriginalWidths) && !autoAllRefused.pending, { widths: widthsOfRows(autoAllRefused), html: autoAllRefused.html });
+    await page.evaluate(() => Editor.setTrackChanges(false));
+
+    // Largeurs fixées : deux glissés, « Refuser » rend la largeur d'origine à toute la colonne (pas celle du premier glissé).
+    await loadDoc(FIXED);
+    const fixedState = await tableState();
+    const fixedOriginal = plain(fixedState.html);
+    await trackOn();
+    await clickCellAway(0);
+    await dragFirstColumnBorder(-40);
+    await dragFirstColumnBorder(-30);
+    const fixedPulled = await tableState();
+    check(`[${theme}] tableau aux largeurs fixées, bord glissé deux fois (vraie souris) : la colonne a perdu 70 px sur ses deux cases, deux marques`,
+      colwidths(fixedPulled.html)[0] < 100 && colwidths(fixedPulled.html)[0] === colwidths(fixedPulled.html)[3] && modificationMarks(fixedPulled.html) === 2, { widths: colwidths(fixedPulled.html) });
+    await clickCellAway(3);
+    await clickSuggestBar('reject');
+    const fixedRefused = await tableState();
+    check(`[${theme}] « Refuser » (vraie souris) rend les 150 d'origine à toute la colonne, pas la largeur du premier glissé`,
+      colwidths(fixedRefused.html).join() === '150,150,150,150,150,150' && plain(fixedRefused.html) === fixedOriginal && !fixedRefused.pending, { widths: colwidths(fixedRefused.html) });
     await page.evaluate(() => Editor.setTrackChanges(false));
   }
   await page.context().close();

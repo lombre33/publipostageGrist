@@ -1212,7 +1212,7 @@
   // qui refuse (revertSuggestion) rend « rien à faire » sans y toucher quand elle n'a aucun texte à défaire, et js/track-changes.js:runChunkedLibCommand, qui recommençait tant qu'une marque restait, tournait sans
   // fin : la page se figeait et le rendu montait à plusieurs Go. Chaque cas lance la commande du bouton de la barre (editor.chain().focus().…AllSuggestionsChunked().run()) sous un garde-fou : chaque lecture de
   // `editor.state` est comptée et, passé `limit`, la lecture lève une erreur - une seule fois - au lieu de laisser tourner la boucle d'avant la correction.
-  async function runAllChunked(h, kind, limit) {
+  async function runAllChunked(h, kind, limit, chunkSize) {
     const ed = EditorCore.getEditor();
     let proto = ed;
     let original = null;
@@ -1224,7 +1224,7 @@
     let tripped = false;
     Object.defineProperty(ed, 'state', { configurable: true, get() { if (!tripped && ++reads > (limit || 20000)) { tripped = true; throw new Error('boucle sans fin'); } return original.call(ed); } });
     try {
-      ed.chain().focus()[kind + 'AllSuggestionsChunked']().run();
+      ed.chain().focus()[kind + 'AllSuggestionsChunked'](chunkSize).run();
     } catch (e) {
       if (!tripped) throw e;
     } finally {
@@ -1386,9 +1386,9 @@
 
   // === « Tout refuser » rend aussi le fond d'une cellule et la largeur d'une colonne (demande d'Antoine du 04/10, carte « Corriger ») ===
   // Avec le suivi allumé, le fond d'une cellule (la puce « Fond de cellule » de la barre du tableau) et la largeur d'une colonne (la poignée du bord) posent une marque `modification` sur chaque case touchée. Elle
-  // ne se voit pas dans l'éditeur et la barre « Accepter / Refuser » ne la propose jamais (js/track-changes.js:isTableMod) ; la lib, à qui « Tout refuser » confie le texte, n'y touche pas non plus quand elle n'a rien
-  // d'autre à défaire : le fond ou la largeur restait, en attente, après « Tout refuser » (et, avant la correction précédente, la page se figeait). Les cas lancent la commande du bouton sous le garde-fou de
-  // runAllChunked, comme ceux des réglages de paragraphe plus haut.
+  // ne se voit pas dans l'éditeur ; la barre « Accepter / Refuser » ne la proposait pas non plus, et la lib, à qui « Tout refuser » confie le texte, n'y touche pas quand elle n'a rien d'autre à défaire : le fond
+  // ou la largeur restait, en attente, après « Tout refuser » (et, avant la correction précédente, la page se figeait). Les cas lancent la commande du bouton sous le garde-fou de runAllChunked, comme ceux des
+  // réglages de paragraphe plus haut ; la barre les propose maintenant un par un (cas `trackchanges_bar_*` plus bas, js/track-changes.js:ridesAlong).
   const FILL = '#fff2a8';
   const FILL_CSS = /background-color: rgb\(255, 242, 168\)/;
   const cellModifications = () => (Editor.getHTML().match(/data-tc-modification/g) || []).length;
@@ -1416,7 +1416,7 @@
 
   cases.push({
     id: 'trackchanges_reject_all_gives_back_a_cell_background_and_accept_all_keeps_it',
-    description: "Suivi allumé, le fond d'une cellule posé par la puce « Fond de cellule » de la barre du tableau (une marque de modification sur la case, que la barre Accepter / Refuser ne propose pas) : « Tout refuser » rend la main et la case sans fond, aucune marque, boutons regrisés - d'un seul Annuler ; refait, « Tout accepter » garde le fond, sans marque",
+    description: "Suivi allumé, le fond d'une cellule posé par la puce « Fond de cellule » de la barre du tableau (une marque de modification sur la case) : « Tout refuser » rend la main et la case sans fond, aucune marque, boutons regrisés - d'un seul Annuler ; refait, « Tout accepter » garde le fond, sans marque",
     run: async (h) => {
       try {
         const out = {};
@@ -1424,7 +1424,6 @@
         const original = plainHtml(Editor.getHTML());
         await pickCellFill(h, FILL);
         out.pending = cellModifications() === 1 && FILL_CSS.test(Editor.getHTML()) && Editor.hasPendingTrackedChanges() && !rejectBtn().disabled;
-        out.noBar = TrackChanges.selectionSuggestionIds(EditorCore.getEditor().state).length === 0;
         const rejected = await runAllChunked(h, 'reject');
         out.rejectNoLoop = !rejected.looped;
         const afterReject = Editor.getHTML();
@@ -1480,6 +1479,337 @@
         out.noLoop = !rejected.looped;
         const html = Editor.getHTML();
         out.original = plainHtml(html) === original && !/background-color/.test(html) && html.indexOf('data-tc-') === -1 && !Editor.hasPendingTrackedChanges();
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  // === La barre « Accepter / Refuser » propose le fond d'une cellule et la largeur d'une colonne (demande d'Antoine du 04/10, carte « Corriger ») ===
+  // Ces deux réglages posent une marque `modification` sur chaque case touchée, que la barre ne voyait pas : seul « Tout refuser » les rendait. Elle les propose maintenant comme l'alignement d'un paragraphe, un par
+  // un (js/track-changes.js:selectionSuggestionIds) ; la largeur d'une colonne se résout sur toute la colonne - une marque par case, un id chacune (expandSuggestionIds). Les marques qui suivent une colonne ajoutée
+  // à travers une case fusionnée (colspan, colwidth, rowspan : ridesAlong) restent cachées, elles se résolvent avec leur colonne. Les parcours à la vraie souris sont dans le script Node trackColumnsMouse.
+  const TABLE_FIXED_3X3 = '<table><tbody>' + ['1', '2', '3'].map(r => '<tr>' + ['a', 'b', 'c'].map(c => '<td colwidth="150"><p>' + c + r + '</p></td>').join('') + '</tr>').join('') + '</tbody></table><p>fin</p>';
+  const TABLE_MERGED_FIXED = '<table><tbody><tr><td colspan="2" colwidth="100,100"><p>ab</p></td><td colwidth="100"><p>c1</p></td></tr><tr><td colwidth="100"><p>a2</p></td><td colwidth="100"><p>b2</p></td><td colwidth="100"><p>c2</p></td></tr></tbody></table><p>fin</p>';
+  // Un attribut de chaque case, ligne par ligne : « 90,150,220 / 90,150,220 » pour les largeurs, « -,#fff2a8 / - » pour les fonds.
+  function cellAttrRows(attr) {
+    const rows = [];
+    EditorCore.getEditor().state.doc.descendants(node => {
+      if (node.type.name === 'tableRow') rows.push([]);
+      else if (node.type.name === 'tableCell' || node.type.name === 'tableHeader') rows[rows.length - 1].push(node.attrs[attr]);
+      return true;
+    });
+    return rows;
+  }
+  const widthRows = () => cellAttrRows('colwidth').map(row => row.map(w => (w ? w.join('+') : '-')).join(',')).join(' / ');
+  // Les largeurs que l'écran montre (celles du DOM, pas celles du document) : Tiptap laissait à l'écran l'ancienne largeur d'une colonne redevenue « automatique ».
+  const renderedWidths = () => Array.from(document.querySelectorAll('.tiptap tr')).map(tr => Array.from(tr.children).map(cell => Math.round(cell.getBoundingClientRect().width)));
+  const sameRenderedWidths = (a, b) => a.length === b.length && a.every((row, i) => row.length === b[i].length && row.every((w, j) => Math.abs(w - b[i][j]) <= 2));
+  const fillRows = () => cellAttrRows('backgroundColor').map(row => row.map(c => c || '-').join(',')).join(' / ');
+  const cellNodePos = text => {
+    let pos = -1;
+    EditorCore.getEditor().state.doc.descendants((node, p) => { if (pos < 0 && (node.type.name === 'tableCell' || node.type.name === 'tableHeader') && node.textContent === text) pos = p; });
+    if (pos < 0) throw new Error('case « ' + text + ' » introuvable');
+    return pos;
+  };
+  // Des cases sélectionnées comme le fait la souris (CellSelection de prosemirror-tables), de la case `anchor` à la case `head`.
+  async function selectCells(h, anchor, head) {
+    const ed = EditorCore.getEditor();
+    ed.view.focus();
+    ed.commands.setCellSelection({ anchorCell: cellNodePos(anchor), headCell: cellNodePos(head) });
+    await h.sleep(200);
+  }
+
+  cases.push({
+    id: 'trackchanges_bar_resolves_a_cell_background_one_cell_at_a_time',
+    description: "Suivi allumé, deux cases colorées par la puce « Fond de cellule » : le curseur dans l'une ouvre la barre « Accepter / Refuser » (rien sur une case sans fond), « Refuser » lui rend sa couleur d'avant (aucune) et laisse l'autre en attente, « Accepter » garde l'autre, sans marque ; un seul Annuler la remet en attente",
+    run: async (h) => {
+      try {
+        const out = {};
+        await loadTable(h, TABLE_3X2, 'b1', true);
+        const original = plainHtml(Editor.getHTML());
+        await pickCellFill(h, FILL);
+        await placeInCell(h, 'a2');
+        await pickCellFill(h, '#c8f7c5');
+        out.pending = cellModifications() === 2 && fillRows() === '-,' + FILL + ',- / #c8f7c5,-,-';
+        await placeInCell(h, 'c1');
+        out.noBarOnPlainCell = !barVisible() && TrackChanges.selectionSuggestionIds(EditorCore.getEditor().state).length === 0;
+        await placeInCell(h, 'b1');
+        out.barOnColoredCell = barVisible() && TrackChanges.selectionSuggestionIds(EditorCore.getEditor().state).length === 1;
+        await pressBarButton(h, 'reject');
+        out.rejectedOne = fillRows() === '-,-,- / #c8f7c5,-,-' && cellModifications() === 1 && Editor.hasPendingTrackedChanges() && !barVisible();
+        await placeInCell(h, 'a2');
+        out.barOnOther = barVisible();
+        await pressBarButton(h, 'accept');
+        out.acceptedOther = fillRows() === '-,-,- / #c8f7c5,-,-' && cellModifications() === 0 && !Editor.hasPendingTrackedChanges() && !barVisible();
+        await h.sleep(700);
+        EditorCore.getEditor().commands.undo();
+        await h.sleep(250);
+        out.undoneOnce = cellModifications() === 1 && fillRows() === '-,-,- / #c8f7c5,-,-' && Editor.hasPendingTrackedChanges();
+        await placeInCell(h, 'a2');
+        await pressBarButton(h, 'reject');
+        out.backToOriginal = plainHtml(Editor.getHTML()) === original && !Editor.hasPendingTrackedChanges();
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_bar_resolves_a_column_width_on_the_whole_column',
+    description: "Suivi allumé, la largeur de deux colonnes changée comme le fait la poignée du bord (une marque par case, un id chacune) : le curseur dans la case du MILIEU d'une colonne ouvre la barre, « Refuser » rend la largeur d'avant à toute la colonne - les trois cases - et laisse l'autre colonne en attente, « Accepter » depuis la dernière case de l'autre garde sa largeur sur toute la colonne, sans marque ; un seul Annuler la remet en attente",
+    run: async (h) => {
+      try {
+        const out = {};
+        await loadTable(h, TABLE_FIXED_3X3, 'a1', true);
+        await setColumnWidth(h, ['a1', 'a2', 'a3'], 90);
+        await setColumnWidth(h, ['c1', 'c2', 'c3'], 220);
+        out.pending = cellModifications() === 6 && widthRows() === '90,150,220 / 90,150,220 / 90,150,220';
+        await placeInCell(h, 'b2');
+        out.noBarOnUntouchedColumn = !barVisible();
+        await placeInCell(h, 'a2');
+        out.barOnMiddleCell = barVisible() && TrackChanges.selectionSuggestionIds(EditorCore.getEditor().state).length === 1;
+        await pressBarButton(h, 'reject');
+        out.rejectedColumn = widthRows() === '150,150,220 / 150,150,220 / 150,150,220' && cellModifications() === 3 && Editor.hasPendingTrackedChanges() && !barVisible();
+        await placeInCell(h, 'c3');
+        out.barOnLastCell = barVisible();
+        await pressBarButton(h, 'accept');
+        out.acceptedColumn = widthRows() === '150,150,220 / 150,150,220 / 150,150,220' && cellModifications() === 0 && !Editor.hasPendingTrackedChanges();
+        await h.sleep(700);
+        EditorCore.getEditor().commands.undo();
+        await h.sleep(250);
+        out.undoneOnce = cellModifications() === 3 && widthRows() === '150,150,220 / 150,150,220 / 150,150,220' && Editor.hasPendingTrackedChanges();
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_bar_resolves_every_selected_cell_background_and_only_those',
+    description: "Trois cases d'une ligne sélectionnées (CellSelection) puis colorées d'un coup : avec les trois sélectionnées la barre s'ouvre et « Refuser » les rend toutes (la première aussi, que la plage de la sélection ne recouvre pas) ; avec deux des trois seulement, « Accepter » ne résout que ces deux-là",
+    run: async (h) => {
+      try {
+        const out = {};
+        await loadTable(h, TABLE_3X2, 'a1', true);
+        const original = plainHtml(Editor.getHTML());
+        await selectCells(h, 'a1', 'c1');
+        await pickCellFill(h, FILL);
+        out.three = cellModifications() === 3 && fillRows() === FILL + ',' + FILL + ',' + FILL + ' / -,-,-';
+        await selectCells(h, 'a1', 'c1');
+        out.barOnCells = barVisible();
+        out.threeIds = TrackChanges.selectionSuggestionIds(EditorCore.getEditor().state).length === 3;
+        await pressBarButton(h, 'reject');
+        out.allBack = plainHtml(Editor.getHTML()) === original && cellModifications() === 0 && !Editor.hasPendingTrackedChanges();
+        await selectCells(h, 'a1', 'c1');
+        await pickCellFill(h, FILL);
+        await selectCells(h, 'b1', 'c1');
+        out.barOnTwo = barVisible() && TrackChanges.selectionSuggestionIds(EditorCore.getEditor().state).length === 2;
+        await pressBarButton(h, 'accept');
+        out.onlyTwo = cellModifications() === 1 && fillRows() === FILL + ',' + FILL + ',' + FILL + ' / -,-,-' && Editor.hasPendingTrackedChanges();
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_bar_resolves_a_width_pulled_across_a_merged_cell',
+    description: "La largeur de la 2e colonne tirée sous une case fusionnée sur deux colonnes (colwidth de la case fusionnée : une largeur de plus, celle de la colonne tirée seule change) : la barre propose cette marque depuis la case fusionnée comme depuis la case du dessous, « Refuser » rend aux deux leurs largeurs d'avant (la case fusionnée à deux largeurs), « Accepter » les garde, sans marque",
+    run: async (h) => {
+      try {
+        const out = {};
+        const pull = async () => {
+          await loadTable(h, TABLE_MERGED_FIXED, 'b2', true);
+          const ed = EditorCore.getEditor();
+          const tr = ed.state.tr;
+          [['ab', [100, 140]], ['b2', [140]]].forEach(([text, colwidth]) => tr.setNodeMarkup(cellNodePos(text), undefined, Object.assign({}, ed.state.doc.nodeAt(cellNodePos(text)).attrs, { colwidth })));
+          ed.view.dispatch(tr);
+          await h.sleep(200);
+        };
+        await pull();
+        out.pending = cellModifications() === 2 && widthRows() === '100+140,100 / 100,140,100';
+        await placeInCell(h, 'ab');
+        out.barOnMergedCell = barVisible();
+        await pressBarButton(h, 'accept');
+        out.acceptedBoth = widthRows() === '100+140,100 / 100,140,100' && cellModifications() === 0 && !Editor.hasPendingTrackedChanges();
+        await pull();
+        await placeInCell(h, 'b2');
+        out.barOnCellBelow = barVisible();
+        await pressBarButton(h, 'reject');
+        out.rejectedBoth = widthRows() === '100+100,100 / 100,100,100' && cellModifications() === 0 && !Editor.hasPendingTrackedChanges();
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify({ out, widths: widthRows() }) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_bar_never_offers_the_marks_that_ride_with_a_column_through_a_merged_cell',
+    description: "Une colonne ajoutée à travers une case fusionnée (largeurs fixées ou non) : la case fusionnée porte les marques qui la suivent (colspan, colwidth sous le même id) et la barre ne les propose pas depuis elle ; depuis la case ajoutée elle propose la colonne, et « Refuser » rend le tableau d'avant, case fusionnée comprise - ni case vide ajoutée, ni marque",
+    run: async (h) => {
+      try {
+        const out = {};
+        for (const [name, html] of [['auto', TABLE_MERGED], ['fixed', TABLE_MERGED_FIXED]]) {
+          await loadTable(h, html, 'b2', true);
+          const before = plainHtml(Editor.getHTML());
+          await pressTableButton(h, 'col-before');
+          await h.sleep(600);
+          const riders = [];
+          EditorCore.getEditor().state.doc.descendants(node => { node.marks.forEach(m => { if (m.type.name === 'modification') riders.push(m.attrs.attrName); }); return true; });
+          out[name + 'Riders'] = riders.includes('colspan') && (name === 'auto' || riders.includes('colwidth'));
+          await placeInCell(h, 'ab');
+          out[name + 'NoBarOnMergedCell'] = !barVisible() && TrackChanges.selectionSuggestionIds(EditorCore.getEditor().state).length === 0;
+          await selectDoc(h, markedNodePos('tableCell', 'insertion', 0) + 2);
+          out[name + 'BarOnAddedCell'] = barVisible();
+          await pressBarButton(h, 'reject');
+          out[name + 'Restored'] = plainHtml(Editor.getHTML()) === before && !Editor.hasPendingTrackedChanges() && Editor.getHTML().indexOf('data-tc-') === -1;
+        }
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  // La valeur que « Refuser » rend est celle d'ORIGINE, même après plusieurs changements du même réglage (deux couleurs, deux glissés du même bord) : la lib note, à chaque remplacement de la marque d'une case, la valeur
+  // d'avant le dernier changement ; js/track-changes.js:keepOriginalCellSettings garde la première. Sur un tableau inséré à la main (largeurs jamais fixées), le widget fige aussitôt les autres colonnes à leur largeur
+  // (js/editor.js:backfillAutoColumnWidths, hors suivi) : refuser la largeur tirée rend aussi ces colonnes à « automatique », sans quoi le tableau ne retrouvait jamais sa mise en page.
+  async function pickNoCellFill(h) {
+    await pressTableButton(h, 'fill-open');
+    const none = document.querySelector('.v2-color-dropdown.visible button[data-action="none"]');
+    if (!none) throw new Error('« Aucune couleur » introuvable dans le menu du fond de cellule');
+    none.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    await h.sleep(250);
+  }
+  const pendingValues = name => {
+    const out = [];
+    EditorCore.getEditor().state.doc.descendants(node => { node.marks.forEach(m => { if (m.type.name === 'modification' && m.attrs.attrName === name) out.push(JSON.stringify(m.attrs.previousValue) + '>' + JSON.stringify(m.attrs.newValue)); }); return true; });
+    return out;
+  };
+
+  cases.push({
+    id: 'trackchanges_refusing_a_cell_background_set_twice_gives_back_the_original',
+    description: "Suivi allumé, la même case colorée deux fois (jaune puis vert) : la marque garde l'absence de fond d'origine, « Refuser » (barre) la rend - pas le jaune d'entre-deux ; « Accepter » garde le vert ; jaune puis « Aucune couleur » ne laisse aucune suggestion",
+    run: async (h) => {
+      try {
+        const out = {};
+        await loadTable(h, TABLE_3X2, 'b1', true);
+        const original = plainHtml(Editor.getHTML());
+        await pickCellFill(h, FILL);
+        await pickCellFill(h, '#c8f7c5');
+        out.oneMark = cellModifications() === 1 && pendingValues('backgroundColor').join() === 'null>"#c8f7c5"';
+        await placeInCell(h, 'b1');
+        await pressBarButton(h, 'reject');
+        out.rejectedToOriginal = fillRows() === '-,-,- / -,-,-' && plainHtml(Editor.getHTML()) === original && !Editor.hasPendingTrackedChanges();
+        await pickCellFill(h, FILL);
+        await pickCellFill(h, '#c8f7c5');
+        await placeInCell(h, 'b1');
+        await pressBarButton(h, 'accept');
+        out.acceptedKeepsLast = fillRows() === '-,#c8f7c5,- / -,-,-' && cellModifications() === 0 && !Editor.hasPendingTrackedChanges();
+        await loadTable(h, TABLE_3X2, 'b1', true);
+        await pickCellFill(h, FILL);
+        await pickNoCellFill(h);
+        out.backToNothing = cellModifications() === 0 && !Editor.hasPendingTrackedChanges() && fillRows() === '-,-,- / -,-,-';
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_refusing_a_column_width_pulled_twice_gives_back_the_original',
+    description: "Suivi allumé, la largeur d'une colonne tirée deux fois (150 -> 120 -> 90, une marque par case) : « Refuser » (barre) rend 150 à toute la colonne, pas 120 ; tirée puis ramenée à 150, plus aucune suggestion",
+    run: async (h) => {
+      try {
+        const out = {};
+        await loadTable(h, TABLE_FIXED_3X3, 'a1', true);
+        await setColumnWidth(h, ['a1', 'a2', 'a3'], 120);
+        await setColumnWidth(h, ['a1', 'a2', 'a3'], 90);
+        out.originalKept = cellModifications() === 3 && pendingValues('colwidth').join() === '[150]>[90],[150]>[90],[150]>[90]';
+        await placeInCell(h, 'a2');
+        await pressBarButton(h, 'reject');
+        out.rejectedToOriginal = widthRows() === '150,150,150 / 150,150,150 / 150,150,150' && cellModifications() === 0 && !Editor.hasPendingTrackedChanges();
+        await setColumnWidth(h, ['a1', 'a2', 'a3'], 90);
+        await setColumnWidth(h, ['a1', 'a2', 'a3'], 150);
+        out.backToNothing = cellModifications() === 0 && !Editor.hasPendingTrackedChanges() && widthRows() === '150,150,150 / 150,150,150 / 150,150,150';
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_refusing_a_width_on_an_automatic_table_gives_back_the_automatic_layout',
+    description: "Tableau aux largeurs jamais fixées, la largeur d'une colonne tirée avec le suivi : le widget fige les autres colonnes (hors suivi) ; « Refuser » (barre) rend le tableau d'origine - toutes les colonnes de nouveau « automatiques », aucune marque, les largeurs d'avant à l'écran (Tiptap gardait l'ancienne) - d'un seul Annuler ; « Accepter » garde la largeur tirée et les colonnes figées",
+    run: async (h) => {
+      try {
+        const out = {};
+        await loadTable(h, TABLE_3X2, 'a1', true);
+        const original = plainHtml(Editor.getHTML());
+        const originalWidths = renderedWidths();
+        const pull = async () => { await setColumnWidth(h, ['a1', 'a2'], 120); await h.sleep(300); };
+        await pull();
+        out.frozen = /^120,\d+,\d+ \/ 120,\d+,\d+$/.test(widthRows()) && cellModifications() === 2;
+        await placeInCell(h, 'a2');
+        await pressBarButton(h, 'reject');
+        out.backToAutomatic = widthRows() === '-,-,- / -,-,-' && plainHtml(Editor.getHTML()) === original && !Editor.hasPendingTrackedChanges();
+        out.shownBackToAutomatic = sameRenderedWidths(renderedWidths(), originalWidths);
+        await h.sleep(700);
+        EditorCore.getEditor().commands.undo();
+        await h.sleep(300);
+        out.undoneOnce = /^120,\d+,\d+ \/ 120,\d+,\d+$/.test(widthRows()) && cellModifications() === 2 && Editor.hasPendingTrackedChanges();
+        await placeInCell(h, 'a1');
+        await pressBarButton(h, 'accept');
+        out.acceptedKeepsFrozen = /^120,\d+,\d+ \/ 120,\d+,\d+$/.test(widthRows()) && cellModifications() === 0 && !Editor.hasPendingTrackedChanges();
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify({ out, widths: widthRows() }) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_reject_all_gives_back_the_automatic_layout_of_a_table_whose_width_was_pulled',
+    description: "Tableau aux largeurs jamais fixées, une colonne tirée avec le suivi : « Tout refuser » rend le tableau d'origine (toutes les colonnes « automatiques ») seul comme avec un texte ajouté en attente - la lib ne sait pas rendre ces colonnes à « automatique » : la transaction qu'elle produit pour la tranche reçoit ce complément, dans le même pas d'historique (un seul Annuler remet tout en attente, le texte ajouté et la largeur) ; « Tout accepter » garde les largeurs",
+    run: async (h) => {
+      try {
+        const out = {};
+        await loadTable(h, TABLE_3X2, 'a1', true);
+        const original = plainHtml(Editor.getHTML());
+        const originalWidths = renderedWidths();
+        await setColumnWidth(h, ['a1', 'a2'], 120);
+        await h.sleep(300);
+        const alone = await runAllChunked(h, 'reject');
+        out.aloneNoLoop = !alone.looped;
+        out.aloneOriginal = widthRows() === '-,-,- / -,-,-' && plainHtml(Editor.getHTML()) === original && !Editor.hasPendingTrackedChanges();
+        out.aloneShownOriginal = sameRenderedWidths(renderedWidths(), originalWidths);
+        await setColumnWidth(h, ['a1', 'a2'], 120);
+        await h.sleep(300);
+        await caretIn(h, 'fin', 3);
+        await h.typeText(' XX');
+        out.mixedPending = cellModifications() === 2 && insCount(Editor.getHTML()) === 1;
+        await h.sleep(700);
+        const mixed = await runAllChunked(h, 'reject');
+        out.mixedNoLoop = !mixed.looped;
+        out.mixedOriginal = widthRows() === '-,-,- / -,-,-' && plainHtml(Editor.getHTML()) === original && !Editor.hasPendingTrackedChanges();
+        out.mixedShownOriginal = sameRenderedWidths(renderedWidths(), originalWidths);
+        await h.sleep(700);
+        EditorCore.getEditor().commands.undo();
+        await h.sleep(300);
+        out.mixedUndoneOnce = /^120,\d+,\d+ \/ 120,\d+,\d+$/.test(widthRows()) && cellModifications() === 2 && insCount(Editor.getHTML()) === 1 && Editor.hasPendingTrackedChanges();
+        const accepted = await runAllChunked(h, 'accept');
+        out.acceptNoLoop = !accepted.looped;
+        out.acceptKeeps = /^120,\d+,\d+ \/ 120,\d+,\d+$/.test(widthRows()) && cellModifications() === 0 && !Editor.hasPendingTrackedChanges();
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify({ out, widths: widthRows() }) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_reject_all_in_small_batches_reaches_an_insertion_behind_a_cell_background',
+    description: "« Tout refuser » par tranches d'une seule marque, avec le fond d'une cellule en attente AVANT un texte ajouté : la première tranche ne contient que la case colorée (rien à défaire pour la lib) et le fond se refuse à part, la boucle continue jusqu'au texte ajouté - document d'origine, aucune marque (le fond restait, et le texte ajouté avec lui, quand une insertion attendait)",
+    run: async (h) => {
+      try {
+        const out = {};
+        await loadTable(h, TABLE_3X2, 'b1', true);
+        const original = plainHtml(Editor.getHTML());
+        await pickCellFill(h, FILL);
+        await caretIn(h, 'fin', 3);
+        await h.typeText(' XX');
+        out.pending = cellModifications() === 1 && insCount(Editor.getHTML()) === 1;
+        const run = await runAllChunked(h, 'reject', undefined, 1);
+        out.noLoop = !run.looped;
+        out.original = plainHtml(Editor.getHTML()) === original && !Editor.hasPendingTrackedChanges();
         return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
       } finally { await disableTrackChangesIfOn(h); }
     },

@@ -375,6 +375,24 @@ const EditorNodes = (function () {
       },
     });
   }
+  // Le tableau de Tiptap (TableView, @tiptap/extension-table) pose `min-width` sur le <col> d'une colonne sans largeur mais ne retire pas le `width` d'avant :
+  // une largeur redevenue « automatique » (Refuser un glissé de bord, Annuler, sur un tableau inséré à la main) gardait à l'écran celle qu'elle venait de
+  // perdre, alors que le document avait retrouvé sa mise en page d'origine.
+  function createTableView(TableView) {
+    return class extends TableView {
+      update(node) {
+        const same = super.update(node);
+        if (!same || !node.firstChild) return same;
+        let index = 0;
+        node.firstChild.forEach(cell => {
+          for (let j = 0; j < cell.attrs.colspan; j += 1, index += 1) {
+            if (!(cell.attrs.colwidth && cell.attrs.colwidth[j]) && this.colgroup.children[index]) this.colgroup.children[index].style.removeProperty('width');
+          }
+        });
+        return same;
+      }
+    };
+  }
   // La colonne d'une zone 2 colonnes où se trouve le curseur : { columnDepth, zoneDepth, colIndex }, ou null hors d'une zone.
   function findTwoColumnsContext($from) {
     let columnDepth = -1;
@@ -1445,7 +1463,7 @@ const EditorNodes = (function () {
     createVarBadgeNode, createCalcBadgeNode, createCalcBadgeKeysExtension, createPageNumberBadgeNode, createSmartChipNode, createFootnoteRefNode, createCommentMark,
     createFontSizeExtension, createTextColorExtension, createHighlightExtension,
     createBulletStyleExtension, createOrderedListStyleExtension, createTaskListStyleExtension,
-    withCellBackground, createTabNavigationExtension, createClearHistoryExtension,
+    withCellBackground, createTableView, createTabNavigationExtension, createClearHistoryExtension,
     createTwoColumnsNodes, createConditionalTextNode, createConditionalCheckboxNode, createConditionalValueNode, createConditionalValueKeysExtension, createEditorImageNode, moveImageNode, createPageBreakNode,
     createHeadingNumberingConfigNode, createTocNode,
   };

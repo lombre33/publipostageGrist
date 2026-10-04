@@ -256,7 +256,7 @@ const Editor = (function () {
       { FontFamily },
       { Suggestion },
       { Document },
-      { Table },
+      { Table, TableView },
       { TableRow },
       { TableCell },
       { TableHeader },
@@ -409,7 +409,7 @@ const Editor = (function () {
         LinkDialog.createExtension(Extension),
         // Rechercher / Remplacer (js/find-replace.js) : surlignage des résultats par décorations (Ctrl+F et Ctrl+H sont écoutés sur le document, cf. wireEditor).
         FindReplace.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
-        TrackedTable.configure({ resizable: true }),
+        TrackedTable.configure({ resizable: true, View: EditorNodes.createTableView(TableView) }),
         TrackedTableRow,
         TrackedTableHeaderWithBg,
         TrackedTableCellWithBg,

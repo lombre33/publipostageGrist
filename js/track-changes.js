@@ -96,27 +96,32 @@ const TrackChanges = (function () {
 
   // Accepter ou refuser une modification (barre flottante, js/floating-toolbars.js)
   const sameId = (a, b) => String(a) === String(b);
-  // Une marque `modification` d'une case ou d'une ligne (la largeur d'une case fusionnée qui gagne une colonne, le fond d'une cellule, la largeur
-  // d'une colonne) ne se voit pas dans l'éditeur : elle ne déclenche jamais la barre « Accepter / Refuser », elle suit seulement la colonne ou la
-  // ligne dont elle fait partie (expandSuggestionIds). « Tout refuser » rend celles qui ne suivent rien (pendingAttributeIds), « Tout accepter »
-  // toutes.
-  const isTableMod = (node, mark) => mark.type.name === 'modification' && CELL_NODE_TYPES.includes(node.type.name);
+  // Une marque `modification` d'une case ou d'une ligne qui accompagne une colonne ou une ligne ajoutée ou supprimée avec le suivi : la case fusionnée
+  // dont la largeur (colspan, colwidth) ou la hauteur (rowspan) change avec elle porte ces marques sous un même id. Elle ne se voit pas dans l'éditeur
+  // et la barre « Accepter / Refuser » ne la propose jamais : elle se résout avec sa colonne ou sa ligne (expandSuggestionIds). Les autres réglages
+  // d'une case - le fond d'une cellule, la largeur d'une colonne tirée à la souris - sont des suggestions comme l'alignement d'un paragraphe : la
+  // barre les propose, un par un.
+  const ridesAlong = (node, mark) => mark.type.name === 'modification' && CELL_NODE_TYPES.includes(node.type.name)
+    && node.marks.some(m => m.type.name === 'modification' && sameId(m.attrs.id, mark.attrs.id) && (m.attrs.attrName === 'colspan' || m.attrs.attrName === 'rowspan'));
 
   // Les ids des suggestions que la sélection touche. Curseur seul : le texte ou l'objet tout contre lui, celui d'avant d'abord (ce que le curseur
-  // vient de franchir) ; à défaut, le bloc le plus profond qui porte une marque en remontant (la case d'une colonne suivie, la ligne, le paragraphe
-  // supprimé en entier) : la suggestion la plus proche, jamais celle d'un bloc plus large qui ne fait que contenir le curseur. Sélection : toutes
-  // celles qu'elle recouvre. Vide quand il n'y en a aucune.
+  // vient de franchir) ; à défaut, le bloc le plus profond qui porte une marque en remontant (la case d'une colonne suivie ou dont le fond ou la
+  // largeur a changé, la ligne, le paragraphe supprimé en entier) : la suggestion la plus proche, jamais celle d'un bloc plus large qui ne fait que
+  // contenir le curseur. Sélection : toutes celles qu'elle recouvre. Vide quand il n'y en a aucune.
   function selectionSuggestionIds(state) {
     const { from, to, empty, $from } = state.selection;
     const ids = [];
     const take = node => suggestionMarksOf(node).forEach(mark => {
-      if (mark.attrs.id == null || isTableMod(node, mark) || ids.some(id => sameId(id, mark.attrs.id))) return;
+      if (mark.attrs.id == null || ridesAlong(node, mark) || ids.some(id => sameId(id, mark.attrs.id))) return;
       ids.push(mark.attrs.id);
     });
     if (empty) {
-      const near = [$from.nodeBefore, $from.nodeAfter].find(node => node && suggestionMarksOf(node).some(m => !isTableMod(node, m)));
+      const near = [$from.nodeBefore, $from.nodeAfter].find(node => node && suggestionMarksOf(node).some(m => !ridesAlong(node, m)));
       if (near) take(near);
     } else {
+      // Des cases sélectionnées (CellSelection, reconnue à `forEachCell` comme le fait setCellsBackground de js/floating-toolbars.js) : la plage de
+      // chacune est son contenu, la case elle-même n'y est pas (la première non plus) - on la prend à part.
+      if (typeof state.selection.forEachCell === 'function') state.selection.forEachCell(cell => take(cell));
       // Un bloc qui contient toute la sélection (la case, la ligne, le tableau où elle se trouve) ne compte pas : il ne fait que l'entourer.
       state.doc.nodesBetween(from, to, (node, pos) => { if (node.isLeaf || pos >= from || pos + node.nodeSize <= to) take(node); });
     }
@@ -124,29 +129,54 @@ const TrackChanges = (function () {
     return ids;
   }
 
+  // Le tableau autour de la case ou de la ligne à `pos` : `$pos` (sa position résolue), `depth` (celle du tableau), `table` et `map` (sa TableMap) ;
+  // null hors d'un tableau.
+  function tableAround(doc, pos) {
+    const $pos = doc.resolve(pos);
+    let depth = $pos.depth;
+    while (depth > 0 && $pos.node(depth).type.name !== 'table') depth--;
+    if (!depth) return null;
+    const table = $pos.node(depth);
+    return { $pos, depth, table, map: TableMapClass.get(table) };
+  }
+  // La largeur d'une colonne tirée à la souris : prosemirror-tables règle `colwidth` sur toutes les cases de la colonne d'un coup, la lib pose une
+  // marque par case, chacune avec son id. Hors celle d'une case fusionnée qui suit une colonne ajoutée ou supprimée (ridesAlong).
+  const isColumnWidth = (node, mark) => mark.type.name === 'modification' && mark.attrs.attrName === 'colwidth' && !ridesAlong(node, mark);
+  // Les colonnes dont la largeur a changé dans une marque `colwidth`, par rang à partir de la première colonne de la case : une case fusionnée porte la
+  // largeur de chaque colonne qu'elle couvre, et seule celle qu'on a tirée compte.
+  function changedColumns(mark) {
+    const before = mark.attrs.previousValue || [];
+    const after = mark.attrs.newValue || [];
+    const columns = [];
+    for (let k = 0; k < Math.max(before.length, after.length); k++) if ((before[k] || 0) !== (after[k] || 0)) columns.push(k);
+    return columns;
+  }
+
   // Tout ce qui se résout avec les suggestions `seedIds` : leurs propres ids, plus, pour une colonne ou une ligne de tableau ajoutée ou supprimée
   // avec le suivi, ceux des autres cases de la colonne (une marque par case, chacune avec son id : en résoudre une seule laisserait un tableau percé,
   // ou une colonne qui revient à la réouverture) et ceux des cases fusionnées dont la largeur (ou la hauteur) a changé avec elle : « Refuser » une
   // colonne ajoutée à travers une case fusionnée doit aussi lui rendre sa largeur, sans quoi prosemirror-tables « répare » le tableau en ajoutant des
-  // cases vides. Rend une table id en texte -> id tel que le document l'écrit (la lib compare avec `===`).
+  // cases vides. Pour la largeur d'une colonne tirée à la souris, ceux des autres cases de la colonne qui portent la leur : une colonne n'a qu'une
+  // largeur, la rendre à une case seule laisserait des largeurs différentes dans la colonne. Rend une table id en texte -> id tel que le document
+  // l'écrit (la lib compare avec `===`).
   function expandSuggestionIds(doc, seedIds) {
     const ids = new Map();
     seedIds.forEach(id => ids.set(String(id), id));
     if (!TableMapClass) return ids;
     const seeds = [];
+    const widths = [];
     doc.descendants((node, pos) => {
       if (!CELL_NODE_TYPES.includes(node.type.name)) return true;
       const own = suggestionMarksOf(node).find(m => m.type.name !== 'modification' && ids.has(String(m.attrs.id)));
       if (own) seeds.push({ pos, kind: own.type.name, isRow: node.type.name === 'tableRow' });
+      const width = suggestionMarksOf(node).find(m => isColumnWidth(node, m) && ids.has(String(m.attrs.id)));
+      if (width) widths.push({ pos, mark: width });
       return true;
     });
     seeds.forEach(({ pos, kind, isRow }) => {
-      const $pos = doc.resolve(pos);
-      let depth = $pos.depth;
-      while (depth > 0 && $pos.node(depth).type.name !== 'table') depth--;
-      if (!depth) return;
-      const table = $pos.node(depth);
-      const map = TableMapClass.get(table);
+      const around = tableAround(doc, pos);
+      if (!around) return;
+      const { $pos, depth, table, map } = around;
       const take = (cell, attrName) => cell && suggestionMarksOf(cell).forEach(m => {
         const sameKind = m.type.name === kind && !isRow;
         const sameSize = m.type.name === 'modification' && m.attrs.attrName === attrName;
@@ -160,7 +190,67 @@ const TrackChanges = (function () {
         for (let row = 0; row < map.height; row++) take(table.nodeAt(map.map[row * map.width + left]), 'colspan');
       }
     });
+    widths.forEach(({ pos, mark }) => {
+      const around = tableAround(doc, pos);
+      if (!around) return;
+      const { $pos, depth, table, map } = around;
+      const { left } = map.findCell(pos - $pos.start(depth));
+      changedColumns(mark).forEach(offset => {
+        if (left + offset >= map.width) return;
+        for (let row = 0; row < map.height; row++) {
+          const cell = table.nodeAt(map.map[row * map.width + left + offset]);
+          if (cell) suggestionMarksOf(cell).forEach(m => { if (isColumnWidth(cell, m) && m.attrs.id != null) ids.set(String(m.attrs.id), m.attrs.id); });
+        }
+      });
+    });
     return ids;
+  }
+
+  // Un réglage de case changé deux fois de suite (deux couleurs de fond, deux glissés du même bord de colonne) : la lib remplace la marque de la case et
+  // y note la valeur d'AVANT LE DERNIER changement - l'originale est perdue, « Refuser » rendait la couleur ou la largeur d'entre-deux. La marque garde
+  // donc la valeur d'origine de celle qu'elle remplace, et disparaît quand le dernier changement la ramène. Seulement pour une transaction faite de
+  // changements d'attribut (le fond : setNodeMarkup ; la largeur : setNodeMarkup sur chaque case de la colonne) : la lib n'y insère ni ne retire aucun
+  // nœud, les positions du document d'avant sont celles du document suivi. La marque qui suit une colonne ajoutée ou supprimée (ridesAlong) reste à la
+  // lib. Ajoute ses corrections à `tracked`, la transaction que la lib vient de produire pour `original`.
+  const isSameValue = (a, b) => JSON.stringify(a == null ? null : a) === JSON.stringify(b == null ? null : b);
+  const attrModification = (node, name) => node.marks.find(m => m.type.name === 'modification' && m.attrs.type === 'attr' && m.attrs.attrName === name);
+  // Le nœud et les attributs qu'un pas change, ou null quand ce pas n'est pas un simple changement d'attribut. `doc` : le document d'avant ce pas.
+  function attributeChange(step, doc) {
+    if (step.jsonID === 'attr') {
+      const node = doc.nodeAt(step.pos);
+      return node && { pos: step.pos, node, names: [step.attr] };
+    }
+    // setNodeMarkup : le même test que la lib (suggestSetNodeMarkup, replaceAroundStep.js).
+    if (step.jsonID === 'replaceAround' && step.structure && step.insert === 1 && step.slice.size === 2 && step.gapFrom === step.from + 1 && step.gapTo === step.to - 1) {
+      const node = doc.nodeAt(step.from);
+      const next = step.slice.content.firstChild;
+      if (!node || !next || next.type !== node.type) return null;
+      return { pos: step.from, node, names: Object.keys(next.attrs).filter(name => next.attrs[name] !== node.attrs[name]) };
+    }
+    return null;
+  }
+  function keepOriginalCellSettings(tracked, original) {
+    const replaced = [];
+    for (let i = 0; i < original.steps.length; i++) {
+      const change = attributeChange(original.steps[i], original.docs[i]);
+      if (!change) return;
+      if (!CELL_NODE_TYPES.includes(change.node.type.name)) continue;
+      change.names.forEach(name => {
+        const before = attrModification(change.node, name);
+        if (before && !ridesAlong(change.node, before)) replaced.push({ pos: change.pos, name, before });
+      });
+    }
+    const { modification } = tracked.doc.type.schema.marks;
+    replaced.forEach(({ pos, name, before }) => {
+      const node = tracked.doc.nodeAt(pos);
+      const mark = node && attrModification(node, name);
+      if (!mark) return;
+      const rest = mark.removeFromSet(node.marks);
+      const marks = isSameValue(before.attrs.previousValue, mark.attrs.newValue)
+        ? rest
+        : modification.create(Object.assign({}, mark.attrs, { previousValue: before.attrs.previousValue })).addToSet(rest);
+      tracked.setNodeMarkup(pos, null, node.attrs, marks);
+    });
   }
 
   // L'étendue, dans `doc`, de tout ce qui porte une insertion ou une suppression d'id `id` : une suggestion s'étend sur des nœuds voisins (la fin
@@ -178,6 +268,33 @@ const TrackChanges = (function () {
     return from == null ? null : { from, to };
   }
 
+  // Une colonne « automatique » (sans `colwidth`) dont on tire le bord devient fixe, et le widget fige aussitôt les autres colonnes automatiques à la
+  // largeur qu'elles ont (backfillAutoColumnWidths, js/editor.js), hors suivi : le tableau n'a plus que des largeurs fixes. Rendre sa largeur d'avant
+  // à la seule colonne tirée (« automatique ») ne suffit pas : le widget la fige de nouveau aussitôt, les autres restent à leurs largeurs figées et le
+  // tableau ne retrouve jamais sa mise en page d'origine. Quand un refus rend une largeur d'avant « automatique » - le tableau l'était alors tout
+  // entier, le widget fige dès qu'une colonne reste automatique à côté d'une fixe -, les autres colonnes du tableau qui restent fixes sans largeur en
+  // attente, celles que le widget a figées, redeviennent donc « automatiques » elles aussi. `refused` : les marques que le refus vient de résoudre.
+  function releaseFrozenColumnWidths(tr, refused) {
+    const tables = [];
+    refused.forEach(({ pos, mark }) => {
+      if (mark.attrs.type !== 'attr' || mark.attrs.attrName !== 'colwidth' || mark.attrs.previousValue != null) return;
+      const $pos = tr.doc.resolve(pos);
+      for (let depth = $pos.depth; depth > 0; depth--) {
+        if ($pos.node(depth).type.name !== 'table') continue;
+        const start = $pos.before(depth);
+        if (!tables.includes(start)) tables.push(start);
+        break;
+      }
+    });
+    tables.forEach(start => {
+      tr.doc.nodeAt(start).descendants((node, offset) => {
+        if (node.type.name !== 'tableCell' && node.type.name !== 'tableHeader') return true;
+        if (node.attrs.colwidth && !attrModification(node, 'colwidth')) tr.setNodeAttribute(start + 1 + offset, 'colwidth', null);
+        return false;
+      });
+    });
+  }
+
   // Résout les marques `modification` (un attribut de nœud qui a changé : alignement, taille d'une image, largeur d'une case fusionnée...) des
   // suggestions `ids` : « accepter » retire la marque, « refuser » la retire et rend l'ancienne valeur - la même règle que revertModifications de la
   // lib, qui ne sait pas la restreindre à une suggestion. Du dernier au premier : les positions lues restent vraies.
@@ -193,6 +310,7 @@ const TrackChanges = (function () {
       if (type === 'attr' && typeof attrName === 'string') tr.setNodeAttribute(pos, attrName, previousValue);
       else if (type === 'nodeType' && tr.doc.type.schema.nodes[previousValue]) tr.setNodeMarkup(pos, tr.doc.type.schema.nodes[previousValue], null);
     });
+    if (!accept) releaseFrozenColumnWidths(tr, found);
   }
 
   // Lecture et exports : le document comme si tout était accepté
@@ -584,13 +702,13 @@ const TrackChanges = (function () {
       return found;
     }
     // Les réglages en attente (un alignement, « Garder avec le suivant », le fond d'une cellule, la largeur d'une colonne) : les marques
-    // `modification`, avec leurs ids tels que le document les écrit. Celles d'une case ou d'une ligne de tableau (isTableMod) suivent leur colonne ou
-    // leur ligne tant que l'une d'elles attend : `withTableMods` les prend aussi, pour quand il n'en reste plus.
-    function pendingAttributeIds(doc, withTableMods) {
+    // `modification`, avec leurs ids tels que le document les écrit. Celles qui accompagnent une colonne ou une ligne de tableau (ridesAlong) la suivent
+    // tant qu'elle attend : `withRiders` les prend aussi, pour quand il n'en reste plus.
+    function pendingAttributeIds(doc, withRiders) {
       const ids = [];
       doc.descendants(node => {
         node.marks.forEach(mark => {
-          if (mark.type.name === 'modification' && (withTableMods || !isTableMod(node, mark)) && mark.attrs.id != null && !ids.some(id => sameId(id, mark.attrs.id))) ids.push(mark.attrs.id);
+          if (mark.type.name === 'modification' && (withRiders || !ridesAlong(node, mark)) && mark.attrs.id != null && !ids.some(id => sameId(id, mark.attrs.id))) ids.push(mark.attrs.id);
         });
       });
       return ids;
@@ -599,32 +717,50 @@ const TrackChanges = (function () {
     // revertSuggestion de la lib rend « rien à faire » avant de résoudre les modifications dès qu'elle n'a aucun texte à défaire, et la boucle
     // retrouverait la même marque à chaque tour (avec un seul réglage de paragraphe suivi, « Tout refuser » ne finirait jamais). `onStall` résout
     // alors ce que la lib laisse et rend vrai s'il a changé le document : la boucle reprend pour le reste. Sans `onStall`, ou s'il ne change rien non
-    // plus, elle s'arrête : des marques peuvent rester, mais la page ne se fige jamais.
-    function runChunkedLibCommand(rangeCommandFactory, editor, chunkSize, onStall) {
+    // plus, elle s'arrête : des marques peuvent rester, mais la page ne se fige jamais. `adjust(tr)` complète la transaction que la lib produit pour
+    // chaque tranche, avant qu'elle ne parte.
+    function runChunkedLibCommand(rangeCommandFactory, editor, chunkSize, onStall, adjust) {
       while (true) {
         const marks = findFirstPendingMarks(editor.state, chunkSize);
         if (marks.length === 0) break;
         const before = editor.state.doc;
         const to = marks[marks.length - 1].to;
-        runGuardedLibCommand((s, d) => rangeCommandFactory(0, to)(s, d), editor, editor.view.dispatch, undefined);
+        runGuardedLibCommand((s, d) => rangeCommandFactory(0, to)(s, adjust ? tr => d(adjust(tr)) : d), editor, editor.view.dispatch, undefined);
         if (editor.state.doc.eq(before) && !(onStall && onStall())) break;
       }
     }
 
     // Les réglages seuls (la lib n'a rien à défaire : un alignement, le fond d'une cellule, la largeur d'une colonne) se refusent comme « Refuser »
-    // une modification : resolveSuggestionIds, une transaction, un seul Annuler. Ceux d'une case ou d'une ligne ne passent là que quand plus aucune
-    // insertion ni suppression n'attend : avec une colonne ou une ligne suivie, ils s'en vont avec elle. Rend vrai si le document a changé.
+    // une modification : resolveSuggestionIds, une transaction, un seul Annuler. Ceux qui accompagnent une colonne ou une ligne ne passent là que quand
+    // plus aucune insertion ni suppression n'attend : avec une colonne ou une ligne suivie, ils s'en vont avec elle. Rend vrai si le document a changé.
     const refuseAttributes = editor => {
       const ids = pendingAttributeIds(editor.state.doc, !hasInsertionOrDeletion(editor.state.doc));
       return ids.length > 0 && resolveSuggestionIds(editor, ids, false);
     };
 
+    // La lib rend `colwidth` avec les autres modifications de la plage (revertSuggestion), sans savoir qu'une largeur d'avant « automatique » doit rendre
+    // au tableau tout entier sa mise en page d'origine (releaseFrozenColumnWidths) : la transaction qu'elle produit reçoit ce complément, dans le même
+    // pas d'historique. Les marques résolues sont celles d'avant qui ne sont plus sur leur case.
+    function releaseWidthsRefusedBy(tr) {
+      const refused = [];
+      tr.before.descendants((node, pos) => {
+        const mark = attrModification(node, 'colwidth');
+        if (!mark || mark.attrs.previousValue != null) return true;
+        const { pos: now, deleted } = tr.mapping.mapResult(pos);
+        const after = deleted ? null : tr.doc.nodeAt(now);
+        if (after && after.type === node.type && !attrModification(after, 'colwidth')) refused.push({ pos: now, mark });
+        return true;
+      });
+      if (refused.length) releaseFrozenColumnWidths(tr, refused);
+      return tr;
+    }
+
     // « Tout accepter » / « Tout refuser » par tranches de `chunkSize` marques : `resolveOne` est applySuggestion ou revertSuggestion, sans id
-    // (toutes les suggestions de la plage). `onStall(editor)` : cf. runChunkedLibCommand.
-    const chunkedCommand = (resolveOne, chunkSize, onStall) => ({ editor, dispatch, tr }) => {
+    // (toutes les suggestions de la plage). `onStall(editor)` : cf. runChunkedLibCommand ; `adjust(tr)` : complète chaque transaction de la lib.
+    const chunkedCommand = (resolveOne, chunkSize, onStall, adjust) => ({ editor, dispatch, tr }) => {
       if (!dispatch) return true;
       tr.setMeta('preventDispatch', true);
-      runChunkedLibCommand((from, to) => resolveOne(undefined, from, to), editor, chunkSize, onStall && (() => onStall(editor)));
+      runChunkedLibCommand((from, to) => resolveOne(undefined, from, to), editor, chunkSize, onStall && (() => onStall(editor)), adjust);
       return true;
     };
 
@@ -639,7 +775,7 @@ const TrackChanges = (function () {
           // chunkSize par défaut, choisi par mesure : assez petit pour rester loin du coût quadratique, assez grand pour ne pas multiplier les pas
           // d'historique sur un document de taille normale.
           acceptAllSuggestionsChunked: (chunkSize = 200) => chunkedCommand(applySuggestion, chunkSize),
-          rejectAllSuggestionsChunked: (chunkSize = 200) => chunkedCommand(revertSuggestion, chunkSize, refuseAttributes),
+          rejectAllSuggestionsChunked: (chunkSize = 200) => chunkedCommand(revertSuggestion, chunkSize, refuseAttributes, releaseWidthsRefusedBy),
           // Une modification à la fois (barre flottante) : celle que la sélection touche, avec tout ce qui s'y résout (resolveSuggestionIds). Faux
           // sans rien changer quand la sélection n'en touche aucune.
           acceptSuggestionsAtSelection: () => ({ editor, dispatch, tr, state }) => resolveAtSelection(editor, state, dispatch, tr, true),
@@ -679,7 +815,9 @@ const TrackChanges = (function () {
           && !(skipMeta && 'skip' in skipMeta);
         if (!enabled) { next(transaction); return; }
         try {
-          next(transformToSuggestionTransaction(transaction, editor.state));
+          const tracked = transformToSuggestionTransaction(transaction, editor.state);
+          keepOriginalCellSettings(tracked, transaction);
+          next(tracked);
         } catch (e) {
           console.warn('[TrackChanges] transaction refusée (suppression de bloc entier non prise en charge par la lib) :', e);
         }
