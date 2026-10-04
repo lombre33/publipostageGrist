@@ -415,6 +415,33 @@ async function run(theme) {
   await page.waitForTimeout(200);
   await page.keyboard.press('Escape');
   await page.waitForTimeout(200);
+
+  // 10) Les options peu passées, toutes ensemble : message (qui décrit la fenêtre), libellé, valeur numérique, texte indicatif, libellés des deux boutons ; la demande
+  // suivante, sans rien de tout cela, les retrouve vides (aucun reste de la précédente).
+  const placeholder = () => page.evaluate(() => document.getElementById('pp-dialog-input').placeholder);
+  await ask('prompt', { title: 'Options', label: 'Libellé du champ', message: 'Un message', value: 42, placeholder: 'Indice', cancelLabel: 'Laisser', confirmLabel: 'Poser' });
+  s = await state();
+  check(`${T}, options : titre, message, libellé, valeur (42 devient « 42 »), texte indicatif, boutons Laisser / Poser, focus et sélection dans le champ`,
+    s.title === 'Options' && s.message === 'Un message' && s.label === 'Libellé du champ' && s.inputShown && s.inputValue === '42' && (await placeholder()) === 'Indice'
+    && JSON.stringify(s.buttons) === '["Laisser","Poser"]' && s.primary === 'Poser' && s.focus === 'input' && s.selection[0] === 0 && s.selection[1] === 2, { s, placeholder: await placeholder() });
+  check(`${T}, options : la fenêtre est décrite par son message, le champ nommé par son libellé`, s.aria.describedBy === 'pp-dialog-message' && s.inputLabelledText === 'Libellé du champ', s.aria);
+  await click(OK);
+  r = await result();
+  check(`${T}, options : « Poser » rend la valeur sous forme de texte ('42')`, r.done && r.value === '42' && !(await isOpen()), r);
+  await ask('confirm', { title: 'Sans message ni libellé' });
+  s = await state();
+  check(`${T}, options : la demande suivante n'a plus de message, de libellé, de champ, de texte indicatif ni de description, et ses boutons par défaut`,
+    s.title === 'Sans message ni libellé' && s.message === null && s.label === null && !s.inputShown && s.inputValue === '' && (await placeholder()) === '' && s.aria.describedBy === null
+    && JSON.stringify(s.buttons) === '["Annuler","Valider"]' && s.primary === 'Valider' && s.focus === 'Valider', { s, placeholder: await placeholder() });
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  await ask('prompt', { title: 'Nom seul' });
+  s = await state();
+  check(`${T}, options : une saisie sans libellé est nommée par son titre, champ vide`, s.label === null && s.inputShown && s.inputValue === '' && s.inputLabelledText === 'Nom seul' && s.focus === 'input', s);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  r = await result();
+  check(`${T}, options : Échap rend null à une saisie`, r.done && r.value === null && !(await isOpen()), r);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------

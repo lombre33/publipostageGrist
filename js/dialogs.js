@@ -47,11 +47,45 @@ const Dialogs = (function () {
     refs.choices = [];
   }
 
+  // Ce que la fenêtre montre pour cette demande : titre, message, champ (saisie seulement) et libellés des deux boutons de base.
+  function fill(opts, isPrompt, hasChoices) {
+    const { message, label, input, cancel, ok } = refs;
+    win.title.textContent = opts.title || '';
+    message.textContent = opts.message || '';
+    message.hidden = !opts.message;
+    label.textContent = opts.label || '';
+    label.hidden = !isPrompt || !opts.label;
+    input.hidden = !isPrompt;
+    input.value = isPrompt && opts.value != null ? String(opts.value) : '';
+    input.placeholder = opts.placeholder || '';
+    // Le champ est nommé par son libellé, sinon par le titre ; la fenêtre est décrite par le message quand il y en a un.
+    input.setAttribute('aria-labelledby', opts.label ? 'pp-dialog-input-label' : 'pp-dialog-title');
+    if (opts.message) win.box.setAttribute('aria-describedby', 'pp-dialog-message');
+    else win.box.removeAttribute('aria-describedby');
+    cancel.textContent = opts.cancelLabel || I18n.t('common.cancel');
+    ok.textContent = opts.confirmLabel || I18n.t('common.confirm');
+    ok.hidden = hasChoices;
+  }
+
+  // Les boutons d'une demande `choose`, à droite d'« Annuler ». Rend celui qui prend le focus : le dernier `primary`, à défaut « Annuler ».
+  function addChoices(choices, finish) {
+    let first = refs.cancel;
+    choices.forEach(choice => {
+      const button = el('button', choice.primary ? 'var-modal-primary' : '', choice.label);
+      button.type = 'button';
+      button.onclick = () => finish(choice.value);
+      win.actions.append(button);
+      refs.choices.push(button);
+      if (choice.primary) first = button;
+    });
+    return first;
+  }
+
   function ask(opts, kind) {
     ensure();
     if (current) current.finish(current.cancelValue);
     return new Promise(resolve => {
-      const { message, label, input, cancel, ok } = refs;
+      const { input, cancel, ok } = refs;
       const isPrompt = kind === 'prompt';
       const choices = kind === 'choose' ? (opts.choices || []) : null;
       const cancelValue = isPrompt || choices ? null : false;
@@ -65,35 +99,10 @@ const Dialogs = (function () {
         resolve(value);
       };
       current = { finish, cancelValue };
-      win.title.textContent = opts.title || '';
-      message.textContent = opts.message || '';
-      message.hidden = !opts.message;
-      label.textContent = opts.label || '';
-      label.hidden = !isPrompt || !opts.label;
-      input.hidden = !isPrompt;
-      input.value = isPrompt && opts.value != null ? String(opts.value) : '';
-      input.placeholder = opts.placeholder || '';
-      // Le champ est nommé par son libellé, sinon par le titre ; la fenêtre est décrite par le message quand il y en a un.
-      input.setAttribute('aria-labelledby', opts.label ? 'pp-dialog-input-label' : 'pp-dialog-title');
-      if (opts.message) win.box.setAttribute('aria-describedby', 'pp-dialog-message');
-      else win.box.removeAttribute('aria-describedby');
-      cancel.textContent = opts.cancelLabel || I18n.t('common.cancel');
-      ok.textContent = opts.confirmLabel || I18n.t('common.confirm');
+      fill(opts, isPrompt, !!choices);
       cancel.onclick = () => finish(cancelValue);
       ok.onclick = () => finish(isPrompt ? input.value : true);
-      ok.hidden = !!choices;
-      let firstFocus = isPrompt ? input : (opts.danger ? cancel : ok);
-      if (choices) {
-        firstFocus = cancel;
-        choices.forEach(choice => {
-          const button = el('button', choice.primary ? 'var-modal-primary' : '', choice.label);
-          button.type = 'button';
-          button.onclick = () => finish(choice.value);
-          win.actions.append(button);
-          refs.choices.push(button);
-          if (choice.primary) firstFocus = button;
-        });
-      }
+      const firstFocus = choices ? addChoices(choices, finish) : (isPrompt ? input : (opts.danger ? cancel : ok));
       input.onkeydown = event => {
         if (event.key !== 'Enter' || event.isComposing) return;
         event.preventDefault();
