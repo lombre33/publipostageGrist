@@ -3,7 +3,8 @@
 // d'écran, au lieu de ce message ». Ici : ce que le guide montre selon le lien « Sélectionner par » (settings.linking de grist.onOptions, js/grist-api.js:getLinkState), ses quatre étapes (accès
 // complet au widget - autre demande d'Antoine du même jour : « il faut également préciser qu'il faut donner les fulls acces au widget avec screen comme pour le reste » -, tableau sur la page,
 // « Sélectionner par », clic sur une ligne), les captures dans les deux langues, sa mise à jour sans recharger, sa disparition quand une ligne arrive, le clic sur une capture, les contrastes en
-// clair et en sombre - DANS la page.
+// clair et en sombre - DANS la page ; et, pour un widget relié mais SANS accès complet (Grist ne lui envoie alors aucune ligne), la carte réduite à l'étape de l'accès (choix d'Antoine du même jour,
+// carte « Guider aussi un widget relié mais sans accès complet ? » : « Étape accès seule »).
 // dev-tests/verify-reader-guide-mouse.mjs le mesure à 700x400 à la vraie souris (défilement à la molette, clic sur une vraie capture, toutes les étapes atteignables).
 (function () {
   const cases = [];
@@ -23,9 +24,11 @@
   const steps = () => Array.from(reader().querySelectorAll('.reader-guide-step'));
   const imgs = () => Array.from(reader().querySelectorAll('.reader-guide-shot img'));
 
-  // Ce que Grist transmet au widget par onOptions : `asTarget` null (aucun lien), une chaîne (relié), ou rien du tout (version de Grist sans `linking`).
-  function fireLinking(linking) {
-    const settings = { accessLevel: stub().state.accessLevel };
+  // Ce que Grist transmet au widget par onOptions : `asTarget` null (aucun lien), une chaîne (relié), ou rien du tout (version de Grist sans `linking`) ; le niveau d'accès : celui du stub (« full ») sauf
+  // si le test en donne un ('none', 'read table'), ou `null` pour une version de Grist qui ne le dit pas.
+  function fireLinking(linking, accessLevel) {
+    const settings = {};
+    if (accessLevel !== null) settings.accessLevel = accessLevel === undefined ? stub().state.accessLevel : accessLevel;
     if (linking !== undefined) settings.linking = linking;
     stub().state.optionsCallback(stub().state.options, settings);
   }
@@ -37,10 +40,10 @@
     reader().style.display = 'block';
     await ReaderMode.render('<p>Modèle</p>', TABLE, null, NO_HF);
   }
-  async function setup(h, linking, lang) {
+  async function setup(h, linking, lang, accessLevel) {
     await h.resetEditor();
     I18n.setLang(lang || 'fr');
-    fireLinking(linking);
+    fireLinking(linking, accessLevel);
     await showEmptyReader();
   }
   async function finish() {
@@ -179,6 +182,102 @@
         && /^Already done\? Go to step 2\./.test(en.lead) && en.marks.length === 3 && /Widget/.test(en.marks[0]) && /Access level/.test(en.marks[1]) && /Full document access/.test(en.marks[1]) && /Accept/.test(en.marks[2])
         && en.next.join(',') === '2,3,,' && en.src === 'en-1.png' && /Accept/.test(en.alt) && /full access/.test(en.intro) && !frenchInEnglish;
       return { pass, notes: JSON.stringify({ fr, en, frenchInEnglish }) };
+    },
+  });
+
+  cases.push({
+    id: 'reader_guide_linked_widget_without_access_shows_only_the_access_step',
+    description: 'Un widget relié par « Sélectionner par » mais SANS accès complet ne reçoit aucune ligne de Grist (même avec une ligne cliquée) : « Aucune ligne sélectionnée » serait faux, la carte se réduit à l\'étape de l\'accès - choix d\'Antoine du 04/10, « Étape accès seule » : titre de l\'étape en titre de carte, phrase qui dit pourquoi, un seul bloc sans « Étape n » ni titre ni renvoi à l\'étape suivante, ses trois repères, sa capture fr-1 / en-1 ; en français et en anglais (aucun mot français dans l\'anglais)',
+    run: async (h) => {
+      const read = () => {
+        const img = reader().querySelector('.reader-guide-shot img');
+        return {
+          guide: !!guide(),
+          message: !!message(),
+          steps: steps().length,
+          title: text(reader().querySelector('.reader-guide-title')),
+          intro: text(reader().querySelector('.reader-guide-intro')),
+          eyebrows: reader().querySelectorAll('.reader-guide-eyebrow').length,
+          stepTitles: reader().querySelectorAll('.reader-guide-step-title').length,
+          unsure: !!reader().querySelector('.reader-guide-unsure'),
+          lead: text(reader().querySelector('.reader-guide-lead')),
+          marks: Array.from(reader().querySelectorAll('.reader-guide-mark-text')).map(text),
+          src: img ? (img.getAttribute('src') || '').replace(/^.*\//, '').replace(/\?.*$/, '') : '',
+          loaded: !!img && img.complete && img.naturalWidth > 0,
+          alt: img ? img.alt : '',
+          all: text(guide()),
+        };
+      };
+      await setup(h, LINKED, 'fr', 'none');
+      await waitFor(() => imgs().length === 1 && imgs().every(i => i.complete), 5000);
+      const fr = read();
+      I18n.setLang('en');
+      await sleep(60);
+      await waitFor(() => imgs().length === 1 && imgs().every(i => i.complete), 5000);
+      const en = read();
+      await finish();
+      const frenchInEnglish = /Donnez|Déjà|Vue|Niveau|Accepter|accès|Passez|Cliquez|panneau|relié|tableau|ligne/.test(en.all + ' ' + en.alt);
+      const pass = fr.guide && !fr.message && fr.steps === 1 && fr.eyebrows === 0 && fr.stepTitles === 0 && !fr.unsure
+        && fr.title === 'Donnez l’accès complet à ce widget'
+        && fr.intro === 'Ce widget est relié à un tableau, mais Grist ne lui envoie aucune ligne tant qu’il n’a pas l’accès complet au document.'
+        && fr.lead === 'Cliquez sur ce widget pour le sélectionner : Grist ouvre son panneau de droite.'
+        && fr.marks.length === 3 && /Vue/.test(fr.marks[0]) && /Niveau d’accès/.test(fr.marks[1]) && /Accès complet au document/.test(fr.marks[1]) && /Accepter/.test(fr.marks[2])
+        && fr.src === 'fr-1.png' && fr.loaded && /Accepter/.test(fr.alt)
+        && en.guide && !en.message && en.steps === 1 && en.eyebrows === 0 && en.stepTitles === 0
+        && en.title === 'Give this widget full access'
+        && en.intro === 'This widget is linked to a table, but Grist sends it no row until it has full access to the document.'
+        && en.lead === 'Click this widget to select it: Grist opens its right-hand panel.'
+        && en.marks.length === 3 && /Widget/.test(en.marks[0]) && /Access level/.test(en.marks[1]) && /Full document access/.test(en.marks[1]) && /Accept/.test(en.marks[2])
+        && en.src === 'en-1.png' && en.loaded && /Accept/.test(en.alt) && !frenchInEnglish;
+      return { pass, notes: JSON.stringify({ fr: Object.assign({}, fr, { all: undefined }), en: Object.assign({}, en, { all: undefined }), frenchInEnglish }) };
+    },
+  });
+
+  cases.push({
+    id: 'reader_guide_access_view_follows_the_access_level_and_the_link_live',
+    description: 'Le niveau d\'accès se suit en direct comme le lien (Grist renvoie les options quand l\'accès est accordé ou retiré) : relié sans accès -> étape de l\'accès seule ; accès accordé -> court message ; retiré -> l\'étape revient ; « lecture de table » ou niveau inconnu -> court message (des lignes arrivent) ; non relié ou lien inconnu sans accès -> le guide en quatre étapes',
+    run: async (h) => {
+      await setup(h, LINKED, 'fr', 'none');
+      const kind = () => guide() ? (steps().length === 1 ? 'accès seul' : 'guide ' + steps().length + ' étapes') : message() ? 'message' : 'rien';
+      const seen = [];
+      const note = (label) => seen.push(label + ' [' + GristAPI.getAccessLevel() + '] : ' + kind());
+      note('relié, sans accès');
+      fireLinking(LINKED, 'full');
+      await sleep(60);
+      note('accès accordé');
+      fireLinking(LINKED, 'none');
+      await sleep(60);
+      note('accès retiré');
+      fireLinking(LINKED, 'read table');
+      await sleep(60);
+      note('lecture de table');
+      fireLinking(LINKED, 'none');
+      await sleep(60);
+      fireLinking(LINKED, null);
+      await sleep(60);
+      note('niveau inconnu');
+      fireLinking(UNLINKED, 'none');
+      await sleep(60);
+      note('non relié, sans accès');
+      fireLinking(undefined, 'none');
+      await sleep(60);
+      note('lien inconnu, sans accès');
+      fireLinking(LINKED, 'none');
+      fireLinking(LINKED, 'none'); // le même état renvoyé : rien ne change
+      await sleep(60);
+      note('relié, sans accès (deux fois)');
+      await finish();
+      const expected = [
+        'relié, sans accès [none] : accès seul',
+        'accès accordé [full] : message',
+        'accès retiré [none] : accès seul',
+        'lecture de table [read table] : message',
+        'niveau inconnu [null] : message',
+        'non relié, sans accès [none] : guide 4 étapes',
+        'lien inconnu, sans accès [none] : guide 4 étapes',
+        'relié, sans accès (deux fois) [none] : accès seul',
+      ];
+      return { pass: JSON.stringify(seen) === JSON.stringify(expected) && GristAPI.getAccessLevel() === 'full', notes: JSON.stringify({ seen, after: GristAPI.getAccessLevel() }) };
     },
   });
 

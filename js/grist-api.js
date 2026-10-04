@@ -92,6 +92,10 @@ const GristAPI = (function () {
   // Le lien « Sélectionner par » de CE widget, d'après settings.linking de grist.onOptions (js/reader-guide.js). 'unknown' tant que Grist ne le dit pas.
   let _linkState = 'unknown';
   let _linkStateCallbacks = [];
+  // Le niveau d'accès accordé à CE widget, d'après settings.accessLevel de grist.onOptions ('none', 'read table' ou 'full') : null tant que Grist ne le dit pas. Sans accès, Grist ne lui envoie aucune
+  // ligne, même relié et avec une ligne cliquée (js/reader-guide.js : l'étape « accès complet » à la place de « Aucune ligne sélectionnée »).
+  let _accessLevel = null;
+  let _accessLevelCallbacks = [];
 
   // Corps commun à toutes les souscriptions onRecord ci-dessous (repli 'shown' et souscription enrichie 'normal') - jamais dupliqué entre elles pour
   // ne pas désynchroniser leur traitement (notification des callbacks, detectTableId, logs) au fil des correctifs futurs.
@@ -206,11 +210,21 @@ const GristAPI = (function () {
         _currentOptions = options || null;
         console.log('[GristAPI] onOptions reçu: optionsJSON=', safeJSONStringify(options), 'settings=', settings);
         warnIfLimitedAccess(settings && settings.accessLevel);
+        // Les deux états sont posés avant tout rappel : un abonné qui lit l'un pendant que l'autre change ne voit jamais un mélange des deux versions des options.
         const linkState = linkStateOf(settings);
-        if (linkState !== _linkState) {
-          _linkState = linkState;
+        const accessLevel = settings && typeof settings.accessLevel === 'string' ? settings.accessLevel : null;
+        const linkChanged = linkState !== _linkState;
+        const accessChanged = accessLevel !== _accessLevel;
+        _linkState = linkState;
+        _accessLevel = accessLevel;
+        if (linkChanged) {
           for (const cb of _linkStateCallbacks) {
             try { cb(linkState); } catch (e) { console.error('[GristAPI] erreur callback onLinkStateChange:', e); }
+          }
+        }
+        if (accessChanged) {
+          for (const cb of _accessLevelCallbacks) {
+            try { cb(accessLevel); } catch (e) { console.error('[GristAPI] erreur callback onAccessLevelChange:', e); }
           }
         }
         for (const cb of _optionsCallbacks) {
@@ -581,6 +595,9 @@ const GristAPI = (function () {
   // 'linked' (relié à une autre vue), 'unlinked' (« Sélectionner par » vide) ou 'unknown' ; le rappel reçoit le nouvel état à chaque changement.
   function getLinkState() { return _linkState; }
   function onLinkStateChange(cb) { _linkStateCallbacks.push(cb); }
+  // 'none', 'read table', 'full' ou null (Grist ne l'a pas encore dit) ; Grist renvoie les options, donc le rappel, quand l'accès est accordé ou retiré.
+  function getAccessLevel() { return _accessLevel; }
+  function onAccessLevelChange(cb) { _accessLevelCallbacks.push(cb); }
   // grist.setOption ne pose qu'un BROUILLON des options de la section (ViewSectionRec.activeCustomOptions, vérifié à la source grist-core) : Grist
   // affiche alors un bouton Enregistrer en haut du widget, seul moyen de le rendre durable et visible des autres personnes. Recopié localement tout de
   // suite, sans attendre le retour d'onOptions.
@@ -881,5 +898,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getColumnType, getColumnChoices, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, getCurrentUserName, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange };
+  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getColumnType, getColumnChoices, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, getCurrentUserName, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange };
 })();

@@ -1,12 +1,13 @@
 // Guide de la Lecture sans ligne (demande d'Antoine du 2026-10-04 : « en mode lecture, quand le widget n'a pas le select by de configuré, il affiche "Aucune ligne sélectionnée" : il faudrait guider
 // l'utilisateur proprement sur ce qu'il faut faire, avec du texte et des captures d'écran, au lieu de ce message »).
 // - Quand : js/reader-mode.js:render() n'a aucune ligne à montrer. Widget relié à une autre vue (GristAPI.getLinkState() = 'linked') : rien à régler, il reste un clic à faire, donc le court message d'avant
-//   (« Aucune ligne sélectionnée » et son indication). Sinon - « Sélectionner par » vide ('unlinked'), ou version de Grist qui ne le dit pas ('unknown') - le guide : quatre étapes (donner l'accès complet au
+//   (« Aucune ligne sélectionnée » et son indication) - sauf sans accès (GristAPI.getAccessLevel() = 'none') : Grist n'envoie alors aucune ligne, même avec une ligne cliquée, et ce message serait faux ; la carte
+//   se réduit à l'étape de l'accès complet (choix d'Antoine du 2026-10-04, carte « Guider aussi un widget relié mais sans accès complet ? » : « Étape accès seule »). Sinon - « Sélectionner par » vide ('unlinked'), ou version de Grist qui ne le dit pas ('unknown') - le guide : quatre étapes (donner l'accès complet au
 //   widget, mettre le tableau sur la page, relier le widget par « Sélectionner par », cliquer sur une ligne), chacune avec sa capture aux repères numérotés. L'étape de l'accès complet vient de la demande
 //   d'Antoine du 2026-10-04 (« il faut également préciser qu'il faut donner les fulls acces au widget avec screen comme pour le reste ») : sans lui Grist n'envoie aucune ligne au widget. La dernière dit
 //   d'abord d'ajouter une ligne quand le tableau est vide (choix d'Antoine du 2026-10-04, carte « Dire d'ajouter une ligne si le tableau est vide ? »). Dans l'état 'unknown' une dernière ligne dit quoi
 //   faire si le widget est déjà relié.
-// - Il se tient à jour sans recharger : Grist renvoie les options du widget dès que son lien change (GristAPI.onLinkStateChange, js/grist-api.js), la langue de l'interface aussi (I18n.onChange) ; et il
+// - Il se tient à jour sans recharger : Grist renvoie les options du widget dès que son lien ou son accès change (GristAPI.onLinkStateChange et onAccessLevelChange, js/grist-api.js), la langue de l'interface aussi (I18n.onChange) ; et il
 //   cède la place au document dès qu'une ligne arrive (js/reader-mode.js remplace tout le contenu du conteneur de la Lecture).
 // - Les captures (img/reader-guide/{fr,en}-{1,2,3,4}.png, le numéro est celui de l'étape : 1 accès, 2 tableau sur la page, 3 « Sélectionner par », 4 ligne choisie) viennent d'un vrai Grist (son interface
 //   réelle, un document d'exemple « Factures »), dans la langue de l'interface du widget, repères numérotés et flèche ajoutés par-dessus. À refaire, avec IMAGE_VERSION montée, si Grist déplace ces réglages.
@@ -61,12 +62,16 @@ const ReaderGuide = (function () {
     return shot;
   }
 
-  function buildStep(step, index) {
+  // `alone` : l'étape est seule dans sa carte (l'accès complet d'un widget relié) - ni « Étape n » ni titre, la carte porte déjà le titre de l'étape, et une phrase d'appui à elle (readerGuide.<id>Only.lead :
+  // « Passez à l'étape 2 » n'aurait pas de sens).
+  function buildStep(step, index, alone) {
     const li = el('li', 'reader-guide-step');
     const body = el('div', 'reader-guide-step-body');
-    body.appendChild(el('p', 'reader-guide-eyebrow', I18n.t('readerGuide.step', { n: index + 1 })));
-    body.appendChild(heading(3, 'reader-guide-step-title', I18n.t('readerGuide.' + step.id + '.title')));
-    if (step.lead) body.appendChild(el('p', 'reader-guide-lead', I18n.t('readerGuide.' + step.id + '.lead', { next: index + 2 })));
+    if (!alone) {
+      body.appendChild(el('p', 'reader-guide-eyebrow', I18n.t('readerGuide.step', { n: index + 1 })));
+      body.appendChild(heading(3, 'reader-guide-step-title', I18n.t('readerGuide.' + step.id + '.title')));
+    }
+    if (step.lead) body.appendChild(el('p', 'reader-guide-lead', I18n.t('readerGuide.' + step.id + (alone ? 'Only' : '') + '.lead', { next: index + 2 })));
     const marks = el('ol', 'reader-guide-marks');
     marks.setAttribute('role', 'list');
     for (let n = 1; n <= step.marks; n++) {
@@ -99,6 +104,22 @@ const ReaderGuide = (function () {
     return root;
   }
 
+  // Widget relié sans accès complet : la même carte réduite à l'étape de l'accès, sous le titre de cette étape et une phrase qui dit pourquoi aucune ligne n'arrive.
+  function buildAccessOnly() {
+    const step = STEPS.find(s => s.id === 'access');
+    const root = el('section', 'reader-guide');
+    root.setAttribute('aria-labelledby', 'reader-guide-title');
+    const title = heading(2, 'reader-guide-title', I18n.t('readerGuide.' + step.id + '.title'));
+    title.id = 'reader-guide-title';
+    root.appendChild(title);
+    root.appendChild(el('p', 'reader-guide-intro', I18n.t('readerGuide.accessOnly.intro')));
+    const steps = el('ol', 'reader-guide-steps');
+    steps.setAttribute('role', 'list');
+    steps.appendChild(buildStep(step, STEPS.indexOf(step), true));
+    root.appendChild(steps);
+    return root;
+  }
+
   // Pas de .error-msg : ne rien avoir sélectionné n'est pas une erreur, juste un clic qui manque.
   function buildMessage() {
     const empty = el('div', 'reader-empty');
@@ -118,6 +139,7 @@ const ReaderGuide = (function () {
       if (container && showsEmptyState(container)) render(container);
     };
     GristAPI.onLinkStateChange(refresh);
+    GristAPI.onAccessLevelChange(refresh);
     I18n.onChange(refresh);
   }
 
@@ -125,7 +147,8 @@ const ReaderGuide = (function () {
     wire();
     container.innerHTML = '';
     const state = GristAPI.getLinkState();
-    container.appendChild(state === 'linked' ? buildMessage() : buildGuide(state));
+    if (state !== 'linked') container.appendChild(buildGuide(state));
+    else container.appendChild(GristAPI.getAccessLevel() === 'none' ? buildAccessOnly() : buildMessage());
   }
 
   return { render };
