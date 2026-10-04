@@ -336,6 +336,8 @@
 .template-preview-modal-content { --pp-modal-title-gap: 10px; --pp-modal-actions-gap: 14px; }
 .template-gallery-modal-content .pp-modal-header h3, .template-preview-modal-content .pp-modal-header h3 { margin-bottom: 12px; }
 .tpl-gallery-filters { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+/* Dans la rangée du bas, à gauche de « Fermer » : l'avertissement ne prend aucune hauteur sur le panneau de 400 px. */
+.tpl-gallery-note { flex: 1; min-width: 0; align-self: center; font-size: 11.5px; line-height: 1.4; color: var(--text-muted); }
 .tpl-gallery-filters input[type="search"] { flex: 1; min-width: 180px; height: 30px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 0 10px; font-size: 12.5px; background: var(--surface); color: var(--text); }
 .tpl-gallery-tags { display: flex; gap: 6px; flex-wrap: wrap; }
 .tpl-gallery-tag { font-family: var(--font-ui); font-size: 12px; font-weight: 600; height: 26px; padding: 0 10px; border-radius: 13px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text-muted); cursor: pointer; }

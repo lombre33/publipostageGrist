@@ -20,6 +20,8 @@
 //      d'un CDN qu'elle ne permet pas, une empreinte ou une adresse que plus rien n'utilise (contrôle de sécurité du 04/10).
 //  12. une police ou une feuille de style chargée depuis un autre site (Google Fonts ou autre : @import, url(), <link>, adresse d'un service de polices), ou une police d'interface qui n'est plus celle du
 //      système (choix d'Antoine du 04/10 : « une police système similaire, pas de Google Fonts ou autre »).
+//  13. un console.log, console.info, console.debug ou console.trace dans js/ ou index.html (la console ne reçoit que les avertissements et les erreurs : un widget public ne raconte pas son démarrage), et la
+//      fenêtre « réseau bloqué » (js/first-contact.js) qui ne liste plus les sites que la politique de sécurité du contenu laisse charger des scripts (bêta : « Tout soigner »).
 //
 // Volontairement PERMISSIF : un nom cité seulement dans un commentaire compte comme utilisé, un préfixe construit (`'toc-level-' + n`) couvre toute la
 // famille. Le but est de ne jamais faire échouer un changement légitime, seulement d'attraper ce qui n'a plus AUCUN point d'entrée. Une classe posée
@@ -452,6 +454,29 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('polices : ni feuille de style, ni page, ni script ne charge de police ou de feuille d\'un autre site (@import, url(), <link>, service de polices) - une police du système, jamais Google Fonts', offenders.length === 0, '\n    ' + offenders.join('\n    '));
   const fontUi = ((stripComments(read('css/style.css')).match(/--font-ui\s*:\s*([^;]+);/) || [])[1] || '').trim();
   check('polices : --font-ui, la police de l\'interface, commence par system-ui (la police du système)', /^system-ui\b/.test(fontUi), fontUi);
+}
+
+// ============================================================================
+// 13. Console silencieuse, et la fenêtre « réseau bloqué » dit les mêmes adresses que la politique
+// ============================================================================
+// Bêta (« Tout soigner », Antoine, 04/10) : la personne qui ouvre la console du navigateur ne doit pas y lire le démarrage du widget (19 console.log en sortaient). On y garde les avertissements (warn) et les
+// erreurs (error), qui ont un sens pour elle ou pour qui signale un problème. dev-tests/verify-first-contact.mjs (script Node `firstContact`) le confirme dans un vrai navigateur au démarrage ; ce contrôle-ci
+// garde les sources. Les adresses de la fenêtre « réseau bloqué » sont celles que la politique de sécurité du contenu (index.html) laisse charger des scripts : un nouveau CDN ajouté à la politique s'ajoute
+// aussi à HOSTS de js/first-contact.js, avec ce qu'il sert à faire (js/i18n.js, firstContact.host.*), sinon la personne dont le pare-feu le bloque ne saurait pas l'autoriser.
+{
+  const talkative = [];
+  const scan = (where, code) => noCommentsJs(code).split('\n').forEach((line, i) => { if (/\bconsole\s*\.\s*(?:log|info|debug|trace)\s*\(/.test(line)) talkative.push(`${where}:${i + 1}`); });
+  jsFiles.forEach(rel => scan(rel, read(rel)));
+  const page = read('index.html').replace(/<!--[\s\S]*?-->/g, m => m.replace(/[^\n]/g, ' '));
+  scan('index.html', page);
+  const warned = jsFiles.filter(rel => /\bconsole\s*\.\s*(?:warn|error)\s*\(/.test(noCommentsJs(read(rel)))).length;
+  check('console : les sources se lisent bien (garde-fou de l\'analyse elle-même : des console.warn / console.error existent encore)', jsFiles.length >= 60 && warned >= 10, `${jsFiles.length} scripts, ${warned} avec warn ou error`);
+  check('console : ni console.log, ni console.info, ni console.debug, ni console.trace dans js/ ou index.html - la console ne reçoit que les avertissements et les erreurs', talkative.length === 0, talkative.join(', '));
+  const policy = (page.match(/<meta http-equiv="Content-Security-Policy" content="([^"]*)"/) || [])[1] || '';
+  const scriptSrc = (policy.match(/script-src([^;]*);/) || [])[1] || '';
+  const allowed = [...new Set([...scriptSrc.matchAll(/https:\/\/([a-z0-9.-]+)/gi)].map(m => m[1]))].sort();
+  const listed = [...noCommentsJs(read('js/first-contact.js')).matchAll(/host:\s*'([^']+)'/g)].map(m => m[1]).sort();
+  check('premier contact : la fenêtre « réseau bloqué » (HOSTS de js/first-contact.js) liste exactement les sites dont la politique de sécurité du contenu laisse charger des scripts', allowed.length >= 4 && JSON.stringify(allowed) === JSON.stringify(listed), `politique : ${allowed.join(', ')} ; fenêtre : ${listed.join(', ')}`);
 }
 
 summarizeAndExit();

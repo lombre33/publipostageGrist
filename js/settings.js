@@ -51,6 +51,10 @@ const Settings = (function () {
     };
     if (!openBtn || !modal || !closeBtn) return;
 
+    // Le numéro de version vient de js/version.js, jamais du HTML : une seule définition à tenir à jour.
+    const versionCell = document.getElementById('settings-credits-version');
+    if (versionCell) versionCell.textContent = PP_VERSION;
+
     openBtn.addEventListener('click', () => {
       langRadios.forEach(r => { r.checked = (r.value === I18n.getLang()); });
       themeRadios.forEach(r => { r.checked = (r.value === getTheme()); });

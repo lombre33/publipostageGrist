@@ -40,6 +40,14 @@ Première bêta publique. Elle reprend l'alpha du 14 septembre 2026 et ajoute l'
 - **Interface** : thème clair, sombre ou celui du système, 54 raccourcis clavier personnalisables, choix
   dans des listes avec recherche pour les colonnes, tables et modèles, fenêtres communes (Tab, Échap),
   barre d'outils pensée pour un petit panneau, contrastes d'au moins 4,5:1.
+- **Premier contact** : ouvert seul dans un onglet, le widget dit qu'il s'utilise dans Grist, où l'ajouter
+  et à quelle adresse ; si le réseau bloque une adresse dont il dépend, ou si le démarrage dure plus de
+  30 secondes, une fenêtre liste les adresses à autoriser ; toute autre erreur de démarrage affiche son
+  message technique. La langue de l'interface suit celle du navigateur au premier lancement, puis le choix
+  fait dans Réglages. Le numéro de version est dans Réglages > Crédits, et l'onglet a un titre, une icône
+  et une description.
+- **Galerie** : un avertissement rappelle que les modèles sont des exemples à adapter, pas un conseil
+  juridique.
 - **Dépôt** : `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `CHANGELOG.md` et `NOTICE`, limites
   connues et roadmap à jour dans le README.
 
@@ -47,6 +55,8 @@ Première bêta publique. Elle reprend l'alpha du 14 septembre 2026 et ajoute l'
 
 - Les bibliothèques d'export (PDF, ZIP, Excel, Word, QR code) ne se chargent qu'au premier usage : le
   widget s'ouvre plus vite.
+- La console du navigateur ne reçoit plus que les avertissements et les erreurs : le widget n'y raconte
+  plus son démarrage.
 - L'interface prend la police du système : la police Manrope n'est plus téléchargée depuis Google Fonts,
   et plus aucune police ni feuille de style ne vient d'un autre site.
 - La galerie ne propose que quatre modèles : facture, contrat de prestation de services, attestation,
@@ -106,12 +116,21 @@ except those postponed to V1 (see the [README](README.md#roadmap-1)).
 - **Interface**: light, dark or system theme, 54 customizable keyboard shortcuts, searchable pickers for
   columns, tables and templates, shared windows (Tab, Esc), toolbar designed for a small panel,
   contrast of at least 4.5:1.
+- **First contact**: opened alone in a browser tab, the widget says it is used inside Grist, where to add
+  it and at which address; if the network blocks an address it depends on, or if startup takes more than
+  30 seconds, a window lists the addresses to allow; any other startup error shows its technical
+  message. The interface language follows the browser's on first launch, then the choice made in
+  Settings. The version number is in Settings > Credits, and the tab has a title, an icon and a
+  description.
+- **Gallery**: a notice reminds that the templates are examples to adapt, not legal advice.
 - **Repository**: `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `CHANGELOG.md` and `NOTICE`,
   known limitations and an up-to-date roadmap in the README.
 
 ### Changed
 
 - The export libraries (PDF, ZIP, Excel, Word, QR code) only load on first use: the widget opens faster.
+- The browser console now only receives warnings and errors: the widget no longer narrates its startup
+  there.
 - The interface uses the system font: the Manrope font is no longer downloaded from Google Fonts, and no
   font or stylesheet comes from another site any more.
 - The gallery only offers four templates: invoice, service agreement, certificate, payment reminder

@@ -1,5 +1,4 @@
 // Publipostage Grist — wrapper API Grist v1.2.0 — 2026-09-04
-console.log('[GristAPI] module chargé, timestamp:', new Date().toISOString(), 'v1.2.0');
 
 const GristAPI = (function () {
   // Tables internes de bookkeeping du widget (modèles, règles de correspondance entre tables) - jamais des tables "métier" de l'utilisateur, donc exclues de
@@ -98,13 +97,8 @@ const GristAPI = (function () {
   let _accessLevelCallbacks = [];
 
   // Corps commun à toutes les souscriptions onRecord ci-dessous (repli 'shown' et souscription enrichie 'normal') - jamais dupliqué entre elles pour
-  // ne pas désynchroniser leur traitement (notification des callbacks, detectTableId, logs) au fil des correctifs futurs.
+  // ne pas désynchroniser leur traitement (notification des callbacks, detectTableId) au fil des correctifs futurs.
   function handleIncomingRecord(record, mappings) {
-    const receivedAt = new Date();
-    const rowId = record && record.id != null ? record.id : null;
-    // Ne jamais logger `record`/`mappings` en entier : une ligne de ce widget contient typiquement des données personnelles (RGPD). Seul l'ID de ligne,
-    // déjà visible dans l'UI Grist, est loggé.
-    console.log('[GristAPI] onRecord reçu, rowId=' + rowId + ', à ' + receivedAt.toISOString());
     _currentRecord = record;
     _currentMappings = mappings || null;
     if (!record) {
@@ -155,21 +149,17 @@ const GristAPI = (function () {
   }
 
   async function init() {
-    console.log('[GristAPI] init: appel de grist.ready({requiredAccess: "full"}).');
     try {
       // Ne pas ajouter columns:[...] sans revalider en Grist réel : ça a déjà cassé toute la résolution #Variable (change mappings.tableId, dont dépend la
       // détection de table courante).
       grist.ready({ requiredAccess: 'full' });
-      console.log('[GristAPI] grist.ready({requiredAccess: "full"}) appelé avec succès.');
     } catch (e) {
       console.error('[GristAPI] ERREUR lors de grist.ready():', e);
       throw e;
     }
 
     // Enregistrer onRecord AVANT tout await pour ne pas rater l'événement initial.
-    if (_recordSubscriptionRegistered) {
-      console.log('[GristAPI] grist.onRecord déjà enregistré, souscription réutilisée.');
-    } else try {
+    if (!_recordSubscriptionRegistered) try {
       // includeColumns:'normal' (au lieu du défaut 'shown') : sans ça, seules les colonnes cochées visibles dans le panneau de droite DE CE WIDGET
       // arrivent dans `record` (GristAPI.ts, FetchSelectedOptions.includeColumns, vérifié à la source jsDelivr le 2026-09-28) - toute colonne créée
       // depuis une autre vue, ou simplement pas affichée ici, est absente de `record` (record[col] === undefined), jamais juste vide. Une règle
@@ -200,7 +190,6 @@ const GristAPI = (function () {
         handleIncomingRecord(record, mappings);
       }, { includeColumns: 'normal' });
       _recordSubscriptionRegistered = true;
-      console.log('[GristAPI] grist.onRecord enregistré (repli \'shown\' + souscription enrichie \'normal\').');
     } catch (e) {
       console.error('[GristAPI] ERREUR lors de grist.onRecord():', e);
     }
@@ -208,7 +197,6 @@ const GristAPI = (function () {
     try {
       grist.onOptions(function (options, settings) {
         _currentOptions = options || null;
-        console.log('[GristAPI] onOptions reçu: optionsJSON=', safeJSONStringify(options), 'settings=', settings);
         warnIfLimitedAccess(settings && settings.accessLevel);
         // Les deux états sont posés avant tout rappel : un abonné qui lit l'un pendant que l'autre change ne voit jamais un mélange des deux versions des options.
         const linkState = linkStateOf(settings);
@@ -231,7 +219,6 @@ const GristAPI = (function () {
           try { cb(_currentOptions); } catch (e) { console.error('[GristAPI] erreur callback onOptions:', e); }
         }
       });
-      console.log('[GristAPI] grist.onOptions enregistré.');
     } catch (e) {
       console.warn('[GristAPI] onOptions non disponible:', e);
     }
@@ -247,7 +234,6 @@ const GristAPI = (function () {
         if (typeof grist.getOptions === 'function') {
           const seedOptions = await grist.getOptions();
           _currentOptions = seedOptions || _currentOptions;
-          console.log('[GristAPI] getOptions (seed) optionsJSON=', safeJSONStringify(seedOptions));
         }
       } catch (e) {
         console.warn('[GristAPI] getOptions indisponible:', e);
@@ -270,19 +256,16 @@ const GristAPI = (function () {
       }
     })();
     await Promise.all([seedOptionsLoaded, schemaLoaded, linkRulesLoaded]);
-    console.log('[GristAPI] init terminé.');
   }
 
   // Récupération robuste du tableId : mappings -> grist.getTable() -> schéma -> vues
   async function detectTableId(mappings, source) {
     source = source || 'unknown';
-    console.log('[GristAPI] detectTableId(' + source + '): début.');
 
     // 1. Via mappings.tableId (présent en accès full)
     if (mappings && typeof mappings.tableId !== 'undefined') {
       const id = String(mappings.tableId || '').trim();
       if (id) {
-        console.log('[GristAPI] detectTableId(' + source + '): via mappings.tableId =', id);
         return id;
       }
     }
@@ -295,18 +278,15 @@ const GristAPI = (function () {
           if (typeof t.getTableId === 'function') {
             const id = await t.getTableId();
             if (id) {
-              console.log('[GristAPI] detectTableId(' + source + '): via grist.getTable().getTableId() =', id);
               return id;
             }
           }
           if (t.tableId) {
-            console.log('[GristAPI] detectTableId(' + source + '): via grist.getTable().tableId =', t.tableId);
             return String(t.tableId);
           }
           // last-resort : propriétés de l'objet
           for (const k of ['id', 'tableRef', 'name']) {
             if (t[k]) {
-              console.log('[GristAPI] detectTableId(' + source + '): via grist.getTable().' + k + ' =', t[k]);
               return String(t[k]);
             }
           }
@@ -325,7 +305,6 @@ const GristAPI = (function () {
           // une colonne est matchée si elle existe dans le record ET dans la table
           const matched = cols.filter(c => recordKeys.indexOf(c) !== -1);
           if (matched.length >= 1) {
-            console.log('[GristAPI] detectTableId(' + source + '): via fallback schéma table=', tableId, 'colonnes matchées=', matched);
             return tableId;
           }
         }
@@ -372,7 +351,6 @@ const GristAPI = (function () {
     try {
       await loadRawTables();
       _tables = _rawTables.filter(t => INTERNAL_TABLES.indexOf(t) === -1);
-      console.log('[GristAPI] refreshSchema: tables détectées =', _tables);
       _columnsByTable = await (fast ? provisionalColumnsByTable(metaRead) : exactColumnsByTable());
     } catch (e) {
       console.error('[GristAPI] refreshSchema: erreur globale —', e);
@@ -589,7 +567,6 @@ const GristAPI = (function () {
 
   function onRecord(cb) {
     _onRecordCallbacks.push(cb);
-    console.log('[GristAPI] onRecord: abonné ajouté. total=', _onRecordCallbacks.length);
     // Rejouer immédiatement le dernier record connu si on est déjà prêt
     if (_currentRecord) {
       try { cb(_currentRecord, _currentTableId, _currentMappings); }
@@ -615,11 +592,6 @@ const GristAPI = (function () {
   async function setWidgetOption(key, value) {
     _currentOptions = Object.assign({}, _currentOptions, { [key]: value });
     await grist.setOption(key, value);
-  }
-
-  function safeJSONStringify(value) {
-    try { return JSON.stringify(value); }
-    catch (e) { return '[unserializable: ' + e.message + ']'; }
   }
 
   async function findReferenceColumns(fromTableId, toTableId) {

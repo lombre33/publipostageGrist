@@ -1,0 +1,18 @@
+/* Fenêtre de premier contact (js/first-contact.js) : le widget ouvert hors de Grist, une adresse bloquée par le réseau, un démarrage interrompu. Le voile, le
+   cadre, le titre et les boutons viennent de la base commune (css/modal-base.css, css/variable-actions.css) ; ce fichier ne règle que le contenu. */
+.pp-first-contact-box { --pp-modal-w: 560px; --pp-modal-title-gap: 10px; }
+.pp-first-contact-body { font-size: 12.5px; line-height: 1.5; color: var(--text); }
+.pp-first-contact-body p { margin: 0 0 10px; }
+.pp-first-contact-body ol, .pp-first-contact-body ul { margin: 0 0 10px; padding-left: 20px; }
+.pp-first-contact-body li { margin: 0 0 6px; }
+.pp-first-contact-body a { color: var(--accent-ink); }
+.pp-first-contact-body code, .pp-first-contact-details pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace; font-size: 12px; }
+.pp-first-contact-body code { padding: 1px 5px; border-radius: 4px; background: var(--surface-sunken); overflow-wrap: anywhere; }
+/* L'adresse à coller dans Grist, d'un clic (user-select: all) ou par « Copier » ; elle passe à la ligne plutôt que de sortir de la fenêtre. */
+.pp-first-contact-address { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.pp-first-contact-address code { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); user-select: all; }
+.pp-first-contact-copy { flex: none; height: 28px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-family: var(--font-ui); font-size: 12px; font-weight: 600; cursor: pointer; }
+.pp-first-contact-copy:hover { background: var(--surface-sunken); }
+.pp-first-contact-details { margin: 0 0 6px; color: var(--text-muted); }
+.pp-first-contact-details summary { cursor: pointer; font-size: 12px; }
+.pp-first-contact-details pre { margin: 6px 0 0; padding: 8px; max-height: 110px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-sunken); color: var(--text); font-size: 11.5px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }

@@ -34,7 +34,7 @@ const TemplateGallery = (function () {
       if (!Array.isArray(entries)) { if (optional) return []; throw new Error('manifeste mal formé'); }
       return entries.map(e => Object.assign({}, e, { __base: base }));
     } catch (e) {
-      if (optional) { console.info('[TemplateGallery] pas de catalogue de dev (' + base + ') - normal sur un déploiement live.'); return []; }
+      if (optional) return [];
       throw e;
     }
   }

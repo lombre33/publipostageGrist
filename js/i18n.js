@@ -411,6 +411,7 @@ const I18n = (function () {
     // --- Galerie de templates ---
     'gallery.title': { fr: 'Créer à partir d’un modèle', en: 'Create from a template' },
     'gallery.searchPlaceholder': { fr: 'Rechercher un modèle…', en: 'Search for a template…' },
+    'gallery.legalNote': { fr: 'Ces modèles sont des exemples à adapter ; ils ne remplacent pas un conseil juridique.', en: 'These templates are examples to adapt; they are not legal advice.' },
     'gallery.useTemplate': { fr: 'Utiliser ce modèle', en: 'Use this template' },
     'gallery.useWithNewTable': { fr: 'Utiliser avec une nouvelle table de données', en: 'Use with a new data table' },
     'gallery.backToGallery': { fr: 'Retour à la galerie', en: 'Back to gallery' },
@@ -586,6 +587,7 @@ const I18n = (function () {
     'settings.pageMargins.left': { fr: 'Gauche', en: 'Left' },
     'settings.triggerKey.reloadNotice': { fr: 'Rechargez la page pour appliquer ce changement.', en: 'Reload the page to apply this change.' },
     'settings.triggerKey.reloadButton': { fr: 'Recharger maintenant', en: 'Reload now' },
+    'settings.credits.version': { fr: 'Version', en: 'Version' },
     'settings.credits.author': { fr: 'Auteur', en: 'Author' },
     'settings.credits.website': { fr: 'Site', en: 'Website' },
     'settings.credits.license': { fr: 'Licence', en: 'License' },
@@ -1358,9 +1360,47 @@ const I18n = (function () {
     'status.splitSingleWorkbookDoneWithFailures': { fr: '{ok} {ok|document réuni|documents réunis} dans un seul classeur Excel, {failed} {failed|échec|échecs} (voir la console) — fichier téléchargé.', en: '{ok} {ok|document|documents} combined into a single Excel workbook, {failed} {failed|failure|failures} (see console) — file downloaded.' },
     // --- Images qu'un export n'a pas pu lire : leur nombre s'écrit avant l'état de fin d'export (js/main.js:setExportDoneStatus) ---
     'status.imagesUnread': { fr: '{n} {n|image introuvable|images introuvables} (voir la console).', en: '{n} missing {n|image|images} (see console).' },
+    // --- Premier contact : le widget ouvert hors de Grist, un réseau qui bloque une adresse, un démarrage interrompu (js/first-contact.js) ---
+    'firstContact.reload': { fr: 'Recharger la page', en: 'Reload the page' },
+    'firstContact.keepWaiting': { fr: 'Continuer d’attendre', en: 'Keep waiting' },
+    'firstContact.technical': { fr: 'Message technique', en: 'Technical message' },
+    'firstContact.copy': { fr: 'Copier', en: 'Copy' },
+    'firstContact.copied': { fr: 'Copié', en: 'Copied' },
+    'firstContact.outside.title': { fr: 'Ce widget s’ouvre dans Grist', en: 'This widget opens inside Grist' },
+    'firstContact.outside.intro': { fr: 'Publipostage+ est un widget personnalisé pour Grist : il ne fonctionne pas seul dans un onglet du navigateur. Pour l’utiliser :', en: 'Publipostage+ is a custom widget for Grist: it does not work on its own in a browser tab. To use it:' },
+    'firstContact.outside.step1': { fr: 'Dans une page Grist, ajoutez un widget personnalisé et collez cette adresse :', en: 'In a Grist page, add a custom widget and paste this address:' },
+    'firstContact.outside.step2': { fr: 'Dans le panneau du widget, réglez « Sélectionner par » (Select by) sur la table dont les lignes servent de source de données.', en: 'In the widget’s panel, set “Select by” to the table whose rows are the data source.' },
+    'firstContact.outside.step3': { fr: 'Accordez-lui l’accès complet au document quand Grist le demande.', en: 'Grant it full access to the document when Grist asks.' },
+    'firstContact.outside.readme': { fr: 'Lire l’installation', en: 'Read the installation guide' },
+    'firstContact.network.title': { fr: 'Le widget n’a pas pu se charger', en: 'The widget could not load' },
+    'firstContact.network.intro': { fr: 'Publipostage+ télécharge ses composants depuis quelques adresses publiques, et votre réseau (pare-feu, proxy) en bloque sans doute une. Demandez à votre service informatique d’autoriser :', en: 'Publipostage+ downloads its components from a few public addresses, and your network (firewall, proxy) is probably blocking one of them. Ask your IT department to allow:' },
+    'firstContact.network.then': { fr: 'Rechargez ensuite la page.', en: 'Then reload the page.' },
+    'firstContact.network.list': { fr: 'La liste complète des adresses est dans le README.', en: 'The full list of addresses is in the README.' },
+    'firstContact.slow.title': { fr: 'Le chargement est long', en: 'Loading is taking a while' },
+    'firstContact.slow.intro': { fr: 'Le widget n’a pas fini de démarrer. Une connexion lente peut suffire ; sinon, votre réseau (pare-feu, proxy) bloque sans doute l’une de ces adresses :', en: 'The widget has not finished starting. A slow connection may be enough; otherwise your network (firewall, proxy) is probably blocking one of these addresses:' },
+    'firstContact.host.editor': { fr: 'l’éditeur de texte, nécessaire au démarrage', en: 'the text editor, needed to start' },
+    'firstContact.host.grist': { fr: 'l’API de Grist, nécessaire au démarrage', en: 'the Grist API, needed to start' },
+    'firstContact.host.exports': { fr: 'les exports PDF, Word et Excel, au premier export', en: 'PDF, Word and Excel exports, on first export' },
+    'firstContact.error.title': { fr: 'Le widget n’a pas pu démarrer', en: 'The widget could not start' },
+    'firstContact.error.intro': { fr: 'Une erreur a arrêté le démarrage. Rechargez la page ; si elle revient, joignez le message technique ci-dessous à votre signalement.', en: 'An error stopped the widget from starting. Reload the page; if it comes back, include the technical message below when you report it.' },
   };
 
-  let lang = (typeof localStorage !== 'undefined' && localStorage.getItem('pp_lang') === 'en') ? 'en' : 'fr';
+  // Langue au premier lancement : celle que la personne a choisie dans Réglages (enregistrée), sinon la première langue du navigateur parmi le français
+  // et l'anglais, l'anglais quand il n'en propose aucune des deux, le français quand il ne dit rien. Le choix n'est enregistré qu'à un changement dans
+  // Réglages : un navigateur remis en anglais, ou en français, est suivi tant que la personne n'a rien choisi.
+  function initialLang() {
+    let stored = null;
+    try { stored = localStorage.getItem('pp_lang'); } catch (e) { /* stockage indisponible : on suit le navigateur */ }
+    if (stored === 'fr' || stored === 'en') return stored;
+    const asked = typeof navigator === 'undefined' ? [] : (navigator.languages && navigator.languages.length ? Array.from(navigator.languages) : [navigator.language]).filter(Boolean);
+    for (const tag of asked) {
+      const code = String(tag).toLowerCase().split('-')[0];
+      if (code === 'fr' || code === 'en') return code;
+    }
+    return asked.length ? 'en' : 'fr';
+  }
+
+  let lang = initialLang();
 
   // Pluriel sans parenthèses : `{n|forme au singulier|forme au pluriel}` prend l'une ou l'autre selon la valeur de la variable `n` (règles de la langue :
   // en français 0 et 1 sont au singulier, en anglais seul 1) - « {count} {count|ligne trouvée|lignes trouvées} » donne « 1 ligne trouvée », « 3 lignes

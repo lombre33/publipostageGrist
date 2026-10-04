@@ -122,6 +122,8 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 5. Après une mise à jour du widget, rechargez la page du document Grist, sans quoi le navigateur peut
    garder l'ancienne version.
 
+Ouvert seul dans un onglet du navigateur, le widget ne fonctionne pas : il le dit et rappelle ces étapes.
+
 **Premiers pas** : ouvrez le menu « Nouveau modèle » puis « Nouveau document » (ou « Créer à partir
 d'un modèle… » pour partir de la galerie), écrivez le texte et tapez `#` pour insérer une variable.
 Passez en mode lecture pour voir le document rempli avec la ligne sélectionnée, puis exportez-le.
@@ -136,7 +138,7 @@ Passez en mode lecture pour voir le document rempli avec la ligne sélectionnée
   valable pour tous les modèles du document.
 - **En-tête et pied de page** : cliquez sur une marge en haut ou en bas de la page pour entrer dans
   l'édition dédiée.
-- **Réglages** (bouton de la barre du haut) : langue, thème, touche déclenchant le panneau `#`,
+- **Réglages** (bouton de la barre du haut) : langue (celle du navigateur au premier lancement), thème, touche déclenchant le panneau `#`,
   raccourcis clavier, marges du modèle, modèle par défaut de la vue, droits par personne, crédits.
   Les réglages « Vue » et « Accès » sont des options du widget : Grist ne les partage avec les autres
   personnes qu'une fois la vue enregistrée.
@@ -218,7 +220,8 @@ bibliothèques et polices sont dans [NOTICE](NOTICE).
   de version avec les dépendances embarquées, pour éviter tout appel externe.
 - **Réseau** : `esm.sh` (éditeur) et `docs.getgrist.com` (API de Grist) sont nécessaires au démarrage ;
   `cdnjs.cloudflare.com` et `cdn.jsdelivr.net` le sont au premier export. Un pare-feu qui bloque l'un
-  d'eux empêche le widget de démarrer ou l'export de se faire : il faut les autoriser.
+  d'eux empêche le widget de démarrer ou l'export de se faire : il faut les autoriser. Au démarrage, le
+  widget le dit dans une fenêtre qui liste ces adresses.
 - **Navigateurs** : les tests automatisés tournent sur Chromium (Chrome, Edge), avec un simulateur de
   Grist ; Firefox et Safari ne sont pas testés automatiquement.
 - **Enregistrement** : deux personnes qui modifient le même modèle en même temps ne sont pas fusionnées.
@@ -421,6 +424,8 @@ GitHub Pages, with no backend and no build step.
 5. After a widget update, reload the Grist document's page, otherwise the browser may keep the old
    version.
 
+Opened alone in a browser tab, the widget does not work: it says so and recalls these steps.
+
 **Getting started**: open the "New template" menu then "New document" (or "Create from a template…" to
 start from the gallery), write the text and type `#` to insert a variable. Switch to reading mode to
 see the document filled with the selected row, then export it.
@@ -434,7 +439,7 @@ see the document filled with the selected row, then export it.
   relationship between two tables once, for good (the "matching key"), valid for every template in the
   document.
 - **Header and footer**: click a margin at the top or bottom of the page to enter dedicated editing.
-- **Settings** (button in the top bar): language, theme, the key that triggers the `#` panel, keyboard
+- **Settings** (button in the top bar): language (the browser's at first launch), theme, the key that triggers the `#` panel, keyboard
   shortcuts, the template's margins, the view's default template, per-person rights, credits. The
   "View" and "Access" settings are widget options: Grist only shares them with other people once the
   view is saved.
@@ -510,7 +515,8 @@ libraries and fonts are in [NOTICE](NOTICE).
   version with bundled dependencies to avoid any external call.
 - **Network**: `esm.sh` (editor) and `docs.getgrist.com` (Grist API) are needed at startup;
   `cdnjs.cloudflare.com` and `cdn.jsdelivr.net` are needed at the first export. A firewall that blocks
-  one of them prevents the widget from starting or the export from working: they must be allowed.
+  one of them prevents the widget from starting or the export from working: they must be allowed. At
+  startup, the widget says so in a window that lists these addresses.
 - **Browsers**: automated tests run on Chromium (Chrome, Edge), with a Grist simulator; Firefox and
   Safari are not tested automatically.
 - **Saving**: two people editing the same template at the same time are not merged. Autosave detects

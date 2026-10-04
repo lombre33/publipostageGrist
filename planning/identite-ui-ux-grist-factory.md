@@ -164,6 +164,8 @@ Chaque chaîne d'interface visible passe par un attribut `data-i18n` (ex. `data-
 résolu par un module i18n dédié (`js/i18n.js` sur Publipostage+, clé `fr`/`en` en miroir). Toute chaîne d'UI
 ajoutée ou modifiée doit avoir sa traduction anglaise dans le **même lot** — jamais en suivi séparé.
 
+**Langue au premier lancement** (choix d'Antoine du 04/10, « Tout soigner »). Sans choix enregistré dans Réglages, la langue est la première des deux (français, anglais) que propose le navigateur, dans l'ordre de ses préférences ; l'anglais s'il n'en propose aucune des deux, le français s'il ne dit rien. Le choix fait dans Réglages l'emporte ensuite (`pp_lang`, `initialLang` de `js/i18n.js`) ; rien n'est enregistré tant que la personne n'a pas choisi.
+
 ### Vocabulaire et écriture des textes
 Arbitré le 29/09 (« Oui, partout », en ligne `fc44fb1`) après un relevé de neuf textes « template », treize pluriels
 entre parenthèses et trois écritures du vide :
@@ -269,6 +271,14 @@ Antoine utilise Publipostage+ dans un panneau Grist d'environ **700×400 px** : 
   de la même façon, son texte entier au survol.
 - Tout changement d'interface est vérifié à ce format, **à la vraie souris et au vrai clavier** (Tab, Échap), en clair et
   en sombre, en français et en anglais.
+
+### Quand le widget ne démarre pas : une fenêtre qui dit quoi faire
+Choix d'Antoine du 04/10 (« Tout soigner »). Un widget qui ne démarre pas ne laisse jamais un écran vide ni une erreur pour la seule console : une fenêtre du widget (`js/first-contact.js`, base commune des fenêtres) en dit la cause et le geste, en français et en anglais, dans le panneau de 700×400. Quatre sortes :
+- **hors de Grist** : la page ouverte seule dans un onglet, sans cadre parent et sans réponse de Grist ; où ajouter le widget, l'adresse à coller (« Copier »), le guide d'installation ;
+- **réseau bloqué** : une adresse dont dépend le widget ne répond pas ; les quatre adresses de la politique de sécurité de `index.html`, chacune avec ce qu'elle sert à faire, le message du navigateur replié ;
+- **chargement long** : 30 s sans erreur ; mêmes adresses, « Continuer d'attendre » et Échap la ferment, elle se ferme d'elle-même quand le widget est prêt ;
+- **erreur** : toute autre erreur de démarrage ; le message technique déplié, « Recharger la page ».
+Seule la fenêtre « chargement long » se ferme par Échap, et rien ne s'affiche avec `?dev` dans l'adresse. Les adresses listées sont celles de la politique de sécurité (gardé par `codeHygiene`, section 13). Le numéro de version se lit dans Réglages > Crédits (`js/version.js`) ; la console ne reçoit que des avertissements et des erreurs. Gardé par le script Node `firstContact`.
 
 ### La langue de ce que le widget écrit dans le document
 Arbitré le 29/09 (en ligne `87a2a63`). Ce que le widget écrit lui-même dans le document — le message d'une variable qui ne

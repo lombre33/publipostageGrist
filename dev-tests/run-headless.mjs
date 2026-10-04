@@ -239,6 +239,7 @@ const NODE_SCRIPTS = {
   userNameChipMouse: 'verify-user-name-chip-mouse.mjs', // puce « Nom de l’utilisateur » à la vraie souris à 700x400, en français et en anglais : ligne juste après l'email dans la liste « # » (Calcul reste atteignable), un clic la pose, le nom en Lecture à côté de l'email, « [Nom indisponible] » / « [Name unavailable] » en rouge sans nom
   startupOpenMouse: 'verify-startup-open-mouse.mjs', // ouverture sur un document aux tables lentes, vrai navigateur à 700x400, vraie souris et vrai clavier : table des modèles lue une fois, modèle affiché avant la lecture complète des tables, bulles jugées tout de suite, « # » liste les colonnes, colonnes exactes ensuite
   cspLoad: 'verify-csp.mjs', // politique de sécurité du contenu de index.html SANS contournement : le widget démarre, s'écrit, se lit et exporte sous la politique ; un script en ligne, un gestionnaire, une adresse javascript:, une balise de base, un cadre, un objet, un formulaire ne passent plus ; le vrai fichier d'API de Grist (réseau) s'évalue ; cadre à bac à sable
+  firstContact: 'verify-first-contact.mjs', // premier contact avant la bêta : onglet (titre, icône, description), console muette, version des Crédits, langue du navigateur et choix enregistré, fenêtres « hors de Grist », « réseau bloqué », « chargement long » et « erreur » à la vraie souris et au vrai clavier (700x400, français et anglais, clair et sombre, contrastes), avertissement de la galerie
 };
 
 const argv = process.argv.slice(2);

@@ -1,7 +1,9 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="utf-8"><title>Publipostage Grist</title><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="utf-8"><title>Publipostage+ · Grist Factory</title><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Publipostage+ : un widget Grist pour écrire des courriers, contrats et e-mails types, les remplir avec les lignes d'une table et les exporter en PDF, Word ou Excel. / A Grist widget to write template letters, contracts and e-mails, fill them with a table's rows and export them as PDF, Word or Excel.">
+<link rel="icon" type="image/jpeg" href="img/grist-factory-logo.jpg">
 <!-- Politique de sécurité du contenu (contrôle du 04/10, AUDIT_CODE.md §3.2) : même si du HTML piégé échappait au filtre (js/html-sanitize.js), le navigateur refuse tout script en ligne, tout
      gestionnaire d'événement, toute adresse javascript:, tout script d'une autre adresse que celles-ci (l'adresse entière quand la bibliothèque est figée), tout cadre, objet, formulaire et toute
      balise de base. Les trois scripts en ligne de cette page y sont cités par leur empreinte : en modifier un (la carte d'importation comprise) change son empreinte, et dev-tests/verify-code-hygiene.mjs
@@ -101,7 +103,7 @@
 <link rel="stylesheet" href="css/style.css?v=0.88">
 <link rel="stylesheet" href="css/reader-guide.css?v=0.3">
 <link rel="stylesheet" href="css/editor-v2.css?v=0.97">
-<link rel="stylesheet" href="css/toolbar-v2.css?v=0.55">
+<link rel="stylesheet" href="css/toolbar-v2.css?v=0.56">
 <link rel="stylesheet" href="css/grid.css?v=0.7">
 <link rel="stylesheet" href="css/template-tree-select.css?v=0.18">
 <link rel="stylesheet" href="css/template-organize-modal.css?v=0.8">
@@ -129,6 +131,7 @@
 <link rel="stylesheet" href="css/format-painter.css?v=0.2">
 <link rel="stylesheet" href="css/sheet-assembly.css?v=0.2">
 <link rel="stylesheet" href="css/external-images.css?v=0.2">
+<link rel="stylesheet" href="css/first-contact.css?v=0.1">
 </head>
 <body>
 <div id="app">
@@ -437,7 +440,7 @@
       </div>
     </div>
     <div class="pp-modal-body tpl-gallery-grid" id="tpl-gallery-grid"></div>
-    <div class="pp-modal-actions modal-actions"><button id="tpl-gallery-close" data-i18n="common.close">Fermer</button></div>
+    <div class="pp-modal-actions modal-actions"><span class="tpl-gallery-note" data-i18n="gallery.legalNote">Ces modèles sont des exemples à adapter ; ils ne remplacent pas un conseil juridique.</span><button id="tpl-gallery-close" data-i18n="common.close">Fermer</button></div>
   </div></div>
   <div id="macro-editor-modal" class="pp-modal pp-modal-page" style="display:none;" tabindex="-1"><div class="pp-modal-box modal-content macro-editor-modal-content" data-size="md" role="dialog" aria-modal="true" aria-labelledby="macro-editor-title" tabindex="-1">
     <div class="pp-modal-header"><h3 id="macro-editor-title" data-i18n="macro.modal.title">Macro-modèle</h3></div>
@@ -624,6 +627,7 @@
       </div>
       <div class="settings-panel" data-settings-panel="credits" hidden>
         <dl class="settings-credits-list">
+          <dt data-i18n="settings.credits.version">Version</dt><dd id="settings-credits-version"></dd>
           <dt data-i18n="settings.credits.author">Auteur</dt><dd id="settings-credits-author">Grist Factory</dd>
           <dt data-i18n="settings.credits.website">Site</dt><dd id="settings-credits-website"><a href="https://grist-factory.fr" id="settings-credits-website-link" target="_blank" rel="noopener noreferrer">grist-factory.fr</a></dd>
           <dt data-i18n="settings.credits.license">Licence</dt><dd id="settings-credits-license"><a href="https://github.com/grist-factory/Publipostage-Plus/blob/main/LICENSE" id="settings-credits-license-link" target="_blank" rel="noopener noreferrer">GNU GPL v3.0</a></dd>
@@ -635,9 +639,10 @@
   </div></div>
 </div>
 <script src="js/dom.js?v=0.2"></script>
+<script src="js/version.js?v=0.1"></script>
 <script src="js/html-sanitize.js?v=0.6"></script>
 <script src="js/page-tree.js?v=0.4"></script>
-<script src="js/grist-api.js?v=0.96"></script>
+<script src="js/grist-api.js?v=0.97"></script>
 <script src="js/templates.js?v=0.85"></script>
 <script>
   // Démarrage anticipé (mesure d'ouverture du 2026-10-02) : Grist et la lecture des modèles ne dépendent d'aucun des scripts qui suivent, ils partent ici pendant que ceux-ci
@@ -652,7 +657,7 @@
 </script>
 <script src="js/reader-mode.js?v=0.123"></script>
 <script src="js/reader-guide.js?v=0.5"></script>
-<script src="js/i18n.js?v=0.113"></script>
+<script src="js/i18n.js?v=0.114"></script>
 <script src="js/shortcuts.js?v=0.9"></script>
 <script src="js/page-layout.js?v=0.9"></script>
 <script src="js/page-layer.js?v=0.4"></script>
@@ -689,12 +694,13 @@
 <script src="js/xlsx-number-format.js?v=0.2"></script>
 <script src="js/grid-xlsx-import.js?v=0.4"></script>
 <script src="js/mailto-export.js?v=0.9"></script>
-<script src="js/template-gallery.js?v=0.10"></script>
-<script src="js/settings.js?v=0.10"></script>
+<script src="js/template-gallery.js?v=0.11"></script>
+<script src="js/settings.js?v=0.11"></script>
 <script src="js/condition-rules.js?v=0.9"></script>
 <script src="js/condition-fields.js?v=0.15"></script>
 <script src="js/modal-base.js?v=0.6"></script>
 <script src="js/dialogs.js?v=0.4"></script>
+<script src="js/first-contact.js?v=0.1"></script>
 <script src="js/external-images.js?v=0.2"></script>
 <script src="js/link-dialog.js?v=0.4"></script>
 <script src="js/find-replace.js?v=0.4"></script>
@@ -734,6 +740,6 @@
 <script src="js/sheet-assembly-dialog.js?v=0.3"></script>
 <script src="js/orientation-toggle.js?v=0.10"></script>
 <script src="js/clean-reading.js?v=0.4"></script>
-<script src="js/main.js?v=0.110"></script>
+<script src="js/main.js?v=0.111"></script>
 </body>
 </html>

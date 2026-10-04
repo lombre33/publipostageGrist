@@ -14,6 +14,15 @@
 // appeler `window.__gristStub.setVariables([...])` puis relancer
 // GristAPI.refreshSchema() eux-mêmes (aucun besoin de rebooter tout le
 // harnais pour ça).
+
+// Sans langue enregistrée, js/i18n.js suit celle du navigateur ; celui des tests est en en-US, et les scénarios sont écrits en français. Le navigateur de
+// test se dit donc français ; un test de la langue par défaut fixe `window.__browserLanguages` (page.addInitScript) avant le chargement de la page.
+try {
+  const asked = () => window.__browserLanguages || ['fr-FR', 'fr'];
+  Object.defineProperty(navigator, 'languages', { configurable: true, get: () => asked() });
+  Object.defineProperty(navigator, 'language', { configurable: true, get: () => asked()[0] });
+} catch (e) { /* un navigateur qui refuse : les tests suivent alors sa langue */ }
+
 (function () {
   const state = {
     // Les 4 tables internes pré-remplies plus bas (Publipostage_Modeles/LiensTables/UserProbe/

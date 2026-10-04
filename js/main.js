@@ -2268,6 +2268,7 @@
   }
 
   async function init() {
+    FirstContact.start(); // widget ouvert hors de Grist, adresse bloquée par le réseau, démarrage trop long : js/first-contact.js
     syncSaveButtonLook();
     wireAccessLockGuard();
     // Grist (schéma, règles de liaison), les modèles et l'éditeur se chargent ensemble : en série, leurs aller-retour et leurs téléchargements
@@ -2330,6 +2331,7 @@
     applyAccessRights();
     AccessRights.onChange(onAccessRightsChange);
     await switchMode('edit');
+    FirstContact.ready();
     setStatus(I18n.t(isReadOnly() ? 'status.readyReadOnly' : 'status.ready'));
     openCleanReadingForReadOnly();
     checkAfterOpen();
@@ -2340,5 +2342,6 @@
   init().catch((e) => {
     console.error('[main] init() a échoué', e);
     setStatus(I18n.t('status.initError', { message: (e && e.message) || String(e) }), true);
+    FirstContact.failed(e);
   });
 })();
