@@ -1,23 +1,24 @@
-/* Bloc de texte conditionnel dans l'éditeur (menu des variables, onglet Chips ; js/editor-nodes.js:createConditionalTextNode). Une vue de l'éditeur seulement : le HTML
-   enregistré ne porte que <div class="conditional-text" data-condition>, que la Lecture, le PDF, le Word et l'e-mail défont (condition remplie) ou retirent (sinon) -
-   js/conditional-text.js. D'où le soin de ne rien changer à la façon dont le texte passe à la ligne : le cadre est un `outline` (il ne participe pas à la mise en page, comme
-   celui de la zone 2 colonnes, css/editor-v2.css) et le bloc n'a ni marge ni remplissage sur les côtés, si bien que le texte qu'il contient passe à la ligne exactement où il le
-   fera à l'export. Seule la hauteur change : l'étiquette et un peu d'air au-dessus et au-dessous. Petit par défaut, le bloc épouse son contenu (voir plus bas) mais jamais au
-   prix d'un autre retour à la ligne.
-   Même direction artistique que les bulles de variable (css/style.css:.var-badge, css/variable-actions.css) : fond #eaf2ff, texte #12406b, liseré #b7cdf2 ; en pointillés
-   #5b7fc0 une fois la condition posée. La page reste blanche dans les deux thèmes, d'où des couleurs écrites en dur comme pour la bulle. */
+/* Bloc de texte conditionnel dans l'éditeur (menu des variables, onglet Chips ; js/editor-nodes.js:createConditionalTextNode). Une vue de
+   l'éditeur seulement : le HTML enregistré ne porte que <div class="conditional-text" data-condition>, que la Lecture, le PDF, le Word et l'e-mail
+   défont (condition remplie) ou retirent (sinon), js/conditional-text.js. Il ne faut donc rien changer à la façon dont le texte passe à la ligne :
+   le cadre est un `outline` (hors mise en page, comme celui de la zone 2 colonnes, css/editor-v2.css) et le bloc n'a ni marge ni remplissage sur
+   les côtés, si bien que le texte passe à la ligne exactement où il le fera à l'export. Seule la hauteur change : l'étiquette et un peu d'air
+   au-dessus et au-dessous. Même direction artistique que les bulles de variable (css/style.css:.var-badge, css/variable-actions.css) : fond
+   #eaf2ff, texte #12406b, liseré #b7cdf2, pointillés #5b7fc0 une fois la condition posée. La page reste blanche dans les deux thèmes, d'où des
+   couleurs en dur comme pour la bulle. */
 .tiptap .conditional-text { position: relative; margin: 8px 0; outline: 1px dashed #b7cdf2; outline-offset: 5px; border-radius: 2px; }
 .tiptap .conditional-text.has-condition { outline-color: #5b7fc0; }
 /* Deux blocs l'un sous l'autre : les marges se confondent, et les cadres (5 px au-delà du texte) se chevaucheraient - un peu plus d'air entre eux. */
 .tiptap .conditional-text + .conditional-text { margin-top: 14px; }
 
-/* Petit par défaut, il grandit avec ce qu'on y met : un mot, un nombre, une phrase donnent un cadre de leur taille (au moins celle de l'étiquette), plus large à chaque mot
-   jusqu'à la largeur de la page, plus haut à chaque retour à la ligne. `fit-content` = la largeur du texte sur une seule ligne, jamais plus que la place disponible : un texte
-   trop long pour la page occupe donc toute sa largeur et passe à la ligne là où il le fera à l'export, un texte qui tient en une ligne n'a aucune raison d'en changer.
-   Réservé aux contenus dont la mise en page ne dépend pas de la largeur du bloc, sinon l'éditeur montrerait autre chose que l'export : paragraphes, titres, listes, citations et
-   blocs emboîtés seulement (tout autre enfant garde toute la largeur, comme les blocs de demain) ; une image, un tableau, une ligne, du code, un encadré, une zone 2 colonnes, un
-   saut de page ou un texte centré, à droite ou justifié se placent sur la largeur de la page. Une image qui flotte à gauche plus haut au même niveau repousse aussi le début
-   des lignes : un cadre étroit à côté d'elle ferait passer le texte à la ligne plus tôt qu'à l'export (à droite, la place restante est la même). */
+/* Petit par défaut, le bloc épouse ce qu'on y met : un mot, un nombre, une phrase donnent un cadre de leur taille (au moins celle de l'étiquette),
+   plus large à chaque mot jusqu'à la largeur de la page, plus haut à chaque retour à la ligne. `fit-content` est la largeur du texte sur une
+   ligne, jamais plus que la place disponible : un texte trop long occupe toute la largeur et passe à la ligne là où il le fera à l'export, un
+   texte qui tient en une ligne n'a aucune raison d'en changer. Réservé aux contenus dont la mise en page ne dépend pas de la largeur du bloc,
+   sinon l'éditeur montrerait autre chose que l'export : paragraphes, titres, listes, citations et blocs emboîtés seulement. Tout autre enfant,
+   présent ou à venir (image, tableau, ligne, code, encadré, zone 2 colonnes, saut de page, texte centré, à droite ou justifié), garde la largeur
+   de la page. Une image qui flotte à gauche plus haut au même niveau repousse aussi le début des lignes : un cadre étroit à côté d'elle ferait
+   passer le texte à la ligne plus tôt qu'à l'export (à droite, la place restante est la même). */
 .tiptap .conditional-text:not(
   :has(.conditional-text-content > :not(p, h1, h2, h3, h4, h5, h6, ul, ol, blockquote, .conditional-text)),
   :has(.editor-image-view, table, hr, pre, .callout, .two-columns-zone-outer, .page-break-marker, .toc-marker, [style*="text-align: center"], [style*="text-align: right"], [style*="text-align: justify"]),
@@ -25,16 +26,18 @@
   :has(.editor-image-view[data-align="left"]) ~ * .conditional-text
 ) { width: fit-content; }
 
-/* Blocs emboîtés : le contenu d'un bloc intérieur est au plus aussi large que celui de son parent (exactement autant dès que le plus large des deux est le sien), donc
-   leurs cadres ne se distinguent que par leur écart au texte - 5 px pour le premier niveau, 2 px pour le deuxième, 0 au-delà. Dans une case de tableau, une colonne de zone 2 colonnes, un élément de liste ou
-   une citation, le premier niveau commence déjà à 2 px : un cadre à 5 px passerait sur le liseré de la case ou sur la puce. */
+/* Blocs emboîtés : le contenu d'un bloc intérieur est au plus aussi large que celui de son parent (exactement autant dès que le plus large des
+   deux est le sien), donc leurs cadres ne se distinguent que par leur écart au texte - 5 px pour le premier niveau, 2 px pour le deuxième, 0
+   au-delà. Dans une case de tableau, une colonne de zone 2 colonnes, un élément de liste ou une citation, le premier niveau commence déjà à 2 px :
+   un cadre à 5 px passerait sur le liseré de la case ou sur la puce. */
 .tiptap :where(td, th, li, blockquote, .two-columns-column) .conditional-text { outline-offset: 2px; }
 .tiptap .conditional-text .conditional-text { outline-offset: 2px; }
 .tiptap :where(td, th, li, blockquote, .two-columns-column) .conditional-text .conditional-text,
 .tiptap .conditional-text .conditional-text .conditional-text { outline-offset: -1px; }
 
-/* Étiquette : « Si Statut = Urgent » (ou « Texte conditionnel · sans condition »), en tête du bloc. Un clic la sélectionne, ce qui ouvre la barre flottante de la bulle
-   (condition d'affichage). Trop longue pour la largeur du bloc, elle est coupée par « … » ; le texte entier est dans son info-bulle. */
+/* Étiquette : « Si Statut = Urgent » (ou « Texte conditionnel · sans condition »), en tête du bloc. Un clic la sélectionne, ce qui ouvre la barre
+   flottante de la bulle (condition d'affichage). Trop longue pour la largeur du bloc, elle est coupée par « … » ; le texte entier est dans son
+   info-bulle. */
 .tiptap .conditional-text-tag { display: block; width: fit-content; max-width: 100%; box-sizing: border-box; margin: 0 0 3px; padding: 0 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   background: #eaf2ff; color: #12406b; border: 1px solid #b7cdf2; border-radius: 3px; font: 600 10.5px/15px var(--font-ui, system-ui, sans-serif); letter-spacing: .01em; cursor: pointer; user-select: none; }
 .tiptap .conditional-text.has-condition > .conditional-text-tag { border-style: dashed; border-color: #5b7fc0; }

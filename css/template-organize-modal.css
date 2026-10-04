@@ -4,7 +4,7 @@
    épinglés) a sa règle ici. */
 
 /* Polices, tailles, marges et bouton de fermeture alignés sur les fenêtres de gabarit proche (#macro-editor-modal, #template-gallery-modal,
-   css/toolbar-v2.css) : sans eux, tout héritait des défauts du navigateur. */
+   css/toolbar-v2.css) : sans cela, tout hériterait des défauts du navigateur. */
 /* Tient dans la fenêtre quelle que soit sa hauteur : le cadre est plafonné à la hauteur du panneau moins 12 px de chaque côté (css/modal-base.css) ;
    titre, explication et recherche forment l'en-tête fixe, « Fermer » reste en bas, et seule la liste rétrécit et défile (zone de contenu). Écarts :
    10 px entre les blocs de l'en-tête et avant la liste, 24 px avant « Fermer ». */
@@ -21,14 +21,15 @@
 .tom-new-folder-btn:hover { background: var(--surface-sunken); }
 
 .template-organize-list { max-height: 360px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); }
-/* Deux classes : la zone de contenu de la base (`.pp-modal-body`, css/modal-base.css, chargée après ce fichier) pose `min-height: 0` et `padding: 0 20px`, qu'une seule classe ne battrait pas. */
+/* Deux classes : la zone de contenu de la base (`.pp-modal-body`, css/modal-base.css, chargée après ce fichier) pose `min-height: 0` et `padding:
+   0 20px`, qu'une seule classe ne battrait pas. */
 .template-organize-modal-content .template-organize-list { min-height: 72px; margin: 0 20px; padding: 4px; }
 
 .template-organize-modal-content .modal-actions button { font-family: var(--font-ui); font-weight: 600; font-size: 13px; height: 30px; padding: 0 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; }
 .template-organize-modal-content .modal-actions button:hover { background: var(--surface-sunken); }
 
-/* Ces lignes ne sélectionnent rien au clic (contrairement à .tts-popup) : seul un dossier réagit (dépliage), donc pas du curseur « pointer » hérité
-   de .tts-row (fausse affordance). « grab » : les lignes sont draggable (js/template-organize-modal.js:makeLeafRow). */
+/* Ces lignes ne sélectionnent rien au clic (contrairement à .tts-popup) : seul un dossier réagit (dépliage), d'où l'absence du curseur « pointer »
+   hérité de .tts-row, fausse affordance. « grab » : les lignes sont draggable (js/template-organize-modal.js:makeLeafRow). */
 #template-organize-list .tts-row-leaf { cursor: grab; }
 
 .tom-folder-hint { flex: none; font-size: 11px; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; }
@@ -45,7 +46,7 @@
 
 /* Glisser-déposer et boutons « + » : voir pendingFolder dans l'en-tête de js/template-organize-modal.js. */
 .tom-dragging { opacity: 0.4; }
-/* accent-soft (pas surface-sunken) : les lignes dossier ont désormais elles-mêmes un fond surface-sunken, la cible du glisser-déposer doit s'en détacher. */
+/* accent-soft (pas surface-sunken) : les lignes dossier ont elles-mêmes un fond surface-sunken, la cible du glisser-déposer doit s'en détacher. */
 .tom-drop-target { background: var(--accent-soft); outline: 2px dashed var(--accent); outline-offset: -2px; }
 
 .tom-add-subfolder-btn { flex: none; border: none; background: transparent; color: var(--text-faint); font: inherit; font-size: 13px; font-weight: 700; line-height: 1; padding: 3px 7px; border-radius: var(--radius-sm); cursor: pointer; opacity: 0; }

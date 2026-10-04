@@ -1,45 +1,42 @@
-/* Variables conditionnelles, autres attributs et boucle d'une bulle #Variable (maquettes validées par Antoine le 2026-09-28) : groupe d'actions de la
-   barre flottante (js/floating-toolbars.js), fenêtre de condition (js/variable-condition.js), fenêtre des autres attributs (js/variable-linked-attrs.js),
-   fenêtre de boucle (js/variable-loop.js) et repères de la boucle dans l'éditeur. Fichier propre à ces éléments pour ne rien changer aux feuilles
-   partagées ; les lignes de règle réutilisent telles quelles les classes .macro-rule-* de css/toolbar-v2.css (mêmes champs que les macro-modèles,
+/* Condition, autres attributs et boucle d'une bulle #Variable : actions de la barre flottante (js/floating-toolbars.js), fenêtres de condition,
+   d'autres attributs et de boucle (js/variable-condition.js, js/variable-linked-attrs.js, js/variable-loop.js) et repères de boucle dans
+   l'éditeur. Les lignes de règle réutilisent les classes .macro-rule-* de css/toolbar-v2.css (mêmes champs que les macro-modèles,
    js/condition-fields.js). */
 
 /* Bulle conditionnelle dans l'éditeur : bordure en pointillés. En lecture et à l'export, la bulle est remplacée par sa valeur ou retirée. */
 .tiptap .var-badge[data-condition] { border-style: dashed; border-color: #5b7fc0; }
 
-/* Bulle choisie par un clic (Antoine, 01/10 : « un mini feedback visuel (changement léger de la couleur de fond ?) pour confirmer que l'on peut copier »). ProseMirror pose
-   `ProseMirror-selectednode` sur une bulle sélectionnée mais masque alors la sélection du navigateur (`ProseMirror-hideselection`) : rien ne la montrait. Le fond passe à un bleu plus
-   soutenu, le liseré et le texte ne changent pas (texte 6,9:1, fond 1,4:1 de celui d'une bulle ordinaire) ; même teinte en sombre, la page du document restant blanche comme les autres couleurs
-   de bulle. `background-color` seulement : le repère de boucle d'une bulle en ligne est un `background-image`. Une bulle cassée garde son rouge, un cran plus soutenu. Même retour pour
-   la bulle « Calcul » (css/variable-calc.css). */
+/* Bulle sélectionnée par un clic : ProseMirror pose `ProseMirror-selectednode` mais masque alors la sélection du navigateur
+   (`ProseMirror-hideselection`), rien ne la montrait. Le fond passe à un bleu plus soutenu (texte 6,9:1), liseré inchangé ; même teinte en sombre,
+   la page du document restant blanche. `background-color` seulement : le repère de boucle d'une bulle en ligne est un `background-image`. Une
+   bulle cassée garde son rouge, un cran plus soutenu. Même retour pour la bulle « Calcul » (css/variable-calc.css). */
 .tiptap .var-badge.ProseMirror-selectednode { background-color: #b9d2f8; }
 .tiptap .var-badge.var-badge-broken.ProseMirror-selectednode { background-color: #f3cccc; }
 
-/* Bulle dans une case de tableau (Antoine, 29/09) ou dans une colonne de zone 2 colonnes (Antoine, 29/09, « oui, les deux colonnes ») : un nom plus long que la
-   case la traversait et recouvrait la case voisine ; dans une colonne, `overflow-wrap: anywhere` (css/style.css) le faisait passer sur 2 ou 3 lignes, si bien que
-   la zone était plus haute dans l'éditeur qu'en lecture et à l'export. Le nom y est coupé au MILIEU par « … » (début tronqué, fin gardée) plutôt que rendu à la
-   ligne, qui ferait grandir la ligne du tableau ou la zone bien au-delà de ce que l'export produira avec la valeur.
-   Le texte entier reste dans le DOM (js/editor-nodes.js, addNodeView) et en info-bulle quand il est coupé. `overflow` seulement sur le début et la fin, jamais
-   sur la bulle : il rognerait le point bleu du format (`::after`, hors de la boîte). Ailleurs que dans une case ou une colonne de zone, la bulle garde son rendu
-   en ligne. Le début rétrécit d'abord (poids de rétrécissement énorme : la fin ne perd rien tant qu'il peut encore céder) mais garde au moins la place de « #… » :
-   sans ce plancher, une case un peu trop étroite laissait une tranche de « # » sans « … », et le nom passait pour entier. Au-delà, c'est la fin qui rétrécit, en se
-   coupant par la GAUCHE (boîte en flex, contenu calé à droite) : le bout du nom, ce qui distingue une variable d'une autre, reste toujours visible. */
+/* Bulle dans une case de tableau ou une colonne de zone 2 colonnes : un nom trop long recouvrait la case voisine ou, avec `overflow-wrap:
+   anywhere` (css/style.css), passait sur 2 ou 3 lignes et rendait la zone plus haute dans l'éditeur qu'en Lecture et à l'export. Le nom y est
+   coupé au milieu par « … » (début tronqué, fin gardée), jamais rendu à la ligne ; le texte entier reste dans le DOM (js/editor-nodes.js,
+   addNodeView) et en info-bulle. `overflow` seulement sur le début et la fin, jamais sur la bulle : il rognerait le point bleu du format
+   (`::after`, hors de la boîte). Le début rétrécit d'abord (poids de rétrécissement énorme) mais garde la place de « #… » : sans ce plancher, une
+   case un peu trop étroite laissait une tranche de « # » sans « … », et le nom passait pour entier. Au-delà, la fin rétrécit en se coupant par la
+   gauche (boîte en flex, contenu calé à droite) : le bout du nom, qui distingue une variable d'une autre, reste visible. */
 .tiptap :where(td, th, .two-columns-column) .var-badge { display: inline-flex; max-width: 100%; box-sizing: border-box; }
 .tiptap :where(td, th, .two-columns-column) .var-badge-head { flex: 0 1000000 auto; min-width: min(1.3em, 40%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tiptap :where(td, th, .two-columns-column) .var-badge-tail { flex: 0 1 auto; min-width: 0; display: flex; justify-content: flex-end; overflow: hidden; white-space: nowrap; }
 
-/* === Barre flottante : actions à gauche, séparateur visible avant les réglages nombre/date (masqué pour une colonne sans réglage) === */
+/* Barre flottante : actions à gauche, séparateur avant les réglages nombre/date (masqué pour une colonne sans réglage). */
 .v2-varfmt-toolbar .v2-varbadge-actions { display: flex; align-items: center; gap: 2px; }
 .v2-varfmt-toolbar .v2-floating-sep[data-var-sep] { align-self: stretch; width: 1px; margin: 3px 4px; background: var(--border, #d7dde3); }
 .v2-varfmt-toolbar .v2-floating-sep[data-var-sep][hidden] { display: none; }
 .v2-floating-toolbar button.is-disabled { opacity: .35; cursor: default; }
 .v2-floating-toolbar button.is-disabled:hover { background: transparent; }
 
-/* « vide » / « non vide » : le champ Valeur ne sert pas, grisé (partagé avec la fenêtre des macro-modèles, js/condition-fields.js:syncValueDisabled). */
+/* « vide » / « non vide » : le champ Valeur ne sert pas, il est grisé (partagé avec les macro-modèles, js/condition-fields.js:syncValueDisabled). */
 .macro-rule-value-slot.is-disabled { opacity: .45; }
 
-/* === Fenêtres === Le voile, le cadre, le titre, la zone qui défile et la ligne de boutons viennent de la base commune (js/modal-base.js, css/modal-base.css) :
-   dans un panneau Grist bas (~700x400), le titre et Enregistrer / Annuler restent visibles et seul le contenu défile. Ici : l'aspect du contenu et des boutons. */
+/* Fenêtres : le voile, le cadre, le titre, la zone qui défile et la ligne de boutons viennent de la base commune (js/modal-base.js,
+   css/modal-base.css), si bien que dans un panneau bas le titre et les boutons restent visibles et que seul le contenu défile. Ici : l'aspect du
+   contenu et des boutons. */
 .var-modal-intro { font-size: 12px; line-height: 1.5; color: var(--text-muted); margin: 0 0 12px; overflow-wrap: anywhere; }
 .var-modal-intro .var-badge { border-style: dashed; border-color: #5b7fc0; font-size: 11.5px; }
 .var-modal-actions .var-modal-spacer { flex: 1; }
@@ -49,20 +46,20 @@
 .var-modal-actions button.var-modal-primary:hover { background: var(--accent-solid-hover); }
 .var-modal-actions button:disabled { opacity: .45; cursor: default; }
 .var-modal-actions button:disabled:not(.var-modal-primary):hover { background: var(--surface); }
-/* Autres attributs : Annuler, Remplacer et « Insérer N attributs » ne tiennent pas côte à côte dans un panneau étroit (sous ~400 px) - « Insérer » passe alors sur sa
-   propre ligne, à droite, au lieu de sortir de la fenêtre. Au-dessus, tout reste sur une ligne. */
+/* Autres attributs : Annuler, Remplacer et « Insérer N attributs » ne tiennent pas côte à côte dans un panneau étroit (sous ~400 px) : « Insérer »
+   passe alors sur sa propre ligne, à droite, au lieu de sortir de la fenêtre. */
 .var-linked-modal-content .var-modal-actions { flex-wrap: wrap; justify-content: flex-end; row-gap: 8px; }
 .var-modal-actions button.var-modal-danger { border-color: transparent; background: transparent; color: var(--danger-ink); padding: 0 4px; }
 .var-modal-actions button.var-modal-danger:hover { background: var(--danger-soft, #fbe9e9); }
 .var-modal-actions button[hidden] { display: none; }
-/* « Défaire le bloc » (fenêtre de condition d'un bloc de texte) : un bouton de retrait comme « Retirer la condition », mais le rouge de --danger fait 4,4:1 sur blanc, trop peu pour un
-   texte (4,5:1) - le texte garde la couleur du texte, comme « Retirer l'encadré » et « Retirer le lien ». Le rouge est celui d'une condition qu'on retire, pas d'un texte qui reste. */
+/* « Défaire le bloc » (fenêtre de condition d'un bloc de texte) : bouton de retrait comme « Retirer la condition », mais le rouge de --danger
+   (4,4:1 sur blanc) est trop faible pour un texte. Il garde la couleur du texte, comme « Retirer l'encadré » et « Retirer le lien » : le rouge
+   vaut pour une condition qu'on retire, pas pour un texte qui reste. */
 .var-modal-actions button.var-modal-danger.var-modal-unwrap { color: var(--text); }
 .var-modal-actions button.var-modal-danger.var-modal-unwrap:hover { background: var(--surface-sunken); }
 
-/* === Fenêtre de condition === */
-/* La ligne de boutons : les retraits à gauche (« Retirer la condition », « Défaire le bloc »), Annuler et Enregistrer à droite. Si les deux groupes ne tiennent pas sur une ligne, le second
-   passe dessous, à droite, entier. */
+/* Fenêtre de condition, ligne de boutons : les retraits (« Retirer la condition », « Défaire le bloc ») à gauche, Annuler et Enregistrer à droite
+   ; si les deux groupes ne tiennent pas sur une ligne, le second passe dessous, à droite, entier. */
 .var-condition-modal-content .var-modal-actions { flex-wrap: wrap; row-gap: 8px; }
 .var-modal-actions-start, .var-modal-actions-end { display: flex; align-items: center; gap: 8px; }
 .var-modal-actions-end { margin-left: auto; }
@@ -76,9 +73,9 @@
 .var-condition-link-hint button { font: inherit; font-weight: 700; color: var(--accent-ink); background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline; }
 .var-condition-add { align-self: flex-start; margin-top: 4px; height: 26px; padding: 0 10px; border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); background: transparent; font-family: var(--font-ui); font-size: 12px; font-weight: 700; color: var(--text-muted); cursor: pointer; }
 .var-condition-add:hover { color: var(--accent-ink); border-color: var(--accent); }
-/* Dernière ligne de la boîte des règles : « + Ajouter une condition » à gauche, Copier / Coller à droite (demande d'Antoine, 2026-09-29) - sur la même ligne,
-   donc aucune hauteur en plus dans un panneau bas ; elle passe à la ligne sous 350 px. Grisés par aria-disabled : le survol (info-bulle qui explique pourquoi)
-   reste possible. .var-condition-clip-status ne se voit pas, il ne sert qu'aux lecteurs d'écran. */
+/* Dernière ligne de la boîte des règles : « + Ajouter une condition » à gauche, Copier / Coller à droite, sur la même ligne pour ne pas ajouter de
+   hauteur dans un panneau bas ; elle passe à la ligne sous 350 px. Grisés par aria-disabled : le survol (info-bulle qui explique pourquoi) reste
+   possible. .var-condition-clip-status ne sert qu'aux lecteurs d'écran. */
 .var-condition-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
 .var-condition-foot .var-condition-add { align-self: center; margin-top: 0; }
 .var-condition-clip { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
@@ -95,11 +92,10 @@
 .var-condition-debug-line strong { color: var(--text); }
 .var-condition-debug-line.is-good strong { color: inherit; }
 
-/* === Fenêtre « Autres attributs » === */
 .var-linked-filter { display: block; width: 100%; height: 28px; box-sizing: border-box; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-family: var(--font-ui); font-size: 12px; padding: 0 8px; margin-bottom: 8px; background: var(--surface); color: var(--text); }
 .var-linked-list { display: flex; flex-direction: column; max-height: min(220px, 38vh); overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
-/* Une ligne : la case (avec le nom et la valeur) qui coche la colonne, puis, pour une colonne Référence, la flèche qui ouvre les colonnes de la table qu'elle
-   désigne. La ligne grisée (la variable elle-même) grise la case seulement : sa flèche reste utilisable. */
+/* Autres attributs, une ligne : la case (nom et valeur) qui coche la colonne, puis, pour une colonne Référence, la flèche qui ouvre les colonnes
+   de la table désignée. La ligne grisée (la variable elle-même) ne grise que la case : sa flèche reste utilisable. */
 .var-linked-row { display: flex; align-items: stretch; font-size: 12.5px; border-top: 1px solid var(--border); color: var(--text); }
 .var-linked-row:first-child { border-top: none; }
 .var-linked-row:hover { background: var(--surface-sunken); }
@@ -125,16 +121,16 @@ button.var-linked-crumb:focus-visible { outline: 2px solid var(--accent); outlin
 .var-linked-value { flex: 1; min-width: 0; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }
 .var-linked-empty { padding: 8px 10px; font-size: 12px; color: var(--text-faint); }
 .var-linked-note { font-size: 11.5px; line-height: 1.45; color: var(--text-faint); margin: 8px 0 0; }
-/* « Reprendre la condition d'affichage » (demande d'Antoine, 2026-09-29) : seulement si la variable d'origine a une condition, cochée par défaut, sous le
-   sous-titre - en haut, donc visible à l'ouverture même quand une longue liste de colonnes fait défiler la fenêtre ; le résumé de la condition se coupe par
-   « … » plutôt que d'élargir la fenêtre. */
+/* « Reprendre la condition d'affichage » : seulement si la variable d'origine a une condition, cochée par défaut, sous le sous-titre : en haut,
+   donc visible à l'ouverture même quand une longue liste de colonnes fait défiler la fenêtre ; le résumé de la condition se coupe par « … » plutôt
+   que d'élargir la fenêtre. */
 .var-linked-inherit { display: flex; align-items: center; gap: 6px; margin: -4px 0 10px; font-size: 12px; font-weight: 700; color: var(--text); cursor: pointer; }
 .var-linked-inherit[hidden] { display: none; }
 .var-linked-inherit input { flex: none; margin: 0; }
 .var-linked-inherit-text { flex: none; }
 .var-linked-inherit-summary { flex: 0 1 auto; min-width: 0; font-weight: 600; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* === Fenêtre de boucle (js/variable-loop.js) === Mêmes champs que la fenêtre de condition ; la bulle de l'introduction garde son trait plein (pas de
+/* Fenêtre de boucle (js/variable-loop.js) : mêmes champs que la fenêtre de condition ; la bulle de l'introduction garde son trait plein (pas de
    condition ici). */
 .var-loop-modal-content .var-modal-intro .var-badge { border-style: solid; border-color: #b7cdf2; }
 .var-loop-label { display: block; margin: 12px 0 5px; font-size: 11px; font-weight: 700; color: var(--text-muted); }
@@ -164,11 +160,12 @@ button.var-linked-crumb:focus-visible { outline: 2px solid var(--accent); outlin
 .var-loop-empty-text[hidden] { display: none; }
 .var-loop-empty-text input { flex: 1; min-width: 0; }
 
-/* === Repères de boucle dans l'éditeur === La zone répétée (ligne de tableau, élément de liste, paragraphe ou titre qui contient une bulle en boucle) est
-   teintée, avec un onglet dans la marge de gauche ; une bulle en boucle « dans la phrase » porte une petite icône. CSS seul, lu sur l'attribut
-   data-loop-repeat de la bulle (js/editor-nodes.js) : rien n'est ajouté au document, et la lecture comme l'export remplacent la bulle, donc aucun repère.
-   :where() garde la spécificité basse : la couleur choisie pour une cellule et la cellule sélectionnée l'emportent. L'onglet ne prend aucune place
-   (flottant de largeur extérieure nulle, ou position absolue dans la cellule, déjà position:relative) : la mise en page de l'aperçu A4 ne bouge pas. */
+/* Repères de boucle dans l'éditeur : la zone répétée (ligne de tableau, élément de liste, paragraphe ou titre qui contient une bulle en boucle)
+   est teintée, avec un onglet dans la marge de gauche ; une bulle en boucle « dans la phrase » porte une petite icône. CSS seul, lu sur l'attribut
+   data-loop-repeat de la bulle (js/editor-nodes.js) : rien n'est ajouté au document, et la Lecture comme l'export remplacent la bulle, donc aucun
+   repère. :where() garde la spécificité basse : la couleur choisie pour une cellule et la cellule sélectionnée l'emportent. L'onglet ne prend
+   aucune place (flottant de largeur extérieure nulle, ou position absolue dans la cellule, déjà position:relative) : la mise en page de l'aperçu
+   A4 ne bouge pas. */
 :root {
   --pp-loop-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2312406b' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m17 2 4 4-4 4'/%3E%3Cpath d='M3 11v-1a4 4 0 0 1 4-4h14'/%3E%3Cpath d='m7 22-4-4 4-4'/%3E%3Cpath d='M21 13v1a4 4 0 0 1-4 4H3'/%3E%3C/svg%3E");
   --pp-loop-icon-accent: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232f6fed' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m17 2 4 4-4 4'/%3E%3Cpath d='M3 11v-1a4 4 0 0 1 4-4h14'/%3E%3Cpath d='m7 22-4-4 4-4'/%3E%3Cpath d='M21 13v1a4 4 0 0 1-4 4H3'/%3E%3C/svg%3E");
@@ -188,8 +185,9 @@ button.var-linked-crumb:focus-visible { outline: 2px solid var(--accent); outlin
   background: #eaf2ff var(--pp-loop-icon) center / 12px 12px no-repeat; pointer-events: none;
 }
 .tiptap :where(tr:has(> td .var-badge[data-loop-repeat="row"], > th .var-badge[data-loop-repeat="row"])) > :where(td, th):first-child::before { position: absolute; left: -30px; top: 50%; margin-top: -10px; }
-/* Paragraphe et élément de liste : flottant « suspendu » dans la marge (marge gauche négative compensée à droite, largeur extérieure nulle : le texte ne
-   bouge pas). Le titre prend ::after, son ::before étant la numérotation des titres (css/editor-v2.css). Élément de liste : à gauche de sa puce. */
+/* Paragraphe et élément de liste : flottant « suspendu » dans la marge (marge gauche négative compensée à droite, largeur extérieure nulle : le
+   texte ne bouge pas). Le titre prend ::after, son ::before étant la numérotation des titres (css/editor-v2.css). Élément de liste : à gauche de
+   sa puce. */
 .tiptap p:has(.var-badge[data-loop-repeat="paragraph"])::before,
 .tiptap :where(h1, h2, h3, h4, h5, h6):has(.var-badge[data-loop-repeat="paragraph"])::after { float: left; margin: 0 10px 0 -30px; }
 .tiptap :where(ul:not([data-type="taskList"]), ol) > li:has(> p .var-badge[data-loop-repeat="item"])::before { float: left; margin: 0 calc(1.4em + 6px) 0 calc(-1.4em - 26px); }

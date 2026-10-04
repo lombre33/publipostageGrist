@@ -1,26 +1,22 @@
-/* Style minimal de l'éditeur V2 (TipTap/ProseMirror) - équivalent basique du look de .ql-editor (V1). Les classes/attributs partagés avec la V1 (.var-badge,
-   .page-break-marker, .toc-marker, .heading-numbering-config) sont déjà stylés dans ../css/style.css, réutilisé tel quel.
-
-   Règles scopées à .tiptap SEUL (pas #editor-container .tiptap) : js/pdf-export.js mesure le rendu réel de blocs détachés en leur donnant juste cette classe
-   (cf. attachMeasureHost) - une dépendance à l'ID du conteneur éditeur les aurait rendues invisibles hors de la page de l'éditeur lui-même. */
-/* font-family Roboto EXPLICITE : sans elle, le navigateur retombe sur Helvetica/Arial alors que pdfmake utilise Roboto par défaut à l'export (cf.
-   ../js/pdf-fonts.js) - deux polices aux métriques différentes ne coupent pas les lignes aux mêmes endroits entre éditeur et PDF (visible surtout en espace
-   étroit : cellule, colonne 2-colonnes). Même bug déjà corrigé côté V1 (css/roboto-fonts.css, réutilisé tel quel ici). */
-/* position:relative + z-index:0 : sert de conteneur de positionnement pour les images en calque devant/derrière le texte (position:absolute posé sur leur
-   wrapper NodeView) - même rôle que .ql-editor{position:relative; z-index:0} en V1. Le z-index:0 est INDISPENSABLE : sans lui .tiptap ne crée pas son propre
-   contexte d'empilement, et une image "derrière le texte" passe alors derrière l'arrière-plan BLANC de #editor-container au lieu du texte - invisible
-   (cf. mémoire project_stacking_context_trap). */
+/* Style de l'éditeur (TipTap/ProseMirror). Les classes partagées avec la Lecture (.var-badge, .page-break-marker, .toc-marker,
+   .heading-numbering-config) sont stylées dans css/style.css. Les règles sont scopées à `.tiptap` seul, sans `#editor-container` :
+   js/pdf-export.js mesure le rendu de blocs détachés en leur donnant juste cette classe (attachMeasureHost), qu'une dépendance à l'ID du conteneur
+   rendrait invisibles hors de la page de l'éditeur. */
+/* Roboto explicite : sans elle le navigateur retombe sur Helvetica ou Arial alors que le PDF utilise Roboto (js/pdf-fonts.js). Deux polices aux
+   métriques différentes ne coupent pas les lignes aux mêmes endroits dans l'éditeur et dans le PDF, surtout en espace étroit (cellule, colonne).
+   Les @font-face sont dans css/roboto-fonts.css. */
+/* `position: relative` fait de `.tiptap` le repère des images en calque devant ou derrière le texte (leur wrapper est en `position: absolute`).
+   `z-index: 0` est indispensable : sans lui `.tiptap` ne crée pas son contexte d'empilement et une image « derrière le texte » passe derrière le
+   fond blanc de #editor-container, donc devient invisible. */
 .tiptap { position: relative; z-index: 0; outline: none; min-height: 200px; font-size: 14px; line-height: 1.42; color: #1b2430; font-family: 'Roboto', Helvetica, Arial, sans-serif; }
-/* Placeholder du document principal vide (@tiptap/extension-placeholder, cf. js/editor.js) - "is-editor-empty" (posée en plus de "is-empty" UNIQUEMENT
-   quand le document ENTIER est vide, jamais pour une cellule de tableau/colonne vide isolée dans un document par ailleurs rempli) + data-placeholder
-   (texte, résolu par une fonction relue à chaque frappe - cf. js/editor.js) sont posées par TipTap lui-même sur le nœud racine vide, quel que soit son
-   tag (`<p>`, `<h1>`...) - d'où un sélecteur par CLASSE, pas par tag. float:left + height:0 : pattern documenté par TipTap - le pseudo-élément ne pousse
-   pas le texte réel qui suivra (sinon le curseur "sauterait" d'une ligne au premier caractère tapé). pointer-events:none : un clic sur le texte gris
-   place le curseur dans le vrai nœud vide en-dessous plutôt que d'être absorbé par la décoration elle-même. Vide en mode édition d'en-tête/pied
-   (js/editor.js le résout à '' dans ce cas) : rien à masquer ici côté CSS. */
+/* Texte indicatif du document vide (@tiptap/extension-placeholder, js/editor.js). TipTap pose `is-editor-empty` et `data-placeholder` sur le nœud
+   racine vide quel que soit son tag (`<p>`, `<h1>`...), d'où un sélecteur par classe. `is-editor-empty` n'existe que quand tout le document est
+   vide, jamais pour une cellule ou une colonne vide d'un document rempli. `float: left` et `height: 0` : le pseudo-élément ne pousse pas le texte
+   tapé ensuite, le curseur ne saute pas d'une ligne au premier caractère. `pointer-events: none` : un clic sur le texte gris place le curseur dans
+   le vrai nœud vide dessous. En édition d'en-tête ou de pied, js/editor.js résout le texte à une chaîne vide : rien à masquer ici. */
 .tiptap .is-editor-empty::before { content: attr(data-placeholder); float: left; height: 0; pointer-events: none; color: var(--paper-text-faint, #667085); }
-/* .reader-content a besoin du même repère que .tiptap (left/top des images en calque sont relatifs à ce conteneur) - sans lui, position:absolute remonte à
-   #reader-container et l'image atterrit au mauvais endroit. */
+/* `.reader-content` a besoin du même repère que `.tiptap` : le `left` et le `top` des images en calque en dépendent, sinon `position: absolute`
+   remonte à #reader-container et l'image atterrit au mauvais endroit. */
 .reader-content { position: relative; z-index: 0; }
 .tiptap p { margin: 0; }
 .tiptap h1, .tiptap h2, .tiptap h3,
@@ -29,24 +25,21 @@
 .tiptap h3 { font-size: 16pt; } .tiptap h4 { font-size: 14pt; }
 .tiptap h5 { font-size: 13pt; } .tiptap h6 { font-size: 12pt; }
 .tiptap ul, .tiptap ol, .reader-content ul, .reader-content ol { margin: 0; padding-left: 1.4em; }
-/* Puces = les MÊMES caractères que l'export PDF (js/pdf-export.js BULLET_MARKERS), pas le rendu natif ○/■ du navigateur ('°'/'*' étant la seule plage de
-   caractères que les polices embarquées peuvent réellement afficher en PDF). Ces 3 valeurs DOIVENT rester identiques à BULLET_MARKERS - si l'un des deux
-   fichiers change, l'autre doit suivre. */
+/* Puces : les mêmes caractères que l'export PDF (BULLET_MARKERS, js/pdf-export.js), pas les ○ et ■ natifs du navigateur : '°' et '*' sont les
+   seuls caractères que les polices embarquées sachent afficher en PDF. Ces trois valeurs doivent rester identiques à BULLET_MARKERS. */
 .tiptap ul li::marker,
 .reader-content ul li::marker { content: '• '; }
 .tiptap ul[data-bullet-style="circle"] li::marker,
 .reader-content ul[data-bullet-style="circle"] li::marker { content: '° '; }
 .tiptap ul[data-bullet-style="square"] li::marker,
 .reader-content ul[data-bullet-style="square"] li::marker { content: '* '; }
-/* Styles de numérotation (bouton "Liste" fusionné puces+numéros) - lettres/romain sont de l'ASCII pur (aucune contrainte WinAnsi contrairement aux puces
-   ci-dessus), un simple list-style-type suffit à rester identique à l'export PDF (cf. pdf-export.js:listMarkerFor). */
+/* Styles de numérotation (bouton « Liste ») : les lettres et le romain sont de l'ASCII pur, sans contrainte de police, donc un `list-style-type`
+   suffit à rester identique au PDF (listMarkerFor, js/pdf-export.js). */
 .tiptap ol[data-number-style="alpha"], .reader-content ol[data-number-style="alpha"] { list-style-type: lower-alpha; }
 .tiptap ol[data-number-style="roman"], .reader-content ol[data-number-style="roman"] { list-style-type: lower-roman; }
-/* Case à cocher (extension officielle @tiptap/extension-task-list/-item) - 3 styles au choix, portés par `data-tasklist-style` sur le <ul> (même schéma que
-   bulletStyle/orderedListStyle ci-dessus) :
-   - absent/"accentStrike" (réglage par défaut) : case bleue accent + texte barré/grisé une fois cochée (convention "liste de tâches" classique).
-   - "classic" : case carrée, tick noir natif du navigateur (accent-color revenu à `auto`), texte JAMAIS barré.
-   - "accentPlain" : même case bleue accent que le style par défaut, mais texte qui reste normal une fois cochée. */
+/* Liste à cases (@tiptap/extension-task-list), trois styles portés par `data-tasklist-style` sur le `<ul>`, comme bulletStyle et orderedListStyle.
+   Sans attribut ou « accentStrike » (défaut) : case bleue d'accent, texte barré et grisé une fois cochée. « classic » : case carrée à coche noire
+   native (`accent-color: auto`), texte jamais barré. « accentPlain » : même case d'accent, texte qui reste normal une fois cochée. */
 .tiptap ul[data-type="taskList"], .reader-content ul[data-type="taskList"] { list-style: none; padding-left: 0; }
 .tiptap ul[data-type="taskList"] li, .reader-content ul[data-type="taskList"] li { display: flex; align-items: flex-start; gap: 6px; }
 .tiptap ul[data-type="taskList"] li > label, .reader-content ul[data-type="taskList"] li > label { flex: none; margin-top: .2em; }
@@ -55,10 +48,10 @@
 .reader-content ul[data-type="taskList"] input[type="checkbox"] { width: 15px; height: 15px; }
 .tiptap ul[data-type="taskList"]:not([data-tasklist-style="classic"]) input[type="checkbox"],
 .reader-content ul[data-type="taskList"]:not([data-tasklist-style="classic"]) input[type="checkbox"] { accent-color: var(--accent, #2f6fed); }
-/* "classic" NE PEUT PAS se contenter de `accent-color: auto` : ce mode laisse le NAVIGATEUR choisir sa couleur de remplissage, or Chrome thème par défaut
-   une case cochée en un bleu proche de l'accent du thème - "classic" ressortait visuellement IDENTIQUE aux 2 autres styles, alors que son but est justement
-   l'absence de tout remplissage (case blanche + tick NOIR). `accent-color` ne sachant pas faire "aucun remplissage", la case est ici entièrement redessinée
-   à la main (`appearance: none` + un tick en ::after via un coin de bordure pivoté) - seul style des 3 à en avoir besoin. */
+/* « classic » ne peut pas se contenter de `accent-color: auto` : le navigateur choisit alors la couleur de remplissage (Chrome prend un bleu
+   proche de l'accent) et le style serait identique aux deux autres, alors qu'il doit rester sans remplissage (case blanche, coche noire).
+   `accent-color` ne sachant pas ne rien remplir, la case est redessinée à la main (`appearance: none` et une coche en ::after, un coin de bordure
+   pivoté) ; c'est le seul style qui l'exige. */
 .tiptap ul[data-type="taskList"][data-tasklist-style="classic"] input[type="checkbox"],
 .reader-content ul[data-type="taskList"][data-tasklist-style="classic"] input[type="checkbox"] {
   appearance: none; -webkit-appearance: none; margin: 0; position: relative;
@@ -71,17 +64,18 @@
   content: ''; position: absolute; left: 3px; top: -1px; width: 4px; height: 8px;
   border: solid #222; border-width: 0 2px 2px 0; transform: rotate(40deg);
 }
-/* Mode Lecture = aperçu figé du contenu résolu, pas un formulaire - une case cliquable là ne sauvegarderait jamais rien nulle part (source de confusion),
-   désactivée à l'affichage plutôt que retirée du HTML. */
+/* Lecture : aperçu figé du contenu résolu, pas un formulaire. Une case cliquable n'enregistrerait rien ; elle est désactivée plutôt que retirée du
+   HTML. */
 .reader-content ul[data-type="taskList"] input[type="checkbox"] { pointer-events: none; }
 .tiptap ul[data-type="taskList"]:not([data-tasklist-style="classic"]):not([data-tasklist-style="accentPlain"]) li[data-checked="true"] > div,
 .reader-content ul[data-type="taskList"]:not([data-tasklist-style="classic"]):not([data-tasklist-style="accentPlain"]) li[data-checked="true"] > div { text-decoration: line-through; color: var(--paper-text-faint, #667085); }
-/* Case à cocher d'une variable Oui / Non (js/reader-mode.js:checkboxNode ; barre « Oui / Non » d'une bulle, js/floating-toolbars.js) - mêmes trois styles que la liste à cases ci-dessus (accent et
-   texte barré, classique, accent et texte normal), dessinés à la main : une case native ne se pose pas dans une ligne de texte et n'a pas de couleur à elle. La taille suit celle du texte (15 px
-   pour un texte de 14 px, comme la case d'un item de liste). La couleur vient de la bulle, en style en ligne (VariableFormat.checkboxColor) : `currentColor` fait le contour, le fond plein d'une
-   case d'accent cochée et la coche, pour que la Lecture, l'impression et les exports (PDF, Word, Excel) disent la même couleur. Le caractère ☑ / ☐ reste dans la case, repoussé hors de sa
-   boîte : il se copie et se lit, il ne se voit pas. `overflow: hidden` fait aussi du bas de la case la ligne de base de la boîte, d'où un `vertical-align` négatif : la case descend un peu sous
-   le texte, comme celle d'un item de liste. Sélecteurs sans `.reader-content` : les exports raster et l'impression reprennent ces feuilles sur leur propre conteneur. */
+/* Case à cocher d'une variable Oui / Non (js/reader-mode.js:checkboxNode ; barre « Oui / Non » d'une bulle, js/floating-toolbars.js) : mêmes trois
+   styles que la liste à cases, dessinés à la main (une case native ne se pose pas dans une ligne de texte et n'a pas de couleur propre). La taille
+   suit celle du texte. La couleur vient de la bulle, en style en ligne (VariableFormat.checkboxColor) : `currentColor` fait le contour, le fond
+   d'une case d'accent cochée et la coche, pour que la Lecture, l'impression et les exports disent la même couleur. Le caractère ☑ / ☐ reste dans
+   la case, repoussé hors de sa boîte : il se copie et se lit sans se voir. `overflow: hidden` fait du bas de la case la ligne de base de la boîte,
+   d'où un `vertical-align` négatif : la case descend un peu sous le texte, comme celle d'un item de liste. Sélecteurs sans `.reader-content` : les
+   exports raster et l'impression reprennent ces feuilles sur leur propre conteneur. */
 .resolved-checkbox {
   display: inline-block; position: relative; box-sizing: border-box; width: 1.07em; height: 1.07em; margin: 0 .1em; vertical-align: -.16em;
   overflow: hidden; white-space: nowrap; text-indent: 3em; text-decoration: none;
@@ -95,12 +89,12 @@
   border: solid currentColor; border-width: 0 .143em .143em 0; transform: rotate(40deg);
 }
 .resolved-checkbox[data-checked="true"]:not([data-checkbox-style="classic"])::after { border-color: #fff; }
-/* Parité stricte mode Lecture (#reader-container/.reader-content) avec .tiptap, AU-DELÀ des puces/numéros ci-dessus : #reader-container est un sélecteur
-   générique partagé avec la V1 (jamais mis à jour pour les valeurs V2 - taille de police absente donc 16px navigateur contre 14px ici, marge de paragraphe
-   6px contre 0, autres bordures/espacements tableau/2-colonnes). Mêmes valeurs EXACTES que .tiptap partout ci-dessous (pas une approximation) : un écart d'un
-   seul px de gap/padding suffit à dévier la coupure de ligne (cf. mémoire white-space:break-spaces). #reader-container reprend l'ID pour battre les règles partagées.
-   white-space:break-spaces - ProseMirror l'impose à .tiptap (comportement interne de la librairie), jamais présent dans le HTML résolu de #reader-container
-   (browser en `normal` par défaut) : compte l'espace de fin de ligne dans la largeur, donc un mot peut basculer de ligne différemment sans ce correctif. */
+/* Parité de la Lecture (#reader-container, .reader-content) avec `.tiptap`, au-delà des puces et numéros : les règles génériques de
+   #reader-container (css/style.css) ne portent pas les valeurs de l'éditeur (pas de taille de police, donc 16 px contre 14 px ; marge de
+   paragraphe 6 px contre 0 ; autres bordures et espacements des tableaux et de la zone 2 colonnes). Les valeurs sont exactement celles de
+   `.tiptap` plus bas : un écart d'un pixel de gap ou de padding suffit à déplacer une coupure de ligne. #reader-container reprend l'ID pour
+   l'emporter sur les règles partagées. `white-space: break-spaces` : ProseMirror l'impose à `.tiptap`, jamais présent dans le HTML résolu de la
+   Lecture (`normal`) ; il compte l'espace de fin de ligne dans la largeur, sans lui un mot bascule de ligne différemment. */
 #reader-container .reader-content { font-size: 14px; line-height: 1.42; color: #1b2430; font-family: 'Roboto', Helvetica, Arial, sans-serif; white-space: break-spaces; }
 #reader-container p { margin: 0; }
 #reader-container .reader-content h1, #reader-container .reader-content h2, #reader-container .reader-content h3,
@@ -109,61 +103,63 @@
 #reader-container .reader-content h3 { font-size: 16pt; } #reader-container .reader-content h4 { font-size: 14pt; }
 #reader-container .reader-content h5 { font-size: 13pt; } #reader-container .reader-content h6 { font-size: 12pt; }
 #reader-container .reader-content blockquote { margin: 4px 0; padding-left: 12px; border-left: 3px solid #d0d7de; font-style: italic; color: #444; }
-/* Lien et bloc de code (menu « Lien, citation, bloc de code », js/link-dialog.js) : mêmes valeurs EXACTES que .tiptap plus bas. */
+/* Lien et bloc de code (menu « Lien, citation, bloc de code », js/link-dialog.js) : mêmes valeurs que `.tiptap` plus bas. */
 #reader-container .reader-content a[href] { color: #0563c1; text-decoration: underline; cursor: pointer; }
 #reader-container .reader-content pre { margin: 4px 0; padding: 8px 10px; background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 4px; color: #1b2430; font-family: 'Cousine', 'Courier New', Courier, monospace; font-size: 9.5pt; line-height: 1.42; white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 4; }
 #reader-container .reader-content pre code { font: inherit; color: inherit; background: none; padding: 0; white-space: inherit; }
 #reader-container table { border-collapse: collapse; table-layout: fixed; width: 100%; margin: 6px 0; }
 #reader-container td, #reader-container th { border: 1px solid #b8c0c9; padding: 4px 6px; position: relative; vertical-align: top; text-align: left; font-weight: normal; }
-/* La zone 2 colonnes en lecture héritait des règles génériques .two-columns-zone/.two-columns-column de ../css/style.css (pensées pour l'éditeur V1 - bordure
-   pleine visible sur CHAQUE colonne, gap 18px et non 16, padding de colonne 6px et non 4px, d'où un texte qui ne coupe pas au même endroit qu'en édition). */
-/* `border: 0` (et non la simple bordure transparente de css/style.css) : sous box-sizing:border-box, 1px de bordure de chaque côté ampute la boîte de
-   CONTENU de la grille - donc la base du `calc(100% - ...)` de la colonne droite - de 2px. Invisible tant que les deux colonnes étaient en %, mais dès
-   qu'une largeur est réglée en mm ces 2px font mentir le chiffre affiché à l'utilisateur, et l'éditeur (22px de chrome) et la lecture (2px) ne
-   tombaient plus sur la même largeur. */
+/* Zone 2 colonnes en Lecture : les règles génériques .two-columns-zone et .two-columns-column de css/style.css (bordure pleine sur chaque colonne,
+   gap 18 px au lieu de 16, padding de colonne 6 px au lieu de 4) feraient couper le texte ailleurs qu'en édition. */
+/* `border: 0` plutôt que la bordure transparente de css/style.css : sous `box-sizing: border-box`, 1 px de bordure de chaque côté retire 2 px à la
+   boîte de contenu de la grille, donc à la base du `calc(100% - ...)` de la colonne droite. Invisible tant que les colonnes sont en %, mais dès
+   qu'une largeur est réglée en mm ces 2 px faussent le chiffre affiché, et l'éditeur (22 px de chrome) et la Lecture (2 px) ne tombent plus sur la
+   même largeur. */
 #reader-container .two-columns-zone { --pp-col-left: max(10mm, min(var(--layout-left, 50%), calc(100% - 16px - 10mm))); display: grid; grid-template-columns: var(--pp-col-left) calc(100% - var(--pp-col-left) - 16px); gap: 16px; margin: 6px 0; padding: 0; border: 0; }
-/* border:1px dashed TRANSPARENT, pas `border:none` : .tiptap réserve cette largeur de bordure même invisible au repos (visible qu'au survol EN ÉDITION) -
-   `none` retire 1px à la boîte, assez pour décaler la coupure de ligne. Jamais survolable en lecture, mais la largeur réservée doit rester identique. */
+/* `border: 1px dashed transparent` et non `none` : `.tiptap` réserve cette largeur de bordure, visible seulement au survol en édition ; `none`
+   retirerait 1 px à la boîte, assez pour décaler la coupure de ligne. Jamais survolable en Lecture, mais la largeur réservée doit rester la même. */
 #reader-container .two-columns-column { min-width: 0; padding: 4px; border: 1px dashed transparent; }
 .tiptap blockquote { margin: 4px 0 4px 0; padding-left: 12px; border-left: 3px solid #d0d7de; font-style: italic; color: #444; }
-/* Lien : bleu de lien de Word (#0563C1, 5,9:1 sur blanc) et soulignement, les mêmes dans la Lecture, le PDF et le Word. La page reste blanche en thème sombre, d'où une couleur
-   écrite en dur comme celle de la citation. Le curseur reste celui du texte : un clic place le curseur, Ctrl/⌘+clic ouvre (js/link-dialog.js). */
+/* Lien : bleu de lien de Word (#0563c1, 5,9:1 sur blanc) et soulignement, les mêmes dans la Lecture, le PDF et le Word. La page reste blanche en
+   thème sombre, d'où une couleur écrite en dur, comme celle de la citation. Le curseur reste celui du texte : un clic place le curseur,
+   Ctrl/⌘+clic ouvre le lien (js/link-dialog.js). */
 .tiptap a { color: #0563c1; text-decoration: underline; cursor: text; }
-/* Bloc de code : du texte brut sur fond gris clair, police à chasse fixe (Cousine au PDF, métrique de Courier New), lignes qui passent à la ligne comme à l'export. 9,5pt : un
-   peu sous le texte courant (10,5pt). Aucune marque n'y est permise (schéma de TipTap), donc ni gras ni couleur ni lien. */
+/* Bloc de code : texte brut sur fond gris clair, police à chasse fixe (Cousine au PDF, métrique de Courier New), lignes qui passent à la ligne
+   comme à l'export. 9,5 pt, un peu sous le texte courant (10,5 pt). Le schéma TipTap n'y permet aucune marque : ni gras, ni couleur, ni lien. */
 .tiptap pre { margin: 4px 0; padding: 8px 10px; background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 4px; color: #1b2430; font-family: 'Cousine', 'Courier New', Courier, monospace; font-size: 9.5pt; line-height: 1.42; white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 4; }
 .tiptap pre code { font: inherit; color: inherit; background: none; padding: 0; white-space: inherit; }
 .tiptap hr { border: none; border-top: 1px solid #d0d7de; margin: 10px 0; }
 .tiptap table { border-collapse: collapse; table-layout: fixed; width: 100%; margin: 6px 0; }
-/* Pas de style particulier pour <th> (gras/fond coloré) : les tableaux insérés depuis la toolbar n'ont pas de ligne d'en-tête (cf. js/editor.js:insertTable,
-   withHeaderRow: false) - une cellule reste visuellement identique à une autre quel que soit son tag HTML. */
+/* Pas de style propre à `<th>` (gras, fond) : les tableaux insérés par la barre n'ont pas de ligne d'en-tête (withHeaderRow: false,
+   js/editor.js:insertTable), une cellule reste identique à une autre quel que soit son tag. */
 .tiptap table td, .tiptap table th { border: 1px solid #b8c0c9; padding: 4px 6px; position: relative; vertical-align: top; text-align: left; font-weight: normal; }
-/* Cases sélectionnées : un voile posé PAR-DESSUS la case (::after), pas un fond. Le fond d'une case colorée (style en ligne) l'emportait sur une règle de classe : la sélection
-   ne se voyait plus sur elle. La page et le tableau restent blancs dans les deux thèmes, d'où un bleu écrit en dur comme celui du lien. */
+/* Cases sélectionnées : un voile posé par-dessus la case (::after), pas un fond. Le fond d'une case colorée (style en ligne) l'emporterait sur une
+   règle de classe et la sélection ne s'y verrait plus. La page et le tableau restent blancs dans les deux thèmes, d'où un bleu écrit en dur, comme
+   celui du lien. */
 .tiptap table .selectedCell::after { content: ''; position: absolute; top: 0; right: 0; bottom: 0; left: 0; z-index: 2; background: rgba(66, 133, 244, 0.3); pointer-events: none; }
 .tiptap table .column-resize-handle { position: absolute; right: -2px; top: 0; bottom: -2px; width: 4px; background: #4285f4; pointer-events: none; }
 .tiptap .tableWrapper { overflow-x: auto; }
 .tiptap.resize-cursor { cursor: col-resize; }
-/* `--pp-col-left` = la colonne gauche telle qu'elle tient réellement : `--layout-left` borné à [10mm ; zone - gouttière - 10mm]. Une largeur en mm réglée pour
-   une page plus large (paysage, marges plus petites) dépasserait sinon la page d'aujourd'hui et laisserait la colonne droite à zéro. Le réglage lui-même
-   n'est pas touché (il revient tel quel avec la page large) ; la poignée et le bouton « mm » suivent la même borne. Sans effet tant que la colonne tient. */
-/* Grille (pas flex) : la largeur de la colonne gauche vient de la variable --layout-left (posée par la poignée de redimensionnement en édition, cf.
-   js/editor.js:createTwoColumnsNodes, ou directement en style inline dans le HTML sérialisé) - la droite prend le reste, moins le gap. */
-/* `padding: 0; border: 0` : la zone héritait sinon du `padding: 16px 10px 4px` + `border: 1px dashed` de css/style.css (styles de l'éditeur V1), soit
-   22px de largeur pris sur la boîte de contenu de la grille. Une colonne réglée à 60mm mesurait alors 57.7mm à l'écran et dans le PDF (qui mesure le
-   rendu réel) mais 60mm dans le DOCX (qui convertit le mm directement) - trois rendus, deux valeurs. Le liseré est conservé à l'identique en
-   `outline`, qui ne participe pas à la mise en page. */
+/* `--pp-col-left` : la colonne gauche telle qu'elle tient réellement, `--layout-left` borné à [10 mm ; zone - gouttière - 10 mm]. Une largeur en
+   mm réglée pour une page plus large (paysage, marges réduites) dépasserait sinon la page courante et laisserait la colonne droite à zéro. Le
+   réglage lui-même n'est pas modifié (il revient tel quel avec la page large) ; la poignée et le bouton « mm » suivent la même borne. Sans effet
+   tant que la colonne tient. */
+/* Grille et non flex : la largeur de la colonne gauche vient de `--layout-left`, posée par la poignée de redimensionnement en édition
+   (js/editor.js:createTwoColumnsNodes) ou en style en ligne dans le HTML sérialisé ; la droite prend le reste, moins le gap. */
+/* `padding: 0; border: 0` : sinon la zone hérite de `padding: 16px 10px 4px` et `border: 1px dashed` de css/style.css, soit 22 px pris sur la
+   boîte de contenu de la grille. Une colonne réglée à 60 mm mesurerait alors 57,7 mm à l'écran et dans le PDF (qui mesure le rendu) mais 60 mm
+   dans le Word (qui convertit le mm directement). Le liseré est repris à l'identique en `outline`, qui ne compte pas dans la mise en page. */
 .tiptap .two-columns-zone { --pp-col-left: max(10mm, min(var(--layout-left, 50%), calc(100% - 16px - 10mm))); display: grid; grid-template-columns: var(--pp-col-left) calc(100% - var(--pp-col-left) - 16px); gap: 16px; margin: 6px 0; padding: 0; border: 0; outline: 1px dashed #8b98a5; outline-offset: -1px; }
 .tiptap .two-columns-column { min-width: 0; padding: 4px; border: 1px dashed transparent; }
 .tiptap .two-columns-zone:hover .two-columns-column { border-color: #d0d7de; }
 .tiptap .two-columns-column > *:first-child { margin-top: 0; }
-/* Wrapper de la NodeView (js/editor.js) - position:relative sert uniquement à ancrer la poignée en absolu ; --layout-left est posée ICI (pas sur
-   .two-columns-zone, son enfant) car une variable CSS personnalisée n'hérite que vers le bas - la poignée (sa sœur) doit aussi pouvoir la lire. */
+/* Wrapper de la NodeView (js/editor.js) : `position: relative` ancre la poignée en absolu. `--layout-left` est posée ici et non sur
+   `.two-columns-zone`, son enfant : une variable CSS n'hérite que vers le bas, et la poignée (sa sœur) doit aussi pouvoir la lire. */
 .tiptap .two-columns-zone-outer { position: relative; --pp-col-left: max(10mm, min(var(--layout-left, 50%), calc(100% - 16px - 10mm))); }
 .tiptap .two-columns-resize-grip { position: absolute; top: 50%; left: var(--pp-col-left, var(--layout-left, 50%)); width: 14px; height: 32px; transform: translate(-50%, -50%); border-radius: 4px; background: var(--accent, #2f6fed); cursor: ew-resize; opacity: 0; transition: opacity .15s ease; z-index: 5; }
 .tiptap .two-columns-zone-outer:hover .two-columns-resize-grip { opacity: 1; }
-/* Bouton "mm" - séparé de la poignée de glisser ci-dessus (pas d'ambiguïté clic/glisser à détecter) : juste au-dessus d'elle, même déclenchement au
-   survol de la zone. */
+/* Bouton « mm » : séparé de la poignée de glisser (aucune ambiguïté clic ou glisser à détecter), juste au-dessus d'elle, avec le même
+   déclenchement au survol de la zone. */
 .tiptap .two-columns-mm-button {
   position: absolute; top: calc(50% - 26px); left: var(--pp-col-left, var(--layout-left, 50%)); transform: translateX(-50%);
   display: flex; align-items: center; justify-content: center; height: 18px; padding: 0 6px; border: none; border-radius: 4px;
@@ -171,9 +167,9 @@
   cursor: pointer; opacity: 0; transition: opacity .15s ease; z-index: 5;
 }
 .tiptap .two-columns-zone-outer:hover .two-columns-mm-button { opacity: 1; }
-/* Popover du bouton "mm" ci-dessus - même position horizontale (juste en dessous de la poignée), même famille visuelle que les autres petits panneaux
-   flottants du projet (#autocomplete-box/.v2-hover-flyout : fond blanc, liseré, ombre portée légère). Deux lignes (gauche saisissable, droite calculée) -
-   pas un champ isolé dont on ne sait pas s'il décrit la colonne de gauche ou de droite. */
+/* Popover du bouton « mm » : même position horizontale (juste sous la poignée) et même famille visuelle que les autres petits panneaux flottants
+   (#autocomplete-box, .v2-hover-flyout : fond blanc, liseré, ombre légère). Deux lignes (gauche saisissable, droite calculée), pour qu'on ne se
+   demande pas si un champ isolé décrit la colonne de gauche ou de droite. */
 .two-columns-mm-popover {
   position: absolute; top: calc(50% + 22px); left: var(--pp-col-left, var(--layout-left, 50%)); transform: translateX(-50%);
   display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; background: var(--surface, #fff); border: 1px solid var(--border-strong, #c3cad6);
@@ -184,55 +180,57 @@
 .two-columns-mm-computed { display: inline-block; width: 56px; padding: 3px 5px; text-align: right; color: var(--text-faint, #6b7684); }
 .tiptap img.editor-image { max-width: 100%; height: auto; vertical-align: bottom; }
 
-/* NodeView de l'image (js/editor.js:createEditorImageNode) - structure DIFFÉRENTE du HTML sérialisé (qui pose position/left/top/data-align/data-wrap
-   directement sur l'<img>) : ici un <span class="editor-image-view"> englobe l'<img> + les poignées, pour qu'elles s'ancrent en CSS absolu sans recalcul JS
-   à chaque scroll (contrairement aux overlays document.body de la V1). Nécessite ses PROPRES règles data-align/data-wrap. */
+/* NodeView de l'image (js/editor.js:createEditorImageNode) : sa structure diffère du HTML sérialisé, qui pose position, left, top, data-align et
+   data-wrap sur l'`<img>`. Ici un `<span class="editor-image-view">` englobe l'`<img>` et les poignées, qui s'ancrent en CSS absolu sans recalcul
+   JS au défilement ; il a ses propres règles data-align et data-wrap. */
 .tiptap .editor-image-view { position: relative; display: inline-block; max-width: 100%; }
 .tiptap .editor-image-view .editor-image { display: block; }
-/* gauche/droite = habillage RÉEL (float natif du navigateur, le texte se répartit tout seul autour, aucun JS nécessaire) ; centre reste bloc centré SANS
-   habillage, comme n'importe quel traitement de texte (un habillage autour d'une image centrée n'a pas de sens). */
+/* Gauche et droite : habillage réel (float natif, le texte se répartit autour sans JS). Le centre reste un bloc centré sans habillage, comme dans
+   tout traitement de texte (habiller une image centrée n'a pas de sens). */
 .tiptap .editor-image-view[data-align="left"] { float: left; margin: 0 12px 8px 0; }
 .tiptap .editor-image-view[data-align="right"] { float: right; margin: 0 0 8px 12px; }
-/* Même traitement, mais pour l'<img> BRUTE directement (sans wrapper) : c'est la forme du HTML SÉRIALISÉ (getHTML()), celle que voit l'hôte de mesure
-   hors-écran de pdf-export.js - sans cette règle, l'image n'y flotte pas (juste une image en ligne normale), et floatedImageParagraphFrom ne peut jamais
-   mesurer où le texte dépasse réellement son bas. Ne s'applique PAS en lecture seule (#reader-container, pas de classe .tiptap) - limitation acceptée : la Lecture a ses propres règles (css/style.css).
-   `max-width: calc(100% - 12px)` : le flottant de l'éditeur (le <span> de l'image) rétrécit de sa marge pour tenir à côté du texte ; une image de la largeur de la ligne ou plus large y mesure donc 12 px de moins que
-   la ligne, et c'est cette largeur que le PDF et le Word reprennent (ExportCommon.shownImageWidthPx lit l'image de cet hôte). */
+/* Même traitement pour l'`<img>` brute sans wrapper : c'est la forme du HTML sérialisé (`getHTML()`), celle de l'hôte de mesure hors écran de
+   pdf-export.js ; sans cette règle l'image n'y flotte pas et floatedImageParagraphFrom ne peut pas mesurer où le texte dépasse son bas. Pas en
+   Lecture (#reader-container n'a pas de classe `.tiptap`), qui a ses propres règles (css/style.css). `max-width: calc(100% - 12px)` : le flottant
+   de l'éditeur (le `<span>`) rétrécit de sa marge pour tenir à côté du texte ; une image de la largeur de la ligne ou plus large y mesure 12 px de
+   moins, et c'est cette largeur que reprennent le PDF et le Word (ExportCommon.shownImageWidthPx lit l'image de cet hôte). */
 .tiptap img.editor-image[data-align="left"] { float: left; margin: 0 12px 8px 0; max-width: calc(100% - 12px); }
 .tiptap img.editor-image[data-align="right"] { float: right; margin: 0 0 8px 12px; max-width: calc(100% - 12px); }
-/* Hôte de mesure du PDF (`.pdf-measure-host`) : l'<img> brute s'y pose comme son NodeView dans l'éditeur, pour que le PDF reprenne les positions que le navigateur y mesure. Dans l'éditeur, une image
-   en ligne a son pied sur la ligne de base du texte (la ligne grandit de sa hauteur et garde sous elle le bas de son interligne : 4,4 pt à 10,5 pt) ; `vertical-align: bottom` ci-dessus la posait sur le
-   bas de la ligne, 4,4 pt plus bas, et tout le texte de la ligne 4,4 pt plus haut. « Bloc » sans alignement et le centre sont seuls sur leur ligne (le NodeView est un bloc). L'éditeur n'est pas touché :
-   son <img> est dans un NodeView, sans `data-align` ni `data-wrap` sur l'image elle-même.
-   `white-space: break-spaces` : ProseMirror le pose sur l'éditeur (l'espace qui précède un retour à la ligne compte dans la largeur de la ligne, et celle qui suit une image « bloc » reste en tête de
-   ligne, 2,6 px) ; l'hôte, en `normal`, coupait une ligne trop tard par endroits et perdait cette espace. */
+/* Hôte de mesure du PDF (`.pdf-measure-host`) : l'`<img>` brute s'y pose comme son NodeView dans l'éditeur, pour que le PDF reprenne les positions
+   mesurées par le navigateur. Dans l'éditeur, une image en ligne a son pied sur la ligne de base du texte : la ligne grandit de sa hauteur et
+   garde sous elle le bas de son interligne (4,4 pt à 10,5 pt) ; `vertical-align: bottom` la poserait 4,4 pt plus bas et remonterait d'autant le
+   texte de la ligne. « Bloc » sans alignement et le centre sont seuls sur leur ligne (le NodeView est un bloc). `white-space: break-spaces` :
+   ProseMirror le pose sur l'éditeur (l'espace avant un retour à la ligne compte dans la largeur, et celle qui suit une image « bloc » reste en
+   tête de ligne) ; l'hôte en `normal` couperait une ligne trop tard par endroits. L'éditeur n'est pas touché : son `<img>` est dans un NodeView,
+   sans data-align ni data-wrap. */
 .pdf-measure-host { white-space: break-spaces; }
 .pdf-measure-host img.editor-image { vertical-align: baseline; }
 .pdf-measure-host img.editor-image[data-align="center"], .pdf-measure-host img.editor-image[data-wrap="block"]:not([data-align]) { display: block; }
 .pdf-measure-host img.editor-image[data-align="center"] { margin-left: auto; margin-right: auto; }
 .tiptap .editor-image-view[data-align="center"] { display: block; width: fit-content; margin-left: auto; margin-right: auto; }
 .tiptap .editor-image-view[data-wrap="block"] { display: block; width: fit-content; }
-/* Image seule sur sa ligne (centrée, ou « bloc » sans alignement) : le texte du paragraphe garde son interligne, avant comme après l'image ; l'image prend sa hauteur et rien de plus.
-   Ce qui lui ajoutait une ligne sous elle (5 px sous une image de 120 px ; ni la Lecture, ni le PDF, ni le Word n'ont cette ligne) est la paire que ProseMirror pose après une image
-   placée en fin de paragraphe, `<img class="ProseMirror-separator">` + `<br class="ProseMirror-trailingBreak">` : la ligne de la paire, à l'interligne du paragraphe, est retirée du flux
-   quand l'image est de ce genre (le texte, lui, n'en a pas besoin : seule l'image finit le paragraphe). Remplace le `line-height: 0` posé sur TOUT le paragraphe (`:has()`), qui écrasait
-   aussi les lignes de texte d'un paragraphe où l'image est au milieu : le texte se superposait à l'image (Antoine, 02/10, point 9). */
+/* Image seule sur sa ligne (centrée, ou « bloc » sans alignement) : le texte du paragraphe garde son interligne, avant comme après l'image, et
+   l'image prend sa hauteur et rien de plus. ProseMirror pose après une image en fin de paragraphe la paire `<img class="ProseMirror-separator">`
+   et `<br class="ProseMirror-trailingBreak">`, qui ajouterait sous l'image une ligne que ni la Lecture, ni le PDF, ni le Word n'ont (5 px sous une
+   image de 120 px) : la ligne de la paire est retirée du flux quand l'image est de ce genre. Un `line-height: 0` sur tout le paragraphe (`:has()`)
+   écraserait aussi les lignes de texte d'un paragraphe où l'image est au milieu, et le texte se superposerait à l'image. */
 .tiptap .editor-image-view[data-align="center"] + img.ProseMirror-separator,
 .tiptap .editor-image-view[data-align="center"] + img.ProseMirror-separator + br.ProseMirror-trailingBreak,
 .tiptap .editor-image-view[data-wrap="block"]:not([data-align]) + img.ProseMirror-separator,
 .tiptap .editor-image-view[data-wrap="block"]:not([data-align]) + img.ProseMirror-separator + br.ProseMirror-trailingBreak { display: none !important; }
 .tiptap .editor-image-view.editor-image-selected { outline: 2px solid var(--accent, #2f6fed); outline-offset: 2px; }
 .tiptap .editor-image-view.editor-image-layered { cursor: default; }
-/* Placeholder d'une image liée à une #Variable de colonne Attachments : jamais de vraie image dans l'éditeur (aucune ligne "courante" garantie) - un simple
-   encadré neutre + icône + libellé "#Table.Colonne", dans la même boîte width×height que la vraie image aura au rendu (cf. resolveVariableImages). L'<img>
-   réel reste dans le DOM (masqué, `src` vide) plutôt que retiré : il porte toujours width/height, donc le reste du fichier fonctionne sans changement. */
+/* Espace réservé d'une image liée à une variable de colonne Attachments : l'éditeur n'a jamais de vraie image (aucune ligne courante garantie),
+   seulement un encadré neutre, une icône et le libellé « #Table.Colonne », dans la même boîte largeur × hauteur que la vraie image au rendu
+   (resolveVariableImages). L'`<img>` reste dans le DOM (masquée, `src` vide) plutôt que retirée : elle porte width et height, le reste du fichier
+   marche sans changement. */
 .tiptap .editor-image-view.editor-image-var-placeholder .editor-image { visibility: hidden; }
 .tiptap .editor-image-view.editor-image-var-placeholder {
   background: var(--surface-sunken, #f2f4f7); border: 1.5px dashed var(--border-strong, #c3cad6); border-radius: 4px;
 }
-/* Scopé à .editor-image-var-placeholder : sans ce préfixe, l'icône ::before ci-dessous (contenu généré, inconditionnel dès que l'élément existe) s'affichait
-   par-dessus TOUTE image, y compris une image normale sans aucun lien avec une variable. Le texte est en --text : --text-faint n'y faisait que 4,39:1 sur le gris du cadre en clair
-   (< 4,5:1, réponse d'Antoine du 02/10 : « Foncer ce texte ») ; l'icône, un tracé et non du texte, garde le gris (3:1 au moins). */
+/* Scopé à `.editor-image-var-placeholder` : sans ce préfixe, l'icône ::before ci-dessous (contenu généré, inconditionnel) s'afficherait sur toute
+   image, même sans variable. Le texte est en `--text` : `--text-faint` n'y atteint que 4,39:1 sur le gris du cadre en clair (< 4,5:1) ; l'icône,
+   un tracé et non du texte, garde le gris (3:1 au moins). */
 .editor-image-var-placeholder .editor-image-var-label {
   position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 4px; padding: 6px; color: var(--text, #1b2430); font-family: var(--font-ui); font-size: 11px;
@@ -250,142 +248,141 @@
 .tiptap .editor-image-handle-ne { top: -5px; right: -5px; cursor: nesw-resize; }
 .tiptap .editor-image-handle-sw { bottom: -5px; left: -5px; cursor: nesw-resize; }
 .tiptap .editor-image-handle-se { bottom: -5px; right: -5px; cursor: nwse-resize; }
-/* PAS conditionnée par .editor-image-selected, contrairement aux poignées de coin : une image "derrière le texte" (z-index négatif sur l'<img> seule) n'est
-   plus cliquable une fois du texte dessus - sans un point d'accroche TOUJOURS visible, impossible de la resélectionner (problème d'œuf-et-poule). Sert de
-   bouton de sélection ; le glisser lui-même, une fois sélectionnée, se fait directement sur l'image (cf. addNodeView, mousedown sur `img`). Repositionnée à
-   GAUCHE (pas au-dessus) : la toolbar flottante apparaît par défaut au-dessus de l'image, une poignée également au-dessus s'y superposait. */
+/* Jamais conditionnée par `.editor-image-selected`, contrairement aux poignées de coin : une image « derrière le texte » (z-index négatif sur
+   l'`<img>` seule) n'est plus cliquable une fois du texte dessus, il faut donc un point d'accroche toujours visible pour la resélectionner. Elle
+   sert de bouton de sélection ; le glissé, une fois l'image sélectionnée, se fait directement sur l'image (addNodeView, mousedown sur `img`).
+   Placée à gauche et non au-dessus : la barre flottante apparaît par défaut au-dessus de l'image et s'y superposerait. */
 .tiptap .editor-image-view.editor-image-layered .editor-image-move-handle { display: flex; align-items: center; justify-content: center; top: 50%; left: -12px; transform: translateY(-50%); width: 20px; height: 20px; border-radius: 50%; background: var(--accent, #2f6fed); cursor: move; z-index: 10; }
 
 #editor-container { position: relative; flex: 1; min-height: 0; padding: 14px; overflow: auto; background: #fff; }
-/* Pas d'ancrage de défilement : à chaque calcul des pages (js/header-footer-preview.js:renderPaginationOverlay) les réserves de coupure sont retirées puis reposées, et le
-   navigateur, qui garde en place le bloc qu'il tient pour ancre, décalait la position de défilement de la hauteur de la première page à chaque passage (une frappe suffisait
-   à faire fuir l'éditeur). Les positions de page se lisent sur des rectangles pris pendant ce calcul : le défilement ne doit pas bouger entre deux. */
+/* Pas d'ancrage de défilement : à chaque calcul des pages (js/header-footer-preview.js:renderPaginationOverlay) les réserves de coupure sont
+   retirées puis reposées, et le navigateur, qui garde en place le bloc qu'il tient pour ancre, décalerait le défilement de la hauteur de la
+   première page à chaque passage (une frappe suffirait à faire fuir l'éditeur). Les positions de page se lisent sur des rectangles pris pendant ce
+   calcul : le défilement ne doit pas bouger entre deux. */
 #editor-container { overflow-anchor: none; }
 
-/* === Mode d'édition en-tête/pied de page (.hf-editing, posée par js/editor.js:enterHeaderFooterMode) === Le contenu affiché dans .tiptap n'est alors PLUS
-   le document principal (échangé via editor.commands.setContent) - cadre en pointillés accent pour qu'il soit impossible de croire qu'on édite le corps du
-   document. `min-height` réduit (200px pensés pour un document vide) : un en-tête d'une seule ligne ne doit pas ouvrir une grande zone blanche vide. Le
-   bandeau texte fixe (::before) d'origine a été remplacé par une vraie pastille interactive (#v2-hf-pill), point d'entrée au clic direct sur la marge de
-   page façon Google Docs/Word. `min-height` aligné sur le plafond de taille d'image (HF_MAX_IMAGE_HEIGHT_PX, 60px) pour qu'un en-tête typique remplisse la
-   zone sans marge résiduelle visible. */
+/* Mode d'édition d'en-tête ou de pied (`.hf-editing`, posée par js/editor.js:enterHeaderFooterMode) : `.tiptap` n'affiche plus le document
+   principal (échangé par `setContent`), d'où un cadre en pointillés d'accent pour qu'on ne croie pas éditer le corps. `min-height` réduit (200 px
+   sont pensés pour un document vide) : un en-tête d'une ligne ne doit pas ouvrir une grande zone blanche. Il est aligné sur le plafond de taille
+   d'image (HF_MAX_IMAGE_HEIGHT_PX, 60 px) pour qu'un en-tête typique remplisse la zone sans marge résiduelle. On y entre d'un clic sur la marge de
+   page, par la pastille #v2-hf-pill. */
 #editor-container.hf-editing .tiptap { outline: 2px dashed var(--accent, #2f6fed); outline-offset: 4px; min-height: 60px; max-height: 60px; overflow: hidden; }
 
-/* Aperçu format A4 (case #v2-toggle-a4-preview) : contraint .tiptap à la largeur de contenu réelle d'une page PDF A4 (595.28pt - 2×28pt de marge, converti
-   en px standard 96/72 = 719.04px), pour que le texte se répartisse comme dans l'export PDF (même largeur que CONTENT_WIDTH_PX de pdf-export.js). `width` =
-   largeur TOTALE (page + marges), le `padding` simulant la marge de page vient s'y RETRANCHER : 719.04px de contenu + 2×37.33px = 793.71px. `box-sizing:
-   border-box` est INDISPENSABLE : sans lui le padding s'AJOUTE à `width`, et la zone de contenu réelle fait alors 793.71px (~10% de trop), d'où un texte qui
-   ne coupe pas au même endroit qu'à l'export - la V1 en profitait sans le savoir via le CSS de Quill, absent ici. Purement visuel. */
+/* Aperçu A4 (case #v2-toggle-a4-preview) : `.tiptap` prend la largeur de contenu d'une page PDF A4 (595,28 pt - 2 × 28 pt de marge, soit 719,04 px
+   à 96/72), pour que le texte se répartisse comme à l'export (CONTENT_WIDTH_PX, pdf-export.js). `width` est la largeur totale (page et marges), le
+   `padding` qui simule la marge de page s'y retranche : 719,04 px de contenu + 2 × 37,33 px = 793,71 px. `box-sizing: border-box` est
+   indispensable : sans lui le padding s'ajoute à `width` et le contenu fait 793,71 px (environ 10 % de trop), le texte ne couperait plus au même
+   endroit qu'à l'export. Purement visuel. */
 #editor-container.a4-preview { background: var(--pp-page-gutter, #eef1f5); }
-/* `.v2-page-sheet` (enfant réel de js/editor.js:init(), enveloppant `.tiptap` une seule fois) porte maintenant le fond/liseré "papier" au lieu de `.tiptap`
-   lui-même : les zones d'en-tête/pied, `.tiptap` et le pied de page apparaissaient comme 3 cartes SÉPARÉES, alors qu'à l'export ce sera UNE SEULE page
-   continue. `.tiptap` garde son padding (marge de page simulée) mais perd son fond/liseré, devenant un bloc transparent sur le fond blanc du sheet parent.
-   Hors Aperçu A4, `.v2-page-sheet` reste totalement neutre - l'édition "classique" est inchangée. Pas de `max-width: 100%` : un widget Grist étroit ferait
-   alors RÉTRÉCIR toute la page en dessous de 793.71px - `#editor-container` a déjà `overflow: auto` (défilement horizontal), donc rien ne l'exige, et un
-   décalage éditeur/PDF bien réel (repéré par l'utilisateur) en dépendait. Nuance importante : la position CAPTURÉE d'une image en calque (data-page-
-   left/top-pt) ne change PAS avec ce rétrécissement (elle est ancrée à `.two-columns-zone`/à la page, dont le coin haut-gauche ne bouge pas non plus quand
-   seule la LARGEUR se réduit - vérifié empiriquement). Ce qui casse, c'est que la colonne DROITE elle-même (limite en `%`, donc dépendante de la largeur du
-   conteneur) se rapproche du bord gauche de la zone quand celle-ci rétrécit, alors que l'image garde son offset ABSOLU depuis ce même bord gauche - la
-   colonne "vient à la rencontre" de l'image, qui semble alors décalée vers la droite DANS l'éditeur par rapport à ce que montrera le PDF (toujours à
-   l'échelle réelle). Ce n'était donc pas la donnée exportée qui était fausse, mais l'aperçu éditeur lui-même qui mentait dès qu'il rendait en dessous de
-   793.71px. La largeur de la feuille est `--pp-page-width` (posée par PageLayout.applyToPreviewCss : 793.71px en portrait, 1122.52px en paysage) ; 793.71px
-   n'est plus que le repli d'avant le premier réglage. */
+/* `.v2-page-sheet` (créée par js/editor.js:init, qui y enveloppe `.tiptap` une seule fois) porte le fond et le liseré « papier » : les zones
+   d'en-tête et de pied, `.tiptap` et le pied apparaîtraient sinon comme trois cartes séparées, alors que l'export est une seule page continue.
+   `.tiptap` garde son padding (marge de page simulée) mais devient un bloc transparent sur le blanc de la feuille. Hors aperçu A4,
+   `.v2-page-sheet` est neutre. Pas de `max-width: 100%` : #editor-container défile déjà horizontalement, et une page rétrécie fausserait l'aperçu
+   : la colonne droite (limite en %) se rapprocherait du bord gauche alors qu'une image en calque garde son décalage absolu, et l'image semblerait
+   décalée par rapport au PDF. La largeur de la feuille est `--pp-page-width` (posée par PageLayout.applyToPreviewCss : 793,71 px en portrait,
+   1122,52 px en paysage) ; 793,71 px n'est que le repli d'avant le premier réglage. */
 #editor-container.a4-preview .v2-page-sheet { display: flow-root; box-sizing: border-box; width: var(--pp-page-width, 793.71px); margin: 0 auto; background: #fff; box-shadow: 0 0 0 1px #d7dde3, 0 4px 16px rgba(20, 28, 46, .10); }
 #editor-container.a4-preview .tiptap { box-sizing: border-box; width: auto; padding: var(--pp-margin-top, 37.33px) var(--pp-margin-right, 37.33px) var(--pp-margin-bottom, 37.33px) var(--pp-margin-left, 37.33px); background: transparent; box-shadow: none; }
-/* En mode édition d'en-tête/pied (.hf-editing), ce même `.tiptap` affiche temporairement le contenu de l'en-tête/pied - le padding vertical de 37.33px
-   ci-dessus simule la marge de PAGE pour le document PRINCIPAL, mais n'a aucun sens ici (c'est déjà le contenu de la marge elle-même). Padding vertical
-   ramené à 8px, IDENTIQUE à la zone de prévisualisation en lecture seule (`.v2-page-edge-spacer`), pour que l'édition active corresponde à ce qu'on voit une
-   fois "Terminer" cliqué - le padding horizontal (37.33px) reste pertinent : il aligne le contenu sur les VRAIES marges gauche/droite de la page. */
+/* En édition d'en-tête ou de pied (`.hf-editing`), `.tiptap` affiche le contenu de l'en-tête ou du pied : le padding vertical de 37,33 px
+   ci-dessus simule la marge de page du document principal et n'a pas de sens ici, c'est déjà le contenu de la marge. Il est ramené à 8 px, comme
+   la zone d'aperçu en lecture seule (`.v2-page-edge-spacer`), pour que l'édition corresponde à ce qu'on voit après « Terminer ». Le padding
+   horizontal reste : il aligne le contenu sur les vraies marges gauche et droite. */
 #editor-container.a4-preview.hf-editing .tiptap { padding: 8px var(--pp-margin-right, 37.33px) 8px var(--pp-margin-left, 37.33px); }
-/* Un tableau avec beaucoup de colonnes peut dépasser la largeur disponible - chaque <col> porte un `min-width` (TipTap), contrainte dure même sous
-   table-layout:fixed. .tableWrapper laisse alors défiler horizontalement (utile en mode classique), mais en Aperçu A4 ce défilement cachait la vraie largeur
-   qu'utilisera l'export PDF (qui ne défile jamais, cf. tableFrom dans js/pdf-export.js). `min-width: 0 !important` supprime le plancher dans le cas courant ;
-   `overflow-x: hidden` (au lieu de `auto`) retire le défilement - un recadrage visible est un signal plus honnête qu'un scroll caché. MIS À JOUR depuis
-   `hidden` vers `visible` : `clampOverflowingTables` (js/editor.js) empêche déjà un tableau de dépasser dans le cas courant, et `hidden` coupait
-   invisiblement une image en calque glissée dans une cellule (descendant DOM de .tableWrapper) dès qu'elle dépassait le bord du tableau. */
+/* Un tableau à beaucoup de colonnes peut dépasser la largeur disponible : chaque `<col>` porte un `min-width` (TipTap), contrainte dure même sous
+   `table-layout: fixed`. `.tableWrapper` laisse alors défiler horizontalement, mais en aperçu A4 ce défilement cacherait la largeur que l'export
+   PDF utilisera (il ne défile jamais, tableFrom dans js/pdf-export.js). `min-width: 0 !important` supprime le plancher dans le cas courant.
+   `overflow-x: visible` : `clampOverflowingTables` (js/editor.js) empêche déjà un tableau de dépasser dans le cas courant, et `hidden` couperait
+   sans le montrer une image en calque glissée dans une cellule (descendant DOM de `.tableWrapper`) dès qu'elle dépasse le bord du tableau. */
 #editor-container.a4-preview .tiptap .tableWrapper { overflow-x: visible; }
 #editor-container.a4-preview .tiptap table col { min-width: 0 !important; }
 
-/* Même aperçu A4, en mode Lecture (#reader-container/.reader-content) - la case #v2-toggle-a4-preview ne posait jusqu'ici la classe `a4-preview` que sur
-   #editor-container, jamais sur #reader-container. Mêmes valeurs que .tiptap ci-dessus ; pas de règle .tableWrapper/col équivalente ici, propres au
-   redimensionnement de tableau de l'éditeur TipTap (absent en lecture, simple HTML résolu). */
+/* Même aperçu A4 en Lecture (#reader-container, .reader-content), mêmes valeurs que `.tiptap` ci-dessus. Pas de règle `.tableWrapper` ni `col`
+   équivalente : elles sont propres au redimensionnement de tableau de l'éditeur TipTap, absent en Lecture (simple HTML résolu). */
 #reader-container.a4-preview { background: var(--pp-page-gutter, #eef1f5); }
-/* Pas de `max-width: 100%` ici non plus, même raison que `.v2-page-sheet` ci-dessus : #reader-container a déjà `overflow: auto` (css/style.css). */
+/* Pas de `max-width: 100%` ici non plus, même raison que pour `.v2-page-sheet` : #reader-container a déjà `overflow: auto` (css/style.css). */
 #reader-container.a4-preview .reader-content { box-sizing: border-box; width: var(--pp-page-width, 793.71px); margin: 0 auto; padding: var(--pp-margin-top, 37.33px) var(--pp-margin-right, 37.33px) var(--pp-margin-bottom, 37.33px) var(--pp-margin-left, 37.33px); background: #fff; box-shadow: 0 0 0 1px #d7dde3, 0 4px 16px rgba(20, 28, 46, .10); }
-/* Dès que la pagination a posé le fond de la feuille (`.v2-reader-paper`, derrière le corps : js/reader-mode.js:renderPaginationPreview), le corps ne peint plus ni blanc
-   ni liseré : une image « derrière le texte » doit passer ENTRE la feuille et le texte, y compris dans les bandes de l'en-tête et du pied, que l'espaceur blanc cachait. */
+/* Dès que la pagination a posé le fond de la feuille (`.v2-reader-paper`, derrière le corps : js/reader-mode.js:renderPaginationPreview), le corps
+   ne peint plus ni blanc ni liseré : une image « derrière le texte » doit passer entre la feuille et le texte, y compris dans les bandes de
+   l'en-tête et du pied, que l'espaceur blanc cacherait. */
 #reader-container.a4-preview .reader-content.v2-paper-backed { background: transparent; box-shadow: none; }
-/* Le fond de la feuille et ce qui se peint dessus : une couche derrière le corps, zoomée comme lui (cf. la règle de zoom en bas de ce fichier), sans souris. */
+/* Le fond de la feuille et ce qu'on y peint : une couche derrière le corps, zoomée comme lui (règle de zoom en bas de ce fichier), sans souris. */
 #reader-container.a4-preview .v2-reader-backdrop { position: absolute; top: 0; left: 0; width: 100%; height: 0; z-index: -1; pointer-events: none; }
 #reader-container.a4-preview .v2-reader-paper { position: absolute; box-sizing: border-box; background: #fff; box-shadow: 0 0 0 1px #d7dde3, 0 4px 16px rgba(20, 28, 46, .10); }
 
-/* === Aperçu paginé réel - éditeur (cf. js/editor.js:renderPaginationOverlay) === Deux natures d'éléments : les espaceurs de bord (`.v2-page-edge-spacer`,
-   en flux normal, frères de `.tiptap`) réservent un vrai espace au début/à la fin du document pour l'en-tête de la page 1/le pied de la dernière page,
-   jamais de recouvrement réel. Les bandes "couture" (`.v2-page-band`, dans `.v2-pagination-overlay`, position:absolute) couvrent les limites INTERMÉDIAIRES
-   entre deux pages et PEUVENT recouvrir un peu de texte pile à la limite (résidu assumé). Même mécanisme réutilisé en mode Lecture, #reader-container ayant
-   déjà `position:relative` (css/style.css).
-   Les hauteurs, les marges et le padding du haut sont posés en ligne par js/header-footer-preview.js:sizeHfZone (éditeur) et js/reader-mode.js (Lecture), à
-   partir des marges du modèle : la boîte d'un espaceur est sa bande cliquable (le contenu et un peu d'air, ou la ligne du libellé quand il est vide), posée sur la
-   marge de `.tiptap` de son côté ; il ne pèse dans la page que par la bande que le PDF réserve (rien quand il est vide). Le contenu n'a donc aucun padding vertical
-   propre ici. La feuille est un contexte de bloc (`display: flow-root`) : sans lui, la marge de bas de la dernière zone s'échapperait de la feuille au lieu d'en
-   compter dans la hauteur, et le pied ne réserverait plus sa bande. */
+/* Aperçu paginé réel de l'éditeur (js/editor.js:renderPaginationOverlay). Les espaceurs de bord (`.v2-page-edge-spacer`, en flux normal, frères de
+   `.tiptap`) réservent de la place au début et à la fin du document pour l'en-tête de la page 1 et le pied de la dernière, sans recouvrir. Les
+   bandes de couture (`.v2-page-band`, dans `.v2-pagination-overlay`, `position: absolute`) couvrent les limites entre deux pages et peuvent
+   recouvrir un peu de texte pile à la limite (résidu assumé). Même mécanisme en Lecture, #reader-container étant déjà `position: relative`
+   (css/style.css). Hauteurs, marges et padding du haut sont posés en ligne (js/header-footer-preview.js:sizeHfZone pour l'éditeur,
+   js/reader-mode.js pour la Lecture) d'après les marges du modèle : la boîte d'un espaceur est sa bande cliquable, posée sur la marge de `.tiptap`
+   de son côté, et ne pèse dans la page que par la bande que le PDF réserve (rien quand il est vide), donc le contenu n'a pas de padding vertical
+   propre. La feuille est un contexte de bloc (`display: flow-root`) : sans lui la marge de bas de la dernière zone s'échapperait de la feuille et
+   le pied ne réserverait plus sa bande. */
 #editor-container.a4-preview .v2-page-edge-spacer, #reader-container.a4-preview .v2-page-edge-spacer {
   box-sizing: border-box; padding: 0 var(--pp-margin-right, 37.33px) 0 var(--pp-margin-left, 37.33px);
   font-size: 10.5px; line-height: 1.42; color: #1b2430;
   transition: background .12s ease, box-shadow .12s ease;
 }
-/* Le TEXTE d'un en-tête ou d'un pied vaut 14 px, soit 10,5 pt : la taille de tout texte du modèle, celle du PDF (`DEFAULT_FONT_SIZE`, js/pdf-export.js) et du Word (21 demi-points,
-   js/docx-export.js) - choix d'Antoine du 01/10 (« Comme le PDF »), il était à 10,5 px à l'écran, trois quarts de ce qui s'imprime. Les 10,5 px de l'espaceur restent à ce qui
-   n'est pas imprimé : le libellé fantôme « + Ajouter un en-tête » d'une zone vide (`js/header-footer-preview.js:sizeHfZone` le centre sur une ligne de 15 px). Dans l'éditeur le
-   texte est le corps de la zone (`.v2-hf-zone-body`) ; en Lecture il est directement dans l'espaceur, qui n'a pas de libellé. Les bandes de couture (`.v2-page-band-header`,
-   `.v2-page-band-footer`) en font autant plus bas. En édition de la zone le texte est dans `.tiptap`, déjà à 14 px : la taille ne saute plus à l'entrée. */
+/* Le texte d'un en-tête ou d'un pied vaut 14 px (10,5 pt), comme tout texte du modèle, le PDF (DEFAULT_FONT_SIZE, js/pdf-export.js) et le Word (21
+   demi-points, js/docx-export.js). Les 10,5 px de l'espaceur restent pour ce qui ne s'imprime pas : le libellé fantôme « + Ajouter un en-tête »
+   d'une zone vide (js/header-footer-preview.js:sizeHfZone le centre sur une ligne de 15 px). Dans l'éditeur le texte est le corps de la zone
+   (`.v2-hf-zone-body`) ; en Lecture il est directement dans l'espaceur, qui n'a pas de libellé. Les bandes de couture (`.v2-page-band-header`,
+   `.v2-page-band-footer`) font de même plus bas. En édition de la zone le texte est dans `.tiptap`, déjà à 14 px : la taille ne saute pas à
+   l'entrée. */
 .v2-hf-zone-body, #reader-container.a4-preview .v2-page-edge-spacer { font-size: 14px; }
-/* Un espaceur ne prend JAMAIS le clic : il recouvre la marge de `.tiptap` (celui du haut passe dessous), et une image en calque posée dans cette marge - le triangle d'un
-   coin de feuille, par exemple - doit rester atteignable. Le clic dans la marge (là où rien n'est posé : le padding de `.tiptap`, ou le fond de la feuille au-dessus
-   de lui) est repris par js/header-footer-preview.js:zoneUnderPointer, qui ouvre l'en-tête ou le pied ; le survol, par la classe `v2-hf-zone-hover` qu'il pose. */
+/* Un espaceur ne prend jamais le clic : il recouvre la marge de `.tiptap` (celui du haut passe dessous), et une image en calque posée dans cette
+   marge, comme le triangle d'un coin de feuille, doit rester atteignable. Le clic dans la marge (là où rien n'est posé : le padding de `.tiptap`,
+   ou le fond de la feuille au-dessus) est repris par js/header-footer-preview.js:zoneUnderPointer, qui ouvre l'en-tête ou le pied ; le survol, par
+   la classe `v2-hf-zone-hover` qu'il pose. */
 #editor-container.a4-preview .v2-page-edge-spacer { pointer-events: none; }
 #editor-container.a4-preview .v2-page-sheet.v2-hf-zone-pointing, #editor-container.a4-preview .v2-page-sheet.v2-hf-zone-pointing .tiptap { cursor: pointer; }
-/* Le texte de l'en-tête et du pied se peint AU-DESSUS du corps, images en calque comprises : le PDF dessine l'en-tête et le pied après le contenu. Sans cela, `.tiptap` (un
-   contexte d'empilement posé après les espaceurs) recouvrait le titre d'un en-tête par l'image « derrière le texte » d'un coin - le triangle de la Fiche mission. */
+/* Le texte de l'en-tête et du pied se peint au-dessus du corps, images en calque comprises : le PDF dessine l'en-tête et le pied après le contenu.
+   Sans cela `.tiptap` (un contexte d'empilement posé après les espaceurs) recouvrirait le titre d'un en-tête par l'image « derrière le texte »
+   d'un coin. */
 #editor-container.a4-preview .v2-page-sheet .v2-page-edge-spacer { z-index: 1; }
-/* Mode Lecture (#reader-container) : jamais interactif, ne connaît pas la distinction vide/rempli de l'éditeur (js/reader-mode.js ne crée une zone QUE si
-   elle a du contenu) - garde sa PROPRE carte, inchangée, aucune règle :hover/curseur ci-dessous (scopées à #editor-container) ne s'y applique. */
+/* Lecture (#reader-container) : jamais interactive, elle ne connaît pas la distinction vide ou rempli de l'éditeur (js/reader-mode.js ne crée une
+   zone que si elle a du contenu). Elle garde sa propre règle, sans le survol ni le curseur ci-dessous, scopés à #editor-container. */
 #reader-container.a4-preview .v2-page-edge-spacer { position: relative; z-index: 1; width: var(--pp-page-width, 793.71px); max-width: 100%; margin: 0 auto; }
-/* Collés à la feuille : la bande de l'en-tête fait partie de la page 1 (le PDF la réserve sous la marge du haut), celle du pied de la dernière page. Ni fond ni liseré
-   ici : le blanc et l'ombre de la page sont ceux de `.v2-reader-paper`, derrière - une seule feuille, comme dans l'éditeur, et une image en calque la traverse. */
-/* Mêmes retours à la ligne que le corps (`white-space: break-spaces` de .reader-content plus haut) : sans cette règle, la valeur d'une cellule Grist sur
-   plusieurs lignes (une adresse) s'aplatissait en une seule ligne dans l'en-tête/pied, alors que measureHtmlHeightPx (hôte .reader-content) l'avait
-   mesurée sur plusieurs et que l'export les garde. */
+/* Collés à la feuille : la bande de l'en-tête fait partie de la page 1 (le PDF la réserve sous la marge du haut), celle du pied de la dernière
+   page. Ni fond ni liseré ici : le blanc et l'ombre de la page sont ceux de `.v2-reader-paper`, derrière, une seule feuille comme dans l'éditeur,
+   et une image en calque la traverse. */
+/* Mêmes retours à la ligne que le corps (`white-space: break-spaces` de `.reader-content` plus haut) : sans cette règle, la valeur d'une cellule
+   Grist sur plusieurs lignes (une adresse) s'aplatirait en une ligne dans l'en-tête ou le pied, alors que measureHtmlHeightPx (hôte
+   `.reader-content`) l'a mesurée sur plusieurs et que l'export les garde. */
 #reader-container.a4-preview .v2-page-edge-spacer, #reader-container.a4-preview .v2-page-band { white-space: break-spaces; }
-/* Éditeur : les zones sont maintenant DANS `.v2-page-sheet`, collées à `.tiptap` (aucune marge/fond/liseré propre, elles laissent voir le fond du sheet
-   parent) - seule une frontière en pointillé, posée UNIQUEMENT quand la zone a du contenu, signale où s'arrête l'en-tête/où commence le pied. */
+/* Éditeur : les zones sont dans `.v2-page-sheet`, collées à `.tiptap`, sans marge, fond ni liseré propres (elles laissent voir le fond de la
+   feuille). Seule une frontière en pointillé, posée quand la zone a du contenu, signale où s'arrête l'en-tête et où commence le pied. */
 #editor-container.a4-preview .v2-page-sheet .v2-page-edge-spacer.v2-hf-zone-filled.v2-page-edge-top { border-bottom: 1px dashed #c3cad6; }
 #editor-container.a4-preview .v2-page-sheet .v2-page-edge-spacer.v2-hf-zone-filled.v2-page-edge-bottom { border-top: 1px dashed #c3cad6; }
 
-/* === Zones cliquables d'en-tête/pied de page (.v2-hf-zone, éditeur uniquement) === Point d'ENTRÉE façon Google Docs/Word : une zone VIDE reste invisible
-   au repos et ne révèle son accroche fantôme qu'au survol ; une zone déjà REMPLIE garde son fond "page" en permanence mais teinte accent + crayon au survol. */
+/* Zones cliquables d'en-tête et de pied (`.v2-hf-zone`, éditeur seulement), à la façon de Google Docs et Word : une zone vide reste invisible au
+   repos et ne montre son accroche fantôme qu'au survol ; une zone remplie garde en permanence son fond « page » et prend au survol une teinte
+   d'accent et un crayon. */
 #editor-container.a4-preview .v2-hf-zone { cursor: pointer; position: relative; }
 #editor-container.a4-preview .v2-hf-zone.v2-hf-zone-empty { background: transparent; }
 #editor-container.a4-preview .v2-hf-zone.v2-hf-zone-empty.v2-hf-zone-hover, #editor-container.a4-preview .v2-hf-zone.v2-hf-zone-empty:hover { background: var(--accent-soft, #e8f0fe); }
 #editor-container.a4-preview .v2-hf-zone.v2-hf-zone-filled { background: #fff; box-shadow: 0 0 0 1px #d7dde3; }
 #editor-container.a4-preview .v2-hf-zone.v2-hf-zone-filled.v2-hf-zone-hover, #editor-container.a4-preview .v2-hf-zone.v2-hf-zone-filled:hover { background: var(--accent-soft, #e8f0fe); box-shadow: 0 0 0 1px var(--accent-soft-border, #c7dbfd); }
-/* Mode email (js/header-footer-preview.js:setEmailMode, retour d'Antoine 2026-09-19) : un en-tête/pied de page n'a aucun sens dans un mailto: (texte
-   brut, pas de pages, cf. js/mailto-export.js). Couvre les deux natures de zones (bords dans .v2-page-sheet ET coutures dans .v2-pagination-overlay,
-   toutes deux descendantes de #editor-container.a4-preview) - gardées visibles (jamais masquées, même règle que le reste de la toolbar) mais inertes et
-   grisées plutôt que retirées. */
+/* Mode email (js/header-footer-preview.js:setEmailMode) : un en-tête ou un pied n'a pas de sens dans un mailto: (texte brut, pas de pages,
+   js/mailto-export.js). La règle couvre les deux sortes de zones (bords dans `.v2-page-sheet` et coutures dans `.v2-pagination-overlay`, toutes
+   deux sous `#editor-container.a4-preview`) : elles restent visibles, comme le reste de la barre, mais inertes et grisées plutôt que retirées. */
 #editor-container.a4-preview .v2-hf-zone.v2-hf-locked { pointer-events: none; opacity: .45; cursor: default; }
-/* Les zones de BORD (dans `.v2-page-sheet`) n'ont PAS leur propre carte - `.v2-page-sheet` porte déjà le fond/liseré "page" ; seules les COUTURES
-   intermédiaires (`.v2-page-band` dans `.v2-pagination-overlay`) gardent la règle générique, représentant le VRAI saut entre deux pages physiques. */
+/* Les zones de bord (dans `.v2-page-sheet`) n'ont pas leur propre carte : la feuille porte déjà le fond et le liseré « page ». Seules les coutures
+   intermédiaires (`.v2-page-band` dans `.v2-pagination-overlay`) gardent la règle générique, qui représente le vrai saut entre deux pages
+   physiques. */
 #editor-container.a4-preview .v2-page-sheet .v2-hf-zone.v2-hf-zone-filled { background: transparent; box-shadow: none; }
 #editor-container.a4-preview .v2-page-sheet .v2-hf-zone.v2-hf-zone-filled.v2-hf-zone-hover, #editor-container.a4-preview .v2-page-sheet .v2-hf-zone.v2-hf-zone-filled:hover { background: var(--accent-soft, #e8f0fe); box-shadow: none; }
-/* Le fantôme n'apparaît qu'au survol, sur le fond teinté que la zone prend alors (--accent-soft) : --accent n'y fait que 3,97:1 en clair et 4,17:1 en sombre. */
+/* Le fantôme n'apparaît qu'au survol, sur le fond teinté que la zone prend alors (`--accent-soft`) : `--accent` n'y fait que 3,97:1 en clair et
+   4,17:1 en sombre. */
 .v2-hf-zone-ghost { display: none; align-items: center; gap: 5px; color: var(--accent-ink, #2558c4); font-weight: 600; pointer-events: auto; }
 #editor-container.a4-preview .v2-hf-zone.v2-hf-zone-empty.v2-hf-zone-hover .v2-hf-zone-ghost, #editor-container.a4-preview .v2-hf-zone.v2-hf-zone-empty:hover .v2-hf-zone-ghost { display: inline-flex; }
 .v2-hf-zone-body { color: var(--paper-text-faint, #667085); max-height: 60px; overflow: hidden; }
-/* Au survol la zone prend le fond teinté du thème : le gris de la page blanche n'y ferait que 2,6:1 en sombre, et le gris du thème 4,34:1 en clair - même mélange que les puces de la galerie. */
+/* Au survol la zone prend le fond teinté du thème : le gris de la page blanche n'y ferait que 2,6:1 en sombre, et le gris du thème 4,34:1 en
+   clair. Même mélange que les puces de la galerie. */
 #editor-container.a4-preview .v2-hf-zone.v2-hf-zone-filled.v2-hf-zone-hover .v2-hf-zone-body, #editor-container.a4-preview .v2-hf-zone.v2-hf-zone-filled:hover .v2-hf-zone-body { color: color-mix(in srgb, var(--text-faint) 80%, var(--text)); }
-/* Cette zone n'est PAS un descendant de `.tiptap` (elle vit dans `.v2-page-sheet`, frère de `.tiptap`) : le contenu d'en-tête/pied résolu qu'on y dépose
-   retombe donc sur la marge PAR DÉFAUT du navigateur (jamais nulle contrairement à `.tiptap p{margin:0}`) - invisible mais réelle, gonflant la zone
-   visuellement au-delà du contenu réel. Pas de décalage de mise en page pour autant : measureHtmlHeightPx mesure déjà avec la classe `tiptap` posée. */
+/* Cette zone n'est pas un descendant de `.tiptap` (elle vit dans `.v2-page-sheet`, sœur de `.tiptap`) : le contenu résolu qu'on y dépose retombe
+   sur la marge par défaut du navigateur (jamais nulle, contrairement à `.tiptap p { margin: 0 }`), invisible mais réelle, qui gonfle la zone
+   au-delà du contenu. La mise en page ne change pas pour autant : measureHtmlHeightPx mesure déjà avec la classe `tiptap` posée. */
 .v2-hf-zone-body p, .v2-hf-zone-body h1, .v2-hf-zone-body h2, .v2-hf-zone-body h3,
 .v2-hf-zone-body h4, .v2-hf-zone-body h5, .v2-hf-zone-body h6,
 .v2-hf-zone-body ul, .v2-hf-zone-body ol,
@@ -393,11 +390,12 @@
 .v2-page-band-header ul, .v2-page-band-header ol,
 .v2-page-band-footer p, .v2-page-band-footer h1, .v2-page-band-footer h2, .v2-page-band-footer h3, .v2-page-band-footer h4, .v2-page-band-footer h5, .v2-page-band-footer h6,
 .v2-page-band-footer ul, .v2-page-band-footer ol { margin: 0; }
-/* Même raison que `.tiptap img.editor-image{vertical-align:bottom}` : un <img> reste "inline" par défaut, aligné sur la ligne de base du texte - laisse un
-   petit espace résiduel sous l'image qui, ajouté à la marge déjà retirée ci-dessus, faisait paraître la zone plus haute que l'image elle-même. */
+/* Même raison que `.tiptap img.editor-image { vertical-align: bottom }` : un `<img>` reste en ligne, aligné sur la ligne de base du texte, ce qui
+   laisse un petit espace sous l'image et, ajouté à la marge retirée ci-dessus, ferait paraître la zone plus haute que l'image. */
 .v2-hf-zone-body img { vertical-align: bottom; }
-/* Même raison que `.tiptap img.editor-image[data-align="left"/"right"]` : une image alignée à gauche/droite dans l'éditeur (habillage réel, float natif)
-   retombait ici en flux normal (bloc plein) - le texte suivant passait EN DESSOUS au lieu de SE PLACER À CÔTÉ. Centre : pas d'habillage, bloc centré. */
+/* Même raison que `.tiptap img.editor-image[data-align="left"/"right"]` : une image alignée à gauche ou à droite dans l'éditeur (habillage réel,
+   float natif) tomberait ici en flux normal (bloc plein) et le texte suivant passerait dessous au lieu de se placer à côté. Centre : pas
+   d'habillage, bloc centré. */
 .v2-hf-zone-body img[data-align="left"] { float: left; margin: 0 12px 8px 0; }
 .v2-hf-zone-body img[data-align="right"] { float: right; margin: 0 0 8px 12px; }
 .v2-hf-zone-body img[data-align="center"] { display: block; margin-left: auto; margin-right: auto; }
@@ -406,52 +404,55 @@
 #editor-container.a4-preview .v2-hf-zone.v2-hf-zone-filled.v2-hf-zone-hover .v2-hf-zone-pencil, #editor-container.a4-preview .v2-hf-zone.v2-hf-zone-filled:hover .v2-hf-zone-pencil { display: block; }
 
 .v2-pagination-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 0; z-index: 4; }
-/* Copies de « Sur toutes les pages » (js/page-layer.js:paintCopies) : une couche de la hauteur nulle, posée dans le repère des bandes de couture, avec une boîte rognée par page.
-   Éditeur : premier enfant de la feuille, donc sous `.tiptap` (z-index 0 aussi, plus loin dans le DOM) et au-dessus du blanc de la feuille ; Lecture : dans le fond de la feuille
-   (`.v2-reader-backdrop`). Jamais de souris : une copie n'est pas à saisir, seule l'image d'origine se déplace. */
+/* Copies de « Sur toutes les pages » (js/page-layer.js:paintCopies) : une couche de hauteur nulle, posée dans le repère des bandes de couture,
+   avec une boîte rognée par page. Éditeur : premier enfant de la feuille, donc sous `.tiptap` (z-index 0 aussi, plus loin dans le DOM) et
+   au-dessus du blanc de la feuille ; Lecture : dans le fond de la feuille (`.v2-reader-backdrop`). Jamais de souris : une copie n'est pas à
+   saisir, seule l'image d'origine se déplace. */
 .v2-page-layer { position: absolute; top: 0; left: 0; width: 100%; height: 0; z-index: 0; pointer-events: none; }
 .v2-page-layer-page { position: absolute; overflow: hidden; pointer-events: none; }
 .v2-page-layer-copy { position: absolute; max-width: none; pointer-events: none; user-select: none; }
 .v2-page-band { position: absolute; box-sizing: border-box; font-size: 10.5px; line-height: 1.42; color: #1b2430; }
 .v2-page-band-header, .v2-page-band-footer { font-size: 14px; }
-/* Une bande de couture rejoue la frontière entre deux pages PHYSIQUES, à leur vraie taille (feuilles entières, choix d'Antoine du 01/10) : le bas de la page qui finit
-   (`.v2-page-seam-foot` : sa marge du bas et la bande de son pied, avec le pied tout en haut), une vraie gouttière (`.v2-page-seam-divider`), puis le haut de la
-   page qui commence (`.v2-page-seam-head` : la bande de son en-tête et sa marge du haut, avec l'en-tête à la moitié de la marge). Le bas et le haut de page sont
-   TRANSPARENTS : c'est la feuille qui est blanche, et l'image d'un coin répétée sur chaque page (« Sur toutes les pages ») doit y rester visible. Seule la
-   gouttière laisse voir le fond de l'espace de travail - c'est elle qui transforme le rouleau continu de `.tiptap` en pile de feuilles distinctes, comme dans
-   Word ou Docs. La couture elle-même ne prend jamais la souris (un clic dans la marge d'une page 2 atteint le texte ou l'image dessous) : seules la gouttière et
-   les zones d'en-tête et de pied l'ont. */
+/* Une bande de couture rejoue la frontière entre deux pages physiques, à leur vraie taille : le bas de la page qui finit (`.v2-page-seam-foot` :
+   marge du bas et bande du pied), une gouttière (`.v2-page-seam-divider`), puis le haut de la page qui commence (`.v2-page-seam-head` : bande de
+   l'en-tête et marge du haut, l'en-tête à la moitié de la marge). Le bas et le haut de page sont transparents : c'est la feuille qui est blanche,
+   et l'image d'un coin répétée sur chaque page (« Sur toutes les pages ») doit y rester visible. Seule la gouttière laisse voir le fond de
+   l'espace de travail : elle fait du rouleau continu de `.tiptap` une pile de feuilles distinctes, comme dans Word ou Docs. La couture ne prend
+   jamais la souris (un clic dans la marge d'une page 2 atteint le texte ou l'image dessous) ; seules la gouttière et les zones d'en-tête et de
+   pied la prennent. */
 .v2-page-band { pointer-events: none; }
 .v2-page-seam-foot, .v2-page-seam-head { position: relative; box-sizing: border-box; }
 .v2-page-seam-divider, .v2-page-band .v2-hf-zone { pointer-events: auto; }
 .v2-page-band-header, .v2-page-band-footer { padding: 8px var(--pp-margin-right, 37.33px) 8px var(--pp-margin-left, 37.33px); overflow: hidden; box-sizing: border-box; background: transparent; }
 .v2-page-band-header:empty, .v2-page-band-footer:empty { display: none; }
-/* Même carte que les zones de bord de la feuille (plus haut) : fond de la feuille, un trait en pointillé là où l'en-tête s'arrête et où le pied commence. */
+/* Même carte que les zones de bord de la feuille (plus haut) : fond de la feuille, un trait en pointillé là où l'en-tête s'arrête et où le pied
+   commence. */
 #editor-container.a4-preview .v2-page-band .v2-hf-zone.v2-hf-zone-filled { background: transparent; box-shadow: none; }
 #editor-container.a4-preview .v2-page-band .v2-hf-zone.v2-hf-zone-filled.v2-hf-zone-hover, #editor-container.a4-preview .v2-page-band .v2-hf-zone.v2-hf-zone-filled:hover { background: var(--accent-soft, #e8f0fe); box-shadow: none; }
 #editor-container.a4-preview .v2-page-seam-head .v2-hf-zone.v2-hf-zone-filled { border-bottom: 1px dashed #c3cad6; }
 #editor-container.a4-preview .v2-page-seam-foot .v2-hf-zone.v2-hf-zone-filled { border-top: 1px dashed #c3cad6; }
-/* La gouttière elle-meme. Les deux ombres portées sortent vers l'INTÉRIEUR de la gouttière depuis chaque feuille (la tranche du bas de la page qui finit,
-   celle du haut de la page qui commence) ; les deux filets nets de 1px sont les bords de papier proprement dits. */
+/* La gouttière elle-même. Les deux ombres portées sortent vers l'intérieur de la gouttière depuis chaque feuille (la tranche du bas de la page qui
+   finit, celle du haut de la page qui commence) ; les deux filets nets de 1 px sont les bords du papier. */
 .v2-page-seam-divider {
   display: flex; align-items: center; justify-content: center;
   height: var(--pp-page-gap, 20px); margin: 0; border: 0; background: var(--pp-page-gutter, #eef1f5);
   box-shadow: inset 0 1px 0 #c7cfdb, inset 0 -1px 0 #c7cfdb, inset 0 9px 9px -9px rgba(20, 28, 46, .30), inset 0 -9px 9px -9px rgba(20, 28, 46, .30);
 }
-/* Coupure de page automatique SANS en-tête/pied configuré (reste visible dès "beaucoup de lignes", pas seulement avec en-tête/pied ou saut forcé) - la même couture,
-   avec le simple repère "— Page N —" dans la gouttière. */
+/* Coupure de page automatique sans en-tête ni pied configuré (visible dès qu'il y a beaucoup de lignes, pas seulement avec un en-tête, un pied ou
+   un saut forcé) : la même couture, avec le repère « — Page N — » dans la gouttière. */
 .v2-page-break-label { font-size: 10px; font-weight: 600; color: #9aa2ad; white-space: nowrap; }
-/* Couture posée ENTRE DEUX LIGNES d'un tableau (js/header-footer-preview.js:addTableSeamCaps, js/reader-mode.js) : le tableau est rogné (js/table-page-cut.js:clipRule) sous la
-   dernière ligne de la page qui finit, jusqu'au bas de la bande, pour que la réserve et les marges de la couture, transparentes, ne montrent ni le fond ni les traits
-   verticaux des cases de la ligne descendue. Le trait du haut de cette ligne est dans la partie rognée : un filet de 1 px, au bord bas de la bande et de la largeur du
-   tableau, le redessine. Le gris des cases (#b8c0c9) : la page reste blanche dans les deux thèmes. */
+/* Couture posée entre deux lignes d'un tableau (js/header-footer-preview.js:addTableSeamCaps, js/reader-mode.js) : le tableau est rogné
+   (js/table-page-cut.js:clipRule) sous la dernière ligne de la page qui finit, jusqu'au bas de la bande, pour que la réserve et les marges
+   transparentes de la couture ne montrent ni le fond ni les traits verticaux des cases de la ligne descendue. Le trait du haut de cette ligne est
+   dans la partie rognée : un filet de 1 px, au bord bas de la bande et de la largeur du tableau, le redessine. Il a le gris des cases (#b8c0c9) :
+   la page reste blanche dans les deux thèmes. */
 .v2-page-seam-cap { position: absolute; bottom: 0; height: 1px; background: #b8c0c9; pointer-events: none; }
 
 #v2-a4-toggle { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 8px; border: 1px solid var(--border, #d7dde3); border-radius: 4px; font-size: 12.5px; cursor: pointer; user-select: none; }
 #v2-a4-toggle:hover { background: var(--surface-sunken, #f2f4f7); }
 
-/* Numérotation des titres : mêmes compteurs CSS que la V1 (css/style.css, .ql-editor[data-heading-style]), scopés à .tiptap au lieu de .ql-editor - seuls les
-   titres de premier niveau du flux principal sont numérotés (sélecteur enfant direct), pas ceux d'un tableau ou d'une zone 2 colonnes. */
+/* Numérotation des titres : compteurs CSS scopés à `.tiptap`. Seuls les titres de premier niveau du flux principal sont numérotés (sélecteur
+   enfant direct), pas ceux d'un tableau ou d'une zone 2 colonnes. */
 .tiptap[data-heading-style] { counter-reset: h1c h2c h3c h4c h5c h6c; }
 .tiptap[data-heading-style] > h1 { counter-reset: h2c h3c h4c h5c h6c; counter-increment: h1c; }
 .tiptap[data-heading-style] > h2 { counter-reset: h3c h4c h5c h6c; counter-increment: h2c; }
@@ -478,53 +479,55 @@
 .tiptap[data-heading-style="roman"] > h5::before { content: counter(h5c, decimal) ") "; }
 .tiptap[data-heading-style="roman"] > h6::before { content: counter(h6c, lower-alpha) ") "; }
 
-/* Aperçu vivant du sommaire dans l'éditeur (cf. Toc.addNodeView) - purement visuel, la V1 n'avait pas cet aperçu en direct dans l'éditeur lui-même. */
+/* Aperçu vivant du sommaire dans l'éditeur (Toc.addNodeView), purement visuel. */
 .tiptap .toc-entry-preview { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* Petit repère visuel (point plein en haut à droite de la bulle) quand un format nombre/date a été choisi via la barre flottante dédiée - sans lui, rien
-   ne distingue une bulle formatée d'une bulle par défaut. `.var-badge` reste dans css/style.css (partagé V1), scopé ici à .tiptap pour l'éditeur V2. */
+/* Petit repère (point plein en haut à droite de la bulle) quand un format de nombre ou de date a été choisi par la barre flottante dédiée : sans
+   lui, rien ne distingue une bulle formatée d'une bulle par défaut. `.var-badge` reste dans css/style.css, scopé ici à `.tiptap`. */
 .tiptap .var-badge { position: relative; }
 .tiptap .var-badge[data-format]::after { content: ''; position: absolute; top: -3px; right: -3px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent, #2f6fed); border: 1px solid #fff; }
 
-/* Badge de numéro de page (js/editor.js:createPageNumberBadgeNode) - même gabarit que .var-badge ci-dessus mais teinte propre (vert plutôt que bleu) pour
-   rester distinct d'une bulle #Variable, les deux pouvant cohabiter dans un même en-tête/pied. Résolu en vrai numéro seulement à l'export/aperçu paginé. */
+/* Badge de numéro de page (js/editor.js:createPageNumberBadgeNode) : même gabarit que `.var-badge` ci-dessus, mais d'une teinte propre (vert
+   plutôt que bleu) pour rester distinct d'une bulle #Variable, les deux pouvant cohabiter dans un en-tête ou un pied. Il n'est résolu en vrai
+   numéro qu'à l'export et à l'aperçu paginé. */
 .tiptap .page-number-badge, .reader-content .page-number-badge { display: inline-block; background: #e7f7ee; color: #146c43; border: 1px solid #b8e6cc; padding: 0 4px; border-radius: 3px; font-size: .92em; line-height: 1.4; }
 
-/* Chips intelligents (js/editor.js:createSmartChipNode/createFootnoteRefNode) - même palette verte que .page-number-badge, langage visuel déjà établi pour
-   "valeur calculée, pas une #Variable". Le marqueur de note reste volontairement SANS pastille/fond (juste un chiffre vert en exposant). */
+/* Chips intelligents (js/editor.js:createSmartChipNode, createFootnoteRefNode) : même palette verte que `.page-number-badge`, celle de « valeur
+   calculée, pas une #Variable ». Le marqueur de note reste sans pastille ni fond (un chiffre vert en exposant). */
 .tiptap .smart-chip, .reader-content .smart-chip { display: inline-block; background: #e7f7ee; color: #146c43; border: 1px solid #b8e6cc; padding: 0 4px; border-radius: 3px; font-size: .92em; line-height: 1.4; }
-/* Numérotation CONTINUE sur tout le document (pas de reset par page) : un seul compteur racine, incrémenté par CSS pur, jamais recalculé en JS à l'écran. */
+/* Numérotation continue sur tout le document (pas de remise à zéro par page) : un seul compteur racine, incrémenté en CSS, jamais recalculé en JS
+   à l'écran. */
 .tiptap, .reader-content { counter-reset: footnote-ref; }
 .tiptap .footnote-ref-marker, .reader-content .footnote-ref-marker { counter-increment: footnote-ref; color: #146c43; font-weight: 600; cursor: pointer; }
 .tiptap .footnote-ref-marker::before, .reader-content .footnote-ref-marker::before { content: counter(footnote-ref); }
 
-/* Effet DISCRET à dessein (demande explicite) : un simple soulignement + fond très pâle, jamais un bloc plein comme .smart-chip - un commentaire ne doit
-   pas dominer visuellement le texte qu'il annote, juste le signaler. SEULEMENT `.tiptap` (jamais `.reader-content`) : un commentaire est un artefact
-   d'édition/collaboration, invisible en Lecture/export - cf. commentaire d'en-tête, js/comments.js. Résolu : gris et discret, jamais complètement invisible
-   (on doit pouvoir encore le retrouver/le rouvrir), à l'inverse de --accent qui reste réservé aux marques ACTIVES. */
+/* Effet discret à dessein : un soulignement et un fond très pâle, jamais un bloc plein comme `.smart-chip` ; un commentaire ne doit pas dominer le
+   texte qu'il annote, seulement le signaler. Seulement `.tiptap`, jamais `.reader-content` : un commentaire est un artefact d'édition et de
+   collaboration, invisible en Lecture et à l'export (js/comments.js). Résolu, il devient gris et discret sans disparaître (on doit pouvoir le
+   retrouver et le rouvrir), l'accent étant réservé aux marques actives. */
 .tiptap .comment-mark { background: #fff3cf; border-bottom: 2px solid #f0c36d; cursor: pointer; }
 .tiptap .comment-mark-resolved { background: transparent; border-bottom: 2px solid var(--text-faint); }
 
-/* Popup d'édition du texte d'une note (js/editor.js:ensureFootnotePopupBox) - harmonisé avec le reste du chrome V2, mêmes jetons que #v2-image-var-picker
-   (var(--surface)/var(--border-strong)/var(--font-ui)), jamais la teinte verte des chips (réservée au CONTENU des bulles, pas au chrome). */
+/* Popup d'édition du texte d'une note (js/editor.js:ensureFootnotePopupBox) : mêmes jetons que #v2-image-var-picker (`--surface`,
+   `--border-strong`, `--font-ui`), jamais la teinte verte des chips, réservée au contenu des bulles et pas au chrome. */
 #v2-footnote-popup { position: absolute; z-index: var(--z-menu); background: var(--surface); border: 1px solid var(--border-strong); border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.10); padding: 8px; width: 240px; font-family: var(--font-ui); }
 #v2-footnote-popup textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 12.5px; color: var(--text); border: 1px solid var(--border-strong); border-radius: 5px; padding: 5px 6px; resize: vertical; }
 #v2-footnote-popup textarea:focus-visible { outline: 2px solid var(--accent-soft-border); outline-offset: -1px; }
 #v2-footnote-popup .v2-footnote-popup-actions { display: flex; justify-content: space-between; gap: 6px; margin-top: 6px; }
-/* Mêmes boutons que .link-rules-modal-content .modal-actions - OK en primaire (accent plein), Supprimer en secondaire teinté danger, même vocabulaire
-   "action destructive" (--danger) que le reste de l'app. */
+/* Mêmes boutons que `.link-rules-modal-content .modal-actions` : OK en primaire (accent plein), Supprimer en secondaire teinté danger
+   (`--danger`), comme les autres actions destructives de l'application. */
 #v2-footnote-popup .v2-footnote-popup-actions button { font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; height: 26px; padding: 0 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; }
 #v2-footnote-popup .v2-footnote-popup-actions button:hover { background: var(--surface-sunken); }
-/* `button.xxx` (pas juste `.xxx`) - sans l'élément en plus, ces 2 règles avaient la même spécificité que la règle générique au-dessus et perdaient contre
-   elle : OK/Supprimer restaient blancs/gris malgré la tentative de les colorer. */
+/* `button.xxx` et non `.xxx` seul : sans l'élément, ces deux règles auraient la même spécificité que la règle générique au-dessus et perdraient
+   contre elle (OK et Supprimer resteraient blancs et gris). */
 #v2-footnote-popup button.v2-footnote-popup-delete { color: var(--danger-ink); border-color: var(--danger-soft); }
 #v2-footnote-popup button.v2-footnote-popup-delete:hover { background: var(--danger-soft); }
 #v2-footnote-popup button.v2-footnote-popup-ok { background: var(--accent-solid); border-color: var(--accent-solid); color: #fff; }
 #v2-footnote-popup button.v2-footnote-popup-ok:hover { background: var(--accent-solid-hover); }
 
-/* Carte de commentaire (js/comments.js) - même chrome/jetons que #v2-footnote-popup, en plus large (fil de discussion + réponse) - inspirée de Google Docs
-   (demande explicite) : bandeau d'état en tête, messages empilés, réponse + actions en pied. Ferme UNIQUEMENT via le × (même leçon que le popup de note :
-   fermer au clic extérieur a déjà causé 3 régressions sur ce projet). */
+/* Carte de commentaire (js/comments.js) : même chrome et mêmes jetons que #v2-footnote-popup, en plus large (fil de discussion et réponse), sur le
+   modèle de Google Docs : bandeau d'état en tête, messages empilés, réponse et actions en pied. Elle ne se ferme que par la ×, comme le popup de
+   note : la fermeture au clic extérieur y a déjà causé des régressions. */
 #v2-comment-popup { position: absolute; z-index: var(--z-menu); background: var(--surface); border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.10); padding: 10px; width: 280px; font-family: var(--font-ui); }
 #v2-comment-popup .v2-comment-popup-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
 #v2-comment-popup .v2-comment-popup-badge { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: #8a6d00; background: #fff3cf; border-radius: 4px; padding: 2px 6px; }
@@ -546,9 +549,9 @@
 #v2-comment-popup button.v2-comment-popup-delete { color: var(--danger-ink); border-color: var(--danger-soft); }
 #v2-comment-popup button.v2-comment-popup-delete:hover { background: var(--danger-soft); }
 
-/* Panneau `#` (js/variables.js:ensureBox), seule définition de #autocomplete-box : colonne flex (JS bascule son display en 'flex') pour que .ac-tabs reste
-   fixe pendant que .ac-items défile seul. Onglets Variables (par défaut) / Chips, bleu --accent des onglets actifs comme PARTOUT ailleurs dans ce fichier,
-   pas le vert des chips (réservé au CONTENU des bulles, pas à la navigation). */
+/* Panneau `#` (js/variables.js:ensureBox), seule définition de #autocomplete-box : colonne flex (le JS bascule son display en `flex`) pour que
+   `.ac-tabs` reste fixe pendant que `.ac-items` défile seul. Onglets Variables (par défaut) et Chips, en `--accent` pour l'onglet actif comme
+   partout dans ce fichier, pas le vert des chips (réservé au contenu des bulles, pas à la navigation). */
 #autocomplete-box { position: absolute; z-index: var(--z-menu); min-width: 160px; max-width: 320px; display: flex; flex-direction: column; max-height: 280px; overflow: hidden; padding: 0; font-family: var(--font-ui); font-size: 12.5px; background: var(--surface); border: 1px solid var(--border-strong); box-shadow: 0 4px 14px rgba(0,0,0,.10); border-radius: 6px; }
 #autocomplete-box .ac-items { overflow: auto; }
 #autocomplete-box .ac-item { padding: 4px 8px; cursor: pointer; color: var(--text); }
@@ -559,53 +562,42 @@
 .ac-tab.active { color: var(--accent); box-shadow: inset 0 -2px 0 var(--accent); }
 
 #v2-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px 10px; border-bottom: 1px solid var(--border, #d7dde3); background: var(--surface, #fff); }
-/* #v2-toolbar est imbriqué DANS #toolbar-top - la règle générique `#toolbar-top button::before` de css/style.css s'applique donc AUSSI par erreur ici : sans
-   mask-image dédié, ce ::before affiche un carré plein 14×14 de `currentColor`, à côté de l'icône SVG injectée par Editor.applyToolbarIcons(). Neutralisé
-   ici (même spécificité que la règle partagée, mais chargé après dans la cascade). */
+/* #v2-toolbar est imbriqué dans #toolbar-top : la règle générique `#toolbar-top button::before` de css/style.css s'y applique donc aussi, et sans
+   `mask-image` dédié ce ::before afficherait un carré plein 14 × 14 de `currentColor` à côté de l'icône SVG injectée par
+   Editor.applyToolbarIcons(). Neutralisé ici (même spécificité que la règle partagée, mais chargé après dans la cascade). */
 #v2-toolbar button::before { content: none; }
-/* Boutons icône-seule (16px, style trait cf. js/icons.js) : plus compact et plus lisible que les glyphes texte/unicode bruts d'origine (signalé par
-   l'utilisateur) - l'identification se fait via le `title` natif (tooltip au survol), déjà présent sur chaque bouton. */
-/* Pas de contour gris permanent (signalé trop lourd par l'utilisateur) - le bouton reste "nu" au repos, un fond + une bordure discrète n'apparaissent qu'au
-   survol (même traitement que les boutons indenter/désindenter, repris ici comme LE style par défaut plutôt qu'un cas particulier). */
+/* Boutons à icône seule (16 px, style trait, js/icons.js) : plus compacts et lisibles que des glyphes texte ou unicode ; le `title` natif
+   (info-bulle au survol), présent sur chaque bouton, les identifie. */
+/* Pas de contour gris permanent (trop lourd) : le bouton reste nu au repos, un fond et une bordure discrète n'apparaissent qu'au survol (comme les
+   boutons indenter et désindenter, ce traitement est ici le style par défaut). */
 #v2-toolbar button { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 28px; border: 1px solid transparent; background: transparent; border-radius: 5px; padding: 0; cursor: pointer; color: var(--text, #3a4452); }
 #v2-toolbar button svg { width: 16px; height: 16px; }
 #v2-toolbar button:hover { background: var(--surface-sunken, #f2f4f7); border-color: var(--border, #d7dde3); }
-/* État actif (ex. gras appliqué là où est le curseur) - absent jusqu'ici, cf. Editor.syncToolbarState dans js/editor.js. */
+/* État actif (par exemple le gras là où est le curseur), voir MainToolbar.syncToolbarState (js/main-toolbar.js). */
 #v2-toolbar button.is-active { background: var(--accent-soft, #e8f0fe); border-color: var(--accent-soft-border, #c7dbfd); color: var(--accent, #2f6fed); }
-/* Indenter/désindenter : sans effet hors d'une liste, donc grisés plutôt que masqués quand inapplicables (Editor.syncToolbarState) - un peu plus petits pour
-   ne pas concurrencer visuellement gras/italique/etc. */
+/* Indenter et désindenter : sans effet hors d'une liste, donc grisés plutôt que masqués quand ils ne s'appliquent pas (syncToolbarState), et un
+   peu plus petits pour ne pas concurrencer gras, italique, etc. */
 #v2-toolbar button.v2-btn-discreet { width: 26px; height: 26px; color: var(--text-muted, #6b7684); }
-/* Bouton #Variable : identique en apparence à un "is-active" permanent (mêmes tokens), pour le distinguer visuellement des boutons de mise en forme
-   voisins sans introduire de nouvelle couleur - actif dans les deux modes (document et email), jamais grisé. */
+/* Bouton #Variable : identique à un « is-active » permanent (mêmes jetons), pour le distinguer des boutons de mise en forme voisins sans nouvelle
+   couleur ; actif dans les deux modes (document et email), jamais grisé. */
 #v2-toolbar button.v2-btn-variable { border-color: var(--accent-soft-border, #c7dbfd); color: var(--accent, #2f6fed); }
 #v2-toolbar button.v2-btn-variable:hover { background: var(--accent-soft, #e8f0fe); }
 #v2-toolbar button:disabled, #v2-toolbar button:disabled:hover { opacity: .35; cursor: default; background: transparent; border-color: transparent; }
 #v2-toolbar select { border: 1px solid transparent; border-radius: 4px; padding: 3px 6px; font-size: 12.5px; background: transparent; }
 #v2-toolbar select:hover, #v2-toolbar select:focus-visible { border-color: var(--border, #d7dde3); background: var(--surface, #fff); }
 #v2-toolbar .v2-sep { width: 1px; align-self: stretch; background: var(--border, #d7dde3); margin: 0 4px; }
-/* Groupe "bouton principal + variantes au survol" (alignement/puces/numérotation) - le bouton principal reste l'action rapide par défaut ; le survol du
-   groupe révèle .v2-hover-flyout, décalé de --v2-flyout-gap sous le bouton (respiration visuelle) SANS écart de hitbox : la bande ainsi ouverte est reprise
-   par le pont de survol plus bas (.v2-hover-group:hover::after). */
+/* Groupe « bouton principal et variantes au survol » (alignement, puces, numérotation) : le bouton principal reste l'action rapide par défaut ; le
+   survol du groupe révèle `.v2-hover-flyout`, décalé de `--v2-flyout-gap` sous le bouton (respiration) sans trou de hitbox : la bande ainsi
+   ouverte est reprise par le pont de survol plus bas (`.v2-hover-group:hover::after`). */
 .v2-hover-group { position: relative; display: inline-flex; --v2-flyout-gap: 2px; }
-/* display:none au repos (pas juste visibility:hidden) : un flyout gardait sa boîte dans le calcul de mise
-   en page même fermé, et #v2-heading-flyout (7 niveaux de titre + numérotation, le seul à dépasser une
-   petite fenêtre) agrandissait alors le scrollHeight/scrollWidth de la PAGE elle-même - une simple molette
-   au-dessus de la barre (aucun flyout ouvert) la faisait défiler et sortait le reste de la barre de la zone
-   visible (mesuré à la vraie molette Playwright, coordinateur, 700x400/600x400, aussi en mode email+Cci où
-   la barre s'allonge encore). display:none retire la boîte du calcul le temps qu'il est fermé, quelle que
-   soit la hauteur de la barre - measuré ET validé par le coordinateur (expérience sur 4b346e3) contre un
-   premier essai à `max-height`/`overflow-y:auto` sur CE rôle générique : `overflow-y:auto` force
-   `overflow-x` à `auto` (les deux ne peuvent pas rester indépendants dès que l'un n'est plus `visible`),
-   ce qui rognait les info-bulles ([data-tip]::after, css/toolbar-v2.css) des boutons Alignement/Liste -
-   régression sur une zone qu'Antoine avait validée le matin même. `overflow-y:auto` reste donc réservé à
-   #v2-heading-flyout ci-dessous (seul flyout sans aucune info-bulle interne), pas ce rôle partagé.
-   L'animation d'ouverture (opacity/transform) ne joue plus sur un display:none/flex (pas de valeur de
-   départ à interpoler) - perte acceptée, un `display` recalculé en JS à l'ouverture (positionFlyout,
-   js/editor-core.js) couvre la hauteur RÉELLE disponible sous la barre à cet instant (email+Cci y compris),
-   plus fiable qu'une constante CSS.
-   Niveau --z-menu (css/style.css), pas 15 : un menu de la barre du haut s'ouvre par-dessus une barre flottante de tableau ou d'image qui descendrait jusque-là, et par-dessus la
-   pastille d'en-tête de page (25) ; positionFlyout le remonte au-dessus des menus déjà ouverts (Layers.raise, js/layers.js).
-   Détails : mémoire projet [[project-publipostage-scroll-chaining-popup-fix]]. */
+/* `display: none` au repos (pas `visibility: hidden`) : un flyout fermé garderait sa boîte dans la mise en page, et #v2-heading-flyout (sept
+   niveaux de titre et la numérotation, le seul à dépasser une petite fenêtre) agrandirait le scrollHeight et le scrollWidth de la page elle-même :
+   une simple molette au-dessus de la barre la ferait défiler et sortirait le reste de la barre de la zone visible, y compris en mode email avec
+   Cci où la barre s'allonge encore. Le défilement vertical d'un flyout est réservé à `.v2-hover-flyout-scrollable` plus bas. L'animation
+   d'ouverture ne joue pas entre `display: none` et `flex` : perte acceptée ; positionFlyout (js/editor-core.js) calcule à l'ouverture la hauteur
+   réelle disponible sous la barre, plus fiable qu'une constante CSS. Niveau `--z-menu` (css/style.css) et pas 15 : un menu de la barre du haut
+   s'ouvre par-dessus une barre flottante de tableau ou d'image qui descendrait jusque-là, et par-dessus la pastille d'en-tête de page (25) ;
+   positionFlyout le remonte au-dessus des menus déjà ouverts (Layers.raise, js/layers.js). */
 .v2-hover-flyout {
   position: absolute; top: 100%; left: 0; display: none; gap: 3px; padding: 4px;
   background: var(--surface, #fff); border: 1px solid var(--border-strong, #c3cad6); border-radius: 6px;
@@ -613,48 +605,48 @@
   opacity: 0; transform: translateY(-4px);
 }
 .v2-hover-group:hover .v2-hover-flyout, .v2-hover-group:focus-within .v2-hover-flyout { display: flex; opacity: 1; transform: translateY(var(--v2-flyout-gap)); }
-/* Pont de survol (retour d'Antoine 2026-09-28 : le menu Image se refermait quand la souris y descendait lentement) : le décalage --v2-flyout-gap laisse, entre
-   le bouton et son menu, une bande qui n'appartient à AUCUN élément du groupe. Un pointeur qui la traverse - un déplacement lent y pose au moins un point -
-   perd le :hover du groupe, le menu repasse en display:none et la souris se retrouve sur ce qu'il y a dessous, sans jamais atteindre le menu. Cette bande
-   est reprise par un pseudo-élément du GROUPE, présent tant qu'il est survolé (ce qui vaut aussi pour son menu, descendant du groupe). Pas un
-   pseudo-élément du flyout : #v2-heading-flyout (overflow-y:auto, .v2-hover-flyout-scrollable) le rognerait. 8px de marge de chaque côté pour une sortie en
-   biais par le coin du bouton (le menu, lui, commence au bord gauche du groupe) ; 1px de recouvrement sous le bord du menu contre un arrondi sous-pixel.
-   Uniquement SOUS le bouton : aucune partie du bouton n'est recouverte, aucun clic n'est volé. */
+/* Pont de survol : le décalage `--v2-flyout-gap` laisse entre le bouton et son menu une bande qui n'appartient à aucun élément du groupe ; un
+   pointeur qui la traverse perd le `:hover` du groupe, le menu repasse en `display: none` et la souris tombe sur ce qu'il y a dessous. Un
+   pseudo-élément du groupe, présent tant que le groupe (donc son menu, son descendant) est survolé, reprend cette bande. Pas un pseudo-élément du
+   flyout : #v2-heading-flyout (`overflow-y: auto`) le rognerait. 8 px de marge de chaque côté pour une sortie en biais par le coin du bouton (le
+   menu commence au bord gauche du groupe), 1 px de recouvrement sous le bord du menu contre un arrondi sous-pixel ; uniquement sous le bouton,
+   donc aucun clic volé. */
 .v2-hover-group:hover::after {
   content: ''; position: absolute; left: -8px; right: -8px; top: 100%; height: calc(var(--v2-flyout-gap) + 1px);
 }
 .v2-hover-flyout-v { flex-direction: column; min-width: 168px; }
-/* Réservé aux flyouts dont le contenu peut dépasser une petite fenêtre (aujourd'hui : #v2-heading-flyout,
-   niveaux de titre + numérotation) - AUCUNE ligne à info-bulle ([data-tip]) dedans, donc overflow-y:auto
-   (et son overflow-x:auto forcé, cf. commentaire ci-dessus) ne coupe rien ici. Ne pas l'ajouter à un futur
-   flyout sans vérifier d'abord qu'aucune de ses lignes ne porte [data-tip]. positionFlyout (js/editor-
-   core.js, réservé à cette même classe) fixe le max-height réel à l'ouverture ; la valeur ci-dessous n'est
-   qu'un repli tant que JS n'a pas encore tourné. */
+/* Réservé aux flyouts dont le contenu peut dépasser une petite fenêtre (aujourd'hui #v2-heading-flyout : niveaux de titre et numérotation). Aucune
+   ligne à info-bulle (`[data-tip]`) dedans, donc `overflow-y: auto` (qui force `overflow-x: auto`) ne coupe rien ; sur un flyout dont une ligne
+   porte `[data-tip]`, il rognerait l'info-bulle (`[data-tip]::after`, css/toolbar-v2.css). positionFlyout (js/editor-core.js, réservé à cette
+   classe) fixe le `max-height` réel à l'ouverture ; la valeur ci-dessous n'est qu'un repli tant que le JS n'a pas tourné. */
 .v2-hover-flyout-scrollable { max-height: 280px; overflow-y: auto; }
-/* Panneau "Liste" restructuré en 3 lignes empilées (puces/numéros/cases à cocher), plus lisible que 3 groupes en rangée horizontale. Le conteneur passe en
-   colonne (.v2-hover-flyout-v) ; chaque ligne redevient une rangée via `.v2-hover-icon-row`, séparée par un filet horizontal (`.v2-hover-hsep`). */
+/* Panneau « Liste » en trois lignes empilées (puces, numéros, cases à cocher), plus lisible que trois groupes en rangée. Le conteneur passe en
+   colonne (`.v2-hover-flyout-v`) ; chaque ligne redevient une rangée par `.v2-hover-icon-row`, séparée par un filet horizontal (`.v2-hover-hsep`). */
 .v2-hover-icon-row { display: flex; gap: 3px; }
 .v2-hover-hsep { height: 1px; background: var(--border, #d7dde3); margin: 3px 1px; }
-/* Rappel non-cliquable de l'action du bouton principal, en tête du flyout - remplace l'infobulle [data-tip] du bouton (retirée), qui se superposait à ce
-   même flyout au survol. Un seul panneau porte maintenant les deux informations, empilées et lisibles. */
+/* Rappel non cliquable de l'action du bouton principal, en tête du flyout : il remplace l'info-bulle `[data-tip]` du bouton, qui se superposerait
+   au flyout au survol. Un seul panneau porte ainsi les deux informations, empilées et lisibles. */
 .v2-hover-flyout-label { display: block; padding: 6px 9px 3px; font-size: 11px; font-weight: 600; color: var(--text-faint, #98a2b3); white-space: nowrap; }
 .v2-hover-row { padding: 6px 9px; border-radius: 5px; font-size: 12.5px; color: var(--text, #3a4452); cursor: pointer; white-space: nowrap; }
 .v2-hover-row:hover { background: var(--surface-sunken, #f2f4f7); }
 .v2-hover-row.is-active { color: var(--accent, #2f6fed); font-weight: 700; }
 .v2-hover-row-disabled { color: var(--text-muted, #9aa3b2); cursor: not-allowed; }
 .v2-hover-row-disabled:hover { background: none; }
-/* Lignes du menu « Lien, citation, bloc de code » (#v2-blocks-flyout) : de vrais boutons, atteignables au clavier (les .v2-hover-row sont des <span>), avec l'icône de la
-   fonction devant et le raccourci à droite. Plus spécifique que `#v2-toolbar button` (30×28, centré), qui vise tout bouton de la barre. */
+/* Lignes du menu « Lien, citation, bloc de code » (#v2-blocks-flyout) : de vrais boutons, atteignables au clavier (les `.v2-hover-row` sont des
+   `<span>`), avec l'icône de la fonction devant et le raccourci à droite. Plus spécifique que `#v2-toolbar button` (30 × 28, centré), qui vise
+   tout bouton de la barre. */
 #v2-toolbar .v2-hover-flyout .v2-menu-row { display: flex; align-items: center; justify-content: flex-start; gap: 8px; width: 100%; height: auto; min-height: 28px; padding: 5px 9px; border: 1px solid transparent; border-radius: 5px; background: transparent; font: inherit; font-size: 12.5px; text-align: left; white-space: nowrap; color: var(--text, #3a4452); }
 #v2-toolbar .v2-hover-flyout .v2-menu-row:hover, #v2-toolbar .v2-hover-flyout .v2-menu-row:focus-visible { background: var(--surface-sunken, #f2f4f7); border-color: transparent; }
 #v2-toolbar .v2-hover-flyout .v2-menu-row.is-active { background: transparent; border-color: transparent; color: var(--accent, #2f6fed); font-weight: 700; }
 .v2-menu-row-icon { display: inline-flex; flex: none; }
 .v2-menu-row-kbd { margin-left: auto; padding-left: 18px; font-size: 11px; font-weight: 400; color: var(--text-faint, #98a2b3); }
-/* Ligne de menu atteignable au clavier (tabindex="0" ; menu Enregistrer, js/main.js:wireSaveMenu) : un <span> ne reçoit pas le focus de lui-même, et le menu reste
-   affiché tant que le focus est dedans (:focus-within du groupe). Trait d'accent, comme le focus du reste de la barre. */
+/* Ligne de menu atteignable au clavier (`tabindex="0"` ; menu Enregistrer, js/main.js:wireSaveMenu) : un `<span>` ne reçoit pas le focus de
+   lui-même, et le menu reste affiché tant que le focus est dedans (`:focus-within` du groupe). Trait d'accent, comme le focus du reste de la
+   barre. */
 .v2-hover-row:focus-visible { outline: 2px solid var(--accent, #2f6fed); outline-offset: -2px; }
-/* Ligne à cocher (« Enregistrement automatique ») : la coche est à droite du libellé et ne se voit que si la ligne est cochée (aria-checked="true") ; le libellé reste
-   aligné à gauche comme dans les autres menus. Trait sans remplissage, en mask comme les autres icônes de la barre, à la couleur d'accent. */
+/* Ligne à cocher (« Enregistrement automatique ») : la coche est à droite du libellé et ne se voit que si la ligne est cochée
+   (`aria-checked="true"`) ; le libellé reste aligné à gauche comme dans les autres menus. Trait sans remplissage, en `mask` comme les autres
+   icônes de la barre, à la couleur d'accent. */
 .v2-hover-row-check { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
 .v2-hover-row-check::after {
   content: ''; flex: none; width: 13px; height: 13px; background-color: var(--accent, #2f6fed); visibility: hidden;
@@ -663,29 +655,30 @@
   mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 13l4 4L19 7'/%3E%3C/svg%3E");
 }
 .v2-hover-row-check[aria-checked="true"]::after { visibility: visible; }
-/* Menu Page (#v2-page-flyout, js/orientation-toggle.js) : le nom de la ligne prend la place libre, les dimensions du format restent discrètes entre lui et la coche. */
+/* Menu Page (#v2-page-flyout, js/orientation-toggle.js) : le nom de la ligne prend la place libre, les dimensions du format restent discrètes
+   entre lui et la coche. */
 .v2-page-row-name { flex: 1; }
 .v2-page-row-size { font-size: 11px; color: var(--text-muted, #667085); }
-/* Bloc "Numérotation des titres" fusionné dans le flyout Titre - même .v2-segmented/.v2-segmented-btn que la pastille en-tête/pied, pour ne pas réinventer
-   un 2ᵉ style de segmenté dans ce fichier. */
+/* Bloc « Numérotation des titres » du flyout Titre : mêmes `.v2-segmented` et `.v2-segmented-btn` que la pastille d'en-tête et de pied, pour ne
+   pas inventer un second style de contrôle segmenté dans ce fichier. */
 .v2-numbering-block { padding: 6px 9px 4px; }
 .v2-numbering-label { display: block; font-size: 10.5px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--text-faint, #98a2b3); margin-bottom: 6px; }
-/* PAS de largeur forcée à 100%/flex:1 sur les boutons (essayé puis retiré : "Aucune" dépassait de son bouton) - chaque bouton garde sa largeur naturelle
-   (`width: auto`, déjà la valeur par défaut de .v2-segmented-btn). Ce `width: auto` perdait pourtant contre `#v2-toolbar button` (1 ID + 1 type, plus
-   spécifique) dès que ce contrôle vit DANS #v2-toolbar - "Aucune" tronqué à 30px. Re-déclaré ici avec un sélecteur plus spécifique (1 ID + 1 classe). */
+/* Pas de largeur forcée à 100 % ni de `flex: 1` sur les boutons (« Aucune » dépassait de son bouton) : chacun garde sa largeur naturelle (`width:
+   auto`, la valeur par défaut de `.v2-segmented-btn`). Ce `width: auto` perdait pourtant contre `#v2-toolbar button` (1 ID et 1 type, plus
+   spécifique) dès que le contrôle vit dans #v2-toolbar, « Aucune » tronqué à 30 px : il est redéclaré ici avec un sélecteur plus spécifique (1 ID
+   et 1 classe). */
 #v2-toolbar .v2-segmented-btn { width: auto; flex-shrink: 0; }
-/* Élargi spécifiquement pour CE flyout : le bloc "Numérotation des titres" y était compressé, les 168px génériques de .v2-hover-flyout-v suffisant à peine
-   à la rangée de titres mais serrant le segmenté 4 boutons en dessous. Les AUTRES flyouts partageant .v2-hover-flyout-v gardent leur largeur d'origine -
-   ciblé par ID, pas par classe. */
+/* Élargi pour ce flyout seulement : les 168 px génériques de `.v2-hover-flyout-v` suffisent à peine à la rangée de titres et serraient le segmenté
+   à quatre boutons en dessous. Les autres flyouts qui partagent `.v2-hover-flyout-v` gardent leur largeur : ciblé par ID, pas par classe. */
 #v2-heading-flyout { min-width: 224px; }
 #v2-heading-flyout .v2-numbering-block { padding: 10px 12px 8px; }
 #v2-heading-flyout .v2-numbering-label { margin-bottom: 8px; }
 #v2-heading-flyout .v2-segmented-btn { padding: 0 14px; font-size: 12.5px; }
-/* Aucun indice visuel sur le bouton principal d'un groupe au survol : le petit point bleu qui le marquait (`.v2-hover-group > button::after`) a été retiré à la
-   demande d'Antoine (2026-09-29) - « on peut les retirer complètement ». Le bouton garde aria-haspopup/aria-expanded (js/editor-core.js). Ne pas le remettre
-   sans lui demander. */
-/* Couleur de police / surlignage - DEUX boutons indépendants : le premier (icône) applique directement la DERNIÈRE couleur choisie, le second (chevron)
-   ouvre le menu de nuances (.v2-color-dropdown) - même geste que Word/Google Docs. C'est l'icône elle-même qui se teinte (setColorIcon). */
+/* Pas de petit point sous le bouton principal d'un groupe au survol : l'indice est retiré à dessein (`.v2-hover-group > button::after`), ne pas le
+   remettre. Le bouton garde `aria-haspopup` et `aria-expanded` (js/editor-core.js). */
+/* Couleur de police et surlignage : deux boutons indépendants. Le premier (l'icône) applique directement la dernière couleur choisie, le second
+   (le chevron) ouvre le menu de nuances (`.v2-color-dropdown`), comme dans Word ou Google Docs. C'est l'icône elle-même qui se teinte
+   (setColorIcon). */
 .v2-color-split { display: inline-flex; align-items: stretch; height: 28px; border-radius: 5px; overflow: hidden; }
 #v2-toolbar .v2-color-split button { width: auto; height: 28px; padding: 0 6px; border: 1px solid transparent; border-radius: 0; background: transparent; }
 #v2-toolbar .v2-color-split button:first-child { border-radius: 5px 0 0 5px; }
@@ -696,18 +689,19 @@
 .v2-color-split-caret svg { width: 10px; height: 10px; }
 .v2-floating-toolbar .v2-color-split { height: 26px; }
 
-/* Fond de cellule (toolbar flottante de tableau) - resté un bouton UNIQUE (pas de "dernier choix" à appliquer d'un clic direct, jamais demandé pour ce
-   contrôle) : classe dédiée pour ne pas hériter du split ci-dessus, garde sa pastille de couleur courante (contexte différent, moins central). */
+/* Fond de cellule (barre flottante de tableau) : un bouton unique, sans « dernière couleur » à appliquer d'un clic. Classe dédiée pour ne pas
+   hériter du split ci-dessus, avec sa pastille de couleur courante. */
 .v2-fill-chip { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 6px; border: 1px solid transparent; border-radius: 4px; background: transparent; cursor: pointer; color: var(--text, #3a4452); }
 .v2-fill-chip:hover { background: var(--surface-sunken, #f2f4f7); border-color: var(--border, #d7dde3); }
 .v2-fill-chip svg { width: 14px; height: 14px; }
 .v2-fill-bar { width: 14px; height: 3px; border-radius: 1px; background: #000; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .08); }
 
-/* Police/taille compactes ("Toolbar compacte") - remplacent les <select> natifs (police imposait sa largeur de texte complet, ex. "Times New Roman", à
-   toute la barre) par une pastille icône+valeur et un stepper -/valeur/+, ouvrant .v2-format-panel au clic (même mécanisme flottant que le menu couleur). */
-/* `width: auto` + `flex-shrink: 0` - bug PRÉEXISTANT touchant aussi l'ancien chip "Police" : `#v2-toolbar button` pose `width: 30px`, et un chip n'a jamais
-   redéfini `width` (le cascade s'applique par PROPRIÉTÉ, la spécificité ne sert à rien pour une propriété non redéclarée). Chip ET valeur écrasés à quelques
-   pixels dès que la barre manque de place - flex-shrink:0 seul ne suffisait pas depuis une base de 30px déjà fausse. */
+/* Police et taille compactes : une pastille icône et valeur et un stepper -/valeur/+ remplacent les `<select>` natifs (la police imposait sa
+   largeur de texte, « Times New Roman » par exemple, à toute la barre) et ouvrent `.v2-format-panel` au clic (même mécanisme flottant que le menu
+   couleur). */
+/* `width: auto` et `flex-shrink: 0` : `#v2-toolbar button` pose `width: 30px` et un chip ne redéfinissait pas `width` (la cascade s'applique par
+   propriété, la spécificité ne sert à rien pour une propriété non redéclarée). Le chip et sa valeur seraient écrasés à quelques pixels dès que la
+   barre manque de place ; `flex-shrink: 0` seul ne suffit pas depuis une base de 30 px déjà trop étroite. */
 .v2-format-chip, #v2-toolbar button.v2-format-chip { display: inline-flex; align-items: center; gap: 4px; width: auto; height: 28px; padding: 0 7px 0 6px; border: 1px solid transparent; border-radius: 5px; background: transparent; cursor: pointer; color: var(--text, #3a4452); font-family: inherit; flex-shrink: 0; }
 .v2-format-chip:hover { background: var(--surface-sunken, #f2f4f7); border-color: var(--border, #d7dde3); }
 .v2-format-chip-val { font-size: 12px; font-weight: 700; max-width: 92px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -725,8 +719,8 @@
 .v2-format-panel button:hover { background: var(--surface-sunken, #f2f4f7); }
 .v2-format-panel button.is-active { color: var(--accent, #2f6fed); font-weight: 700; }
 
-/* Menu déroulant de nuances (bouton couleur ci-dessus) - grille de pastilles + case "personnalisé" (ouvre le sélecteur natif, cf. .v2-color-dropdown-native)
-   + case "aucune" optionnelle. */
+/* Menu déroulant de nuances (bouton couleur ci-dessus) : grille de pastilles, case « personnalisé » (ouvre le sélecteur natif,
+   `.v2-color-dropdown-native`) et case « aucune » optionnelle. */
 .v2-color-dropdown { display: none; position: absolute; top: 0; left: 0; z-index: var(--z-menu); background: var(--surface, #fff); border: 1px solid var(--border, #d7dde3); border-radius: 8px; box-shadow: 0 4px 16px rgba(20, 28, 46, .18); padding: 8px; }
 .v2-color-dropdown.visible { display: block; }
 .v2-color-grid { display: grid; grid-template-columns: repeat(8, 20px); gap: 5px; }
@@ -736,29 +730,28 @@
 .v2-color-dropdown-footer button { display: inline-flex; align-items: center; gap: 5px; padding: 4px 7px; border: 1px solid var(--border, #d7dde3); border-radius: 5px; background: var(--surface, #fff); cursor: pointer; font-size: 12px; color: var(--text, #3a4452); white-space: nowrap; }
 .v2-color-dropdown-footer button svg { width: 13px; height: 13px; }
 .v2-color-dropdown-footer button:hover { background: var(--surface-sunken, #f2f4f7); }
-/* Sélecteur natif caché mais réellement cliquable via .click() (pas display:none, qui empêche l'ouverture programmatique du picker dans la plupart des
-   navigateurs) - déclenché par la case "Personnalisé…". */
+/* Sélecteur natif caché mais cliquable par `.click()` (pas `display: none`, qui empêche l'ouverture programmatique du sélecteur dans la plupart
+   des navigateurs), déclenché par la case « Personnalisé… ». */
 .v2-color-dropdown-native { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 
-/* Toolbar contextuelle flottante (tableau, image...) - positionnée par @floating-ui/dom, ancrée dans document.body plutôt que #editor-container pour éviter
-   tout souci de contexte d'empilement avec un ancêtre (cf. mémoire project_stacking_context_trap). Niveau --z-floating-toolbar (css/style.css) : SOUS tous les menus, listes
-   et popups (--z-menu), qui s'ouvrent donc par-dessus (le menu # passait dessous quand elle valait 2000), et sous les fenêtres. Layers.raise ne les range pas entre elles : celle d'une bulle ou
-   d'une image, créée après celle du tableau, reste dessus quand un seul clic ouvre les deux (js/layers.js). */
+/* Barre contextuelle flottante (tableau, image...), positionnée par @floating-ui/dom et ancrée dans `document.body` plutôt que dans
+   #editor-container pour éviter tout souci de contexte d'empilement avec un ancêtre. Niveau `--z-floating-toolbar` (css/style.css) : sous tous les
+   menus, listes et popups (`--z-menu`), qui s'ouvrent donc par-dessus, et sous les fenêtres. Layers.raise ne les range pas entre elles : celle
+   d'une bulle ou d'une image, créée après celle du tableau, reste dessus quand un seul clic ouvre les deux (js/layers.js). */
 .v2-floating-toolbar { display: none; position: absolute; top: 0; left: 0; z-index: var(--z-floating-toolbar); gap: 2px; padding: 3px; background: var(--surface, #fff); border: 1px solid var(--border, #d7dde3); border-radius: 6px; box-shadow: 0 4px 16px rgba(20, 28, 46, .18); }
 .v2-floating-toolbar.visible { display: flex; }
 .v2-floating-toolbar button { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 26px; border: none; background: transparent; border-radius: 4px; padding: 0; cursor: pointer; color: var(--text, #3a4452); }
 .v2-floating-toolbar button svg { width: 15px; height: 15px; }
 .v2-floating-toolbar button:hover { background: var(--surface-sunken, #f2f4f7); }
-/* État actif (ex. le calque courant du sélecteur normal/devant/derrière) - même traitement que la toolbar principale, essentiel pour voir lequel des 3 est actif. */
+/* État actif (par exemple le calque courant du sélecteur normal, devant, derrière) : même traitement que la barre principale, pour voir lequel des
+   trois est actif. */
 .v2-floating-toolbar button.is-active { background: var(--accent-soft, #e8f0fe); color: var(--accent, #2f6fed); }
 
-/* === Ajustement automatique de la page à la largeur disponible === Dans un panneau Grist étroit, la feuille A4 (793.71px + marges de l'espace de travail)
-   dépasse le conteneur : elle restait atteignable au défilement horizontal, mais lire un document en le faisant glisser de gauche à droite n'a aucun sens.
-   `zoom` plutôt que `transform: scale()` : `zoom` participe à la mise en page (le conteneur voit la taille réduite, donc plus de débordement horizontal) et
-   les coordonnées de souris restent correctes, là où `transform` laisse un fantôme à la taille d'origine et décale le curseur de ProseMirror.
-   Volontairement jamais au-dessus de 1 : la feuille ne doit pas grossir sur un grand écran, sa largeur est celle d'une vraie page A4.
-   Posé sur la feuille ET sur la surcouche de pagination (ses bandes sont positionnées dans le même repère), jamais sur #editor-container lui-même, dont
-   clientWidth sert justement à calculer le facteur. */
+/* Ajustement de la page à la largeur disponible : dans un panneau Grist étroit, la feuille A4 (793,71 px et les marges de l'espace de travail)
+   dépasserait le conteneur. `zoom` plutôt que `transform: scale()` : il compte dans la mise en page (plus de débordement horizontal) et garde les
+   coordonnées de souris justes, là où `transform` laisse un fantôme à la taille d'origine et décale le curseur de ProseMirror. Jamais au-dessus de
+   1 : la feuille ne grossit pas sur un grand écran. Posé sur la feuille et sur la surcouche de pagination (leurs bandes sont dans le même repère),
+   jamais sur #editor-container, dont `clientWidth` sert à calculer le facteur. */
 #editor-container.a4-preview .v2-page-sheet,
 #editor-container.a4-preview .v2-pagination-overlay,
 #reader-container.a4-preview .reader-content,

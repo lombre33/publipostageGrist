@@ -1,23 +1,23 @@
-/* Habillage de TemplateTreeSelect (js/template-tree-select.js), planning/feature-rangement-tri-modeles.md §7. Réutilise les jetons de css/style.css
+/* Habillage de TemplateTreeSelect (js/template-tree-select.js, planning/feature-rangement-tri-modeles.md). Réutilise les jetons de css/style.css
    (--surface, --border-strong, --radius-sm...), aucune couleur en dur : le thème sombre est hérité. */
 
-/* Le <select> réel ne doit jamais redevenir visible par une règle `display` plus spécifique ailleurs (bandeau email resté affiché malgré [hidden]) :
-   display:none est défendu par !important. */
+/* Le <select> réel ne doit jamais redevenir visible par une règle `display` plus spécifique ailleurs : display:none est défendu par !important. */
 .tts-native-select.tts-native-select { display: none !important; }
 
 .tts-wrap { position: relative; display: inline-flex; align-items: center; min-width: 0; }
-/* [hidden] seul perd contre `display: inline-flex` ci-dessus : pendant « Renommer », le déclencheur disparaît pour laisser le champ du nom à sa place (js/template-tree-select.js, syncDisabledState). */
+/* [hidden] seul perd contre `display: inline-flex` ci-dessus : pendant « Renommer », le déclencheur disparaît pour laisser le champ du nom à sa
+   place (js/template-tree-select.js, syncDisabledState). */
 .tts-wrap[hidden] { display: none; }
 
 .tts-trigger { display: inline-flex; align-items: center; gap: 4px; border: none; height: 26px; background: transparent; padding: 0 6px 0 8px; max-width: 168px; min-width: 0; border-radius: 0; font: inherit; color: inherit; cursor: pointer; }
-/* .tts-trigger est un <button> de #toolbar-top : la règle générique #toolbar-top button::before (css/style.css) lui poserait un ::before de 14x14 en
-   background-color: currentColor sans mask-image (chaque bouton fournit le sien), soit un carré plein avant l'icône (.tts-icon). Même remède que
-   #v2-btn-toggle-cci::before (css/toolbar-v2.css). Préfixé par #toolbar-top : même compte d'ID que la règle générique, sinon l'ordre de déclaration
-   les départagerait. */
+/* .tts-trigger est un <button> de #toolbar-top : la règle générique #toolbar-top button::before (css/style.css) lui poserait un ::before de 14x14
+   en background-color: currentColor sans mask-image (chaque bouton fournit le sien), soit un carré plein avant l'icône (.tts-icon). Même remède
+   que #v2-btn-toggle-cci::before (css/toolbar-v2.css) ; préfixé par #toolbar-top pour avoir le même compte d'ID que la règle générique, sinon
+   l'ordre de déclaration les départagerait. */
 #toolbar-top .tts-trigger::before { content: none; }
-/* #toolbar-top .tts-trigger:hover (pas seulement .tts-trigger:hover) : sans l'ID, la règle perdrait contre #toolbar-top button:hover (css/style.css,
-   non gardée par média) qui pose le même fond. Sous `not (hover: hover)` la surcharge neutralise ce fond ; sans elle, un tap tactile ou trackpad le
-   laisse « collé » après le clic (aucun mouseleave), lu à tort comme un bug (--surface-sunken, bleuté en clair). */
+/* #toolbar-top .tts-trigger:hover (et non .tts-trigger:hover) : sans l'ID, la règle perdrait contre #toolbar-top button:hover (css/style.css, non
+   gardée par média) qui pose le même fond. Sous `not (hover: hover)`, la surcharge neutralise ce fond : sans elle, un tap tactile ou un trackpad
+   le laisse « collé » après le clic (aucun mouseleave). */
 #toolbar-top .tts-trigger:hover { background: var(--surface-sunken); }
 @media not (hover: hover) {
   #toolbar-top .tts-trigger:hover { background: transparent; }
@@ -42,17 +42,16 @@
 .tts-caret { display: inline-block; width: 10px; height: 10px; flex: none; background-color: currentColor; -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); }
 
 /* position: fixed, rattaché à document.body (openPopup()) plutôt qu'à .tts-wrap : .tts-wrap vit dans #v2-title-cluster (css/toolbar-v2.css), qui a
-   `overflow: hidden`. En restant enfant de .tts-wrap, le panneau était rogné dès que la ligne sélectionnée (focus clavier à l'ouverture) faisait
-   défiler ce bloc de 28 px : le déclencheur sortait du cadre et ne laissait voir qu'un bandeau bleu (--accent-soft). top/left sont posés à
-   l'ouverture depuis le rect du déclencheur. */
-/* overscroll-behavior: contain : au bout de la liste, le reste d'un geste de molette ne doit pas « chaîner » vers la page. Combiné à
-   outsideScrollHandler (js/template-tree-select.js), il faisait défiler la page et révélait un débordement latent (#v2-heading-flyout) qui remontait
-   la barre d'outils hors de portée en petite fenêtre. */
-/* color explicite : <body> ne fixe aucune couleur de texte, le panneau (fond var(--surface), sombre en thème sombre) héritait du noir du navigateur. */
-/* font-family explicite : rattaché à document.body, le panneau sort de la cascade de la barre d'outils (--font-ui) et retombait sur l'Arial du body
-   (css/style.css). */
-/* font-size explicite : rattaché à <body>, le panneau héritait des 16 px du navigateur, plus que le déclencheur (13 px) et que les menus au survol
-   (12,5 px, .v2-hover-row). Même taille que ces menus. */
+   `overflow: hidden` ; le panneau y serait rogné dès que le focus clavier à l'ouverture fait défiler ce bloc. top/left sont posés à l'ouverture
+   depuis le rect du déclencheur. */
+/* overscroll-behavior: contain : au bout de la liste, le reste d'un geste de molette ne doit pas « chaîner » vers la page : avec
+   outsideScrollHandler (js/template-tree-select.js), elle défilerait et remonterait la barre d'outils hors de portée en petite fenêtre. */
+/* color explicite : <body> ne fixe aucune couleur de texte, le panneau (fond var(--surface), sombre en thème sombre) hériterait du noir du
+   navigateur. */
+/* font-family explicite : rattaché à document.body, le panneau sort de la cascade de la barre d'outils (--font-ui) et retomberait sur l'Arial du
+   body (css/style.css). */
+/* font-size explicite : rattaché à <body>, le panneau hériterait des 16 px du navigateur, plus que le déclencheur (13 px) et que les menus au
+   survol (12,5 px, .v2-hover-row), dont il prend la taille. */
 /* z-index --z-menu (css/style.css) : la liste s'ouvre par-dessus une barre flottante de tableau ou d'image qui descendrait jusqu'à elle ; openPopup
    la remonte au-dessus des menus déjà ouverts (Layers.raise, js/layers.js). */
 .tts-popup { display: none; position: fixed; min-width: 220px; max-width: 340px; max-height: 360px; overflow-y: auto; overscroll-behavior: contain; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); box-shadow: var(--shadow-float); padding: 4px; z-index: var(--z-menu); font-family: var(--font-ui); font-size: 12.5px; color: var(--text); }
@@ -84,10 +83,10 @@
 
 .tts-group.is-collapsed { display: none; }
 
-/* Dossiers et modèles se distinguent d'un coup d'œil, pas seulement par l'icône : nom de dossier en gras sur une bande pleine largeur, nom de modèle
-   en graisse normale sans fond, un trait vertical relie chaque dossier déplié à son contenu. Poids 700 (que toute police du système sert), aucune couleur ajoutée
-   : --surface-sunken et --border-strong suivent le thème sombre. Ces règles servent aussi la fenêtre « Organiser mes modèles » ; la liste déroulante
-   allège le gras juste après. */
+/* Dossiers et modèles se distinguent d'un coup d'œil, pas seulement par l'icône : nom de dossier en gras sur une bande pleine largeur, nom de
+   modèle en graisse normale sans fond, un trait vertical relie chaque dossier déplié à son contenu. Poids 700 (que toute police du système sert),
+   aucune couleur ajoutée : --surface-sunken et --border-strong suivent le thème sombre. Ces règles servent aussi la fenêtre « Organiser mes
+   modèles » ; la liste déroulante allège le gras juste après. */
 .tts-row-folder { background: var(--surface-sunken); font-weight: 700; margin-top: 2px; }
 .tts-row-folder .tts-row-label { font-weight: 700; }
 /* Liste déroulante seulement : demi-gras (600) plutôt que 700. La fenêtre Organiser garde son gras. */

@@ -1,25 +1,27 @@
-/* Droits par personne (js/access-rights.js, js/main.js:applyAccessRights) - demande d'Antoine du 2026-09-28. */
+/* Droits par personne (js/access-rights.js, js/main.js:applyAccessRights). */
 
 /* Commande interdite par les droits : grisée comme .v2-hf-locked (css/toolbar-v2.css), jamais masquée ni retirée. Pour la souris ; le clavier et les
    .click() venus d'autres modules sont arrêtés en capture par js/main.js:wireAccessLockGuard. !important : un groupe à survol (export, qualité) ou un
    bouton de #toolbar-top porte déjà ses propres règles d'opacité, plus spécifiques, qui l'emporteraient sinon. */
 .pp-access-locked { pointer-events: none !important; opacity: .35 !important; cursor: default; }
 
-/* Commentaires en mode Lecture - pour toute personne qui a le droit de commenter, en lecture seule ou en Lecture choisie (js/comments.js:readerMode, classe
-   posée par js/main.js:renderReader). Mêmes teintes que dans l'éditeur (css/editor-v2.css, .tiptap .comment-mark) ; sans le droit de commenter (et pour
-   un macro-modèle), le mode Lecture reste sans commentaires, comme l'export. */
+/* Commentaires en mode Lecture - pour toute personne qui a le droit de commenter, en lecture seule ou en Lecture choisie
+   (js/comments.js:readerMode, classe posée par js/main.js:renderReader). Mêmes teintes que dans l'éditeur (css/editor-v2.css, .tiptap
+   .comment-mark) ; sans le droit de commenter (et pour un macro-modèle), le mode Lecture reste sans commentaires, comme l'export. */
 #reader-container.pp-reader-comments .comment-mark { background: #fff3cf; border-bottom: 2px solid #f0c36d; cursor: pointer; }
 #reader-container.pp-reader-comments .comment-mark-resolved { background: transparent; border-bottom: 2px solid var(--text-faint); }
 
-/* Onglet Réglages > Accès : cinq listes, un statut et deux notes, plus haut que la place d'un panneau de ~700x400. La fenêtre elle-même ne défile pas (base commune des
-   fenêtres, css/modal-base.css) : seul le contenu de l'onglet défile (.settings-body), le titre, les onglets et « Fermer » restent en place. */
+/* Onglet Réglages > Accès : cinq listes, un statut et deux notes, plus haut que la place d'un panneau bas. La fenêtre elle-même ne défile pas
+   (base commune des fenêtres, css/modal-base.css) : seul le contenu de l'onglet défile (.settings-body), le titre, les onglets et « Fermer »
+   restent en place. */
 .settings-access-grid { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 12px; align-items: center; }
 .settings-access-grid label { font-size: 13px; color: var(--text); }
 .settings-access-grid select { min-width: 0; width: 100%; height: 28px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 0 6px; font-family: var(--font-ui); font-size: 13px; background: var(--surface); color: var(--text); }
 .settings-access-grid select:disabled { opacity: .55; }
 /* Choix de colonne avec recherche (js/search-select.js) : même hauteur et même corps de texte que la liste des tables à côté, qui reste native. */
 .settings-access-grid .ss-trigger { height: 28px; padding: 0 6px; font-size: 13px; }
-/* Case « Ouvrir les personnes en lecture seule sur la Lecture épurée » : sous les cinq choix, grisée comme eux tant qu'aucune colonne « Lecture seule » n'est choisie (rien ne disparaît). */
+/* Case « Ouvrir les personnes en lecture seule sur la Lecture épurée » : sous les cinq choix, grisée comme eux tant qu'aucune colonne « Lecture
+   seule » n'est choisie (rien ne disparaît). */
 .settings-access-clean { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); margin: 14px 0 0; cursor: pointer; }
 .settings-access-clean input { margin: 0; flex: none; cursor: inherit; }
 .settings-access-clean input:disabled { cursor: default; }

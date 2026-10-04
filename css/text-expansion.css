@@ -1,29 +1,33 @@
-/* Expansion de texte (js/text-expansion.js) - demande d'Antoine du 2026-10-01. Deux morceaux : la liste flottante qui s'ouvre sous le curseur quand on tape le
-   caractère déclencheur, et la section « Abréviations » de Réglages > Raccourcis. */
+/* Expansion de texte (js/text-expansion.js). Deux morceaux : la liste flottante qui s'ouvre sous le curseur quand on tape le caractère
+   déclencheur, et la section « Abréviations » de Réglages > Raccourcis. */
 
-/* Liste des abréviations : même langage visuel que le panneau # (#autocomplete-box, css/editor-v2.css) - fond de surface, liseré, ombre légère, ligne choisie sur
-   --surface-sunken. Rattachée à <body> comme lui ; placée sous le curseur (ou au-dessus, en bas d'un petit panneau) par ViewportFit.placePopup, qui plafonne sa hauteur et la remonte au-dessus
-   des couches déjà ouvertes (Layers.raise) ; son niveau est le jeton --z-menu de css/style.css (règle d'Antoine du 01/10 : le dernier menu ouvert est toujours au-dessus), jamais un nombre. */
+/* Liste des abréviations : même langage visuel que le panneau # (#autocomplete-box, css/editor-v2.css) : fond de surface, liseré, ombre légère,
+   ligne choisie sur --surface-sunken. Rattachée à <body> comme lui ; placée sous le curseur (ou au-dessus, en bas d'un petit panneau) par
+   ViewportFit.placePopup, qui plafonne sa hauteur et la remonte au-dessus des couches déjà ouvertes (Layers.raise). Son niveau est le jeton
+   --z-menu de css/style.css, jamais un nombre : le dernier menu ouvert est toujours au-dessus. */
 #expansion-box { position: absolute; z-index: var(--z-menu); display: none; flex-direction: column; box-sizing: border-box; min-width: 200px; max-width: 360px; max-height: 232px; overflow-y: auto; padding: 3px; font-family: var(--font-ui); font-size: 12.5px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.10); }
-/* L'abréviation en gras, son texte à côté sur une seule ligne coupée par « … » (un retour à la ligne du texte s'y lit comme une espace). Les deux en --text : le texte
-   gris (--text-muted) n'atteindrait pas 4,5:1 sur la ligne choisie, teintée. */
+/* L'abréviation en gras, son texte à côté sur une seule ligne coupée par « … » (un retour à la ligne du texte s'y lit comme une espace). Les deux
+   en --text : le texte gris (--text-muted) n'atteindrait pas 4,5:1 sur la ligne choisie, teintée. */
 .ex-item { display: flex; align-items: baseline; gap: 10px; padding: 4px 8px; border-radius: 4px; cursor: pointer; color: var(--text); }
 .ex-item.selected, .ex-item:hover { background: var(--surface-sunken); }
 .ex-abbr { flex: none; font-weight: 700; }
 .ex-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Réglages > Raccourcis > Abréviations. Pas de `display` sur .settings-panel (css/toolbar-v2.css : il battrait l'attribut `hidden` des onglets masqués) : tout est dans
-   la section à l'intérieur. La fenêtre ne défile pas, seul le contenu de l'onglet le fait (.settings-body) : la liste peut compter autant de lignes qu'on veut. */
-/* Le titre et le réglage du caractère sur une seule ligne : à 700x400 la liste se lit sans trop défiler. */
+/* Réglages > Raccourcis > Abréviations. Pas de `display` sur .settings-panel (css/toolbar-v2.css : il battrait l'attribut `hidden` des onglets
+   masqués) : tout est dans la section à l'intérieur. La fenêtre ne défile pas, seul le contenu de l'onglet le fait (.settings-body) : la liste
+   peut compter autant de lignes qu'on veut. */
+/* Le titre et le réglage du caractère sur une seule ligne : dans un panneau bas, la liste se lit sans trop défiler. */
 .settings-expansion-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 6px; }
 .settings-section-title { margin: 0; font-family: var(--font-ui); font-size: 13px; font-weight: 700; color: var(--text); }
 .settings-expansion-char-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); }
 #settings-expansion-char { box-sizing: border-box; width: 44px; height: 28px; padding: 0 4px; text-align: center; font-family: var(--font-ui); font-size: 14px; background: var(--surface); color: var(--text); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); }
-/* Erreur : le texte garde la couleur du texte (--danger ne fait que 4,4:1 sur blanc) ; c'est le filet rouge qui la désigne, comme .pp-link-error (css/link-dialog.css). */
+/* Erreur : le texte garde la couleur du texte (--danger ne fait que 4,4:1 sur blanc) ; c'est le filet rouge qui la désigne, comme .pp-link-error
+   (css/link-dialog.css). */
 .settings-expansion-error { margin: 0 0 8px; padding-left: 8px; border-left: 3px solid var(--danger); font-size: 12.5px; font-weight: 600; color: var(--text); }
 .settings-expansion-error[hidden] { display: none; }
-/* Une indication ou un avertissement commence sous le champ qu'il concerne, jamais sous son libellé (règle d'Antoine) : dans la grille du formulaire, l'erreur prend la colonne
-   des champs, entre le texte et les boutons ; celle du caractère déclencheur, dont le champ est au bord droit de la ligne du titre, s'aligne sur ce bord (texte et filet à droite). */
+/* Une indication ou un avertissement commence sous le champ qu'il concerne, jamais sous son libellé : dans la grille du formulaire, l'erreur prend
+   la colonne des champs, entre le texte et les boutons ; celle du caractère déclencheur, dont le champ est au bord droit de la ligne du titre,
+   s'aligne sur ce bord (texte et filet à droite). */
 .settings-expansion-form .settings-expansion-error { grid-column: 2; margin: 0; }
 #settings-expansion-char-status { width: fit-content; max-width: 80%; margin: -2px 0 8px auto; padding: 0 8px 0 0; border-left: 0; border-right: 3px solid var(--danger); text-align: right; }
 .settings-expansion-form { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 12px; align-items: center; margin: 0 0 10px; }

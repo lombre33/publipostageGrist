@@ -1,9 +1,9 @@
-/* Liste déroulante avec recherche (js/search-select.js) : remplace à l'écran un <select> (masqué, toujours source de la valeur) par un champ + un panneau
-   contenant une zone de recherche et la liste des choix. Fichier propre à ce composant pour ne rien changer aux feuilles partagées ; couleurs par variables
-   seulement, donc thème sombre compris. Le champ reprend la hauteur et la typographie des <select> des fenêtres (ex. .link-config-bridge-col select). */
+/* Liste déroulante avec recherche (js/search-select.js) : remplace à l'écran un <select> (masqué, toujours source de la valeur) par un champ et un
+   panneau contenant la zone de recherche et la liste des choix. Couleurs par variables seulement, donc thème sombre compris. Le champ reprend la
+   hauteur et la typographie des <select> des fenêtres (ex. .link-config-bridge-col select). */
 .ss-wrap { position: relative; width: 100%; }
-/* Champ d'une ligne de règle (Colonne / Opérateur / Valeur : js/condition-fields.js, tri de la boucle) : même hauteur et même corps de texte que les champs
-   voisins (26 px, 12 px), largeur qui suit la ligne comme le <select> qu'il remplace (flex 1 1 90px de .macro-rule-column-wrap). */
+/* Champ d'une ligne de règle (Colonne / Opérateur / Valeur : js/condition-fields.js, tri de la boucle) : même hauteur et même corps de texte que
+   les champs voisins (26 px, 12 px), largeur qui suit la ligne comme le <select> qu'il remplace (flex 1 1 90px de .macro-rule-column-wrap). */
 .ss-wrap.ss-inline { flex: 1 1 90px; width: auto; min-width: 90px; }
 .ss-inline .ss-trigger { height: 26px; padding: 0 6px; font-size: 12px; }
 
@@ -13,21 +13,22 @@
 .ss-trigger.is-placeholder .ss-value { color: var(--text-faint); }
 .ss-trigger:disabled { opacity: .55; cursor: default; }
 .ss-trigger:disabled:hover { border-color: var(--border-strong); }
-/* Champ Valeur d'une règle grisé par « vide » / « non vide » : le conteneur est déjà atténué (.macro-rule-value-slot.is-disabled, css/variable-actions.css), le champ
-   ne l'est pas une seconde fois (0,45 x 0,55 le rendait presque invisible). */
+/* Champ Valeur d'une règle grisé par « vide » / « non vide » : le conteneur est déjà atténué (.macro-rule-value-slot.is-disabled,
+   css/variable-actions.css), le champ ne l'est pas une seconde fois (0,45 × 0,55 le rendrait presque invisible). */
 .macro-rule-value-slot.is-disabled .ss-trigger:disabled { opacity: 1; }
-/* Nom puis indice à la suite, sur une seule ligne coupée par des points de suspension à la fin (comme le texte d'un <select>) : on lit toujours le nom
-   en premier, et le libellé complet est en info-bulle du champ. */
+/* Nom puis indice à la suite, sur une seule ligne coupée par des points de suspension à la fin (comme le texte d'un <select>) : on lit toujours le
+   nom en premier, et le libellé complet est en info-bulle du champ. */
 .ss-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ss-hint { margin-left: .35em; font-size: 11.5px; color: var(--text-faint); }
 .ss-chevron { flex: none; width: 6px; height: 6px; margin: -3px 2px 0 0; border: solid var(--text-muted); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
 
-/* Fenêtre du macro-modèle (js/macro-editor.js) : la liste « Si aucune règle ne correspond » garde la hauteur et le corps de l'ancien <select> (28 px, 12 px) ;
-   la page de garde garde ceux des champs de la fenêtre (30 px, 12,5 px : le défaut), les listes des règles sont `inline`. */
+/* Fenêtre du macro-modèle (js/macro-editor.js) : la liste « Si aucune règle ne correspond » a la hauteur et le corps du <select> qu'elle remplace
+   (28 px, 12 px) ; la page de garde prend ceux des champs de la fenêtre (30 px, 12,5 px : le défaut) ; les listes des règles sont `inline`. */
 .macro-slot-default-select + .ss-wrap .ss-trigger { height: 28px; padding: 0 6px; font-size: 12px; }
 
-/* Menu sans champ fermé (`popup: true`, « Image depuis une variable » de la barre) : seul le panneau se voit, ouvert par le code à côté de la ligne qui l'a
-   demandé, au-dessus de la barre d'outils comme l'ancienne liste simple, au niveau des menus (--z-menu, css/style.css ; SearchSelect le remonte à l'ouverture, Layers.raise). */
+/* Menu sans champ fermé (`popup: true`, « Image depuis une variable » de la barre) : seul le panneau se voit, ouvert par le code à côté de la
+   ligne qui l'a demandé, au-dessus de la barre d'outils, au niveau des menus (--z-menu, css/style.css ; SearchSelect le remonte à l'ouverture,
+   Layers.raise). */
 .ss-popup .ss-trigger { display: none; }
 .ss-popup .ss-panel { z-index: var(--z-menu); }
 

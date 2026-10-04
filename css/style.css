@@ -1,12 +1,12 @@
-/* Publipostage Grist – stylesheet. Référencé par index.html (mode édition) et par reader-mode.js (mode lecture via #reader-container). */
-/* Aucune police ni feuille de style d'un autre site (choix d'Antoine, 04/10 : « une police système similaire, pas de Google Fonts ou autre ») : la police chargée depuis Google Fonts
-   lui disait, à chaque ouverture du widget, l'adresse IP et l'heure de la personne. L'interface prend la police du système (--font-ui), le contenu du courrier le Roboto ci-dessous ;
+/* Feuille de style du widget, référencée par index.html (édition) et par js/reader-mode.js (Lecture, #reader-container). */
+/* Aucune police ni feuille de style d'un autre site : un service de polices apprendrait, à chaque ouverture du widget, l'adresse IP et l'heure de
+   la personne. L'interface prend la police du système (`--font-ui`), le contenu du courrier le Roboto ci-dessous ;
    dev-tests/verify-code-hygiene.mjs (groupe codeHygiene) et dev-tests/verify-csp.mjs (groupe cspLoad) gardent cette règle. */
-/* Roboto (regular/italic/bold/bold-italic) : voir css/roboto-fonts.css, lié séparément avant cette feuille. Auto-hébergée pour garantir que l'éditeur/
-   #reader-container utilisent EXACTEMENT les mêmes fichiers que ceux embarqués dans le PDF par pdfmake - sinon le texte ne coupe pas ses lignes pareil. */
+/* Roboto (regular, italic, bold, bold-italic) : voir css/roboto-fonts.css, lié séparément avant cette feuille. Auto-hébergée pour que l'éditeur et
+   #reader-container utilisent exactement les fichiers que pdfmake embarque dans le PDF ; sans cela le texte ne coupe pas ses lignes pareil. */
 
-/* === Design tokens === --font-ui n'est appliqué qu'au chrome de l'application (barres d'outils, boutons, libellés) : le contenu du courrier garde
-   volontairement Roboto (pour matcher l'export PDF) plutôt que la police du système. */
+/* Jetons de design. `--font-ui` ne s'applique qu'au chrome de l'application (barres d'outils, boutons, libellés) : le contenu du courrier garde
+   Roboto, pour correspondre à l'export PDF, plutôt que la police du système. */
 :root {
   --bg: #f4f6fa;
   --surface: #ffffff;
@@ -14,28 +14,31 @@
   --border: #dde2ea;
   --border-strong: #c3cad6;
   --text: #1b2430;
-  /* Gris des textes secondaires : 4,61:1 au moins sur tous les fonds clairs (blanc 5,40 ; --bg 4,99 ; --surface-sunken 4,77 ; --accent-soft 4,71 ; --good-soft 4,82 ; --danger-soft 4,61).
-     L'ancien #667085 ne faisait que 4,39:1 sur --surface-sunken, le gris des cadres des fenêtres Condition et Boucle (contrôle du 03/10, choix d'Antoine « Tout corriger »). */
+  /* Gris des textes secondaires : 4,61:1 au moins sur tous les fonds clairs (blanc 5,40 ; `--bg` 4,99 ; `--surface-sunken` 4,77 ; `--accent-soft`
+     4,71 ; `--good-soft` 4,82 ; `--danger-soft` 4,61). Un gris plus clair (#667085) ne ferait que 4,39:1 sur `--surface-sunken`, le gris des
+     cadres des fenêtres Condition et Boucle. */
   --text-muted: #5f6b7e;
   --text-faint: #5f6b7e;
-  /* Texte discret posé sur la page blanche (éditeur, Lecture) : la page reste blanche en sombre, ce gris ne s'y éclaircit donc pas (--text-faint sombre sur blanc : 2,46:1 ;
-     celui-ci : 4,97:1). Défini ici seulement, les blocs sombres ne le redéfinissent pas. */
+  /* Texte discret posé sur la page blanche (éditeur, Lecture) : la page reste blanche en sombre, ce gris ne s'y éclaircit donc pas (`--text-faint`
+     sombre sur blanc : 2,46:1 ; celui-ci : 4,97:1). Défini ici seulement, les blocs sombres ne le redéfinissent pas. */
   --paper-text-faint: #667085;
   --accent: #2f6fed;
   --accent-hover: #2558c4;
-  /* Fond des boutons pleins à texte blanc : le même bleu dans les deux thèmes (blanc dessus : 4,55:1). --accent, éclairci en sombre pour se lire sur
-     le fond, ne donnerait que 3,08:1 au texte blanc. Survol : plus foncé, donc plus contrasté, dans les deux thèmes. */
+  /* Fond des boutons pleins à texte blanc : le même bleu dans les deux thèmes (blanc dessus : 4,55:1). `--accent`, éclairci en sombre pour se lire
+     sur le fond, ne donnerait que 3,08:1 au texte blanc. Survol : plus foncé, donc plus contrasté, dans les deux thèmes. */
   --accent-solid: #2f6fed;
   --accent-solid-hover: #2558c4;
-  /* Texte d'accent posé sur un fond teinté (--accent-soft, --surface-sunken) : --accent n'y atteint que 3,97 à 4,43:1. Plus foncé en clair, plus clair en sombre. */
+  /* Texte d'accent posé sur un fond teinté (`--accent-soft`, `--surface-sunken`) : `--accent` n'y atteint que 3,97 à 4,43:1. Plus foncé en clair,
+     plus clair en sombre. */
   --accent-ink: #2558c4;
-  /* Message de réussite (fond teinté de vert) : sans ces jetons, les règles retombaient sur leurs valeurs de secours claires, 3,65:1 pour le texte et un encadré
-     clair en thème sombre. */
+  /* Message de réussite (fond teinté de vert) : sans ces jetons, les règles retomberaient sur leurs valeurs de secours claires (3,65:1 pour le
+     texte, un encadré clair en thème sombre). */
   --good: #146c48;
   --good-soft: #e5f6ee;
   --good-soft-border: #bfe6d3;
-  /* Bouton Enregistrer quand l'enregistrement automatique est coupé : noir et blanc classique (glyphe blanc dessus : 15,5:1), là où l'enregistrement automatique actif le garde bleu.
-     En sombre le fond reste noir, plus foncé que la barre, cerné par la bordure des boutons. Survol : plus clair, le glyphe reste à plus de 9:1. */
+  /* Bouton Enregistrer quand l'enregistrement automatique est coupé : noir et blanc classique (glyphe blanc dessus : 15,5:1), là où
+     l'enregistrement automatique actif le garde bleu. En sombre le fond reste noir, plus foncé que la barre, cerné par la bordure des boutons.
+     Survol : plus clair, le glyphe reste à plus de 9:1. */
   --solid-neutral: #1b2430;
   --solid-neutral-hover: #3b4558;
   --solid-neutral-border: #1b2430;
@@ -43,34 +46,38 @@
   --accent-soft-border: #c7dbfd;
   --danger: #d84343;
   --danger-soft: #fbe9e9;
-  /* Texte rouge (message d'erreur de la barre, « Retirer… » des fenêtres, compteur d'email dépassé, avertissements, « Supprimer » des bulles) : --danger seul ne fait que 4,37:1 sur blanc ; celui-ci 5,47:1
-     sur blanc et 4,67:1 sur --danger-soft. --danger reste pour les bordures, filets et icônes (3:1 suffit). En sombre : la valeur de --danger (5,3:1 au moins). */
+  /* Texte rouge (message d'erreur de la barre, « Retirer… » des fenêtres, compteur d'email dépassé, avertissements, « Supprimer » des bulles) :
+     `--danger` seul ne fait que 4,37:1 sur blanc ; celui-ci 5,47:1 sur blanc et 4,67:1 sur `--danger-soft`. `--danger` reste pour les bordures,
+     filets et icônes (3:1 suffit). En sombre : la valeur de `--danger` (5,3:1 au moins). */
   --danger-ink: #c53030;
   --radius-sm: 7px;
   --shadow-float: 0 14px 32px -8px rgba(9,16,35,.35), 0 2px 8px rgba(9,16,35,.12);
   --shadow-card: 0 1px 2px rgba(20,28,46,.05);
-  /* La police du système de la personne (Segoe UI, SF, Roboto, Cantarell...) : rien n'est téléchargé. Poids 400, 600 et 700 seulement (jamais 800, que Segoe UI sert en « Black »). */
+  /* La police du système de la personne (Segoe UI, SF, Roboto, Cantarell...) : rien n'est téléchargé. Poids 400, 600 et 700 seulement (jamais 800,
+     que Segoe UI sert en « Black »). */
   --font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  /* Gouttière entre deux pages de l'aperçu paginé (cf. .v2-page-seam-divider / .v2-page-break-line) : c'est elle qui fait lire le flux continu de
+  /* Gouttière entre deux pages de l'aperçu paginé (`.v2-page-seam-divider`, `.v2-page-break-line`) : c'est elle qui fait lire le flux continu de
      l'éditeur comme une pile de feuilles distinctes. Assez haute pour se voir, assez basse pour ne pas repousser tout le document. */
   --pp-page-gap: 28px;
   --pp-page-gutter: #e4e8ef;
-  /* Voile des modales - variabilisé pour que le thème sombre puisse l'assombrir. */
+  /* Voile des modales, variabilisé pour que le thème sombre puisse l'assombrir. */
   --pp-scrim: rgba(15, 23, 42, .45);
-  /* Ordre d'empilement des couches flottantes (js/layers.js), de la plus basse à la plus haute : barres flottantes d'une sélection (tableau, image, bulle) < menus, listes et popups < info-bulles de
-     la barre du haut < fenêtres (css/modal-base.css, 1990 et plus). Un z-index en dur sur une couche flottante recrée le défaut d'où cela vient : le menu # s'ouvrait SOUS la barre du tableau (retour
-     d'Antoine, 2026-10-01). Dans un niveau de menus ou d'info-bulles, Layers.raise() met le dernier ouvert au-dessus de ceux déjà ouverts (z-index en ligne : niveau + rang) ; un niveau est large de 100. Les barres
-     flottantes ne sont pas rangées : l'ordre du DOM garde la plus précise (bulle, image) au-dessus de la plus générale (tableau), même quand un seul geste les ouvre toutes les deux. */
+  /* Ordre d'empilement des couches flottantes (js/layers.js), de la plus basse à la plus haute : barres flottantes d'une sélection (tableau,
+     image, bulle) < menus, listes et popups < info-bulles de la barre du haut < fenêtres (css/modal-base.css, 1990 et plus). Un `z-index` en dur
+     sur une couche flottante recrée le défaut que ces jetons évitent : le menu # s'ouvrait sous la barre du tableau. Dans un niveau de menus ou
+     d'info-bulles, Layers.raise() met le dernier ouvert au-dessus de ceux déjà ouverts (`z-index` en ligne : niveau + rang) ; un niveau est large
+     de 100. Les barres flottantes ne sont pas rangées : l'ordre du DOM garde la plus précise (bulle, image) au-dessus de la plus générale
+     (tableau), même quand un seul geste les ouvre toutes les deux. */
   --z-floating-toolbar: 1500;
   --z-menu: 1600;
   --z-tip: 1800;
 }
 
-/* === Thème sombre === Ne concerne QUE le chrome de l'application (barre du haut, plan de travail autour de la page, modales, panneaux flottants). La PAGE
-   elle-même reste blanche avec son texte sombre, dans les deux thèmes : c'est du papier, et ses couleurs sont celles qui partent réellement au PDF/DOCX -
-   les inverser ferait mentir l'aperçu sur le document produit, exactement ce que ce widget cherche à éviter.
-   Deux points d'entrée, dans cet ordre : le choix explicite de l'utilisateur (`data-theme` sur <html>, cf. js/settings.js), et à défaut la préférence du
-   système. La requête média est neutralisée quand l'utilisateur a explicitement choisi le thème clair. */
+/* Thème sombre : il ne concerne que le chrome de l'application (barre du haut, plan de travail autour de la page, modales, panneaux flottants). La
+   page reste blanche avec son texte sombre dans les deux thèmes : c'est du papier, et ses couleurs sont celles qui partent au PDF et au Word ; les
+   inverser ferait mentir l'aperçu sur le document produit. Deux points d'entrée, dans cet ordre : le choix explicite de la personne (`data-theme`
+   sur `<html>`, js/settings.js), puis à défaut la préférence du système. La requête média est neutralisée quand le thème clair a été choisi
+   explicitement. */
 :root[data-theme="dark"] {
   --bg: #171b23;
   --surface: #1e2430;
@@ -100,7 +107,7 @@
   --pp-scrim: rgba(3, 6, 12, .62);
 }
 
-/* Même palette, appliquée d'après la préférence système - sauf si l'utilisateur a explicitement demandé le thème clair. */
+/* Même palette, appliquée d'après la préférence du système, sauf si le thème clair a été demandé explicitement. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #171b23;
@@ -132,22 +139,21 @@
   }
 }
 
-/* Texte d'aide des champs (« Valeur », « Rechercher un modèle… ») : le gris par défaut du navigateur tombe à 3,4:1 sur les fonds sombres ; en clair il reste
-   celui du navigateur. Même couleur que le texte secondaire, sans l'atténuation d'opacité que Firefox y ajoute. */
+/* Texte d'aide des champs (« Valeur », « Rechercher un modèle… ») : le gris par défaut du navigateur tombe à 3,4:1 sur les fonds sombres ; en
+   clair il reste celui du navigateur. Même couleur que le texte secondaire, sans l'atténuation d'opacité que Firefox y ajoute. */
 :root[data-theme="dark"] :is(input, textarea)::placeholder { color: var(--text-muted); opacity: 1; }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) :is(input, textarea)::placeholder { color: var(--text-muted); opacity: 1; }
 }
 
-/* === Typographie et mise en page de base === */
 html, body { margin:0; padding:0; height:100%; font-family: Arial, sans-serif; background: var(--bg); }
 body { display:flex; flex-direction:column; }
-/* #app n'avait ni hauteur ni flex propres : un enfant flex sans flex-basis se dimensionne à son CONTENU par défaut, donc dès que l'éditeur dépassait la
-   hauteur de la fenêtre, c'est TOUTE LA PAGE qui gagnait sa barre de défilement (barre d'outils comprise) au lieu du défilement interne prévu sur
-   #editor-container. #app reproduit le même schéma flex-column contraint que body, pour que ce soit #editor-container qui défile, jamais la page. */
+/* #app reproduit le schéma flex en colonne contraint de `body` : un enfant flex sans `flex-basis` se dimensionne à son contenu, donc dès que
+   l'éditeur dépasserait la hauteur de la fenêtre, toute la page aurait sa barre de défilement (barre d'outils comprise) au lieu du défilement
+   interne de #editor-container. */
 #app { display:flex; flex-direction:column; height:100%; min-height:0; }
-/* Bandeau compact (maximiser la hauteur dispo pour l'éditeur) : UNE seule ligne toujours visible (.bar-row). Tous les id de bouton/input sont INCHANGÉS :
-   main.js les cible toujours pareil. */
+/* Bandeau compact (maximiser la hauteur de l'éditeur) : une seule ligne toujours visible (`.bar-row`). Les id des boutons et des inputs sont ceux
+   que cible js/main.js. */
 #toolbar-top { display:flex; flex-direction: column; border-bottom:1px solid var(--border); background: var(--surface); font-family: var(--font-ui); }
 .bar-row { display:flex; align-items:center; gap:5px; flex-wrap: wrap; padding:6px 10px; }
 .bar-sep { width:1px; align-self:stretch; margin:2px 2px; background: var(--border); flex:none; }
@@ -177,28 +183,30 @@ body { display:flex; flex-direction:column; }
 #btn-export-pdf::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.1'%3E%3Cpath d='M12 3v12m0 0 4-4m-4 4-4-4M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.1'%3E%3Cpath d='M12 3v12m0 0 4-4m-4 4-4-4M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3'/%3E%3C/svg%3E"); }
 #btn-mode-edit::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z'/%3E%3C/svg%3E"); }
 #btn-mode-read::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E"); }
-/* Préfixées par #toolbar-top pour dépasser sans ambiguïté la spécificité de la règle générique #toolbar-top button ci-dessus (même compte d'ID que la règle
-   générique + type "button" s'annuleraient sinon en cas d'égalité). */
+/* Préfixées par #toolbar-top pour l'emporter sans ambiguïté sur la règle générique `#toolbar-top button` ci-dessus (même compte d'ID et type
+   `button` : sinon égalité de spécificité). */
 #toolbar-top #btn-save { background: var(--accent-solid); border-color: var(--accent-solid); color: #fff; box-shadow: 0 1px 2px rgba(47,111,237,.35); }
 #toolbar-top #btn-save:hover { background: var(--accent-solid-hover); border-color: var(--accent-solid-hover); }
-/* Enregistrement automatique coupé (js/main.js:wireSaveMenu, retour d'Antoine du 01/10) : noir et blanc classique ; le bleu, lui, dit « enregistrement automatique actif ».
-   Deux classes disent la même chose : celle du bouton, et celle de <html>, posée par le <head> d'index.html avant le premier affichage (le bouton n'est jamais peint en bleu puis en fondu vers le noir). */
+/* Enregistrement automatique coupé (js/main.js:wireSaveMenu) : noir et blanc classique ; le bleu dit « enregistrement automatique actif ». Deux
+   classes disent la même chose : celle du bouton, et celle de `<html>`, posée par le `<head>` d'index.html avant le premier affichage (le bouton
+   n'est jamais peint en bleu puis en fondu vers le noir). */
 #toolbar-top #btn-save.is-autosave-off, html.pp-autosave-off #toolbar-top #btn-save { background: var(--solid-neutral); border-color: var(--solid-neutral-border); color: #fff; box-shadow: 0 1px 2px rgba(20,28,46,.35); }
 #toolbar-top #btn-save.is-autosave-off:hover, html.pp-autosave-off #toolbar-top #btn-save:hover { background: var(--solid-neutral-hover); border-color: var(--solid-neutral-hover); }
 #toolbar-top #btn-delete { color: var(--danger); }
 #toolbar-top #btn-delete:hover { background: var(--danger-soft); border-color: var(--danger); }
 #toolbar-top #btn-export-pdf { background: var(--accent-solid); border-color: var(--accent-solid); color: #fff; box-shadow: 0 1px 2px rgba(47,111,237,.35); }
 #toolbar-top #btn-export-pdf:hover { background: var(--accent-solid-hover); border-color: var(--accent-solid-hover); }
-/* Les deux boutons de mode sont fusionnés visuellement en un sélecteur segmenté (même comportement JS : ils gardent leurs id et leur classe .active togglée
-   par main.js, seul l'agencement CSS change). */
+/* Les deux boutons de mode sont fusionnés visuellement en un sélecteur segmenté ; ils gardent leurs id et leur classe `.active`, basculée par
+   js/main.js. */
 .mode-toggle { display:inline-flex; }
 #toolbar-top #btn-mode-edit, #toolbar-top #btn-mode-read { background: var(--surface-sunken); }
 #toolbar-top #btn-mode-edit { border-radius: var(--radius-sm) 0 0 var(--radius-sm); border-right: none; }
 #toolbar-top #btn-mode-read { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
 #toolbar-top button.active { background: var(--surface); color: var(--accent); border-color: var(--accent); box-shadow: var(--shadow-card); }
 .var-badge { display:inline-block; background:#eaf2ff; color:#12406b; border:1px solid #b7cdf2; padding:0 4px; border-radius:3px; font-size:.92em; line-height:1.4; }
-/* Variable #Variable dont la table/colonne référencée n'existe plus - posé/retiré par refreshVariableBadgeValidity() à chaque mise à jour (purement visuel,
-   rien de persisté). Le message d'erreur vit dans l'attribut `title` natif (infobulle système, sans JS de popup dédié). */
+/* Variable #Variable dont la table ou la colonne référencée n'existe plus : classe posée et retirée par refreshVariableBadgeValidity() à chaque
+   mise à jour (purement visuel, rien de persisté). Le message d'erreur est dans l'attribut `title` natif (info-bulle du système, sans popup
+   dédié). */
 .var-badge.var-badge-broken { background:#fbe9e9; color:#a4231c; border-color:#f0b3b3; padding-right:16px; position:relative; cursor:help; }
 .var-badge.var-badge-broken::after {
   content:""; position:absolute; top:50%; right:3px; transform:translateY(-50%);
@@ -212,17 +220,17 @@ body { display:flex; flex-direction:column; }
 .link-rule-row { font-size:12px; }
 .link-rule-row button { font-size:11px; padding:2px 6px; }
 #status-msg { margin-left:auto; font-family: var(--font-ui); font-size:12px; font-weight:600; color: var(--text-muted); }
-/* Bandeau de conflit auto-save (js/main.js) - ambre plutôt que --danger : signale une action à prendre, pas une erreur. Une seule action possible
-   ("Recharger") - garder ses modifications locales reste implicite (ne rien faire, ou Enregistrer manuellement). */
+/* Bandeau de conflit de l'enregistrement automatique (js/main.js) : ambre plutôt que `--danger`, car il signale une action à prendre et non une
+   erreur. Une seule action (« Recharger ») ; garder ses modifications locales reste implicite (ne rien faire, ou Enregistrer à la main). */
 .autosave-conflict-banner { display:flex; align-items:center; gap:10px; padding:8px 14px; background:#fff7e6; border-bottom:1px solid #f0c36d; color:#7a5900; font-family: var(--font-ui); font-size:13px; }
 .autosave-conflict-banner button { font-family: var(--font-ui); font-size:12px; font-weight:600; padding:4px 10px; border:1px solid #f0c36d; border-radius: var(--radius-sm); background:#fff; color:#7a5900; cursor:pointer; }
 .autosave-conflict-banner button:hover { background:#fff2d1; }
-/* z-index:0 (en plus de position:relative) : force #reader-container à établir son PROPRE contexte d'empilement local - sans ça son fond opaque se peint
-   APRÈS (par-dessus) toute image en calque "derrière le texte" (z-index négatif), la rendant invisible et lui volant ses clics. */
+/* `z-index: 0` (en plus de `position: relative`) : #reader-container établit son propre contexte d'empilement ; sans cela son fond opaque se
+   peindrait par-dessus toute image en calque « derrière le texte » (`z-index` négatif), la rendant invisible et lui volant ses clics. */
 #reader-container { position:relative; z-index:0; flex:1; min-height:0; padding:18px 22px; overflow:auto; background:#fff; line-height:1.45; font-family: 'Roboto', Helvetica, Arial, sans-serif; }
 
-/* margin/padding volontairement réduits au minimum : cette "chrome" d'édition n'existe pas côté PDF (twoColumnsFrom pose une marge calibrée pour matcher
-   CETTE valeur) - un padding plus généreux gonflait la zone dans l'éditeur sans contrepartie dans le PDF, décalant tout ce qui suit. */
+/* `margin` et `padding` réduits au minimum : ce chrome d'édition n'existe pas côté PDF (twoColumnsFrom pose une marge calibrée pour correspondre à
+   cette valeur) ; un padding plus généreux gonflerait la zone dans l'éditeur sans contrepartie dans le PDF, et décalerait tout ce qui suit. */
 .two-columns-zone { position: relative; display: grid; grid-template-columns: var(--layout-left, 50%) calc(100% - var(--layout-left, 50%) - 18px); gap: 18px; margin: 0; padding: 16px 10px 4px; border: 1px dashed #8b98a5; border-radius: 3px; box-sizing: border-box; max-width: 100%; }
 .two-columns-column { min-width: 0; min-height: 48px; padding: 6px; border: 1px solid #d7dde3; box-sizing: border-box; overflow-wrap: anywhere; word-break: break-word; }
 .two-columns-resize-grip { position: absolute; top: 50%; left: var(--layout-left, 50%); width: 22px; height: 40px; transform: translate(-50%, -50%); cursor: ew-resize; z-index: 20; user-select: none; touch-action: none; display: flex; align-items: center; justify-content: center; }
@@ -231,13 +239,12 @@ body { display:flex; flex-direction:column; }
 #reader-container .two-columns-zone { border-color: transparent; padding-top: 0; }
 #reader-container .two-columns-resize-grip { display: none; }
 
-/* === Saut de page forcé === */
 .page-break-marker { display:block; margin: 18px 0; padding: 6px 10px; border:1px dashed #d97706; color:#d97706; font-size:.85em; text-align:center; user-select:none; }
 #reader-container .page-break-marker { color: transparent; border-color: transparent; }
 
-/* === Sommaire + numérotation des titres === Configuration invisible (persistée dans le contenu). Le marqueur de sommaire (.toc-marker) affiche un APERÇU
-   en direct de la vraie liste des titres DANS l'éditeur, dans un encadré en pointillés (même traitement que .page-break-marker). En mode lecture et à
-   l'export PDF, le même marqueur est entièrement résolu (variables + numéro de page) et perd cet encadré (.toc-resolved). */
+/* Sommaire et numérotation des titres. La configuration est invisible (persistée dans le contenu). Le marqueur de sommaire (`.toc-marker`) affiche
+   en direct dans l'éditeur un aperçu de la vraie liste des titres, dans un encadré en pointillés (comme `.page-break-marker`). En Lecture et à
+   l'export PDF, le même marqueur est entièrement résolu (variables et numéro de page) et perd cet encadré (`.toc-resolved`). */
 .heading-numbering-config { display: none; }
 .toc-marker { display: block; margin: 18px 0; padding: 10px 14px; border: 1px dashed #6b7280; border-radius: 4px; color: #6b7280; font-size: .9em; }
 .toc-title { font-weight: 600; font-size: 1.15em; margin: 0 0 8px; color: inherit; }
@@ -248,16 +255,16 @@ body { display:flex; flex-direction:column; }
 .toc-entry.toc-level-4 { margin-left: 42px; }
 .toc-entry.toc-level-5 { margin-left: 56px; }
 .toc-entry.toc-level-6 { margin-left: 70px; }
-/* Mode lecture : le placeholder éditeur (encadré en pointillés, texte muet) reste masqué tant qu'il n'est pas résolu par reader-mode.js - une fois résolu
-   (classe .toc-resolved posée par resolveTocMarkers), ré-affiché avec une mise en forme normale, intégrée au document comme un vrai bloc. */
+/* Lecture : l'encadré de l'éditeur (pointillés, texte muet) reste masqué tant que reader-mode.js ne l'a pas résolu ; une fois résolu (classe
+   `.toc-resolved` posée par resolveTocMarkers), il est ré-affiché avec une mise en forme normale, intégrée au document comme un vrai bloc. */
 #reader-container .toc-marker { display: none; user-select: none; }
 #reader-container .toc-marker.toc-resolved { display: block; margin: 18px 0; padding: 0; border: none; color: inherit; font-size: 1em; user-select: text; }
 
-/* Numérotation automatique des titres H1-H6 en mode Lecture, pilotée par le data-attribute data-heading-style posé sur .reader-content (PAS #reader-container
-   lui-même : .reader-content est le seul VRAI parent direct des titres) - un pur compteur CSS (::before), à l'image des puces/numéros de liste (cf.
-   listMarkerFor dans pdf-export.js, qui MESURE ce même ::before pour le reproduire dans le PDF). L'équivalent éditeur (`.tiptap[data-heading-style]`) vit
-   dans css/editor-v2.css - les deux DOIVENT rester en phase (mêmes 3 styles décimal/alpha/romain, même cascade au-delà de h3). Uniquement les titres de
-   PREMIER NIVEAU du flux principal (`>`) : un titre dans un tableau/une colonne n'est pas numéroté. */
+/* Numérotation automatique des titres H1 à H6 en Lecture, pilotée par `data-heading-style` sur `.reader-content` (pas sur #reader-container :
+   `.reader-content` est le seul vrai parent direct des titres) : un compteur CSS (::before), comme les puces et numéros de liste (listMarkerFor
+   dans pdf-export.js mesure ce même ::before pour le reproduire dans le PDF). L'équivalent de l'éditeur (`.tiptap[data-heading-style]`) est dans
+   css/editor-v2.css ; les deux doivent rester en phase (mêmes trois styles décimal, alpha et romain, même cascade au-delà de h3). Seuls les titres
+   de premier niveau du flux principal (`>`) sont numérotés : pas ceux d'un tableau ou d'une colonne. */
 .reader-content[data-heading-style] { counter-reset: h1c h2c h3c h4c h5c h6c; }
 .reader-content[data-heading-style] > h1 { counter-reset: h2c h3c h4c h5c h6c; counter-increment: h1c; }
 .reader-content[data-heading-style] > h2 { counter-reset: h3c h4c h5c h6c; counter-increment: h2c; }
@@ -287,14 +294,12 @@ body { display:flex; flex-direction:column; }
 .reader-content[data-heading-style="roman"] > h5::before { content: counter(h5c, decimal) ") "; }
 .reader-content[data-heading-style="roman"] > h6::before { content: counter(h6c, lower-alpha) ") "; }
 
-/* === Mode lecture === */
 #reader-container h1, #reader-container h2, #reader-container h3 { color:#1f2d3d; }
 
-/* === Images de l'éditeur : sélection, resize et repositionnement === */
 .editor-image { max-width: 100%; height: auto; cursor: grab; outline: 2px solid transparent; outline-offset: 2px; }
 .editor-image:hover { outline-color: #1f5dbf; }
-/* Poignées volontairement grandes et contrastées : ce sont elles qui portent le redimensionnement libre, les boutons zoom +/- n'étant qu'un raccourci en
-   +/-25%. position:fixed : ces poignées vivent dans document.body, hors de l'éditeur, pour échapper à la réconciliation DOM de TipTap. */
+/* Poignées grandes et contrastées : elles portent le redimensionnement libre, les boutons zoom +/- n'étant qu'un raccourci de ±25 %. `position:
+   fixed` : elles vivent dans `document.body`, hors de l'éditeur, pour échapper à la réconciliation DOM de TipTap. */
 .editor-image-handle { position: fixed; z-index: 9999; display: none; width: 14px; height: 14px; margin: -8px; border: 2px solid var(--accent); border-radius: 3px; background: var(--surface); box-shadow: 0 1px 3px rgba(0,0,0,.35); cursor: nwse-resize; }
 .editor-image-handle:hover { background: var(--accent-soft); }
 .editor-image-handle-nw { cursor: nwse-resize; }
@@ -305,24 +310,23 @@ body { display:flex; flex-direction:column; }
 .editor-image[data-align="center"] { display: block; margin-left: auto; margin-right: auto; }
 .editor-image[data-align="right"] { display: block; margin-left: auto; margin-right: 0; }
 .editor-image[data-wrap="block"] { display: block; }
-/* Gauche / droite = habillage réel (float), comme `.tiptap .editor-image-view[data-align="left"|"right"]` de l'éditeur (css/editor-v2.css) : le texte se place à côté de l'image, y compris celui des paragraphes qui
-   suivent tant qu'elle les dépasse, avec 12 px de marge côté texte et 8 px dessous. Avant, l'image était un bloc et le texte la contournait par dessus et dessous (Antoine, 02/10, point 9 : la fiabilité
-   entre l'éditeur et la Lecture). Une image en calque (devant / derrière le texte) est positionnée en absolu : sans habillage, ni marge. Une image plus large que la ligne y rétrécit de la marge (12 px) pour
-   tenir à côté d'elle, comme le flottant de l'éditeur (largeur « au plus ce qui reste »), et non de toute la largeur. */
+/* Gauche et droite : habillage réel (float), comme `.tiptap .editor-image-view[data-align="left"|"right"]` de l'éditeur (css/editor-v2.css) : le
+   texte se place à côté de l'image, y compris celui des paragraphes qui suivent tant qu'elle les dépasse, avec 12 px de marge côté texte et 8 px
+   dessous, pour que l'éditeur et la Lecture coupent au même endroit. Une image en calque (devant ou derrière le texte) est positionnée en absolu :
+   sans habillage, ni marge. Une image plus large que la ligne y rétrécit de la marge (12 px) pour tenir à côté du texte, comme le flottant de
+   l'éditeur (largeur « au plus ce qui reste »). */
 .reader-content img.editor-image[data-align="left"]:not([data-layer="front"]):not([data-layer="behind"]) { float: left; margin: 0 12px 8px 0; max-width: calc(100% - 12px); }
 .reader-content img.editor-image[data-align="right"]:not([data-layer="front"]):not([data-layer="behind"]) { float: right; margin: 0 0 8px 12px; max-width: calc(100% - 12px); }
 
-/* === Mode Lecture : état vide (aucune ligne sélectionnée) ===
-   Rendu par js/reader-mode.js:render() quand record est null. Avant l'ajout de cet état, #reader-container restait littéralement vide dans ce cas : un
-   écran blanc sans la moindre indication de ce qu'il fallait faire. Volontairement neutre (pas de rouge/erreur) : ne rien avoir sélectionné n'est pas
-   une erreur, juste une étape qui manque. */
+/* Lecture sans ligne sélectionnée (rendu par js/reader-mode.js:render() quand `record` est null) : neutre, sans rouge ni erreur, car ne rien avoir
+   sélectionné n'est pas une erreur mais une étape qui manque ; un écran blanc n'indiquerait pas ce qu'il faut faire. */
 .reader-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 240px; padding: 48px 24px; text-align: center; font-family: var(--font-ui); }
 .reader-empty-title { margin: 0; font-size: 15px; font-weight: 700; color: var(--text); }
 .reader-empty-hint { margin: 0; max-width: 42ch; font-size: 13px; line-height: 1.5; color: var(--text-muted); }
 
-/* setStatus(msg, true) (js/main.js) pose cette classe sur #status-msg depuis toujours, mais AUCUNE règle ne la définissait : un message d'erreur
-   (« Nom du modèle requis. », « Erreur génération PDF. ») s'affichait exactement comme un message de succès, en gris. */
+/* setStatus(msg, true) (js/main.js) pose cette classe sur #status-msg : un message d'erreur (« Nom du modèle requis. », « Erreur génération
+   PDF. ») doit se lire autrement qu'un message de succès. */
 #status-msg.error-msg { color: var(--danger-ink); }
-/* « Modifications non enregistrées » (enregistrement automatique coupé, js/main.js:updateSaveStatus) : couleur du texte courant au lieu du gris des autres messages, pour se repérer
-   d'un coup d'œil - sans le rouge d'une erreur : rien n'a échoué, l'enregistrement est simplement à faire à la main. */
+/* « Modifications non enregistrées » (enregistrement automatique coupé, js/main.js:updateSaveStatus) : couleur du texte courant au lieu du gris
+   des autres messages, pour se repérer d'un coup d'œil, sans le rouge d'une erreur : rien n'a échoué, l'enregistrement est à faire à la main. */
 #status-msg.is-unsaved { color: var(--text); }

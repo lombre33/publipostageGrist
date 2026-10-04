@@ -1,13 +1,10 @@
-/* Roboto auto-hebergee (data URI), utilisee par l'editeur et #reader-container pour que le texte s'affiche EXACTEMENT dans la police que pdfmake
-   utilise a l'export, plutot que de retomber sur Helvetica/Arial faute de Roboto installee - deux polices aux metriques differentes ne coupent pas les
-   lignes pareil. Regular/Italic : convertis en WOFF2 (fontTools, 2026-09-14) depuis les MEMES fichiers .ttf que ceux embarques par pdfmake - verifie
-   octet-pour-octet que hmtx/unitsPerEm/nombre de glyphes sont identiques avant/apres conversion (WOFF2 est un conteneur compresse SANS PERTE des memes
-   tables de police, jamais un ré-hinting) : le rendu reste au pixel pres identique a l'ancien TTF brut, pour ~45% du poids (audit de performance
-   2026-09-14 : la version TTF brute, non compressee pour le web, pesait 566 Ko et bloquait le premier rendu - index.html la charge en tout premier <link>).
-
-   Bold/Bold Italic : pdfmake n'embarque PAS de vrai Bold par defaut (seulement Roboto-Medium, plus etroit que le Bold du navigateur - d'ou un mot de plus
-   par ligne a l'export). On fournit donc ici le vrai Roboto-Bold/Bold-Italic, et js/pdf-fonts.js embarque EXACTEMENT les memes fichiers (TTF, pdfmake ne
-   sait pas lire du WOFF2) dans pdfmake. */
+/* Roboto auto-hébergée (data URI), utilisée par l'éditeur et #reader-container pour que le texte s'affiche dans la police que pdfmake utilise à
+   l'export, plutôt que de retomber sur Helvetica/Arial faute de Roboto installée : deux polices aux métriques différentes ne coupent pas les
+   lignes pareil. Regular et Italic : WOFF2 converti avec fontTools depuis les mêmes .ttf que ceux de pdfmake (conteneur compressé sans perte des
+   mêmes tables : hmtx, unitsPerEm et nombre de glyphes identiques, pas de ré-hinting), pour ~45 % du poids du TTF brut (566 Ko), qui bloquait le
+   premier rendu ; index.html la charge en tout premier <link>. Bold et Bold Italic : pdfmake n'embarque pas de vrai Bold par défaut (seulement
+   Roboto-Medium, plus étroit que le Bold du navigateur, d'où un mot de plus par ligne à l'export). On fournit donc ici le vrai Roboto-Bold et
+   Bold-Italic, et js/pdf-fonts.js embarque dans pdfmake les mêmes fichiers, en TTF (pdfmake ne lit pas le WOFF2). */
 @font-face {
   font-family: 'Roboto';
   font-style: normal;

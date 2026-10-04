@@ -1,9 +1,11 @@
-/* Case conditionnelle dans l'éditeur (menu des variables, onglet Chips ; js/editor-nodes.js:createConditionalCheckboxNode). Une vue de l'éditeur seulement : le HTML enregistré ne porte que
-   <span class="conditional-checkbox" data-condition data-checkbox-style>, que la Lecture, le PDF, le Word, l'Excel et l'e-mail remplacent par la case cochée ou non (js/conditional-checkbox.js).
-   Même direction artistique que les bulles de variable (css/style.css:.var-badge) : fond #eaf2ff, texte #12406b, liseré #b7cdf2 ; en pointillés #5b7fc0 une fois la condition posée. La page reste
-   blanche dans les deux thèmes, d'où des couleurs écrites en dur comme pour la bulle. La case est celle de la Lecture (`.resolved-checkbox`, css/editor-v2.css), décochée.
-   Trop longue pour sa case ou sa colonne, la puce coupe le MILIEU de son libellé par « … » (début tronqué, fin gardée, comme une bulle, css/variable-actions.css) : elle ne dépasse jamais et ne
-   passe jamais à la ligne. Le début rétrécit d'abord (poids de rétrécissement énorme) ; au-delà, c'est la fin qui rétrécit, en se coupant par la gauche. */
+/* Case conditionnelle dans l'éditeur (menu des variables, onglet Chips ; js/editor-nodes.js:createConditionalCheckboxNode). Une vue de l'éditeur
+   seulement : le HTML enregistré ne porte que <span class="conditional-checkbox" data-condition data-checkbox-style>, que la Lecture, le PDF, le
+   Word, l'Excel et l'e-mail remplacent par la case cochée ou non (js/conditional-checkbox.js). Même direction artistique que les bulles de
+   variable (css/style.css:.var-badge) : fond #eaf2ff, texte #12406b, liseré #b7cdf2, pointillés #5b7fc0 une fois la condition posée. La page reste
+   blanche dans les deux thèmes, d'où des couleurs en dur comme pour la bulle. La case est celle de la Lecture (`.resolved-checkbox`,
+   css/editor-v2.css), décochée. Trop longue pour sa case ou sa colonne, la puce coupe le milieu de son libellé par « … » (début tronqué, fin
+   gardée, comme une bulle, css/variable-actions.css) : elle ne dépasse jamais et ne passe jamais à la ligne. Le début rétrécit d'abord (poids de
+   rétrécissement énorme), puis la fin, coupée par la gauche. */
 .tiptap .conditional-checkbox { display: inline-flex; align-items: center; gap: .3em; max-width: 100%; box-sizing: border-box; vertical-align: bottom; background: #eaf2ff; color: #12406b; border: 1px solid #b7cdf2;
   padding: 0 4px; border-radius: 3px; font-size: .92em; line-height: 1.4; cursor: pointer; }
 .tiptap .conditional-checkbox.has-condition { border-style: dashed; border-color: #5b7fc0; }

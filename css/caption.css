@@ -8,8 +8,7 @@
    (`.is-editor-empty`, css/editor-v2.css) : float + hauteur nulle pour ne pas pousser le texte tapé, pointer-events: none pour qu'un clic place le
    curseur dans le vrai paragraphe. Même gris que ce texte d'attente (`--paper-text-faint`, #667085 : 5,0:1 sur la feuille). */
 .tiptap p[data-caption="true"].caption-empty::before { content: attr(data-caption-placeholder); float: left; height: 0; pointer-events: none; color: var(--paper-text-faint, #667085); }
-/* Le bouton « Légende » ajoute 32 px à la barre flottante de l'image (bouton de 28 px et deux écarts de 2 px) : la glissière d'opacité rend ces 32 px
-   (129 px d'origine) pour que la barre garde sa largeur d'avant. À ~700 px, quand l'image est tout en haut de la page, la barre recouvre la bande du
-   suivi des modifications : plus large, elle passait sur le milieu de « Tout accepter » et le vrai clic n'y arrivait plus
-   (dev-tests/verify-image-arrows-keyboard.mjs). */
+/* Le bouton « Légende » ajoute 32 px à la barre flottante de l'image (bouton de 28 px et deux écarts de 2 px) : la glissière d'opacité rend ces 32
+   px (129 px d'origine) pour que la barre garde sa largeur. À ~700 px, quand l'image est tout en haut de la page, la barre recouvre la bande du
+   suivi des modifications : plus large, elle passerait sur le milieu de « Tout accepter » et le clic n'y arriverait plus. */
 .v2-floating-toolbar input[type="range"][data-role="opacity"] { width: 97px; }

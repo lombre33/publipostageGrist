@@ -1,75 +1,68 @@
-/* Refonte UI/UX de la ligne "modèle/export" (.bar-row) et de la ligne de mise en forme (#v2-toolbar). Fichier séparé de editor-v2.css (qui ne couvre que
-   .tiptap) : ce qui suit touche le CHROME de l'app (barre du haut), pas l'éditeur lui-même.
+/* Chrome de l'application (barre du haut) : la ligne « modèle et export » (`.bar-row`) et la ligne de mise en forme (#v2-toolbar). Séparé de
+   css/editor-v2.css, qui ne couvre que `.tiptap`, et de css/style.css : ces sélecteurs n'existent que dans index.html. */
 
-   Volontairement PAS dans ../css/style.css (partagé avec la V1) : les sélecteurs ci-dessous n'existent que dans le HTML de index.html - la V1 garde son
-   propre mécanisme (icône seule + libellé révélé au survol, cf. css/style.css `.btn-text`), inchangé. */
-
-/* === Cluster "modèle courant" (sélecteur + renommage) === Remplace les deux champs séparés (select V1 + input#template-name toujours visible) par UN seul
-   contrôle : le select affiche/choisit le modèle, un crayon fait apparaître l'input à sa place pour renommer - même geste que Google Docs/Notion. */
+/* Cluster « modèle courant » (sélecteur et renommage) : un seul contrôle au lieu de deux champs séparés. Le select affiche et choisit le modèle,
+   un crayon fait apparaître l'input à sa place pour renommer, comme dans Google Docs ou Notion. */
 .title-cluster { display: inline-flex; align-items: center; height: 28px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); overflow: hidden; }
 .title-cluster select { border: none; height: 26px; background: transparent; padding: 0 6px 0 8px; max-width: 168px; border-radius: 0; }
 .title-cluster select:focus-visible { outline: 2px solid var(--accent-soft-border); outline-offset: -2px; }
 .title-cluster .title-cluster-input { box-sizing: border-box; border: none; height: 26px; background: var(--accent-soft); padding: 0 8px; width: 160px; outline: none; }
 .title-cluster button.rename-btn { border: none; border-left: 1px solid var(--border); border-radius: 0; height: 26px; width: 26px; padding: 0; background: transparent; color: var(--text-faint); }
 .title-cluster button.rename-btn:hover, .title-cluster button.rename-btn:focus-visible { color: var(--text); background: var(--surface-sunken); }
-/* Crayon de renommage : délibérément plus petit/discret que celui du mode Édition pour ne pas laisser croire aux deux boutons la même fonction. */
+/* Crayon de renommage : plus petit et plus discret que celui du mode Édition, pour que les deux boutons ne laissent pas croire à la même fonction. */
 #toolbar-top #btn-rename-template::before { width: 12px; height: 12px; -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M12 20h9'/%3E%3Cpath d='M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M12 20h9'/%3E%3Cpath d='M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z'/%3E%3C/svg%3E"); }
-/* Étoile "modèle par défaut" : même gabarit discret que le crayon de renommage. Contour uniquement à l'état inactif ; l'état actif (.is-default) passe en
-   couleur accent plutôt que de changer de tracé, pour rester lisible même en tout petit. */
+/* Étoile « modèle par défaut » : même gabarit discret que le crayon de renommage. Contour seul à l'état inactif ; l'état actif (`.is-default`)
+   passe en couleur d'accent plutôt que de changer de tracé, pour rester lisible en tout petit. */
 #toolbar-top #btn-set-default-template::before { width: 12px; height: 12px; -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linejoin='round'%3E%3Cpath d='M12 3.5l2.4 5.6 6.1.6-4.6 4 1.4 6-5.3-3.2-5.3 3.2 1.4-6-4.6-4 6.1-.6Z'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linejoin='round'%3E%3Cpath d='M12 3.5l2.4 5.6 6.1.6-4.6 4 1.4 6-5.3-3.2-5.3 3.2 1.4-6-4.6-4 6.1-.6Z'/%3E%3C/svg%3E"); }
 #toolbar-top #btn-set-default-template.is-default { color: var(--accent); background: var(--accent-soft); }
 #toolbar-top #btn-set-default-template:disabled { opacity: .4; cursor: default; }
 
-/* === Cluster "actions document" (Nouveau/Enregistrer/Dupliquer/Supprimer/Tables liées) === Juste un regroupement par ESPACEMENT (gap), sans boîte visuelle
-   autour (un encadré gris testé puis retiré, pas dans le style du reste de l'app). Enregistrer/Supprimer/Exporter restent distingués par COULEUR. */
+/* Cluster « actions document » (Nouveau, Enregistrer, Dupliquer, Supprimer, Tables liées) : un simple regroupement par espacement (`gap`), sans
+   boîte autour. Enregistrer, Supprimer et Exporter se distinguent par la couleur. */
 .action-cluster { display: inline-flex; align-items: center; gap: 4px; }
 
-/* Icône "Tables liées" : deux mini-tableaux reliés par un trait - distincte du bouton "Insérer un tableau" (un seul tableau). Remplace le carré plein
-   résultant de l'absence de règle ::before pour ce bouton. */
+/* Icône « Tables liées » : deux mini-tableaux reliés par un trait, distincte du bouton « Insérer un tableau » (un seul tableau). */
 #btn-link-rules::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8'%3E%3Crect x='2' y='3' width='8' height='8' rx='1'/%3E%3Cpath d='M2 7h8M6 3v8'/%3E%3Crect x='14' y='13' width='8' height='8' rx='1'/%3E%3Cpath d='M14 17h8M18 13v8'/%3E%3Cpath d='M10 7h2a2 2 0 0 1 2 2v2'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8'%3E%3Crect x='2' y='3' width='8' height='8' rx='1'/%3E%3Cpath d='M2 7h8M6 3v8'/%3E%3Crect x='14' y='13' width='8' height='8' rx='1'/%3E%3Cpath d='M14 17h8M18 13v8'/%3E%3Cpath d='M10 7h2a2 2 0 0 1 2 2v2'/%3E%3C/svg%3E"); }
 
-/* Bascule portrait / paysage (js/orientation-toggle.js) : une seule icône, la page telle qu'elle est - haute en portrait, large en paysage - et le bouton est allumé
-   (.active, comme Mode édition) en paysage. Grisé (disabled) pour un modèle dont les moteurs ne suivent pas l'orientation, jamais retiré. */
+/* Bascule portrait / paysage (js/orientation-toggle.js) : une seule icône, la page telle qu'elle est (haute en portrait, large en paysage) ; le
+   bouton est allumé (`.active`, comme Mode édition) en paysage. Grisé (`disabled`) pour un modèle dont les moteurs ne suivent pas l'orientation,
+   jamais retiré. */
 #btn-page-orientation::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Crect x='6' y='3' width='12' height='18' rx='2'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Crect x='6' y='3' width='12' height='18' rx='2'/%3E%3C/svg%3E"); }
 #btn-page-orientation[data-orientation="landscape"]::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Crect x='3' y='6' width='18' height='12' rx='2'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Crect x='3' y='6' width='18' height='12' rx='2'/%3E%3C/svg%3E"); }
 #toolbar-top #btn-page-orientation:disabled { opacity: .35; cursor: default; }
 
-/* Icône "Réglages" (roue crantée) - même famille d'icône que .bar-row (masque ::before, PAS Icons.svg()/applyToolbarIcons qui ne couvre que #v2-toolbar).
-   Poussé tout à droite par #status-msg juste avant lui (margin-left:auto), sans CSS de positionnement supplémentaire. */
+/* Icône « Réglages » (roue crantée) : même famille que `.bar-row` (masque ::before, pas Icons.svg ni applyToolbarIcons, qui ne couvrent que
+   #v2-toolbar). Poussé tout à droite par #status-msg juste avant lui (`margin-left: auto`). */
 #v2-btn-settings::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Ccircle cx='12' cy='12' r='3.2'/%3E%3Cpath d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Ccircle cx='12' cy='12' r='3.2'/%3E%3Cpath d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'/%3E%3C/svg%3E"); }
 
-/* Logo Grist Factory : repère de marque discret, coin haut-droit du bandeau (demande d'Antoine, 2026-09-19 -
-   posé au départ dans le flux de .bar-row, il retombait donc à la ligne suivante dès que cette ligne (déjà
-   dense, cf. mémoire projet) passait au retour à la ligne). Sorti du flux (position absolute, ancré sur
-   #toolbar-top) pour rester fixe dans le coin quel que soit le nombre de lignes que .bar-row occupe.
-   Toujours pas un ::before comme les autres icônes de cette ligne : c'est une vraie image (avatar fourni),
-   pas un trait monochrome recolorable - donc un <img> à part, pas intégré à la famille d'icônes .bar-row. */
+/* Logo Grist Factory : repère de marque discret dans le coin haut droit du bandeau. Sorti du flux (`position: absolute`, ancré sur #toolbar-top)
+   pour rester fixe quel que soit le nombre de lignes de `.bar-row` ; dans le flux, il retomberait à la ligne suivante dès que cette ligne, déjà
+   dense, passe au retour à la ligne. C'est une vraie image, pas un trait monochrome recolorable : un `<img>` à part, hors de la famille d'icônes
+   de `.bar-row`. */
 #toolbar-top { position: relative; }
-/* clip (pas hidden : aucun conteneur de défilement, rien que focus() ou scrollIntoView puisse faire défiler) sur l'axe horizontal seulement - les menus et
-   info-bulles qui descendent sous la barre restent visibles. Une info-bulle masquée (opacity:0, mais toujours en place) d'un bouton de bout de ligne
-   dépassait de 19 à 36px à droite et rendait la page entière défilable latéralement, barre comprise. Au survol, js/viewport-fit.js la ramène dans la
-   fenêtre avant qu'elle n'apparaisse : ce clip ne coupe jamais une info-bulle visible. */
+/* `overflow-x: clip` (pas `hidden` : aucun conteneur de défilement que `focus()` ou `scrollIntoView` puisse faire défiler), sur l'axe horizontal
+   seulement : les menus et info-bulles qui descendent sous la barre restent visibles. Une info-bulle masquée (opacity 0, mais en place) d'un
+   bouton de bout de ligne dépassait de 19 à 36 px à droite et rendait toute la page défilable latéralement, barre comprise. Au survol,
+   js/viewport-fit.js la ramène dans la fenêtre avant qu'elle n'apparaisse : ce clip ne coupe jamais une info-bulle visible. */
 #toolbar-top { overflow-x: clip; }
-/* top calé sur le centre vertical des boutons de .bar-row (padding-top 6px + moitié des 28px de hauteur
-   de bouton, moins la moitié des 20px du logo) pour l'aligner avec le bouton Réglages plutôt qu'avec le
-   haut de la barre - demande d'Antoine, 2026-09-19 ("aligner avec la roue crantée que ça fasse joli"). */
+/* `top` calé sur le centre vertical des boutons de `.bar-row` (padding-top 6 px, plus la moitié des 28 px d'un bouton, moins la moitié des 20 px
+   du logo) pour l'aligner avec le bouton Réglages plutôt qu'avec le haut de la barre. */
 #v2-brand-logo { position: absolute; top: 10px; right: 10px; width: 20px; height: 20px; border-radius: 50%; opacity: .85; }
-/* Réserve la place du logo dans le coin haut-droit pour qu'aucun élément de .bar-row (bouton Réglages,
-   compteur de longueur email...) ne puisse jamais passer dessous. */
+/* Réserve la place du logo dans le coin haut droit : aucun élément de `.bar-row` (bouton Réglages, compteur de longueur email...) ne passe
+   dessous. */
 .bar-row { padding-right: 34px; }
-/* Coin "info" (#status-msg, css/style.css) : largeur de base FIXE, celle de "Enregistré à HH:MM:SS.", texte tronqué au-delà (message entier au survol,
-   js/viewport-fit.js). Sa largeur suivait jusqu'ici son texte, qui passe de "" à "Enregistré à HH:MM:SS." à chaque auto-save : entre ~740 et 880px de
-   large, le bouton Réglages passait alors à la ligne puis revenait, et la barre sautait de 33px pendant la frappe. Le retour à la ligne ne dépend plus
-   que de cette base constante, jamais du message affiché. */
+/* Coin « info » (#status-msg, css/style.css) : largeur de base fixe, celle de « Enregistré à HH:MM:SS. », texte tronqué au-delà (message entier au
+   survol, js/viewport-fit.js). Si sa largeur suivait son texte, qui passe de vide à « Enregistré à HH:MM:SS. » à chaque enregistrement
+   automatique, le bouton Réglages passerait à la ligne puis reviendrait entre 740 et 880 px de large et la barre sauterait de 33 px pendant la
+   frappe. Le retour à la ligne ne dépend ainsi que de cette base constante, jamais du message affiché. */
 #status-msg { flex: 1 1 12.5em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
 
-/* === Infobulle classique (bulle sombre sous le bouton), remplace "libellé révélé au survol" de la V1 (`.btn-text`, qui élargit le bouton). Déclenchée par
-   [data-tip] plutôt que `title` (les deux natifs ne cohabitent pas bien) - l'accessibilité passe par aria-label. Pas de flèche : les icônes ::before
-   occupent déjà le seul autre pseudo-élément disponible. */
+/* Info-bulle classique (bulle sombre sous le bouton). Déclenchée par `[data-tip]` plutôt que par `title` (les deux natifs cohabitent mal) ;
+   l'accessibilité passe par `aria-label`. Pas de flèche : les icônes ::before occupent déjà le seul autre pseudo-élément disponible. */
 .bar-row [data-tip], #v2-toolbar [data-tip] { position: relative; }
-/* --pp-tip-shift : décalage posé au survol/focus par js/viewport-fit.js pour qu'une info-bulle de bout de ligne tienne entière dans la fenêtre (porté par
-   `left`, pas par `transform`, qui est animé : l'info-bulle glisserait latéralement en apparaissant). Niveau --z-tip (css/style.css) : au-dessus des barres flottantes et des menus,
-   qu'elle ne doit jamais voir passer par-dessus elle (50 la laissait sous une barre de tableau descendue jusque-là). */
+/* `--pp-tip-shift` : décalage posé au survol ou au focus par js/viewport-fit.js pour qu'une info-bulle de bout de ligne tienne entière dans la
+   fenêtre (porté par `left` et non par `transform`, qui est animé : l'info-bulle glisserait latéralement en apparaissant). Niveau `--z-tip`
+   (css/style.css) : au-dessus des barres flottantes et des menus, qu'elle ne doit jamais voir passer par-dessus elle. */
 .bar-row [data-tip]::after, #v2-toolbar [data-tip]::after {
   content: attr(data-tip);
   position: absolute; left: calc(50% + var(--pp-tip-shift, 0px)); top: calc(100% + 7px); transform: translateX(-50%) translateY(-3px);
@@ -80,74 +73,72 @@
 }
 .bar-row [data-tip]:hover::after, .bar-row [data-tip]:focus-visible::after,
 #v2-toolbar [data-tip]:hover::after, #v2-toolbar [data-tip]:focus-visible::after { opacity: 1; transform: translateX(-50%) translateY(0); }
-/* Info-bulle "collée" : après un clic souris, un bouton qui garde (Enregistrer, Mode lecture...) ou reprend (Tables liées, Réglages, à la fermeture de leur
-   fenêtre) le focus passe en :focus-visible dès la touche suivante - Échap typiquement - et affichait son info-bulle jusqu'au prochain clic ailleurs, souris
-   partie. `pp-tip-pointer` (js/viewport-fit.js) marque la souris comme dernière modalité : seule l'info-bulle de FOCUS y est cachée, celle du survol reste,
-   et Tab rend les siennes à la navigation clavier. */
+/* Info-bulle « collée » : après un clic souris, un bouton qui garde ou reprend le focus (Enregistrer, Mode lecture, Tables liées, Réglages à la
+   fermeture de leur fenêtre) passe en `:focus-visible` à la touche suivante (Échap, typiquement) et afficherait son info-bulle jusqu'au prochain
+   clic ailleurs. `pp-tip-pointer` (js/viewport-fit.js) marque la souris comme dernière modalité : seule l'info-bulle de focus est alors cachée,
+   celle du survol reste, et Tab rend les siennes à la navigation clavier. */
 .pp-tip-pointer .bar-row [data-tip]:focus-visible:not(:hover)::after,
 .pp-tip-pointer #v2-toolbar [data-tip]:focus-visible:not(:hover)::after { opacity: 0; }
-/* Info-bulles coupées par leur propre conteneur : un overflow:hidden rogne l'info-bulle (::after, sous le bouton) de tout bouton qu'il contient - Renommer et
-   Modèle par défaut dans #v2-title-cluster, les deux moitiés des boutons couleur/surlignage - ou la sienne propre (#v2-size-stepper porte lui-même son
-   data-tip). Ces overflow ne servaient qu'à arrondir les coins des fonds de survol : arrondis désormais par les boutons d'extrémité eux-mêmes (rayon du
-   conteneur moins sa bordure de 1px). Les moitiés couleur/surlignage de #v2-toolbar ont déjà les leurs (css/editor-v2.css). */
+/* Info-bulles coupées par leur propre conteneur : un `overflow: hidden` rogne l'info-bulle (::after, sous le bouton) de tout bouton qu'il contient
+   (Renommer et Modèle par défaut dans #v2-title-cluster, les deux moitiés des boutons couleur et surlignage) ou la sienne (#v2-size-stepper porte
+   lui-même son `data-tip`). Ces `overflow` ne servaient qu'à arrondir les coins des fonds de survol : les boutons d'extrémité les arrondissent
+   eux-mêmes (rayon du conteneur moins sa bordure de 1 px). Les moitiés couleur et surlignage de #v2-toolbar ont déjà les leurs
+   (css/editor-v2.css). */
 #v2-title-cluster, #v2-toolbar .v2-color-split, #v2-size-stepper { overflow: visible; }
 #v2-title-cluster .tts-trigger { border-radius: calc(var(--radius-sm) - 1px) 0 0 calc(var(--radius-sm) - 1px); }
 #toolbar-top #btn-set-default-template { border-radius: 0 calc(var(--radius-sm) - 1px) calc(var(--radius-sm) - 1px) 0; }
 #v2-toolbar #v2-size-minus { border-radius: 4px 0 0 4px; }
 #v2-toolbar #v2-size-plus { border-radius: 0 4px 4px 0; }
 
-/* Mécanisme commun anti-chevauchement info-bulle/menu (retour Antoine 2026-09-28 : le bouton "image" affichait son nom PAR-DESSUS son propre flyout au
-   survol, déjà réglé une fois au cas par cas pour #v2-btn-quality/#btn-export-pdf en leur retirant data-tip - cf. .v2-hover-flyout-label, editor-v2.css,
-   désormais généralisé à Titre/Alignement/Liste/Image de la même façon). aria-expanded="true" est posé, PAR DÉLÉGATION (donc aussi pour un `.v2-hover-
-   group` créé après coup, ex. #v2-hf-pagenum-group - js/header-footer-preview.js), sur le bouton qui porte le data-tip pendant que son menu est ouvert -
-   js/editor-core.js (délégation document pour tout .v2-hover-group au survol/focus, wireDropdownButton/closeDropdownPanel pour les panneaux flottants
-   police/taille/couleurs au clic). Un seul signal générique : tout futur bouton à menu en hérite automatiquement dès qu'il pose aria-expanded sur son
-   propre déclencheur, sans toucher ce fichier. transition: none pour une disparition immédiate - sinon le délai de .35s ci-dessus laisserait l'info-bulle
-   visible un instant par-dessus le menu qui vient de s'ouvrir. */
+/* Anti-chevauchement info-bulle et menu : un bouton ne doit pas afficher son nom par-dessus son propre flyout au survol. `aria-expanded="true"`
+   est posé par délégation (donc aussi pour un `.v2-hover-group` créé après coup, comme #v2-hf-pagenum-group, js/header-footer-preview.js) sur le
+   bouton qui porte le `data-tip` pendant que son menu est ouvert : js/editor-core.js pour tout `.v2-hover-group` au survol et au focus,
+   wireDropdownButton et closeDropdownPanel pour les panneaux flottants police, taille et couleurs au clic. Un seul signal générique : tout futur
+   bouton à menu en hérite dès qu'il pose `aria-expanded` sur son déclencheur, sans toucher ce fichier. `transition: none` pour une disparition
+   immédiate : sinon le délai de .35 s ci-dessus laisserait l'info-bulle visible un instant par-dessus le menu qui vient de s'ouvrir. */
 [data-tip][aria-expanded="true"]::after { opacity: 0 !important; transition: none !important; }
-/* Cas où le data-tip est porté par un ANCÊTRE du bouton qui gère réellement le menu (ex. #v2-size-stepper : le data-tip est sur le <span> englobant, pas
-   sur #v2-size-chip-val lui-même) - règle séparée de la précédente : un sélecteur groupé par une virgule est invalidé EN BLOC (cas direct compris) sur un
-   navigateur qui ne connaît pas :has(), alors que deux règles distinctes ne perdent que celle-ci. */
+/* Cas où le `data-tip` est porté par un ancêtre du bouton qui gère le menu (#v2-size-stepper : le `data-tip` est sur le `<span>` englobant, pas
+   sur #v2-size-chip-val). Règle séparée de la précédente : un sélecteur groupé par une virgule est invalidé en bloc (cas direct compris) par un
+   navigateur qui ne connaît pas `:has()`, alors que deux règles distinctes ne perdent que celle-ci. */
 [data-tip]:has([aria-expanded="true"])::after { opacity: 0 !important; transition: none !important; }
 
-/* === Menu "Titre" fusionné (niveau + numérotation des titres) === Remplace deux contrôles jusqu'ici séparés (un <select> "Normal/Titre 1-6" + une pastille
-   de numérotation isolée), qui portent tous deux sur les titres. Un seul chip (.v2-format-chip) déclenche un flyout listant les niveaux PUIS, séparé par un
-   filet, le style de numérotation (.v2-segmented). Les DEUX <select> natifs restent dans le DOM (masqués) : js/main.js s'appuie encore dessus pour
-   lire/poser la valeur au chargement d'un modèle. */
+/* Menu « Titre » fusionné (niveau et numérotation des titres) : un seul chip (`.v2-format-chip`) déclenche un flyout qui liste les niveaux puis,
+   après un filet, le style de numérotation (`.v2-segmented`). Les deux `<select>` natifs restent dans le DOM, masqués : js/main.js s'en sert
+   encore pour lire et poser la valeur au chargement d'un modèle. */
 #v2-header-select[hidden], #v2-heading-numbering-select[hidden] { display: none; }
 
-/* === Contours retirés sur la ligne du haut aussi - transparent au repos, révélé au survol seulement. Override V2-only (spécificité égale à la règle
-   partagée de css/style.css, gagne car chargé après) : les boutons déjà distingués par couleur ou état gardent leurs propres règles plus spécifiques. */
+/* Contours retirés aussi sur la ligne du haut : transparents au repos, révélés au survol. Spécificité égale à la règle partagée de css/style.css,
+   qui perd parce que cette feuille est chargée après ; les boutons déjà distingués par la couleur ou l'état gardent leurs règles, plus
+   spécifiques. */
 #toolbar-top button { border-color: transparent; }
 #toolbar-top button:hover { border-color: var(--border-strong); }
 .title-cluster { border-color: transparent; }
 .a4-toggle { border-color: transparent; background: transparent; }
 .a4-toggle:hover { border-color: var(--border-strong); background: var(--surface-sunken); }
 
-/* === Nom de fichier PDF masqué derrière un crayon (même geste que le renommage de modèle ci-dessus) - toujours replié au chargement d'un modèle, même si
-   un nom y est déjà configuré (cf. js/main.js:wirePdfFilenameToggle/loadTemplateIntoEditor - UI de base clean par défaut, retour d'Antoine 2026-09-19). */
+/* Nom de fichier PDF masqué derrière un crayon (même geste que le renommage de modèle ci-dessus) : toujours replié au chargement d'un modèle, même
+   si un nom y est déjà configuré (js/main.js:wirePdfFilenameToggle, loadTemplateIntoEditor). */
 .v2-pdf-filename-cluster { display: inline-flex; align-items: center; gap: 4px; }
 #pdf-filename-template { height: 28px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 0 8px; min-width: 220px; background: var(--surface); color: var(--text); }
 #btn-toggle-pdf-filename::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M12 20h9'/%3E%3Cpath d='M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M12 20h9'/%3E%3Cpath d='M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z'/%3E%3C/svg%3E"); }
 
-/* === Bandeau Objet/À/Cc/Cci du mode email (planning/feature-email-mode.md) === Sur une seule ligne pour limiter la hauteur prise (retour d'Antoine,
-   2026-09-18) - masqué par défaut (hidden), affiché uniquement par js/main.js quand le modèle courant est un modèle email. Les 4 champs sont de simples
-   <input type="text"> (pas des mini-éditeurs TipTap) : #Variable s'y insère en texte brut via Variables.initFilenameInput, MÊME mécanisme déjà éprouvé que
-   #pdf-filename-template ci-dessus - ces valeurs finissent de toute façon en texte brut dans une URL mailto:, une bulle riche n'y apporterait rien. */
+/* Bandeau Objet / À / Cc / Cci du mode email (planning/feature-email-mode.md) : sur une seule ligne pour limiter la hauteur prise, masqué par
+   défaut (`hidden`) et affiché par js/main.js quand le modèle courant est un modèle email. Les quatre champs sont de simples `<input
+   type="text">`, pas des mini-éditeurs TipTap : #Variable s'y insère en texte brut par Variables.initFilenameInput, comme pour
+   #pdf-filename-template ci-dessus ; ces valeurs finissent en texte brut dans une URL mailto:, une bulle riche n'y apporterait rien. */
 #v2-email-fields-row { display: flex; align-items: center; gap: 6px; padding: 6px 10px; flex-wrap: wrap; border-bottom: 1px solid var(--border); background: var(--surface); font-family: var(--font-ui); }
-/* `display:flex` juste au-dessus a une spécificité (1,0,0) supérieure à la règle native [hidden]{display:none} de la feuille UA (0,1,0) - la règle
-   AUTEUR l'emporte dans la cascade quelle que soit la spécificité (origine auteur > origine UA), donc l'attribut `hidden` posé par js/main.js
-   (loadTemplateIntoEditor) ne masquait plus rien : le bandeau Objet/À/Cc/Cci et le bouton #btn-create-email restaient visibles en permanence, y compris
-   sur un modèle document (régression jamais vue par les tests, qui ne vérifiaient que la propriété .hidden, pas le rendu réel - cf.
-   .settings-trigger-reload-notice[hidden] plus bas pour le même piège déjà rencontré). Re-déclarés avec [hidden] en plus pour qu'ils reprennent la main. */
+/* `display: flex` juste au-dessus a une spécificité (1,0,0) supérieure à la règle native `[hidden] { display: none }` du navigateur (0,1,0), et la
+   règle de l'auteur l'emporte dans la cascade (origine auteur > origine navigateur) : l'attribut `hidden` posé par js/main.js
+   (loadTemplateIntoEditor) ne masquerait plus rien, le bandeau et le bouton #btn-create-email resteraient visibles sur un modèle document.
+   Re-déclarés avec `[hidden]` pour qu'ils reprennent la main (même piège que `.settings-trigger-reload-notice[hidden]` plus bas). */
 #v2-email-fields-row[hidden] { display: none; }
 #btn-create-email[hidden] { display: none; }
 .v2-email-field-label { font-size: 13px; font-weight: 600; color: var(--text-muted); }
 .v2-email-field-input { flex: 0 1 200px; min-width: 120px; }
 .v2-email-field-input.v2-email-field-subject { flex-basis: 300px; }
-/* Panneau étroit : Objet/À/Cc/Cci partagent une seule ligne tant que chaque champ garde au moins 64px. Leurs largeurs de base (300/200px) imposaient 2 à 3
-   lignes de 38px : à 600x400, avec Cci, la barre montait à 388px sur 400 - plus une ligne de texte visible dans l'éditeur, et la page débordait de 16px.
-   Au-delà de 900px, largeurs d'origine inchangées. */
+/* Panneau étroit : Objet, À, Cc et Cci partagent une seule ligne tant que chaque champ garde au moins 64 px. Leurs largeurs de base (300 et 200
+   px) imposeraient 2 à 3 lignes de 38 px : à 600 × 400, avec Cci, la barre atteindrait 388 px sur 400, sans une ligne de texte visible dans
+   l'éditeur, et la page déborderait de 16 px. Au-delà de 900 px, les largeurs d'origine ne changent pas. */
 @media (max-width: 900px) {
   .v2-email-field-input, .v2-email-field-input.v2-email-field-subject { flex: 1 1 0; min-width: 64px; }
   .v2-email-field-input.v2-email-field-subject { flex-grow: 1.5; }
@@ -155,49 +146,42 @@
 .v2-email-cci-toggle { font-size: 12.5px; font-weight: 600; height: 28px; padding: 0 8px; border-radius: var(--radius-sm); background: transparent; color: var(--text-muted); cursor: pointer; }
 .v2-email-cci-toggle:hover { background: var(--surface-sunken); color: var(--text); }
 .v2-email-cci-toggle.is-active { background: var(--accent-soft); border-color: var(--accent-soft-border); color: var(--accent-ink); }
-/* Préfixées par #toolbar-top (même compte de spécificité que la règle générique #toolbar-top button de
-   css/style.css qui, sinon, gagne et impose sa bordure transparente et son texte foncé - même piège et
-   même remède que #toolbar-top #btn-save un peu plus bas dans ce fichier). Sans ce préfixe le bouton
-   perdait sa bordure et sa couleur muted de la maquette. */
+/* Préfixées par #toolbar-top (même compte de spécificité que la règle générique `#toolbar-top button` de css/style.css qui, sinon, l'emporte et
+   impose sa bordure transparente et son texte foncé ; même remède que #toolbar-top #btn-save plus bas dans ce fichier). */
 #toolbar-top .v2-email-cci-toggle { border: 1px solid var(--border-strong); color: var(--text-muted); }
-/* Bouton texte pur, comme sur la maquette (aucune icône) - sans ce ::before en plus spécifique, le
-   ::before générique de #toolbar-top button::before (css/style.css) gagne à spécificité égale (chargé
-   avant, cf. #v2-toolbar button::before dans editor-v2.css qui règle le même problème pour l'autre
-   toolbar) et affiche un carré plein 14x14, faute de mask-image défini pour ce bouton. */
+/* Bouton texte pur, sans icône : sans ce ::before plus spécifique, le ::before générique de `#toolbar-top button::before` (css/style.css)
+   l'emporte à spécificité égale (chargé avant ; `#v2-toolbar button::before` dans css/editor-v2.css règle le même problème pour l'autre barre) et
+   affiche un carré plein 14 × 14, faute de `mask-image` défini pour ce bouton. */
 #toolbar-top #v2-btn-toggle-cci::before { content: none; }
 
-/* Compteur de longueur + bouton d'action de la bar-row 1, visibles uniquement en mode email (js/main.js) - insérés après le bouton Exporter PDF existant,
-   jamais à côté (il n'y a qu'un seul bouton d'action ici, cf. planning/feature-email-mode.md §4.1 - "le bouton exporter en pdf disparaît [du bandeau email]
-   il est déjà sur la première ligne, donc pas besoin qu'il soit à côté de composer l'email" - retour d'Antoine). Le compteur mesure la longueur de l'URL
-   mailto: RÉSOLUE (§4.4 du document) - jamais bloquant, juste informatif (rouge au-delà de MailtoExport.SAFE_URL_LENGTH).
-   */
+/* Compteur de longueur et bouton d'action de la `.bar-row` 1, visibles en mode email seulement (js/main.js), insérés après le bouton Exporter PDF
+   existant : il n'y a qu'un seul bouton d'action ici (planning/feature-email-mode.md §4.1), le bouton d'export PDF étant déjà sur la première
+   ligne. Le compteur mesure la longueur de l'URL mailto: résolue (§4.4 du document) ; jamais bloquant, seulement informatif (rouge au-delà de
+   MailtoExport.SAFE_URL_LENGTH). */
 .v2-email-char-counter { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
 .v2-email-char-counter.is-over-limit { color: var(--danger-ink); font-weight: 600; }
-/* Préfixées par #toolbar-top, comme #btn-save/#btn-export-pdf juste au-dessus dans css/style.css : sans
-   ce préfixe, la règle générique #toolbar-top button (background/color/border-color) gagne à spécificité
-   égale et le bouton retombe à son style transparent par défaut - c'était le cas ici (bug constaté,
-   Antoine 2026-09-19 : "pas du tout comme la maquette"), le fond accent et le texte blanc n'étaient
-   jamais appliqués. */
+/* Préfixées par #toolbar-top, comme #btn-save et #btn-export-pdf dans css/style.css : sans ce préfixe, la règle générique `#toolbar-top button`
+   (background, color, border-color) l'emporte à spécificité égale et le bouton retombe à son style transparent par défaut, sans le fond d'accent
+   ni le texte blanc. */
 #toolbar-top #btn-create-email { background: var(--accent-solid); border-color: var(--accent-solid); color: #fff; box-shadow: 0 1px 2px rgba(47,111,237,.35); gap: 5px; }
 #toolbar-top #btn-create-email:hover { background: var(--accent-solid-hover); border-color: var(--accent-solid-hover); }
-/* Icône avion en papier de la maquette, en mask (même famille que le reste de .bar-row) plutôt qu'un
-   <svg> inline - currentColor reprend le blanc du texte ci-dessus. Taille : celle du ::before générique
-   de #toolbar-top button (14x14, css/style.css) - une valeur ici n'y gagnerait pas, cette règle étant
-   moins spécifique sur width/height (seul mask-image, qu'aucune autre règle ne fixe, s'applique bien). */
+/* Icône avion en papier, en `mask` (même famille que le reste de `.bar-row`) plutôt qu'un `<svg>` en ligne : `currentColor` reprend le blanc du
+   texte ci-dessus. Taille : celle du ::before générique de `#toolbar-top button` (14 × 14, css/style.css) ; une valeur ici n'y gagnerait pas,
+   cette règle étant moins spécifique sur `width` et `height` (seul `mask-image`, qu'aucune autre règle ne fixe, s'applique). */
 #btn-create-email::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='22' y1='2' x2='11' y2='13'/%3E%3Cpolygon points='22 2 15 22 11 13 2 9 22 2'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='22' y1='2' x2='11' y2='13'/%3E%3Cpolygon points='22 2 15 22 11 13 2 9 22 2'/%3E%3C/svg%3E"); }
 
-/* === Qualité PDF : bouton + panneau au survol (même mécanisme que les styles de puce/numérotation de la ligne de mise en forme) plutôt qu'un <select>
-   toujours affiché - js/main.js:onExportPdf lit encore v2-pdf-quality.value directement, inchangé. */
-/* Page (coin plié, même silhouette que l'icône "saut de page" - ancre ce bouton comme "propre au PDF/document") + petites barres ascendantes (niveaux de
-   qualité) - retenu après plusieurs essais moins concluants (jauge à aiguille, trame de points, curseurs). */
+/* Qualité PDF : bouton et panneau au survol (même mécanisme que les styles de puce et de numérotation de la ligne de mise en forme) plutôt qu'un
+   `<select>` toujours affiché ; js/main.js:onExportPdf lit encore `v2-pdf-quality.value` directement. */
+/* Page (coin plié, même silhouette que l'icône « saut de page », qui ancre ce bouton comme propre au PDF et au document) et petites barres
+   ascendantes (niveaux de qualité). */
 #v2-btn-quality::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 2h8l4 4v16H6z'/%3E%3Cpath d='M14 2v4h4'/%3E%3Cpath d='M9 17v-2.5M12.5 17v-5M16 17v-3'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 2h8l4 4v16H6z'/%3E%3Cpath d='M14 2v4h4'/%3E%3Cpath d='M9 17v-2.5M12.5 17v-5M16 17v-3'/%3E%3C/svg%3E"); }
 #v2-pdf-quality[hidden] { display: none; }
 
-/* === Modale "Correspondance de tables" (#link-config-modal) === Maquette sobre : les 2 radios à égalité laissent place au cas normal ("Ligne
-   correspondante", toujours affiché) avec le cas rare ("Ligne fixe") relégué à un simple lien texte. Les deux <select> portent chacun leur propre
-   étiquette JUSTE AU-DESSUS (association select ↔ table sans ambiguïté). */
-/* Cadre, titre, largeur et défilement : base commune des fenêtres (css/modal-base.css) ; ici seulement les deux écarts que cette fenêtre a toujours eus. 12 px
-   avant les boutons + les 4 px sous le dernier lien = les 16 px d'avant, où les deux marges se confondaient. */
+/* Fenêtre « Correspondance de tables » (#link-config-modal) : le cas normal (« Ligne correspondante », toujours affiché) et le cas rare (« Ligne
+   fixe »), relégué à un simple lien texte, plutôt que deux radios à égalité. Les deux `<select>` portent chacun leur étiquette juste au-dessus
+   (association select et table sans ambiguïté). */
+/* Cadre, titre, largeur et défilement : base commune des fenêtres (css/modal-base.css) ; ici seulement les deux écarts que cette fenêtre a
+   toujours eus. 12 px avant les boutons et les 4 px sous le dernier lien font les 16 px d'avant, où les deux marges se confondaient. */
 .link-config-modal-content { --pp-modal-title-gap: 14px; --pp-modal-actions-gap: 12px; }
 .link-config-bridge { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 10px; }
 .link-config-bridge[hidden] { display: none; }
@@ -221,11 +205,12 @@
 .link-config-modal-content .modal-actions .link-config-btn-primary:hover,
 .macro-editor-modal-content .modal-actions .link-config-btn-primary:hover { background: var(--accent-solid-hover); }
 
-/* === Modale "Macro modèle" (#macro-editor-modal, js/macro-editor.js) === Page de garde + liste de cartes "annexe conditionnelle", chaque carte reprenant
-   .link-rule-row pour ses lignes de règle (même vocabulaire visuel que la modale "Tables liées" ci-dessus) plutôt qu'un nouveau patron de liste. */
-/* Enregistrer/Annuler sortaient de la fenêtre dès qu'une seule règle était ajoutée dans un panneau bas (700×400, 600×400, 500×500, 900×450 - mesuré par le
-   coordinateur, 2026-09-28) : c'était alors le cadre entier qui défilait, boutons collés en bas. Depuis la base commune des fenêtres (js/modal-base.js), le titre
-   et les boutons sont fixes et seul le contenu défile, comme dans toutes les autres. */
+/* Fenêtre « Macro modèle » (#macro-editor-modal, js/macro-editor.js) : page de garde et liste de cartes « annexe conditionnelle », chaque carte
+   reprenant `.link-rule-row` pour ses lignes de règle (même vocabulaire visuel que la fenêtre « Tables liées » ci-dessus) plutôt qu'un nouveau
+   patron de liste. */
+/* Titre et boutons de la fenêtre sont fixes et seul le contenu défile (base commune des fenêtres, js/modal-base.js), comme dans toutes les autres
+   : sinon, dès qu'une règle est ajoutée dans un panneau bas (700 × 400, 600 × 400, 500 × 500, 900 × 450), c'est le cadre entier qui défile et
+   Enregistrer et Annuler sortent de la fenêtre. */
 .macro-editor-intro { font-size: 11.5px; color: var(--text-faint); margin: 0 0 14px; }
 .macro-editor-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
 .macro-editor-field label { font-size: 11px; font-weight: 700; color: var(--text-muted); }
@@ -240,37 +225,39 @@
 .macro-slot-remove:hover, .macro-rule-remove:hover { background: var(--surface); border-color: var(--border-strong); color: var(--danger); }
 .macro-slot-remove::before, .macro-rule-remove::before { content: "✕"; font-size: 12px; }
 .macro-slot-rules { display: flex; flex-direction: column; gap: 4px; }
-/* flex-wrap:wrap (au lieu du nowrap implicite) : sans ça, les zones flex:1 (min-width:0) de la ligne se réduisaient jusqu'à l'illisible plutôt que de
-   passer à la ligne - mesuré par le coordinateur (2026-09-28, panneau étroit ET avertissement colonne absente) : sélecteur de colonne réduit à 10px. */
+/* `flex-wrap: wrap` (au lieu du `nowrap` implicite) : sans lui, les zones `flex: 1` (`min-width: 0`) de la ligne se réduiraient jusqu'à
+   l'illisible plutôt que de passer à la ligne (sélecteur de colonne réduit à 10 px dans un panneau étroit ou avec l'avertissement « colonne
+   absente »). */
 .macro-rule-row { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; padding: 3px 0; }
-/* Règle d'une annexe du macro-modèle sur DEUX lignes (js/macro-editor.js:renderSlots ; audit UX/UI du 2026-09-29, F8 : cinq contrôles sur une ligne se
-   chevauchaient à 520 px - la liste des colonnes recouvrait l'opérateur, dont le « = » disparaissait). Ligne 1 : « Si », colonne, opérateur. Ligne 2, sous la
-   colonne (même retrait de 39 px que .macro-rule-column-type dans la fenêtre de condition) : valeur, flèche, modèle. La croix (.macro-rule-remove), centrée à
-   droite, retire la règle entière. Ces trois classes ne servent qu'à la fenêtre du macro-modèle : la condition d'une bulle et le filtre d'une boucle gardent
-   .macro-rule-row en une seule ligne. */
+/* Règle d'une annexe du macro-modèle sur deux lignes (js/macro-editor.js:renderSlots) : cinq contrôles sur une ligne se chevauchaient à 520 px (la
+   liste des colonnes recouvrait l'opérateur, dont le « = » disparaissait). Ligne 1 : « Si », colonne, opérateur. Ligne 2, sous la colonne (même
+   retrait de 39 px que `.macro-rule-column-type` dans la fenêtre de condition) : valeur, flèche, modèle. La croix (`.macro-rule-remove`), centrée
+   à droite, retire la règle entière. Ces trois classes ne servent qu'à la fenêtre du macro-modèle : la condition d'une bulle et le filtre d'une
+   boucle gardent `.macro-rule-row` sur une seule ligne. */
 .macro-rule-body { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
 .macro-rule-line { display: flex; align-items: center; gap: 5px; min-width: 0; }
 .macro-rule-line-detail { padding-left: 39px; box-sizing: border-box; }
 .macro-rule-line-detail .macro-rule-value-slot { min-width: 90px; }
-/* L'indication de type (« nombre », « date »…) et l'avertissement « colonne absente », enfants directs de la règle, commencent sous la colonne comme la seconde
-   ligne, et comme dans la fenêtre de condition (css/variable-actions.css : .var-condition-rules .macro-rule-column-type) ; le sélecteur ne vaut que si la règle a un corps. */
+/* L'indication de type (« nombre », « date »...) et l'avertissement « colonne absente », enfants directs de la règle, commencent sous la colonne
+   comme la seconde ligne, et comme dans la fenêtre de condition (css/variable-actions.css : `.var-condition-rules .macro-rule-column-type`) ; le
+   sélecteur ne vaut que si la règle a un corps. */
 .macro-rule-body ~ .macro-rule-column-type { padding-left: 39px; box-sizing: border-box; }
 .macro-rule-connector { flex: none; font-size: 11px; font-weight: 700; color: var(--text-muted); width: 34px; }
 .macro-rule-column, .macro-rule-value { flex: 1; min-width: 0; height: 26px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
 .macro-rule-row select { flex: none; height: 26px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 12px; padding: 0 4px; background: var(--surface); color: var(--text); }
 .macro-rule-row select.macro-rule-modele { flex: 1; min-width: 0; }
 .macro-rule-arrow { flex: none; color: var(--text-faint); font-size: 12px; }
-/* flex-wrap:wrap + min-width en px (au lieu de 0) sur les deux enfants : quand select ET advancedInput sont visibles en même temps (valeur déjà
-   enregistrée absente des choix/colonnes actuels), ils se partageaient l'espace à 50/50 jusqu'à tronquer leur texte ("Autre valeur…" -> "Au", mesuré par
-   le coordinateur, 2026-09-28) - passent maintenant à la ligne l'un sous l'autre plutôt que de rétrécir sous une largeur lisible. */
+/* `flex-wrap: wrap` et `min-width` en px (au lieu de 0) sur les deux enfants : quand le select et l'`advancedInput` sont visibles en même temps
+   (valeur déjà enregistrée absente des choix ou des colonnes actuels), ils se partageraient l'espace à 50/50 jusqu'à tronquer leur texte (« Autre
+   valeur… » devenait « Au ») ; ils passent à la ligne l'un sous l'autre plutôt que de rétrécir sous une largeur lisible. */
 .macro-rule-column-wrap { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .macro-rule-column-wrap select.macro-rule-column { flex: 1 1 90px; min-width: 90px; }
 .macro-rule-column-advanced { flex: 1 1 90px; min-width: 90px; height: 26px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
 .macro-rule-column-advanced[hidden] { display: none; }
-/* flex:1 0 100% : force TOUJOURS sa propre ligne en pleine largeur de .macro-rule-row (jamais juste celle de .macro-rule-column-wrap, ~1/3 de la ligne -
-   l'avertissement "colonne absente" y dépassait largement et écrasait le reste de la ligne, cf. commentaire de .macro-rule-row) ; white-space:normal
-   (au lieu de nowrap) pour qu'il puisse revenir à la ligne lui-même si besoin. Placé par renderSlots (js/macro-editor.js) en DERNIER enfant de la ligne,
-   hors de .macro-rule-column-wrap. */
+/* `flex: 1 0 100%` : toujours sa propre ligne, en pleine largeur de `.macro-rule-row` (pas seulement celle de `.macro-rule-column-wrap`, environ
+   un tiers de la ligne, où l'avertissement « colonne absente » dépasserait largement et écraserait le reste de la ligne). `white-space: normal`
+   (au lieu de `nowrap`) pour qu'il revienne lui-même à la ligne au besoin. Placé par renderSlots (js/macro-editor.js) en dernier enfant de la
+   ligne, hors de `.macro-rule-column-wrap`. */
 .macro-rule-column-type { flex: 1 0 100%; font-size: 10.5px; color: var(--text-faint); white-space: normal; margin-top: 2px; }
 .macro-rule-column-type.is-warning { color: var(--danger-ink); font-weight: 600; }
 .macro-rule-value-slot { flex: 1; min-width: 0; display: flex; }
@@ -286,16 +273,18 @@
 .macro-editor-add-slot { display: block; width: 100%; font-size: 12.5px; font-weight: 600; color: var(--accent); background: var(--surface); border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); padding: 7px; cursor: pointer; font-family: var(--font-ui); }
 .macro-editor-add-slot:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); }
 
-/* Panneau résumé (#macro-summary-container, index.html) affiché à la place de l'éditeur TipTap quand le modèle courant est un macro modèle
-   (js/main.js:syncEditorVisibilityForMode) - reste sobre, l'utilisateur ne modifie sa composition qu'en rouvrant la modale ci-dessus. js/main.js lui pose `display:block` (style en ligne) quand
-   il s'affiche : le `display:flex` d'ici n'a jamais joué, le cadre se centre donc par ses marges et le panneau défile quand la liste des modèles dépasse sa hauteur (700×400). */
+/* Panneau résumé (#macro-summary-container, index.html) affiché à la place de l'éditeur TipTap quand le modèle courant est un macro-modèle
+   (js/main.js:syncEditorVisibilityForMode) : sobre, la composition ne se modifie qu'en rouvrant la fenêtre ci-dessus. js/main.js lui pose
+   `display: block` (style en ligne) à l'affichage : le `display: flex` d'ici ne joue jamais, le cadre se centre par ses marges et le panneau
+   défile quand la liste des modèles dépasse sa hauteur (700 × 400). */
 #macro-summary-container { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 18px; background: var(--surface-sunken); overflow-y: auto; }
 .macro-summary-box { text-align: center; max-width: 480px; margin: 0 auto; }
-/* La phrase prend --text (choix d'Antoine, 02/10) : --text-muted sur le fond --surface-sunken du panneau n'y faisait que 4,39:1 en clair, sous les 4,5:1 de la charte (F5). */
+/* La phrase prend `--text` : `--text-muted` sur le fond `--surface-sunken` du panneau n'atteint que 4,39:1 en clair, sous les 4,5:1 de la charte. */
 .macro-summary-text { font-size: 13px; color: var(--text); margin: 0 0 12px; }
-/* Les modèles de la composition (js/macro-editor.js:renderParts) : une ligne par page de garde ou annexe, le nom de chaque modèle suivi de son stylo, qui l'ouvre dans l'éditeur (le bandeau
-   « Revenir au macro-modèle » ramène ici, js/main.js), puis de son œil, qui le masque de la Lecture et des exports (demande d'Antoine, 04/10). Un modèle masqué reste dans la composition : son nom
-   se grise et son œil est barré et enfoncé (rien ne disparaît, on grise). Un modèle supprimé depuis reste dit (grisé, stylo et œil grisés), jamais retiré. */
+/* Les modèles de la composition (js/macro-editor.js:renderParts) : une ligne par page de garde ou annexe, avec le nom du modèle suivi de son
+   stylo, qui l'ouvre dans l'éditeur (le bandeau « Revenir au macro-modèle » ramène ici, js/main.js), puis de son œil, qui le masque de la Lecture
+   et des exports. Un modèle masqué reste dans la composition : son nom se grise et son œil est barré et enfoncé (rien ne disparaît, on grise). Un
+   modèle supprimé depuis reste dit (grisé, stylo et œil grisés), jamais retiré. */
 .macro-summary-parts { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 6px; text-align: left; }
 .macro-summary-part { display: flex; align-items: flex-start; gap: 8px; padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
 .macro-summary-part-label { flex: none; width: 88px; box-sizing: border-box; font-size: 11px; font-weight: 700; line-height: 24px; color: var(--text-muted); }
@@ -309,11 +298,13 @@
 .macro-summary-edit:focus-visible, .macro-summary-eye:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .macro-summary-edit:disabled, .macro-summary-eye:disabled { opacity: .35; cursor: default; }
 .macro-summary-edit:disabled:hover, .macro-summary-eye:disabled:hover { background: transparent; border-color: transparent; color: var(--text-muted); }
-/* L'œil d'un modèle masqué : enfoncé (fond et bordure des boutons actifs, texte plein), pour que l'état ne tienne pas seulement à l'icône barrée ; le nom du modèle se grise. */
+/* L'œil d'un modèle masqué est enfoncé (fond et bordure des boutons actifs, texte plein), pour que l'état ne tienne pas seulement à l'icône barrée
+   ; le nom du modèle se grise. */
 .macro-summary-eye[aria-pressed="true"] { background: var(--surface-sunken); border-color: var(--border-strong); color: var(--text); }
 .macro-summary-model.is-hidden-model .macro-summary-model-name { color: var(--text-muted); }
-/* Bandeau « Revenir au macro-modèle » (#macro-return-bar, index.html ; js/main.js:syncMacroReturnBar) : une ligne fine entre la barre d'outils et le texte, tant que le modèle à l'écran a été ouvert
-   par le stylo du résumé d'un macro-modèle (pas une icône de plus dans la barre d'outils gelée). Jetons de css/style.css seulement : clair et sombre. */
+/* Bandeau « Revenir au macro-modèle » (#macro-return-bar, index.html ; js/main.js:syncMacroReturnBar) : une ligne fine entre la barre d'outils et
+   le texte, tant que le modèle à l'écran a été ouvert par le stylo du résumé d'un macro-modèle (une icône de plus dans la barre d'outils gelée
+   n'est pas une option). Jetons de css/style.css seulement : clair et sombre. */
 .macro-return-bar { flex: none; display: flex; align-items: center; gap: 10px; padding: 4px 10px; box-sizing: border-box; border-bottom: 1px solid var(--border); background: var(--surface); color: var(--text-muted); font-family: var(--font-ui); font-size: 12px; }
 .macro-return-bar[hidden] { display: none; }
 .macro-return-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -323,8 +314,8 @@
 #btn-edit-macro { font-family: var(--font-ui); font-weight: 600; font-size: 13px; height: 32px; padding: 0 16px; border-radius: var(--radius-sm); border: 1px solid var(--accent-solid); background: var(--accent-solid); color: #fff; cursor: pointer; }
 #btn-edit-macro:hover { background: var(--accent-solid-hover); border-color: var(--accent-solid-hover); }
 
-/* === Modale "Tables liées" (#link-rules-modal) === Liste des règles configurées ; chaque ligne avait 2 boutons texte bruts sans style, remplacés par des
-   icônes cohérentes avec le reste de la toolbar (même crayon que le renommage, même corbeille que Supprimer). */
+/* Fenêtre « Tables liées » (#link-rules-modal) : liste des règles configurées ; chaque ligne a des icônes cohérentes avec le reste de la barre
+   (même crayon que le renommage, même corbeille que Supprimer). */
 .link-rules-modal-content { --pp-modal-title-gap: 12px; --pp-modal-actions-gap: 16px; }
 .link-rules-list { display: flex; flex-direction: column; gap: 2px; max-height: 240px; }
 .link-rule-row { display: flex; align-items: center; gap: 6px; padding: 7px 4px; border-bottom: 1px solid var(--border); }
@@ -338,9 +329,9 @@
 .link-rule-btn-delete::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.1'%3E%3Cpath d='M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.1'%3E%3Cpath d='M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14'/%3E%3C/svg%3E"); }
 .link-rules-empty { font-size: 12.5px; color: var(--text-faint); margin: 0; }
 
-/* === Galerie de templates (#template-gallery-modal/#template-preview-modal) === Même base que #link-rules-modal, mais contenu bien plus large (mosaïque) : taille
-   « lg » de la base commune (css/modal-base.css). Le titre et la recherche de la galerie, le titre et les boutons « Utiliser » de l'aperçu sont dans l'en-tête
-   fixe ; la grille (galerie) et la page (aperçu) sont la zone qui défile, les boutons du bas restent en place. */
+/* Galerie de modèles (#template-gallery-modal, #template-preview-modal) : même base que #link-rules-modal, mais un contenu bien plus large
+   (mosaïque) : taille « lg » de la base commune (css/modal-base.css). Le titre et la recherche de la galerie, le titre et les boutons « Utiliser »
+   de l'aperçu sont dans l'en-tête fixe ; la grille (galerie) et la page (aperçu) sont la zone qui défile, les boutons du bas restent en place. */
 .template-gallery-modal-content { --pp-modal-title-gap: 0px; --pp-modal-actions-gap: 14px; }
 .template-preview-modal-content { --pp-modal-title-gap: 10px; --pp-modal-actions-gap: 14px; }
 .template-gallery-modal-content .pp-modal-header h3, .template-preview-modal-content .pp-modal-header h3 { margin-bottom: 12px; }
@@ -371,28 +362,28 @@
 .tpl-preview-actions #tpl-preview-use-empty:hover, .tpl-preview-actions #tpl-preview-use-data:hover { background: var(--accent-solid-hover); }
 .tpl-preview-body { background: var(--surface-sunken); border-radius: 6px; }
 .template-preview-modal-content .tpl-preview-body { margin: 0 20px; padding: 16px; }
-/* Le "look page A4" de .v2-page-sheet/.tiptap est normalement posé par des règles SCOPÉES à #editor-container.a4-preview - cette prévisualisation vit dans
-   une modale, donc aucune ne s'applique ici. Reprend seulement les 2 constantes nécessaires (mêmes valeurs que editor-v2.css) ; tout le reste (styles des
-   titres/listes/tableaux/badges #Variable) est générique, non scopé, donc déjà actif ici tel quel. */
+/* Le « look page A4 » de `.v2-page-sheet` et `.tiptap` vient de règles scopées à `#editor-container.a4-preview` ; cet aperçu vit dans une fenêtre,
+   aucune ne s'y applique. Il reprend seulement les deux constantes nécessaires (mêmes valeurs que css/editor-v2.css) ; le reste (styles des
+   titres, listes, tableaux, bulles #Variable) est générique, non scopé, donc déjà actif ici. */
 .tpl-preview-body .v2-page-sheet { box-sizing: border-box; width: 793.71px; max-width: 100%; margin: 0 auto; background: #fff; box-shadow: 0 0 0 1px var(--border-strong), 0 4px 16px rgba(20, 28, 46, .1); }
 .tpl-preview-body .tiptap { box-sizing: border-box; padding: 37.33px; background: transparent; }
 
-/* === Panneau Réglages (langue / touche de déclenchement / crédits) === Même gabarit que .link-config-modal-content ci-dessus - premier système d'onglets
-   du projet : une rangée de boutons + un panneau par onglet, un seul visible via l'attribut `hidden` natif (pas de librairie/état complexe). */
-/* Trois étages : titre et onglets fixes en haut (l'en-tête de la base commune des fenêtres, css/modal-base.css), « Fermer » fixe en bas, et SEUL le contenu de
-   l'onglet visible défile (audit UX/UI du 29/09, F2). Avant : 360px pour six onglets (« Touche de déclenchement » sur deux lignes, « Marges de page » sur
-   trois, « Crédits » rogné) et une fenêtre entière qui défilait, donc « Fermer » entièrement sous le bas visible d'un panneau de 400px dans Accès. Taille
-   « md » de la base : 480px, marges intérieures comprises (au plus la largeur du panneau moins 24px). */
+/* Panneau Réglages (langue, touche de déclenchement, crédits) : même gabarit que `.link-config-modal-content` ci-dessus. Premier système d'onglets
+   du projet : une rangée de boutons et un panneau par onglet, un seul visible par l'attribut `hidden` natif (ni librairie ni état complexe). */
+/* Trois étages : titre et onglets fixes en haut (l'en-tête de la base commune des fenêtres, css/modal-base.css), « Fermer » fixe en bas, et seul
+   le contenu de l'onglet visible défile. Sans cela, dans 360 px, les onglets passeraient sur plusieurs lignes (« Touche de déclenchement » sur
+   deux, « Marges de page » sur trois, « Crédits » rogné) et la fenêtre entière défilerait, avec « Fermer » sous le bas visible d'un panneau de 400
+   px. Taille « md » de la base : 480 px, marges intérieures comprises (au plus la largeur du panneau moins 24 px). */
 .settings-modal-content { --pp-modal-title-gap: 0px; }
 .settings-modal-content .pp-modal-header h3 { margin-bottom: 12px; }
 .settings-tabs { flex: none; display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
-/* Une ligne, jamais deux : chaque onglet prend sa largeur de texte puis se partage le reste ; dans un panneau plus étroit que la fenêtre, un libellé se coupe par « … »
-   plutôt que de passer à la ligne. Huit onglets depuis « Vue » (réglages propres à la vue : modèle selon la ligne) : 1 px de marge de chaque côté, texte à 12 px et aucun écart entre
-   eux - avec la police des tests (DejaVu Sans, plus large qu'Arial de 17 %), les libellés français font 415 px pour 440 px de place (405 px à 12,5 px, mais 2 px de marge : 464 px pour huit). */
+/* Une ligne, jamais deux : chaque onglet prend sa largeur de texte puis se partage le reste ; dans un panneau plus étroit que la fenêtre, un
+   libellé se coupe par « … » plutôt que de passer à la ligne. Avec beaucoup d'onglets, 1 px de marge de chaque côté, texte à 12 px et aucun écart
+   entre eux : avec la police des tests (DejaVu Sans, plus large qu'Arial de 17 %), les libellés français tiennent à peine. */
 .settings-tab { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-ui); font-size: 12px; font-weight: 600; color: var(--text-faint); background: none; border: none; padding: 7px 1px; cursor: pointer; border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
-/* Le contenu de l'onglet affiché est l'étage qui défile (.settings-body : la zone de contenu de la base). Pas de `display` sur .settings-panel : js/settings.js
-   masque les six autres par l'attribut `hidden`, qu'une règle `display` battrait. Marge négative + même marge intérieure sur .settings-body : la couronne de
-   focus des champs qui touchent le bord n'est pas rognée par le défilement, sans décaler le contenu. */
+/* Le contenu de l'onglet affiché est l'étage qui défile (`.settings-body`, la zone de contenu de la base). Pas de `display` sur `.settings-panel`
+   : js/settings.js masque les autres par l'attribut `hidden`, qu'une règle `display` battrait. Marge négative et même marge intérieure sur
+   `.settings-body` : la couronne de focus des champs qui touchent le bord n'est pas rognée par le défilement, sans décaler le contenu. */
 .settings-modal-content .settings-body { overflow-x: hidden; margin: -3px 0; padding: 3px 20px; }
 .settings-tab:hover { background: var(--surface-sunken); }
 .settings-tab.active { color: var(--accent); box-shadow: inset 0 -2px 0 var(--accent); }
@@ -404,52 +395,55 @@
 .settings-margins-grid input { width: 64px; height: 28px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 0 8px; font-size: 13px; background: var(--surface); color: var(--text); }
 #settings-trigger-char { height: 30px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 0 8px; font-size: 13px; background: var(--surface); color: var(--text); }
 .settings-trigger-reload-notice { display: flex; align-items: center; gap: 8px; margin: 12px 0 0; font-size: 12.5px; color: var(--text-muted); }
-/* `display:flex` juste au-dessus a EXACTEMENT la même spécificité (0,1,0) que la règle native [hidden]{display:none} de la feuille UA - la règle AUTEUR
-   l'emporte dans la cascade, donc l'attribut `hidden` ne masquait plus rien. Re-déclaré avec [hidden] en plus (0,2,0) pour qu'il reprenne la main. */
+/* `display: flex` juste au-dessus a exactement la même spécificité (0,1,0) que la règle native `[hidden] { display: none }` du navigateur, et la
+   règle de l'auteur l'emporte dans la cascade : l'attribut `hidden` ne masquerait plus rien. Re-déclaré avec `[hidden]` (0,2,0) pour qu'il
+   reprenne la main. */
 .settings-trigger-reload-notice[hidden] { display: none; }
 .settings-trigger-reload-notice button { font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; height: 26px; padding: 0 10px; border-radius: var(--radius-sm); border: 1px solid var(--accent-solid); background: var(--accent-solid); color: #fff; cursor: pointer; }
 .settings-trigger-reload-notice button:hover { background: var(--accent-solid-hover); }
 .settings-credits-list { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0; font-size: 13px; }
 .settings-credits-list dt { font-weight: 700; color: var(--text-muted); }
 .settings-credits-list dd { margin: 0; color: var(--text); }
-/* Liens des Crédits : le bleu par défaut du navigateur fait 1,65:1 sur le fond sombre ; la couleur d'accent suit le thème. */
+/* Liens des Crédits : le bleu par défaut du navigateur ne fait que 1,65:1 sur le fond sombre ; la couleur d'accent suit le thème. */
 .settings-credits-list a { color: var(--accent); }
 .settings-modal-content .modal-actions { margin: 12px 20px 0; padding: 12px 0 18px; border-top: 1px solid var(--border); }
 .settings-modal-content .modal-actions button { font-family: var(--font-ui); font-weight: 600; font-size: 13px; height: 30px; padding: 0 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; }
 .settings-modal-content .modal-actions button:hover { background: var(--surface-sunken); }
 
-/* === Barre flottante de formatage nombre/date d'une bulle #Variable === Réutilise le chrome .v2-floating-toolbar ; ce qui suit ne couvre que le CONTENU
-   propre (segmenté FR/US/aucun, décimales, devise, bascule lettres, préréglages de date) - ses boutons ont besoin d'une largeur variable (libellés texte),
-   contrairement aux boutons icône-seule des autres barres flottantes. */
-/* Largeur = son contenu, jamais plus que la fenêtre (moins la marge de 8px du positionnement) : dans un panneau étroit les réglages passent à la ligne au lieu de
-   déborder (avec « Si la valeur vaut zéro » la barre nombre fait ~530px). `width: max-content` : la largeur ne dépend pas de la position `left` que lui donne le
-   positionnement, sans quoi la mesure et le placement se répondraient l'un à l'autre. */
+/* Barre flottante de formatage nombre ou date d'une bulle #Variable : elle réutilise le chrome `.v2-floating-toolbar` ; ce qui suit ne couvre que
+   son contenu propre (segmenté FR/US/aucun, décimales, devise, bascule lettres, préréglages de date), dont les boutons ont besoin d'une largeur
+   variable (libellés texte), contrairement aux boutons à icône seule des autres barres flottantes. */
+/* Largeur = son contenu, jamais plus que la fenêtre (moins la marge de 8 px du positionnement) : dans un panneau étroit les réglages passent à la
+   ligne au lieu de déborder (avec « Si la valeur vaut zéro », la barre nombre fait environ 530 px). `width: max-content` : la largeur ne dépend
+   pas de la position `left` que lui donne le positionnement, sans quoi la mesure et le placement se répondraient l'un à l'autre. */
 .v2-varfmt-toolbar { align-items: center; flex-wrap: wrap; width: max-content; max-width: calc(100vw - 16px); }
 .v2-varfmt-toolbar [data-var-panel] { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .v2-varfmt-toolbar [data-var-panel][hidden] { display: none; }
 .v2-varfmt-seg { display: inline-flex; border: 1px solid var(--border, #d7dde3); border-radius: 4px; overflow: hidden; }
 .v2-varfmt-toolbar .v2-varfmt-seg button { width: auto; height: 26px; padding: 0 8px; font-size: 11.5px; font-weight: 700; border-radius: 0; border-left: 1px solid var(--border, #d7dde3); }
 .v2-varfmt-toolbar .v2-varfmt-seg button:first-child { border-left: none; }
-/* Les trois cases de la barre « Oui / Non » sont les icônes de la liste à cases, dessinées dans un coin d'un cadre de 24 : à 15 px la case ne fait que 4 px et les styles « texte barré » et
-   « texte normal » (deux traits de longueur différente) ne se distinguent plus ; à 20 px ils se lisent, dans la hauteur de 26 px des autres boutons de la barre. */
+/* Les trois cases de la barre « Oui / Non » sont les icônes de la liste à cases, dessinées dans un coin d'un cadre de 24 : à 15 px la case ne fait
+   que 4 px et les styles « texte barré » et « texte normal » (deux traits de longueur différente) ne se distinguent plus ; à 20 px ils se lisent,
+   dans la hauteur de 26 px des autres boutons de la barre. */
 .v2-varfmt-toolbar [data-var-panel="bool"] .v2-varfmt-seg button svg { width: 20px; height: 20px; }
 .v2-varfmt-toolbar select, .v2-varfmt-toolbar input[type="text"] { height: 26px; border: 1px solid var(--border, #d7dde3); border-radius: 4px; font-size: 12px; padding: 0 6px; background: var(--surface, #fff); color: var(--text, #3a4452); }
 .v2-varfmt-toolbar input[data-role="num-currency"] { width: 56px; }
 .v2-varfmt-toolbar select[data-role="date-preset"] { width: 190px; }
 .v2-varfmt-toolbar button[data-action="num-words"], .v2-varfmt-toolbar button[data-action="date-words"] { width: auto; padding: 0 8px; font-size: 12px; font-weight: 600; }
-/* Écriture en lettres active : le style de séparateur (FR/US/aucun) n'a plus de sens - grisé, pas retiré. Les décimales RESTENT actives : la partie
-   décimale s'écrit elle aussi en toutes lettres ("virgule cinquante-six"), pas d'arrondi silencieux ; la devise reste utilisable ("mille euros"). */
+/* Écriture en lettres active : le style de séparateur (FR/US/aucun) n'a plus de sens, il est grisé et non retiré. Les décimales restent actives :
+   la partie décimale s'écrit aussi en toutes lettres (« virgule cinquante-six »), sans arrondi silencieux ; la devise reste utilisable (« mille
+   euros »). */
 [data-var-panel="number"].v2-varfmt-words-active .v2-varfmt-seg { opacity: .4; pointer-events: none; }
 
-/* Boutons/groupes sans aucun sens pendant l'édition d'en-tête/pied de page - pointer-events (pas juste disabled, la numérotation des titres est un GROUPE
-   au survol) hérite vers tous les descendants, bloquant aussi le panneau flottant révélé au survol. `.v2-floating-toolbar .v2-hf-locked` en plus : les
-   boutons "devant/derrière le texte" de la barre flottante d'image vivent hors de #v2-toolbar, verrouillés car pdf-export.js ne résout pas la position
-   d'une image en calque dans cette zone. */
+/* Boutons et groupes sans sens pendant l'édition d'en-tête ou de pied de page. `pointer-events` (pas seulement `disabled` : la numérotation des
+   titres est un groupe au survol) hérite vers tous les descendants, bloquant aussi le panneau flottant révélé au survol. `.v2-floating-toolbar
+   .v2-hf-locked` en plus : les boutons « devant / derrière le texte » de la barre flottante d'image vivent hors de #v2-toolbar, verrouillés car
+   pdf-export.js ne résout pas la position d'une image en calque dans cette zone. */
 #v2-toolbar .v2-hf-locked, .v2-floating-toolbar .v2-hf-locked { pointer-events: none; opacity: .35; }
 
-/* === Pastille flottante d'édition d'en-tête/pied de page (#v2-hf-pill) === Remplace l'ancien bouton de toolbar + sous-barre dockée pleine largeur - façon
-   Google Docs/Word : on entre en édition en cliquant une zone de marge de la page (cf. .v2-hf-zone), cette pastille n'apparaît qu'ENSUITE. `position:
-   sticky` (dans #editor-container, qui défile) plutôt qu'ancrée au clic : reste visible même sur un en-tête qui déborderait de la zone visible. */
+/* Pastille flottante d'édition d'en-tête ou de pied (#v2-hf-pill), à la façon de Google Docs et Word : on entre en édition en cliquant une zone de
+   marge de la page (`.v2-hf-zone`), la pastille n'apparaît qu'ensuite. `position: sticky` (dans #editor-container, qui défile) plutôt qu'ancrée au
+   clic : elle reste visible même sur un en-tête qui déborde de la zone visible. */
 .v2-hf-pill {
   position: sticky; top: 8px; z-index: 25; width: fit-content; margin: 0 auto 14px;
   display: flex; align-items: center; gap: 10px; padding: 6px 8px 6px 14px;
@@ -469,8 +463,8 @@
 .v2-hf-btn-done { margin-left: auto; width: auto; height: 28px; padding: 0 14px; font-size: 12.5px; font-weight: 700; border-radius: 999px; border: 1px solid var(--accent-solid); background: var(--accent-solid); color: #fff; cursor: pointer; }
 .v2-hf-btn-done:hover { background: var(--accent-solid-hover); border-color: var(--accent-solid-hover); }
 
-/* Menu "Image depuis une variable" (js/editor.js:openImageVariablePicker) - même langage visuel que #autocomplete-box (css/editor-v2.css, #Variable en texte),
-   instance DOM séparée (id différent) pour ne rien partager entre les deux fichiers. */
+/* Menu « Image depuis une variable » (js/editor.js:openImageVariablePicker) : même langage visuel que #autocomplete-box (css/editor-v2.css,
+   #Variable en texte), instance DOM séparée (id différent) pour ne rien partager entre les deux fichiers. */
 #v2-image-var-picker { position: absolute; z-index: var(--z-menu); min-width: 200px; max-width: 320px; max-height: 240px; overflow: auto; background: var(--surface); border: 1px solid var(--border-strong); box-shadow: 0 4px 14px rgba(0,0,0,.10); border-radius: 6px; font-family: var(--font-ui); font-size: 12.5px; }
 .v2-image-var-picker-item { padding: 6px 10px; cursor: pointer; color: var(--text); }
 .v2-image-var-picker-item:hover { background: var(--surface-sunken); }
