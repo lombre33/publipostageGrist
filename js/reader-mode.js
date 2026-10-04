@@ -914,8 +914,10 @@ const ReaderMode = (function () {
     // Le PDF, le Word et l'Excel sortent le document comme la Lecture, suggestions du suivi acceptées, mais sans teinte : le texte supprimé n'y est
     // plus, le texte ajouté s'y écrit comme le reste. Le modèle garde ses suggestions en attente.
     applyAcceptedView(wrapper, cleanHtml, { tint: false });
-    // Cf. commentaire équivalent dans render() : schéma à jour nécessaire pour que resolveBadgeNode détecte correctement une colonne Attachments.
-    await GristAPI.refreshSchema().catch(() => {});
+    // Cf. commentaire équivalent dans render() : les types de colonnes à jour, nécessaires pour que resolveBadgeNode détecte correctement une colonne
+    // Attachments. Pas refreshSchema : il relisait chaque table du document en entier pour chaque ligne exportée (1,4 million de cases pour un PDF d'une
+    // seule ligne dans un document de 40 tables de 2 000 lignes, autant pour chaque ligne d'un lot), pour une liste de colonnes que l'export n'utilise pas.
+    await GristAPI.refreshColumnTypes().catch(() => {});
     // Mêmes zones répétées que le mode Lecture (cf. render()), avant de lister les bulles : les copies en font partie.
     const loopCtx = LoopRules.createContext();
     await LoopRules.expandZones(wrapper, tableId || lastCurrentTableId, record, loopCtx);

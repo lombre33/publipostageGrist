@@ -162,6 +162,59 @@
     },
   });
 
+  // Deux tables de 2 000 lignes que le document n'utilise pas, dans le schéma du document : un export ne les lit pas.
+  async function addUnusedTables() {
+    const stub = window.__gristStub;
+    ['RdArchives', 'RdJournal'].forEach(name => {
+      stub.setVariables(name, { Titre: 'Text', Montant: 'Numeric' });
+      stub.setRows(name, Array.from({ length: 2000 }, (_, i) => ({ id: i + 1, Titre: 'Ligne ' + (i + 1), Montant: i })));
+    });
+    await GristAPI.refreshSchema();
+  }
+
+  cases.push({
+    id: 'export_does_not_read_tables_the_document_does_not_use',
+    description: 'Un export de trois lignes d’affilée (PDF, Word, Excel) ne lit pas les tables du document que ses variables n’utilisent pas (avant : la passe de schéma exact relisait toutes les tables à chaque ligne, 1,4 million de cases pour un PDF d’une ligne dans le banc de charge) ; les trois autres tables restent lues une seule fois par ligne',
+    run: async (h) => {
+      await seed(h);
+      await addUnusedTables();
+      await PdfExport.ensurePdfLibsLoaded();
+      await DocxExport.ensureDocxLibLoaded();
+      const html = manyBadges();
+      const exporters = {
+        pdf: () => PdfExport.getNativePdfBlobForRecord(html, PAGE, delivered(), EXPORT_FILENAME, EXPORT_HF, undefined),
+        docx: () => DocxExport.getDocxBlobForRecord(html, PAGE, delivered(), EXPORT_FILENAME, EXPORT_HF, undefined),
+        xlsx: () => XlsxExport.getXlsxBlobForRecord(html, PAGE, delivered(), EXPORT_FILENAME),
+      };
+      const problems = [];
+      const counted = {};
+      for (const [name, run] of Object.entries(exporters)) {
+        const read = await tablesRead(async () => { await run(); await run(); await run(); });
+        const counts = countOf(read);
+        counted[name] = counts;
+        const unused = (counts.RdArchives || 0) + (counts.RdJournal || 0);
+        if (unused) problems.push(name + ' : ' + unused + ' lecture(s) d’une table que le document n’utilise pas');
+        ['RdDossiers', 'RdClients', 'RdEmployes'].forEach(table => { if (counts[table] !== 3) problems.push(name + ' : ' + table + ' lue ' + (counts[table] || 0) + ' fois pour 3 lignes'); });
+      }
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems, counted }) };
+    },
+  });
+
+  cases.push({
+    id: 'export_types_a_column_added_since_the_last_schema_pass',
+    description: 'Une colonne Pièces jointes ajoutée dans Grist depuis la dernière passe de schéma est connue comme telle après un export (les types de colonnes sont relus à chaque ligne exportée, comme à chaque rendu de la Lecture : une photo ne s’écrit pas comme une liste de nombres)',
+    run: async (h) => {
+      await seed(h);
+      const stub = window.__gristStub;
+      stub.setVariables('RdPieces', { Nom: 'Text', Photo: 'Attachments' });
+      stub.setRows('RdPieces', [{ id: 1, Nom: 'Pièce 1', Photo: [] }]);
+      const before = GristAPI.getColumnType('RdPieces', 'Photo');
+      await XlsxExport.getXlsxBlobForRecord('<p>' + badge('RdPieces', 'Nom') + '</p>', 'RdPieces', { id: 1, Nom: 'Pièce 1', Photo: [] }, '');
+      const after = GristAPI.getColumnType('RdPieces', 'Photo');
+      return { pass: before !== 'Attachments' && after === 'Attachments', notes: JSON.stringify({ before, after }) };
+    },
+  });
+
   cases.push({
     id: 'reader_superseded_renders_stop_early',
     description: 'Trois rendus lancés d’affilée (ligne qui change, zoom qui s’applique) : les deux premiers s’arrêtent après leur première attente, seul le dernier lit les tables et s’affiche',
