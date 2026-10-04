@@ -206,14 +206,18 @@ const TrackChanges = (function () {
     return ids;
   }
 
-  // Un réglage de case changé deux fois de suite (deux couleurs de fond, deux glissés du même bord de colonne) : la lib remplace la marque de la case et
-  // y note la valeur d'AVANT LE DERNIER changement - l'originale est perdue, « Refuser » rendait la couleur ou la largeur d'entre-deux. La marque garde
-  // donc la valeur d'origine de celle qu'elle remplace, et disparaît quand le dernier changement la ramène. Seulement pour une transaction faite de
-  // changements d'attribut (le fond : setNodeMarkup ; la largeur : setNodeMarkup sur chaque case de la colonne) : la lib n'y insère ni ne retire aucun
-  // nœud, les positions du document d'avant sont celles du document suivi. La marque qui suit une colonne ajoutée ou supprimée (ridesAlong) reste à la
-  // lib. Ajoute ses corrections à `tracked`, la transaction que la lib vient de produire pour `original`.
+  // Le réglage d'un nœud changé par une transaction faite de changements d'attribut (le fond d'une case : setNodeMarkup ; la largeur d'une colonne : setNodeMarkup sur chaque case ;
+  // l'alignement d'un paragraphe) : la lib n'y insère ni ne retire aucun nœud, les positions du document d'avant sont celles du document suivi. Elle pose une marque `modification` sur
+  // le nœud, d'où deux défauts. 1) Un réglage changé deux fois de suite (deux couleurs de fond, deux glissés du même bord de colonne, deux alignements) : la lib remplace la marque et y
+  // note la valeur d'AVANT LE DERNIER changement - l'originale est perdue, « Refuser » rendait la valeur d'entre-deux. La marque garde donc la valeur d'origine de celle qu'elle
+  // remplace, et disparaît quand le dernier changement la ramène. La marque qui suit une colonne ou une ligne ajoutée ou supprimée (ridesAlong) reste à la lib. 2) Une `modification`
+  // exclut l'insertion et la suppression (schéma de la lib) : posée sur une case dont la colonne est ajoutée ou supprimée, elle lui retirait sa marque - « Tout refuser » laissait la
+  // colonne en place, « Tout accepter » rendait un tableau percé. Un changement sur un nœud qui porte une insertion en fait partie : il s'applique, le nœud garde sa marque (refuser
+  // l'ajout l'enlève entier, l'accepter garde tout). Sur un nœud qui porte une suppression il n'a pas lieu : ce qui s'en va n'a plus de réglage à proposer, et refuser la suppression
+  // rend le document d'origine. Ajoute ses corrections à `tracked`, la transaction que la lib vient de produire pour `original`.
   const isSameValue = (a, b) => JSON.stringify(a == null ? null : a) === JSON.stringify(b == null ? null : b);
   const attrModification = (node, name) => node.marks.find(m => m.type.name === 'modification' && m.attrs.type === 'attr' && m.attrs.attrName === name);
+  const isInsertionOrDeletion = mark => isSuggestionMark(mark) && mark.type.name !== 'modification';
   // Le nœud et les attributs qu'un pas change, ou null quand ce pas n'est pas un simple changement d'attribut. `doc` : le document d'avant ce pas.
   function attributeChange(step, doc) {
     if (step.jsonID === 'attr') {
@@ -229,17 +233,27 @@ const TrackChanges = (function () {
     }
     return null;
   }
-  function keepOriginalCellSettings(tracked, original) {
+  function keepOriginalNodeSettings(tracked, original) {
+    const carried = [];
     const replaced = [];
     for (let i = 0; i < original.steps.length; i++) {
       const change = attributeChange(original.steps[i], original.docs[i]);
       if (!change) return;
-      if (!CELL_NODE_TYPES.includes(change.node.type.name)) continue;
+      if (change.node.marks.some(isInsertionOrDeletion)) {
+        if (!carried.some(other => other.pos === change.pos)) carried.push(change);
+        continue;
+      }
       change.names.forEach(name => {
         const before = attrModification(change.node, name);
         if (before && !ridesAlong(change.node, before)) replaced.push({ pos: change.pos, name, before });
       });
     }
+    carried.forEach(({ pos, node: before }) => {
+      const node = tracked.doc.nodeAt(pos);
+      if (!node || node.type !== before.type) return;
+      const attrs = before.marks.some(mark => mark.type.name === 'deletion') ? before.attrs : node.attrs;
+      if (!node.hasMarkup(before.type, attrs, before.marks)) tracked.setNodeMarkup(pos, null, attrs, before.marks);
+    });
     const { modification } = tracked.doc.type.schema.marks;
     replaced.forEach(({ pos, name, before }) => {
       const node = tracked.doc.nodeAt(pos);
@@ -251,6 +265,8 @@ const TrackChanges = (function () {
         : modification.create(Object.assign({}, mark.attrs, { previousValue: before.attrs.previousValue })).addToSet(rest);
       tracked.setNodeMarkup(pos, null, node.attrs, marks);
     });
+    // Tout ce que la transaction changeait n'a pas eu lieu (des cases supprimées) : le document est resté tel quel, il n'y a rien à annuler ni rien d'enregistrer.
+    if (carried.length && tracked.before.eq(tracked.doc)) tracked.setMeta('addToHistory', false).setMeta('preventUpdate', true);
   }
 
   // L'étendue, dans `doc`, de tout ce qui porte une insertion ou une suppression d'id `id` : une suggestion s'étend sur des nœuds voisins (la fin
@@ -816,7 +832,7 @@ const TrackChanges = (function () {
         if (!enabled) { next(transaction); return; }
         try {
           const tracked = transformToSuggestionTransaction(transaction, editor.state);
-          keepOriginalCellSettings(tracked, transaction);
+          keepOriginalNodeSettings(tracked, transaction);
           next(tracked);
         } catch (e) {
           console.warn('[TrackChanges] transaction refusée (suppression de bloc entier non prise en charge par la lib) :', e);

@@ -740,6 +740,10 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   défait. Elle ne s'ouvre jamais pendant la frappe, ni tant qu'un bouton de la souris est appuyé dans le texte (elle s'ouvre au relâchement), ni sans le focus dans le texte ; elle se ferme en Lecture, devant les
   fenêtres de variable et d'un clic ailleurs, reste entière dans le panneau (retournée au-dessus du texte tout en bas) et passe au-dessus de la barre du tableau. Monochrome comme les autres barres flottantes : le vert
   et le rouge restent ceux du texte suivi.
+- Réglages d'une case, d'une colonne ou d'un paragraphe en suivi (carte « Aussi l'alignement » d'Antoine, 04/10) : le fond d'une cellule, la largeur d'une colonne tirée et l'alignement d'un paragraphe sont des modifications que
+  la barre « Accepter / Refuser » propose une à une (une largeur sur toute la colonne), et « Refuser » rend toujours la valeur d'ORIGINE, même après deux changements du même réglage, jamais celle d'entre-deux ; un réglage ramené à sa
+  valeur d'origine ne laisse aucune suggestion. Colorer ou tirer une colonne AJOUTÉE avec le suivi fait partie de son ajout : ses cases gardent leur marque, « Refuser » ou « Tout refuser » la retire entière, « Accepter » garde tout.
+  Sur une colonne SUPPRIMÉE le fond et la largeur n'ont pas lieu : sa suppression reste entière, « Tout accepter » ne rend jamais un tableau percé.
 - Lecture avec des modifications du suivi en attente (demande d'Antoine du 04/10) : la Lecture montre le document comme si toutes les modifications étaient acceptées, avec seulement une légère teinte là où
   quelque chose a changé. Le texte supprimé a disparu (ni barré ni grisé), le texte ajouté ou de remplacement est là, plus aucune marque du suivi ne se voit. La teinte est un fond vert pâle `#e5f6ee`, le même
   en clair et en sombre (la page de Lecture reste blanche) : sous le texte ajouté, sur le paragraphe ou le titre dont la mise en forme a changé, sur les cases d'une colonne ou d'une ligne ajoutée (même avec un

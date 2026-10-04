@@ -1666,7 +1666,7 @@
   });
 
   // La valeur que « Refuser » rend est celle d'ORIGINE, même après plusieurs changements du même réglage (deux couleurs, deux glissés du même bord) : la lib note, à chaque remplacement de la marque d'une case, la valeur
-  // d'avant le dernier changement ; js/track-changes.js:keepOriginalCellSettings garde la première. Sur un tableau inséré à la main (largeurs jamais fixées), le widget fige aussitôt les autres colonnes à leur largeur
+  // d'avant le dernier changement ; js/track-changes.js:keepOriginalNodeSettings garde la première. Sur un tableau inséré à la main (largeurs jamais fixées), le widget fige aussitôt les autres colonnes à leur largeur
   // (js/editor.js:backfillAutoColumnWidths, hors suivi) : refuser la largeur tirée rend aussi ces colonnes à « automatique », sans quoi le tableau ne retrouvait jamais sa mise en page.
   async function pickNoCellFill(h) {
     await pressTableButton(h, 'fill-open');
@@ -1810,6 +1810,258 @@
         const run = await runAllChunked(h, 'reject', undefined, 1);
         out.noLoop = !run.looped;
         out.original = plainHtml(Editor.getHTML()) === original && !Editor.hasPendingTrackedChanges();
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  // === Une colonne ajoutée ou supprimée garde sa marque quand on la colore ou la tire ; un alignement changé deux fois se refuse jusqu'à l'original (demande d'Antoine du 04/10, carte « Aussi l'alignement ») ===
+  // Une marque `modification` exclut l'insertion et la suppression (la lib) : le fond ou la largeur posé sur une case de colonne AJOUTÉE lui faisait perdre sa marque d'ajout - « Tout refuser » laissait la colonne,
+  // ou un tableau décalé -, et sur une case de colonne SUPPRIMÉE la marque de suppression : « Tout accepter » rendait un tableau percé. Un changement d'attribut sur une case qui porte déjà une insertion en fait
+  // maintenant partie (la case garde sa marque, la valeur s'applique, refuser la colonne l'enlève entière, l'accepter garde tout) ; sur une case qui porte une suppression, il n'a pas lieu (js/track-changes.js:
+  // keepOriginalNodeSettings, appelée par le pont). Et deux alignements de suite (centré, puis à droite) : la marque garde l'alignement d'ORIGINE, comme celle d'une case. Les parcours à la vraie souris
+  // sont dans le script Node trackColumnsMouse (section 12).
+  const cellMarkNames = () => {
+    const out = [];
+    EditorCore.getEditor().state.doc.descendants(node => {
+      if (node.type.name === 'tableCell' || node.type.name === 'tableHeader') out.push(node.marks.map(m => m.type.name + (m.type.name === 'modification' ? ':' + m.attrs.attrName : '')).join('+') || '-');
+      return true;
+    });
+    return out;
+  };
+  const cellsWithMark = name => cellMarkNames().filter(marks => marks.split('+').some(m => m === name || m.indexOf(name + ':') === 0)).length;
+  // Le curseur dans la `n`-ième case qui porte une marque `markName` (une case ajoutée est vide : son paragraphe commence une position après elle).
+  async function placeInMarkedCell(h, markName, n) {
+    const ed = EditorCore.getEditor();
+    ed.view.focus();
+    ed.view.dispatch(ed.state.tr.setSelection(EditorCore.getTextSelectionClass().create(ed.state.doc, markedNodePos('tableCell', markName, n) + 2)));
+    await h.sleep(150);
+  }
+  // La largeur posée comme le fait la poignée du bord (une transaction, `colwidth` de chaque case de la colonne) sur les cases qui portent une marque `markName`.
+  async function setMarkedColumnWidth(h, markName, width) {
+    const ed = EditorCore.getEditor();
+    const tr = ed.state.tr;
+    const positions = [];
+    ed.state.doc.descendants((node, p) => { if (node.type.name === 'tableCell' && node.marks.some(m => m.type.name === markName)) positions.push(p); });
+    positions.forEach(pos => tr.setNodeMarkup(pos, undefined, Object.assign({}, tr.doc.nodeAt(pos).attrs, { colwidth: [width] })));
+    ed.view.dispatch(tr);
+    await h.sleep(300);
+    return positions.length;
+  }
+  const rowsCount = () => cellRows().map(row => row.length).join(',');
+
+  cases.push({
+    id: 'trackchanges_a_cell_background_on_an_added_column_stays_part_of_the_addition',
+    description: "Suivi allumé, une colonne ajoutée (« Colonne après ») dont une case reçoit un fond : ses cases gardent leur marque d'insertion (aucune marque de modification), le fond s'applique ; « Tout refuser » retire toute la colonne (le tableau d'origine), Annuler la rend colorée, « Tout accepter » garde la colonne et son fond",
+    run: async (h) => {
+      try {
+        const out = {};
+        await loadTable(h, TABLE_3X2, 'b1', true);
+        const original = plainHtml(Editor.getHTML());
+        await pressTableButton(h, 'col-after');
+        await h.sleep(300);
+        out.added = cellsWithMark('insertion') === 2 && rowsCount() === '4,4';
+        await placeInMarkedCell(h, 'insertion', 0);
+        await pickCellFill(h, FILL);
+        out.stillAnInsertion = cellsWithMark('insertion') === 2 && cellModifications() === 0;
+        out.filled = FILL_CSS.test(Editor.getHTML());
+        // Plus de 500 ms entre le fond et le refus : prosemirror-history groupe deux transactions voisines plus rapprochées (Annuler défait alors les deux d'un coup).
+        await h.sleep(700);
+        const rejected = await runAllChunked(h, 'reject');
+        out.rejectNoLoop = !rejected.looped;
+        out.columnGone = plainHtml(Editor.getHTML()) === original && !Editor.hasPendingTrackedChanges() && rowsCount() === '3,3';
+        await h.sleep(700);
+        EditorCore.getEditor().commands.undo();
+        await h.sleep(300);
+        out.undone = cellsWithMark('insertion') === 2 && FILL_CSS.test(Editor.getHTML()) && rowsCount() === '4,4';
+        const accepted = await runAllChunked(h, 'accept');
+        out.acceptNoLoop = !accepted.looped;
+        out.acceptKept = rowsCount() === '4,4' && cellMarkNames().every(marks => marks === '-') && FILL_CSS.test(Editor.getHTML()) && !Editor.hasPendingTrackedChanges();
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_the_bar_refuses_an_added_column_whose_cell_was_colored',
+    description: "Suivi allumé, une colonne ajoutée dont une case est colorée, le curseur dans cette case : la barre « Accepter / Refuser » s'ouvre sur la colonne, « Refuser » la retire entière (le tableau d'origine, un seul Annuler la rend), « Accepter » la garde avec son fond",
+    run: async (h) => {
+      try {
+        const out = {};
+        await loadTable(h, TABLE_3X2, 'b1', true);
+        const original = plainHtml(Editor.getHTML());
+        await pressTableButton(h, 'col-after');
+        await placeInMarkedCell(h, 'insertion', 1);
+        await pickCellFill(h, FILL);
+        await placeInMarkedCell(h, 'insertion', 1);
+        out.barOpen = barVisible();
+        await h.sleep(700);
+        await pressBarButton(h, 'reject');
+        out.refusedEntirely = plainHtml(Editor.getHTML()) === original && !Editor.hasPendingTrackedChanges();
+        await h.sleep(700);
+        EditorCore.getEditor().commands.undo();
+        await h.sleep(300);
+        out.oneUndo = cellsWithMark('insertion') === 2 && FILL_CSS.test(Editor.getHTML()) && rowsCount() === '4,4';
+        await placeInMarkedCell(h, 'insertion', 0);
+        await pressBarButton(h, 'accept');
+        out.acceptedKeepsAll = rowsCount() === '4,4' && cellMarkNames().every(marks => marks === '-') && FILL_CSS.test(Editor.getHTML()) && !Editor.hasPendingTrackedChanges();
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_a_column_width_on_an_added_column_stays_part_of_the_addition',
+    description: "Suivi allumé, la largeur d'une colonne ajoutée tirée à la souris (colwidth sur chacune de ses cases) : les cases gardent leur marque d'insertion, la largeur s'applique ; « Tout refuser » retire toute la colonne (comme sans largeur tirée), Annuler la rend, « Tout accepter » garde la colonne à sa largeur",
+    run: async (h) => {
+      try {
+        const out = {};
+        // Le témoin : la même colonne ajoutée, refusée sans que sa largeur ait été tirée (les largeurs que le widget recalcule après l'ajout ne sont pas des suggestions).
+        await loadTable(h, TABLE_FIXED_3X3, 'b1', true);
+        await pressTableButton(h, 'col-after');
+        await h.sleep(400);
+        await runAllChunked(h, 'reject');
+        const control = plainHtml(Editor.getHTML());
+        await loadTable(h, TABLE_FIXED_3X3, 'b1', true);
+        await pressTableButton(h, 'col-after');
+        await h.sleep(400);
+        out.added = cellsWithMark('insertion') === 3 && rowsCount() === '4,4,4';
+        const pulled = await setMarkedColumnWidth(h, 'insertion', 90);
+        out.stillAnInsertion = pulled === 3 && cellsWithMark('insertion') === 3 && cellModifications() === 0;
+        out.widthApplied = widthRows() === '150,150,90,150 / 150,150,90,150 / 150,150,90,150' || widthRows().split(' / ').every(row => row.split(',')[2] === '90');
+        const rejected = await runAllChunked(h, 'reject');
+        out.rejectNoLoop = !rejected.looped;
+        out.columnGone = plainHtml(Editor.getHTML()) === control && !Editor.hasPendingTrackedChanges() && rowsCount() === '3,3,3';
+        await h.sleep(700);
+        EditorCore.getEditor().commands.undo();
+        await h.sleep(300);
+        out.undone = cellsWithMark('insertion') === 3 && rowsCount() === '4,4,4';
+        await runAllChunked(h, 'accept');
+        out.acceptKept = rowsCount() === '4,4,4' && cellMarkNames().every(marks => marks === '-') && widthRows().split(' / ').every(row => row.split(',')[2] === '90') && !Editor.hasPendingTrackedChanges();
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(Object.assign({ widths: widthRows() }, out)) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_a_cell_background_on_a_deleted_column_does_not_break_its_deletion',
+    description: "Suivi allumé, une colonne supprimée (cases barrées) dont une case reçoit un fond : le fond n'a pas lieu et les cases gardent leur marque de suppression ; « Tout accepter » retire la colonne proprement (pas de tableau percé, pas de case vide en trop), « Tout refuser » rend le tableau d'origine",
+    run: async (h) => {
+      try {
+        const out = {};
+        await loadTable(h, TABLE_3X2, 'b1', true);
+        const original = plainHtml(Editor.getHTML());
+        await pressTableButton(h, 'col-del');
+        await h.sleep(300);
+        out.deleted = cellsWithMark('deletion') === 2;
+        await placeInCell(h, 'b1');
+        await pickCellFill(h, FILL);
+        out.noFill = fillRows() === '-,-,- / -,-,-';
+        out.stillADeletion = cellsWithMark('deletion') === 2 && cellModifications() === 0;
+        await runAllChunked(h, 'accept');
+        out.acceptedCleanly = plainHtml(Editor.getHTML()) === '<table><tbody><tr><td><p>a1</p></td><td><p>c1</p></td></tr><tr><td><p>a2</p></td><td><p>c2</p></td></tr></tbody></table><p>fin</p>' && !Editor.hasPendingTrackedChanges();
+        await h.sleep(700);
+        EditorCore.getEditor().commands.undo();
+        await h.sleep(300);
+        await runAllChunked(h, 'reject');
+        out.rejectedToOriginal = plainHtml(Editor.getHTML()) === original && !Editor.hasPendingTrackedChanges();
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_a_column_width_on_a_deleted_column_does_not_break_its_deletion',
+    description: "Suivi allumé, une colonne supprimée dont on tire la largeur (colwidth sur chacune de ses cases) : la largeur n'a pas lieu, les cases gardent leur marque de suppression, « Tout accepter » retire la colonne proprement",
+    run: async (h) => {
+      try {
+        const out = {};
+        await loadTable(h, TABLE_FIXED_3X3, 'b1', true);
+        await pressTableButton(h, 'col-del');
+        await h.sleep(400);
+        const before = widthRows();
+        out.deleted = cellsWithMark('deletion') === 3;
+        const pulled = await setMarkedColumnWidth(h, 'deletion', 90);
+        out.ignored = pulled === 3 && widthRows() === before && cellsWithMark('deletion') === 3 && cellModifications() === 0;
+        await runAllChunked(h, 'accept');
+        out.acceptedCleanly = rowsCount() === '2,2,2' && cellMarkNames().every(marks => marks === '-') && !Editor.hasPendingTrackedChanges();
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(Object.assign({ widths: widthRows() }, out)) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  const paragraphAligns = () => {
+    const out = [];
+    EditorCore.getEditor().state.doc.forEach(node => { if (node.type.name === 'paragraph') out.push(node.attrs.textAlign == null ? '-' : node.attrs.textAlign); });
+    return out.join(',');
+  };
+  cases.push({
+    id: 'trackchanges_refusing_an_alignment_changed_twice_gives_back_the_original',
+    description: "Suivi allumé, l'alignement d'un paragraphe changé deux fois (centré, puis à droite) : une seule marque, qui garde l'alignement d'origine ; « Refuser » (barre) rend l'alignement d'origine, pas le centré d'entre-deux ; « Accepter » garde l'alignement à droite ; sur deux paragraphes réalignés deux fois, « Tout refuser » rend les deux",
+    run: async (h) => {
+      try {
+        const out = {};
+        await h.resetEditor();
+        await disableTrackChangesIfOn(h);
+        Editor.setHTML('<p>Un</p><p>Aligné</p>');
+        await h.sleep(250);
+        const original = Editor.getHTML();
+        Editor.setTrackChanges(true);
+        const ed = EditorCore.getEditor();
+        await caretIn(h, 'Aligné', 2);
+        ed.commands.setTextAlign('center');
+        await h.sleep(700);
+        ed.commands.setTextAlign('right');
+        await h.sleep(700);
+        out.oneMark = pendingValues('textAlign').join() === 'null>"right"';
+        await caretIn(h, 'Aligné', 2);
+        out.barOpen = barVisible();
+        await pressBarButton(h, 'reject');
+        out.originalBack = paragraphAligns() === '-,-' && Editor.getHTML() === original && !Editor.hasPendingTrackedChanges();
+        ed.commands.setTextAlign('center');
+        await h.sleep(700);
+        ed.commands.setTextAlign('right');
+        await h.sleep(700);
+        await caretIn(h, 'Aligné', 2);
+        await pressBarButton(h, 'accept');
+        out.acceptedKeepsLast = paragraphAligns() === '-,right' && modificationCount() === 0 && !Editor.hasPendingTrackedChanges();
+        await h.resetEditor();
+        await disableTrackChangesIfOn(h);
+        Editor.setHTML('<p>Un</p><p>Deux</p>');
+        await h.sleep(250);
+        Editor.setTrackChanges(true);
+        ed.chain().focus().selectAll().setTextAlign('center').run();
+        await h.sleep(700);
+        ed.chain().focus().selectAll().setTextAlign('right').run();
+        await h.sleep(700);
+        out.twoMarks = pendingValues('textAlign').join() === 'null>"right",null>"right"';
+        await runAllChunked(h, 'reject');
+        out.rejectAllBack = paragraphAligns() === '-,-' && !Editor.hasPendingTrackedChanges();
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_an_alignment_brought_back_to_the_original_leaves_no_suggestion',
+    description: "Suivi allumé, un paragraphe d'abord à droite, centré puis remis à droite : plus aucune suggestion en attente (la marque disparaît quand le dernier changement ramène l'alignement d'origine)",
+    run: async (h) => {
+      try {
+        const out = {};
+        await h.resetEditor();
+        await disableTrackChangesIfOn(h);
+        Editor.setHTML('<p>Un</p><p style="text-align: right;">Aligné</p>');
+        await h.sleep(250);
+        out.startsRight = paragraphAligns() === '-,right';
+        Editor.setTrackChanges(true);
+        const ed = EditorCore.getEditor();
+        await caretIn(h, 'Aligné', 2);
+        ed.commands.setTextAlign('center');
+        await h.sleep(700);
+        out.pending = pendingValues('textAlign').join() === '"right">"center"';
+        ed.commands.setTextAlign('right');
+        await h.sleep(700);
+        out.cleared = modificationCount() === 0 && !Editor.hasPendingTrackedChanges() && paragraphAligns() === '-,right';
         return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
       } finally { await disableTrackChangesIfOn(h); }
     },

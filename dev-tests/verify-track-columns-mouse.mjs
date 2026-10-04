@@ -7,6 +7,8 @@
 // dans le tableau). Le HTML enregistré porte la marque en attribut de la case, parce qu'un <ins> posé autour d'un <td> ne survit pas à l'analyseur HTML du navigateur.
 // Le fond d'une cellule et la largeur d'une colonne posent aussi une marque de modification sur les cases touchées : « Tout refuser » doit les rendre et « Tout accepter » les garder (section 7, 04/10).
 // La barre « Accepter / Refuser » les propose aussi, un par un, et la largeur d'une colonne se résout sur toute la colonne (sections 9 et 10, 04/10, carte « Corriger »).
+// Une colonne ajoutée puis colorée ou tirée garde sa marque d'ajout (« Refuser » ou « Tout refuser » la retire entière), une colonne supprimée n'accepte aucun fond ni aucune largeur, et un alignement changé deux fois
+// se refuse jusqu'à l'original (section 12, 04/10, carte « Aussi l'alignement »).
 // Lancé par run-headless.mjs (groupe Node "trackColumnsMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-track-columns-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -214,6 +216,30 @@ async function pickFill(color) {
   await sleep(250);
   await page.click(`.v2-color-dropdown.visible button[data-action="pick:${color}"]`);
   await settle();
+}
+// Le bord droit de la `index`-ième case (dans l'ordre du document) glissé de `dx` pixels, comme dragFirstColumnBorder.
+async function dragCellBorder(index, dx) {
+  const border = await page.evaluate(i => { const r = document.querySelectorAll('.tiptap td')[i].getBoundingClientRect(); return { x: r.right - 1, y: r.top + r.height / 2 }; }, index);
+  await page.mouse.move(border.x - 30, border.y);
+  await page.mouse.move(border.x, border.y, { steps: 4 });
+  await sleep(200);
+  await page.mouse.down();
+  await page.mouse.move(border.x + dx, border.y, { steps: 6 });
+  await page.mouse.up();
+  await settle();
+}
+const centerOf = selector => page.evaluate(sel => { const r = document.querySelector(sel).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }, selector);
+// L'alignement choisi à la vraie souris : survol de l'icône Alignement, arrivée par le bas du document (jamais par-dessus un autre volet de la barre d'outils), puis clic sur l'alignement du volet.
+async function alignWith(name) {
+  const c = await centerOf('#v2-btn-align-main');
+  await page.mouse.move(c.x, c.y + 150);
+  await page.mouse.move(c.x, c.y, { steps: 4 });
+  await sleep(350);
+  const b = await centerOf('#v2-btn-align-' + name);
+  await page.mouse.click(b.x, b.y);
+  await settle();
+  await page.mouse.move(WIDTH / 2, HEIGHT - 6, { steps: 3 });
+  await sleep(300);
 }
 async function dragFirstColumnBorder(dx) {
   const border = await page.evaluate(() => { const r = document.querySelector('.tiptap td').getBoundingClientRect(); return { x: r.right - 1, y: r.top + r.height / 2 }; });
@@ -515,6 +541,141 @@ for (const dark of [false, true]) {
     const fixedRefused = await tableState();
     check(`[${theme}] « Refuser » (vraie souris) rend les 150 d'origine à toute la colonne, pas la largeur du premier glissé`,
       colwidths(fixedRefused.html).join() === '150,150,150,150,150,150' && plain(fixedRefused.html) === fixedOriginal && !fixedRefused.pending, { widths: colwidths(fixedRefused.html) });
+    await page.evaluate(() => Editor.setTrackChanges(false));
+  }
+  if (!dark) {
+    // 12) Une colonne ajoutée ou supprimée puis colorée ou tirée, et un alignement changé deux fois (carte « Aussi l'alignement », 04/10). Une marque de modification exclut l'insertion et la suppression : le fond ou
+    // la largeur posé sur une case de colonne ajoutée lui retirait sa marque d'ajout (« Tout refuser » laissait la colonne), sur une case de colonne supprimée sa marque de suppression (« Tout accepter » rendait un
+    // tableau percé). Maintenant le réglage fait partie de l'ajout, et n'a pas lieu sur ce qui se supprime ; l'alignement d'un paragraphe changé deux fois se refuse jusqu'à l'alignement d'origine.
+    const cellsWith = (html, name) => (html.match(new RegExp('<td[^>]* data-tc-' + name + '=', 'g')) || []).length;
+    const FILL_YELLOW = /background-color: rgb\(255, 242, 168\)/;
+    const widthOf = (state, row, col) => Math.round(state.rows[row][col].right - state.rows[row][col].left);
+
+    // Colonne ajoutée puis colorée, refusée à la barre.
+    await loadDoc(AUTO);
+    const addOriginal = plain((await tableState()).html);
+    await trackOn();
+    await clickCellAway(1);
+    await clickBar('col-after');
+    await clickCellAway(2);
+    await pickFill('#fff2a8');
+    const addFilled = await tableState();
+    check(`[${theme}] colonne ajoutée puis colorée (vraie souris) : ses deux cases gardent leur marque d'ajout, aucune marque de modification, le fond est dans le document`,
+      colsOf(addFilled) === '4,4' && cellsWith(addFilled.html, 'insertion') === 2 && modificationMarks(addFilled.html) === 0 && FILL_YELLOW.test(addFilled.html) && addFilled.pending, { html: addFilled.html });
+    await clickCellAway(2);
+    const addBar = await suggestBar();
+    check(`[${theme}] la barre « Accepter / Refuser » s'ouvre sur la colonne ajoutée et colorée : dans le panneau, atteinte par la souris, sans recouvrir la barre du tableau`,
+      addBar.visible && addBar.left >= 0 && addBar.right <= WIDTH && addBar.top >= 0 && addBar.bottom <= HEIGHT && addBar.buttons.length === 2 && addBar.buttons.every(b => b.reachable) && !addBar.overlapsTableBar, addBar);
+    await clickSuggestBar('reject');
+    const addRefused = await tableState();
+    check(`[${theme}] « Refuser » (vraie souris) enlève toute la colonne ajoutée et colorée : le tableau d'origine, trois colonnes alignées, plus aucune suggestion`,
+      plain(addRefused.html) === addOriginal && colsOf(addRefused) === '3,3' && inLine(addRefused, 3) && !addRefused.pending, { cols: colsOf(addRefused), html: addRefused.html });
+    await undo();
+    const addUndone = await tableState();
+    check(`[${theme}] un seul Ctrl+Z (vraie touche) rend la colonne colorée, avec sa marque d'ajout`,
+      colsOf(addUndone) === '4,4' && cellsWith(addUndone.html, 'insertion') === 2 && modificationMarks(addUndone.html) === 0 && FILL_YELLOW.test(addUndone.html) && addUndone.pending, { html: addUndone.html });
+    await clickCellAway(2);
+    await clickSuggestBar('accept');
+    const addAccepted = await tableState();
+    check(`[${theme}] « Accepter » (vraie souris) garde la colonne et son fond, sans marque`,
+      colsOf(addAccepted) === '4,4' && inLine(addAccepted, 4) && FILL_YELLOW.test(addAccepted.html) && cellsWith(addAccepted.html, 'insertion') === 0 && modificationMarks(addAccepted.html) === 0 && !addAccepted.pending, { html: addAccepted.html });
+    await page.evaluate(() => Editor.setTrackChanges(false));
+
+    // Colonne ajoutée puis colorée, refusée par « Tout refuser ».
+    await loadDoc(AUTO);
+    await trackOn();
+    await clickCellAway(1);
+    await clickBar('col-after');
+    await clickCellAway(2);
+    await pickFill('#fff2a8');
+    await resolveAll('v2-btn-reject-all');
+    const addAllRefused = await tableState();
+    check(`[${theme}] « Tout refuser » (vraie souris) enlève la colonne ajoutée et colorée : le tableau d'origine, plus aucune suggestion`,
+      plain(addAllRefused.html) === addOriginal && colsOf(addAllRefused) === '3,3' && inLine(addAllRefused, 3) && !addAllRefused.pending, { cols: colsOf(addAllRefused), html: addAllRefused.html });
+    await page.evaluate(() => Editor.setTrackChanges(false));
+
+    // Colonne ajoutée puis tirée (largeurs fixées) : « Tout refuser » rend le même tableau que sans la largeur tirée.
+    await loadDoc(FIXED);
+    await trackOn();
+    await clickCellAway(1);
+    await clickBar('col-after');
+    await resolveAll('v2-btn-reject-all');
+    const addControl = plain((await tableState()).html);
+    await loadDoc(FIXED);
+    await trackOn();
+    await clickCellAway(1);
+    await clickBar('col-after');
+    const beforeDrag = await tableState();
+    await dragCellBorder(2, -30);
+    const addDragged = await tableState();
+    check(`[${theme}] colonne ajoutée puis bord glissé (vraie souris) : la colonne est plus étroite, ses cases gardent leur marque d'ajout, aucune marque de modification`,
+      widthOf(addDragged, 0, 2) < widthOf(beforeDrag, 0, 2) - 15 && widthOf(addDragged, 1, 2) === widthOf(addDragged, 0, 2) && cellsWith(addDragged.html, 'insertion') === 2 && modificationMarks(addDragged.html) === 0 && addDragged.pending,
+      { before: widthOf(beforeDrag, 0, 2), after: widthOf(addDragged, 0, 2), html: addDragged.html });
+    await resolveAll('v2-btn-reject-all');
+    const addDragRefused = await tableState();
+    check(`[${theme}] « Tout refuser » (vraie souris) enlève la colonne ajoutée et tirée comme celle qui ne l'est pas : même tableau, plus aucune suggestion`,
+      plain(addDragRefused.html) === addControl && colsOf(addDragRefused) === '3,3' && inLine(addDragRefused, 3) && !addDragRefused.pending, { cols: colsOf(addDragRefused), html: addDragRefused.html, control: addControl });
+    await page.evaluate(() => Editor.setTrackChanges(false));
+
+    // Colonne supprimée puis colorée : le fond n'a pas lieu, la suppression reste entière.
+    await loadDoc(AUTO);
+    await trackOn();
+    await clickCellAway(1);
+    await clickBar('col-del');
+    await clickCellAway(1);
+    await pickFill('#fff2a8');
+    const delFilled = await tableState();
+    check(`[${theme}] colonne supprimée puis colorée (vraie souris) : le fond n'a pas lieu, les deux cases gardent leur marque de suppression, aucune marque de modification`,
+      cellsWith(delFilled.html, 'deletion') === 2 && modificationMarks(delFilled.html) === 0 && !/background-color/.test(delFilled.html) && delFilled.pending, { html: delFilled.html });
+    await resolveAll('v2-btn-accept-all');
+    const delAccepted = await tableState();
+    check(`[${theme}] « Tout accepter » (vraie souris) retire la colonne supprimée proprement : deux colonnes alignées, aucune case vide en trop`,
+      colsOf(delAccepted) === '2,2' && inLine(delAccepted, 2) && !/b1|b2/.test(delAccepted.html) && !delAccepted.pending, { cols: colsOf(delAccepted), html: delAccepted.html });
+    await undo();
+    await resolveAll('v2-btn-reject-all');
+    const delRefused = await tableState();
+    check(`[${theme}] « Tout refuser » (vraie souris) rend le tableau d'origine à la colonne supprimée puis colorée`,
+      plain(delRefused.html) === addOriginal && colsOf(delRefused) === '3,3' && !delRefused.pending, { cols: colsOf(delRefused), html: delRefused.html });
+    await page.evaluate(() => Editor.setTrackChanges(false));
+
+    // Alignement changé deux fois (vrai survol et vrai clic sur l'icône Alignement), refusé à la barre.
+    const ALIGN_DOC = '<p>Un</p><p>Aligné</p>';
+    const alignedState = () => page.evaluate(() => {
+      const marks = [];
+      const aligns = [];
+      EditorCore.getEditor().state.doc.descendants(node => {
+        if (node.type.name === 'paragraph') aligns.push(node.attrs.textAlign == null ? '-' : node.attrs.textAlign);
+        node.marks.forEach(m => { if (m.type.name === 'modification' && m.attrs.attrName === 'textAlign') marks.push(JSON.stringify(m.attrs.previousValue) + '>' + JSON.stringify(m.attrs.newValue)); });
+      });
+      return { aligns: aligns.join(','), marks, html: Editor.getHTML(), pending: Editor.hasPendingTrackedChanges() };
+    });
+    const clickAligned = async () => { await page.mouse.move(WIDTH / 2, HEIGHT - 6); await sleep(350); await page.click('.tiptap p >> nth=1'); await sleep(300); };
+    await loadDoc(ALIGN_DOC);
+    const alignOriginal = (await alignedState()).html;
+    await trackOn();
+    await clickAligned();
+    await alignWith('center');
+    await clickAligned();
+    await alignWith('right');
+    const alignedTwice = await alignedState();
+    check(`[${theme}] alignement changé deux fois (vraie souris) : une seule marque, qui garde l'alignement d'origine (aucun) et note « à droite »`,
+      alignedTwice.aligns === '-,right' && alignedTwice.marks.join() === 'null>"right"' && alignedTwice.pending, alignedTwice);
+    await clickAligned();
+    const alignBar = await suggestBar();
+    check(`[${theme}] la barre « Accepter / Refuser » s'ouvre sur le paragraphe réaligné : dans le panneau, atteinte par la souris`,
+      alignBar.visible && alignBar.left >= 0 && alignBar.right <= WIDTH && alignBar.top >= 0 && alignBar.bottom <= HEIGHT && alignBar.buttons.length === 2 && alignBar.buttons.every(b => b.reachable), alignBar);
+    await clickSuggestBar('reject');
+    const alignRefused = await alignedState();
+    check(`[${theme}] « Refuser » (vraie souris) rend l'alignement d'origine, pas le centré d'entre-deux : le document d'origine, plus aucune suggestion`,
+      alignRefused.aligns === '-,-' && alignRefused.html === alignOriginal && alignRefused.marks.length === 0 && !alignRefused.pending, alignRefused);
+    await undo();
+    const alignUndone = await alignedState();
+    check(`[${theme}] un seul Ctrl+Z (vraie touche) remet l'alignement à droite en attente, avec l'alignement d'origine`,
+      alignUndone.aligns === '-,right' && alignUndone.marks.join() === 'null>"right"' && alignUndone.pending, alignUndone);
+    await clickAligned();
+    await clickSuggestBar('accept');
+    const alignAccepted = await alignedState();
+    check(`[${theme}] « Accepter » (vraie souris) garde l'alignement à droite, sans marque`, alignAccepted.aligns === '-,right' && alignAccepted.marks.length === 0 && !alignAccepted.pending, alignAccepted);
     await page.evaluate(() => Editor.setTrackChanges(false));
   }
   await page.context().close();
