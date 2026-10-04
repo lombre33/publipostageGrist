@@ -1,20 +1,22 @@
-// Raccourcis clavier personnalisables (demande d'Antoine du 2026-10-01 : « pouvoir définir des raccourcis personnalisés (navigations, etc.) » ; sa réponse à la carte : « Tout, par
-// personne »). Chaque action du widget a une touche d'origine (ou aucune) que chacun peut changer, retirer ou rétablir dans Réglages > Raccourcis (js/shortcuts-panel.js).
+// Raccourcis clavier personnalisables : chaque action du widget a une touche d'origine (ou aucune) que chacun change, retire ou rétablit dans
+// Réglages > Raccourcis (js/shortcuts-panel.js).
 //
-// Une action « fait ce que fait son bouton » : elle clique le bouton de la barre d'outils (ou la ligne de menu), donc passe par les mêmes gardes que la souris - droits par personne
-// et mode Lecture (`pp-access-locked`, js/main.js:wireAccessLockGuard), grille (js/grid-editor.js). Le grisé `v2-hf-locked` (e-mail, en-tête, macro-modèle), lui, n'est que du CSS
-// (`pointer-events: none`) qu'un clic par programme ne voit pas : `usable()` le relit avant chaque clic. Aucun raccourci ne peut faire ce qu'un clic de souris ne peut pas.
+// Une action « fait ce que fait son bouton » : elle clique le bouton de la barre d'outils (ou la ligne de menu) et passe donc par les mêmes gardes
+// que la souris : droits par personne et mode Lecture (`pp-access-locked`, js/main.js:wireAccessLockGuard), grille (js/grid-editor.js). Le grisé
+// `v2-hf-locked` (e-mail, en-tête, macro-modèle) n'est que du CSS (`pointer-events: none`) qu'un clic par programme ne voit pas : `usable()` le relit
+// avant chaque clic.
 //
-// Les touches qui existent déjà (Ctrl+B, Ctrl+K, Ctrl+S, Ctrl+Z...) restent traitées par l'éditeur ou js/main.js tant qu'on n'y touche pas : ce module n'intervient qu'une fois la
-// touche d'une action changée ou retirée. Il pose alors son écouteur en capture sur le document, avant tous les autres (ce script est chargé juste après js/i18n.js), et arrête
-// l'ancienne touche pour qu'elle ne fasse plus rien - sans cela « Ctrl+B » gras continuerait de répondre après avoir donné « Alt+B » au gras.
+// Les touches qui existent déjà (Ctrl+B, Ctrl+K, Ctrl+S, Ctrl+Z...) restent traitées par l'éditeur ou js/main.js tant qu'on n'y touche pas : ce
+// module n'intervient qu'une fois la touche d'une action changée ou retirée. Son écouteur, posé en capture sur le document avant tous les autres
+// (script chargé juste après js/i18n.js), arrête alors l'ancienne touche : sans cela « Ctrl+B » mettrait encore en gras après avoir donné « Alt+B »
+// au gras.
 //
-// Une combinaison s'écrit « Mod+Alt+Shift+k » (Mod = Ctrl sous Windows et Linux, ⌘ sous macOS) : la même d'une plateforme à l'autre. Les choix sont par navigateur (localStorage),
-// comme la langue et le thème. Les touches ne marchent que quand le focus est dans le widget (le navigateur ne livre rien d'autre à un iframe).
+// Une combinaison s'écrit « Mod+Alt+Shift+k » (Mod = Ctrl sous Windows et Linux, ⌘ sous macOS), la même d'une plateforme à l'autre. Les choix sont
+// par navigateur (localStorage), comme la langue et le thème, et ne valent que focus dans le widget (un iframe ne reçoit rien d'autre).
 const Shortcuts = (function () {
   const STORAGE = 'pp_shortcuts';
 
-  // === Combinaisons ==========================================================================================================================================
+  // Combinaisons
 
   const MODIFIER_KEYS = ['Shift', 'Control', 'Alt', 'AltGraph', 'Meta', 'OS', 'CapsLock', 'NumLock', 'ScrollLock', 'Fn', 'FnLock', 'Hyper', 'Super', 'Symbol', 'SymbolLock'];
   const NAMED_KEYS = { Enter: 'Enter', Tab: 'Tab', Escape: 'Escape', Backspace: 'Backspace', Delete: 'Delete', Home: 'Home', End: 'End', PageUp: 'PageUp', PageDown: 'PageDown',
@@ -28,8 +30,9 @@ const Shortcuts = (function () {
   }
   function lang() { return (typeof I18n !== 'undefined' && I18n.getLang()) || 'fr'; }
 
-  // La touche seule, sans modificateurs : une lettre en minuscule, un chiffre (lu sur le code physique - sur un clavier AZERTY il faut Maj pour taper « 1 », et c'est quand même la
-  // touche « 1 »), « F1 » à « F12 », une touche nommée, ou un signe de ponctuation ASCII. null : touche seule de modificateur, ou touche qu'on ne sait pas nommer.
+  // La touche seule, sans modificateurs : une lettre en minuscule, un chiffre (lu sur le code physique - sur un clavier AZERTY il faut Maj pour taper
+  // « 1 », et c'est quand même la touche « 1 »), « F1 » à « F12 », une touche nommée, ou un signe de ponctuation ASCII. null : touche seule de
+  // modificateur, ou touche qu'on ne sait pas nommer.
   function keyOf(event) {
     const key = event.key;
     if (MODIFIER_KEYS.indexOf(key) !== -1) return null;
@@ -42,14 +45,15 @@ const Shortcuts = (function () {
       if (/^[a-z]$/i.test(key)) return key.toLowerCase();
       if (key.charCodeAt(0) < 128) return key === '+' ? null : key;
     }
-    // macOS : Option+lettre écrit un autre caractère (« ¬ » pour Option+L) ou une touche morte (Option+E) - la lettre se lit alors sur le code physique.
+    // macOS : Option+lettre écrit un autre caractère (« ¬ » pour Option+L) ou une touche morte (Option+E) - la lettre se lit alors sur le code
+    // physique.
     match = /^Key([A-Z])$/.exec(code);
     if (match) return match[1].toLowerCase();
     return null;
   }
 
-  // { combo, altGr } ; combo = null quand l'événement n'est qu'un modificateur ou une touche sans nom. `altGr` : Ctrl+Alt sous Windows et Linux, c'est AltGr, qui écrit des caractères
-  // (« @ », « # » sur un clavier AZERTY) : jamais un raccourci.
+  // { combo, altGr } ; combo = null quand l'événement n'est qu'un modificateur ou une touche sans nom. `altGr` : Ctrl+Alt sous Windows et Linux,
+  // c'est AltGr, qui écrit des caractères (« @ », « # » sur un clavier AZERTY) : jamais un raccourci.
   function fromEvent(event) {
     const key = keyOf(event);
     if (!key) return { combo: null, altGr: false };
@@ -102,7 +106,8 @@ const Shortcuts = (function () {
     return key.length === 1 ? key.toUpperCase() : key;
   }
 
-  // « Ctrl+Alt+Maj+K » ailleurs, « ⌃⌥⇧⌘K » sur macOS (dans l'ordre de la plateforme : Ctrl, Option, Maj, Commande). '' quand `combo` n'en est pas une (action sans touche).
+  // « Ctrl+Alt+Maj+K » ailleurs, « ⌃⌥⇧⌘K » sur macOS (dans l'ordre de la plateforme : Ctrl, Option, Maj, Commande). '' quand `combo` n'en est pas une
+  // (action sans touche).
   function format(combo) {
     const p = parse(combo);
     if (!p) return '';
@@ -131,7 +136,8 @@ const Shortcuts = (function () {
     return parts.join('+');
   }
 
-  // Ce qu'on ne peut pas prendre pour une touche : '' quand la combinaison convient, sinon le code du problème (clé `settings.keys.problem.<code>` pour le texte).
+  // Ce qu'on ne peut pas prendre pour une touche : '' quand la combinaison convient, sinon le code du problème (clé `settings.keys.problem.<code>`
+  // pour le texte).
   function formProblem(combo) {
     const p = parse(combo);
     if (!p) return 'invalid';
@@ -140,20 +146,22 @@ const Shortcuts = (function () {
     return '';
   }
 
-  // Touches que l'éditeur ou le navigateur gardent pour eux, hors des actions de la liste : copier-coller, sélection, saut de ligne, texte en code, titres 0 et 4 à 6, retour à
-  // la ligne forcé, rechargement, fermeture, nouveaux onglets, retour en arrière. Elles n'arrivent pas toutes à la page (Ctrl+T, Ctrl+N, Ctrl+W jamais) :
-  // ce sont celles qu'on refuse de prendre, avec leur raison - une touche déjà liée qui n'a pas de ligne dans la liste ne pourrait plus jamais être rétablie.
+  // Touches que l'éditeur ou le navigateur gardent pour eux, hors des actions de la liste : copier-coller, sélection, saut de ligne, texte en code,
+  // titres 0 et 4 à 6, retour à la ligne forcé, rechargement, fermeture, nouveaux onglets, retour en arrière. Elles n'arrivent pas toutes à la page
+  // (Ctrl+T, Ctrl+N, Ctrl+W jamais) : ce sont celles qu'on refuse de prendre, avec leur raison - une touche déjà liée qui n'a pas de ligne dans la
+  // liste ne pourrait plus jamais être rétablie.
   const RESERVED = ['Mod+a', 'Mod+c', 'Mod+x', 'Mod+v', 'Mod+Shift+v', 'Mod+Enter', 'Shift+Enter', 'Mod+Backspace', 'Mod+Delete', 'Mod+e',
     'Mod+Alt+0', 'Mod+Alt+4', 'Mod+Alt+5', 'Mod+Alt+6',
     'Mod+r', 'Mod+Shift+r', 'Mod+l', 'Mod+n', 'Mod+t', 'Mod+w', 'Mod+q', 'Mod+m', 'Mod+Shift+n', 'Mod+Shift+t', 'Mod+Shift+w', 'Mod+Tab', 'Mod+Shift+Tab',
     'Mod+PageUp', 'Mod+PageDown', 'Alt+F4', 'F5', 'F11', 'F12', 'Alt+ArrowLeft', 'Alt+ArrowRight', 'Alt+ArrowUp', 'Alt+ArrowDown'];
 
-  // === Les actions ==========================================================================================================================================
+  // Les actions
 
   const byId = id => document.getElementById(id);
 
-  // Un clic de souris pourrait-il atteindre cet élément ? Faux pour un bouton désactivé, grisé (`v2-hf-locked`, `pp-access-locked`, ou tout autre `pointer-events: none` hérité) ou
-  // masqué. Une ligne de menu au survol (`.v2-hover-flyout`) est toujours fermée, donc sans dimensions : seul le reste compte pour elle.
+  // Un clic de souris pourrait-il atteindre cet élément ? Faux pour un bouton désactivé, grisé (`v2-hf-locked`, `pp-access-locked`, ou tout autre
+  // `pointer-events: none` hérité) ou masqué. Une ligne de menu au survol (`.v2-hover-flyout`) est toujours fermée, donc sans dimensions : seul le
+  // reste compte pour elle.
   function usable(el) {
     if (!el || el.disabled || el.getAttribute('aria-disabled') === 'true' || el.closest('[hidden], .v2-hf-locked, .pp-access-locked')) return false;
     if (getComputedStyle(el).pointerEvents === 'none') return false;
@@ -161,15 +169,16 @@ const Shortcuts = (function () {
   }
   // Clique le bouton (ou la ligne de menu) : même chemin que la souris, donc mêmes gardes. false quand il n'y en a pas ou qu'il est inutilisable.
   const click = id => () => { const el = byId(id); if (!usable(el)) return false; el.click(); return true; };
-  // Un bouton câblé sur « mousedown » (couleur de police, surlignage, taille de police : js/floating-toolbars.js, js/main-toolbar.js) ne verrait jamais un `click` : on lui fait le même
-  // geste que la souris. Mêmes gardes que `click`.
+  // Un bouton câblé sur « mousedown » (couleur de police, surlignage, taille de police : js/floating-toolbars.js, js/main-toolbar.js) ne verrait
+  // jamais un `click` : on lui fait le même geste que la souris. Mêmes gardes que `click`.
   const mouseDown = id => () => {
     const el = byId(id);
     if (!usable(el)) return false;
     el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, composed: true, button: 0, view: window }));
     return true;
   };
-  // « Titre 1 » : la ligne du menu Titre (même geste que la souris). Une seconde fois sur le même niveau, retour au paragraphe : la touche de TipTap (Ctrl+Alt+1) en fait autant.
+  // « Titre 1 » : la ligne du menu Titre (même geste que la souris). Une seconde fois sur le même niveau, retour au paragraphe : la touche de TipTap
+  // (Ctrl+Alt+1) en fait autant.
   const headingRow = level => () => {
     const select = byId('v2-header-select');
     const target = select && select.value === String(level) ? 'p' : String(level);
@@ -178,10 +187,12 @@ const Shortcuts = (function () {
     row.click();
     return true;
   };
-  // « Rechercher » et « Rechercher et remplacer » : ouvrent la barre de js/find-replace.js, le clavier dans son champ - comme Ctrl+F et Ctrl+H, pas comme la loupe, qui referme la barre
-  // déjà ouverte (une touche qui la fermerait ne chercherait plus). Faux sans rien ouvrir quand l'éditeur n'est pas à l'écran (Lecture, macro-modèle) : la touche reste alors au navigateur.
+  // « Rechercher » et « Rechercher et remplacer » : ouvrent la barre de js/find-replace.js, le clavier dans son champ - comme Ctrl+F et Ctrl+H, pas
+  // comme la loupe, qui referme la barre déjà ouverte (une touche qui la fermerait ne chercherait plus). Faux sans rien ouvrir quand l'éditeur n'est
+  // pas à l'écran (Lecture, macro-modèle) : la touche reste alors au navigateur.
   const findPanel = replace => () => typeof FindReplace !== 'undefined' && !!FindReplace.open({ replace });
-  // « Mode édition » : le curseur revient dans le document, pour qu'on tape tout de suite - sinon la frappe suivante tomberait sur le bouton (Espace le cliquerait).
+  // « Mode édition » : le curseur revient dans le document, pour qu'on tape tout de suite - sinon la frappe suivante tomberait sur le bouton (Espace
+  // le cliquerait).
   const editMode = () => {
     if (!click('btn-mode-edit')()) return false;
     const editor = typeof EditorCore !== 'undefined' && EditorCore.getEditor();
@@ -189,18 +200,21 @@ const Shortcuts = (function () {
     return true;
   };
   const templatesList = () => { const el = document.querySelector('#v2-title-cluster .tts-trigger'); if (!usable(el)) return false; el.click(); return true; };
-  // « Liste numérotée » et « Liste de tâches » : la touche d'origine (Ctrl+Maj+7 et Ctrl+Maj+9, celles de TipTap) bascule - elle pose la liste et la retire au second appui - alors que le bouton
-  // pose un style (numérotation, cases à cocher). Sur une sélection de cases, où l'éditeur ne traiterait que la case de tête, elle bascule donc la liste dans chaque case
-  // (EditorCore.toggleList), sous les mêmes gardes que le bouton.
+  // « Liste numérotée » et « Liste de tâches » : la touche d'origine (Ctrl+Maj+7 et Ctrl+Maj+9, celles de TipTap) bascule - elle pose la liste et la
+  // retire au second appui - alors que le bouton pose un style (numérotation, cases à cocher). Sur une sélection de cases, où l'éditeur ne traiterait
+  // que la case de tête, elle bascule donc la liste dans chaque case (EditorCore.toggleList), sous les mêmes gardes que le bouton.
   const toggleListInCells = (name, command, buttonId) => () => {
     if (typeof EditorCore === 'undefined' || !usable(byId(buttonId))) return false;
     EditorCore.toggleList(name, command);
     return true;
   };
 
-  // { id, group, label (clé i18n du nom), key (touche d'origine, '' = aucune), macKey (celle de macOS quand elle diffère), native (la touche d'origine est déjà traitée par l'éditeur,
-  // js/main.js ou js/find-replace.js), cells (sa touche d'origine, traitée par l'éditeur sur la seule case de tête d'une sélection de cases, passe par son bouton quand des cases sont sélectionnées - ou par la fonction que `cells` donne quand le bouton ne bascule pas comme la touche), aliases (autres touches d'origine traitées de même), scope ('editor' = ne vaut pas dans un champ de saisie ; 'app' = vaut partout), repeat (la touche enfoncée se répète), hint (sélecteur de
-  // l'élément qui montre la touche : infobulle, ligne de menu ou titre de menu), aria (sélecteur de l'élément qui la dit aux lecteurs d'écran, `hint` par défaut), run }.
+  // { id, group, label (clé i18n du nom), key (touche d'origine, '' = aucune), macKey (celle de macOS quand elle diffère), native (l'éditeur,
+  // js/main.js ou js/find-replace.js traitent déjà la touche d'origine), cells (touche d'origine que l'éditeur ne traite que sur la case de tête
+  // d'une sélection de cases : elle passe par le bouton quand des cases sont sélectionnées, ou par la fonction que `cells` donne quand le bouton ne
+  // bascule pas comme la touche), aliases (autres touches d'origine traitées de même), scope ('editor' : ne vaut pas dans un champ de saisie ; 'app'
+  // : vaut partout), repeat (la touche enfoncée se répète), hint (sélecteur de l'élément qui montre la touche : infobulle, ligne ou titre de menu),
+  // aria (sélecteur de l'élément qui la dit aux lecteurs d'écran, `hint` par défaut), run }.
   const tip = id => '#' + id;
   const ACTIONS = [
     // Modèles
@@ -236,8 +250,9 @@ const Shortcuts = (function () {
     { id: 'sizeUp', group: 'format', label: 'font.sizeIncrease', key: '', scope: 'editor', repeat: true, aria: tip('v2-size-plus'), run: mouseDown('v2-size-plus') },
     { id: 'textColor', group: 'format', label: 'color.text.tip', key: '', scope: 'editor', hint: tip('v2-btn-text-color'), run: mouseDown('v2-btn-text-color') },
     { id: 'highlight', group: 'format', label: 'color.highlight.tip', key: 'Alt+Shift+h', scope: 'editor', hint: tip('v2-btn-highlight'), run: mouseDown('v2-btn-highlight') },
-    // Le pinceau (js/format-painter.js) : la touche fait ce que fait son bouton - copie la mise en forme et arme le pinceau, ou l'arrête s'il est armé. « Appliquer » pose ce qui a été
-    // copié sur la sélection du moment, faite au clavier ou à la souris ; sans rien de copié, ni sélection de texte, elle ne fait rien.
+    // Le pinceau (js/format-painter.js) : la touche fait ce que fait son bouton - copie la mise en forme et arme le pinceau, ou l'arrête s'il est
+    // armé. « Appliquer » pose ce qui a été copié sur la sélection du moment, faite au clavier ou à la souris ; sans rien de copié, ni sélection de
+    // texte, elle ne fait rien.
     { id: 'formatPainter', group: 'format', label: 'fmt.painter.tip', key: 'Alt+Shift+c', scope: 'editor', hint: tip('v2-btn-format-painter'), run: click('v2-btn-format-painter') },
     { id: 'formatPaste', group: 'format', label: 'shortcuts.action.formatPaste', key: 'Alt+Shift+v', scope: 'editor', run: () => typeof FormatPainter !== 'undefined' && FormatPainter.apply() },
     { id: 'heading1', group: 'format', label: 'heading.level1', key: 'Alt+Shift+1', aliases: ['Mod+Alt+1'], scope: 'editor', hint: '#v2-heading-flyout .v2-hover-row[data-level="1"]', run: headingRow(1) },
@@ -269,8 +284,8 @@ const Shortcuts = (function () {
   const BY_ID = {};
   ACTIONS.forEach(action => { BY_ID[action.id] = action; });
 
-  // « Date du jour » : la même bulle que la ligne « Date du jour » du panneau # (résolue à chaque Lecture et à chaque export), pas une date figée dans le modèle. Faite par le
-  // bouton « Insérer une variable » : grisée comme lui (lecture seule, Lecture, macro-modèle).
+  // « Date du jour » : la même bulle que la ligne « Date du jour » du panneau # (résolue à chaque Lecture et à chaque export), pas une date figée
+  // dans le modèle. Faite par le bouton « Insérer une variable » : grisée comme lui (lecture seule, Lecture, macro-modèle).
   function insertTodayChip() {
     const editor = typeof EditorCore !== 'undefined' && EditorCore.getEditor();
     if (!editor || !usable(byId('v2-btn-insert-variable'))) return false;
@@ -288,9 +303,10 @@ const Shortcuts = (function () {
     return true;
   }
 
-  // === Touches choisies (par navigateur) ====================================================================================================================
+  // Touches choisies (par navigateur)
 
-  // { idAction: combinaison | '' } : seules les actions changées y sont ; '' = « aucune touche ». Une entrée illisible (action disparue, combinaison abîmée) est ignorée.
+  // { idAction: combinaison | '' } : seules les actions changées y sont ; '' = « aucune touche ». Une entrée illisible (action disparue, combinaison
+  // abîmée) est ignorée.
   let custom = readStorage();
   const listeners = [];
 
@@ -315,7 +331,8 @@ const Shortcuts = (function () {
   function changed() { decorate(); listeners.slice().forEach(fn => { try { fn(); } catch (e) { console.warn('[shortcuts] un abonné a levé une exception', e); } }); }
 
   const isCustomized = action => Object.prototype.hasOwnProperty.call(custom, action.id);
-  // La touche d'origine sur cette plateforme : `macKey` quand elle y diffère (⌘H masque l'application sous macOS : le remplacement y est ⌘⇧H, js/find-replace.js).
+  // La touche d'origine sur cette plateforme : `macKey` quand elle y diffère (⌘H masque l'application sous macOS : le remplacement y est ⌘⇧H,
+  // js/find-replace.js).
   const defaultOf = action => (isMac() && action.macKey !== undefined ? action.macKey : action.key);
   const currentKey = action => (isCustomized(action) ? custom[action.id] : defaultOf(action));
   const nativeKeys = action => (action.native ? [defaultOf(action)] : []).concat(action.aliases || []);
@@ -331,8 +348,8 @@ const Shortcuts = (function () {
     return ACTIONS.find(a => a.id !== exceptId && currentKey(a) === combo) || null;
   }
 
-  // Une touche d'origine « rendue » : l'action dont elle était la touche native a changé (ou perdu) sa touche, et personne ne l'a prise depuis - elle ne fait plus ce qu'elle faisait.
-  // Retourne l'action qui l'a rendue.
+  // Une touche d'origine « rendue » : l'action dont elle était la touche native a changé (ou perdu) sa touche, et personne ne l'a prise depuis - elle
+  // ne fait plus ce qu'elle faisait. Retourne l'action qui l'a rendue.
   function freedBy(combo) {
     if (ownerOf(combo)) return null;
     return ACTIONS.find(a => isCustomized(a) && nativeKeys(a).indexOf(combo) !== -1) || null;
@@ -345,7 +362,8 @@ const Shortcuts = (function () {
     const other = ownerOf(combo, id);
     if (other) return { problem: 'duplicate', other };
     if (RESERVED.indexOf(combo) !== -1) return { problem: 'reserved' };
-    // Les touches d'origine natives d'une autre action qu'on n'a pas touchée sont à elle aussi : « Ctrl+Maj+8 » reste aux puces tant qu'elles ne l'ont pas rendue.
+    // Les touches d'origine natives d'une autre action qu'on n'a pas touchée sont à elle aussi : « Ctrl+Maj+8 » reste aux puces tant qu'elles ne
+    // l'ont pas rendue.
     const holder = ACTIONS.find(a => a.id !== id && !isCustomized(a) && nativeKeys(a).indexOf(combo) !== -1);
     if (holder) return { problem: 'duplicate', other: holder };
     return { problem: '' };
@@ -373,11 +391,12 @@ const Shortcuts = (function () {
   }
   function resetAll() { custom = {}; writeStorage(); changed(); }
 
-  // === Infobulles et lecteurs d'écran ====================================================================================================================
+  // Infobulles et lecteurs d'écran
 
-  // La touche se montre là où le bouton se nomme : `data-keytip` (« (Ctrl+B) ») après le texte de l'infobulle d'un bouton [data-tip], `data-keyhint` (« Ctrl+B ») à droite d'une
-  // ligne de menu ou après le titre d'un menu - css/shortcuts.css les lit - et se dit aux lecteurs d'écran (`aria-keyshortcuts`). Des attributs à eux, qu'aucun changement de langue
-  // ne réécrit : un « (Ctrl+B) » ajouté au data-tip s'effacerait au premier applyTranslations().
+  // La touche se montre là où le bouton se nomme : `data-keytip` (« (Ctrl+B) ») après le texte de l'infobulle d'un bouton [data-tip], `data-keyhint`
+  // (« Ctrl+B ») à droite d'une ligne de menu ou après le titre d'un menu - css/shortcuts.css les lit - et se dit aux lecteurs d'écran
+  // (`aria-keyshortcuts`). Des attributs à eux, qu'aucun changement de langue ne réécrit : un « (Ctrl+B) » ajouté au data-tip s'effacerait au premier
+  // applyTranslations().
   function setAttr(el, name, value) { if (value) el.setAttribute(name, value); else el.removeAttribute(name); }
   function decorate() {
     ACTIONS.forEach(action => {
@@ -392,7 +411,7 @@ const Shortcuts = (function () {
     });
   }
 
-  // === Le clavier ========================================================================================================================================
+  // Le clavier
 
   let recorder = null; // la liste de Réglages écoute une combinaison : elle reçoit toutes les touches, plus aucune action ne part
 
@@ -425,8 +444,9 @@ const Shortcuts = (function () {
     if (!combo || altGr) return;
     const owner = ownerOf(combo);
     if (owner) {
-      // À sa touche d'origine, une action native est déjà prise en charge par l'éditeur ou js/main.js : rien à faire ici - sauf sur une sélection de cases pour une action qui le demande
-      // (`cells`) : l'éditeur ne traiterait que la case de tête, le bouton les traite toutes (ou la fonction que `cells` donne, quand le bouton ne fait pas comme la touche d'origine).
+      // À sa touche d'origine, une action native est déjà prise en charge par l'éditeur ou js/main.js : rien à faire ici - sauf sur une sélection de
+      // cases pour une action qui le demande (`cells`) : l'éditeur ne traiterait que la case de tête, le bouton les traite toutes (ou la fonction que
+      // `cells` donne, quand le bouton ne fait pas comme la touche d'origine).
       const originalKey = owner.native && !isCustomized(owner) && defaultOf(owner) === combo;
       if (originalKey && !(owner.cells && onCellSelection())) return;
       if (modalOpen() || (owner.scope === 'editor' && inTextField())) return;
@@ -437,7 +457,8 @@ const Shortcuts = (function () {
       try { action(); } catch (e) { console.warn('[shortcuts] l’action « ' + owner.id + ' » a échoué', e); }
       return;
     }
-    // Une touche d'origine rendue ne fait plus ce qu'elle faisait - mais dans un champ de saisie autre que l'éditeur elle garde son sens de texte (Ctrl+Z y défait la frappe).
+    // Une touche d'origine rendue ne fait plus ce qu'elle faisait - mais dans un champ de saisie autre que l'éditeur elle garde son sens de texte
+    // (Ctrl+Z y défait la frappe).
     const freed = freedBy(combo);
     if (freed && !modalOpen() && !(freed.scope === 'editor' && inTextField())) { event.preventDefault(); event.stopImmediatePropagation(); }
   }

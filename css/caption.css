@@ -1,12 +1,15 @@
-/* Légende (js/caption.js) : le paragraphe `data-caption`, posé sous une image ou un tableau - petit, italique, gris. Même rendu dans l'éditeur, la Lecture et les zones d'en-tête / pied ;
-   le PDF et le Word le reprennent (inheritedStyle de js/pdf-export.js, inheritedRunStyle de js/docx-export.js, mêmes valeurs : Caption.SIZE_PX, Caption.COLOR). Aucune marge : comme tout
-   paragraphe (`.tiptap p { margin: 0 }`), pour que la hauteur reste celle du PDF. Un texte qui porte sa propre taille ou sa propre couleur la garde, comme dans un paragraphe ordinaire.
-   La feuille reste blanche en thème sombre : le gris est donc une valeur fixe (7:1), pas un jeton du thème. */
+/* Légende (js/caption.js) : le paragraphe `data-caption`, posé sous une image ou un tableau (petit, italique, gris). Même rendu dans l'éditeur, la
+   Lecture et les zones d'en-tête / pied ; le PDF et le Word le reprennent (inheritedStyle de js/pdf-export.js, inheritedRunStyle de
+   js/docx-export.js, mêmes valeurs : Caption.SIZE_PX, Caption.COLOR). Aucune marge, comme tout paragraphe (`.tiptap p { margin: 0 }`), pour que la
+   hauteur reste celle du PDF. Un texte qui porte sa propre taille ou sa propre couleur la garde, comme dans un paragraphe ordinaire. La feuille reste
+   blanche en thème sombre : le gris est donc une valeur fixe (7:1), pas un jeton du thème. */
 .tiptap p[data-caption="true"], .reader-content p[data-caption="true"], .v2-hf-zone-body p[data-caption="true"] { font-size: 12px; font-style: italic; color: #595959; }
-/* « Légende… » dans la légende vide où se trouve le curseur (décoration de js/caption.js). Même patron que le texte d'attente du document vide (`.is-editor-empty`, css/editor-v2.css) :
-   float + hauteur nulle pour ne pas pousser le texte tapé, pointer-events: none pour qu'un clic place le curseur dans le vrai paragraphe. Même gris que ce texte d'attente (`--paper-text-faint`, #667085 : 5,0:1 sur la feuille, qui reste blanche en sombre). */
+/* « Légende… » dans la légende vide où se trouve le curseur (décoration de js/caption.js). Même patron que le texte d'attente du document vide
+   (`.is-editor-empty`, css/editor-v2.css) : float + hauteur nulle pour ne pas pousser le texte tapé, pointer-events: none pour qu'un clic place le
+   curseur dans le vrai paragraphe. Même gris que ce texte d'attente (`--paper-text-faint`, #667085 : 5,0:1 sur la feuille). */
 .tiptap p[data-caption="true"].caption-empty::before { content: attr(data-caption-placeholder); float: left; height: 0; pointer-events: none; color: var(--paper-text-faint, #667085); }
-/* Le bouton « Légende » ajoute 32 px à la barre flottante de l'image (bouton de 28 px et deux écarts de 2 px) : la glissière d'opacité rend ces 32 px (129 px d'origine, taille par défaut du
-   navigateur, sans règle jusqu'ici) pour que la barre garde sa largeur d'avant. À ~700 px, quand l'image est tout en haut de la page, la barre recouvre la bande du suivi des modifications : plus
-   large, elle passait sur le milieu de « Tout accepter » et le vrai clic n'y arrivait plus (dev-tests/verify-image-arrows-keyboard.mjs). */
+/* Le bouton « Légende » ajoute 32 px à la barre flottante de l'image (bouton de 28 px et deux écarts de 2 px) : la glissière d'opacité rend ces 32 px
+   (129 px d'origine) pour que la barre garde sa largeur d'avant. À ~700 px, quand l'image est tout en haut de la page, la barre recouvre la bande du
+   suivi des modifications : plus large, elle passait sur le milieu de « Tout accepter » et le vrai clic n'y arrivait plus
+   (dev-tests/verify-image-arrows-keyboard.mjs). */
 .v2-floating-toolbar input[type="range"][data-role="opacity"] { width: 97px; }

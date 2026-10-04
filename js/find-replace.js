@@ -1,31 +1,37 @@
-// Rechercher / Remplacer dans l'éditeur (demande d'Antoine, 2026-10-01 : « Rechercher/Remplacer » ; roadmap A20). Un panneau fin entre la barre d'outils et le texte - jamais une
-// fenêtre : le modèle reste visible et modifiable pendant qu'on cherche.
-//  - Rechercher : tous les résultats surlignés, le courant plus marqué, « 3 sur 12 », précédent / suivant (Entrée, Maj+Entrée), « Respecter la casse » et « Mot entier » ;
-//  - Remplacer : « Remplacer » remplace le résultat courant puis passe au suivant, « Tout remplacer » les remplace tous. Un remplacement est une vraie transaction ProseMirror
-//    (UNE seule étape d'annulation, « Tout remplacer » compris) qui garde la mise en forme du texte remplacé et passe par le mode suivi quand il est actif : l'ancien texte devient
-//    une suppression suggérée, le nouveau une insertion suggérée, comme une frappe (cf. js/track-changes.js ; skipTracking, lui, est l'inverse, pour ce que le widget écrit seul) ;
-//  - ouverture : Ctrl+F / ⌘F (rechercher) et Ctrl+H / ⌘⇧H (remplacer) où que soit le clavier (il reste souvent sur le bouton de la barre d'outils qu'on vient de cliquer) tant que
-//    l'éditeur est à l'écran et qu'aucune fenêtre n'est ouverte - sinon la recherche du navigateur reprend la main - et la loupe de la barre d'outils ; Échap ferme et rend le clavier
-//    à l'éditeur, le dernier résultat reste sélectionné (on peut taper par-dessus).
-// Le moteur (findMatches) ne dépend que d'un document ProseMirror : il se teste sans interface. L'état de la recherche vit dans ce module, pas dans le plugin ProseMirror : un
-// changement de modèle reconstruit l'état de l'éditeur (Editor.setHTML) et remettrait sinon la recherche à zéro sous le panneau resté ouvert. Styles : css/find-replace.css.
+// Rechercher / Remplacer dans l'éditeur : un panneau fin entre la barre d'outils et le texte, jamais une fenêtre, pour que le modèle reste visible et
+// modifiable pendant qu'on cherche.
+//  - Rechercher : tous les résultats surlignés, le courant plus marqué, « 3 sur 12 », précédent / suivant (Entrée, Maj+Entrée), « Respecter la casse
+//    » et « Mot entier » ;
+//  - Remplacer : « Remplacer » remplace le résultat courant puis passe au suivant, « Tout remplacer » les remplace tous. Un remplacement est une
+//    transaction ProseMirror (une seule étape d'annulation, « Tout remplacer » compris) qui garde la mise en forme du texte remplacé et passe par le
+//    mode suivi quand il est actif : l'ancien texte devient une suppression suggérée, le nouveau une insertion suggérée (js/track-changes.js ;
+//    skipTracking est l'inverse, pour ce que le widget écrit seul) ;
+//  - ouverture : Ctrl+F / ⌘F (rechercher) et Ctrl+H / ⌘⇧H (remplacer), même quand le clavier est resté sur un bouton de la barre d'outils, tant que
+//    l'éditeur est à l'écran et qu'aucune fenêtre n'est ouverte (sinon la recherche du navigateur reprend la main) ; la loupe de la barre fait de
+//    même. Échap ferme et rend le clavier à l'éditeur, le dernier résultat reste sélectionné (on peut taper par-dessus).
+// Le moteur (findMatches) ne dépend que d'un document ProseMirror : il se teste sans interface. L'état de la recherche vit dans ce module, pas dans
+// le plugin ProseMirror : un changement de modèle reconstruit l'état de l'éditeur (Editor.setHTML) et remettrait sinon la recherche à zéro sous le
+// panneau resté ouvert. Styles : css/find-replace.css.
 const FindReplace = (function () {
   const isMac = () => /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent || '');
-  // Mêmes écritures que les infobulles de Enregistrer (⌘S) et du lien (⌘K). ⌘H est réservé à macOS (masquer l'application) : sur Mac le remplacement est ⌘⇧H, comme dans Google Docs.
+  // Mêmes écritures que les infobulles de Enregistrer (⌘S) et du lien (⌘K). ⌘H est réservé à macOS (masquer l'application) : sur Mac le remplacement
+  // est ⌘⇧H, comme dans Google Docs.
   const findShortcutLabel = () => (isMac() ? '⌘F' : 'Ctrl+F');
   const replaceShortcutLabel = () => (isMac() ? '⌘⇧H' : 'Ctrl+H');
 
-  // === Le moteur : un document ProseMirror, une requête, des options ===================================================================================================
-  // Le texte d'un bloc est lu caractère pour caractère comme le document compte ses positions : un nœud qui n'est pas du texte (bulle, image, pastille) vaut autant d'OBJECT que sa
-  // taille, qu'aucune requête ne trouve et qui coupe un mot ; un saut de ligne vaut « \n ». Le texte d'une suppression suivie (marque `deletion`, encore dans le document tant qu'on
-  // ne l'a pas acceptée) vaut aussi des OBJECT : pour qui lit, il n'existe déjà plus - le retrouver ferait remplacer deux fois le même mot.
+  // Le moteur : un document ProseMirror, une requête, des options
+  // Le texte d'un bloc est lu caractère pour caractère comme le document compte ses positions : un nœud qui n'est pas du texte (bulle, image,
+  // pastille) vaut autant d'OBJECT que sa taille, qu'aucune requête ne trouve et qui coupe un mot ; un saut de ligne vaut « \n ». Le texte d'une
+  // suppression suivie (marque `deletion`, encore dans le document tant qu'on ne l'a pas acceptée) vaut aussi des OBJECT : pour qui lit, il n'existe
+  // déjà plus, et le retrouver ferait remplacer deux fois le même mot.
   const OBJECT = '\uFFFC';
   const SPACES = /[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g;
   const SINGLE_QUOTES = /[\u2018\u2019\u201A\u201B\u02BC]/g;
   const DOUBLE_QUOTES = /[\u201C\u201D\u201E]/g;
   const WORD_CHAR = /[\p{L}\p{N}_]/u;
-  // Espace insécable, apostrophe et guillemet droits ou typographiques se valent (un texte français a des « mot ! » avec espace fine insécable, des l’apostrophe courbes) ; la
-  // substitution est de un caractère pour un caractère, donc les positions trouvées dans le texte normalisé sont celles du texte d'origine.
+  // Espace insécable, apostrophe et guillemet droits ou typographiques se valent (un texte français a des « mot ! » avec espace fine insécable, des
+  // l’apostrophe courbes) ; la substitution est de un caractère pour un caractère, donc les positions trouvées dans le texte normalisé sont celles du
+  // texte d'origine.
   const normalize = text => text.replace(SPACES, ' ').replace(SINGLE_QUOTES, "'").replace(DOUBLE_QUOTES, '"');
   const isDeletion = mark => mark.type.name === 'deletion';
   const TRACK_MARKS = new Set(['insertion', 'deletion', 'modification']);
@@ -53,7 +59,8 @@ const FindReplace = (function () {
     return spans[lo].pos + (index - spans[lo].at);
   }
 
-  // Le caractère à `index` (hors du texte : non) est-il une lettre, un chiffre ou « _ » ? Une paire de substitution (lettre hors du plan de base) se lit en entier.
+  // Le caractère à `index` (hors du texte : non) est-il une lettre, un chiffre ou « _ » ? Une paire de substitution (lettre hors du plan de base) se
+  // lit en entier.
   function isWordCharAt(text, index) {
     if (index < 0 || index >= text.length) return false;
     let codePoint = text.codePointAt(index);
@@ -61,9 +68,10 @@ const FindReplace = (function () {
     return WORD_CHAR.test(String.fromCodePoint(codePoint));
   }
 
-  // Les correspondances de `query` dans `doc`, dans l'ordre du document : [{ from, to }]. Chaque bloc de texte se cherche à part (une correspondance ne traverse jamais deux
-  // paragraphes ni deux cases), à travers les changements de mise en forme dans le bloc (« bon<b>jour</b> » se trouve). Sans chevauchement : « aa » dans « aaaa » vaut deux.
-  // options : { matchCase, wholeWord }. Casse ignorée par défaut (`i` + `u` : « É » et « é » se valent, « e » et « é » non).
+  // Les correspondances de `query` dans `doc`, dans l'ordre du document : [{ from, to }]. Chaque bloc de texte se cherche à part (une correspondance
+  // ne traverse jamais deux paragraphes ni deux cases), à travers les changements de mise en forme dans le bloc (« bon<b>jour</b> » se trouve). Sans
+  // chevauchement : « aa » dans « aaaa » vaut deux. options : { matchCase, wholeWord }. Casse ignorée par défaut (`i` + `u` : « É » et « é » se
+  // valent, « e » et « é » non).
   function findMatches(doc, query, options) {
     const opts = options || {};
     const needle = normalize(String(query == null ? '' : query).split(OBJECT).join(''));
@@ -89,7 +97,7 @@ const FindReplace = (function () {
     return matches;
   }
 
-  // === L'état de la recherche =============================================================================================================================================
+  // L'état de la recherche
   const META = 'ppFindReplace';
   const MAX_PREFILL = 120; // une sélection plus longue n'est pas un mot à chercher
   const state = { open: false, query: '', replacement: '', matchCase: false, wholeWord: false, replaceVisible: false, flash: '', flashDoc: null };
@@ -111,7 +119,7 @@ const FindReplace = (function () {
     return matches.findIndex(m => m.from === selection.from && m.to === selection.to);
   }
 
-  // === Surlignage et raccourcis (une extension TipTap) ======================================================================================================================
+  // Surlignage et raccourcis (une extension TipTap)
   function decorationsFor(pmState) {
     if (!state.open || !state.query) return null;
     const matches = currentMatches(pmState);
@@ -131,15 +139,17 @@ const FindReplace = (function () {
     });
   }
 
-  // Redessine le surlignage et le compteur sans toucher au document : une transaction vide, comme partout ailleurs dans l'éditeur (cf. Editor.init, I18n.onChange).
+  // Redessine le surlignage et le compteur sans toucher au document : une transaction vide, comme partout ailleurs dans l'éditeur (cf. Editor.init,
+  // I18n.onChange).
   function refresh() {
     const ed = editor();
     if (ed) ed.view.dispatch(ed.state.tr.setMeta(META, true));
   }
 
-  // === Se placer sur un résultat ============================================================================================================================================
-  // Le résultat devient la sélection de l'éditeur (le panneau garde le focus : ProseMirror ne touche pas à la sélection du navigateur quand il ne l'a pas) ; son surlignage vient
-  // des décorations, la sélection du navigateur étant alors dans le champ de recherche. La zone de défilement amène le résultat au milieu quand il est hors de vue.
+  // Se placer sur un résultat
+  // Le résultat devient la sélection de l'éditeur (le panneau garde le focus : ProseMirror ne touche pas à la sélection du navigateur quand il ne l'a
+  // pas) ; son surlignage vient des décorations, la sélection du navigateur étant alors dans le champ de recherche. La zone de défilement amène le
+  // résultat au milieu quand il est hors de vue.
   function select(match) {
     const ed = editor();
     const TextSelection = EditorCore.getTextSelectionClass();
@@ -178,7 +188,8 @@ const FindReplace = (function () {
     return true;
   }
 
-  // La requête ou une option vient de changer : on se place sur le premier résultat à partir du début de la sélection (la frappe d'un mot qui s'allonge reste donc sur place).
+  // La requête ou une option vient de changer : on se place sur le premier résultat à partir du début de la sélection (la frappe d'un mot qui
+  // s'allonge reste donc sur place).
   function applyQuery() {
     const ed = editor();
     if (!ed) return;
@@ -189,9 +200,10 @@ const FindReplace = (function () {
     if (target && !(target.from === from && target.to === to)) select(target); else refresh();
   }
 
-  // === Remplacer ============================================================================================================================================================
-  // Le texte qui remplace garde la mise en forme du premier caractère remplacé (gras, couleur, lien : une marque de lien n'est pas « inclusive », insertText la perdrait en fin de
-  // lien). En mode suivi les marques de suivi héritées sont retirées : c'est le mode qui pose celles de l'insertion.
+  // Remplacer
+  // Le texte qui remplace garde la mise en forme du premier caractère remplacé (gras, couleur, lien : une marque de lien n'est pas « inclusive »,
+  // insertText la perdrait en fin de lien). En mode suivi, les marques de suivi héritées sont retirées : c'est le mode qui pose celles de
+  // l'insertion.
   function replacementMarks(doc, pos, suggest) {
     const $pos = doc.resolve(pos);
     const after = $pos.nodeAfter;
@@ -205,7 +217,8 @@ const FindReplace = (function () {
     else tr.delete(match.from, match.to);
   }
 
-  // Envoie `tr` et rend la transaction réellement appliquée (celle que le pont du suivi a transformée en suggestions, le cas échéant), ou null si elle a été refusée.
+  // Envoie `tr` et rend la transaction réellement appliquée (celle que le pont du suivi a transformée en suggestions, le cas échéant), ou null si
+  // elle a été refusée.
   function dispatchAndCapture(tr) {
     const ed = editor();
     let applied = null;
@@ -215,8 +228,8 @@ const FindReplace = (function () {
     return applied;
   }
 
-  // Remplace le résultat courant, puis se place sur le suivant. Sans résultat courant (la sélection n'est pas sur un résultat), « Remplacer » ne fait que se placer sur le prochain :
-  // on voit ce qui va être remplacé avant de le remplacer.
+  // Remplace le résultat courant, puis se place sur le suivant. Sans résultat courant (la sélection n'est pas sur un résultat), « Remplacer » ne fait
+  // que se placer sur le prochain : on voit ce qui va être remplacé avant de le remplacer.
   function replaceCurrent() {
     const ed = editor();
     if (!ed || !ed.isEditable || !state.query) return false;
@@ -228,7 +241,8 @@ const FindReplace = (function () {
     replaceInTransaction(tr, ed.state.doc, match, state.replacement, Editor.isTrackChangesOn());
     const applied = dispatchAndCapture(tr);
     if (!applied) { setFlash(I18n.t('find.replaceFailed')); return false; }
-    // Ce qui suit le texte qui vient d'être mis : la fin du remplacement dans le document final (en mode suivi, après l'insertion qui suit la suppression).
+    // Ce qui suit le texte qui vient d'être mis : la fin du remplacement dans le document final (en mode suivi, après l'insertion qui suit la
+    // suppression).
     const end = applied.mapping.map(match.to, 1);
     const rest = currentMatches(ed.state);
     const next = rest.find(m => m.from >= end) || rest[0];
@@ -241,7 +255,7 @@ const FindReplace = (function () {
     return true;
   }
 
-  // Tous les résultats en UNE transaction (donc une seule annulation), du dernier au premier : les positions des résultats d'avant ne bougent pas.
+  // Tous les résultats en une transaction (donc une seule annulation), du dernier au premier : les positions des résultats d'avant ne bougent pas.
   function replaceAll() {
     const ed = editor();
     if (!ed || !ed.isEditable || !state.query) return 0;
@@ -257,7 +271,7 @@ const FindReplace = (function () {
     return matches.length;
   }
 
-  // === Le panneau ===========================================================================================================================================================
+  // Le panneau
   let bar = null;
   let refs = null;
 
@@ -342,7 +356,8 @@ const FindReplace = (function () {
     I18n.onChange(() => { if (bar) { applyTexts(); updateCount(); } });
   }
 
-  // Textes du panneau, relus à chaque changement de langue. Info-bulle native (title) : le panneau vit hors de #toolbar-top, où s'applique le [data-tip] de la barre.
+  // Textes du panneau, relus à chaque changement de langue. Info-bulle native (title) : le panneau vit hors de #toolbar-top, où s'applique le
+  // [data-tip] de la barre.
   function applyTexts() {
     const t = key => I18n.t(key);
     bar.setAttribute('aria-label', t('find.aria'));
@@ -368,11 +383,13 @@ const FindReplace = (function () {
   }
 
   function setDisabled(button, disabled) {
-    // aria-disabled plutôt que disabled : le bouton garde le focus quand le dernier résultat vient d'être remplacé (un bouton désactivé le perdrait au profit de <body>).
+    // aria-disabled plutôt que disabled : le bouton garde le focus quand le dernier résultat vient d'être remplacé (un bouton désactivé le perdrait
+    // au profit de <body>).
     if (disabled) button.setAttribute('aria-disabled', 'true'); else button.removeAttribute('aria-disabled');
   }
 
-  // « 3 sur 12 » quand la sélection est sur un résultat, « 12 résultats » sinon, « Aucun résultat » ; après « Tout remplacer », le nombre de remplacements jusqu'à la prochaine action.
+  // « 3 sur 12 » quand la sélection est sur un résultat, « 12 résultats » sinon, « Aucun résultat » ; après « Tout remplacer », le nombre de
+  // remplacements jusqu'à la prochaine action.
   function updateCount() {
     if (!bar || !refs) return;
     const ed = editor();
@@ -411,7 +428,8 @@ const FindReplace = (function () {
       event.preventDefault();
       replaceCurrent();
     });
-    // Échap ferme depuis n'importe quel contrôle du panneau ; Ctrl+F et Ctrl+H y servent à aller au champ voulu (jamais à la recherche du navigateur).
+    // Échap ferme depuis n'importe quel contrôle du panneau ; Ctrl+F et Ctrl+H y servent à aller au champ voulu (jamais à la recherche du
+    // navigateur).
     bar.addEventListener('keydown', event => {
       if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closePanel(); return; }
       if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
@@ -419,8 +437,8 @@ const FindReplace = (function () {
       if (key === 'f') { event.preventDefault(); find.focus(); find.select(); }
       else if (key === 'h') { event.preventDefault(); showReplace(); }
       else if ((key === 'z' || key === 'y') && event.target.tagName !== 'INPUT') {
-        // Un clic sur « Remplacer » laisse le clavier sur ce bouton, qui n'a pas d'historique : Ctrl+Z y défait le remplacement dans le modèle (Ctrl+Maj+Z ou Ctrl+Y le refait).
-        // Dans un champ, Ctrl+Z reste celui du champ.
+        // Un clic sur « Remplacer » laisse le clavier sur ce bouton, qui n'a pas d'historique : Ctrl+Z y défait le remplacement dans le modèle
+        // (Ctrl+Maj+Z ou Ctrl+Y le refait). Dans un champ, Ctrl+Z reste celui du champ.
         event.preventDefault();
         const ed = editor();
         if (!ed || !ed.isEditable) return;
@@ -464,8 +482,8 @@ const FindReplace = (function () {
     button.setAttribute('aria-pressed', isOpen ? 'true' : 'false');
   }
 
-  // Ouvre le panneau (ou rend le clavier à son champ s'il l'est déjà). `replace` : montre aussi la ligne « Remplacer par ». Faux sans rien ouvrir quand l'éditeur n'est pas à
-  // l'écran (Lecture, macro-modèle).
+  // Ouvre le panneau (ou rend le clavier à son champ s'il l'est déjà). `replace` : montre aussi la ligne « Remplacer par ». Faux sans rien ouvrir
+  // quand l'éditeur n'est pas à l'écran (Lecture, macro-modèle).
   function open(options) {
     const ed = editor();
     const container = document.getElementById('editor-container');
@@ -487,7 +505,8 @@ const FindReplace = (function () {
     return true;
   }
 
-  // Ferme le panneau et efface le surlignage. `focus: false` quand l'éditeur n'est plus à l'écran (js/main.js, Mode lecture) : lui rendre le clavier n'aurait pas de sens.
+  // Ferme le panneau et efface le surlignage. `focus: false` quand l'éditeur n'est plus à l'écran (js/main.js, Mode lecture) : lui rendre le clavier
+  // n'aurait pas de sens.
   function closePanel(options) {
     if (!state.open) return;
     state.open = false;
@@ -499,8 +518,9 @@ const FindReplace = (function () {
     if (!options || options.focus !== false) ed.commands.focus();
   }
 
-  // Ctrl+F et Ctrl+H sur le document, pas sur l'éditeur : après un clic sur un bouton de la barre d'outils le focus n'est plus dans le texte, et la recherche du navigateur s'ouvrirait
-  // à la place. Ils laissent la main à qui les a déjà pris (le champ du panneau), à une fenêtre ouverte, et au navigateur quand l'éditeur n'est pas à l'écran (Mode lecture, macro-modèle).
+  // Ctrl+F et Ctrl+H sur le document, pas sur l'éditeur : après un clic sur un bouton de la barre d'outils le focus n'est plus dans le texte, et la
+  // recherche du navigateur s'ouvrirait à la place. Ils laissent la main à qui les a déjà pris (le champ du panneau), à une fenêtre ouverte, et au
+  // navigateur quand l'éditeur n'est pas à l'écran (Mode lecture, macro-modèle).
   const anyWindowOpen = () => Array.from(document.querySelectorAll('.pp-modal')).some(overlay => getComputedStyle(overlay).display !== 'none');
   function onDocumentKeydown(event) {
     if (event.defaultPrevented || event.altKey || event.isComposing || !(isMac() ? event.metaKey : event.ctrlKey)) return;

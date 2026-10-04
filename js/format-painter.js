@@ -1,14 +1,16 @@
-// Pinceau de mise en forme (demande d'Antoine du 02/10, point 8 : « ajout d'un bouton pour copier/coller la mise en forme »). Un clic sur le bouton (#v2-btn-format-painter) copie la mise
-// en forme du texte où l'on se trouve ; la sélection qu'on fait ensuite la reçoit, puis le pinceau se range. Un double-clic le garde armé pour peindre plusieurs endroits, Échap ou un
-// nouveau clic l'arrête. Au clavier : « Reproduire la mise en forme » (Alt+Maj+C, le même geste que le bouton) puis « Appliquer la mise en forme » (Alt+Maj+V) sur la
-// sélection voulue, faite au clavier ou à la souris (js/shortcuts.js).
+// Pinceau de mise en forme. Un clic sur le bouton (#v2-btn-format-painter) copie la mise en forme du texte où l'on se trouve ; la sélection qu'on
+// fait ensuite la reçoit, puis le pinceau se range. Un double-clic le garde armé pour peindre plusieurs endroits, Échap ou un nouveau clic l'arrête.
+// Au clavier (js/shortcuts.js) : « Reproduire la mise en forme » (Alt+Maj+C, le même geste que le bouton) puis « Appliquer la mise en forme »
+// (Alt+Maj+V) sur la sélection voulue, faite au clavier ou à la souris.
 //
-// Ce qui est copié, de la source (le premier caractère de la sélection, ou le curseur) :
-//  - la mise en forme du caractère : gras, italique, souligné, barré, police, taille, couleur, surlignage. Elle REMPLACE celle du texte peint (peindre un texte ordinaire efface la mise en
-//    forme de la cible, comme dans Word). Un lien, un commentaire, une marque du suivi des modifications sont du contenu, pas de la mise en forme : jamais touchés ;
-//  - celle du paragraphe (alignement, niveau de titre) quand la source est un curseur ou un paragraphe entier, comme le « ¶ » de Word : une sélection partielle ne copie que le caractère.
-//    Elle n'est posée que sur les paragraphes peints en entier (triple-clic, ou une sélection qui les couvre) : peindre un mot ne recentre pas son paragraphe. Les puces, les tableaux et
-//    les images ne sont pas de la mise en forme de texte ; un paragraphe de légende garde son type.
+// Copié depuis la source (le premier caractère de la sélection, ou le curseur) :
+//  - la mise en forme du caractère : gras, italique, souligné, barré, police, taille, couleur, surlignage. Elle remplace celle du texte peint
+//    (peindre un texte ordinaire efface celle de la cible, comme dans Word). Un lien, un commentaire, une marque du suivi des modifications sont du
+//    contenu, pas de la mise en forme : jamais touchés ;
+//  - celle du paragraphe (alignement, niveau de titre) quand la source est un curseur ou un paragraphe entier, comme le « ¶ » de Word : une sélection
+//    partielle ne copie que le caractère. Elle n'est posée que sur les paragraphes peints en entier (triple-clic, ou sélection qui les couvre) :
+//    peindre un mot ne recentre pas son paragraphe. Les puces, les tableaux et les images ne sont pas de la mise en forme de texte ; un paragraphe de
+//    légende garde son type.
 // Une application est une seule transaction : un seul Ctrl+Z la défait.
 const FormatPainter = (function () {
   const BUTTON_ID = 'v2-btn-format-painter';
@@ -28,13 +30,14 @@ const FormatPainter = (function () {
   let settleTimer = null;
   let lastMousePaint = null; // { at, from, to } : la dernière application à la souris, pour le triple-clic qui la prolonge
 
-  // Le pinceau agit-il ? Faux quand son bouton est grisé (e-mail, macro-modèle, Lecture, droits) : la barre le dit par `v2-hf-locked` ou `pp-access-locked`, jamais en le retirant.
+  // Le pinceau agit-il ? Faux quand son bouton est grisé (e-mail, macro-modèle, Lecture, droits) : la barre le dit par `v2-hf-locked` ou
+  // `pp-access-locked`, jamais en le retirant.
   function isUsable() {
     return !!editor && !!button && !button.disabled && !button.closest('[hidden], .v2-hf-locked, .pp-access-locked');
   }
 
-  // Le bloc de texte est-il peint EN ENTIER par la sélection [from, to] ? Un bloc vide l'est quand la sélection le dépasse des deux côtés. Un triple-clic qui déborde au tout début du bloc
-  // suivant (Chrome) ne le couvre pas.
+  // Le bloc de texte est-il peint en entier par la sélection [from, to] ? Un bloc vide l'est quand la sélection le dépasse des deux côtés. Un
+  // triple-clic qui déborde au tout début du bloc suivant (Chrome) ne le couvre pas.
   function coversBlock(from, to, pos, node) {
     const start = pos + 1;
     const end = pos + node.nodeSize - 1;
@@ -48,8 +51,8 @@ const FormatPainter = (function () {
       && !(mark.type.name === 'textStyle' && Object.keys(mark.attrs).every(key => mark.attrs[key] == null || mark.attrs[key] === '')));
   }
 
-  // Ce que la sélection donne à copier : les marques de son premier caractère (ou celles que la frappe prendrait, au curseur), le paragraphe de la source quand elle est un curseur ou
-  // couvre ce paragraphe.
+  // Ce que la sélection donne à copier : les marques de son premier caractère (ou celles que la frappe prendrait, au curseur), le paragraphe de la
+  // source quand elle est un curseur ou couvre ce paragraphe.
   function capture(state) {
     const { selection, doc } = state;
     let marks = null;
@@ -76,8 +79,9 @@ const FormatPainter = (function () {
     return { marks: formatMarksOf(marks), block: paragraph };
   }
 
-  // La transaction qui pose `snap` sur la sélection : les marques de caractère d'abord (celles de la cible retirées, celles de la source posées), puis le paragraphe de chaque bloc de texte
-  // peint en entier. { tr, reachable } : `reachable` dit s'il y avait du contenu en ligne (du texte, une bulle) à mettre en forme.
+  // La transaction qui pose `snap` sur la sélection : les marques de caractère d'abord (celles de la cible retirées, celles de la source posées),
+  // puis le paragraphe de chaque bloc de texte peint en entier. { tr, reachable } : `reachable` dit s'il y avait du contenu en ligne (du texte, une
+  // bulle) à mettre en forme.
   function paintTransaction(state, snap, onSelection) {
     const { doc, schema } = state;
     const selection = onSelection || state.selection;
@@ -139,8 +143,9 @@ const FormatPainter = (function () {
     return true;
   }
 
-  // Pose la mise en forme copiée sur la sélection. Vrai quand il y avait du texte à mettre en forme (même s'il l'était déjà, rien ne change alors) ; faux sinon - sélection vide ou
-  // sans texte (une image), rien de copié, pinceau grisé : l'appelant garde alors le pinceau armé. Un pinceau armé d'un clic se range après une application ; armé d'un double-clic, il reste.
+  // Pose la mise en forme copiée sur la sélection. Vrai quand il y avait du texte à mettre en forme (même s'il l'était déjà, rien ne change alors) ;
+  // faux sinon - sélection vide ou sans texte (une image), rien de copié, pinceau grisé : l'appelant garde alors le pinceau armé. Un pinceau armé
+  // d'un clic se range après une application ; armé d'un double-clic, il reste.
   function apply(releasedCells) {
     if (!snapshot || !isUsable()) return false;
     const state = editor.state;
@@ -155,8 +160,8 @@ const FormatPainter = (function () {
     return true;
   }
 
-  // Le clic du bouton : copie et arme, ou, déjà armé, arrête. Le double-clic (au-dessous) garde le pinceau armé. Un clic « de clavier » (Entrée, Espace, la touche du pinceau) a un
-  // `detail` de 0 : il bascule comme un clic.
+  // Le clic du bouton : copie et arme, ou, déjà armé, arrête. Le double-clic (au-dessous) garde le pinceau armé. Un clic « de clavier » (Entrée,
+  // Espace, la touche du pinceau) a un `detail` de 0 : il bascule comme un clic.
   function onButtonClick(event) {
     if (event.detail >= 2) return; // le second clic d'un double-clic : le `dblclick` qui suit s'en charge
     if (armed) disarm();
@@ -166,8 +171,9 @@ const FormatPainter = (function () {
     if (copy()) arm(true);
   }
 
-  // La souris : seul un appui commencé DANS le texte, pinceau armé, compte (le clic sur le bouton lui-même ne doit rien peindre). À son relâchement, la sélection est prête (un glissé,
-  // un double-clic sur un mot, un triple-clic sur un paragraphe, Maj+clic) : le pinceau la peint. Un simple clic, sans sélection, ne fait rien et laisse le pinceau armé.
+  // La souris : seul un appui commencé dans le texte, pinceau armé, compte (le clic sur le bouton lui-même ne doit rien peindre). À son relâchement,
+  // la sélection est prête (un glissé, un double-clic sur un mot, un triple-clic sur un paragraphe, Maj+clic) : le pinceau la peint. Un simple clic,
+  // sans sélection, ne fait rien et laisse le pinceau armé.
   function onMouseDown(event) {
     const inText = !!editor && editor.view.dom.contains(event.target);
     pointerInEditor = inText && (armed || continuesMousePaint(event));
@@ -176,8 +182,9 @@ const FormatPainter = (function () {
     if (!pointerInEditor) return;
     pointerInEditor = false;
     clearTimeout(settleTimer);
-    // Un glissé sur des cases d'un tableau : la sélection de cases n'existe que jusqu'ici, ProseMirror la reconvertit en texte (celui où le navigateur a fini son glissé) juste après le relâchement,
-    // tantôt avant tantôt après le tour qui suit : on la relève maintenant (ce relâchement passe ici avant le sien, en capture).
+    // Un glissé sur des cases d'un tableau : la sélection de cases n'existe que jusqu'ici, ProseMirror la reconvertit en texte (celui où le
+    // navigateur a fini son glissé) juste après le relâchement, tantôt avant tantôt après le tour qui suit : on la relève maintenant (ce relâchement
+    // passe ici avant le sien, en capture).
     const cells = editor.state.selection.$anchorCell ? editor.state.selection : null;
     // Après le tour de ProseMirror : sa sélection suit celle du navigateur à ce relâchement.
     settleTimer = setTimeout(() => {
@@ -188,7 +195,8 @@ const FormatPainter = (function () {
       }
     }, 0);
   }
-  // Un triple-clic commence par un double-clic, qui peint déjà le mot (et range un pinceau d'un clic) : le troisième clic, dans la foulée et sur ce même mot, peint le paragraphe entier.
+  // Un triple-clic commence par un double-clic, qui peint déjà le mot (et range un pinceau d'un clic) : le troisième clic, dans la foulée et sur ce
+  // même mot, peint le paragraphe entier.
   function continuesMousePaint(event) {
     if (!lastMousePaint || event.detail < 3 || Date.now() - lastMousePaint.at > MULTI_CLICK_MS) return false;
     const at = editor.view.posAtCoords({ left: event.clientX, top: event.clientY });
@@ -198,7 +206,8 @@ const FormatPainter = (function () {
     if (armed && event.key === 'Escape') disarm();
   }
 
-  // Un pinceau armé dont le bouton vient d'être grisé (Lecture, droits, e-mail, macro-modèle : une classe posée sur le bouton, par js/main.js ou js/main-toolbar.js) s'arrête.
+  // Un pinceau armé dont le bouton vient d'être grisé (Lecture, droits, e-mail, macro-modèle : une classe posée sur le bouton, par js/main.js ou
+  // js/main-toolbar.js) s'arrête.
   function stopWhenGreyed() {
     if (armed && !isUsable()) disarm();
   }
