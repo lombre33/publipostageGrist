@@ -290,6 +290,7 @@ const Editor = (function () {
     EditorCore.setFloatingUi({ computePosition, offset, flip, shift, autoUpdate });
     GridEditor.configure({ Plugin, PluginKey, TextSelection, Decoration, DecorationSet, TableMap, CellSelection });
     tableTools = { selectedRect, isInTable };
+    TableMerge.configure({ TableMap, selectedRect, isInTable });
     let EditorStateClass;
     EditorCore.setNodeSelectionClass(NodeSelection);
     EditorCore.setTextSelectionClass(TextSelection);

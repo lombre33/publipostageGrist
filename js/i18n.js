@@ -951,9 +951,14 @@ const I18n = (function () {
     'table.colDelMerged': { fr: 'Indisponible avec le suivi des modifications : une cellule fusionnée traverse cette colonne', en: 'Unavailable with track changes on: a merged cell runs across this column' },
     'table.tableDel': { fr: 'Supprimer le tableau', en: 'Delete table' },
     'table.fillOpen': { fr: 'Fond de cellule (remplir)', en: 'Cell background (fill)' },
-    // Barre de la case d'une grille (js/floating-toolbars.js) : fusion, alignement vertical.
+    // Fusion et scission de cases (js/floating-toolbars.js : grille et tableau de document), puis l'alignement vertical de la barre d'une grille. Les cinq phrases d'après sont les raisons du grisé, en info-bulle (js/table-merge.js).
     'table.cellMerge': { fr: 'Fusionner les cases', en: 'Merge cells' },
     'table.cellSplit': { fr: 'Scinder la case', en: 'Split cell' },
+    'table.cellMergeNeedsCells': { fr: 'Fusionner les cases : sélectionnez-en au moins deux, en glissant sur le tableau', en: 'Merge cells: select at least two, by dragging across the table' },
+    'table.cellMergeOverlap': { fr: 'Fusionner les cases : une case déjà fusionnée dépasse de la sélection, incluez-la en entier', en: 'Merge cells: an already merged cell sticks out of the selection, include all of it' },
+    'table.cellMergeLoop': { fr: 'Fusionner les cases : une ligne de la sélection est répétée par une boucle', en: 'Merge cells: a row of the selection is repeated by a loop' },
+    'table.cellSplitNeedsMerged': { fr: 'Scinder la case : placez le curseur dans une case fusionnée', en: 'Split cell: place the cursor in a merged cell' },
+    'table.cellTracked': { fr: 'Indisponible avec le suivi des modifications : la forme du tableau changerait', en: 'Unavailable with track changes on: the shape of the table would change' },
     'table.valignTop': { fr: 'Aligner en haut', en: 'Align to top' },
     'table.valignMiddle': { fr: 'Aligner au milieu', en: 'Align to middle' },
     'table.valignBottom': { fr: 'Aligner en bas', en: 'Align to bottom' },
@@ -1195,6 +1200,7 @@ const I18n = (function () {
     'varLoop.source.refList': { fr: 'Lignes de « {table} » listées dans {via}', en: 'Rows of “{table}” listed in {via}' },
     'varLoop.source.noLink': { fr: '« {table} » n’est plus liée à cette page : la boucle n’a aucune ligne à parcourir.', en: '“{table}” is no longer linked to this page: the loop has no rows to go over.' },
     'varLoop.repeat.row': { fr: 'La ligne du tableau', en: 'The table row' },
+    'varLoop.repeat.rowMerged': { fr: 'Indisponible : une case fusionnée sur plusieurs lignes traverse cette ligne', en: 'Unavailable: a cell merged across several rows runs through this row' },
     'varLoop.repeat.cell': { fr: 'La variable, dans sa cellule', en: 'The variable, in its cell' },
     'varLoop.repeat.item': { fr: 'L’élément de liste', en: 'The list item' },
     'varLoop.repeat.inline': { fr: 'La variable, dans la phrase', en: 'The variable, in the sentence' },

@@ -1,6 +1,6 @@
 # Fonctionnalités diverses — édition, sortie PDF, organisation
 
-> **Statut au 4 octobre 2026 : en grande partie livré.** En ligne : Rechercher / Remplacer, filigrane, taille et orientation de page, QR code, dossiers de modèles, nom de modèle déjà pris (« nom (2) »), copier-coller d'images, fusion de plusieurs modèles (macro-modèles) et choix de modèle conditionnel (« Modèle selon la ligne »). Pas encore faits : le remplissage avec des données d'exemple, les variantes multi-langues d'un modèle et la fusion de cellules dans un tableau de document (elle n'existe que dans les grilles). Ce document garde les conceptions d'origine.
+> **Statut au 4 octobre 2026 : en grande partie livré.** En ligne : Rechercher / Remplacer, filigrane, taille et orientation de page, QR code, dossiers de modèles, nom de modèle déjà pris (« nom (2) »), copier-coller d'images, fusion de plusieurs modèles (macro-modèles) et choix de modèle conditionnel (« Modèle selon la ligne »). Fusion et scission de cases dans un tableau de document : livrées le 4 octobre (lot 1 : boutons « Fusionner les cases » et « Scinder la case » de la barre du tableau, `js/table-merge.js`, le Word corrigé ; lot 2 à suivre : une case fusionnée sur plusieurs lignes reste sur une seule page). Pas encore faits : le remplissage avec des données d'exemple et les variantes multi-langues d'un modèle. Ce document garde les conceptions d'origine.
 
 Regroupe les items de la roadmap qui sont chacun trop petits pour mériter leur propre fichier, mais
 gardés en détail pour ne rien perdre de la demande initiale.
@@ -24,6 +24,8 @@ du texte remplacé et passe par le pont du suivi des modifications quand il est 
 les tests dans les groupes `findReplace` et `findReplaceMouse`. Pas fait : chercher dans le texte des bulles (noms de variables), dans l'en-tête et le pied de page hors édition, ni par expression régulière.
 
 ## Fusion de cellules de tableau
+
+> **Livré le 4 octobre 2026 (choix d'Antoine : « Complète »).** Les commandes `mergeCells` / `splitCell` de prosemirror-tables sont reprises par `js/table-merge.js` (texte gardé à la suite, largeur de chaque colonne couverte rendue à la case fusionnée, un seul Annuler, gardes : une seule case, case déjà fusionnée qui dépasse, suivi des modifications, ligne répétée par une boucle) et les deux boutons de la barre flottante du tableau (`js/floating-toolbars.js`). Le vrai risque était bien l'export : `tableFrom` (PDF) lisait déjà les `colspan` / `rowspan`, mais `tableBlockFrom` (Word) décalait d'une colonne les cases d'après une case fusionnée sur plusieurs lignes (corrigé : la place de chaque case vient de `ExportCommon.placeCells`). Tests : groupe `tableMerge` et script Node `tableMergeMouse`.
 
 Le tableau du projet utilise `@tiptap/extension-table` (confirmé par les mêmes classes
 `.tableWrapper`/`.selectedCell`/`.column-resize-handle` que documente `css/editor-v2.css:98-101`, posées

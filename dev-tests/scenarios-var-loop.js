@@ -108,6 +108,7 @@
   function setSelect(select, value) { select.value = value; select.dispatchEvent(new Event('change', { bubbles: true })); }
   function modal() { return document.getElementById('var-loop-modal'); }
   function previewLines() { return Array.from(modal().querySelectorAll('.var-condition-debug-line')).map(l => (l.hidden ? '' : l.textContent)); }
+  function sameLists(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
   function actionButton(label) { return Array.from(modal().querySelectorAll('.var-modal-actions button')).find(b => b.textContent === label); }
 
   cases.push({
@@ -311,6 +312,46 @@
         && JSON.stringify(saved) === JSON.stringify({ repeat: 'row', table: 'LpLignes', sort: { column: 'Montant', direction: 'asc' }, empty: 'header' })
         && tint === 'rgb(245, 249, 255)' && tabShown && headerTint !== tint && activeAfterSave && removeShown && afterRemove == null && tintAfterRemove !== tint;
       return { pass, notes: JSON.stringify({ opened, closed, title, source, segs, before, directionLabels, sorted, saved, tint, tabShown, headerTint, activeAfterSave, removeShown, afterRemove, tintAfterRemove }) };
+    },
+  });
+
+  cases.push({
+    id: 'loop_window_row_choice_is_greyed_when_a_merged_cell_crosses_the_row',
+    description: 'Fenêtre Boucle : « La ligne du tableau » est grisée (jamais retirée), avec sa raison en info-bulle, quand une case fusionnée sur plusieurs lignes traverse la ligne de la bulle (la copie casserait le tableau) : la bulle seule dans sa cellule est choisie d\'office, un clic sur le choix grisé ne change rien ; une ligne que rien ne traverse garde les deux choix',
+    run: async (h) => {
+      await seed(h);
+      // Première table : « Lot » est fusionnée sur les deux lignes, la bulle Qté est dans la première. Seconde table : aucune fusion, la bulle Designation.
+      Editor.setHTML('<table><tbody>'
+        + `<tr><td rowspan="2"><p>Lot</p></td>${cell(badgeHtml('LpLignes', 'Qte'))}</tr>`
+        + `<tr>${cell('suite')}</tr>`
+        + '</tbody></table><p>entre</p><table><tbody>'
+        + `<tr>${cell(badgeHtml('LpLignes', 'Designation'))}${cell('x')}</tr>`
+        + '</tbody></table>');
+      const state = () => {
+        const buttons = Array.from(modal().querySelectorAll('.var-loop-seg button'));
+        return buttons.map(b => ({ text: b.textContent, pressed: b.getAttribute('aria-pressed') === 'true', disabled: b.getAttribute('aria-disabled') === 'true', title: b.title, opacity: Number(getComputedStyle(b).opacity) }));
+      };
+      let ed = await selectBadge(h, 'LpLignes.Qte');
+      pressToolbarButton('var-loop');
+      await h.sleep(500);
+      const merged = state();
+      const rowButton = Array.from(modal().querySelectorAll('.var-loop-seg button')).find(b => b.dataset.repeat === 'row');
+      rowButton.click();
+      await h.sleep(60);
+      const afterClick = state();
+      actionButton(I18n.t('common.save')).click();
+      await h.sleep(100);
+      const saved = badgeNodes(ed).find(b => b.node.attrs.key === 'LpLignes.Qte').node.attrs.loop;
+      ed = await selectBadge(h, 'LpLignes.Designation');
+      pressToolbarButton('var-loop');
+      await h.sleep(500);
+      const plain = state();
+      actionButton(I18n.t('common.cancel')).click();
+      await h.sleep(100);
+      const pass = merged.length === 2 && merged[0].text === I18n.t('varLoop.repeat.row') && merged[0].disabled && merged[0].title === I18n.t('varLoop.repeat.rowMerged') && merged[0].opacity < 0.6 && !merged[0].pressed
+        && merged[1].pressed && !merged[1].disabled && sameLists(afterClick, merged) && saved && saved.repeat === 'inline'
+        && plain.length === 2 && !plain[0].disabled && plain[0].pressed && !plain[1].disabled && plain[0].title === '';
+      return { pass, notes: JSON.stringify({ merged, afterClick: afterClick.map(b => [b.pressed, b.disabled]), saved, plain }) };
     },
   });
 

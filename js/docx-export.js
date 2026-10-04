@@ -495,15 +495,15 @@ const DocxExport = (function () {
     const tableRows = [];
     // Les lignes de titres (cases <th> en tête) : Word les reprend en haut de chaque page où le tableau se poursuit (`tblHeader`), comme le PDF.
     const headerRowCount = ExportCommon.headerRowCount(rows);
+    // Où chaque case commence dans la grille du tableau : une case fusionnée sur plusieurs lignes tient sa place dans les lignes d'après, dont les cases se décalent d'autant (Word
+    // écrit seul les cases de continuation). Sans cela la case qui suit prenait la largeur d'une autre colonne.
+    const placement = new Map(ExportCommon.placeCells(rows).placed.map(placed => [placed.el, placed]));
     for (const tr of rows) {
       const cells = Array.from(tr.children).filter(c => /^(TD|TH)$/i.test(c.tagName));
       const tableCells = [];
-      let colIndex = 0;
       for (const cell of cells) {
-        const span = parseInt(cell.getAttribute('colspan') || '1', 10) || 1;
-        const rowSpan = parseInt(cell.getAttribute('rowspan') || '1', 10) || 1;
-        const width = colWidthsTwip.slice(colIndex, colIndex + span).reduce((a, b) => a + b, 0) || Math.floor(CONTENT_WIDTH_TWIP / columnCount);
-        colIndex += span;
+        const { col, colspan: span, rowspan: rowSpan } = placement.get(cell);
+        const width = colWidthsTwip.slice(col, col + span).reduce((a, b) => a + b, 0) || Math.floor(CONTENT_WIDTH_TWIP / columnCount);
         const children = await blocksFromContainer(cell, ctx, false, Math.max(200, width - WORD_DEFAULT_CELL_MARGIN_TWIP), keptRows.includes(tr));
         tableCells.push(new docx.TableCell({
           children: children.length ? children : [new docx.Paragraph('')],

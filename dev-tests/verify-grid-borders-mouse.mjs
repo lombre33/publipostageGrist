@@ -463,7 +463,7 @@ async function runTheme(theme) {
     if (!bar) return null;
     return Array.from(bar.querySelectorAll('button[data-action]')).filter(b => getComputedStyle(b).display !== 'none' && b.getBoundingClientRect().width > 0).map(b => b.dataset.action);
   });
-  check(`${label} - tableau de document : la barre n'a pas de bouton « Bordures » (ni de fusion, ni d'alignement vertical)`, !!classic && !classic.includes('borders-open') && classic.join() === 'row-before,row-after,row-del,col-before,col-after,col-del,table-del,caption,fill-open', classic);
+  check(`${label} - tableau de document : la barre n'a pas de bouton « Bordures » (ni d'alignement vertical) ; ses boutons de fusion sont ceux du tableau de document`, !!classic && !classic.includes('borders-open') && classic.join() === 'row-before,row-after,row-del,col-before,col-after,col-del,table-del,cell-merge,cell-split,caption,fill-open', classic);
 
   await context.close();
 }

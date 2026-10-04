@@ -85,12 +85,13 @@ const VariableLoop = (function () {
     const source = LoopRules.sourceFor(node.attrs, GristAPI.getCurrentTableId());
     return { active: false, enabled: !!source, title: I18n.t(source ? 'varToolbar.loop' : 'varToolbar.loopDisabled') };
   }
-  // Où est la bulle : décide des choix « Ce qui se répète » (le plus proche l'emporte : une liste dans une cellule propose l'élément de liste).
+  // Où est la bulle : décide des choix « Ce qui se répète » (le plus proche l'emporte : une liste dans une cellule propose l'élément de liste). `rowMerged` : une case fusionnée sur
+  // plusieurs lignes traverse la ligne de la bulle (js/table-merge.js) - la copier pour chaque ligne liée casserait le tableau, « La ligne du tableau » est alors grisée.
   function placeOf(editorState, pos) {
     const $pos = editorState.doc.resolve(pos);
     const rowDepth = nearestDepth($pos, ZONE_NODES.row);
     const itemDepth = nearestDepth($pos, ZONE_NODES.item);
-    if (rowDepth !== -1 && rowDepth > itemDepth) return { kind: 'table', repeats: ['row', 'inline'], inCell: true };
+    if (rowDepth !== -1 && rowDepth > itemDepth) return { kind: 'table', repeats: ['row', 'inline'], inCell: true, rowMerged: TableMerge.rowCrossedByMerge($pos.node(rowDepth - 1), $pos.index(rowDepth - 1)) };
     if (itemDepth !== -1) return { kind: 'list', repeats: ['item', 'inline'], inCell: rowDepth !== -1 };
     return { kind: $pos.parent.type.name === 'heading' ? 'heading' : 'paragraph', repeats: ['inline', 'paragraph'], inCell: false };
   }
@@ -259,6 +260,10 @@ const VariableLoop = (function () {
     else if (rule.mode === 'singleton') sourceText.textContent = I18n.t('varLoop.source.singleton', { table });
     else sourceText.textContent = I18n.t('varLoop.source.link', { table, via: Variables.describeLinkVia(table, rule, GristAPI.getCurrentTableId()) });
   }
+  // « La ligne du tableau » grisée (aria-disabled : le survol, qui dit pourquoi, reste) quand une case fusionnée traverse la ligne ; une boucle déjà posée sur une telle ligne reste lisible.
+  function repeatBlocked(repeat) {
+    return repeat === 'row' && !!state.place.rowMerged && state.working.repeat !== 'row';
+  }
   function renderRepeat() {
     const { repeatSeg, separatorRow } = refs;
     repeatSeg.replaceChildren();
@@ -268,13 +273,14 @@ const VariableLoop = (function () {
       btn.type = 'button';
       btn.dataset.repeat = repeat;
       btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      if (repeatBlocked(repeat)) { btn.setAttribute('aria-disabled', 'true'); btn.title = I18n.t('varLoop.repeat.rowMerged'); }
       btn.addEventListener('click', () => setRepeat(repeat));
       repeatSeg.appendChild(btn);
     });
     separatorRow.hidden = state.working.repeat !== 'inline';
   }
   function setRepeat(repeat) {
-    if (!state || state.working.repeat === repeat) return;
+    if (!state || state.working.repeat === repeat || repeatBlocked(repeat)) return;
     state.working.repeat = repeat;
     // « Masquer », « Afficher un texte », « Laisser vide » valent pour la phrase comme pour le paragraphe ; sinon, le choix par défaut de la nouvelle zone.
     if (LoopRules.EMPTY_MODES[repeat].indexOf(state.working.empty) === -1) state.working.empty = LoopRules.defaultEmpty(repeat, state.place.inCell);
@@ -544,7 +550,7 @@ const VariableLoop = (function () {
     ensureModal();
     const place = placeOf(editor.state, pos);
     // Une boucle déplacée depuis (d'un tableau vers un paragraphe, par exemple) reprend le premier choix de son nouvel endroit.
-    const repeat = existing && place.repeats.indexOf(existing.repeat) !== -1 ? existing.repeat : place.repeats[0];
+    const repeat = existing && place.repeats.indexOf(existing.repeat) !== -1 ? existing.repeat : place.repeats.find(r => !(r === 'row' && place.rowMerged));
     const keepEmpty = existing && LoopRules.EMPTY_MODES[repeat].indexOf(existing.empty) !== -1;
     state = {
       editor, pos, node, place, source,

@@ -152,8 +152,8 @@ const FloatingToolbars = (function () {
       ['col-del', 'colDel', I18n.t('table.colDel')],
       ['table-del', 'trash', I18n.t('table.tableDel')],
     ];
-    // Ce que seule une grille a (js/grid-editor.js) : fusion, alignement vertical. Posé dans la barre pour tous les tableaux, montré par css/grid.css
-    // sous `body.pp-grid-mode` seulement : la barre d'un tableau de document reste celle d'avant.
+    // Ce que seule une grille a (js/grid-editor.js) : bordures, alignement vertical. Posé dans la barre pour tous les tableaux, montré par css/grid.css
+    // sous `body.pp-grid-mode` seulement. La fusion et la scission de cases sont à tous les tableaux (js/table-merge.js pour un document, js/grid-editor.js pour une grille).
     const VALIGN_BUTTONS = [['valign-top', 'valignTop', 'top', I18n.t('table.valignTop')], ['valign-middle', 'valignMiddle', 'middle', I18n.t('table.valignMiddle')], ['valign-bottom', 'valignBottom', 'bottom', I18n.t('table.valignBottom')]];
     // Menu « Bordures » d'une grille : les huit réglages (icône, info-bulle) ; la couleur du stylo (null = le trait de départ) se choisit une fois et
     // reste pour les réglages suivants.
@@ -167,9 +167,9 @@ const FloatingToolbars = (function () {
     const gridButton = (action, icon, title) => `<button data-action="${action}" class="v2-grid-only" title="${title}">${Icons.svg(icon)}</button>`;
     const html = buttons.map(([action, icon, title]) =>
       `<button data-action="${action}" title="${title}">${Icons.svg(icon)}</button>`).join('')
-      + '<span class="v2-floating-sep v2-grid-only"></span>'
-      + gridButton('cell-merge', 'cellMerge', I18n.t('table.cellMerge'))
-      + gridButton('cell-split', 'cellSplit', I18n.t('table.cellSplit'))
+      + '<span class="v2-floating-sep"></span>'
+      + `<button data-action="cell-merge" title="${I18n.t('table.cellMerge')}">${Icons.svg('cellMerge')}</button>`
+      + `<button data-action="cell-split" title="${I18n.t('table.cellSplit')}">${Icons.svg('cellSplit')}</button>`
       + '<span class="v2-floating-sep"></span>'
       + `<button data-action="caption" title="${I18n.t('caption.addTable')}" aria-label="${I18n.t('caption.addTable')}">${Icons.svg('caption')}</button>`
       + `<button data-action="fill-open" class="v2-fill-chip" id="v2-table-fill-btn" title="${I18n.t('table.fillOpen')}">`
@@ -188,8 +188,8 @@ const FloatingToolbars = (function () {
         'col-after': () => editor.chain().focus().addColumnAfter().run(),
         'col-del': () => { if (!columnDeleteBlocked()) editor.chain().focus().deleteColumn().run(); },
         'table-del': () => editor.chain().focus().deleteTable().run(),
-        'cell-merge': () => GridEditor.mergeCells(editor),
-        'cell-split': () => GridEditor.splitCell(editor),
+        'cell-merge': () => (GridEditor.isActive() ? GridEditor.mergeCells(editor) : TableMerge.mergeCells(editor)),
+        'cell-split': () => (GridEditor.isActive() ? GridEditor.splitCell(editor) : TableMerge.splitCell(editor)),
         'valign-top': () => GridEditor.setVerticalAlign(editor, 'top'),
         'valign-middle': () => GridEditor.setVerticalAlign(editor, 'middle'),
         'valign-bottom': () => GridEditor.setVerticalAlign(editor, 'bottom'),
@@ -252,10 +252,22 @@ const FloatingToolbars = (function () {
       const fill = editor.getAttributes('tableCell').backgroundColor || editor.getAttributes('tableHeader').backgroundColor;
       EditorCore.setColorBar('v2-table-fill-bar', fill || null);
     };
+    // « Fusionner » et « Scinder » ont deux grisés : celui d'une grille (`v2-hf-locked`, sans raison) et celui d'un document (`is-disabled`, avec sa raison pour info-bulle, comme
+    // « Supprimer la colonne »). La barre passe de l'un à l'autre sans se redessiner : chaque mode défait le grisé de l'autre.
+    const MERGE_BUTTONS = [['cell-merge', 'table.cellMerge', TableMerge.mergeBlock], ['cell-split', 'table.cellSplit', TableMerge.splitBlock]];
+    const syncDocumentMergeButtons = () => {
+      MERGE_BUTTONS.forEach(([action, labelKey, blockOf]) => {
+        const btn = button(action);
+        if (btn) btn.classList.remove('v2-hf-locked');
+        const reason = blockOf(editor);
+        setDisabled(action, !!reason, I18n.t(reason || labelKey));
+      });
+    };
     const syncGridButtons = () => {
       setLocked('table-del', true);
       // Pas de légende dans une grille : le bouton reste dans la barre, grisé, avec sa raison pour info-bulle (js/caption.js).
       Caption.syncButton(button('caption'), editor, 'table');
+      MERGE_BUTTONS.forEach(([action, labelKey]) => setDisabled(action, false, I18n.t(labelKey)));
       setLocked('cell-merge', !GridEditor.canMerge(editor));
       setLocked('cell-split', !GridEditor.canSplit(editor));
       const align = GridEditor.selectedVerticalAlign(editor);
@@ -295,6 +307,7 @@ const FloatingToolbars = (function () {
       setDisabled('col-del', colBlocked, I18n.t(colBlocked ? 'table.colDelMerged' : 'table.colDel'));
       const rowBlocked = rowDeleteBlocked();
       setDisabled('row-del', rowBlocked, I18n.t(rowBlocked ? 'table.rowDelMerged' : 'table.rowDel'));
+      syncDocumentMergeButtons();
       Caption.syncButton(button('caption'), editor, 'table');
       syncFillBar();
     };
