@@ -796,6 +796,135 @@
   });
 
   cases.push({
+    id: 'searchselect_open_panel_keys_pointer_and_scroll_paths',
+    description: 'Liste ouverte : Page↓ / Page↑ sautent de six lignes, Tab referme et rend le focus au champ, un appui sur le champ ouvert garde le focus dans la zone de recherche, la surbrillance ne suit la souris que quand elle bouge, un défilement hors du panneau le replace et un défilement dans la liste non ; Ctrl+lettre et une saisie en cours de composition n’ouvrent ni ne déplacent rien',
+    run: async () => {
+      const box = document.createElement('div');
+      box.innerHTML = '<select id="cs-sel4"><option value="">-- Aucune --</option>' + Array.from({ length: 20 }, (_, i) => `<option value="o${i}">Option ${i}</option>`).join('') + '</select>';
+      document.body.appendChild(box);
+      let anchorLeft = 40;
+      const controller = SearchSelect.attach(box.querySelector('select'), { anchor: () => ({ left: anchorLeft, right: anchorLeft + 200, top: 100, bottom: 130, width: 200, height: 30 }) });
+      const trigger = controller.trigger;
+      const panel = box.querySelector('.ss-panel');
+      const input = box.querySelector('.ss-input');
+      const key = (el, k, extra) => { const event = new KeyboardEvent('keydown', Object.assign({ key: k, bubbles: true, cancelable: true }, extra || {})); el.dispatchEvent(event); return event; };
+      const activeIndex = () => { const row = box.querySelector('.ss-option.is-active'); return row ? Number(row.dataset.index) : -1; };
+      const mouseMove = (el, x, y) => el.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: x, clientY: y }));
+
+      // Champ fermé : Ctrl+lettre et une saisie en cours de composition n'ouvrent rien ; une lettre ouvre avec elle comme début de recherche.
+      key(trigger, 'o', { ctrlKey: true });
+      key(trigger, 'o', { isComposing: true });
+      const closedForModifiers = !controller.isOpen();
+      const closedMousedown = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+      trigger.dispatchEvent(closedMousedown);
+      key(trigger, 'o');
+      const openedWithLetter = controller.isOpen() && input.value === 'o';
+      key(input, 'Escape');
+      const closedByEscape = !controller.isOpen();
+
+      controller.open();
+      const startsOnEmptyChoice = activeIndex() === 0;
+      key(input, 'PageDown');
+      const pageDown1 = activeIndex();
+      key(input, 'PageDown');
+      const pageDown2 = activeIndex();
+      key(input, 'PageUp');
+      const pageUp = activeIndex();
+      key(input, 'ArrowDown', { isComposing: true });
+      const composingIgnored = activeIndex() === pageUp;
+
+      // Un appui sur le champ ouvert garde le focus dans la zone de recherche ; fermé, rien n'est retenu.
+      const openMousedown = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+      trigger.dispatchEvent(openMousedown);
+
+      // La surbrillance suit la souris seulement quand elle bouge : la liste change sous un pointeur immobile.
+      const rows = box.querySelectorAll('.ss-option');
+      mouseMove(rows[3], 10, 10);
+      const hoverMoves = activeIndex() === 3;
+      key(input, 'ArrowDown');
+      const arrowAfterHover = activeIndex() === 4;
+      mouseMove(rows[3], 10, 10);
+      const stillPointerKeepsRow = activeIndex() === 4;
+      mouseMove(rows[3], 11, 10);
+      const movedPointerTakesRow = activeIndex() === 3;
+
+      // Un défilement hors du panneau le replace sous le champ ; un défilement dans la liste ne le replace pas.
+      const leftBefore = panel.style.left;
+      anchorLeft = 90;
+      document.body.dispatchEvent(new Event('scroll'));
+      const replaced = panel.style.left;
+      anchorLeft = 140;
+      box.querySelector('.ss-list').dispatchEvent(new Event('scroll'));
+      const insideKept = panel.style.left;
+
+      key(input, 'Tab');
+      const tabCloses = !controller.isOpen() && document.activeElement === trigger;
+      controller.destroy();
+      box.remove();
+      const pass = closedForModifiers && !closedMousedown.defaultPrevented && openedWithLetter && closedByEscape && startsOnEmptyChoice && pageDown1 === 6 && pageDown2 === 12 && pageUp === 6
+        && composingIgnored && openMousedown.defaultPrevented && hoverMoves && arrowAfterHover && stillPointerKeepsRow && movedPointerTakesRow
+        && leftBefore === '40px' && replaced === '90px' && insideKept === '90px' && tabCloses;
+      return { pass, notes: JSON.stringify({ closedForModifiers, closedMousedownPrevented: closedMousedown.defaultPrevented, openedWithLetter, closedByEscape, startsOnEmptyChoice, pageDown1, pageDown2, pageUp, composingIgnored, openMousedownPrevented: openMousedown.defaultPrevented, hoverMoves, arrowAfterHover, stillPointerKeepsRow, movedPointerTakesRow, leftBefore, replaced, insideKept, tabCloses }) };
+    },
+  });
+
+  cases.push({
+    id: 'searchselect_arrows_from_no_choice_empty_results_and_disabled_select',
+    description: 'Liste sans choix courant : ↑ sur le champ l’ouvre sans rien surligner, ↑ dans la zone de recherche prend la dernière ligne, ↓ la première ; une recherche sans résultat laisse flèches et Entrée sans effet ; ↓ sur le champ déjà ouvert ne touche pas à la recherche ; une liste désactivée ne s’ouvre ni par le code ni au clavier ; le focus donné à la liste d’origine va au champ, et lui revient une fois la liste détruite',
+    run: async () => {
+      const box = document.createElement('div');
+      box.innerHTML = '<select id="cs-sel5">' + Array.from({ length: 8 }, (_, i) => `<option value="p${i}">Pomme ${i}</option>`).join('') + '</select>';
+      document.body.appendChild(box);
+      const select = box.querySelector('select');
+      select.selectedIndex = -1;
+      const controller = SearchSelect.attach(select);
+      const trigger = controller.trigger;
+      const input = box.querySelector('.ss-input');
+      const key = (el, k) => { const event = new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }); el.dispatchEvent(event); return event; };
+      const activeIndex = () => { const row = box.querySelector('.ss-option.is-active'); return row ? Number(row.dataset.index) : -1; };
+
+      const upEvent = key(trigger, 'ArrowUp');
+      const openedByArrowUp = controller.isOpen() && upEvent.defaultPrevented;
+      const nothingHighlighted = activeIndex() === -1;
+      key(input, 'ArrowUp');
+      const lastRow = activeIndex();
+      key(input, 'Escape');
+      controller.open();
+      key(trigger, 'ArrowDown');
+      const stillOpenUntouched = controller.isOpen() && input.value === '' && activeIndex() === -1;
+      key(input, 'ArrowDown');
+      const firstRow = activeIndex();
+
+      input.value = 'zzzz';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      const emptyAfterSearch = box.querySelectorAll('.ss-option').length === 0 && activeIndex() === -1;
+      ['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Enter'].forEach(k => key(input, k));
+      const inertWithoutResults = controller.isOpen() && select.selectedIndex === -1 && activeIndex() === -1;
+      key(input, 'Escape');
+
+      select.disabled = true;
+      controller.open();
+      key(trigger, 'ArrowDown');
+      key(trigger, 'a');
+      const disabledStaysClosed = !controller.isOpen();
+      select.disabled = false;
+
+      // Le focus donné à la liste d'origine (étiquette, code) va au champ ; détruite, la liste retrouve son focus natif.
+      select.focus();
+      const selectFocusGoesToTrigger = document.activeElement === trigger;
+      trigger.blur();
+      controller.focus();
+      const controllerFocusGoesToTrigger = document.activeElement === trigger;
+      controller.destroy();
+      const nativeFocusBack = !Object.prototype.hasOwnProperty.call(select, 'focus');
+      box.remove();
+      const pass = openedByArrowUp && nothingHighlighted && lastRow === 7 && stillOpenUntouched && firstRow === 0 && emptyAfterSearch && inertWithoutResults && disabledStaysClosed
+        && selectFocusGoesToTrigger && controllerFocusGoesToTrigger && nativeFocusBack;
+      return { pass, notes: JSON.stringify({ openedByArrowUp, nothingHighlighted, lastRow, stillOpenUntouched, firstRow, emptyAfterSearch, inertWithoutResults, disabledStaysClosed, selectFocusGoesToTrigger, controllerFocusGoesToTrigger, nativeFocusBack }) };
+    },
+  });
+
+  cases.push({
     id: 'colsearch_long_flat_list_scrolls_and_keeps_the_active_row_visible',
     description: 'Liste longue (40 colonnes d’une autre table, en plus des autres tables) dans la fenêtre de condition : la liste défile dans son panneau, PageBas / ↓ gardent la ligne active à l’écran, aucun intitulé de groupe, et la colonne d’une autre table se retrouve par son nom',
     run: async (h) => {
