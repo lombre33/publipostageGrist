@@ -1,23 +1,26 @@
-// Tableaux de tableur pour une grille (planning/feature-mode-grille-excel.md, sujet 17 du 02/10 : « quand on a copié un tableau depuis Excel et que l'on veut le coller dans une grille,
-// actuellement ça colle une image dans la cellule ; moi j'aimerais bien le tableau avec ses cellules, etc. y compris les cellules fusionnées et mises en forme si possible »).
-// Un tableur (Excel, Google Sheets, LibreOffice Calc) pose dans le presse-papiers un tableau HTML dont la mise en forme est dans une feuille de style (`class=xl65`) ou en ligne : ce
-// module le lit case par case et le réécrit en HTML d'éditeur avec ce que la grille sait garder - fusions, fond, gras / italique / souligné / barré, couleur et taille du texte,
-// alignements horizontal et vertical, traits, retours à la ligne dans la case, liens. Un modèle de cases UNIQUE
-//   { width, cols: [px], rows: [{ height: px, cells: [{ col, colspan, rowspan, html, align, valign, fill, borders: { top, right, bottom, left } }] }] }
-// où `html` est le contenu en ligne déjà écrit (marques comprises) : le presse-papiers (`fromClipboardHtml`) et, au sujet 18, un classeur .xlsx (js/grid-xlsx-import.js) y arrivent chacun
-// de leur côté et sortent par le même `toHtml` - un tableau collé et un tableau importé ne peuvent pas diverger.
-// Un document (hors grille) reçoit le même tableau, au choix d'Antoine du 02/10 (« Coller aussi un tableau Excel en cases dans un document, hors grille ? » - « Oui, en cases ») : `toDocumentHtml`
-// n'écrit que ce que le PDF et le Word d'un tableau de document lisent - fusions, fond, texte, alignement horizontal, liens, largeur des colonnes - et ni traits case par case, ni alignement
-// vertical, ni hauteur de ligne : l'éditeur les montrerait, mais l'export ne les lit que pour une grille (une ligne qui porte `data-row-height` en fait une).
+// Tableaux de tableur pour une grille (planning/feature-mode-grille-excel.md). Un tableur (Excel, Google Sheets, LibreOffice Calc) pose dans le
+// presse-papiers un tableau HTML dont la mise en forme est dans une feuille de style (`class=xl65`) ou en ligne : ce module le lit case par case et
+// le réécrit en HTML d'éditeur avec ce que la grille sait garder (fusions, fond, gras / italique / souligné / barré, couleur et taille du texte,
+// alignements horizontal et vertical, traits, retours à la ligne dans la case, liens). Un modèle de cases unique :
+//   { width, cols: [px], rows: [{ height: px, cells: [{ col, colspan, rowspan, html, align, valign, fill, borders: { top, right, bottom, left } }]
+//   }] }
+// où `html` est le contenu en ligne déjà écrit (marques comprises) : le presse-papiers (`fromClipboardHtml`) et un classeur .xlsx
+// (js/grid-xlsx-import.js) y arrivent chacun de leur côté et sortent par le même `toHtml`, si bien qu'un tableau collé et un tableau importé ne
+// peuvent pas diverger.
+// Un document (hors grille) reçoit le même tableau, en cases : `toDocumentHtml` n'écrit que ce que le PDF et le Word d'un tableau de document lisent
+// (fusions, fond, texte, alignement horizontal, liens, largeur des colonnes) et ni traits case par case, ni alignement vertical, ni hauteur de ligne
+// : l'éditeur les montrerait, mais l'export ne les lit que pour une grille (une ligne qui porte `data-row-height` en fait une).
 // Pur : DOMParser seulement, ni éditeur ni ProseMirror. Script classique, portée globale comme TableBorders.
 const GridTable = (function () {
   const MAX_ROWS = 3000;
   const MAX_COLS = 300;
   const TABLE_RE = /<table[\s>]/i;
-  // Ce que posent les tableurs, avec de quoi les reconnaître : Excel (ProgId et espace de noms Office), Google Sheets (élément et attributs `sheets`), LibreOffice (generator).
+  // Ce que posent les tableurs, avec de quoi les reconnaître : Excel (ProgId et espace de noms Office), Google Sheets (élément et attributs
+  // `sheets`), LibreOffice (generator).
   const SPREADSHEET_RE = /urn:schemas-microsoft-com:office:excel|name=["']?ProgId["']?\s+content=["']?Excel|google-sheets-html-origin|data-sheets-(?:root|value)|name=["']?generator["']?\s+content=["']?(?:Sheets|LibreOffice)/i;
   const SAFE_LINK_RE = /^(?:https?:|mailto:|tel:)/i;
-  // Le gris des traits de quadrillage de Google Sheets (`td { border: 1px solid #cccccc }` sur chaque case) : c'est le trait de départ de la grille, pas un trait choisi.
+  // Le gris des traits de quadrillage de Google Sheets (`td { border: 1px solid #cccccc }` sur chaque case) : c'est le trait de départ de la grille,
+  // pas un trait choisi.
   const GRIDLINE_GRAYS = ['#cccccc'];
   const SKIPPED_TAGS = new Set(['script', 'style', 'img', 'svg', 'table', 'object', 'iframe', 'video', 'audio', 'canvas', 'head', 'title', 'meta', 'link', 'noscript']);
   const BLOCK_TAGS = new Set(['p', 'div', 'li', 'tr', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'pre', 'ul', 'ol']);
@@ -36,10 +39,8 @@ const GridTable = (function () {
   const escapeAttr = text => escapeHtml(text).replace(/"/g, '&quot;');
   const clampInt = (value, min, max) => { const n = parseInt(value, 10); return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : min; };
 
-  // --- Valeurs CSS ---------------------------------------------------------------------------------------------------------------------------------------------
-
-  // « a: b; c: rgb(1, 2, 3) » -> { a: 'b', c: 'rgb(1, 2, 3)' }, en gardant l'ordre d'écriture dans `order` (le dernier gagne entre `border` et `border-top`). Les `mso-*` d'Office sont
-  // ignorés, `!important` aussi.
+  // « a: b; c: rgb(1, 2, 3) » -> { a: 'b', c: 'rgb(1, 2, 3)' }, en gardant l'ordre d'écriture dans `order` (le dernier gagne entre `border` et
+  // `border-top`). Les `mso-*` d'Office sont ignorés, `!important` aussi.
   function parseDecls(text) {
     const out = [];
     let depth = 0;
@@ -93,9 +94,8 @@ const GridTable = (function () {
   }
   const toPx = value => { const pt = toPt(value); return pt === null ? null : pt / 0.75; };
 
-  // --- Feuilles de style ---------------------------------------------------------------------------------------------------------------------------------------
-
-  // Les règles `tag`, `.classe`, `tag.classe` des <style> d'un tableur (Excel les range dans <!-- ... --> et y mêle des `@page`) ; les autres sélecteurs sont ignorés.
+  // Les règles `tag`, `.classe`, `tag.classe` des <style> d'un tableur (Excel les range dans <!-- ... --> et y mêle des `@page`) ; les autres
+  // sélecteurs sont ignorés.
   function parseRules(cssText) {
     const rules = [];
     const text = String(cssText || '').replace(/<!--|-->/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
@@ -112,13 +112,15 @@ const GridTable = (function () {
     return rules;
   }
 
-  // Le style que l'élément porte de lui-même : attributs de présentation (`align`, `valign`, `bgcolor`, `color` de <font>), puis les règles (la balise avant la classe, la règle écrite plus
-  // tard avant la plus ancienne), puis son attribut `style`. { props: { nom: valeur }, seq: { nom: rang } } : le rang dit quelle écriture a eu le dernier mot.
+  // Le style que l'élément porte de lui-même : attributs de présentation (`align`, `valign`, `bgcolor`, `color` de <font>), puis les règles (la
+  // balise avant la classe, la règle écrite plus tard avant la plus ancienne), puis son attribut `style`. { props: { nom: valeur }, seq: { nom:
+  // rang } } : le rang dit quelle écriture a eu le dernier mot.
   function ownStyle(el, rules) {
     const props = {};
     const seq = {};
     let rank = 0;
-    // Une valeur que CSS refuse n'écrase rien : `td { text-align: general }` d'Excel n'est pas du CSS, l'attribut `align=right` de la case reste donc celui qui compte.
+    // Une valeur que CSS refuse n'écrase rien : `td { text-align: general }` d'Excel n'est pas du CSS, l'attribut `align=right` de la case reste donc
+    // celui qui compte.
     const set = (name, value) => {
       if (name === 'text-align' && !/^(left|right|center|justify|start|end|inherit|initial|unset)$/i.test(String(value).trim())) return;
       props[name] = value;
@@ -137,7 +139,8 @@ const GridTable = (function () {
     return { props, seq };
   }
 
-  // La mise en forme du texte portée par un style ; seules les propriétés ÉCRITES y figurent (le reste hérite). `size` en points, absente quand elle vaut celle du tableur.
+  // La mise en forme du texte portée par un style ; seules les propriétés écrites y figurent (le reste hérite). `size` en points, absente quand elle
+  // vaut celle du tableur.
   function textFormat(style, baseSizePt) {
     const p = style.props;
     const fmt = {};
@@ -152,8 +155,6 @@ const GridTable = (function () {
     }
     return fmt;
   }
-
-  // --- Contenu d'une case --------------------------------------------------------------------------------------------------------------------------------------
 
   function collectInline(node, state, out) {
     node.childNodes.forEach((child) => {
@@ -174,8 +175,8 @@ const GridTable = (function () {
     });
   }
 
-  // Les jetons d'une case en HTML d'éditeur : espaces blancs réduits comme le fait un navigateur (le texte d'Excel est coupé en lignes de code), espaces de bord ôtés, retours à la
-  // ligne gardés (`<br>` : un retour DANS la case), jamais en bout de case.
+  // Les jetons d'une case en HTML d'éditeur : espaces blancs réduits comme le fait un navigateur (le texte d'Excel est coupé en lignes de code),
+  // espaces de bord ôtés, retours à la ligne gardés (`<br>` : un retour dans la case), jamais en bout de case.
   function tokensToHtml(tokens) {
     const items = [];
     tokens.forEach((token) => {
@@ -200,7 +201,8 @@ const GridTable = (function () {
     return items.map(item => (item.br ? '<br>' : markHtml(escapeHtml(item.text), item.fmt))).join('');
   }
 
-  // Un texte déjà échappé dans ses marques : gras, italique, souligné, barré, couleur et taille du texte (un <span style> que l'éditeur relit en `textStyle`), lien.
+  // Un texte déjà échappé dans ses marques : gras, italique, souligné, barré, couleur et taille du texte (un <span style> que l'éditeur relit en
+  // `textStyle`), lien.
   function markHtml(escaped, fmt) {
     let html = escaped;
     if (!fmt) return html;
@@ -216,10 +218,8 @@ const GridTable = (function () {
     return html;
   }
 
-  // --- Cases, traits, alignements ------------------------------------------------------------------------------------------------------------------------------
-
-  // « .5pt solid windowtext », « 1px solid #000000 », « none » -> '#rrggbb', ou null (« pas de trait » du tableur = le trait de départ de la grille, comme le quadrillage d'Excel
-  // qui n'est pas copié).
+  // « .5pt solid windowtext », « 1px solid #000000 », « none » -> '#rrggbb', ou null (« pas de trait » du tableur = le trait de départ de la grille,
+  // comme le quadrillage d'Excel qui n'est pas copié).
   function parseBorder(value) {
     const tokens = String(value || '').trim().split(/\s+(?![^(]*\))/).filter(Boolean);
     if (!tokens.length) return null;
@@ -250,8 +250,9 @@ const GridTable = (function () {
     return NUMBER_RE.test(text) ? 'right' : null;
   }
 
-  // Excel et Sheets écrivent `vertical-align: bottom` sur TOUTES les cases (c'est leur alignement de départ) : on ne peut pas y lire un choix. Le bas reste donc celui de la grille (le
-  // milieu, comme le reste du tableau où l'on colle) ; le haut et le milieu, eux, ne s'écrivent que quand la personne les a choisis.
+  // Excel et Sheets écrivent `vertical-align: bottom` sur toutes les cases (c'est leur alignement de départ) : on ne peut pas y lire un choix. Le bas
+  // est donc ignoré et la case garde l'alignement de la grille (le milieu) ; le haut et le milieu, eux, ne s'écrivent que quand la personne les a
+  // choisis.
   function verticalAlign(style) {
     const raw = String(style.props['vertical-align'] || '').trim().toLowerCase();
     if (raw === 'top') return 'top';
@@ -266,9 +267,8 @@ const GridTable = (function () {
     return shorthand || null;
   }
 
-  // --- Le tableau ----------------------------------------------------------------------------------------------------------------------------------------------
-
-  // La largeur (`width`) d'une colonne ou la hauteur (`height`) d'une ligne, en px : l'attribut d'Excel et de Sheets (des px) ou la longueur en ligne (des pt chez Excel).
+  // La largeur (`width`) d'une colonne ou la hauteur (`height`) d'une ligne, en px : l'attribut d'Excel et de Sheets (des px) ou la longueur en ligne
+  // (des pt chez Excel).
   function lengthPx(el, rules, name) {
     const attr = el.getAttribute(name);
     if (attr && /^\d+(\.\d+)?$/.test(attr.trim())) return parseFloat(attr);
@@ -283,10 +283,12 @@ const GridTable = (function () {
     if (!table) return null;
     const rules = [];
     doc.querySelectorAll('style').forEach(el => rules.push(...parseRules(el.textContent)));
-    // La taille du texte « de départ » du tableur (Excel : 11 pt sur `td`, Sheets : 10 pt sur la table) : une case n'a une taille à elle que si elle s'en écarte.
+    // La taille du texte « de départ » du tableur (Excel : 11 pt sur `td`, Sheets : 10 pt sur la table) : une case n'a une taille à elle que si elle
+    // s'en écarte.
     const baseCell = ownStyle(doc.createElement('td'), rules);
     const baseSize = toPt(baseCell.props['font-size']) || toPt(ownStyle(table, rules).props['font-size']) || 11;
-    // Ce que le tableur cache (une ligne ou une case masquée, écrite `display:none`) ne se colle pas ; une case fusionnée qui couvre une ligne cachée ne compte que les lignes qui restent.
+    // Ce que le tableur cache (une ligne ou une case masquée, écrite `display:none`) ne se colle pas ; une case fusionnée qui couvre une ligne cachée
+    // ne compte que les lignes qui restent.
     const hidden = el => ownStyle(el, rules).props.display === 'none';
     const allRows = Array.from(table.rows);
     const rowEls = allRows.filter(tr => !hidden(tr));
@@ -348,8 +350,9 @@ const GridTable = (function () {
     return model;
   }
 
-  // Le modèle en HTML d'éditeur. `sizes` : écrire aussi la largeur des colonnes et la hauteur des lignes (un tableau neuf, l'import) ; sans elles (un collage dans une grille qui a déjà
-  // les siennes) la grille garde ses colonnes et ses lignes, et celles qu'elle ajoute prennent la taille de leur voisine.
+  // Le modèle en HTML d'éditeur. `sizes` : écrire aussi la largeur des colonnes et la hauteur des lignes (un tableau neuf, l'import) ; sans elles (un
+  // collage dans une grille qui a déjà les siennes) la grille garde ses colonnes et ses lignes, et celles qu'elle ajoute prennent la taille de leur
+  // voisine.
   function toHtml(model, options) {
     const sizes = !!(options && options.sizes);
     const widths = [];
@@ -374,8 +377,8 @@ const GridTable = (function () {
     return `<table${sizes ? ` style="width: ${total}px;"` : ''}>${colgroup}<tbody>${rows}</tbody></table>`;
   }
 
-  // Le modèle en HTML de DOCUMENT : les largeurs des colonnes (le tableau garde les proportions du tableur, l'éditeur le ramène à la page s'il la dépasse), sans hauteur de ligne, sans trait
-  // case par case ni alignement vertical - voir l'en-tête.
+  // Le modèle en HTML de document : les largeurs des colonnes (le tableau garde les proportions du tableur, l'éditeur le ramène à la page s'il la
+  // dépasse), sans hauteur de ligne, sans trait case par case ni alignement vertical (voir l'en-tête).
   function toDocumentHtml(model) {
     const plain = {
       width: model.width,
@@ -385,13 +388,12 @@ const GridTable = (function () {
     return toHtml(plain, { sizes: true });
   }
 
-  // --- Ce que l'éditeur fait du presse-papiers -----------------------------------------------------------------------------------------------------------------
-
   function isSpreadsheetHtml(html) {
     return typeof html === 'string' && TABLE_RE.test(html) && SPREADSHEET_RE.test(html);
   }
 
-  // Le HTML collé, réécrit par `write` quand il vient d'un tableur ; tout autre HTML (un texte, une page web, des cases copiées dans l'éditeur même) est rendu tel quel.
+  // Le HTML collé, réécrit par `write` quand il vient d'un tableur ; tout autre HTML (un texte, une page web, des cases copiées dans l'éditeur même)
+  // est rendu tel quel.
   function rewriteSpreadsheetHtml(html, write) {
     if (!isSpreadsheetHtml(html)) return html;
     try {
@@ -409,7 +411,8 @@ const GridTable = (function () {
   // Pour un document : un tableau du document.
   function cleanPastedDocumentHtml(html) { return rewriteSpreadsheetHtml(html, toDocumentHtml); }
 
-  // Le presse-papiers porte-t-il un tableau de tableur ? Excel y joint aussi une IMAGE de la plage : sans ce test, c'est elle qui était collée (dans une grille comme dans un document).
+  // Le presse-papiers porte-t-il un tableau de tableur ? Excel y joint aussi une image de la plage : sans ce test, c'est elle qui serait collée (dans
+  // une grille comme dans un document).
   function clipboardHasSpreadsheetTable(clipboardData) {
     try { return isSpreadsheetHtml(clipboardData && clipboardData.getData('text/html')); } catch (e) { return false; }
   }
@@ -417,5 +420,5 @@ const GridTable = (function () {
   // Un lien qu'une case peut garder : http, https, mailto, tel (un `javascript:` ou un `file:` perd son lien et garde son texte).
   const isSafeLink = href => SAFE_LINK_RE.test(String(href || '').trim());
 
-  return { fromClipboardHtml, toHtml, toDocumentHtml, cleanPastedHtml, cleanPastedDocumentHtml, isSpreadsheetHtml, clipboardHasSpreadsheetTable, isSafeLink, parseColor, markHtml, escapeHtml, parseRules, parseDecls };
+  return { fromClipboardHtml, toHtml, toDocumentHtml, cleanPastedHtml, cleanPastedDocumentHtml, isSpreadsheetHtml, clipboardHasSpreadsheetTable, isSafeLink, markHtml, escapeHtml };
 })();

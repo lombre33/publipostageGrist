@@ -1,20 +1,22 @@
-// Moteur de calcul d'une bulle « Calcul » (demande d'Antoine du 2026-10-01 : « variables calculées », au classeur de la feuille de route « Somme et soustraction entre
-// #Variables (sous-total + TVA = total) »). Un module PUR : ni DOM, ni Grist, ni I18n - il lit un texte, en fait un arbre, et l'évalue sur des valeurs déjà lues ; ce
-// sont js/variables.js (lecture des variables, mise en forme) et js/variable-calc.js (fenêtre) qui le branchent. Pas de `eval` ni de `Function` : un modèle peut venir d'un
-// collaborateur (js/html-sanitize.js), un calcul n'exécute jamais que ce parseur.
+// Moteur de calcul d'une bulle « Calcul » (variables calculées : sous-total + TVA = total). Un module pur : ni DOM, ni Grist, ni I18n, il lit un
+// texte, en fait un arbre, et l'évalue sur des valeurs déjà lues ; ce sont js/variables.js (lecture des variables, mise en forme) et
+// js/variable-calc.js (fenêtre) qui le branchent. Pas de `eval` ni de `Function` : un modèle peut venir d'un collaborateur (js/html-sanitize.js), un
+// calcul n'exécute jamais que ce parseur.
 //
 // Deux écritures du même calcul :
-//  - la forme ENREGISTRÉE (attribut `formula` de la bulle, data-formula) : indépendante de la langue et de la touche de déclenchement - variables entre accolades
-//    `{Facture.SousTotal}`, décimales au point, fonctions en anglais, valeurs d'une fonction séparées par « ; » : `{Facture.SousTotal}*0.2+SUM({Lignes.Prix};10)`.
-//    Une variable est « Table.Colonne », ou « Table.Reference.Colonne » quand elle descend de référence en référence (la même clé que la bulle #Variable) ;
-//  - la forme SAISIE (le champ de la fenêtre, le texte de la bulle) : `#Facture.SousTotal × 0,2 + somme(#Lignes.Prix ; 10)`, dans la langue de l'interface. fromDisplay
-//    et toDisplay passent de l'une à l'autre, sans rien perdre : une personne qui change de langue ou de touche de déclenchement retrouve son calcul.
+//  - la forme enregistrée (attribut `formula` de la bulle, data-formula) : indépendante de la langue et de la touche de déclenchement - variables
+//    entre accolades `{Facture.SousTotal}`, décimales au point, fonctions en anglais, valeurs d'une fonction séparées par « ; » :
+//    `{Facture.SousTotal}*0.2+SUM({Lignes.Prix};10)`. Une variable est « Table.Colonne », ou « Table.Reference.Colonne » quand elle descend de
+//    référence en référence (la même clé que la bulle #Variable) ;
+//  - la forme saisie (le champ de la fenêtre, le texte de la bulle) : `#Facture.SousTotal × 0,2 + somme(#Lignes.Prix ; 10)`, dans la langue de
+//    l'interface. fromDisplay et toDisplay passent de l'une à l'autre, sans rien perdre : une personne qui change de langue ou de touche de
+//    déclenchement retrouve son calcul.
 //
-// Ce qu'un calcul sait faire : + - * / (et × ÷ −), les parenthèses, le pourcentage (`20%` vaut 0,2), des nombres et des variables ; les fonctions SUM/SOMME,
-// AVERAGE/MOYENNE, MIN, MAX, COUNT/NB et ROUND/ARRONDI. Une variable d'une table liée à plusieurs lignes (règle « match » de la Boucle) vaut une LISTE de nombres, une
-// par ligne, dans l'ordre de la table : `SUM({Lignes.Prix} * {Lignes.Quantite})` en fait le total. Les opérations s'appliquent ligne à ligne (un nombre seul vaut pour
-// chaque ligne ; deux listes veulent la même longueur) et seules les fonctions ramènent une liste à un nombre. Une cellule vide compte pour 0 dans une opération et est
-// ignorée par SUM, AVERAGE, MIN, MAX et COUNT.
+// Ce qu'un calcul sait faire : + - * / (et × ÷ −), les parenthèses, le pourcentage (`20%` vaut 0,2), des nombres et des variables ; les fonctions
+// SUM/SOMME, AVERAGE/MOYENNE, MIN, MAX, COUNT/NB et ROUND/ARRONDI. Une variable d'une table liée à plusieurs lignes (règle « match » de la Boucle)
+// vaut une liste de nombres, une par ligne, dans l'ordre de la table : `SUM({Lignes.Prix} * {Lignes.Quantite})` en fait le total. Les opérations
+// s'appliquent ligne à ligne (un nombre seul vaut pour chaque ligne ; deux listes veulent la même longueur) et seules les fonctions ramènent une
+// liste à un nombre. Une cellule vide compte pour 0 dans une opération et est ignorée par SUM, AVERAGE, MIN, MAX et COUNT.
 const Formula = (function () {
   // Fonctions : nom enregistré -> noms saisis (français en premier, c'est celui que la fenêtre propose) et nombre de valeurs permis [min, max].
   const FUNCTIONS = {
@@ -37,8 +39,8 @@ const Formula = (function () {
 
   function fail(code, extra) { return Object.assign({ code }, extra); }
 
-  // === Lecture : texte enregistré -> jetons ===
-  // Retourne { tokens } ou { error }. Un jeton : { t: 'num'|'var'|'name'|'op', pos, ... } - `op` est l'un de + - * / % ( ) ;
+  // Lecture : le texte enregistré en jetons. Retourne { tokens } ou { error }. Un jeton : { t: 'num'|'var'|'name'|'op', pos, ... } - `op` est l'un de
+  // + - * / % ( ) ;
   function tokenize(src) {
     const tokens = [];
     let i = 0;
@@ -67,9 +69,9 @@ const Formula = (function () {
     return { tokens };
   }
 
-  // === Lecture : jetons -> arbre ===
-  //   expr    := terme (('+'|'-') terme)*        terme := signe (('*'|'/') signe)*
-  //   signe   := ('-'|'+') signe | suffixe       suffixe := primaire '%'*
+  // Lecture : les jetons en arbre.
+  //   expr := terme (('+'|'-') terme)* terme := signe (('*'|'/') signe)*
+  //   signe := ('-'|'+') signe | suffixe suffixe := primaire '%'*
   //   primaire:= nombre | {variable} | NOM '(' [expr (';' expr)*] ')' | '(' expr ')'
   // Nœuds : { t:'num', value } { t:'var', key, table, column } { t:'neg', a } { t:'pct', a } { t:'bin', op, a, b } { t:'call', name, args }.
   function parseTokens(tokens) {
@@ -93,7 +95,8 @@ const Formula = (function () {
         return inner;
       }
       if (token.t === 'name') {
-        // Un mot seul n'est ni une variable (elle commence par la touche de déclenchement, ou s'écrit {…} une fois enregistrée) ni une fonction (elle porte ses parenthèses).
+        // Un mot seul n'est ni une variable (elle commence par la touche de déclenchement, ou s'écrit {…} une fois enregistrée) ni une fonction (elle
+        // porte ses parenthèses).
         if (!isOp(tokens[at + 1], '(')) throw fail('unknownName', { name: token.name, pos: token.pos });
         const name = FUNCTION_BY_TYPED[token.name.toUpperCase()];
         if (!name) throw fail('unknownFunction', { name: token.name, pos: token.pos });
@@ -123,24 +126,18 @@ const Formula = (function () {
       if (isOp(peek(), '+')) { at += 1; return unary(depth + 1); }
       return postfix(depth);
     }
-    function term(depth) {
-      let node = unary(depth);
-      while (isOp(peek(), '*') || isOp(peek(), '/')) {
+    // Une suite d'opérations de même priorité, de gauche à droite ; `next` lit un opérande.
+    const chain = (ops, next) => (depth) => {
+      let node = next(depth);
+      while (ops.some(op => isOp(peek(), op))) {
         const op = peek().op;
         at += 1;
-        node = { t: 'bin', op, a: node, b: unary(depth) };
+        node = { t: 'bin', op, a: node, b: next(depth) };
       }
       return node;
-    }
-    function expr(depth) {
-      let node = term(depth);
-      while (isOp(peek(), '+') || isOp(peek(), '-')) {
-        const op = peek().op;
-        at += 1;
-        node = { t: 'bin', op, a: node, b: term(depth) };
-      }
-      return node;
-    }
+    };
+    const term = chain(['*', '/'], unary);
+    const expr = chain(['+', '-'], term);
 
     try {
       const ast = expr(0);
@@ -173,10 +170,10 @@ const Formula = (function () {
     return Array.from(seen.values());
   }
 
-  // === Valeurs ===
-  // Une valeur d'un calcul : un nombre, `null` (cellule vide) ou une LISTE de nombres/null (une valeur par ligne liée).
-  // Un nombre lu dans une cellule : un vrai nombre, un booléen (1 ou 0), ou un texte qui n'est QUE un nombre (« 12,5 », « 1 234,56 ») - jamais « 12 EUR » ni « 1.234,56 »,
-  // deux écritures dont le sens dépend de la langue : mieux vaut dire que ce n'est pas un nombre que de se tromper de total. { value } ou { error }.
+  // Une valeur d'un calcul : un nombre, `null` (cellule vide) ou une liste de nombres ou de null (une valeur par ligne liée).
+  // Un nombre lu dans une cellule : un vrai nombre, un booléen (1 ou 0), ou un texte qui n'est qu'un nombre (« 12,5 », « 1 234,56 »), jamais « 12
+  // EUR » ni « 1.234,56 », deux écritures dont le sens dépend de la langue : mieux vaut dire que ce n'est pas un nombre que de se tromper de total.
+  // { value } ou { error }.
   function toNumber(raw) {
     if (raw === null || raw === undefined || raw === '') return { value: null };
     if (typeof raw === 'number') return Number.isFinite(raw) ? { value: raw } : { error: fail('notNumber', { text: String(raw) }) };
@@ -189,14 +186,15 @@ const Formula = (function () {
     return { error: fail('notNumber', { text: String(raw) }) };
   }
 
-  // Le bruit des nombres à virgule (0,1 + 0,2 = 0,30000000000000004) : quinze chiffres significatifs, ce que Grist et les tableurs montrent. Jamais de « -0 » : Intl l'écrirait.
+  // Le bruit des nombres à virgule (0,1 + 0,2 = 0,30000000000000004) : quinze chiffres significatifs, ce que Grist et les tableurs montrent. Jamais
+  // de « -0 » : Intl l'écrirait.
   function clean(n) {
     const rounded = Number(n.toPrecision(15));
     return rounded === 0 ? 0 : rounded;
   }
 
-  // Arrondi « à l'école » (la moitié s'éloigne de zéro : 2,5 -> 3 et -2,5 -> -3, comme ARRONDI d'un tableur), par décalage décimal de l'ÉCRITURE du nombre : 1,005 à
-  // 2 décimales donne 1,01, que n * 100 (100,49999999999999) arrondirait mal.
+  // Arrondi « à l'école » (la moitié s'éloigne de zéro : 2,5 -> 3 et -2,5 -> -3, comme ARRONDI d'un tableur), par décalage décimal de l'écriture du
+  // nombre : 1,005 à 2 décimales donne 1,01, que n * 100 (100,49999999999999) arrondirait mal.
   function roundHalfAway(x, digits) {
     const n = Math.abs(x);
     const text = String(n);
@@ -206,10 +204,16 @@ const Formula = (function () {
     return x < 0 ? -rounded : rounded;
   }
 
-  // === Évaluation ===
   const isList = v => Array.isArray(v);
+  const OPERATIONS = {
+    '+': (x, y) => x + y,
+    '-': (x, y) => x - y,
+    '*': (x, y) => x * y,
+    '/': (x, y) => { if (y === 0) throw fail('divZero'); return x / y; },
+  };
   const num = v => (v === null || v === undefined ? 0 : v);
-  // Applique `fn` à deux valeurs, ligne à ligne quand l'une est une liste : un nombre seul vaut pour chaque ligne, deux listes veulent la même longueur.
+  // Applique `fn` à deux valeurs, ligne à ligne quand l'une est une liste : un nombre seul vaut pour chaque ligne, deux listes veulent la même
+  // longueur.
   function zip(a, b, fn) {
     if (!isList(a) && !isList(b)) return fn(a, b);
     if (isList(a) && isList(b)) {
@@ -258,18 +262,17 @@ const Formula = (function () {
       case 'bin': {
         const a = evalNode(node.a, values);
         const b = evalNode(node.b, values);
-        if (node.op === '+') return zip(a, b, (x, y) => num(x) + num(y));
-        if (node.op === '-') return zip(a, b, (x, y) => num(x) - num(y));
-        if (node.op === '*') return zip(a, b, (x, y) => num(x) * num(y));
-        return zip(a, b, (x, y) => { if (num(y) === 0) throw fail('divZero'); return num(x) / num(y); });
+        const operate = OPERATIONS[node.op];
+        return zip(a, b, (x, y) => operate(num(x), num(y)));
       }
       default: return callFunction(node.name, node.args.map(arg => evalNode(arg, values)));
     }
   }
 
-  // Évalue un arbre sur `values` : { [clé de variable]: nombre | null | liste | { error: texte } } (les valeurs lues, déjà converties par toNumber). Retourne { value } - un
-  // nombre, ou null quand il n'y a rien à montrer (une cellule vide seule, la moyenne de rien) - ou { error: { code, … } }. Le résultat final est UN nombre : une liste de
-  // plusieurs lignes est une erreur (`manyValues`), une liste d'une seule ligne vaut son nombre, une liste vide ne montre rien.
+  // Évalue un arbre sur `values` : { [clé de variable]: nombre | null | liste | { error: texte } } (les valeurs lues, déjà converties par toNumber).
+  // Retourne { value } - un nombre, ou null quand il n'y a rien à montrer (une cellule vide seule, la moyenne de rien) - ou { error: { code, … } }.
+  // Le résultat final est UN nombre : une liste de plusieurs lignes est une erreur (`manyValues`), une liste d'une seule ligne vaut son nombre, une
+  // liste vide ne montre rien.
   function evaluate(ast, values) {
     try {
       let result = evalNode(ast, values || {});
@@ -286,12 +289,13 @@ const Formula = (function () {
     }
   }
 
-  // === Écriture saisie <-> écriture enregistrée ===
-  // La saisie : `spans` dit où sont les variables de `text` ([{ start, end, table, column }], dans l'ordre : js/variables.js:findTextVariables, qui connaît les colonnes du
-  // document et la touche de déclenchement) ; elles deviennent {Table.Colonne}. Le reste est ramené à la forme enregistrée : × ÷ − et les décimales à virgule (« 0,2 »),
-  // et les noms de fonction (français ou anglais, casse libre) à leur nom enregistré. Une faute (une virgule perdue, un mot inconnu) n'est PAS corrigée ici : le texte
-  // rendu passe ensuite par parse(), qui la nomme.
-  // `lang` : en anglais la virgule n'est PAS une décimale (« 1,000 » y est mille) : elle reste telle quelle, et le moteur la refuse plutôt que de lire 1.
+  // Écriture saisie vers écriture enregistrée. `spans` dit où sont les variables de `text` ([{ start, end, table, column }], dans l'ordre :
+  // js/variables.js:findTextVariables, qui connaît les colonnes du document et la touche de déclenchement) ; elles deviennent {Table.Colonne}. Le
+  // reste est ramené à la forme enregistrée : × ÷ − et les décimales à virgule (« 0,2 »), et les noms de fonction (français ou anglais, casse libre)
+  // à leur nom enregistré. Une faute (une virgule perdue, un mot inconnu) n'est pas corrigée ici : le texte rendu passe ensuite par parse(), qui la
+  // nomme.
+  // `lang` : en anglais la virgule n'est pas une décimale (« 1,000 » y est mille) : elle reste telle quelle, et le moteur la refuse plutôt que de
+  // lire 1.
   function plainToStored(segment, lang) {
     let out = segment.replace(/[×]/g, '*').replace(/[÷]/g, '/').replace(/[−–]/g, '-');
     if (lang !== 'en') out = out.replace(/(\d),(\d)/g, '$1.$2').replace(/(^|[(;+\-*/])(,)(\d)/g, '$1.$3');
@@ -310,8 +314,9 @@ const Formula = (function () {
     return (out + plainToStored(source.slice(at), lang)).trim();
   }
 
-  // La forme enregistrée -> la saisie, `opts` : { trigger: touche de déclenchement ('#'), lang: 'fr'|'en', pretty: × ÷ − à la place de * / - (le texte d'une bulle ; le champ de
-  // la fenêtre garde ce qu'on tape au clavier) }. Les espaces sont remis autour des opérateurs. Un texte que le moteur ne sait pas lire revient tel quel.
+  // La forme enregistrée -> la saisie, `opts` : { trigger: touche de déclenchement ('#'), lang: 'fr'|'en', pretty: × ÷ − à la place de * / - (le
+  // texte d'une bulle ; le champ de la fenêtre garde ce qu'on tape au clavier) }. Les espaces sont remis autour des opérateurs. Un texte que le
+  // moteur ne sait pas lire revient tel quel.
   function toDisplay(stored, opts) {
     const o = Object.assign({ trigger: '#', lang: 'fr', pretty: false }, opts);
     const lexed = tokenize(String(stored == null ? '' : stored));
@@ -358,8 +363,8 @@ const Formula = (function () {
     return FUNCTION_ORDER.map(name => FUNCTIONS[name][lang === 'en' ? 'en' : 'fr']);
   }
 
-  // Le message d'une erreur, par `t` (I18n.t : clés `formula.error.*` de js/i18n.js) - le moteur ne connaît aucune langue. `trigger` : la touche de déclenchement, dite dans
-  // l'aide d'un mot inconnu.
+  // Le message d'une erreur, par `t` (I18n.t : clés `formula.error.*` de js/i18n.js) - le moteur ne connaît aucune langue. `trigger` : la touche de
+  // déclenchement, dite dans l'aide d'un mot inconnu.
   function errorMessage(error, t, opts) {
     const lang = opts && opts.lang;
     const trigger = (opts && opts.trigger) || '#';

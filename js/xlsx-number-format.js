@@ -1,24 +1,37 @@
-// Formats d'affichage d'Excel (`numFmt` : « #,##0.00\ "€" », « dd/mm/yyyy », « 0.0% »...) : le TEXTE qu'Excel montrerait pour une valeur. Un classeur .xlsx ne garde que la valeur brute d'un nombre ou d'une
-// date (12.5, 46298) et le code de format de sa case ; l'import d'une grille (js/grid-xlsx-import.js, sujet 18 du 02/10) a besoin du texte affiché, ExcelJS ne l'écrit pas.
-//   XlsxNumberFormat.format(value, code, { lang })  ->  string
-//     value : un nombre, une date (Date, lue en UTC : ExcelJS les rend ainsi), du texte ou un booléen ; code : le format de la case (« General » si vide) ; lang : 'fr' (virgule décimale, espace
-//     insécable entre les milliers, jours et mois en français) ou 'en' (point décimal, virgule entre les milliers).
-// Géré : les sections `positif;négatif;zéro;texte`, `General`, les chiffres `0 # ?` avec point décimal, milliers et pourcentage, les textes entre guillemets, les caractères échappés (`\ `), `[$€-40C]`
-// (le symbole), les couleurs et conditions entre crochets (ignorées), `_x` et `*x` (ignorés : ce sont des espaces de mise en page), les chiffres répartis entre des textes (`00 00 00 00 00`), les dates et
-// heures (`yyyy mm dd hh mm ss AM/PM`, `mmm`, `mmmm`, `ddd`, `dddd`, `[h]:mm`), les formats de date « système » d'Excel qui dépendent de la langue (`mm-dd-yy`, `[$-F800]`). Pas géré, rendu comme `General` :
-// la notation scientifique (`0.00E+00`) et les fractions (`# ?/?`). Pur : Intl seulement, ni DOM ni éditeur. Script classique, portée globale comme TableBorders.
+// Formats d'affichage d'Excel (`numFmt` : « #,##0.00\ "€" », « dd/mm/yyyy », « 0.0% »...) : le texte qu'Excel montrerait pour une valeur. Un classeur
+// .xlsx ne garde que la valeur brute d'un nombre ou d'une date (12.5, 46298) et le code de format de sa case ; l'import d'une grille
+// (js/grid-xlsx-import.js) a besoin du texte affiché, ExcelJS ne l'écrit pas.
+//   XlsxNumberFormat.format(value, code, { lang }) -> string
+//     value : un nombre, une date (Date, lue en UTC : ExcelJS les rend ainsi), du texte ou un booléen ; code : le format de la case (« General » si
+//     vide) ; lang : 'fr' (virgule décimale, espace insécable entre les milliers, jours et mois en français) ou 'en' (point décimal, virgule entre
+//     les milliers).
+// Géré : les sections `positif;négatif;zéro;texte`, `General`, les chiffres `0 # ?` avec point décimal, milliers et pourcentage, les textes entre
+// guillemets, les caractères échappés (`\ `), `[$€-40C]` (le symbole), les couleurs et conditions entre crochets (ignorées), `_x` et `*x` (ignorés :
+// ce sont des espaces de mise en page), les chiffres répartis entre des textes (`00 00 00 00 00`), les dates et heures (`yyyy mm dd hh mm ss AM/PM`,
+// `mmm`, `mmmm`, `ddd`, `dddd`, `[h]:mm`), les formats de date « système » d'Excel qui dépendent de la langue (`mm-dd-yy`, `[$-F800]`). Pas géré,
+// rendu comme `General` : la notation scientifique (`0.00E+00`) et les fractions (`# ?/?`). Pur : Intl seulement, ni DOM ni éditeur. Script
+// classique, portée globale comme TableBorders.
 const XlsxNumberFormat = (function () {
   const LOCALES = { fr: 'fr-FR', en: 'en-US' };
-  const EPOCH_UTC_MS = Date.UTC(1899, 11, 30); // le jour 0 des numéros de série d'Excel (le jour 1 est le 31/12/1899 : l'erreur de 1900 d'Excel reste en deçà du 01/03/1900)
+  // Un Intl.NumberFormat ou DateTimeFormat met des dizaines de microsecondes à se construire, un format de case à se découper : une feuille répète
+  // les mêmes sur des milliers de cases, d'où ces deux caches (quelques entrées chacun).
+  const formatters = new Map();
+  function intl(Kind, locale, options) {
+    const key = Kind.name + locale + JSON.stringify(options);
+    let formatter = formatters.get(key);
+    if (!formatter) { formatter = new Kind(locale, options); formatters.set(key, formatter); }
+    return formatter;
+  }
+  // le jour 0 des numéros de série d'Excel (le jour 1 est le 31/12/1899 : l'erreur de 1900 d'Excel reste en deçà du 01/03/1900)
+  const EPOCH_UTC_MS = Date.UTC(1899, 11, 30);
   const DAY_MS = 86400000;
-  // Les formats « système » d'Excel (la date courte de la machine) : ExcelJS les nomme `mm-dd-yy` (n° 14) et `m/d/yy "h":mm` (n° 22) ; ils s'écrivent dans l'ordre de la langue. Un format que la personne a écrit
-  // elle-même (`m/d/yyyy`) est un format ordinaire : il reste tel que le classeur le dit.
+  // Les formats « système » d'Excel (la date courte de la machine) : ExcelJS les nomme `mm-dd-yy` (n° 14) et `m/d/yy "h":mm` (n° 22) ; ils s'écrivent
+  // dans l'ordre de la langue. Un format que la personne a écrit elle-même (`m/d/yyyy`) est un format ordinaire : il reste tel que le classeur le
+  // dit.
   const LOCALIZED_CODES = {
     fr: { 'mm-dd-yy': 'dd/mm/yyyy', 'm/d/yy "h":mm': 'dd/mm/yyyy hh:mm', '[$-F800]dddd\\,\\ mmmm\\ dd\\,\\ yyyy': 'dddd d mmmm yyyy', '[$-F400]h:mm:ss\\ AM/PM': 'hh:mm:ss' },
     en: { 'mm-dd-yy': 'm/d/yyyy', 'm/d/yy "h":mm': 'm/d/yyyy h:mm', '[$-F800]dddd\\,\\ mmmm\\ dd\\,\\ yyyy': 'dddd, mmmm d, yyyy', '[$-F400]h:mm:ss\\ AM/PM': 'h:mm:ss AM/PM' },
   };
-
-  // --- Découpe d'un format -----------------------------------------------------------------------------------------------------------------------------------
 
   // Les sections d'un format, séparées par `;` hors guillemets, crochets et caractères échappés.
   function splitSections(code) {
@@ -40,8 +53,10 @@ const XlsxNumberFormat = (function () {
     return out;
   }
 
-  // Les jetons d'une section : textes (`lit`), chiffres (`dig`), point (`pt`), séparateur de milliers (`thou`), pourcentage (`pct`), texte de la case (`txt`), `General` (`gen`), et les jetons de date
-  // (`y`, `mo`, `d`, `h`, `s`, `ap`, `el`), plus `sci` et `frac` (non gérés).
+  // Les jetons d'une section : textes (`lit`), chiffres (`dig`), point (`pt`), séparateur de milliers (`thou`), pourcentage (`pct`), texte de la case
+  // (`txt`), `General` (`gen`), et les jetons de date (`y`, `mo`, `d`, `h`, `s`, `ap`, `el`), plus `sci` et `frac` (non gérés).
+  const SIMPLE_TOKENS = { '.': 'pt', ',': 'thou', '%': 'pct', '@': 'txt' };
+  const DATE_RUNS = { y: /[yY]/, mo: /[mM]/, d: /[dD]/, h: /[hH]/, s: /[sS]/ }; // le jeton d'une suite de y, de m, de d...
   function tokenize(section) {
     const tokens = [];
     const lit = (s) => { if (s) tokens.push({ k: 'lit', s }); };
@@ -64,19 +79,13 @@ const XlsxNumberFormat = (function () {
         continue; // une couleur ou une condition : sans effet sur le texte
       }
       if (ch === '0' || ch === '#' || ch === '?') { tokens.push({ k: 'dig', c: ch }); i++; continue; }
-      if (ch === '.') { tokens.push({ k: 'pt' }); i++; continue; }
-      if (ch === ',') { tokens.push({ k: 'thou' }); i++; continue; }
-      if (ch === '%') { tokens.push({ k: 'pct' }); i++; continue; }
-      if (ch === '@') { tokens.push({ k: 'txt' }); i++; continue; }
+      if (SIMPLE_TOKENS[ch]) { tokens.push({ k: SIMPLE_TOKENS[ch] }); i++; continue; }
       if (/^general/i.test(rest)) { tokens.push({ k: 'gen' }); i += 7; continue; }
       if (/^e[+-]/i.test(rest)) { tokens.push({ k: 'sci' }); i += 2; continue; }
       const ampm = /^(AM\/PM|am\/pm|A\/P|a\/p)/.exec(rest);
       if (ampm) { tokens.push({ k: 'ap', short: ampm[1].length === 3, lower: ampm[1] === ampm[1].toLowerCase() }); i += ampm[1].length; continue; }
-      if (/[yY]/.test(ch)) { const j = run(i, /[yY]/); tokens.push({ k: 'y', n: j - i }); i = j; continue; }
-      if (/[mM]/.test(ch)) { const j = run(i, /[mM]/); tokens.push({ k: 'mo', n: j - i }); i = j; continue; }
-      if (/[dD]/.test(ch)) { const j = run(i, /[dD]/); tokens.push({ k: 'd', n: j - i }); i = j; continue; }
-      if (/[hH]/.test(ch)) { const j = run(i, /[hH]/); tokens.push({ k: 'h', n: j - i }); i = j; continue; }
-      if (/[sS]/.test(ch)) { const j = run(i, /[sS]/); tokens.push({ k: 's', n: j - i }); i = j; continue; }
+      const unit = Object.keys(DATE_RUNS).find(k => DATE_RUNS[k].test(ch));
+      if (unit) { const j = run(i, DATE_RUNS[unit]); tokens.push({ k: unit, n: j - i }); i = j; continue; }
       if (ch === '/' && tokens.some(t => t.k === 'dig')) { tokens.push({ k: 'frac' }); i++; continue; }
       lit(ch);
       i++;
@@ -84,10 +93,19 @@ const XlsxNumberFormat = (function () {
     return tokens;
   }
 
+  const sectionCache = new Map();
+  function sectionsOf(fmt) {
+    let sections = sectionCache.get(fmt);
+    if (!sections) {
+      if (sectionCache.size >= 500) sectionCache.clear();
+      sections = splitSections(fmt).map(tokenize);
+      sectionCache.set(fmt, sections);
+    }
+    return sections;
+  }
+
   const DATE_KINDS = new Set(['y', 'mo', 'd', 'h', 's', 'ap', 'el']);
   const isDateSection = tokens => tokens.some(t => DATE_KINDS.has(t.k));
-
-  // --- Nombres -----------------------------------------------------------------------------------------------------------------------------------------------
 
   // Un nombre sans format (« Standard ») : jusqu'à 11 chiffres significatifs, comme Excel ; un entier garde tous ses chiffres.
   function general(value, lang) {
@@ -96,17 +114,19 @@ const XlsxNumberFormat = (function () {
     return lang === 'fr' ? text.replace('.', ',') : text;
   }
 
-  // Le texte d'un nombre dans une section de chiffres : `abs` est la valeur absolue déjà mise à l'échelle (pourcentage, milliers) ; le signe se règle avant.
+  const EMPTY_SLOT = { 0: '0', '?': ' ', '#': '' }; // ce qu'un emplacement de chiffre écrit quand il n'y a plus de chiffre à y mettre
+
+  // Le texte d'un nombre dans une section de chiffres : `abs` est la valeur absolue déjà mise à l'échelle (pourcentage, milliers) ; le signe se règle
+  // avant.
   function renderDigits(abs, tokens, lang) {
     const first = tokens.findIndex(t => t.k === 'dig');
     let last = -1;
     tokens.forEach((t, i) => { if (t.k === 'dig') last = i; });
     const point = tokens.findIndex((t, i) => t.k === 'pt' && i > first && i < last);
-    const intTokens = tokens.slice(first, point < 0 ? last + 1 : point).filter(t => t.k === 'dig');
-    const fracTokens = point < 0 ? [] : tokens.slice(point + 1, last + 1).filter(t => t.k === 'dig');
-    const minInt = intTokens.filter(t => t.c === '0').length;
-    const minFrac = fracTokens.filter(t => t.c === '0').length;
     const between = tokens.slice(first, point < 0 ? last + 1 : point);
+    const fracTokens = point < 0 ? [] : tokens.slice(point + 1, last + 1).filter(t => t.k === 'dig');
+    const minInt = between.filter(t => t.k === 'dig' && t.c === '0').length;
+    const minFrac = fracTokens.filter(t => t.c === '0').length;
     const grouping = between.some((t, i) => t.k === 'thou' && between.slice(0, i).some(d => d.k === 'dig') && between.slice(i + 1).some(d => d.k === 'dig'));
     const interleaved = between.some(t => t.k === 'lit');
     const locale = LOCALES[lang] || LOCALES.fr;
@@ -117,26 +137,26 @@ const XlsxNumberFormat = (function () {
       const placed = [];
       for (let i = between.length - 1; i >= 0; i--) {
         const t = between[i];
-        if (t.k === 'dig') {
-          if (at > 0) { placed.unshift(digits[--at]); } else if (t.c === '0') placed.unshift('0'); else if (t.c === '?') placed.unshift(' '); else placed.unshift('');
-        } else if (t.k === 'lit') placed.unshift(t.s);
+        if (t.k === 'dig') placed.push(at > 0 ? digits[--at] : EMPTY_SLOT[t.c]);
+        else if (t.k === 'lit') placed.push(t.s);
       }
-      const extra = at > 0 ? digits.slice(0, at) : '';
-      const text = extra + placed.join('');
-      return { first, end: (point < 0 ? last : point - 1), text };
+      return { first, end: (point < 0 ? last : point - 1), text: digits.slice(0, at) + placed.reverse().join('') };
     }
     // L'espace fine insécable de Intl fr-FR devient l'espace insécable ordinaire, comme dans une bulle nombre (js/variable-format.js).
-    let text = new Intl.NumberFormat(locale, { minimumIntegerDigits: Math.max(1, minInt), minimumFractionDigits: minFrac, maximumFractionDigits: fracTokens.length, useGrouping: grouping }).format(abs).replace(/\u202f/g, '\u00a0');
+    const numbers = intl(Intl.NumberFormat, locale, { minimumIntegerDigits: Math.max(1, minInt), minimumFractionDigits: minFrac, maximumFractionDigits: fracTokens.length, useGrouping: grouping });
+    let text = numbers.format(abs).replace(/\u202f/g, '\u00a0');
     if (!minInt) text = text.replace(/^0(?=\D|$)/, '');
     return { first, end: last, text };
   }
 
+  const plain = t => (t.k === 'lit' ? t.s : t.k === 'pct' ? '%' : ''); // ce qu'écrit un jeton qui n'est pas un chiffre
+
   function renderNumberSection(value, tokens, lang, negativeShown) {
     if (tokens.some(t => t.k === 'sci' || t.k === 'frac')) return null;
+    const sign = negativeShown ? '-' : '';
     if (tokens.some(t => t.k === 'gen')) {
       const text = general(Math.abs(value), lang);
-      const out = tokens.map(t => (t.k === 'gen' ? text : t.k === 'lit' ? t.s : '')).join('');
-      return (negativeShown ? '-' : '') + out;
+      return sign + tokens.map(t => (t.k === 'gen' ? text : t.k === 'lit' ? t.s : '')).join('');
     }
     let abs = Math.abs(value);
     tokens.forEach(t => { if (t.k === 'pct') abs *= 100; });
@@ -146,18 +166,10 @@ const XlsxNumberFormat = (function () {
     let drop = new Set();
     for (let i = lastDig + 1; lastDig >= 0 && i < tokens.length && tokens[i].k === 'thou'; i++) { abs /= 1000; drop.add(i); }
     const live = tokens.filter((_, i) => !drop.has(i));
-    if (!live.some(t => t.k === 'dig')) return (negativeShown ? '-' : '') + live.map(t => (t.k === 'lit' ? t.s : t.k === 'pct' ? '%' : '')).join('');
+    if (!live.some(t => t.k === 'dig')) return sign + live.map(plain).join('');
     const block = renderDigits(abs, live, lang);
-    const out = live.map((t, i) => {
-      if (i < block.first) return t.k === 'lit' ? t.s : t.k === 'pct' ? '%' : '';
-      if (i === block.first) return block.text;
-      if (i <= block.end) return '';
-      return t.k === 'lit' ? t.s : t.k === 'pct' ? '%' : '';
-    }).join('');
-    return (negativeShown ? '-' : '') + out;
+    return sign + live.map((t, i) => (i === block.first ? block.text : i > block.first && i <= block.end ? '' : plain(t))).join('');
   }
-
-  // --- Dates -------------------------------------------------------------------------------------------------------------------------------------------------
 
   function serialOf(date) { return (date.getTime() - EPOCH_UTC_MS) / DAY_MS; }
   function dateOfSerial(serial) { return new Date(EPOCH_UTC_MS + Math.round(serial * DAY_MS)); }
@@ -165,7 +177,7 @@ const XlsxNumberFormat = (function () {
 
   function renderDateSection(date, tokens, lang) {
     const locale = LOCALES[lang] || LOCALES.fr;
-    const names = (opts) => new Intl.DateTimeFormat(locale, Object.assign({ timeZone: 'UTC' }, opts)).format(date);
+    const names = opts => intl(Intl.DateTimeFormat, locale, Object.assign({ timeZone: 'UTC' }, opts)).format(date);
     const serial = serialOf(date);
     const twelve = tokens.some(t => t.k === 'ap');
     const hour24 = date.getUTCHours();
@@ -208,15 +220,13 @@ const XlsxNumberFormat = (function () {
     }).join('');
   }
 
-  // --- Entrée ------------------------------------------------------------------------------------------------------------------------------------------------
-
   function format(value, code, options) {
     const lang = options && options.lang === 'en' ? 'en' : 'fr';
     if (value === null || value === undefined || value === '') return '';
     if (typeof value === 'boolean') return lang === 'fr' ? (value ? 'VRAI' : 'FAUX') : (value ? 'TRUE' : 'FALSE');
     let fmt = String(code || 'General').trim() || 'General';
     if (LOCALIZED_CODES[lang] && LOCALIZED_CODES[lang][fmt]) fmt = LOCALIZED_CODES[lang][fmt];
-    const sections = splitSections(fmt).map(tokenize);
+    const sections = sectionsOf(fmt);
     if (typeof value === 'string') {
       const section = sections.length >= 4 ? sections[3] : sections.find(tokens => tokens.some(t => t.k === 'txt'));
       if (!section) return value;
@@ -256,13 +266,14 @@ const XlsxNumberFormat = (function () {
     return general(number, lang);
   }
 
-  // Le format de la case est-il un format de date ou d'heure ? (ExcelJS rend une Date pour ceux qu'il reconnaît ; un nombre dont le format est une date s'affiche aussi en date.)
+  // Le format de la case est-il un format de date ou d'heure ? (ExcelJS rend une Date pour ceux qu'il reconnaît ; un nombre dont le format est une
+  // date s'affiche aussi en date.)
   function isDateFormat(code) {
     if (!code) return false;
     const fmt = String(code).trim();
     if (LOCALIZED_CODES.fr[fmt]) return true;
-    return splitSections(fmt).some(section => isDateSection(tokenize(section)));
+    return sectionsOf(fmt).some(isDateSection);
   }
 
-  return { format, isDateFormat, dateOfSerial, serialOf };
+  return { format, isDateFormat };
 })();

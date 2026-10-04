@@ -1,35 +1,39 @@
-// Import d'un classeur Excel (.xlsx) dans une grille (planning/feature-mode-grille-excel.md, sujet 18 du 02/10 : « Prévoir un Import Excel pour le modèle Grille »). Le contraire de l'export de
-// js/xlsx-export.js : la PREMIÈRE feuille visible du classeur devient une NOUVELLE grille, case par case - texte tel que l'affiche Excel (formats de nombre et de date : js/xlsx-number-format.js),
-// cases fusionnées, largeur des colonnes et hauteur des lignes, gras / italique / souligné / barré, couleur et taille du texte, fond, bordures (couleur), alignements horizontal et vertical, liens,
-// retours à la ligne dans une case. Même modèle de cases que le collage d'un tableau de tableur (js/grid-table.js) : le classeur sort par le même `GridTable.toHtml`, un tableau collé et un tableau
-// importé ne peuvent pas diverger.
-//   GridXlsxImport.openFile(file)                         -> Promise<{ sheets: [{ index, name }], build(index, { lang }) }>   le classeur lu UNE fois : ses feuilles visibles, dans l'ordre d'Excel, et la grille de celle qu'on choisit
-//   GridXlsxImport.chooseSheet(sheets, { anchor })        -> Promise<index | null>   la liste avec recherche des feuilles (js/search-select.js), sous le rectangle que rend `anchor()` ; null : Échap ou un clic ailleurs
-//   GridXlsxImport.importFile(file, { lang, sheetIndex? }) -> Promise<{ html, model, sheetName, sheetIndex, sheetCount, rows, cols }>   (rejette avec une Error dont `code` dit pourquoi)
-//   GridXlsxImport.fromArrayBuffer(buffer, { lang, sheetIndex? })  -> idem, depuis les octets du fichier
-//   GridXlsxImport.buildModel(workbook, { lang, sheetIndex? })  -> idem, depuis un classeur ExcelJS déjà lu (les tests)
-//   GridXlsxImport.chooseFile(onFile)                     -> ouvre le sélecteur de fichier ; `onFile(file)` n'est appelé que si un fichier est choisi
-// Codes d'erreur : 'oldFormat' (un .xls ou un classeur protégé par mot de passe : le fichier est un conteneur OLE, pas un zip), 'unreadable' (pas un classeur), 'empty' (aucune case utile),
-// 'tooBig' (plus de MAX_ROWS lignes, MAX_COLS colonnes ou MAX_CELLS cases : la grille serait inutilisable, rien n'est coupé en silence).
-// Les feuilles, lignes et colonnes masquées ne sont pas importées. Un classeur qui a plusieurs feuilles visibles demande laquelle devient la grille (choix d'Antoine du 02/10, « Oui, une liste ») :
-// une seule est importée, les autres ne le sont pas. Pas importés : formules (le résultat calculé est écrit), images, graphiques, commentaires, mise en forme conditionnelle, police, retrait,
-// orientation du texte. Dépend de GridTable (js/grid-table.js), TableBorders (js/table-borders.js), XlsxNumberFormat (js/xlsx-number-format.js) et XlsxExport (chargement paresseux d'ExcelJS).
+// Import d'un classeur Excel (.xlsx) dans une grille (planning/feature-mode-grille-excel.md). Le contraire de l'export de js/xlsx-export.js : une
+// feuille visible du classeur devient une nouvelle grille, case par case - texte tel que l'affiche Excel (formats de nombre et de date :
+// js/xlsx-number-format.js), cases fusionnées, largeur des colonnes et hauteur des lignes, gras / italique / souligné / barré, couleur et taille du
+// texte, fond, bordures (couleur), alignements horizontal et vertical, liens, retours à la ligne dans une case. Même modèle de cases que le collage
+// d'un tableau de tableur (js/grid-table.js) : le classeur sort par le même `GridTable.toHtml`, un tableau collé et un tableau importé ne peuvent pas
+// diverger.
+//   GridXlsxImport.openFile(file) -> Promise<{ sheets: [{ index, name }], build(index, { lang }) }>
+//     le classeur lu une fois : ses feuilles visibles, dans l'ordre d'Excel, et la grille de celle qu'on choisit
+//   GridXlsxImport.chooseSheet(sheets, { anchor }) -> Promise<index | null>
+//     la liste avec recherche des feuilles (js/search-select.js), sous le rectangle que rend `anchor()` ; null : Échap ou un clic ailleurs
+//   GridXlsxImport.importFile(file, { lang, sheetIndex? }) -> Promise<{ html, model, sheetName, sheetIndex, sheetCount, rows, cols }>
+//     rejette avec une Error dont `code` dit pourquoi
+//   GridXlsxImport.fromArrayBuffer(buffer, { lang, sheetIndex? }) -> idem, depuis les octets du fichier
+//   GridXlsxImport.chooseFile(onFile) -> ouvre le sélecteur de fichier ; `onFile(file)` n'est appelé que si un fichier est choisi
+// Codes d'erreur : 'oldFormat' (un .xls ou un classeur protégé par mot de passe : le fichier est un conteneur OLE, pas un zip), 'unreadable' (pas un
+// classeur), 'empty' (aucune case utile), 'tooBig' (plus de MAX_ROWS lignes, MAX_COLS colonnes ou MAX_CELLS cases : la grille serait inutilisable,
+// rien n'est coupé en silence).
+// Les feuilles, lignes et colonnes masquées ne sont pas importées. Un classeur qui a plusieurs feuilles visibles demande laquelle devient la grille
+// (une liste avec recherche) : une seule est importée, les autres ne le sont pas. Pas importés : formules (le résultat calculé est écrit), images,
+// graphiques, commentaires, mise en forme conditionnelle, police, retrait, orientation du texte. Dépend de GridTable (js/grid-table.js), TableBorders
+// (js/table-borders.js), XlsxNumberFormat (js/xlsx-number-format.js) et XlsxExport (chargement paresseux d'ExcelJS).
 const GridXlsxImport = (function () {
   const MAX_ROWS = 1000;
   const MAX_COLS = 100;
-  const MAX_CELLS = 5000; // une frappe dans une grille de 5 000 cases coûte ~120 ms (le coût suit le nombre de cases) ; 20 000 cases : ~800 ms
+  const MAX_CELLS = 5000; // la frappe dans une grille coûte à proportion de son nombre de cases : au-delà, elle devient pénible
   const MIN_COL_PX = 24; // la plus petite colonne d'une grille
   const DEFAULT_COL_PX = 64; // 8,43 caractères : la largeur d'une colonne sans largeur écrite
   const DEFAULT_ROW_PT = 15;
   const DEFAULT_SIZE_PT = 11;
-  // Les types de valeur d'ExcelJS (ExcelJS.ValueType).
-  const T = { Null: 0, Merge: 1, Number: 2, String: 3, Date: 4, Hyperlink: 5, Formula: 6, SharedString: 7, RichText: 8, Boolean: 9, Error: 10 };
+  // Ceux des types de valeur d'ExcelJS (ExcelJS.ValueType) qu'on distingue ; les autres se lisent comme une valeur simple (`scalar`).
+  const T = { Null: 0, Merge: 1, Hyperlink: 5, Formula: 6, RichText: 8, Error: 10 };
 
   function fail(code, message, details) { return Object.assign(new Error(message || code), { code }, details || {}); }
 
-  // --- Couleurs ----------------------------------------------------------------------------------------------------------------------------------------------
-
-  // La palette par défaut d'Office (un thème absent ou illisible), dans l'ordre des index de thème d'Excel : fond 1, texte 1, fond 2, texte 2, accents 1 à 6, lien, lien suivi.
+  // La palette par défaut d'Office (un thème absent ou illisible), dans l'ordre des index de thème d'Excel : fond 1, texte 1, fond 2, texte 2,
+  // accents 1 à 6, lien, lien suivi.
   const DEFAULT_THEME = ['ffffff', '000000', 'e7e6e6', '44546a', '4472c4', 'ed7d31', 'a5a5a5', 'ffc000', '5b9bd5', '70ad47', '0563c1', '954f72'];
   const THEME_ORDER = ['lt1', 'dk1', 'lt2', 'dk2', 'accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6', 'hlink', 'folHlink'];
   // Les 64 couleurs « indexées » d'Excel (anciens classeurs, couleurs de la palette de base) ; 64 et 65 sont le texte et le fond du système.
@@ -37,7 +41,8 @@ const GridXlsxImport = (function () {
     + '9999ff 993366 ffffcc ccffff 660066 ff8080 0066cc ccccff 000080 ff00ff ffff00 00ffff 800080 800000 008080 0000ff 00ccff ccffff ccffcc ffff99 99ccff ff99cc cc99ff ffcc99 '
     + '3366ff 33cccc 99cc00 ffcc00 ff9900 ff6600 666699 969696 003366 339966 003300 333300 993300 993366 333399 333333').split(' ');
 
-  // La palette du thème du classeur (ExcelJS en garde le XML tel quel dans `_themes`) : « <a:accent1><a:srgbClr val="4472C4"/> », ou « <a:dk1><a:sysClr ... lastClr="000000"/> ».
+  // La palette du thème du classeur (ExcelJS en garde le XML tel quel dans `_themes`) : « <a:accent1><a:srgbClr val="4472C4"/> », ou
+  // « <a:dk1><a:sysClr ... lastClr="000000"/> ».
   function themePalette(workbook) {
     const themes = workbook && workbook._themes;
     const xml = themes ? String(themes.theme1 || Object.values(themes)[0] || '') : '';
@@ -83,11 +88,9 @@ const GridXlsxImport = (function () {
     return null;
   }
 
-  // --- Contenu d'une case ------------------------------------------------------------------------------------------------------------------------------------
-
   const underlineOn = value => !!value && value !== 'none';
 
-  // La mise en forme d'une police d'Excel : seules les propriétés ÉCRITES y figurent (une plage de texte riche ne redit que ce qui change).
+  // La mise en forme d'une police d'Excel : seules les propriétés écrites y figurent (une plage de texte riche ne redit que ce qui change).
   function fontFormat(font, color) {
     const fmt = {};
     if (!font) return fmt;
@@ -100,7 +103,8 @@ const GridXlsxImport = (function () {
     return fmt;
   }
 
-  // Le texte de la valeur, découpé en plages de même mise en forme : [{ text, fmt?, href? }], et son genre (`number`, `date`, `bool`, `error` ou `text`) qui règle l'alignement « Standard ».
+  // Le texte de la valeur, découpé en plages de même mise en forme : [{ text, fmt?, href? }], et son genre (`number`, `date`, `bool`, `error` ou
+  // `text`) qui règle l'alignement « Standard ».
   function contentOf(cell, numFmt, options) {
     const { lang, color } = options;
     const value = cell.value;
@@ -128,7 +132,8 @@ const GridXlsxImport = (function () {
     }
   }
 
-  // Le contenu d'une case en HTML d'éditeur : les plages avec leurs marques, un retour à la ligne dans la case = `<br>`. `baseSize` : la taille du texte « de départ » du classeur, qu'on n'écrit pas.
+  // Le contenu d'une case en HTML d'éditeur : les plages avec leurs marques, un retour à la ligne dans la case = `<br>`. `baseSize` : la taille du
+  // texte « de départ » du classeur, qu'on n'écrit pas.
   function runsToHtml(runs, base, baseSize) {
     const parts = [];
     runs.forEach((run) => {
@@ -143,20 +148,19 @@ const GridXlsxImport = (function () {
     return parts.join('').replace(/^(?:<br>)+|(?:<br>)+$/g, '');
   }
 
-  // --- La feuille --------------------------------------------------------------------------------------------------------------------------------------------
-
   const columnNumber = letters => letters.split('').reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0);
   const rangeOf = (text) => {
     const m = /^([A-Z]+)(\d+):([A-Z]+)(\d+)$/.exec(String(text).toUpperCase());
     return m ? { r1: Number(m[2]), c1: columnNumber(m[1]), r2: Number(m[4]), c2: columnNumber(m[3]) } : null;
   };
 
-  // Le trait fin gris de départ d'une case de grille (celui que js/xlsx-export.js écrit sur les côtés sans couleur choisie, js/pdf-export.js:TABLE_BORDER_COLOR) : le relire comme une couleur choisie
-  // ferait d'une grille exportée puis importée une grille aux traits « colorés » en gris - qui ne suivraient plus le trait de départ. Un côté sans trait n'a pas de couleur non plus : le trait de départ.
+  // Le trait fin gris de départ d'une case de grille (celui que js/xlsx-export.js écrit sur les côtés sans couleur choisie,
+  // js/pdf-export.js:TABLE_BORDER_COLOR) : le relire comme une couleur choisie ferait d'une grille exportée puis importée une grille aux traits
+  // « colorés » en gris - qui ne suivraient plus le trait de départ. Un côté sans trait n'a pas de couleur non plus : le trait de départ.
   const DEFAULT_LINE = '#777777';
-  const sideColor = (side, color) => {
+  const sideColor = (side, palette) => {
     if (!side || !side.style || side.style === 'none') return null;
-    const hex = colorHex(side.color, color.palette) || '#000000';
+    const hex = colorHex(side.color, palette) || '#000000';
     return hex === DEFAULT_LINE ? null : hex;
   };
 
@@ -170,153 +174,169 @@ const GridXlsxImport = (function () {
     return kind === 'number' || kind === 'date' ? 'right' : kind === 'bool' || kind === 'error' ? 'center' : null;
   }
 
-  // L'alignement vertical n'est repris que quand le classeur l'écrit : sans lui Excel aligne en bas, mais ce n'est pas un choix - la grille garde alors le sien (le milieu, GridEditor.DEFAULT_VALIGN).
-  // Toujours écrit, même quand c'est le milieu : une case sans alignement est « neuve » pour l'éditeur, qui lui en pose un par une transaction à part - une par case, des minutes pour un gros classeur.
+  // L'alignement vertical n'est repris que quand le classeur l'écrit : sans lui Excel aligne en bas, mais ce n'est pas un choix, la grille garde
+  // alors le sien (le milieu, GridEditor.DEFAULT_VALIGN).
+  // Toujours écrit, même quand c'est le milieu : une case sans alignement est « neuve » pour l'éditeur, qui lui en pose un par une transaction à
+  // part, une par case : très lent pour un gros classeur.
   const DEFAULT_VALIGN = 'middle';
   function verticalAlign(style) {
     const v = style.alignment && style.alignment.vertical;
-    if (v === 'top') return 'top';
-    if (v === 'bottom') return 'bottom';
-    return DEFAULT_VALIGN;
+    return v === 'top' || v === 'bottom' ? v : DEFAULT_VALIGN;
   }
 
-  function fillOf(style, color) {
+  function fillOf(style, palette) {
     const fill = style.fill;
     if (!fill) return null;
-    if (fill.type === 'pattern') return fill.pattern === 'solid' ? colorHex(fill.fgColor, color.palette) : null;
-    if (fill.type === 'gradient' && Array.isArray(fill.stops) && fill.stops.length) return colorHex(fill.stops[0].color, color.palette);
+    if (fill.type === 'pattern') return fill.pattern === 'solid' ? colorHex(fill.fgColor, palette) : null;
+    if (fill.type === 'gradient' && Array.isArray(fill.stops) && fill.stops.length) return colorHex(fill.stops[0].color, palette);
     return null;
   }
 
-  const hasLook = (cell, color) => {
+  const hasLook = (cell, palette) => {
     const style = cell.style || {};
     const b = style.border || {};
-    return !!(fillOf(style, color) || sideColor(b.top, color) || sideColor(b.left, color) || sideColor(b.bottom, color) || sideColor(b.right, color));
+    return !!(fillOf(style, palette) || sideColor(b.top, palette) || sideColor(b.left, palette) || sideColor(b.bottom, palette) || sideColor(b.right, palette));
   };
 
-  // Les traits qu'un côté de case partage avec sa voisine (ou, fusionnée, avec toute une file de voisines) n'ont qu'UNE valeur dans la grille (js/table-borders.js) : celle du classeur y est mise
-  // d'accord ICI, une fois, comme l'éditeur le ferait à l'ouverture - mais par une transaction par case désaccordée, des minutes pour un gros classeur (Excel n'écrit souvent un trait que d'un côté).
-  function resolveBorders(byRow, height, width, rowPos) {
+  // Les traits qu'un côté de case partage avec sa voisine (ou, fusionnée, avec toute une file de voisines) n'ont qu'une valeur dans la grille
+  // (js/table-borders.js) : celle du classeur y est mise d'accord ici, une fois, comme l'éditeur le ferait à l'ouverture, mais par une transaction
+  // par case désaccordée : très lent pour un gros classeur (Excel n'écrit souvent un trait que d'un côté).
+  function resolveBorders(grid, width) {
     const flat = [];
-    byRow.forEach((cells, r) => cells.forEach(cell => flat.push({ row: rowPos.get(r), cell })));
-    flat.sort((a, b) => a.row - b.row || a.cell.col - b.cell.col);
-    const spec = {
+    grid.forEach((cells, row) => cells.forEach(cell => flat.push({ row, cell })));
+    const sides = TableBorders.resolve({
       width,
-      height,
-      cells: flat.map(({ row, cell }) => ({ row, col: cell.col, rowspan: cell.rowspan, colspan: cell.colspan, top: cell.borders.top, right: cell.borders.right, bottom: cell.borders.bottom, left: cell.borders.left })),
-    };
-    const sides = TableBorders.resolve(spec);
+      height: grid.length,
+      cells: flat.map(({ row, cell }) => Object.assign({ row, col: cell.col, rowspan: cell.rowspan, colspan: cell.colspan }, cell.borders)),
+    });
     flat.forEach(({ cell }, i) => { cell.borders = sides[i]; });
   }
 
-  // La première feuille VISIBLE du classeur (ou celle qu'on demande, par son rang parmi les feuilles visibles).
+  // Les feuilles visibles du classeur, dans l'ordre d'Excel : `sheetIndex` est un rang parmi elles.
   function visibleSheets(workbook) { return workbook.worksheets.filter(sheet => !sheet.state || sheet.state === 'visible'); }
 
-  function buildModel(workbook, options) {
-    const lang = options && options.lang === 'en' ? 'en' : 'fr';
-    const sheets = visibleSheets(workbook);
-    const all = workbook.worksheets;
-    const sheetIndex = Math.max(0, Math.min((options && options.sheetIndex) || 0, Math.max(0, sheets.length - 1)));
-    const sheet = sheets[sheetIndex] || all[0];
-    if (!sheet) throw fail('unreadable', 'Le classeur ne contient aucune feuille.'); // un zip qui n'est pas un classeur : ExcelJS le lit sans feuille
-    const color = { palette: themePalette(workbook) };
-    const colorOf = c => colorHex(c, color.palette);
-
-    // L'étendue utile : jusqu'à la dernière case qui a une valeur, un fond ou un trait (des cases mises en forme mais vides au loin ne comptent pas), fusions comprises.
-    let lastRow = 0;
-    let lastCol = 0;
+  // L'étendue utile : ExcelJS ne rend que les lignes qui ont une valeur ; dans chacune, une case compte si elle a une valeur, un fond ou un trait
+  // (des cases mises en forme mais vides au loin ne comptent pas). Les cases d'une plage fusionnée comptent toutes : ExcelJS les crée à la lecture.
+  function usedExtent(sheet, palette) {
+    let rows = 0;
+    let cols = 0;
     sheet.eachRow({ includeEmpty: false }, (row, r) => {
       row.eachCell({ includeEmpty: true }, (cell, c) => {
-        if (cell.type !== T.Null || hasLook(cell, color)) { lastRow = Math.max(lastRow, r); lastCol = Math.max(lastCol, c); }
+        if (cell.type !== T.Null || hasLook(cell, palette)) { rows = Math.max(rows, r); cols = Math.max(cols, c); }
       });
     });
-    const merges = ((sheet.model && sheet.model.merges) || []).map(rangeOf).filter(Boolean);
-    merges.forEach((m) => { lastRow = Math.max(lastRow, m.r2); lastCol = Math.max(lastCol, m.c2); });
-    if (!lastRow || !lastCol) throw fail('empty', 'La feuille ne contient aucune case.');
+    return { rows, cols };
+  }
 
-    const shownRows = [];
-    const shownCols = [];
-    for (let r = 1; r <= lastRow; r++) if (!sheet.getRow(r).hidden) shownRows.push(r);
-    for (let c = 1; c <= lastCol; c++) if (!sheet.getColumn(c).hidden) shownCols.push(c);
-    if (!shownRows.length || !shownCols.length) throw fail('empty', 'La feuille ne contient aucune case visible.');
-    if (shownRows.length > MAX_ROWS || shownCols.length > MAX_COLS || shownRows.length * shownCols.length > MAX_CELLS) {
-      throw fail('tooBig', 'La feuille est trop grande pour une grille.', { rows: shownRows.length, cols: shownCols.length, maxRows: MAX_ROWS, maxCols: MAX_COLS, maxCells: MAX_CELLS });
-    }
-    const rowPos = new Map(shownRows.map((r, i) => [r, i]));
-    const colPos = new Map(shownCols.map((c, i) => [c, i]));
-
-    // Les fusions, ramenées aux lignes et colonnes qui restent : l'ancre est la première case visible de la plage, le contenu et la mise en forme sont ceux de sa case en haut à gauche.
+  // Les fusions, ramenées aux lignes et colonnes qui restent : l'ancre est la première case visible de la plage, le contenu et la mise en forme sont
+  // ceux de sa case en haut à gauche. `anchors` : « ligne,colonne » de l'ancre -> { m, rowspan, colspan } ; `covered` : les autres cases de la plage.
+  function mergeLayout(merges, shownRows, shownCols) {
     const anchors = new Map();
     const covered = new Set();
     merges.forEach((m) => {
       const rs = shownRows.filter(r => r >= m.r1 && r <= m.r2);
       const cs = shownCols.filter(c => c >= m.c1 && c <= m.c2);
       if (!rs.length || !cs.length) return;
-      anchors.set(rs[0] + ',' + cs[0], { m, rowspan: rs.length, colspan: cs.length, lastRow: rs[rs.length - 1], lastCol: cs[cs.length - 1] });
+      anchors.set(rs[0] + ',' + cs[0], { m, rowspan: rs.length, colspan: cs.length });
       rs.forEach(r => cs.forEach((c) => { if (r !== rs[0] || c !== cs[0]) covered.add(r + ',' + c); }));
     });
+    return { anchors, covered };
+  }
 
-    // Première passe : le contenu de chaque case, pour connaître la taille de texte la plus courante (celle qu'on n'écrit pas).
-    const cells = [];
-    const sizes = new Map();
-    shownRows.forEach((r) => {
-      shownCols.forEach((c) => {
-        if (covered.has(r + ',' + c)) return;
-        const anchor = anchors.get(r + ',' + c);
-        const source = anchor ? sheet.getCell(anchor.m.r1, anchor.m.c1) : sheet.getCell(r, c);
-        const style = source.style || {};
-        const content = contentOf(source, source.numFmt || style.numFmt, { lang, color: colorOf });
-        const font = style.font || {};
-        const size = font.size || DEFAULT_SIZE_PT;
-        if (content.runs.some(run => String(run.text).trim())) sizes.set(size, (sizes.get(size) || 0) + 1);
-        cells.push({ r, c, anchor, source, style, content, base: Object.assign({ bold: false, italic: false, underline: false, strike: false, size: DEFAULT_SIZE_PT }, fontFormat(font, colorOf)) });
-      });
+  // La taille de texte la plus courante parmi les cases qui ont du texte (à égalité, la première rencontrée) : le « texte de départ » du classeur,
+  // qu'on n'écrit pas.
+  function commonSize(cells) {
+    const counts = new Map();
+    cells.forEach(({ content, size }) => {
+      if (content.runs.some(run => String(run.text).trim())) counts.set(size, (counts.get(size) || 0) + 1);
     });
-    let baseSize = DEFAULT_SIZE_PT;
+    let common = DEFAULT_SIZE_PT;
     let best = 0;
-    sizes.forEach((count, size) => { if (count > best) { best = count; baseSize = size; } });
+    counts.forEach((count, size) => { if (count > best) { best = count; common = size; } });
+    return common;
+  }
 
-    const byRow = new Map();
-    cells.forEach((cell) => {
-      const { r, c, anchor, style, content } = cell;
+  function buildModel(workbook, options) {
+    const lang = options && options.lang === 'en' ? 'en' : 'fr';
+    const sheets = visibleSheets(workbook);
+    const sheetIndex = Math.max(0, Math.min((options && options.sheetIndex) || 0, Math.max(0, sheets.length - 1)));
+    const sheet = sheets[sheetIndex] || workbook.worksheets[0];
+    if (!sheet) throw fail('unreadable', 'Le classeur ne contient aucune feuille.'); // un zip qui n'est pas un classeur : ExcelJS le lit sans feuille
+    const palette = themePalette(workbook);
+    const colorOf = c => colorHex(c, palette);
+
+    const merges = ((sheet.model && sheet.model.merges) || []).map(rangeOf).filter(Boolean);
+    const extent = usedExtent(sheet, palette);
+    if (!extent.rows || !extent.cols) throw fail('empty', 'La feuille ne contient aucune case.');
+    const shownRows = [];
+    const shownCols = [];
+    for (let r = 1; r <= extent.rows; r++) if (!sheet.getRow(r).hidden) shownRows.push(r);
+    for (let c = 1; c <= extent.cols; c++) if (!sheet.getColumn(c).hidden) shownCols.push(c);
+    if (!shownRows.length || !shownCols.length) throw fail('empty', 'La feuille ne contient aucune case visible.');
+    if (shownRows.length > MAX_ROWS || shownCols.length > MAX_COLS || shownRows.length * shownCols.length > MAX_CELLS) {
+      throw fail('tooBig', 'La feuille est trop grande pour une grille.', { rows: shownRows.length, cols: shownCols.length, maxRows: MAX_ROWS, maxCols: MAX_COLS, maxCells: MAX_CELLS });
+    }
+    const { anchors, covered } = mergeLayout(merges, shownRows, shownCols);
+
+    // Première passe : le contenu de chaque case, pour connaître la taille de texte la plus courante.
+    const cells = [];
+    shownRows.forEach((r, row) => shownCols.forEach((c, col) => {
+      const key = r + ',' + c;
+      if (covered.has(key)) return;
+      const anchor = anchors.get(key);
+      const source = anchor ? sheet.getCell(anchor.m.r1, anchor.m.c1) : sheet.getCell(r, c);
+      const style = source.style || {};
+      const font = style.font || {};
+      cells.push({
+        row,
+        col,
+        anchor,
+        style,
+        content: contentOf(source, source.numFmt || style.numFmt, { lang, color: colorOf }),
+        size: font.size || DEFAULT_SIZE_PT,
+        base: Object.assign({ bold: false, italic: false, underline: false, strike: false, size: DEFAULT_SIZE_PT }, fontFormat(font, colorOf)),
+      });
+    }));
+    const baseSize = commonSize(cells);
+
+    // Deuxième passe : les cases du modèle, rangées par ligne. Le pourtour d'une case fusionnée : le haut et la gauche de sa case d'angle, la droite
+    // de la dernière colonne de sa première ligne, le bas de la dernière ligne de sa première colonne.
+    const borderOf = (r, c) => (sheet.getCell(r, c).style || {}).border || {};
+    const grid = shownRows.map(() => []);
+    cells.forEach(({ row, col, anchor, style, content, base }) => {
       const border = style.border || {};
-      let borders;
-      if (anchor) {
-        // Le pourtour d'une case fusionnée : le haut et la gauche de sa case d'angle, la droite de la dernière colonne de sa première ligne, le bas de la dernière ligne de sa première colonne.
-        const at = (rr, cc) => (sheet.getCell(rr, cc).style || {}).border || {};
-        borders = { top: sideColor(border.top, color), left: sideColor(border.left, color), right: sideColor(at(anchor.m.r1, anchor.m.c2).right, color), bottom: sideColor(at(anchor.m.r2, anchor.m.c1).bottom, color) };
-      } else {
-        borders = { top: sideColor(border.top, color), left: sideColor(border.left, color), right: sideColor(border.right, color), bottom: sideColor(border.bottom, color) };
-      }
-      const out = {
-        col: colPos.get(c),
+      const m = anchor && anchor.m;
+      grid[row].push({
+        col,
         colspan: anchor ? anchor.colspan : 1,
         rowspan: anchor ? anchor.rowspan : 1,
-        html: runsToHtml(content.runs, cell.base, baseSize),
+        html: runsToHtml(content.runs, base, baseSize),
         align: horizontalAlign(style, content.kind),
         valign: verticalAlign(style),
-        fill: fillOf(style, color),
-        borders,
-      };
-      if (!byRow.has(r)) byRow.set(r, []);
-      byRow.get(r).push(out);
+        fill: fillOf(style, palette),
+        borders: {
+          top: sideColor(border.top, palette),
+          left: sideColor(border.left, palette),
+          right: sideColor(m ? borderOf(m.r1, m.c2).right : border.right, palette),
+          bottom: sideColor(m ? borderOf(m.r2, m.c1).bottom : border.bottom, palette),
+        },
+      });
     });
+    resolveBorders(grid, shownCols.length);
 
-    resolveBorders(byRow, shownRows.length, shownCols.length, rowPos);
-
-    const defaultColPx = sheet.properties && sheet.properties.defaultColWidth ? Math.round(sheet.properties.defaultColWidth * 7 + 5) : DEFAULT_COL_PX;
-    const defaultRowPx = ((sheet.properties && sheet.properties.defaultRowHeight) || DEFAULT_ROW_PT) / 0.75;
+    const props = sheet.properties || {};
+    const widthPx = chars => Math.round(chars * 7 + 5);
+    const defaultColPx = props.defaultColWidth ? widthPx(props.defaultColWidth) : DEFAULT_COL_PX;
+    const defaultRowPt = props.defaultRowHeight || DEFAULT_ROW_PT;
     const model = {
       width: shownCols.length,
-      cols: shownCols.map((c) => { const w = sheet.getColumn(c).width; return Math.max(MIN_COL_PX, w ? Math.round(w * 7 + 5) : defaultColPx); }),
-      rows: shownRows.map((r) => { const h = sheet.getRow(r).height; return { height: Math.round(h ? h / 0.75 : defaultRowPx), cells: byRow.get(r) || [] }; }),
+      cols: shownCols.map((c) => { const w = sheet.getColumn(c).width; return Math.max(MIN_COL_PX, w ? widthPx(w) : defaultColPx); }),
+      rows: shownRows.map((r, i) => ({ height: Math.round((sheet.getRow(r).height || defaultRowPt) / 0.75), cells: grid[i] })),
     };
     return {
       model, html: GridTable.toHtml(model, { sizes: true }), sheetName: sheet.name, sheetIndex, sheetCount: sheets.length || 1, rows: shownRows.length, cols: shownCols.length,
     };
   }
-
-  // --- Le fichier --------------------------------------------------------------------------------------------------------------------------------------------
 
   // Les octets d'un classeur, lus par ExcelJS (chargé à la demande) : le classeur, ou l'erreur d'une personne qui a choisi un mauvais fichier.
   async function readWorkbook(buffer) {
@@ -337,8 +357,9 @@ const GridXlsxImport = (function () {
     return fromArrayBuffer(await file.arrayBuffer(), options);
   }
 
-  // Le classeur lu une seule fois, pour qu'on puisse choisir la feuille avant d'en faire la grille : les feuilles VISIBLES dans l'ordre d'Excel (`index` : leur rang, celui que `build` attend) et
-  // `build(index, { lang })`, qui rend ce que rend importFile pour cette feuille. Un classeur dont toutes les feuilles sont masquées n'en propose qu'une, la première (comme avant).
+  // Le classeur lu une seule fois, pour qu'on puisse choisir la feuille avant d'en faire la grille : les feuilles visibles dans l'ordre d'Excel
+  // (`index` : leur rang, celui que `build` attend) et `build(index, { lang })`, qui rend ce que rend importFile pour cette feuille. Un classeur dont
+  // toutes les feuilles sont masquées n'en propose qu'une, la première.
   async function openFile(file) {
     const workbook = await readWorkbook(await file.arrayBuffer());
     const visible = visibleSheets(workbook);
@@ -350,9 +371,10 @@ const GridXlsxImport = (function () {
     };
   }
 
-  // La feuille à importer quand le classeur en a plusieurs : la liste avec recherche de toutes les listes du widget (js/search-select.js), sous le rectangle que rend `anchor()`.
-  // Rend le rang de la feuille choisie, ou null quand on referme la liste sans choisir (Échap, un clic ailleurs) : rien n'est alors importé. Si la liste ne peut pas s'ouvrir, la première
-  // feuille est prise, comme avant la liste (le message de fin dit laquelle).
+  // La feuille à importer quand le classeur en a plusieurs : la liste avec recherche de toutes les listes du widget (js/search-select.js), sous le
+  // rectangle que rend `anchor()`.
+  // Rend le rang de la feuille choisie, ou null quand on referme la liste sans choisir (Échap, un clic ailleurs) : rien n'est alors importé. Si la
+  // liste ne peut pas s'ouvrir, la première feuille est prise (le message de fin dit laquelle).
   function chooseSheet(sheets, options) {
     return new Promise((resolve) => {
       const host = document.createElement('div');
@@ -374,7 +396,8 @@ const GridXlsxImport = (function () {
         search = SearchSelect.attachSheets(select, {
           popup: true,
           anchor: options && options.anchor,
-          // Un choix ferme la liste AVANT d'envoyer `change` : la fermeture sans choix attend la fin de l'évènement, pour que le choix passe en premier (une promesse ne se tient qu'une fois).
+          // Un choix ferme la liste AVANT d'envoyer `change` : la fermeture sans choix attend la fin de l'évènement, pour que le choix passe en
+          // premier (une promesse ne se tient qu'une fois).
           onClose: () => setTimeout(() => { cleanup(); resolve(null); }, 0),
         });
         select.addEventListener('change', () => resolve(Number(select.value)));
@@ -387,7 +410,8 @@ const GridXlsxImport = (function () {
     });
   }
 
-  // Le sélecteur de fichier du navigateur, appelé dans le geste de la personne (le clic sur la ligne du menu) : l'élément n'existe que le temps du choix.
+  // Le sélecteur de fichier du navigateur, appelé dans le geste de la personne (le clic sur la ligne du menu) : l'élément n'existe que le temps du
+  // choix.
   function chooseFile(onFile) {
     const input = document.createElement('input');
     input.type = 'file';
@@ -399,5 +423,5 @@ const GridXlsxImport = (function () {
     input.click();
   }
 
-  return { openFile, chooseSheet, importFile, fromArrayBuffer, buildModel, chooseFile, themePalette, applyTint, colorHex, MAX_ROWS, MAX_COLS, MAX_CELLS };
+  return { openFile, chooseSheet, importFile, fromArrayBuffer, chooseFile };
 })();
