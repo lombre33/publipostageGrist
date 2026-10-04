@@ -52,13 +52,22 @@ const ConditionRules = (function () {
   // getUTC*, jamais getFullYear/getMonth/getDate (heure locale) - même raison que parseDateExpected ci-dessus. Jour calendaire NU (colonne Date, ou la
   // valeur "expected" saisie dans la règle, toujours sans fuseau) - pour une colonne DateTime:<fuseau>, cf. dayKeyInZone ci-dessous.
   function dayKey(d) { return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0'); }
+  const zoneFormatters = new Map(); // fuseau -> formateur Intl : en construire un coûte ~60 µs, formater moins d'1 µs
+  function zoneFormatter(tz) {
+    if (!zoneFormatters.has(tz)) {
+      let formatter;
+      try { formatter = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }); }
+      catch (e) { formatter = { format: dayKey }; } // fuseau que le moteur JS ne reconnaît pas (très rare) : jour UTC plutôt que planter la comparaison
+      zoneFormatters.set(tz, formatter);
+    }
+    return zoneFormatters.get(tz);
+  }
   // Jour calendaire d'un instant DANS LE FUSEAU DE LA COLONNE (ex. "DateTime:Europe/Paris") : sans ça, un DateTime pris le soir à Paris (23h30, encore
   // le 26/09 à Paris) est déjà le 27/09 en UTC, et "= 26/09/2026" échouerait à tort (audit du coordinateur, 2026-09-28, trouvé en vérifiant CE correctif,
   // séparément du bug Choice d'Antoine dont la cause est ailleurs - cf. js/grist-api.js:includeColumns). 'en-CA' est le format Intl qui rend directement
   // "AAAA-MM-JJ", sans repasser par une regex.
   function dayKeyInZone(d, tz) {
-    try { return new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d); }
-    catch (e) { return dayKey(d); } // fuseau que le moteur JS ne reconnaît pas (très rare) : repli UTC plutôt que planter la comparaison.
+    try { return zoneFormatter(tz).format(d); } catch (e) { return dayKey(d); } // date hors bornes : format() lève, jour UTC
   }
   // "DateTime:Europe/Paris" -> "Europe/Paris" ; "DateTime" seul (sans fuseau explicite) ou "Date" -> null, jour UTC nu (dayKey), déjà correct pour ces
   // deux cas (vérifié à la source grist-core, extractInfoFromColType : le fuseau est tout ce qui suit le premier ":").
@@ -66,6 +75,15 @@ const ConditionRules = (function () {
     const t = String(columnType || '');
     return t.indexOf('DateTime:') === 0 ? t.slice('DateTime:'.length) : null;
   }
+
+  // Les six comparaisons communes aux dates, aux nombres et aux textes ; un autre opérateur n'est jamais vrai.
+  const COMPARATORS = new Map([
+    ['=', (a, b) => a === b], ['≠', (a, b) => a !== b],
+    ['>', (a, b) => a > b], ['<', (a, b) => a < b],
+    ['≥', (a, b) => a >= b], ['≤', (a, b) => a <= b],
+  ]);
+  const compare = (operator, a, b) => COMPARATORS.has(operator) && COMPARATORS.get(operator)(a, b);
+  const textOf = v => String(isEmpty(v) ? '' : v);
 
   // '=', '≠', '>', '<', '≥', '≤', 'contient', 'vide', 'non vide' - même liste que planning/feature-conditional-content.md (jamais implémentée ailleurs,
   // donc rien à réutiliser). `columnType` (chaîne Grist telle que js/grist-api.js:getColumnType la renvoie - "Text","Numeric","Bool","Date",
@@ -97,10 +115,7 @@ const ConditionRules = (function () {
 
     if (type === 'Bool' && (actual === true || actual === false)) {
       const expectedBool = parseBoolExpected(expected);
-      if (expectedBool !== null) {
-        if (operator === '=') return actual === expectedBool;
-        if (operator === '≠') return actual !== expectedBool;
-      }
+      if (expectedBool !== null && (operator === '=' || operator === '≠')) return compare(operator, actual, expectedBool);
     }
 
     if (type === 'Date' || type.indexOf('DateTime') === 0) {
@@ -108,61 +123,17 @@ const ConditionRules = (function () {
       if (actualDate) {
         const tz = dateTimeZone(type);
         const aKey = tz ? dayKeyInZone(actualDate, tz) : dayKey(actualDate);
-        // "contient" à part, AVANT d'exiger que `expected` soit une date COMPLÈTE valide : un vrai "contient" cherche un fragment ("2026", "09-26"),
-        // jamais une date entière - sinon ça revient juste à refaire "=" (audit du coordinateur, 2026-09-28 : avant ce correctif, "contient" était
-        // toujours faux ici, ce qui régressait par rapport à AVANT le tout premier correctif (0b2550e), où ça marchait par coïncidence de format sur le
-        // chemin aperçu seulement - String(GristDate) -> "AAAA-MM-JJ", objtypes.ts). aKey (même jour calendaire, dans le fuseau de la colonne) marche
-        // pareil sur les deux chemins de lecture, sans coïncidence.
         if (operator === 'contient') return aKey.indexOf(String(expected == null ? '' : expected).trim().toLowerCase()) !== -1;
         const expectedDate = parseDateExpected(expected);
-        // `expected` illisible en date (ex. "31/02/2026", ou vide) : faux pour TOUS les opérateurs restants, jamais un repli sur la comparaison
-        // générique en texte ci-dessous - sinon ">"/"≥"/"<" retombaient sur un ordre lexicographique de chaînes et matchaient parfois par accident
-        // (ex. "> 09/26/2026" ou "≥ 09/26/2026" matchaient le 26/09/2026 ; régression trouvée seulement sur ces opérateurs, "=" étant déjà correct
-        // depuis le premier correctif - audit du coordinateur, 2026-09-28).
-        if (!expectedDate) return false;
-        // Comparaison à la granularité JOUR pour TOUS les autres opérateurs (dans le fuseau de la colonne pour DateTime:<fuseau>, en UTC nu pour
-        // Date - déjà correct sans fuseau, cf. GristDate.toString()) : la modale ne propose de saisir qu'un jour, jamais une heure (placeholder),
-        // donc comparer l'instant exact rendait "=" (jour) et ">"/"≤" (instant) incohérents entre eux pour une même valeur - ex. 14h le jour J
-        // matchait à la fois "= J" et "> J", alors que "≤ J" échouait (audit du coordinateur, 2026-09-28).
-        const eKey = dayKey(expectedDate);
-        switch (operator) {
-          case '=': return aKey === eKey;
-          case '≠': return aKey !== eKey;
-          case '>': return aKey > eKey;
-          case '<': return aKey < eKey;
-          case '≥': return aKey >= eKey;
-          case '≤': return aKey <= eKey;
-          default: return false;
-        }
+        return !!expectedDate && compare(operator, aKey, dayKey(expectedDate));
       }
     }
 
-    if (operator === 'contient') return String(isEmpty(actual) ? '' : actual).toLowerCase().indexOf(String(expected).toLowerCase()) !== -1;
+    if (operator === 'contient') return textOf(actual).toLowerCase().indexOf(String(expected).toLowerCase()) !== -1;
     const aNum = Number(actual);
     const eNum = Number(expected);
-    const bothNumeric = !isEmpty(actual) && !isEmpty(expected) && actual !== true && actual !== false && isFinite(aNum) && isFinite(eNum);
-    if (bothNumeric) {
-      switch (operator) {
-        case '=': return aNum === eNum;
-        case '≠': return aNum !== eNum;
-        case '>': return aNum > eNum;
-        case '<': return aNum < eNum;
-        case '≥': return aNum >= eNum;
-        case '≤': return aNum <= eNum;
-      }
-    }
-    // .trim() : une valeur copiée-collée dans Grist ou dans la règle avec un espace en trop ne doit pas suffire à casser un "=" par ailleurs correct.
-    const aStr = String(isEmpty(actual) ? '' : actual).trim();
-    const eStr = String(isEmpty(expected) ? '' : expected).trim();
-    switch (operator) {
-      case '=': return aStr === eStr;
-      case '≠': return aStr !== eStr;
-      case '>': return aStr > eStr;
-      case '<': return aStr < eStr;
-      case '≥': return aStr >= eStr;
-      case '≤': return aStr <= eStr;
-      default: return false;
-    }
+    if (!isEmpty(actual) && !isEmpty(expected) && actual !== true && actual !== false && isFinite(aNum) && isFinite(eNum)) return compare(operator, aNum, eNum);
+    return compare(operator, textOf(actual).trim(), textOf(expected).trim());
   }
 
   // "Colonne" d'une règle : nue (colonne de la table courante, ex. "TypeDossier") ou qualifiée "Table.Colonne" pour une valeur cross-table déjà

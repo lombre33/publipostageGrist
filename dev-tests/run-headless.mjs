@@ -205,6 +205,7 @@ const NODE_SCRIPTS = {
   codeHygiene: 'verify-code-hygiene.mjs', // Node pur, sans navigateur : clés i18n, variables CSS et règles CSS sans usage
   templateOrganizerUnit: 'unit-template-organizer.mjs', // Node pur (vm) : logique de l'arbre de rangement, js/template-organizer.js
   templatePreferencesUnit: 'unit-template-preferences.mjs', // Node pur (vm + faux docApi) : js/template-preferences.js, file d'écritures et retour arrière
+  conditionRulesUnit: 'unit-condition-rules.mjs', // Node pur (vm) : js/condition-rules.js:compareValues - vide, liste, Oui / Non, nombres, dates et fuseaux (navigateur réglé ailleurs qu'en UTC), un seul formateur Intl par fuseau
   calcMouse: 'verify-calc-mouse.mjs', // bulle « Calcul » (variables calculées) à la vraie souris et au vrai clavier : ligne « Calcul » de la liste « # », fenêtre dans 700x400, liste des colonnes devant elle, barre aux boutons grisés aux pixels, case étroite, Lecture, anglais ; 700x400 clair et sombre
   xlsxNumberFormatUnit: 'unit-xlsx-number-format.mjs', // Node pur (vm) : js/xlsx-number-format.js, le texte qu'Excel montre pour une valeur (euros, pourcentages, dates, zéros de tête, sections, français et anglais) - sert à l'import d'un classeur dans une grille
   formulaUnit: 'unit-formula.mjs', // Node pur (vm) : js/formula.js, le moteur des bulles « Calcul » (variables calculées) : opérations, listes de lignes, fonctions, fautes de syntaxe, écriture saisie et enregistrée
