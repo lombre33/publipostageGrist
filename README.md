@@ -55,7 +55,7 @@ La galerie **Créer à partir d'un modèle…** propose des modèles prêts à l
 - **Autres attributs** : insère d'autres colonnes de la même ligne d'une table liée, à la suite d'une variable.
 - **Calcul** : une formule avec des colonnes et les fonctions SOMME, MOYENNE, MIN, MAX, NB et ARRONDI, évaluée par un petit analyseur intégré (jamais par `eval`).
 - **Bulles prêtes à poser** : date du jour, heure actuelle, e-mail de la personne connectée.
-- **Renommages suivis** : quand une table ou une colonne est renommée dans Grist, les modèles sont réécrits à l'ouverture suivante ; une variable restée sans colonne devient rouge et se corrige par « Colonne… ».
+- **Renommages suivis** : quand une table ou une colonne est renommée dans Grist, les modèles sont réécrits à l'ouverture suivante ; une variable restée sans colonne devient rouge, et sa barre propose alors « Colonne… » pour choisir la bonne (le bouton n'est là que sur une variable rouge).
 - **Choix du modèle** : modèle par défaut à l'ouverture, modèle par défaut d'une vue, ou modèle choisi selon la ligne par des règles (Réglages > Vue).
 
 ### Lecture, enregistrement et collaboration

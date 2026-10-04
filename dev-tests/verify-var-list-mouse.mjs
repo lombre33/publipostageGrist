@@ -173,8 +173,10 @@ const barState = () => page.evaluate(() => {
   const bar = document.querySelector('.v2-varfmt-toolbar');
   const button = bar.querySelector('button[data-action="var-list"]');
   const order = Array.from(bar.querySelectorAll('.v2-varbadge-actions button')).map(b => b.getAttribute('data-action'));
+  // « Colonne » n'est là que sur une variable cassée : caché (aucune boîte) sur la bulle saine d'ici.
+  const column = bar.querySelector('button[data-action="var-column"]');
   const r = bar.getBoundingClientRect();
-  return { visible: bar.classList.contains('visible'), order, active: button.classList.contains('is-active'), disabled: button.getAttribute('aria-disabled') === 'true', title: button.title, left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+  return { visible: bar.classList.contains('visible'), order, columnHidden: !!column && column.hidden && column.getClientRects().length === 0, active: button.classList.contains('is-active'), disabled: button.getAttribute('aria-disabled') === 'true', title: button.title, left: r.left, right: r.right, top: r.top, bottom: r.bottom };
 });
 const modalState = () => page.evaluate(() => {
   const overlay = document.getElementById('var-list-modal');
@@ -212,12 +214,12 @@ async function run(theme) {
   await page.evaluate(doc => { Editor.setHTML(doc); }, DOC);
   await page.waitForTimeout(250);
 
-  // 1) Un vrai clic sur la bulle : la barre, avec le bouton « Liste » entre « Boucle » et « Colonne ».
+  // 1) Un vrai clic sur la bulle : la barre, avec le bouton « Liste » après « Boucle » (« Colonne » vient ensuite, mais seulement sur une variable cassée).
   const badge = await clickSel('.tiptap .var-badge[data-column="Themes"]');
   check(`${T} - la bulle Liste de choix se trouve et se clique`, badge.found && badge.inViewport, badge);
   const bar = await barState();
-  check(`${T} - clic sur la bulle : barre ouverte, entière dans le panneau, bouton « Liste » entre « Boucle » et « Colonne », ni grisé ni bleu`,
-    bar.visible && bar.left >= 0 && bar.right <= WIDTH + 0.5 && bar.top >= 0 && JSON.stringify(bar.order.slice(-3)) === JSON.stringify(['var-loop', 'var-list', 'var-column']) && !bar.disabled && !bar.active, bar);
+  check(`${T} - clic sur la bulle : barre ouverte, entière dans le panneau, bouton « Liste » après « Boucle », « Colonne » absente (bulle saine), « Liste » ni grisé ni bleu`,
+    bar.visible && bar.left >= 0 && bar.right <= WIDTH + 0.5 && bar.top >= 0 && JSON.stringify(bar.order.slice(-3)) === JSON.stringify(['var-loop', 'var-list', 'var-column']) && bar.columnHidden && !bar.disabled && !bar.active, bar);
   const button = await hitTest(LIST_BUTTON);
   check(`${T} - le bouton « Liste » est dans le panneau, au premier plan et assez grand pour un vrai clic (au moins 24 px)`, button.found && button.inViewport && button.onTop && button.w >= 24 && button.h >= 24, button);
   await shot(`${theme}-1-barre`);

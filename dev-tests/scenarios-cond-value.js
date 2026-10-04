@@ -159,7 +159,7 @@
   function setInput(input, value) { input.value = value; input.dispatchEvent(new Event('input', { bubbles: true })); }
   function barButton(action) {
     const b = toolbar().querySelector(`button[data-action="${action}"]`);
-    return b ? { disabled: b.classList.contains('is-disabled'), aria: b.getAttribute('aria-disabled'), active: b.classList.contains('is-active'), title: b.title } : null;
+    return b ? { disabled: b.classList.contains('is-disabled'), aria: b.getAttribute('aria-disabled'), active: b.classList.contains('is-active'), title: b.title, hidden: b.hidden && b.getClientRects().length === 0 } : null;
   }
   function barState() {
     const bar = toolbar();
@@ -610,7 +610,7 @@
   // === Barre flottante d'une valeur ===
   cases.push({
     id: 'condvalue_caret_in_a_value_opens_the_variable_toolbar_with_three_buttons_greyed',
-    description: 'Le curseur dans une valeur - ou la valeur sélectionnée - ouvre la barre des variables au-dessus d’elle : condition active (bleue) si posée, « Autres attributs », « Boucle » et « Colonne » grisés - pas retirés - avec leur raison en info-bulle, sans réglage nombre, date ni case ; elle se ferme quand la sélection quitte la valeur ou la déborde',
+    description: 'Le curseur dans une valeur - ou la valeur sélectionnée - ouvre la barre des variables au-dessus d’elle : condition active (bleue) si posée, « Autres attributs » et « Boucle » grisés - pas retirés - avec leur raison en info-bulle, « Colonne » absente (elle n’est là que sur une variable cassée), sans réglage nombre, date ni case ; elle se ferme quand la sélection quitte la valeur ou la déborde',
     run: async (h) => {
       await seed(h);
       Editor.setHTML('<p>Début</p><p>Avant ' + val('Premier mot', COND_URGENT) + ' et ' + val('libre') + ' après</p><p>Fin</p>');
@@ -626,8 +626,8 @@
       caretInValue(1, 2);
       await h.sleep(120);
       const withoutCondition = barState();
-      const grey = s => s.linked.disabled && s.linked.aria === 'true' && !s.linked.active && s.loop.disabled && s.loop.aria === 'true' && !s.loop.active && s.column.disabled && s.column.aria === 'true'
-        && s.linked.title === I18n.t('varToolbar.notForValue') && s.loop.title === I18n.t('varToolbar.loopValue') && s.column.title === I18n.t('varToolbar.notForValue')
+      const grey = s => s.linked.disabled && s.linked.aria === 'true' && !s.linked.active && s.loop.disabled && s.loop.aria === 'true' && !s.loop.active && s.column.hidden
+        && s.linked.title === I18n.t('varToolbar.notForValue') && s.loop.title === I18n.t('varToolbar.loopValue')
         && s.numberHidden && s.dateHidden && s.boolHidden;
       // La valeur sélectionnée en entier ouvre la même barre.
       ed().commands.setNodeSelection(valueNodes()[0].pos);
@@ -650,7 +650,7 @@
 
   cases.push({
     id: 'condvalue_greyed_toolbar_buttons_open_nothing_and_a_variable_inside_a_value_keeps_its_own_toolbar',
-    description: 'Un clic sur « Autres attributs », « Boucle » ou « Colonne » grisés d’une valeur n’ouvre aucune fenêtre et ne change ni la valeur ni la sélection ; une bulle de variable DANS une valeur, sélectionnée, garde sa barre à elle (réglage nombre pour une colonne nombre, boutons actifs), puis la barre de la valeur revient au curseur dans son texte',
+    description: 'Un clic sur « Autres attributs » ou « Boucle » grisés d’une valeur n’ouvre aucune fenêtre et ne change ni la valeur ni la sélection ; une bulle de variable DANS une valeur, sélectionnée, garde sa barre à elle (réglage nombre pour une colonne nombre, boutons actifs, sans « Colonne » tant qu’elle n’est pas cassée), puis la barre de la valeur revient au curseur dans son texte',
     run: async (h) => {
       await seed(h);
       Editor.setHTML('<p>Dossier ' + val('Montant ' + badgeHtml('Montant') + ' et ' + badgeHtml('Responsable'), COND_URGENT) + '</p><p>Fin</p>');
@@ -659,7 +659,7 @@
       caretInValue(0, 2);
       await h.sleep(120);
       const selectionBefore = ed().state.selection.from;
-      ['var-linked', 'var-loop', 'var-column'].forEach(pressToolbarButton);
+      ['var-linked', 'var-loop'].forEach(pressToolbarButton);
       await h.sleep(80);
       const open = { linked: VariableLinkedAttrs.isOpen(), loop: VariableLoop.isOpen(), condition: VariableCondition.isOpen() };
       const unchanged = Editor.getHTML() === source && ed().state.selection.from === selectionBefore && visible(toolbar());
@@ -674,9 +674,9 @@
       await h.sleep(120);
       const backOnValue = barState();
       const pass = !open.linked && !open.loop && !open.condition && unchanged
-        && onNumber.visible && !onNumber.numberHidden && onNumber.linked.title !== I18n.t('varToolbar.notForValue') && onNumber.column.title !== I18n.t('varToolbar.notForValue') && !onNumber.column.disabled
-        && onRef.visible && !onRef.linked.disabled && onRef.linked.title === I18n.t('varToolbar.linked')
-        && backOnValue.visible && backOnValue.numberHidden && backOnValue.linked.disabled && backOnValue.linked.title === I18n.t('varToolbar.notForValue') && backOnValue.condition.active;
+        && onNumber.visible && !onNumber.numberHidden && onNumber.linked.title !== I18n.t('varToolbar.notForValue') && onNumber.column.hidden
+        && onRef.visible && !onRef.linked.disabled && onRef.linked.title === I18n.t('varToolbar.linked') && onRef.column.hidden
+        && backOnValue.visible && backOnValue.numberHidden && backOnValue.linked.disabled && backOnValue.linked.title === I18n.t('varToolbar.notForValue') && backOnValue.condition.active && backOnValue.column.hidden;
       return { pass, notes: JSON.stringify({ open, unchanged, onNumber, onRef, backOnValue }) };
     },
   });

@@ -1,7 +1,8 @@
-// Suite "varColumn" - bouton « Colonne… » de la barre flottante d'une bulle #Variable (point 11 d'Antoine du 2026-10-02 : « si une variable est cassée, est-ce que ça peut aider, quand
-// je reviens sur le modèle, d'aller chercher le bon nom ? »). Une liste avec recherche de toutes les colonnes, celles de la table de la page en tête ; la colonne choisie prend la place
-// de celle de la bulle - cassée ou non - avec la même règle que « Remplacer » d'Autres attributs : condition, format du même genre et boucle de la même source sont gardés.
-// Une table pas encore liée ouvre d'abord la fenêtre de choix de la clé. La souris réelle à 700x400 est dans verify-var-toolbar-mouse.mjs.
+// Suite "varColumn" - bouton « Colonne… » de la barre flottante d'une bulle #Variable (point 11 des retours du 2026-10-02 : « si une variable est cassée, est-ce que ça peut aider, quand
+// je reviens sur le modèle, d'aller chercher le bon nom ? »), qui n'est là QUE sur une variable cassée (bulle rouge), demande du 2026-10-04 : « pas à chaque fois, uniquement quand une
+// variable est cassée » - une variable saine, un calcul, un bloc de texte, une valeur et une case conditionnelle ne l'ont pas. Une liste avec recherche de toutes les colonnes, celles de
+// la table de la page en tête ; la colonne choisie prend la place de celle de la bulle avec la même règle que « Remplacer » d'Autres attributs : condition, format du même genre et
+// boucle de la même source sont gardés. Une table pas encore liée ouvre d'abord la fenêtre de choix de la clé. La souris réelle à 700x400 est dans verify-var-toolbar-mouse.mjs.
 (function () {
   const cases = [];
   const PAGE = 'VcoNotifications';
@@ -66,7 +67,15 @@
   const closeKeyWindow = async h => { if (keyWindowOpen()) { document.getElementById('link-config-cancel').click(); await h.sleep(60); } };
   const ruleOf = table => { const rule = GristAPI.getLinkRule(table); return rule ? [rule.mode, rule.colonneCible, rule.colonneSource] : null; };
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-  const buttonState = () => { const b = columnButton(); return { disabled: b.getAttribute('aria-disabled') === 'true', title: b.title, label: b.getAttribute('aria-label') }; };
+  // Le bouton tel que la personne le voit : la barre est ouverte ET le bouton a une boîte (un bouton `hidden` n'en a aucune). Une barre fermée ne montre rien.
+  const buttonState = () => {
+    const b = columnButton();
+    return {
+      shown: !!b && toolbar().classList.contains('visible') && b.getClientRects().length > 0,
+      hidden: !!b && b.hidden, disabled: !!b && b.getAttribute('aria-disabled') === 'true', title: b ? b.title : null, label: b ? b.getAttribute('aria-label') : null,
+    };
+  };
+  const barIsOpen = () => toolbar().classList.contains('visible');
 
   // Sélection d'une bulle d'un type donné (calcul, bloc de texte, case conditionnelle) dans un document neuf : la barre s'ouvre sur elle comme sur un clic.
   async function selectNodeOfType(h, html, typeName) {
@@ -81,38 +90,44 @@
   }
 
   cases.push({
-    id: 'varcolumn_button_is_active_for_a_variable_and_greyed_for_the_other_bubbles',
-    description: 'La barre d’une variable porte « Colonne… » (actif, son info-bulle dit quand la colonne est introuvable) ; elle reste là, grisée avec sa raison, pour un calcul, un bloc de texte et une case conditionnelle',
+    id: 'varcolumn_button_shows_only_on_a_broken_variable',
+    description: 'La barre d’une variable saine (colonne de la page, d’une autre table, chemin de références) n’a pas « Colonne… » ; elle l’a, avec une info-bulle qui dit que la colonne est introuvable, sur une variable cassée (colonne, chemin ou table disparus) ; un calcul (même cassé), un bloc de texte et une case conditionnelle ne l’ont jamais',
     run: async (h) => {
       const states = {};
+      // Dans l'ordre : trois variables saines, puis trois cassées (colonne, chemin de références, table disparus).
+      const kinds = ['valid', 'validPath', 'otherTable', 'broken', 'brokenPath', 'brokenTable'];
+      const html = `<p>${[badge(PAGE, 'Titre'), badge(PAGE, 'Projet.Nom'), badge('VcoProjet', 'Nom'), badge(PAGE, 'Ancien'), badge(PAGE, 'Projet.Inconnu'), badge('VcoDisparue', 'Nom')].join(' ')}</p>`;
       for (const lang of ['fr', 'en']) {
         await inLang(lang, async () => {
-          await seed(h, `<p>${badge(PAGE, 'Titre')} ${badge(PAGE, 'Ancien')}</p>`);
-          await selectBadge(h, 0);
-          states[lang + '_valid'] = buttonState();
-          await selectBadge(h, 1);
-          states[lang + '_broken'] = buttonState();
+          await seed(h, html);
+          for (let i = 0; i < kinds.length; i++) {
+            await selectBadge(h, i);
+            states[lang + '_' + kinds[i]] = Object.assign(buttonState(), { bar: barIsOpen(), red: document.querySelectorAll('.tiptap .var-badge')[i].classList.contains('var-badge-broken') });
+          }
         });
       }
       await inLang('fr', async () => {
         await selectNodeOfType(h, '<p><span class="calc-badge" data-formula="{VcoNotifications.Montant}*2"></span></p>', 'calcBadge');
-        states.calc = buttonState();
+        states.calc = Object.assign(buttonState(), { bar: barIsOpen() });
+        await selectNodeOfType(h, '<p><span class="calc-badge" data-formula="{VcoNotifications.Ancien}*2"></span></p>', 'calcBadge');
+        states.calcBroken = Object.assign(buttonState(), { bar: barIsOpen(), red: !!document.querySelector('.tiptap .calc-badge-broken') });
         await selectNodeOfType(h, '<div class="conditional-text"><p>Texte conditionnel</p></div>', 'conditionalText');
-        states.block = buttonState();
+        states.block = Object.assign(buttonState(), { bar: barIsOpen() });
         await selectNodeOfType(h, '<p><span class="conditional-checkbox">☐</span></p>', 'conditionalCheckbox');
-        states.checkbox = buttonState();
+        states.checkbox = Object.assign(buttonState(), { bar: barIsOpen() });
       });
-      const expected = {
-        fr_valid: ['Changer la colonne de la variable…', false],
-        fr_broken: ['Cette variable ne trouve plus sa colonne : choisir la bonne…', false],
-        en_valid: ['Change the variable’s column…', false],
-        en_broken: ['This variable can no longer find its column: pick the right one…', false],
-        calc: ['Disponible pour une variable, pas pour un calcul', true],
-        block: ['Disponible pour une variable, pas pour un bloc de texte', true],
-        checkbox: ['Disponible pour une variable, pas pour une case conditionnelle', true],
-      };
-      const wrong = Object.keys(expected).filter(k => states[k].title !== expected[k][0] || states[k].label !== expected[k][0] || states[k].disabled !== expected[k][1]);
-      return { pass: wrong.length === 0, notes: wrong.map(k => k + ' : ' + JSON.stringify(states[k])).join(' | ') || 'ok' };
+      const BROKEN = { fr: 'Cette variable ne trouve plus sa colonne : choisir la bonne…', en: 'This variable can no longer find its column: pick the right one…' };
+      const absent = s => s.bar && !s.shown && s.hidden;
+      const present = (s, lang) => s.bar && s.shown && !s.hidden && !s.disabled && s.title === BROKEN[lang] && s.label === BROKEN[lang];
+      const wrong = [];
+      for (const lang of ['fr', 'en']) {
+        // Le bouton suit la bulle rouge, ni plus ni moins.
+        ['valid', 'validPath', 'otherTable'].forEach(kind => { const s = states[lang + '_' + kind]; if (!absent(s) || s.red) wrong.push(lang + '_' + kind); });
+        ['broken', 'brokenPath', 'brokenTable'].forEach(kind => { const s = states[lang + '_' + kind]; if (!present(s, lang) || !s.red) wrong.push(lang + '_' + kind); });
+      }
+      ['calc', 'calcBroken', 'block', 'checkbox'].forEach(kind => { if (!absent(states[kind])) wrong.push(kind); });
+      if (!states.calcBroken.red) wrong.push('calcBroken (la bulle n’est pas rouge : le cas ne prouve rien)');
+      return { pass: wrong.length === 0, notes: wrong.length ? wrong.map(k => k + ' : ' + JSON.stringify(states[k.split(' ')[0]])).join(' | ') : 'ok' };
     },
   });
 
@@ -179,6 +194,50 @@
   });
 
   cases.push({
+    id: 'varcolumn_button_comes_with_a_column_renamed_in_grist_and_goes_once_the_variable_is_repaired',
+    description: 'Une colonne renommée dans Grist rend la bulle rouge et « Colonne… » apparaît dans sa barre ; choisir la nouvelle colonne répare la bulle et la barre qui revient n’a plus le bouton ; renommée une seconde fois, il revient au retour sur le modèle',
+    run: async (h) => {
+      await seed(h, `<p>${badge(PAGE, 'Titre')}</p>`);
+      const stub = window.__gristStub;
+      const redBubble = () => document.querySelector('.tiptap .var-badge').classList.contains('var-badge-broken');
+      const state = () => Object.assign(buttonState(), { bar: barIsOpen(), red: redBubble() });
+      await selectBadge(h, 0);
+      const beforeRename = state();
+      const renamed = stub.renameColumn(PAGE, 'Titre', 'Intitule');
+      await GristAPI.refreshSchema();
+      // Retour sur le modèle : la bulle garde l'ancien nom.
+      Editor.setHTML(`<p>${badge(PAGE, 'Titre')}</p>`);
+      await h.sleep(200);
+      await selectBadge(h, 0);
+      const afterRename = state();
+      pressColumn();
+      await h.sleep(200);
+      await pickRow(h, PAGE + '.Intitule');
+      await h.sleep(250);
+      const reselected = !!ed().state.selection.node && ed().state.selection.node.type.name === 'varBadge';
+      const afterRepair = state();
+      const repairedTo = attrsOf(0).column;
+      // Le nom change encore dans Grist : au retour sur le modèle la bulle est de nouveau rouge et le bouton revient.
+      const renamedAgain = stub.renameColumn(PAGE, 'Intitule', 'Objet');
+      await GristAPI.refreshSchema();
+      Editor.setHTML(`<p>${badge(PAGE, 'Intitule')}</p>`);
+      await h.sleep(200);
+      await selectBadge(h, 0);
+      const afterSecondRename = state();
+      const checks = {
+        renamedInGrist: renamed && renamedAgain,
+        saneBubbleHasNoButton: beforeRename.bar && !beforeRename.red && !beforeRename.shown && beforeRename.hidden,
+        renamedBubbleIsRedAndHasTheButton: afterRename.bar && afterRename.red && afterRename.shown && !afterRename.hidden && !afterRename.disabled,
+        listRepairsIt: repairedTo === 'Intitule' && reselected,
+        repairedBubbleIsNeitherRedNorOffered: afterRepair.bar && !afterRepair.red && !afterRepair.shown && afterRepair.hidden,
+        buttonComesBackWithTheNextRename: afterSecondRename.bar && afterSecondRename.red && afterSecondRename.shown,
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: failed.join(', ') || 'ok' };
+    },
+  });
+
+  cases.push({
     id: 'varcolumn_replacement_drops_only_what_fits_the_old_column',
     description: 'Le format d’un autre genre tombe (nombre, date, Oui / Non, zéro seul), celui du même genre reste ; la boucle reste pour une colonne de la même source et tombe sinon ; la condition reste toujours',
     run: async (h) => {
@@ -236,7 +295,9 @@
       document.getElementById('link-config-confirm').click();
       await h.sleep(300);
       const confirmed = { attrs: attrsOf(0), rule: ruleOf('VcoAnnuaire'), windowClosed: !keyWindowOpen() };
-      // Une table déjà liée (VcoProjet) : rien à demander.
+      // Une table déjà liée (VcoProjet) : rien à demander. La bulle réparée n'a plus le bouton : retour à une bulle cassée.
+      Editor.setHTML(`<p>${badge(PAGE, 'Libelle', attr('data-condition', COND))}</p>`);
+      await h.sleep(120);
       await selectBadge(h, 0);
       pressColumn();
       await h.sleep(200);

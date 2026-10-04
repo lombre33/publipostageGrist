@@ -323,7 +323,7 @@
 
   cases.push({
     id: 'varlist_toolbar_button_enabled_active_and_greyed_with_reasons',
-    description: 'Barre d’une bulle : le bouton « Liste » se place entre « Boucle » et « Colonne », actif pour une colonne Liste de choix ou Liste de références, bleu quand un réglage s’écarte du défaut, grisé (jamais retiré, raison en info-bulle) pour un texte, une liste en boucle, un calcul, un bloc de texte, une valeur et une case conditionnelle ; un clic sur le bouton grisé n’ouvre rien',
+    description: 'Barre d’une bulle : le bouton « Liste » se place après « Boucle » (« Colonne » vient ensuite, mais seulement sur une variable cassée), actif pour une colonne Liste de choix ou Liste de références, bleu quand un réglage s’écarte du défaut, grisé (jamais retiré, raison en info-bulle) pour un texte, une liste en boucle, un calcul, un bloc de texte, une valeur et une case conditionnelle ; un clic sur le bouton grisé n’ouvre rien',
     run: async (h) => {
       await seed(h);
       const loop = { repeat: 'inline', table: PEOPLE, via: { table: PAGE, column: 'Membres' }, separator: ', ', lastSeparator: ' et ' };

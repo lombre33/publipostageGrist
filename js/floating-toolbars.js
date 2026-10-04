@@ -629,7 +629,8 @@ const FloatingToolbars = (function () {
 
   // Barre flottante d'une bulle #Variable (même modèle que l'image), ouverte sur toutes les variables : un groupe d'actions à gauche (condition
   // d'affichage, autres attributs de la même ligne, boucle sur les lignes liées, liste des valeurs d'une colonne Liste de choix ou de références,
-  // colonne), puis, pour une colonne nombre, date ou Oui / Non seulement, le sous-panneau de format choisi par le type de la colonne Grist (Oui /
+  // et, SEULEMENT sur une variable cassée, le choix d'une autre colonne), puis, pour une colonne nombre, date ou Oui / Non seulement, le
+  // sous-panneau de format choisi par le type de la colonne Grist (Oui /
   // Non : trois cases et « vrai / faux »). Une bulle « Calcul » (js/variable-calc.js) ouvre la même barre : « Modifier le calcul » prend la place du
   // groupe d'actions (condition, autres attributs et boucle sont grisés, sans objet pour une formule), avec le réglage nombre puisque son résultat
   // est un nombre.
@@ -642,7 +643,7 @@ const FloatingToolbars = (function () {
       `<button data-action="var-linked" title="${I18n.t('varToolbar.linked')}" aria-label="${I18n.t('varToolbar.linked')}">${Icons.svg('varLinked')}</button>`,
       `<button data-action="var-loop" title="${I18n.t('varToolbar.loop')}" aria-label="${I18n.t('varToolbar.loop')}">${Icons.svg('varLoop')}</button>`,
       `<button data-action="var-list" title="${I18n.t('varToolbar.list')}" aria-label="${I18n.t('varToolbar.list')}">${Icons.svg('varList')}</button>`,
-      `<button data-action="var-column" title="${I18n.t('varToolbar.column')}" aria-label="${I18n.t('varToolbar.column')}">${Icons.svg('varColumn')}</button>`,
+      `<button data-action="var-column" title="${I18n.t('varToolbar.columnBroken')}" aria-label="${I18n.t('varToolbar.columnBroken')}" hidden>${Icons.svg('varColumn')}</button>`,
       '</div>',
       '<span class="v2-floating-sep" data-var-sep></span>',
       '<div data-var-panel="number">',
@@ -786,11 +787,15 @@ const FloatingToolbars = (function () {
       setDisabled(action, true, I18n.t(reasonKey));
       setActive(action, false);
     }
-    // « Colonne… » : active pour une variable - son info-bulle dit quand la colonne est introuvable, c'est là qu'on la répare -, grisée pour un
-    // calcul, un bloc de texte et une case conditionnelle, avec sa raison en info-bulle. `reasonKey` : le texte de la raison, absent quand le bouton
-    // est actif.
-    function syncColumnButton(node, reasonKey) {
-      setLabeled('var-column', !!reasonKey, I18n.t(reasonKey || (VariableColumn.isBroken(node.attrs) ? 'varToolbar.columnBroken' : 'varToolbar.column')));
+    // « Colonne… » : là SEULEMENT sur une variable cassée (la bulle rouge : colonne, chemin ou table disparus dans Grist), pour y choisir la bonne
+    // colonne ; absente - cachée, pas grisée : demande expresse, exception à « rien ne disparaît » - d'une variable saine, d'un calcul (même cassé),
+    // d'un bloc de texte, d'une valeur et d'une case conditionnelle. Relue à chaque ouverture de la barre : une variable réparée la perd.
+    function syncColumnButton(node) {
+      const btn = button('var-column');
+      if (!btn) return;
+      const broken = node.type.name === 'varBadge' && VariableColumn.isBroken(node.attrs);
+      btn.hidden = !broken;
+      if (broken) setLabeled('var-column', false, I18n.t('varToolbar.columnBroken'));
     }
     // « Liste… » : active (bleue) quand la bulle a un réglage de liste, grisée pour une colonne qui n'est pas une liste, une bulle en boucle, un
     // calcul, un bloc de texte, une valeur et une case conditionnelle, avec sa raison en info-bulle. `status` : { active, enabled, title }, comme
@@ -817,9 +822,9 @@ const FloatingToolbars = (function () {
     // Un bloc de texte conditionnel, une valeur et une case ont la même barre : seuls le nom de la condition et les raisons des boutons grisés
     // changent (clés de js/i18n.js).
     const REASONS = {
-      block: { condition: 'varToolbar.condition', linked: 'varToolbar.linkedBlock', loop: 'varToolbar.loopBlock', list: 'varToolbar.listBlock', column: 'varToolbar.columnBlock' },
-      value: { condition: 'varToolbar.condition', linked: 'varToolbar.notForValue', loop: 'varToolbar.loopValue', list: 'varToolbar.notForValue', column: 'varToolbar.notForValue' },
-      checkbox: { condition: 'varToolbar.conditionCheckbox', linked: 'varToolbar.linkedCheckbox', loop: 'varToolbar.loopCheckbox', list: 'varToolbar.listCheckbox', column: 'varToolbar.columnCheckbox' },
+      block: { condition: 'varToolbar.condition', linked: 'varToolbar.linkedBlock', loop: 'varToolbar.loopBlock', list: 'varToolbar.listBlock' },
+      value: { condition: 'varToolbar.condition', linked: 'varToolbar.notForValue', loop: 'varToolbar.loopValue', list: 'varToolbar.notForValue' },
+      checkbox: { condition: 'varToolbar.conditionCheckbox', linked: 'varToolbar.linkedCheckbox', loop: 'varToolbar.loopCheckbox', list: 'varToolbar.listCheckbox' },
     };
     function syncConditionalState(node, why) {
       syncConditionButton(node, why.condition);
@@ -827,7 +832,7 @@ const FloatingToolbars = (function () {
       greyOut('var-linked', why.linked);
       greyOut('var-loop', why.loop);
       syncListButton({ active: false, enabled: false, title: I18n.t(why.list) });
-      syncColumnButton(node, why.column);
+      syncColumnButton(node);
     }
 
     // Les boutons des styles de case : celui du style en cours est allumé et enfoncé. « vrai / faux » (`text`) est le style d'une bulle sans
@@ -854,7 +859,7 @@ const FloatingToolbars = (function () {
       const isDate = format.type === 'date';
       showCalcEdit(isCalc);
       syncConditionButton(node, 'varToolbar.condition', isCalc ? 'varToolbar.notForCalc' : null);
-      syncColumnButton(node, isCalc ? 'varToolbar.notForCalc' : null);
+      syncColumnButton(node);
       if (isCalc) {
         // Un calcul n'a ni autre attribut de sa ligne ni boucle : les deux boutons restent à leur place, grisés, avec leur raison en info-bulle.
         greyOut('var-linked', 'varToolbar.notForCalc');

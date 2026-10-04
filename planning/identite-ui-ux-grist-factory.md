@@ -154,8 +154,9 @@ qui existent déjà** sans son accord explicite. Une barre d'outils jugée dense
 §3) reste telle quelle tant qu'il n'a pas validé un changement — la réponse à une UI qu'on n'ose pas retoucher
 n'est jamais de la retoucher quand même, c'est de proposer sans y toucher. Deux précisions :
 - Une fonction indisponible dans un contexte est **grisée, jamais masquée** : mode Lecture (la barre de mise en forme
-  est grisée), mode Email, droits par personne (opacité .35, plus de clic), export en cours. La seule exception est la Lecture épurée, demandée par Antoine le 02/10 (§3) : la barre
-  y disparaît tout entière, sur un geste, et revient à la sortie.
+  est grisée), mode Email, droits par personne (opacité .35, plus de clic), export en cours. Il n'y a que deux exceptions : la Lecture épurée, demandée par Antoine le 02/10 (§3) : la barre
+  y disparaît tout entière, sur un geste, et revient à la sortie ; et le bouton « Changer la colonne de la variable… » de la barre d'une variable, demandé de même le 04/10 (§3) :
+  il n'y est que sur une variable cassée (bulle rouge), absent - pas grisé - d'une variable saine, d'un calcul, d'un bloc de texte, d'une valeur et d'une case conditionnelle.
 - Un défaut qui revient se corrige **une fois pour toutes**, à sa cause commune, pas fenêtre par fenêtre ni menu par
   menu : c'est ce qui a donné la base commune des fenêtres et le pont de survol des menus (§3).
 
@@ -449,10 +450,16 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   n'écrit que le nom courant. « Enregistrer sous… » arrive avec le premier nom libre déjà saisi et sélectionné : Entrée suffit, une frappe le remplace. Le coin d'état dit le nom retenu
   (« Ce nom existe déjà : renommé « Rapport (2) ». ») ; enregistrement automatique coupé il garde « Modifications non enregistrées. », le nouveau nom se lit dans le titre. Un modèle
   déjà enregistré qui garde son nom n'est jamais renommé, même s'il a un jumeau d'avant la règle.
-- Variables : cliquer une variable ouvre sa barre flottante (Condition, Autres attributs, Boucle, Liste, réglages nombre/date) ;
+- Variables : cliquer une variable ouvre sa barre flottante (Condition, Autres attributs, Boucle, Liste, réglages nombre/date, et « Colonne… » sur une variable cassée seulement) ;
   en édition, une bulle à condition est en pointillés ; les fenêtres correspondantes reposent sur la base commune. Dans
   une règle, « = » sur une colonne à choix multiples ou une liste de références veut dire « contient ce choix » (arbitré
   le 29/09).
+- « Changer la colonne de la variable… » (point 11 des retours du 02/10 : réparer une variable dont Grist a renommé ou supprimé la colonne ; restreint le 04/10 : « pas à chaque fois, uniquement
+  quand une variable est cassée ») : bouton `varColumn` de la barre flottante d'une variable, **là seulement quand la bulle est rouge** (colonne, chemin de références ou table disparus), caché - pas
+  grisé : seconde exception, expresse, à « grisée, jamais masquée » - sur une variable saine, un calcul (même cassé), un bloc de texte, une valeur et une case conditionnelle ; il suit la bulle
+  rouge, apparaît au retour sur le modèle quand la colonne a été renommée dans Grist et disparaît quand la variable est réparée. Il ouvre la liste avec recherche de toutes les colonnes (la table de
+  la page en tête) ; la colonne choisie prend la place de l'ancienne en gardant la condition, le format du même genre et la boucle de la même source (une table pas encore liée ouvre d'abord la
+  fenêtre de la clé), en un seul Annuler, et la barre qui revient n'a plus le bouton.
 - Bloc de texte conditionnel (demande d'Antoine du 01/10) : une ligne « Texte conditionnel » (« Conditional text ») de l'onglet Chips du menu des variables, jamais une nouvelle
   icône. Sans sélection, un bloc vide se pose à la place de « # » et le curseur s'y met ; avec du texte sélectionné, le bouton « Insérer une variable » ouvre la liste sur Chips,
   la ligne en surbrillance, et Entrée entoure le texte (qui n'est jamais remplacé par « # »). Le bloc contient des paragraphes, des listes, des tableaux, des variables
@@ -481,8 +488,8 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   fin de la valeur et ← à son début en sortent sans que le curseur bouge à l'écran, et le texte tapé ensuite se pose là où le curseur est, jamais dedans ou dehors au hasard du navigateur
   (au bord d'un cadre, Chrome choisit seul le côté) ; Retour arrière au début et Suppr à la fin effacent le caractère voisin, comme si la valeur n'était pas là ; vider son texte la laisse
   vide avec sa condition, Retour arrière ou Suppr dans une valeur vide la retire. Un clic dans la valeur ouvre la barre flottante des variables, réduite à la condition d'affichage (même
-  fenêtre que pour une bulle ou un bloc, mêmes colonnes, mêmes liens entre tables) ; « Autres attributs », « Boucle », « Liste » et « Colonne » n'ont pas d'objet ici, grisés par `aria-disabled` avec leur
-  raison en info-bulle, jamais retirés. « Défaire la valeur », dans la fenêtre de condition d'une valeur seulement, retire le cadre et la condition et laisse le texte à sa place (un seul
+  fenêtre que pour une bulle ou un bloc, mêmes colonnes, mêmes liens entre tables) ; « Autres attributs », « Boucle » et « Liste » n'ont pas d'objet ici, grisés par `aria-disabled` avec leur
+  raison en info-bulle, jamais retirés ; « Colonne… » n'y est pas (elle n'est là que sur une variable cassée). « Défaire la valeur », dans la fenêtre de condition d'une valeur seulement, retire le cadre et la condition et laisse le texte à sa place (un seul
   Annuler rend la valeur). Condition remplie, le texte se lit sans cadre au fil de la phrase ; sinon la valeur disparaît, le texte autour reste (une valeur masquée emporte celles qu'elle
   contient), en Lecture, PDF, Word, Excel et e-mail. Suivi des modifications : une valeur dont tout le contenu était une suggestion ne laisse pas de cadre vide quand on accepte ou refuse tout.
 - Calcul (demande d'Antoine du 01/10, « variables calculées ») : une ligne « Calcul » (« Calculation ») de l'onglet Chips du menu des variables, jamais une nouvelle icône ; elle remplace le « # » tapé et
@@ -515,7 +522,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   icône « 0 » qui devient « Ø » (barré) quand le zéro est masqué : enfoncé = masqué, relâché = « 0 » écrit. Une icône,
   une fonction : pas de menu. Les champs texte et la liste des attributs gardent le 0.
 - Liste d'une variable (demande d'Antoine du 04/10, « un UI simple et efficace pour gérer les listes ») : une bulle sur une colonne Liste de choix ou Liste de références (celle d'une table
-  liée comprise) a son bouton « Liste » dans sa barre flottante, entre « Boucle » et « Colonne » ; icône `varList`, deux crochets autour de trois points (à 2,5 d'écart, les points se lisaient
+  liée comprise) a son bouton « Liste » dans sa barre flottante, après « Boucle » (« Colonne… » vient ensuite, mais seulement sur une variable cassée) ; icône `varList`, deux crochets autour de trois points (à 2,5 d'écart, les points se lisaient
   comme un tiret à 15 px). Il ouvre une fenêtre de la base commune (dans 700×400, titre et boutons fixes) : « Afficher », puis quatre choix sur une même ligne, en boutons à la manière de ceux
   de la Boucle (`aria-pressed`) : « Toutes les valeurs » (celui du départ), « La première », « La dernière » et « La n-ième ». « Toutes les valeurs » montre « Séparateur » (« , » au départ,
   espaces comprises) et « Avant la dernière » (vide = le même séparateur ; « , » puis « et » écrit « A, B et C ») ; « La n-ième » montre « Numéro » (de 1 à 999, 1 au départ ; sans valeur à ce

@@ -1057,13 +1057,22 @@ await page.waitForTimeout(500);
 const imageAgain = await visibleBars();
 check('... un clic sur l\'image la rouvre', imageAgain.open === 1, imageAgain);
 
-// « Colonne… » (point 11 d'Antoine du 2026-10-02 : une variable cassée par un renommage dans Grist se répare en choisissant la bonne colonne) : un bouton de la barre d'une variable ouvre la
-// liste avec recherche de toutes les colonnes. À la vraie souris et à 700x400 : le bouton reste atteignable sur la barre la plus longue (celle d'un nombre), la liste s'ouvre entière dans la
-// fenêtre et au-dessus de la barre, la frappe filtre, un vrai clic sur la ligne remplace la colonne de la bulle cassée en gardant sa condition, et sa barre revient.
+// « Colonne… » (point 11 des retours du 2026-10-02 : une variable cassée par un renommage dans Grist se répare en choisissant la bonne colonne ; le 2026-10-04 : « pas à chaque fois,
+// uniquement quand une variable est cassée ») : un bouton de la barre d'une variable CASSÉE (bulle rouge) ouvre la liste avec recherche de toutes les colonnes ; une variable saine ne l'a pas.
+// À la vraie souris et à 700x400 : la barre de la bulle nombre saine n'a pas le bouton et reste dans la fenêtre ; sur la bulle rouge il est atteignable, la liste s'ouvre entière dans la
+// fenêtre et au-dessus de la barre, la frappe filtre, un vrai clic sur la ligne remplace la colonne de la bulle cassée en gardant sa condition, sa barre revient SANS le bouton.
 const COLUMN_BUTTON = '.v2-varfmt-toolbar.visible button[data-action="var-column"]';
+// Le bouton dans la barre ouverte : posé ou non, et rendu ou non (un bouton `hidden` n'a aucune boîte, donc rien à cliquer).
+const columnButtonState = () => page.evaluate(() => {
+  const bar = document.querySelector('.v2-varfmt-toolbar.visible');
+  const b = bar && bar.querySelector('button[data-action="var-column"]');
+  return { bar: !!bar, present: !!b, hidden: !!b && b.hidden, boxes: b ? b.getClientRects().length : -1 };
+});
 await openNumberBar();
-const columnOnNumberBar = await hitTest(COLUMN_BUTTON);
-check('700 px : sur la barre la plus longue (une bulle nombre), « Colonne… » reste atteignable, dans la fenêtre et non recouvert', columnOnNumberBar.found && columnOnNumberBar.inViewport && columnOnNumberBar.onTop, columnOnNumberBar);
+const columnOnNumberBar = await columnButtonState();
+const numberBarSane = await numberBar();
+check('700 px : la barre d\'une bulle nombre saine n\'a pas « Colonne… » (le bouton est caché, sans boîte) et reste dans la fenêtre', columnOnNumberBar.bar && columnOnNumberBar.present && columnOnNumberBar.hidden && columnOnNumberBar.boxes === 0
+  && !!numberBarSane && numberBarSane.left >= 0 && numberBarSane.right <= numberBarSane.viewport + 0.5 && numberBarSane.panelShown, { columnOnNumberBar, numberBarSane });
 await page.evaluate(() => {
   document.querySelector('.tiptap').blur();
   const condition = JSON.stringify({ mode: 'all', rules: [{ column: 'Statut', operator: '=', value: 'Urgent' }] }).replace(/"/g, '&quot;');
@@ -1113,6 +1122,8 @@ const repairedBadge = await page.evaluate(() => {
 });
 check('un vrai clic sur la ligne : la bulle prend la colonne, n’est plus rouge, garde sa condition, la liste se ferme et la barre revient', repairedBadge.column === 'Titre' && repairedBadge.key === 'VcDossiers.Titre'
   && !repairedBadge.broken && /Statut/.test(repairedBadge.condition) && repairedBadge.barOpen && !repairedBadge.listOpen, repairedBadge);
+const columnAfterRepair = await columnButtonState();
+check('... et la barre revenue n\'a plus « Colonne… » : la variable n\'est plus cassée', columnAfterRepair.bar && columnAfterRepair.present && columnAfterRepair.hidden && columnAfterRepair.boxes === 0, columnAfterRepair);
 
 // Panneau étroit : la barre nombre passe à la ligne si elle ne tient pas, ne dépasse pas la fenêtre, le bouton reste atteignable.
 await page.setViewportSize({ width: 360, height: HEIGHT });
@@ -1122,8 +1133,21 @@ const barNarrow = await numberBar();
 const zeroNarrow = await hitTest('.v2-varfmt-toolbar.visible button[data-action="num-zero"]');
 check('fenêtre de 360 px : la barre nombre reste dans la fenêtre et ne fait pas défiler la page', !!barNarrow && barNarrow.left >= 0 && barNarrow.right <= barNarrow.viewport + 0.5 && barNarrow.docOverflowX <= 0, barNarrow);
 check('... et le bouton du zéro y reste atteignable', zeroNarrow.found && zeroNarrow.inViewport && zeroNarrow.onTop, zeroNarrow);
+const columnNarrowSane = await columnButtonState();
+check('... sans « Colonne… » sur cette bulle saine', columnNarrowSane.bar && columnNarrowSane.present && columnNarrowSane.hidden && columnNarrowSane.boxes === 0, columnNarrowSane);
+await page.evaluate(() => {
+  document.querySelector('.tiptap').blur();
+  Editor.setHTML('<p>Dossier <span class="var-badge" data-table="VcDossiers" data-column="Intitule" data-key="VcDossiers.Intitule"></span> suivi.</p>');
+  document.querySelector('.tiptap .var-badge[data-column="Intitule"]').scrollIntoView({ block: 'center' });
+});
+await page.waitForTimeout(500);
+const brokenNarrowBox = await hitTest(BROKEN_BADGE);
+await page.mouse.click(brokenNarrowBox.x, brokenNarrowBox.y);
+await page.waitForTimeout(500);
 const columnNarrow = await hitTest(COLUMN_BUTTON);
-check('... et « Colonne… » aussi', columnNarrow.found && columnNarrow.inViewport && columnNarrow.onTop, columnNarrow);
+const brokenBarNarrow = await page.evaluate(() => { const r = document.querySelector('.v2-varfmt-toolbar.visible').getBoundingClientRect(); return { left: r.left, right: r.right, viewport: innerWidth, docOverflowX: document.scrollingElement.scrollWidth - innerWidth }; });
+check('... et sur une bulle cassée « Colonne… » est atteignable à la vraie souris, la barre dans la fenêtre', columnNarrow.found && columnNarrow.inViewport && columnNarrow.onTop
+  && brokenBarNarrow.left >= 0 && brokenBarNarrow.right <= brokenBarNarrow.viewport + 0.5 && brokenBarNarrow.docOverflowX <= 0, { columnNarrow, brokenBarNarrow });
 await page.setViewportSize({ width: WIDTH, height: HEIGHT });
 await page.waitForTimeout(300);
 
