@@ -142,7 +142,8 @@ button.var-linked-crumb:focus-visible { outline: 2px solid var(--accent); outlin
 .var-loop-seg button + button { border-left: 1px solid var(--border); }
 .var-loop-seg button:hover { background: var(--surface-sunken); }
 .var-loop-seg button.is-on { background: var(--accent-soft, #e8f0fe); color: var(--accent-hover, #2558c4); }
-/* Un choix qui n'a pas de sens ici (« La ligne du tableau » quand une case fusionnée sur plusieurs lignes la traverse) : grisé, jamais retiré, son info-bulle dit pourquoi. */
+/* Un choix qui n'a pas de sens ici (« La ligne du tableau » quand une case fusionnée sur plusieurs lignes la traverse) : grisé, jamais retiré, son
+   info-bulle dit pourquoi. */
 .var-loop-seg button[aria-disabled="true"] { opacity: .45; cursor: default; }
 .var-loop-seg button[aria-disabled="true"]:hover { background: var(--surface); }
 .var-loop-seps { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 8px; font-size: 12px; font-weight: 600; color: var(--text); }

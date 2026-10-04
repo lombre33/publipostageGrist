@@ -1,8 +1,9 @@
-// Traduction FR/EN de l'interface (panneau Réglages > Langue) - IIFE classique, chargée en tout premier (avant variable-format.js/variables.js/editor.js/
-// main.js/settings.js) pour qu'ils lisent I18n.getLang()/I18n.t() comme un global nu déjà prêt, même schéma de dépendance implicite par ordre de <script>.
+// Traduction FR/EN de l'interface (panneau Réglages > Langue) - IIFE classique, chargée en tout premier (avant variable-format.js, variables.js,
+// editor.js, main.js et settings.js) pour qu'ils lisent I18n.getLang() et I18n.t() comme un global nu déjà prêt, même schéma de dépendance implicite
+// par ordre de <script>.
 //
-// MAINTENANCE (demande explicite) : chaque entrée porte fr ET en côte à côte dans le même objet littéral - impossible de modifier l'un sans voir l'autre.
-// `t()` avertit en console (pas d'échec silencieux) si une traduction 'en' manque - filet de sécurité si un futur texte français ajouté sans son pendant.
+// Maintenance : chaque entrée porte fr et en côte à côte dans le même objet littéral, impossible de modifier l'un sans voir l'autre. `t()` avertit en
+// console (pas d'échec silencieux) si une traduction 'en' manque : filet de sécurité si un futur texte français est ajouté sans son pendant.
 const I18n = (function () {
   const STRINGS = {
     // --- Bandeau du haut : cluster modèle / actions ---
@@ -57,10 +58,11 @@ const I18n = (function () {
     'toolbar.linkRules.aria': { fr: 'Tables liées (correspondance pour #Variable d’une autre table)', en: 'Linked tables (matching for #Variable from another table)' },
     'toolbar.modeEdit': { fr: 'Mode édition', en: 'Edit mode' },
     'toolbar.modeRead': { fr: 'Mode lecture', en: 'Read mode' },
-    // Lecture épurée (js/clean-reading.js, retours d'Antoine du 2026-10-02, point 19) : la ligne du menu du bouton Mode lecture, et l'info-bulle du bouton de sortie.
+    // Lecture épurée (js/clean-reading.js) : la ligne du menu du bouton Mode lecture, et l'info-bulle du bouton de sortie.
     'toolbar.cleanReading': { fr: 'Lecture épurée', en: 'Clean reading' },
     'cleanReading.exit': { fr: 'Quitter la lecture épurée (Échap)', en: 'Exit clean reading (Esc)' },
-    // {format} : le format de la page du modèle (A3, A4, A5, A6, ou « 7 × 3,7 cm » pour un format libre : PageLayout.getFormatLabel) - js/orientation-toggle.js compose ces textes, aucun attribut data-i18n-* ne les porte.
+    // {format} : le format de la page du modèle (A3, A4, A5, A6, ou « 7 × 3,7 cm » pour un format libre : PageLayout.getFormatLabel) -
+    // js/orientation-toggle.js compose ces textes, aucun attribut data-i18n-* ne les porte.
     'toolbar.a4.tip': { fr: 'Aperçu {format}', en: '{format} preview' },
     'toolbar.a4.aria': { fr: 'Aperçu {format} — limite la largeur de l’éditeur à celle du contenu d’une page {format}, pour que le texte se répartisse comme dans le PDF.', en: '{format} preview — limits the editor width to that of a {format} page’s content, so text wraps the same way as in the PDF.' },
     'toolbar.orientation.portrait': { fr: 'Page {format} en portrait (passer en paysage)', en: '{format} page in portrait (switch to landscape)' },
@@ -92,7 +94,8 @@ const I18n = (function () {
     'watermark.opacity.label': { fr: 'Opacité', en: 'Opacity' },
     'watermark.opacity.value': { fr: '{n} %', en: '{n}%' },
     'watermark.remove': { fr: 'Retirer le filigrane', en: 'Remove watermark' },
-    // Fenêtre « Format libre… » du menu Page (js/page-size-dialog.js) : la taille de la page en centimètres. {min} et {max} : les bornes (2 et 55,88), écrites avec la virgule en français, le point en anglais.
+    // Fenêtre « Format libre… » du menu Page (js/page-size-dialog.js) : la taille de la page en centimètres. {min} et {max} : les bornes (2 et
+    // 55,88), écrites avec la virgule en français, le point en anglais.
     'pageSize.title': { fr: 'Format de page libre', en: 'Custom page size' },
     'pageSize.width.label': { fr: 'Largeur', en: 'Width' },
     'pageSize.height.label': { fr: 'Hauteur', en: 'Height' },
@@ -116,7 +119,8 @@ const I18n = (function () {
     'pageSize.saved.deleted': { fr: 'Format « {name} » supprimé.', en: 'Format “{name}” deleted.' },
     'pageSize.saved.error.write': { fr: 'Le format n’a pas pu être enregistré dans le document.', en: 'The format could not be saved to the document.' },
     'pageSize.saved.error.delete': { fr: 'Le format n’a pas pu être supprimé du document.', en: 'The format could not be deleted from the document.' },
-    // Fenêtre « Assemblage avant impression… » du menu Exporter en PDF (js/sheet-assembly-dialog.js) : les pages de chaque ligne posées sur des feuilles A4 ou A3, une par emplacement, avec ou sans traits de coupe.
+    // Fenêtre « Assemblage avant impression… » du menu Exporter en PDF (js/sheet-assembly-dialog.js) : les pages de chaque ligne posées sur des
+    // feuilles A4 ou A3, une par emplacement, avec ou sans traits de coupe.
     'sheetAssembly.title': { fr: 'Assemblage avant impression', en: 'Assemble before printing' },
     'sheetAssembly.sheet.label': { fr: 'Feuille', en: 'Sheet' },
     'sheetAssembly.sheet.tooSmall': { fr: 'Trop petite pour une page {format}.', en: 'Too small for a {format} page.' },
@@ -193,7 +197,8 @@ const I18n = (function () {
     'align.center': { fr: 'Centrer', en: 'Center' },
     'align.right': { fr: 'Aligner à droite', en: 'Align right' },
     'align.justify': { fr: 'Justifier', en: 'Justify' },
-    // « Garder avec le suivant » (js/keep-with-next.js) : la ligne à cocher du menu Alignement, son nom accessible et la raison de son grisage (info-bulle).
+    // « Garder avec le suivant » (js/keep-with-next.js) : la ligne à cocher du menu Alignement, son nom accessible et la raison de son grisage
+    // (info-bulle).
     'keepNext.row': { fr: 'Garder avec le suivant', en: 'Keep with next' },
     'keepNext.aria': { fr: 'Garder avec le suivant : le paragraphe reste sur la même page que le bloc qui le suit', en: 'Keep with next: the paragraph stays on the same page as the block that follows it' },
     'keepNext.notHere': { fr: 'Seulement pour les paragraphes du texte (ni titre, ni légende, ni tableau, liste, colonne, encadré ou citation, ni en-tête ou pied de page)', en: 'Only for text paragraphs (not headings, captions, tables, lists, columns, callouts, quotes, headers or footers)' },
@@ -252,13 +257,14 @@ const I18n = (function () {
     'insert.toc.aria': { fr: 'Insérer un sommaire (généré à partir des titres)', en: 'Insert a table of contents (generated from headings)' },
     'insert.comment.tip': { fr: 'Commenter la sélection', en: 'Comment on selection' },
     'insert.comment.aria': { fr: 'Ajouter un commentaire sur le texte sélectionné', en: 'Add a comment on the selected text' },
-    // Réutilise le nœud blockquote existant (déjà géré en PDF/DOCX, cf. js/pdf-export.js) - seul le bouton manquait (retour Antoine, 2026-09-28).
+    // Réutilise le nœud blockquote existant (déjà géré en PDF et en Word, cf. js/pdf-export.js) : seul le bouton manquait.
     'insert.citation.tip': { fr: 'Citation', en: 'Quote' },
     'insert.citation.aria': { fr: 'Insérer une citation', en: 'Insert a quote' },
     'insert.variable.tip': { fr: 'Insérer une variable', en: 'Insert a variable' },
     'insert.variable.aria': { fr: 'Insérer une variable (#Variable ou chip)', en: 'Insert a variable (#Variable or chip)' },
-    // Une seule icône de la barre pour le lien, la citation, le bloc de code, l'encadré et le bloc de signature (demande d'Antoine, 2026-10-01) : le bouton principal ouvre la
-    // fenêtre du lien, le menu au survol porte les lignes. Le raccourci (Ctrl+K ou ⌘K selon la plateforme) s'ajoute à l'aria-label par js/link-dialog.js.
+    // Une seule icône de la barre pour le lien, la citation, le bloc de code, l'encadré et le bloc de signature : le bouton principal ouvre la
+    // fenêtre du lien, le menu au survol porte les lignes. Le raccourci (Ctrl+K ou ⌘K selon la plateforme) s'ajoute à l'aria-label par
+    // js/link-dialog.js.
     'insert.blocks.tip': { fr: 'Lien et blocs de contenu', en: 'Link and content blocks' },
     'insert.link.aria': { fr: 'Insérer un lien', en: 'Insert a link' },
     'insert.link.row': { fr: 'Lien…', en: 'Link…' },
@@ -269,7 +275,8 @@ const I18n = (function () {
     'insert.callout.aria': { fr: 'Insérer un encadré', en: 'Insert a callout' },
     'insert.signature.tip': { fr: 'Bloc de signature', en: 'Signature block' },
     'insert.signature.aria': { fr: 'Insérer un bloc de signature', en: 'Insert a signature block' },
-    // --- Encadré (js/callout.js) : Note, Attention et Important ne sont que des points de départ (couleur + icône), jamais gardés dans le document ---
+    // --- Encadré (js/callout.js) : Note, Attention et Important ne sont que des points de départ (couleur + icône), jamais gardés dans le document
+    // ---
     'callout.title.new': { fr: 'Insérer un encadré', en: 'Insert a callout' },
     'callout.title.edit': { fr: 'Modifier l’encadré', en: 'Edit the callout' },
     'callout.type': { fr: 'Type', en: 'Type' },
@@ -296,7 +303,8 @@ const I18n = (function () {
     // --- Bloc de signature (js/callout.js) : les deux légendes écrites sous les lignes, dans la langue de l'interface au moment de l'insertion ---
     'signature.name': { fr: 'Nom et signature', en: 'Name and signature' },
     'signature.date': { fr: 'Date', en: 'Date' },
-    // --- QR code (js/qr-code.js) : la fenêtre, son aperçu, et ce que la Lecture et les exports écrivent à la place d'un QR code qu'ils ne peuvent pas dessiner ---
+    // --- QR code (js/qr-code.js) : la fenêtre, son aperçu, et ce que la Lecture et les exports écrivent à la place d'un QR code qu'ils ne peuvent
+    // pas dessiner ---
     'qr.title.new': { fr: 'Insérer un QR code', en: 'Insert a QR code' },
     'qr.title.edit': { fr: 'Modifier le QR code', en: 'Edit the QR code' },
     'qr.text.label': { fr: 'Adresse ou texte', en: 'Address or text' },
@@ -313,7 +321,8 @@ const I18n = (function () {
     'qr.preview.unavailable': { fr: 'QR code indisponible : la bibliothèque n’a pas pu se charger.', en: 'QR code unavailable: the library could not be loaded.' },
     'qr.doc.unavailable': { fr: '[QR code indisponible]', en: '[QR code unavailable]' },
     'qr.doc.tooLong': { fr: '[QR code : texte trop long]', en: '[QR code: text too long]' },
-    // --- Légende sous une image ou un tableau (js/caption.js) : le bouton des barres flottantes, le texte d'attente de la légende vide et les raisons du grisage ---
+    // --- Légende sous une image ou un tableau (js/caption.js) : le bouton des barres flottantes, le texte d'attente de la légende vide et les
+    // raisons du grisage ---
     'caption.placeholder': { fr: 'Légende…', en: 'Caption…' },
     'caption.addImage': { fr: 'Ajouter une légende sous l’image', en: 'Add a caption under the image' },
     'caption.addTable': { fr: 'Ajouter une légende sous le tableau', en: 'Add a caption under the table' },
@@ -385,7 +394,8 @@ const I18n = (function () {
     'trackChanges.acceptAll.aria': { fr: 'Accepter toutes les suggestions du document', en: 'Accept all suggestions in the document' },
     'trackChanges.rejectAll.tip': { fr: 'Tout refuser', en: 'Reject all' },
     'trackChanges.rejectAll.aria': { fr: 'Refuser toutes les suggestions du document', en: 'Reject all suggestions in the document' },
-    // Barre flottante d'une modification (js/floating-toolbars.js:wireSuggestionFloatingToolbar) : le libellé du bouton, et son info-bulle, qui dit combien de modifications il traite ({n} : celles de la sélection).
+    // Barre flottante d'une modification (js/floating-toolbars.js:wireSuggestionFloatingToolbar) : le libellé du bouton, et son info-bulle, qui dit
+    // combien de modifications il traite ({n} : celles de la sélection).
     'trackChanges.accept.label': { fr: 'Accepter', en: 'Accept' },
     'trackChanges.reject.label': { fr: 'Refuser', en: 'Reject' },
     'trackChanges.accept.tip': { fr: 'Accepter {n|cette modification|ces modifications}', en: 'Accept {n|this change|these changes}' },
@@ -444,8 +454,8 @@ const I18n = (function () {
     'macro.modal.valuePlaceholder': { fr: 'Valeur', en: 'Value' },
     'macro.modal.valuePlaceholderDate': { fr: 'Valeur (ex. 2026-09-26 ou 26/09/2026)', en: 'Value (e.g. 2026-09-26)' },
     'macro.modal.valueChoosePlaceholder': { fr: '— Choisir une valeur —', en: '— Choose a value —' },
-    // Champ Valeur d'une colonne Oui / Non (Bool) : les deux mots que la comparaison lit (ConditionRules.parseBoolExpected), et la mention d'une valeur déjà
-    // enregistrée qu'elle ne lit pas (js/condition-fields.js:buildBoolList).
+    // Champ Valeur d'une colonne Oui / Non (Bool) : les deux mots que la comparaison lit (ConditionRules.parseBoolExpected), et la mention d'une
+    // valeur déjà enregistrée qu'elle ne lit pas (js/condition-fields.js:buildBoolList).
     'macro.modal.valueBoolYes': { fr: 'Oui', en: 'Yes' },
     'macro.modal.valueBoolNo': { fr: 'Non', en: 'No' },
     'macro.modal.valueUnrecognized': { fr: 'valeur non reconnue', en: 'unrecognized value' },
@@ -464,13 +474,15 @@ const I18n = (function () {
     'macro.summary.empty': { fr: 'Aucune page de garde ni annexe définie pour l’instant.', en: 'No cover page or annex defined yet.' },
     'macro.summary.noCover': { fr: 'aucune', en: 'none' },
     'macro.summary.text': { fr: 'Page de garde : {cover} — {count} {count|annexe conditionnelle|annexes conditionnelles}.', en: 'Cover page: {cover} — {count} conditional {count|annex|annexes}.' },
-    // Les modèles de la composition, un stylo chacun (js/macro-editor.js) : il ouvre ce modèle dans l'éditeur ; le bandeau « Revenir au macro-modèle » (js/main.js) ramène au macro-modèle.
+    // Les modèles de la composition, un stylo chacun (js/macro-editor.js) : il ouvre ce modèle dans l'éditeur ; le bandeau « Revenir au
+    // macro-modèle » (js/main.js) ramène au macro-modèle.
     'macro.summary.partsAria': { fr: 'Modèles assemblés', en: 'Assembled templates' },
     'macro.summary.edit': { fr: 'Modifier le modèle « {name} »', en: 'Edit the template “{name}”' },
     'macro.summary.missing': { fr: 'modèle introuvable', en: 'template not found' },
     'macro.summary.noTemplate': { fr: 'aucun modèle choisi', en: 'no template chosen' },
-    // L'œil de chaque modèle du résumé (js/macro-editor.js) : il masque le modèle de la Lecture et de toutes les sorties du macro-modèle, sans le retirer de la composition. Le nom accessible dit le geste
-    // et ne change pas (c'est `aria-pressed` qui dit l'état) ; l'info-bulle dit l'état et ce que le clic fait.
+    // L'œil de chaque modèle du résumé (js/macro-editor.js) : il masque le modèle de la Lecture et de toutes les sorties du macro-modèle, sans le
+    // retirer de la composition. Le nom accessible dit le geste et ne change pas (c'est `aria-pressed` qui dit l'état) ; l'info-bulle dit l'état et
+    // ce que le clic fait.
     'macro.summary.hide': { fr: 'Masquer le modèle « {name} »', en: 'Hide the template “{name}”' },
     'macro.summary.hideTip': { fr: 'Masquer « {name} » de la Lecture et des exports', en: 'Hide “{name}” from Reading and exports' },
     'macro.summary.hiddenTip': { fr: '« {name} » est masqué de la Lecture et des exports : cliquer pour l’afficher', en: '“{name}” is hidden from Reading and exports: click to show it' },
@@ -548,7 +560,7 @@ const I18n = (function () {
     'settings.access.readOnly': { fr: 'Lecture seule', en: 'Read-only' },
     'settings.access.export': { fr: 'Export autorisé', en: 'Export allowed' },
     'settings.access.comments': { fr: 'Commentaires autorisés', en: 'Comments allowed' },
-    // Case « Ouvrir les personnes en lecture seule sur la Lecture épurée » (js/access-rights.js, js/clean-reading.js : choix d'Antoine du 2026-10-02).
+    // Case « Ouvrir les personnes en lecture seule sur la Lecture épurée » (js/access-rights.js, js/clean-reading.js).
     'settings.access.cleanReading': { fr: 'Ouvrir les personnes en lecture seule sur la Lecture épurée', en: 'Open read-only people on Clean reading' },
     'settings.access.cleanReadingHint': {
       fr: 'Elles ouvrent sur le document seul, sans la barre d’outils ; le bouton rond du coin haut droit ou Échap leur rend la barre (Commenter, Exporter selon leurs droits). Choisissez d’abord la colonne « Lecture seule ».',
@@ -672,12 +684,14 @@ const I18n = (function () {
     'shortcuts.action.image': { fr: 'Insérer une image', en: 'Insert an image' },
     'shortcuts.action.formatPaste': { fr: 'Appliquer la mise en forme', en: 'Apply the copied formatting' },
 
-    // --- Mode Lecture (js/reader-mode.js:render) : état vide (aucune ligne sélectionnée) et avertissement quand une variable n'a pas pu être résolue ---
+    // --- Mode Lecture (js/reader-mode.js:render) : état vide (aucune ligne sélectionnée) et avertissement quand une variable n'a pas pu être résolue
+    // ---
     'reader.empty.title': { fr: 'Aucune ligne sélectionnée', en: 'No row selected' },
     'reader.empty.hint': { fr: 'Sélectionnez une ligne dans la table Grist pour voir le document avec ses données.', en: 'Select a row in the Grist table to see the document filled with its data.' },
-    // Guide de la Lecture sans ligne (js/reader-guide.js, demande d'Antoine du 2026-10-04) : quatre étapes pour que le widget reçoive une ligne (accès complet au document, tableau sur la page, « Sélectionner par » de Grist,
-    // clic sur une ligne). Les libellés de Grist cités (« Ajouter », « Niveau d'accès », « Sélectionner par », « Données source »...) sont ceux de ses fichiers de langue (grist-core, static/locales/{fr,en}.client.json,
-    // relevés le 2026-10-04) ; « Ajouter à la Page » prend sa majuscule en français.
+    // Guide de la Lecture sans ligne (js/reader-guide.js) : quatre étapes pour que le widget reçoive une ligne (accès complet au document, tableau
+    // sur la page, « Sélectionner par » de Grist, clic sur une ligne). Les libellés de Grist cités (« Ajouter », « Niveau d'accès », « Sélectionner
+    // par », « Données source »...) sont ceux de ses fichiers de langue (grist-core, static/locales/{fr,en}.client.json) ; « Ajouter à la Page »
+    // prend sa majuscule en français.
     'readerGuide.title': { fr: 'Reliez ce widget à votre tableau', en: 'Link this widget to your table' },
     'readerGuide.intro': { fr: 'En mode Lecture, le modèle se remplit avec la ligne choisie dans un tableau de cette page. Aucune ligne n’arrive à ce widget : il lui faut l’accès complet au document, et il doit être relié à ce tableau par le réglage « Sélectionner par » de Grist.', en: 'In Reading mode, the template is filled with the row picked in a table on this page. No row reaches this widget: it needs full access to the document, and it must be linked to that table with Grist’s “Select by” setting.' },
     'readerGuide.step': { fr: 'Étape {n}', en: 'Step {n}' },
@@ -687,7 +701,7 @@ const I18n = (function () {
     'readerGuide.access.mark2': { fr: 'Vérifiez « Niveau d’accès » : il doit afficher « Accès complet au document »', en: 'Check “Access level”: it must read “Full document access”' },
     'readerGuide.access.mark3': { fr: 'Sinon, cliquez sur « Accepter »', en: 'If not, click “Accept”' },
     'readerGuide.access.alt': { fr: 'Le panneau de droite de Grist : l’onglet « Vue » (1), la liste « Niveau d’accès » (2) et le bouton « Accepter » de la demande d’accès complet (3).', en: 'Grist’s right-hand panel: the “Widget” tab (1), the “Access level” list (2) and the “Accept” button of the full-access request (3).' },
-    // Widget relié mais sans accès complet (choix d'Antoine du 2026-10-04, carte « Guider aussi un widget relié mais sans accès complet ? » : « Étape accès seule ») : cette seule étape, sans son numéro ni son titre (c'est celui de la carte).
+    // Widget relié mais sans accès complet : cette seule étape, sans son numéro ni son titre (c'est celui de la carte).
     'readerGuide.accessOnly.intro': { fr: 'Ce widget est relié à un tableau, mais Grist ne lui envoie aucune ligne tant qu’il n’a pas l’accès complet au document.', en: 'This widget is linked to a table, but Grist sends it no row until it has full access to the document.' },
     'readerGuide.accessOnly.lead': { fr: 'Cliquez sur ce widget pour le sélectionner : Grist ouvre son panneau de droite.', en: 'Click this widget to select it: Grist opens its right-hand panel.' },
     'readerGuide.add.title': { fr: 'Mettez votre tableau sur cette page', en: 'Put your table on this page' },
@@ -711,7 +725,8 @@ const I18n = (function () {
     'readerGuide.unzoom': { fr: 'Cliquer pour réduire la capture', en: 'Click to shrink the screenshot' },
     'readerGuide.unsure': { fr: 'Ce widget est déjà relié ? Cliquez simplement sur une ligne du tableau.', en: 'Is this widget already linked? Just click a row of the table.' },
     'reader.unresolvedVariables': { fr: 'Attention : certaines variables n’ont pas pu être résolues.', en: 'Warning: some variables could not be resolved.' },
-    // Écrit à la place du chip « Email de l'utilisateur » quand l'adresse ne peut pas être lue (js/reader-mode.js:resolveSmartChips) : en Lecture et dans les exports.
+    // Écrit à la place du chip « Email de l'utilisateur » quand l'adresse ne peut pas être lue (js/reader-mode.js:resolveSmartChips) : en Lecture et
+    // dans les exports.
     'reader.emailUnavailable': { fr: '[Email indisponible]', en: '[Email unavailable]' },
     // Pareil pour le chip « Nom de l'utilisateur » : nom illisible, ou que Grist ne donne pas à cette personne.
     'reader.nameUnavailable': { fr: '[Nom indisponible]', en: '[Name unavailable]' },
@@ -721,24 +736,24 @@ const I18n = (function () {
     'status.readyReadOnly': { fr: 'Widget prêt, en lecture seule.', en: 'Widget ready, read-only.' },
     'status.readOnly': { fr: 'Lecture seule.', en: 'Read-only.' },
     'status.gristApiError': { fr: 'Erreur init API Grist.', en: 'Error initializing Grist API.' },
-    // init() (js/main.js) n'a de filet QUE sur TemplateTreeSelect.attach() : une exception ailleurs (rare,
-    // mais déjà vu le 2026-09-28 avec l'arbre de rangement) bloquait tout le reste - Enregistrer, Ctrl+S,
-    // l'auto-save - sans le moindre message, seule la console (jamais consultée par Antoine) montrait la
-    // cause. init().catch(...) affiche maintenant l'erreur ici plutôt que de laisser le widget muet.
+    // init() (js/main.js) n'a de filet que sur TemplateTreeSelect.attach() : une exception ailleurs bloquerait tout le reste (Enregistrer, Ctrl+S,
+    // l'auto-save) sans le moindre message, seule la console en montrant la cause. init().catch(...) affiche l'erreur ici plutôt que de laisser le
+    // widget muet.
     'status.initError': { fr: 'Erreur au chargement du widget : {message}', en: 'Error loading the widget: {message}' },
     'status.templateNameRequired': { fr: 'Nom du modèle requis.', en: 'Template name required.' },
     'status.nameExists': { fr: 'Ce nom existe déjà : renommé « {name} ».', en: 'This name already exists: renamed “{name}”.' },
-    // Coin "info" (#status-msg) piloté par l'état RÉEL de sauvegarde (cf. js/main.js:updateSaveStatus) plutôt que par le dernier événement quel qu'il
-    // soit : affiché uniquement quand tout ce qui a été tapé est bien enregistré, vide sinon (frappe en attente du prochain passage de l'enregistrement
-    // automatique, brouillon jamais enregistré, conflit) - sauf enregistrement automatique coupé, cf. unsavedChanges plus bas.
+    // Coin « info » (#status-msg) piloté par l'état réel de sauvegarde (cf. js/main.js:updateSaveStatus) plutôt que par le dernier événement quel
+    // qu'il soit : affiché uniquement quand tout ce qui a été tapé est bien enregistré, vide sinon (frappe en attente du prochain passage de
+    // l'enregistrement automatique, brouillon jamais enregistré, conflit) - sauf enregistrement automatique coupé, cf. unsavedChanges plus bas.
     'status.savedAt': { fr: 'Enregistré à {time}.', en: 'Saved at {time}.' },
-    // Enregistrement automatique coupé et modifications en attente : le coin le dit tant que rien n'est enregistré à la main. Plus large que la base du coin (12,5 em,
-    // css/toolbar-v2.css) : entier quand la barre le met sur sa propre ligne (panneau d'environ 700 px), coupé par « … » dans la bande où il partage la première ligne avec les
-    // boutons (environ 850 à 880 px) - son texte entier s'affiche alors au survol (js/viewport-fit.js).
+    // Enregistrement automatique coupé et modifications en attente : le coin le dit tant que rien n'est enregistré à la main. Plus large que la base
+    // du coin (12,5 em, css/toolbar-v2.css) : entier quand la barre le met sur sa propre ligne (panneau d'environ 700 px), coupé par « … » dans la
+    // bande où il partage la première ligne avec les boutons (environ 850 à 880 px) - son texte entier s'affiche alors au survol
+    // (js/viewport-fit.js).
     'status.unsavedChanges': { fr: 'Modifications non enregistrées.', en: 'Unsaved changes.' },
-    // Cas "brouillon jamais enregistré" de updateSaveStatus() (Templates.getCurrentId() encore null) : sans ce message, le coin "info" restait
-    // simplement vide et rien n'expliquait pourquoi l'auto-save (qui ne crée jamais de modèle, cf. main.js:autosaveTick "if (!id) return") ne faisait
-    // rien pendant que l'utilisateur tapait. Même style d'alerte que templateNameRequired ci-dessus (même cause réelle : pas encore de nom/ligne Grist).
+    // Cas « brouillon jamais enregistré » de updateSaveStatus() (Templates.getCurrentId() encore null) : sans ce message, le coin « info » resterait
+    // vide et rien n'expliquerait pourquoi l'auto-save (qui ne crée jamais de modèle, cf. main.js:autosaveTick « if (!id) return ») ne fait rien
+    // pendant la frappe. Même style d'alerte que templateNameRequired ci-dessus (même cause : pas encore de nom ni de ligne Grist).
     'status.unsavedTemplateWarning': { fr: 'Modèle non enregistré : donnez-lui un nom puis cliquez sur Enregistrer pour activer l’enregistrement automatique.', en: 'Template not saved: name it and click Save to enable auto-save.' },
     'status.autosaveConflictReloaded': { fr: 'Dernière version rechargée.', en: 'Latest version reloaded.' },
     'status.autosaveDisabled': { fr: 'Enregistrement automatique désactivé.', en: 'Auto-save turned off.' },
@@ -790,7 +805,7 @@ const I18n = (function () {
     'status.zipCompressing': { fr: 'Compression de l’archive ZIP...', en: 'Compressing the ZIP archive...' },
     'status.batchExportDoneWithFailures': { fr: '{ok} PDF générés, {failed} {failed|échec|échecs} (voir la console) — archive ZIP téléchargée.', en: '{ok} PDFs generated, {failed} {failed|failure|failures} (see console) — ZIP archive downloaded.' },
     'status.batchExportDone': { fr: '{ok} PDF générés — archive ZIP téléchargée.', en: '{ok} PDFs generated — ZIP archive downloaded.' },
-    // Export DOCX de toutes les lignes (ZIP) : mêmes messages que le lot PDF, avec le bon format (avant le 29/09, il annonçait des PDF).
+    // Export DOCX de toutes les lignes (ZIP) : mêmes messages que le lot PDF, avec le bon format.
     'status.loadingExportLibs': { fr: 'Chargement des bibliothèques d’export...', en: 'Loading export libraries...' },
     'status.exportLibsLoadError': { fr: 'Échec de chargement des bibliothèques d’export.', en: 'Failed to load export libraries.' },
     'status.batchExportProgressDocx': { fr: 'Export DOCX en lot : {current}/{total}...', en: 'Batch DOCX export: {current}/{total}...' },
@@ -819,7 +834,8 @@ const I18n = (function () {
     'autosave.conflict.message': { fr: 'Ce modèle a été modifié ailleurs pendant votre édition.', en: 'This template was modified elsewhere while you were editing.' },
     'autosave.conflict.reload': { fr: 'Recharger la dernière version', en: 'Reload latest version' },
 
-    // --- Confirmations / invites (main.js) ; titres des fenêtres de saisie et de confirmation (js/dialogs.js), qui prennent aussi les textes des clés voisines ---
+    // --- Confirmations / invites (main.js) ; titres des fenêtres de saisie et de confirmation (js/dialogs.js), qui prennent aussi les textes des
+    // clés voisines ---
     'dialog.imageUrl.title': { fr: 'Insérer une image', en: 'Insert an image' },
     'dialog.newTable.title': { fr: 'Nouvelle table Grist', en: 'New Grist table' },
     'dialog.newFolder.title': { fr: 'Nouveau dossier', en: 'New folder' },
@@ -831,8 +847,9 @@ const I18n = (function () {
     'dialog.pasteTooBig.title': { fr: 'Tableau collé sans mise en forme', en: 'Table pasted without formatting' },
     'dialog.pasteTooBig.rows': { fr: 'Le tableau collé compte {count} lignes : au-delà de {max}, il est collé tel quel, sans la mise en forme du tableur (fusions, fonds, largeurs de colonnes).', en: 'The pasted table has {count} rows: beyond {max}, it is pasted as is, without the spreadsheet formatting (merged cells, fills, column widths).' },
     'dialog.pasteTooBig.cols': { fr: 'Le tableau collé compte {count} colonnes : au-delà de {max}, il est collé tel quel, sans la mise en forme du tableur (fusions, fonds, largeurs de colonnes).', en: 'The pasted table has {count} columns: beyond {max}, it is pasted as is, without the spreadsheet formatting (merged cells, fills, column widths).' },
-    // Quitter un modèle dont des modifications ne sont pas enregistrées (autre modèle, « + », nouvel email, nouvelle grille, galerie) : « Toujours demander » (choix d'Antoine, 01/10).
-    // Sans nom (nouveau modèle jamais enregistré) il n'y a pas d'« Enregistrer » : le nom manque, la fenêtre propose d'abandonner ou d'annuler pour lui en donner un.
+    // Quitter un modèle dont des modifications ne sont pas enregistrées (autre modèle, « + », nouvel email, nouvelle grille, galerie) : « Toujours
+    // demander ». Sans nom (nouveau modèle jamais enregistré) il n'y a pas d'« Enregistrer » : le nom manque, la fenêtre propose d'abandonner ou
+    // d'annuler pour lui en donner un.
     'dialog.unsaved.title': { fr: 'Modifications non enregistrées', en: 'Unsaved changes' },
     'dialog.unsaved.message': { fr: '« {name} » a des modifications non enregistrées. Les enregistrer avant de continuer ?', en: '“{name}” has unsaved changes. Save them before continuing?' },
     'dialog.unsaved.messageNoName': { fr: 'Ce nouveau modèle n’a pas de nom et n’est pas enregistré. Annulez pour lui en donner un, ou abandonnez-le.', en: 'This new template has no name and is not saved. Cancel to name it, or discard it.' },
@@ -848,15 +865,17 @@ const I18n = (function () {
     'confirm.mergedExportGrid': { fr: 'Générer un PDF par valeur de « {table} » ({count} {count|valeur|valeurs}) et les réunir dans un seul fichier PDF, chaque valeur commençant sur une nouvelle page ?', en: 'Generate one PDF per value of “{table}” ({count} {count|value|values}) and combine them into a single PDF file, each value starting on a new page?' },
     'confirm.batchExportXlsx': { fr: 'Générer un classeur Excel par valeur de « {table} » ({count} {count|valeur|valeurs}) et les regrouper dans une archive ZIP ?', en: 'Generate one Excel workbook per value of “{table}” ({count} {count|value|values}) and bundle them into a ZIP archive?' },
     'confirm.singleWorkbookExport': { fr: 'Générer un seul classeur Excel, avec une feuille par valeur de « {table} » ({count} {count|valeur|valeurs}) ?', en: 'Generate a single Excel workbook with one sheet per value of “{table}” ({count} {count|value|values})?' },
-    // Images d'un site externe à l'export (js/external-images.js) : la fenêtre qui liste les sites avant le PDF ou le Word, et le message quand on l'annule.
+    // Images d'un site externe à l'export (js/external-images.js) : la fenêtre qui liste les sites avant le PDF ou le Word, et le message quand on
+    // l'annule.
     'dialog.externalImages.title': { fr: 'Images d’un site externe', en: 'Images from an external site' },
     'confirm.externalImages': { fr: 'Pour cet export, le widget doit télécharger des images hébergées {count|sur un site externe|sur des sites externes} :\n{sites}\n\nAnnuler arrête l’export.', en: 'For this export, the widget has to download images hosted {count|on an external site|on external sites}:\n{sites}\n\nCancel stops the export.' },
-    // Image insérée par son adresse quand elle vient d'un autre site (js/main-toolbar.js, choix d'Antoine du 04/10) : la question posée une fois, à l'insertion.
+    // Image insérée par son adresse quand elle vient d'un autre site (js/main-toolbar.js) : la question posée une fois, à l'insertion.
     'dialog.imageExternal.title': { fr: 'Image d’un site externe', en: 'Image from an external site' },
     'dialog.imageExternal.message': { fr: 'Cette image est hébergée sur un site externe ({site}).\n\nIntégrer l’image la copie dans le modèle : elle ne dépend plus de ce site.\nGarder le lien l’affiche depuis ce site à chaque ouverture du modèle : elle sera signalée en rouge.', en: 'This image is hosted on an external site ({site}).\n\nEmbedding the image copies it into the template: it no longer depends on that site.\nKeeping the link shows it from that site each time the template is opened: it will be flagged in red.' },
     'dialog.imageExternal.embed': { fr: 'Intégrer l’image', en: 'Embed image' },
     'dialog.imageExternal.keep': { fr: 'Garder le lien', en: 'Keep link' },
-    // Image d'un site externe à l'affichage (js/external-images.js) : l'infobulle de toute image qui charge depuis un autre site que le widget et Grist (contour en tirets, css/external-images.css).
+    // Image d'un site externe à l'affichage (js/external-images.js) : l'infobulle de toute image qui charge depuis un autre site que le widget et
+    // Grist (contour en tirets, css/external-images.css).
     'image.externalSite': { fr: 'Image hébergée sur un site externe ({site}) : chaque affichage la télécharge depuis ce site.', en: 'Image hosted on an external site ({site}): every display downloads it from that site.' },
     'status.exportCancelled': { fr: 'Export annulé.', en: 'Export cancelled.' },
     'prompt.newTemplateName': { fr: 'Nom du nouveau modèle :', en: 'Name of the new template:' },
@@ -885,8 +904,8 @@ const I18n = (function () {
     'searchSelect.count': { fr: '{count} {count|résultat|résultats}', en: '{count} {count|result|results}' },
     // Liste de plus de 500 résultats : seuls les premiers sont posés, cette ligne dit combien d'autres restent.
     'searchSelect.more': { fr: 'Encore {count} {count|résultat|résultats} : précisez la recherche.', en: '{count} more {count|result|results}: refine your search.' },
-    // Même liste avec recherche pour une TABLE (Réglages > Accès), un MODÈLE (macro-modèle), une VALEUR possible d'une colonne (champ Valeur d'une règle) et une FEUILLE
-    // d'un classeur Excel (import d'une grille) : SearchSelect.attachTables / attachTemplates / attachValues / attachSheets.
+    // Même liste avec recherche pour une table (Réglages > Accès), un modèle (macro-modèle), une valeur possible d'une colonne (champ Valeur d'une
+    // règle) et une feuille d'un classeur Excel (import d'une grille) : SearchSelect.attachTables / attachTemplates / attachValues / attachSheets.
     'searchSelect.searchTables': { fr: 'Rechercher une table…', en: 'Search for a table…' },
     'searchSelect.noTableMatch': { fr: 'Aucune table ne correspond.', en: 'No table matches.' },
     'searchSelect.searchTemplates': { fr: 'Rechercher un modèle…', en: 'Search for a template…' },
@@ -917,9 +936,10 @@ const I18n = (function () {
     'linkRules.theseTemplates': { fr: 'ces modèles', en: 'these templates' },
     'linkRules.unnamed': { fr: '(sans nom)', en: '(unnamed)' },
 
-    // --- Messages d'erreur d'une #Variable (js/variables.js : baseRows, followReference, resolveRawValue, resolveVariableResult ; js/reader-mode.js :
-    // resolveBadgeNode). Écrits dans le document à la place de la valeur (mode Lecture, exports PDF et DOCX), donc dans la langue de l'interface de qui lit ou
-    // exporte. Le mode Lecture ne les reconnaît pas à leurs premiers mots mais au drapeau `isError` de Variables.resolveVariableResult ---
+    // --- Messages d'erreur d'une #Variable (js/variables.js : baseRows, followReference, resolveRawValue, resolveVariableResult ;
+    // js/reader-mode.js : resolveBadgeNode). Écrits dans le document à la place de la valeur (mode Lecture, exports PDF et DOCX), donc dans la langue
+    // de l'interface de qui lit ou exporte. Le mode Lecture ne les reconnaît pas à leurs premiers mots mais au drapeau `isError` de
+    // Variables.resolveVariableResult ---
     'variables.error.noCurrentTable': { fr: '[ERREUR: table courante indisponible]', en: '[ERROR: current table unavailable]' },
     'variables.error.noMatching': { fr: '[ERREUR: aucune correspondance configurée pour {table} — réinsérez la variable pour la configurer]', en: '[ERROR: no matching configured for {table} — reinsert the variable to configure it]' },
     'variables.error.rowNotFound': { fr: '[ERREUR: ligne introuvable dans {table}]', en: '[ERROR: row not found in {table}]' },
@@ -957,7 +977,8 @@ const I18n = (function () {
     'table.colDelMerged': { fr: 'Indisponible avec le suivi des modifications : une cellule fusionnée traverse cette colonne', en: 'Unavailable with track changes on: a merged cell runs across this column' },
     'table.tableDel': { fr: 'Supprimer le tableau', en: 'Delete table' },
     'table.fillOpen': { fr: 'Fond de cellule (remplir)', en: 'Cell background (fill)' },
-    // Fusion et scission de cases (js/floating-toolbars.js : grille et tableau de document), puis l'alignement vertical de la barre d'une grille. Les cinq phrases d'après sont les raisons du grisé, en info-bulle (js/table-merge.js).
+    // Fusion et scission de cases (js/floating-toolbars.js : grille et tableau de document), puis l'alignement vertical de la barre d'une grille. Les
+    // cinq phrases d'après sont les raisons du grisé, en info-bulle (js/table-merge.js).
     'table.cellMerge': { fr: 'Fusionner les cases', en: 'Merge cells' },
     'table.cellSplit': { fr: 'Scinder la case', en: 'Split cell' },
     'table.cellMergeNeedsCells': { fr: 'Fusionner les cases : sélectionnez-en au moins deux, en glissant sur le tableau', en: 'Merge cells: select at least two, by dragging across the table' },
@@ -995,12 +1016,13 @@ const I18n = (function () {
     'footnotePopup.ok': { fr: 'OK', en: 'OK' },
     'footnotePopup.placeholder': { fr: 'Texte de la note…', en: 'Note text…' },
 
-    // --- Sommaire (placeholder avant résolution) : montré par l'éditeur (NodeView) ET écrit dans le HTML enregistré/copié (renderHTML, js/editor-nodes.js) ---
+    // --- Sommaire (placeholder avant résolution) : montré par l'éditeur (NodeView) ET écrit dans le HTML enregistré/copié (renderHTML,
+    // js/editor-nodes.js) ---
     'toc.placeholder': { fr: 'Sommaire (généré automatiquement à partir des titres)', en: 'Table of contents (generated automatically from headings)' },
 
     // --- Placeholder du corps de l'éditeur, document principal vide (@tiptap/extension-placeholder, cf. js/editor.js) - lu via une fonction plutôt
     // qu'une chaîne figée (cf. commentaire à l'appel), donc pas besoin de I18n.onChange pour suivre un changement de langue en cours de session : ce
-    // n'est PAS affiché en mode édition d'en-tête/pied (cf. js/header-footer-preview.js), une zone vide n'y montre aucun texte.
+    // n'est pas affiché en mode édition d'en-tête/pied (cf. js/header-footer-preview.js), une zone vide n'y montre aucun texte.
     'editor.placeholder': { fr: 'Commencez à écrire votre modèle ici…', en: 'Start writing your template here…' },
 
     // --- Barre flottante de formatage nombre/date d'une bulle #Variable ---
@@ -1019,9 +1041,10 @@ const I18n = (function () {
     'varFmt.showYear': { fr: 'Afficher/masquer l’année', en: 'Show/hide year' },
     'varFmt.datePreset': { fr: 'Format de date', en: 'Date format' },
     'varFmt.wordsDateTitle': { fr: 'Écriture en toutes lettres', en: 'Spelled out' },
-    // Colonne Oui / Non : les quatre écritures de la barre d'une bulle. Les trois cases sont celles de la liste à cases (mêmes icônes, mêmes infobulles list.checklistClassic.tip et
-    // list.checklistAccentPlain.tip ; la première précise ce que le style barre dans une variable), le texte écrit « vrai » / « faux » (« true » / « false » en anglais) - c'est aussi
-    // ce que la bulle écrit sans réglage. Coché / décoché : le nom accessible d'une case de la Lecture.
+    // Colonne Oui / Non : les quatre écritures de la barre d'une bulle. Les trois cases sont celles de la liste à cases (mêmes icônes, mêmes
+    // infobulles list.checklistClassic.tip et list.checklistAccentPlain.tip ; la première précise ce que le style barre dans une variable), le texte
+    // écrit « vrai » / « faux » (« true » / « false » en anglais) - c'est aussi ce que la bulle écrit sans réglage. Coché / décoché : le nom
+    // accessible d'une case de la Lecture.
     'varFmt.boolTrue': { fr: 'vrai', en: 'true' },
     'varFmt.boolFalse': { fr: 'faux', en: 'false' },
     'varFmt.boolChecked': { fr: 'Coché', en: 'Checked' },
@@ -1045,8 +1068,8 @@ const I18n = (function () {
     'hf.pagenumSlash': { fr: '3 / 12', en: '3 / 12' },
     'hf.done': { fr: 'Terminer', en: 'Done' },
 
-    // --- Titre du sommaire, exporté en PDF (js/pdf-export.js:buildTocStack et son repli), en DOCX (js/docx-export.js:buildTocParagraphs) et affiché en mode
-    // Lecture (js/reader-mode.js:resolveTocMarkers) : tous disent la même chose, le mode Lecture étant l'aperçu de l'export ---
+    // --- Titre du sommaire, exporté en PDF (js/pdf-export.js:buildTocStack et son repli), en DOCX (js/docx-export.js:buildTocParagraphs) et affiché
+    // en mode Lecture (js/reader-mode.js:resolveTocMarkers) : tous disent la même chose, le mode Lecture étant l'aperçu de l'export ---
     'pdf.tocTitle': { fr: 'Sommaire', en: 'Table of Contents' },
     'pdf.tocEmpty': { fr: 'Aucun titre trouvé.', en: 'No heading found.' },
     // Sommaire d'un export DOCX sans aucun titre (js/docx-export.js:buildTocParagraphs) : sa phrase à lui, en italique entre parenthèses.
@@ -1110,8 +1133,9 @@ const I18n = (function () {
     'varCond.clip.copiedStatus': { fr: 'Condition copiée.', en: 'Condition copied.' },
     'varCond.clip.pastedStatus': { fr: 'Condition collée. Enregistrez pour l’appliquer à la variable.', en: 'Condition pasted. Save to apply it to the variable.' },
 
-    // --- Bloc de texte conditionnel (menu des variables, onglet Chips ; js/editor-nodes.js:createConditionalTextNode, js/conditional-text.js) : l'entrée du panneau, l'étiquette du bloc
-    // dans l'éditeur, et les variantes « bloc » de la barre flottante et de la fenêtre de condition d'une variable (js/floating-toolbars.js, js/variable-condition.js) ---
+    // --- Bloc de texte conditionnel (menu des variables, onglet Chips ; js/editor-nodes.js:createConditionalTextNode, js/conditional-text.js) :
+    // l'entrée du panneau, l'étiquette du bloc dans l'éditeur, et les variantes « bloc » de la barre flottante et de la fenêtre de condition d'une
+    // variable (js/floating-toolbars.js, js/variable-condition.js) ---
     'chips.conditionalText': { fr: 'Texte conditionnel', en: 'Conditional text' },
     'varToolbar.linkedBlock': { fr: 'Disponible pour une variable, pas pour un bloc de texte', en: 'Available for a variable, not for a text block' },
     'varToolbar.loopBlock': { fr: 'Disponible pour une variable liée à plusieurs lignes, pas pour un bloc de texte', en: 'Available for a variable linked to several rows, not for a text block' },
@@ -1129,8 +1153,9 @@ const I18n = (function () {
     'condText.tag.titleNone': { fr: 'Texte conditionnel sans condition : il s’affiche toujours. Cliquez pour choisir sa condition.', en: 'Conditional text with no condition: it always shows. Click to choose its condition.' },
     'condText.tag.titleIf': { fr: 'S’affiche si {condition}. Cliquez pour modifier sa condition.', en: 'Shown if {condition}. Click to edit its condition.' },
 
-    // --- Valeur conditionnelle (menu des variables, onglet Chips ; js/conditional-value.js, js/editor-nodes.js:createConditionalValueNode) : l'entrée du panneau, le texte d'attente et l'info-bulle
-    // de la valeur dans l'éditeur, les boutons grisés de sa barre (js/floating-toolbars.js) et les variantes « valeur » de la fenêtre de condition (js/variable-condition.js) ---
+    // --- Valeur conditionnelle (menu des variables, onglet Chips ; js/conditional-value.js, js/editor-nodes.js:createConditionalValueNode) :
+    // l'entrée du panneau, le texte d'attente et l'info-bulle de la valeur dans l'éditeur, les boutons grisés de sa barre (js/floating-toolbars.js)
+    // et les variantes « valeur » de la fenêtre de condition (js/variable-condition.js) ---
     'chips.conditionalValue': { fr: 'Valeur conditionnelle', en: 'Conditional value' },
     'condValue.placeholder': { fr: 'valeur', en: 'value' },
     'condValue.titleNone': { fr: 'Valeur conditionnelle sans condition : elle s’affiche toujours. Pour choisir sa condition, cliquez dedans puis sur l’icône de condition de la barre.', en: 'Conditional value with no condition: it always shows. To choose its condition, click inside it, then the condition icon in the toolbar.' },
@@ -1146,8 +1171,9 @@ const I18n = (function () {
     'varCond.unwrapLostValue': { fr: 'La valeur conditionnelle a été déplacée ou supprimée pendant l’édition : elle n’a pas été défaite.', en: 'The conditional value was moved or deleted while editing: it was not unwrapped.' },
     'varCond.clip.pastedStatusValue': { fr: 'Condition collée. Enregistrez pour l’appliquer à la valeur.', en: 'Condition pasted. Save to apply it to the value.' },
 
-    // --- Case conditionnelle (menu des variables, onglet Chips ; js/conditional-checkbox.js, js/editor-nodes.js:createConditionalCheckboxNode) : l'entrée du panneau, le libellé et l'info-bulle
-    // de la puce dans l'éditeur, les deux boutons grisés de sa barre (js/floating-toolbars.js). La fenêtre de condition a ses phrases à part (`varCond.*Checkbox`).
+    // --- Case conditionnelle (menu des variables, onglet Chips ; js/conditional-checkbox.js, js/editor-nodes.js:createConditionalCheckboxNode) :
+    // l'entrée du panneau, le libellé et l'info-bulle de la puce dans l'éditeur, les deux boutons grisés de sa barre (js/floating-toolbars.js). La
+    // fenêtre de condition a ses phrases à part (`varCond.*Checkbox`).
     'chips.conditionalCheckbox': { fr: 'Case conditionnelle', en: 'Conditional checkbox' },
     'condCheckbox.tag.none': { fr: 'sans condition', en: 'no condition' },
     'condCheckbox.tag.if': { fr: 'Si {condition}', en: 'If {condition}' },
@@ -1316,13 +1342,15 @@ const I18n = (function () {
     'schemaRenames.status': { fr: 'Mis à jour après un renommage dans Grist : {parts}.', en: 'Updated after a rename in Grist: {parts}.' },
     'schemaRenames.part.variables': { fr: '{count} {count|variable|variables} dans {models} {models|modèle|modèles}', en: '{count} {count|variable|variables} in {models} {models|template|templates}' },
     'schemaRenames.part.links': { fr: '{count} {count|clé de correspondance|clés de correspondance}', en: '{count} matching {count|key|keys}' },
-    // Avertissement d'ouverture (js/settings-columns.js) : un réglage Accès ou Selon la ligne cite une colonne, ou la table des droits, qui n'existe plus dans Grist. Le titre est celui de l'onglet.
+    // Avertissement d'ouverture (js/settings-columns.js) : un réglage Accès ou Selon la ligne cite une colonne, ou la table des droits, qui n'existe
+    // plus dans Grist. Le titre est celui de l'onglet.
     'settingsColumns.quoted': { fr: '« {name} »', en: '“{name}”' },
     'settingsColumns.part.columns': { fr: '{title} : {count|la colonne|les colonnes} {names} {count|n’existe|n’existent} plus.', en: '{title}: {count|the column|the columns} {names} {count|no longer exists|no longer exist}.' },
     'settingsColumns.part.table': { fr: '{title} : la table « {name} » n’existe plus.', en: '{title}: the table “{name}” no longer exists.' },
     'settingsColumns.status': { fr: '{parts} À re-choisir dans les Réglages.', en: '{parts} Choose again in Settings.' },
-    // Liste d'une variable (js/variable-list.js, bouton « Liste » de la barre d'une bulle, demande d'Antoine du 2026-10-04) : une colonne Liste de choix ou Liste de références écrit toutes ses
-    // valeurs (avec le séparateur voulu), la première, la dernière ou la n-ième. Les séparateurs sont ceux des boucles (« Séparateur », « Avant la dernière »).
+    // Liste d'une variable (js/variable-list.js, bouton « Liste » de la barre d'une bulle) : une colonne Liste de choix ou Liste de références écrit
+    // toutes ses valeurs (avec le séparateur voulu), la première, la dernière ou la n-ième. Les séparateurs sont ceux des boucles (« Séparateur »,
+    // « Avant la dernière »).
     'varToolbar.list': { fr: 'Liste : quelles valeurs écrire', en: 'List: which values to write' },
     'varToolbar.listDisabled': { fr: 'Disponible pour une colonne Liste de choix ou Liste de références', en: 'Available for a Choice List or Reference List column' },
     'varToolbar.listLoop': { fr: 'La boucle écrit déjà chaque valeur de la liste : retirez-la pour régler la liste', en: 'The loop already writes every value of the list: remove it to set the list' },
@@ -1405,10 +1433,10 @@ const I18n = (function () {
 
   let lang = initialLang();
 
-  // Pluriel sans parenthèses : `{n|forme au singulier|forme au pluriel}` prend l'une ou l'autre selon la valeur de la variable `n` (règles de la langue :
-  // en français 0 et 1 sont au singulier, en anglais seul 1) - « {count} {count|ligne trouvée|lignes trouvées} » donne « 1 ligne trouvée », « 3 lignes
-  // trouvées ». Une forme peut contenir d'autres `{variable}` ou un autre pluriel. Traité AVANT les variables simples, pour que le texte d'une variable
-  // (nom de colonne, valeur saisie) ne soit jamais lu comme un pluriel.
+  // Pluriel sans parenthèses : `{n|forme au singulier|forme au pluriel}` prend l'une ou l'autre selon la valeur de la variable `n` (règles de la
+  // langue : en français 0 et 1 sont au singulier, en anglais seul 1) - « {count} {count|ligne trouvée|lignes trouvées} » donne « 1 ligne trouvée »,
+  // « 3 lignes trouvées ». Une forme peut contenir d'autres `{variable}` ou un autre pluriel. Traité avant les variables simples, pour que le texte
+  // d'une variable (nom de colonne, valeur saisie) ne soit jamais lu comme un pluriel.
   const pluralRules = {};
   function expandPlurals(s, vars) {
     let out = '';
@@ -1451,21 +1479,21 @@ const I18n = (function () {
   function getLang() { return lang; }
 
   // Abonnés notifiés après chaque changement de langue. Nécessaire pour les libellés qu'aucun attribut data-i18n-* ne peut porter parce qu'ils se
-  // composent à l'exécution (ex. l'infobulle « Enregistrer (⌘S) » du bouton Enregistrer, dont le raccourci dépend de la plateforme) : sans ce crochet,
-  // applyTranslations() les réécrirait à leur version brute au premier changement de langue.
+  // composent à l'exécution (ex. l'infobulle « Enregistrer (⌘S) » du bouton Enregistrer, dont le raccourci dépend de la plateforme) : sans ce
+  // crochet, applyTranslations() les réécrirait à leur version brute au premier changement de langue.
   const changeListeners = [];
   function onChange(fn) { if (typeof fn === 'function') changeListeners.push(fn); }
 
   function setLang(next) {
     lang = next === 'en' ? 'en' : 'fr';
-    try { localStorage.setItem('pp_lang', lang); } catch (e) { /* stockage indisponible - la langue ne survivra pas au rechargement, sans plus de conséquence */ }
+    try { localStorage.setItem('pp_lang', lang); } catch (e) { /* stockage indisponible : la langue ne survivra pas au rechargement */ }
     document.documentElement.lang = lang;
     applyTranslations();
     changeListeners.forEach(fn => { try { fn(lang); } catch (e) { console.warn('[I18n] un abonné au changement de langue a levé une exception', e); } });
   }
 
-  // Parcourt le DOM (ou un sous-arbre `root`, ex. un nœud injecté après coup par un module qui ne connaît pas I18n) et applique les 4 variantes d'attribut de
-  // traduction déclarative - le texte français d'origine reste en dur dans le HTML comme repli si ce fichier n'a pas encore chargé.
+  // Parcourt le DOM (ou un sous-arbre `root`, ex. un nœud injecté après coup par un module qui ne connaît pas I18n) et applique les 4 variantes
+  // d'attribut de traduction déclarative - le texte français d'origine reste en dur dans le HTML comme repli si ce fichier n'a pas encore chargé.
   function applyTranslations(root) {
     const scope = root || document;
     scope.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); });
@@ -1474,8 +1502,9 @@ const I18n = (function () {
     scope.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.setAttribute('placeholder', t(el.getAttribute('data-i18n-placeholder'))); });
   }
 
-  // Applique tout de suite (pas seulement lors d'un futur setLang) : ce script est placé après tout le HTML du bandeau/des modales (les <script> sont en
-  // fin de <body>), donc le DOM à traduire existe déjà - un utilisateur ayant déjà choisi EN voit l'anglais dès l'ouverture, pas après avoir rouvert Réglages.
+  // Applique tout de suite (pas seulement lors d'un futur setLang) : ce script est placé après tout le HTML du bandeau/des modales (les <script> sont
+  // en fin de <body>), donc le DOM à traduire existe déjà - un utilisateur ayant déjà choisi EN voit l'anglais dès l'ouverture, pas après avoir
+  // rouvert Réglages.
   document.documentElement.lang = lang;
   applyTranslations();
 

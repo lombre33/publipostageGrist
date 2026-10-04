@@ -3,7 +3,11 @@
 // modification ; ce module ajoute une couche visuelle synchronisée dans les deux sens (voir attach() pour les quatre pièges évités).
 // Périmètre : parcourir, choisir, épingler. Créer un dossier et y ranger un modèle se fait dans js/template-organize-modal.js ; son déclencheur,
 // #btn-organize-templates, est créé ici une seule fois (en-tête du panneau, en haut à droite) et js/main.js passe `onOrganize` à attach().
+// Les briques de ligne (rowShell, makeGroup, pinButton, appendSections) sont aussi celles de cette fenêtre : une seule structure pour
+// css/template-tree-select.css.
 const TemplateTreeSelect = (function () {
+  const { el, button } = Dom;
+
   let realSelect = null;
   let wrap, trigger, triggerIcon, triggerLabel, popup;
   // En-tête fixe du panneau (titre + « Organiser ») : créé une fois par attachInner(), render() ne redessine que les lignes en dessous.
@@ -16,20 +20,57 @@ const TemplateTreeSelect = (function () {
   // pas {} : un dossier peut s'appeler « constructor » ou « __proto__ ».
   const folderOverrides = new Map();
 
-  function iconSpan(typeModele) {
-    const span = document.createElement('span');
-    span.className = 'tts-icon tts-icon-' + (typeModele || 'document');
-    return span;
-  }
+  const iconSpan = typeModele => el('span', 'tts-icon tts-icon-' + (typeModele || 'document'));
 
   function labelFor(tpl) {
-    const isDefault = Templates.isDefault(tpl.id);
-    return isDefault ? (tpl.nom + ' ★') : tpl.nom;
+    return Templates.isDefault(tpl.id) ? (tpl.nom + ' ★') : tpl.nom;
+  }
+
+  // Une ligne de l'arbre, `kind` « folder » ou « leaf » : chevron (dossier seulement), icône, libellé. css/template-tree-select.css en dépend, dans
+  // cet ordre.
+  function rowShell(kind, depth, typeModele, text) {
+    const row = el('div', 'tts-row tts-row-' + kind);
+    row.style.setProperty('--tts-depth', String(depth));
+    if (kind === 'folder') row.appendChild(el('span', 'tts-folder-caret'));
+    row.append(iconSpan(kind === 'folder' ? 'folder' : typeModele), el('span', 'tts-row-label', text));
+    return row;
+  }
+
+  // Le groupe des enfants d'un dossier : `makeChild(enfant, profondeur)` pour chacun.
+  function makeGroup(depth, children, makeChild) {
+    const group = el('div', 'tts-group');
+    // Profondeur du dossier (pas celle de ses enfants) : css/template-tree-select.css cale le trait guide du groupe sur le caret de CE dossier ;
+    // posée explicitement, sinon le groupe hériterait de celle du groupe parent.
+    group.style.setProperty('--tts-depth', String(depth));
+    children.forEach(child => group.appendChild(makeChild(child, depth + 1)));
+    return group;
+  }
+
+  // Le bouton épingle d'une ligne de modèle. Info-bulle native (le panneau et la fenêtre « Organiser » vivent hors de #toolbar-top : le [data-tip] de
+  // la barre ne s'y applique pas) : elle dit ce que fait le clic dans l'état courant, pour ne pas le confondre avec l'étoile « modèle par défaut »
+  // de la barre.
+  function pinButton(pinned) {
+    const pin = button('tts-pin-btn');
+    pin.classList.toggle('is-pinned', pinned);
+    pin.setAttribute('aria-pressed', String(pinned));
+    pin.setAttribute('aria-label', I18n.t('templateTree.pin.aria'));
+    pin.title = I18n.t(pinned ? 'templateTree.unpin.tip' : 'templateTree.pin.tip');
+    return pin;
+  }
+
+  // Les deux sections de la liste : « Épinglés » (à plat), puis « Tous les modèles » (l'arbre), chacune seulement si elle a des lignes.
+  function appendSections(container, view, makePinnedRow, makeTreeRow) {
+    const section = (titleKey, nodes, makeRow) => {
+      if (!nodes.length) return;
+      container.appendChild(el('div', 'tts-section-label', I18n.t(titleKey)));
+      nodes.forEach(node => container.appendChild(makeRow(node)));
+    };
+    section('templateTree.pinnedSection', view.pinned, makePinnedRow);
+    section('templateTree.allSection', view.tree, makeTreeRow);
   }
 
   function makeRow(node, depth) {
-    if (node.type === 'dossier') return makeFolderRow(node, depth);
-    return makeLeafRow(node, depth);
+    return node.type === 'dossier' ? makeFolderRow(node, depth) : makeLeafRow(node, depth);
   }
 
   // Un dossier s'ouvre déplié, sauf si cette personne l'a réglé « replié par défaut » (TemplatePreferences.isFolderCollapsed, posé depuis « Organiser
@@ -40,83 +81,46 @@ const TemplateTreeSelect = (function () {
   }
 
   function makeFolderRow(node, depth) {
-    const li = document.createElement('div');
-    li.className = 'tts-row tts-row-folder';
-    li.setAttribute('role', 'treeitem');
     const open = isFolderOpen(node.chemin);
-    li.setAttribute('aria-expanded', open ? 'true' : 'false');
-    li.dataset.folderPath = node.chemin;
-    li.setAttribute('tabindex', '-1');
-    li.style.setProperty('--tts-depth', String(depth));
-    const caret = document.createElement('span');
-    caret.className = 'tts-folder-caret';
-    const icon = document.createElement('span');
-    icon.className = 'tts-icon tts-icon-folder';
-    const label = document.createElement('span');
-    label.className = 'tts-row-label';
-    label.textContent = node.nom;
-    li.appendChild(caret);
-    li.appendChild(icon);
-    li.appendChild(label);
-
-    const group = document.createElement('div');
-    group.className = 'tts-group';
-    // Profondeur du dossier (pas celle de ses enfants) : css/template-tree-select.css cale le trait guide du groupe sur le caret de CE dossier ;
-    // posée explicitement, sinon le groupe hériterait de celle du groupe parent.
-    group.style.setProperty('--tts-depth', String(depth));
+    const row = rowShell('folder', depth, null, node.nom);
+    row.setAttribute('role', 'treeitem');
+    row.setAttribute('aria-expanded', String(open));
+    row.dataset.folderPath = node.chemin;
+    row.tabIndex = -1;
+    const group = makeGroup(depth, node.enfants, makeRow);
     group.setAttribute('role', 'group');
     group.classList.toggle('is-collapsed', !open);
-    node.enfants.forEach((child) => group.appendChild(makeRow(child, depth + 1)));
-
-    li.addEventListener('click', (e) => {
+    row.addEventListener('click', (e) => {
       e.stopPropagation();
-      toggleFolder(li, group);
+      toggleFolder(row, group);
     });
 
-    // Fragment plutôt qu'un <div> englobant : `group` doit rester le frère direct de `li` (toggleFolder et la navigation clavier ArrowRight/Left
-    // lisent li.nextElementSibling).
+    // Fragment plutôt qu'un <div> englobant : `group` doit rester le frère direct de la ligne (toggleFolder et la navigation clavier ArrowRight/Left
+    // lisent row.nextElementSibling).
     const fragment = document.createDocumentFragment();
-    fragment.appendChild(li);
-    fragment.appendChild(group);
+    fragment.append(row, group);
     return fragment;
   }
 
-  function toggleFolder(li, group) {
-    const expanded = li.getAttribute('aria-expanded') !== 'false';
-    li.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+  function toggleFolder(row, group) {
+    const expanded = row.getAttribute('aria-expanded') !== 'false';
+    row.setAttribute('aria-expanded', String(!expanded));
     group.classList.toggle('is-collapsed', expanded);
-    if (li.dataset.folderPath) folderOverrides.set(li.dataset.folderPath, !expanded);
+    if (row.dataset.folderPath) folderOverrides.set(row.dataset.folderPath, !expanded);
   }
 
   function makeLeafRow(node, depth) {
-    const li = document.createElement('div');
-    li.className = 'tts-row tts-row-leaf';
-    li.setAttribute('role', 'treeitem');
-    li.setAttribute('tabindex', '-1');
-    li.dataset.templateId = String(node.id);
-    li.style.setProperty('--tts-depth', String(depth));
-    if (String(realSelect.value) === String(node.id)) li.setAttribute('aria-selected', 'true');
+    const row = rowShell('leaf', depth, node.typeModele, labelFor(node));
+    row.setAttribute('role', 'treeitem');
+    row.tabIndex = -1;
+    row.dataset.templateId = String(node.id);
+    if (String(realSelect.value) === String(node.id)) row.setAttribute('aria-selected', 'true');
 
-    li.appendChild(iconSpan(node.typeModele));
-    const label = document.createElement('span');
-    label.className = 'tts-row-label';
-    label.textContent = labelFor({ id: node.id, nom: node.nom });
-    li.appendChild(label);
-
-    const pinBtn = document.createElement('button');
-    pinBtn.type = 'button';
-    pinBtn.className = 'tts-pin-btn';
+    const pinned = TemplatePreferences.isPinned(node.id);
+    const pinBtn = pinButton(pinned);
     // -1 : un <button> est un arrêt de tabulation natif, ce qui casserait le focus roulant de l'arbre (Tab sortirait de la ligne vers ce bouton au
     // lieu de sortir du widget). Pas de raccourci clavier pour épingler : seule la souris y accède.
     pinBtn.tabIndex = -1;
-    const prefs = TemplatePreferences.getCached();
-    const pinned = !!(prefs[node.id] && prefs[node.id].epingle);
-    pinBtn.classList.toggle('is-pinned', pinned);
-    pinBtn.setAttribute('aria-pressed', String(pinned));
-    pinBtn.setAttribute('aria-label', I18n.t('templateTree.pin.aria'));
-    // Info-bulle native (le panneau vit dans document.body, hors de #toolbar-top : le [data-tip] de la barre ne s'y applique pas) : dit ce que fait
-    // le clic dans l'état courant, pour ne pas le confondre avec l'étoile « modèle par défaut » de la barre.
-    pinBtn.title = I18n.t(pinned ? 'templateTree.unpin.tip' : 'templateTree.pin.tip');
     pinBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
       try {
@@ -127,12 +131,11 @@ const TemplateTreeSelect = (function () {
         console.error('[template-tree-select] échec épinglage', err);
       }
     });
-    li.appendChild(pinBtn);
+    row.appendChild(pinBtn);
 
-    li.addEventListener('click', () => selectValue(node.id));
-    return li;
+    row.addEventListener('click', () => selectValue(node.id));
+    return row;
   }
-
 
   function render() {
     // Un ré-affichage pendant que le popup est ouvert (clic sur une épingle) reconstruit tout popup.innerHTML : sans ceci, la ligne qui avait le
@@ -151,28 +154,8 @@ const TemplateTreeSelect = (function () {
     // seulement un texte déjà mis en forme par refreshTemplateList (js/main.js).
     const view = TemplateOrganizer.buildView(Templates.getCached(), TemplatePreferences.getCached());
 
-    if (!view.pinned.length && !view.tree.length) {
-      const empty = document.createElement('div');
-      empty.className = 'tts-empty';
-      empty.textContent = I18n.t('templateTree.empty');
-      popup.appendChild(empty);
-    }
-
-    if (view.pinned.length) {
-      const sep = document.createElement('div');
-      sep.className = 'tts-section-label';
-      sep.textContent = I18n.t('templateTree.pinnedSection');
-      popup.appendChild(sep);
-      view.pinned.forEach((p) => popup.appendChild(makeLeafRow({ id: p.id, nom: p.nom, typeModele: p.typeModele }, 0)));
-    }
-
-    if (view.tree.length) {
-      const sep = document.createElement('div');
-      sep.className = 'tts-section-label';
-      sep.textContent = I18n.t('templateTree.allSection');
-      popup.appendChild(sep);
-      view.tree.forEach((n) => popup.appendChild(makeRow(n, 0)));
-    }
+    if (!view.pinned.length && !view.tree.length) popup.appendChild(el('div', 'tts-empty', I18n.t('templateTree.empty')));
+    appendSections(popup, view, p => makeLeafRow(p, 0), n => makeRow(n, 0));
 
     syncTriggerLabel();
     syncDisabledState();
@@ -184,14 +167,9 @@ const TemplateTreeSelect = (function () {
   }
 
   // Synchronisation du déclencheur avec le <select> réel
-  function findTemplateById(id) {
-    if (id === '' || id == null) return null;
-    return Templates.getCached().find((t) => String(t.id) === String(id)) || null;
-  }
-
   function syncTriggerLabel() {
     const id = realSelect.value;
-    const tpl = findTemplateById(id);
+    const tpl = Templates.byId(id);
     triggerIcon.className = 'tts-icon tts-icon-' + (tpl ? (tpl.typeModele || 'document') : 'new');
     // Le libellé suit l'<option> choisie, pas seulement le cache : « Renommer » (js/main.js) ne change que le texte de l'option tant que le modèle
     // n'est pas enregistré, et le nouveau nom doit se voir tout de suite.
@@ -238,16 +216,9 @@ const TemplateTreeSelect = (function () {
   }
 
   // Ouverture, fermeture et navigation clavier (patron WAI-ARIA « Tree View »)
+  // Une ligne est visible si aucun de ses groupes ancêtres n'est replié.
   function visibleRows() {
-    return Array.from(popup.querySelectorAll('.tts-row')).filter((r) => {
-      // Une ligne est visible si aucun de ses groupes ancêtres n'est collapsed.
-      let ancestorGroup = r.closest('.tts-group');
-      while (ancestorGroup) {
-        if (ancestorGroup.classList.contains('is-collapsed')) return false;
-        ancestorGroup = ancestorGroup.parentElement && ancestorGroup.parentElement.closest('.tts-group');
-      }
-      return true;
-    });
+    return Array.from(popup.querySelectorAll('.tts-row')).filter(row => !row.closest('.tts-group.is-collapsed'));
   }
 
   function setRovingFocus(row) {
@@ -382,20 +353,12 @@ const TemplateTreeSelect = (function () {
 
     // Piège 4 : le <select> réel est masqué (classe, tabIndex, aria-hidden ci-dessous) avant que le reste d'attach() (construction de l'arbre,
     // render() qui lit Grist et peut lever sur une donnée inattendue) ait fini. Le try/catch de js/main.js empêche l'exception de casser init(), mais
-    // sans repli ici le <select> resterait masqué sans arbre à sa place : plus aucun moyen de choisir un modèle. En cas d'échec, on annule ce
-    // qu'attach() a fait (retire wrap et popup, arrête le MutationObserver), on rend le <select> natif utilisable, puis on relaie l'exception.
+    // sans repli ici le <select> resterait masqué sans arbre à sa place : plus aucun moyen de choisir un modèle. En cas d'échec, detach() annule ce
+    // qu'attach() a fait et rend le <select> natif utilisable, puis l'exception est relayée.
     try {
       attachInner();
     } catch (err) {
-      if (mo) { mo.disconnect(); mo = null; }
-      if (wrap && wrap.parentNode) wrap.parentNode.removeChild(wrap);
-      if (popup && popup.parentNode) popup.parentNode.removeChild(popup);
-      if (realSelect) {
-        realSelect.classList.remove('tts-native-select');
-        realSelect.removeAttribute('aria-hidden');
-        realSelect.tabIndex = 0;
-      }
-      realSelect = wrap = trigger = triggerIcon = triggerLabel = popup = head = headTitle = organizeBtn = organizeLabel = null;
+      detach();
       throw err;
     }
   }
@@ -409,23 +372,15 @@ const TemplateTreeSelect = (function () {
     realSelect.tabIndex = -1;
     realSelect.setAttribute('aria-hidden', 'true');
 
-    wrap = document.createElement('span');
-    wrap.className = 'tts-wrap';
+    wrap = el('span', 'tts-wrap');
     realSelect.parentNode.insertBefore(wrap, realSelect.nextSibling);
 
-    trigger = document.createElement('button');
-    trigger.type = 'button';
-    trigger.className = 'tts-trigger';
+    trigger = button('tts-trigger');
     trigger.setAttribute('aria-haspopup', 'tree');
     trigger.setAttribute('aria-expanded', 'false');
     triggerIcon = iconSpan('new');
-    triggerLabel = document.createElement('span');
-    triggerLabel.className = 'tts-trigger-label';
-    const caret = document.createElement('span');
-    caret.className = 'tts-caret';
-    trigger.appendChild(triggerIcon);
-    trigger.appendChild(triggerLabel);
-    trigger.appendChild(caret);
+    triggerLabel = el('span', 'tts-trigger-label');
+    trigger.append(triggerIcon, triggerLabel, el('span', 'tts-caret'));
     // e.detail (nombre de clics du geste : 2 pour un vrai double-clic) distingue un double-clic natif d'un second clic délibéré (rouvrir puis
     // refermer, ce que font les tests avec deux clics synthétiques à detail=0). Sans ce garde, le réflexe du <select> natif (double-clic pour
     // choisir) ouvrait puis refermait aussitôt le panneau. Une minuterie fixe (ignorer un clic dans les 250 ms) avait été écartée : elle cassait
@@ -442,8 +397,7 @@ const TemplateTreeSelect = (function () {
       if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPopup(); }
     });
 
-    popup = document.createElement('div');
-    popup.className = 'tts-popup';
+    popup = el('div', 'tts-popup');
     popup.setAttribute('role', 'tree');
     popup.setAttribute('aria-label', I18n.t('template.select'));
     popup.addEventListener('keydown', onPopupKeydown);
@@ -451,26 +405,19 @@ const TemplateTreeSelect = (function () {
     // En-tête fixe : titre à gauche, « Organiser mes modèles » en haut à droite. tabIndex -1 : on y arrive par Flèche haut depuis la première ligne
     // (onPopupKeydown), pas par Tab, qui referme le panneau. Le clic referme le panneau et rend le focus au déclencheur avant d'ouvrir la fenêtre :
     // celle-ci le rendra à la fermeture, et le bouton, masqué avec le panneau, ne peut pas le recevoir.
-    head = document.createElement('div');
-    head.className = 'tts-head';
-    headTitle = document.createElement('span');
-    headTitle.className = 'tts-head-title';
-    organizeBtn = document.createElement('button');
-    organizeBtn.type = 'button';
+    head = el('div', 'tts-head');
+    headTitle = el('span', 'tts-head-title');
+    organizeBtn = button('tts-organize-btn');
     organizeBtn.id = 'btn-organize-templates';
-    organizeBtn.className = 'tts-organize-btn';
     organizeBtn.tabIndex = -1;
-    organizeLabel = document.createElement('span');
-    organizeLabel.className = 'tts-organize-label';
-    organizeBtn.appendChild(iconSpan('organize'));
-    organizeBtn.appendChild(organizeLabel);
+    organizeLabel = el('span', 'tts-organize-label');
+    organizeBtn.append(iconSpan('organize'), organizeLabel);
     organizeBtn.addEventListener('click', () => {
       closePopup();
       trigger.focus({ preventScroll: true });
       if (onOrganize) onOrganize();
     });
-    head.appendChild(headTitle);
-    head.appendChild(organizeBtn);
+    head.append(headTitle, organizeBtn);
     popup.appendChild(head);
     syncHeadTexts();
 
@@ -499,10 +446,10 @@ const TemplateTreeSelect = (function () {
     if (mo) { mo.disconnect(); mo = null; }
     if (outsideClickHandler) { document.removeEventListener('mousedown', outsideClickHandler, true); outsideClickHandler = null; }
     if (outsideScrollHandler) { window.removeEventListener('scroll', outsideScrollHandler, true); outsideScrollHandler = null; }
-    if (wrap && wrap.parentNode) wrap.parentNode.removeChild(wrap);
+    if (wrap) wrap.remove();
     // popup n'est plus un enfant de wrap (il est dans document.body) : le retirer explicitement, sinon un futur attach() en recréerait un second en
     // laissant l'ancien orphelin.
-    if (popup && popup.parentNode) popup.parentNode.removeChild(popup);
+    if (popup) popup.remove();
     realSelect.classList.remove('tts-native-select');
     realSelect.removeAttribute('aria-hidden');
     realSelect.tabIndex = 0;
@@ -527,5 +474,5 @@ const TemplateTreeSelect = (function () {
     if (popup) { popup.setAttribute('aria-label', I18n.t('template.select')); syncHeadTexts(); render(); }
   });
 
-  return { attach, refresh, iconSpan };
+  return { attach, refresh, iconSpan, rowShell, makeGroup, pinButton, appendSections };
 })();

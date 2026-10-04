@@ -1,7 +1,8 @@
-// Cases à cocher d'une variable Oui/Non pour le PDF vectoriel : deux polices TrueType de deux glyphes (U+2610 case décochée, U+2611 case cochée), générées par
-// dev-tests/build-pdf-boxes-font.py (à relancer pour les modifier ; le détail du dessin y est). pdfmake ne met pas de dessin dans une ligne de texte, et Roboto & co n'ont
-// pas ces glyphes : js/pdf-export.js:inlineRuns pose la case comme un mot, dans la couleur du run. PPBoxAccent = styles « accentStrike » et « accentPlain » (carré arrondi
-// plein, coche en creux), PPBoxClassic = style « classic » (contour et coche). Chargé après vfs_fonts, comme js/pdf-fonts*.js.
+// Cases à cocher d'une variable Oui/Non pour le PDF vectoriel : deux polices TrueType de deux glyphes (U+2610 case décochée, U+2611 case cochée),
+// générées par dev-tests/build-pdf-boxes-font.py (à relancer pour les modifier ; le détail du dessin y est). pdfmake ne met pas de dessin dans une
+// ligne de texte, et Roboto & co n'ont pas ces glyphes : js/pdf-export.js:inlineRuns pose la case comme un mot, dans la couleur du run. PPBoxAccent =
+// styles « accentStrike » et « accentPlain » (carré arrondi plein, coche en creux), PPBoxClassic = style « classic » (contour et coche). Chargé après
+// vfs_fonts, comme js/pdf-fonts*.js.
 (function () {
   if (!window.pdfMake || !window.pdfMake.vfs) return;
   if (!window.pdfMake.fonts) window.pdfMake.fonts = {};

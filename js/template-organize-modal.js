@@ -10,14 +10,18 @@
 // (il faut tout voir pour ranger) : l'interrupteur ne règle que la liste déroulante. Celui d'un dossier en attente reste local (pendingCollapsed)
 // jusqu'au premier modèle rangé.
 const TemplateOrganizeModal = (function () {
+  const { el, button } = Dom;
   let modal, searchInput, list, newFolderBtn;
   let searchTerm = '';
   let pendingFolder = null;
   let pendingCollapsed = false; // interrupteur du dossier en attente, écrit seulement quand il devient réel (cf. applyPendingFolderState)
 
-  // Après toute écriture (épingle, dossier), l'arbre de la barre d'outils se met à jour sans fermeture ni réouverture (TemplateTreeSelect.refresh(),
-  // aussi appelé au chargement asynchrone des préférences).
-  function refreshTree() { TemplateTreeSelect.refresh(); }
+  // Après toute écriture (épingle, dossier), la liste et l'arbre de la barre d'outils se mettent à jour sans fermeture ni réouverture
+  // (TemplateTreeSelect.refresh() est aussi appelé au chargement asynchrone des préférences).
+  function redraw() {
+    render();
+    TemplateTreeSelect.refresh();
+  }
 
   function findFolderInTree(nodes, path) {
     for (const n of nodes) {
@@ -29,12 +33,21 @@ const TemplateOrganizeModal = (function () {
     return null;
   }
 
-  // Nom du seul nouveau segment : le préfixe du parent est géré ici (voir pendingFolder).
-  async function promptNewFolderName(parentPath) {
+  // Le dossier en attente (null : aucun) repart toujours déplié.
+  function setPendingFolder(path) {
+    pendingFolder = path;
+    pendingCollapsed = false;
+  }
+
+  // « + » : demande le nom du seul nouveau segment (le préfixe du parent est géré ici, voir pendingFolder), puis pose le dossier en attente.
+  async function addFolder(parentPath) {
     const value = await Dialogs.prompt({ title: I18n.t('dialog.newFolder.title'), label: I18n.t('organize.modal.newFolderPrompt'), confirmLabel: I18n.t('common.create') });
-    if (value === null) return null;
-    const full = parentPath ? parentPath + '/' + value : value;
-    return TemplatePreferences.normalizeFolderPath(full);
+    if (value === null) return;
+    const path = TemplatePreferences.normalizeFolderPath(parentPath ? parentPath + '/' + value : value);
+    if (!path) return;
+    setPendingFolder(path);
+    render();
+    revealPendingFolder();
   }
 
   // Le dossier en attente vient d'être créé par un rangement : son interrupteur « replié par défaut », resté local, est écrit maintenant. Un échec ne
@@ -54,8 +67,7 @@ const TemplateOrganizeModal = (function () {
       await TemplatePreferences.setFolder(id, path);
       await applyPendingFolderState(path);
       if (pendingFolder === path) pendingFolder = null;
-      render();
-      refreshTree();
+      redraw();
     } catch (e) {
       console.error('[template-organize-modal] échec du glisser-déposer', e);
     }
@@ -71,8 +83,7 @@ const TemplateOrganizeModal = (function () {
     try {
       await TemplatePreferences.setFolder(id, value);
       await applyPendingFolderState(TemplatePreferences.normalizeFolderPath(value));
-      render();
-      refreshTree();
+      redraw();
     } catch (e) {
       console.error('[template-organize-modal] échec du déplacement', e);
     }
@@ -82,8 +93,7 @@ const TemplateOrganizeModal = (function () {
     try {
       // setPinned() ne lève pas pour une identification indisponible (repli anonyme, js/template-preferences.js).
       await TemplatePreferences.setPinned(id, !pinned);
-      render();
-      refreshTree();
+      redraw();
     } catch (e) {
       console.error('[template-organize-modal] échec épinglage', e);
     }
@@ -93,23 +103,19 @@ const TemplateOrganizeModal = (function () {
   // l'interface suit tout de suite ; si Grist refuse l'écriture, retour au dernier état confirmé et redessin.
   async function toggleFolderDefault(path) {
     const pending = TemplatePreferences.setFolderCollapsed(path, !TemplatePreferences.isFolderCollapsed(path));
-    render();
-    refreshTree();
+    redraw();
     try {
       await pending;
     } catch (e) {
       console.error('[template-organize-modal] échec de l’état du dossier', e);
-      render();
-      refreshTree();
+      redraw();
     }
   }
 
   // Interrupteur d'une ligne dossier (réelle ou en attente). Deux tracés distincts (déplié : le contenu sous l'en-tête ; replié : l'en-tête seul et
   // trois points), ni la punaise, ni l'étoile, ni un chevron (une icône = une fonction). L'info-bulle dit l'état courant et ce que fait le clic.
   function makeFolderDefaultButton(collapsed, focusKey, onToggle) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'tom-folder-default-btn';
+    const btn = button('tom-folder-default-btn');
     btn.dataset.focusKey = focusKey; // cf. render() : le bouton retrouve le focus après le redessin
     btn.classList.toggle('is-collapsed', collapsed);
     btn.setAttribute('aria-pressed', String(collapsed));
@@ -119,11 +125,22 @@ const TemplateOrganizeModal = (function () {
     return btn;
   }
 
+  // Cible de glisser-déposer pour le dossier `path` : preventDefault() sur dragover est obligatoire (règle HTML5 DnD), sinon 'drop' ne se déclenche
+  // jamais.
+  function acceptDrops(row, path) {
+    row.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; row.classList.add('tom-drop-target'); });
+    row.addEventListener('dragleave', () => row.classList.remove('tom-drop-target'));
+    row.addEventListener('drop', (e) => {
+      e.preventDefault();
+      row.classList.remove('tom-drop-target');
+      const id = e.dataTransfer.getData('text/plain');
+      if (id) dropOnFolder(id, path);
+    });
+  }
+
   // folderLabel : seulement pour les lignes épinglées (à plat en tête, donc sans indentation qui indique leur dossier).
   function makeLeafRow(node, depth, folderLabel) {
-    const row = document.createElement('div');
-    row.className = 'tts-row tts-row-leaf';
-    row.style.setProperty('--tts-depth', String(depth));
+    const row = TemplateTreeSelect.rowShell('leaf', depth, node.typeModele, node.nom);
     row.dataset.templateId = String(node.id);
 
     // Glisser-déposer : seules les feuilles sont draggable (un dossier n'a pas d'identité propre à déplacer). dragend se déclenche toujours (drop
@@ -136,47 +153,19 @@ const TemplateOrganizeModal = (function () {
     });
     row.addEventListener('dragend', () => row.classList.remove('tom-dragging'));
 
-    row.appendChild(TemplateTreeSelect.iconSpan(node.typeModele));
-    const label = document.createElement('span');
-    label.className = 'tts-row-label';
-    label.textContent = node.nom;
-    row.appendChild(label);
-    if (folderLabel) {
-      const hint = document.createElement('span');
-      hint.className = 'tom-folder-hint';
-      hint.textContent = folderLabel;
-      row.appendChild(hint);
-    }
+    if (folderLabel) row.appendChild(el('span', 'tom-folder-hint', folderLabel));
 
-    const prefs = TemplatePreferences.getCached();
-    const pref = prefs[node.id];
-    const pinned = !!(pref && pref.epingle);
-    const pinBtn = document.createElement('button');
-    pinBtn.type = 'button';
-    pinBtn.className = 'tts-pin-btn';
-    pinBtn.classList.toggle('is-pinned', pinned);
-    pinBtn.setAttribute('aria-pressed', String(pinned));
-    pinBtn.setAttribute('aria-label', I18n.t('templateTree.pin.aria'));
-    // Info-bulle native (la fenêtre vit hors de #toolbar-top : le [data-tip] de la barre ne s'y applique pas) : dit ce que fait le clic dans l'état
-    // courant, pour ne pas le confondre avec l'étoile « modèle par défaut » de la barre.
-    pinBtn.title = I18n.t(pinned ? 'templateTree.unpin.tip' : 'templateTree.pin.tip');
+    const pinned = TemplatePreferences.isPinned(node.id);
+    const pinBtn = TemplateTreeSelect.pinButton(pinned);
     pinBtn.addEventListener('click', () => togglePin(node.id, pinned));
-    row.appendChild(pinBtn);
-
-    const moveBtn = document.createElement('button');
-    moveBtn.type = 'button';
-    moveBtn.className = 'tom-move-btn';
-    moveBtn.textContent = I18n.t('organize.modal.moveButton');
-    moveBtn.addEventListener('click', () => moveTemplate(node.id, (pref && pref.dossier) || ''));
-    row.appendChild(moveBtn);
+    const moveBtn = button('tom-move-btn', I18n.t('organize.modal.moveButton'));
+    moveBtn.addEventListener('click', () => moveTemplate(node.id, TemplatePreferences.getFolder(node.id) || ''));
+    row.append(pinBtn, moveBtn);
 
     // Repli sans souris ni tactile tant qu'un dossier « en attente » existe (le glisser-déposer n'a pas d'équivalent clavier) : un bouton sur chaque
     // modèle.
     if (pendingFolder) {
-      const placeBtn = document.createElement('button');
-      placeBtn.type = 'button';
-      placeBtn.className = 'tom-place-here-btn';
-      placeBtn.textContent = I18n.t('organize.modal.placeHereButton');
+      const placeBtn = button('tom-place-here-btn', I18n.t('organize.modal.placeHereButton'));
       placeBtn.addEventListener('click', (e) => { e.stopPropagation(); dropOnFolder(node.id, pendingFolder); });
       row.appendChild(placeBtn);
     }
@@ -185,62 +174,25 @@ const TemplateOrganizeModal = (function () {
   }
 
   function makeFolderRow(node, depth) {
-    const row = document.createElement('div');
-    row.className = 'tts-row tts-row-folder';
+    const row = TemplateTreeSelect.rowShell('folder', depth, null, node.nom);
     row.setAttribute('aria-expanded', 'true');
-    row.style.setProperty('--tts-depth', String(depth));
-    row.appendChild(Object.assign(document.createElement('span'), { className: 'tts-folder-caret' }));
-    row.appendChild(TemplateTreeSelect.iconSpan('folder'));
-    const label = document.createElement('span');
-    label.className = 'tts-row-label';
-    label.textContent = node.nom;
-    row.appendChild(label);
-
-    const addSubBtn = document.createElement('button');
-    addSubBtn.type = 'button';
-    addSubBtn.className = 'tom-add-subfolder-btn';
+    const addSubBtn = button('tom-add-subfolder-btn', '+');
     addSubBtn.setAttribute('aria-label', I18n.t('organize.modal.newSubfolderAria'));
-    addSubBtn.textContent = '+';
-    addSubBtn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      const path = await promptNewFolderName(node.chemin);
-      if (!path) return;
-      pendingFolder = path;
-      pendingCollapsed = false;
-      render();
-      revealPendingFolder();
-    });
-    row.appendChild(addSubBtn);
-    row.appendChild(makeFolderDefaultButton(TemplatePreferences.isFolderCollapsed(node.chemin), 'folder-default:' + node.chemin, () => toggleFolderDefault(node.chemin)));
+    addSubBtn.addEventListener('click', (e) => { e.stopPropagation(); addFolder(node.chemin); });
+    row.append(addSubBtn, makeFolderDefaultButton(TemplatePreferences.isFolderCollapsed(node.chemin), 'folder-default:' + node.chemin, () => toggleFolderDefault(node.chemin)));
 
-    const group = document.createElement('div');
-    group.className = 'tts-group';
-    // Profondeur du dossier (pas celle de ses enfants) : css/template-tree-select.css cale le trait guide du groupe sur le caret de CE dossier ;
-    // posée explicitement, sinon le groupe hériterait de celle du groupe parent.
-    group.style.setProperty('--tts-depth', String(depth));
-    node.enfants.forEach((child) => group.appendChild(makeNode(child, depth + 1)));
-
+    const group = TemplateTreeSelect.makeGroup(depth, node.enfants, makeNode);
     row.addEventListener('click', () => {
       const expanded = row.getAttribute('aria-expanded') !== 'false';
-      row.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+      row.setAttribute('aria-expanded', String(!expanded));
       group.classList.toggle('is-collapsed', expanded);
     });
-
-    // Cible de glisser-déposer : preventDefault() sur dragover est obligatoire (règle HTML5 DnD), sinon 'drop' ne se déclenche jamais.
-    row.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; row.classList.add('tom-drop-target'); });
-    row.addEventListener('dragleave', () => row.classList.remove('tom-drop-target'));
-    row.addEventListener('drop', (e) => {
-      e.preventDefault();
-      row.classList.remove('tom-drop-target');
-      const id = e.dataTransfer.getData('text/plain');
-      if (id) dropOnFolder(id, node.chemin);
-    });
+    acceptDrops(row, node.chemin);
 
     // Fragment plutôt qu'un <div> englobant (comme js/template-tree-select.js:makeFolderRow) : `group` doit rester le frère direct de `row` pour un
     // dossier imbriqué.
     const fragment = document.createDocumentFragment();
-    fragment.appendChild(row);
-    fragment.appendChild(group);
+    fragment.append(row, group);
     return fragment;
   }
 
@@ -251,36 +203,17 @@ const TemplateOrganizeModal = (function () {
   // Dossier « en attente » : affiché à part, à plat, avec son chemin complet, car il n'a pas encore de place stable dans l'arbre ; il disparaît dès
   // que le premier modèle y est rangé (view.tree le contient alors).
   function makePendingFolderRow(path) {
-    const row = document.createElement('div');
-    row.className = 'tts-row tts-row-folder tom-pending-folder';
-    row.style.setProperty('--tts-depth', '0');
-    row.appendChild(Object.assign(document.createElement('span'), { className: 'tts-folder-caret' }));
-    row.appendChild(TemplateTreeSelect.iconSpan('folder'));
-    const label = document.createElement('span');
-    label.className = 'tts-row-label';
-    label.textContent = path;
-    row.appendChild(label);
-    const hint = document.createElement('span');
-    hint.className = 'tom-pending-hint';
-    hint.textContent = I18n.t('organize.modal.newFolderPendingHint');
-    row.appendChild(hint);
-    row.appendChild(makeFolderDefaultButton(pendingCollapsed, 'folder-default:pending', () => { pendingCollapsed = !pendingCollapsed; render(); }));
-    const cancelBtn = document.createElement('button');
-    cancelBtn.type = 'button';
-    cancelBtn.className = 'tom-cancel-pending-btn';
+    const row = TemplateTreeSelect.rowShell('folder', 0, null, path);
+    row.classList.add('tom-pending-folder');
+    const cancelBtn = button('tom-cancel-pending-btn', '×');
     cancelBtn.setAttribute('aria-label', I18n.t('organize.modal.newFolderCancelAria'));
-    cancelBtn.textContent = '×';
-    cancelBtn.addEventListener('click', (e) => { e.stopPropagation(); pendingFolder = null; pendingCollapsed = false; render(); });
-    row.appendChild(cancelBtn);
-
-    row.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; row.classList.add('tom-drop-target'); });
-    row.addEventListener('dragleave', () => row.classList.remove('tom-drop-target'));
-    row.addEventListener('drop', (e) => {
-      e.preventDefault();
-      row.classList.remove('tom-drop-target');
-      const id = e.dataTransfer.getData('text/plain');
-      if (id) dropOnFolder(id, path);
-    });
+    cancelBtn.addEventListener('click', (e) => { e.stopPropagation(); setPendingFolder(null); render(); });
+    row.append(
+      el('span', 'tom-pending-hint', I18n.t('organize.modal.newFolderPendingHint')),
+      makeFolderDefaultButton(pendingCollapsed, 'folder-default:pending', () => { pendingCollapsed = !pendingCollapsed; render(); }),
+      cancelBtn,
+    );
+    acceptDrops(row, path);
     return row;
   }
 
@@ -305,10 +238,7 @@ const TemplateOrganizeModal = (function () {
     const templates = Templates.getCached().filter((t) => !term || String(t.nom ?? '').toLowerCase().includes(term));
 
     if (!templates.length) {
-      const empty = document.createElement('div');
-      empty.className = 'tom-empty';
-      empty.textContent = I18n.t('organize.modal.noMatch');
-      list.appendChild(empty);
+      list.appendChild(el('div', 'tom-empty', I18n.t('organize.modal.noMatch')));
       return;
     }
 
@@ -317,20 +247,7 @@ const TemplateOrganizeModal = (function () {
     // Le dossier en attente est devenu réel (un modèle y a été rangé) : il apparaît à sa vraie place dans view.tree.
     if (pendingFolder && findFolderInTree(view.tree, pendingFolder)) pendingFolder = null;
 
-    if (view.pinned.length) {
-      const sep = document.createElement('div');
-      sep.className = 'tts-section-label';
-      sep.textContent = I18n.t('templateTree.pinnedSection');
-      list.appendChild(sep);
-      view.pinned.forEach((p) => list.appendChild(makeLeafRow(p, 0, p.dossier)));
-    }
-    if (view.tree.length) {
-      const sep = document.createElement('div');
-      sep.className = 'tts-section-label';
-      sep.textContent = I18n.t('templateTree.allSection');
-      list.appendChild(sep);
-      view.tree.forEach((n) => list.appendChild(makeNode(n, 0)));
-    }
+    TemplateTreeSelect.appendSections(list, view, (p) => makeLeafRow(p, 0, p.dossier), (n) => makeNode(n, 0));
     if (pendingFolder) list.appendChild(makePendingFolderRow(pendingFolder));
   }
 
@@ -344,8 +261,7 @@ const TemplateOrganizeModal = (function () {
     if (!modal) return;
     modal.style.display = 'flex';
     searchTerm = '';
-    pendingFolder = null;
-    pendingCollapsed = false;
+    setPendingFolder(null);
     if (searchInput) searchInput.value = '';
     render();
     if (searchInput) searchInput.focus();
@@ -354,17 +270,7 @@ const TemplateOrganizeModal = (function () {
   function close() {
     if (modal) modal.style.display = 'none';
     // Un dossier resté « en attente » n'a rien écrit dans Grist : fermer la fenêtre l'abandonne, comme annuler la saisie « Déplacer vers… ».
-    pendingFolder = null;
-    pendingCollapsed = false;
-  }
-
-  async function onNewRootFolder() {
-    const path = await promptNewFolderName('');
-    if (!path) return;
-    pendingFolder = path;
-    pendingCollapsed = false;
-    render();
-    revealPendingFolder();
+    setPendingFolder(null);
   }
 
   // Branché une seule fois à l'init (js/main.js), comme MacroEditor.wire(). ModalBase.adopt (js/main.js:wirePageModals) gère Échap, le piège de focus
@@ -378,7 +284,7 @@ const TemplateOrganizeModal = (function () {
     if (!modal || !searchInput || !list || !newFolderBtn || !closeBtn) return;
     list.tabIndex = -1; // focusable par programme seulement (cf. render), jamais dans l'ordre de Tab
     closeBtn.addEventListener('click', close);
-    newFolderBtn.addEventListener('click', onNewRootFolder);
+    newFolderBtn.addEventListener('click', () => addFolder(''));
     searchInput.addEventListener('input', () => { searchTerm = searchInput.value || ''; render(); });
   }
 

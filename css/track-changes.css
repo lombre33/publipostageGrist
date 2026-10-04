@@ -1,11 +1,12 @@
-/* Suivi des modifications (js/track-changes.js) - rendu des marques insertion/deletion/modification dans le contenu de l'éditeur (.tiptap), mode "suivi"
-   façon Word/Google Docs (planning/feature-track-changes.md). Boutons de la barre (#v2-btn-track-changes/#v2-btn-accept-all/#v2-btn-reject-all) : aucune
-   règle dédiée nécessaire ici, ils héritent des styles génériques déjà posés sur tout bouton de #v2-toolbar (icône, survol, .is-active, :disabled -
-   css/editor-v2.css). Les marques « insertion » (vert) et « deletion » (rouge, barré) prennent les teintes d'une case de colonne suivie (plus bas) : écrites en dur,
-   les mêmes en clair et en sombre, car la page reste blanche en thème sombre (charte, « Contrastes ») - un jeton de thème y posait une pastille foncée sur le
-   papier ; 5,7:1 pour le vert et 5,6:1 pour le rouge (le texte supprimé en --danger sur --danger-soft n'avait que 3,7:1, demande d'Antoine du 01/10). La marque
-   « modification » réutilise --accent déjà présente dans css/style.css, comme .comment-mark le fait pour son propre état.
-   parseHTML de ModificationMark lit `span[data-type="modification"]` sans exiger data-id (attribut optionnel côté schéma) ; ces règles ciblent le sélecteur
+/* Suivi des modifications (js/track-changes.js) - rendu des marques insertion/deletion/modification dans le contenu de l'éditeur (.tiptap), mode
+   "suivi" façon Word/Google Docs (planning/feature-track-changes.md). Boutons de la barre
+   (#v2-btn-track-changes/#v2-btn-accept-all/#v2-btn-reject-all) : aucune règle dédiée nécessaire ici, ils héritent des styles génériques déjà
+   posés sur tout bouton de #v2-toolbar (icône, survol, .is-active, :disabled - css/editor-v2.css). Les marques « insertion » (vert) et
+   « deletion » (rouge, barré) prennent les teintes d'une case de colonne suivie (plus bas) : écrites en dur, les mêmes en clair et en sombre, car
+   la page reste blanche en thème sombre (charte, « Contrastes ») - un jeton de thème y posait une pastille foncée sur le papier ; 5,7:1 pour le
+   vert et 5,6:1 pour le rouge (le texte supprimé en --danger sur --danger-soft n'avait que 3,7:1, demande d'Antoine du 01/10). La marque
+   « modification » réutilise --accent déjà présente dans css/style.css, comme .comment-mark le fait pour son propre état. parseHTML de
+   ModificationMark lit `span[data-type="modification"]` sans exiger data-id (attribut optionnel côté schéma) ; ces règles ciblent le sélecteur
    d'attribut seul pour rester valides même sur un span sans data-id. */
 .tiptap ins[data-id] {
   text-decoration: none;
@@ -24,10 +25,11 @@
   text-underline-offset: 2px;
 }
 
-/* Image suggérée, insérée ou supprimée (js/editor-nodes.js, moveImageNode : un déplacement suivi laisse l'original à sa place en suppression et la copie à la nouvelle en insertion ;
-   accepter garde la copie, refuser rend l'original). Le <ins>/<del> qui la porte n'a pas de boîte quand l'image est en calque (elle sort du flux) : sa teinte ne se voit pas, le cadre
-   est donc posé sur l'image elle-même - plein vert pour l'insertion, rouge en tirets et image estompée pour la suppression. Mêmes verts et rouges que le texte suggéré, 6,4:1 et 6,6:1
-   sur la page blanche (elle reste blanche en sombre). `opacity` en !important : celle d'une image translucide s'écrit en ligne sur l'<img>. */
+/* Image suggérée, insérée ou supprimée (js/editor-nodes.js, moveImageNode : un déplacement suivi laisse l'original à sa place en suppression et la
+   copie à la nouvelle en insertion ; accepter garde la copie, refuser rend l'original). Le <ins>/<del> qui la porte n'a pas de boîte quand l'image
+   est en calque (elle sort du flux) : sa teinte ne se voit pas, le cadre est donc posé sur l'image elle-même - plein vert pour l'insertion, rouge
+   en tirets et image estompée pour la suppression. Mêmes verts et rouges que le texte suggéré, 6,4:1 et 6,6:1 sur la page blanche (elle reste
+   blanche en sombre). `opacity` en !important : celle d'une image translucide s'écrit en ligne sur l'<img>. */
 .tiptap ins[data-id] img.editor-image {
   outline: 2px solid #146c48;
 }
@@ -36,11 +38,12 @@
   opacity: 0.45 !important;
 }
 
-/* Colonne ajoutée ou supprimée avec le suivi (« Colonne avant / après », « Supprimer la colonne ») : la marque est posée sur chaque CASE, que ProseMirror dessine en
-   <ins>/<del> (ou <span data-type="modification">, la largeur d'une case fusionnée qui gagne une colonne) autour du <td>, donc enfant direct du <tr>. Sans règle, cet
-   élément en ligne sortait la case du tableau (une bande de 11 px). Il ne produit plus de boîte (`display: contents`) : la case reste une vraie case du tableau et
-   porte elle-même la teinte. Couleurs écrites en dur, les mêmes dans les deux thèmes : la page reste blanche en sombre (charte, « Contrastes »), 5,7:1 pour le vert
-   et 5,6:1 pour le rouge. Fond en `!important` : une case déjà colorée (fond posé en ligne) laisserait sinon la suggestion invisible. */
+/* Colonne ajoutée ou supprimée avec le suivi (« Colonne avant / après », « Supprimer la colonne ») : la marque est posée sur chaque case, que
+   ProseMirror dessine en <ins>/<del> (ou <span data-type="modification">, la largeur d'une case fusionnée qui gagne une colonne) autour du <td>,
+   donc enfant direct du <tr>. Sans règle, cet élément en ligne sortait la case du tableau (une bande de 11 px). Il ne produit plus de boîte
+   (`display: contents`) : la case reste une vraie case du tableau et porte elle-même la teinte. Couleurs écrites en dur, les mêmes dans les deux
+   thèmes : la page reste blanche en sombre (charte, « Contrastes »), 5,7:1 pour le vert et 5,6:1 pour le rouge. Fond en `!important` : une case
+   déjà colorée (fond posé en ligne) laisserait sinon la suggestion invisible. */
 .tiptap tr > ins[data-id],
 .tiptap tr > del[data-id],
 .tiptap tr > span[data-type="modification"] {
@@ -58,10 +61,11 @@
   text-decoration: line-through;
 }
 
-/* Ligne ajoutée ou supprimée avec le suivi (« Ligne avant / après », « Supprimer la ligne ») : même défaut et même remède que les colonnes ci-dessus. La marque est posée sur la
-   LIGNE, que ProseMirror dessine en <ins>/<del> (ou <span data-type="modification">) autour du <tr>, donc enfant direct du <tbody> : sans règle, cet élément en ligne
-   sortait la ligne du tableau (une bande de 22 à 49 px de large). Il ne produit plus de boîte (`display: contents`) : la ligne reste une vraie ligne du tableau, ses cases
-   portent la teinte (les mêmes que celles d'une colonne suivie, fixes dans les deux thèmes). */
+/* Ligne ajoutée ou supprimée avec le suivi (« Ligne avant / après », « Supprimer la ligne ») : même défaut et même remède que les colonnes
+   ci-dessus. La marque est posée sur la ligne, que ProseMirror dessine en <ins>/<del> (ou <span data-type="modification">) autour du <tr>, donc
+   enfant direct du <tbody> : sans règle, cet élément en ligne sortait la ligne du tableau (une bande de 22 à 49 px de large). Il ne produit plus
+   de boîte (`display: contents`) : la ligne reste une vraie ligne du tableau, ses cases portent la teinte (les mêmes que celles d'une colonne
+   suivie, fixes dans les deux thèmes). */
 .tiptap tbody > ins[data-id],
 .tiptap tbody > del[data-id],
 .tiptap tbody > span[data-type="modification"] {
@@ -79,8 +83,9 @@
   text-decoration: line-through;
 }
 
-/* Barre « Accepter / Refuser » d'une modification suivie (js/floating-toolbars.js:wireSuggestionFloatingToolbar) : deux boutons à libellé, de la largeur de leur texte (comme ceux de la barre nombre/date d'une
-   bulle, css/toolbar-v2.css), aux couleurs de la barre flottante : monochrome, le vert et le rouge restent ceux du texte suivi. Le chrome (fond, bordure, ombre, niveau) vient de .v2-floating-toolbar. */
+/* Barre « Accepter / Refuser » d'une modification suivie (js/floating-toolbars.js:wireSuggestionFloatingToolbar) : deux boutons à libellé, de la
+   largeur de leur texte (comme ceux de la barre nombre/date d'une bulle, css/toolbar-v2.css), aux couleurs de la barre flottante : monochrome, le
+   vert et le rouge restent ceux du texte suivi. Le chrome (fond, bordure, ombre, niveau) vient de .v2-floating-toolbar. */
 .v2-suggest-toolbar button {
   width: auto;
   padding: 0 10px;

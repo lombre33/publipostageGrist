@@ -1,6 +1,7 @@
-// PPSymbols : les pictogrammes que ni Roboto ni les cinq autres familles du PDF n'ont (✓ ✗ ★ ☎ ⚠ → ① ₿ ✅ et quelques émojis courants, en noir et blanc), en une police TrueType.
-// Générée par dev-tests/build-pdf-fonts-fallback.py (à relancer pour la modifier ; les sources, les blocs repris et la licence y sont). js/pdf-glyph-fallback.js l'appelle pour un caractère que la
-// police du texte n'a pas, et seulement pour celui-là. Les quatre graisses sur le même fichier (rien à mettre en gras). Chargé après vfs_fonts, comme js/pdf-fonts*.js.
+// PPSymbols : les pictogrammes que ni Roboto ni les cinq autres familles du PDF n'ont (✓ ✗ ★ ☎ ⚠ → ① ₿ ✅ et quelques émojis courants, en noir et
+// blanc), en une police TrueType. Générée par dev-tests/build-pdf-fonts-fallback.py (à relancer pour la modifier ; les sources, les blocs repris et
+// la licence y sont). js/pdf-glyph-fallback.js l'appelle pour un caractère que la police du texte n'a pas, et seulement pour celui-là. Les quatre
+// graisses sur le même fichier (rien à mettre en gras). Chargé après vfs_fonts, comme js/pdf-fonts*.js.
 (function () {
   if (!window.pdfMake || !window.pdfMake.vfs) return;
   if (!window.pdfMake.fonts) window.pdfMake.fonts = {};

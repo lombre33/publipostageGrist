@@ -6,7 +6,7 @@
 // C'est la même bulle, avec la même démarche que « Remplacer » d'Autres attributs (js/variable-linked-attrs.js:replace) : ses réglages restent, sauf
 // ce qui ne vaut que pour l'ancienne colonne - un format d'un autre genre (une date sur un texte donnerait n'importe quoi), une boucle d'une autre
 // source. La condition d'affichage reste toujours : elle parle de la ligne, pas de la colonne. Le genre du format se lit sur le format lui-même, pas
-// sur l'ancienne colonne : celle d'une bulle cassée n'existe plus. Une variable d'une AUTRE table passe par la fenêtre de choix de la clé, comme à
+// sur l'ancienne colonne : celle d'une bulle cassée n'existe plus. Une variable d'une autre table passe par la fenêtre de choix de la clé, comme à
 // l'insertion (Variables.ensureLinkConfigured, sauf dans une zone répétée pour cette table) ; refusée, rien ne change. Une seule transaction : un
 // seul Annuler rend l'ancienne colonne.
 const VariableColumn = (function () {

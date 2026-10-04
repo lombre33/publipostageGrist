@@ -53,8 +53,8 @@ const VariableFormat = (function () {
   // Écrit en toutes lettres chaque composant encore purement numérique après filtrage : un mois déjà écrit en lettres reste tel quel, seuls le jour,
   // l'année (et un mois numérique) sont convertis.
   function wordifyDateParts(parts) {
-    const toWords = dateLocale() === 'en-US' ? numberToWordsEn : numberToWordsFr;
-    return parts.map(part => (/^\d+$/.test(part.value) ? Object.assign({}, part, { value: toWords(parseInt(part.value, 10)) }) : part));
+    const lang = numberLang();
+    return parts.map(part => (/^\d+$/.test(part.value) ? Object.assign({}, part, { value: numberToWords(parseInt(part.value, 10), 0, lang) }) : part));
   }
 
   function formatDate(val, format) {
@@ -125,7 +125,7 @@ const VariableFormat = (function () {
     return words;
   }
   // « mille » est invariable et jamais précédé de « un », contrairement à « million » et « milliard », de vrais noms qui prennent « un » et un « s »
-  // au pluriel. Écrit la partie entière seule (numberToWordsFr écrit les décimales).
+  // au pluriel. Écrit la partie entière seule (numberToWords écrit les décimales).
   function integerToWordsFr(rounded) {
     if (rounded === 0) return 'zéro';
     const scales = [
@@ -169,17 +169,6 @@ const VariableFormat = (function () {
     if (zeros < digits.length) words.push(toWords(parseInt(digits.slice(zeros), 10)));
     return words.join(' ');
   }
-  // Écrit un nombre en toutes lettres, décimales comprises quand `decimals` est renseigné (0 à 3) : « 1234,56 » doit pouvoir s'écrire avec sa partie
-  // décimale. Sans `decimals`, l'entier le plus proche. Un montant dans une devise connue ne passe pas par ici : ses décimales sont des centimes
-  // (amountToWords).
-  function numberToWordsFr(n, decimals) {
-    const d = decimals == null ? 0 : decimals;
-    const { intPart, fracDigits } = splitAbsolute(n, d);
-    let words = integerToWordsFr(intPart);
-    if (d > 0) words += ' virgule ' + fractionToWords(fracDigits, integerToWordsFr, 'zéro');
-    return (n < 0 && (intPart > 0 || /[1-9]/.test(fracDigits)) ? 'moins ' : '') + words;
-  }
-
   // --- Nombre en toutes lettres (anglais, convention américaine) --- Bien plus simple que le français : « hundred », « thousand », « million » et
   // « billion » sont invariables, et l'anglais courant et légal omet « and » entre les centaines et le reste (« one hundred twenty-one »).
   const UNITS_EN = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
@@ -219,52 +208,62 @@ const VariableFormat = (function () {
     if (remaining > 0 || parts.length === 0) parts.push(threeDigitsToWordsEn(remaining));
     return parts.join(' ');
   }
-  function numberToWordsEn(n, decimals) {
+  // Ce qui change d'une langue à l'autre dans l'écriture d'un nombre ou d'un montant : l'entier en lettres ; les mots de la virgule, du zéro, du moins
+  // et du « et » entre les unités et les centimes ; les devises connues, accolées au nombre en lettres (« mille euros », « a thousand euros », pas
+  // « mille € ») avec leur petite unité au singulier et au pluriel : les décimales d'un montant sont ses centimes. Une devise personnalisée non
+  // reconnue reste le symbole ou le texte tel quel.
+  const WORDS = {
+    fr: {
+      integer: integerToWordsFr, point: ' virgule ', zero: 'zéro', minus: 'moins ', and: ' et ',
+      currency: { '€': 'euro', '$': 'dollar', '£': 'livre' },
+      subunit: { '€': ['centime', 'centimes'], '$': ['cent', 'cents'], '£': ['penny', 'pence'] },
+    },
+    en: {
+      integer: integerToWordsEn, point: ' point ', zero: 'zero', minus: 'minus ', and: ' and ',
+      currency: { '€': 'euro', '$': 'dollar', '£': 'pound' },
+      subunit: { '€': ['cent', 'cents'], '$': ['cent', 'cents'], '£': ['penny', 'pence'] },
+    },
+  };
+  // Écrit un nombre en toutes lettres, décimales comprises quand `decimals` est renseigné (0 à 3) : « 1234,56 » doit pouvoir s'écrire avec sa partie
+  // décimale. Sans `decimals`, l'entier le plus proche. Un montant dans une devise connue ne passe pas par ici : ses décimales sont des centimes
+  // (amountToWords).
+  function numberToWords(n, decimals, lang) {
+    const w = WORDS[lang];
     const d = decimals == null ? 0 : decimals;
     const { intPart, fracDigits } = splitAbsolute(n, d);
-    let words = integerToWordsEn(intPart);
-    if (d > 0) words += ' point ' + fractionToWords(fracDigits, integerToWordsEn, 'zero');
-    return (n < 0 && (intPart > 0 || /[1-9]/.test(fracDigits)) ? 'minus ' : '') + words;
+    const words = w.integer(intPart) + (d > 0 ? w.point + fractionToWords(fracDigits, w.integer, w.zero) : '');
+    return (n < 0 && (intPart > 0 || /[1-9]/.test(fracDigits)) ? w.minus : '') + words;
   }
-
-  // La devise en toutes lettres, accolée au nombre en lettres (« mille euros », « a thousand euros », pas « mille € ») ; le symbole ou le texte tel
-  // quel pour une devise personnalisée non reconnue.
-  const CURRENCY_WORDS_FR = { '€': 'euro', '$': 'dollar', '£': 'livre' };
-  const CURRENCY_WORDS_EN = { '€': 'euro', '$': 'dollar', '£': 'pound' };
   function currencyWords(symbol, count, lang) {
-    const base = (lang === 'en' ? CURRENCY_WORDS_EN : CURRENCY_WORDS_FR)[symbol];
+    const base = WORDS[lang].currency[symbol];
     if (!base) return symbol;
     return count > 1 || count < -1 ? base + 's' : base;
   }
-  // La petite unité de chaque devise connue (singulier, pluriel) : les décimales d'un montant sont ses centimes.
-  const SUBUNIT_WORDS_FR = { '€': ['centime', 'centimes'], '$': ['cent', 'cents'], '£': ['penny', 'pence'] };
-  const SUBUNIT_WORDS_EN = { '€': ['cent', 'cents'], '$': ['cent', 'cents'], '£': ['penny', 'pence'] };
   // Un montant dans une devise connue, en toutes lettres : les unités entières puis, s'il y en a, les centimes (« six cent cinquante euros », « un
   // euro et un centime », « cinquante centimes », « mille deux cent trente-quatre euros et cinq centimes »), jamais « virgule ». Deux décimales au
   // plus : un montant qui en a trois s'écrit comme un nombre (null, comme pour une devise inconnue : l'appelant écrit le nombre puis la devise telle
   // quelle). Pluriel dès deux en français (« zéro euro », « un euro »), dès qu'il n'y en a pas un en anglais (« zero euros »). Un million rond ou un
   // milliard rond veut « de » : « un million d’euros ».
   function amountToWords(n, decimals, symbol, lang) {
-    const en = lang === 'en';
-    const unit = (en ? CURRENCY_WORDS_EN : CURRENCY_WORDS_FR)[symbol];
+    const w = WORDS[lang];
+    const unit = w.currency[symbol];
     const d = decimals == null ? 0 : decimals;
     if (!unit || d > 2) return null;
-    const subunit = (en ? SUBUNIT_WORDS_EN : SUBUNIT_WORDS_FR)[symbol];
     const { intPart, fracDigits } = splitAbsolute(n, d);
     const cents = d === 0 ? 0 : parseInt(fracDigits, 10) * (d === 1 ? 10 : 1);
-    const toWords = en ? integerToWordsEn : integerToWordsFr;
+    const en = lang === 'en';
     const plural = count => (en ? count !== 1 : count > 1);
     const parts = [];
     if (intPart > 0 || cents === 0) {
       const name = plural(intPart) ? unit + 's' : unit;
       const de = !en && intPart > 0 && intPart % 1e6 === 0 ? (/^[aeiouyéèêàâîôû]/i.test(name) ? 'd’' : 'de ') : '';
-      parts.push(toWords(intPart) + ' ' + de + name);
+      parts.push(w.integer(intPart) + ' ' + de + name);
     }
-    if (cents > 0) parts.push(toWords(cents) + ' ' + subunit[plural(cents) ? 1 : 0]);
-    return (n < 0 && (intPart > 0 || cents > 0) ? (en ? 'minus ' : 'moins ') : '') + parts.join(en ? ' and ' : ' et ');
+    if (cents > 0) parts.push(w.integer(cents) + ' ' + w.subunit[symbol][plural(cents) ? 1 : 0]);
+    return (n < 0 && (intPart > 0 || cents > 0) ? w.minus : '') + parts.join(w.and);
   }
 
-  // La langue d'écriture en lettres et la locale Intl d'un NOMBRE : un réglage de la variable (opts.style 'fr' ou 'us') l'emporte sur la langue de
+  // La langue d'écriture en lettres et la locale Intl d'un nombre : un réglage de la variable (opts.style 'fr' ou 'us') l'emporte sur la langue de
   // l'interface ; 'none' (qui ne touche pas à la langue) et l'absence de réglage la suivent.
   function numberLang(style) {
     if (style === 'us') return 'en';
@@ -319,7 +318,7 @@ const VariableFormat = (function () {
     if (opts.words) {
       const amount = opts.currency ? amountToWords(n, opts.decimals, opts.currency, lang) : null;
       if (amount != null) return amount;
-      const words = lang === 'en' ? numberToWordsEn(n, opts.decimals) : numberToWordsFr(n, opts.decimals);
+      const words = numberToWords(n, opts.decimals, lang);
       return opts.currency ? `${words} ${currencyWords(opts.currency, Math.round(n), lang)}` : words;
     }
     const locale = lang === 'en' ? 'en-US' : 'fr-FR';
@@ -384,10 +383,7 @@ const VariableFormat = (function () {
     return list.pick === 'all' && list.separator === LIST_SEPARATOR && list.lastSeparator === '' ? null : list;
   }
   // Les valeurs d'une liste à plat : une liste de listes (une colonne Choix multiple lue sur plusieurs lignes liées) n'en fait qu'une.
-  function flattenList(value) {
-    if (!Array.isArray(value)) return [value];
-    return value.reduce((all, item) => all.concat(flattenList(item)), []);
-  }
+  function flattenList(value) { return Array.isArray(value) ? value.flat(Infinity) : [value]; }
   // Le texte d'une liste dont les valeurs sont déjà écrites (`texts`) : les valeurs vides sont sautées, puis le choix de `list` s'applique.
   function listText(texts, raw) {
     const list = normalizeList(raw);

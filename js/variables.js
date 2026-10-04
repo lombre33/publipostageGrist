@@ -101,7 +101,7 @@ const Variables = (function () {
     return [loopTable, GristAPI.getCurrentTableId()].filter((table, index, all) => table && all.indexOf(table) === index);
   }
   // `items` ({ table, … }) avec les colonnes des tables « en cours » en tête : chaque table de `tables` dans cet ordre, puis les autres, l'ordre
-  // d'origine gardé dans chaque groupe. À appliquer AVANT toute limite de longueur, sans quoi une table qui vient tard dans le schéma voit ses
+  // d'origine gardé dans chaque groupe. À appliquer avant toute limite de longueur, sans quoi une table qui vient tard dans le schéma voit ses
   // colonnes écartées par celles des tables d'avant.
   function prioritizeTables(items, tables) {
     const groups = tables.map(() => []);
@@ -349,7 +349,7 @@ const Variables = (function () {
     position(() => el.getBoundingClientRect());
   }
   // Pose « #Clé » en texte brut, sans bulle (un <input> ne contient pas de HTML) : ReaderMode.resolveFilename la remplace à l'export. Une variable
-  // d'une AUTRE table demande sa clé de correspondance quand on la choisit dans un champ qui n'est pas dans une fenêtre, comme à l'insertion d'une
+  // d'une autre table demande sa clé de correspondance quand on la choisit dans un champ qui n'est pas dans une fenêtre, comme à l'insertion d'une
   // bulle : sans clé, « réinsérez la variable pour la configurer » (variables.error.noMatching) ne mènerait nulle part. Refusée, rien n'est posé et
   // le texte tapé reste. Les champs d'une fenêtre gardent leur propre moment : le calcul demande ses clés à la validation.
   async function insertFilenameVariable(item) {
@@ -445,7 +445,7 @@ const Variables = (function () {
   }
   const unwrapRefValue = v => (Array.isArray(v) ? v[1] : v);
 
-  // Valeur d'une cellule telle que Grist l'AFFICHE, pour une ligne lue par fetchTable (autre table, export en lot, aperçu de la fenêtre de
+  // Valeur d'une cellule telle que Grist l'affiche, pour une ligne lue par fetchTable (autre table, export en lot, aperçu de la fenêtre de
   // condition) : la forme brute donne l'id de la ligne référencée pour une Référence (0 si vide) et ["L", …] pour une liste, là où grist.onRecord
   // livre déjà la valeur affichée pour la table de la page. Une Référence ou une liste de références prend donc la valeur de sa colonne d'affichage
   // (GristAPI.getDisplayColumn : la colonne « gristHelper_Display… » que Grist calcule dans la même table et que fetchTable livre,
@@ -462,9 +462,9 @@ const Variables = (function () {
     return (Array.isArray(value) && value[0] === 'L') ? value.slice(1) : value;
   }
 
-  // La ligne brute (fetchTable) de la ligne courante de la page, pour une colonne que grist.onRecord n'a PAS livrée (`record[colonne] === undefined`,
+  // La ligne brute (fetchTable) de la ligne courante de la page, pour une colonne que grist.onRecord n'a pas livrée (`record[colonne] === undefined`,
   // la clé absente : un champ rapporté - colonne à formule créée depuis une autre vue - qui n'est pas cochée dans les colonnes de CE widget tant que
-  // includeColumns:'normal' ne l'a pas complétée, cf. js/grist-api.js:init). Lue une seule fois par ligne livrée : chaque livraison est un NOUVEL
+  // includeColumns:'normal' ne l'a pas complétée, cf. js/grist-api.js:init). Lue une seule fois par ligne livrée : chaque livraison est un nouvel
   // objet, la WeakMap oublie donc d'elle-même la lecture précédente, et plusieurs colonnes absentes de la même ligne partagent une seule lecture de
   // la table. null sans identifiant de ligne (ligne « nouvelle ») ou si la lecture échoue.
   const rawRowByRecord = new WeakMap();
@@ -474,7 +474,7 @@ const Variables = (function () {
     return rawRowByRecord.get(record);
   }
   // L'identifiant de la ligne que désigne la colonne Référence `column` de la ligne courante de `tableId`. fetchTable (export en lot) le donne tel
-  // quel, mais grist.onRecord (Lecture, export de la ligne courante) livre la valeur AFFICHÉE (« Projet Alpha ») ou un objet Reference, qui ne
+  // quel, mais grist.onRecord (Lecture, export de la ligne courante) livre la valeur affichée (« Projet Alpha ») ou un objet Reference, qui ne
   // retrouve aucune ligne (« [ERREUR: ligne introuvable] » à la place de la valeur) : il est relu sur la ligne brute, comme ruleSourceValue le fait
   // pour la colonne source d'une règle. Sans ligne brute (ligne « nouvelle »), la valeur telle quelle.
   async function referencedRowId(tableId, column, record) {
@@ -486,8 +486,8 @@ const Variables = (function () {
   }
 
   // La valeur de la colonne source d'une règle « match » pour la ligne courante. Comparée à l'identifiant de ligne de la table cible, une colonne
-  // Référence doit fournir l'identifiant RÉFÉRENCÉ : fetchTable (export en lot) le donne tel quel, mais grist.onRecord (Lecture, export de la ligne
-  // courante) livre la valeur de la colonne AFFICHÉE par la Référence (« Dupont Jean »), ou un objet Reference quand cette valeur est un nombre
+  // Référence doit fournir l'identifiant référencé : fetchTable (export en lot) le donne tel quel, mais grist.onRecord (Lecture, export de la ligne
+  // courante) livre la valeur de la colonne affichée par la Référence (« Dupont Jean »), ou un objet Reference quand cette valeur est un nombre
   // (WidgetFrame.ts:fetchSelectedRecord, expandRefs vrai par défaut, et objtypes.ts:decodeObject dans grist-core) : la règle proposée d'office pour
   // une colonne Référence (identifiant de ligne = colonne Référence) ne trouverait jamais la ligne en Lecture. Dans ce seul cas, la ligne brute est
   // relue par son id ; toute autre règle garde la valeur de `record` telle quelle (une règle qui compare le texte affiché, « NomPrenom =
@@ -521,7 +521,7 @@ const Variables = (function () {
     return rows.filter(row => String(keyOf(row)).trim() === wanted);
   }
   // Les lignes de `varTable` qui correspondent à la ligne courante selon la règle de liaison de cette table (aucune : vide), pour la résolution d'une
-  // variable comme pour la fenêtre « Autres attributs » (js/variable-linked-attrs.js), qui lit plusieurs colonnes de la MÊME ligne.
+  // variable comme pour la fenêtre « Autres attributs » (js/variable-linked-attrs.js), qui lit plusieurs colonnes de la même ligne.
   // `opts.fetchRows(tableId)` remplace GristAPI.fetchTableRows, pour ne lire chaque table qu'une fois quand une condition est évaluée sur toutes les
   // lignes d'une table (aperçu de js/variable-condition.js).
   async function resolveLinkedRows(varTable, rule, record, currentTableId, opts) {
@@ -536,13 +536,13 @@ const Variables = (function () {
   }
 
   // === Descendre de référence en référence === Une colonne « Accompagnateur.Email » (GristAPI.resolveColumnPath) part de la ligne de la table de la
-  // bulle, suit la colonne Référence Accompagnateur jusqu'à la ligne de l'annuaire qu'elle désigne, et lit Email sur CETTE ligne, comme
+  // bulle, suit la colonne Référence Accompagnateur jusqu'à la ligne de l'annuaire qu'elle désigne, et lit Email sur cette ligne, comme
   // $Projet.Accompagnateur.Email dans une formule Grist. Aucune règle de liaison n'est ajoutée pour les tables traversées : le chemin lui-même dit
   // quelle ligne, et deux références vers la même table (Accompagnateur et Porteur vers l'annuaire) donnent chacune la leur. Une colonne ordinaire
   // est un chemin sans maillon à suivre.
 
   // Les lignes brutes (fetchTable) de `varTable` d'où part la variable pour la ligne courante : la ligne du tour d'une zone répétée, la ligne
-  // courante elle-même (relue par son identifiant : grist.onRecord ne livre que la valeur AFFICHÉE d'une Référence, jamais l'id qu'il faut suivre),
+  // courante elle-même (relue par son identifiant : grist.onRecord ne livre que la valeur affichée d'une Référence, jamais l'id qu'il faut suivre),
   // les lignes que trouve la règle de liaison de la table, à défaut la colonne Référence de la page qui y mène. `multi` : plusieurs lignes possibles
   // (règle « match »), à lire une par une.
   async function baseRows(varTable, tableId, record, opts) {

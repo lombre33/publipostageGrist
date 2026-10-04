@@ -697,7 +697,7 @@
       }
       return;
     }
-    // Un enregistrement encore en cours (Grist lent) rendrait, à sa fin, SON identifiant au modèle courant (cf. runSave) : la copie, qui part d'un
+    // Un enregistrement encore en cours (Grist lent) rendrait, à sa fin, son identifiant au modèle courant (cf. runSave) : la copie, qui part d'un
     // modèle sans identifiant, attend qu'il soit fini, celui d'un deuxième clic compris.
     const epoch = autosaveEpoch;
     while (saveIsRunning() || saveWaiting) await (saveWaiting || whenSaveFinished());

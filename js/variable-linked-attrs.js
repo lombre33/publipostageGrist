@@ -1,5 +1,5 @@
 // Fenêtre « Autres attributs » d'une bulle #Variable : depuis une variable dont la ligne est déterminée dans une autre table (ex.
-// #Annuaire.NomPrenom, trouvée via Dossiers.Responsable), insère d'autres colonnes de la MÊME ligne (ex. Annuaire.Telephone) juste après elle,
+// #Annuaire.NomPrenom, trouvée via Dossiers.Responsable), insère d'autres colonnes de la même ligne (ex. Annuaire.Telephone) juste après elle,
 // séparées par une espace. Les bulles insérées sont des #Variable ordinaires de cette table : elles passent par la même règle de liaison (une par
 // table et par document, Publipostage_LiensTables), donc désignent la même ligne, en lecture comme à l'export. Proposée pour :
 //  - une variable d'une autre table (liée à son insertion ; sinon la fenêtre de choix de la clé s'ouvre d'abord, comme à l'insertion) ;
@@ -273,7 +273,7 @@ const VariableLinkedAttrs = (function () {
     if (!rule || !currentTableId) return I18n.t('varLinked.subtitlePlain', { badge });
     if (rule.mode === 'singleton') return I18n.t('varLinked.subtitleSingleton', { badge, table: base });
     const via = Variables.describeLinkVia(base, rule, currentTableId);
-    // Colonne Référence déjà couverte par une AUTRE règle pour la même table (une seule par document) : les bulles insérées suivront cette règle-là,
+    // Colonne Référence déjà couverte par une autre règle pour la même table (une seule par document) : les bulles insérées suivront cette règle-là,
     // le dire plutôt que d'annoncer « même ligne que » à tort.
     if (refColumn && !(rule.colonneCible === 'id' && rule.colonneSource === refColumn)) return I18n.t('varLinked.subtitleOtherLink', { table: base, via, badge });
     return I18n.t('varLinked.subtitleVia', { badge, via });

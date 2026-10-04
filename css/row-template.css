@@ -1,5 +1,6 @@
-/* Réglages > Selon la ligne (js/row-template-panel.js). Les lignes de règle et la carte reprennent les classes des macro-modèles (.macro-slot-card, .macro-rule-*,
-   css/toolbar-v2.css) ; ici seulement la case d'activation et l'état grisé. Pas de `display` sur .settings-panel (il battrait l'attribut `hidden` des onglets masqués). */
+/* Réglages > Selon la ligne (js/row-template-panel.js). Les lignes de règle et la carte reprennent les classes des macro-modèles
+   (.macro-slot-card, .macro-rule-*, css/toolbar-v2.css) ; ici seulement la case d'activation et l'état grisé. Pas de `display` sur .settings-panel
+   (il battrait l'attribut `hidden` des onglets masqués). */
 .settings-rowtemplate-enable { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); margin: 0 0 10px; cursor: pointer; }
 .settings-rowtemplate-enable input { margin: 0; }
 /* Décoché ou verrouillé : visible mais grisé, inerte (rien ne disparaît). */
@@ -9,7 +10,8 @@
 /* Onglet « Vue » : réglages propres à la vue du widget, une section par réglage (titre, puis son contenu). */
 .settings-view-panel .settings-section-title { margin: 0 0 6px; }
 .settings-view-panel .settings-view-section + .settings-view-section { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
-/* Section « Modèle par défaut de cette vue » (js/view-template.js) : l'état, puis deux boutons de la mesure de ceux des autres onglets (css/shortcuts.css, css/text-expansion.css). Grisés, jamais retirés. */
+/* Section « Modèle par défaut de cette vue » (js/view-template.js) : l'état, puis deux boutons de la mesure de ceux des autres onglets
+   (css/shortcuts.css, css/text-expansion.css). Grisés, jamais retirés. */
 .settings-viewtemplate-status { font-size: 12.5px; color: var(--text); margin: 0 0 10px; overflow-wrap: anywhere; }
 .settings-viewtemplate-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
 .settings-viewtemplate-actions button { font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; height: 26px; padding: 0 10px; min-width: 0; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); cursor: pointer; }

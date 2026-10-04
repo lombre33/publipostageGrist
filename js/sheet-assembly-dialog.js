@@ -33,7 +33,9 @@ const SheetAssemblyDialog = (function () {
     try { const raw = JSON.parse(localStorage.getItem(STORAGE) || 'null'); return raw && typeof raw === 'object' ? raw : null; } catch (e) { return null; }
   }
   function writeSaved() {
-    try { localStorage.setItem(STORAGE, JSON.stringify({ sheet: state.sheet, orientation: state.orientation, marks: state.marks })); } catch (e) { /* stockage indisponible - le choix ne survivra pas au rechargement */ }
+    try {
+      localStorage.setItem(STORAGE, JSON.stringify({ sheet: state.sheet, orientation: state.orientation, marks: state.marks }));
+    } catch (e) { /* stockage indisponible : le choix ne survivra pas au rechargement */ }
   }
 
   // La page du modèle ouvert (sens et format compris) : celle que chaque ligne produit ; un macro-modèle porte la sienne et l'impose à ses annexes.
@@ -238,8 +240,8 @@ const SheetAssemblyDialog = (function () {
     fillSelect(down.select, grid.rows, state.rows);
     marks.items.forEach(item => { item.input.checked = (item.value === 'on') === state.marks; });
     const layout = described();
-    // Aucune page ne tient (un format libre plus grand que les deux feuilles) : ni « 1 emplacement par feuille » ni « Pages réduites à 59 % » ne seraient vrais, rien n'est
-    // posé - la feuille d'aperçu reste vide -, la fenêtre le dit, et « Générer » reste grisé.
+    // Aucune page ne tient (un format libre plus grand que les deux feuilles) : ni « 1 emplacement par feuille » ni « Pages réduites à 59 % » ne
+    // seraient vrais, rien n'est posé - la feuille d'aperçu reste vide -, la fenêtre le dit, et « Générer » reste grisé.
     const fits = SheetLayout.slotCount(grid) > 0;
     renderPreview(fits ? layout : Object.assign({}, layout, { slots: [], cutMarks: [] }));
     const sheetCount = SheetLayout.sheetCount(ctx.count, layout.count);

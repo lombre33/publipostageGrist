@@ -154,10 +154,10 @@ const MainToolbar = (function () {
       return src;
     }
   }
-  // L'adresse d'une image d'un AUTRE site (ExternalImages.siteOf) se choisit une fois, à l'insertion (choix d'Antoine du 04/10, contrôle de sécurité) : « Intégrer
-  // l'image » (par défaut) la copie dans le modèle, « Garder le lien » garde l'adresse - elle se charge alors depuis ce site à chaque ouverture et reste signalée en
-  // rouge (js/external-images.js). Une adresse data: ou du même site que le widget n'envoie personne ailleurs : intégrée comme avant, sans question.
-  // Renvoie null quand la question est annulée (Annuler, Échap) : rien ne s'insère.
+  // L'adresse d'une image d'un autre site (ExternalImages.siteOf) se choisit une fois, à l'insertion (contrôle de sécurité) : « Intégrer l'image »
+  // (par défaut) la copie dans le modèle, « Garder le lien » garde l'adresse - elle se charge alors depuis ce site à chaque ouverture et reste
+  // signalée en rouge (js/external-images.js). Une adresse data: ou du même site que le widget n'envoie personne ailleurs : elle est intégrée sans
+  // question. Renvoie null quand la question est annulée (Annuler, Échap) : rien ne s'insère.
   async function imageSourceFromUrl(url) {
     const site = ExternalImages.siteOf(url);
     if (!site) return urlToDataUriOrWarn(url);
@@ -468,8 +468,8 @@ const MainToolbar = (function () {
     // Le bouton principal réapplique l'alignement qu'il montre (currentAlign, tenu à jour par syncToolbarState) ; les quatre boutons ci-dessus sont
     // dans le panneau révélé au survol (.v2-hover-flyout, index.html).
     bind('v2-btn-align-main', () => editor.chain().focus().setTextAlign(currentAlign).run());
-    // « Garder avec le suivant » (js/keep-with-next.js) : ligne à cocher du même panneau, au clic comme au clavier (Entrée, Espace). Sans effet quand le groupe est grisé (e-mail,
-    // macro-modèle, lecture seule, Lecture) : son `tabindex` laisse y arriver au clavier.
+    // « Garder avec le suivant » (js/keep-with-next.js) : ligne à cocher du même panneau, au clic comme au clavier (Entrée, Espace). Sans effet quand
+    // le groupe est grisé (e-mail, macro-modèle, lecture seule, Lecture) : son `tabindex` laisse y arriver au clavier.
     const keepNextRow = byId('v2-btn-keep-next');
     if (keepNextRow) {
       const toggleKeepNext = () => { if (!keepNextRow.closest('.v2-hf-locked, .pp-access-locked')) KeepWithNext.run(editor); };
@@ -507,7 +507,8 @@ const MainToolbar = (function () {
     bind('v2-btn-table', () => editor.chain().focus().insertTable({ rows: 2, cols: 2, withHeaderRow: false }).run());
     bind('v2-btn-two-columns', () => editor.chain().focus().insertTwoColumns().run());
     bind('v2-btn-image', async () => {
-      // Espaces autour d'une adresse collée retirés : ni dans la question, ni dans l'adresse gardée ; une saisie d'espaces seuls vaut une saisie vide.
+      // Espaces autour d'une adresse collée retirés : ni dans la question, ni dans l'adresse gardée ; une saisie d'espaces seuls vaut une saisie
+      // vide.
       const url = ((await Dialogs.prompt({ title: I18n.t('dialog.imageUrl.title'), label: I18n.t('image.urlPrompt'), confirmLabel: I18n.t('common.insert') })) || '').trim();
       if (!url) return;
       const src = await imageSourceFromUrl(url);

@@ -223,8 +223,8 @@ const Templates = (function () {
   // Le modèle du cache qui porte cet identifiant.
   function byId(id) { return id == null ? undefined : templatesCache.find(t => sameId(t.id, id)); }
 
-  // Un modèle email ou macro n'ouvre jamais le widget tout seul (modèle par défaut, de la vue ou de la ligne) : une action ponctuelle ou un mode spécialisé
-  // ne s'affiche que sur demande.
+  // Un modèle email ou macro n'ouvre jamais le widget tout seul (modèle par défaut, de la vue ou de la ligne) : une action ponctuelle ou un mode
+  // spécialisé ne s'affiche que sur demande.
   const canOpenAtStart = typeModele => typeModele !== 'email' && typeModele !== 'macro';
 
   // Deux noms sont le même quand ils ne diffèrent que par les majuscules ou les espaces autour : « contrat » et « Contrat » se confondent dans la

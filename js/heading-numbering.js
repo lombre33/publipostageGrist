@@ -32,6 +32,8 @@ const HeadingNumbering = (function () {
     return String(n);
   }
 
+  const levelOf = h => parseInt(h.tagName.slice(1), 10) || 1;
+
   // Un marqueur ("1) "/"a) "/"") par titre, aligné par index à `headingEls` (ordre document) - jamais le texte complet du titre : les deux
   // consommateurs construisent ce texte différemment (pdf-export.js préserve la mise en forme via de vrais "runs" pdfmake, le sommaire n'a besoin que
   // du textContent brut).
@@ -40,7 +42,7 @@ const HeadingNumbering = (function () {
     if (!scheme) return headingEls.map(() => '');
     const counters = [0, 0, 0, 0, 0, 0];
     return headingEls.map(h => {
-      const level = parseInt(h.tagName.slice(1), 10) || 1;
+      const level = levelOf(h);
       counters[level - 1] += 1;
       for (let i = level; i < 6; i += 1) counters[i] = 0;
       return formatCounterValue(counters[level - 1], scheme[level - 1]) + ') ';
@@ -51,7 +53,7 @@ const HeadingNumbering = (function () {
   function entriesFor(headingEls, numberingStyle) {
     const markers = markersFor(headingEls, numberingStyle);
     return headingEls.map((h, i) => {
-      const level = parseInt(h.tagName.slice(1), 10) || 1;
+      const level = levelOf(h);
       return { level, text: (markers[i] + (h.textContent || '')).replace(/\s+/g, ' ').trim() };
     });
   }

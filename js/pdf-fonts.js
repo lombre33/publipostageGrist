@@ -1,10 +1,12 @@
-// Vraie police Roboto Bold/Bold-Italic (Google Fonts, Roboto 3.015, TOUS ses caracteres : latin, latin etendu, grec, cyrillique, vietnamien - comme le Regular et l'Italic de pdfmake ;
-// les deux chaines ci-dessous sont generees par dev-tests/build-pdf-fonts-fallback.py), pour remplacer le Roboto-Medium utilise par defaut par pdfmake pour le gras
-// : Roboto-Medium a une chasse differente de la vraie graisse Bold rendue par le navigateur, ce qui faisait "gagner" un mot de plus par ligne a l'export PDF.
+// Vraie police Roboto Bold/Bold-Italic (Google Fonts, Roboto 3.015, tous ses caractères : latin, latin étendu, grec, cyrillique, vietnamien - comme
+// le Regular et l'Italic de pdfmake ; les deux chaînes ci-dessous sont générées par dev-tests/build-pdf-fonts-fallback.py), pour remplacer le
+// Roboto-Medium que pdfmake prend par défaut pour le gras : sa chasse diffère de celle du vrai gras Bold que rend le navigateur, un mot de plus
+// tiendrait par ligne dans le PDF.
 (function () {
   if (!window.pdfMake || !window.pdfMake.vfs) return;
-  // pdfmake n'expose pas de `pdfMake.fonts` par defaut : sans lui, la librairie retombe silencieusement sur son mapping interne code en dur (Regular/Medium/
-  // Italic/MediumItalic). Il faut donc le CREER ici (pas seulement muter un 'bold' existant) pour que ce remplacement prenne effet.
+  // pdfmake n'expose pas de `pdfMake.fonts` par défaut : sans lui, la bibliothèque retombe silencieusement sur son tableau interne en dur
+  // (Regular/Medium/Italic/MediumItalic). Il faut donc le créer ici (pas seulement modifier un 'bold' existant) pour que ce remplacement prenne
+  // effet.
   if (!window.pdfMake.fonts) {
     window.pdfMake.fonts = {
       Roboto: { normal: 'Roboto-Regular.ttf', bold: 'Roboto-Medium.ttf', italics: 'Roboto-Italic.ttf', bolditalics: 'Roboto-MediumItalic.ttf' }

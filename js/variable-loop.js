@@ -75,8 +75,8 @@ const VariableLoop = (function () {
     return { active: false, enabled: !!source, title: I18n.t(source ? 'varToolbar.loop' : 'varToolbar.loopDisabled') };
   }
   // Où est la bulle : décide des choix « Ce qui se répète » (le plus proche l'emporte : une liste dans une cellule propose l'élément de liste).
-  // `rowMerged` : une case fusionnée sur plusieurs lignes traverse la ligne de la bulle (js/table-merge.js) ; la copier pour chaque ligne liée casserait
-  // le tableau, « La ligne du tableau » est alors grisée.
+  // `rowMerged` : une case fusionnée sur plusieurs lignes traverse la ligne de la bulle (js/table-merge.js) ; la copier pour chaque ligne liée
+  // casserait le tableau, « La ligne du tableau » est alors grisée.
   function placeOf(editorState, pos) {
     const $pos = editorState.doc.resolve(pos);
     const rowDepth = nearestDepth($pos, ZONE_NODES.row);

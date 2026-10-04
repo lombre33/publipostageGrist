@@ -1,12 +1,14 @@
-// Polices web-safe usuelles (Arial/Times New Roman/Courier New/Georgia/Calibri), embarquees via des equivalents libres a metrique IDENTIQUE (memes largeurs
-// de caracteres) : pdfmake ne peut jamais utiliser une police du systeme (polices commerciales non distribuables) - correspondance (comme LibreOffice/Google Docs) :
-//   Arial            -> Arimo   (Google Fonts, licence OFL)
-//   Times New Roman  -> Tinos   (Google Fonts, licence OFL)
-//   Courier New      -> Cousine (Google Fonts, licence OFL)
-//   Georgia          -> Gelasio (Google Fonts, licence OFL)
-//   Calibri          -> Carlito (Google Fonts, licence OFL)
-// Fichiers regular/bold/italic/bolditalic sources : github.com/google/fonts (Arimo/Gelasio instancies en statique via fonttools varLib.instancer, pdfmake
-// ne lisant pas les polices variables), sous-ensemble latin+latin-ext + ponctuation courante (memes caracteres que Roboto, cf. pdf-fonts.js).
+// Polices web-safe usuelles (Arial, Times New Roman, Courier New, Georgia, Calibri), embarquées sous la forme d'équivalents libres de métrique
+// identique (mêmes largeurs de caractères) : pdfmake ne peut jamais utiliser une police du système (polices commerciales non distribuables).
+// Correspondance, comme dans LibreOffice et Google Docs :
+//   Arial -> Arimo (Google Fonts, licence OFL)
+//   Times New Roman -> Tinos (Google Fonts, licence OFL)
+//   Courier New -> Cousine (Google Fonts, licence OFL)
+//   Georgia -> Gelasio (Google Fonts, licence OFL)
+//   Calibri -> Carlito (Google Fonts, licence OFL)
+// Fichiers regular, bold, italic et bolditalic tirés de github.com/google/fonts (Arimo et Gelasio instanciées en statique avec fonttools
+// varLib.instancer, pdfmake ne lisant pas les polices variables), sous-ensemble latin + latin étendu + ponctuation courante (les mêmes caractères que
+// Roboto, cf. pdf-fonts.js).
 (function () {
   if (!window.pdfMake || !window.pdfMake.vfs) return;
   if (!window.pdfMake.fonts) window.pdfMake.fonts = {};

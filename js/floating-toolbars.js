@@ -21,7 +21,7 @@ const FloatingToolbars = (function () {
         const btn = button(action);
         if (btn) btn.classList.toggle('is-active', !!active);
       },
-      // aria-disabled plutôt que disabled : un <button disabled> ne reçoit plus le survol, son info-bulle (qui dit POURQUOI il est grisé) ne
+      // aria-disabled plutôt que disabled : un <button disabled> ne reçoit plus le survol, son info-bulle (qui dit pourquoi il est grisé) ne
       // s'afficherait pas.
       setDisabled(action, disabled, title) {
         const btn = button(action);
@@ -152,8 +152,9 @@ const FloatingToolbars = (function () {
       ['col-del', 'colDel', I18n.t('table.colDel')],
       ['table-del', 'trash', I18n.t('table.tableDel')],
     ];
-    // Ce que seule une grille a (js/grid-editor.js) : bordures, alignement vertical. Posé dans la barre pour tous les tableaux, montré par css/grid.css
-    // sous `body.pp-grid-mode` seulement. La fusion et la scission de cases sont à tous les tableaux (js/table-merge.js pour un document, js/grid-editor.js pour une grille).
+    // Ce que seule une grille a (js/grid-editor.js) : bordures, alignement vertical. Posé dans la barre pour tous les tableaux, montré par
+    // css/grid.css sous `body.pp-grid-mode` seulement. La fusion et la scission de cases sont à tous les tableaux (js/table-merge.js pour un
+    // document, js/grid-editor.js pour une grille).
     const VALIGN_BUTTONS = [['valign-top', 'valignTop', 'top', I18n.t('table.valignTop')], ['valign-middle', 'valignMiddle', 'middle', I18n.t('table.valignMiddle')], ['valign-bottom', 'valignBottom', 'bottom', I18n.t('table.valignBottom')]];
     // Menu « Bordures » d'une grille : les huit réglages (icône, info-bulle) ; la couleur du stylo (null = le trait de départ) se choisit une fois et
     // reste pour les réglages suivants.
@@ -161,7 +162,7 @@ const FloatingToolbars = (function () {
       ['top', 'bordersTop', I18n.t('table.bordersTop')], ['bottom', 'bordersBottom', I18n.t('table.bordersBottom')], ['left', 'bordersLeft', I18n.t('table.bordersLeft')],
       ['right', 'bordersRight', I18n.t('table.bordersRight')], ['none', 'bordersNone', I18n.t('table.bordersNone')]];
     let penColor = null;
-    // Les menus de la barre d'une grille (fond, bordures) s'ouvrent SOUS la bande où elle est fixée : au-dessus, ils recouvriraient la barre
+    // Les menus de la barre d'une grille (fond, bordures) s'ouvrent sous la bande où elle est fixée : au-dessus, ils recouvriraient la barre
     // d'outils.
     const menuPlacement = () => (GridEditor.isActive() ? { placement: 'bottom-start' } : undefined);
     const gridButton = (action, icon, title) => `<button data-action="${action}" class="v2-grid-only" title="${title}">${Icons.svg(icon)}</button>`;
@@ -252,8 +253,9 @@ const FloatingToolbars = (function () {
       const fill = editor.getAttributes('tableCell').backgroundColor || editor.getAttributes('tableHeader').backgroundColor;
       EditorCore.setColorBar('v2-table-fill-bar', fill || null);
     };
-    // « Fusionner » et « Scinder » ont deux grisés : celui d'une grille (`v2-hf-locked`, sans raison) et celui d'un document (`is-disabled`, avec sa raison pour info-bulle, comme
-    // « Supprimer la colonne »). La barre passe de l'un à l'autre sans se redessiner : chaque mode défait le grisé de l'autre.
+    // « Fusionner » et « Scinder » ont deux grisés : celui d'une grille (`v2-hf-locked`, sans raison) et celui d'un document (`is-disabled`, avec sa
+    // raison pour info-bulle, comme « Supprimer la colonne »). La barre passe de l'un à l'autre sans se redessiner : chaque mode défait le grisé de
+    // l'autre.
     const MERGE_BUTTONS = [['cell-merge', 'table.cellMerge', TableMerge.mergeBlock], ['cell-split', 'table.cellSplit', TableMerge.splitBlock]];
     const syncDocumentMergeButtons = () => {
       MERGE_BUTTONS.forEach(([action, labelKey, blockOf]) => {
@@ -706,8 +708,8 @@ const FloatingToolbars = (function () {
     // (Variables.resolveCalcResult).
     function columnTypeOf(node) { return node.type.name === 'calcBadge' ? 'Numeric' : GristAPI.getColumnType(node.attrs.table, node.attrs.column); }
 
-    // Les fenêtres des boutons de gauche, ouvertes sur la bulle sélectionnée ; position capturée AU CLIC, la fenêtre retire ensuite le focus de
-    // l'éditeur. Un bouton grisé (cf. syncState) ne fait rien. « Autres attributs » : variable d'une AUTRE table (déjà liée à l'insertion) ou colonne
+    // Les fenêtres des boutons de gauche, ouvertes sur la bulle sélectionnée ; position capturée au clic, la fenêtre retire ensuite le focus de
+    // l'éditeur. Un bouton grisé (cf. syncState) ne fait rien. « Autres attributs » : variable d'une autre table (déjà liée à l'insertion) ou colonne
     // Référence de la table de la page, règle tenue par js/variable-linked-attrs.js.
     const WINDOWS = {
       'var-condition': (node, pos) => VariableCondition.open(editor, pos),
@@ -941,7 +943,7 @@ const FloatingToolbars = (function () {
   }
 
   // Barre flottante d'une modification suivie : « Accepter » et « Refuser » ne traitent que celle sur laquelle on a cliqué (ou celles que la
-  // sélection recouvre), « Tout accepter » et « Tout refuser » restant dans la barre du haut. Elle s'ouvre SOUS le curseur - au-dessus, elle
+  // sélection recouvre), « Tout accepter » et « Tout refuser » restant dans la barre du haut. Elle s'ouvre sous le curseur - au-dessus, elle
   // recouvrirait la barre du tableau, de l'image ou de la bulle que le même clic peut ouvrir - et jamais pendant la frappe : taper au bout d'une
   // suggestion ne doit pas la rouvrir à chaque lettre, elle attend un vrai déplacement de la sélection (ou un clic). Pendant un glisser à la souris
   // elle attend le relâchement.
