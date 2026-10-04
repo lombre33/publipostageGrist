@@ -1299,12 +1299,10 @@
     if (!record) { alert(exportText('alert.noRecordForExport')); return; }
     setStatus(I18n.t('status.pdfGenerating'));
     try {
-      const qualitySelect = document.getElementById('v2-pdf-quality');
-      const quality = qualitySelect ? qualitySelect.value : 'native';
       const tableId = currentTableId || GristAPI.getCurrentTableId();
       const doc = await currentRecordDocument(tableId, record);
       if (doc.split) { await onExportBatch('pdfZip', doc.split); return; }
-      await PdfExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), quality, doc.headerFooterData, PageLayout.getMarginsPt());
+      await PdfExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsPt());
       setStatus(I18n.t('status.pdfGenerated'));
     } catch (e) {
       // « Annuler » sur la fenêtre des images d'un site externe (js/external-images.js) : un choix, pas une erreur.
@@ -1448,8 +1446,7 @@
 
   // Export en lot : une ligne = un fichier, regroupés dans une archive ZIP (PDF, DOCX ou classeur Excel), ou mis bout à bout dans un seul PDF (js/pdf-merge.js : même
   // rendu par ligne que le ZIP, chaque ligne commence sur une nouvelle page) ou un seul classeur Excel (une feuille par ligne, js/xlsx-export.js). Lit toutes les
-  // lignes via docApi (ignore un filtre de vue). Limité au vectoriel pour le PDF :
-  // 'Impr. navigateur' ouvrirait une boîte de dialogue par ligne, et les qualités raster n'ont pas de variante "retourne un blob".
+  // lignes via docApi (ignore un filtre de vue).
   // Ce qui change d'un export à l'autre : ses textes (clés i18n), le nom des fichiers, la fonction qui rend UNE ligne et ses marges (points pour le PDF, twips
   // pour le DOCX, aucune pour l'Excel : la feuille reprend la page du modèle) et ses bibliothèques (`loadLibs` : l'archive ZIP n'a besoin que de JSZip, ~0,1 Mo,
   // pas du lot PDF de ~4 Mo) ; tout le reste (lecture des lignes, confirmation, boucle, archive, téléchargement) est commun. `single` : pas de blob par ligne, le
@@ -1700,7 +1697,7 @@
     pdfFilenameInput.addEventListener('keydown', e => { if (e.key === 'Enter') pdfFilenameInput.blur(); });
   }
 
-  // Qualité PDF : bouton + panneau au survol plutôt qu'un <select> toujours affiché - onExportPdf lit encore v2-pdf-quality.value directement, inchangé.
+  // Qualité PDF : bouton + panneau au survol plutôt qu'un <select> toujours affiché. Seul le vectoriel existe : l'export ne lit plus la valeur choisie, les autres lignes sont grisées (« bientôt »).
   function wireQualityDropdown() {
     const select = document.getElementById('v2-pdf-quality');
     const flyout = document.getElementById('v2-quality-flyout');

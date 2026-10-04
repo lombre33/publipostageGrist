@@ -152,53 +152,6 @@
     },
   });
 
-  // html2pdf.js (~0,9 Mo) ne sert qu'aux qualités raster, grisées dans l'interface : il ne doit pas se télécharger au premier export PDF (choix d'Antoine,
-  // 29/09), seulement le jour où une de ces qualités est demandée (js/pdf-export-alt.js:exportViaRaster). Placé avant tout autre cas qui pourrait le charger.
-  const html2pdfScripts = () => Array.from(document.scripts).filter(sc => /html2pdf/i.test(sc.src)).length;
-  // pdfmake et html2pdf/jsPDF téléchargent par un Blob passé à FileSaver, dont le clic du <a download> n'a pas la forme de celui de clickExportRow : le Blob est
-  // repéré à sa création (URL.createObjectURL) pendant `action`, jusqu'à ce qu'un PDF apparaisse.
-  async function capturePdfBlob(h, action) {
-    const blobs = [];
-    const origCreate = URL.createObjectURL;
-    URL.createObjectURL = obj => { blobs.push(obj); return origCreate.call(URL, obj); };
-    let error = null;
-    try {
-      await action();
-      const startedAt = Date.now();
-      while (!blobs.some(b => b && b.size > 0 && /pdf/i.test(b.type || '')) && Date.now() - startedAt < 30000) await h.sleep(100);
-    } catch (e) { error = String(e && e.message || e); }
-    finally { URL.createObjectURL = origCreate; }
-    return { blob: blobs.find(b => b && b.size > 0 && /pdf/i.test(b.type || '')) || null, error, sizes: blobs.map(b => [b.type, b.size]) };
-  }
-  cases.push({
-    id: 'pdfbatch_html2pdf_not_loaded_by_first_pdf_export',
-    description: 'Le premier export PDF (vrai bouton, qualité vectorielle) ne télécharge pas html2pdf.js : ni balise <script>, ni window.html2pdf',
-    run: async (h) => {
-      await seed(h, `<p>Bonjour ${badge('Nom')}.</p>`);
-      const before = { scripts: html2pdfScripts(), global: typeof window.html2pdf };
-      const res = await capturePdfBlob(h, async () => { document.getElementById('btn-export-pdf').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); });
-      const texts = res.blob ? await pdfPageTexts(h, res.blob) : [];
-      const after = { scripts: html2pdfScripts(), global: typeof window.html2pdf };
-      const pass = before.scripts === 0 && before.global === 'undefined' && after.scripts === 0 && after.global === 'undefined'
-        && !res.error && texts.length === 1 && squash(texts[0]).includes(squash(NAMES[0]));
-      return { pass, notes: JSON.stringify({ before, after, error: res.error, blobs: res.sizes, texts }) };
-    },
-  });
-
-  cases.push({
-    id: 'pdfbatch_raster_quality_loads_html2pdf_on_demand',
-    description: 'Une qualité raster (grisée dans l\'interface, appelée ici directement) charge html2pdf.js à ce moment-là et produit bien un PDF',
-    run: async (h) => {
-      await seed(h, `<p>Bonjour ${badge('Nom')}.</p>`);
-      const before = { scripts: html2pdfScripts(), global: typeof window.html2pdf };
-      const res = await capturePdfBlob(h, () => PdfExport.exportCurrentRecord('<p>Bonjour ' + badge('Nom') + '.</p>', TABLE, { id: 1, Nom: NAMES[0] }, '', 'low', null, undefined));
-      const magic = res.blob ? String.fromCharCode(...new Uint8Array(await res.blob.slice(0, 5).arrayBuffer())) : '';
-      const after = { scripts: html2pdfScripts(), global: typeof window.html2pdf };
-      const pass = before.scripts === 0 && before.global === 'undefined' && after.scripts === 1 && after.global === 'function' && !res.error && magic === '%PDF-';
-      return { pass, notes: JSON.stringify({ before, after, error: res.error, blobs: res.sizes, magic }) };
-    },
-  });
-
   // Texte du corps d'un .docx, lu dans les octets (word/document.xml dézippé) : ce que Word afficherait, pas un état interne.
   async function docxBodyText(blob) {
     await ExportCommon.ensureJsZipLoaded();

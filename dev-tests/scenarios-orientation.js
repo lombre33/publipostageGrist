@@ -1,5 +1,5 @@
 // Paysage / portrait d'un modèle classique (js/page-layout.js : orientation, getPageSize*, --pp-page-width ; consommée par l'aperçu A4, la pagination de
-// l'éditeur et de la Lecture, le facteur d'ajustement de js/main.js, js/pdf-export.js, js/docx-export.js, js/pdf-export-alt.js, les Réglages).
+// l'éditeur et de la Lecture, le facteur d'ajustement de js/main.js, js/pdf-export.js, js/docx-export.js, les Réglages).
 //
 // Le format A4 était écrit en dur à sept endroits (793.71px / 841.89pt / 11906 x 16838 twips...). Chaque scénario vérifie donc un étage DIFFÉRENT, et
 // systématiquement que le paysage donne le même résultat à l'écran et à l'export - un étage oublié se verrait ici comme une page de 297 mm de haut
@@ -637,36 +637,6 @@ window.EditorTestSuites.orientation = (function () {
         const landscape = limits();
         document.getElementById('settings-close').click();
         return { pass: JSON.stringify(portrait) === JSON.stringify([277, 190, 277, 190]) && JSON.stringify(landscape) === JSON.stringify([190, 277, 190, 277]), notes: 'portrait(haut,droite,bas,gauche)=' + portrait + ' paysage=' + landscape };
-      },
-    },
-    {
-      id: 'orient_alternative_pdf_paths_follow_orientation',
-      description: 'L\'impression navigateur et les qualités raster (grisées dans l\'interface) suivent aussi le sens de la page',
-      async run(h) {
-        const printed = [];
-        const rasterOpts = [];
-        const origLoad = ExportCommon.loadScriptOnce;
-        const origHtml2pdf = window.html2pdf;
-        ExportCommon.loadScriptOnce = () => Promise.resolve();
-        window.html2pdf = () => ({ set(o) { rasterOpts.push(o); return this; }, from() { return this; }, save() { return Promise.resolve(); } });
-        try {
-          for (const orientation of ['portrait', 'landscape']) {
-            const before = document.querySelectorAll('iframe').length;
-            await PdfExportAlt.exportViaBrowserPrint('<p>x</p>', 'essai', orientation);
-            const frames = Array.from(document.querySelectorAll('iframe'));
-            const frame = frames[frames.length - 1];
-            const rule = frame && frame.contentDocument && /@page\s*\{[^}]*\}/.exec(frame.contentDocument.documentElement.innerHTML);
-            printed.push({ orientation, rule: rule && rule[0], frames: frames.length - before });
-          }
-          await PdfExportAlt.exportViaRaster('<p>x</p>', 'essai', 'low', 'landscape');
-          await PdfExportAlt.exportViaRaster('<p>x</p>', 'essai', 'low');
-        } finally {
-          ExportCommon.loadScriptOnce = origLoad;
-          window.html2pdf = origHtml2pdf;
-        }
-        const ok = printed.length === 2 && /size:\s*A4;/.test(printed[0].rule || '') && /size:\s*A4 landscape;/.test(printed[1].rule || '')
-          && rasterOpts.length === 2 && rasterOpts[0].jsPDF.orientation === 'landscape' && rasterOpts[1].jsPDF.orientation === 'portrait';
-        return { pass: ok, notes: 'impression=' + JSON.stringify(printed) + ' raster=' + JSON.stringify(rasterOpts.map(o => o.jsPDF.orientation)) };
       },
     },
   ];

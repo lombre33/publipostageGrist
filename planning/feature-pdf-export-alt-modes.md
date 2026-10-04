@@ -5,6 +5,8 @@
 fichier `js/pdf-export-alt.js`, déjà découplé du moteur vectoriel — donc un chantier sur ce fichier
 n'a aucun risque de régresser l'export vectoriel (seul mode actuellement actif dans l'UI publiée).
 
+**Statut au 4 octobre 2026** : le code décrit ici (`js/pdf-export-alt.js`, html2pdf.js) a été retiré du dépôt à la suite du contrôle de sécurité (html2pdf.js 0.10.1 embarque un jsPDF et un DOMPurify périmés, avec des failles connues). Il reste dans l'historique git (le dernier commit qui le contient est 12635fa). Les trois qualités restent grisées dans l'interface (« bientôt »). Reprendre ce chantier, c'est écrire le mode avec des bibliothèques à jour, puis ajouter leur adresse à la politique de sécurité du contenu d'`index.html` (le groupe `codeHygiene` le réclame).
+
 **Statut au 2026-09-14 soir** : ce document est une analyse/plan, écrit dans le respect de la consigne
 "pas de nouveau fix ce soir" (le fichier n'a pas été modifié). Comme ces 3 modes sont déjà **désactivés
 dans l'UI** (`index.html`, boutons grisés), toute future implémentation ici peut se faire, être testée,

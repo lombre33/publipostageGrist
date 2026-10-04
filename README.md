@@ -75,7 +75,7 @@ La galerie **Créer à partir d'un modèle…** propose des modèles prêts à l
 - **Word** (`.docx`, bêta) : listes et notes de bas de page natives, un fichier par ligne en lot.
 - **Excel** (`.xlsx`) pour les grilles : une archive ZIP d'un classeur par ligne de la table, ou un seul classeur d'une feuille par ligne.
 - Avant un export, une fenêtre liste les sites externes dont des images seraient téléchargées.
-- Les qualités de PDF « impression navigateur » et « raster » sont dans le code mais désactivées dans l'interface (« bientôt »).
+- Les qualités de PDF « impression navigateur » et « raster » ne sont pas livrées : l'interface les montre grisées (« bientôt »), leur code (html2pdf.js) a été retiré le 4 octobre 2026 et reste dans l'historique git.
 
 ### Interface
 
@@ -137,7 +137,6 @@ Aucune étape de build : tous les fichiers sont servis tels quels. Les biblioth�
 | JSZip 3.10.1 | Exports en lot (archive ZIP) | `cdnjs.cloudflare.com` | SRI sha384 |
 | ExcelJS 4.4.0 | Export Excel | `cdnjs.cloudflare.com` | SRI sha384 |
 | qrcode-generator 1.4.4 | QR code | `cdnjs.cloudflare.com` | SRI sha384 |
-| html2pdf.js 0.10.1 | PDF raster (désactivé dans l'interface) | `cdnjs.cloudflare.com` | SRI sha384 |
 | docx 9.7.1 | Export Word | `cdn.jsdelivr.net` | SRI sha384 |
 | Manrope | Police de l'interface (repli sur la police du système) | Google Fonts (`fonts.googleapis.com`) | aucune |
 

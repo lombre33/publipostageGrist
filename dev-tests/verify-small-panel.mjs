@@ -8,7 +8,7 @@
 //  - popups #Variable (éditeur et champs), fil de commentaires et "Image depuis une variable" tenus dans la fenêtre ;
 //  - menus au survol (.v2-hover-group, dont Exporter en PDF et Image) : ils ne se referment plus quand la souris y descend lentement, et leurs boutons ne portent
 //    plus de petit point bleu (29/09, css/editor-v2.css).
-//  - premier export PDF (vrai clic sur le bouton de la barre) : un PDF sort et html2pdf.js n'est jamais demandé (29/09, js/pdf-export-alt.js).
+//  - premier export PDF (vrai clic sur le bouton de la barre) : un PDF sort et html2pdf.js n'est jamais demandé (29/09 ; retiré le 04/10, ce garde-fou en interdit le retour par ce chemin).
 // Les scénarios de dev-tests/scenarios-*.js tournent DANS la page (dispatchEvent) : ni :hover réel, ni pixels, ni le :focus-visible qu'un vrai Échap
 // déclenche. Lancé par run-headless.mjs (groupe Node "smallPanel", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-small-panel.mjs
 import { createServer } from 'node:http';
@@ -64,7 +64,6 @@ const UMD_ROUTES = OFFLINE ? [
   [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/pdf\.min\.js$/, 'umd/pdf.min.js'],
   [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/pdf\.worker\.min\.js$/, 'umd/pdf.worker.min.js'],
   [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/jszip\.min\.js$/, 'umd/jszip.min.js'],
-  [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/html2pdf\.bundle\.min\.js$/, 'umd/html2pdf.bundle.min.js'],
   [/^https:\/\/cdn\.jsdelivr\.net\/npm\/docx@.*$/, 'umd/docx.iife.js'],
 ] : [];
 if (!OFFLINE) console.log('[verify-small-panel] miroir hors-ligne absent (dev-tests/offline-deps.sh) - les CDN seront appelés en direct.');
@@ -666,7 +665,7 @@ async function emailPathPopup(width, height) {
   await browser.close();
 }
 
-// === 6. Premier export PDF : le fichier sort, sans aucune requête vers html2pdf (qualités raster seulement, js/pdf-export-alt.js) ===
+// === 6. Premier export PDF : le fichier sort, sans aucune requête vers html2pdf (retiré le 04/10) ===
 async function firstPdfExport(width, height) {
   const { browser, page } = await openAt(width, height);
   await page.evaluate(async () => {

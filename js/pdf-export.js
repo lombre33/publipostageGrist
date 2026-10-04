@@ -1,5 +1,5 @@
-// Export PDF — 4 qualités : vectoriel (pdfmake, moteur principal de ce fichier), impression navigateur (iframe + window.print()) et raster basse/ultra
-// (html2pdf.js sur un conteneur détaché, chargé à la demande par js/pdf-export-alt.js) - ces deux derniers capturent le vrai DOM résolu, jamais le docDefinition pdfmake.
+// Export PDF vectoriel (pdfmake). L'impression navigateur et les qualités raster (html2pdf.js) ont été retirées le 04/10 (contrôle de sécurité : jsPDF et DOMPurify périmés) ; leur code reste dans l'historique git
+// (js/pdf-export-alt.js) et l'interface les montre grisées (« bientôt »).
 const PdfExport = (function () {
   // Chargement paresseux au premier export (économise 1-2s d'ouverture). `integrity` (SRI sha384) : recalculer si la version change via `curl -s <url> |
   // openssl dgst -sha384 -binary | openssl base64 -A`.
@@ -2923,7 +2923,7 @@ const PdfExport = (function () {
     });
   }
 
-  async function exportCurrentRecord(htmlContent, currentTableId, record, filenameTemplate, quality, headerFooterData, marginsPt) {
+  async function exportCurrentRecord(htmlContent, currentTableId, record, filenameTemplate, headerFooterData, marginsPt) {
     if (!record) { alert(I18n.t('alert.noRecordForExport')); return; }
     // Avant tout : une image d'un site externe est téléchargée (ou chargée par le navigateur) pour ce PDF - la fenêtre la liste et peut tout arrêter (js/external-images.js).
     await ExternalImages.confirmExport(htmlContent, headerFooterData);
@@ -2931,17 +2931,12 @@ const PdfExport = (function () {
     await ensurePdfLibsLoaded();
     const resolvedHtml = await ReaderMode.preview(htmlContent, currentTableId, record);
     const filename = await ReaderMode.resolveFilename(filenameTemplate, currentTableId, record);
-    // Qualités non-vectorielles : cf. js/pdf-export-alt.js (isolées, actuellement désactivées dans l'UI - encore peu robustes).
-    if (quality === 'browser-print') { await PdfExportAlt.exportViaBrowserPrint(resolvedHtml, filename, pageOrientation, pageFormat); return; }
-    if (quality === 'low' || quality === 'ultra') { await PdfExportAlt.exportViaRaster(resolvedHtml, filename, quality, pageOrientation, pageFormat); return; }
-    // En-tête/pied de page : uniquement le chemin vectoriel natif - ni l'impression navigateur ni les qualités raster n'ont de notion de header/footer natif
-    // de page.
     const resolvedHeaderFooterData = await ExportCommon.resolveHeaderFooterVariables(headerFooterData, currentTableId, record);
     await exportNativePdf(resolvedHtml, filename, resolvedHeaderFooterData);
   }
 
   // Export PDF en lot (une ligne Grist -> un blob PDF, cf. js/main.js onExportBatch) - réutilise la même paire ReaderMode.preview/
-  // ExportCommon.resolveHeaderFooterVariables qu'exportCurrentRecord. Limité au vectoriel : 'browser-print' ouvre une boîte de dialogue par ligne, sans surveillance.
+  // ExportCommon.resolveHeaderFooterVariables qu'exportCurrentRecord.
   async function getNativePdfBlobForRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt) {
     // Même fenêtre que pour un seul PDF ; dans un lot, un site déjà accepté n'est pas redemandé et un refus arrête tout le lot (ExternalImages.beginRun, js/main.js).
     await ExternalImages.confirmExport(htmlContent, headerFooterData);
