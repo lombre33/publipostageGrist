@@ -97,15 +97,19 @@ const VariableList = (function () {
     const numberHint = el('span', 'var-loop-hint');
     numberRow.append(numberLabel, numberInput, numberHint);
 
-    // « Un document par valeur » : la case, son libellé, puis ce que le réglage change (l'indication commence sous le libellé, pas sous la case).
+    // « Un document par valeur » : la case, puis son libellé et ce que le réglage change sur la même ligne (l'indication qui passe à la ligne commence sous le libellé, pas sous la case).
     const splitBlock = el('div', 'var-list-split');
     const splitBox = el('input');
     splitBox.type = 'checkbox';
     splitBox.id = 'var-list-split';
+    const splitText = el('div', 'var-list-split-text');
     const splitLabel = el('label');
     splitLabel.htmlFor = 'var-list-split';
     const splitHint = el('span', 'var-loop-hint');
-    splitBlock.append(splitBox, splitLabel, splitHint);
+    splitHint.id = 'var-list-split-hint';
+    splitBox.setAttribute('aria-describedby', 'var-list-split-hint');
+    splitText.append(splitLabel, splitHint);
+    splitBlock.append(splitBox, splitText);
 
     const preview = el('div', 'var-condition-debug');
     preview.setAttribute('aria-live', 'polite');

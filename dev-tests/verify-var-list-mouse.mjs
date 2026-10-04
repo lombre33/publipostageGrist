@@ -188,6 +188,7 @@ const modalState = () => page.evaluate(() => {
     shown: overlay.style.display !== 'none' && r.width > 0,
     left: r.left, right: r.right, top: r.top, bottom: r.bottom, overflowX: box.scrollWidth - box.clientWidth, bodyOverflowX: body.scrollWidth - body.clientWidth,
     scrolls: body.scrollHeight > body.clientHeight + 1,
+    sepTop: Math.round(overlay.querySelector('#var-list-sep').getBoundingClientRect().top), lastTop: Math.round(overlay.querySelector('#var-list-last').getBoundingClientRect().top),
     picks: Array.from(overlay.querySelectorAll('.var-loop-seg button')).map(b => [b.dataset.pick, b.getAttribute('aria-pressed'), b.textContent]),
     sepRow: !field('.var-list-seps').hidden, numRow: !field('.var-list-number').hidden,
     sep: field('#var-list-sep').value, last: field('#var-list-last').value, index: field('#var-list-index').value,
@@ -235,6 +236,7 @@ async function run(theme) {
   check(`${T} - ouverte : « Toutes les valeurs » enfoncé, séparateur « , », champ du numéro caché, pas de « Remettre par défaut », aperçu de la ligne`,
     opened.picks[0][1] === 'true' && opened.picks.slice(1).every(p => p[1] === 'false') && opened.sepRow && !opened.numRow && opened.sep === ', ' && !opened.reset
     && opened.preview === 'Ligne sélectionnée (n° 1) : 3 valeurs (Santé, Social, Culture). Le document écrit « Santé, Social, Culture ».', opened);
+  check(`${T} - ouverte (case décochée) : la fenêtre tient dans le panneau SANS défilement - l'aperçu est entier - et les deux séparateurs sont sur une seule ligne`, !opened.scrolls && opened.sepTop === opened.lastTop, opened);
   const picks = {};
   for (const p of ['all', 'first', 'last', 'nth']) picks[p] = await hitTest(PICK(p));
   check(`${T} - les quatre choix sont dans la fenêtre, au premier plan et assez grands (au moins 24 px de haut)`, Object.values(picks).every(b => b.found && b.inViewport && b.onTop && b.h >= 24), picks);
@@ -320,14 +322,14 @@ async function run(theme) {
   const splitLabelBox = await hitTest(SPLIT_LABEL);
   const splitCheckBox = await hitTest(SPLIT_BOX);
   check(`${T} - la case « Un document par valeur » est décochée à l'ouverture, avec son indication dessous, et il n'y a qu'une ligne d'aperçu`,
-    splitOpen.shown && !splitOpen.splitChecked && splitOpen.splitLabel === 'Un document par valeur' && splitOpen.splitHint === 'Exports PDF, Word et Excel. La Lecture et l’e-mail ne changent pas.' && splitOpen.lines.length === 1, splitOpen);
+    splitOpen.shown && !splitOpen.splitChecked && splitOpen.splitLabel === 'Un document par valeur' && splitOpen.splitHint === 'Exports PDF, Word et Excel seulement.' && splitOpen.lines.length === 1, splitOpen);
   check(`${T} - le libellé et la case sont dans le panneau, au premier plan, le libellé assez haut pour un vrai clic (au moins 20 px)`,
     [splitLabelBox, splitCheckBox].every(b => b.found && b.inViewport && b.onTop) && splitLabelBox.h >= 20, { splitLabelBox, splitCheckBox });
   await shot(`${theme}-6-case-decochee`);
   await clickSel(SPLIT_LABEL);
   const splitTicked = await modalState();
-  check(`${T} - vrai clic sur le libellé : la case est cochée, l'aperçu a une seconde ligne « 3 documents pour cette ligne », la première ligne ne bouge pas`,
-    splitTicked.splitChecked && splitTicked.lines.length === 2 && splitTicked.lines[0] === splitOpen.lines[0] && splitTicked.lines[1] === 'Export : 3 documents pour cette ligne, un par valeur (Santé, Social, Culture).', splitTicked);
+  check(`${T} - vrai clic sur le libellé : la case est cochée, l'aperçu a une seconde ligne « 3 documents, un par valeur », la première ligne ne bouge pas`,
+    splitTicked.splitChecked && splitTicked.lines.length === 2 && splitTicked.lines[0] === splitOpen.lines[0] && splitTicked.lines[1] === 'Export : 3 documents, un par valeur (Santé, Social, Culture).', splitTicked);
   check(`${T} - case cochée : la fenêtre reste entière dans le panneau (700x400), sans défilement horizontal, titre et boutons visibles et au premier plan`,
     splitTicked.left >= 0 && splitTicked.right <= WIDTH + 0.5 && splitTicked.top >= 0 && splitTicked.bottom <= HEIGHT + 0.5 && splitTicked.overflowX <= 1 && splitTicked.bodyOverflowX <= 1
     && [await hitTest(`${MODAL} #var-list-title`), await hitTest(`${MODAL} .var-modal-primary`)].every(b => b.found && b.inViewport && b.onTop), splitTicked);
@@ -408,17 +410,18 @@ async function runEnglish() {
   check('anglais - la fenêtre tient dans le panneau sans défilement horizontal, les quatre choix (« All values », « The first », « The last », « The nth ») entiers et atteignables',
     opened.shown && opened.right <= WIDTH + 0.5 && opened.bottom <= HEIGHT + 0.5 && opened.overflowX <= 1 && opened.bodyOverflowX <= 1 && JSON.stringify(opened.picks.map(p => p[2])) === JSON.stringify(['All values', 'The first', 'The last', 'The nth'])
     && Object.values(picks).every(b => b.found && b.inViewport && b.onTop), { opened, picks });
+  check('anglais - ouverte (case décochée) : la fenêtre tient dans le panneau sans défilement et les deux séparateurs sont sur une seule ligne', !opened.scrolls && opened.sepTop === opened.lastTop, opened);
   await clickSel(PICK('nth'));
   await typeInto(`${MODAL} #var-list-index`, '3');
   const nth = await modalState();
   check('anglais - « The nth » avec le numéro 3 : aperçu « Culture »', nth.preview === 'Selected row (#1): 3 values (Santé, Social, Culture). The document writes “Culture”.', nth);
   await shot('en-fenetre');
   check('anglais - la case « One document per value » est décochée avec son indication', opened.splitLabel === 'One document per value' && !opened.splitChecked
-    && opened.splitHint === 'PDF, Word and Excel exports. Reading and e-mail are unchanged.', opened);
+    && opened.splitHint === 'PDF, Word and Excel exports only.', opened);
   await clickSel(SPLIT_LABEL);
   const enSplit = await modalState();
   check('anglais - vrai clic sur le libellé : la case est cochée, seconde ligne « 3 documents for this row », la fenêtre reste entière dans le panneau, sans défilement horizontal',
-    enSplit.splitChecked && enSplit.lines.length === 2 && enSplit.lines[1] === 'Export: 3 documents for this row, one per value (Santé, Social, Culture).'
+    enSplit.splitChecked && enSplit.lines.length === 2 && enSplit.lines[1] === 'Export: 3 documents, one per value (Santé, Social, Culture).'
     && enSplit.right <= WIDTH + 0.5 && enSplit.bottom <= HEIGHT + 0.5 && enSplit.overflowX <= 1 && enSplit.bodyOverflowX <= 1
     && [await hitTest(`${MODAL} #var-list-title`), await hitTest(`${MODAL} .var-modal-primary`)].every(b => b.found && b.inViewport && b.onTop), enSplit);
   await shot('en-case-cochee');

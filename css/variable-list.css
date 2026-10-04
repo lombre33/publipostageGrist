@@ -17,12 +17,21 @@
 .var-list-seps .var-list-last-input { width: 160px; }
 .var-list-number .var-list-index-input { width: 64px; }
 
-/* « Un document par valeur » : la case, son libellé, puis l'indication, qui commence sous le libellé (règle d'Antoine : une indication commence sous son champ, pas sous la case). */
-.var-list-split { display: grid; grid-template-columns: max-content 1fr; align-items: center; gap: 0 8px; margin-top: 8px; }
-.var-list-split input { margin: 0; }
-/* Le libellé fait 22 px de haut : c'est lui qu'une souris vise, comme la case (un libellé de 14 px était étroit pour un vrai clic). */
-.var-list-split label { padding: 4px 0; font-size: 12px; font-weight: 700; color: var(--text); cursor: pointer; }
-.var-list-split .var-loop-hint { grid-column: 2; }
+/* Dans un panneau de 700 x 400 la fenêtre n'a pas la place d'une ligne de plus : quand elle est assez large, les deux séparateurs sont sur une seule ligne, comme dans la fenêtre de boucle, et l'indication
+   commence sous le premier champ. Plus étroite, ils restent l'un sous l'autre. */
+@media (min-width: 520px) {
+  .var-list-seps { grid-template-columns: repeat(4, max-content); }
+  .var-list-seps label:nth-of-type(2) { padding-left: 12px; }
+  .var-list-seps .var-list-last-input { width: 150px; }
+  .var-list-seps .var-loop-hint { grid-column: 2 / -1; }
+}
+
+/* « Un document par valeur » : la case, puis son libellé et son indication sur la même ligne (elle passe sous le libellé, pas sous la case, quand la place manque : règle d'Antoine). Le libellé fait 22 px
+   de haut : c'est lui qu'une souris vise, comme la case. */
+.var-list-split { display: grid; grid-template-columns: max-content 1fr; align-items: start; gap: 0 8px; margin-top: 8px; }
+.var-list-split input { margin: 4px 0 0; }
+.var-list-split-text { line-height: 16px; }
+.var-list-split label { display: inline-block; padding: 3px 0; margin-right: 6px; font-size: 12px; font-weight: 700; color: var(--text); cursor: pointer; }
 
 /* Bulle réglée « Un document par valeur » (format.list.perValue, lu dans le data-format du nœud) : petite icône bleue, deux pages l'une sur l'autre, à droite dans la bulle - comme celle d'une boucle « dans la
    phrase » (css/variable-actions.css), en fond pour laisser ::after au point bleu des bulles réglées. Une bulle en boucle garde son icône : le réglage n'y servirait à rien. */

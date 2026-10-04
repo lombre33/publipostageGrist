@@ -590,7 +590,7 @@
           && same(en.picks.map(p => p[1]), ['All values', 'The first', 'The last', 'The nth']) && en.picks[2][2] === 'true'
           && en.sepLabel === 'Separator' && en.lastLabel === 'Before the last' && en.numberLabel === 'Number' && en.placeholder === 'same as separator'
           && same(en.hints, ['spaces included', '1 = the first value. With no value at that position, nothing is written.',
-            'PDF, Word and Excel exports. Reading and e-mail are unchanged.'])
+            'PDF, Word and Excel exports only.'])
           && en.splitLabel === 'One document per value' && !en.splitChecked
           && en.resetText === 'Reset to default' && en.cancelText === 'Cancel' && en.saveText === 'Save'
           && en.preview === 'Selected row (#1): 3 values (Santé, Social, Culture). The document writes “Culture”.',
@@ -605,7 +605,7 @@
   // --- « Un document par valeur » : la case de la fenêtre et l'icône de la bulle ---
   cases.push({
     id: 'varlist_window_one_document_per_value_checkbox_preview_save_and_reset',
-    description: 'Fenêtre « Liste » : la case « Un document par valeur » (décochée au départ, son indication dessous) ajoute une seconde ligne d’aperçu - « 3 documents pour cette ligne, un par valeur », « un seul document » pour une ligne à une seule valeur ou à liste vide - sans toucher à la première ; elle va avec n’importe quel choix (« La première »…) ; Enregistrer l’écrit dans le format de la bulle (perValue, le reste du réglage gardé), la barre est bleue même sans autre réglage, la Lecture écrit toujours la liste comme réglée, la fenêtre rouverte la montre cochée, la décocher retire la clé et « Remettre par défaut » tout',
+    description: 'Fenêtre « Liste » : la case « Un document par valeur » (décochée au départ, son indication à côté) ajoute une seconde ligne d’aperçu - « 3 documents, un par valeur », « un seul document » pour une ligne à une seule valeur ou à liste vide - sans toucher à la première ; elle va avec n’importe quel choix (« La première »…) ; Enregistrer l’écrit dans le format de la bulle (perValue, le reste du réglage gardé), la barre est bleue même sans autre réglage, la Lecture écrit toujours la liste comme réglée, la fenêtre rouverte la montre cochée, la décocher retire la clé et « Remettre par défaut » tout',
     run: async (h) => {
       await seed(h);
       Editor.setHTML(`<p>${badge('Themes')} ${badge('Titre')}</p>`);
@@ -666,11 +666,11 @@
       cancelButton().click();
       await h.sleep(150);
       const prev = 'Ligne sélectionnée (n° 1) : 3 valeurs (Santé, Social, Culture). Le document écrit « ';
-      const export3 = 'Export : 3 documents pour cette ligne, un par valeur (Santé, Social, Culture).';
+      const export3 = 'Export : 3 documents, un par valeur (Santé, Social, Culture).';
       const checks = {
         opened: got.opened,
         initial: !got.initial.checked && got.initial.label === 'Un document par valeur' && got.initial.line.hidden && got.initial.line.text === '' && got.initial.first === prev + 'Santé, Social, Culture ».'
-          && got.initial.hint === 'Exports PDF, Word et Excel. La Lecture et l’e-mail ne changent pas.',
+          && got.initial.hint === 'Exports PDF, Word et Excel seulement.',
         ticked: !got.ticked.line.hidden && got.ticked.line.text === export3 && got.ticked.first === prev + 'Santé, Social, Culture ».',
         withFirst: got.withFirst.checked && !got.withFirst.line.hidden && got.withFirst.line.text === export3 && got.withFirst.first === prev + 'Santé ».',
         saved: same(got.saved.format, { list: { pick: 'first', perValue: true } }) && got.saved.bar.active && got.saved.bar.enabled && same(got.serialized, { list: { pick: 'first', perValue: true } }),
