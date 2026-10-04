@@ -43,6 +43,29 @@ const EditorCore = (function () {
     return (isFinite(z) && z > 0) ? z : 1;
   }
 
+  // Règles posées une à une pendant le calcul d'une pagination (js/header-footer-preview.js, js/reader-mode.js) : la coupure suivante mesure le
+  // document avec les réserves déjà posées, donc chaque règle agit avant la mesure d'après. Réécrire la feuille entière à chaque coupure refait le
+  // style de tout le document (86 ms par page pour un tableau de 1 000 lignes : un calcul quadratique en nombre de pages) alors qu'une feuille
+  // ajoutée n'invalide que ce qu'elle vise (8 ms). Chaque règle va donc dans sa feuille <style>, posée à la suite de `anchor` et des précédentes :
+  // même ordre, même cascade que dans la feuille unique, que l'appelant remplit d'un coup à la fin du calcul avant `clear()`. `className` est repris
+  // par chaque feuille posée.
+  function createStepSheets(anchor, className) {
+    const sheets = [];
+    return {
+      add(rule) {
+        const sheet = document.createElement('style');
+        if (className) sheet.className = className;
+        sheet.textContent = rule;
+        (sheets.length ? sheets[sheets.length - 1] : anchor).after(sheet);
+        sheets.push(sheet);
+      },
+      clear() {
+        sheets.forEach(sheet => sheet.remove());
+        sheets.length = 0;
+      },
+    };
+  }
+
   // Barre contextuelle flottante, positionnée par @floating-ui/dom et ancrée dans document.body (aucun contexte d'empilement d'un ancêtre ne la
   // gêne).
   function createFloatingPanel(className, innerHTML, onAction, onInput) {
@@ -458,7 +481,7 @@ const EditorCore = (function () {
 
   return {
     setEditor, getEditor, setFloatingUi, setNodeSelectionClass, getTextSelectionClass, setTextSelectionClass,
-    patchNodeAndReselect, editorContentWidthPx, layoutZoom, createFloatingPanel,
+    patchNodeAndReselect, editorContentWidthPx, layoutZoom, createStepSheets, createFloatingPanel,
     registerFloatingPanel, hideFloatingContextToolbars,
     getOpenDropdownPanel, setOpenDropdownPanel, closeDropdownPanel, wireDropdownButton,
     setColorBar, setColorIcon, createSelectionPreserver, isCellSelection, runOnSelectedCells, isInsideNode,

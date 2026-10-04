@@ -361,8 +361,12 @@ const HeaderFooterPreview = (function () {
   let appliedRowPad = new WeakMap();
   function clearPageBreakMargins() {
     if (paginationMarginStyleEl) paginationMarginStyleEl.textContent = '';
+    if (paginationSteps) paginationSteps.clear();
     appliedRowPad = new WeakMap();
   }
+  // Les règles de la pagination en cours (EditorCore.createStepSheets) : retirées avec la feuille des marges, au cas où un calcul s'interromprait en
+  // route.
+  let paginationSteps = null;
   function schedulePaginationRecompute() {
     if (paginationRecomputeTimer) clearTimeout(paginationRecomputeTimer);
     paginationRecomputeTimer = setTimeout(renderPaginationOverlay, 200);
@@ -714,8 +718,8 @@ const HeaderFooterPreview = (function () {
   // s'enregistrerait pour de bon (pageIndex n'étant plus nul).
   function migrateLegacyImagePositions() {
     // En édition d'en-tête/pied, le document affiché est le fragment, pas le corps du modèle.
-    if (!editor || !isA4Preview() || hfMode || !tiptapShowsLayout(editor.view.dom)) return;
-    applyImagePatches(regridImages(layeredImages(a => a.pageIndex == null && a.left != null)));
+    if (!editor || !isA4Preview() || hfMode || !tiptapShowsLayout(editor.view.dom)) return false;
+    return applyImagePatches(regridImages(layeredImages(a => a.pageIndex == null && a.left != null)));
   }
 
   // Après un changement d'orientation ou de format, la page change de hauteur : la grille de chaque image en calque, lue par le PDF et le Word, est
@@ -739,7 +743,8 @@ const HeaderFooterPreview = (function () {
     const tiptapEl = editor && editor.view && editor.view.dom;
     if (!tiptapEl || hfMode || !isA4Preview() || !tiptapShowsLayout(tiptapEl)) { reconcilePending = true; return false; }
     reconcilePending = false;
-    renderPaginationOverlay();
+    // `layoutFresh` : l'appelant vient de poser la pagination et rien ne l'a changée depuis, la refaire rendrait exactement la même.
+    if (!(opts && opts.layoutFresh)) renderPaginationOverlay();
     if (!lastPageLayout) return false;
     const patches = [];
     layeredImages(a => a.pageIndex >= 1 && a.pageTopPt != null).forEach(({ pos, attrs }) => {
@@ -867,6 +872,7 @@ const HeaderFooterPreview = (function () {
     clearPageBreakMargins();
     const marginRules = ['#editor-container .tiptap { min-height: ' + heightBefore + 'px; }'];
     ensurePaginationMarginStyle().textContent = marginRules[0];
+    paginationSteps = EditorCore.createStepSheets(ensurePaginationMarginStyle());
     const breaks = computePageBreaks(tiptapEl, pageContentHeightPx);
     const totalPages = breaks.length + 1;
 
@@ -949,7 +955,7 @@ const HeaderFooterPreview = (function () {
       } else {
         marginRules.push('#editor-container .tiptap > *:nth-child(' + nthChild + ') { margin-bottom: ' + (seamHeight + remaining) + 'px; }');
       }
-      ensurePaginationMarginStyle().textContent = marginRules.join('\n');
+      paginationSteps.add(marginRules[marginRules.length - 1]);
       const seamTop = toLayoutY(afterBottomScreen) + remaining;
       seam.style.top = seamTop + 'px';
       bodyTopRel = afterBottomRel + remaining + seamHeight;
@@ -960,6 +966,7 @@ const HeaderFooterPreview = (function () {
     marginRules[0] = '#editor-container .tiptap { min-height: ' + (bodyTopRel + pageContentHeightPx + mPx.bottom) + 'px; }';
     tableStrips.forEach((strips, nth) => marginRules.push(TablePageCut.clipRule('#editor-container .tiptap > *:nth-child(' + nth + ')', strips)));
     ensurePaginationMarginStyle().textContent = marginRules.join('\n');
+    paginationSteps.clear();
     // Les pages sont posées : les copies de « Sur toutes les pages » se peignent dessus (la dernière réserve vient de changer la hauteur de la
     // feuille).
     lastPageLayout = { pages, tiptapTop: toLayoutY(tiptapRect.top) };

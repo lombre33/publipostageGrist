@@ -267,7 +267,7 @@ const Editor = (function () {
     // (js/track-changes.js:nextSuggestionId).
     TrackChanges.setKnownSuggestionIds(() => Object.keys(suiviMetadataCache));
     const tracked = TrackChanges.extendForTracking;
-    const withCellStyle = Cell => EditorNodes.withCellBackground(GridEditor.withCellAttributes(Cell));
+    const withCellStyle = Cell => EditorNodes.withCellBackground(GridEditor.withCellAttributes(EditorNodes.withFastColwidth(Cell)));
     const { TwoColumnsColumn, TwoColumnsZone } = EditorNodes.createTwoColumnsNodes(Node, mergeAttributes);
 
     editor = new TiptapEditor({
@@ -487,8 +487,8 @@ const Editor = (function () {
     backfillAutoColumnWidths(editor);
     clampOverflowingTables(editor);
     HeaderFooterPreview.renderPaginationOverlay();
-    HeaderFooterPreview.migrateLegacyImagePositions();
-    HeaderFooterPreview.reconcileLayerImagesWithGrid();
+    const imagesRegridded = HeaderFooterPreview.migrateLegacyImagePositions();
+    HeaderFooterPreview.reconcileLayerImagesWithGrid({ layoutFresh: !imagesRegridded });
     // Vérification immédiate (schéma en cache) puis après rafraîchissement explicite (couvre une table/colonne supprimée entretemps). La passe
     // exacte lit toutes les tables en entier (1,4 M de cases à chaque modèle affiché dans un document de 40 tables de 2 000 lignes) : quand aucune
     // bulle n'est rouge, celle d'il y a moins d'une minute suffit (js/main.js la demande de même à l'ouverture) ; une bulle rouge peut venir d'un

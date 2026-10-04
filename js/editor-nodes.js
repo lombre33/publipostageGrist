@@ -375,6 +375,35 @@ const EditorNodes = (function () {
       },
     });
   }
+  // Largeur d'une case lue sans son attribut `colwidth` : celle de sa colonne dans le <colgroup> du tableau. La bibliothèque cherche les <col> du
+  // tableau entier POUR CHAQUE case, un parcours du tableau par case (1,3 s pour 1 000 lignes de 6 colonnes, quadratique) ; ils ne sont cherchés ici
+  // qu'une fois par tableau, le temps de la lecture du HTML (la mémoire est vidée dès la fin de la tâche : un tableau déjà dans la page peut avoir
+  // changé de colonnes).
+  let colgroupColsByTable = new WeakMap();
+  function parseColwidthOnce(element) {
+    const attribute = element.getAttribute('colwidth');
+    if (attribute) return attribute.split(',').map(width => parseInt(width, 10));
+    const row = element.parentElement;
+    const table = element.closest('table');
+    if (!row || !table) return null;
+    let cols = colgroupColsByTable.get(table);
+    if (!cols) {
+      cols = table.querySelectorAll('colgroup > col');
+      colgroupColsByTable.set(table, cols);
+      Promise.resolve().then(() => { colgroupColsByTable = new WeakMap(); });
+    }
+    const col = cols[Array.prototype.indexOf.call(row.children, element)];
+    const width = col ? col.getAttribute('width') : null;
+    return width ? [parseInt(width, 10)] : null;
+  }
+  function withFastColwidth(CellExtension) {
+    return CellExtension.extend({
+      addAttributes() {
+        const parent = this.parent();
+        return Object.assign({}, parent, { colwidth: Object.assign({}, parent.colwidth, { parseHTML: parseColwidthOnce }) });
+      },
+    });
+  }
   // Le tableau de Tiptap (TableView, @tiptap/extension-table) pose `min-width` sur le <col> d'une colonne sans largeur mais ne retire pas le `width` d'avant :
   // une largeur redevenue « automatique » (Refuser un glissé de bord, Annuler, sur un tableau inséré à la main) gardait à l'écran celle qu'elle venait de
   // perdre, alors que le document avait retrouvé sa mise en page d'origine.
@@ -1664,7 +1693,7 @@ const EditorNodes = (function () {
     createVarBadgeNode, createCalcBadgeNode, createCalcBadgeKeysExtension, createPageNumberBadgeNode, createSmartChipNode, createFootnoteRefNode, createCommentMark,
     createFontSizeExtension, createTextColorExtension, createHighlightExtension,
     createBulletStyleExtension, createOrderedListStyleExtension, createTaskListStyleExtension,
-    withCellBackground, createTableView, createTabNavigationExtension, createClearHistoryExtension,
+    withCellBackground, withFastColwidth, parseColwidthOnce, createTableView, createTabNavigationExtension, createClearHistoryExtension,
     createTwoColumnsNodes, createConditionalTextNode, createConditionalCheckboxNode, createConditionalValueNode, createConditionalValueKeysExtension, createFloatingImageKeysExtension, createBehindImageClickThroughExtension, createEditorImageNode, moveImageNode, createPageBreakNode,
     createHeadingNumberingConfigNode, createTocNode,
   };

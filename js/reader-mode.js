@@ -343,6 +343,7 @@ const ReaderMode = (function () {
     const styleEl = document.createElement('style');
     styleEl.className = 'v2-pagination-style';
     wrapper.appendChild(styleEl);
+    const steps = EditorCore.createStepSheets(styleEl, 'v2-pagination-style');
     const marginRules = [];
     const zoom = EditorCore.layoutZoom(wrapper);
     // Positions lues sur les rectangles, jamais sur offsetTop/offsetLeft/offsetWidth (arrondis à l'entier : une page posée à 0,4 px près n'est plus
@@ -411,8 +412,8 @@ const ReaderMode = (function () {
         // class="page-break-marker">, jamais un <p>.
         marginRules.push('#reader-container .reader-content > *:nth-child(' + (offset.afterIndex + 1) + ') { margin-bottom: ' + (seamHeight + remaining) + 'px; }');
       }
-      // Écrit la feuille à chaque itération : la frontière suivante doit voir l'effet des marges déjà posées avant de mesurer sa propre position.
-      styleEl.textContent = marginRules.join('\n');
+      // Posée tout de suite : la frontière suivante doit voir l'effet des marges déjà posées avant de mesurer sa propre position.
+      steps.add(marginRules[marginRules.length - 1]);
       const seamTop = toLayoutY(afterBottomScreen) + remaining;
       seam.style.top = seamTop + 'px';
       bodyTopRel = afterBottomRel + remaining + seamHeight;
@@ -423,6 +424,7 @@ const ReaderMode = (function () {
     marginRules.push('#reader-container .reader-content { min-height: ' + (bodyTopRel + pageContentHeightPx + mPx.bottom) + 'px; }');
     tableStrips.forEach((strips, index) => marginRules.push(TablePageCut.clipRule('#reader-container .reader-content > *:nth-child(' + (index + 1) + ')', strips)));
     styleEl.textContent = marginRules.join('\n');
+    steps.clear();
 
     // Le fond de la feuille : une seule page blanche pour toute la pile, bandes d'en-tête et de pied comprises, derrière le corps (z-index -1 dans le
     // conteneur, qui est un contexte d'empilement). Le corps, les espaceurs de bord et la feuille elle-même sont transparents : une image « derrière
