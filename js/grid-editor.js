@@ -1,19 +1,20 @@
-// Mode grille (planning/feature-mode-grille-excel.md) : un modèle de type « grille » (colonne TypeModele) n'est pas un texte sur une page A4 mais UN tableau, sans
-// feuille, dont on tire les traits pour régler les colonnes et les lignes, et que l'export Excel reprend case par case. Même éditeur TipTap que les documents
-// (aucun second éditeur) : ce module n'ajoute que ce qui fait d'un document « un tableau et rien d'autre » -
-//   - un garde-fou (filterTransaction) qui refuse toute modification dont le résultat ne serait plus UN seul tableau, sans second tableau ni bloc que la grille
-//     ne sait pas exporter (deux colonnes, sommaire, citation, bloc de code...) : la barre les grise, le garde-fou tient aussi pour le collage et le clavier ;
-//   - la sélection toujours DANS une case (jamais le paragraphe vide que TipTap range sous un tableau final, jamais le curseur « gap » après lui) ;
-//   - les bandeaux A, B, C / 1, 2, 3 autour du tableau, collants au défilement, avec les poignées qui règlent la largeur d'une colonne et la hauteur d'une ligne
-//     (aperçu en direct pendant le geste, UNE seule transaction au relâcher : un seul Annuler) ;
-//   - la hauteur de ligne (`rowHeight` sur tableRow, plancher = la hauteur de son texte) et la largeur de colonne (`colwidth` de chaque case) toujours posées ;
-//   - le saut de page, porté par une ligne (`pageBreakBefore`) : le PDF y commence une page, l'Excel une feuille ; une pastille dans le numéro de la ligne et un trait en tirets le montrent ;
-//   - le collage dans une case, sans les lignes vides de fin que les textes copiés traînent (`trimPastedSlice`) ;
+// Mode grille (planning/feature-mode-grille-excel.md) : un modèle de type « grille » (colonne TypeModele) n'est pas un texte sur une page A4 mais un
+// seul tableau, sans feuille, dont on tire les traits pour régler colonnes et lignes, et que l'export Excel reprend case par case. C'est le même
+// éditeur TipTap que les documents : ce module n'ajoute que ce qui fait d'un document « un tableau et rien d'autre » :
+//   - un garde-fou (filterTransaction) qui refuse toute modification dont le résultat ne serait plus un seul tableau, ou contiendrait un bloc que la
+//     grille ne sait pas exporter : la barre grise ces boutons, le garde-fou tient aussi pour le collage et le clavier ;
+//   - la sélection toujours dans une case (jamais le paragraphe vide que TipTap range sous un tableau final, jamais le curseur « gap » après lui) ;
+//   - les bandeaux A, B, C / 1, 2, 3, collants au défilement, dont les poignées règlent la largeur d'une colonne et la hauteur d'une ligne (aperçu en
+//     direct, une seule transaction au relâcher : un seul Annuler) ;
+//   - la hauteur de ligne (`rowHeight` sur tableRow, plancher = la hauteur de son texte) et la largeur de colonne (`colwidth` de chaque case),
+//     toujours posées ;
+//   - le saut de page porté par une ligne (`pageBreakBefore`) : le PDF y commence une page, l'Excel une feuille ;
+//   - le collage dans une case sans les lignes vides de fin (`trimPastedSlice`), et celui d'un tableau de tableur case par case, mise en forme
+//     comprise (`transformPastedHTML`, js/grid-table.js) ;
 //   - Entrée qui descend d'une case (`enterGoesDown`), Maj+Entrée et Ctrl+Entrée qui ajoutent une ligne dans la case ;
-//   - le défilement vers la sélection (flèches, Tab, Entrée, frappe) qui tient compte des bandeaux : la case d'arrivée toute visible, le curseur jamais dessous (`revealSelection`) ;
-//   - le collage d'un tableau de tableur (Excel, Sheets, LibreOffice) case par case, mise en forme comprise (`transformPastedHTML`, js/grid-table.js).
-// Tout est inerte tant que setActive(true) n'a pas été appelé (js/main.js:loadTemplateIntoEditor) : un document, un email ou un macro-modèle ne voient rien de ce
-// fichier. Script classique, même convention de portée globale que Editor/MainToolbar ; les classes TipTap/ProseMirror arrivent par configure() (editor.js).
+//   - le défilement vers la sélection qui tient compte des bandeaux (`revealSelection`).
+// Tout est inerte tant que setActive(true) n'a pas été appelé (js/main.js:loadTemplateIntoEditor) : un document, un email ou un macro-modèle ne
+// voient rien de ce fichier. Les classes TipTap/ProseMirror arrivent par configure() (editor.js).
 const GridEditor = (function () {
   const TYPE = 'grille';
   const DEFAULT_COLS = 6;
@@ -24,20 +25,22 @@ const GridEditor = (function () {
   const MAX_COL_WIDTH_PX = 1200;
   const MAX_ROW_HEIGHT_PX = 1000;
 
-  // Ce qu'une grille ne sait pas porter (ni à l'écran, ni dans l'Excel) : un second tableau, des colonnes de texte (le bloc de signature en est une), un sommaire,
-  // une citation, un encadré, un bloc de code, un trait horizontal, une note de bas de page, un numéro de page (en-tête/pied : pas dans une grille), le saut de page
-  // de document (celui d'une grille est porté par une ligne : `pageBreakBefore`). Jamais une liste, un titre, une image : ceux-là s'écrivent dans l'Excel (puces
-  // « • », gras et taille, image posée sur la case).
+  // Ce qu'une grille ne sait pas porter, ni à l'écran ni dans l'Excel : un second tableau, des colonnes de texte (le bloc de signature en est une),
+  // un sommaire, une citation, un encadré, un bloc de code, un trait horizontal, une note de bas de page, un numéro de page, le saut de page de
+  // document (celui d'une grille est porté par une ligne). Une liste, un titre ou une image restent permis : l'Excel les écrit (puces « • », gras et
+  // taille, image posée sur la case).
   const FORBIDDEN_NODES = new Set(['table', 'twoColumnsZone', 'twoColumnsColumn', 'toc', 'headingNumberingConfig', 'pageBreak', 'blockquote', 'callout', 'codeBlock',
     'horizontalRule', 'footnoteRef', 'pageNumberBadge']);
   const CELL_NODES = new Set(['tableCell', 'tableHeader']);
-  // Alignement vertical d'une case (`verticalAlign`, inline `vertical-align`) : au milieu par défaut, comme les en-têtes d'un tableur mis en forme ; le haut et le bas se choisiront
-  // dans la barre de la case (lot « fusion, bordures, alignement vertical »). Posé sur CHAQUE case de la grille : l'éditeur, la Lecture, le PDF et l'Excel le lisent au même endroit.
+  // Alignement vertical d'une case (`verticalAlign`, `vertical-align` en ligne) : au milieu par défaut, comme les en-têtes d'un tableur mis en forme.
+  // Posé sur chaque case : l'éditeur, la Lecture, le PDF et l'Excel le lisent au même endroit.
   const VALIGNS = new Set(['top', 'middle', 'bottom']);
   const DEFAULT_VALIGN = 'middle';
-  // Les quatre bords d'une case (js/table-borders.js : null = trait de départ, 'none' = pas de trait, '#rrggbb' = couleur) : un attribut par côté, écrit sur les deux cases d'un trait partagé.
+  // Les quatre bords d'une case (js/table-borders.js : null = trait de départ, 'none' = pas de trait, '#rrggbb' = couleur) : un attribut par côté,
+  // écrit sur les deux cases d'un trait partagé.
   const BORDER_ATTRS = { top: 'borderTop', right: 'borderRight', bottom: 'borderBottom', left: 'borderLeft' };
-  // Les bords qu'une ligne neuve (ou une colonne neuve) reprend de sa voisine : ceux qui la longent (`sides`) et ceux de ses deux bouts (`before`, `after`).
+  // Les bords qu'une ligne neuve (ou une colonne neuve) reprend de sa voisine : ceux qui la longent (`sides`) et ceux de ses deux bouts (`before`,
+  // `after`).
   const ROW_EDGES = { before: BORDER_ATTRS.top, after: BORDER_ATTRS.bottom, sides: [BORDER_ATTRS.left, BORDER_ATTRS.right] };
   const COLUMN_EDGES = { before: BORDER_ATTRS.left, after: BORDER_ATTRS.right, sides: [BORDER_ATTRS.top, BORDER_ATTRS.bottom] };
 
@@ -54,8 +57,7 @@ const GridEditor = (function () {
   function isActive() { return active; }
   function isGridType(typeModele) { return typeModele === TYPE; }
 
-  // --- Extension TipTap : hauteur de ligne -------------------------------------------------------------------------------------------------------------------
-  // `rowHeight` : hauteur MINIMALE en px (une ligne que son texte agrandit garde sa hauteur de texte, comme un <tr style="height">). Absent (null) pour tout
+  // `rowHeight` : hauteur minimale en px (une ligne que son texte agrandit garde sa hauteur de texte, comme un <tr style="height">). Null pour tout
   // tableau de document : aucun changement de rendu ni de HTML hors grille.
   function withRowAttributes(TableRow) {
     return TableRow.extend({
@@ -67,8 +69,9 @@ const GridEditor = (function () {
             parseHTML: el => { const px = parseInt(el.getAttribute('data-row-height'), 10); return px > 0 ? px : null; },
             renderHTML: attrs => (attrs.rowHeight ? { 'data-row-height': String(attrs.rowHeight), style: 'height: ' + attrs.rowHeight + 'px' } : {}),
           },
-          // Saut de page AVANT cette ligne : la grille n'a pas de page, mais son PDF et son Excel en ont (une nouvelle page, une nouvelle feuille : js/export-common.js:gridRowSegments).
-          // Faux pour toute ligne d'un tableau de document ; `data-page-break-before` est la marque de l'enregistrement, lue par les exports et par le CSS qui trace le trait.
+          // Saut de page avant cette ligne : la grille n'a pas de page, mais son PDF et son Excel en ont (une nouvelle page, une nouvelle feuille :
+          // js/export-common.js:gridRowSegments). Faux pour toute ligne d'un tableau de document ; `data-page-break-before` est la marque de
+          // l'enregistrement, lue par les exports et par le CSS qui trace le trait.
           pageBreakBefore: {
             default: false,
             parseHTML: el => el.getAttribute('data-page-break-before') === 'true',
@@ -79,16 +82,17 @@ const GridEditor = (function () {
     });
   }
 
-  // `verticalAlign` : null pour toute case d'un tableau de document (aucun changement de rendu ni de HTML hors grille) ; 'top', 'middle' ou 'bottom' dans une grille.
-  // Lu dans `data-valign` seulement, la marque de l'enregistrement : le `vertical-align` d'un tableau collé d'Excel ou du web ne doit rien changer à un tableau de
-  // document (l'export PDF ne l'applique que dans une grille, l'éditeur et la Lecture le montreraient seuls).
-  // Les bords (`borderTop`...) suivent la même règle : null pour toute case d'un tableau de document, lus dans `data-border-*` seulement (jamais dans le `border` d'un tableau collé) ;
-  // écrits en ligne pour que l'éditeur, la Lecture, le PDF et l'Excel les lisent au même endroit - `hidden` = pas de trait (il l'emporte sur le trait de la case voisine, bordures fusionnées).
+  // Les attributs HTML d'un bord : `data-border-<côté>`, la marque de l'enregistrement, et le `border-*` en ligne, `hidden` pour « pas de trait » (il
+  // l'emporte sur le trait de la case voisine, bordures fusionnées).
   function borderHtml(side, value) {
     const v = TableBorders.normalizeValue(value);
     if (!v) return {};
     return { ['data-border-' + side]: v, style: 'border-' + side + ': ' + (v === TableBorders.NONE ? 'hidden' : '1px solid ' + v) };
   }
+  // `verticalAlign` et les bords (`borderTop`...) : null pour toute case d'un tableau de document, donc aucun changement de rendu ni de HTML hors
+  // grille ; dans une grille, 'top', 'middle' ou 'bottom' pour l'alignement. Lus dans `data-valign` et `data-border-*` seulement, la marque de
+  // l'enregistrement : le `vertical-align` ou le `border` d'un tableau collé d'Excel ou du web ne doit rien changer à un tableau de document (le PDF
+  // ne les applique que dans une grille, l'éditeur et la Lecture les montreraient seuls).
   function withCellAttributes(CellExtension) {
     return CellExtension.extend({
       addAttributes() {
@@ -113,14 +117,14 @@ const GridEditor = (function () {
     });
   }
 
-  // Le HTML d'une grille enregistrée est son tableau, rien d'autre : le paragraphe vide que TipTap range sous un tableau final (TrailingNode) n'est pas du contenu - TipTap
-  // le remet tout seul au chargement. Les exports (Lecture, PDF, Excel) n'ont ainsi jamais à le deviner : une ligne vide sous la grille, voire une page de plus.
+  // Le HTML d'une grille enregistrée est son tableau, rien d'autre : le paragraphe vide que TipTap range sous un tableau final (TrailingNode) n'est
+  // pas du contenu, TipTap le remet au chargement. Les exports (Lecture, PDF, Excel) n'ont ainsi jamais à le deviner : une ligne vide sous la grille,
+  // voire une page de plus.
   function serialize(html) {
     const tail = '</table><p></p>';
     return active && typeof html === 'string' && html.endsWith(tail) ? html.slice(0, html.length - '<p></p>'.length) : html;
   }
 
-  // --- Document -------------------------------------------------------------------------------------------------------------------------------------------------
   function tableInfo(doc) {
     const first = doc.firstChild;
     return first && first.type.name === 'table' ? { node: first, pos: 0 } : null;
@@ -135,8 +139,8 @@ const GridEditor = (function () {
 
   function isEmptyParagraph(node) { return node.type.name === 'paragraph' && node.content.size === 0; }
 
-  // Un seul tableau en tête du document, éventuellement suivi du paragraphe vide que TipTap range sous un tableau final (TrailingNode de StarterKit : on ne
-  // peut pas l'empêcher, on le cache - cf. css/grid.css - et la sélection n'y entre jamais), sans rien d'interdit dans les cases.
+  // Un seul tableau en tête du document, éventuellement suivi du paragraphe vide que TipTap range sous un tableau final (TrailingNode de StarterKit :
+  // impossible à empêcher, on le cache - css/grid.css - et la sélection n'y entre jamais), sans rien d'interdit dans les cases.
   function isValidGridDoc(doc) {
     const n = doc.childCount;
     if (n < 1 || n > 2) return false;
@@ -146,7 +150,7 @@ const GridEditor = (function () {
     doc.child(0).descendants(node => {
       if (!ok) return false;
       const name = node.type.name;
-      // Une image en calque (devant/derrière le texte) n'a pas de sens sur une case : posée sur la case, à sa taille, rien d'autre.
+      // Une image en calque (devant ou derrière le texte) n'a pas de sens sur une case, où une image se pose à sa taille.
       if (FORBIDDEN_NODES.has(name) || (name === 'editorImage' && node.attrs.layer && node.attrs.layer !== 'normal')) { ok = false; return false; }
       return true;
     });
@@ -164,7 +168,8 @@ const GridEditor = (function () {
     return table.create(null, rows);
   }
 
-  // Chaque case une seule fois (une case fusionnée occupe plusieurs emplacements de la grille), avec l'emplacement de son coin haut gauche, dans l'ordre de lecture.
+  // Chaque case une seule fois (une case fusionnée occupe plusieurs emplacements de la grille), avec l'emplacement de son coin haut gauche, dans
+  // l'ordre de lecture.
   function cellOrigins(tableNode, map) {
     const nodes = new Map();
     tableNode.forEach((row, rowOffset) => row.forEach((cell, cellOffset) => nodes.set(rowOffset + 1 + cellOffset, cell)));
@@ -178,8 +183,8 @@ const GridEditor = (function () {
     return cells;
   }
 
-  // Largeur de chaque colonne de la grille, lue sur les `colwidth` des cases (la première largeur connue de la colonne gagne : toutes les lignes doivent s'y
-  // accorder) ; DEFAULT_COL_WIDTH_PX quand aucune case ne la porte (colonne ajoutée par la barre de la case : ses cases naissent sans largeur).
+  // Largeur de chaque colonne, lue sur les `colwidth` des cases (la première largeur connue de la colonne gagne : toutes les lignes doivent s'y
+  // accorder) ; DEFAULT_COL_WIDTH_PX quand aucune case ne la porte (une colonne ajoutée par la barre de la case naît sans largeur).
   function columnWidths(tableNode) {
     const map = libs.TableMap.get(tableNode);
     const widths = new Array(map.width).fill(0);
@@ -190,16 +195,18 @@ const GridEditor = (function () {
     return widths.map(w => w || DEFAULT_COL_WIDTH_PX);
   }
 
-  // Seule une case dont le type porte l'attribut peut le recevoir : sinon le « correctif » ne corrigerait jamais rien et appendTransaction tournerait sans fin.
+  // Seule une case dont le type porte l'attribut peut le recevoir : sinon le « correctif » ne corrigerait jamais rien et appendTransaction tournerait
+  // sans fin.
   function hasCellAttr(cell, name) { return !!cell.type.spec.attrs && name in cell.type.spec.attrs; }
   // Une case neuve (ligne ou colonne ajoutée, collage) : aucun alignement vertical encore posé.
   function isFreshCell(cell) { return hasCellAttr(cell, 'verticalAlign') && !VALIGNS.has(cell.attrs.verticalAlign); }
 
-  // Les bords de départ des cases neuves, et ce qu'il faut changer chez leurs voisines : une ligne ajoutée reprend les bords gauche et droit de la ligne voisine (du dessus, du dessous pour la
-  // première), une colonne ajoutée les bords haut et bas de la colonne voisine (de gauche, de droite pour la première). Au milieu du tableau, le trait entre l'ancienne case et la nouvelle
-  // est celui d'avant (js/table-borders.js : la valeur du voisin l'emporte sur le trait de départ de la case neuve). En bout de grille, le bord extérieur reste à l'extérieur, passe à la
-  // case neuve - et le trait qui était extérieur devient un trait intérieur, comme celui d'à côté (sinon un cadre caché ou coloré se prolongerait entre l'ancienne case et la nouvelle).
-  // Rend une Map position de case -> attributs à écrire.
+  // Les bords de départ des cases neuves, et ce qu'il faut changer chez leurs voisines. Une ligne ajoutée reprend les bords gauche et droit de la
+  // ligne voisine (du dessus, du dessous pour la première), une colonne ajoutée les bords haut et bas de la colonne voisine (de gauche, de droite
+  // pour la première). Au milieu du tableau, le trait entre l'ancienne case et la nouvelle est celui d'avant (js/table-borders.js : la valeur du
+  // voisin l'emporte sur le trait de départ de la case neuve). En bout de grille, le bord extérieur reste à l'extérieur et passe à la case neuve ; le
+  // trait qui était extérieur devient intérieur, comme celui d'à côté (sinon un cadre caché ou coloré se prolongerait entre l'ancienne case et la
+  // nouvelle). Rend une Map position de case -> attributs à écrire.
   function borderSeeds(tableNode, map, cells, fresh) {
     const seeds = new Map();
     if (!fresh.size) return seeds;
@@ -211,7 +218,8 @@ const GridEditor = (function () {
     const colFresh = colCells.map(allFresh);
     const nearest = (flags, from, step) => { for (let i = from + step; i >= 0 && i < flags.length; i += step) if (!flags[i]) return i; return -1; };
     const put = (pos, attrs) => seeds.set(pos, Object.assign(seeds.get(pos) || {}, attrs));
-    // La case neuve `pos`, de rang `index` dans les `flags` de sa ligne (ou de sa colonne) ; `cellAt(i)` : la position de la case de rang i dans cette même ligne.
+    // Pose les bords de la case neuve `pos`, de rang `index` parmi les lignes (ou les colonnes) `flags` (vrai : entièrement neuve) ; `cellAt(i)` rend
+    // la position de la case voisine de rang i.
     const seedFrom = (edges, flags, pos, index, cellAt) => {
       const before = nearest(flags, index, -1);
       const refIndex = before >= 0 ? before : nearest(flags, index, 1);
@@ -239,8 +247,8 @@ const GridEditor = (function () {
     return seeds;
   }
 
-  // Pose la largeur de chaque case qui n'en a pas (ou qui n'a pas celle de sa colonne), l'alignement vertical de départ et les bords de départ des cases neuves, sur la
-  // transaction `tr` (ou une neuve) ; null s'il n'y a rien à faire.
+  // Pose la largeur de chaque case qui n'en a pas (ou qui n'a pas celle de sa colonne), l'alignement vertical de départ et les bords de départ des
+  // cases neuves, sur la transaction `tr` (ou une neuve) ; null s'il n'y a rien à faire.
   function fixCellDimensions(state, tr) {
     const info = tableInfo(tr ? tr.doc : state.doc);
     if (!info) return null;
@@ -265,7 +273,8 @@ const GridEditor = (function () {
     return changed ? out : null;
   }
 
-  // Une ligne ajoutée par la barre de la case naît sans hauteur : elle prend celle de la ligne du dessus (du dessous pour la première), comme dans un tableur.
+  // Une ligne ajoutée par la barre de la case naît sans hauteur : elle prend celle de la ligne du dessus (du dessous pour la première), comme dans un
+  // tableur.
   function fixRowHeights(state, tr) {
     const info = tableInfo(tr ? tr.doc : state.doc);
     if (!info) return null;
@@ -283,7 +292,7 @@ const GridEditor = (function () {
     return changed ? out : null;
   }
 
-  // --- Bordures : la description du tableau que lit js/table-borders.js, et ce qu'on écrit en retour ---------------------------------------------------------------------
+  // La description du tableau que lit js/table-borders.js : une entrée par case, avec son emplacement, ses étendues et ses quatre bords.
   function borderSpec(tableNode) {
     const map = libs.TableMap.get(tableNode);
     const cells = cellOrigins(tableNode, map).map(({ pos, row, col, node: { attrs } }) => ({
@@ -293,8 +302,8 @@ const GridEditor = (function () {
     return { width: map.width, height: map.height, cells };
   }
 
-  // Écrit sur chaque case les côtés calculés (`sides`, dans l'ordre de `spec.cells`) quand ils diffèrent de ce qu'elle porte ; null s'il n'y a rien à changer. Les positions ne bougent pas
-  // (même taille de nœud) : plusieurs cases d'une même transaction ne se décalent pas.
+  // Écrit sur chaque case les côtés calculés (`sides`, dans l'ordre de `spec.cells`) quand ils diffèrent de ce qu'elle porte ; null s'il n'y a rien à
+  // changer. Les positions ne bougent pas (même taille de nœud) : plusieurs cases d'une même transaction ne se décalent pas.
   function writeBorders(state, tr, info, spec, sides) {
     let out = tr;
     let changed = false;
@@ -314,8 +323,8 @@ const GridEditor = (function () {
     return changed ? out : null;
   }
 
-  // Met d'accord les cases qui se partagent un trait (fusion, ligne ou colonne supprimée, collage) : « pas de trait » l'emporte, puis la première couleur, sinon le trait de départ.
-  // Rien à faire - et aucune transaction - quand tout s'accorde déjà.
+  // Met d'accord les cases qui se partagent un trait (fusion, ligne ou colonne supprimée, collage) : « pas de trait » l'emporte, puis la première
+  // couleur, sinon le trait de départ. Null quand tout s'accorde déjà.
   function fixBorders(state, tr) {
     const info = tableInfo(tr ? tr.doc : state.doc);
     if (!info) return null;
@@ -323,8 +332,9 @@ const GridEditor = (function () {
     return writeBorders(state, tr, info, spec, TableBorders.resolve(spec)) || null;
   }
 
-  // Retire le saut de page que rien ne peut suivre : avant la première ligne (une page vide) ou au milieu d'une case fusionnée sur plusieurs lignes. L'éditeur n'en pose pas de tel, mais
-  // la première ligne peut le devenir (la ligne du dessus a été supprimée) et un HTML collé ou chargé peut en porter. Rien à faire - et aucune transaction - sinon.
+  // Retire le saut de page que rien ne peut suivre : avant la première ligne (une page vide) ou au milieu d'une case fusionnée sur plusieurs lignes.
+  // L'éditeur n'en pose pas de tel, mais la première ligne peut le devenir (la ligne du dessus supprimée) et un HTML collé ou chargé peut en porter.
+  // Null quand il n'y a rien à retirer.
   function fixPageBreaks(state, tr) {
     const info = tableInfo(tr ? tr.doc : state.doc);
     if (!info) return null;
@@ -340,13 +350,14 @@ const GridEditor = (function () {
     return changed ? out : null;
   }
 
-  // Les réparations d'une grille l'une après l'autre, chacune sur la transaction de la précédente (`tr` : celle de départ, ou null) ; null quand il n'y avait rien à réparer.
+  // Les réparations d'une grille l'une après l'autre, chacune sur la transaction de la précédente (`tr` : celle de départ, ou null) ; null quand il
+  // n'y avait rien à réparer.
   function repairGrid(state, tr) {
     return [fixCellDimensions, fixRowHeights, fixBorders, fixPageBreaks].reduce((out, fix) => fix(state, out) || out, tr);
   }
 
-  // Le document est déjà « une grille » ? Sinon (modèle vide, contenu abîmé) on garde le premier tableau trouvé s'il est valable, sinon la grille de départ.
-  // Hors historique et sans signal « modifié » : ouvrir un modèle n'est pas une modification de la personne.
+  // Le document est déjà « une grille » ? Sinon (modèle vide, contenu abîmé), on garde le premier tableau trouvé s'il est valable, sinon la grille de
+  // départ. Hors historique et sans signal « modifié » : ouvrir un modèle n'est pas une modification de la personne.
   function normalizeDocument() {
     const { state, view } = editor;
     let tr = null;
@@ -365,7 +376,6 @@ const GridEditor = (function () {
     selectFirstCell();
   }
 
-  // --- Sélection -----------------------------------------------------------------------------------------------------------------------------------------------
   function isCellSelection(sel) { return !!(sel && sel.$anchorCell); }
 
   function selectionInsideTable(sel) {
@@ -387,8 +397,8 @@ const GridEditor = (function () {
     return ends ? libs.CellSelection.create(doc, ends.first, ends.last) : null;
   }
 
-  // Où remettre une sélection qui sort du tableau : tout le document ou le tableau entier -> toutes les cases ; après le tableau -> la fin de la dernière case ;
-  // avant -> le début de la première.
+  // Où remettre une sélection qui sort du tableau : tout le document ou le tableau entier -> toutes les cases ; après le tableau -> la fin de la
+  // dernière case ; avant -> le début de la première.
   function selectionBackInside(doc, sel) {
     const info = tableInfo(doc);
     if (!info) return null;
@@ -411,8 +421,8 @@ const GridEditor = (function () {
     return !!ends && ed.commands.setCellSelection({ anchorCell: ends.first, headCell: ends.last });
   }
 
-  // Suppr/Retour arrière sur des cases sélectionnées : vide leur contenu (comme dans un tableur) au lieu de la commande « supprimer le tableau » de TipTap quand
-  // toutes sont sélectionnées - que le garde-fou refuserait en silence, et la touche semblerait ne rien faire.
+  // Suppr et Retour arrière sur des cases sélectionnées vident leur contenu (comme dans un tableur), au lieu de la commande « supprimer le tableau »
+  // de TipTap quand toutes sont sélectionnées : le garde-fou la refuserait en silence et la touche semblerait ne rien faire.
   function clearSelectedCells(ed) {
     const sel = ed.state.selection;
     if (!isCellSelection(sel)) return false;
@@ -447,8 +457,7 @@ const GridEditor = (function () {
     return pos == null ? null : editor.view.nodeDOM(pos);
   }
 
-  // --- Barre de la case : fusion, alignement vertical ------------------------------------------------------------------------------------------------------------
-  // Les cases que la barre vise : toutes celles d'une sélection de cases, sinon la case du curseur.
+  // Les cases que la barre de la case vise : toutes celles d'une sélection de cases, sinon la case du curseur.
   function selectedCells(state) {
     const sel = state.selection;
     const out = [];
@@ -476,7 +485,8 @@ const GridEditor = (function () {
     return true;
   }
 
-  // Fusionner n'a de sens que pour des cases d'une même page : une case ne s'étend jamais de part et d'autre d'un saut de page (le PDF et l'Excel la couperaient en deux).
+  // Fusionner n'a de sens que pour des cases d'une même page : une case ne s'étend jamais de part et d'autre d'un saut de page (le PDF et l'Excel la
+  // couperaient en deux).
   function canMerge(ed) {
     if (!active || !ed.can().mergeCells()) return false;
     const info = tableInfo(ed.state.doc);
@@ -487,7 +497,8 @@ const GridEditor = (function () {
   }
   function canSplit(ed) { return active && ed.can().splitCell(); }
 
-  // Le rectangle (emplacements de la grille, `right` et `bottom` exclus) que couvrent les cases visées : toujours un rectangle, une sélection de cases n'en connaît pas d'autre.
+  // Le rectangle (emplacements de la grille, `right` et `bottom` exclus) que couvrent les cases visées : toujours un rectangle, une sélection de
+  // cases n'en connaît pas d'autre.
   function selectionRect(state, info) {
     const map = libs.TableMap.get(info.node);
     let rect = null;
@@ -500,10 +511,11 @@ const GridEditor = (function () {
     return rect;
   }
 
-  // Fusionne les cases sélectionnées en une seule : le texte des autres s'ajoute à la suite du sien (rien n'est perdu, Annuler rend tout), le fond et l'alignement sont ceux de la
-  // première. prosemirror-tables ne laisse à la case fusionnée que la largeur de sa première colonne (0 pour les autres) : on lui rend, dans la même transaction, celle de chaque
-  // colonne qu'elle couvre - sans cela, fusionner toutes les lignes de deux colonnes remettait la seconde à la largeur par défaut (fixDimensions ne la retrouvait dans aucune autre case).
-  // Ses bords sont ceux du POURTOUR des cases fusionnées (pas ceux de la première, dont le côté droit était un trait intérieur) ; les traits de l'intérieur disparaissent.
+  // Fusionne les cases sélectionnées en une seule : le texte des autres s'ajoute à la suite du sien (rien n'est perdu, Annuler rend tout), le fond et
+  // l'alignement sont ceux de la première. prosemirror-tables ne laisse à la case fusionnée que la largeur de sa première colonne (0 pour les autres)
+  // : on lui rend, dans la même transaction, celle de chaque colonne qu'elle couvre, sinon fixCellDimensions remettrait la seconde à la largeur par
+  // défaut. Ses bords sont ceux du pourtour des cases fusionnées (le côté droit de la première était un trait intérieur) ; les traits de l'intérieur
+  // disparaissent.
   function mergeCells(ed) {
     if (!canMerge(ed)) return false;
     const before = tableInfo(ed.state.doc);
@@ -523,8 +535,9 @@ const GridEditor = (function () {
     }).run();
   }
 
-  // Scinde la case fusionnée en autant de cases qu'elle en recouvrait : la première garde le contenu, les autres naissent vides, avec le fond, l'alignement et la largeur de leur colonne.
-  // Les bords du pourtour restent aux cases du pourtour ; les traits entre les nouvelles cases sont ceux de départ.
+  // Scinde la case fusionnée en autant de cases qu'elle en recouvrait : la première garde le contenu, les autres naissent vides, avec le fond,
+  // l'alignement et la largeur de leur colonne. Les bords du pourtour restent aux cases du pourtour ; les traits entre les nouvelles cases sont ceux
+  // de départ.
   function splitCell(ed) {
     if (!canSplit(ed)) return false;
     const before = tableInfo(ed.state.doc);
@@ -551,8 +564,9 @@ const GridEditor = (function () {
     }).run();
   }
 
-  // Les traits que visent les cases sélectionnées, selon le réglage du menu « Bordures » : tout (« all »), le pourtour (« outer »), l'intérieur (« inner »), un côté, ou plus aucun trait (« none »).
-  // `color` : la couleur du stylo, null = le trait de départ. Une seule transaction pour toutes les cases touchées : un seul Annuler.
+  // Les traits que visent les cases sélectionnées, selon le réglage du menu « Bordures » : tout (« all »), le pourtour (« outer »), l'intérieur
+  // (« inner »), un côté, ou plus aucun trait (« none »). `color` : la couleur du stylo, null = le trait de départ. Une seule transaction pour toutes
+  // les cases touchées : un seul Annuler.
   function applyBorders(ed, preset, color) {
     if (!active || !TableBorders.PRESETS.includes(preset)) return false;
     const info = tableInfo(ed.state.doc);
@@ -566,7 +580,8 @@ const GridEditor = (function () {
     return true;
   }
 
-  // Le réglage a-t-il un trait à poser ? « Intérieurs » n'en a pas pour une seule case (ni pour l'intérieur d'une case fusionnée) : le bouton se grise.
+  // Le réglage a-t-il un trait à poser ? « Intérieurs » n'en a pas pour une seule case (ni pour l'intérieur d'une case fusionnée) : le bouton se
+  // grise.
   function canApplyBorders(ed, preset) {
     if (!active || !TableBorders.PRESETS.includes(preset)) return false;
     const info = tableInfo(ed.state.doc);
@@ -574,21 +589,21 @@ const GridEditor = (function () {
     return !!rect && TableBorders.usableEdges(borderSpec(info.node), TableBorders.presetEdges(preset, rect)).length > 0;
   }
 
-  // --- Saut de page : porté par une ligne -----------------------------------------------------------------------------------------------------------------------------
   // Une case couvre-t-elle la limite entre la ligne `row - 1` et la ligne `row` ? (la même case dans les deux, dans l'une des colonnes)
   function boundaryCrossed(map, row) {
     for (let col = 0; col < map.width; col++) if (map.map[(row - 1) * map.width + col] === map.map[row * map.width + col]) return true;
     return false;
   }
 
-  // La ligne que le bouton vise : la première de la sélection (le saut se pose AVANT elle).
+  // La ligne que le bouton vise : la première de la sélection (le saut se pose avant elle).
   function pageBreakRow(state) {
     const info = tableInfo(state.doc);
     const rect = info && selectionRect(state, info);
     return rect ? { info, map: libs.TableMap.get(info.node), row: rect.top } : null;
   }
 
-  // Pas avant la première ligne (une page vide), pas au milieu d'une case fusionnée sur plusieurs lignes (aucune case n'est coupée en deux) : le bouton se grise.
+  // Pas avant la première ligne (une page vide), pas au milieu d'une case fusionnée sur plusieurs lignes (aucune case n'est coupée en deux) : le
+  // bouton se grise.
   function canTogglePageBreak(ed) {
     if (!active) return false;
     const target = pageBreakRow(ed.state);
@@ -619,11 +634,10 @@ const GridEditor = (function () {
     return rows;
   }
 
-  // --- Collage ----------------------------------------------------------------------------------------------------------------------------------------------------
-  // Un texte copié finit presque toujours par un retour à la ligne (une ligne de Grist, d'un mail ou d'un autre tableur, un paragraphe sélectionné jusqu'à sa fin) :
-  // ProseMirror en fait un dernier paragraphe vide qui reste sous le texte collé (Antoine, 02/10 : « quand on colle une variable en mode grille ça rajoute 1 à 2 lignes en
-  // dessous non souhaitées »). Dans une case ces lignes vides ne servent à rien : elles agrandissent la ligne et ouvrent des lignes dans l'Excel. Elles ne sont pas collées ;
-  // les lignes vides du MILIEU d'un texte restent, et un tableau copié (ses lignes, ses cases) est laissé tel quel - c'est prosemirror-tables qui le place.
+  // Un texte copié finit presque toujours par un retour à la ligne (une ligne de Grist, d'un mail ou d'un autre tableur, un paragraphe sélectionné
+  // jusqu'à sa fin) : ProseMirror en fait un dernier paragraphe vide qui reste sous le texte collé. Dans une case ces lignes vides ne servent à rien
+  // : elles agrandissent la ligne et ouvrent des lignes dans l'Excel, donc elles ne sont pas collées. Les lignes vides du milieu d'un texte restent,
+  // et un tableau copié (ses lignes, ses cases) est laissé tel quel : prosemirror-tables le place.
   function isBlankBlock(node) {
     if (!node.isTextblock) return false;
     let blank = true;
@@ -661,13 +675,14 @@ const GridEditor = (function () {
     return new slice.constructor(fragment, slice.openStart, Math.min(slice.openEnd, openDepthAtEnd(fragment)));
   }
 
-  // --- Défilement : la case et le curseur jamais sous les bandeaux ------------------------------------------------------------------------------------------------------
-  // ProseMirror amène le curseur dans la vue en ne connaissant que le bord du panneau : les bandeaux collés (colonnes en haut, lignes à gauche) recouvrent ce qui passe dessous, il ne les voit pas.
-  // Une flèche du haut ou de gauche, Maj+Tab ou Entrée laissaient donc le curseur, ou toute la case, cachés sous eux (Antoine, 02/10) ; vers le bas et la droite la case arrivait coupée au bord.
-  // On complète son défilement APRÈS lui (l'évènement `transaction` de TipTap suit la mise à jour de la vue), pour toute transaction qui le demande : flèches, Tab, Entrée, frappe, Annuler.
-  // Quand la transaction a changé de case, la case d'arrivée est montrée EN ENTIER. Puis, même dans une case plus haute (ou plus large) que le panneau, reste en vue ce qui compte : le curseur ;
-  // le début de ce qui est sélectionné quand on arrive en sélectionnant la case (Entrée, Tab, Maj+Tab) ; sa tête quand on étend une sélection dans la même case. Dans la même case seul le curseur
-  // est ramené hors des bandeaux : taper ne fait pas défiler une case coupée sur laquelle on vient de cliquer.
+  // ProseMirror amène le curseur dans la vue en ne connaissant que le bord du panneau : les bandeaux collés (colonnes en haut, lignes à gauche)
+  // recouvrent ce qui passe dessous, il ne les voit pas. Une flèche vers le haut ou la gauche, Maj+Tab ou Entrée laissaient le curseur, ou toute la
+  // case, cachés sous eux ; vers le bas et la droite la case arrivait coupée au bord.
+  // On complète son défilement après lui (l'évènement `transaction` de TipTap suit la mise à jour de la vue), pour toute transaction qui le demande :
+  // flèches, Tab, Entrée, frappe, Annuler. Quand la transaction a changé de case, la case d'arrivée est montrée en entier ; puis, même dans une case
+  // plus haute (ou plus large) que le panneau, reste en vue ce qui compte : le curseur, le début de ce qui est sélectionné quand on arrive en
+  // sélectionnant la case (Entrée, Tab, Maj+Tab), sa tête quand on étend une sélection dans la même case. Dans la même case seul le curseur est
+  // ramené hors des bandeaux : taper ne fait pas défiler une case coupée sur laquelle on vient de cliquer.
   const CARET_MARGIN_PX = 5; // la marge que ProseMirror laisse autour du curseur (`scrollMargin`)
   let lastCellDom = null;    // la case du curseur après la transaction d'avant : sert à voir si celle-ci a changé de case
 
@@ -703,15 +718,16 @@ const GridEditor = (function () {
     scrollRectInto(scroller, area, view.coordsAtPos(movedToOtherCell ? sel.from : sel.head, 1), CARET_MARGIN_PX);
   }
 
-  // --- Entrée : la case du dessous --------------------------------------------------------------------------------------------------------------------------------
-  // Comme dans Excel et Google Sheets (Antoine, 02/10) : Entrée descend d'une case et la sélectionne (on tape par-dessus, comme avec Tab) ; Maj+Entrée et Ctrl+Entrée ajoutent une
-  // ligne DANS la case (le retour à la ligne forcé de TipTap, que ces deux touches faisaient déjà). Sur la dernière ligne la touche est prise sans rien faire : pas de ligne de
-  // tableau ajoutée en passant, pas de paragraphe vide. Dans une liste (puces, numéros, tâches) Entrée garde son sens de liste, sinon on n'y ajouterait jamais un point.
+  // Comme dans Excel et Google Sheets : Entrée descend d'une case et la sélectionne (on tape par-dessus, comme avec Tab) ; Maj+Entrée et Ctrl+Entrée
+  // ajoutent une ligne dans la case (le retour à la ligne forcé de TipTap, que ces deux touches faisaient déjà). Sur la dernière ligne la touche est
+  // prise sans rien faire : pas de ligne de tableau ajoutée en passant, pas de paragraphe vide. Dans une liste (puces, numéros, tâches) Entrée garde
+  // son sens de liste, sinon on n'y ajouterait jamais un point.
   const LIST_ITEMS = new Set(['listItem', 'taskItem']);
 
   function inListItem(sel) { return !isCellSelection(sel) && ancestorDepth(sel.$head, LIST_ITEMS) > 0; }
 
-  // La case sous la case active, dans sa colonne de gauche ; sous une case fusionnée sur plusieurs lignes, la case qui suit sa dernière ligne. Null sur la dernière ligne.
+  // La case sous la case active, dans sa colonne de gauche ; sous une case fusionnée sur plusieurs lignes, la case qui suit sa dernière ligne. Null
+  // sur la dernière ligne.
   function cellBelowPos(info, cellPos) {
     const map = libs.TableMap.get(info.node);
     const rect = map.findCell(cellPos - (info.pos + 1));
@@ -734,9 +750,10 @@ const GridEditor = (function () {
     return true;
   }
 
-  // Une extension à part, de priorité normale, et rangée dans js/editor.js APRÈS StarterKit (sa liste à puces, ses touches de base) et AVANT Variables et TextExpansion : TipTap
-  // essaie les extensions de la dernière rangée à la première, donc la liste `#` (ou celle des expansions) ouverte garde son Entrée (choisir une ligne) et ne cède la touche
-  // qu'à la case du dessous quand elle n'en veut pas, alors que celle d'un calcul (priorité 1000) passe toujours devant. Hors grille la fonction rend faux : Entrée coupe le paragraphe.
+  // Une extension à part, de priorité normale, rangée dans js/editor.js après StarterKit (sa liste à puces, ses touches de base) et avant Variables
+  // et TextExpansion : TipTap essaie les extensions de la dernière rangée à la première, donc la liste `#` (ou celle des expansions) ouverte garde
+  // son Entrée (choisir une ligne) et ne cède la touche à la case du dessous que quand elle n'en veut pas, alors que celle d'un calcul (priorité
+  // 1000) passe toujours devant. Hors grille la fonction rend faux : Entrée coupe le paragraphe.
   function createEnterExtension(Extension) {
     return Extension.create({
       name: 'gridEnter',
@@ -746,12 +763,12 @@ const GridEditor = (function () {
     });
   }
 
-  // --- Extension TipTap : garde-fou, sélection, touches ----------------------------------------------------------------------------------------------------------
   function createExtension(Extension) {
     const { Plugin, PluginKey, Decoration, DecorationSet } = libs;
     return Extension.create({
       name: 'gridEditor',
-      // Avant les raccourcis de Tableau (Retour arrière / Suppr sur toutes les cases = supprimer le tableau) et de TipTap (Ctrl+A = tout le document).
+      // Avant les raccourcis de Tableau (Retour arrière / Suppr sur toutes les cases = supprimer le tableau) et de TipTap (Ctrl+A = tout le
+      // document).
       priority: 1000,
       addKeyboardShortcuts() {
         const when = fn => ({ editor: ed }) => (active ? fn(ed) : false);
@@ -781,7 +798,8 @@ const GridEditor = (function () {
             return tr;
           },
           props: {
-            // Un tableau de tableur (Excel, Sheets, LibreOffice) est réécrit pour la grille avant que ProseMirror le lise : fusions, fond, texte, alignements, traits (js/grid-table.js).
+            // Un tableau de tableur (Excel, Sheets, LibreOffice) est réécrit pour la grille avant que ProseMirror le lise : fusions, fond, texte,
+            // alignements, traits (js/grid-table.js).
             transformPastedHTML(html) { return active ? GridTable.cleanPastedHtml(html) : html; },
             transformPasted(slice) { return active ? trimPastedSlice(slice) : slice; },
             decorations(state) {
@@ -796,9 +814,8 @@ const GridEditor = (function () {
     });
   }
 
-  // --- Largeur de colonne, hauteur de ligne (une transaction chacune) -------------------------------------------------------------------------------------------
-  // Même parcours que `updateColumnWidth` de prosemirror-tables (poignée du bord d'une case) : toutes les cases de la colonne reçoivent la largeur, une case
-  // fusionnée sur plusieurs colonnes ne change que SA part de `colwidth`.
+  // Même parcours que `updateColumnWidth` de prosemirror-tables (poignée du bord d'une case) : toutes les cases de la colonne reçoivent la largeur,
+  // une case fusionnée sur plusieurs colonnes ne change que sa part de `colwidth`. Une seule transaction.
   function setColumnWidth(colIndex, width) {
     const { state, view } = editor;
     const info = tableInfo(state.doc);
@@ -829,7 +846,6 @@ const GridEditor = (function () {
     view.dispatch(state.tr.setNodeMarkup(rowPos(info, rowIndex), undefined, Object.assign({}, row.attrs, { rowHeight: height })));
   }
 
-  // --- Bandeaux A, B, C / 1, 2, 3 ---------------------------------------------------------------------------------------------------------------------------------
   function colName(index) {
     let name = '';
     let n = index;
@@ -839,8 +855,8 @@ const GridEditor = (function () {
 
   function tableDom() { return editor && editor.view.dom.querySelector(':scope > .tableWrapper > table'); }
 
-  // Taille réelle de chaque colonne et de chaque ligne, lue sur le rendu (une ligne que son texte agrandit n'a pas la hauteur de son attribut). null quand
-  // l'éditeur est masqué (Lecture, macro-modèle) : rien à mesurer, les bandeaux gardent leur dernier état.
+  // Taille réelle de chaque colonne et de chaque ligne, lue sur le rendu (une ligne que son texte agrandit n'a pas la hauteur de son attribut). null
+  // quand l'éditeur est masqué (Lecture, macro-modèle) : rien à mesurer, les bandeaux gardent leur dernier état.
   function measure() {
     const table = tableDom();
     if (!table) return null;
@@ -868,7 +884,7 @@ const GridEditor = (function () {
     sheet.insertBefore(cols, sheet.firstChild);
     sheet.insertBefore(corner, sheet.firstChild);
     strips = { corner, cols, rows };
-    // mousedown ET pointerdown : le focus reste dans la grille (ni sélection de texte, ni perte du curseur) pendant qu'on clique un bandeau.
+    // mousedown et pointerdown : le focus reste dans la grille (ni sélection de texte, ni perte du curseur) pendant qu'on clique un bandeau.
     [corner, cols, rows].forEach(node => node.addEventListener('mousedown', event => event.preventDefault()));
     corner.addEventListener('pointerdown', onCornerDown);
     cols.addEventListener('pointerdown', event => onStripDown('col', event));
@@ -918,8 +934,8 @@ const GridEditor = (function () {
     return head;
   }
 
-  // Le numéro d'une ligne qui porte un saut de page : une pastille à cheval sur son bord haut (le trait en tirets sur la ligne, c'est css/grid.css), et l'info-bulle du saut. La pastille ne répond pas au
-  // pointeur : la poignée qui règle la ligne du dessus, juste dessous, reste atteignable.
+  // Le numéro d'une ligne qui porte un saut de page : une pastille à cheval sur son bord haut (le trait en tirets sur la ligne, c'est css/grid.css),
+  // et l'info-bulle du saut. La pastille ne répond pas au pointeur : la poignée qui règle la ligne du dessus, juste dessous, reste atteignable.
   function markPageBreak(head, on) {
     head.classList.toggle('has-break', on);
     let badge = head.querySelector(':scope > .v2-grid-break');
@@ -982,7 +998,6 @@ const GridEditor = (function () {
     Array.prototype.forEach.call(strips.rows.children, (head, i) => head.classList.toggle('sel', i >= rowFrom && i <= rowTo));
   }
 
-  // --- Clic sur un bandeau : sélectionne toute la colonne / la ligne ------------------------------------------------------------------------------------------------
   function onCornerDown(event) {
     if (event.button !== 0 || !editor) return;
     event.preventDefault();
@@ -1018,7 +1033,6 @@ const GridEditor = (function () {
     else selectLine(kind, index, event.shiftKey);
   }
 
-  // --- Tirer un trait : aperçu en direct, une transaction au relâcher ------------------------------------------------------------------------------------------------
   function showTip(text, event) {
     if (!tip) { tip = el('div', 'v2-grid-tip'); tip.setAttribute('role', 'status'); document.body.appendChild(tip); }
     tip.textContent = text;
@@ -1027,8 +1041,8 @@ const GridEditor = (function () {
   }
   function hideTip() { if (tip) { tip.remove(); tip = null; } }
 
-  // Hauteur d'une ligne réduite à son contenu : le plancher du glissé (« une ligne ne descend pas sous la hauteur de son texte »). Mesurée par une feuille de style
-  // d'un instant, pas en changeant le style de la ligne : ProseMirror verrait la ligne modifiée et la redessinerait.
+  // Hauteur d'une ligne réduite à son contenu : le plancher du glissé (« une ligne ne descend pas sous la hauteur de son texte »). Mesurée par une
+  // feuille de style d'un instant, pas en changeant le style de la ligne : ProseMirror verrait la ligne modifiée et la redessinerait.
   function naturalRowHeight(tr, index) {
     const probe = document.createElement('style');
     probe.textContent = `.tiptap table > tbody > tr:nth-child(${index + 1}) { height: 0 !important; }`;
@@ -1054,9 +1068,9 @@ const GridEditor = (function () {
     document.body.classList.add(isCol ? 'pp-grid-resizing-col' : 'pp-grid-resizing-row');
     showTip(size + ' px', event);
 
-    // Aperçu par une feuille de style posée dans <head>, jamais par un style en ligne sur le tableau : ProseMirror lit un attribut modifié sur une ligne (<tr>) comme un
-    // changement du document à relire et redessine la ligne - l'aperçu d'une hauteur s'effaçait aussitôt, à la vraie souris. Il ne voit rien d'une feuille de style, et
-    // le rendu d'avant n'a jamais été touché : annuler = retirer la feuille.
+    // Aperçu par une feuille de style posée dans <head>, jamais par un style en ligne sur le tableau : ProseMirror lit un attribut modifié sur une
+    // ligne (<tr>) comme un changement du document à relire et redessine la ligne (l'aperçu d'une hauteur s'effacerait aussitôt). Il
+    // ne voit rien d'une feuille de style, et le rendu d'avant n'est jamais touché : annuler = retirer la feuille.
     const preview = document.createElement('style');
     preview.id = 'pp-grid-resize-preview';
     document.head.appendChild(preview);
@@ -1080,7 +1094,7 @@ const GridEditor = (function () {
       try { target.releasePointerCapture(event.pointerId); } catch (e) { /* déjà relâché */ }
       document.body.classList.remove('pp-grid-resizing-col', 'pp-grid-resizing-row');
       hideTip();
-      // L'enregistrement redessine le tableau à sa nouvelle taille (synchrone) AVANT que l'aperçu ne soit retiré : pas de saut.
+      // L'enregistrement redessine le tableau à sa nouvelle taille (synchrone) avant que l'aperçu ne soit retiré : pas de saut.
       if (commit && size !== Math.round(startSize)) { if (isCol) setColumnWidth(index, size); else setRowHeight(index, size); }
       else head.style[isCol ? 'width' : 'height'] = startSize + 'px';
       preview.remove();
@@ -1096,14 +1110,15 @@ const GridEditor = (function () {
     document.addEventListener('keydown', onKey, true);
   }
 
-  // La bande où la barre de la case est fixée (index.html : #v2-cell-bar-dock, css/grid.css), entre la barre d'outils et le plan de travail : dans une grille cette barre ne flotte
-  // plus sur la case courante. Posée sur une case (au-dessus ou en dessous), elle recouvrait les cases voisines : un appui dessus tombait sur ses boutons, et ni un clic ni un
-  // glissé ne pouvait plus les atteindre (vu à la vraie souris à 700x400, demande d'Antoine : sélectionner plusieurs cases en glissant).
+  // La bande où la barre de la case est fixée (index.html : #v2-cell-bar-dock, css/grid.css), entre la barre d'outils et le plan de travail : dans
+  // une grille cette barre ne flotte plus sur la case courante. Posée sur une case, elle recouvrait les cases voisines : un appui dessus tombait sur
+  // ses boutons, et ni un clic ni un glissé ne pouvait plus les atteindre.
   function barSlot() { return document.getElementById('v2-cell-bar-dock'); }
 
-  // Barres flottantes d'image et de bulle : elles ne recouvrent jamais les bandeaux. Posée au-dessus de la première ligne, une barre cachait les lettres - ni clic
-  // sur une lettre, ni poignée à tirer tant que le curseur était dans la première ligne (vu à la vraie souris à 700x400). floating-ui la garde dans le plan de travail,
-  // hors des deux bandeaux : elle passe sous la case quand il n'y a pas la place au-dessus, et reste à droite du bandeau des numéros. Fonction relue à chaque calcul.
+  // Barres flottantes d'image et de bulle : elles ne recouvrent jamais les bandeaux. Posée au-dessus de la première ligne, une barre cachait les
+  // lettres (ni clic sur une lettre, ni poignée à tirer tant que le curseur était dans la première ligne). floating-ui la garde dans le plan de
+  // travail, hors des deux bandeaux : elle passe sous la case quand il n'y a pas la place au-dessus, et reste à droite du bandeau des numéros.
+  // Fonction relue à chaque calcul.
   function floatingOptions() {
     if (!active || !strips) return undefined;
     const box = document.getElementById('editor-container');
@@ -1112,9 +1127,9 @@ const GridEditor = (function () {
     return { flip: { boundary: box, padding: { top } }, shift: { boundary: box, padding: { top, left: corner.width + 8, right: 8, bottom: 8 } } };
   }
 
-  // --- Activation ---------------------------------------------------------------------------------------------------------------------------------------------------
-  // Les boutons grisés d'une grille ne se déclenchent pas non plus au clavier (Tab puis Entrée) : un clic sur un bouton grisé de la barre est arrêté en capture,
-  // comme js/main.js:wireAccessLockGuard le fait pour les droits. `v2-hf-locked` n'est jamais posé ailleurs qu'ici pendant une grille (ni en-tête, ni email).
+  // Les boutons grisés d'une grille ne se déclenchent pas non plus au clavier (Tab puis Entrée) : un clic sur un bouton grisé de la barre est arrêté
+  // en capture, comme js/main.js:wireAccessLockGuard le fait pour les droits. `v2-hf-locked` n'est posé qu'ici pendant une grille (ni en-tête, ni
+  // email).
   function wireLockedClickGuard() {
     document.addEventListener('click', event => {
       if (!active || !event.target.closest) return;
@@ -1140,8 +1155,8 @@ const GridEditor = (function () {
     if (active) setActive(true, true);
   }
 
-  // Entre dans / sort du mode grille. Appelé par js/main.js à chaque chargement de modèle : faux AVANT Editor.setHTML (le garde-fou ne doit pas refuser le
-  // contenu qu'on charge), puis vrai pour une grille (le document est alors ramené à une grille valable, les bandeaux se posent).
+  // Entre dans le mode grille ou en sort. Appelé par js/main.js à chaque chargement de modèle : faux avant Editor.setHTML (le garde-fou ne doit pas
+  // refuser le contenu qu'on charge), puis vrai pour une grille (le document est alors ramené à une grille valable, les bandeaux se posent).
   function setActive(on, force) {
     on = !!on;
     if (on === active && !force) { if (on) scheduleSync(); return; }
@@ -1154,11 +1169,11 @@ const GridEditor = (function () {
     if (a4Toggle) a4Toggle.disabled = on;
     if (!editor) return;
     if (on) {
-      // Une grille s'ouvre en haut à gauche : le plan de travail est le même que celui du modèle précédent et en gardait le défilement (une nouvelle grille apparaissait
-      // descendue jusqu'à la ligne 12, ses bandeaux et sa première ligne hors de vue).
+      // Une grille s'ouvre en haut à gauche : le plan de travail est celui du modèle précédent et en garderait le défilement, bandeaux et première
+      // ligne hors de vue.
       if (container) { container.scrollTop = 0; container.scrollLeft = 0; }
-      // Pas de suivi des modifications dans une grille : il ne suit ni les lignes, ni les colonnes, ni les fusions (bouton grisé) - et un suivi resté allumé
-      // d'un document précédent transformerait chaque frappe en suggestion.
+      // Pas de suivi des modifications dans une grille : il ne suit ni les lignes, ni les colonnes, ni les fusions (bouton grisé), et un suivi resté
+      // allumé d'un document précédent transformerait chaque frappe en suggestion.
       if (Editor.isTrackChangesOn()) Editor.setTrackChanges(false);
       normalizeDocument();
       buildStrips();

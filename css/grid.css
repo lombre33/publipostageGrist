@@ -1,13 +1,15 @@
-/* Mode grille (js/grid-editor.js) : un modèle de type « grille » s'affiche sans feuille A4 - le tableau part du coin haut gauche, s'arrête à sa dernière ligne et sa
-   dernière colonne et défile dans le panneau, entouré de ses bandeaux A, B, C / 1, 2, 3 collants au défilement. Tout est scopé à `.v2-grid-mode` (posé sur
-   #editor-container par GridEditor.setActive) ou à `body.pp-grid-mode` : un document, un email ou un macro-modèle n'en voient aucune règle. */
+/* Mode grille (js/grid-editor.js) : un modèle de type « grille » s'affiche sans feuille A4. Le tableau part du coin haut gauche, s'arrête à sa
+   dernière ligne et sa dernière colonne et défile dans le panneau, entouré de ses bandeaux A, B, C / 1, 2, 3 collants au défilement. Tout est
+   scopé à `.v2-grid-mode` (posé sur #editor-container par GridEditor.setActive) ou à `body.pp-grid-mode` : un document, un email ou un
+   macro-modèle n'en voient aucune règle. */
 
 :root { --grid-strip-w: 44px; --grid-strip-h: 22px; --grid-row-default: 28px; }
 
 #editor-container.v2-grid-mode { padding: 0; background: var(--pp-page-gutter, #e4e8ef); }
 
-/* `.v2-page-sheet` (js/editor.js:init) enveloppe `.tiptap` depuis toujours ; ici il devient la grille CSS qui range le coin, le bandeau des colonnes, le bandeau des
-   lignes et le tableau. `max-content` : la feuille a exactement la taille du tableau + ses bandeaux, le reste du panneau montre le fond de l'espace de travail. */
+/* `.v2-page-sheet` enveloppe `.tiptap` depuis toujours ; ici il devient la grille CSS qui range le coin, le bandeau des colonnes, le bandeau des
+   lignes et le tableau. `max-content` : la feuille a exactement la taille du tableau et de ses bandeaux, le reste du panneau montre le fond de
+   l'espace de travail. */
 #editor-container.v2-grid-mode .v2-page-sheet {
   display: grid; grid-template-columns: var(--grid-strip-w) max-content; grid-template-rows: var(--grid-strip-h) max-content; width: max-content;
 }
@@ -16,15 +18,20 @@
 #editor-container.v2-grid-mode .tiptap .tableWrapper { overflow: visible; }
 #editor-container.v2-grid-mode .tiptap table { margin: 0; width: auto; background: #fff; }
 #editor-container.v2-grid-mode .tiptap table col { min-width: 0 !important; }
-/* Hauteur de départ d'une ligne (28 px = une ligne de texte + les marges de case) ; la hauteur réglée par la personne (`rowHeight` -> style inline) la remplace. */
+/* Hauteur de départ d'une ligne (28 px = une ligne de texte plus les marges de case) ; la hauteur réglée par la personne (`rowHeight`, style en
+   ligne) la remplace. */
 #editor-container.v2-grid-mode .tiptap table tr { height: var(--grid-row-default); }
-/* L'alignement vertical d'une case est le sien (`verticalAlign`, style en ligne posé par GridEditor) : la Lecture, le PDF et l'Excel le lisent au même endroit. */
-/* Case courante (curseur dans une case) : un cadre plein, comme dans un tableur. Une sélection de cases garde le fond bleu de prosemirror-tables (.selectedCell). */
+/* L'alignement vertical d'une case est le sien (`verticalAlign`, style en ligne posé par GridEditor) : la Lecture, le PDF et l'Excel le lisent au
+   même endroit. */
+/* Case courante (curseur dans une case) : un cadre plein, comme dans un tableur. Une sélection de cases garde le fond bleu de prosemirror-tables
+   (.selectedCell). */
 #editor-container.v2-grid-mode .tiptap table td.v2-grid-cur, #editor-container.v2-grid-mode .tiptap table th.v2-grid-cur { outline: 2px solid var(--accent); outline-offset: -2px; }
-/* Le paragraphe vide que TipTap range sous un tableau final (TrailingNode) n'est pas une case : caché, et la sélection n'y entre jamais (GridEditor). */
+/* Le paragraphe vide que TipTap range sous un tableau final (TrailingNode) n'est pas une case : caché, et la sélection n'y entre jamais
+   (GridEditor). */
 #editor-container.v2-grid-mode .tiptap > p:last-child { display: none; }
 
-/* --- Bandeaux --- Collants : chacun occupe, comme zone de grille, toute la feuille (pour pouvoir glisser sur toute sa hauteur / largeur), mais n'a que sa propre taille. */
+/* Bandeaux collants : chacun occupe, comme zone de grille, toute la feuille (pour qu'on puisse glisser sur toute sa hauteur ou sa largeur) mais
+   n'a que sa propre taille. */
 .v2-grid-corner, .v2-grid-cols, .v2-grid-rows { user-select: none; -webkit-user-select: none; }
 .v2-grid-corner {
   grid-area: 1 / 1 / -1 / -1; justify-self: start; align-self: start; position: sticky; top: 0; left: 0; z-index: 7; box-sizing: border-box;
@@ -42,8 +49,9 @@
 .v2-grid-rowhead.sel { background: var(--accent-soft); box-shadow: inset -2px 0 0 var(--accent); }
 .v2-grid-label { pointer-events: none; }
 
-/* --- Poignées : le trait entre deux lettres règle la largeur de la colonne de gauche, le trait entre deux numéros la hauteur de la ligne du dessus. La zone
-   qui répond au pointeur (9 px) déborde de part et d'autre du trait ; le trait lui-même (3 px, accent) n'apparaît qu'au survol et pendant le glissé. */
+/* Poignées : le trait entre deux lettres règle la largeur de la colonne de gauche, le trait entre deux numéros la hauteur de la ligne du dessus.
+   La zone qui répond au pointeur (9 px) déborde de part et d'autre du trait ; le trait lui-même (3 px, accent) n'apparaît qu'au survol et pendant
+   le glissé. */
 .v2-grid-handle { position: absolute; z-index: 2; touch-action: none; }
 .v2-grid-handle::after { content: ''; position: absolute; background: var(--accent); opacity: 0; }
 .v2-grid-colhead .v2-grid-handle { top: 0; right: -4px; width: 9px; height: 100%; cursor: col-resize; }
@@ -55,9 +63,11 @@ body.pp-grid-resizing-col, body.pp-grid-resizing-col * { cursor: col-resize !imp
 body.pp-grid-resizing-row, body.pp-grid-resizing-row * { cursor: row-resize !important; user-select: none !important; }
 body.pp-grid-resizing-col .v2-grid-handle::after, body.pp-grid-resizing-row .v2-grid-handle::after { opacity: 0; }
 
-/* --- Saut de page --- Une ligne qui en porte un (`data-page-break-before`, js/grid-editor.js) : le PDF y commence une page, l'Excel une feuille. Un trait en tirets sur son bord haut, tracé dans le fond de
-   ses cases (`background-image` : il reste sous le texte et la sélection, et ne touche pas au fond choisi), et une pastille à cheval sur le bord haut de son numéro, qui ne répond pas au pointeur
-   (la poignée de la ligne du dessus, juste dessous, reste atteignable). Rien en Lecture : le saut ne se voit que là où on le pose. Le bleu des boutons pleins : le même dans les deux thèmes (F5). */
+/* Saut de page : une ligne qui en porte un (`data-page-break-before`, js/grid-editor.js) : le PDF y commence une page, l'Excel une feuille. Un
+   trait en tirets sur son bord haut, tracé dans le fond de ses cases (`background-image` : il reste sous le texte et la sélection, et ne touche
+   pas au fond choisi), et une pastille à cheval sur le bord haut de son numéro, qui ne répond pas au pointeur (la poignée de la ligne du dessus,
+   juste dessous, reste atteignable). Rien en Lecture : le saut ne se voit que là où on le pose. La pastille a le bleu des boutons pleins, le même
+   dans les deux thèmes. */
 #editor-container.v2-grid-mode .tiptap table tr[data-page-break-before] > td,
 #editor-container.v2-grid-mode .tiptap table tr[data-page-break-before] > th {
   background-image: repeating-linear-gradient(90deg, var(--accent-solid) 0 6px, transparent 6px 10px); background-size: 100% 2px; background-repeat: no-repeat; background-position: top left;
@@ -71,28 +81,31 @@ body.pp-grid-resizing-col .v2-grid-handle::after, body.pp-grid-resizing-row .v2-
 /* Taille affichée près du pointeur pendant le glissé. */
 .v2-grid-tip { position: fixed; z-index: 4000; padding: 2px 7px; border-radius: 4px; background: var(--text); color: var(--surface); font: 600 12px/1.4 var(--font-ui); pointer-events: none; white-space: nowrap; }
 
-/* --- Barre d'outils --- Aperçu A4 n'a plus de sens (plus de feuille) : grisé, jamais retiré. Le reste du grisé passe par `v2-hf-locked` (js/main-toolbar.js). */
+/* Aperçu A4 n'a plus de sens (plus de feuille) : grisé, jamais retiré. Le reste du grisé passe par `v2-hf-locked` (js/main-toolbar.js). */
 body.pp-grid-mode #v2-a4-toggle { opacity: .35; pointer-events: none; }
 
-/* --- Barre de la case --- Fixée dans cette bande (js/floating-toolbars.js, EditorCore.createFloatingPanel : dock) entre la barre d'outils et le plan de travail, jamais posée sur une
-   case : flottante, elle recouvrait les cases voisines de la case courante, un appui dessus tombait sur ses boutons et ni un clic ni un glissé ne pouvait plus les atteindre. La bande
-   se montre tant qu'une grille est dans l'éditeur (pas en Lecture ni sur le résumé d'un macro-modèle, `pp-editor-hidden` : js/main.js:syncEditorVisibilityForMode). */
+/* Barre de la case : fixée dans cette bande (js/floating-toolbars.js, EditorCore.createFloatingPanel : dock) entre la barre d'outils et le plan de
+   travail, jamais posée sur une case : flottante, elle recouvrait les cases voisines de la case courante, un appui dessus tombait sur ses boutons
+   et ni un clic ni un glissé ne pouvait plus les atteindre. La bande se montre tant qu'une grille est dans l'éditeur (pas en Lecture ni sur le
+   résumé d'un macro-modèle, `pp-editor-hidden` : js/main.js:syncEditorVisibilityForMode). */
 .v2-cell-bar-dock { display: none; flex: none; align-items: center; box-sizing: border-box; min-height: 34px; padding: 3px 8px; background: var(--surface); border-bottom: 1px solid var(--border); }
 body.pp-grid-mode:not(.pp-editor-hidden) .v2-cell-bar-dock { display: flex; }
 .v2-cell-bar-dock .v2-floating-toolbar { position: static; padding: 0; border: 0; border-radius: 0; box-shadow: none; background: transparent; }
-/* Une barre trop large pour le panneau passe à la ligne (tout reste atteignable) plutôt que de déborder ; un trait fin sépare les groupes (lignes et colonnes, fusion, fond, alignement).
-   Elle garde le niveau des barres flottantes (--z-floating-toolbar, css/style.css : un enfant de bande flex garde son z-index même sans position), SOUS celui des menus : le menu « + » descend
-   jusque sur cette bande (« Nouvelle grille ») et reste dessus - gridCellsMouse. */
+/* Une barre trop large pour le panneau passe à la ligne (tout reste atteignable) plutôt que de déborder ; un trait fin sépare les groupes (lignes
+   et colonnes, fusion, fond, alignement). Elle garde le niveau des barres flottantes (--z-floating-toolbar, css/style.css : un enfant de bande
+   flex garde son z-index même sans position), sous celui des menus : le menu « + » descend jusque sur cette bande (« Nouvelle grille ») et reste
+   dessus. */
 .v2-cell-bar-dock .v2-floating-toolbar { flex-wrap: wrap; row-gap: 2px; }
 .v2-cell-bar-dock .v2-floating-sep { align-self: stretch; width: 1px; margin: 3px 4px; background: var(--border); }
-/* Ce que seule une grille a (fusion, alignement vertical) : dans la barre de tous les tableaux, montré ici seulement - la barre d'un tableau de document reste celle d'avant. */
+/* Ce que seule une grille a (fusion, alignement vertical) : dans la barre de tous les tableaux, montré ici seulement - la barre d'un tableau de
+   document reste celle d'avant. */
 .v2-floating-toolbar .v2-grid-only { display: none; }
 body.pp-grid-mode .v2-floating-toolbar button.v2-grid-only { display: inline-flex; }
 body.pp-grid-mode .v2-floating-toolbar .v2-floating-sep.v2-grid-only { display: block; }
 
-/* --- Menu « Bordures » --- (js/floating-toolbars.js:createBordersDropdown) Une rangée de huit réglages en icônes, puis la couleur du trait : la grille de nuances et le pied du menu de couleur
-   (css/editor-v2.css). `v2-color-dropdown` lui donne le niveau des menus (--z-menu), au-dessus de la bande de la barre. Un réglage grisé (« Intérieures » pour une seule case) reste atteignable :
-   un clic dessus ne fait rien. */
+/* Menu « Bordures » (js/floating-toolbars.js:createBordersDropdown) : une rangée de huit réglages en icônes, puis la couleur du trait : la grille
+   de nuances et le pied du menu de couleur (css/editor-v2.css). `v2-color-dropdown` lui donne le niveau des menus (--z-menu), au-dessus de la
+   bande de la barre. Un réglage grisé (« Intérieures » pour une seule case) reste atteignable : un clic dessus ne fait rien. */
 .v2-borders-presets { display: grid; grid-template-columns: repeat(8, 28px); gap: 3px; }
 .v2-borders-presets button { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 26px; padding: 0; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--text); cursor: pointer; }
 .v2-borders-presets button svg { width: 16px; height: 16px; }
