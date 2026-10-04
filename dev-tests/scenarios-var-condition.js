@@ -230,6 +230,159 @@
     },
   });
 
+  // La fenêtre de condition ouverte sur la bulle « Titre » d'une page sur VcDossiers : sa ligne de règle et ses deux lignes d'aperçu.
+  async function openPreviewWindow(h, condition, readLatencyMs) {
+    await seed(h);
+    Editor.setHTML(`<p>Objet : ${badgeHtml('VcDossiers', 'Titre', condition)}</p>`);
+    await selectBadge(h, 'Titre');
+    if (readLatencyMs) window.__gristStub.setLatency({ fetchTable: readLatencyMs });
+    pressToolbarButton('var-condition');
+    await h.sleep(50);
+    const modal = document.getElementById('var-condition-modal');
+    // Les champs se relisent à chaque fois : choisir une colonne reconstruit celui de la valeur.
+    return {
+      modal,
+      column: () => modal.querySelector('.macro-rule-row select.macro-rule-column'),
+      value: () => modal.querySelector('.macro-rule-row .macro-rule-value'),
+      lines: () => Array.from(modal.querySelectorAll('.var-condition-debug-line')).map(l => l.textContent),
+    };
+  }
+
+  cases.push({
+    id: 'varcond_preview_lines_say_each_outcome',
+    description: 'Aperçu de la fenêtre de condition : sans colonne choisie, aucune ligne qui remplisse la condition, sans ligne sélectionnée, table vide, grande table (la première ligne qui la remplit est citée avec son repère), deux lignes sur trois (la première de la table est citée, pas la dernière) et lecture qui échoue ; la valeur n\'est lue que pour une ligne qui remplit la condition',
+    run: async (h) => {
+      const w = await openPreviewWindow(h);
+      const results = {};
+      const stub = window.__gristStub;
+      const realRecord = GristAPI.getCurrentRecord;
+      const realContext = LoopRules.createContext;
+      const realWarn = console.warn;
+      // La valeur ne se lit que pour une ligne qui remplit la condition : sans cela chaque aperçu relirait une valeur dont il n'affiche rien.
+      const realResolve = Variables.resolveVariable;
+      let valueReads = 0;
+      Variables.resolveVariable = function () { valueReads += 1; return realResolve.apply(this, arguments); };
+      try {
+        await h.sleep(400);
+        results.noColumn = w.lines();
+        setSelect(w.column(), 'Statut');
+        await h.sleep(30);
+        valueReads = 0;
+        setInput(w.value(), 'Zzz');
+        await h.sleep(700);
+        results.noMatch = w.lines();
+        results.noMatchValueReads = valueReads;
+        // Deux lignes sur trois remplissent la condition : la première citée est la première de la table, pas la dernière trouvée.
+        valueReads = 0;
+        setInput(w.value(), 'Urgent');
+        await h.sleep(700);
+        results.twoMatches = w.lines();
+        results.twoMatchesValueReads = valueReads;
+        GristAPI.getCurrentRecord = () => null;
+        setInput(w.value(), 'Urgent');
+        await h.sleep(700);
+        results.noRecord = w.lines();
+        GristAPI.getCurrentRecord = realRecord;
+        stub.setRows('VcDossiers', []);
+        setInput(w.value(), 'Normal');
+        await h.sleep(700);
+        results.emptyTable = w.lines();
+        // 600 lignes : le parcours rend la main au navigateur deux fois (toutes les 250 lignes) ; la seule ligne « Urgent » est la dernière.
+        stub.setRows('VcDossiers', Array.from({ length: 600 }, (_, i) => ({ id: i + 1, Titre: 'Dossier ' + (i + 1), Statut: i === 599 ? 'Urgent' : 'Normal', Responsable: 0, Montant: i })));
+        valueReads = 0;
+        setInput(w.value(), 'Urgent');
+        await h.sleep(1200);
+        results.bigTable = w.lines();
+        results.bigTableValueReads = valueReads;
+        console.warn = () => {};
+        LoopRules.createContext = () => { throw new Error('lecture impossible (simulée)'); };
+        setInput(w.value(), 'Normal');
+        await h.sleep(700);
+        results.unavailable = w.lines();
+      } finally {
+        GristAPI.getCurrentRecord = realRecord;
+        LoopRules.createContext = realContext;
+        console.warn = realWarn;
+        Variables.resolveVariable = realResolve;
+      }
+      const tr = (key, vars) => I18n.t(key, vars);
+      const met = tr('varCond.debug.currentMet', { id: 1, value: 'Dossier A' });
+      const notMet = tr('varCond.debug.currentNotMet', { id: 1 });
+      const expected = {
+        noColumn: [tr('varCond.debug.chooseColumn'), ''],
+        noMatch: [notMet, tr('varCond.debug.none', { table: 'VcDossiers', total: 3 })],
+        noMatchValueReads: 0,
+        twoMatches: [met, tr('varCond.debug.count', { table: 'VcDossiers', count: 2, total: 3 }) + ' ' + tr('varCond.debug.first', { id: 1, label: ' (Dossier A)', value: 'Dossier A' })],
+        twoMatchesValueReads: 2,
+        noRecord: [tr('varCond.debug.noRecord'), ''],
+        emptyTable: [notMet, tr('linkConfig.previewTableEmpty', { table: 'VcDossiers' })],
+        bigTable: [met, tr('varCond.debug.count', { table: 'VcDossiers', count: 1, total: 600 }) + ' ' + tr('varCond.debug.first', { id: 600, label: ' (Dossier 600)', value: 'Dossier 600' })],
+        bigTableValueReads: 2,
+        unavailable: [tr('linkConfig.previewUnavailable'), ''],
+      };
+      const pass = JSON.stringify(results) === JSON.stringify(expected) && results.noMatch[1] === 'Dans « VcDossiers » : aucune des 3 lignes ne remplit la condition.'
+        && results.bigTable[1].indexOf('1 ligne sur 600 remplit la condition. Première : n° 600 (Dossier 600)') !== -1 && results.emptyTable[1] === '« VcDossiers » est vide.';
+      return { pass, notes: JSON.stringify(results) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_preview_of_a_condition_changed_meanwhile_is_dropped',
+    description: 'Aperçu de la fenêtre de condition : quand la colonne est retirée pendant qu\'une lecture lente est en cours - celle de la table de la page (pleine ou vide) ou celle d\'une table liée -, le résultat de cette lecture n\'est jamais affiché',
+    run: async (h) => {
+      const w = await openPreviewWindow(h);
+      const results = {};
+      const stub = window.__gristStub;
+      try {
+        setSelect(w.column(), 'Statut');
+        await h.sleep(30);
+        setInput(w.value(), 'Urgent');
+        await h.sleep(700);
+        results.computed = w.lines();
+        stub.setLatency({ fetchTable: 600 });
+        setInput(w.value(), 'Normal');
+        // L'aperçu se lance 250 ms après la saisie : à 450 ms, la lecture de la table est en cours.
+        await h.sleep(450);
+        setSelect(w.column(), '');
+        await h.sleep(300);
+        results.cleared = w.lines();
+        await h.sleep(900);
+        results.later = w.lines();
+        // Même chose quand c'est la ligne sélectionnée qui attend : sa règle lit une autre table (lente) au moment où la colonne est retirée.
+        stub.setLatency(0);
+        const linked = { mode: 'all', rules: [{ column: 'VcAnnuaire.NomPrenom', operator: '=', value: 'Dupont Jean' }] };
+        const v = await openPreviewWindow(h, linked, 600);
+        await h.sleep(150);
+        setSelect(v.column(), '');
+        await h.sleep(300);
+        results.linkedCleared = v.lines();
+        await h.sleep(900);
+        results.linkedLater = v.lines();
+        // Table de la page vide (lecture lente) : « est vide » d'une lecture dépassée ne s'affiche pas non plus.
+        const e = await openPreviewWindow(h, undefined, 600);
+        stub.setRows('VcDossiers', []);
+        setSelect(e.column(), 'Statut');
+        await h.sleep(30);
+        setInput(e.value(), 'Normal');
+        await h.sleep(450);
+        setSelect(e.column(), '');
+        await h.sleep(300);
+        results.emptyCleared = e.lines();
+        await h.sleep(900);
+        results.emptyLater = e.lines();
+      } finally {
+        stub.setLatency(0);
+      }
+      const chooseColumn = [I18n.t('varCond.debug.chooseColumn'), ''];
+      const pass = results.computed.length === 2 && results.computed[0] === I18n.t('varCond.debug.currentMet', { id: 1, value: 'Dossier A' })
+        && results.computed[1].indexOf(I18n.t('varCond.debug.count', { table: 'VcDossiers', count: 2, total: 3 })) === 0
+        && JSON.stringify(results.cleared) === JSON.stringify(chooseColumn) && JSON.stringify(results.later) === JSON.stringify(chooseColumn)
+        && JSON.stringify(results.linkedCleared) === JSON.stringify(chooseColumn) && JSON.stringify(results.linkedLater) === JSON.stringify(chooseColumn)
+        && JSON.stringify(results.emptyCleared) === JSON.stringify(chooseColumn) && JSON.stringify(results.emptyLater) === JSON.stringify(chooseColumn);
+      return { pass, notes: JSON.stringify(results) };
+    },
+  });
+
   cases.push({
     id: 'varcond_window_saves_and_removes_condition',
     description: 'Fenêtre de condition : Enregistrer pose la condition sur la bulle (aperçu : ligne sélectionnée, 2 lignes sur 3), Retirer l’enlève',

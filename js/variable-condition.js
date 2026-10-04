@@ -238,6 +238,43 @@ const VariableCondition = (function () {
     const value = firstCol ? row[firstCol] : null;
     return typeof value !== 'string' || !value.trim() ? '' : ' (' + shorten(value.trim(), 40) + ')';
   }
+  // Première ligne de l'aperçu : la condition pour la ligne sélectionnée dans Grist. Rend faux quand la fenêtre a changé pendant le calcul.
+  async function previewSelectedRow({ condition, tableId, t, stale, currentLine }, record) {
+    const holds = await ConditionRules.conditionHolds(condition, tableId, record);
+    const shown = holds && showsValue() ? await displayValue(record, tableId) : '';
+    if (stale()) return false;
+    setLine(currentLine, I18n.t(holds ? t.met : t.notMet, { id: record.id, value: shown }), holds);
+    return true;
+  }
+  // Combien de lignes remplissent la condition, et la première. Rend null quand la fenêtre a changé pendant le parcours.
+  async function countHolding(condition, tableId, rows, fetchRows, stale) {
+    let count = 0;
+    let first = null;
+    for (let i = 0; i < rows.length; i++) {
+      if (await ConditionRules.conditionHolds(condition, tableId, rows[i], { fetchRows })) {
+        count += 1;
+        if (!first) first = rows[i];
+      }
+      // Rend la main au navigateur de temps en temps sur une grande table, et abandonne si la condition a changé entre-temps.
+      if (i % 250 === 249) { await new Promise(r => setTimeout(r, 0)); if (stale()) return null; }
+    }
+    return { count, first };
+  }
+  // Seconde ligne de l'aperçu : toutes les lignes de la table de la page, leur nombre et ce que donne la première.
+  async function previewAllRows({ condition, tableId, t, stale, countLine }) {
+    const { fetchRows } = LoopRules.createContext();
+    const rows = await fetchRows(tableId);
+    if (stale()) return;
+    if (!rows.length) { setLine(countLine, I18n.t('linkConfig.previewTableEmpty', { table: tableId }), false); return; }
+    const found = await countHolding(condition, tableId, rows, fetchRows, stale);
+    if (!found || stale()) return;
+    const { count, first } = found;
+    if (!count) { setLine(countLine, I18n.t('varCond.debug.none', { table: tableId, total: rows.length }), false); return; }
+    const firstValue = showsValue() ? await displayValue(first, tableId) : '';
+    if (stale()) return;
+    setLine(countLine, I18n.t('varCond.debug.count', { table: tableId, count, total: rows.length }) + ' '
+      + I18n.t(t.first, { id: first.id, label: rowLabel(first, tableId), value: firstValue }), false);
+  }
   async function updatePreview() {
     if (!state || !refs) return;
     syncClipboardButtons();
@@ -247,37 +284,13 @@ const VariableCondition = (function () {
     const condition = ConditionRules.normalizeCondition(state.working);
     const tableId = GristAPI.getCurrentTableId();
     const record = GristAPI.getCurrentRecord();
-    const t = texts();
+    const view = { condition, tableId, t: texts(), stale, currentLine, countLine };
     setLine(countLine, '', false);
     if (!condition) { setLine(currentLine, I18n.t('varCond.debug.chooseColumn'), false); return; }
     if (!record || !tableId) { setLine(currentLine, I18n.t('varCond.debug.noRecord'), false); return; }
     setLine(currentLine, I18n.t('varCond.debug.computing'), false);
     try {
-      const holds = await ConditionRules.conditionHolds(condition, tableId, record);
-      const shown = holds && showsValue() ? await displayValue(record, tableId) : '';
-      if (stale()) return;
-      setLine(currentLine, I18n.t(holds ? t.met : t.notMet, { id: record.id, value: shown }), holds);
-
-      const { fetchRows } = LoopRules.createContext();
-      const rows = await fetchRows(tableId);
-      if (stale()) return;
-      if (!rows.length) { setLine(countLine, I18n.t('linkConfig.previewTableEmpty', { table: tableId }), false); return; }
-      let count = 0;
-      let first = null;
-      for (let i = 0; i < rows.length; i++) {
-        if (await ConditionRules.conditionHolds(condition, tableId, rows[i], { fetchRows })) {
-          count += 1;
-          if (!first) first = rows[i];
-        }
-        // Rend la main au navigateur de temps en temps sur une grande table, et abandonne si la condition a changé entre-temps.
-        if (i % 250 === 249) { await new Promise(r => setTimeout(r, 0)); if (stale()) return; }
-      }
-      if (stale()) return;
-      if (!count) { setLine(countLine, I18n.t('varCond.debug.none', { table: tableId, total: rows.length }), false); return; }
-      const firstValue = showsValue() ? await displayValue(first, tableId) : '';
-      if (stale()) return;
-      setLine(countLine, I18n.t('varCond.debug.count', { table: tableId, count, total: rows.length }) + ' '
-        + I18n.t(t.first, { id: first.id, label: rowLabel(first, tableId), value: firstValue }), false);
+      if (await previewSelectedRow(view, record)) await previewAllRows(view);
     } catch (e) {
       console.warn('[VariableCondition] aperçu indisponible', e);
       if (!stale()) setLine(currentLine, I18n.t('linkConfig.previewUnavailable'), false);
