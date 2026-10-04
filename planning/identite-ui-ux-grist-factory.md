@@ -282,6 +282,9 @@ Arbitré le 04/10 (contrôle de sécurité du code, « Tout corriger », correct
 - le signalement ne prend aucune place (`outline`, jamais une bordure ni un cadre : la mise en page, la pagination et le PDF ne bougent pas), n'entre jamais dans le HTML enregistré, et tient
   aussi pour une image habillée, derrière le texte ou posée dans une case ;
 - aucun écran n'a à y penser : l'observateur de `js/external-images.js` signale toute `<img>` de la page (`data-external-site`) ; le widget n'a aucune image d'un autre site dans sa propre interface ;
+- à l'insertion par adresse (« Insérer une image »), l'adresse d'une image d'un autre site pose une fois la question « Intégrer l'image » (par défaut : copiée dans le modèle) ou « Garder le lien »
+  (choix du 04/10, « Demander à l'insertion » ; `imageSourceFromUrl` de `js/main-toolbar.js`) : un lien gardé reste signalé comme ci-dessus, Annuler et Échap n'insèrent rien, une adresse `data:` ou du même site que le widget
+  s'intègre sans question ;
 - avant l'export, la fenêtre « Images d'un site externe » liste les sites (choix du 01/10, `Dialogs.confirm`). Limite connue : le signalement n'empêche pas la requête, et une image invisible
   (un pixel) l'échappe ; seul un blocage jusqu'à acceptation l'arrêterait.
 

@@ -7,7 +7,10 @@
 // chargement réseau pour la plupart des cas ci-dessous. Deux cas dédiés
 // plus bas exercent la vraie conversion http(s) -> data: (retour Antoine,
 // 2026-09-28), via des chemins servis par le serveur de test lui-même
-// (même origine, pas de CORS réel à simuler).
+// (même origine : intégrée sans question, pas de CORS réel à simuler).
+// Une adresse d'un AUTRE site pose la question « Intégrer l'image » / « Garder
+// le lien » (choix d'Antoine, 04/10) : les cas « img_insert_external_url_* »,
+// avec `fetch` remplacé pour les adresses en « .test ».
 (function () {
   const DATA_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
   const cases = [];
@@ -80,6 +83,159 @@
       return {
         pass: alertShown && src === '/img/n-existe-pas-404.png',
         notes: { alertShown, src },
+      };
+    },
+  });
+
+  // --- Image d'un AUTRE site : la question « Intégrer l'image » / « Garder le lien » (choix d'Antoine du 04/10, contrôle de sécurité) ---------------------------------
+  // Les adresses sont en « .test » (jamais résolues) et `fetch` est remplacé le temps d'un cas : les adresses « .test » sont notées et reçoivent une image (« refuse » dans
+  // le nom : le site refuse, comme un CORS), le reste passe aux vrais fichiers du harnais.
+  const EXTERNAL_URL = 'https://images.exemple.test/logo.png';
+  const EXTERNAL_HOST = 'images.exemple.test';
+  function stubFetch() {
+    const original = window.fetch;
+    const urls = [];
+    window.fetch = function (input, init) {
+      const url = String(typeof input === 'string' ? input : input && input.url);
+      if (!/^https?:\/\/[^/]*\.test(:\d+)?\//.test(url)) return original.call(window, input, init);
+      urls.push(url);
+      if (/refuse/.test(url)) return Promise.reject(new TypeError('Failed to fetch'));
+      const bytes = Uint8Array.from(atob(DATA_PNG.split(',')[1]), c => c.charCodeAt(0));
+      return Promise.resolve(new Response(new Blob([bytes], { type: 'image/png' }), { status: 200 }));
+    };
+    return { urls, restore() { window.fetch = original; } };
+  }
+  // Un clic sur « Insérer une image » avec l'adresse tapée et la réponse donnée à la question ; `choose` : 'keep', 'embed' ou null (annulée). On attend l'image (ou 400 ms
+  // quand aucune ne doit venir : le gestionnaire du bouton est asynchrone, le clic ne l'attend pas). Rend ce qui a été demandé, téléchargé et inséré.
+  async function insertByUrl(h, typed, choose, { expectImage = true, alert = false } = {}) {
+    const fetches = stubFetch();
+    const asked = [];
+    const dialogs = h.stubDialogs({ prompt: typed, choose: opts => { asked.push({ fetchesAtAsk: fetches.urls.length, opts }); return choose; } });
+    const origAlert = window.alert;
+    let alertShown = false;
+    window.alert = () => { alertShown = true; };
+    await h.clickButton('v2-btn-image');
+    const deadline = Date.now() + (expectImage ? 3000 : 400);
+    while (Date.now() < deadline && !(expectImage && h.tiptap().querySelector('img.editor-image') && (!alert || alertShown))) await h.sleep(20);
+    await h.sleep(120);
+    dialogs.restore(); fetches.restore(); window.alert = origAlert;
+    const image = h.tiptap().querySelector('img.editor-image');
+    return { asked, fetched: fetches.urls, alertShown, image, src: image && image.getAttribute('src') };
+  }
+
+  cases.push({
+    id: 'img_insert_external_url_asks_embed_or_keep',
+    description: 'Adresse d\'une image d\'un autre site : une question « Intégrer l\'image » (par défaut) / « Garder le lien », posée après l\'adresse et AVANT tout téléchargement, qui nomme le site',
+    run: async (h) => {
+      await h.resetEditor();
+      await h.focusAtEnd();
+      const r = await insertByUrl(h, EXTERNAL_URL, 'embed');
+      const q = r.asked[0] && r.asked[0].opts;
+      const labels = q && q.choices.map(c => c.label);
+      return {
+        pass: r.asked.length === 1 && r.asked[0].fetchesAtAsk === 0 && q.title === I18n.t('dialog.imageExternal.title')
+          && q.message === I18n.t('dialog.imageExternal.message', { site: EXTERNAL_HOST }) && q.message.includes(EXTERNAL_HOST)
+          && JSON.stringify(q.choices.map(c => c.value)) === '["keep","embed"]' && q.choices[1].primary === true && !q.choices[0].primary
+          && JSON.stringify(labels) === JSON.stringify([I18n.t('dialog.imageExternal.keep'), I18n.t('dialog.imageExternal.embed')]),
+        notes: { asked: r.asked.length, fetchesAtAsk: r.asked[0] && r.asked[0].fetchesAtAsk, title: q && q.title, labels, primary: q && q.choices.filter(c => c.primary).map(c => c.value) },
+      };
+    },
+  });
+
+  cases.push({
+    id: 'img_insert_external_url_embed_converts_to_data_uri',
+    description: '« Intégrer l\'image » : l\'image est téléchargée une fois, insérée en data: URI, l\'adresse du site n\'est pas dans le modèle et l\'image n\'est pas signalée',
+    run: async (h) => {
+      await h.resetEditor();
+      await h.focusAtEnd();
+      const r = await insertByUrl(h, EXTERNAL_URL, 'embed');
+      const html = Editor.getHTML();
+      return {
+        pass: !!r.src && r.src.startsWith('data:image/') && JSON.stringify(r.fetched) === JSON.stringify([EXTERNAL_URL]) && !html.includes(EXTERNAL_HOST)
+          && !r.image.hasAttribute('data-external-site') && !r.alertShown,
+        notes: { src: r.src && r.src.slice(0, 40), fetched: r.fetched, flagged: r.image && r.image.getAttribute('data-external-site'), alert: r.alertShown },
+      };
+    },
+  });
+
+  cases.push({
+    id: 'img_insert_external_url_keep_link_stays_flagged',
+    description: '« Garder le lien » : l\'adresse est gardée telle quelle, rien n\'est téléchargé à l\'insertion, et l\'image reste signalée (hôte, infobulle, contour en tirets rouges)',
+    run: async (h) => {
+      await h.resetEditor();
+      await h.focusAtEnd();
+      const r = await insertByUrl(h, EXTERNAL_URL, 'keep');
+      const outline = r.image && getComputedStyle(r.image).outlineStyle;
+      return {
+        pass: r.src === EXTERNAL_URL && r.fetched.length === 0 && r.image.getAttribute('data-external-site') === EXTERNAL_HOST
+          && r.image.title === I18n.t('image.externalSite', { site: EXTERNAL_HOST }) && outline === 'dashed' && !r.alertShown && Editor.getHTML().includes(EXTERNAL_URL),
+        notes: { src: r.src, fetched: r.fetched, flagged: r.image && r.image.getAttribute('data-external-site'), outline, alert: r.alertShown },
+      };
+    },
+  });
+
+  cases.push({
+    id: 'img_insert_external_url_cancel_inserts_nothing',
+    description: 'Question annulée (Annuler, Échap) : aucune image, aucun téléchargement, le document est inchangé',
+    run: async (h) => {
+      await h.resetEditor();
+      await h.focusAtEnd();
+      await h.typeText('Avant');
+      const before = Editor.getHTML();
+      const r = await insertByUrl(h, EXTERNAL_URL, null, { expectImage: false });
+      return {
+        pass: r.asked.length === 1 && !r.image && r.fetched.length === 0 && !r.alertShown && Editor.getHTML() === before,
+        notes: { asked: r.asked.length, image: !!r.image, fetched: r.fetched, same: Editor.getHTML() === before },
+      };
+    },
+  });
+
+  cases.push({
+    id: 'img_insert_external_url_embed_failure_keeps_link_and_warns',
+    description: '« Intégrer l\'image » sur un site qui refuse le téléchargement : l\'alerte s\'affiche et le lien est gardé, signalé comme tout lien d\'un autre site',
+    run: async (h) => {
+      await h.resetEditor();
+      await h.focusAtEnd();
+      const url = 'https://refuse.exemple.test/logo.png';
+      const r = await insertByUrl(h, url, 'embed', { alert: true });
+      return {
+        pass: r.alertShown && r.src === url && JSON.stringify(r.fetched) === JSON.stringify([url]) && r.image.getAttribute('data-external-site') === 'refuse.exemple.test',
+        notes: { alert: r.alertShown, src: r.src, fetched: r.fetched, flagged: r.image && r.image.getAttribute('data-external-site') },
+      };
+    },
+  });
+
+  cases.push({
+    id: 'img_insert_url_no_question_for_data_and_same_site',
+    description: 'Une adresse data: ou du même site que le widget n\'envoie personne ailleurs : intégrée comme avant, sans question',
+    run: async (h) => {
+      await h.resetEditor();
+      await h.focusAtEnd();
+      const data = await insertByUrl(h, DATA_PNG, 'keep');
+      await h.resetEditor();
+      await h.focusAtEnd();
+      const same = await insertByUrl(h, '/img/grist-factory-logo.jpg', 'keep');
+      return {
+        pass: data.asked.length === 0 && data.src === DATA_PNG && same.asked.length === 0 && !!same.src && same.src.startsWith('data:image/'),
+        notes: { dataAsked: data.asked.length, dataSrc: data.src && data.src.slice(0, 30), sameAsked: same.asked.length, sameSrc: same.src && same.src.slice(0, 30) },
+      };
+    },
+  });
+
+  cases.push({
+    id: 'img_insert_url_spaces_trimmed',
+    description: 'Une adresse collée avec des espaces ou un retour à la ligne autour : l\'adresse gardée et celle de la question sont nettoyées ; des espaces seuls ne demandent ni n\'insèrent rien',
+    run: async (h) => {
+      await h.resetEditor();
+      await h.focusAtEnd();
+      const padded = await insertByUrl(h, '  ' + EXTERNAL_URL + ' \n', 'keep');
+      await h.resetEditor();
+      await h.focusAtEnd();
+      const blank = await insertByUrl(h, '   ', 'keep', { expectImage: false });
+      return {
+        pass: padded.src === EXTERNAL_URL && padded.asked.length === 1 && padded.asked[0].opts.message.includes('(' + EXTERNAL_HOST + ')')
+          && blank.asked.length === 0 && !blank.image && blank.fetched.length === 0,
+        notes: { paddedSrc: padded.src, blankAsked: blank.asked.length, blankImage: !!blank.image },
       };
     },
   });

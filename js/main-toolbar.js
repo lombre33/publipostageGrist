@@ -134,7 +134,7 @@ const MainToolbar = (function () {
     ViewportFit.placePopup(box, rect, { gap: 4 });
   }
   // Image insérée par URL : convertie en data URI avant insertion (même fetch que js/pdf-export.js:inlineEditorImagesAsDataUri, avancé à l'import),
-  // pour que l'URL externe ne soit jamais stockée dans le modèle. Si la conversion échoue (CORS, réseau), l'URL brute reste : l'image s'affiche dans
+  // pour que l'URL externe ne soit pas stockée dans le modèle. Si la conversion échoue (CORS, réseau), l'URL brute reste : l'image s'affiche dans
   // l'éditeur et en Lecture, seul l'export PDF/DOCX peut échouer à l'inclure, avec l'avertissement.
   async function urlToDataUriOrWarn(src) {
     if (!src || src.startsWith('data:')) return src;
@@ -153,6 +153,24 @@ const MainToolbar = (function () {
       window.alert(I18n.t('image.corsWarning'));
       return src;
     }
+  }
+  // L'adresse d'une image d'un AUTRE site (ExternalImages.siteOf) se choisit une fois, à l'insertion (choix d'Antoine du 04/10, contrôle de sécurité) : « Intégrer
+  // l'image » (par défaut) la copie dans le modèle, « Garder le lien » garde l'adresse - elle se charge alors depuis ce site à chaque ouverture et reste signalée en
+  // rouge (js/external-images.js). Une adresse data: ou du même site que le widget n'envoie personne ailleurs : intégrée comme avant, sans question.
+  // Renvoie null quand la question est annulée (Annuler, Échap) : rien ne s'insère.
+  async function imageSourceFromUrl(url) {
+    const site = ExternalImages.siteOf(url);
+    if (!site) return urlToDataUriOrWarn(url);
+    const choice = await Dialogs.choose({
+      title: I18n.t('dialog.imageExternal.title'),
+      message: I18n.t('dialog.imageExternal.message', { site }),
+      choices: [
+        { value: 'keep', label: I18n.t('dialog.imageExternal.keep') },
+        { value: 'embed', label: I18n.t('dialog.imageExternal.embed'), primary: true },
+      ],
+    });
+    if (choice === 'keep') return url;
+    return choice === 'embed' ? urlToDataUriOrWarn(url) : null;
   }
   function applyToolbarIcons() {
     const set = (id, icon) => { const el = byId(id); if (el) el.innerHTML = Icons.svg(icon); };
@@ -473,10 +491,11 @@ const MainToolbar = (function () {
     bind('v2-btn-table', () => editor.chain().focus().insertTable({ rows: 2, cols: 2, withHeaderRow: false }).run());
     bind('v2-btn-two-columns', () => editor.chain().focus().insertTwoColumns().run());
     bind('v2-btn-image', async () => {
-      const url = await Dialogs.prompt({ title: I18n.t('dialog.imageUrl.title'), label: I18n.t('image.urlPrompt'), confirmLabel: I18n.t('common.insert') });
+      // Espaces autour d'une adresse collée retirés : ni dans la question, ni dans l'adresse gardée ; une saisie d'espaces seuls vaut une saisie vide.
+      const url = ((await Dialogs.prompt({ title: I18n.t('dialog.imageUrl.title'), label: I18n.t('image.urlPrompt'), confirmLabel: I18n.t('common.insert') })) || '').trim();
       if (!url) return;
-      const src = await urlToDataUriOrWarn(url);
-      await Editor.insertImageAtDefaultSize(src);
+      const src = await imageSourceFromUrl(url);
+      if (src !== null) await Editor.insertImageAtDefaultSize(src);
     });
     bind('v2-btn-image-from-variable', () => openImageVariablePicker(byId('v2-btn-image-from-variable')));
     // Une grille n'a pas de page : le bouton y pose le saut de la ligne (le PDF y commence une page, l'Excel une feuille) ; un second clic le retire.

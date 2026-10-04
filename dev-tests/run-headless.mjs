@@ -149,7 +149,7 @@ const NODE_SCRIPTS = {
   modalBaseMouse: 'verify-modal-base-mouse.mjs', // base commune des fenêtres (js/modal-base.js) : Condition, Autres attributs, Boucle - titre et boutons fixes, Tab, Échap
   modalPagesMouse: 'verify-modal-pages-mouse.mjs', // même base, lot 2 : les sept fenêtres d'index.html (Réglages, Tables liées, Clé de correspondance, Macro-modèle, Organiser, Galerie, Aperçu)
   dialogsMouse: 'verify-dialogs-mouse.mjs', // saisies et confirmations (js/dialogs.js) à la place de prompt/confirm : au-dessus des autres fenêtres, Tab, Échap, focus rendu
-  externalImagesMouse: 'verify-external-images-mouse.mjs', // fenêtre avant l'export d'un modèle qui contient une image d'un site externe (js/external-images.js) : vrai clic sur Exporter PDF / DOCX / lot ZIP, Annuler, Échap, Tab, Continuer, quarante sites qui défilent, 700x400 clair, sombre et anglais
+  externalImagesMouse: 'verify-external-images-mouse.mjs', // fenêtre avant l'export d'un modèle qui contient une image d'un site externe (js/external-images.js) : vrai clic sur Exporter PDF / DOCX / lot ZIP, Annuler, Échap, Tab, Continuer, quarante sites qui défilent, la question « Intégrer l'image » / « Garder le lien » à l'insertion par adresse, 700x400 clair, sombre et anglais
   smallPanel: 'verify-small-panel.mjs',
   accessRightsMouse: 'verify-access-rights-mouse.mjs',
   rowTemplateMouse: 'verify-row-template-mouse.mjs', // modèle selon la ligne (Réglages > Selon la ligne) à la vraie souris dans 700x400 : onglets lisibles (FR, EN), case, colonne / valeur / modèle dans leurs listes avec recherche, option écrite, ouverture à la fermeture, ligne suivante en édition et en Lecture

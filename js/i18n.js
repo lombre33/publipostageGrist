@@ -841,6 +841,11 @@ const I18n = (function () {
     // Images d'un site externe à l'export (js/external-images.js) : la fenêtre qui liste les sites avant le PDF ou le Word, et le message quand on l'annule.
     'dialog.externalImages.title': { fr: 'Images d’un site externe', en: 'Images from an external site' },
     'confirm.externalImages': { fr: 'Pour cet export, le widget doit télécharger des images hébergées {count|sur un site externe|sur des sites externes} :\n{sites}\n\nAnnuler arrête l’export.', en: 'For this export, the widget has to download images hosted {count|on an external site|on external sites}:\n{sites}\n\nCancel stops the export.' },
+    // Image insérée par son adresse quand elle vient d'un autre site (js/main-toolbar.js, choix d'Antoine du 04/10) : la question posée une fois, à l'insertion.
+    'dialog.imageExternal.title': { fr: 'Image d’un site externe', en: 'Image from an external site' },
+    'dialog.imageExternal.message': { fr: 'Cette image est hébergée sur un site externe ({site}).\n\nIntégrer l’image la copie dans le modèle : elle ne dépend plus de ce site.\nGarder le lien l’affiche depuis ce site à chaque ouverture du modèle : elle sera signalée en rouge.', en: 'This image is hosted on an external site ({site}).\n\nEmbedding the image copies it into the template: it no longer depends on that site.\nKeeping the link shows it from that site each time the template is opened: it will be flagged in red.' },
+    'dialog.imageExternal.embed': { fr: 'Intégrer l’image', en: 'Embed image' },
+    'dialog.imageExternal.keep': { fr: 'Garder le lien', en: 'Keep link' },
     // Image d'un site externe à l'affichage (js/external-images.js) : l'infobulle de toute image qui charge depuis un autre site que le widget et Grist (contour en tirets, css/external-images.css).
     'image.externalSite': { fr: 'Image hébergée sur un site externe ({site}) : chaque affichage la télécharge depuis ce site.', en: 'Image hosted on an external site ({site}): every display downloads it from that site.' },
     'status.exportCancelled': { fr: 'Export annulé.', en: 'Export cancelled.' },
