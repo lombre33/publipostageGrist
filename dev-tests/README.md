@@ -1547,6 +1547,45 @@ assertions (`near(a, b, tol)`, en général 0.5 à 1mm) sont volontairement plus
 comparaison écran/écran (`compareEditorReaderPosition` tolère 2px). Resserrer une tolérance sans
 mesurer d'abord l'écart réel produit des faux rouges.
 
+## Tests de charge : `load-tests.mjs` (à la demande : ni passe ciblée, ni suite complète)
+
+Le banc de charge ouvre le VRAI widget (`index.html`) dans Chromium à la taille du panneau d'Antoine (700×400), face à des documents Grist fabriqués qui grandissent (tables, colonnes, lignes, modèles, bulles, pages, boucles, listes), et **mesure** : ce qui casse (un plafond, une coupe muette, un résultat faux : `CASSE`), ce qui ralentit (`LENT` = au-delà du budget indiqué), et ce que le widget **lit dans Grist à chaque geste**. Ce n'est pas une suite de non-régression : il sort 0 sauf avec `--strict`, et il n'est lancé que s'il est nommé. Les corrections qu'il motive ont leurs propres scénarios dans `scenarios-*.js`.
+
+```
+node dev-tests/run-headless.mjs load                     # toutes les séries (≈ 30 min)
+node dev-tests/run-headless.mjs load schema reads        # seulement celles-là
+node dev-tests/run-headless.mjs load linked --quick      # volumes réduits (essai de fumée, quelques minutes)
+node dev-tests/run-headless.mjs load batch --out /tmp/charge.json --strict
+```
+
+(Équivalent : `node dev-tests/load-tests.mjs …`.) Il faut le miroir hors ligne des CDN (`bash dev-tests/offline-deps.sh`) ; port 8971 (`LOAD_PORT`), fichiers téléchargés dans `/tmp/pp-load-out` (`LOAD_OUT`). **Une série à la fois** : les durées se faussent si deux passes se partagent le processeur.
+
+| Série | Ce qu'elle mesure |
+|---|---|
+| `schema` | 40 tables × 17 colonnes, 1 table × 700, 200 tables × 20, 1 table × 5 000 : ouverture, liste « # » (toutes les variables posées ? la dernière clé atteignable en cherchant ? noms accentués), instantané du schéma gardé dans le navigateur |
+| `reads` | 40 tables de 200 / 2 000 / 10 000 lignes : cases lues par geste (choisir un modèle, premier « # », autre ligne, Lecture, PDF, Word, lot) |
+| `batch` | lots de 50 à 1 000 lignes : ZIP de PDF, PDF unique, ZIP de Word, PDF assemblé en feuilles ; durée, fichier, mémoire, plus long arrêt de la page, lectures par ligne ; un lot dont chaque PDF porte un logo de 300 Ko ; le même lot avec 100 ms d'attente par lecture |
+| `content` | UN modèle qui grandit : 1 à 120 pages, 100 à 2 000 bulles, tableau de 100 à 2 000 lignes, 20 à 400 images ; chargement, frappe, sérialisation, Ctrl+F, Lecture (texte à l'écran, page de nouveau libre), retour à l'éditeur, PDF, Word, et la fin du document dans le fichier |
+| `templates` | 50 à 1 000 modèles de 7 Ko avec dossiers et épingles, 20 à 60 modèles de 1,6 Mo ; liste, choix, et ce que l'enregistrement automatique relit au repos et en tapant |
+| `linked` | bulles d'une AUTRE table (fiche client d'une facture) : lectures de la table liée en Lecture, en PDF, en lot ; page de 10 000 lignes |
+| `zones` | en-tête et pied de page (quatre zones, chacune résolue comme un morceau de document) : lectures par PDF et par ligne de lot |
+| `loops` | boucle sur les lignes liées (10 à 2 000 lignes) et boucle « dans la phrase » : Lecture, PDF, dernière ligne écrite |
+| `macro` | macro-modèle de 5 à 50 positions, jusqu'à 10 règles chacune, sur la table de la page ou sur une autre table |
+| `lists` | colonne d'une règle (4 000 et 5 000 colonnes), valeurs d'une Référence (1 000 à 50 000), abréviations (2 000), formats de page (2 000) |
+| `limits` | plafonds fixes du code : collage d'un tableur (3 000 lignes), import .xlsx dans une grille (1 000 lignes, 100 colonnes, 5 000 cases) |
+| `values` | une Liste de choix de 50 à 5 000 valeurs dans une ligne (toutes écrites ?), « Un document par valeur » (20 à 300 valeurs, deux listes de 20 : un fichier par combinaison ?) |
+| `internal` | table des droits (100 à 50 000 lignes : lectures par minute), table des commentaires (1 000 et 10 000 : lue à chaque modèle affiché) |
+| `suivi` | 100 à 2 000 suggestions de suivi : chargement, Lecture « comme accepté », PDF |
+| `sommaire` | 100 à 1 000 titres et un sommaire : chargement, Lecture, PDF |
+
+**Lire une ligne** : `ok | linked | 2 000 clients … : PDF d'une ligne - lectures de la table Clients : 16 lecture(s) (budget 2) - …`. Une **case lue** = une ligne × une colonne ramenée par `fetchTable`, qui ramène la table ENTIÈRE sans filtre ni choix de colonnes (cf. `js/grist-api.js`, « Lectures de tables partagées pendant un rendu ») : c'est la mesure du coût côté Grist, que le faux Grist ne peut pas chronométrer (ses durées sont un plancher, sans réseau).
+
+**Le document d'essai** (`dev-tests/load-doc.js`, posé AVANT l'ouverture par `window.__preSeedGristStub`) : `window.__LOAD_SPEC` = `{ tables: [{ id, rows, columns: [{ id, type, choices?, listLen?, valueEvery?, constant?, div?, shows? }] }], links, models: { count, paragraphs, table, columns, folders, depth, pinned, extraChars, images, imageChars, logoKb, hf, macro }, formats, abbreviations, rights, internal, options, userEmail, latency }`. Les valeurs sont déterministes ; `window.__LOAD` compte, par table, ce que le widget lit (`fetch.byTable`) et écrit (`apply`). `load-lib.mjs` ouvre la page, fabrique les gestes à la vraie souris (`click`, `clickHoverRow`, `pickTemplate`, `exportBatchOf`) ; `load-tests.mjs` porte les séries.
+
+**Pièges déjà rencontrés** : taper moins de 2,5 s après « Widget prêt. » perd des touches (`settleMs` dans `open`) ; la liste « # » ne s'ouvre qu'au début d'un paragraphe vide ou après une espace ; le nombre de pages affichées se lit après qu'il ne bouge plus (`stableCount`) ; un PDF se relit par `pdftotext` sans `-layout` (une case étroite coupe sa phrase sur deux lignes) ; la Lecture n'écrit rien sans ligne courante (`fire`) ; **la Lecture, puis le retour à l'éditeur, lancent chacun une mise en page REPOUSSÉE** après que le texte est à l'écran (la page est gelée plusieurs secondes sur un long tableau) : `freeMain` (`load-tests.mjs`) attend le fil principal libre avant la mesure suivante, sans quoi un PDF lancé juste après se voit compter cette mise en page (un tableau de 2 000 lignes : « PDF 25 s » au lieu de 3,7 s) ; les durées sont celles d'un Chromium sans carte graphique dans un conteneur partagé : comparer d'une passe à l'autre sur la même machine, pas à une montre.
+
+**Résultats et rapport** : `/mnt/project-files/tests-de-charge-2026-10-04/rapport.md`.
+
 ## Pourquoi `_test-harness.html` n'est pas commité
 
 Ce fichier est une copie de `index.html` avec le script de l'API Grist

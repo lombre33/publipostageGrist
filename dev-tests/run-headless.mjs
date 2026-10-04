@@ -7,6 +7,7 @@
 //   node dev-tests/run-headless.mjs                      # tous les groupes, un navigateur par groupe
 //   node dev-tests/run-headless.mjs comments formatting  # seulement ces groupes
 //   node dev-tests/run-headless.mjs --port 8899 formatting
+//   node dev-tests/run-headless.mjs load [sections] [--quick]   # banc de charge (dev-tests/load-tests.mjs), à la demande seulement
 //
 // Un navigateur NEUF par groupe, à dessein : le README documente des fuites d'état entre suites
 // (scenarios-chips laissait échouer un scénario d'image sans rapport). Un processus par groupe rend
@@ -21,6 +22,13 @@ import { spawnSync } from 'node:child_process';
 
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const CACHE = join(ROOT, 'dev-tests', '.offline-cache');
+
+// « load » : le banc de charge (dev-tests/load-tests.mjs), lancé seulement s'il est nommé en premier - jamais dans la suite complète ni dans la passe ciblée. Les arguments qui suivent
+// (sections, --quick, --out, --strict) lui sont transmis tels quels. Il mesure et signale, il ne juge pas : voir « Tests de charge » dans dev-tests/README.md.
+if (process.argv[2] === 'load') {
+  const loadRun = spawnSync(process.execPath, [join(ROOT, 'dev-tests', 'load-tests.mjs'), ...process.argv.slice(3)], { stdio: 'inherit' });
+  process.exit(loadRun.status === null ? 1 : loadRun.status);
+}
 
 // _test-harness.html (racine, gitignoré) est une simple copie de index.html avec l'API Grist réelle
 // remplacée par le stub local - jusqu'ici régénérée à la main (dev-tests/generate-harness.sh) avant
