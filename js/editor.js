@@ -1,6 +1,6 @@
-// Éditeur — TipTap/ProseMirror. Script classique (pas type="module") : TipTap et ProseMirror sont chargés par import() dynamique dans init(), ce qui
-// garde la portée globale partagée avec GristAPI, Templates et ReaderMode. Nœuds et extensions sont construits par des createXxx(...) : les classes
-// TipTap n'existent pas avant cet import.
+// Éditeur — TipTap/ProseMirror. Script classique (pas type="module") : TipTap et ProseMirror sont chargés par import() dynamique dans
+// loadLibraries(), ce qui garde la portée globale partagée avec GristAPI, Templates et ReaderMode. Nœuds et extensions sont construits par des
+// createXxx(...) : les classes TipTap n'existent pas avant cet import.
 const Editor = (function () {
   const el = Dom.el;
   let editor = null;
@@ -206,11 +206,10 @@ const Editor = (function () {
     });
   }
 
-
-  async function init() {
-    // Ces modules n'ont aucune dépendance d'ordre entre eux (chacun n'alimente que sa propre variable, aucun n'est lu avant la construction des
-    // extensions plus bas) : chargés en parallèle plutôt qu'en `await` séquentiels. Un `import()` est une requête réseau vers esm.sh, et la cascade
-    // ajoutait jusqu'à 1 à 2 s au démarrage sur une connexion lente ou à cache froid.
+  // TipTap et ProseMirror se chargent par import() : leurs classes n'existent pas avant. Aucune dépendance d'ordre entre ces modules (chacun
+  // n'alimente que sa propre variable) : ils partent en parallèle plutôt qu'en `await` séquentiels, car un import() est une requête réseau vers
+  // esm.sh et la cascade ajoutait jusqu'à 1 à 2 s au démarrage sur une connexion lente ou à cache froid.
+  async function loadLibraries() {
     const [
       { Editor: TiptapEditor, Extension, Node, Mark, mergeAttributes, InputRule },
       { StarterKit },
@@ -250,135 +249,176 @@ const Editor = (function () {
       import('prosemirror-view'),
       import('prosemirror-tables'),
     ]);
+    return {
+      TiptapEditor, Extension, Node, Mark, mergeAttributes, InputRule, StarterKit, TextAlign, TextStyle, FontFamily, Suggestion, Document,
+      Table, TableView, TableRow, TableCell, TableHeader, TaskList, TaskItem, Placeholder, computePosition, offset, flip, shift, autoUpdate,
+      NodeSelection, TextSelection, EditorState, Plugin, PluginKey, Decoration, DecorationSet, TableMap, CellSelection, selectedRect, isInTable,
+    };
+  }
+
+  // Remet aux modules du widget les classes de TipTap et de ProseMirror dont ils ont besoin : bulles flottantes, sélections, tableaux, grille.
+  function configureModules({
+    computePosition, offset, flip, shift, autoUpdate, NodeSelection, TextSelection, Plugin, PluginKey, Decoration, DecorationSet,
+    TableMap, CellSelection, selectedRect, isInTable,
+  }) {
     EditorCore.setFloatingUi({ computePosition, offset, flip, shift, autoUpdate });
     GridEditor.configure({ Plugin, PluginKey, TextSelection, Decoration, DecorationSet, TableMap, CellSelection });
     tableTools = { selectedRect, isInTable };
     TableMerge.configure({ TableMap, selectedRect, isInTable });
     EditorCore.setNodeSelectionClass(NodeSelection);
     EditorCore.setTextSelectionClass(TextSelection);
+  }
 
-    // Suivi des modifications (planning/feature-track-changes.md) : `doc` et tout conteneur de bloc dont un enfant direct peut être supprimé ou
-    // inséré en bloc (pas seulement son texte) doivent autoriser explicitement les trois marques de suivi par `.extend({marks: '...'})` (`tracked`),
-    // sans quoi ProseMirror lève « Invalid content for node X » dès la première suppression de bloc entier sous suivi actif (js/track-changes.js).
-    // StarterKit embarque son propre `Document`, jamais extensible de l'extérieur : `document: false` le désactive pour lui substituer la version
-    // étendue, seule différence avec l'usage par défaut de StarterKit.
-    trackChangesApi = await TrackChanges.createExtensions(Node, Mark, Extension, mergeAttributes);
+  // Suivi des modifications (planning/feature-track-changes.md) : `doc` et tout conteneur de bloc dont un enfant direct peut être supprimé ou inséré
+  // en bloc (pas seulement son texte) doivent autoriser explicitement les trois marques de suivi par `.extend({marks: '...'})`, sans quoi ProseMirror
+  // lève « Invalid content for node X » dès la première suppression de bloc entier sous suivi actif (js/track-changes.js).
+  function tracked(extension) { return TrackChanges.extendForTracking(extension); }
+
+  function onEditorUpdate({ editor: updatedEditor, transaction }) {
+    HeaderFooterPreview.enforceZoneHeightLimit(updatedEditor, transaction);
+    backfillAutoColumnWidths(updatedEditor, transaction);
+    clampOverflowingTables(updatedEditor, transaction);
+    HeaderFooterPreview.schedulePaginationRecompute();
+    refreshVariableBadgeValidity();
+  }
+
+  function clipboardProps() {
+    return {
+      // Copier une sélection de cases : le texte brut est un tableau tabulé (js/table-select.js), le HTML reste le tableau des cases ; tout le
+      // reste garde le texte par défaut.
+      clipboardTextSerializer: slice => TableSelect.clipboardText(slice),
+      // Un tableau de tableur (Excel, Sheets, LibreOffice) collé dans un document devient un tableau du document, case par case
+      // (js/grid-table.js) ; dans une grille, c'est le plugin de la grille (GridEditor.createExtension) qui le réécrit pour elle.
+      transformPastedHTML: html => (GridEditor.isActive() ? html : GridTable.cleanPastedDocumentHtml(html)),
+      // Ne consomme que si le presse-papiers contient réellement une image ; un collage de texte normal suit le traitement natif de ProseMirror.
+      handlePaste(view, event) {
+        const items = Array.from((event.clipboardData && event.clipboardData.items) || []);
+        const imageItem = items.find(item => item.kind === 'file' && item.type && item.type.startsWith('image/'));
+        if (!imageItem) return false;
+        // Excel joint à son tableau HTML une image de la plage copiée : dans une grille comme dans un document, c'est le tableau, case par case,
+        // que la personne veut.
+        if (GridTable.clipboardHasSpreadsheetTable(event.clipboardData)) return false;
+        const file = imageItem.getAsFile();
+        if (!file) return false;
+        event.preventDefault();
+        pasteImageFile(file);
+        return true;
+      },
+    };
+  }
+
+  // Le texte et ses styles, les listes, les pastilles en ligne, les commentaires et le suivi des modifications.
+  function textExtensions({
+    Extension, Node, Mark, mergeAttributes, StarterKit, Document, TextAlign, TextStyle, FontFamily, TaskList, TaskItem, Placeholder,
+  }) {
+    return [
+      // Liens (js/link-dialog.js) : un clic place le curseur (Ctrl/⌘+clic ouvre le lien) ; une adresse tapée sans schéma prend https, plus http.
+      // StarterKit embarque son propre `Document`, jamais extensible de l'extérieur : `document: false` le désactive pour lui substituer la version
+      // étendue.
+      StarterKit.configure({ document: false, link: { openOnClick: false, defaultProtocol: 'https' } }),
+      tracked(Document),
+      TextAlign.configure({ types: ['heading', 'paragraph'] }),
+      TextStyle,
+      FontFamily,
+      EditorNodes.createFontSizeExtension(Extension),
+      EditorNodes.createTextColorExtension(Extension),
+      EditorNodes.createHighlightExtension(Extension),
+      EditorNodes.createBulletStyleExtension(Extension),
+      EditorNodes.createOrderedListStyleExtension(Extension),
+      TaskList,
+      TaskItem.configure({ nested: false }),
+      EditorNodes.createTaskListStyleExtension(Extension),
+      // `includeChildren` n'est volontairement pas activé (défaut false) : un placeholder par cellule de tableau ou colonne vide encombrerait
+      // l'écran de plusieurs textes gris, alors que seul le document principal, pris dans son ensemble, doit en montrer un. `placeholder` est une
+      // fonction, pas une chaîne figée à la construction, pour deux raisons : (1) l'extension la relit à chaque recalcul de décoration (donc à
+      // chaque frappe ou sélection), et un I18n.t() dedans suit un changement de langue en cours de session sans I18n.onChange ; (2) ce même
+      // éditeur sert à éditer un en-tête ou un pied de page vide (contenu échangé par setContent, cf. header-footer-preview.js) : « Commencez à
+      // écrire votre modèle ici… » y serait trompeur, donc rien n'y est affiché.
+      Placeholder.configure({ placeholder: () => (HeaderFooterPreview.isEditingHeaderFooter() ? '' : I18n.t('editor.placeholder')) }),
+      EditorNodes.createVarBadgeNode(Node, mergeAttributes),
+      EditorNodes.createCalcBadgeNode(Node, mergeAttributes),
+      EditorNodes.createCalcBadgeKeysExtension(Extension),
+      EditorNodes.createPageNumberBadgeNode(Node, mergeAttributes),
+      EditorNodes.createSmartChipNode(Node, mergeAttributes),
+      EditorNodes.createFootnoteRefNode(Node, mergeAttributes),
+      EditorNodes.createCommentMark(Mark, mergeAttributes),
+      trackChangesApi.InsertionMark,
+      trackChangesApi.DeletionMark,
+      trackChangesApi.ModificationMark,
+      trackChangesApi.SuggestChangesBridge,
+    ];
+  }
+
+  // Les touches, les variables, les liens, la recherche, les tableaux, les colonnes, les blocs conditionnels, la légende, les images et les pages,
+  // puis la grille.
+  function structureExtensions({
+    Extension, Node, mergeAttributes, Plugin, PluginKey, Decoration, DecorationSet, EditorState, Suggestion, InputRule,
+    Table, TableView, TableRow, TableHeader, TableCell,
+  }) {
+    const withCellStyle = Cell => EditorNodes.withCellBackground(GridEditor.withCellAttributes(EditorNodes.withFastColwidth(Cell)));
+    const { TwoColumnsColumn, TwoColumnsZone } = EditorNodes.createTwoColumnsNodes(Node, mergeAttributes);
+    return [
+      // Entrée d'une grille (descend d'une case), rangée à cet endroit : après StarterKit et avant Variables et TextExpansion. TipTap essaie la
+      // dernière extension rangée en premier : leurs listes ouvertes gardent donc Entrée, et la liste à puces aussi (cf.
+      // GridEditor.createEnterExtension). Hors grille, elle ne fait rien.
+      GridEditor.createEnterExtension(Extension),
+      // Les touches d'une valeur conditionnelle (Entrée = retour à la ligne dans la valeur, Retour arrière la retire vide) : même rang que l'Entrée
+      // d'une grille, pour la même raison.
+      EditorNodes.createConditionalValueKeysExtension(Extension, Plugin, PluginKey),
+      // Retour arrière et Suppr n'emportent plus une image en calque avec le texte voisin (la ligne qui la porte n'est qu'une ancre invisible) :
+      // même rang, même raison ; un texte tapé, collé ou composé sur une sélection qui la contient la laisse aussi.
+      EditorNodes.createFloatingImageKeysExtension(Extension, Plugin, PluginKey),
+      // Un clic sur du texte posé sur une image « derrière le texte » atteint le texte, pas l'image (le cadre de l'image laisse passer les
+      // clics quand le pointeur est sur un caractère).
+      EditorNodes.createBehindImageClickThroughExtension(Extension, Plugin, PluginKey),
+      Variables.createExtension(Extension, Suggestion),
+      TextExpansion.createExtension(Extension, Suggestion, InputRule, PluginKey),
+      LinkDialog.createExtension(Extension),
+      // Rechercher / Remplacer (js/find-replace.js) : surlignage des résultats par décorations (Ctrl+F et Ctrl+H sont écoutés sur le document, cf.
+      // wireEditor).
+      FindReplace.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
+      tracked(Table).configure({ resizable: true, View: EditorNodes.createTableView(TableView) }),
+      // La ligne aussi : « Colonne avant / après » et « Supprimer la colonne » posent une marque sur chaque case de la colonne, des enfants directs
+      // d'une ligne.
+      tracked(GridEditor.withRowAttributes(TableRow)),
+      tracked(withCellStyle(TableHeader)),
+      tracked(withCellStyle(TableCell)),
+      tracked(TwoColumnsColumn),
+      tracked(TwoColumnsZone),
+      // Encadré (js/callout.js) : un bloc qui contient des blocs, comme une colonne - il doit donc, lui aussi, accepter les marques de suivi sur
+      // ses enfants.
+      tracked(Callout.createNode(Node, mergeAttributes)),
+      tracked(EditorNodes.createConditionalTextNode(Node, mergeAttributes)),
+      EditorNodes.createConditionalCheckboxNode(Node, mergeAttributes),
+      EditorNodes.createConditionalValueNode(Node, mergeAttributes),
+      // Légende (js/caption.js) : un attribut du paragraphe, plus le texte d'attente de la légende vide où se trouve le curseur.
+      Caption.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
+      // « Garder avec le suivant » (js/keep-with-next.js) : un attribut du paragraphe, sans plugin.
+      KeepWithNext.createExtension(Extension),
+      EditorNodes.createEditorImageNode(Node),
+      EditorNodes.createPageBreakNode(Node),
+      EditorNodes.createHeadingNumberingConfigNode(Node),
+      EditorNodes.createTocNode(Node),
+      EditorNodes.createTabNavigationExtension(Extension),
+      EditorNodes.createClearHistoryExtension(Extension, EditorState),
+      GridEditor.createExtension(Extension),
+    ];
+  }
+
+  async function init() {
+    const libs = await loadLibraries();
+    configureModules(libs);
+    // Les marques de suivi et le pont ProseMirror se construisent une fois, avant les extensions qui s'en servent.
+    trackChangesApi = await TrackChanges.createExtensions(libs.Node, libs.Mark, libs.Extension, libs.mergeAttributes);
     // Une modification neuve ne reprend jamais le numéro d'une modification que la session connaît, résolue ou non
     // (js/track-changes.js:nextSuggestionId).
     TrackChanges.setKnownSuggestionIds(() => Object.keys(suiviMetadataCache));
-    const tracked = TrackChanges.extendForTracking;
-    const withCellStyle = Cell => EditorNodes.withCellBackground(GridEditor.withCellAttributes(EditorNodes.withFastColwidth(Cell)));
-    const { TwoColumnsColumn, TwoColumnsZone } = EditorNodes.createTwoColumnsNodes(Node, mergeAttributes);
-
-    editor = new TiptapEditor({
+    editor = new libs.TiptapEditor({
       element: document.getElementById('editor-container'),
-      onUpdate: ({ editor: updatedEditor, transaction }) => {
-        HeaderFooterPreview.enforceZoneHeightLimit(updatedEditor, transaction);
-        backfillAutoColumnWidths(updatedEditor, transaction);
-        clampOverflowingTables(updatedEditor, transaction);
-        HeaderFooterPreview.schedulePaginationRecompute();
-        refreshVariableBadgeValidity();
-      },
-      // Ne consomme que si le presse-papiers contient réellement une image ; un collage de texte normal suit le traitement natif de ProseMirror.
-      editorProps: {
-        // Copier une sélection de cases : le texte brut est un tableau tabulé (js/table-select.js), le HTML reste le tableau des cases ; tout le
-        // reste garde le texte par défaut.
-        clipboardTextSerializer: slice => TableSelect.clipboardText(slice),
-        // Un tableau de tableur (Excel, Sheets, LibreOffice) collé dans un document devient un tableau du document, case par case
-        // (js/grid-table.js) ; dans une grille, c'est le plugin de la grille (GridEditor.createExtension) qui le réécrit pour elle.
-        transformPastedHTML: html => (GridEditor.isActive() ? html : GridTable.cleanPastedDocumentHtml(html)),
-        handlePaste(view, event) {
-          const items = Array.from((event.clipboardData && event.clipboardData.items) || []);
-          const imageItem = items.find(item => item.kind === 'file' && item.type && item.type.startsWith('image/'));
-          if (!imageItem) return false;
-          // Excel joint à son tableau HTML une image de la plage copiée : dans une grille comme dans un document, c'est le tableau, case par case,
-          // que la personne veut.
-          if (GridTable.clipboardHasSpreadsheetTable(event.clipboardData)) return false;
-          const file = imageItem.getAsFile();
-          if (!file) return false;
-          event.preventDefault();
-          pasteImageFile(file);
-          return true;
-        },
-      },
-      extensions: [
-        // Liens (js/link-dialog.js) : un clic place le curseur (Ctrl/⌘+clic ouvre le lien) ; une adresse tapée sans schéma prend https, plus http.
-        StarterKit.configure({ document: false, link: { openOnClick: false, defaultProtocol: 'https' } }),
-        tracked(Document),
-        TextAlign.configure({ types: ['heading', 'paragraph'] }),
-        TextStyle,
-        FontFamily,
-        EditorNodes.createFontSizeExtension(Extension),
-        EditorNodes.createTextColorExtension(Extension),
-        EditorNodes.createHighlightExtension(Extension),
-        EditorNodes.createBulletStyleExtension(Extension),
-        EditorNodes.createOrderedListStyleExtension(Extension),
-        TaskList,
-        TaskItem.configure({ nested: false }),
-        EditorNodes.createTaskListStyleExtension(Extension),
-        // `includeChildren` n'est volontairement pas activé (défaut false) : un placeholder par cellule de tableau ou colonne vide encombrerait
-        // l'écran de plusieurs textes gris, alors que seul le document principal, pris dans son ensemble, doit en montrer un. `placeholder` est une
-        // fonction, pas une chaîne figée à la construction, pour deux raisons : (1) l'extension la relit à chaque recalcul de décoration (donc à
-        // chaque frappe ou sélection), et un I18n.t() dedans suit un changement de langue en cours de session sans I18n.onChange ; (2) ce même
-        // éditeur sert à éditer un en-tête ou un pied de page vide (contenu échangé par setContent, cf. header-footer-preview.js) : « Commencez à
-        // écrire votre modèle ici… » y serait trompeur, donc rien n'y est affiché.
-        Placeholder.configure({ placeholder: () => (HeaderFooterPreview.isEditingHeaderFooter() ? '' : I18n.t('editor.placeholder')) }),
-        EditorNodes.createVarBadgeNode(Node, mergeAttributes),
-        EditorNodes.createCalcBadgeNode(Node, mergeAttributes),
-        EditorNodes.createCalcBadgeKeysExtension(Extension),
-        EditorNodes.createPageNumberBadgeNode(Node, mergeAttributes),
-        EditorNodes.createSmartChipNode(Node, mergeAttributes),
-        EditorNodes.createFootnoteRefNode(Node, mergeAttributes),
-        EditorNodes.createCommentMark(Mark, mergeAttributes),
-        trackChangesApi.InsertionMark,
-        trackChangesApi.DeletionMark,
-        trackChangesApi.ModificationMark,
-        trackChangesApi.SuggestChangesBridge,
-        // Entrée d'une grille (descend d'une case), rangée à cet endroit : après StarterKit et avant Variables et TextExpansion. TipTap essaie la
-        // dernière extension rangée en premier : leurs listes ouvertes gardent donc Entrée, et la liste à puces aussi (cf.
-        // GridEditor.createEnterExtension). Hors grille, elle ne fait rien.
-        GridEditor.createEnterExtension(Extension),
-        // Les touches d'une valeur conditionnelle (Entrée = retour à la ligne dans la valeur, Retour arrière la retire vide) : même rang que l'Entrée
-        // d'une grille, pour la même raison.
-        EditorNodes.createConditionalValueKeysExtension(Extension, Plugin, PluginKey),
-        // Retour arrière et Suppr n'emportent plus une image en calque avec le texte voisin (la ligne qui la porte n'est qu'une ancre invisible) :
-        // même rang, même raison ; un texte tapé, collé ou composé sur une sélection qui la contient la laisse aussi.
-        EditorNodes.createFloatingImageKeysExtension(Extension, Plugin, PluginKey),
-        // Un clic sur du texte posé sur une image « derrière le texte » atteint le texte, pas l'image (le cadre de l'image laisse passer les
-        // clics quand le pointeur est sur un caractère).
-        EditorNodes.createBehindImageClickThroughExtension(Extension, Plugin, PluginKey),
-        Variables.createExtension(Extension, Suggestion),
-        TextExpansion.createExtension(Extension, Suggestion, InputRule, PluginKey),
-        LinkDialog.createExtension(Extension),
-        // Rechercher / Remplacer (js/find-replace.js) : surlignage des résultats par décorations (Ctrl+F et Ctrl+H sont écoutés sur le document, cf.
-        // wireEditor).
-        FindReplace.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
-        tracked(Table).configure({ resizable: true, View: EditorNodes.createTableView(TableView) }),
-        // La ligne aussi : « Colonne avant / après » et « Supprimer la colonne » posent une marque sur chaque case de la colonne, des enfants directs
-        // d'une ligne.
-        tracked(GridEditor.withRowAttributes(TableRow)),
-        tracked(withCellStyle(TableHeader)),
-        tracked(withCellStyle(TableCell)),
-        tracked(TwoColumnsColumn),
-        tracked(TwoColumnsZone),
-        // Encadré (js/callout.js) : un bloc qui contient des blocs, comme une colonne - il doit donc, lui aussi, accepter les marques de suivi sur
-        // ses enfants.
-        tracked(Callout.createNode(Node, mergeAttributes)),
-        tracked(EditorNodes.createConditionalTextNode(Node, mergeAttributes)),
-        EditorNodes.createConditionalCheckboxNode(Node, mergeAttributes),
-        EditorNodes.createConditionalValueNode(Node, mergeAttributes),
-        // Légende (js/caption.js) : un attribut du paragraphe, plus le texte d'attente de la légende vide où se trouve le curseur.
-        Caption.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
-        // « Garder avec le suivant » (js/keep-with-next.js) : un attribut du paragraphe, sans plugin.
-        KeepWithNext.createExtension(Extension),
-        EditorNodes.createEditorImageNode(Node),
-        EditorNodes.createPageBreakNode(Node),
-        EditorNodes.createHeadingNumberingConfigNode(Node),
-        EditorNodes.createTocNode(Node),
-        EditorNodes.createTabNavigationExtension(Extension),
-        EditorNodes.createClearHistoryExtension(Extension, EditorState),
-        GridEditor.createExtension(Extension),
-      ],
+      onUpdate: onEditorUpdate,
+      editorProps: clipboardProps(),
+      // L'ordre compte : TipTap essaie la dernière extension rangée en premier (cf. GridEditor.createEnterExtension).
+      extensions: [...textExtensions(libs), ...structureExtensions(libs)],
       content: '',
     });
     wireEditor();
