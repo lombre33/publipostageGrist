@@ -14,25 +14,12 @@ const ConditionalCheckbox = (function () {
   function styleOf(value) { return VariableFormat.isCheckboxStyle(value) ? value : DEFAULT_STYLE; }
 
   // === Rendu ===
-  // La case est cochée si la condition lue dans son data-condition est remplie. `binding` : la ligne du tour d'une zone répétée qui contient la case (js/loop-rules.js:bindingOf) - une
-  // règle sur une colonne de la table de la boucle lit alors cette ligne.
-  async function holds(chip, tableId, record) {
-    const raw = chip.getAttribute('data-condition');
-    if (!raw) return false;
-    let condition = null;
-    try { condition = JSON.parse(raw); } catch (e) { console.error('[ConditionalCheckbox] condition de case illisible', e); return false; }
-    if (!ConditionRules.normalizeCondition(condition)) return false;
-    const binding = LoopRules.bindingOf(chip);
-    try { return await ConditionRules.conditionHolds(condition, tableId, record, binding ? { loop: binding } : undefined); }
-    catch (e) { console.error('[ConditionalCheckbox] échec de l\'évaluation de la condition d\'une case', e); return false; }
-  }
-
   // Remplace chaque case conditionnelle de `root` par sa case dessinée. Les conditions se lisent toutes d'abord, en parallèle ; le HTML se transforme ensuite.
   async function resolve(root, tableId, record) {
     if (!root) return;
     const chips = Array.from(root.querySelectorAll(SELECTOR));
     if (!chips.length) return;
-    const verdicts = await Promise.all(chips.map(chip => holds(chip, tableId, record)));
+    const verdicts = await Promise.all(chips.map(chip => ConditionRules.elementHolds(chip, tableId, record, false))); // sans condition : décochée
     chips.forEach((chip, i) => {
       const box = ReaderMode.checkboxNode(verdicts[i], styleOf(chip.getAttribute('data-checkbox-style')));
       // Repère de position posé par js/comments.js:buildReaderHtml (commentaires en mode Lecture) : reporté sur la case qui remplace la puce.

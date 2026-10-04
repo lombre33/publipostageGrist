@@ -1,6 +1,6 @@
 // Conditions « colonne opérateur valeur » sur une ligne Grist, évaluées de la même façon par les macro-modèles (js/macro-templates.js, choix d'une
-// annexe) et les variables conditionnelles. Aucune dépendance DOM. Une règle = { column, operator, value } ; `column` nue (table courante) ou
-// qualifiée « Table.Colonne » (cf. parseColumnRef).
+// annexe) et les variables conditionnelles. Aucune dépendance DOM : seule elementHolds lit l'attribut de l'élément qu'on lui passe. Une règle =
+// { column, operator, value } ; `column` nue (table courante) ou qualifiée « Table.Colonne » (cf. parseColumnRef).
 const ConditionRules = (function () {
   // Opérateurs des fenêtres de règles (macro-modèles, variables conditionnelles), dans l'ordre des listes déroulantes.
   const OPERATORS = ['=', '≠', '>', '<', '≥', '≤', 'contient', 'vide', 'non vide'];
@@ -186,5 +186,20 @@ const ConditionRules = (function () {
     return c.mode === 'any' ? results.some(Boolean) : results.every(Boolean);
   }
 
-  return { OPERATORS, compareValues, parseBoolExpected, parseColumnRef, matches, normalizeCondition, conditionHolds };
+  // Verdict de la condition d'un élément du modèle (bloc, valeur, case ou bulle conditionnels), lue dans son attribut data-condition et évaluée avec la ligne du
+  // tour de la zone répétée qui le contient (js/loop-rules.js:bindingOf) : une règle sur une colonne de la table de la boucle lit alors cette ligne. `whenNone` : le
+  // verdict d'un élément sans condition ou sans règle complète. Une condition illisible, ou dont l'évaluation échoue, ne laisse rien passer : faux, comme une règle
+  // illisible.
+  async function elementHolds(el, tableId, record, whenNone) {
+    const raw = el.getAttribute('data-condition');
+    if (!raw) return whenNone;
+    let condition;
+    try { condition = JSON.parse(raw); } catch (e) { console.error('[ConditionRules] condition illisible', e); return false; }
+    if (!normalizeCondition(condition)) return whenNone;
+    const binding = LoopRules.bindingOf(el);
+    try { return await conditionHolds(condition, tableId, record, binding ? { loop: binding } : undefined); }
+    catch (e) { console.error('[ConditionRules] échec de l\'évaluation de la condition', e); return false; }
+  }
+
+  return { OPERATORS, compareValues, parseBoolExpected, parseColumnRef, matches, normalizeCondition, conditionHolds, elementHolds };
 })();

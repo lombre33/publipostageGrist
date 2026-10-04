@@ -12,25 +12,13 @@ const ConditionalText = (function () {
   const SELECTOR = 'div.conditional-text';
 
   // === Rendu ===
-  // Valeur d'une condition posée sur un bloc, lue dans son data-condition. `binding` : la ligne du tour d'une zone répétée qui contient le bloc (js/loop-rules.js:bindingOf) -
-  // une règle sur une colonne de la table de la boucle lit alors cette ligne.
-  async function blockHolds(block, tableId, record) {
-    const raw = block.getAttribute('data-condition');
-    if (!raw) return true;
-    let condition = null;
-    try { condition = JSON.parse(raw); } catch (e) { console.error('[ConditionalText] condition de bloc illisible', e); return false; }
-    const binding = LoopRules.bindingOf(block);
-    try { return await ConditionRules.conditionHolds(condition, tableId, record, binding ? { loop: binding } : undefined); }
-    catch (e) { console.error('[ConditionalText] échec de l\'évaluation de la condition d\'un bloc', e); return false; }
-  }
-
   // Défait chaque bloc de `root` dont la condition est remplie, retire les autres. Les conditions se lisent toutes d'abord, en parallèle ; le HTML se transforme ensuite, dans
   // l'ordre du document : un bloc extérieur retiré emporte les blocs qu'il contient (ils ne sont plus dans `root`), un bloc extérieur défait laisse les siens à leur verdict.
   async function resolve(root, tableId, record) {
     if (!root) return;
     const blocks = Array.from(root.querySelectorAll(SELECTOR));
     if (!blocks.length) return;
-    const verdicts = await Promise.all(blocks.map(block => blockHolds(block, tableId, record)));
+    const verdicts = await Promise.all(blocks.map(block => ConditionRules.elementHolds(block, tableId, record, true)));
     blocks.forEach((block, i) => {
       if (!root.contains(block)) return;
       if (verdicts[i]) block.replaceWith(...Array.from(block.childNodes));

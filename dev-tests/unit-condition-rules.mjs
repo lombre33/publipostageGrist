@@ -122,4 +122,54 @@ const seconds = (y, m, d, h, mi) => Date.UTC(y, m - 1, d, h || 0, mi || 0) / 100
   if (before === undefined) delete process.env.TZ; else process.env.TZ = before;
 }
 
+// 11. La condition d'un élément du modèle (bloc, valeur, case ou bulle conditionnels) : lue dans data-condition, évaluée avec la ligne du tour d'une zone répétée.
+// Les modules voisins (Variables, GristAPI, LoopRules) sont remplacés par de petits faux : seule la lecture de l'attribut est en jeu ici.
+{
+  const logged = [];
+  const evaluated = [];
+  const stubCtx = createContext({
+    console: { log: console.log, warn: console.warn, error: (...args) => logged.push(args) },
+    Variables: {
+      resolveRawValue: async (table, column, tableId, record, opts) => {
+        evaluated.push({ table, column, opts });
+        if (column === 'Boum') throw new Error('lecture impossible');
+        return { value: record[column] };
+      },
+    },
+    GristAPI: { getColumnType: () => 'Text' },
+    LoopRules: { bindingOf: el => el.binding || null },
+  });
+  loadScript(stubCtx, 'js/condition-rules.js');
+  const DUPONT = { Nom: 'Dupont', Statut: 'Actif' };
+  const rule = (column, value) => ({ column, operator: '=', value });
+  const condition = (mode, ...rules) => JSON.stringify({ mode, rules });
+  const holds = (raw, whenNone, options = {}) => {
+    stubCtx.__EL = { binding: options.binding, getAttribute: name => (name === 'data-condition' ? raw : null) };
+    stubCtx.__REC = options.record || DUPONT;
+    return evalIn(stubCtx, `ConditionRules.elementHolds(__EL, 'T', __REC, ${whenNone})`);
+  };
+  const both = async (raw, options) => [await holds(raw, true, options), await holds(raw, false, options)];
+
+  check('élément sans condition (attribut absent ou vide) : le verdict `whenNone`',
+    JSON.stringify([...await both(null), ...await both('')]) === '[true,false,true,false]');
+  check('condition sans règle complète (null, aucune règle, règle sans colonne, pas de liste de règles) : le verdict `whenNone`, même attribut présent',
+    (await Promise.all(['null', '{"rules":[]}', '{"rules":[{"column":""}]}', '{"mode":"any"}'].map(raw => both(raw)))).every(r => r[0] === true && r[1] === false));
+  logged.length = 0;
+  check('condition illisible : faux, quel que soit `whenNone`, et l\'erreur est écrite dans la console', JSON.stringify(await both('pas du json')) === '[false,false]' && logged.length === 2, 'journal : ' + logged.length);
+  check('condition remplie : vrai, quel que soit `whenNone`', JSON.stringify(await both(condition('all', rule('Nom', 'Dupont')))) === '[true,true]');
+  check('condition non remplie : faux, quel que soit `whenNone`', JSON.stringify(await both(condition('all', rule('Nom', 'Martin')))) === '[false,false]');
+  check('deux règles : « all » veut toutes, « any » au moins une',
+    await holds(condition('all', rule('Nom', 'Martin'), rule('Statut', 'Actif')), true) === false && await holds(condition('any', rule('Nom', 'Martin'), rule('Statut', 'Actif')), true) === true);
+  check('une règle dont la colonne ne se lit pas ne laisse rien passer : faux, sans lever', await holds(condition('all', rule('Boum', 'x')), true) === false);
+  logged.length = 0;
+  const hostile = new Proxy({}, { has() { throw new Error('ligne illisible'); } }); // `column in record` lève : l'évaluation de la condition échoue
+  check('évaluation qui échoue : faux, sans lever, et l\'erreur est écrite dans la console', await holds(condition('all', rule('Absente', 'x')), true, { record: hostile }) === false && logged.length === 1, 'journal : ' + logged.length);
+  evaluated.length = 0;
+  await holds(condition('all', rule('Nom', 'Dupont')), true, { binding: { row: 3 } });
+  check('dans une zone répétée, la règle lit la ligne du tour : la liaison de l\'élément est transmise telle quelle', evaluated.length === 1 && JSON.stringify(evaluated[0].opts) === '{"loop":{"row":3}}', JSON.stringify(evaluated));
+  evaluated.length = 0;
+  await holds(condition('all', rule('Nom', 'Dupont')), true);
+  check('hors zone répétée, aucune option n\'est transmise', evaluated.length === 1 && evaluated[0].opts === undefined, JSON.stringify(evaluated));
+}
+
 summarizeAndExit();

@@ -14,25 +14,13 @@ const ConditionalValue = (function () {
   const SELECTOR = 'span.conditional-value';
 
   // === Rendu ===
-  // Valeur d'une condition posée sur une valeur, lue dans son data-condition. `binding` : la ligne du tour d'une zone répétée qui contient la valeur (js/loop-rules.js:bindingOf) -
-  // une règle sur une colonne de la table de la boucle lit alors cette ligne.
-  async function valueHolds(span, tableId, record) {
-    const raw = span.getAttribute('data-condition');
-    if (!raw) return true;
-    let condition = null;
-    try { condition = JSON.parse(raw); } catch (e) { console.error('[ConditionalValue] condition de valeur illisible', e); return false; }
-    const binding = LoopRules.bindingOf(span);
-    try { return await ConditionRules.conditionHolds(condition, tableId, record, binding ? { loop: binding } : undefined); }
-    catch (e) { console.error('[ConditionalValue] échec de l\'évaluation de la condition d\'une valeur', e); return false; }
-  }
-
   // Défait chaque valeur de `root` dont la condition est remplie, retire les autres. Les conditions se lisent toutes d'abord, en parallèle ; le HTML se transforme ensuite, dans l'ordre du
   // document : une valeur extérieure retirée emporte celles qu'elle contient (elles ne sont plus dans `root`), une valeur extérieure défaite laisse les siennes à leur verdict.
   async function resolve(root, tableId, record) {
     if (!root) return;
     const spans = Array.from(root.querySelectorAll(SELECTOR));
     if (!spans.length) return;
-    const verdicts = await Promise.all(spans.map(span => valueHolds(span, tableId, record)));
+    const verdicts = await Promise.all(spans.map(span => ConditionRules.elementHolds(span, tableId, record, true)));
     spans.forEach((span, i) => {
       if (!root.contains(span)) return;
       if (verdicts[i]) span.replaceWith(...Array.from(span.childNodes));
