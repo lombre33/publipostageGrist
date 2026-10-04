@@ -969,6 +969,230 @@
     },
   });
 
+  // --- 10) Ce que le découpage de js/grid-xlsx-import.js déplace -------------------------------------------------------------------------------------------------------------------
+  // Les couleurs (thème, teintes, palette indexée, rgb), le contenu d'une case selon sa sorte (liens, texte riche, formules, erreurs, cases vides mises en forme) et les erreurs de lecture d'une feuille.
+  // Les attendus ont été relevés sur le code d'AVANT le découpage : un classeur lu de la même façon donne la même grille.
+  const digestOf = model => model.rows.map(row => row.cells.map(cell => [cell.col, cell.colspan + 'x' + cell.rowspan, cell.fill || '-', cell.align || '-', cell.valign,
+    ['top', 'left', 'bottom', 'right'].map(side => (cell.borders && cell.borders[side]) || '.').join(' '), cell.html].join(' ')).join(' | '));
+  const importModel = async (spec, options, theme) => {
+    let bytes = await buildXlsx(spec);
+    if (theme !== undefined) bytes = await withTheme(bytes, theme);
+    return GridXlsxImport.fromArrayBuffer(asBuffer(bytes), Object.assign({ lang: 'fr' }, options));
+  };
+  const importError = async (spec, options) => { try { await importModel(spec, options); return null; } catch (e) { return e.code + ' : ' + e.message; } };
+  // Le même classeur avec un autre thème (la palette que `themePalette` lit dans le XML du thème), ou sans aucun (`scheme` faux).
+  async function withTheme(bytes, scheme) {
+    const zip = await JSZip.loadAsync(bytes);
+    if (!scheme) zip.remove('xl/theme/theme1.xml');
+    else zip.file('xl/theme/theme1.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Essai"><a:themeElements><a:clrScheme name="Essai">${scheme}</a:clrScheme></a:themeElements></a:theme>`);
+    return zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' });
+  }
+  const FONT = (color, flags, size) => `<font>${flags || ''}<sz val="${size || 11}"/>${color || ''}<name val="Calibri"/><family val="2"/></font>`;
+  const SOLID = color => `<fill><patternFill patternType="solid"><fgColor ${color}/><bgColor indexed="64"/></patternFill></fill>`;
+  // Des lignes de cases d'essai, une case par mise en forme : `styleRows` donne, pour chaque case, { font, fill, border } (le XML) ; rend la spec, avec ses `xfs` posés dans l'ordre.
+  function lookSpec(styleRows, text) {
+    const fonts = [FONT('<color theme="1"/>')];
+    const fills = ['<fill><patternFill patternType="none"/></fill>', '<fill><patternFill patternType="gray125"/></fill>'];
+    const borders = ['<border><left/><right/><top/><bottom/><diagonal/></border>'];
+    const xfs = [{}];
+    const rows = styleRows.map(styles => styles.map((style) => {
+      const xf = {};
+      if (style.font) { fonts.push(style.font); xf.fontId = fonts.length - 1; }
+      if (style.fill) { fills.push(style.fill); xf.fillId = fills.length - 1; }
+      if (style.border) { borders.push(style.border); xf.borderId = borders.length - 1; }
+      xfs.push(xf);
+      return { v: text === undefined ? 'x' : text, s: xfs.length - 1 };
+    }));
+    return { fonts, fills, borders, xfs, sheets: [{ name: 'Couleurs', rows }] };
+  }
+
+  cases.push({
+    id: 'gridImport_theme_colours_and_their_tints_come_from_the_workbook_theme',
+    description: 'Le fond d\'une case qui cite une couleur du thème (de 0 à 11, avec une nuance de -25 % ou +60 % ou sans) prend la couleur du thème PROPRE au classeur (ici un thème maison), assombrie ou éclaircie dans l\'espace teinte / luminosité / saturation ; un rang hors thème n\'a pas de couleur ; un thème qui n\'écrit pas toutes ses couleurs garde celles d\'Office pour les autres',
+    run: async () => {
+      const own = '<a:dk1><a:sysClr val="windowText" lastClr="101820"/></a:dk1><a:lt1><a:sysClr val="window" lastClr="FAFAFA"/></a:lt1><a:dk2><a:srgbClr val="1F3864"/></a:dk2><a:lt2><a:srgbClr val="F2E6D9"/></a:lt2>'
+        + '<a:accent1><a:srgbClr val="C0507F"/></a:accent1><a:accent2><a:srgbClr val="2E9C8F"/></a:accent2><a:accent3><a:srgbClr val="808080"/></a:accent3><a:accent4><a:srgbClr val="E6B800"/></a:accent4>'
+        + '<a:accent5><a:srgbClr val="4B7BEC"/></a:accent5><a:accent6><a:srgbClr val="99CC33"/></a:accent6><a:hlink><a:srgbClr val="0563C1"/></a:hlink><a:folHlink><a:srgbClr val="954F72"/></a:folHlink>';
+      const partial = '<a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1><a:accent1><a:srgbClr val="336699"/></a:accent1>';
+      const grid = (scheme) => {
+        const rows = [];
+        for (let theme = 0; theme <= 12; theme++) rows.push([0, -0.25, 0.6].map(tint => ({ fill: SOLID(`theme="${theme}"${tint ? ` tint="${tint}"` : ''}`) })));
+        return importModel(lookSpec(rows), null, scheme);
+      };
+      const fillsOf = out => out.model.rows.map(row => row.cells.map(cell => cell.fill || '-').join(' '));
+      const withOwn = fillsOf(await grid(own));
+      const withPartial = fillsOf(await grid(partial));
+      const withOffice = fillsOf(await grid());
+      const withoutTheme = fillsOf(await grid(false));
+      // Une ligne par rang de thème (0 à 12), trois nuances par ligne : sans, -25 %, +60 %. Le thème d'Office : 4472C4 assombri de 25 % donne 2F5597 et éclairci de 60 % B4C7E7, comme Excel.
+      const EXPECTED = {
+        own: [
+          "#fafafa #bbbbbb #fdfdfd",
+          "#101820 #0c1218 #84a3c1",
+          "#f2e6d9 #d5ae84 #faf5f0",
+          "#1f3864 #172a4b #8ba8db",
+          "#c0507f #96365e #e6b9cc",
+          "#2e9c8f #23756b #a0e3db",
+          "#808080 #606060 #cccccc",
+          "#e6b800 #ad8a00 #ffe98f",
+          "#4b7bec #164fd3 #b7caf7",
+          "#99cc33 #739926 #d6ebad",
+          "#0563c1 #044a91 #85c1fc",
+          "#954f72 #703b56 #d8b5c7",
+          "- - -"
+        ],
+        partial: [
+          "#ffffff #bfbfbf #ffffff",
+          "#000000 #000000 #999999",
+          "#e7e6e6 #afabab #f5f5f5",
+          "#44546a #333f50 #adb9ca",
+          "#336699 #264c73 #a3c2e0",
+          "#ed7d31 #c55a11 #f8cbad",
+          "#a5a5a5 #7c7c7c #dbdbdb",
+          "#ffc000 #bf9000 #ffe699",
+          "#5b9bd5 #2e75b6 #bdd7ee",
+          "#70ad47 #548235 #c5e0b4",
+          "#0563c1 #044a91 #85c1fc",
+          "#954f72 #703b56 #d8b5c7",
+          "- - -"
+        ],
+        office: [
+          "#ffffff #bfbfbf #ffffff",
+          "#000000 #000000 #999999",
+          "#e7e6e6 #afabab #f5f5f5",
+          "#44546a #333f50 #adb9ca",
+          "#4472c4 #2f5597 #b4c7e7",
+          "#ed7d31 #c55a11 #f8cbad",
+          "#a5a5a5 #7c7c7c #dbdbdb",
+          "#ffc000 #bf9000 #ffe699",
+          "#5b9bd5 #2e75b6 #bdd7ee",
+          "#70ad47 #548235 #c5e0b4",
+          "#0563c1 #044a91 #85c1fc",
+          "#954f72 #703b56 #d8b5c7",
+          "- - -"
+        ],
+      };
+      const pass = JSON.stringify(withOwn) === JSON.stringify(EXPECTED.own) && JSON.stringify(withPartial) === JSON.stringify(EXPECTED.partial) && JSON.stringify(withOffice) === JSON.stringify(EXPECTED.office) && JSON.stringify(withoutTheme) === JSON.stringify(EXPECTED.office);
+      return { pass, notes: JSON.stringify({ withOwn, withPartial, withOffice, withoutTheme }) };
+    },
+  });
+
+  cases.push({
+    id: 'gridImport_indexed_rgb_gradient_and_automatic_colours_of_fills_texts_and_lines',
+    description: 'Les autres façons d\'écrire une couleur : indexée (palette de base, 64 et 65 = texte et fond du système, hors palette = aucune), rgb (le canal alpha est ignoré), « automatique » (aucune), dégradé (sa première couleur), motif non plein (aucun fond) ; pour le texte (noir = pas de couleur) et pour les traits (le gris de départ #777777 = pas de couleur choisie)',
+    run: async () => {
+      const fills = [
+        SOLID('indexed="2"'), SOLID('indexed="22"'), SOLID('indexed="63"'), SOLID('indexed="64"'), SOLID('indexed="65"'), SOLID('indexed="66"'), SOLID('indexed="99"'),
+        SOLID('rgb="FF336699"'), SOLID('rgb="80123456"'), SOLID('auto="1"'),
+        '<fill><gradientFill degree="90"><stop position="0"><color rgb="FF00FF00"/></stop><stop position="1"><color rgb="FF0000FF"/></stop></gradientFill></fill>',
+        '<fill><patternFill patternType="lightGray"><fgColor rgb="FFFF0000"/><bgColor indexed="64"/></patternFill></fill>',
+        '<fill><patternFill patternType="solid"/></fill>',
+      ].map(fill => ({ fill }));
+      const fonts = [
+        FONT('<color theme="4" tint="0.39997558519241921"/>'), FONT('<color indexed="10"/>'), FONT('<color rgb="FF00B050"/>'), FONT('<color indexed="64"/>'), FONT('<color auto="1"/>'),
+        FONT('<color indexed="99"/>'), FONT('<color theme="12"/>'), FONT('<color rgb="FF000000"/>'), FONT('<color rgb="FFC00000"/>', '<b/><i/><strike/><u/>', 18), FONT('', '<u val="none"/>'),
+      ].map(font => ({ font }));
+      const line = (side, style, color) => `<${side} style="${style}">${color}</${side}>`;
+      const borders = [
+        `<border>${line('left', 'thin', '<color rgb="FF777777"/>')}${line('right', 'medium', '<color indexed="10"/>')}${line('top', 'thin', '<color theme="4" tint="-0.249977111117893"/>')}${line('bottom', 'none', '<color rgb="FFFF0000"/>')}<diagonal/></border>`,
+        `<border>${line('left', 'thin', '<color auto="1"/>')}<right/>${line('top', 'dashed', '<color rgb="FF00FF00"/>')}${line('bottom', 'thin', '')}<diagonal/></border>`,
+      ].map(border => ({ border }));
+      const out = await importModel(lookSpec([fills, fonts, borders]));
+      const digest = digestOf(out.model);
+      // Colonne, étendue, fond, alignement, alignement vertical, traits (haut gauche bas droite), contenu : trois lignes (fonds, textes, traits).
+      const EXPECTED = [
+        "0 1x1 #ff0000 - middle . . . . x | 1 1x1 #c0c0c0 - middle . . . . x | 2 1x1 #333333 - middle . . . . x | 3 1x1 #000000 - middle . . . . x | 4 1x1 #ffffff - middle . . . . x | 5 1x1 - - middle . . . . x | 6 1x1 - - middle . . . . x | 7 1x1 #336699 - middle . . . . x | 8 1x1 #123456 - middle . . . . x | 9 1x1 - - middle . . . . x | 10 1x1 #00ff00 - middle . . . . x | 11 1x1 - - middle . . . . x | 12 1x1 - - middle . . . . x",
+        "0 1x1 - - middle . . #2f5597 . <span style=\"color: #8faadc\">x</span> | 1 1x1 - - middle . . #00ff00 . <span style=\"color: #ff0000\">x</span> | 2 1x1 - - middle . . . . <span style=\"color: #00b050\">x</span> | 3 1x1 - - middle . . . . x | 4 1x1 - - middle . . . . x | 5 1x1 - - middle . . . . x | 6 1x1 - - middle . . . . x | 7 1x1 - - middle . . . . x | 8 1x1 - - middle . . . . <span style=\"color: #c00000; font-size: 18pt\"><strong><em><u><s>x</s></u></em></strong></span> | 9 1x1 - - middle . . . . x | 10 1x1 - - middle . . . .  | 11 1x1 - - middle . . . .  | 12 1x1 - - middle . . . . ",
+        "0 1x1 - - middle #2f5597 . . #ff0000 x | 1 1x1 - - middle #00ff00 #ff0000 #000000 . x | 2 1x1 - - middle . . . .  | 3 1x1 - - middle . . . .  | 4 1x1 - - middle . . . .  | 5 1x1 - - middle . . . .  | 6 1x1 - - middle . . . .  | 7 1x1 - - middle . . . .  | 8 1x1 - - middle . . . .  | 9 1x1 - - middle . . . .  | 10 1x1 - - middle . . . .  | 11 1x1 - - middle . . . .  | 12 1x1 - - middle . . . . "
+      ];
+      return { pass: JSON.stringify(digest) === JSON.stringify(EXPECTED), notes: JSON.stringify({ digest }) };
+    },
+  });
+
+  cases.push({
+    id: 'gridImport_cell_contents_by_kind_links_rich_text_formulas_errors_and_styled_empty_cells',
+    description: 'Le contenu d\'une case selon sa sorte : pourcentage et date au format de la case, booléen, erreur, formule (son résultat), lien simple, lien sur du texte riche, adresse refusée, texte riche (barré, italique, souligné, taille), alignements justifié / réparti / centré sur la sélection / répété ; une case vide mais mise en forme compte dans l\'étendue (pas une case vide sans fond ni trait)',
+    run: async () => {
+      const spec = {
+        numFmts: { 165: '0.00%', 166: 'd mmm yyyy' },
+        fills: ['<fill><patternFill patternType="none"/></fill>', '<fill><patternFill patternType="gray125"/></fill>', SOLID('rgb="FFFFCC00"')],
+        borders: ['<border><left/><right/><top/><bottom/><diagonal/></border>', `<border><left/><right/><top/><bottom style="thin"><color rgb="FF0000FF"/></bottom><diagonal/></border>`],
+        xfs: [{}, { numFmtId: 165 }, { numFmtId: 166 }, { align: 'horizontal="justify"' }, { align: 'horizontal="distributed"' }, { align: 'horizontal="centerContinuous"' }, { align: 'horizontal="fill"' }, { fillId: 2 }, { numFmtId: 165, align: 'horizontal="right"' }, { borderId: 1 }],
+        sheets: [{
+          name: 'Contenus',
+          links: [{ ref: 'G1', url: 'https://example.org/page' }, { ref: 'H1', url: 'https://example.org/riche' }, { ref: 'I1', url: 'javascript:alert(1)' }],
+          rows: [
+            [{ v: 0.256, s: 1 }, { v: 46298, s: 2 }, true, { v: '#N/A', t: 'e' }, { v: 'ABC', f: 'UPPER("abc")' }, { v: 7, f: '3+4' }, 'lien simple',
+              { rich: [{ t: 'lien ' }, { t: 'riche', rPr: '<b/><strike/>' }] }, 'dangereux', { rich: [{ t: 'a ', rPr: '<i/>' }, { t: 'b ', rPr: '<u/><sz val="16"/><color rgb="FFFF0000"/>' }, { t: 'c', rPr: '<strike/><color theme="4"/>' }] }],
+            [{ v: 'justifié', s: 3 }, { v: 'réparti', s: 4 }, { v: 'centré', s: 5 }, { v: 'répété', s: 6 }, null, null, null, null, null, { v: 'fin', s: 8 }],
+            [null, null, null, null, { s: 7 }, { s: 9 }, null, null, null, null, { s: 1 }],
+            [{ v: 'fin de feuille' }],
+          ],
+        }],
+      };
+      const out = await importModel(spec);
+      const digest = digestOf(out.model);
+      const EXPECTED = [
+        "0 1x1 - right middle . . . . 25,60% | 1 1x1 - right middle . . . . 3 oct. 2026 | 2 1x1 - center middle . . . . VRAI | 3 1x1 - center middle . . . . #N/A | 4 1x1 - - middle . . . . ABC | 5 1x1 - right middle . . . . 7 | 6 1x1 - - middle . . . . <a href=\"https://example.org/page\">lien simple</a> | 7 1x1 - - middle . . . . <a href=\"https://example.org/riche\">lien </a><a href=\"https://example.org/riche\"><strong><s>riche</s></strong></a> | 8 1x1 - - middle . . . . dangereux | 9 1x1 - - middle . . . . <em>a </em><span style=\"color: #ff0000; font-size: 16pt\"><u>b </u></span><span style=\"color: #4472c4\"><s>c</s></span>",
+        "0 1x1 - justify middle . . . . justifié | 1 1x1 - justify middle . . . . réparti | 2 1x1 - center middle . . . . centré | 3 1x1 - - middle . . . . répété | 4 1x1 - - middle . . . .  | 5 1x1 - - middle . . . .  | 6 1x1 - - middle . . . .  | 7 1x1 - - middle . . . .  | 8 1x1 - - middle . . . .  | 9 1x1 - right middle . . . . fin",
+        "0 1x1 - - middle . . . .  | 1 1x1 - - middle . . . .  | 2 1x1 - - middle . . . .  | 3 1x1 - - middle . . . .  | 4 1x1 #ffcc00 - middle . . . .  | 5 1x1 - - middle . . #0000ff .  | 6 1x1 - - middle . . . .  | 7 1x1 - - middle . . . .  | 8 1x1 - - middle . . . .  | 9 1x1 - - middle . . . . ",
+        "0 1x1 - - middle . . . . fin de feuille | 1 1x1 - - middle . . . .  | 2 1x1 - - middle . . . .  | 3 1x1 - - middle . . . .  | 4 1x1 - - middle . . . .  | 5 1x1 - - middle #0000ff . . .  | 6 1x1 - - middle . . . .  | 7 1x1 - - middle . . . .  | 8 1x1 - - middle . . . .  | 9 1x1 - - middle . . . . "
+      ];
+      return { pass: JSON.stringify(digest) === JSON.stringify(EXPECTED) && out.rows === 4 && out.cols === 10, notes: JSON.stringify({ digest, rows: out.rows, cols: out.cols }) };
+    },
+  });
+
+  cases.push({
+    id: 'gridImport_sheet_choice_defaults_sizes_and_the_errors_that_say_why',
+    description: 'Le rang de feuille demandé est ramené dans les feuilles visibles (trop grand : la dernière ; négatif ou absent : la première), la langue inconnue vaut le français, les largeurs et hauteurs par défaut de la feuille servent aux colonnes et lignes sans mesure, et les erreurs disent pourquoi (aucune feuille, aucune case, aucune case visible, trop grande avec ses mesures)',
+    run: async () => {
+      const book = { sheets: [{ name: 'Un', rows: [['a', 'b']] }, { name: 'Deux', state: 'hidden', rows: [['caché']] }, { name: 'Trois', rows: [['c'], ['d'], ['e']] }] };
+      const names = [];
+      for (const sheetIndex of [undefined, -3, 0, 1, 2, 99, Number.NaN]) names.push(sheetIndex + ' -> ' + (await importModel(book, { sheetIndex })).sheetName);
+      const english = await importModel({ sheets: [{ name: 'Un', rows: [[1234.5, true]] }] }, { lang: 'en' });
+      const other = await importModel({ sheets: [{ name: 'Un', rows: [[1234.5, true]] }] }, { lang: 'de' });
+      const sized = await importModel({ sheets: [{ name: 'Un', defaultColWidth: 20, defaultRowHeight: 30, rows: [['a', 'b'], ['c', 'd']], cols: [{ min: 2, max: 2, width: 3 }], rowMeta: { 2: { ht: 60 } } }] });
+      let tooBig = null;
+      try { await importModel({ sheets: [{ name: 'Large', rows: [Array.from({ length: 101 }, () => 'x')] }] }); } catch (e) { tooBig = [e.code, e.rows, e.cols, e.maxRows, e.maxCols, e.maxCells].join(','); }
+      const errors = {
+        noSheet: await importError({ sheets: [] }),
+        noCell: await importError({ sheets: [{ name: 'Vide', rows: [[null]] }] }),
+        nothingShown: await importError({ sheets: [{ name: 'Masquée', rows: [['x']], rowMeta: { 1: { hidden: true } } }] }),
+        columnHidden: await importError({ sheets: [{ name: 'Masquée', rows: [['x']], cols: [{ min: 1, max: 1, hidden: true }] }] }),
+      };
+      const got = {
+        names, english: digestOf(english.model), other: digestOf(other.model),
+        sized: [sized.model.cols.join(','), sized.model.rows.map(row => row.height).join(',')].join(' / '), tooBig, errors,
+      };
+      const EXPECTED = {
+        "names": [
+          "undefined -> Un",
+          "-3 -> Un",
+          "0 -> Un",
+          "1 -> Trois",
+          "2 -> Trois",
+          "99 -> Trois",
+          "NaN -> Un"
+        ],
+        "english": [
+          "0 1x1 - right middle . . . . 1234.5 | 1 1x1 - center middle . . . . TRUE"
+        ],
+        "other": [
+          "0 1x1 - right middle . . . . 1234,5 | 1 1x1 - center middle . . . . VRAI"
+        ],
+        "sized": "145,26 / 40,80",
+        "tooBig": "tooBig,1,101,1000,100,5000",
+        "errors": {
+          "noSheet": "unreadable : Le classeur ne contient aucune feuille.",
+          "noCell": "empty : La feuille ne contient aucune case.",
+          "nothingShown": "empty : La feuille ne contient aucune case visible.",
+          "columnHidden": "empty : La feuille ne contient aucune case visible."
+        }
+      };
+      return { pass: JSON.stringify(got) === JSON.stringify(EXPECTED), notes: JSON.stringify(got) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.gridImport = cases;
 })();

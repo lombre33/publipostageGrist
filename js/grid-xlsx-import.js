@@ -32,61 +32,75 @@ const GridXlsxImport = (function () {
 
   function fail(code, message, details) { return Object.assign(new Error(message || code), { code }, details || {}); }
 
-  // La palette par défaut d'Office (un thème absent ou illisible), dans l'ordre des index de thème d'Excel : fond 1, texte 1, fond 2, texte 2,
-  // accents 1 à 6, lien, lien suivi.
-  const DEFAULT_THEME = ['ffffff', '000000', 'e7e6e6', '44546a', '4472c4', 'ed7d31', 'a5a5a5', 'ffc000', '5b9bd5', '70ad47', '0563c1', '954f72'];
-  const THEME_ORDER = ['lt1', 'dk1', 'lt2', 'dk2', 'accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6', 'hlink', 'folHlink'];
-  // Les 64 couleurs « indexées » d'Excel (anciens classeurs, couleurs de la palette de base) ; 64 et 65 sont le texte et le fond du système.
-  const INDEXED = ('000000 ffffff ff0000 00ff00 0000ff ffff00 ff00ff 00ffff 000000 ffffff ff0000 00ff00 0000ff ffff00 ff00ff 00ffff 800000 008000 000080 808000 800080 008080 c0c0c0 808080 '
-    + '9999ff 993366 ffffcc ccffff 660066 ff8080 0066cc ccccff 000080 ff00ff ffff00 00ffff 800080 800000 008080 0000ff 00ccff ccffff ccffcc ffff99 99ccff ff99cc cc99ff ffcc99 '
-    + '3366ff 33cccc 99cc00 ffcc00 ff9900 ff6600 666699 969696 003366 339966 003300 333300 993300 993366 333399 333333').split(' ');
+  // Les couleurs d'Excel : la palette du thème du classeur et ses teintes, les couleurs « indexées », la couleur d'un trait de case.
+  const { themePalette, colorHex, sideColor } = (function () {
+    // La palette par défaut d'Office (un thème absent ou illisible), dans l'ordre des index de thème d'Excel : fond 1, texte 1, fond 2, texte 2,
+    // accents 1 à 6, lien, lien suivi.
+    const DEFAULT_THEME = ['ffffff', '000000', 'e7e6e6', '44546a', '4472c4', 'ed7d31', 'a5a5a5', 'ffc000', '5b9bd5', '70ad47', '0563c1', '954f72'];
+    const THEME_ORDER = ['lt1', 'dk1', 'lt2', 'dk2', 'accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6', 'hlink', 'folHlink'];
+    // Les 64 couleurs « indexées » d'Excel (anciens classeurs, couleurs de la palette de base) ; 64 et 65 sont le texte et le fond du système.
+    const INDEXED = ('000000 ffffff ff0000 00ff00 0000ff ffff00 ff00ff 00ffff 000000 ffffff ff0000 00ff00 0000ff ffff00 ff00ff 00ffff 800000 008000 000080 808000 800080 008080 c0c0c0 808080 '
+      + '9999ff 993366 ffffcc ccffff 660066 ff8080 0066cc ccccff 000080 ff00ff ffff00 00ffff 800080 800000 008080 0000ff 00ccff ccffff ccffcc ffff99 99ccff ff99cc cc99ff ffcc99 '
+      + '3366ff 33cccc 99cc00 ffcc00 ff9900 ff6600 666699 969696 003366 339966 003300 333300 993300 993366 333399 333333').split(' ');
 
-  // La palette du thème du classeur (ExcelJS en garde le XML tel quel dans `_themes`) : « <a:accent1><a:srgbClr val="4472C4"/> », ou
-  // « <a:dk1><a:sysClr ... lastClr="000000"/> ».
-  function themePalette(workbook) {
-    const themes = workbook && workbook._themes;
-    const xml = themes ? String(themes.theme1 || Object.values(themes)[0] || '') : '';
-    return THEME_ORDER.map((name, i) => {
-      const m = new RegExp('<a:' + name + '>\\s*<a:(?:srgbClr\\s+val="([0-9a-fA-F]{6})"|sysClr[^>]*lastClr="([0-9a-fA-F]{6})")').exec(xml);
-      return m ? (m[1] || m[2]).toLowerCase() : DEFAULT_THEME[i];
-    });
-  }
-
-  // Une teinte d'Excel (`tint` de -1 à 1) : -0,25 assombrit de 25 %, +0,4 éclaircit de 40 %, dans l'espace teinte / luminosité / saturation.
-  function applyTint(hex, tint) {
-    if (!tint) return hex;
-    const [r, g, b] = [0, 2, 4].map(i => parseInt(hex.slice(i, i + 2), 16) / 255);
-    const max = Math.max(r, g, b);
-    const min = Math.min(r, g, b);
-    let h = 0;
-    let s = 0;
-    let l = (max + min) / 2;
-    if (max !== min) {
-      const d = max - min;
-      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-      h = max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
-      h /= 6;
+    // La palette du thème du classeur (ExcelJS en garde le XML tel quel dans `_themes`) : « <a:accent1><a:srgbClr val="4472C4"/> », ou
+    // « <a:dk1><a:sysClr ... lastClr="000000"/> ».
+    function themePalette(workbook) {
+      const themes = workbook && workbook._themes;
+      const xml = themes ? String(themes.theme1 || Object.values(themes)[0] || '') : '';
+      return THEME_ORDER.map((name, i) => {
+        const m = new RegExp('<a:' + name + '>\\s*<a:(?:srgbClr\\s+val="([0-9a-fA-F]{6})"|sysClr[^>]*lastClr="([0-9a-fA-F]{6})")').exec(xml);
+        return m ? (m[1] || m[2]).toLowerCase() : DEFAULT_THEME[i];
+      });
     }
-    l = tint < 0 ? l * (1 + tint) : l * (1 - tint) + tint;
-    const hue = (p, q, t) => { let u = t; if (u < 0) u += 1; if (u > 1) u -= 1; if (u < 1 / 6) return p + (q - p) * 6 * u; if (u < 1 / 2) return q; if (u < 2 / 3) return p + (q - p) * (2 / 3 - u) * 6; return p; };
-    let out;
-    if (s === 0) out = [l, l, l];
-    else {
-      const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-      const p = 2 * l - q;
-      out = [hue(p, q, h + 1 / 3), hue(p, q, h), hue(p, q, h - 1 / 3)];
-    }
-    return out.map(v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0')).join('');
-  }
 
-  // Une couleur d'ExcelJS - { argb }, { theme, tint }, { indexed } ou rien (« automatique ») - en « #rrggbb » ; null quand elle n'en dit pas.
-  function colorHex(color, palette) {
-    if (!color) return null;
-    if (typeof color.argb === 'string' && color.argb.length >= 6) return '#' + color.argb.slice(-6).toLowerCase();
-    if (color.theme !== undefined && color.theme !== null) { const base = palette[color.theme]; return base ? '#' + applyTint(base, color.tint || 0) : null; }
-    if (color.indexed !== undefined && color.indexed !== null) { const base = color.indexed === 64 ? '000000' : color.indexed === 65 ? 'ffffff' : INDEXED[color.indexed]; return base ? '#' + base : null; }
-    return null;
-  }
+    // Une teinte d'Excel (`tint` de -1 à 1) : -0,25 assombrit de 25 %, +0,4 éclaircit de 40 %, dans l'espace teinte / luminosité / saturation.
+    function applyTint(hex, tint) {
+      if (!tint) return hex;
+      const [r, g, b] = [0, 2, 4].map(i => parseInt(hex.slice(i, i + 2), 16) / 255);
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      let h = 0;
+      let s = 0;
+      let l = (max + min) / 2;
+      if (max !== min) {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        h = max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+        h /= 6;
+      }
+      l = tint < 0 ? l * (1 + tint) : l * (1 - tint) + tint;
+      const hue = (p, q, t) => { let u = t; if (u < 0) u += 1; if (u > 1) u -= 1; if (u < 1 / 6) return p + (q - p) * 6 * u; if (u < 1 / 2) return q; if (u < 2 / 3) return p + (q - p) * (2 / 3 - u) * 6; return p; };
+      let out;
+      if (s === 0) out = [l, l, l];
+      else {
+        const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+        const p = 2 * l - q;
+        out = [hue(p, q, h + 1 / 3), hue(p, q, h), hue(p, q, h - 1 / 3)];
+      }
+      return out.map(v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0')).join('');
+    }
+
+    // Une couleur d'ExcelJS - { argb }, { theme, tint }, { indexed } ou rien (« automatique ») - en « #rrggbb » ; null quand elle n'en dit pas.
+    function colorHex(color, palette) {
+      if (!color) return null;
+      if (typeof color.argb === 'string' && color.argb.length >= 6) return '#' + color.argb.slice(-6).toLowerCase();
+      if (color.theme !== undefined && color.theme !== null) { const base = palette[color.theme]; return base ? '#' + applyTint(base, color.tint || 0) : null; }
+      if (color.indexed !== undefined && color.indexed !== null) { const base = color.indexed === 64 ? '000000' : color.indexed === 65 ? 'ffffff' : INDEXED[color.indexed]; return base ? '#' + base : null; }
+      return null;
+    }
+
+    // Le trait fin gris de départ d'une case de grille (celui que js/xlsx-export.js écrit sur les côtés sans couleur choisie,
+    // js/pdf-export.js:TABLE_BORDER_COLOR) : le relire comme une couleur choisie ferait d'une grille exportée puis importée une grille aux traits
+    // « colorés » en gris - qui ne suivraient plus le trait de départ. Un côté sans trait n'a pas de couleur non plus : le trait de départ.
+    const DEFAULT_LINE = '#777777';
+    const sideColor = (side, palette) => {
+      if (!side || !side.style || side.style === 'none') return null;
+      const hex = colorHex(side.color, palette) || '#000000';
+      return hex === DEFAULT_LINE ? null : hex;
+    };
+    return { themePalette, colorHex, sideColor };
+  })();
 
   const underlineOn = value => !!value && value !== 'none';
 
@@ -111,6 +125,11 @@ const GridXlsxImport = (function () {
     const format = v => XlsxNumberFormat.format(v, numFmt, { lang });
     const runsOf = (rich) => rich.map(run => ({ text: run.text || '', fmt: fontFormat(run.font, color) }));
     const link = (href, runs) => (GridTable.isSafeLink(href) ? runs.map(run => Object.assign({}, run, { href: String(href).trim() })) : runs);
+    // Le texte d'un lien : des plages de texte riche, ou le texte seul.
+    const hyperlinkText = (v) => {
+      if (v && typeof v.text === 'object' && v.text) return runsOf(v.text.richText || []);
+      return [{ text: v && v.text !== undefined ? String(v.text) : '' }];
+    };
     const scalar = (v) => {
       if (v === null || v === undefined) return { runs: [], kind: 'text' };
       if (typeof v === 'boolean') return { runs: [{ text: format(v) }], kind: 'bool' };
@@ -122,10 +141,7 @@ const GridXlsxImport = (function () {
     switch (cell.type) {
       case T.Null: case T.Merge: return { runs: [], kind: 'text' };
       case T.RichText: return { runs: runsOf(value.richText || []), kind: 'text' };
-      case T.Hyperlink: {
-        const text = value && typeof value.text === 'object' && value.text ? runsOf(value.text.richText || []) : [{ text: value && value.text !== undefined ? String(value.text) : '' }];
-        return { runs: link(value && value.hyperlink, text), kind: 'text' };
-      }
+      case T.Hyperlink: return { runs: link(value && value.hyperlink, hyperlinkText(value)), kind: 'text' };
       case T.Formula: return scalar(value && value.result);
       case T.Error: return { runs: [{ text: String(value && value.error !== undefined ? value.error : '') }], kind: 'error' };
       default: return scalar(value);
@@ -154,16 +170,6 @@ const GridXlsxImport = (function () {
     return m ? { r1: Number(m[2]), c1: columnNumber(m[1]), r2: Number(m[4]), c2: columnNumber(m[3]) } : null;
   };
 
-  // Le trait fin gris de départ d'une case de grille (celui que js/xlsx-export.js écrit sur les côtés sans couleur choisie,
-  // js/pdf-export.js:TABLE_BORDER_COLOR) : le relire comme une couleur choisie ferait d'une grille exportée puis importée une grille aux traits
-  // « colorés » en gris - qui ne suivraient plus le trait de départ. Un côté sans trait n'a pas de couleur non plus : le trait de départ.
-  const DEFAULT_LINE = '#777777';
-  const sideColor = (side, palette) => {
-    if (!side || !side.style || side.style === 'none') return null;
-    const hex = colorHex(side.color, palette) || '#000000';
-    return hex === DEFAULT_LINE ? null : hex;
-  };
-
   function horizontalAlign(style, kind) {
     const h = style.alignment && style.alignment.horizontal;
     if (h === 'center' || h === 'centerContinuous') return 'center';
@@ -174,12 +180,12 @@ const GridXlsxImport = (function () {
     return kind === 'number' || kind === 'date' ? 'right' : kind === 'bool' || kind === 'error' ? 'center' : null;
   }
 
-  // L'alignement vertical n'est repris que quand le classeur l'écrit : sans lui Excel aligne en bas, mais ce n'est pas un choix, la grille garde
-  // alors le sien (le milieu, GridEditor.DEFAULT_VALIGN).
-  // Toujours écrit, même quand c'est le milieu : une case sans alignement est « neuve » pour l'éditeur, qui lui en pose un par une transaction à
-  // part, une par case : très lent pour un gros classeur.
-  const DEFAULT_VALIGN = 'middle';
   function verticalAlign(style) {
+    // L'alignement vertical n'est repris que quand le classeur l'écrit : sans lui Excel aligne en bas, mais ce n'est pas un choix, la grille garde
+    // alors le sien (le milieu, GridEditor.DEFAULT_VALIGN).
+    // Toujours écrit, même quand c'est le milieu : une case sans alignement est « neuve » pour l'éditeur, qui lui en pose un par une transaction à
+    // part, une par case : très lent pour un gros classeur.
+    const DEFAULT_VALIGN = 'middle';
     const v = style.alignment && style.alignment.vertical;
     return v === 'top' || v === 'bottom' ? v : DEFAULT_VALIGN;
   }
@@ -256,16 +262,17 @@ const GridXlsxImport = (function () {
     return common;
   }
 
-  function buildModel(workbook, options) {
-    const lang = options && options.lang === 'en' ? 'en' : 'fr';
+  // La feuille à lire : `options.sheetIndex`, un rang parmi les feuilles visibles (au-delà, la dernière).
+  function pickSheet(workbook, options) {
     const sheets = visibleSheets(workbook);
     const sheetIndex = Math.max(0, Math.min((options && options.sheetIndex) || 0, Math.max(0, sheets.length - 1)));
     const sheet = sheets[sheetIndex] || workbook.worksheets[0];
     if (!sheet) throw fail('unreadable', 'Le classeur ne contient aucune feuille.'); // un zip qui n'est pas un classeur : ExcelJS le lit sans feuille
-    const palette = themePalette(workbook);
-    const colorOf = c => colorHex(c, palette);
+    return { sheets, sheetIndex, sheet };
+  }
 
-    const merges = ((sheet.model && sheet.model.merges) || []).map(rangeOf).filter(Boolean);
+  // Les lignes et les colonnes de l'étendue utile qui ne sont pas masquées ; rien à montrer, ou trop grand : l'erreur le dit.
+  function shownLines(sheet, palette) {
     const extent = usedExtent(sheet, palette);
     if (!extent.rows || !extent.cols) throw fail('empty', 'La feuille ne contient aucune case.');
     const shownRows = [];
@@ -276,14 +283,16 @@ const GridXlsxImport = (function () {
     if (shownRows.length > MAX_ROWS || shownCols.length > MAX_COLS || shownRows.length * shownCols.length > MAX_CELLS) {
       throw fail('tooBig', 'La feuille est trop grande pour une grille.', { rows: shownRows.length, cols: shownCols.length, maxRows: MAX_ROWS, maxCols: MAX_COLS, maxCells: MAX_CELLS });
     }
-    const { anchors, covered } = mergeLayout(merges, shownRows, shownCols);
+    return { shownRows, shownCols };
+  }
 
-    // Première passe : le contenu de chaque case, pour connaître la taille de texte la plus courante.
+  // Première passe : le contenu de chaque case, pour connaître la taille de texte la plus courante.
+  function readCells(sheet, shown, layout, options) {
     const cells = [];
-    shownRows.forEach((r, row) => shownCols.forEach((c, col) => {
+    shown.shownRows.forEach((r, row) => shown.shownCols.forEach((c, col) => {
       const key = r + ',' + c;
-      if (covered.has(key)) return;
-      const anchor = anchors.get(key);
+      if (layout.covered.has(key)) return;
+      const anchor = layout.anchors.get(key);
       const source = anchor ? sheet.getCell(anchor.m.r1, anchor.m.c1) : sheet.getCell(r, c);
       const style = source.style || {};
       const font = style.font || {};
@@ -292,17 +301,19 @@ const GridXlsxImport = (function () {
         col,
         anchor,
         style,
-        content: contentOf(source, source.numFmt || style.numFmt, { lang, color: colorOf }),
+        content: contentOf(source, source.numFmt || style.numFmt, options),
         size: font.size || DEFAULT_SIZE_PT,
-        base: Object.assign({ bold: false, italic: false, underline: false, strike: false, size: DEFAULT_SIZE_PT }, fontFormat(font, colorOf)),
+        base: Object.assign({ bold: false, italic: false, underline: false, strike: false, size: DEFAULT_SIZE_PT }, fontFormat(font, options.color)),
       });
     }));
-    const baseSize = commonSize(cells);
+    return cells;
+  }
 
-    // Deuxième passe : les cases du modèle, rangées par ligne. Le pourtour d'une case fusionnée : le haut et la gauche de sa case d'angle, la droite
-    // de la dernière colonne de sa première ligne, le bas de la dernière ligne de sa première colonne.
+  // Deuxième passe : les cases du modèle, rangées par ligne. Le pourtour d'une case fusionnée : le haut et la gauche de sa case d'angle, la droite
+  // de la dernière colonne de sa première ligne, le bas de la dernière ligne de sa première colonne.
+  function buildGrid(sheet, cells, rowCount, baseSize, palette) {
     const borderOf = (r, c) => (sheet.getCell(r, c).style || {}).border || {};
-    const grid = shownRows.map(() => []);
+    const grid = Array.from({ length: rowCount }, () => []);
     cells.forEach(({ row, col, anchor, style, content, base }) => {
       const border = style.border || {};
       const m = anchor && anchor.m;
@@ -322,6 +333,18 @@ const GridXlsxImport = (function () {
         },
       });
     });
+    return grid;
+  }
+
+  function buildModel(workbook, options) {
+    const lang = options && options.lang === 'en' ? 'en' : 'fr';
+    const { sheets, sheetIndex, sheet } = pickSheet(workbook, options);
+    const palette = themePalette(workbook);
+    const shown = shownLines(sheet, palette);
+    const { shownRows, shownCols } = shown;
+    const merges = ((sheet.model && sheet.model.merges) || []).map(rangeOf).filter(Boolean);
+    const cells = readCells(sheet, shown, mergeLayout(merges, shownRows, shownCols), { lang, color: c => colorHex(c, palette) });
+    const grid = buildGrid(sheet, cells, shownRows.length, commonSize(cells), palette);
     resolveBorders(grid, shownCols.length);
 
     const props = sheet.properties || {};
