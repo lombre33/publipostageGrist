@@ -89,6 +89,7 @@ const GROUPS = {
   schemaRenames: 'scenarios-schema-renames', // suivi des renommages de tables et de colonnes faits dans Grist : mappeur, réécriture des modèles et des clés de correspondance, lecture seule, modèle affiché (js/schema-renames.js)
   settingsColumns: 'scenarios-settings-columns', // avertissement d'ouverture : Réglages > Accès ou > Selon la ligne cite une colonne (ou la table des droits) qui n'existe plus dans Grist (js/settings-columns.js)
   varZero: 'scenarios-var-zero',
+  varList: 'scenarios-var-list', // listes d'une variable (colonne Liste de choix ou Liste de références) : toutes avec séparateur, première, dernière, n-ième ; moteur, Lecture, lot, barre, fenêtre « Liste » (js/variable-list.js)
   varNumber: 'scenarios-var-number-default',
   varBool: 'scenarios-var-bool', // variable Oui / Non : barre à quatre écritures (trois cases de la liste à cases, vrai / faux), la case en Lecture, PDF (polices de cases), Word, Excel et e-mail, le barré, les champs texte inchangés
   linkConfig: 'scenarios-link-config',
@@ -133,6 +134,7 @@ const NODE_SCRIPTS = {
   wheelScroll: 'verify-wheel-scroll.mjs',
   varToolbarMouse: 'verify-var-toolbar-mouse.mjs',
   varBoolMouse: 'verify-var-bool-mouse.mjs', // barre d'une bulle Oui / Non à la vraie souris : quatre boutons atteignables, bouton enfoncé, Lecture mesurée aux pixels d'une vraie capture ; 700x400 clair, sombre et anglais
+  varListMouse: 'verify-var-list-mouse.mjs', // fenêtre « Liste » d'une variable à la vraie souris et au vrai clavier : bouton de la barre (entre Boucle et Colonne, grisé pour un texte), fenêtre entière dans 700x400, choix, numéro et séparateurs tapés, aperçu, Enregistrer, Lecture, Remettre par défaut, Échap ; clair, sombre et anglais
   condTextMouse: 'verify-cond-text-mouse.mjs', // bloc de texte conditionnel à la vraie souris : liste « # » et Chips, étiquette et barre (icônes grisées aux pixels), fenêtre de condition, blocs emboîtés, texte entouré, Lecture ; 700x400 clair et sombre
   condCheckboxMouse: 'verify-cond-checkbox-mouse.mjs', // case conditionnelle à la vraie souris : liste « # » et Chips, UN clic pose la puce et ouvre sa barre (icônes grisées aux pixels), fenêtre de condition, colonne étroite, Lecture mesurée aux pixels ; 700x400 clair, sombre et anglais
   condValueMouse: 'verify-cond-value-mouse.mjs', // valeur conditionnelle à la vraie souris et au vrai clavier : liste « # » et Chips, frappe dans la valeur, Entrée, flèches qui en sortent et frappe derrière (ou devant) son cadre, Retour arrière et Suppr aux bords, texte vidé sans perdre la valeur, barre et fenêtre de condition, texte sélectionné entouré, Lecture ; 700x400 clair, sombre et anglais, puis 360 px

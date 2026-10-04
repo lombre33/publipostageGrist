@@ -1225,6 +1225,32 @@ const I18n = (function () {
     'settingsColumns.part.columns': { fr: '{title} : {count|la colonne|les colonnes} {names} {count|n’existe|n’existent} plus.', en: '{title}: {count|the column|the columns} {names} {count|no longer exists|no longer exist}.' },
     'settingsColumns.part.table': { fr: '{title} : la table « {name} » n’existe plus.', en: '{title}: the table “{name}” no longer exists.' },
     'settingsColumns.status': { fr: '{parts} À re-choisir dans les Réglages.', en: '{parts} Choose again in Settings.' },
+    // Liste d'une variable (js/variable-list.js, bouton « Liste » de la barre d'une bulle, demande d'Antoine du 2026-10-04) : une colonne Liste de choix ou Liste de références écrit toutes ses
+    // valeurs (avec le séparateur voulu), la première, la dernière ou la n-ième. Les séparateurs sont ceux des boucles (« Séparateur », « Avant la dernière »).
+    'varToolbar.list': { fr: 'Liste : quelles valeurs écrire', en: 'List: which values to write' },
+    'varToolbar.listDisabled': { fr: 'Disponible pour une colonne Liste de choix ou Liste de références', en: 'Available for a Choice List or Reference List column' },
+    'varToolbar.listLoop': { fr: 'La boucle écrit déjà chaque valeur de la liste : retirez-la pour régler la liste', en: 'The loop already writes every value of the list: remove it to set the list' },
+    'varToolbar.listBlock': { fr: 'Disponible pour une variable, pas pour un bloc de texte', en: 'Available for a variable, not for a text block' },
+    'varToolbar.listCheckbox': { fr: 'Disponible pour une variable, pas pour une case conditionnelle', en: 'Available for a variable, not for a conditional checkbox' },
+    'varList.title': { fr: 'Liste', en: 'List' },
+    'varList.intro.choice': { fr: 'contient plusieurs choix. Réglez ce que le document en écrit.', en: 'holds several choices. Set what the document writes from it.' },
+    'varList.intro.ref': { fr: 'contient plusieurs lignes de « {table} ». Réglez ce que le document en écrit.', en: 'holds several rows of “{table}”. Set what the document writes from it.' },
+    'varList.section.pick': { fr: 'Afficher', en: 'Show' },
+    'varList.pick.all': { fr: 'Toutes les valeurs', en: 'All values' },
+    'varList.pick.first': { fr: 'La première', en: 'The first' },
+    'varList.pick.last': { fr: 'La dernière', en: 'The last' },
+    'varList.pick.nth': { fr: 'La n-ième', en: 'The nth' },
+    'varList.separator': { fr: 'Séparateur', en: 'Separator' },
+    'varList.lastSeparator': { fr: 'Avant la dernière', en: 'Before the last' },
+    'varList.lastSeparatorPlaceholder': { fr: 'comme le séparateur', en: 'same as separator' },
+    'varList.separatorHint': { fr: 'espaces comprises', en: 'spaces included' },
+    'varList.number': { fr: 'Numéro', en: 'Number' },
+    'varList.numberHint': { fr: '1 = la première valeur. Sans valeur à ce rang, rien n’est écrit.', en: '1 = the first value. With no value at that position, nothing is written.' },
+    'varList.preview.empty': { fr: 'Ligne sélectionnée (n° {id}) : la liste est vide, le document n’écrit rien.', en: 'Selected row (#{id}): the list is empty, the document writes nothing.' },
+    'varList.preview.values': { fr: 'Ligne sélectionnée (n° {id}) : {count} {count|valeur|valeurs} ({values}). Le document écrit « {text} ».', en: 'Selected row (#{id}): {count} {count|value|values} ({values}). The document writes “{text}”.' },
+    'varList.preview.beyond': { fr: 'Ligne sélectionnée (n° {id}) : {count} {count|valeur|valeurs} ({values}), mais pas de valeur n° {index} : le document n’écrit rien.', en: 'Selected row (#{id}): {count} {count|value|values} ({values}), but no value #{index}: the document writes nothing.' },
+    'varList.reset': { fr: 'Remettre par défaut', en: 'Reset to default' },
+    'varList.saveLost': { fr: 'La variable a été déplacée ou supprimée pendant l’édition : le réglage de la liste n’a pas été enregistré.', en: 'The variable was moved or deleted while editing: the list setting was not saved.' },
   };
 
   let lang = (typeof localStorage !== 'undefined' && localStorage.getItem('pp_lang') === 'en') ? 'en' : 'fr';

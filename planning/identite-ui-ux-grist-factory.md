@@ -174,7 +174,7 @@ entre parenthèses et trois écritures du vide :
 ### Fenêtres : une seule base pour toutes
 Arbitré le 29/09 (« Les dix », en ligne `5fd9409` puis `b78d24f`). Toutes les fenêtres du widget — celles écrites dans
 `index.html` (Réglages, Tables liées, Clé de correspondance, Macro-modèle, Organiser mes modèles, Galerie, Aperçu),
-celles des variables (Condition, Autres attributs, Boucle) et les saisies/confirmations — reposent sur
+celles des variables (Condition, Autres attributs, Boucle, Liste) et les saisies/confirmations — reposent sur
 `js/modal-base.js` et `css/modal-base.css`. Avant : des largeurs de 380 à 960 px sans règle, un voile clair fixe même en
 sombre pour six d'entre elles, un titre qui sortait de l'écran, un clavier qui s'échappait de la fenêtre.
 - **Trois zones** : le titre (fixe), le contenu (la seule zone qui défile), les boutons (fixes : « Fermer », « Annuler »…).
@@ -409,7 +409,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   n'écrit que le nom courant. « Enregistrer sous… » arrive avec le premier nom libre déjà saisi et sélectionné : Entrée suffit, une frappe le remplace. Le coin d'état dit le nom retenu
   (« Ce nom existe déjà : renommé « Rapport (2) ». ») ; enregistrement automatique coupé il garde « Modifications non enregistrées. », le nouveau nom se lit dans le titre. Un modèle
   déjà enregistré qui garde son nom n'est jamais renommé, même s'il a un jumeau d'avant la règle.
-- Variables : cliquer une variable ouvre sa barre flottante (Condition, Autres attributs, Boucle, réglages nombre/date) ;
+- Variables : cliquer une variable ouvre sa barre flottante (Condition, Autres attributs, Boucle, Liste, réglages nombre/date) ;
   en édition, une bulle à condition est en pointillés ; les fenêtres correspondantes reposent sur la base commune. Dans
   une règle, « = » sur une colonne à choix multiples ou une liste de références veut dire « contient ce choix » (arbitré
   le 29/09).
@@ -422,7 +422,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   de page, image flottante à gauche plus haut) lui garde toute la largeur. Un clic dans le texte d'un bloc resté sélectionné y pose le curseur (une bulle, une image et l'étiquette gardent leur clic). Il se délimite sans changer la largeur du texte (cadre en `outline`), dans la direction artistique des
   bulles : fond `#eaf2ff`, texte `#12406b`, liseré `#b7cdf2` en pointillés, plus foncé (`#5b7fc0`) une fois la condition posée, anneau d'accent une fois sélectionné ; l'étiquette dit
   « Si Statut = Urgent » ou « Texte conditionnel · sans condition ». Un clic sur l'étiquette sélectionne le bloc et ouvre la barre flottante des variables : seule la condition
-  d'affichage y sert (même fenêtre que pour une bulle, mêmes colonnes, mêmes liens entre tables) ; « Autres attributs » et « Boucle » n'ont pas d'objet ici, grisés par
+  d'affichage y sert (même fenêtre que pour une bulle, mêmes colonnes, mêmes liens entre tables) ; « Autres attributs », « Boucle » et « Liste » n'ont pas d'objet ici, grisés par
   `aria-disabled` avec leur raison en info-bulle, jamais retirés. Le cadre n'existe que dans l'éditeur : condition remplie, le texte se lit sans cadre ni ligne ajoutée ;
   sinon le bloc et tout ce qu'il contient disparaissent, sans ligne vide, en Lecture, PDF, Word et e-mail (un bloc masqué emporte ceux qu'il contient). Entrée sur un paragraphe
   vide en fin de bloc en sort, comme d'une citation ; Retour arrière sur le bloc sélectionné le supprime avec son contenu. « Défaire le bloc » (choix « Fenêtre » d'Antoine, 01/10) :
@@ -441,7 +441,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   fin de la valeur et ← à son début en sortent sans que le curseur bouge à l'écran, et le texte tapé ensuite se pose là où le curseur est, jamais dedans ou dehors au hasard du navigateur
   (au bord d'un cadre, Chrome choisit seul le côté) ; Retour arrière au début et Suppr à la fin effacent le caractère voisin, comme si la valeur n'était pas là ; vider son texte la laisse
   vide avec sa condition, Retour arrière ou Suppr dans une valeur vide la retire. Un clic dans la valeur ouvre la barre flottante des variables, réduite à la condition d'affichage (même
-  fenêtre que pour une bulle ou un bloc, mêmes colonnes, mêmes liens entre tables) ; « Autres attributs », « Boucle » et « Colonne » n'ont pas d'objet ici, grisés par `aria-disabled` avec leur
+  fenêtre que pour une bulle ou un bloc, mêmes colonnes, mêmes liens entre tables) ; « Autres attributs », « Boucle », « Liste » et « Colonne » n'ont pas d'objet ici, grisés par `aria-disabled` avec leur
   raison en info-bulle, jamais retirés. « Défaire la valeur », dans la fenêtre de condition d'une valeur seulement, retire le cadre et la condition et laisse le texte à sa place (un seul
   Annuler rend la valeur). Condition remplie, le texte se lit sans cadre au fil de la phrase ; sinon la valeur disparaît, le texte autour reste (une valeur masquée emporte celles qu'elle
   contient), en Lecture, PDF, Word, Excel et e-mail. Suivi des modifications : une valeur dont tout le contenu était une suggestion ne laisse pas de cadre vide quand on accepte ou refuse tout.
@@ -474,6 +474,19 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   Word (choix d'Antoine du 01/10, modèles déjà enregistrés compris) ; la barre de la bulle a un seul bouton en bascule,
   icône « 0 » qui devient « Ø » (barré) quand le zéro est masqué : enfoncé = masqué, relâché = « 0 » écrit. Une icône,
   une fonction : pas de menu. Les champs texte et la liste des attributs gardent le 0.
+- Liste d'une variable (demande d'Antoine du 04/10, « un UI simple et efficace pour gérer les listes ») : une bulle sur une colonne Liste de choix ou Liste de références (celle d'une table
+  liée comprise) a son bouton « Liste » dans sa barre flottante, entre « Boucle » et « Colonne » ; icône `varList`, deux crochets autour de trois points (à 2,5 d'écart, les points se lisaient
+  comme un tiret à 15 px). Il ouvre une fenêtre de la base commune (dans 700×400, titre et boutons fixes) : « Afficher », puis quatre choix sur une même ligne, en boutons à la manière de ceux
+  de la Boucle (`aria-pressed`) : « Toutes les valeurs » (celui du départ), « La première », « La dernière » et « La n-ième ». « Toutes les valeurs » montre « Séparateur » (« , » au départ,
+  espaces comprises) et « Avant la dernière » (vide = le même séparateur ; « , » puis « et » écrit « A, B et C ») ; « La n-ième » montre « Numéro » (de 1 à 999, 1 au départ ; sans valeur à ce
+  rang la bulle n'écrit rien) ; la première et la dernière n'ont aucun champ. Les champs sont en grille, l'étiquette puis le champ, et l'indication qui suit commence sous le champ. Dessous, un
+  aperçu d'une ligne, calculé avec le vrai formatage sur la ligne sélectionnée du tableau et mis à jour à chaque frappe (« Ligne sélectionnée (n° 3) : 2 valeurs (A, B). Le document écrit
+  « A et B ». »). Rien n'est écrit dans le modèle avant « Enregistrer » ; Échap et « Annuler » le laissent tel quel ; « Remettre par défaut » (texte rouge sans cadre, à gauche) n'existe que si la
+  bulle a déjà un réglage, il le retire tout de suite. Sans réglage, la bulle écrit exactement ce qu'elle écrivait avant (les valeurs séparées par « , ») : aucun modèle déjà enregistré ne
+  change. Le réglage est une clé du format de la bulle (`format.list`, avec les seules clés qui s'écartent du départ : `pick`, `index`, `separator`, `lastSeparator`) : il allume le point bleu
+  des bulles réglées et vaut partout où la bulle s'écrit (Lecture, PDF, Word, Excel, e-mail, lot). Il suit une colonne remplacée (« Autres attributs », Remplacer) seulement vers une autre
+  colonne liste. Une bulle dans une boucle reçoit déjà une valeur par tour : le réglage n'y servirait à rien, le bouton est grisé (`aria-disabled`, raison en info-bulle) ; il l'est aussi sur
+  une colonne qui n'est pas une liste, un calcul, un bloc de texte conditionnel, une valeur conditionnelle et une case conditionnelle : grisé, jamais retiré.
 - Variable Oui / Non (demande d'Antoine du 01/10) : une bulle sur une colonne Oui / Non a sa propre barre flottante, comme une date ou
   une image, à quatre boutons d'une même rangée : les trois styles de la liste à cases (`accentStrike`, `classic`, `accentPlain`, mêmes
   icônes, mêmes noms que les boutons de la liste) puis « vrai / faux » (« true / false » en interface anglaise). Sans réglage la bulle
@@ -500,8 +513,8 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   Lecture puis son étiquette, « Si Statut = Urgent » ou « sans condition » ; trop longue pour sa case ou sa colonne, elle coupe le milieu de son étiquette par « … », sans déborder ni
   passer à la ligne, et elle n'agrandit pas la ligne. Sa barre : les trois styles de case de la variable Oui / Non (mêmes icônes, mêmes noms, pas de « vrai / faux » : une case est
   toujours une case) et le bouton Condition, qui ouvre la même fenêtre que pour une bulle ou un bloc (mêmes colonnes, mêmes liens entre tables, Copier / Coller entre les trois) sous le
-  titre « Condition de la case », avec « Cocher si » devant la combinaison de plusieurs règles et un aperçu qui dit si la case est cochée pour la ligne courante ; « Autres attributs »
-  et « Boucle » n'ont pas d'objet ici, grisés par `aria-disabled` avec leur raison en info-bulle, jamais retirés. Une case neuve est « accent, texte normal » (les deux styles « accent »
+  titre « Condition de la case », avec « Cocher si » devant la combinaison de plusieurs règles et un aperçu qui dit si la case est cochée pour la ligne courante ; « Autres attributs »,
+  « Boucle » et « Liste » n'ont pas d'objet ici, grisés par `aria-disabled` avec leur raison en info-bulle, jamais retirés. Une case neuve est « accent, texte normal » (les deux styles « accent »
   dessinent la même case, rien n'est barré). Elle se lit cochée quand la condition est remplie pour la ligne affichée
   (pour la ligne du tour dans une zone répétée), décochée sinon, et décochée sans condition ou quand la condition ne se lit plus ; la case est celle de la variable Oui / Non (mêmes
   couleurs, même nom accessible « Coché » / « Décoché ») en Lecture, PDF, Word, Excel et e-mail (« [x] » / « [ ] »).

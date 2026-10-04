@@ -109,6 +109,9 @@ const Icons = (function () {
     // Bouton « Colonne… » de la même barre (js/variable-column.js : changer ou réparer la colonne d'une bulle) : une colonne de tableau avec sa case d'en-tête et les deux chevrons, haut
     // et bas, d'un choix dans une liste.
     varColumn: '<rect x="3" y="3" width="9" height="18" rx="1.5"/><path d="M3 8h9"/><path d="m16 9 2.5-2.5L21 9"/><path d="m16 15 2.5 2.5L21 15"/>',
+    // Bouton « Liste… » de la même barre (js/variable-list.js : quelles valeurs d'une liste le document écrit) : des crochets qui enferment trois valeurs - une liste au sens de la donnée, qui ne
+    // se confond ni avec les puces ni avec les numéros de la barre (une icône ne porte qu'une fonction). Les trois points sont espacés de 3,5 : à 15 px, plus près, ils se fondent en un tiret.
+    varList: '<path d="M6.5 4H3.5v16h3"/><path d="M17.5 4h3v16h-3"/><path d="M8.5 12h.01M12 12h.01M15.5 12h.01"/>',
     // Un 0 (ovale) barré d'un trait (Ø) : bouton « Ne rien afficher si la valeur vaut zéro » de la barre d'un nombre. Le trait (l'unique <path>) est caché par l'attribut
     // `display` quand la bulle affiche le zéro : on ne remplace pas le SVG, la cible d'un clic en train de se produire doit rester dans la barre (cf. wireVariableFloatingToolbar).
     zeroToggle: '<ellipse cx="12" cy="12" rx="5.5" ry="8"/><path d="M5 21 19 3"/>',
