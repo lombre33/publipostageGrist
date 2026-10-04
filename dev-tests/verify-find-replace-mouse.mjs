@@ -10,6 +10,8 @@
 //  - le suivi des modifications allumé : le remplacement devient une suppression et une insertion suggérées, une seule étape d'annulation ;
 //  - Échap ferme et rend le clavier au texte, Ctrl+F reprend le mot sélectionné, Ctrl+H ouvre sur le champ de remplacement ;
 //  - Mode lecture : la barre se ferme et la loupe est grisée ; retour en Mode édition ;
+//  - beaucoup de résultats (3 500) : à la vraie molette puis au clavier, ceux de l'écran sont toujours tous surlignés (même après un long passage sans résultat et après un saut tout
+//    en bas), le surlignage reste borné, le résultat courant est amené à l'écran ;
 //  - l'interface en anglais.
 // Lancé par run-headless.mjs (groupe Node "findReplaceMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-find-replace-mouse.mjs
 // FIND_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans elle, rien n'est écrit.
@@ -415,6 +417,85 @@ async function run(theme) {
   await closePanelIfOpen();
 }
 
+// Beaucoup de résultats : 3 500 « foo » (2 000 en haut, un long passage sans rien, 1 500 en bas). Au-delà de 500 résultats, seuls l'écran et ses abords sont surlignés
+// (js/find-replace.js) : la fenêtre de surlignage doit suivre la vraie molette et les sauts du clavier.
+const bigLine = (i, per) => `<p>Ligne ${i}${per ? ' : ' + Array(per).fill('foo').join(' ') : ' sans rien à trouver'}.</p>`;
+const BIG = Array.from({ length: 400 }, (_, i) => bigLine(i, 5)).join('') + Array.from({ length: 300 }, (_, i) => bigLine(400 + i, 0)).join('') + Array.from({ length: 300 }, (_, i) => bigLine(700 + i, 5)).join('');
+// Les « foo » dont la ligne tient entièrement dans la zone de texte : ceux que le document y met (`expected`), ceux que le DOM surligne (`marked`), et tous les surlignés (`all`).
+const onScreen = () => page.evaluate(() => {
+  const box = document.getElementById('editor-container').getBoundingClientRect();
+  const ed = EditorCore.getEditor();
+  const inside = r => r.top >= box.top + 3 && r.bottom <= box.bottom - 3;
+  const expected = FindReplace.findMatches(ed.state.doc, 'foo', {}).filter(m => inside(ed.view.coordsAtPos(m.from))).length;
+  const marked = Array.from(document.querySelectorAll('.tiptap .pp-find-match')).filter(e => inside(e.getBoundingClientRect())).length;
+  return { expected, marked, all: document.querySelectorAll('.tiptap .pp-find-match').length };
+});
+const scrollInfo = () => page.evaluate(() => { const s = document.getElementById('editor-container'); return { top: Math.round(s.scrollTop), max: Math.round(s.scrollHeight - s.clientHeight) }; });
+async function runManyResults(T) {
+  await resetPanel();
+  await setDoc(BIG);
+  const start = await pointOf('Ligne 0', 0.05);
+  await page.mouse.click(start.x, start.y);
+  await page.waitForTimeout(150);
+  await realClick(LOUPE);
+  await page.keyboard.type('foo');
+  await page.waitForTimeout(400);
+  const typed = Object.assign({ count: await countText(), focus: await focusId() }, await onScreen());
+  check(`${T}, 3 500 résultats : « 1 sur 3500 », tous ceux de l'écran sont surlignés, mais pas les 3 500 (moins de 1 000)`, typed.count === '1 sur 3500' && typed.expected >= 5 && typed.marked >= typed.expected && typed.all < 1000 && typed.focus === 'pp-find-input', typed);
+  await snap(`${T}-7-beaucoup-de-resultats`);
+
+  // La vraie molette, par grands crans : jusqu'au bout du modèle (en traversant le long passage sans résultat), puis en remontant.
+  await page.mouse.move(WIDTH / 2, HEIGHT - 60);
+  const seen = [];
+  let sawEmpty = false;
+  let sawResultsAfterEmpty = false;
+  let broken = null;
+  let widest = 0;
+  for (const [dy, times] of [[1500, 24], [-1500, 24]]) {
+    for (let i = 0; i < times; i++) {
+      await page.mouse.wheel(0, dy);
+      await page.waitForTimeout(110);
+      const s = Object.assign(await scrollInfo(), await onScreen());
+      widest = Math.max(widest, s.all);
+      if (s.expected === 0) sawEmpty = true; else if (sawEmpty) sawResultsAfterEmpty = true;
+      if (!broken && (s.marked < s.expected || s.all >= 1000)) broken = s;
+      if (i % 8 === 7) seen.push(s);
+    }
+  }
+  const end = await scrollInfo();
+  check(`${T}, molette : en descendant jusqu'en bas du modèle puis en remontant, ceux de l'écran restent tous surlignés (y compris après le long passage sans résultat), jamais 1 000 surlignés à la fois`,
+    !broken && sawEmpty && sawResultsAfterEmpty && widest < 1000 && end.top < end.max, { broken, sawEmpty, sawResultsAfterEmpty, widest, end, seen });
+
+  // Le clavier : « précédent » depuis le premier saute au dernier (tout en bas), « suivant » revient au premier (tout en haut) ; le courant est surligné et à l'écran.
+  await page.evaluate(() => { document.getElementById('editor-container').scrollTop = 0; });
+  await realClick(FIND);
+  await pressKey('Control+a');
+  await page.keyboard.type('foo');
+  await page.waitForTimeout(300);
+  await pressKey('Shift+Enter');
+  const last = Object.assign({ count: await countText(), current: await currentText(), visible: await currentVisible() }, await onScreen());
+  await pressKey('Enter');
+  const first = Object.assign({ count: await countText(), current: await currentText(), visible: await currentVisible() }, await onScreen());
+  check(`${T}, Maj+Entrée puis Entrée : « 3500 sur 3500 » tout en bas, puis « 1 sur 3500 » tout en haut ; le résultat courant est orange, dans la zone de texte, et ceux de l'écran restent surlignés`,
+    last.count === '3500 sur 3500' && last.current === 'foo' && last.visible.inside && last.marked >= last.expected && last.expected >= 5 && last.all < 1000
+    && first.count === '1 sur 3500' && first.current === 'foo' && first.visible.inside && first.marked >= first.expected && first.expected >= 5 && first.all < 1000, { last, first });
+
+  // Une lettre de plus (plus aucun résultat), puis on l'efface : les 3 500 reviennent, l'écran est de nouveau surligné.
+  await realClick(FIND);
+  await page.keyboard.type('x');
+  await page.waitForTimeout(250);
+  const none = { count: await countText(), marks: await marksCount() };
+  await pressKey('Backspace');
+  await page.waitForTimeout(250);
+  const back = Object.assign({ count: await countText() }, await onScreen());
+  check(`${T}, une lettre de plus puis Retour arrière : « Aucun résultat » sans surlignage, puis les 3 500 résultats reviennent avec l'écran surligné`,
+    none.count === 'Aucun résultat' && none.marks === 0 && /^\d+ sur 3500$/.test(back.count) && back.marked >= back.expected && back.expected >= 5 && back.all < 1000, { none, back });
+  await pressKey('Escape');
+  const closed = { open: await barOpen(), marks: await marksCount() };
+  check(`${T}, Échap : le surlignage disparaît, la barre se ferme`, !closed.open && closed.marks === 0, closed);
+  await resetPanel();
+}
+
 async function runEnglish() {
   await page.evaluate(() => I18n.setLang('en'));
   await page.waitForTimeout(300);
@@ -461,9 +542,11 @@ async function runEnglish() {
 }
 
 await run('light');
+await runManyResults('light');
 await page.evaluate(() => Settings.setTheme('dark'));
 await page.waitForTimeout(250);
 await run('dark');
+await runManyResults('dark');
 await runEnglish();
 
 check('aucune boîte native (prompt, confirm, alert) ne s’est ouverte', nativeDialogs.length === 0, nativeDialogs);

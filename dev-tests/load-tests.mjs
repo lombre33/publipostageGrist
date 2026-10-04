@@ -378,9 +378,11 @@ async function content(r) {
       const ser = await timed(page, 'const h = Editor.getHTML(); return h.length;');
       r.rec('content', `${sc.label} : sérialisation (enregistrement automatique)`, ser.ms, { budget: 500 });
       if (sc.arg.pages !== undefined && sc.arg.pages >= q(30, 10)) {
-        // Ctrl+F : la première lettre tapée cherche dans tout le document (aucun plafond de correspondances).
-        const fr = await timedPaint(page, 'const ed = EditorCore.getEditor(); const t0 = performance.now(); const n = FindReplace.findMatches(ed.state.doc, arg.q, {}).length; const scan = performance.now() - t0; FindReplace.open(); FindReplace.setQuery(arg.q); return { n, scan };', { q: 'e' });
-        r.rec('content', `${sc.label} : Ctrl+F, première lettre « e » tapée`, fr.ms, { budget: 1500, note: `${fmt(fr.value.n)} correspondances, balayage seul ${Math.round(fr.value.scan)} ms` });
+        // Ctrl+F : la première lettre tapée cherche dans tout le document (aucun plafond de correspondances) ; au-delà de 500 résultats, seuls ceux de l'écran et de ses abords sont surlignés.
+        const fr = await timedPaint(page, 'const ed = EditorCore.getEditor(); const t0 = performance.now(); const n = FindReplace.findMatches(ed.state.doc, arg.q, {}).length; const scan = performance.now() - t0; FindReplace.open(); FindReplace.setQuery(arg.q); return { n, scan, marked: document.querySelectorAll(".tiptap .pp-find-match").length };', { q: 'e' });
+        r.rec('content', `${sc.label} : Ctrl+F, première lettre « e » tapée`, fr.ms, { budget: 500, note: `${fmt(fr.value.n)} correspondances, ${fmt(fr.value.marked)} surlignées, balayage seul ${Math.round(fr.value.scan)} ms` });
+        const typingFind = await measureTyping(page);
+        r.rec('content', `${sc.label} : frappe (par touche, au milieu) avec la recherche ouverte`, typingFind.perKey, { budget: 150, note: `tâches longues : ${Math.round(typingFind.longTaskTotal)} ms au total, ${Math.round(typingFind.longTaskMax)} ms au plus` });
         await page.evaluate(() => { FindReplace.setQuery(''); FindReplace.close(); });
         await sleep(300);
       }

@@ -1,7 +1,7 @@
 // Rechercher / Remplacer dans l'éditeur : un panneau fin entre la barre d'outils et le texte, jamais une fenêtre, pour que le modèle reste visible et
 // modifiable pendant qu'on cherche.
-//  - Rechercher : tous les résultats surlignés, le courant plus marqué, « 3 sur 12 », précédent / suivant (Entrée, Maj+Entrée), « Respecter la casse
-//    » et « Mot entier » ;
+//  - Rechercher : tous les résultats surlignés (au-delà de 500, ceux de l'écran et de ses abords), le courant plus marqué, « 3 sur 12 », précédent
+//    / suivant (Entrée, Maj+Entrée), « Respecter la casse » et « Mot entier » ;
 //  - Remplacer : « Remplacer » remplace le résultat courant puis passe au suivant, « Tout remplacer » les remplace tous. Un remplacement est une
 //    transaction ProseMirror (une seule étape d'annulation, « Tout remplacer » compris) qui garde la mise en forme du texte remplacé et passe par le
 //    mode suivi quand il est actif : l'ancien texte devient une suppression suggérée, le nouveau une insertion suggérée (js/track-changes.js ;
@@ -98,8 +98,16 @@ const FindReplace = (function () {
   // L'état de la recherche
   const META = 'ppFindReplace';
   const MAX_PREFILL = 120; // une sélection plus longue n'est pas un mot à chercher
+  // Un surlignage par résultat, c'est un <span> par résultat à poser (et à recalculer) à chaque lettre tapée : 38 760 pour un « e » dans 120 pages,
+  // plus d'une seconde et demie. Au-delà de ALL_BELOW résultats, seuls ceux de l'écran et de ses abords (`win`) sont surlignés ; le compteur, Entrée
+  // et « Tout remplacer » comptent et parcourent tous les résultats, surlignés ou non.
+  const ALL_BELOW = 500;
+  const MIN_SPAN = 100; // marge de part et d'autre de l'écran : autant de résultats que l'écran en montre, entre MIN_SPAN et MAX_SPAN
+  const MAX_SPAN = 1000;
   const state = { open: false, query: '', replacement: '', matchCase: false, wholeWord: false, replaceVisible: false, flash: '', flashDoc: null };
   let cache = null; // { doc, query, matchCase, wholeWord, matches } : les résultats d'un même document ne se recalculent pas à chaque transaction
+  let win = null; // { from, to } : positions du document que couvre le surlignage quand il y a plus de ALL_BELOW résultats (placeWindow)
+  let windowPending = false;
   let pm = null; // { Plugin, PluginKey, Decoration, DecorationSet } de ProseMirror, fournis par js/editor.js
 
   const editor = () => EditorCore.getEditor();
@@ -112,18 +120,51 @@ const FindReplace = (function () {
     return cache.matches;
   }
 
+  // Premier indice de 0 à `length` pour lequel `test` est vrai (`test` est faux puis vrai : les résultats suivent l'ordre du document), `length` si
+  // aucun : une recherche par dichotomie, qui ne parcourt pas des dizaines de milliers de résultats.
+  function firstWhere(length, test) {
+    let lo = 0;
+    let hi = length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (test(mid)) hi = mid; else lo = mid + 1;
+    }
+    return lo;
+  }
+
   // Indice du résultat que la sélection de l'éditeur recouvre exactement (le « résultat courant »), -1 sinon.
   function indexOfSelection(matches, selection) {
-    return matches.findIndex(m => m.from === selection.from && m.to === selection.to);
+    const at = firstWhere(matches.length, i => matches[i].from >= selection.from);
+    return at < matches.length && matches[at].from === selection.from && matches[at].to === selection.to ? at : -1;
+  }
+
+  // Indices [premier, dernier] des résultats que la fenêtre `win` recouvre (dernier < premier : aucun).
+  function windowRange(matches) {
+    if (!win) return [0, -1];
+    return [firstWhere(matches.length, i => matches[i].to > win.from), firstWhere(matches.length, i => matches[i].from >= win.to) - 1];
   }
 
   // Surlignage et raccourcis (une extension TipTap)
+  // Tant qu'aucune fenêtre n'est posée (le panneau vient de s'ouvrir), les résultats surlignés sont ceux qui entourent la sélection, là où l'on est
+  // le plus souvent ; placeWindow la corrige aussitôt d'après l'écran. Rien n'est mesuré ici : quand ProseMirror demande les décorations, l'écran
+  // montre encore le document d'avant la transaction.
   function decorationsFor(pmState) {
     if (!state.open || !state.query) return null;
     const matches = currentMatches(pmState);
     if (!matches.length) return null;
     const { from, to } = pmState.selection;
-    return pm.DecorationSet.create(pmState.doc, matches.map(m => pm.Decoration.inline(m.from, m.to, { class: m.from === from && m.to === to ? 'pp-find-match pp-find-current' : 'pp-find-match' })));
+    const mark = m => pm.Decoration.inline(m.from, m.to, { class: m.from === from && m.to === to ? 'pp-find-match pp-find-current' : 'pp-find-match' });
+    if (matches.length <= ALL_BELOW) return pm.DecorationSet.create(pmState.doc, matches.map(mark));
+    if (!win) {
+      const near = firstWhere(matches.length, i => matches[i].from >= from);
+      win = { from: matches[Math.max(0, near - MIN_SPAN)].from, to: matches[Math.min(matches.length - 1, near + MIN_SPAN)].to };
+    }
+    const [first, last] = windowRange(matches);
+    const shown = matches.slice(first, last + 1).map(mark);
+    // Le résultat courant se voit toujours, où qu'il soit par rapport à la fenêtre.
+    const current = indexOfSelection(matches, pmState.selection);
+    if (current >= 0 && (current < first || current > last)) shown.push(mark(matches[current]));
+    return pm.DecorationSet.create(pmState.doc, shown);
   }
 
   // pmClasses : { Plugin, PluginKey, Decoration, DecorationSet } (js/editor.js les importe déjà).
@@ -138,10 +179,48 @@ const FindReplace = (function () {
   }
 
   // Redessine le surlignage et le compteur sans toucher au document : une transaction vide, comme partout ailleurs dans l'éditeur (cf. Editor.init,
-  // I18n.onChange).
-  function refresh() {
+  // I18n.onChange). `windowOnly` : la demande vient de placeWindow, qui n'a pas à se remesurer après elle-même.
+  function refresh(windowOnly) {
     const ed = editor();
-    if (ed) ed.view.dispatch(ed.state.tr.setMeta(META, true));
+    if (ed) ed.view.dispatch(ed.state.tr.setMeta(META, windowOnly ? 'window' : true));
+  }
+
+  // Quand il y a plus de ALL_BELOW résultats, la fenêtre de surlignage suit l'écran. Les résultats suivent l'ordre du document, donc leur hauteur :
+  // le premier et le dernier à l'écran se trouvent par dichotomie sur la position de chaque résultat (une vingtaine de mesures chacun), sans
+  // parcourir les milliers de résultats. La fenêtre couvre l'écran plus autant de part et d'autre (entre MIN_SPAN et MAX_SPAN résultats) ; elle ne
+  // bouge que si l'écran s'approche à moins de la moitié de cette marge d'un de ses bords (un défilement ne redessine pas à chaque cran), ou si elle
+  // est devenue bien plus large que l'écran (passage où les résultats sont plus rares). Appelée après chaque transaction (une fois le défilement
+  // qu'elle demande fait) et à chaque défilement de la zone de texte.
+  function placeWindow() {
+    if (!state.open || !state.query) return;
+    const ed = editor();
+    const scroller = document.getElementById('editor-container');
+    if (!ed || !scroller) return;
+    const matches = currentMatches(ed.state);
+    const count = matches.length;
+    if (count <= ALL_BELOW) return;
+    const box = scroller.getBoundingClientRect();
+    if (!box.height) return; // éditeur masqué (Lecture, macro-modèle) : rien à mesurer
+    let failed = false;
+    const rectOf = i => { try { return ed.view.coordsAtPos(matches[i].from); } catch (e) { failed = true; return null; } };
+    // Le premier résultat qui n'est plus au-dessus de l'écran, et le premier qui est passé en dessous.
+    const firstShown = firstWhere(count, i => { const rect = rectOf(i); return !!rect && rect.bottom >= box.top; });
+    const firstBelow = firstWhere(count, i => { const rect = rectOf(i); return !!rect && rect.top > box.bottom; });
+    if (failed) return;
+    const lastShown = Math.max(firstShown, firstBelow - 1);
+    const span = Math.min(MAX_SPAN, Math.max(MIN_SPAN, firstBelow - firstShown));
+    const [first, last] = windowRange(matches);
+    const covers = first <= Math.max(0, firstShown - (span >> 1)) && last >= Math.min(count - 1, lastShown + (span >> 1));
+    if (covers && last - first + 1 <= lastShown - firstShown + 1 + 4 * span) return;
+    win = { from: matches[Math.max(0, firstShown - span)].from, to: matches[Math.min(count - 1, lastShown + span)].to };
+    refresh(true);
+  }
+
+  // Après la transaction en cours, et le défilement qu'elle a pu demander (select, reveal) : la mesure se fait sur l'écran tel qu'il sera.
+  function scheduleWindow() {
+    if (windowPending) return;
+    windowPending = true;
+    queueMicrotask(() => { windowPending = false; placeWindow(); });
   }
 
   // Se placer sur un résultat
@@ -191,6 +270,7 @@ const FindReplace = (function () {
   function applyQuery() {
     const ed = editor();
     if (!ed) return;
+    win = null; // d'autres résultats : la fenêtre de surlignage se repose autour de la sélection, puis d'après l'écran (placeWindow)
     state.flash = '';
     const matches = state.query ? currentMatches(ed.state) : [];
     const { from, to } = ed.state.selection;
@@ -342,6 +422,7 @@ const FindReplace = (function () {
 
     bar.append(findRow, replaceRow);
     container.parentNode.insertBefore(bar, container);
+    container.addEventListener('scroll', placeWindow, { passive: true });
     refs = { toggle, find, count, prev, next, matchCase, wholeWord, close, replaceRow, replacement, one, all };
     wirePanel();
     applyTexts();
@@ -502,6 +583,7 @@ const FindReplace = (function () {
   function closePanel(options) {
     if (!state.open) return;
     state.open = false;
+    win = null;
     if (bar) bar.hidden = true;
     updateToolbarButton(false);
     const ed = editor();
@@ -523,7 +605,11 @@ const FindReplace = (function () {
   }
 
   function wireEditor(ed) {
-    ed.on('transaction', () => { if (state.open) updateCount(); });
+    ed.on('transaction', ({ transaction }) => {
+      if (!state.open) return;
+      updateCount();
+      if (!transaction || transaction.getMeta(META) !== 'window') scheduleWindow();
+    });
     document.addEventListener('keydown', onDocumentKeydown);
   }
 

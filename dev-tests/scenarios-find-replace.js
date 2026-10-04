@@ -6,6 +6,8 @@
 //     fermeture (Échap, la sélection reste), fermeture seule quand l'éditeur est masqué, textes français et anglais ;
 //  3) le REMPLACEMENT : « Remplacer » puis le suivant, « Tout remplacer », UNE étape d'annulation chacun, mise en forme gardée (gras, couleur, lien), remplacement vide, mode suivi
 //     (suppression + insertion suggérées, Tout accepter / Tout refuser), cases de tableau et listes, aucune modification du modèle tant qu'on ne fait que chercher.
+//  4) BEAUCOUP DE RÉSULTATS : jusqu'à 500 tous sont surlignés ; au-delà, seuls ceux de l'écran et de ses abords le sont (le courant toujours), la fenêtre suit le défilement et les
+//     sauts d'un résultat à l'autre, et le compteur comme « Tout remplacer » gardent tous les résultats.
 // La frappe réelle (vrai clavier, vraie souris, 700x400, clair et sombre, anglais) est dans dev-tests/verify-find-replace-mouse.mjs : un KeyboardEvent synthétique n'est pas un geste
 // « trusted ». Aucun caractère spécial n'est écrit en séquence d'échappement dans ce fichier (String.fromCharCode) : un outil d'édition les remplace par le caractère lui-même.
 (function () {
@@ -577,6 +579,160 @@
       undoOnce(); await sleep(80);
       const left = parse(Editor.getHTML()).querySelectorAll('ins').length;
       return { pass: replaced === 150 && pairs === 150 && left === 0 && ms < 8000, notes: JSON.stringify({ replaced, pairs, left, ms }) };
+    });
+
+  // === 4) Beaucoup de résultats ============================================================================================================================================
+  // Un <span> par résultat se paie à chaque lettre tapée : au-delà de ALL_BELOW (500) résultats, js/find-replace.js ne surligne que l'écran et ses abords.
+  const scroller = () => document.getElementById('editor-container');
+  const frames = async () => { for (let i = 0; i < 2; i++) await new Promise(r => requestAnimationFrame(() => r())); await sleep(30); };
+  // `lines` paragraphes d'une ligne chacun, `perLine` « foo » par ligne (ou aucun : un passage sans résultat).
+  const lines = (count, perLine, from) => Array.from({ length: count }, (_, i) => '<p>Ligne ' + ((from || 0) + i) + (perLine ? ' : ' + Array.from({ length: perLine }, () => 'foo').join(' ') : ' sans rien à trouver') + '.</p>').join('');
+  // 3 500 résultats : 2 000 en haut, un long passage sans rien, 1 500 en bas.
+  const bigDoc = () => lines(400, 5) + lines(300, 0, 400) + lines(300, 5, 700);
+  const marksIn = () => tiptap().querySelectorAll('.pp-find-match').length;
+  // Les résultats dont la ligne tient entièrement dans la zone de texte visible : combien le document en met là (`expected`), combien le DOM en surligne (`marked`).
+  function onScreen(query) {
+    const box = scroller().getBoundingClientRect();
+    const inside = r => r.top >= box.top + 3 && r.bottom <= box.bottom - 3;
+    const expected = find(query).filter(m => inside(ed().view.coordsAtPos(m.from))).length;
+    const marked = Array.from(tiptap().querySelectorAll('.pp-find-match')).filter(e => inside(e.getBoundingClientRect())).length;
+    return { expected, marked, all: marksIn() };
+  }
+  const currentOnScreen = () => {
+    const cur = tiptap().querySelector('.pp-find-current');
+    if (!cur) return false;
+    const box = scroller().getBoundingClientRect();
+    const r = cur.getBoundingClientRect();
+    return r.top >= box.top && r.bottom <= box.bottom;
+  };
+  const scrollToFraction = async fraction => {
+    const s = scroller();
+    s.scrollTop = (s.scrollHeight - s.clientHeight) * fraction;
+    await frames();
+  };
+  const BOUND = 1000; // bien moins que les 3 500 résultats : ce que l'écran montre, plus de quoi défiler un peu
+
+  scenario('fr_many_results_highlight_the_screen_and_its_surroundings_only',
+    'Beaucoup de résultats : 3 500 « foo » sont comptés, mais seuls ceux de l\'écran et de ses abords sont surlignés (moins de 1 000, tous ceux de l\'écran, le courant en orange)',
+    async h => {
+      await begin(h, bigDoc());
+      scroller().scrollTop = 0;
+      FindReplace.open({ replace: false });
+      FindReplace.setQuery('foo');
+      await frames();
+      const shown = onScreen('foo');
+      const current = tiptap().querySelectorAll('.pp-find-current').length;
+      const pass = countText() === '1 sur 3500' && shown.expected >= 5 && shown.marked >= shown.expected && shown.all >= shown.marked && shown.all < BOUND && current === 1;
+      return { pass, notes: JSON.stringify({ count: countText(), shown, current }) };
+    });
+
+  scenario('fr_many_results_follow_the_screen_when_scrolling_and_jumping',
+    'Beaucoup de résultats : en défilant (quart du modèle, long passage sans résultat, bas), puis en sautant au dernier résultat et au premier, ceux de l\'écran restent tous surlignés et le surlignage reste borné',
+    async h => {
+      await begin(h, bigDoc());
+      scroller().scrollTop = 0;
+      FindReplace.open({ replace: false });
+      FindReplace.setQuery('foo');
+      await frames();
+      const steps = [];
+      for (const [label, fraction] of [['quart', 0.2], ['passage vide', 0.55], ['bas', 0.97], ['haut', 0.02]]) {
+        await scrollToFraction(fraction);
+        steps.push(Object.assign({ label }, onScreen('foo')));
+      }
+      // Le passage sans résultat ne montre rien ; les autres endroits montrent des résultats, tous surlignés.
+      const stepsOk = steps.every(s => s.marked >= s.expected && s.all < BOUND) && steps[1].expected === 0 && steps.filter(s => s.label !== 'passage vide').every(s => s.expected >= 5);
+      // Depuis le premier résultat, « précédent » saute au dernier (tout en bas), « suivant » revient au premier (tout en haut) : le courant est surligné et à l'écran.
+      selectRange(1, 1);
+      FindReplace.setQuery('foo');
+      await frames();
+      FindReplace.prev();
+      await frames();
+      const last = Object.assign({ count: countText(), current: currentOnScreen() }, onScreen('foo'));
+      FindReplace.next();
+      await frames();
+      const first = Object.assign({ count: countText(), current: currentOnScreen() }, onScreen('foo'));
+      const jumpsOk = last.count === '3500 sur 3500' && last.current && last.marked >= last.expected && last.all < BOUND
+        && first.count === '1 sur 3500' && first.current && first.marked >= first.expected && first.all < BOUND;
+      return { pass: stepsOk && jumpsOk, notes: JSON.stringify({ steps, last, first }) };
+    });
+
+  scenario('fr_many_results_follow_an_edit_in_the_text',
+    'Beaucoup de résultats : une lettre tapée dans le texte, panneau ouvert, laisse les résultats de l\'écran surlignés (sur le bon texte) et le compteur à jour',
+    async h => {
+      await begin(h, bigDoc());
+      scroller().scrollTop = 0;
+      FindReplace.open({ replace: false });
+      FindReplace.setQuery('foo');
+      await scrollToFraction(0.8);
+      const box = scroller().getBoundingClientRect();
+      const visible = find('foo').filter(m => { const r = ed().view.coordsAtPos(m.from); return r.top >= box.top + 3 && r.bottom <= box.bottom - 3; });
+      // Un « foo » de plus devant le premier de l'écran : tout ce qui suit se décale de quatre positions, la fenêtre de surlignage avec.
+      ed().view.dispatch(ed().state.tr.insertText('foo ', visible[0].from));
+      await frames();
+      const after = onScreen('foo');
+      const texts = Array.from(tiptap().querySelectorAll('.pp-find-match')).map(e => e.textContent.toLowerCase());
+      const pass = after.marked >= after.expected && after.expected >= 5 && after.all < BOUND && texts.every(t => t === 'foo') && countText() === '1 sur 3501';
+      return { pass, notes: JSON.stringify({ after, count: countText(), odd: texts.filter(t => t !== 'foo').slice(0, 5) }) };
+    });
+
+  scenario('fr_many_results_follow_a_template_change',
+    'Beaucoup de résultats : charger un autre modèle, panneau ouvert, surligne ce qui est à l\'écran même quand les mêmes positions du document tombent ailleurs (lignes plus courtes)',
+    async h => {
+      await begin(h, lines(1000, 5));
+      scroller().scrollTop = 0;
+      FindReplace.open({ replace: false });
+      FindReplace.setQuery('foo');
+      await scrollToFraction(0.5);
+      const before = onScreen('foo');
+      // 1 000 lignes encore, mais bien plus courtes : la fenêtre de surlignage, en positions du document, tombe maintenant sur d'autres lignes que celles de l'écran.
+      Editor.setHTML(lines(1000, 1));
+      await frames();
+      const after = onScreen('foo');
+      const pass = before.expected >= 5 && before.marked >= before.expected && before.all < BOUND && after.expected >= 5 && after.marked >= after.expected && after.all < BOUND && /1000/.test(countText()) && barOpen();
+      return { pass, notes: JSON.stringify({ before, after, count: countText(), scrollTop: scroller().scrollTop }) };
+    });
+
+  scenario('fr_many_results_are_all_replaced_not_only_the_highlighted',
+    'Beaucoup de résultats : « Remplacer » passe au suivant, « Tout remplacer » remplace les 3 499 autres (pas seulement ceux qui sont surlignés) en une étape d\'annulation que « Annuler » défait',
+    async h => {
+      await begin(h, bigDoc());
+      scroller().scrollTop = 0;
+      selectRange(1, 1);
+      FindReplace.open({ replace: true });
+      FindReplace.setReplacement('bar');
+      FindReplace.setQuery('foo');
+      await frames();
+      FindReplace.replaceCurrent();
+      await frames();
+      const afterOne = { count: countText(), foo: find('foo').length };
+      await sleep(600); // plus de 500 ms entre les deux : l'historique ne les groupe pas en une seule étape d'annulation
+      const replaced = FindReplace.replaceAll();
+      await frames();
+      const afterAll = { replaced, foo: find('foo').length, bar: find('bar').length, marks: marksIn(), count: countText() };
+      undoOnce();
+      await frames();
+      const undone = { foo: find('foo').length, bar: find('bar').length };
+      const pass = afterOne.count === '1 sur 3499' && afterOne.foo === 3499 && afterAll.replaced === 3499 && afterAll.foo === 0 && afterAll.bar === 3500 && afterAll.marks === 0 && afterAll.count === '3499 remplacements'
+        && undone.foo === 3499 && undone.bar === 1;
+      return { pass, notes: JSON.stringify({ afterOne, afterAll, undone }) };
+    });
+
+  scenario('fr_results_up_to_500_are_all_highlighted_even_off_screen',
+    'Peu de résultats : jusqu\'à 500, tous sont surlignés (même hors de l\'écran) ; à 501, seuls l\'écran et ses abords le sont',
+    async h => {
+      await begin(h, lines(500, 1));
+      scroller().scrollTop = 0;
+      FindReplace.open({ replace: false });
+      FindReplace.setQuery('foo');
+      await frames();
+      const five = { count: countText(), marks: marksIn() };
+      await begin(h, lines(501, 1));
+      scroller().scrollTop = 0;
+      FindReplace.setQuery('foo');
+      await frames();
+      const more = { count: countText(), marks: marksIn(), shown: onScreen('foo') };
+      const pass = five.marks === 500 && five.count === '1 sur 500' && more.count === '1 sur 501' && more.marks > 0 && more.marks < 501 && more.shown.marked >= more.shown.expected && more.shown.expected >= 5;
+      return { pass, notes: JSON.stringify({ five, more }) };
     });
 
   // === Contrastes du panneau et du surlignage (F5 : 4,5:1 au moins, clair et sombre) ==========================================================================================
