@@ -42,6 +42,134 @@ const MailtoExport = (function () {
     return BULLET_MARKERS[listEl.getAttribute('data-bullet-style')] || BULLET_MARKERS.disc;
   }
 
+  // Un lien : en texte brut il n'y a plus de cible cliquable, l'adresse s'écrit donc à la suite du texte, entre parenthèses (« le site
+  // (https://exemple.fr) »), sauf si le texte est déjà l'adresse (avec ou sans « https:// »), qui n'est alors écrite qu'une fois. Un lien sans
+  // texte donne son adresse seule.
+  function linkAsText(text, href) {
+    const target = href.replace(/^(?:mailto|tel):/i, '');
+    const shown = text.trim();
+    if (!shown) return target;
+    const bare = value => value.replace(/^https?:\/\//i, '').replace(/\/$/, '').toLowerCase();
+    return bare(shown) === bare(target) ? text : `${text} (${target})`;
+  }
+
+  // Les balises dont rien ne s'écrit : aucune image possible en texte brut ; <style> et <script> ne sont jamais destinés à l'utilisateur (par
+  // exemple le <style> que l'aperçu A4 paginé de ReaderMode injecte dans .reader-content) : à ignorer partout, jamais à extraire comme texte.
+  const IGNORED_TAGS = new Set(['IMG', 'STYLE', 'SCRIPT']);
+
+  // Un paragraphe, un titre ou un bloc de code qui en suit un autre dans le même bloc (citation de deux paragraphes, item de liste suivi d'un bloc
+  // de code) commence sa propre ligne.
+  const isLineBlock = node => node.nodeType === Node.ELEMENT_NODE && /^(P|DIV|H[1-6]|PRE)$/.test(node.tagName);
+
+  // Une liste ou une citation dans un item, une citation ou une case : ses lignes sont écrites sur de nouvelles lignes, à la suite du texte qui les
+  // précède (le retrait vient de l'appelant).
+  const endLine = out => (out === '' || out.endsWith('\n') ? out : out + '\n');
+
+  // Les lignes d'une liste ou d'une citation (null pour tout autre élément).
+  const listOrQuoteText = el => (el.tagName === 'UL' || el.tagName === 'OL' ? listLines(el).join('\n') : el.tagName === 'BLOCKQUOTE' ? quoteText(el) : null);
+
+  // Le texte d'un élément en ligne qui s'écrit autrement que son contenu : un lien (son adresse à la suite du texte), une note de bas de page, la
+  // case d'une variable Oui / Non ; null pour tout autre élément.
+  function specialInlineText(child) {
+    if (child.tagName === 'A') {
+      const href = HtmlSanitize.safeLinkHref(child.getAttribute('href'));
+      if (href) return linkAsText(inlineText(child), href);
+    }
+    // Note de bas de page : sans pied de page en texte brut, la note est écrite à la suite, entre parenthèses, plutôt que perdue.
+    if (child.classList && child.classList.contains('footnote-ref-marker')) {
+      const text = (child.getAttribute('data-note-text') || '').trim();
+      return text ? ` (${text})` : '';
+    }
+    // Case à cocher d'une variable Oui / Non (js/reader-mode.js:checkboxNode) : « [x] » / « [ ] », comme celle d'un item de liste à cases
+    // (listMarker).
+    if (child.classList && child.classList.contains('resolved-checkbox')) return child.getAttribute('data-checked') === 'true' ? '[x]' : '[ ]';
+    return null;
+  }
+
+  // Ajoute à `acc.out` le texte d'un enfant d'un nœud en ligne ; `acc.sawLineBlock` : un paragraphe, titre ou bloc de code a déjà été écrit dans ce
+  // nœud.
+  function appendInlineChild(acc, child) {
+    if (child.nodeType === Node.TEXT_NODE) { acc.out += child.textContent; return; }
+    if (child.nodeType !== Node.ELEMENT_NODE) return;
+    if (isLineBlock(child)) { if (acc.sawLineBlock) acc.out += '\n'; acc.sawLineBlock = true; }
+    if (child.tagName === 'BR') { acc.out += '\n'; return; }
+    const nested = listOrQuoteText(child);
+    if (nested !== null) {
+      if (nested) { acc.out = endLine(acc.out) + nested + '\n'; acc.sawLineBlock = false; }
+      return;
+    }
+    const special = specialInlineText(child);
+    if (special !== null) { acc.out += special; return; }
+    if (IGNORED_TAGS.has(child.tagName)) return;
+    acc.out += inlineText(child);
+  }
+
+  // Le texte d'un nœud en ligne : seul <br> est un retour à la ligne dur, toute mise en forme est ignorée (aucune ne survit en texte brut).
+  function inlineText(node) {
+    const acc = { out: '', sawLineBlock: false };
+    node.childNodes.forEach(child => appendInlineChild(acc, child));
+    return acc.out;
+  }
+
+  // Une liste à puces, numérotée ou à cases : un signe texte devant chaque item. Les lignes d'un item qui suivent la première (un second
+  // paragraphe, un retour à la ligne, un bloc de code) et ses sous-listes se placent sous son texte, après la largeur du signe : « 10. » pousse
+  // plus loin que « • ». Les lignes d'une sous-liste, écrites sans retrait par l'appel récursif de inlineText, reçoivent ainsi le leur de leur item
+  // parent.
+  function listLines(listEl) {
+    const lines = [];
+    let position = 0;
+    Array.from(listEl.children).forEach(li => {
+      if (li.tagName !== 'LI') return;
+      const marker = listMarker(listEl, li, position++);
+      const pad = ' '.repeat(marker.length);
+      inlineText(li).trim().split('\n').forEach((line, index) => lines.push(((index === 0 ? marker : pad) + line).replace(/[ \t]+$/, '')));
+    });
+    return lines;
+  }
+
+  // Une citation : « > » devant chaque ligne, une ligne vide de la citation garde son « > » seul ; les blocs qu'elle contient s'écrivent comme
+  // ailleurs (listes comprises), donc une citation dans une citation devient « >> ».
+  function quoteText(node) {
+    const inner = inlineText(node).trim();
+    if (!inner) return '';
+    return inner.split('\n').map(line => (line.trim() === '' ? '>' : (line.startsWith('>') ? '>' : '> ') + line)).join('\n');
+  }
+
+  // Les blocs d'un conteneur, dans l'ordre, ajoutés à `blocks` : le corps du document, et l'intérieur d'un encadré (js/callout.js), qui n'a ni fond
+  // ni barre en texte brut - ses blocs s'écrivent comme ceux du corps, listes comprises.
+  function collectBlocks(container, blocks) {
+    container.childNodes.forEach(node => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const text = node.textContent.trim();
+        if (text) blocks.push(text);
+        return;
+      }
+      if (node.nodeType !== Node.ELEMENT_NODE) return;
+      const tag = node.tagName;
+      const nested = listOrQuoteText(node);
+      if (nested !== null) { blocks.push(nested); return; }
+      if (/^H[1-6]$/.test(tag) || tag === 'P') { blocks.push(inlineText(node).trim()); return; }
+      // Bloc de code : son texte tel quel, lignes et retraits gardés (seuls les retours à la ligne de tête et de queue partent, jamais
+      // l'indentation de la première ligne).
+      if (tag === 'PRE') { blocks.push((node.textContent || '').replace(/^\n+|\s+$/g, '')); return; }
+      if (node.classList.contains('callout')) { collectBlocks(node, blocks); return; }
+      if (tag === 'HR') { blocks.push('---'); return; }
+      if (IGNORED_TAGS.has(tag)) return;
+      if (tag === 'TABLE') {
+        // Dégradation minimale (le bouton Tableau est grisé en mode email, ce cas ne devrait survenir qu'après un collage) : une ligne par ligne de
+        // tableau, cellules séparées par « | ».
+        const rows = Array.from(node.querySelectorAll('tr')).map(tr =>
+          Array.from(tr.querySelectorAll('td, th')).map(cell => inlineText(cell).trim()).join(' | ')
+        );
+        blocks.push(rows.join('\n'));
+        return;
+      }
+      // Repli générique (zone 2-colonnes, autre bloc non prévu ci-dessus) : le texte est extrait plutôt que perdu.
+      const text = inlineText(node).trim();
+      if (text) blocks.push(text);
+    });
+  }
+
   // Le HTML déjà résolu (plus aucune bulle #Variable : il est passé par la même résolution que le mode Lecture, ReaderMode.render()) en texte brut
   // pour un corps mailto. Un sérialiseur à part, pas une extension de celui du PDF. Paragraphes et titres : une ligne, une ligne vide entre deux
   // blocs ; listes : le signe de l'éditeur devant chaque item (puce, numéro, case), les lignes qui suivent et les sous-listes alignées sous le texte
@@ -51,127 +179,8 @@ const MailtoExport = (function () {
     const holder = document.createElement('template'); // inerte : le HTML se lit sans que rien ne charge ni ne s'exécute
     holder.innerHTML = html || '';
     const root = holder.content;
-
-    // Un lien : en texte brut il n'y a plus de cible cliquable, l'adresse s'écrit donc à la suite du texte, entre parenthèses (« le site
-    // (https://exemple.fr) »), sauf si le texte est déjà l'adresse (avec ou sans « https:// »), qui n'est alors écrite qu'une fois. Un lien sans
-    // texte donne son adresse seule.
-    function linkAsText(text, href) {
-      const target = href.replace(/^(?:mailto|tel):/i, '');
-      const shown = text.trim();
-      if (!shown) return target;
-      const bare = value => value.replace(/^https?:\/\//i, '').replace(/\/$/, '').toLowerCase();
-      return bare(shown) === bare(target) ? text : `${text} (${target})`;
-    }
-
-    // Les balises dont rien ne s'écrit : aucune image possible en texte brut ; <style> et <script> ne sont jamais destinés à l'utilisateur (par
-    // exemple le <style> que l'aperçu A4 paginé de ReaderMode injecte dans .reader-content) : à ignorer partout, jamais à extraire comme texte.
-    const IGNORED_TAGS = new Set(['IMG', 'STYLE', 'SCRIPT']);
-
-    // Un paragraphe, un titre ou un bloc de code qui en suit un autre dans le même bloc (citation de deux paragraphes, item de liste suivi d'un bloc
-    // de code) commence sa propre ligne.
-    const isLineBlock = node => node.nodeType === Node.ELEMENT_NODE && /^(P|DIV|H[1-6]|PRE)$/.test(node.tagName);
-
-    // Une liste ou une citation dans un item, une citation ou une case : ses lignes sont écrites sur de nouvelles lignes, à la suite du texte qui les
-    // précède (le retrait vient de l'appelant).
-    const endLine = out => (out === '' || out.endsWith('\n') ? out : out + '\n');
-
-    // Les lignes d'une liste ou d'une citation (null pour tout autre élément).
-    const listOrQuoteText = el => (el.tagName === 'UL' || el.tagName === 'OL' ? listLines(el).join('\n') : el.tagName === 'BLOCKQUOTE' ? quoteText(el) : null);
-
-    // Le texte d'un nœud en ligne : seul <br> est un retour à la ligne dur, toute mise en forme est ignorée (aucune ne survit en texte brut).
-    function inlineText(node) {
-      let out = '';
-      let sawLineBlock = false;
-      node.childNodes.forEach(child => {
-        if (child.nodeType === Node.TEXT_NODE) { out += child.textContent; return; }
-        if (child.nodeType !== Node.ELEMENT_NODE) return;
-        if (isLineBlock(child)) { if (sawLineBlock) out += '\n'; sawLineBlock = true; }
-        if (child.tagName === 'BR') { out += '\n'; return; }
-        const nested = listOrQuoteText(child);
-        if (nested !== null) {
-          if (nested) { out = endLine(out) + nested + '\n'; sawLineBlock = false; }
-          return;
-        }
-        if (child.tagName === 'A') {
-          const href = HtmlSanitize.safeLinkHref(child.getAttribute('href'));
-          if (href) { out += linkAsText(inlineText(child), href); return; }
-        }
-        // Note de bas de page : sans pied de page en texte brut, la note est écrite à la suite, entre parenthèses, plutôt que perdue.
-        if (child.classList && child.classList.contains('footnote-ref-marker')) {
-          const text = (child.getAttribute('data-note-text') || '').trim();
-          out += text ? ` (${text})` : '';
-          return;
-        }
-        // Case à cocher d'une variable Oui / Non (js/reader-mode.js:checkboxNode) : « [x] » / « [ ] », comme celle d'un item de liste à cases
-        // (listMarker).
-        if (child.classList && child.classList.contains('resolved-checkbox')) { out += child.getAttribute('data-checked') === 'true' ? '[x]' : '[ ]'; return; }
-        if (IGNORED_TAGS.has(child.tagName)) return;
-        out += inlineText(child);
-      });
-      return out;
-    }
-
-    // Une liste à puces, numérotée ou à cases : un signe texte devant chaque item. Les lignes d'un item qui suivent la première (un second
-    // paragraphe, un retour à la ligne, un bloc de code) et ses sous-listes se placent sous son texte, après la largeur du signe : « 10. » pousse
-    // plus loin que « • ». Les lignes d'une sous-liste, écrites sans retrait par l'appel récursif de inlineText, reçoivent ainsi le leur de leur item
-    // parent.
-    function listLines(listEl) {
-      const lines = [];
-      let position = 0;
-      Array.from(listEl.children).forEach(li => {
-        if (li.tagName !== 'LI') return;
-        const marker = listMarker(listEl, li, position++);
-        const pad = ' '.repeat(marker.length);
-        inlineText(li).trim().split('\n').forEach((line, index) => lines.push(((index === 0 ? marker : pad) + line).replace(/[ \t]+$/, '')));
-      });
-      return lines;
-    }
-
-    // Une citation : « > » devant chaque ligne, une ligne vide de la citation garde son « > » seul ; les blocs qu'elle contient s'écrivent comme
-    // ailleurs (listes comprises), donc une citation dans une citation devient « >> ».
-    function quoteText(node) {
-      const inner = inlineText(node).trim();
-      if (!inner) return '';
-      return inner.split('\n').map(line => (line.trim() === '' ? '>' : (line.startsWith('>') ? '>' : '> ') + line)).join('\n');
-    }
-
     const blocks = [];
-    // Les blocs d'un conteneur, dans l'ordre : le corps du document, et l'intérieur d'un encadré (js/callout.js), qui n'a ni fond ni barre en texte
-    // brut - ses blocs s'écrivent comme ceux du corps, listes comprises.
-    function collectBlocks(container) {
-      container.childNodes.forEach(node => {
-        if (node.nodeType === Node.TEXT_NODE) {
-          const text = node.textContent.trim();
-          if (text) blocks.push(text);
-          return;
-        }
-        if (node.nodeType !== Node.ELEMENT_NODE) return;
-        const tag = node.tagName;
-        const nested = listOrQuoteText(node);
-        if (nested !== null) { blocks.push(nested); return; }
-        if (/^H[1-6]$/.test(tag) || tag === 'P') { blocks.push(inlineText(node).trim()); return; }
-        // Bloc de code : son texte tel quel, lignes et retraits gardés (seuls les retours à la ligne de tête et de queue partent, jamais
-        // l'indentation de la première ligne).
-        if (tag === 'PRE') { blocks.push((node.textContent || '').replace(/^\n+|\s+$/g, '')); return; }
-        if (node.classList.contains('callout')) { collectBlocks(node); return; }
-        if (tag === 'HR') { blocks.push('---'); return; }
-        if (IGNORED_TAGS.has(tag)) return;
-        if (tag === 'TABLE') {
-          // Dégradation minimale (le bouton Tableau est grisé en mode email, ce cas ne devrait survenir qu'après un collage) : une ligne par ligne de
-          // tableau, cellules séparées par « | ».
-          const rows = Array.from(node.querySelectorAll('tr')).map(tr =>
-            Array.from(tr.querySelectorAll('td, th')).map(cell => inlineText(cell).trim()).join(' | ')
-          );
-          blocks.push(rows.join('\n'));
-          return;
-        }
-        // Repli générique (zone 2-colonnes, autre bloc non prévu ci-dessus) : le texte est extrait plutôt que perdu.
-        const text = inlineText(node).trim();
-        if (text) blocks.push(text);
-      });
-    }
-    collectBlocks(root);
-
+    collectBlocks(root, blocks);
     return blocks.filter(b => b.length > 0).join('\n\n');
   }
 
