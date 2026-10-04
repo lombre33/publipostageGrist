@@ -1,23 +1,27 @@
 // Guide de la Lecture sans ligne (demande d'Antoine du 2026-10-04 : « en mode lecture, quand le widget n'a pas le select by de configuré, il affiche "Aucune ligne sélectionnée" : il faudrait guider
 // l'utilisateur proprement sur ce qu'il faut faire, avec du texte et des captures d'écran, au lieu de ce message »).
 // - Quand : js/reader-mode.js:render() n'a aucune ligne à montrer. Widget relié à une autre vue (GristAPI.getLinkState() = 'linked') : rien à régler, il reste un clic à faire, donc le court message d'avant
-//   (« Aucune ligne sélectionnée » et son indication). Sinon - « Sélectionner par » vide ('unlinked'), ou version de Grist qui ne le dit pas ('unknown') - le guide : trois étapes (mettre le tableau sur la
-//   page, relier le widget par « Sélectionner par », cliquer sur une ligne), chacune avec sa capture aux repères numérotés. Dans l'état 'unknown' une dernière ligne dit quoi faire si le widget est déjà relié.
+//   (« Aucune ligne sélectionnée » et son indication). Sinon - « Sélectionner par » vide ('unlinked'), ou version de Grist qui ne le dit pas ('unknown') - le guide : quatre étapes (donner l'accès complet au
+//   widget, mettre le tableau sur la page, relier le widget par « Sélectionner par », cliquer sur une ligne), chacune avec sa capture aux repères numérotés. L'étape de l'accès complet vient de la demande
+//   d'Antoine du 2026-10-04 (« il faut également préciser qu'il faut donner les fulls acces au widget avec screen comme pour le reste ») : sans lui Grist n'envoie aucune ligne au widget. La dernière dit
+//   d'abord d'ajouter une ligne quand le tableau est vide (choix d'Antoine du 2026-10-04, carte « Dire d'ajouter une ligne si le tableau est vide ? »). Dans l'état 'unknown' une dernière ligne dit quoi
+//   faire si le widget est déjà relié.
 // - Il se tient à jour sans recharger : Grist renvoie les options du widget dès que son lien change (GristAPI.onLinkStateChange, js/grist-api.js), la langue de l'interface aussi (I18n.onChange) ; et il
 //   cède la place au document dès qu'une ligne arrive (js/reader-mode.js remplace tout le contenu du conteneur de la Lecture).
-// - Les captures (img/reader-guide/{fr,en}-{1,2,3}.png) viennent d'un vrai Grist (son interface réelle, un document d'exemple « Factures »), dans la langue de l'interface du widget, repères numérotés et
-//   flèche ajoutés par-dessus. À refaire, avec IMAGE_VERSION montée, si Grist déplace ces réglages.
+// - Les captures (img/reader-guide/{fr,en}-{1,2,3,4}.png, le numéro est celui de l'étape : 1 accès, 2 tableau sur la page, 3 « Sélectionner par », 4 ligne choisie) viennent d'un vrai Grist (son interface
+//   réelle, un document d'exemple « Factures »), dans la langue de l'interface du widget, repères numérotés et flèche ajoutés par-dessus. À refaire, avec IMAGE_VERSION montée, si Grist déplace ces réglages.
 // - Dans le panneau de 700×400, le guide défile (le conteneur de la Lecture défile déjà) : les captures s'y lisent à 66 % de leur taille, un clic sur l'une l'affiche à sa taille réelle, un second la rétrécit.
 // Script classique (pas type="module"), même convention de portée globale que CleanReading ; js/reader-mode.js l'appelle (ReaderGuide.render).
 const ReaderGuide = (function () {
   const IMAGE_DIR = 'img/reader-guide/';
-  const IMAGE_VERSION = '1';
+  const IMAGE_VERSION = '2';
   // Une étape : l'identifiant de ses textes (readerGuide.<id>.*), le nombre de repères numérotés de sa capture (une ligne de liste chacun), si elle s'ouvre sur une phrase, et la largeur réelle de sa capture
-  // en pixels CSS (le fichier est enregistré au double, pour les écrans à forte densité).
+  // en pixels CSS (le fichier est enregistré au double, pour les écrans à forte densité). La phrase d'une étape reçoit {next} : le numéro de l'étape suivante (« Déjà fait ? Passez à l'étape 2 »).
   const STEPS = [
+    { id: 'access', marks: 3, lead: true, width: 244 },
     { id: 'add', marks: 3, lead: true, width: 470 },
     { id: 'link', marks: 3, lead: true, width: 240 },
-    { id: 'pick', marks: 2, lead: false, width: 282 },
+    { id: 'pick', marks: 2, lead: true, width: 282 },
   ];
   let wired = false;
 
@@ -62,7 +66,7 @@ const ReaderGuide = (function () {
     const body = el('div', 'reader-guide-step-body');
     body.appendChild(el('p', 'reader-guide-eyebrow', I18n.t('readerGuide.step', { n: index + 1 })));
     body.appendChild(heading(3, 'reader-guide-step-title', I18n.t('readerGuide.' + step.id + '.title')));
-    if (step.lead) body.appendChild(el('p', 'reader-guide-lead', I18n.t('readerGuide.' + step.id + '.lead')));
+    if (step.lead) body.appendChild(el('p', 'reader-guide-lead', I18n.t('readerGuide.' + step.id + '.lead', { next: index + 2 })));
     const marks = el('ol', 'reader-guide-marks');
     marks.setAttribute('role', 'list');
     for (let n = 1; n <= step.marks; n++) {

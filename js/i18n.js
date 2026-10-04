@@ -643,13 +643,20 @@ const I18n = (function () {
     // --- Mode Lecture (js/reader-mode.js:render) : état vide (aucune ligne sélectionnée) et avertissement quand une variable n'a pas pu être résolue ---
     'reader.empty.title': { fr: 'Aucune ligne sélectionnée', en: 'No row selected' },
     'reader.empty.hint': { fr: 'Sélectionnez une ligne dans la table Grist pour voir le document avec ses données.', en: 'Select a row in the Grist table to see the document filled with its data.' },
-    // Guide de la Lecture sans ligne (js/reader-guide.js, demande d'Antoine du 2026-10-04) : trois étapes pour relier le widget à un tableau avec « Sélectionner par » de Grist. Les libellés de Grist cités
-    // (« Ajouter », « Sélectionner par », « Données source »...) sont ceux de ses fichiers de langue (grist-core, static/locales/{fr,en}.client.json, relevés le 2026-10-04) ; « Ajouter à la Page » prend sa majuscule en français.
+    // Guide de la Lecture sans ligne (js/reader-guide.js, demande d'Antoine du 2026-10-04) : quatre étapes pour que le widget reçoive une ligne (accès complet au document, tableau sur la page, « Sélectionner par » de Grist,
+    // clic sur une ligne). Les libellés de Grist cités (« Ajouter », « Niveau d'accès », « Sélectionner par », « Données source »...) sont ceux de ses fichiers de langue (grist-core, static/locales/{fr,en}.client.json,
+    // relevés le 2026-10-04) ; « Ajouter à la Page » prend sa majuscule en français.
     'readerGuide.title': { fr: 'Reliez ce widget à votre tableau', en: 'Link this widget to your table' },
-    'readerGuide.intro': { fr: 'En mode Lecture, le modèle se remplit avec la ligne choisie dans un tableau de cette page. Aucune ligne n’arrive à ce widget : il doit être relié à ce tableau par le réglage « Sélectionner par » de Grist.', en: 'In Reading mode, the template is filled with the row picked in a table on this page. No row reaches this widget: it must be linked to that table with Grist’s “Select by” setting.' },
+    'readerGuide.intro': { fr: 'En mode Lecture, le modèle se remplit avec la ligne choisie dans un tableau de cette page. Aucune ligne n’arrive à ce widget : il lui faut l’accès complet au document, et il doit être relié à ce tableau par le réglage « Sélectionner par » de Grist.', en: 'In Reading mode, the template is filled with the row picked in a table on this page. No row reaches this widget: it needs full access to the document, and it must be linked to that table with Grist’s “Select by” setting.' },
     'readerGuide.step': { fr: 'Étape {n}', en: 'Step {n}' },
+    'readerGuide.access.title': { fr: 'Donnez l’accès complet à ce widget', en: 'Give this widget full access' },
+    'readerGuide.access.lead': { fr: 'Déjà fait ? Passez à l’étape {next}. Sinon, cliquez sur ce widget pour le sélectionner : Grist ouvre son panneau de droite.', en: 'Already done? Go to step {next}. Otherwise, click this widget to select it: Grist opens its right-hand panel.' },
+    'readerGuide.access.mark1': { fr: 'Ouvrez l’onglet « Vue »', en: 'Open the “Widget” tab' },
+    'readerGuide.access.mark2': { fr: 'Vérifiez « Niveau d’accès » : il doit afficher « Accès complet au document »', en: 'Check “Access level”: it must read “Full document access”' },
+    'readerGuide.access.mark3': { fr: 'Sinon, cliquez sur « Accepter »', en: 'If not, click “Accept”' },
+    'readerGuide.access.alt': { fr: 'Le panneau de droite de Grist : l’onglet « Vue » (1), la liste « Niveau d’accès » (2) et le bouton « Accepter » de la demande d’accès complet (3).', en: 'Grist’s right-hand panel: the “Widget” tab (1), the “Access level” list (2) and the “Accept” button of the full-access request (3).' },
     'readerGuide.add.title': { fr: 'Mettez votre tableau sur cette page', en: 'Put your table on this page' },
-    'readerGuide.add.lead': { fr: 'Il y est déjà ? Passez à l’étape 2. Sinon, dans Grist, ouvrez « Ajouter », puis « Ajouter une vue à la page ».', en: 'Already there? Go to step 2. Otherwise, in Grist, open “Add new”, then “Add widget to page”.' },
+    'readerGuide.add.lead': { fr: 'Il y est déjà ? Passez à l’étape {next}. Sinon, dans Grist, ouvrez « Ajouter », puis « Ajouter une vue à la page ».', en: 'Already there? Go to step {next}. Otherwise, in Grist, open “Add new”, then “Add widget to page”.' },
     'readerGuide.add.mark1': { fr: 'Choisissez « Table »', en: 'Pick “Table”' },
     'readerGuide.add.mark2': { fr: 'Choisissez vos données', en: 'Pick your data' },
     'readerGuide.add.mark3': { fr: 'Cliquez sur « Ajouter à la Page »', en: 'Click “Add to page”' },
@@ -661,6 +668,7 @@ const I18n = (function () {
     'readerGuide.link.mark3': { fr: 'Choisissez votre tableau', en: 'Pick your table' },
     'readerGuide.link.alt': { fr: 'Le panneau de droite de Grist : l’onglet « Données source » (1), la liste « Sélectionner par » (2) et, dans cette liste, le tableau (3).', en: 'Grist’s right-hand panel: the “Data” tab (1), the “Select by” list (2) and, in that list, the table (3).' },
     'readerGuide.pick.title': { fr: 'Cliquez sur une ligne du tableau', en: 'Click a row of the table' },
+    'readerGuide.pick.lead': { fr: 'Le tableau est vide ? Ajoutez-y d’abord une ligne.', en: 'Is the table empty? Add a row to it first.' },
     'readerGuide.pick.mark1': { fr: 'Cliquez sur une ligne', en: 'Click a row' },
     'readerGuide.pick.mark2': { fr: 'Le modèle s’affiche avec les données de cette ligne', en: 'The template shows that row’s data' },
     'readerGuide.pick.alt': { fr: 'Une ligne choisie dans le tableau (1) et le modèle rempli avec ses données (2).', en: 'A row picked in the table (1) and the template filled with its data (2).' },

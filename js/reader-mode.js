@@ -567,7 +567,7 @@ const ReaderMode = (function () {
     stopGeometryWatch();
     // État vide : atteignable depuis js/main.js:renderReader(), qui appelle désormais render() avec record=null au lieu de retourner en silence (le mode
     // Lecture affichait alors un conteneur totalement vide, sans la moindre explication). Pas une erreur, juste une étape que l'utilisateur n'a pas encore
-    // faite : js/reader-guide.js la lui explique (le guide en trois étapes, ou le court message quand le widget est déjà relié à un tableau).
+    // faite : js/reader-guide.js la lui explique (le guide en quatre étapes, ou le court message quand le widget est déjà relié à un tableau).
     if (!record) {
       ReaderGuide.render(container);
       return;

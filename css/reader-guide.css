@@ -1,4 +1,4 @@
-/* Guide de la Lecture sans ligne (js/reader-guide.js, demande d'Antoine du 2026-10-04) : une carte, le titre et l'introduction en haut, puis trois étapes séparées d'un filet, chacune avec ses repères numérotés et sa capture.
+/* Guide de la Lecture sans ligne (js/reader-guide.js, demande d'Antoine du 2026-10-04) : une carte, le titre et l'introduction en haut, puis quatre étapes séparées d'un filet, chacune avec ses repères numérotés et sa capture.
    Tout le texte est posé sur la carte (--surface) et non sur le fond du conteneur de la Lecture : ce fond est le plan de travail sombre en thème sombre, mais du blanc quand l'aperçu A4 est coupé (css/editor-v2.css,
    #reader-container.a4-preview) - un texte clair du thème sombre y serait à 1,2:1. Les règles portent #reader-container : `#reader-container p { margin: 0 }` (css/editor-v2.css) l'emporterait sur les marges d'une simple classe.
    Le court message d'une Lecture déjà reliée garde ses règles de css/style.css (.reader-empty). */
