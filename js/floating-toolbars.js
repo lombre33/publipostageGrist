@@ -608,7 +608,7 @@ const FloatingToolbars = (function () {
   }
 
   // Barre flottante d'une bulle #Variable (même modèle que l'image), ouverte sur TOUTES les variables depuis la maquette validée le 2026-09-28 : un groupe
-  // d'actions à gauche (condition d'affichage, autres attributs de la même ligne, boucle sur les lignes liées), puis, pour une colonne nombre, date ou
+  // d'actions à gauche (condition d'affichage, autres attributs de la même ligne, boucle sur les lignes liées, liste - quelles valeurs d'une colonne Liste de choix ou Liste de références écrire), puis, pour une colonne nombre, date ou
   // Oui / Non seulement, le sous-panneau de formatage choisi par le type de colonne Grist (nombre et date inchangés ; Oui / Non : trois cases et « vrai / faux »).
   // Une bulle « Calcul » (js/variable-calc.js) ouvre la même barre : « Modifier le calcul » à la place du groupe d'actions (condition, autres attributs et boucle sont grisés, sans objet
   // pour une formule) et le réglage nombre, son résultat étant un nombre.
@@ -620,6 +620,7 @@ const FloatingToolbars = (function () {
       `<button data-action="var-condition" title="${I18n.t('varToolbar.condition')}" aria-label="${I18n.t('varToolbar.condition')}">${Icons.svg('varCondition')}</button>`,
       `<button data-action="var-linked" title="${I18n.t('varToolbar.linked')}" aria-label="${I18n.t('varToolbar.linked')}">${Icons.svg('varLinked')}</button>`,
       `<button data-action="var-loop" title="${I18n.t('varToolbar.loop')}" aria-label="${I18n.t('varToolbar.loop')}">${Icons.svg('varLoop')}</button>`,
+      `<button data-action="var-list" title="${I18n.t('varToolbar.list')}" aria-label="${I18n.t('varToolbar.list')}">${Icons.svg('varList')}</button>`,
       `<button data-action="var-column" title="${I18n.t('varToolbar.column')}" aria-label="${I18n.t('varToolbar.column')}">${Icons.svg('varColumn')}</button>`,
       '</div>',
       '<span class="v2-floating-sep" data-var-sep></span>',
@@ -735,7 +736,7 @@ const FloatingToolbars = (function () {
       // Position capturée AU CLIC : la fenêtre ouverte ensuite retire le focus de l'éditeur, et c'est cette bulle précise qu'elle modifiera.
       if (action === 'calc-edit') { if (isCalc) VariableCalc.openAt(editor, editor.state.selection.from); return; }
       // Condition, autres attributs et boucle n'ont pas d'objet pour un calcul : leurs boutons sont grisés (syncState), un clic dessus ne fait rien.
-      if (isCalc && (action === 'var-condition' || action === 'var-linked' || action === 'var-loop' || action === 'var-column')) return;
+      if (isCalc && (action === 'var-condition' || action === 'var-linked' || action === 'var-loop' || action === 'var-list' || action === 'var-column')) return;
       if (action === 'var-condition') { VariableCondition.open(editor, editor.state.selection.from); return; }
       if (action === 'var-linked') {
         if (!linkedAttrsAvailable(node)) return;
@@ -745,6 +746,12 @@ const FloatingToolbars = (function () {
       if (action === 'var-loop') {
         if (!VariableLoop.status(editor, editor.state.selection.from, node).enabled) return;
         VariableLoop.open(editor, editor.state.selection.from);
+        return;
+      }
+      // Liste : la fenêtre de js/variable-list.js (toutes les valeurs et leur séparateur, la première, la dernière ou la n-ième) ; grisée, un clic ne fait rien.
+      if (action === 'var-list') {
+        if (!VariableList.status(node).enabled) return;
+        VariableList.open(editor, editor.state.selection.from);
         return;
       }
       // Changer (ou réparer) la colonne de la variable : la liste avec recherche de js/variable-column.js, posée à côté de la bulle ; position capturée au clic, comme les fenêtres ci-dessus.
@@ -811,6 +818,15 @@ const FloatingToolbars = (function () {
       setButtonDisabled(columnBtn, !!reasonKey, title);
       columnBtn.setAttribute('aria-label', title);
     }
+    // « Liste… » : active (bleue) quand la bulle a un réglage de liste, grisée (jamais retirée) pour une colonne qui n'est pas une liste, une bulle en boucle, un calcul, un bloc de texte, une valeur et une
+    // case conditionnelle, avec sa raison en info-bulle. `status` : { active, enabled, title }, comme VariableList.status.
+    function syncListButton(status) {
+      const listBtn = panel.el.querySelector('button[data-action="var-list"]');
+      if (!listBtn) return;
+      setButtonDisabled(listBtn, !status.enabled, status.title);
+      listBtn.setAttribute('aria-label', status.title);
+      listBtn.classList.toggle('is-active', !!status.active);
+    }
     // Le bouton de condition garde son nom d'origine pour une bulle et un bloc ; une case conditionnelle dit « cochée si… » (une condition d'affichage n'aurait pas de sens pour elle).
     function setConditionTitle(key) {
       const conditionBtn = panel.el.querySelector('button[data-action="var-condition"]');
@@ -819,8 +835,8 @@ const FloatingToolbars = (function () {
       conditionBtn.setAttribute('aria-label', conditionBtn.title);
     }
     // Un bloc de texte conditionnel et une valeur conditionnelle ont la même barre : seules les raisons des trois boutons grisés changent (`reasons`, les clés de js/i18n.js).
-    const BLOCK_REASONS = { linked: 'varToolbar.linkedBlock', loop: 'varToolbar.loopBlock', column: 'varToolbar.columnBlock' };
-    const VALUE_REASONS = { linked: 'varToolbar.notForValue', loop: 'varToolbar.loopValue', column: 'varToolbar.notForValue' };
+    const BLOCK_REASONS = { linked: 'varToolbar.linkedBlock', loop: 'varToolbar.loopBlock', list: 'varToolbar.listBlock', column: 'varToolbar.columnBlock' };
+    const VALUE_REASONS = { linked: 'varToolbar.notForValue', loop: 'varToolbar.loopValue', list: 'varToolbar.notForValue', column: 'varToolbar.notForValue' };
     function syncBlockState(node, reasons) {
       const why = reasons || BLOCK_REASONS;
       setConditionTitle('varToolbar.condition');
@@ -835,6 +851,7 @@ const FloatingToolbars = (function () {
       const loopBtn = panel.el.querySelector('button[data-action="var-loop"]');
       setButtonDisabled(loopBtn, true, I18n.t(why.loop));
       if (loopBtn) loopBtn.classList.remove('is-active');
+      syncListButton({ active: false, enabled: false, title: I18n.t(why.list) });
       syncColumnButton(node, why.column);
     }
 
@@ -866,6 +883,7 @@ const FloatingToolbars = (function () {
       const loopBtn = panel.el.querySelector('button[data-action="var-loop"]');
       setButtonDisabled(loopBtn, true, I18n.t('varToolbar.loopCheckbox'));
       if (loopBtn) loopBtn.classList.remove('is-active');
+      syncListButton({ active: false, enabled: false, title: I18n.t('varToolbar.listCheckbox') });
       syncColumnButton(node, 'varToolbar.columnCheckbox');
       syncBoolButtons(ConditionalCheckbox.styleOf(node.attrs.style));
     }
@@ -889,6 +907,9 @@ const FloatingToolbars = (function () {
         setButtonDisabled(panel.el.querySelector('button[data-action="var-loop"]'), true, I18n.t('varToolbar.notForCalc'));
         setActive('var-linked', false);
         setActive('var-loop', false);
+        syncListButton({ active: false, enabled: false, title: I18n.t('varToolbar.notForCalc') });
+      } else {
+        syncListButton(VariableList.status(node));
       }
       // aria-disabled plutôt que disabled : un <button disabled> ne reçoit plus le survol, son info-bulle expliquant POURQUOI il est grisé ne s'afficherait pas.
       const linkedBtn = isCalc ? null : panel.el.querySelector('button[data-action="var-linked"]');
@@ -959,7 +980,7 @@ const FloatingToolbars = (function () {
       if (!block && !checkbox && !value && !node) { panel.hide(); return; }
       // Fenêtre de condition / d'autres attributs / de boucle / de calcul ouverte sur cette bulle : la barre reste masquée tant qu'elle l'est (règle d'Antoine) ; son niveau, sous les fenêtres, la
       // cacherait de toute façon derrière le voile.
-      if (VariableCondition.isOpen() || VariableLinkedAttrs.isOpen() || VariableLoop.isOpen() || VariableCalc.isOpen()) { panel.hide(); return; }
+      if (VariableCondition.isOpen() || VariableLinkedAttrs.isOpen() || VariableLoop.isOpen() || VariableList.isOpen() || VariableCalc.isOpen()) { panel.hide(); return; }
       // Bloc de texte conditionnel : pas de réglage nombre/date ni de séparateur, et la barre s'ancre sur l'étiquette du bloc (en haut à gauche), pas au milieu de sa largeur.
       const type = node ? columnTypeOf(node) : null;
       const isNumber = type === 'Numeric' || type === 'Int';

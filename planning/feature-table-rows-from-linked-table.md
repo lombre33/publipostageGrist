@@ -1,5 +1,7 @@
 # Lignes de tableau générées depuis une table liée
 
+> **Statut au 4 octobre 2026 : livré le 29 septembre, sous le nom de « boucles ».** La fenêtre « Boucle » d'une bulle `#Variable` répète une ligne de tableau, un élément de liste, un paragraphe ou la bulle seule pour chaque ligne liée, avec filtre et tri, en Lecture et à l'export (`js/variable-loop.js`, `js/loop-rules.js`). Ce document garde la conception d'origine.
+
 **Priorité 1 — identifiée par l'utilisateur comme "le plus impactant".** Non commencée, ce document
 est une conception technique pour permettre une implémentation autonome future.
 

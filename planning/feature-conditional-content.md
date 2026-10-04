@@ -1,5 +1,7 @@
 # Blocs conditionnels, choix de modèle conditionnel, fusion conditionnelle de documents
 
+> **Statut au 4 octobre 2026 : livré, sous plusieurs formes.** Blocs conditionnels : « Texte conditionnel » (`js/conditional-text.js`), case conditionnelle (`js/conditional-checkbox.js`), valeur conditionnelle dans une phrase (`js/conditional-value.js`) et condition d'affichage d'une bulle (`js/variable-condition.js`). Choix de modèle conditionnel : « Modèle selon la ligne » dans Réglages > Vue (`js/row-template.js`). Fusion conditionnelle de documents : les macro-modèles (`js/macro-templates.js`). Ce document garde la conception d'origine.
+
 **Priorité 1 (blocs conditionnels) et 5 (choix de modèle conditionnel).** Regroupés dans un seul
 document car les trois idées de la liste utilisateur partagent le même besoin fondamental : **évaluer
 une condition sur une valeur Grist et en tirer une décision d'affichage/de composition** — seule la

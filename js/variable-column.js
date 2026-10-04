@@ -22,15 +22,18 @@ const VariableColumn = (function () {
     return GristAPI.getColumns(table).indexOf(column) === -1;
   }
 
-  // Genre de réglage que porte un format de bulle, et que permet une colonne : nombre, date, Oui / Non. Le zéro se règle seul, sans `type` (js/floating-toolbars.js, num-zero) : c'est un réglage nombre.
+  // Genre de réglage que porte un format de bulle, et que permet une colonne : nombre, date, Oui / Non, liste. Le zéro se règle seul, sans `type` (js/floating-toolbars.js, num-zero) : c'est un réglage nombre ;
+  // la liste aussi (`list`, js/variable-list.js) : elle suit d'une liste de choix à une liste de références, pas sur une colonne qui n'est pas une liste.
   function formatKindOf(format) {
     if (!format) return null;
     if (format.type === 'number' || format.type === 'date' || format.type === 'bool') return format.type;
-    return format.zero ? 'number' : null;
+    if (format.zero) return 'number';
+    return format.list ? 'list' : null;
   }
   function columnKindOf(type) {
     if (type === 'Numeric' || type === 'Int') return 'number';
     if (type === 'Date' || type === 'DateTime') return 'date';
+    if (VariableFormat.isListType(type)) return 'list';
     return type === 'Bool' ? 'bool' : null;
   }
   function sameVia(a, b) { return (!a && !b) || (!!a && !!b && a.table === b.table && a.column === b.column); }

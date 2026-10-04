@@ -89,6 +89,7 @@ const GROUPS = {
   schemaRenames: 'scenarios-schema-renames', // suivi des renommages de tables et de colonnes faits dans Grist : mappeur, réécriture des modèles et des clés de correspondance, lecture seule, modèle affiché (js/schema-renames.js)
   settingsColumns: 'scenarios-settings-columns', // avertissement d'ouverture : Réglages > Accès ou > Selon la ligne cite une colonne (ou la table des droits) qui n'existe plus dans Grist (js/settings-columns.js)
   varZero: 'scenarios-var-zero',
+  varList: 'scenarios-var-list', // listes d'une variable (colonne Liste de choix ou Liste de références) : toutes avec séparateur, première, dernière, n-ième ; moteur, Lecture, lot, barre, fenêtre « Liste » (js/variable-list.js)
   varNumber: 'scenarios-var-number-default',
   varBool: 'scenarios-var-bool', // variable Oui / Non : barre à quatre écritures (trois cases de la liste à cases, vrai / faux), la case en Lecture, PDF (polices de cases), Word, Excel et e-mail, le barré, les champs texte inchangés
   linkConfig: 'scenarios-link-config',
@@ -122,6 +123,7 @@ const GROUPS = {
   imageText: 'scenarios-image-text', // image « Au cœur du texte » et texte autour (js/editor-nodes.js, css/editor-v2.css, js/reader-mode.js, js/pdf-export.js, js/docx-export.js) : l'image seule sur sa ligne, l'habillage gauche / droite, l'image dans la ligne, la bascule en ligne / bloc, mesurés dans l'éditeur, la Lecture, le PDF et le Word
   formatPainter: 'scenarios-format-painter', // pinceau de mise en forme (js/format-painter.js, bouton après le surlignage, Alt+Maj+C / V) : ce qui est copié et posé, le paragraphe sur un curseur ou un paragraphe entier, une étape d'historique, armé par un clic ou un double-clic, grisé en e-mail et en macro-modèle, les touches
   tableCells: 'scenarios-table-cells', // sélection de plusieurs cases d'un tableau (CellSelection) : gras, taille, police, couleurs, surlignage, puces, numéros, citation, retrait et retrait inverse sur toutes les cases choisies (et leurs touches Ctrl+Maj+B, Ctrl+Maj+8, Ctrl+Maj+7, Ctrl+Maj+9), la sélection reste, un seul Annuler ; copier, couper, coller en tableau tabulé
+  htmlSanitize: 'scenarios-html-sanitize', // HTML qui ne vient pas de l'éditeur (js/html-sanitize.js, Editor.setHTML) : rien ne s'exécute, rien d'actif ne survit, tout ce que l'éditeur écrit reste
 };
 
 // Scripts Node autonomes (page.mouse réel, pas de page.evaluate) : structurellement à part de GROUPS
@@ -133,6 +135,7 @@ const NODE_SCRIPTS = {
   wheelScroll: 'verify-wheel-scroll.mjs',
   varToolbarMouse: 'verify-var-toolbar-mouse.mjs',
   varBoolMouse: 'verify-var-bool-mouse.mjs', // barre d'une bulle Oui / Non à la vraie souris : quatre boutons atteignables, bouton enfoncé, Lecture mesurée aux pixels d'une vraie capture ; 700x400 clair, sombre et anglais
+  varListMouse: 'verify-var-list-mouse.mjs', // fenêtre « Liste » d'une variable à la vraie souris et au vrai clavier : bouton de la barre (entre Boucle et Colonne, grisé pour un texte), fenêtre entière dans 700x400, choix, numéro et séparateurs tapés, aperçu, Enregistrer, Lecture, Remettre par défaut, Échap ; clair, sombre et anglais
   condTextMouse: 'verify-cond-text-mouse.mjs', // bloc de texte conditionnel à la vraie souris : liste « # » et Chips, étiquette et barre (icônes grisées aux pixels), fenêtre de condition, blocs emboîtés, texte entouré, Lecture ; 700x400 clair et sombre
   condCheckboxMouse: 'verify-cond-checkbox-mouse.mjs', // case conditionnelle à la vraie souris : liste « # » et Chips, UN clic pose la puce et ouvre sa barre (icônes grisées aux pixels), fenêtre de condition, colonne étroite, Lecture mesurée aux pixels ; 700x400 clair, sombre et anglais
   condValueMouse: 'verify-cond-value-mouse.mjs', // valeur conditionnelle à la vraie souris et au vrai clavier : liste « # » et Chips, frappe dans la valeur, Entrée, flèches qui en sortent et frappe derrière (ou devant) son cadre, Retour arrière et Suppr aux bords, texte vidé sans perdre la valeur, barre et fenêtre de condition, texte sélectionné entouré, Lecture ; 700x400 clair, sombre et anglais, puis 360 px
@@ -203,6 +206,7 @@ const NODE_SCRIPTS = {
   codeHygiene: 'verify-code-hygiene.mjs', // Node pur, sans navigateur : clés i18n, variables CSS et règles CSS sans usage
   templateOrganizerUnit: 'unit-template-organizer.mjs', // Node pur (vm) : logique de l'arbre de rangement, js/template-organizer.js
   templatePreferencesUnit: 'unit-template-preferences.mjs', // Node pur (vm + faux docApi) : js/template-preferences.js, file d'écritures et retour arrière
+  conditionRulesUnit: 'unit-condition-rules.mjs', // Node pur (vm) : js/condition-rules.js:compareValues - vide, liste, Oui / Non, nombres, dates et fuseaux (navigateur réglé ailleurs qu'en UTC), un seul formateur Intl par fuseau
   calcMouse: 'verify-calc-mouse.mjs', // bulle « Calcul » (variables calculées) à la vraie souris et au vrai clavier : ligne « Calcul » de la liste « # », fenêtre dans 700x400, liste des colonnes devant elle, barre aux boutons grisés aux pixels, case étroite, Lecture, anglais ; 700x400 clair et sombre
   xlsxNumberFormatUnit: 'unit-xlsx-number-format.mjs', // Node pur (vm) : js/xlsx-number-format.js, le texte qu'Excel montre pour une valeur (euros, pourcentages, dates, zéros de tête, sections, français et anglais) - sert à l'import d'un classeur dans une grille
   formulaUnit: 'unit-formula.mjs', // Node pur (vm) : js/formula.js, le moteur des bulles « Calcul » (variables calculées) : opérations, listes de lignes, fonctions, fautes de syntaxe, écriture saisie et enregistrée
@@ -211,6 +215,7 @@ const NODE_SCRIPTS = {
   userIdentityUnit: 'unit-user-identity.mjs', // Node pur (vm + faux docApi) : js/grist-api.js, la lecture du nom et de l'email de la personne - table-sonde d'avant la puce Nom migrée UNE fois, aucune écriture de schéma pour l'email seul, plusieurs puces = une lecture et une colonne ajoutée, compte sans nom, colonne refusée, lecteur du document
   userNameChipMouse: 'verify-user-name-chip-mouse.mjs', // puce « Nom de l’utilisateur » à la vraie souris à 700x400, en français et en anglais : ligne juste après l'email dans la liste « # » (Calcul reste atteignable), un clic la pose, le nom en Lecture à côté de l'email, « [Nom indisponible] » / « [Name unavailable] » en rouge sans nom
   startupOpenMouse: 'verify-startup-open-mouse.mjs', // ouverture sur un document aux tables lentes, vrai navigateur à 700x400, vraie souris et vrai clavier : table des modèles lue une fois, modèle affiché avant la lecture complète des tables, bulles jugées tout de suite, « # » liste les colonnes, colonnes exactes ensuite
+  cspLoad: 'verify-csp.mjs', // politique de sécurité du contenu de index.html SANS contournement : le widget démarre, s'écrit, se lit et exporte sous la politique ; un script en ligne, un gestionnaire, une adresse javascript:, une balise de base, un cadre, un objet, un formulaire ne passent plus ; le vrai fichier d'API de Grist (réseau) s'évalue ; cadre à bac à sable
 };
 
 const argv = process.argv.slice(2);
@@ -318,7 +323,7 @@ const DEV_FILES = ['helpers', 'runner'];
 
 async function runGroup(name, probeExpr) {
   const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hinting=none'] });
-  const context = await browser.newContext({ viewport: { width: viewportWidth, height: viewportHeight } });
+  const context = await browser.newContext({ bypassCSP: true, viewport: { width: viewportWidth, height: viewportHeight } });
   const page = await context.newPage();
   const consoleErrors = [];
   page.on('console', m => { if (m.type() === 'error') consoleErrors.push(m.text()); });

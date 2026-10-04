@@ -392,10 +392,11 @@ const VariableLinkedAttrs = (function () {
     editor.chain().focus().insertContentAt(insertAt, content).run();
   }
 
-  // Genre du format que porte une colonne : un format nombre n'a de sens que sur un nombre, un format date que sur une date (même répartition que la barre flottante,
-  // js/floating-toolbars.js:wireVariableFloatingToolbar).
+  // Genre du format que porte une colonne : un format nombre n'a de sens que sur un nombre, un format date que sur une date, un réglage de liste (js/variable-list.js) que sur une liste de choix ou de
+  // références (même répartition que la barre flottante, js/floating-toolbars.js:wireVariableFloatingToolbar).
   function formatKind(type) {
     if (type === 'Numeric' || type === 'Int') return 'number';
+    if (VariableFormat.isListType(type)) return 'list';
     return type === 'Date' || type === 'DateTime' ? 'date' : null;
   }
   // « Remplacer » : la bulle d'origine prend la colonne du premier attribut coché, les autres cochés suivent, séparés par une espace, comme à l'insertion. Elle reste la

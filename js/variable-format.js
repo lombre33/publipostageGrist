@@ -286,8 +286,72 @@ const VariableFormat = (function () {
     return formatted;
   }
 
+  // --- Liste (colonne Choix multiple ou Référence multiple) ---
+  // format.list = { pick, index, separator, lastSeparator, perValue } : ce que règle la fenêtre « Liste » (js/variable-list.js). Sans réglage - la bulle d'une liste déjà posée -
+  // toutes les valeurs s'écrivent, dans l'ordre de la cellule, séparées par « , » (Variables.formatValue) : c'est le défaut, et le seul rendu d'avant cette fenêtre. `pick` : 'all'
+  // (toutes : `separator` entre chacune, `lastSeparator` avant la dernière - vide, le même séparateur), 'first', 'last' ou 'nth' (la n-ième, `index` compté depuis 1 ; une liste plus
+  // courte n'écrit rien). Seules les clés qui s'écartent du défaut sont enregistrées (storedList) : une bulle remise au défaut n'a plus de réglage, ni de point bleu.
+  const LIST_PICKS = ['all', 'first', 'last', 'nth'];
+  const LIST_SEPARATOR = ', ';
+  const LIST_INDEX_MAX = 999;
+  // Les types de colonne que ces réglages concernent.
+  function isListType(type) { return type === 'ChoiceList' || (typeof type === 'string' && type.indexOf('RefList:') === 0); }
+  // Les réglages complets d'un `format.list` quelconque (absent, illisible, incomplet) : toujours un objet, chaque clé à sa valeur par défaut au besoin.
+  function normalizeList(raw) {
+    const list = raw && typeof raw === 'object' ? raw : {};
+    return {
+      pick: LIST_PICKS.indexOf(list.pick) !== -1 ? list.pick : 'all',
+      index: Math.min(LIST_INDEX_MAX, Math.max(1, Math.floor(Number(list.index)) || 1)),
+      separator: typeof list.separator === 'string' ? list.separator : LIST_SEPARATOR,
+      lastSeparator: typeof list.lastSeparator === 'string' ? list.lastSeparator : '',
+      perValue: list.perValue === true,
+    };
+  }
+  // Vrai quand ces réglages ne changent rien : ni la façon d'écrire la liste, ni le nombre de documents à l'export.
+  function isDefaultList(raw) {
+    const list = normalizeList(raw);
+    return list.pick === 'all' && list.separator === LIST_SEPARATOR && list.lastSeparator === '' && !list.perValue;
+  }
+  // Ce que la bulle enregistre : seulement les clés utiles (le numéro ne sert qu'à « n-ième », les séparateurs qu'à « toutes »), ou null quand tout est par défaut.
+  function storedList(raw) {
+    const list = normalizeList(raw);
+    if (isDefaultList(list)) return null;
+    const out = {};
+    if (list.pick !== 'all') out.pick = list.pick;
+    if (list.pick === 'nth') out.index = list.index;
+    if (list.pick === 'all') {
+      if (list.separator !== LIST_SEPARATOR) out.separator = list.separator;
+      if (list.lastSeparator !== '') out.lastSeparator = list.lastSeparator;
+    }
+    if (list.perValue) out.perValue = true;
+    return out;
+  }
+  // Les réglages d'écriture du `format` d'une bulle quand ils diffèrent du défaut, sinon null : c'est ce que lit Variables.formatValue, une bulle sans eux s'écrit comme avant.
+  function listStyle(format) {
+    if (!format || !format.list) return null;
+    const list = normalizeList(format.list);
+    return list.pick === 'all' && list.separator === LIST_SEPARATOR && list.lastSeparator === '' ? null : list;
+  }
+  // Les valeurs d'une liste à plat : une liste de listes (une colonne Choix multiple lue sur plusieurs lignes liées) n'en fait qu'une.
+  function flattenList(value) {
+    if (!Array.isArray(value)) return [value];
+    return value.reduce((all, item) => all.concat(flattenList(item)), []);
+  }
+  // Le texte d'une liste dont les valeurs sont déjà écrites (`texts`) : les valeurs vides sont sautées, puis le choix de `list` s'applique.
+  function listText(texts, raw) {
+    const list = normalizeList(raw);
+    const shown = texts.filter(text => text !== '' && text != null);
+    if (list.pick === 'first') return shown.length ? shown[0] : '';
+    if (list.pick === 'last') return shown.length ? shown[shown.length - 1] : '';
+    if (list.pick === 'nth') return list.index <= shown.length ? shown[list.index - 1] : '';
+    if (shown.length < 2) return shown.join('');
+    const last = list.lastSeparator === '' ? list.separator : list.lastSeparator;
+    return shown.slice(0, -1).join(list.separator) + last + shown[shown.length - 1];
+  }
+
   return {
     DATE_PRESETS, presetLabel, formatDate, formatNumber, isZero, numberToWordsFr, numberToWordsEn,
     BOOL_CHECKBOX_STYLES, CHECKED_BOX, UNCHECKED_BOX, isCheckboxStyle, boolStyle, checkboxColor, formatBool,
+    LIST_SEPARATOR, LIST_INDEX_MAX, isListType, normalizeList, isDefaultList, storedList, listStyle, flattenList, listText,
   };
 })();

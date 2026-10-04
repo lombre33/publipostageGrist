@@ -1,15 +1,18 @@
-/* Lecture épurée (js/clean-reading.js, retours d'Antoine du 2026-10-02, point 19) : le mode Lecture sans la barre du haut ni le reste de l'interface, le document seul dans tout le panneau.
-   Un seul interrupteur : la classe `pp-clean-reading` sur <body>, posée et retirée par le script. #toolbar-top porte tout ce qui n'est pas le document - la barre, les champs de l'email, la
-   barre de mise en forme -, #reader-container (flex: 1, css/style.css) prend alors toute la hauteur. Les fenêtres, le fil de commentaire et le bandeau « modifié ailleurs » ne sont pas dans
-   la barre : ils s'affichent comme avant (un avertissement de données ne se cache pas). */
+/* Lecture épurée (js/clean-reading.js) : le mode Lecture sans la barre du haut ni le reste de l'interface, le document seul dans tout le panneau. Un
+   seul interrupteur : la classe `pp-clean-reading` sur <body>, posée et retirée par le script. #toolbar-top porte tout ce qui n'est pas le document
+   (la barre, les champs de l'email, la barre de mise en forme) ; #reader-container (flex: 1, css/style.css) prend alors toute la hauteur. Les
+   fenêtres, le fil de commentaire et le bandeau « modifié ailleurs » ne sont pas dans la barre : ils s'affichent comme avant (un avertissement de
+   données ne se cache pas). */
 body.pp-clean-reading #toolbar-top { display: none; }
-/* Le bandeau « Revenir au macro-modèle » (#macro-return-bar, css/toolbar-v2.css) n'est pas dans #toolbar-top : une ligne de navigation posée au-dessus du texte, tant que le modèle à l'écran a été
-   ouvert par le stylo d'un macro-modèle. Elle n'a pas sa place dans le document seul ; elle revient avec la barre à la sortie. */
+/* Le bandeau « Revenir au macro-modèle » (#macro-return-bar, css/toolbar-v2.css) n'est pas dans #toolbar-top : c'est une ligne de navigation posée
+   au-dessus du texte tant que le modèle à l'écran a été ouvert par le stylo d'un macro-modèle. Elle n'a pas sa place dans le document seul ; elle
+   revient avec la barre à la sortie. */
 body.pp-clean-reading #macro-return-bar { display: none; }
 
-/* Bouton de sortie : seul à l'écran avec le document, dans le coin haut droit (là où le logo de la barre se trouve le reste du temps), à gauche de la barre de défilement de la Lecture
-   (22px : le défilement se garde sa piste). Même icône qu'un plein écran qu'on quitte, deux coins vers l'intérieur. Les couleurs viennent des jetons de la barre (glyphe ≥ 4,5:1 sur
-   son fond, en clair comme en sombre ; le trait est le --border-strong de tous les boutons de la barre). Niveau --z-floating-toolbar (css/style.css) : sous le fil de commentaire, les menus et les fenêtres. */
+/* Bouton de sortie : seul à l'écran avec le document, dans le coin haut droit (là où se trouve le logo de la barre le reste du temps), à gauche de la
+   barre de défilement de la Lecture (22px : le défilement garde sa piste). Même icône qu'un plein écran qu'on quitte, deux coins vers l'intérieur.
+   Couleurs : jetons de la barre (glyphe ≥ 4,5:1 sur son fond, en clair comme en sombre ; le trait est le --border-strong de tous les boutons de la
+   barre). Niveau --z-floating-toolbar (css/style.css) : sous le fil de commentaire, les menus et les fenêtres. */
 #btn-exit-clean-reading { display: none; }
 body.pp-clean-reading #btn-exit-clean-reading {
   display: inline-flex; align-items: center; justify-content: center; position: fixed; top: 8px; right: 22px; z-index: var(--z-floating-toolbar);

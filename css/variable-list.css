@@ -1,0 +1,18 @@
+/* Fenêtre « Liste » d'une bulle #Variable (js/variable-list.js). Le cadre, le titre et les boutons viennent de la base commune (js/modal-base.js, css/modal-base.css) ; les champs sont ceux de la
+   fenêtre de boucle (.var-loop-label, .var-loop-seg, .var-loop-seps, .var-loop-hint, .var-condition-debug de css/variable-actions.css). Ne reste ici que ce qui est propre à la liste.
+   Chargé après css/variable-actions.css. */
+
+/* La bulle de l'introduction garde son trait plein (pas de condition ici). */
+.var-list-modal-content .var-modal-intro .var-badge { border-style: solid; border-color: #b7cdf2; }
+
+/* Les quatre choix tiennent sur une ligne dans la fenêtre (le dernier, « La n-ième », passait à la ligne avec les 11 px de marge des boucles). */
+.var-list-modal-content .var-loop-seg button { padding: 0 8px; }
+
+/* Les champs en grille, l'étiquette puis le champ : les deux séparateurs s'alignent, et l'indication qui suit commence sous le champ, pas sous son étiquette (règle d'Antoine). */
+.var-list-seps, .var-list-number { display: grid; grid-template-columns: max-content 1fr; align-items: center; gap: 6px 8px; }
+.var-list-seps[hidden], .var-list-number[hidden] { display: none; }
+.var-list-seps label + input, .var-list-number label + input { margin-right: 0; }
+.var-list-seps .var-loop-hint, .var-list-number .var-loop-hint { grid-column: 2; }
+/* « Avant la dernière » porte un texte d'attente (« comme le séparateur ») ; le numéro de « La n-ième » tient sur trois chiffres. */
+.var-list-seps .var-list-last-input { width: 160px; }
+.var-list-number .var-list-index-input { width: 64px; }

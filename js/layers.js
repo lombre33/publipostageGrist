@@ -1,19 +1,18 @@
-// Ordre d'empilement des couches flottantes de l'interface : barres flottantes d'une sélection (tableau, image, bulle), menus et listes, popups, info-bulles. La règle d'Antoine
-// (2026-10-01 : « le dernier menu qui s'ouvre doit toujours être au-dessus de l'existant ») est posée ICI, une fois, plutôt que menu par menu : le menu # s'ouvrait sous la barre du
-// tableau parce que chaque couche avait son z-index en dur (barre 2000, menu # 1000, menus de la barre du haut 15, liste des modèles 40) sans aucun ordre entre elles.
-//  - Les NIVEAUX sont fixes : des jetons CSS (--z-floating-toolbar < --z-menu < --z-tip, css/style.css), jamais un nombre en dur dans une feuille (codeHygiene le vérifie). Une barre
-//    flottante est donc toujours sous un menu, un menu sous une info-bulle, et les trois sous les fenêtres (css/modal-base.css, 1990 et plus).
-//  - DANS le niveau des menus et au-dessus, Layers.raise(el) met l'élément qui vient de s'ouvrir au-dessus de ceux qui le sont déjà : z-index en ligne = niveau + rang. Le niveau d'un
-//    élément est celui que sa feuille de style lui donne (un seul endroit où le dire) ; la pile ne garde que les éléments encore affichés, elle ne grossit donc jamais.
-//  - Le niveau des BARRES FLOTTANTES n'est pas rangé : un seul geste en ouvre souvent deux (cliquer une bulle dans une case de tableau ouvre la barre de la bulle ET celle du tableau,
-//    dans l'ordre où le code les teste), et « la dernière ouverte au-dessus » mettrait celle du tableau sur celle de la bulle. Elles gardent l'ordre du DOM : la plus précise est créée
-//    après la plus générale et reste dessus. Raise ne fait donc rien pour elles, et la barre d'une bulle ou d'une image reste lisible quand celle du tableau s'ouvre en dernier.
-//  - Un popup ouvert depuis le champ d'une FENÊTRE passe devant elle : les fenêtres (css/modal-base.css, 1990 à 2100) sont au-dessus des trois niveaux, aucun rang ne l'y amène (la liste #
-//    d'un champ de fenêtre s'ouvrait dessous, invisible). Layers.raise(el, fenêtre) prend alors pour niveau le z-index de CETTE fenêtre + 1, lu à chaque appel (il change d'une fenêtre à l'autre) :
-//    devant elle quelles que soient les couches ouvertes avant, sans jeton ni z-index de plus dans une feuille. Un élément n'a qu'un niveau à la fois (la liste # sert à l'éditeur puis à une
-//    fenêtre) : en changer le retire de la pile de l'ancien, où le rang d'un menu ouvert ensuite le ramènerait sous la fenêtre.
-// À appeler à l'OUVERTURE d'une couche flottante (ou à chaque placement d'un popup en cours d'usage, comme la liste #), jamais à chaque recalage d'une barre déjà affichée : elle
-// changerait de rang sans que rien ne s'ouvre. Script classique (pas type="module"), même convention de portée globale que EditorCore/ViewportFit.
+// Ordre d'empilement des couches flottantes : barres flottantes d'une sélection (tableau, image, bulle), menus et listes, popups, info-bulles.
+// La règle (le dernier menu ouvert est toujours au-dessus de l'existant) est posée ici, une fois, plutôt que menu par menu : chaque couche avait
+// son z-index en dur, sans ordre entre elles.
+//  - Les niveaux sont fixes : des jetons CSS (--z-floating-toolbar < --z-menu < --z-tip, css/style.css), jamais un nombre en dur dans une feuille
+//    (codeHygiene le vérifie). Barre flottante < menu < info-bulle, et les trois sous les fenêtres (css/modal-base.css, 1990 et plus).
+//  - Dans le niveau des menus et au-dessus, Layers.raise(el) met l'élément qui vient de s'ouvrir au-dessus de ceux déjà ouverts : z-index en ligne =
+//    niveau + rang. Le niveau d'un élément est celui que sa feuille de style lui donne ; la pile ne garde que les éléments encore affichés.
+//  - Les barres flottantes ne sont pas rangées : un geste en ouvre souvent deux (cliquer une bulle dans une case de tableau ouvre la barre de la
+//    bulle et celle du tableau), et « la dernière ouverte au-dessus » mettrait celle du tableau sur celle de la bulle. Elles gardent l'ordre du DOM
+//    (la plus précise est créée après la plus générale) ; raise ne fait rien pour elles.
+//  - Un popup ouvert depuis le champ d'une fenêtre passe devant elle : les fenêtres (1990 à 2100) sont au-dessus des trois niveaux. Layers.raise(el,
+//    fenêtre) prend pour niveau le z-index de cette fenêtre + 1, lu à chaque appel. Un élément n'a qu'un niveau à la fois (la liste # sert à
+//    l'éditeur puis à une fenêtre) : en changer le retire de la pile de l'ancien.
+// À appeler à l'ouverture d'une couche flottante (ou à chaque placement d'un popup en cours d'usage, comme la liste #), jamais à chaque recalage
+// d'une barre déjà affichée. Script classique (pas type="module"), portée globale comme EditorCore et ViewportFit.
 const Layers = (function () {
   const WIDTH = 100; // largeur d'un niveau : le rang ne le dépasse jamais, deux niveaux ne se recouvrent donc pas
   const stacks = new Map(); // niveau -> éléments ouverts à ce niveau, du plus bas au plus haut
@@ -34,7 +33,8 @@ const Layers = (function () {
     return level === toolbarLevel;
   }
 
-  // Le niveau juste au-dessus de la fenêtre `over` (0 sans fenêtre ou sans z-index) : lu à chaque appel, une fenêtre pouvant être à 1990, 2000, 2050 ou 2100 (css/modal-base.css).
+  // Le niveau juste au-dessus de la fenêtre `over` (0 sans fenêtre ou sans z-index) : lu à chaque appel, une fenêtre pouvant être à 1990, 2000, 2050
+  // ou 2100 (css/modal-base.css).
   function levelAbove(over) {
     if (!over || !over.isConnected) return 0;
     const z = parseInt(getComputedStyle(over).zIndex, 10);

@@ -391,7 +391,15 @@ const Variables = (function () {
     // `opts.colType` : le type imposé quand la valeur ne vient d'aucune colonne - le résultat d'un calcul (js/formula.js) est un nombre, écrit et caché à zéro comme celui d'une colonne Numérique.
     const colType = opts.colType || (varTable && varColumn ? GristAPI.getColumnType(varTable, varColumn) : null);
     const hideZero = !opts.rawNumbers && !opts.keepZero && zeroHidden(format, colType);
-    if (Array.isArray(val)) return (hideZero ? val.filter(v => !VariableFormat.isZero(v)) : val).map(v => formatValue(v, format, varTable, varColumn, opts)).join(', ');
+    if (Array.isArray(val)) {
+      // Une bulle de liste réglée (fenêtre « Liste », js/variable-list.js : séparateur, première, dernière ou n-ième valeur) écrit la liste à plat ; sans réglage, toutes les valeurs
+      // sont jointes par « , » comme avant la fenêtre. Les champs texte (Objet, À, Cc, Cci, nom du PDF) n'ont pas de format : ils gardent la virgule.
+      const style = VariableFormat.listStyle(format);
+      const items = style ? VariableFormat.flattenList(val) : val;
+      const kept = hideZero ? items.filter(v => !VariableFormat.isZero(v)) : items;
+      const texts = kept.map(v => formatValue(v, format, varTable, varColumn, opts));
+      return style ? VariableFormat.listText(texts, style) : texts.join(', ');
+    }
     if (hideZero && VariableFormat.isZero(val)) return '';
     // Oui / Non : « vrai » / « faux » (« true » / « false » en anglais) sans réglage - la barre « Oui / Non » (js/floating-toolbars.js) le montre enfoncé -, une case ☑ / ☐ quand la bulle porte l'un des
     // trois styles de case. Avant, tout s'écrivait « true » / « false » quelle que soit la langue. Les champs texte (`rawNumbers` : Objet, À, Cc, Cci, nom du PDF) et les valeurs montrées comme donnée

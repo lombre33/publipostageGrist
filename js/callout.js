@@ -1,18 +1,17 @@
-// Encadrés et bloc de signature de l'éditeur (demande d'Antoine, 2026-10-01, deuxième lot du menu « Lien et blocs de contenu » : « encadré Note, Attention ou
-// Important (couleur et icône au choix) et bloc de signature (ligne, nom, date) », sous la même icône que le lien, la citation et le bloc de code).
-//  - L'ENCADRÉ est un nœud TipTap (`callout`, un bloc qui contient des blocs) : un fond teinté, une barre de couleur à gauche et une icône, tous trois posés par le CSS
-//    à partir de deux attributs, `data-color` et `data-icon`. Note, Attention et Important ne sont que trois points de départ de la fenêtre (bleu + information, orange +
-//    triangle, rouge + point d'exclamation) : la couleur et l'icône se choisissent ensuite à part, c'est pourquoi le type n'est pas gardé dans le document.
-//    La palette et les icônes ne sont écrites qu'ici : le CSS de l'éditeur et de la Lecture en est généré (installStyles), les exports PDF et Word en tirent les mêmes
-//    couleurs (colors) et la même icône en PNG (iconPng).
-//  - Le BLOC DE SIGNATURE est un morceau de document fait de nœuds qui existent déjà (une zone 2 colonnes, des paragraphes) : de l'espace pour signer, une ligne, puis « Nom et
-//    signature » sous la première colonne et « Date » sous la seconde. Rien à rendre de nouveau dans la Lecture, le PDF, le Word ou l'e-mail, et tout reste modifiable (une
-//    variable à la place du nom, une autre légende...).
-// Les styles de la fenêtre et de l'encadré sont dans css/callout.css ; le menu est dans index.html (#v2-blocks-group), ses actions dans js/main-toolbar.js.
+// Encadrés et bloc de signature de l'éditeur, sous la même icône de menu que le lien, la citation et le bloc de code (« Lien et blocs de contenu »).
+//  - L'encadré est un nœud TipTap (`callout`, un bloc qui contient des blocs) : un fond teinté, une barre de couleur à gauche et une icône, tous
+//    trois posés par le CSS à partir de deux attributs, `data-color` et `data-icon`. Note, Attention et Important ne sont que trois points de départ
+//    de la fenêtre (bleu + information, orange + triangle, rouge + point d'exclamation) : la couleur et l'icône se choisissent ensuite à part, c'est
+//    pourquoi le type n'est pas gardé dans le document. La palette et les icônes ne sont écrites qu'ici : le CSS de l'éditeur et de la Lecture en est
+//    généré (installStyles), les exports PDF et Word en tirent les mêmes couleurs (colors) et la même icône en PNG (iconPng).
+//  - Le bloc de signature est un morceau de document fait de nœuds qui existent déjà (une zone 2 colonnes, des paragraphes) : de l'espace pour
+//    signer, une ligne, puis « Nom et signature » sous la première colonne et « Date » sous la seconde. Rien à rendre de nouveau dans la Lecture, le
+//    PDF, le Word ou l'e-mail, et tout reste modifiable (une variable à la place du nom, une autre légende...).
+// Styles de la fenêtre et de l'encadré : css/callout.css ; le menu est dans index.html (#v2-blocks-group), ses actions dans js/main-toolbar.js.
 const Callout = (function () {
-  // === La palette et les icônes ===========================================================================================================================
-  // Couleur d'accent (barre, icône : 3:1 au moins sur la teinte, 4,4 à 6,7:1 en pratique) et teinte de fond (le texte du document, #1b2430, y reste à plus de 14:1).
-  // Le papier du document reste blanc dans le thème sombre : ces couleurs ne changent pas avec lui.
+  // La palette et les icônes
+  // Couleur d'accent (barre, icône : 3:1 au moins sur la teinte, 4,4 à 6,7:1 en pratique) et teinte de fond (le texte du document, #1b2430, y reste à
+  // plus de 14:1). Le papier du document reste blanc dans le thème sombre : ces couleurs ne changent pas avec lui.
   const COLOR_ORDER = ['blue', 'green', 'amber', 'red', 'purple', 'gray'];
   const COLORS = {
     blue: { accent: '#2563eb', tint: '#eff6ff' },
@@ -22,8 +21,8 @@ const Callout = (function () {
     purple: { accent: '#7e22ce', tint: '#faf5ff' },
     gray: { accent: '#4b5563', tint: '#f3f4f6' },
   };
-  // Icônes « trait » sur une grille de 24 (même famille que js/icons.js) : une liste de tracés, un rond de 9 de rayon pour les cercles. Les points (`h.01`) sont des tracés
-  // de longueur nulle : avec des bouts ronds ils se peignent comme un point.
+  // Icônes « trait » sur une grille de 24 (même famille que js/icons.js) : une liste de tracés, un rond de 9 de rayon pour les cercles. Les points
+  // (`h.01`) sont des tracés de longueur nulle : avec des bouts ronds ils se peignent comme un point.
   const CIRCLE = 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z';
   function starPath() {
     const points = [];
@@ -60,8 +59,8 @@ const Callout = (function () {
       + iconOf(iconKey).map(d => '<path d="' + d + '"/>').join('') + '</svg>';
   }
 
-  // L'icône en PNG, de la couleur d'accent : pdfmake et Word n'embarquent que des images (les glyphes d'icône, eux, manquent aux polices des PDF). `pixels` de côté ; dessinée
-  // à partir des mêmes tracés que le CSS, par Path2D. Retourne une URL de données.
+  // L'icône en PNG, de la couleur d'accent : pdfmake et Word n'embarquent que des images (les glyphes d'icône, eux, manquent aux polices des PDF).
+  // `pixels` de côté ; dessinée à partir des mêmes tracés que le CSS, par Path2D. Retourne une URL de données.
   function iconPng(iconKey, hexColor, pixels) {
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = pixels;
@@ -75,8 +74,8 @@ const Callout = (function () {
     return canvas.toDataURL('image/png');
   }
 
-  // Le CSS qui dépend de la palette : les variables d'une couleur et d'une icône, portées par l'attribut de l'encadré (`.callout` seul garde les valeurs par défaut :
-  // la plus faible spécificité, donc battue par les règles à attribut). La mise en page de l'encadré est dans css/callout.css.
+  // Le CSS qui dépend de la palette : les variables d'une couleur et d'une icône, portées par l'attribut de l'encadré (`.callout` seul garde les
+  // valeurs par défaut : la plus faible spécificité, donc battue par les règles à attribut). La mise en page de l'encadré est dans css/callout.css.
   function maskUrl(iconKey) { return 'url("data:image/svg+xml,' + encodeURIComponent(svgMarkup(iconKey, '#000')) + '")'; }
   function styleText() {
     const first = COLORS[DEFAULT.color];
@@ -93,8 +92,9 @@ const Callout = (function () {
     document.head.appendChild(style);
   }
 
-  // === Le nœud ============================================================================================================================================
-  // Un bloc qui contient des blocs (comme la citation) : défini (`defining`), pour que le copier-coller et la transformation gardent l'encadré autour de son contenu.
+  // Le nœud
+  // Un bloc qui contient des blocs (comme la citation) : défini (`defining`), pour que le copier-coller et la transformation gardent l'encadré autour
+  // de son contenu.
   function createNode(Node, mergeAttributes) {
     return Node.create({
       name: 'callout',
@@ -123,8 +123,8 @@ const Callout = (function () {
   }
   const isInside = ed => !!ed && !!findAround(ed.state.selection.$from);
 
-  // Entoure la sélection : les blocs choisis (ou celui du curseur) se retrouvent dans l'encadré. Dans une liste, un encadré ne peut pas prendre la place d'un paragraphe
-  // d'élément (le premier enfant d'un élément est un paragraphe) : c'est alors la liste entière qui est entourée.
+  // Entoure la sélection : les blocs choisis (ou celui du curseur) se retrouvent dans l'encadré. Dans une liste, un encadré ne peut pas prendre la
+  // place d'un paragraphe d'élément (le premier enfant d'un élément est un paragraphe) : c'est alors la liste entière qui est entourée.
   function wrapSelection(ed, attrs) {
     if (ed.can().wrapIn('callout', attrs)) return ed.chain().focus().wrapIn('callout', attrs).run();
     const { $from } = ed.state.selection;
@@ -136,11 +136,12 @@ const Callout = (function () {
     return false;
   }
 
-  // Retire l'encadré autour du curseur sans toucher à son contenu : le cadre est REMPLACÉ par ses blocs, qui prennent sa place, et la sélection reste où elle était dans le texte
-  // (un cran plus bas : le jeton d'ouverture du cadre n'est plus devant elle). Pas `tr.lift` : en mode suivi, la bibliothèque traduit une levée en texte barré dans le cadre et le
-  // même texte inséré après lui - le cadre, vide, reste une fois tout accepté -, alors qu'un remplacement donne le cadre entier barré et son contenu inséré : « Tout accepter » rend
-  // exactement le document sans l'encadré, « Tout refuser » celui d'avant (même technique que ConditionalText.unwrap, js/conditional-text.js). Faux, sans rien changer, quand le
-  // parent n'accepte pas ces blocs à la place du cadre (le premier bloc d'un élément de liste doit être un paragraphe).
+  // Retire l'encadré autour du curseur sans toucher à son contenu : le cadre est remplacé par ses blocs, et la sélection reste où elle était dans le
+  // texte (un cran plus bas : le jeton d'ouverture du cadre n'est plus devant elle). Pas `tr.lift` : en mode suivi, la bibliothèque traduit une levée
+  // en texte barré dans le cadre et le même texte inséré après lui (le cadre, vide, reste une fois tout accepté), alors qu'un remplacement donne le
+  // cadre entier barré et son contenu inséré : « Tout accepter » rend exactement le document sans l'encadré, « Tout refuser » celui d'avant (même
+  // technique que ConditionalText.unwrap, js/conditional-text.js). Faux, sans rien changer, quand le parent n'accepte pas ces blocs à la place du
+  // cadre (le premier bloc d'un élément de liste doit être un paragraphe).
   function unwrapAround(ed) {
     const found = findAround(ed.state.selection.$from);
     if (!found) return false;
@@ -153,7 +154,8 @@ const Callout = (function () {
       const type = selection.toJSON().type;
       tr.replaceWith(found.pos, end, found.node.content);
       let next = null;
-      // Un nœud sélectionné (une image du cadre) reste sélectionné : sa classe est celle de la sélection même (deux exemplaires du module de ProseMirror circulent, cf. selectedImageNode).
+      // Un nœud sélectionné (une image du cadre) reste sélectionné : sa classe est celle de la sélection même (deux exemplaires du module de
+      // ProseMirror circulent, cf. selectedImageNode).
       if (type === 'node' && inside(selection.from)) next = selection.constructor.create(tr.doc, selection.from - 1);
       else if (type === 'text' && inside(selection.anchor) && inside(selection.head)) next = EditorCore.getTextSelectionClass().create(tr.doc, selection.anchor - 1, selection.head - 1);
       tr.setSelection(next || EditorCore.getTextSelectionClass().near(tr.doc.resolve(found.pos), 1));
@@ -161,7 +163,7 @@ const Callout = (function () {
     }).run();
   }
 
-  // === La fenêtre =========================================================================================================================================
+  // La fenêtre
   let win = null;
   let refs = null;
   let state = { color: DEFAULT.color, icon: DEFAULT.icon, editing: false };
@@ -173,8 +175,8 @@ const Callout = (function () {
     return e;
   }
 
-  // Un groupe de choix à une seule réponse (rôle radiogroup) : flèches pour passer de l'un à l'autre (le choix suit le focus), Entrée pour valider la fenêtre, un seul arrêt de Tab
-  // par groupe (celui qui est choisi, ou le premier quand rien ne l'est).
+  // Un groupe de choix à une seule réponse (rôle radiogroup) : flèches pour passer de l'un à l'autre (le choix suit le focus), Entrée pour valider la
+  // fenêtre, un seul arrêt de Tab par groupe (celui qui est choisi, ou le premier quand rien ne l'est).
   function radioGroup(labelId, options, onPick) {
     const group = el('div', 'pp-callout-options');
     group.setAttribute('role', 'radiogroup');
@@ -284,7 +286,8 @@ const Callout = (function () {
     if (ed) ed.commands.focus();
   }
 
-  // Ouvre la fenêtre : pour modifier l'encadré autour du curseur s'il y en a un, sinon pour en insérer un (autour de la sélection). Faux quand l'éditeur n'est pas modifiable.
+  // Ouvre la fenêtre : pour modifier l'encadré autour du curseur s'il y en a un, sinon pour en insérer un (autour de la sélection). Faux quand
+  // l'éditeur n'est pas modifiable.
   function open() {
     const ed = EditorCore.getEditor();
     if (!ed || !ed.isEditable) return false;
@@ -328,9 +331,10 @@ const Callout = (function () {
     closeWindow();
   }
 
-  // === Le bloc de signature ===============================================================================================================================
-  // Une zone 2 colonnes : trois lignes vides pour signer (~1,6 cm), une ligne de tirets bas, puis la légende - « Nom et signature » à gauche, « Date » à droite. Les tirets bas
-  // font une ligne dans tous les rendus sans rien de nouveau à exporter, et se remplacent comme du texte (une variable, une autre légende...).
+  // Le bloc de signature
+  // Une zone 2 colonnes : trois lignes vides pour signer (~1,6 cm), une ligne de tirets bas, puis la légende (« Nom et signature » à gauche, « Date »
+  // à droite). Les tirets bas font une ligne dans tous les rendus sans rien de nouveau à exporter, et se remplacent comme du texte (une variable, une
+  // autre légende...).
   const SIGNATURE_LINE = '_'.repeat(30);
   function signatureContent() {
     const column = caption => ({
@@ -342,8 +346,8 @@ const Callout = (function () {
     return { type: 'twoColumnsZone', content: [column(I18n.t('signature.name')), column(I18n.t('signature.date'))] };
   }
 
-  // Insère le bloc sous le bloc du curseur (au premier niveau du document : sous la liste, le tableau, l'encadré où il se trouve) ; un paragraphe vide est remplacé, pour ne
-  // pas laisser une ligne vide devant. Le curseur se pose dans la légende de gauche, prête à être changée.
+  // Insère le bloc sous le bloc du curseur (au premier niveau du document : sous la liste, le tableau, l'encadré où il se trouve) ; un paragraphe
+  // vide est remplacé, pour ne pas laisser une ligne vide devant. Le curseur se pose dans la légende de gauche, prête à être changée.
   function insertSignature(ed) {
     if (!ed || !ed.isEditable) return false;
     const { $from } = ed.state.selection;
