@@ -18,6 +18,19 @@ const HtmlSanitize = (function () {
   const DROPPED_ATTRS = new Set(['srcdoc', 'formaction', 'action', 'ping', 'background', 'poster', 'srcset', 'imagesrcset', 'xlink:href', 'data', 'codebase', 'manifest', 'name', 'form',
     'is', 'slot', 'autofocus', 'popover', 'popovertarget', 'popovertargetaction']);
 
+  // Un style qui charge une ressource (url(), image-set()...) fait contacter un site au simple affichage, sans qu'aucune <img> ne le signale (js/external-images.js) : la déclaration est retirée.
+  // L'éditeur n'en écrit jamais dans un attribut style (ses images sont des <img>, l'encadré pose son url(data:...) dans une feuille de style de la page). Une propriété personnalisée garde son
+  // texte tel quel : un échappement (u\72l) y est refusé, alors que le navigateur le lirait comme url().
+  const CSS_LOADS = /url\s*\(|image-set\s*\(|image\s*\(|src\s*\(|cross-fade\s*\(/i;
+  function cleanStyle(el) {
+    const style = el.style;
+    Array.from(style).forEach(prop => {
+      const value = style.getPropertyValue(prop);
+      if (CSS_LOADS.test(value) || (prop.indexOf('--') === 0 && value.indexOf('\\') !== -1)) style.removeProperty(prop);
+    });
+    if (!el.getAttribute('style')) el.removeAttribute('style');
+  }
+
   // Les liens ne mènent qu'à une page web, une adresse e-mail ou un numéro (ce que la fenêtre « Lien » de l'éditeur sait écrire, js/link-dialog.js) : l'adresse d'un lien, ou null.
   // Les exports (PDF, Word, e-mail) s'en servent aussi pour savoir quel lien garder.
   function safeLinkHref(href) {
@@ -43,6 +56,7 @@ const HtmlSanitize = (function () {
       const safe = safeLinkHref(el.getAttribute('href'));
       if (safe) el.setAttribute('href', safe); else el.removeAttribute('href');
     }
+    if (el.hasAttribute('style')) cleanStyle(el);
   }
 
   // Nettoie en place un arbre déjà parsé dans un document inerte, sans jamais le sérialiser : le chemin de l'éditeur le donne tel quel à ProseMirror.

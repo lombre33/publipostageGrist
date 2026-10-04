@@ -5,8 +5,10 @@
 // Un vrai réseau de test : les adresses en « .test » sont servies par la page de Playwright (page.route) et chaque requête est notée avec son type. L'image que
 // l'éditeur AFFICHE est une requête 'image' (inchangée) ; le téléchargement de l'EXPORT est une requête 'fetch' : c'est elle qui ne doit jamais partir avant
 // « Continuer », ni après « Annuler ». Les téléchargements de fichiers sont les vrais (événement `download` de Playwright).
-// Quatre parties : 1) un PDF d'une ligne (Annuler au clic, Échap, Tab, Continuer) ; 2) un DOCX d'une ligne ; 3) un lot ZIP (deux fenêtres à la suite, un refus arrête
-// tout le lot, une seule question pour toutes les lignes) ; 4) quarante sites (le titre et les boutons restent, seule la liste défile), un seul site, anglais.
+// Cinq parties : 1) un PDF d'une ligne (Annuler au clic, Échap, Tab, Continuer) ; 2) un DOCX d'une ligne ; 3) un lot ZIP (deux fenêtres à la suite, un refus arrête
+// tout le lot, une seule question pour toutes les lignes) ; 4) quarante sites (le titre et les boutons restent, seule la liste défile), un seul site, anglais ;
+// 5) l'AFFICHAGE (contrôle de sécurité du 04/10, « Tout corriger ») : l'image d'un autre site porte un contour en tirets rouges et une infobulle qui nomme le site, dans
+// l'éditeur (au repos, au survol, sélectionnée) puis dans la Lecture, en clair, en sombre et en anglais, mesuré sur une vraie capture ; l'image intégrée n'en a pas.
 // Lancé par run-headless.mjs (groupe Node "externalImagesMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-external-images-mouse.mjs
 // EXTERNAL_IMAGES_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans elle, rien n'est écrit.
 import { createServer } from 'node:http';
@@ -497,11 +499,94 @@ async function runEnglish() {
   await page.evaluate(() => I18n.setLang('fr'));
 }
 
+// 5) L'affichage : le contour en tirets rouges et l'infobulle d'une image qui charge depuis un autre site (js/external-images.js, css/external-images.css).
+const DISPLAY_HOST = 'affiche.exemple.test';
+const displayImg = src => `<img class="editor-image" src="${src}" alt="Image" style="width: 90px;">`;
+const displayHtml = () => `<p>Dossier : ${badge('ExtDossiers', 'Titre')}</p><p>${displayImg('https://' + DISPLAY_HOST + '/logo.png')}</p><p>${displayImg(DATA_PNG)}</p>`;
+const externalIn = root => `${root} img[src^="https://${DISPLAY_HOST}"]`;
+const embeddedIn = root => `${root} img[src^="data:"]`;
+// Le rectangle d'une image, amenée au milieu de la vue (la capture et le clic partent de là).
+async function boxOf(selector) {
+  return page.evaluate(sel => {
+    const e = document.querySelector(sel);
+    if (!e) return null;
+    e.scrollIntoView({ block: 'center', inline: 'nearest' });
+    const r = e.getBoundingClientRect();
+    return { left: r.left, top: r.top, width: r.width, height: r.height };
+  }, selector);
+}
+// Pixels rouges (celui du contour, même adoucis) dans la bande du haut d'une VRAIE capture : le contour est tracé à l'intérieur de l'image, sur ses premiers pixels.
+async function redPixels(box) {
+  const png = await page.screenshot({ clip: { x: Math.max(0, Math.floor(box.left)), y: Math.max(0, Math.floor(box.top)), width: Math.max(1, Math.floor(box.width)), height: 6 } });
+  return page.evaluate(async b64 => {
+    const img = new Image();
+    img.src = 'data:image/png;base64,' + b64;
+    await img.decode();
+    const c = document.createElement('canvas');
+    c.width = img.width; c.height = img.height;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    const d = ctx.getImageData(0, 0, c.width, c.height).data;
+    let red = 0;
+    for (let i = 0; i < d.length; i += 4) if (d[i] > 150 && d[i + 1] < 120 && d[i + 2] < 120 && d[i] - d[i + 1] > 60) red++;
+    return red;
+  }, png.toString('base64'));
+}
+const outlineOf = selector => page.evaluate(sel => {
+  const e = document.querySelector(sel);
+  if (!e) return null;
+  const css = getComputedStyle(e);
+  return { style: css.outlineStyle, width: css.outlineWidth, color: css.outlineColor, site: e.getAttribute('data-external-site'), title: e.title };
+}, selector);
+// Le panneau met la feuille à l'échelle (zoom ~0,6 à 700×400) : un trait de 3 px y mesure ~1,8 px ; la VRAIE capture (pixels rouges) dit s'il se voit.
+const DASHED_RED = o => !!o && o.style === 'dashed' && o.color === 'rgb(197, 48, 48)' && parseFloat(o.width) >= 1 && parseFloat(o.width) <= 3;
+
+async function checkDisplay(T, where, root) {
+  await page.mouse.move(2, 2);
+  await page.waitForTimeout(200);
+  const outside = await outlineOf(externalIn(root));
+  const embedded = await outlineOf(embeddedIn(root));
+  const tip = await tr('image.externalSite', { site: DISPLAY_HOST });
+  check(`${T}, ${where} : l'image d'un autre site porte son hôte, l'infobulle et un contour de 3 px (à l'échelle de la feuille) en tirets rouges`, !!outside && outside.site === DISPLAY_HOST && outside.title === tip && DASHED_RED(outside), outside);
+  check(`${T}, ${where} : l'image intégrée n'a ni hôte, ni infobulle, ni tirets`, !!embedded && embedded.site === null && !embedded.title && embedded.style !== 'dashed', embedded);
+  const redOutside = await redPixels(await boxOf(externalIn(root)));
+  const redEmbedded = await redPixels(await boxOf(embeddedIn(root)));
+  check(`${T}, ${where} : les tirets rouges se voient sur une vraie capture (${redOutside} pixels rouges au bord de l'image d'un autre site, ${redEmbedded} sur l'image intégrée)`, redOutside >= 25 && redEmbedded === 0, { redOutside, redEmbedded });
+}
+
+async function runDisplay(T, { dark = false, english = false } = {}) {
+  if (dark) await page.evaluate(() => Settings.setTheme('dark'));
+  if (english) await page.evaluate(() => I18n.setLang('en'));
+  await page.waitForTimeout(200);
+  await seed(displayHtml());
+  await checkDisplay(T, 'éditeur', '.tiptap');
+  await snap(`affichage-${T}-editeur`);
+  // Au survol, l'image garde ses tirets rouges (le contour bleu de survol d'une image ne les remplace pas) ; sélectionnée, l'éditeur ajoute sa sélection sans les retirer.
+  await realHover(externalIn('.tiptap'));
+  const hovered = await outlineOf(externalIn('.tiptap'));
+  check(`${T}, éditeur, au survol : le contour reste rouge en tirets`, DASHED_RED(hovered), hovered);
+  await realClick(externalIn('.tiptap'));
+  const selected = await page.evaluate(() => !!document.querySelector('.tiptap .editor-image-view.editor-image-selected'));
+  const afterSelect = await outlineOf(externalIn('.tiptap'));
+  check(`${T}, éditeur, image sélectionnée : la sélection de l'éditeur et les tirets rouges sont là ensemble`, selected && DASHED_RED(afterSelect), { selected, afterSelect });
+  await realClick('#btn-mode-read', 700);
+  await page.waitForSelector('#reader-container .reader-content img', { timeout: 15000 });
+  await page.waitForTimeout(500);
+  await checkDisplay(T, 'Lecture', '#reader-container');
+  await snap(`affichage-${T}-lecture`);
+  await realClick('#btn-mode-edit', 500);
+  if (dark) await page.evaluate(() => Settings.setTheme('light'));
+  if (english) await page.evaluate(() => I18n.setLang('fr'));
+}
+
 // Un arrêt (la fenêtre ne s'ouvre pas, un élément manque) est un échec rapporté, pas un plantage : le navigateur est fermé dans tous les cas.
 try {
   await run('clair');
   await runDark();
   await runEnglish();
+  await runDisplay('clair');
+  await runDisplay('sombre', { dark: true });
+  await runDisplay('anglais', { english: true });
 } catch (e) { total++; failures++; console.log('  FAIL - le parcours s’arrête : ' + e.message); }
 
 check('aucune boîte native (prompt, confirm, alert) ne s’est ouverte', nativeDialogs.length === 0, nativeDialogs);

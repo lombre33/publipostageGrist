@@ -1,0 +1,10 @@
+/* Image d'un site externe, à l'affichage (js/external-images.js : toute <img> de la page qui charge depuis un autre site que le widget et Grist porte data-external-site="hôte").
+   Un contour en tirets, à l'intérieur de l'image : il ne prend aucune place (ni la mise en page, ni la pagination, ni le PDF ne changent), se peint par-dessus l'image et tient aussi
+   sur une image habillée à gauche ou à droite, derrière le texte ou posée dans une case de tableau. La page (éditeur, Lecture) reste blanche dans les deux thèmes : le rouge est celui
+   du thème clair dans les deux (4,67:1 sur blanc, comme --danger-ink), jamais le jeton du thème sombre (#f08a8a, 2,3:1 sur blanc). Le texte explicatif est l'infobulle de l'image.
+   3 px : la feuille est mise à l'échelle du panneau (zoom ~0,6 à 700×400), le trait y mesure ~1,8 px à l'écran ; 2 px n'en faisait que ~1,2. */
+:root { --paper-danger: #c53030; }
+
+/* Les deux sélecteurs : `img.editor-image[...]` passe devant `.editor-image:hover` (css/style.css) qui, sinon, repeindrait le contour en bleu au survol. */
+img[data-external-site],
+img.editor-image[data-external-site] { outline: 3px dashed var(--paper-danger); outline-offset: -3px; }
