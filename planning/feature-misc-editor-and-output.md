@@ -128,7 +128,7 @@ dernière zone ; la Lecture (`render`), le PDF (`htmlToPdfContent`, flux princip
 garde (il faut pouvoir écrire à la suite), mais deux Entrées de trop au bas d'une page ne font plus apparaître « Page 2 », ni un « 2/2 » dans le pied : les lignes dépassent simplement
 la dernière page, et la page apparaît dès qu'on tape du texte dessus. Un saut de page posé par la personne garde son repère même sans rien derrière (Lecture et exports, eux, ne font
 pas de page vide de lui) ; les lignes vides tapées derrière lui n'ouvrent pas de « Page 3 ». Les lignes vides du milieu gardent leur place.
-**Reste ouvert** : l'impression navigateur et les qualités raster (`js/pdf-export-alt.js`, désactivées dans l'interface) ne rognent pas ; une zone à deux colonnes vide en fin de document
+**Reste ouvert** : l'impression navigateur et les qualités raster (grisées dans l'interface, code retiré le 04/10) ne rognaient pas ; une zone à deux colonnes vide en fin de document
 compte encore dans l'éditeur (elle n'est pas une « ligne vide »).
 
 ## QR code / code-barres

@@ -1,6 +1,6 @@
 // Formats de page (A3, A4, A5, A6) d'un modèle classique - suite de la bascule portrait / paysage (dev-tests/scenarios-orientation.js).
 // js/page-layout.js (FORMATS) est la seule table des dimensions : l'aperçu A4 (devenu « Aperçu A5 »...), la pagination de l'éditeur et de la Lecture, le facteur
-// d'ajustement de js/main.js, js/pdf-export.js (pageSize de pdfmake), js/docx-export.js (w:pgSz), js/pdf-export-alt.js (@page, jsPDF) et les Réglages la lisent.
+// d'ajustement de js/main.js, js/pdf-export.js (pageSize de pdfmake), js/docx-export.js (w:pgSz) et les Réglages la lisent.
 // Le format voyage avec le sens et les marges, dans la clé `format` du JSON de la colonne Margins (absente = A4 : un modèle enregistré avant ce réglage se recharge
 // A4, inchangé).
 //
@@ -900,39 +900,6 @@ window.EditorTestSuites.pageFormat = (function () {
           notes: 'suivi actif=' + tracking + ' suggestions en attente=' + pending + ' images=' + images + ' grille avant=' + JSON.stringify({ i: before.pageIndex, t: before.pageTopPt })
             + ' apres=' + JSON.stringify(after && { i: after.pageIndex, t: after.pageTopPt }) + ' mesure=' + JSON.stringify(fresh && { i: fresh.pageIndex, t: fresh.pageTopPt }),
         };
-      },
-    },
-    {
-      id: 'fmt_alternative_pdf_paths_follow_format',
-      description: 'L\'impression navigateur (@page size) et les qualités raster (format de jsPDF), grisées dans l\'interface, suivent aussi le format et le sens de la page',
-      async run() {
-        const printed = [];
-        const rasterOpts = [];
-        const origLoad = ExportCommon.loadScriptOnce;
-        const origHtml2pdf = window.html2pdf;
-        ExportCommon.loadScriptOnce = () => Promise.resolve();
-        window.html2pdf = () => ({ set(o) { rasterOpts.push(o); return this; }, from() { return this; }, save() { return Promise.resolve(); } });
-        try {
-          for (const [orientation, format] of [['portrait', 'A5'], ['landscape', 'A3'], ['portrait', undefined]]) {
-            const before = document.querySelectorAll('iframe').length;
-            await PdfExportAlt.exportViaBrowserPrint('<p>x</p>', 'essai', orientation, format);
-            const frames = Array.from(document.querySelectorAll('iframe'));
-            const frame = frames[frames.length - 1];
-            const rule = frame && frame.contentDocument && /@page\s*\{[^}]*\}/.exec(frame.contentDocument.documentElement.innerHTML);
-            printed.push({ orientation, format, rule: rule && rule[0], frames: frames.length - before });
-          }
-          await PdfExportAlt.exportViaRaster('<p>x</p>', 'essai', 'low', 'landscape', 'A5');
-          await PdfExportAlt.exportViaRaster('<p>x</p>', 'essai', 'low', 'portrait', 'A6');
-          await PdfExportAlt.exportViaRaster('<p>x</p>', 'essai', 'low', 'portrait');
-        } finally {
-          ExportCommon.loadScriptOnce = origLoad;
-          window.html2pdf = origHtml2pdf;
-        }
-        const rule = i => printed[i].rule || '';
-        const ok = printed.length === 3 && /size:\s*A5;/.test(rule(0)) && /size:\s*A3 landscape;/.test(rule(1)) && /size:\s*A4;/.test(rule(2))
-          && rasterOpts.length === 3 && rasterOpts[0].jsPDF.format === 'a5' && rasterOpts[0].jsPDF.orientation === 'landscape'
-          && rasterOpts[1].jsPDF.format === 'a6' && rasterOpts[1].jsPDF.orientation === 'portrait' && rasterOpts[2].jsPDF.format === 'a4';
-        return { pass: ok, notes: 'impression=' + JSON.stringify(printed.map(p => p.rule)) + ' raster=' + JSON.stringify(rasterOpts.map(o => [o.jsPDF.format, o.jsPDF.orientation])) };
       },
     },
     {
