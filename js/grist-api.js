@@ -767,22 +767,33 @@ const GristAPI = (function () {
     return baseUrl;
   }
 
-  // Jeton d'accès court terme (quelques minutes) réutilisé pour les appels REST d'upload/téléchargement de pièces jointes, avec marge de sécurité avant
-  // expiration.
+  // Jeton d'accès court terme (quelques minutes) réutilisé pour télécharger des pièces jointes, avec marge de sécurité avant expiration. En LECTURE SEULE (contrôle de
+  // sécurité du 04/10, accepté par Antoine) : le widget ne fait que lire des pièces jointes, il n'en envoie aucune, et un jeton qui peut aussi écrire serait un risque
+  // inutile s'il sortait du widget.
   async function getAccessTokenCached() {
     const now = Date.now();
     if (_tokenCache && _tokenCache.expiresAt - now > 15000) return _tokenCache;
-    const info = await grist.docApi.getAccessToken({ readOnly: false });
+    const info = await grist.docApi.getAccessToken({ readOnly: true });
     const baseUrl = fixBaseUrl(info.baseUrl);
     if (baseUrl !== info.baseUrl) console.warn('[GristAPI] baseUrl corrigé:', info.baseUrl, '->', baseUrl);
     _tokenCache = { token: info.token, baseUrl, expiresAt: now + (info.ttlMsecs || 120000) };
     return _tokenCache;
   }
 
+  // L'identifiant d'une pièce jointe de Grist est un numéro de ligne : des chiffres, rien d'autre. Un modèle écrit `data-attachment-id` comme il veut ; tout ce qui n'est pas
+  // un numéro (`..`, `/`, `?`, `#`, `@`...) est refusé ici, avant de se glisser dans le chemin de l'adresse (contrôle de sécurité du 04/10, accepté par Antoine). '' : refusé.
+  function attachmentIdOf(value) {
+    if (!value || (typeof value !== 'number' && typeof value !== 'string')) return '';
+    const id = String(value).trim();
+    return /^\d+$/.test(id) ? id : '';
+  }
+
+  // L'adresse de téléchargement d'une pièce jointe, ou '' quand il n'y en a pas : pas d'identifiant, ou un identifiant refusé (aucun jeton n'est alors demandé).
   async function getAttachmentDownloadUrl(attachmentId) {
-    if (!attachmentId) return '';
+    const id = attachmentIdOf(attachmentId);
+    if (!id) return '';
     const info = await getAccessTokenCached();
-    return `${info.baseUrl}/attachments/${attachmentId}/download?auth=${info.token}`;
+    return `${info.baseUrl}/attachments/${id}/download?auth=${info.token}`;
   }
 
   // Email et nom de la personne (chips #Variable) : le jeton de getAccessTokenCached() renvoie toujours "anon@getgrist.com" (identité scopée au document, pas la session
@@ -883,8 +894,12 @@ const GristAPI = (function () {
     await Promise.all(images.map(async img => {
       const id = img.dataset.attachmentId;
       if (!id) return;
-      try { img.src = await getAttachmentDownloadUrl(id); }
-      catch (e) { console.warn('[GristAPI] hydrateAttachmentImages: échec pour', id, e); }
+      try {
+        const url = await getAttachmentDownloadUrl(id);
+        // Un identifiant refusé ne donne aucune adresse : le src de l'image reste ce qu'il est, jamais vidé ni remplacé par une adresse bricolée.
+        if (url) img.src = url;
+        else console.warn('[GristAPI] hydrateAttachmentImages: identifiant de pièce jointe refusé', id);
+      } catch (e) { console.warn('[GristAPI] hydrateAttachmentImages: échec pour', id, e); }
     }));
   }
 
