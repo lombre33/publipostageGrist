@@ -227,7 +227,7 @@ const snap = () => page.evaluate(() => {
     text: prose ? prose.textContent : '',
     status: document.getElementById('status-msg').textContent,
     updates: window.__gristStub.countActions('UpdateRecord', 'Publipostage_Modeles'),
-    focus: !a ? null : (a.dataset && a.dataset.templateId ? 'stylo:' + a.dataset.templateId : (a.id || a.className || a.tagName)),
+    focus: !a ? null : (a.dataset && a.dataset.templateId ? (a.classList.contains('macro-summary-eye') ? 'oeil:' : 'stylo:') + a.dataset.templateId : (a.id || a.className || a.tagName)),
   };
 });
 // Le résumé : une ligne par page de garde ou annexe, avec ses modèles et leur stylo.
@@ -404,12 +404,13 @@ async function run(theme) {
   check(`${T} - de retour en Édition, le résumé du macro-modèle est là`, rs.summaryShown && !rs.barShown, rs);
   await away();
 
-  // Clavier : Tab visite les stylos dans l'ordre de lecture puis « Modifier la composition » ; l'anneau du stylo se voit.
+  // Clavier : Tab visite, pour chaque modèle, son stylo puis son œil (04/10), dans l'ordre de lecture, puis « Modifier la composition » ; l'anneau du stylo se voit.
   await page.focus('#macro-summary-parts .macro-summary-edit');
   const order = [(await snap()).focus];
-  for (let i = 0; i < 5; i++) { await page.keyboard.press('Tab'); order.push((await snap()).focus); }
-  check(`${T} - Tab visite les cinq stylos dans l'ordre de lecture puis « Modifier la composition »`,
-    JSON.stringify(order) === JSON.stringify(['stylo:' + idCover, 'stylo:' + idCdi, 'stylo:' + idCdd, 'stylo:' + idMentions, 'stylo:' + idMentions, 'btn-edit-macro']), order);
+  for (let i = 0; i < 10; i++) { await page.keyboard.press('Tab'); order.push((await snap()).focus); }
+  check(`${T} - Tab visite le stylo puis l'œil de chacun des cinq modèles, dans l'ordre de lecture, puis « Modifier la composition »`,
+    JSON.stringify(order) === JSON.stringify(['stylo:' + idCover, 'oeil:' + idCover, 'stylo:' + idCdi, 'oeil:' + idCdi, 'stylo:' + idCdd, 'oeil:' + idCdd, 'stylo:' + idMentions, 'oeil:' + idMentions, 'stylo:' + idMentions, 'oeil:' + idMentions, 'btn-edit-macro']), order);
+  await page.keyboard.press('Shift+Tab');
   await page.keyboard.press('Shift+Tab');
   const ring = await paintOf('#macro-summary-parts .macro-summary-edit:focus', '#macro-summary-parts .macro-summary-part');
   check(`${T} - un stylo pris au clavier montre son anneau de focus (2 px, plein, 3:1 au moins sur sa ligne)`,

@@ -1,20 +1,13 @@
-/* Habillage de #template-organize-modal (js/template-organize-modal.js) - "Organiser mes modèles".
-   Le voile, le cadre et ses trois zones viennent de la base commune des fenêtres (css/modal-base.css,
-   js/modal-base.js) ; les ajustements propres à cette fenêtre sont ci-dessous. Les lignes de la
-   liste réutilisent TELLES QUELLES .tts-row/.tts-icon/.tts-pin-btn/.tts-folder-caret/.tts-section-label/
-   .tts-group de css/template-tree-select.css (déjà chargé, déjà couvert par ses propres tests) plutôt que
-   de dupliquer ce rendu - seul ce qui est vraiment nouveau ici (recherche, bouton "Déplacer vers…",
-   indice de dossier des épinglés) a sa propre règle. */
+/* Habillage de #template-organize-modal (js/template-organize-modal.js). Voile, cadre et trois zones viennent de la base commune des fenêtres
+   (css/modal-base.css, js/modal-base.js). Les lignes de la liste réutilisent telles quelles .tts-row, .tts-icon, .tts-pin-btn, .tts-folder-caret,
+   .tts-section-label et .tts-group de css/template-tree-select.css ; seul ce qui est nouveau (recherche, « Déplacer vers… », indice de dossier des
+   épinglés) a sa règle ici. */
 
-/* Corrections DA (28/09, premier retour d'Antoine après le premier essai) : ce fichier ne redéclarait
-   aucune des propriétés que chaque modale soeur fixe explicitement (police, tailles, marges, bouton de
-   fermeture) - tout héritait donc des défauts du navigateur/de <body>. Valeurs alignées sur les modales
-   les plus proches en gabarit (#macro-editor-modal, #template-gallery-modal), cf. css/toolbar-v2.css. */
-/* Tient dans la fenêtre quelle que soit sa hauteur (29/09, Antoine : « la fenêtre se cale sur l'écran »). Avant, seule la liste était plafonnée (360 px) : à 700x400 la
-   fenêtre faisait 568 px, centrée elle débordait de 84 px en haut (titre coupé) et en bas (bouton « Fermer » hors de l'écran, sans défilement possible - l'overlay est
-   fixe). Depuis la base commune des fenêtres (css/modal-base.css), le cadre se plafonne à la hauteur du panneau moins 12 px de chaque côté : le titre, l'explication et
-   la recherche forment l'en-tête fixe, « Fermer » reste en bas, et seule la liste rétrécit et défile (elle est la zone de contenu de la fenêtre). Écarts d'avant : 10 px
-   entre les blocs de l'en-tête et avant la liste, 24 px avant « Fermer ». */
+/* Polices, tailles, marges et bouton de fermeture alignés sur les fenêtres de gabarit proche (#macro-editor-modal, #template-gallery-modal,
+   css/toolbar-v2.css) : sans eux, tout héritait des défauts du navigateur. */
+/* Tient dans la fenêtre quelle que soit sa hauteur : le cadre est plafonné à la hauteur du panneau moins 12 px de chaque côté (css/modal-base.css) ;
+   titre, explication et recherche forment l'en-tête fixe, « Fermer » reste en bas, et seule la liste rétrécit et défile (zone de contenu). Écarts :
+   10 px entre les blocs de l'en-tête et avant la liste, 24 px avant « Fermer ». */
 .template-organize-modal-content { --pp-modal-title-gap: 10px; --pp-modal-actions-gap: 24px; }
 .template-organize-modal-content .pp-modal-header { display: flex; flex-direction: column; gap: 10px; }
 .template-organize-modal-content .pp-modal-header h3 { margin-bottom: 12px; }
@@ -34,10 +27,8 @@
 .template-organize-modal-content .modal-actions button { font-family: var(--font-ui); font-weight: 600; font-size: 13px; height: 30px; padding: 0 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; }
 .template-organize-modal-content .modal-actions button:hover { background: var(--surface-sunken); }
 
-/* Les lignes de cette liste ne sélectionnent rien au clic (à la différence de .tts-popup) : seul un
-   dossier réagit au clic (dépliage). Le curseur "pointer" hérité de .tts-row induirait sinon une fausse
-   affordance de clic sur chaque modèle. "grab" (pas "default") depuis le glisser-déposer (28/09) : ces
-   lignes restent draggable, cf. js/template-organize-modal.js:makeLeafRow. */
+/* Ces lignes ne sélectionnent rien au clic (contrairement à .tts-popup) : seul un dossier réagit (dépliage), donc pas du curseur « pointer » hérité
+   de .tts-row (fausse affordance). « grab » : les lignes sont draggable (js/template-organize-modal.js:makeLeafRow). */
 #template-organize-list .tts-row-leaf { cursor: grab; }
 
 .tom-folder-hint { flex: none; font-size: 11px; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; }
@@ -45,17 +36,14 @@
 .tom-move-btn { flex: none; border: none; background: transparent; color: var(--text-faint); font: inherit; font-size: 11.5px; font-weight: 600; padding: 3px 6px; border-radius: var(--radius-sm); cursor: pointer; opacity: 0; }
 .tts-row:hover .tom-move-btn, .tts-row:focus-within .tom-move-btn { opacity: 1; }
 @media not (hover: hover) {
-  /* Même piège que .tts-trigger/.tts-row ailleurs dans ce projet (fond/affordance "collée" ou au
-     contraire jamais révélée sans survol réel) - sur tactile, ce bouton reste toujours visible plutôt que
-     de dépendre d'un :hover qui ne se déclenchera jamais. */
+  /* Sur tactile, ce bouton reste visible plutôt que de dépendre d'un :hover qui ne se déclenchera jamais. */
   .tom-move-btn { opacity: 1; }
 }
 .tom-move-btn:hover { background: var(--surface-sunken); color: var(--text); }
 
 .tom-empty { padding: 16px 8px; text-align: center; font-size: 12.5px; color: var(--text-faint); }
 
-/* Glisser-déposer et boutons "+" (28/09, second retour d'Antoine) - cf. commentaire d'en-tête de
-   js/template-organize-modal.js sur pendingFolder. */
+/* Glisser-déposer et boutons « + » : voir pendingFolder dans l'en-tête de js/template-organize-modal.js. */
 .tom-dragging { opacity: 0.4; }
 /* accent-soft (pas surface-sunken) : les lignes dossier ont désormais elles-mêmes un fond surface-sunken, la cible du glisser-déposer doit s'en détacher. */
 .tom-drop-target { background: var(--accent-soft); outline: 2px dashed var(--accent); outline-offset: -2px; }
@@ -71,19 +59,18 @@
 .tom-place-here-btn:hover { background: var(--accent); color: var(--surface); }
 
 .tom-pending-folder { border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); font-style: italic; color: var(--text-faint); background: transparent; }
-/* Pas de vrai caret d'expansion ici (rien à replier/déplier tant que le dossier n'existe pas) - masqué
-   plutôt que retiré pour garder l'alignement avec l'icône/le libellé des lignes dossier réelles. */
+/* Pas de vrai caret ici (rien à replier tant que le dossier n'existe pas) : masqué plutôt que retiré, pour garder l'alignement avec les lignes
+   dossier réelles. */
 .tom-pending-folder .tts-folder-caret { visibility: hidden; }
 .tom-pending-folder .tts-row-label { font-style: italic; font-weight: 600; }
 .tom-pending-hint { flex: 1; min-width: 0; font-size: 11px; font-style: normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tom-cancel-pending-btn { flex: none; border: none; background: transparent; color: var(--text-faint); font: inherit; font-size: 14px; line-height: 1; padding: 2px 6px; border-radius: var(--radius-sm); cursor: pointer; }
 .tom-cancel-pending-btn:hover { background: var(--surface-sunken); color: var(--text); }
 
-/* Interrupteur "ce dossier s'ouvre déplié / replié dans la liste déroulante" (29/09, demande d'Antoine), une icône par ligne dossier - réelle ou en
-   attente. Deux tracés qui montrent l'état : le contenu lisible sous l'en-tête (déplié), l'en-tête seul et trois points (replié, accent).
-   Volontairement ni la punaise (favori), ni l'étoile (modèle par défaut), ni un chevron (le caret de la ligne). Toujours visible, contrairement
-   à l'épingle : c'est un état à lire d'un coup d'oeil sur toute la liste. padding: 0 - le padding natif d'un <button> écrase sinon le glyphe
-   (même piège que .tts-pin-btn, css/template-tree-select.css). */
+/* Interrupteur « ce dossier s'ouvre déplié ou replié dans la liste déroulante » : une icône par ligne dossier (réelle ou en attente), deux tracés qui
+   montrent l'état (déplié : contenu sous l'en-tête ; replié : en-tête seul et trois points, accent). Ni la punaise, ni l'étoile, ni un chevron.
+   Toujours visible, contrairement à l'épingle : c'est un état à lire d'un coup d'œil. padding: 0 : le padding natif d'un <button> écrase sinon le
+   glyphe (même piège que .tts-pin-btn). */
 .tom-folder-default-btn { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; flex: none; border: none; background: transparent; border-radius: var(--radius-sm); color: var(--text-faint); cursor: pointer; }
 .tom-folder-default-btn.is-collapsed { color: var(--accent); }
 @media (hover: hover) and (pointer: fine) {

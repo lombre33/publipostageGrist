@@ -1,15 +1,15 @@
-// Modèle par défaut de la vue (retour d'Antoine, 2026-10-02, « 16 bis » : « un bouton qui permette de mettre ce modèle par défaut pour la vue dans laquelle il est, comme ça à
-// chaque fois que l'on arrive dans la vue/page on a le même modèle qui s'affiche »).
-// Le widget n'a pas besoin de savoir sur quelle page il est : les options d'un widget appartiennent à SA vue (section) dans Grist, donc un widget posé sur deux pages a deux
-// réglages. Le choix vit dans l'option `modeleDeLaVue` (l'id du modèle), même mécanique que js/access-rights.js et js/row-template.js : lue avec le widget, sans lecture de plus,
-// et partagée par tout le monde seulement une fois la vue enregistrée côté Grist (grist.setOption ne pose qu'un brouillon : bouton Enregistrer en haut du widget).
-// À l'ouverture : la ligne qui désigne un modèle (js/row-template.js) l'emporte, puis le modèle de la vue, puis le modèle par défaut du document (★, js/templates.js). Comme pour
-// l'étoile, un modèle email ou un macro-modèle ne peut pas être ce modèle de départ (le bouton est grisé, et un choix déjà enregistré qui l'est devenu est ignoré).
-// L'écran est la section « Modèle par défaut de cette vue » de Réglages > Vue : l'état, un bouton « Utiliser le modèle ouvert » et « Retirer ».
-//   ViewTemplate.init()      -> lit l'option, s'abonne à ses changements ; à appeler une fois les options connues (après GristAPI.init)
-//   ViewTemplate.usableId()  -> id du modèle de la vue s'il existe encore et peut servir de modèle de départ, sinon null
-//   ViewTemplate.set(id)     -> choisit ce modèle pour la vue ; clear() retire le choix
-//   ViewTemplate.wirePanel() -> branche la section de Réglages (redessinée à l'ouverture et à chaque changement de droits : en lecture seule, ses boutons sont grisés)
+// Modèle par défaut de la vue. Les options d'un widget appartiennent à SA vue (section) dans Grist : un widget posé sur deux pages a deux réglages,
+// et il n'a pas besoin de savoir sur quelle page il est. Le choix vit dans l'option `modeleDeLaVue` (id du modèle), même mécanique que
+// js/access-rights.js et js/row-template.js : lue avec le widget, partagée par tout le monde seulement une fois la vue enregistrée côté Grist
+// (grist.setOption ne pose qu'un brouillon).
+// À l'ouverture : la ligne qui désigne un modèle (js/row-template.js) l'emporte, puis le modèle de la vue, puis le modèle par défaut du document (★,
+// js/templates.js). Comme l'étoile, un modèle email ou un macro-modèle ne peut pas être ce modèle de départ (bouton grisé ; un choix enregistré
+// devenu invalide est ignoré).
+// Écran : section « Modèle par défaut de cette vue » de Réglages > Vue (état, « Utiliser le modèle ouvert », « Retirer »).
+//   ViewTemplate.init() -> lit l'option et s'abonne à ses changements (après GristAPI.init)
+//   ViewTemplate.usableId() -> id du modèle de la vue s'il existe encore et peut servir de départ, sinon null
+//   ViewTemplate.set(id) -> choisit ce modèle pour la vue ; clear() retire le choix
+//   ViewTemplate.wirePanel() -> branche la section de Réglages (redessinée à l'ouverture et à chaque changement de droits ; grisée en lecture seule)
 const ViewTemplate = (function () {
   const OPTION_KEY = 'modeleDeLaVue';
 
@@ -56,7 +56,7 @@ const ViewTemplate = (function () {
     });
   }
 
-  // === Réglages > Vue > Modèle par défaut de cette vue ===
+  // Réglages > Vue > Modèle par défaut de cette vue
   const el = id => document.getElementById(id);
 
   // Le modèle ouvert, tel que le montre js/main.js (liste des modèles) : null pour un nouveau modèle jamais enregistré.
@@ -112,8 +112,8 @@ const ViewTemplate = (function () {
     const openBtn = el('v2-btn-settings');
     if (openBtn) openBtn.addEventListener('click', renderPanel);
     I18n.onChange(renderPanel);
-    // Et dès que les droits changent Réglages ouverts (choix dans l'onglet Accès, case cochée dans la table des droits, relecture de 10 s) : les boutons se grisent ou se dégrisent sans qu'on
-    // les rouvre (choix d'Antoine du 2026-10-02). Rien à préserver ici : l'écran ne contient aucune saisie, que des boutons et un texte d'état.
+    // Les droits changent aussi Réglages ouverts (onglet Accès, case cochée dans la table des droits, relecture de 10 s) : les boutons se grisent ou
+    // se dégrisent sans rouvrir. Rien à préserver ici : l'écran n'a aucune saisie.
     if (typeof AccessRights !== 'undefined') AccessRights.onChange(renderPanel);
     renderPanel();
   }

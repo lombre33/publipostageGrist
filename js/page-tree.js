@@ -1,16 +1,16 @@
-// Rangement des pages que Grist crée avec les tables du widget (retour d'Antoine, 2026-10-02, point 15 : « lorsque le widget est ajouté dans un nouveau document, créer
-// une table et les autres imbriquées dessous pour éviter d'alourdir la navigation, et si possible en mode replié par défaut »).
-// grist-core (sandbox/grist/useractions.py : AddTable -> doAddView) crée pour chaque AddTable une page au premier niveau, tout en bas du volet des pages. Le widget en crée
-// jusqu'à six (modèles, commentaires, préférences de rangement, abréviations, liens entre tables, sonde de l'e-mail) : autant de lignes dans la navigation du document.
-// Ici : la page de `Publipostage_Modeles` reste au premier niveau et se replie par défaut ; la page de chacune des autres tables passe juste dessous, comme le fait le
-// glisser-déposer de Grist (app/client/models/TreeModel.ts : UpdateRecord sur `_grist_Pages`, `indentation` et `pagePos` = position de la page qui doit la suivre).
-// Le « replié par défaut » est l'option du document que Grist lit (app/client/models/entities/PageRec.ts : `_grist_Pages.options` = {"collapsed": true}, la case « Replier
-// par défaut » du menu d'une page) ; elle n'est posée qu'à la création de la table des modèles, donc dans un document neuf, jamais re-posée après un choix de l'utilisateur.
-// Rien n'est jamais déplacé dans un document existant : seules les tables créées pendant la session sont rangées, une fois. Un échec (droits, ancienne version de
-// Grist sans la colonne `options`) ne casse jamais la création de la table : il est consigné dans la console et c'est tout.
-//   PageTree.afterTableCreated(tableId) -> Promise<void> ; à appeler juste après l'AddTable d'une table du widget (sans attendre : rien ne dépend du rangement)
-//   PageTree.whenIdle()                 -> Promise<void> ; les rangements demandés jusque-là sont finis (tests)
-//   PageTree.reset()                    -> oublie les tables en attente (tests : chaque scénario repart d'un volet à lui)
+// Rangement des pages que Grist crée avec les tables du widget. grist-core (sandbox/grist/useractions.py : AddTable -> doAddView) crée pour chaque
+// AddTable une page au premier niveau, tout en bas du volet des pages ; le widget en crée jusqu'à six (modèles, commentaires, préférences de
+// rangement, abréviations, liens entre tables, sonde de l'e-mail), autant de lignes dans la navigation.
+// Ici : la page de `Publipostage_Modeles` reste au premier niveau et se replie par défaut ; celle de chaque autre table passe juste dessous, comme le
+// glisser-déposer de Grist (app/client/models/TreeModel.ts : UpdateRecord sur `_grist_Pages`, `indentation` et `pagePos` = position de la page qui
+// doit la suivre). Le « replié par défaut » est l'option que Grist lit (app/client/models/entities/PageRec.ts : `_grist_Pages.options` =
+// {"collapsed": true}, case « Replier par défaut » du menu d'une page) ; elle n'est posée qu'à la création de la table des modèles (document neuf),
+// jamais re-posée après un choix de la personne.
+// Rien n'est déplacé dans un document existant : seules les tables créées pendant la session sont rangées, une fois. Un échec (droits, ancienne
+// version de Grist sans la colonne `options`) ne casse pas la création de la table : il est consigné dans la console.
+//   PageTree.afterTableCreated(tableId) -> Promise<void> ; à appeler juste après l'AddTable d'une table du widget (sans attendre)
+//   PageTree.whenIdle() -> Promise<void> ; les rangements demandés sont finis (tests)
+//   PageTree.reset() -> oublie les tables en attente (tests : chaque scénario repart d'un volet à lui)
 const PageTree = (function () {
   const MAIN_TABLE = 'Publipostage_Modeles';
   const PAGES = '_grist_Pages';

@@ -1,27 +1,14 @@
-// "Organiser mes modèles" (planning/feature-rangement-tri-modeles.md §4/§8.3) : modale dédiée pour créer
-// des dossiers et y ranger des modèles - le "reste à faire" documenté depuis le câblage de la Piste B
-// (js/template-tree-select.js, en-tête). Réutilise TemplateOrganizer.buildView et TemplatePreferences
-// tels quels (js/template-organizer.js, js/template-preferences.js) : rien à changer dans ces deux
-// fichiers pour cette modale.
-//
-// Un dossier n'existe QUE comme la valeur du champ Dossier d'au moins une préférence - pas de table de
-// dossiers séparée (carte de décision, choix confirmé par Antoine le 2026-09-28 : "Créé en rangeant un
-// modèle"). Conséquence directe sur les boutons "+" ci-dessous (ajoutés le même jour, second retour
-// d'Antoine après le premier essai) : un "+" ne peut JAMAIS, à lui seul, persister un dossier vide. Il ne
-// fait que nommer un chemin "en attente" (pendingFolder, état local, jamais écrit en base) affiché comme
-// une ligne dossier à part jusqu'à ce qu'un modèle y soit effectivement rangé - par glisser-déposer ou par
-// le bouton de repli "Ranger ici" (glisser-déposer n'a pas d'équivalent clavier/tactile fiable). Dès cette
-// première écriture, TemplateOrganizer.buildView fait apparaître un vrai nœud dossier à cette place et la
-// ligne "en attente" disparaît naturellement au render() suivant. Le bouton "Déplacer vers…" (chemin
-// tapé à la main, saisie de texte libre) reste utilisable en toutes circonstances, y compris pour créer un
-// dossier directement par ce biais - les "+"/le glisser-déposer sont additifs, pas un remplacement.
-//
-// Dossier déplié ou replié par défaut dans la liste déroulante (29/09, demande d'Antoine) : chaque ligne
-// dossier porte un interrupteur (.tom-folder-default-btn) dont l'état est enregistré PAR UTILISATEUR
-// (TemplatePreferences.setFolderCollapsed) et lu par js/template-tree-select.js à chaque ouverture de la
-// liste. Cette modale-ci garde ses dossiers dépliés (il faut tout voir pour ranger) : l'interrupteur ne
-// règle que la liste déroulante. Un dossier "en attente" n'existant pas en base, son interrupteur reste
-// local (pendingCollapsed) et n'est écrit qu'au moment où un modèle y est rangé.
+// « Organiser mes modèles » (planning/feature-rangement-tri-modeles.md §4/§8.3) : fenêtre pour créer des dossiers et y ranger des modèles. Réutilise
+// TemplateOrganizer.buildView et TemplatePreferences tels quels.
+// Un dossier n'existe que comme valeur du champ Dossier d'au moins une préférence (pas de table de dossiers). Un « + » ne persiste donc jamais un
+// dossier vide : il nomme un chemin « en attente » (pendingFolder, état local, jamais écrit) affiché comme une ligne à part jusqu'à ce qu'un modèle y
+// soit rangé, par glisser-déposer ou par « Ranger ici » (le glisser-déposer n'a pas d'équivalent clavier ni tactile fiable). Dès cette première
+// écriture, buildView fait apparaître le vrai dossier et la ligne en attente disparaît au render() suivant. « Déplacer vers… » (chemin tapé) reste
+// utilisable partout, y compris pour créer un dossier.
+// Dossier déplié ou replié par défaut dans la liste déroulante : chaque ligne dossier porte un interrupteur (.tom-folder-default-btn), enregistré par
+// personne (TemplatePreferences.setFolderCollapsed) et lu par js/template-tree-select.js à chaque ouverture. Cette fenêtre garde ses dossiers dépliés
+// (il faut tout voir pour ranger) : l'interrupteur ne règle que la liste déroulante. Celui d'un dossier en attente reste local (pendingCollapsed)
+// jusqu'au premier modèle rangé.
 const TemplateOrganizeModal = (function () {
   let modal, searchInput, list, newFolderBtn;
   let searchTerm = '';
@@ -41,9 +28,8 @@ const TemplateOrganizeModal = (function () {
     return span;
   }
 
-  // Après toute écriture (épingle/dossier), l'arbre de la barre d'outils doit refléter le changement sans
-  // attendre une fermeture/réouverture - TemplateTreeSelect.refresh() existe déjà pour ça (utilisé aussi
-  // par le chargement asynchrone des préférences au démarrage, js/main.js).
+  // Après toute écriture (épingle, dossier), l'arbre de la barre d'outils se met à jour sans fermeture ni réouverture (TemplateTreeSelect.refresh(),
+  // aussi appelé au chargement asynchrone des préférences).
   function refreshTree() {
     if (typeof TemplateTreeSelect !== 'undefined') TemplateTreeSelect.refresh();
   }
@@ -58,8 +44,7 @@ const TemplateOrganizeModal = (function () {
     return null;
   }
 
-  // Nom du seul nouveau segment (pas le chemin complet) : le préfixe du parent est géré ici, pas tapé par
-  // l'utilisateur - cf. commentaire d'en-tête sur pendingFolder.
+  // Nom du seul nouveau segment : le préfixe du parent est géré ici (voir pendingFolder).
   async function promptNewFolderName(parentPath) {
     const value = await Dialogs.prompt({ title: I18n.t('dialog.newFolder.title'), label: I18n.t('organize.modal.newFolderPrompt'), confirmLabel: I18n.t('common.create') });
     if (value === null) return null;
@@ -67,8 +52,8 @@ const TemplateOrganizeModal = (function () {
     return TemplatePreferences.normalizeFolderPath(full);
   }
 
-  // Le dossier en attente vient d'être créé en y rangeant un modèle : son interrupteur "replié par défaut", resté local jusque-là, est écrit
-  // maintenant. Un échec ici ne défait pas le rangement (le dossier existe, déplié) : il est seulement journalisé.
+  // Le dossier en attente vient d'être créé par un rangement : son interrupteur « replié par défaut », resté local, est écrit maintenant. Un échec ne
+  // défait pas le rangement (le dossier existe, déplié) : il est seulement journalisé.
   async function applyPendingFolderState(path) {
     if (!path || pendingFolder !== path || !pendingCollapsed) return;
     pendingCollapsed = false;
@@ -97,7 +82,7 @@ const TemplateOrganizeModal = (function () {
       ? I18n.t('organize.modal.moveHint', { folders: folders.join(', ') })
       : I18n.t('organize.modal.moveHintEmpty');
     const value = await Dialogs.prompt({ title: I18n.t('dialog.moveFolder.title'), message: hint, value: currentFolder || '', confirmLabel: I18n.t('common.move') });
-    if (value === null) return; // Annulé : ne rien écrire (distinct d'une chaîne vide, qui vide le dossier).
+    if (value === null) return;  // Annulé : rien à écrire (une chaîne vide, elle, vide le dossier).
     try {
       await TemplatePreferences.setFolder(id, value);
       await applyPendingFolderState(TemplatePreferences.normalizeFolderPath(value));
@@ -110,8 +95,7 @@ const TemplateOrganizeModal = (function () {
 
   async function togglePin(id, pinned) {
     try {
-      // setPinned() ne lève jamais pour une identification indisponible (repli anonyme silencieux, cf.
-      // js/template-preferences.js) - même garde que js/template-tree-select.js.
+      // setPinned() ne lève pas pour une identification indisponible (repli anonyme, js/template-preferences.js).
       await TemplatePreferences.setPinned(id, !pinned);
       render();
       refreshTree();
@@ -120,9 +104,8 @@ const TemplateOrganizeModal = (function () {
     }
   }
 
-  // Bascule "s'ouvre déplié / replié" d'un dossier RÉEL. Le nouvel état est lu au moment du clic (pas dans la ligne dessinée : deux clics
-  // rapides doivent bien revenir à l'état de départ) et l'interface suit tout de suite ; si Grist refuse l'écriture, le module revient au
-  // dernier état confirmé et on redessine.
+  // Bascule « déplié / replié » d'un dossier RÉEL. Le nouvel état est lu au clic (deux clics rapides doivent revenir à l'état de départ) et
+  // l'interface suit tout de suite ; si Grist refuse l'écriture, retour au dernier état confirmé et redessin.
   async function toggleFolderDefault(path) {
     const pending = TemplatePreferences.setFolderCollapsed(path, !TemplatePreferences.isFolderCollapsed(path));
     render();
@@ -136,9 +119,8 @@ const TemplateOrganizeModal = (function () {
     }
   }
 
-  // Interrupteur d'une ligne dossier (réelle ou en attente). Deux tracés distincts (dossier déplié : le contenu se lit sous l'en-tête ; replié :
-  // l'en-tête seul et trois points), volontairement ni la punaise, ni l'étoile, ni un chevron (une icône = une fonction). L'info-bulle
-  // dit l'état courant ET ce que fait le clic, comme celle de l'épingle.
+  // Interrupteur d'une ligne dossier (réelle ou en attente). Deux tracés distincts (déplié : le contenu sous l'en-tête ; replié : l'en-tête seul et
+  // trois points), ni la punaise, ni l'étoile, ni un chevron (une icône = une fonction). L'info-bulle dit l'état courant et ce que fait le clic.
   function makeFolderDefaultButton(collapsed, focusKey, onToggle) {
     const btn = document.createElement('button');
     btn.type = 'button';
@@ -152,19 +134,15 @@ const TemplateOrganizeModal = (function () {
     return btn;
   }
 
-  // folderLabel : uniquement pour les lignes épinglées (affichées à plat en tête, donc sans indentation
-  // pour indiquer leur dossier) - une feuille dans l'arbre en dessous est déjà visuellement dans son
-  // dossier grâce à l'indentation, cf. makeNode.
+  // folderLabel : seulement pour les lignes épinglées (à plat en tête, donc sans indentation qui indique leur dossier).
   function makeLeafRow(node, depth, folderLabel) {
     const row = document.createElement('div');
     row.className = 'tts-row tts-row-leaf';
     row.style.setProperty('--tts-depth', String(depth));
     row.dataset.templateId = String(node.id);
 
-    // Glisser-déposer (2026-09-28, second retour d'Antoine) : seules les FEUILLES sont draggable, jamais
-    // une ligne dossier - un dossier n'a pas d'identité propre à déplacer, seulement les modèles qu'il
-    // contient (cf. commentaire d'en-tête). dragend se déclenche toujours (drop réussi, annulé ou en
-    // dehors d'une cible) : sans lui une ligne resterait visuellement "figée" en cours de glissement.
+    // Glisser-déposer : seules les FEUILLES sont draggable (un dossier n'a pas d'identité propre à déplacer). dragend se déclenche toujours (drop
+    // réussi, annulé ou hors cible) : sans lui une ligne resterait « figée » en cours de glissement.
     row.draggable = true;
     row.addEventListener('dragstart', (e) => {
       e.dataTransfer.setData('text/plain', String(node.id));
@@ -194,8 +172,8 @@ const TemplateOrganizeModal = (function () {
     pinBtn.classList.toggle('is-pinned', pinned);
     pinBtn.setAttribute('aria-pressed', String(pinned));
     pinBtn.setAttribute('aria-label', I18n.t('templateTree.pin.aria'));
-    // Info-bulle native (la modale vit hors de #toolbar-top : le [data-tip] de la barre ne s'y applique pas) - dit ce que fait le clic dans l'état
-    // courant, pour ne pas le confondre avec l'étoile "modèle par défaut" de la barre.
+    // Info-bulle native (la fenêtre vit hors de #toolbar-top : le [data-tip] de la barre ne s'y applique pas) : dit ce que fait le clic dans l'état
+    // courant, pour ne pas le confondre avec l'étoile « modèle par défaut » de la barre.
     pinBtn.title = I18n.t(pinned ? 'templateTree.unpin.tip' : 'templateTree.pin.tip');
     pinBtn.addEventListener('click', () => togglePin(node.id, pinned));
     row.appendChild(pinBtn);
@@ -207,10 +185,8 @@ const TemplateOrganizeModal = (function () {
     moveBtn.addEventListener('click', () => moveTemplate(node.id, (pref && pref.dossier) || ''));
     row.appendChild(moveBtn);
 
-    // Repli sans souris/tactile pendant qu'un dossier "en attente" existe (cf. commentaire d'en-tête) - le
-    // glisser-déposer n'a pas d'équivalent clavier. N'apparaît que le temps qu'un dossier est en attente,
-    // sur CHAQUE modèle (y compris celui déjà dans ce dossier en attente, cas déjà impossible puisque le
-    // dossier n'existe pas encore réellement tant que rien n'y a été rangé).
+    // Repli sans souris ni tactile tant qu'un dossier « en attente » existe (le glisser-déposer n'a pas d'équivalent clavier) : un bouton sur chaque
+    // modèle.
     if (pendingFolder) {
       const placeBtn = document.createElement('button');
       placeBtn.type = 'button';
@@ -254,8 +230,8 @@ const TemplateOrganizeModal = (function () {
 
     const group = document.createElement('div');
     group.className = 'tts-group';
-    // Profondeur du dossier (pas celle de ses enfants) : css/template-tree-select.css cale le trait guide du groupe sur le caret de CE dossier. Posée explicitement, sinon le groupe
-    // hériterait de la profondeur du groupe parent.
+    // Profondeur du dossier (pas celle de ses enfants) : css/template-tree-select.css cale le trait guide du groupe sur le caret de CE dossier ;
+    // posée explicitement, sinon le groupe hériterait de celle du groupe parent.
     group.style.setProperty('--tts-depth', String(depth));
     node.enfants.forEach((child) => group.appendChild(makeNode(child, depth + 1)));
 
@@ -265,8 +241,7 @@ const TemplateOrganizeModal = (function () {
       group.classList.toggle('is-collapsed', expanded);
     });
 
-    // Cible de glisser-déposer (2026-09-28) : preventDefault() sur dragover est OBLIGATOIRE (règle HTML5
-    // DnD), sinon 'drop' ne se déclenche jamais.
+    // Cible de glisser-déposer : preventDefault() sur dragover est obligatoire (règle HTML5 DnD), sinon 'drop' ne se déclenche jamais.
     row.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; row.classList.add('tom-drop-target'); });
     row.addEventListener('dragleave', () => row.classList.remove('tom-drop-target'));
     row.addEventListener('drop', (e) => {
@@ -276,8 +251,8 @@ const TemplateOrganizeModal = (function () {
       if (id) dropOnFolder(id, node.chemin);
     });
 
-    // Fragment (pas un <div> englobant) : même raison que js/template-tree-select.js:makeFolderRow -
-    // `group` doit rester le frère direct de `row` pour un dossier imbriqué.
+    // Fragment plutôt qu'un <div> englobant (comme js/template-tree-select.js:makeFolderRow) : `group` doit rester le frère direct de `row` pour un
+    // dossier imbriqué.
     const fragment = document.createDocumentFragment();
     fragment.appendChild(row);
     fragment.appendChild(group);
@@ -288,10 +263,8 @@ const TemplateOrganizeModal = (function () {
     return node.type === 'dossier' ? makeFolderRow(node, depth) : makeLeafRow(node, depth, null);
   }
 
-  // Dossier "en attente" (cf. commentaire d'en-tête) : affiché à part, à plat, avec son chemin complet en
-  // libellé plutôt que d'être spliced à sa position imbriquée dans l'arbre - un dossier qui n'existe pas
-  // encore réellement n'a pas de place stable à lui trouver dans l'arbre affiché. Disparaît de lui-même
-  // (view.tree le contient alors réellement) dès le premier modèle rangé dedans.
+  // Dossier « en attente » : affiché à part, à plat, avec son chemin complet, car il n'a pas encore de place stable dans l'arbre ; il disparaît dès
+  // que le premier modèle y est rangé (view.tree le contient alors).
   function makePendingFolderRow(path) {
     const row = document.createElement('div');
     row.className = 'tts-row tts-row-folder tom-pending-folder';
@@ -326,10 +299,9 @@ const TemplateOrganizeModal = (function () {
     return row;
   }
 
-  // Redessine la liste ET garde le focus et le défilement là où ils étaient. list.innerHTML = '' détruit le bouton qu'on vient de cliquer : le
-  // focus retombait sur <body> et le clavier repartait du début de la fenêtre (Échap, lui, ferme partout : la base commune l'écoute sur le
-  // document). Le bouton est retrouvé par data-focus-key ; à défaut (le bouton a disparu avec le redessin, ex. « Ranger ici ») le focus va à
-  // la liste elle-même (tabindex -1, hors piège de Tab).
+  // Redessine la liste en gardant le focus et le défilement. list.innerHTML = '' détruit le bouton cliqué : le focus retomberait sur <body> et le
+  // clavier repartirait du début de la fenêtre. Le bouton est retrouvé par data-focus-key ; à défaut (il a disparu avec le redessin, ex. « Ranger ici
+  // »), le focus va à la liste (tabindex -1, hors piège de Tab).
   function render() {
     const active = document.activeElement;
     const focusInList = !!(active && list.contains(active));
@@ -357,8 +329,7 @@ const TemplateOrganizeModal = (function () {
 
     const view = TemplateOrganizer.buildView(templates, currentPreferences());
 
-    // Le dossier en attente vient d'être réellement créé (un modèle y a été rangé depuis) : il apparaît
-    // maintenant à sa vraie place dans view.tree, plus la peine de le montrer à part.
+    // Le dossier en attente est devenu réel (un modèle y a été rangé) : il apparaît à sa vraie place dans view.tree.
     if (pendingFolder && findFolderInTree(view.tree, pendingFolder)) pendingFolder = null;
 
     if (view.pinned.length) {
@@ -378,8 +349,8 @@ const TemplateOrganizeModal = (function () {
     if (pendingFolder) list.appendChild(makePendingFolderRow(pendingFolder));
   }
 
-  // Le dossier "en attente" est la dernière ligne de la liste : dans une fenêtre basse la liste défile, la ramener en vue pour que la personne voie
-  // qu'il a bien été créé (et son interrupteur).
+  // Le dossier « en attente » est la dernière ligne : dans une fenêtre basse la liste défile, donc on la ramène en vue pour montrer qu'il a été créé
+  // (et son interrupteur).
   function revealPendingFolder() {
     if (list.querySelector('.tom-pending-folder')) list.scrollTop = list.scrollHeight;
   }
@@ -397,8 +368,7 @@ const TemplateOrganizeModal = (function () {
 
   function close() {
     if (modal) modal.style.display = 'none';
-    // Aucune trace, aucune écriture Grist n'a eu lieu pour un dossier resté "en attente" (cf. commentaire
-    // d'en-tête) - fermer la modale l'abandonne silencieusement, comme annuler la saisie "Déplacer vers…".
+    // Un dossier resté « en attente » n'a rien écrit dans Grist : fermer la fenêtre l'abandonne, comme annuler la saisie « Déplacer vers… ».
     pendingFolder = null;
     pendingCollapsed = false;
   }
@@ -412,9 +382,8 @@ const TemplateOrganizeModal = (function () {
     revealPendingFolder();
   }
 
-  // Branché une seule fois à l'init (js/main.js), même patron que MacroEditor.wire(). La base commune des fenêtres
-  // (ModalBase.adopt, js/main.js:wirePageModals) prend en charge Échap, le piège de focus et sa restauration -
-  // rien à refaire ici pour ça.
+  // Branché une seule fois à l'init (js/main.js), comme MacroEditor.wire(). ModalBase.adopt (js/main.js:wirePageModals) gère Échap, le piège de focus
+  // et sa restauration.
   function wire() {
     modal = document.getElementById('template-organize-modal');
     searchInput = document.getElementById('template-organize-search');

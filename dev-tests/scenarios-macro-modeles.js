@@ -1720,6 +1720,549 @@
     },
   });
 
+  // --- L'œil d'un modèle du résumé (04/10, demande d'Antoine : « dans l'interface d'édition du macro-modèle, une icône œil pour masquer l'un des modèles : il ne s'applique plus en Lecture ni aux exports ») ---
+  // Le résumé (js/macro-editor.js:renderParts) met un œil après le stylo de chaque modèle. Un clic le masque de la Lecture et de toutes les sorties du macro-modèle (js/macro-templates.js:pickModeleId, le seul
+  // endroit où une position choisit son modèle), le grise sans le retirer (l'œil est barré) et écrit la composition dans sa ligne (`hiddenModeleIds`, dans SA position : le même modèle peut rester affiché ailleurs).
+  // Les gestes sont ceux de la personne (le vrai œil, les vrais boutons d'export, la vraie fenêtre de composition) ; ce que la souris mesure à 700×400 est dans le script Node macroHiddenMouse.
+  const squashed = s => String(s).replace(/\s+/g, '');
+  const countOf = (text, word) => (String(text).match(new RegExp(word, 'g')) || []).length;
+  const eyeOf = (slot, id) => document.querySelector('#macro-summary-parts .macro-summary-eye[data-slot="' + slot + '"][data-template-id="' + id + '"]');
+  const eyeState = (slot, id) => {
+    const eye = eyeOf(slot, id);
+    if (!eye) return null;
+    const entry = eye.closest('.macro-summary-model');
+    const box = eye.getBoundingClientRect();
+    const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    return {
+      pressed: eye.getAttribute('aria-pressed'), disabled: eye.disabled, label: eye.getAttribute('aria-label'), title: eye.title,
+      crossed: eye.innerHTML.includes('M4 4l16 16'), greyed: entry.classList.contains('is-hidden-model'),
+      nameColor: getComputedStyle(entry.querySelector('.macro-summary-model-name')).color,
+      w: Math.round(box.width), h: Math.round(box.height), afterPencil: eye.previousElementSibling === entry.querySelector('.macro-summary-edit'),
+      onTop: !!hit && (hit === eye || eye.contains(hit)),
+    };
+  };
+  // Les modèles masqués de la position `slotIndex` dans la composition écrite dans une ligne (null : cette position n'existe pas).
+  const hiddenIn = (row, slotIndex) => { const slot = (composition(row) || [])[slotIndex]; return slot ? (slot.hiddenModeleIds || []).map(String) : null; };
+  const statusNow = () => { const el = document.getElementById('status-msg'); return { text: el.textContent, error: el.className === 'error-msg' }; };
+  // La ligne courante de la page du document (la colonne Nom décide des annexes : « a », « b » dans composedMacro).
+  async function feedNom(h, nom) {
+    const stub = window.__gristStub;
+    stub.setVariables(PAGE_DATA, { Nom: 'Text' });
+    stub.setRows(PAGE_DATA, [{ id: 1, Nom: nom }]);
+    await GristAPI.refreshSchema();
+    stub.fireRecord({ id: 1, Nom: nom }, PAGE_DATA);
+    await h.sleep(100);
+  }
+  // Ce que la personne lit : la Lecture du macro-modèle (texte sans espaces), puis retour à l'Édition (le résumé).
+  async function readingOf(h) {
+    document.getElementById('btn-mode-read').click();
+    await h.sleep(1000);
+    const text = squashed(document.getElementById('reader-container').textContent || '');
+    document.getElementById('btn-mode-edit').click();
+    await h.sleep(500);
+    return text;
+  }
+  // Les sorties, par les vrais boutons : le PDF de la ligne, le PDF unique (toutes les lignes à la suite), le Word ; chacune rend le texte de ses pages (sans espaces).
+  async function singlePdfOf(h) {
+    const blob = await pdfDownloaded(h, async () => { document.getElementById('btn-export-pdf').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); });
+    return blob ? (await pdfPages(h, blob)).map(p => squashed(p.text)) : null;
+  }
+  async function mergedPdfOf(h) {
+    const file = await fileDownloaded(h, 'v2-btn-export-pdf-merged');
+    return file && file.blob ? (await pdfPages(h, file.blob)).map(p => squashed(p.text)) : null;
+  }
+  async function wordTextOf(h) {
+    const file = await fileDownloaded(h, 'v2-btn-export-docx');
+    if (!file || !file.blob) return null;
+    await ExportCommon.ensureJsZipLoaded();
+    const xml = await (await JSZip.loadAsync(await file.blob.arrayBuffer())).file('word/document.xml').async('string');
+    return squashed(xml.replace(/<[^>]+>/g, ''));
+  }
+
+  cases.push({
+    id: 'macro_hidden_model_is_left_out_by_pick_and_build',
+    description: "pickModeleId et buildConcatenatedHtml laissent de côté le modèle masqué de SA position (page de garde, règle qui correspond, modèle par défaut), sans passer à la règle suivante ni au modèle par défaut ; les identifiants se comparent en texte ; les sauts de page se recomptent sans lui ; une composition sans liste se lit comme avant",
+    run: async () => {
+      const problems = [];
+      const pick = (slot, record) => MacroTemplates.pickModeleId(slot, 'Dossiers', record);
+      if (await pick({ type: 'fixed', modeleId: '42', hiddenModeleIds: ['42'] }, {}) !== null) problems.push('page de garde masquée');
+      if (await pick({ type: 'fixed', modeleId: '42' }, {}) !== '42') problems.push('page de garde non masquée');
+      // Identifiants en texte : la fenêtre de composition écrit '42', Grist rend 42.
+      if (await pick({ type: 'fixed', modeleId: 42, hiddenModeleIds: ['42'] }, {}) !== null) problems.push('42 (nombre) masqué par "42" (texte)');
+      if (await pick({ type: 'fixed', modeleId: '42', hiddenModeleIds: [42] }, {}) !== null) problems.push('"42" (texte) masqué par 42 (nombre)');
+      // Annexe : la première règle qui correspond donne son modèle, masqué ou non ; jamais la règle suivante ni le modèle par défaut à sa place.
+      const annex = hidden => ({
+        type: 'conditional',
+        rules: [{ column: 'Type', operator: '=', value: 'A', modeleId: 'ma' }, { column: 'Type', operator: '=', value: 'A', modeleId: 'mb' }],
+        defaultModeleId: 'md',
+        hiddenModeleIds: hidden,
+      });
+      if (await pick(annex(['ma']), { Type: 'A' }) !== null) problems.push('la règle 1 correspond et son modèle est masqué : rien attendu (ni la règle 2, ni le défaut)');
+      if (await pick(annex(['mb']), { Type: 'A' }) !== 'ma') problems.push('le modèle masqué de la règle 2 ne change pas la règle 1');
+      if (await pick(annex(['md']), { Type: 'A' }) !== 'ma') problems.push('le modèle par défaut masqué ne change pas la règle 1');
+      if (await pick(annex(['md']), { Type: 'Z' }) !== null) problems.push('aucune règle ne correspond et le modèle par défaut est masqué : rien attendu');
+      if (await pick(annex(['ma', 'mb']), { Type: 'Z' }) !== 'md') problems.push('aucune règle ne correspond : le modèle par défaut, même si les modèles des règles sont masqués');
+      if (await pick(annex([]), { Type: 'A' }) !== 'ma' || await pick(annex(undefined), { Type: 'A' }) !== 'ma') problems.push('liste vide ou absente : rien de masqué');
+      // Assemblage : pas de modèle masqué dans le document, pas de saut de page orphelin, les rangs des sauts se suivent.
+      const templates = [{ id: 'cover', contenu: '<p>GARDE</p>' }, { id: 'a1', contenu: '<p>ANNEXE1</p>' }, { id: 'a2', contenu: '<p>ANNEXE2</p>' }];
+      const rule = modeleId => ({ column: 'Type', operator: '=', value: 'A', modeleId });
+      const slots = { slots: [
+        { type: 'fixed', modeleId: 'cover', hiddenModeleIds: ['cover'] },
+        { type: 'conditional', rules: [rule('a1')], defaultModeleId: null },
+        { type: 'conditional', rules: [rule('a2')], defaultModeleId: null },
+      ] };
+      const html = await MacroTemplates.buildConcatenatedHtml(slots, 'Dossiers', { Type: 'A' }, templates);
+      if (html !== '<p>ANNEXE1</p>' + MacroTemplates.slotBreakHtml(1) + '<p>ANNEXE2</p>') problems.push('assemblage sans la page de garde : ' + html);
+      // Le même modèle dans deux positions : masqué dans l'une seulement.
+      const twice = { slots: [{ type: 'fixed', modeleId: 'cover', hiddenModeleIds: ['cover'] }, { type: 'conditional', rules: [rule('cover')], defaultModeleId: null }] };
+      const once = await MacroTemplates.buildConcatenatedHtml(twice, 'Dossiers', { Type: 'A' }, templates);
+      if (once !== '<p>GARDE</p>') problems.push('même modèle masqué dans la page de garde seulement : ' + once);
+      // Tout masqué : un document vide, sans erreur. Composition d'avant l'œil (sans liste) : comme avant.
+      const none = await MacroTemplates.buildConcatenatedHtml({ slots: [{ type: 'fixed', modeleId: 'cover', hiddenModeleIds: ['cover'] }] }, 'Dossiers', {}, templates);
+      if (none !== '') problems.push('tout masqué : ' + none);
+      const legacy = await MacroTemplates.buildConcatenatedHtml({ slots: [{ type: 'fixed', modeleId: 'cover' }] }, 'Dossiers', {}, templates);
+      if (legacy !== '<p>GARDE</p>') problems.push('composition sans liste : ' + legacy);
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+    },
+  });
+
+  cases.push({
+    id: 'macro_hidden_model_helpers_copy_prune_and_ignore_the_unknown',
+    description: "withModelHidden rend une copie (jamais la composition reçue), masque ou affiche UN modèle d'UNE position et retire la liste devenue vide ; keepHidden ne reporte que les modèles encore présents dans la position reconstruite ; slotModelIds ne donne ni doublon ni modèle vide",
+    run: async () => {
+      const problems = [];
+      const base = { slots: [
+        { type: 'fixed', modeleId: 7 },
+        { type: 'conditional', rules: [{ column: 'C', operator: '=', value: 'x', modeleId: '8' }, { column: 'C', operator: '=', value: 'y', modeleId: 8 }, { column: 'C', operator: '=', value: 'z', modeleId: null }], defaultModeleId: '9' },
+      ] };
+      const frozen = JSON.stringify(base);
+      const ids = MacroTemplates.slotModelIds(base.slots[1]).map(String);
+      if (JSON.stringify(ids) !== JSON.stringify(['8', '9'])) problems.push('slotModelIds : ' + JSON.stringify(ids));
+      if (MacroTemplates.slotModelIds(null).length || MacroTemplates.slotModelIds({ type: 'conditional' }).length || MacroTemplates.slotModelIds({ type: 'fixed', modeleId: '' }).length) problems.push('slotModelIds sur des positions vides');
+      const hid = MacroTemplates.withModelHidden(base, 1, '8', true);
+      if (JSON.stringify(base) !== frozen) problems.push('la composition reçue a été modifiée');
+      if (JSON.stringify(hid.slots[1].hiddenModeleIds) !== JSON.stringify(['8'])) problems.push('masquer : ' + JSON.stringify(hid.slots[1]));
+      if (hid.slots[0].hiddenModeleIds !== undefined) problems.push('une autre position a été touchée');
+      const again = MacroTemplates.withModelHidden(hid, 1, 8, true);
+      if (JSON.stringify(again.slots[1].hiddenModeleIds.map(String)) !== JSON.stringify(['8'])) problems.push('masquer deux fois (texte puis nombre) : ' + JSON.stringify(again.slots[1].hiddenModeleIds));
+      const both = MacroTemplates.withModelHidden(hid, 1, '9', true);
+      if (JSON.stringify(both.slots[1].hiddenModeleIds.map(String).sort()) !== JSON.stringify(['8', '9'])) problems.push('deux modèles masqués dans une position : ' + JSON.stringify(both.slots[1].hiddenModeleIds));
+      const one = MacroTemplates.withModelHidden(both, 1, 8, false);
+      if (JSON.stringify(one.slots[1].hiddenModeleIds.map(String)) !== JSON.stringify(['9'])) problems.push('en afficher un des deux : ' + JSON.stringify(one.slots[1].hiddenModeleIds));
+      const back = MacroTemplates.withModelHidden(MacroTemplates.withModelHidden(base, 0, 7, true), 0, 7, false);
+      if (JSON.stringify(back) !== frozen) problems.push("masquer puis afficher ne rend pas la composition d'origine : " + JSON.stringify(back));
+      if (JSON.stringify(MacroTemplates.withModelHidden(base, 5, '8', true)) !== frozen) problems.push('position inexistante');
+      if (JSON.stringify(MacroTemplates.withModelHidden(null, 0, '8', true)) !== JSON.stringify({ slots: [] })) problems.push('composition absente');
+      const rebuilt = { type: 'conditional', rules: [{ column: 'C', operator: '=', value: 'x', modeleId: '8' }], defaultModeleId: null };
+      const kept = MacroTemplates.keepHidden(rebuilt, both.slots[1]);
+      if (JSON.stringify(kept.hiddenModeleIds) !== JSON.stringify(['8'])) problems.push('keepHidden : le modèle 9 a quitté la position, son masquage aussi : ' + JSON.stringify(kept));
+      const replaced = MacroTemplates.keepHidden({ type: 'fixed', modeleId: '10' }, { type: 'fixed', modeleId: '7', hiddenModeleIds: ['7'] });
+      if (replaced.hiddenModeleIds !== undefined) problems.push('un autre modèle mis à la place repart affiché : ' + JSON.stringify(replaced));
+      if (MacroTemplates.keepHidden({ type: 'fixed', modeleId: '7' }, null).hiddenModeleIds !== undefined) problems.push("keepHidden sans position d'origine");
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+    },
+  });
+
+  cases.push({
+    id: 'macro_summary_gives_each_model_an_eye_that_says_its_state',
+    description: "Le résumé met un œil après le stylo de chaque modèle (nom accessible « Masquer le modèle « … » », info-bulle, 24 px au moins, au premier plan) ; un modèle masqué dans sa position a l'œil barré et enfoncé et son nom grisé, sans être retiré ; le même modèle dans une autre position reste affiché ; un modèle supprimé a un œil grisé",
+    run: async (h) => {
+      try {
+        const macro = await composedMacro(h, 'Macro yeux', (m, rule) => [
+          { type: 'conditional', rules: [rule(m.coverId, 'c')], defaultModeleId: null },
+          { type: 'conditional', rules: [rule(987654, 'e')], defaultModeleId: null },
+        ]);
+        const problems = [];
+        const cover = 'Macro yeux - garde', other = 'Macro yeux - autre', third = 'Macro yeux - défaut';
+        const hideLabel = name => 'Masquer le modèle « ' + name + ' »';
+        const hideTip = name => 'Masquer « ' + name + ' » de la Lecture et des exports';
+        const hiddenTip = name => '« ' + name + ' » est masqué de la Lecture et des exports : cliquer pour l’afficher';
+        const everyModel = [[0, macro.coverId, cover], [1, macro.otherId, other], [1, macro.coverId, cover], [1, macro.thirdId, third], [2, macro.coverId, cover]];
+        // Rien de masqué : tous les yeux ouverts, actifs, après leur stylo, au premier plan.
+        for (const [slot, id, name] of everyModel) {
+          const s = eyeState(slot, id);
+          if (!s) { problems.push('œil absent : position ' + slot + ', ' + name); continue; }
+          if (s.pressed !== 'false' || s.crossed || s.greyed || s.disabled) problems.push('œil ouvert attendu (' + slot + ', ' + name + ') : ' + JSON.stringify(s));
+          if (s.label !== hideLabel(name) || s.title !== hideTip(name)) problems.push('noms (' + slot + ', ' + name + ') : ' + s.label + ' / ' + s.title);
+          if (s.w < 24 || s.h < 24 || !s.onTop || !s.afterPencil) problems.push('taille, premier plan ou place (' + slot + ', ' + name + ') : ' + JSON.stringify(s));
+        }
+        const gone = eyeState(3, 987654);
+        if (!gone || !gone.disabled || gone.pressed !== null || gone.crossed || gone.label !== 'modèle introuvable') problems.push('modèle supprimé : œil grisé attendu : ' + JSON.stringify(gone));
+        const shownColor = eyeState(1, macro.coverId).nameColor;
+        const namesBefore = JSON.stringify(summaryRows().map(r => [r.label, r.models]));
+        // Des modèles masqués dans la ligne (comme après un clic, ou écrits par quelqu'un d'autre) : la page de garde dans sa position, « autre » et « défaut » dans l'annexe 1.
+        const slots = composition(macroRow(macro.id));
+        slots[0].hiddenModeleIds = [macro.coverId];
+        slots[1].hiddenModeleIds = [macro.otherId, macro.thirdId];
+        window.__gristStub.remoteWrite(MACRO_TABLE, macro.id, { Contenu: JSON.stringify({ slots }) });
+        await reopen(h, macro.id);
+        const wanted = [[0, macro.coverId, cover, true], [1, macro.otherId, other, true], [1, macro.coverId, cover, false], [1, macro.thirdId, third, true], [2, macro.coverId, cover, false]];
+        for (const [slot, id, name, hidden] of wanted) {
+          const s = eyeState(slot, id);
+          if (!s) { problems.push('œil absent après relecture : position ' + slot + ', ' + name); continue; }
+          if (s.pressed !== String(hidden) || s.crossed !== hidden || s.greyed !== hidden) problems.push('état (' + slot + ', ' + name + ') attendu ' + hidden + ' : ' + JSON.stringify(s));
+          if (s.label !== hideLabel(name)) problems.push('le nom accessible change avec l\'état (' + slot + ', ' + name + ') : ' + s.label);
+          if (s.title !== (hidden ? hiddenTip(name) : hideTip(name))) problems.push('info-bulle (' + slot + ', ' + name + ') : ' + s.title);
+          if (hidden && s.nameColor === shownColor) problems.push('nom masqué pas grisé (' + slot + ', ' + name + ') : ' + s.nameColor);
+          if (!hidden && s.nameColor !== shownColor) problems.push('nom affiché grisé (' + slot + ', ' + name + ') : ' + s.nameColor);
+        }
+        // Rien ne disparaît : mêmes lignes, mêmes modèles, mêmes stylos.
+        if (JSON.stringify(summaryRows().map(r => [r.label, r.models])) !== namesBefore) problems.push('les lignes du résumé ont changé : ' + JSON.stringify(summaryRows().map(r => [r.label, r.models])));
+        if (summaryRows().flatMap(r => r.pencils).filter(p => !p.disabled).length !== 5) problems.push('stylos : ' + JSON.stringify(summaryRows().map(r => r.pencils.length)));
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      } finally { await leaveMacro(h); }
+    },
+  });
+
+  cases.push({
+    id: 'macro_eye_hides_the_model_from_reading_pdf_merged_pdf_and_word_and_shows_it_again',
+    description: "Un clic sur l'œil d'un modèle le retire de la Lecture, du PDF, du PDF unique et du Word (UNE seule position : le même modèle, donné par une règle d'une annexe, reste), le macro-modèle reste composé de la même façon ; un second clic remet tout, la ligne Grist retrouve exactement sa composition d'avant",
+    run: async (h) => {
+      try {
+        const macro = await composedMacro(h, 'Macro œil sorties');
+        await feedNom(h, 'b'); // l'annexe 1 donne alors, par sa règle « b », le modèle de la page de garde : « Page de garde » deux fois
+        setAutosave(false);
+        const problems = [];
+        const original = macroRow(macro.id).Contenu;
+        const word = 'Pagedegarde';
+        const outputs = async () => {
+          const pdf = await singlePdfOf(h), merged = await mergedPdfOf(h), docx = await wordTextOf(h);
+          return { reading: countOf(await readingOf(h), word), pdf: pdf && pdf.map(t => countOf(t, word)), merged: merged && merged.map(t => countOf(t, word)), word: docx && countOf(docx, word) };
+        };
+        const full = await outputs();
+        if (JSON.stringify(full) !== JSON.stringify({ reading: 2, pdf: [1, 1], merged: [1, 1], word: 2 })) problems.push('avant tout masquage : ' + JSON.stringify(full));
+        // Un clic sur l'œil de la page de garde : une seule « Page de garde » partout (celle de l'annexe 1, même modèle dans une autre position).
+        eyeOf(0, macro.coverId).click();
+        await h.sleep(700);
+        const hiddenCover = await outputs();
+        if (JSON.stringify(hiddenCover) !== JSON.stringify({ reading: 1, pdf: [1], merged: [1], word: 1 })) problems.push('page de garde masquée : ' + JSON.stringify(hiddenCover));
+        if (JSON.stringify(summaryRows().map(r => [r.label, r.models])) !== JSON.stringify([['Page de garde', ['Macro œil sorties - garde']], ['Annexe 1', ['Macro œil sorties - autre', 'Macro œil sorties - garde', 'Macro œil sorties - défaut']]])) problems.push('le résumé a changé : ' + JSON.stringify(summaryRows().map(r => r.models)));
+        // Un second clic remet tout, à l'identique.
+        eyeOf(0, macro.coverId).click();
+        await h.sleep(700);
+        if (macroRow(macro.id).Contenu !== original) problems.push('la ligne ne retrouve pas sa composition : ' + macroRow(macro.id).Contenu + ' pour ' + original);
+        const reading = await readingOf(h);
+        if (countOf(reading, word) !== 2) problems.push('Lecture après le second clic : ' + reading);
+        // Même modèle, autre position : l'œil du modèle que donne la règle de l'annexe 1 ne retire pas la page de garde.
+        eyeOf(1, macro.coverId).click();
+        await h.sleep(700);
+        const hiddenAnnex = await readingOf(h);
+        if (countOf(hiddenAnnex, word) !== 1) problems.push("l'œil de l'annexe 1 retire une seule page : " + hiddenAnnex);
+        const row = macroRow(macro.id);
+        if (JSON.stringify(hiddenIn(row, 1)) !== JSON.stringify([String(macro.coverId)]) || JSON.stringify(hiddenIn(row, 0)) !== JSON.stringify([])) problems.push('ligne : page de garde ' + JSON.stringify(hiddenIn(row, 0)) + ', annexe 1 ' + JSON.stringify(hiddenIn(row, 1)));
+        // Une ligne qui ne choisit pas ce modèle : l'annexe 1 donne « Autre page », seule la page de garde reste d'avant.
+        await feedNom(h, 'a');
+        const forA = await readingOf(h);
+        if (countOf(forA, word) !== 1 || countOf(forA, 'Autrepage') !== 1) problems.push('ligne « a » : ' + forA);
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      } finally { await leaveMacro(h); }
+    },
+  });
+
+  cases.push({
+    id: 'macro_eye_click_writes_the_composition_only_and_keeps_the_rest_of_the_row',
+    description: "Un clic sur l'œil dit son état tout de suite, écrit UNE fois la composition dans sa ligne (le modèle masqué dans sa position) sans toucher au reste (nom, nom du PDF, en-tête et pied, page), garde le focus et le même bouton, ne quitte ni le résumé ni le macro-modèle, et le coin d'état le dit ; relu depuis Grist, l'œil est toujours fermé",
+    run: async (h) => {
+      try {
+        const macro = await composedMacro(h, 'Macro œil ligne');
+        const problems = [];
+        // Une ligne qui a des réglages, écrits par l'enregistrement automatique (vrai champ, vrai minuteur).
+        const field = document.getElementById('pdf-filename-template');
+        field.hidden = false;
+        field.value = 'Dossier-{Nom}';
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+        PageLayout.setMarginsMm({ top: 31, right: 24, bottom: 26, left: 22 });
+        document.dispatchEvent(new CustomEvent('pp:marginsChanged'));
+        await waitTicks(h, 2);
+        setAutosave(false); // plus rien d'autre n'écrit : seule l'écriture de l'œil peut changer la ligne
+        const before = macroRow(macro.id);
+        if (before.NomFichierPDF !== 'Dossier-{Nom}') problems.push('le cas ne prouve rien, nom du PDF : ' + before.NomFichierPDF);
+        const writes0 = writesNow();
+        const screen0 = JSON.stringify(screenState());
+        const eye = eyeOf(1, macro.otherId);
+        eye.focus();
+        eye.click();
+        await h.sleep(40);
+        const instant = eyeState(1, macro.otherId);
+        if (instant.pressed !== 'true' || !instant.crossed || !instant.greyed) problems.push("l'écran ne dit pas l'état dès le clic : " + JSON.stringify(instant));
+        await h.sleep(700);
+        const after = macroRow(macro.id);
+        const changed = Object.keys(Object.assign({}, before, after)).filter(k => k !== 'Contenu' && k !== 'DateModif' && JSON.stringify(before[k]) !== JSON.stringify(after[k]));
+        if (changed.length) problems.push('colonnes changées en plus de la composition : ' + changed.join());
+        if (JSON.stringify(hiddenIn(after, 1)) !== JSON.stringify([String(macro.otherId)]) || JSON.stringify(hiddenIn(after, 0)) !== JSON.stringify([])) problems.push('composition écrite : ' + after.Contenu);
+        const unchanged = composition(after).map(s => { const copy = JSON.parse(JSON.stringify(s)); delete copy.hiddenModeleIds; return copy; });
+        if (JSON.stringify(unchanged) !== JSON.stringify(composition(before))) problems.push('la composition elle-même a changé : ' + after.Contenu);
+        if (writesNow() - writes0 !== 1) problems.push('une seule écriture attendue : ' + (writesNow() - writes0));
+        if (JSON.stringify(screenState()) !== screen0) problems.push("l'écran a changé (modèle, résumé, bandeau) : " + JSON.stringify(screenState()));
+        if (document.activeElement !== eye || !document.contains(eye)) problems.push("l'œil n'a plus le focus ou a été remplacé : " + (document.activeElement && document.activeElement.className));
+        const status = statusNow();
+        if (status.text !== 'Modèle masqué de la Lecture et des exports : « Macro œil ligne - autre »' || status.error) problems.push('coin d\'état : ' + JSON.stringify(status));
+        const cached = Templates.getCached().find(t => String(t.id) === String(macro.id));
+        if (JSON.stringify((cached.macroSlots.slots[1].hiddenModeleIds || []).map(String)) !== JSON.stringify([String(macro.otherId)])) problems.push('cache des modèles : ' + JSON.stringify(cached.macroSlots.slots[1]));
+        // Relu depuis Grist (le modèle est rechargé par la liste), l'œil est toujours fermé.
+        await reopen(h, macro.id);
+        const reread = eyeState(1, macro.otherId);
+        if (!reread || reread.pressed !== 'true' || !reread.crossed || !reread.greyed) problems.push('relu depuis Grist : ' + JSON.stringify(reread));
+        // Le second clic retire le masquage : la liste disparaît de la ligne, qui retrouve sa composition d'avant.
+        eyeOf(1, macro.otherId).click();
+        await h.sleep(700);
+        const restored = macroRow(macro.id);
+        if (restored.Contenu !== before.Contenu) problems.push('composition après le second clic : ' + restored.Contenu);
+        if (statusNow().text !== 'Modèle de nouveau dans la Lecture et les exports : « Macro œil ligne - autre »') problems.push('coin d\'état au second clic : ' + statusNow().text);
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      } finally { await leaveMacro(h); }
+    },
+  });
+
+  cases.push({
+    id: 'macro_hidden_model_stays_hidden_through_the_window_save_and_leaves_with_its_model',
+    description: "Après un œil, une relecture des modèles puis « Modifier la composition » et « Enregistrer » sans rien changer, le modèle reste masqué (le résumé reçu avant la relecture est périmé) ; changer la page de garde ou le modèle d'une règle ne laisse pas le masquage derrière le modèle retiré, et un modèle mis à sa place repart affiché ; les autres positions gardent le leur",
+    run: async (h) => {
+      try {
+        const macro = await composedMacro(h, 'Macro œil fenêtre');
+        setAutosave(false);
+        const problems = [];
+        await Templates.loadAll(); // le cache change d'objet : le résumé à l'écran (et son bouton « Modifier la composition ») en a reçu un plus ancien
+        eyeOf(1, macro.otherId).click();
+        await h.sleep(600);
+        eyeOf(0, macro.coverId).click();
+        await h.sleep(600);
+        document.getElementById('btn-edit-macro').click();
+        await h.sleep(250);
+        document.getElementById('macro-editor-save').click();
+        await h.sleep(900);
+        let row = macroRow(macro.id);
+        if (JSON.stringify(hiddenIn(row, 0)) !== JSON.stringify([String(macro.coverId)]) || JSON.stringify(hiddenIn(row, 1)) !== JSON.stringify([String(macro.otherId)])) problems.push('après « Enregistrer » sans changement : ' + row.Contenu);
+        if (!eyeState(0, macro.coverId) || eyeState(0, macro.coverId).pressed !== 'true' || eyeState(1, macro.otherId).pressed !== 'true') problems.push('yeux après « Enregistrer » : ' + JSON.stringify([eyeState(0, macro.coverId), eyeState(1, macro.otherId)]));
+        // Le modèle de la règle 1 de l'annexe 1 (masqué) est remplacé par le modèle par défaut : son masquage part avec lui, l'autre position garde le sien.
+        document.getElementById('btn-edit-macro').click();
+        await h.sleep(250);
+        const ruleSelect = document.querySelector('#macro-editor-slots .macro-rule-modele');
+        ruleSelect.value = String(macro.thirdId);
+        ruleSelect.dispatchEvent(new Event('change', { bubbles: true }));
+        document.getElementById('macro-editor-save').click();
+        await h.sleep(900);
+        row = macroRow(macro.id);
+        if (JSON.stringify(hiddenIn(row, 1)) !== JSON.stringify([]) || JSON.stringify(hiddenIn(row, 0)) !== JSON.stringify([String(macro.coverId)])) problems.push('après le changement de la règle 1 : ' + row.Contenu);
+        if (eyeState(1, macro.thirdId) === null || eyeState(1, macro.thirdId).pressed !== 'false') problems.push('le modèle mis à la place repart affiché : ' + JSON.stringify(eyeState(1, macro.thirdId)));
+        // Une autre page de garde : le masquage de l'ancienne ne la suit pas ; remettre l'ancienne ne le ressuscite pas.
+        document.getElementById('btn-edit-macro').click();
+        await h.sleep(250);
+        const cover = document.getElementById('macro-editor-cover');
+        cover.value = String(macro.otherId);
+        cover.dispatchEvent(new Event('change', { bubbles: true }));
+        document.getElementById('macro-editor-save').click();
+        await h.sleep(900);
+        row = macroRow(macro.id);
+        if (JSON.stringify(hiddenIn(row, 0)) !== JSON.stringify([]) || String(composition(row)[0].modeleId) !== String(macro.otherId)) problems.push('après une autre page de garde : ' + row.Contenu);
+        document.getElementById('btn-edit-macro').click();
+        await h.sleep(250);
+        const back = document.getElementById('macro-editor-cover');
+        back.value = String(macro.coverId);
+        back.dispatchEvent(new Event('change', { bubbles: true }));
+        document.getElementById('macro-editor-save').click();
+        await h.sleep(900);
+        if (JSON.stringify(hiddenIn(macroRow(macro.id), 0)) !== JSON.stringify([])) problems.push('la page de garde remise ne redevient pas masquée toute seule : ' + macroRow(macro.id).Contenu);
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      } finally { await leaveMacro(h); }
+    },
+  });
+
+  cases.push({
+    id: 'macro_eye_clicks_in_a_row_end_on_the_last_state_with_one_write_at_a_time',
+    description: "Grist lent : quatre clics de suite (deux yeux, l'un trois fois, après une relecture des modèles qui croise la première écriture) font au plus deux écritures, jamais deux en même temps, et la ligne, le cache et l'écran finissent sur le dernier état demandé, sans perdre le premier masquage, même si le résumé a été redessiné entre-temps à partir d'un cache périmé ; un œil cliqué ensuite part de cette composition",
+    run: async (h) => {
+      try {
+        const macro = await composedMacro(h, 'Macro œil rafale', (m, rule) => [{ type: 'conditional', rules: [rule(m.coverId, 'c')], defaultModeleId: null }]);
+        setAutosave(false);
+        const problems = [];
+        const writes0 = writesNow();
+        await Templates.loadAll(); // le cache change d'objet : celui que le résumé a reçu à l'ouverture est périmé
+        window.__gristStub.setLatency({ fetchTable: 200, applyUserActions: 400 });
+        window.__gristStub.resetInFlightStats();
+        try {
+          eyeOf(0, macro.coverId).click(); // masqué : l'écriture part
+          // Dès le clic, avant toute réponse de Grist, le cache des modèles (que lisent la Lecture et les exports) dit déjà le masquage.
+          const instant = Templates.getCached().find(t => String(t.id) === String(macro.id));
+          if (JSON.stringify((instant.macroSlots.slots[0].hiddenModeleIds || []).map(String)) !== JSON.stringify([String(macro.coverId)])) problems.push('le cache ne dit pas le masquage dès le clic : ' + JSON.stringify(instant.macroSlots.slots[0]));
+          const reread = Templates.loadAll(); // la lecture arrive avant l'écriture : elle rend l'état d'avant et remplace les objets du cache
+          await reread; // ... alors que l'écriture dure encore : les clics qui suivent partent de ce que l'écran demande, pas de ce cache périmé
+          // Un redessin du résumé à partir de ce cache périmé (ici un changement de langue) rouvre l'œil de la page de garde à l'écran : la fin des écritures le referme.
+          I18n.setLang('en');
+          await h.sleep(60);
+          I18n.setLang('fr');
+          await h.sleep(60);
+          eyeOf(1, macro.otherId).click(); // masqué
+          eyeOf(1, macro.otherId).click(); // affiché
+          eyeOf(1, macro.otherId).click(); // masqué
+          await h.sleep(3000);
+        } finally { window.__gristStub.setLatency(0); }
+        const writes = writesNow() - writes0;
+        if (writes < 1 || writes > 2) problems.push('écritures : ' + writes);
+        if (window.__gristStub.state.maxInFlight.applyUserActions > 1) problems.push('deux écritures en même temps : ' + window.__gristStub.state.maxInFlight.applyUserActions);
+        const row = macroRow(macro.id);
+        if (JSON.stringify(hiddenIn(row, 0)) !== JSON.stringify([String(macro.coverId)]) || JSON.stringify(hiddenIn(row, 1)) !== JSON.stringify([String(macro.otherId)])) problems.push('ligne : ' + row.Contenu);
+        const cached = Templates.getCached().find(t => String(t.id) === String(macro.id));
+        if (JSON.stringify(cached.macroSlots.slots.map(s => (s.hiddenModeleIds || []).map(String))) !== JSON.stringify([[String(macro.coverId)], [String(macro.otherId)], []])) problems.push('cache : ' + JSON.stringify(cached.macroSlots));
+        if (eyeState(0, macro.coverId).pressed !== 'true' || eyeState(1, macro.otherId).pressed !== 'true' || eyeState(2, macro.coverId).pressed !== 'false') problems.push('écran : ' + JSON.stringify([eyeState(0, macro.coverId), eyeState(1, macro.otherId), eyeState(2, macro.coverId)]));
+        if (statusNow().text !== 'Modèle masqué de la Lecture et des exports : « Macro œil rafale - autre »' || statusNow().error) problems.push('coin d\'état : ' + JSON.stringify(statusNow()));
+        // Un œil cliqué après une relecture des modèles part de la composition à jour : les deux premiers masquages restent.
+        await Templates.loadAll();
+        eyeOf(2, macro.coverId).click();
+        await h.sleep(700);
+        const last = macroRow(macro.id);
+        if (JSON.stringify([0, 1, 2].map(i => hiddenIn(last, i))) !== JSON.stringify([[String(macro.coverId)], [String(macro.otherId)], [String(macro.coverId)]])) problems.push('après un troisième œil : ' + last.Contenu);
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems, writes }) };
+      } finally { window.__gristStub.setLatency(0); I18n.setLang('fr'); await leaveMacro(h); }
+    },
+  });
+
+  cases.push({
+    id: 'macro_eye_write_failure_puts_the_eye_back_and_says_so',
+    description: "Grist refuse l'écriture : l'œil, qui s'était fermé tout de suite, se rouvre (l'écran repart de ce que Grist garde), le coin d'état dit « Échec de l'enregistrement. » en erreur, la ligne n'a pas bougé ; une fois Grist de retour, le même clic marche",
+    run: async (h) => {
+      const real = window.grist.docApi.applyUserActions;
+      try {
+        const macro = await composedMacro(h, 'Macro œil échec');
+        setAutosave(false);
+        const problems = [];
+        const original = macroRow(macro.id).Contenu;
+        window.grist.docApi.applyUserActions = actions => actions.some(a => a[0] === 'UpdateRecord' && a[1] === MACRO_TABLE) ? Promise.reject(new Error('Grist refuse (simulé)')) : real.call(window.grist.docApi, actions);
+        eyeOf(1, macro.otherId).click();
+        // Aussitôt, avant que Grist ait répondu (ici il refuse sur-le-champ) : l'écran dit déjà l'état demandé.
+        if (eyeState(1, macro.otherId).pressed !== 'true') problems.push("l'œil ne se ferme pas tout de suite : " + JSON.stringify(eyeState(1, macro.otherId)));
+        await h.sleep(900);
+        const failed = eyeState(1, macro.otherId);
+        if (failed.pressed !== 'false' || failed.crossed || failed.greyed) problems.push("l'œil ne se rouvre pas après l'échec : " + JSON.stringify(failed));
+        if (macroRow(macro.id).Contenu !== original) problems.push('la ligne a bougé : ' + macroRow(macro.id).Contenu);
+        const cached = Templates.getCached().find(t => String(t.id) === String(macro.id));
+        if ((cached.macroSlots.slots[1].hiddenModeleIds || []).length) problems.push('le cache garde le masquage : ' + JSON.stringify(cached.macroSlots.slots[1]));
+        if (statusNow().text !== 'Échec de l’enregistrement.' || !statusNow().error) problems.push("coin d'état : " + JSON.stringify(statusNow()));
+        window.grist.docApi.applyUserActions = real;
+        eyeOf(1, macro.otherId).click();
+        await h.sleep(700);
+        if (JSON.stringify(hiddenIn(macroRow(macro.id), 1)) !== JSON.stringify([String(macro.otherId)]) || eyeState(1, macro.otherId).pressed !== 'true') problems.push('après le retour de Grist : ' + macroRow(macro.id).Contenu);
+        if (statusNow().error || !/masqué/.test(statusNow().text)) problems.push("coin d'état au second essai : " + JSON.stringify(statusNow()));
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      } finally { window.grist.docApi.applyUserActions = real; await leaveMacro(h); }
+    },
+  });
+
+  cases.push({
+    id: 'macro_eye_does_nothing_for_a_read_only_person',
+    description: "En lecture seule, un clic sur l'œil n'écrit rien et ne change rien à l'écran",
+    run: async (h) => {
+      const realGet = AccessRights.get;
+      try {
+        const macro = await composedMacro(h, 'Macro œil lecture seule');
+        setAutosave(false);
+        const problems = [];
+        const writes0 = writesNow();
+        const before = JSON.stringify(eyeState(1, macro.otherId));
+        AccessRights.get = () => ({ readOnly: true, canExport: true, canComment: false });
+        eyeOf(1, macro.otherId).click();
+        await h.sleep(600);
+        if (writesNow() !== writes0) problems.push('une écriture a eu lieu');
+        if (JSON.stringify(eyeState(1, macro.otherId)) !== before) problems.push("l'œil a changé : " + JSON.stringify(eyeState(1, macro.otherId)));
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      } finally { AccessRights.get = realGet; await leaveMacro(h); }
+    },
+  });
+
+  cases.push({
+    id: 'macro_eye_follows_the_language',
+    description: "En anglais, l'œil dit « Hide the template “…” », son info-bulle et le coin d'état suivent l'état (masqué / affiché) ; un changement de langue en cours de route réécrit l'œil sans l'ouvrir et lui laisse le focus",
+    run: async (h) => {
+      try {
+        const macro = await composedMacro(h, 'Macro œil langue');
+        setAutosave(false);
+        const problems = [];
+        const name = 'Macro œil langue - garde';
+        I18n.setLang('en');
+        await h.sleep(200);
+        const en = eyeState(0, macro.coverId);
+        if (en.label !== 'Hide the template “' + name + '”' || en.title !== 'Hide “' + name + '” from Reading and exports') problems.push('œil ouvert en anglais : ' + JSON.stringify(en));
+        eyeOf(0, macro.coverId).click();
+        await h.sleep(700);
+        const hiddenEn = eyeState(0, macro.coverId);
+        if (hiddenEn.pressed !== 'true' || hiddenEn.label !== 'Hide the template “' + name + '”' || hiddenEn.title !== '“' + name + '” is hidden from Reading and exports: click to show it') problems.push('œil fermé en anglais : ' + JSON.stringify(hiddenEn));
+        if (statusNow().text !== 'Template hidden from Reading and exports: “' + name + '”') problems.push('coin d\'état en anglais : ' + statusNow().text);
+        eyeOf(0, macro.coverId).focus();
+        I18n.setLang('fr');
+        await h.sleep(200);
+        const focused = document.activeElement;
+        if (!focused || !focused.classList.contains('macro-summary-eye') || focused.dataset.slot !== '0' || String(focused.dataset.templateId) !== String(macro.coverId)) problems.push('le focus de l\'œil ne survit pas au redessin du résumé : ' + (focused && (focused.className + ' ' + focused.dataset.slot)));
+        const hiddenFr = eyeState(0, macro.coverId);
+        if (hiddenFr.pressed !== 'true' || hiddenFr.label !== 'Masquer le modèle « ' + name + ' »' || hiddenFr.title !== '« ' + name + ' » est masqué de la Lecture et des exports : cliquer pour l’afficher') problems.push('œil fermé repassé en français : ' + JSON.stringify(hiddenFr));
+        I18n.setLang('en');
+        eyeOf(0, macro.coverId).click();
+        await h.sleep(700);
+        if (statusNow().text !== 'Template back in Reading and exports: “' + name + '”') problems.push('coin d\'état au second clic, en anglais : ' + statusNow().text);
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      } finally { I18n.setLang('fr'); await leaveMacro(h); }
+    },
+  });
+
+  cases.push({
+    id: 'macro_eye_batch_zip_leaves_the_hidden_model_out_row_by_row',
+    description: "ZIP de PDF, une ligne après l'autre : le modèle masqué de l'annexe 1 manque à la ligne dont une règle le choisit (sans que la règle suivante ou le modèle par défaut prenne sa place), les autres lignes gardent leurs annexes",
+    run: async (h) => {
+      try {
+        const macro = await composedMacro(h, 'Macro œil lot');
+        setAutosave(false);
+        const stub = window.__gristStub;
+        const rows = [{ id: 1, Nom: 'a' }, { id: 2, Nom: 'b' }, { id: 3, Nom: 'z' }];
+        stub.setVariables(PAGE_DATA, { Nom: 'Text' });
+        stub.setRows(PAGE_DATA, rows);
+        await GristAPI.refreshSchema();
+        stub.fireRecord(rows[0], PAGE_DATA);
+        await h.sleep(100);
+        eyeOf(1, macro.otherId).click(); // « Autre page » : l'annexe de la ligne « a »
+        await h.sleep(700);
+        const problems = [];
+        const file = await fileDownloaded(h, 'v2-btn-export-pdf-batch');
+        if (!file || !file.blob) return { pass: false, notes: 'aucun ZIP téléchargé' };
+        await ExportCommon.ensureJsZipLoaded();
+        const zip = await JSZip.loadAsync(await file.blob.arrayBuffer());
+        const texts = {};
+        for (const name of Object.keys(zip.files)) texts[name] = (await pdfPages(h, await zip.file(name).async('blob'))).map(p => squashed(p.text));
+        const names = ['publipostage.pdf', 'publipostage (2).pdf', 'publipostage (3).pdf'];
+        if (Object.keys(texts).length !== 3 || !names.every(n => texts[n])) return { pass: false, notes: 'fichiers : ' + JSON.stringify(Object.keys(texts)) };
+        const pages = n => texts[n].map(t => ['Pagedegarde', 'Autrepage', 'Pagepardéfaut'].filter(w => t.includes(w)).join('+'));
+        // Ligne « a » : annexe 1 = « Autre page », masquée : rien à sa place. Ligne « b » : son annexe est le modèle de la page de garde (autre position). Ligne « z » : modèle par défaut.
+        if (JSON.stringify(pages(names[0])) !== JSON.stringify(['Pagedegarde'])) problems.push('ligne a : ' + JSON.stringify(pages(names[0])));
+        if (JSON.stringify(pages(names[1])) !== JSON.stringify(['Pagedegarde', 'Pagedegarde'])) problems.push('ligne b : ' + JSON.stringify(pages(names[1])));
+        if (JSON.stringify(pages(names[2])) !== JSON.stringify(['Pagedegarde', 'Pagepardéfaut'])) problems.push('ligne z : ' + JSON.stringify(pages(names[2])));
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      } finally { await leaveMacro(h); }
+    },
+  });
+
+  cases.push({
+    id: 'macro_save_as_copy_keeps_the_hidden_models',
+    description: "« Enregistrer sous… » d'un macro-modèle dont un modèle est masqué en fait une copie qui garde le masquage (même composition, œil fermé à l'écran)",
+    run: async (h) => {
+      const dialogs = h.stubDialogs({ prompt: 'Copie œil' });
+      try {
+        const macro = await composedMacro(h, 'Macro œil copie');
+        setAutosave(false);
+        eyeOf(1, macro.otherId).click();
+        await h.sleep(700);
+        const problems = [];
+        const rowsBefore = window.__gristStub.state.rows[MACRO_TABLE].id.slice();
+        document.getElementById('v2-btn-save-as').click();
+        await h.sleep(900);
+        const copyId = window.__gristStub.state.rows[MACRO_TABLE].id.find(x => !rowsBefore.includes(x));
+        const copy = copyId != null ? macroRow(copyId) : null;
+        if (!copy || copy.Nom !== 'Copie œil') problems.push('copie absente : ' + JSON.stringify(copy && copy.Nom));
+        else if (copy.Contenu !== macroRow(macro.id).Contenu || JSON.stringify(hiddenIn(copy, 1)) !== JSON.stringify([String(macro.otherId)])) problems.push('composition de la copie : ' + copy.Contenu);
+        const onScreen = eyeState(1, macro.otherId);
+        if (!onScreen || onScreen.pressed !== 'true') problems.push("œil de la copie à l'écran : " + JSON.stringify(onScreen));
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      } finally { dialogs.restore(); await leaveMacro(h); }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.macroModeles = cases;
 })();

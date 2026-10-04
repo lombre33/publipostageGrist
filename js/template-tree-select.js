@@ -1,16 +1,8 @@
-// Remplace visuellement #template-select (natif) par un arbre "épinglés + dossiers" - Piste B validée
-// par Antoine (planning/feature-rangement-tri-modeles.md §7). Le <select> réel RESTE l'unique source de
-// vérité pour .value/.options/.selectedIndex/l'évènement 'change' : tous les appels existants de
-// js/main.js (onTemplateSelectChange, syncDefaultTemplateButton, wireDefaultTemplateButton, etc.)
-// continuent de fonctionner SANS modification. Ce module ajoute une couche visuelle par-dessus et la
-// tient synchronisée dans les deux sens - voir attach() pour le détail des trois pièges déjà rencontrés
-// sur ce projet (relais coordinateur 2026-09-20) et explicitement évités ici.
-//
-// Scope limité à parcourir/choisir/épingler depuis l'arbre - pas de glisser-déposer, jamais éprouvé ici.
-// Créer un dossier et y ranger un modèle se fait depuis la modale js/template-organize-modal.js
-// ("Organiser mes modèles"). Son déclencheur a changé d'endroit deux fois : dernière ligne du panneau, puis un bouton de la
-// barre (Antoine, 2026-09-28), et depuis le 2026-10-01 l'en-tête du panneau, en haut à droite (#btn-organize-templates,
-// créé ici une seule fois ; js/main.js passe `onOrganize` à attach() et garde l'id pour le verrou de lecture seule).
+// Remplace visuellement #template-select (natif) par un arbre « épinglés + dossiers » (planning/feature-rangement-tri-modeles.md §7). Le <select>
+// réel reste l'unique source de vérité (.value, .options, .selectedIndex, évènement 'change') : les appels de js/main.js fonctionnent sans
+// modification ; ce module ajoute une couche visuelle synchronisée dans les deux sens (voir attach() pour les quatre pièges évités).
+// Périmètre : parcourir, choisir, épingler. Créer un dossier et y ranger un modèle se fait dans js/template-organize-modal.js ; son déclencheur,
+// #btn-organize-templates, est créé ici une seule fois (en-tête du panneau, en haut à droite) et js/main.js passe `onOrganize` à attach().
 const TemplateTreeSelect = (function () {
   let realSelect = null;
   let wrap, trigger, triggerIcon, triggerLabel, popup;
@@ -19,10 +11,9 @@ const TemplateTreeSelect = (function () {
   let onOrganize = null;
   let mo = null;
   let outsideClickHandler = null;
-  // Dossiers dépliés/repliés À LA MAIN pendant que le panneau est ouvert (chemin -> ouvert ?). Le panneau se redessine en entier à chaque
-  // écriture (clic sur une épingle...) : sans cette mémoire, chaque dossier retomberait sur son état par défaut sous les yeux de la
-  // personne. Vidée à chaque ouverture (openPopup) : l'état par défaut de l'utilisateur s'applique alors de nouveau. Map, pas {} : un
-  // dossier nommé "constructor" ou "__proto__" (cf. TemplateOrganizer.buildView).
+  // Dossiers dépliés ou repliés à la main pendant que le panneau est ouvert (chemin -> ouvert ?). Le panneau se redessine en entier à chaque écriture
+  // (clic sur une épingle...) : sans cette mémoire, chaque dossier retomberait sur son état par défaut. Vidée à chaque ouverture (openPopup). Map,
+  // pas {} : un dossier peut s'appeler « constructor » ou « __proto__ ».
   const folderOverrides = new Map();
 
   function iconSpan(typeModele) {
@@ -36,10 +27,9 @@ const TemplateTreeSelect = (function () {
     return isDefault ? (tpl.nom + ' ★') : tpl.nom;
   }
 
-  // --- Construction de l'arbre affiché, à partir des mêmes données que le <select> réel -------------
-  // (Templates.getCached()/TemplatePreferences.getCached(), pas les <option> du DOM : ceux-ci ne portent
-  // ni typeModele ni le statut "par défaut" en donnée structurée, seulement un textContent déjà mis en
-  // forme par refreshTemplateList - cf. js/main.js.)
+  // Arbre affiché, à partir des mêmes données que le <select> réel (Templates.getCached(), TemplatePreferences.getCached()) et non de ses <option> :
+  // celles-ci ne portent ni typeModele ni le statut « par défaut » en donnée structurée, seulement un texte déjà mis en forme par refreshTemplateList
+  // (js/main.js).
   function currentTemplates() {
     return (typeof Templates !== 'undefined' && Templates.getCached()) || [];
   }
@@ -52,8 +42,8 @@ const TemplateTreeSelect = (function () {
     return makeLeafRow(node, depth);
   }
 
-  // Un dossier s'ouvre déplié, sauf si CETTE personne l'a réglé "replié par défaut" (js/template-preferences.js:isFolderCollapsed, posé depuis
-  // "Organiser mes modèles") ou l'a basculé à la main depuis l'ouverture du panneau.
+  // Un dossier s'ouvre déplié, sauf si CETTE personne l'a réglé « replié par défaut » (TemplatePreferences.isFolderCollapsed, posé depuis « Organiser
+  // mes modèles ») ou l'a basculé à la main depuis l'ouverture du panneau.
   function isFolderOpen(chemin) {
     if (folderOverrides.has(chemin)) return folderOverrides.get(chemin);
     return !(typeof TemplatePreferences !== 'undefined' && TemplatePreferences.isFolderCollapsed(chemin));
@@ -81,8 +71,8 @@ const TemplateTreeSelect = (function () {
 
     const group = document.createElement('div');
     group.className = 'tts-group';
-    // Profondeur du dossier (pas celle de ses enfants) : css/template-tree-select.css cale le trait guide du groupe sur le caret de CE dossier. Posée explicitement, sinon le groupe
-    // hériterait de la profondeur du groupe parent.
+    // Profondeur du dossier (pas celle de ses enfants) : css/template-tree-select.css cale le trait guide du groupe sur le caret de CE dossier ;
+    // posée explicitement, sinon le groupe hériterait de celle du groupe parent.
     group.style.setProperty('--tts-depth', String(depth));
     group.setAttribute('role', 'group');
     group.classList.toggle('is-collapsed', !open);
@@ -93,10 +83,8 @@ const TemplateTreeSelect = (function () {
       toggleFolder(li, group);
     });
 
-    // Fragment (pas un <div> englobant) : `group` doit rester le frère DIRECT de `li` une fois inséré
-    // chez l'appelant, sinon `li.nextElementSibling` (toggleFolder, navigation clavier ArrowRight/Left)
-    // ne retrouverait plus le bon groupe pour un dossier imbriqué (li+group se retrouveraient enfants
-    // d'un conteneur intermédiaire plutôt que frères directs dans `.tts-group` du parent).
+    // Fragment plutôt qu'un <div> englobant : `group` doit rester le frère direct de `li` (toggleFolder et la navigation clavier ArrowRight/Left
+    // lisent li.nextElementSibling).
     const fragment = document.createDocumentFragment();
     fragment.appendChild(li);
     fragment.appendChild(group);
@@ -128,24 +116,21 @@ const TemplateTreeSelect = (function () {
     const pinBtn = document.createElement('button');
     pinBtn.type = 'button';
     pinBtn.className = 'tts-pin-btn';
-    // -1 : un <button> est nativement un arrêt de tabulation, ce qui casserait le focus roulant de
-    // l'arbre (Tab sortirait de la ligne courante vers ce bouton au lieu de sortir du widget). Pas
-    // encore de raccourci clavier dédié pour épingler en v1 (cf. limite de scope en tête de fichier) -
-    // seule la souris y accède pour l'instant.
+    // -1 : un <button> est un arrêt de tabulation natif, ce qui casserait le focus roulant de l'arbre (Tab sortirait de la ligne vers ce bouton au
+    // lieu de sortir du widget). Pas de raccourci clavier pour épingler : seule la souris y accède.
     pinBtn.tabIndex = -1;
     const prefs = currentPreferences();
     const pinned = !!(prefs[node.id] && prefs[node.id].epingle);
     pinBtn.classList.toggle('is-pinned', pinned);
     pinBtn.setAttribute('aria-pressed', String(pinned));
     pinBtn.setAttribute('aria-label', I18n.t('templateTree.pin.aria'));
-    // Info-bulle native (le panneau vit dans document.body, hors de #toolbar-top : le [data-tip] de la barre ne s'y applique pas) - dit ce que fait le clic dans l'état
-    // courant, pour ne pas le confondre avec l'étoile "modèle par défaut" de la barre.
+    // Info-bulle native (le panneau vit dans document.body, hors de #toolbar-top : le [data-tip] de la barre ne s'y applique pas) : dit ce que fait
+    // le clic dans l'état courant, pour ne pas le confondre avec l'étoile « modèle par défaut » de la barre.
     pinBtn.title = I18n.t(pinned ? 'templateTree.unpin.tip' : 'templateTree.pin.tip');
     pinBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
       try {
-        // setPinned() ne lève jamais pour une identification indisponible (repli anonyme silencieux,
-        // cf. js/template-preferences.js) - seule une vraie panne d'écriture Grist atterrit ici.
+        // setPinned() ne lève pas pour une identification indisponible (repli anonyme) ; seule une vraie panne d'écriture Grist atterrit ici.
         await TemplatePreferences.setPinned(node.id, !pinned);
         render();
       } catch (err) {
@@ -160,10 +145,8 @@ const TemplateTreeSelect = (function () {
 
 
   function render() {
-    // Un ré-affichage déclenché pendant que le popup est ouvert (ex. clic sur l'épingle d'une ligne, cf.
-    // pinBtn ci-dessus) reconstruit tout popup.innerHTML : sans ceci, la ligne qui avait le focus clavier
-    // roulant (tabindex=0 + focus DOM réel) disparaîtrait et le focus retomberait sur <body>, cassant la
-    // navigation clavier en plein milieu d'un usage.
+    // Un ré-affichage pendant que le popup est ouvert (clic sur une épingle) reconstruit tout popup.innerHTML : sans ceci, la ligne qui avait le
+    // focus clavier roulant disparaîtrait et le focus retomberait sur <body>, cassant la navigation clavier.
     let focusedId;
     if (popup.contains(document.activeElement)) {
       const focusedRow = document.activeElement.closest('.tts-row');
@@ -172,8 +155,8 @@ const TemplateTreeSelect = (function () {
     // Seules les lignes sont redessinées : l'en-tête (titre et « Organiser ») reste en place, avec son id et son focus.
     Array.from(popup.children).forEach((child) => { if (child !== head) popup.removeChild(child); });
 
-    // Pas de ligne « — Nouveau modèle — » (value '') : le bouton « + » de la barre sert à ça (Antoine, 2026-10-01). La 1re <option> du <select> réel, elle, reste : c'est
-    // l'état « modèle pas encore enregistré », que le déclencheur affiche.
+    // Pas de ligne « — Nouveau modèle — » (value '') : le bouton « + » de la barre sert à ça. La 1re <option> du <select> réel reste : c'est l'état «
+    // modèle pas encore enregistré », que le déclencheur affiche.
     const view = TemplateOrganizer.buildView(currentTemplates(), currentPreferences());
 
     if (!view.pinned.length && !view.tree.length) {
@@ -208,7 +191,7 @@ const TemplateTreeSelect = (function () {
     }
   }
 
-  // --- Synchronisation trigger <- <select> réel --------------------------------------------------
+  // Synchronisation du déclencheur avec le <select> réel
   function findTemplateById(id) {
     if (id === '' || id == null) return null;
     return currentTemplates().find((t) => String(t.id) === String(id)) || null;
@@ -218,8 +201,8 @@ const TemplateTreeSelect = (function () {
     const id = realSelect.value;
     const tpl = findTemplateById(id);
     triggerIcon.className = 'tts-icon tts-icon-' + (tpl ? (tpl.typeModele || 'document') : 'new');
-    // Le libellé suit l'<option> choisie, pas seulement le cache : « Renommer » (js/main.js) ne change que le texte de l'option tant que le modèle n'est pas enregistré, et le
-    // nouveau nom doit se voir tout de suite - avec le <select> natif il se voyait, alors que le cache garde l'ancien nom jusqu'à « Enregistrer ».
+    // Le libellé suit l'<option> choisie, pas seulement le cache : « Renommer » (js/main.js) ne change que le texte de l'option tant que le modèle
+    // n'est pas enregistré, et le nouveau nom doit se voir tout de suite.
     const opt = realSelect.options[realSelect.selectedIndex];
     triggerLabel.textContent = tpl ? ((opt && opt.value !== '' && opt.textContent) || labelFor(tpl)) : I18n.t('template.newOption');
     popup.querySelectorAll('.tts-row[aria-selected]').forEach((r) => r.removeAttribute('aria-selected'));
@@ -229,19 +212,15 @@ const TemplateTreeSelect = (function () {
 
   function syncDisabledState() {
     trigger.disabled = !!realSelect.disabled;
-    // « Renommer » (js/main.js) pose hidden sur le <select> réel pour faire apparaître le champ du nom À SA PLACE. Son display:none permanent le rend déjà invisible : c'est donc
-    // le déclencheur qui doit suivre, sinon le champ s'ouvrait à côté de la liste (retour d'Antoine, 2026-10-01).
+    // « Renommer » (js/main.js) pose hidden sur le <select> réel pour faire apparaître le champ du nom à sa place. Son display:none permanent le rend
+    // déjà invisible : c'est donc le déclencheur qui doit suivre, sinon le champ s'ouvrirait à côté de la liste.
     wrap.hidden = !!realSelect.hidden;
     if (realSelect.hidden) closePopup();
   }
 
-  // Redéfinit l'accesseur `value` sur CETTE instance de <select> (masque l'accesseur du prototype
-  // HTMLSelectElement pour ce seul élément) : c'est la seule façon fiable de détecter les nombreuses
-  // écritures directes `templateSelect.value = ...` déjà présentes dans js/main.js (ex. après
-  // Templates.setDefault, dans onNew/onDelete/onSave, au chargement du modèle par défaut) SANS modifier
-  // ce code existant. Ces écritures ne déclenchent jamais d'évènement 'change' natif (le navigateur ne le
-  // fait que sur une interaction utilisateur), donc les écouter directement laisserait l'arbre affiché
-  // désynchronisé du <select> réel dans tous ces cas.
+  // Redéfinit l'accesseur `value` sur CETTE instance de <select> : seule façon fiable de détecter les écritures directes `templateSelect.value = ...`
+  // de js/main.js sans modifier ce code. Ces écritures ne déclenchent pas d'évènement 'change' natif (réservé aux interactions de la personne) : les
+  // écouter laisserait l'arbre désynchronisé du <select>.
   function interceptValueWrites(el, onChange) {
     let proto = Object.getPrototypeOf(el);
     let desc;
@@ -249,7 +228,7 @@ const TemplateTreeSelect = (function () {
       desc = Object.getOwnPropertyDescriptor(proto, 'value');
       proto = Object.getPrototypeOf(proto);
     }
-    if (!desc || !desc.set) return; // pas de fallback silencieux souhaitable ici, mais ne doit jamais lever à l'attache
+    if (!desc || !desc.set) return;  // ne doit jamais lever à l'attache
     Object.defineProperty(el, 'value', {
       configurable: true,
       enumerable: desc.enumerable,
@@ -266,7 +245,7 @@ const TemplateTreeSelect = (function () {
     trigger.focus({ preventScroll: true });
   }
 
-  // --- Ouverture/fermeture + navigation clavier (patron WAI-ARIA "Tree View") ----------------------
+  // Ouverture, fermeture et navigation clavier (patron WAI-ARIA « Tree View »)
   function visibleRows() {
     return Array.from(popup.querySelectorAll('.tts-row')).filter((r) => {
       // Une ligne est visible si aucun de ses groupes ancêtres n'est collapsed.
@@ -283,27 +262,21 @@ const TemplateTreeSelect = (function () {
     popup.querySelectorAll('.tts-row[tabindex="0"]').forEach((r) => r.setAttribute('tabindex', '-1'));
     if (!row) return;
     row.setAttribute('tabindex', '0');
-    // preventScroll : ce focus automatique à l'ouverture ne doit jamais faire défiler un ancêtre pour
-    // "révéler" la ligne - c'est exactement ce qui masquait le déclencheur derrière #v2-title-cluster
-    // avant que le panneau ne soit détaché en position: fixed (cf. commentaire CSS de .tts-popup).
+    // preventScroll : le focus automatique à l'ouverture ne doit pas faire défiler un ancêtre pour « révéler » la ligne (il masquait le déclencheur
+    // derrière #v2-title-cluster avant que le panneau soit détaché en position: fixed).
     row.focus({ preventScroll: true });
   }
 
-  // Calé sur le rect RÉEL du déclencheur (pas du CSS top:100%/left:0, qui supposait que popup restait un
-  // enfant positionné de .tts-wrap) - popup vit maintenant dans document.body, cf. commentaire CSS. Mesuré
-  // APRÈS le classList.add('is-open') (display:none n'a pas de taille), pour pouvoir caler `left` en cas de
-  // débordement à droite (barre d'outils qui peut être proche du bord dans un petit panneau Grist).
+  // Calé sur le rect réel du déclencheur (le panneau vit dans document.body, voir .tts-popup dans le CSS). Mesuré après classList.add('is-open')
+  // (display:none n'a pas de taille) pour pouvoir caler `left` en cas de débordement à droite.
   function positionPopup() {
     const rect = trigger.getBoundingClientRect();
     popup.style.top = (rect.bottom + 4) + 'px';
     popup.style.left = rect.left + 'px';
-    // Même correction que overflowRight ci-dessous, sur l'axe vertical : un panneau latéral Grist réel
-    // descend vers 700x400 (mesure du coordinateur, 2026-09-28) - le max-height:360px fixe du CSS
-    // dépassait alors le bas de la fenêtre de 9px, rognant la dernière ligne sans qu'aucun défilement
-    // (page ou panneau) ne puisse plus la révéler. Borné ici sur la place RÉELLEMENT disponible sous le
-    // déclencheur, jamais plus que le max-height CSS. -10 : max-height cible la boîte de CONTENU (pas de
-    // box-sizing:border-box sur .tts-popup), donc la bordure+le padding (1px+4px de chaque côté, CSS)
-    // s'ajoutent par-dessus - sans eux la marge de 12px se faisait grignoter et le panneau redépassait.
+    // Même correction sur l'axe vertical : un panneau Grist descend vers 700x400, et le max-height:360px fixe du CSS dépassait le bas de la fenêtre,
+    // rognant la dernière ligne sans défilement possible. Borné sur la place réellement disponible sous le déclencheur, jamais plus que le max-height
+    // CSS. -10 : max-height vise la boîte de contenu (pas de box-sizing:border-box sur .tts-popup), la bordure et le padding (1px + 4px de chaque
+    // côté) s'ajoutent par-dessus.
     popup.style.maxHeight = Math.max(80, Math.min(360, window.innerHeight - rect.bottom - 12 - 10)) + 'px';
     const popupRect = popup.getBoundingClientRect();
     const overflowRight = popupRect.right - (window.innerWidth - 8);
@@ -313,7 +286,7 @@ const TemplateTreeSelect = (function () {
   let outsideScrollHandler = null;
   function openPopup() {
     if (popup.classList.contains('is-open')) return;
-    folderOverrides.clear(); // chaque ouverture repart de l'état par défaut de l'utilisateur (cf. folderOverrides)
+    folderOverrides.clear();  // chaque ouverture repart de l'état par défaut de la personne (voir folderOverrides)
     render();
     popup.classList.add('is-open');
     positionPopup();
@@ -324,12 +297,9 @@ const TemplateTreeSelect = (function () {
     // Aucun modèle : le focus va sur « Organiser », sinon Échap ne serait plus capté par le panneau (le focus resterait sur le déclencheur).
     if (selected) setRovingFocus(selected);
     else if (organizeBtn) organizeBtn.focus({ preventScroll: true });
-    // Le navigateur GARDE le scrollTop de .tts-popup d'une fermeture à l'autre (overflow-y:auto, cf. CSS) -
-    // sans repositionnement explicite ici, rouvrir après avoir défilé rendait visibles des lignes qui
-    // n'étaient plus les mêmes que celles attendues en haut du panneau (mesure indépendante du
-    // coordinateur, 2026-09-28 : ligne visible à l'endroit du déclencheur après une fermeture/réouverture
-    // avec la liste défilée, un clic dessus retombait donc sur le déclencheur). scrollIntoView() est évité
-    // à dessein : il peut faire défiler un ANCÊTRE (page Grist), pas seulement .tts-popup lui-même.
+    // Le navigateur garde le scrollTop de .tts-popup d'une fermeture à l'autre (overflow-y:auto) : sans repositionnement explicite, rouvrir après
+    // avoir défilé montrait d'autres lignes que celles attendues en haut, et un clic retombait sur le déclencheur. scrollIntoView() est évité : il
+    // peut faire défiler un ancêtre (page Grist) et pas seulement .tts-popup.
     if (selected) {
       const desired = selected.offsetTop - (popup.clientHeight - selected.offsetHeight) / 2;
       popup.scrollTop = Math.max(0, Math.min(desired, popup.scrollHeight - popup.clientHeight));
@@ -338,14 +308,10 @@ const TemplateTreeSelect = (function () {
     }
     outsideClickHandler = (e) => { if (!wrap.contains(e.target) && !popup.contains(e.target)) closePopup(); };
     document.addEventListener('mousedown', outsideClickHandler, true);
-    // Un panneau en position: fixed ne suit pas tout seul un ancêtre qui défile (page Grist, panneau
-    // latéral...) - le refermer plutôt que le laisser flotter à un endroit qui ne correspond plus au
-    // déclencheur (capture: true pour attraper le scroll de N'IMPORTE quel ancêtre, pas seulement window).
-    // MAIS `.tts-popup` a lui-même overflow-y:auto (liste longue, cf. CSS) : un scroll NE BUBBLE PAS mais
-    // reste intercepté en phase de capture par ce même écouteur - sans le garde ci-dessous, la moindre
-    // tentative de faire défiler la liste (molette, barre de défilement, PageDown) la refermait aussitôt et
-    // remettait son scrollTop à 0, rendant tout modèle au-delà de la hauteur visible impossible à atteindre
-    // (Antoine, 2026-09-28 : "dès que je fais la moindre action... que ca soit une tentative de scroll").
+    // Un panneau en position: fixed ne suit pas un ancêtre qui défile (page Grist, panneau latéral) : on le referme plutôt que de le laisser flotter
+    // ailleurs que son déclencheur (capture: true pour attraper le scroll de n'importe quel ancêtre). .tts-popup a lui-même overflow-y:auto : son
+    // propre défilement est aussi capté en phase de capture, d'où le garde ci-dessous ; sans lui, faire défiler la liste (molette, barre, PageDown)
+    // la refermait aussitôt et rendait inaccessibles les modèles hors de la hauteur visible.
     outsideScrollHandler = (e) => { if (popup.contains(e.target)) return; closePopup(); };
     window.addEventListener('scroll', outsideScrollHandler, true);
   }
@@ -360,8 +326,8 @@ const TemplateTreeSelect = (function () {
 
   function onPopupKeydown(e) {
     const rows = visibleRows();
-    // « Organiser » (en-tête) fait partie du parcours au clavier : Flèche haut depuis la première ligne l'atteint (plus bas), Flèche bas le quitte pour la première ligne. Entrée et
-    // Espace restent au clic natif du bouton ; Échap et Tab sont traités plus bas comme depuis une ligne.
+    // « Organiser » (en-tête) fait partie du parcours au clavier : Flèche haut depuis la première ligne l'atteint, Flèche bas le quitte pour la
+    // première ligne. Entrée et Espace restent au clic natif du bouton ; Échap et Tab sont traités plus bas comme depuis une ligne.
     if (organizeBtn && document.activeElement === organizeBtn) {
       if (e.key === 'ArrowDown') { e.preventDefault(); setRovingFocus(rows[0]); return; }
       if (e.key === 'End') { e.preventDefault(); setRovingFocus(rows[rows.length - 1]); return; }
@@ -371,12 +337,9 @@ const TemplateTreeSelect = (function () {
     const current = document.activeElement && document.activeElement.classList.contains('tts-row') ? document.activeElement : rows[0];
     const idx = rows.indexOf(current);
     if (e.key === 'Escape') { e.preventDefault(); closePopup(); trigger.focus({ preventScroll: true }); return; }
-    // Tab (relevé 2026-09-28) : sans ce garde, Tab suivait l'ordre naturel du DOM depuis une ligne du
-    // panneau - qui vit dans document.body, PAS juste après le déclencheur (cf. commentaire de attach()
-    // sur #v2-title-cluster { overflow: hidden }) - et atterrissait n'importe où, popup toujours ouvert à
-    // l'écran. Pas de preventDefault ici : on referme et on redonne le focus au déclencheur AVANT que le
-    // navigateur ne poursuive son Tab par défaut, qui part alors du déclencheur (sa place naturelle dans
-    // la barre) plutôt que de la ligne du panneau.
+    // Tab : le panneau vit dans document.body, pas juste après le déclencheur, donc l'ordre naturel du DOM atterrirait n'importe où avec le popup
+    // resté ouvert. Pas de preventDefault : on referme et on redonne le focus au déclencheur avant que le navigateur poursuive son Tab, qui part
+    // alors du déclencheur (sa place dans la barre).
     if (e.key === 'Tab') { closePopup(); trigger.focus({ preventScroll: true }); return; }
     if (e.key === 'ArrowDown') { e.preventDefault(); setRovingFocus(rows[Math.min(idx + 1, rows.length - 1)]); return; }
     if (e.key === 'ArrowUp') {
@@ -387,9 +350,8 @@ const TemplateTreeSelect = (function () {
     }
     if (e.key === 'Home') { e.preventDefault(); setRovingFocus(rows[0]); return; }
     if (e.key === 'End') { e.preventDefault(); setRovingFocus(rows[rows.length - 1]); return; }
-    // ArrowRight/ArrowLeft suivent le patron WAI-ARIA "Tree View" : sur un dossier fermé, Right l'ouvre ;
-    // sur un dossier déjà ouvert, Right entre dedans (1er enfant) ; Left sur un dossier ouvert le
-    // referme, sur une feuille ou un dossier fermé il remonte au dossier parent.
+    // Patron WAI-ARIA « Tree View » : Droite ouvre un dossier fermé, entre dans un dossier ouvert (1er enfant) ; Gauche referme un dossier ouvert,
+    // sinon remonte au dossier parent.
     if (e.key === 'ArrowRight' && current && current.classList.contains('tts-row-folder')) {
       e.preventDefault();
       if (current.getAttribute('aria-expanded') === 'false') {
@@ -418,22 +380,17 @@ const TemplateTreeSelect = (function () {
     }
   }
 
-  // --- Attache / détache ----------------------------------------------------------------------------
+  // Attache et détache
   function attach(select, options) {
     if (realSelect) detach();
     realSelect = select;
     // Gardé d'un attach() à l'autre quand on n'en repasse pas : la même vue rattachée sans options (après un échec, dev-tests) continue d'ouvrir « Organiser ».
     if (options && typeof options.onOrganize === 'function') onOrganize = options.onOrganize;
 
-    // Piège 4 (relevé 2026-09-28, jamais reproduit mais jamais protégé) : le <select> réel est masqué
-    // (classe + tabIndex + aria-hidden ci-dessous) AVANT que le reste de cette fonction (construction de
-    // l'arbre, render() en fin de fonction - lit les données Grist et peut lever sur une donnée
-    // inattendue) n'ait fini. Le try/catch de js/main.js autour de TemplateTreeSelect.attach() empêche
-    // bien l'exception de casser tout init(), mais SANS repli explicite ici, une exception après ce point
-    // laissait le <select> déjà masqué et aucun arbre affiché à la place : plus aucun moyen de choisir un
-    // modèle, silencieusement. En cas d'échec, on annule tout ce que attach() a déjà fait (retire
-    // wrap/popup s'ils existent, arrête le MutationObserver) et on rend le <select> natif de nouveau
-    // visible/utilisable avant de relayer l'exception à l'appelant.
+    // Piège 4 : le <select> réel est masqué (classe, tabIndex, aria-hidden ci-dessous) avant que le reste d'attach() (construction de l'arbre,
+    // render() qui lit Grist et peut lever sur une donnée inattendue) ait fini. Le try/catch de js/main.js empêche l'exception de casser init(), mais
+    // sans repli ici le <select> resterait masqué sans arbre à sa place : plus aucun moyen de choisir un modèle. En cas d'échec, on annule ce
+    // qu'attach() a fait (retire wrap et popup, arrête le MutationObserver), on rend le <select> natif utilisable, puis on relaie l'exception.
     try {
       attachInner();
     } catch (err) {
@@ -451,13 +408,11 @@ const TemplateTreeSelect = (function () {
   }
 
   function attachInner() {
-    // Piège 1 (2026-09-19, bandeau email resté affiché) : `hidden` seul peut être vaincu par une règle
-    // CSS `display` plus spécifique ailleurs. Le <select> réel passe donc en display:none PERMANENT via
-    // une classe dédiée avec !important (css/template-tree-select.css) - jamais via l'attribut hidden.
+    // Piège 1 : `hidden` seul peut être vaincu par une règle CSS `display` plus spécifique (bandeau email resté affiché). Le <select> réel passe donc
+    // en display:none permanent par une classe dédiée avec !important (css/template-tree-select.css), jamais par l'attribut hidden.
     realSelect.classList.add('tts-native-select');
-    // Piège 2 : un élément juste masqué visuellement reste focusable/annoncé par un lecteur d'écran.
-    // display:none règle déjà ce point, ceci est une deuxième barrière explicite si une future règle CSS
-    // affaiblissait le display:none sans qu'on s'en rende compte.
+    // Piège 2 : un élément seulement masqué visuellement reste focusable et annoncé par un lecteur d'écran. display:none règle déjà ce point ;
+    // tabIndex -1 est une seconde barrière si une règle CSS affaiblissait display:none.
     realSelect.tabIndex = -1;
     realSelect.setAttribute('aria-hidden', 'true');
 
@@ -478,14 +433,10 @@ const TemplateTreeSelect = (function () {
     trigger.appendChild(triggerIcon);
     trigger.appendChild(triggerLabel);
     trigger.appendChild(caret);
-    // e.detail (nombre de clics que le navigateur compte pour CE geste - 2 pour un vrai double-clic natif)
-    // distingue un authentique double-clic d'un simple second clic délibéré (rouvrir puis refermer, ce que
-    // fait par ex. dev-tests/scenarios-toolbar-chrome.js en dispatchant deux clics synthétiques séparés,
-    // toujours à detail=0) : sans ce garde, le réflexe hérité du <select> natif (double-clic pour "choisir")
-    // ouvrait puis refermait aussitôt le panneau au 2e clic, ne laissant visible que le fond de survol du
-    // bouton - signalé le 2026-09-28 ("fond bleu au clic, dropdown broken, impossible de changer de
-    // modèle"). Une minuterie fixe (ex. "ignorer un clic dans les 250ms") avait été essayée puis écartée :
-    // elle cassait aussi une fermeture délibérée rapide, exactement le geste que ce test générique exerce.
+    // e.detail (nombre de clics du geste : 2 pour un vrai double-clic) distingue un double-clic natif d'un second clic délibéré (rouvrir puis
+    // refermer, ce que font les tests avec deux clics synthétiques à detail=0). Sans ce garde, le réflexe du <select> natif (double-clic pour
+    // choisir) ouvrait puis refermait aussitôt le panneau. Une minuterie fixe (ignorer un clic dans les 250 ms) avait été écartée : elle cassait
+    // aussi une fermeture délibérée rapide.
     trigger.addEventListener('click', (e) => {
       if (popup.classList.contains('is-open')) {
         if (e.detail >= 2) return;
@@ -504,9 +455,9 @@ const TemplateTreeSelect = (function () {
     popup.setAttribute('aria-label', I18n.t('template.select'));
     popup.addEventListener('keydown', onPopupKeydown);
 
-    // En-tête fixe : titre à gauche, « Organiser mes modèles » en haut à droite. tabIndex -1 : on y arrive par Flèche haut depuis la première ligne (onPopupKeydown), pas par Tab,
-    // qui referme le panneau. Le clic referme le panneau et rend le focus au déclencheur AVANT d'ouvrir la fenêtre : celle-ci le rendra à son tour à la fermeture, et le bouton,
-    // masqué avec le panneau, ne peut pas le recevoir.
+    // En-tête fixe : titre à gauche, « Organiser mes modèles » en haut à droite. tabIndex -1 : on y arrive par Flèche haut depuis la première ligne
+    // (onPopupKeydown), pas par Tab, qui referme le panneau. Le clic referme le panneau et rend le focus au déclencheur avant d'ouvrir la fenêtre :
+    // celle-ci le rendra à la fermeture, et le bouton, masqué avec le panneau, ne peut pas le recevoir.
     head = document.createElement('div');
     head.className = 'tts-head';
     headTitle = document.createElement('span');
@@ -531,15 +482,14 @@ const TemplateTreeSelect = (function () {
     syncHeadTexts();
 
     wrap.appendChild(trigger);
-    // popup rattaché à document.body, PAS à wrap : cf. commentaire de .tts-popup (css/template-tree-select.css)
-    // sur le rognage par #v2-title-cluster { overflow: hidden }. Repositionné à chaque ouverture (openPopup()).
+    // popup rattaché à document.body, pas à wrap (rognage par #v2-title-cluster { overflow: hidden }, voir .tts-popup dans
+    // css/template-tree-select.css). Repositionné à chaque ouverture (openPopup()).
     document.body.appendChild(popup);
 
     interceptValueWrites(realSelect, () => { syncTriggerLabel(); });
 
-    // Piège 3 : refreshTemplateList() (js/main.js) reconstruit tout le innerHTML du <select> sans
-    // toujours ré-écrire `.value` juste après - childList/subtree capte cette reconstruction, distincte
-    // de l'interception de `.value` ci-dessus qui ne capte, elle, que les écritures de valeur seule.
+    // Piège 3 : refreshTemplateList() (js/main.js) reconstruit tout le innerHTML du <select> sans toujours réécrire `.value` ensuite :
+    // childList/subtree capte cette reconstruction, que l'interception de `.value` ne voit pas.
     mo = new MutationObserver((mutations) => {
       const structural = mutations.some((m) => m.type === 'childList');
       const attrChanged = mutations.some((m) => m.type === 'attributes');
@@ -557,8 +507,8 @@ const TemplateTreeSelect = (function () {
     if (outsideClickHandler) { document.removeEventListener('mousedown', outsideClickHandler, true); outsideClickHandler = null; }
     if (outsideScrollHandler) { window.removeEventListener('scroll', outsideScrollHandler, true); outsideScrollHandler = null; }
     if (wrap && wrap.parentNode) wrap.parentNode.removeChild(wrap);
-    // popup n'est plus un enfant de wrap (rattaché à document.body, cf. attach()) : le retirer
-    // explicitement, sinon un futur attach() en recréerait un second en laissant l'ancien orphelin.
+    // popup n'est plus un enfant de wrap (il est dans document.body) : le retirer explicitement, sinon un futur attach() en recréerait un second en
+    // laissant l'ancien orphelin.
     if (popup && popup.parentNode) popup.parentNode.removeChild(popup);
     realSelect.classList.remove('tts-native-select');
     realSelect.removeAttribute('aria-hidden');
@@ -574,15 +524,12 @@ const TemplateTreeSelect = (function () {
     organizeBtn.setAttribute('aria-label', I18n.t('toolbar.organizeTemplates'));
   }
 
-  // Force un nouveau rendu depuis les données actuelles - utile après TemplatePreferences.loadForCurrentUser()
-  // qui résout après le premier attach()/render() (l'identification utilisateur est asynchrone).
+  // Force un nouveau rendu depuis les données actuelles : utile après TemplatePreferences.loadForCurrentUser(), qui résout après le premier
+  // attach()/render() (identification asynchrone).
   function refresh() { if (realSelect) render(); }
 
-  // Abonnement UNIQUE au niveau module (pas dans attach()) : I18n.onChange() (js/i18n.js) n'offre aucun
-  // moyen de se désabonner, un ré-abonnement à chaque attach()/detach() empilerait donc un écouteur
-  // fantôme par cycle. La garde `if (popup)` le rend inoffensif tant que rien n'est attaché - même
-  // schéma que I18n.onChange(decorateSaveButtonShortcut) dans js/main.js, mais avec garde explicite ici
-  // puisque ce module peut être détaché.
+  // Abonnement unique au niveau module (pas dans attach()) : I18n.onChange() ne permet pas de se désabonner, un ré-abonnement par attach()/detach()
+  // empilerait des écouteurs fantômes. La garde `if (popup)` le rend inoffensif tant que rien n'est attaché.
   if (typeof I18n !== 'undefined') {
     I18n.onChange(() => {
       if (popup) { popup.setAttribute('aria-label', I18n.t('template.select')); syncHeadTexts(); render(); }

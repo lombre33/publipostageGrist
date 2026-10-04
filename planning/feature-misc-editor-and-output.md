@@ -1,5 +1,7 @@
 # Fonctionnalités diverses — édition, sortie PDF, organisation
 
+> **Statut au 4 octobre 2026 : en grande partie livré.** En ligne : Rechercher / Remplacer, filigrane, taille et orientation de page, QR code, dossiers de modèles, nom de modèle déjà pris (« nom (2) »), copier-coller d'images, fusion de plusieurs modèles (macro-modèles) et choix de modèle conditionnel (« Modèle selon la ligne »). Pas encore faits : le remplissage avec des données d'exemple, les variantes multi-langues d'un modèle et la fusion de cellules dans un tableau de document (elle n'existe que dans les grilles). Ce document garde les conceptions d'origine.
+
 Regroupe les items de la roadmap qui sont chacun trop petits pour mériter leur propre fichier, mais
 gardés en détail pour ne rien perdre de la demande initiale.
 

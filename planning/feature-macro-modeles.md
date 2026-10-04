@@ -1,5 +1,7 @@
 # Macro modèles — assembler plusieurs modèles en un seul document
 
+> **Statut au 4 octobre 2026 : livré le 20 septembre** (écran de création `js/macro-editor.js`, résolution en Lecture et à l'export `js/macro-templates.js`). Depuis : un macro-modèle impose sa page (sens et format A3 à A6) aux modèles qu'il assemble, la colonne d'une règle se cherche dans une liste de toutes les tables, et un stylo ouvre chaque modèle assemblé dans l'éditeur. La mention « rien n'est implémenté » ci-dessous date du cadrage du 19 septembre.
+
 **Cadrage demandé par Antoine le 2026-09-19**, en même temps que le rangement/tri des modèles (traité
 dans un autre fil, cf. `planning/feature-misc-editor-and-output.md#dossiersfavoris-galerie-de-modèles`).
 Ce document est de la réflexion/conception, **rien n'est implémenté**.

@@ -1,5 +1,7 @@
 # Rangement et tri des modèles — cadrage
 
+> **Statut au 4 octobre 2026 : livré.** La liste des modèles est un arbre (dossiers, sous-dossiers, épingle = favori personnel, étoile = modèle par défaut, dossier replié par défaut) avec la fenêtre « Organiser mes modèles » ; le rangement est propre à chaque personne (table `Publipostage_PreferencesModeles`). Code : `js/template-tree-select.js`, `js/template-organize-modal.js`, `js/template-preferences.js`. Ce document garde le cadrage d'origine.
+
 Demandé par Antoine le 2026-09-19 (fil « Rangement et tri des modèles ») : le document sera utilisé
 par plusieurs utilisateurs, en plus du modèle par défaut existant (unique, document entier) il faut
 que chaque utilisateur puisse définir les modèles qu'il veut voir en priorité dans le sélecteur, et
