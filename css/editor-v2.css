@@ -517,7 +517,7 @@
 #v2-footnote-popup .v2-footnote-popup-actions button:hover { background: var(--surface-sunken); }
 /* `button.xxx` (pas juste `.xxx`) - sans l'élément en plus, ces 2 règles avaient la même spécificité que la règle générique au-dessus et perdaient contre
    elle : OK/Supprimer restaient blancs/gris malgré la tentative de les colorer. */
-#v2-footnote-popup button.v2-footnote-popup-delete { color: var(--danger); border-color: var(--danger-soft); }
+#v2-footnote-popup button.v2-footnote-popup-delete { color: var(--danger-ink); border-color: var(--danger-soft); }
 #v2-footnote-popup button.v2-footnote-popup-delete:hover { background: var(--danger-soft); }
 #v2-footnote-popup button.v2-footnote-popup-ok { background: var(--accent-solid); border-color: var(--accent-solid); color: #fff; }
 #v2-footnote-popup button.v2-footnote-popup-ok:hover { background: var(--accent-solid-hover); }
@@ -543,7 +543,7 @@
 #v2-comment-popup .v2-comment-popup-actions button:hover { background: var(--surface-sunken); }
 #v2-comment-popup button.v2-comment-popup-post { background: var(--accent-solid); border-color: var(--accent-solid); color: #fff; margin-right: auto; }
 #v2-comment-popup button.v2-comment-popup-post:hover { background: var(--accent-solid-hover); }
-#v2-comment-popup button.v2-comment-popup-delete { color: var(--danger); border-color: var(--danger-soft); }
+#v2-comment-popup button.v2-comment-popup-delete { color: var(--danger-ink); border-color: var(--danger-soft); }
 #v2-comment-popup button.v2-comment-popup-delete:hover { background: var(--danger-soft); }
 
 /* Panneau `#` (js/variables.js:ensureBox), seule définition de #autocomplete-box : colonne flex (JS bascule son display en 'flex') pour que .ac-tabs reste

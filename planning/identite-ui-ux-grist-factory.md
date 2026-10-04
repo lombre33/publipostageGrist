@@ -37,7 +37,7 @@
 « Interface principalement monochrome » (règle d'Antoine) veut dire : une base de gris (fond/surface/bordure/texte
 à plusieurs intensités) + **un seul bleu d'accent** pour les actions/états actifs, et rien d'autre sans raison
 fonctionnelle. Deux couleurs sémantiques s'y ajoutent, jamais décoratives :
-- **Rouge** — erreurs, actions destructrices (`--danger`).
+- **Rouge** — erreurs, actions destructrices : `--danger` pour une bordure, un filet ou une icône, `--danger-ink` pour un TEXTE (cf. « Contrastes »).
 - **Ambre** — attention/état en attente (conflit d'autosave sur Publipostage+, badge « connexion en cours » sur
   SlidesPlus) : la même intention existe déjà sur les deux widgets, avec des teintes proches mais pas encore
   unifiées en un token partagé — à harmoniser si un design system commun est créé.
@@ -51,13 +51,14 @@ Palette exacte de Publipostage+ (`css/style.css`, jetons de `:root`, thèmes cla
 | Surface enfoncée | `--surface-sunken` | `#eef1f6` | `#262e3c` |
 | Bordure / bordure forte | `--border` / `--border-strong` | `#dde2ea` / `#c3cad6` | `#323b4b` / `#465166` |
 | Texte | `--text` | `#1b2430` | `#e7ecf5` |
-| Texte atténué (un seul gris de texte, cf. « Contrastes ») | `--text-muted` = `--text-faint` | `#667085` | `#9aa6bb` |
+| Texte atténué (un seul gris de texte, cf. « Contrastes ») | `--text-muted` = `--text-faint` | `#5f6b7e` | `#9aa6bb` |
 | **Accent** (unique) : liens, états actifs, focus ; survol | `--accent`, `--accent-hover` | `#2f6fed`, `#2558c4` | `#5b91f5`, `#74a3f7` |
 | Accent plein (fond d'un bouton à texte blanc) ; survol | `--accent-solid`, `--accent-solid-hover` | `#2f6fed`, `#2558c4` | identiques au clair |
 | Accent doux : fond, bord | `--accent-soft`, `--accent-soft-border` | `#e8f0fe`, `#c7dbfd` | `#24324b`, `#35507d` |
 | Texte d'accent sur fond teinté ; réussite (texte, fond) | `--accent-ink` ; `--good`, `--good-soft` | `#2558c4` ; `#146c48`, `#e5f6ee` | `#74a3f7` ; `#6fd3a3`, `#163326` |
 | Texte discret posé sur la page blanche (éditeur, Lecture) | `--paper-text-faint` | `#667085` | identique au clair |
 | Danger ; fond doux | `--danger`, `--danger-soft` | `#d84343`, `#fbe9e9` | `#f08a8a`, `#3a2426` |
+| Texte rouge (message d'erreur, « Retirer la condition », « Supprimer », compteur dépassé, avertissement) | `--danger-ink` | `#c53030` | `#f08a8a` |
 | Voile derrière les fenêtres | `--pp-scrim` | `rgba(15, 23, 42, .45)` | `rgba(3, 6, 12, .62)` |
 | Rayon d'angle | `--radius-sm` | 7 px sur les contrôles (boutons, champs, lignes de liste), 8 px sur le cadre des fenêtres, rond pour les pastilles et le logo : coins arrondis partout, jamais carrés | idem |
 | Ombres | `--shadow-float`, `--shadow-card` | portée douce pour les éléments flottants et les fenêtres, très légère pour les cartes | plus marquée |
@@ -68,7 +69,11 @@ Ne pas ajouter une couleur qui n'a pas de rôle sémantique clair (pas de couleu
 Arbitré le 29/09 après l'audit (en ligne `c428609`) : tout texte, lien, bouton plein et anneau de focus atteint **4,5:1**
 au moins dans les deux thèmes (avant : texte discret à 2,58:1 en clair, liens des Crédits à 1,65:1 en sombre, blanc des
 boutons pleins à 3,08:1 en sombre). Règles à suivre :
-- Le gris de texte le plus pâle admis est `--text-faint` (= `--text-muted`) ; jamais un gris plus clair pour un texte.
+- Le gris de texte le plus pâle admis est `--text-faint` (= `--text-muted`, `#5f6b7e` en clair : 4,61:1 au moins sur tous les fonds clairs, dont le gris des cadres `--surface-sunken`
+  où l'ancien `#667085` n'avait que 4,39:1) ; jamais un gris plus clair pour un texte. Le gris de la page blanche (`--paper-text-faint`, `#667085`) et celui du PDF et du Word ne changent pas.
+- Un **texte rouge prend `--danger-ink`** (`#c53030` en clair, 4,67:1 au moins sur tous les fonds ; en sombre le même rouge que `--danger`), jamais `--danger`, qui ne fait que 4,37:1 sur blanc.
+  `--danger` reste aux bordures, aux filets et aux icônes (3:1 suffit). Le défaut revenait à chaque nouveau texte rouge, corrigé règle par règle : il est réglé une fois au jeton (Antoine, 04/10, « Tout corriger »).
+  `codeHygiene` (section 10) refuse toute règle `color: var(--danger)` hors des quatre boutons à icône seule, et `contrast` mesure chaque texte rouge et chaque gris sur son fond.
 - Un **bouton plein à texte blanc prend `--accent-solid`** (et `--accent-solid-hover`), jamais `--accent` : celui-ci
   s'éclaircit en sombre et le blanc dessus tomberait à 3,08:1.
 - Liens et texte d'accent : `--accent`. Anneau de focus : `outline: 2px solid var(--accent)`. Texte d'aide des champs

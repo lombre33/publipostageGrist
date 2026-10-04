@@ -696,6 +696,106 @@
     },
   });
 
+  // Gris des textes secondaires et rouge des textes d'erreur (contrôle complet du 03/10, réponse d'Antoine « Tout corriger » à la carte « Corriger le test périmé et les deux contrastes du thème clair ? ») :
+  // un seul correctif au jeton, pas une teinte par fenêtre. Avant : --text-muted et --text-faint (#667085) ne faisaient que 4,39:1 sur --surface-sunken, le gris des cadres des fenêtres Condition et
+  // Boucle, et --danger (#d84343) 4,37:1 sur blanc dès qu'une règle le posait en couleur de TEXTE. Le texte rouge prend --danger-ink ; --danger reste aux bordures, filets et icônes (3:1 suffit).
+  const tokenColor = name => withProbe('<i style="display:block;color:var(' + name + ')"></i>', el => parseColor(getComputedStyle(el).color));
+  const tokenFill = name => withProbe('<i style="display:block;background:var(' + name + ')"></i>', el => parseColor(getComputedStyle(el).backgroundColor));
+
+  cases.push({
+    id: 'contrast_secondary_grey_and_red_text_tokens_reach_4_5_on_every_surface_in_light_and_dark',
+    description: 'Jetons de texte secondaire (--text-muted, --text-faint) et de texte rouge (--danger-ink) : 4,5:1 au moins sur chacun des fonds du thème (page, surface, cadre gris, accent doux, danger doux, réussite douce), en clair et en sombre ; --danger-ink existe, est plus foncé que --danger en clair et le même en sombre ; le gris du papier (--paper-text-faint) reste #667085, celui du PDF',
+    run: async () => {
+      const surfaces = ['--bg', '--surface', '--surface-sunken', '--accent-soft', '--danger-soft', '--good-soft'];
+      const tokens = {};
+      const byTheme = inBothThemes(theme => {
+        const out = {};
+        for (const fg of ['--text-muted', '--text-faint', '--danger-ink']) {
+          const color = tokenColor(fg);
+          for (const bg of surfaces) out[fg + ' sur ' + bg] = round2(ratio(color, tokenFill(bg)));
+        }
+        tokens[theme] = {
+          declared: getComputedStyle(html).getPropertyValue('--danger-ink').trim(),
+          ink: tokenColor('--danger-ink'), danger: tokenColor('--danger'), paper: tokenColor('--paper-text-faint'),
+        };
+        return out;
+      });
+      const bad = failing(byTheme, 4.5);
+      const same = (a, b) => Math.round(a.r) === Math.round(b.r) && Math.round(a.g) === Math.round(b.g) && Math.round(a.b) === Math.round(b.b);
+      // Sans --danger-ink, `color: var(--danger-ink)` hérite du texte courant : la mesure passerait à tort. D'où le contrôle qu'il est déclaré, dans les deux thèmes.
+      const inkDeclared = !!tokens.light.declared && !!tokens.dark.declared;
+      const inkDarkerInLight = lum(tokens.light.ink) < lum(tokens.light.danger);
+      const inkIsDangerInDark = same(tokens.dark.ink, tokens.dark.danger);
+      const paperGreyKept = same(tokens.light.paper, { r: 102, g: 112, b: 133 }) && same(tokens.dark.paper, { r: 102, g: 112, b: 133 });
+      return {
+        pass: bad.length === 0 && inkDeclared && inkDarkerInLight && inkIsDangerInDark && paperGreyKept,
+        notes: JSON.stringify({ bad, inkDeclared, inkDarkerInLight, inkIsDangerInDark, paperGreyKept, byTheme }),
+      };
+    },
+  });
+
+  cases.push({
+    id: 'contrast_grey_hints_of_the_condition_and_loop_windows_reach_4_5_on_the_grey_frames_in_light_and_dark',
+    description: 'Textes gris des fenêtres Condition et Boucle posés sur le gris des cadres (« Si », « + Ajouter une condition », lien de la table liée, ligne d’aperçu « Choisissez une colonne… » / « Dans « Contrats » : 1 ligne sur 2… ») : 4,5:1 au moins, en clair et en sombre (ils n’avaient que 4,39:1 en clair)',
+    run: async () => {
+      // Les classes et les fonds sont ceux des fenêtres : le cadre des règles (.var-condition-rules) et la ligne d'aperçu (.var-condition-debug-line, reprise par la fenêtre Boucle) sont en --surface-sunken.
+      const markup = '<div>'
+        + '<div class="var-condition-rules"><span class="macro-rule-connector">Si</span><div class="var-condition-link-hint">ligne de « Clients » trouvée via Contrats.Client</div><button type="button" class="var-condition-add">+ Ajouter une condition</button></div>'
+        + '<div class="var-condition-debug"><div class="var-condition-debug-line"><span>Choisissez une colonne pour voir l’aperçu.</span></div></div>'
+        + '</div>';
+      return withProbe(markup, root => {
+        const byTheme = inBothThemes(() => ({
+          '« Si »': round2(textRatio(root.querySelector('.macro-rule-connector'))),
+          'lien de la table liée': round2(textRatio(root.querySelector('.var-condition-link-hint'))),
+          '+ Ajouter une condition': round2(textRatio(root.querySelector('.var-condition-add'))),
+          'ligne d’aperçu': round2(textRatio(root.querySelector('.var-condition-debug-line span'))),
+        }));
+        const bad = failing(byTheme, 4.5);
+        return { pass: bad.length === 0, notes: JSON.stringify({ bad, byTheme }) };
+      });
+    },
+  });
+
+  cases.push({
+    id: 'contrast_red_text_of_the_status_error_remove_buttons_counter_and_warnings_reaches_4_5_in_light_and_dark',
+    description: 'Texte rouge (message d’erreur de la barre, « Retirer la condition », « Supprimer » des bulles de note et de commentaire, compteur d’email dépassé, avertissement de colonne du macro-modèle, ligne « accès verrouillé » de Réglages) : 4,5:1 au moins sur son fond, en clair et en sombre (--danger n’avait que 4,37:1 en clair)',
+    run: async () => {
+      const status = document.getElementById('status-msg');
+      const counter = document.getElementById('v2-email-char-counter');
+      const locked = document.getElementById('settings-access-locked');
+      const saved = { text: status.textContent, cls: status.className, counterOver: counter.classList.contains('is-over-limit') };
+      // Fenêtre : le texte posé sur --surface (.modal-content) ; bulles : #v2-footnote-popup / #v2-comment-popup (les règles sont écrites avec l'id) ; macro-modèle : le cadre d'une règle (--surface-sunken).
+      const markup = '<div>'
+        + '<div class="pp-modal-box modal-content"><div class="var-modal-actions"><button type="button" class="var-modal-danger">Retirer la condition</button></div></div>'
+        + '<div id="v2-footnote-popup"><div class="v2-footnote-popup-actions"><button type="button" class="v2-footnote-popup-delete">Supprimer</button></div></div>'
+        + '<div id="v2-comment-popup"><div class="v2-comment-popup-actions"><button type="button" class="v2-comment-popup-delete">Supprimer</button></div></div>'
+        + '<div class="macro-slot-card"><div class="macro-rule"><span class="macro-rule-column-type is-warning">⚠ absente de la ligne affichée</span></div></div>'
+        + '</div>';
+      try {
+        status.textContent = 'Modèle non enregistré : donnez-lui un nom puis cliquez sur Enregistrer.';
+        status.className = 'error-msg';
+        counter.classList.add('is-over-limit');
+        return withProbe(markup, root => {
+          const byTheme = inBothThemes(() => ({
+            'message d’erreur de la barre': round2(textRatio(status)),
+            '« Retirer la condition »': round2(textRatio(root.querySelector('.var-modal-danger'))),
+            '« Supprimer » de la note de bas de page': round2(textRatio(root.querySelector('.v2-footnote-popup-delete'))),
+            '« Supprimer » du commentaire': round2(textRatio(root.querySelector('.v2-comment-popup-delete'))),
+            'compteur d’email dépassé': round2(textRatio(counter)),
+            'avertissement de colonne du macro-modèle': round2(textRatio(root.querySelector('.macro-rule-column-type'))),
+            'ligne « accès verrouillé »': round2(textRatio(locked)),
+          }));
+          const bad = failing(byTheme, 4.5);
+          return { pass: bad.length === 0, notes: JSON.stringify({ bad, byTheme }) };
+        });
+      } finally {
+        status.textContent = saved.text;
+        status.className = saved.cls;
+        if (!saved.counterOver) counter.classList.remove('is-over-limit');
+      }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.contrast = cases;
 })();

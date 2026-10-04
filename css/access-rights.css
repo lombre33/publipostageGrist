@@ -25,5 +25,5 @@
 .settings-access-clean input:disabled { cursor: default; }
 .settings-access-clean input:disabled + span { opacity: .55; }
 .settings-access-status { font-size: 12.5px; font-weight: 600; color: var(--text); margin: 12px 0 0; }
-.settings-access-locked { font-size: 12.5px; color: var(--danger); margin: 8px 0 0; }
+.settings-access-locked { font-size: 12.5px; color: var(--danger-ink); margin: 8px 0 0; }
 .settings-access-hint { font-size: 12px; color: var(--text-muted); margin: 8px 0 0; }

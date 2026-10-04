@@ -414,7 +414,7 @@
 
   cases.push({
     id: 'te_settings_tab_is_listed_and_translated',
-    description: 'Réglages compte sept onglets dont « Raccourcis » (« Shortcuts » en anglais), son panneau est masqué tant qu\'on ne l\'ouvre pas, et tous ses textes - titre, libellés, boutons, message vide, notes - suivent la langue',
+    description: 'Réglages compte huit onglets dont « Raccourcis » (« Shortcuts » en anglais), son panneau est masqué tant qu\'on ne l\'ouvre pas, et tous ses textes - titre, libellés, boutons, message vide, notes - suivent la langue',
     run: async () => {
       wipe();
       const tabs = Array.from(document.querySelectorAll('.settings-tab')).map(t => t.getAttribute('data-settings-tab'));
@@ -442,7 +442,7 @@
       const back = snapshot();
       const same = Object.keys(fr).filter(k => fr[k] === en[k]);
       return {
-        pass: tabs.length === 7 && tabs[3] === 'shortcuts' && hiddenAtStart && fr.tab === 'Raccourcis' && en.tab === 'Shortcuts' && en.title === 'Abbreviations' && en.add === 'Add'
+        pass: tabs.length === 8 && tabs[3] === 'shortcuts' && hiddenAtStart && fr.tab === 'Raccourcis' && en.tab === 'Shortcuts' && en.title === 'Abbreviations' && en.add === 'Add'
           && fr.add === 'Ajouter' && fr.intro.indexOf('§ub') !== -1 && en.intro.indexOf('§ub') !== -1 && same.length === 0 && JSON.stringify(back) === JSON.stringify(fr),
         notes: JSON.stringify({ tabs, hiddenAtStart, same, fr, en }),
       };

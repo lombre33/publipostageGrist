@@ -15,6 +15,7 @@
 //   8. js/xlsx-export.js qui lit un style calculé (getComputedStyle) : il suivrait le thème sombre de l'éditeur.
 //   9. un z-index de 100 ou plus écrit en dur sur une couche flottante (barre, menu, liste, popup, info-bulle) au lieu d'un jeton --z-* de css/style.css (retour d'Antoine du 01/10) ;
 //      un jeton --z-* déclaré dans une autre feuille, un z-index en `!important` (un popup de fenêtre passe par Layers.raise(popup, fenêtre)), un z-index posé en ligne hors js/layers.js.
+//  10. un texte rouge posé avec --danger (4,37:1 sur blanc) au lieu de --danger-ink (4,5:1 au moins sur tous les fonds) : seuls quatre boutons à icône seule gardent --danger (contrôle du 03/10).
 //
 // Volontairement PERMISSIF : un nom cité seulement dans un commentaire compte comme utilisé, un préfixe construit (`'toc-level-' + n`) couvre toute la
 // famille. Le but est de ne jamais faire échouer un changement légitime, seulement d'attraper ce qui n'a plus AUCUN point d'entrée. Une classe posée
@@ -325,6 +326,37 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     });
   }
   check('couches flottantes : aucun script hors js/layers.js ne pose de z-index en ligne - il appelle Layers.raise(élément) à l\'ouverture', inline.length === 0, '\n    ' + inline.join('\n    '));
+}
+
+// ============================================================================
+// 10. Texte rouge : --danger-ink pour un texte, --danger pour une icône, une bordure ou un filet
+// ============================================================================
+// Contrôle complet du 03/10 (choix d'Antoine « Tout corriger ») : --danger (#d84343) ne fait que 4,37:1 sur blanc. Posé en couleur de TEXTE (message d'erreur de la barre, « Retirer la condition »,
+// « Supprimer » d'une bulle de note ou de commentaire, compteur d'email dépassé, avertissement de colonne du macro-modèle, ligne « accès verrouillé » de Réglages) il passait sous les 4,5:1.
+// Le défaut avait déjà été corrigé règle par règle (color: var(--text) dans trois d'entre elles) et revenait avec chaque nouveau texte rouge : le correctif est au jeton. Un texte rouge prend
+// var(--danger-ink) (css/style.css : 4,5:1 au moins sur tous les fonds du thème, en clair et en sombre) ; --danger reste aux bordures, aux filets et aux icônes (3:1 suffit).
+// Les seules règles qui gardent `color: var(--danger)` sont des boutons à icône seule, dont le masque d'icône prend `color` : un nouveau cas se discute, puis s'ajoute à cette liste, avec ce qu'il contient.
+{
+  const ICON_ONLY = new Set([
+    '#toolbar-top #btn-delete',          // corbeille de la barre du haut (css/style.css : icône en masque, aucun texte)
+    '.macro-slot-remove:hover',          // croix d'une annexe du macro-modèle (js/macro-editor.js : bouton sans texte)
+    '.macro-rule-remove:hover',          // croix d'une règle (macro-modèle, condition, boucle, panneau d'une ligne : boutons sans texte)
+    '.link-rule-btn-delete:hover',       // corbeille d'une règle de lien entre deux tables (js/variables.js : icône en masque)
+  ]);
+  const offenders = [];
+  for (const rel of cssFiles) {
+    for (const m of stripComments(read(rel)).matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      if (!/(?<![\w-])color\s*:\s*var\(\s*--danger\s*[,)]/.test(m[2])) continue;
+      const selectors = m[1].split(',').map(sel => sel.replace(/\s+/g, ' ').trim());
+      if (!selectors.every(sel => ICON_ONLY.has(sel))) offenders.push(`${rel} : ${selectors.join(', ').slice(0, 110)}`);
+    }
+  }
+  check('texte rouge : aucune règle ne pose `color: var(--danger)` hors des quatre boutons à icône seule - un texte rouge prend var(--danger-ink) (--danger n\'a que 4,37:1 sur blanc)', offenders.length === 0, '\n    ' + offenders.join('\n    '));
+
+  // Le jeton existe, dans la feuille qui porte les autres, pour le thème clair ET les deux blocs sombres (sans lui, `color: var(--danger-ink)` hérite du texte courant : plus rien de rouge, et aucun test de contraste ne le verrait).
+  const style = stripComments(read('css/style.css'));
+  const declarations = [...style.matchAll(/--danger-ink\s*:\s*(#[0-9a-fA-F]{3,8})\s*;/g)].map(m => m[1].toLowerCase());
+  check('texte rouge : css/style.css déclare --danger-ink trois fois (thème clair, thème sombre choisi, thème sombre du système), d\'un rouge plus foncé que --danger en clair', declarations.length === 3 && declarations[0] === '#c53030', JSON.stringify(declarations));
 }
 
 summarizeAndExit();

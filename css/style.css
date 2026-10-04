@@ -12,8 +12,10 @@
   --border: #dde2ea;
   --border-strong: #c3cad6;
   --text: #1b2430;
-  --text-muted: #667085;
-  --text-faint: #667085;
+  /* Gris des textes secondaires : 4,61:1 au moins sur tous les fonds clairs (blanc 5,40 ; --bg 4,99 ; --surface-sunken 4,77 ; --accent-soft 4,71 ; --good-soft 4,82 ; --danger-soft 4,61).
+     L'ancien #667085 ne faisait que 4,39:1 sur --surface-sunken, le gris des cadres des fenêtres Condition et Boucle (contrôle du 03/10, choix d'Antoine « Tout corriger »). */
+  --text-muted: #5f6b7e;
+  --text-faint: #5f6b7e;
   /* Texte discret posé sur la page blanche (éditeur, Lecture) : la page reste blanche en sombre, ce gris ne s'y éclaircit donc pas (--text-faint sombre sur blanc : 2,46:1 ;
      celui-ci : 4,97:1). Défini ici seulement, les blocs sombres ne le redéfinissent pas. */
   --paper-text-faint: #667085;
@@ -39,6 +41,9 @@
   --accent-soft-border: #c7dbfd;
   --danger: #d84343;
   --danger-soft: #fbe9e9;
+  /* Texte rouge (message d'erreur de la barre, « Retirer… » des fenêtres, compteur d'email dépassé, avertissements, « Supprimer » des bulles) : --danger seul ne fait que 4,37:1 sur blanc ; celui-ci 5,47:1
+     sur blanc et 4,67:1 sur --danger-soft. --danger reste pour les bordures, filets et icônes (3:1 suffit). En sombre : la valeur de --danger (5,3:1 au moins). */
+  --danger-ink: #c53030;
   --radius-sm: 7px;
   --shadow-float: 0 14px 32px -8px rgba(9,16,35,.35), 0 2px 8px rgba(9,16,35,.12);
   --shadow-card: 0 1px 2px rgba(20,28,46,.05);
@@ -85,6 +90,7 @@
   --solid-neutral-border: #465166;
   --danger: #f08a8a;
   --danger-soft: #3a2426;
+  --danger-ink: #f08a8a;
   --shadow-float: 0 14px 32px -8px rgba(0,0,0,.65), 0 2px 8px rgba(0,0,0,.45);
   --shadow-card: 0 1px 2px rgba(0,0,0,.45);
   --pp-page-gutter: #10141b;
@@ -115,6 +121,7 @@
     --solid-neutral-border: #465166;
     --danger: #f08a8a;
     --danger-soft: #3a2426;
+    --danger-ink: #f08a8a;
     --shadow-float: 0 14px 32px -8px rgba(0,0,0,.65), 0 2px 8px rgba(0,0,0,.45);
     --shadow-card: 0 1px 2px rgba(0,0,0,.45);
     --pp-page-gutter: #10141b;
@@ -312,7 +319,7 @@ body { display:flex; flex-direction:column; }
 
 /* setStatus(msg, true) (js/main.js) pose cette classe sur #status-msg depuis toujours, mais AUCUNE règle ne la définissait : un message d'erreur
    (« Nom du modèle requis. », « Erreur génération PDF. ») s'affichait exactement comme un message de succès, en gris. */
-#status-msg.error-msg { color: var(--danger); }
+#status-msg.error-msg { color: var(--danger-ink); }
 /* « Modifications non enregistrées » (enregistrement automatique coupé, js/main.js:updateSaveStatus) : couleur du texte courant au lieu du gris des autres messages, pour se repérer
    d'un coup d'œil - sans le rouge d'une erreur : rien n'a échoué, l'enregistrement est simplement à faire à la main. */
 #status-msg.is-unsaved { color: var(--text); }
