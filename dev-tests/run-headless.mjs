@@ -124,6 +124,7 @@ const GROUPS = {
   imageText: 'scenarios-image-text', // image « Au cœur du texte » et texte autour (js/editor-nodes.js, css/editor-v2.css, js/reader-mode.js, js/pdf-export.js, js/docx-export.js) : l'image seule sur sa ligne, l'habillage gauche / droite, l'image dans la ligne, la bascule en ligne / bloc, mesurés dans l'éditeur, la Lecture, le PDF et le Word
   formatPainter: 'scenarios-format-painter', // pinceau de mise en forme (js/format-painter.js, bouton après le surlignage, Alt+Maj+C / V) : ce qui est copié et posé, le paragraphe sur un curseur ou un paragraphe entier, une étape d'historique, armé par un clic ou un double-clic, grisé en e-mail et en macro-modèle, les touches
   tableCells: 'scenarios-table-cells', // sélection de plusieurs cases d'un tableau (CellSelection) : gras, taille, police, couleurs, surlignage, puces, numéros, citation, retrait et retrait inverse sur toutes les cases choisies (et leurs touches Ctrl+Maj+B, Ctrl+Maj+8, Ctrl+Maj+7, Ctrl+Maj+9), la sélection reste, un seul Annuler ; copier, couper, coller en tableau tabulé
+  htmlSanitize: 'scenarios-html-sanitize', // HTML qui ne vient pas de l'éditeur (js/html-sanitize.js, Editor.setHTML) : rien ne s'exécute, rien d'actif ne survit, tout ce que l'éditeur écrit reste
 };
 
 // Scripts Node autonomes (page.mouse réel, pas de page.evaluate) : structurellement à part de GROUPS
@@ -213,6 +214,7 @@ const NODE_SCRIPTS = {
   formatPainterMouse: 'verify-format-painter-mouse.mjs', // pinceau de mise en forme à la vraie souris et au vrai clavier à 700x400 : le bouton sur la 2e rangée sans en ajouter, un mot, un glissé, un triple-clic, des cases de tableau, le double-clic qui garde le pinceau, Échap, Alt+Maj+C / V, clair, sombre et anglais
   startupReadsUnit: 'unit-startup-reads.mjs', // Node pur (vm + faux docApi qui compte ses appels) : ce que l'ouverture lit dans Grist - Templates.loadAll (une lecture), GristAPI.init (aucune table du document), GristAPI.refreshSchema (colonnes exactes, une passe à la fois), câblage d'index.html et de js/main.js
   startupOpenMouse: 'verify-startup-open-mouse.mjs', // ouverture sur un document aux tables lentes, vrai navigateur à 700x400, vraie souris et vrai clavier : table des modèles lue une fois, modèle affiché avant la lecture complète des tables, bulles jugées tout de suite, « # » liste les colonnes, colonnes exactes ensuite
+  cspLoad: 'verify-csp.mjs', // politique de sécurité du contenu de index.html SANS contournement : le widget démarre, s'écrit, se lit et exporte sous la politique ; un script en ligne, un gestionnaire, une adresse javascript:, une balise de base, un cadre, un objet, un formulaire ne passent plus ; le vrai fichier d'API de Grist (réseau) s'évalue ; cadre à bac à sable
 };
 
 const argv = process.argv.slice(2);
@@ -320,7 +322,7 @@ const DEV_FILES = ['helpers', 'runner'];
 
 async function runGroup(name, probeExpr) {
   const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hinting=none'] });
-  const context = await browser.newContext({ viewport: { width: viewportWidth, height: viewportHeight } });
+  const context = await browser.newContext({ bypassCSP: true, viewport: { width: viewportWidth, height: viewportHeight } });
   const page = await context.newPage();
   const consoleErrors = [];
   page.on('console', m => { if (m.type() === 'error') consoleErrors.push(m.text()); });

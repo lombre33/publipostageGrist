@@ -89,7 +89,7 @@ const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hi
 const pageErrors = [];
 
 async function openWidget(colorScheme) {
-  const context = await browser.newContext({ viewport: { width: WIDTH, height: HEIGHT }, colorScheme });
+  const context = await browser.newContext({ bypassCSP: true, viewport: { width: WIDTH, height: HEIGHT }, colorScheme });
   const page = await context.newPage();
   page.on('pageerror', e => { pageErrors.push(e.message); console.log('[pageerror]', e.message); });
   page.on('dialog', d => { pageErrors.push('boîte inattendue : ' + d.message()); d.accept().catch(() => {}); });

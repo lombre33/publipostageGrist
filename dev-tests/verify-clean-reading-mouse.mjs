@@ -99,7 +99,7 @@ const LONG_BODY = '<p>Bonjour <span class="var-badge" data-table="Clients" data-
 // n'a pas mis window.__droitsFail à false.
 async function openWidget(colorScheme, opts) {
   opts = opts || {};
-  const context = await browser.newContext({ viewport: { width: WIDTH, height: HEIGHT }, colorScheme });
+  const context = await browser.newContext({ bypassCSP: true, viewport: { width: WIDTH, height: HEIGHT }, colorScheme });
   const page = await context.newPage();
   page.on('pageerror', e => { pageErrors.push(e.message); console.log('[pageerror]', e.message); });
   const dialogs = [];

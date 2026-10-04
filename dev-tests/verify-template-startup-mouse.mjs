@@ -80,7 +80,7 @@ function check(name, pass, notes) {
 const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hinting=none'] });
 const pageErrors = [];
 async function openPage(extraSeed) {
-  const context = await browser.newContext({ viewport: { width: WIDTH, height: HEIGHT } });
+  const context = await browser.newContext({ bypassCSP: true, viewport: { width: WIDTH, height: HEIGHT } });
   const page = await context.newPage();
   page.on('pageerror', e => { pageErrors.push(e.message); console.log('[pageerror]', e.message); });
   if (OFFLINE) {

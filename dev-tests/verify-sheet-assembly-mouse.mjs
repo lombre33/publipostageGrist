@@ -86,7 +86,7 @@ function check(name, pass, notes) {
 }
 
 const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hinting=none'] });
-const context = await browser.newContext({ viewport: { width: WIDTH, height: HEIGHT }, acceptDownloads: true });
+const context = await browser.newContext({ bypassCSP: true, viewport: { width: WIDTH, height: HEIGHT }, acceptDownloads: true });
 const page = await context.newPage();
 const pageErrors = [];
 const consoleProblems = [];

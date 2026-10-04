@@ -136,7 +136,7 @@ const PRESEED = `
 `;
 
 async function openPage(browser) {
-  const context = await browser.newContext({ viewport: { width: WIDTH, height: HEIGHT } });
+  const context = await browser.newContext({ bypassCSP: true, viewport: { width: WIDTH, height: HEIGHT } });
   const page = await context.newPage();
   const pageErrors = [];
   page.on('pageerror', e => { pageErrors.push(e.message); console.log('[pageerror]', e.message); });
