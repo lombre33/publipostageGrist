@@ -17,9 +17,9 @@ const MacroEditor = (function () {
   // reporte ses modèles masqués (collectSlotsForSave).
   let coverKept = null;
 
-  // Un macro-modèle ne peut pas se référencer lui-même ni un autre macro-modèle (pas d'imbrication), ni un modèle email (pas un contenu de page).
-  // Recalculé à chaque ouverture et chaque rendu plutôt que mis en cache : la liste des modèles peut changer pendant que la modale est ouverte.
   function availableTemplates() {
+    // Un macro-modèle ne peut pas se référencer lui-même ni un autre macro-modèle (pas d'imbrication), ni un modèle email (pas un contenu de page).
+    // Recalculé à chaque ouverture et chaque rendu plutôt que mis en cache : la liste des modèles peut changer pendant que la modale est ouverte.
     return Templates.getCached().filter(t => (t.typeModele || 'document') === 'document');
   }
 
@@ -28,16 +28,16 @@ const MacroEditor = (function () {
   function coverSelect() { return document.getElementById('macro-editor-cover'); }
   function slotsContainer() { return document.getElementById('macro-editor-slots'); }
 
-  // Liste avec recherche (js/search-select.js) : un modèle se cherche comme une colonne. Le <select> reste la source de la valeur, et la liste native
-  // si le composant est indisponible (rend alors null) ; l'appelant appelle `sync()` après l'avoir rempli à nouveau. Rappelé sur un <select> déjà
-  // équipé (la page de garde, posée dans index.html), `attach` rend le même contrôleur : un échec d'une ouverture est retenté à la suivante.
   function searchable(select, opts) {
+    // Liste avec recherche (js/search-select.js) : un modèle se cherche comme une colonne. Le <select> reste la source de la valeur, et la liste native
+    // si le composant est indisponible (rend alors null) ; l'appelant appelle `sync()` après l'avoir rempli à nouveau. Rappelé sur un <select> déjà
+    // équipé (la page de garde, posée dans index.html), `attach` rend le même contrôleur : un échec d'une ouverture est retenté à la suivante.
     try { return SearchSelect.attachTemplates(select, opts); }
     catch (e) { console.warn('[MacroEditor] recherche de modèle indisponible, liste native conservée', e); return null; }
   }
 
-  // Un élément avec sa classe, son texte et ses enfants (tous facultatifs).
   function node(tag, className, text, children) {
+    // Un élément avec sa classe, son texte et ses enfants (tous facultatifs).
     const element = Dom.el(tag, className, text);
     (children || []).forEach(child => element.appendChild(child));
     return element;
@@ -65,9 +65,9 @@ const MacroEditor = (function () {
     select.value = selectedId != null ? String(selectedId) : '';
   }
 
-  // Une règle de l'annexe : les champs et la mise en page sont ceux de ConditionFields.buildTemplateRule, partagés avec le réglage « Selon la
-  // ligne ».
   function ruleRow(slot, rule, ruleIndex) {
+    // Une règle de l'annexe : les champs et la mise en page sont ceux de ConditionFields.buildTemplateRule, partagés avec le réglage « Selon la
+    // ligne ».
     const connector = I18n.t(ruleIndex === 0 ? 'macro.modal.ruleIf' : 'macro.modal.ruleOrIf');
     const onRemove = () => { slot.rules.splice(ruleIndex, 1); renderSlots(); };
     const { row, modeleSelect } = ConditionFields.buildTemplateRule(rule, { connector, templates: availableTemplates(), onRemove });
@@ -75,8 +75,8 @@ const MacroEditor = (function () {
     return row;
   }
 
-  // Le modèle de « Si aucune règle ne correspond » : un des modèles, ou aucun.
   function defaultSelectFor(slot) {
+    // Le modèle de « Si aucune règle ne correspond » : un des modèles, ou aucun.
     const select = node('select', 'macro-slot-default-select');
     const skip = option('', I18n.t('macro.modal.defaultSkip'));
     skip.dataset.placeholder = 'false'; // liste avec recherche : « Ne rien inclure » est un vrai choix, pas un « rien » grisé
@@ -138,10 +138,10 @@ const MacroEditor = (function () {
     if (m) m.style.display = 'none';
   }
 
-  // Les modèles masqués par leur œil (js/macro-templates.js:isModelHidden) restent masqués à travers cette fenêtre : une position reconstruite
-  // reprend ceux de ses modèles qui y sont encore (un modèle retiré ne laisse pas son masquage derrière lui, un modèle mis à sa place repart
-  // affiché).
   function collectSlotsForSave() {
+    // Les modèles masqués par leur œil (js/macro-templates.js:isModelHidden) restent masqués à travers cette fenêtre : une position reconstruite
+    // reprend ceux de ses modèles qui y sont encore (un modèle retiré ne laisse pas son masquage derrière lui, un modèle mis à sa place repart
+    // affiché).
     const result = [];
     const coverId = coverSelect() ? coverSelect().value : '';
     if (coverId) result.push(MacroTemplates.keepHidden({ type: 'fixed', modeleId: coverId }, coverKept));
@@ -194,12 +194,12 @@ const MacroEditor = (function () {
     }
   }
 
-  // onSaved(id) : rappel de js/main.js pour rafraîchir la liste des modèles et recharger le macro-modèle enregistré - branché une seule fois à
-  // l'init, même patron que les autres modales de ce fichier (js/main.js:wireLinkRulesModal). getScreenSettings() : les réglages du macro-modèle
-  // chargé tels qu'ils sont à l'écran (voir settingsToKeep), fournis par js/main.js. onOpenTemplate(id) : ouvre ce modèle dans l'éditeur, depuis le
-  // stylo d'une ligne du résumé (js/main.js:openTemplateFromMacro). onModelVisibility({ name, hidden, ok }) : l'œil d'un modèle du résumé a fini
-  // d'écrire la composition (ok) ou n'a pas pu (js/main.js:onMacroModelVisibility, le coin d'état).
   function wire(onSaved, getScreenSettings, onOpenTemplate, onModelVisibility) {
+    // onSaved(id) : rappel de js/main.js pour rafraîchir la liste des modèles et recharger le macro-modèle enregistré - branché une seule fois à
+    // l'init, même patron que les autres modales de ce fichier (js/main.js:wireLinkRulesModal). getScreenSettings() : les réglages du macro-modèle
+    // chargé tels qu'ils sont à l'écran (voir settingsToKeep), fournis par js/main.js. onOpenTemplate(id) : ouvre ce modèle dans l'éditeur, depuis le
+    // stylo d'une ligne du résumé (js/main.js:openTemplateFromMacro). onModelVisibility({ name, hidden, ok }) : l'œil d'un modèle du résumé a fini
+    // d'écrire la composition (ok) ou n'a pas pu (js/main.js:onMacroModelVisibility, le coin d'état).
     screenSettings = typeof getScreenSettings === 'function' ? getScreenSettings : null;
     openTemplate = typeof onOpenTemplate === 'function' ? onOpenTemplate : null;
     onVisibilityChange = typeof onModelVisibility === 'function' ? onModelVisibility : null;
@@ -227,18 +227,18 @@ const MacroEditor = (function () {
     });
   }
 
-  // Le macro-modèle tel que le cache des modèles le tient maintenant. Le cache est remplacé objet par objet à chaque relecture des modèles
-  // (l'enregistrement automatique en fait une toutes les 15 s au repos) : l'objet reçu par showSummary() peut déjà être périmé, alors que la fenêtre
-  // de composition et l'œil d'un modèle doivent partir de la composition à jour.
   function currentTemplate(tpl) {
+    // Le macro-modèle tel que le cache des modèles le tient maintenant. Le cache est remplacé objet par objet à chaque relecture des modèles
+    // (l'enregistrement automatique en fait une toutes les 15 s au repos) : l'objet reçu par showSummary() peut déjà être périmé, alors que la fenêtre
+    // de composition et l'œil d'un modèle doivent partir de la composition à jour.
     return (tpl && tpl.id != null && Templates.byId(tpl.id)) || tpl;
   }
 
-  // Les modèles de la composition dans l'ordre où on les lit : la page de garde, puis chaque annexe avec le modèle de chacune de ses règles et celui
-  // de « Si aucune règle ne correspond » (jamais deux fois le même dans une annexe), sous les mêmes numéros d'annexe que la fenêtre de composition
-  // (renderSlots). Une annexe sans aucun modèle garde sa ligne : le numéro suivant ne saute pas. `slot` et `slotIndex` disent de quelle position de
-  // la composition vient la ligne : c'est dans cette position que l'œil d'un modèle le masque.
   function summaryParts(tpl) {
+    // Les modèles de la composition dans l'ordre où on les lit : la page de garde, puis chaque annexe avec le modèle de chacune de ses règles et celui
+    // de « Si aucune règle ne correspond » (jamais deux fois le même dans une annexe), sous les mêmes numéros d'annexe que la fenêtre de composition
+    // (renderSlots). Une annexe sans aucun modèle garde sa ligne : le numéro suivant ne saute pas. `slot` et `slotIndex` disent de quelle position de
+    // la composition vient la ligne : c'est dans cette position que l'œil d'un modèle le masque.
     const slots = (tpl && tpl.macroSlots && Array.isArray(tpl.macroSlots.slots)) ? tpl.macroSlots.slots : [];
     let annexNumber = 0;
     return slots.map((slot, slotIndex) => {
@@ -253,10 +253,10 @@ const MacroEditor = (function () {
     });
   }
 
-  // L'œil d'un modèle : l'icône dit l'état (œil barré = masqué de la Lecture et des exports), `aria-pressed` le dit aux lecteurs d'écran, le nom du
-  // modèle se grise. Le nom accessible dit le geste et ne change pas ; l'info-bulle dit l'état et ce que le clic fait. Écrit aussi bien au dessin du
-  // résumé qu'au clic : le bouton reste le même, il garde le focus.
   function paintEye(entry, eye, hidden, name) {
+    // L'œil d'un modèle : l'icône dit l'état (œil barré = masqué de la Lecture et des exports), `aria-pressed` le dit aux lecteurs d'écran, le nom du
+    // modèle se grise. Le nom accessible dit le geste et ne change pas ; l'info-bulle dit l'état et ce que le clic fait. Écrit aussi bien au dessin du
+    // résumé qu'au clic : le bouton reste le même, il garde le focus.
     entry.classList.toggle('is-hidden-model', hidden);
     eye.innerHTML = Icons.svg(hidden ? 'eyeOff' : 'eye');
     eye.setAttribute('aria-pressed', hidden ? 'true' : 'false');
@@ -271,10 +271,10 @@ const MacroEditor = (function () {
     return btn;
   }
 
-  // Un modèle de la composition : son nom, puis son stylo qui l'ouvre dans l'éditeur (openTemplate, fourni par js/main.js, qui retient d'où l'on
-  // vient pour le bandeau « Revenir au macro-modèle »), puis son œil qui le masque de la Lecture et des exports (toggleModelHidden). Un modèle
-  // supprimé depuis reste dit, grisé, avec son stylo et son œil grisés : rien ne disparaît.
   function modelEntry(id, found, part) {
+    // Un modèle de la composition : son nom, puis son stylo qui l'ouvre dans l'éditeur (openTemplate, fourni par js/main.js, qui retient d'où l'on
+    // vient pour le bandeau « Revenir au macro-modèle »), puis son œil qui le masque de la Lecture et des exports (toggleModelHidden). Un modèle
+    // supprimé depuis reste dit, grisé, avec son stylo et son œil grisés : rien ne disparaît.
     const name = node('span', 'macro-summary-model-name', found ? found.nom : I18n.t('macro.summary.missing'));
     if (found) name.title = found.nom; // un nom long est coupé par « … » : il se lit en entier au survol
     const edit = summaryButton('macro-summary-edit', id);
@@ -304,9 +304,9 @@ const MacroEditor = (function () {
   // modèles, des secondes). L'écran et le cache disent l'état voulu dès le clic, l'écriture suit.
   const eyeWrites = new Map();
 
-  // Écrit la composition d'un macro-modèle dans sa ligne, comme « Enregistrer » de la fenêtre : mêmes réglages gardés (nom du PDF, en-tête et pied,
-  // page : ceux de l'écran s'il est chargé, ceux de Grist sinon), jamais une composition vide ni inventée pour un macro-modèle supprimé depuis.
   async function writeComposition(id, macroSlots) {
+    // Écrit la composition d'un macro-modèle dans sa ligne, comme « Enregistrer » de la fenêtre : mêmes réglages gardés (nom du PDF, en-tête et pied,
+    // page : ceux de l'écran s'il est chargé, ceux de Grist sinon), jamais une composition vide ni inventée pour un macro-modèle supprimé depuis.
     const stored = Templates.byId(id);
     if (!stored) throw new Error('macro-modèle introuvable');
     const kept = settingsToKeep(id);
@@ -321,9 +321,9 @@ const MacroEditor = (function () {
     tpl.contenu = JSON.stringify(macroSlots);
   }
 
-  // Les yeux à l'écran disent-ils cette composition ? Faux seulement quand un redessin du résumé (changement de langue, relecture après l'échec d'une
-  // autre écriture) les a faits partir d'un cache des modèles qu'une relecture croisant l'écriture avait remis à l'état d'avant.
   function eyesShow(macroSlots) {
+    // Les yeux à l'écran disent-ils cette composition ? Faux seulement quand un redessin du résumé (changement de langue, relecture après l'échec d'une
+    // autre écriture) les a faits partir d'un cache des modèles qu'une relecture croisant l'écriture avait remis à l'état d'avant.
     const list = document.getElementById('macro-summary-parts');
     if (!list) return true;
     return Array.from(list.querySelectorAll('.macro-summary-eye:not(:disabled)')).every(eye => {
@@ -359,10 +359,10 @@ const MacroEditor = (function () {
     if (onVisibilityChange) onVisibilityChange({ name: state.last.name, hidden: state.last.hidden, ok: !failed });
   }
 
-  // Le clic sur l'œil d'un modèle du résumé : le masque de la Lecture et de toutes les sorties du macro-modèle (js/macro-templates.js:pickModeleId),
-  // ou le remet. Le modèle reste dans la composition, grisé avec son œil barré (rien ne disparaît) ; la composition est écrite dans sa ligne, avec le
-  // reste du macro-modèle.
   function toggleModelHidden(entry, eye, slotIndex, id, name) {
+    // Le clic sur l'œil d'un modèle du résumé : le masque de la Lecture et de toutes les sorties du macro-modèle (js/macro-templates.js:pickModeleId),
+    // ou le remet. Le modèle reste dans la composition, grisé avec son œil barré (rien ne disparaît) ; la composition est écrite dans sa ligne, avec le
+    // reste du macro-modèle.
     if (AccessRights.get().readOnly) return;
     const tpl = currentTemplate(summaryTpl);
     if (!tpl || tpl.id == null || !tpl.macroSlots) return;
