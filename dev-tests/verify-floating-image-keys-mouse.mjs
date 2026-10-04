@@ -8,7 +8,9 @@
 //  - un triple clic sur une ligne qui porte une image, puis Retour arrière : le texte part, l'image reste là où elle était ; la ligne vide se joint ensuite à celle d'avant sans l'image ;
 //  - Suppr en fin de titre, la ligne suivante ne portant que l'image : elle se joint, l'image reste, et le Suppr suivant joint la ligne d'après au lieu d'effacer l'image ;
 //  - ce qui doit partir part : un vrai clic sur l'image la sélectionne, Suppr l'enlève et elle seule (Ctrl+Z la rend), Ctrl+A puis Suppr vide tout le document ;
-//  - une image au fil du texte garde son comportement (Retour arrière juste après elle l'efface).
+//  - une image au fil du texte garde son comportement (Retour arrière juste après elle l'efface) ;
+//  - un texte tapé, Entrée, un texte collé (saisie IME) ou Ctrl+Suppr sur une ligne qui porte l'image : le texte est remplacé ou effacé, l'image reste au même endroit de l'écran, la frappe suivante
+//    se joint au texte tapé (jamais à la ligne du dessus), Ctrl+Z rend la ligne et l'image en une étape ; Couper (Ctrl+X) emporte l'image avec le texte, Coller (Ctrl+V) la rend à sa place.
 // Lancé par run-headless.mjs (groupe Node "floatingKeysMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-floating-image-keys-mouse.mjs
 // FLOATING_KEYS_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans elle, rien n'est écrit.
 import { createServer } from 'node:http';
@@ -272,6 +274,73 @@ async function runTheme(theme, variant) {
     await press('Control+a', 'Delete');
     s = await state();
     check(`${label} - Ctrl+A puis Suppr vide tout le document, l'image comprise (« ${s.text} », ${s.images} image)`, s.images === 0 && s.text.replace(/\s|\|/g, '') === '', s);
+
+    // --- 6. Texte tapé, Entrée, collé, mot effacé, Couper sur une ligne qui porte l'image ---
+    const line = 'Titre | Ligne A⟨image⟩ | Ligne B';
+    await load('<p>Titre</p><p>Ligne A' + F + '</p><p>Ligne B</p>');
+    start = await state();
+    await tripleClickLine(1);
+    await page.keyboard.type('xyz', { delay: 40 });
+    await sleep(250);
+    s = await state();
+    check(`${label} - des lettres tapées sur la ligne sélectionnée la remplacent, l'image reste, et les lettres se suivent (« ${s.text} »)`, s.images === 1 && s.text === 'Titre | xyz⟨image⟩ | Ligne B', s);
+    check(`${label} - l'image est restée à sa place à l'écran`, s.views.length === 1 && sameSpot(s.views[0], start.views[0]), { avant: start.views, apres: s.views });
+    await press('Control+z');
+    s = await state();
+    check(`${label} - Ctrl+Z rend la ligne et l'image en une étape (« ${s.text} », ${s.images} image)`, s.images === 1 && s.text === line && s.views.length === 1 && sameSpot(s.views[0], start.views[0]), { avant: start.views, apres: s.views, texte: s.text });
+
+    await load('<p>Titre</p><p>Ligne A' + F + '</p><p>Ligne B</p>');
+    await tripleClickLine(1);
+    await press('Enter');
+    await page.keyboard.type('ab', { delay: 40 });
+    await sleep(250);
+    s = await state();
+    check(`${label} - Entrée sur la ligne sélectionnée : l'image reste (${s.images}), la frappe suivante va dans la nouvelle ligne et non à la fin de la ligne du dessus (« ${s.text} »)`, s.images === 1 && s.text === 'Titre |  | ⟨image⟩ab | Ligne B', s);
+    // Deux étapes : la frappe « ab », puis Entrée avec l'image reposée.
+    await press('Control+z', 'Control+z');
+    s = await state();
+    check(`${label} - Ctrl+Z deux fois (la frappe, puis Entrée) rend la ligne d'avant et son image (« ${s.text} », ${s.images} image)`, s.images === 1 && s.text === line, s);
+
+    await load('<p>Titre</p><p>Ligne A' + F + '</p><p>Ligne B</p>');
+    start = await state();
+    await tripleClickLine(1);
+    await page.keyboard.insertText('Collé');
+    await sleep(250);
+    s = await state();
+    check(`${label} - un texte collé sur la ligne sélectionnée (saisie IME) la remplace, l'image reste (« ${s.text} »)`, s.images === 1 && s.text === 'Titre | Collé⟨image⟩ | Ligne B' && s.views.length === 1 && sameSpot(s.views[0], start.views[0]), s);
+
+    // Le texte tapé après la suppression d'une ligne : il reste dans cette ligne, pas au bout du titre (avant : « Titreab »).
+    await load('<p>Titre</p><p>Ligne A' + F + '</p><p>Ligne B</p>');
+    await tripleClickLine(1);
+    await press('Backspace');
+    await page.keyboard.type('ab', { delay: 40 });
+    await sleep(250);
+    s = await state();
+    check(`${label} - Retour arrière sur la ligne sélectionnée puis du texte : il reste dans cette ligne, le titre n'est pas touché (« ${s.text} »)`, s.images === 1 && s.text === 'Titre | ⟨image⟩ab | Ligne B', s);
+
+    // Ctrl+Suppr au début d'un mot qui porte l'ancre en son milieu : le navigateur efface « foo » et l'ancre d'un coup ; l'image reste, la frappe suivante aussi.
+    await load('<p>Titre</p><p>foo' + F + 'bar baz</p><p>Ligne B</p>');
+    start = await state();
+    await clickLine(1);
+    await press('Home', 'Control+Delete');
+    s = await state();
+    check(`${label} - Ctrl+Suppr efface le mot (« ${s.text} ») sans emporter l'image (${s.images}), qui reste à sa place à l'écran`, s.images === 1 && !s.text.includes('foo') && s.text.includes('bar baz') && s.views.length === 1 && sameSpot(s.views[0], start.views[0]), { texte: s.text, avant: start.views, apres: s.views });
+    await page.keyboard.type('Z');
+    await sleep(200);
+    s = await state();
+    check(`${label} - la lettre tapée ensuite va dans la même ligne (« ${s.text} »)`, s.images === 1 && s.text.startsWith('Titre | ') && s.text.includes('Zbar baz') && s.text.endsWith(' | Ligne B'), s);
+
+    // Couper : le texte et l'image partent ensemble dans le presse-papiers ; Coller les rend, l'image à sa place sur la page.
+    await load('<p>Titre</p><p>Ligne A' + F + '</p><p>Ligne B</p><p>Fin</p>');
+    start = await state();
+    await tripleClickLine(1);
+    await press('Control+x');
+    s = await state();
+    check(`${label} - Couper emporte le texte et l'image (« ${s.text} », ${s.images} image)`, s.images === 0 && s.text === 'Titre |  | Ligne B | Fin', s);
+    await clickEndOfLine(3);
+    await press('Control+v');
+    s = await state();
+    check(`${label} - Coller rend le texte et l'image, à la même place à l'écran (« ${s.text} »)`, s.images === 1 && s.text === 'Titre |  | Ligne B | FinLigne A⟨image⟩' && s.views.length === 1 && sameSpot(s.views[0], start.views[0]), { texte: s.text, avant: start.views, apres: s.views });
   }
 
   // --- 5. Une image au fil du texte (classique) : Retour arrière juste après elle l'efface, comme avant ---

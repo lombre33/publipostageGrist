@@ -1089,9 +1089,12 @@ const EditorNodes = (function () {
   //   ligne qui ne porte que l'image (elle semble vide) se joint ainsi à celle d'avant, l'image avec elle.
   // - Texte sélectionné avec une ancre dedans (triple clic sur une ligne, Maj + flèches) : le texte part comme d'habitude, les images en calque de
   //   la sélection sont reposées là où elle se referme, dans la même étape d'annulation.
+  // - Texte tapé, Entrée, texte collé ou composé sur un texte sélectionné qui contient une ancre, mot effacé en entier (Ctrl + Suppr) : aucune de
+  //   ces touches n'est jouée ici (le navigateur remplace le texte lui-même), la garde `keepImagesOfReplacedText` pose donc les images au même
+  //   endroit après le remplacement.
   // - Le reste suit son cours : une image sélectionnée part, tout le document sélectionné (Ctrl + A, ou un texte qui le couvre en entier) aussi, et
   //   suivi des modifications actif la bibliothèque marque la suppression (js/track-changes.js).
-  function createFloatingImageKeysExtension(Extension) {
+  function createFloatingImageKeysExtension(Extension, Plugin, PluginKey) {
     const free = editor => editor.isEditable && !Editor.isTrackChangesOn() && editor.state.selection instanceof EditorCore.getTextSelectionClass();
     // Curseur seul : passe par-dessus les ancres collées à lui dans le sens de la touche (`dir` -1 Retour arrière, 1 Suppr). Ne consomme jamais la touche.
     const stepOver = (editor, dir) => {
@@ -1107,6 +1110,15 @@ const EditorNodes = (function () {
       if (pos !== selection.from) editor.view.dispatch(editor.state.tr.setSelection(EditorCore.getTextSelectionClass().create(doc, pos)));
       return false;
     };
+    // Où poser le curseur à côté d'ancres reposées en `pos`. Derrière du texte il reste devant elles : la lettre suivante se joint au texte. Sans texte
+    // devant lui (début de ligne, ligne qui ne porte que des ancres), un curseur placé devant une ancre ne reçoit pas la frappe - le navigateur
+    // l'envoie au bout de la ligne du dessus - : il passe derrière elles, au même endroit à l'écran.
+    const caretBeside = (doc, pos) => {
+      if (doc.resolve(pos).nodeBefore && doc.resolve(pos).nodeBefore.isText) return pos;
+      let at = pos;
+      for (let next = doc.resolve(at).nodeAfter; isFloatingImage(next); next = doc.resolve(at).nodeAfter) at += next.nodeSize;
+      return at;
+    };
     // Texte sélectionné : rend vrai quand la suppression est faite ici (une ancre dans la sélection), faux quand la touche suit son cours.
     const deleteKeepingImages = editor => {
       if (!free(editor) || editor.state.selection.empty) return false;
@@ -1121,14 +1133,80 @@ const EditorNodes = (function () {
       if (!tr.doc.resolve(at).parent.inlineContent) return false;
       let end = at;
       images.forEach(image => { tr.insert(end, image); end += image.nodeSize; });
-      editor.view.dispatch(tr.setSelection(TextSelection.create(tr.doc, at)).scrollIntoView());
+      editor.view.dispatch(tr.setSelection(TextSelection.create(tr.doc, caretBeside(tr.doc, at))).scrollIntoView());
       return true;
     };
     const keys = (names, dir) => names.reduce((all, name) => Object.assign(all, { [name]: ({ editor }) => deleteKeepingImages(editor) || stepOver(editor, dir) }), {});
+
+    // Du texte remplacé ou effacé par autre chose que Retour arrière ou Suppr sur une sélection : une lettre, Entrée, un collage, une composition, ou
+    // un mot effacé en entier (Ctrl + Suppr). ProseMirror ou le navigateur le fait lui-même, aucune touche d'ici n'est jouée : les images en calque
+    // du texte remplacé que la transaction a emportées sont reposées là où le remplacement se referme, dans la même étape d'annulation. Le texte
+    // remplacé est la sélection, ou, curseur seul, la plage d'une seule étape de texte pur (sans image dans ce qu'elle pose) dans un seul bloc.
+    // Sont rendues les images dont la sorte (source, colonne PJ, QR code) compte moins d'exemplaires après qu'avant : une image déplacée,
+    // redimensionnée ou remplacée par un collage identique ne manque pas.
+    // Suivent leur cours : Couper (l'image part avec le texte dans le presse-papiers), Annuler et Rétablir, une transaction hors historique ou que le
+    // suivi laisse passer (une correction du widget, « Tout accepter » et « Tout refuser »), le suivi des modifications actif, une image sélectionnée
+    // (le remplacement est un geste sur elle), tout le document remplacé (Ctrl + A, un modèle chargé) et un remplacement qui se ferme hors d'un texte
+    // (un tableau supprimé : rien où poser l'image).
+    const keepKey = new PluginKey('floatingImageKeep');
+    const sameImage = (a, b) => ['src', 'varTable', 'varColumn', 'varKey', 'qrText'].every(name => a.attrs[name] === b.attrs[name]);
+    const imagesOf = doc => { const found = []; doc.descendants((node, pos) => { if (node.type.name === 'editorImage') found.push({ node, pos }); }); return found; };
+    const wholeDocReplaced = trs => trs.some(tr => tr.steps.some((step, i) => typeof step.from === 'number' && typeof step.to === 'number' && step.from <= 0 && step.to >= tr.docs[i].content.size));
+    // La plage de texte que la transaction a remplacée, dans le document d'avant ; null quand ce n'est pas du texte (une étape qui entoure, un nœud posé).
+    function replacedTextRange(root, selection, doc) {
+      if (!selection.empty) return { from: selection.from, to: selection.to };
+      const step = root.steps[0];
+      if (!step || !step.slice || step.gapFrom !== undefined || !(step.from < step.to)) return null;
+      const $from = doc.resolve(step.from);
+      if (!$from.parent.inlineContent || !$from.sameParent(doc.resolve(step.to))) return null;
+      let holdsImage = false;
+      step.slice.content.descendants(child => { if (child.type.name === 'editorImage') holdsImage = true; });
+      return holdsImage ? null : { from: step.from, to: step.to };
+    }
+    function keepImagesOfReplacedText(trs, oldState, newState) {
+      const TextSelection = EditorCore.getTextSelectionClass();
+      const { selection } = oldState;
+      const root = trs[0];
+      if (!(selection instanceof TextSelection) || !root.docChanged || root.getMeta('appendedTransaction')) return null;
+      if (trs.some(tr => tr.getMeta('history$') || tr.getMeta('addToHistory') === false || tr.getMeta('uiEvent') === 'cut' || tr.getMeta(keepKey) || TrackChanges.isSkipped(tr))) return null;
+      if (Editor.isTrackChangesOn()) return null;
+      const range = replacedTextRange(root, selection, oldState.doc);
+      if (!range) return null;
+      const inside = [];
+      oldState.doc.nodesBetween(range.from, range.to, (node, pos) => { if (isFloatingImage(node)) inside.push({ node, pos }); });
+      if (!inside.length) return null;
+      if (!selection.empty && selection.from <= TextSelection.atStart(oldState.doc).from && selection.to >= TextSelection.atEnd(oldState.doc).to) return null;
+      if (wholeDocReplaced(trs)) return null;
+      // Chaque image d'après réclame d'abord une image d'avant hors de la plage, de même sorte ; celles de la plage qui restent sans image d'après ont disparu.
+      const left = imagesOf(newState.doc).map(({ node }) => node);
+      const claim = node => { const at = left.findIndex(other => sameImage(other, node)); if (at >= 0) left.splice(at, 1); return at >= 0; };
+      imagesOf(oldState.doc).forEach(({ node, pos }) => { if (pos < range.from || pos >= range.to) claim(node); });
+      const gone = inside.filter(({ node }) => !claim(node));
+      if (!gone.length) return null;
+      const tr = newState.tr;
+      let added = 0;
+      gone.forEach(({ node, pos }) => {
+        const at = trs.reduce((mapped, step) => step.mapping.map(mapped, 1), pos);
+        if (!newState.doc.resolve(at).parent.inlineContent) return;
+        tr.insert(at + added, node);
+        added += node.nodeSize;
+      });
+      if (!tr.docChanged) return null;
+      // Le curseur ne passe pas derrière les ancres reposées à côté de lui sauf sans texte devant (caretBeside) : la lettre d'après se joint au texte tapé.
+      const caret = newState.selection;
+      if (caret instanceof TextSelection) {
+        const place = pos => caretBeside(tr.doc, tr.mapping.map(pos, -1));
+        tr.setSelection(TextSelection.create(tr.doc, place(caret.anchor), place(caret.head)));
+      }
+      return tr.setMeta(keepKey, true);
+    }
     return Extension.create({
       name: 'floatingImageKeys',
       addKeyboardShortcuts() {
         return Object.assign(keys(['Backspace', 'Shift-Backspace', 'Mod-Backspace', 'Alt-Backspace'], -1), keys(['Delete', 'Mod-Delete', 'Alt-Delete'], 1));
+      },
+      addProseMirrorPlugins() {
+        return [new Plugin({ key: keepKey, appendTransaction: keepImagesOfReplacedText })];
       },
     });
   }

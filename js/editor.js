@@ -342,8 +342,8 @@ const Editor = (function () {
         // d'une grille, pour la même raison.
         EditorNodes.createConditionalValueKeysExtension(Extension, Plugin, PluginKey),
         // Retour arrière et Suppr n'emportent plus une image en calque avec le texte voisin (la ligne qui la porte n'est qu'une ancre invisible) :
-        // même rang, même raison.
-        EditorNodes.createFloatingImageKeysExtension(Extension),
+        // même rang, même raison ; un texte tapé, collé ou composé sur une sélection qui la contient la laisse aussi.
+        EditorNodes.createFloatingImageKeysExtension(Extension, Plugin, PluginKey),
         // Un clic sur du texte posé sur une image « derrière le texte » atteint le texte, pas l'image (le cadre de l'image laisse passer les
         // clics quand le pointeur est sur un caractère).
         EditorNodes.createBehindImageClickThroughExtension(Extension, Plugin, PluginKey),

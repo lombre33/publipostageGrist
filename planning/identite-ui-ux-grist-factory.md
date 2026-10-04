@@ -599,7 +599,9 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   Une image en calque ne part que par un geste sur elle-même (Antoine, 04/10, « des fois je veux supprimer une ligne et ça me supprime l'image à proximité », puis « important ! l'image est une image importée via
   une colonne PJ » : la règle vaut pour l'image d'un fichier comme pour celle d'une colonne PJ) : un clic ou sa poignée la sélectionne, puis Suppr ou Retour arrière ; le bouton « Supprimer » de sa barre ; Ctrl + A puis
   Suppr (tout le document). Le texte qu'on efface autour d'elle ne l'emporte jamais : Retour arrière et Suppr passent par-dessus son ancre invisible (la ligne qui ne porte qu'elle semble vide : elle se joint à sa voisine,
-  l'image avec elle, au même endroit de l'écran et de la page), et un texte sélectionné qui la contient part sans elle (elle est reposée là où la sélection se referme, dans la même étape d'Annuler). Suivi des
+  l'image avec elle, au même endroit de l'écran et de la page), et un texte sélectionné qui la contient part sans elle (elle est reposée là où la sélection se referme, dans la même étape d'Annuler), qu'on l'efface, qu'on le remplace en
+  tapant, par Entrée ou en collant, ou qu'on efface un mot d'un coup (Ctrl + Suppr). Le curseur se pose derrière elle quand aucun texte ne la précède : devant, la frappe partirait à la ligne du dessus. Couper
+  emporte l'image avec le texte dans le presse-papiers, Coller la rend à sa place sur la page. Suivi des
   modifications allumé, la bibliothèque marque la suppression comme pour le texte. Un clic sur du texte posé sur une image « derrière le texte » atteint le texte, pas l'image (Antoine, même demande) : le curseur
   se pose, le double clic prend le mot, le triple clic la ligne, le glissé sélectionne, et Suppr efface ce texte. La poignée de déplacement de l'image et sa partie sans texte (à droite des lignes, au-dessous, au
   bout d'une ligne) gardent leur clic : il sélectionne l'image comme avant, qui reste ainsi toujours atteignable. Une image « devant le texte » se clique partout, texte dessous ou non.
