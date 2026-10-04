@@ -413,6 +413,17 @@ const Variables = (function () {
     if (effectiveFormat && effectiveFormat.type === 'date') return VariableFormat.formatDate(val, effectiveFormat);
     return String(val);
   }
+  // Les valeurs d'une liste, une écriture chacune, dans l'ordre et au compte où « La n-ième » (fenêtre « Liste », js/variable-list.js) les prend : à plat, zéro caché comme la bulle l'écrit, celles qui s'écrivent
+  // vides en moins. C'est la suite qu'un export « un document par valeur » parcourt (js/list-split.js) : le document n° k écrit la k-ième. Une valeur qui n'est pas une liste est une suite d'un seul élément.
+  function listTexts(val, format, varTable, varColumn, opts) {
+    opts = opts || {};
+    if (val === null || val === undefined) return [];
+    const colType = opts.colType || (varTable && varColumn ? GristAPI.getColumnType(varTable, varColumn) : null);
+    const hideZero = !opts.rawNumbers && !opts.keepZero && zeroHidden(format, colType);
+    const items = Array.isArray(val) ? VariableFormat.flattenList(val) : [val];
+    const kept = hideZero ? items.filter(v => !VariableFormat.isZero(v)) : items;
+    return kept.map(v => formatValue(v, format, varTable, varColumn, opts)).filter(text => text !== '' && text !== null && text !== undefined);
+  }
   function unwrapRefValue(v) { return Array.isArray(v) ? v[1] : v; }
   function sameValue(a, b) { return String(a).trim() === String(b).trim(); }
 
@@ -639,6 +650,17 @@ const Variables = (function () {
   // Le texte seul, pour ce qui l'écrit tel quel (nom de fichier, champs du mode email, boucles en ligne, aperçus des fenêtres). `opts` : voir resolveVariableResult.
   async function resolveVariable(varTable, varColumn, currentTableId, record, format, opts) {
     return (await resolveVariableResult(varTable, varColumn, currentTableId, record, format, opts)).text;
+  }
+  // Les valeurs d'une liste pour cette ligne, comme la bulle les compte (listTexts) : { texts }, ou { texts: [], error } quand la colonne ne se lit pas. `opts` : voir resolveVariableResult.
+  async function resolveListTexts(varTable, varColumn, currentTableId, record, format, opts) {
+    try {
+      const { value, error } = await resolveRawValue(varTable, varColumn, currentTableId, record, opts);
+      if (error) return { texts: [], error };
+      return { texts: listTexts(value, format, varTable, varColumn, opts) };
+    } catch (e) {
+      console.error('[variables] échec de la lecture d\'une liste', e);
+      return { texts: [], error: I18n.t('variables.error.failed', { table: varTable, column: varColumn }) };
+    }
   }
 
   // === Bulle « Calcul » (js/formula.js) ===
@@ -1067,7 +1089,7 @@ const Variables = (function () {
   // ses colonnes comme la liste « # ».
   return {
     createExtension, resolveVariable, resolveVariableResult, resolveRawValue, resolveTextVariables, findTextVariables, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar,
-    preferChipsTab, ensureLinkConfigured, editLinkRule, describeLinkVia, resolveLinkedRows, resolveRows, formatValue, zeroHidden, cellValue, currentTables, prioritizeTables,
+    preferChipsTab, ensureLinkConfigured, editLinkRule, describeLinkVia, resolveLinkedRows, resolveRows, formatValue, listTexts, resolveListTexts, zeroHidden, cellValue, currentTables, prioritizeTables,
     resolveCalcResult, resolveCalc, calcProblem, formulaErrorText,
   };
 })();
