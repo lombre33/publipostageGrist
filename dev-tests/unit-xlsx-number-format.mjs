@@ -100,4 +100,34 @@ eq('une date invalide : rien', fmt(new Date(NaN), 'dd/mm/yyyy'), '');
 eq('un nombre infini s\'écrit tel quel', fmt(Infinity, '0.00'), 'Infinity');
 eq('une date avant 1900 avec un format de date : rien n\'est inventé', fmt(-5, 'dd/mm/yyyy'), '');
 
+// 10. Les chemins que le découpage de tokenize, de renderDateSection et de format déplace (audit externe, groupe B) : chaque jeton de date, chaque
+// sorte de valeur, chaque section.
+eq('« mmmmm » : l\'initiale du mois (octobre → O)', fmt(utc(2026, 10, 2), 'mmmmm'), 'O');
+eq('« ddd » : le jour abrégé (français)', fmt(utc(2026, 10, 2), 'ddd'), 'ven.');
+eq('« dddd » : le jour entier (français)', fmt(utc(2026, 10, 2), 'dddd'), 'vendredi');
+eq('« h:mm A/P » : l\'initiale de l\'après-midi', fmt(utc(2026, 10, 2, 14, 5), 'h:mm A/P', 'en'), '2:05 P');
+eq('« h:mm A/P » : l\'initiale du matin', fmt(utc(2026, 10, 2, 9, 4), 'h:mm A/P', 'en'), '9:04 A');
+eq('« h:mm am/pm » : en minuscules', fmt(utc(2026, 10, 2, 14, 5), 'h:mm am/pm', 'en'), '2:05 pm');
+eq('« [mm] » : les minutes cumulées (un jour et demi = 2160)', fmt(1.5, '[mm]'), '2160');
+eq('« [ss] » : les secondes cumulées (un jour et demi = 129600)', fmt(1.5, '[ss]'), '129600');
+eq('« [hhh] » : les heures cumulées sur trois chiffres', fmt(1.5, '[hhh]'), '036');
+eq('« mm:[ss] » : « mm » juste avant des secondes cumulées est une minute', fmt(utc(1900, 1, 1, 0, 5, 0), 'mm:[ss]'), '05:173100');
+eq('« mm:ss.0000 » : le quatrième chiffre d\'une fraction de seconde s\'écrit 0', fmt(utc(2026, 10, 2, 14, 5, 9, 450), 'mm:ss.0000'), '05:09.4500');
+eq('« hh:mm.00 » : une fraction sans secondes n\'écrit aucun chiffre, le point reste', fmt(utc(2026, 10, 2, 14, 5, 9, 450), 'hh:mm.00'), '14:05.');
+eq('« hh,ss » : la virgule s\'écrit dans une date', fmt(utc(2026, 10, 2, 14, 5, 9), 'hh,ss'), '14,09');
+eq('un jeton « @ » dans un format de date n\'écrit rien', fmt(utc(2026, 10, 2), 'yyyy @'), '2026 ');
+eq('booléen faux (anglais)', fmt(false, 'General', 'en'), 'FALSE');
+eq('un texte dans la section texte d\'un format à quatre sections : les chiffres de cette section n\'écrivent rien', fmt('abc', '0;0;0;"<"0@">"'), '<abc>');
+eq('une valeur qui n\'est ni un nombre, ni une date, ni un texte s\'écrit telle quelle', fmt({ toString: () => 'xyz' }, '0.00'), 'xyz');
+eq('format anglais d\'une date en « General » : la date courte anglaise', fmt(utc(2026, 10, 2), 'General', 'en'), '10/2/2026');
+eq('zéro dans un format de date : 30/12/1899', fmt(0, 'dd/mm/yyyy'), '30/12/1899');
+eq('nombre négatif et section négative d\'une date : rien d\'inventé', fmt(-1, 'dd/mm/yyyy;dd/mm/yyyy'), '');
+eq('un format écrit avec des espaces autour : coupé', fmt(12.5, '  0.00  '), '12,50');
+eq('un format fait d\'espaces seulement : Standard', fmt(12.5, '   '), '12,5');
+eq('un format écrit en minuscules « general » : Standard', fmt(3.5, 'general'), '3,5');
+eq('le mot « Standard » collé à des textes : « General » reconnu, les textes gardés', fmt(3.5, '"≈ "General" €"'), '≈ 3,5 €');
+eq('« E+ » dans un format est la notation scientifique, non gérée : Standard', fmt(1234.5, '0.00E+00'), '1234,5');
+eq('guillemet jamais fermé : le texte va jusqu\'à la fin', fmt(12.5, '0.0" m'), '12,5 m');
+eq('un caractère échappé en fin de format : rien ne lève', fmt(12.5, '0.0\\'), '12,5');
+
 summarizeAndExit();

@@ -57,39 +57,56 @@ const XlsxNumberFormat = (function () {
   // (`txt`), `General` (`gen`), et les jetons de date (`y`, `mo`, `d`, `h`, `s`, `ap`, `el`), plus `sci` et `frac` (non gérés).
   const SIMPLE_TOKENS = { '.': 'pt', ',': 'thou', '%': 'pct', '@': 'txt' };
   const DATE_RUNS = { y: /[yY]/, mo: /[mM]/, d: /[dD]/, h: /[hH]/, s: /[sS]/ }; // le jeton d'une suite de y, de m, de d...
+  const pushLiteral = (tokens, s) => { if (s) tokens.push({ k: 'lit', s }); };
+  const runEnd = (section, i, re) => { let j = i; while (j < section.length && re.test(section[j])) j++; return j; };
+  // Chaque lecteur lit le jeton qui commence à la position `i`, l'ajoute à `tokens` et rend la position qui suit.
+  function readQuoted(section, i, tokens) {
+    const end = section.indexOf('"', i + 1);
+    const stop = end < 0 ? section.length : end;
+    pushLiteral(tokens, section.slice(i + 1, stop));
+    return stop + 1;
+  }
+  function readBracket(section, i, tokens) {
+    const end = section.indexOf(']', i);
+    const inner = end < 0 ? section.slice(i + 1) : section.slice(i + 1, end);
+    const next = end < 0 ? section.length : end + 1;
+    const currency = /^\$([^-\]]*)(?:-.*)?$/.exec(inner);
+    if (currency) { pushLiteral(tokens, currency[1]); return next; }
+    const elapsed = /^(h+|m+|s+)$/i.exec(inner);
+    if (elapsed) tokens.push({ k: 'el', u: elapsed[1][0].toLowerCase(), n: elapsed[1].length });
+    return next; // une couleur ou une condition : sans effet sur le texte
+  }
+  // Un mot (`General`, `E+`, `AM/PM`) ou une suite de lettres de date ; -1 quand le caractère n'en commence aucun.
+  function readWord(section, i, tokens) {
+    const rest = section.slice(i);
+    if (/^general/i.test(rest)) { tokens.push({ k: 'gen' }); return i + 7; }
+    if (/^e[+-]/i.test(rest)) { tokens.push({ k: 'sci' }); return i + 2; }
+    const ampm = /^(AM\/PM|am\/pm|A\/P|a\/p)/.exec(rest);
+    if (ampm) { tokens.push({ k: 'ap', short: ampm[1].length === 3, lower: ampm[1] === ampm[1].toLowerCase() }); return i + ampm[1].length; }
+    const unit = Object.keys(DATE_RUNS).find(k => DATE_RUNS[k].test(section[i]));
+    if (!unit) return -1;
+    const j = runEnd(section, i, DATE_RUNS[unit]);
+    tokens.push({ k: unit, n: j - i });
+    return j;
+  }
+  function readToken(section, i, tokens) {
+    const ch = section[i];
+    if (ch === '"') return readQuoted(section, i, tokens);
+    if (ch === '\\') { pushLiteral(tokens, section[i + 1] || ''); return i + 2; }
+    if (ch === '_' || ch === '*') return i + 2;
+    if (ch === '[') return readBracket(section, i, tokens);
+    if (ch === '0' || ch === '#' || ch === '?') { tokens.push({ k: 'dig', c: ch }); return i + 1; }
+    if (SIMPLE_TOKENS[ch]) { tokens.push({ k: SIMPLE_TOKENS[ch] }); return i + 1; }
+    const word = readWord(section, i, tokens);
+    if (word >= 0) return word;
+    if (ch === '/' && tokens.some(t => t.k === 'dig')) { tokens.push({ k: 'frac' }); return i + 1; }
+    pushLiteral(tokens, ch);
+    return i + 1;
+  }
   function tokenize(section) {
     const tokens = [];
-    const lit = (s) => { if (s) tokens.push({ k: 'lit', s }); };
-    const run = (i, re) => { let j = i; while (j < section.length && re.test(section[j])) j++; return j; };
     let i = 0;
-    while (i < section.length) {
-      const ch = section[i];
-      const rest = section.slice(i);
-      if (ch === '"') { const end = section.indexOf('"', i + 1); const stop = end < 0 ? section.length : end; lit(section.slice(i + 1, stop)); i = stop + 1; continue; }
-      if (ch === '\\') { lit(section[i + 1] || ''); i += 2; continue; }
-      if (ch === '_' || ch === '*') { i += 2; continue; }
-      if (ch === '[') {
-        const end = section.indexOf(']', i);
-        const inner = end < 0 ? section.slice(i + 1) : section.slice(i + 1, end);
-        i = end < 0 ? section.length : end + 1;
-        const currency = /^\$([^-\]]*)(?:-.*)?$/.exec(inner);
-        if (currency) { lit(currency[1]); continue; }
-        const elapsed = /^(h+|m+|s+)$/i.exec(inner);
-        if (elapsed) tokens.push({ k: 'el', u: elapsed[1][0].toLowerCase(), n: elapsed[1].length });
-        continue; // une couleur ou une condition : sans effet sur le texte
-      }
-      if (ch === '0' || ch === '#' || ch === '?') { tokens.push({ k: 'dig', c: ch }); i++; continue; }
-      if (SIMPLE_TOKENS[ch]) { tokens.push({ k: SIMPLE_TOKENS[ch] }); i++; continue; }
-      if (/^general/i.test(rest)) { tokens.push({ k: 'gen' }); i += 7; continue; }
-      if (/^e[+-]/i.test(rest)) { tokens.push({ k: 'sci' }); i += 2; continue; }
-      const ampm = /^(AM\/PM|am\/pm|A\/P|a\/p)/.exec(rest);
-      if (ampm) { tokens.push({ k: 'ap', short: ampm[1].length === 3, lower: ampm[1] === ampm[1].toLowerCase() }); i += ampm[1].length; continue; }
-      const unit = Object.keys(DATE_RUNS).find(k => DATE_RUNS[k].test(ch));
-      if (unit) { const j = run(i, DATE_RUNS[unit]); tokens.push({ k: unit, n: j - i }); i = j; continue; }
-      if (ch === '/' && tokens.some(t => t.k === 'dig')) { tokens.push({ k: 'frac' }); i++; continue; }
-      lit(ch);
-      i++;
-    }
+    while (i < section.length) i = readToken(section, i, tokens);
     return tokens;
   }
 
@@ -175,95 +192,129 @@ const XlsxNumberFormat = (function () {
   function dateOfSerial(serial) { return new Date(EPOCH_UTC_MS + Math.round(serial * DAY_MS)); }
   const two = n => String(n).padStart(2, '0');
 
+  // « m » est une minute juste après les heures ou juste avant les secondes, un mois sinon.
+  function isMinuteToken(kinds, t) {
+    const at = kinds.indexOf(t);
+    const before = kinds[at - 1];
+    const after = kinds[at + 1];
+    const afterHours = before && (before.k === 'h' || (before.k === 'el' && before.u === 'h'));
+    return afterHours || (after && (after.k === 's' || (after.k === 'el' && after.u === 's')));
+  }
+  // Le texte de chaque jeton de date ; `c` garde ce que la date partage entre ses jetons (`afterSeconds`, `fractionAt` : les chiffres qui suivent
+  // les secondes).
+  function monthOrMinuteText(t, c) {
+    if (isMinuteToken(c.kinds, t)) return t.n === 1 ? String(c.date.getUTCMinutes()) : two(c.date.getUTCMinutes());
+    if (t.n === 1) return String(c.date.getUTCMonth() + 1);
+    if (t.n === 2) return two(c.date.getUTCMonth() + 1);
+    if (t.n === 3) return c.names({ month: 'short' });
+    if (t.n === 4) return c.names({ month: 'long' });
+    return c.names({ month: 'long' }).charAt(0).toUpperCase();
+  }
+  function dayText(t, c) {
+    if (t.n === 1) return String(c.date.getUTCDate());
+    if (t.n === 2) return two(c.date.getUTCDate());
+    return c.names({ weekday: t.n === 3 ? 'short' : 'long' });
+  }
+  function hourText(t, c) { const h = c.twelve ? (c.hour24 % 12 || 12) : c.hour24; return t.n === 1 ? String(h) : two(h); }
+  function secondsText(t, c) { c.afterSeconds = true; const s = c.date.getUTCSeconds(); return t.n === 1 ? String(s) : two(s); }
+  function meridiemText(t, c) {
+    const text = t.short ? (c.hour24 < 12 ? 'A' : 'P') : (c.hour24 < 12 ? 'AM' : 'PM');
+    return t.lower ? text.toLowerCase() : text;
+  }
+  function elapsedText(t, c) {
+    const perDay = t.u === 'h' ? 24 : t.u === 'm' ? 1440 : 86400;
+    const total = Math.floor(c.serial * perDay + 1e-9);
+    return t.n === 1 ? String(total) : String(total).padStart(t.n, '0');
+  }
+  const DATE_TEXT = {
+    lit: t => t.s, pt: () => '.', thou: () => ',', mo: monthOrMinuteText, d: dayText, h: hourText, s: secondsText, ap: meridiemText, el: elapsedText,
+    y: (t, c) => (t.n <= 2 ? two(c.date.getUTCFullYear() % 100) : String(c.date.getUTCFullYear())),
+    // `ss.00` : les centièmes de seconde, les chiffres qui suivent les secondes ; ailleurs un chiffre ne s'écrit pas dans une date.
+    dig: (t, c) => (c.afterSeconds ? (c.millis[c.fractionAt++] || '0') : ''),
+  };
+
   function renderDateSection(date, tokens, lang) {
     const locale = LOCALES[lang] || LOCALES.fr;
-    const names = opts => intl(Intl.DateTimeFormat, locale, Object.assign({ timeZone: 'UTC' }, opts)).format(date);
-    const serial = serialOf(date);
-    const twelve = tokens.some(t => t.k === 'ap');
-    const hour24 = date.getUTCHours();
-    const kinds = tokens.filter(t => t.k !== 'lit');
-    const millis = String(date.getUTCMilliseconds()).padStart(3, '0');
-    let afterSeconds = false;
-    let fractionAt = 0;
-    return tokens.map((t) => {
-      if (t.k === 'lit') return t.s;
-      // `ss.00` : les centièmes de seconde, les chiffres qui suivent les secondes ; ailleurs un chiffre ne s'écrit pas dans une date.
-      if (t.k === 'dig') return afterSeconds ? (millis[fractionAt++] || '0') : '';
-      if (t.k === 'pt') return '.';
-      if (t.k === 'thou') return ',';
-      if (t.k === 'y') return t.n <= 2 ? two(date.getUTCFullYear() % 100) : String(date.getUTCFullYear());
-      if (t.k === 'mo') {
-        const at = kinds.indexOf(t);
-        const before = kinds[at - 1];
-        const after = kinds[at + 1];
-        // « m » est une minute juste après les heures ou juste avant les secondes, un mois sinon.
-        if ((before && (before.k === 'h' || (before.k === 'el' && before.u === 'h'))) || (after && (after.k === 's' || (after.k === 'el' && after.u === 's')))) return t.n === 1 ? String(date.getUTCMinutes()) : two(date.getUTCMinutes());
-        if (t.n === 1) return String(date.getUTCMonth() + 1);
-        if (t.n === 2) return two(date.getUTCMonth() + 1);
-        if (t.n === 3) return names({ month: 'short' });
-        if (t.n === 4) return names({ month: 'long' });
-        return names({ month: 'long' }).charAt(0).toUpperCase();
-      }
-      if (t.k === 'd') {
-        if (t.n === 1) return String(date.getUTCDate());
-        if (t.n === 2) return two(date.getUTCDate());
-        return names({ weekday: t.n === 3 ? 'short' : 'long' });
-      }
-      if (t.k === 'h') { const h = twelve ? (hour24 % 12 || 12) : hour24; return t.n === 1 ? String(h) : two(h); }
-      if (t.k === 's') { afterSeconds = true; const s = date.getUTCSeconds(); return t.n === 1 ? String(s) : two(s); }
-      if (t.k === 'ap') { const text = t.short ? (hour24 < 12 ? 'A' : 'P') : (hour24 < 12 ? 'AM' : 'PM'); return t.lower ? text.toLowerCase() : text; }
-      if (t.k === 'el') {
-        const total = t.u === 'h' ? Math.floor(serial * 24 + 1e-9) : t.u === 'm' ? Math.floor(serial * 1440 + 1e-9) : Math.floor(serial * 86400 + 1e-9);
-        return t.n === 1 ? String(total) : String(total).padStart(t.n, '0');
-      }
-      return '';
-    }).join('');
+    const c = {
+      date,
+      names: opts => intl(Intl.DateTimeFormat, locale, Object.assign({ timeZone: 'UTC' }, opts)).format(date),
+      serial: serialOf(date),
+      twelve: tokens.some(t => t.k === 'ap'),
+      hour24: date.getUTCHours(),
+      kinds: tokens.filter(t => t.k !== 'lit'),
+      millis: String(date.getUTCMilliseconds()).padStart(3, '0'),
+      afterSeconds: false,
+      fractionAt: 0,
+    };
+    return tokens.map((t) => { const text = DATE_TEXT[t.k]; return text ? text(t, c) : ''; }).join('');
   }
 
-  function format(value, code, options) {
-    const lang = options && options.lang === 'en' ? 'en' : 'fr';
-    if (value === null || value === undefined || value === '') return '';
-    if (typeof value === 'boolean') return lang === 'fr' ? (value ? 'VRAI' : 'FAUX') : (value ? 'TRUE' : 'FALSE');
+  const booleanText = (value, lang) => (lang === 'fr' ? (value ? 'VRAI' : 'FAUX') : (value ? 'TRUE' : 'FALSE'));
+
+  // Le code de la case dans la langue demandée : « General » s'il est vide, les formats « système » d'Excel dans l'ordre de la langue.
+  function formatCodeOf(code, lang) {
     let fmt = String(code || 'General').trim() || 'General';
     if (LOCALIZED_CODES[lang] && LOCALIZED_CODES[lang][fmt]) fmt = LOCALIZED_CODES[lang][fmt];
-    const sections = sectionsOf(fmt);
-    if (typeof value === 'string') {
-      const section = sections.length >= 4 ? sections[3] : sections.find(tokens => tokens.some(t => t.k === 'txt'));
-      if (!section) return value;
-      return section.map(t => (t.k === 'txt' ? value : t.k === 'lit' ? t.s : '')).join('');
-    }
-    let number;
-    let date = null;
+    return fmt;
+  }
+
+  // Un texte : la section texte (la quatrième, ou celle qui porte `@`), sinon le texte tel quel.
+  function formatText(value, sections) {
+    const section = sections.length >= 4 ? sections[3] : sections.find(tokens => tokens.some(t => t.k === 'txt'));
+    if (!section) return value;
+    return section.map(t => (t.k === 'txt' ? value : t.k === 'lit' ? t.s : '')).join('');
+  }
+
+  // Ni texte ni booléen : le nombre de la case (une date en est un, son numéro de série) et sa date s'il y en a une ; `done` quand il n'y a rien
+  // à mettre en forme.
+  function numericInput(value) {
     if (Object.prototype.toString.call(value) === '[object Date]') {
-      if (Number.isNaN(value.getTime())) return '';
-      date = value;
-      number = serialOf(value);
-    } else if (typeof value === 'number') {
-      number = value;
-    } else {
-      return String(value);
+      if (Number.isNaN(value.getTime())) return { done: '' };
+      return { number: serialOf(value), date: value };
     }
-    if (!Number.isFinite(number)) return String(number);
-    // Quelle section : positif, négatif (valeur absolue, son signe est dans le format), zéro.
+    if (typeof value === 'number') return { number: value, date: null };
+    return { done: String(value) };
+  }
+
+  // Quelle section : positif, négatif (valeur absolue, son signe est dans le format), zéro.
+  function pickSection(number, sections) {
     let index = 0;
     let negativeShown = false;
     if (number < 0 && sections.length >= 2) index = 1;
     else if (number < 0) negativeShown = true;
     else if (number === 0 && sections.length >= 3) index = 2;
-    const tokens = sections[index] || sections[0];
+    return { tokens: sections[index] || sections[0], negativeShown };
+  }
+
+  // Une date dont la case n'a pas de format de date (`General`) : la date courte de la langue, avec l'heure si elle n'est pas minuit.
+  function renderGeneralDate(date, lang) {
+    const short = tokenize(LOCALIZED_CODES[lang]['mm-dd-yy']);
+    const withTime = date.getTime() % DAY_MS !== 0 ? short.concat(tokenize(' hh:mm:ss')) : short;
+    return renderDateSection(date, withTime, lang);
+  }
+
+  function formatNumber(number, date, sections, lang) {
+    if (!Number.isFinite(number)) return String(number);
+    const { tokens, negativeShown } = pickSection(number, sections);
     if (isDateSection(tokens)) {
       if (!date && number < 0) return '';
       return renderDateSection(date || dateOfSerial(number), tokens, lang);
     }
-    // Une date dont la case n'a pas de format de date (`General`) : la date courte de la langue, avec l'heure si elle n'est pas minuit.
-    if (date && tokens.some(t => t.k === 'gen')) {
-      const short = tokenize(LOCALIZED_CODES[lang]['mm-dd-yy']);
-      const withTime = date.getTime() % DAY_MS !== 0 ? short.concat(tokenize(' hh:mm:ss')) : short;
-      return renderDateSection(date, withTime, lang);
-    }
+    if (date && tokens.some(t => t.k === 'gen')) return renderGeneralDate(date, lang);
     const rendered = renderNumberSection(number, tokens, lang, negativeShown);
     if (rendered !== null) return rendered;
     return general(number, lang);
+  }
+
+  function format(value, code, options) {
+    const lang = options && options.lang === 'en' ? 'en' : 'fr';
+    if (value === null || value === undefined || value === '') return '';
+    if (typeof value === 'boolean') return booleanText(value, lang);
+    const sections = sectionsOf(formatCodeOf(code, lang));
+    if (typeof value === 'string') return formatText(value, sections);
+    const input = numericInput(value);
+    if (input.done !== undefined) return input.done;
+    return formatNumber(input.number, input.date, sections, lang);
   }
 
   // Le format de la case est-il un format de date ou d'heure ? (ExcelJS rend une Date pour ceux qu'il reconnaît ; un nombre dont le format est une
