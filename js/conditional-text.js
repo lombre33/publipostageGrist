@@ -11,17 +11,11 @@ const ConditionalText = (function () {
   const TYPE = 'conditionalText';
   const SELECTOR = 'div.conditional-text';
 
-  // Défait chaque bloc de `root` dont la condition est remplie, retire les autres. Les conditions se lisent toutes d'abord, en parallèle ; le HTML se
-  // transforme ensuite, dans l'ordre du document : un bloc extérieur retiré emporte les blocs qu'il contient, un bloc extérieur défait laisse les
-  // siens à leur verdict.
-  async function resolve(root, tableId, record) {
-    if (!root) return;
-    const blocks = Array.from(root.querySelectorAll(SELECTOR));
-    if (!blocks.length) return;
-    const verdicts = await Promise.all(blocks.map(block => ConditionRules.elementHolds(block, tableId, record, true)));
-    blocks.forEach((block, i) => {
-      if (!root.contains(block)) return;
-      if (verdicts[i]) block.replaceWith(...Array.from(block.childNodes));
+  // Défait chaque bloc de `root` dont la condition est remplie (le cadre disparaît, son contenu reste), retire les autres. Un bloc extérieur retiré
+  // emporte les blocs qu'il contient, un bloc extérieur défait laisse les siens à leur verdict.
+  function resolve(root, tableId, record) {
+    return ConditionRules.resolveElements(root, SELECTOR, tableId, record, true, (block, holds) => {
+      if (holds) block.replaceWith(...Array.from(block.childNodes));
       else LoopRules.removeAndPrune(block);
     });
   }

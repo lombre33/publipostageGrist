@@ -118,5 +118,5 @@ const ViewTemplate = (function () {
     renderPanel();
   }
 
-  return { OPTION_KEY, init, getId, usableId, set, clear, wirePanel };
+  return { init, getId, usableId, set, clear, wirePanel };
 })();

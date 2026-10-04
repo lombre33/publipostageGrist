@@ -42,7 +42,7 @@ const TemplateTreeSelect = (function () {
     return makeLeafRow(node, depth);
   }
 
-  // Un dossier s'ouvre déplié, sauf si CETTE personne l'a réglé « replié par défaut » (TemplatePreferences.isFolderCollapsed, posé depuis « Organiser
+  // Un dossier s'ouvre déplié, sauf si cette personne l'a réglé « replié par défaut » (TemplatePreferences.isFolderCollapsed, posé depuis « Organiser
   // mes modèles ») ou l'a basculé à la main depuis l'ouverture du panneau.
   function isFolderOpen(chemin) {
     if (folderOverrides.has(chemin)) return folderOverrides.get(chemin);
@@ -218,7 +218,7 @@ const TemplateTreeSelect = (function () {
     if (realSelect.hidden) closePopup();
   }
 
-  // Redéfinit l'accesseur `value` sur CETTE instance de <select> : seule façon fiable de détecter les écritures directes `templateSelect.value = ...`
+  // Redéfinit l'accesseur `value` sur cette instance de <select> : seule façon fiable de détecter les écritures directes `templateSelect.value = ...`
   // de js/main.js sans modifier ce code. Ces écritures ne déclenchent pas d'évènement 'change' natif (réservé aux interactions de la personne) : les
   // écouter laisserait l'arbre désynchronisé du <select>.
   function interceptValueWrites(el, onChange) {
@@ -536,5 +536,5 @@ const TemplateTreeSelect = (function () {
     });
   }
 
-  return { attach, detach, refresh };
+  return { attach, refresh };
 })();

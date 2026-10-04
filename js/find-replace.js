@@ -14,10 +14,6 @@
 // panneau resté ouvert. Styles : css/find-replace.css.
 const FindReplace = (function () {
   const isMac = () => /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent || '');
-  // Mêmes écritures que les infobulles de Enregistrer (⌘S) et du lien (⌘K). ⌘H est réservé à macOS (masquer l'application) : sur Mac le remplacement
-  // est ⌘⇧H, comme dans Google Docs.
-  const findShortcutLabel = () => (isMac() ? '⌘F' : 'Ctrl+F');
-  const replaceShortcutLabel = () => (isMac() ? '⌘⇧H' : 'Ctrl+H');
 
   // Le moteur : un document ProseMirror, une requête, des options
   // Le texte d'un bloc est lu caractère pour caractère comme le document compte ses positions : un nœud qui n'est pas du texte (bulle, image,
@@ -552,6 +548,5 @@ const FindReplace = (function () {
       applyQuery();
     },
     setReplacement(text) { state.replacement = String(text == null ? '' : text); if (refs) refs.replacement.value = state.replacement; },
-    findShortcutLabel, replaceShortcutLabel,
   };
 })();

@@ -170,6 +170,35 @@ const seconds = (y, m, d, h, mi) => Date.UTC(y, m - 1, d, h || 0, mi || 0) / 100
   evaluated.length = 0;
   await holds(condition('all', rule('Nom', 'Dupont')), true);
   check('hors zone répétée, aucune option n\'est transmise', evaluated.length === 1 && evaluated[0].opts === undefined, JSON.stringify(evaluated));
+
+  // resolveElements : l'enchaînement commun aux blocs, valeurs et cases conditionnels (verdicts lus d'abord, HTML transformé ensuite). Une fausse racine
+  // suffit : `querySelectorAll` rend les éléments, `contains` dit lesquels n'ont pas été sortis de la racine par une transformation.
+  const fakeEl = (name, raw) => ({ name, getAttribute: attr => (attr === 'data-condition' ? raw : null) });
+  const fakeRoot = elements => { const gone = new Set(); return { gone, querySelectorAll: () => elements, contains: element => !gone.has(element) }; };
+  const resolveAll = (root, whenNone, apply) => {
+    stubCtx.__ROOT = root; stubCtx.__APPLY = apply; stubCtx.__REC = DUPONT;
+    return evalIn(stubCtx, `ConditionRules.resolveElements(__ROOT, 'x', 'T', __REC, ${whenNone}, __APPLY)`);
+  };
+  {
+    const [a, b, c] = [fakeEl('a', condition('all', rule('Nom', 'Dupont'))), fakeEl('b', condition('all', rule('Nom', 'Martin'))), fakeEl('c', null)];
+    const seen = [];
+    evaluated.length = 0;
+    await resolveAll(fakeRoot([a, b, c]), false, (element, holds) => seen.push([element.name, holds, evaluated.length]));
+    check('resolveElements : chaque élément reçoit son verdict dans l\'ordre du document, `whenNone` pour celui sans condition',
+      JSON.stringify(seen.map(s => s.slice(0, 2))) === '[["a",true],["b",false],["c",false]]', JSON.stringify(seen));
+    check('resolveElements : tous les verdicts sont lus avant la première transformation', seen.every(s => s[2] === 2), JSON.stringify(seen));
+    seen.length = 0;
+    await resolveAll(fakeRoot([a, c]), true, (element, holds) => seen.push([element.name, holds]));
+    check('resolveElements : `whenNone` vrai pour l\'élément sans condition', JSON.stringify(seen) === '[["a",true],["c",true]]', JSON.stringify(seen));
+    seen.length = 0;
+    const outer = fakeRoot([a, b]);
+    await resolveAll(outer, true, element => { seen.push(element.name); if (element === a) outer.gone.add(b); });
+    check('resolveElements : un élément sorti de la racine par la transformation précédente n\'est plus traité', JSON.stringify(seen) === '["a"]', JSON.stringify(seen));
+    seen.length = 0;
+    await resolveAll(null, true, () => seen.push('x'));
+    await resolveAll(fakeRoot([]), true, () => seen.push('x'));
+    check('resolveElements : sans racine ni élément, rien n\'est transformé', seen.length === 0);
+  }
 }
 
 summarizeAndExit();

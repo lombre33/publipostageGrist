@@ -388,5 +388,5 @@ const QrCode = (function () {
     closeWindow();
   }
 
-  return { LIB, DEFAULT_WIDTH_PX, ensureLibrary, modulesOf, dataUri, hasColumns, columnsIn, linkOf, resolveTemplate, resolveImage, needsImage, selectedNode, isSelected, attrsFor, open };
+  return { LIB, ensureLibrary, dataUri, resolveImage, needsImage, isSelected, attrsFor, open };
 })();

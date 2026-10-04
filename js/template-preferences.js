@@ -187,7 +187,7 @@ const TemplatePreferences = (function () {
   }
 
   return {
-    TABLE_NAME, loadForCurrentUser, getCached, setPinned, setFolder, isPinned, getFolder, listFolders,
+    loadForCurrentUser, getCached, setPinned, setFolder, isPinned, getFolder, listFolders,
     isFolderCollapsed, setFolderCollapsed, normalizeFolderPath,
   };
 })();

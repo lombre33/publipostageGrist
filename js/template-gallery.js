@@ -119,5 +119,5 @@ const TemplateGallery = (function () {
     return root.innerHTML;
   }
 
-  return { loadManifest, fetchHtml, fetchHeaderFooter, fetchSchema, stripVariableBadges, parseGristSchema, rebindVariableTable, resolveUrl };
+  return { loadManifest, fetchHtml, fetchHeaderFooter, fetchSchema, stripVariableBadges, rebindVariableTable, resolveUrl };
 })();

@@ -470,8 +470,8 @@ const Shortcuts = (function () {
 
   return {
     GROUPS, ACTIONS,
-    action: actionOf, keyFor, defaultKeyFor, label, isChanged, check, setKey, resetKey, resetAll, ownerOf, usable,
-    fromEvent, parse, format, ariaKeys, formProblem,
+    action: actionOf, keyFor, defaultKeyFor, label, isChanged, check, setKey, resetKey, resetAll, 
+    fromEvent, format, ariaKeys, formProblem,
     setRecorder: fn => { recorder = typeof fn === 'function' ? fn : null; },
     isRecording: () => !!recorder,
     onChange: fn => { if (typeof fn === 'function') listeners.push(fn); },

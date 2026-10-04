@@ -368,5 +368,5 @@ const Callout = (function () {
   }
 
   installStyles();
-  return { COLORS, COLOR_ORDER, ICONS, ICON_ORDER, PRESETS, PRESET_ORDER, createNode, isInside, findAround, open, wrapSelection, insertSignature, iconPng, svgMarkup, colorOf, installStyles, SIGNATURE_LINE };
+  return { COLORS, COLOR_ORDER, ICON_ORDER, PRESETS, PRESET_ORDER, createNode, isInside, open, wrapSelection, insertSignature, iconPng, colorOf };
 })();

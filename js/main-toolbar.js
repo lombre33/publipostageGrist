@@ -642,7 +642,6 @@ const MainToolbar = (function () {
   }
 
   return {
-    setEditor, setEmailMode, setMacroMode, setGridMode, applyToolbarIcons, syncToolbarState, wireToolbar, wireHeadingMenu,
-    wireSelectionDependentSelects, wireCompactFontSizeControls,
+    setEditor, setEmailMode, setMacroMode, setGridMode, syncToolbarState, wireToolbar,
   };
 })();

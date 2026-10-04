@@ -112,5 +112,5 @@ const PageTree = (function () {
     collapsePending = false;
   }
 
-  return { afterTableCreated, whenIdle, reset, MAIN_TABLE };
+  return { afterTableCreated, whenIdle, reset };
 })();

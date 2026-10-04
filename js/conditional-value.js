@@ -14,17 +14,11 @@ const ConditionalValue = (function () {
   const TYPE = 'conditionalValue';
   const SELECTOR = 'span.conditional-value';
 
-  // Défait chaque valeur de `root` dont la condition est remplie, retire les autres. Les conditions se lisent toutes d'abord, en parallèle ; le HTML
-  // se transforme ensuite, dans l'ordre du document : une valeur extérieure retirée emporte celles qu'elle contient, une valeur extérieure défaite
-  // laisse les siennes à leur verdict.
-  async function resolve(root, tableId, record) {
-    if (!root) return;
-    const spans = Array.from(root.querySelectorAll(SELECTOR));
-    if (!spans.length) return;
-    const verdicts = await Promise.all(spans.map(span => ConditionRules.elementHolds(span, tableId, record, true)));
-    spans.forEach((span, i) => {
-      if (!root.contains(span)) return;
-      if (verdicts[i]) span.replaceWith(...Array.from(span.childNodes));
+  // Défait chaque valeur de `root` dont la condition est remplie (le cadre disparaît, son contenu reste), retire les autres. Une valeur extérieure
+  // retirée emporte celles qu'elle contient, une valeur extérieure défaite laisse les siennes à leur verdict.
+  function resolve(root, tableId, record) {
+    return ConditionRules.resolveElements(root, SELECTOR, tableId, record, true, (span, holds) => {
+      if (holds) span.replaceWith(...Array.from(span.childNodes));
       else span.remove();
     });
   }
@@ -109,5 +103,5 @@ const ConditionalValue = (function () {
     return true;
   }
 
-  return { TYPE, SELECTOR, resolve, insertFromPanel, unwrap };
+  return { resolve, insertFromPanel, unwrap };
 })();

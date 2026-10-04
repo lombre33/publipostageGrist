@@ -244,5 +244,5 @@ const OrientationToggle = (function () {
     sync();
   }
 
-  return { BUTTON_ID, TYPES, wire, sync, toggle, selectOrientation, selectFormat, selectPageSize, setBusy };
+  return { TYPES, wire, sync, toggle, selectOrientation, selectFormat, selectPageSize, setBusy };
 })();
