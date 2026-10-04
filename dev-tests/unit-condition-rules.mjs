@@ -41,6 +41,7 @@ const seconds = (y, m, d, h, mi) => Date.UTC(y, m - 1, d, h || 0, mi || 0) / 100
   check('Oui / Non : true ≠ « non » est vrai, true ≠ « oui » est faux', compare(true, '≠', 'non', 'Bool') === true && compare(true, '≠', 'oui', 'Bool') === false);
   check('Oui / Non : un autre mot ne correspond à rien (« = » faux, « ≠ » vrai)', compare(true, '=', 'peut-être', 'Bool') === false && compare(true, '≠', 'peut-être', 'Bool') === true);
   check('un booléen n\'est pas le nombre 1 hors colonne Oui / Non, il l\'est par le mot « 1 » dans une colonne Oui / Non', compare(true, '=', '1', 'Any') === false && compare(true, '=', '1', 'Bool') === true);
+  check('Oui / Non : une valeur qui n\'est pas un booléen (le nombre 1 ou 0 d\'un export) se compare comme un nombre', compare(1, '=', '1', 'Bool') === true && compare(0, '=', '0', 'Bool') === true && compare(1, '=', 'oui', 'Bool') === false);
   check('parseBoolExpected : vrai, faux, ou null pour un autre mot', evalIn(ctx, `[ConditionRules.parseBoolExpected(' Oui '), ConditionRules.parseBoolExpected('NON'), ConditionRules.parseBoolExpected('bof'), ConditionRules.parseBoolExpected(null)].join()`) === 'true,false,,');
 }
 
@@ -71,6 +72,7 @@ const seconds = (y, m, d, h, mi) => Date.UTC(y, m - 1, d, h || 0, mi || 0) / 100
   check('date : une saisie hors bornes ne correspond jamais (ni « = » ni « ≠ »)', ['31/02/2026', '09/26/2026', '00/01/2026', 'demain'].every(v => compare(jour, '=', v, 'Date') === false && compare(jour, '≠', v, 'Date') === false));
   check('date : un instant en secondes (export en lot) vaut la même date', compare(seconds(2026, 9, 26, 12), '=', '26/09/2026', 'Date') === true);
   check('date : « contient » cherche dans « AAAA-MM-JJ »', compare(jour, 'contient', '09-26', 'Date') === true && compare(jour, 'contient', '2027', 'Date') === false);
+  check('date : « contient » sans valeur attendue (vide, null ou absente) : toute date la contient', [null, undefined, ''].every(v => compare(jour, 'contient', v, 'Date') === true));
   check('date : une date illisible retombe sur la comparaison générale', compare(new (evalIn(ctx, 'Date'))(NaN), '=', '26/09/2026', 'Date') === false);
 }
 

@@ -29,11 +29,11 @@ const ConditionRules = (function () {
     return null;
   }
   function daysInMonth(year, month1based) { return new Date(Date.UTC(year, month1based, 0)).getUTCDate(); }
-  // « 26/09/2026 » (saisie en français) ou « 2026-09-26 » (ISO, format de GristDate.toString()) : Date.parse seul est trop ambigu selon le moteur
-  // (JJ/MM ou MM/JJ). Construite en UTC (Date.UTC, jamais `new Date(y, m, d)` qui lit en heure locale) pour que la comparaison ne dépende pas du
-  // fuseau du navigateur : une valeur Grist est un jour calendaire, pas un instant local. Un jour ou un mois hors bornes (« 31/02/2026 »,
-  // « 09/26/2026 ») est refusé au lieu de déborder sur un autre mois : une date saisie invalide ne correspond jamais.
   function parseDateExpected(expected) {
+    // « 26/09/2026 » (saisie en français) ou « 2026-09-26 » (ISO, format de GristDate.toString()) : Date.parse seul est trop ambigu selon le moteur
+    // (JJ/MM ou MM/JJ). Construite en UTC (Date.UTC, jamais `new Date(y, m, d)` qui lit en heure locale) pour que la comparaison ne dépende pas du
+    // fuseau du navigateur : une valeur Grist est un jour calendaire, pas un instant local. Un jour ou un mois hors bornes (« 31/02/2026 »,
+    // « 09/26/2026 ») est refusé au lieu de déborder sur un autre mois : une date saisie invalide ne correspond jamais.
     const s = String(expected == null ? '' : expected).trim();
     const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
     const fr = iso ? null : /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s);
@@ -60,14 +60,14 @@ const ConditionRules = (function () {
     }
     return zoneFormatters.get(tz);
   }
-  // Jour calendaire d'un instant dans le fuseau de la colonne (« DateTime:Europe/Paris ») : le soir à Paris (23h30, encore le 26/09) est déjà le
-  // 27/09 en UTC, et « = 26/09/2026 » échouerait à tort. 'en-CA' est le format Intl qui rend directement « AAAA-MM-JJ ».
   function dayKeyInZone(d, tz) {
+    // Jour calendaire d'un instant dans le fuseau de la colonne (« DateTime:Europe/Paris ») : le soir à Paris (23h30, encore le 26/09) est déjà le
+    // 27/09 en UTC, et « = 26/09/2026 » échouerait à tort. 'en-CA' est le format Intl qui rend directement « AAAA-MM-JJ ».
     try { return zoneFormatter(tz).format(d); } catch (e) { return dayKey(d); }  // date hors bornes : format() lève, jour UTC
   }
-  // « DateTime:Europe/Paris » -> « Europe/Paris » ; « DateTime » seul ou « Date » -> null : jour UTC nu (dayKey), déjà correct pour ces deux cas
-  // (vérifié à la source de grist-core, extractInfoFromColType : le fuseau est tout ce qui suit le premier « : »).
   function dateTimeZone(columnType) {
+    // « DateTime:Europe/Paris » -> « Europe/Paris » ; « DateTime » seul ou « Date » -> null : jour UTC nu (dayKey), déjà correct pour ces deux cas
+    // (vérifié à la source de grist-core, extractInfoFromColType : le fuseau est tout ce qui suit le premier « : »).
     const t = String(columnType || '');
     return t.indexOf('DateTime:') === 0 ? t.slice('DateTime:'.length) : null;
   }
@@ -81,44 +81,35 @@ const ConditionRules = (function () {
   const compare = (operator, a, b) => COMPARATORS.has(operator) && COMPARATORS.get(operator)(a, b);
   const textOf = v => String(isEmpty(v) ? '' : v);
 
-  // Opérateurs : '=', '≠', '>', '<', '≥', '≤', 'contient', 'vide', 'non vide' (planning/feature-conditional-content.md). `columnType` (la chaîne de
-  // js/grist-api.js:getColumnType : "Text", "Numeric", "Bool", "Date", "DateTime:UTC", "Choice", "Ref:Table"... ; null ou undefined si inconnue)
-  // décide de trois cas avant la comparaison générale :
-  //  - Liste (choix multiples, liste de références : un tableau) : « = » veut dire « contient ce choix » et « ≠ » « ne le contient pas » (« =
-  //    Projet » retient donc une ligne Projet + Urgent), comme le filtre d'une boucle (js/loop-rules.js:ruleHolds) ; les autres opérateurs lisent la
-  //    forme texte « Projet,Urgent ».
-  //  - Bool : Grist renvoie un booléen JS, jamais égal au mot français tapé dans la règle (« Oui », « Non »).
-  //  - Date/DateTime : voir toUtcInstant, parseDateExpected et dayKey ci-dessus.
-  // Sans `columnType`, les cas Bool et Date sont ignorés et la comparaison générale s'applique. Reference et ReferenceList n'ont pas de cas propre :
-  // une colonne de référence n'arrive pas toujours sous la forme [id, valeur affichée] selon le chemin de lecture, elle passe par la comparaison
-  // générale en texte. Choice (une seule chaîne) aussi.
-  function compareValues(actual, operator, expected, columnType) {
-    const type = String(columnType || '');
+  function compareList(actual, operator, expected, type) {
+    // Une liste (choix multiples, liste de références) : « = » veut dire « contient ce choix », « ≠ » « ne le contient pas ». null pour tout autre cas.
+    if (!Array.isArray(actual) || (operator !== '=' && operator !== '≠')) return null;
+    const contains = actual.some(item => compareValues(item, '=', expected, type));
+    return operator === '=' ? contains : !contains;
+  }
 
-    if (operator === 'vide') return isEmpty(actual);
-    if (operator === 'non vide') return !isEmpty(actual);
+  function compareBool(actual, operator, expected, type) {
+    // Une colonne Oui / Non lue en booléen, contre un des mots de parseBoolExpected. null pour tout autre cas.
+    if (type !== 'Bool' || (actual !== true && actual !== false)) return null;
+    const expectedBool = parseBoolExpected(expected);
+    if (expectedBool === null || (operator !== '=' && operator !== '≠')) return null;
+    return compare(operator, actual, expectedBool);
+  }
 
-    if (Array.isArray(actual) && (operator === '=' || operator === '≠')) {
-      const contains = actual.some(item => compareValues(item, '=', expected, type));
-      return operator === '=' ? contains : !contains;
-    }
+  function compareDates(actual, operator, expected, type) {
+    // Une date ou un instant, comparés au jour près (dans le fuseau d'une colonne DateTime:Zone). null quand la colonne n'est pas de ce type ou que la
+    // valeur n'est pas une date lisible : la comparaison générale s'applique.
+    if (type !== 'Date' && type.indexOf('DateTime') !== 0) return null;
+    const actualDate = toUtcInstant(actual);
+    if (!actualDate) return null;
+    const tz = dateTimeZone(type);
+    const aKey = tz ? dayKeyInZone(actualDate, tz) : dayKey(actualDate);
+    if (operator === 'contient') return aKey.indexOf(String(expected == null ? '' : expected).trim().toLowerCase()) !== -1;
+    const expectedDate = parseDateExpected(expected);
+    return !!expectedDate && compare(operator, aKey, dayKey(expectedDate));
+  }
 
-    if (type === 'Bool' && (actual === true || actual === false)) {
-      const expectedBool = parseBoolExpected(expected);
-      if (expectedBool !== null && (operator === '=' || operator === '≠')) return compare(operator, actual, expectedBool);
-    }
-
-    if (type === 'Date' || type.indexOf('DateTime') === 0) {
-      const actualDate = toUtcInstant(actual);
-      if (actualDate) {
-        const tz = dateTimeZone(type);
-        const aKey = tz ? dayKeyInZone(actualDate, tz) : dayKey(actualDate);
-        if (operator === 'contient') return aKey.indexOf(String(expected == null ? '' : expected).trim().toLowerCase()) !== -1;
-        const expectedDate = parseDateExpected(expected);
-        return !!expectedDate && compare(operator, aKey, dayKey(expectedDate));
-      }
-    }
-
+  function compareGeneral(actual, operator, expected) {
     if (operator === 'contient') return textOf(actual).toLowerCase().indexOf(String(expected).toLowerCase()) !== -1;
     const aNum = Number(actual);
     const eNum = Number(expected);
@@ -126,17 +117,41 @@ const ConditionRules = (function () {
     return compare(operator, textOf(actual).trim(), textOf(expected).trim());
   }
 
-  // « Colonne » d'une règle : nue (colonne de la table courante, ex. « TypeDossier ») ou qualifiée « Table.Colonne » pour une valeur d'une autre
-  // table, résolue par #Variable : une lecture ponctuelle contre la même ligne, jamais une itération.
+  function compareValues(actual, operator, expected, columnType) {
+    // Opérateurs : '=', '≠', '>', '<', '≥', '≤', 'contient', 'vide', 'non vide' (planning/feature-conditional-content.md). `columnType` (la chaîne de
+    // js/grist-api.js:getColumnType : "Text", "Numeric", "Bool", "Date", "DateTime:UTC", "Choice", "Ref:Table"... ; null ou undefined si inconnue)
+    // décide de trois cas avant la comparaison générale :
+    //  - Liste (choix multiples, liste de références : un tableau) : « = » veut dire « contient ce choix » et « ≠ » « ne le contient pas » (« =
+    //    Projet » retient donc une ligne Projet + Urgent), comme le filtre d'une boucle (js/loop-rules.js:ruleHolds) ; les autres opérateurs lisent la
+    //    forme texte « Projet,Urgent ».
+    //  - Bool : Grist renvoie un booléen JS, jamais égal au mot français tapé dans la règle (« Oui », « Non »).
+    //  - Date/DateTime : voir toUtcInstant, parseDateExpected et dayKey ci-dessus.
+    // Sans `columnType`, les cas Bool et Date sont ignorés et la comparaison générale s'applique. Reference et ReferenceList n'ont pas de cas propre :
+    // une colonne de référence n'arrive pas toujours sous la forme [id, valeur affichée] selon le chemin de lecture, elle passe par la comparaison
+    // générale en texte. Choice (une seule chaîne) aussi.
+    const type = String(columnType || '');
+
+    if (operator === 'vide') return isEmpty(actual);
+    if (operator === 'non vide') return !isEmpty(actual);
+
+    // Chaque cas rend vrai ou faux quand il s'applique, null sinon : le premier qui décide l'emporte, la comparaison générale vient en dernier.
+    return compareList(actual, operator, expected, type)
+      ?? compareBool(actual, operator, expected, type)
+      ?? compareDates(actual, operator, expected, type)
+      ?? compareGeneral(actual, operator, expected);
+  }
+
   function parseColumnRef(rawColumn, tableId) {
+    // « Colonne » d'une règle : nue (colonne de la table courante, ex. « TypeDossier ») ou qualifiée « Table.Colonne » pour une valeur d'une autre
+    // table, résolue par #Variable : une lecture ponctuelle contre la même ligne, jamais une itération.
     const idx = String(rawColumn || '').indexOf('.');
     if (idx === -1) return { table: tableId, column: rawColumn };
     return { table: rawColumn.slice(0, idx), column: rawColumn.slice(idx + 1) };
   }
 
-  // `opts` (facultatif) est transmis tel quel à Variables.resolveRawValue, par exemple { fetchRows } pour lire chaque table une seule fois quand une
-  // même condition est évaluée sur toutes les lignes d'une table (aperçu de la fenêtre de condition d'une variable, js/variable-condition.js).
   async function matches(rule, tableId, record, opts) {
+    // `opts` (facultatif) est transmis tel quel à Variables.resolveRawValue, par exemple { fetchRows } pour lire chaque table une seule fois quand une
+    // même condition est évaluée sur toutes les lignes d'une table (aperçu de la fenêtre de condition d'une variable, js/variable-condition.js).
     if (!rule || !rule.column) return false;
     const { table, column } = parseColumnRef(rule.column, tableId);
     let actual;
@@ -170,18 +185,18 @@ const ConditionRules = (function () {
     return compareValues(actual, rule.operator, rule.value, columnType);
   }
 
-  // Condition d'affichage d'une bulle #Variable (attribut `condition` du nœud varBadge, js/editor-nodes.js) : { mode: 'all'|'any', rules: [...] }.
-  // Les règles sans colonne (ligne laissée vide dans la fenêtre) sont ignorées ; sans aucune règle complète, pas de condition (null).
   function normalizeCondition(condition) {
+    // Condition d'affichage d'une bulle #Variable (attribut `condition` du nœud varBadge, js/editor-nodes.js) : { mode: 'all'|'any', rules: [...] }.
+    // Les règles sans colonne (ligne laissée vide dans la fenêtre) sont ignorées ; sans aucune règle complète, pas de condition (null).
     if (!condition || !Array.isArray(condition.rules)) return null;
     const rules = condition.rules.filter(r => r && r.column);
     if (!rules.length) return null;
     return { mode: condition.mode === 'any' ? 'any' : 'all', rules };
   }
 
-  // La condition sous la forme enregistrée dans un nœud, ou gardée en brouillon par une fenêtre : une copie neuve (jamais un lien vers les règles que
-  // la fenêtre modifie en place), sans les règles vides, opérateur « = » par défaut, valeurs en texte ; null sans aucune règle complète.
   function plainCondition(condition) {
+    // La condition sous la forme enregistrée dans un nœud, ou gardée en brouillon par une fenêtre : une copie neuve (jamais un lien vers les règles que
+    // la fenêtre modifie en place), sans les règles vides, opérateur « = » par défaut, valeurs en texte ; null sans aucune règle complète.
     const normalized = normalizeCondition(condition);
     return normalized && {
       mode: normalized.mode,
@@ -189,20 +204,20 @@ const ConditionRules = (function () {
     };
   }
 
-  // Vrai si la variable doit s'afficher pour cette ligne : pas de condition = toujours ; 'all' = toutes les règles, 'any' = au moins une. Une règle
-  // illisible compte comme non remplie (comme pour les macro-modèles, cf. matches).
   async function conditionHolds(condition, tableId, record, opts) {
+    // Vrai si la variable doit s'afficher pour cette ligne : pas de condition = toujours ; 'all' = toutes les règles, 'any' = au moins une. Une règle
+    // illisible compte comme non remplie (comme pour les macro-modèles, cf. matches).
     const c = normalizeCondition(condition);
     if (!c) return true;
     const results = await Promise.all(c.rules.map(rule => matches(rule, tableId, record, opts)));
     return c.mode === 'any' ? results.some(Boolean) : results.every(Boolean);
   }
 
-  // Verdict de la condition d'un élément du modèle (bloc, valeur, case ou bulle conditionnels), lue dans son attribut data-condition et évaluée avec
-  // la ligne du tour de la zone répétée qui le contient (js/loop-rules.js:bindingOf) : une règle sur une colonne de la table de la boucle lit alors
-  // cette ligne. `whenNone` : le verdict d'un élément sans condition ou sans règle complète. Une condition illisible, ou dont l'évaluation échoue, ne
-  // laisse rien passer : faux, comme une règle illisible.
   async function elementHolds(el, tableId, record, whenNone) {
+    // Verdict de la condition d'un élément du modèle (bloc, valeur, case ou bulle conditionnels), lue dans son attribut data-condition et évaluée avec
+    // la ligne du tour de la zone répétée qui le contient (js/loop-rules.js:bindingOf) : une règle sur une colonne de la table de la boucle lit alors
+    // cette ligne. `whenNone` : le verdict d'un élément sans condition ou sans règle complète. Une condition illisible, ou dont l'évaluation échoue, ne
+    // laisse rien passer : faux, comme une règle illisible.
     const raw = el.getAttribute('data-condition');
     if (!raw) return whenNone;
     let condition;
@@ -213,10 +228,10 @@ const ConditionRules = (function () {
     catch (e) { console.error('[ConditionRules] échec de l\'évaluation de la condition', e); return false; }
   }
 
-  // Transforme, dans l'ordre du document, chaque élément `selector` de `root` selon le verdict de sa condition. Les verdicts se lisent tous d'abord,
-  // en parallèle ; `apply(element, holds)` modifie ensuite le HTML. Un élément sorti de `root` par l'application précédente (le bloc extérieur retiré
-  // emporte ceux qu'il contient) n'est plus traité.
   async function resolveElements(root, selector, tableId, record, whenNone, apply) {
+    // Transforme, dans l'ordre du document, chaque élément `selector` de `root` selon le verdict de sa condition. Les verdicts se lisent tous d'abord,
+    // en parallèle ; `apply(element, holds)` modifie ensuite le HTML. Un élément sorti de `root` par l'application précédente (le bloc extérieur retiré
+    // emporte ceux qu'il contient) n'est plus traité.
     if (!root) return;
     const elements = Array.from(root.querySelectorAll(selector));
     if (!elements.length) return;
