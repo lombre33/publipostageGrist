@@ -694,6 +694,11 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   défait. Elle ne s'ouvre jamais pendant la frappe, ni tant qu'un bouton de la souris est appuyé dans le texte (elle s'ouvre au relâchement), ni sans le focus dans le texte ; elle se ferme en Lecture, devant les
   fenêtres de variable et d'un clic ailleurs, reste entière dans le panneau (retournée au-dessus du texte tout en bas) et passe au-dessus de la barre du tableau. Monochrome comme les autres barres flottantes : le vert
   et le rouge restent ceux du texte suivi.
+- Lecture avec des modifications du suivi en attente (demande d'Antoine du 04/10) : la Lecture montre le document comme si toutes les modifications étaient acceptées, avec seulement une légère teinte là où
+  quelque chose a changé. Le texte supprimé a disparu (ni barré ni grisé), le texte ajouté ou de remplacement est là, plus aucune marque du suivi ne se voit. La teinte est un fond vert pâle `#e5f6ee`, le même
+  en clair et en sombre (la page de Lecture reste blanche) : sous le texte ajouté, sur le paragraphe ou le titre dont la mise en forme a changé, sur les cases d'une colonne ou d'une ligne ajoutée (même avec un
+  fond posé sur la case) ; une image ajoutée prend un contour de 2 px `#8fd3aa`. La couleur du texte ne change pas et rien n'est souligné (14:1 sur la teinte, un lien 5,3:1). Rien n'est accepté pour de bon :
+  l'éditeur garde ses suggestions, et le corps de l'e-mail suit la Lecture ; le PDF, le Word et l'Excel gardent pour l'instant le texte supprimé barré.
 - Export Excel d'une grille (demande d'Antoine du 01/10) : le menu « Qualité PDF » a trois lignes Excel, sous les deux lignes Word : « Exporter en Excel… », « Exporter toutes les
   valeurs de la table en Excel (ZIP)… » et « Exporter toutes les valeurs de la table dans un seul classeur… ». Elles sont actives dans une grille et grisées ailleurs ; à l'inverse
   les deux lignes Word sont grisées dans une grille — jamais retirées, `aria-disabled` posé, un clic dessus ne lance rien et n'ouvre aucune confirmation. « Exporter en Excel… »

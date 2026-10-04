@@ -397,13 +397,18 @@ const Comments = (function () {
 
   // Même sortie qu'editor.getHTML() (DOMSerializer du schéma, cf. @tiptap/core getHTMLFromFragment), repères de position en plus. Sous-classe plutôt que
   // la table `nodes` du sérialiseur : prosemirror-model 1.25 écrit les textes sans jamais la consulter (serializeNodeInner, vérifié dans sa source).
+  // Sous-classe de CELUI du schéma (js/track-changes.js, installSerializer), pas de la classe de la bibliothèque : une colonne ou une ligne suivie
+  // s'y écrit en attribut de la case (data-tc-*), sinon l'analyseur HTML de la Lecture sort la case de son tableau et sa suppression ne se voit plus.
   let AnnotatingSerializer = null;
+  let annotatingBase = null;
   async function buildReaderHtml() {
     if (!editor) return '';
     if (!pmModel) pmModel = await import('prosemirror-model');
     const { DOMSerializer } = pmModel;
-    if (!AnnotatingSerializer) {
-      AnnotatingSerializer = class extends DOMSerializer {
+    const base = DOMSerializer.fromSchema(editor.schema);
+    if (!AnnotatingSerializer || annotatingBase !== base.constructor) {
+      annotatingBase = base.constructor;
+      AnnotatingSerializer = class extends annotatingBase {
         serializeNodeInner(node, options) {
           if (node.isText) {
             const span = document.createElement('span');
@@ -433,7 +438,6 @@ const Comments = (function () {
       const list = positions.get(node);
       if (list) list.push(pos); else positions.set(node, [pos]);
     });
-    const base = DOMSerializer.fromSchema(editor.schema);
     const serializer = new AnnotatingSerializer(base.nodes, base.marks);
     serializer.takeTag = node => { const list = positions.get(node); return list && list.length ? version + ':' + list.shift() : null; };
     const host = document.createElement('div');

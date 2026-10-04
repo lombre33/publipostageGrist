@@ -89,3 +89,23 @@
   font-weight: 600;
   white-space: nowrap;
 }
+
+/* Lecture (js/reader-mode.js:renderRecord, TrackChanges.acceptedView) : le document comme si toutes les suggestions étaient acceptées, avec une
+   légère teinte là où quelque chose a changé - texte inséré ou remplacé, paragraphe ou titre dont la mise en forme a changé, case, colonne ou ligne
+   ajoutée. Le texte garde sa couleur, seul le fond change : le vert pâle du texte inséré dans l'éditeur (plus haut), écrit en dur et le même en
+   clair et en sombre puisque la page reste blanche en sombre (charte, « Contrastes » ; 14:1 avec le texte de la page). `!important` sur une case,
+   comme pour les colonnes suivies plus haut : un fond posé en ligne sur la case laisserait sinon la teinte invisible. Une image n'a pas de fond
+   visible : elle prend un cadre. */
+.reader-content .pp-tc-changed {
+  background-color: #e5f6ee;
+}
+.reader-content td.pp-tc-changed,
+.reader-content th.pp-tc-changed,
+.reader-content tr.pp-tc-changed > td,
+.reader-content tr.pp-tc-changed > th {
+  background-color: #e5f6ee !important;
+}
+.reader-content img.pp-tc-changed,
+.reader-content .pp-tc-changed > img {
+  outline: 2px solid #8fd3aa;
+}

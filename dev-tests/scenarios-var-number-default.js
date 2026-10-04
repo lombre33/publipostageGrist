@@ -199,6 +199,82 @@
     },
   });
 
+  // --- Un montant en toutes lettres (défaut relevé par les essais de cas d'usage du 04/10 : quittance et facture) ---
+  const AMOUNT_FR = { type: 'number', style: 'fr', decimals: 2, currency: '€', words: true };
+  const AMOUNT_US = { type: 'number', style: 'us', decimals: 2, currency: '$', words: true };
+  cases.push({
+    id: 'varnumber_words_amount_writes_euros_then_centimes',
+    description: 'Un montant en toutes lettres avec une devise s’écrit en euros puis en centimes, jamais « virgule » : 650,00 € « six cent cinquante euros », 1 234,05 € « … euros et cinq centimes », 1,01 € « un euro et un centime », 0,50 € « cinquante centimes » ; un million ou un milliard rond prend « d’ » ; zéro et un restent au singulier ; un montant négatif commence par « moins » ; 1,005 s’écrit comme ses chiffres (1,01) ; sans décimale réglée le montant reste arrondi à l’euro',
+    run: async () => {
+      const fr = (n, o) => VariableFormat.formatNumber(n, Object.assign({}, AMOUNT_FR, o));
+      const got = {
+        round: fr(650), cents5: fr(1234.05), cents56: fr(1234.56), one: fr(1.01), half: fr(0.5), onecent: fr(0.01), zero: fr(0), euro: fr(1), euros: fr(2),
+        eighty: fr(80.8), twentyone: fr(21.21), negative: fr(-12.5), thirdDecimal: fr(1234.567), digitsAgree: fr(1.005), nearlyOne: fr(0.999), negativeNothing: fr(-0.004),
+        million: fr(1e6), millionCents: fr(2000000.5), milliard: fr(1e9), millionPlusMore: fr(1200000), milliardAndMillion: fr(1001000000), dollars: fr(3e6, { currency: '$' }),
+        pounds: fr(2.5, { currency: '£' }), oneDecimal: fr(12.5, { decimals: 1 }),
+        noDecimals: fr(1234.56, { decimals: 0 }), unsetDecimals: fr(1234.56, { decimals: null }), millionNoDecimals: fr(1e6, { decimals: 0 }),
+      };
+      const expected = {
+        round: 'six cent cinquante euros', cents5: 'mille deux cent trente-quatre euros et cinq centimes', cents56: 'mille deux cent trente-quatre euros et cinquante-six centimes',
+        one: 'un euro et un centime', half: 'cinquante centimes', onecent: 'un centime', zero: 'zéro euro', euro: 'un euro', euros: 'deux euros',
+        eighty: 'quatre-vingts euros et quatre-vingts centimes', twentyone: 'vingt et un euros et vingt et un centimes', negative: 'moins douze euros et cinquante centimes',
+        thirdDecimal: 'mille deux cent trente-quatre euros et cinquante-sept centimes', digitsAgree: 'un euro et un centime', nearlyOne: 'un euro', negativeNothing: 'zéro euro',
+        million: 'un million d’euros', millionCents: 'deux millions d’euros et cinquante centimes', milliard: 'un milliard d’euros', millionPlusMore: 'un million deux cent mille euros',
+        milliardAndMillion: 'un milliard un million d’euros', dollars: 'trois millions de dollars', pounds: 'deux livres et cinquante pence', oneDecimal: 'douze euros et cinquante centimes',
+        noDecimals: 'mille deux cent trente-cinq euros', unsetDecimals: 'mille deux cent trente-cinq euros', millionNoDecimals: 'un million d’euros',
+      };
+      const wrong = Object.keys(expected).filter(k => got[k] !== expected[k]);
+      return { pass: wrong.length === 0, notes: JSON.stringify({ wrong: wrong.map(k => [k, got[k], expected[k]]) }) };
+    },
+  });
+
+  cases.push({
+    id: 'varnumber_words_amount_english_dollars_and_cents',
+    description: 'En anglais (US) : « one thousand two hundred thirty-four dollars and five cents », « one dollar and one cent », « fifty cents », « zero dollars », « minus three dollars and twenty-five cents », « two pounds and fifty pence » ; la devise d’une interface en anglais s’écrit de même',
+    run: async () => {
+      const us = (n, o) => VariableFormat.formatNumber(n, Object.assign({}, AMOUNT_US, o));
+      const before = I18n.getLang();
+      I18n.setLang('en');
+      let interfaceEn;
+      try { interfaceEn = VariableFormat.formatNumber(1.01, { type: 'number', decimals: 2, currency: '€', words: true }); } finally { I18n.setLang(before); }
+      const got = {
+        cents: us(1234.05), one: us(1.01), half: us(0.5), round: us(650), zero: us(0), negative: us(-3.25), pounds: us(2.5, { currency: '£' }), euros: us(2.5, { currency: '€' }),
+        million: us(1e6), interfaceEn,
+      };
+      const expected = {
+        cents: 'one thousand two hundred thirty-four dollars and five cents', one: 'one dollar and one cent', half: 'fifty cents', round: 'six hundred fifty dollars', zero: 'zero dollars',
+        negative: 'minus three dollars and twenty-five cents', pounds: 'two pounds and fifty pence', euros: 'two euros and fifty cents', million: 'one million dollars', interfaceEn: 'one euro and one cent',
+      };
+      const wrong = Object.keys(expected).filter(k => got[k] !== expected[k]);
+      return { pass: wrong.length === 0, notes: JSON.stringify({ wrong: wrong.map(k => [k, got[k], expected[k]]) }) };
+    },
+  });
+
+  cases.push({
+    id: 'varnumber_words_decimals_keep_their_zeros_and_other_currencies_keep_their_reading',
+    description: 'Un nombre en toutes lettres sans devise garde les zéros de ses décimales (1,05 « un virgule zéro cinq », 650,00 « six cent cinquante virgule zéro zéro », 1,005 « un virgule zéro zéro cinq » ; en anglais « one point zero five »), et la lecture reste celle d’avant pour une devise inconnue (« … virgule cinquante-six CHF ») ou un montant de plus de deux décimales',
+    run: async () => {
+      const fr = (n, o) => VariableFormat.formatNumber(n, Object.assign({ type: 'number', style: 'fr', words: true }, o));
+      const us = (n, o) => VariableFormat.formatNumber(n, Object.assign({ type: 'number', style: 'us', words: true }, o));
+      const got = {
+        zeroFirst: fr(1.05, { decimals: 2 }), zeros: fr(650, { decimals: 2 }), twoZeros: fr(1.005, { decimals: 3 }), plain: fr(1234.56, { decimals: 2 }), half: fr(0.5, { decimals: 1 }), negative: fr(-2.5, { decimals: 1 }),
+        whole: fr(21), rounded: fr(1234.56, { decimals: 0 }), eighty: fr(0.8, { decimals: 2 }),
+        unknownCurrency: fr(1234.56, { decimals: 2, currency: 'CHF' }), threeDecimals: fr(1.859, { decimals: 3, currency: '€' }),
+        usZeroFirst: us(1.05, { decimals: 2 }), usPlain: us(1.25, { decimals: 2 }), usWhole: us(21),
+        dateWords: VariableFormat.formatDate(631152000, { type: 'date', preset: 'd_mmmm_yyyy', words: true }),
+      };
+      const expected = {
+        zeroFirst: 'un virgule zéro cinq', zeros: 'six cent cinquante virgule zéro zéro', twoZeros: 'un virgule zéro zéro cinq', plain: 'mille deux cent trente-quatre virgule cinquante-six', half: 'zéro virgule cinq',
+        negative: 'moins deux virgule cinq', whole: 'vingt et un', rounded: 'mille deux cent trente-cinq', eighty: 'zéro virgule quatre-vingts',
+        unknownCurrency: 'mille deux cent trente-quatre virgule cinquante-six CHF', threeDecimals: 'un virgule huit cent cinquante-neuf euros',
+        usZeroFirst: 'one point zero five', usPlain: 'one point twenty-five', usWhole: 'twenty-one',
+        dateWords: 'un janvier mille neuf cent quatre-vingt-dix',
+      };
+      const wrong = Object.keys(expected).filter(k => got[k] !== expected[k]);
+      return { pass: wrong.length === 0, notes: JSON.stringify({ wrong: wrong.map(k => [k, got[k], expected[k]]) }) };
+    },
+  });
+
   // --- Les fichiers : le PDF (police pdfmake) et le Word ---
   async function pdfText(h, blob) {
     await h.ensurePdfJsLoaded();
@@ -229,6 +305,32 @@
       };
       const failed = Object.keys(checks).filter(k => !checks[k]);
       return { pass: failed.length === 0, notes: JSON.stringify({ failed, pdf: JSON.stringify(pdf.slice(0, 160)), docx }) };
+    },
+  });
+
+  cases.push({
+    id: 'varnumber_words_amount_reaches_reading_preview_pdf_and_docx',
+    description: 'Le montant en toutes lettres d’une bulle (« mille deux cent trente-quatre euros et cinq centimes » pour 1 234,05 €) s’écrit pareil dans la Lecture, l’aperçu commun du PDF, du Word et de l’email, le vrai PDF et le vrai DOCX',
+    run: async (h) => {
+      await seed(h);
+      const record = Object.assign({}, RECORD, { Montant: 1234.05 });
+      const sentence = 'mille deux cent trente-quatre euros et cinq centimes';
+      const html = `<p>Arrêté : ${badge('Montant', AMOUNT_FR)}.</p>`;
+      const reading = resolvedTexts(await renderReader(html, record));
+      const preview = (await previewBox(html, record)).textContent;
+      await PdfExport.ensurePdfLibsLoaded();
+      // pdf.js rend chaque morceau du texte à part (« trente- » puis « quatre ») : comparé sans espaces.
+      const pdf = (await pdfText(h, (await PdfExport.getNativePdfBlobForRecord(html, PAGE, record, '', NO_HF, undefined)).blob)).replace(/\s+/g, '');
+      await DocxExport.ensureDocxLibLoaded();
+      await ExportCommon.ensureJsZipLoaded();
+      const zip = await JSZip.loadAsync(await (await DocxExport.getDocxBlobForRecord(html, PAGE, record, '', NO_HF, null)).blob.arrayBuffer());
+      const docx = Array.from(new DOMParser().parseFromString(await zip.file('word/document.xml').async('string'), 'application/xml').getElementsByTagName('w:t')).map(t => t.textContent).join('');
+      const checks = {
+        reading: JSON.stringify(reading) === JSON.stringify([sentence]), preview: preview === 'Arrêté : ' + sentence + '.',
+        pdf: pdf.includes(('Arrêté : ' + sentence + '.').replace(/\s+/g, '')) && !/virgule/.test(pdf), docx: docx === 'Arrêté : ' + sentence + '.',
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: JSON.stringify({ failed, reading, preview, pdf: pdf.slice(0, 160), docx }) };
     },
   });
 

@@ -762,6 +762,38 @@ la barre du haut ne bouge pas (« Tout accepter », « Tout refuser »). La barr
   (`trackChanges.accept.tip`, `{n|cette modification|ces modifications}`). Au clavier, une flèche qui amène le curseur contre une modification l'ouvre aussi.
 - Tests : groupe `trackChanges` (`trackchanges_bar_*`, 7 cas) et script Node `suggestionBarMouse` (`dev-tests/verify-suggestion-bar-mouse.mjs`, 51 vérifications, 700×400 clair et sombre).
 
+## La Lecture comme si tout était accepté (2026-10-04, demande d'Antoine)
+
+Antoine, en testant l'édition collaborative : « en mode lecture afficher comme si toutes les modifications étaient acceptées avec juste un léger changement de couleur là où des modifs sont présentes ».
+La Lecture (`ReaderMode.renderRecord`, `js/reader-mode.js`) passe maintenant le HTML nettoyé par `TrackChanges.acceptedView(wrapper)` (`js/track-changes.js`), avant les zones répétées, les blocs conditionnels
+et les bulles : plus de `<ins>`, de `<del>` ni de `data-tc-*`, le texte supprimé a disparu, et ce qui est ajouté ou dont la mise en forme change porte la classe `.pp-tc-changed` (fond vert pâle).
+Le document de l'éditeur n'est jamais touché : rien n'est accepté pour de bon.
+
+- **Pourquoi au niveau du DOM** : la Lecture reçoit du HTML (`Editor.getHTML()`, ou `Comments.buildReaderHtml()` quand les commentaires sont actifs, ou celui qu'un macro-modèle assemble à partir d'autres
+  modèles), pas un document ProseMirror. Reconstruire un éditeur pour y rejouer « Tout accepter » aurait été plus lourd et plus fragile (la lib plante sur le dernier nœud du document, cf. `withEndGuard`).
+  `acceptedView(root)` refait donc dans le DOM ce que la lib (`applySuggestionsToTransform`, relue dans sa source) fait au document, règle par règle :
+  - une suppression est un `<del data-id>` ; une suppression à cheval sur des blocs laisse un bout de même id par bloc (la suite se cherche dans le premier contenu du bloc suivant, `followingDeletion`, comme
+    `findSuggestionMarkEnd`), et les blocs sont réunis ; un paragraphe ou un item de liste vidé reste, vide, comme la lib le laisse ;
+  - un mot supprimé entre deux espaces du même bloc de texte n'en laisse qu'une (la lib avale l'espace qui suit) ;
+  - une insertion ne garde que son texte : le U+200B posé pour un saut de paragraphe disparaît, et le repère `data-pp-pos` d'un commentaire suit quand ce caractère était au début du texte ;
+  - une colonne ou une ligne suivie (une marque `data-tc-*` par case) : les cases et les lignes supprimées s'en vont, puis `<colgroup>` et la largeur du tableau sont refaits d'après la première ligne comme
+    le fait `createColGroup` de Tiptap ; les cases ajoutées gardent leur teinte ;
+  - une modification (`span[data-type="modification"]` : alignement, taille d'une image, largeur d'une case) : la marque part, la valeur nouvelle reste, le bloc est teinté.
+- **Équivalence prouvée, pas supposée** : pour treize façons de modifier du texte et sept tableaux, le test compare la vue à ce que « Tout accepter » donne vraiment (`trackchanges_reading_view_equals_accept_all_*`),
+  depuis le HTML de l'éditeur comme depuis celui de la Lecture avec commentaires. Une exploration hors dépôt en avait comparé 41 au total avant d'écrire ces cas.
+- **Teinte** (`css/track-changes.css`) : `.reader-content .pp-tc-changed` pose le fond `#e5f6ee`, celui du texte inséré dans l'éditeur, le même en clair et en sombre puisque la page de Lecture reste blanche ;
+  le texte garde sa couleur (`#1b2430`, 14:1 sur la teinte ; un lien `#0563c1` 5,3:1) et rien n'est souligné. Une case ajoutée prend la teinte même avec un fond posé en ligne (`!important`) ; une image
+  prend un contour de 2 px `#8fd3aa`. Le texte ajouté en ligne est enveloppé dans un `<span class="pp-tc-changed">`, un bloc ajouté ou modifié porte la classe lui-même.
+- **Les deux chemins du HTML** : `Comments.buildReaderHtml` écrivait le document avec un `AnnotatingSerializer` dérivé du sérialiseur de base de ProseMirror, pas de celui du schéma (`installSerializer`) :
+  une case suivie s'y écrivait `<ins><td>`, que l'analyseur HTML sort du tableau. Il dérive maintenant de celui du schéma, comme `getHTML()`, et la marque d'une case s'écrit en attribut `data-tc-*`.
+- **Si la vue échoue** : `renderRecord` remet le HTML nettoyé tel quel (suggestions visibles) et écrit l'erreur à la console, plutôt qu'un document à moitié transformé ou une Lecture vide.
+- **Sécurité** : la vue n'écrit aucun HTML (des nœuds seulement : `createElement`, `Range.deleteContents`, `Text.data`) ; le HTML qu'elle reçoit est celui de `HtmlSanitize.clean`, qui garde `ins`, `del`,
+  `table`, `col` et les attributs `data-*` ; en cas d'échec, c'est ce même texte nettoyé qui est remis.
+- **Autres sorties** : le corps de l'e-mail (`onCreateEmail` lit le DOM de la Lecture) suit la vue acceptée. PDF, Word et Excel passent par `ReaderMode.preview` (`expandedWrapper`, son propre
+  `HtmlSanitize.clean`) : ils n'ont PAS changé, le texte supprimé y reste barré et le texte inséré n'est pas teinté ; Antoine est interrogé avant tout changement.
+- Tests : groupe `trackChanges` (`trackchanges_reading_*`, 5 cas : treize textes, sept tableaux, la vraie Lecture en clair et en sombre, les repères de position des commentaires, la vue qui échoue) et script
+  Node `suggestionReadingMouse` (`dev-tests/verify-suggestion-reading-mouse.mjs`, 29 vérifications à la vraie souris et au vrai clavier, 700×400 clair et sombre).
+
 ## Sources externes consultées (recherche du 2026-09-18)
 
 Accès direct à `tiptap.dev`, `prosemirror.net`, `support.getgrist.com` et `community.getgrist.com`

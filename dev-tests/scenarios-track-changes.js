@@ -1207,6 +1207,243 @@
     },
   });
 
+  // === Lecture : le document comme si toutes les suggestions étaient acceptées (demande d'Antoine du 04/10) ===
+  // « En mode lecture afficher comme si toutes les modifications étaient acceptées, avec juste un léger changement de couleur là où des modifs sont présentes. » La Lecture retouche le HTML qu'elle
+  // reçoit (js/track-changes.js:acceptedView, appelée par js/reader-mode.js:renderRecord) : le résultat doit être EXACTEMENT celui de « Tout accepter » (comparé ici, cas par cas, au vrai
+  // résultat de la lib), la teinte étant la seule différence voulue. Les deux sources de HTML y passent : editor.getHTML() et js/comments.js:buildReaderHtml (Lecture avec commentaires).
+  // HTML comparable : la teinte et les repères de position déroulés, les U+200B (repères de saut de paragraphe, que la lib laisse parfois devant un texte) retirés, les mises en forme voisines identiques réunies.
+  function comparableHtml(html) {
+    const root = document.createElement('div');
+    root.innerHTML = HtmlSanitize.clean(html);
+    root.querySelectorAll('span.pp-tc-changed, span[data-pp-pos]').forEach(span => span.replaceWith(...span.childNodes));
+    root.querySelectorAll('.pp-tc-changed').forEach(el => { el.classList.remove('pp-tc-changed'); if (!el.getAttribute('class')) el.removeAttribute('class'); });
+    root.querySelectorAll('[data-pp-atom]').forEach(el => el.removeAttribute('data-pp-atom'));
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const texts = [];
+    while (walker.nextNode()) texts.push(walker.currentNode);
+    texts.forEach(text => { text.data = text.data.split('​').join(''); });
+    root.normalize();
+    for (let merged = true; merged;) {
+      merged = false;
+      for (const el of Array.from(root.querySelectorAll('strong, em, u, s, code, sub, sup, a, span'))) {
+        const next = el.nextSibling;
+        if (el.parentNode && next && next.nodeType === 1 && next.tagName === el.tagName && el.cloneNode(false).outerHTML === next.cloneNode(false).outerHTML) {
+          while (next.firstChild) el.appendChild(next.firstChild);
+          next.remove();
+          root.normalize();
+          merged = true;
+          break;
+        }
+      }
+    }
+    return root.innerHTML;
+  }
+  const SUGGESTION_LEFTOVERS = 'ins[data-id], del[data-id], span[data-type="modification"], [data-tc-insertion], [data-tc-deletion], [data-tc-modification]';
+  // Ce que la Lecture fait d'un HTML : la vue « comme acceptée », sa teinte et ce qui reste du suivi (rien).
+  function acceptedViewOf(html) {
+    const root = document.createElement('div');
+    root.innerHTML = HtmlSanitize.clean(html);
+    TrackChanges.acceptedView(root);
+    return { html: comparableHtml(root.innerHTML), tinted: root.querySelectorAll('.pp-tc-changed').length, leftovers: root.querySelectorAll(SUGGESTION_LEFTOVERS).length };
+  }
+  const deleteSelection = async h => { document.execCommand('delete'); await h.sleep(120); };
+  // Une touche pressée comme au clavier : ProseMirror lit l'évènement keydown et passe par les raccourcis de l'éditeur (Entrée coupe le bloc, Retour arrière le rejoint).
+  const press = async (h, key) => {
+    const keyCode = { Enter: 13, Backspace: 8 }[key];
+    EditorCore.getEditor().view.dom.dispatchEvent(new KeyboardEvent('keydown', { key, code: key, keyCode, which: keyCode, bubbles: true, cancelable: true }));
+    await h.sleep(120);
+  };
+  const readingScenarios = [
+    ['une insertion', '<p>Alpha beta</p>', async h => { await caretIn(h, 'Alpha beta', 10); await h.typeText(' XX'); }, true],
+    ['un mot supprimé entre deux espaces (une seule espace reste)', '<p>Garder retirer fin</p>', async h => {
+      await selectDoc(h, textPos('retirer', 0), textPos('retirer', 7)); await deleteSelection(h);
+    }, false],
+    ['un remplacement', '<p>Un mot à changer ici</p>', async h => {
+      await selectDoc(h, textPos('changer', 0), textPos('changer', 7)); document.execCommand('insertText', false, 'nouveau'); await h.sleep(120);
+    }, true],
+    ['une suppression à cheval sur deux paragraphes', '<p>Alpha beta</p><p>Gamma delta</p><p>Epsilon</p>', async h => {
+      await selectDoc(h, textPos('beta', 0), textPos('Gamma', 5)); await deleteSelection(h);
+    }, false],
+    ['une suppression sur trois paragraphes', '<p>Alpha beta</p><p>Gamma</p><p>Epsilon zeta</p><p>Fin</p>', async h => {
+      await selectDoc(h, textPos('beta', 0), textPos('Epsilon', 7)); await deleteSelection(h);
+    }, false],
+    ['une suppression à cheval sur deux items de liste', '<ul><li><p>Un deux</p></li><li><p>Trois quatre</p></li><li><p>Cinq</p></li></ul>', async h => {
+      await selectDoc(h, textPos('deux', 0), textPos('Trois', 5)); await deleteSelection(h);
+    }, false],
+    ['Entrée au milieu d\'un paragraphe, puis du texte', '<p>Alpha beta</p><p>Fin</p>', async h => { await caretIn(h, 'Alpha beta', 5); await press(h, 'Enter'); await h.typeText('NEW'); }, true],
+    ['Retour arrière au début d\'un paragraphe', '<p>Alpha</p><p>Beta</p>', async h => { await caretIn(h, 'Beta', 0); await press(h, 'Backspace'); }, false],
+    ['un item de liste ajouté', '<ul><li><p>Un</p></li><li><p>Deux</p></li></ul>', async h => { await caretIn(h, 'Deux', 4); await press(h, 'Enter'); await h.typeText('Trois'); }, true],
+    ['un texte mis en gras (suppression + insertion de même id)', '<p>Un mot important ici</p>', async h => {
+      await selectDoc(h, textPos('important', 0), textPos('important', 9)); EditorCore.getEditor().commands.toggleBold(); await h.sleep(120);
+    }, true],
+    ['un alignement changé (marque sur le bloc)', '<p>Un</p><p>Aligné</p>', async h => { await caretIn(h, 'Aligné', 2); EditorCore.getEditor().commands.setTextAlign('right'); await h.sleep(120); }, true],
+    ['une insertion dans un mot en gras', '<p>Un <strong>mot gras</strong> ici</p>', async h => { await caretIn(h, 'mot gras', 3); await h.typeText('XY'); }, true],
+    ['deux suppressions séparées par une espace', '<p>a b c d</p>', async h => {
+      await selectDoc(h, textPos('a b c d', 2), textPos('a b c d', 3)); await deleteSelection(h);
+      await selectDoc(h, textPos(' c d', 1), textPos(' c d', 2)); await deleteSelection(h);
+    }, false],
+  ];
+  const WIDTHS = '<table><tbody><tr><td colwidth="100"><p>a1</p></td><td colwidth="150"><p>b1</p></td><td colwidth="80"><p>c1</p></td></tr><tr><td colwidth="100"><p>a2</p></td><td colwidth="150"><p>b2</p></td><td colwidth="80"><p>c2</p></td></tr></tbody></table><p>fin</p>';
+  const MERGED = '<table><tbody><tr><td colspan="2"><p>ab</p></td><td><p>c1</p></td></tr><tr><td><p>a2</p></td><td><p>b2</p></td><td><p>c2</p></td></tr></tbody></table><p>fin</p>';
+  const THREE_ROWS = '<table><tbody><tr><td><p>a1</p></td><td><p>b1</p></td></tr><tr><td><p>a2</p></td><td><p>b2</p></td></tr><tr><td><p>a3</p></td><td><p>b3</p></td></tr></tbody></table><p>fin</p>';
+  const tableScenarios = [
+    ['une colonne ajoutée (les largeurs restent)', WIDTHS, 'b1', 'col-after', true],
+    ['une colonne supprimée (la largeur du tableau suit)', WIDTHS, 'b1', 'col-del', false],
+    ['la première colonne supprimée', WIDTHS, 'a1', 'col-del', false],
+    ['une colonne supprimée à travers une cellule fusionnée', MERGED, 'b2', 'col-del', false],
+    ['une colonne ajoutée à travers une cellule fusionnée', MERGED, 'b2', 'col-before', true],
+    ['une ligne ajoutée', THREE_ROWS, 'a2', 'row-after', true],
+    ['la première ligne supprimée', THREE_ROWS, 'a1', 'row-del', false],
+  ];
+  // Une même construction, vue de la Lecture par les deux HTML qu'elle reçoit, puis comparée à ce que « Tout accepter » donne vraiment.
+  async function readingAgainstAcceptAll(h, name, tinted) {
+    const pending = Editor.getHTML();
+    const fromEditor = acceptedViewOf(pending);
+    const fromComments = acceptedViewOf(await Comments.buildReaderHtml());
+    EditorCore.getEditor().chain().focus().acceptAllSuggestionsChunked().run();
+    await h.sleep(200);
+    const real = comparableHtml(Editor.getHTML());
+    const same = fromEditor.html === real && fromComments.html === real;
+    const clean = fromEditor.leftovers === 0 && fromComments.leftovers === 0;
+    const tint = !tinted || (fromEditor.tinted > 0 && fromComments.tinted > 0);
+    return same && clean && tint ? null : { name, same, clean, tint, pending: pending.slice(0, 900), view: fromEditor.html.slice(0, 900), viewComments: fromComments.html.slice(0, 900), real: real.slice(0, 900) };
+  }
+
+  cases.push({
+    id: 'trackchanges_reading_view_equals_accept_all_on_text_edits',
+    description: "Le document que la Lecture montre (js/track-changes.js:acceptedView) est exactement celui que « Tout accepter » donne, pour treize façons de modifier du texte : insertion, mot supprimé entre deux espaces (une seule reste), remplacement, suppression sur deux ou trois paragraphes ou sur deux items de liste, Entrée, Retour arrière, item ajouté, gras, alignement - depuis le HTML de l'éditeur comme depuis celui de la Lecture avec commentaires - sans <ins>, <del> ni marque de suivi, avec de la teinte là où du texte est ajouté ou une mise en forme change.",
+    run: async (h) => {
+      try {
+        const failures = [];
+        for (const [name, html, build, tinted] of readingScenarios) {
+          await documentWithInsertions(h, html, []);
+          await build(h);
+          const failure = await readingAgainstAcceptAll(h, name, tinted);
+          if (failure) failures.push(failure);
+        }
+        return { pass: failures.length === 0, notes: failures.length ? JSON.stringify(failures) : readingScenarios.length + ' constructions identiques à « Tout accepter »' };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_reading_view_equals_accept_all_on_table_columns_and_rows',
+    description: "Colonnes et lignes suivies : la Lecture montre le tableau tel que « Tout accepter » le laisse - cases, colonnes (les <col> et la largeur du tableau refaits d'après la première ligne, comme Tiptap), lignes, cases fusionnées - depuis le HTML de l'éditeur comme depuis celui de la Lecture avec commentaires (dont le sérialiseur écrit maintenant la marque en attribut de la case, sinon l'analyseur HTML sortait la case de son tableau), avec de la teinte sur ce qui est ajouté.",
+    run: async (h) => {
+      try {
+        const failures = [];
+        for (const [name, html, cell, action, tinted] of tableScenarios) {
+          await loadTable(h, html, cell, true);
+          await pressTableButton(h, action);
+          const failure = await readingAgainstAcceptAll(h, name, tinted);
+          if (failure) failures.push(failure);
+        }
+        return { pass: failures.length === 0, notes: failures.length ? JSON.stringify(failures) : tableScenarios.length + ' tableaux identiques à « Tout accepter »' };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_reading_renders_the_accepted_document_with_a_light_tint_in_light_and_dark',
+    description: "Dans la vraie Lecture (ReaderMode.render, aussi quand le HTML vient d'une fonction comme pour un macro-modèle) : plus d'<ins>, de <del> ni de marque de suivi, le texte supprimé a disparu, le texte ajouté a un fond vert pâle (rgb(229, 246, 238), le même en clair et en sombre, texte à 4,5:1 au moins) SANS changer la couleur du texte ni le souligner, une case ajoutée prend la teinte même avec un fond posé en ligne, et le document de l'éditeur garde ses suggestions (rien n'est accepté pour de bon).",
+    run: async (h) => {
+      const root = document.documentElement;
+      const themeBefore = root.getAttribute('data-theme');
+      const containers = [document.getElementById('reader-container'), document.getElementById('editor-container')];
+      const displayBefore = containers.map(el => el.style.display);
+      try {
+        await h.resetEditor();
+        await disableTrackChangesIfOn(h);
+        const pending = '<p>Début <ins data-id="1">ajouté</ins> milieu <del data-id="2">retiré</del> fin.</p><p>Texte normal.</p>'
+          + '<p>Coupé<ins data-id="3">​</ins></p><p><ins data-id="3">​suite</ins> du texte</p>'
+          + '<span data-type="modification" data-id="4" type="attr" attrname="textAlign" newvalue="right"><p style="text-align: right;">Aligné</p></span>'
+          + '<table><tbody><tr><td><p>A</p></td><td data-tc-deletion="5"><p>B</p></td><td data-tc-insertion="6" style="background-color: #fff2cc;"><p>N</p></td></tr></tbody></table>';
+        Editor.setHTML(pending);
+        await h.sleep(250);
+        const suggestionsKept = () => /<ins |<del /.test(Editor.getHTML());
+        const out = {};
+        for (const [label, source] of [['html', pending], ['fonction', () => pending]]) {
+          const content = await h.renderReaderMode(source, null);
+          out[label] = {
+            leftovers: content.querySelectorAll(SUGGESTION_LEFTOVERS).length,
+            text: content.textContent.replace(/​/g, ''),
+          };
+        }
+        const content = document.querySelector('#reader-container .reader-content');
+        const plain = Array.from(content.querySelectorAll('p')).find(p => p.textContent === 'Texte normal.');
+        const inserted = content.querySelector('span.pp-tc-changed');
+        const cell = content.querySelector('td.pp-tc-changed');
+        const luminance = css => {
+          const [r, g, b] = css.match(/\d+(\.\d+)?/g).slice(0, 3).map(Number).map(v => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); });
+          return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        };
+        const ratio = (a, b) => { const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x); return (hi + 0.05) / (lo + 0.05); };
+        const byTheme = {};
+        for (const theme of ['light', 'dark']) {
+          root.setAttribute('data-theme', theme);
+          const cs = getComputedStyle(inserted);
+          byTheme[theme] = { background: cs.backgroundColor, color: cs.color, sameColor: cs.color === getComputedStyle(plain).color, plainDecoration: cs.textDecorationLine === 'none', ratio: Math.round(ratio(cs.color, cs.backgroundColor) * 100) / 100, cell: getComputedStyle(cell).backgroundColor };
+        }
+        const tinted = Array.from(content.querySelectorAll('.pp-tc-changed')).map(el => el.tagName + ':' + el.textContent);
+        const textOk = out.html.text.indexOf('retiré') === -1 && out.html.text.indexOf('Début ajouté milieu fin.') !== -1 && out.html.text.indexOf('Coupé') !== -1 && out.html.text.indexOf('suite du texte') !== -1 && out.html.text.indexOf('B') === -1;
+        const gone = out.html.leftovers === 0 && out.fonction.leftovers === 0 && out.fonction.text === out.html.text;
+        const tint = ['light', 'dark'].every(theme => byTheme[theme].background === 'rgb(229, 246, 238)' && byTheme[theme].cell === 'rgb(229, 246, 238)' && byTheme[theme].sameColor && byTheme[theme].plainDecoration && byTheme[theme].ratio >= 4.5);
+        const alignTinted = tinted.some(item => item.startsWith('P:Aligné'));
+        return { pass: textOk && gone && tint && alignTinted && suggestionsKept(), notes: JSON.stringify({ textOk, gone, tint, alignTinted, suggestionsKept: suggestionsKept(), byTheme, tinted, out }) };
+      } finally {
+        if (themeBefore === null) root.removeAttribute('data-theme'); else root.setAttribute('data-theme', themeBefore);
+        containers.forEach((el, i) => { el.style.display = displayBefore[i]; });
+      }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_reading_with_comments_keeps_comment_positions_after_the_accepted_view',
+    description: "Lecture avec commentaires (js/comments.js:buildReaderHtml) : le texte supprimé a disparu et les repères de position (data-pp-pos) désignent toujours le bon texte du document - y compris quand la vue retire une espace en trop ou le U+200B d'un saut de paragraphe au début d'un texte - sinon un commentaire serait posé à côté de ce qui est sélectionné.",
+    run: async (h) => {
+      try {
+        await documentWithInsertions(h, '<p>Garder retirer fin</p><p>Alpha beta</p>', []);
+        await selectDoc(h, textPos('retirer', 0), textPos('retirer', 7)); await deleteSelection(h);
+        await caretIn(h, 'Alpha beta', 5); await press(h, 'Enter'); await h.typeText('NEW');
+        const html = await Comments.buildReaderHtml();
+        const root = document.createElement('div');
+        root.innerHTML = HtmlSanitize.clean(html);
+        TrackChanges.acceptedView(root);
+        const doc = EditorCore.getEditor().state.doc;
+        const spans = Array.from(root.querySelectorAll('span[data-pp-pos]'));
+        const wrong = spans.filter(span => doc.textBetween(Number(span.getAttribute('data-pp-pos').split(':')[1]), Number(span.getAttribute('data-pp-pos').split(':')[1]) + span.textContent.length) !== span.textContent);
+        const trimmed = spans.some(span => span.textContent === 'fin') && spans.some(span => span.textContent === 'NEW');
+        return { pass: spans.length > 0 && wrong.length === 0 && trimmed && root.textContent.indexOf('retirer') === -1, notes: JSON.stringify({ spans: spans.length, wrong: wrong.map(s => s.getAttribute('data-pp-pos') + ':' + s.textContent), trimmed, text: root.textContent }) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_reading_survives_a_failing_accepted_view',
+    description: "Si la vue « comme acceptée » échoue en route (js/reader-mode.js:renderRecord), la Lecture ne reste ni vide ni à moitié transformée : elle montre le document tel qu'avant, suggestions visibles, et l'erreur va à la console.",
+    run: async (h) => {
+      const original = TrackChanges.acceptedView;
+      const consoleError = console.error;
+      const logged = [];
+      const containers = [document.getElementById('reader-container'), document.getElementById('editor-container')];
+      const displayBefore = containers.map(el => el.style.display);
+      try {
+        await h.resetEditor();
+        await disableTrackChangesIfOn(h);
+        TrackChanges.acceptedView = (root) => { root.innerHTML = ''; throw new Error('vue impossible'); };
+        console.error = (...args) => { logged.push(String(args[0])); };
+        const content = await h.renderReaderMode('<p>Début <ins data-id="1">ajouté</ins> milieu <del data-id="2">retiré</del> fin.</p>', null);
+        const kept = content.querySelectorAll('ins').length === 1 && content.querySelectorAll('del').length === 1 && content.textContent.indexOf('Début ajouté milieu retiré fin.') !== -1;
+        const reported = logged.filter(line => line.indexOf('vue « comme acceptée » impossible') !== -1).length === 1;
+        return { pass: kept && reported, notes: JSON.stringify({ kept, reported, logged, html: content.innerHTML.slice(0, 300) }) };
+      } finally {
+        TrackChanges.acceptedView = original;
+        console.error = consoleError;
+        containers.forEach((el, i) => { el.style.display = displayBefore[i]; });
+      }
+    },
+  });
+
   cases.push({
     id: 'trackchanges_macro_template_excluded_from_suivi',
     description: "Un macro-modèle (TypeModele='macro') n'a jamais de suiviModifications exploitable (null, jamais un objet) et verrouille les 3 boutons de suivi dans la barre - son JSON de composition ne passe jamais par l'éditeur suivi",
