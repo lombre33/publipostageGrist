@@ -1269,6 +1269,103 @@
     },
   });
 
+  // --- « Modèle selon la ligne » (js/row-template.js) : les lots Excel donnent à chaque ligne la grille de SON modèle - ses cases, le nom de son fichier et la page de SA feuille (sens, papier, marges) -, pas celle de
+  // la grille ouverte (essais d'Antoine du 04/10, défaut B4). Deux grilles enregistrées (une fiche en A4 portrait, une grande en A3 paysage) et, à l'écran, un brouillon en A4 portrait que la ligne « Autre » garde. ---
+  const RT_KEY = 'modeleSelonLigne';
+  const RT_ROWS = [
+    { id: 1, Nom: 'Alpha Durand', Genre: 'Fiche' },
+    { id: 2, Nom: 'Bravo Martin', Genre: 'Large' },
+    { id: 3, Nom: 'Charlie Petit', Genre: 'Autre' },
+  ];
+  async function seedRowGrids(h) {
+    const stub = window.__gristStub;
+    await h.resetEditor();
+    stub.setVariables(TABLE, { Nom: 'Text', Genre: 'Text' });
+    stub.setRows(TABLE, RT_ROWS);
+    await GristAPI.refreshSchema();
+    stub.fireRecord(Object.assign({}, RT_ROWS[2]), TABLE);
+    await sleep(100);
+    const grid = word => gridHtml([140, 100], [30, 30], [[word, 'Montant'], [badge('Nom'), '']]);
+    const saved = {};
+    const save = async (key, nom, word, filename, page) => { saved[key] = (await Templates.save(null, nom, grid(word), filename, null, page, GridEditor.TYPE, null)).id; };
+    await save('fiche', 'RT Fiche', 'FICHE', 'Fiche #' + TABLE + '.Nom', { top: 20, right: 20, bottom: 20, left: 20, orientation: 'portrait', format: 'A4' });
+    await save('large', 'RT Large', 'LARGE', 'Large #' + TABLE + '.Nom', { top: 15, right: 15, bottom: 15, left: 15, orientation: 'landscape', format: 'A3' });
+    await Templates.loadAll();
+    Templates.setCurrentId(null);
+    const rule = (value, modeleId) => ({ column: 'Genre', operator: '=', value, modeleId: String(modeleId) });
+    stub.setWidgetOptions({ [RT_KEY]: { enabled: true, rules: [rule('Fiche', saved.fiche), rule('Large', saved.large)], otherwise: 'keep' } });
+    await sleep(150);
+    await enterGrid(h);
+    await loadGrid(grid('BROUILLON'));
+    return saved;
+  }
+  async function releaseRowGrids(h, saved) {
+    window.__gristStub.setWidgetOptions(null);
+    await sleep(150);
+    for (const id of Object.values(saved || {})) await Templates.remove(id);
+    await Templates.loadAll();
+    Templates.setCurrentId(null);
+    await leaveGrid(h);
+    GridEditor.setActive(false);
+  }
+  // Ce que doit montrer la feuille de chaque ligne : le mot de sa grille, le nom de la ligne, la page (papier d'Excel : 9 = A4, 8 = A3), les marges (pouces).
+  const RT_SHEETS = {
+    fiche: { word: 'FICHE', nom: 'Alpha Durand', orientation: 'portrait', paper: '9', margin: 0.79 },
+    large: { word: 'LARGE', nom: 'Bravo Martin', orientation: 'landscape', paper: '8', margin: 0.59 },
+    brouillon: { word: 'BROUILLON', nom: 'Charlie Petit', orientation: 'portrait', paper: '9', margin: 0.39 }, // les marges d'un document neuf : 28 pt
+  };
+  function sheetProblems(label, sheet, expect) {
+    if (!sheet) return [label + ' : absente'];
+    const problems = [];
+    const text = sheet.text();
+    if (!text.includes(expect.word) || !text.includes(expect.nom)) problems.push(label + ' : texte=' + text);
+    Object.values(RT_SHEETS).filter(other => other !== expect).forEach(other => { if (text.includes(other.word)) problems.push(label + ' : contient « ' + other.word + ' »'); });
+    const p = sheet.pageSetup;
+    if (!p || p.orientation !== expect.orientation || p.paperSize !== expect.paper) problems.push(label + ' : page=' + JSON.stringify(p));
+    if (!sheet.margins || !near(sheet.margins.left, expect.margin, 0.011)) problems.push(label + ' : marges=' + JSON.stringify(sheet.margins));
+    return problems;
+  }
+
+  cases.push({
+    id: 'xlsx_batch_zip_row_template_each_row_comes_from_the_grid_and_the_page_of_its_template',
+    description: 'Lot Excel (ZIP) avec « Modèle selon la ligne » : chaque classeur reprend la grille du modèle de SA ligne, nommé comme son modèle le veut, avec la page de sa feuille (la grande grille en A3 paysage) ; la ligne que le réglage laisse au modèle ouvert garde le brouillon de l\'écran',
+    run: async (h) => {
+      const saved = await seedRowGrids(h);
+      try {
+        const res = await clickExportRow(h, ROWS.xlsxBatch);
+        const dl = res.downloads[0];
+        if (res.downloads.length !== 1 || !dl) return { pass: false, notes: 'téléchargements=' + res.downloads.length + ' états=' + JSON.stringify(res.statuses) };
+        const zip = await JSZip.loadAsync(await dl.blob.arrayBuffer());
+        const files = Object.keys(zip.files).filter(n => !zip.files[n].dir).sort();
+        const byFile = { 'Fiche Alpha Durand.xlsx': RT_SHEETS.fiche, 'Large Bravo Martin.xlsx': RT_SHEETS.large, 'publipostage.xlsx': RT_SHEETS.brouillon };
+        const bad = [];
+        if (JSON.stringify(files) !== JSON.stringify(Object.keys(byFile).sort())) bad.push('fichiers=' + JSON.stringify(files));
+        for (const name of Object.keys(byFile)) bad.push(...sheetProblems(name, zip.file(name) ? (await openXlsx(await zip.file(name).async('blob'))).sheet : null, byFile[name]));
+        if (res.status !== I18n.t('status.batchExportDoneXlsx', { ok: RT_ROWS.length })) bad.push('fin=' + res.status);
+        return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+      } finally { await releaseRowGrids(h, saved); }
+    },
+  });
+
+  cases.push({
+    id: 'xlsx_single_workbook_row_template_each_sheet_comes_from_the_grid_and_the_page_of_its_template',
+    description: 'Classeur unique avec « Modèle selon la ligne » : une feuille par ligne, de la grille du modèle de SA ligne, nommée comme son fichier et avec sa propre page (sens, papier, marges) ; la ligne que le réglage laisse au modèle ouvert garde le brouillon',
+    run: async (h) => {
+      const saved = await seedRowGrids(h);
+      try {
+        const res = await clickExportRow(h, ROWS.xlsxSingle);
+        const dl = res.downloads[0];
+        if (res.downloads.length !== 1 || !dl) return { pass: false, notes: 'téléchargements=' + res.downloads.length + ' états=' + JSON.stringify(res.statuses) };
+        const x = await openXlsx(dl.blob);
+        const expected = [['Fiche Alpha Durand', RT_SHEETS.fiche], ['Large Bravo Martin', RT_SHEETS.large], ['publipostage', RT_SHEETS.brouillon]];
+        const bad = [];
+        if (JSON.stringify(x.sheets.map(sh => sh.name)) !== JSON.stringify(expected.map(([name]) => name))) bad.push('feuilles=' + JSON.stringify(x.sheets.map(sh => sh.name)));
+        expected.forEach(([name, expect], i) => bad.push(...sheetProblems(name, x.sheets[i], expect)));
+        return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+      } finally { await releaseRowGrids(h, saved); }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.xlsx = cases;
 })();

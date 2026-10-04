@@ -378,6 +378,311 @@
     },
   });
 
+  // --- « Modèle selon la ligne » (js/row-template.js, Réglages > Selon la ligne) : un export en lot donne à CHAQUE ligne le modèle que les règles lui désignent - son contenu, ses en-têtes et pieds, le sens de sa
+  // page, le nom de son fichier -, comme quand la ligne s'ouvre à l'écran, au lieu du seul modèle ouvert (essais d'Antoine du 04/10, défaut B4). Les modèles sont enregistrés par Templates.save, le réglage est posé comme
+  // Grist le fait (options du widget) ; à l'écran, un brouillon que les lignes « Autre » gardent (`otherwise: 'keep'`). Chaque cas retire le réglage et les modèles en partant. ---
+  const RT_KEY = 'modeleSelonLigne';
+  const RT_ROWS = [
+    { id: 1, Nom: 'Alpha Durand', Genre: 'Facture' },
+    { id: 2, Nom: 'Bravo Martin', Genre: 'Devis' },
+    { id: 3, Nom: 'Charlie Petit', Genre: 'Autre' },
+    { id: 4, Nom: 'Delta Moreau', Genre: 'Devis' },
+  ];
+  const rtPage = orientation => ({ top: 20, right: 20, bottom: 20, left: 20, orientation, format: 'A4' });
+  const rtHeader = text => ({ enabled: true, differentFirstPage: false, header: { default: `<p>${text}</p>`, first: '' }, footer: { default: '', first: '' } });
+  const rtRule = (value, modeleId) => ({ column: 'Genre', operator: '=', value, modeleId: String(modeleId) });
+  const PER_VALUE = ` data-format="${JSON.stringify({ list: { perValue: true } }).replace(/"/g, '&quot;')}"`;
+  const listBadge = column => `<span class="var-badge" data-table="${TABLE}" data-column="${column}" data-key="${TABLE}.${column}"${PER_VALUE}></span>`;
+
+  // `options` : `rows` et `columns` (la table), `extra(saved)` (des modèles de plus, enregistrés après Facture et Devis : { key, nom, html, filename, headerFooter, page, type }), `rules(saved)` (des règles de plus),
+  // `enabled` (faux : réglage coupé). Rend les numéros des modèles enregistrés, par clé.
+  async function seedRowTemplates(h, options) {
+    const opt = options || {};
+    const rows = opt.rows || RT_ROWS;
+    const stub = window.__gristStub;
+    await h.resetEditor();
+    stub.setVariables(TABLE, Object.assign({ Nom: 'Text', Genre: 'Text' }, opt.columns || {}));
+    stub.setRows(TABLE, rows);
+    await GristAPI.refreshSchema();
+    // Une ligne que le réglage laisse au modèle de l'écran : le poser n'ouvre aucun modèle.
+    stub.fireRecord(Object.assign({}, rows.find(r => r.Genre === 'Autre') || rows[0]), TABLE);
+    await h.sleep(50);
+    const saved = {};
+    const save = async spec => {
+      saved[spec.key] = (await Templates.save(null, spec.nom, spec.html, spec.filename || '', spec.headerFooter || null, spec.page || null, spec.type || 'document', null)).id;
+    };
+    await save({ key: 'facture', nom: 'RT Facture', html: `<p>FACTURE ${badge('Nom')}</p>`, filename: 'Facture_#' + TABLE + '.Nom', headerFooter: rtHeader('ENTETEFACTURE'), page: rtPage('portrait') });
+    await save({ key: 'devis', nom: 'RT Devis', html: `<p>DEVIS ${badge('Nom')}</p>`, filename: 'Devis_#' + TABLE + '.Nom', headerFooter: rtHeader('ENTETEDEVIS'), page: rtPage('landscape') });
+    for (const spec of (opt.extra ? opt.extra(saved) : [])) await save(spec);
+    await Templates.loadAll();
+    Templates.setCurrentId(null);
+    const rules = [rtRule('Facture', saved.facture), rtRule('Devis', saved.devis)].concat(opt.rules ? opt.rules(saved) : []);
+    stub.setWidgetOptions({ [RT_KEY]: { enabled: opt.enabled !== false, rules, otherwise: 'keep' } });
+    await h.sleep(150);
+    // Le brouillon de l'écran : un modèle pas enregistré, en portrait, avec son propre en-tête et sans nom de fichier.
+    document.getElementById('pdf-filename-template').value = '';
+    PageLayout.setMarginsMm(rtPage('portrait'));
+    Editor.setHTML(`<p>BROUILLON ${badge('Nom')}</p>`);
+    Editor.setHeaderFooterData(rtHeader('ENTETEBROUILLON'));
+    await h.sleep(100);
+    return saved;
+  }
+  async function releaseRowTemplates(h, saved) {
+    window.__gristStub.setWidgetOptions(null);
+    await h.sleep(150);
+    for (const id of Object.values(saved || {})) await Templates.remove(id);
+    await Templates.loadAll();
+    Templates.setCurrentId(null);
+    PageLayout.setMarginsMm(null);
+    await restoreDocumentMode(h); // un modèle ouvert pour de bon laisse son nom et son nom de fichier à l'écran
+  }
+
+  // Ce qu'un .docx dit de son texte et de sa page, lu dans ses octets : le corps, les en-têtes et pieds (word/header*.xml, footer*.xml) et le sens de la page (w:pgSz).
+  async function docxFacts(blob) {
+    await ExportCommon.ensureJsZipLoaded();
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const text = async name => (await zip.file(name).async('string')).replace(/<[^>]+>/g, '');
+    let headers = '';
+    for (const name of Object.keys(zip.files).filter(n => /^word\/(header|footer)\d*\.xml$/.test(n))) headers += await text(name);
+    const documentXml = await zip.file('word/document.xml').async('string');
+    return { body: squash(documentXml.replace(/<[^>]+>/g, '')), headers: squash(headers), landscape: /<w:pgSz[^>]*w:orient="landscape"/.test(documentXml) };
+  }
+  // Le texte (en-têtes compris) et le sens de chaque page d'un PDF, lus dans ses octets (pdf.js).
+  async function pdfFacts(h, blob) {
+    await h.ensurePdfJsLoaded();
+    const pdf = await window.pdfjsLib.getDocument({ data: new Uint8Array(await blob.arrayBuffer()) }).promise;
+    const pages = [];
+    for (let n = 1; n <= pdf.numPages; n++) {
+      const page = await pdf.getPage(n);
+      const view = page.getViewport({ scale: 1 });
+      const content = await page.getTextContent();
+      pages.push({ body: squash(content.items.map(it => it.str).join(' ')), landscape: view.width > view.height });
+    }
+    return pages;
+  }
+  // Ce qui manque ou déborde dans un document : `has` doit y être (corps ou en-tête), `hasNot` ne doit pas y être, et sa page est dans le sens attendu.
+  function documentProblems(label, fact, expect) {
+    const all = (fact && (fact.body + (fact.headers || ''))) || '';
+    const problems = [];
+    if (!fact) return [label + ' : absent'];
+    expect.has.forEach(needle => { if (!all.includes(needle)) problems.push(label + ' : « ' + needle + ' » manque'); });
+    (expect.hasNot || []).forEach(needle => { if (all.includes(needle)) problems.push(label + ' : « ' + needle + ' » ne devrait pas y être'); });
+    if (fact.landscape !== expect.landscape) problems.push(label + ' : paysage=' + fact.landscape);
+    return problems;
+  }
+  const FACTURE_OF = nom => ({ has: ['FACTURE', squash(nom), 'ENTETEFACTURE'], hasNot: ['DEVIS', 'BROUILLON'], landscape: false });
+  const DEVIS_OF = nom => ({ has: ['DEVIS', squash(nom), 'ENTETEDEVIS'], hasNot: ['FACTURE', 'BROUILLON'], landscape: true });
+  const BROUILLON_OF = nom => ({ has: ['BROUILLON', squash(nom), 'ENTETEBROUILLON'], hasNot: ['FACTURE', 'DEVIS'], landscape: false });
+
+  cases.push({
+    id: 'pdfbatch_row_template_docx_zip_each_row_comes_from_its_own_template',
+    description: 'Lot DOCX (ZIP) avec « Modèle selon la ligne » : chaque ligne sort du modèle que ses règles lui donnent - son contenu, son en-tête, le sens de sa page (le devis en paysage), le nom de son fichier -, et la ligne que le réglage laisse au modèle ouvert garde le brouillon de l’écran',
+    run: async (h) => {
+      const saved = await seedRowTemplates(h);
+      try {
+        const active = RowTemplate.isActive();
+        const res = await clickExportRow(h, 'v2-btn-export-docx-batch');
+        const dl = res.downloads[0];
+        const zip = dl && dl.blob ? await JSZip.loadAsync(await dl.blob.arrayBuffer()) : null;
+        const files = zip ? Object.keys(zip.files).filter(n => !zip.files[n].dir).sort() : [];
+        const expected = {
+          'Facture_Alpha Durand.docx': FACTURE_OF('Alpha Durand'),
+          'Devis_Bravo Martin.docx': DEVIS_OF('Bravo Martin'),
+          'publipostage.docx': BROUILLON_OF('Charlie Petit'),
+          'Devis_Delta Moreau.docx': DEVIS_OF('Delta Moreau'),
+        };
+        const problems = [];
+        if (JSON.stringify(files) !== JSON.stringify(Object.keys(expected).sort())) problems.push('fichiers=' + JSON.stringify(files));
+        for (const name of Object.keys(expected)) problems.push(...documentProblems(name, zip && zip.file(name) ? await docxFacts(await zip.file(name).async('blob')) : null, expected[name]));
+        if (res.status !== I18n.t('status.batchExportDoneDocx', { ok: RT_ROWS.length })) problems.push('fin=' + res.status);
+        return { pass: active && res.downloads.length === 1 && dl.name === TABLE + '-export-docx.zip' && !problems.length, notes: JSON.stringify({ active, files, problems }) };
+      } finally { await releaseRowTemplates(h, saved); }
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_row_template_pdf_zip_each_row_comes_from_its_own_template',
+    description: 'Lot PDF (ZIP) avec « Modèle selon la ligne » : le PDF de chaque ligne a le contenu, l’en-tête, le sens de page (devis en paysage) et le nom de fichier du modèle de SA ligne',
+    run: async (h) => {
+      const saved = await seedRowTemplates(h);
+      try {
+        const res = await clickExportRow(h, 'v2-btn-export-pdf-batch');
+        const dl = res.downloads[0];
+        const zip = dl && dl.blob ? await JSZip.loadAsync(await dl.blob.arrayBuffer()) : null;
+        const files = zip ? Object.keys(zip.files).filter(n => !zip.files[n].dir).sort() : [];
+        const expected = {
+          'Facture_Alpha Durand.pdf': FACTURE_OF('Alpha Durand'),
+          'Devis_Bravo Martin.pdf': DEVIS_OF('Bravo Martin'),
+          'publipostage.pdf': BROUILLON_OF('Charlie Petit'),
+          'Devis_Delta Moreau.pdf': DEVIS_OF('Delta Moreau'),
+        };
+        const problems = [];
+        if (JSON.stringify(files) !== JSON.stringify(Object.keys(expected).sort())) problems.push('fichiers=' + JSON.stringify(files));
+        for (const name of Object.keys(expected)) {
+          const pages = zip && zip.file(name) ? await pdfFacts(h, await zip.file(name).async('blob')) : [];
+          problems.push(...(pages.length === 1 ? documentProblems(name, pages[0], expected[name]) : [name + ' : ' + pages.length + ' pages']));
+        }
+        if (res.status !== I18n.t('status.batchExportDone', { ok: RT_ROWS.length })) problems.push('fin=' + res.status);
+        return { pass: res.downloads.length === 1 && dl.name === TABLE + '-export-pdf.zip' && !problems.length, notes: JSON.stringify({ files, problems }) };
+      } finally { await releaseRowTemplates(h, saved); }
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_row_template_merged_pdf_follows_the_templates_in_row_order',
+    description: 'PDF unique avec « Modèle selon la ligne » : les pages suivent l’ordre des lignes, chacune avec le contenu, l’en-tête et le sens de page du modèle de sa ligne (facture et brouillon en portrait, devis en paysage)',
+    run: async (h) => {
+      const saved = await seedRowTemplates(h);
+      try {
+        const res = await clickExportRow(h, 'v2-btn-export-pdf-merged');
+        const dl = res.downloads[0];
+        const pages = dl && dl.blob ? await pdfFacts(h, dl.blob) : [];
+        const expected = [FACTURE_OF('Alpha Durand'), DEVIS_OF('Bravo Martin'), BROUILLON_OF('Charlie Petit'), DEVIS_OF('Delta Moreau')];
+        const problems = pages.length === expected.length ? expected.flatMap((expect, i) => documentProblems('page ' + (i + 1), pages[i], expect)) : ['pages=' + pages.length];
+        return { pass: res.downloads.length === 1 && dl.name === TABLE + '-export.pdf' && !problems.length, notes: JSON.stringify({ problems, status: res.status }) };
+      } finally { await releaseRowTemplates(h, saved); }
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_row_template_off_keeps_the_open_template_for_every_row',
+    description: 'Réglage « Selon la ligne » coupé (règles gardées, case décochée) : toutes les lignes sortent du modèle ouvert, comme sans le réglage',
+    run: async (h) => {
+      const saved = await seedRowTemplates(h, { enabled: false });
+      try {
+        const active = RowTemplate.isActive();
+        const res = await clickExportRow(h, 'v2-btn-export-docx-batch');
+        const dl = res.downloads[0];
+        const zip = dl && dl.blob ? await JSZip.loadAsync(await dl.blob.arrayBuffer()) : null;
+        const files = zip ? Object.keys(zip.files).filter(n => !zip.files[n].dir).sort() : [];
+        const expected = ['publipostage (2).docx', 'publipostage (3).docx', 'publipostage (4).docx', 'publipostage.docx'];
+        const problems = [];
+        for (const name of files) problems.push(...documentProblems(name, await docxFacts(await zip.file(name).async('blob')), BROUILLON_OF('')));
+        return { pass: !active && JSON.stringify(files) === JSON.stringify(expected) && !problems.length, notes: JSON.stringify({ active, files, problems }) };
+      } finally { await releaseRowTemplates(h, saved); }
+    },
+  });
+
+  // Le modèle de la ligne est celui qui est déjà ouvert : c'est l'écran, avec ce qui n'est pas enregistré (comme l'export d'une seule ligne), pas la copie enregistrée.
+  cases.push({
+    id: 'pdfbatch_row_template_open_template_keeps_its_unsaved_edits',
+    description: 'Lot DOCX avec « Modèle selon la ligne » : une ligne dont les règles désignent le modèle ouvert sort de l’écran, avec ses modifications pas encore enregistrées ; les autres, de leur modèle enregistré',
+    run: async (h) => {
+      const saved = await seedRowTemplates(h);
+      try {
+        // Le modèle Facture ouvert pour de bon (la liste des modèles), puis modifié sans être enregistré.
+        const select = document.getElementById('template-select');
+        if (!Array.from(select.options).some(o => o.value === String(saved.facture))) {
+          const option = document.createElement('option');
+          option.value = String(saved.facture);
+          option.textContent = 'RT Facture';
+          select.appendChild(option);
+        }
+        select.value = String(saved.facture);
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        await h.sleep(400);
+        const opened = String(Templates.getCurrentId()) === String(saved.facture);
+        Editor.setHTML(`<p>FACTURE MODIFIEE ${badge('Nom')}</p>`);
+        await h.sleep(100);
+        const res = await clickExportRow(h, 'v2-btn-export-docx-batch');
+        const dl = res.downloads[0];
+        const zip = dl && dl.blob ? await JSZip.loadAsync(await dl.blob.arrayBuffer()) : null;
+        const files = zip ? Object.keys(zip.files).filter(n => !zip.files[n].dir).sort() : [];
+        // Ligne 1 (Facture) et ligne 3 (« Autre », gardée) : l'écran, nommé comme le modèle Facture ouvert ; lignes 2 et 4 : le devis enregistré.
+        const expected = {
+          'Facture_Alpha Durand.docx': { has: ['FACTUREMODIFIEE', 'AlphaDurand', 'ENTETEFACTURE'], landscape: false },
+          'Devis_Bravo Martin.docx': DEVIS_OF('Bravo Martin'),
+          'Facture_Charlie Petit.docx': { has: ['FACTUREMODIFIEE', 'CharliePetit', 'ENTETEFACTURE'], landscape: false },
+          'Devis_Delta Moreau.docx': DEVIS_OF('Delta Moreau'),
+        };
+        const problems = [];
+        if (JSON.stringify(files) !== JSON.stringify(Object.keys(expected).sort())) problems.push('fichiers=' + JSON.stringify(files));
+        for (const name of Object.keys(expected)) problems.push(...documentProblems(name, zip && zip.file(name) ? await docxFacts(await zip.file(name).async('blob')) : null, expected[name]));
+        return { pass: opened && !problems.length, notes: JSON.stringify({ opened, files, problems }) };
+      } finally { await releaseRowTemplates(h, saved); }
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_row_template_macro_model_assembles_its_own_annexes_for_the_row',
+    description: 'Une ligne que « Modèle selon la ligne » envoie vers un macro-modèle sort de sa composition (ses modèles bout à bout, un saut de page entre eux), avec l’en-tête, la page et le nom de fichier du macro-modèle',
+    run: async (h) => {
+      const rows = RT_ROWS.concat([{ id: 5, Nom: 'Echo Blanc', Genre: 'Dossier' }]);
+      const saved = await seedRowTemplates(h, {
+        rows,
+        extra: ids => [{
+          key: 'dossier', nom: 'RT Dossier', html: JSON.stringify({ slots: [{ type: 'fixed', modeleId: ids.facture }, { type: 'fixed', modeleId: ids.devis }] }),
+          filename: 'Dossier_#' + TABLE + '.Nom', headerFooter: rtHeader('ENTETEDOSSIER'), page: rtPage('landscape'), type: 'macro',
+        }],
+        rules: ids => [rtRule('Dossier', ids.dossier)],
+      });
+      try {
+        const res = await clickExportRow(h, 'v2-btn-export-docx-batch');
+        const dl = res.downloads[0];
+        const zip = dl && dl.blob ? await JSZip.loadAsync(await dl.blob.arrayBuffer()) : null;
+        const entry = zip && zip.file('Dossier_Echo Blanc.docx');
+        const fact = entry ? await docxFacts(await entry.async('blob')) : null;
+        const files = zip ? Object.keys(zip.files).filter(n => !zip.files[n].dir).sort() : [];
+        const problems = documentProblems('Dossier_Echo Blanc.docx', fact, { has: ['FACTURE', 'DEVIS', 'EchoBlanc', 'ENTETEDOSSIER'], hasNot: ['BROUILLON'], landscape: true });
+        if (fact && fact.body.indexOf('FACTURE') > fact.body.indexOf('DEVIS')) problems.push('les modèles du macro ne sont pas dans l’ordre');
+        return { pass: res.downloads.length === 1 && files.length === rows.length && !problems.length, notes: JSON.stringify({ files, problems }) };
+      } finally { await releaseRowTemplates(h, saved); }
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_row_template_split_list_of_the_row_model_makes_one_document_per_value',
+    description: 'Le modèle d’une ligne (pas celui de l’écran) a une liste réglée « Un document par valeur » : cette ligne sort en un document par valeur, nommés avec la valeur, et la confirmation compte tous les documents',
+    run: async (h) => {
+      const rows = [{ id: 1, Nom: 'Alpha Durand', Genre: 'Autre' }, { id: 2, Nom: 'Echo Blanc', Genre: 'Liste', Themes: ['L', 'Santé', 'Social'] }];
+      const saved = await seedRowTemplates(h, {
+        rows, columns: { Themes: 'ChoiceList' },
+        extra: () => [{ key: 'liste', nom: 'RT Liste', html: `<p>LISTE ${badge('Nom')} ${listBadge('Themes')}</p>`, filename: 'Liste_#' + TABLE + '.Nom', headerFooter: rtHeader('ENTETELISTE'), page: rtPage('portrait') }],
+        rules: ids => [rtRule('Liste', ids.liste)],
+      });
+      try {
+        const res = await clickExportRow(h, 'v2-btn-export-docx-batch');
+        const dl = res.downloads[0];
+        const zip = dl && dl.blob ? await JSZip.loadAsync(await dl.blob.arrayBuffer()) : null;
+        const files = zip ? Object.keys(zip.files).filter(n => !zip.files[n].dir).sort() : [];
+        const expected = ['Liste_Echo Blanc - Santé.docx', 'Liste_Echo Blanc - Social.docx', 'publipostage.docx'];
+        const problems = [];
+        for (const [name, value] of [['Liste_Echo Blanc - Santé.docx', 'Santé'], ['Liste_Echo Blanc - Social.docx', 'Social']]) {
+          const fact = zip && zip.file(name) ? await docxFacts(await zip.file(name).async('blob')) : null;
+          problems.push(...documentProblems(name, fact, { has: ['LISTE', 'EchoBlanc', squash(value), 'ENTETELISTE'], hasNot: ['BROUILLON', value === 'Santé' ? 'Social' : 'Santé'], landscape: false }));
+        }
+        const note = I18n.t('confirm.splitNote', { documents: expected.length });
+        const confirmed = res.confirms.length === 1 && res.confirms[0].endsWith(note);
+        return { pass: res.downloads.length === 1 && JSON.stringify(files) === JSON.stringify(expected) && !problems.length && confirmed, notes: JSON.stringify({ files, problems, confirms: res.confirms }) };
+      } finally { await releaseRowTemplates(h, saved); }
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_row_template_model_of_the_wrong_kind_is_counted_as_failed_not_written_by_the_open_one',
+    description: 'Lot DOCX : une ligne que « Modèle selon la ligne » envoie vers une grille (qui ne se génère pas en Word) n’est pas générée et est comptée en échec ; elle ne sort pas du brouillon de l’écran, et les autres lignes sortent de leur modèle',
+    run: async (h) => {
+      const rows = [{ id: 1, Nom: 'Alpha Durand', Genre: 'Facture' }, { id: 2, Nom: 'Bravo Martin', Genre: 'Grille' }, { id: 3, Nom: 'Charlie Petit', Genre: 'Autre' }];
+      const saved = await seedRowTemplates(h, {
+        rows,
+        extra: () => [{ key: 'grille', nom: 'RT Grille', html: '<table><tbody><tr><td><p>GRILLE</p></td></tr></tbody></table>', filename: 'Grille_#' + TABLE + '.Nom', page: rtPage('portrait'), type: GridEditor.TYPE }],
+        rules: ids => [rtRule('Grille', ids.grille)],
+      });
+      try {
+        const res = await clickExportRow(h, 'v2-btn-export-docx-batch');
+        const dl = res.downloads[0];
+        const zip = dl && dl.blob ? await JSZip.loadAsync(await dl.blob.arrayBuffer()) : null;
+        const files = zip ? Object.keys(zip.files).filter(n => !zip.files[n].dir).sort() : [];
+        const expected = ['Facture_Alpha Durand.docx', 'publipostage.docx'];
+        const problems = [];
+        problems.push(...documentProblems('Facture_Alpha Durand.docx', zip && zip.file('Facture_Alpha Durand.docx') ? await docxFacts(await zip.file('Facture_Alpha Durand.docx').async('blob')) : null, FACTURE_OF('Alpha Durand')));
+        const status = I18n.t('status.batchExportDoneWithFailuresDocx', { ok: 2, failed: 1 });
+        if (res.status !== status) problems.push('fin=' + res.status);
+        return { pass: res.downloads.length === 1 && JSON.stringify(files) === JSON.stringify(expected) && !problems.length, notes: JSON.stringify({ files, problems, status: res.status }) };
+      } finally { await releaseRowTemplates(h, saved); }
+    },
+  });
+
   // --- Macro-modèle : les annexes se choisissent ligne par ligne (js/main.js:onExportBatch appelle MacroTemplates.buildConcatenatedHtml pour CHAQUE ligne, pas une
   // fois pour le lot). Un macro-modèle réel, chargé par le vrai <select> de modèles, sur trois lignes dont deux ont le même type. Placé en dernier : le macro
   // chargé laisse l'application en mode macro, restauré à la fin par le vrai bouton « Nouveau document » (resetEditor() ne touche pas à ce mode). ---

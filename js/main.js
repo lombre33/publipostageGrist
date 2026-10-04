@@ -1458,7 +1458,9 @@
   // Ce qui change d'un export à l'autre : ses textes (clés i18n), le nom des fichiers, la fonction qui rend UNE ligne et ses marges (points pour le PDF, twips
   // pour le DOCX, aucune pour l'Excel : la feuille reprend la page du modèle) et ses bibliothèques (`loadLibs` : l'archive ZIP n'a besoin que de JSZip, ~0,1 Mo,
   // pas du lot PDF de ~4 Mo) ; tout le reste (lecture des lignes, confirmation, boucle, archive, téléchargement) est commun. `single` : pas de blob par ligne, le
-  // classeur unique reçoit une feuille par ligne.
+  // classeur unique reçoit une feuille par ligne. `grid` : le genre de modèle que cet export sait faire - faux, un document (Word), vrai, une grille (Excel) ; absent, les deux (PDF) :
+  // une ligne dont « Modèle selon la ligne » désigne un modèle d'un autre genre n'est pas générée (comptée en échec). `pageOptions` : la page d'une feuille Excel, lue sur les réglages
+  // de page posés (ceux de l'écran, ou ceux du modèle d'une ligne, cf. templateSource).
   const BATCH_EXPORTS = {
     pdfZip: {
       label: 'PDF', confirm: 'confirm.batchExport', loading: 'status.loadingPdfLibs', loadError: 'status.pdfLibsLoadError', progress: 'status.batchExportProgress',
@@ -1488,46 +1490,108 @@
     docxZip: {
       label: 'DOCX', confirm: 'confirm.batchExportDocx', loading: 'status.loadingExportLibs', loadError: 'status.exportLibsLoadError', progress: 'status.batchExportProgressDocx',
       noFile: 'status.exportErrorDocx', done: 'status.batchExportDoneDocx', doneWithFailures: 'status.batchExportDoneWithFailuresDocx',
-      entryExt: '.docx', fileSuffix: '-export-docx.zip', margins: () => PageLayout.getMarginsTwip(),
+      entryExt: '.docx', fileSuffix: '-export-docx.zip', margins: () => PageLayout.getMarginsTwip(), grid: false,
       loadLibs: () => ExportCommon.ensureJsZipLoaded(),
       renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins) => DocxExport.getDocxBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, margins),
     },
     xlsxZip: {
       label: 'Excel', confirm: 'confirm.batchExportXlsx', loading: 'status.loadingExportLibs', loadError: 'status.exportLibsLoadError', progress: 'status.batchExportProgressXlsx',
       noFile: 'status.exportErrorXlsx', done: 'status.batchExportDoneXlsx', doneWithFailures: 'status.batchExportDoneWithFailuresXlsx',
-      entryExt: '.xlsx', fileSuffix: '-export-xlsx.zip',
+      entryExt: '.xlsx', fileSuffix: '-export-xlsx.zip', grid: true, pageOptions: () => XlsxExport.pageOptionsFromLayout(),
       loadLibs: async () => { await ExportCommon.ensureJsZipLoaded(); await XlsxExport.ensureExcelLibLoaded(); },
-      renderRow: (html, tableId, row, filenameTemplate) => XlsxExport.getXlsxBlobForRecord(html, tableId, row, filenameTemplate),
+      renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins, pageOptions) => XlsxExport.getXlsxBlobForRecord(html, tableId, row, filenameTemplate, pageOptions || undefined),
     },
     xlsxSingle: {
       label: 'Excel', confirm: 'confirm.singleWorkbookExport', loading: 'status.loadingExportLibs', loadError: 'status.exportLibsLoadError', progress: 'status.batchExportProgressXlsx',
       noFile: 'status.exportErrorXlsx', done: 'status.singleWorkbookDone', doneWithFailures: 'status.singleWorkbookDoneWithFailures',
       splitDone: 'status.splitSingleWorkbookDone', splitDoneWithFailures: 'status.splitSingleWorkbookDoneWithFailures',
-      single: true, fileSuffix: '-export.xlsx',
+      single: true, fileSuffix: '-export.xlsx', grid: true, pageOptions: () => XlsxExport.pageOptionsFromLayout(),
       loadLibs: () => XlsxExport.ensureExcelLibLoaded(),
     },
   };
 
   // Les documents d'un export en lot, dans l'ordre : un par ligne, ou un par valeur d'une liste réglée « Un document par valeur » (js/list-split.js ; un macro-modèle assemble ici le HTML de chaque ligne, gardé pour le
   // rendu). Sans bulle réglée ainsi dans le modèle, ses en-têtes ni ses modèles, rien n'est lu ni calculé de plus : un document par ligne, `variant` nul, comme avant. Une ligne dont le plan échoue garde son document.
-  async function planExportJobs(rows, { tableId, isMacro, html, templatesCache, headerFooterData, buildRowHtml }) {
-    const footerParts = ListSplit.partsOf('', headerFooterData).slice(1);
-    const mayHaveSplit = ListSplit.hasMarker(footerParts) || (isMacro ? templatesCache.some(tpl => ListSplit.hasMarker([tpl.contenu])) : ListSplit.hasMarker([html]));
-    if (!mayHaveSplit) return rows.map(row => ({ row, variant: null }));
+  // Chaque document garde sa `source` : le modèle qui le fait (voir ci-dessous).
+  async function planExportJobs(rows, { tableId, sourceOf, templatesCache }) {
     const jobs = [];
     for (const row of rows) {
+      const source = await sourceOf(row);
+      if (!sourceMaySplit(source, templatesCache)) { jobs.push({ row, source, variant: null }); continue; }
       let rowHtml;
       let plan = null;
       try {
-        rowHtml = await buildRowHtml(row);
-        plan = await ListSplit.plan(ListSplit.partsOf(rowHtml, headerFooterData), tableId, row);
+        rowHtml = await sourceRowHtml(source, tableId, row, templatesCache);
+        plan = await ListSplit.plan(ListSplit.partsOf(rowHtml, source.headerFooterData), tableId, row);
       } catch (e) {
         console.error('[main] export en lot : plan « un document par valeur » impossible pour la ligne', row.id, e);
       }
-      if (!plan) { jobs.push({ row, variant: null }); continue; }
-      plan.variants.forEach(variant => jobs.push({ row, rowHtml, variant }));
+      if (!plan) { jobs.push({ row, source, variant: null }); continue; }
+      plan.variants.forEach(variant => jobs.push({ row, source, rowHtml, variant }));
     }
     return jobs;
+  }
+
+  // Ce qu'un export en lot lit du modèle qui fait le document d'une ligne - sa « source » : son HTML (un macro-modèle : sa composition, assemblée ligne par ligne, car le choix des annexes dépend des valeurs
+  // de CHAQUE ligne, cf. MacroTemplates), ses en-têtes et pieds de page, ses marges (dans l'unité du moteur de l'export), le nom de ses fichiers, son genre. Celle du modèle ouvert est lue une fois pour tout
+  // le lot ; sans « Modèle selon la ligne » (js/row-template.js), toutes les lignes l'ont. Avec lui, une ligne que ses règles envoient vers un autre modèle a la source de CE modèle (rowSourceResolver).
+  function openTemplateSource(cfg) {
+    const isMacro = currentTypeModele === 'macro';
+    return {
+      typeModele: currentTypeModele, isMacro, html: isMacro ? null : Editor.getHTML(), macroSlots: isMacro ? getCurrentMacroSlots() : null,
+      headerFooterData: Editor.getHeaderFooterData(), filenameTemplate: getPdfFilenameTemplate(), margins: cfg.margins ? cfg.margins() : null, pageOptions: null,
+    };
+  }
+
+  // La source d'un autre modèle de la liste, tel qu'il est enregistré : rien n'est chargé dans l'éditeur ni changé à l'écran. Sa page est lue par les fonctions de l'écran (PageLayout borne les marges et les
+  // convertit) : posée le temps de la lecture et rendue aussitôt, sans `await` entre les deux - ni l'une ni l'autre n'est jamais affichée. Ses en-têtes et pieds passent par l'export comme ceux de l'écran (leur HTML y est assaini).
+  function templateSource(tpl, cfg) {
+    const isMacro = tpl.typeModele === 'macro';
+    const onScreen = PageLayout.getMarginsMm();
+    let margins = null;
+    let pageOptions = null;
+    PageLayout.setMarginsMm(tpl.marginsMm);
+    try {
+      margins = cfg.margins ? cfg.margins() : null;
+      pageOptions = cfg.pageOptions ? cfg.pageOptions() : null;
+    } finally { PageLayout.setMarginsMm(onScreen); }
+    return {
+      typeModele: tpl.typeModele || 'document', isMacro, html: isMacro ? null : (tpl.contenu || ''), macroSlots: isMacro ? (tpl.macroSlots || { slots: [] }) : null,
+      headerFooterData: tpl.headerFooter, filenameTemplate: String(tpl.nomFichierPDF || '').trim(), margins, pageOptions,
+    };
+  }
+
+  // La source de chaque ligne d'un lot. Sans « Modèle selon la ligne » : celle du modèle ouvert, tout de suite, rien n'est lu de plus. Avec lui : celle du modèle que ses règles donnent à CETTE ligne (RowTemplate.pick :
+  // les mêmes règles que quand la ligne s'ouvre à l'écran). Aucune ne la désigne et le réglage garde le modèle ouvert, ou le modèle désigné est déjà ouvert : celui de l'écran, avec ce qu'il n'a pas encore enregistré.
+  function rowSourceResolver(tableId, cfg, openSource) {
+    if (!RowTemplate.isActive()) return async () => openSource;
+    const byTemplate = new Map();
+    return async row => {
+      let id = null;
+      try { id = await RowTemplate.pick(row, tableId); }
+      catch (e) { console.error('[main] export en lot : modèle de la ligne impossible à choisir, celui de l’écran est gardé', row.id, e); }
+      if (id == null || String(id) === String(Templates.getCurrentId())) return openSource;
+      if (!byTemplate.has(id)) {
+        const tpl = Templates.getCached().find(t => String(t.id) === String(id));
+        byTemplate.set(id, tpl ? templateSource(tpl, cfg) : openSource);
+      }
+      return byTemplate.get(id);
+    };
+  }
+
+  // Le HTML BRUT du document de cette ligne pour cette source (un macro-modèle : ses annexes, choisies avec les valeurs de la ligne).
+  function sourceRowHtml(source, tableId, row, templatesCache) {
+    return source.isMacro ? MacroTemplates.buildConcatenatedHtml(source.macroSlots, tableId, row, templatesCache) : source.html;
+  }
+
+  // Cette source peut-elle se découper en plusieurs documents (« Un document par valeur ») ? Sans bulle réglée ainsi dans le modèle, ses en-têtes ni ses modèles (ceux de la liste, pour un macro-modèle), non : le plan
+  // n'est même pas calculé. Une fois par source.
+  function sourceMaySplit(source, templatesCache) {
+    if (source.maySplit === undefined) {
+      const footerParts = ListSplit.partsOf('', source.headerFooterData).slice(1);
+      source.maySplit = ListSplit.hasMarker(footerParts) || (source.isMacro ? templatesCache.some(tpl => ListSplit.hasMarker([tpl.contenu])) : ListSplit.hasMarker([source.html]));
+    }
+    return source.maySplit;
   }
 
   // `only` (facultatif) : la ligne courante seule - { record, plan, html } -, quand son document se découpe en plusieurs (« Un document par valeur », js/list-split.js) : une archive de ses documents, sans lire la table
@@ -1554,18 +1618,14 @@
 
     // Pas de HTML unique calculé une fois pour tout le lot : pour un macro-modèle, le choix des annexes dépend des valeurs de CHAQUE ligne (cf.
     // MacroTemplates), donc la concaténation doit être refaite ligne par ligne dans la boucle ci-dessous plutôt que réutilisée telle quelle comme pour un
-    // modèle normal (où le même gabarit HTML suffit pour toutes les lignes, seule sa résolution #Variable variant par ligne).
-    const isMacro = currentTypeModele === 'macro';
-    const html = isMacro ? null : Editor.getHTML();
-    const macroSlots = isMacro ? getCurrentMacroSlots() : null;
-    const templatesCache = isMacro ? Templates.getCached() : null;
-    const filenameTemplate = getPdfFilenameTemplate();
-    const headerFooterData = Editor.getHeaderFooterData();
-    const margins = cfg.margins ? cfg.margins() : null;
-    const buildRowHtml = row => (isMacro ? MacroTemplates.buildConcatenatedHtml(macroSlots, tableId, row, templatesCache) : html);
+    // modèle normal (où le même gabarit HTML suffit pour toutes les lignes, seule sa résolution #Variable variant par ligne). Et pas de modèle unique non plus quand
+    // « Modèle selon la ligne » est réglé : chaque ligne a la source du modèle que ses règles lui donnent (rowSourceResolver), comme à l'écran.
+    const templatesCache = Templates.getCached();
+    const openSource = openTemplateSource(cfg);
+    const sourceOf = only ? async () => openSource : rowSourceResolver(tableId, cfg, openSource);
     // Compté avant la confirmation : « Un document par valeur » fait plus de documents que de lignes.
-    const jobs = only ? only.plan.variants.map(variant => ({ row: only.record, rowHtml: only.html, variant }))
-      : await planExportJobs(rows, { tableId, isMacro, html, templatesCache, headerFooterData, buildRowHtml });
+    const jobs = only ? only.plan.variants.map(variant => ({ row: only.record, source: openSource, rowHtml: only.html, variant }))
+      : await planExportJobs(rows, { tableId, sourceOf, templatesCache });
     const splitting = jobs.some(job => ListSplit.hasPins(job.variant));
 
     // Les planches se règlent dans leur propre fenêtre (feuille, emplacements, traits de coupe) : elle tient lieu de confirmation.
@@ -1599,17 +1659,23 @@
     let failed = 0;
     let cancelled = false;
     for (let i = 0; i < jobs.length; i++) {
-      const { row, variant } = jobs[i];
+      const { row, variant, source } = jobs[i];
       setStatus(I18n.t(cfg.progress, { current: i + 1, total: jobs.length }));
+      // Le modèle d'une ligne (« Modèle selon la ligne ») peut ne pas être du genre de cet export - une grille en Word, un document en Excel : la ligne n'est pas générée, comme celle qui échoue.
+      if (source !== openSource && cfg.grid != null && cfg.grid !== GridEditor.isGridType(source.typeModele)) {
+        console.error('[main] export ' + cfg.label + ' en lot : le modèle de la ligne ' + row.id + ' (' + source.typeModele + ') ne se génère pas dans ce format');
+        failed++;
+        continue;
+      }
       try {
         // Le document de cette valeur : les bulles réglées « Un document par valeur » y écrivent leur k-ième valeur (js/list-split.js) ; sans découpage, le HTML et les en-têtes sont ceux de la ligne, tels quels.
-        const rowHtml = ListSplit.pin(jobs[i].rowHtml !== undefined ? jobs[i].rowHtml : await buildRowHtml(row), variant);
-        const jobHeaderFooter = ListSplit.pinHeaderFooter(headerFooterData, variant);
+        const rowHtml = ListSplit.pin(jobs[i].rowHtml !== undefined ? jobs[i].rowHtml : await sourceRowHtml(source, tableId, row, templatesCache), variant);
+        const jobHeaderFooter = ListSplit.pinHeaderFooter(source.headerFooterData, variant);
         const valueName = variant && variant.label ? sanitizeFilenamePart(variant.label) : '';
         if (single) {
-          await workbook.appendRecord(rowHtml, tableId, row, filenameTemplate, valueName);
+          await workbook.appendRecord(rowHtml, tableId, row, source.filenameTemplate, valueName, source.pageOptions || undefined);
         } else {
-          const { blob, filename } = await cfg.renderRow(rowHtml, tableId, row, filenameTemplate, jobHeaderFooter, margins);
+          const { blob, filename } = await cfg.renderRow(rowHtml, tableId, row, source.filenameTemplate, jobHeaderFooter, source.margins, source.pageOptions);
           if (merged) {
             await mergedPdf.append(blob);
           } else {
@@ -1631,7 +1697,7 @@
     setStatus(I18n.t(sheets ? 'status.sheetsAssembling' : merged ? 'status.pdfMerging' : single ? 'status.xlsxAssembling' : 'status.zipCompressing'));
     const outBlob = merged ? await mergedPdf.toBlob() : single ? await workbook.toBlob() : await zip.generateAsync({ type: 'blob' });
     // Archive d'un export seul : nommée comme la ligne ; sinon comme la table.
-    const outBase = only ? (sanitizeFilenamePart(await ReaderMode.resolveFilename(filenameTemplate, tableId, rows[0])) || sanitizeFilenamePart(tableId)) : sanitizeFilenamePart(tableId);
+    const outBase = only ? (sanitizeFilenamePart(await ReaderMode.resolveFilename(openSource.filenameTemplate, tableId, rows[0])) || sanitizeFilenamePart(tableId)) : sanitizeFilenamePart(tableId);
     ExportCommon.downloadBlob(outBlob, outBase + cfg.fileSuffix);
     const sheetCount = sheets ? mergedPdf.sheetCount : 0;
     const useSplitTexts = splitting && cfg.splitDone;

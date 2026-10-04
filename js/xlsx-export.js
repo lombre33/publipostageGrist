@@ -621,17 +621,18 @@ const XlsxExport = (function () {
   // Un classeur unique pour toute la table : une feuille par enregistrement (et une de plus à chaque saut de page de la grille), nommée comme le fichier qu'il aurait eu dans l'archive ZIP
   // (31 caractères au plus, « nom (2) » quand deux feuilles s'appelleraient pareil). Un enregistrement qui échoue ne laisse pas de feuille à moitié écrite : l'appelant le compte en échec et passe au suivant.
   // `valueName` (facultatif) : la valeur de la liste que ce document écrit quand le modèle est réglé « Un document par valeur » ; elle suit le nom de la feuille.
+  // `pageOptions` (facultatif, de la forme de pageOptionsFromLayout) : la page de CETTE feuille quand son modèle n'est pas celui de l'écran (« Modèle selon la ligne », js/main.js:onExportBatch).
   async function createSingleWorkbook(options) {
     await ensureExcelLibLoaded();
     const workbook = newWorkbook();
     const usedNames = new Set();
     return {
-      async appendRecord(htmlContent, tableId, record, filenameTemplate, valueName) {
+      async appendRecord(htmlContent, tableId, record, filenameTemplate, valueName, pageOptions) {
         await ExternalImages.confirmExport(htmlContent, null);
         const { resolvedHtml, filename } = await resolveRecord(htmlContent, tableId, record, filenameTemplate);
         const before = workbook.worksheets.length;
         try {
-          await addRecordSheet(workbook, nameWithValue(filename, valueName), resolvedHtml, Object.assign(pageOptionsFromLayout(), options || {}, { usedNames }));
+          await addRecordSheet(workbook, nameWithValue(filename, valueName), resolvedHtml, Object.assign(pageOptionsFromLayout(), options || {}, pageOptions || {}, { usedNames }));
         } catch (e) {
           workbook.worksheets.slice(before).forEach(sheet => { usedNames.delete(sheet.name.toLowerCase()); workbook.removeWorksheet(sheet.id); });
           throw e;
@@ -642,5 +643,5 @@ const XlsxExport = (function () {
     };
   }
 
-  return { exportCurrentRecord, getXlsxBlobForRecord, createSingleWorkbook, ensureExcelLibLoaded, typedCellHook, addRecordSheet, newWorkbook, sheetNameFrom, XLSX_MIME };
+  return { exportCurrentRecord, getXlsxBlobForRecord, createSingleWorkbook, ensureExcelLibLoaded, typedCellHook, addRecordSheet, newWorkbook, sheetNameFrom, pageOptionsFromLayout, XLSX_MIME };
 })();
