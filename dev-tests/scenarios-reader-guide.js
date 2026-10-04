@@ -1,7 +1,9 @@
 // Suite "readerGuide" - le guide de la Lecture sans ligne (js/reader-guide.js, css/reader-guide.css, img/reader-guide/), demande d'Antoine du 2026-10-04 : « en mode lecture, quand le
 // widget n'a pas le select by de configuré, il affiche "Aucune ligne sélectionnée" : il faudrait guider l'utilisateur proprement sur ce qu'il faut faire, avec du texte et des captures
-// d'écran, au lieu de ce message ». Ici : ce que le guide montre selon le lien « Sélectionner par » (settings.linking de grist.onOptions, js/grist-api.js:getLinkState), les captures dans
-// les deux langues, sa mise à jour sans recharger, sa disparition quand une ligne arrive, le clic sur une capture, les contrastes en clair et en sombre - DANS la page.
+// d'écran, au lieu de ce message ». Ici : ce que le guide montre selon le lien « Sélectionner par » (settings.linking de grist.onOptions, js/grist-api.js:getLinkState), ses quatre étapes (accès
+// complet au widget - autre demande d'Antoine du même jour : « il faut également préciser qu'il faut donner les fulls acces au widget avec screen comme pour le reste » -, tableau sur la page,
+// « Sélectionner par », clic sur une ligne), les captures dans les deux langues, sa mise à jour sans recharger, sa disparition quand une ligne arrive, le clic sur une capture, les contrastes en
+// clair et en sombre - DANS la page.
 // dev-tests/verify-reader-guide-mouse.mjs le mesure à 700x400 à la vraie souris (défilement à la molette, clic sur une vraie capture, toutes les étapes atteignables).
 (function () {
   const cases = [];
@@ -52,7 +54,7 @@
 
   cases.push({
     id: 'reader_guide_replaces_the_empty_message_when_the_widget_is_not_linked',
-    description: 'Sans « Sélectionner par », la Lecture sans ligne montre le guide en trois étapes (chacune avec son titre, ses repères numérotés et sa capture) à la place de « Aucune ligne sélectionnée »',
+    description: 'Sans « Sélectionner par », la Lecture sans ligne montre le guide en quatre étapes (chacune avec son titre, ses repères numérotés et sa capture) à la place de « Aucune ligne sélectionnée »',
     run: async (h) => {
       await setup(h, UNLINKED);
       const got = {
@@ -67,20 +69,20 @@
         unsure: !!reader().querySelector('.reader-guide-unsure'),
       };
       await finish();
-      const pass = got.guide && !got.message && !got.oldTitle && got.title === 'Reliez ce widget à votre tableau' && got.steps === 3
-        && got.eyebrows.join('|') === 'Étape 1|Étape 2|Étape 3' && got.marks.join(',') === '3,3,2' && got.shots.join(',') === '1,1,1' && !got.unsure;
+      const pass = got.guide && !got.message && !got.oldTitle && got.title === 'Reliez ce widget à votre tableau' && got.steps === 4
+        && got.eyebrows.join('|') === 'Étape 1|Étape 2|Étape 3|Étape 4' && got.marks.join(',') === '3,3,3,2' && got.shots.join(',') === '1,1,1,1' && !got.unsure;
       return { pass, notes: JSON.stringify(got) };
     },
   });
 
   cases.push({
     id: 'reader_guide_shots_load_in_french_and_english_at_double_resolution',
-    description: 'Chaque étape montre sa capture dans la langue de l\'interface (fr-1 à fr-3, en-1 à en-3) : le fichier se charge, son texte alternatif est écrit, sa taille réelle est le double de celle que lit le guide (écrans à forte densité)',
+    description: 'Chaque étape montre sa capture dans la langue de l\'interface (fr-1 à fr-4, en-1 à en-4, le numéro est celui de l\'étape) : le fichier se charge, son texte alternatif est écrit, sa taille réelle est le double de celle que lit le guide (écrans à forte densité)',
     run: async (h) => {
       const out = {};
       for (const lang of ['fr', 'en']) {
         await setup(h, UNLINKED, lang);
-        await waitFor(() => imgs().length === 3 && imgs().every(i => i.complete), 5000);
+        await waitFor(() => imgs().length === 4 && imgs().every(i => i.complete), 5000);
         out[lang] = imgs().map(i => ({
           file: (i.getAttribute('src') || '').replace(/^.*\//, '').replace(/\?.*$/, ''),
           loaded: i.complete && i.naturalWidth > 0,
@@ -89,7 +91,7 @@
         }));
       }
       await finish();
-      const ok = (lang) => out[lang].length === 3 && out[lang].every((s, i) => s.file === lang + '-' + (i + 1) + '.png' && s.loaded && s.alt && s.doubled);
+      const ok = (lang) => out[lang].length === 4 && out[lang].every((s, i) => s.file === lang + '-' + (i + 1) + '.png' && s.loaded && s.alt && s.doubled);
       return { pass: ok('fr') && ok('en'), notes: JSON.stringify(out) };
     },
   });
@@ -99,18 +101,84 @@
     description: 'Le guide est écrit dans la langue de l\'interface (libellés de Grist compris : « Ajouter une vue à la page » / « Add widget to page ») et se réécrit seul quand la langue change, captures comprises',
     run: async (h) => {
       await setup(h, UNLINKED, 'fr');
-      const fr = { title: text(reader().querySelector('.reader-guide-title')), lead: text(reader().querySelector('.reader-guide-lead')), src: imgs()[0].getAttribute('src') };
+      // La deuxième étape (le tableau sur la page) est celle qui cite des libellés de Grist ; la première est l'accès complet.
+      const lead = () => text(steps()[1].querySelector('.reader-guide-lead'));
+      const fr = { title: text(reader().querySelector('.reader-guide-title')), lead: lead(), src: imgs()[1].getAttribute('src') };
       I18n.setLang('en');
       await sleep(60);
-      const en = { title: text(reader().querySelector('.reader-guide-title')), lead: text(reader().querySelector('.reader-guide-lead')), src: imgs()[0].getAttribute('src'), all: text(guide()) };
+      const en = { title: text(reader().querySelector('.reader-guide-title')), lead: lead(), src: imgs()[1].getAttribute('src'), all: text(guide()) };
       I18n.setLang('fr');
       await sleep(60);
       const back = text(reader().querySelector('.reader-guide-title'));
       await finish();
-      const frenchLeft = /Reliez|Étape|Cliquez|Choisissez|tableau/.test(en.all);
-      const pass = fr.title === 'Reliez ce widget à votre tableau' && /Ajouter une vue à la page/.test(fr.lead) && /fr-1\.png/.test(fr.src)
-        && en.title === 'Link this widget to your table' && /Add widget to page/.test(en.lead) && /en-1\.png/.test(en.src) && !frenchLeft && back === fr.title;
+      const frenchLeft = /Reliez|Étape|Cliquez|Choisissez|Donnez|Vérifiez|Ouvrez|accès|tableau/.test(en.all);
+      const pass = fr.title === 'Reliez ce widget à votre tableau' && /Ajouter une vue à la page/.test(fr.lead) && /fr-2\.png/.test(fr.src)
+        && en.title === 'Link this widget to your table' && /Add widget to page/.test(en.lead) && /en-2\.png/.test(en.src) && !frenchLeft && back === fr.title;
       return { pass, notes: JSON.stringify({ fr, en: Object.assign({}, en, { all: undefined }), frenchLeft, back }) };
+    },
+  });
+
+  cases.push({
+    id: 'reader_guide_step_4_says_to_add_a_row_first_when_the_table_is_empty',
+    description: 'L\'étape 4 (« Cliquez sur une ligne du tableau ») dit d\'abord d\'ajouter une ligne quand le tableau est vide - choix d\'Antoine du 04/10 sur la carte « Dire d\'ajouter une ligne si le tableau est vide ? » - en français et en anglais, entre son titre et ses repères, sans toucher aux phrases des trois autres étapes',
+    run: async (h) => {
+      const read = () => {
+        const last = steps()[3];
+        const lead = last && last.querySelector('.reader-guide-lead');
+        const title = last && last.querySelector('.reader-guide-step-title');
+        const marks = last && last.querySelector('.reader-guide-marks');
+        return {
+          leads: steps().map(s => text(s.querySelector('.reader-guide-lead'))),
+          last: text(lead),
+          order: !!(lead && title && marks) && !!(title.compareDocumentPosition(lead) & Node.DOCUMENT_POSITION_FOLLOWING) && !!(lead.compareDocumentPosition(marks) & Node.DOCUMENT_POSITION_FOLLOWING),
+        };
+      };
+      await setup(h, UNLINKED, 'fr');
+      const fr = read();
+      I18n.setLang('en');
+      await sleep(60);
+      const en = read();
+      await finish();
+      const pass = fr.leads.length === 4 && fr.last === 'Le tableau est vide ? Ajoutez-y d’abord une ligne.' && fr.order && fr.leads.every(Boolean)
+        && /^Déjà fait \?/.test(fr.leads[0]) && /^Il y est déjà \?/.test(fr.leads[1]) && /^Cliquez sur ce widget/.test(fr.leads[2])
+        && en.leads.length === 4 && en.last === 'Is the table empty? Add a row to it first.' && en.order
+        && /^Already done\?/.test(en.leads[0]) && /^Already there\?/.test(en.leads[1]) && /^Click this widget/.test(en.leads[2]);
+      return { pass, notes: JSON.stringify({ fr, en }) };
+    },
+  });
+
+  cases.push({
+    id: 'reader_guide_step_1_tells_to_give_the_widget_full_access_with_its_screenshot',
+    description: 'La première étape dit de donner l\'accès complet au widget - demande d\'Antoine du 04/10 : « il faut également préciser qu\'il faut donner les fulls acces au widget avec screen comme pour le reste » : titre, phrase qui renvoie à l\'étape 2 si c\'est déjà fait, trois repères (onglet « Vue », « Niveau d\'accès » sur « Accès complet au document », bouton « Accepter »), capture fr-1 / en-1 avec son texte alternatif, l\'introduction le dit aussi ; en français et en anglais (aucun mot français dans l\'anglais), les trois autres étapes suivent dans l\'ordre',
+    run: async (h) => {
+      const read = () => {
+        const first = steps()[0];
+        const img = first && first.querySelector('.reader-guide-shot img');
+        return {
+          titles: steps().map(s => text(s.querySelector('.reader-guide-step-title'))),
+          first: text(first),
+          lead: text(first && first.querySelector('.reader-guide-lead')),
+          marks: first ? Array.from(first.querySelectorAll('.reader-guide-mark-text')).map(text) : [],
+          next: steps().map(s => (text(s.querySelector('.reader-guide-lead')).match(/(?:étape|step) (\d)/) || [])[1] || ''),
+          src: img ? (img.getAttribute('src') || '').replace(/^.*\//, '').replace(/\?.*$/, '') : '',
+          alt: img ? img.alt : '',
+          intro: text(reader().querySelector('.reader-guide-intro')),
+        };
+      };
+      await setup(h, UNLINKED, 'fr');
+      const fr = read();
+      I18n.setLang('en');
+      await sleep(60);
+      const en = read();
+      await finish();
+      const frenchInEnglish = /Donnez|Déjà|Vue|Niveau|Accepter|accès|Passez|cliquez|panneau/.test(en.first + ' ' + en.alt);
+      const pass = fr.titles.join('|') === 'Donnez l’accès complet à ce widget|Mettez votre tableau sur cette page|Reliez ce widget au tableau|Cliquez sur une ligne du tableau'
+        && /^Déjà fait \? Passez à l’étape 2\./.test(fr.lead) && fr.marks.length === 3 && /Vue/.test(fr.marks[0]) && /Niveau d’accès/.test(fr.marks[1]) && /Accès complet au document/.test(fr.marks[1]) && /Accepter/.test(fr.marks[2])
+        && fr.next.join(',') === '2,3,,' && fr.src === 'fr-1.png' && /Accepter/.test(fr.alt) && /accès complet/.test(fr.intro)
+        && en.titles.join('|') === 'Give this widget full access|Put your table on this page|Link this widget to the table|Click a row of the table'
+        && /^Already done\? Go to step 2\./.test(en.lead) && en.marks.length === 3 && /Widget/.test(en.marks[0]) && /Access level/.test(en.marks[1]) && /Full document access/.test(en.marks[1]) && /Accept/.test(en.marks[2])
+        && en.next.join(',') === '2,3,,' && en.src === 'en-1.png' && /Accept/.test(en.alt) && /full access/.test(en.intro) && !frenchInEnglish;
+      return { pass, notes: JSON.stringify({ fr, en, frenchInEnglish }) };
     },
   });
 

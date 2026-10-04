@@ -3,7 +3,7 @@
 // panneau Grist d'Antoine (~700x400), en thème clair puis sombre, en français puis en anglais - demande d'Antoine du 2026-10-04 : « en mode lecture, quand le widget n'a pas le select by de configuré, il affiche
 // "Aucune ligne sélectionnée" : il faudrait guider l'utilisateur proprement sur ce qu'il faut faire, avec du texte et des captures d'écran, au lieu de ce message ».
 // dev-tests/scenarios-reader-guide.js vérifie les états et les textes DANS la page ; ici, ce qui se mesure aux PIXELS et au geste réel : le vrai clic sur Mode lecture, le titre et le début de la première étape dans
-// le panneau sans rien faire, les trois étapes atteignables à la molette, rien qui dépasse à droite (700 px comme 420 px), les captures réellement peintes (le bleu de leurs repères à l'écran), un vrai clic et
+// le panneau sans rien faire, les quatre étapes atteignables à la molette (accès complet au widget, tableau sur la page, « Sélectionner par », ligne choisie), rien qui dépasse à droite (700 px comme 420 px), les captures réellement peintes (le bleu de leurs repères à l'écran), un vrai clic et
 // Entrée / Espace qui les agrandissent et les rétrécissent, le lien changé en direct (court message puis guide), la ligne qui arrive et efface le guide, aucune image introuvable.
 // Lancé par run-headless.mjs (groupe Node "readerGuideMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-reader-guide-mouse.mjs
 // (READER_GUIDE_SHOTS=<dossier> y range une capture par étape, à regarder - aucune vérification n'en dépend).
@@ -199,7 +199,7 @@ const view = page => page.evaluate(() => {
     clientW: c.clientWidth, clientH: c.clientHeight, scrollW: c.scrollWidth, scrollH: c.scrollHeight, scrollTop: Math.round(c.scrollTop),
     guide: rel(guide),
     title: { inView: inView(c.querySelector('.reader-guide-title')) },
-    steps: Array.from(c.querySelectorAll('.reader-guide-step')).map(s => ({ title: inView(s.querySelector('.reader-guide-step-title')), seen: seen(s), box: rel(s), body: rel(s.querySelector('.reader-guide-step-body')), shot: rel(s.querySelector('.reader-guide-shot')), zoomed: s.classList.contains('is-zoomed') })),
+    steps: Array.from(c.querySelectorAll('.reader-guide-step')).map(s => ({ title: inView(s.querySelector('.reader-guide-step-title')), lead: inView(s.querySelector('.reader-guide-lead')), leadText: ((s.querySelector('.reader-guide-lead') || {}).textContent || '').trim(), seen: seen(s), box: rel(s), body: rel(s.querySelector('.reader-guide-step-body')), shot: rel(s.querySelector('.reader-guide-shot')), zoomed: s.classList.contains('is-zoomed') })),
   };
 });
 
@@ -229,8 +229,8 @@ const fireLinking = (page, linking) => page.evaluate((l) => {
 }, linking);
 
 const TEXTS = {
-  fr: { title: 'Reliez ce widget à votre tableau', short: 'Aucune ligne sélectionnée', stepTitles: ['Mettez votre tableau sur cette page', 'Reliez ce widget au tableau', 'Cliquez sur une ligne du tableau'], zoom: 'Cliquer pour agrandir la capture', unzoom: 'Cliquer pour réduire la capture' },
-  en: { title: 'Link this widget to your table', short: 'No row selected', stepTitles: ['Put your table on this page', 'Link this widget to the table', 'Click a row of the table'], zoom: 'Click to enlarge the screenshot', unzoom: 'Click to shrink the screenshot' },
+  fr: { title: 'Reliez ce widget à votre tableau', short: 'Aucune ligne sélectionnée', stepTitles: ['Donnez l’accès complet à ce widget', 'Mettez votre tableau sur cette page', 'Reliez ce widget au tableau', 'Cliquez sur une ligne du tableau'], pickLead: 'Le tableau est vide ? Ajoutez-y d’abord une ligne.', zoom: 'Cliquer pour agrandir la capture', unzoom: 'Cliquer pour réduire la capture' },
+  en: { title: 'Link this widget to your table', short: 'No row selected', stepTitles: ['Give this widget full access', 'Put your table on this page', 'Link this widget to the table', 'Click a row of the table'], pickLead: 'Is the table empty? Add a row to it first.', zoom: 'Click to enlarge the screenshot', unzoom: 'Click to shrink the screenshot' },
 };
 
 async function runPass(theme, lang) {
@@ -253,20 +253,20 @@ async function runPass(theme, lang) {
     stepTitles: Array.from(document.querySelectorAll('.reader-guide-step-title')).map(e => e.textContent),
     oldMessage: !!document.querySelector('#reader-container .reader-empty'),
   }));
-  check(`${label} - vrai clic sur Mode lecture sans ligne : le guide s'affiche à la place de « ${T.short} », titre et trois étapes dans la langue de l'interface`,
+  check(`${label} - vrai clic sur Mode lecture sans ligne : le guide s'affiche à la place de « ${T.short} », titre et quatre étapes dans la langue de l'interface`,
     !!first.guide && !texts.oldMessage && texts.title === T.title && JSON.stringify(texts.stepTitles) === JSON.stringify(T.stepTitles), { texts, guide: first.guide });
   check(`${label} - sans rien faire, le titre et le début de la première étape sont dans le panneau (rien n'est caché sous la barre)`,
     first.title.inView && !!first.steps[0] && first.steps[0].seen && first.steps[0].box.top < first.clientH - 60, { title: first.title, step: first.steps[0] && first.steps[0].box, clientH: first.clientH });
   check(`${label} - le guide tient dans la largeur du panneau : aucun défilement horizontal, la carte ne dépasse pas à droite`,
     first.scrollW <= first.clientW && !!first.guide && first.guide.right <= first.clientW && first.guide.left >= 0, { scrollW: first.scrollW, clientW: first.clientW, guide: first.guide });
   check(`${label} - à 700 px, la capture de chaque étape est à droite de son texte, à 66 % de sa taille`,
-    first.steps.length === 3 && first.steps.every(s => s.shot.left >= s.body.right - 1 && s.shot.top <= s.body.top + 40), first.steps.map(s => ({ body: s.body, shot: s.shot })));
+    first.steps.length === 4 && first.steps.every(s => s.shot.left >= s.body.right - 1 && s.shot.top <= s.body.top + 40), first.steps.map(s => ({ body: s.body, shot: s.shot })));
   check(`${label} - le guide est plus haut que le panneau : il défile (le conteneur de la Lecture défile)`, first.scrollH > first.clientH + 200, { scrollH: first.scrollH, clientH: first.clientH });
   // Sans guide (ancien code, ou panne), la suite n'a rien à mesurer : les échecs ci-dessus le disent, pas une exception.
-  if (first.steps.length !== 3) { await context.close(); return; }
+  if (first.steps.length !== 4) { await context.close(); return; }
 
   // La molette : chaque étape devient visible en entier à son tour, jusqu'au bas du guide.
-  const reachable = [false, false, false];
+  const reachable = [false, false, false, false];
   let bottomReached = false;
   for (let i = 0; i < 14 && !bottomReached; i++) {
     const v = await view(page);
@@ -277,46 +277,48 @@ async function runPass(theme, lang) {
   }
   const bottom = await view(page);
   await shot(page, `${theme}-${lang}-bas`);
-  check(`${label} - à la molette, on atteint le bas du guide et la capture de la troisième étape y est entière dans le panneau`,
-    bottomReached && bottom.steps[2].shot.top >= 0 && bottom.steps[2].shot.bottom <= bottom.clientH, { bottomReached, last: bottom.steps[2] });
+  check(`${label} - à la molette, on atteint le bas du guide et la capture de la quatrième étape y est entière dans le panneau`,
+    bottomReached && bottom.steps[3].shot.top >= 0 && bottom.steps[3].shot.bottom <= bottom.clientH, { bottomReached, last: bottom.steps[3] });
   check(`${label} - à la molette, le titre de chaque étape et l'essentiel de sa capture se lisent ensemble dans le panneau à un moment du défilement`, reachable.every(Boolean), { reachable });
+  check(`${label} - au bas du guide, la phrase de la quatrième étape (« ${T.pickLead} ») se lit en entier dans le panneau, avec sa capture`, bottom.steps[3].lead && bottom.steps[3].leadText === T.pickLead, { lead: bottom.steps[3].lead, text: bottom.steps[3].leadText });
   await page.evaluate(() => { document.getElementById('reader-container').scrollTop = 0; });
   await page.waitForTimeout(150);
 
   // Les captures sont réellement peintes (le bleu de leurs repères), dans la langue de l'interface, sans fichier introuvable.
   const loaded = await page.evaluate(() => Array.from(document.querySelectorAll('.reader-guide-shot img')).map(i => ({ src: i.getAttribute('src').replace(/\?.*$/, ''), ok: i.complete && i.naturalWidth > 0 })));
   const blue1 = await blueOf(page, '.reader-guide-step:nth-child(1) .reader-guide-shot img');
-  check(`${label} - la capture de la première étape est peinte à l'écran (repères bleus visibles) et les trois fichiers ${lang}-1 à ${lang}-3 sont chargés`,
-    blue1 > 40 && loaded.length === 3 && loaded.every((s, i) => s.ok && s.src === `img/reader-guide/${lang}-${i + 1}.png`), { blue1, loaded });
+  check(`${label} - la capture de la première étape (l'accès complet) est peinte à l'écran (repères bleus visibles) et les quatre fichiers ${lang}-1 à ${lang}-4 sont chargés`,
+    blue1 > 40 && loaded.length === 4 && loaded.every((s, i) => s.ok && s.src === `img/reader-guide/${lang}-${i + 1}.png`), { blue1, loaded });
 
-  // Un vrai clic sur la première capture l'agrandit à sa taille réelle, sans déborder ; un second la rétrécit.
-  const before = (await view(page)).steps[0];
-  await realClick(page, '.reader-guide-step:nth-child(1) .reader-guide-shot');
+  // Un vrai clic sur la capture de la deuxième étape (la plus large, 470 px) l'agrandit à sa taille réelle, sans déborder ; un second la rétrécit. La molette la met d'abord dans le panneau.
+  await wheelTo(page, '.reader-guide-step:nth-child(2) .reader-guide-shot');
+  const before = (await view(page)).steps[1];
+  await realClick(page, '.reader-guide-step:nth-child(2) .reader-guide-shot');
   await page.waitForTimeout(200);
   const zoomed = await view(page);
-  const state = await page.evaluate(() => { const b = document.querySelector('.reader-guide-step:nth-child(1) .reader-guide-shot'); return { pressed: b.getAttribute('aria-pressed'), title: b.title }; });
+  const state = await page.evaluate(() => { const b = document.querySelector('.reader-guide-step:nth-child(2) .reader-guide-shot'); return { pressed: b.getAttribute('aria-pressed'), title: b.title }; });
   await shot(page, `${theme}-${lang}-agrandi`);
   check(`${label} - un vrai clic sur la capture l'affiche à sa taille réelle (470 px) sous le texte, sans défilement horizontal`,
-    zoomed.steps[0].zoomed && Math.abs(zoomed.steps[0].shot.w - 472) <= 4 && zoomed.steps[0].shot.top >= zoomed.steps[0].body.bottom - 1 && zoomed.scrollW <= zoomed.clientW && zoomed.steps[0].shot.right <= zoomed.clientW
-      && state.pressed === 'true' && state.title === T.unzoom && before.shot.w < 330, { before: before.shot, zoomed: zoomed.steps[0].shot, state, scrollW: zoomed.scrollW });
+    zoomed.steps[1].zoomed && Math.abs(zoomed.steps[1].shot.w - 472) <= 4 && zoomed.steps[1].shot.top >= zoomed.steps[1].body.bottom - 1 && zoomed.scrollW <= zoomed.clientW && zoomed.steps[1].shot.right <= zoomed.clientW
+      && state.pressed === 'true' && state.title === T.unzoom && before.shot.w < 330, { before: before.shot, zoomed: zoomed.steps[1].shot, state, scrollW: zoomed.scrollW });
   // Elle change de place en grandissant : le panneau la suit, elle remplit l'écran autant qu'elle le peut au lieu de partir sous le bord du panneau.
-  const zs = zoomed.steps[0].shot;
+  const zs = zoomed.steps[1].shot;
   const visibleH = Math.min(zs.bottom, zoomed.clientH) - Math.max(zs.top, 0);
   check(`${label} - la capture agrandie reste à l'écran après le clic (le panneau la suit)`, visibleH >= Math.min(zs.h, zoomed.clientH) - 4, { zoomed: zs, clientH: zoomed.clientH, visibleH });
-  await realClick(page, '.reader-guide-step:nth-child(1) .reader-guide-shot');
+  await realClick(page, '.reader-guide-step:nth-child(2) .reader-guide-shot');
   await page.waitForTimeout(200);
   const shrunk = await view(page);
-  check(`${label} - un second clic la rétrécit : même largeur qu'avant, à droite du texte`, !shrunk.steps[0].zoomed && Math.abs(shrunk.steps[0].shot.w - before.shot.w) <= 1 && shrunk.steps[0].shot.left >= shrunk.steps[0].body.right - 1, { before: before.shot, shrunk: shrunk.steps[0].shot });
+  check(`${label} - un second clic la rétrécit : même largeur qu'avant, à droite du texte`, !shrunk.steps[1].zoomed && Math.abs(shrunk.steps[1].shot.w - before.shot.w) <= 1 && shrunk.steps[1].shot.left >= shrunk.steps[1].body.right - 1, { before: before.shot, shrunk: shrunk.steps[1].shot });
 
-  // Au vrai clavier : le bouton atteint par le focus, Entrée agrandit, Espace rétrécit.
-  await page.evaluate(() => document.querySelector('.reader-guide-step:nth-child(2) .reader-guide-shot').focus());
+  // Au vrai clavier : le bouton atteint par le focus, Entrée agrandit, Espace rétrécit (troisième étape).
+  await page.evaluate(() => document.querySelector('.reader-guide-step:nth-child(3) .reader-guide-shot').focus());
   await page.keyboard.press('Enter');
   await page.waitForTimeout(150);
-  const afterEnter = (await view(page)).steps[1].zoomed;
+  const afterEnter = (await view(page)).steps[2].zoomed;
   await page.keyboard.press('Space');
   await page.waitForTimeout(150);
-  const afterSpace = (await view(page)).steps[1].zoomed;
-  check(`${label} - au vrai clavier, Entrée agrandit la capture de la deuxième étape et Espace la rétrécit`, afterEnter === true && afterSpace === false, { afterEnter, afterSpace });
+  const afterSpace = (await view(page)).steps[2].zoomed;
+  check(`${label} - au vrai clavier, Entrée agrandit la capture de la troisième étape et Espace la rétrécit`, afterEnter === true && afterSpace === false, { afterEnter, afterSpace });
 
   // Le lien change en direct : « Sélectionner par » choisi -> le court message ; vidé -> le guide revient.
   await fireLinking(page, { asTarget: 'Cursor:Same-Table', asSource: false });
@@ -352,13 +354,14 @@ async function runNarrow() {
   await shot(page, 'etroit');
   const v = await view(page);
   check('panneau de 420 px : aucun défilement horizontal, la carte tient dans le panneau', v.scrollW <= v.clientW && !!v.guide && v.guide.right <= v.clientW, { scrollW: v.scrollW, clientW: v.clientW, guide: v.guide });
-  check('panneau de 420 px : la capture de chaque étape passe sous son texte, entière dans la carte', v.steps.length === 3 && v.steps.every(s => s.shot.top >= s.body.bottom - 1 && s.shot.right <= v.guide.right), v.steps.map(s => ({ body: s.body, shot: s.shot })));
-  await wheelTo(page, '.reader-guide-step:nth-child(1) .reader-guide-shot');
-  await realClick(page, '.reader-guide-step:nth-child(1) .reader-guide-shot');
+  check('panneau de 420 px : la capture de chaque étape passe sous son texte, entière dans la carte', v.steps.length === 4 && v.steps.every(s => s.shot.top >= s.body.bottom - 1 && s.shot.right <= v.guide.right), v.steps.map(s => ({ body: s.body, shot: s.shot })));
+  // La plus large capture (deuxième étape, 470 px) : c'est elle qui risque de déborder.
+  await wheelTo(page, '.reader-guide-step:nth-child(2) .reader-guide-shot');
+  await realClick(page, '.reader-guide-step:nth-child(2) .reader-guide-shot');
   await page.waitForTimeout(200);
   const z = await view(page);
-  check('panneau de 420 px : une capture agrandie se réduit à la largeur de la carte, sans défilement horizontal', z.steps[0].zoomed && z.scrollW <= z.clientW && z.steps[0].shot.right <= z.guide.right, { scrollW: z.scrollW, clientW: z.clientW, shot: z.steps[0].shot, guide: z.guide });
-  const zs = z.steps[0].shot;
+  check('panneau de 420 px : une capture agrandie se réduit à la largeur de la carte, sans défilement horizontal', z.steps[1].zoomed && z.scrollW <= z.clientW && z.steps[1].shot.right <= z.guide.right, { scrollW: z.scrollW, clientW: z.clientW, shot: z.steps[1].shot, guide: z.guide });
+  const zs = z.steps[1].shot;
   check('panneau de 420 px : la capture agrandie reste à l\'écran après le clic', Math.min(zs.bottom, z.clientH) - Math.max(zs.top, 0) >= Math.min(zs.h, z.clientH) - 4, { zoomed: zs, clientH: z.clientH });
   await context.close();
 }
@@ -370,7 +373,7 @@ await runPass('dark', 'en');
 await runNarrow();
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 const missing = imageRequests.filter(r => r.status !== 200);
-check('les six captures sont servies (aucune image introuvable ni refusée)', imageRequests.length >= 6 && missing.length === 0, { requested: imageRequests.length, missing });
+check('les huit captures sont servies (aucune image introuvable ni refusée)', imageRequests.length >= 8 && missing.length === 0, { requested: imageRequests.length, missing });
 
 await browser.close();
 server.close();
