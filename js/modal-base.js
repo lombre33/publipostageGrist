@@ -1,22 +1,18 @@
-// Base commune des fenêtres du widget (audit UX/UI du 2026-09-29, choix d'Antoine « une base pour les dix fenêtres », en deux lots : d'abord Condition d'affichage,
-// Autres attributs et Boucle, qui refaisaient chacune l'ouverture, Échap, les boutons et le focus ; ensuite les sept fenêtres écrites dans index.html).
-// Une fenêtre = un voile (`.pp-modal`), un cadre (`.pp-modal-box`, aussi `.modal-content`) et trois zones : le TITRE, le CONTENU et la ligne de BOUTONS.
-// Seul le contenu défile : le titre et les boutons restent toujours visibles, même dans le panneau de 700x400 de Grist (règle d'Antoine, 2026-09-29).
-// Le clavier est tenu ici, une fois pour toutes, pour la fenêtre du dessus (la dernière ouverte) :
-//  - Tab et Maj+Tab tournent DANS la fenêtre, y compris quand le focus est tombé sur <body> (un champ redessiné, un bouton retiré) ;
-//  - Échap ferme la fenêtre où que soit le focus, sauf si un composant l'a déjà pris (la liste avec recherche referme son seul panneau, cf. js/search-select.js).
-// L'écouteur est posé sur le document, pas sur la fenêtre : posé sur elle, il ne voyait plus rien dès que le focus en sortait, et Échap ne fermait plus rien.
-// Deux façons d'avoir une fenêtre :
-//  - `create` bâtit le cadre en JavaScript (fenêtres de variable, saisies et confirmations) : le code appelle `show()` et `hide()` ;
-//  - `adopt` reprend une fenêtre écrite dans index.html (Réglages, Tables liées, macro-modèle, Organiser, galerie, aperçu, clé de correspondance) : son module
-//    l'ouvre et la ferme comme avant, par `style.display`, et la base le constate pour lui donner le clavier et le focus. Échap y passe par le bouton qui la ferme,
-//    donc par la même sortie que la souris.
-// Un clic sur le voile ne ferme rien, à dessein : il protège une saisie en cours. Aucun texte ici (les fenêtres portent les leurs, en français et en anglais).
+// Base commune des fenêtres du widget. Une fenêtre = un voile (`.pp-modal`), un cadre (`.pp-modal-box`, aussi `.modal-content`) et trois zones :
+// titre, contenu, boutons. Seul le contenu défile : titre et boutons restent visibles, même dans le panneau de 700x400 de Grist.
+// Le clavier est tenu ici pour la fenêtre du dessus (la dernière ouverte) : Tab et Maj+Tab tournent dans la fenêtre (y compris si le focus est tombé
+// sur <body>) ; Échap la ferme où que soit le focus, sauf si un composant l'a déjà pris (la liste avec recherche referme son seul panneau,
+// js/search-select.js). L'écouteur est sur le document, pas sur la fenêtre : posé sur elle, il ne voyait plus rien dès que le focus en sortait.
+// Deux façons d'avoir une fenêtre : `create` bâtit le cadre en JavaScript (fenêtres de variable, saisies et confirmations ; le code appelle `show()`
+// et `hide()`) ; `adopt` reprend une fenêtre écrite dans index.html (son module l'ouvre et la ferme par `style.display`, la base le constate pour lui
+// donner le clavier et le focus ; Échap passe par le bouton de fermeture, donc par la même sortie que la souris).
+// Un clic sur le voile ne ferme rien, à dessein : il protège une saisie en cours. Aucun texte ici (chaque fenêtre porte les siens, en français et en
+// anglais).
 const ModalBase = (function () {
   const stack = [];          // fenêtres ouvertes, la dernière est au-dessus : c'est elle qui reçoit le clavier
   const pages = new Set();   // fenêtres reprises d'index.html : leur module les ouvre et les ferme, la base le constate (MutationObserver)
   const FOCUSABLE = 'a[href], button, input:not([type="hidden"]), select, textarea, [tabindex]';
-  let lastOutside = null;    // dernier élément à avoir eu le focus HORS d'une fenêtre reprise : l'ouvreur quand le module a déjà mis le focus dans la fenêtre
+  let lastOutside = null;    // dernier élément à avoir eu le focus hors d'une fenêtre reprise : l'ouvreur quand le module a déjà mis le focus dans la fenêtre
 
   function el(tag, className) {
     const e = document.createElement(tag);
@@ -24,8 +20,8 @@ const ModalBase = (function () {
     return e;
   }
 
-  // Éléments atteignables à Tab dans `root`, dans l'ordre du document : ni désactivés, ni cachés (hidden, display:none d'un ancêtre), ni retirés de l'ordre
-  // de tabulation (tabindex="-1", comme les lignes d'une liste avec recherche).
+  // Éléments atteignables à Tab dans `root`, dans l'ordre du document : ni désactivés, ni cachés (hidden, display:none d'un ancêtre), ni retirés de
+  // l'ordre de tabulation (tabindex="-1", comme les lignes d'une liste avec recherche).
   function focusables(root) {
     return Array.from(root.querySelectorAll(FOCUSABLE)).filter(e =>
       !e.disabled && e.tabIndex >= 0 && !e.closest('[hidden]') && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden');
@@ -37,7 +33,8 @@ const ModalBase = (function () {
     const first = list[0];
     const last = list[list.length - 1];
     const active = document.activeElement;
-    // Focus hors du cadre (sur <body>, sur le voile après un clic à côté) : on y rentre par le bon bout, au lieu de laisser Tab partir dans la barre d'outils.
+    // Focus hors du cadre (sur <body>, sur le voile après un clic à côté) : on y rentre par le bon bout, au lieu de laisser Tab partir dans la barre
+    // d'outils.
     if (!win.box.contains(active)) { event.preventDefault(); (event.shiftKey ? last : first).focus(); return; }
     if (event.shiftKey && active === first) { event.preventDefault(); last.focus(); }
     else if (!event.shiftKey && active === last) { event.preventDefault(); first.focus(); }
@@ -67,21 +64,21 @@ const ModalBase = (function () {
     if (win.restoreFocus !== false && back && back.isConnected && typeof back.focus === 'function') back.focus();
   }
 
-  // --- Fenêtres reprises d'index.html ---
+  // Fenêtres reprises d'index.html
 
   const isShown = win => getComputedStyle(win.overlay).display !== 'none';
   const insidePage = node => Array.from(pages).some(win => win.box.contains(node));
 
-  // L'élément qui a ouvert `win` : celui qui a le focus, sauf si le module a déjà mis le focus dans la fenêtre (le champ de nom du macro-modèle, la recherche
-  // d'Organiser) - alors le dernier qui l'avait avant, hors des fenêtres reprises.
+  // L'élément qui a ouvert `win` : celui qui a le focus, sauf si le module a déjà mis le focus dans la fenêtre (le champ de nom du macro-modèle, la
+  // recherche d'Organiser) - alors le dernier qui l'avait avant, hors des fenêtres reprises.
   function openerOf(win) {
     const active = document.activeElement;
     return active && active !== document.body && !win.box.contains(active) ? active : lastOutside;
   }
 
-  // Compare ce que montre chaque fenêtre reprise à la pile, dans l'ordre : d'abord celles qui se ferment, puis celles qui s'ouvrent. Une fenêtre qui en
-  // remplace une autre dans la foulée (galerie -> aperçu, et « Retour à la galerie ») garde l'ouvreur de la première : à la fin de la chaîne, le focus
-  // revient au bouton qui a ouvert la galerie, pas à un bouton de la fenêtre qu'on vient de cacher.
+  // Compare ce que montre chaque fenêtre reprise à la pile : d'abord celles qui se ferment, puis celles qui s'ouvrent. Une fenêtre qui en remplace
+  // une autre dans la foulée (galerie -> aperçu, « Retour à la galerie ») garde l'ouvreur de la première : à la fin de la chaîne, le focus revient au
+  // bouton qui a ouvert la galerie.
   function syncPages() {
     const opened = [], closed = [];
     pages.forEach(win => {
@@ -100,11 +97,11 @@ const ModalBase = (function () {
   }
   const observer = new MutationObserver(syncPages);
 
-  // Le cadre de la fenêtre, sans rien dedans : à remplir par `win.title`, `win.body` (le contenu) et `win.actions` (les boutons), puis à ouvrir par
-  // `win.show()`. Options : id (du voile - les styles et les tests s'y accrochent), titleId (du <h3> ; aria-labelledby de la fenêtre), boxClass et actionsClass
-  // (classes propres à la fenêtre), size ('sm' 400 px, 'md' 480 px, 'lg' 960 px, plafonné à la largeur du panneau ; 'md' par défaut), onEscape (défaut : fermer),
-  // restoreFocus (rendre le focus à l'élément qui l'avait à l'ouverture ; vrai par défaut - les fenêtres de variable le rendent à l'éditeur elles-mêmes, pour
-  // que la barre flottante revienne).
+  // Le cadre de la fenêtre, sans rien dedans : à remplir par `win.title`, `win.body` (contenu) et `win.actions` (boutons), puis à ouvrir par
+  // `win.show()`. Options : id (du voile : styles et tests s'y accrochent), titleId (du <h3>, aria-labelledby), boxClass et actionsClass, size ('sm'
+  // 400 px, 'md' 480 px par défaut, 'lg' 960 px, plafonné à la largeur du panneau), onEscape (défaut : fermer), restoreFocus (rendre le focus à
+  // l'élément qui l'avait à l'ouverture, vrai par défaut ; les fenêtres de variable le rendent elles-mêmes à l'éditeur pour que la barre flottante
+  // revienne).
   function create(opts) {
     const overlay = el('div', 'pp-modal');
     overlay.id = opts.id;
@@ -148,8 +145,9 @@ const ModalBase = (function () {
     return win;
   }
 
-  // Reprend la fenêtre `#id` d'index.html, déjà écrite en voile `.pp-modal` > cadre `.pp-modal-box` (role, aria-modal, aria-labelledby) > titre, contenu, boutons.
-  // Options : closeId (le bouton qui la ferme : Échap le clique, donc passe par le code de fermeture du module - libérer une promesse, effacer un brouillon).
+  // Reprend la fenêtre `#id` d'index.html, déjà écrite en voile `.pp-modal` > cadre `.pp-modal-box` (role, aria-modal, aria-labelledby) > titre,
+  // contenu, boutons. Options : closeId (le bouton qui la ferme : Échap le clique, donc passe par le code de fermeture du module - libérer une
+  // promesse, effacer un brouillon).
   function adopt(id, opts) {
     const overlay = document.getElementById(id);
     const box = overlay && overlay.querySelector('.pp-modal-box');

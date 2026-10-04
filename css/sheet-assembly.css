@@ -1,22 +1,25 @@
-/* La fenêtre « Assemblage avant impression » (js/sheet-assembly-dialog.js) : libellé à gauche, réglage à droite, la feuille d'aperçu dans la dernière colonne des trois premières lignes (feuille, sens, traits
-   de coupe) ; la 4e ligne, les emplacements (deux listes et leur texte), passe sous l'aperçu pour tenir sur une ligne. Chaque indication commence sous le champ qu'elle concerne, dans la colonne des réglages
-   (l'échelle sous les traits de coupe, la règle de l'ordre sous les emplacements) ; le résumé de ce que le choix donne ferme la fenêtre. Elle tient dans les 376 px du panneau de 700x400 sans défiler, en français
-   comme en anglais. Chargé après css/modal-base.css et css/variable-actions.css (le cadre et les boutons de la fenêtre en viennent). */
+/* La fenêtre « Assemblage avant impression » (js/sheet-assembly-dialog.js) : libellé à gauche, réglage à droite, la feuille d'aperçu dans la dernière
+   colonne des trois premières lignes (feuille, sens, traits de coupe) ; la 4e ligne, les emplacements (deux listes et leur texte), passe sous
+   l'aperçu pour tenir sur une ligne. Chaque indication commence sous le champ qu'elle concerne, dans la colonne des réglages ; le résumé de ce que le
+   choix donne ferme la fenêtre. Elle tient dans les 376 px du panneau de 700x400 sans défiler, en français comme en anglais. Chargé après
+   css/modal-base.css et css/variable-actions.css (le cadre et les boutons de la fenêtre en viennent). */
 .pp-sheets-grid { display: grid; grid-template-columns: 104px minmax(0, 1fr) 112px; column-gap: 12px; row-gap: 10px; align-items: center; padding-bottom: 2px; }
 .pp-sheets-label { font-size: 12px; font-weight: 700; color: var(--text); }
 .pp-sheets-options { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; min-width: 0; min-height: 30px; }
 .pp-sheets-option { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--text); cursor: pointer; }
 .pp-sheets-option input { margin: 0; accent-color: var(--accent-solid); cursor: inherit; }
 .pp-sheets-option input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-/* Un choix où la page ne tient pas reste affiché, grisé (« rien ne disparaît, on grise ») : le texte atténué garde ses 4,5:1 dans les deux thèmes, l'info-bulle dit pourquoi. */
+/* Un choix où la page ne tient pas reste affiché, grisé (rien ne disparaît) : le texte atténué garde ses 4,5:1 dans les deux thèmes, l'info-bulle dit
+   pourquoi. */
 .pp-sheets-option-off { color: var(--text-muted); cursor: not-allowed; }
 .pp-sheets-slots { grid-column: 2 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0; font-size: 12.5px; color: var(--text); }
 .pp-sheets-slot-field { display: inline-flex; align-items: center; gap: 6px; }
 .pp-sheets-select { box-sizing: border-box; height: 30px; min-width: 48px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-family: var(--font-ui); font-size: 12.5px; padding: 0 6px; background: var(--surface); color: var(--text); }
 .pp-sheets-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .pp-sheets-times { color: var(--text-muted); }
-/* La feuille d'aperçu : un carré qui reçoit la feuille entière (portrait ou paysage). Le papier est blanc dans les deux thèmes, comme celui du document : ses couleurs sont fixes. L'épaisseur des
-   traits ne suit pas l'échelle du dessin (vector-effect) - sinon un trait de coupe de 0,5 pt ne se verrait pas à 112 px. */
+/* La feuille d'aperçu : un carré qui reçoit la feuille entière (portrait ou paysage). Le papier est blanc dans les deux thèmes, comme celui du
+   document : ses couleurs sont fixes. L'épaisseur des traits ne suit pas l'échelle du dessin (vector-effect) : un trait de coupe de 0,5 pt ne se
+   verrait pas à 112 px. */
 .pp-sheets-preview { grid-column: 3; grid-row: 1 / span 3; display: flex; align-items: center; justify-content: center; width: 112px; height: 110px; }
 .pp-sheets-svg { display: block; flex: none; box-shadow: 0 1px 3px rgba(15, 23, 42, .18); }
 .pp-sheets-paper { fill: #fff; stroke: #c3cad6; stroke-width: 1px; vector-effect: non-scaling-stroke; }

@@ -1,12 +1,13 @@
-/* Filigrane (js/page-layer.js:watermarkElement, js/watermark-dialog.js). Le texte est posé au centre de la boîte de chaque page (`left` et `top` à 50 %), tourné autour de son
-   centre : le corps, la couleur, l'opacité et l'angle sont écrits en ligne par PageLayer.watermarkLayout - les mêmes valeurs que le PDF et le Word. Roboto gras, la police
-   que pdfmake embarque pour le gras : mêmes largeurs de lettres à l'écran et à l'export. `line-height: 1` et un centre à 50 % donnent à la ligne de base le même creux
-   sous le centre (0,342 em) que PDFKit. Jamais de souris : le filigrane n'est ni sélectionnable ni cliquable, le texte de la page reste à saisir au travers. */
+/* Filigrane (js/page-layer.js:watermarkElement, js/watermark-dialog.js). Le texte est posé au centre de la boîte de chaque page (`left` et `top` à 50
+   %), tourné autour de son centre : le corps, la couleur, l'opacité et l'angle sont écrits en ligne par PageLayer.watermarkLayout, les mêmes valeurs
+   que le PDF et le Word. Roboto gras, la police que pdfmake embarque pour le gras : mêmes largeurs de lettres à l'écran et à l'export. `line-height:
+   1` et un centre à 50 % donnent à la ligne de base le même creux sous le centre (0,342 em) que PDFKit. Jamais de souris : le filigrane n'est ni
+   sélectionnable ni cliquable, le texte de la page reste à saisir au travers. */
 .v2-page-watermark { position: absolute; left: 50%; top: 50%; line-height: 1; font-family: 'Roboto', Helvetica, Arial, sans-serif; font-weight: 700; white-space: nowrap; pointer-events: none; user-select: none; }
 
-/* === La fenêtre « Filigrane… » (js/watermark-dialog.js) === Libellé à gauche, réglage à droite, la feuille d'aperçu dans la dernière colonne des trois lignes de réglage : le texte
-   et son indication, le sens, la couleur, l'opacité et l'aperçu tiennent dans les 376 px du panneau de 700x400, sans défiler. Chargé après css/modal-base.css et
-   css/variable-actions.css (le cadre, le champ et les boutons de la fenêtre en viennent). */
+/* La fenêtre « Filigrane… » (js/watermark-dialog.js) : libellé à gauche, réglage à droite, la feuille d'aperçu dans la dernière colonne des trois
+   lignes de réglage. Le texte et son indication, le sens, la couleur, l'opacité et l'aperçu tiennent dans les 376 px du panneau de 700x400, sans
+   défiler. Chargé après css/modal-base.css et css/variable-actions.css (le cadre, le champ et les boutons de la fenêtre en viennent). */
 .pp-watermark-grid { display: grid; grid-template-columns: 72px minmax(0, 1fr) 112px; column-gap: 12px; row-gap: 12px; align-items: center; padding-bottom: 2px; }
 .pp-watermark-label { font-size: 12px; font-weight: 700; color: var(--text); }
 .pp-watermark-cell { grid-column: 2 / -1; min-width: 0; }
@@ -19,20 +20,23 @@
 .pp-watermark-choice:hover { background: var(--accent-soft); }
 .pp-watermark-choice[aria-checked="true"] { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent); }
 .pp-watermark-swatch { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--surface); background: var(--swatch); box-shadow: 0 0 0 1px var(--border-strong); }
-/* Le rond de couleur choisi : un anneau qui se lit sur les deux fonds (le texte, 4,5:1 sur la fenêtre, et pas la couleur du rond, qui peut lui ressembler). */
+/* Le rond de couleur choisi : un anneau qui se lit sur les deux fonds (le texte, 4,5:1 sur la fenêtre, et pas la couleur du rond, qui peut lui
+   ressembler). */
 .pp-watermark-swatch[aria-checked="true"] { box-shadow: 0 0 0 2px var(--text); }
 .pp-watermark-choice:focus-visible, .pp-watermark-swatch:focus-visible, .pp-watermark-range:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .pp-watermark-opacity-cell { display: flex; align-items: center; gap: 10px; }
 .pp-watermark-range { flex: 1; min-width: 0; margin: 0; accent-color: var(--accent-solid); }
 .pp-watermark-percent { flex: none; min-width: 3.2em; font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; color: var(--text); }
-/* La feuille d'aperçu : un carré qui reçoit la page du modèle réduite (portrait ou paysage). Le papier est blanc dans les deux thèmes ; la page est dessinée à sa taille réelle et
-   réduite par `transform: scale` (js/watermark-dialog.js:renderPreview), donc le filigrane y a exactement les proportions de la vraie page. */
+/* La feuille d'aperçu : un carré qui reçoit la page du modèle réduite (portrait ou paysage). Le papier est blanc dans les deux thèmes ; la page est
+   dessinée à sa taille réelle et réduite par `transform: scale` (js/watermark-dialog.js:renderPreview), donc le filigrane y a exactement les
+   proportions de la vraie page. */
 .pp-watermark-preview { grid-column: 3; grid-row: 2 / span 3; display: flex; align-items: center; justify-content: center; width: 112px; height: 112px; }
 .pp-watermark-sheet { position: relative; flex: none; overflow: hidden; box-sizing: content-box; background: #fff; border: 1px solid var(--border-strong); box-shadow: 0 1px 3px rgba(15, 23, 42, .18); }
 .pp-watermark-page { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
-/* « Retirer le filigrane » : même règle que « Retirer le lien » et « Retirer l'encadré » (le rouge de --danger ne fait que 4,4:1 sur blanc : le texte garde sa couleur, le contour dit « destructif »). */
+/* « Retirer le filigrane » : même règle que « Retirer le lien » (texte en --text, contour rouge pour dire « destructif »). */
 .pp-watermark-box .var-modal-actions button.var-modal-danger { color: var(--text); border-color: var(--danger); padding: 0 12px; }
-/* La ligne « Filigrane… » du menu Page (js/orientation-toggle.js) : le nom prend la place libre, le texte du filigrane en cours reste discret à droite, coupé s'il est long. */
+/* La ligne « Filigrane… » du menu Page (js/orientation-toggle.js) : le nom prend la place libre, le texte du filigrane en cours reste discret à
+   droite, coupé s'il est long. */
 .v2-page-watermark-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
 .v2-page-watermark-row .v2-page-row-size { max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
 .v2-page-watermark-row .v2-page-row-size:empty { display: none; }

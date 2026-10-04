@@ -1,13 +1,13 @@
-// QR code de l'éditeur (demande d'Antoine, 2026-10-01 : « intégration d'un lien présent dans une cellule Grist (variable) ou d'un lien externe qui peut être rentré »).
-// Un QR code est une image `img.editor-image` comme les autres (taille, alignement, calque, opacité, exports PDF et Word : rien de nouveau), qui porte en plus son texte dans
-// `data-qr-text` (attribut `qrText` du nœud, js/editor-nodes.js). Deux cas, selon ce que le texte contient :
-//  - une adresse ou un texte SANS colonne (« https://exemple.fr ») : le QR code est dessiné à l'insertion, l'image est complète dans le modèle ;
-//  - UNE COLONNE OU PLUS (« #Clients.Site », « https://suivi.fr/#Commandes.Numero ») : l'éditeur montre un cadre (comme « Image depuis une variable »), sans image ; le QR
-//    code est dessiné à la Lecture et à l'export pour chaque ligne (resolveImage, appelé par js/reader-mode.js), jamais enregistré dans le modèle. Une ligne dont toutes
-//    les colonnes sont vides n'a pas de QR code, comme une image sans pièce jointe.
-// La bibliothèque (qrcode-generator 1.4.4, MIT) se charge à la première utilisation, depuis cdnjs avec un hash SRI, comme JSZip (js/export-common.js) ; le dessin (PNG, modules
-// de pixels entiers, marge de 4 modules) se fait ici. La fenêtre « QR code… » s'ouvre depuis le menu « Lien et blocs de contenu » (index.html, js/main-toolbar.js) ; ses styles sont
-// dans css/qr-code.css.
+// QR code de l'éditeur. C'est une image `img.editor-image` comme les autres (taille, alignement, calque, opacité, exports PDF et Word : rien de
+// nouveau), qui porte en plus son texte dans `data-qr-text` (attribut `qrText` du nœud, js/editor-nodes.js). Deux cas, selon ce que le texte contient
+// :
+//  - une adresse ou un texte sans colonne (« https://exemple.fr ») : le QR code est dessiné à l'insertion, l'image est complète dans le modèle ;
+//  - une colonne ou plus (« #Clients.Site », « https://suivi.fr/#Commandes.Numero ») : l'éditeur montre un cadre (comme « Image depuis une variable
+//    »), sans image ; le QR code est dessiné à la Lecture et à l'export pour chaque ligne (resolveImage, appelé par js/reader-mode.js), jamais
+//    enregistré dans le modèle. Une ligne dont toutes les colonnes sont vides n'a pas de QR code, comme une image sans pièce jointe.
+// La bibliothèque (qrcode-generator 1.4.4, MIT) se charge à la première utilisation, depuis cdnjs avec un hash SRI, comme JSZip (js/export-common.js)
+// ; le dessin (PNG, modules de pixels entiers, marge de 4 modules) se fait ici. La fenêtre « QR code… » s'ouvre depuis le menu « Lien et blocs de
+// contenu » (index.html, js/main-toolbar.js) ; styles dans css/qr-code.css.
 const QrCode = (function () {
   // Recalculer le hash si la version change : `curl -s <url> | openssl dgst -sha384 -binary | openssl base64 -A`.
   const LIB = { src: 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js', integrity: 'sha384-mZT2gIty7ZDdOGkxfP6joZcYdMW1Jvj9dRlfpTmaJAKKXTqzygtB22k7FLe+KZC1' };
@@ -17,10 +17,10 @@ const QrCode = (function () {
   const DEFAULT_WIDTH_PX = 120; // ~3,2 cm à l'écran comme à l'impression : lisible sans prendre la page
   const ALT = 'QR code';
 
-  // === La bibliothèque ====================================================================================================================================
+  // La bibliothèque
   let libPromise = null;
-  // Résolue quand `window.qrcode` est prêt (le texte s'encode en UTF-8, pas en une lettre par octet comme par défaut) ; rejetée si le script ne charge pas, et réessayée
-  // alors à l'appel suivant.
+  // Résolue quand `window.qrcode` est prêt (le texte s'encode en UTF-8, pas en une lettre par octet comme par défaut) ; rejetée si le script ne
+  // charge pas, et réessayée alors à l'appel suivant.
   function ensureLibrary() {
     if (!libPromise) {
       libPromise = (window.qrcode ? Promise.resolve() : ExportCommon.loadScriptOnce(LIB)).then(() => {
@@ -36,7 +36,8 @@ const QrCode = (function () {
     error.tooLong = true;
     return error;
   }
-  // Les modules du QR code de `text` : { count, isDark(ligne, colonne) }. Lève une erreur `tooLong` quand le texte ne tient pas dans le plus grand QR code (2 331 octets).
+  // Les modules du QR code de `text` : { count, isDark(ligne, colonne) }. Lève une erreur `tooLong` quand le texte ne tient pas dans le plus grand QR
+  // code (2 331 octets).
   async function modulesOf(text) {
     await ensureLibrary();
     const qr = window.qrcode(0, ERROR_LEVEL);
@@ -45,8 +46,8 @@ const QrCode = (function () {
     return { count: qr.getModuleCount(), isDark: (row, col) => qr.isDark(row, col) };
   }
 
-  // Le QR code de `text` en PNG (adresse `data:`) : noir sur blanc, marge comprise, chaque module un carré de pixels entiers (net à l'impression, lu par tous les
-  // lecteurs). Le PDF et le Word le reprennent comme n'importe quelle image.
+  // Le QR code de `text` en PNG (adresse `data:`) : noir sur blanc, marge comprise, chaque module un carré de pixels entiers (net à l'impression, lu
+  // par tous les lecteurs). Le PDF et le Word le reprennent comme n'importe quelle image.
   async function dataUri(text) {
     const { count, isDark } = await modulesOf(text);
     const total = count + 2 * QUIET_MODULES;
@@ -66,23 +67,24 @@ const QrCode = (function () {
     return canvas.toDataURL('image/png');
   }
 
-  // === Le texte et ses colonnes ===========================================================================================================================
+  // Le texte et ses colonnes
   // Les colonnes écrites dans le texte (« #Table.Colonne », comme dans l'objet d'un e-mail ou le nom du PDF) : [{ start, end, table, column }].
   function columnsIn(text) {
     try { return Variables.findTextVariables(String(text || '')); } catch (e) { return []; }
   }
   const hasColumns = text => columnsIn(text).length > 0;
 
-  // Une colonne « Lien » de Grist peut contenir « titre adresse » : l'adresse est le dernier mot (HyperLinkTextBox.ts et constructUrl, grist-core, relus le 2026-10-01).
-  // Quand le texte du QR code est cette colonne et rien d'autre, c'est l'adresse qu'il porte ; toute autre valeur reste telle quelle.
+  // Une colonne « Lien » de Grist peut contenir « titre adresse » : l'adresse est le dernier mot (HyperLinkTextBox.ts et constructUrl dans
+  // grist-core). Quand le texte du QR code est cette colonne et rien d'autre, c'est l'adresse qu'il porte ; toute autre valeur reste telle quelle.
   function linkOf(value) {
     const text = String(value == null ? '' : value).trim();
     const cut = text.lastIndexOf(' ');
     return cut > 0 && /^https?:\/\/\S+$/i.test(text.slice(cut + 1)) ? text.slice(cut + 1) : value;
   }
 
-  // Le texte du QR code pour la ligne `record` : { text, failed, empty }. `failed` : une colonne n'a pas pu être lue ; `empty` : le texte a des colonnes et toutes sont
-  // vides pour cette ligne. `opts` : ligne du tour d'une zone répétée, comme pour une bulle (js/loop-rules.js). Les nombres restent bruts (« 12000 », pas « 12 000 »).
+  // Le texte du QR code pour la ligne `record` : { text, failed, empty }. `failed` : une colonne n'a pas pu être lue ; `empty` : le texte a des
+  // colonnes et toutes sont vides pour cette ligne. `opts` : ligne du tour d'une zone répétée, comme pour une bulle (js/loop-rules.js). Les nombres
+  // restent bruts (« 12000 », pas « 12 000 »).
   async function resolveTemplate(template, tableId, record, opts) {
     const found = columnsIn(template);
     if (!found.length) return { text: template, failed: false, empty: false };
@@ -104,17 +106,18 @@ const QrCode = (function () {
     return { text, failed, empty: filled === 0 };
   }
 
-  // === À la Lecture et à l'export =========================================================================================================================
+  // À la Lecture et à l'export
   function noteInPlaceOf(img, key) {
     const span = document.createElement('span');
     span.className = 'resolved-var error-msg';
     span.textContent = I18n.t(key);
     img.replaceWith(span);
   }
-  // `needsImage` : un QR code dont le texte a des colonnes n'a pas d'image dans le modèle ; celui d'un texte seul a déjà la sienne et n'est jamais redessiné.
+  // `needsImage` : un QR code dont le texte a des colonnes n'a pas d'image dans le modèle ; celui d'un texte seul a déjà la sienne et n'est jamais
+  // redessiné.
   const needsImage = img => !!img.getAttribute('data-qr-text') && !img.getAttribute('src');
-  // Dessine le QR code de `img` (un cadre sans image du modèle) pour la ligne `record`. Sans valeur il disparaît ; illisible ou trop long, il laisse une note dans la
-  // langue de l'interface (la Lecture et les exports écrivent ce message, pas une image cassée).
+  // Dessine le QR code de `img` (un cadre sans image du modèle) pour la ligne `record`. Sans valeur il disparaît ; illisible ou trop long, il laisse
+  // une note dans la langue de l'interface (la Lecture et les exports écrivent ce message, pas une image cassée).
   async function resolveImage(img, tableId, record, opts) {
     if (!needsImage(img)) return;
     let resolved;
@@ -130,7 +133,7 @@ const QrCode = (function () {
     }
   }
 
-  // === Dans l'éditeur =====================================================================================================================================
+  // Dans l'éditeur
   // Le nœud « image » sélectionné quand c'est un QR code : { node, pos }, sinon null.
   function selectedNode(ed) {
     const node = ed && ed.state.selection.node;
@@ -143,7 +146,7 @@ const QrCode = (function () {
     return { src: hasColumns(text) ? null : await dataUri(text), alt: ALT, qrText: text };
   }
 
-  // === La fenêtre =========================================================================================================================================
+  // La fenêtre
   let win = null;
   let refs = null;
   let state = null;
@@ -172,7 +175,7 @@ const QrCode = (function () {
     input.autocomplete = 'off';
     input.spellcheck = false;
     input.setAttribute('aria-describedby', 'pp-qr-hint pp-qr-error');
-    // L'indication et l'erreur commencent sous le champ, pas sous son libellé (règle d'Antoine, cf. condition et macro-modèle).
+    // L'indication et l'erreur commencent sous le champ, pas sous son libellé.
     const column = el('button', 'pp-qr-column');
     column.type = 'button';
     const hint = el('p', 'pp-qr-note');
@@ -204,7 +207,8 @@ const QrCode = (function () {
     win.actions.append(spacer, cancel, ok);
     refs = { label, input, column, hint, error, previewLabel, paper, image, message, caption, cancel, ok };
 
-    // La saisie d'une colonne au clavier : « # » ouvre la même liste que dans l'objet d'un e-mail (js/variables.js), rangée par-dessus la fenêtre (css/qr-code.css).
+    // La saisie d'une colonne au clavier : « # » ouvre la même liste que dans l'objet d'un e-mail (js/variables.js), rangée par-dessus la fenêtre
+    // (css/qr-code.css).
     Variables.initFilenameInput(input);
     input.addEventListener('input', () => { clearError(); schedulePreview(); });
     // Entrée valide, sauf quand la liste des colonnes tapées est ouverte : elle a déjà pris la touche pour choisir.
@@ -236,8 +240,9 @@ const QrCode = (function () {
     try { search.destroy(); } catch (e) { /* déjà défait */ }
     host.remove();
   }
-  // « Insérer une colonne… » : la liste avec recherche de toutes les colonnes (js/search-select.js), le même choix que partout ; la colonne choisie s'écrit « #Table.Colonne »
-  // à la place de la sélection du champ. Le <select> caché qui la porte vit dans la fenêtre, pour que son panneau soit au-dessus d'elle.
+  // « Insérer une colonne… » : la liste avec recherche de toutes les colonnes (js/search-select.js), le même choix que partout ; la colonne choisie
+  // s'écrit « #Table.Colonne » à la place de la sélection du champ. Le <select> caché qui la porte vit dans la fenêtre, pour que son panneau soit
+  // au-dessus d'elle.
   function openColumnList() {
     closeColumnList();
     const candidates = GristAPI.getAllVariables().filter(v => v.column.indexOf('gristHelper_') !== 0 && GristAPI.getColumnType(v.table, v.column) !== 'Attachments');
@@ -295,8 +300,8 @@ const QrCode = (function () {
     message.textContent = shown ? '' : I18n.t('qr.preview.' + kind);
     caption.hidden = !(shown && hasColumns(refs.input.value.trim()));
     caption.textContent = caption.hidden ? '' : I18n.t('qr.preview.row');
-    // Rien à insérer sans texte, avec un texte trop long ou sans la bibliothèque ; une colonne vide ou illisible pour la ligne en cours n'empêche rien : une autre ligne
-    // a peut-être sa valeur.
+    // Rien à insérer sans texte, avec un texte trop long ou sans la bibliothèque ; une colonne vide ou illisible pour la ligne en cours n'empêche
+    // rien : une autre ligne a peut-être sa valeur.
     refs.ok.disabled = kind === 'empty' || kind === 'tooLong' || kind === 'unavailable';
   }
   function schedulePreview(delay) {
@@ -336,7 +341,8 @@ const QrCode = (function () {
     if (ed) ed.commands.focus();
   }
 
-  // Ouvre la fenêtre : pour modifier le QR code sélectionné s'il y en a un, sinon pour en insérer un à la place du curseur. Faux quand l'éditeur n'est pas modifiable.
+  // Ouvre la fenêtre : pour modifier le QR code sélectionné s'il y en a un, sinon pour en insérer un à la place du curseur. Faux quand l'éditeur
+  // n'est pas modifiable.
   function open() {
     const ed = EditorCore.getEditor();
     if (!ed || !ed.isEditable) return false;

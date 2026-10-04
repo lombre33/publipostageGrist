@@ -1,11 +1,13 @@
-// Fenêtre « Filigrane… » du menu Page (js/orientation-toggle.js ; roadmap n° 14) : le texte écrit en grand, en travers de chaque page du modèle - son texte, son sens (en
-// diagonale ou à l'horizontale), sa couleur et son opacité, avec une feuille d'aperçu. Elle ne fait que lire et poser PageLayout.setWatermark (qui borne le réglage et le garde dans
-// la colonne Margins du modèle), puis prévenir l'enregistrement automatique (pp:marginsChanged, comme le sens et le format de la page) : le repeint de l'éditeur et de la Lecture
-// vient de pp:watermarkChanged (js/main.js), le PDF et le Word relisent le réglage à PageLayout au moment d'exporter. La géométrie et le dessin sont à PageLayer, les mêmes pour les
-// quatre rendus : la feuille d'aperçu les réutilise telles quelles, à l'échelle, donc ce qu'elle montre est ce que la page portera.
+// Fenêtre « Filigrane… » du menu Page (js/orientation-toggle.js) : le texte écrit en grand, en travers de chaque page du modèle (son texte, son sens
+// en diagonale ou à l'horizontale, sa couleur et son opacité), avec une feuille d'aperçu. Elle ne fait que lire et poser PageLayout.setWatermark (qui
+// borne le réglage et le garde dans la colonne Margins du modèle), puis prévenir l'enregistrement automatique (pp:marginsChanged, comme le sens et le
+// format de la page). Le repeint de l'éditeur et de la Lecture vient de pp:watermarkChanged (js/main.js), le PDF et le Word relisent le réglage à
+// PageLayout à l'export. La géométrie et le dessin sont à PageLayer, les mêmes pour les quatre rendus : la feuille d'aperçu les réutilise à
+// l'échelle, donc ce qu'elle montre est ce que la page portera.
 const WatermarkDialog = (function () {
-  // Six couleurs, le gris d'abord (PageLayout.WATERMARK_DEFAULT) : celles d'un filigrane qui ne gêne pas la lecture une fois éclaircies par l'opacité. Un réglage enregistré avec une
-  // autre couleur (JSON écrit à la main, version plus récente) est gardé tel quel tant qu'on n'en choisit pas une de la liste.
+  // Six couleurs, le gris d'abord (PageLayout.WATERMARK_DEFAULT) : celles d'un filigrane qui ne gêne pas la lecture une fois éclaircies par
+  // l'opacité. Un réglage enregistré avec une autre couleur (JSON écrit à la main, version plus récente) est gardé tel quel tant qu'on n'en choisit
+  // pas une de la liste.
   const COLORS = { gray: '#808080', black: '#000000', red: '#c62828', blue: '#1565c0', green: '#2e7d32', orange: '#ef6c00' };
   const COLOR_ORDER = ['gray', 'black', 'red', 'blue', 'green', 'orange'];
   const OPACITY_MIN = 5;
@@ -24,8 +26,8 @@ const WatermarkDialog = (function () {
     return e;
   }
 
-  // Un groupe de choix à une seule réponse (rôle radiogroup) : flèches pour passer de l'un à l'autre (le choix suit le focus), Entrée pour valider la fenêtre, un seul arrêt de Tab
-  // par groupe (celui qui est choisi, ou le premier quand rien ne l'est).
+  // Un groupe de choix à une seule réponse (rôle radiogroup) : flèches pour passer de l'un à l'autre (le choix suit le focus), Entrée pour valider la
+  // fenêtre, un seul arrêt de Tab par groupe (celui qui est choisi, ou le premier quand rien ne l'est).
   function radioGroup(labelId, options, onPick) {
     const group = el('div', 'pp-watermark-options');
     group.setAttribute('role', 'radiogroup');
@@ -73,7 +75,7 @@ const WatermarkDialog = (function () {
     text.autocomplete = 'off';
     text.spellcheck = false;
     text.setAttribute('aria-describedby', 'pp-watermark-hint');
-    // L'indication commence sous le champ, pas sous son libellé (règle d'Antoine, cf. condition, macro-modèle et lien).
+    // L'indication commence sous le champ, pas sous son libellé.
     const hint = el('p', 'pp-watermark-note'); hint.id = 'pp-watermark-hint';
     const textCell = el('div', 'pp-watermark-cell');
     textCell.append(text, hint);
@@ -146,7 +148,8 @@ const WatermarkDialog = (function () {
     return PageLayout.normalizeWatermark({ text: state.text, angle: state.angle, color: state.color, opacity: state.opacity / 100 });
   }
 
-  // La feuille d'aperçu : la page du modèle (son sens, son format) à l'échelle du carré de PREVIEW_PX, le filigrane dessiné par PageLayer comme sur une vraie page.
+  // La feuille d'aperçu : la page du modèle (son sens, son format) à l'échelle du carré de PREVIEW_PX, le filigrane dessiné par PageLayer comme sur
+  // une vraie page.
   function renderPreview() {
     const { sheet, page } = refs;
     page.textContent = '';
@@ -167,7 +170,8 @@ const WatermarkDialog = (function () {
     const { angles, colors, range, percent } = refs;
     angles.check(state.angle);
     colors.check(state.color);
-    // L'opacité de l'état n'est pas relue du curseur : un réglage à 23 % (JSON écrit à la main) que le curseur arrondirait à 25 % reste à 23 % tant qu'on n'y touche pas.
+    // L'opacité de l'état n'est pas relue du curseur : un réglage à 23 % (JSON écrit à la main) que le curseur arrondirait à 25 % reste à 23 % tant
+    // qu'on n'y touche pas.
     range.value = String(state.opacity);
     range.setAttribute('aria-valuetext', I18n.t('watermark.opacity.value', { n: state.opacity }));
     percent.textContent = I18n.t('watermark.opacity.value', { n: state.opacity });

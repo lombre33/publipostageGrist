@@ -1,10 +1,10 @@
-/* Base commune des fenêtres (js/modal-base.js) : le voile, le cadre et ses trois zones - titre, contenu, boutons. Le cadre reste un `.modal-content` (css/style.css :
-   fond, coins, ombre) ; ce fichier n'y ajoute que la mise en page. Seul le CONTENU défile : le titre et les boutons ne bougent pas, la fenêtre tient dans le
-   panneau de 700x400 de Grist (règle d'Antoine, 2026-09-29). Chargé après css/style.css (il en remplace le padding et les largeurs de `.modal-content`) et avant
-   css/variable-actions.css (l'aspect des boutons et du contenu de chaque fenêtre est chez elle). */
+/* Base commune des fenêtres (js/modal-base.js) : le voile, le cadre et ses trois zones (titre, contenu, boutons). Le cadre reste un `.modal-content`
+   (css/style.css : fond, coins, ombre) ; ce fichier n'y ajoute que la mise en page. Seul le contenu défile : titre et boutons ne bougent pas, et la
+   fenêtre tient dans le panneau de 700x400 de Grist. Chargé après css/style.css (il en remplace le padding et les largeurs de `.modal-content`) et
+   avant css/variable-actions.css (l'aspect des boutons et du contenu de chaque fenêtre est chez elle). */
 :root {
-  /* Trois largeurs pour les fenêtres (elles en avaient six : 380, 400, 420, 480, 520 et 960 px) : petite pour une question et ses deux boutons, moyenne pour un
-     formulaire, large pour la galerie de modèles et son aperçu. Toujours plafonnées à la largeur du panneau (voir max-width). */
+  /* Trois largeurs de fenêtre : petite (une question et ses deux boutons), moyenne (un formulaire), large (la galerie de modèles et son aperçu).
+     Toujours plafonnées à la largeur du panneau (voir max-width). */
   --pp-modal-w-sm: 400px;
   --pp-modal-w-md: 480px;
   --pp-modal-w-lg: 960px;
@@ -12,36 +12,38 @@
   --pp-modal-gap: 12px;
 }
 
-/* Le voile suit le thème (--pp-scrim, plus foncé en sombre). Quatre étages de z-index, tous AU-DESSUS des couches flottantes de la page (barres flottantes 1500, menus 1600, info-bulles
-   1800 : jetons --z-*, css/style.css, js/layers.js) : 1990 pour les fenêtres de variable ; 2000 pour les fenêtres écrites dans index.html (`.pp-modal-page`) ; 2050 pour la clé de correspondance, que le choix
-   d'une colonne d'une table pas encore liée ouvre PAR-DESSUS la fenêtre de condition (1990) comme celle d'un macro-modèle (2000, écrite après elle dans index.html :
-   à z-index égal, la clé passerait dessous) ; 2100 pour les saisies et confirmations, qui s'ouvrent par-dessus toutes les autres. */
+/* Le voile suit le thème (--pp-scrim, plus foncé en sombre). Quatre étages de z-index, tous au-dessus des couches flottantes de la page (barres
+   flottantes 1500, menus 1600, info-bulles 1800 : jetons --z-*, css/style.css, js/layers.js) : 1990 pour les fenêtres de variable ; 2000 pour celles
+   d'index.html (`.pp-modal-page`) ; 2050 pour la clé de correspondance, qui s'ouvre par-dessus la fenêtre de condition (1990) comme celle d'un
+   macro-modèle (2000, écrite après elle dans index.html : à z-index égal, la clé passerait dessous) ; 2100 pour les saisies et confirmations,
+   par-dessus toutes les autres. */
 .pp-modal { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--pp-scrim); z-index: 1990; }
 .pp-modal-page { z-index: 2000; }
 #link-config-modal { z-index: 2050; }
 
-/* max-height en % de l'écran (le voile est fixe sur tout le panneau) et flex en colonne : le contenu prend la place qui reste, le titre et les boutons gardent
-   la leur. Pas d'overflow sur le cadre : il rognerait les coins et défilerait à sa guise quand un champ prend le focus. */
+/* max-height en % de l'écran (le voile est fixe sur tout le panneau) et flex en colonne : le contenu prend la place qui reste, titre et boutons
+   gardent la leur. Pas d'overflow sur le cadre : il rognerait les coins et défilerait à sa guise quand un champ prend le focus. */
 .pp-modal-box { display: flex; flex-direction: column; box-sizing: border-box; padding: 0; min-width: 0; width: var(--pp-modal-w, var(--pp-modal-w-md)); max-width: calc(100% - 2 * var(--pp-modal-gap)); max-height: calc(100% - 2 * var(--pp-modal-gap)); font-family: var(--font-ui); }
 .pp-modal-box[data-size="sm"] { --pp-modal-w: var(--pp-modal-w-sm); }
 .pp-modal-box[data-size="lg"] { --pp-modal-w: var(--pp-modal-w-lg); }
-/* Le voile et le cadre prennent le focus par programme (clic à côté, ouverture sans champ) : pas de liseré autour d'un élément qui n'est pas un contrôle. */
+/* Le voile et le cadre prennent le focus par programme (clic à côté, ouverture sans champ) : pas de liseré sur un élément qui n'est pas un
+   contrôle. */
 .pp-modal:focus, .pp-modal-box:focus { outline: none; }
-/* Deux écarts propres à chaque fenêtre, gardés tels qu'ils étaient : sous le titre (ou sous ce que l'en-tête porte en plus - onglets, recherche) et au-dessus des
-   boutons. Une fenêtre les règle en posant --pp-modal-title-gap et --pp-modal-actions-gap sur son cadre. */
+/* Deux écarts propres à chaque fenêtre : sous le titre (ou sous ce que l'en-tête porte en plus : onglets, recherche) et au-dessus des boutons. Une
+   fenêtre les règle en posant --pp-modal-title-gap et --pp-modal-actions-gap sur son cadre. */
 .pp-modal-header { flex: none; padding: 18px 20px var(--pp-modal-title-gap, 6px); }
 .pp-modal-header h3 { margin: 0; font-size: 14.5px; font-weight: 800; color: var(--text); overflow-wrap: anywhere; }
 /* overscroll-behavior : au bout de la zone, la molette ne fait pas défiler la page derrière le voile. */
 .pp-modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 20px; }
-/* 20 px au-dessus des boutons par défaut, comme avant pour les fenêtres de variable (16 px de marge + 4 px de la ligne collante) : celles qui tenaient sans
-   défiler gardent leur hauteur. */
+/* 20 px au-dessus des boutons par défaut (16 px de marge + 4 px de la ligne collante) : les fenêtres de variable qui tenaient sans défiler gardent
+   leur hauteur. */
 .pp-modal-actions { flex: none; display: flex; align-items: center; gap: 8px; padding: var(--pp-modal-actions-gap, 20px) 20px 18px; }
 
-/* === Saisies et confirmations (js/dialogs.js) === Au-dessus des fenêtres écrites dans index.html (z-index 2000), dont elles sont souvent la suite
-   (Organiser > nouveau dossier, Tables liées > supprimer une correspondance). Les boutons prennent l'aspect de `.var-modal-actions` (css/variable-actions.css). */
+/* Saisies et confirmations (js/dialogs.js) : au-dessus des fenêtres d'index.html (z-index 2000), dont elles sont souvent la suite (Organiser >
+   nouveau dossier, Tables liées > supprimer une correspondance). Les boutons prennent l'aspect de `.var-modal-actions` (css/variable-actions.css). */
 #pp-dialog-modal { z-index: 2100; }
-/* « Annuler », « Abandonner » et « Enregistrer » (Dialogs.choose) ne tiennent pas côte à côte dans un panneau étroit (sous ~400 px) : le dernier passe alors sur sa propre
-   ligne, à droite, au lieu de sortir de la fenêtre. Au-dessus, tout reste sur une ligne, comme pour une saisie ou une confirmation. */
+/* « Annuler », « Abandonner » et « Enregistrer » (Dialogs.choose) ne tiennent pas côte à côte dans un panneau étroit (sous ~400 px) : le dernier
+   passe sur sa propre ligne, à droite, au lieu de sortir de la fenêtre. Au-dessus, tout reste sur une ligne. */
 #pp-dialog-modal .pp-modal-actions { flex-wrap: wrap; justify-content: flex-end; row-gap: 8px; }
 .pp-dialog-message { margin: 0 0 12px; font-size: 12.5px; line-height: 1.5; color: var(--text); white-space: pre-line; overflow-wrap: anywhere; }
 .pp-dialog-message[hidden] { display: none; }

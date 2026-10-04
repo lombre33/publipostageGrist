@@ -1,30 +1,25 @@
-// Liste déroulante avec recherche pour un <select> existant (demande d'Antoine du 2026-09-29 pour la fenêtre de choix de la clé : « faire une recherche en
-// tapant du texte », liste mise à jour au fil de la frappe). Le <select> reste la source de vérité : masqué, il garde sa valeur et reçoit un évènement
-// `change` à chaque choix, donc le code qui l'écoute ou qui lit `.value` ne change pas. Un clic (ou ↓, ou une lettre) sur le champ ouvre un panneau avec
-// une zone de recherche et la liste des choix ; les mots tapés (accents et casse ignorés, dans n'importe quel ordre) doivent tous figurer dans le libellé.
-//
-// Une <option> peut porter `data-name` (le nom) et `data-hint` (ce qui s'affiche entre parenthèses, en plus discret) ; sans eux, son texte sert de nom.
-// Le libellé complet (« nom (indice) ») reste le texte de l'<option> : c'est ce que voit et cherche quiconque n'a pas le panneau, et la recherche porte
-// aussi sur l'indice. Une <option> désactivée (le « — Choisissez… — » de départ) n'est jamais proposée, elle ne sert qu'à l'affichage du champ fermé.
-// Trois autres cas, tous lus dans le <select> :
-//  - un <optgroup> : son libellé devient un intitulé au-dessus de ses lignes, et disparaît avec elles quand la recherche les écarte ;
-//  - une <option> sans valeur, mais permise (« -- Choisir une colonne -- », « — Aucune — ») : le choix « rien », proposé en tête tant qu'on ne cherche pas,
-//    écarté dès qu'on tape, et affiché en grisé dans le champ fermé - sauf `data-placeholder="false"` : une valeur vide qui est un vrai choix (« Ordre de la
-//    table » au tri d'une boucle), proposée, cherchée, cochée et affichée comme les autres ;
-//  - une <option data-pinned="true"> (la saisie avancée) : toujours en bas de la liste, quelle que soit la recherche, pour qu'un mot sans résultat
-//    ne la rende pas inatteignable.
-//
-// Réutilisable sans copier-coller pour toute autre liste : SearchSelect.attach(select, opts) (attachColumns pour un choix de COLONNE, attachTables pour une
-// TABLE, attachTemplates pour un MODÈLE, attachValues pour une VALEUR possible d'une colonne, attachSheets pour une FEUILLE d'un classeur Excel : mêmes textes partout
-// pour chaque sorte de liste) puis, à la
-// fermeture de la fenêtre, .destroy() (le <select> natif réapparaît). Si attach() lève, l'appelant garde le <select> natif, inchangé.
-// Options : labelledBy, searchPlaceholder et emptyText (un texte, ou une fonction qui le relit à chaque ouverture : la langue de l'interface peut changer
-// pendant que la liste reste posée), placeholder ; `inline` (champ d'une ligne de règle : même hauteur et même corps que ses voisins, largeur qui suit la
-// ligne) ; `hintInTrigger: false` (l'indice reste dans la liste, pas dans le champ fermé).
-// Un menu plutôt qu'un champ (« Image depuis une variable » de la barre) : `popup: true` ne montre aucun champ fermé, le panneau s'ouvre par le code
-// (controller.open()) à côté du rectangle que rend `anchor()` (relu à chaque placement), et `onClose(refocus)` prévient quand il se referme - un choix, Échap,
-// un clic ailleurs ; `refocus` vaut vrai quand la fermeture vient du clavier ou d'un choix, faux quand le focus est déjà parti ailleurs. À l'appelant de
-// défaire ensuite le <select> (destroy()), de préférence après la fin de l'évènement en cours.
+// Liste déroulante avec recherche pour un <select> existant. Le <select> reste la source de vérité : masqué, il garde sa valeur et reçoit un
+// évènement `change` à chaque choix, donc le code qui l'écoute ou lit `.value` ne change pas. Un clic (ou ↓, ou une lettre) sur le champ ouvre un
+// panneau avec une zone de recherche et la liste ; les mots tapés (accents et casse ignorés, dans n'importe quel ordre) doivent tous figurer dans le
+// libellé.
+// Une <option> peut porter `data-name` (le nom) et `data-hint` (affiché entre parenthèses, plus discret) ; sans eux, son texte sert de nom. Le
+// libellé complet (« nom (indice) ») reste le texte de l'<option> (ce que voit et cherche quiconque n'a pas le panneau) et la recherche porte aussi
+// sur l'indice. Une <option> désactivée (le « — Choisissez… — » de départ) n'est jamais proposée : elle n'affiche que le champ fermé.
+// Autres cas lus dans le <select> :
+//  - <optgroup> : son libellé devient un intitulé au-dessus de ses lignes, et disparaît avec elles quand la recherche les écarte ;
+//  - <option> sans valeur mais permise (« -- Choisir une colonne -- », « — Aucune — ») : le choix « rien », proposé en tête tant qu'on ne cherche
+//    pas, écarté dès qu'on tape, grisé dans le champ fermé ; sauf `data-placeholder="false"` : une valeur vide qui est un vrai choix (« Ordre de la
+//    table »), traitée comme les autres ;
+//  - <option data-pinned="true"> (la saisie avancée) : toujours en bas de la liste, quelle que soit la recherche.
+// SearchSelect.attach(select, opts), ou attachColumns, attachTables, attachTemplates, attachValues, attachSheets (mêmes textes pour chaque sorte de
+// liste) ; .destroy() à la fermeture de la fenêtre (le <select> natif réapparaît). Si attach() lève, l'appelant garde le <select> natif.
+// Options : labelledBy, searchPlaceholder, emptyText (texte ou fonction relue à chaque ouverture : la langue peut changer), placeholder ; `inline`
+// (champ d'une ligne de règle : même hauteur que ses voisins, largeur qui suit la ligne) ; `hintInTrigger: false` (l'indice reste dans la liste, pas
+// dans le champ fermé).
+// Un menu plutôt qu'un champ (« Image depuis une variable ») : `popup: true` ne montre aucun champ fermé, le panneau s'ouvre par controller.open() à
+// côté du rectangle de `anchor()` (relu à chaque placement), et `onClose(refocus)` prévient à la fermeture (choix, Échap, clic ailleurs) ; refocus
+// vaut vrai si la fermeture vient du clavier ou d'un choix. À l'appelant de défaire ensuite le <select> (destroy()), de préférence après la fin de
+// l'évènement en cours.
 const SearchSelect = (function () {
   const MARGIN = 8;              // marge minimale entre le panneau et le bord de la fenêtre
   const GAP = 4;                 // écart entre le champ et son panneau
@@ -32,7 +27,8 @@ const SearchSelect = (function () {
   const PREFERRED_HEIGHT = 250;  // hauteur visée (zone de recherche + une dizaine de lignes) ; réduite dans un panneau Grist bas
   const MIN_HEIGHT = 120;
   const PAGE = 6;                // lignes sautées par Page↓/Page↑
-  const MAX_ROWS = 500;          // résultats posés dans la page : 20 000 lignes (les valeurs d'une Référence vers une grande table) mettent plus d'une seconde à s'afficher
+  // résultats posés dans la page : 20 000 lignes (les valeurs d'une Référence vers une grande table) mettent plus d'une seconde à s'afficher
+  const MAX_ROWS = 500;
   let _uid = 0;
   const _controllers = new WeakMap();
 
@@ -48,8 +44,8 @@ const SearchSelect = (function () {
     return String(text == null ? '' : text).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   }
 
-  // Éléments de `items` (produits par readItems) dont le libellé contient TOUS les mots de `query`, dans l'ordre d'origine ; tout si la recherche est vide.
-  // Une ligne épinglée reste toujours ; le choix « rien » (`empty`) ne se propose que sans recherche.
+  // Éléments de `items` (produits par readItems) dont le libellé contient tous les mots de `query`, dans l'ordre d'origine ; tout si la recherche est
+  // vide. Une ligne épinglée reste toujours ; le choix « rien » (`empty`) ne se propose que sans recherche.
   function filterItems(items, query) {
     const words = normalize(query).split(/\s+/).filter(Boolean);
     if (!words.length) return items.slice();
@@ -83,8 +79,8 @@ const SearchSelect = (function () {
     opts = opts || {};
     const id = 'ss-' + (++_uid);
     const previousDisplay = select.style.display;
-    // Textes de la zone de recherche et du message « aucun résultat » : une chaîne, ou une fonction qui les relit - relus à chaque ouverture du panneau, pour
-    // qu'une liste posée une fois sur une fenêtre qui reste (Réglages, « Trier par ») suive un changement de langue de l'interface.
+    // Textes de la zone de recherche et du message « aucun résultat » : une chaîne, ou une fonction relue à chaque ouverture, pour qu'une liste posée
+    // une fois sur une fenêtre qui reste (Réglages, « Trier par ») suive un changement de langue.
     const textOf = (value, key) => (typeof value === 'function' ? value() : value) || I18n.t(key);
     let searchPlaceholder = textOf(opts.searchPlaceholder, 'searchSelect.placeholder');
     let emptyText = textOf(opts.emptyText, 'searchSelect.empty');
@@ -103,7 +99,8 @@ const SearchSelect = (function () {
     const chevron = el('span', 'ss-chevron');
     chevron.setAttribute('aria-hidden', 'true');
     trigger.append(valueEl, chevron);
-    // Libellés du <select> (<label for>) : son nom accessible, et un clic dessus met le focus sur le champ visible (le <select>, masqué, ne le peut plus).
+    // Libellés du <select> (<label for>) : son nom accessible, et un clic dessus met le focus sur le champ visible (le <select>, masqué, ne le peut
+    // plus).
     const labels = Array.prototype.slice.call(select.labels || []);
     labels.forEach((label, i) => { if (!label.id) label.id = id + '-label-' + i; });
     const labelIds = [opts.labelledBy].concat(labels.map(label => label.id)).filter(Boolean);
@@ -145,8 +142,8 @@ const SearchSelect = (function () {
     let lastX = -1;
     let lastY = -1;
 
-    // Champ fermé : le choix courant (nom + indice discret), sinon le texte de l'<option> désactivée de départ. Le choix « rien » (option permise sans valeur)
-    // s'affiche en grisé, comme un texte de départ. Reprend aussi l'état grisé du <select>.
+    // Champ fermé : le choix courant (nom + indice discret), sinon le texte de l'<option> désactivée de départ ; le choix « rien » est grisé comme un
+    // texte de départ. Reprend aussi l'état grisé du <select>.
     function syncTrigger() {
       const opt = select.options[select.selectedIndex];
       const chosen = opt && !opt.disabled ? opt : null;
@@ -164,8 +161,8 @@ const SearchSelect = (function () {
       }
     }
 
-    // Fait défiler la liste juste ce qu'il faut pour montrer la ligne active. Sans scrollIntoView : il remonterait aussi les ancêtres défilants
-    // (fenêtre Grist comprise) et ferait sauter la page.
+    // Fait défiler juste ce qu'il faut pour montrer la ligne active. Pas de scrollIntoView : il remonterait aussi les ancêtres défilants (fenêtre
+    // Grist comprise) et ferait sauter la page.
     function scrollToActive() {
       const row = rows[active];
       if (!row) return;
@@ -194,8 +191,8 @@ const SearchSelect = (function () {
       const searching = query.trim() !== '';
       // Les résultats proprement dits : ni la ligne épinglée ni le choix « rien », qui ne comptent pas comme une réponse à la recherche.
       const matches = found.filter(item => !item.pinned && !item.empty);
-      // Liste très longue : seuls les MAX_ROWS premiers résultats sont posés, une ligne dit d'affiner la recherche (le champ cherche dans tous, le nombre annoncé
-      // est le total). Aucune liste de fenêtre n'en approche : ça ne change que les valeurs d'une Référence vers une très grande table.
+      // Liste très longue : seuls les MAX_ROWS premiers résultats sont posés, une ligne dit d'affiner la recherche (le champ cherche dans tous, le
+      // nombre annoncé est le total). Ne concerne que les valeurs d'une Référence vers une très grande table.
       const dropped = matches.length > MAX_ROWS ? new Set(matches.slice(MAX_ROWS)) : null;
       visible = dropped ? found.filter(item => !dropped.has(item)) : found;
       list.textContent = '';
@@ -232,13 +229,13 @@ const SearchSelect = (function () {
       // Message quand la recherche ne trouve rien (ou qu'il n'y a rien à lister) ; pas pour une liste qui ne propose que « rien », sans recherche.
       empty.hidden = matches.length > 0 || (!searching && visible.length > 0);
       status.textContent = !searching ? '' : (matches.length ? I18n.t('searchSelect.count', { count: matches.length }) : emptyText);
-      // Recherche en cours : le premier résultat, pour que Entrée le prenne (jamais la ligne épinglée : elle ne se choisit pas par mégarde). Sinon le choix
-      // courant ; rien de surligné tant qu'il n'y a ni recherche ni choix, pour qu'un Entrée à vide ne choisisse pas au hasard la première colonne.
+      // Recherche en cours : le premier résultat, pour que Entrée le prenne (jamais la ligne épinglée, pour qu'elle ne se choisisse pas par mégarde).
+      // Sinon le choix courant ; rien de surligné sans recherche ni choix, pour qu'un Entrée à vide ne choisisse pas la première colonne au hasard.
       setActive(searching ? (matches.length ? visible.indexOf(matches[0]) : -1) : visible.findIndex(item => item.value === current), false);
     }
 
-    // Panneau en position fixe : hors de toute zone rognante (une fenêtre à défilement, un ancêtre overflow:hidden), sous le champ, ou au-dessus si la
-    // place manque dessous (panneau Grist bas, ~700x400) ; sa hauteur suit la place disponible et la liste défile dedans.
+    // Panneau en position fixe : hors de toute zone rognante (fenêtre à défilement, ancêtre overflow:hidden), sous le champ ou au-dessus si la place
+    // manque (panneau Grist bas, ~700x400) ; sa hauteur suit la place disponible et la liste défile dedans.
     function place() {
       // Champ retiré de la page pendant que le panneau est ouvert (règles redessinées) : refermer, sinon les écouteurs de la fenêtre resteraient.
       if (!trigger.isConnected) { closePanel(false); return; }
@@ -275,7 +272,8 @@ const SearchSelect = (function () {
       input.value = query;
       open = true;
       panel.hidden = false;
-      // Le menu sans champ (popup: true) est posé sur la page, au niveau des menus : au-dessus de ce qui est déjà ouvert (js/layers.js). Celui d'une fenêtre reste dans le sien.
+      // Le menu sans champ (popup: true) est posé sur la page, au niveau des menus : au-dessus de ce qui est déjà ouvert (js/layers.js). Celui d'une
+      // fenêtre reste dans le sien.
       if (opts.popup) Layers.raise(panel);
       trigger.setAttribute('aria-expanded', 'true');
       render();
@@ -310,11 +308,11 @@ const SearchSelect = (function () {
       setActive(active < 0 ? (delta > 0 ? 0 : visible.length - 1) : Math.min(visible.length - 1, Math.max(0, active + delta)));
     }
 
-    // Le champ fermé : un clic (ou Entrée / Espace, qui déclenchent le même clic) ouvre ou referme ; ↓/↑ ouvrent ; une lettre ouvre avec elle comme début
-    // de recherche (preventDefault : sinon elle serait tapée une seconde fois dans la zone qui prend le focus). Échap et Tab restent à la fenêtre.
+    // Champ fermé : un clic (ou Entrée / Espace, qui déclenchent le même clic) ouvre ou referme ; ↓/↑ ouvrent ; une lettre ouvre avec elle comme
+    // début de recherche (preventDefault : sinon elle serait tapée deux fois dans la zone qui prend le focus). Échap et Tab restent à la fenêtre.
     trigger.addEventListener('mousedown', (event) => {
-      // Panneau ouvert : garder le focus dans la zone de recherche, sinon son `blur` referme le panneau avant que le clic ne le referme lui-même (et le
-      // rouvre aussitôt dans les navigateurs qui ne donnent pas le focus aux boutons).
+      // Panneau ouvert : garder le focus dans la zone de recherche, sinon son `blur` referme le panneau avant que le clic ne le referme (et le rouvre
+      // aussitôt dans les navigateurs qui ne donnent pas le focus aux boutons).
       if (open) event.preventDefault();
     });
     trigger.addEventListener('click', () => { if (open) closePanel(true); else openPanel(); });
@@ -333,7 +331,7 @@ const SearchSelect = (function () {
         case 'PageDown': event.preventDefault(); move(PAGE); break;
         case 'PageUp': event.preventDefault(); move(-PAGE); break;
         case 'Enter': event.preventDefault(); if (visible[active]) choose(visible[active]); break;
-        // Échap ferme le panneau SEUL : la fenêtre qui le contient (js/modal-base.js : ModalBase.create, ModalBase.adopt ; js/main.js:wirePageModals) se fermerait sinon avec lui.
+        // Échap ferme le panneau seul : la fenêtre qui le contient (js/modal-base.js) se fermerait sinon avec lui.
         case 'Escape': event.preventDefault(); event.stopPropagation(); closePanel(true); break;
         // Le focus revient au champ avant l'action par défaut de Tab, qui part donc de lui : champ suivant (Maj+Tab : précédent).
         case 'Tab': closePanel(true); break;
@@ -351,8 +349,8 @@ const SearchSelect = (function () {
       const row = event.target.closest('.ss-option');
       if (row && visible[Number(row.dataset.index)]) choose(visible[Number(row.dataset.index)]);
     });
-    // Surbrillance à la souris seulement quand elle BOUGE : la liste change sous un pointeur immobile à chaque frappe, et le navigateur envoie alors un
-    // mousemove qui volerait la ligne active (Entrée ne prendrait plus le premier résultat).
+    // Surbrillance à la souris seulement quand elle bouge : la liste change sous un pointeur immobile à chaque frappe, et le mousemove alors envoyé
+    // volerait la ligne active (Entrée ne prendrait plus le premier résultat).
     list.addEventListener('mousemove', (event) => {
       if (event.clientX === lastX && event.clientY === lastY) return;
       lastX = event.clientX;
@@ -367,7 +365,8 @@ const SearchSelect = (function () {
     select.style.display = 'none';
     select.addEventListener('change', syncTrigger);
     labels.forEach(label => label.addEventListener('click', onLabelClick));
-    // Le <select> masqué ne peut plus prendre le focus : ce qui l'appelait (ouverture d'une fenêtre, bouton « Ajouter une condition ») le donne au champ visible.
+    // Le <select> masqué ne peut plus prendre le focus : ce qui l'appelait (ouverture d'une fenêtre, bouton « Ajouter une condition ») le donne au
+    // champ visible.
     select.focus = (options) => trigger.focus(options);
 
     const controller = {
@@ -393,23 +392,23 @@ const SearchSelect = (function () {
     return controller;
   }
 
-  // Mêmes textes partout pour une sorte de liste (zone de recherche, « Aucune … ne correspond. »), pour que chaque choix de la même sorte se lise et se cherche
-  // de la même façon (demande d'Antoine du 2026-09-29 : harmoniser dès qu'on propose un choix de colonne, puis aussi les listes de tables et de modèles).
+  // Mêmes textes partout pour une sorte de liste (zone de recherche, « Aucune … ne correspond. »).
   function attachKind(select, opts, searchKey, emptyKey) {
     return attach(select, Object.assign({ searchPlaceholder: () => I18n.t(searchKey), emptyText: () => I18n.t(emptyKey) }, opts));
   }
-  // Liste de COLONNES.
+  // Liste de colonnes.
   function attachColumns(select, opts) { return attachKind(select, opts, 'linkConfig.searchColumns', 'linkConfig.noColumnMatch'); }
-  // Liste de TABLES (Réglages > Accès).
+  // Liste de tables (Réglages > Accès).
   function attachTables(select, opts) { return attachKind(select, opts, 'searchSelect.searchTables', 'searchSelect.noTableMatch'); }
-  // Liste de MODÈLES (page de garde, annexes et modèle par défaut d'un macro-modèle).
+  // Liste de modèles (page de garde, annexes et modèle par défaut d'un macro-modèle).
   function attachTemplates(select, opts) { return attachKind(select, opts, 'searchSelect.searchTemplates', 'searchSelect.noTemplateMatch'); }
-  // Liste de VALEURS possibles d'une colonne (choix d'une colonne Choix, valeurs affichées d'une colonne Référence : champ Valeur d'une règle).
+  // Liste de valeurs possibles d'une colonne (choix d'une colonne Choix, valeurs affichées d'une colonne Référence : champ Valeur d'une règle).
   function attachValues(select, opts) { return attachKind(select, opts, 'searchSelect.searchValues', 'searchSelect.noValueMatch'); }
-  // Liste de FEUILLES d'un classeur Excel (import d'une grille : js/grid-xlsx-import.js).
+  // Liste de feuilles d'un classeur Excel (import d'une grille : js/grid-xlsx-import.js).
   function attachSheets(select, opts) { return attachKind(select, opts, 'searchSelect.searchSheets', 'searchSelect.noSheetMatch'); }
-  // Remet à jour le champ visible d'un <select> déjà attaché après un changement par programme de sa valeur, de ses options ou de son état grisé ; sans effet
-  // sur un <select> que le composant n'a pas pris (liste native de repli) - pour un code qui ne garde pas le contrôleur, comme le grisage d'un champ Valeur.
+  // Remet à jour le champ visible d'un <select> déjà attaché après un changement par programme de sa valeur, de ses options ou de son état grisé ;
+  // sans effet sur un <select> que le composant n'a pas pris (liste native de repli). Pour le code qui ne garde pas le contrôleur (grisage d'un champ
+  // Valeur).
   function sync(select) {
     const controller = _controllers.get(select);
     if (controller) controller.sync();
