@@ -61,6 +61,19 @@ const I18n = (function () {
     // Lecture épurée (js/clean-reading.js) : la ligne du menu du bouton Mode lecture, et l'info-bulle du bouton de sortie.
     'toolbar.cleanReading': { fr: 'Lecture épurée', en: 'Clean reading' },
     'cleanReading.exit': { fr: 'Quitter la lecture épurée (Échap)', en: 'Exit clean reading (Esc)' },
+    // Zoom de la page (js/page-zoom.js, retour d'Antoine du 2026-10-04) : la pastille du coin bas droit du document. {keys} : le raccourci,
+    // « Ctrl » ou « ⌘ » selon la plateforme - le script compose ces textes, aucun attribut data-i18n-* ne les porte.
+    'pageZoom.group': { fr: 'Zoom de la page', en: 'Page zoom' },
+    'pageZoom.value': { fr: '{n} %', en: '{n}%' },
+    'pageZoom.out': { fr: 'Zoom arrière ({keys})', en: 'Zoom out ({keys})' },
+    'pageZoom.in': { fr: 'Zoom avant ({keys})', en: 'Zoom in ({keys})' },
+    'pageZoom.reset': { fr: 'Revenir à l’affichage d’origine ({keys})', en: 'Back to the original view ({keys})' },
+    'pageZoom.fit': { fr: 'Ajuster', en: 'Fit' },
+    'pageZoom.fit.tip': { fr: 'Ajuster la page à la largeur du panneau', en: 'Fit the page to the panel width' },
+    // Grisé, avec sa raison : l'aperçu de la page est décoché ({format} : « A4 », « 7 × 3,7 cm »...), ou le modèle n'a pas de page
+    // (grille, résumé d'un macro-modèle).
+    'pageZoom.unavailable.preview': { fr: 'Zoom indisponible : l’aperçu {format} est décoché', en: 'Zoom unavailable: the {format} preview is turned off' },
+    'pageZoom.unavailable.none': { fr: 'Zoom indisponible : ce modèle n’a pas de page à afficher', en: 'Zoom unavailable: this template has no page to show' },
     // {format} : le format de la page du modèle (A3, A4, A5, A6, ou « 7 × 3,7 cm » pour un format libre : PageLayout.getFormatLabel) -
     // js/orientation-toggle.js compose ces textes, aucun attribut data-i18n-* ne les porte.
     'toolbar.a4.tip': { fr: 'Aperçu {format}', en: '{format} preview' },

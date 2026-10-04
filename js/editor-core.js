@@ -128,12 +128,13 @@ const EditorCore = (function () {
 
   // Filet de sécurité : les barres contextuelles (tableau, image, variable) ne se ferment normalement que sur un vrai changement de sélection
   // ProseMirror ; un clic hors de `.tiptap` et hors de `.v2-floating-toolbar` les referme toutes, pour les cas sans évènement ProseMirror (ex. clic
-  // sur "Mode lecture").
+  // sur "Mode lecture"). La pastille du zoom de la page (js/page-zoom.js) n'en fait pas partie : un appui dessus ne prend pas le focus et ne change ni la
+  // sélection ni le contexte, la barre de l'image ou du tableau reste ouverte et suit la feuille qui change d'échelle.
   const floatingContextPanels = [];
   function registerFloatingPanel(panel) { floatingContextPanels.push(panel); }
   function hideFloatingContextToolbars() { floatingContextPanels.forEach(p => p.hide()); }
   document.addEventListener('mousedown', (event) => {
-    if (event.target.closest('.tiptap') || event.target.closest('.v2-floating-toolbar')) return;
+    if (event.target.closest('.tiptap') || event.target.closest('.v2-floating-toolbar') || event.target.closest('.pp-page-zoom')) return;
     hideFloatingContextToolbars();
   });
 

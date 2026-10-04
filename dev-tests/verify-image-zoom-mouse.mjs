@@ -170,6 +170,18 @@ async function selectImage() {
   await clickAt(c.x, c.y);
   return page.evaluate(() => { const n = EditorCore.getEditor().state.selection.node; return !!n && n.type.name === 'editorImage'; });
 }
+// Centre d'une poignée que la souris touche vraiment. La pastille du zoom (js/page-zoom.js) est fixe en bas à droite du panneau et, à 700x400, recouvre la poignée en bas à droite
+// d'une image agrandie : on fait alors défiler le document à la vraie molette, comme le ferait Antoine, jusqu'à ce que la poignée soit dégagée.
+async function reachableHandle(sel, handleSel) {
+  let c = await centerOf(sel);
+  for (let i = 0; i < 8 && c && !(await hit(c, handleSel)); i++) {
+    await page.mouse.move(120, 200);
+    await page.mouse.wheel(0, 60);
+    await sleep(200);
+    c = await centerOf(sel);
+  }
+  return c;
+}
 
 // Nombre de transactions qui changent le document (un simple clic sur l'image ne doit en produire aucune).
 await page.evaluate(() => {
@@ -252,9 +264,9 @@ async function gestures(label, expectZoomBelowOne) {
   check(label + ' : le ratio est conservé (hauteur / largeur = 0,5)', near(afterGrow.height / afterGrow.width, 0.5, 0.01), r2(afterGrow.height / afterGrow.width));
   check(label + ' : le coin haut gauche ne bouge pas pendant l\'agrandissement', near(afterGrow.left, afterMove.left) && near(afterGrow.top, afterMove.top), { avant: [r2(afterMove.left), r2(afterMove.top)], apres: [r2(afterGrow.left), r2(afterGrow.top)] });
 
-  // 4) Rétrécir de 60 px.
+  // 4) Rétrécir de 60 px (la poignée, agrandie de 100 px plus haut, peut maintenant se trouver sous la pastille du zoom : voir reachableHandle).
   await selectImage();
-  const se2 = await centerOf('.tiptap .editor-image-view .editor-image-handle-se');
+  const se2 = await reachableHandle('.tiptap .editor-image-view .editor-image-handle-se', '.editor-image-handle-se');
   await dragBy(se2, -60, 0);
   const afterShrink = await geometry();
   check(label + ' : tirer la poignée de 60 px vers la gauche rétrécit l\'image de 60 px à l\'écran', near(afterShrink.width - afterGrow.width, -60), { avant: r2(afterGrow.width), apres: r2(afterShrink.width) });

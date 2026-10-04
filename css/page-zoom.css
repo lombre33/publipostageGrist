@@ -1,0 +1,22 @@
+/* Contrôle de zoom de la page (js/page-zoom.js) : une petite pastille dans le coin bas droit du document, hors de la barre d'outils (gelée) - moins,
+   pourcentage, plus, « Ajuster ». Fixe dans le panneau, à gauche de la barre de défilement et au-dessus de celle du bas (24 px : elles gardent leur
+   piste). Niveau --z-page-zoom (css/style.css) : sous les barres flottantes d'une bulle, d'une image ou d'un tableau, les menus, les info-bulles et
+   les fenêtres. Couleurs : jetons de css/style.css (texte ≥ 4,5:1, clair et sombre), aucune couleur en dur ; monochrome, l'accent ne sert qu'à l'état
+   enfoncé d'« Ajuster ». */
+.pp-page-zoom { position: fixed; right: 24px; bottom: 24px; z-index: var(--z-page-zoom); display: inline-flex; align-items: center; gap: 2px; box-sizing: border-box; height: 30px; padding: 2px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); color: var(--text); box-shadow: var(--shadow-card); font-family: var(--font-ui); font-size: 12px; line-height: 1; user-select: none; }
+.pp-page-zoom button { box-sizing: border-box; height: 24px; margin: 0; padding: 0 8px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.pp-page-zoom button:hover { background: var(--surface-sunken); border-color: var(--border); }
+.pp-page-zoom button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Moins et plus : un carré, le signe un peu plus grand que le texte. */
+.pp-page-zoom .pp-page-zoom-step { width: 26px; padding: 0; font-size: 16px; }
+/* Le pourcentage : largeur fixe et chiffres de même chasse, pour que les boutons voisins ne dansent pas d'un cran à l'autre. */
+.pp-page-zoom .pp-page-zoom-value { min-width: 46px; padding: 0 4px; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* Un filet entre les trois boutons du niveau et « Ajuster », qui est enfoncé (cadre et fond d'accent doux, le texte garde sa couleur) tant que la
+   page suit la largeur du panneau. */
+.pp-page-zoom .pp-page-zoom-sep { flex: none; width: 1px; height: 16px; margin: 0 3px; background: var(--border-strong); }
+.pp-page-zoom .pp-page-zoom-fit[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }
+/* Grisé, jamais retiré, et toujours atteignable au clavier (aria-disabled) : plus de page à zoomer (aperçu décoché, grille, résumé d'un
+   macro-modèle), ou la limite du zoom atteinte. */
+.pp-page-zoom [aria-disabled="true"] { opacity: .35; cursor: default; }
+.pp-page-zoom [aria-disabled="true"]:hover { background: transparent; border-color: transparent; }
+@media print { .pp-page-zoom { display: none; } }

@@ -212,7 +212,9 @@ qui s'ouvrait sous la barre du tableau). Avant : chaque couche avait son `z-inde
 posée une fois dans `js/layers.js` et trois jetons de `css/style.css`, pas menu par menu :
 - **Quatre niveaux, toujours dans cet ordre** : barres flottantes d'une sélection (tableau, image, bulle ; `--z-floating-toolbar`)
   < menus, listes et popups (`--z-menu`) < info-bulles (`--z-tip`) < fenêtres (1990 et plus, section précédente). Une barre
-  flottante ne recouvre donc jamais un menu, et un menu ne recouvre jamais une fenêtre.
+  flottante ne recouvre donc jamais un menu, et un menu ne recouvre jamais une fenêtre. Sous tous les quatre, la pastille du
+  zoom de la page (`--z-page-zoom`, 1400 : un contrôle fixe du coin du document, pas une couche qui s'ouvre) ne recouvre rien
+  de ce qui s'ouvre, et un menu de la barre du haut déroulé jusqu'à elle passe devant.
 - **Dans le niveau des menus, le dernier ouvert est dessus** : toute couche flottante appelle `Layers.raise(élément)` à son
   OUVERTURE (ou à chaque placement d'un popup en cours d'usage, comme la liste `#`), jamais à chaque recalage d'un menu déjà
   affiché, qui changerait de rang sans que rien ne s'ouvre. Le rang s'ajoute au niveau et ne le dépasse jamais.
@@ -330,7 +332,8 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   texte (45 dont 8 avec texte, selon l'audit du 29/09), sur **deux lignes à 700×400** (38 % de la hauteur du panneau) et
   jusqu'à **5 rangées** en dessous de 420 px de large, avec sous-menus révélés au survol. Constat de densité admis par
   Antoine mais **chantier gelé** — c'est ce qui a fait préférer un ajustement automatique de la mise en page à un
-  contrôle de zoom manuel. Ne rien ajouter dans cette barre sans son accord. Faciliter la prise en main d'un nouvel
+  contrôle de zoom manuel (le zoom demandé ensuite, le 04/10, vit dans un coin du document, pas ici : « Zoom de la page »,
+  plus bas). Ne rien ajouter dans cette barre sans son accord. Faciliter la prise en main d'un nouvel
   utilisateur (lien vers la galerie dans le document vide, libellés sur la barre d'une variable) lui a été proposé le
   29/09 : il a répondu **« Laisser »**, ne pas le reproposer.
 - Menus au survol (`.v2-hover-group` / `.v2-hover-flyout`) : un menu ne se referme pas quand la souris descend lentement
@@ -774,6 +777,24 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
 - Feuille A4 : dans un panneau étroit, la page est réduite à la largeur disponible par un `zoom` CSS (`--pp-fit-zoom` : à
   700 px de panneau, 794 px de mise en page passent à 672 px) — à l'écran seulement. Les coupures de ligne de l'éditeur
   sont celles d'un grand panneau ; les PDF sont identiques quelle que soit la taille du panneau.
+- Zoom de la page (demande d'Antoine du 04/10, « pouvoir zoomer dans l'éditeur à la fois en mode lecture et en mode édition » : un
+  badge aux dimensions personnalisées apparaissait tout petit au milieu du gris) : la barre d'outils reste gelée, le zoom est une
+  **pastille fixée au coin bas droit du document** (moins, pourcentage, plus, « Ajuster » ; 30 px de haut, 24 px du bord, hors de la
+  barre de défilement, sous les barres flottantes, les menus et les fenêtres), ni icône ni ligne de menu de plus. Elle reste là en
+  Édition, en Lecture et en Lecture épurée, et **grisée avec sa raison dans l'infobulle, jamais retirée**, quand rien ne s'affiche en
+  page (aperçu de la page décoché, grille, résumé d'un macro-modèle) ; ses textes et ses touches suivent la langue et la plateforme
+  (Ctrl ou ⌘). Même mécanisme que l'ajustement ci-dessus (`--pp-fit-zoom`, `PageZoom.factorFor` dans `js/page-zoom.js`), trois états :
+  l'**affichage d'origine** (la feuille réduite pour tenir dans le panneau, jamais agrandie : ce qu'on voyait avant, 100 % pour un
+  petit document), **Ajuster** (la page prend toute la largeur du panneau, en Édition comme en Lecture, et le suit quand il change de
+  taille ; un badge de 90 × 120 mm passe à 198 % à 700 px) et un **niveau choisi** de 25 à 400 % (25, 33, 50, 67, 75, 80, 90, 100, 110,
+  125, 150, 175, 200, 250, 300, 400) ; un clic sur le pourcentage rend l'affichage d'origine. Les gestes : Ctrl (⌘) + molette ou
+  pincement (le point sous le pointeur ne bouge pas), Ctrl (⌘) + plus, moins ou 0 ; le navigateur ne zoome plus la page quand la
+  pastille est disponible, il garde ses touches quand elle est grisée ou qu'une fenêtre est ouverte. Le niveau est gardé **par modèle,
+  dans ce navigateur** (`localStorage`, clé `pp_page_zoom`, avec le numéro et le nom du modèle : le niveau d'un autre document Grist
+  n'est pas repris) ; affichage seulement, rien n'en passe dans le document, le PDF, le Word ou l'impression. Un appui sur la pastille
+  ne prend pas le focus (le curseur reste dans le texte) et ne ferme pas les barres flottantes. Tout geste qui lit la souris dans la
+  feuille divise par `EditorCore.layoutZoom` : la bordure d'une colonne de tableau, que `prosemirror-tables` lit en pixels écran, est
+  corrigée dans `js/page-zoom.js`. Vérifié par `pageZoom` et `pageZoomMouse`.
 - Orientation de la page (demande d'Antoine du 01/10, « une bascule paysage et portrait… également pour les modèles
   classiques ») : le bouton Portrait / Paysage de la barre, juste après Aperçu A4, montre la page telle qu'elle est (haute en
   portrait, large en paysage) et s'allume en paysage. Il est actif pour les modèles classiques, les macro-modèles et les grilles (une grille n'a pas de page à l'écran : le sens règle la page de son PDF et la feuille de son Excel) ; pour un email

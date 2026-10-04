@@ -208,6 +208,8 @@
   // réécrit ici.
   function loadTemplateIntoEditor(tpl, forcedTypeModele) {
     forgetMacroOriginUnless(tpl);
+    // Le niveau de zoom gardé pour ce modèle (macro-modèle compris), avant tout calcul du facteur d'ajustement de la page (js/page-zoom.js).
+    PageZoom.useTemplate(tpl);
     if (tpl && tpl.typeModele === 'macro') { loadMacroIntoEditor(tpl); return; }
     closeTemplateRenameEditor();
     // Sans cette sortie, changer de modèle pendant l'édition d'un en-tête ou d'un pied de page laisserait leur contenu à la place du document
@@ -1858,22 +1860,16 @@
     syncActiveRow();
   }
 
-  // Ajustement automatique de la page à la largeur disponible (cf. la règle `zoom` de css/editor-v2.css) : réduit la feuille juste ce qu'il faut pour
-  // qu'elle tienne dans le conteneur, jamais au-delà de 1 (une page A4 n'a pas à grossir sur un grand écran) et jamais en dessous de MIN_FIT_ZOOM,
+  // Ajustement de la page à la largeur disponible (cf. la règle `zoom` de css/editor-v2.css) : réduit la feuille juste ce qu'il faut pour
+  // qu'elle tienne dans le conteneur, jamais au-delà de 1 (une page A4 n'a pas à grossir sur un grand écran) et jamais en dessous de 0,5,
   // sous lequel le texte deviendrait illisible ; le défilement horizontal reprend alors la main. Quand la feuille tient déjà, le facteur vaut 1 et
-  // rien ne change.
-  const MIN_FIT_ZOOM = 0.5;
+  // rien ne change. C'est l'affichage d'origine : js/page-zoom.js (factorFor) calcule ce facteur et le remplace par le niveau que la personne a
+  // choisi (pastille de zoom, Ctrl + molette, « Ajuster »), le même pour l'éditeur et la Lecture.
   function applyPageFitZoom(container) {
     if (!container) return;
     if (!container.classList.contains('a4-preview')) { container.style.removeProperty('--pp-fit-zoom'); return; }
-    // clientWidth exclut déjà la barre de défilement verticale ; le padding du conteneur, lui, encadre la feuille et doit être retiré à la main.
-    const cs = getComputedStyle(container);
-    const available = container.clientWidth - parseFloat(cs.paddingLeft || 0) - parseFloat(cs.paddingRight || 0);
-    if (!(available > 0)) return;
-    // Largeur de la feuille = celle de .v2-page-sheet / .reader-content en Aperçu A4 (--pp-page-width, css/editor-v2.css) : 793.71px en A4 portrait,
-    // 1122.52px en A4 paysage, 559.37px en A5 portrait... Lue à chaque calcul, elle change avec le sens et le format du modèle.
-    const raw = available / PageLayout.getSheetWidthPx();
-    const zoom = raw >= 1 ? 1 : Math.max(MIN_FIT_ZOOM, raw);
+    const zoom = PageZoom.factorFor(container);
+    if (zoom == null) return;
     // Arrondi au millième : sans ça, un redimensionnement continu réécrit la variable à chaque pixel et relance la pagination en boucle.
     const next = String(Math.round(zoom * 1000) / 1000);
     if (container.style.getPropertyValue('--pp-fit-zoom') === next) return;
@@ -1933,6 +1929,13 @@
   }
 
   function wirePageFitZoom() {
+    // La pastille de zoom (js/page-zoom.js) change le facteur sans que le conteneur change de taille : les bandes de pagination, mesurées sur l'ancien
+    // rendu, se refont ici - celles de l'éditeur, ou la Lecture.
+    PageZoom.wire({
+      apply: applyPageFitZoomToBoth,
+      refresh: () => (currentMode === 'read' ? renderReader() : Editor.refreshPaginationPreview()),
+      template: () => ({ id: Templates.getCurrentId(), name: templateNameInput ? templateNameInput.value.trim() : '' }),
+    });
     refreshPageFitZoom();
     if (typeof ResizeObserver === 'function') {
       const ro = new ResizeObserver(() => refreshPageFitZoom());

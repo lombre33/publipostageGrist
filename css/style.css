@@ -67,7 +67,9 @@
      sur une couche flottante recrée le défaut que ces jetons évitent : le menu # s'ouvrait sous la barre du tableau. Dans un niveau de menus ou
      d'info-bulles, Layers.raise() met le dernier ouvert au-dessus de ceux déjà ouverts (`z-index` en ligne : niveau + rang) ; un niveau est large
      de 100. Les barres flottantes ne sont pas rangées : l'ordre du DOM garde la plus précise (bulle, image) au-dessus de la plus générale
-     (tableau), même quand un seul geste les ouvre toutes les deux. */
+     (tableau), même quand un seul geste les ouvre toutes les deux. Le contrôle de zoom de la page (js/page-zoom.js), posé dans le coin du document, est
+     sous toutes ces couches : il ne doit jamais cacher une barre flottante ni un menu. */
+  --z-page-zoom: 1400;
   --z-floating-toolbar: 1500;
   --z-menu: 1600;
   --z-tip: 1800;
