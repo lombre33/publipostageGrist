@@ -12,8 +12,8 @@ const GristAPI = (function () {
   // liste jamais ses tables internes.
   const INTERNAL_TABLES = ['Publipostage_Modeles', 'Publipostage_LiensTables', 'Publipostage_UserProbe', 'Publipostage_PreferencesModeles', 'Publipostage_Commentaires', 'Publipostage_Abreviations'];
   const LINKS_TABLE_NAME = 'Publipostage_LiensTables';
-  // Table interne pour getCurrentUserEmail() (chip "Email de l'utilisateur") - une colonne à formule déclenchée (capture qui a réellement déclenché le
-  // calcul, `user.Email`), vidée après chaque lecture.
+  // Table interne pour getCurrentUserEmail() et getCurrentUserName() (chips "Email de l'utilisateur" et "Nom de l'utilisateur") - des colonnes à formule déclenchée
+  // (capture qui a réellement déclenché le calcul, `user.Email` et `user.Name`), vidée après chaque lecture.
   const USER_PROBE_TABLE_NAME = 'Publipostage_UserProbe';
   let _tables = [];
   let _columnsByTable = {};
@@ -746,8 +746,10 @@ const GristAPI = (function () {
     return `${info.baseUrl}/attachments/${attachmentId}/download?auth=${info.token}`;
   }
 
-  // Email utilisateur (chip #Variable) : le jeton de getAccessTokenCached() renvoie toujours "anon@getgrist.com" (identité scopée au document, pas la session
-  // navigateur). Contournement : une formule DÉCLENCHÉE sur `user.Email`, dans une table interne dédiée, attribue la vraie valeur (ligne ajoutée puis retirée).
+  // Email et nom de la personne (chips #Variable) : le jeton de getAccessTokenCached() renvoie toujours "anon@getgrist.com" (identité scopée au document, pas la session
+  // navigateur). Contournement : une formule DÉCLENCHÉE sur `user.Email`, dans une table interne dédiée, attribue la vraie valeur (ligne ajoutée puis retirée). `user.Name`
+  // se lit de la même ligne, dans une seconde colonne ajoutée à la première demande de nom (vérifié à la source grist-core le 2026-10-04 : sandbox/grist/user.py, `Name`
+  // comme `Email` ; GranularAccess.ts:getUser, le nom du profil Grist - à défaut la partie de l'adresse avant le @ - ou null pour un compte sans nom).
   async function ensureUserProbeTable() {
     const tables = await listAllTablesCached();
     if (tables.includes(USER_PROBE_TABLE_NAME)) return;
@@ -761,24 +763,77 @@ const GristAPI = (function () {
     _rawTables.push(USER_PROBE_TABLE_NAME);
     if (typeof PageTree !== 'undefined') PageTree.afterTableCreated(USER_PROBE_TABLE_NAME);
   }
-  let _userEmailCache = null;
-  async function getCurrentUserEmail() {
-    if (_userEmailCache) return _userEmailCache;
+  // Une lecture de la sonde : la ligne que les formules déclenchées viennent de remplir (Email, et Name si sa colonne existe). Les demandes qui se chevauchent n'en font
+  // qu'une - plusieurs chips d'un même rendu, Email et Nom ensemble : deux cycles en parallèle sur un document sans table-sonde auraient créé la table deux fois.
+  let _userProbeRead = null;
+  function probeUserRow() {
+    if (!_userProbeRead) {
+      _userProbeRead = readUserProbeRow();
+      const done = () => { _userProbeRead = null; };
+      _userProbeRead.then(done, done);
+    }
+    return _userProbeRead;
+  }
+  async function readUserProbeRow() {
     await ensureUserProbeTable();
     const addResult = await grist.docApi.applyUserActions([['AddRecord', USER_PROBE_TABLE_NAME, null, {}]]);
     const rowId = addResult && addResult.retValues && addResult.retValues[0];
     if (rowId == null) throw new Error('AddRecord sur ' + USER_PROBE_TABLE_NAME + ' n’a renvoyé aucun id de ligne');
     try {
-      const row = await fetchRowById(USER_PROBE_TABLE_NAME, rowId, true);
-      const email = row && row.Email;
-      if (!email) throw new Error('la formule déclenchée user.Email n’a renvoyé aucune valeur');
-      _userEmailCache = email;
-      return email;
+      return await fetchRowById(USER_PROBE_TABLE_NAME, rowId, true);
     } finally {
       // Nettoyage best-effort - une ligne orpheline ici n'est pas grave (la table reste de toute façon interne/invisible), mais mieux vaut ne rien laisser
       // trainer à chaque appel.
       grist.docApi.applyUserActions([['RemoveRecord', USER_PROBE_TABLE_NAME, rowId]]).catch(() => {});
     }
+  }
+  let _userEmailCache = null;
+  async function getCurrentUserEmail() {
+    if (_userEmailCache) return _userEmailCache;
+    const row = await probeUserRow();
+    const email = row && row.Email;
+    if (!email) throw new Error('la formule déclenchée user.Email n’a renvoyé aucune valeur');
+    rememberUserRow(row);
+    return email;
+  }
+
+  // Nom de la personne : null tant qu'il n'est pas lu, '' quand Grist n'en donne aucun (une réponse comme une autre, gardée pour la session). Une lecture qui échoue n'est pas gardée.
+  let _userNameCache = null;
+  let _userNameRead = null;
+  // Le nom que porte une ligne de la sonde : null si elle n'a pas la colonne `Name` (table-sonde d'avant la chip Nom), sinon le texte sans espaces autour - '' pour un compte sans
+  // nom ou une formule en erreur (une valeur qui n'est pas du texte).
+  function userNameOf(row) {
+    if (!row || !('Name' in row)) return null;
+    return typeof row.Name === 'string' ? row.Name.trim() : '';
+  }
+  // Une ligne lue donne les deux : l'email et, si la ligne a sa colonne, le nom sont gardés pour la session - la chip qui demande l'autre ensuite n'a rien à relire.
+  function rememberUserRow(row) {
+    if (row && row.Email) _userEmailCache = row.Email;
+    const name = userNameOf(row);
+    if (name !== null) _userNameCache = name;
+  }
+  async function getCurrentUserName() {
+    if (_userNameCache !== null) return _userNameCache;
+    if (!_userNameRead) {
+      _userNameRead = readUserName();
+      const done = () => { _userNameRead = null; };
+      _userNameRead.then(done, done);
+    }
+    return _userNameRead;
+  }
+  async function readUserName() {
+    let row = await probeUserRow();
+    if (!row) throw new Error('la ligne ajoutée à ' + USER_PROBE_TABLE_NAME + ' est introuvable');
+    if (userNameOf(row) === null) {
+      // Table-sonde d'avant la chip Nom : sa colonne s'ajoute une fois pour toutes (la ligne qu'on vient de lire ne l'avait pas, donc aucun id pris : AddColumn renommerait sinon),
+      // puis une ligne neuve la remplit. Lue hors du partage de probeUserRow : une lecture déjà partie a pu être écrite avant la colonne.
+      await grist.docApi.applyUserActions([['AddColumn', USER_PROBE_TABLE_NAME, 'Name', { type: 'Text', isFormula: false, formula: 'user.Name', recalcWhen: 0, recalcDeps: null }]]);
+      row = await readUserProbeRow();
+    }
+    const name = userNameOf(row);
+    if (name === null) throw new Error('la colonne Name de ' + USER_PROBE_TABLE_NAME + ' reste absente après son ajout');
+    rememberUserRow(row);
+    return name;
   }
 
   // Rafraîchit le src des images de pièces jointes dans un DOM donné : le jeton d'accès expire après quelques minutes, donc le src ne doit jamais être
@@ -804,5 +859,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getColumnType, getColumnChoices, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf };
+  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getColumnType, getColumnChoices, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, getCurrentUserName, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf };
 })();

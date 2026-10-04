@@ -56,6 +56,9 @@
     // Email que renverrait la formule déclenchée user.Email de Publipostage_UserProbe (js/grist-api.js:getCurrentUserEmail). null = formule sans
     // valeur, comme avant ce champ : l'identification échoue, ce que tous les scénarios existants supposent.
     userEmail: null,
+    // Nom que renverrait user.Name (js/grist-api.js:getCurrentUserName) : écrit dans la colonne Name de la table-sonde SI elle existe - comme la formule déclenchée, qui n'a rien à calculer
+    // tant que la colonne n'a pas été ajoutée. null = Grist ne donne aucun nom à cette personne (compte sans nom : user.Name vaut None).
+    userName: null,
     docId: 'stub' + Math.random().toString(36).slice(2, 8),
   };
 
@@ -326,6 +329,7 @@
     if (cb) setTimeout(() => cb(state.options, { accessLevel: state.accessLevel, linking: {} }), 0);
   }
   function setUserEmail(email) { state.userEmail = email || null; }
+  function setUserName(name) { state.userName = name || null; }
   function setDocId(id) { state.docId = String(id); }
 
   // Même filtrage que la vraie API (WidgetFrame.ts:_visibleColumns, vérifié à la source) : 'shown' retire les colonnes pas cochées dans CETTE
@@ -413,6 +417,8 @@
           if (!table.Email) table.Email = table.id.map(() => null);
           table.Email[table.id.length - 1] = state.userEmail;
         }
+        // Formule déclenchée user.Name : seulement dans une table qui a déjà sa colonne Name (ajoutée par AddColumn), pas dans la table-sonde d'avant la chip Nom.
+        if (tableId === 'Publipostage_UserProbe' && 'Name' in table) table.Name[table.id.length - 1] = state.userName;
         retValues.push(newId);
       } else if (type === 'UpdateRecord') {
         const rowId = action[2];
@@ -594,7 +600,7 @@
     },
   };
 
-  window.__gristStub = { state, setVariables, setRows, setHiddenColumns, setAccessLevel, setWidgetOptions, setUserEmail, setDocId, renameColumn, renameTable, deleteColumn, dropTable, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, remoteWrite, getRow, dropColumn, resetPages, readPages, setLatency, resetInFlightStats, failReadBackOnce };
+  window.__gristStub = { state, setVariables, setRows, setHiddenColumns, setAccessLevel, setWidgetOptions, setUserEmail, setUserName, setDocId, renameColumn, renameTable, deleteColumn, dropTable, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, remoteWrite, getRow, dropColumn, resetPages, readPages, setLatency, resetInFlightStats, failReadBackOnce };
   // Point d'ancrage pour seeder AVANT que main.js:init() ne tourne (donc avant le tout premier
   // fetchTable de GristAPI.init()) - contrairement à un appel de setVariables/setRows APRÈS "Widget
   // prêt.", qui ne peut jamais tester "le widget démarre avec tel modèle déjà marqué par défaut" (cf.
