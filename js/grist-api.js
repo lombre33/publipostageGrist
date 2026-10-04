@@ -486,6 +486,12 @@ const GristAPI = (function () {
     }
   }
 
+  // La table que vise un type Référence (« Ref:Annuaire ») ou Liste de références (« RefList:Annuaire ») : { table, list }, `list` vrai pour la seconde ; null pour tout
+  // autre type.
+  function referenceOf(type) {
+    const found = /^(Ref|RefList):(.+)$/.exec(type);
+    return found ? { table: found[2], list: found[1] === 'RefList' } : null;
+  }
   // Type d'une colonne. Un chemin « Ref.Colonne » (bulle qui descend de référence en référence, cf. resolveColumnPath) a le type de sa dernière colonne :
   // c'est lui qui décide du format date/nombre et des images d'une variable.
   function getColumnType(tableId, colId) {
@@ -500,9 +506,9 @@ const GristAPI = (function () {
   function tableAtEndOf(tableId, hops) {
     let table = tableId;
     for (let i = 0; i < hops.length; i++) {
-      const type = (_columnTypesByTable[table] && _columnTypesByTable[table][hops[i]]) || '';
-      if (type.indexOf('Ref:') !== 0 || !type.slice(4)) return null;
-      table = type.slice(4);
+      const ref = referenceOf(_columnTypesByTable[table] && _columnTypesByTable[table][hops[i]]);
+      if (!ref || ref.list) return null;
+      table = ref.table;
     }
     return table;
   }
@@ -567,6 +573,9 @@ const GristAPI = (function () {
   function getColumns(tableId) {
     return _columnsByTable[tableId] || [];
   }
+  // Une colonne d'aide « gristHelper_… » : le texte affiché d'une Référence, que Grist range dans la même table. Le widget ne la propose ni ne la nomme jamais.
+  function isHelperColumn(column) { return String(column).indexOf('gristHelper_') === 0; }
+  function getVisibleColumns(tableId) { return getColumns(tableId).filter(column => !isHelperColumn(column)); }
 
   function getAllVariables() {
     const vars = [];
@@ -625,13 +634,11 @@ const GristAPI = (function () {
       const toRowId = tableRowId[toTableId];
       if (!fromRowId || !toRowId) return [];
       const refCols = [];
-      if (colsMeta && colsMeta.parentId) {
-        for (let i = 0; i < colsMeta.parentId.length; i++) {
-          if (colsMeta.parentId[i] === fromRowId && colsMeta.type && String(colsMeta.type[i]).indexOf('Ref:') === 0) {
-            const parentId = colsMeta.type[i].slice(4);
-            if (parentId === toTableId) refCols.push(colsMeta.colId[i]);
-          }
-        }
+      if (colsMeta && colsMeta.parentId && colsMeta.type) {
+        colsMeta.parentId.forEach((parent, i) => {
+          const ref = referenceOf(colsMeta.type[i]);
+          if (parent === fromRowId && ref && !ref.list && ref.table === toTableId) refCols.push(colsMeta.colId[i]);
+        });
       }
       return refCols;
     } catch (e) {
@@ -915,5 +922,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getColumnType, getColumnChoices, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, getCurrentUserName, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange };
+  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnChoices, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, getCurrentUserName, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange };
 })();

@@ -1,6 +1,6 @@
-/* Fenêtre « Liste » d'une bulle #Variable (js/variable-list.js). Le cadre, le titre et les boutons viennent de la base commune (js/modal-base.js, css/modal-base.css) ; les champs sont ceux de la
-   fenêtre de boucle (.var-loop-label, .var-loop-seg, .var-loop-seps, .var-loop-hint, .var-condition-debug de css/variable-actions.css). Ne reste ici que ce qui est propre à la liste.
-   Chargé après css/variable-actions.css. */
+/* Fenêtre « Liste » d'une bulle #Variable (js/variable-list.js). Le cadre, le titre et les boutons viennent de la base commune (js/modal-base.js,
+   css/modal-base.css), les champs de la fenêtre de boucle (.var-loop-label, .var-loop-seg, .var-loop-seps, .var-loop-hint, .var-condition-debug de
+   css/variable-actions.css) : ne reste ici que ce qui est propre à la liste. Chargé après css/variable-actions.css. */
 
 /* La bulle de l'introduction garde son trait plein (pas de condition ici). */
 .var-list-modal-content .var-modal-intro .var-badge { border-style: solid; border-color: #b7cdf2; }
@@ -8,7 +8,8 @@
 /* Les quatre choix tiennent sur une ligne dans la fenêtre (le dernier, « La n-ième », passait à la ligne avec les 11 px de marge des boucles). */
 .var-list-modal-content .var-loop-seg button { padding: 0 8px; }
 
-/* Les champs en grille, l'étiquette puis le champ : les deux séparateurs s'alignent, et l'indication qui suit commence sous le champ, pas sous son étiquette (règle d'Antoine). */
+/* Les champs en grille, l'étiquette puis le champ : les deux séparateurs s'alignent, et l'indication qui suit commence sous le champ, pas sous son
+   étiquette. */
 .var-list-seps, .var-list-number { display: grid; grid-template-columns: max-content 1fr; align-items: center; gap: 6px 8px; }
 .var-list-seps[hidden], .var-list-number[hidden] { display: none; }
 .var-list-seps label + input, .var-list-number label + input { margin-right: 0; }
@@ -17,8 +18,8 @@
 .var-list-seps .var-list-last-input { width: 160px; }
 .var-list-number .var-list-index-input { width: 64px; }
 
-/* Dans un panneau de 700 x 400 la fenêtre n'a pas la place d'une ligne de plus : quand elle est assez large, les deux séparateurs sont sur une seule ligne, comme dans la fenêtre de boucle, et l'indication
-   commence sous le premier champ. Plus étroite, ils restent l'un sous l'autre. */
+/* Dans un panneau de 700 x 400 la fenêtre n'a pas la place d'une ligne de plus : quand elle est assez large, les deux séparateurs tiennent sur une
+   seule ligne, comme dans la fenêtre de boucle, et l'indication commence sous le premier champ. Plus étroite, ils restent l'un sous l'autre. */
 @media (min-width: 520px) {
   .var-list-seps { grid-template-columns: repeat(4, max-content); }
   .var-list-seps label:nth-of-type(2) { padding-left: 12px; }
@@ -26,15 +27,16 @@
   .var-list-seps .var-loop-hint { grid-column: 2 / -1; }
 }
 
-/* « Un document par valeur » : la case, puis son libellé et son indication sur la même ligne (elle passe sous le libellé, pas sous la case, quand la place manque : règle d'Antoine). Le libellé fait 22 px
-   de haut : c'est lui qu'une souris vise, comme la case. */
+/* « Un document par valeur » : la case, puis son libellé et son indication sur la même ligne (elle passe sous le libellé, pas sous la case, quand
+   la place manque). Le libellé fait 22 px de haut : c'est lui qu'une souris vise, comme la case. */
 .var-list-split { display: grid; grid-template-columns: max-content 1fr; align-items: start; gap: 0 8px; margin-top: 8px; }
 .var-list-split input { margin: 4px 0 0; }
 .var-list-split-text { line-height: 16px; }
 .var-list-split label { display: inline-block; padding: 3px 0; margin-right: 6px; font-size: 12px; font-weight: 700; color: var(--text); cursor: pointer; }
 
-/* Bulle réglée « Un document par valeur » (format.list.perValue, lu dans le data-format du nœud) : petite icône bleue, deux pages l'une sur l'autre, à droite dans la bulle - comme celle d'une boucle « dans la
-   phrase » (css/variable-actions.css), en fond pour laisser ::after au point bleu des bulles réglées. Une bulle en boucle garde son icône : le réglage n'y servirait à rien. */
+/* Bulle réglée « Un document par valeur » (format.list.perValue, lu dans le data-format du nœud) : une petite icône bleue, deux pages l'une sur
+   l'autre, à droite dans la bulle, comme celle d'une boucle « dans la phrase » (css/variable-actions.css) ; en fond, pour laisser ::after au point
+   bleu des bulles réglées. Une bulle en boucle garde son icône : le réglage n'y servirait à rien. */
 :root {
   --pp-split-icon-accent: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232f6fed' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='8' y='8' width='12' height='12' rx='2'/%3E%3Cpath d='M4 16V6a2 2 0 0 1 2-2h10'/%3E%3C/svg%3E");
 }

@@ -1,6 +1,6 @@
 // Suite "linkConfig" - fenêtre de choix de la clé entre deux tables (#link-config-modal, Variables.showLinkConfigModal), retour d'Antoine du 2026-09-29 :
 // 1) listes de colonnes avec recherche « en tapant du texte », mises à jour au fil de la frappe (js/search-select.js, par-dessus les deux <select> qui
-// restent la source des valeurs) ; 2) le nom de la table où est la donnée réelle de chaque colonne, entre parenthèses (Variables.describeColumn).
+// restent la source des valeurs) ; 2) le nom de la table où est la donnée réelle de chaque colonne, entre parenthèses (js/variables.js:columnHint).
 // Les gestes clavier sont envoyés comme des KeyboardEvent sur les vrais champs ; les clics à la souris réelle à 700x400 sont dans le script Node
 // verify-var-toolbar-mouse.mjs (groupe varToolbarMouse).
 (function () {

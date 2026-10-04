@@ -126,8 +126,7 @@ const ModalBase = (function () {
       // Les boutons habituels, dans l'ordre : `first` (un bouton de tête, de la classe donnée : « var-modal-danger » pour « Retirer »), un espace,
       // Annuler, le bouton principal. Chaque module pose ses libellés.
       addButtons(firstClass) {
-        const button = className => Object.assign(el('button', className), { type: 'button' });
-        const buttons = { first: firstClass ? button(firstClass) : null, cancel: button(), ok: button('var-modal-primary') };
+        const buttons = { first: firstClass ? Dom.button(firstClass) : null, cancel: Dom.button(), ok: Dom.button('var-modal-primary') };
         actions.append(...[buttons.first, el('span', 'var-modal-spacer'), buttons.cancel, buttons.ok].filter(Boolean));
         return buttons;
       },

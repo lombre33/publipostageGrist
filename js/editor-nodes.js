@@ -1,15 +1,6 @@
 // Fabriques de nœuds et d'extensions TipTap personnalisés. Aucune ne ferme sur une référence d'éditeur partagée : chaque NodeView reçoit la sienne
 // par le paramètre `({ node, editor, getPos })` que TipTap fournit à chaque rendu.
 const EditorNodes = (function () {
-  // Touche de déclenchement configurable (panneau Réglages), lue directement dans localStorage, même clé que js/variables.js : pas de dépendance
-  // croisée pour une simple lecture.
-  function varBadgeTriggerChar() {
-    try {
-      const v = localStorage.getItem('pp_trigger_char');
-      return (v && v.length === 1) ? v : '#';
-    } catch (e) { return '#'; }
-  }
-
   // Un attribut gardé dans le JSON du nœud, jamais rendu en attribut HTML : sans `renderHTML` vide, TipTap écrirait aussi chaque attribut par défaut
   // en attribut nu (table="...") en plus des data-* posés à la main, un doublon.
   const internalAttr = defaultValue => ({ default: defaultValue, renderHTML: () => ({}) });
@@ -111,7 +102,7 @@ const EditorNodes = (function () {
       // `data-loop-repeat` à part : les repères de la zone répétée (css/variable-actions.css) la trouvent par sélecteur, sans lire le JSON.
       if (node.attrs.loop) { attrs['data-loop'] = JSON.stringify(node.attrs.loop); attrs['data-loop-repeat'] = node.attrs.loop.repeat || 'inline'; }
       // Préfixe décoratif régénéré à chaque rendu (jamais stocké) : suit la touche de déclenchement configurée, rétroactif sans migration.
-      return ['span', attrs, varBadgeTriggerChar() + node.attrs.key];
+      return ['span', attrs, Variables.triggerChar() + node.attrs.key];
     }
     return inlineAtom(Node, {
       name: 'varBadge',
@@ -153,7 +144,7 @@ const EditorNodes = (function () {
   function createCalcBadgeNode(Node, mergeAttributes) {
     // Le texte de la bulle : « = » puis la formule dans l'écriture saisie, × ÷ − à la place de * / - (régénéré à chaque rendu, jamais stocké).
     function calcLabel(formula) {
-      return '= ' + Formula.toDisplay(formula, { trigger: varBadgeTriggerChar(), lang: I18n.getLang(), pretty: true });
+      return '= ' + Formula.toDisplay(formula, { trigger: Variables.triggerChar(), lang: I18n.getLang(), pretty: true });
     }
     function badgeSpec(HTMLAttributes, node) {
       const attrs = mergeAttributes(HTMLAttributes, { class: 'calc-badge', contenteditable: 'false', 'data-formula': node.attrs.formula || '' });

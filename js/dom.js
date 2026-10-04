@@ -9,6 +9,20 @@ const Dom = (function () {
     return node;
   }
 
+  // Une <option> de liste déroulante, avec sa valeur et son texte.
+  function option(value, text) {
+    const node = el('option', null, text);
+    node.value = value;
+    return node;
+  }
+
+  // Un bouton qui ne valide jamais un formulaire (type="button"), avec sa classe CSS et son texte quand ils sont donnés.
+  function button(className, text) {
+    const node = el('button', className, text);
+    node.type = 'button';
+    return node;
+  }
+
   // Un groupe de choix à une seule réponse (rôle radiogroup) : flèches pour passer de l'un à l'autre (le choix suit le focus, il n'y a donc rien à
   // « activer » : Entrée valide la fenêtre, `onEnter`), un seul arrêt de Tab par groupe (celui qui est choisi, ou le premier quand rien ne l'est).
   // `options` : [{ value, className, fill(bouton) }], `fill` posant le contenu du bouton. Rend le groupe, ses boutons et `check(value)`, qui coche le
@@ -48,5 +62,5 @@ const Dom = (function () {
     };
   }
 
-  return { el, radioGroup };
+  return { el, option, button, radioGroup };
 })();

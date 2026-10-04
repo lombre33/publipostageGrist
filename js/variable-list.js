@@ -1,11 +1,13 @@
-// Fenêtre « Liste » d'une bulle #Variable dont la colonne est une liste (demande d'Antoine du 2026-10-04 : « une UI simple et efficace pour gérer les listes - tout afficher avec le séparateur voulu,
-// comme les boucles, ou afficher le n-ième en laissant choisir n, avec premier et dernier déjà prêts »). Une colonne Liste de choix ou Liste de références (ChoiceList, RefList) livre plusieurs valeurs :
-// sans réglage la bulle les écrit toutes, séparées par « , » (le seul rendu d'avant cette fenêtre, qui reste celui d'une bulle déjà posée). Le réglage vit dans le `format.list` de la bulle
-// (js/variable-format.js : pick, index, separator, lastSeparator) ; Variables.formatValue le lit pour tous les chemins de rendu - Lecture, PDF, Word, Excel, e-mail, export en lot. Une case « Un document par valeur »
-// (perValue, js/list-split.js) y ajoute l'autre réglage de la demande : les exports PDF, Word et Excel sortent un document par valeur de la liste, le reste identique ; la Lecture et l'e-mail restent à l'affichage réglé ici.
-// Même gabarit que la fenêtre de boucle (js/variable-loop.js) et mêmes champs de séparateur ; l'aperçu est calculé sur la ligne sélectionnée avec le vrai Variables.formatValue, il ne peut donc pas
-// écrire autre chose que le document. Ouverte depuis la barre flottante de la bulle (js/floating-toolbars.js:wireVariableFloatingToolbar).
+// Fenêtre « Liste » d'une bulle #Variable dont la colonne est une liste de choix ou de références (ChoiceList, RefList) : toutes les valeurs avec le
+// séparateur voulu, ou la première, la dernière, la n-ième. Sans réglage la bulle les écrit toutes, séparées par « , ». Le réglage vit dans le
+// `format.list` de la bulle (js/variable-format.js), que Variables.formatValue lit pour tous les rendus : Lecture, PDF, Word, Excel, e-mail, export
+// en lot. La case « Un document par valeur » (js/list-split.js) fait sortir un document par valeur aux exports PDF, Word et Excel ; la Lecture et
+// l'e-mail gardent l'affichage réglé ici. Même gabarit que la fenêtre de boucle (js/variable-loop.js) ; l'aperçu passe par le vrai
+// Variables.formatValue sur la ligne sélectionnée, il ne peut donc pas écrire autre chose que le document. Ouverte depuis la barre flottante de la
+// bulle (js/floating-toolbars.js:wireVariableFloatingToolbar).
 const VariableList = (function () {
+  const el = Dom.el;
+  const { setLine, shorten } = VariableModal;
   const PICKS = ['all', 'first', 'last', 'nth'];
   // Valeurs citées dans l'aperçu : les premières seulement, la suite en « … ».
   const PREVIEW_VALUES = 5;
@@ -14,18 +16,10 @@ const VariableList = (function () {
   let refs = null;
   // { editor, pos, node, had, working } - `working` est une copie : rien n'est écrit dans la bulle avant « Enregistrer ».
   let state = null;
-  let previewGeneration = 0;
-  let previewTimer = null;
+  const previewRun = VariableModal.previewRunner(updatePreview);
 
-  function el(tag, className, text) {
-    const e = document.createElement(tag);
-    if (className) e.className = className;
-    if (text != null) e.textContent = text;
-    return e;
-  }
   function isOpen() { return !!state; }
-  function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
-  function shorten(text, max) { return text.length > max ? text.slice(0, max - 1) + '…' : text; }
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
   // La colonne de la bulle (ou le bout de son chemin « Responsable.Competences ») est une liste de choix ou une liste de références.
   function isListColumn(attrs) {
@@ -34,23 +28,22 @@ const VariableList = (function () {
   // Les réglages d'une bulle, complets (jamais null) : ce que la fenêtre montre à l'ouverture.
   function listOf(node) { return VariableFormat.normalizeList(node.attrs.format && node.attrs.format.list); }
 
-  // Icône Liste de la barre flottante pour une bulle : active quand un réglage s'écarte du défaut ; grisée, avec l'info-bulle qui dit pourquoi, pour une colonne qui n'est pas une liste, ou quand une
-  // boucle écrit déjà chaque valeur de la liste (à chaque tour la bulle ne porte plus qu'une valeur : « première » ou « n-ième » n'auraient aucun sens).
+  // Icône Liste de la barre flottante : active quand un réglage s'écarte du défaut ; grisée, avec l'info-bulle qui dit pourquoi, pour une colonne qui
+  // n'est pas une liste, ou quand une boucle écrit déjà chaque valeur (à chaque tour la bulle ne porte plus qu'une valeur : « première » ou
+  // « n-ième » n'auraient aucun sens).
   function status(node) {
     if (!isListColumn(node.attrs)) return { active: false, enabled: false, title: I18n.t('varToolbar.listDisabled') };
     if (LoopRules.normalizeLoop(node.attrs.loop)) return { active: false, enabled: false, title: I18n.t('varToolbar.listLoop') };
     return { active: !VariableFormat.isDefaultList(node.attrs.format && node.attrs.format.list), enabled: true, title: I18n.t('varToolbar.list') };
   }
 
-  // === Fenêtre ===
   function ensureModal() {
     if (win) return;
-    // Cadre, titre, zone qui défile et ligne de boutons : js/modal-base.js. Échap ferme la fenêtre où que soit le focus ; le focus revient à l'éditeur (cf. close), pas à l'élément qui l'avait à l'ouverture.
+    // Échap ferme la fenêtre où que soit le focus ; le focus revient à l'éditeur (cf. close), pas à l'élément qui l'avait à l'ouverture.
     win = ModalBase.create({
       id: 'var-list-modal', titleId: 'var-list-title', boxClass: 'var-modal-content var-list-modal-content', actionsClass: 'var-modal-actions',
       onEscape: close, restoreFocus: false,
     });
-    const box = win.box;
     const intro = el('p', 'var-modal-intro');
 
     const pickLabel = el('div', 'var-loop-label');
@@ -69,107 +62,70 @@ const VariableList = (function () {
       pickButtons[pick] = btn;
     });
 
-    // « Toutes les valeurs » : les deux séparateurs des boucles (js/variable-loop.js), le second vide = le même que le premier.
-    const separatorRow = el('div', 'var-loop-seps var-list-seps');
-    const sepLabel = el('label');
-    sepLabel.htmlFor = 'var-list-sep';
-    const sepInput = el('input', 'var-loop-sep-input');
-    sepInput.type = 'text';
-    sepInput.id = 'var-list-sep';
-    const lastLabel = el('label');
-    lastLabel.htmlFor = 'var-list-last';
-    const lastInput = el('input', 'var-list-last-input');
-    lastInput.type = 'text';
-    lastInput.id = 'var-list-last';
-    const sepHint = el('span', 'var-loop-hint');
-    separatorRow.append(sepLabel, sepInput, lastLabel, lastInput, sepHint);
+    // « Toutes les valeurs » : les deux séparateurs des boucles, le second vide = le même que le premier.
+    const separators = VariableModal.separatorFields('var-list', (key, text) => { if (state) state.working[key] = text; });
 
     // « La n-ième » : le numéro, de 1 à 999.
     const numberRow = el('div', 'var-loop-seps var-list-number');
-    const numberLabel = el('label');
-    numberLabel.htmlFor = 'var-list-index';
-    const numberInput = el('input', 'var-list-index-input');
-    numberInput.type = 'number';
-    numberInput.id = 'var-list-index';
-    numberInput.min = '1';
-    numberInput.max = String(VariableFormat.LIST_INDEX_MAX);
-    numberInput.step = '1';
+    const number = VariableModal.labelledInput('var-list-index', 'var-list-index-input', 'number');
+    Object.assign(number.input, { min: '1', max: String(VariableFormat.LIST_INDEX_MAX), step: '1' });
     const numberHint = el('span', 'var-loop-hint');
-    numberRow.append(numberLabel, numberInput, numberHint);
+    numberRow.append(number.label, number.input, numberHint);
 
-    // « Un document par valeur » : la case, puis son libellé et ce que le réglage change sur la même ligne (l'indication qui passe à la ligne commence sous le libellé, pas sous la case).
-    const splitBlock = el('div', 'var-list-split');
-    const splitBox = el('input');
-    splitBox.type = 'checkbox';
-    splitBox.id = 'var-list-split';
-    const splitText = el('div', 'var-list-split-text');
-    const splitLabel = el('label');
-    splitLabel.htmlFor = 'var-list-split';
+    // « Un document par valeur » : la case, puis son libellé et ce que le réglage change sur la même ligne (l'indication qui passe à la ligne
+    // commence sous le libellé, pas sous la case).
+    const split = VariableModal.labelledInput('var-list-split', null, 'checkbox');
     const splitHint = el('span', 'var-loop-hint');
     splitHint.id = 'var-list-split-hint';
-    splitBox.setAttribute('aria-describedby', 'var-list-split-hint');
-    splitText.append(splitLabel, splitHint);
-    splitBlock.append(splitBox, splitText);
+    split.input.setAttribute('aria-describedby', 'var-list-split-hint');
+    const splitText = el('div', 'var-list-split-text');
+    splitText.append(split.label, splitHint);
+    const splitBlock = el('div', 'var-list-split');
+    splitBlock.append(split.input, splitText);
 
-    const preview = el('div', 'var-condition-debug');
-    preview.setAttribute('aria-live', 'polite');
-    const previewLine = el('div', 'var-condition-debug-line');
-    // Les documents que la ligne sélectionnée sortirait des exports : seulement quand la case est cochée.
-    const splitLine = el('div', 'var-condition-debug-line');
+    // La seconde ligne montre les documents que la ligne sélectionnée sortirait des exports : seulement quand la case est cochée.
+    const { box: previewArea, lines: [previewLine, splitLine] } = VariableModal.previewBox(2);
     splitLine.hidden = true;
-    preview.append(previewLine, splitLine);
 
-    const resetBtn = el('button', 'var-modal-danger');
-    resetBtn.type = 'button';
-    const spacer = el('span', 'var-modal-spacer');
-    const cancelBtn = el('button');
-    cancelBtn.type = 'button';
-    const saveBtn = el('button', 'var-modal-primary');
-    saveBtn.type = 'button';
-    win.actions.append(resetBtn, spacer, cancelBtn, saveBtn);
+    const { first: resetBtn, cancel: cancelBtn, ok: saveBtn } = win.addButtons('var-modal-danger');
 
-    win.body.append(intro, pickLabel, pickSeg, separatorRow, numberRow, splitBlock, preview);
+    win.body.append(intro, pickLabel, pickSeg, separators.row, numberRow, splitBlock, previewArea);
     refs = {
-      title: win.title, intro, pickLabel, pickButtons, separatorRow, sepLabel, sepInput, lastLabel, lastInput, sepHint,
-      numberRow, numberLabel, numberInput, numberHint, splitBox, splitLabel, splitHint, previewLine, splitLine, resetBtn, cancelBtn, saveBtn,
+      title: win.title, intro, pickLabel, pickButtons, separators, numberRow, number, numberHint, split, splitHint, previewLine, splitLine, resetBtn, cancelBtn, saveBtn,
     };
 
-    sepInput.addEventListener('input', () => { if (state) state.working.separator = sepInput.value; });
-    lastInput.addEventListener('input', () => { if (state) state.working.lastSeparator = lastInput.value; });
     // Le numéro est lu pendant la frappe (le champ peut être vide un instant) et ramené à 1-999 en le quittant, comme l'enregistrement le fera.
-    numberInput.addEventListener('input', () => { if (state) state.working.index = VariableFormat.normalizeList({ index: numberInput.value }).index; });
-    numberInput.addEventListener('change', () => { if (state) numberInput.value = String(state.working.index); });
-    // Cochée, la seconde ligne d'aperçu (les documents de la ligne) vient en vue : dans un panneau bas elle est sous le pli de la fenêtre.
-    splitBox.addEventListener('change', async () => {
+    number.input.addEventListener('input', () => { if (state) state.working.index = VariableFormat.normalizeList({ index: number.input.value }).index; });
+    number.input.addEventListener('change', () => { if (state) number.input.value = String(state.working.index); });
+    // Cochée, la seconde ligne d'aperçu vient en vue : dans un panneau bas elle est sous le pli de la fenêtre.
+    split.input.addEventListener('change', async () => {
       if (!state) return;
-      state.working.perValue = splitBox.checked;
+      state.working.perValue = split.input.checked;
       await updatePreview();
-      if (state && splitBox.checked && !splitLine.hidden) splitLine.scrollIntoView({ block: 'nearest' });
+      if (state && split.input.checked && !splitLine.hidden) splitLine.scrollIntoView({ block: 'nearest' });
     });
     resetBtn.addEventListener('click', () => { if (state) { applyList(null); close(); } });
     cancelBtn.addEventListener('click', close);
     saveBtn.addEventListener('click', save);
-    // Toute saisie (séparateurs, numéro) relance l'aperçu, avec un court délai pour ne pas recalculer à chaque touche.
-    box.addEventListener('input', schedulePreview);
-    box.addEventListener('change', schedulePreview);
+    win.box.addEventListener('input', previewRun.schedule);
+    win.box.addEventListener('change', previewRun.schedule);
   }
 
   function renderIntro() {
     const { table, column } = state.node.attrs;
-    const badge = el('span', 'var-badge', Variables.triggerChar() + (state.node.attrs.key || ''));
-    const type = GristAPI.getColumnType(table, column) || '';
-    const text = type.indexOf('RefList:') === 0 ? I18n.t('varList.intro.ref', { table: type.slice(8) }) : I18n.t('varList.intro.choice');
-    refs.intro.replaceChildren(badge, document.createTextNode(' ' + text));
+    const target = GristAPI.referenceOf(GristAPI.getColumnType(table, column));
+    const text = target && target.list ? I18n.t('varList.intro.ref', { table: target.table }) : I18n.t('varList.intro.choice');
+    refs.intro.replaceChildren(el('span', 'var-badge', VariableModal.badgeText(state.node)), document.createTextNode(' ' + text));
   }
-  // Le bouton du choix en cours est enfoncé ; les champs de « toutes » et de « n-ième » n'apparaissent que pour leur choix (le numéro, ni pour la première ni pour la dernière).
+  // Le bouton du choix en cours est enfoncé ; les champs de « toutes » et de « n-ième » n'apparaissent que pour leur choix.
   function renderPick() {
-    const { pickButtons, separatorRow, numberRow } = refs;
+    const { pickButtons, separators, numberRow } = refs;
     PICKS.forEach(pick => {
       const on = pick === state.working.pick;
       pickButtons[pick].classList.toggle('is-on', on);
       pickButtons[pick].setAttribute('aria-pressed', on ? 'true' : 'false');
     });
-    separatorRow.hidden = state.working.pick !== 'all';
+    separators.row.hidden = state.working.pick !== 'all';
     numberRow.hidden = state.working.pick !== 'nth';
   }
   function setPick(pick) {
@@ -179,33 +135,15 @@ const VariableList = (function () {
     updatePreview();
   }
 
-  // Réglage tel qu'il sera enregistré : seulement les clés utiles (js/variable-format.js:storedList), null quand tout est par défaut.
+  // Réglage tel qu'il sera enregistré : seulement les clés utiles (VariableFormat.storedList), null quand tout est par défaut.
   function workingList() { return VariableFormat.storedList(state.working); }
 
-  // === Aperçu === La ligne sélectionnée dans Grist : les valeurs de la liste, puis ce que le document en écrit - le vrai Variables.formatValue avec le réglage en cours.
-  function setLine(line, text, good) {
-    line.replaceChildren();
-    line.hidden = !text;
-    line.classList.toggle('is-good', !!good);
-    if (!text) return;
-    if (good) {
-      const icon = el('span');
-      icon.setAttribute('aria-hidden', 'true');
-      icon.style.cssText = 'flex:none; display:inline-flex; width:14px; height:14px; margin-top:2px;';
-      icon.innerHTML = Icons.svg('acceptAll');
-      line.appendChild(icon);
-    }
-    line.appendChild(el('span', null, text));
-  }
-  function schedulePreview() {
-    clearTimeout(previewTimer);
-    previewTimer = setTimeout(updatePreview, 250);
-  }
+  // Aperçu sur la ligne sélectionnée dans Grist : les valeurs de la liste, puis ce que le document en écrit (le vrai Variables.formatValue, avec le
+  // réglage en cours).
   async function updatePreview() {
     if (!state || !refs) return;
-    clearTimeout(previewTimer);
-    const gen = ++previewGeneration;
-    const stale = () => gen !== previewGeneration || !state;
+    const outdated = previewRun.begin();
+    const stale = () => outdated() || !state;
     const tableId = GristAPI.getCurrentTableId();
     const record = GristAPI.getCurrentRecord();
     const { previewLine, splitLine } = refs;
@@ -216,7 +154,8 @@ const VariableList = (function () {
       const raw = await Variables.resolveRawValue(table, column, tableId, record, {});
       if (stale()) return;
       if (raw.error) { setLine(previewLine, I18n.t('linkConfig.previewUnavailable'), false); setLine(splitLine, '', false); return; }
-      // Les valeurs comptées comme l'export les compte (Variables.listTexts) : celles dont « La n-ième » prend un rang, et un document chacune quand la case est cochée.
+      // Les valeurs comptées comme l'export les compte (Variables.listTexts) : celles dont « La n-ième » prend un rang, et un document chacune quand
+      // la case est cochée.
       const values = Variables.listTexts(raw.value, format, table, column);
       const shown = values.slice(0, PREVIEW_VALUES).map(v => shorten(v, 40)).join(', ') + (values.length > PREVIEW_VALUES ? ', …' : '');
       if (!state.working.perValue) setLine(splitLine, '', false);
@@ -224,8 +163,7 @@ const VariableList = (function () {
       else if (values.length) setLine(splitLine, I18n.t('varList.split.previewSingle'), false);
       else setLine(splitLine, I18n.t('varList.split.previewEmpty'), false);
       if (!values.length) { setLine(previewLine, I18n.t('varList.preview.empty', { id: record.id }), false); return; }
-      const list = workingList();
-      const written = Variables.formatValue(raw.value, Object.assign({}, format, list ? { list } : { list: null }), table, column);
+      const written = Variables.formatValue(raw.value, Object.assign({}, format, { list: workingList() }), table, column);
       if (written === '') {
         setLine(previewLine, I18n.t('varList.preview.beyond', { id: record.id, count: values.length, values: shown, index: state.working.index }), false);
         return;
@@ -237,27 +175,21 @@ const VariableList = (function () {
     }
   }
 
-  // Réécrit le `format.list` de la bulle d'origine, retrouvée à sa position capturée au clic - seulement si c'est toujours la même variable. Les autres clés du format restent ; `list` nul retire la clé,
-  // et une bulle qui n'a plus aucun réglage retrouve un format vide (plus de point bleu, plus de data-format dans le modèle).
+  // Réécrit le `format.list` de la bulle d'origine, retrouvée à sa position capturée au clic, si c'est toujours la même variable. Les autres clés du
+  // format restent ; `list` nul retire la clé, et une bulle qui n'a plus aucun réglage retrouve un format vide (plus de point bleu, plus de
+  // data-format dans le modèle).
   function applyList(list) {
-    const { editor, pos, node: original } = state;
-    const node = editor.state.doc.nodeAt(pos);
-    if (!node || node.type.name !== 'varBadge' || node.attrs.table !== original.attrs.table || node.attrs.column !== original.attrs.column) {
-      console.warn('[VariableList] bulle introuvable à sa position d\'origine - réglage non enregistré.');
-      alert(I18n.t('varList.saveLost'));
-      return false;
-    }
+    const node = VariableModal.nodeAtOrigin(state, 'varList.saveLost', 'VariableList');
+    if (!node) return;
     const format = Object.assign({}, node.attrs.format);
     if (list) format.list = list; else delete format.list;
-    EditorCore.patchNodeAndReselect(editor, pos, Object.assign({}, node.attrs, { format: Object.keys(format).length ? format : null }));
-    return true;
+    EditorCore.patchNodeAndReselect(state.editor, state.pos, Object.assign({}, node.attrs, { format: Object.keys(format).length ? format : null }));
   }
   // Rien n'est écrit quand rien n'a changé : pas d'étape d'annulation pour un « Enregistrer » sans modification.
   function save() {
     if (!state) return;
     const list = workingList();
-    const before = VariableFormat.storedList(state.node.attrs.format && state.node.attrs.format.list);
-    if (!same(list, before)) applyList(list);
+    if (!same(list, VariableFormat.storedList(state.node.attrs.format && state.node.attrs.format.list))) applyList(list);
     close();
   }
 
@@ -266,8 +198,7 @@ const VariableList = (function () {
     const editor = state && state.editor;
     win.hide();
     state = null;
-    previewGeneration += 1;
-    clearTimeout(previewTimer);
+    previewRun.cancel();
     // La bulle est toujours sélectionnée : rendre le focus à l'éditeur fait réapparaître sa barre flottante.
     if (editor) editor.view.focus();
   }
@@ -282,33 +213,34 @@ const VariableList = (function () {
       had: !VariableFormat.isDefaultList(node.attrs.format && node.attrs.format.list),
       working: listOf(node),
     };
-    const r = refs;
-    r.title.textContent = I18n.t('varList.title');
-    r.pickLabel.textContent = I18n.t('varList.section.pick');
-    PICKS.forEach(pick => { r.pickButtons[pick].textContent = I18n.t('varList.pick.' + pick); });
-    r.sepLabel.textContent = I18n.t('varList.separator');
-    r.lastLabel.textContent = I18n.t('varList.lastSeparator');
-    r.lastInput.placeholder = I18n.t('varList.lastSeparatorPlaceholder');
-    r.sepHint.textContent = I18n.t('varList.separatorHint');
-    r.numberLabel.textContent = I18n.t('varList.number');
-    r.numberHint.textContent = I18n.t('varList.numberHint');
-    r.splitLabel.textContent = I18n.t('varList.split.label');
-    r.splitHint.textContent = I18n.t('varList.split.hint');
-    r.splitBox.checked = state.working.perValue;
-    r.sepInput.value = state.working.separator;
-    r.lastInput.value = state.working.lastSeparator;
-    r.numberInput.value = String(state.working.index);
-    r.resetBtn.textContent = I18n.t('varList.reset');
-    r.resetBtn.hidden = !state.had;
-    r.cancelBtn.textContent = I18n.t('common.cancel');
-    r.saveBtn.textContent = I18n.t('common.save');
+    const { title, pickLabel, pickButtons, separators, number, numberHint, split, splitHint, resetBtn, cancelBtn, saveBtn } = refs;
+    title.textContent = I18n.t('varList.title');
+    pickLabel.textContent = I18n.t('varList.section.pick');
+    PICKS.forEach(pick => { pickButtons[pick].textContent = I18n.t('varList.pick.' + pick); });
+    separators.sepLabel.textContent = I18n.t('varList.separator');
+    separators.lastLabel.textContent = I18n.t('varList.lastSeparator');
+    separators.lastInput.placeholder = I18n.t('varList.lastSeparatorPlaceholder');
+    separators.hint.textContent = I18n.t('varList.separatorHint');
+    separators.sepInput.value = state.working.separator;
+    separators.lastInput.value = state.working.lastSeparator;
+    number.label.textContent = I18n.t('varList.number');
+    numberHint.textContent = I18n.t('varList.numberHint');
+    number.input.value = String(state.working.index);
+    split.label.textContent = I18n.t('varList.split.label');
+    splitHint.textContent = I18n.t('varList.split.hint');
+    split.input.checked = state.working.perValue;
+    resetBtn.textContent = I18n.t('varList.reset');
+    resetBtn.hidden = !state.had;
+    cancelBtn.textContent = I18n.t('common.cancel');
+    saveBtn.textContent = I18n.t('common.save');
     renderIntro();
     renderPick();
-    // La barre flottante de la bulle reste masquée tant que la fenêtre est ouverte (règle d'Antoine) ; elle est sous le voile de toute façon (--z-floating-toolbar, css/style.css).
+    // La barre flottante de la bulle reste masquée tant que la fenêtre est ouverte ; elle est sous le voile de toute façon (--z-floating-toolbar,
+    // css/style.css).
     EditorCore.hideFloatingContextToolbars();
-    win.show(() => r.pickButtons[state.working.pick]);
+    win.show(() => pickButtons[state.working.pick]);
     updatePreview();
   }
 
-  return { open, close, isOpen, status, isListColumn };
+  return { open, isOpen, status };
 })();

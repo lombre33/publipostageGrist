@@ -14,22 +14,15 @@ const ConditionFields = (function () {
     return input;
   }
 
-  function makeOption(value, text) {
-    const option = document.createElement('option');
-    option.value = value;
-    option.textContent = text;
-    return option;
-  }
-
   // Dernière ligne d'une liste avec recherche : jamais filtrée.
   function pinnedOption(value, text) {
-    const option = makeOption(value, text);
+    const option = Dom.option(value, text);
     option.dataset.pinned = 'true';
     return option;
   }
 
   const savedValue = rule => (rule.value == null ? '' : String(rule.value));
-  const isReference = type => /^Ref(List)?:/.test(type);
+  const isReference = type => !!GristAPI.referenceOf(type);
 
   // Type Grist affiché sous le champ colonne : il dit quel format saisir dans le champ valeur (une date, par exemple).
   function friendlyTypeLabel(type) {
@@ -48,16 +41,10 @@ const ConditionFields = (function () {
   // sert à la liste native de repli. Exportée : le tri d'une boucle (js/variable-loop.js) liste ses colonnes pareil.
   function appendColumnOption(parent, value, table, column) {
     const hint = friendlyTypeLabel(GristAPI.getColumnType(table, column));
-    const option = makeOption(value, hint ? value + ' (' + hint + ')' : value);
+    const option = Dom.option(value, hint ? value + ' (' + hint + ')' : value);
     option.dataset.name = value;
     if (hint) option.dataset.hint = hint;
     parent.appendChild(option);
-  }
-
-  // Sans les colonnes d'aide « gristHelper_… » (valeur affichée d'une Référence) : la Référence se compare déjà à sa valeur affichée
-  // (js/variables.js:cellValue).
-  function visibleColumns(table) {
-    return GristAPI.getColumns(table).filter(c => c.indexOf('gristHelper_') !== 0);
   }
 
   // Une seule liste à plat, sans groupes : les colonnes de la table de la page en tête et en valeur nue, celles des autres tables en
@@ -66,24 +53,27 @@ const ConditionFields = (function () {
   function appendAllTablesOptions(select, currentTableId) {
     const tables = GristAPI.getTables();
     const ordered = tables.includes(currentTableId) ? [currentTableId, ...tables.filter(t => t !== currentTableId)] : tables;
-    ordered.forEach(table => visibleColumns(table).forEach(c => appendColumnOption(select, table === currentTableId ? c : table + '.' + c, table, c)));
+    ordered.forEach(table => GristAPI.getVisibleColumns(table).forEach(c => appendColumnOption(select, table === currentTableId ? c : table + '.' + c, table, c)));
   }
 
   // Avant d'adopter une colonne d'une table pas encore liée à celle de la page, la fenêtre de choix de la clé s'ouvre
   // (js/variables.js:ensureLinkConfigured). Rend `true` tout de suite quand il n'y a rien à demander (colonne de la page ou table déjà liée), sinon
   // une promesse : vraie si le lien est enregistré, fausse si le choix est annulé (options.onColumnChosen remet alors la colonne précédente).
-  function ensureTableLinked(ref) {
+  // `onLinked`, facultatif : appelé une fois le lien enregistré et la colonne adoptée (le setTimeout laisse passer l'adoption, qui suit la résolution
+  // de la promesse).
+  function ensureTableLinked(ref, onLinked) {
     const currentTableId = GristAPI.getCurrentTableId();
     if (!ref || !ref.table || !currentTableId || ref.table === currentTableId) return true;
     if (GristAPI.getLinkRule(ref.table)) return true;
-    return Variables.ensureLinkConfigured({ table: ref.table });
+    const linking = Variables.ensureLinkConfigured({ table: ref.table });
+    return onLinked ? linking.then(ok => { if (ok) setTimeout(onLinked, 0); return ok; }) : linking;
   }
 
   // Liste des colonnes selon les options de buildColumnField : celles de `table` seule, de toutes les tables, ou de la page.
   function fillColumnList(select, opts) {
-    select.appendChild(makeOption('', I18n.t('macro.modal.columnChoosePlaceholder')));
+    select.appendChild(Dom.option('', I18n.t('macro.modal.columnChoosePlaceholder')));
     const pageTable = GristAPI.getCurrentTableId();
-    if (opts.table) visibleColumns(opts.table).forEach(c => appendColumnOption(select, c, opts.table, c));
+    if (opts.table) GristAPI.getVisibleColumns(opts.table).forEach(c => appendColumnOption(select, c, opts.table, c));
     else if (opts.allTables) appendAllTablesOptions(select, pageTable);
     else if (pageTable) GristAPI.getColumns(pageTable).forEach(c => appendColumnOption(select, c, pageTable, c));
   }
@@ -234,13 +224,13 @@ const ConditionFields = (function () {
     return {
       showLoading() {
         select.textContent = '';
-        select.appendChild(makeOption('', I18n.t('macro.modal.valueLoading')));
+        select.appendChild(Dom.option('', I18n.t('macro.modal.valueLoading')));
         refresh();
       },
       fill(values) {
         select.textContent = '';
-        select.appendChild(makeOption('', I18n.t('macro.modal.valueChoosePlaceholder')));
-        values.forEach(v => select.appendChild(makeOption(v, v)));
+        select.appendChild(Dom.option('', I18n.t('macro.modal.valueChoosePlaceholder')));
+        values.forEach(v => select.appendChild(Dom.option(v, v)));
         select.appendChild(pinnedOption(ADVANCED_VALUE, I18n.t('macro.modal.valueAdvanced')));
         showSavedChoice(select, advancedInput, ADVANCED_VALUE, savedValue(rule), values);
         refresh();
@@ -262,13 +252,13 @@ const ConditionFields = (function () {
     const select = el('select', 'macro-rule-value');
     const yes = I18n.t('macro.modal.valueBoolYes');
     const no = I18n.t('macro.modal.valueBoolNo');
-    select.append(makeOption('', I18n.t('macro.modal.valueChoosePlaceholder')), makeOption(yes, yes), makeOption(no, no));
+    select.append(Dom.option('', I18n.t('macro.modal.valueChoosePlaceholder')), Dom.option(yes, yes), Dom.option(no, no));
     const saved = savedValue(rule);
     const word = ConditionRules.parseBoolExpected(saved);
     let unrecognized = null;
     if (saved.trim() !== '' && word === null) {
       const hint = I18n.t('macro.modal.valueUnrecognized');
-      unrecognized = makeOption(saved, saved + ' (' + hint + ')');
+      unrecognized = Dom.option(saved, saved + ' (' + hint + ')');
       unrecognized.dataset.name = saved;
       unrecognized.dataset.hint = hint;
       select.appendChild(unrecognized);
@@ -331,7 +321,7 @@ const ConditionFields = (function () {
     valueSlot.querySelectorAll('select, input').forEach(field => {
       field.disabled = disabled;
       // La liste avec recherche ne lit l'état grisé de son <select> masqué qu'à sa demande (aucun évènement ne le lui dit).
-      if (field.tagName === 'SELECT' && typeof SearchSelect !== 'undefined') SearchSelect.sync(field);
+      if (field.tagName === 'SELECT') SearchSelect.sync(field);
     });
   }
 
@@ -351,7 +341,7 @@ const ConditionFields = (function () {
   // buildColumnField).
   function buildConditionFields(rule, options) {
     const valueSlot = el('span', 'macro-rule-value-slot');
-    const operatorSelect = document.createElement('select');
+    const operatorSelect = el('select');
     let columnType = null;
     function renderValue(type, colId, table) {
       columnType = type;
@@ -363,7 +353,7 @@ const ConditionFields = (function () {
 
     const columnField = buildColumnField(rule, renderValue, options);
 
-    ConditionRules.OPERATORS.forEach(op => operatorSelect.appendChild(makeOption(op, op)));
+    ConditionRules.OPERATORS.forEach(op => operatorSelect.appendChild(Dom.option(op, op)));
     operatorSelect.value = rule.operator || '=';
     // La 1re colonne a été rendue avant que les options existent : on grise maintenant, une fois l'opérateur enregistré choisi.
     syncOperatorOptions(operatorSelect, columnType);
@@ -371,6 +361,39 @@ const ConditionFields = (function () {
     operatorSelect.addEventListener('change', () => { rule.operator = operatorSelect.value; syncValueDisabled(valueSlot, operatorSelect.value); });
 
     return { columnWrap: columnField.wrap, operatorSelect, valueSlot, typeHint: columnField.typeHint };
+  }
+
+  // Une règle sans colonne, telle que « + Ajouter une condition » la pose.
+  const emptyRule = () => ({ column: '', operator: '=', value: '' });
+
+  // La ligne d'une règle de la condition d'une bulle ou du filtre d'une boucle (js/variable-condition.js, js/variable-loop.js), en une seule ligne :
+  // le connecteur (« Si », puis « et » ou « ou » selon `mode`), la colonne, l'opérateur, la valeur, la croix qui retire la règle (`onRemove`), puis
+  // l'indication de type et les nœuds `extra` : en dernier, pour la raison donnée à buildTemplateRule. `options` : celles de buildConditionFields.
+  function buildRuleRow(rule, index, { mode, options, onRemove, extra = [] }) {
+    const connectorKey = index === 0 ? 'macro.modal.ruleIf' : (mode === 'any' ? 'varCond.ruleOr' : 'varCond.ruleAnd');
+    const fields = buildConditionFields(rule, options);
+    const remove = el('button', 'macro-rule-remove');
+    remove.type = 'button';
+    remove.setAttribute('aria-label', I18n.t('varCond.removeRule'));
+    remove.title = I18n.t('varCond.removeRule');
+    remove.addEventListener('click', onRemove);
+    const row = el('div', 'macro-rule-row');
+    row.append(el('span', 'macro-rule-connector', I18n.t(connectorKey)), fields.columnWrap, fields.operatorSelect, fields.valueSlot, remove, fields.typeHint, ...extra);
+    return row;
+  }
+
+  // « + Ajouter une condition » : ajoute une règle vide à `rules`, `redraw` redessine la fenêtre, puis la colonne de la dernière ligne de `box` prend
+  // le focus.
+  function buildAddRuleButton(box, rules, redraw) {
+    const button = el('button', 'var-condition-add', I18n.t('varCond.addRule'));
+    button.type = 'button';
+    button.addEventListener('click', () => {
+      rules.push(emptyRule());
+      redraw();
+      const selects = box.querySelectorAll('select.macro-rule-column');
+      if (selects.length) selects[selects.length - 1].focus();
+    });
+    return button;
   }
 
   // Options de buildConditionFields pour une règle « condition → modèle » : la colonne se choisit dans une seule liste avec recherche qui réunit
@@ -381,8 +404,8 @@ const ConditionFields = (function () {
   // La règle « condition → modèle » des macro-modèles et du réglage « Selon la ligne », sur deux lignes (cinq contrôles sur une seule se
   // chevauchaient dans une fenêtre de 520 px : la liste des colonnes recouvrait l'opérateur) : `connector` (« Si », « Sinon si »), la colonne et
   // l'opérateur ; puis, sous la colonne, la valeur et, après une flèche, le modèle choisi parmi `templates`. La croix à droite retire la règle
-  // (`onRemove`). La condition d'une bulle et le filtre d'une boucle (js/variable-condition.js, js/variable-loop.js) construisent leur ligne avec les
-  // mêmes classes .macro-rule-* et gardent une seule ligne. Rend la ligne et la liste des modèles, que l'appelant coiffe de sa liste avec recherche.
+  // (`onRemove`). La condition d'une bulle et le filtre d'une boucle gardent une seule ligne (buildRuleRow). Rend la ligne et la liste des modèles,
+  // que l'appelant coiffe de sa liste avec recherche.
   function buildTemplateRule(rule, { connector, templates, onRemove }) {
     const fields = buildConditionFields(rule, TEMPLATE_RULE_OPTIONS);
     const label = el('span', 'macro-rule-connector');
@@ -391,7 +414,7 @@ const ConditionFields = (function () {
     arrow.setAttribute('aria-hidden', 'true');
     arrow.textContent = '→';
     const modeleSelect = el('select', 'macro-rule-modele');
-    modeleSelect.append(makeOption('', I18n.t('macro.modal.choosePlaceholder')), ...templates.map(t => makeOption(String(t.id), t.nom)));
+    modeleSelect.append(Dom.option('', I18n.t('macro.modal.choosePlaceholder')), ...templates.map(t => Dom.option(String(t.id), t.nom)));
     modeleSelect.value = rule.modeleId != null ? String(rule.modeleId) : '';
     modeleSelect.addEventListener('change', () => { rule.modeleId = modeleSelect.value || null; });
     const lineOne = el('div', 'macro-rule-line');
@@ -412,5 +435,5 @@ const ConditionFields = (function () {
     return { row, modeleSelect };
   }
 
-  return { appendColumnOption, ensureTableLinked, buildConditionFields, buildTemplateRule };
+  return { appendColumnOption, ensureTableLinked, emptyRule, buildRuleRow, buildAddRuleButton, buildTemplateRule };
 })();

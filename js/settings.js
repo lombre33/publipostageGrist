@@ -1,9 +1,8 @@
-// Panneau Réglages - Langue (I18n.setLang), Thème (localStorage + data-theme sur <html>), Touche de déclenchement (localStorage, lu directement par
-// variables.js/editor.js), Marges de page (par modèle) et Crédits (statique). Même convention d'ouverture/fermeture que les autres modales
+// Panneau Réglages : Langue (I18n.setLang), Thème (localStorage + data-theme sur <html>), Touche de déclenchement (localStorage, relue par
+// Variables.triggerChar), Marges de page (par modèle) et Crédits (statique). Même convention d'ouverture et de fermeture que les autres fenêtres
 // (style.display, pas de fermeture au clic sur le fond).
 const Settings = (function () {
   const TRIGGER_KEY_STORAGE = 'pp_trigger_char';
-  const DEFAULT_TRIGGER_CHAR = '#';
   const THEME_STORAGE = 'pp_theme';
   const THEMES = ['system', 'light', 'dark'];
 
@@ -31,15 +30,6 @@ const Settings = (function () {
   // Appliqué dès le chargement de ce fichier, pas seulement à l'ouverture des Réglages : sinon l'app s'affiche en clair puis bascule, ce qui se voit.
   applyTheme(getTheme());
 
-  // js/variables.js et js/editor.js relisent la même clé indépendamment - exposé ici pour que ce fichier reste la référence documentée de la valeur
-  // par défaut/nom de clé.
-  function getTriggerChar() {
-    try {
-      const v = localStorage.getItem(TRIGGER_KEY_STORAGE);
-      return (v && v.length === 1) ? v : DEFAULT_TRIGGER_CHAR;
-    } catch (e) { return DEFAULT_TRIGGER_CHAR; }
-  }
-
   function wireSettingsModal() {
     const openBtn = document.getElementById('v2-btn-settings');
     const modal = document.getElementById('settings-modal');
@@ -64,7 +54,7 @@ const Settings = (function () {
     openBtn.addEventListener('click', () => {
       langRadios.forEach(r => { r.checked = (r.value === I18n.getLang()); });
       themeRadios.forEach(r => { r.checked = (r.value === getTheme()); });
-      if (triggerSelect) triggerSelect.value = getTriggerChar();
+      if (triggerSelect) triggerSelect.value = Variables.triggerChar();
       if (reloadNotice) reloadNotice.hidden = true;
       syncMarginInputs();
       modal.style.display = 'flex';

@@ -1,33 +1,28 @@
-// Bulle « Calcul » (demande d'Antoine du 2026-10-01 : « variables calculées », au classeur de la feuille de route « Somme et soustraction entre #Variables, sous-total + TVA = total »).
-// La ligne « Calcul » du menu des variables (onglet Chips, js/variables.js) ouvre la fenêtre de ce fichier ; la bulle qui en sort (nœud `calcBadge`, js/editor-nodes.js) porte une
-// formule que js/formula.js sait lire et évaluer, et que js/reader-mode.js remplace par son résultat en Lecture, en PDF et en Word. Ici : la fenêtre « Insérer / Modifier le
-// calcul », un champ où la touche de déclenchement complète les colonnes comme dans le nom du PDF (Variables.initFilenameInput), une rangée de fonctions, et le résultat du calcul
-// pour la ligne courante, mis à jour à la frappe.
+// Bulle « Calcul » : la ligne « Calcul » du menu des variables (onglet Chips, js/variables.js) ouvre la fenêtre de ce fichier ; la bulle qui en sort
+// (nœud `calcBadge`, js/editor-nodes.js) porte une formule que js/formula.js sait lire et évaluer, et que js/reader-mode.js remplace par son résultat
+// en Lecture, en PDF et en Word. Ici : la fenêtre « Insérer / Modifier le calcul », un champ où la touche de déclenchement complète les colonnes
+// comme dans le nom du PDF (Variables.initFilenameInput), une rangée de fonctions, et le résultat du calcul pour la ligne courante, mis à jour à la
+// frappe.
 //
-// La formule saisie (« #Facture.SousTotal * 0,2 + SOMME(#Lignes.Prix) ») n'est jamais enregistrée telle quelle : Formula.fromDisplay la ramène à l'écriture enregistrée, que la bulle
-// relit dans la langue et avec la touche de déclenchement du moment. À l'enregistrement, chaque table citée qui n'est pas celle de la page ni la table d'une zone répétée est liée à
-// la table de la page - la fenêtre de la clé de correspondance s'ouvre pour celles qui ne le sont pas encore, comme à l'insertion d'une variable d'une autre table.
+// La formule saisie (« #Facture.SousTotal * 0,2 + SOMME(#Lignes.Prix) ») n'est jamais enregistrée telle quelle : Formula.fromDisplay la ramène à
+// l'écriture enregistrée, que la bulle relit dans la langue et avec la touche de déclenchement du moment. À l'enregistrement, chaque table citée qui
+// n'est ni celle de la page ni celle d'une zone répétée est liée à la table de la page - la fenêtre de la clé de correspondance s'ouvre pour celles
+// qui ne le sont pas encore, comme à l'insertion d'une variable d'une autre table.
 //
-// Le nœud est inséré à la VALIDATION, pas à l'ouverture : « Annuler » ne laisse rien dans le document, et l'historique garde une seule étape. Les styles sont dans css/variable-calc.css.
+// Le nœud est inséré à la validation, pas à l'ouverture : « Annuler » ne laisse rien dans le document, et l'historique garde une seule étape.
+// Styles : css/variable-calc.css.
 const VariableCalc = (function () {
+  const { el, button } = Dom;
   let win = null;
   let refs = null;
   let ctx = null; // { editor, pos, isNew, format, loopTable, attempted }
-  let previewTimer = null;
-  let previewSeq = 0;
-
-  function el(tag, className, text) {
-    const e = document.createElement(tag);
-    if (className) e.className = className;
-    if (text !== undefined) e.textContent = text;
-    return e;
-  }
+  const previewRun = VariableModal.previewRunner(refreshPreview);
   const escapeRegExp = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const lang = () => I18n.getLang();
   const trigger = () => Variables.triggerChar();
 
-  // === Du texte saisi à la formule enregistrée ===
-  // Une touche de déclenchement suivie d'un nom que la saisie ne reconnaît pas comme colonne (faute de frappe, colonne supprimée) : le mot tapé, ou null.
+  // === Du texte saisi à la formule enregistrée === Une touche de déclenchement suivie d'un nom que la saisie ne reconnaît pas comme colonne (faute
+  // de frappe, colonne supprimée) : le mot tapé, ou null.
   function unknownVariableIn(text, spans) {
     const re = new RegExp(escapeRegExp(trigger()) + '[A-Za-z0-9_.]*', 'g');
     let found;
@@ -48,23 +43,22 @@ const VariableCalc = (function () {
   }
   const typedFormula = stored => Formula.toDisplay(stored, { trigger: trigger(), lang: lang() });
 
-  // Les tables de la formule qui ne sont ni celle de la page ni celle de la zone répétée où se pose la bulle (elle y lit la ligne du tour : js/loop-rules.js).
+  // Les tables de la formule qui ne sont ni celle de la page ni celle de la zone répétée où se pose la bulle (elle y lit la ligne du tour :
+  // js/loop-rules.js).
   function otherTables(ast) {
     const current = GristAPI.getCurrentTableId();
-    const tables = [];
-    Formula.variablesOf(ast).forEach(variable => { if (tables.indexOf(variable.table) === -1) tables.push(variable.table); });
-    return tables.filter(table => table !== current);
+    return [...new Set(Formula.variablesOf(ast).map(variable => variable.table))].filter(table => table !== current);
   }
 
-  // === Résultat sous le champ ===
-  // `state` : 'hint' (texte discret : un calcul pas fini, un calcul qui n'a rien à montrer), 'ok' (le résultat) ou 'error' (rouge, après une validation refusée).
+  // === Résultat sous le champ === `state` : 'hint' (texte discret : un calcul pas fini, un calcul qui n'a rien à montrer), 'ok' (le résultat) ou
+  // 'error' (rouge, après une validation refusée).
   function showStatus(text, state) {
     refs.status.textContent = text;
     refs.status.dataset.state = state;
   }
   async function refreshPreview() {
     if (!win || !win.isOpen()) return;
-    const seq = ++previewSeq;
+    const outdated = previewRun.begin();
     const text = refs.input.value;
     if (!text.trim()) { showStatus(I18n.t('calc.status.empty'), 'hint'); return; }
     const compiled = compile(text);
@@ -80,75 +74,61 @@ const VariableCalc = (function () {
     if (!record) { showStatus(I18n.t('calc.status.noRow'), 'hint'); return; }
     // keepZero : le zéro s'affiche ici, la fenêtre dit ensuite que le document ne l'écrit pas.
     const result = await Variables.resolveCalcResult(compiled.stored, tableId, record, ctx.format, { keepZero: true });
-    if (seq !== previewSeq) return;
+    if (outdated()) return;
     if (result.isError) showStatus(result.message, ctx.attempted ? 'error' : 'hint');
     else if (result.value === null) showStatus(I18n.t('calc.status.blank'), 'hint');
     else if (result.value === 0 && Variables.zeroHidden(ctx.format, 'Numeric')) showStatus(I18n.t('calc.status.zero'), 'hint');
     else showStatus(I18n.t('calc.status.result', { value: result.text }), 'ok');
-  }
-  function schedulePreview() {
-    clearTimeout(previewTimer);
-    previewTimer = setTimeout(refreshPreview, 250);
   }
 
   // === La fenêtre ===
   function ensure() {
     if (win) return;
     // restoreFocus: false : le focus revient à l'éditeur (closeWindow), pas à l'élément qui l'avait - la bulle y reste sélectionnée.
-    win = ModalBase.create({ id: 'pp-calc-modal', titleId: 'pp-calc-title', size: 'md', boxClass: 'pp-calc-box', actionsClass: 'var-modal-actions', onEscape: () => closeWindow(), restoreFocus: false });
-    const label = el('label', 'pp-dialog-label');
-    label.htmlFor = 'pp-calc-formula';
-    const input = el('input', 'pp-dialog-input');
-    input.id = 'pp-calc-formula';
-    input.type = 'text';
+    win = ModalBase.create({ id: 'pp-calc-modal', titleId: 'pp-calc-title', size: 'md', boxClass: 'pp-calc-box', actionsClass: 'var-modal-actions', onEscape: closeWindow, restoreFocus: false });
+    const { label, input } = VariableModal.labelledInput('pp-calc-formula', 'pp-dialog-input');
+    label.className = 'pp-dialog-label';
     input.autocomplete = 'off';
     input.spellcheck = false;
     input.setAttribute('aria-describedby', 'pp-calc-hint pp-calc-status');
-    // L'indication et le résultat commencent sous le champ, pas sous son libellé (règle d'Antoine, cf. condition et macro-modèle).
+    // L'indication et le résultat commencent sous le champ, pas sous son libellé.
     const hint = el('p', 'pp-link-note');
     hint.id = 'pp-calc-hint';
     const functions = el('div', 'pp-calc-functions');
     const functionsLabel = el('span', 'pp-calc-functions-label');
     functions.appendChild(functionsLabel);
     const functionButtons = Formula.FUNCTION_ORDER.map(canonical => {
-      const button = el('button', 'pp-calc-function');
-      button.type = 'button';
-      button.dataset.fn = canonical;
+      const fn = button('pp-calc-function');
+      fn.dataset.fn = canonical;
       // mousedown sans effet sur le focus : le curseur et la sélection restent dans le champ, que le clic complète.
-      button.addEventListener('mousedown', event => event.preventDefault());
-      button.addEventListener('click', () => insertFunction(canonical));
-      functions.appendChild(button);
-      return button;
+      fn.addEventListener('mousedown', event => event.preventDefault());
+      fn.addEventListener('click', () => insertFunction(canonical));
+      functions.appendChild(fn);
+      return fn;
     });
     const functionsHint = el('p', 'pp-link-note');
     const status = el('p', 'pp-calc-status');
     status.id = 'pp-calc-status';
     status.setAttribute('role', 'status');
     win.body.append(label, input, hint, functions, functionsHint, status);
-    const spacer = el('span', 'var-modal-spacer');
-    const cancel = el('button');
-    cancel.type = 'button';
-    const ok = el('button', 'var-modal-primary');
-    ok.type = 'button';
-    win.actions.append(spacer, cancel, ok);
+    const { cancel, ok } = win.addButtons();
     refs = { label, input, hint, functionsLabel, functionButtons, functionsHint, status, cancel, ok };
 
-    // La liste des colonnes s'ouvre sous le champ après la touche de déclenchement, comme dans le nom du PDF ; Entrée y choisit une colonne avant de valider la fenêtre (son écouteur
-    // passe le premier et prend l'évènement : `defaultPrevented`).
+    // La liste des colonnes s'ouvre sous le champ après la touche de déclenchement, comme dans le nom du PDF ; Entrée y choisit une colonne avant de
+    // valider la fenêtre (son écouteur passe le premier et prend l'évènement : `defaultPrevented`).
     Variables.initFilenameInput(input);
-    input.addEventListener('input', () => { input.removeAttribute('aria-invalid'); schedulePreview(); });
+    input.addEventListener('input', () => { input.removeAttribute('aria-invalid'); previewRun.schedule(); });
     input.addEventListener('keydown', event => {
       if (event.key !== 'Enter' || event.defaultPrevented || event.isComposing) return;
       event.preventDefault();
       ok.click();
     });
-    cancel.addEventListener('click', () => closeWindow());
+    cancel.addEventListener('click', closeWindow);
     ok.addEventListener('click', apply);
   }
 
   function closeWindow() {
-    clearTimeout(previewTimer);
-    previewSeq += 1;
+    previewRun.cancel();
     if (win) win.hide();
     if (ctx && ctx.editor) ctx.editor.commands.focus();
   }
@@ -170,7 +150,7 @@ const VariableCalc = (function () {
   function openWindow(editor, opts) {
     ensure();
     ctx = { editor, pos: opts.pos, isNew: opts.isNew, format: opts.format || null, loopTable: VariableLoop.loopTableAt(editor.state, opts.pos), attempted: false };
-    // La barre flottante de la bulle reste masquée tant que la fenêtre est ouverte (règle d'Antoine) ; elle revient avec la sélection à la fermeture.
+    // La barre flottante de la bulle reste masquée tant que la fenêtre est ouverte ; elle revient avec la sélection à la fermeture.
     EditorCore.hideFloatingContextToolbars();
     const { label, input, hint, functionsLabel, functionButtons, functionsHint, cancel, ok } = refs;
     win.title.textContent = I18n.t(opts.isNew ? 'calc.title.new' : 'calc.title.edit');
@@ -181,9 +161,9 @@ const VariableCalc = (function () {
     hint.textContent = I18n.t('calc.formula.hint', { trigger: trigger() });
     functionsLabel.textContent = I18n.t('calc.functions.label');
     const names = Formula.functionNames(lang());
-    functionButtons.forEach((button, i) => {
-      button.textContent = names[i];
-      button.title = I18n.t('calc.fn.' + button.dataset.fn);
+    functionButtons.forEach((fn, i) => {
+      fn.textContent = names[i];
+      fn.title = I18n.t('calc.fn.' + fn.dataset.fn);
     });
     functionsHint.textContent = I18n.t('calc.functions.hint', { trigger: trigger() });
     cancel.textContent = I18n.t('common.cancel');
@@ -194,7 +174,8 @@ const VariableCalc = (function () {
     refreshPreview();
   }
 
-  // Valide : la formule doit se lire, puis chaque table citée doit être liée à celle de la page. Une erreur reste dans la fenêtre, rouge, le champ au premier plan.
+  // Valide : la formule doit se lire, puis chaque table citée doit être liée à celle de la page. Une erreur reste dans la fenêtre, rouge, le champ au
+  // premier plan.
   async function apply() {
     const { input } = refs;
     const here = ctx;
@@ -225,8 +206,8 @@ const VariableCalc = (function () {
     closeWindow();
   }
 
-  // === Entrées ===
-  // Pose d'un nouveau calcul à la place de « #calc » (le texte tapé après la touche de déclenchement) : le texte part, la fenêtre s'ouvre, la bulle n'entre qu'à la validation.
+  // === Entrées === Pose d'un nouveau calcul à la place de « #calc » (le texte tapé après la touche de déclenchement) : le texte part, la fenêtre
+  // s'ouvre, la bulle n'entre qu'à la validation.
   function insertFromPanel(editor, range) {
     editor.chain().focus().deleteRange(range).run();
     openWindow(editor, { pos: range.from, isNew: true, formula: '', format: null });

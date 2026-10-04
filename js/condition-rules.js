@@ -179,6 +179,16 @@ const ConditionRules = (function () {
     return { mode: condition.mode === 'any' ? 'any' : 'all', rules };
   }
 
+  // La condition sous la forme enregistrée dans un nœud, ou gardée en brouillon par une fenêtre : une copie neuve (jamais un lien vers les règles que
+  // la fenêtre modifie en place), sans les règles vides, opérateur « = » par défaut, valeurs en texte ; null sans aucune règle complète.
+  function plainCondition(condition) {
+    const normalized = normalizeCondition(condition);
+    return normalized && {
+      mode: normalized.mode,
+      rules: normalized.rules.map(r => ({ column: r.column, operator: r.operator || '=', value: r.value == null ? '' : String(r.value) })),
+    };
+  }
+
   // Vrai si la variable doit s'afficher pour cette ligne : pas de condition = toujours ; 'all' = toutes les règles, 'any' = au moins une. Une règle
   // illisible compte comme non remplie (comme pour les macro-modèles, cf. matches).
   async function conditionHolds(condition, tableId, record, opts) {
@@ -214,5 +224,5 @@ const ConditionRules = (function () {
     elements.forEach((el, i) => { if (root.contains(el)) apply(el, verdicts[i]); });
   }
 
-  return { OPERATORS, compareValues, parseBoolExpected, parseColumnRef, matches, normalizeCondition, conditionHolds, elementHolds, resolveElements };
+  return { OPERATORS, compareValues, parseBoolExpected, parseColumnRef, matches, normalizeCondition, plainCondition, conditionHolds, elementHolds, resolveElements };
 })();

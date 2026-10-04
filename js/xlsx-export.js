@@ -98,12 +98,6 @@ const XlsxExport = (function () {
   }
 
   // Format d'affichage des vrais nombres et des vraies dates
-  // Même choix de langue que VariableFormat.numberLang : « us » ou « fr » imposés par la bulle, sinon la langue de l'interface.
-  function numberLangOf(style) {
-    if (style === 'us') return 'en';
-    if (style === 'fr') return 'fr';
-    return (typeof I18n !== 'undefined' && I18n.getLang() === 'en') ? 'en' : 'fr';
-  }
   // Code de format d'Excel, écrit dans sa convention (virgule des milliers, point des décimales) : Excel l'affiche selon la langue de la personne qui
   // ouvre le fichier ; seuls le groupement, le nombre de décimales et la devise viennent de la bulle.
   function numberFormatCode(format, value) {
@@ -114,7 +108,7 @@ const XlsxExport = (function () {
     else if (decimals > 0) code += '.' + '0'.repeat(decimals);
     if (f.currency) {
       const literal = String(f.currency).replace(/"/g, '');
-      code = numberLangOf(f.style) === 'fr' ? code + ' "' + literal + '"' : '"' + literal + '"' + code;
+      code = VariableFormat.numberLang(f.style) === 'fr' ? code + ' "' + literal + '"' : '"' + literal + '"' + code;
     }
     return code;
   }
