@@ -8,7 +8,9 @@
 //  - la langue au premier lancement : celle du navigateur (la première des deux langues du widget dans l'ordre de ses préférences, l'anglais s'il n'en propose aucune,
 //    le français s'il ne dit rien), sauf choix enregistré dans Réglages, qui l'emporte ; un stockage refusé ne casse rien ;
 //  - « hors de Grist » : le widget ouvert seul dans un onglet dit où l'ajouter, donne l'adresse à coller (et la copie d'un clic), renvoie au guide d'installation dans
-//    la langue de la page, et ne se ferme pas par Échap ; rien de tout cela avec `?dev` dans l'adresse ni quand Grist répond ;
+//    la langue de la page, et ne se ferme pas par Échap ; rien de tout cela avec `?dev` dans l'adresse ni quand Grist répond ; l'adresse donnée est celle du dossier de la
+//    page là où elle est servie (site public = celle du README, autre hébergement, serveur local), sans fichier, paramètres ni ancre, et celle du site public pour une page
+//    ouverte depuis un fichier du disque ;
 //  - « réseau bloqué » : un module de l'éditeur qui ne se télécharge pas, ou le script de l'API Grist absent d'un cadre, ouvre la fenêtre qui liste les adresses à
 //    autoriser, le message du navigateur à la demande, « Recharger la page » (qui recharge pour de bon, et le widget démarre quand l'adresse est rouverte) ;
 //  - « démarrage trop long » (30 s sans erreur) : mêmes adresses, « Continuer d'attendre » ou Échap la ferment, elle se ferme d'elle-même quand le widget est prêt ;
@@ -33,6 +35,7 @@ const SHOTS = process.env.FIRST_CONTACT_SHOTS || '';
 const WIDTH = 700;
 const HEIGHT = 400;
 const REPO = 'https://github.com/grist-factory/Publipostage-Plus';
+const PUBLIC_ADDRESS = 'https://grist-factory.github.io/Publipostage-Plus/'; // l'adresse du site public, celle que le README donne à coller dans Grist
 if (SHOTS) await mkdir(SHOTS, { recursive: true });
 
 // Même régénération du harnais et même miroir hors-ligne que dev-tests/verify-modal-pages-mouse.mjs.
@@ -112,8 +115,10 @@ const pageErrors = [];
 //    n'est pas chargé) ; stored : valeur de pp_lang déjà enregistrée ;
 //  - noGrist : Grist ne répond jamais à onOptions (le widget ouvert seul dans un onglet) ;
 //  - clock : l'horloge de la page est pilotée par le test (page.clock) ;
-//  - denyStorage : localStorage refuse tout (navigation privée, stockage bloqué).
-async function openPage({ esm = 'serve', locale, languages, stored, noGrist = false, clock = false, denyStorage = false, query = '', wait = 'load', width = WIDTH, height = HEIGHT, frame = false, blockStub = false } = {}) {
+//  - denyStorage : localStorage refuse tout (navigation privée, stockage bloqué) ;
+//  - origin : l'adresse où la page est SERVIE (le site public, une copie ailleurs) : ses fichiers viennent du serveur local mais le navigateur croit les lire de là ;
+//    `path` est ce qui suit dans la barre d'adresse (nom du fichier, paramètres, ancre) ; file : la page est ouverte depuis un fichier du disque (file://).
+async function openPage({ esm = 'serve', locale, languages, stored, noGrist = false, clock = false, denyStorage = false, query = '', wait = 'load', width = WIDTH, height = HEIGHT, frame = false, blockStub = false, origin = '', path = '', file = false } = {}) {
   const context = await browser.newContext({ bypassCSP: true, viewport: { width, height }, permissions: ['clipboard-read', 'clipboard-write'], ...(locale ? { locale } : {}) });
   const page = await context.newPage();
   const state = { context, page, esm, held: [], consoleLines: [], errors: [], opened: [] };
@@ -139,6 +144,16 @@ async function openPage({ esm = 'serve', locale, languages, stored, noGrist = fa
   if (denyStorage) await page.addInitScript(() => { Object.defineProperty(window, 'localStorage', { configurable: true, get() { throw new Error('stockage refusé'); } }); });
   if (noGrist) await page.addInitScript(() => { window.__preSeedGristStub = () => { window.grist.onOptions = function () { /* Grist ne répond pas */ }; }; });
   if (clock) await page.clock.install();
+  if (origin) {
+    const home = new URL(origin);
+    await page.route(`${home.origin}${home.pathname}**`, async route => {
+      const asked = new URL(route.request().url());
+      let rel = decodeURIComponent(asked.pathname.slice(home.pathname.length));
+      if (rel === '' || rel === 'index.html') rel = '_test-harness.html'; // la page d'accueil du site est le harnais (index.html avec le faux Grist)
+      const res = await fetch(`${BASE}/${rel}${asked.search}`);
+      await route.fulfill({ status: res.status, headers: { 'content-type': res.headers.get('content-type') || 'application/octet-stream' }, body: Buffer.from(await res.arrayBuffer()) });
+    });
+  }
   if (frame) {
     // Le widget dans un cadre, comme Grist le montre : une page hôte de la même origine (pour lire le cadre), puis le harnais dedans.
     await page.route(`${BASE}/_frame-host.html`, route => route.fulfill({
@@ -151,6 +166,10 @@ async function openPage({ esm = 'serve', locale, languages, stored, noGrist = fa
       if (!state.frame) await page.waitForTimeout(100);
     }
     await state.frame.waitForLoadState('load');
+  } else if (origin) {
+    await page.goto(`${origin}${path}`, { waitUntil: wait });
+  } else if (file) {
+    await page.goto(`file://${join(ROOT, '_test-harness.html')}${query}`, { waitUntil: wait });
   } else {
     await page.goto(`${BASE}/_test-harness.html${query}`, { waitUntil: wait });
   }
@@ -492,7 +511,7 @@ await section('Réseau bloqué et erreur de démarrage (fenêtre ouverte par mai
 // 4. Hors de Grist : le widget ouvert seul dans un onglet (aucune réponse de Grist).
 // ============================================================================================================================================================
 await section('Ouvert hors de Grist', async () => {
-  const B = await openPage({ noGrist: true });
+  const B = await openPage({ noGrist: true, origin: PUBLIC_ADDRESS }); // servi comme sur le site public : la fenêtre et les captures montrent la vraie adresse
   await waitWindow(B, 15000);
   await B.page.evaluate(() => { window.__opened = []; window.open = (...args) => { window.__opened.push(args); return null; }; });
   for (const [theme, lang] of LOOKS) {
@@ -502,7 +521,7 @@ await section('Ouvert hors de Grist', async () => {
     await B.page.waitForTimeout(150);
     const d = await checkWindow(B, T, 'outside', lang, [t.readme]);
     check(`${T} : trois étapes, la première donne l’adresse de la page (celle à coller dans Grist) et un bouton « ${t.copy} »`,
-      d.steps.length === 3 && d.address === BASE + '/' && d.copyLabel === t.copy && d.steps[0].includes(d.address), { steps: d.steps.length, address: d.address, copy: d.copyLabel });
+      d.steps.length === 3 && d.address === PUBLIC_ADDRESS && d.copyLabel === t.copy && d.steps[0].includes(d.address), { steps: d.steps.length, address: d.address, copy: d.copyLabel });
     check(`${T} : ni liste d’adresses ni message technique`, d.hosts.length === 0 && d.details === null, { hosts: d.hosts, details: d.details });
     // « Lire l’installation » : le guide, dans la langue de la page, dans un autre onglet sans lien avec la page.
     await B.page.evaluate(() => { window.__opened.length = 0; });
@@ -517,7 +536,7 @@ await section('Ouvert hors de Grist', async () => {
   // « Copier » met l'adresse dans le presse-papiers et le dit.
   const copyFr = await realClick(B, WINDOW + ' .pp-first-contact-copy', 300);
   const clip = await B.page.evaluate(async () => ({ clipboard: await navigator.clipboard.readText(), label: document.querySelector('.pp-first-contact-copy').textContent }));
-  check('« Copier » met l’adresse dans le presse-papiers et répond « Copié »', clip.clipboard === BASE + '/' && clip.label === TEXT.fr.copied, clip);
+  check('« Copier » met l’adresse dans le presse-papiers et répond « Copié »', clip.clipboard === PUBLIC_ADDRESS && clip.label === TEXT.fr.copied, clip);
   check('... et le bouton garde sa place (la ligne ne bouge pas)', (await hitTest(B, WINDOW + ' .pp-first-contact-copy')).found && Math.abs((await hitTest(B, WINDOW + ' .pp-first-contact-copy')).y - copyFr.y) < 2);
   // Une erreur de démarrage (conséquence d'être hors de Grist) ne remplace pas la consigne ; le clavier reste dans la fenêtre, Échap ne la ferme pas.
   await B.page.evaluate(() => FirstContact.failed(new Error('Failed to fetch dynamically imported module : conséquence, pas cause')));
@@ -532,6 +551,36 @@ await section('Ouvert hors de Grist', async () => {
   await B2.page.waitForTimeout(3500);
   check('avec ?dev dans l’adresse, le widget ouvert hors de Grist n’affiche rien', !(await displayed(B2, WINDOW)) && await B2.page.evaluate(sel => !document.querySelector(sel), WINDOW));
   await closePage(B2);
+});
+
+// ============================================================================================================================================================
+// 4b. L'adresse donnée hors de Grist : celle du dossier de la page là où elle est servie (le site public donne celle du README), sans fichier, paramètres ni ancre ;
+//     une page ouverte depuis un fichier du disque n'en a pas que Grist puisse charger : elle donne celle du site public.
+// ============================================================================================================================================================
+await section('Adresse donnée hors de Grist', async () => {
+  const addressOn = async opts => {
+    const S = await openPage({ noGrist: true, ...opts });
+    await waitWindow(S, 15000);
+    const d = await describe(S);
+    await closePage(S);
+    return { kind: d.kind, address: d.address, inFirstStep: d.steps.length > 0 && d.steps[0].includes(d.address) };
+  };
+  const readme = readFileSync(join(ROOT, 'outils', 'depot-propre', 'public', 'README.md'), 'utf8');
+  const given = [...readme.matchAll(/\*\*`(https:\/\/grist-factory\.github\.io\/[^`]+)`\*\*/g)].map(m => m[1]);
+  check('le README, en français et en anglais, donne à coller l’adresse du site public, celle que montre la fenêtre sur ce site', given.length === 2 && given.every(a => a === PUBLIC_ADDRESS), given);
+
+  const tail = await addressOn({ origin: PUBLIC_ADDRESS, path: 'index.html?utm_source=lien#installation' });
+  check('ouvert par .../index.html?utm_source=lien#installation, la fenêtre donne le dossier du site public : ni fichier, ni paramètre, ni ancre',
+    tail.kind === 'outside' && tail.address === PUBLIC_ADDRESS && tail.inFirstStep, tail);
+  const fork = await addressOn({ origin: 'https://exemple.github.io/mon-widget/' });
+  check('copie hébergée ailleurs : la fenêtre donne l’adresse de cette copie, pas celle du site public', fork.kind === 'outside' && fork.address === 'https://exemple.github.io/mon-widget/', fork);
+  const root = await addressOn({ origin: 'https://exemple.org/' });
+  check('hébergement à la racine d’un domaine : l’adresse est celle du domaine', root.kind === 'outside' && root.address === 'https://exemple.org/', root);
+  const local = await addressOn({});
+  check('serveur local : l’adresse garde son port (celle qu’on colle dans Grist en développant)', local.kind === 'outside' && local.address === BASE + '/', local);
+  const disk = await addressOn({ file: true });
+  check('page ouverte depuis un fichier du disque (file://) : la fenêtre donne l’adresse du site public, pas un chemin de disque que Grist ne peut pas charger',
+    disk.kind === 'outside' && disk.address === PUBLIC_ADDRESS && disk.inFirstStep, disk);
 });
 
 // ============================================================================================================================================================

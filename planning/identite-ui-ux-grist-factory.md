@@ -274,7 +274,7 @@ Antoine utilise Publipostage+ dans un panneau Grist d'environ **700×400 px** : 
 
 ### Quand le widget ne démarre pas : une fenêtre qui dit quoi faire
 Choix d'Antoine du 04/10 (« Tout soigner »). Un widget qui ne démarre pas ne laisse jamais un écran vide ni une erreur pour la seule console : une fenêtre du widget (`js/first-contact.js`, base commune des fenêtres) en dit la cause et le geste, en français et en anglais, dans le panneau de 700×400. Quatre sortes :
-- **hors de Grist** : la page ouverte seule dans un onglet, sans cadre parent et sans réponse de Grist ; où ajouter le widget, l'adresse à coller (« Copier »), le guide d'installation ;
+- **hors de Grist** : la page ouverte seule dans un onglet, sans cadre parent et sans réponse de Grist ; où ajouter le widget, l'adresse à coller (« Copier »), le guide d'installation. L'adresse est celle du dossier de la page là où elle est servie, sans nom de fichier, paramètres ni ancre (le site public donne celle du README, une copie hébergée ailleurs la sienne) ; une page ouverte depuis un fichier du disque donne celle du site public, jamais un chemin de disque ;
 - **réseau bloqué** : une adresse dont dépend le widget ne répond pas ; les quatre adresses de la politique de sécurité de `index.html`, chacune avec ce qu'elle sert à faire, le message du navigateur replié ;
 - **chargement long** : 30 s sans erreur ; mêmes adresses, « Continuer d'attendre » et Échap la ferment, elle se ferme d'elle-même quand le widget est prêt ;
 - **erreur** : toute autre erreur de démarrage ; le message technique déplié, « Recharger la page ».

@@ -14,6 +14,7 @@ const FirstContact = (function () {
   const OUTSIDE_WAIT_MS = 1000;
   const SLOW_MS = 30000;
   const REPO = 'https://github.com/grist-factory/Publipostage-Plus';
+  const PUBLIC_ADDRESS = 'https://grist-factory.github.io/Publipostage-Plus/'; // celle que le README donne à coller dans Grist
   const ANCHORS = { install: { fr: '#installation-dans-grist', en: '#installing-in-grist' }, limits: { fr: '#limites-connues', en: '#known-limitations' } };
   // Les adresses dont dépend le widget, avec ce qu'elles servent à faire (README, « Dépendances »).
   const HOSTS = [
@@ -43,8 +44,10 @@ const FirstContact = (function () {
   const devMode = () => { try { return new URLSearchParams(window.location.search).has('dev'); } catch (e) { return false; } };
   const alone = () => window.parent === window;
   const gristAnswered = () => GristAPI.getAccessLevel() !== null;
-  // L'adresse du dossier de la page, celle à coller dans Grist : la même que celle où se trouve la personne (dépôt public, copie hébergée ailleurs).
-  const widgetAddress = () => new URL('.', window.location.href).href;
+  // L'adresse du dossier de la page, celle à coller dans Grist : la même que celle où se trouve la personne (site public, copie hébergée ailleurs, serveur local),
+  // sans le nom du fichier, les paramètres ni l'ancre. Une page ouverte depuis un fichier du disque (le dépôt téléchargé) n'a pas d'adresse que Grist puisse charger :
+  // on donne alors celle du site public.
+  const widgetAddress = () => (/^https?:$/.test(window.location.protocol) ? new URL('.', window.location.href).href : PUBLIC_ADDRESS);
   const repoLink = section => REPO + ANCHORS[section][I18n.getLang()];
 
   function ensure() {
