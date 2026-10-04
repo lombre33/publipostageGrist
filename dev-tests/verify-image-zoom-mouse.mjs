@@ -1,14 +1,16 @@
 #!/usr/bin/env node
-// Gestes sur une image à la taille du panneau Grist d'Antoine (~700x400), vraie souris pour tout : la feuille A4 y est réduite à ~0,85 (--pp-fit-zoom), donc un
+// Gestes sur une image à la taille du panneau Grist (~700x400), vraie souris pour tout : la feuille A4 y est réduite à ~0,85 (--pp-fit-zoom), donc un
 // pixel de souris et un pixel de getBoundingClientRect ne valent plus un pixel de mise en page (`left`, `top`, `width` d'une image).
-// Bug corrigé (01/10) : js/editor-nodes.js (redimensionner, déplacer) et js/floating-toolbars.js (à gauche / au centre / à droite d'une image en calque, premier
-// passage en calque) additionnaient des pixels écran à des pixels de mise en page. À 700 px : agrandir une image de 100 px la RÉTRÉCISSAIT, la glisser de 100 px ne la
-// déplaçait que de 85, « à droite » la faisait déborder de 42 px sur la marge, « devant le texte » la décalait en haut à gauche au premier clic. Aucun test ne le voyait :
-// les scénarios de dev-tests/ tournent à 1400x1000, feuille à sa taille réelle (facteur 1), et dispatchEvent ne passe pas par la vraie souris.
+// Ce que ce test attrape : js/editor-nodes.js (redimensionner, déplacer) et js/floating-toolbars.js (à gauche / au centre / à droite d'une image en
+// calque, premier passage en calque) qui additionneraient des pixels écran à des pixels de mise en page. À 700 px, agrandir une image de 100 px la
+// rétrécirait, la glisser de 100 px ne la déplacerait que de 85, « à droite » la ferait déborder de 42 px sur la marge, « devant le texte » la
+// décalerait en haut à gauche au premier clic. Les scénarios de dev-tests/ tournent à 1400x1000, feuille à sa taille réelle (facteur 1), et
+// dispatchEvent ne passe pas par la vraie souris : ils ne le voient pas.
 // Même parcours rejoué à 1400x1000 (facteur 1) en témoin : rien ne doit y changer.
-// Suivi des modifications actif (choix d'Antoine, 01/10 : « le déplacement d'une image laisse une trace, quel que soit le mode de déplacement ») : glisser l'image laisse l'original barré
-// à sa place et pose la copie à la nouvelle position (suppression + insertion suggérées), resélectionnée ; un simple clic sur l'image sélectionnée ne laisse rien ; glisser la copie la
-// déplace en place ; l'original barré ne se glisse pas ; accepter garde la copie, refuser rend l'original (même parcours aux flèches : dev-tests/verify-image-arrows-keyboard.mjs).
+// Suivi des modifications actif (le déplacement d'une image laisse une trace, quel que soit le mode de déplacement) : glisser l'image laisse
+// l'original barré à sa place et pose la copie à la nouvelle position (suppression + insertion suggérées), resélectionnée ; un simple clic sur
+// l'image sélectionnée ne laisse rien ; glisser la copie la déplace en place ; l'original barré ne se glisse pas ; accepter garde la copie, refuser
+// rend l'original (même parcours aux flèches : dev-tests/verify-image-arrows-keyboard.mjs).
 // Lancé par run-headless.mjs (groupe Node "imageZoomMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-image-zoom-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -170,8 +172,9 @@ async function selectImage() {
   await clickAt(c.x, c.y);
   return page.evaluate(() => { const n = EditorCore.getEditor().state.selection.node; return !!n && n.type.name === 'editorImage'; });
 }
-// Centre d'une poignée que la souris touche vraiment. La pastille du zoom (js/page-zoom.js) est fixe en bas à droite du panneau et, à 700x400, recouvre la poignée en bas à droite
-// d'une image agrandie : on fait alors défiler le document à la vraie molette, comme le ferait Antoine, jusqu'à ce que la poignée soit dégagée.
+// Centre d'une poignée que la souris touche vraiment. La pastille du zoom (js/page-zoom.js) est fixe en bas à droite du panneau et, à 700x400,
+// recouvre la poignée en bas à droite d'une image agrandie : on fait alors défiler le document à la vraie molette jusqu'à ce que la poignée soit
+// dégagée.
 async function reachableHandle(sel, handleSel) {
   let c = await centerOf(sel);
   for (let i = 0; i < 8 && c && !(await hit(c, handleSel)); i++) {

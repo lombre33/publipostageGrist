@@ -1,7 +1,8 @@
-// Fusionner et scinder des cases dans un tableau de DOCUMENT (Antoine, 04/10 : « fusion de cellules dans les documents » à coder pour la bêta, carte « Complète »). La grille a les
-// siennes (js/grid-editor.js:mergeCells et splitCell, qui règlent aussi les bordures et les sauts de page d'une grille) ; celles-ci vont avec les mêmes boutons de la barre du tableau
-// (js/floating-toolbars.js), grisés quand ils ne servent pas, avec leur raison pour info-bulle (jamais retirés). Le texte des cases fusionnées se garde à la suite de celui de la
-// première (prosemirror-tables), le fond et le type (titre ou case) sont ceux de la première, Annuler rend tout d'un seul geste. Ne touche pas au DOM : tout passe par l'éditeur.
+// Fusionner et scinder des cases dans un tableau de document. La grille a les siennes (js/grid-editor.js:mergeCells et splitCell, qui règlent aussi
+// les bordures et les sauts de page d'une grille) ; celles-ci vont avec les mêmes boutons de la barre du tableau (js/floating-toolbars.js), grisés
+// quand ils ne servent pas, avec leur raison pour info-bulle (jamais retirés). Le texte des cases fusionnées se garde à la suite de celui de la
+// première (prosemirror-tables), le fond et le type (titre ou case) sont ceux de la première, Annuler rend tout d'un seul geste. Ne touche pas au
+// DOM : tout passe par l'éditeur.
 const TableMerge = (function () {
   let libs = null; // { TableMap, selectedRect, isInTable } de prosemirror-tables, posés par Editor.init()
   function configure(tools) { libs = tools; }

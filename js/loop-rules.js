@@ -61,11 +61,10 @@ const LoopRules = (function () {
       // Colonne en chemin (#Projet.Accompagnateur.Membres, GristAPI.resolveColumnPath) : la boucle lit sa liste dans la ligne courante sous le nom
       // d'une seule colonne, pas d'un chemin - grisée.
       if (String(attrs.column).indexOf('.') !== -1) return null;
-      const type = GristAPI.getColumnType(attrs.table, attrs.column) || '';
-      if (type.indexOf('RefList:') !== 0) return null;
-      const target = type.slice('RefList:'.length);
+      const ref = GristAPI.referenceOf(GristAPI.getColumnType(attrs.table, attrs.column));
+      if (!ref || !ref.list) return null;
       // Une liste de références vers la table de la page elle-même lierait aussi toutes les autres variables de la page à la fiche du tour : écartée.
-      return target && target !== currentTableId ? { table: target, via: { table: currentTableId, column: attrs.column } } : null;
+      return ref.table !== currentTableId ? { table: ref.table, via: { table: currentTableId, column: attrs.column } } : null;
     }
     const rule = GristAPI.getLinkRule(attrs.table);
     if (!rule || rule.mode !== 'match' || rule.colonneCible === 'id') return null;

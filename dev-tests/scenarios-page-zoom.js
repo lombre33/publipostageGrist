@@ -1,9 +1,11 @@
-// Suite "pageZoom" - zoom de la page (js/page-zoom.js, css/page-zoom.css), retour d'Antoine du 2026-10-04 : « pouvoir zoomer dans l'éditeur à la fois en mode lecture et en
-// mode édition » (un petit document aux dimensions personnalisées apparaît tout petit au milieu du gris). Une pastille dans le coin bas droit du document (moins, pourcentage,
-// plus, Ajuster), Ctrl (⌘) + molette, Ctrl (⌘) + plus / moins / 0 ; affichage seulement ; le niveau est gardé par modèle, dans ce navigateur.
-// Ici : la structure, les niveaux, les états et les textes, DANS la page (clics, touches et molette synthétiques) ; dev-tests/verify-page-zoom-mouse.mjs en mesure les pixels à
-// 700x400 à la vraie souris, à la vraie molette et au vrai clavier, en clair, en sombre et en anglais.
-// Les contrôles se lisent par le DOM (#pp-page-zoom-*), jamais par l'API de PageZoom : sur l'ancien code ils sont absents et le scénario échoue au lieu de lever une exception.
+// Suite "pageZoom" - zoom de la page (js/page-zoom.js, css/page-zoom.css), en Édition et en Lecture : un petit document aux dimensions personnalisées
+// apparaîtrait sinon tout petit au milieu du gris. Une pastille dans le coin bas droit du document (moins, pourcentage, plus, Ajuster), Ctrl (⌘) +
+// molette, Ctrl (⌘) + plus / moins / 0 ; affichage seulement ; le niveau est gardé par modèle, dans ce navigateur.
+// Ici : la structure, les niveaux, les états et les textes, dans la page (clics, touches et molette synthétiques) ;
+// dev-tests/verify-page-zoom-mouse.mjs en mesure les pixels à 700x400 à la vraie souris, à la vraie molette et au vrai clavier, en clair, en sombre
+// et en anglais.
+// Les contrôles se lisent par le DOM (#pp-page-zoom-*), jamais par l'API de PageZoom : sur l'ancien code ils sont absents et le scénario échoue au
+// lieu de lever une exception.
 // Chaque scénario repart de l'affichage d'origine et y revient (finish) : le niveau choisi ne doit rien laisser derrière lui.
 (function () {
   const cases = [];

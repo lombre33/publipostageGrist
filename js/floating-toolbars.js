@@ -631,7 +631,7 @@ const FloatingToolbars = (function () {
 
   // Barre flottante d'une bulle #Variable (même modèle que l'image), ouverte sur toutes les variables : un groupe d'actions à gauche (condition
   // d'affichage, autres attributs de la même ligne, boucle sur les lignes liées, liste des valeurs d'une colonne Liste de choix ou de références,
-  // et, SEULEMENT sur une variable cassée, le choix d'une autre colonne), puis, pour une colonne nombre, date ou Oui / Non seulement, le
+  // et, seulement sur une variable cassée, le choix d'une autre colonne), puis, pour une colonne nombre, date ou Oui / Non seulement, le
   // sous-panneau de format choisi par le type de la colonne Grist (Oui /
   // Non : trois cases et « vrai / faux »). Une bulle « Calcul » (js/variable-calc.js) ouvre la même barre : « Modifier le calcul » prend la place du
   // groupe d'actions (condition, autres attributs et boucle sont grisés, sans objet pour une formule), avec le réglage nombre puisque son résultat
@@ -789,7 +789,7 @@ const FloatingToolbars = (function () {
       setDisabled(action, true, I18n.t(reasonKey));
       setActive(action, false);
     }
-    // « Colonne… » : là SEULEMENT sur une variable cassée (la bulle rouge : colonne, chemin ou table disparus dans Grist), pour y choisir la bonne
+    // « Colonne… » : là seulement sur une variable cassée (la bulle rouge : colonne, chemin ou table disparus dans Grist), pour y choisir la bonne
     // colonne ; absente - cachée, pas grisée : demande expresse, exception à « rien ne disparaît » - d'une variable saine, d'un calcul (même cassé),
     // d'un bloc de texte, d'une valeur et d'une case conditionnelle. Relue à chaque ouverture de la barre : une variable réparée la perd.
     function syncColumnButton(node) {

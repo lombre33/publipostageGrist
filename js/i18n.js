@@ -61,7 +61,7 @@ const I18n = (function () {
     // Lecture épurée (js/clean-reading.js) : la ligne du menu du bouton Mode lecture, et l'info-bulle du bouton de sortie.
     'toolbar.cleanReading': { fr: 'Lecture épurée', en: 'Clean reading' },
     'cleanReading.exit': { fr: 'Quitter la lecture épurée (Échap)', en: 'Exit clean reading (Esc)' },
-    // Zoom de la page (js/page-zoom.js, retour d'Antoine du 2026-10-04) : la pastille du coin bas droit du document. {keys} : le raccourci,
+    // Zoom de la page (js/page-zoom.js) : la pastille du coin bas droit du document. {keys} : le raccourci,
     // « Ctrl » ou « ⌘ » selon la plateforme - le script compose ces textes, aucun attribut data-i18n-* ne les porte.
     'pageZoom.group': { fr: 'Zoom de la page', en: 'Page zoom' },
     'pageZoom.value': { fr: '{n} %', en: '{n}%' },

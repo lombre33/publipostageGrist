@@ -1,16 +1,15 @@
 // Zoom de la page, en Édition comme en Lecture : agrandir ou réduire la feuille à l'écran. Un petit document aux dimensions personnalisées (un badge)
-// apparaissait tout petit au milieu du gris (retour d'Antoine du 2026-10-04). Affichage seulement : la page, le PDF, le Word et les exports gardent
-// leurs dimensions réelles.
-//  - Un seul mécanisme, celui d'avant : le facteur `--pp-fit-zoom` (zoom CSS de la feuille, css/editor-v2.css), posé par js/main.js:applyPageFitZoom, qui
-//    demande ici sa valeur (factorFor). Tout ce qui se mesure sur la feuille le divise déjà par ce facteur (EditorCore.layoutZoom). Trois états :
-//    « auto » (l'affichage d'origine : la feuille réduite pour tenir dans le panneau quand elle est plus large, jamais agrandie), « fit » (« Ajuster » :
-//    la feuille prend toute la largeur du panneau et la suit quand il change de taille) et « manual » (un niveau choisi, de 25 à 400 %, qui ne bouge
+// apparaîtrait sinon tout petit au milieu du gris. Affichage seulement : la page, le PDF, le Word et les exports gardent leurs dimensions réelles.
+//  - Un seul mécanisme : le facteur `--pp-fit-zoom` (zoom CSS de la feuille, css/editor-v2.css), posé par js/main.js:applyPageFitZoom, qui demande
+//    ici sa valeur (factorFor). Tout ce qui se mesure sur la feuille le divise déjà par ce facteur (EditorCore.layoutZoom). Trois états : « auto »
+//    (l'affichage d'origine : la feuille réduite pour tenir dans le panneau quand elle est plus large, jamais agrandie), « fit » (« Ajuster » : la
+//    feuille prend toute la largeur du panneau et la suit quand il change de taille) et « manual » (un niveau choisi, de 25 à 400 %, qui ne bouge
 //    plus avec le panneau).
 //  - Commandes : la pastille du coin bas droit du document (moins, pourcentage, plus, Ajuster - la barre d'outils reste gelée), Ctrl (⌘) + molette ou
 //    pincement, Ctrl (⌘) + plus, moins ou 0 (0 rend l'affichage d'origine, comme un clic sur le pourcentage). Le point sous le pointeur ne bouge pas
 //    (le centre du panneau pour les boutons et le clavier).
-//  - Indisponible - grisé, jamais retiré - quand rien ne s'affiche en page : aperçu de la page décoché, grille, résumé d'un macro-modèle. Les touches et
-//    la molette laissent alors le navigateur faire ce qu'il faisait.
+//  - Indisponible - grisé, jamais retiré - quand rien ne s'affiche en page : aperçu de la page décoché, grille, résumé d'un macro-modèle. Les touches
+//    et la molette laissent alors le navigateur faire ce qu'il faisait.
 //  - Le niveau est gardé par modèle, dans ce navigateur (localStorage, comme la langue) ; un modèle jamais zoomé repart de l'affichage d'origine.
 // Script classique (pas type="module"), même convention de portée globale que CleanReading ; js/main.js le câble (wire) et lui annonce chaque modèle
 // chargé (useTemplate).
@@ -86,8 +85,6 @@ const PageZoom = (function () {
     mode = entry ? entry.m : 'auto';
     level = entry && entry.m === 'manual' ? entry.z : 1;
   }
-
-  // Le facteur à poser
 
   // La largeur que prend la barre de défilement verticale d'un conteneur (0 avec les barres qui se superposent au contenu), mesurée une fois.
   let scrollbarPx = null;

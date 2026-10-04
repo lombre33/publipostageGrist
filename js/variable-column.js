@@ -1,4 +1,4 @@
-// « Colonne… » de la barre flottante d'une bulle #Variable CASSÉE (colonne renommée ou supprimée dans Grist) : choisir à la main, dans une liste
+// « Colonne… » de la barre flottante d'une bulle #Variable cassée (colonne renommée ou supprimée dans Grist) : choisir à la main, dans une liste
 // avec recherche (js/search-select.js) de toutes les colonnes - celles de la table de la page en tête, comme la liste « # » -, la colonne qui prend
 // la place de celle de la bulle. Le bouton n'est dans la barre que sur une bulle rouge (js/floating-toolbars.js, `isBroken` ci-dessous) ; la liste,
 // elle, sait remplacer aussi la colonne d'une bulle valide.

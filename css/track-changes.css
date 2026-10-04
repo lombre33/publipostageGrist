@@ -4,7 +4,7 @@
    posés sur tout bouton de #v2-toolbar (icône, survol, .is-active, :disabled - css/editor-v2.css). Les marques « insertion » (vert) et
    « deletion » (rouge, barré) prennent les teintes d'une case de colonne suivie (plus bas) : écrites en dur, les mêmes en clair et en sombre, car
    la page reste blanche en thème sombre (charte, « Contrastes ») - un jeton de thème y posait une pastille foncée sur le papier ; 5,7:1 pour le
-   vert et 5,6:1 pour le rouge (le texte supprimé en --danger sur --danger-soft n'avait que 3,7:1, demande d'Antoine du 01/10). La marque
+   vert et 5,6:1 pour le rouge (--danger sur --danger-soft ne ferait que 3,7:1). La marque
    « modification » réutilise --accent déjà présente dans css/style.css, comme .comment-mark le fait pour son propre état. parseHTML de
    ModificationMark lit `span[data-type="modification"]` sans exiger data-id (attribut optionnel côté schéma) ; ces règles ciblent le sélecteur
    d'attribut seul pour rester valides même sur un span sans data-id. */

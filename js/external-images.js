@@ -1,18 +1,20 @@
-// Images d'un site externe à l'export (choix d'Antoine, 2026-10-01 : « Fenêtre avant l'export », AUDIT_CODE.md §2.3). Une image du modèle dont l'adresse est un
-// http(s) vers un autre site que le widget ou Grist (ancien modèle inséré par URL avant la conversion en base64 à l'insertion, image collée depuis une page web,
-// conversion impossible) était téléchargée à chaque export, sans rien demander (js/pdf-export.js:inlineEditorImagesAsDataUri, js/docx-export.js:docxImageDataFrom, js/xlsx-export.js:imageForWorkbook).
-// Avant tout export, une fenêtre (Dialogs.confirm) liste les sites : « Continuer » exporte, « Annuler » arrête l'export - rien n'est téléchargé ni écrit.
-// Ne comptent PAS comme externes : les data: et blob:, l'origine du widget, et le serveur de Grist (les images de pièces jointes, dont « Image depuis une
-// variable » qui ne lit que des colonnes Pièces jointes : aucune cellule ne peut envoyer l'export vers un autre site).
-// À l'affichage (contrôle de sécurité du 04/10, « Tout corriger », AUDIT_CODE.md §3.2) : une image d'un autre site se charge dès que le modèle s'ouvre, dans l'éditeur comme dans la
-// Lecture, et révèle à ce site l'ouverture du document (adresse IP, heure). Rien ne l'empêche - le modèle s'affiche comme avant -, mais elle est signalée en permanence : toute <img> de
-// la page qui charge depuis un autre site porte data-external-site="hôte" et une infobulle, et css/external-images.css lui trace un contour en tirets. Un observateur de la page le fait
-// pour TOUTES les images, éditeur, Lecture, en-têtes et pieds compris : aucune surface d'affichage n'a à y penser. Le widget n'a aucune image d'un autre site dans sa propre interface.
-//   ExternalImages.confirmExport(html, headerFooterData)  -> Promise<void> ; rejette (isCancel) quand la fenêtre est refusée
-//   ExternalImages.beginRun() / endRun()                   -> un lancement d'export (un clic, un lot entier : js/main.js:withExportLock) : un site déjà accepté n'est pas
-//                                                              redemandé, un refus arrête tout le lot ; sans lancement ouvert, chaque appel demande pour lui seul
+// Images d'un autre site que le widget et Grist, à l'export et à l'affichage.
+// Une image du modèle dont l'adresse est un http(s) vers un autre site (ancien modèle inséré par URL avant la conversion en base64 à l'insertion,
+// image collée depuis une page web, conversion impossible) est téléchargée par l'export (js/pdf-export.js:inlineEditorImagesAsDataUri,
+// js/docx-export.js:docxImageDataFrom, js/xlsx-export.js:imageForWorkbook) : avant tout export, une fenêtre (Dialogs.confirm) liste ces sites,
+// « Continuer » exporte et « Annuler » arrête l'export, sans rien télécharger ni écrire.
+// Ne comptent pas comme externes : les data: et blob:, l'origine du widget et le serveur de Grist (les images de pièces jointes, dont « Image depuis
+// une variable », qui ne lit que des colonnes Pièces jointes : aucune cellule ne peut envoyer l'export vers un autre site).
+// À l'affichage, une image d'un autre site se charge dès que le modèle s'ouvre, dans l'éditeur comme dans la Lecture, et révèle à ce site l'ouverture
+// du document (adresse IP, heure). Rien ne l'empêche, le modèle s'affiche comme avant, mais elle est signalée en permanence : toute <img> de la page
+// qui charge depuis un autre site porte data-external-site="hôte" et une infobulle, et css/external-images.css lui trace un contour en tirets. Un
+// observateur de la page le fait pour toutes les images (éditeur, Lecture, en-têtes et pieds) : aucune surface d'affichage n'a à y penser. Le widget
+// n'a aucune image d'un autre site dans sa propre interface.
+//   ExternalImages.confirmExport(html, headerFooterData) -> Promise<void> ; rejette (isCancel) quand la fenêtre est refusée
+//   ExternalImages.beginRun() / endRun() -> un lancement d'export (un clic, un lot entier : js/main.js:withExportLock) : un site déjà accepté n'est
+//   pas redemandé, un refus arrête tout le lot ; sans lancement ouvert, chaque appel demande pour lui seul
 //   ExternalImages.isCancel(error)
-//   ExternalImages.siteOf(src)                             -> l'hôte d'une adresse d'image qui sort du widget (http(s) vers un autre site), sinon ''
+//   ExternalImages.siteOf(src) -> l'hôte d'une adresse d'image qui sort du widget (http(s) vers un autre site), sinon ''
 // Le HTML est lu dans un document inerte (DOMParser) : un innerHTML sur un nœud de la page, même détaché, fait déjà charger ses images au navigateur.
 const ExternalImages = (function () {
   const CANCEL_NAME = 'ExternalImagesCancelled';
@@ -101,7 +103,7 @@ const ExternalImages = (function () {
     if (sites.length) await approve(sites);
   }
 
-  // --- Affichage : toute image de la page qui charge depuis un autre site est signalée -------------------------------------------------------------------------
+  // Affichage : toute image de la page qui charge depuis un autre site est signalée.
 
   const SITE_ATTR = 'data-external-site';
 

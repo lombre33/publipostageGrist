@@ -1,16 +1,20 @@
 #!/usr/bin/env node
-// Zoom de la page (js/page-zoom.js, css/page-zoom.css) à la VRAIE souris, à la vraie molette et au vrai clavier (page.mouse, page.keyboard, Node/Playwright) et à la taille du
-// panneau Grist d'Antoine (~700x400), en thème clair puis sombre, puis en anglais - retour d'Antoine du 2026-10-04 : « pouvoir zoomer dans l'éditeur à la fois en mode lecture et en
-// mode édition » (un petit document aux dimensions personnalisées - un badge - apparaît tout petit au milieu du gris).
-// dev-tests/scenarios-page-zoom.js vérifie la structure, les niveaux, les états et les textes DANS la page (clics, touches et molette synthétiques) ; ici, ce qui se mesure aux PIXELS
-// et au geste réel : la pastille du coin bas droit (entière dans le panneau, hors de la barre de défilement, atteignable sous la souris, ses couleurs à 4,5:1 et réellement peintes),
-// « Ajuster » qui donne au badge toute la largeur du panneau sans barre de défilement horizontale, plus et moins, Ctrl + plus / moins / 0 au vrai clavier (le navigateur ne zoome
-// pas lui-même), Ctrl + molette qui garde sous le pointeur le mot qu'il survole (Édition et Lecture), la molette sans Ctrl qui défile comme avant, le curseur du texte gardé quand on
-// clique la pastille, la Lecture et la Lecture épurée, une fenêtre ouverte qui passe devant la pastille et garde ses touches, le niveau retrouvé après un rechargement de la page.
-// Le zoom change l'échelle des gestes : la bordure d'une colonne de tableau (prosemirror-tables lit la souris en pixels écran) et les poignées d'une image doivent encore suivre le
-// pointeur à 200 % et à 50 % (un pixel de souris = un pixel écran). L'affichage d'origine (jamais zoomé) est celui d'avant : même facteur d'ajustement que l'ancien calcul.
+// Zoom de la page (js/page-zoom.js, css/page-zoom.css) à la vraie souris, à la vraie molette et au vrai clavier (page.mouse, page.keyboard,
+// Node/Playwright) et à la taille du panneau Grist (~700x400), en thème clair puis sombre, puis en anglais. Un petit document aux dimensions
+// personnalisées (un badge) apparaîtrait sinon tout petit au milieu du gris.
+// dev-tests/scenarios-page-zoom.js vérifie la structure, les niveaux, les états et les textes dans la page (clics, touches et molette synthétiques) ;
+// ici, ce qui se mesure aux pixels et au geste réel : la pastille du coin bas droit (entière dans le panneau, hors de la barre de défilement,
+// atteignable sous la souris, ses couleurs à 4,5:1 et réellement peintes), « Ajuster » qui donne au badge toute la largeur du panneau sans barre de
+// défilement horizontale, plus et moins, Ctrl + plus / moins / 0 au vrai clavier (le navigateur ne zoome pas lui-même), Ctrl + molette qui garde sous
+// le pointeur le mot qu'il survole (Édition et Lecture), la molette sans Ctrl qui défile comme avant, le curseur du texte gardé quand on clique la
+// pastille, la Lecture et la Lecture épurée, une fenêtre ouverte qui passe devant la pastille et garde ses touches, le niveau retrouvé après un
+// rechargement de la page.
+// Le zoom change l'échelle des gestes : la bordure d'une colonne de tableau (prosemirror-tables lit la souris en pixels écran) et les poignées d'une
+// image doivent encore suivre le pointeur à 200 % et à 50 % (un pixel de souris = un pixel écran). L'affichage d'origine (jamais zoomé) est celui
+// d'avant : même facteur d'ajustement que l'ancien calcul.
 // Lancé par run-headless.mjs (groupe Node "pageZoomMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-page-zoom-mouse.mjs
-// (PAGE_ZOOM_SHOTS=<dossier> y range une capture par étape, à regarder - aucune vérification n'en dépend ; PAGE_ZOOM_ONLY=<partie> n'en lance qu'une : badge, contrat, english, wide).
+// (PAGE_ZOOM_SHOTS=<dossier> y range une capture par étape, à regarder - aucune vérification n'en dépend ; PAGE_ZOOM_ONLY=<partie> n'en lance
+// qu'une : badge, contrat, english, wide).
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';

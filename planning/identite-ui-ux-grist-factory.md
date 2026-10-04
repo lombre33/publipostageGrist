@@ -792,7 +792,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
 - Feuille A4 : dans un panneau étroit, la page est réduite à la largeur disponible par un `zoom` CSS (`--pp-fit-zoom` : à
   700 px de panneau, 794 px de mise en page passent à 672 px) — à l'écran seulement. Les coupures de ligne de l'éditeur
   sont celles d'un grand panneau ; les PDF sont identiques quelle que soit la taille du panneau.
-- Zoom de la page (demande d'Antoine du 04/10, « pouvoir zoomer dans l'éditeur à la fois en mode lecture et en mode édition » : un
+- Zoom de la page (« pouvoir zoomer dans l'éditeur à la fois en mode lecture et en mode édition » : un
   badge aux dimensions personnalisées apparaissait tout petit au milieu du gris) : la barre d'outils reste gelée, le zoom est une
   **pastille fixée au coin bas droit du document** (moins, pourcentage, plus, « Ajuster » ; 30 px de haut, 24 px du bord, hors de la
   barre de défilement, sous les barres flottantes, les menus et les fenêtres), ni icône ni ligne de menu de plus. Elle reste là en
