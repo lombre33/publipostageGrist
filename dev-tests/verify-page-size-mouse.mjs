@@ -275,7 +275,7 @@ const formatNow = (page) => page.evaluate(() => ({ format: PageLayout.getFormat(
 const MM = 96 / 25.4; // pixels de mise en page par millimètre
 const WIN = '#pp-pagesize-modal';
 const OK_BUTTON = `${WIN} .var-modal-primary`;
-const CANCEL_BUTTON = `${WIN} .var-modal-actions button:not(.var-modal-primary)`;
+const CANCEL_BUTTON = `${WIN} .var-modal-actions button:not(.var-modal-primary):not(.pp-pagesize-save)`;
 
 const winOpen = page => page.evaluate(() => { const m = document.getElementById('pp-pagesize-modal'); return !!m && getComputedStyle(m).display !== 'none'; });
 // Ce que la fenêtre montre : textes, champs (valeur, erreur), aperçu (feuille dessinée dans son cadre), boutons, élément qui a le focus.
@@ -286,7 +286,7 @@ const winState = page => page.evaluate(() => {
   const sheetEl = q('.pp-pagesize-sheet');
   const sheet = sheetEl.getBoundingClientRect(), stage = q('.pp-pagesize-stage').getBoundingClientRect();
   const err = q('#pp-pagesize-error');
-  const ok = q('.var-modal-primary'), cancel = q('.var-modal-actions button:not(.var-modal-primary)');
+  const ok = q('.var-modal-primary'), cancel = q('.var-modal-actions button:not(.var-modal-primary):not(.pp-pagesize-save)');
   const a = document.activeElement;
   return {
     open: getComputedStyle(m).display !== 'none', title: q('h3').textContent, labels: Array.from(m.querySelectorAll('.pp-pagesize-label')).map(l => l.textContent),
@@ -438,7 +438,7 @@ async function runTheme(theme) {
   const w0 = await winState(page);
   const fit0 = await winFits(page);
   check(`${label} - fenêtre : un vrai clic sur la ligne l'ouvre, titre « ${w0.title} », Largeur et Hauteur à la page courante (${w0.width} x ${w0.height})`,
-    w0.open && w0.title === 'Format de page libre' && w0.labels.join() === 'Largeur,Hauteur' && w0.width === '21' && w0.height === '29,7' && w0.caption === '21 × 29,7 cm' && w0.orientation === 'Portrait' && !w0.okDisabled && w0.error === '', w0);
+    w0.open && w0.title === 'Format de page libre' && w0.labels.join() === 'Format,Largeur,Hauteur' && w0.width === '21' && w0.height === '29,7' && w0.caption === '21 × 29,7 cm' && w0.orientation === 'Portrait' && !w0.okDisabled && w0.error === '', w0);
   check(`${label} - fenêtre : elle tient dans ${WIDTH}x${HEIGHT} sans défiler (${fit0.scrollH}/${fit0.clientH}, ${fit0.top}-${fit0.bottom}) ; « Annuler » et « Valider » au premier plan`,
     fit0.ok && (await seenBox(page, OK_BUTTON)) && (await seenBox(page, CANCEL_BUTTON)) && w0.cancelText === 'Annuler' && w0.okText === 'Valider', { fit0, w0 });
   check(`${label} - fenêtre : le focus est dans le champ de la largeur, son texte sélectionné`, w0.focus === 'pp-pagesize-width' && w0.selected && w0.selected[0] === 0 && w0.selected[1] === w0.selected[2] && w0.selected[2] === 2, { focus: w0.focus, selected: w0.selected });
@@ -561,17 +561,24 @@ async function runTheme(theme) {
   await page.waitForTimeout(300);
   const kb0 = await winState(page);
   check(`${label} - clavier : Entrée sur la ligne ouvre la fenêtre sur la page libre (${kb0.width} x ${kb0.height}, ${kb0.orientation}), focus dans la largeur`, kb0.open && kb0.width === '7' && kb0.height === '3,7' && kb0.orientation === 'Paysage' && kb0.focus === 'pp-pagesize-width', kb0);
+  // Un tour entier depuis la largeur : la hauteur, « Enregistrer ce format… », « Annuler », « Valider », puis, en tournant, la liste des formats (la corbeille, grisée tant qu'aucun format n'est
+  // choisi, est sautée), la largeur et la hauteur de nouveau (le détail de la rangée « Format » est dans savedFormatsMouse).
   const order = [];
-  for (let i = 0; i < 5; i++) { await page.keyboard.press('Tab'); order.push((await winState(page)).focus); }
-  check(`${label} - clavier : Tab tourne dans la fenêtre (${order.join(' > ')}), sans en sortir`, order.join() === 'pp-pagesize-height,Annuler,Valider,pp-pagesize-width,pp-pagesize-height', order);
-  // Depuis la hauteur, deux Maj+Tab : la largeur puis, en tournant, « Valider » ; Tab revient sur la largeur.
+  for (let i = 0; i < 7; i++) { await page.keyboard.press('Tab'); order.push((await winState(page)).focus); }
+  check(`${label} - clavier : Tab tourne dans la fenêtre (${order.join(' > ')}), sans en sortir`, order.join() === 'pp-pagesize-height,Enregistrer ce format…,Annuler,Valider,— Choisir un format —,pp-pagesize-width,pp-pagesize-height', order);
+  // Depuis la hauteur, Maj+Tab : la largeur, la liste, puis, en tournant, « Valider » ; Tab revient sur la liste puis la largeur.
   await page.keyboard.press('Shift+Tab');
   const reverseWidth = (await winState(page)).focus;
   await page.keyboard.press('Shift+Tab');
+  const reverseList = (await winState(page)).focus;
+  await page.keyboard.press('Shift+Tab');
   const reverse = (await winState(page)).focus;
   await page.keyboard.press('Tab');
+  const forwardList = (await winState(page)).focus;
+  await page.keyboard.press('Tab');
   const forward = (await winState(page)).focus;
-  check(`${label} - clavier : Maj+Tab depuis la hauteur va à la largeur puis revient sur « Valider » (${reverseWidth} > ${reverse}), et Tab retourne à la largeur (${forward})`, reverseWidth === 'pp-pagesize-width' && reverse === 'Valider' && forward === 'pp-pagesize-width', { reverseWidth, reverse, forward });
+  check(`${label} - clavier : Maj+Tab depuis la hauteur va à la largeur, à la liste puis revient sur « Valider » (${reverseWidth} > ${reverseList} > ${reverse}), et Tab retourne à la liste puis à la largeur (${forwardList} > ${forward})`,
+    reverseWidth === 'pp-pagesize-width' && reverseList === '— Choisir un format —' && reverse === 'Valider' && forwardList === '— Choisir un format —' && forward === 'pp-pagesize-width', { reverseWidth, reverseList, reverse, forwardList, forward });
   await page.keyboard.press('Control+a');
   await page.keyboard.type('10');
   await page.keyboard.press('Tab');
@@ -638,7 +645,7 @@ async function runTheme(theme) {
   const en = await winState(page);
   const enFit = await winFits(page);
   check(`${label} - anglais : « ${en.title} », Width / Height, « ${en.cancelText} » et « ${en.okText} », taille « ${en.caption} », la fenêtre tient sans défiler`,
-    en.title === 'Custom page size' && en.labels.join() === 'Width,Height' && en.cancelText === 'Cancel' && en.okText === 'Confirm' && en.width === '40' && en.height === '50' && en.caption === '40 × 50 cm' && enFit.ok, { en, enFit });
+    en.title === 'Custom page size' && en.labels.join() === 'Format,Width,Height' && en.cancelText === 'Cancel' && en.okText === 'Confirm' && en.width === '40' && en.height === '50' && en.caption === '40 × 50 cm' && enFit.ok, { en, enFit });
   await typeSizeByKeyboard(page, '7,5', 'abc');
   const enBad = await winState(page);
   const enBadFit = await winFits(page);

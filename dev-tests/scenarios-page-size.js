@@ -64,7 +64,7 @@ window.EditorTestSuites.pageSize = (function () {
   const field = side => document.getElementById('pp-pagesize-' + side);
   function type(side, value) { const input = field(side); input.value = value; input.dispatchEvent(new Event('input', { bubbles: true })); }
   const okButton = () => modal().querySelector('.var-modal-actions .var-modal-primary');
-  const cancelButton = () => modal().querySelector('.var-modal-actions button:not(.var-modal-primary)');
+  const cancelButton = () => modal().querySelector('.var-modal-actions button:not(.var-modal-primary):not(.pp-pagesize-save)');
   function closeWindowIfOpen() { if (isOpen()) cancelButton().click(); }
   function windowState() {
     const sheet = modal().querySelector('.pp-pagesize-sheet');
@@ -408,7 +408,7 @@ window.EditorTestSuites.pageSize = (function () {
         try {
           if (!(await openWindowByRow(h))) return { pass: false, notes: 'la fenêtre ne s\'ouvre pas' };
           const s0 = windowState();
-          if (s0.title !== 'Format de page libre' || s0.labels.join() !== 'Largeur,Hauteur' || s0.buttons.join() !== 'Annuler,Valider') problems.push('textes : ' + JSON.stringify([s0.title, s0.labels, s0.buttons]));
+          if (s0.title !== 'Format de page libre' || s0.labels.join() !== 'Format,Largeur,Hauteur' || s0.buttons.join() !== 'Annuler,Valider') problems.push('textes : ' + JSON.stringify([s0.title, s0.labels, s0.buttons]));
           if (!/^De 2 à 55,88 cm/.test(s0.hint) || !/paysage/.test(s0.hint) || /\{/.test(s0.hint)) problems.push('indication : ' + s0.hint);
           if (s0.caption !== '21 × 29,7 cm' || s0.orientation !== 'Portrait' || s0.okDisabled || s0.error !== '' || s0.invalid.some(Boolean)) problems.push('départ : ' + JSON.stringify(s0));
           if (!s0.aria[0].includes('centimètres') || !s0.aria[1].includes('centimètres')) problems.push('noms accessibles : ' + s0.aria);
@@ -509,7 +509,7 @@ window.EditorTestSuites.pageSize = (function () {
           closeWindowIfOpen();
           await openWindowByRow(h);
           const en = windowState();
-          if (en.title !== 'Custom page size' || en.labels.join() !== 'Width,Height' || en.buttons.join() !== 'Cancel,Confirm' && en.buttons.join() !== 'Cancel,OK') problems.push('anglais, textes : ' + JSON.stringify([en.title, en.labels, en.buttons]));
+          if (en.title !== 'Custom page size' || en.labels.join() !== 'Format,Width,Height' || en.buttons.join() !== 'Cancel,Confirm' && en.buttons.join() !== 'Cancel,OK') problems.push('anglais, textes : ' + JSON.stringify([en.title, en.labels, en.buttons]));
           if (en.hint !== 'From 2 to 55.88 cm, the Word limit. Wider than tall, the page is in landscape.') problems.push('anglais, indication : ' + en.hint);
           if (en.width !== '21' || en.height !== '29.7' || en.caption !== '21 × 29.7 cm' || en.orientation !== 'Portrait') problems.push('anglais, champs : ' + JSON.stringify([en.width, en.height, en.caption, en.orientation]));
           type('width', '60');

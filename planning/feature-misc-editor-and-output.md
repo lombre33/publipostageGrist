@@ -116,6 +116,11 @@ du menu Page ouvre une fenêtre en centimètres (`js/page-size-dialog.js`). La t
 20 à 558,8 mm, les 22 pouces de Word). L'éditeur, la Lecture, le PDF, le Word et l'assemblage avant impression la lisent par `PageLayout` sans rien apprendre de plus. `setPageSize` pose des marges de 3 mm pour une page de moins de
 6 cm de côté court (marges encore d'origine seulement), et les zones d'en-tête et de pied encore vides sont grisées sur une page de moins de 8 cm de haut. L'assemblage dit « ne tient ni sur A4 ni sur A3 » pour une page qui ne tient
 sur aucune feuille. Étude : `etudes/formats-personnalises/etude.md` (dossier du projet).
+**Formats nommés livrés le 04/10** (même carte « Format libre et formats nommés » : donner un nom à une taille, « Étiquette 70 × 37 », et la reprendre sur d'autres modèles) : la fenêtre « Format libre… » a une rangée « Format » (liste avec recherche,
+corbeille, « Enregistrer ce format… » ; `js/page-size-dialog.js`). Les formats sont ceux du document, pour toute l'équipe : table `Publipostage_FormatsPage` (Nom, Largeur, Hauteur en millimètres, la page telle qu'on la voit, sens compris), masquée
+des listes de tables du widget (`INTERNAL_TABLES` de `js/grist-api.js`), lue à l'ouverture de la fenêtre et créée à la première écriture seulement (`js/saved-page-formats.js`, même patron que `js/text-expansion.js` sans la colonne Utilisateur). C'est une COPIE
+de taille, pas un lien : choisir un format remplit Largeur et Hauteur, la page ne change qu'à « Valider », et le modèle garde sa taille (clé `format` de `Margins`), pas le nom du format ; supprimer ou refaire un format ne change aucun modèle. Un nom pris
+devient « nom (2) » comme celui d'un modèle ; les lignes illisibles (nom vide, taille hors bornes) sont ignorées sans être corrigées dans Grist. Tests : `savedFormats` (11 scénarios dans la page) et `savedFormatsMouse` (vraie souris, 700×400, clair et sombre).
 **Reste ouvert** : d'autres formats (Lettre US, Légal US, A2, A1, ISO B...) sur carte à Antoine, rien de codé avant son choix ; l'aperçu de la galerie et de l'arbre des modèles
 (toujours une feuille A4 portrait) ; (l'orientation et le format d'un macro-modèle sont livrés : voir ci-dessous).
 

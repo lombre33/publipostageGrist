@@ -9,8 +9,8 @@ const GristAPI = (function () {
   // métier de l'utilisateur. Publipostage_Commentaires (js/comments.js, fils de discussion) manquait : le vrai
   // listTables() rend TOUTES les tables du document (grist-core WidgetFrame.ts, _grist_Tables sans filtre), elle
   // apparaissait donc dans l'autocomplétion # et les sélecteurs - invisible avec dev-tests/grist-stub.js, qui ne
-  // liste jamais ses tables internes.
-  const INTERNAL_TABLES = ['Publipostage_Modeles', 'Publipostage_LiensTables', 'Publipostage_UserProbe', 'Publipostage_PreferencesModeles', 'Publipostage_Commentaires', 'Publipostage_Abreviations'];
+  // liste jamais ses tables internes. Publipostage_FormatsPage (js/saved-page-formats.js, formats de page nommés du document) : même raison.
+  const INTERNAL_TABLES = ['Publipostage_Modeles', 'Publipostage_LiensTables', 'Publipostage_UserProbe', 'Publipostage_PreferencesModeles', 'Publipostage_Commentaires', 'Publipostage_Abreviations', 'Publipostage_FormatsPage'];
   const LINKS_TABLE_NAME = 'Publipostage_LiensTables';
   // Table interne pour getCurrentUserEmail() et getCurrentUserName() (chips "Email de l'utilisateur" et "Nom de l'utilisateur") - des colonnes à formule déclenchée
   // (capture qui a réellement déclenché le calcul, `user.Email` et `user.Name`), vidée après chaque lecture.
