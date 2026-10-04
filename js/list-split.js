@@ -46,13 +46,12 @@ const ListSplit = (function () {
   }
 
   // Le HTML du document n° k : les bulles réglées « Un document par valeur » dont la colonne est épinglée prennent le réglage « La k-ième » (leur autre format, nombre ou date, reste). Sans épingle, la même chaîne.
-  // <template> : un document inerte (ni image chargée, ni script lancé) qui garde les cases de tableau en place.
+  // Le HTML vient du document : il est lu dans un document inerte et filtré (HtmlSanitize.parseInert, comme le fait ReaderMode.preview pour tout ce qu'il rend), puis relu en texte.
   function pin(html, variant) {
     if (!html || !hasPins(variant) || html.indexOf(MARKER) === -1) return html;
-    const holder = document.createElement('template');
-    holder.innerHTML = html;
+    const holder = HtmlSanitize.parseInert(html);
     let changed = false;
-    holder.content.querySelectorAll('.var-badge[data-format]').forEach(badge => {
+    holder.querySelectorAll('.var-badge[data-format]').forEach(badge => {
       let format = null;
       try { format = JSON.parse(badge.getAttribute('data-format')); } catch (e) { return; }
       if (!format || !format.list || format.list.perValue !== true) return;
