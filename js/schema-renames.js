@@ -27,55 +27,56 @@
 //    lit et n'est plus touché.
 //  - DateModif ne bouge pas : ce n'est pas une modification de la personne, et l'enregistrement automatique n'y voit pas un conflit.
 const SchemaRenames = (function () {
-  const STORAGE_PREFIX = 'pp_schema_';
-  const STORAGE_INDEX = 'pp_schema_index';
-  const MAX_SNAPSHOTS = 30; // documents gardés : au-delà, les plus anciens sont oubliés
   const FORMAT = 1;
-  const TEMPLATE_COLUMNS = ['Nom', 'TypeModele', 'Contenu', 'HeaderFooter', 'NomFichierPDF', 'Destinataires', 'Cc', 'Cci', 'Objet'];
-  const TEXT_COLUMNS = ['NomFichierPDF', 'Destinataires', 'Cc', 'Cci', 'Objet'];
-  // Tout ce que le widget range dans un modèle et qui nomme une table ou une colonne : comme BOUND_SELECTOR de js/loop-rules.js, mais sans
-  // restreindre les images.
-  const ELEMENT_SELECTOR = '.var-badge, .calc-badge, img.editor-image, .conditional-text, .conditional-value, .conditional-checkbox';
 
   let running = false;
 
-  // Forme de l'instantané : { f: FORMAT, t: { idTable: [nom, { idColonne: nom }] } }, les identifiants étant les rangs de ligne de _grist_Tables et
-  // _grist_Tables_column.
-  function storageGet(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
-  function storageSet(key, value) { try { localStorage.setItem(key, value); return true; } catch (e) { return false; } }
-  function storageRemove(key) { try { localStorage.removeItem(key); } catch (e) { /* stockage indisponible */ } }
+  // Le rangement de l'instantané dans le stockage du navigateur, un par document.
+  const { loadSnapshot, saveSnapshot, reset } = (function () {
+    const STORAGE_PREFIX = 'pp_schema_';
+    const STORAGE_INDEX = 'pp_schema_index';
+    const MAX_SNAPSHOTS = 30; // documents gardés : au-delà, les plus anciens sont oubliés
 
-  function loadSnapshot(docKey) {
-    const raw = storageGet(STORAGE_PREFIX + docKey);
-    if (!raw) return null;
-    try {
-      const value = JSON.parse(raw);
-      return value && value.f === FORMAT && value.t && typeof value.t === 'object' ? value : null;
-    } catch (e) { return null; }
-  }
+    // Forme de l'instantané : { f: FORMAT, t: { idTable: [nom, { idColonne: nom }] } }, les identifiants étant les rangs de ligne de _grist_Tables et
+    // _grist_Tables_column.
+    function storageGet(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+    function storageSet(key, value) { try { localStorage.setItem(key, value); return true; } catch (e) { return false; } }
+    function storageRemove(key) { try { localStorage.removeItem(key); } catch (e) { /* stockage indisponible */ } }
 
-  // Les documents dont l'instantané est gardé, du plus ancien au plus récent.
-  function readIndex() {
-    try {
-      const index = JSON.parse(storageGet(STORAGE_INDEX) || '[]');
-      return Array.isArray(index) ? index : [];
-    } catch (e) { return []; }
-  }
+    function loadSnapshot(docKey) {
+      const raw = storageGet(STORAGE_PREFIX + docKey);
+      if (!raw) return null;
+      try {
+        const value = JSON.parse(raw);
+        return value && value.f === FORMAT && value.t && typeof value.t === 'object' ? value : null;
+      } catch (e) { return null; }
+    }
 
-  function saveSnapshot(docKey, snapshot) {
-    if (!storageSet(STORAGE_PREFIX + docKey, JSON.stringify(snapshot))) return false;
-    const index = readIndex().filter(key => key !== docKey);
-    index.push(docKey);
-    while (index.length > MAX_SNAPSHOTS) storageRemove(STORAGE_PREFIX + index.shift());
-    storageSet(STORAGE_INDEX, JSON.stringify(index));
-    return true;
-  }
+    // Les documents dont l'instantané est gardé, du plus ancien au plus récent.
+    function readIndex() {
+      try {
+        const index = JSON.parse(storageGet(STORAGE_INDEX) || '[]');
+        return Array.isArray(index) ? index : [];
+      } catch (e) { return []; }
+    }
 
-  // Oublie tous les instantanés (tests : chaque scénario repart d'un widget qui n'a rien noté).
-  function reset() {
-    readIndex().forEach(key => storageRemove(STORAGE_PREFIX + key));
-    storageRemove(STORAGE_INDEX);
-  }
+    function saveSnapshot(docKey, snapshot) {
+      if (!storageSet(STORAGE_PREFIX + docKey, JSON.stringify(snapshot))) return false;
+      const index = readIndex().filter(key => key !== docKey);
+      index.push(docKey);
+      while (index.length > MAX_SNAPSHOTS) storageRemove(STORAGE_PREFIX + index.shift());
+      storageSet(STORAGE_INDEX, JSON.stringify(index));
+      return true;
+    }
+
+    // Oublie tous les instantanés (tests : chaque scénario repart d'un widget qui n'a rien noté).
+    function reset() {
+      readIndex().forEach(key => storageRemove(STORAGE_PREFIX + key));
+      storageRemove(STORAGE_INDEX);
+    }
+
+    return { loadSnapshot, saveSnapshot, reset };
+  })();
 
   // Le document, tel que Grist le nomme dans l'adresse de son interface de programmation (.../api/docs/<identifiant>) : le seul identifiant sûr, deux
   // documents peuvent porter le même nom.
@@ -140,6 +141,46 @@ const SchemaRenames = (function () {
       }
     });
     return { tables, columns, any: tables.length + columns.length > 0 };
+  }
+
+  // Lit, dans un texte, les variables écrites avec les noms d'hier (`o` : l'index de l'instantané ; `refTargetRow` : la table qu'une colonne désigne aujourd'hui).
+  function createTextMatcher(o, refTargetRow) {
+    // Les clés « Table.Colonne » de l'instantané, les plus longues d'abord : « Dossiers.MontantTTC » avant « Dossiers.Montant ».
+    let oldKeys = null;
+    function keys() {
+      if (oldKeys) return oldKeys;
+      oldKeys = [];
+      Object.keys(o.tableName).forEach(tRow => {
+        Object.keys(o.colRow[tRow]).forEach(name => oldKeys.push({ key: o.tableName[tRow] + '.' + name, table: o.tableName[tRow], tRow, cRow: o.colRow[tRow][name], column: name }));
+      });
+      oldKeys.sort((a, b) => b.key.length - a.key.length);
+      return oldKeys;
+    }
+
+    // Dans un texte, la variable écrite juste après la touche de déclenchement (`rest` commence après elle) : { table, path, length } avec les noms
+    // d'hier, le chemin prolongé tant que le texte suit une colonne Référence (la colonne la plus longue de la table atteinte l'emporte, comme
+    // Variables.findTextVariables). Null si rien ne s'y lit.
+    function matchTextKey(rest) {
+      const base = keys().find(k => rest.startsWith(k.key));
+      if (!base) return null;
+      let path = base.column;
+      let length = base.key.length;
+      let cRow = base.cRow;
+      for (;;) {
+        const tRow = refTargetRow(cRow);
+        if (tRow === undefined) break;
+        let next = null;
+        Object.keys(o.colRow[tRow] || {}).forEach(name => {
+          if (rest.startsWith('.' + name, length) && (!next || name.length > next.name.length)) next = { name, cRow: o.colRow[tRow][name] };
+        });
+        if (!next) break;
+        path += '.' + next.name;
+        length += 1 + next.name.length;
+        cRow = next.cRow;
+      }
+      return { table: base.table, path, length };
+    }
+    return matchTextKey;
   }
 
   // `saved` : l'instantané ; `current` : le schéma d'aujourd'hui avec ses `refs`. Chaque fonction rend null quand il n'y a rien à changer : référence
@@ -219,43 +260,7 @@ const SchemaRenames = (function () {
       return Object.keys(c.colRow).some(tRow => tRow !== ctx.oldRow && c.colRow[tRow][name] !== undefined);
     }
 
-    // Les clés « Table.Colonne » de l'instantané, les plus longues d'abord : « Dossiers.MontantTTC » avant « Dossiers.Montant ».
-    let oldKeys = null;
-    function keys() {
-      if (oldKeys) return oldKeys;
-      oldKeys = [];
-      Object.keys(o.tableName).forEach(tRow => {
-        Object.keys(o.colRow[tRow]).forEach(name => oldKeys.push({ key: o.tableName[tRow] + '.' + name, table: o.tableName[tRow], tRow, cRow: o.colRow[tRow][name], column: name }));
-      });
-      oldKeys.sort((a, b) => b.key.length - a.key.length);
-      return oldKeys;
-    }
-
-    // Dans un texte, la variable écrite juste après la touche de déclenchement (`rest` commence après elle) : { table, path, length } avec les noms
-    // d'hier, le chemin prolongé tant que le texte suit une colonne Référence (la colonne la plus longue de la table atteinte l'emporte, comme
-    // Variables.findTextVariables). Null si rien ne s'y lit.
-    function matchTextKey(rest) {
-      const base = keys().find(k => rest.startsWith(k.key));
-      if (!base) return null;
-      let path = base.column;
-      let length = base.key.length;
-      let cRow = base.cRow;
-      for (;;) {
-        const tRow = refTargetRow(cRow);
-        if (tRow === undefined) break;
-        let next = null;
-        Object.keys(o.colRow[tRow] || {}).forEach(name => {
-          if (rest.startsWith('.' + name, length) && (!next || name.length > next.name.length)) next = { name, cRow: o.colRow[tRow][name] };
-        });
-        if (!next) break;
-        path += '.' + next.name;
-        length += 1 + next.name.length;
-        cRow = next.cRow;
-      }
-      return { table: base.table, path, length };
-    }
-
-    return { mapQualified, mapTable, tableContext, mapBare, otherTableHasColumn, matchTextKey };
+    return { mapQualified, mapTable, tableContext, mapBare, otherTableHasColumn, matchTextKey: createTextMatcher(o, refTargetRow) };
   }
 
   function parseJson(raw) {
@@ -295,22 +300,28 @@ const SchemaRenames = (function () {
   function rewriteLoop(loop, m) {
     if (!loop || typeof loop !== 'object' || !loop.table) return { loop, count: 0 };
     const next = Object.assign({}, loop);
-    let count = 0;
     const table = m.mapTable(loop.table);
-    if (table) { next.table = table; count++; }
-    if (loop.via && loop.via.table && loop.via.column) {
-      const via = m.mapQualified(loop.via.table, loop.via.column);
-      if (via) { next.via = Object.assign({}, loop.via, { table: via.table, column: via.column }); count++; }
-    }
     const ctx = m.tableContext(table || loop.table);
-    if (loop.filter) {
-      const filter = rewriteCondition(loop.filter, m, ctx, false);
-      if (filter.count) { next.filter = filter.condition; count += filter.count; }
-    }
-    if (loop.sort && typeof loop.sort.column === 'string' && loop.sort.column) {
-      const column = mapRuleColumn(loop.sort.column, m, ctx, false);
-      if (column !== null) { next.sort = Object.assign({}, loop.sort, { column }); count++; }
-    }
+    if (table) next.table = table;
+    // Chaque partie qui nomme une table ou une colonne écrit dans `next` ce qui change et rend le nombre de références réécrites.
+    const rewriteVia = () => {
+      const via = loop.via && loop.via.table && loop.via.column ? m.mapQualified(loop.via.table, loop.via.column) : null;
+      if (!via) return 0;
+      next.via = Object.assign({}, loop.via, { table: via.table, column: via.column });
+      return 1;
+    };
+    const rewriteFilter = () => {
+      const filter = loop.filter ? rewriteCondition(loop.filter, m, ctx, false) : { count: 0 };
+      if (filter.count) next.filter = filter.condition;
+      return filter.count;
+    };
+    const rewriteSort = () => {
+      const column = loop.sort && typeof loop.sort.column === 'string' && loop.sort.column ? mapRuleColumn(loop.sort.column, m, ctx, false) : null;
+      if (column === null) return 0;
+      next.sort = Object.assign({}, loop.sort, { column });
+      return 1;
+    };
+    const count = (table ? 1 : 0) + rewriteVia() + rewriteFilter() + rewriteSort();
     return count ? { loop: next, count } : { loop, count: 0 };
   }
 
@@ -431,6 +442,9 @@ const SchemaRenames = (function () {
     const tpl = document.createElement('template');
     tpl.innerHTML = src;
     const root = tpl.content;
+    // Tout ce que le widget range dans un modèle et qui nomme une table ou une colonne : comme BOUND_SELECTOR de js/loop-rules.js, mais sans
+    // restreindre les images.
+    const ELEMENT_SELECTOR = '.var-badge, .calc-badge, img.editor-image, .conditional-text, .conditional-value, .conditional-checkbox';
     // Un modèle qui nomme d'autres tables que celle de la page, et jamais celle-ci, n'est pas lu comme un modèle de cette page : ses colonnes sans
     // nom de table restent.
     const elements = root.querySelectorAll(ELEMENT_SELECTOR);
@@ -477,6 +491,7 @@ const SchemaRenames = (function () {
   // Un modèle lu tel que Grist le range ({ id, Contenu, HeaderFooter, … } en texte brut) : ce qu'il faut écrire pour qu'il suive les renommages, ou
   // null.
   function planTemplate(row, m, ctx) {
+    const TEXT_COLUMNS = ['NomFichierPDF', 'Destinataires', 'Cc', 'Cci', 'Objet'];
     const fields = {};
     let count = 0;
     const keep = (column, text, n) => { if (n) { fields[column] = text; count += n; } };
@@ -500,23 +515,22 @@ const SchemaRenames = (function () {
   // colonne de la table cible ; la colonne source une colonne de la table de la page, que le texte « id » désigne par son identifiant de ligne.
   function planLink(rule, m, page) {
     const next = { tableCible: rule.tableCible, mode: rule.mode, colonneCible: rule.colonneCible, colonneSource: rule.colonneSource };
-    let count = 0;
     const table = m.mapTable(rule.tableCible);
     // La table renommée a déjà sa clé (la personne l'a reposée à la main) : elle reste, l'ancienne n'est pas recopiée par-dessus.
     if (table && GristAPI.getLinkRule(table)) return null;
-    if (table) { next.tableCible = table; count++; }
-    if (rule.mode === 'match' && rule.colonneCible && rule.colonneCible !== 'id') {
-      const target = m.mapQualified(rule.tableCible, rule.colonneCible);
-      if (target) { next.colonneCible = target.column; if (!table) next.tableCible = target.table; count++; }
-    }
-    if (rule.mode === 'match' && rule.colonneSource && rule.colonneSource !== 'id' && page && !m.otherTableHasColumn(rule.colonneSource, page)) {
-      const source = m.mapBare(rule.colonneSource, page);
-      if (source !== null) { next.colonneSource = source; count++; }
-    }
+    if (table) next.tableCible = table;
+    const mapTarget = () => (rule.mode === 'match' && rule.colonneCible && rule.colonneCible !== 'id' ? m.mapQualified(rule.tableCible, rule.colonneCible) : null);
+    const mapSource = () => (rule.mode === 'match' && rule.colonneSource && rule.colonneSource !== 'id' && page && !m.otherTableHasColumn(rule.colonneSource, page) ? m.mapBare(rule.colonneSource, page) : null);
+    const target = mapTarget();
+    if (target) { next.colonneCible = target.column; if (!table) next.tableCible = target.table; }
+    const source = mapSource();
+    if (source !== null) next.colonneSource = source;
+    const count = (table ? 1 : 0) + (target ? 1 : 0) + (source !== null ? 1 : 0);
     return count ? { from: rule.tableCible, rule: next, count } : null;
   }
 
   async function fetchTemplateRows() {
+    const TEMPLATE_COLUMNS = ['Nom', 'TypeModele', 'Contenu', 'HeaderFooter', 'NomFichierPDF', 'Destinataires', 'Cc', 'Cci', 'Objet'];
     const data = await grist.docApi.fetchTable(Templates.TABLE_NAME);
     return (data.id || []).map((id, i) => {
       const row = { id };
@@ -553,6 +567,28 @@ const SchemaRenames = (function () {
     try { return await runOnce(hooks || {}); } finally { running = false; }
   }
 
+  // Lecture, réécriture et écriture à la suite, sans rien d'autre entre : un modèle enregistré par quelqu'un d'autre ne peut être écrasé que dans un
+  // intervalle de quelques millisecondes. La clé de la nouvelle table d'abord, l'ancienne retirée ensuite : une panne entre les deux laisse une clé de
+  // trop, jamais une clé perdue.
+  async function writeRewrites(templates, links) {
+    if (templates.length) await grist.docApi.applyUserActions(templates.map(t => ['UpdateRecord', Templates.TABLE_NAME, t.id, t.fields]));
+    for (const link of links) {
+      await GristAPI.saveLinkRule(link.rule.tableCible, link.rule);
+      if (link.from !== link.rule.tableCible) await GristAPI.deleteLinkRule(link.from);
+    }
+    await Templates.loadAll();
+  }
+
+  // Le modèle affiché fait-il partie de ce qui vient d'être réécrit ? Le redessiner. Faux quand la personne a modifié entre-temps ou que la liste ne le
+  // montre pas : la passe est reprise à l'ouverture suivante.
+  function redisplayRewritten(templates, untouched, summary) {
+    const currentId = Templates.getCurrentId();
+    if (currentId == null || !templates.some(t => String(t.id) === String(currentId))) return true;
+    if (!untouched() || !redisplayCurrentTemplate(currentId)) return false;
+    summary.redisplayed = true;
+    return true;
+  }
+
   async function runOnce(hooks) {
     if (isReadOnly()) return { skipped: 'readOnly' };
     const [docKey, current] = await Promise.all([documentKey(), readSchema()]);
@@ -583,22 +619,8 @@ const SchemaRenames = (function () {
     const untouched = () => (typeof hooks.isUntouched === 'function' ? hooks.isUntouched() : true);
     if (!untouched()) return Object.assign(summary, { skipped: 'touched' });
 
-    // Lecture, réécriture et écriture à la suite, sans rien d'autre entre : un modèle enregistré par quelqu'un d'autre ne peut être écrasé que dans
-    // un intervalle de quelques millisecondes.
-    if (templates.length) await grist.docApi.applyUserActions(templates.map(t => ['UpdateRecord', Templates.TABLE_NAME, t.id, t.fields]));
-    // La clé de la nouvelle table d'abord, l'ancienne retirée ensuite : une panne entre les deux laisse une clé de trop, jamais une clé perdue.
-    for (const link of links) {
-      await GristAPI.saveLinkRule(link.rule.tableCible, link.rule);
-      if (link.from !== link.rule.tableCible) await GristAPI.deleteLinkRule(link.from);
-    }
-    await Templates.loadAll();
-
-    let complete = true;
-    const currentId = Templates.getCurrentId();
-    if (currentId != null && templates.some(t => String(t.id) === String(currentId))) {
-      if (untouched() && redisplayCurrentTemplate(currentId)) summary.redisplayed = true; else complete = false;
-    }
-    if (complete) saveSnapshot(docKey, current.snapshot); else summary.skipped = 'touched';
+    await writeRewrites(templates, links);
+    if (redisplayRewritten(templates, untouched, summary)) saveSnapshot(docKey, current.snapshot); else summary.skipped = 'touched';
     const message = statusMessage(summary.variables, summary.templates, summary.links);
     if (message && typeof hooks.notify === 'function') hooks.notify(message);
     return summary;

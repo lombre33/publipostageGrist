@@ -272,6 +272,51 @@
   });
 
   cases.push({
+    id: 'schemarenames_each_part_of_a_loop_follows_on_its_own_and_an_unchanged_loop_comes_back_as_it_was',
+    description: 'Dans une boucle, la table, le chemin « via », le filtre et le tri suivent chacun de leur côté (le filtre et le tri se lisent dans la table parcourue, renommée ou non) ; une boucle sans table, sans rien à changer ou à moitié écrite est rendue telle quelle, et l’original n’est jamais modifié',
+    run: async () => {
+      const m = mapper();
+      const via = (table, column, extra) => Object.assign({ table, column }, extra || {});
+      const sort = (column, direction) => ({ column, direction: direction || 'asc' });
+      // [étiquette, boucle écrite, boucle attendue (null : rendue telle quelle), nombre de références réécrites]
+      const variants = [
+        ['table seule', { repeat: 'row', table: 'Projets' }, { repeat: 'row', table: 'Portefeuille' }, 1],
+        ['via seul', { table: 'Dossiers', via: via('Dossiers', 'Projet', { label: 'x' }) }, { table: 'Dossiers', via: via('Dossiers', 'Programme', { label: 'x' }) }, 1],
+        ['filtre seul', { table: 'Dossiers', filter: cond([['Montant', '>', '1'], ['Titre', '=', 'x']], 'any') }, { table: 'Dossiers', filter: cond([['Total', '>', '1'], ['Titre', '=', 'x']], 'any') }, 1],
+        ['tri nu seul', { table: 'Dossiers', sort: sort('Montant', 'desc') }, { table: 'Dossiers', sort: sort('Total', 'desc') }, 1],
+        ['tri avec nom de table', { table: 'Dossiers', sort: sort('Projets.Nom') }, { table: 'Dossiers', sort: sort('Portefeuille.Intitule') }, 1],
+        ['table renommée, filtre et tri lus dans la nouvelle', { table: 'Projets', filter: cond([['Nom', '=', 'A']]), sort: sort('Chef') }, { table: 'Portefeuille', filter: cond([['Intitule', '=', 'A']]), sort: sort('Responsable') }, 3],
+        ['via sans colonne', { table: 'Dossiers', via: { table: 'Dossiers' } }, null, 0],
+        ['via vide', { table: 'Dossiers', via: null }, null, 0],
+        ['via déjà lisible', { table: 'Dossiers', via: via('Dossiers', 'Titre') }, null, 0],
+        ['filtre sans règle', { table: 'Dossiers', filter: { mode: 'all' } }, null, 0],
+        ['filtre déjà lisible', { table: 'Dossiers', filter: cond([['Titre', '=', 'x']]) }, null, 0],
+        ['tri sans colonne', { table: 'Dossiers', sort: { direction: 'asc' } }, null, 0],
+        ['tri à colonne vide', { table: 'Dossiers', sort: sort('') }, null, 0],
+        ['tri à colonne qui n’est pas un texte', { table: 'Dossiers', sort: sort(5) }, null, 0],
+        ['tri déjà lisible', { table: 'Dossiers', sort: sort('Titre') }, null, 0],
+        ['table inconnue', { table: 'Inconnue', filter: cond([['Montant', '=', '1']]), sort: sort('Montant') }, null, 0],
+        ['table déjà lisible', { table: 'Portefeuille', filter: cond([['Intitule', '=', '1']]), sort: sort('Intitule') }, null, 0],
+      ];
+      const failed = [];
+      for (const [label, written, expected, count] of variants) {
+        const before = JSON.stringify(written);
+        const out = SchemaRenames.rewriteLoop(written, m);
+        const asWritten = expected === null;
+        const ok = out.count === count && JSON.stringify(written) === before
+          && (asWritten ? out.loop === written : out.loop !== written && same(out.loop, expected) && same(Object.keys(out.loop), Object.keys(expected)));
+        if (!ok) failed.push(label + ' : ' + JSON.stringify(out));
+      }
+      // Sans table, ou qui n’est pas une boucle : rendue telle quelle, sans rien lire d’autre.
+      for (const odd of [null, undefined, 'texte', 5, {}, { table: '' }, { table: null, filter: cond([['Montant', '=', '1']]) }]) {
+        const out = SchemaRenames.rewriteLoop(odd, m);
+        if (out.count !== 0 || out.loop !== odd) failed.push('boucle sans table ' + JSON.stringify(odd));
+      }
+      return { pass: failed.length === 0, notes: failed.join(' ; ') || variants.length + ' boucles' };
+    },
+  });
+
+  cases.push({
     id: 'schemarenames_bare_columns_belong_to_the_page_table_only_for_a_template_of_that_page',
     description: 'Une colonne sans nom de table est lue dans la table de la page, mais un modèle qui ne nomme que d’autres tables n’est pas lu comme un modèle de cette page : ses colonnes nues restent ; un modèle qui nomme la page, ou aucune table, les voit suivre',
     run: async () => {
