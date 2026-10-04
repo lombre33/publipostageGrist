@@ -947,17 +947,43 @@ const FloatingToolbars = (function () {
   // recouvrirait la barre du tableau, de l'image ou de la bulle que le même clic peut ouvrir - et jamais pendant la frappe : taper au bout d'une
   // suggestion ne doit pas la rouvrir à chaque lettre, elle attend un vrai déplacement de la sélection (ou un clic). Pendant un glisser à la souris
   // elle attend le relâchement.
-  function wireSuggestionFloatingToolbar() {
+  function wireSuggestionFloatingToolbar(authors) {
+    // Qui a proposé la modification vient APRÈS les boutons : l'identité de la personne se lit une fois, à l'ouverture de la barre, et son étiquette arrive un instant plus tard ;
+    // devant les boutons, elle les décalerait sous la souris.
     const html = ['accept', 'reject'].map((name) => {
       const key = 'trackChanges.' + name + '.label';
       return `<button data-action="${name}" data-i18n="${key}">${I18n.t(key)}</button>`;
-    }).join('');
+    }).join('') + '<span class="v2-suggest-author" hidden></span>';
     const panel = EditorCore.createFloatingPanel('v2-floating-toolbar v2-suggest-toolbar', html, (action) => {
       const chain = editor.chain().focus();
       (action === 'accept' ? chain.acceptSuggestionsAtSelection() : chain.rejectSuggestionsAtSelection()).run();
       panel.hide();
     });
     EditorCore.registerFloatingPanel(panel);
+    // L'étiquette « Proposé par Marie Curie » : le nom de la personne (son adresse à défaut de nom), « et 2 autres » quand la sélection couvre des modifications de
+    // plusieurs personnes ; son info-bulle les donne toutes, avec leur adresse. Vide et masquée quand aucune des modifications n'a d'auteur connu (le contenu de la barre est alors
+    // celui d'avant). Un clic dessus ne fait rien et ne prend pas le focus de l'éditeur.
+    const authorLabel = panel.el.querySelector('.v2-suggest-author');
+    authorLabel.addEventListener('mousedown', (event) => event.preventDefault());
+    let shownIds = [];
+    const showAuthors = () => {
+      const people = authors ? authors.of(shownIds) : [];
+      const names = people.map((p) => p.name || p.email);
+      if (!names.length) {
+        authorLabel.hidden = true;
+        authorLabel.textContent = '';
+        authorLabel.removeAttribute('title');
+        return;
+      }
+      // `n` avant `name` : le texte d'un nom n'est jamais relu comme une variable (I18n.t).
+      authorLabel.textContent = names.length === 1
+        ? I18n.t('trackChanges.proposedBy.one', { name: names[0] })
+        : I18n.t('trackChanges.proposedBy.many', { n: names.length - 1, name: names[0] });
+      authorLabel.title = I18n.t('trackChanges.proposedBy.one', { name: people.map((p) => (p.name && p.email ? p.name + ' (' + p.email + ')' : (p.name || p.email))).join(', ') });
+      authorLabel.hidden = false;
+    };
+    if (authors) authors.onChange(() => { if (panel.el.classList.contains('visible')) showAuthors(); });
+    I18n.onChange(showAuthors);
     // Fermée après une modification du document (frappe, résolution, Annuler) jusqu'au prochain déplacement de la sélection ou clic ; fermée aussi
     // tant qu'un bouton de la souris est appuyé dans le texte.
     let suppressed = false;
@@ -991,6 +1017,8 @@ const FloatingToolbars = (function () {
       panel.el.querySelectorAll('button[data-action]').forEach((btn) => {
         btn.title = I18n.t('trackChanges.' + btn.dataset.action + '.tip', { n: ids.length });
       });
+      shownIds = ids;
+      showAuthors();
       const dom = editor.state.selection.node ? editor.view.nodeDOM(editor.state.selection.from) : null;
       panel.show(dom && dom.getClientRects && dom.getClientRects().length ? dom : caretAnchor, options);
     };

@@ -760,6 +760,12 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   la barre « Accepter / Refuser » propose une à une (une largeur sur toute la colonne), et « Refuser » rend toujours la valeur d'ORIGINE, même après deux changements du même réglage, jamais celle d'entre-deux ; un réglage ramené à sa
   valeur d'origine ne laisse aucune suggestion. Colorer ou tirer une colonne AJOUTÉE avec le suivi fait partie de son ajout : ses cases gardent leur marque, « Refuser » ou « Tout refuser » la retire entière, « Accepter » garde tout.
   Sur une colonne SUPPRIMÉE le fond et la largeur n'ont pas lieu : sa suppression reste entière, « Tout accepter » ne rend jamais un tableau percé.
+- Qui a proposé une modification (demande d'Antoine du 04/10, « indique le nom ou l'email de la personne ayant proposé la modification ») : la barre « Accepter / Refuser » porte, APRÈS ses deux boutons, une étiquette
+  discrète « Proposé par Marie Curie » (« Proposed by … » en anglais) : le nom de la personne, son adresse à défaut de nom, « et 2 autres » quand la sélection couvre les modifications de plusieurs personnes ; son
+  info-bulle les donne toutes, avec leur adresse. Elle vient après les boutons parce que l'identité se lit une fois, à l'ouverture de la barre, et que l'étiquette arrive alors un instant plus tard : devant eux, elle les
+  décalerait sous la souris. Texte de couleur atténuée des jetons (4,5:1 au moins, clair et sombre), police du système, une seule ligne de 220 px au plus coupée en points de suspension, un filet la sépare des boutons ; un
+  clic dessus ne fait rien (la barre reste ouverte, l'éditeur garde le focus et la sélection). Une modification dont le document ne connaît aucun auteur (enregistrée avant le suivi des auteurs) n'a pas d'étiquette : la
+  barre est celle d'avant, jamais un « Proposé par » au nom de quelqu'un d'autre ; une modification tapée à l'instant est celle de la personne devant l'écran.
 - Lecture avec des modifications du suivi en attente (demande d'Antoine du 04/10) : la Lecture montre le document comme si toutes les modifications étaient acceptées, avec seulement une légère teinte là où
   quelque chose a changé. Le texte supprimé a disparu (ni barré ni grisé), le texte ajouté ou de remplacement est là, plus aucune marque du suivi ne se voit. La teinte est un fond vert pâle `#e5f6ee`, le même
   en clair et en sombre (la page de Lecture reste blanche) : sous le texte ajouté, sur le paragraphe ou le titre dont la mise en forme a changé, sur les cases d'une colonne ou d'une ligne ajoutée (même avec un

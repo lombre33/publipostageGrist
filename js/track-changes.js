@@ -80,18 +80,70 @@ const TrackChanges = (function () {
     return ids;
   }
 
-  // Fusionne les ids présents dans le document avec les métadonnées déjà connues (auteur, horodatage) : un id déjà vu garde son auteur et sa date
-  // d'origine, un nouveau reçoit authorEmail et maintenant. Les ids disparus (suggestion acceptée ou refusée) disparaissent du résultat sans purge
-  // explicite, puisqu'on ne recopie que ce qui est encore présent : purge dès la résolution, le défaut le plus prudent, comme un commentaire supprimé
+  // Qui a proposé quoi : { [id]: { author, authorName, createdAt } }, la colonne Grist SuiviModifications (Editor.getSuiviModificationsForSave). `author` est l'adresse de la
+  // personne (null quand le document ne la connaît pas), `authorName` son nom (absent quand Grist n'en donne pas), `createdAt` la date de l'enregistrement.
+  // Fusionne les ids présents dans le document avec les métadonnées déjà connues : un id déjà vu garde son auteur et sa date d'origine, un nouveau reçoit la personne
+  // devant l'écran (`author` : { email, name }, ou une adresse seule, ou null) et maintenant. Les ids disparus (suggestion acceptée ou refusée) disparaissent du résultat
+  // sans purge explicite, puisqu'on ne recopie que ce qui est encore présent : purge dès la résolution, le défaut le plus prudent, comme un commentaire supprimé
   // (cf. « Rétention de l'historique » dans planning/feature-track-changes.md).
-  function computeMetadata(state, previousMetadata, authorEmail) {
+  function computeMetadata(state, previousMetadata, author) {
     const previous = previousMetadata || {};
     const now = new Date().toISOString();
+    const who = typeof author === 'string' ? { email: author, name: '' } : (author || {});
     const next = {};
     collectPendingIds(state).forEach((id) => {
-      next[id] = previous[id] || { author: authorEmail || null, createdAt: now };
+      if (previous[id]) { next[id] = previous[id]; return; }
+      const entry = { author: who.email || null };
+      if (who.name) entry.authorName = who.name;
+      entry.createdAt = now;
+      next[id] = entry;
     });
     return next;
+  }
+
+  // À l'ouverture d'un document : chaque modification en attente que ses métadonnées ne connaissent pas (document enregistré avant le suivi des auteurs, colonne vide ou
+  // illisible) reçoit un auteur null. Sans cela, le premier enregistrement la mettrait au nom de la personne qui a ouvert le document, et la barre la lui attribuerait.
+  function seedMetadata(state, metadata) {
+    const seeded = Object.assign({}, metadata || {});
+    collectPendingIds(state).forEach((id) => {
+      if (!seeded[id]) seeded[id] = { author: null, createdAt: null };
+    });
+    return seeded;
+  }
+
+  // Les personnes derrière les modifications d'ids donnés : [{ name, email }], sans doublon (même adresse, ou même nom à défaut d'adresse), dans l'ordre des ids ; `name` et
+  // `email` sont vides quand on ne les connaît pas. Une modification que les métadonnées ne connaissent pas est celle de la personne devant l'écran (tapée dans cette session,
+  // pas encore enregistrée) : `current` est { email, name }, ou null tant que son identité n'est pas lue. Une modification dont le document ne connaît aucun auteur n'en apporte
+  // aucun.
+  function authorsOfSuggestions(ids, metadata, current) {
+    const people = new Map();
+    ids.forEach((id) => {
+      const entry = metadata && metadata[String(id)];
+      const who = entry ? { email: entry.author || '', name: entry.authorName || '' } : current;
+      if (!who || !(who.email || who.name)) return;
+      const key = String(who.email || who.name).toLowerCase();
+      const known = people.get(key);
+      if (!known) people.set(key, { name: who.name || '', email: who.email || '' });
+      else if (!known.name && who.name) known.name = who.name;
+    });
+    return Array.from(people.values());
+  }
+
+  // Les numéros que la session connaît hors du document : ceux des métadonnées, y compris les modifications résolues depuis (« Annuler » peut les ramener, avec leur auteur).
+  // Fournis par l'éditeur (Editor.init).
+  let knownSuggestionIds = () => [];
+  function setKnownSuggestionIds(provider) {
+    knownSuggestionIds = typeof provider === 'function' ? provider : () => [];
+  }
+  // Le numéro d'une modification neuve : au-dessus de tous ceux du document ET de tous ceux que la session connaît. generateNextNumberId de la lib ne regarde que le document :
+  // une fois la modification 1 de Jean acceptée, la suivante reprenait le numéro 1 et, avec lui, le nom de Jean. Elle saute aussi les enfants d'un nœud marqué (une case dont
+  // le fond a changé et qui contient une insertion).
+  function nextSuggestionId(schema, doc) {
+    let highest = 0;
+    const take = (id) => { const n = Number(id); if (Number.isFinite(n) && n > highest) highest = n; };
+    knownSuggestionIds().forEach(take);
+    if (doc) doc.descendants(node => { suggestionMarksOf(node).forEach(mark => take(mark.attrs.id)); });
+    return highest + 1;
   }
 
   // Accepter ou refuser une modification (barre flottante, js/floating-toolbars.js)
@@ -831,7 +883,7 @@ const TrackChanges = (function () {
           && !(skipMeta && 'skip' in skipMeta);
         if (!enabled) { next(transaction); return; }
         try {
-          const tracked = transformToSuggestionTransaction(transaction, editor.state);
+          const tracked = transformToSuggestionTransaction(transaction, editor.state, nextSuggestionId);
           keepOriginalNodeSettings(tracked, transaction);
           next(tracked);
         } catch (e) {
@@ -867,6 +919,7 @@ const TrackChanges = (function () {
   }
 
   return {
-    extendForTracking, hasPendingSuggestions, computeMetadata, createExtensions, skipTracking, isSkipped, selectionSuggestionIds, acceptedView,
+    extendForTracking, hasPendingSuggestions, collectPendingIds, computeMetadata, seedMetadata, authorsOfSuggestions, setKnownSuggestionIds, createExtensions, skipTracking,
+    isSkipped, selectionSuggestionIds, acceptedView,
   };
 })();

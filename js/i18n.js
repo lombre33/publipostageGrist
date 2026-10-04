@@ -413,6 +413,10 @@ const I18n = (function () {
     'trackChanges.reject.label': { fr: 'Refuser', en: 'Reject' },
     'trackChanges.accept.tip': { fr: 'Accepter {n|cette modification|ces modifications}', en: 'Accept {n|this change|these changes}' },
     'trackChanges.reject.tip': { fr: 'Refuser {n|cette modification|ces modifications}', en: 'Reject {n|this change|these changes}' },
+    // Qui a proposé la modification, dans la même barre (js/floating-toolbars.js:wireSuggestionFloatingToolbar) : un nom, ou une adresse à défaut de nom ; « et {n} autre(s) » quand la sélection
+    // couvre les modifications de plusieurs personnes (l'info-bulle de l'étiquette les donne toutes, avec leur adresse).
+    'trackChanges.proposedBy.one': { fr: 'Proposé par {name}', en: 'Proposed by {name}' },
+    'trackChanges.proposedBy.many': { fr: 'Proposé par {name} et {n} {n|autre|autres}', en: 'Proposed by {name} and {n} {n|other|others}' },
 
     // --- Actions communes (boutons de modale réutilisés à plusieurs endroits) ---
     'common.close': { fr: 'Fermer', en: 'Close' },

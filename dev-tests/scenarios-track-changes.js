@@ -2067,6 +2067,217 @@
     },
   });
 
+  // === Qui a proposé chaque modification (demande d'Antoine du 04/10 : « indique le nom ou l'email de la personne ayant proposé la modification ») ===
+  // Le nom et l'adresse de la personne qui propose une modification s'enregistrent avec elle (colonne SuiviModifications : { auteur, nom, date } par identifiant de modification) et la barre « Accepter /
+  // Refuser » les montre (js/floating-toolbars.js:wireSuggestionFloatingToolbar, Editor.getSuggestionAuthors). Une modification que le document n'a jamais enregistrée est celle de la personne devant
+  // l'écran ; une modification sans auteur connu (enregistrée avant le suivi des auteurs) ne nomme personne et n'est jamais mise au compte de qui enregistre ensuite. L'identité est lue une fois par session
+  // (GristAPI.getCurrentUserEmail / getCurrentUserName) : chaque cas la fixe en tête, avant la première lecture de la page - ces cas viennent donc APRÈS « trackchanges_survives_save_and_reload », qui
+  // attend un auteur null.
+  const MARIE = { email: 'marie.curie@example.org', name: 'Marie Curie' };
+  const JEAN = { author: 'jean.dupont@example.org', authorName: 'Jean Dupont', createdAt: '2026-10-03T09:00:00.000Z' };
+  const PAUL = { author: 'paul.martin@example.org', createdAt: '2026-10-03T10:00:00.000Z' };
+  const useMarie = () => { stub().setUserEmail(MARIE.email); stub().setUserName(MARIE.name); };
+  const suggestionIds = html => Array.from(new Set(Array.from(html.matchAll(/ data-id="([^"]+)"/g), m => m[1])));
+  const authorsOf = ids => Editor.getSuggestionAuthors(ids).map(a => a.name + '<' + a.email + '>').join(' | ');
+  async function saveAs(h, name) {
+    document.getElementById('template-name').value = name;
+    await h.clickButton('btn-save');
+    await h.sleep(700);
+    const row = stub().getRow(TABLE, Templates.getCurrentId());
+    let suivi = {};
+    try { suivi = JSON.parse(row.SuiviModifications || '{}'); } catch (e) { /* laissé vide, jugé par l'appelant */ }
+    return suivi;
+  }
+
+  cases.push({
+    id: 'trackchanges_without_a_readable_identity_a_new_suggestion_names_nobody',
+    description: "Sans identité lisible (la formule user.Email ne rend rien), une suggestion tapée ne nomme personne et rien ne casse : pas d'auteur pour la barre, un auteur null à l'enregistrement",
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        await enableTrackChanges(h);
+        Editor.setHTML('<p>Sans identité.</p>');
+        await h.focusAtEnd();
+        await h.typeText(' Ajout anonyme.');
+        const ids = suggestionIds(Editor.getHTML());
+        // Le premier appel lance la lecture de l'identité, qui échoue ici ; l'attente laisse la lecture finir avant de juger.
+        Editor.getSuggestionAuthors(ids);
+        await h.sleep(500);
+        const out = { oneSuggestion: ids.length === 1, nobody: authorsOf(ids) === '' };
+        const suivi = await saveAs(h, 'Suivi anonyme');
+        const entry = suivi[ids[0]] || {};
+        out.savedAnonymous = Object.keys(suivi).length === 1 && entry.author === null && !('authorName' in entry);
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) + ' ' + JSON.stringify(suivi) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_a_saved_suggestion_records_who_proposed_it',
+    description: "Une suggestion tapée avec le suivi allumé s'enregistre avec l'adresse ET le nom de la personne devant l'écran, et la date (SuiviModifications, même UpdateRecord que Contenu)",
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        useMarie();
+        await enableTrackChanges(h);
+        Editor.setHTML('<p>Modèle avec auteur.</p>');
+        await h.focusAtEnd();
+        await h.typeText(' Ajout de Marie.');
+        const suivi = await saveAs(h, 'Suivi auteur');
+        const ids = Object.keys(suivi);
+        const entry = suivi[ids[0]] || {};
+        return {
+          pass: ids.length === 1 && entry.author === MARIE.email && entry.authorName === MARIE.name && typeof entry.createdAt === 'string',
+          notes: 'SuiviModifications=' + JSON.stringify(suivi),
+        };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_the_authors_of_loaded_suggestions_are_the_ones_the_document_recorded',
+    description: "Un document chargé avec ses auteurs : getSuggestionAuthors rend le nom, ou l'adresse à défaut de nom, sans doublon et dans l'ordre ; une modification sans auteur n'apporte personne",
+    run: async (h) => {
+      await h.resetEditor();
+      useMarie();
+      await disableTrackChangesIfOn(h);
+      Editor.setHTML('<p>Début <ins data-id="1">ajout de Jean</ins> milieu <ins data-id="2">ajout de Paul</ins> fin <ins data-id="3">ajout sans auteur</ins> <ins data-id="4">autre ajout de Jean</ins>.</p>', {
+        1: JEAN, 2: PAUL, 3: { author: null, createdAt: '2026-10-03T11:00:00.000Z' }, 4: JEAN,
+      });
+      await h.sleep(150);
+      const out = {
+        jean: authorsOf([1]) === 'Jean Dupont<jean.dupont@example.org>',
+        paulWithoutName: authorsOf(['2']) === '<paul.martin@example.org>',
+        nobody: authorsOf([3]) === '',
+        inOrderWithoutDuplicates: authorsOf([4, 1, 2, 3]) === 'Jean Dupont<jean.dupont@example.org> | <paul.martin@example.org>',
+      };
+      return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_a_suggestion_without_a_recorded_author_is_not_credited_to_whoever_saves',
+    description: "Une suggestion en attente que le document n'a jamais attribuée (enregistrée avant le suivi des auteurs) reste sans auteur, même enregistrée par quelqu'un d'autre : rien n'est mis à son nom",
+    run: async (h) => {
+      await h.resetEditor();
+      useMarie();
+      await disableTrackChangesIfOn(h);
+      Editor.setHTML('<p>Ancien texte <ins data-id="4">ajouté jadis</ins>.</p>', {});
+      await h.sleep(150);
+      const before = authorsOf([4]);
+      const suivi = await saveAs(h, 'Suivi sans auteur');
+      const entry = suivi['4'] || {};
+      const out = {
+        nobodyBeforeSaving: before === '',
+        savedWithoutAuthor: Object.keys(suivi).join() === '4' && entry.author === null && !('authorName' in entry),
+        nobodyAfterSaving: authorsOf([4]) === '',
+      };
+      return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) + ' ' + JSON.stringify(suivi) };
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_saving_keeps_the_authors_of_the_others_and_adds_the_new_one',
+    description: "Marie ouvre un document où Jean a proposé une modification et en propose une : l'enregistrement garde Jean (adresse, nom, date d'origine) pour la sienne et nomme Marie pour la nouvelle",
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        useMarie();
+        await disableTrackChangesIfOn(h);
+        Editor.setHTML('<p>Texte <ins data-id="1">de Jean</ins> fin.</p>', { 1: JEAN });
+        await h.sleep(150);
+        await enableTrackChanges(h);
+        await h.focusAtEnd();
+        await h.typeText(' Ajout de Marie.');
+        const suivi = await saveAs(h, 'Suivi deux auteurs');
+        const mine = Object.keys(suivi).filter(id => id !== '1');
+        const entry = suivi[mine[0]] || {};
+        const out = {
+          jeanKept: JSON.stringify(suivi['1']) === JSON.stringify(JEAN),
+          oneNew: mine.length === 1,
+          marieNamed: entry.author === MARIE.email && entry.authorName === MARIE.name,
+        };
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) + ' ' + JSON.stringify(suivi) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_a_suggestion_typed_in_this_session_is_the_one_of_the_person_at_the_screen',
+    description: "Une suggestion tapée mais pas encore enregistrée est celle de la personne devant l'écran : getSuggestionAuthors la nomme sans attendre l'enregistrement",
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        useMarie();
+        await enableTrackChanges(h);
+        Editor.setHTML('<p>Texte neuf.</p>');
+        await h.focusAtEnd();
+        await h.typeText(' Ajout neuf.');
+        const ids = suggestionIds(Editor.getHTML());
+        // Le premier appel lance la lecture de l'identité quand personne ne l'a faite avant (le cas seul) : on lit ensuite.
+        Editor.getSuggestionAuthors(ids);
+        await h.sleep(600);
+        const authors = authorsOf(ids);
+        return { pass: ids.length === 1 && authors === 'Marie Curie<marie.curie@example.org>', notes: 'ids=' + ids.join() + ' auteurs=' + authors };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_after_accepting_every_suggestion_a_new_one_takes_neither_the_old_id_nor_its_author',
+    description: "Jean avait proposé la modification 1, Marie la résout (Tout accepter) puis en propose une : la nouvelle n'est pas numérotée 1 (le nom de Jean ne peut pas lui rester collé) et on y lit Marie",
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        useMarie();
+        await disableTrackChangesIfOn(h);
+        Editor.setHTML('<p>Texte <ins data-id="1">de Jean</ins> fin.</p>', { 1: JEAN });
+        await h.sleep(150);
+        await enableTrackChanges(h);
+        await h.clickButton('v2-btn-accept-all');
+        await h.sleep(300);
+        const resolved = !Editor.hasPendingTrackedChanges();
+        await h.focusAtEnd();
+        await h.typeText(' Ajout de Marie.');
+        Editor.getSuggestionAuthors(suggestionIds(Editor.getHTML()));
+        await h.sleep(600);
+        const ids = suggestionIds(Editor.getHTML());
+        const out = {
+          resolved,
+          oneNewSuggestion: ids.length === 1,
+          newNumber: ids.length === 1 && ids[0] !== '1',
+          marie: authorsOf(ids) === 'Marie Curie<marie.curie@example.org>',
+        };
+        const suivi = await saveAs(h, 'Suivi numéro neuf');
+        out.savedForMarie = Object.keys(suivi).length === 1 && (suivi[ids[0]] || {}).author === MARIE.email;
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) + ' ' + JSON.stringify(suivi) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_the_author_of_a_resolved_suggestion_comes_back_with_undo_even_after_a_save',
+    description: "Marie accepte la modification de Jean, enregistre (le JSON la purge), puis annule : la suggestion revient avec le nom de Jean, pas celui de Marie",
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        useMarie();
+        await disableTrackChangesIfOn(h);
+        Editor.setHTML('<p>Texte <ins data-id="1">de Jean</ins> fin.</p>', { 1: JEAN });
+        await h.sleep(150);
+        await h.clickButton('v2-btn-accept-all');
+        await h.sleep(700);
+        const suivi = await saveAs(h, 'Suivi annuler');
+        const purged = JSON.stringify(suivi) === '{}';
+        EditorCore.getEditor().commands.undo();
+        await h.sleep(300);
+        const back = suggestionIds(Editor.getHTML());
+        const out = { purged, back: back.join() === '1', jean: authorsOf(back) === 'Jean Dupont<jean.dupont@example.org>' };
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) + ' ' + JSON.stringify(suivi) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
   // === Lecture : le document comme si toutes les suggestions étaient acceptées (demande d'Antoine du 04/10) ===
   // « En mode lecture afficher comme si toutes les modifications étaient acceptées, avec juste un léger changement de couleur là où des modifs sont présentes. » La Lecture retouche le HTML qu'elle
   // reçoit (js/track-changes.js:acceptedView, appelée par js/reader-mode.js:renderRecord) : le résultat doit être EXACTEMENT celui de « Tout accepter » (comparé ici, cas par cas, au vrai

@@ -524,7 +524,18 @@ pour :
 3. ~~Attribution par auteur~~ — **implémentée telle quelle le 2026-09-21** : `SuiviModifications`
    stocke l'email par id (`GristAPI.getCurrentUserEmail()`, même mécanisme déjà en cache que les
    commentaires), repli anonyme (`null`) si l'identification échoue. Pas de choix produit distinct
-   restant ici.
+   restant ici. **Affichée depuis le 2026-10-04** (demande d'Antoine : « indique le nom ou l'email de
+   la personne ayant proposé la modification ») dans la barre « Accepter / Refuser » d'une modification
+   (« Proposé par Marie Curie », js/floating-toolbars.js) : l'entrée devient `{ author, authorName,
+   createdAt }` (`authorName` : `GristAPI.getCurrentUserName()`, absent quand Grist n'en donne pas -
+   l'étiquette montre alors l'adresse). Une modification que le document n'a jamais attribuée (enregistrée
+   avant ce suivi des auteurs) reçoit `author: null` à l'ouverture (`TrackChanges.seedMetadata`) : elle ne
+   nomme personne et n'est jamais mise au compte de qui enregistre ensuite. Une modification tapée dans la
+   session mais pas encore enregistrée est celle de la personne devant l'écran (`Editor.getSuggestionAuthors`).
+   Les numéros ne se réutilisent jamais dans une session (`TrackChanges.nextSuggestionId` : la lib reprenait
+   le numéro 1 une fois la modification 1 acceptée, avec le nom de son ancien auteur) ; la session garde
+   aussi les auteurs des modifications résolues depuis, pour que « Annuler » les ramène nommées - seul le
+   JSON enregistré est purgé.
 4. ~~Comportement des exports (PDF/DOCX/mailto/mode Lecture) face à des changements non tranchés~~ —
    **tranchée le 2026-10-04 par Antoine** : la Lecture, l'e-mail, le PDF, le Word et l'Excel montrent
    l'état accepté (la Lecture avec une légère teinte verte, les exports « Acceptées, sans teinte »),

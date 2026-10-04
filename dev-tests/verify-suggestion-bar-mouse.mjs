@@ -6,6 +6,8 @@
 // (clic, glisser, jamais pendant la frappe ni tant qu'un bouton de la souris est appuyé), sa place (sous le curseur, tout entière dans la fenêtre, au-dessus de ce qu'elle recouvre,
 // retournée au-dessus du texte tout en bas), ses couleurs (4,5:1 au moins, calculées ET aux pixels), « Accepter » / « Refuser » au vrai clic (une seule modification traitée, un seul Ctrl+Z),
 // l'anglais, et une colonne de tableau ajoutée avec le suivi, résolue depuis l'une de ses cases pendant que la barre du tableau est ouverte aussi.
+// Demande d'Antoine du 04/10 (« indique le nom ou l'email de la personne ayant proposé la modification ») : la dernière partie lit l'étiquette « Proposé par … » de la barre (nom, adresse à défaut de
+// nom, « et N autres », aucune étiquette sans auteur connu, une longue adresse coupée), sa place (après les boutons, qui ne bougent pas quand elle arrive), ses couleurs et son inertie au clic.
 // Lancé par run-headless.mjs (groupe Node "suggestionBarMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-suggestion-bar-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -147,7 +149,7 @@ async function pixelAt(x, y) {
 const bar = () => page.evaluate(() => {
   const el = document.querySelector('.v2-suggest-toolbar');
   // Pas de barre du tout (le code d'avant) : une barre fermée, que chaque vérification constate - le parcours va jusqu'au bout au lieu de s'arrêter sur une erreur.
-  if (!el) return { visible: false, left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0, text: '', buttons: [] };
+  if (!el) return { visible: false, left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0, text: '', buttons: [], label: null };
   const r = el.getBoundingClientRect();
   const effectiveBg = (node) => { for (let n = node; n; n = n.parentElement) { const c = getComputedStyle(n).backgroundColor; if (!/rgba\(.*,\s*0\)|transparent/.test(c)) return c; } return 'rgb(255, 255, 255)'; };
   const buttons = [...el.querySelectorAll('button')].map((b) => {
@@ -155,7 +157,14 @@ const bar = () => page.evaluate(() => {
     const hit = document.elementFromPoint(br.left + br.width / 2, br.top + br.height / 2);
     return { action: b.dataset.action, text: b.textContent, title: b.title, left: br.left, top: br.top, x: br.left + br.width / 2, y: br.top + br.height / 2, color: getComputedStyle(b).color, bg: effectiveBg(b), reachable: hit === b };
   });
-  return { visible: el.classList.contains('visible'), left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height, text: el.textContent, buttons };
+  // L'étiquette de l'auteur (« Proposé par … ») : absente (code d'avant), masquée, ou visible avec son cadre, son texte, son info-bulle et sa couleur.
+  const labelEl = el.querySelector('.v2-suggest-author');
+  const label = labelEl ? (() => {
+    const lr = labelEl.getBoundingClientRect();
+    const cs = getComputedStyle(labelEl);
+    return { hidden: labelEl.hidden || lr.width === 0, text: labelEl.textContent, title: labelEl.title, left: lr.left, right: lr.right, top: lr.top, bottom: lr.bottom, x: lr.left + lr.width / 2, y: lr.top + lr.height / 2, color: cs.color, bg: effectiveBg(labelEl), ellipsized: labelEl.scrollWidth > labelEl.clientWidth + 1, textOverflow: cs.textOverflow };
+  })() : null;
+  return { visible: el.classList.contains('visible'), left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height, text: el.textContent, buttons, label };
 });
 const barOpen = async () => (await bar()).visible;
 const caretRect = () => page.evaluate(() => { const ed = EditorCore.getEditor(); const c = ed.view.coordsAtPos(ed.state.selection.head); return { top: c.top, bottom: c.bottom, left: c.left }; });
@@ -201,6 +210,8 @@ for (const dark of [false, true]) {
   const theme = dark ? 'sombre' : 'clair';
   page = await openPage(dark);
   console.log(`\n--- thème ${theme} ---`);
+  // La personne devant l'écran : ce que la formule déclenchée user.Email / user.Name de la table-sonde rendrait (js/grist-api.js:getCurrentUserEmail, getCurrentUserName).
+  await page.evaluate(() => { window.__gristStub.setUserEmail('marie.curie@example.org'); window.__gristStub.setUserName('Marie Curie'); });
   await page.evaluate(() => { Editor.setTrackChanges(false); });
   await newDocument('<p>Premier paragraphe de test.</p><p>Deuxième paragraphe avec un mot à retirer ici.</p><p>Troisième paragraphe.</p>');
 
@@ -248,7 +259,7 @@ for (const dark of [false, true]) {
   check(`[${theme}] la barre s'ouvre sous le curseur, tout entière dans la fenêtre`,
     b1.visible && b1.top >= caret.bottom - 1 && b1.left >= 0 && b1.right <= WIDTH && b1.top >= 0 && b1.bottom <= HEIGHT, { bar: [b1.left, b1.top, b1.right, b1.bottom], caret });
   check(`[${theme}] libellés « Accepter » et « Refuser », info-bulles au singulier`,
-    b1.text === 'AccepterRefuser' && b1.buttons.map(b => b.title).join() === 'Accepter cette modification,Refuser cette modification', { text: b1.text, titles: b1.buttons.map(b => b.title) });
+    b1.buttons.map(b => b.text).join('') === 'AccepterRefuser' && b1.buttons.map(b => b.title).join() === 'Accepter cette modification,Refuser cette modification', { text: b1.buttons.map(b => b.text), titles: b1.buttons.map(b => b.title) });
   check(`[${theme}] rien ne recouvre la barre : le centre de chaque bouton est atteint par la souris`, b1.buttons.length === 2 && b1.buttons.every(b => b.reachable), b1.buttons.map(b => b.reachable));
   const ratios = b1.buttons.map(b => contrast(b.color, b.bg));
   check(`[${theme}] boutons : texte sur fond à 4,5:1 au moins`, ratios.length === 2 && ratios.every(r => r >= 4.5), { colors: b1.buttons.map(b => b.color + ' sur ' + b.bg), ratios });
@@ -309,7 +320,7 @@ for (const dark of [false, true]) {
   await sleep(200);
   await clickText('Ajout trois');
   const en = await bar();
-  check(`[${theme}] en anglais : « Accept » et « Reject », info-bulles « this change »`, en.visible && en.text === 'AcceptReject' && en.buttons.map(b => b.title).join() === 'Accept this change,Reject this change', { text: en.text, titles: en.buttons.map(b => b.title) });
+  check(`[${theme}] en anglais : « Accept » et « Reject », info-bulles « this change »`, en.visible && en.buttons.map(b => b.text).join('') === 'AcceptReject' && en.buttons.map(b => b.title).join() === 'Accept this change,Reject this change', { text: en.buttons.map(b => b.text), titles: en.buttons.map(b => b.title) });
   await page.evaluate(() => I18n.setLang('fr'));
   await sleep(200);
 
@@ -381,6 +392,123 @@ for (const dark of [false, true]) {
     const afterUndo = await page.evaluate(() => ({ columns: [...document.querySelectorAll('.tiptap tr')].map(tr => tr.querySelectorAll('td, th').length), pending: Editor.hasPendingTrackedChanges() }));
     check(`[${theme}] Ctrl+Z : la colonne revient entière d'un seul coup, toujours en attente`, afterUndo.columns.join() === '4,4' && afterUndo.pending, afterUndo);
   }
+
+  // === Qui a proposé la modification (demande d'Antoine du 04/10) ===
+  // Un document ouvert avec ses auteurs : Jean (nom et adresse), Paul (adresse seule), une modification sans auteur connu, Madeleine (une adresse très longue, sans nom). La barre « Accepter /
+  // Refuser » ajoute, APRÈS ses boutons, « Proposé par … » : le nom, l'adresse à défaut de nom, « et N autres » pour plusieurs personnes, rien quand aucune n'est connue.
+  await page.evaluate(() => { Editor.setTrackChanges(false); I18n.setLang('fr'); });
+  const MADELEINE = 'madeleine.de.la.tour.d.auvergne.de.saint.germain@exemple-tres-long-domaine.example.org';
+  await page.evaluate((madeleine) => {
+    Editor.setHTML('<p>Début <ins data-id="1">ajout de Jean</ins> milieu <ins data-id="2">ajout de Paul</ins> fin <ins data-id="3">ajout sans auteur</ins>.</p>'
+      + '<p>Suite <ins data-id="4">ajout de Madeleine</ins> finale.</p><p>Dernier paragraphe de test.</p>', {
+      1: { author: 'jean.dupont@example.org', authorName: 'Jean Dupont', createdAt: '2026-10-03T09:00:00.000Z' },
+      2: { author: 'paul.martin@example.org', createdAt: '2026-10-03T10:00:00.000Z' },
+      3: { author: null, createdAt: null },
+      4: { author: madeleine, createdAt: '2026-10-03T11:00:00.000Z' },
+    });
+  }, MADELEINE);
+  await settle();
+  await parkMouse();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  // L'étiquette arrive un instant après l'ouverture de la barre quand l'identité se lit : on la guette jusqu'à une seconde.
+  const barWith = async (wanted) => {
+    let b = await bar();
+    for (let i = 0; i < 12 && !(wanted(b.label)); i++) { await sleep(100); b = await bar(); }
+    return b;
+  };
+  const insideWindow = (b) => b.left >= 0 && b.top >= 0 && b.right <= WIDTH && b.bottom <= HEIGHT;
+  const rightOfButtons = (b) => !!b.label && b.buttons.length === 2 && b.label.left >= Math.max(...b.buttons.map(btn => 2 * btn.x - btn.left)) - 0.5 && b.label.right <= b.right + 0.5;
+
+  await clickText('ajout de Jean');
+  const jean = await barWith(l => l && !l.hidden);
+  check(`[${theme}] clic sur la modification de Jean : « Proposé par Jean Dupont », tout entière dans la barre`,
+    jean.visible && !!jean.label && !jean.label.hidden && jean.label.text === 'Proposé par Jean Dupont' && insideWindow(jean), { visible: jean.visible, label: jean.label && jean.label.text, bar: [jean.left, jean.top, jean.right, jean.bottom] });
+  check(`[${theme}] l'étiquette est APRÈS les boutons (qui ne bougent jamais quand elle arrive) et rien ne recouvre la barre`,
+    rightOfButtons(jean) && jean.buttons.every(b => b.reachable), { label: jean.label && [jean.label.left, jean.label.right], buttons: jean.buttons.map(b => [b.left, b.x, b.reachable]) });
+  check(`[${theme}] l'info-bulle de l'étiquette donne le nom ET l'adresse`, !!jean.label && jean.label.title === 'Proposé par Jean Dupont (jean.dupont@example.org)', jean.label && jean.label.title);
+  const labelRatio = jean.label ? contrast(jean.label.color, jean.label.bg) : 0;
+  check(`[${theme}] étiquette : texte sur fond à 4,5:1 au moins`, labelRatio >= 4.5, { color: jean.label && jean.label.color, bg: jean.label && jean.label.bg, ratio: labelRatio });
+
+  // Les boutons ne bougent pas quand l'étiquette apparaît ou disparaît : la barre est ancrée à gauche, l'étiquette ne prend que la place à droite.
+  const positions = (b) => b.buttons.map(btn => Math.round(btn.left) + ',' + Math.round(btn.top)).join(' ');
+  const withLabelPositions = positions(jean);
+  await page.evaluate(() => { const el = document.querySelector('.v2-suggest-author'); if (el) el.hidden = true; });
+  await sleep(250);
+  const withoutLabelPositions = positions(await bar());
+  check(`[${theme}] sans l'étiquette, « Accepter » et « Refuser » restent exactement au même endroit`, !!jean.label && withLabelPositions === withoutLabelPositions, { withLabelPositions, withoutLabelPositions });
+  await page.evaluate(() => { const el = document.querySelector('.v2-suggest-author'); if (el) el.hidden = false; });
+  await sleep(250);
+
+  // Un clic sur l'étiquette ne fait rien : la barre reste ouverte, l'éditeur garde le focus et sa sélection.
+  const selectionState = () => page.evaluate(() => { const ed = EditorCore.getEditor(); return { from: ed.state.selection.from, to: ed.state.selection.to, focus: ed.view.hasFocus() }; });
+  const beforeLabelClick = await selectionState();
+  const labelNow = (await bar()).label;
+  if (labelNow) await page.mouse.click(labelNow.x, labelNow.y);
+  await sleep(300);
+  const afterLabelClick = await selectionState();
+  check(`[${theme}] un clic sur l'étiquette ne ferme pas la barre et ne fait pas perdre le focus ni la sélection`,
+    !!labelNow && (await barOpen()) && beforeLabelClick.focus && afterLabelClick.focus && beforeLabelClick.from === afterLabelClick.from && beforeLabelClick.to === afterLabelClick.to, { beforeLabelClick, afterLabelClick });
+
+  await clickText('ajout de Paul');
+  const paul = await barWith(l => l && !l.hidden && /paul/.test(l.text));
+  check(`[${theme}] une modification dont le document n'a que l'adresse : « Proposé par paul.martin@example.org »`, !!paul.label && paul.label.text === 'Proposé par paul.martin@example.org', paul.label && paul.label.text);
+
+  await clickText('ajout sans auteur');
+  await sleep(500);
+  const nobody = await bar();
+  check(`[${theme}] une modification sans auteur connu : barre ouverte, aucune étiquette (la barre est celle d'avant)`,
+    nobody.visible && !!nobody.label && nobody.label.hidden && nobody.label.text === '' && nobody.text === 'AccepterRefuser', { visible: nobody.visible, label: nobody.label, text: nobody.text });
+
+  await clickText('ajout de Madeleine');
+  const madeleine = await barWith(l => l && !l.hidden);
+  check(`[${theme}] une très longue adresse : coupée en points de suspension, la barre reste tout entière dans la fenêtre et atteignable, l'info-bulle donne l'adresse entière`,
+    !!madeleine.label && !madeleine.label.hidden && madeleine.label.ellipsized && madeleine.label.textOverflow === 'ellipsis' && madeleine.label.right - madeleine.label.left <= 221 && insideWindow(madeleine)
+    && madeleine.buttons.every(b => b.reachable) && madeleine.label.title === 'Proposé par ' + MADELEINE, { label: madeleine.label, bar: [madeleine.left, madeleine.right] });
+
+  // Un glisser sur les modifications de Jean et de Paul : « Proposé par Jean Dupont et 1 autre », l'info-bulle les donne tous les deux.
+  await parkMouse();
+  const fromJean = await rectOf('ajout de Jean');
+  const toPaul = await rectOf('ajout de Paul');
+  await sleep(700);
+  await page.mouse.move(fromJean.left + 1, fromJean.y);
+  await page.mouse.down();
+  await page.mouse.move(toPaul.right - 1, toPaul.y, { steps: 8 });
+  await page.mouse.up();
+  await sleep(350);
+  const two = await barWith(l => l && !l.hidden && /autre/.test(l.text));
+  check(`[${theme}] plusieurs personnes : « Proposé par Jean Dupont et 1 autre », l'info-bulle les nomme toutes`,
+    !!two.label && two.label.text === 'Proposé par Jean Dupont et 1 autre' && two.label.title === 'Proposé par Jean Dupont (jean.dupont@example.org), paul.martin@example.org', two.label && [two.label.text, two.label.title]);
+
+  // L'anglais : « Proposed by … », « and 1 other », « and 2 others ».
+  await page.evaluate(() => I18n.setLang('en'));
+  await clickText('ajout de Jean');
+  const enOne = await barWith(l => l && !l.hidden && /Proposed/.test(l.text));
+  await parkMouse();
+  const enFrom = await rectOf('ajout de Jean');
+  const enTo = await rectOf('ajout de Madeleine');
+  await sleep(700);
+  await page.mouse.move(enFrom.left + 1, enFrom.y);
+  await page.mouse.down();
+  await page.mouse.move(enTo.right - 1, enTo.y, { steps: 10 });
+  await page.mouse.up();
+  await sleep(350);
+  const enMany = await barWith(l => l && !l.hidden && /others/.test(l.text));
+  check(`[${theme}] en anglais : « Proposed by Jean Dupont », puis « Proposed by Jean Dupont and 2 others » pour trois personnes`,
+    !!enOne.label && enOne.label.text === 'Proposed by Jean Dupont' && !!enMany.label && enMany.label.text === 'Proposed by Jean Dupont and 2 others', { one: enOne.label && enOne.label.text, many: enMany.label && enMany.label.text });
+  await page.evaluate(() => I18n.setLang('fr'));
+  await sleep(200);
+
+  // Une modification tapée à l'instant, jamais enregistrée : c'est celle de la personne devant l'écran (l'identité se lit à l'ouverture de la barre).
+  await page.evaluate(() => Editor.setTrackChanges(true));
+  await clickText('Dernier paragraphe');
+  await page.keyboard.press('End');
+  await page.keyboard.type(' Ajout de Marie.');
+  await sleep(300);
+  await clickText('Ajout de Marie');
+  const mine = await barWith(l => l && !l.hidden);
+  check(`[${theme}] une modification tapée à l'instant : « Proposé par Marie Curie » (la personne devant l'écran), son adresse dans l'info-bulle`,
+    !!mine.label && mine.label.text === 'Proposé par Marie Curie' && mine.label.title === 'Proposé par Marie Curie (marie.curie@example.org)', mine.label && [mine.label.text, mine.label.title]);
+  await page.evaluate(() => Editor.setTrackChanges(false));
 
   await page.evaluate(() => Editor.setTrackChanges(false));
   await page.context().close();

@@ -8,6 +8,14 @@ const Editor = (function () {
   // changes.md, décision n°4). Repartie de zéro à chaque chargement de modèle (setHTML), jamais
   // conservée d'un modèle à l'autre.
   let suiviMetadataCache = {};
+  // Qui est devant l'écran : { email, name }, lu une fois par session (GristAPI.getCurrentUserEmail et getCurrentUserName) ; null tant qu'on ne l'a pas lu ou quand Grist ne le
+  // donne pas. Une lecture qui échoue n'est retentée par la barre qu'au bout d'une minute (chaque lecture écrit dans la table interne du document), par l'enregistrement
+  // à chaque fois qu'une modification neuve attend son auteur.
+  let currentAuthor = null;
+  let currentAuthorRead = null;
+  let currentAuthorFailedAt = 0;
+  const AUTHOR_RETRY_MS = 60000;
+  const authorListeners = [];
   // API renvoyée par TrackChanges.createExtensions() (js/track-changes.js), construite une fois dans
   // init() - isSuggestModeOn a besoin des fonctions de la lib, importées dynamiquement là-bas.
   let trackChangesApi = null;
@@ -327,6 +335,8 @@ const Editor = (function () {
     // extensible depuis l'extérieur) - `document: false` le désactive pour lui substituer la version
     // étendue ci-dessous, seule différence avec l'usage par défaut de StarterKit.
     trackChangesApi = await TrackChanges.createExtensions(Node, Mark, Extension, mergeAttributes);
+    // Une modification neuve ne reprend jamais le numéro d'une modification que la session connaît, résolue ou non (js/track-changes.js:nextSuggestionId).
+    TrackChanges.setKnownSuggestionIds(() => Object.keys(suiviMetadataCache));
     const TrackedDocument = TrackChanges.extendForTracking(Document);
     const TrackedTable = TrackChanges.extendForTracking(Table);
     // La ligne aussi : « Colonne avant / après » et « Supprimer la colonne » posent une marque sur chaque CASE de la colonne, des enfants directs d'une ligne.
@@ -455,7 +465,7 @@ const Editor = (function () {
     FloatingToolbars.wireTableFloatingToolbar();
     FloatingToolbars.wireImageFloatingToolbar();
     FloatingToolbars.wireVariableFloatingToolbar();
-    FloatingToolbars.wireSuggestionFloatingToolbar();
+    FloatingToolbars.wireSuggestionFloatingToolbar({ of: getSuggestionAuthors, onChange: onSuggestionAuthorsChange });
     Comments.setEditor(editor);
     Comments.wireClickToOpen();
     editor.on('selectionUpdate', MainToolbar.syncToolbarState);
@@ -523,6 +533,8 @@ const Editor = (function () {
     // Sans ça l'historique Annuler/Rétablir s'accumule à travers les changements de modèle : un Annuler après chargement pouvait faire réapparaître le
     // contenu d'un modèle précédent (bug confirmé).
     editor.commands.clearHistory();
+    // Les modifications en attente que le document n'a jamais attribuées n'ont pas d'auteur : elles ne sont mises au nom de personne, ni à l'écran ni à l'enregistrement.
+    suiviMetadataCache = TrackChanges.seedMetadata(editor.state, suiviMetadataCache);
     // clearHistory() reconstruit l'état ProseMirror via EditorState.create(), qui réinitialise l'état de TOUS les plugins (pas seulement l'historique
     // Annuler/Rétablir qu'elle vise) - le mode suivi (un booléen de plugin, jamais stocké dans le document) repasserait sinon silencieusement à OFF à
     // chaque changement de modèle, y compris en rechargeant le même. Cf. commentaire de TrackChanges.restoreSuggestModeIfNeeded (js/track-changes.js).
@@ -613,18 +625,63 @@ const Editor = (function () {
     return !!editor && TrackChanges.hasPendingSuggestions(editor.state);
   }
 
+  // Qui est devant l'écran, lu une fois (les demandes qui se chevauchent n'en font qu'une). Le nom d'abord demandé ajoute une colonne à la table interne de l'identification
+  // (js/grist-api.js) : une personne sans droit sur la structure du document ne l'obtient pas, son adresse suffit alors. Repli anonyme silencieux (null) si l'identification
+  // échoue, même convention que js/comments.js.
+  function readCurrentAuthor() {
+    if (currentAuthor) return Promise.resolve(currentAuthor);
+    if (!currentAuthorRead) {
+      currentAuthorRead = (async () => {
+        let email = '';
+        try { email = await GristAPI.getCurrentUserEmail(); } catch (e) { /* repli anonyme silencieux */ }
+        if (!email) { currentAuthorFailedAt = Date.now(); return null; }
+        let name = '';
+        try { name = await GristAPI.getCurrentUserName(); } catch (e) { /* l'adresse suffit */ }
+        currentAuthor = { email, name: name || '' };
+        authorListeners.forEach((fn) => { try { fn(); } catch (e) { console.warn('[Editor] écouteur des auteurs en échec', e); } });
+        return currentAuthor;
+      })();
+      const done = () => { currentAuthorRead = null; };
+      currentAuthorRead.then(done, done);
+    }
+    return currentAuthorRead;
+  }
+
+  // Les personnes derrière les modifications d'ids donnés : [{ name, email }] (js/track-changes.js:authorsOfSuggestions), pour la barre « Accepter / Refuser ». Une modification que
+  // les métadonnées ne connaissent pas est celle de la personne devant l'écran : tant qu'on ne l'a pas lue, la liste ne la compte pas, et sa lecture part (la barre est prévenue
+  // par onSuggestionAuthorsChange quand elle arrive).
+  function getSuggestionAuthors(ids) {
+    const fresh = ids.some(id => !suiviMetadataCache[String(id)]);
+    if (fresh && !currentAuthor && !currentAuthorRead && Date.now() - currentAuthorFailedAt > AUTHOR_RETRY_MS) readCurrentAuthor();
+    return TrackChanges.authorsOfSuggestions(ids, suiviMetadataCache, currentAuthor);
+  }
+  function onSuggestionAuthorsChange(fn) {
+    if (typeof fn === 'function') authorListeners.push(fn);
+  }
+
   // Auteur/horodatage par suggestion en attente (colonne Grist SuiviModifications, cf. commentaire de
   // suiviMetadataCache plus haut). Appelée juste avant chaque Templates.save() (Enregistrer manuel ET
   // auto-save, js/main.js) - jamais séparément, pour ne jamais écrire cette colonne hors du même
   // UpdateRecord que Contenu/DateModif (planning/feature-track-changes.md, exigence sur la fenêtre de
-  // risque en cas de conflit). Repli anonyme silencieux si l'identification Grist échoue, même
-  // convention que js/comments.js.
+  // risque en cas de conflit). Le NOM de la personne devant l'écran ne se lit que quand une modification
+  // neuve attend son auteur (il ajoute une colonne à la table d'identification). Le JSON rendu ne garde
+  // que les modifications en attente ; la session garde tout ce qu'elle a vu, y compris ce qui est
+  // résolu depuis : « Annuler » le ramène avec son auteur.
   async function getSuiviModificationsForSave() {
     if (!editor) return suiviMetadataCache;
+    const fresh = Array.from(TrackChanges.collectPendingIds(editor.state)).some(id => !suiviMetadataCache[id]);
     let author = null;
-    try { author = await GristAPI.getCurrentUserEmail(); } catch (e) { /* repli anonyme silencieux */ }
-    suiviMetadataCache = TrackChanges.computeMetadata(editor.state, suiviMetadataCache, author);
-    return suiviMetadataCache;
+    if (fresh) {
+      author = await readCurrentAuthor();
+    } else {
+      // Aucune modification neuve : l'adresse ne sert à rien ici, mais elle se lit à chaque enregistrement comme avant. GristAPI la garde une fois lue (un seul passage par la table
+      // d'identification) et d'autres modules s'appuient sur ce premier passage ; sans lui il viendrait pendant la frappe suivante, au milieu d'un enregistrement automatique
+      // (dev-tests/scenarios-autosave-race.js : jamais deux écritures à la fois).
+      try { await GristAPI.getCurrentUserEmail(); } catch (e) { /* repli anonyme silencieux */ }
+    }
+    const saved = TrackChanges.computeMetadata(editor.state, suiviMetadataCache, author);
+    suiviMetadataCache = Object.assign({}, suiviMetadataCache, saved);
+    return saved;
   }
 
   return {
@@ -643,5 +700,7 @@ const Editor = (function () {
     selectedColumnsCrossMergedCell,
     selectedRowsCrossMergedCell,
     getSuiviModificationsForSave,
+    getSuggestionAuthors,
+    onSuggestionAuthorsChange,
   };
 })();

@@ -94,6 +94,27 @@
   font-weight: 600;
   white-space: nowrap;
 }
+/* Qui a proposé la modification (« Proposé par Marie Curie »), après les boutons : elle arrive un instant après l'ouverture de la barre (l'identité se lit une fois), devant eux elle les
+   décalerait sous la souris. Discrète : texte courant de la barre, couleur de texte atténué des jetons (≥ 4,5:1, clair et sombre), un filet la sépare des boutons ; une longue adresse
+   se coupe en points de suspension, l'info-bulle la donne en entier. Le chrome vient de .v2-floating-toolbar. */
+.v2-suggest-toolbar .v2-suggest-author {
+  align-self: center;
+  box-sizing: border-box;
+  max-width: 220px;
+  margin-left: 2px;
+  padding: 0 8px 0 10px;
+  border-left: 1px solid var(--border);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+  user-select: none;
+}
+.v2-suggest-toolbar .v2-suggest-author[hidden] { display: none; }
 
 /* Lecture (js/reader-mode.js:renderRecord et resolveHeaderFooterZone, TrackChanges.acceptedView) : le document comme si toutes les suggestions
    étaient acceptées, avec une légère teinte là où quelque chose a changé - texte inséré ou remplacé, paragraphe ou titre dont la mise en forme a
