@@ -7,13 +7,17 @@
 // Ce que la suite vérifie, avec de vrais minuteurs (l'auto-save est un `setInterval` que rien ne peut déclencher à la demande, cf. dev-tests/scenarios-autosave.js) :
 // 1. au repos, la table est relue à 15 s d'intervalle - pas avant -, et un enregistrement fait ailleurs pendant ce temps est signalé à la lecture suivante, sans rien écrire ;
 // 2. l'attente du repos ne protège pas moins : quelqu'un d'autre enregistre pendant que rien ne bouge, la personne tape juste après - le premier passage relit AVANT d'écrire,
-//    affiche le bandeau et n'écrase rien (une horloge qui sauterait la lecture parce qu'elle date de moins de 15 s écraserait la version de l'autre).
+//    affiche le bandeau et n'écrase rien (une horloge qui sauterait la lecture parce qu'elle date de moins de 15 s écraserait la version de l'autre) ;
+// 3. une table des modèles LOURDE attend plus longtemps (js/main.js, autosaveIdleIntervalMs : une milliseconde pour 100 caractères de la dernière lecture, 3 Mo : 30 s) : vingt modèles de
+//    1,6 Mo relus toutes les 15 s, c'étaient 118 Mo par minute (lot « Lectures de fond » de « Tests de charge »).
 // Les lectures se comptent en enveloppant grist.docApi.fetchTable le temps du cas : le stub journalise les écritures, pas les lectures.
 (function () {
   const cases = [];
   const TABLE = 'Publipostage_Modeles';
   const TICK_MS = 2500; // = AUTOSAVE_INTERVAL_MS (js/main.js). À garder synchronisé si cette constante change.
   const IDLE_MS = 15000; // = AUTOSAVE_IDLE_INTERVAL_MS (js/main.js).
+  const HEAVY_CHARS = 3000000; // une table de 3 Mo de texte ...
+  const HEAVY_IDLE_MS = 30000; // ... attend HEAVY_CHARS / AUTOSAVE_IDLE_CHARS_PER_MS (js/main.js) = 30 s.
 
   const stub = () => window.__gristStub;
   const banner = () => document.getElementById('autosave-conflict-banner');
@@ -135,6 +139,62 @@
           notes: 'bandeau affiché en ' + TICK_MS * 2 + ' ms=' + shown + ', lectures=' + reads + ' (au moins 1 : lire avant d\'écrire), écritures=' + writes + ', version d\'ailleurs intacte=' + remoteIntact,
         };
       } finally { watch.stop(); }
+    },
+  });
+
+  // Une ligne de plus dans la table des modèles, directement dans le faux Grist (le modèle du cas garde sa petite taille) : `chars` caractères de texte dans son contenu. Rend son id.
+  function addHeavyModel(chars) {
+    const table = stub().state.rows[TABLE];
+    const id = Math.max.apply(null, table.id.concat([0])) + 1000;
+    table.id.push(id);
+    Object.keys(table).forEach(column => {
+      if (column === 'id') return;
+      table[column].push(column === 'Nom' ? 'Modèle lourd du cas' : column === 'Contenu' ? '<p>' + 'x'.repeat(chars) + '</p>' : column === 'TypeModele' ? 'document' : null);
+    });
+    return id;
+  }
+  function removeModel(id) {
+    const table = stub().state.rows[TABLE];
+    const index = table.id.indexOf(id);
+    if (index === -1) return;
+    Object.keys(table).forEach(column => { table[column].splice(index, 1); });
+  }
+
+  cases.push({
+    id: 'autosave_idle_waits_longer_before_rereading_a_heavy_models_table',
+    description: "Au repos, une table des modèles de 3 Mo n'est relue qu'au bout de 30 s (une milliseconde pour 100 caractères lus), pas toutes les 15 s : à ce rythme, vingt modèles de 1,6 Mo relisaient 118 Mo par minute pour n'y rien trouver ; rien n'est écrit",
+    run: async (h) => {
+      await clearConflictIfAny(h);
+      const id = await openSavedTemplate(h, 'AutoSave table lourde', '<p>Rien à enregistrer</p>');
+      if (!id) return { pass: false, notes: 'modèle non rouvert par la liste' };
+      const heavyId = addHeavyModel(HEAVY_CHARS);
+      try {
+        // Le poids de la table est connu avant que l'attente du repos ne commence : la lecture de la liste des modèles le lit, puis le modèle est rouvert (c'est lui qui met l'horloge à l'heure).
+        await Templates.loadAll();
+        await h.clickButton('btn-new');
+        await h.sleep(300);
+        chooseTemplate(id);
+        await h.sleep(500);
+        if (String(Templates.getCurrentId()) !== String(id)) return { pass: false, notes: 'modèle non rouvert par la liste' };
+        const watch = watchModelReads();
+        const loadedAt = performance.now();
+        try {
+          stub().clearActionLog();
+          // L'ancien rythme aurait lu à 15 s : à 25 s la table ne doit toujours pas avoir été relue.
+          const tooEarly = await waitUntil(h, () => watch.times.length >= 1, 25000, 250);
+          const readAt = tooEarly ? null : await waitUntil(h, () => watch.times.length >= 1, HEAVY_IDLE_MS + TICK_MS * 2 - 25000, 250);
+          const delay = watch.times.length ? Math.round(watch.times[0] - loadedAt) : null;
+          const writes = stub().countActions('UpdateRecord', TABLE);
+          const pass = !tooEarly && !!readAt && delay !== null && delay >= HEAVY_IDLE_MS - TICK_MS * 2 && delay <= HEAVY_IDLE_MS + TICK_MS * 2 && writes === 0;
+          return {
+            pass,
+            notes: 'table de ' + HEAVY_CHARS + ' caractères : lue avant 25 s=' + tooEarly + ' (attendu non), lecture venue=' + !!readAt + ', délai ' + delay + ' ms (attendu ~' + HEAVY_IDLE_MS + '), écritures=' + writes,
+          };
+        } finally { watch.stop(); }
+      } finally {
+        removeModel(heavyId);
+        await Templates.loadAll();
+      }
     },
   });
 

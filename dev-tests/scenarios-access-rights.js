@@ -828,6 +828,80 @@
     },
   });
 
+  // Relecture périodique de la table des droits (js/access-rights.js, refreshDelayMs : 10 s, davantage quand la table est grosse - une milliseconde par case lue, 3 minutes au plus).
+  // De VRAIS minuteurs : rien ne déclenche la relecture à la demande. Les instants de chaque lecture de la table (fetchTable), tant que le cas dure.
+  function watchRightsReads() {
+    const docApi = window.grist.docApi;
+    const original = docApi.fetchTable;
+    const times = [];
+    docApi.fetchTable = function (tableId) {
+      if (tableId === RIGHTS_TABLE) times.push(performance.now());
+      return original.apply(this, arguments);
+    };
+    return { times, stop: () => { docApi.fetchTable = original; } };
+  }
+  // La table des droits de `rowCount` lignes, la dernière étant celle de la personne (tous les droits) ; rend le nombre de cases d'une lecture (lignes x colonnes, id compris).
+  async function seedRightsTable(rowCount) {
+    stub().setUserEmail(EMAIL);
+    stub().setVariables(RIGHTS_TABLE, RIGHTS_COLUMNS);
+    const rows = [];
+    for (let i = 1; i < rowCount; i++) rows.push({ id: i, Email: 'personne' + i + '@exemple.fr', LectureSeule: false, Export: true, Commentaires: true });
+    rows.push({ id: rowCount, Email: 'Lecteur@Exemple.fr', LectureSeule: false, Export: true, Commentaires: true });
+    stub().setRows(RIGHTS_TABLE, rows);
+    await GristAPI.refreshSchema();
+    const read = await GristAPI.fetchTableRows(RIGHTS_TABLE);
+    return read.length * Object.keys(read[0]).length;
+  }
+
+  cases.push({
+    id: 'access_small_rights_table_is_reread_every_10_seconds',
+    description: 'Une table des droits ordinaire (une ligne par personne) reste relue toutes les 10 s, comme avant : la relecture ne vient ni plus tôt ni plus tard',
+    run: async (h) => {
+      await savedTemplate(h, 'Droits relus tous les 10 s');
+      await seedRightsTable(3);
+      const watch = watchRightsReads();
+      try {
+        stub().setWidgetOptions({ droitsAcces: CONFIG });
+        const found = await waitFor(() => AccessRights.getStatus().state === 'found', 4000);
+        const second = await waitFor(() => watch.times.length >= 2, 14000);
+        const gap = watch.times.length >= 2 ? Math.round(watch.times[1] - watch.times[0]) : null;
+        const pass = found && second && watch.times.length === 2 && gap >= 8500 && gap <= 12500;
+        return { pass, notes: 'table trouvée=' + found + ', lectures=' + watch.times.length + ' (attendu 2), écart=' + gap + ' ms (attendu ~10000)' };
+      } finally {
+        watch.stop();
+        await cleanup();
+      }
+    },
+  });
+
+  cases.push({
+    id: 'access_heavy_rights_table_is_reread_less_often',
+    description: 'Une table des droits de 20 000 cases n’est relue qu’au bout de 20 s (une milliseconde par case lue), pas toutes les 10 s : 50 000 lignes relues toutes les 10 s, c’étaient 1,16 million de cases par minute pour n’y rien changer ; les droits restent appliqués',
+    run: async (h) => {
+      await savedTemplate(h, 'Droits table lourde');
+      const keys = await seedRightsTable(1); // une ligne : autant de cases que de colonnes
+      const cells = await seedRightsTable(Math.ceil(20000 / keys));
+      const expected = Math.min(180000, Math.max(10000, cells));
+      const watch = watchRightsReads();
+      try {
+        stub().setWidgetOptions({ droitsAcces: CONFIG });
+        const found = await waitFor(() => AccessRights.getStatus().state === 'found', 6000);
+        // L'ancien rythme (10 s) aurait relu : 15 s après la première lecture, la table ne doit toujours pas l'avoir été.
+        await sleep(15000);
+        const readsAt15 = watch.times.length;
+        const second = await waitFor(() => watch.times.length >= 2, expected + 4000 - 15000);
+        const gap = watch.times.length >= 2 ? Math.round(watch.times[1] - watch.times[0]) : null;
+        const rights = AccessRights.get();
+        const pass = found && readsAt15 === 1 && second && gap >= expected - 2500 && gap <= expected + 5000 && !rights.readOnly && rights.canExport && rights.canComment;
+        return { pass, notes: cells + ' cases lues, attente attendue ' + expected + ' ms : lectures à 15 s=' + readsAt15 + ' (attendu 1), deuxième lecture venue=' + second + ', écart=' + gap + ' ms, droits=' + JSON.stringify(rights) };
+      } finally {
+        watch.stop();
+        await cleanup();
+        stub().setRows(RIGHTS_TABLE, []);
+      }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.accessRights = cases;
 })();

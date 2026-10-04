@@ -71,13 +71,25 @@ const Comments = (function () {
     } catch (e) { console.error('[Comments] Erreur création table commentaires', e); }
   }
 
+  // Un modèle sans la moindre marque de commentaire - ni dans son texte, ni dans son en-tête ou son pied - n'a aucun fil à relire. `tpl` est sa
+  // ligne (js/templates.js) ; sans elle on ne sait pas, et la table est lue comme avant.
+  function carriesCommentMarks(tpl) {
+    if (!tpl) return true;
+    const hasMark = html => typeof html === 'string' && html.indexOf('data-comment-id') !== -1;
+    const headerFooter = tpl.headerFooter || {};
+    return hasMark(tpl.contenu) || [headerFooter.header, headerFooter.footer].some(zone => !!zone && (hasMark(zone.default) || hasMark(zone.first)));
+  }
+
   // Appelé par js/main.js à chaque changement de modèle (chargement, nouveau, suppression), sans rafraîchissement continu : un commentaire est bien
   // moins sensible à la latence que le contenu du document, pas besoin d'un deuxième polling par-dessus l'enregistrement automatique.
-  async function loadForTemplate(modeleId) {
+  // La table des fils est celle de tout le document (60 000 cases pour 10 000 commentaires) : un modèle qui ne porte aucune marque ne la lit pas,
+  // et ne la crée pas non plus - postMessage la crée au premier message.
+  async function loadForTemplate(modeleId, tpl) {
     currentModeleId = modeleId || null;
     threadsByCommentId = {};
     closePopup();
     if (!modeleId) return;
+    if (!carriesCommentMarks(tpl)) return;
     await ensureTableExists();
     try {
       const data = await grist.docApi.fetchTable(TABLE_NAME);

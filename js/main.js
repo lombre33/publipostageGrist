@@ -166,7 +166,7 @@
     MainToolbar.syncToolbarState();
     if (btnCreateEmail) btnCreateEmail.hidden = true;
     Templates.setCurrentId(tpl ? tpl.id : null);
-    Comments.loadForTemplate(tpl ? tpl.id : null).catch(e => console.error('[main] chargement des commentaires impossible', e));
+    Comments.loadForTemplate(tpl ? tpl.id : null, tpl).catch(e => console.error('[main] chargement des commentaires impossible', e));
     MacroEditor.showSummary(tpl);
     syncEditorVisibilityForMode();
     applyPageFitZoomToBoth();
@@ -258,7 +258,7 @@
     MainToolbar.syncToolbarState();
     if (btnCreateEmail) btnCreateEmail.hidden = currentTypeModele !== 'email';
     Templates.setCurrentId(tpl ? tpl.id : null);
-    Comments.loadForTemplate(tpl ? tpl.id : null).catch(e => console.error('[main] chargement des commentaires impossible', e));
+    Comments.loadForTemplate(tpl ? tpl.id : null, tpl).catch(e => console.error('[main] chargement des commentaires impossible', e));
     const headingNumberingSelect = document.getElementById('v2-heading-numbering-select');
     if (headingNumberingSelect) headingNumberingSelect.value = Editor.getHeadingNumberingStyle();
     // En Lecture, le conteneur de l'éditeur est caché : sans ce rendu, le changement de modèle semblerait ne rien faire jusqu'à un passage par le
@@ -819,8 +819,18 @@
   // Au repos (rien à enregistrer), le passage ne relit la table des modèles que toutes les AUTOSAVE_IDLE_INTERVAL_MS : la relire en entier, contenus
   // compris (816 Ko pour 14 modèles avec images), toutes les 2,5 s pour n'y rien trouver chargerait Grist en continu. Dès qu'il y a quelque chose à
   // enregistrer, chaque passage relit avant d'écrire, comme toujours : la protection contre un écrasement ne change pas, seul un enregistrement fait
-  // ailleurs pendant que rien ne bouge est signalé plus tard (15 s au plus).
+  // ailleurs pendant que rien ne bouge est signalé plus tard (15 s au plus, davantage pour une table lourde : voir plus bas).
   const AUTOSAVE_IDLE_INTERVAL_MS = 15000;
+  // Une table des modèles lourde ne se relit pas à ce rythme : vingt modèles de 1,6 Mo (images comprises), relus quatre fois par minute,
+  // c'étaient 118 Mo par minute pour ne rien trouver. L'attente suit le poids de la dernière lecture (Templates.getLoadedChars), une
+  // milliseconde pour AUTOSAVE_IDLE_CHARS_PER_MS caractères (3 Mo : 30 s), sans dépasser AUTOSAVE_IDLE_MAX_INTERVAL_MS ; une table de moins de
+  // 1,5 Mo garde ses 15 s.
+  const AUTOSAVE_IDLE_MAX_INTERVAL_MS = 180000;
+  const AUTOSAVE_IDLE_CHARS_PER_MS = 100;
+  function autosaveIdleIntervalMs() {
+    const byWeight = Math.ceil(Templates.getLoadedChars() / AUTOSAVE_IDLE_CHARS_PER_MS);
+    return Math.min(AUTOSAVE_IDLE_MAX_INTERVAL_MS, Math.max(AUTOSAVE_IDLE_INTERVAL_MS, byWeight));
+  }
   // Préférence par navigateur (comme la touche de déclenchement #Variable, cf. js/settings.js), pas par document : chacun choisit s'il veut
   // l'enregistrement automatique, indépendamment des autres personnes qui ouvrent le même widget.
   const AUTOSAVE_ENABLED_STORAGE = 'pp_autosave_enabled';
@@ -979,10 +989,10 @@
     if (autosaveConflictActive) return; // gelé tant que l'utilisateur n'a pas choisi (recharger, ou Enregistrer manuellement pour garder sa version)
     const id = Templates.getCurrentId();
     if (!id) return; // aucune ligne à mettre à jour - jamais de création automatique
-    // Au repos, une lecture toutes les AUTOSAVE_IDLE_INTERVAL_MS, à une demi-période près (un passage un peu en avance lit déjà, au lieu de repousser
-    // la lecture d'une période de plus).
+    // Au repos, une lecture toutes les autosaveIdleIntervalMs(), à une demi-période près (un passage un peu en avance lit déjà, au lieu de
+    // repousser la lecture d'une période de plus).
     const checkStartedAt = performance.now();
-    if (!autosaveDirty && checkStartedAt - autosaveLastCheckAt < AUTOSAVE_IDLE_INTERVAL_MS - AUTOSAVE_INTERVAL_MS / 2) return;
+    if (!autosaveDirty && checkStartedAt - autosaveLastCheckAt < autosaveIdleIntervalMs() - AUTOSAVE_INTERVAL_MS / 2) return;
     const epoch = autosaveEpoch;
     let remote;
     try { remote = await readRemoteTemplate(id, epoch); }

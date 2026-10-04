@@ -21,6 +21,11 @@ const AccessRights = (function () {
   // Relecture périodique, seulement quand un réglage existe : une case cochée dans la table pendant que la personne a le widget ouvert s'applique
   // sans recharger. Aucun abonnement possible à une autre table que celle de la vue (grist.onRecords ne couvre que la section liée).
   const REFRESH_INTERVAL_MS = 10000;
+  // La table est relue en entier : plus elle est grosse, plus la relecture attend - une milliseconde par case de la dernière lecture (50 000
+  // lignes de quatre colonnes, id compris : 200 000 cases, 3 minutes), sans dépasser REFRESH_MAX_INTERVAL_MS. Une table de droits ordinaire, une
+  // ligne par personne, reste à 10 s.
+  const REFRESH_MAX_INTERVAL_MS = 180000;
+  const REFRESH_MS_PER_CELL = 1;
   const FULL_RIGHTS = Object.freeze({ readOnly: false, canExport: true, canComment: true });
   // Table réglée mais illisible pour cette personne (règle d'accès Grist qui la lui cache, le plus souvent) : on ne sait pas si elle y figure.
   // Verrouillé par précaution plutôt que tous les droits - le propriétaire du document, qui lit toujours la table, n'est jamais concerné.
@@ -35,6 +40,8 @@ const AccessRights = (function () {
   // session, pas un toutes les REFRESH_INTERVAL_MS.
   let emailLookupFailed = false;
   let refreshTimer = null;
+  // Cases de la table des droits à la dernière lecture : elles règlent l'attente de la suivante (refreshDelayMs).
+  let lastReadCells = 0;
   let computeGeneration = 0;
   const listeners = [];
 
@@ -94,11 +101,13 @@ const AccessRights = (function () {
     let rows;
     try { rows = await GristAPI.fetchTableRows(cfg.table); }
     catch (e) {
+      lastReadCells = 0;
       console.warn('[AccessRights] table des droits illisible : ' + cfg.table, e);
       // `tableGone` seulement quand c'est vrai : les autres états « error » gardent leur forme d'avant.
       const gone = await tableIsGone(cfg.table);
       return { rights: LOCKED_RIGHTS, status: gone ? { state: 'error', email, tableGone: true } : { state: 'error', email } };
     }
+    lastReadCells = rows.length * (rows.length ? Object.keys(rows[0]).length : 0);
     const wanted = normalizeEmail(email);
     const row = rows.find(r => normalizeEmail(r[cfg.emailColumn]) === wanted);
     if (!row) return { rights: FULL_RIGHTS, status: { state: 'notFound', email } };
@@ -115,6 +124,8 @@ const AccessRights = (function () {
     const generation = ++computeGeneration;
     const result = await compute(config);
     if (generation !== computeGeneration) return; // un réglage plus récent a relancé le calcul entre-temps
+    // Quelle que soit la cause de cette lecture (minuterie, nouveau réglage), l'attente de la suivante repart d'ici, d'après ce qu'elle a lu.
+    if (refreshTimer) scheduleRefresh();
     const before = get();
     const statusChanged = JSON.stringify(result.status) !== JSON.stringify(status);
     rights = result.rights;
@@ -126,13 +137,26 @@ const AccessRights = (function () {
     if (statusChanged) renderSettingsPanel();
   }
 
+  function refreshDelayMs() {
+    return Math.min(REFRESH_MAX_INTERVAL_MS, Math.max(REFRESH_INTERVAL_MS, lastReadCells * REFRESH_MS_PER_CELL));
+  }
+
+  // La relecture suivante est prévue au départ de chaque tour, pas à son retour : une lecture qui ne revient jamais n'arrête pas la boucle
+  // (refresh la replace, d'après ce qu'elle vient de lire, quand elle revient).
+  function scheduleRefresh() {
+    if (refreshTimer) clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => {
+      scheduleRefresh();
+      refresh().catch(e => console.error('[AccessRights] relecture des droits impossible', e));
+    }, refreshDelayMs());
+  }
+
   function startTimer() {
-    if (refreshTimer) return;
-    refreshTimer = setInterval(() => { refresh().catch(e => console.error('[AccessRights] relecture des droits impossible', e)); }, REFRESH_INTERVAL_MS);
+    if (!refreshTimer) scheduleRefresh();
   }
 
   function stopTimer() {
-    if (refreshTimer) clearInterval(refreshTimer);
+    if (refreshTimer) clearTimeout(refreshTimer);
     refreshTimer = null;
   }
 

@@ -166,6 +166,20 @@ const Templates = (function () {
     }
   }
 
+  // Poids de la dernière lecture de la table, en caractères de texte (contenus et images en base64 compris) : js/main.js en tire l'attente de la
+  // relecture au repos, plus longue quand la table est lourde.
+  let loadedChars = 0;
+  function charsOf(data) {
+    let chars = 0;
+    Object.keys(data).forEach(column => {
+      const values = data[column];
+      if (!Array.isArray(values)) return;
+      for (let i = 0; i < values.length; i++) if (typeof values[i] === 'string') chars += values[i].length;
+    });
+    return chars;
+  }
+  function getLoadedChars() { return loadedChars; }
+
   async function loadAll() {
     // Une seule lecture pour tout vérifier : les migrations dont les colonnes sont déjà là n'ont plus rien à relire (cf. ensureOnce).
     const first = await readTable();
@@ -181,6 +195,7 @@ const Templates = (function () {
     try {
       // Aucune migration n'a tourné (ni écrit une colonne) depuis la lecture initiale : elle est encore la table, inutile de la relire.
       const data = first && migrationRuns === runsBefore ? first : await grist.docApi.fetchTable(TABLE_NAME);
+      loadedChars = charsOf(data);
       templatesCache = [];
       for (let i = 0; i < data.id.length; i++) {
         const typeModele = (data.TypeModele && data.TypeModele[i]) || 'document';
@@ -211,6 +226,7 @@ const Templates = (function () {
     } catch (e) {
       console.error('Erreur chargement modèles', e);
       templatesCache = [];
+      loadedChars = 0;
     }
     return templatesCache;
   }
@@ -415,6 +431,6 @@ const Templates = (function () {
 
   return {
     loadAll, getCached, byId, getCurrentId, setCurrentId, isCurrent, getDefaultId, isDefault, canOpenAtStart, setDefault, save, remove, sameName, uniqueName,
-    getWriteSeq, isWriting, whenIdle, lastWritten, sameDateModif, TABLE_NAME,
+    getWriteSeq, isWriting, whenIdle, lastWritten, sameDateModif, getLoadedChars, TABLE_NAME,
   };
 })();

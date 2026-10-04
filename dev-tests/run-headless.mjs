@@ -75,7 +75,7 @@ const GROUPS = {
   comments: 'scenarios-comments',
   autosave: 'scenarios-autosave',
   autosaveRace: 'scenarios-autosave-race', // enregistrement automatique face à un Grist lent : passages qui se chevauchent, Enregistrer pendant un passage, changement de modèle pendant une lecture, relecture échouée
-  autosaveIdle: 'scenarios-autosave-idle', // enregistrement automatique AU REPOS (js/main.js, AUTOSAVE_IDLE_INTERVAL_MS) : la table des modèles n'est relue que toutes les 15 s quand rien n'est à enregistrer et un enregistrement fait ailleurs est signalé à la lecture suivante ; la frappe relit toujours AVANT d'écrire. Vrais minuteurs : ~45 s
+  autosaveIdle: 'scenarios-autosave-idle', // enregistrement automatique AU REPOS (js/main.js, AUTOSAVE_IDLE_INTERVAL_MS) : la table des modèles n'est relue que toutes les 15 s quand rien n'est à enregistrer (30 s pour une table de 3 Mo : l'attente suit le poids de la dernière lecture) et un enregistrement fait ailleurs est signalé à la lecture suivante ; la frappe relit toujours AVANT d'écrire. Vrais minuteurs : ~80 s
   toolbarChrome: 'scenarios-toolbar-chrome',
   macroModeles: 'scenarios-macro-modeles',
   templateTree: 'scenarios-template-tree',
@@ -108,7 +108,7 @@ const GROUPS = {
   pdfBatch: 'scenarios-pdf-batch',
   pdfGlyphs: 'scenarios-pdf-glyphs', // un caractère que la police n'a pas ne s'imprime plus en case vide dans le PDF (js/pdf-glyph-fallback.js, js/pdf-fonts.js, js/pdf-fonts-symbols.js, inlineRuns et glyphText de js/pdf-export.js) : PDF relu par pdf.js, glyphes .notdef comptés
   sheetAssembly: 'scenarios-sheet-assembly', // « Assemblage avant impression » (js/sheet-layout.js, js/sheet-assembly-dialog.js, js/pdf-merge.js:createSheets) : géométrie des planches, fenêtre de réglage, PDF relu par pdf.js (feuilles, texte par emplacement, traits de coupe tracés et peints), menu, droits d'export, grille
-  accessRights: 'scenarios-access-rights',
+  accessRights: 'scenarios-access-rights', // droits par personne (js/access-rights.js) : lecture seule, export, commentaires ; la table des droits relue toutes les 10 s, davantage quand elle est grosse (vrais minuteurs : ~40 s pour ces deux cas)
   linksBlocks: 'scenarios-links-blocks',
   calloutSignature: 'scenarios-callout-signature',
   qrCode: 'scenarios-qr-code', // QR code (js/qr-code.js) : ligne du menu de la chaîne, fenêtre, image et cadre de l'éditeur, Lecture, PDF, Word et Excel, relus par un décodeur (jsQR)
@@ -133,6 +133,7 @@ const GROUPS = {
   emailExport: 'scenarios-email-export', // texte et lien du mode Email (js/mailto-export.js) : puces et numéros comme l'éditeur, retraits sous le texte de l'item, citations en « > », le vrai chemin éditeur -> Lecture -> texte, l'URL construite et sa jauge
   cleanReading: 'scenarios-clean-reading', // Lecture épurée (js/clean-reading.js) : ligne « Lecture épurée » sous Mode lecture, barre du haut cachée, bouton de sortie, Échap, retour au mode d'origine, focus, langue
   readerReads: 'scenarios-reader-reads', // la Lecture lit chaque table une seule fois par rendu, un export une seule fois par ligne (js/grist-api.js:withReadPass, js/export-common.js:resolveRecord) et suit une image qui change de taille après la mesure (js/reader-mode.js:watchGeometry)
+  schemaAtDisplay: 'scenarios-schema-at-display', // la passe de schéma exact à l'affichage d'un modèle (js/editor.js:setHTML) : rien n'est relu quand aucune bulle n'est rouge et que la dernière passe a moins d'une minute, elle repart pour une bulle rouge (colonne ajoutée depuis) ou une passe plus vieille
   readerGuide: 'scenarios-reader-guide', // guide de la Lecture sans ligne (js/reader-guide.js, img/reader-guide/) : guide en quatre étapes (accès complet, tableau sur la page, « Sélectionner par », ligne choisie) sans « Sélectionner par », court message quand le widget est relié (l'étape de l'accès seule s'il est relié sans accès complet), captures FR / EN, mise à jour sans recharger, clic sur une capture, contrastes clair et sombre
   imageText: 'scenarios-image-text', // image « Au cœur du texte » et texte autour (js/editor-nodes.js, css/editor-v2.css, js/reader-mode.js, js/pdf-export.js, js/docx-export.js) : l'image seule sur sa ligne, l'habillage gauche / droite, l'image dans la ligne, la bascule en ligne / bloc, mesurés dans l'éditeur, la Lecture, le PDF et le Word
   formatPainter: 'scenarios-format-painter', // pinceau de mise en forme (js/format-painter.js, bouton après le surlignage, Alt+Maj+C / V) : ce qui est copié et posé, le paragraphe sur un curseur ou un paragraphe entier, une étape d'historique, armé par un clic ou un double-clic, grisé en e-mail et en macro-modèle, les touches

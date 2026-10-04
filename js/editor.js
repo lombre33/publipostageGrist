@@ -503,6 +503,10 @@ const Editor = (function () {
     });
   }
 
+  // Âge au-delà duquel l'affichage d'un modèle relit le schéma exact même quand aucune bulle n'est rouge (setHTML) ; le même qu'au démarrage
+  // (js/main.js).
+  const SCHEMA_MAX_AGE_MS = 60000;
+
   // suiviModifications : métadonnée { [id]: {author, createdAt} } relue depuis la colonne Grist du
   // modèle (null pour un modèle jamais suivi, ou de type macro - cf. js/templates.js). `setContent`
   // remplacé par `loadTrackedDocument` (js/track-changes.js) : le suivi peut être actif au moment de
@@ -531,9 +535,13 @@ const Editor = (function () {
     HeaderFooterPreview.renderPaginationOverlay();
     HeaderFooterPreview.migrateLegacyImagePositions();
     HeaderFooterPreview.reconcileLayerImagesWithGrid();
-    // Vérification immédiate (schéma en cache) puis après rafraîchissement explicite (couvre une table/colonne supprimée entretemps).
+    // Vérification immédiate (schéma en cache) puis après rafraîchissement explicite (couvre une table/colonne supprimée entretemps). La passe
+    // exacte lit toutes les tables en entier (1,4 M de cases à chaque modèle affiché dans un document de 40 tables de 2 000 lignes) : quand aucune
+    // bulle n'est rouge, celle d'il y a moins d'une minute suffit (js/main.js la demande de même à l'ouverture) ; une bulle rouge peut venir d'un
+    // schéma périmé (une colonne ajoutée depuis), la passe repart alors comme avant.
     refreshVariableBadgeValidity();
-    GristAPI.refreshSchema().then(refreshVariableBadgeValidity)
+    const looksBroken = !!editor.view.dom.querySelector('.var-badge-broken, .calc-badge-broken');
+    GristAPI.refreshSchema(looksBroken ? undefined : { maxAgeMs: SCHEMA_MAX_AGE_MS }).then(refreshVariableBadgeValidity)
       .catch(e => console.warn('[Editor] refreshSchema pour la validation des #Variable a échoué', e));
   }
 

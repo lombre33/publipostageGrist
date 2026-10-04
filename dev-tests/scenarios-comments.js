@@ -291,6 +291,104 @@
     },
   });
 
+  // Lot « Lectures de fond » de « Tests de charge » : la table des fils est celle de TOUT le document (60 000 cases pour 10 000 commentaires). Un modèle qui ne porte aucune marque de
+  // commentaire n'a aucun fil à relire : l'afficher ne la lit plus, et ne la crée plus dans un document qui n'en a pas (js/comments.js, loadForTemplate : carriesCommentMarks).
+  // Les lectures de la table (fetchTable), tant que le cas dure.
+  function watchThreadReads() {
+    const docApi = window.grist.docApi;
+    const original = docApi.fetchTable;
+    const state = { reads: 0, stop: () => { docApi.fetchTable = original; } };
+    docApi.fetchTable = function (tableId) {
+      if (tableId === TABLE) state.reads++;
+      return original.apply(this, arguments);
+    };
+    return state;
+  }
+
+  // Le modèle rouvert par la liste, depuis un document vidé : le chemin réel qui rend la main à Comments.loadForTemplate.
+  async function redisplay(h, modeleId) {
+    await h.resetEditor();
+    Editor.setHTML('<p>Document vidé entre-temps</p>');
+    const select = document.getElementById('template-select');
+    select.value = String(modeleId);
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    await h.sleep(700);
+  }
+
+  cases.push({
+    id: 'comment_template_without_marks_neither_reads_nor_creates_the_comments_table_until_the_first_message',
+    description: "Un modèle sans aucune marque de commentaire n'a aucun fil : l'afficher ne lit pas la table des fils et ne la crée pas dans un document qui n'en a pas ; le premier message la crée, et le modèle commenté la relit une fois à l'affichage et retrouve son fil",
+    run: async (h) => {
+      const s = stub();
+      const tables = s.state.tables;
+      const hadTable = tables.indexOf(TABLE);
+      const savedRows = s.state.rows[TABLE];
+      const modeleId = await savedTemplateWithText(h, 'Commentaires sans marque', 'Texte sans aucune marque');
+      if (hadTable !== -1) tables.splice(hadTable, 1); // listTables ne la rapporte plus : le widget la créerait s'il la lisait
+      delete s.state.rows[TABLE];
+      const watch = watchThreadReads();
+      try {
+        s.clearActionLog();
+        await redisplay(h, modeleId);
+        const readsWithoutMarks = watch.reads;
+        const createdWithoutMarks = s.countActions('AddTable', TABLE);
+        // Le premier message crée la table, le fil s'y écrit.
+        const id = await commentFirstParagraph(h);
+        if (!id) return { pass: false, notes: 'aucune marque posée' };
+        await postFirstMessage(h, 'Premier message dans une table neuve');
+        const createdByTheMessage = s.countActions('AddTable', TABLE);
+        const rows = rowsFor(id).length;
+        await pressPopupButton(h, '.v2-comment-popup-close');
+        await h.clickButton('btn-save');
+        await h.sleep(500);
+        // Le modèle commenté : sa table est relue une fois à l'affichage, et le fil s'y retrouve.
+        watch.reads = 0;
+        await redisplay(h, modeleId);
+        const readsWithMark = watch.reads;
+        const mark = document.querySelector('.tiptap .comment-mark[data-comment-id="' + id + '"]');
+        if (mark) { mark.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); await h.sleep(300); }
+        const texts = Array.from(popup() ? popup().querySelectorAll('.v2-comment-popup-text') : []).map(e => e.textContent);
+        await closePopupIfOpen(h);
+        const checks = {
+          noReadWithoutMarks: readsWithoutMarks === 0,
+          noTableCreatedWithoutMarks: createdWithoutMarks === 0,
+          firstMessageCreatesTheTable: createdByTheMessage === 1 && rows === 1,
+          oneReadWithAMark: readsWithMark === 1,
+          threadFound: texts.indexOf('Premier message dans une table neuve') !== -1,
+        };
+        const failed = Object.keys(checks).filter(k => !checks[k]);
+        return {
+          pass: failed.length === 0,
+          notes: failed.length ? failed.join(', ') + ' | lectures sans marque=' + readsWithoutMarks + ', tables créées à l\'affichage=' + createdWithoutMarks + ', par le message=' + createdByTheMessage + ', lignes=' + rows + ', lectures avec marque=' + readsWithMark + ', messages=' + JSON.stringify(texts) : 'ok',
+        };
+      } finally {
+        watch.stop();
+        if (hadTable !== -1 && tables.indexOf(TABLE) === -1) tables.splice(hadTable, 0, TABLE);
+        if (savedRows) s.state.rows[TABLE] = savedRows;
+      }
+    },
+  });
+
+  cases.push({
+    id: 'comment_mark_only_in_the_header_still_reads_the_comments_table',
+    description: "Un modèle dont la seule marque de commentaire est dans son en-tête (aucune dans le texte) relit quand même la table des fils à l'affichage : le fil de l'en-tête reste lisible (garde de la lecture évitée : elle regarde aussi l'en-tête et le pied)",
+    run: async (h) => {
+      const modeleId = await savedTemplateWithText(h, 'Commentaire dans l\'en-tête', 'Corps sans aucune marque');
+      Editor.setHeaderFooterData({
+        enabled: true, differentFirstPage: false,
+        header: { default: '<p><span class="comment-mark" data-comment-id="cm-entete-test" data-resolved="false">En-tête commenté</span></p>', first: '' },
+        footer: { default: '', first: '' },
+      });
+      await h.clickButton('btn-save');
+      await h.sleep(500);
+      const watch = watchThreadReads();
+      try {
+        await redisplay(h, modeleId);
+        return { pass: watch.reads >= 1, notes: 'lectures de la table des fils à l\'affichage=' + watch.reads + ' (attendu au moins 1 : la marque est dans l\'en-tête)' };
+      } finally { watch.stop(); }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.comments = cases;
 })();

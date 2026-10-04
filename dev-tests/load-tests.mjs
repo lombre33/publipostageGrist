@@ -443,12 +443,15 @@ async function templates(r) {
       const tp = Date.now();
       await pickTemplate(page, last);
       r.rec('templates', `${sc.label} : choisir un modèle`, Date.now() - tp - 700, { budget: 3000, note: `${mb((await w.stats()).modelChars)} Mo de modèles relus` });
-      // Au repos : combien l'enregistrement automatique relit-il en une minute ?
+      // Au repos : combien l'enregistrement automatique relit-il en une minute ? L'attente suit le poids de la table (js/main.js, autosaveIdleIntervalMs : 15 s, une milliseconde pour 100 caractères
+      // lus, 3 minutes au plus) : le budget est le nombre de lectures que cette attente laisse passer en une minute, plus une.
+      const loadedChars = await page.evaluate(() => Templates.getLoadedChars());
+      const expectedWaitMs = Math.min(180000, Math.max(15000, Math.ceil(loadedChars / 100)));
       await w.resetStats();
       await sleep(q(31000, 16000));
       const idle = await w.stats();
       const idleSeconds = q(31, 16);
-      r.rec('templates', `${sc.label} : au repos, lectures de la table des modèles par minute`, Math.round(idle.fetchCalls / idleSeconds * 60 * 10) / 10, { unit: 'lectures/min', note: `${mb(idle.modelChars / idleSeconds * 60)} Mo par minute, rien d'écrit (${idle.applyCalls} écriture(s))` });
+      r.rec('templates', `${sc.label} : au repos, lectures de la table des modèles par minute`, Math.round(idle.fetchCalls / idleSeconds * 60 * 10) / 10, { unit: 'lectures/min', budget: Math.ceil(60000 / expectedWaitMs) + 1, note: `${mb(idle.modelChars / idleSeconds * 60)} Mo par minute, rien d'écrit (${idle.applyCalls} écriture(s)) ; table de ${mb(loadedChars)} Mo : attente prévue ${Math.round(expectedWaitMs / 1000)} s` });
       // En tapant : un passage de l'enregistrement automatique relit tout, écrit le modèle, relit encore.
       await page.evaluate(() => EditorCore.getEditor().commands.focus('end'));
       await w.resetStats();
@@ -942,10 +945,10 @@ async function values(r) {
 }
 
 // ===================================================================================================================================================
-// internal : les tables que le widget garde dans le document - droits d'accès (relus toutes les 10 s), commentaires (relus à chaque affichage d'un modèle)
+// internal : les tables que le widget garde dans le document - droits d'accès (relus toutes les 10 s, moins souvent quand la table est grosse), commentaires (relus à l'affichage d'un modèle commenté)
 // ===================================================================================================================================================
 async function internal(r) {
-  // droits d'accès : la table des droits est relue en entier toutes les 10 s dès qu'un réglage existe (js/access-rights.js REFRESH_INTERVAL_MS)
+  // droits d'accès : la table des droits est relue en entier dès qu'un réglage existe, toutes les 10 s - une milliseconde par case lue au-delà, 3 minutes au plus (js/access-rights.js refreshDelayMs)
   for (const n of q([100, 5000, 50000], [100, 5000])) {
     const spec = {
       tables: [{ id: 'Table01', rows: 5, columns: columnsMix(6) }],
@@ -965,10 +968,12 @@ async function internal(r) {
       const s = await w.stats();
       const t = (s.byTable && s.byTable.Droits) || { calls: 0, cells: 0 };
       const perMin = Math.round(t.calls * 60000 / WINDOW_MS * 10) / 10;
-      r.rec('internal', `${label} : au repos, lectures de la table des droits par minute`, perMin, { unit: 'lectures/min', note: `${fmt(Math.round(t.cells * 60000 / WINDOW_MS))} cases lues par minute` });
+      // Une lecture = n lignes x 4 colonnes (id compris) ; l'attente est d'une milliseconde par case, entre 10 s et 3 minutes : le budget est ce qu'elle laisse passer en une minute, plus une lecture.
+      const expectedWaitMs = Math.min(180000, Math.max(10000, n * 4));
+      r.rec('internal', `${label} : au repos, lectures de la table des droits par minute`, perMin, { unit: 'lectures/min', budget: Math.ceil(60000 / expectedWaitMs) + 1, note: `${fmt(Math.round(t.cells * 60000 / WINDOW_MS))} cases lues par minute ; attente prévue ${Math.round(expectedWaitMs / 1000)} s` });
     });
   }
-  // commentaires : Publipostage_Commentaires est lue en entière à chaque affichage d'un modèle (js/comments.js loadForTemplate), tous modèles confondus
+  // commentaires : Publipostage_Commentaires est lue en entière à l'affichage d'un modèle qui porte une marque de commentaire (js/comments.js loadForTemplate, carriesCommentMarks), tous modèles confondus
   for (const n of q([1000, 10000], [1000])) {
     const cols = columnsMix(6);
     const rows = Array.from({ length: n }, (_, i) => ({ ModeleId: 1 + (i % 20), CommentId: 'c' + i, Auteur: 'Auteur ' + (i % 15), Texte: 'Commentaire ' + i + ' ' + 'texte '.repeat(12), CreeLe: 1700000000 + i }));
@@ -985,9 +990,10 @@ async function internal(r) {
       await sleep(600);
       const s = await w.stats();
       const t = (s.byTable && s.byTable.Publipostage_Commentaires) || { calls: 0, cells: 0 };
-      r.rec('internal', `${label} : choisir un modèle - lectures de la table des commentaires`, t.calls, { unit: 'lecture(s)', note: `${fmt(t.cells)} cases lues (tous les commentaires du document, pas ceux du modèle)` });
+      r.rec('internal', `${label} : choisir un modèle sans marque de commentaire - lectures de la table des commentaires`, t.calls, { unit: 'lecture(s)', budget: 0, note: `${fmt(t.cells)} cases lues (un modèle sans marque n'a aucun fil à relire)` });
+      // Sans la ligne du modèle, loadForTemplate ne sait pas s'il porte une marque : il lit, comme pour un modèle commenté - tous les commentaires du document, pas ceux du modèle.
       const ms = await page.evaluate(async () => { const t0 = performance.now(); await Comments.loadForTemplate(Templates.getCurrentId()); return Math.round(performance.now() - t0); });
-      r.rec('internal', `${label} : charger les commentaires du modèle`, ms, { budget: 1000 });
+      r.rec('internal', `${label} : charger les commentaires d'un modèle commenté`, ms, { budget: 1000 });
     });
   }
 }

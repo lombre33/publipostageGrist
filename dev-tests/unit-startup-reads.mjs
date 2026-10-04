@@ -293,7 +293,7 @@ async function main() {
     check('refreshSchema pendant une passe : la colonne ajoutée entre-temps est vue', (await run('GristAPI.getColumns("Missions")')).includes('Tardive'), await run('GristAPI.getColumns("Missions")'));
   }
 
-  // 10. maxAgeMs : une passe complète lue il y a moins que ça suffit (pas de nouvelle lecture) ; au-delà, on relit. Editor.setHTML le demande à chaque modèle.
+  // 10. maxAgeMs : une passe complète lue il y a moins que ça suffit (pas de nouvelle lecture) ; au-delà, on relit. Editor.setHTML le demande à chaque modèle (une passe d'il y a moins d'une minute suffit tant qu'aucune bulle n'est rouge, groupe schemaAtDisplay).
   {
     const doc = makeDoc();
     const { run, clock } = fresh(doc);
@@ -365,7 +365,7 @@ async function main() {
     check('index.html : le démarrage anticipé lance GristAPI.init() et Templates.loadAll()', !!early && /GristAPI\.init\(\)/.test(early) && /Templates\.loadAll\(\)/.test(early));
     check('js/main.js : reprend les promesses du démarrage anticipé, ou les lance lui-même', /window\.__earlyStart/.test(main) && /early\.grist \|\| GristAPI\.init\(\)/.test(main) && /early\.templates \|\| Templates\.loadAll\(\)/.test(main));
     check('js/main.js : l\'éditeur se charge en même temps que Grist (pas après)', main.indexOf('const editorReady = Editor.init()') !== -1 && main.indexOf('const editorReady = Editor.init()') < main.indexOf('await gristInit'));
-    check('js/editor.js : setHTML demande la lecture complète des tables (le schéma d\'init() n\'est que provisoire)', /GristAPI\.refreshSchema\(\)\.then\(refreshVariableBadgeValidity\)/.test(editor));
+    check('js/editor.js : setHTML demande la lecture complète des tables (le schéma d\'init() n\'est que provisoire), toujours quand une bulle est rouge, sinon si la dernière a plus d\'une minute', /const looksBroken = !!editor\.view\.dom\.querySelector\('\.var-badge-broken, \.calc-badge-broken'\);\s*GristAPI\.refreshSchema\(looksBroken \? undefined : \{ maxAgeMs: SCHEMA_MAX_AGE_MS \}\)\.then\(refreshVariableBadgeValidity\)/.test(editor) && /const SCHEMA_MAX_AGE_MS = 60000;/.test(editor));
     const readyAt = main.indexOf("setStatus(I18n.t(isReadOnly() ? 'status.readyReadOnly' : 'status.ready'))");
     // Le rappel vit dans checkAfterOpen, que le démarrage appelle une fois « prêt » affiché.
     const afterOpenAt = main.indexOf('function checkAfterOpen()');
