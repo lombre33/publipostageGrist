@@ -581,7 +581,17 @@ const ReaderMode = (function () {
     if (stale()) return;
     // .reader-content : le parent direct des titres de premier niveau, celui qui porte data-heading-style (#reader-container ne peut pas jouer ce rôle, ce
     // <div> s'intercale toujours entre les deux).
-    const wrapper = document.createElement('div'); wrapper.className = 'reader-content'; wrapper.innerHTML = HtmlSanitize.clean(htmlContent);
+    const wrapper = document.createElement('div'); wrapper.className = 'reader-content';
+    const cleanHtml = HtmlSanitize.clean(htmlContent);
+    wrapper.innerHTML = cleanHtml;
+    // Les suggestions du suivi des modifications encore en attente (js/track-changes.js) : la Lecture montre le document comme si elles étaient
+    // toutes acceptées, avec une légère teinte là où quelque chose a changé. Avant tout le reste : les boucles, les blocs conditionnels et les bulles
+    // ne voient plus ni <ins> ni <del>. Si cette vue échoue, la Lecture montre le document tel qu'avant (suggestions visibles) plutôt qu'un document
+    // à moitié transformé ou une Lecture vide.
+    try { TrackChanges.acceptedView(wrapper); } catch (e) {
+      console.error('[reader-mode] vue « comme acceptée » impossible, les suggestions restent affichées', e);
+      wrapper.innerHTML = cleanHtml;
+    }
     // Un lien de la Lecture s'ouvre dans un nouvel onglet : le suivre dans le cadre du widget le remplacerait (et la plupart des sites refusent d'y être affichés).
     wrapper.querySelectorAll('a[href^="http"]').forEach(a => { a.target = '_blank'; a.rel = 'noopener noreferrer'; });
     const configEl = wrapper.querySelector(':scope > .heading-numbering-config');
