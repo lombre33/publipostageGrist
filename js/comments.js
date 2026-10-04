@@ -23,18 +23,15 @@ const Comments = (function () {
   let currentModeleId = null;
   let threadsByCommentId = {}; // { [commentId]: [{id, auteur, texte, creeLe}, ...] } trié par creeLe croissant
 
-  // Droits par personne (js/access-rights.js), posés par js/main.js:applyCommentsPermissions. `readerMode` : le mode Lecture est affiché avec les
-  // commentaires autorisés, qu'il soit imposé par la lecture seule ou choisi ; ils y sont visibles et utilisables, et Commenter y agit sur le texte
-  // sélectionné dans la Lecture, plus sur l'éditeur masqué. En Édition, false.
   let canComment = true;
   let readerMode = false;
-  // Fournis par js/main.js : `save` enregistre le modèle après un changement de marque fait depuis le mode Lecture (l'auto-save n'écrit rien en
-  // lecture seule) et renvoie true une fois enregistré, false si le modèle a changé ailleurs entre-temps ou si l'écriture échoue ; `refresh`
-  // redessine le mode Lecture pour montrer la marque ajoutée, résolue ou retirée.
   let readerHooks = { save: null, refresh: null };
   let readerRoot = null; // #reader-container, retenu par wireReader
 
   function setPermissions(next) {
+    // Droits par personne (js/access-rights.js), posés par js/main.js:applyCommentsPermissions. `readerMode` : le mode Lecture est affiché avec les
+    // commentaires autorisés, qu'il soit imposé par la lecture seule ou choisi ; ils y sont visibles et utilisables, et Commenter y agit sur le texte
+    // sélectionné dans la Lecture, plus sur l'éditeur masqué. En Édition, false.
     const nextCanComment = !!(next && next.canComment);
     const nextReaderMode = !!(next && next.readerMode);
     if (nextCanComment === canComment && nextReaderMode === readerMode) return;
@@ -44,9 +41,14 @@ const Comments = (function () {
     readerRange = null;
   }
   function isReaderMode() { return readerMode; }
-  function setReaderHooks(hooks) { readerHooks = Object.assign({ save: null, refresh: null }, hooks); }
-  // Hors mode Lecture, rien à faire ici : l'auto-save (ou Enregistrer) emporte la marque avec le reste du document, comme avant.
+  function setReaderHooks(hooks) {
+    // Fournis par js/main.js : `save` enregistre le modèle après un changement de marque fait depuis le mode Lecture (l'auto-save n'écrit rien en
+    // lecture seule) et renvoie true une fois enregistré, false si le modèle a changé ailleurs entre-temps ou si l'écriture échoue ; `refresh`
+    // redessine le mode Lecture pour montrer la marque ajoutée, résolue ou retirée.
+    readerHooks = Object.assign({ save: null, refresh: null }, hooks);
+  }
   async function saveReaderAnchors() {
+    // Hors mode Lecture, rien à faire ici : l'auto-save (ou Enregistrer) emporte la marque avec le reste du document, comme avant.
     if (!readerMode || !readerHooks.save) return true;
     try { return !!(await readerHooks.save()); } catch (e) { console.error('[Comments] enregistrement du modèle impossible', e); return false; }
   }
@@ -54,9 +56,9 @@ const Comments = (function () {
     if (!readerMode || !readerHooks.refresh) return Promise.resolve();
     return Promise.resolve(readerHooks.refresh()).catch(e => console.error('[Comments] rafraîchissement du mode Lecture impossible', e));
   }
-  // Marque affichée d'un fil : en readerMode, celle du mode Lecture - l'éditeur y est masqué, ses marques n'ont aucune position (un popup placé
-  // contre elles partait dans le coin haut gauche).
   function markElement(commentId) {
+    // Marque affichée d'un fil : en readerMode, celle du mode Lecture - l'éditeur y est masqué, ses marques n'ont aucune position (un popup placé
+    // contre elles partait dans le coin haut gauche).
     const root = readerMode && readerRoot ? readerRoot : editor.view.dom;
     return root.querySelector('.comment-mark[data-comment-id="' + commentId + '"]');
   }
@@ -65,20 +67,20 @@ const Comments = (function () {
     try { await GristAPI.ensureTable(TABLE_NAME, TABLE_COLUMNS); } catch (e) { console.error('[Comments] Erreur création table commentaires', e); }
   }
 
-  // Un modèle sans la moindre marque de commentaire - ni dans son texte, ni dans son en-tête ou son pied - n'a aucun fil à relire. `tpl` est sa
-  // ligne (js/templates.js) ; sans elle on ne sait pas, et la table est lue comme avant.
   function carriesCommentMarks(tpl) {
+    // Un modèle sans la moindre marque de commentaire - ni dans son texte, ni dans son en-tête ou son pied - n'a aucun fil à relire. `tpl` est sa
+    // ligne (js/templates.js) ; sans elle on ne sait pas, et la table est lue comme avant.
     if (!tpl) return true;
     const hasMark = html => typeof html === 'string' && html.indexOf('data-comment-id') !== -1;
     const headerFooter = tpl.headerFooter || {};
     return hasMark(tpl.contenu) || [headerFooter.header, headerFooter.footer].some(zone => !!zone && (hasMark(zone.default) || hasMark(zone.first)));
   }
 
-  // Appelé par js/main.js à chaque changement de modèle (chargement, nouveau, suppression), sans rafraîchissement continu : un commentaire est bien
-  // moins sensible à la latence que le contenu du document, pas besoin d'un deuxième polling par-dessus l'enregistrement automatique.
-  // La table des fils est celle de tout le document (60 000 cases pour 10 000 commentaires) : un modèle qui ne porte aucune marque ne la lit pas,
-  // et ne la crée pas non plus - postMessage la crée au premier message.
   async function loadForTemplate(modeleId, tpl) {
+    // Appelé par js/main.js à chaque changement de modèle (chargement, nouveau, suppression), sans rafraîchissement continu : un commentaire est bien
+    // moins sensible à la latence que le contenu du document, pas besoin d'un deuxième polling par-dessus l'enregistrement automatique.
+    // La table des fils est celle de tout le document (60 000 cases pour 10 000 commentaires) : un modèle qui ne porte aucune marque ne la lit pas,
+    // et ne la crée pas non plus - postMessage la crée au premier message.
     currentModeleId = modeleId || null;
     threadsByCommentId = {};
     closePopup();
@@ -122,9 +124,9 @@ const Comments = (function () {
     return true;
   }
 
-  // Un seul niveau : tous les messages d'un même fil partagent le même CommentId, triés par date (fil linéaire façon Google Docs, pas de réponses
-  // imbriquées).
   async function deleteThreadRecords(commentId) {
+    // Un seul niveau : tous les messages d'un même fil partagent le même CommentId, triés par date (fil linéaire façon Google Docs, pas de réponses
+    // imbriquées).
     const rows = (threadsByCommentId[commentId] || []).filter(r => r.id != null);
     delete threadsByCommentId[commentId];
     if (!rows.length) return;
@@ -132,10 +134,10 @@ const Comments = (function () {
     catch (e) { console.error('[Comments] Erreur suppression du fil', e); }
   }
 
-  // Toutes les portées de texte marquées `commentId`, les portions adjacentes fusionnées en une plage. Plusieurs plages plutôt qu'une seule supposée
-  // : reste correct si une frappe a fragmenté la marque en morceaux non adjacents. Une bulle #Variable ou un chip (nœud en ligne sans texte) compte
-  // aussi : commenter la seule valeur d'une variable en mode Lecture ne marque que lui.
   function findMarkRanges(commentId) {
+    // Toutes les portées de texte marquées `commentId`, les portions adjacentes fusionnées en une plage. Plusieurs plages plutôt qu'une seule
+    // supposée : reste correct si une frappe a fragmenté la marque en morceaux non adjacents. Une bulle #Variable ou un chip (nœud en ligne sans
+    // texte) compte aussi : commenter la seule valeur d'une variable en mode Lecture ne marque que lui.
     const ranges = [];
     let current = null;
     editor.state.doc.descendants((node, pos) => {
@@ -147,9 +149,9 @@ const Comments = (function () {
     });
     return ranges;
   }
-  // Retire ou pose une marque par instance exacte (type et attributs, via Mark.eq()), jamais par type seul : deux fils indépendants peuvent se
-  // chevaucher sur une même portion de texte (cf. `excludes: ''`), et un removeMark par type aurait aussi arraché l'autre fil.
   function setResolved(commentId, resolved) {
+    // Retire ou pose une marque par instance exacte (type et attributs, via Mark.eq()), jamais par type seul : deux fils indépendants peuvent se
+    // chevaucher sur une même portion de texte (cf. `excludes: ''`), et un removeMark par type aurait aussi arraché l'autre fil.
     const ranges = findMarkRanges(commentId);
     if (!ranges.length) return;
     const tr = editor.state.tr;
@@ -167,9 +169,9 @@ const Comments = (function () {
     editor.view.dispatch(tr);
     return true;
   }
-  // Remet des plages relevées par findMarkRanges juste avant un removeMarkFromDoc - seules des marques ont changé entre-temps, les positions
-  // tiennent.
   function restoreMarkRanges(ranges) {
+    // Remet des plages relevées par findMarkRanges juste avant un removeMarkFromDoc - seules des marques ont changé entre-temps, les positions
+    // tiennent.
     if (!ranges.length) return;
     const tr = editor.state.tr;
     ranges.forEach(r => tr.addMark(r.start, r.end, r.mark));
@@ -212,9 +214,9 @@ const Comments = (function () {
     return isNaN(d.getTime()) ? '' : d.toLocaleString(I18n.getLang() === 'en' ? 'en-US' : 'fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   }
 
-  // Un bouton d'action du popup : il réagit au mousedown (pas au click, comme celui des notes de bas de page) et se grise pour qui ne peut pas
-  // commenter.
   function popupButton(className, label, onPress) {
+    // Un bouton d'action du popup : il réagit au mousedown (pas au click, comme celui des notes de bas de page) et se grise pour qui ne peut pas
+    // commenter.
     const btn = element('button', className, label);
     btn.type = 'button';
     btn.disabled = !canComment;
@@ -225,11 +227,7 @@ const Comments = (function () {
     return btn;
   }
 
-  function renderPopup(commentId, resolved) {
-    const box = ensurePopupBox();
-    const messages = threadsByCommentId[commentId] || [];
-    box.innerHTML = '';
-
+  function popupHeader(resolved) {
     const badge = element('span', 'v2-comment-popup-badge' + (resolved ? ' is-resolved' : ''));
     badge.textContent = I18n.t(resolved ? 'comments.resolvedBadge' : 'comments.activeBadge');
     const closeBtn = element('button', 'v2-comment-popup-close', '×');
@@ -238,7 +236,10 @@ const Comments = (function () {
     closeBtn.addEventListener('mousedown', event => { event.preventDefault(); closePopup(); });
     const header = element('div', 'v2-comment-popup-header');
     header.append(badge, closeBtn);
+    return header;
+  }
 
+  function popupThreadList(messages) {
     const list = element('div', 'v2-comment-popup-list');
     messages.forEach(m => {
       const item = element('div', 'v2-comment-popup-message');
@@ -246,63 +247,83 @@ const Comments = (function () {
       item.append(meta, element('div', 'v2-comment-popup-text', m.texte));
       list.appendChild(item);
     });
+    return list;
+  }
 
+  function popupReplyArea(hasMessages) {
     const replyArea = element('textarea', 'v2-comment-popup-reply');
     replyArea.rows = 2;
-    replyArea.placeholder = I18n.t(messages.length ? 'comments.replyPlaceholder' : 'comments.firstMessagePlaceholder');
+    replyArea.placeholder = I18n.t(hasMessages ? 'comments.replyPlaceholder' : 'comments.firstMessagePlaceholder');
     // Commentaires non autorisés pour cette personne : le fil reste lisible, la saisie et les actions sont grisées (jamais retirées).
     replyArea.disabled = !canComment;
     replyArea.addEventListener('keydown', event => {
       if (event.key === 'Escape') { event.preventDefault(); closePopup(); }
     });
+    return replyArea;
+  }
 
+  async function publishFirstMessage(commentId, resolved, replyArea) {
+    if (!replyArea.value.trim()) return;
+    // Mode Lecture : la marque posée par insertCommentFromReader n'existe encore que dans l'éditeur ; elle est enregistrée avant le message, pour
+    // qu'un échec (modèle changé ailleurs entre-temps) n'écrive rien du tout.
+    if (!(await saveReaderAnchors())) { alert(I18n.t('comments.saveError')); return; }
+    const ok = await postMessage(commentId, replyArea.value);
+    if (ok) { popupIsNewThread = false; renderPopup(commentId, resolved); return; }
+    if (readerMode) {
+      // Message refusé alors que la marque vient d'être enregistrée : on la retire pour ne pas laisser un fil vide surligné dans le modèle.
+      removeMarkFromDoc(commentId);
+      await saveReaderAnchors();
+      hidePopup();
+      refreshReader();
+      alert(I18n.t('comments.saveError'));
+    }
+  }
+
+  async function toggleResolved(commentId, resolved) {
+    setResolved(commentId, !resolved);
+    if (!(await saveReaderAnchors())) { setResolved(commentId, resolved); alert(I18n.t('comments.saveError')); return; }
+    renderPopup(commentId, !resolved);
+    refreshReader();
+  }
+
+  async function deleteThread(commentId) {
+    if (!(await Dialogs.confirm({ title: I18n.t('comments.confirmDelete'), confirmLabel: I18n.t('common.delete'), danger: true }))) return;
+    // Mode Lecture : la marque retirée est d'abord enregistrée dans le modèle, les lignes du fil ne partent qu'ensuite - un échec remet la
+    // marque, jamais un fil supprimé dont la marque resterait surlignée.
+    const ranges = readerMode ? findMarkRanges(commentId) : [];
+    if (readerMode) {
+      removeMarkFromDoc(commentId);
+      if (!(await saveReaderAnchors())) { restoreMarkRanges(ranges); alert(I18n.t('comments.saveError')); return; }
+    }
+    await deleteThreadRecords(commentId);
+    if (!readerMode) removeMarkFromDoc(commentId);
+    hidePopup();
+    refreshReader();
+  }
+
+  function popupActions(commentId, resolved, hasMessages, replyArea) {
     const actions = element('div', 'v2-comment-popup-actions');
-    if (!messages.length) {
+    if (!hasMessages) {
       // Fil tout juste créé, jamais publié - seule action possible : publier le 1er message (ou fermer/Échap, qui retire la marque via closePopup()).
-      actions.appendChild(popupButton('v2-comment-popup-post', I18n.t('comments.post'), async () => {
-        if (!replyArea.value.trim()) return;
-        // Mode Lecture : la marque posée par insertCommentFromReader n'existe encore que dans l'éditeur ; elle est enregistrée avant le message, pour
-        // qu'un échec (modèle changé ailleurs entre-temps) n'écrive rien du tout.
-        if (!(await saveReaderAnchors())) { alert(I18n.t('comments.saveError')); return; }
-        const ok = await postMessage(commentId, replyArea.value);
-        if (ok) { popupIsNewThread = false; renderPopup(commentId, resolved); return; }
-        if (readerMode) {
-          // Message refusé alors que la marque vient d'être enregistrée : on la retire pour ne pas laisser un fil vide surligné dans le modèle.
-          removeMarkFromDoc(commentId);
-          await saveReaderAnchors();
-          hidePopup();
-          refreshReader();
-          alert(I18n.t('comments.saveError'));
-        }
-      }));
+      actions.appendChild(popupButton('v2-comment-popup-post', I18n.t('comments.post'), () => publishFirstMessage(commentId, resolved, replyArea)));
     } else {
       actions.append(
         popupButton('v2-comment-popup-post', I18n.t('comments.reply'), async () => {
           if (await postMessage(commentId, replyArea.value)) renderPopup(commentId, resolved);
         }),
-        popupButton('v2-comment-popup-resolve', I18n.t(resolved ? 'comments.reopen' : 'comments.resolve'), async () => {
-          setResolved(commentId, !resolved);
-          if (!(await saveReaderAnchors())) { setResolved(commentId, resolved); alert(I18n.t('comments.saveError')); return; }
-          renderPopup(commentId, !resolved);
-          refreshReader();
-        }),
-        popupButton('v2-comment-popup-delete', I18n.t('comments.deleteThread'), async () => {
-          if (!(await Dialogs.confirm({ title: I18n.t('comments.confirmDelete'), confirmLabel: I18n.t('common.delete'), danger: true }))) return;
-          // Mode Lecture : la marque retirée est d'abord enregistrée dans le modèle, les lignes du fil ne partent qu'ensuite - un échec remet la
-          // marque, jamais un fil supprimé dont la marque resterait surlignée.
-          const ranges = readerMode ? findMarkRanges(commentId) : [];
-          if (readerMode) {
-            removeMarkFromDoc(commentId);
-            if (!(await saveReaderAnchors())) { restoreMarkRanges(ranges); alert(I18n.t('comments.saveError')); return; }
-          }
-          await deleteThreadRecords(commentId);
-          if (!readerMode) removeMarkFromDoc(commentId);
-          hidePopup();
-          refreshReader();
-        }),
+        popupButton('v2-comment-popup-resolve', I18n.t(resolved ? 'comments.reopen' : 'comments.resolve'), () => toggleResolved(commentId, resolved)),
+        popupButton('v2-comment-popup-delete', I18n.t('comments.deleteThread'), () => deleteThread(commentId)),
       );
     }
-    box.append(header, list, replyArea, actions);
+    return actions;
+  }
+
+  function renderPopup(commentId, resolved) {
+    const box = ensurePopupBox();
+    const messages = threadsByCommentId[commentId] || [];
+    box.innerHTML = '';
+    const replyArea = popupReplyArea(messages.length > 0);
+    box.append(popupHeader(resolved), popupThreadList(messages), replyArea, popupActions(commentId, resolved, messages.length > 0, replyArea));
     // Popup déjà ouvert dont le contenu change de hauteur (message publié, réponse, fil résolu) : replacé pour rester dans la fenêtre. Ancre relue
     // par son id - ProseMirror re-rend la marque à chaque transaction (setResolved), l'élément d'origine peut ne plus être dans le document.
     if (box.style.display !== 'none' && editor) {
@@ -312,9 +333,9 @@ const Comments = (function () {
     return { box, replyArea };
   }
 
-  // Popup déjà affiché : sa hauteur réelle est mesurée (ViewportFit.placePopup), car une estimation fixe laisserait un fil de quelques réponses
-  // sortir sous le bas du panneau.
   function positionPopup(box, anchorEl) {
+    // Popup déjà affiché : sa hauteur réelle est mesurée (ViewportFit.placePopup), car une estimation fixe laisserait un fil de quelques réponses
+    // sortir sous le bas du panneau.
     try {
       ViewportFit.placePopup(box, anchorEl.getBoundingClientRect(), { gap: 6 });
     } catch (e) {
@@ -337,8 +358,8 @@ const Comments = (function () {
   function openThreadView(commentId, anchorEl, resolved) { openPopup(commentId, anchorEl, resolved, false); }
   function openComposer(commentId, anchorEl) { openPopup(commentId, anchorEl, false, true); }
 
-  // La marque cliquée (dans l'éditeur ou dans la Lecture) ouvre son fil.
   function openMarkThread(el) {
+    // La marque cliquée (dans l'éditeur ou dans la Lecture) ouvre son fil.
     const id = el.getAttribute('data-comment-id');
     if (id) openThreadView(id, el, el.getAttribute('data-resolved') === 'true');
   }
@@ -355,23 +376,23 @@ const Comments = (function () {
     openComposer(id, markElement(id) || editor.view.dom);
   }
 
-  // Commentaires en mode Lecture (readerMode). Le mode Lecture montre du HTML résolu (valeurs à la place des #Variable), jamais l'éditeur : pour
-  // poser une marque au bon endroit du modèle, chaque texte y porte sa position ProseMirror (data-pp-pos, début du texte) et chaque bulle ou chip la
-  // sienne (data-pp-atom), que js/reader-mode.js recopie sur la valeur qui la remplace. Les deux sont préfixées d'un numéro de rendu : une sélection
-  // faite sur un rendu dont le document a changé depuis est refusée plutôt que posée au mauvais endroit.
   let pmModel = null;
   let readerRenderVersion = 0;
   const readerDocs = new Map(); // numéro de rendu -> document ProseMirror sérialisé pour ce rendu (les derniers seulement)
   // Dernière sélection non vide faite dans le mode Lecture : le clic sur le bouton Commenter peut la faire perdre au navigateur.
   let readerRange = null;
 
-  // Même sortie qu'editor.getHTML() (DOMSerializer du schéma, cf. @tiptap/core getHTMLFromFragment), repères de position en plus. Sous-classe plutôt
-  // que la table `nodes` du sérialiseur : prosemirror-model 1.25 écrit les textes sans jamais la consulter (serializeNodeInner). Sous-classe du
-  // sérialiseur du schéma (js/track-changes.js, installSerializer), pas de la classe de la bibliothèque : une colonne ou une ligne suivie s'y écrit
-  // en attribut de la case (data-tc-*), sinon l'analyseur HTML de la Lecture sort la case de son tableau et sa suppression ne se voit plus.
   let AnnotatingSerializer = null;
   let annotatingBase = null;
   async function buildReaderHtml() {
+    // Même sortie qu'editor.getHTML() (DOMSerializer du schéma, cf. @tiptap/core getHTMLFromFragment), repères de position en plus. Sous-classe
+    // plutôt que la table `nodes` du sérialiseur : prosemirror-model 1.25 écrit les textes sans jamais la consulter (serializeNodeInner). Sous-classe
+    // du sérialiseur du schéma (js/track-changes.js, installSerializer), pas de la classe de la bibliothèque : une colonne ou une ligne suivie s'y
+    // écrit en attribut de la case (data-tc-*), sinon l'analyseur HTML de la Lecture sort la case de son tableau et sa suppression ne se voit plus.
+    // Commentaires en mode Lecture (readerMode). Le mode Lecture montre du HTML résolu (valeurs à la place des #Variable), jamais l'éditeur : pour
+    // poser une marque au bon endroit du modèle, chaque texte y porte sa position ProseMirror (data-pp-pos, début du texte) et chaque bulle ou chip
+    // la sienne (data-pp-atom), que js/reader-mode.js recopie sur la valeur qui la remplace. Les deux sont préfixées d'un numéro de rendu : une
+    // sélection faite sur un rendu dont le document a changé depuis est refusée plutôt que posée au mauvais endroit.
     if (!editor) return '';
     if (!pmModel) pmModel = await import('prosemirror-model');
     const { DOMSerializer } = pmModel;
@@ -424,18 +445,18 @@ const Comments = (function () {
     const pos = Number(value.slice(i + 1));
     return (isFinite(version) && isFinite(pos)) ? { version, pos } : null;
   }
-  // Bord d'un repère : une bulle/chip compte pour 1 position (nœud atome), un texte pour sa longueur.
   function markerEdge(marker, side) {
+    // Bord d'un repère : une bulle/chip compte pour 1 position (nœud atome), un texte pour sa longueur.
     const isAtom = marker.hasAttribute('data-pp-atom');
     const tag = parseReaderTag(marker.getAttribute(isAtom ? 'data-pp-atom' : 'data-pp-pos'));
     if (!tag) return null;
     const size = isAtom ? 1 : marker.textContent.length;
     return { version: tag.version, pos: side === 'start' ? tag.pos : tag.pos + size };
   }
-  // Extrémité d'une sélection du mode Lecture -> position dans le document : exacte dans un texte, bord de la valeur pour une bulle/chip résolue,
-  // sinon le repère le plus proche vers l'intérieur de la sélection (début : premier repère qui suit, fin : dernier qui précède) - une sélection qui
-  // commence dans un sommaire ou une marge ne déborde donc jamais au-delà de ce qui a été sélectionné.
   function readerPointToPos(content, node, offset, side) {
+    // Extrémité d'une sélection du mode Lecture -> position dans le document : exacte dans un texte, bord de la valeur pour une bulle/chip résolue,
+    // sinon le repère le plus proche vers l'intérieur de la sélection (début : premier repère qui suit, fin : dernier qui précède) - une sélection
+    // qui commence dans un sommaire ou une marge ne déborde donc jamais au-delà de ce qui a été sélectionné.
     const el = node.nodeType === 3 ? node.parentElement : node;
     const atom = el && el.closest('[data-pp-atom]');
     if (atom && content.contains(atom)) return markerEdge(atom, side);
@@ -466,9 +487,9 @@ const Comments = (function () {
     if (readerRange && readerRange.startContainer.isConnected && readerRange.endContainer.isConnected && root.contains(readerRange.commonAncestorContainer)) return readerRange;
     return null;
   }
-  // { from, to, rect } dans le document de l'éditeur, { stale: true } si le rendu affiché ne correspond plus au document, null sans texte
-  // sélectionné.
   function readerSelectionToDocRange() {
+    // { from, to, rect } dans le document de l'éditeur, { stale: true } si le rendu affiché ne correspond plus au document, null sans texte
+    // sélectionné.
     const root = document.getElementById('reader-container');
     const content = root && root.querySelector('.reader-content');
     if (!content) return null;
@@ -498,9 +519,9 @@ const Comments = (function () {
     openComposer(id, markElement(id) || rectAnchor(target.rect));
   }
 
-  // Branché une seule fois par js/main.js sur #reader-container : ouvre le fil d'une marque cliquée, retient la dernière sélection. Rien ne se passe
-  // hors readerMode (les marques n'y sont d'ailleurs pas surlignées, cf. css/access-rights.css).
   function wireReader(container) {
+    // Branché une seule fois par js/main.js sur #reader-container : ouvre le fil d'une marque cliquée, retient la dernière sélection. Rien ne se
+    // passe hors readerMode (les marques n'y sont d'ailleurs pas surlignées, cf. css/access-rights.css).
     if (!container) return;
     readerRoot = container;
     document.addEventListener('selectionchange', () => {
@@ -526,10 +547,10 @@ const Comments = (function () {
     });
   }
 
-  // Délégué sur editor.view.dom (pas un listener par marque : une marque n'a pas de NodeView comme un nœud atome, cf. footnoteRef). Pas de
-  // preventDefault() : contrairement à un nœud atome non éditable, le texte commenté reste éditable, et le clic doit aussi positionner le curseur ;
-  // l'ouverture du popup n'est qu'un effet en plus.
   function wireClickToOpen() {
+    // Délégué sur editor.view.dom (pas un listener par marque : une marque n'a pas de NodeView comme un nœud atome, cf. footnoteRef). Pas de
+    // preventDefault() : contrairement à un nœud atome non éditable, le texte commenté reste éditable, et le clic doit aussi positionner le curseur ;
+    // l'ouverture du popup n'est qu'un effet en plus.
     if (!editor) return;
     editor.view.dom.addEventListener('mousedown', event => {
       const el = event.target.closest('.comment-mark');
