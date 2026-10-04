@@ -184,9 +184,9 @@
         await openChipsTab(h);
         en = panelItems();
       } finally { I18n.setLang(lang); }
-      // Huit lignes : « Valeur conditionnelle » (js/conditional-value.js) vient juste après le bloc, « Case conditionnelle » puis « Calcul » ensuite.
-      const pass = fr.length === 8 && fr[4] === 'Texte conditionnel' && fr[5] === 'Valeur conditionnelle' && fr[6] === 'Case conditionnelle' && fr[7] === 'Calcul' && fr.slice(0, 4).join('|') === 'Note de bas de page|Date du jour|Heure actuelle|Email de l’utilisateur'
-        && en.length === 8 && en[4] === 'Conditional text' && en[5] === 'Conditional value' && en[6] === 'Conditional checkbox' && en[7] === 'Calculation';
+      // Neuf lignes : « Nom de l'utilisateur » vient juste après l'email, puis le bloc ; « Valeur conditionnelle » (js/conditional-value.js) juste après le bloc, « Case conditionnelle » puis « Calcul » ensuite.
+      const pass = fr.length === 9 && fr[5] === 'Texte conditionnel' && fr[6] === 'Valeur conditionnelle' && fr[7] === 'Case conditionnelle' && fr[8] === 'Calcul' && fr.slice(0, 5).join('|') === 'Note de bas de page|Date du jour|Heure actuelle|Email de l’utilisateur|Nom de l’utilisateur'
+        && en.length === 9 && en[3] === 'User’s email' && en[4] === 'User’s name' && en[5] === 'Conditional text' && en[6] === 'Conditional value' && en[7] === 'Conditional checkbox' && en[8] === 'Calculation';
       return { pass, notes: JSON.stringify({ fr, en }) };
     },
   });
