@@ -726,6 +726,16 @@ const Variables = (function () {
   async function resolveCalc(stored, currentTableId, record, format, opts) {
     return (await resolveCalcResult(stored, currentTableId, record, format, opts)).text;
   }
+  // Ce qui coupe une bulle #Variable de sa donnée, sans lire aucune cellule : null quand tout va bien, sinon 'table' (disparue), 'path' (un maillon
+  // d'un chemin « Référence.Colonne » a disparu ou n'est plus une Référence) ou 'column' (absente de sa table). Rouge de la bulle de l'éditeur
+  // (Editor.refreshVariableBadgeValidity) et libellé de « Colonne… » (VariableColumn.isBroken).
+  function badgeProblem(table, column) {
+    if (!table) return null;
+    if (GristAPI.getTables().indexOf(table) === -1) return 'table';
+    if (!column) return null;
+    if (String(column).indexOf('.') !== -1) return GristAPI.resolveColumnPath(table, column) ? null : 'path';
+    return GristAPI.getColumns(table).indexOf(column) === -1 ? 'column' : null;
+  }
   // Ce qui empêche une bulle « Calcul » de se calculer, sans lire aucune cellule : la formule ne se lit pas, ou elle cite une table ou une colonne
   // qui n'existe plus. '' quand tout va bien. La bulle de l'éditeur devient rouge avec ce message en info-bulle
   // (Editor.refreshVariableBadgeValidity).
@@ -1065,6 +1075,6 @@ const Variables = (function () {
   return {
     createExtension, resolveVariable, resolveVariableResult, resolveRawValue, resolveTextVariables, replaceTextVariables, findTextVariables, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar,
     preferChipsTab, ensureLinkConfigured, editLinkRule, describeLinkVia, resolveLinkedRows, resolveRows, formatValue, listTexts, resolveListTexts, zeroHidden, cellValue, currentTables, prioritizeTables,
-    resolveCalcResult, resolveCalc, calcProblem, formulaErrorText,
+    resolveCalcResult, resolveCalc, badgeProblem, calcProblem, formulaErrorText,
   };
 })();

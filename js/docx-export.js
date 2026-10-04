@@ -152,50 +152,36 @@ const DocxExport = (function () {
     return docx.AlignmentType[map[m[1].toLowerCase()]];
   }
 
-  // pdfmake (js/pdf-export.js:rasterizeDataUri) doit rastériser en PNG car il n'accepte que PNG et JPEG ; docx.ImageRun accepte aussi GIF et BMP mais
-  // ni WEBP ni SVG : même filet ici, l'image est décodée dans un <canvas> puis réencodée en PNG quand son type n'est pas pris en charge.
+  // pdfmake (js/pdf-export.js:inlineEditorImagesAsDataUri) doit rastériser en PNG car il n'accepte que PNG et JPEG ; docx.ImageRun accepte aussi GIF
+  // et BMP mais ni WEBP ni SVG : même filet ici, l'image est décodée dans un <canvas> puis réencodée en PNG quand son type n'est pas pris en charge.
   const DOCX_IMAGE_TYPES = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/bmp': 'bmp' };
-  function rasterizeToPngBlob(objectUrlOrDataUri) {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.naturalWidth || 512;
-        canvas.height = img.naturalHeight || 512;
-        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-        canvas.toBlob(b => (b ? resolve(b) : reject(new Error('toBlob a échoué'))), 'image/png');
-      };
-      img.onerror = () => reject(new Error('Échec de décodage de l’image pour rastérisation'));
-      img.src = objectUrlOrDataUri;
-    });
-  }
+  const DEFAULT_IMAGE_RATIO = 0.75;
+  const ratioOf = image => (image.naturalWidth && image.naturalHeight ? image.naturalHeight / image.naturalWidth : DEFAULT_IMAGE_RATIO);
   async function docxImageDataFrom(img) {
     const src = img.getAttribute('src') || '';
     if (!src) { ExportCommon.noteImageWithoutSource(img); return null; }
     let blob;
-    try {
-      const resp = await fetch(src);
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      blob = await resp.blob();
-    } catch (e) { console.warn('[DocxExport] image ignorée (téléchargement impossible) :', src, e); ExportCommon.noteUnreadImage(img); return null; }
+    try { blob = await ImageIo.fetchBlob(src); }
+    catch (e) { console.warn('[DocxExport] image ignorée (téléchargement impossible) :', src, e); ExportCommon.noteUnreadImage(img); return null; }
+    // Hauteur déduite du ratio intrinsèque : docx exige les deux dimensions, pdfmake sait déduire l'une de l'autre.
     let type = DOCX_IMAGE_TYPES[blob.type];
-    if (!type) {
-      try { blob = await rasterizeToPngBlob(URL.createObjectURL(blob)); type = 'png'; }
-      catch (e) { console.warn('[DocxExport] image ignorée (rastérisation impossible) :', src, e); ExportCommon.noteUnreadImage(img); return null; }
+    let ratio;
+    if (type) {
+      ratio = await ImageIo.load(blob).then(ratioOf, () => DEFAULT_IMAGE_RATIO);
+    } else {
+      try {
+        const canvas = await ImageIo.draw(blob);
+        blob = await ImageIo.pngBlob(canvas);
+        type = 'png';
+        ratio = canvas.height / canvas.width;
+      } catch (e) { console.warn('[DocxExport] image ignorée (rastérisation impossible) :', src, e); ExportCommon.noteUnreadImage(img); return null; }
     }
     const data = await blob.arrayBuffer();
-    // Largeur déjà posée par l'éditeur (même convention que pdfImageFromNode, js/pdf-export.js) ; hauteur déduite du ratio intrinsèque (docx exige
-    // les deux dimensions, pdfmake sait déduire l'une de l'autre). Une image dans le texte est ramenée à la largeur de ce qui la contient, comme dans
-    // l'éditeur (ExportCommon.shownImageWidthPx) ; une image en calque garde sa taille réglée.
+    // Largeur déjà posée par l'éditeur (même convention que pdfImageFromNode, js/pdf-export.js). Une image dans le texte est ramenée à la largeur
+    // de ce qui la contient, comme dans l'éditeur (ExportCommon.shownImageWidthPx) ; une image en calque garde sa taille réglée.
     const styleWidthPx = parseFloat(img.style.width) || 320;
     const layer = img.getAttribute('data-layer');
     const widthPx = (layer === 'front' || layer === 'behind') ? styleWidthPx : ExportCommon.shownImageWidthPx(img, styleWidthPx);
-    const ratio = await new Promise(resolve => {
-      const probe = new Image();
-      probe.onload = () => resolve((probe.naturalHeight && probe.naturalWidth) ? probe.naturalHeight / probe.naturalWidth : 0.75);
-      probe.onerror = () => resolve(0.75);
-      probe.src = URL.createObjectURL(blob);
-    });
     return { data, type, width: Math.round(widthPx), height: Math.max(1, Math.round(widthPx * ratio)) };
   }
 

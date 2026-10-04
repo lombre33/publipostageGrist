@@ -139,15 +139,7 @@ const MainToolbar = (function () {
   async function urlToDataUriOrWarn(src) {
     if (!src || src.startsWith('data:')) return src;
     try {
-      const resp = await fetch(src);
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      const blob = await resp.blob();
-      return await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = () => reject(reader.error || new Error('FileReader a échoué'));
-        reader.readAsDataURL(blob);
-      });
+      return await ImageIo.toDataUri(await ImageIo.fetchBlob(src));
     } catch (e) {
       console.warn('[Editor] image par URL non convertible en data URI (CORS/réseau), URL brute conservée :', src, e);
       window.alert(I18n.t('image.corsWarning'));

@@ -2549,26 +2549,10 @@ const PdfExport = (function () {
     }
   }
 
-  // pdfmake ne sait embarquer que du JPEG/PNG (SVG et WEBP le font bloquer indéfiniment ou lever "Unknown image format") - rastérise donc en PNG via
-  // un aller-retour <img>/<canvas>, quel que soit le format source. Cas fréquent : un CDN renvoie du WEBP par négociation de contenu même pour une
-  // URL en ".png".
-  function rasterizeDataUri(dataUri) {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.naturalWidth || 512;
-        canvas.height = img.naturalHeight || 512;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        try { resolve(canvas.toDataURL('image/png')); } catch (e) { reject(e); }
-      };
-      img.onerror = () => reject(new Error('Échec de décodage de l’image pour rastérisation'));
-      img.src = dataUri;
-    });
-  }
-  // pdfmake exige une image en data URI base64 : un simple src http(s)://... (upload Grist ou URL externe) n'est jamais rendu, silencieusement. En
-  // cas d'échec (réseau, CORS...), marque l'image à ignorer plutôt que de faire planter tout l'export.
+  // pdfmake exige une image en data URI base64 : un simple src http(s)://... (upload Grist ou URL externe) n'est jamais rendu, silencieusement. Il ne
+  // sait embarquer que du JPEG et du PNG (SVG et WEBP le font bloquer indéfiniment ou lever "Unknown image format") : tout autre format est redessiné
+  // en PNG, cas fréquent quand un CDN renvoie du WEBP par négociation de contenu même pour une URL en ".png". En cas d'échec (réseau, CORS...),
+  // marque l'image à ignorer plutôt que de faire planter tout l'export.
   async function inlineEditorImagesAsDataUri(html) {
     const wrapper = document.createElement('div');
     wrapper.innerHTML = html || '';
@@ -2577,18 +2561,8 @@ const PdfExport = (function () {
       let src = img.getAttribute('src') || '';
       if (!src) { ExportCommon.noteImageWithoutSource(img); return; }
       try {
-        if (!src.startsWith('data:')) {
-          const resp = await fetch(src);
-          if (!resp.ok) throw new Error('HTTP ' + resp.status);
-          const blob = await resp.blob();
-          src = await new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
-            reader.onerror = () => reject(reader.error || new Error('FileReader a échoué'));
-            reader.readAsDataURL(blob);
-          });
-        }
-        if (!/^data:image\/(png|jpe?g);/.test(src)) src = await rasterizeDataUri(src);
+        if (!src.startsWith('data:')) src = await ImageIo.toDataUri(await ImageIo.fetchBlob(src));
+        if (!/^data:image\/(png|jpe?g);/.test(src)) src = (await ImageIo.draw(src)).toDataURL('image/png');
         img.setAttribute('src', src);
         // Décode ici, avant la resérialisation : une hauteur `auto` a besoin du ratio intrinsèque, connu une fois l'image décodée, sinon
         // floatedImageParagraphFrom mesurerait `imgRect.bottom` trop tôt. `decode()` pré-chauffe aussi le cache pour le <img> reparsé plus tard.

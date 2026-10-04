@@ -15,16 +15,9 @@ const VariableColumn = (function () {
 
   const isOpen = () => picking || !!session;
 
-  // Même lecture que Editor.refreshVariableBadgeValidity (le rouge de la bulle) : table disparue, colonne absente de sa table, chemin dont un maillon
-  // a disparu ou n'est plus une Référence.
-  function isBroken(attrs) {
-    const table = attrs && attrs.table;
-    const column = attrs && attrs.column;
-    if (!table || !column) return false;
-    if (GristAPI.getTables().indexOf(table) === -1) return true;
-    if (String(column).indexOf('.') !== -1) return !GristAPI.resolveColumnPath(table, column);
-    return GristAPI.getColumns(table).indexOf(column) === -1;
-  }
+  // Même lecture que le rouge de la bulle (Variables.badgeProblem) : table disparue, colonne absente de sa table, chemin dont un maillon a disparu ou
+  // n'est plus une Référence.
+  const isBroken = attrs => !!(attrs && attrs.column && Variables.badgeProblem(attrs.table, attrs.column));
 
   // Genre de réglage que porte un format de bulle, et que permet une colonne : nombre, date, Oui / Non, liste. Le zéro se règle seul, sans `type`
   // (js/floating-toolbars.js, num-zero) : c'est un réglage nombre ; la liste aussi (`list`, js/variable-list.js) : elle suit d'une liste de choix à

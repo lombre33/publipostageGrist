@@ -64,6 +64,35 @@
   });
 
   cases.push({
+    id: 'chip_footnote_popup_stays_in_the_window_and_clear_of_its_note',
+    description: 'Le popup d\'une note tout en bas de la fenêtre s\'ouvre entièrement visible, au-dessus de la note qu\'il édite au lieu de la recouvrir',
+    run: async (h) => {
+      await h.resetEditor();
+      Editor.setHTML('<p>Texte<sup class="footnote-ref-marker" data-note-id="n1" data-note-text="note"></sup> suite</p>');
+      await h.sleep(300);
+      const editor = EditorCore.getEditor();
+      let notePos = null;
+      editor.state.doc.descendants((node, pos) => { if (notePos == null && node.type.name === 'footnoteRef') notePos = pos; });
+      if (notePos == null) return { pass: false, notes: 'note de bas de page introuvable' };
+      // La note est placée tout en bas de la fenêtre en remplaçant la mesure que le popup en prend, plutôt qu'en faisant défiler une page dont la hauteur
+      // change d'un banc à l'autre.
+      const note = editor.view.nodeDOM(notePos);
+      const noteRect = { left: 120, right: 140, top: innerHeight - 60, bottom: innerHeight - 40, width: 20, height: 20 };
+      note.getBoundingClientRect = () => noteRect;
+      try {
+        Editor.openFootnoteEditorAt(notePos);
+        await h.sleep(60);
+        const popup = document.getElementById('v2-footnote-popup');
+        const r = popup.getBoundingClientRect();
+        const inside = r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth;
+        const clear = r.bottom <= noteRect.top || r.top >= noteRect.bottom;
+        Array.from(popup.querySelectorAll('button')).find(b => /OK/i.test(b.textContent)).dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+        return { pass: inside && clear, notes: JSON.stringify({ popup: { top: r.top, bottom: r.bottom, left: r.left, right: r.right }, note: { top: noteRect.top, bottom: noteRect.bottom }, innerHeight, innerWidth }) };
+      } finally { delete note.getBoundingClientRect; }
+    },
+  });
+
+  cases.push({
     id: 'chip_footnote_two_notes_numbering',
     description: 'Deux notes de bas de page se numérotent 1 puis 2 (compteur CSS continu)',
     run: async (h) => {

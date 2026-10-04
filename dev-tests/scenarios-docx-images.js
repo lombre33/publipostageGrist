@@ -14,6 +14,8 @@
   const cases = [];
   const PAGE_MARGIN_PT = 28; // 560 twips, cf. js/docx-export.js - la valeur par défaut de PageLayout quand aucune marge n'est passée.
   const PNG_1PX = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+  // WEBP 4x1 réel (encodé par Chromium lui-même) : un WEBP tronqué ferait réussir les cas pour une mauvaise raison (image ignorée, donc 0 image).
+  const WEBP_4X1 = 'data:image/webp;base64,UklGRh4CAABXRUJQVlA4WAoAAAAgAAAAAwAAAAAASUNDUMgBAAAAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADZWUDggMAAAANABAJ0BKgQAAQABQCYloAJ0ugH4AAOwAP73WS/+QWlct4A//jKnxlT4yp/xcwAAAA==';
   const TOL_PT = 1; // 1pt = 12700 EMU : les arrondis d'EMU de l'export sont très en dessous, cette tolérance ne couvre que la mesure DOM du scénario.
 
   function img(attrs, style) {
@@ -368,12 +370,27 @@
     id: 'docximg_webp_rasterized_to_png',
     description: 'Un format que DOCX n\'accepte pas (WEBP) est rastérisé en PNG au lieu d\'être perdu',
     run: async (h) => {
-      // WEBP 4x1 réel (encodé par Chromium lui-même) - un WEBP tronqué passerait le test pour une mauvaise raison (image ignorée = 0 image aussi).
-      const webp = 'data:image/webp;base64,UklGRh4CAABXRUJQVlA4WAoAAAAgAAAAAwAAAAAASUNDUMgBAAAAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADZWUDggMAAAANABAJ0BKgQAAQABQCYloAJ0ugH4AAOwAP73WS/+QWlct4A//jKnxlT4yp/xcwAAAA==';
-      const parts = await h.exportDocxParts('<p><img class="editor-image" src="' + webp + '" alt="Image" style="width:100px;"></p>');
+      const parts = await h.exportDocxParts('<p><img class="editor-image" src="' + WEBP_4X1 + '" alt="Image" style="width:100px;"></p>');
       const ds = h.docxDrawings(parts.doc);
       const media = Object.keys(parts.mediaSizes);
       return { pass: ds.length === 1 && media.length === 1 && /\.png$/.test(media[0]), notes: JSON.stringify({ images: ds.length, media }) };
+    },
+  });
+  cases.push({
+    id: 'docximg_object_urls_are_released',
+    description: 'Lire les images d\'un export (PNG pris tel quel, WEBP redessiné) ne laisse aucune adresse blob: ouverte : chacune garderait son image en mémoire jusqu\'à la fermeture de la page',
+    run: async (h) => {
+      const create = URL.createObjectURL;
+      const revoke = URL.revokeObjectURL;
+      const created = new Set();
+      const revoked = new Set();
+      URL.createObjectURL = blob => { const url = create.call(URL, blob); created.add(url); return url; };
+      URL.revokeObjectURL = url => { revoked.add(url); return revoke.call(URL, url); };
+      try {
+        const parts = await h.exportDocxParts('<p>' + img({}, 'width: 100px;') + '<img class="editor-image" src="' + WEBP_4X1 + '" alt="Image" style="width:100px;"></p>');
+        const leaked = [...created].filter(url => !revoked.has(url));
+        return { pass: h.docxDrawings(parts.doc).length === 2 && created.size >= 2 && leaked.length === 0, notes: JSON.stringify({ images: h.docxDrawings(parts.doc).length, created: created.size, leaked: leaked.length }) };
+      } finally { URL.createObjectURL = create; URL.revokeObjectURL = revoke; }
     },
   });
   cases.push({

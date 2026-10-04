@@ -335,37 +335,23 @@ const XlsxExport = (function () {
 
   // Images
   const IMAGE_EXTENSIONS = { 'image/png': 'png', 'image/jpeg': 'jpeg', 'image/gif': 'gif' };
-  function loadImage(url) {
-    return new Promise((resolve, reject) => { const probe = new Image(); probe.onload = () => resolve(probe); probe.onerror = () => reject(new Error('image illisible')); probe.src = url; });
-  }
-  function blobToBase64(blob) {
-    return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1] || ''); reader.onerror = () => reject(reader.error); reader.readAsDataURL(blob); });
-  }
   // Même lecture que DocxExport.docxImageDataFrom : le contenu de `src` (data:, blob:, adresse de pièce jointe) par fetch ; PNG, JPEG et GIF tels
   // quels, tout le reste (WEBP, SVG, BMP) redessiné en PNG. Une image illisible est laissée de côté : le reste de la feuille s'écrit.
   async function imageForWorkbook(img) {
     const src = img.getAttribute('src') || '';
     if (!src) { ExportCommon.noteImageWithoutSource(img); return null; }
     let blob;
+    try { blob = await ImageIo.fetchBlob(src); }
+    catch (e) { console.warn('[XlsxExport] image ignorée (téléchargement impossible) :', src.slice(0, 80), e); ExportCommon.noteUnreadImage(img); return null; }
     try {
-      const resp = await fetch(src);
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      blob = await resp.blob();
-    } catch (e) { console.warn('[XlsxExport] image ignorée (téléchargement impossible) :', src.slice(0, 80), e); ExportCommon.noteUnreadImage(img); return null; }
-    try {
+      const decoded = await ImageIo.load(blob);
       let extension = IMAGE_EXTENSIONS[blob.type];
-      const url = URL.createObjectURL(blob);
-      try {
-        const decoded = await loadImage(url);
-        if (!extension) {
-          const canvas = document.createElement('canvas');
-          canvas.width = decoded.naturalWidth || 512; canvas.height = decoded.naturalHeight || 512;
-          canvas.getContext('2d').drawImage(decoded, 0, 0, canvas.width, canvas.height);
-          blob = await new Promise((resolve, reject) => canvas.toBlob(b => (b ? resolve(b) : reject(new Error('toBlob a échoué'))), 'image/png'));
-          extension = 'png';
-        }
-        return { base64: await blobToBase64(blob), extension, naturalWidth: decoded.naturalWidth, naturalHeight: decoded.naturalHeight };
-      } finally { URL.revokeObjectURL(url); }
+      if (!extension) {
+        blob = await ImageIo.pngBlob(await ImageIo.draw(decoded));
+        extension = 'png';
+      }
+      const base64 = (await ImageIo.toDataUri(blob)).split(',')[1] || '';
+      return { base64, extension, naturalWidth: decoded.naturalWidth, naturalHeight: decoded.naturalHeight };
     } catch (e) { console.warn('[XlsxExport] image ignorée (décodage impossible) :', src.slice(0, 80), e); ExportCommon.noteUnreadImage(img); return null; }
   }
   // La taille de l'image dans la case : largeur et hauteur posées par l'éditeur (px), l'une déduite de l'autre par le rapport de l'image quand il en
