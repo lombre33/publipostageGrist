@@ -166,12 +166,14 @@ const GridEditor = (function () {
 
   // Chaque case une seule fois (une case fusionnée occupe plusieurs emplacements de la grille), avec l'emplacement de son coin haut gauche, dans l'ordre de lecture.
   function cellOrigins(tableNode, map) {
+    const nodes = new Map();
+    tableNode.forEach((row, rowOffset) => row.forEach((cell, cellOffset) => nodes.set(rowOffset + 1 + cellOffset, cell)));
     const seen = new Set();
     const cells = [];
     map.map.forEach((pos, i) => {
       if (seen.has(pos)) return;
       seen.add(pos);
-      cells.push({ pos, row: Math.floor(i / map.width), col: i % map.width, node: tableNode.nodeAt(pos) });
+      cells.push({ pos, row: Math.floor(i / map.width), col: i % map.width, node: nodes.get(pos) || tableNode.nodeAt(pos) });
     });
     return cells;
   }
@@ -284,18 +286,10 @@ const GridEditor = (function () {
   // --- Bordures : la description du tableau que lit js/table-borders.js, et ce qu'on écrit en retour ---------------------------------------------------------------------
   function borderSpec(tableNode) {
     const map = libs.TableMap.get(tableNode);
-    const cells = [];
-    const seen = new Set();
-    for (let i = 0; i < map.map.length; i++) {
-      const pos = map.map[i];
-      if (seen.has(pos)) continue;
-      seen.add(pos);
-      const attrs = tableNode.nodeAt(pos).attrs;
-      cells.push({
-        pos, row: Math.floor(i / map.width), col: i % map.width, rowspan: attrs.rowspan || 1, colspan: attrs.colspan || 1,
-        top: attrs.borderTop, right: attrs.borderRight, bottom: attrs.borderBottom, left: attrs.borderLeft,
-      });
-    }
+    const cells = cellOrigins(tableNode, map).map(({ pos, row, col, node: { attrs } }) => ({
+      pos, row, col, rowspan: attrs.rowspan || 1, colspan: attrs.colspan || 1,
+      top: attrs.borderTop, right: attrs.borderRight, bottom: attrs.borderBottom, left: attrs.borderLeft,
+    }));
     return { width: map.width, height: map.height, cells };
   }
 
@@ -305,15 +299,14 @@ const GridEditor = (function () {
     let out = tr;
     let changed = false;
     spec.cells.forEach((cell, index) => {
-      const node = info.node.nodeAt(cell.pos);
-      if (!hasCellAttr(node, BORDER_ATTRS.top)) return;
       const next = {};
       let differs = false;
       TableBorders.SIDES.forEach((side) => {
-        const attr = BORDER_ATTRS[side];
-        if ((node.attrs[attr] || null) !== sides[index][side]) { next[attr] = sides[index][side]; differs = true; }
+        if ((cell[side] || null) !== sides[index][side]) { next[BORDER_ATTRS[side]] = sides[index][side]; differs = true; }
       });
       if (!differs) return;
+      const node = info.node.nodeAt(cell.pos);
+      if (!hasCellAttr(node, BORDER_ATTRS.top)) return;
       if (!out) out = state.tr;
       out.setNodeMarkup(info.pos + 1 + cell.pos, undefined, Object.assign({}, node.attrs, next));
       changed = true;
