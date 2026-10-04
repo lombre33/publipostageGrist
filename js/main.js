@@ -218,28 +218,11 @@
     // Le garde-fou d'une grille (js/grid-editor.js) refuse tout contenu qui n'est pas un tableau : levé avant de charger un autre modèle, reposé plus
     // bas si c'est une grille.
     GridEditor.setActive(false);
-    // Marges posées avant setHTML : les zones à deux colonnes en mm calculent --layout-left dès leur première construction, à partir de
-    // PageLayout.getContentWidthMm() ; posées après, une première passe se ferait avec les marges du modèle précédent.
-    PageLayout.setMarginsMm(tpl ? tpl.marginsMm : null);
-    layerGridsStale = false;  // les grilles d'un modèle chargé sont celles de sa propre orientation
-    // Une grille n'a pas de feuille A4, mais la classe `a4-preview` ne sort des conteneurs que plus bas (syncA4PreviewForModelType), après le
-    // chargement : venant d'un document, `setHTML` rognerait le tableau à la largeur d'une page (clampOverflowingTables ne mesure que sous cette
-    // classe), et un classeur de 20 colonnes de 64 px arriverait à 36 px par colonne.
-    if (GridEditor.isGridType(tpl ? tpl.typeModele : forcedTypeModele)) { editorContainer.classList.remove('a4-preview'); readerContainer.classList.remove('a4-preview'); }
-    Editor.setHTML(tpl ? tpl.contenu : '', tpl ? tpl.suiviModifications : null);
-    Editor.setHeaderFooterData(tpl ? tpl.headerFooter : null);
+    const typeModele = typeModeleOf(tpl, forcedTypeModele);
+    loadContentIntoEditor(tpl, typeModele);
     showTemplateNames(tpl);
-    currentTypeModele = tpl ? (tpl.typeModele || 'document') : (forcedTypeModele || 'document');
-    if (emailFieldsRow) emailFieldsRow.hidden = currentTypeModele !== 'email';
-    // Un changement de modèle invalide le cache des valeurs brutes (cf. updateEmailFieldsDisplay) : on repart d'un état brut pour ce modèle, et la
-    // résolution est redemandée plus bas si l'on est en Lecture.
-    emailFieldsRawCache = null;
-    eachEmailInput((input, key) => { input.readOnly = false; input.value = tpl ? (tpl[key] || '') : ''; });
-    if (emailCciInput) {
-      // Contrairement au nom du fichier PDF, la Cci reste visible quand elle est déjà réglée.
-      emailCciInput.hidden = !emailCciInput.value.trim();
-      if (emailCciToggle) emailCciToggle.classList.toggle('is-active', !emailCciInput.hidden);
-    }
+    currentTypeModele = typeModele;
+    loadEmailFields(tpl);
     MainToolbar.setEmailMode(currentTypeModele === 'email');
     MainToolbar.setMacroMode(false);
     MainToolbar.setGridMode(GridEditor.isGridType(currentTypeModele));
@@ -259,8 +242,7 @@
     Editor.refreshPaginationPreview();
     MainToolbar.syncToolbarState();
     if (btnCreateEmail) btnCreateEmail.hidden = currentTypeModele !== 'email';
-    Templates.setCurrentId(tpl ? tpl.id : null);
-    Comments.loadForTemplate(tpl ? tpl.id : null, tpl).catch(e => console.error('[main] chargement des commentaires impossible', e));
+    setCurrentTemplate(tpl);
     const headingNumberingSelect = document.getElementById('v2-heading-numbering-select');
     if (headingNumberingSelect) headingNumberingSelect.value = Editor.getHeadingNumberingStyle();
     // En Lecture, le conteneur de l'éditeur est caché : sans ce rendu, le changement de modèle semblerait ne rien faire jusqu'à un passage par le
@@ -273,6 +255,45 @@
     // En dernier, pas avant : setHTML et setHeaderFooterData déclenchent leurs propres transactions, donc `editor.on('update')` ; sans cette remise à
     // zéro, charger un modèle le marquerait « modifié » pour l'enregistrement automatique.
     resetAutosaveState(tpl);
+  }
+
+  function typeModeleOf(tpl, forcedTypeModele) {
+    // Le genre propre au modèle, « document » à défaut ; forcedTypeModele ne sert qu'à un nouveau modèle vide (tpl = null).
+    return tpl ? (tpl.typeModele || 'document') : (forcedTypeModele || 'document');
+  }
+
+  // Le contenu du modèle dans l'éditeur : marges, grille des images, texte avec son suivi des modifications, en-tête et pied.
+  function loadContentIntoEditor(tpl, typeModele) {
+    // Marges posées avant setHTML : les zones à deux colonnes en mm calculent --layout-left dès leur première construction, à partir de
+    // PageLayout.getContentWidthMm() ; posées après, une première passe se ferait avec les marges du modèle précédent.
+    PageLayout.setMarginsMm(tpl ? tpl.marginsMm : null);
+    layerGridsStale = false;  // les grilles d'un modèle chargé sont celles de sa propre orientation
+    // Une grille n'a pas de feuille A4, mais la classe `a4-preview` ne sort des conteneurs que plus bas (syncA4PreviewForModelType), après le
+    // chargement : venant d'un document, `setHTML` rognerait le tableau à la largeur d'une page (clampOverflowingTables ne mesure que sous cette
+    // classe), et un classeur de 20 colonnes de 64 px arriverait à 36 px par colonne.
+    if (GridEditor.isGridType(typeModele)) { editorContainer.classList.remove('a4-preview'); readerContainer.classList.remove('a4-preview'); }
+    Editor.setHTML(tpl ? tpl.contenu : '', tpl ? tpl.suiviModifications : null);
+    Editor.setHeaderFooterData(tpl ? tpl.headerFooter : null);
+  }
+
+  // Les champs d'e-mail (objet, destinataires, Cci…) repartent de ceux du modèle, vides pour un nouveau.
+  function loadEmailFields(tpl) {
+    if (emailFieldsRow) emailFieldsRow.hidden = currentTypeModele !== 'email';
+    // Un changement de modèle invalide le cache des valeurs brutes (cf. updateEmailFieldsDisplay) : on repart d'un état brut pour ce modèle, et la
+    // résolution est redemandée plus bas si l'on est en Lecture.
+    emailFieldsRawCache = null;
+    eachEmailInput((input, key) => { input.readOnly = false; input.value = tpl ? (tpl[key] || '') : ''; });
+    if (emailCciInput) {
+      // Contrairement au nom du fichier PDF, la Cci reste visible quand elle est déjà réglée.
+      emailCciInput.hidden = !emailCciInput.value.trim();
+      if (emailCciToggle) emailCciToggle.classList.toggle('is-active', !emailCciInput.hidden);
+    }
+  }
+
+  // Le modèle devient le modèle courant ; ses commentaires se chargent en arrière-plan.
+  function setCurrentTemplate(tpl) {
+    Templates.setCurrentId(tpl ? tpl.id : null);
+    Comments.loadForTemplate(tpl ? tpl.id : null, tpl).catch(e => console.error('[main] chargement des commentaires impossible', e));
   }
 
   let nameBeforeEdit = null; // le nom du modèle quand le crayon a ouvert le champ ; null hors saisie
@@ -452,36 +473,51 @@
     if (isReadOnly()) return;
     GridXlsxImport.chooseFile(async (file) => {
       setStatus(I18n.t('status.xlsxImporting'));
-      let imported;
-      let chosen = null; // la feuille choisie, quand le classeur en a plusieurs : une erreur la nomme
-      try {
-        const book = await GridXlsxImport.openFile(file);
-        let index = 0;
-        if (book.sheets.length > 1) {
-          // Sous le « + » : c'est de là que la personne est partie. Elle recouvre le coin d'état, qui n'a rien à dire pendant ce temps (« Lecture… »
-          // serait faux, la lecture est finie) ; refermée sans choix, la liste ne change rien : le coin d'état redit l'état du modèle en cours.
-          setStatus('');
-          const picked = await GridXlsxImport.chooseSheet(book.sheets, { anchor: () => document.getElementById('btn-new').getBoundingClientRect() });
-          if (picked === null) { updateSaveStatus(); refocusEditorIfLost(); return; }
-          index = picked;
-          chosen = book.sheets[index].name;
-        }
-        imported = book.build(index, { lang: I18n.getLang() });
-      } catch (e) {
-        console.warn('[main] import Excel impossible', e); // une erreur de la personne (mauvais fichier), pas du widget
-        const key = e && e.code === 'empty' && chosen !== null ? 'status.xlsxImportEmptySheet' : (XLSX_IMPORT_ERRORS[e && e.code] || XLSX_IMPORT_ERRORS.unreadable);
-        setStatus(I18n.t(key, { sheet: chosen, rows: e && e.rows, cols: e && e.cols, maxRows: e && e.maxRows, maxCols: e && e.maxCols, maxCells: e && e.maxCells }), true);
-        return;
-      }
+      const imported = await readXlsxForImport(file);
+      if (!imported) return;
       if (hasEditsToConfirmBeforeLeaving() && !(await askBeforeLeaving())) { updateSaveStatus(); return; }
-      templateSelect.value = '';
-      loadTemplateIntoEditor({ id: null, nom: '', contenu: imported.html, typeModele: GridEditor.TYPE, marginsMm: null, suiviModifications: null, headerFooter: null }, GridEditor.TYPE);
-      markAutosaveDirty();
-      const counts = { rows: imported.rows, cols: imported.cols };
-      setStatus(imported.sheetCount > 1
-        ? I18n.t('status.xlsxImportedSheet', Object.assign({ sheet: imported.sheetName, index: imported.sheetIndex + 1, total: imported.sheetCount }, counts))
-        : I18n.t('status.xlsxImported', counts));
+      openImportedGrid(imported);
     });
+  }
+
+  // Lit le classeur et construit la grille. null : la liste des feuilles a été fermée sans choix, ou le classeur est refusé (l'erreur est dite
+  // dans le coin d'état) ; dans les deux cas rien d'autre ne se passe.
+  async function readXlsxForImport(file) {
+    let chosen = null; // la feuille choisie, quand le classeur en a plusieurs : une erreur la nomme
+    try {
+      const book = await GridXlsxImport.openFile(file);
+      let index = 0;
+      if (book.sheets.length > 1) {
+        // Sous le « + » : c'est de là que la personne est partie. Elle recouvre le coin d'état, qui n'a rien à dire pendant ce temps (« Lecture… »
+        // serait faux, la lecture est finie) ; refermée sans choix, la liste ne change rien : le coin d'état redit l'état du modèle en cours.
+        setStatus('');
+        const picked = await GridXlsxImport.chooseSheet(book.sheets, { anchor: () => document.getElementById('btn-new').getBoundingClientRect() });
+        if (picked === null) { updateSaveStatus(); refocusEditorIfLost(); return null; }
+        index = picked;
+        chosen = book.sheets[index].name;
+      }
+      return book.build(index, { lang: I18n.getLang() });
+    } catch (e) {
+      reportXlsxImportError(e, chosen);
+      return null;
+    }
+  }
+
+  function reportXlsxImportError(e, chosen) {
+    console.warn('[main] import Excel impossible', e); // une erreur de la personne (mauvais fichier), pas du widget
+    const key = e && e.code === 'empty' && chosen !== null ? 'status.xlsxImportEmptySheet' : (XLSX_IMPORT_ERRORS[e && e.code] || XLSX_IMPORT_ERRORS.unreadable);
+    setStatus(I18n.t(key, { sheet: chosen, rows: e && e.rows, cols: e && e.cols, maxRows: e && e.maxRows, maxCols: e && e.maxCols, maxCells: e && e.maxCells }), true);
+  }
+
+  function openImportedGrid(imported) {
+    // Une nouvelle grille, sans nom et pas encore enregistrée, comme « Nouvelle grille ».
+    templateSelect.value = '';
+    loadTemplateIntoEditor({ id: null, nom: '', contenu: imported.html, typeModele: GridEditor.TYPE, marginsMm: null, suiviModifications: null, headerFooter: null }, GridEditor.TYPE);
+    markAutosaveDirty();
+    const counts = { rows: imported.rows, cols: imported.cols };
+    setStatus(imported.sheetCount > 1
+      ? I18n.t('status.xlsxImportedSheet', Object.assign({ sheet: imported.sheetName, index: imported.sheetIndex + 1, total: imported.sheetCount }, counts))
+      : I18n.t('status.xlsxImported', counts));
   }
 
   // Un nouveau macro-modèle n'a rien à charger avant d'avoir été composé et enregistré : contrairement aux autres types, il ne vide pas l'éditeur, il
@@ -984,11 +1020,53 @@
     finally { if (autosaveTickStartedAt === startedAt) autosaveTickPending = false; }
   }
 
+  // Les cas où un passage ne fait rien du tout, avant même de lire la table.
+  function autosaveTickBlocked() {
+    if (leavePromptOpen) return true;
+    if (!isAutosaveEnabled()) return true;  // coupé par la personne (cf. wireSaveMenu) : ni vérification de conflit ni écriture en arrière-plan
+    if (exportOperationInProgress) return true; // évite toute contention Grist avec un export en cours
+    if (autosaveConflictActive) return true; // gelé tant que l'utilisateur n'a pas choisi (recharger, ou Enregistrer manuellement pour garder sa version)
+    return false;
+  }
+
+  // Ce qu'un passage écrit, une fois sûr qu'il y a quelque chose à écrire : le nom saisi et le genre du modèle. null : rien à écrire.
+  function autosaveWriteTarget(remoteTpl) {
+    const nom = templateNameInput ? templateNameInput.value.trim() : '';
+    if (!nom) return null; // même garde que le bouton Enregistrer manuel
+    // Un macro-modèle n'a rien dans l'éditeur (Editor.getHTML() est toujours vide, cf. loadMacroIntoEditor) : son Contenu est sa composition,
+    // réécrite telle que Grist vient de la rendre (remoteTpl, relu plus haut). Sans cela, renommer le macro-modèle ou changer son nom de PDF ou ses
+    // marges remplacerait sa composition par un paragraphe vide en moins de 3 s. Macro-modèle introuvable dans Grist (supprimé ailleurs) : rien n'est
+    // écrit, jamais une composition inventée.
+    const isMacro = currentTypeModele === 'macro';
+    if (isMacro && !remoteTpl) return null;
+    return { nom, isMacro };
+  }
+
+  // L'écriture d'un passage. `epoch` : le modèle choisi quand le passage a commencé ; `editVersion` : l'état de l'édition lu avant de lire quoi que ce
+  // soit.
+  async function writeAutosave(id, { nom, isMacro }, remoteTpl, epoch, editVersion) {
+    try {
+      const suiviModifications = isMacro ? null : await Editor.getSuiviModificationsForSave();
+      // un autre modèle a été choisi pendant l'attente de l'identification : l'éditeur n'est plus celui dont `id` est la ligne (cf. onSave)
+      if (epoch !== autosaveEpoch) return;
+      const contenu = isMacro ? remoteTpl.contenu : Editor.getHTML();
+      const { dateModif } = await saveScreenAs(id, nom, suiviModifications, contenu);
+      // Un autre modèle chargé pendant l'écriture (autosaveEpoch) a son propre état : rien de ceci ne lui appartient.
+      if (epoch === autosaveEpoch) {
+        autosaveLastKnownDateModif = dateModif;
+        noteSaved(editVersion);
+        updateSaveStatus();
+      }
+    } catch (e) {
+      console.error('[main] auto-save : échec d’enregistrement', e);
+      // autosaveDirty reste vrai : retenté au passage suivant. Affiché, pas seulement journalisé : un échec répété doit se voir dans le coin d'état
+      // plutôt que de laisser croire que tout est enregistré.
+      setStatus(I18n.t('status.autosaveError'), true);
+    }
+  }
+
   async function runAutosaveTick() {
-    if (leavePromptOpen) return;
-    if (!isAutosaveEnabled()) return;  // coupé par la personne (cf. wireSaveMenu) : ni vérification de conflit ni écriture en arrière-plan
-    if (exportOperationInProgress) return; // évite toute contention Grist avec un export en cours
-    if (autosaveConflictActive) return; // gelé tant que l'utilisateur n'a pas choisi (recharger, ou Enregistrer manuellement pour garder sa version)
+    if (autosaveTickBlocked()) return;
     const id = Templates.getCurrentId();
     if (!id) return; // aucune ligne à mettre à jour - jamais de création automatique
     // Au repos, une lecture toutes les autosaveIdleIntervalMs(), à une demi-période près (un passage un peu en avance lit déjà, au lieu de
@@ -1014,32 +1092,8 @@
     // plutôt que de forcer la sortie de ce mode toutes les 2 à 3 s, bien plus gênant que d'attendre le suivant.
     if (Editor.isEditingHeaderFooter()) return;
     const editVersion = autosaveEditVersion; // Avant de lire quoi que ce soit : ce qui est modifié après reste « à enregistrer » (cf. noteSaved)
-    const nom = templateNameInput ? templateNameInput.value.trim() : '';
-    if (!nom) return; // même garde que le bouton Enregistrer manuel
-    // Un macro-modèle n'a rien dans l'éditeur (Editor.getHTML() est toujours vide, cf. loadMacroIntoEditor) : son Contenu est sa composition,
-    // réécrite telle que Grist vient de la rendre (remoteTpl, relu plus haut). Sans cela, renommer le macro-modèle ou changer son nom de PDF ou ses
-    // marges remplacerait sa composition par un paragraphe vide en moins de 3 s. Macro-modèle introuvable dans Grist (supprimé ailleurs) : rien n'est
-    // écrit, jamais une composition inventée.
-    const isMacro = currentTypeModele === 'macro';
-    if (isMacro && !remoteTpl) return;
-    try {
-      const suiviModifications = isMacro ? null : await Editor.getSuiviModificationsForSave();
-      // un autre modèle a été choisi pendant l'attente de l'identification : l'éditeur n'est plus celui dont `id` est la ligne (cf. onSave)
-      if (epoch !== autosaveEpoch) return;
-      const contenu = isMacro ? remoteTpl.contenu : Editor.getHTML();
-      const { dateModif } = await saveScreenAs(id, nom, suiviModifications, contenu);
-      // Un autre modèle chargé pendant l'écriture (autosaveEpoch) a son propre état : rien de ceci ne lui appartient.
-      if (epoch === autosaveEpoch) {
-        autosaveLastKnownDateModif = dateModif;
-        noteSaved(editVersion);
-        updateSaveStatus();
-      }
-    } catch (e) {
-      console.error('[main] auto-save : échec d’enregistrement', e);
-      // autosaveDirty reste vrai : retenté au passage suivant. Affiché, pas seulement journalisé : un échec répété doit se voir dans le coin d'état
-      // plutôt que de laisser croire que tout est enregistré.
-      setStatus(I18n.t('status.autosaveError'), true);
-    }
+    const target = autosaveWriteTarget(remoteTpl);
+    if (target) await writeAutosave(id, target, remoteTpl, epoch, editVersion);
   }
 
   function startAutosaveLoop() {
@@ -1707,17 +1761,7 @@
     const rows = await readBatchRows(cfg, tableId, only);
     if (!rows) return;
 
-    // Pas de HTML unique pour tout le lot : pour un macro-modèle, le choix des annexes dépend des valeurs de chaque ligne (cf. MacroTemplates), donc
-    // la concaténation est refaite ligne par ligne dans la boucle ci-dessous ; un modèle normal garde le même gabarit pour toutes les lignes, seule
-    // la résolution des #Variable change. Pas de modèle unique non plus quand « Modèle selon la ligne » est réglé : chaque ligne a la source du
-    // modèle que ses règles lui donnent (rowSourceResolver), comme à l'écran.
-    const templatesCache = Templates.getCached();
-    const openSource = openTemplateSource(cfg);
-    const sourceOf = only ? async () => openSource : rowSourceResolver(tableId, cfg, openSource);
-    // Compté avant la confirmation : « Un document par valeur » fait plus de documents que de lignes.
-    const jobs = only ? only.plan.variants.map(variant => ({ row: only.record, source: openSource, rowHtml: only.html, variant }))
-      : await planExportJobs(rows, { tableId, sourceOf, templatesCache });
-    const splitting = jobs.some(job => ListSplit.hasPins(job.variant));
+    const { openSource, templatesCache, jobs, splitting } = await planBatchJobs(cfg, tableId, only, rows);
     const sheetSetup = await confirmBatch(cfg, { only, tableId, rowCount: rows.length, jobCount: jobs.length, splitting });
     if (!sheetSetup) return;
 
@@ -1733,6 +1777,33 @@
     }
 
     const sink = await openBatchSink(cfg, tableId, sheetSetup);
+    const { ok, failed, cancelled } = await runBatchJobs(cfg, sink, jobs, { tableId, openSource, templatesCache });
+    if (cancelled) { setStatus(I18n.t('status.exportCancelled')); return; }
+    if (!ok) { setStatus(I18n.t(cfg.noFile), true); return; }
+
+    await finishBatchExport(cfg, sink, { only, tableId, rows, openSource, splitting, ok, failed });
+  }
+
+  // Les documents à générer : un par ligne, ou un par valeur quand « Un document par valeur » découpe. Rend aussi ce que leur génération relit
+  // (le modèle ouvert, le cache des modèles) et si l'un d'eux est un découpage.
+  async function planBatchJobs(cfg, tableId, only, rows) {
+    // Pas de HTML unique pour tout le lot : pour un macro-modèle, le choix des annexes dépend des valeurs de chaque ligne (cf. MacroTemplates), donc
+    // la concaténation est refaite ligne par ligne dans la boucle de runBatchJobs ; un modèle normal garde le même gabarit pour toutes les lignes,
+    // seule la résolution des #Variable change. Pas de modèle unique non plus quand « Modèle selon la ligne » est réglé : chaque ligne a la source
+    // du modèle que ses règles lui donnent (rowSourceResolver), comme à l'écran.
+    const templatesCache = Templates.getCached();
+    const openSource = openTemplateSource(cfg);
+    const sourceOf = only ? async () => openSource : rowSourceResolver(tableId, cfg, openSource);
+    // Compté avant la confirmation : « Un document par valeur » fait plus de documents que de lignes.
+    const jobs = only ? only.plan.variants.map(variant => ({ row: only.record, source: openSource, rowHtml: only.html, variant }))
+      : await planExportJobs(rows, { tableId, sourceOf, templatesCache });
+    const splitting = jobs.some(job => ListSplit.hasPins(job.variant));
+    return { openSource, templatesCache, jobs, splitting };
+  }
+
+  // Génère les documents un par un dans `sink`. cancelled : « Annuler » sur la fenêtre des images d'un site externe a arrêté tout le lot ;
+  // failed : les lignes que leur modèle ou une erreur a empêché de générer.
+  async function runBatchJobs(cfg, sink, jobs, { tableId, openSource, templatesCache }) {
     let ok = 0;
     let failed = 0;
     let cancelled = false;
@@ -1762,9 +1833,11 @@
         failed++;
       }
     }
-    if (cancelled) { setStatus(I18n.t('status.exportCancelled')); return; }
-    if (!ok) { setStatus(I18n.t(cfg.noFile), true); return; }
+    return { ok, failed, cancelled };
+  }
 
+  // La fin d'un export en lot : le fichier assemblé est téléchargé, le coin d'état dit combien de documents (et de planches) il contient.
+  async function finishBatchExport(cfg, sink, { only, tableId, rows, openSource, splitting, ok, failed }) {
     setStatus(I18n.t(sink.finishing));
     const outBlob = await sink.finish();
     // Archive d'un export seul : nommée comme la ligne ; sinon comme la table.
