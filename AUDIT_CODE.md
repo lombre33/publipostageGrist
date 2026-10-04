@@ -154,6 +154,8 @@ Vérifié par la suite de tests complète (~90 scénarios, aucune régression) e
 d'un document combinant tableau/image/gras via `PdfExport.getNativePdfBlobForRecord` après le
 correctif.
 
+**Reprise du 4 octobre 2026 (contrôle cyber, rapport `controle-cyber-2026-10-04`)** : le corps du modèle (colonne `Contenu`) n'était filtré nulle part - `Editor.setHTML` → `loadTrackedDocument` faisait un `innerHTML` sur un `<div>` du widget, qui charge les images et lance leur `onerror` même détaché - et le filtre avait deux contournements (XSS de mutation `form`/`math`/`style`, balises `iframe`, `base`, `link`, `style`, `object`, `embed` laissées). Corrigé : `loadTrackedDocument` lit le HTML dans un document inerte (`HtmlSanitize.parseInert`) qu'il donne à ProseMirror sans jamais le sérialiser ; `HtmlSanitize.clean` garde une liste blanche de balises, retire `srcdoc`, `formaction` et les adresses `javascript:`, et relit son résultat jusqu'à un texte stable. Groupe de tests `htmlSanitize` (19 cas ; 15 échouent sur l'ancien code).
+
 | Fichier:ligne(s) (état AVANT correctif) | Constat | Priorité |
 |---|---|---|
 | `js/editor.js:2480, 2527/2532, 2638, 2730, 2740` | En-tête/pied de page injecté via `innerHTML` sans passer par le schéma de l'éditeur — un collaborateur du document Grist pouvait y placer un payload s'exécutant automatiquement. | ~~Important~~ ✅ |
