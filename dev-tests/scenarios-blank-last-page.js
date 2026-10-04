@@ -13,6 +13,15 @@
 // L'ÉDITEUR (repère « Page 2 » de l'Aperçu A4, carte d'Antoine du 01/10 : « Faire ignorer les lignes vides de fin au repère « Page 2 » de l'éditeur ? » - Oui) :
 // il garde ses lignes vides (il faut pouvoir écrire à la suite), mais celles de la FIN n'ouvrent plus de page, comme dans la Lecture et les exports ; un saut de page
 // posé par la personne garde, lui, son repère.
+//
+// UNE IMAGE FLOTTANTE SUR SA PROPRE LIGNE (Antoine, 2026-10-04 : « dans un document format personnalisé assez petit, j'ai deux images, une première en mode classique, une
+// deuxième en mode flottante, sauf que même si l'image est sur la première page on dirait qu'elle crée une deuxième page ; et quand je supprime la ligne de la deuxième page cela
+// supprime l'image flottante ») : une image en calque vit dans un paragraphe, et quand cette ligne ne porte qu'elle, la ligne est une ligne comme une autre pour la mise en page - elle
+// ne tient plus sur une page que le texte remplit, et ouvre la page 2 pour une image que sa grille a posée sur la page 1. Même règle que pour les lignes vides de fin, dans l'éditeur
+// (HeaderFooterPreview.trailingBlankStart) comme dans la Lecture, le PDF et le Word (ReaderMode.trimTrailingBlankBlocks) : la ligne de fin qui ne porte que des images en calque de la
+// PAGE 1 (grille complète) n'ouvre pas de page, et les exports donnent ses images au paragraphe de texte qui la précède. Les images d'une page 2 ou plus, les lignes suivies de
+// texte, les images sans grille et les lignes sans paragraphe de texte avant elles gardent leur ligne. Une image importée via une colonne PJ (même jour, « important ! l'image est une image
+// importée via une colonne PJ ») suit la même règle : le cadre « #Table.Colonne » qu'en montre l'éditeur porte un libellé, qui ne compte pas comme du texte de la ligne.
 window.EditorTestSuites = window.EditorTestSuites || {};
 window.EditorTestSuites.blankLastPage = (function () {
   const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
@@ -83,6 +92,79 @@ window.EditorTestSuites.blankLastPage = (function () {
       ['espace insécable', lines(n) + '<p>&nbsp;</p>'],
       ['saut de ligne seul', lines(n) + '<p><br></p>'],
     ];
+  }
+
+
+  // --- Une image flottante sur sa propre ligne (Antoine, 2026-10-04) ---
+  // La grille de page de l'image, celle que l'Aperçu A4 capture quand on la pose (data-page-index, puis deux décalages en points depuis le coin du contenu) : c'est elle, pas la ligne qui la
+  // porte, qui place l'image dans le PDF, le Word et la Lecture. 150 pt à droite et 20 pt sous le coin du contenu tiennent dans la page de 100 x 70 mm comme dans l'A4.
+  const GRID_LEFT_PT = 150;
+  const GRID_TOP_PT = 20;
+  const FLOAT_PX = 40;
+  // Une image liée à la colonne PJ « Photo » de la table Clients : dans l'éditeur un cadre « #Clients.Photo » sans image, à la Lecture et à l'export la pièce jointe de la ligne.
+  const PJ_ATTRS = ' data-var-table="Clients" data-var-column="Photo" data-var-key="Clients.Photo"';
+  function floatingImage(o) {
+    o = o || {};
+    const layer = o.layer || 'front';
+    const grid = o.grid === false ? '' : ' data-page-index="' + (o.pageIndex || 0) + '" data-page-left-pt="' + GRID_LEFT_PT + '" data-page-top-pt="' + GRID_TOP_PT + '"';
+    // `left` et `top` du style sont comptés depuis le coin de la feuille : la grille plus la marge, comme l'éditeur les pose quand l'image est positionnée.
+    const margins = PageLayout.getMarginsMm();
+    return '<img class="editor-image" src="' + (o.pj ? '' : TINY_PNG) + '" alt="" style="width: ' + FLOAT_PX + 'px; height: ' + FLOAT_PX + 'px; position: absolute; left: ' + (margins.left * 96 / 25.4 + GRID_LEFT_PT * 96 / 72) + 'px; top: '
+      + (margins.top * 96 / 25.4 + GRID_TOP_PT * 96 / 72) + 'px; z-index: ' + (layer === 'front' ? 5 : -1) + ';" data-layer="' + layer + '" data-wrap="inline"' + (o.repeat ? ' data-repeat="true"' : '') + grid + (o.pj ? PJ_ATTRS : '') + '>';
+  }
+  function anchorLine(o) { return '<p>' + floatingImage(o) + '</p>'; }
+  // Une image au fil du texte (le mode par défaut) sur sa ligne.
+  function classicImageLine(widthPx) {
+    return '<p><img class="editor-image" src="' + TINY_PNG + '" alt="" style="width: ' + widthPx + 'px" data-layer="normal" data-wrap="inline"></p>';
+  }
+  // Un petit format personnalisé, celui d'Antoine : 100 x 70 mm, soit 80 x 50 mm de contenu avec les marges de 10 mm que setPageSize donne à une petite page.
+  async function setupSmallFormat(h) {
+    await h.resetEditor();
+    PageLayout.setMarginsMm(null);
+    PageLayout.setPageSize(100, 70);
+    OrientationToggle.sync();
+    h.setA4Preview(true);
+    document.dispatchEvent(new CustomEvent('pp:pageLayoutChanged'));
+    await h.sleep(300);
+  }
+  function restorePage() {
+    PageLayout.setMarginsMm(null);
+    OrientationToggle.sync();
+    document.dispatchEvent(new CustomEvent('pp:pageLayoutChanged'));
+  }
+  // Largeur de l'image au fil du texte qui remplit la page : la plus petite avec laquelle une ligne de texte derrière elle ne tient plus, donc la plus grande image qui laisse encore
+  // moins d'une ligne de place sous elle (dichotomie, chaque essai est un vrai rendu). On cherche DERRIÈRE une ligne de texte parce qu'une image plus haute que la page reste seule sur
+  // la sienne sans en ouvrir une autre (il n'y a rien à couper devant elle) : seule la ligne suivante fait grandir le nombre de pages avec l'image.
+  async function fullImageWidth(measure) {
+    let fits = 40;
+    let over = Math.ceil(PageLayout.getContentHeightMm() * 96 / 25.4);
+    while (over - fits > 1) {
+      const mid = (fits + over) >> 1;
+      if ((await measure(classicImageLine(mid) + '<p>Texte</p>')) === 1) fits = mid; else over = mid;
+    }
+    return over;
+  }
+  // Même dichotomie pour des lignes de texte suivies d'un bloc donné : le plus long texte qui tient sur une page AVEC ce bloc à la fin.
+  async function fullPageWith(measure, suffix) {
+    let fits = 5; let over = 90;
+    while (over - fits > 1) {
+      const mid = (fits + over) >> 1;
+      if ((await measure(lines(mid) + suffix)) === 1) fits = mid; else over = mid;
+    }
+    return fits;
+  }
+  // Les trois moteurs qui paginent : le nombre de pages de l'ÉDITEUR (Aperçu A4), de la LECTURE et du PDF pour un HTML donné.
+  function enginesOf(h, headerFooter) {
+    return {
+      editor: html => editorPages(h, html, headerFooter),
+      reader: html => readerPages(h, html, headerFooter),
+      pdf: async html => (await pdfPages(h, html, headerFooter)).count,
+    };
+  }
+  // L'image flottante (30 pt de large) parmi les images peintes d'une page de PDF, et sa place relevée dans le fichier.
+  function paintedFloating(page) {
+    const found = page && page.images.find(image => Math.abs(image.width - FLOAT_PX * 0.75) < 1);
+    return found ? { x: Math.round(found.x * 100) / 100, y: Math.round(found.y * 100) / 100 } : null;
   }
 
   return [
@@ -430,6 +512,221 @@ window.EditorTestSuites.blankLastPage = (function () {
         if (flush !== expected(1)) problems.push('texte ras la marge + 3 lignes vides : pied « ' + flush + ' » (« ' + expected(1) + ' » attendu)');
         if (over !== expected(2)) problems.push('une ligne de trop + 3 lignes vides : pied « ' + over + ' » (« ' + expected(2) + ' » attendu)');
         return { pass: problems.length === 0, notes: JSON.stringify({ lignesParPage: n, flush, over, problems }) };
+      },
+    },
+    {
+      id: 'blank_page_floating_image_on_page_1_opens_no_page_in_a_small_format',
+      description: 'Petit format personnalisé (100 x 70 mm), une image au fil du texte qui remplit la page et, sur la ligne suivante, une image flottante posée sur la page 1 (devant, derrière, ou derrière sur toutes les pages) : éditeur, Lecture et PDF restent sur UNE page, le document garde ses deux images, le PDF les peint sur cette page et la flottante est à la place que lui donne sa grille',
+      async run(h) {
+        const problems = [];
+        const summary = {};
+        try {
+          await setupSmallFormat(h);
+          const m = PageLayout.getMarginsPt();
+          const variants = [['devant le texte', { layer: 'front' }], ['derrière le texte', { layer: 'behind' }], ['derrière, sur toutes les pages', { layer: 'behind', repeat: true }]];
+          for (const [engine, measure] of Object.entries(enginesOf(h))) {
+            const width = await fullImageWidth(measure);
+            // La page tient l'image, et pas une ligne de plus derrière elle.
+            const bare = await measure(classicImageLine(width));
+            const over = await measure(classicImageLine(width) + '<p>Texte</p>');
+            const seen = { largeurDeLImage: width };
+            if (bare !== 1 || over !== 2) problems.push(engine + ', capacité mal mesurée : image de ' + width + ' px -> ' + bare + ' page(s), avec une ligne de texte derrière -> ' + over + ' (1 puis 2 attendues)');
+            for (const [label, o] of variants) {
+              const html = classicImageLine(width) + anchorLine(o);
+              const pages = await measure(html);
+              seen[label] = pages + ' page(s)';
+              if (pages !== 1) problems.push(engine + ', image flottante ' + label + ' : ' + pages + ' pages (1 attendue)');
+              if (engine === 'editor') {
+                // Rien n'est supprimé : la ligne de l'image reste dans le document, seule la page qu'elle ouvrait disparaît.
+                const probe = document.createElement('div'); probe.innerHTML = Editor.getHTML();
+                const kept = probe.querySelectorAll(':scope > p').length + ' paragraphes, ' + probe.querySelectorAll('img.editor-image').length + ' images';
+                seen[label] += ', ' + kept;
+                if (kept !== '2 paragraphes, 2 images') problems.push('éditeur, image flottante ' + label + ' : le document garde ' + kept + ' (2 paragraphes et 2 images attendus)');
+              }
+              if (engine === 'reader') {
+                const painted = document.querySelectorAll('#reader-container img.editor-image').length;
+                seen[label] += ', ' + painted + ' image(s) à l\'écran';
+                if (painted !== 2) problems.push('Lecture, image flottante ' + label + ' : ' + painted + ' images à l\'écran (2 attendues)');
+              }
+              if (engine === 'pdf') {
+                const pdf = await pdfPages(h, html);
+                const first = pdf.gt.pages[0];
+                const at = paintedFloating(first);
+                seen[label] += ', ' + (first ? first.images.length : 0) + ' image(s) sur la page 1, flottante en ' + JSON.stringify(at);
+                if (pdf.blank) problems.push('PDF, image flottante ' + label + ' : ' + pdf.blank + ' page(s) blanche(s)');
+                if (!first || first.images.length !== 2) problems.push('PDF, image flottante ' + label + ' : ' + (first ? first.images.length : 0) + ' image(s) sur la page 1 (2 attendues)');
+                if (!at || Math.abs(at.x - (m.left + GRID_LEFT_PT)) > 0.6 || Math.abs(at.y - (m.top + GRID_TOP_PT)) > 0.6) problems.push('PDF, image flottante ' + label + ' : peinte en ' + JSON.stringify(at) + ', attendue en {"x":' + (m.left + GRID_LEFT_PT) + ',"y":' + (m.top + GRID_TOP_PT) + '}');
+                if (first && Math.abs(first.width - 100 * 72 / 25.4) > 1) problems.push('PDF : page de ' + first.width + ' pt de large (le petit format de 100 mm attendu)');
+              }
+            }
+            summary[engine] = seen;
+          }
+        } finally { restorePage(); }
+        return { pass: problems.length === 0, notes: JSON.stringify({ summary, problems }) };
+      },
+    },
+    {
+      id: 'blank_page_floating_image_from_an_attachment_column_opens_no_page_either',
+      description: 'La même image flottante importée via une colonne PJ (Antoine, 2026-10-04, « important ! l\'image est une image importée via une colonne PJ ») : dans l\'éditeur son cadre « #Clients.Photo » est un objet, pas du texte - la ligne de fin n\'ouvre pas de page, comme à la Lecture où la pièce jointe de la ligne est peinte dessus ; la ligne suivie de texte et une image PJ au fil du texte gardent leur ligne',
+      async run(h) {
+        const problems = [];
+        const summary = {};
+        const original = window.fetch;
+        // Le serveur de Grist, côté pièces jointes : toute pièce jointe est une image.
+        window.fetch = (input, init) => {
+          const url = String(typeof input === 'string' ? input : input && input.url);
+          if (!/\/attachments\/\d+\/download/.test(url)) return original.call(window, input, init);
+          return Promise.resolve(new Response(new Blob([Uint8Array.from(atob(TINY_PNG.split(',')[1]), c => c.charCodeAt(0))], { type: 'image/png' }), { status: 200 }));
+        };
+        try {
+          await setupSmallFormat(h);
+          const stub = window.__gristStub;
+          const row = { id: 1, Nom: 'Dupont', Photo: ['L', 7] };
+          stub.setVariables('Clients', { Nom: 'Text', Photo: 'Attachments' });
+          stub.setRows('Clients', [row]);
+          await GristAPI.refreshSchema();
+          stub.fireRecord(row, 'Clients');
+          await h.sleep(100);
+          const engines = enginesOf(h);
+          for (const engine of ['editor', 'reader']) {
+            const measure = engines[engine];
+            const width = await fullImageWidth(measure);
+            const pjClassic = '<p><img class="editor-image" src="" alt="" style="width: ' + width + 'px; height: ' + width + 'px" data-layer="normal" data-wrap="inline"' + PJ_ATTRS + '></p>';
+            const seen = { largeurDeLImage: width };
+            for (const [label, o] of [['devant le texte', { layer: 'front', pj: true }], ['derrière le texte', { layer: 'behind', pj: true }], ['derrière, sur toutes les pages', { layer: 'behind', repeat: true, pj: true }]]) {
+              // L'image au fil du texte est une vraie image, puis une image PJ : le cadre de la PJ est plus haut que l'image, la largeur mesurée convient aux deux.
+              for (const [firstLabel, first] of [['image au fil du texte', classicImageLine(width)], ['image PJ au fil du texte', pjClassic]]) {
+                const pages = await measure(first + anchorLine(o));
+                seen[firstLabel + ', flottante PJ ' + label] = pages;
+                if (pages !== 1) problems.push(engine + ', ' + firstLabel + ' puis image PJ flottante ' + label + ' : ' + pages + ' pages (1 attendue)');
+              }
+              if (engine === 'editor') {
+                const probe = document.createElement('div'); probe.innerHTML = Editor.getHTML();
+                const kept = probe.querySelectorAll(':scope > p').length + ' paragraphes, ' + probe.querySelectorAll('img.editor-image').length + ' images';
+                if (kept !== '2 paragraphes, 2 images') problems.push('éditeur, image PJ flottante ' + label + ' : le document garde ' + kept + ' (2 paragraphes et 2 images attendus)');
+              }
+              if (engine === 'reader') {
+                await measure(classicImageLine(width) + anchorLine(o));
+                const painted = Array.from(document.querySelectorAll('#reader-container img.editor-image'));
+                const withFile = painted.filter(img => img.getAttribute('src'));
+                if (painted.length !== 2 || withFile.length !== 2) problems.push('Lecture, image PJ flottante ' + label + ' : ' + painted.length + ' images à l\'écran dont ' + withFile.length + ' avec leur fichier (2 et 2 attendues)');
+              }
+            }
+            // Garde-fous : la ligne de l'image PJ suivie de texte, et une image PJ au fil du texte seule en fin de page, gardent leur ligne.
+            const n = await fullPageWith(measure, '');
+            const guards = [
+              ['ligne de l\'image PJ suivie de texte', lines(n) + anchorLine({ layer: 'front', pj: true }) + '<p>Suite</p>', 2],
+              ['image PJ au fil du texte en fin de page', lines(n) + pjClassic, 2],
+            ];
+            for (const [name, html, expected] of guards) {
+              const pages = await measure(html);
+              seen[name] = pages;
+              if (pages !== expected) problems.push(engine + ', ' + name + ' : ' + pages + ' page(s) (' + expected + ' attendue(s))');
+            }
+            summary[engine] = seen;
+          }
+        } finally { window.fetch = original; restorePage(); }
+        return { pass: problems.length === 0, notes: JSON.stringify({ summary, problems }) };
+      },
+    },
+    {
+      id: 'blank_page_floating_image_word_anchors_to_the_paragraph_before_its_line',
+      description: 'Word : l\'image flottante de la page 1 qui était seule sur sa ligne de fin est ancrée au paragraphe de texte qui la précède, à la même place de la page (marge + grille) ; il ne reste pas de paragraphe à elle seule, que Word pouvait rejeter sur une page 2 où l\'ancre se serait retrouvée',
+      async run(h) {
+        const problems = [];
+        const rows = {};
+        try {
+          await setupSmallFormat(h);
+          const m = PageLayout.getMarginsPt();
+          const cases = [
+            ['devant le texte', classicImageLine(180) + anchorLine({ layer: 'front' })],
+            ['derrière le texte', classicImageLine(180) + anchorLine({ layer: 'behind' })],
+            ['lignes vides entre le texte et la ligne de l\'image', classicImageLine(180) + blankLines(2) + anchorLine()],
+            ['derrière du texte', '<p>Texte</p>' + anchorLine()],
+          ];
+          for (const [label, html] of cases) {
+            const parts = await h.exportDocxParts(html, null, PageLayout.getMarginsTwip());
+            const body = parts.doc.getElementsByTagName('w:body')[0];
+            const paragraphs = Array.from(body.children).filter(node => node.tagName === 'w:p');
+            const kinds = paragraphs.map(p => Array.from(p.getElementsByTagName('w:drawing')).map(d => (d.getElementsByTagName('wp:anchor')[0] ? 'ancre' : 'en ligne')));
+            const anchors = h.docxDrawings(parts.doc).filter(d => d.kind === 'anchor');
+            rows[label] = { paragraphes: paragraphs.length, images: kinds, ancres: anchors.map(a => ({ x: Math.round(a.x * 100) / 100, y: Math.round(a.y * 100) / 100, relativeFrom: a.relativeFrom })) };
+            if (paragraphs.length !== 1) problems.push(label + ' : ' + paragraphs.length + ' paragraphes (1 attendu, celui qui précède la ligne)');
+            if (anchors.length !== 1) { problems.push(label + ' : ' + anchors.length + ' ancre(s) (1 attendue)'); continue; }
+            const a = anchors[0];
+            if (!kinds[0] || kinds[0].filter(k => k === 'ancre').length !== 1) problems.push(label + ' : l\'ancre n\'est pas dans le paragraphe de texte (' + JSON.stringify(kinds) + ')');
+            if (Math.abs(a.x - (m.left + GRID_LEFT_PT)) > 0.6 || Math.abs(a.y - (m.top + GRID_TOP_PT)) > 0.6) problems.push(label + ' : ancre en (' + a.x + ', ' + a.y + ') pt, attendue en (' + (m.left + GRID_LEFT_PT) + ', ' + (m.top + GRID_TOP_PT) + ')');
+            if (a.relativeFrom.h !== 'page' || a.relativeFrom.v !== 'page') problems.push(label + ' : ancre relative à ' + JSON.stringify(a.relativeFrom) + ' (la page attendue)');
+          }
+        } finally { restorePage(); }
+        return { pass: problems.length === 0, notes: JSON.stringify({ rows, problems }) };
+      },
+    },
+    {
+      id: 'blank_page_floating_image_line_keeps_its_page_when_it_has_something_to_show',
+      description: 'Garde-fous, éditeur / Lecture / PDF, avec et sans en-tête et pied : seule la ligne de fin qui ne porte QUE des images flottantes de la page 1 (grille complète) derrière un paragraphe de texte n\'ouvre pas de page, avec ou sans lignes vides autour ; l\'image d\'une page 2, la ligne suivie de texte, la ligne qui porte aussi du texte, l\'image sans grille et la ligne derrière un titre gardent leur ligne, au même nombre de pages dans les trois moteurs',
+      async run(h) {
+        await setup(h);
+        const problems = [];
+        const summary = {};
+        // Avec un en-tête et un pied la page est plus courte et la grille compte la bande de l'en-tête : la règle est la même, seuls les cas qui la portent sont rejoués.
+        for (const [hfLabel, hf] of [['sans en-tête', null], ['avec en-tête et pied', HEADER_FOOTER]]) {
+          for (const [engine, measure] of Object.entries(enginesOf(h, hf))) {
+            const n = await fullPageWith(measure, '');
+            const nHeading = hf ? null : await fullPageWith(measure, '<h2>Fin</h2>');
+            const cases = [
+              ['la ligne seule, en fin', lines(n) + anchorLine(), 1],
+              ['lignes vides autour', lines(n) + blankLines(2) + anchorLine() + blankLines(2), 1],
+              ['deux images flottantes sur la ligne', lines(n) + '<p>' + floatingImage() + floatingImage({ layer: 'behind' }) + '</p>', 1],
+              ['image de la page 2', lines(n) + anchorLine({ pageIndex: 1 }), 2],
+              ['du texte derrière la ligne', lines(n) + anchorLine() + '<p>Suite</p>', 2],
+              ['du texte sur la ligne', lines(n) + '<p>Légende ' + floatingImage() + '</p>', 2],
+            ];
+            if (!hf) cases.push(['la ligne derrière un titre', lines(nHeading) + '<h2>Fin</h2>' + anchorLine(), 2]);
+            // L'éditeur donne tout seul une grille à l'image qui n'en a pas (il la capture au chargement) : le cas n'a de sens que pour le HTML d'un ancien modèle, lu tel quel par la Lecture et le PDF.
+            if (!hf && engine !== 'editor') cases.push(['image sans grille (ancien modèle)', lines(n) + anchorLine({ grid: false }), 2]);
+            const seen = { lignesParPage: n };
+            if (nHeading) seen.lignesParPageDerriereUnTitre = nHeading;
+            for (const [name, html, expected] of cases) {
+              const pages = await measure(html);
+              seen[name] = pages;
+              if (pages !== expected) problems.push(hfLabel + ', ' + engine + ', ' + name + ' : ' + pages + ' page(s) (' + expected + ' attendue(s))');
+            }
+            if (engine === 'pdf') {
+              // L'image d'une page 2 est peinte sur la page 2, pas sur la page 1 : sa ligne ouvre bien la page qu'elle a demandée.
+              const second = await pdfPages(h, lines(n) + anchorLine({ pageIndex: 1 }), hf);
+              const onPage = second.gt.pages.map(page => page.images.length);
+              seen['images peintes par page, image de la page 2'] = onPage;
+              if (onPage.length !== 2 || onPage[0] !== 0 || onPage[1] !== 1) problems.push(hfLabel + ', PDF, image de la page 2 : ' + JSON.stringify(onPage) + ' images par page (0 puis 1 attendues)');
+            }
+            (summary[hfLabel] = summary[hfLabel] || {})[engine] = seen;
+          }
+        }
+        return { pass: problems.length === 0, notes: JSON.stringify({ summary, problems }) };
+      },
+    },
+    {
+      id: 'blank_page_floating_image_alone_in_the_document',
+      description: 'Une image flottante seule dans le document (aucun paragraphe de texte avant sa ligne) : une page en éditeur, Lecture et PDF, l\'image est peinte à sa place et le Word garde son ancre ; un document vide de texte ne plante pas',
+      async run(h) {
+        await setup(h);
+        const problems = [];
+        const summary = {};
+        const m = PageLayout.getMarginsPt();
+        for (const [engine, measure] of Object.entries(enginesOf(h))) {
+          const pages = await measure(anchorLine());
+          summary[engine] = pages + ' page(s)';
+          if (pages !== 1) problems.push(engine + ' : ' + pages + ' pages (1 attendue)');
+        }
+        const pdf = await pdfPages(h, anchorLine());
+        const at = paintedFloating(pdf.gt.pages[0]);
+        summary.pdf += ', flottante en ' + JSON.stringify(at);
+        if (!at || Math.abs(at.x - (m.left + GRID_LEFT_PT)) > 0.6 || Math.abs(at.y - (m.top + GRID_TOP_PT)) > 0.6) problems.push('PDF : image peinte en ' + JSON.stringify(at) + ', attendue en (' + (m.left + GRID_LEFT_PT) + ', ' + (m.top + GRID_TOP_PT) + ')');
+        const parts = await h.exportDocxParts(anchorLine(), null, PageLayout.getMarginsTwip());
+        const anchors = h.docxDrawings(parts.doc).filter(d => d.kind === 'anchor');
+        summary.word = anchors.length + ' ancre(s)';
+        if (anchors.length !== 1) problems.push('Word : ' + anchors.length + ' ancre(s) (1 attendue)');
+        return { pass: problems.length === 0, notes: JSON.stringify({ summary, problems }) };
       },
     },
   ];

@@ -226,7 +226,31 @@ const HeaderFooterPreview = (function () {
   function trailingBlankStart(children) {
     let start = children.length;
     while (start > 0 && isBlankParagraph(children[start - 1])) start--;
-    return start;
+    // Les lignes de fin qui ne portent que des images en calque de la page 1 en font partie, avec les lignes vides qui les séparent, quand un paragraphe de texte les précède : la
+    // Lecture et les exports lui font reprendre les images (js/reader-mode.js:trimTrailingBlankBlocks). Sans lui, la ligne reste une ligne comme une autre.
+    let anchorStart = start;
+    while (anchorStart > 0 && (isBlankParagraph(children[anchorStart - 1]) || isTailAnchorParagraph(children[anchorStart - 1]))) anchorStart--;
+    const host = children[anchorStart - 1];
+    return anchorStart < start && host && host.tagName === 'P' && !host.hasAttribute('data-caption') && !isBlankParagraph(host) && !isTailAnchorParagraph(host) ? anchorStart : start;
+  }
+  // Une ligne de fin qui ne porte que des images en calque posées sur la PAGE 1 (demande du 2026-10-04 : dans un petit format, une image flottante sur la première page « crée une deuxième
+  // page ») : l'image est placée par sa grille de page, pas par la ligne qui la porte, et cette ligne n'a rien à montrer dans le flux ; ouvrir une page pour elle seule serait ouvrir une page
+  // blanche. La page 1 existe toujours : seules ces images-là sont dispensées, celle d'une page 2 ou plus a pu demander la page que sa ligne ouvre. Il faut la grille entière (page et deux
+  // décalages, ce que lisent le PDF et le Word) ; elle se lit sur le nœud ProseMirror, la vue de l'image ne la porte pas (le séparateur et le <br> que ProseMirror pose derrière une image ne
+  // comptent pas). Le texte se lit lui aussi sur le nœud : la vue d'une image liée à une colonne PJ porte son libellé « #Table.Colonne », que `textContent` prendrait pour du texte. Même
+  // règle, sur le HTML, dans js/reader-mode.js:isTailAnchor.
+  function isTailAnchorParagraph(el) {
+    if (el.tagName !== 'P' || !el.querySelector(':scope > .editor-image-layered') || el.querySelector(':scope > :not(br):not(.ProseMirror-separator):not(.editor-image-layered)')) return false;
+    try {
+      const paragraph = editor.state.doc.resolve(editor.view.posAtDOM(el, 0)).parent;
+      let onlyFirstPageLayers = paragraph.type.name === 'paragraph' && paragraph.childCount > 0;
+      paragraph.forEach(child => {
+        const a = child.attrs;
+        if (child.isText && !child.text.trim()) return;
+        if (child.type.name !== 'editorImage' || a.layer === 'normal' || a.pageIndex !== 0 || a.pageLeftPt == null || a.pageTopPt == null) onlyFirstPageLayers = false;
+      });
+      return onlyFirstPageLayers;
+    } catch (e) { return false; }
   }
 
   // Les tranches de hauteur d'un tableau de premier niveau que TablePageCut sait couper entre deux lignes, `null` pour tout autre bloc.

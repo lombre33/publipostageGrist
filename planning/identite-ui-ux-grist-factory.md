@@ -592,6 +592,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   Le cadre se pose sur l'image (en calque elle sort du flux : la teinte du texte suggéré n'y aurait pas de boîte), mêmes vert et rouge que le texte suggéré (6,4:1 et 6,6:1 sur la page blanche).
   Le paragraphe qui ne porte qu'une image en calque, la ligne où on l'a posée, garde sa ligne vide dans l'éditeur, la Lecture, le PDF et le Word (Antoine, 02/10, « écart entre l'éditeur et le mode
   lecture ») : le texte qui suit descend d'une ligne dans les quatre, les coupures de page tombent aux mêmes lignes, en haut du modèle comme après un saut de page, dans une case ou une colonne.
+  Seule la ligne de FIN de document fait exception (voir « Fin de document »).
 - Image « Au cœur du texte » et texte autour (Antoine, 02/10, point 9, et sa carte du point 10, « La rendre fidèle ») : l'éditeur, la Lecture, le PDF et le Word posent l'image et son texte de la même façon.
   Sans alignement et « en ligne », l'image est dans la ligne de texte, son pied sur la ligne de base (la ligne grandit) ; sans alignement et « bloc », elle est seule sur sa ligne, à gauche, le texte d'avant finit sa
   ligne et celui d'après repart dessous ; centrée, seule sur sa ligne, au centre ; alignée à gauche ou à droite, elle flotte et le texte l'habille, celui des paragraphes suivants aussi tant qu'elle les dépasse (12 px côté
@@ -866,7 +867,10 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   Word, même quand le texte arrive pile à la marge du bas. Les lignes vides du milieu gardent leur hauteur. L'éditeur garde ses lignes vides (il faut pouvoir écrire à la suite), mais celles de la fin
   n'ouvrent pas de « Page 2 » ni ne comptent dans le « n/total » du pied de page, comme en Lecture et dans les exports (Antoine, 01/10, carte « Faire ignorer les lignes vides de fin
   au repère « Page 2 » de l'éditeur ? » : Oui) ; elles dépassent simplement la dernière page, et la page apparaît dès qu'on tape du texte dessus. Un saut de page posé par la personne garde,
-  lui, son repère « Page 2 » même sans rien derrière.
+  lui, son repère « Page 2 » même sans rien derrière. La ligne de fin qui ne porte que des images en calque posées sur la PAGE 1 (la ligne où l'on a posé une image flottante, grille de page
+  complète) en fait partie, quand un paragraphe de texte la précède (Antoine, 04/10, « une image flottante qui crée une deuxième page ») : elle n'ouvre pas de page, ni dans l'éditeur (elle dépasse la
+  dernière page comme une ligne vide) ni en Lecture, en PDF et en Word, où ses images passent au paragraphe qui la précède, posées au même endroit de la page. Du texte derrière elle, une
+  image d'une page 2 ou plus, une image sans grille de page ou une ligne qui ne suit pas un paragraphe de texte (un titre, un tableau, le début du document) lui gardent sa ligne.
 - Onglet « Raccourcis » et abréviations « § » (demande d'Antoine du 01/10, « un caractère qui flag et qui étend une valeur saisie » ; sa réponse à la carte : « Tout, par personne ») : un
   septième onglet des Réglages, « Raccourcis », après « Déclencheur ». Les sept onglets (huit depuis « Vue », voir plus bas) tiennent sur une seule ligne dans les 480 px de la fenêtre (`.settings-tabs` sans interstice,
   onglets à 7 px et 2 px de marge intérieure), jamais sur deux ; aucun `display` n'est posé sur `.settings-panel` (il battrait l'attribut `hidden` des panneaux masqués). La section «

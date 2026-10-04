@@ -159,9 +159,39 @@ const ReaderMode = (function () {
     if (node.nodeType === Node.ELEMENT_NODE) return node.tagName === 'STYLE' || node.classList.contains('heading-numbering-config');
     return node.nodeType === Node.COMMENT_NODE || (node.nodeType === Node.TEXT_NODE && !node.nodeValue.trim());
   }
+  // Une ligne de fin qui ne porte que des images en calque posées sur la PAGE 1 (demande du 2026-10-04 : dans un petit format, une image flottante sur la première page « crée une deuxième page »).
+  // L'image est placée par sa grille de page, pas par la ligne qui la porte, et cette ligne n'a rien à montrer dans le flux : quand le texte arrive à la marge du bas elle n'y tient plus et ouvre
+  // une page blanche, comme une ligne vide. La page 1 existe toujours : seules ces images-là sont dispensées, une image d'une page 2 ou plus a pu demander la page que sa ligne ouvre. Il faut la
+  // grille entière (`data-page-index` et les deux décalages, ce que lit pdf-export.js:pdfImageFromNode) : sans elle l'image n'est placée que par son paragraphe, et la ligne reste. Même règle,
+  // sur le DOM de l'éditeur, dans js/header-footer-preview.js:isTailAnchorParagraph.
+  function isFirstPageLayerImage(el) {
+    return el.matches(LAYER_IMAGE_SELECTOR) && parseInt(el.getAttribute('data-page-index'), 10) === 0
+      && Number.isFinite(parseFloat(el.getAttribute('data-page-left-pt'))) && Number.isFinite(parseFloat(el.getAttribute('data-page-top-pt')));
+  }
+  function isTailAnchor(el) {
+    if (el.tagName !== 'P' || el.textContent.replace(/[\s ​]/g, '')) return false;
+    const children = Array.from(el.children);
+    return children.length > 0 && children.every(isFirstPageLayerImage);
+  }
+  // Ces lignes de fin (et les lignes vides qui les séparent) quittent le flux : le dernier paragraphe de texte qui les précède reprend leurs images, posées par leur grille quel que soit
+  // le paragraphe qui les porte, et elles sont retirées. Sans paragraphe de texte avant elles (un tableau, une liste, un titre, un saut de page, ou le début du document) la ligne reste :
+  // l'image n'aurait pas d'hôte, et c'est la même condition dans l'éditeur (js/header-footer-preview.js:trailingBlankStart).
+  function carryTailAnchors(root, blocks) {
+    let from = blocks.length;
+    while (from > 1 && blocks[from - 1].nodeType === Node.ELEMENT_NODE && blocks[from - 1].tagName === 'P' && (isTailAnchor(blocks[from - 1]) || hasNothingToShow(blocks[from - 1]))) from--;
+    const tail = blocks.slice(from);
+    const host = blocks[from - 1];
+    if (!tail.some(isTailAnchor) || !host || host.nodeType !== Node.ELEMENT_NODE || host.tagName !== 'P' || host.hasAttribute('data-caption') || hasNothingToShow(host) || isTailAnchor(host)) return;
+    tail.forEach(block => {
+      Array.from(block.children).filter(isFirstPageLayerImage).forEach(img => host.appendChild(img));
+      root.removeChild(block);
+    });
+    blocks.length = from;
+  }
   function trimTrailingBlankBlocks(root) {
     const blocks = Array.from(root.childNodes).filter(node => !isDocumentFurniture(node));
     while (blocks.length > 1 && blocks[blocks.length - 1].nodeType === Node.ELEMENT_NODE && hasNothingToShow(blocks[blocks.length - 1])) root.removeChild(blocks.pop());
+    carryTailAnchors(root, blocks);
     const last = blocks[blocks.length - 1];
     if (!last || last.nodeType !== Node.ELEMENT_NODE || !last.classList.contains('two-columns-zone')) return;
     last.querySelectorAll(':scope > .two-columns-column').forEach(column => {
