@@ -217,13 +217,23 @@ const Templates = (function () {
 
   function getCached() { return templatesCache; }
 
+  // Des identifiants de modèle comparés en texte : un <select> les donne en texte, Grist en nombre.
+  const sameId = (a, b) => String(a) === String(b);
+
+  // Le modèle du cache qui porte cet identifiant.
+  function byId(id) { return id == null ? undefined : templatesCache.find(t => sameId(t.id, id)); }
+
+  // Un modèle email ou macro n'ouvre jamais le widget tout seul (modèle par défaut, de la vue ou de la ligne) : une action ponctuelle ou un mode spécialisé
+  // ne s'affiche que sur demande.
+  const canOpenAtStart = typeModele => typeModele !== 'email' && typeModele !== 'macro';
+
   // Deux noms sont le même quand ils ne diffèrent que par les majuscules ou les espaces autour : « contrat » et « Contrat » se confondent dans la
   // liste.
   function sameName(a, b) { return String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase(); }
 
   // Un autre modèle porte-t-il déjà ce nom ? `ignoreId` ne compte pas : le modèle qu'on enregistre ne se gêne pas lui-même.
   function isNameTaken(nom, ignoreId) {
-    return templatesCache.some(t => (ignoreId == null || String(t.id) !== String(ignoreId)) && sameName(t.nom, nom));
+    return templatesCache.some(t => (ignoreId == null || !sameId(t.id, ignoreId)) && sameName(t.nom, nom));
   }
 
   // Nom libre le plus proche de `nom` : `nom` lui-même s'il est libre, sinon « nom (2) », « nom (3) »... Un nom qui finit déjà par « (n) » continue
@@ -241,6 +251,8 @@ const Templates = (function () {
 
   function getCurrentId() { return currentTemplateId; }
 
+  const isCurrent = id => id != null && sameId(currentTemplateId, id);
+
   function setCurrentId(id) { currentTemplateId = id; currentIdSeq++; }
 
   // Un modèle email ou macro n'est jamais le modèle de démarrage (cf. js/main.js, syncDefaultTemplateButton) : une ligne restée marquée EstParDefaut
@@ -248,9 +260,11 @@ const Templates = (function () {
   // widget s'ouvrirait sur « Nouveau modèle » et l'étoile n'apparaîtrait sur aucun des deux. Plusieurs modèles document marqués : le premier de la
   // table.
   function getDefaultId() {
-    const found = templatesCache.find(t => t.estParDefaut && t.typeModele !== 'email' && t.typeModele !== 'macro');
+    const found = templatesCache.find(t => t.estParDefaut && canOpenAtStart(t.typeModele));
     return found ? found.id : null;
   }
+
+  const isDefault = id => id != null && sameId(getDefaultId(), id);
 
   // id = null retire le modèle par défaut sans en redéfinir un autre. Un seul modèle par défaut à la fois : les autres sont explicitement repassés à
   // false, pour ne jamais avoir deux « par défaut » après un enchaînement d'appels.
@@ -259,11 +273,11 @@ const Templates = (function () {
     await ensureDefaultColumn();
     const actions = [];
     templatesCache.forEach(t => {
-      if (t.estParDefaut && String(t.id) !== String(id)) actions.push(['UpdateRecord', TABLE_NAME, t.id, { EstParDefaut: false }]);
+      if (t.estParDefaut && !sameId(t.id, id)) actions.push(['UpdateRecord', TABLE_NAME, t.id, { EstParDefaut: false }]);
     });
     if (id != null) actions.push(['UpdateRecord', TABLE_NAME, id, { EstParDefaut: true }]);
     if (actions.length) await grist.docApi.applyUserActions(actions);
-    templatesCache.forEach(t => { t.estParDefaut = (id != null && String(t.id) === String(id)); });
+    templatesCache.forEach(t => { t.estParDefaut = (id != null && sameId(t.id, id)); });
   }
 
   // Relit le DateModif réellement stocké par Grist pour cette ligne plutôt que de se fier à la chaîne ISO qu'on vient d'envoyer : rien ne garantit
@@ -318,7 +332,7 @@ const Templates = (function () {
       ]);
       // Le cache garde le nom que la ligne vient de recevoir : js/main.js (settleTemplateName) y compare le nom tapé, et uniqueName y cherche les
       // noms pris.
-      const cached = templatesCache.find(t => String(t.id) === String(id));
+      const cached = byId(id);
       if (cached) cached.nom = nom;
       const dateModif = await readBackDateModif(id, now);
       lastWrittenById.set(String(id), dateModif);
@@ -399,5 +413,8 @@ const Templates = (function () {
     ]);
   }
 
-  return { loadAll, getCached, getCurrentId, setCurrentId, getDefaultId, setDefault, save, remove, sameName, uniqueName, getWriteSeq, isWriting, whenIdle, lastWritten, sameDateModif, TABLE_NAME };
+  return {
+    loadAll, getCached, byId, getCurrentId, setCurrentId, isCurrent, getDefaultId, isDefault, canOpenAtStart, setDefault, save, remove, sameName, uniqueName,
+    getWriteSeq, isWriting, whenIdle, lastWritten, sameDateModif, TABLE_NAME,
+  };
 })();

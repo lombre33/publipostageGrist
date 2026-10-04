@@ -23,7 +23,7 @@ const TemplateTreeSelect = (function () {
   }
 
   function labelFor(tpl) {
-    const isDefault = tpl.id != null && String(Templates.getDefaultId()) === String(tpl.id);
+    const isDefault = Templates.isDefault(tpl.id);
     return isDefault ? (tpl.nom + ' ★') : tpl.nom;
   }
 

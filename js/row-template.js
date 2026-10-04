@@ -73,7 +73,7 @@ const RowTemplate = (function () {
 
   function isActive() { return !!config; }
 
-  const templateExists = id => Templates.getCached().some(t => String(t.id) === String(id));
+  const templateExists = id => !!Templates.byId(id);
 
   // « Le modèle par défaut » : celui de la vue (js/view-template.js) s'il y en a un, sinon le ★ du document. Même garde qu'au démarrage
   // (js/main.js) : un modèle email ou macro n'est jamais « le modèle par défaut » qu'on ouvre tout seul.
@@ -81,9 +81,7 @@ const RowTemplate = (function () {
     const ofView = typeof ViewTemplate !== 'undefined' ? ViewTemplate.usableId() : null;
     if (ofView != null) return ofView;
     const id = Templates.getDefaultId();
-    if (id == null) return null;
-    const tpl = Templates.getCached().find(t => String(t.id) === String(id));
-    return tpl && tpl.typeModele !== 'email' && tpl.typeModele !== 'macro' ? String(tpl.id) : null;
+    return id == null ? null : String(id);
   }
 
   async function pick(record, tableId) {

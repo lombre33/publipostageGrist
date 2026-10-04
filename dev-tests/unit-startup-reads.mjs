@@ -367,7 +367,9 @@ async function main() {
     check('js/main.js : l\'éditeur se charge en même temps que Grist (pas après)', main.indexOf('const editorReady = Editor.init()') !== -1 && main.indexOf('const editorReady = Editor.init()') < main.indexOf('await gristInit'));
     check('js/editor.js : setHTML demande la lecture complète des tables (le schéma d\'init() n\'est que provisoire)', /GristAPI\.refreshSchema\(\)\.then\(refreshVariableBadgeValidity\)/.test(editor));
     const readyAt = main.indexOf("setStatus(I18n.t(isReadOnly() ? 'status.readyReadOnly' : 'status.ready'))");
-    check('js/main.js : après « prêt », la lecture complète est rappelée si rien ne l\'a faite (maxAgeMs)', readyAt !== -1 && /setTimeout\(\(\) => \{ GristAPI\.refreshSchema\(\{ maxAgeMs: 60000 \}\)/.test(main.slice(readyAt)));
+    // Le rappel vit dans checkAfterOpen, que le démarrage appelle une fois « prêt » affiché.
+    const afterOpenAt = main.indexOf('function checkAfterOpen()');
+    check('js/main.js : après « prêt », la lecture complète est rappelée si rien ne l\'a faite (maxAgeMs)', readyAt !== -1 && afterOpenAt !== -1 && main.indexOf('checkAfterOpen();', readyAt) !== -1 && /setTimeout\(\(\) => \{ GristAPI\.refreshSchema\(\{ maxAgeMs: 60000 \}\)/.test(main.slice(afterOpenAt)));
   }
 
   summarizeAndExit();

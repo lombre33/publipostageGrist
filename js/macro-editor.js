@@ -36,12 +36,6 @@ const MacroEditor = (function () {
     catch (e) { console.warn('[MacroEditor] recherche de modèle indisponible, liste native conservée', e); return null; }
   }
 
-  // Le modèle du cache (Templates.getCached) qui porte cet identifiant, comparé en texte : la fenêtre de composition écrit les identifiants en texte,
-  // Grist les rend en nombre.
-  function cachedTemplate(id) {
-    return Templates.getCached().find(t => String(t.id) === String(id));
-  }
-
   // Un élément avec sa classe, son texte et ses enfants (tous facultatifs).
   function node(tag, className, text, children) {
     const element = Dom.el(tag, className, text);
@@ -166,8 +160,8 @@ const MacroEditor = (function () {
   function settingsToKeep(id = editingId) {
     const none = { nomFichierPDF: '', headerFooter: null, marginsMm: null };
     if (id == null) return none;
-    if (screenSettings && String(Templates.getCurrentId()) === String(id)) return screenSettings();
-    const stored = cachedTemplate(id);
+    if (screenSettings && Templates.isCurrent(id)) return screenSettings();
+    const stored = Templates.byId(id);
     return stored ? { nomFichierPDF: stored.nomFichierPDF || '', headerFooter: stored.headerFooter, marginsMm: stored.marginsMm } : none;
   }
 
@@ -184,7 +178,7 @@ const MacroEditor = (function () {
     const macroSlots = collectSlotsForSave();
     // Un nom déjà pris par un autre modèle devient « nom (2) », « nom (3) »... (même règle que js/main.js:settleTemplateName) ; un macro-modèle qui
     // garde son nom n'est jamais renommé, même s'il a un doublon d'avant cette règle.
-    const stored = editingId != null ? cachedTemplate(editingId) : null;
+    const stored = editingId != null ? Templates.byId(editingId) : null;
     const finalName = stored && Templates.sameName(nom, stored.nom) ? nom : Templates.uniqueName(nom, editingId);
     const startedAt = savingSince = Date.now();
     try {
@@ -225,7 +219,7 @@ const MacroEditor = (function () {
   function describeSummary(tpl) {
     if (!tpl || !tpl.macroSlots || !Array.isArray(tpl.macroSlots.slots) || !tpl.macroSlots.slots.length) return I18n.t('macro.summary.empty');
     const cover = tpl.macroSlots.slots.find(s => s.type === 'fixed');
-    const coverTpl = cover ? cachedTemplate(cover.modeleId) : null;
+    const coverTpl = cover ? Templates.byId(cover.modeleId) : null;
     const annexCount = tpl.macroSlots.slots.filter(s => s.type === 'conditional').length;
     return I18n.t('macro.summary.text', {
       cover: coverTpl ? coverTpl.nom : I18n.t('macro.summary.noCover'),
@@ -237,7 +231,7 @@ const MacroEditor = (function () {
   // (l'enregistrement automatique en fait une toutes les 15 s au repos) : l'objet reçu par showSummary() peut déjà être périmé, alors que la fenêtre
   // de composition et l'œil d'un modèle doivent partir de la composition à jour.
   function currentTemplate(tpl) {
-    return (tpl && tpl.id != null && cachedTemplate(tpl.id)) || tpl;
+    return (tpl && tpl.id != null && Templates.byId(tpl.id)) || tpl;
   }
 
   // Les modèles de la composition dans l'ordre où on les lit : la page de garde, puis chaque annexe avec le modèle de chacune de ses règles et celui
@@ -313,12 +307,12 @@ const MacroEditor = (function () {
   // Écrit la composition d'un macro-modèle dans sa ligne, comme « Enregistrer » de la fenêtre : mêmes réglages gardés (nom du PDF, en-tête et pied,
   // page : ceux de l'écran s'il est chargé, ceux de Grist sinon), jamais une composition vide ni inventée pour un macro-modèle supprimé depuis.
   async function writeComposition(id, macroSlots) {
-    const stored = cachedTemplate(id);
+    const stored = Templates.byId(id);
     if (!stored) throw new Error('macro-modèle introuvable');
     const kept = settingsToKeep(id);
     const { dateModif } = await Templates.save(stored.id, stored.nom, JSON.stringify(macroSlots), kept.nomFichierPDF, kept.headerFooter, kept.marginsMm, 'macro', null);
     // La date que Grist vient de donner à la ligne : le cache la connaît, comme un enregistrement de la fenêtre.
-    const written = cachedTemplate(id);
+    const written = Templates.byId(id);
     if (written && dateModif != null) written.dateModif = dateModif;
   }
 
@@ -358,7 +352,7 @@ const MacroEditor = (function () {
     } else {
       // Une relecture des modèles qui a croisé l'écriture a pu remettre dans le cache la composition d'avant : il garde celle qui vient d'être
       // écrite.
-      const cached = cachedTemplate(id);
+      const cached = Templates.byId(id);
       if (cached && JSON.stringify(cached.macroSlots) !== JSON.stringify(state.slots)) setComposition(cached, state.slots);
       if (summaryTpl && String(summaryTpl.id) === String(id) && !eyesShow(state.slots)) renderSummary(summaryTpl);
     }
@@ -399,7 +393,7 @@ const MacroEditor = (function () {
     const focusedEye = focused && focused.classList && focused.classList.contains('macro-summary-eye') && list.contains(focused) ? { slot: focused.dataset.slot, id: focused.dataset.templateId } : null;
     list.innerHTML = '';
     summaryParts(tpl).forEach(part => {
-      const entries = part.ids.map(id => modelEntry(id, cachedTemplate(id), part));
+      const entries = part.ids.map(id => modelEntry(id, Templates.byId(id), part));
       if (!entries.length) entries.push(node('span', 'macro-summary-model-name', I18n.t('macro.summary.noTemplate')));
       const label = node('span', 'macro-summary-part-label', part.label);
       list.appendChild(node('li', 'macro-summary-part', null, [label, node('span', 'macro-summary-models', null, entries)]));

@@ -1,18 +1,18 @@
-// Orchestration : gestion de modèles + mode Édition/Lecture + export PDF + câblage Grist + modale "Tables liées". `Editor.init()` est async : il charge
-// TipTap/ProseMirror via import() dynamique au moment de l'appel.
+// Orchestration du widget : modèles, modes Édition et Lecture, exports, câblage de Grist. `Editor.init()` est asynchrone : il charge TipTap et
+// ProseMirror par import() dynamique.
 (function () {
   let currentMode = 'edit';
   let currentTableId = null;
   let latestRecord = null;
   let latestRecordTableId = null;
-  // Mode email (planning/feature-email-mode.md) : 'document' par défaut, y compris pour un modèle jamais chargé (avant le tout premier appel à
-  // loadTemplateIntoEditor) - ne devient 'email' que via un modèle dont TypeModele='email' ou onNewEmail().
+  // Type du modèle à l'écran (planning/feature-email-mode.md) : « document » par défaut, avant même le premier chargement ; il ne devient « email »
+  // que par un modèle de ce type ou « Nouvel email ».
   let currentTypeModele = 'document';
-  // Le macro-modèle d'où le modèle à l'écran a été ouvert par le stylo de son résumé, et ce modèle : { macroId, templateId }, null sinon (cf. openTemplateFromMacro).
+  // Le macro-modèle d'où le modèle à l'écran a été ouvert par le stylo de son résumé, et ce modèle : { macroId, templateId }, null sinon (cf.
+  // openTemplateFromMacro).
   let macroOrigin = null;
-  // Valeurs BRUTES (gabarits #Variable) des 4 champs, capturées juste avant de passer en Lecture - le mode Lecture affiche des valeurs RÉSOLUES dans les
-  // MÊMES <input> (pas de duplication de zone, comme le reste de la bar-row 2/#v2-toolbar déjà partagée entre les deux modes) ; non-null uniquement pendant
-  // que le mode Lecture est actif, cf. updateEmailFieldsDisplay().
+  // Valeurs brutes (gabarits #Variable) des quatre champs, capturées juste avant de passer en Lecture : la Lecture affiche les valeurs résolues dans
+  // les mêmes <input>, sans zone en double. Non nul seulement pendant la Lecture (cf. updateEmailFieldsDisplay).
   let emailFieldsRawCache = null;
 
   const statusMsg = document.getElementById('status-msg');
@@ -36,8 +36,8 @@
   const btnCreateEmail = document.getElementById('btn-create-email');
   const emailCharCounter = document.getElementById('v2-email-char-counter');
 
-  // Résout Objet/À/Cc/Cci pour UNE ligne Grist donnée - partagé entre updateEmailFieldsDisplay (affichage Lecture), updateEmailLengthGauge (jauge §4.4) et
-  // onCreateEmail (construction réelle du mailto:), pour ne jamais faire diverger ces 3 résolutions.
+  // Résout Objet, À, Cc et Cci pour une ligne. Partagé par l'affichage en Lecture et par buildMailtoForRecord (jauge de longueur et création de
+  // l'email), pour que ces résolutions ne divergent pas.
   async function resolveEmailFieldsForRecord(rawFields, tableId, record) {
     const [objet, destinataires, cc, cci] = await Promise.all([
       Variables.resolveTextVariables(rawFields.objet, tableId, record),
@@ -48,16 +48,15 @@
     return { objet, destinataires, cc, cci };
   }
 
+  // Les quatre champs de l'email : leur clé, la même dans les réglages du modèle et dans les valeurs résolues, et leur <input>.
+  const EMAIL_FIELDS = [['objet', emailSubjectInput], ['destinataires', emailToInput], ['cc', emailCcInput], ['cci', emailCciInput]];
+  const eachEmailInput = fn => EMAIL_FIELDS.forEach(([key, input]) => { if (input) fn(input, key); });
+
   function getEmailFieldsFromInputs() {
-    // En Lecture, les <input> affichent des valeurs RÉSOLUES (cf. updateEmailFieldsDisplay) - jamais ce qu'il faut enregistrer (onSave via Ctrl+S,
-    // autosaveTick, qui ne vérifient pas currentMode). Le cache tient déjà les gabarits bruts dans cette même forme tant qu'il est non-null.
+    // En Lecture, les <input> montrent des valeurs résolues, jamais ce qu'il faut enregistrer (Ctrl+S et l'enregistrement automatique ne regardent
+    // pas le mode) : le cache tient les gabarits bruts, dans la même forme, tant qu'il n'est pas nul.
     if (emailFieldsRawCache) return emailFieldsRawCache;
-    return {
-      objet: emailSubjectInput ? emailSubjectInput.value.trim() : '',
-      destinataires: emailToInput ? emailToInput.value.trim() : '',
-      cc: emailCcInput ? emailCcInput.value.trim() : '',
-      cci: emailCciInput ? emailCciInput.value.trim() : '',
-    };
+    return Object.fromEntries(EMAIL_FIELDS.map(([key, input]) => [key, input ? input.value.trim() : '']));
   }
 
   function wireCciToggle() {
@@ -78,8 +77,9 @@
     return pdfFilenameInput ? pdfFilenameInput.value.trim() : '';
   }
 
-  // Réglages du macro-modèle chargé que sa fenêtre de composition ne montre pas, tels qu'ils sont à l'écran : nom du fichier PDF, en-tête et pied de page, page (marges, sens, format).
-  // La fenêtre (js/macro-editor.js) et « Enregistrer sous » les réécrivent avec la composition ; remis à zéro, ils perdaient en silence ce que la personne avait réglé.
+  // Réglages du macro-modèle chargé que sa fenêtre de composition ne montre pas, tels que l'écran les a : nom du fichier PDF, en-tête et pied de
+  // page, page (marges, sens, format). La fenêtre (js/macro-editor.js) et « Enregistrer sous » les réécrivent avec la composition ; remis à zéro, ils
+  // seraient perdus en silence.
   function macroSettingsOnScreen() {
     return { nomFichierPDF: getPdfFilenameTemplate(), headerFooter: Editor.getHeaderFooterData(), marginsMm: PageLayout.getMarginsMm() };
   }
@@ -100,21 +100,18 @@
     });
   }
 
-  // Reflète si le modèle actuellement chargé est le modèle par défaut - rappelé après chaque changement de modèle et après le clic sur le bouton lui-même,
-  // jamais mis à jour "à la main" ailleurs pour ne jamais désynchroniser l'icône de l'état réel.
+  // Reflète si le modèle chargé est le modèle par défaut. Rappelée après chaque changement de modèle et après le clic sur le bouton, jamais mise à
+  // jour à la main ailleurs : l'icône ne se désynchronise pas de l'état réel.
   function syncDefaultTemplateButton() {
     const btn = document.getElementById('btn-set-default-template');
     if (!btn) return;
     const currentId = Templates.getCurrentId();
-    const isDefault = currentId != null && String(Templates.getDefaultId()) === String(currentId);
+    const isDefault = Templates.isDefault(currentId);
     btn.classList.toggle('is-default', isDefault);
-    // Un modèle email ne doit jamais devenir le modèle qui s'ouvre par défaut (Antoine, 2026-09-19) :
-    // l'email est une action ponctuelle sur un enregistrement, pas un état dans lequel le widget doit
-    // démarrer. Grisé (disabled, même traitement visuel que "aucun modèle chargé"), jamais masqué. Même
-    // raison pour un macro-modèle (planning/feature-macro-modeles.md) : l'UI de base doit rester propre au
-    // démarrage, un mode spécialisé (email, macro) ne s'affiche que si l'utilisateur le demande sur le
-    // moment - un widget qui s'ouvrirait sur le panneau résumé macro serait le même désagrément.
-    btn.disabled = currentId == null || currentTypeModele === 'email' || currentTypeModele === 'macro';
+    // Un modèle email ou macro ne devient jamais le modèle par défaut (planning/feature-macro-modeles.md) : l'email est une action ponctuelle sur une
+    // ligne et le macro-modèle un mode spécialisé, pas des états où le widget doit démarrer. Le bouton est grisé (même traitement que « aucun modèle
+    // chargé »), jamais masqué.
+    btn.disabled = currentId == null || !Templates.canOpenAtStart(currentTypeModele);
   }
 
   function wireDefaultTemplateButton() {
@@ -123,7 +120,7 @@
     btn.addEventListener('click', async () => {
       const currentId = Templates.getCurrentId();
       if (!currentId || isReadOnly()) return;
-      const wasDefault = String(Templates.getDefaultId()) === String(currentId);
+      const wasDefault = Templates.isDefault(currentId);
       await Templates.setDefault(wasDefault ? null : currentId);
       await refreshTemplateList();
       templateSelect.value = currentId;
@@ -133,9 +130,19 @@
     syncDefaultTemplateButton();
   }
 
-  // Un macro-modèle (TypeModele='macro') n'a pas de contenu TipTap propre : Contenu est du JSON de composition (planning/feature-macro-modeles.md), jamais
-  // du HTML - Editor.setHTML() ne doit donc JAMAIS le recevoir. Branche à part, plus courte que le chemin normal (pas de champs email, pas d'autosave
-  // significatif puisque l'éditeur partagé n'est jamais touché pour ce type) plutôt que de parsemer loadTemplateIntoEditor de conditions supplémentaires.
+  // Le nom du modèle et son nom de fichier PDF. Ce dernier est toujours replié au chargement, même quand un nom est déjà réglé : l'interface de base
+  // reste épurée, le crayon (wirePdfFilenameToggle) le déplie à la demande, et la valeur n'est jamais perdue.
+  function showTemplateNames(tpl) {
+    if (templateNameInput) templateNameInput.value = tpl ? tpl.nom : '';
+    if (pdfFilenameInput) {
+      pdfFilenameInput.value = tpl ? (tpl.nomFichierPDF || '') : '';
+      pdfFilenameInput.hidden = true;
+    }
+  }
+
+  // Un macro-modèle n'a pas de contenu TipTap : son Contenu est le JSON de sa composition (planning/feature-macro-modeles.md), que Editor.setHTML()
+  // ne doit jamais recevoir. Branche à part, plus courte que le chemin normal (ni champs email, ni auto-enregistrement utile : l'éditeur partagé
+  // n'est pas touché), plutôt que des conditions de plus dans loadTemplateIntoEditor.
   function loadMacroIntoEditor(tpl) {
     closeTemplateRenameEditor();
     Editor.exitHeaderFooterModeIfActive();
@@ -144,12 +151,11 @@
     layerGridsStale = false;
     Editor.setHTML('');
     Editor.setHeaderFooterData(tpl ? tpl.headerFooter : null);
-    if (templateNameInput) templateNameInput.value = tpl ? tpl.nom : '';
-    if (pdfFilenameInput) { pdfFilenameInput.value = tpl ? (tpl.nomFichierPDF || '') : ''; pdfFilenameInput.hidden = true; }
+    showTemplateNames(tpl);
     currentTypeModele = 'macro';
     if (emailFieldsRow) emailFieldsRow.hidden = true;
     emailFieldsRawCache = null;
-    [emailSubjectInput, emailToInput, emailCcInput, emailCciInput].forEach(el => { if (el) { el.value = ''; el.readOnly = false; } });
+    eachEmailInput(input => { input.value = ''; input.readOnly = false; });
     MainToolbar.setEmailMode(false);
     MainToolbar.setMacroMode(true);
     MainToolbar.setGridMode(false);
@@ -170,8 +176,8 @@
     resetAutosaveState(tpl);
   }
 
-  // Bascule editor-container/macro-summary-container/reader-container selon le mode courant ET le type du modèle chargé - factorisé plutôt que dupliqué
-  // entre switchMode() et loadMacroIntoEditor()/loadTemplateIntoEditor() (un changement de modèle en pleine édition ne repasse jamais par switchMode()).
+  // Affiche l'éditeur, le résumé du macro-modèle ou la Lecture selon le mode et le type du modèle chargé. Partagé par switchMode et les deux
+  // chargeurs : un changement de modèle en pleine édition ne repasse pas par switchMode.
   function syncEditorVisibilityForMode() {
     const showEditor = currentMode === 'edit' && currentTypeModele !== 'macro';
     const showMacroSummary = currentMode === 'edit' && currentTypeModele === 'macro';
@@ -179,65 +185,56 @@
     // La bande de la barre de la case d'une grille (css/grid.css) disparaît avec l'éditeur : Lecture, résumé d'un macro-modèle.
     document.body.classList.toggle('pp-editor-hidden', !showEditor);
     if (macroSummaryContainer) macroSummaryContainer.style.display = showMacroSummary ? 'block' : 'none';
-    // Les barres flottantes d'une bulle, d'un tableau ou d'une image sont ancrées dans l'éditeur : masqué (Lecture, résumé d'un macro-modèle), elles n'ont plus rien à
-    // montrer. Sans cela la barre d'une bulle restée sélectionnée sautait en haut à gauche (8, 8), par-dessus les boutons Lecture et Édition : un clic réel sur « Lecture »
-    // fermait la barre (EditorCore.hideFloatingContextToolbars) mais le blur de l'éditeur qui suit la réaffichait aussitôt, et le passage au clavier ne la fermait jamais.
+    // Les barres flottantes d'une bulle, d'un tableau ou d'une image sont ancrées dans l'éditeur : masqué, elles n'ont plus rien à montrer. Sans
+    // cela, la barre d'une bulle restée sélectionnée sautait en haut à gauche, par-dessus les boutons Lecture et Édition, et le blur de l'éditeur la
+    // réaffichait aussitôt après un clic sur « Lecture ».
     // Le panneau Rechercher / Remplacer (js/find-replace.js) cherche dans l'éditeur : masqué, il se ferme sans lui rendre le clavier.
     if (!showEditor) { EditorCore.hideFloatingContextToolbars(); FindReplace.close({ focus: false }); }
-    // Un modèle chargé pendant que l'éditeur était masqué (Lecture, macro-modèle) n'a pas pu être mesuré : ses colonnes sont ajustées maintenant qu'il a une
-    // mise en page. Sans cela un tableau resté trop large pour la page ne rentrait qu'à la prochaine frappe. Ce n'est pas une modification de la personne :
-    // l'état « à enregistrer » reste celui d'avant, sinon un simple retour au Mode édition réécrirait le modèle à la prochaine passe d'auto-save (le chargement
-    // d'un modèle remet cet état à zéro en dernière ligne de loadTemplateIntoEditor, pour la même raison).
+    // Un modèle chargé pendant que l'éditeur était masqué n'a pas pu être mesuré : ses colonnes sont ajustées maintenant qu'il a une mise en page,
+    // sinon un tableau trop large pour la page ne rentrerait qu'à la prochaine frappe. Ce n'est pas une modification de la personne : l'état « à
+    // enregistrer » reste celui d'avant, sinon un simple retour au Mode édition réécrirait le modèle à la passe d'enregistrement suivante
+    // (loadTemplateIntoEditor remet cet état à zéro en dernier, pour la même raison).
     if (showEditor) {
       const wasDirty = autosaveDirty;
       Editor.refreshLayout();
       if (!wasDirty && autosaveDirty) { autosaveDirty = false; updateSaveStatus(); }
-      // Orientation changée pendant que l'éditeur était masqué : la grille page des images en calque est recapturée maintenant qu'il a une mise en page.
+      // Orientation changée pendant que l'éditeur était masqué : la grille page des images en calque est recapturée maintenant qu'il a une mise en
+      // page.
       recaptureStaleLayerGrids();
     }
   }
 
-  // forcedTypeModele : n'a d'effet que pour tpl=null (nouveau modèle vide, cf. onNew/onNewEmail) - un tpl existant porte déjà son propre typeModele
-  // (Templates.loadAll()), jamais réécrit ici.
+  // forcedTypeModele : seulement pour tpl = null (nouveau modèle vide, cf. startNewTemplate) ; un modèle existant porte son propre type, jamais
+  // réécrit ici.
   function loadTemplateIntoEditor(tpl, forcedTypeModele) {
     forgetMacroOriginUnless(tpl);
     if (tpl && tpl.typeModele === 'macro') { loadMacroIntoEditor(tpl); return; }
     closeTemplateRenameEditor();
-    // Changer de modèle en pleine édition d'en-tête/pied de page laisserait sinon le contenu d'en-tête chargé à la place du document principal qu'on
-    // s'apprête à écraser - même garde que Save/Export/Mode Lecture.
+    // Sans cette sortie, changer de modèle pendant l'édition d'un en-tête ou d'un pied de page laisserait leur contenu à la place du document
+    // principal qu'on s'apprête à écraser (même garde que l'enregistrement, les exports et la Lecture).
     Editor.exitHeaderFooterModeIfActive();
-    // Le garde-fou d'une grille (js/grid-editor.js) refuse tout contenu qui n'est pas « un tableau » : levé AVANT de charger celui d'un autre modèle, reposé plus bas
-    // si ce modèle est lui-même une grille.
+    // Le garde-fou d'une grille (js/grid-editor.js) refuse tout contenu qui n'est pas un tableau : levé avant de charger un autre modèle, reposé plus
+    // bas si c'est une grille.
     GridEditor.setActive(false);
-    // Marges posées AVANT setHTML : les zones 2-colonnes en mode mm calculent --layout-left dès leur toute première construction (par setHTML) à partir
-    // de PageLayout.getContentWidthMm() - les poser après aurait rendu une 1ère passe avec les marges du modèle PRÉCÉDENT.
+    // Marges posées avant setHTML : les zones à deux colonnes en mm calculent --layout-left dès leur première construction, à partir de
+    // PageLayout.getContentWidthMm() ; posées après, une première passe se ferait avec les marges du modèle précédent.
     PageLayout.setMarginsMm(tpl ? tpl.marginsMm : null);
-    layerGridsStale = false; // les grilles d'un modèle chargé sont celles de SA propre orientation
-    // Une grille n'a pas de feuille A4, mais la classe `a4-preview` ne sort des conteneurs que PLUS BAS (syncA4PreviewForModelType), après le chargement : venant d'un document, `setHTML` ci-dessous
-    // rognait le tableau chargé à la largeur d'une page (clampOverflowingTables, qui ne mesure que sous cette classe) - un classeur de 20 colonnes de 64 px arrivait à 36 px par colonne.
+    layerGridsStale = false;  // les grilles d'un modèle chargé sont celles de sa propre orientation
+    // Une grille n'a pas de feuille A4, mais la classe `a4-preview` ne sort des conteneurs que plus bas (syncA4PreviewForModelType), après le
+    // chargement : venant d'un document, `setHTML` rognerait le tableau à la largeur d'une page (clampOverflowingTables ne mesure que sous cette
+    // classe), et un classeur de 20 colonnes de 64 px arriverait à 36 px par colonne.
     if (GridEditor.isGridType(tpl ? tpl.typeModele : forcedTypeModele)) { editorContainer.classList.remove('a4-preview'); readerContainer.classList.remove('a4-preview'); }
     Editor.setHTML(tpl ? tpl.contenu : '', tpl ? tpl.suiviModifications : null);
     Editor.setHeaderFooterData(tpl ? tpl.headerFooter : null);
-    if (templateNameInput) templateNameInput.value = tpl ? tpl.nom : '';
-    if (pdfFilenameInput) {
-      pdfFilenameInput.value = tpl ? (tpl.nomFichierPDF || '') : '';
-      // Toujours replié au chargement d'un modèle (Antoine, 2026-09-19 : l'UI de base doit rester
-      // clean par défaut), même si un nom est déjà configuré - le crayon (cf. wirePdfFilenameToggle)
-      // le déplie à la demande, la valeur elle-même n'est jamais perdue.
-      pdfFilenameInput.hidden = true;
-    }
+    showTemplateNames(tpl);
     currentTypeModele = tpl ? (tpl.typeModele || 'document') : (forcedTypeModele || 'document');
     if (emailFieldsRow) emailFieldsRow.hidden = currentTypeModele !== 'email';
-    // Un changement de modèle invalide tout cache de valeurs brutes en attente de restauration (cf. updateEmailFieldsDisplay) - reparti d'un état brut pour
-    // CE modèle, la résolution (si on est déjà en Lecture) est redemandée plus bas.
+    // Un changement de modèle invalide le cache des valeurs brutes (cf. updateEmailFieldsDisplay) : on repart d'un état brut pour ce modèle, et la
+    // résolution est redemandée plus bas si l'on est en Lecture.
     emailFieldsRawCache = null;
-    [emailSubjectInput, emailToInput, emailCcInput, emailCciInput].forEach(el => { if (el) el.readOnly = false; });
-    if (emailSubjectInput) emailSubjectInput.value = tpl ? (tpl.objet || '') : '';
-    if (emailToInput) emailToInput.value = tpl ? (tpl.destinataires || '') : '';
-    if (emailCcInput) emailCcInput.value = tpl ? (tpl.cc || '') : '';
+    eachEmailInput((input, key) => { input.readOnly = false; input.value = tpl ? (tpl[key] || '') : ''; });
     if (emailCciInput) {
-      emailCciInput.value = tpl ? (tpl.cci || '') : '';
-      // Reste visible si une Cci est déjà configurée - même précaution que pdfFilenameInput ci-dessus.
+      // Contrairement au nom du fichier PDF, la Cci reste visible quand elle est déjà réglée.
       emailCciInput.hidden = !emailCciInput.value.trim();
       if (emailCciToggle) emailCciToggle.classList.toggle('is-active', !emailCciInput.hidden);
     }
@@ -246,19 +243,17 @@
     MainToolbar.setGridMode(GridEditor.isGridType(currentTypeModele));
     syncExportRowsForModelType();
     HeaderFooterPreview.setEmailMode(currentTypeModele === 'email');
-    // Une grille n'a pas de feuille A4 : la classe a4-preview sort des conteneurs AVANT que la mise en page (syncEditorVisibilityForMode) et la pagination ne
-    // mesurent quoi que ce soit.
+    // La classe a4-preview sort des conteneurs d'une grille avant que la mise en page (syncEditorVisibilityForMode) et la pagination ne mesurent quoi
+    // que ce soit.
     syncA4PreviewForModelType();
     GridEditor.setActive(GridEditor.isGridType(currentTypeModele));
     if (macroSummaryContainer) macroSummaryContainer.style.display = 'none';
     syncEditorVisibilityForMode();
-    // Le facteur d'ajustement dépend de la largeur de la page du NOUVEAU modèle (portrait ou paysage), et le conteneur garde sa taille : l'observateur de
-    // redimensionnement (wirePageFitZoom) ne le recalculerait pas. Posé avant les rafraîchissements qui suivent (pagination, Lecture).
+    // Le facteur d'ajustement dépend de la largeur de la page du nouveau modèle (portrait ou paysage) et le conteneur garde sa taille : l'observateur
+    // de redimensionnement (wirePageFitZoom) ne le recalculerait pas. Posé avant les rafraîchissements qui suivent (pagination, Lecture).
     applyPageFitZoomToBoth();
-    // Editor.setHTML() plus haut a déjà déclenché un premier rendu de l'aperçu paginé (onUpdate ->
-    // schedulePaginationRecompute) AVANT que setEmailMode ci-dessus ne soit posé - sans ce rafraîchissement
-    // explicite, les zones de marge cliquables garderaient l'état verrouillé/déverrouillé du modèle
-    // PRÉCÉDENT jusqu'à la prochaine frappe.
+    // Editor.setHTML() a déjà déclenché un premier rendu de l'aperçu paginé avant que setEmailMode ne soit posé : sans ce rafraîchissement, les zones
+    // de marge cliquables garderaient l'état verrouillé ou déverrouillé du modèle précédent jusqu'à la prochaine frappe.
     Editor.refreshPaginationPreview();
     MainToolbar.syncToolbarState();
     if (btnCreateEmail) btnCreateEmail.hidden = currentTypeModele !== 'email';
@@ -266,22 +261,22 @@
     Comments.loadForTemplate(tpl ? tpl.id : null).catch(e => console.error('[main] chargement des commentaires impossible', e));
     const headingNumberingSelect = document.getElementById('v2-heading-numbering-select');
     if (headingNumberingSelect) headingNumberingSelect.value = Editor.getHeadingNumberingStyle();
-    // Changer de modèle ne touchait jusqu'ici que #editor-container (caché en mode Lecture) - #reader-container ne se rafraîchissait donc jamais tant qu'on
-    // ne repassait pas explicitement par "Mode édition" puis "Mode lecture" (le changement de modèle semblait alors "ne rien faire" en mode Lecture).
+    // En Lecture, le conteneur de l'éditeur est caché : sans ce rendu, le changement de modèle semblerait ne rien faire jusqu'à un passage par le
+    // Mode édition.
     if (currentMode === 'read') renderReader();
     if (currentMode === 'read') updateEmailFieldsDisplay();
     updateEmailLengthGauge();
     syncDefaultTemplateButton();
     OrientationToggle.sync(currentTypeModele);
-    // DERNIÈRE ligne de cette fonction (pas avant) : Editor.setHTML()/setHeaderFooterData() juste au-dessus déclenchent leurs propres transactions
-    // ProseMirror, donc leur propre `editor.on('update')` - sans ça, charger un modèle se marquerait lui-même "modifié" aux yeux de l'auto-save.
+    // En dernier, pas avant : setHTML et setHeaderFooterData déclenchent leurs propres transactions, donc `editor.on('update')` ; sans cette remise à
+    // zéro, charger un modèle le marquerait « modifié » pour l'enregistrement automatique.
     resetAutosaveState(tpl);
   }
 
   let nameBeforeEdit = null; // le nom du modèle quand le crayon a ouvert le champ ; null hors saisie
-  // Le select choisit/affiche le modèle courant, le crayon fait apparaître l'input à sa place pour le renommer : hidden sur le <select> réel suffit,
-  // js/template-tree-select.js masque alors son déclencheur (sans cela le champ s'ouvrait à côté de la liste). Le renommage ne touche que l'affichage local
-  // : la persistance reste au prochain clic sur Enregistrer (ou à l'enregistrement automatique, qui voit la saisie).
+  // La liste choisit et affiche le modèle courant, le crayon fait apparaître le champ du nom à sa place : `hidden` sur le <select> réel suffit,
+  // js/template-tree-select.js masque alors son déclencheur (sinon le champ s'ouvrirait à côté de la liste). Le renommage ne touche que l'affichage ;
+  // il s'enregistre au prochain clic sur Enregistrer ou à l'enregistrement automatique, qui lit la saisie.
   function closeTemplateRenameEditor() {
     if (!templateNameInput || !templateSelect) return;
     templateNameInput.hidden = true;
@@ -289,22 +284,24 @@
     nameBeforeEdit = null;
   }
 
-  // Le nom sous lequel le modèle vient d'être enregistré : celui de la galerie, ou « nom (2) » s'il existait déjà (les messages de la galerie disent le nom retenu).
+  // Le nom sous lequel le modèle vient d'être enregistré : celui de la galerie, ou « nom (2) » s'il existait déjà (les messages de la galerie disent
+  // le nom retenu).
   function savedTemplateName(fallback) {
     const name = templateNameInput ? templateNameInput.value.trim() : '';
     return name || fallback;
   }
 
-  // Un nom déjà pris par un autre modèle devient « nom (2) », « nom (3) »... (demande d'Antoine du 01/10). Posé quand la saisie est VALIDÉE (Entrée, clic ailleurs, enregistrement),
-  // jamais à chaque lettre : le champ ne change pas sous les doigts de la personne qui tape, et l'enregistrement automatique, qui n'écrit que le nom courant, n'y touche pas.
-  // Un modèle déjà enregistré dont le nom n'a pas changé reste tel quel, même si un doublon d'avant cette règle existe : seul un nom NOUVEAU est vérifié (modèle pas encore
-  // enregistré, ou nom changé depuis l'ouverture du crayon). Rend le nom retenu ; s'il a changé, le champ le prend et le coin d'état dit pourquoi.
+  // Un nom déjà pris par un autre modèle devient « nom (2) », « nom (3) »... Posé quand la saisie est validée (Entrée, clic ailleurs,
+  // enregistrement), jamais à chaque lettre : le champ ne change pas sous les doigts de la personne qui tape, et l'enregistrement automatique, qui
+  // n'écrit que le nom courant, n'y touche pas.
+  // Un modèle enregistré dont le nom n'a pas changé reste tel quel, même avec un doublon antérieur : seul un nom nouveau est vérifié (modèle pas
+  // encore enregistré, ou nom changé depuis l'ouverture du crayon). Rend le nom retenu ; s'il a changé, le champ le prend et le coin d'état le dit.
   function settleTemplateName() {
     if (!templateNameInput) return '';
     const typed = templateNameInput.value.trim();
     if (!typed) return typed;
     const id = Templates.getCurrentId();
-    const stored = id == null ? null : Templates.getCached().find(t => String(t.id) === String(id));
+    const stored = Templates.byId(id);
     // Pas encore enregistré (id nul : nouveau modèle, copie, galerie) : le nom est toujours vérifié.
     const previous = id == null ? null : (nameBeforeEdit != null ? nameBeforeEdit : (stored ? stored.nom : null));
     if (previous != null && Templates.sameName(typed, previous)) return typed;
@@ -312,7 +309,8 @@
     if (unique !== typed) {
       templateNameInput.value = unique;
       markAutosaveDirty(); // le nom a pu être écrit tel que tapé par un passage de l'enregistrement automatique : le prochain écrit le nouveau
-      // Enregistrement automatique coupé, le coin d'état garde « Modifications non enregistrées. » : ce message-là protège ce qui n'est écrit nulle part, le nouveau nom se lit dans le titre.
+      // Enregistrement automatique coupé, le coin d'état garde « Modifications non enregistrées. » : ce message-là protège ce qui n'est écrit nulle
+      // part, le nouveau nom se lit dans le titre.
       if (isAutosaveEnabled()) setStatus(I18n.t('status.nameExists', { name: unique }));
     }
     return unique;
@@ -322,7 +320,8 @@
     const renameBtn = document.getElementById('btn-rename-template');
     if (!renameBtn || !templateNameInput || !templateSelect) return;
     function openEditor() {
-      // Le champ reprend la largeur du nom qu'il remplace (120 px au moins) : la barre ne bouge pas, et à 700 px elle ne passe pas sur une deuxième ligne.
+      // Le champ reprend la largeur du nom qu'il remplace (120 px au moins) : la barre ne bouge pas, et à 700 px elle ne passe pas sur une deuxième
+      // ligne.
       const shown = document.querySelector('#v2-title-cluster .tts-wrap');
       if (shown && shown.offsetWidth) templateNameInput.style.width = Math.max(120, shown.offsetWidth) + 'px';
       nameBeforeEdit = templateNameInput.value.trim();
@@ -335,8 +334,9 @@
       if (nameBeforeEdit !== null) settleTemplateName(); // seulement une saisie ouverte par le crayon, pas un blur parasite
       const opt = templateSelect.options[templateSelect.selectedIndex];
       if (opt && templateNameInput.value.trim()) {
-        // Même libellé que refreshTemplateList : l'étoile du modèle par défaut reste, la liste le montre avec le nouveau nom jusqu'à l'enregistrement.
-        const isDefault = opt.value !== '' && String(Templates.getDefaultId()) === String(opt.value);
+        // Même libellé que refreshTemplateList : l'étoile du modèle par défaut reste, la liste le montre avec le nouveau nom jusqu'à
+        // l'enregistrement.
+        const isDefault = Templates.isDefault(opt.value);
         opt.textContent = isDefault ? (templateNameInput.value.trim() + ' ★') : templateNameInput.value.trim();
       }
       closeTemplateRenameEditor();
@@ -346,18 +346,21 @@
     templateNameInput.addEventListener('keydown', e => { if (e.key === 'Enter') templateNameInput.blur(); });
   }
 
-  // === Quitter le modèle courant avec des modifications en attente ===
-  // Changer de modèle, créer un document, un email ou une grille, ou en créer un depuis la galerie remplace le contenu de l'éditeur : ce qui attendait d'être
-  // enregistré (autosaveDirty : enregistrement automatique coupé, ou allumé mais dans les 2,5 s d'avant le prochain passage) disparaissait sans rien demander.
-  // Choix d'Antoine du 01/10, « Toujours demander » : une fenêtre Enregistrer / Abandonner / Annuler, que l'enregistrement automatique soit allumé ou non.
-  // Pas de question quand rien n'attend, ni en lecture seule (rien ne s'enregistre pour cette personne), ni pour un macro-modèle (il s'édite dans sa fenêtre).
-  // Les appelants gardent leur chemin synchrone quand il n'y a rien à demander : `if (hasEditsToConfirmBeforeLeaving() && !(await askBeforeLeaving())) return;`.
+  // Quitter le modèle courant avec des modifications en attente
+  // Changer de modèle, créer un document, un email ou une grille, ou en créer un depuis la galerie remplace le contenu de l'éditeur : ce qui
+  // attendait d'être enregistré (autosaveDirty : enregistrement automatique coupé, ou allumé mais dans les 2,5 s d'avant le prochain passage)
+  // disparaîtrait sans rien demander. Une fenêtre Enregistrer / Abandonner / Annuler est donc posée, que l'enregistrement automatique soit allumé ou
+  // non.
+  // Pas de question quand rien n'attend, ni en lecture seule (rien ne s'enregistre pour cette personne), ni pour un macro-modèle (il s'édite dans sa
+  // fenêtre). Les appelants gardent leur chemin synchrone quand il n'y a rien à demander : `if (hasEditsToConfirmBeforeLeaving() && !(await
+  // askBeforeLeaving())) return;`.
   function hasEditsToConfirmBeforeLeaving() {
     return autosaveDirty && !isReadOnly() && currentTypeModele !== 'macro';
   }
 
-  // true : on peut continuer (« Abandonner », ou « Enregistrer » réussi) ; false : la personne reste (« Annuler », Échap, enregistrement refusé : le message d'erreur
-  // est alors dans le coin d'état). Sans nom il n'y a pas d'« Enregistrer » : un nouveau modèle jamais enregistré ne peut pas l'être tant qu'il n'en a pas.
+  // true : on peut continuer (« Abandonner », ou « Enregistrer » réussi) ; false : la personne reste (« Annuler », Échap, enregistrement refusé : le
+  // message d'erreur est alors dans le coin d'état). Sans nom il n'y a pas d'« Enregistrer » : un nouveau modèle jamais enregistré ne peut pas l'être
+  // tant qu'il n'en a pas.
   async function askBeforeLeaving() {
     const name = templateNameInput ? templateNameInput.value.trim() : '';
     const choices = [{ value: 'discard', label: I18n.t('dialog.unsaved.discard') }];
@@ -381,9 +384,10 @@
     return false;
   }
 
-  // Une fenêtre ou une liste abandonnée (« Annuler », la liste des feuilles d'un Excel) : la personne reprend où elle en était. Ouverte depuis une ligne de menu (une étiquette que la souris ne
-  // focalise pas), elle n'avait rien à rendre : le bouton qu'on vient de cliquer, tout juste caché, garde le focus jusqu'au prochain rendu, d'où le test « n'est plus affiché » en plus du
-  // focus sur <body>. Un focus qui est ailleurs, sur un champ où l'on vient de cliquer, y reste.
+  // Une fenêtre ou une liste abandonnée (« Annuler », la liste des feuilles d'un Excel) : la personne reprend où elle en était. Ouverte depuis une
+  // ligne de menu (une étiquette que la souris ne focalise pas), elle n'a aucun focus à rendre : le bouton cliqué, tout juste caché, le garde
+  // jusqu'au prochain rendu, d'où le test « n'est plus affiché » en plus du focus sur <body>. Un focus ailleurs, sur un champ où l'on vient de
+  // cliquer, y reste.
   function refocusEditorIfLost() {
     const active = document.activeElement;
     if (currentMode === 'edit' && (!active || active === document.body || active.getClientRects().length === 0)) EditorCore.getEditor().commands.focus();
@@ -392,7 +396,8 @@
   async function onTemplateSelectChange() {
     const id = templateSelect.value;
     if (hasEditsToConfirmBeforeLeaving()) {
-      // La liste referme son menu et rend le focus à son bouton juste après cet évènement : la question vient après, sinon ce focus passerait derrière la fenêtre.
+      // La liste referme son menu et rend le focus à son bouton juste après cet évènement : la question vient après, sinon ce focus passerait
+      // derrière la fenêtre.
       await Promise.resolve();
       if (!(await askBeforeLeaving())) {
         const currentId = Templates.getCurrentId();
@@ -403,54 +408,43 @@
       templateSelect.value = id;
     }
     if (!id) { loadTemplateIntoEditor(null); return; }
-    const tpl = Templates.getCached().find(t => String(t.id) === String(id));
+    const tpl = Templates.byId(id);
     if (tpl) loadTemplateIntoEditor(tpl);
   }
 
-  // « Modèle selon la ligne » (js/row-template.js) : ouvre le modèle que la ligne désigne, par le chemin ordinaire de la liste - donc avec sa question « Enregistrer / Abandonner /
-  // Annuler » quand des modifications attendent. true : ce modèle est ouvert ; false : il ne l'est pas (introuvable, ou « Annuler » : la personne garde le sien).
+  // « Modèle selon la ligne » (js/row-template.js) : ouvre le modèle que la ligne désigne, par le chemin ordinaire de la liste - donc avec sa
+  // question « Enregistrer / Abandonner / Annuler » quand des modifications attendent. true : ce modèle est ouvert ; false : il ne l'est pas
+  // (introuvable, ou « Annuler » : la personne garde le sien).
   async function openTemplateForRow(id) {
-    if (!Templates.getCached().some(t => String(t.id) === String(id))) return false;
-    if (String(Templates.getCurrentId()) === String(id)) return false;
+    if (!Templates.byId(id) || Templates.isCurrent(id)) return false;
     templateSelect.value = String(id);
     await onTemplateSelectChange();
-    return String(Templates.getCurrentId()) === String(id);
+    return Templates.isCurrent(id);
   }
 
-  // loadTemplateIntoEditor(null) appelle resetAutosaveState(null) -> updateSaveStatus(), qui affiche déjà l'avertissement "modèle non enregistré"
-  // (cf. plus haut) : ne PAS l'écraser après coup avec un message générique, sinon cet avertissement disparaîtrait pile au moment où il est le plus
-  // utile (juste après avoir cliqué "Nouveau modèle"). Sans question : onDelete l'appelle quand le modèle courant vient d'être supprimé.
-  function startBlankDocument() {
+  // loadTemplateIntoEditor(null) appelle resetAutosaveState(null), puis updateSaveStatus, qui affiche déjà l'avertissement « modèle non
+  // enregistré » : ne pas l'écraser après coup par un message générique, il disparaîtrait au moment où il est le plus utile, juste après « Nouveau
+  // modèle ». Sans question : onDelete l'appelle quand le modèle courant vient d'être supprimé.
+  // typeModele : le type d'un nouveau modèle vide (email : bandeau Objet / À / Cc / Cci et verrouillage de la barre d'outils ; grille : tableau de
+  // départ, posé par GridEditor.setActive).
+  function startBlankDocument(typeModele) {
     templateSelect.value = '';
-    loadTemplateIntoEditor(null);
+    loadTemplateIntoEditor(null, typeModele);
   }
 
-  async function onNew() {
+  async function startNewTemplate(typeModele) {
     if (isReadOnly()) return;
     if (hasEditsToConfirmBeforeLeaving() && !(await askBeforeLeaving())) return;
-    startBlankDocument();
+    startBlankDocument(typeModele);
   }
+  const onNew = () => startNewTemplate();
+  const onNewEmail = () => startNewTemplate('email');
+  const onNewGrid = () => startNewTemplate(GridEditor.TYPE);
 
-  // Même schéma qu'onNew() - seule différence, le 2e argument qui bascule le bandeau Objet/À/Cc/Cci et le verrouillage de la toolbar.
-  async function onNewEmail() {
-    if (isReadOnly()) return;
-    if (hasEditsToConfirmBeforeLeaving() && !(await askBeforeLeaving())) return;
-    templateSelect.value = '';
-    loadTemplateIntoEditor(null, 'email');
-  }
-
-  // Même schéma encore : une nouvelle grille est un modèle vide d'un type fixé à la création (un tableau de départ, posé par GridEditor.setActive).
-  async function onNewGrid() {
-    if (isReadOnly()) return;
-    if (hasEditsToConfirmBeforeLeaving() && !(await askBeforeLeaving())) return;
-    templateSelect.value = '';
-    loadTemplateIntoEditor(null, GridEditor.TYPE);
-  }
-
-  // Import d'un classeur Excel (js/grid-xlsx-import.js, sujet 18 du 02/10 : « Prévoir un Import Excel pour le modèle Grille »). Le sélecteur de fichier doit s'ouvrir DANS le clic ; le
-  // classeur est lu ensuite et, s'il a plusieurs feuilles visibles, une liste avec recherche demande laquelle devient la grille (choix d'Antoine du 02/10, « Oui, une liste »). Seulement
-  // après le choix on demande de quitter le modèle courant s'il a des modifications non enregistrées : choisir « Annuler » dans le sélecteur, fermer la liste des feuilles, un fichier
-  // illisible ou une feuille vide ne coûte rien. Le résultat est une NOUVELLE grille, sans nom et pas encore enregistrée (comme « Nouvelle grille »), qui le dit tant qu'elle n'a pas de nom.
+  // Import d'un classeur Excel (js/grid-xlsx-import.js). Le sélecteur de fichier doit s'ouvrir dans le clic ; le classeur est lu ensuite et, s'il a
+  // plusieurs feuilles visibles, une liste avec recherche demande laquelle devient la grille. On ne demande de quitter le modèle courant (s'il a des
+  // modifications non enregistrées) qu'après ce choix : « Annuler » dans le sélecteur, une liste fermée, un fichier illisible ou une feuille vide ne
+  // coûtent rien. Le résultat est une nouvelle grille, sans nom et pas encore enregistrée, comme « Nouvelle grille ».
   const XLSX_IMPORT_ERRORS = { oldFormat: 'status.xlsxImportOldFormat', unreadable: 'status.xlsxImportUnreadable', empty: 'status.xlsxImportEmpty', tooBig: 'status.xlsxImportTooBig' };
   function onImportXlsx() {
     if (isReadOnly()) return;
@@ -462,8 +456,8 @@
         const book = await GridXlsxImport.openFile(file);
         let index = 0;
         if (book.sheets.length > 1) {
-          // Sous le « + » : c'est de là que la personne est partie. Elle recouvre le coin d'état, qui n'a rien à dire pendant ce temps (« Lecture… » serait faux, la lecture est finie) ;
-          // refermée sans choix, la liste ne change rien : le coin d'état redit l'état du modèle en cours.
+          // Sous le « + » : c'est de là que la personne est partie. Elle recouvre le coin d'état, qui n'a rien à dire pendant ce temps (« Lecture… »
+          // serait faux, la lecture est finie) ; refermée sans choix, la liste ne change rien : le coin d'état redit l'état du modèle en cours.
           setStatus('');
           const picked = await GridXlsxImport.chooseSheet(book.sheets, { anchor: () => document.getElementById('btn-new').getBoundingClientRect() });
           if (picked === null) { updateSaveStatus(); refocusEditorIfLost(); return; }
@@ -488,42 +482,45 @@
     });
   }
 
-  // Un nouveau macro-modèle n'a rien à "charger" avant d'avoir été composé et enregistré au moins une fois (contrairement à onNew/onNewEmail, qui vident
-  // l'éditeur immédiatement) - ouvre directement l'écran de composition, vide.
+  // Un nouveau macro-modèle n'a rien à charger avant d'avoir été composé et enregistré : contrairement aux autres types, il ne vide pas l'éditeur, il
+  // ouvre l'écran de composition, vide.
   function onNewMacro() {
     if (isReadOnly()) return;
     MacroEditor.openModal(null);
   }
 
-  // Rappel de MacroEditor après "Enregistrer" dans sa modale (nouveau macro-modèle ou modification d'un existant) - même geste que la fin d'onSave() :
-  // rafraîchir la liste, sélectionner ce qui vient d'être enregistré, resynchroniser le bouton "par défaut".
-  // renamedTo : le nom retenu quand celui qui était demandé existait déjà (« nom (2) »), le coin d'état le dit à la place de « Macro-modèle enregistré ».
+  // Rappel de MacroEditor après « Enregistrer » dans sa fenêtre (nouveau macro-modèle ou modification) : comme la fin d'onSave, il relit la liste,
+  // sélectionne ce qui vient d'être enregistré et resynchronise le bouton « par défaut ».
+  // renamedTo : le nom retenu quand celui qui était demandé existait déjà (« nom (2) »), que le coin d'état dit à la place de « Macro-modèle
+  // enregistré ».
   async function onMacroSaved(id, renamedTo) {
     await refreshTemplateList();
     const done = () => setStatus(renamedTo ? I18n.t('status.nameExists', { name: renamedTo }) : I18n.t('status.macroSaved'));
-    // Le macro-modèle est enregistré dans tous les cas ; le charger remplace l'éditeur, donc les modifications en attente du modèle qu'on quitte : même question.
+    // Le macro-modèle est enregistré dans tous les cas ; le charger remplace l'éditeur, donc les modifications en attente du modèle qu'on quitte :
+    // même question.
     if (hasEditsToConfirmBeforeLeaving() && !(await askBeforeLeaving())) { done(); return; }
     templateSelect.value = id;
-    const tpl = Templates.getCached().find(t => String(t.id) === String(id));
-    loadTemplateIntoEditor(tpl);
+    loadTemplateIntoEditor(Templates.byId(id));
     syncDefaultTemplateButton();
     done();
   }
 
-  // Rappel de MacroEditor quand l'œil d'un modèle du résumé a fini d'écrire la composition (masqué ou affiché, `ok` à faux si Grist a refusé) : le coin d'état le dit, dans la langue de l'interface.
+  // Rappel de MacroEditor quand l'œil d'un modèle du résumé a fini d'écrire la composition (masqué ou affiché, `ok` à faux si Grist a refusé) : le
+  // coin d'état le dit, dans la langue de l'interface.
   function onMacroModelVisibility({ name, hidden, ok }) {
     if (!ok) { setStatus(I18n.t('status.saveError'), true); return; }
     setStatus(I18n.t(hidden ? 'status.macroModelHidden' : 'status.macroModelShown', { name }));
   }
 
-  // === Ouvrir un modèle d'un macro-modèle, et y revenir ===
-  // Le stylo d'une ligne du résumé d'un macro-modèle (js/macro-editor.js:showSummary) ouvre ce modèle dans l'éditeur comme un choix de la liste ; tant qu'il est à l'écran, le bandeau « Revenir au
-  // macro-modèle » (#macro-return-bar) ramène au macro-modèle d'où l'on vient. macroOrigin = { macroId, templateId }, remis à null dès qu'un AUTRE modèle se charge (liste, « + », galerie, suppression :
-  // forgetMacroOriginUnless, en tête de loadTemplateIntoEditor), jamais quand le même est rechargé (conflit d'enregistrement automatique).
+  // Ouvrir un modèle d'un macro-modèle, et y revenir
+  // Le stylo d'une ligne du résumé d'un macro-modèle (js/macro-editor.js:showSummary) ouvre ce modèle dans l'éditeur comme un choix de la liste ;
+  // tant qu'il est à l'écran, le bandeau « Revenir au macro-modèle » (#macro-return-bar) ramène au macro-modèle d'origine. macroOrigin = { macroId,
+  // templateId } est remis à null dès qu'un autre modèle se charge (liste, « + », galerie, suppression : forgetMacroOriginUnless, en tête de
+  // loadTemplateIntoEditor), jamais quand le même est rechargé (conflit d'enregistrement automatique).
 
   function syncMacroReturnBar() {
     if (!macroReturnBar) return;
-    const macro = macroOrigin ? Templates.getCached().find(t => String(t.id) === String(macroOrigin.macroId)) : null;
+    const macro = macroOrigin && Templates.byId(macroOrigin.macroId);
     macroReturnBar.hidden = !macro;
     const text = document.getElementById('macro-return-text');
     if (!text) return;
@@ -532,21 +529,23 @@
   }
 
   function forgetMacroOriginUnless(tpl) {
-    if (!macroOrigin || (tpl && String(tpl.id) === String(Templates.getCurrentId()))) return;
+    if (!macroOrigin || (tpl && Templates.isCurrent(tpl.id))) return;
     macroOrigin = null;
     syncMacroReturnBar();
   }
 
-  // Un macro-modèle n'a rien à enregistrer avant d'être quitté (il s'édite dans sa fenêtre) : pas de question ici, contrairement au retour (returnToMacro). La liste et le cache des modèles sont relus
-  // d'abord : un modèle créé ailleurs depuis le dernier passage n'a pas encore sa ligne dans le <select> (le choisir y laisserait « Nouveau modèle »), et le texte lu est celui de Grist.
+  // Un macro-modèle n'a rien à enregistrer avant d'être quitté (il s'édite dans sa fenêtre) : pas de question ici, contrairement au retour
+  // (returnToMacro). La liste et le cache des modèles sont relus d'abord : un modèle créé ailleurs depuis le dernier passage n'a pas encore sa ligne
+  // dans le <select> (le choisir y laisserait « Nouveau modèle »), et le texte lu est celui de Grist.
   async function openTemplateFromMacro(templateId) {
     if (isReadOnly() || currentTypeModele !== 'macro') return;
     const macroId = Templates.getCurrentId();
     if (macroId == null) return;
     await refreshTemplateList();
-    const tpl = Templates.getCached().find(t => String(t.id) === String(templateId));
-    // Un autre modèle s'est chargé pendant la relecture (deux clics de suite) : celui-là gagne. Modèle disparu : le macro-modèle reste, la liste le montre de nouveau.
-    if (String(Templates.getCurrentId()) !== String(macroId)) return;
+    const tpl = Templates.byId(templateId);
+    // Un autre modèle s'est chargé pendant la relecture (deux clics de suite) : celui-là gagne. Modèle disparu : le macro-modèle reste, la liste le
+    // montre de nouveau.
+    if (!Templates.isCurrent(macroId)) return;
     if (!tpl || tpl.typeModele === 'macro') { templateSelect.value = macroId; return; }
     templateSelect.value = tpl.id;
     loadTemplateIntoEditor(tpl);
@@ -554,18 +553,19 @@
     syncMacroReturnBar();
   }
 
-  // Même chemin qu'un choix du macro-modèle dans la liste : la question « Modifications non enregistrées » est posée si le modèle ouvert en a, et « Annuler » reste sur lui (le bandeau aussi).
-  // Le cache des modèles est relu d'abord : Templates.save ne touche pas à Contenu, et ce qui vient d'être modifié ici doit se lire dans le macro-modèle (Lecture, PDF, Word) sans attendre le
-  // prochain passage de l'enregistrement automatique.
+  // Même chemin qu'un choix du macro-modèle dans la liste : la question « Modifications non enregistrées » est posée si le modèle ouvert en a, et
+  // « Annuler » reste sur lui (le bandeau aussi). Le cache des modèles est relu d'abord : Templates.save ne touche pas à Contenu, et ce qui vient
+  // d'être modifié ici doit se lire dans le macro-modèle (Lecture, PDF, Word) sans attendre le prochain passage de l'enregistrement automatique.
   async function returnToMacro() {
     const origin = macroOrigin;
     if (!origin) return;
     try { await Templates.loadAll(); } catch (e) { console.error('[main] relecture des modèles impossible', e); }
-    // Macro-modèle supprimé depuis (par quelqu'un d'autre) : le modèle reste à l'écran, le bandeau s'efface (choisir une valeur absente de la liste ouvrirait un modèle vide).
-    if (!Templates.getCached().some(t => String(t.id) === String(origin.macroId))) { syncMacroReturnBar(); return; }
+    // Macro-modèle supprimé depuis (par quelqu'un d'autre) : le modèle reste à l'écran, le bandeau s'efface (choisir une valeur absente de la liste
+    // ouvrirait un modèle vide).
+    if (!Templates.byId(origin.macroId)) { syncMacroReturnBar(); return; }
     templateSelect.value = origin.macroId;
     await onTemplateSelectChange();
-    if (currentTypeModele !== 'macro' || String(Templates.getCurrentId()) !== String(origin.macroId)) return;
+    if (currentTypeModele !== 'macro' || !Templates.isCurrent(origin.macroId)) return;
     // Le stylo du modèle qu'on vient de quitter reprend le focus : le bouton « Revenir » a disparu avec le bandeau.
     const pencil = document.querySelector('.macro-summary-edit[data-template-id="' + CSS.escape(String(origin.templateId)) + '"]');
     if (pencil) pencil.focus();
@@ -577,11 +577,11 @@
     I18n.onChange(syncMacroReturnBar); // le nom du macro-modèle est dans la phrase du bandeau
   }
 
-  // Un seul enregistrement manuel à la fois (carte « Corriger » d'Antoine du 02/10). Grist lent, un deuxième clic sur Enregistrer (ou Ctrl+S) pendant que le premier écrivait partait
-  // aussitôt : l'identifiant d'un modèle tout neuf n'arrive qu'à la fin de l'écriture, les deux gestes créaient donc une ligne chacun, sous le même nom - deux modèles identiques.
-  // Le deuxième attend la fin du premier (liste relue comprise), puis enregistre ce que l'écran montre ALORS, dans la même ligne ; plusieurs gestes pendant la même écriture n'en
-  // font qu'un, qui lit l'état au moment où il part (il n'y a rien à rattraper). Un enregistrement qui ne revient jamais (connexion perdue) ne bloque pas le bouton au-delà de
-  // SAVE_WATCHDOG_MS, comme les écritures de js/templates.js.
+  // Un seul enregistrement manuel à la fois. Avec Grist lent, un deuxième clic sur Enregistrer (ou Ctrl+S) pendant la première écriture partait
+  // aussitôt : l'identifiant d'un modèle tout neuf n'arrive qu'à la fin de l'écriture, et les deux gestes créaient chacun une ligne sous le même nom.
+  // Le deuxième attend la fin du premier (liste relue comprise), puis enregistre ce que l'écran montre alors, dans la même ligne ; plusieurs gestes
+  // pendant la même écriture n'en font qu'un, qui lit l'état au moment où il part. Un enregistrement qui ne revient jamais (connexion perdue) ne
+  // bloque pas le bouton au-delà de SAVE_WATCHDOG_MS, comme les écritures de js/templates.js.
   const SAVE_WATCHDOG_MS = 60000;
   let saveRunning = null; // la promesse de l'enregistrement en cours
   let saveStartedAt = 0;
@@ -595,7 +595,7 @@
     });
   }
   function onSave() {
-    if (currentTypeModele === 'macro') return runSave(); // le bouton n'y fait qu'ouvrir la fenêtre du macro-modèle : rien d'écrit, rien à faire attendre
+    if (currentTypeModele === 'macro') return runSave(); // le bouton n'y fait qu'ouvrir la fenêtre du macro-modèle : rien à écrire
     if (!saveIsRunning()) {
       saveStartedAt = Date.now();
       const run = saveRunning = runSave().finally(() => { if (saveRunning === run) saveRunning = null; });
@@ -605,15 +605,18 @@
     return saveWaiting;
   }
 
-  // Un macro-modèle s'édite exclusivement via sa modale (MacroEditor) - jamais Editor.getHTML() (toujours vide pour ce type, cf. loadMacroIntoEditor), qui
-  // écraserait silencieusement ses slots avec un contenu vide si on laissait passer le chemin normal ci-dessous. "Enregistrer" rouvre donc directement la
-  // modale plutôt que d'enregistrer quoi que ce soit lui-même.
+  // Écrit dans Grist le modèle tel que l'écran le montre : `html` (celui de l'éditeur par défaut), ses en-têtes, sa page, son type et ses champs
+  // email.
+  function saveScreenAs(id, nom, suiviModifications, html = Editor.getHTML()) {
+    return Templates.save(id, nom, html, getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsMm(), currentTypeModele, getEmailFieldsFromInputs(), suiviModifications);
+  }
+
+  // Un macro-modèle s'édite uniquement dans sa fenêtre (MacroEditor) : Editor.getHTML() est toujours vide pour ce type et, par le chemin normal,
+  // écraserait sa composition par un contenu vide. « Enregistrer » rouvre donc la fenêtre au lieu d'enregistrer.
   async function runSave() {
     if (isReadOnly()) return; // Ctrl+S compris (wireSaveShortcut) : le bouton, lui, est déjà grisé
     if (currentTypeModele === 'macro') {
-      const id = Templates.getCurrentId();
-      const tpl = id != null ? Templates.getCached().find(t => String(t.id) === String(id)) : null;
-      MacroEditor.openModal(tpl);
+      MacroEditor.openModal(Templates.byId(Templates.getCurrentId()));
       return;
     }
     Editor.exitHeaderFooterModeIfActive();
@@ -625,47 +628,52 @@
     const epoch = autosaveEpoch;
     try {
       const suiviModifications = await Editor.getSuiviModificationsForSave();
-      // Cette attente (l'identification de la personne : une écriture et une lecture de Grist quand elle n'est pas encore connue, des secondes quand il est lent) a pu laisser choisir un autre modèle :
-      // l'éditeur montre alors celui-là, et l'écrire sous l'identifiant de ce modèle-ci le remplacerait. Le choisir en répondant « Abandonner » voulait dire renoncer à cet enregistrement.
+      // Cette attente (l'identification de la personne : une écriture et une lecture de Grist quand elle n'est pas encore connue, des secondes quand
+      // Grist est lent) a pu laisser choisir un autre modèle : l'éditeur montre alors celui-là, et l'écrire sous l'identifiant de ce modèle-ci le
+      // remplacerait. Le choisir en répondant « Abandonner » renonce à cet enregistrement.
       if (epoch !== autosaveEpoch) return;
       const editVersion = autosaveEditVersion;
-      ({ id: savedId, dateModif } = await Templates.save(id, nom, Editor.getHTML(), getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsMm(), currentTypeModele, getEmailFieldsFromInputs(), suiviModifications));
-      // La date écrite est notée TOUT DE SUITE, avant la relecture de la liste plus bas (une lecture de Grist de plus : plusieurs secondes quand il est lent). Un passage de l'enregistrement
-      // automatique qui lisait entre les deux voyait la date que ce geste venait d'écrire sans la connaître : « modifié ailleurs » (cf. autosaveTick). Un modèle chargé pendant l'écriture
-      // (autosaveEpoch) garde son propre état. Un enregistrement manuel tranche tout conflit en cours en faveur de CETTE version - pas besoin de recharger.
+      ({ id: savedId, dateModif } = await saveScreenAs(id, nom, suiviModifications));
+      // La date écrite est notée tout de suite, avant la relecture de la liste plus bas (une lecture de Grist de plus, des secondes quand il est
+      // lent) : un passage de l'enregistrement automatique entre les deux verrait cette date sans la connaître et conclurait « modifié ailleurs »
+      // (cf. autosaveTick). Un modèle chargé pendant l'écriture (autosaveEpoch) garde son propre état. Un enregistrement manuel tranche tout conflit
+      // en cours en faveur de cette version : pas besoin de recharger.
       if (epoch === autosaveEpoch) {
         autosaveLastKnownDateModif = dateModif;
         noteSaved(editVersion);
         hideConflictBanner();
       }
     } catch (e) {
-      // Avant ce try/catch, un échec ici (ex. colonne Grist manquante) interrompait silencieusement la fonction : aucune erreur visible, la liste des
-      // modèles/le statut n'étaient jamais mis à jour, et rien dans l'interface ne laissait deviner que "Enregistrer" n'avait rien enregistré.
+      // Un échec ici (par exemple une colonne Grist manquante) doit se voir : sans ce traitement, la fonction s'interromprait sans message, la liste
+      // et le coin d'état ne seraient pas mis à jour, et rien ne dirait que « Enregistrer » n'a rien enregistré.
       console.error('[main] échec de l’enregistrement manuel', e);
       setStatus(I18n.t('status.saveError'), true);
       return;
     }
     if (epoch === autosaveEpoch) Templates.setCurrentId(savedId);
     await refreshTemplateList();
-    // L'écriture et la relecture de la liste durent des secondes quand Grist est lent : un autre modèle a pu être choisi entre-temps (autosaveEpoch). L'écran, la liste et le modèle courant sont alors
-    // les siens : ce geste ne les remet pas sur le modèle qu'il vient d'écrire (l'enregistrement automatique y écrirait ensuite ce que l'écran montre), il ne fait que rafraîchir la liste.
+    // L'écriture et la relecture de la liste durent des secondes quand Grist est lent : un autre modèle a pu être choisi entre-temps (autosaveEpoch).
+    // L'écran, la liste et le modèle courant sont alors les siens : ce geste ne les remet pas sur le modèle qu'il vient d'écrire (l'enregistrement
+    // automatique y écrirait ensuite ce que l'écran montre), il ne fait que rafraîchir la liste.
     const sameTemplate = epoch === autosaveEpoch;
     const shownId = sameTemplate ? savedId : Templates.getCurrentId();
     templateSelect.value = shownId == null ? '' : shownId;
     syncDefaultTemplateButton();
-    // Premier enregistrement d'un modèle tout neuf : Comments n'a encore JAMAIS reçu d'id de modèle (loadForTemplate n'est appelé que par
-    // loadTemplateIntoEditor, qui ne repasse pas par ici). Sans ceci, "Commenter la sélection" répondait "Enregistrez d'abord le modèle" à quelqu'un qui
-    // venait précisément de l'enregistrer, jusqu'à ce qu'il change de modèle et revienne. Uniquement quand l'id CHANGE : un ré-enregistrement du même
-    // modèle n'a rien à recharger, et loadForTemplate referme le popup ouvert.
+    // Premier enregistrement d'un modèle tout neuf : Comments n'a encore reçu aucun identifiant de modèle (loadForTemplate n'est appelé que par
+    // loadTemplateIntoEditor, qui ne repasse pas par ici). Sans cet appel, « Commenter la sélection » répondrait « Enregistrez d'abord le modèle » à
+    // quelqu'un qui vient de l'enregistrer, jusqu'à un changement de modèle. Seulement quand l'identifiant change : un nouvel enregistrement du même
+    // modèle n'a rien à recharger, et loadForTemplate referme le panneau ouvert.
     if (sameTemplate && String(id) !== String(savedId)) {
       Comments.loadForTemplate(savedId).catch(e => console.error('[main] chargement des commentaires impossible après création du modèle', e));
-      forgetMacroOriginUnless(null); // une copie (« Enregistrer sous… ») n'est pas un modèle du macro-modèle d'où l'on venait : le bandeau n'a plus de sens
+      forgetMacroOriginUnless(null); // une copie n'est pas un modèle du macro-modèle d'où l'on venait : le bandeau n'a plus de sens
     }
     updateSaveStatus();
-    if (sameTemplate && nom !== typedName) setStatus(I18n.t('status.nameExists', { name: nom })); // à la place de « Enregistré à… » : le nom a changé, c'est ce qu'il faut lire
+    // à la place de « Enregistré à… » : le nom a changé, c'est ce qu'il faut lire
+    if (sameTemplate && nom !== typedName) setStatus(I18n.t('status.nameExists', { name: nom }));
   }
 
-  // La copie est proposée sous le premier nom libre (« Contrat (2) » pour « Contrat ») : Entrée suffit, la saisie est sélectionnée pour la remplacer d'une frappe.
+  // La copie est proposée sous le premier nom libre (« Contrat (2) » pour « Contrat ») : Entrée suffit, la saisie est sélectionnée pour la remplacer
+  // d'une frappe.
   async function onSaveAs() {
     if (isReadOnly()) return;
     const currentName = templateNameInput ? templateNameInput.value.trim() : '';
@@ -673,11 +681,10 @@
     if (!asked) return;
     const nom = asked.trim();
     if (!nom) return;
-    // Copie un macro-modèle par sa composition (mêmes slots, nouvel id Grist) plutôt que de passer par onSave() ci-dessus, qui rouvrirait la modale au
-    // lieu d'enregistrer quoi que ce soit - "sous" doit ici dupliquer directement, comme pour un document normal.
+    // Un macro-modèle se copie par sa composition (mêmes emplacements, nouvel identifiant) : passer par onSave rouvrirait sa fenêtre au lieu de
+    // dupliquer.
     if (currentTypeModele === 'macro') {
-      const id = Templates.getCurrentId();
-      const tpl = id != null ? Templates.getCached().find(t => String(t.id) === String(id)) : null;
+      const tpl = Templates.byId(Templates.getCurrentId());
       const macroSlots = tpl && tpl.macroSlots ? tpl.macroSlots : { slots: [] };
       try {
         const kept = macroSettingsOnScreen();
@@ -690,8 +697,8 @@
       }
       return;
     }
-    // Un enregistrement encore en cours (Grist lent) rendrait, à sa fin, SON identifiant au modèle courant (cf. runSave) : la copie, qui part d'un modèle sans identifiant, attend
-    // qu'il soit fini, celui d'un deuxième clic compris.
+    // Un enregistrement encore en cours (Grist lent) rendrait, à sa fin, SON identifiant au modèle courant (cf. runSave) : la copie, qui part d'un
+    // modèle sans identifiant, attend qu'il soit fini, celui d'un deuxième clic compris.
     const epoch = autosaveEpoch;
     while (saveIsRunning() || saveWaiting) await (saveWaiting || whenSaveFinished());
     if (epoch !== autosaveEpoch) return; // un autre modèle a été choisi pendant l'attente : la copie n'a plus d'objet
@@ -711,20 +718,23 @@
     setStatus(I18n.t('status.templateDeleted'));
   }
 
-  // === Droits par personne (js/access-rights.js, demande d'Antoine du 2026-09-28) ===
-  // Verrou d'interface seulement : grise (classe pp-access-locked, jamais masqué ni retiré), et les gardes des fonctions d'action (onSave, switchMode,
-  // withExportLock, autosaveTick...) couvrent les raccourcis clavier et les appels directs. Seules les règles d'accès de Grist protègent les données.
+  // Droits par personne (js/access-rights.js)
+  // Verrou d'interface seulement : grise (classe pp-access-locked, jamais masqué ni retiré), et les gardes des fonctions d'action (onSave,
+  // switchMode, withExportLock, autosaveTick...) couvrent les raccourcis clavier et les appels directs. Seules les règles d'accès de Grist protègent
+  // les données.
   const ACCESS_LOCK_CLASS = 'pp-access-locked';
-  // Tout ce qui modifie le modèle ou écrit dans Grist, en plus de la barre de mise en forme entière (#v2-toolbar, sauf Commenter qui suit son propre droit).
+  // Tout ce qui modifie le modèle ou écrit dans Grist, en plus de la barre de mise en forme entière (#v2-toolbar, sauf Commenter qui suit son propre
+  // droit).
   const READ_ONLY_LOCKED_IDS = ['v2-new-template-group', 'btn-organize-templates', 'v2-save-group', 'btn-delete', 'btn-link-rules',
     'btn-mode-edit', 'btn-rename-template', 'btn-set-default-template', 'v2-pdf-filename-cluster', 'v2-page-group'];
   // Le droit d'export couvre PDF (une ligne, ZIP, PDF unique), Word et la création d'email : #v2-quality-group porte aussi les deux exports DOCX.
   const EXPORT_LOCKED_IDS = ['v2-quality-group', 'v2-export-pdf-group', 'btn-create-email'];
   const READ_ONLY_DISABLED_INPUTS = ['settings-margin-top', 'settings-margin-right', 'settings-margin-bottom', 'settings-margin-left'];
-  // Réglage présent au démarrage : les droits sont attendus avant le premier affichage, au plus ce délai (Grist qui tarde à répondre) - au-delà le widget
-  // démarre verrouillé (AccessRights.get() tant que le calcul n'a pas abouti) et se déverrouille seul à la réponse.
+  // Réglage présent au démarrage : les droits sont attendus avant le premier affichage, au plus ce délai (Grist qui tarde à répondre) - au-delà le
+  // widget démarre verrouillé (AccessRights.get() tant que le calcul n'a pas abouti) et se déverrouille seul à la réponse.
   const ACCESS_STARTUP_WAIT_MS = 5000;
-  // Délai après l'ouverture au bout duquel les colonnes exactes des tables sont relues si rien ne l'a fait (l'affichage du premier modèle les demande déjà, Editor.setHTML).
+  // Délai après l'ouverture au bout duquel les colonnes exactes des tables sont relues si rien ne l'a fait (l'affichage du premier modèle les demande
+  // déjà, Editor.setHTML).
   const EXACT_SCHEMA_CHECK_MS = 2500;
 
   function isReadOnly() { return AccessRights.get().readOnly; }
@@ -736,11 +746,11 @@
     else el.removeAttribute('aria-disabled');
   }
 
-  // Barre de mise en forme et d'insertion (#v2-toolbar) : grisée en lecture seule ET dès que le mode Lecture est affiché, choisi ou imposé. L'éditeur y est
-  // masqué mais ses commandes restaient actives : un clic sur Tableau, Sommaire ou Citation modifiait le modèle caché, et l'auto-save l'enregistrait sans
-  // rien montrer (audit du 2026-09-29, F1). Commenter suit son propre droit, jamais le mode : dans la Lecture il agit sur le texte sélectionné DANS la
-  // Lecture (applyCommentsPermissions). Modes, aperçu A4, réglages, arbre des modèles et export ne font pas partie de #v2-toolbar : ils restent actifs.
-  // Rappelée par applyAccessRights (droits) et switchMode (mode).
+  // Barre de mise en forme et d'insertion (#v2-toolbar) : grisée en lecture seule et dès que la Lecture est affichée, choisie ou imposée. L'éditeur y
+  // est masqué mais ses commandes restent actives : un clic sur Tableau, Sommaire ou Citation modifierait le modèle caché, que l'enregistrement
+  // automatique écrirait sans rien montrer. Commenter suit son propre droit, jamais le mode : dans la Lecture il agit sur le texte sélectionné dans
+  // la Lecture (applyCommentsPermissions). Modes, aperçu A4, réglages, arbre des modèles et exports ne font pas partie de #v2-toolbar et restent
+  // actifs. Rappelée par applyAccessRights (droits) et switchMode (mode).
   function applyFormattingBarLock() {
     const formattingBar = document.getElementById('v2-toolbar');
     if (!formattingBar) return;
@@ -748,10 +758,10 @@
     Array.from(formattingBar.children).forEach(child => { if (child.id !== 'v2-btn-comment') setAccessLocked(child, locked); });
   }
 
-  // Commentaires : le mode Lecture les montre et en accepte de nouveaux (js/comments.js:readerMode) dès qu'il est affiché, imposé par la lecture seule ou
-  // choisi, pour toute personne qui a le droit de commenter (choix d'Antoine du 2026-09-30, « Commenter dans la Lecture »). Avant, Commenter d'un mode
-  // Lecture choisi posait sa marque sur la sélection de l'éditeur masqué, enregistrée sans rien montrer. En Édition, Commenter agit sur l'éditeur, comme
-  // toujours. Rappelée par applyAccessRights (droits) et switchMode (mode, AVANT le dessin du mode Lecture : renderReader lit cet état).
+  // Commentaires : la Lecture les montre et en accepte de nouveaux (js/comments.js:readerMode) dès qu'elle est affichée, choisie ou imposée par la
+  // lecture seule, pour toute personne qui a le droit de commenter. Sans cela, Commenter dans une Lecture choisie poserait sa marque sur la sélection
+  // de l'éditeur masqué, enregistrée sans rien montrer. En Édition, Commenter agit sur l'éditeur. Rappelée par applyAccessRights (droits) et
+  // switchMode (mode, avant le dessin de la Lecture : renderReader lit cet état).
   function applyCommentsPermissions() {
     const rights = AccessRights.get();
     Comments.setPermissions({ canComment: rights.canComment, readerMode: rights.canComment && (rights.readOnly || currentMode === 'read') });
@@ -768,24 +778,25 @@
     updateSaveStatus();
   }
 
-  // Droits changés en cours de session (case cochée dans la table, réglage modifié) : switchMode force lui-même le mode Lecture en lecture seule ; sinon
-  // un mode Lecture déjà affiché est redessiné, commentaires montrés ou non.
+  // Droits changés en cours de session (case cochée dans la table, réglage modifié) : switchMode force lui-même le mode Lecture en lecture seule ;
+  // sinon un mode Lecture déjà affiché est redessiné, commentaires montrés ou non.
   function onAccessRightsChange() {
     applyAccessRights();
     if (isReadOnly() || currentMode === 'read') switchMode(currentMode);
     openCleanReadingForReadOnly();
   }
 
-  // Case « Ouvrir les personnes en lecture seule sur la Lecture épurée » (Réglages > Accès) : voir CleanReading.openForReadOnly, qui décide une seule fois par session. Appelée à la fin d'init()
-  // puis à chaque changement de droits : tant que la table des droits n'a pas donné de réponse (pending, Grist lent ; error, table illisible), rien n'est décidé - une personne qui a tous les droits
-  // démarre verrouillée par précaution et ne doit jamais être mise en Lecture épurée sur cette foi.
+  // Case « Ouvrir les personnes en lecture seule sur la Lecture épurée » (Réglages > Accès) : voir CleanReading.openForReadOnly, qui décide une seule
+  // fois par session. Appelée à la fin d'init() puis à chaque changement de droits : tant que la table des droits n'a pas donné de réponse (pending,
+  // Grist lent ; error, table illisible), rien n'est décidé - une personne qui a tous les droits démarre verrouillée par précaution et ne doit jamais
+  // être mise en Lecture épurée sur cette foi.
   function openCleanReadingForReadOnly() {
     const config = AccessRights.getConfig();
     CleanReading.openForReadOnly({ state: AccessRights.getStatus().state, readOnly: AccessRights.get().readOnly, enabled: !!(config && config.cleanReading) });
   }
 
-  // Un clic (souris, clavier, ou .click() d'un autre module) sur une commande grisée par applyAccessRights ou applyFormattingBarLock est arrêté en capture,
-  // avant tout gestionnaire.
+  // Un clic (souris, clavier, ou .click() d'un autre module) sur une commande grisée par applyAccessRights ou applyFormattingBarLock est arrêté en
+  // capture, avant tout gestionnaire.
   function wireAccessLockGuard() {
     document.addEventListener('click', event => {
       const target = event.target;
@@ -795,61 +806,63 @@
     }, true);
   }
 
-  // === Auto-save (V1) ===
-  // Enregistre automatiquement le modèle en cours toutes les AUTOSAVE_INTERVAL_MS, mais SEULEMENT s'il y a eu une modification depuis le dernier
-  // enregistrement (autosaveDirty) ET qu'un modèle existant est déjà chargé (jamais de création automatique - un modèle tout juste créé doit toujours
-  // passer par un premier Enregistrer manuel, cf. onSave). Objectif : réduire la fenêtre de perte en cas de fermeture inattendue, PAS remplacer
-  // Enregistrer - et réduire la fenêtre de collision si quelqu'un d'autre modifie le même modèle en même temps (moins de temps sans écrire = moins de
-  // chances qu'un écrasement silencieux couvre beaucoup de travail).
-  //
-  // Détection de conflit : à chaque vérification, on compare le DateModif réellement présent dans Grist à celui qu'on a nous-mêmes écrit en dernier
-  // (autosaveLastKnownDateModif). Un écart révèle qu'une autre personne (ou un autre onglet) a enregistré ce même modèle entre-temps - l'auto-save se
-  // gèle alors (n'écrase plus rien tout seul) et affiche un bandeau proposant de recharger. Un Enregistrer MANUEL reste toujours possible pendant ce
-  // temps et tranche explicitement en faveur de la version locale (cf. onSave) - un choix conscient de l'utilisateur, jamais fait à sa place.
+  // Enregistrement automatique
+  // Enregistre le modèle en cours toutes les AUTOSAVE_INTERVAL_MS, mais seulement s'il y a eu une modification depuis le dernier enregistrement
+  // (autosaveDirty) et qu'un modèle existant est chargé : jamais de création automatique, un modèle tout neuf passe d'abord par un Enregistrer manuel
+  // (cf. onSave). Il réduit la fenêtre de perte en cas de fermeture inattendue, sans remplacer Enregistrer, et la fenêtre de collision si quelqu'un
+  // modifie le même modèle en même temps.
+  // Détection de conflit : à chaque vérification, le DateModif présent dans Grist est comparé à celui que ce widget a écrit en dernier
+  // (autosaveLastKnownDateModif). Un écart révèle qu'une autre personne (ou un autre onglet) a enregistré ce modèle entre-temps : l'enregistrement
+  // automatique se gèle (il n'écrase plus rien) et un bandeau propose de recharger. Un Enregistrer manuel reste possible pendant ce temps et tranche
+  // en faveur de la version locale (cf. onSave) : un choix conscient, jamais fait à la place de la personne.
   const AUTOSAVE_INTERVAL_MS = 2500;
-  // Au repos (rien à enregistrer), le passage ne relit la table des modèles que toutes les AUTOSAVE_IDLE_INTERVAL_MS : la relire en entier, contenus compris (816 Ko pour 14 modèles avec
-  // images), toutes les 2,5 s pour n'y rien trouver chargeait Grist en continu (choix d'Antoine, 02/10 : « Ralentir au repos »). Dès qu'il y a quelque chose à enregistrer, chaque passage
-  // relit AVANT d'écrire, comme toujours : la protection contre un écrasement ne change pas, seul un enregistrement fait ailleurs pendant que rien ne bouge est signalé plus tard (15 s au plus).
+  // Au repos (rien à enregistrer), le passage ne relit la table des modèles que toutes les AUTOSAVE_IDLE_INTERVAL_MS : la relire en entier, contenus
+  // compris (816 Ko pour 14 modèles avec images), toutes les 2,5 s pour n'y rien trouver chargerait Grist en continu. Dès qu'il y a quelque chose à
+  // enregistrer, chaque passage relit avant d'écrire, comme toujours : la protection contre un écrasement ne change pas, seul un enregistrement fait
+  // ailleurs pendant que rien ne bouge est signalé plus tard (15 s au plus).
   const AUTOSAVE_IDLE_INTERVAL_MS = 15000;
-  // Préférence PAR NAVIGATEUR (comme la touche de déclenchement #Variable, cf. js/settings.js), pas par document Grist : chacun choisit s'il veut de
-  // l'auto-save, indépendamment des autres personnes qui ouvrent le même widget.
+  // Préférence par navigateur (comme la touche de déclenchement #Variable, cf. js/settings.js), pas par document : chacun choisit s'il veut
+  // l'enregistrement automatique, indépendamment des autres personnes qui ouvrent le même widget.
   const AUTOSAVE_ENABLED_STORAGE = 'pp_autosave_enabled';
   let autosaveDirty = false;
   let autosaveLastKnownDateModif = null;
-  // Dernière fois que le modèle ouvert a été comparé à Grist (performance.now : l'horloge du système peut reculer) : un passage qui a lu, ou le chargement du modèle, qui vient de Grist.
+  // Dernière fois que le modèle ouvert a été comparé à Grist (performance.now : l'horloge du système peut reculer) : un passage qui a lu, ou le
+  // chargement du modèle, qui vient de Grist.
   let autosaveLastCheckAt = -Infinity;
   let autosaveConflictActive = false;
   let autosaveConflictTpl = null;
   let autosaveTimer = null;
-  // La question « Enregistrer / Abandonner / Annuler » est posée (askBeforeLeaving) : l'enregistrement automatique n'écrit rien pendant ce temps, sinon « Abandonner » ne
-  // laisserait rien à abandonner - ce que la personne a tapé serait déjà enregistré.
+  // La question « Enregistrer / Abandonner / Annuler » est posée (askBeforeLeaving) : l'enregistrement automatique n'écrit rien pendant ce temps,
+  // sinon « Abandonner » ne laisserait rien à abandonner - ce que la personne a tapé serait déjà enregistré.
   let leavePromptOpen = false;
-  // Numéro de la dernière modification (frappe ou réglage, cf. markAutosaveDirty). Un drapeau « à enregistrer » remis à zéro quand l'écriture REVIENT effaçait aussi ce qui avait été tapé
-  // pendant qu'elle durait (Grist lent : des secondes) : ces mots n'étaient jamais enregistrés tant qu'une autre frappe ne rallumait pas le drapeau, et « Enregistré à… » s'affichait quand
-  // même. noteSaved(numéro) ne rend « enregistré » que ce qui n'a pas bougé depuis le numéro que l'écriture portait au départ.
+  // Numéro de la dernière modification (frappe ou réglage, cf. markAutosaveDirty). Un drapeau « à enregistrer » remis à zéro au retour de l'écriture
+  // effacerait aussi ce qui a été tapé pendant qu'elle durait (des secondes quand Grist est lent) : ces mots ne seraient pas enregistrés tant qu'une
+  // autre frappe ne rallumerait pas le drapeau, alors que « Enregistré à… » s'afficherait. noteSaved(numéro) ne rend « enregistré » que ce qui n'a
+  // pas bougé depuis le numéro que l'écriture portait au départ.
   let autosaveEditVersion = 0;
-  // Monte à chaque chargement d'un modèle (resetAutosaveState). Un passage ou un enregistrement qui attend Grist le relit à son retour : s'il a changé, le modèle de l'écran n'est plus
-  // celui sur lequel il a commencé, et ni la date lue ni l'état « enregistré » qu'il s'apprête à poser ne lui appartiennent plus.
+  // Monte à chaque chargement d'un modèle (resetAutosaveState). Un passage ou un enregistrement qui attend Grist le relit à son retour : s'il a
+  // changé, le modèle de l'écran n'est plus celui sur lequel il a commencé, et ni la date lue ni l'état « enregistré » qu'il s'apprête à poser ne lui
+  // appartiennent plus.
   let autosaveEpoch = 0;
-  // Un passage de l'auto-save est en cours (autosaveTick) : celui de l'intervalle suivant ne s'empile pas derrière - sauf s'il dure depuis plus d'une minute (un appel à Grist qui ne
-  // revient jamais ne doit pas arrêter l'enregistrement automatique pour de bon).
+  // Un passage de l'auto-save est en cours (autosaveTick) : celui de l'intervalle suivant ne s'empile pas derrière - sauf s'il dure depuis plus d'une
+  // minute (un appel à Grist qui ne revient jamais ne doit pas arrêter l'enregistrement automatique pour de bon).
   let autosaveTickPending = false;
   let autosaveTickStartedAt = 0;
   const AUTOSAVE_TICK_WATCHDOG_MS = 60000;
 
   function isAutosaveEnabled() {
     try { return localStorage.getItem(AUTOSAVE_ENABLED_STORAGE) !== 'false'; } // absent = activé par défaut
-    catch (e) { return true; } // stockage indisponible (navigation privée, quota) : on se comporte comme si c'était activé plutôt que de le figer désactivé
+    catch (e) { return true; } // stockage indisponible (navigation privée, quota) : comme activé, plutôt que figé désactivé
   }
 
   function setAutosaveEnabled(enabled) {
-    try { localStorage.setItem(AUTOSAVE_ENABLED_STORAGE, enabled ? 'true' : 'false'); } catch (e) { /* choix non persisté, reste actif pour cette session */ }
+    try { localStorage.setItem(AUTOSAVE_ENABLED_STORAGE, enabled ? 'true' : 'false'); } catch (e) { /* non persisté : actif pour cette session */ }
   }
 
-  // Aspect du bouton Enregistrer d'après ce réglage (retour d'Antoine du 01/10) : bleu et blanc enregistrement automatique allumé, noir et blanc classique coupé. Deux classes le disent :
-  // celle du bouton, et celle de <html> (pp-autosave-off), que le <head> d'index.html pose AVANT le premier affichage - c'est elle qui évite un premier affichage en bleu puis un fondu vers
-  // le noir chez qui a coupé l'enregistrement automatique (posée ici, à la fin du chargement des scripts, elle arrivait après l'image bleue). Remise à l'heure dès le début d'init(), à chaque
-  // clic de la ligne du menu et quand un autre onglet change le réglage.
+  // Aspect du bouton Enregistrer d'après ce réglage : bleu et blanc enregistrement automatique allumé, noir et blanc coupé. Deux classes le disent :
+  // celle du bouton, et celle de <html> (pp-autosave-off), que le <head> d'index.html pose avant le premier affichage ; posée ici, à la fin du
+  // chargement des scripts, elle arriverait après un premier affichage en bleu suivi d'un fondu vers le noir chez qui a coupé l'enregistrement
+  // automatique. Remise à l'heure au début d'init, à chaque clic de la ligne du menu et quand un autre onglet change le réglage.
   function syncSaveButtonLook() {
     const off = !isAutosaveEnabled();
     document.documentElement.classList.toggle('pp-autosave-off', off);
@@ -858,7 +871,8 @@
   }
 
   function markAutosaveDirty() { autosaveEditVersion++; autosaveDirty = true; updateSaveStatus(); }
-  // Une écriture vient de partir avec l'état de l'éditeur tel qu'il était à la version `editVersion` : ce qui a été tapé depuis reste « à enregistrer » pour le passage suivant.
+  // Une écriture vient de partir avec l'état de l'éditeur tel qu'il était à la version `editVersion` : ce qui a été tapé depuis reste « à
+  // enregistrer » pour le passage suivant.
   function noteSaved(editVersion) { if (editVersion === autosaveEditVersion) autosaveDirty = false; }
 
   function resetAutosaveState(tpl) {
@@ -870,22 +884,23 @@
     updateSaveStatus();
   }
 
-  // Coin "info" de la barre d'outils (#status-msg, setStatus) - avant ceci, il affichait simplement le dernier message quel qu'il soit ("Modèle
-  // enregistré.", "PDF généré.", une erreur...) et le gardait affiché indéfiniment, y compris après de nouvelles frappes JAMAIS enregistrées : rien
-  // n'indiquait que ce message était devenu faux. Appelée après CHAQUE frappe (markAutosaveDirty) et après chaque sauvegarde/rechargement, elle fait
-  // dire au coin "info" la vérité sur l'état ACTUEL plutôt que sur le dernier événement : "Enregistré à HH:MM" seulement quand tout ce qui a été tapé
-  // est bien en base, rien sinon (brouillon jamais enregistré, frappe en attente, conflit non résolu) - sauf enregistrement automatique coupé, où une frappe en attente le dit.
+  // Coin d'état de la barre d'outils (#status-msg, setStatus). Sans cette fonction, il garderait le dernier message (« Modèle enregistré. », « PDF
+  // généré. », une erreur…) même après de nouvelles frappes jamais enregistrées, sans rien dire que ce message est devenu faux. Appelée après chaque
+  // frappe (markAutosaveDirty) et après chaque enregistrement ou rechargement, elle fait dire au coin l'état actuel plutôt que le dernier événement :
+  // « Enregistré à HH:MM » seulement quand tout ce qui a été tapé est en base, rien sinon (brouillon jamais enregistré, frappe en attente, conflit
+  // non résolu) ; avec l'enregistrement automatique coupé, une frappe en attente le dit.
   function updateSaveStatus() {
-    // Lecture seule (js/access-rights.js) : rien ne s'enregistre pour cette personne, « Enregistré à… » ou « modèle non enregistré » n'auraient pas de sens.
+    // Lecture seule (js/access-rights.js) : rien ne s'enregistre pour cette personne, « Enregistré à… » ou « modèle non enregistré » n'auraient pas
+    // de sens.
     if (isReadOnly()) { setStatus(I18n.t('status.readOnly')); return; }
-    // Aucun modèle enregistré du tout (pas encore de ligne Grist) : autosaveTick() ne peut structurellement rien faire tant que ça dure (il refuse de
-    // CRÉER un modèle, cf. son "if (!id) return" plus bas) - un statut vide laissait croire, à tort, que tout allait bien pendant que rien n'était
-    // jamais protégé par l'auto-save. Même style d'alerte que templateNameRequired (onSave) : même cause réelle, pas encore de nom/ligne Grist.
+    // Aucun modèle enregistré (pas encore de ligne Grist) : autosaveTick ne peut rien faire tant que ça dure (il ne crée jamais de modèle, cf. son
+    // « if (!id) return »). Un statut vide laisserait croire que tout est protégé. Même alerte que templateNameRequired (onSave) : même cause, pas
+    // encore de nom ni de ligne.
     if (!Templates.getCurrentId()) { setStatus(I18n.t('status.unsavedTemplateWarning'), true); return; }
-    // Enregistrement automatique coupé (retours d'Antoine du 01/10 : sa bascule barrée a quitté la barre, cet état ne se voyait plus que dans le menu d'Enregistrer) : rien ne partira
-    // tout seul, ce qui vient d'être tapé n'est nulle part ailleurs que dans l'éditeur - le coin d'état le dit tant que ça dure, jusqu'au prochain Enregistrer. Seulement dans ce cas :
-    // enregistrement automatique actif, le délai entre une frappe et le passage suivant ne dure que 2,5 s et le coin reste vide, comme avant. Avant le test de DateModif : un modèle
-    // sans date connue doit pourtant le dire.
+    // Enregistrement automatique coupé (son réglage ne se voit plus que dans le menu d'Enregistrer) : rien ne partira tout seul, ce qui vient d'être
+    // tapé n'est que dans l'éditeur, et le coin d'état le dit jusqu'au prochain Enregistrer. Seulement dans ce cas : avec l'enregistrement
+    // automatique actif, le délai avant le passage suivant ne dure que 2,5 s et le coin reste vide. Avant le test de DateModif : un modèle sans date
+    // connue doit pourtant le dire.
     if (autosaveDirty && !autosaveConflictActive && !isAutosaveEnabled()) {
       setStatus(I18n.t('status.unsavedChanges'));
       statusMsg.classList.add('is-unsaved');
@@ -896,16 +911,12 @@
     setStatus(I18n.t('status.savedAt', { time: formatSaveTime(autosaveLastKnownDateModif) }));
   }
 
-  // autosaveLastKnownDateModif vient de Templates.save()/loadAll(), qui relisent toutes deux DateModif via
-  // fetchTable() : Grist représente une colonne DateTime comme des SECONDES entières depuis l'epoch, jamais
-  // des millisecondes (dev-tests/grist-stub.js:61-76 reproduit ce comportement) - malgré son nom, ce n'est
-  // pas la chaîne ISO qu'on a envoyée. new Date(secondes) la traite à tort comme des millisecondes, ce qui
-  // affichait une heure quasi figée (ex. "Enregistré à 18:22:59" en continu) et donnait à tort l'impression
-  // que l'enregistrement ne marchait pas plutôt qu'un simple bug d'affichage (signalé le 2026-09-28).
-  // Mais readBackDateModif (js/templates.js) retombe sur la chaîne ISO d'origine (pas un nombre) si la
-  // relecture échoue (colonne/ligne introuvable, requête en échec) - un simple `*1000` sur cette chaîne
-  // donne NaN, et new Date(NaN).toLocaleTimeString() renvoie littéralement "Invalid Date" à l'écran plutôt
-  // que de lever (le catch ci-dessous ne l'attrape donc pas) : les deux représentations doivent être gérées.
+  // autosaveLastKnownDateModif vient de Templates.save et loadAll, qui relisent DateModif par fetchTable : Grist rend une colonne DateTime en
+  // secondes entières depuis l'epoch, jamais en millisecondes (dev-tests/grist-stub.js reproduit ce comportement), et non en chaîne ISO comme celle
+  // qu'on envoie. new Date(secondes) les prendrait pour des millisecondes et afficherait une heure quasi figée.
+  // Mais readBackDateModif (js/templates.js) retombe sur la chaîne ISO d'origine quand la relecture échoue : multipliée par 1000, elle donne NaN, et
+  // new Date(NaN).toLocaleTimeString() renvoie « Invalid Date » sans lever (le catch ci-dessous ne l'attrape pas). Les deux représentations doivent
+  // donc être gérées.
   function formatSaveTime(dateModif) {
     try {
       const d = typeof dateModif === 'number' ? new Date(dateModif * 1000) : new Date(dateModif);
@@ -926,8 +937,9 @@
     if (conflictBanner) conflictBanner.style.display = 'none';
   }
 
-  // Le modèle a-t-il été réécrit par quelqu'un d'autre ? Sa date dans Grist n'est ni celle que ce widget connaît (autosaveLastKnownDateModif) ni celle de sa dernière écriture
-  // (Templates.lastWritten : un enregistrement fait par ce widget dont l'état d'ici n'est pas encore à jour, comme un macro-modèle enregistré par sa fenêtre).
+  // Le modèle a-t-il été réécrit par quelqu'un d'autre ? Sa date dans Grist n'est ni celle que ce widget connaît (autosaveLastKnownDateModif) ni
+  // celle de sa dernière écriture (Templates.lastWritten : un enregistrement fait par ce widget dont l'état d'ici n'est pas encore à jour, comme un
+  // macro-modèle enregistré par sa fenêtre).
   function changedElsewhere(remoteTpl) {
     const known = autosaveLastKnownDateModif;
     if (!remoteTpl || !known || !remoteTpl.dateModif) return false;
@@ -935,9 +947,10 @@
     return !Templates.sameDateModif(remoteTpl.dateModif, Templates.lastWritten(remoteTpl.id));
   }
 
-  // Relit la table des modèles et rend { remoteTpl } (la ligne de `id`, absente si le modèle a été supprimé), ou null quand cette lecture ne prouve rien : elle a croisé une écriture de CE
-  // widget (la lecture tombe entre l'écriture et la relecture de sa date, ou revient avec l'état d'avant : Grist lent, cf. Templates.getWriteSeq), ou un autre modèle a été chargé pendant ce
-  // temps (la ligne relue n'est plus celle de l'écran). Une lecture abandonnée ne perd rien : le passage suivant relit l'état d'alors. Lève si la lecture échoue.
+  // Relit la table des modèles et rend { remoteTpl } (la ligne de `id`, absente si le modèle a été supprimé), ou null quand cette lecture ne prouve
+  // rien : elle a croisé une écriture de CE widget (la lecture tombe entre l'écriture et la relecture de sa date, ou revient avec l'état d'avant :
+  // Grist lent, cf. Templates.getWriteSeq), ou un autre modèle a été chargé pendant ce temps (la ligne relue n'est plus celle de l'écran). Une
+  // lecture abandonnée ne perd rien : le passage suivant relit l'état d'alors. Lève si la lecture échoue.
   async function readRemoteTemplate(id, epoch) {
     if (Templates.isWriting()) return null;
     const seq = Templates.getWriteSeq();
@@ -946,9 +959,10 @@
     return { remoteTpl: fresh.find(t => String(t.id) === String(id)) };
   }
 
-  // Un seul passage à la fois : Grist lent, un passage (relire la table, écrire, relire la date) dure plus que l'intervalle, et chaque passage de plus s'empilait, relisant la table pendant
-  // que le précédent écrivait - jusqu'à trois écritures en même temps, et le faux conflit que ce chevauchement produit (retour d'Antoine du 02/10 : « modifié ailleurs » alors qu'il est
-  // seul). Le passage de l'intervalle suivant est simplement sauté : un passage lit l'état d'AUJOURD'HUI, il n'y a rien à rattraper.
+  // Un seul passage à la fois : avec Grist lent, un passage (relire la table, écrire, relire la date) dure plus que l'intervalle, et chaque passage
+  // de plus s'empilerait, relisant la table pendant que le précédent écrit : jusqu'à trois écritures simultanées, et le faux conflit « modifié
+  // ailleurs » que ce chevauchement produit chez une personne seule. Le passage suivant est simplement sauté : un passage lit l'état du moment, il
+  // n'y a rien à rattraper.
   async function autosaveTick() {
     if (autosaveTickPending && Date.now() - autosaveTickStartedAt < AUTOSAVE_TICK_WATCHDOG_MS) return;
     autosaveTickPending = true;
@@ -960,13 +974,13 @@
 
   async function runAutosaveTick() {
     if (leavePromptOpen) return;
-    if (!isAutosaveEnabled()) return; // désactivé par l'utilisateur (cf. wireSaveMenu) - aucun appel Grist tant que c'est le cas, pas seulement le
-    // dernier enregistrement sauté : ni le polling de conflit ni l'écriture elle-même ne doivent tourner en arrière-plan pendant que c'est éteint.
+    if (!isAutosaveEnabled()) return;  // coupé par la personne (cf. wireSaveMenu) : ni vérification de conflit ni écriture en arrière-plan
     if (exportOperationInProgress) return; // évite toute contention Grist avec un export en cours
     if (autosaveConflictActive) return; // gelé tant que l'utilisateur n'a pas choisi (recharger, ou Enregistrer manuellement pour garder sa version)
     const id = Templates.getCurrentId();
     if (!id) return; // aucune ligne à mettre à jour - jamais de création automatique
-    // Au repos, une lecture toutes les AUTOSAVE_IDLE_INTERVAL_MS, à une demi-période près (un passage un peu en avance lit déjà, au lieu de repousser la lecture d'une période de plus).
+    // Au repos, une lecture toutes les AUTOSAVE_IDLE_INTERVAL_MS, à une demi-période près (un passage un peu en avance lit déjà, au lieu de repousser
+    // la lecture d'une période de plus).
     const checkStartedAt = performance.now();
     if (!autosaveDirty && checkStartedAt - autosaveLastCheckAt < AUTOSAVE_IDLE_INTERVAL_MS - AUTOSAVE_INTERVAL_MS / 2) return;
     const epoch = autosaveEpoch;
@@ -981,25 +995,27 @@
       return;
     }
     if (!autosaveDirty) return;
-    // Lecture seule : la vérification de conflit ci-dessus garde son bandeau (le modèle a changé ailleurs), mais rien n'est écrit. Un commentaire posé en
-    // Lecture passe par saveReaderCommentAnchors, jamais par ici.
+    // Lecture seule : la vérification de conflit ci-dessus garde son bandeau (le modèle a changé ailleurs), mais rien n'est écrit. Un commentaire
+    // posé en Lecture passe par saveReaderCommentAnchors, jamais par ici.
     if (isReadOnly()) return;
-    // getHTML() renverrait le fragment en-tête/pied actuellement chargé, pas le document principal (cf. header-footer-preview.js) - on saute ce tick
-    // plutôt que de forcer une sortie de ce mode toutes les ~2-3s (bien plus perturbant que d'attendre le tick suivant).
+    // getHTML() renverrait le fragment d'en-tête ou de pied chargé, pas le document principal (cf. header-footer-preview.js) : on saute ce passage
+    // plutôt que de forcer la sortie de ce mode toutes les 2 à 3 s, bien plus gênant que d'attendre le suivant.
     if (Editor.isEditingHeaderFooter()) return;
-    const editVersion = autosaveEditVersion; // AVANT de lire quoi que ce soit : ce qui est modifié après reste « à enregistrer » (cf. noteSaved)
+    const editVersion = autosaveEditVersion; // Avant de lire quoi que ce soit : ce qui est modifié après reste « à enregistrer » (cf. noteSaved)
     const nom = templateNameInput ? templateNameInput.value.trim() : '';
     if (!nom) return; // même garde que le bouton Enregistrer manuel
-    // Un macro-modèle n'a rien dans l'éditeur (Editor.getHTML() est toujours vide, cf. loadMacroIntoEditor) : son Contenu est sa composition, réécrite telle que Grist vient de la rendre
-    // (remoteTpl, relu plus haut). Renommer le macro-modèle, changer son nom de PDF ou ses marges remplaçait sinon sa composition par un paragraphe vide, en moins de 3 s. Macro-modèle
-    // introuvable dans Grist (supprimé ailleurs) : rien n'est écrit, jamais une composition inventée.
+    // Un macro-modèle n'a rien dans l'éditeur (Editor.getHTML() est toujours vide, cf. loadMacroIntoEditor) : son Contenu est sa composition,
+    // réécrite telle que Grist vient de la rendre (remoteTpl, relu plus haut). Sans cela, renommer le macro-modèle ou changer son nom de PDF ou ses
+    // marges remplacerait sa composition par un paragraphe vide en moins de 3 s. Macro-modèle introuvable dans Grist (supprimé ailleurs) : rien n'est
+    // écrit, jamais une composition inventée.
     const isMacro = currentTypeModele === 'macro';
     if (isMacro && !remoteTpl) return;
     try {
       const suiviModifications = isMacro ? null : await Editor.getSuiviModificationsForSave();
-      if (epoch !== autosaveEpoch) return; // un autre modèle a été choisi pendant l'attente de l'identification : l'éditeur n'est plus celui dont `id` est la ligne (cf. onSave)
+      // un autre modèle a été choisi pendant l'attente de l'identification : l'éditeur n'est plus celui dont `id` est la ligne (cf. onSave)
+      if (epoch !== autosaveEpoch) return;
       const contenu = isMacro ? remoteTpl.contenu : Editor.getHTML();
-      const { dateModif } = await Templates.save(id, nom, contenu, getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsMm(), currentTypeModele, getEmailFieldsFromInputs(), suiviModifications);
+      const { dateModif } = await saveScreenAs(id, nom, suiviModifications, contenu);
       // Un autre modèle chargé pendant l'écriture (autosaveEpoch) a son propre état : rien de ceci ne lui appartient.
       if (epoch === autosaveEpoch) {
         autosaveLastKnownDateModif = dateModif;
@@ -1008,8 +1024,8 @@
       }
     } catch (e) {
       console.error('[main] auto-save : échec d’enregistrement', e);
-      // autosaveDirty reste true - retenté au prochain tick. Affiché (pas seulement loggé) : un échec RÉPÉTÉ doit se voir dans le coin "info" plutôt que
-      // de laisser croire, en silence, que tout est enregistré alors que ça ne l'est plus depuis ce tick.
+      // autosaveDirty reste vrai : retenté au passage suivant. Affiché, pas seulement journalisé : un échec répété doit se voir dans le coin d'état
+      // plutôt que de laisser croire que tout est enregistré.
       setStatus(I18n.t('status.autosaveError'), true);
     }
   }
@@ -1019,17 +1035,16 @@
     autosaveTimer = setInterval(autosaveTick, AUTOSAVE_INTERVAL_MS);
   }
 
-  // Menu « Enregistrer » (retours d'Antoine du 01/10, points 5 et 6) : le bouton garde son geste - un clic, un enregistrement - et son survol ouvre dessous
-  // « Enregistrer sous… » (une copie) et la case « Enregistrement automatique » (activé par défaut), qui remplacent le bouton « Enregistrer sous » et la bascule qui
-  // occupaient la barre. Même mécanisme que les autres boutons à menu (.v2-hover-group, css/editor-v2.css).
-  // - Le bouton ne prend pas le focus à la souris, comme tout bouton de menu au survol (délégation de js/editor-core.js : sinon son menu, :focus-within, restait affiché
-  //   une fois la souris partie, et le curseur quittait le texte en cours) ; un champ de saisie qui l'avait (renommage...) le perd au clic, avant onSave, donc le nom
-  //   validé est bien celui qui s'enregistre. Les lignes du menu en font autant ici : ce sont des <span tabindex="0">, que la souris focaliserait sinon.
-  // - tabindex="0" et Entrée/Espace sur les lignes : « Enregistrer sous » était un vrai bouton, atteignable au clavier ; des <span> ne le seraient pas. Le menu reste
-  //   ouvert tant que le focus est dedans. Au clavier, « Enregistrer sous… » met d'abord le focus sur le bouton : la fenêtre qu'elle ouvre le lui rend à sa fermeture, et
-  //   une ligne de menu refermée ne peut pas le recevoir.
-  // - La boucle setInterval de l'auto-save tourne TOUJOURS une fois démarrée, seul autosaveTick() vérifie isAutosaveEnabled() en tout premier : décocher ne l'arrête
-  //   pas (rien à recréer à la réactivation), ça fait juste sauter les ticks, à un coût négligeable (une lecture localStorage toutes les 2.5 s).
+  // Menu « Enregistrer » : le bouton garde son geste (un clic, un enregistrement) et son survol ouvre « Enregistrer sous… » (une copie) et la case
+  // « Enregistrement automatique » (cochée par défaut). Même mécanisme que les autres boutons à menu (.v2-hover-group, css/editor-v2.css).
+  // - Le bouton ne prend pas le focus à la souris, comme tout bouton à menu au survol (délégation de js/editor-core.js) : sinon son menu
+  //   (:focus-within) resterait affiché une fois la souris partie, et le curseur quitterait le texte. Un champ de saisie qui l'avait (renommage…) le
+  //   perd au clic, avant onSave : le nom validé est bien celui qui s'enregistre. Les lignes du menu, des <span tabindex="0">, sont traitées de même.
+  // - Entrée et Espace agissent sur les lignes, qui restent ainsi atteignables au clavier ; le menu reste ouvert tant que le focus est dedans. Au
+  //   clavier, « Enregistrer sous… » met d'abord le focus sur le bouton : la fenêtre qu'elle ouvre le lui rend à sa fermeture, ce qu'une ligne de
+  //   menu refermée ne pourrait pas recevoir.
+  // - La boucle setInterval de l'enregistrement automatique tourne toujours une fois démarrée ; seul autosaveTick teste isAutosaveEnabled. Décocher
+  //   la case fait donc sauter les passages sans rien arrêter ni recréer (une lecture localStorage toutes les 2,5 s).
   function wireSaveMenu() {
     const saveBtn = document.getElementById('btn-save');
     const saveAsRow = document.getElementById('v2-btn-save-as');
@@ -1041,7 +1056,7 @@
       if (active && active !== document.body && !active.closest('.ProseMirror') && active.matches('input, textarea, select')) active.blur();
     };
     saveBtn.addEventListener('click', onSave);
-    // La coche du menu et l'aspect du bouton disent le même état (retour d'Antoine du 01/10).
+    // La coche du menu et l'aspect du bouton disent le même état.
     const syncAutosaveRow = () => {
       if (autosaveRow) autosaveRow.setAttribute('aria-checked', isAutosaveEnabled() ? 'true' : 'false');
       syncSaveButtonLook();
@@ -1051,12 +1066,12 @@
       setAutosaveEnabled(enabled);
       syncAutosaveRow();
       setStatus(I18n.t(enabled ? 'status.autosaveEnabled' : 'status.autosaveDisabled'));
-      // Coupé avec des modifications déjà en attente : l'indicateur « Modifications non enregistrées » passe devant le message du geste, qui n'aurait été lu qu'un instant.
+      // Coupé avec des modifications déjà en attente : l'indicateur « Modifications non enregistrées » passe devant le message du geste, qui n'aurait
+      // été lu qu'un instant.
       if (!enabled && autosaveDirty) updateSaveStatus();
-      // Réactiver ne remet RIEN à zéro : resetAutosaveState() effaçait aussi autosaveDirty, donc ce qui avait été tapé pendant la coupure n'était jamais enregistré
-      // (le coin d'état annonçait pourtant « Enregistré à… ») et un changement fait ailleurs pendant ce temps passait sans bandeau de conflit. Rien n'est à
-      // re-synchroniser : onSave et le chargement d'un modèle tiennent autosaveLastKnownDateModif à jour même éteint, le prochain tick enregistre ce qui est en
-      // attente comme si on n'avait jamais coupé, ou ouvre le bandeau si le modèle a changé ailleurs entre-temps.
+      // Réactiver ne remet rien à zéro : effacer autosaveDirty ferait perdre ce qui a été tapé pendant la coupure et passer sous silence un
+      // changement fait ailleurs. Rien n'est à resynchroniser : onSave et le chargement d'un modèle tiennent autosaveLastKnownDateModif à jour même
+      // éteint ; le prochain passage enregistre ce qui est en attente, ou ouvre le bandeau de conflit si le modèle a changé ailleurs.
     };
     const wireRow = (row, action) => {
       if (!row) return;
@@ -1071,8 +1086,8 @@
     wireRow(saveAsRow, (viaKeyboard) => { if (viaKeyboard) saveBtn.focus(); onSaveAs(); });
     wireRow(autosaveRow, toggleAutosave);
     syncAutosaveRow();
-    // Le choix est par navigateur : un autre onglet (ou un autre widget du même document) qui le change se voit ici aussi, sans attendre un rechargement. L'évènement ne part que dans
-    // les AUTRES pages ; `key` vaut null quand tout le stockage est vidé.
+    // Le choix est par navigateur : un autre onglet (ou un autre widget du même document) qui le change se voit ici aussi, sans rechargement.
+    // L'évènement ne part que dans les autres pages ; `key` vaut null quand tout le stockage est vidé.
     window.addEventListener('storage', (event) => {
       if (event.key !== null && event.key !== AUTOSAVE_ENABLED_STORAGE) return;
       syncAutosaveRow();
@@ -1091,17 +1106,16 @@
     });
   }
 
-  // Slots du macro-modèle actuellement chargé (Templates.getCurrentId()), ou une liste vide si aucun/pas macro - jamais null, pour épargner aux appelants
-  // la vérification.
+  // Slots du macro-modèle actuellement chargé (Templates.getCurrentId()), ou une liste vide si aucun/pas macro - jamais null, pour épargner aux
+  // appelants la vérification.
   function getCurrentMacroSlots() {
-    const id = Templates.getCurrentId();
-    const tpl = id != null ? Templates.getCached().find(t => String(t.id) === String(id)) : null;
+    const tpl = Templates.byId(Templates.getCurrentId());
     return (tpl && tpl.macroSlots) ? tpl.macroSlots : { slots: [] };
   }
 
-  // Pour un macro-modèle, le "contenu" à résoudre n'est jamais Editor.getHTML() (toujours vide, cf. loadMacroIntoEditor) mais le résultat de la
-  // concaténation des modèles retenus pour CETTE ligne/table (MacroTemplates.buildConcatenatedHtml) - même ligne pour la page de garde et les annexes
-  // (décision d'Antoine, 2026-09-20), donc un seul appel suffit ici.
+  // Pour un macro-modèle, le contenu à résoudre n'est jamais Editor.getHTML() (toujours vide, cf. loadMacroIntoEditor) mais la concaténation des
+  // modèles retenus pour cette ligne ou cette table (MacroTemplates.buildConcatenatedHtml) : la page de garde et les annexes partagent la même ligne,
+  // un seul appel suffit.
   async function currentDocumentHtml(tableId, record) {
     if (currentTypeModele !== 'macro') return Editor.getHTML();
     if (!record || !tableId) return '';
@@ -1111,30 +1125,30 @@
   async function renderReader(record, recordTableId) {
     if (typeof record === 'undefined') record = latestRecord || GristAPI.getCurrentRecord();
     let tableId = recordTableId || GristAPI.getCurrentTableId() || currentTableId;
-    // Sans ligne sélectionnée, on délègue quand même à ReaderMode.render() pour qu'il affiche son état vide. Avant, ce `return` sec laissait
-    // #reader-container littéralement vide : écran blanc sans explication, et le message prévu dans reader-mode.js était du code mort.
-    // Note : onCreateEmail() (mode email) appelle aussi renderReader() alors que currentMode reste 'edit', pour lire le corps résolu sans changer de mode -
-    // sans risque, #reader-container reste display:none tant que currentMode !== 'read' (cf. switchMode).
+    // Sans ligne sélectionnée, ReaderMode.render() affiche tout de même son état vide : un simple `return` laisserait #reader-container vide, un
+    // écran blanc sans explication. onCreateEmail (mode email) appelle aussi renderReader() alors que currentMode reste 'edit', pour lire le corps
+    // résolu sans changer de mode : #reader-container reste display:none tant que currentMode !== 'read' (cf. switchMode).
     if (!record) { await ReaderMode.render(await currentDocumentHtml(tableId, null), tableId, null, Editor.getHeaderFooterData()); return; }
     if (!tableId) {
       const ctx = await GristAPI.detectCurrentContext();
       if (ctx && ctx.tableId) { currentTableId = ctx.tableId; tableId = ctx.tableId; }
     }
     readerContainer.classList.toggle('pp-reader-comments', readerCommentsActive());
-    // Le HTML est donné par une fonction : l'assemblage d'un macro-modèle (ses règles de slot) relit des tables, ce qui doit se faire dans les lectures partagées de CE rendu.
+    // Le HTML est donné par une fonction : l'assemblage d'un macro-modèle (ses règles de slot) relit des tables, ce qui doit se faire dans les
+    // lectures partagées de ce rendu.
     const html = () => (readerCommentsActive() ? Comments.buildReaderHtml() : currentDocumentHtml(tableId, record));
     await ReaderMode.render(html, tableId, record, Editor.getHeaderFooterData());
   }
 
   // Mode Lecture affiché (imposé par la lecture seule ou choisi) avec droit de commenter (js/comments.js:readerMode, applyCommentsPermissions) : il
-  // montre les commentaires et en accepte de nouveaux, sur un HTML qui porte les positions du document. Jamais pour un macro-modèle : son contenu vient
-  // d'autres modèles, pas de l'éditeur.
+  // montre les commentaires et en accepte de nouveaux, sur un HTML qui porte les positions du document. Jamais pour un macro-modèle : son contenu
+  // vient d'autres modèles, pas de l'éditeur.
   function readerCommentsActive() { return Comments.isReaderMode() && currentTypeModele !== 'macro'; }
 
-  // Commentaire posé, résolu ou supprimé depuis le mode Lecture : l'auto-save n'écrit rien en lecture seule (et n'a peut-être pas encore tourné quand le
-  // mode Lecture est choisi), le modèle (sa marque de commentaire) est donc enregistré ici - et seulement s'il n'a pas changé ailleurs depuis son
-  // chargement, sinon la marque écraserait ce changement (même contrôle de DateModif que autosaveTick). false = rien d'enregistré, js/comments.js annule
-  // alors son changement de marque.
+  // Commentaire posé, résolu ou supprimé depuis le mode Lecture : l'auto-save n'écrit rien en lecture seule (et n'a peut-être pas encore tourné quand
+  // le mode Lecture est choisi), le modèle (sa marque de commentaire) est donc enregistré ici - et seulement s'il n'a pas changé ailleurs depuis son
+  // chargement, sinon la marque écraserait ce changement (même contrôle de DateModif que autosaveTick). false = rien d'enregistré, js/comments.js
+  // annule alors son changement de marque.
   async function saveReaderCommentAnchors() {
     const id = Templates.getCurrentId();
     if (!id || currentTypeModele === 'macro' || autosaveConflictActive) return false;
@@ -1144,7 +1158,8 @@
     let remote;
     try {
       remote = await readRemoteTemplate(id, epoch);
-      // Une écriture de ce widget (un passage de l'enregistrement automatique) a croisé la lecture : on attend qu'elle finisse et on relit, plutôt que d'annuler le commentaire de la personne.
+      // Une écriture de ce widget (un passage de l'enregistrement automatique) a croisé la lecture : on attend qu'elle finisse et on relit, plutôt
+      // que d'annuler le commentaire de la personne.
       if (!remote) { await Templates.whenIdle(); remote = await readRemoteTemplate(id, epoch); }
     }
     catch (e) { console.error('[main] commentaire en lecture : vérification de conflit impossible', e); return false; }
@@ -1154,7 +1169,7 @@
     try {
       const suiviModifications = await Editor.getSuiviModificationsForSave();
       const editVersion = autosaveEditVersion;
-      const { dateModif } = await Templates.save(id, nom, Editor.getHTML(), getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsMm(), currentTypeModele, getEmailFieldsFromInputs(), suiviModifications);
+      const { dateModif } = await saveScreenAs(id, nom, suiviModifications);
       if (epoch === autosaveEpoch) {
         autosaveLastKnownDateModif = dateModif;
         noteSaved(editVersion);
@@ -1169,43 +1184,47 @@
     }
   }
 
-  // Bascule l'affichage d'Objet/À/Cc/Cci entre gabarit brut (édition) et valeurs résolues (lecture) - MÊMES <input>, jamais dupliqués (cf.
-  // emailFieldsRawCache ci-dessus). Sans ligne sélectionnée, garde les gabarits bruts affichés (rien à résoudre) plutôt qu'un champ vidé sans explication.
+  // Bascule l'affichage d'Objet/À/Cc/Cci entre gabarit brut (édition) et valeurs résolues (lecture) sur les mêmes <input>, jamais dupliqués (cf.
+  // emailFieldsRawCache ci-dessus). Sans ligne sélectionnée, les gabarits bruts restent affichés (rien à résoudre) plutôt qu'un champ vidé sans
+  // explication.
   async function updateEmailFieldsDisplay() {
     if (!emailFieldsRow || currentTypeModele !== 'email') return;
-    const inputs = [emailSubjectInput, emailToInput, emailCcInput, emailCciInput];
     if (currentMode !== 'read') {
       if (!emailFieldsRawCache) return; // déjà en état brut, rien à restaurer
       const raw = emailFieldsRawCache;
       emailFieldsRawCache = null;
-      if (emailSubjectInput) emailSubjectInput.value = raw.objet;
-      if (emailToInput) emailToInput.value = raw.destinataires;
-      if (emailCcInput) emailCcInput.value = raw.cc;
-      if (emailCciInput) emailCciInput.value = raw.cci;
-      inputs.forEach(el => { if (el) el.readOnly = false; });
+      eachEmailInput((input, key) => { input.value = raw[key]; input.readOnly = false; });
       return;
     }
     if (!emailFieldsRawCache) {
       emailFieldsRawCache = getEmailFieldsFromInputs();
-      inputs.forEach(el => { if (el) el.readOnly = true; });
+      eachEmailInput(input => { input.readOnly = true; });
     }
     const record = latestRecord || GristAPI.getCurrentRecord();
     if (!record) return;
     const tableId = latestRecordTableId || GristAPI.getCurrentTableId() || currentTableId;
     const raw = emailFieldsRawCache;
     const resolved = await resolveEmailFieldsForRecord(raw, tableId, record);
-    // Repassé en édition (ou modèle changé) pendant la résolution : emailFieldsRawCache a déjà été traité par la branche ci-dessus, ne pas écraser son
-    // travail avec ce résultat maintenant obsolète.
+    // Repassé en édition (ou modèle changé) pendant la résolution : emailFieldsRawCache a déjà été traité par la branche ci-dessus, ne pas écraser
+    // son travail avec ce résultat maintenant obsolète.
     if (currentMode !== 'read' || emailFieldsRawCache !== raw) return;
-    if (emailSubjectInput) emailSubjectInput.value = resolved.objet;
-    if (emailToInput) emailToInput.value = resolved.destinataires;
-    if (emailCcInput) emailCcInput.value = resolved.cc;
-    if (emailCciInput) emailCciInput.value = resolved.cci;
+    eachEmailInput((input, key) => { input.value = resolved[key]; });
   }
 
-  // Jauge de longueur mailto: (§4.4 du document) - PERMANENTE, sur l'URL RÉSOLUE (to+cc+cci+objet+corps), pas sur le gabarit tapé (un accent/retour à la
-  // ligne coûte plus cher une fois encodé - cf. MailtoExport). Dépend de la ligne Grist sélectionnée : appelée à chaque changement de ligne, de modèle, ou
-  // de contenu (avec un debounce, cf. scheduleEmailLengthGauge) - jamais bloquante, juste informative.
+  // L'URL mailto: de cette ligne : les champs résolus, et le corps lu dans le rendu de la Lecture (ReaderMode.render : mêmes bulles et chips que le
+  // PDF). `stale` (facultatif) rend vrai quand un résultat plus récent a pris le relais : l'URL n'est alors pas construite (null).
+  async function buildMailtoForRecord(record, tableId, stale) {
+    const fields = await resolveEmailFieldsForRecord(getEmailFieldsFromInputs(), tableId, record);
+    await renderReader(record, tableId);
+    if (stale && stale()) return null;
+    const content = readerContainer.querySelector('.reader-content');
+    const bodyText = MailtoExport.plainTextFromHtml(content ? content.innerHTML : readerContainer.innerHTML);
+    return MailtoExport.buildMailtoUrl({ to: fields.destinataires, cc: fields.cc, bcc: fields.cci, subject: fields.objet, bodyText });
+  }
+
+  // Jauge de longueur mailto:, permanente, sur l'URL résolue (to+cc+cci+objet+corps) et non sur le gabarit tapé : un accent ou un retour à la ligne
+  // coûte plus cher une fois encodé (cf. MailtoExport). Dépend de la ligne sélectionnée : appelée à chaque changement de ligne, de modèle ou de
+  // contenu (avec un debounce, cf. scheduleEmailLengthGauge) ; jamais bloquante, seulement informative.
   let emailGaugeRunId = 0;
   async function updateEmailLengthGauge() {
     if (!emailCharCounter) return;
@@ -1214,13 +1233,8 @@
     const record = latestRecord || GristAPI.getCurrentRecord();
     if (!record) { emailCharCounter.hidden = true; return; }
     const tableId = latestRecordTableId || GristAPI.getCurrentTableId() || currentTableId;
-    const rawFields = getEmailFieldsFromInputs();
-    const resolvedFields = await resolveEmailFieldsForRecord(rawFields, tableId, record);
-    await renderReader(record, tableId);
-    if (runId !== emailGaugeRunId) return; // une résolution plus récente a déjà pris le relais
-    const resolvedContent = readerContainer.querySelector('.reader-content');
-    const bodyText = MailtoExport.plainTextFromHtml(resolvedContent ? resolvedContent.innerHTML : readerContainer.innerHTML);
-    const url = MailtoExport.buildMailtoUrl({ to: resolvedFields.destinataires, cc: resolvedFields.cc, bcc: resolvedFields.cci, subject: resolvedFields.objet, bodyText });
+    const url = await buildMailtoForRecord(record, tableId, () => runId !== emailGaugeRunId);
+    if (url === null) return; // une résolution plus récente a déjà pris le relais
     const check = MailtoExport.checkUrlLength(url);
     emailCharCounter.hidden = false;
     emailCharCounter.classList.toggle('is-over-limit', !check.safe);
@@ -1233,21 +1247,21 @@
     emailGaugeDebounceTimer = setTimeout(updateEmailLengthGauge, 500);
   }
 
-  // Verrou anti-double-export : pdf-export.js utilise un état de module partagé pour numéroter les notes de bas de page - deux exports en parallèle
-  // corromperaient silencieusement la numérotation (cf. AUDIT_CODE.md §4). Désactive les deux boutons pendant toute opération, pas seulement celui cliqué.
+  // Verrou anti-double-export : pdf-export.js numérote les notes de bas de page dans un état de module partagé, que deux exports en parallèle
+  // corrompraient en silence. Tous les contrôles d'export (EXPORT_CONTROL_IDS) sont désactivés pendant toute opération, pas seulement celui cliqué.
   let exportOperationInProgress = false;
-  // `v2-btn-export-pdf-batch` est un <span> (ligne de menu au survol), pas un <button> - `.disabled` n'a aucun effet dessus (propriété réservée aux contrôles
-  // de formulaire) ; `pointer-events`/`opacity` fonctionnent sur n'importe quel élément.
+  // `v2-btn-export-pdf-batch` est un <span> (ligne de menu au survol), pas un <button> - `.disabled` n'a aucun effet dessus (propriété réservée aux
+  // contrôles de formulaire) ; `pointer-events`/`opacity` fonctionnent sur n'importe quel élément.
   function setExportControlLocked(el, locked) {
     if (!el) return;
     if ('disabled' in el) el.disabled = locked;
     el.style.pointerEvents = locked ? 'none' : '';
     el.style.opacity = locked ? '.5' : '';
   }
-  // Un bouton grisé perd le focus (le navigateur le rend au corps de la page) : sans ce rappel, le clavier repartirait du début de la page à la fin d'un export ou
-  // quand la fenêtre « Email trop long » se referme (elle n'a alors plus d'élément d'origine à retrouver). Seul un focus posé au clavier (cadre de focus visible)
-  // est rendu : à la souris rien ne change. Rien n'est rendu si le focus est allé ailleurs pendant l'export ; un élément resté actif mais masqué (le bouton de la
-  // fenêtre qui vient de se fermer) n'est pas un focus déplacé.
+  // Un bouton grisé perd le focus (le navigateur le rend au corps de la page) : sans ce rappel, le clavier repartirait du début de la page à la fin
+  // d'un export ou quand la fenêtre « Email trop long » se referme (elle n'a alors plus d'élément d'origine à retrouver). Seul un focus posé au
+  // clavier (cadre de focus visible) est rendu : à la souris rien ne change. Rien n'est rendu si le focus est allé ailleurs pendant l'export ; un
+  // élément resté actif mais masqué (le bouton de la fenêtre qui vient de se fermer) n'est pas un focus déplacé.
   function keyboardFocusedElement() {
     const el = document.activeElement;
     return el && el !== document.body && el.matches(':focus-visible') ? el : null;
@@ -1258,7 +1272,8 @@
     const movedElsewhere = now && now !== document.body && now !== el && now.getClientRects().length > 0;
     if (!movedElsewhere) el.focus({ preventScroll: true });
   }
-  // Les contrôles qu'un export en cours grise : tous les exports et « Créer l'email », pour qu'on ne lance pas un second export par-dessus le premier.
+  // Les contrôles qu'un export en cours grise : tous les exports et « Créer l'email », pour qu'on ne lance pas un second export par-dessus le
+  // premier.
   const EXPORT_CONTROL_IDS = ['btn-export-pdf', 'v2-btn-export-pdf-batch', 'v2-btn-export-pdf-merged', 'v2-btn-export-pdf-sheets', 'v2-btn-export-docx', 'v2-btn-export-docx-batch', 'v2-btn-export-xlsx',
     'v2-btn-export-xlsx-batch', 'v2-btn-export-xlsx-single', 'btn-create-email'];
   function withExportLock(fn) {
@@ -1269,7 +1284,8 @@
       const keyboardFocus = keyboardFocusedElement();
       OrientationToggle.setBusy(true);
       controls.forEach(el => setExportControlLocked(el, true));
-      // Un clic = un lancement (un lot entier compris) : les sites d'images déjà acceptés ne sont pas redemandés, un refus arrête tout (js/external-images.js).
+      // Un clic = un lancement (un lot entier compris) : les sites d'images déjà acceptés ne sont pas redemandés, un refus arrête tout
+      // (js/external-images.js).
       ExternalImages.beginRun();
       ExportCommon.resetUnreadImages();
       try {
@@ -1284,15 +1300,18 @@
     };
   }
 
-  // L'état de fin d'un export réussi : son texte, précédé - quand des images n'ont pas pu être lues et manquent dans le fichier (ExportCommon.noteUnreadImage) - de leur nombre, en tête : le coin
-  // d'état coupe ce qui dépasse, à droite. Le fichier est bien produit : ce n'est pas une erreur (pas de rouge), mais la personne n'a plus à ouvrir le fichier pour s'en apercevoir.
+  // L'état de fin d'un export réussi : son texte, précédé - quand des images n'ont pas pu être lues et manquent dans le fichier
+  // (ExportCommon.noteUnreadImage) - de leur nombre, en tête : le coin d'état coupe ce qui dépasse, à droite. Le fichier est bien produit : ce n'est
+  // pas une erreur (pas de rouge), mais la personne n'a plus à ouvrir le fichier pour s'en apercevoir.
   function setExportDoneStatus(text) {
     const unread = ExportCommon.unreadImageCount();
     setStatus(unread ? I18n.t('status.imagesUnread', { n: unread }) + ' ' + text : text);
   }
 
-  // Le document de la ligne courante pour un export seul : { html, headerFooterData } - ceux du modèle, avec la valeur de chaque liste réglée « Un document par valeur » (js/list-split.js) quand elle n'en a qu'une -, ou
-  // { split } quand la ligne fait plusieurs documents : l'appelant passe alors à l'archive d'onExportBatch (PDF, Word ou Excel, un fichier par valeur). Sans liste ainsi réglée, le HTML et les en-têtes du modèle, tels quels.
+  // Le document de la ligne courante pour un export seul : { html, headerFooterData } - ceux du modèle, avec la valeur de chaque liste réglée « Un
+  // document par valeur » (js/list-split.js) quand elle n'en a qu'une -, ou { split } quand la ligne fait plusieurs documents : l'appelant passe
+  // alors à l'archive d'onExportBatch (PDF, Word ou Excel, un fichier par valeur). Sans liste ainsi réglée, le HTML et les en-têtes du modèle, tels
+  // quels.
   async function currentRecordDocument(tableId, record) {
     const html = await currentDocumentHtml(tableId, record);
     const headerFooterData = Editor.getHeaderFooterData();
@@ -1301,29 +1320,52 @@
     return { html: ListSplit.pin(html, plan.variants[0]), headerFooterData: ListSplit.pinHeaderFooter(headerFooterData, plan.variants[0]) };
   }
 
-  async function onExportPdf() {
+  // Les exports d'une seule ligne : le lot que prend son document quand « Un document par valeur » le découpe, l'alerte sans ligne, les textes du
+  // coin d'état et l'export lui-même (`doc` : { html, headerFooterData }, cf. currentRecordDocument). Word n'a ni sélecteur de qualité ni autre mode
+  // (cf. en-tête de js/docx-export.js). Excel exporte le tableau d'une grille, sans en-tête ni pied de page ni marges du document : la feuille
+  // reprend l'orientation et les marges de PageLayout.
+  const SINGLE_EXPORTS = {
+    pdf: {
+      batch: 'pdfZip', noRecord: 'alert.noRecordForExport', generating: 'status.pdfGenerating', generated: 'status.pdfGenerated', failed: 'status.pdfGenerationError',
+      run: (doc, tableId, record) => PdfExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsPt()),
+    },
+    docx: {
+      batch: 'docxZip', noRecord: 'alert.noRecordForExport', generating: 'status.docxGenerating', generated: 'status.docxGenerated', failed: 'status.docxGenerationError',
+      run: (doc, tableId, record) => DocxExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsTwip()),
+    },
+    xlsx: {
+      batch: 'xlsxZip', noRecord: 'alert.noRecordForExportXlsx', generating: 'status.xlsxGenerating', generated: 'status.xlsxGenerated', failed: 'status.xlsxGenerationError',
+      run: (doc, tableId, record) => XlsxExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate()),
+    },
+  };
+
+  async function exportRecordAs(kind) {
+    const spec = SINGLE_EXPORTS[kind];
     Editor.exitHeaderFooterModeIfActive();
     const record = GristAPI.getCurrentRecord();
-    if (!record) { alert(exportText('alert.noRecordForExport')); return; }
-    setStatus(I18n.t('status.pdfGenerating'));
+    if (!record) { alert(exportText(spec.noRecord)); return; }
+    setStatus(I18n.t(spec.generating));
     try {
       const tableId = currentTableId || GristAPI.getCurrentTableId();
       const doc = await currentRecordDocument(tableId, record);
-      if (doc.split) { await onExportBatch('pdfZip', doc.split); return; }
-      await PdfExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsPt());
-      setExportDoneStatus(I18n.t('status.pdfGenerated'));
+      if (doc.split) { await onExportBatch(spec.batch, doc.split); return; }
+      await spec.run(doc, tableId, record);
+      setExportDoneStatus(I18n.t(spec.generated));
     } catch (e) {
       // « Annuler » sur la fenêtre des images d'un site externe (js/external-images.js) : un choix, pas une erreur.
       if (ExternalImages.isCancel(e)) { setStatus(I18n.t('status.exportCancelled')); return; }
       console.error(e);
-      setStatus(I18n.t('status.pdfGenerationError'), true);
+      setStatus(I18n.t(spec.failed), true);
     }
   }
+  const onExportPdf = () => exportRecordAs('pdf');
+  const onExportDocx = () => exportRecordAs('docx');
+  const onExportXlsx = () => exportRecordAs('xlsx');
 
-  // Mode email (planning/feature-email-mode.md) : construit l'URL mailto: pour la ligne Grist courante et l'ouvre (même geste que les exports PDF/DOCX ci-
-  // dessus/dessous - un <a> synthétique plutôt que window.location.href, dont le comportement dans l'iframe sandboxée d'un widget Grist est moins prévisible).
-  // Le corps réutilise la résolution DÉJÀ FAITE par le mode Lecture (ReaderMode.render, mêmes bulles #Variable/chips que le PDF) plutôt que de la dupliquer -
-  // renderReader() ne fait que mettre à jour #reader-container, jamais visible tant que currentMode reste 'edit' (cf. switchMode).
+  // Mode email (planning/feature-email-mode.md) : construit l'URL mailto: de la ligne courante et l'ouvre par un <a> synthétique plutôt que
+  // window.location.href, dont le comportement dans l'iframe sandboxée d'un widget Grist est moins prévisible. Le corps réutilise la résolution du
+  // mode Lecture (ReaderMode.render : mêmes bulles et chips que le PDF) plutôt que de la dupliquer ; renderReader() ne fait que mettre à jour
+  // #reader-container, jamais visible tant que currentMode reste 'edit' (cf. switchMode).
   async function onCreateEmail() {
     Editor.exitHeaderFooterModeIfActive();
     const record = GristAPI.getCurrentRecord();
@@ -1331,11 +1373,7 @@
     const tableId = currentTableId || GristAPI.getCurrentTableId();
     setStatus(I18n.t('status.emailGenerating'));
     try {
-      const resolved = await resolveEmailFieldsForRecord(getEmailFieldsFromInputs(), tableId, record);
-      await renderReader(record, tableId);
-      const resolvedContent = readerContainer.querySelector('.reader-content');
-      const bodyText = MailtoExport.plainTextFromHtml(resolvedContent ? resolvedContent.innerHTML : readerContainer.innerHTML);
-      const url = MailtoExport.buildMailtoUrl({ to: resolved.destinataires, cc: resolved.cc, bcc: resolved.cci, subject: resolved.objet, bodyText });
+      const url = await buildMailtoForRecord(record, tableId);
       const check = MailtoExport.checkUrlLength(url);
       if (!check.safe && !(await Dialogs.confirm({
         title: I18n.t('dialog.emailTooLong.title'), message: I18n.t('confirm.emailTooLong', { length: check.length, limit: check.limit }), confirmLabel: I18n.t('common.continue'),
@@ -1355,47 +1393,8 @@
     }
   }
 
-  // V1 - portée volontairement plus modeste que le PDF (cf. en-tête js/docx-export.js) : pas de sélecteur de qualité, un seul mode d'export.
-  async function onExportDocx() {
-    Editor.exitHeaderFooterModeIfActive();
-    const record = GristAPI.getCurrentRecord();
-    if (!record) { alert(I18n.t('alert.noRecordForExport')); return; }
-    setStatus(I18n.t('status.docxGenerating'));
-    try {
-      const tableId = currentTableId || GristAPI.getCurrentTableId();
-      const doc = await currentRecordDocument(tableId, record);
-      if (doc.split) { await onExportBatch('docxZip', doc.split); return; }
-      await DocxExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsTwip());
-      setExportDoneStatus(I18n.t('status.docxGenerated'));
-    } catch (e) {
-      if (ExternalImages.isCancel(e)) { setStatus(I18n.t('status.exportCancelled')); return; }
-      console.error(e);
-      setStatus(I18n.t('status.docxGenerationError'), true);
-    }
-  }
-
-  // Export Excel d'une grille (js/xlsx-export.js) : le tableau du modèle, enregistrement résolu, dans un classeur d'une feuille. Mêmes gestes que l'export DOCX ; sans
-  // en-tête ni pied de page ni marges du document (une grille n'a pas de feuille A4 : la feuille Excel reprend l'orientation et les marges de PageLayout).
-  async function onExportXlsx() {
-    Editor.exitHeaderFooterModeIfActive();
-    const record = GristAPI.getCurrentRecord();
-    if (!record) { alert(I18n.t('alert.noRecordForExportXlsx')); return; }
-    setStatus(I18n.t('status.xlsxGenerating'));
-    try {
-      const tableId = currentTableId || GristAPI.getCurrentTableId();
-      const doc = await currentRecordDocument(tableId, record);
-      if (doc.split) { await onExportBatch('xlsxZip', doc.split); return; }
-      await XlsxExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate());
-      setExportDoneStatus(I18n.t('status.xlsxGenerated'));
-    } catch (e) {
-      if (ExternalImages.isCancel(e)) { setStatus(I18n.t('status.exportCancelled')); return; }
-      console.error(e);
-      setStatus(I18n.t('status.xlsxGenerationError'), true);
-    }
-  }
-
-  // Dans une grille, « lignes » devient « valeurs de la table » : une ligne y est déjà une ligne de la grille (demande d'Antoine, 01/10) ; les autres types de modèle
-  // gardent leurs mots. Chaque texte concerné a sa variante « …Grid » ici ; `exportText` choisit selon le type du modèle affiché.
+  // Dans une grille, « lignes » devient « valeurs de la table » : une ligne y est déjà une ligne de la grille. Les autres types de modèle gardent
+  // leurs mots. Chaque texte concerné a sa variante « …Grid » ici ; `exportText` choisit selon le type du modèle affiché.
   const GRID_WORDING = {
     'toolbar.exportPdfBatch': 'toolbar.exportPdfBatchGrid',
     'toolbar.exportPdfMerged': 'toolbar.exportPdfMergedGrid',
@@ -1414,9 +1413,9 @@
     return I18n.t(GridEditor.isGridType(currentTypeModele) && GRID_WORDING[key] ? GRID_WORDING[key] : key, vars);
   }
 
-  // Les exports qui n'ont de sens que pour un seul genre de modèle : Word pour un document, Excel pour une grille. La ligne de l'autre genre reste dans le menu, grisée
-  // (« rien ne disparaît, on grise », demande d'Antoine du 2026-10-01) ; le clic d'une ligne grisée ne fait rien (cf. onExportRow, au câblage des boutons). Les deux lignes
-  // PDF « toutes les lignes » prennent aussi les mots de la grille (`data-i18n` change, pour que le texte suive un changement de langue).
+  // Les exports qui n'ont de sens que pour un seul genre de modèle : Word pour un document, Excel pour une grille. La ligne de l'autre genre reste
+  // dans le menu, grisée ; son clic ne fait rien (cf. onExportRow, au câblage des boutons). Les deux lignes PDF « toutes les lignes » prennent aussi
+  // les mots de la grille (`data-i18n` change, pour que le texte suive un changement de langue).
   function syncExportRowsForModelType() {
     const grid = GridEditor.isGridType(currentTypeModele);
     const grey = (id, off) => {
@@ -1436,14 +1435,14 @@
     });
   }
 
-  // Caractères invalides dans un nom de fichier ZIP/Windows - une valeur de cellule Grist du type "Dupont/Fils" casserait silencieusement l'arborescence du
-  // ZIP si non filtrée.
+  // Caractères invalides dans un nom de fichier ZIP ou Windows : une valeur de cellule comme « Dupont/Fils » casserait l'arborescence du ZIP si elle
+  // n'était pas filtrée.
   function sanitizeFilenamePart(name) {
     return String(name || '').replace(/[\\/:*?"<>|]+/g, '_').trim();
   }
 
-  // Ajoute un suffixe " (2)", " (3)"... si ce nom a déjà été utilisé dans ce lot - deux lignes peuvent tout à fait résoudre au même nom de fichier (gabarit
-  // de nom sans variable, ou variable identique sur 2 lignes), sinon la 2e écraserait silencieusement la 1re dans le ZIP.
+  // Ajoute un suffixe « (2) », « (3) »… si ce nom a déjà servi dans ce lot : deux lignes peuvent résoudre au même nom (gabarit sans variable, ou
+  // variable identique), et la seconde écraserait la première dans le ZIP.
   function uniqueZipFilename(baseName, usedNames) {
     let name = baseName;
     let n = 2;
@@ -1452,41 +1451,43 @@
     return name;
   }
 
-  // Export en lot : une ligne = un fichier, regroupés dans une archive ZIP (PDF, DOCX ou classeur Excel), ou mis bout à bout dans un seul PDF (js/pdf-merge.js : même
-  // rendu par ligne que le ZIP, chaque ligne commence sur une nouvelle page) ou un seul classeur Excel (une feuille par ligne, js/xlsx-export.js). Lit toutes les
-  // lignes via docApi (ignore un filtre de vue).
-  // Ce qui change d'un export à l'autre : ses textes (clés i18n), le nom des fichiers, la fonction qui rend UNE ligne et ses marges (points pour le PDF, twips
-  // pour le DOCX, aucune pour l'Excel : la feuille reprend la page du modèle) et ses bibliothèques (`loadLibs` : l'archive ZIP n'a besoin que de JSZip, ~0,1 Mo,
-  // pas du lot PDF de ~4 Mo) ; tout le reste (lecture des lignes, confirmation, boucle, archive, téléchargement) est commun. `single` : pas de blob par ligne, le
-  // classeur unique reçoit une feuille par ligne. `grid` : le genre de modèle que cet export sait faire - faux, un document (Word), vrai, une grille (Excel) ; absent, les deux (PDF) :
-  // une ligne dont « Modèle selon la ligne » désigne un modèle d'un autre genre n'est pas générée (comptée en échec). `pageOptions` : la page d'une feuille Excel, lue sur les réglages
-  // de page posés (ceux de l'écran, ou ceux du modèle d'une ligne, cf. templateSource).
+  // Export en lot : une ligne = un fichier, regroupés dans une archive ZIP (PDF, DOCX ou classeur Excel), ou mis bout à bout dans un seul PDF
+  // (js/pdf-merge.js : même rendu par ligne que le ZIP, une nouvelle page par ligne) ou un seul classeur Excel (une feuille par ligne,
+  // js/xlsx-export.js). Lit toutes les lignes via docApi, sans le filtre de vue.
+  // Ce qui change d'un export à l'autre : ses textes (clés i18n), le nom des fichiers, la fonction qui rend une ligne et ses marges (points pour le
+  // PDF, twips pour le DOCX, aucune pour l'Excel dont la feuille reprend la page du modèle) et ses bibliothèques (`loadLibs` : l'archive ZIP n'a
+  // besoin que de JSZip, ~0,1 Mo, pas du lot PDF de ~4 Mo). Le reste (lecture des lignes, confirmation, boucle, archive, téléchargement) est commun.
+  // - `single` : pas de blob par ligne, le classeur unique reçoit une feuille par ligne.
+  // - `grid` : le genre de modèle que l'export sait faire (faux : un document, Word ; vrai : une grille, Excel ; absent : les deux, PDF). Une ligne
+  //   dont « Modèle selon la ligne » désigne un modèle d'un autre genre n'est pas générée (comptée en échec).
+  // - `pageOptions` : la page d'une feuille Excel, lue sur les réglages de page posés (ceux de l'écran, ou ceux du modèle d'une ligne, cf.
+  //   templateSource).
+  const PDF_BATCH = {
+    label: 'PDF', loading: 'status.loadingPdfLibs', loadError: 'status.pdfLibsLoadError', progress: 'status.batchExportProgress', noFile: 'status.exportError',
+    margins: () => PageLayout.getMarginsPt(),
+    renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins) => PdfExport.getNativePdfBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, margins),
+  };
   const BATCH_EXPORTS = {
-    pdfZip: {
-      label: 'PDF', confirm: 'confirm.batchExport', loading: 'status.loadingPdfLibs', loadError: 'status.pdfLibsLoadError', progress: 'status.batchExportProgress',
-      noFile: 'status.exportError', done: 'status.batchExportDone', doneWithFailures: 'status.batchExportDoneWithFailures',
-      entryExt: '.pdf', fileSuffix: '-export-pdf.zip', margins: () => PageLayout.getMarginsPt(),
+    pdfZip: Object.assign({}, PDF_BATCH, {
+      confirm: 'confirm.batchExport', done: 'status.batchExportDone', doneWithFailures: 'status.batchExportDoneWithFailures',
+      entryExt: '.pdf', fileSuffix: '-export-pdf.zip',
       loadLibs: async () => { await PdfExport.ensurePdfLibsLoaded(); await ExportCommon.ensureJsZipLoaded(); },
-      renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins) => PdfExport.getNativePdfBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, margins),
-    },
-    pdfMerged: {
-      label: 'PDF', confirm: 'confirm.mergedExport', loading: 'status.loadingPdfLibs', loadError: 'status.pdfLibsLoadError', progress: 'status.batchExportProgress',
-      noFile: 'status.exportError', done: 'status.mergedExportDone', doneWithFailures: 'status.mergedExportDoneWithFailures',
+    }),
+    pdfMerged: Object.assign({}, PDF_BATCH, {
+      confirm: 'confirm.mergedExport', done: 'status.mergedExportDone', doneWithFailures: 'status.mergedExportDoneWithFailures',
       splitDone: 'status.splitMergedDone', splitDoneWithFailures: 'status.splitMergedDoneWithFailures',
-      merged: true, fileSuffix: '-export.pdf', margins: () => PageLayout.getMarginsPt(),
+      merged: true, fileSuffix: '-export.pdf',
       loadLibs: async () => { await PdfExport.ensurePdfLibsLoaded(); await PdfMerge.ensureLibLoaded(); },
-      renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins) => PdfExport.getNativePdfBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, margins),
-    },
-    // Assemblage avant impression (js/sheet-assembly-dialog.js, js/sheet-layout.js) : les mêmes PDF par ligne que le PDF unique, posés sur des feuilles A4 ou A3 (js/pdf-merge.js:createSheets). La fenêtre
-    // de réglage tient lieu de confirmation (`sheets`) ; le fichier sort sous le nom `<table>-assemblage.pdf`.
-    pdfSheets: {
-      label: 'PDF', loading: 'status.loadingPdfLibs', loadError: 'status.pdfLibsLoadError', progress: 'status.batchExportProgress',
-      noFile: 'status.exportError', done: 'status.sheetsExportDone', doneWithFailures: 'status.sheetsExportDoneWithFailures',
+    }),
+    // Assemblage avant impression (js/sheet-assembly-dialog.js, js/sheet-layout.js) : les mêmes PDF par ligne que le PDF unique, posés sur des
+    // feuilles A4 ou A3 (js/pdf-merge.js:createSheets). La fenêtre de réglage tient lieu de confirmation (`sheets`) ; le fichier sort sous le nom
+    // `<table>-assemblage.pdf`.
+    pdfSheets: Object.assign({}, PDF_BATCH, {
+      done: 'status.sheetsExportDone', doneWithFailures: 'status.sheetsExportDoneWithFailures',
       splitDone: 'status.splitSheetsDone', splitDoneWithFailures: 'status.splitSheetsDoneWithFailures',
-      merged: true, sheets: true, fileSuffix: '-assemblage.pdf', margins: () => PageLayout.getMarginsPt(),
+      merged: true, sheets: true, fileSuffix: '-assemblage.pdf',
       loadLibs: async () => { await PdfExport.ensurePdfLibsLoaded(); await PdfMerge.ensureLibLoaded(); },
-      renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins) => PdfExport.getNativePdfBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, margins),
-    },
+    }),
     docxZip: {
       label: 'DOCX', confirm: 'confirm.batchExportDocx', loading: 'status.loadingExportLibs', loadError: 'status.exportLibsLoadError', progress: 'status.batchExportProgressDocx',
       noFile: 'status.exportErrorDocx', done: 'status.batchExportDoneDocx', doneWithFailures: 'status.batchExportDoneWithFailuresDocx',
@@ -1510,9 +1511,10 @@
     },
   };
 
-  // Les documents d'un export en lot, dans l'ordre : un par ligne, ou un par valeur d'une liste réglée « Un document par valeur » (js/list-split.js ; un macro-modèle assemble ici le HTML de chaque ligne, gardé pour le
-  // rendu). Sans bulle réglée ainsi dans le modèle, ses en-têtes ni ses modèles, rien n'est lu ni calculé de plus : un document par ligne, `variant` nul, comme avant. Une ligne dont le plan échoue garde son document.
-  // Chaque document garde sa `source` : le modèle qui le fait (voir ci-dessous).
+  // Les documents d'un export en lot, dans l'ordre : un par ligne, ou un par valeur d'une liste réglée « Un document par valeur » (js/list-split.js ;
+  // un macro-modèle assemble ici le HTML de chaque ligne, gardé pour le rendu). Sans bulle réglée ainsi dans le modèle, ses en-têtes ni ses modèles,
+  // rien n'est lu ni calculé de plus : un document par ligne, `variant` nul. Une ligne dont le plan échoue garde son document. Chaque document garde
+  // sa `source` : le modèle qui le fait (voir ci-dessous).
   async function planExportJobs(rows, { tableId, sourceOf, templatesCache }) {
     const jobs = [];
     for (const row of rows) {
@@ -1532,9 +1534,11 @@
     return jobs;
   }
 
-  // Ce qu'un export en lot lit du modèle qui fait le document d'une ligne - sa « source » : son HTML (un macro-modèle : sa composition, assemblée ligne par ligne, car le choix des annexes dépend des valeurs
-  // de CHAQUE ligne, cf. MacroTemplates), ses en-têtes et pieds de page, ses marges (dans l'unité du moteur de l'export), le nom de ses fichiers, son genre. Celle du modèle ouvert est lue une fois pour tout
-  // le lot ; sans « Modèle selon la ligne » (js/row-template.js), toutes les lignes l'ont. Avec lui, une ligne que ses règles envoient vers un autre modèle a la source de CE modèle (rowSourceResolver).
+  // Ce qu'un export en lot lit du modèle qui fait le document d'une ligne, sa « source » : son HTML (pour un macro-modèle, sa composition, assemblée
+  // ligne par ligne car le choix des annexes dépend des valeurs de chaque ligne, cf. MacroTemplates), ses en-têtes et pieds de page, ses marges (dans
+  // l'unité du moteur de l'export), le nom de ses fichiers, son genre. Celle du modèle ouvert est lue une fois pour tout le lot ; sans « Modèle selon
+  // la ligne » (js/row-template.js), toutes les lignes l'ont. Avec lui, une ligne que ses règles envoient vers un autre modèle a la source de ce
+  // modèle (rowSourceResolver).
   function openTemplateSource(cfg) {
     const isMacro = currentTypeModele === 'macro';
     return {
@@ -1543,8 +1547,9 @@
     };
   }
 
-  // La source d'un autre modèle de la liste, tel qu'il est enregistré : rien n'est chargé dans l'éditeur ni changé à l'écran. Sa page est lue par les fonctions de l'écran (PageLayout borne les marges et les
-  // convertit) : posée le temps de la lecture et rendue aussitôt, sans `await` entre les deux - ni l'une ni l'autre n'est jamais affichée. Ses en-têtes et pieds passent par l'export comme ceux de l'écran (leur HTML y est assaini).
+  // La source d'un autre modèle de la liste, tel qu'il est enregistré : rien n'est chargé dans l'éditeur ni changé à l'écran. Sa page est lue par les
+  // fonctions de l'écran (PageLayout borne les marges et les convertit) : posée le temps de la lecture et rendue aussitôt, sans `await` entre les
+  // deux - ni l'une ni l'autre n'est jamais affichée. Ses en-têtes et pieds passent par l'export comme ceux de l'écran (leur HTML y est assaini).
   function templateSource(tpl, cfg) {
     const isMacro = tpl.typeModele === 'macro';
     const onScreen = PageLayout.getMarginsMm();
@@ -1561,8 +1566,9 @@
     };
   }
 
-  // La source de chaque ligne d'un lot. Sans « Modèle selon la ligne » : celle du modèle ouvert, tout de suite, rien n'est lu de plus. Avec lui : celle du modèle que ses règles donnent à CETTE ligne (RowTemplate.pick :
-  // les mêmes règles que quand la ligne s'ouvre à l'écran). Aucune ne la désigne et le réglage garde le modèle ouvert, ou le modèle désigné est déjà ouvert : celui de l'écran, avec ce qu'il n'a pas encore enregistré.
+  // La source de chaque ligne d'un lot. Sans « Modèle selon la ligne » : celle du modèle ouvert, tout de suite, rien n'est lu de plus. Avec lui :
+  // celle du modèle que ses règles donnent à cette ligne (RowTemplate.pick : les mêmes règles que quand la ligne s'ouvre à l'écran). Aucune ne la
+  // désigne et le réglage garde le modèle ouvert, ou le modèle désigné est déjà ouvert : celui de l'écran, avec ce qu'il n'a pas encore enregistré.
   function rowSourceResolver(tableId, cfg, openSource) {
     if (!RowTemplate.isActive()) return async () => openSource;
     const byTemplate = new Map();
@@ -1570,22 +1576,22 @@
       let id = null;
       try { id = await RowTemplate.pick(row, tableId); }
       catch (e) { console.error('[main] export en lot : modèle de la ligne impossible à choisir, celui de l’écran est gardé', row.id, e); }
-      if (id == null || String(id) === String(Templates.getCurrentId())) return openSource;
+      if (id == null || Templates.isCurrent(id)) return openSource;
       if (!byTemplate.has(id)) {
-        const tpl = Templates.getCached().find(t => String(t.id) === String(id));
+        const tpl = Templates.byId(id);
         byTemplate.set(id, tpl ? templateSource(tpl, cfg) : openSource);
       }
       return byTemplate.get(id);
     };
   }
 
-  // Le HTML BRUT du document de cette ligne pour cette source (un macro-modèle : ses annexes, choisies avec les valeurs de la ligne).
+  // Le HTML brut du document de cette ligne pour cette source (un macro-modèle : ses annexes, choisies avec les valeurs de la ligne).
   function sourceRowHtml(source, tableId, row, templatesCache) {
     return source.isMacro ? MacroTemplates.buildConcatenatedHtml(source.macroSlots, tableId, row, templatesCache) : source.html;
   }
 
-  // Cette source peut-elle se découper en plusieurs documents (« Un document par valeur ») ? Sans bulle réglée ainsi dans le modèle, ses en-têtes ni ses modèles (ceux de la liste, pour un macro-modèle), non : le plan
-  // n'est même pas calculé. Une fois par source.
+  // Cette source peut-elle se découper en plusieurs documents (« Un document par valeur ») ? Sans bulle réglée ainsi dans le modèle, ses en-têtes ni
+  // ses modèles (ceux de la liste, pour un macro-modèle), non : le plan n'est même pas calculé. Une fois par source.
   function sourceMaySplit(source, templatesCache) {
     if (source.maySplit === undefined) {
       const footerParts = ListSplit.partsOf('', source.headerFooterData).slice(1);
@@ -1594,32 +1600,81 @@
     return source.maySplit;
   }
 
-  // `only` (facultatif) : la ligne courante seule - { record, plan, html } -, quand son document se découpe en plusieurs (« Un document par valeur », js/list-split.js) : une archive de ses documents, sans lire la table
-  // ni demander confirmation (le clic d'un export seul vaut accord), nommée comme la ligne.
+  // Les lignes d'un export en lot : celles de la table (docApi, sans le filtre de vue), ou `only.record` seul. null : rien à exporter, le coin d'état
+  // le dit.
+  async function readBatchRows(cfg, tableId, only) {
+    if (only) return [only.record];
+    let rows;
+    try { rows = await GristAPI.fetchTableRows(tableId); }
+    catch (e) {
+      console.error('[main] export ' + cfg.label + ' en lot : échec de lecture de la table', e);
+      setStatus(exportText('status.cannotReadRows'), true);
+      return null;
+    }
+    if (!rows.length) { setStatus(exportText('status.noRowsInTable', { table: tableId }), true); return null; }
+    return rows;
+  }
+
+  // L'accord avant un export en lot : `{}`, ou `{ layout }` pour les planches, qui se règlent dans leur propre fenêtre (feuille, emplacements, traits
+  // de coupe) : elle tient lieu de confirmation. Un export seul n'en demande pas, son clic vaut accord. null : la personne renonce.
+  async function confirmBatch(cfg, { only, tableId, rowCount, jobCount, splitting }) {
+    if (only) return {};
+    if (cfg.sheets) return (await SheetAssemblyDialog.open({ count: jobCount, table: tableId, grid: GridEditor.isGridType(currentTypeModele) })) || null;
+    const note = splitting ? '\n\n' + I18n.t('confirm.splitNote', { documents: jobCount }) : '';
+    const proceed = await Dialogs.confirm({ title: exportText('dialog.batchExport.title'), message: exportText(cfg.confirm, { count: rowCount, table: tableId }) + note, confirmLabel: I18n.t('common.generate') });
+    return proceed ? {} : null;
+  }
+
+  // Où un export en lot range ses documents : une archive ZIP (un fichier par document), un PDF unique (`merged`, ou `sheets` : posés sur des
+  // planches) ou un classeur Excel unique (`single`). `add` reçoit le document tout prêt ; `finish` rend le fichier, `finishing` dit ce qui se passe
+  // pendant ce temps. `sheetCount` ne se lit qu'une fois `finish` terminé.
+  async function openBatchSink(cfg, tableId, sheetSetup) {
+    if (cfg.single) {
+      const workbook = await XlsxExport.createSingleWorkbook();
+      return {
+        add: doc => workbook.appendRecord(doc.html, tableId, doc.row, doc.source.filenameTemplate, doc.valueName, doc.source.pageOptions || undefined),
+        finish: () => workbook.toBlob(),
+        finishing: 'status.xlsxAssembling',
+      };
+    }
+    const render = doc => cfg.renderRow(doc.html, tableId, doc.row, doc.source.filenameTemplate, doc.headerFooterData, doc.source.margins, doc.source.pageOptions);
+    if (cfg.merged) {
+      const pdf = await (cfg.sheets ? PdfMerge.createSheets(tableId, sheetSetup.layout) : PdfMerge.create(tableId));
+      return {
+        add: async doc => pdf.append((await render(doc)).blob),
+        finish: () => pdf.toBlob(),
+        finishing: cfg.sheets ? 'status.sheetsAssembling' : 'status.pdfMerging',
+        sheetCount: () => (cfg.sheets ? pdf.sheetCount : 0),
+      };
+    }
+    const zip = new JSZip();
+    const usedNames = new Set();
+    return {
+      add: async doc => {
+        const { blob, filename } = await render(doc);
+        const base = (sanitizeFilenamePart(filename) || ('document-' + doc.row.id)) + (doc.valueName ? ' - ' + doc.valueName : '');
+        zip.file(uniqueZipFilename(base, usedNames) + cfg.entryExt, blob);
+      },
+      finish: () => zip.generateAsync({ type: 'blob' }),
+      finishing: 'status.zipCompressing',
+    };
+  }
+
+  // `only` (facultatif) : la ligne courante seule - { record, plan, html } -, quand son document se découpe en plusieurs (« Un document par valeur »,
+  // js/list-split.js) : une archive de ses documents, sans lire la table ni demander confirmation (le clic d'un export seul vaut accord), nommée
+  // comme la ligne.
   async function onExportBatch(kind, only) {
     const cfg = BATCH_EXPORTS[kind];
-    const merged = !!cfg.merged;
-    const single = !!cfg.single;
-    const sheets = !!cfg.sheets;
     Editor.exitHeaderFooterModeIfActive();
     const tableId = currentTableId || GristAPI.getCurrentTableId();
     if (!tableId) { setStatus(I18n.t('status.currentTableNotFound'), true); return; }
-    let rows;
-    if (only) rows = [only.record];
-    else {
-      try { rows = await GristAPI.fetchTableRows(tableId); }
-      catch (e) {
-        console.error('[main] export ' + cfg.label + ' en lot : échec de lecture de la table', e);
-        setStatus(exportText('status.cannotReadRows'), true);
-        return;
-      }
-    }
-    if (!rows.length) { setStatus(exportText('status.noRowsInTable', { table: tableId }), true); return; }
+    const rows = await readBatchRows(cfg, tableId, only);
+    if (!rows) return;
 
-    // Pas de HTML unique calculé une fois pour tout le lot : pour un macro-modèle, le choix des annexes dépend des valeurs de CHAQUE ligne (cf.
-    // MacroTemplates), donc la concaténation doit être refaite ligne par ligne dans la boucle ci-dessous plutôt que réutilisée telle quelle comme pour un
-    // modèle normal (où le même gabarit HTML suffit pour toutes les lignes, seule sa résolution #Variable variant par ligne). Et pas de modèle unique non plus quand
-    // « Modèle selon la ligne » est réglé : chaque ligne a la source du modèle que ses règles lui donnent (rowSourceResolver), comme à l'écran.
+    // Pas de HTML unique pour tout le lot : pour un macro-modèle, le choix des annexes dépend des valeurs de chaque ligne (cf. MacroTemplates), donc
+    // la concaténation est refaite ligne par ligne dans la boucle ci-dessous ; un modèle normal garde le même gabarit pour toutes les lignes, seule
+    // la résolution des #Variable change. Pas de modèle unique non plus quand « Modèle selon la ligne » est réglé : chaque ligne a la source du
+    // modèle que ses règles lui donnent (rowSourceResolver), comme à l'écran.
     const templatesCache = Templates.getCached();
     const openSource = openTemplateSource(cfg);
     const sourceOf = only ? async () => openSource : rowSourceResolver(tableId, cfg, openSource);
@@ -1627,21 +1682,11 @@
     const jobs = only ? only.plan.variants.map(variant => ({ row: only.record, source: openSource, rowHtml: only.html, variant }))
       : await planExportJobs(rows, { tableId, sourceOf, templatesCache });
     const splitting = jobs.some(job => ListSplit.hasPins(job.variant));
+    const sheetSetup = await confirmBatch(cfg, { only, tableId, rowCount: rows.length, jobCount: jobs.length, splitting });
+    if (!sheetSetup) return;
 
-    // Les planches se règlent dans leur propre fenêtre (feuille, emplacements, traits de coupe) : elle tient lieu de confirmation.
-    let sheetSetup = null;
-    if (only) {
-      // Un export seul : pas de confirmation.
-    } else if (sheets) {
-      sheetSetup = await SheetAssemblyDialog.open({ count: jobs.length, table: tableId, grid: GridEditor.isGridType(currentTypeModele) });
-      if (!sheetSetup) return;
-    } else {
-      const note = splitting ? '\n\n' + I18n.t('confirm.splitNote', { documents: jobs.length }) : '';
-      const proceed = await Dialogs.confirm({ title: exportText('dialog.batchExport.title'), message: exportText(cfg.confirm, { count: rows.length, table: tableId }) + note, confirmLabel: I18n.t('common.generate') });
-      if (!proceed) return;
-    }
-
-    // Ni JSZip ni le lot PDF ne sont chargés d'office au démarrage du widget : `JSZip` n'existe pas tant que ceci n'a pas été attendu au moins une fois.
+    // Ni JSZip ni le lot PDF ne sont chargés d'office au démarrage du widget : `JSZip` n'existe pas tant que ceci n'a pas été attendu au moins une
+    // fois.
     setStatus(I18n.t(cfg.loading));
     try {
       await cfg.loadLibs();
@@ -1651,38 +1696,28 @@
       return;
     }
 
-    const zip = merged || single ? null : new JSZip();
-    const mergedPdf = merged ? (sheets ? await PdfMerge.createSheets(tableId, sheetSetup.layout) : await PdfMerge.create(tableId)) : null;
-    const workbook = single ? await XlsxExport.createSingleWorkbook() : null;
-    const usedNames = new Set();
+    const sink = await openBatchSink(cfg, tableId, sheetSetup);
     let ok = 0;
     let failed = 0;
     let cancelled = false;
     for (let i = 0; i < jobs.length; i++) {
       const { row, variant, source } = jobs[i];
       setStatus(I18n.t(cfg.progress, { current: i + 1, total: jobs.length }));
-      // Le modèle d'une ligne (« Modèle selon la ligne ») peut ne pas être du genre de cet export - une grille en Word, un document en Excel : la ligne n'est pas générée, comme celle qui échoue.
+      // Le modèle d'une ligne (« Modèle selon la ligne ») peut ne pas être du genre de cet export - une grille en Word, un document en Excel : la
+      // ligne n'est pas générée, comme celle qui échoue.
       if (source !== openSource && cfg.grid != null && cfg.grid !== GridEditor.isGridType(source.typeModele)) {
         console.error('[main] export ' + cfg.label + ' en lot : le modèle de la ligne ' + row.id + ' (' + source.typeModele + ') ne se génère pas dans ce format');
         failed++;
         continue;
       }
       try {
-        // Le document de cette valeur : les bulles réglées « Un document par valeur » y écrivent leur k-ième valeur (js/list-split.js) ; sans découpage, le HTML et les en-têtes sont ceux de la ligne, tels quels.
-        const rowHtml = ListSplit.pin(jobs[i].rowHtml !== undefined ? jobs[i].rowHtml : await sourceRowHtml(source, tableId, row, templatesCache), variant);
-        const jobHeaderFooter = ListSplit.pinHeaderFooter(source.headerFooterData, variant);
-        const valueName = variant && variant.label ? sanitizeFilenamePart(variant.label) : '';
-        if (single) {
-          await workbook.appendRecord(rowHtml, tableId, row, source.filenameTemplate, valueName, source.pageOptions || undefined);
-        } else {
-          const { blob, filename } = await cfg.renderRow(rowHtml, tableId, row, source.filenameTemplate, jobHeaderFooter, source.margins, source.pageOptions);
-          if (merged) {
-            await mergedPdf.append(blob);
-          } else {
-            const base = (sanitizeFilenamePart(filename) || ('document-' + row.id)) + (valueName ? ' - ' + valueName : '');
-            zip.file(uniqueZipFilename(base, usedNames) + cfg.entryExt, blob);
-          }
-        }
+        // Le document de cette valeur : les bulles réglées « Un document par valeur » y écrivent leur k-ième valeur (js/list-split.js) ; sans
+        // découpage, le HTML et les en-têtes sont ceux de la ligne, tels quels.
+        const html = ListSplit.pin(jobs[i].rowHtml !== undefined ? jobs[i].rowHtml : await sourceRowHtml(source, tableId, row, templatesCache), variant);
+        await sink.add({
+          row, source, html, headerFooterData: ListSplit.pinHeaderFooter(source.headerFooterData, variant),
+          valueName: variant && variant.label ? sanitizeFilenamePart(variant.label) : '',
+        });
         ok++;
       } catch (e) {
         // « Annuler » sur la fenêtre des images d'un site externe arrête tout le lot, pas seulement cette ligne : rien n'est téléchargé.
@@ -1694,19 +1729,19 @@
     if (cancelled) { setStatus(I18n.t('status.exportCancelled')); return; }
     if (!ok) { setStatus(I18n.t(cfg.noFile), true); return; }
 
-    setStatus(I18n.t(sheets ? 'status.sheetsAssembling' : merged ? 'status.pdfMerging' : single ? 'status.xlsxAssembling' : 'status.zipCompressing'));
-    const outBlob = merged ? await mergedPdf.toBlob() : single ? await workbook.toBlob() : await zip.generateAsync({ type: 'blob' });
+    setStatus(I18n.t(sink.finishing));
+    const outBlob = await sink.finish();
     // Archive d'un export seul : nommée comme la ligne ; sinon comme la table.
     const outBase = only ? (sanitizeFilenamePart(await ReaderMode.resolveFilename(openSource.filenameTemplate, tableId, rows[0])) || sanitizeFilenamePart(tableId)) : sanitizeFilenamePart(tableId);
     ExportCommon.downloadBlob(outBlob, outBase + cfg.fileSuffix);
-    const sheetCount = sheets ? mergedPdf.sheetCount : 0;
+    const sheets = sink.sheetCount ? sink.sheetCount() : 0;
     const useSplitTexts = splitting && cfg.splitDone;
     const doneKey = failed ? (useSplitTexts ? cfg.splitDoneWithFailures : cfg.doneWithFailures) : (useSplitTexts ? cfg.splitDone : cfg.done);
-    setExportDoneStatus(failed ? exportText(doneKey, { ok, failed, sheets: sheetCount }) : exportText(doneKey, { ok, sheets: sheetCount }));
+    setExportDoneStatus(exportText(doneKey, { ok, failed, sheets }));
   }
 
   async function switchMode(mode) {
-    // Lecture seule : le mode Lecture est le seul accessible (demande d'Antoine), y compris depuis la dernière ligne d'init().
+    // Lecture seule : le mode Lecture est le seul accessible, y compris depuis la dernière ligne d'init().
     if (isReadOnly()) mode = 'read';
     // La Lecture épurée (js/clean-reading.js) n'existe que dans le mode Lecture : un autre mode la quitte, la barre du haut revient avec lui.
     CleanReading.onModeChange(mode);
@@ -1723,9 +1758,9 @@
     await updateEmailLengthGauge();
   }
 
-  // Posée sur les deux conteneurs (édition et lecture), sinon la largeur réelle d'une page PDF ne s'appliquait jamais en mode Lecture. .checked sur le
-  // <label> lui-même fait rester l'icône en accent/bleu tant que la case est cochée, plutôt qu'un simple texte de case à cocher. Une grille n'a pas de feuille :
-  // la case est alors grisée (GridEditor.setActive) et la classe retirée, la case garde sa valeur pour le modèle suivant.
+  // Classe posée sur les deux conteneurs (édition et lecture) : la largeur réelle d'une page PDF doit aussi s'appliquer en mode Lecture. `.checked`
+  // sur le <label> lui-même garde l'icône en accent tant que la case est cochée. Une grille n'a pas de feuille : la case est alors grisée
+  // (GridEditor.setActive) et la classe retirée, la case gardant sa valeur pour le modèle suivant.
   function applyA4Preview() {
     const toggle = document.getElementById('v2-toggle-a4-preview');
     if (!toggle) return;
@@ -1741,8 +1776,8 @@
     recaptureStaleLayerGrids();
   }
 
-  // Rappelée à chaque changement de modèle (loadTemplateIntoEditor, loadMacroIntoEditor) : seul le passage d'une grille à un autre type (ou l'inverse) change la
-  // classe, dans tous les autres cas la case seule la gouverne, comme avant les grilles.
+  // Rappelée à chaque changement de modèle (loadTemplateIntoEditor, loadMacroIntoEditor) : seul le passage d'une grille à un autre type (ou
+  // l'inverse) change la classe, dans tous les autres cas la case seule la gouverne.
   let a4ForcedOffByGrid = false;
   function syncA4PreviewForModelType() {
     const grid = GridEditor.isGridType(currentTypeModele);
@@ -1758,8 +1793,8 @@
     applyA4Preview();
   }
 
-  // Nom de fichier PDF masqué par défaut derrière un crayon : réglage secondaire, pas besoin d'occuper en permanence une zone de la barre du haut. Reste
-  // visible si déjà configuré (cf. loadTemplateIntoEditor).
+  // Nom de fichier PDF masqué par défaut derrière un crayon : réglage secondaire, pas besoin d'occuper en permanence une zone de la barre du haut.
+  // Reste visible si déjà configuré (cf. loadTemplateIntoEditor).
   function wirePdfFilenameToggle() {
     const btn = document.getElementById('btn-toggle-pdf-filename');
     if (!btn || !pdfFilenameInput) return;
@@ -1771,7 +1806,8 @@
     pdfFilenameInput.addEventListener('keydown', e => { if (e.key === 'Enter') pdfFilenameInput.blur(); });
   }
 
-  // Qualité PDF : bouton + panneau au survol plutôt qu'un <select> toujours affiché. Seul le vectoriel existe : l'export ne lit plus la valeur choisie, les autres lignes sont grisées (« bientôt »).
+  // Qualité PDF : bouton + panneau au survol plutôt qu'un <select> toujours affiché. Seul le vectoriel existe : l'export ne lit plus la valeur
+  // choisie, les autres lignes sont grisées (« bientôt »).
   function wireQualityDropdown() {
     const select = document.getElementById('v2-pdf-quality');
     const flyout = document.getElementById('v2-quality-flyout');
@@ -1788,10 +1824,10 @@
     syncActiveRow();
   }
 
-  // Ajustement automatique de la page à la largeur disponible (cf. la règle `zoom` de css/editor-v2.css). Réduit la feuille juste ce qu'il faut pour
-  // qu'elle tienne dans le conteneur, jamais au-delà de 1 (une page A4 n'a pas à grossir sur un grand écran) et jamais en dessous de MIN_FIT_ZOOM, sous
-  // lequel le texte deviendrait illisible - le défilement horizontal reprend alors la main, comme avant. Aucun contrôle ajouté dans la barre d'outils :
-  // quand la feuille tient déjà, le facteur vaut 1 et rien ne change.
+  // Ajustement automatique de la page à la largeur disponible (cf. la règle `zoom` de css/editor-v2.css) : réduit la feuille juste ce qu'il faut pour
+  // qu'elle tienne dans le conteneur, jamais au-delà de 1 (une page A4 n'a pas à grossir sur un grand écran) et jamais en dessous de MIN_FIT_ZOOM,
+  // sous lequel le texte deviendrait illisible ; le défilement horizontal reprend alors la main. Quand la feuille tient déjà, le facteur vaut 1 et
+  // rien ne change.
   const MIN_FIT_ZOOM = 0.5;
   function applyPageFitZoom(container) {
     if (!container) return;
@@ -1800,8 +1836,8 @@
     const cs = getComputedStyle(container);
     const available = container.clientWidth - parseFloat(cs.paddingLeft || 0) - parseFloat(cs.paddingRight || 0);
     if (!(available > 0)) return;
-    // Largeur de la feuille = celle de .v2-page-sheet / .reader-content en Aperçu A4 (--pp-page-width, css/editor-v2.css) : 793.71px en A4 portrait, 1122.52px en
-    // A4 paysage, 559.37px en A5 portrait... Lue à chaque calcul, elle change avec le sens et le format du modèle.
+    // Largeur de la feuille = celle de .v2-page-sheet / .reader-content en Aperçu A4 (--pp-page-width, css/editor-v2.css) : 793.71px en A4 portrait,
+    // 1122.52px en A4 paysage, 559.37px en A5 portrait... Lue à chaque calcul, elle change avec le sens et le format du modèle.
     const raw = available / PageLayout.getSheetWidthPx();
     const zoom = raw >= 1 ? 1 : Math.max(MIN_FIT_ZOOM, raw);
     // Arrondi au millième : sans ça, un redimensionnement continu réécrit la variable à chaque pixel et relance la pagination en boucle.
@@ -1811,7 +1847,7 @@
     return true;
   }
 
-  // Pose le facteur sur les deux conteneurs SANS rafraîchir quoi que ce soit : pour les appelants qui rafraîchissent eux-mêmes juste après (chargement d'un
+  // Pose le facteur sur les deux conteneurs sans rien rafraîchir, pour les appelants qui rafraîchissent eux-mêmes juste après (chargement d'un
   // modèle, changement d'orientation). Rend true si l'un des deux a changé.
   function applyPageFitZoomToBoth() {
     const editorChanged = applyPageFitZoom(editorContainer);
@@ -1822,35 +1858,41 @@
   function refreshPageFitZoom() {
     const editorChanged = applyPageFitZoom(editorContainer);
     const readerChanged = applyPageFitZoom(readerContainer);
-    // Les bandes de pagination sont positionnées à partir de mesures réelles : un changement de facteur les rend caduques tant qu'on n'a pas recalculé.
+    // Les bandes de pagination sont positionnées à partir de mesures réelles : un changement de facteur les rend caduques tant qu'on n'a pas
+    // recalculé.
     if (editorChanged && currentMode === 'edit') Editor.refreshPaginationPreview();
     if (readerChanged && currentMode === 'read') renderReader();
   }
 
-  // Vrai quand l'orientation ou le format a changé à un moment où l'éditeur ne pouvait pas mesurer sa mise en page - masqué (Lecture, résumé d'un macro-modèle) ou sans
-  // Aperçu A4 (pas de pagination, donc pas de grille page) : la grille page des images en calque reste à recapturer (cf. onPageLayoutChanged).
+  // Vrai quand l'orientation ou le format a changé à un moment où l'éditeur ne pouvait pas mesurer sa mise en page - masqué (Lecture, résumé d'un
+  // macro-modèle) ou sans Aperçu A4 (pas de pagination, donc pas de grille page) : la grille page des images en calque reste à recapturer (cf.
+  // onPageLayoutChanged).
   let layerGridsStale = false;
-  // Recapture en attente, dès que l'éditeur peut la mesurer (retour en Édition, Aperçu A4 rallumé). Elle vient d'un geste de la personne (le changement
-  // d'orientation ou de format) : si elle a modifié le document, l'enregistrement automatique la reprend - un enregistrement a pu partir entre-temps.
+  // Recapture en attente, dès que l'éditeur peut la mesurer (retour en Édition, Aperçu A4 rallumé). Elle vient d'un geste de la personne (le
+  // changement d'orientation ou de format) : si elle a modifié le document, l'enregistrement automatique la reprend - un enregistrement a pu partir
+  // entre-temps.
   function recaptureStaleLayerGrids() {
     if (!layerGridsStale || currentMode !== 'edit' || currentTypeModele === 'macro' || !editorContainer.classList.contains('a4-preview')) return;
     layerGridsStale = false;
     if (HeaderFooterPreview.recaptureLayeredImageGrids()) markAutosaveDirty();
   }
-  // Après un changement d'orientation ou de format : le facteur d'ajustement (calculé sur la largeur de la page) d'abord, puis tout ce qui se mesure avec lui -
-  // colonnes des tableaux et pagination de l'éditeur, repagination de la Lecture. Les marges gardent leurs millimètres : seule la page change de forme.
+  // Après un changement d'orientation ou de format : le facteur d'ajustement (calculé sur la largeur de la page) d'abord, puis tout ce qui se mesure
+  // avec lui - colonnes des tableaux et pagination de l'éditeur, repagination de la Lecture. Les marges gardent leurs millimètres : seule la page
+  // change de forme.
   function onPageLayoutChanged() {
     applyPageFitZoomToBoth();
     Editor.refreshLayout();
-    // La page a changé de hauteur : la grille page de chaque image en calque (lue par le PDF et le Word) est recapturée sur le rendu réel de l'éditeur. Masqué
-    // (Lecture) ou sans Aperçu A4, il n'a pas de mise en page à mesurer : la recapture attend qu'il le puisse (syncEditorVisibilityForMode, wireA4PreviewToggle).
+    // La page a changé de hauteur : la grille page de chaque image en calque (lue par le PDF et le Word) est recapturée sur le rendu réel de
+    // l'éditeur. Masqué (Lecture) ou sans Aperçu A4, il n'a pas de mise en page à mesurer : la recapture attend qu'il le puisse
+    // (syncEditorVisibilityForMode, wireA4PreviewToggle).
     layerGridsStale = true;
     recaptureStaleLayerGrids();
     if (currentMode === 'read') renderReader();
   }
 
-  // Le filigrane (fenêtre « Filigrane… » du menu Page) est peint par la couche de page de l'éditeur (Aperçu A4) et de la Lecture : la page garde sa taille, seule la couche est
-  // repeinte. Un macro-modèle n'a pas d'éditeur à repeindre (son résumé n'a pas de page) : sa Lecture, son PDF et son Word relisent le réglage.
+  // Le filigrane (fenêtre « Filigrane… » du menu Page) est peint par la couche de page de l'éditeur (Aperçu A4) et de la Lecture : la page garde sa
+  // taille, seule la couche est repeinte. Un macro-modèle n'a pas d'éditeur à repeindre (son résumé n'a pas de page) : sa Lecture, son PDF et son
+  // Word relisent le réglage.
   function onWatermarkChanged() {
     if (currentMode === 'read') renderReader();
     else if (currentTypeModele !== 'macro') Editor.refreshPaginationPreview();
@@ -1867,12 +1909,12 @@
     }
   }
 
-  // Raccourci clavier Ctrl+S / Cmd+S : enregistre le modèle courant, exactement comme le bouton Enregistrer (même onSave(), donc mêmes contrôles - nom
-  // obligatoire, sortie du mode en-tête/pied). Posé en capture sur `document` pour marcher où que soit le focus (éditeur TipTap, champ de nom, aperçu de
-  // template), et preventDefault() est indispensable : sans lui le navigateur ouvre sa propre boîte « Enregistrer la page », y compris dans l'iframe du
-  // widget Grist. Neutralisé pendant qu'une modale est ouverte : Ctrl+S y enregistrerait un modèle que l'utilisateur est justement en train de remplacer.
-  // Les autres touches du widget, et celle-ci quand on la change dans Réglages > Raccourcis, sont à js/shortcuts.js : il passe avant ce gestionnaire (chargé plus tôt, même
-  // phase de capture) et arrête Ctrl+S une fois la touche d'Enregistrer changée.
+  // Ctrl+S / Cmd+S : enregistre le modèle courant exactement comme le bouton Enregistrer (même onSave, donc mêmes contrôles : nom obligatoire, sortie
+  // du mode en-tête/pied). Posé en capture sur `document` pour marcher où que soit le focus (éditeur, champ de nom, aperçu), avec preventDefault :
+  // sinon le navigateur ouvre sa propre boîte « Enregistrer la page », y compris dans l'iframe du widget. Neutralisé pendant qu'une fenêtre est
+  // ouverte : Ctrl+S y enregistrerait un modèle que la personne est justement en train de remplacer.
+  // Les autres touches du widget, et celle-ci une fois changée dans Réglages > Raccourcis, relèvent de js/shortcuts.js : chargé plus tôt dans la même
+  // phase de capture, il passe avant ce gestionnaire et arrête Ctrl+S quand la touche d'Enregistrer a changé.
   function wireSaveShortcut() {
     const anyModalOpen = () => Array.prototype.some.call(
       document.querySelectorAll('#link-rules-modal, #link-config-modal, #template-gallery-modal, #template-preview-modal, #settings-modal, #template-organize-modal'),
@@ -1886,9 +1928,10 @@
     }, true);
   }
 
-  // Le libellé du raccourci dépend de la plateforme (⌘S sur macOS, Ctrl+S ailleurs) et de la touche choisie dans Réglages > Raccourcis (js/shortcuts.js ; '' quand elle a été
-  // retirée) : impossible à écrire dans index.html, posé ici sur le titre du menu du bouton Enregistrer (qui remplace son info-bulle : un bouton à menu n'a pas de data-tip, les
-  // deux se superposeraient) et sur son aria-label. Re-appliqué à chaque changement de langue et de touche, sinon I18n.applyTranslations() le réécrirait sans le raccourci.
+  // Le libellé du raccourci dépend de la plateforme (⌘S sur macOS, Ctrl+S ailleurs) et de la touche choisie dans Réglages > Raccourcis
+  // (js/shortcuts.js ; '' quand elle a été retirée) : impossible à écrire dans index.html. Posé sur le titre du menu du bouton Enregistrer (qui
+  // remplace son info-bulle : un bouton à menu n'a pas de data-tip, les deux se superposeraient) et sur son aria-label. Réappliqué à chaque
+  // changement de langue et de touche, sinon I18n.applyTranslations() le réécrirait sans le raccourci.
   function decorateSaveButtonShortcut() {
     const btn = document.getElementById('btn-save');
     if (!btn) return;
@@ -1899,9 +1942,9 @@
     if (menuTitle) menuTitle.textContent = label;
   }
 
-  // Les sept fenêtres écrites dans index.html sont reprises par la base commune des fenêtres (js/modal-base.js) : Tab et Échap tenus dans la fenêtre du dessus
-  // où que soit le focus, focus à l'ouverture et rendu à l'élément d'origine à la fermeture. Leur module les ouvre et les ferme comme avant (style.display) ;
-  // Échap clique le bouton qui les ferme (le second nom de chaque paire), donc passe par la même sortie que la souris.
+  // Les fenêtres écrites dans index.html sont reprises par la base commune des fenêtres (js/modal-base.js) : Tab et Échap tenus dans la fenêtre du
+  // dessus où que soit le focus, focus à l'ouverture et rendu à l'élément d'origine à la fermeture. Leur module les ouvre et les ferme par
+  // style.display ; Échap clique le bouton qui les ferme (le second nom de chaque paire), donc passe par la même sortie que la souris.
   function wirePageModals() {
     [
       ['link-rules-modal', 'link-rules-close'],
@@ -1914,8 +1957,8 @@
     ].forEach(([id, closeId]) => ModalBase.adopt(id, { closeId }));
   }
 
-  // "Tables liées" (js/variables.js) : modale séparée, rafraîchit la liste à chaque ouverture (une règle a pu être ajoutée entre-temps via l'insertion d'une
-  // variable).
+  // "Tables liées" (js/variables.js) : modale séparée, rafraîchit la liste à chaque ouverture (une règle a pu être ajoutée entre-temps via
+  // l'insertion d'une variable).
   function wireLinkRulesModal() {
     const btn = document.getElementById('btn-link-rules');
     const modal = document.getElementById('link-rules-modal');
@@ -1925,8 +1968,8 @@
     btnClose.addEventListener('click', () => { modal.style.display = 'none'; });
   }
 
-  // Galerie de templates : aperçu en lecture seule = simple reconstruction DOM passive (innerHTML dans un conteneur .tiptap), pas une seconde instance
-  // TipTap, donc aucun risque sur le document réellement en cours d'édition.
+  // Galerie de modèles : l'aperçu en lecture seule est une simple reconstruction DOM passive (innerHTML dans un conteneur .tiptap), pas une seconde
+  // instance TipTap, donc sans risque pour le document en cours d'édition.
   function wireTemplateGalleryModal() {
     const openLink = document.getElementById('v2-btn-new-from-template');
     const galleryModal = document.getElementById('template-gallery-modal');
@@ -2028,18 +2071,22 @@
       previewModal.style.display = 'none';
     }
 
-    // Charger le template ne suffit pas : sans un Templates.save() explicite, il ne reste qu'un tampon d'édition non enregistré, invisible dans
-    // #template-select. Réutilise onSave() tel quel plutôt que dupliquer l'appel à Templates.save().
-    async function useEmpty() {
-      if (!currentEntry || !currentHtml) return;
-      // Le nouveau modèle remplace l'éditeur : même question que pour un changement de modèle (« Annuler » laisse la galerie ouverte, rien n'est créé).
-      if (hasEditsToConfirmBeforeLeaving() && !(await askBeforeLeaving())) return;
-      const html = TemplateGallery.stripVariableBadges(currentHtml);
+    // Charger le modèle ne suffit pas : sans enregistrement explicite, il ne reste qu'un tampon d'édition, invisible dans #template-select. Passe par
+    // onSave plutôt que d'appeler Templates.save à part.
+    async function saveEntryAsTemplate(html) {
       const headerFooter = await TemplateGallery.fetchHeaderFooter(currentEntry);
       templateSelect.value = '';
       loadTemplateIntoEditor({ id: null, contenu: html, headerFooter, nom: currentEntry.name, nomFichierPDF: '' });
       await onSave();
       closeAll();
+    }
+
+    async function useEmpty() {
+      if (!currentEntry || !currentHtml) return;
+      // Le nouveau modèle remplace l'éditeur : même question que pour un changement de modèle (« Annuler » laisse la galerie ouverte, rien n'est
+      // créé).
+      if (hasEditsToConfirmBeforeLeaving() && !(await askBeforeLeaving())) return;
+      await saveEntryAsTemplate(TemplateGallery.stripVariableBadges(currentHtml));
       setStatus(I18n.t('status.templateSavedAsNew', { name: savedTemplateName(currentEntry.name) }));
     }
 
@@ -2058,8 +2105,8 @@
       const defaultName = schema.tableName || currentEntry.name.replace(/[^a-zA-Z0-9_]+/g, '_');
       const tableName = await Dialogs.prompt({ title: I18n.t('dialog.newTable.title'), label: I18n.t('prompt.newTableName'), value: defaultName, confirmLabel: I18n.t('common.create') });
       if (!tableName) return;
-      // Les badges #Variable du HTML statique pointent vers schema.tableName - si Grist crée la table sous un autre nom (renommée dans le prompt, ou
-      // dédupliquée), il faut réaligner ces références avant de charger le HTML, ou les variables pointeraient vers une table inexistante.
+      // Les badges #Variable du HTML statique pointent vers schema.tableName : si Grist crée la table sous un autre nom (renommée à la saisie, ou
+      // dédupliquée), ces références sont réalignées avant de charger le HTML, faute de quoi les variables pointeraient vers une table inexistante.
       let actualTableId = tableName;
       try {
         const result = await grist.docApi.applyUserActions([['AddTable', tableName, schema.columns]]);
@@ -2071,12 +2118,7 @@
         setStatus(I18n.t('status.tableCreationError', { table: tableName }), true);
         return;
       }
-      const html = TemplateGallery.rebindVariableTable(currentHtml, schema.tableName, actualTableId);
-      const headerFooter = await TemplateGallery.fetchHeaderFooter(currentEntry);
-      templateSelect.value = '';
-      loadTemplateIntoEditor({ id: null, contenu: html, headerFooter, nom: currentEntry.name, nomFichierPDF: '' });
-      await onSave();
-      closeAll();
+      await saveEntryAsTemplate(TemplateGallery.rebindVariableTable(currentHtml, schema.tableName, actualTableId));
       setStatus(I18n.t('status.tableCreatedSummary', { table: actualTableId, count: schema.columns.length, name: savedTemplateName(currentEntry.name) }));
     }
 
@@ -2085,9 +2127,10 @@
     if (previewCloseBtn) previewCloseBtn.addEventListener('click', closeAll);
     if (previewBack) previewBack.addEventListener('click', () => { previewModal.style.display = 'none'; galleryModal.style.display = 'flex'; });
     if (searchInput) searchInput.addEventListener('input', renderGrid);
-    // Un seul « Utiliser… » à la fois (carte « Corriger » d'Antoine du 02/10) : Grist lent, rien ne bouge à l'écran et la personne clique une deuxième fois. Le clic en trop créait un deuxième
-    // modèle (« Facture » puis « Facture (2) ») ; sur « Utiliser avec une nouvelle table de données », il rouvrait la fenêtre du nom de la table avant la fin de la première création. Il est
-    // ignoré tant que la première n'est pas finie ; une création qui ne revient jamais ne bloque pas les boutons au-delà de SAVE_WATCHDOG_MS.
+    // Un seul « Utiliser… » à la fois : avec Grist lent, rien ne bouge à l'écran et la personne clique une deuxième fois, ce qui créerait un second
+    // modèle (« Facture » puis « Facture (2) ») ou, sur « Utiliser avec une nouvelle table de données », rouvrirait la fenêtre du nom avant la fin de
+    // la première création. Le clic en trop est ignoré tant que la première création n'est pas finie ; une création qui ne revient jamais ne bloque
+    // pas les boutons au-delà de SAVE_WATCHDOG_MS.
     let useStartedAt = 0; // 0 : aucune création en cours
     const once = (action) => async function () {
       if (useStartedAt && Date.now() - useStartedAt < SAVE_WATCHDOG_MS) return;
@@ -2098,108 +2141,49 @@
     previewUseData.addEventListener('click', once(useWithData));
   }
 
-  async function init() {
-    syncSaveButtonLook();
-    wireAccessLockGuard();
-    // Grist (schéma, règles de liaison), les modèles et l'éditeur se chargent ENSEMBLE : en série, leurs aller-retour et leurs téléchargements faisaient attendre 6 s le premier
-    // modèle (mesure d'ouverture du 2026-10-02). index.html a pu les lancer plus tôt encore (window.__earlyStart), pendant que les derniers scripts arrivent.
-    const early = window.__earlyStart || {};
-    const gristInit = early.grist || GristAPI.init();
-    const templatesLoaded = early.templates || Templates.loadAll();
-    const editorReady = Editor.init();
-    editorReady.catch(() => {}); // l'échec se lit plus bas, à l'attente ; ici seulement pas d'« unhandled rejection » le temps que Grist réponde
-    try { await gristInit; } catch (e) { setStatus(I18n.t('status.gristApiError'), true); }
-    // Lancé dès que les options du widget sont connues (GristAPI.init), attendu seulement avant le premier affichage, en fin d'init().
-    const accessReady = AccessRights.init();
-    ViewTemplate.init();
-    RowTemplate.init({
-      openTemplate: openTemplateForRow,
-      currentId: () => Templates.getCurrentId(),
-      currentRecord: () => ({ record: latestRecord, tableId: latestRecordTableId }),
-    });
-    await editorReady;
-    Comments.setReaderHooks({ save: saveReaderCommentAnchors, refresh: () => renderReader() });
-    Comments.wireReader(readerContainer);
-    // 'update' (pas 'transaction') : ne fire que si le DOCUMENT a réellement changé (docChanged), jamais pour un simple déplacement de curseur/sélection -
-    // cf. section "Auto-save" plus haut. Couvre aussi l'édition en-tête/pied (même instance d'éditeur, contenu échangé via setContent).
+  // Tout ce qui marque le brouillon « modifié » ou rafraîchit la jauge de l'email : l'éditeur, les champs du modèle et les réglages de page.
+  function wireEditTracking() {
+    // 'update' et non 'transaction' : ne part que si le document a réellement changé (docChanged), jamais pour un simple déplacement du curseur ou de
+    // la sélection (cf. la section Enregistrement automatique plus haut). Couvre aussi l'édition de l'en-tête et du pied (même instance d'éditeur,
+    // contenu échangé par setContent).
     EditorCore.getEditor().on('update', markAutosaveDirty);
     EditorCore.getEditor().on('update', scheduleEmailLengthGauge);
     if (templateNameInput) templateNameInput.addEventListener('input', markAutosaveDirty);
     if (pdfFilenameInput) pdfFilenameInput.addEventListener('input', markAutosaveDirty);
-    [emailSubjectInput, emailToInput, emailCcInput, emailCciInput].forEach(el => {
-      if (!el) return;
+    eachEmailInput(el => {
       el.addEventListener('input', markAutosaveDirty);
       el.addEventListener('input', scheduleEmailLengthGauge);
-      // Même mécanisme #Variable, déjà éprouvé, que le champ "nom de fichier PDF" (texte brut - cf. commentaire CSS de #v2-email-fields-row) - pas de
-      // suggestion "Chips" ici (setTabsVisible(false) dans checkForFilenameTrigger), une note de bas de page/date/heure n'a aucun sens dans un objet ou une
-      // liste d'adresses.
+      // Même mécanisme #Variable que le champ « nom de fichier PDF » (texte brut, cf. le commentaire CSS de #v2-email-fields-row), sans suggestion de
+      // chips (setTabsVisible(false) dans checkForFilenameTrigger) : une note de bas de page, une date ou une heure n'a aucun sens dans un objet ou
+      // une liste d'adresses.
       Variables.initFilenameInput(el);
     });
     wireCciToggle();
-    // Émis par js/settings.js à chaque saisie dans les 4 champs de marge (onglet Réglages) - sans lui, changer uniquement les marges sans toucher au
-    // texte ne marquait jamais le brouillon "modifié" et l'auto-save ne l'enregistrait donc jamais.
+    // Émis par js/settings.js à chaque saisie dans les quatre champs de marge (onglet Réglages) : changer seulement les marges ne touche pas au
+    // texte, et sans cet évènement le brouillon ne serait jamais marqué « modifié ».
     document.addEventListener('pp:marginsChanged', markAutosaveDirty);
-    // Émis par PageLayout.setOrientation (bouton Portrait / Paysage) : la feuille change de largeur ET de hauteur. Le bouton ne rafraîchit rien lui-même.
+    // Émis par PageLayout.setOrientation (bouton Portrait / Paysage) : la feuille change de largeur et de hauteur. Le bouton ne rafraîchit rien
+    // lui-même.
     document.addEventListener('pp:pageLayoutChanged', onPageLayoutChanged);
     // Émis par PageLayout.setWatermark (fenêtre « Filigrane… ») : la couche des pages est repeinte, la page ne change pas de forme.
     document.addEventListener('pp:watermarkChanged', onWatermarkChanged);
-    GristAPI.onRecord(async function (record, tableId) {
-      latestRecord = record;
-      latestRecordTableId = tableId || GristAPI.getCurrentTableId();
-      if (tableId) currentTableId = tableId;
-      // Réglage « Modèle selon la ligne » coupé (le cas général) : un test, rien d'autre. Activé et le modèle de la ligne change : loadTemplateIntoEditor a déjà redessiné la Lecture.
-      const switched = await RowTemplate.follow(record, latestRecordTableId);
-      if (currentMode === 'read' && record && !switched) await renderReader(record, latestRecordTableId);
-      if (currentMode === 'read') await updateEmailFieldsDisplay();
-      await updateEmailLengthGauge();
-    });
-    await refreshTemplateList(templatesLoaded);
-    // Enveloppe #template-select AVANT l'écriture de templateSelect.value ci-dessous (modèle par
-    // défaut) : TemplateTreeSelect intercepte cet accesseur pour se synchroniser (js/template-tree-select.js),
-    // donc l'ordre importe - attaché après, ce premier affichage du modèle par défaut serait manqué.
-    //
-    // try/catch ajouté le 2026-09-28 (Antoine : "l'enregistrement d'un modèle ne fonctionne pas") :
-    // init() n'a ailleurs aucun filet, donc une exception ici (arbre du rangement, nouveau cette
-    // semaine) empêchait tout ce qui suit de se brancher - Enregistrer, Ctrl+S, l'auto-save, le statut
-    // "Prêt" - sans aucun message. Cas réel trouvé et corrigé séparément (js/template-organizer.js,
-    // ligne avec Nom vide/null), mais Enregistrer ne doit plus jamais dépendre du bon fonctionnement de
-    // cette vue décorative : un futur bug de rendu de l'arbre reste dans l'arbre.
-    // onOrganize : « Organiser mes modèles » vit dans l'en-tête du panneau depuis le 2026-10-01 (js/template-tree-select.js), plus dans la barre.
-    try { TemplateTreeSelect.attach(templateSelect, { onOrganize: () => { if (!isReadOnly()) TemplateOrganizeModal.open(); } }); } catch (e) { console.error('[main] TemplateTreeSelect.attach a échoué, arbre non disponible', e); }
-    // Chargement non bloquant, même patron que Comments.loadForTemplate ci-dessous : l'identification
-    // utilisateur (GristAPI.getCurrentUserEmail) est un aller-retour réseau, pas de raison de retarder
-    // le démarrage du widget pour la section "Épinglés" de l'arbre.
-    TemplatePreferences.loadForCurrentUser()
-      .then(() => TemplateTreeSelect.refresh())
-      .catch(e => console.error('[main] chargement des préférences de rangement impossible', e));
-    // Modèle par défaut (cf. btn-set-default-template) : sélectionné avant la lecture de templateSelect.value ci-dessous, pour que le widget s'ouvre
-    // directement dessus plutôt que sur "-- Nouveau modèle --". Silencieux si l'id ne correspond à aucune option (modèle supprimé entre-temps).
-    // Réglage « Modèle selon la ligne » activé et la ligne déjà connue : le widget s'ouvre directement sur son modèle, sans passer par le modèle par défaut.
-    let startupRowTemplateId = null;
-    if (RowTemplate.isActive() && latestRecord) {
-      try { startupRowTemplateId = await RowTemplate.pick(latestRecord, latestRecordTableId); }
-      catch (e) { console.error('[main] modèle de la ligne introuvable au démarrage', e); }
-    }
-    const defaultTemplateId = Templates.getDefaultId();
-    // Ordre d'ouverture : la ligne qui désigne un modèle, puis le modèle choisi pour cette vue (js/view-template.js), puis le modèle par défaut du document (★).
-    const viewTemplateId = ViewTemplate.usableId();
-    if (startupRowTemplateId != null) {
-      templateSelect.value = startupRowTemplateId;
-    } else if (viewTemplateId != null) {
-      templateSelect.value = viewTemplateId;
-    } else if (defaultTemplateId != null) {
-      const defaultTpl = Templates.getCached().find(t => String(t.id) === String(defaultTemplateId));
-      // Un modèle email ou macro ne doit jamais être le modèle de démarrage (cf. syncDefaultTemplateButton,
-      // qui grise désormais le bouton "modèle par défaut" pour ces deux types) - mais ce garde ne
-      // "détricote" pas un défaut resté coincé sur un modèle email d'AVANT ce correctif (Antoine,
-      // 2026-09-19 : le widget s'ouvrait encore sur l'email malgré le bouton grisé). On l'ignore
-      // explicitement ici plutôt que de compter sur une remise à zéro manuelle.
-      if (!defaultTpl || (defaultTpl.typeModele !== 'email' && defaultTpl.typeModele !== 'macro')) templateSelect.value = defaultTemplateId;
-    }
-    await onTemplateSelectChange();
-    templateSelect.addEventListener('change', onTemplateSelectChange);
-    // Les lignes reçues avant ce point (modèles pas encore chargés) comptent maintenant ; la ligne déjà ouverte au démarrage ne rouvre rien.
-    RowTemplate.start().catch(e => console.error('[main] modèle selon la ligne non appliqué', e));
+  }
+
+  // La ligne sélectionnée dans Grist a changé : la Lecture, les champs de l'email et la jauge suivent.
+  async function onRecordChange(record, tableId) {
+    latestRecord = record;
+    latestRecordTableId = tableId || GristAPI.getCurrentTableId();
+    if (tableId) currentTableId = tableId;
+    // Réglage « Modèle selon la ligne » coupé (le cas général) : un test, rien d'autre. Activé et le modèle de la ligne change :
+    // loadTemplateIntoEditor a déjà redessiné la Lecture.
+    const switched = await RowTemplate.follow(record, latestRecordTableId);
+    if (currentMode === 'read' && record && !switched) await renderReader(record, latestRecordTableId);
+    if (currentMode === 'read') await updateEmailFieldsDisplay();
+    await updateEmailLengthGauge();
+  }
+
+  // Les boutons de la barre : nouveau modèle, import, suppression, exports, création de l'email, modes Édition et Lecture.
+  function wireToolbarButtons() {
     document.getElementById('btn-new').addEventListener('click', onNew);
     const btnNewDocument = document.getElementById('v2-btn-new-document');
     const btnNewEmail = document.getElementById('v2-btn-new-email');
@@ -2229,6 +2213,11 @@
     if (btnCreateEmail) btnCreateEmail.addEventListener('click', withExportLock(onCreateEmail));
     btnEdit.addEventListener('click', () => switchMode('edit'));
     btnRead.addEventListener('click', () => switchMode('read'));
+  }
+
+  // Le reste des branchements de l'interface : Lecture épurée, fenêtres, nom du fichier PDF, qualité, raccourcis, bandeau de conflit, menu
+  // Enregistrer.
+  function wireWidgetControls() {
     CleanReading.wire({
       getMode: () => currentMode,
       switchMode,
@@ -2252,24 +2241,24 @@
     decorateSaveButtonShortcut();
     I18n.onChange(decorateSaveButtonShortcut);
     Shortcuts.onChange(decorateSaveButtonShortcut);
-    // Le message « Modifications non enregistrées » dure tant que rien n'est enregistré : il suit un changement de langue au lieu de rester dans l'ancienne.
+    // Le message « Modifications non enregistrées » dure tant que rien n'est enregistré : il suit un changement de langue au lieu de rester dans
+    // l'ancienne.
     I18n.onChange(() => { if (statusMsg.classList.contains('is-unsaved')) statusMsg.textContent = I18n.t('status.unsavedChanges'); });
     Variables.initFilenameInput(pdfFilenameInput);
     wireAutosaveConflictBanner();
     wireMacroReturn();
     wireSaveMenu();
-    startAutosaveLoop();
-    await Promise.race([accessReady, new Promise(resolve => setTimeout(resolve, ACCESS_STARTUP_WAIT_MS))]);
-    applyAccessRights();
-    AccessRights.onChange(onAccessRightsChange);
-    await switchMode('edit');
-    setStatus(I18n.t(isReadOnly() ? 'status.readyReadOnly' : 'status.ready'));
-    openCleanReadingForReadOnly();
-    // L'ouverture n'a lu que les métadonnées des tables (colonnes provisoires, GristAPI.init) : une passe lue il y a moins d'une minute - celle de l'affichage du premier modèle - suffit, sinon elle part ici.
+  }
+
+  // Une fois le modèle affiché : la lecture exacte du schéma, puis les renommages et les réglages qui citent une colonne disparue.
+  function checkAfterOpen() {
+    // L'ouverture n'a lu que les métadonnées des tables (colonnes provisoires, GristAPI.init) : une passe lue il y a moins d'une minute - celle de
+    // l'affichage du premier modèle - suffit, sinon elle part ici.
     setTimeout(() => { GristAPI.refreshSchema({ maxAgeMs: 60000 }).catch(() => {}); }, EXACT_SCHEMA_CHECK_MS);
-    // Les renommages faits dans Grist depuis la dernière ouverture (js/schema-renames.js) : une fois le modèle affiché, sans l'attendre.
-    // Puis les réglages Accès et Selon la ligne qui citent une colonne disparue (js/settings-columns.js), qui passent APRÈS : le coin d'état n'a qu'une ligne, et l'avertissement - il demande une action - se lit
-    // en premier ; « Mis à jour après un renommage… » le suit au lieu d'être effacé (message entier au survol, js/viewport-fit.js).
+    // Les renommages faits dans Grist depuis la dernière ouverture (js/schema-renames.js) : une fois le modèle affiché, sans l'attendre. Puis les
+    // réglages Accès et Selon la ligne qui citent une colonne disparue (js/settings-columns.js), qui passent après : le coin d'état n'a qu'une ligne,
+    // et l'avertissement, qui demande une action, se lit en premier ; « Mis à jour après un renommage… » le suit au lieu d'être effacé (message
+    // entier au survol, js/viewport-fit.js).
     const untouched = () => !hasEditsToConfirmBeforeLeaving();
     let renamedMessage = '';
     SchemaRenames.checkAfterOpen({ isUntouched: untouched, notify: msg => { renamedMessage = msg; setStatus(msg); } })
@@ -2278,10 +2267,76 @@
       .catch(e => console.warn('[main] vérification des réglages impossible', e));
   }
 
-  // .catch() ajouté le 2026-09-28 : init() n'a de filet que sur TemplateTreeSelect.attach() (cf. commentaire
-  // ci-dessus) - toute autre exception plantait l'initialisation en silence, rien dans le statut, la seule
-  // trace était la console (qu'Antoine ne consulte pas). Un futur bug ailleurs dans init() s'affichera
-  // maintenant ici plutôt que de reproduire "l'enregistrement ne fonctionne pas" sans aucun indice visible.
+  async function init() {
+    syncSaveButtonLook();
+    wireAccessLockGuard();
+    // Grist (schéma, règles de liaison), les modèles et l'éditeur se chargent ensemble : en série, leurs aller-retour et leurs téléchargements
+    // faisaient attendre 6 s le premier modèle. index.html a pu les lancer plus tôt encore (window.__earlyStart), pendant que les derniers scripts
+    // arrivent.
+    const early = window.__earlyStart || {};
+    const gristInit = early.grist || GristAPI.init();
+    const templatesLoaded = early.templates || Templates.loadAll();
+    const editorReady = Editor.init();
+    editorReady.catch(() => {}); // l'échec se lit plus bas, à l'attente ; ici seulement pas d'« unhandled rejection » le temps que Grist réponde
+    try { await gristInit; } catch (e) { setStatus(I18n.t('status.gristApiError'), true); }
+    // Lancé dès que les options du widget sont connues (GristAPI.init), attendu seulement avant le premier affichage, en fin d'init().
+    const accessReady = AccessRights.init();
+    ViewTemplate.init();
+    RowTemplate.init({
+      openTemplate: openTemplateForRow,
+      currentId: () => Templates.getCurrentId(),
+      currentRecord: () => ({ record: latestRecord, tableId: latestRecordTableId }),
+    });
+    await editorReady;
+    Comments.setReaderHooks({ save: saveReaderCommentAnchors, refresh: () => renderReader() });
+    Comments.wireReader(readerContainer);
+    wireEditTracking();
+    GristAPI.onRecord(onRecordChange);
+    await refreshTemplateList(templatesLoaded);
+    // Enveloppe #template-select avant l'écriture de templateSelect.value ci-dessous (modèle par défaut) : TemplateTreeSelect intercepte cet
+    // accesseur pour se synchroniser (js/template-tree-select.js), donc l'ordre importe ; attaché après, le premier affichage du modèle par défaut
+    // serait manqué.
+    // Le try/catch garde le reste du démarrage : init() n'a ailleurs aucun filet, et une exception dans cette vue décorative empêcherait de brancher
+    // tout ce qui suit (Enregistrer, Ctrl+S, enregistrement automatique, statut « Prêt ») sans aucun message. Un bug de rendu de l'arbre doit rester
+    // dans l'arbre.
+    // `onOrganize` : « Organiser mes modèles » vit dans l'en-tête du panneau (js/template-tree-select.js).
+    try { TemplateTreeSelect.attach(templateSelect, { onOrganize: () => { if (!isReadOnly()) TemplateOrganizeModal.open(); } }); } catch (e) { console.error('[main] TemplateTreeSelect.attach a échoué, arbre non disponible', e); }
+    // Chargement non bloquant, comme Comments.loadForTemplate ci-dessous : l'identification de la personne (GristAPI.getCurrentUserEmail) est un
+    // aller-retour réseau qui ne doit pas retarder le démarrage pour la section « Épinglés » de l'arbre.
+    TemplatePreferences.loadForCurrentUser()
+      .then(() => TemplateTreeSelect.refresh())
+      .catch(e => console.error('[main] chargement des préférences de rangement impossible', e));
+    // Modèle par défaut (cf. btn-set-default-template) : sélectionné avant la lecture de templateSelect.value ci-dessous, pour que le widget s'ouvre
+    // directement dessus plutôt que sur "-- Nouveau modèle --". Silencieux si l'id ne correspond à aucune option (modèle supprimé entre-temps).
+    // Réglage « Modèle selon la ligne » activé et la ligne déjà connue : le widget s'ouvre directement sur son modèle, sans passer par le modèle par
+    // défaut.
+    let startupRowTemplateId = null;
+    if (RowTemplate.isActive() && latestRecord) {
+      try { startupRowTemplateId = await RowTemplate.pick(latestRecord, latestRecordTableId); }
+      catch (e) { console.error('[main] modèle de la ligne introuvable au démarrage', e); }
+    }
+    // Ordre d'ouverture : la ligne qui désigne un modèle, puis le modèle choisi pour cette vue (js/view-template.js), puis le modèle par défaut du
+    // document (★, jamais un modèle email ou macro : Templates.getDefaultId les ignore, même quand la colonne les marque encore).
+    const startupTemplateId = [startupRowTemplateId, ViewTemplate.usableId(), Templates.getDefaultId()].find(id => id != null);
+    if (startupTemplateId !== undefined) templateSelect.value = startupTemplateId;
+    await onTemplateSelectChange();
+    templateSelect.addEventListener('change', onTemplateSelectChange);
+    // Les lignes reçues avant ce point (modèles pas encore chargés) comptent maintenant ; la ligne déjà ouverte au démarrage ne rouvre rien.
+    RowTemplate.start().catch(e => console.error('[main] modèle selon la ligne non appliqué', e));
+    wireToolbarButtons();
+    wireWidgetControls();
+    startAutosaveLoop();
+    await Promise.race([accessReady, new Promise(resolve => setTimeout(resolve, ACCESS_STARTUP_WAIT_MS))]);
+    applyAccessRights();
+    AccessRights.onChange(onAccessRightsChange);
+    await switchMode('edit');
+    setStatus(I18n.t(isReadOnly() ? 'status.readyReadOnly' : 'status.ready'));
+    openCleanReadingForReadOnly();
+    checkAfterOpen();
+  }
+
+  // Dernier filet de init() : hors TemplateTreeSelect.attach() (cf. ci-dessus), une exception interromprait l'initialisation en silence, sa seule
+  // trace étant la console. Elle s'affiche ici dans le coin d'état.
   init().catch((e) => {
     console.error('[main] init() a échoué', e);
     setStatus(I18n.t('status.initError', { message: (e && e.message) || String(e) }), true);

@@ -19,9 +19,9 @@ const ViewTemplate = (function () {
   const expectedEchoes = [];
 
   const normalize = value => (value != null && value !== '' ? String(value) : null);
-  const find = id => Templates.getCached().find(t => String(t.id) === String(id));
+  const find = Templates.byId;
   // Un modèle email ou macro ne démarre jamais le widget (cf. js/main.js:syncDefaultTemplateButton).
-  const canStart = tpl => !!tpl && tpl.typeModele !== 'email' && tpl.typeModele !== 'macro';
+  const canStart = tpl => !!tpl && Templates.canOpenAtStart(tpl.typeModele);
 
   function getId() { return currentId; }
 
