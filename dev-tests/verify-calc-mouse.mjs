@@ -208,6 +208,23 @@ const calcNodes = page => page.evaluate(() => {
 const fieldValue = page => page.evaluate(sel => document.querySelector(sel).value, FIELD);
 const statusText = page => page.evaluate(() => document.querySelector('#pp-calc-modal .pp-calc-status').textContent);
 
+// La liste « # » a son propre défilement : sa hauteur est limitée à la place libre autour du curseur, et à 700x400 les dernières lignes de l'onglet Chips passent sous son bord (neuf lignes
+// depuis « Nom de l'utilisateur »). Une ligne cachée y est amenée comme le fait l'utilisateur : la molette posée sur la liste, jusqu'à ce qu'elle soit entière sous la souris. Une liste qui
+// ne défilerait pas laisserait la ligne cachée après les six tours, et le contrôle qui suit échoue.
+async function reachListRow(page, text) {
+  let entry = await hitByText(page, '#autocomplete-box .ac-item', text);
+  let wheels = 0;
+  while (entry.found && !seen(entry) && wheels < 6) {
+    const list = await hitTest(page, '#autocomplete-box .ac-items');
+    await page.mouse.move(list.x, list.y);
+    await page.mouse.wheel(0, 60);
+    await page.waitForTimeout(120);
+    entry = await hitByText(page, '#autocomplete-box .ac-item', text);
+    wheels++;
+  }
+  return { entry, wheels };
+}
+
 // La liste « # » vers la ligne « Calcul » de l'onglet Chips, aux vrais clics, à partir du curseur dans un paragraphe vide (un « # » collé à un mot n'ouvre pas la liste).
 async function openFromHashList(page, label, calcLabel) {
   const insertButton = await clickSel(page, '#v2-btn-insert-variable');
@@ -218,9 +235,9 @@ async function openFromHashList(page, label, calcLabel) {
   if (!chipsTab.found) return false;
   await realClick(page, chipsTab);
   await page.waitForTimeout(150);
-  const entry = await hitByText(page, '#autocomplete-box .ac-item', calcLabel);
-  check(`${label} - la ligne « ${calcLabel} » est dans l'onglet Chips, visible et au premier plan`, entry.found && entry.inViewport && entry.onTop, entry);
-  if (entry.found) await realClick(page, entry);
+  const { entry, wheels } = await reachListRow(page, calcLabel);
+  check(`${label} - la ligne « ${calcLabel} » est dans l'onglet Chips, atteignable (à la molette si la liste défile), visible et au premier plan`, seen(entry), { entry, wheels });
+  if (seen(entry)) await realClick(page, entry);
   await page.waitForTimeout(300);
   return windowOpen(page);
 }
