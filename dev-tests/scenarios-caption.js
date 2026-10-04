@@ -468,8 +468,8 @@
   const CAP = text => '<p data-caption="true">' + text + '</p>';
   const token = (row, line) => 'R' + String(row).padStart(2, '0') + 'L' + line;
   const tableOf = rows => '<table><tbody>' + Array.from({ length: rows }, (_, i) => '<tr><td><p>' + token(i, 0) + '</p></td><td><p>Valeur ' + i + '</p></td></tr>').join('') + '</tbody></table>';
-  // Un tableau qu'on ne sait pas couper entre deux lignes (une case fusionnée sur deux lignes) : il reste d'une pièce.
-  const MERGED_TABLE = '<table><tbody><tr><td rowspan="2"><p>Fusion</p></td><td><p>B1</p></td></tr><tr><td><p>B2</p></td></tr><tr><td><p>C1</p></td><td><p>C2</p></td></tr></tbody></table>';
+  // Un tableau qu'on ne sait pas couper entre deux lignes (une case fusionnée sur toutes ses lignes : elles forment un seul groupe, js/table-page-cut.js:unitsOf) : il reste d'une pièce.
+  const MERGED_TABLE = '<table><tbody><tr><td rowspan="3"><p>Fusion</p></td><td><p>B1</p></td></tr><tr><td><p>B2</p></td></tr><tr><td><p>C2</p></td></tr></tbody></table>';
   const PAGE_BREAK = '<div class="page-break-marker" contenteditable="false">Saut de page</div>';
 
   const zoomOf = el => {
@@ -573,6 +573,26 @@
         });
         const pass = got.editor.bands === 1 && got.editor.first === 'ROW:' + token(7, 0) && got.editor.next === 'CAPTION:Tableau un'
           && got.reader.bands === 1 && got.reader.first === 'ROW:' + token(7, 0) && got.reader.next === 'CAPTION:Tableau un' && got.unchanged;
+        return { pass, notes: JSON.stringify(got) };
+      } finally { restoreLayout(); }
+    },
+  });
+
+  cases.push({
+    id: 'caption_keep_the_last_group_of_merged_rows_goes_to_the_next_page_with_its_caption_in_the_editor_and_the_reader',
+    description: 'Éditeur et Lecture : quand les dernières lignes d\'un tableau, liées par une case fusionnée, tiennent dans la page mais pas la légende, tout le groupe passe à la page suivante avec sa légende (comme la dernière ligne d\'un tableau simple) ; avant, la légende ouvrait la page 2 toute seule',
+    run: async (h) => {
+      try {
+        const group = '<tr><td rowspan="2"><p>' + token(6, 0) + '</p></td><td><p>Valeur 6</p></td></tr><tr><td><p>' + token(7, 0) + '</p></td></tr>';
+        const html = intro(6) + tableOf(6).replace('</tbody></table>', group + '</tbody></table>') + CAP('Tableau un') + '<p>Après</p>';
+        const got = await pagedEditorAndReader(h, html, kids => {
+          const wrapper = kids.find(k => k.classList.contains('tableWrapper'));
+          const at = kids.indexOf(wrapper);
+          return sumHeights(kids.slice(0, at + 1)) + layoutHeight(kids[at + 1]) / 2;
+        });
+        // La page 2 s'ouvre sur la première ligne du groupe (celle dont le texte est sous la bande), la ligne liée à elle la suit.
+        const pass = got.editor.bands === 1 && got.editor.first === 'ROW:' + token(6, 0) && got.editor.next === 'ROW:' + token(7, 0)
+          && got.reader.bands === 1 && got.reader.first === 'ROW:' + token(6, 0) && got.reader.next === 'ROW:' + token(7, 0) && got.unchanged;
         return { pass, notes: JSON.stringify(got) };
       } finally { restoreLayout(); }
     },
@@ -766,7 +786,7 @@
       const got = {
         before: named('Avant').keep, imageWithCaption: images[0].keep, caption: named('Figure un').keep,
         cutRows: ['A00L0', 'A01L0', 'A02L0'].map(t => named(t).keep), tableCaption: named('Tableau un').keep,
-        mergedRows: ['MFusion', 'MB1', 'MB2', 'MC1', 'MC2'].map(t => named(t).keep), mergedCaption: named('Tableau fusionné').keep,
+        mergedRows: ['MFusion', 'MB1', 'MB2', 'MC2'].map(t => named(t).keep), mergedCaption: named('Tableau fusionné').keep,
         text: named('Texte seul').keep, orphanCaption: named('Légende orpheline').keep,
         doubleImage: images[1].keep, doubleOne: named('Double un').keep, doubleTwo: named('Double deux').keep,
         lonelyImage: images[2].keep, lonelyText: named('Image sans légende').keep, plainRows: ['S00L0', 'S01L0'].map(t => named(t).keep), after: named('Après').keep,

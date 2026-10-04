@@ -9,7 +9,9 @@
 //    à sa place (même rang de ligne) et le modèle enregistré ne contient aucun rembourrage de coupure ;
 //  - Flèche bas / Flèche haut et Tab / Maj+Tab traversent la bande d'une ligne à l'autre, dans les deux sens, sans sauter ni bloquer ;
 //  - la Lecture (vrai clic sur « Mode lecture ») coupe au même rang que l'éditeur ;
-//  - le PDF (vrai clic sur « Exporter en PDF », fichier relu par pdf.js) ne coupe aucune ligne en deux et ne perd aucun texte.
+//  - le PDF (vrai clic sur « Exporter en PDF », fichier relu par pdf.js) ne coupe aucune ligne en deux et ne perd aucun texte ;
+//  - des lignes liées par une case fusionnée (Antoine, 04/10, « Complète ») : le saut qui aurait traversé le groupe passe AVANT sa première ligne dans l'éditeur, la Lecture et le PDF ; un vrai
+//    clic dans la case fusionnée et dans une ligne qu'elle recouvre, sous la bande, met le curseur dans cette case ; la frappe y écrit ; le groupe tient tout entier sur une page du PDF.
 // Lancé par run-headless.mjs (groupe Node "tablePageCutMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-table-page-cut-mouse.mjs
 // TABLE_CUT_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans elle, rien n'est écrit.
 import { createServer } from 'node:http';
@@ -97,7 +99,20 @@ const DOC_HTML = '<h1>Fiche de suivi</h1><p>Introduction du document.</p><table>
   + Array.from({ length: ROW_COUNT }, (_, i) => `<tr><td><p>R${pad2(i)}L0</p><p>R${pad2(i)}L1</p></td><td><p>Valeur ${i}</p></td></tr>`).join('')
   + '</tbody></table><p>Fin du document.</p>';
 
-async function openWidget(colorScheme) {
+// Le même document, dont les lignes `from` à `from + span - 1` sont liées par une case fusionnée (la première case de la ligne `from` s'étend sur elles) : toutes les lignes gardent deux
+// paragraphes, donc la même hauteur - le saut tombe au même endroit, au milieu du groupe quand `from` précède de peu la ligne qui ouvre la page 2 du tableau simple.
+const mergedDocHtml = (from, span) => '<h1>Fiche de suivi</h1><p>Introduction du document.</p><table><tbody>'
+  + Array.from({ length: ROW_COUNT }, (_, i) => {
+    const paras = `<p>R${pad2(i)}L0</p><p>R${pad2(i)}L1</p>`;
+    if (i === from) return `<tr><td rowspan="${span}">${paras}</td><td><p>Valeur ${i}</p><p>suite</p></td></tr>`;
+    if (i > from && i < from + span) return `<tr><td>${paras}</td></tr>`;
+    return `<tr><td>${paras}</td><td><p>Valeur ${i}</p></td></tr>`;
+  }).join('')
+  + '</tbody></table><p>Fin du document.</p>';
+// La ligne qui ouvre la page 2 du tableau simple, par thème (lue dans runTheme) : le groupe de lignes liées est posé juste avant, pour que le saut le traverse.
+const plainBreakRow = {};
+
+async function openWidget(colorScheme, docHtml = DOC_HTML) {
   const context = await browser.newContext({ bypassCSP: true, viewport: { width: WIDTH, height: HEIGHT }, colorScheme, acceptDownloads: true });
   const page = await context.newPage();
   page.on('pageerror', e => { pageErrors.push(e.message); console.log('[pageerror]', e.message); });
@@ -137,7 +152,7 @@ async function openWidget(colorScheme) {
       m.NomFichierPDF.push(''); m.HeaderFooter.push(''); m.DateModif.push(1790000000); m.Margins.push(''); m.EstParDefaut.push(true);
       stub.state.nextRowId.Publipostage_Modeles = 2;
     };
-  }, DOC_HTML);
+  }, docHtml);
   await page.goto(`${BASE}/_test-harness.html`, { waitUntil: 'load' });
   await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
   await page.waitForFunction(() => {
@@ -239,16 +254,21 @@ async function seamPaint(page, scope) {
     }
   }
   const cap = (await rowPixels(page, (g.table.left + g.table.right) / 2, g.bandBottom - 0.5, 1))[0];
-  return { visible, samples: ys.length * (g.xs.length + 1), ink: ink.slice(0, 4), inkCount: ink.length, cap, capDrawn: !isWhite(cap) };
+  return { visible, samples: ys.length * (g.xs.length + 1), ink: ink.slice(0, 4), inkCount: ink.length, cap, capDrawn: !isWhite(cap), span: Math.round(g.bandBottom - g.prevBottom), viewport: Math.round(g.visibleBottom - g.visibleTop) };
 }
 
-// Fait défiler le conteneur pour que le haut de la bande `index` soit au tiers de la zone visible.
-const scrollBandIntoView = (page, scope, index) => page.evaluate(({ scope, index }) => {
+// Fait défiler le conteneur pour que le haut de la bande `index` soit au tiers de la zone visible. `whole` : c'est la couture entière qu'on veut voir, de la dernière ligne
+// d'avant la bande (que seamPaint relit, quand un groupe de lignes est passé à la page suivante, la réserve de la page d'avant peut dépasser le tiers) au bas de la bande : le haut
+// de cette ligne se pose alors en haut de la zone visible.
+const scrollBandIntoView = (page, scope, index, whole = false) => page.evaluate(({ scope, index, whole }) => {
   const container = document.getElementById(scope === 'reader' ? 'reader-container' : 'editor-container');
   const band = container.querySelectorAll('.v2-page-band')[index];
   const c = container.getBoundingClientRect();
-  container.scrollTop += band.getBoundingClientRect().top - (c.top + c.height / 3);
-}, { scope, index });
+  if (!whole) { container.scrollTop += band.getBoundingClientRect().top - (c.top + c.height / 3); return; }
+  const rows = Array.from(container.querySelectorAll(scope === 'reader' ? '.reader-content > table > tbody > tr' : '.tiptap > .tableWrapper > table > tbody > tr'));
+  const k = rows.findIndex(row => row.querySelector('p').getBoundingClientRect().top >= band.getBoundingClientRect().bottom - 1);
+  container.scrollTop += rows[k - 1].getBoundingClientRect().bottom - (c.top + 6);
+}, { scope, index, whole });
 
 // Où cliquer pour atteindre le paragraphe `p` de la ligne `row` (centre de son texte) : le point, et si c'est bien la case de cette ligne qui reçoit le clic (rien dessus).
 const pointInRow = (page, row, cell, para) => page.evaluate(({ row, cell, para }) => {
@@ -310,6 +330,7 @@ async function runTheme(theme) {
   if (!a4On) await realClick(page, '#v2-a4-toggle');
   await page.waitForTimeout(1200);
   const ed = await seamState(page, 'editor');
+  plainBreakRow[theme] = ed.aligned[0];
   check(`${label} - éditeur : le tableau de ${ROW_COUNT} lignes passe sur plusieurs pages (${ed.bands} sauts, feuille au facteur ${ed.zoom.toFixed(3)})`, ed.bands >= 1 && ed.rows === ROW_COUNT && ed.zoom < 1, ed);
   check(`${label} - éditeur : la ligne qui ouvre chaque page (rangs ${JSON.stringify(ed.aligned)}) commence sous la bande de saut de page, la page d'avant garde sa réserve (${JSON.stringify(ed.reserve)} px), aucun texte dessous`,
     ed.bands >= 1 && ed.aligned.every(i => i > 0) && ed.overlaps === 0 && ed.reserve.every(r => r != null && r >= -0.5), ed);
@@ -413,8 +434,96 @@ async function runTheme(theme) {
   await context.close();
 }
 
+// Le tableau dont trois lignes sont liées par une case fusionnée : le saut qui les aurait traversées passe avant la première.
+async function runMerged(theme) {
+  const label = theme === 'dark' ? 'sombre' : 'clair';
+  const SPAN = 3;
+  const k = plainBreakRow[theme];
+  console.log(`\n=== Lignes liées par une case fusionnée au saut de page, vraie souris, ${WIDTH}x${HEIGHT}, thème ${label} ===`);
+  if (!(k > SPAN)) { check(`${label} - le tableau simple ouvre sa page 2 sur une ligne assez basse pour y poser un groupe de ${SPAN} lignes`, false, { k }); return; }
+  // Le groupe est les lignes k-2, k-1, k : le saut du tableau simple (ligne k en haut de la page 2) le traverse.
+  const from = k - (SPAN - 1);
+  const { context, page, downloads } = await openWidget(theme, mergedDocHtml(from, SPAN));
+  const a4On = await page.evaluate(() => document.getElementById('editor-container').classList.contains('a4-preview'));
+  if (!a4On) await realClick(page, '#v2-a4-toggle');
+  await page.waitForTimeout(1200);
+  const ed = await seamState(page, 'editor');
+  check(`${label} - éditeur : le saut qui aurait traversé les lignes ${from} à ${k} passe avant la première (la page 2 s'ouvre sur la ligne ${JSON.stringify(ed.aligned)}), aucun texte dessous, liseré à la largeur du tableau`,
+    ed.bands >= 1 && ed.aligned[0] === from && ed.overlaps === 0 && ed.reserve.every(r => r != null && r >= -0.5) && ed.caps.every(c => c.n === 1 && c.fullWidth), ed);
+  await parkMouse(page);
+  await scrollBandIntoView(page, 'editor', 0, true);
+  await page.waitForTimeout(300);
+  await snap(page, `${theme}-4-fusion-editeur-bande`);
+  const edPaint = await seamPaint(page, 'editor');
+  check(`${label} - éditeur : la réserve et les marges de la couture sont blanches malgré la case fusionnée (${edPaint.samples} points relus), le trait du haut du groupe est redessiné au bas de la bande`,
+    edPaint.visible && edPaint.inkCount === 0 && edPaint.capDrawn, edPaint);
+
+  // Vrai clic dans la case fusionnée (sous la bande), puis dans une ligne qu'elle recouvre.
+  const inMerged = await pointInRow(page, from, 0, 0);
+  check(`${label} - la case fusionnée (${ROW_COUNT > 0 ? 'ligne ' + from : ''}) est visible sous la bande et reçoit le clic : rien ne la recouvre`, inMerged.visible && inMerged.hitRow, inMerged);
+  await page.mouse.move(inMerged.x - 8, inMerged.y - 3, { steps: 3 });
+  await page.mouse.click(inMerged.x, inMerged.y);
+  await page.waitForTimeout(250);
+  const clicked = await caretRow(page);
+  check(`${label} - vrai clic dans la case fusionnée : le curseur est dans la ligne ${from}, première case, le clavier dans le texte`, clicked.row === from && clicked.cell === 0 && clicked.focusInEditor, clicked);
+  await page.keyboard.type('X');
+  await page.waitForTimeout(600);
+  const typed = await page.evaluate((row) => document.querySelectorAll('#editor-container .tiptap > .tableWrapper > table > tbody > tr')[row].querySelector('td').textContent, from);
+  const afterTyping = await seamState(page, 'editor');
+  check(`${label} - la frappe écrit dans la case fusionnée (« ${typed.slice(0, 18)}… ») et la page 2 s'ouvre toujours sur la ligne ${from}, sans texte dessous`, typed.includes('X') && afterTyping.aligned[0] === from && afterTyping.bands === ed.bands && afterTyping.overlaps === 0, afterTyping);
+  const inCovered = await pointInRow(page, from + 1, 0, 0);
+  await page.mouse.move(inCovered.x - 8, inCovered.y - 3, { steps: 3 });
+  await page.mouse.click(inCovered.x, inCovered.y);
+  await page.waitForTimeout(250);
+  const clickedCovered = await caretRow(page);
+  check(`${label} - vrai clic dans la ligne ${from + 1}, qu'une case fusionnée recouvre : le curseur est dans cette ligne`, inCovered.visible && inCovered.hitRow && clickedCovered.row === from + 1 && clickedCovered.focusInEditor, { inCovered, clickedCovered });
+
+  // Rien du saut dans le modèle enregistré.
+  await page.waitForTimeout(4500);
+  const stored = await page.evaluate(() => window.__gristStub.getRow('Publipostage_Modeles', 1).Contenu || '');
+  check(`${label} - le modèle enregistré porte la frappe et aucun rembourrage de coupure`, stored.includes('X') && !/padding-top/.test(stored) && !/v2-page-seam-cap/.test(stored) && /rowspan="3"/.test(stored), { padding: /padding-top/.test(stored), rowspan: /rowspan="3"/.test(stored) });
+
+  // Lecture (vrai clic) : même saut que l'éditeur.
+  await page.evaluate(() => window.__gristStub.fireRecord({ id: 1, Nom: 'Dupont' }, 'Clients'));
+  await realClick(page, '#btn-mode-read');
+  await page.waitForFunction(() => document.getElementById('reader-container').style.display === 'block' && !!document.querySelector('#reader-container .reader-content table'), null, { timeout: 8000 }).catch(() => {});
+  await page.waitForTimeout(1000);
+  const rd = await seamState(page, 'reader');
+  check(`${label} - Lecture : mêmes sauts que l'éditeur (${rd.bands} contre ${ed.bands}), la page 2 s'ouvre sur la ligne ${JSON.stringify(rd.aligned)} comme l'éditeur ${JSON.stringify(ed.aligned)}`,
+    rd.bands === ed.bands && JSON.stringify(rd.aligned) === JSON.stringify(ed.aligned) && rd.overlaps === 0 && rd.caps.every(c => c.n === 1 && c.fullWidth), { rd, ed });
+  await scrollBandIntoView(page, 'reader', 0, true);
+  await page.waitForTimeout(300);
+  const rdPaint = await seamPaint(page, 'reader');
+  check(`${label} - Lecture : la réserve et les marges de la couture sont blanches (${rdPaint.samples} points relus), le trait du haut du groupe est redessiné au bas de la bande`, rdPaint.visible && rdPaint.inkCount === 0 && rdPaint.capDrawn, rdPaint);
+  await snap(page, `${theme}-5-fusion-lecture-bande`);
+
+  // PDF (vrai clic) : le groupe est sur une page, rien ne manque.
+  downloads.length = 0;
+  await realClick(page, '#btn-export-pdf');
+  const startedAt = Date.now();
+  while (!downloads.some(d => /\.pdf$/i.test(d.suggestedFilename())) && Date.now() - startedAt < 30000) await page.waitForTimeout(150);
+  const file = downloads.find(d => /\.pdf$/i.test(d.suggestedFilename()));
+  check(`${label} - PDF : le fichier est téléchargé`, !!file, downloads.map(d => d.suggestedFilename()));
+  if (file) {
+    const bytes = readFileSync(await file.path());
+    const pdf = await pdfTokens(page, bytes.toString('base64'));
+    const pagesOf = {};
+    pdf.tokens.forEach(t => { (pagesOf[t.row] = pagesOf[t.row] || new Set()).add(t.page); });
+    const split = Object.keys(pagesOf).filter(r => pagesOf[r].size > 1).map(Number);
+    const groupPages = new Set();
+    pdf.tokens.forEach(t => { if (t.row >= from && t.row < from + SPAN) groupPages.add(t.page); });
+    const firstOnPage2 = Math.min(...pdf.tokens.filter(t => t.page === 1).map(t => t.row));
+    check(`${label} - PDF : ${pdf.pages} pages, les lignes ${from} à ${k} liées par la case fusionnée sont sur une seule page, aucune ligne coupée, rien ne manque (${pdf.tokens.length}/${ROW_COUNT * 2} jetons lus)`,
+      pdf.pages >= 2 && groupPages.size === 1 && split.length === 0 && pdf.tokens.length === ROW_COUNT * 2, { pages: pdf.pages, groupPages: Array.from(groupPages), split, tokens: pdf.tokens.length });
+    check(`${label} - PDF : la page 2 s'ouvre sur la ligne ${firstOnPage2}, à moins d'une ligne de la Lecture (ligne ${rd.aligned[0]})`, Math.abs(firstOnPage2 - rd.aligned[0]) <= 1, { firstOnPage2, readerFirst: rd.aligned[0] });
+  }
+  await context.close();
+}
+
 await runTheme('light');
 await runTheme('dark');
+await runMerged('light');
+await runMerged('dark');
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 
 await browser.close();

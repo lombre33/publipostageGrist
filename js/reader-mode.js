@@ -57,8 +57,8 @@ const ReaderMode = (function () {
   // il reste alors sur sa page et le repère tombe derrière lui. Le déplacer en entier revient à se tromper de tout ce qui tenait dans la page (un tableau ou une
   // zone 2 colonnes qui déborde de ~30 px envoyé en page 2, page 1 presque vide) au lieu de se tromper de ce qui déborde, alors que l'export coupe au pixel.
   // Un tableau de premier niveau fait exception à la première phrase : il se coupe ENTRE deux lignes (js/table-page-cut.js, comme l'éditeur, le PDF et le Word), les lignes qui ne
-  // tiennent pas ouvrent la page suivante. Le décalage porte alors `rowIndex` (rang de la première ligne de la page qui commence) et `afterIndex` est celui du tableau. Un
-  // tableau qu'on ne sait pas couper ainsi (ligne plus haute que la page, cases fusionnées sur plusieurs lignes...) garde la règle ci-dessus.
+  // tiennent pas ouvrent la page suivante. Le décalage porte alors `rowIndex` (rang de la première ligne de la page qui commence) et `afterIndex` est celui du tableau. Les lignes
+  // qu'une case fusionnée sur plusieurs lignes lie passent ensemble. Un tableau qu'on ne sait pas couper ainsi (ligne ou groupe de lignes plus haut que la page...) garde la règle ci-dessus.
   // La légende d'une image ou d'un tableau reste avec son bloc, comme dans l'éditeur (js/header-footer-preview.js:computePageBreaks, « Rester ensemble ») : le bloc et ses légendes comptent pour
   // UN bloc d'une pièce ; pour un tableau coupé entre deux lignes, la dernière ligne et la légende. « Garder avec le suivant » (js/keep-with-next.js) : une suite de paragraphes gardés et le bloc
   // qui la suit passent à la page suivante d'un seul tenant quand ils ne tiennent pas dans la place restante, sauf au-delà de 90 % d'une page.
@@ -101,9 +101,9 @@ const ReaderMode = (function () {
       const captionPx = captions.reduce((sum, el) => sum + el.getBoundingClientRect().height / zoom, 0);
       const cuttable = child.tagName === 'TABLE' ? TablePageCut.measure(child, child, zoom, pageContentHeightPx, null, captionPx) : null;
       if (cuttable) {
-        const tablePlan = TablePageCut.plan(consumed, cuttable.segs, pageContentHeightPx);
+        const tablePlan = TablePageCut.plan(consumed, cuttable.segs, pageContentHeightPx, cuttable.starts);
         if (tablePlan.blockBreakBefore) offsets.push({ top, afterIndex: index - 1, remainingPx: 0 });
-        tablePlan.cuts.forEach(rowIndex => offsets.push({ top: top + cuttable.segs.slice(0, rowIndex).reduce((sum, seg) => sum + seg, 0), afterIndex: index, rowIndex, remainingPx: 0 }));
+        tablePlan.cuts.forEach((rowIndex, k) => offsets.push({ top: top + cuttable.segs.slice(0, tablePlan.ranks[k]).reduce((sum, seg) => sum + seg, 0), afterIndex: index, rowIndex, remainingPx: 0 }));
         consumed = tablePlan.consumedAfter;
         if (cuttable.keepsTail) counted = index + 1 + captions.length;
         return;

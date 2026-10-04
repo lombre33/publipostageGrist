@@ -242,8 +242,9 @@ const HeaderFooterPreview = (function () {
   //    en entier se tromperait de tout ce qui tenait dans la page au lieu de ce qui déborde ;
   //  - les lignes vides de fin de document ne comptent pas (trailingBlankStart) : elles ouvriraient une page pour elles seules.
   // Un tableau de premier niveau se coupe entre deux lignes (js/table-page-cut.js), comme le PDF (dontBreakRows) et le Word (cantSplit) : la coupure
-  // porte `rowIndex` (rang de la première ligne de la nouvelle page) et `afterEl` est l'enveloppe du tableau. Un tableau qu'on ne sait pas couper
-  // ainsi (ligne plus haute que la page, cases fusionnées, grille...) suit la règle des blocs que l'export coupe. Une légende d'image ou de tableau
+  // porte `rowIndex` (rang de la première ligne de la nouvelle page) et `afterEl` est l'enveloppe du tableau. Les lignes qu'une case fusionnée sur plusieurs
+  // lignes lie ne se séparent pas : elles passent ensemble à la page suivante, comme une seule ligne. Un tableau qu'on ne sait pas couper
+  // ainsi (ligne ou groupe de lignes plus haut que la page, grille...) suit la règle des blocs que l'export coupe. Une légende d'image ou de tableau
   // (js/caption.js) reste avec son bloc, jamais seule en haut de la page suivante : le bloc et ses légendes comptent pour un seul bloc. Pour un
   // tableau coupé entre deux lignes, la dernière ligne et la légende font ce bloc. Un bloc et sa légende qui ne tiennent pas ensemble dans une page
   // (Caption.fitsWithCaption) ne sont pas gardés ensemble. « Garder avec le suivant » (js/keep-with-next.js) : une suite de paragraphes gardés et le bloc qui la suit passent à la page
@@ -291,7 +292,7 @@ const HeaderFooterPreview = (function () {
       const lastCaption = captions[captions.length - 1];
       const cuttable = cuttableTable(child, pageContentHeightPx, zoom, captionPx);
       if (cuttable) {
-        const tablePlan = TablePageCut.plan(consumed, cuttable.segs, pageContentHeightPx);
+        const tablePlan = TablePageCut.plan(consumed, cuttable.segs, pageContentHeightPx, cuttable.starts);
         if (tablePlan.blockBreakBefore) breaks.push({ afterEl: lastBlock, forced: false, remainingPx: 0 });
         tablePlan.cuts.forEach(rowIndex => breaks.push({ afterEl: child, rowIndex, forced: false, remainingPx: 0 }));
         consumed = tablePlan.consumedAfter;

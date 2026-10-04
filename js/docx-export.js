@@ -478,13 +478,18 @@ const DocxExport = (function () {
     return fill ? { type: docx.ShadingType.CLEAR, fill, color: 'auto' } : undefined;
   }
   // `keepWithCaption` : une légende suit le tableau (js/caption.js, « Rester ensemble » : jamais seule en haut de la page suivante). Word garde une ligne avec le paragraphe qui la suit quand
-  // les paragraphes de ses cases portent « Conserver avec le suivant » : la dernière ligne d'un tableau qui se coupe entre deux lignes (js/table-page-cut.js), toutes les lignes sinon, comme
+  // les paragraphes de ses cases portent « Conserver avec le suivant » : les lignes du dernier groupe d'un tableau qui se coupe entre deux lignes (js/table-page-cut.js), toutes les lignes sinon, comme
   // l'éditeur et le PDF qui passent alors le tableau entier. Word laisse tomber le lien quand la suite dépasse une page.
+  // Les lignes qu'une case fusionnée sur plusieurs lignes lie (TablePageCut.unitsOf) ne se séparent pas non plus (Antoine, 04/10, « Complète ») : toutes sauf la dernière de chaque groupe
+  // gardent leurs paragraphes avec le suivant, y compris la case de continuation que docx.js écrit dans les lignes recouvertes. Word laisse tomber le lien d'un groupe plus haut que la page.
   async function tableBlockFrom(tableEl, ctx, keepWithCaption) {
     const rows = Array.from(tableEl.querySelectorAll(':scope > tbody > tr, :scope > thead > tr, :scope > tr'));
     if (!rows.length) return null;
-    const cutRows = keepWithCaption ? TablePageCut.rowsOf(tableEl) : null;
-    const keptRows = keepWithCaption ? (cutRows && cutRows.length === rows.length ? [rows[rows.length - 1]] : rows) : [];
+    const cutRows = TablePageCut.rowsOf(tableEl);
+    const units = cutRows && cutRows.length === rows.length ? TablePageCut.unitsOf(cutRows) : null;
+    const keptRows = keepWithCaption ? (units ? rows.slice(units[units.length - 1].from) : rows) : [];
+    const joinedRows = new Set();
+    (units || []).forEach((unit) => { for (let r = unit.from; r < unit.to - 1; r += 1) joinedRows.add(rows[r]); });
     const firstRowCells = Array.from(rows[0].children).filter(c => /^(TD|TH)$/i.test(c.tagName));
     const columnCount = firstRowCells.reduce((sum, c) => sum + (parseInt(c.getAttribute('colspan') || '1', 10) || 1), 0) || 1;
     // Repli à parts égales si le tableau n'est pas attaché au document (ex. zone en-tête/pied, hors périmètre de la mesure, cf. buildDocxDocument) : aucun rendu à mesurer.
@@ -504,7 +509,7 @@ const DocxExport = (function () {
       for (const cell of cells) {
         const { col, colspan: span, rowspan: rowSpan } = placement.get(cell);
         const width = colWidthsTwip.slice(col, col + span).reduce((a, b) => a + b, 0) || Math.floor(CONTENT_WIDTH_TWIP / columnCount);
-        const children = await blocksFromContainer(cell, ctx, false, Math.max(200, width - WORD_DEFAULT_CELL_MARGIN_TWIP), keptRows.includes(tr));
+        const children = await blocksFromContainer(cell, ctx, false, Math.max(200, width - WORD_DEFAULT_CELL_MARGIN_TWIP), keptRows.includes(tr) || joinedRows.has(tr));
         tableCells.push(new docx.TableCell({
           children: children.length ? children : [new docx.Paragraph('')],
           width: { size: width, type: docx.WidthType.DXA },
@@ -520,7 +525,14 @@ const DocxExport = (function () {
     // columnWidths pilote le <w:tblGrid> (déclaration structurelle des colonnes) - SANS lui, docx.js retombe sur son propre défaut interne
     // (100 twips/colonne, vérifié dans son bundle), incohérent avec les largeurs réelles posées ci-dessus sur chaque TableCell.width. Un <w:tblGrid> qui ne
     // correspond pas aux tcW réels est un tableau non conforme (Word peut le signaler comme contenu à réparer).
-    return new docx.Table({ rows: tableRows, width: { size: CONTENT_WIDTH_TWIP, type: docx.WidthType.DXA }, columnWidths: colWidthsTwip });
+    const wordTable = new docx.Table({ rows: tableRows, width: { size: CONTENT_WIDTH_TWIP, type: docx.WidthType.DXA }, columnWidths: colWidthsTwip });
+    // La case de continuation d'une case fusionnée (docx.js la crée dans la ligne recouverte, sans contenu) : un paragraphe vide qui garde, lui aussi, avec le suivant. Word ne tient la ligne avec
+    // la suivante que si les paragraphes de toutes ses cases le demandent.
+    tableRows.forEach((tableRow, i) => {
+      if (!joinedRows.has(rows[i]) && !keptRows.includes(rows[i])) return;
+      tableRow.cells.forEach((tableCell) => { if (tableCell.options && tableCell.options.verticalMerge === docx.VerticalMergeType.CONTINUE) tableCell.addChildElement(new docx.Paragraph({ keepNext: true })); });
+    });
+    return wordTable;
   }
 
   const NO_BORDER = { style: 'none', size: 0, color: 'FFFFFF' };

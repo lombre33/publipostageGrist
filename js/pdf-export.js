@@ -796,21 +796,43 @@ const PdfExport = (function () {
     // lignes de texte, comme avant (et comme l'éditeur, qui les garde d'une pièce). Pas non plus un tableau qui porte une image en calque : avec dontBreakRows, pdfmake note les
     // positions (`positions[].left` / `.top`) du texte de ses cases dans la ligne en cours de rangement, sans le décalage de la colonne ni le rembourrage de la case (mesuré : 28 au lieu de
     // 383,7 pt dans la 3e colonne), et l'ancrage d'une image en calque ancienne (sans grille de page) se lit dessus - elle partait à gauche de la page.
+    // Les lignes qu'une case fusionnée sur plusieurs lignes lie (js/table-page-cut.js:unitsOf) passent ensemble à la page suivante (Antoine, 04/10, « Complète »). Mais pdfmake, avec dontBreakRows, perd le
+    // texte d'une case fusionnée (mesuré : 12 lignes de texte sur 16) : le groupe devient UNE ligne du tableau, dont l'unique case, sur toutes les colonnes, porte le tableau des lignes du groupe,
+    // cases fusionnées comprises (`unitRowFrom`). Les mêmes colonnes, les mêmes traits et les mêmes marges : le PDF relu par pdf.js a les textes et les traits aux mêmes positions que le tableau à plat.
     const cutRows = TablePageCut.rowsOf(node);
+    const cutUnits = cutRows && cutRows.length === rawRows.length ? TablePageCut.unitsOf(cutRows) : null;
     const hasLayeredImage = Array.from(node.querySelectorAll('img')).some(img => (img.getAttribute('data-layer') || 'normal') !== 'normal' && img.style.position === 'absolute');
     // Une image habillée (calque du fond de page, ancré sur son texte) lit la position de son texte, que dontBreakRows fausse de la même façon.
     const hasFloatedImage = Array.from(node.querySelectorAll('img.editor-image')).some(img => (img.getAttribute('data-layer') || 'normal') === 'normal' && /^(left|right)$/.test(img.getAttribute('data-align') || ''));
-    const keepRowsWhole = !!cutRows && !isGrid && !!inMainFlow && !hasLayeredImage && !hasFloatedImage && tablePageHeightPt > 0 && !(node.parentElement && node.parentElement.closest('td, th, li, blockquote, .callout, .two-columns-column'))
-      && TablePageCut.rowsFit(cutRows.map(row => row.getBoundingClientRect().height * PX_TO_PT), tablePageHeightPt);
+    const unitHeightsPt = cutUnits ? cutUnits.map(unit => (cutRows[unit.to - 1].getBoundingClientRect().bottom - cutRows[unit.from].getBoundingClientRect().top) * PX_TO_PT) : [];
+    const keepRowsWhole = !!cutUnits && !isGrid && !!inMainFlow && !hasLayeredImage && !hasFloatedImage && tablePageHeightPt > 0 && !(node.parentElement && node.parentElement.closest('td, th, li, blockquote, .callout, .two-columns-column'))
+      && TablePageCut.rowsFit(unitHeightsPt, tablePageHeightPt);
     // Les lignes de titres (cases <th> en tête) reviennent en haut de chaque page où le tableau se poursuit - comme dans le Word (`tblHeader`). Pour un tableau du texte courant seulement : celui d'une
     // case, d'une liste, d'une citation, d'un encadré ou d'une colonne ne passe pas d'une page à l'autre, et une grille (js/grid-editor.js) n'a pas de feuille.
-    const repeatedHeaderRows = !isGrid && !!inMainFlow && !(node.parentElement && node.parentElement.closest('td, th, li, blockquote, .callout, .two-columns-column')) ? ExportCommon.headerRowCount(rawRows) : 0;
+    let repeatedHeaderRows = !isGrid && !!inMainFlow && !(node.parentElement && node.parentElement.closest('td, th, li, blockquote, .callout, .two-columns-column')) ? ExportCommon.headerRowCount(rawRows) : 0;
+    const layout = {
+      hLineWidth: () => 0.5, vLineWidth: () => 0.5, hLineColor: () => TABLE_BORDER_COLOR, vLineColor: () => TABLE_BORDER_COLOR,
+      paddingLeft: () => cellPadLeftPt, paddingRight: () => cellPadRightPt, paddingTop: () => cellPadTopPt, paddingBottom: () => cellPadBottomPt,
+    };
+    // Le tableau d'un groupe de lignes, à la place de ses lignes : le trait de son contour est celui de la ligne qui le porte (hLineWidth et vLineWidth à 0 aux bords), et ses marges négatives
+    // reprennent le rembourrage de cette ligne, que le tableau imbriqué n'a pas à compter.
+    const unitRowFrom = unitBody => {
+      const inner = Object.assign({}, layout, {
+        hLineWidth: (i, tableNode) => (i === 0 || i === tableNode.table.body.length ? 0 : layout.hLineWidth(i, tableNode)),
+        vLineWidth: (i, tableNode) => (i === 0 || i === tableNode.table.widths.length ? 0 : layout.vLineWidth(i, tableNode)),
+      });
+      const unitTable = { table: { widths: widths.slice(), body: unitBody }, layout: inner, margin: [-cellPadLeftPt, -cellPadTopPt, -cellPadRightPt, -cellPadBottomPt], colSpan: columnCount, border: [true, true, true, true], _unitTable: true };
+      return [unitTable].concat(Array.from({ length: columnCount - 1 }, () => ({})));
+    };
+    let tableBody = body;
+    if (keepRowsWhole && cutUnits.some(unit => unit.to - unit.from > 1)) {
+      tableBody = cutUnits.map(unit => (unit.to - unit.from > 1 ? unitRowFrom(body.slice(unit.from, unit.to)) : body[unit.from]));
+      // Les lignes de titres finissent toujours entre deux groupes (headerRowCount s'arrête avant une case fusionnée qui déborde) : leur nombre, en groupes.
+      repeatedHeaderRows = cutUnits.filter(unit => unit.to <= repeatedHeaderRows).length;
+    }
     const table = {
-      table: Object.assign({ headerRows: repeatedHeaderRows, widths, body: body.length ? body : [[{ text: ' ' }].concat(Array(Math.max(0, columnCount - 1)).fill({}))] }, isGrid && body.length ? { heights: gridRowAreaPt } : {}, keepRowsWhole ? { dontBreakRows: true } : {}),
-      layout: {
-        hLineWidth: () => 0.5, vLineWidth: () => 0.5, hLineColor: () => TABLE_BORDER_COLOR, vLineColor: () => TABLE_BORDER_COLOR,
-        paddingLeft: () => cellPadLeftPt, paddingRight: () => cellPadRightPt, paddingTop: () => cellPadTopPt, paddingBottom: () => cellPadBottomPt,
-      },
+      table: Object.assign({ headerRows: repeatedHeaderRows, widths, body: tableBody.length ? tableBody : [[{ text: ' ' }].concat(Array(Math.max(0, columnCount - 1)).fill({}))] }, isGrid && body.length ? { heights: gridRowAreaPt } : {}, keepRowsWhole ? { dontBreakRows: true } : {}),
+      layout,
       margin: [0, 5, 0, 5],
     };
     if (pageBreakBefore) table.pageBreak = 'before';
@@ -832,8 +854,11 @@ const PdfExport = (function () {
   function splitTailRow(table, node, captionPt) {
     const body = table.table.body;
     const rows = TablePageCut.rowsOf(node);
-    if (!table.table.dontBreakRows || body.length < 2 || !rows || rows.length !== body.length) return null;
-    const tailPt = rows[rows.length - 1].getBoundingClientRect().height * PX_TO_PT + captionPt;
+    // Les lignes du tableau sont ses groupes de lignes (tableFrom : un groupe lié par une case fusionnée est une seule ligne) : le dernier est celui qui garde sa légende.
+    const units = rows ? TablePageCut.unitsOf(rows) : null;
+    if (!table.table.dontBreakRows || body.length < 2 || !units || units.length !== body.length) return null;
+    const lastUnit = units[units.length - 1];
+    const tailPt = (rows[lastUnit.to - 1].getBoundingClientRect().bottom - rows[lastUnit.from].getBoundingClientRect().top) * PX_TO_PT + captionPt;
     if (!Caption.fitsWithCaption(tailPt, tablePageHeightPt)) return null;
     // Les lignes de titres restent au premier morceau (jamais toutes les lignes de lui : pdfmake ne reprend rien au-dessus de rien) ; la dernière ligne, seule, n'en reprend pas.
     const head = Object.assign({}, table, { table: Object.assign({}, table.table, { body: body.slice(0, -1), headerRows: Math.min(table.table.headerRows || 0, body.length - 2) }), margin: [0, 5, 0, 0] });

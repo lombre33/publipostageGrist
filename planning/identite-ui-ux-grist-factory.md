@@ -699,7 +699,8 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   répétée par une boucle, dont la copie casserait le tableau - une fusion dans UNE ligne répétée reste permise). Fusionner garde tout le texte (à la suite dans la première case), son fond et son type
   (titre ou case) et la largeur de chaque colonne couverte ; scinder rend les cases (la première garde le texte, les autres naissent vides) ; un seul Annuler défait chaque geste. La fenêtre « Boucle » grise
   de la même façon « La ligne du tableau » quand une case fusionnée sur plusieurs lignes traverse la ligne de la bulle (le choix reste visible, avec sa raison en info-bulle) ; « Dans le texte » y est
-  choisi d'office. Dans le Word, les cases d'après une case fusionnée sur plusieurs lignes restent dans leur colonne.
+  choisi d'office. Dans le Word, les cases d'après une case fusionnée sur plusieurs lignes restent dans leur colonne. Une case fusionnée sur plusieurs lignes lie ces lignes au saut de page : la page ne
+  les sépare jamais (« Tableau au saut de page », plus bas).
 - Bordures d'une grille (demande d'Antoine du 01/10, maquette « Barre » : « Bordures » entre Fond et Alignement vertical). Le bouton « Bordures » de la barre de la case (un carré aux traits pointillés, une flèche) ouvre un
   menu SOUS la bande de la barre, jamais sur la barre d'outils (le menu de fond s'ouvre lui aussi dessous) : huit réglages en icônes — Toutes les bordures, Bordures extérieures, Bordures intérieures, Haut, Bas, Gauche,
   Droite, Aucune bordure —, puis « Couleur du trait » (les huit nuances du texte, « Personnalisé… », « Par défaut » = le trait fin gris de départ). Une couleur choisie ne referme pas le menu et reste celle du stylo pour les
@@ -925,8 +926,12 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   première ne tient pas, le tableau entier passe. Dans l'éditeur et en Lecture, chaque page est une feuille entière (« Pages entières ») : la page qui finit garde sa place libre sous sa dernière ligne, puis vient la bande de saut de page,
   et la ligne qui ouvre la page commence juste sous la bande. Le tableau est rogné sur cette place libre et sur les marges de la couture, qui restent blanches (ni le fond ni les traits verticaux
   des cases n'y passent) : ses bordures se ferment sous la dernière ligne de la page qui finit et se rouvrent au bas de la bande par un seul filet de 1 px, et le texte de la ligne reste cliquable sous la bande. L'éditeur affiche les noms des
-  variables, plus longs que leurs valeurs : il peut couper une ligne plus tôt que la Lecture et le PDF, qui coupent à moins d'une ligne l'un de l'autre. Une ligne plus haute que 90 % de la page,
-  des cases fusionnées sur plusieurs lignes, un tableau dans une colonne, une liste ou un encadré, un en-tête ou un pied de page, une grille, un tableau qui porte une image en calque (PDF) et une ligne proposée en suivi des
+  variables, plus longs que leurs valeurs : il peut couper une ligne plus tôt que la Lecture et le PDF, qui coupent à moins d'une ligne l'un de l'autre. Une case fusionnée sur plusieurs lignes lie les
+  siennes (Antoine, 04/10, « Complète » : fusion de cellules dans les documents) : ces lignes forment un groupe que la page ne sépare jamais, et c'est entre deux groupes que le tableau se coupe, de la même
+  façon dans l'éditeur, en Lecture, en PDF et en Word ; un tableau dont une seule case lie toutes les lignes passe en entier à la page suivante. En PDF le groupe s'écrit comme une seule ligne (un tableau
+  dans la ligne, aux mêmes positions que sans lui ; l'en-tête répété compte en groupes) ; en Word chaque ligne du groupe, sauf la dernière, reste avec la suivante (« Conserver avec la suite »), case fusionnée
+  comprise. Une ligne (ou un groupe de lignes) plus haute que 90 % de la page, un tableau dans une colonne, une liste ou un encadré, un en-tête ou un pied de page, une grille, un tableau qui porte une image
+  en calque (PDF) et une ligne proposée en suivi des
   modifications gardent l'ancien comportement (l'aperçu les garde d'une pièce, le PDF les coupe entre deux lignes de texte) : une ligne qu'on ne peut pas ranger ne doit jamais disparaître. Le modèle
   enregistré ne change pas : la ligne descendue sous la bande l'est par une feuille de style, jamais par un style écrit dans le document.
 - Pinceau de mise en forme (demande d'Antoine du 02/10, « ajout d'un bouton pour copier/coller la mise en forme ») : un bouton sur la deuxième rangée de la barre, juste après le
