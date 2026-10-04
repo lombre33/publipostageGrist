@@ -16,3 +16,17 @@
 /* « Avant la dernière » porte un texte d'attente (« comme le séparateur ») ; le numéro de « La n-ième » tient sur trois chiffres. */
 .var-list-seps .var-list-last-input { width: 160px; }
 .var-list-number .var-list-index-input { width: 64px; }
+
+/* « Un document par valeur » : la case, son libellé, puis l'indication, qui commence sous le libellé (règle d'Antoine : une indication commence sous son champ, pas sous la case). */
+.var-list-split { display: grid; grid-template-columns: max-content 1fr; align-items: center; gap: 0 8px; margin-top: 8px; }
+.var-list-split input { margin: 0; }
+/* Le libellé fait 22 px de haut : c'est lui qu'une souris vise, comme la case (un libellé de 14 px était étroit pour un vrai clic). */
+.var-list-split label { padding: 4px 0; font-size: 12px; font-weight: 700; color: var(--text); cursor: pointer; }
+.var-list-split .var-loop-hint { grid-column: 2; }
+
+/* Bulle réglée « Un document par valeur » (format.list.perValue, lu dans le data-format du nœud) : petite icône bleue, deux pages l'une sur l'autre, à droite dans la bulle - comme celle d'une boucle « dans la
+   phrase » (css/variable-actions.css), en fond pour laisser ::after au point bleu des bulles réglées. Une bulle en boucle garde son icône : le réglage n'y servirait à rien. */
+:root {
+  --pp-split-icon-accent: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232f6fed' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='8' y='8' width='12' height='12' rx='2'/%3E%3Cpath d='M4 16V6a2 2 0 0 1 2-2h10'/%3E%3C/svg%3E");
+}
+.tiptap .var-badge[data-format*='"perValue":true']:not([data-loop-repeat]) { padding-right: 17px; background-image: var(--pp-split-icon-accent); background-repeat: no-repeat; background-position: right 3px center; background-size: 10px 10px; }

@@ -70,5 +70,5 @@ const ListSplit = (function () {
     return Object.assign({}, data, { header: zone(data.header), footer: zone(data.footer) });
   }
 
-  return { MARKER, hasMarker, partsOf, plan, pin, pinHeaderFooter };
+  return { MARKER, hasMarker, hasPins, partsOf, plan, pin, pinHeaderFooter };
 })();

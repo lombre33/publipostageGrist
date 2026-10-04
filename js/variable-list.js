@@ -1,7 +1,8 @@
 // Fenêtre « Liste » d'une bulle #Variable dont la colonne est une liste (demande d'Antoine du 2026-10-04 : « une UI simple et efficace pour gérer les listes - tout afficher avec le séparateur voulu,
 // comme les boucles, ou afficher le n-ième en laissant choisir n, avec premier et dernier déjà prêts »). Une colonne Liste de choix ou Liste de références (ChoiceList, RefList) livre plusieurs valeurs :
 // sans réglage la bulle les écrit toutes, séparées par « , » (le seul rendu d'avant cette fenêtre, qui reste celui d'une bulle déjà posée). Le réglage vit dans le `format.list` de la bulle
-// (js/variable-format.js : pick, index, separator, lastSeparator) ; Variables.formatValue le lit pour tous les chemins de rendu - Lecture, PDF, Word, Excel, e-mail, export en lot.
+// (js/variable-format.js : pick, index, separator, lastSeparator) ; Variables.formatValue le lit pour tous les chemins de rendu - Lecture, PDF, Word, Excel, e-mail, export en lot. Une case « Un document par valeur »
+// (perValue, js/list-split.js) y ajoute l'autre réglage de la demande : les exports PDF, Word et Excel sortent un document par valeur de la liste, le reste identique ; la Lecture et l'e-mail restent à l'affichage réglé ici.
 // Même gabarit que la fenêtre de boucle (js/variable-loop.js) et mêmes champs de séparateur ; l'aperçu est calculé sur la ligne sélectionnée avec le vrai Variables.formatValue, il ne peut donc pas
 // écrire autre chose que le document. Ouverte depuis la barre flottante de la bulle (js/floating-toolbars.js:wireVariableFloatingToolbar).
 const VariableList = (function () {
@@ -96,10 +97,23 @@ const VariableList = (function () {
     const numberHint = el('span', 'var-loop-hint');
     numberRow.append(numberLabel, numberInput, numberHint);
 
+    // « Un document par valeur » : la case, son libellé, puis ce que le réglage change (l'indication commence sous le libellé, pas sous la case).
+    const splitBlock = el('div', 'var-list-split');
+    const splitBox = el('input');
+    splitBox.type = 'checkbox';
+    splitBox.id = 'var-list-split';
+    const splitLabel = el('label');
+    splitLabel.htmlFor = 'var-list-split';
+    const splitHint = el('span', 'var-loop-hint');
+    splitBlock.append(splitBox, splitLabel, splitHint);
+
     const preview = el('div', 'var-condition-debug');
     preview.setAttribute('aria-live', 'polite');
     const previewLine = el('div', 'var-condition-debug-line');
-    preview.appendChild(previewLine);
+    // Les documents que la ligne sélectionnée sortirait des exports : seulement quand la case est cochée.
+    const splitLine = el('div', 'var-condition-debug-line');
+    splitLine.hidden = true;
+    preview.append(previewLine, splitLine);
 
     const resetBtn = el('button', 'var-modal-danger');
     resetBtn.type = 'button';
@@ -110,10 +124,10 @@ const VariableList = (function () {
     saveBtn.type = 'button';
     win.actions.append(resetBtn, spacer, cancelBtn, saveBtn);
 
-    win.body.append(intro, pickLabel, pickSeg, separatorRow, numberRow, preview);
+    win.body.append(intro, pickLabel, pickSeg, separatorRow, numberRow, splitBlock, preview);
     refs = {
       title: win.title, intro, pickLabel, pickButtons, separatorRow, sepLabel, sepInput, lastLabel, lastInput, sepHint,
-      numberRow, numberLabel, numberInput, numberHint, previewLine, resetBtn, cancelBtn, saveBtn,
+      numberRow, numberLabel, numberInput, numberHint, splitBox, splitLabel, splitHint, previewLine, splitLine, resetBtn, cancelBtn, saveBtn,
     };
 
     sepInput.addEventListener('input', () => { if (state) state.working.separator = sepInput.value; });
@@ -121,6 +135,13 @@ const VariableList = (function () {
     // Le numéro est lu pendant la frappe (le champ peut être vide un instant) et ramené à 1-999 en le quittant, comme l'enregistrement le fera.
     numberInput.addEventListener('input', () => { if (state) state.working.index = VariableFormat.normalizeList({ index: numberInput.value }).index; });
     numberInput.addEventListener('change', () => { if (state) numberInput.value = String(state.working.index); });
+    // Cochée, la seconde ligne d'aperçu (les documents de la ligne) vient en vue : dans un panneau bas elle est sous le pli de la fenêtre.
+    splitBox.addEventListener('change', async () => {
+      if (!state) return;
+      state.working.perValue = splitBox.checked;
+      await updatePreview();
+      if (state && splitBox.checked && !splitLine.hidden) splitLine.scrollIntoView({ block: 'nearest' });
+    });
     resetBtn.addEventListener('click', () => { if (state) { applyList(null); close(); } });
     cancelBtn.addEventListener('click', close);
     saveBtn.addEventListener('click', save);
@@ -158,8 +179,7 @@ const VariableList = (function () {
   function workingList() { return VariableFormat.storedList(state.working); }
 
   // === Aperçu === La ligne sélectionnée dans Grist : les valeurs de la liste, puis ce que le document en écrit - le vrai Variables.formatValue avec le réglage en cours.
-  function setLine(text, good) {
-    const line = refs.previewLine;
+  function setLine(line, text, good) {
     line.replaceChildren();
     line.hidden = !text;
     line.classList.toggle('is-good', !!good);
@@ -184,28 +204,32 @@ const VariableList = (function () {
     const stale = () => gen !== previewGeneration || !state;
     const tableId = GristAPI.getCurrentTableId();
     const record = GristAPI.getCurrentRecord();
-    if (!record || !tableId) { setLine(I18n.t('varCond.debug.noRecord'), false); return; }
-    setLine(I18n.t('varCond.debug.computing'), false);
+    const { previewLine, splitLine } = refs;
+    if (!record || !tableId) { setLine(previewLine, I18n.t('varCond.debug.noRecord'), false); setLine(splitLine, '', false); return; }
+    setLine(previewLine, I18n.t('varCond.debug.computing'), false);
     try {
       const { table, column, format } = state.node.attrs;
       const raw = await Variables.resolveRawValue(table, column, tableId, record, {});
       if (stale()) return;
-      if (raw.error) { setLine(I18n.t('linkConfig.previewUnavailable'), false); return; }
-      const values = VariableFormat.flattenList(raw.value == null ? [] : raw.value)
-        .map(v => Variables.formatValue(v, format, table, column))
-        .filter(text => text !== '' && text != null);
-      if (!values.length) { setLine(I18n.t('varList.preview.empty', { id: record.id }), false); return; }
+      if (raw.error) { setLine(previewLine, I18n.t('linkConfig.previewUnavailable'), false); setLine(splitLine, '', false); return; }
+      // Les valeurs comptées comme l'export les compte (Variables.listTexts) : celles dont « La n-ième » prend un rang, et un document chacune quand la case est cochée.
+      const values = Variables.listTexts(raw.value, format, table, column);
+      const shown = values.slice(0, PREVIEW_VALUES).map(v => shorten(v, 40)).join(', ') + (values.length > PREVIEW_VALUES ? ', …' : '');
+      if (!state.working.perValue) setLine(splitLine, '', false);
+      else if (values.length > 1) setLine(splitLine, I18n.t('varList.split.preview', { count: values.length, values: shown }), true);
+      else if (values.length) setLine(splitLine, I18n.t('varList.split.previewSingle'), false);
+      else setLine(splitLine, I18n.t('varList.split.previewEmpty'), false);
+      if (!values.length) { setLine(previewLine, I18n.t('varList.preview.empty', { id: record.id }), false); return; }
       const list = workingList();
       const written = Variables.formatValue(raw.value, Object.assign({}, format, list ? { list } : { list: null }), table, column);
-      const shown = values.slice(0, PREVIEW_VALUES).map(v => shorten(v, 40)).join(', ') + (values.length > PREVIEW_VALUES ? ', …' : '');
       if (written === '') {
-        setLine(I18n.t('varList.preview.beyond', { id: record.id, count: values.length, values: shown, index: state.working.index }), false);
+        setLine(previewLine, I18n.t('varList.preview.beyond', { id: record.id, count: values.length, values: shown, index: state.working.index }), false);
         return;
       }
-      setLine(I18n.t('varList.preview.values', { id: record.id, count: values.length, values: shown, text: shorten(written, 240) }), true);
+      setLine(previewLine, I18n.t('varList.preview.values', { id: record.id, count: values.length, values: shown, text: shorten(written, 240) }), true);
     } catch (e) {
       console.warn('[VariableList] aperçu indisponible', e);
-      if (!stale()) setLine(I18n.t('linkConfig.previewUnavailable'), false);
+      if (!stale()) { setLine(previewLine, I18n.t('linkConfig.previewUnavailable'), false); setLine(splitLine, '', false); }
     }
   }
 
@@ -264,6 +288,9 @@ const VariableList = (function () {
     r.sepHint.textContent = I18n.t('varList.separatorHint');
     r.numberLabel.textContent = I18n.t('varList.number');
     r.numberHint.textContent = I18n.t('varList.numberHint');
+    r.splitLabel.textContent = I18n.t('varList.split.label');
+    r.splitHint.textContent = I18n.t('varList.split.hint');
+    r.splitBox.checked = state.working.perValue;
     r.sepInput.value = state.working.separator;
     r.lastInput.value = state.working.lastSeparator;
     r.numberInput.value = String(state.working.index);

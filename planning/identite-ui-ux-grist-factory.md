@@ -487,6 +487,17 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   des bulles réglées et vaut partout où la bulle s'écrit (Lecture, PDF, Word, Excel, e-mail, lot). Il suit une colonne remplacée (« Autres attributs », Remplacer) seulement vers une autre
   colonne liste. Une bulle dans une boucle reçoit déjà une valeur par tour : le réglage n'y servirait à rien, le bouton est grisé (`aria-disabled`, raison en info-bulle) ; il l'est aussi sur
   une colonne qui n'est pas une liste, un calcul, un bloc de texte conditionnel, une valeur conditionnelle et une case conditionnelle : grisé, jamais retiré.
+- « Un document par valeur » (second volet de la demande d'Antoine du 04/10 sur les listes : « une feature qui indiquera que ça fera un export par valeur ») : dans la fenêtre « Liste », sous les
+  champs et au-dessus de l'aperçu, une case « Un document par valeur » (décochée au départ ; libellé en gras 12 px, assez haut - 22 px - pour une souris) et, dessous, son indication d'une ligne
+  (« Exports PDF, Word et Excel. La Lecture et l'e-mail ne changent pas. »), qui commence sous le libellé, pas sous la case. Cochée, l'aperçu gagne une seconde ligne verte sous la première (« Export :
+  3 documents pour cette ligne, un par valeur (A, B, C). » ; « un seul document » pour une ligne à une valeur ou à liste vide) et la fenêtre la fait venir en vue dans un panneau bas ; la case va avec
+  n'importe lequel des quatre choix (ils règlent ce que la Lecture écrit). Enregistrer l'écrit dans `format.list` (clé `perValue`, qui suffit seule à allumer le bouton « Liste » et le point bleu) et la
+  bulle porte à droite une petite icône bleue (deux pages l'une sur l'autre, 10 px, jeton `--pp-split-icon-accent`), posée en image de fond comme celle d'une boucle « dans la phrase » pour laisser le
+  point bleu - sauf dans une boucle, où le réglage ne s'applique jamais. Les exports sortent alors un document par valeur de la ligne, tout le reste identique : l'archive ZIP de PDF (un PDF par valeur,
+  nommé « ligne - valeur »), le PDF unique (chaque document commence sur une nouvelle page), les archives de Word et d'Excel, le classeur Excel unique (une feuille « ligne - valeur », 31 caractères au
+  plus, la valeur toujours lisible) et l'export d'une seule ligne (une archive à partir de deux documents, le fichier ordinaire sinon) ; la confirmation d'un lot ajoute une phrase avec le nombre de
+  documents. Deux listes réglées sur des colonnes différentes donnent un document par combinaison (la première change le plus lentement), deux bulles sur la même colonne prennent la même valeur, une
+  ligne à liste vide garde un seul document (la bulle n'écrit rien). Ni la Lecture ni l'e-mail ne découpent : ils écrivent la liste comme réglée. Sans bulle réglée ainsi, un export reste ce qu'il était.
 - Variable Oui / Non (demande d'Antoine du 01/10) : une bulle sur une colonne Oui / Non a sa propre barre flottante, comme une date ou
   une image, à quatre boutons d'une même rangée : les trois styles de la liste à cases (`accentStrike`, `classic`, `accentPlain`, mêmes
   icônes, mêmes noms que les boutons de la liste) puis « vrai / faux » (« true / false » en interface anglaise). Sans réglage la bulle
