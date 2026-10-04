@@ -193,17 +193,17 @@ const DocxExport = (function () {
   }
   async function docxImageDataFrom(img) {
     const src = img.getAttribute('src') || '';
-    if (!src) return null;
+    if (!src) { ExportCommon.noteImageWithoutSource(img); return null; }
     let blob;
     try {
       const resp = await fetch(src);
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
       blob = await resp.blob();
-    } catch (e) { console.warn('[DocxExport] image ignorée (téléchargement impossible) :', src, e); return null; }
+    } catch (e) { console.warn('[DocxExport] image ignorée (téléchargement impossible) :', src, e); ExportCommon.noteUnreadImage(img); return null; }
     let type = DOCX_IMAGE_TYPES[blob.type];
     if (!type) {
       try { blob = await rasterizeToPngBlob(URL.createObjectURL(blob)); type = 'png'; }
-      catch (e) { console.warn('[DocxExport] image ignorée (rastérisation impossible) :', src, e); return null; }
+      catch (e) { console.warn('[DocxExport] image ignorée (rastérisation impossible) :', src, e); ExportCommon.noteUnreadImage(img); return null; }
     }
     const data = await blob.arrayBuffer();
     // Largeur déjà posée par l'éditeur (même convention que pdfImageFromNode, js/pdf-export.js) ; hauteur déduite du ratio intrinsèque réel (docx exige les

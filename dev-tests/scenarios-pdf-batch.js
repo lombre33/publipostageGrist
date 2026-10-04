@@ -27,8 +27,9 @@
   }
 
   // Clique la ligne du menu et attend le téléchargement : la confirmation acceptée et notée (options reçues), le <a download> intercepté au lieu d'un vrai téléchargement.
-  async function clickExportRow(h, rowId) {
-    const downloads = [];
+  // `downloadsSink` (facultatif) : la liste où un autre chemin de téléchargement note aussi ses fichiers (un PDF seul, pdfmake.download : voir clickSinglePdf).
+  async function clickExportRow(h, rowId, downloadsSink) {
+    const downloads = downloadsSink || [];
     const confirms = [];
     const blobsByUrl = new Map();
     const origCreate = URL.createObjectURL;
@@ -217,6 +218,165 @@
       } finally { I18n.setLang(previousLang); }
     },
   }));
+
+  // --- Une pièce jointe dont le fichier n'existe plus (supprimée du document : Grist répond 404 à son adresse). L'export laisse l'image de côté et écrit le reste ; il doit le dire, en tête de
+  // l'état de fin (« 1 image introuvable (voir la console). PDF généré. »), au lieu d'un « PDF généré. » seul. Une case vide, elle, n'a pas d'image à perdre : aucun avertissement. ---
+  const PNG_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+  const PHOTO_IMG = `<img class="editor-image" src="" alt="Photo" style="width: 120px;" data-var-table="${TABLE}" data-var-column="Photo" data-var-key="${TABLE}.Photo">`;
+  // Le serveur de Grist, côté pièces jointes : les numéros de `missing` reçoivent un 404, les autres une image. Les adresses demandées sont notées (le test ne prouve rien si l'image n'a jamais été demandée).
+  function stubAttachments(missing) {
+    const original = window.fetch;
+    const asked = [];
+    window.fetch = function (input, init) {
+      const url = String(typeof input === 'string' ? input : input && input.url);
+      const match = url.match(/\/attachments\/(\d+)\/download/);
+      if (!match) return original.call(window, input, init);
+      const id = Number(match[1]);
+      asked.push(id);
+      if (missing.includes(id)) return Promise.resolve(new Response('Not Found', { status: 404 }));
+      return Promise.resolve(new Response(new Blob([Uint8Array.from(atob(PNG_B64), c => c.charCodeAt(0))], { type: 'image/png' }), { status: 200 }));
+    };
+    return { asked, restore() { window.fetch = original; } };
+  }
+  // `attachments` : la pièce jointe de chaque ligne (un numéro, ou null pour une case vide) ; la ligne `current` est celle de la page.
+  async function seedPhotos(h, attachments, current) {
+    await h.resetEditor();
+    const stub = window.__gristStub;
+    const rows = attachments.map((id, i) => ({ id: i + 1, Nom: NAMES[i] || ('Nom ' + (i + 1)), Photo: id == null ? null : ['L', id] }));
+    stub.setVariables(TABLE, { Nom: 'Text', Photo: 'Attachments' });
+    stub.setRows(TABLE, rows);
+    await GristAPI.refreshSchema();
+    stub.fireRecord(rows[current || 0], TABLE);
+    await h.sleep(50);
+    Editor.setHTML(`<p>Bonjour ${badge('Nom')}</p>` + PHOTO_IMG);
+    Editor.setHeaderFooterData(NO_HF);
+    await h.sleep(80);
+    return rows;
+  }
+  // « Exporter en PDF » d'une ligne passe par pdfmake.download() et non par un <a download> : l'appel est pris au passage (son PDF relu depuis ses octets) au lieu d'enregistrer un fichier.
+  async function clickSinglePdf(h) {
+    await PdfExport.ensurePdfLibsLoaded();
+    const original = window.pdfMake.createPdf;
+    const sink = [];
+    window.pdfMake.createPdf = function (docDefinition) {
+      const gen = original.call(window.pdfMake, docDefinition);
+      gen.download = function (name) { gen.getBlob(blob => sink.push({ name, blob })); };
+      return gen;
+    };
+    try { return await clickExportRow(h, 'btn-export-pdf', sink); } finally { window.pdfMake.createPdf = original; }
+  }
+  const withLang = async (lang, fn) => {
+    const previous = I18n.getLang();
+    try { I18n.setLang(lang); return await fn(); } finally { I18n.setLang(previous); }
+  };
+  const fireRow = async (h, rows, index) => { window.__gristStub.fireRecord(rows[index], TABLE); await h.sleep(60); };
+
+  cases.push({
+    id: 'pdfbatch_pdf_says_when_an_attachment_file_is_missing',
+    description: '« Exporter en PDF » d’une ligne dont la pièce jointe n’existe plus : le PDF est produit, et l’état commence par « 1 image introuvable (voir la console). » ; une pièce jointe lisible ou une case vide ne changent pas « PDF généré. », et l’avertissement ne reste pas pour l’export suivant',
+    run: async (h) => {
+      const net = stubAttachments([8]);
+      try {
+        const rows = await seedPhotos(h, [7, 8, null], 1);
+        const missing = await clickSinglePdf(h);
+        const missingText = missing.downloads[0] && missing.downloads[0].blob ? squash((await pdfPageTexts(h, missing.downloads[0].blob)).join(' ')) : '';
+        await fireRow(h, rows, 0);
+        const readable = await clickSinglePdf(h);
+        await fireRow(h, rows, 2);
+        const empty = await clickSinglePdf(h);
+        const pass = missing.downloads.length === 1 && missingText.includes(squash(NAMES[1])) && net.asked.includes(8) && net.asked.includes(7)
+          && missing.status === '1 image introuvable (voir la console). PDF généré.'
+          && readable.downloads.length === 1 && readable.status === 'PDF généré.'
+          && empty.downloads.length === 1 && empty.status === 'PDF généré.';
+        return { pass, notes: JSON.stringify({ asked: net.asked, missing: missing.status, readable: readable.status, empty: empty.status, missingText, downloads: missing.downloads.map(d => [d.name, d.blob && d.blob.type, d.blob && d.blob.size]) }) };
+      } finally { net.restore(); }
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_docx_says_when_an_attachment_file_is_missing',
+    description: '« Exporter en DOCX » d’une ligne dont la pièce jointe n’existe plus : le .docx est produit sans l’image (aucun fichier dans word/media) et l’état commence par « 1 image introuvable… » ; une pièce jointe lisible garde son image et l’état « DOCX généré. »',
+    run: async (h) => {
+      const net = stubAttachments([8]);
+      try {
+        const rows = await seedPhotos(h, [7, 8], 1);
+        const mediaOf = async blob => { await ExportCommon.ensureJsZipLoaded(); return Object.keys((await JSZip.loadAsync(await blob.arrayBuffer())).files).filter(n => /^word\/media\/.+/.test(n)); };
+        const missing = await clickExportRow(h, 'v2-btn-export-docx');
+        const missingText = missing.downloads[0] && missing.downloads[0].blob ? squash(await docxBodyText(missing.downloads[0].blob) || '') : '';
+        const missingMedia = missing.downloads[0] && missing.downloads[0].blob ? await mediaOf(missing.downloads[0].blob) : null;
+        await fireRow(h, rows, 0);
+        const readable = await clickExportRow(h, 'v2-btn-export-docx');
+        const readableMedia = readable.downloads[0] && readable.downloads[0].blob ? await mediaOf(readable.downloads[0].blob) : null;
+        const pass = missing.downloads.length === 1 && missingText.includes(squash(NAMES[1])) && missingMedia && missingMedia.length === 0
+          && missing.status === '1 image introuvable (voir la console). DOCX généré.'
+          && readable.downloads.length === 1 && readableMedia && readableMedia.length === 1 && readable.status === 'DOCX généré.';
+        return { pass, notes: JSON.stringify({ asked: net.asked, missing: missing.status, missingMedia, readable: readable.status, readableMedia }) };
+      } finally { net.restore(); }
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_zip_counts_each_missing_file_once',
+    description: 'Lot en ZIP : la même pièce jointe absente dans deux lignes ne compte que pour une image, deux pièces jointes absentes pour deux ; le nombre précède « 3 PDF générés — archive ZIP téléchargée. » (PDF) et « 3 DOCX générés… » (Word), et chaque ligne a son fichier',
+    run: async (h) => {
+      const net = stubAttachments([8, 9]);
+      try {
+        await seedPhotos(h, [7, 8, 8]);
+        const sameFile = await clickExportRow(h, 'v2-btn-export-pdf-batch');
+        const sameZip = sameFile.downloads[0] && sameFile.downloads[0].blob ? await JSZip.loadAsync(await sameFile.downloads[0].blob.arrayBuffer()) : null;
+        await seedPhotos(h, [7, 8, 9]);
+        const twoFiles = await clickExportRow(h, 'v2-btn-export-docx-batch');
+        const twoZip = twoFiles.downloads[0] && twoFiles.downloads[0].blob ? await JSZip.loadAsync(await twoFiles.downloads[0].blob.arrayBuffer()) : null;
+        const pass = sameFile.downloads.length === 1 && sameZip && Object.keys(sameZip.files).length === NAMES.length
+          && sameFile.status === '1 image introuvable (voir la console). 3 PDF générés — archive ZIP téléchargée.'
+          && twoFiles.downloads.length === 1 && twoZip && Object.keys(twoZip.files).length === NAMES.length
+          && twoFiles.status === '2 images introuvables (voir la console). 3 DOCX générés — archive ZIP téléchargée.';
+        return { pass, notes: JSON.stringify({ asked: net.asked, sameFile: sameFile.status, twoFiles: twoFiles.status }) };
+      } finally { net.restore(); }
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_merged_pdf_says_missing_files_in_english',
+    description: 'PDF unique en anglais : « 2 missing images (see console). 3 rows combined into a single PDF — file downloaded. », au pluriel anglais ; sans pièce jointe absente, l’état reste « 3 rows combined… » seul',
+    run: async (h) => {
+      const net = stubAttachments([8, 9]);
+      try {
+        return await withLang('en', async () => {
+          await seedPhotos(h, [7, 8, 9]);
+          const two = await clickExportRow(h, 'v2-btn-export-pdf-merged');
+          await seedPhotos(h, [7, 7, null]);
+          const none = await clickExportRow(h, 'v2-btn-export-pdf-merged');
+          const pass = two.downloads.length === 1 && two.status === '2 missing images (see console). 3 rows combined into a single PDF — file downloaded.'
+            && none.downloads.length === 1 && none.status === '3 rows combined into a single PDF — file downloaded.';
+          return { pass, notes: JSON.stringify({ two: two.status, none: none.status }) };
+        });
+      } finally { net.restore(); }
+    },
+  });
+
+  // Excel : le classeur est produit par XlsxExport (une image par case), sans passer par le menu - le même état de fin que Word s'y ajoute (js/main.js:setExportDoneStatus).
+  cases.push({
+    id: 'pdfbatch_xlsx_notes_an_attachment_file_it_cannot_read',
+    description: 'Excel : une grille avec deux pièces jointes dont une absente écrit le classeur avec la seule image lisible (un fichier dans xl/media) et note l’image perdue ; le décompte repart de zéro à chaque clic',
+    run: async (h) => {
+      const net = stubAttachments([8]);
+      try {
+        await h.resetEditor();
+        const url = id => `http://localhost/api/docs/stub/attachments/${id}/download?auth=stub-token`;
+        const cell = id => `<td colwidth="120"><p><img class="editor-image" src="${url(id)}" data-attachment-id="${id}" data-source="attachment" style="width: 40px" data-layer="normal" data-wrap="inline"></p></td>`;
+        const html = `<table style="width: 240px;"><colgroup><col style="width: 120px;"><col style="width: 120px;"></colgroup><tbody><tr data-row-height="40" style="height: 40px">${cell(7)}${cell(8)}</tr></tbody></table>`;
+        ExportCommon.resetUnreadImages();
+        const { blob } = await XlsxExport.getXlsxBlobForRecord(html, TABLE, { id: 1, Nom: NAMES[0] }, '');
+        await ExportCommon.ensureJsZipLoaded();
+        const media = Object.keys((await JSZip.loadAsync(await blob.arrayBuffer())).files).filter(n => /^xl\/media\/.+/.test(n));
+        const counted = ExportCommon.unreadImageCount();
+        ExportCommon.resetUnreadImages();
+        const pass = media.length === 1 && counted === 1 && ExportCommon.unreadImageCount() === 0 && net.asked.includes(7) && net.asked.includes(8);
+        return { pass, notes: JSON.stringify({ media, counted, asked: net.asked }) };
+      } finally { net.restore(); ExportCommon.resetUnreadImages(); }
+    },
+  });
 
   // --- Macro-modèle : les annexes se choisissent ligne par ligne (js/main.js:onExportBatch appelle MacroTemplates.buildConcatenatedHtml pour CHAQUE ligne, pas une
   // fois pour le lot). Un macro-modèle réel, chargé par le vrai <select> de modèles, sur trois lignes dont deux ont le même type. Placé en dernier : le macro

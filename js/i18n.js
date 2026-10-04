@@ -1312,6 +1312,8 @@ const I18n = (function () {
     'status.splitSheetsDoneWithFailures': { fr: '{ok} {ok|document placé|documents placés} sur {sheets} {sheets|feuille|feuilles}, {failed} {failed|échec|échecs} (voir la console) — fichier téléchargé.', en: '{ok} {ok|document|documents} placed on {sheets} {sheets|sheet|sheets}, {failed} {failed|failure|failures} (see console) — file downloaded.' },
     'status.splitSingleWorkbookDone': { fr: '{ok} {ok|document réuni|documents réunis} dans un seul classeur Excel — fichier téléchargé.', en: '{ok} {ok|document|documents} combined into a single Excel workbook — file downloaded.' },
     'status.splitSingleWorkbookDoneWithFailures': { fr: '{ok} {ok|document réuni|documents réunis} dans un seul classeur Excel, {failed} {failed|échec|échecs} (voir la console) — fichier téléchargé.', en: '{ok} {ok|document|documents} combined into a single Excel workbook, {failed} {failed|failure|failures} (see console) — file downloaded.' },
+    // --- Images qu'un export n'a pas pu lire : leur nombre s'écrit avant l'état de fin d'export (js/main.js:setExportDoneStatus) ---
+    'status.imagesUnread': { fr: '{n} {n|image introuvable|images introuvables} (voir la console).', en: '{n} missing {n|image|images} (see console).' },
   };
 
   let lang = (typeof localStorage !== 'undefined' && localStorage.getItem('pp_lang') === 'en') ? 'en' : 'fr';

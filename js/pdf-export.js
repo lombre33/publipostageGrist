@@ -2398,7 +2398,7 @@ const PdfExport = (function () {
     const images = Array.from(wrapper.querySelectorAll('img'));
     await Promise.all(images.map(async img => {
       let src = img.getAttribute('src') || '';
-      if (!src) return;
+      if (!src) { ExportCommon.noteImageWithoutSource(img); return; }
       try {
         if (!src.startsWith('data:')) {
           const resp = await fetch(src);
@@ -2419,6 +2419,7 @@ const PdfExport = (function () {
       } catch (e) {
         console.warn('[PdfExport] image ignorée dans le PDF vectoriel (conversion impossible) :', img.getAttribute('src'), e);
         img.setAttribute('data-pdf-skip', '1');
+        ExportCommon.noteUnreadImage(img);
       }
     }));
     return wrapper.innerHTML;
