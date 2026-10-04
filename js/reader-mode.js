@@ -148,11 +148,22 @@ const ReaderMode = (function () {
       while (column.children.length > 1 && column.lastElementChild.tagName === 'P' && hasNothingToShow(column.lastElementChild)) column.removeChild(column.lastElementChild);
     });
   }
+  // Les suggestions du suivi des modifications encore en attente (js/track-changes.js) : le document s'écrit comme si elles étaient toutes acceptées.
+  // Si la vue échoue, il reste tel qu'il est écrit (suggestions visibles) plutôt qu'à moitié transformé ou vide, et l'erreur va à la console.
+  // `options.tint: false` : sans teinte.
+  function applyAcceptedView(wrapper, source, options) {
+    try { TrackChanges.acceptedView(wrapper, options); } catch (e) {
+      console.error('[reader-mode] vue « comme acceptée » impossible, les suggestions restent affichées', e);
+      wrapper.innerHTML = source;
+    }
+  }
   // #Variable d'un fragment d'en-tête/pied - même résolution que le corps (badges .var-badge remplacés par leur valeur réelle), avec le VRAI enregistrement
   // Grist affiché en mode Lecture.
   async function resolveHeaderFooterZone(html, tableId, record) {
     if (!html) return html;
     const wrapper = document.createElement('div'); wrapper.innerHTML = html;
+    // Comme le corps : les suggestions du suivi acceptées, avec la teinte légère.
+    applyAcceptedView(wrapper, html);
     const loopCtx = LoopRules.createContext();
     await LoopRules.expandZones(wrapper, tableId, record, loopCtx);
     // Blocs de texte conditionnels (js/conditional-text.js) : défaits ou retirés ici, avant les bulles - celles d'un bloc retiré n'ont rien à résoudre.
@@ -584,14 +595,9 @@ const ReaderMode = (function () {
     const wrapper = document.createElement('div'); wrapper.className = 'reader-content';
     const cleanHtml = HtmlSanitize.clean(htmlContent);
     wrapper.innerHTML = cleanHtml;
-    // Les suggestions du suivi des modifications encore en attente (js/track-changes.js) : la Lecture montre le document comme si elles étaient
-    // toutes acceptées, avec une légère teinte là où quelque chose a changé. Avant tout le reste : les boucles, les blocs conditionnels et les bulles
-    // ne voient plus ni <ins> ni <del>. Si cette vue échoue, la Lecture montre le document tel qu'avant (suggestions visibles) plutôt qu'un document
-    // à moitié transformé ou une Lecture vide.
-    try { TrackChanges.acceptedView(wrapper); } catch (e) {
-      console.error('[reader-mode] vue « comme acceptée » impossible, les suggestions restent affichées', e);
-      wrapper.innerHTML = cleanHtml;
-    }
+    // La Lecture montre le document comme si les suggestions du suivi en attente étaient toutes acceptées, avec une légère teinte là où quelque
+    // chose a changé. Avant tout le reste : les boucles, les blocs conditionnels et les bulles ne voient plus ni <ins> ni <del>.
+    applyAcceptedView(wrapper, cleanHtml);
     // Un lien de la Lecture s'ouvre dans un nouvel onglet : le suivre dans le cadre du widget le remplacerait (et la plupart des sites refusent d'y être affichés).
     wrapper.querySelectorAll('a[href^="http"]').forEach(a => { a.target = '_blank'; a.rel = 'noopener noreferrer'; });
     const configEl = wrapper.querySelector(':scope > .heading-numbering-config');
@@ -851,7 +857,11 @@ const ReaderMode = (function () {
   }
   // Le document tel que preview() le déroule avant de remplacer les bulles : les zones répétées (leurs copies comprises) et les conditions de bloc, de valeur et de case résolues. Partagé avec splitBadges.
   async function expandedWrapper(htmlContent, tableId, record) {
-    const wrapper = document.createElement('div'); wrapper.innerHTML = HtmlSanitize.clean(htmlContent);
+    const cleanHtml = HtmlSanitize.clean(htmlContent);
+    const wrapper = document.createElement('div'); wrapper.innerHTML = cleanHtml;
+    // Le PDF, le Word et l'Excel sortent le document comme la Lecture, suggestions du suivi acceptées, mais sans teinte (choix d'Antoine, 04/10) :
+    // le texte supprimé n'y est plus, le texte ajouté s'y écrit comme le reste. Le modèle garde ses suggestions en attente.
+    applyAcceptedView(wrapper, cleanHtml, { tint: false });
     // Cf. commentaire équivalent dans render() : schéma à jour nécessaire pour que resolveBadgeNode détecte correctement une colonne Attachments.
     await GristAPI.refreshSchema().catch(() => {});
     // Mêmes zones répétées que le mode Lecture (cf. render()), avant de lister les bulles : les copies en font partie.

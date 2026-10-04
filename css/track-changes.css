@@ -90,22 +90,24 @@
   white-space: nowrap;
 }
 
-/* Lecture (js/reader-mode.js:renderRecord, TrackChanges.acceptedView) : le document comme si toutes les suggestions étaient acceptées, avec une
-   légère teinte là où quelque chose a changé - texte inséré ou remplacé, paragraphe ou titre dont la mise en forme a changé, case, colonne ou ligne
-   ajoutée. Le texte garde sa couleur, seul le fond change : le vert pâle du texte inséré dans l'éditeur (plus haut), écrit en dur et le même en
-   clair et en sombre puisque la page reste blanche en sombre (charte, « Contrastes » ; 14:1 avec le texte de la page). `!important` sur une case,
-   comme pour les colonnes suivies plus haut : un fond posé en ligne sur la case laisserait sinon la teinte invisible. Une image n'a pas de fond
-   visible : elle prend un cadre. */
-.reader-content .pp-tc-changed {
+/* Lecture (js/reader-mode.js:renderRecord et resolveHeaderFooterZone, TrackChanges.acceptedView) : le document comme si toutes les suggestions
+   étaient acceptées, avec une légère teinte là où quelque chose a changé - texte inséré ou remplacé, paragraphe ou titre dont la mise en forme a
+   changé, case, colonne ou ligne ajoutée. Le texte garde sa couleur, seul le fond change : le vert pâle du texte inséré dans l'éditeur (plus haut),
+   écrit en dur et le même en clair et en sombre puisque la page reste blanche en sombre (charte, « Contrastes » ; 14:1 avec le texte de la page).
+   `!important` sur une case, comme pour les colonnes suivies plus haut : un fond posé en ligne sur la case laisserait sinon la teinte invisible. Une
+   image n'a pas de fond visible : elle prend un cadre. Les en-têtes et les pieds de page de la Lecture (l'espaceur du bord et les bandes de couture)
+   ne sont pas dans `.reader-content` : ils ont la même teinte. Le PDF, le Word et l'Excel n'en ont aucune (ReaderMode.preview,
+   TrackChanges.acceptedView sans teinte). */
+:is(.reader-content, .v2-page-edge-spacer, .v2-page-band-header, .v2-page-band-footer) .pp-tc-changed {
   background-color: #e5f6ee;
 }
-.reader-content td.pp-tc-changed,
-.reader-content th.pp-tc-changed,
-.reader-content tr.pp-tc-changed > td,
-.reader-content tr.pp-tc-changed > th {
+:is(.reader-content, .v2-page-edge-spacer, .v2-page-band-header, .v2-page-band-footer) td.pp-tc-changed,
+:is(.reader-content, .v2-page-edge-spacer, .v2-page-band-header, .v2-page-band-footer) th.pp-tc-changed,
+:is(.reader-content, .v2-page-edge-spacer, .v2-page-band-header, .v2-page-band-footer) tr.pp-tc-changed > td,
+:is(.reader-content, .v2-page-edge-spacer, .v2-page-band-header, .v2-page-band-footer) tr.pp-tc-changed > th {
   background-color: #e5f6ee !important;
 }
-.reader-content img.pp-tc-changed,
-.reader-content .pp-tc-changed > img {
+:is(.reader-content, .v2-page-edge-spacer, .v2-page-band-header, .v2-page-band-footer) img.pp-tc-changed,
+:is(.reader-content, .v2-page-edge-spacer, .v2-page-band-header, .v2-page-band-footer) .pp-tc-changed > img {
   outline: 2px solid #8fd3aa;
 }

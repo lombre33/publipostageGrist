@@ -357,6 +357,31 @@
   });
 
   cases.push({
+    id: 'xlsx_pending_suggestions_come_out_as_accepted_without_strike_or_tint',
+    description: "Une grille dont le texte porte des suggestions du suivi en attente (<ins>, <del>) sort comme si elles étaient acceptées (choix d'Antoine, 04/10) : le texte supprimé n'est plus dans la case (il y sortait barré), le texte ajouté s'écrit comme le reste, aucune police n'est barrée, aucun fond de teinte (E5F6EE) n'est posé, et la case dont tout le texte est supprimé est vide.",
+    run: async (h) => {
+      await seed(h);
+      const html = gridHtml([300, 120, 120], [30, 30], [
+        [td('Début <ins data-id="1">ajouté</ins> milieu <del data-id="2">retiré</del> fin.'), td('<del data-id="3">Tout</del>'), td('A<ins data-id="4"><strong>B</strong></ins>')],
+        ['x', 'y', 'z'],
+      ]);
+      const { blob } = await XlsxExport.getXlsxBlobForRecord(html, TABLE, RECORD, '');
+      const x = await openXlsx(blob);
+      const c = ref => x.sheet.cell(ref);
+      const part = async name => (x.zip.file(name) ? x.zip.file(name).async('string') : '');
+      const written = (await part('xl/styles.xml')) + (await part('xl/sharedStrings.xml')) + x.sheet.xml;
+      const bad = [];
+      if (c('A1').value !== 'Début ajouté milieu fin.' || c('A1').rich) bad.push('A1=' + JSON.stringify({ value: c('A1').value, rich: !!c('A1').rich }));
+      if (c('B1').value) bad.push('B1 devrait être vide : ' + JSON.stringify(c('B1').value));
+      if (c('C1').value !== 'AB') bad.push('C1=' + JSON.stringify(c('C1').value));
+      if (/retiré|Tout/.test(written)) bad.push('le texte supprimé est resté dans le fichier');
+      if (/<strike\b/.test(written)) bad.push('une police barrée');
+      if (/E5F6EE/i.test(written)) bad.push('un fond de teinte');
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  cases.push({
     id: 'xlsx_colors_come_only_from_what_the_person_set',
     description: 'Les couleurs du fichier viennent de ce que la personne a posé (couleur du texte, fond de case) et d\'un filet gris fixe : une case sans format n\'a ni couleur de texte ni fond, thème sombre réglé compris (jamais de blanc sur blanc ni de case noire). Le garde-fou de fond est dans codeHygiene : aucune lecture du style calculé',
     run: async (h) => {

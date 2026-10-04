@@ -194,14 +194,15 @@ const TrackChanges = (function () {
     });
   }
 
-  // --- Lecture : le document comme si tout était accepté ---------------------------------------------------------------------------------------
+  // --- Lecture et exports : le document comme si tout était accepté ----------------------------------------------------------------------------
   // Le mode Lecture (js/reader-mode.js:renderRecord) montre le document tel qu'il serait après « Tout accepter », avec une légère teinte
-  // (.pp-tc-changed, css/track-changes.css) là où quelque chose a changé. Le document n'est pas touché : c'est le HTML qui est retouché au niveau du
-  // DOM (celui d'editor.getHTML() ou de js/comments.js:buildReaderHtml, qui garde ses repères data-pp-pos), sans éditeur ni schéma - un macro-modèle
-  // assemble d'ailleurs le HTML d'autres modèles. Mêmes règles que la lib (commands.js:applySuggestionsToTransform, relue dans sa source) : le texte
-  // supprimé s'en va, et une seule espace des deux quand celle d'avant et celle d'après en sont ; une suppression à cheval sur plusieurs blocs les
-  // réunit ; une insertion ne garde que son texte (le U+200B posé pour un saut de paragraphe disparaît) ; une case, une colonne ou une ligne
-  // supprimée s'en va aussi, avec son <col>.
+  // (.pp-tc-changed, css/track-changes.css) là où quelque chose a changé ; le PDF, le Word et l'Excel (ReaderMode.preview) sortent le même document
+  // sans teinte (choix d'Antoine, 04/10). Le document n'est pas touché : c'est le HTML qui est retouché au niveau du DOM (celui d'editor.getHTML() ou
+  // de js/comments.js:buildReaderHtml, qui garde ses repères data-pp-pos), sans éditeur ni schéma - un macro-modèle assemble d'ailleurs le HTML
+  // d'autres modèles. Mêmes règles que la lib (commands.js:applySuggestionsToTransform, relue dans sa source) : le texte supprimé s'en va, et une
+  // seule espace des deux quand celle d'avant et celle d'après en sont ; une suppression à cheval sur plusieurs blocs les réunit ; une insertion ne
+  // garde que son texte (le U+200B posé pour un saut de paragraphe disparaît) ; une case, une colonne ou une ligne supprimée s'en va aussi, avec son
+  // <col>.
   const CHANGED_CLASS = 'pp-tc-changed';
   const ZERO_WIDTH_SPACE = '​';
   const SUGGESTION_MARKERS = 'ins[data-id], del[data-id], span[data-type="modification"], [data-tc-insertion], [data-tc-deletion], [data-tc-modification]';
@@ -322,9 +323,10 @@ const TrackChanges = (function () {
     if (squeeze) dropLeading(after, 1);
     mergeBlocks(root, blockA, blockB);
   }
-  // Un élément de suivi (<ins>, <span data-type="modification">) laisse son contenu, teinté : en bloc, la classe va sur chaque bloc ; en ligne, dans
-  // un <span>.
-  function tintAndUnwrap(el) {
+  // Un élément de suivi (<ins>, <span data-type="modification">) laisse son contenu, teinté sauf pour une sortie (`tint` faux) : en bloc, la classe
+  // va sur chaque bloc ; en ligne, dans un <span>.
+  function tintAndUnwrap(el, tint) {
+    if (!tint) { el.replaceWith(...el.childNodes); return; }
     const blocks = Array.from(el.children).filter(child => BLOCK_TAGS.has(child.tagName));
     if (blocks.length) {
       blocks.forEach(block => block.classList.add(CHANGED_CLASS));
@@ -336,7 +338,7 @@ const TrackChanges = (function () {
     while (el.firstChild) span.appendChild(el.firstChild);
     el.replaceWith(span);
   }
-  function acceptInsertion(ins) {
+  function acceptInsertion(ins, tint) {
     const texts = [];
     const walker = ins.ownerDocument.createTreeWalker(ins, NodeFilter.SHOW_TEXT);
     while (walker.nextNode()) texts.push(walker.currentNode);
@@ -346,7 +348,7 @@ const TrackChanges = (function () {
       if (text.parentNode && text.data.includes(ZERO_WIDTH_SPACE)) text.data = text.data.split(ZERO_WIDTH_SPACE).join('');
     });
     if (!ins.parentNode) return;
-    if (ins.firstChild) tintAndUnwrap(ins); else refillContainer(pruneEmpty(ins));
+    if (ins.firstChild) tintAndUnwrap(ins, tint); else refillContainer(pruneEmpty(ins));
   }
   // Tiptap écrit un <col> par colonne de la PREMIÈRE ligne et la largeur du tableau d'après eux (createColGroup, @tiptap/extension-table) : refaits
   // une fois les cases et les lignes supprimées retirées, sinon une colonne vide resterait à droite. Largeur minimale d'une colonne : celle que les
@@ -374,8 +376,8 @@ const TrackChanges = (function () {
     table.style.minWidth = fixed ? '' : total + 'px';
     if (!table.getAttribute('style')) table.removeAttribute('style');
   }
-  // Colonnes et lignes suivies (une marque par case, cf. CELL_NODE_TYPES) : les supprimées s'en vont, les ajoutées gardent leur teinte.
-  function acceptTableSuggestions(root) {
+  // Colonnes et lignes suivies (une marque par case, cf. CELL_NODE_TYPES) : les supprimées s'en vont, les ajoutées se teintent (sauf en sortie).
+  function acceptTableSuggestions(root, tint) {
     root.querySelectorAll('table').forEach(table => {
       let removed = false;
       Array.from(table.rows).forEach(row => {
@@ -385,21 +387,22 @@ const TrackChanges = (function () {
       if (removed) rebuildColumns(table);
     });
     root.querySelectorAll('[data-tc-insertion], [data-tc-modification], [data-tc-deletion]').forEach(el => {
-      if (el.hasAttribute('data-tc-insertion')) el.classList.add(CHANGED_CLASS);
+      if (tint && el.hasAttribute('data-tc-insertion')) el.classList.add(CHANGED_CLASS);
       MARK_NAMES.forEach(name => el.removeAttribute(cellMarkAttribute(name)));
     });
   }
   // Rend `root` (un conteneur détaché ou non, dont le HTML vient d'être posé) tel qu'il serait avec toutes les suggestions acceptées. True si quelque
-  // chose a changé.
-  function acceptedView(root) {
+  // chose a changé. `options.tint: false` pour une sortie (PDF, Word, Excel) : ce qui a changé s'y écrit comme le reste, sans teinte.
+  function acceptedView(root, options) {
     if (!root.querySelector(SUGGESTION_MARKERS)) return false;
-    acceptTableSuggestions(root);
+    const tint = !options || options.tint !== false;
+    acceptTableSuggestions(root, tint);
     // Dans l'ordre du document, comme la lib : la suppression d'avant se voit déjà faite quand on regarde l'espace qui précède celle d'après.
     root.querySelectorAll('ins[data-id], del[data-id]').forEach(el => {
       if (!root.contains(el)) return;
-      if (el.tagName === 'DEL') acceptDeletion(root, el); else acceptInsertion(el);
+      if (el.tagName === 'DEL') acceptDeletion(root, el); else acceptInsertion(el, tint);
     });
-    root.querySelectorAll('span[data-type="modification"]').forEach(tintAndUnwrap);
+    root.querySelectorAll('span[data-type="modification"]').forEach(el => tintAndUnwrap(el, tint));
     return true;
   }
 

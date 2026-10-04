@@ -1444,6 +1444,169 @@
     },
   });
 
+  // === Exports : le PDF, le Word et l'Excel sortent le document comme la Lecture, sans teinte (choix d'Antoine, 04/10) ===
+  // Carte « Faire sortir le PDF, le Word et l'Excel comme la Lecture, modifications acceptées ? » : « Acceptées, sans teinte ». Les trois exports lisent le HTML du modèle par ReaderMode.preview
+  // (js/reader-mode.js:expandedWrapper), qui le passe par TrackChanges.acceptedView sans teinte : le texte supprimé n'y est plus (il y sortait barré), le texte ajouté s'écrit comme le reste, et le
+  // modèle garde ses suggestions en attente. Les en-têtes et pieds de page prennent le même chemin (js/export-common.js:resolveZone) ; ceux de la Lecture aussi (resolveHeaderFooterZone), avec la teinte.
+  const EXPORT_RECORD = { id: 1 };
+  const exportedHtml = html => ReaderMode.preview(html, null, EXPORT_RECORD);
+  const hasSuggestions = html => /<ins |<del |data-tc-|data-type="modification"/.test(html);
+  // Supprimer une colonne à travers une cellule fusionnée : le bouton est grisé sous le suivi (js/floating-toolbars.js), rien n'est donc en attente ; l'export reste le même.
+  const LOCKED_UNDER_TRACKING = new Set(['une colonne supprimée à travers une cellule fusionnée']);
+  // Une même construction, exportée avec ses suggestions en attente, puis comparée à l'export du document que « Tout accepter » donne vraiment : pareil, et rien du suivi ni de la teinte ne reste.
+  async function exportAgainstAcceptAll(h, name) {
+    const pending = Editor.getHTML();
+    const exported = await exportedHtml(pending);
+    EditorCore.getEditor().chain().focus().acceptAllSuggestionsChunked().run();
+    await h.sleep(200);
+    const real = comparableHtml(await exportedHtml(Editor.getHTML()));
+    const view = comparableHtml(exported);
+    const holder = document.createElement('div');
+    holder.innerHTML = exported;
+    const clean = !/pp-tc-changed/.test(exported) && holder.querySelectorAll(SUGGESTION_LEFTOVERS).length === 0 && !holder.querySelector('ins, del');
+    const pendingHadSuggestions = hasSuggestions(pending) || LOCKED_UNDER_TRACKING.has(name);
+    return pendingHadSuggestions && view === real && clean ? null : { name, pendingHadSuggestions, same: view === real, clean, pending: pending.slice(0, 900), view: view.slice(0, 900), real: real.slice(0, 900) };
+  }
+  const EXPORT_PENDING = '<p>Début <ins data-id="1">ajouté</ins> milieu <del data-id="2">retiré</del> fin.</p>'
+    + '<p>Coupé<ins data-id="3">​</ins></p><p><ins data-id="3">​suite</ins> du texte</p>'
+    + '<span data-type="modification" data-id="4" type="attr" attrname="textAlign" newvalue="right"><p style="text-align: right;">Aligné</p></span>'
+    + '<table><tbody><tr><td><p>A</p></td><td data-tc-deletion="5"><p>B</p></td><td data-tc-insertion="6" style="background-color: #fff2cc;"><p>N</p></td></tr></tbody></table>';
+  const EXPORT_HEADER_FOOTER = {
+    enabled: true, differentFirstPage: false,
+    header: { default: '<p>En-tête <del data-id="9">brouillon</del><ins data-id="10">final</ins></p>', first: '' },
+    footer: { default: '<p>Pied <ins data-id="11">validé</ins> <del data-id="12">provisoire</del></p>', first: '' },
+  };
+  const compact = text => String(text).replace(/\s+/g, '');
+  const meaningfulTexts = paragraphs => paragraphs.map(p => p.text).filter(text => text.trim() !== '');
+
+  cases.push({
+    id: 'trackchanges_exports_read_the_document_as_accepted_like_accept_all',
+    description: "Ce que le PDF, le Word et l'Excel lisent du modèle (ReaderMode.preview) est exactement le document que « Tout accepter » donne, pour les treize façons de modifier du texte et les sept tableaux de la Lecture - sans <ins>, <del>, marque de suivi ni teinte (.pp-tc-changed) : le texte supprimé n'y est plus, le texte ajouté s'y écrit comme le reste.",
+    run: async (h) => {
+      try {
+        const failures = [];
+        for (const [name, html, build] of readingScenarios) {
+          await documentWithInsertions(h, html, []);
+          await build(h);
+          const failure = await exportAgainstAcceptAll(h, name);
+          if (failure) failures.push(failure);
+        }
+        for (const [name, html, cell, action] of tableScenarios) {
+          await loadTable(h, html, cell, true);
+          await pressTableButton(h, action);
+          const failure = await exportAgainstAcceptAll(h, name);
+          if (failure) failures.push(failure);
+        }
+        return { pass: failures.length === 0, notes: failures.length ? JSON.stringify(failures) : (readingScenarios.length + tableScenarios.length) + ' exports identiques à « Tout accepter », sans teinte' };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_exports_word_comes_out_as_accepted_without_strike_or_tint',
+    description: "Le .docx d'un modèle aux suggestions en attente (texte ajouté, texte supprimé, saut de paragraphe, alignement changé, case supprimée et case ajoutée) et d'en-têtes et de pieds de page qui en ont aussi : le texte supprimé n'est écrit nulle part, aucun passage n'est barré, aucun fond de teinte (E5F6EE) n'est posé, le texte ajouté est écrit comme le reste - et le modèle de l'éditeur garde ses suggestions.",
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        await disableTrackChangesIfOn(h);
+        Editor.setHTML(EXPORT_PENDING);
+        await h.sleep(250);
+        const pending = Editor.getHTML();
+        const docx = await h.exportDocxParts(pending, EXPORT_HEADER_FOOTER);
+        const body = meaningfulTexts(h.docxParagraphs(docx.doc));
+        const header = h.docxParagraphs(docx.part('word/header1.xml'));
+        const footer = h.docxParagraphs(docx.part('word/footer1.xml'));
+        const everyPart = Object.keys(docx.parts).map(name => docx.parts[name]).join('\n');
+        const struck = [docx.doc, docx.part('word/header1.xml'), docx.part('word/footer1.xml')].some(xml => h.docxParagraphs(xml).some(p => p.runs.some(r => r.strike)));
+        const checks = {
+          body: body.join('|') === 'Début ajouté milieu fin.|Coupé|suite du texte|Aligné|A|N',
+          header: meaningfulTexts(header).join('|') === 'En-tête final',
+          footer: compact(meaningfulTexts(footer).join('|')) === compact('Pied validé'),
+          deletedTextGone: !/retiré|brouillon|provisoire/.test(everyPart),
+          nothingStruck: !struck,
+          noTint: !/E5F6EE/i.test(everyPart),
+          templateKeepsSuggestions: hasSuggestions(Editor.getHTML()) && Editor.getHTML() === pending,
+        };
+        return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, body, header: meaningfulTexts(header), footer: meaningfulTexts(footer) }) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_exports_pdf_comes_out_as_accepted_without_strike_or_tint',
+    description: "Le PDF d'un modèle aux suggestions en attente et d'en-têtes et de pieds de page qui en ont aussi, relu dans le fichier (pdf.js) : le texte supprimé n'est peint nulle part, le texte ajouté l'est comme le reste (une seule espace entre les mots quand une suppression retire un mot entouré d'espaces), rien n'est barré (lineThrough) ni teinté.",
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        await disableTrackChangesIfOn(h);
+        Editor.setHTML(EXPORT_PENDING);
+        await h.sleep(250);
+        const pdf = await h.exportPdfContent(Editor.getHTML(), EXPORT_HEADER_FOOTER);
+        const truth = await h.extractPdfGroundTruth(pdf.base64);
+        const painted = truth.pages.map(page => page.textItems.map(item => item.str).join(' ')).join(' ');
+        const zone = fn => { try { return typeof fn === 'function' ? fn(1, 1) : fn; } catch (e) { return null; } };
+        const definition = JSON.stringify([pdf.docDefinition.content, zone(pdf.docDefinition.header), zone(pdf.docDefinition.footer)]);
+        const checks = {
+          bodyPainted: compact(painted).includes(compact('Début ajouté milieu fin.')) && compact(painted).includes(compact('suite du texte')),
+          headerFooterPainted: compact(painted).includes('En-têtefinal') && compact(painted).includes('Piedvalidé'),
+          deletedTextGone: !/retiré|brouillon|provisoire/.test(painted),
+          deletedCellGone: !/\bB\b/.test(painted),
+          nothingStruck: definition.indexOf('lineThrough') === -1,
+          noTint: !/e5f6ee/i.test(definition),
+        };
+        return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, painted: painted.slice(0, 400) }) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_exports_header_footer_zones_are_resolved_as_accepted',
+    description: "Les quatre fragments d'en-tête et de pied que le PDF et le Word reçoivent (ExportCommon.resolveHeaderFooterVariables) sont déjà « comme acceptés » : ni <ins>, <del> ni teinte, le texte supprimé n'y est plus.",
+    run: async (h) => {
+      await h.resetEditor();
+      const hf = {
+        enabled: true, differentFirstPage: true,
+        header: { default: EXPORT_HEADER_FOOTER.header.default, first: '<p>Première <del data-id="13">ancienne</del><ins data-id="14">page</ins></p>' },
+        footer: { default: EXPORT_HEADER_FOOTER.footer.default, first: '<p><del data-id="15">Rien</del></p>' },
+      };
+      const zones = await ExportCommon.resolveHeaderFooterVariables(hf, null, EXPORT_RECORD);
+      const text = html => { const box = document.createElement('div'); box.innerHTML = html || ''; return { text: box.textContent.replace(/\s+/g, ' ').trim(), leftovers: box.querySelectorAll('ins, del, .pp-tc-changed').length }; };
+      const read = { headerDefault: text(zones.header.default), headerFirst: text(zones.header.first), footerDefault: text(zones.footer.default), footerFirst: text(zones.footer.first) };
+      const pass = read.headerDefault.text === 'En-tête final' && read.headerFirst.text === 'Première page' && read.footerDefault.text === 'Pied validé' && read.footerFirst.text === ''
+        && Object.values(read).every(zone => zone.leftovers === 0);
+      return { pass, notes: JSON.stringify(read) };
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_reading_header_footer_zones_show_the_accepted_text_with_the_tint',
+    description: "Les en-têtes et les pieds de page de la Lecture (l'espaceur du bord de la feuille) montrent aussi leurs suggestions comme acceptées : le texte supprimé n'y est plus, ni <ins> ni <del>, et ce qui est ajouté a le fond vert pâle de la Lecture (rgb(229, 246, 238)), texte inchangé.",
+    run: async (h) => {
+      const containers = [document.getElementById('reader-container'), document.getElementById('editor-container')];
+      const displayBefore = containers.map(el => el.style.display);
+      try {
+        await h.resetEditor();
+        await disableTrackChangesIfOn(h);
+        h.setA4Preview(true);
+        await h.renderReaderMode('<p>Corps</p>', EXPORT_HEADER_FOOTER);
+        const zoneOf = selector => {
+          const el = document.querySelector('#reader-container ' + selector);
+          if (!el) return null;
+          const tinted = el.querySelector('.pp-tc-changed');
+          return { text: el.textContent.replace(/\s+/g, ' ').trim(), leftovers: el.querySelectorAll('ins, del').length, tinted: tinted ? tinted.textContent : null, background: tinted ? getComputedStyle(tinted).backgroundColor : null };
+        };
+        const header = zoneOf('.v2-page-edge-top');
+        const footer = zoneOf('.v2-page-edge-bottom');
+        const pass = !!header && !!footer && header.text === 'En-tête final' && footer.text === 'Pied validé' && header.leftovers === 0 && footer.leftovers === 0
+          && header.tinted === 'final' && footer.tinted === 'validé' && header.background === 'rgb(229, 246, 238)' && footer.background === 'rgb(229, 246, 238)';
+        return { pass, notes: JSON.stringify({ header, footer }) };
+      } finally {
+        h.setA4Preview(false);
+        containers.forEach((el, i) => { el.style.display = displayBefore[i]; });
+      }
+    },
+  });
+
   cases.push({
     id: 'trackchanges_macro_template_excluded_from_suivi',
     description: "Un macro-modèle (TypeModele='macro') n'a jamais de suiviModifications exploitable (null, jamais un objet) et verrouille les 3 boutons de suivi dans la barre - son JSON de composition ne passe jamais par l'éditeur suivi",
