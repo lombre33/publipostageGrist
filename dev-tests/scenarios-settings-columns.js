@@ -303,6 +303,42 @@
   );
 
   scenario(
+    'settingscolumns_page_table_is_asked_only_for_bare_columns_and_a_failed_lookup_skips_them',
+    'La table de la page n’est cherchée que si une règle cite une colonne nue (rien n’est demandé quand toutes citent « Table.Colonne ») ; une recherche qui échoue vaut une table inconnue (les colonnes nues sont sautées, les autres vérifiées) ; une règle sans colonne est ignorée',
+    async () => {
+      const current = GristAPI.getCurrentTableId;
+      const detect = GristAPI.detectTableId;
+      const readRaw = RowTemplate.readRaw;
+      const asked = { current: 0, detect: 0 };
+      let qualifiedOnly; let askedForQualified; let failedLookup; let noColumn;
+      try {
+        GristAPI.getCurrentTableId = function () { asked.current++; return current.apply(this, arguments); };
+        GristAPI.detectTableId = function () { asked.detect++; return detect.apply(this, arguments); };
+        await configure({ modeleSelonLigne: byRow([rule(LINKED + '.Disparue')]) });
+        qualifiedOnly = await SettingsColumns.problems();
+        askedForQualified = { current: asked.current, detect: asked.detect };
+        await configure({ modeleSelonLigne: byRow([rule('Disparue'), rule(LINKED + '.Disparue')]) });
+        GristAPI.getCurrentTableId = () => null;
+        GristAPI.detectTableId = async () => { throw new Error('détection impossible (simulée)'); };
+        failedLookup = await SettingsColumns.problems();
+        GristAPI.getCurrentTableId = current;
+        GristAPI.detectTableId = detect;
+        RowTemplate.readRaw = () => ({ enabled: true, rules: [{ column: '', operator: '=', value: 'x', modeleId: '999' }, rule(LINKED + '.Disparue')], otherwise: 'keep' });
+        noColumn = await SettingsColumns.problems();
+      } finally { GristAPI.getCurrentTableId = current; GristAPI.detectTableId = detect; RowTemplate.readRaw = readRaw; }
+      const wanted = { columns: [LINKED + '.Disparue'] };
+      const checks = {
+        qualifiedOnly: same(qualifiedOnly.rowTemplate, wanted),
+        askedNothingForQualified: same(askedForQualified, { current: 0, detect: 0 }),
+        failedLookup: same(failedLookup.rowTemplate, wanted),
+        noColumn: same(noColumn.rowTemplate, wanted),
+      };
+      const v = verdict(checks);
+      return { pass: v.pass, notes: v.failed.join(', ') || JSON.stringify({ askedForQualified, failedLookup, noColumn }) };
+    },
+  );
+
+  scenario(
     'settingscolumns_a_person_restricted_by_her_row_is_not_told_but_the_owner_is',
     'Une personne que sa ligne de droits met en lecture seule ne reçoit pas un message qui ne regarde que qui règle l’Accès ; la personne qui n’est pas restreinte, si : même réglage, même colonne manquante',
     async () => {

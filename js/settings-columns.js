@@ -48,32 +48,39 @@ const SettingsColumns = (function () {
     return missing.length ? { columns: missing } : null;
   }
 
+  // La table de la page, pour résoudre les colonnes citées nues ; inutile (null) quand toutes les règles citent « Table.Colonne ».
+  async function pageTableOf(rules) {
+    if (!rules.some(rule => String(rule.column || '').indexOf('.') === -1)) return null;
+    return GristAPI.getCurrentTableId() || await GristAPI.detectTableId(null, 'settingsColumns').catch(() => null);
+  }
+
+  // La règle cite-t-elle une colonne qui n'existe plus ? `isHidden()` dit si une table absente du schéma est seulement cachée à cette personne.
+  async function citesMissingColumn(rule, pageTable, isHidden) {
+    if (!rule.column) return false;
+    const { table, column } = ConditionRules.parseColumnRef(rule.column, pageTable);
+    if (!table || !column) return false;
+    if (GristAPI.resolveColumnPath(table, column)) return false;
+    // Table dont les colonnes ne sont pas encore lues : rien à conclure.
+    if (tableExists(table)) return columnsKnown(table);
+    // Table absente du schéma : la colonne citée n'existe plus non plus - sauf si la table est seulement cachée à cette personne.
+    return !(await isHidden());
+  }
+
   // Réglage Selon la ligne : les colonnes de ses règles qui n'existent plus, écrites comme la règle les cite (nue pour la table de la page,
   // « Table.Colonne » sinon, chemin de références compris). Coupé, le réglage ne sert à rien : ses règles gardées ne comptent pas. Une colonne nue ne
   // se vérifie qu'avec la table de la page.
   async function rowTemplateProblem() {
     const raw = RowTemplate.readRaw();
     if (!raw || !raw.enabled || !raw.rules.length || !schemaKnown()) return null;
-    let pageTable = null;
-    if (raw.rules.some(rule => String(rule.column || '').indexOf('.') === -1)) {
-      pageTable = GristAPI.getCurrentTableId() || await GristAPI.detectTableId(null, 'settingsColumns').catch(() => null);
-    }
-    const missing = [];
+    const pageTable = await pageTableOf(raw.rules);
     let hidden;
+    const isHidden = async () => {
+      if (hidden === undefined) hidden = await mayBeHidden();
+      return hidden;
+    };
+    const missing = [];
     for (const rule of raw.rules) {
-      if (!rule.column) continue;
-      const { table, column } = ConditionRules.parseColumnRef(rule.column, pageTable);
-      if (!table || !column) continue;
-      if (GristAPI.resolveColumnPath(table, column)) continue;
-      if (tableExists(table)) {
-        // Table dont les colonnes ne sont pas encore lues : rien à conclure.
-        if (!columnsKnown(table)) continue;
-      } else {
-        // Table absente du schéma : la colonne citée n'existe plus non plus - sauf si la table est seulement cachée à cette personne.
-        if (hidden === undefined) hidden = await mayBeHidden();
-        if (hidden) continue;
-      }
-      missing.push(rule.column);
+      if (await citesMissingColumn(rule, pageTable, isHidden)) missing.push(rule.column);
     }
     return missing.length ? { columns: unique(missing) } : null;
   }
