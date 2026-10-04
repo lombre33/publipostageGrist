@@ -223,10 +223,10 @@ const EditorNodes = (function () {
     });
   }
 
-  // Chip intelligent - date/heure/email, même schéma que VarBadge. Jamais de vraie valeur dans l'éditeur (résolu en mode Lecture/export, cf.
+  // Chip intelligent - date/heure/email/nom, même schéma que VarBadge. Jamais de vraie valeur dans l'éditeur (résolu en mode Lecture/export, cf.
   // js/reader-mode.js:resolveSmartChips) - vert plutôt que bleu pour signaler "valeur calculée, pas une colonne Grist".
   function createSmartChipNode(Node, mergeAttributes) {
-    const KIND_I18N_KEYS = { date: 'chips.date', time: 'chips.time', email: 'chips.email' };
+    const KIND_I18N_KEYS = { date: 'chips.date', time: 'chips.time', email: 'chips.email', name: 'chips.name' };
     function labelFor(kind) {
       const key = KIND_I18N_KEYS[kind];
       return key ? I18n.t(key) : '?';

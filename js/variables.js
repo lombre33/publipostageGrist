@@ -26,6 +26,7 @@ const Variables = (function () {
     { key: 'Date du jour', i18nKey: 'chips.date', kind: 'chip', chipKind: 'date' },
     { key: 'Heure actuelle', i18nKey: 'chips.time', kind: 'chip', chipKind: 'time' },
     { key: 'Email de l’utilisateur', i18nKey: 'chips.email', kind: 'chip', chipKind: 'email' },
+    { key: 'Nom de l’utilisateur', i18nKey: 'chips.name', kind: 'chip', chipKind: 'name' },
     // Pas un chip en ligne mais un BLOC (js/conditional-text.js) : il entoure le texte sélectionné quand le bouton « Insérer une variable » a ouvert la liste dessus, sinon il
     // se pose vide, curseur dedans.
     { key: 'Texte conditionnel', i18nKey: 'chips.conditionalText', kind: 'chip', chipKind: 'conditionalText' },

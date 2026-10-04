@@ -665,6 +665,8 @@ const I18n = (function () {
     'reader.unresolvedVariables': { fr: 'Attention : certaines variables n’ont pas pu être résolues.', en: 'Warning: some variables could not be resolved.' },
     // Écrit à la place du chip « Email de l'utilisateur » quand l'adresse ne peut pas être lue (js/reader-mode.js:resolveSmartChips) : en Lecture et dans les exports.
     'reader.emailUnavailable': { fr: '[Email indisponible]', en: '[Email unavailable]' },
+    // Pareil pour le chip « Nom de l'utilisateur » : nom illisible, ou que Grist ne donne pas à cette personne.
+    'reader.nameUnavailable': { fr: '[Nom indisponible]', en: '[Name unavailable]' },
 
     // --- Messages de statut (js/main.js:setStatus) ---
     'status.ready': { fr: 'Widget prêt.', en: 'Widget ready.' },
@@ -808,6 +810,7 @@ const I18n = (function () {
     'chips.date': { fr: 'Date du jour', en: 'Today’s date' },
     'chips.time': { fr: 'Heure actuelle', en: 'Current time' },
     'chips.email': { fr: 'Email de l’utilisateur', en: 'User’s email' },
+    'chips.name': { fr: 'Nom de l’utilisateur', en: 'User’s name' },
 
     // --- Modale de configuration de correspondance (js/variables.js:showLinkConfigModal) ---
     'linkConfig.columnPlaceholder': { fr: '— Choisir une colonne —', en: '— Choose a column —' },

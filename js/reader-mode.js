@@ -693,7 +693,7 @@ const ReaderMode = (function () {
     const nodes = Array.from(wrapper.querySelectorAll('img.editor-image[data-qr-text]')).filter(QrCode.needsImage);
     await Promise.all(nodes.map(img => QrCode.resolveImage(img, tableId, record, loopOpts(LoopRules.bindingOf(img)))));
   }
-  // Chips intelligents - date du jour/heure actuelle/email utilisateur, valeurs calculées (jamais liées à une colonne Grist) donc résolues à chaque rendu
+  // Chips intelligents - date du jour/heure actuelle/email et nom de l'utilisateur, valeurs calculées (jamais liées à une colonne Grist) donc résolues à chaque rendu
   // sans recherche de ligne/table liée. `.footnote-ref-marker` n'a pas besoin d'être résolu ici : son numéro vient du compteur CSS, déjà correct à l'écran.
   function formatTodayDate() {
     const d = new Date();
@@ -703,6 +703,15 @@ const ReaderMode = (function () {
     const d = new Date();
     return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
   }
+  // Le texte d'un chip qui lit la personne connectée (email, nom) : la valeur lue ou, si elle ne se lit pas (réseau, portée du jeton insuffisante, lecteur Grist) ou que Grist n'en
+  // donne aucune, le repli visuel d'une #Variable cassée - jamais un blocage du reste du rendu.
+  async function userChipText(read, unavailableKey) {
+    try {
+      const text = await read();
+      if (text) return { text, isError: false };
+    } catch (e) { /* repli ci-dessous */ }
+    return { text: I18n.t(unavailableKey), isError: true };
+  }
   async function resolveSmartChips(wrapper) {
     const chips = Array.from(wrapper.querySelectorAll('.smart-chip'));
     await Promise.all(chips.map(async chip => {
@@ -710,13 +719,8 @@ const ReaderMode = (function () {
       let text = ''; let isError = false;
       if (kind === 'date') text = formatTodayDate();
       else if (kind === 'time') text = formatNowTime();
-      else if (kind === 'email') {
-        // Repli visuel identique à une #Variable cassée en cas d'échec (réseau, portée du jeton insuffisante...), jamais un blocage du reste du rendu.
-        try {
-          text = await GristAPI.getCurrentUserEmail();
-          if (!text) { text = I18n.t('reader.emailUnavailable'); isError = true; }
-        } catch (e) { text = I18n.t('reader.emailUnavailable'); isError = true; }
-      }
+      else if (kind === 'email') ({ text, isError } = await userChipText(() => GristAPI.getCurrentUserEmail(), 'reader.emailUnavailable'));
+      else if (kind === 'name') ({ text, isError } = await userChipText(() => GristAPI.getCurrentUserName(), 'reader.nameUnavailable'));
       const span = document.createElement('span');
       span.textContent = text;
       span.className = 'resolved-var' + (isError ? ' error-msg' : '');
