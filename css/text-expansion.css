@@ -12,6 +12,12 @@
 .ex-item.selected, .ex-item:hover { background: var(--surface-sunken); }
 .ex-abbr { flex: none; font-weight: 700; }
 .ex-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* « Encore N résultats : précisez la recherche. » : dernière ligne de la liste quand d'autres abréviations répondent encore à la saisie (même phrase
+   et même gris que .ss-more, css/search-select.css ; ce n'est pas une ligne qu'on choisit). Collée au bas de la liste, d'un bord à l'autre du cadre
+   (marges négatives = son remplissage), elle se lit dès l'ouverture. La liste qui la porte (`.has-more`) n'a pas de remplissage en bas : sinon le
+   navigateur garderait la ligne à 3 px du bord, et une ligne de la liste passerait dessous. */
+#expansion-box.has-more { padding-bottom: 0; }
+.ex-more { position: sticky; bottom: 0; flex: none; margin: 6px -3px 0; padding: 6px 11px 5px; font-size: 12px; line-height: 1.35; color: var(--text-faint); background: var(--surface); border-top: 1px solid var(--border); border-radius: 0 0 5px 5px; }
 
 /* Réglages > Raccourcis > Abréviations. Pas de `display` sur .settings-panel (css/toolbar-v2.css : il battrait l'attribut `hidden` des onglets
    masqués) : tout est dans la section à l'intérieur. La fenêtre ne défile pas, seul le contenu de l'onglet le fait (.settings-body) : la liste

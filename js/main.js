@@ -1095,6 +1095,19 @@
     });
   }
 
+  // Un tableau de tableur plus grand que ce que la mise en forme garde (js/grid-table.js) est collé tel quel : la fenêtre le dit, une fois le
+  // collage fait. Le coin d'état ne le dirait pas : le collage le remet à l'état d'enregistrement, et l'enregistrement automatique à nouveau 2,5 s
+  // plus tard, sur un tableau qui peut figer la page un moment.
+  function wirePasteTooBigNotice() {
+    GridTable.setTooBigHandler(({ kind, count, max }) => {
+      const number = n => n.toLocaleString(I18n.getLang() === 'en' ? 'en-US' : 'fr-FR');
+      // Pas dans le collage même : la fenêtre prendrait le focus avant que ProseMirror ait fini de poser le tableau.
+      setTimeout(async () => {
+        await Dialogs.choose({ title: I18n.t('dialog.pasteTooBig.title'), message: I18n.t('dialog.pasteTooBig.' + kind, { count: number(count), max: number(max) }), choices: [], cancelLabel: I18n.t('common.close') });
+      }, 0);
+    });
+  }
+
   function wireAutosaveConflictBanner() {
     if (!conflictReloadBtn) return;
     conflictReloadBtn.addEventListener('click', () => {
@@ -1615,10 +1628,21 @@
     return rows;
   }
 
+  // Au-delà de ce nombre de documents, l'export d'une seule ligne que « Un document par valeur » découpe demande d'abord (deux listes de 20
+  // valeurs en font 400, deux de 100 en font 10 000, dans une archive construite en mémoire).
+  const SPLIT_CONFIRM_FROM = 50;
+
   // L'accord avant un export en lot : `{}`, ou `{ layout }` pour les planches, qui se règlent dans leur propre fenêtre (feuille, emplacements, traits
-  // de coupe) : elle tient lieu de confirmation. Un export seul n'en demande pas, son clic vaut accord. null : la personne renonce.
+  // de coupe) : elle tient lieu de confirmation. Un export seul n'en demande pas, son clic vaut accord, sauf quand sa ligne fait plus de
+  // SPLIT_CONFIRM_FROM documents. null : la personne renonce.
   async function confirmBatch(cfg, { only, tableId, rowCount, jobCount, splitting }) {
-    if (only) return {};
+    if (only) {
+      if (jobCount <= SPLIT_CONFIRM_FROM) return {};
+      const proceed = await Dialogs.confirm({ title: I18n.t('varList.split.label'), message: I18n.t('confirm.splitExport', { documents: jobCount }), confirmLabel: I18n.t('common.generate') });
+      // « Génération en cours… » (exportRecordAs) ne doit pas rester affiché derrière un renoncement.
+      if (!proceed) setStatus(I18n.t('status.exportCancelled'));
+      return proceed ? {} : null;
+    }
     if (cfg.sheets) return (await SheetAssemblyDialog.open({ count: jobCount, table: tableId, grid: GridEditor.isGridType(currentTypeModele) })) || null;
     const note = splitting ? '\n\n' + I18n.t('confirm.splitNote', { documents: jobCount }) : '';
     const proceed = await Dialogs.confirm({ title: exportText('dialog.batchExport.title'), message: exportText(cfg.confirm, { count: rowCount, table: tableId }) + note, confirmLabel: I18n.t('common.generate') });
@@ -2246,6 +2270,7 @@
     I18n.onChange(() => { if (statusMsg.classList.contains('is-unsaved')) statusMsg.textContent = I18n.t('status.unsavedChanges'); });
     Variables.initFilenameInput(pdfFilenameInput);
     wireAutosaveConflictBanner();
+    wirePasteTooBigNotice();
     wireMacroReturn();
     wireSaveMenu();
   }

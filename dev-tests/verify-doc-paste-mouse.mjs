@@ -8,7 +8,9 @@
 //   - Ctrl+Z défait le collage d'un coup, Ctrl+Maj+Z le rend ;
 //   - Ctrl+Maj+V (coller sans mise en forme) colle le TEXTE de la plage, ni tableau ni image ;
 //   - Google Sheets et LibreOffice Calc donnent eux aussi un tableau, sans image ;
-//   - une image seule (aucun tableau dans le presse-papiers) se colle toujours comme image.
+//   - une image seule (aucun tableau dans le presse-papiers) se colle toujours comme image ;
+//   - un tableur plus grand que ce que la mise en forme garde (301 colonnes ; 3 000 lignes ou 300 colonnes au plus) est collé tel quel et UNE fenêtre le dit, une fois le collage fait : « Fermer »
+//     à la vraie souris ou Échap la referme et rend le focus au texte, en français comme en anglais ; à 300 colonnes ou en texte seul (Ctrl+Maj+V), aucune fenêtre.
 // Lancé par run-headless.mjs (groupe Node « docPasteMouse », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-doc-paste-mouse.mjs
 // DOC_PASTE_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans elle, rien n'est écrit.
 import { createServer } from 'node:http';
@@ -144,6 +146,7 @@ async function setClipboard(page, parts) {
     const fixtures = window.GridTableFixtures;
     const items = {};
     if (p.html) items['text/html'] = new Blob([fixtures[p.html]], { type: 'text/html' });
+    if (p.rawHtml) items['text/html'] = new Blob([p.rawHtml], { type: 'text/html' });
     if (p.text) items['text/plain'] = new Blob([fixtures[p.text] != null ? fixtures[p.text] : p.text], { type: 'text/plain' });
     if (p.png) items['image/png'] = new Blob([Uint8Array.from(atob(fixtures.PNG_BASE64), c => c.charCodeAt(0))], { type: 'image/png' });
     await navigator.clipboard.write([new ClipboardItem(items, { unsanitized: ['text/html'] })]);
@@ -206,6 +209,82 @@ const documentState = page => page.evaluate((contrastSrc) => {
   return out;
 }, CONTRAST_FN);
 
+// Un tableau de tableur d'UNE ligne et `cols` colonnes, avec la signature d'Excel (une table de plus de 3 000 lignes figerait la page : sa pagination est en n², hors de ce test).
+const wideSheet = cols => '<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta name=ProgId content=Excel.Sheet></head><body><table><tr>' + '<td>c</td>'.repeat(cols) + '</tr></table></body></html>';
+// La fenêtre d'information (js/dialogs.js, `choose` sans choix) : ouverte ou non, ses textes, ses boutons visibles, son focus, sa place dans le panneau.
+const noticeState = page => page.evaluate(() => {
+  const overlay = document.getElementById('pp-dialog-modal');
+  if (!overlay || getComputedStyle(overlay).display === 'none') return { open: false };
+  const box = overlay.querySelector('.pp-modal-box');
+  const r = box.getBoundingClientRect();
+  const message = document.getElementById('pp-dialog-message');
+  const buttons = Array.from(overlay.querySelectorAll('.pp-modal-actions button')).filter(b => !b.hidden && b.getClientRects().length > 0);
+  const focus = document.activeElement;
+  return {
+    open: true, title: document.getElementById('pp-dialog-title').textContent, message: message.hidden ? '' : message.textContent, buttons: buttons.map(b => b.textContent),
+    focusOn: focus && overlay.contains(focus) ? focus.textContent : null, inPanel: r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight,
+    box: { left: Math.round(r.left), top: Math.round(r.top), right: Math.round(r.right), bottom: Math.round(r.bottom) },
+  };
+});
+const waitNotice = (page, open) => page.waitForFunction((want) => { const o = document.getElementById('pp-dialog-modal'); return (!!o && getComputedStyle(o).display !== 'none') === want; }, open, { timeout: 8000 }).then(() => true, () => false);
+// Ce que le document montre : tableaux, cellules de la première ligne, et où est le focus (le texte, ou ailleurs).
+const wideState = page => page.evaluate(() => {
+  const table = document.querySelector('.tiptap table');
+  const focus = document.activeElement;
+  return { tables: document.querySelectorAll('.tiptap table').length, cells: table && table.rows[0] ? table.rows[0].cells.length : 0, focusInText: !!focus && focus.closest('.tiptap') !== null };
+});
+
+async function tooBigNotices(page, label, shot) {
+  const paste = async (cols, key) => {
+    await startDocument(page);
+    await setClipboard(page, { rawHtml: wideSheet(cols), text: 'c' });
+    await page.keyboard.press(key || 'Control+V');
+  };
+  // 301 colonnes : collé tel quel, et la fenêtre le dit une fois le collage fait.
+  await paste(301);
+  const opened = await waitNotice(page, true);
+  const notice = await noticeState(page);
+  const doc = await wideState(page);
+  await shot('trop-grand');
+  check(`${label} - 301 colonnes collées : une fenêtre s'ouvre, le tableau est là tel quel (une ligne, 301 cases)`, opened && notice.open && doc.tables === 1 && doc.cells === 301, { notice, doc });
+  check(`${label} - la fenêtre dit « Tableau collé sans mise en forme », le nombre de colonnes et la limite, avec un seul bouton « Fermer » qui a le focus`, notice.title === 'Tableau collé sans mise en forme' && notice.message === 'Le tableau collé compte 301 colonnes : au-delà de 300, il est collé tel quel, sans la mise en forme du tableur (fusions, fonds, largeurs de colonnes).' && notice.buttons.join('|') === 'Fermer' && notice.focusOn === 'Fermer', notice);
+  check(`${label} - la fenêtre tient entière dans le panneau de 700x400`, notice.inPanel === true, notice.box);
+  const close = await page.evaluate(() => { const b = Array.from(document.querySelectorAll('#pp-dialog-modal .pp-modal-actions button')).find(x => x.getClientRects().length > 0); const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+  await page.mouse.move(close.x - 8, close.y - 4, { steps: 4 });
+  await page.mouse.click(close.x, close.y);
+  const closed = await waitNotice(page, false);
+  const afterClose = await wideState(page);
+  check(`${label} - un clic sur « Fermer » referme la fenêtre, rend le focus au texte et ne touche pas au tableau`, closed && afterClose.tables === 1 && afterClose.cells === 301 && afterClose.focusInText, afterClose);
+  // Échap referme aussi, et le collage suivant la rouvre (une fenêtre par collage, pas de cumul).
+  await paste(301);
+  const reopened = await waitNotice(page, true);
+  await page.keyboard.press('Escape');
+  const escaped = await waitNotice(page, false);
+  const afterEscape = await wideState(page);
+  check(`${label} - Échap referme la fenêtre d'un second collage, le focus revient au texte`, reopened && escaped && afterEscape.tables === 1 && afterEscape.focusInText, afterEscape);
+  // En anglais : titre, phrase et bouton.
+  await page.evaluate(() => I18n.setLang('en'));
+  await paste(301);
+  await waitNotice(page, true);
+  const english = await noticeState(page);
+  check(`${label} - en anglais : « Table pasted without formatting », « The pasted table has 301 columns… », bouton « Close »`, english.open && english.title === 'Table pasted without formatting' && english.message === 'The pasted table has 301 columns: beyond 300, it is pasted as is, without the spreadsheet formatting (merged cells, fills, column widths).' && english.buttons.join('|') === 'Close' && english.inPanel, english);
+  await page.keyboard.press('Escape');
+  await waitNotice(page, false);
+  await page.evaluate(() => I18n.setLang('fr'));
+  // 300 colonnes : nettoyé comme un tableur, aucune fenêtre ; en texte seul (Ctrl+Maj+V), aucune fenêtre non plus.
+  await paste(300);
+  await page.waitForFunction(() => { const t = document.querySelector('.tiptap table'); return !!t && t.rows[0].cells.length === 300; }, null, { timeout: 8000 }).catch(() => {});
+  await page.waitForTimeout(500);
+  const atLimit = await noticeState(page);
+  const atLimitDoc = await wideState(page);
+  check(`${label} - 300 colonnes (la limite) : le tableau est collé, aucune fenêtre`, !atLimit.open && atLimitDoc.tables === 1 && atLimitDoc.cells === 300, { atLimit, atLimitDoc });
+  await paste(301, 'Control+Shift+V');
+  await page.waitForTimeout(700);
+  const plain = await noticeState(page);
+  const plainDoc = await wideState(page);
+  check(`${label} - Ctrl+Maj+V d'un tableur de 301 colonnes colle le texte : ni tableau ni fenêtre`, !plain.open && plainDoc.tables === 0, { plain, plainDoc });
+}
+
 async function flow(colorScheme, label) {
   const { context, page } = await openWidget(colorScheme);
   const shot = async (name) => { if (SHOTS) await page.screenshot({ path: join(SHOTS, `${label}-${name}.png`) }); };
@@ -265,6 +344,9 @@ async function flow(colorScheme, label) {
   await page.waitForFunction(() => document.querySelectorAll('.tiptap img:not(.ProseMirror-separator)').length > 0, null, { timeout: 6000 }).catch(() => {});
   const image = await documentState(page);
   check(`${label} - une image seule (aucun tableau dans le presse-papiers) se colle toujours comme image`, image.images === 1 && image.tables === 0, image);
+
+  // --- Un tableur plus grand que la mise en forme : collé tel quel, et la personne en est prévenue ---
+  await tooBigNotices(page, label, shot);
   await context.close();
 }
 

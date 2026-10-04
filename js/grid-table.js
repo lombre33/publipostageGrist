@@ -14,6 +14,15 @@
 const GridTable = (function () {
   const MAX_ROWS = 3000;
   const MAX_COLS = 300;
+  // Qui prévenir quand un tableau de tableur dépasse ce que la mise en forme garde (MAX_ROWS lignes, MAX_COLS colonnes) : il est alors collé tel
+  // quel (rewriteSpreadsheetHtml). Un seul rappel, posé par js/main.js ; sans lui rien n'est dit (module seul, tests). Il rend le rappel précédent :
+  // un test qui pose le sien le remet ensuite.
+  let onTooBig = null;
+  function setTooBigHandler(handler) {
+    const before = onTooBig;
+    onTooBig = typeof handler === 'function' ? handler : null;
+    return before;
+  }
   const TABLE_RE = /<table[\s>]/i;
   // Ce que posent les tableurs, avec de quoi les reconnaître : Excel (ProgId et espace de noms Office), Google Sheets (élément et attributs
   // `sheets`), LibreOffice (generator).
@@ -276,8 +285,11 @@ const GridTable = (function () {
     return px === null ? 0 : px;
   }
 
-  function fromClipboardHtml(html) {
+  // `report` (facultatif) : reçoit `tooBig` ({ kind: 'rows' | 'cols', count, max }) quand le tableau dépasse MAX_ROWS lignes ou MAX_COLS colonnes -
+  // le modèle est alors null, comme pour un presse-papiers sans tableau, et la raison se lit ici.
+  function fromClipboardHtml(html, report) {
     if (typeof html !== 'string' || !TABLE_RE.test(html)) return null;
+    const tooBig = (kind, count, max) => { if (report) report.tooBig = { kind, count, max }; return null; };
     const doc = new DOMParser().parseFromString(html, 'text/html');
     const table = doc.querySelector('table');
     if (!table) return null;
@@ -292,7 +304,8 @@ const GridTable = (function () {
     const hidden = el => ownStyle(el, rules).props.display === 'none';
     const allRows = Array.from(table.rows);
     const rowEls = allRows.filter(tr => !hidden(tr));
-    if (!rowEls.length || allRows.length > MAX_ROWS) return null;
+    if (!rowEls.length) return null;
+    if (allRows.length > MAX_ROWS) return tooBig('rows', allRows.length, MAX_ROWS);
     const rowIndex = new Map(allRows.map((tr, i) => [tr, i]));
     const shownBefore = [0];
     allRows.forEach((tr, i) => shownBefore.push(shownBefore[i] + (hidden(tr) ? 0 : 1)));
@@ -313,7 +326,7 @@ const GridTable = (function () {
       return { entries, height: lengthPx(tr, rules, 'height') };
     });
     const width = Math.max(1, ...occupied.map(line => (line ? line.length : 0)));
-    if (width > MAX_COLS) return null;
+    if (width > MAX_COLS) return tooBig('cols', width, MAX_COLS);
 
     const model = { width, cols: [], rows: [] };
     // Les colonnes : des <col width> (Excel, Sheets), ou une largeur portée par le <colgroup> lui-même (LibreOffice).
@@ -393,11 +406,16 @@ const GridTable = (function () {
   }
 
   // Le HTML collé, réécrit par `write` quand il vient d'un tableur ; tout autre HTML (un texte, une page web, des cases copiées dans l'éditeur même)
-  // est rendu tel quel.
+  // est rendu tel quel. Un tableur trop grand l'est aussi, et la personne en est prévenue (setTooBigHandler) : le tableau collé garderait ses cases
+  // sans leur mise en forme, elle ne le saurait pas autrement.
   function rewriteSpreadsheetHtml(html, write) {
     if (!isSpreadsheetHtml(html)) return html;
     try {
-      const model = fromClipboardHtml(html);
+      const report = {};
+      const model = fromClipboardHtml(html, report);
+      if (report.tooBig && onTooBig) {
+        try { onTooBig(report.tooBig); } catch (e) { console.warn('[GridTable] avertissement d\'un tableau trop grand impossible :', e); }
+      }
       return model ? write(model) : html;
     } catch (e) {
       console.warn('[GridTable] tableau collé illisible, collé tel quel :', e);
@@ -420,5 +438,5 @@ const GridTable = (function () {
   // Un lien qu'une case peut garder : http, https, mailto, tel (un `javascript:` ou un `file:` perd son lien et garde son texte).
   const isSafeLink = href => SAFE_LINK_RE.test(String(href || '').trim());
 
-  return { fromClipboardHtml, toHtml, toDocumentHtml, cleanPastedHtml, cleanPastedDocumentHtml, isSpreadsheetHtml, clipboardHasSpreadsheetTable, isSafeLink, markHtml, escapeHtml };
+  return { fromClipboardHtml, toHtml, toDocumentHtml, cleanPastedHtml, cleanPastedDocumentHtml, isSpreadsheetHtml, clipboardHasSpreadsheetTable, isSafeLink, markHtml, escapeHtml, setTooBigHandler };
 })();

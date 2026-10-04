@@ -550,6 +550,60 @@
     },
   });
 
+  // Plus de 50 abréviations répondent à la saisie : la liste en montre 50 et le dit (les autres ne s'atteignent qu'en tapant plus de lettres : sans cette ligne, rien ne l'annonce).
+  cases.push({
+    id: 'te_list_announces_the_abbreviations_beyond_the_first_50',
+    description: 'Plus de 50 abréviations répondent à la saisie : la liste « § » garde 50 lignes et finit par « Encore N résultats : précisez la recherche. » (français et anglais, 4,5:1 en clair et en sombre) ; à 50 ou moins, aucune ligne de ce genre ; ce n\'est pas une ligne qu\'on choisit',
+    run: async (h) => {
+      wipe();
+      for (let i = 0; i < 50; i++) await TextExpansion.add('p' + i, 'texte p ' + i);
+      const atFifty = TextExpansion.filterEntries('p');
+      await TextExpansion.add('p50', 'texte p 50');
+      const atFiftyOne = TextExpansion.filterEntries('p');
+      for (let i = 0; i < 60; i++) await TextExpansion.add('n' + i, 'texte ' + i);
+      const box = () => document.getElementById('expansion-box');
+      const open = async query => {
+        await h.resetEditor();
+        await h.focusAtEnd();
+        await h.typeText('§' + query);
+        await h.sleep(250);
+      };
+      const shape = () => ({ opened: box().style.display !== 'none', items: box().querySelectorAll('.ex-item').length, more: Array.from(box().querySelectorAll('.ex-more')).map(m => m.textContent), last: box().lastElementChild && box().lastElementChild.className });
+      await open('n');
+      const fr = shape();
+      const html = document.documentElement;
+      const before = html.getAttribute('data-theme');
+      const noMotion = document.createElement('style');
+      noMotion.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; }';
+      document.head.appendChild(noMotion);
+      const ratios = {};
+      try {
+        for (const theme of ['light', 'dark']) {
+          html.setAttribute('data-theme', theme);
+          ratios[theme] = textRatio(box().querySelector('.ex-more'));
+        }
+      } finally {
+        if (before === null) html.removeAttribute('data-theme'); else html.setAttribute('data-theme', before);
+        noMotion.remove();
+      }
+      I18n.setLang('en');
+      let en;
+      try { await open('n'); en = shape(); } finally { I18n.setLang('fr'); }
+      await open('n1');
+      const narrow = shape();
+      await open('zzz');
+      const nothing = shape();
+      const wantedFr = ['Encore 10 résultats : précisez la recherche.'];
+      const wantedEn = ['10 more results: refine your search.'];
+      const pass = atFifty.length === 50 && atFifty.more === 0 && atFiftyOne.length === 50 && atFiftyOne.more === 1
+        && fr.opened && fr.items === 50 && JSON.stringify(fr.more) === JSON.stringify(wantedFr) && fr.last === 'ex-more'
+        && en.items === 50 && JSON.stringify(en.more) === JSON.stringify(wantedEn)
+        && ratios.light >= 4.5 && ratios.dark >= 4.5
+        && narrow.opened && narrow.items === 11 && narrow.more.length === 0 && !nothing.opened;
+      return { pass, notes: JSON.stringify({ atFifty: [atFifty.length, atFifty.more], atFiftyOne: [atFiftyOne.length, atFiftyOne.more], fr, en, ratios, narrow, nothing }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.textExpansion = cases;
 })();

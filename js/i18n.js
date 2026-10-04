@@ -827,6 +827,10 @@ const I18n = (function () {
     'dialog.emailTooLong.title': { fr: 'Email trop long', en: 'Email too long' },
     'dialog.batchExport.title': { fr: 'Exporter toutes les lignes', en: 'Export all rows' },
     'dialog.batchExport.titleGrid': { fr: 'Exporter toutes les valeurs de la table', en: 'Export all table values' },
+    // Un tableur de plus de 3 000 lignes ou 300 colonnes (js/grid-table.js) est collé tel quel : la fenêtre le dit une fois le collage fait.
+    'dialog.pasteTooBig.title': { fr: 'Tableau collé sans mise en forme', en: 'Table pasted without formatting' },
+    'dialog.pasteTooBig.rows': { fr: 'Le tableau collé compte {count} lignes : au-delà de {max}, il est collé tel quel, sans la mise en forme du tableur (fusions, fonds, largeurs de colonnes).', en: 'The pasted table has {count} rows: beyond {max}, it is pasted as is, without the spreadsheet formatting (merged cells, fills, column widths).' },
+    'dialog.pasteTooBig.cols': { fr: 'Le tableau collé compte {count} colonnes : au-delà de {max}, il est collé tel quel, sans la mise en forme du tableur (fusions, fonds, largeurs de colonnes).', en: 'The pasted table has {count} columns: beyond {max}, it is pasted as is, without the spreadsheet formatting (merged cells, fills, column widths).' },
     // Quitter un modèle dont des modifications ne sont pas enregistrées (autre modèle, « + », nouvel email, nouvelle grille, galerie) : « Toujours demander » (choix d'Antoine, 01/10).
     // Sans nom (nouveau modèle jamais enregistré) il n'y a pas d'« Enregistrer » : le nom manque, la fenêtre propose d'abandonner ou d'annuler pour lui en donner un.
     'dialog.unsaved.title': { fr: 'Modifications non enregistrées', en: 'Unsaved changes' },
@@ -1352,6 +1356,8 @@ const I18n = (function () {
     'varList.split.previewSingle': { fr: 'Export : un seul document, cette ligne n’a qu’une valeur.', en: 'Export: a single document, this row has only one value.' },
     'varList.split.previewEmpty': { fr: 'Export : un seul document, la liste de cette ligne est vide.', en: 'Export: a single document, the list of this row is empty.' },
     'confirm.splitNote': { fr: 'Une variable de liste est réglée « Un document par valeur » : cela fait {documents} {documents|document|documents} en tout.', en: 'A list variable is set to “One document per value”: that makes {documents} {documents|document|documents} in all.' },
+    // Export d'une seule ligne de beaucoup de documents (js/main.js, SPLIT_CONFIRM_FROM), sinon sans question ; son titre est `varList.split.label`.
+    'confirm.splitExport': { fr: 'Cette ligne fait {documents} {documents|document|documents}, un par valeur des listes réglées « Un document par valeur ». Générer l’archive ?', en: 'This row makes {documents} {documents|document|documents}, one per value of the lists set to “One document per value”. Generate the archive?' },
     'status.splitMergedDone': { fr: '{ok} {ok|document réuni|documents réunis} dans un seul PDF — fichier téléchargé.', en: '{ok} {ok|document|documents} combined into a single PDF — file downloaded.' },
     'status.splitMergedDoneWithFailures': { fr: '{ok} {ok|document réuni|documents réunis} dans un seul PDF, {failed} {failed|échec|échecs} (voir la console) — fichier téléchargé.', en: '{ok} {ok|document|documents} combined into a single PDF, {failed} {failed|failure|failures} (see console) — file downloaded.' },
     'status.splitSheetsDone': { fr: '{ok} {ok|document placé|documents placés} sur {sheets} {sheets|feuille|feuilles} — fichier téléchargé.', en: '{ok} {ok|document|documents} placed on {sheets} {sheets|sheet|sheets} — file downloaded.' },

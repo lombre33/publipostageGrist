@@ -376,6 +376,67 @@ async function manyRowsPart(T) {
   await page.evaluate(async () => { for (const e of TextExpansion.list().filter(x => /^r\d\d$/.test(x.abbreviation))) await TextExpansion.remove(e.rowId); });
 }
 
+// Plus de 50 abréviations répondent à la saisie : la liste en garde 50 et dit « Encore N résultats : précisez la recherche. » sur une ligne collée au bas de la
+// liste, lisible dès l'ouverture, que la flèche haut (la liste boucle vers la cinquantième) ne recouvre pas ; à 50 ou moins, aucune ligne de ce genre.
+const beyondFifty = () => page.evaluate(() => {
+  const box = document.getElementById('expansion-box');
+  if (!box || box.style.display === 'none') return { open: false };
+  const b = box.getBoundingClientRect();
+  const more = box.querySelector('.ex-more');
+  const m = more && more.getBoundingClientRect();
+  const items = Array.from(box.querySelectorAll('.ex-item'));
+  const selected = box.querySelector('.ex-item.selected');
+  const s = selected && selected.getBoundingClientRect();
+  const inBox = r => !!r && r.top >= b.top - 0.5 && r.bottom <= b.bottom + 0.5;
+  return {
+    open: true, items: items.length, more: more ? more.textContent : null, moreVisible: inBox(m), scrollable: box.scrollHeight > box.clientHeight + 1,
+    selectedIndex: items.indexOf(selected), selectedClear: !!s && (!m || s.bottom <= m.top + 0.5) && s.top >= b.top - 0.5,
+    inPanel: b.left >= -0.5 && b.top >= -0.5 && b.right <= innerWidth + 0.5 && b.bottom <= innerHeight + 0.5, last: box.lastElementChild ? box.lastElementChild.className : '',
+    geometry: { box: [Math.round(b.top), Math.round(b.bottom)], more: m ? [Math.round(m.top), Math.round(m.bottom)] : null, selected: s ? [Math.round(s.top), Math.round(s.bottom)] : null, scrollTop: Math.round(box.scrollTop), clientHeight: box.clientHeight, scrollHeight: box.scrollHeight },
+  };
+});
+async function seedQ() { await page.evaluate(async () => { for (let i = 0; i < 60; i++) await TextExpansion.add('q' + String(i).padStart(2, '0'), 'texte q ' + i); }); }
+async function dropQ() { await page.evaluate(async () => { for (const e of TextExpansion.list().filter(x => /^q\d\d$/.test(x.abbreviation))) await TextExpansion.remove(e.rowId); }); }
+async function beyondFiftyPart(T) {
+  await seedQ();
+  await setDoc('<p></p>');
+  await focusEnd();
+  await page.keyboard.type('§q');
+  await page.waitForTimeout(250);
+  let g = await beyondFifty();
+  check(`${T} : « §q » (60 abréviations) montre 50 lignes et « Encore 10 résultats… » dès l'ouverture, au bas de la liste, dans le panneau`, g.open && g.items === 50 && g.more === 'Encore 10 résultats : précisez la recherche.' && g.moreVisible && g.scrollable && g.last === 'ex-more' && g.inPanel, g);
+  await snap(`${T}-4-plus-de-50`);
+  // Ligne par ligne, vers le bas puis vers le haut : la ligne choisie reste dans la liste et ne passe jamais sous « Encore 10 résultats ».
+  let lost = null;
+  for (let i = 1; i <= 30 && !lost; i++) {
+    await page.keyboard.press('ArrowDown');
+    const step = await beyondFifty();
+    if (step.selectedIndex !== i || !step.selectedClear || !step.moreVisible) lost = { down: i, step };
+  }
+  for (let i = 29; i >= 0 && !lost; i--) {
+    await page.keyboard.press('ArrowUp');
+    const step = await beyondFifty();
+    if (step.selectedIndex !== i || !step.selectedClear || !step.moreVisible) lost = { up: i, step };
+  }
+  check(`${T} : trente fois flèche bas puis trente fois flèche haut, la ligne choisie reste visible dans la liste, jamais sous « Encore 10 résultats »`, lost === null, lost);
+  await page.keyboard.press('ArrowUp');
+  await page.waitForTimeout(120);
+  g = await beyondFifty();
+  check(`${T} : la flèche haut choisit la cinquantième ligne (la liste boucle), que « Encore 10 résultats » ne recouvre pas`, g.selectedIndex === 49 && g.selectedClear && g.moreVisible, g);
+  await snap(`${T}-4-plus-de-50-fin`);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(150);
+  check(`${T} : Entrée écrit la cinquantième abréviation (« §q49 »), pas une des dix autres`, (await plain()) === 'texte q 49', await plain());
+  await setDoc('<p></p>');
+  await focusEnd();
+  await page.keyboard.type('§q5');
+  await page.waitForTimeout(200);
+  g = await beyondFifty();
+  check(`${T} : « §q5 » (10 abréviations) n'ajoute aucune ligne « Encore »`, g.open && g.items === 10 && g.more === null, g);
+  await page.keyboard.press('Escape');
+  await dropQ();
+}
+
 // Suivi des modifications, à la vraie frappe : une seule insertion, rien de « §ub » ne reste.
 async function trackChangesPart(T) {
   await setDoc('<p>Début</p>');
@@ -562,6 +623,7 @@ async function run(theme) {
   await closeSettings();
   await triggerCharPart(T, true);
   await manyRowsPart(T);
+  await beyondFiftyPart(T);
 }
 
 async function runEnglish() {
@@ -572,6 +634,15 @@ async function runEnglish() {
   await page.keyboard.type('§ub ');
   await page.waitForTimeout(150);
   check('anglais : l\'expansion marche comme en français', (await plain()) === 'université de Bordeaux ', await plain());
+  await seedQ();
+  await setDoc('<p></p>');
+  await focusEnd();
+  await page.keyboard.type('§q');
+  await page.waitForTimeout(250);
+  const english = await beyondFifty();
+  check('anglais : « §q » (60 abréviations) dit « 10 more results: refine your search. » au bas de la liste', english.open && english.items === 50 && english.more === '10 more results: refine your search.' && english.moreVisible, english);
+  await page.keyboard.press('Escape');
+  await dropQ();
   await settingsPart('anglais', false);
   await closeSettings();
   await page.evaluate(() => I18n.setLang('fr'));

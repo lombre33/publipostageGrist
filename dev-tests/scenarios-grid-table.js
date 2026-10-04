@@ -381,6 +381,60 @@ td
   });
 
   cases.push({
+    id: 'gridTable_a_spreadsheet_beyond_3000_rows_or_300_columns_is_pasted_as_is_and_the_handler_is_told_once',
+    description: 'Un tableau de tableur de plus de 3 000 lignes ou de plus de 300 colonnes est toujours collé tel quel, mais le rappel posé par `GridTable.setTooBigHandler` en est prévenu une fois, par la grille comme par le document, avec ce qu\'il compte et la limite (`{ kind: \'rows\' | \'cols\', count, max }`) ; à 3 000 lignes ou 300 colonnes, rien n\'est dit et le tableau est nettoyé ; un tableau web, un tableur lu sans rappel et un rappel qui échoue ne changent rien au collage.',
+    run: async () => {
+      const mark = '<meta name="ProgId" content="Excel.Sheet">';
+      const clip = rows => `<html>${mark}<body><table>${rows}</table></body></html>`;
+      const rows = n => '<tr><td>x</td></tr>'.repeat(n);
+      const cols = n => '<tr>' + '<td>x</td>'.repeat(n) + '</tr>';
+      const told = [];
+      const before = GridTable.setTooBigHandler(info => told.push(info));
+      try {
+        // Ce que `write` en fait et ce que la personne en apprend, pour un collage dans un document puis dans une grille.
+        const paste = (clean, html) => { told.length = 0; const out = clean(html); return { rewritten: out !== html, told: told.slice() }; };
+        const inDoc = html => paste(GridTable.cleanPastedDocumentHtml, html);
+        const inGrid = html => paste(GridTable.cleanPastedHtml, html);
+        const rowsAtLimit = inDoc(clip(rows(3000)));
+        const rowsOver = inDoc(clip(rows(3001)));
+        const rowsOverInGrid = inGrid(clip(rows(3001)));
+        const colsAtLimit = inDoc(clip(cols(300)));
+        const colsOver = inDoc(clip(cols(301)));
+        const colsOverInGrid = inGrid(clip(cols(301)));
+        const web = inDoc('<table>' + rows(3001) + '</table>');
+        const report = {};
+        const model = GridTable.fromClipboardHtml(clip(rows(3001)), report);
+        const okReport = {};
+        GridTable.fromClipboardHtml(clip(rows(3000)), okReport);
+        const emptyReport = {};
+        const empty = GridTable.fromClipboardHtml(clip('<tr style="display:none"><td>z</td></tr>'), emptyReport);
+        // Un rappel qui échoue ne casse pas le collage (collé tel quel, comme sans rappel).
+        GridTable.setTooBigHandler(() => { throw new Error('rappel en échec'); });
+        const failingHtml = clip(rows(3001));
+        const failing = GridTable.cleanPastedDocumentHtml(failingHtml) === failingHtml;
+        GridTable.setTooBigHandler(null);
+        const silentHtml = clip(rows(3001));
+        const silent = GridTable.cleanPastedDocumentHtml(silentHtml) === silentHtml;
+        const checks = {
+          rowsAtLimit: rowsAtLimit.rewritten && rowsAtLimit.told.length === 0,
+          rowsOver: !rowsOver.rewritten && JSON.stringify(rowsOver.told) === JSON.stringify([{ kind: 'rows', count: 3001, max: 3000 }]),
+          rowsOverInGrid: !rowsOverInGrid.rewritten && JSON.stringify(rowsOverInGrid.told) === JSON.stringify([{ kind: 'rows', count: 3001, max: 3000 }]),
+          colsAtLimit: colsAtLimit.rewritten && colsAtLimit.told.length === 0,
+          colsOver: !colsOver.rewritten && JSON.stringify(colsOver.told) === JSON.stringify([{ kind: 'cols', count: 301, max: 300 }]),
+          colsOverInGrid: !colsOverInGrid.rewritten && JSON.stringify(colsOverInGrid.told) === JSON.stringify([{ kind: 'cols', count: 301, max: 300 }]),
+          web: !web.rewritten && web.told.length === 0,
+          report: model === null && JSON.stringify(report.tooBig) === JSON.stringify({ kind: 'rows', count: 3001, max: 3000 }) && okReport.tooBig === undefined,
+          noReportForEmpty: empty === null && emptyReport.tooBig === undefined,
+          failing, silent,
+        };
+        return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, rowsOver: rowsOver.told, colsOver: colsOver.told }) };
+      } finally {
+        GridTable.setTooBigHandler(before);
+      }
+    },
+  });
+
+  cases.push({
     id: 'gridTable_what_the_spreadsheet_hides_is_not_pasted',
     description: 'Une ligne ou une case masquée (`display:none`, comme Excel écrit une ligne cachée, y compris par une classe de sa feuille de style) ne se colle pas, et une case fusionnée qui couvre une ligne cachée ne couvre que les lignes qui restent : ici « p » sur deux lignes dont la seconde est cachée ne couvre qu\'une ligne et « r » reste sous « p ».',
     run: async () => {
@@ -634,6 +688,52 @@ td
       const text = await pasteInDocument(h, { text: 'seulement du texte' });
       const textOk = text.tables === 0 && text.images === 0 && text.domImages === 0 && /seulement du texte/.test(doc().textContent);
       return { pass: untouched && webOk && imageOk && textOk, notes: JSON.stringify({ untouched, webOk, imageOk, textOk, web: { tables: pasted.tables, title } }) };
+    },
+  });
+
+  cases.push({
+    id: 'gridTable_in_a_document_a_spreadsheet_beyond_the_limits_is_pasted_as_is_and_a_notice_says_so',
+    description: 'Collé dans un document, un tableau de tableur de plus de 3 000 lignes (ou 300 colonnes) arrive tel quel - le tableau est bien là - et une fenêtre d\'information s\'ouvre une fois (« Tableau collé sans mise en forme », nombre et limite en toutes lettres, bouton « Fermer »), en français puis en anglais ; à 3 000 lignes, rien ne s\'ouvre et le tableau est nettoyé ; la fenêtre ne s\'ouvre pas dans le collage même (le tableau est posé quand elle s\'ouvre).',
+    run: async (h) => {
+      const mark = '<meta name="ProgId" content="Excel.Sheet">';
+      const clip = rows => `<html>${mark}<body><table>${rows}</table></body></html>`;
+      const rows = n => '<tr><td>x</td><td>y</td></tr>'.repeat(n);
+      const spaced = text => text.replace(/[  ]/g, ' ');
+      // Le nombre de tableaux du document au moment où la fenêtre est demandée : 1 si elle attend la fin du collage.
+      const tablesWhenAsked = [];
+      const stub = h.stubDialogs({ choose: () => { tablesWhenAsked.push(tableCount()); return null; } });
+      const lang = I18n.getLang();
+      try {
+        const big = await pasteInDocument(h, { html: clip(rows(3001)), text: 'x\ty' });
+        await sleep(200);
+        const askedFr = stub.asked.slice();
+        stub.asked.length = 0;
+        I18n.setLang('en');
+        const bigEn = await pasteInDocument(h, { html: clip(rows(3001)), text: 'x\ty' });
+        await sleep(200);
+        const askedEn = stub.asked.slice();
+        stub.asked.length = 0;
+        I18n.setLang('fr');
+        const atLimit = await pasteInDocument(h, { html: clip(rows(3000)), text: 'x\ty' });
+        await sleep(200);
+        const askedAtLimit = stub.asked.slice();
+        const checks = {
+          pastedAsIs: big.tables === 1 && big.images === 0 && bigEn.tables === 1,
+          oneNoticeFr: askedFr.length === 1 && askedFr[0].kind === 'choose',
+          afterThePaste: tablesWhenAsked[0] === 1,
+          titleFr: askedFr[0] && askedFr[0].title === 'Tableau collé sans mise en forme',
+          messageFr: askedFr[0] && spaced(askedFr[0].message) === 'Le tableau collé compte 3 001 lignes : au-delà de 3 000, il est collé tel quel, sans la mise en forme du tableur (fusions, fonds, largeurs de colonnes).',
+          closeFr: askedFr[0] && askedFr[0].cancelLabel === 'Fermer' && Array.isArray(askedFr[0].choices) && askedFr[0].choices.length === 0,
+          oneNoticeEn: askedEn.length === 1,
+          titleEn: askedEn[0] && askedEn[0].title === 'Table pasted without formatting',
+          messageEn: askedEn[0] && askedEn[0].message === 'The pasted table has 3,001 rows: beyond 3,000, it is pasted as is, without the spreadsheet formatting (merged cells, fills, column widths).' && askedEn[0].cancelLabel === 'Close',
+          atLimitSilent: askedAtLimit.length === 0 && atLimit.tables === 1 && !/ProgId|mso-/i.test(atLimit.html),
+        };
+        return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, fr: askedFr, en: askedEn }) };
+      } finally {
+        I18n.setLang(lang);
+        stub.restore();
+      }
     },
   });
 

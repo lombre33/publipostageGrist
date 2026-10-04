@@ -16,6 +16,9 @@ const TextExpansion = (function () {
   const DEFAULT_CHAR = '§';
   const MAX_ABBREVIATION_LENGTH = 30;
   const MAX_TEXT_LENGTH = 2000;
+  // Lignes de la liste « § » : au-delà, une dernière ligne dit combien d'abréviations de plus répondent à la saisie (taper plus de lettres les
+  // resserre).
+  const MAX_SUGGESTIONS = 50;
   // Ce qu'on peut taper après le déclencheur : lettres (toutes langues), chiffres, tiret et tiret bas. Tout autre caractère tapé juste après une
   // abréviation entière la clôt (DELIMITERS) ou n'a aucun rapport avec elle.
   const ABBREVIATION_PATTERN = /^[\p{L}\p{N}_-]+$/u;
@@ -130,7 +133,7 @@ const TextExpansion = (function () {
   // Ce que la liste « § » propose pour `query` : l'abréviation entière d'abord, puis celles qui commencent par la saisie, celles qui la contiennent,
   // enfin celles dont le texte a un mot qui commence ainsi (« bordeaux » retrouve « ub »). Un mot, pas un morceau de mot : « u » ne remonterait sinon
   // que du bruit (« rue », « jour »).
-  function filterEntries(query) {
+  function rankEntries(query) {
     const q = normalizeKey(query);
     const wordStart = q && new RegExp('(^|[^\\p{L}\\p{N}])' + escapeRegExp(q), 'iu');
     const ranked = [];
@@ -146,7 +149,15 @@ const TextExpansion = (function () {
       ranked.push({ entry, rank });
     });
     ranked.sort((a, b) => a.rank - b.rank || a.entry.abbreviation.localeCompare(b.entry.abbreviation, lang()));
-    return ranked.slice(0, 50).map(r => r.entry);
+    return ranked.map(r => r.entry);
+  }
+
+  // Les MAX_SUGGESTIONS premières ; `more` : combien d'autres répondent encore à la saisie (la liste le dit : « Encore N résultats »).
+  function filterEntries(query) {
+    const ranked = rankEntries(query);
+    const shown = ranked.slice(0, MAX_SUGGESTIONS);
+    shown.more = ranked.length - shown.length;
+    return shown;
   }
 
   // Ce qu'on enregistre : l'abréviation sans espaces ni déclencheur de tête (« §ub » collé tel quel dans le champ), le texte aux retours à la ligne
@@ -296,6 +307,7 @@ const TextExpansion = (function () {
 
   let box = null;
   let rowEls = [];
+  let moreEl = null; // la ligne « Encore N résultats » sous les abréviations montrées, quand il en reste
   let shown = [];
   let selected = 0;
   let pickItem = null;
@@ -319,14 +331,17 @@ const TextExpansion = (function () {
     });
     const row = rowEls[selected];
     if (!row || !box) return;
+    // La ligne « Encore N résultats » reste collée au bas de la liste : la ligne choisie ne passe pas dessous.
+    const covered = moreEl ? moreEl.offsetHeight : 0;
     if (row.offsetTop < box.scrollTop) box.scrollTop = row.offsetTop;
-    else if (row.offsetTop + row.offsetHeight > box.scrollTop + box.clientHeight) box.scrollTop = row.offsetTop + row.offsetHeight - box.clientHeight;
+    else if (row.offsetTop + row.offsetHeight > box.scrollTop + box.clientHeight - covered) box.scrollTop = row.offsetTop + row.offsetHeight - box.clientHeight + covered;
   }
 
   function hide() {
     if (box) box.style.display = 'none';
     shown = [];
     rowEls = [];
+    moreEl = null;
     pickItem = null;
   }
 
@@ -356,6 +371,16 @@ const TextExpansion = (function () {
       el.appendChild(row);
       return row;
     });
+    moreEl = null;
+    el.classList.toggle('has-more', shown.more > 0);
+    if (shown.more > 0) {
+      moreEl = document.createElement('div');
+      moreEl.className = 'ex-more';
+      moreEl.setAttribute('role', 'presentation');
+      // La phrase des listes avec recherche (js/search-select.js) : « Encore N résultats : précisez la recherche. »
+      moreEl.textContent = I18n.t('searchSelect.more', { count: shown.more });
+      el.appendChild(moreEl);
+    }
     el.style.display = 'flex';
     paintSelection();
     const rect = props.clientRect && props.clientRect();

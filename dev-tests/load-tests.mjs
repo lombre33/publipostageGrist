@@ -783,7 +783,7 @@ async function limits(r) {
   const tables = [{ id: 'Table01', rows: 5, columns: columnsMix(6) }];
   await withWidget({ tables }, async w => {
     const { page } = w;
-    // --- collage d'un tableau de tableur (HTML du presse-papiers) : plafond de 3 000 lignes (js/grid-table.js:15), au-delà le collage reste tel quel
+    // --- collage d'un tableau de tableur (HTML du presse-papiers) : plafond de 3 000 lignes (js/grid-table.js:15), au-delà le collage reste tel quel et la personne en est prévenue (fenêtre, `GridTable.setTooBigHandler`)
     for (const rows of q([1000, 2999, 3000, 3001, 6000], [1000, 3001])) {
       const res = await page.evaluate(n => {
         const body = Array.from({ length: n }, (_, i) => '<tr><td>Ligne ' + (i + 1) + '</td><td>B</td><td>C</td></tr>').join('');
@@ -791,12 +791,17 @@ async function limits(r) {
         const t0 = performance.now();
         const model = GridTable.fromClipboardHtml(html);
         const ms = performance.now() - t0;
+        // Le vrai rappel (la fenêtre de js/main.js) est mis de côté le temps de la mesure : seul le nombre de prévenus compte ici.
+        const told = [];
+        const before = GridTable.setTooBigHandler(info => told.push(info));
         const t1 = performance.now();
         const cleaned = GridTable.cleanPastedDocumentHtml(html);
-        return { ms, model: !!model, rows: model && model.rows ? model.rows.length : null, rewritten: cleaned !== html, cleanMs: performance.now() - t1 };
+        const cleanMs = performance.now() - t1;
+        GridTable.setTooBigHandler(before);
+        return { ms, model: !!model, rows: model && model.rows ? model.rows.length : null, rewritten: cleaned !== html, cleanMs, told: told.length };
       }, rows);
-      r.rec('limits', `collage d'un tableur de ${fmt(rows)} lignes : analyse`, res.ms, { budget: 2000, note: res.model ? `${res.rows} ligne(s) reconnue(s)` : 'plafond dépassé : collé tel quel, SANS nettoyage ni message' });
-      r.rec('limits', `collage d'un tableur de ${fmt(rows)} lignes : nettoyé comme un tableur`, res.rewritten ? 1 : 0, { unit: '', ok: rows <= 3000 ? res.rewritten : true, note: res.rewritten ? '' : 'collé tel quel (silencieux)' });
+      r.rec('limits', `collage d'un tableur de ${fmt(rows)} lignes : analyse`, res.ms, { budget: 2000, note: res.model ? `${res.rows} ligne(s) reconnue(s)` : 'plafond dépassé : collé tel quel, SANS nettoyage (la personne en est prévenue)' });
+      r.rec('limits', `collage d'un tableur de ${fmt(rows)} lignes : nettoyé comme un tableur`, res.rewritten ? 1 : 0, { unit: '', ok: rows <= 3000 ? res.rewritten && res.told === 0 : !res.rewritten && res.told === 1, note: res.rewritten ? '' : res.told === 1 ? 'collé tel quel, la personne en est prévenue' : 'collé tel quel (silencieux)' });
     }
     // --- import d'un classeur .xlsx dans une grille : 1 000 lignes, 100 colonnes, 5 000 cases (js/grid-xlsx-import.js:23-25), refus annoncé par un message
     const plans = q([[1000, 5], [1001, 5], [50, 100], [51, 100], [60, 101]], [[1001, 5], [51, 100]]);

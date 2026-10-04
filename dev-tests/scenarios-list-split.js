@@ -381,6 +381,71 @@
     },
   });
 
+  // Un clic sur la ligne du menu, la confirmation (si elle est posée) refusée ou acceptée comme `answer`, et ce qui se passe pendant `waitMs` : les questions posées, les fichiers téléchargés, le coin d'état.
+  async function clickAnswering(h, rowId, answer, waitMs) {
+    const asked = [];
+    const downloads = [];
+    const blobsByUrl = new Map();
+    const origCreate = URL.createObjectURL;
+    const origClick = HTMLAnchorElement.prototype.click;
+    const dialogs = h.stubDialogs({ confirm: opts => { asked.push(opts); return answer; } });
+    URL.createObjectURL = obj => { const url = origCreate.call(URL, obj); blobsByUrl.set(url, obj); return url; };
+    HTMLAnchorElement.prototype.click = function () {
+      if (this.download) { downloads.push({ name: this.download, blob: blobsByUrl.get(this.href) }); return; }
+      return origClick.call(this);
+    };
+    try {
+      document.getElementById(rowId).dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      const startedAt = Date.now();
+      while (!downloads.length && Date.now() - startedAt < waitMs) await h.sleep(100);
+      // Un export qui continue après un refus montrerait « Génération… » ici : on attend un peu avant de lire le coin d'état.
+      if (!downloads.length) await h.sleep(1500);
+    } finally {
+      dialogs.restore();
+      URL.createObjectURL = origCreate;
+      HTMLAnchorElement.prototype.click = origClick;
+    }
+    return { asked, downloads, status: document.getElementById('status-msg').textContent };
+  }
+
+  cases.push({
+    id: 'listsplit_single_export_asks_before_making_more_than_50_documents',
+    description: 'Un export seul (« Exporter en PDF ») dont la ligne fait plus de 50 documents - deux listes de 20 valeurs en font 400 - demande d\'abord « Cette ligne fait N documents… Générer l\'archive ? » : « Annuler » ne fabrique rien et laisse « Export annulé. » dans le coin d\'état, « Générer » donne l\'archive de tous les documents ; à 50 documents ou moins le clic vaut accord comme avant, sans question ; la question est en anglais en anglais.',
+    run: async (h) => {
+      await seed(h, BODY);
+      const values = n => Array.from({ length: n }, (_, i) => 'v' + String(i + 1).padStart(2, '0'));
+      const fire = n => { window.__gristStub.fireRecord({ id: 1, Titre: 'Alpha', Themes: values(n), Langues: ['fr'] }, TABLE); };
+      const lang = I18n.getLang();
+      try {
+        fire(51);
+        await h.sleep(60);
+        const refused = await withFilenameTemplate(NAME, () => clickAnswering(h, 'btn-export-pdf', false, 2000));
+        const accepted = await withFilenameTemplate(NAME, () => clickAnswering(h, 'btn-export-pdf', true, 120000));
+        const names = accepted.downloads[0] && accepted.downloads[0].blob ? (await zipEntries(accepted.downloads[0].blob)).names : [];
+        I18n.setLang('en');
+        const refusedEn = await withFilenameTemplate(NAME, () => clickAnswering(h, 'btn-export-pdf', false, 2000));
+        I18n.setLang('fr');
+        // 50 documents : la limite, pas de question. La réponse « refuser » le prouverait par un export annulé : il se fait.
+        fire(50);
+        await h.sleep(60);
+        const atLimit = await withFilenameTemplate(NAME, () => clickAnswering(h, 'btn-export-pdf', false, 120000));
+        const limitNames = atLimit.downloads[0] && atLimit.downloads[0].blob ? (await zipEntries(atLimit.downloads[0].blob)).names : [];
+        const checks = {
+          refusedAskedOnce: refused.asked.length === 1,
+          message: refused.asked[0] && refused.asked[0].message === 'Cette ligne fait 51 documents, un par valeur des listes réglées « Un document par valeur ». Générer l’archive ?' && refused.asked[0].title === 'Un document par valeur' && refused.asked[0].confirmLabel === 'Générer',
+          refusedNothingMade: refused.downloads.length === 0 && refused.status === 'Export annulé.',
+          acceptedAskedOnce: accepted.asked.length === 1,
+          acceptedArchive: names.length === 51 && names[0] === 'Alpha - v01.pdf' && names[50] === 'Alpha - v51.pdf',
+          english: refusedEn.asked.length === 1 && refusedEn.asked[0].message === 'This row makes 51 documents, one per value of the lists set to “One document per value”. Generate the archive?' && refusedEn.status === 'Export cancelled.',
+          atLimitNoQuestion: atLimit.asked.length === 0 && limitNames.length === 50,
+        };
+        return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, refused: refused.asked.map(a => a.message), status: refused.status, names: names.length, first: names[0], last: names[names.length - 1], limitNames: limitNames.length }) };
+      } finally {
+        I18n.setLang(lang);
+      }
+    },
+  });
+
   // --- Une liste de références : un document par ligne liée, nommé d'après son texte affiché (la colonne d'aide de Grist), pas d'après son numéro ---
   cases.push({
     id: 'listsplit_reference_list_one_document_per_linked_row_named_after_its_shown_text',
