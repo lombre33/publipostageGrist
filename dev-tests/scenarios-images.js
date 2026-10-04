@@ -734,6 +734,77 @@
     },
   });
 
+  // --- Passes par lot sur les images en calque : une seule pagination pour toute la passe ---
+  // migrateLegacyImagePositions et recaptureLayeredImageGrids mesurent chaque image avec computePageGridPosition, qui reposait toute la pagination (renderPaginationOverlay) à
+  // chaque appel : le temps croissait comme images x mise en page (80 images dans un document de 320 blocs : 2 s au chargement d'un modèle). La pagination n'est reposée qu'une fois
+  // pour la passe, et de nouveau après une image que la mesure a repoussée au bord de la page. Chaque rendu écrit le libellé « + Ajouter un en-tête » : I18n.t('hf.addHeader') les compte.
+  const paginationsDuring = fn => {
+    const real = I18n.t;
+    let renders = 0;
+    I18n.t = function (key) { if (key === 'hf.addHeader') renders++; return real.apply(this, arguments); };
+    try { return { result: fn(), renders }; } finally { I18n.t = real; }
+  };
+  const batchImagesHtml = (count, { withGrid, corner }) => '<p>Début</p>' + Array.from({ length: 40 }, (_, i) => '<p>Remplissage ' + i + ' ' + 'mot '.repeat(30) + '</p>').join('')
+    + Array.from({ length: count }, (_, i) => {
+      const where = corner && i === 0 ? 'left: -9999px; top: -9999px;' : 'left: ' + (60 + (i % 5) * 70) + 'px; top: ' + (30 + i * 45) + 'px;';
+      const grid = withGrid ? ' data-page-index="0" data-page-left-pt="40" data-page-top-pt="' + (20 + i * 30) + '"' : '';
+      return '<p>Ligne ' + i + ' <img class="editor-image" src="' + DATA_PNG + '" alt="" style="width: 40px; height: 40px; position: absolute; ' + where + ' z-index: 5;" data-layer="front" data-wrap="inline"' + grid + '></p>';
+    }).join('');
+  const imageDoms = () => {
+    const doms = [];
+    EditorCore.getEditor().state.doc.descendants((node, pos) => { if (node.type.name === 'editorImage') doms.push({ dom: EditorCore.getEditor().view.nodeDOM(pos), attrs: node.attrs }); });
+    return doms;
+  };
+  // Les attributs enregistrés suivent la mesure d'une image prise seule (voie publique, pagination reposée à chaque fois), à l'arrondi du pixel près.
+  const gridsMatchSingleMeasure = () => imageDoms().every(({ dom, attrs }) => {
+    const g = HeaderFooterPreview.computePageGridPosition(dom);
+    return !!g && g.pageIndex === attrs.pageIndex && near(g.pageLeftPt, attrs.pageLeftPt) && near(g.pageTopPt, attrs.pageTopPt);
+  });
+
+  cases.push({
+    id: 'image_layered_batch_recapture_paginates_once',
+    description: 'Recapturer la grille de 30 images en calque ne repose la pagination qu\'une fois, et chaque image reçoit la grille qu\'une mesure prise seule lui donne',
+    run: async (h) => {
+      await h.resetEditor();
+      h.setA4Preview(true);
+      Editor.setHTML(batchImagesHtml(30, { withGrid: true }));
+      await h.sleep(400);
+      const { result, renders } = paginationsDuring(() => HeaderFooterPreview.recaptureLayeredImageGrids());
+      const matches = gridsMatchSingleMeasure();
+      return { pass: result === true && renders === 1 && matches && imageDoms().length === 30, notes: JSON.stringify({ result, renders, matches }) };
+    },
+  });
+
+  cases.push({
+    id: 'image_layered_batch_migrate_paginates_once',
+    description: 'Migrer 30 images en calque sans grille (modèle ancien) ne repose la pagination qu\'une fois ; toutes reçoivent leur grille',
+    run: async (h) => {
+      await h.resetEditor();
+      Editor.setHTML(batchImagesHtml(30, { withGrid: false }));
+      await h.sleep(300);
+      h.setA4Preview(true);
+      const before = imageDoms().filter(({ attrs }) => attrs.pageIndex == null).length;
+      const { renders } = paginationsDuring(() => HeaderFooterPreview.migrateLegacyImagePositions());
+      const after = imageDoms().filter(({ attrs }) => attrs.pageIndex == null).length;
+      return { pass: before === 30 && after === 0 && renders === 1 && gridsMatchSingleMeasure(), notes: JSON.stringify({ before, after, renders }) };
+    },
+  });
+
+  cases.push({
+    id: 'image_layered_batch_repaginates_after_a_moved_image',
+    description: 'Une image que la mesure repousse au bord de la page fait reposer la pagination avant l\'image suivante (deux fois en tout), et les grilles restent celles d\'une mesure prise seule',
+    run: async (h) => {
+      await h.resetEditor();
+      h.setA4Preview(true);
+      Editor.setHTML(batchImagesHtml(6, { withGrid: true, corner: true }));
+      await h.sleep(400);
+      const { result, renders } = paginationsDuring(() => HeaderFooterPreview.recaptureLayeredImageGrids());
+      const [corner] = imageDoms();
+      const atEdge = near(corner.attrs.pageLeftPt, -PageLayout.getMarginsPt().left);
+      return { pass: result === true && renders === 2 && atEdge && gridsMatchSingleMeasure(), notes: JSON.stringify({ result, renders, atEdge }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.images = cases;
 })();

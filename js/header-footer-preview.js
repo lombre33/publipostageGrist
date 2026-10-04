@@ -4,6 +4,16 @@ const HeaderFooterPreview = (function () {
   let editor = null;
   function setEditor(ed) { editor = ed; watchPaginationGeometry(); }
 
+  const ZONES = ['header', 'footer'];
+  const VARIANTS = ['default', 'first'];
+  function editorContainer() { return document.getElementById('editor-container'); }
+  function isA4Preview() {
+    const container = editorContainer();
+    return !!container && container.classList.contains('a4-preview');
+  }
+  // Éditeur visible (pas masqué par la Lecture) : sans mise en page, tous les rectangles valent 0 et rien ne se mesure.
+  function tiptapShowsLayout(tiptapEl) { return !!tiptapEl && tiptapEl.getClientRects().length > 0; }
+
   // Posé par js/main.js (comme MainToolbar.setEmailMode) quand le modèle courant est un modèle email : un en-tête/pied de page n'a aucun sens dans un
   // mailto: (texte brut, pas de pages, cf. js/mailto-export.js) - retour d'Antoine 2026-09-19. Bloque enterHeaderFooterMode (seul point d'entrée, cf. les
   // 3 sites qui l'appellent plus bas) plutôt que de masquer les zones de marge : elles restent visibles mais inertes et grisées (classe v2-hf-locked,
@@ -58,8 +68,12 @@ const HeaderFooterPreview = (function () {
     hfMode = { zone, variant };
     suppressHeightGuardOnce = true;
     editor.commands.setContent(headerFooterDraft[zone][variant] || '');
-    const container = document.getElementById('editor-container');
-    if (container) container.classList.add('hf-editing');
+    syncHfMode();
+  }
+  // L'éditeur vient d'échanger son contenu : la classe d'édition, la barre d'outils, la pastille et la pagination suivent `hfMode`.
+  function syncHfMode() {
+    const container = editorContainer();
+    if (container) container.classList.toggle('hf-editing', !!hfMode);
     MainToolbar.syncToolbarState();
     renderHfPill();
     renderPaginationOverlay();
@@ -75,11 +89,9 @@ const HeaderFooterPreview = (function () {
   // blanche de 26 px au-dessus ou au-dessous de la feuille - et sans aucun contenu dans les deux zones, ni en-tête ni pied ne reste activé, ni la première page
   // différente. Ne touche jamais à un fragment qui a du contenu, ni à une variante « première page » qui n'est pas utilisée (case décochée).
   function dropEmptyZones(data) {
-    const zones = ['header', 'footer'];
-    const variants = ['default', 'first'];
-    zones.forEach(zone => variants.forEach(variant => { if (!hasZoneContent(data[zone][variant])) data[zone][variant] = ''; }));
-    const used = data.differentFirstPage ? variants : ['default'];
-    if (!zones.some(zone => used.some(variant => data[zone][variant]))) { data.enabled = false; data.differentFirstPage = false; }
+    ZONES.forEach(zone => VARIANTS.forEach(variant => { if (!hasZoneContent(data[zone][variant])) data[zone][variant] = ''; }));
+    const used = data.differentFirstPage ? VARIANTS : ['default'];
+    if (!ZONES.some(zone => used.some(variant => data[zone][variant]))) { data.enabled = false; data.differentFirstPage = false; }
   }
 
   function exitHeaderFooterMode() {
@@ -89,11 +101,7 @@ const HeaderFooterPreview = (function () {
     hfMode = null;
     editor.commands.setContent(mainDocSnapshot || '');
     mainDocSnapshot = null;
-    const container = document.getElementById('editor-container');
-    if (container) container.classList.remove('hf-editing');
-    MainToolbar.syncToolbarState();
-    renderHfPill();
-    renderPaginationOverlay();
+    syncHfMode();
   }
 
   // Appelé par main.js avant Save/Export/Lecture - sans ça editor.getHTML() renverrait le fragment d'en-tête/pied actuellement chargé, pas le document.
@@ -121,10 +129,7 @@ const HeaderFooterPreview = (function () {
         })
       : empty;
     // Assaini ici : seul point d'entrée d'un en-tête/pied venant de la colonne Grist (modifiable par un autre collaborateur sans ouvrir ce widget).
-    headerFooterDraft.header.default = HtmlSanitize.clean(headerFooterDraft.header.default);
-    headerFooterDraft.header.first = HtmlSanitize.clean(headerFooterDraft.header.first);
-    headerFooterDraft.footer.default = HtmlSanitize.clean(headerFooterDraft.footer.default);
-    headerFooterDraft.footer.first = HtmlSanitize.clean(headerFooterDraft.footer.first);
+    ZONES.forEach(zone => VARIANTS.forEach(variant => { headerFooterDraft[zone][variant] = HtmlSanitize.clean(headerFooterDraft[zone][variant]); }));
     // Un modèle enregistré avant ce nettoyage peut déjà porter un en-tête « activé » sans rien dedans (clic dans la marge puis « Terminer ») : remis à plat à
     // l'ouverture, il est enregistré ainsi à la prochaine sauvegarde.
     dropEmptyZones(headerFooterDraft);
@@ -134,7 +139,7 @@ const HeaderFooterPreview = (function () {
   // Pastille flottante d'édition d'en-tête/pied, sticky en haut de #editor-container, visible seulement pendant l'édition (hfMode actif). On y entre en
   // cliquant une zone de marge posée par renderPaginationOverlay, pas via un bouton de toolbar. Construite une fois puis resynchronisée.
   function renderHfPill() {
-    const container = document.getElementById('editor-container');
+    const container = editorContainer();
     if (!container) return;
     let pill = document.getElementById('v2-hf-pill');
     if (!hfMode) { if (pill) pill.remove(); return; }
@@ -303,10 +308,13 @@ const HeaderFooterPreview = (function () {
   }
 
   let paginationOverlayEl = null;
-  let paginationEdgeTopEl = null;
-  let paginationEdgeBottomEl = null;
+  const edgeZones = { top: null, bottom: null };
   // Couche des copies de « Sur toutes les pages » : premier enfant de la feuille, sous `.tiptap` (cf. paintRepeatedCopies).
   let paginationCopiesEl = null;
+  function removeCopiesLayer() {
+    if (paginationCopiesEl) paginationCopiesEl.remove();
+    paginationCopiesEl = null;
+  }
   // Les pages de la dernière pagination (haut de la feuille, haut du corps, en pixels de mise en page dans le repère du conteneur) et le haut de `.tiptap` dans ce même repère :
   // ce que lit reconcileLayerImagesWithGrid.
   let lastPageLayout = null;
@@ -347,8 +355,7 @@ const HeaderFooterPreview = (function () {
     const tiptapEl = editor && editor.view && editor.view.dom;
     if (!tiptapEl || paginationObserver || typeof ResizeObserver !== 'function') return;
     const recomputeIfResized = () => {
-      const container = document.getElementById('editor-container');
-      if (hfMode || !container || !container.classList.contains('a4-preview')) return;
+      if (hfMode || !isA4Preview()) return;
       if (tiptapEl.offsetWidth + 'x' + tiptapEl.offsetHeight === renderedSize || observedRecomputes >= 8) return;
       observedRecomputes++;
       clearTimeout(observedRecomputesTimer);
@@ -361,10 +368,11 @@ const HeaderFooterPreview = (function () {
   }
   function clearPaginationOverlay() {
     if (paginationOverlayEl) paginationOverlayEl.innerHTML = '';
-    if (paginationEdgeTopEl && paginationEdgeTopEl.parentNode) paginationEdgeTopEl.parentNode.removeChild(paginationEdgeTopEl);
-    if (paginationEdgeBottomEl && paginationEdgeBottomEl.parentNode) paginationEdgeBottomEl.parentNode.removeChild(paginationEdgeBottomEl);
-    if (paginationCopiesEl && paginationCopiesEl.parentNode) paginationCopiesEl.parentNode.removeChild(paginationCopiesEl);
-    paginationEdgeTopEl = null; paginationEdgeBottomEl = null; paginationCopiesEl = null;
+    ['top', 'bottom'].forEach(pos => {
+      if (edgeZones[pos]) edgeZones[pos].remove();
+      edgeZones[pos] = null;
+    });
+    removeCopiesLayer();
     lastPageLayout = null;
     hoveredZoneEl = null;
     clearPageBreakMargins();
@@ -373,16 +381,11 @@ const HeaderFooterPreview = (function () {
   // Zones de marge cliquables (façon Google Docs/Word) : un clic appelle enterHeaderFooterMode(zone, variant). Début/fin de document ont un vrai espace en
   // flux (`.v2-page-edge-spacer`, jamais enfant de `.tiptap`) ; les limites intermédiaires restent de purs overlays absolus dans la marge réservée.
   function ensureEdgeZone(pageSheet, tiptapEl, pos) {
-    if (pos === 'top' && !paginationEdgeTopEl) {
-      paginationEdgeTopEl = document.createElement('div');
-      paginationEdgeTopEl.className = 'v2-page-edge-spacer v2-page-edge-top v2-hf-zone';
-      pageSheet.insertBefore(paginationEdgeTopEl, tiptapEl);
-    }
-    if (pos === 'bottom' && !paginationEdgeBottomEl) {
-      paginationEdgeBottomEl = document.createElement('div');
-      paginationEdgeBottomEl.className = 'v2-page-edge-spacer v2-page-edge-bottom v2-hf-zone';
-      pageSheet.insertBefore(paginationEdgeBottomEl, tiptapEl.nextSibling);
-    }
+    if (edgeZones[pos]) return;
+    const el = document.createElement('div');
+    el.className = 'v2-page-edge-spacer v2-page-edge-' + pos + ' v2-hf-zone';
+    pageSheet.insertBefore(el, pos === 'top' ? tiptapEl : tiptapEl.nextSibling);
+    edgeZones[pos] = el;
   }
   // Bande cliquable d'une zone VIDE : le libellé « + Ajouter un en-tête » et un peu d'air autour. Rien n'étant imprimé, elle se pose DANS la marge, à son bord extérieur ;
   // le reste de la marge garde son rôle de page (cliquer juste sous la dernière ligne place le curseur à la fin du texte, comme avant, au lieu d'ouvrir le pied).
@@ -450,7 +453,7 @@ const HeaderFooterPreview = (function () {
     if (hfMode || inEmailMode || !editor || !editor.view || event.button) return null;
     const tiptapEl = editor.view.dom;
     if (event.target !== tiptapEl && event.target !== tiptapEl.parentElement) return null;
-    for (const el of [paginationEdgeTopEl, paginationEdgeBottomEl]) {
+    for (const el of [edgeZones.top, edgeZones.bottom]) {
       if (!el || !el.isConnected) continue;
       const r = el.getBoundingClientRect();
       if (event.clientX >= r.left && event.clientX < r.right && event.clientY >= r.top && event.clientY < r.bottom) return el;
@@ -528,225 +531,169 @@ const HeaderFooterPreview = (function () {
     return { enabled, differentFirstPage, headerForPage: n => (n === 1 && differentFirstPage) ? headerFirstHtml : headerHtml, footerForPage: n => (n === 1 && differentFirstPage) ? footerFirstHtml : footerHtml, pageContentHeightPx, topBandPx: topExtraPx, bottomBandPx: bottomExtraPx };
   }
 
-  // Ancêtre direct de .tiptap contenant `el` (computePageBreaks ne regarde jamais plus profond qu'un enfant direct - une zone 2-colonnes/un tableau compte
-  // comme UN bloc). Sert à situer un élément nested (image dans une colonne/cellule) parmi les coupures de page.
+  // Ancêtre direct de .tiptap qui contient `el` : computePageBreaks ne regarde jamais plus profond qu'un enfant direct (une zone 2 colonnes ou un tableau compte pour UN bloc).
   function topLevelAncestorIn(tiptapEl, el) {
     let cur = el;
     while (cur && cur.parentElement !== tiptapEl) cur = cur.parentElement;
     return cur;
   }
 
-  // Position d'un élément RÉELLEMENT RENDU sur la grille de page (index de page + décalage en pt depuis le coin haut-gauche IMPRIMABLE de cette page) -
-  // lue directement sur le DOM déjà mis en page (breaks + marges de coupure déjà appliquées), jamais reconstruite : c'est exactement cette garantie qui
-  // permet à pdf-export.js de placer l'image au même endroit sans avoir à deviner un contexte ou chercher une ancre textuelle. `null` si l'Aperçu A4 n'est
-  // pas actif (pagination non significative dans ce cas, cf. renderPaginationOverlay) ou si `el` n'est pas dans .tiptap. EFFET DE BORD : repositionne `el`
-  // (style.left/top) si la mesure le place au-delà du bord physique de la page - voir le commentaire plus bas, juste avant le `return`.
-  function computePageGridPosition(el) {
-    const container = document.getElementById('editor-container');
-    const tiptapEl = editor && editor.view && editor.view.dom;
-    if (!container || !tiptapEl || !el || !container.classList.contains('a4-preview')) return null;
-    // Éditeur masqué (Lecture, résumé d'un macro-modèle : display:none) : aucune mise en page, tous les rectangles valent 0 et la mesure ne dit que « coin de la
-    // page » (-marge/-marge). Pas de position plutôt qu'une fausse.
-    if (!tiptapEl.getClientRects().length) return null;
-    const topLevelEl = topLevelAncestorIn(tiptapEl, el);
-    if (!topLevelEl) return null;
-    // Resynchronise D'ABORD les marges de coupure réelles (renderPaginationOverlay les efface puis les repose à jour) : sans ça, une règle de marge
-    // laissée par un calcul PRÉCÉDENT (contenu ou en-tête/pied différents à ce moment-là) gonfle la hauteur mesurée d'un bloc au hasard et fait déclencher
-    // des coupures bien trop tôt - confirmé (pageIndex aberrant, ~= l'index brut de l'élément) avant ce correctif.
-    renderPaginationOverlay();
-    const { pageContentHeightPx, topBandPx } = currentPageGeometry();
-    const tiptapRect = tiptapEl.getBoundingClientRect();
-    const cs = getComputedStyle(tiptapEl);
-    // Les rectangles sont en pixels écran, le remplissage lu par getComputedStyle en pixels de mise en page : à ~700 px la feuille est réduite (zoom CSS), et
-    // l'origine de la grille se décalait de remplissage x (1 - zoom), soit ~6 px pour une marge de 28 pt à 0,85 : l'image tirée au coin s'arrêtait en retrait.
-    const gridZoom = layoutZoom(tiptapEl);
-    const padTop = (parseFloat(cs.paddingTop) || 0) * gridZoom;
-    const padLeft = (parseFloat(cs.paddingLeft) || 0) * gridZoom;
-    const pageStartLeft = tiptapRect.left + padLeft;
-    const elRect = el.getBoundingClientRect();
+  // Feuilles entières : la page d'une image est celle où se trouve son bord haut, pas celle du paragraphe qui la porte (tirée de la page 1 sur la page 2, elle garde son paragraphe sur la page 1 et sa grille dirait « page 1, 847 pt », hors de la feuille). Les feuilles ont une place fixe (k hauteurs de feuille plus les gouttières) : dans une gouttière, l'image est de la page suivante, que clampToPageEdge ramène à son bord. Rend l'index de la page et le haut de son corps, en pixels écran.
+  function pageStartFromLayout(elTop, zoom) {
+    const pages = lastPageLayout.pages;
+    const lc = layerCoords(editorContainer(), zoom);
+    const pageH = PageLayout.getPageSizePx().height;
+    const y = lc.y(elTop);
+    let pageIndex = pages.findIndex(page => y < page.top + pageH);
+    if (pageIndex < 0) pageIndex = pages.length - 1;
+    return { pageIndex, pageStartTop: lc.screenY(pages[pageIndex].bodyTop) };
+  }
+
+  // Édition d'en-tête ou de pied : pas de mise en page mesurée, la page est celle du bloc qui porte l'élément, lue sur les coupures du fragment. `firstPageTop` : haut du corps de la première page, en pixels écran.
+  function pageStartFromBreaks(tiptapEl, topLevelEl, el, pageContentHeightPx, zoom, firstPageTop) {
+    const breaks = computePageBreaks(tiptapEl, pageContentHeightPx);
+    const children = Array.from(tiptapEl.children);
+    const elIdx = children.indexOf(topLevelEl);
+    // Un élément DANS un tableau coupé entre deux lignes est sur la page de sa ligne : rang de la ligne parmi celles du tableau, -1 s'il n'est dans aucune.
+    const rowRankIn = (wrapper) => {
+      const rows = TablePageCut.rowsOf(wrapper.querySelector(':scope > table'));
+      let row = el.closest('tr');
+      while (rows && row && rows.indexOf(row) < 0) row = row.parentElement && row.parentElement.closest('tr');
+      return rows && row ? rows.indexOf(row) : -1;
+    };
     let pageIndex = 0;
-    let pageStartTop = tiptapRect.top + padTop;
-    if (lastPageLayout && lastPageLayout.pages.length) {
-      // Feuilles entières : la page d'une image est celle où se trouve son bord haut, pas celle du paragraphe qui la porte. Tirée de la page 1 sur la page 2, l'image garde son
-      // paragraphe sur la page 1 : sa grille disait alors « page 1, 847 pt », une position hors de la feuille que le PDF ne dessine pas. Les feuilles ont maintenant une place
-      // fixe (page k = k hauteurs de feuille plus les gouttières), la grille se lit donc sur la feuille où l'image est posée. Dans une gouttière (entre le bas d'une feuille et le
-      // haut de la suivante) elle est de la page suivante, que la borne du haut de page, plus bas, ramène à son bord.
-      const pages = lastPageLayout.pages;
-      const lc = layerCoords(document.getElementById('editor-container'), gridZoom);
-      const pageH = PageLayout.getPageSizePx().height;
-      const y = lc.y(elRect.top);
-      pageIndex = pages.findIndex(page => y < page.top + pageH);
-      if (pageIndex < 0) pageIndex = pages.length - 1;
-      pageStartTop = lc.screenY(pages[pageIndex].bodyTop);
-    } else {
-      // Pas de mise en page mesurée (édition d'en-tête ou de pied) : la page du paragraphe qui porte l'image, comme avant les feuilles entières.
-      const breaks = computePageBreaks(tiptapEl, pageContentHeightPx);
-      const children = Array.from(tiptapEl.children);
-      const elIdx = children.indexOf(topLevelEl);
-      // Un élément DANS un tableau coupé entre deux lignes : sur la page de sa ligne (rang de la ligne parmi celles du tableau, -1 s'il n'est dans aucune).
-      const rowRankIn = (wrapper) => {
-        const rows = TablePageCut.rowsOf(wrapper.querySelector(':scope > table'));
-        let row = el.closest('tr');
-        while (rows && row && rows.indexOf(row) < 0) row = row.parentElement && row.parentElement.closest('tr');
-        return rows && row ? rows.indexOf(row) : -1;
-      };
-      let lastBreak = null;
-      for (const brk of breaks) {
-        const afterIdx = children.indexOf(brk.afterEl);
-        if (elIdx > afterIdx || (brk.rowIndex != null && elIdx === afterIdx && rowRankIn(brk.afterEl) >= brk.rowIndex)) { pageIndex++; lastBreak = brk; } else break;
-      }
-      if (lastBreak && lastBreak.rowIndex != null) {
-        // La page commence à la ligne qui l'ouvre, sous la couture : le haut de la ligne plus ce que la règle de coupure lui a ajouté (computePageBreaks, mesuré feuille posée,
-        // ne le compte pas ; renderPaginationOverlay vient de la poser, ou de la retirer : alors la ligne n'a rien reçu).
-        const row = (TablePageCut.rowsOf(lastBreak.afterEl.querySelector(':scope > table')) || [])[lastBreak.rowIndex];
-        if (row) pageStartTop = row.getBoundingClientRect().top + (appliedRowPad.get(row) || 0) * gridZoom;
-      } else if (lastBreak) {
-        // Le margin-bottom de coupure est déjà appliqué au DOM réel (ensurePaginationMarginStyle) : le prochain frère direct est donc déjà poussé à la
-        // position exacte du début de page suivante - pas besoin de reconstruire la hauteur de la bande de coupure elle-même.
-        const nextSibling = lastBreak.afterEl.nextElementSibling;
-        pageStartTop = nextSibling ? nextSibling.getBoundingClientRect().top : lastBreak.afterEl.getBoundingClientRect().bottom;
-      }
+    let lastBreak = null;
+    for (const brk of breaks) {
+      const afterIdx = children.indexOf(brk.afterEl);
+      if (elIdx > afterIdx || (brk.rowIndex != null && elIdx === afterIdx && rowRankIn(brk.afterEl) >= brk.rowIndex)) { pageIndex++; lastBreak = brk; } else break;
     }
-    // Les deux termes sont des rectangles écran : leur différence est en pixels écran, à ramener en pixels de mise en page avant la conversion en points.
-    const rawLeftPt = ((elRect.left - pageStartLeft) / gridZoom) / PT_TO_PX;
-    const rawTopPt = ((elRect.top - pageStartTop) / gridZoom) / PT_TO_PX;
-    // Une image en calque glissée au-dessus/à gauche du bord PHYSIQUE de la page (pas seulement dans la marge - au-delà de la marge de ce côté) donnerait un point
-    // de grille qui, une fois exporté (marge + pageTopPt/pageLeftPt), tombe à une coordonnée PDF négative : invisible/coupée dans le PDF alors que
-    // le navigateur, lui, continue de l'afficher en entier (ni `.tiptap` ni `.v2-page-sheet` ne la découpe visuellement) - l'éditeur mentait sur ce qui sera
-    // réellement imprimable (repéré par l'utilisateur : image "tout en haut de l'éditeur" ressortant rognée au PDF). Corrigé en repoussant l'élément dans le
-    // DOM RÉEL (pas seulement la valeur retournée) jusqu'au bord physique dès qu'on le détecte ici - le seul point de passage commun aux 3 sites d'appel
-    // (setLayer/alignOrSnap/glisser), qui lisent tous ensuite `el.offsetLeft`/`offsetTop` pour connaître le left/top brut à enregistrer, donc restent
-    // automatiquement cohérents avec cette correction sans avoir à la dupliquer.
-    // Le bord physique de la page est à -marge du coin imprimable : avec des marges asymétriques (35mm à gauche, 30mm en haut...) les deux bornes
-    // diffèrent, et toutes deux diffèrent de l'ancien -28pt codé en dur (qui rognait une image parfaitement placée sous une grande marge, et en laissait
-    // sortir une sous une petite).
-    const marginsPtNow = PageLayout.getMarginsPt();
-    // Le bord du haut est plus loin que la marge quand un en-tête réserve sa bande (le PDF la compte dans la marge du haut de CHAQUE page) : sans elle, une image
-    // tirée au coin s'arrêtait 55 pt plus bas que le bord de la feuille.
-    const minLeftPt = -marginsPtNow.left;
-    const minTopPt = -(marginsPtNow.top + topBandPx / PT_TO_PX);
-    const clampDeltaLeftPt = rawLeftPt < minLeftPt ? minLeftPt - rawLeftPt : 0;
-    const clampDeltaTopPt = rawTopPt < minTopPt ? minTopPt - rawTopPt : 0;
-    if (clampDeltaLeftPt || clampDeltaTopPt) {
+    let pageStartTop = firstPageTop;
+    if (lastBreak && lastBreak.rowIndex != null) {
+      // La page commence à la ligne qui l'ouvre, sous la couture : haut de la ligne plus ce que la règle de coupure lui a ajouté (computePageBreaks mesure feuille posée et ne le compte pas ; renderPaginationOverlay vient de la poser, ou de la retirer : la ligne n'a alors rien reçu).
+      const row = (TablePageCut.rowsOf(lastBreak.afterEl.querySelector(':scope > table')) || [])[lastBreak.rowIndex];
+      if (row) pageStartTop = row.getBoundingClientRect().top + (appliedRowPad.get(row) || 0) * zoom;
+    } else if (lastBreak) {
+      // Le margin-bottom de coupure est déjà dans le DOM (ensurePaginationMarginStyle) : le frère suivant est déjà poussé au début de la page suivante.
+      const nextSibling = lastBreak.afterEl.nextElementSibling;
+      pageStartTop = nextSibling ? nextSibling.getBoundingClientRect().top : lastBreak.afterEl.getBoundingClientRect().bottom;
+    }
+    return { pageIndex, pageStartTop };
+  }
+
+  // Une image en calque tirée au-delà du bord PHYSIQUE de la page donnerait une position exportée négative (marge plus grille) : coupée dans le PDF alors que le navigateur l'affiche en entier. Elle est donc repoussée dans le DOM réel jusqu'à ce bord, le seul point commun aux appelants, qui relisent ensuite offsetLeft/offsetTop pour le left/top à enregistrer. Le bord est à -marge du coin imprimable (marges asymétriques comprises), plus la bande de l'en-tête en haut : le PDF la compte dans la marge du haut de CHAQUE page. Rend la position corrigée, en points.
+  function clampToPageEdge(el, leftPt, topPt, topBandPx) {
+    const margins = PageLayout.getMarginsPt();
+    const minLeftPt = -margins.left;
+    const minTopPt = -(margins.top + topBandPx / PT_TO_PX);
+    const clampDeltaLeftPt = leftPt < minLeftPt ? minLeftPt - leftPt : 0;
+    const clampDeltaTopPt = topPt < minTopPt ? minTopPt - topPt : 0;
+    const moved = !!(clampDeltaLeftPt || clampDeltaTopPt);
+    if (moved) {
       const curLeftPx = parseFloat(el.style.left) || 0;
       const curTopPx = parseFloat(el.style.top) || 0;
       el.style.left = (curLeftPx + clampDeltaLeftPt * PT_TO_PX) + 'px';
       el.style.top = (curTopPx + clampDeltaTopPt * PT_TO_PX) + 'px';
     }
-    return {
-      pageIndex,
-      pageLeftPt: rawLeftPt + clampDeltaLeftPt,
-      pageTopPt: rawTopPt + clampDeltaTopPt,
-    };
+    return { moved, pageLeftPt: leftPt + clampDeltaLeftPt, pageTopPt: topPt + clampDeltaTopPt };
   }
 
-  // Migration silencieuse : une image en calque positionnée AVANT l'introduction de la grille page (data-page-index/left/top-pt) n'a que left/top (relatifs
-  // à son offsetParent au moment du calque/glisser) - pdf-export.js doit alors reconstruire sa position via l'ancien système d'ancrage textuel, qui suppose
-  // à tort que left/top représentent une distance LOCALE au paragraphe hôte. C'est FAUX dès que l'image a été glissée ailleurs (l'usage normal d'un calque
-  // "flottant") : position:absolute ignore totalement le flux du document, left/top n'ont alors plus aucun rapport avec "où est le paragraphe hôte" - d'où
-  // des résultats aberrants (confirmé : une image glissée loin de son paragraphe pouvait ressortir collée en haut de page). Rattrapée ici en capturant la
-  // grille page de toute image déjà en calque dès qu'un document est chargé (Aperçu A4 actif) - aucune action de l'utilisateur nécessaire, un ancien
-  // document se met à niveau tout seul à la prochaine ouverture.
-  // Un modèle chargé pendant que l'éditeur est masqué (Lecture, après un macro-modèle) n'a rien de mesurable : il garde ses images sans grille, et cette passe est
-  // rejouée quand l'éditeur redevient visible (Editor.refreshLayout). Mesurée masquée, l'image recevait -marge/-marge (le coin de la page), et cette position
-  // s'enregistrait à la première frappe ou au premier Enregistrer, sans jamais être recalculée (pageIndex n'est plus nul).
-  // La passe n'est pas une modification de la personne : une seule transaction (setNodeMarkup, la sélection n'est pas touchée), hors historique et hors suivi des
-  // modifications. Suivie, la bibliothèque en faisait une suppression + une insertion de l'image ; l'original (marqué supprimé, pageIndex toujours nul) restait candidat
-  // à la passe suivante, et chaque retour de l'éditeur (Lecture puis Édition, chaque frappe dans une marge des Réglages) ajoutait une copie de plus, en suggestion en attente.
-  function migrateLegacyImagePositions() {
-    if (!editor || !document.getElementById('editor-container').classList.contains('a4-preview')) return;
-    // En édition d'en-tête/pied, le document affiché est le fragment, pas le corps du modèle dont les images sont à migrer.
-    if (hfMode || !editor.view.dom.getClientRects().length) return;
-    const toPatch = [];
-    editor.state.doc.descendants((node, pos) => {
-      if (node.type.name === 'editorImage' && node.attrs.layer !== 'normal' && node.attrs.pageIndex == null && node.attrs.left != null) {
-        toPatch.push(pos);
-      }
-    });
-    // Toutes les mesures d'abord, la transaction ensuite : elle pourrait sinon redessiner un nœud pendant qu'on mesure le suivant.
-    const patches = [];
-    toPatch.forEach(pos => {
-      const dom = editor.view.nodeDOM(pos);
-      if (!dom) return;
-      const grid = computePageGridPosition(dom);
-      if (!grid) return;
-      const current = editor.state.doc.nodeAt(pos);
-      if (current) patches.push({ pos, attrs: Object.assign({}, current.attrs, grid) });
-    });
-    if (!patches.length) return;
-    const tr = editor.state.tr;
-    patches.forEach(p => tr.setNodeMarkup(p.pos, undefined, p.attrs));
-    tr.setMeta('addToHistory', false);
-    TrackChanges.skipTracking(tr);
-    editor.view.dispatch(tr);
+  // Position d'un élément sur la grille de page : index de page et décalage en points depuis le coin haut gauche IMPRIMABLE de cette page. Elle se lit sur le DOM mis en page, coupures comprises, jamais reconstruite : c'est ce qui permet à pdf-export.js de placer l'image au même endroit. `null` sans Aperçu A4 (la pagination n'a alors pas de sens), éditeur masqué (Lecture : tous les rectangles valent 0, la mesure ne dirait que « coin de la page ») ou élément hors de .tiptap. Repousse `el` (style.left/top) jusqu'au bord physique de la page s'il en sort (clampToPageEdge).
+  // `pass` (facultatif) : un objet partagé par les mesures d'une même passe sur plusieurs images. La pagination n'est reposée qu'à la première, puis après une image que la mesure a repoussée : mesurer ne change rien, et une pagination complète par image rendrait la passe quadratique.
+  function computePageGridPosition(el, pass) {
+    const tiptapEl = editor && editor.view && editor.view.dom;
+    if (!tiptapEl || !el || !isA4Preview() || !tiptapShowsLayout(tiptapEl)) return null;
+    const topLevelEl = topLevelAncestorIn(tiptapEl, el);
+    if (!topLevelEl) return null;
+    // Marges de coupure remises à jour d'abord : une règle laissée par un calcul précédent (contenu ou en-tête différents) gonflerait la hauteur d'un bloc et déclencherait des coupures trop tôt.
+    if (!(pass && pass.synced)) {
+      renderPaginationOverlay();
+      if (pass) pass.synced = true;
+    }
+    const { pageContentHeightPx, topBandPx } = currentPageGeometry();
+    const tiptapRect = tiptapEl.getBoundingClientRect();
+    const cs = getComputedStyle(tiptapEl);
+    // Les rectangles sont en pixels écran, le remplissage en pixels de mise en page : à ~700 px la feuille est réduite, le remplissage se multiplie par son zoom.
+    const zoom = layoutZoom(tiptapEl);
+    const pageStartLeft = tiptapRect.left + (parseFloat(cs.paddingLeft) || 0) * zoom;
+    const elRect = el.getBoundingClientRect();
+    const { pageIndex, pageStartTop } = lastPageLayout && lastPageLayout.pages.length
+      ? pageStartFromLayout(elRect.top, zoom)
+      : pageStartFromBreaks(tiptapEl, topLevelEl, el, pageContentHeightPx, zoom, tiptapRect.top + (parseFloat(cs.paddingTop) || 0) * zoom);
+    // Écarts en pixels écran : à ramener en pixels de mise en page avant la conversion en points.
+    const rawLeftPt = ((elRect.left - pageStartLeft) / zoom) / PT_TO_PX;
+    const rawTopPt = ((elRect.top - pageStartTop) / zoom) / PT_TO_PX;
+    const edge = clampToPageEdge(el, rawLeftPt, rawTopPt, topBandPx);
+    if (edge.moved && pass) pass.synced = false;
+    return { pageIndex, pageLeftPt: edge.pageLeftPt, pageTopPt: edge.pageTopPt };
   }
 
-  // Après un changement d'orientation : la page change de hauteur, donc la page sur laquelle tombe chaque bloc, et la position de chaque image en calque
-  // sur SA page. La grille page (data-page-index/left/top-pt) a été capturée dans l'ancienne géométrie et c'est elle que lisent le PDF et le Word - sans cette
-  // recapture, une image sortait dans l'export sur une page que l'éditeur ne lui montre plus. Même mesure que migrateLegacyImagePositions (qui ne traite que
-  // les images SANS grille), pour toutes celles qui en ont une, en UNE transaction hors historique (changer d'orientation n'est pas annulable par Annuler, la
-  // recapture non plus) et sans toucher à la sélection (patchNodeAndReselect sélectionnerait chaque image tour à tour). Rend true si elle a modifié le document.
-  function recaptureLayeredImageGrids() {
-    if (!editor || !document.getElementById('editor-container').classList.contains('a4-preview')) return false;
-    const targets = [];
+  // Les images en calque dont les attributs passent `keep`, avec leur position dans le document.
+  function layeredImages(keep) {
+    const found = [];
     editor.state.doc.descendants((node, pos) => {
-      if (node.type.name === 'editorImage' && node.attrs.layer !== 'normal' && node.attrs.pageIndex != null) targets.push(pos);
+      if (node.type.name === 'editorImage' && node.attrs.layer !== 'normal' && keep(node.attrs)) found.push({ pos, attrs: node.attrs });
     });
-    if (!targets.length) return false;
-    // Toutes les mesures d'abord, les transactions ensuite : chacune pourrait sinon redessiner un nœud pendant qu'on mesure le suivant.
+    return found;
+  }
+
+  // Les attributs de chaque image de `images` recalés sur sa grille de page, `extra(dom)` ajoutant ce qui se lit sur le DOM après la mesure. Toutes les mesures d'abord, la transaction ensuite (elle pourrait redessiner un nœud pendant qu'on mesure le suivant), sur une seule mise en page pour toute la passe (`pass` de computePageGridPosition).
+  function regridImages(images, extra) {
+    const pass = {};
     const patches = [];
-    targets.forEach(pos => {
+    images.forEach(({ pos, attrs }) => {
       const dom = editor.view.nodeDOM(pos);
-      const current = editor.state.doc.nodeAt(pos);
-      if (!dom || !current) return;
-      const grid = computePageGridPosition(dom);
-      if (!grid) return;
-      // computePageGridPosition peut avoir repoussé `dom` jusqu'au bord physique de la page : left/top stockés suivent la position corrigée.
-      patches.push({ pos, attrs: Object.assign({}, current.attrs, grid, { left: Math.round(dom.offsetLeft), top: Math.round(dom.offsetTop) }) });
+      const grid = dom && computePageGridPosition(dom, pass);
+      if (grid) patches.push({ pos, attrs: Object.assign({}, attrs, grid, extra && extra(dom)) });
     });
+    return patches;
+  }
+
+  // Une seule transaction pour tous les correctifs d'une passe, hors historique et hors suivi des modifications : ces passes ne sont pas une modification de la personne (suivie, la bibliothèque en ferait une suppression plus une insertion, et chaque passe ajouterait une copie en suggestion). La sélection n'est pas touchée. Rend true si le document a changé.
+  function applyImagePatches(patches) {
     if (!patches.length) return false;
     const tr = editor.state.tr;
     patches.forEach(p => tr.setNodeMarkup(p.pos, undefined, p.attrs));
     tr.setMeta('addToHistory', false);
-    // Suivi des modifications actif : cette recapture n'est pas une modification de la personne, elle ne doit pas ressortir comme une suggestion.
     TrackChanges.skipTracking(tr);
     editor.view.dispatch(tr);
     return true;
   }
 
-  // Les feuilles ont leur taille réelle (« Pages entières ») : le haut du corps d'une page 2, 3... n'est plus là où l'ancienne mise en page compacte le posait (ni marge, ni bande
-  // de pied et d'en-tête entre deux feuilles). Une image en calque d'un modèle enregistré avant ce changement et posée sur l'une de ces pages garde son `top` d'alors, mais sa
-  // grille page (le PDF et le Word la lisent) dit toujours « tant de points depuis le haut du corps de SA page » : l'éditeur la montrait donc plus haut que l'export. Au
-  // chargement, son `top` se relit sur la grille. Rien ne change pour un modèle enregistré depuis (les deux s'accordent : l'écart toléré couvre l'arrondi), ni pour la page 1
-  // (même géométrie qu'avant) ; une image dans un tableau ou une colonne (autre repère que `.tiptap`) est laissée. Une seule transaction, hors historique et hors suivi, comme
-  // migrateLegacyImagePositions : ce n'est pas une modification de la personne. Rend true si elle a modifié le document.
+  // Migration silencieuse : une image en calque posée avant la grille de page n'a que left/top, que pdf-export.js ne sait lire qu'en les prenant pour une distance au paragraphe hôte, faux dès que l'image a été glissée ailleurs. Sa grille est capturée dès que le document est chargé en Aperçu A4, sans geste de la personne.
+  // Un modèle chargé pendant que l'éditeur est masqué (Lecture) n'a rien de mesurable : il garde ses images sans grille et la passe est rejouée au retour de l'éditeur (Editor.refreshLayout) ; mesurée masquée, l'image recevrait -marge/-marge et cette position s'enregistrerait pour de bon (pageIndex n'étant plus nul).
+  function migrateLegacyImagePositions() {
+    // En édition d'en-tête/pied, le document affiché est le fragment, pas le corps du modèle.
+    if (!editor || !isA4Preview() || hfMode || !tiptapShowsLayout(editor.view.dom)) return;
+    applyImagePatches(regridImages(layeredImages(a => a.pageIndex == null && a.left != null)));
+  }
+
+  // Après un changement d'orientation ou de format, la page change de hauteur : la grille de chaque image en calque, lue par le PDF et le Word, est recapturée, sinon l'export la place sur une page que l'éditeur ne lui montre plus. Même mesure que migrateLegacyImagePositions, pour les images qui ont déjà une grille ; left/top suivent la position que computePageGridPosition a pu corriger. Rend true si le document a changé.
+  function recaptureLayeredImageGrids() {
+    if (!editor || !isA4Preview()) return false;
+    const images = layeredImages(a => a.pageIndex != null);
+    return applyImagePatches(regridImages(images, dom => ({ left: Math.round(dom.offsetLeft), top: Math.round(dom.offsetTop) })));
+  }
+
+  // Les feuilles ont leur taille réelle : le haut du corps d'une page 2, 3... n'est plus là où l'ancienne mise en page compacte le posait. Une image en calque d'un modèle enregistré avant garde son `top` d'alors alors que sa grille (lue par le PDF et le Word) dit « tant de points depuis le haut du corps de SA page » : au chargement, son `top` se relit sur la grille. Rien ne change pour un modèle enregistré depuis (l'écart toléré couvre l'arrondi), ni pour la page 1, ni pour une image dans un tableau ou une colonne (autre repère que `.tiptap`). Rend true si le document a changé.
   // Sans mise en page mesurable (éditeur masqué par la Lecture, Aperçu A4 décoché) elle reste « en attente » : `{ onlyIfPending: true }` la rejoue quand l'éditeur en a une.
   let reconcilePending = false;
   function reconcileLayerImagesWithGrid(opts) {
     if (opts && opts.onlyIfPending && !reconcilePending) return false;
     const tiptapEl = editor && editor.view && editor.view.dom;
-    if (!tiptapEl || hfMode || !document.getElementById('editor-container').classList.contains('a4-preview') || !tiptapEl.getClientRects().length) { reconcilePending = true; return false; }
+    if (!tiptapEl || hfMode || !isA4Preview() || !tiptapShowsLayout(tiptapEl)) { reconcilePending = true; return false; }
     reconcilePending = false;
     renderPaginationOverlay();
     if (!lastPageLayout) return false;
     const patches = [];
-    editor.state.doc.descendants((node, pos) => {
-      const a = node.attrs;
-      if (node.type.name !== 'editorImage' || a.layer === 'normal' || !(a.pageIndex >= 1) || a.pageTopPt == null) return;
-      const page = lastPageLayout.pages[a.pageIndex];
+    layeredImages(a => a.pageIndex >= 1 && a.pageTopPt != null).forEach(({ pos, attrs }) => {
+      const page = lastPageLayout.pages[attrs.pageIndex];
       const dom = editor.view.nodeDOM(pos);
       if (!page || !dom || dom.offsetParent !== tiptapEl) return;
-      const wantedTop = Math.round(page.bodyTop - lastPageLayout.tiptapTop + a.pageTopPt * PT_TO_PX);
-      if (Math.abs(wantedTop - (a.top || 0)) <= 1.5) return;
-      patches.push({ pos, attrs: Object.assign({}, a, { top: wantedTop }) });
+      const wantedTop = Math.round(page.bodyTop - lastPageLayout.tiptapTop + attrs.pageTopPt * PT_TO_PX);
+      if (Math.abs(wantedTop - (attrs.top || 0)) <= 1.5) return;
+      patches.push({ pos, attrs: Object.assign({}, attrs, { top: wantedTop }) });
     });
-    if (!patches.length) return false;
-    const tr = editor.state.tr;
-    patches.forEach(p => tr.setNodeMarkup(p.pos, undefined, p.attrs));
-    tr.setMeta('addToHistory', false);
-    TrackChanges.skipTracking(tr);
-    editor.view.dispatch(tr);
-    return true;
+    return applyImagePatches(patches);
   }
 
   // Une couture rejoue ce qui sépare deux feuilles PHYSIQUES, à leur vraie taille : le bas de la page qui finit (sa marge du bas, la bande de son pied : `foot`, avec
@@ -812,12 +759,11 @@ const HeaderFooterPreview = (function () {
     const pageSize = PageLayout.getPageSizePt();
     const watermark = PageLayer.watermarkLayout(PageLayout.getWatermark(), pageSize.width, pageSize.height);
     if (!items.length && !watermark) {
-      if (paginationCopiesEl && paginationCopiesEl.parentNode) paginationCopiesEl.parentNode.removeChild(paginationCopiesEl);
-      paginationCopiesEl = null;
+      removeCopiesLayer();
       return;
     }
     if (!paginationCopiesEl || paginationCopiesEl.parentNode !== pageSheet) {
-      if (paginationCopiesEl && paginationCopiesEl.parentNode) paginationCopiesEl.parentNode.removeChild(paginationCopiesEl);
+      removeCopiesLayer();
       paginationCopiesEl = document.createElement('div');
       paginationCopiesEl.className = 'v2-page-layer';
       paginationCopiesEl.setAttribute('aria-hidden', 'true');
@@ -827,8 +773,6 @@ const HeaderFooterPreview = (function () {
       left: view.sheetLeft, width: view.sheetWidth, pageHeight: PageLayout.getPageSizePx().height, contentLeft: view.contentLeftPx, pages, items, watermark,
     });
   }
-  // Éditeur visible (pas masqué par la Lecture) : sans mise en page, tous les rectangles valent 0 et rien ne se mesure.
-  function tiptapShowsLayout(tiptapEl) { return !!tiptapEl && tiptapEl.getClientRects().length > 0; }
   // Le tableau est rogné sous la dernière ligne de la page qui finit, jusqu'au bas de la couture (TablePageCut.clipRule) : le trait du haut de la ligne qui ouvre la page, qui est
   // dans la partie rognée, se redessine au bord bas de la bande par un filet de 1 px de la largeur du tableau (même gris que les cases, css/editor-v2.css).
   function addTableSeamCaps(seam, tableEl, pageSheet, zoom) {
@@ -842,10 +786,10 @@ const HeaderFooterPreview = (function () {
   }
 
   function renderPaginationOverlay() {
-    const container = document.getElementById('editor-container');
+    const container = editorContainer();
     const tiptapEl = editor && editor.view && editor.view.dom;
     if (!container || !tiptapEl) return;
-    if (hfMode || !container.classList.contains('a4-preview')) { clearPaginationOverlay(); return; }
+    if (hfMode || !isA4Preview()) { clearPaginationOverlay(); return; }
     wireMarginZones(container);
 
     if (!paginationOverlayEl) {
@@ -870,8 +814,8 @@ const HeaderFooterPreview = (function () {
     const pageSheet = tiptapEl.parentElement;
     ensureEdgeZone(pageSheet, tiptapEl, 'top');
     ensureEdgeZone(pageSheet, tiptapEl, 'bottom');
-    updateHfZone(paginationEdgeTopEl, headerForPage(1), 1, totalPages, 'header', differentFirstPage ? 'first' : 'default', I18n.t('hf.addHeader'), topBandPx);
-    updateHfZone(paginationEdgeBottomEl, footerForPage(totalPages), totalPages, totalPages, 'footer', (totalPages === 1 && differentFirstPage) ? 'first' : 'default', I18n.t('hf.addFooter'), bottomBandPx);
+    updateHfZone(edgeZones.top, headerForPage(1), 1, totalPages, 'header', differentFirstPage ? 'first' : 'default', I18n.t('hf.addHeader'), topBandPx);
+    updateHfZone(edgeZones.bottom, footerForPage(totalPages), totalPages, totalPages, 'footer', (totalPages === 1 && differentFirstPage) ? 'first' : 'default', I18n.t('hf.addFooter'), bottomBandPx);
 
     // Les bandes couvrent toute la largeur de la FEUILLE, pas de la colonne de texte : ce sont des frontières entre deux pages physiques, et depuis que la
     // frontière se dessine comme une vraie gouttière (fond gris + tranche des deux feuilles, cf. css/editor-v2.css), une bande large de la seule colonne
@@ -962,8 +906,8 @@ const HeaderFooterPreview = (function () {
 
   return {
     setEditor, setEmailMode, getHfMode, clampWidthForHfMaxSize, enforceZoneHeightLimit,
-    enterHeaderFooterMode, exitHeaderFooterMode, exitHeaderFooterModeIfActive, isEditingHeaderFooter,
-    getHeaderFooterData, setHeaderFooterData, renderHfPill,
+    enterHeaderFooterMode, exitHeaderFooterModeIfActive, isEditingHeaderFooter,
+    getHeaderFooterData, setHeaderFooterData,
     schedulePaginationRecompute, renderPaginationOverlay, computePageGridPosition, migrateLegacyImagePositions, reconcileLayerImagesWithGrid, recaptureLayeredImageGrids,
   };
 })();
