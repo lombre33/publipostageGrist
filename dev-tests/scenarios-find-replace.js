@@ -212,6 +212,58 @@
       return { pass, notes: JSON.stringify({ first, steps, back, none }) };
     });
 
+  // Le compteur du panneau (js/find-replace.js : `countLabel`, `updateCount`) dans chacun de ses états, avec l'état grisé des flèches et des boutons de remplacement.
+  scenario('fr_panel_counter_says_idle_none_total_index_and_the_replace_message',
+    'Panneau : le compteur est vide sans requête, dit « 1 sur 4 » sur un résultat, « 4 résultats » quand la sélection est ailleurs, « Aucun résultat » sans résultat, « 4 remplacements » après « Tout remplacer » (jusqu\'à la prochaine modification du texte) ; flèches grisées sans résultat, boutons de remplacement grisés sans résultat ou quand le modèle n\'est pas modifiable',
+    async h => {
+      await begin(h, '<p>foo un</p><p>deux Foo</p><p>trois FOO</p><p>quatre foo</p>');
+      const kinds = () => document.getElementById('pp-find-count').dataset.kind;
+      const greyed = () => ['pp-find-prev', 'pp-find-next', 'pp-find-replace-one', 'pp-find-replace-all'].map(id => isDisabled(id));
+      const state = () => ({ text: countText(), kind: kinds(), greyed: greyed() });
+      const observed = {};
+      FindReplace.open({ replace: true });
+      await sleep(40);
+      observed.idle = state();
+      FindReplace.setReplacement('barre');
+      FindReplace.setQuery('foo');
+      await sleep(40);
+      observed.index = state();
+      selectRange(1, 1); // le curseur au début, hors de tout résultat
+      await sleep(40);
+      observed.total = state();
+      FindReplace.setQuery('introuvable');
+      await sleep(40);
+      observed.none = state();
+      FindReplace.setQuery('foo');
+      await sleep(40);
+      FindReplace.replaceAll();
+      await sleep(40);
+      observed.replaced = state();
+      ed().commands.insertContentAt(1, 'x');
+      await sleep(40);
+      observed.afterEdit = state();
+      FindReplace.setQuery('barre');
+      await sleep(40);
+      ed().setEditable(false);
+      try {
+        FindReplace.setQuery('barr');
+        await sleep(40);
+        observed.readOnly = state();
+      } finally { ed().setEditable(true); }
+      const closed = [true, true, true, true];
+      const open4 = [false, false, false, false];
+      const expected = {
+        idle: { text: '', kind: 'idle', greyed: closed },
+        index: { text: '1 sur 4', kind: 'some', greyed: open4 },
+        total: { text: '4 résultats', kind: 'some', greyed: open4 },
+        none: { text: 'Aucun résultat', kind: 'none', greyed: closed },
+        replaced: { text: '4 remplacements', kind: 'flash', greyed: closed }, // plus aucun « foo » : rien à remplacer, mais le message reste
+        afterEdit: { text: 'Aucun résultat', kind: 'none', greyed: closed },
+        readOnly: { text: '1 sur 4', kind: 'some', greyed: [false, false, true, true] },
+      };
+      return { pass: JSON.stringify(observed) === JSON.stringify(expected), notes: JSON.stringify(observed) };
+    });
+
   scenario('fr_panel_options_case_and_whole_word',
     'Panneau : « Respecter la casse » et « Mot entier » (boutons du panneau, aria-pressed) changent les résultats tout de suite',
     async h => {
