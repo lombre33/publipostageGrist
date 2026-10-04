@@ -239,27 +239,31 @@ const VariableFormat = (function () {
     if (!base) return symbol;
     return count > 1 || count < -1 ? base + 's' : base;
   }
+  // Pluriel dès deux en français (« zéro euro », « un euro »), dès qu'il n'y en a pas un en anglais (« zero euros »).
+  const isPlural = (count, lang) => (lang === 'en' ? count !== 1 : count > 1);
+  // Les centimes d'un montant écrit avec 0, 1 ou 2 décimales : « 0,5 » vaut cinquante centimes.
+  const centsOf = (fracDigits, decimals) => (decimals === 0 ? 0 : parseInt(fracDigits, 10) * (decimals === 1 ? 10 : 1));
+  // Les unités entières d'un montant. Un million rond ou un milliard rond veut « de » en français : « un million d’euros ».
+  function unitsToWords(count, unit, lang) {
+    const name = isPlural(count, lang) ? unit + 's' : unit;
+    const roundMillions = lang !== 'en' && count > 0 && count % 1e6 === 0;
+    const de = roundMillions ? (/^[aeiouyéèêàâîôû]/i.test(name) ? 'd’' : 'de ') : '';
+    return WORDS[lang].integer(count) + ' ' + de + name;
+  }
   // Un montant dans une devise connue, en toutes lettres : les unités entières puis, s'il y en a, les centimes (« six cent cinquante euros », « un
   // euro et un centime », « cinquante centimes », « mille deux cent trente-quatre euros et cinq centimes »), jamais « virgule ». Deux décimales au
   // plus : un montant qui en a trois s'écrit comme un nombre (null, comme pour une devise inconnue : l'appelant écrit le nombre puis la devise telle
-  // quelle). Pluriel dès deux en français (« zéro euro », « un euro »), dès qu'il n'y en a pas un en anglais (« zero euros »). Un million rond ou un
-  // milliard rond veut « de » : « un million d’euros ».
+  // quelle).
   function amountToWords(n, decimals, symbol, lang) {
     const w = WORDS[lang];
     const unit = w.currency[symbol];
     const d = decimals == null ? 0 : decimals;
     if (!unit || d > 2) return null;
     const { intPart, fracDigits } = splitAbsolute(n, d);
-    const cents = d === 0 ? 0 : parseInt(fracDigits, 10) * (d === 1 ? 10 : 1);
-    const en = lang === 'en';
-    const plural = count => (en ? count !== 1 : count > 1);
+    const cents = centsOf(fracDigits, d);
     const parts = [];
-    if (intPart > 0 || cents === 0) {
-      const name = plural(intPart) ? unit + 's' : unit;
-      const de = !en && intPart > 0 && intPart % 1e6 === 0 ? (/^[aeiouyéèêàâîôû]/i.test(name) ? 'd’' : 'de ') : '';
-      parts.push(w.integer(intPart) + ' ' + de + name);
-    }
-    if (cents > 0) parts.push(w.integer(cents) + ' ' + w.subunit[symbol][plural(cents) ? 1 : 0]);
+    if (intPart > 0 || cents === 0) parts.push(unitsToWords(intPart, unit, lang));
+    if (cents > 0) parts.push(w.integer(cents) + ' ' + w.subunit[symbol][isPlural(cents, lang) ? 1 : 0]);
     return (n < 0 && (intPart > 0 || cents > 0) ? w.minus : '') + parts.join(w.and);
   }
 

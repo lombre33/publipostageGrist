@@ -843,6 +843,93 @@
     },
   });
 
+  // Toutes les touches du panneau, depuis une ligne, un dossier, une ligne de dossier et « Organiser » : où va le focus, ce qui s'ouvre ou se ferme, et si le navigateur garde la touche
+  // (defaultPrevented faux : Tab et Entrée sur « Organiser » lui restent).
+  cases.push({
+    id: 'tree_keyboard_map_from_rows_folders_and_organize',
+    description: 'Au clavier, le panneau suit le patron « arbre » : flèches, Début, Fin, Droite et Gauche sur un dossier ou une ligne de dossier, Entrée et Espace, Échap et Tab, depuis une ligne comme depuis « Organiser » (touche gardée par le navigateur quand elle ne sert pas)',
+    run: async (h) => {
+      const idA = await createTemplate(h, 'document', 'Clavier carte - A');
+      const idB = await createTemplate(h, 'document', 'Clavier carte - B');
+      await TemplatePreferences.setFolder(idA, 'Clavier-Carte');
+      const checks = {};
+      const press = (k) => { const ev = new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }); document.activeElement.dispatchEvent(ev); return ev.defaultPrevented; };
+      const rowsNow = () => Array.from(popup().querySelectorAll('.tts-row')).filter(r => !r.closest('.tts-group.is-collapsed'));
+      const organize = () => document.getElementById('btn-organize-templates');
+      const reopen = async () => { await closeTree(h); await openPopup(h); };
+      try {
+        await openPopup(h);
+        let rows = rowsNow();
+        const last = rows[rows.length - 1];
+        rows[1].focus();
+        checks.down = press('ArrowDown') === true && document.activeElement === rows[2];
+        checks.up = press('ArrowUp') === true && document.activeElement === rows[1];
+        checks.home = press('Home') === true && document.activeElement === rows[0];
+        checks.end = press('End') === true && document.activeElement === last;
+        checks.downOnLast = press('ArrowDown') === true && document.activeElement === last;
+        rows[0].focus();
+        checks.upOnFirstReachesOrganize = press('ArrowUp') === true && document.activeElement === organize();
+        // Depuis « Organiser » : le parcours continue dans les lignes, les autres flèches sont gardées sans rien faire, Entrée et Espace restent au clic du bouton.
+        checks.organizeDown = press('ArrowDown') === true && document.activeElement === rows[0];
+        organize().focus();
+        checks.organizeEnd = press('End') === true && document.activeElement === last;
+        organize().focus();
+        checks.organizeKeptKeys = ['ArrowUp', 'Home', 'ArrowLeft', 'ArrowRight'].every(k => press(k) === true && document.activeElement === organize());
+        checks.organizeNativeKeys = ['Enter', ' '].every(k => press(k) === false && document.activeElement === organize() && popupOpen());
+        checks.organizeOtherKey = press('a') === false && document.activeElement === organize();
+        checks.organizeEscape = press('Escape') === true && !popupOpen() && document.activeElement === trigger();
+        await openPopup(h);
+        organize().focus();
+        checks.organizeTab = press('Tab') === false && !popupOpen() && document.activeElement === trigger();
+        // Un dossier : Gauche le referme, Droite l'ouvre puis entre dedans, Entrée et Espace le replient et le déplient.
+        await openPopup(h);
+        const folder = folderRowByPath('Clavier-Carte');
+        const group = groupOf(folder);
+        const expanded = () => folder.getAttribute('aria-expanded');
+        folder.focus();
+        checks.folderLeftCloses = expanded() === 'true' && press('ArrowLeft') === true && expanded() === 'false' && group.classList.contains('is-collapsed') && document.activeElement === folder;
+        checks.folderRightOpens = press('ArrowRight') === true && expanded() === 'true' && !group.classList.contains('is-collapsed') && document.activeElement === folder;
+        checks.folderRightEnters = press('ArrowRight') === true && document.activeElement === rowFor(idA);
+        folder.focus();
+        checks.folderEnterToggles = press('Enter') === true && expanded() === 'false';
+        checks.folderSpaceToggles = press(' ') === true && expanded() === 'true';
+        // Une ligne dans un dossier : Gauche remonte au dossier ; Droite ne sert pas. Une ligne à la racine : Gauche est gardée sans rien faire.
+        rowFor(idA).focus();
+        checks.leafRightUnused = press('ArrowRight') === false && document.activeElement === rowFor(idA);
+        checks.leafLeftGoesUp = press('ArrowLeft') === true && document.activeElement === folder;
+        rowFor(idB).focus();
+        checks.rootLeafLeftKept = press('ArrowLeft') === true && document.activeElement === rowFor(idB);
+        checks.otherKeyKept = press('a') === false && document.activeElement === rowFor(idB);
+        // Entrée et Espace choisissent le modèle, referment le panneau et rendent le focus au déclencheur.
+        rowFor(idA).focus();
+        checks.enterSelects = press('Enter') === true && String(realSelect().value) === String(idA) && !popupOpen() && document.activeElement === trigger();
+        await h.sleep(300);
+        await openPopup(h);
+        rowFor(idB).focus();
+        checks.spaceSelects = press(' ') === true && String(realSelect().value) === String(idB) && !popupOpen() && document.activeElement === trigger();
+        await h.sleep(300);
+        // Sans aucun modèle : les touches de parcours ne font rien (et ne lèvent rien) depuis « Organiser ».
+        const original = Templates.getCached;
+        Templates.getCached = () => [];
+        try {
+          TemplateTreeSelect.refresh();
+          await reopen();
+          organize().focus();
+          checks.emptyKeys = ['ArrowDown', 'End', 'ArrowUp', 'Home'].every(k => press(k) === true && document.activeElement === organize() && popupOpen());
+        } finally {
+          Templates.getCached = original;
+          TemplateTreeSelect.refresh();
+        }
+        await closeTree(h);
+      } finally {
+        await closeTree(h);
+        await tidyFolders(['Clavier-Carte'], [idA, idB]);
+      }
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: Object.keys(checks).length === 25 && failed.length === 0, notes: JSON.stringify({ failed, count: Object.keys(checks).length }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.templateTree = cases;
 })();

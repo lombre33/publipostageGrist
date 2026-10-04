@@ -287,60 +287,70 @@ const TemplateTreeSelect = (function () {
     if (outsideScrollHandler) { window.removeEventListener('scroll', outsideScrollHandler, true); outsideScrollHandler = null; }
   }
 
-  function onPopupKeydown(e) {
-    const rows = visibleRows();
-    // « Organiser » (en-tête) fait partie du parcours au clavier : Flèche haut depuis la première ligne l'atteint, Flèche bas le quitte pour la
-    // première ligne. Entrée et Espace restent au clic natif du bouton ; Échap et Tab sont traités plus bas comme depuis une ligne.
-    if (organizeBtn && document.activeElement === organizeBtn) {
-      if (e.key === 'ArrowDown') { e.preventDefault(); setRovingFocus(rows[0]); return; }
-      if (e.key === 'End') { e.preventDefault(); setRovingFocus(rows[rows.length - 1]); return; }
-      if (e.key === 'ArrowUp' || e.key === 'Home' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); return; }
-      if (e.key === 'Enter' || e.key === ' ') return;
-    }
-    const current = document.activeElement && document.activeElement.classList.contains('tts-row') ? document.activeElement : rows[0];
-    const idx = rows.indexOf(current);
-    if (e.key === 'Escape') { e.preventDefault(); closePopup(); trigger.focus({ preventScroll: true }); return; }
-    // Tab : le panneau vit dans document.body, pas juste après le déclencheur, donc l'ordre naturel du DOM atterrirait n'importe où avec le popup
+  const leaveForTrigger = () => { closePopup(); trigger.focus({ preventScroll: true }); };
+  const isFolderRow = row => row.classList.contains('tts-row-folder');
+  const toggleFolderRow = row => toggleFolder(row, row.nextElementSibling);
+  // Entrée et Espace : un dossier se replie ou se déplie, une ligne de modèle se choisit.
+  function activateRow(e, { current }) {
+    if (!current) return;
+    e.preventDefault();
+    if (isFolderRow(current)) toggleFolderRow(current);
+    else selectValue(current.dataset.templateId);
+  }
+
+  // Les touches du panneau, une fonction chacune : elle reçoit l'évènement et { rows (les lignes visibles), current (la ligne qui a le focus, à
+  // défaut la première), idx (son rang) } et appelle preventDefault quand elle prend la touche : une touche non prise reste au navigateur. Droite et
+  // Gauche suivent le patron WAI-ARIA « Tree View » : Droite ouvre un dossier fermé et entre dans un dossier ouvert (1er enfant) ; Gauche referme un
+  // dossier ouvert, sinon remonte au dossier parent.
+  const ROW_KEYS = {
+    Escape: e => { e.preventDefault(); leaveForTrigger(); },
+    // Tab : le panneau vit dans document.body, pas juste après le déclencheur, donc l'ordre naturel du DOM atterrirait n'importe où avec le panneau
     // resté ouvert. Pas de preventDefault : on referme et on redonne le focus au déclencheur avant que le navigateur poursuive son Tab, qui part
-    // alors du déclencheur (sa place dans la barre).
-    if (e.key === 'Tab') { closePopup(); trigger.focus({ preventScroll: true }); return; }
-    if (e.key === 'ArrowDown') { e.preventDefault(); setRovingFocus(rows[Math.min(idx + 1, rows.length - 1)]); return; }
-    if (e.key === 'ArrowUp') {
+    // alors de la place du déclencheur dans la barre.
+    Tab: leaveForTrigger,
+    ArrowDown: (e, { rows, idx }) => { e.preventDefault(); setRovingFocus(rows[Math.min(idx + 1, rows.length - 1)]); },
+    ArrowUp: (e, { rows, idx }) => {
       e.preventDefault();
       if (idx <= 0 && organizeBtn) organizeBtn.focus({ preventScroll: true });
       else setRovingFocus(rows[Math.max(idx - 1, 0)]);
-      return;
-    }
-    if (e.key === 'Home') { e.preventDefault(); setRovingFocus(rows[0]); return; }
-    if (e.key === 'End') { e.preventDefault(); setRovingFocus(rows[rows.length - 1]); return; }
-    // Patron WAI-ARIA « Tree View » : Droite ouvre un dossier fermé, entre dans un dossier ouvert (1er enfant) ; Gauche referme un dossier ouvert,
-    // sinon remonte au dossier parent.
-    if (e.key === 'ArrowRight' && current && current.classList.contains('tts-row-folder')) {
+    },
+    Home: (e, { rows }) => { e.preventDefault(); setRovingFocus(rows[0]); },
+    End: (e, { rows }) => { e.preventDefault(); setRovingFocus(rows[rows.length - 1]); },
+    ArrowRight: (e, { current }) => {
+      if (!current || !isFolderRow(current)) return;
       e.preventDefault();
-      if (current.getAttribute('aria-expanded') === 'false') {
-        toggleFolder(current, current.nextElementSibling);
-      } else {
-        const firstChild = current.nextElementSibling && current.nextElementSibling.querySelector('.tts-row');
-        if (firstChild) setRovingFocus(firstChild);
-      }
-      return;
-    }
-    if (e.key === 'ArrowLeft' && current) {
+      if (current.getAttribute('aria-expanded') === 'false') { toggleFolderRow(current); return; }
+      const firstChild = current.nextElementSibling && current.nextElementSibling.querySelector('.tts-row');
+      if (firstChild) setRovingFocus(firstChild);
+    },
+    ArrowLeft: (e, { current }) => {
+      if (!current) return;
       e.preventDefault();
-      if (current.classList.contains('tts-row-folder') && current.getAttribute('aria-expanded') !== 'false') {
-        toggleFolder(current, current.nextElementSibling);
-      } else {
-        const parentGroup = current.closest('.tts-group');
-        const parentRow = parentGroup && parentGroup.previousElementSibling;
-        if (parentRow && parentRow.classList.contains('tts-row')) setRovingFocus(parentRow);
-      }
-      return;
-    }
-    if ((e.key === 'Enter' || e.key === ' ') && current) {
-      e.preventDefault();
-      if (current.classList.contains('tts-row-folder')) toggleFolder(current, current.nextElementSibling);
-      else selectValue(current.dataset.templateId);
-    }
+      if (isFolderRow(current) && current.getAttribute('aria-expanded') !== 'false') { toggleFolderRow(current); return; }
+      const parentGroup = current.closest('.tts-group');
+      const parentRow = parentGroup && parentGroup.previousElementSibling;
+      if (parentRow && parentRow.classList.contains('tts-row')) setRovingFocus(parentRow);
+    },
+    Enter: activateRow,
+    ' ': activateRow,
+  };
+  // « Organiser » (en-tête) fait partie du parcours : Flèche haut depuis la première ligne l'atteint, Flèche bas le quitte pour la première ligne,
+  // Fin pour la dernière. Les autres flèches, Début compris, ne bougent rien mais restent à la liste ; Entrée et Espace restent au clic natif du
+  // bouton ; Échap et Tab s'y traitent comme depuis une ligne.
+  const keepKey = e => e.preventDefault();
+  const leaveKey = () => {};
+  const ORGANIZE_KEYS = {
+    ArrowDown: ROW_KEYS.Home, End: ROW_KEYS.End,
+    ArrowUp: keepKey, Home: keepKey, ArrowLeft: keepKey, ArrowRight: keepKey,
+    Enter: leaveKey, ' ': leaveKey,
+  };
+
+  function onPopupKeydown(e) {
+    const action = (organizeBtn && document.activeElement === organizeBtn && ORGANIZE_KEYS[e.key]) || ROW_KEYS[e.key];
+    if (!action) return;
+    const rows = visibleRows();
+    const current = document.activeElement && document.activeElement.classList.contains('tts-row') ? document.activeElement : rows[0];
+    action(e, { rows, current, idx: rows.indexOf(current) });
   }
 
   // Attache et détache
