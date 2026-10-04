@@ -839,10 +839,8 @@ const ReaderMode = (function () {
       return { node: span, isError: true };
     }
   }
-  // `onBadge(badge, binding)` (facultatif, js/xlsx-export.js) : appelé pour chaque bulle APRÈS le déroulé des zones répétées et AVANT qu'elle soit remplacée par sa
-  // valeur, avec la ligne du tour qu'elle suit (null hors zone) ; le fichier Excel y repère les cases qui ne contiennent qu'un nombre ou qu'une date. Il s'exécute
-  // d'un trait jusqu'à son premier `await` pendant que le parcours démarre : toutes les bulles sont alors encore en place.
-  async function preview(htmlContent, tableId, record, onBadge) {
+  // Le document tel que preview() le déroule avant de remplacer les bulles : les zones répétées (leurs copies comprises) et les conditions de bloc, de valeur et de case résolues. Partagé avec splitBadges.
+  async function expandedWrapper(htmlContent, tableId, record) {
     const wrapper = document.createElement('div'); wrapper.innerHTML = HtmlSanitize.clean(htmlContent);
     // Cf. commentaire équivalent dans render() : schéma à jour nécessaire pour que resolveBadgeNode détecte correctement une colonne Attachments.
     await GristAPI.refreshSchema().catch(() => {});
@@ -852,6 +850,32 @@ const ReaderMode = (function () {
     await ConditionalText.resolve(wrapper, tableId || lastCurrentTableId, record);
     await ConditionalValue.resolve(wrapper, tableId || lastCurrentTableId, record);
     await ConditionalCheckbox.resolve(wrapper, tableId || lastCurrentTableId, record);
+    return { wrapper, loopCtx };
+  }
+  // Les bulles réglées « Un document par valeur » (format.list.perValue, js/variable-list.js) que l'export de cette ligne trouvera dans ces morceaux de HTML (le corps, les quatre zones d'en-tête et de pied) :
+  // celles qui restent après les zones répétées et les conditions de bloc, de valeur et de case, que leur propre condition laisse écrire, et qui ne sont ni dans une zone répétée ni en boucle « dans la phrase »
+  // (le tour y donne déjà la valeur). Un morceau sans le mot « perValue » n'est même pas lu. Retourne [{ table, column, format }], dans l'ordre du document.
+  async function splitBadges(parts, tableId, record) {
+    const found = [];
+    for (const part of parts) {
+      if (!part || part.indexOf('perValue') === -1) continue;
+      const { wrapper } = await expandedWrapper(part, tableId, record);
+      for (const badge of wrapper.querySelectorAll('.var-badge')) {
+        const format = parseBadgeFormat(badge);
+        if (!format || !format.list || format.list.perValue !== true) continue;
+        const binding = LoopRules.bindingOf(badge);
+        if (binding || badge.hasAttribute('data-loop')) continue;
+        if (!(await badgeConditionHolds(badge, tableId || lastCurrentTableId, record, binding))) continue;
+        found.push({ table: badge.getAttribute('data-table'), column: badge.getAttribute('data-column'), format });
+      }
+    }
+    return found;
+  }
+  // `onBadge(badge, binding)` (facultatif, js/xlsx-export.js) : appelé pour chaque bulle APRÈS le déroulé des zones répétées et AVANT qu'elle soit remplacée par sa
+  // valeur, avec la ligne du tour qu'elle suit (null hors zone) ; le fichier Excel y repère les cases qui ne contiennent qu'un nombre ou qu'une date. Il s'exécute
+  // d'un trait jusqu'à son premier `await` pendant que le parcours démarre : toutes les bulles sont alors encore en place.
+  async function preview(htmlContent, tableId, record, onBadge) {
+    const { wrapper, loopCtx } = await expandedWrapper(htmlContent, tableId, record);
     const badges = wrapper.querySelectorAll(BADGE_SELECTOR);
     await Promise.all(Array.from(badges).map(async badge => {
       const format = parseBadgeFormat(badge);
@@ -880,5 +904,5 @@ const ReaderMode = (function () {
     result += filenameTemplate.slice(lastEnd);
     return result;
   }
-  return { render, preview, resolveFilename, trimTrailingBlankBlocks, checkboxNode };
+  return { render, preview, resolveFilename, splitBadges, trimTrailingBlankBlocks, checkboxNode };
 })();

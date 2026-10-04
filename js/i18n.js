@@ -1290,6 +1290,18 @@ const I18n = (function () {
     'varList.preview.beyond': { fr: 'Ligne sélectionnée (n° {id}) : {count} {count|valeur|valeurs} ({values}), mais pas de valeur n° {index} : le document n’écrit rien.', en: 'Selected row (#{id}): {count} {count|value|values} ({values}), but no value #{index}: the document writes nothing.' },
     'varList.reset': { fr: 'Remettre par défaut', en: 'Reset to default' },
     'varList.saveLost': { fr: 'La variable a été déplacée ou supprimée pendant l’édition : le réglage de la liste n’a pas été enregistré.', en: 'The variable was moved or deleted while editing: the list setting was not saved.' },
+    'varList.split.label': { fr: 'Un document par valeur', en: 'One document per value' },
+    'varList.split.hint': { fr: 'Exports PDF, Word et Excel seulement.', en: 'PDF, Word and Excel exports only.' },
+    'varList.split.preview': { fr: 'Export : {count} documents, un par valeur ({values}).', en: 'Export: {count} documents, one per value ({values}).' },
+    'varList.split.previewSingle': { fr: 'Export : un seul document, cette ligne n’a qu’une valeur.', en: 'Export: a single document, this row has only one value.' },
+    'varList.split.previewEmpty': { fr: 'Export : un seul document, la liste de cette ligne est vide.', en: 'Export: a single document, the list of this row is empty.' },
+    'confirm.splitNote': { fr: 'Une variable de liste est réglée « Un document par valeur » : cela fait {documents} {documents|document|documents} en tout.', en: 'A list variable is set to “One document per value”: that makes {documents} {documents|document|documents} in all.' },
+    'status.splitMergedDone': { fr: '{ok} {ok|document réuni|documents réunis} dans un seul PDF — fichier téléchargé.', en: '{ok} {ok|document|documents} combined into a single PDF — file downloaded.' },
+    'status.splitMergedDoneWithFailures': { fr: '{ok} {ok|document réuni|documents réunis} dans un seul PDF, {failed} {failed|échec|échecs} (voir la console) — fichier téléchargé.', en: '{ok} {ok|document|documents} combined into a single PDF, {failed} {failed|failure|failures} (see console) — file downloaded.' },
+    'status.splitSheetsDone': { fr: '{ok} {ok|document placé|documents placés} sur {sheets} {sheets|feuille|feuilles} — fichier téléchargé.', en: '{ok} {ok|document|documents} placed on {sheets} {sheets|sheet|sheets} — file downloaded.' },
+    'status.splitSheetsDoneWithFailures': { fr: '{ok} {ok|document placé|documents placés} sur {sheets} {sheets|feuille|feuilles}, {failed} {failed|échec|échecs} (voir la console) — fichier téléchargé.', en: '{ok} {ok|document|documents} placed on {sheets} {sheets|sheet|sheets}, {failed} {failed|failure|failures} (see console) — file downloaded.' },
+    'status.splitSingleWorkbookDone': { fr: '{ok} {ok|document réuni|documents réunis} dans un seul classeur Excel — fichier téléchargé.', en: '{ok} {ok|document|documents} combined into a single Excel workbook — file downloaded.' },
+    'status.splitSingleWorkbookDoneWithFailures': { fr: '{ok} {ok|document réuni|documents réunis} dans un seul classeur Excel, {failed} {failed|échec|échecs} (voir la console) — fichier téléchargé.', en: '{ok} {ok|document|documents} combined into a single Excel workbook, {failed} {failed|failure|failures} (see console) — file downloaded.' },
   };
 
   let lang = (typeof localStorage !== 'undefined' && localStorage.getItem('pp_lang') === 'en') ? 'en' : 'fr';

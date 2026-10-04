@@ -302,6 +302,7 @@
       reset: !m.querySelector('.var-modal-danger').hidden, resetText: m.querySelector('.var-modal-danger').textContent,
       cancelText: m.querySelector('.var-modal-actions button:not(.var-modal-danger):not(.var-modal-primary)').textContent, saveText: m.querySelector('.var-modal-primary').textContent,
       preview: m.querySelector('.var-condition-debug-line').textContent,
+      splitLabel: m.querySelector('label[for="var-list-split"]').textContent, splitChecked: m.querySelector('#var-list-split').checked,
     };
   };
   const pickButton = pick => modal().querySelector(`.var-loop-seg button[data-pick="${pick}"]`);
@@ -588,11 +589,127 @@
         enWindow: !!en && en.title === 'List' && en.intro === '#VlProjets.Themes holds several choices. Set what the document writes from it.'
           && same(en.picks.map(p => p[1]), ['All values', 'The first', 'The last', 'The nth']) && en.picks[2][2] === 'true'
           && en.sepLabel === 'Separator' && en.lastLabel === 'Before the last' && en.numberLabel === 'Number' && en.placeholder === 'same as separator'
-          && same(en.hints, ['spaces included', '1 = the first value. With no value at that position, nothing is written.'])
+          && same(en.hints, ['spaces included', '1 = the first value. With no value at that position, nothing is written.',
+            'PDF, Word and Excel exports only.'])
+          && en.splitLabel === 'One document per value' && !en.splitChecked
           && en.resetText === 'Reset to default' && en.cancelText === 'Cancel' && en.saveText === 'Save'
           && en.preview === 'Selected row (#1): 3 values (Santé, Social, Culture). The document writes “Culture”.',
         emptyRow: got.emptyRow === 'Ligne sélectionnée (n° 3) : la liste est vide, le document n’écrit rien.',
         noRecord: got.noRecord === 'Aucune ligne sélectionnée dans Grist : sélectionnez-en une pour voir l’aperçu.',
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: JSON.stringify({ failed, got }) };
+    },
+  });
+
+  // --- « Un document par valeur » : la case de la fenêtre et l'icône de la bulle ---
+  cases.push({
+    id: 'varlist_window_one_document_per_value_checkbox_preview_save_and_reset',
+    description: 'Fenêtre « Liste » : la case « Un document par valeur » (décochée au départ, son indication à côté) ajoute une seconde ligne d’aperçu - « 3 documents, un par valeur », « un seul document » pour une ligne à une seule valeur ou à liste vide - sans toucher à la première ; elle va avec n’importe quel choix (« La première »…) ; Enregistrer l’écrit dans le format de la bulle (perValue, le reste du réglage gardé), la barre est bleue même sans autre réglage, la Lecture écrit toujours la liste comme réglée, la fenêtre rouverte la montre cochée, la décocher retire la clé et « Remettre par défaut » tout',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML(`<p>${badge('Themes')} ${badge('Titre')}</p>`);
+      const got = {};
+      const box = () => modal().querySelector('#var-list-split');
+      const splitLine = () => { const line = modal().querySelectorAll('.var-condition-debug-line')[1]; return { text: line.textContent, hidden: line.hidden }; };
+      const tick = async on => { box().checked = on; box().dispatchEvent(new Event('change', { bubbles: true })); await h.sleep(400); };
+      got.opened = await openList(h, 'Themes');
+      got.initial = { checked: box().checked, label: fields().splitLabel, hint: modal().querySelector('.var-list-split .var-loop-hint').textContent, line: splitLine(), first: fields().preview };
+      await tick(true);
+      got.ticked = { line: splitLine(), first: fields().preview };
+      pickButton('first').click();
+      await h.sleep(300);
+      got.withFirst = { checked: box().checked, line: splitLine(), first: fields().preview };
+      saveButton().click();
+      await h.sleep(250);
+      got.saved = { format: formatOf('Themes'), bar: buttonState() };
+      got.reading = resolvedTexts(await renderReader(Editor.getHTML(), RECORD_1));
+      const serialized = document.createElement('div');
+      serialized.innerHTML = Editor.getHTML();
+      got.serialized = JSON.parse(serialized.querySelector('span.var-badge').getAttribute('data-format'));
+      got.reopened = (await openList(h, 'Themes')) ? { checked: box().checked, reset: !modal().querySelector('.var-modal-danger').hidden, line: splitLine() } : null;
+      await tick(false);
+      got.unticked = splitLine();
+      saveButton().click();
+      await h.sleep(250);
+      got.afterUntick = formatOf('Themes');
+      // Cochée seule, avec « Toutes les valeurs » : un réglage à elle seule.
+      await openList(h, 'Themes');
+      pickButton('all').click();
+      await tick(true);
+      saveButton().click();
+      await h.sleep(250);
+      got.onlyPerValue = { format: formatOf('Themes'), bar: buttonState() };
+      await openList(h, 'Themes');
+      resetButton().click();
+      await h.sleep(250);
+      got.reset = { format: formatOf('Themes'), bar: buttonState() };
+      // Annuler après avoir coché : rien n'est écrit.
+      await openList(h, 'Themes');
+      await tick(true);
+      cancelButton().click();
+      await h.sleep(200);
+      got.cancelled = formatOf('Themes');
+      // Une ligne à une seule valeur, puis une liste vide : un seul document.
+      window.__gristStub.fireRecord(Object.assign({}, RECORD_2), PAGE);
+      await h.sleep(60);
+      await openList(h, 'Themes');
+      await tick(true);
+      got.oneValue = splitLine();
+      cancelButton().click();
+      await h.sleep(150);
+      window.__gristStub.fireRecord(Object.assign({}, RECORD_3), PAGE);
+      await h.sleep(60);
+      await openList(h, 'Themes');
+      await tick(true);
+      got.emptyList = { line: splitLine(), first: fields().preview };
+      cancelButton().click();
+      await h.sleep(150);
+      const prev = 'Ligne sélectionnée (n° 1) : 3 valeurs (Santé, Social, Culture). Le document écrit « ';
+      const export3 = 'Export : 3 documents, un par valeur (Santé, Social, Culture).';
+      const checks = {
+        opened: got.opened,
+        initial: !got.initial.checked && got.initial.label === 'Un document par valeur' && got.initial.line.hidden && got.initial.line.text === '' && got.initial.first === prev + 'Santé, Social, Culture ».'
+          && got.initial.hint === 'Exports PDF, Word et Excel seulement.',
+        ticked: !got.ticked.line.hidden && got.ticked.line.text === export3 && got.ticked.first === prev + 'Santé, Social, Culture ».',
+        withFirst: got.withFirst.checked && !got.withFirst.line.hidden && got.withFirst.line.text === export3 && got.withFirst.first === prev + 'Santé ».',
+        saved: same(got.saved.format, { list: { pick: 'first', perValue: true } }) && got.saved.bar.active && got.saved.bar.enabled && same(got.serialized, { list: { pick: 'first', perValue: true } }),
+        readingUnchanged: same(got.reading, ['Santé', 'Alpha']),
+        reopened: !!got.reopened && got.reopened.checked && got.reopened.reset && !got.reopened.line.hidden && got.reopened.line.text === export3,
+        unticked: got.unticked.hidden && got.unticked.text === '' && same(got.afterUntick, { list: { pick: 'first' } }),
+        onlyPerValue: same(got.onlyPerValue.format, { list: { perValue: true } }) && got.onlyPerValue.bar.active && got.onlyPerValue.bar.enabled,
+        reset: got.reset.format === null && !got.reset.bar.active,
+        cancelled: got.cancelled === null,
+        oneValue: !got.oneValue.hidden && got.oneValue.text === 'Export : un seul document, cette ligne n’a qu’une valeur.',
+        emptyList: !got.emptyList.line.hidden && got.emptyList.line.text === 'Export : un seul document, la liste de cette ligne est vide.' && got.emptyList.first === 'Ligne sélectionnée (n° 3) : la liste est vide, le document n’écrit rien.',
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: JSON.stringify({ failed, got }) };
+    },
+  });
+
+  cases.push({
+    id: 'varlist_split_bubble_shows_a_small_icon_in_the_editor_except_in_a_loop',
+    description: 'Éditeur : une bulle réglée « Un document par valeur » porte une petite icône à droite (marge et image de fond de css/variable-list.css, le point bleu des bulles réglées gardé en ::after) ; une bulle sans ce réglage non, une bulle en boucle « dans la phrase » non plus (le réglage n’y servirait à rien)',
+    run: async (h) => {
+      await seed(h);
+      const loop = { repeat: 'inline', table: PEOPLE, via: { table: PAGE, column: 'Membres' }, separator: ', ', lastSeparator: ' et ' };
+      Editor.setHTML(`<p>${badge('Themes', { list: { perValue: true } })} ${badge('Titre')} ${badge('Membres', { list: { pick: 'last' } })} ${badge('Responsable', { list: { perValue: true } })}</p>`);
+      const loopNode = badgeNodes().find(b => b.node.attrs.column === 'Responsable');
+      ed().chain().command(({ tr }) => { tr.setNodeMarkup(loopNode.pos, undefined, Object.assign({}, loopNode.node.attrs, { loop })); return true; }).run();
+      await h.sleep(150);
+      const look = column => {
+        const el = Array.from(document.querySelectorAll('.tiptap .var-badge')).find(e => e.getAttribute('data-column') === column);
+        const style = getComputedStyle(el);
+        return { padding: style.paddingRight, image: style.backgroundImage, dot: getComputedStyle(el, '::after').content };
+      };
+      const got = { perValue: look('Themes'), plain: look('Titre'), otherSetting: look('Membres'), inLoop: look('Responsable') };
+      const hasIcon = l => l.padding === '17px' && l.image.indexOf('data:image/svg+xml') !== -1;
+      const checks = {
+        perValueIcon: hasIcon(got.perValue), perValueKeepsDot: got.perValue.dot !== 'none' && got.perValue.dot !== 'normal',
+        plainNone: !hasIcon(got.plain), otherSettingNone: !hasIcon(got.otherSetting),
+        // La bulle en boucle garde l'icône de la boucle : une autre image que celle de « Un document par valeur ».
+        loopNone: got.inLoop.image !== got.perValue.image,
       };
       const failed = Object.keys(checks).filter(k => !checks[k]);
       return { pass: failed.length === 0, notes: JSON.stringify({ failed, got }) };

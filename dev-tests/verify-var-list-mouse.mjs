@@ -7,7 +7,9 @@
 //  - « La n-ième » puis un numéro tapé au clavier, « Toutes les valeurs » puis deux séparateurs tapés : l'aperçu dit ce que le document écrira ;
 //  - Enregistrer ferme la fenêtre, la barre revient avec le bouton bleu, la bulle porte son point bleu, la Lecture écrit la liste telle que réglée ;
 //  - une bulle qui n'est pas une liste : bouton grisé, un vrai clic dessus n'ouvre rien ; « Remettre par défaut » et Échap (vrai clavier) ;
-//  - en anglais les quatre choix et les champs tiennent dans la fenêtre sans déborder.
+//  - la case « Un document par valeur » : un vrai clic sur son libellé (ou sur la case) la coche, la barre d'espace la bascule, l'aperçu gagne une seconde ligne (le nombre de documents de la ligne),
+//    la fenêtre garde titre et boutons visibles dans 700x400, Enregistrer l'écrit (perValue) et la bulle porte sa petite icône ; décochée puis enregistrée, plus aucun réglage ;
+//  - en anglais les quatre choix, les champs et la case tiennent dans la fenêtre sans déborder.
 // Lancé par run-headless.mjs (groupe Node "varListMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-var-list-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -164,6 +166,8 @@ const BAR = '.v2-varfmt-toolbar.visible';
 const LIST_BUTTON = `${BAR} button[data-action="var-list"]`;
 const MODAL = '#var-list-modal';
 const PICK = pick => `${MODAL} .var-loop-seg button[data-pick="${pick}"]`;
+const SPLIT_LABEL = `${MODAL} label[for="var-list-split"]`;
+const SPLIT_BOX = `${MODAL} #var-list-split`;
 // Le réglage d'une bulle du document (null = aucun).
 const formatOf = column => page.evaluate(col => { let found; EditorCore.getEditor().state.doc.descendants(n => { if (n.type.name === 'varBadge' && n.attrs.column === col) found = n.attrs.format; }); return found === undefined ? 'absente' : found; }, column);
 const barState = () => page.evaluate(() => {
@@ -184,10 +188,13 @@ const modalState = () => page.evaluate(() => {
     shown: overlay.style.display !== 'none' && r.width > 0,
     left: r.left, right: r.right, top: r.top, bottom: r.bottom, overflowX: box.scrollWidth - box.clientWidth, bodyOverflowX: body.scrollWidth - body.clientWidth,
     scrolls: body.scrollHeight > body.clientHeight + 1,
+    sepTop: Math.round(overlay.querySelector('#var-list-sep').getBoundingClientRect().top), lastTop: Math.round(overlay.querySelector('#var-list-last').getBoundingClientRect().top),
     picks: Array.from(overlay.querySelectorAll('.var-loop-seg button')).map(b => [b.dataset.pick, b.getAttribute('aria-pressed'), b.textContent]),
     sepRow: !field('.var-list-seps').hidden, numRow: !field('.var-list-number').hidden,
     sep: field('#var-list-sep').value, last: field('#var-list-last').value, index: field('#var-list-index').value,
     reset: !field('.var-modal-danger').hidden, preview: field('.var-condition-debug-line').textContent,
+    splitChecked: field('#var-list-split').checked, splitLabel: field('label[for="var-list-split"]').textContent, splitHint: field('.var-list-split .var-loop-hint').textContent,
+    lines: Array.from(overlay.querySelectorAll('.var-condition-debug-line')).filter(l => !l.hidden).map(l => l.textContent),
     focus: document.activeElement ? (document.activeElement.id || document.activeElement.dataset.pick || document.activeElement.tagName) : null,
   };
 });
@@ -229,6 +236,7 @@ async function run(theme) {
   check(`${T} - ouverte : « Toutes les valeurs » enfoncé, séparateur « , », champ du numéro caché, pas de « Remettre par défaut », aperçu de la ligne`,
     opened.picks[0][1] === 'true' && opened.picks.slice(1).every(p => p[1] === 'false') && opened.sepRow && !opened.numRow && opened.sep === ', ' && !opened.reset
     && opened.preview === 'Ligne sélectionnée (n° 1) : 3 valeurs (Santé, Social, Culture). Le document écrit « Santé, Social, Culture ».', opened);
+  check(`${T} - ouverte (case décochée) : la fenêtre tient dans le panneau SANS défilement - l'aperçu est entier - et les deux séparateurs sont sur une seule ligne`, !opened.scrolls && opened.sepTop === opened.lastTop, opened);
   const picks = {};
   for (const p of ['all', 'first', 'last', 'nth']) picks[p] = await hitTest(PICK(p));
   check(`${T} - les quatre choix sont dans la fenêtre, au premier plan et assez grands (au moins 24 px de haut)`, Object.values(picks).every(b => b.found && b.inViewport && b.onTop && b.h >= 24), picks);
@@ -305,6 +313,84 @@ async function run(theme) {
   await page.waitForTimeout(300);
   const reset = await barState();
   check(`${T} - « Remettre par défaut » : fenêtre fermée, la bulle n'a plus aucun réglage, le bouton n'est plus bleu`, !(await modalState()).shown && (await formatOf('Themes')) === null && reset.visible && !reset.active, reset);
+
+  // 8) « Un document par valeur » : un vrai clic sur le libellé coche la case, la barre d'espace la bascule, l'aperçu gagne sa seconde ligne, la fenêtre reste entière dans le panneau.
+  await clickSel('.tiptap .var-badge[data-column="Themes"]');
+  await clickSel(LIST_BUTTON);
+  await page.waitForTimeout(350);
+  const splitOpen = await modalState();
+  const splitLabelBox = await hitTest(SPLIT_LABEL);
+  const splitCheckBox = await hitTest(SPLIT_BOX);
+  check(`${T} - la case « Un document par valeur » est décochée à l'ouverture, avec son indication dessous, et il n'y a qu'une ligne d'aperçu`,
+    splitOpen.shown && !splitOpen.splitChecked && splitOpen.splitLabel === 'Un document par valeur' && splitOpen.splitHint === 'Exports PDF, Word et Excel seulement.' && splitOpen.lines.length === 1, splitOpen);
+  check(`${T} - le libellé et la case sont dans le panneau, au premier plan, le libellé assez haut pour un vrai clic (au moins 20 px)`,
+    [splitLabelBox, splitCheckBox].every(b => b.found && b.inViewport && b.onTop) && splitLabelBox.h >= 20, { splitLabelBox, splitCheckBox });
+  await shot(`${theme}-6-case-decochee`);
+  await clickSel(SPLIT_LABEL);
+  const splitTicked = await modalState();
+  check(`${T} - vrai clic sur le libellé : la case est cochée, l'aperçu a une seconde ligne « 3 documents, un par valeur », la première ligne ne bouge pas`,
+    splitTicked.splitChecked && splitTicked.lines.length === 2 && splitTicked.lines[0] === splitOpen.lines[0] && splitTicked.lines[1] === 'Export : 3 documents, un par valeur (Santé, Social, Culture).', splitTicked);
+  check(`${T} - case cochée : la fenêtre reste entière dans le panneau (700x400), sans défilement horizontal, titre et boutons visibles et au premier plan`,
+    splitTicked.left >= 0 && splitTicked.right <= WIDTH + 0.5 && splitTicked.top >= 0 && splitTicked.bottom <= HEIGHT + 0.5 && splitTicked.overflowX <= 1 && splitTicked.bodyOverflowX <= 1
+    && [await hitTest(`${MODAL} #var-list-title`), await hitTest(`${MODAL} .var-modal-primary`)].every(b => b.found && b.inViewport && b.onTop), splitTicked);
+  const secondLine = await page.evaluate(sel => {
+    const lines = Array.from(document.querySelectorAll(sel + ' .var-condition-debug-line')).filter(l => !l.hidden);
+    const r = lines[lines.length - 1].getBoundingClientRect();
+    const body = document.querySelector(sel + ' .pp-modal-body').getBoundingClientRect();
+    return { top: r.top, bottom: r.bottom, bodyTop: body.top, bodyBottom: body.bottom };
+  }, MODAL);
+  check(`${T} - la seconde ligne d'aperçu est entière à l'écran juste après le clic (la fenêtre la fait venir en vue si le panneau est bas)`,
+    secondLine.top >= secondLine.bodyTop - 0.5 && secondLine.bottom <= secondLine.bodyBottom + 0.5, secondLine);
+  await shot(`${theme}-7-case-cochee`);
+  // Clavier : la case a le focus après le clic sur son libellé ; Espace la bascule.
+  await page.keyboard.press('Space');
+  const spaceOff = await modalState();
+  await page.keyboard.press('Space');
+  const spaceOn = await modalState();
+  check(`${T} - la barre d'espace (vrai clavier) décoche puis recoche la case, la seconde ligne d'aperçu suit`,
+    !spaceOff.splitChecked && spaceOff.lines.length === 1 && spaceOn.splitChecked && spaceOn.lines.length === 2, { spaceOff, spaceOn });
+  await clickSel(PICK('first'));
+  const withFirst = await modalState();
+  check(`${T} - la case va avec « La première » : elle reste cochée, la première ligne dit « Santé », la seconde garde les 3 documents`,
+    withFirst.splitChecked && withFirst.picks[1][1] === 'true' && withFirst.lines[0].endsWith('Le document écrit « Santé ».') && withFirst.lines[1].startsWith('Export : 3 documents'), withFirst);
+  await clickSel(PICK('all'));
+  await clickSel(`${MODAL} .var-modal-primary`);
+  await page.waitForTimeout(300);
+  const splitSaved = await modalState();
+  const splitBar = await barState();
+  const splitFormat = await formatOf('Themes');
+  const icon = await page.evaluate(() => {
+    const b = document.querySelector('.tiptap .var-badge[data-column="Themes"]');
+    const style = getComputedStyle(b);
+    return { padding: style.paddingRight, image: style.backgroundImage.slice(0, 40), dot: getComputedStyle(b, '::after').content };
+  });
+  check(`${T} - vrai clic sur Enregistrer : la fenêtre se ferme, la bulle porte seulement « un document par valeur », la barre revient avec le bouton « Liste » bleu`,
+    !splitSaved.shown && JSON.stringify(splitFormat) === JSON.stringify({ list: { perValue: true } }) && splitBar.visible && splitBar.active && !splitBar.disabled, { splitSaved, splitFormat, splitBar });
+  check(`${T} - la bulle réglée porte sa petite icône à droite (marge de 17 px, image de fond) et garde son point bleu`,
+    icon.padding === '17px' && icon.image.indexOf('data:image/svg+xml') !== -1 && icon.dot !== 'none', icon);
+  await clickSel('.tiptap .var-badge[data-column="Titre"]');
+  await shot(`${theme}-8-bulle-icone`);
+  await clickSel('#btn-mode-read');
+  await page.waitForTimeout(400);
+  const splitRead = await page.evaluate(() => Array.from(document.querySelectorAll('#reader-container .reader-content .resolved-var')).map(e => e.textContent));
+  check(`${T} - Mode lecture : la liste s'écrit en entier (« Santé, Social, Culture »), un document par valeur ne concerne que les exports`, JSON.stringify(splitRead) === JSON.stringify(['Santé, Social, Culture', 'Alpha']), splitRead);
+  await clickSel('#btn-mode-edit');
+  await page.waitForTimeout(300);
+  // Rouverte : cochée ; un vrai clic sur la case elle-même la décoche, Enregistrer retire tout réglage.
+  await clickSel('.tiptap .var-badge[data-column="Themes"]');
+  await clickSel(LIST_BUTTON);
+  await page.waitForTimeout(350);
+  const splitAgain = await modalState();
+  check(`${T} - rouverte : la case est cochée, « Remettre par défaut » proposé, la seconde ligne d'aperçu est là`, splitAgain.shown && splitAgain.splitChecked && splitAgain.reset && splitAgain.lines.length === 2, splitAgain);
+  await clickSel(SPLIT_BOX);
+  const splitOff = await modalState();
+  check(`${T} - vrai clic sur la case : décochée, la seconde ligne disparaît`, !splitOff.splitChecked && splitOff.lines.length === 1, splitOff);
+  await clickSel(`${MODAL} .var-modal-primary`);
+  await page.waitForTimeout(300);
+  const splitCleared = await barState();
+  check(`${T} - Enregistrer sans la case : la bulle n'a plus aucun réglage, le bouton n'est plus bleu, l'icône a disparu`,
+    (await formatOf('Themes')) === null && splitCleared.visible && !splitCleared.active
+    && (await page.evaluate(() => getComputedStyle(document.querySelector('.tiptap .var-badge[data-column="Themes"]')).backgroundImage)) === 'none', splitCleared);
 }
 
 async function runEnglish() {
@@ -324,11 +410,21 @@ async function runEnglish() {
   check('anglais - la fenêtre tient dans le panneau sans défilement horizontal, les quatre choix (« All values », « The first », « The last », « The nth ») entiers et atteignables',
     opened.shown && opened.right <= WIDTH + 0.5 && opened.bottom <= HEIGHT + 0.5 && opened.overflowX <= 1 && opened.bodyOverflowX <= 1 && JSON.stringify(opened.picks.map(p => p[2])) === JSON.stringify(['All values', 'The first', 'The last', 'The nth'])
     && Object.values(picks).every(b => b.found && b.inViewport && b.onTop), { opened, picks });
+  check('anglais - ouverte (case décochée) : la fenêtre tient dans le panneau sans défilement et les deux séparateurs sont sur une seule ligne', !opened.scrolls && opened.sepTop === opened.lastTop, opened);
   await clickSel(PICK('nth'));
   await typeInto(`${MODAL} #var-list-index`, '3');
   const nth = await modalState();
   check('anglais - « The nth » avec le numéro 3 : aperçu « Culture »', nth.preview === 'Selected row (#1): 3 values (Santé, Social, Culture). The document writes “Culture”.', nth);
   await shot('en-fenetre');
+  check('anglais - la case « One document per value » est décochée avec son indication', opened.splitLabel === 'One document per value' && !opened.splitChecked
+    && opened.splitHint === 'PDF, Word and Excel exports only.', opened);
+  await clickSel(SPLIT_LABEL);
+  const enSplit = await modalState();
+  check('anglais - vrai clic sur le libellé : la case est cochée, seconde ligne « 3 documents for this row », la fenêtre reste entière dans le panneau, sans défilement horizontal',
+    enSplit.splitChecked && enSplit.lines.length === 2 && enSplit.lines[1] === 'Export: 3 documents, one per value (Santé, Social, Culture).'
+    && enSplit.right <= WIDTH + 0.5 && enSplit.bottom <= HEIGHT + 0.5 && enSplit.overflowX <= 1 && enSplit.bodyOverflowX <= 1
+    && [await hitTest(`${MODAL} #var-list-title`), await hitTest(`${MODAL} .var-modal-primary`)].every(b => b.found && b.inViewport && b.onTop), enSplit);
+  await shot('en-case-cochee');
   await clickSel(`${MODAL} .var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)`);
   await page.waitForTimeout(250);
   check('anglais - Cancel ferme la fenêtre sans rien changer', !(await modalState()).shown && (await formatOf('Themes')) === null);

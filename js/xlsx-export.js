@@ -611,19 +611,27 @@ const XlsxExport = (function () {
     ExportCommon.downloadBlob(blob, (filename || 'publipostage') + '.xlsx');
   }
 
+  // Le nom d'une feuille « un document par valeur » (js/list-split.js) : celui du fichier, raccourci pour que la valeur tienne dans les 31 caractères d'Excel.
+  function nameWithValue(name, value) {
+    if (!value) return name;
+    const tail = ' - ' + value;
+    return String(name || '').slice(0, Math.max(0, 31 - tail.length)).trim() + tail;
+  }
+
   // Un classeur unique pour toute la table : une feuille par enregistrement (et une de plus à chaque saut de page de la grille), nommée comme le fichier qu'il aurait eu dans l'archive ZIP
   // (31 caractères au plus, « nom (2) » quand deux feuilles s'appelleraient pareil). Un enregistrement qui échoue ne laisse pas de feuille à moitié écrite : l'appelant le compte en échec et passe au suivant.
+  // `valueName` (facultatif) : la valeur de la liste que ce document écrit quand le modèle est réglé « Un document par valeur » ; elle suit le nom de la feuille.
   async function createSingleWorkbook(options) {
     await ensureExcelLibLoaded();
     const workbook = newWorkbook();
     const usedNames = new Set();
     return {
-      async appendRecord(htmlContent, tableId, record, filenameTemplate) {
+      async appendRecord(htmlContent, tableId, record, filenameTemplate, valueName) {
         await ExternalImages.confirmExport(htmlContent, null);
         const { resolvedHtml, filename } = await resolveRecord(htmlContent, tableId, record, filenameTemplate);
         const before = workbook.worksheets.length;
         try {
-          await addRecordSheet(workbook, filename, resolvedHtml, Object.assign(pageOptionsFromLayout(), options || {}, { usedNames }));
+          await addRecordSheet(workbook, nameWithValue(filename, valueName), resolvedHtml, Object.assign(pageOptionsFromLayout(), options || {}, { usedNames }));
         } catch (e) {
           workbook.worksheets.slice(before).forEach(sheet => { usedNames.delete(sheet.name.toLowerCase()); workbook.removeWorksheet(sheet.id); });
           throw e;
