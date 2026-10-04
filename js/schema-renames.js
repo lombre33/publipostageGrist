@@ -1,26 +1,30 @@
-// Suivi des renommages de tables et de colonnes faits dans Grist (point 11 d'Antoine du 2026-10-02 : « si je change le nom d'une colonne sur Grist, est-ce que ça peut le changer
-// dans la variable ? »). Grist garde l'identifiant de ligne d'une table et d'une colonne (_grist_Tables, _grist_Tables_column : un renommage met à jour la MÊME ligne, vérifié à la
-// source grist-core, useractions.py RenameColumn / RenameTable) et réécrit ses propres formules, jamais le contenu d'un widget : un modèle qui nomme « Dossiers.Montant » garde ce
-// nom, et la bulle devient rouge. Ici, à l'ouverture du widget, les noms d'aujourd'hui sont comparés, identifiant par identifiant, à ceux de la dernière ouverture ; ce qui a changé
-// de nom est réécrit là où le widget l'a écrit : les modèles (bulles, conditions, boucles, calculs, blocs, valeurs et cases conditionnels, images liées, QR codes, en-têtes et pieds de page,
-// macro-modèles, nom du PDF, champs de l'e-mail) et les clés de correspondance entre tables (Publipostage_LiensTables).
+// Suivi des renommages de tables et de colonnes faits dans Grist. Grist garde l'identifiant de ligne d'une table et d'une colonne (_grist_Tables,
+// _grist_Tables_column : un renommage met à jour la même ligne, voir useractions.py RenameColumn / RenameTable dans grist-core) et réécrit ses
+// propres formules, jamais le contenu d'un widget : un modèle qui nomme « Dossiers.Montant » garde ce nom, et la bulle devient rouge. À l'ouverture
+// du widget, les noms d'aujourd'hui sont donc comparés, identifiant par identifiant, à ceux de la dernière ouverture ; ce qui a changé de nom est
+// réécrit là où le widget l'a écrit : les modèles (bulles, conditions, boucles, calculs, blocs, valeurs et cases conditionnels, images liées, QR
+// codes, en-têtes et pieds de page, macro-modèles, nom du PDF, champs de l'e-mail) et les clés de correspondance entre tables
+// (Publipostage_LiensTables).
 //
-// Rien n'est lu ni écrit avant l'affichage du modèle (point 1 d'Antoine, temps d'ouverture) : js/main.js appelle checkAfterOpen en toute dernière ligne d'init(), sans l'attendre.
-// L'instantané (identifiant -> nom, pour chaque table et chaque colonne) vit dans le stockage du navigateur, par document (pp_schema_<document>) : `grist.setOption` ne pose qu'un
-// brouillon de la section (bouton Enregistrer de Grist) et une table de plus dans le document alourdirait la navigation. Conséquence : le suivi se fait navigateur par navigateur ;
-// la première ouverture d'un navigateur ne fait que noter le schéma, un renommage fait avant ne se rattrape pas (le bouton « Colonne… » de la barre d'une bulle le répare à la main).
+// Rien n'est lu ni écrit avant l'affichage du modèle, pour ne pas ralentir l'ouverture : js/main.js appelle checkAfterOpen en toute dernière ligne
+// d'init(), sans l'attendre. L'instantané (identifiant -> nom, pour chaque table et chaque colonne) vit dans le stockage du navigateur, par document
+// (pp_schema_<document>) : `grist.setOption` ne pose qu'un brouillon de la section (bouton Enregistrer de Grist) et une table de plus dans le
+// document alourdirait la navigation. Conséquence : le suivi se fait navigateur par navigateur ; la première ouverture d'un navigateur ne fait que
+// noter le schéma, un renommage fait avant ne se rattrape pas (le bouton « Colonne… » de la barre d'une bulle le répare à la main).
 //
 // Règles qui rendent la réécriture sûre :
-//  - Seule une référence CASSÉE aujourd'hui est réécrite. Une colonne qu'on lit encore comme elle est écrite (nom repris par une autre colonne, deux noms échangés) n'est jamais
-//    touchée : mieux vaut laisser une bulle fausse comme avant que d'en changer une qui marche.
-//  - Le nouveau nom vient des identifiants, jamais d'une ressemblance de noms. Un chemin « Projet.Responsable.Email » se descend colonne par colonne, la table suivante étant celle que
-//    la colonne référence aujourd'hui.
-//  - Une colonne sans nom de table (condition d'une bulle, règle d'un macro-modèle) est une colonne de la table de la page : celle de ce widget. Un modèle qui ne nomme, ailleurs, que
-//    d'autres tables n'est pas lu comme celui de cette page, et une colonne nue dont une AUTRE table porte encore le nom n'est pas réécrite non plus (le modèle peut servir sur l'autre
-//    page, où elle se lit). Dans le filtre et le tri d'une boucle, c'est une colonne de la table parcourue, sans ambiguïté. La colonne source d'une clé de correspondance suit la même
-//    règle : la clé sert à toutes les pages. Sans table de page connue, la passe attend l'ouverture suivante.
-//  - Rien ne s'écrit en lecture seule, ni quand la personne a déjà commencé à modifier le modèle affiché (la passe est reprise à l'ouverture suivante), et l'instantané n'avance qu'une
-//    fois tout réécrit : une passe interrompue se rejoue sans risque, puisque ce qui est déjà réécrit se lit et n'est plus touché.
+//  - Seule une référence cassée aujourd'hui est réécrite. Une colonne qu'on lit encore comme elle est écrite (nom repris par une autre colonne, deux
+//    noms échangés) n'est jamais touchée : mieux vaut laisser une bulle fausse comme avant que d'en changer une qui marche.
+//  - Le nouveau nom vient des identifiants, jamais d'une ressemblance de noms. Un chemin « Projet.Responsable.Email » se descend colonne par colonne,
+//    la table suivante étant celle que la colonne référence aujourd'hui.
+//  - Une colonne sans nom de table (condition d'une bulle, règle d'un macro-modèle) est une colonne de la table de la page : celle de ce widget. Un
+//    modèle qui ne nomme, ailleurs, que d'autres tables n'est pas lu comme celui de cette page, et une colonne nue dont une autre table porte encore
+//    le nom n'est pas réécrite non plus (le modèle peut servir sur l'autre page, où elle se lit). Dans le filtre et le tri d'une boucle, c'est une
+//    colonne de la table parcourue, sans ambiguïté. La colonne source d'une clé de correspondance suit la même règle : la clé sert à toutes les
+//    pages. Sans table de page connue, la passe attend l'ouverture suivante.
+//  - Rien ne s'écrit en lecture seule, ni quand la personne a déjà commencé à modifier le modèle affiché (la passe est reprise à l'ouverture
+//    suivante), et l'instantané n'avance qu'une fois tout réécrit : une passe interrompue se rejoue sans risque, puisque ce qui est déjà réécrit se
+//    lit et n'est plus touché.
 //  - DateModif ne bouge pas : ce n'est pas une modification de la personne, et l'enregistrement automatique n'y voit pas un conflit.
 const SchemaRenames = (function () {
   const STORAGE_PREFIX = 'pp_schema_';
@@ -29,13 +33,14 @@ const SchemaRenames = (function () {
   const FORMAT = 1;
   const TEMPLATE_COLUMNS = ['Nom', 'TypeModele', 'Contenu', 'HeaderFooter', 'NomFichierPDF', 'Destinataires', 'Cc', 'Cci', 'Objet'];
   const TEXT_COLUMNS = ['NomFichierPDF', 'Destinataires', 'Cc', 'Cci', 'Objet'];
-  // Tout ce que le widget range dans un modèle et qui nomme une table ou une colonne (js/loop-rules.js:BOUND_SELECTOR, plus la bulle de calcul).
+  // Tout ce que le widget range dans un modèle et qui nomme une table ou une colonne : comme BOUND_SELECTOR de js/loop-rules.js, mais sans
+  // restreindre les images.
   const ELEMENT_SELECTOR = '.var-badge, .calc-badge, img.editor-image, .conditional-text, .conditional-value, .conditional-checkbox';
 
   let running = false;
 
-  // === Stockage de l'instantané ===
-  // { f: FORMAT, t: { idTable: [nom, { idColonne: nom }] } } - rangs de ligne de _grist_Tables / _grist_Tables_column.
+  // Forme de l'instantané : { f: FORMAT, t: { idTable: [nom, { idColonne: nom }] } }, les identifiants étant les rangs de ligne de _grist_Tables et
+  // _grist_Tables_column.
   function storageGet(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
   function storageSet(key, value) { try { localStorage.setItem(key, value); return true; } catch (e) { return false; } }
   function storageRemove(key) { try { localStorage.removeItem(key); } catch (e) { /* stockage indisponible */ } }
@@ -49,12 +54,17 @@ const SchemaRenames = (function () {
     } catch (e) { return null; }
   }
 
+  // Les documents dont l'instantané est gardé, du plus ancien au plus récent.
+  function readIndex() {
+    try {
+      const index = JSON.parse(storageGet(STORAGE_INDEX) || '[]');
+      return Array.isArray(index) ? index : [];
+    } catch (e) { return []; }
+  }
+
   function saveSnapshot(docKey, snapshot) {
     if (!storageSet(STORAGE_PREFIX + docKey, JSON.stringify(snapshot))) return false;
-    let index = [];
-    try { index = JSON.parse(storageGet(STORAGE_INDEX) || '[]'); } catch (e) { index = []; }
-    if (!Array.isArray(index)) index = [];
-    index = index.filter(key => key !== docKey);
+    const index = readIndex().filter(key => key !== docKey);
     index.push(docKey);
     while (index.length > MAX_SNAPSHOTS) storageRemove(STORAGE_PREFIX + index.shift());
     storageSet(STORAGE_INDEX, JSON.stringify(index));
@@ -63,13 +73,12 @@ const SchemaRenames = (function () {
 
   // Oublie tous les instantanés (tests : chaque scénario repart d'un widget qui n'a rien noté).
   function reset() {
-    let index = [];
-    try { index = JSON.parse(storageGet(STORAGE_INDEX) || '[]'); } catch (e) { index = []; }
-    (Array.isArray(index) ? index : []).forEach(key => storageRemove(STORAGE_PREFIX + key));
+    readIndex().forEach(key => storageRemove(STORAGE_PREFIX + key));
     storageRemove(STORAGE_INDEX);
   }
 
-  // Le document, tel que Grist le nomme dans l'adresse de son interface de programmation (.../api/docs/<identifiant>) : le seul identifiant sûr, deux documents peuvent porter le même nom.
+  // Le document, tel que Grist le nomme dans l'adresse de son interface de programmation (.../api/docs/<identifiant>) : le seul identifiant sûr, deux
+  // documents peuvent porter le même nom.
   async function documentKey() {
     const info = await grist.docApi.getAccessToken({ readOnly: true });
     const url = new URL(String((info && info.baseUrl) || ''));
@@ -77,9 +86,8 @@ const SchemaRenames = (function () {
     return found ? url.host + '/' + found[1] : null;
   }
 
-  // === Le schéma d'aujourd'hui ===
-  // `snapshot` : la forme de l'instantané. `refs` : { idColonne: nom de la table que cette colonne Référence ou Liste de références désigne } - jamais gardé : seul le présent compte pour
-  // savoir où mène une colonne. Null quand aucune table n'est lisible.
+  // `snapshot` : la forme de l'instantané. `refs` : { idColonne: nom de la table que cette colonne Référence ou Liste de références désigne } -
+  // jamais gardé : seul le présent compte pour savoir où mène une colonne. Null quand aucune table n'est lisible.
   async function readSchema() {
     const visible = new Set(GristAPI.getTables());
     const [tables, columns] = await Promise.all([grist.docApi.fetchTable('_grist_Tables'), grist.docApi.fetchTable('_grist_Tables_column')]);
@@ -95,7 +103,8 @@ const SchemaRenames = (function () {
       const target = /^Ref(?:List)?:(.+)$/.exec(String(columns.type ? columns.type[i] : ''));
       if (target) refs[id] = target[1];
     });
-    // Aucune table lisible (liste des tables ou métadonnées pas rendues) : une lecture qui a échoué ne doit jamais remplacer l'instantané, qui est la seule mémoire des anciens noms.
+    // Aucune table lisible (liste des tables ou métadonnées pas rendues) : une lecture qui a échoué ne doit jamais remplacer l'instantané, qui est la
+    // seule mémoire des anciens noms.
     return Object.keys(t).length ? { snapshot: { f: FORMAT, t }, refs } : null;
   }
 
@@ -115,7 +124,8 @@ const SchemaRenames = (function () {
     return idx;
   }
 
-  // Ce qui a changé de nom entre l'instantané et le schéma d'aujourd'hui, identifiant par identifiant : { tables: [{ from, to }], columns: [{ table, from, to }], any }.
+  // Ce qui a changé de nom entre l'instantané et le schéma d'aujourd'hui, identifiant par identifiant : { tables: [{ from, to }], columns: [{ table,
+  // from, to }], any }.
   function diff(saved, current) {
     const o = indexOf(saved);
     const c = indexOf(current);
@@ -132,9 +142,8 @@ const SchemaRenames = (function () {
     return { tables, columns, any: tables.length + columns.length > 0 };
   }
 
-  // === Les noms d'hier -> les noms d'aujourd'hui ===
-  // `saved` : l'instantané ; `current` : le schéma d'aujourd'hui avec ses `refs`. Chaque fonction rend null quand il n'y a rien à changer : référence encore lisible telle qu'elle est écrite,
-  // nom inconnu de l'instantané, table ou colonne supprimée.
+  // `saved` : l'instantané ; `current` : le schéma d'aujourd'hui avec ses `refs`. Chaque fonction rend null quand il n'y a rien à changer : référence
+  // encore lisible telle qu'elle est écrite, nom inconnu de l'instantané, table ou colonne supprimée.
   function createMapper(saved, current, refs) {
     const o = indexOf(saved);
     const c = indexOf(current);
@@ -156,7 +165,8 @@ const SchemaRenames = (function () {
       return true;
     }
 
-    // Le chemin d'hier, colonne après colonne, avec les noms d'aujourd'hui : chaque nom d'hier se cherche dans la table d'hier, la table suivante est celle que la colonne désigne aujourd'hui.
+    // Le chemin d'hier, colonne après colonne, avec les noms d'aujourd'hui : chaque nom d'hier se cherche dans la table d'hier, la table suivante est
+    // celle que la colonne désigne aujourd'hui.
     function walk(tRow, path) {
       const hops = String(path).split('.');
       const names = [];
@@ -190,7 +200,8 @@ const SchemaRenames = (function () {
       return name === undefined || name === table ? null : name;
     }
 
-    // La table où se lit une colonne sans nom de table : { oldRow, oldName, newName } - la table d'aujourd'hui portant ce nom, qui existait déjà dans l'instantané. Null sinon.
+    // La table où se lit une colonne sans nom de table : { oldRow, oldName, newName } - la table d'aujourd'hui portant ce nom, qui existait déjà dans
+    // l'instantané. Null sinon.
     function tableContext(nowName) {
       const tRow = nowName ? c.tableRow[nowName] : undefined;
       return tRow === undefined || o.tableName[tRow] === undefined ? null : { oldRow: tRow, oldName: o.tableName[tRow], newName: nowName };
@@ -220,8 +231,9 @@ const SchemaRenames = (function () {
       return oldKeys;
     }
 
-    // Dans un texte, la variable écrite juste après la touche de déclenchement (`rest` commence après elle) : { table, path, length } avec les noms d'hier, le chemin prolongé tant que le
-    // texte suit une colonne Référence (la colonne la plus longue de la table atteinte l'emporte, comme Variables.findTextVariables). Null si rien ne s'y lit.
+    // Dans un texte, la variable écrite juste après la touche de déclenchement (`rest` commence après elle) : { table, path, length } avec les noms
+    // d'hier, le chemin prolongé tant que le texte suit une colonne Référence (la colonne la plus longue de la table atteinte l'emporte, comme
+    // Variables.findTextVariables). Null si rien ne s'y lit.
     function matchTextKey(rest) {
       const base = keys().find(k => rest.startsWith(k.key));
       if (!base) return null;
@@ -246,14 +258,14 @@ const SchemaRenames = (function () {
     return { mapQualified, mapTable, tableContext, mapBare, otherTableHasColumn, matchTextKey };
   }
 
-  // === Réécriture ===
   function parseJson(raw) {
     if (!raw) return null;
     try { return JSON.parse(raw); } catch (e) { return null; }
   }
 
-  // La colonne d'une règle : nue (table du contexte) ou « Table.Colonne ». Le nouveau texte de la colonne, ou null. `ambiguous` : la table du contexte n'est que la table de la page de CE widget, et le
-  // modèle peut servir sur une autre page : une colonne nue dont une autre table porte encore le nom se lit là-bas, elle ne bouge pas. Faux pour la table parcourue par une boucle, qui est certaine.
+  // La colonne d'une règle : nue (table du contexte) ou « Table.Colonne ». Le nouveau texte de la colonne, ou null. `ambiguous` : la table du
+  // contexte n'est que la table de la page de CE widget, et le modèle peut servir sur une autre page : une colonne nue dont une autre table porte
+  // encore le nom se lit là-bas, elle ne bouge pas. Faux pour la table parcourue par une boucle, qui est certaine.
   function mapRuleColumn(raw, m, ctx, ambiguous) {
     const dot = raw.indexOf('.');
     if (dot === -1) {
@@ -278,7 +290,8 @@ const SchemaRenames = (function () {
     return count ? { condition: Object.assign({}, condition, { rules }), count } : { condition, count: 0 };
   }
 
-  // { repeat, table, via: { table, column }, filter, sort: { column, direction }, … } (js/loop-rules.js). Le filtre et le tri parlent de la table parcourue.
+  // { repeat, table, via: { table, column }, filter, sort: { column, direction }, … } (js/loop-rules.js). Le filtre et le tri parlent de la table
+  // parcourue.
   function rewriteLoop(loop, m) {
     if (!loop || typeof loop !== 'object' || !loop.table) return { loop, count: 0 };
     const next = Object.assign({}, loop);
@@ -315,7 +328,8 @@ const SchemaRenames = (function () {
     return { text, count };
   }
 
-  // Les variables d'un texte brut : la touche de déclenchement, puis « Table.Colonne » ou « Table.Référence.Colonne » (nom du PDF, champs de l'e-mail, texte d'un QR code).
+  // Les variables d'un texte brut : la touche de déclenchement, puis « Table.Colonne » ou « Table.Référence.Colonne » (nom du PDF, champs de
+  // l'e-mail, texte d'un QR code).
   function rewriteText(text, m, trigger) {
     const src = String(text == null ? '' : text);
     if (!trigger || src.indexOf(trigger) === -1) return { text: src, count: 0 };
@@ -334,14 +348,18 @@ const SchemaRenames = (function () {
   }
 
   // Les tables que le contenu nomme en toutes lettres : bulles, images liées, formules, boucles, règles « Table.Colonne ».
-  function explicitTablesOf(root) {
+  function explicitTablesOf(elements) {
     const tables = new Set();
-    const addRules = condition => { if (condition && Array.isArray(condition.rules)) condition.rules.forEach(r => { if (r && typeof r.column === 'string' && r.column.indexOf('.') > 0) tables.add(r.column.slice(0, r.column.indexOf('.'))); }); };
-    root.querySelectorAll(ELEMENT_SELECTOR).forEach(el => {
+    const addRules = condition => {
+      for (const rule of (condition && Array.isArray(condition.rules) ? condition.rules : [])) {
+        const dot = rule && typeof rule.column === 'string' ? rule.column.indexOf('.') : -1;
+        if (dot > 0) tables.add(rule.column.slice(0, dot));
+      }
+    };
+    elements.forEach(el => {
       const table = el.getAttribute('data-table') || el.getAttribute('data-var-table');
       if (table) tables.add(table);
-      const formula = el.getAttribute('data-formula');
-      if (formula) formula.replace(/\{([A-Za-z_][A-Za-z0-9_]*)\./g, (whole, name) => { tables.add(name); return whole; });
+      for (const found of (el.getAttribute('data-formula') || '').matchAll(/\{([A-Za-z_][A-Za-z0-9_]*)\./g)) tables.add(found[1]);
       addRules(parseJson(el.getAttribute('data-condition')));
       const loop = parseJson(el.getAttribute('data-loop'));
       if (loop && loop.table) {
@@ -353,34 +371,38 @@ const SchemaRenames = (function () {
     return tables;
   }
 
-  // Un élément du modèle (bulle, bulle de calcul, image liée ou QR code, bloc, valeur ou case conditionnels) : le nombre de références réécrites.
-  function rewriteElement(el, m, page, trigger) {
-    let count = 0;
+  // La table et la colonne que nomme une bulle ou une image liée (data-table / data-column, ou data-var-table / data-var-column pour l'image) : 1
+  // quand la référence est réécrite, 0 sinon.
+  function rewriteReference(el, m) {
     const isImage = el.tagName === 'IMG';
     const tableAttr = isImage ? 'data-var-table' : 'data-table';
     const columnAttr = isImage ? 'data-var-column' : 'data-column';
     const keyAttr = isImage ? 'data-var-key' : 'data-key';
     const table = el.getAttribute(tableAttr);
     const column = el.getAttribute(columnAttr);
-    if (table && column) {
-      const next = m.mapQualified(table, column);
-      if (next) {
-        const oldKey = el.getAttribute(keyAttr);
-        const newKey = next.table + '.' + next.column;
-        el.setAttribute(tableAttr, next.table);
-        el.setAttribute(columnAttr, next.column);
-        if (oldKey === table + '.' + column) el.setAttribute(keyAttr, newKey);
-        // Le texte de la bulle (touche de déclenchement + clé) : régénéré au chargement dans l'éditeur, mais gardé juste dans le HTML enregistré.
-        if (!isImage && oldKey && el.textContent.endsWith(oldKey)) el.textContent = el.textContent.slice(0, el.textContent.length - oldKey.length) + newKey;
-        count++;
-      }
-    }
+    const next = table && column ? m.mapQualified(table, column) : null;
+    if (!next) return 0;
+    const oldKey = el.getAttribute(keyAttr);
+    const newKey = next.table + '.' + next.column;
+    el.setAttribute(tableAttr, next.table);
+    el.setAttribute(columnAttr, next.column);
+    if (oldKey === table + '.' + column) el.setAttribute(keyAttr, newKey);
+    // Le texte de la bulle (touche de déclenchement + clé) : régénéré au chargement dans l'éditeur, mais gardé juste dans le HTML enregistré.
+    if (!isImage && oldKey && el.textContent.endsWith(oldKey)) el.textContent = el.textContent.slice(0, el.textContent.length - oldKey.length) + newKey;
+    return 1;
+  }
+
+  // Un élément du modèle (bulle, bulle de calcul, image liée ou QR code, bloc, valeur ou case conditionnels) : le nombre de références réécrites.
+  function rewriteElement(el, m, page, trigger) {
+    let count = rewriteReference(el, m);
     const formula = el.getAttribute('data-formula');
     if (formula) {
       const next = rewriteFormula(formula, m);
       if (next.count) {
         el.setAttribute('data-formula', next.text);
-        try { el.textContent = '= ' + Formula.toDisplay(next.text, { trigger, lang: I18n.getLang(), pretty: true }); } catch (e) { /* le libellé se refait au chargement */ }
+        try {
+          el.textContent = '= ' + Formula.toDisplay(next.text, { trigger, lang: I18n.getLang(), pretty: true });
+        } catch (e) { /* le libellé se refait au chargement */ }
         count += next.count;
       }
     }
@@ -409,11 +431,13 @@ const SchemaRenames = (function () {
     const tpl = document.createElement('template');
     tpl.innerHTML = src;
     const root = tpl.content;
-    // Un modèle qui nomme d'autres tables que celle de la page, et jamais celle-ci, n'est pas lu comme un modèle de cette page : ses colonnes sans nom de table restent.
-    const explicit = explicitTablesOf(root);
+    // Un modèle qui nomme d'autres tables que celle de la page, et jamais celle-ci, n'est pas lu comme un modèle de cette page : ses colonnes sans
+    // nom de table restent.
+    const elements = root.querySelectorAll(ELEMENT_SELECTOR);
+    const explicit = explicitTablesOf(elements);
     const page = ctx.page && (!explicit.size || explicit.has(ctx.page.oldName) || explicit.has(ctx.page.newName)) ? ctx.page : null;
     let count = 0;
-    root.querySelectorAll(ELEMENT_SELECTOR).forEach(el => { count += rewriteElement(el, m, page, ctx.trigger); });
+    elements.forEach(el => { count += rewriteElement(el, m, page, ctx.trigger); });
     return count ? { html: tpl.innerHTML, count } : { html: src, count: 0 };
   }
 
@@ -450,7 +474,8 @@ const SchemaRenames = (function () {
     return count ? { text: JSON.stringify(data), count } : { text: json, count: 0 };
   }
 
-  // Un modèle lu tel que Grist le range ({ id, Contenu, HeaderFooter, … } en texte brut) : ce qu'il faut écrire pour qu'il suive les renommages, ou null.
+  // Un modèle lu tel que Grist le range ({ id, Contenu, HeaderFooter, … } en texte brut) : ce qu'il faut écrire pour qu'il suive les renommages, ou
+  // null.
   function planTemplate(row, m, ctx) {
     const fields = {};
     let count = 0;
@@ -471,8 +496,8 @@ const SchemaRenames = (function () {
     return count ? { id: row.id, fields, count } : null;
   }
 
-  // Les clés de correspondance entre tables : { tableCible, mode, colonneCible, colonneSource } -> ce qui change, ou null. La colonne cible est une colonne de la table cible ; la colonne
-  // source une colonne de la table de la page, que le texte « id » désigne par son identifiant de ligne.
+  // Les clés de correspondance entre tables : { tableCible, mode, colonneCible, colonneSource } -> ce qui change, ou null. La colonne cible est une
+  // colonne de la table cible ; la colonne source une colonne de la table de la page, que le texte « id » désigne par son identifiant de ligne.
   function planLink(rule, m, page) {
     const next = { tableCible: rule.tableCible, mode: rule.mode, colonneCible: rule.colonneCible, colonneSource: rule.colonneSource };
     let count = 0;
@@ -502,8 +527,9 @@ const SchemaRenames = (function () {
 
   function isReadOnly() { return typeof AccessRights !== 'undefined' && AccessRights.get().readOnly; }
 
-  // Le modèle affiché est redessiné par le chemin ordinaire d'un changement de modèle (js/main.js:onTemplateSelectChange), qui relit le cache des modèles. Seulement si la liste montre bien
-  // ce modèle : l'évènement recharge ce que la liste montre. Faux sinon (le modèle reste à l'écran tel qu'il était : la passe est reprise à l'ouverture suivante).
+  // Le modèle affiché est redessiné par le chemin ordinaire d'un changement de modèle (js/main.js:onTemplateSelectChange), qui relit le cache des
+  // modèles. Seulement si la liste montre bien ce modèle : l'évènement recharge ce que la liste montre. Faux sinon (le modèle reste à l'écran tel
+  // qu'il était : la passe est reprise à l'ouverture suivante).
   function redisplayCurrentTemplate(id) {
     const select = document.getElementById('template-select');
     if (!select || select.value !== String(id)) return false;
@@ -518,8 +544,9 @@ const SchemaRenames = (function () {
     return parts.length ? I18n.t('schemaRenames.status', { parts: parts.join(', ') }) : '';
   }
 
-  // L'appel de js/main.js, en toute dernière ligne d'init(). `hooks` : { isUntouched() - vrai tant que la personne n'a rien modifié, notify(texte) - le coin d'état }.
-  // Rend un compte rendu (tests) : { skipped } quand la passe n'a pas lieu ou est reprise plus tard, { bootstrapped }, sinon { renames, variables, templates, links, redisplayed }.
+  // L'appel de js/main.js, en toute dernière ligne d'init(). `hooks` : { isUntouched() - vrai tant que la personne n'a rien modifié, notify(texte) -
+  // le coin d'état }. Rend un compte rendu (tests) : { skipped } quand la passe n'a pas lieu ou est reprise plus tard, { bootstrapped }, sinon
+  // { renames, variables, templates, links, redisplayed }.
   async function checkAfterOpen(hooks) {
     if (running) return { skipped: 'running' };
     running = true;
@@ -541,7 +568,8 @@ const SchemaRenames = (function () {
 
     const m = createMapper(saved, current.snapshot, current.refs);
     const pageName = GristAPI.getCurrentTableId() || await GristAPI.detectTableId(null, 'schemaRenames');
-    // Sans la table de la page, une colonne sans nom de table ne se lirait pas : la passe attend la prochaine ouverture plutôt que d'avancer l'instantané sur une lecture incomplète.
+    // Sans la table de la page, une colonne sans nom de table ne se lirait pas : la passe attend la prochaine ouverture plutôt que d'avancer
+    // l'instantané sur une lecture incomplète.
     if (!pageName) return { skipped: 'noPage' };
     const ctx = { page: m.tableContext(pageName), trigger: Variables.triggerChar() };
     const rows = await fetchTemplateRows();
@@ -555,7 +583,8 @@ const SchemaRenames = (function () {
     const untouched = () => (typeof hooks.isUntouched === 'function' ? hooks.isUntouched() : true);
     if (!untouched()) return Object.assign(summary, { skipped: 'touched' });
 
-    // Lecture, réécriture, écriture à la suite, sans rien d'autre entre : un modèle enregistré par quelqu'un d'autre dans l'intervalle ne serait écrasé que par un intervalle de quelques millisecondes.
+    // Lecture, réécriture et écriture à la suite, sans rien d'autre entre : un modèle enregistré par quelqu'un d'autre ne peut être écrasé que dans
+    // un intervalle de quelques millisecondes.
     if (templates.length) await grist.docApi.applyUserActions(templates.map(t => ['UpdateRecord', Templates.TABLE_NAME, t.id, t.fields]));
     // La clé de la nouvelle table d'abord, l'ancienne retirée ensuite : une panne entre les deux laisse une clé de trop, jamais une clé perdue.
     for (const link of links) {
@@ -575,5 +604,5 @@ const SchemaRenames = (function () {
     return summary;
   }
 
-  return { checkAfterOpen, reset, diff, createMapper, rewriteHtml, rewriteText, rewriteFormula, rewriteCondition, rewriteLoop, rewriteMacro, rewriteHeaderFooter, planTemplate, planLink };
+  return { checkAfterOpen, reset, diff, createMapper, rewriteHtml, rewriteText, rewriteFormula, rewriteCondition, rewriteLoop, rewriteMacro, rewriteHeaderFooter };
 })();

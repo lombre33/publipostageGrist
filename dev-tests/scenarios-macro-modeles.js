@@ -9,9 +9,9 @@
   // --- compareValues : chaque opérateur, y compris le cas numérique (valeur de règle toujours une chaîne saisie dans la modale). ---
   cases.push({
     id: 'macro_compare_operators',
-    description: 'MacroTemplates.compareValues couvre =, ≠, >, <, ≥, ≤ (numérique et texte), contient, vide, non vide',
+    description: 'ConditionRules.compareValues couvre =, ≠, >, <, ≥, ≤ (numérique et texte), contient, vide, non vide',
     run: async () => {
-      const c = MacroTemplates.compareValues;
+      const c = ConditionRules.compareValues;
       const checks = [
         [c(5, '=', '5'), true, 'numérique ='],
         [c(5, '≠', '5'), false, 'numérique ≠'],
@@ -50,7 +50,7 @@
     id: 'macro_compare_values_column_type_aware',
     description: 'compareValues interprète Bool ("Oui"/"Non") et Date/DateTime (objet Date OU secondes UTC, jour/avant/après, fuseau de colonne, "contient", dates invalides rejetées) selon columnType',
     run: async () => {
-      const c = MacroTemplates.compareValues;
+      const c = ConditionRules.compareValues;
       const day26Obj = new Date(Date.UTC(2026, 8, 26)); // forme "onRecord" (objet Date, ex. GristDate)
       const day26Sec = Date.UTC(2026, 8, 26) / 1000; // forme "export en lot" (secondes UTC, js/variable-format.js)
       const day27Obj = new Date(Date.UTC(2026, 8, 27));
@@ -112,7 +112,7 @@
     id: 'macro_compare_list_contains',
     description: '« = » sur une liste (ChoiceList, liste de références) veut dire « contient ce choix » et « ≠ » « ne le contient pas » ; une valeur seule et les autres opérateurs ne changent pas',
     run: async () => {
-      const c = MacroTemplates.compareValues;
+      const c = ConditionRules.compareValues;
       const both = ['Projet', 'Urgent'];
       const checks = [
         [c(both, '=', 'Projet', 'ChoiceList'), true, '= Projet retient Projet + Urgent'],
@@ -147,8 +147,8 @@
     id: 'macro_parse_column_ref',
     description: 'parseColumnRef distingue une colonne nue (table courante) et une référence "Table.Colonne"',
     run: async () => {
-      const bare = MacroTemplates.parseColumnRef('TypeDossier', 'Dossiers');
-      const qualified = MacroTemplates.parseColumnRef('Clients.Statut', 'Dossiers');
+      const bare = ConditionRules.parseColumnRef('TypeDossier', 'Dossiers');
+      const qualified = ConditionRules.parseColumnRef('Clients.Statut', 'Dossiers');
       const pass = bare.table === 'Dossiers' && bare.column === 'TypeDossier' && qualified.table === 'Clients' && qualified.column === 'Statut';
       return { pass, notes: JSON.stringify({ bare, qualified }) };
     },

@@ -1,28 +1,29 @@
-// Droits par personne (demande d'Antoine du 2026-09-28) : lecture seule, export autorisé, commentaires autorisés, lus dans une table Grist choisie dans
-// Réglages > Accès - une ligne par personne, repérée par son email Grist (GristAPI.getCurrentUserEmail), une colonne Booléen par droit, chacune facultative.
-// Le widget ne crée jamais cette table : elle appartient au document, et peut servir en même temps aux règles d'accès de Grist.
+// Droits par personne : lecture seule, export autorisé, commentaires autorisés, lus dans une table Grist choisie dans Réglages > Accès - une ligne
+// par personne, repérée par son email Grist (GristAPI.getCurrentUserEmail), une colonne Booléen par droit, chacune facultative. Le widget ne crée
+// jamais cette table : elle appartient au document, et peut servir en même temps aux règles d'accès de Grist.
 //
-// Le réglage vit dans les options du widget (grist.setOption, clé OPTION_KEY) : partagé par tous ceux qui ouvrent CETTE vue, mais seulement une fois
-// enregistré côté Grist - setOption ne pose qu'un brouillon de la section, que Grist propose d'enregistrer par un bouton en haut du widget (vérifié à la
-// source grist-core, ViewSectionRec.activeCustomOptions / ViewSectionMenu.ts doSave).
+// Le réglage vit dans les options du widget (grist.setOption, clé OPTION_KEY) : partagé par tous ceux qui ouvrent cette vue, mais seulement une fois
+// enregistré côté Grist - setOption ne pose qu'un brouillon de la section, que Grist propose d'enregistrer par un bouton en haut du widget (voir
+// ViewSectionRec.activeCustomOptions et ViewSectionMenu.ts doSave dans grist-core).
 //
-// Ce n'est qu'un verrou d'interface (js/main.js:applyAccessRights grise, jamais ne retire) : seules les règles d'accès de Grist protègent les données.
+// Ce n'est qu'un verrou d'interface (js/main.js:applyAccessRights grise, jamais ne retire) : seules les règles d'accès de Grist protègent les
+// données.
 //
-// Table des droits supprimée ou renommée dans Grist (choix d'Antoine du 2026-10-02, carte « Rendre l'onglet Accès modifiable quand la table des droits n'existe plus ? » : « Rendre modifiable ») :
-// tout le monde reste en lecture seule par précaution (état « error »), mais l'onglet Réglages > Accès, lui, reste modifiable pour en choisir une autre - sans cela, la personne qui a réglé
-// l'Accès n'aurait aucun moyen de se débloquer depuis le widget. Une table seulement CACHÉE par une règle d'accès de Grist ne déverrouille rien (état « error » sans `tableGone`).
+// Table des droits supprimée ou renommée dans Grist : tout le monde reste en lecture seule par précaution (état « error »), mais l'onglet Réglages >
+// Accès, lui, reste modifiable pour en choisir une autre - sans cela, la personne qui a réglé l'Accès n'aurait aucun moyen de se débloquer depuis le
+// widget. Une table seulement cachée par une règle d'accès de Grist ne déverrouille rien (état « error » sans `tableGone`).
 //
-// Case « Ouvrir les personnes en lecture seule sur la Lecture épurée » (choix d'Antoine du 2026-10-02, carte « Un réglage ») : clé cleanReading du même réglage, décochée au départ,
-// grisée tant qu'aucune colonne « Lecture seule » n'est choisie (sans elle, personne n'est en lecture seule). js/main.js la lit à la première réponse des droits
+// Case « Ouvrir les personnes en lecture seule sur la Lecture épurée » : clé cleanReading du même réglage, décochée au départ, grisée tant qu'aucune
+// colonne « Lecture seule » n'est choisie (sans elle, personne n'est en lecture seule). js/main.js la lit à la première réponse des droits
 // (CleanReading.openForReadOnly) : la personne dont la ligne dit « lecture seule » ouvre alors le widget sur le document seul, sans barre d'outils.
 const AccessRights = (function () {
   const OPTION_KEY = 'droitsAcces';
-  // Relecture périodique, seulement quand un réglage existe : une case cochée dans la table pendant que la personne a le widget ouvert s'applique sans
-  // recharger. Aucun abonnement possible à une autre table que celle de la vue (grist.onRecords ne couvre que la section liée).
+  // Relecture périodique, seulement quand un réglage existe : une case cochée dans la table pendant que la personne a le widget ouvert s'applique
+  // sans recharger. Aucun abonnement possible à une autre table que celle de la vue (grist.onRecords ne couvre que la section liée).
   const REFRESH_INTERVAL_MS = 10000;
   const FULL_RIGHTS = Object.freeze({ readOnly: false, canExport: true, canComment: true });
-  // Table réglée mais illisible pour cette personne (règle d'accès Grist qui la lui cache, le plus souvent) : on ne sait pas si elle y figure. Verrouillé
-  // par précaution plutôt que tous les droits - le propriétaire du document, qui lit toujours la table, n'est jamais concerné.
+  // Table réglée mais illisible pour cette personne (règle d'accès Grist qui la lui cache, le plus souvent) : on ne sait pas si elle y figure.
+  // Verrouillé par précaution plutôt que tous les droits - le propriétaire du document, qui lit toujours la table, n'est jamais concerné.
   const LOCKED_RIGHTS = Object.freeze({ readOnly: true, canExport: false, canComment: false });
 
   let config = null;
@@ -30,8 +31,8 @@ const AccessRights = (function () {
   // Tant que le tout premier calcul n'est pas fini (réglage présent au démarrage) : les gardes de js/main.js lisent get() et bloquent toute écriture.
   let pending = false;
   let status = { state: 'off' };
-  // L'identification (GristAPI.getCurrentUserEmail) écrit une ligne dans une table interne : un lecteur Grist ne le peut pas. Un seul essai par session,
-  // pas un toutes les REFRESH_INTERVAL_MS.
+  // L'identification (GristAPI.getCurrentUserEmail) écrit une ligne dans une table interne : un lecteur Grist ne le peut pas. Un seul essai par
+  // session, pas un toutes les REFRESH_INTERVAL_MS.
   let emailLookupFailed = false;
   let refreshTimer = null;
   let computeGeneration = 0;
@@ -75,8 +76,8 @@ const AccessRights = (function () {
     listeners.forEach(cb => { try { cb(get()); } catch (e) { console.error('[AccessRights] un abonné a levé une exception', e); } });
   }
 
-  // La table des droits a-t-elle disparu du document (supprimée ou renommée), au lieu d'être seulement illisible ou cachée à cette personne ? Le test est celui de js/settings-columns.js
-  // (liste des tables, puis lignes blanchies de _grist_Tables) ; sans lui, ou dans le doute : non.
+  // La table des droits a-t-elle disparu du document (supprimée ou renommée), au lieu d'être seulement illisible ou cachée à cette personne ? Le test
+  // est celui de js/settings-columns.js (liste des tables, puis lignes blanchies de _grist_Tables) ; sans lui, ou dans le doute : non.
   async function tableIsGone(table) {
     try { return typeof SettingsColumns !== 'undefined' && (await SettingsColumns.tableGone(table)) === true; }
     catch (e) { return false; }
@@ -101,7 +102,8 @@ const AccessRights = (function () {
     const wanted = normalizeEmail(email);
     const row = rows.find(r => normalizeEmail(r[cfg.emailColumn]) === wanted);
     if (!row) return { rights: FULL_RIGHTS, status: { state: 'notFound', email } };
-    // Une colonne réglée puis supprimée de la table ne compte plus (même effet que « — Aucune — ») : sinon une colonne disparue interdirait l'export à tous.
+    // Une colonne réglée puis supprimée de la table ne compte plus (même effet que « — Aucune — ») : sinon une colonne disparue interdirait l'export
+    // à tous.
     const flag = (col, whenUnset) => ((col && Object.prototype.hasOwnProperty.call(row, col)) ? row[col] === true : whenUnset);
     return {
       rights: { readOnly: flag(cfg.readOnlyColumn, false), canExport: flag(cfg.exportColumn, true), canComment: flag(cfg.commentsColumn, true) },
@@ -119,7 +121,8 @@ const AccessRights = (function () {
     status = result.status;
     pending = false;
     if (!sameRights(before, get()) || statusChanged) notify();
-    // Un changement d'état arrivé tout seul (relecture de 10 s : la table des droits supprimée, ou revenue) alors que l'onglet est ouvert : il le montre sans qu'on le rouvre.
+    // Un changement d'état arrivé tout seul (relecture de 10 s : la table des droits supprimée, ou revenue) alors que l'onglet est ouvert : il le
+    // montre sans qu'on le rouvre.
     if (statusChanged) renderSettingsPanel();
   }
 
@@ -133,8 +136,8 @@ const AccessRights = (function () {
     refreshTimer = null;
   }
 
-  // Les droits en vigueur restent appliqués pendant le calcul qui suit un changement de réglage (pas de passage par l'état verrouillé) : sinon chaque choix
-  // dans l'onglet Accès ferait basculer l'interface en lecture puis la rendrait.
+  // Les droits en vigueur restent appliqués pendant le calcul qui suit un changement de réglage (pas de passage par l'état verrouillé) : sinon chaque
+  // choix dans l'onglet Accès ferait basculer l'interface en lecture puis la rendrait.
   function setConfig(nextConfig) {
     if (JSON.stringify(nextConfig) === JSON.stringify(config)) return Promise.resolve();
     config = nextConfig;
@@ -155,8 +158,8 @@ const AccessRights = (function () {
     return refresh().then(renderSettingsPanel);
   }
 
-  // Appelé par js/main.js juste après GristAPI.init() (les options du widget sont alors connues). Sans réglage : résolu tout de suite, sans le moindre
-  // appel à Grist - en particulier aucune écriture dans la table interne d'identification pour qui n'a jamais réglé cet onglet.
+  // Appelé par js/main.js juste après GristAPI.init() (les options du widget sont alors connues). Sans réglage : résolu tout de suite, sans le
+  // moindre appel à Grist - en particulier aucune écriture dans la table interne d'identification pour qui n'a jamais réglé cet onglet.
   function init() {
     GristAPI.onWidgetOptionsChange(options => {
       setConfig(configFromOptions(options)).catch(e => console.error('[AccessRights] calcul des droits impossible', e));
@@ -170,7 +173,6 @@ const AccessRights = (function () {
     });
   }
 
-  // === Onglet Réglages > Accès ===
   const ids = {
     table: 'settings-access-table',
     email: 'settings-access-email',
@@ -180,11 +182,11 @@ const AccessRights = (function () {
   };
   // La case n'est pas dans `ids` : celui-ci ne contient que les listes, que wireSettingsPanel habille de la recherche.
   const CLEAN_ID = 'settings-access-clean-reading';
-  // Réglage en cours d'édition dans l'onglet - distinct de `config` (normalisé, donc null tant qu'aucune case n'est choisie) : sans lui, choisir la table
-  // puis la colonne email effacerait le choix de table au rendu suivant, faute de colonne de droit déjà choisie.
+  // Réglage en cours d'édition dans l'onglet - distinct de `config` (normalisé, donc null tant qu'aucune case n'est choisie) : sans lui, choisir la
+  // table puis la colonne email effacerait le choix de table au rendu suivant, faute de colonne de droit déjà choisie.
   let draft = null;
-  // Listes avec recherche des choix de l'onglet (la table, puis l'email et les trois droits), comme partout ailleurs dans l'interface. Chaque <select> est rempli
-  // à nouveau à chaque rendu : le champ visible le relit ensuite (`sync`).
+  // Listes avec recherche des choix de l'onglet (la table, puis l'email et les trois droits), comme partout ailleurs dans l'interface. Chaque
+  // <select> est rempli à nouveau à chaque rendu : le champ visible le relit ensuite (`sync`).
   const searches = [];
 
   function el(id) { return document.getElementById(id); }
@@ -246,11 +248,13 @@ const AccessRights = (function () {
     fillSelect(el(ids.readOnly), bools, current.readOnlyColumn, none);
     fillSelect(el(ids.exportCol), bools, current.exportColumn, none);
     fillSelect(el(ids.comments), bools, current.commentsColumn, none);
-    // Verrouillé pour qui est lui-même en lecture seule : sinon l'onglet suffirait à se déverrouiller. Sauf quand la table des droits n'existe plus (`tableGone`) : tout le monde est alors en
-    // lecture seule par précaution, y compris qui l'a réglée, et rien d'autre ne permettrait d'en choisir une autre. Les droits restent en lecture seule jusqu'à ce qu'une table soit rechoisie.
+    // Verrouillé pour qui est lui-même en lecture seule : sinon l'onglet suffirait à se déverrouiller. Sauf quand la table des droits n'existe plus
+    // (`tableGone`) : tout le monde est alors en lecture seule par précaution, y compris qui l'a réglée, et rien d'autre ne permettrait d'en choisir
+    // une autre. Les droits restent en lecture seule jusqu'à ce qu'une table soit rechoisie.
     const locked = get().readOnly && !!config && !status.tableGone;
     Object.keys(ids).forEach(k => { const s = el(ids[k]); if (s) s.disabled = locked; });
-    // La case reste là, grisée, tant qu'aucune colonne « Lecture seule » n'est choisie (rien ne disparaît, on grise) ; verrouillée aussi pour qui est lui-même en lecture seule.
+    // La case reste là, grisée, tant qu'aucune colonne « Lecture seule » n'est choisie (rien ne disparaît, on grise) ; verrouillée aussi pour qui est
+    // lui-même en lecture seule.
     const cleanBox = el(CLEAN_ID);
     if (cleanBox) {
       cleanBox.checked = !!current.cleanReading;
@@ -268,12 +272,13 @@ const AccessRights = (function () {
   }
 
   function readDraftFromPanel() {
+    const valueOf = id => (el(id) ? el(id).value : '');
     return {
-      table: el(ids.table) ? el(ids.table).value : '',
-      emailColumn: el(ids.email) ? el(ids.email).value : '',
-      readOnlyColumn: el(ids.readOnly) ? el(ids.readOnly).value : '',
-      exportColumn: el(ids.exportCol) ? el(ids.exportCol).value : '',
-      commentsColumn: el(ids.comments) ? el(ids.comments).value : '',
+      table: valueOf(ids.table),
+      emailColumn: valueOf(ids.email),
+      readOnlyColumn: valueOf(ids.readOnly),
+      exportColumn: valueOf(ids.exportCol),
+      commentsColumn: valueOf(ids.comments),
       cleanReading: !!(el(CLEAN_ID) && el(CLEAN_ID).checked),
     };
   }
@@ -322,5 +327,5 @@ const AccessRights = (function () {
     I18n.onChange(renderSettingsPanel);
   }
 
-  return { OPTION_KEY, init, get, getStatus, getConfig, onChange, refresh, normalizeConfig };
+  return { init, get, getStatus, getConfig, onChange, refresh };
 })();

@@ -1,21 +1,24 @@
-// Écran de création dédié pour les macro modèles (planning/feature-macro-modeles.md) : une modale (même patron que #link-rules-modal/js/variables.js -
-// liste dynamique de lignes avec ajout/suppression, plutôt qu'un nouveau mécanisme) pour composer une page de garde + des annexes conditionnelles, et un
-// panneau résumé affiché à la place de l'éditeur TipTap quand un macro-modèle est le modèle courant (cf. js/main.js:loadMacroIntoEditor).
+// Écran de création des macro-modèles (planning/feature-macro-modeles.md) : une modale (même patron que #link-rules-modal de js/variables.js : liste
+// dynamique de lignes avec ajout et suppression) pour composer une page de garde et des annexes conditionnelles, et un panneau résumé affiché à la
+// place de l'éditeur TipTap quand un macro-modèle est le modèle courant (js/main.js:loadMacroIntoEditor).
 const MacroEditor = (function () {
   let editingId = null;
-  // Copie de travail des slots conditionnels (le slot fixe "page de garde" est géré à part par #macro-editor-cover, cf. collectSlotsForSave) - jamais la
-  // même référence que tpl.macroSlots.slots, pour ne modifier le modèle réellement enregistré qu'au clic sur "Enregistrer".
+  // Copie de travail des slots conditionnels (le slot fixe « page de garde » est géré à part par #macro-editor-cover, voir collectSlotsForSave) :
+  // jamais la même référence que tpl.macroSlots.slots, pour ne modifier le modèle enregistré qu'au clic sur « Enregistrer ».
   let slots = [];
-  // Le macro-modèle dont le résumé est à l'écran (redessiné au changement de langue) et le rappel de js/main.js qui ouvre un de ses modèles dans l'éditeur (stylo d'une ligne du résumé).
+  // Le macro-modèle dont le résumé est à l'écran (redessiné au changement de langue) et le rappel de js/main.js qui ouvre un de ses modèles dans
+  // l'éditeur (stylo d'une ligne du résumé).
   let summaryTpl = null;
   let openTemplate = null;
-  // Rappel de js/main.js quand l'œil d'un modèle du résumé a fini d'écrire la composition dans Grist (voir toggleModelHidden) : { name, hidden, ok }, pour que le coin d'état le dise.
+  // Rappel de js/main.js quand l'œil d'un modèle du résumé a fini d'écrire la composition dans Grist (voir toggleModelHidden) : { name, hidden, ok },
+  // pour que le coin d'état le dise.
   let onVisibilityChange = null;
-  // La page de garde telle qu'elle était dans la composition quand la fenêtre s'est ouverte : « Enregistrer » reconstruit cette position et lui reporte ses modèles masqués (collectSlotsForSave).
+  // La page de garde telle qu'elle était dans la composition quand la fenêtre s'est ouverte : « Enregistrer » reconstruit cette position et lui
+  // reporte ses modèles masqués (collectSlotsForSave).
   let coverKept = null;
 
-  // Un macro-modèle ne peut pas se référencer lui-même ni un autre macro-modèle (pas d'imbrication - hors scope V1), ni un modèle email (pas un contenu
-  // de page). Recalculé à chaque ouverture/rendu plutôt que mis en cache : la liste des modèles peut changer pendant que la modale est ouverte.
+  // Un macro-modèle ne peut pas se référencer lui-même ni un autre macro-modèle (pas d'imbrication), ni un modèle email (pas un contenu de page).
+  // Recalculé à chaque ouverture et chaque rendu plutôt que mis en cache : la liste des modèles peut changer pendant que la modale est ouverte.
   function availableTemplates() {
     return Templates.getCached().filter(t => (t.typeModele || 'document') === 'document');
   }
@@ -26,161 +29,118 @@ const MacroEditor = (function () {
   function slotsContainer() { return document.getElementById('macro-editor-slots'); }
 
   // Champs Colonne / Opérateur / Valeur d'une règle (liste des colonnes, choix réels d'une colonne Choice, indication de type, avertissement
-  // "colonne absente de la ligne") : js/condition-fields.js, partagé avec les variables conditionnelles - jamais recopié ici. La colonne se choisit dans UNE
-  // seule liste avec recherche qui réunit celles de TOUTES les tables, à la suite et sans groupes (demande d'Antoine du 2026-10-01 : « trouver avec son nom la
-  // colonne dans le champ de recherche, pas besoin de séparer les colonnes de la table en cours et les autres ») : celles de la page en nom nu, les autres en
-  // « Table.Colonne ». Choisir une colonne d'une table pas encore liée ouvre la fenêtre de choix de la clé, qui l'enregistre ; Annuler remet la colonne précédente.
+  // « colonne absente de la ligne ») : js/condition-fields.js, partagé avec les variables conditionnelles, jamais recopié ici. La colonne se choisit
+  // dans une seule liste avec recherche qui réunit celles de toutes les tables, à la suite et sans groupes (on trouve une colonne par son nom, sans
+  // séparer celles de la table en cours des autres) : celles de la page en nom nu, les autres en « Table.Colonne ». Choisir une colonne d'une table
+  // pas encore liée ouvre la fenêtre de choix de la clé, qui l'enregistre ; Annuler remet la colonne précédente.
   const COLUMN_FIELD_OPTIONS = { allTables: true, onColumnChosen: ref => ConditionFields.ensureTableLinked(ref) };
 
-  // Liste avec recherche (js/search-select.js) : un modèle se cherche comme une colonne (demande d'Antoine du 2026-09-29). Le <select> reste la source de la
-  // valeur - et la liste native si le composant est indisponible (rend alors null) ; l'appelant appelle `sync()` après l'avoir rempli à nouveau. Rappelé sur un
-  // <select> déjà équipé (la page de garde, posée dans index.html), `attach` rend le même contrôleur : un échec d'une ouverture est retenté à la suivante.
+  // Liste avec recherche (js/search-select.js) : un modèle se cherche comme une colonne. Le <select> reste la source de la valeur, et la liste native
+  // si le composant est indisponible (rend alors null) ; l'appelant appelle `sync()` après l'avoir rempli à nouveau. Rappelé sur un <select> déjà
+  // équipé (la page de garde, posée dans index.html), `attach` rend le même contrôleur : un échec d'une ouverture est retenté à la suivante.
   function searchable(select, opts) {
     try { return SearchSelect.attachTemplates(select, opts); }
     catch (e) { console.warn('[MacroEditor] recherche de modèle indisponible, liste native conservée', e); return null; }
   }
 
+  // Le modèle du cache (Templates.getCached) qui porte cet identifiant, comparé en texte : la fenêtre de composition écrit les identifiants en texte, Grist
+  // les rend en nombre.
+  function cachedTemplate(id) {
+    return Templates.getCached().find(t => String(t.id) === String(id));
+  }
+
+  // Un élément avec sa classe, son texte et ses enfants (tous facultatifs).
+  function node(tag, className, text, children) {
+    const element = document.createElement(tag);
+    if (className) element.className = className;
+    if (text != null) element.textContent = text;
+    (children || []).forEach(child => element.appendChild(child));
+    return element;
+  }
+
+  function option(value, text) {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = text;
+    return opt;
+  }
+
+  function iconButton(className, label, onClick) {
+    const btn = node('button', className);
+    btn.type = 'button';
+    btn.setAttribute('aria-label', label);
+    btn.addEventListener('click', onClick);
+    return btn;
+  }
+
   function fillModeleSelect(select, selectedId, placeholderKey) {
     select.innerHTML = '';
-    const empty = document.createElement('option');
-    empty.value = '';
-    empty.textContent = I18n.t(placeholderKey);
-    select.appendChild(empty);
-    availableTemplates().forEach(t => {
-      const opt = document.createElement('option');
-      opt.value = String(t.id);
-      opt.textContent = t.nom;
-      select.appendChild(opt);
-    });
+    select.appendChild(option('', I18n.t(placeholderKey)));
+    availableTemplates().forEach(t => select.appendChild(option(String(t.id), t.nom)));
     select.value = selectedId != null ? String(selectedId) : '';
+  }
+
+  // Une règle sur deux lignes (cinq contrôles sur une ligne se chevauchaient dans une fenêtre de 520 px : la liste des colonnes recouvrait
+  // l'opérateur, dont le « = » disparaissait) : « Si », la colonne et l'opérateur ; puis, sous la colonne, la valeur et le modèle choisi (→).
+  // La croix, à droite, retire la règle entière. Propre à cette fenêtre : la condition d'une bulle et le filtre d'une boucle
+  // (js/variable-condition.js, js/variable-loop.js) construisent leur ligne avec les mêmes classes .macro-rule-* et gardent une seule ligne.
+  function ruleRow(slot, rule, ruleIndex) {
+    const fields = ConditionFields.buildConditionFields(rule, COLUMN_FIELD_OPTIONS);
+    const connector = node('span', 'macro-rule-connector', I18n.t(ruleIndex === 0 ? 'macro.modal.ruleIf' : 'macro.modal.ruleOrIf'));
+    const arrow = node('span', 'macro-rule-arrow', '→');
+    arrow.setAttribute('aria-hidden', 'true');
+    const modeleSelect = node('select', 'macro-rule-modele');
+    fillModeleSelect(modeleSelect, rule.modeleId, 'macro.modal.choosePlaceholder');
+    modeleSelect.addEventListener('change', () => { rule.modeleId = modeleSelect.value || null; });
+    const lineOne = node('div', 'macro-rule-line', null, [connector, fields.columnWrap, fields.operatorSelect]);
+    const lineTwo = node('div', 'macro-rule-line macro-rule-line-detail', null, [fields.valueSlot, arrow, modeleSelect]);
+    searchable(modeleSelect, { inline: true });
+    const removeRule = () => { slot.rules.splice(ruleIndex, 1); renderSlots(); };
+    const remove = iconButton('macro-rule-remove', I18n.t('macro.modal.removeRule'), removeRule);
+    const body = node('div', 'macro-rule-body', null, [lineOne, lineTwo]);
+    // fields.typeHint vient en dernier, pas avec fields.columnWrap : `.macro-rule-column-type` a flex-basis:100% (css/toolbar-v2.css), donc prend
+    // toujours sa propre ligne en pleine largeur de la règle, quelle que soit sa position dans le HTML ; dans le tiers de largeur de
+    // fields.columnWrap, l'avertissement « colonne absente » (400 px et plus) écrasait tout le reste de la ligne.
+    return node('div', 'macro-rule-row', null, [body, remove, fields.typeHint]);
+  }
+
+  // Le modèle de « Si aucune règle ne correspond » : un des modèles, ou aucun.
+  function defaultSelectFor(slot) {
+    const select = node('select', 'macro-slot-default-select');
+    const skip = option('', I18n.t('macro.modal.defaultSkip'));
+    skip.dataset.placeholder = 'false'; // liste avec recherche : « Ne rien inclure » est un vrai choix, pas un « rien » grisé
+    select.appendChild(skip);
+    availableTemplates().forEach(t => select.appendChild(option(String(t.id), I18n.t('macro.modal.defaultUse', { name: t.nom }))));
+    select.value = slot.defaultModeleId != null ? String(slot.defaultModeleId) : '';
+    select.addEventListener('change', () => { slot.defaultModeleId = select.value || null; });
+    return select;
+  }
+
+  function slotCard(slot, slotIndex) {
+    const removeSlot = () => { slots.splice(slotIndex, 1); renderSlots(); };
+    const title = node('span', 'macro-slot-title', I18n.t('macro.modal.annexeLabel', { n: slotIndex + 1 }));
+    const header = node('div', 'macro-slot-header', null, [title, iconButton('macro-slot-remove', I18n.t('macro.modal.removeSlot'), removeSlot)]);
+    const rules = node('div', 'macro-slot-rules', null, (slot.rules || []).map((rule, ruleIndex) => ruleRow(slot, rule, ruleIndex)));
+    const addRule = node('button', 'macro-rule-add', I18n.t('macro.modal.addRule'));
+    addRule.type = 'button';
+    addRule.addEventListener('click', () => {
+      slot.rules = slot.rules || [];
+      slot.rules.push({ column: '', operator: '=', value: '', modeleId: null });
+      renderSlots();
+    });
+    const defaultLabel = node('label', 'macro-slot-default-label', I18n.t('macro.modal.defaultLabel'));
+    const defaultSelect = defaultSelectFor(slot);
+    const card = node('div', 'macro-slot-card', null, [header, rules, addRule, node('div', 'macro-slot-sep'), defaultLabel, defaultSelect]);
+    searchable(defaultSelect);
+    return card;
   }
 
   function renderSlots() {
     const container = slotsContainer();
     if (!container) return;
     container.innerHTML = '';
-    if (!slots.length) {
-      const empty = document.createElement('div');
-      empty.className = 'macro-slots-empty';
-      empty.textContent = I18n.t('macro.modal.noSlots');
-      container.appendChild(empty);
-    }
-    slots.forEach((slot, slotIndex) => {
-      const card = document.createElement('div');
-      card.className = 'macro-slot-card';
-
-      const header = document.createElement('div');
-      header.className = 'macro-slot-header';
-      const title = document.createElement('span');
-      title.className = 'macro-slot-title';
-      title.textContent = I18n.t('macro.modal.annexeLabel', { n: slotIndex + 1 });
-      const removeSlotBtn = document.createElement('button');
-      removeSlotBtn.type = 'button';
-      removeSlotBtn.className = 'macro-slot-remove';
-      removeSlotBtn.setAttribute('aria-label', I18n.t('macro.modal.removeSlot'));
-      removeSlotBtn.addEventListener('click', () => { slots.splice(slotIndex, 1); renderSlots(); });
-      header.appendChild(title);
-      header.appendChild(removeSlotBtn);
-      card.appendChild(header);
-
-      const rulesBox = document.createElement('div');
-      rulesBox.className = 'macro-slot-rules';
-      (slot.rules || []).forEach((rule, ruleIndex) => {
-        const row = document.createElement('div');
-        row.className = 'macro-rule-row';
-
-        // Une règle sur DEUX lignes (audit UX/UI du 2026-09-29, F8 : cinq contrôles sur une ligne se chevauchaient dans une fenêtre de 520 px, la liste des colonnes
-        // recouvrait l'opérateur dont le « = » disparaissait) : « Si », la colonne et l'opérateur ; puis, sous la colonne, la valeur et le modèle choisi (→). La
-        // croix, à droite, retire la règle entière. Propre à cette fenêtre : la condition d'une bulle et le filtre d'une boucle (js/variable-condition.js,
-        // js/variable-loop.js) construisent leur ligne avec les mêmes classes .macro-rule-* et gardent une seule ligne.
-        const body = document.createElement('div');
-        body.className = 'macro-rule-body';
-        const lineOne = document.createElement('div');
-        lineOne.className = 'macro-rule-line';
-        const lineTwo = document.createElement('div');
-        lineTwo.className = 'macro-rule-line macro-rule-line-detail';
-        body.appendChild(lineOne);
-        body.appendChild(lineTwo);
-        row.appendChild(body);
-
-        const connector = document.createElement('span');
-        connector.className = 'macro-rule-connector';
-        connector.textContent = I18n.t(ruleIndex === 0 ? 'macro.modal.ruleIf' : 'macro.modal.ruleOrIf');
-        lineOne.appendChild(connector);
-
-        const fields = ConditionFields.buildConditionFields(rule, COLUMN_FIELD_OPTIONS);
-        lineOne.appendChild(fields.columnWrap);
-        lineOne.appendChild(fields.operatorSelect);
-        lineTwo.appendChild(fields.valueSlot);
-
-        const arrow = document.createElement('span');
-        arrow.className = 'macro-rule-arrow';
-        arrow.setAttribute('aria-hidden', 'true');
-        arrow.textContent = '→';
-        lineTwo.appendChild(arrow);
-
-        const modeleSelect = document.createElement('select');
-        modeleSelect.className = 'macro-rule-modele';
-        fillModeleSelect(modeleSelect, rule.modeleId, 'macro.modal.choosePlaceholder');
-        modeleSelect.addEventListener('change', () => { rule.modeleId = modeleSelect.value || null; });
-        lineTwo.appendChild(modeleSelect);
-        searchable(modeleSelect, { inline: true });
-
-        const removeRuleBtn = document.createElement('button');
-        removeRuleBtn.type = 'button';
-        removeRuleBtn.className = 'macro-rule-remove';
-        removeRuleBtn.setAttribute('aria-label', I18n.t('macro.modal.removeRule'));
-        removeRuleBtn.addEventListener('click', () => { slot.rules.splice(ruleIndex, 1); renderSlots(); });
-        row.appendChild(removeRuleBtn);
-
-        // Ajouté en DERNIER, pas avec fields.columnWrap : `.macro-rule-column-type` a flex-basis:100% (cf. css/toolbar-v2.css), donc prend TOUJOURS sa
-        // propre ligne en pleine largeur de `row`, quelle que soit sa position dans le HTML - mesuré par le coordinateur (2026-09-28) : à l'intérieur du
-        // <1/3 de largeur de fields.columnWrap, l'avertissement "colonne absente" (400px+) écrasait tout le reste de la ligne.
-        row.appendChild(fields.typeHint);
-
-        rulesBox.appendChild(row);
-      });
-      card.appendChild(rulesBox);
-
-      const addRuleBtn = document.createElement('button');
-      addRuleBtn.type = 'button';
-      addRuleBtn.className = 'macro-rule-add';
-      addRuleBtn.textContent = I18n.t('macro.modal.addRule');
-      addRuleBtn.addEventListener('click', () => {
-        slot.rules = slot.rules || [];
-        slot.rules.push({ column: '', operator: '=', value: '', modeleId: null });
-        renderSlots();
-      });
-      card.appendChild(addRuleBtn);
-
-      const sep = document.createElement('div');
-      sep.className = 'macro-slot-sep';
-      card.appendChild(sep);
-
-      const defaultLabel = document.createElement('label');
-      defaultLabel.className = 'macro-slot-default-label';
-      defaultLabel.textContent = I18n.t('macro.modal.defaultLabel');
-      card.appendChild(defaultLabel);
-      const defaultSelect = document.createElement('select');
-      defaultSelect.className = 'macro-slot-default-select';
-      const skipOpt = document.createElement('option');
-      skipOpt.value = '';
-      skipOpt.textContent = I18n.t('macro.modal.defaultSkip');
-      skipOpt.dataset.placeholder = 'false'; // liste avec recherche : « Ne rien inclure » est un vrai choix, pas un « rien » grisé
-      defaultSelect.appendChild(skipOpt);
-      availableTemplates().forEach(t => {
-        const o = document.createElement('option');
-        o.value = String(t.id);
-        o.textContent = I18n.t('macro.modal.defaultUse', { name: t.nom });
-        defaultSelect.appendChild(o);
-      });
-      defaultSelect.value = slot.defaultModeleId != null ? String(slot.defaultModeleId) : '';
-      defaultSelect.addEventListener('change', () => { slot.defaultModeleId = defaultSelect.value || null; });
-      card.appendChild(defaultSelect);
-      searchable(defaultSelect);
-
-      container.appendChild(card);
-    });
+    if (!slots.length) container.appendChild(node('div', 'macro-slots-empty', I18n.t('macro.modal.noSlots')));
+    slots.forEach((slot, slotIndex) => container.appendChild(slotCard(slot, slotIndex)));
   }
 
   function openModal(tpl) {
@@ -207,8 +167,9 @@ const MacroEditor = (function () {
     if (m) m.style.display = 'none';
   }
 
-  // Les modèles masqués par leur œil (js/macro-templates.js:isModelHidden) restent masqués à travers cette fenêtre : une position reconstruite reprend ceux de ses modèles qui y sont encore (un modèle
-  // retiré ne laisse pas son masquage derrière lui, un modèle mis à sa place repart affiché).
+  // Les modèles masqués par leur œil (js/macro-templates.js:isModelHidden) restent masqués à travers cette fenêtre : une position reconstruite
+  // reprend ceux de ses modèles qui y sont encore (un modèle retiré ne laisse pas son masquage derrière lui, un modèle mis à sa place repart
+  // affiché).
   function collectSlotsForSave() {
     const result = [];
     const coverId = coverSelect() ? coverSelect().value : '';
@@ -220,21 +181,23 @@ const MacroEditor = (function () {
     return { slots: result };
   }
 
-  // Réglages du macro-modèle que cette fenêtre ne montre pas (nom du fichier PDF, en-tête et pied de page, page) : réécrits tels quels avec la composition. Remis à zéro (nom de PDF vide,
-  // en-tête retiré, marges par défaut), ils se perdaient à chaque « Enregistrer ». Le macro-modèle chargé donne ceux de l'écran (screenSettings, fourni par js/main.js : modifications
-  // pas encore enregistrées comprises), un autre ceux de Grist ; un nouveau macro-modèle repart des réglages par défaut.
+  // Réglages du macro-modèle que cette fenêtre ne montre pas (nom du fichier PDF, en-tête et pied de page, page) : réécrits tels quels avec la
+  // composition. Remis à zéro (nom de PDF vide, en-tête retiré, marges par défaut), ils se perdaient à chaque « Enregistrer ». Le macro-modèle chargé
+  // donne ceux de l'écran (screenSettings, fourni par js/main.js : modifications pas encore enregistrées comprises), un autre ceux de Grist ; un
+  // nouveau macro-modèle repart des réglages par défaut.
   let screenSettings = null;
   function settingsToKeep(id = editingId) {
     const none = { nomFichierPDF: '', headerFooter: null, marginsMm: null };
     if (id == null) return none;
     if (screenSettings && String(Templates.getCurrentId()) === String(id)) return screenSettings();
-    const stored = Templates.getCached().find(t => String(t.id) === String(id));
+    const stored = cachedTemplate(id);
     return stored ? { nomFichierPDF: stored.nomFichierPDF || '', headerFooter: stored.headerFooter, marginsMm: stored.marginsMm } : none;
   }
 
-  // Un seul enregistrement à la fois (même retour d'Antoine du 02/10 que js/main.js:onSave) : Grist lent, un deuxième clic sur « Enregistrer » pendant l'écriture d'un macro-modèle tout neuf
-  // en créait un deuxième sous le même nom, l'identifiant de la ligne n'arrivant qu'à la fin. La fenêtre se referme dès que la première écriture est revenue : le clic en trop est ignoré.
-  // Une écriture qui ne revient jamais (connexion perdue) ne bloque pas le bouton au-delà de SAVE_WATCHDOG_MS, comme celles de js/templates.js.
+  // Un seul enregistrement à la fois (comme js/main.js:onSave) : avec Grist lent, un deuxième clic sur « Enregistrer » pendant l'écriture d'un
+  // macro-modèle tout neuf en créait un deuxième sous le même nom, l'identifiant de la ligne n'arrivant qu'à la fin. La fenêtre se referme dès que la
+  // première écriture est revenue : le clic en trop est ignoré. Une écriture qui ne revient jamais (connexion perdue) ne bloque pas le bouton au-delà
+  // de SAVE_WATCHDOG_MS, comme celles de js/templates.js.
   const SAVE_WATCHDOG_MS = 60000;
   let savingSince = 0; // 0 : aucun enregistrement en cours
   async function save(onSaved) {
@@ -242,9 +205,9 @@ const MacroEditor = (function () {
     const nom = nameInput() ? nameInput().value.trim() : '';
     if (!nom) { alert(I18n.t('macro.modal.nameRequired')); return; }
     const macroSlots = collectSlotsForSave();
-    // Un nom déjà pris par un autre modèle devient « nom (2) », « nom (3) »... (demande d'Antoine du 01/10, même règle que js/main.js:settleTemplateName) ; un macro-modèle
-    // qui garde son nom n'est jamais renommé, même s'il a un doublon d'avant cette règle.
-    const stored = editingId != null ? Templates.getCached().find(t => String(t.id) === String(editingId)) : null;
+    // Un nom déjà pris par un autre modèle devient « nom (2) », « nom (3) »... (même règle que js/main.js:settleTemplateName) ; un macro-modèle qui
+    // garde son nom n'est jamais renommé, même s'il a un doublon d'avant cette règle.
+    const stored = editingId != null ? cachedTemplate(editingId) : null;
     const finalName = stored && Templates.sameName(nom, stored.nom) ? nom : Templates.uniqueName(nom, editingId);
     const startedAt = savingSince = Date.now();
     try {
@@ -260,11 +223,11 @@ const MacroEditor = (function () {
     }
   }
 
-  // onSaved(id) : rappel de js/main.js pour rafraîchir la liste des modèles et recharger le macro-modèle enregistré - branché une seule fois à l'init,
-  // même patron que les autres modales de ce fichier (js/main.js:wireLinkRulesModal).
-  // getScreenSettings() : les réglages du macro-modèle chargé tels qu'ils sont à l'écran (voir settingsToKeep), fournis par js/main.js.
-  // onOpenTemplate(id) : ouvre ce modèle dans l'éditeur, depuis le stylo d'une ligne du résumé (js/main.js:openTemplateFromMacro).
-  // onModelVisibility({ name, hidden, ok }) : l'œil d'un modèle du résumé a fini d'écrire la composition (ok) ou n'a pas pu (js/main.js:onMacroModelVisibility, le coin d'état).
+  // onSaved(id) : rappel de js/main.js pour rafraîchir la liste des modèles et recharger le macro-modèle enregistré - branché une seule fois à
+  // l'init, même patron que les autres modales de ce fichier (js/main.js:wireLinkRulesModal). getScreenSettings() : les réglages du macro-modèle
+  // chargé tels qu'ils sont à l'écran (voir settingsToKeep), fournis par js/main.js. onOpenTemplate(id) : ouvre ce modèle dans l'éditeur, depuis le
+  // stylo d'une ligne du résumé (js/main.js:openTemplateFromMacro). onModelVisibility({ name, hidden, ok }) : l'œil d'un modèle du résumé a fini
+  // d'écrire la composition (ok) ou n'a pas pu (js/main.js:onMacroModelVisibility, le coin d'état).
   function wire(onSaved, getScreenSettings, onOpenTemplate, onModelVisibility) {
     screenSettings = typeof getScreenSettings === 'function' ? getScreenSettings : null;
     openTemplate = typeof onOpenTemplate === 'function' ? onOpenTemplate : null;
@@ -285,7 +248,7 @@ const MacroEditor = (function () {
   function describeSummary(tpl) {
     if (!tpl || !tpl.macroSlots || !Array.isArray(tpl.macroSlots.slots) || !tpl.macroSlots.slots.length) return I18n.t('macro.summary.empty');
     const cover = tpl.macroSlots.slots.find(s => s.type === 'fixed');
-    const coverTpl = cover ? Templates.getCached().find(t => String(t.id) === String(cover.modeleId)) : null;
+    const coverTpl = cover ? cachedTemplate(cover.modeleId) : null;
     const annexCount = tpl.macroSlots.slots.filter(s => s.type === 'conditional').length;
     return I18n.t('macro.summary.text', {
       cover: coverTpl ? coverTpl.nom : I18n.t('macro.summary.noCover'),
@@ -293,15 +256,17 @@ const MacroEditor = (function () {
     });
   }
 
-  // Le macro-modèle tel que le cache des modèles le tient MAINTENANT. Le cache est remplacé objet par objet à chaque relecture des modèles (l'enregistrement automatique en fait une toutes les 15 s au
-  // repos) : l'objet reçu par showSummary() peut déjà être périmé, alors que la fenêtre de composition et l'œil d'un modèle doivent partir de la composition à jour.
+  // Le macro-modèle tel que le cache des modèles le tient maintenant. Le cache est remplacé objet par objet à chaque relecture des modèles
+  // (l'enregistrement automatique en fait une toutes les 15 s au repos) : l'objet reçu par showSummary() peut déjà être périmé, alors que la fenêtre
+  // de composition et l'œil d'un modèle doivent partir de la composition à jour.
   function currentTemplate(tpl) {
-    return (tpl && tpl.id != null && Templates.getCached().find(t => String(t.id) === String(tpl.id))) || tpl;
+    return (tpl && tpl.id != null && cachedTemplate(tpl.id)) || tpl;
   }
 
-  // Les modèles de la composition dans l'ordre où on les lit : la page de garde, puis chaque annexe avec le modèle de chacune de ses règles et celui de « Si aucune règle ne correspond » (jamais
-  // deux fois le même dans une annexe), sous les mêmes numéros d'annexe que la fenêtre de composition (renderSlots). Une annexe sans aucun modèle garde sa ligne : le numéro suivant ne saute pas.
-  // `slot` et `slotIndex` disent de quelle position de la composition vient la ligne : c'est dans cette position que l'œil d'un modèle le masque.
+  // Les modèles de la composition dans l'ordre où on les lit : la page de garde, puis chaque annexe avec le modèle de chacune de ses règles et celui
+  // de « Si aucune règle ne correspond » (jamais deux fois le même dans une annexe), sous les mêmes numéros d'annexe que la fenêtre de composition
+  // (renderSlots). Une annexe sans aucun modèle garde sa ligne : le numéro suivant ne saute pas. `slot` et `slotIndex` disent de quelle position de
+  // la composition vient la ligne : c'est dans cette position que l'œil d'un modèle le masque.
   function summaryParts(tpl) {
     const slots = (tpl && tpl.macroSlots && Array.isArray(tpl.macroSlots.slots)) ? tpl.macroSlots.slots : [];
     let annexNumber = 0;
@@ -317,8 +282,9 @@ const MacroEditor = (function () {
     });
   }
 
-  // L'œil d'un modèle : l'icône dit l'état (œil barré = masqué de la Lecture et des exports), `aria-pressed` le dit aux lecteurs d'écran, le nom du modèle se grise. Le nom accessible dit le geste et ne
-  // change pas ; l'info-bulle dit l'état et ce que le clic fait. Écrit aussi bien au dessin du résumé qu'au clic : le bouton reste le même, il garde le focus.
+  // L'œil d'un modèle : l'icône dit l'état (œil barré = masqué de la Lecture et des exports), `aria-pressed` le dit aux lecteurs d'écran, le nom du
+  // modèle se grise. Le nom accessible dit le geste et ne change pas ; l'info-bulle dit l'état et ce que le clic fait. Écrit aussi bien au dessin du
+  // résumé qu'au clic : le bouton reste le même, il garde le focus.
   function paintEye(entry, eye, hidden, name) {
     entry.classList.toggle('is-hidden-model', hidden);
     eye.innerHTML = Icons.svg(hidden ? 'eyeOff' : 'eye');
@@ -327,25 +293,24 @@ const MacroEditor = (function () {
     eye.title = I18n.t(hidden ? 'macro.summary.hiddenTip' : 'macro.summary.hideTip', { name });
   }
 
-  // Un modèle de la composition : son nom, puis son stylo qui l'ouvre dans l'éditeur (openTemplate, fourni par js/main.js, qui retient d'où l'on vient pour le bandeau « Revenir au macro-modèle »),
-  // puis son œil qui le masque de la Lecture et des exports (toggleModelHidden). Un modèle supprimé depuis reste dit, grisé, avec son stylo et son œil grisés : rien ne disparaît.
+  function summaryButton(className, id) {
+    const btn = node('button', className);
+    btn.type = 'button';
+    btn.dataset.templateId = String(id);
+    return btn;
+  }
+
+  // Un modèle de la composition : son nom, puis son stylo qui l'ouvre dans l'éditeur (openTemplate, fourni par js/main.js, qui retient d'où l'on
+  // vient pour le bandeau « Revenir au macro-modèle »), puis son œil qui le masque de la Lecture et des exports (toggleModelHidden). Un modèle
+  // supprimé depuis reste dit, grisé, avec son stylo et son œil grisés : rien ne disparaît.
   function modelEntry(id, found, part) {
-    const entry = document.createElement('span');
-    entry.className = 'macro-summary-model' + (found ? '' : ' is-missing');
-    const name = document.createElement('span');
-    name.className = 'macro-summary-model-name';
-    name.textContent = found ? found.nom : I18n.t('macro.summary.missing');
+    const name = node('span', 'macro-summary-model-name', found ? found.nom : I18n.t('macro.summary.missing'));
     if (found) name.title = found.nom; // un nom long est coupé par « … » : il se lit en entier au survol
-    const edit = document.createElement('button');
-    edit.type = 'button';
-    edit.className = 'macro-summary-edit';
-    edit.dataset.templateId = String(id);
+    const edit = summaryButton('macro-summary-edit', id);
     edit.innerHTML = Icons.svg('edit');
-    const eye = document.createElement('button');
-    eye.type = 'button';
-    eye.className = 'macro-summary-eye';
-    eye.dataset.templateId = String(id);
+    const eye = summaryButton('macro-summary-eye', id);
     eye.dataset.slot = String(part.slotIndex);
+    const entry = node('span', 'macro-summary-model' + (found ? '' : ' is-missing'), null, [name, edit, eye]);
     if (found) {
       const label = I18n.t('macro.summary.edit', { name: found.nom });
       edit.setAttribute('aria-label', label);
@@ -360,25 +325,23 @@ const MacroEditor = (function () {
       eye.innerHTML = Icons.svg('eye');
       eye.setAttribute('aria-label', I18n.t('macro.summary.missing'));
     }
-    entry.appendChild(name);
-    entry.appendChild(edit);
-    entry.appendChild(eye);
     return entry;
   }
 
-  // Les écritures de composition que les yeux demandent, par macro-modèle : { slots, dirty, last }. Une seule écriture à la fois ; les clics qui arrivent pendant qu'elle dure n'en font qu'UNE de
-  // plus, avec la dernière composition demandée (Grist lent : l'écriture relit toute la table des modèles, des secondes). L'écran et le cache disent l'état voulu dès le clic, l'écriture suit.
+  // Les écritures de composition que les yeux demandent, par macro-modèle : { slots, dirty, last }. Une seule écriture à la fois ; les clics qui
+  // arrivent pendant qu'elle dure n'en font qu'une de plus, avec la dernière composition demandée (Grist lent : l'écriture relit toute la table des
+  // modèles, des secondes). L'écran et le cache disent l'état voulu dès le clic, l'écriture suit.
   const eyeWrites = new Map();
 
-  // Écrit la composition d'un macro-modèle dans sa ligne, comme « Enregistrer » de la fenêtre : mêmes réglages gardés (nom du PDF, en-tête et pied, page : ceux de l'écran s'il est chargé, ceux de Grist
-  // sinon), jamais une composition vide ni inventée pour un macro-modèle supprimé depuis.
+  // Écrit la composition d'un macro-modèle dans sa ligne, comme « Enregistrer » de la fenêtre : mêmes réglages gardés (nom du PDF, en-tête et pied,
+  // page : ceux de l'écran s'il est chargé, ceux de Grist sinon), jamais une composition vide ni inventée pour un macro-modèle supprimé depuis.
   async function writeComposition(id, macroSlots) {
-    const stored = Templates.getCached().find(t => String(t.id) === String(id));
+    const stored = cachedTemplate(id);
     if (!stored) throw new Error('macro-modèle introuvable');
     const kept = settingsToKeep(id);
     const { dateModif } = await Templates.save(stored.id, stored.nom, JSON.stringify(macroSlots), kept.nomFichierPDF, kept.headerFooter, kept.marginsMm, 'macro', null);
     // La date que Grist vient de donner à la ligne : le cache la connaît, comme un enregistrement de la fenêtre.
-    const written = Templates.getCached().find(t => String(t.id) === String(id));
+    const written = cachedTemplate(id);
     if (written && dateModif != null) written.dateModif = dateModif;
   }
 
@@ -387,8 +350,8 @@ const MacroEditor = (function () {
     tpl.contenu = JSON.stringify(macroSlots);
   }
 
-  // Les yeux à l'écran disent-ils cette composition ? Faux seulement quand un redessin du résumé (changement de langue, relecture après l'échec d'une autre écriture) les a faits partir d'un cache
-  // des modèles qu'une relecture croisant l'écriture avait remis à l'état d'avant.
+  // Les yeux à l'écran disent-ils cette composition ? Faux seulement quand un redessin du résumé (changement de langue, relecture après l'échec d'une
+  // autre écriture) les a faits partir d'un cache des modèles qu'une relecture croisant l'écriture avait remis à l'état d'avant.
   function eyesShow(macroSlots) {
     const list = document.getElementById('macro-summary-parts');
     if (!list) return true;
@@ -416,22 +379,25 @@ const MacroEditor = (function () {
       try { await Templates.loadAll(); } catch (e) { console.error('[MacroEditor] relecture des modèles impossible', e); }
       if (summaryTpl && String(summaryTpl.id) === String(id)) renderSummary(summaryTpl);
     } else {
-      // Une relecture des modèles qui a croisé l'écriture a pu remettre dans le cache la composition d'avant : il garde celle qui vient d'être écrite.
-      const cached = Templates.getCached().find(t => String(t.id) === String(id));
+      // Une relecture des modèles qui a croisé l'écriture a pu remettre dans le cache la composition d'avant : il garde celle qui vient d'être
+      // écrite.
+      const cached = cachedTemplate(id);
       if (cached && JSON.stringify(cached.macroSlots) !== JSON.stringify(state.slots)) setComposition(cached, state.slots);
       if (summaryTpl && String(summaryTpl.id) === String(id) && !eyesShow(state.slots)) renderSummary(summaryTpl);
     }
     if (onVisibilityChange) onVisibilityChange({ name: state.last.name, hidden: state.last.hidden, ok: !failed });
   }
 
-  // Le clic sur l'œil d'un modèle du résumé : le masque de la Lecture et de toutes les sorties du macro-modèle (js/macro-templates.js:pickModeleId), ou le remet. Le modèle reste dans la composition,
-  // grisé avec son œil barré (rien ne disparaît) ; la composition est écrite dans sa ligne, avec le reste du macro-modèle.
+  // Le clic sur l'œil d'un modèle du résumé : le masque de la Lecture et de toutes les sorties du macro-modèle (js/macro-templates.js:pickModeleId),
+  // ou le remet. Le modèle reste dans la composition, grisé avec son œil barré (rien ne disparaît) ; la composition est écrite dans sa ligne, avec le
+  // reste du macro-modèle.
   function toggleModelHidden(entry, eye, slotIndex, id, name) {
     if (AccessRights.get().readOnly) return;
     const tpl = currentTemplate(summaryTpl);
     if (!tpl || tpl.id == null || !tpl.macroSlots) return;
     const key = String(tpl.id);
-    // La composition la plus récente : celle que l'écriture en cours porte, pas celle du cache, qu'une relecture des modèles a pu remplacer par l'état d'avant.
+    // La composition la plus récente : celle que l'écriture en cours porte, pas celle du cache, qu'une relecture des modèles a pu remplacer par
+    // l'état d'avant.
     const pending = eyeWrites.get(key);
     const base = pending ? pending.slots : tpl.macroSlots;
     const slot = base.slots[slotIndex];
@@ -450,29 +416,16 @@ const MacroEditor = (function () {
   function renderParts(tpl) {
     const list = document.getElementById('macro-summary-parts');
     if (!list) return;
-    // Un œil qui avait le focus le garde si le résumé est redessiné (changement de langue, relecture après un échec) : le clavier ne repart pas du début de la page.
+    // Un œil qui avait le focus le garde si le résumé est redessiné (changement de langue, relecture après un échec) : le clavier ne repart pas du
+    // début de la page.
     const focused = document.activeElement;
     const focusedEye = focused && focused.classList && focused.classList.contains('macro-summary-eye') && list.contains(focused) ? { slot: focused.dataset.slot, id: focused.dataset.templateId } : null;
     list.innerHTML = '';
-    const known = Templates.getCached();
     summaryParts(tpl).forEach(part => {
-      const item = document.createElement('li');
-      item.className = 'macro-summary-part';
-      const label = document.createElement('span');
-      label.className = 'macro-summary-part-label';
-      label.textContent = part.label;
-      const models = document.createElement('span');
-      models.className = 'macro-summary-models';
-      if (!part.ids.length) {
-        const none = document.createElement('span');
-        none.className = 'macro-summary-model-name';
-        none.textContent = I18n.t('macro.summary.noTemplate');
-        models.appendChild(none);
-      }
-      part.ids.forEach(id => models.appendChild(modelEntry(id, known.find(t => String(t.id) === String(id)), part)));
-      item.appendChild(label);
-      item.appendChild(models);
-      list.appendChild(item);
+      const entries = part.ids.map(id => modelEntry(id, cachedTemplate(id), part));
+      if (!entries.length) entries.push(node('span', 'macro-summary-model-name', I18n.t('macro.summary.noTemplate')));
+      const label = node('span', 'macro-summary-part-label', part.label);
+      list.appendChild(node('li', 'macro-summary-part', null, [label, node('span', 'macro-summary-models', null, entries)]));
     });
     if (focusedEye) {
       const again = list.querySelector('.macro-summary-eye[data-slot="' + CSS.escape(focusedEye.slot) + '"][data-template-id="' + CSS.escape(focusedEye.id) + '"]');

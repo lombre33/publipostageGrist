@@ -1,23 +1,27 @@
-// Boucle sur les lignes liées d'une bulle #Variable (maquette validée par Antoine le 2026-09-28, « nickel pour implémentation ») - le moteur, sans
-// fenêtre : lignes parcourues, filtre, tri, déroulé de la zone répétée en lecture et à l'export (js/reader-mode.js, point d'entrée commun du mode
-// Lecture, du PDF, du DOCX et de l'export en lot). Aucune dépendance à l'éditeur : la fenêtre est dans js/variable-loop.js.
+// Boucle sur les lignes liées d'une bulle #Variable : le moteur, sans fenêtre (la fenêtre est dans js/variable-loop.js). Lignes parcourues, filtre,
+// tri, déroulé de la zone répétée en Lecture et à l'export (js/reader-mode.js, point d'entrée commun du mode Lecture, du PDF, du Word et de l'export
+// en lot). Aucune dépendance à l'éditeur.
 //
 // La boucle vit dans l'attribut `loop` du nœud varBadge (js/editor-nodes.js, sérialisé en data-loop), comme la condition d'affichage :
 //   { repeat: 'inline'|'row'|'item'|'paragraph', table, via: null|{ table, column }, filter: null|{ mode, rules }, sort: { column, direction },
 //     empty, emptyText, separator, lastSeparator }
 // - `table` : la table dont les lignes sont parcourues. `via` : une colonne Liste de références de la table de la page (les fiches qu'elle référence,
-//   dans l'ordre de la cellule) ; sans `via`, les lignes de `table` trouvées par la règle de liaison du document (Variables.resolveLinkedRows, la même
-//   que celle qui affiche aujourd'hui toutes les valeurs jointes par des virgules).
-// - `repeat` : ce qui se répète autour de la bulle - la ligne du tableau (<tr>), l'élément de liste (<li>), le paragraphe ou le titre qui la contient,
-//   ou la bulle seule, dans la phrase ('inline' : ses valeurs jointes par `separator`, et `lastSeparator` avant la dernière). Une zone n'a qu'une
-//   boucle, celle de sa première bulle qui en porte une ; les autres bulles de `table` placées dans la zone suivent la même ligne à chaque tour.
-// - Portée sur la bulle plutôt que sur la zone : supprimer ou déplacer la bulle emporte sa boucle, jamais une zone répétée qu'aucune bulle ne permettrait
-//   plus d'ouvrir. Une bulle déplacée hors de sa zone (hors du tableau, de la liste) redevient une bulle ordinaire, en édition comme en lecture.
-// Dans chaque copie de la zone, chaque bulle (et chaque image liée à une variable) est associée à la ligne du tour (bindingOf) : js/variables.js:
-// resolveRawValue lit alors la valeur dans cette ligne (opts.loop) au lieu de chercher les lignes liées - valeur, format, condition et images compris.
+//   dans l'ordre de la cellule) ; sans `via`, les lignes de `table` trouvées par la règle de liaison du document (Variables.resolveLinkedRows, la
+//   même que celle qui affiche aujourd'hui toutes les valeurs jointes par des virgules).
+// - `repeat` : ce qui se répète autour de la bulle - la ligne du tableau (<tr>), l'élément de liste (<li>), le paragraphe ou le titre qui la
+//   contient, ou la bulle seule, dans la phrase ('inline' : ses valeurs jointes par `separator`, et `lastSeparator` avant la dernière). Une zone n'a
+//   qu'une boucle, celle de sa première bulle qui en porte une ; les autres bulles de `table` placées dans la zone suivent la même ligne à chaque
+//   tour.
+// - Portée sur la bulle plutôt que sur la zone : supprimer ou déplacer la bulle emporte sa boucle, jamais une zone répétée qu'aucune bulle ne
+//   permettrait plus d'ouvrir. Une bulle déplacée hors de sa zone (hors du tableau, de la liste) redevient une bulle ordinaire, en édition comme en
+//   lecture.
+// Dans chaque copie de la zone, chaque bulle (et chaque image liée à une variable) est associée à la ligne du tour (bindingOf) :
+// js/variables.js:resolveRawValue lit alors la valeur dans cette ligne (opts.loop) au lieu de chercher les lignes liées - valeur, format, condition
+// et images compris.
 const LoopRules = (function () {
   const REPEATS = ['inline', 'row', 'item', 'paragraph'];
-  // Choix « Si aucune ligne » proposés pour chaque zone, le premier étant celui par défaut (sauf 'inline' dans une cellule de tableau, cf. defaultEmpty).
+  // Choix « Si aucune ligne » proposés pour chaque zone, le premier étant celui par défaut (sauf 'inline' dans une cellule de tableau, cf.
+  // defaultEmpty).
   const EMPTY_MODES = { row: ['header', 'text'], item: ['none', 'text'], paragraph: ['hide', 'text', 'blank'], inline: ['hide', 'text', 'blank'] };
   const TEXT_BLOCK_SELECTOR = 'p, h1, h2, h3, h4, h5, h6';
 
@@ -33,9 +37,9 @@ const LoopRules = (function () {
     const via = raw.via && raw.via.table && raw.via.column ? { table: String(raw.via.table), column: String(raw.via.column) } : null;
     const sortRaw = raw.sort || {};
     const sort = { column: sortRaw.column ? String(sortRaw.column) : '', direction: sortRaw.direction === 'desc' ? 'desc' : 'asc' };
-    // Choix absent ou inconnu (document modifié à la main) : 'blank' pour une bulle seule, le choix par défaut de la zone sinon - jamais un paragraphe
-    // masqué que personne n'a demandé.
-    const empty = EMPTY_MODES[repeat].indexOf(raw.empty) !== -1 ? raw.empty : (repeat === 'inline' ? 'blank' : EMPTY_MODES[repeat][0]);
+    // Choix absent ou inconnu (document modifié à la main) : 'blank' pour une bulle seule, le choix par défaut de la zone sinon - jamais un
+    // paragraphe masqué que personne n'a demandé.
+    const empty = EMPTY_MODES[repeat].indexOf(raw.empty) !== -1 ? raw.empty : defaultEmpty(repeat, repeat === 'inline');
     return {
       repeat, table: String(raw.table), via, filter: ConditionRules.normalizeCondition(raw.filter), sort, empty,
       emptyText: raw.emptyText == null ? '' : String(raw.emptyText),
@@ -48,14 +52,14 @@ const LoopRules = (function () {
     try { return normalizeLoop(JSON.parse(json)); } catch (e) { return null; }
   }
 
-  // Ce qu'une bulle peut parcourir : une variable d'une autre table liée par une règle « match » qui peut trouver plusieurs lignes (la colonne comparée
-  // côté table liée n'est pas son identifiant de ligne, ex. Lignes.Facture = identifiant de la facture), ou une colonne Liste de références de la table
-  // de la page (ex. Factures.Formateurs). Null sinon - colonne ordinaire de la page, ligne unique, table pas liée : la Boucle est grisée.
+  // Ce qu'une bulle peut parcourir : une variable d'une autre table liée par une règle « match » qui peut trouver plusieurs lignes (la colonne
+  // comparée côté table liée n'est pas son identifiant de ligne, ex. Lignes.Facture = identifiant de la facture), ou une colonne Liste de références
+  // de la table de la page (ex. Factures.Formateurs). Null sinon - colonne ordinaire de la page, ligne unique, table pas liée : la Boucle est grisée.
   function sourceFor(attrs, currentTableId) {
     if (!attrs || !attrs.table || !currentTableId) return null;
     if (attrs.table === currentTableId) {
-      // Colonne en chemin (#Projet.Accompagnateur.Membres, GristAPI.resolveColumnPath) : la boucle lit sa liste dans la ligne courante sous le nom d'une seule
-      // colonne, pas d'un chemin - grisée.
+      // Colonne en chemin (#Projet.Accompagnateur.Membres, GristAPI.resolveColumnPath) : la boucle lit sa liste dans la ligne courante sous le nom
+      // d'une seule colonne, pas d'un chemin - grisée.
       if (String(attrs.column).indexOf('.') !== -1) return null;
       const type = GristAPI.getColumnType(attrs.table, attrs.column) || '';
       if (type.indexOf('RefList:') !== 0) return null;
@@ -88,12 +92,13 @@ const LoopRules = (function () {
     return rows.slice().sort((a, b) => (rank(a) - rank(b)) || (a.id - b.id));
   }
 
-  // Lignes parcourues pour la ligne courante, avant filtre et tri : [{ row, anchor }] - `anchor` est la valeur affichée de la fiche dans la colonne Liste
-  // de références (`via`), celle que la bulle de cette colonne montre à chaque tour.
+  // Lignes parcourues pour la ligne courante, avant filtre et tri : [{ row, anchor }] - `anchor` est la valeur affichée de la fiche dans la colonne
+  // Liste de références (`via`), celle que la bulle de cette colonne montre à chaque tour.
   async function linkedItems(loop, tableId, record, fetchRows) {
     if (loop.via) {
       if (loop.via.table !== tableId) return { error: 'via' };
-      // La ligne de grist.onRecord livre les valeurs affichées de la liste, pas les identifiants : relue sous sa forme brute, comme l'export en lot la reçoit.
+      // La ligne de grist.onRecord livre les valeurs affichées de la liste, pas les identifiants : relue sous sa forme brute, comme l'export en lot
+      // la reçoit.
       let pageRow = GristAPI.isRawRow(record) ? record : null;
       if (!pageRow && record.id != null) pageRow = (await fetchRows(tableId)).find(r => r.id === record.id) || null;
       if (!pageRow) return { items: [] };
@@ -115,9 +120,9 @@ const LoopRules = (function () {
     return { items: tableOrder(rows).map(row => ({ row, anchor: undefined })) };
   }
 
-  // Une règle du filtre porte sur une colonne de la table parcourue (nom nu), comparée à la valeur telle que Grist l'affiche (Variables.cellValue : une
-  // Référence vaut sa valeur affichée, une date ses secondes, que ConditionRules.compareValues sait lire). Liste (choix multiples, liste de références) :
-  // « = » et « contient » sont remplis par un seul élément, « ≠ » par aucun, « vide » par une liste vide.
+  // Une règle du filtre porte sur une colonne de la table parcourue (nom nu), comparée à la valeur telle que Grist l'affiche (Variables.cellValue :
+  // une Référence vaut sa valeur affichée, une date ses secondes, que ConditionRules.compareValues sait lire). Liste (choix multiples, liste de
+  // références) : « = » et « contient » sont remplis par un seul élément, « ≠ » par aucun, « vide » par une liste vide.
   function ruleHolds(rule, loop, row) {
     const ref = ConditionRules.parseColumnRef(rule.column, loop.table);
     if (ref.table !== loop.table) return false;
@@ -134,8 +139,8 @@ const LoopRules = (function () {
   function filterHolds(loop, row) {
     const filter = loop.filter;
     if (!filter) return true;
-    const results = filter.rules.map(rule => ruleHolds(rule, loop, row));
-    return filter.mode === 'any' ? results.some(Boolean) : results.every(Boolean);
+    const holds = rule => ruleHolds(rule, loop, row);
+    return filter.mode === 'any' ? filter.rules.some(holds) : filter.rules.every(holds);
   }
 
   function sortKey(value) {
@@ -162,8 +167,9 @@ const LoopRules = (function () {
     return keyed.map(k => k.item);
   }
 
-  // Lignes retenues pour une ligne de la table de la page : { items, total } (total = lignes liées avant le filtre), ou { error } - 'noLink' (table plus
-  // liée) ou 'via' (modèle utilisé sur une autre table que celle de sa colonne Liste de références). `record` : ligne de grist.onRecord ou de fetchTable.
+  // Lignes retenues pour une ligne de la table de la page : { items, total } (total = lignes liées avant le filtre), ou { error } - 'noLink' (table
+  // plus liée) ou 'via' (modèle utilisé sur une autre table que celle de sa colonne Liste de références). `record` : ligne de grist.onRecord ou de
+  // fetchTable.
   async function iterate(loop, tableId, record, ctx) {
     if (!loop || !record || !tableId) return { items: [], total: 0 };
     const fetchRows = (ctx && ctx.fetchRows) || memoFetchRows();
@@ -173,14 +179,14 @@ const LoopRules = (function () {
     return { items: sortItems(loop, kept), total: found.items.length };
   }
 
-  // === Association d'un élément copié à la ligne du tour ===
   const bindings = new WeakMap();
-  // Les blocs de texte conditionnels (js/conditional-text.js), les valeurs conditionnelles (js/conditional-value.js) et les cases conditionnelles (js/conditional-checkbox.js) aussi : copiés avec leur zone, chacun lit la ligne de son tour pour
-  // évaluer sa condition. Et les bulles « Calcul » (js/variable-calc.js) : « Prix × Quantité » dans une ligne répétée donne le total de CETTE ligne. Les QR codes (js/qr-code.js) lisent
-  // la leur pour le texte de leurs colonnes.
+  // Tout ce qui lit la ligne du tour dans une zone copiée : les bulles #Variable, les images liées à une variable, les bulles « Calcul » (« Prix ×
+  // Quantité » dans une ligne répétée donne le total de cette ligne), les QR codes (le texte de leurs colonnes) et les blocs, valeurs et cases
+  // conditionnels (leur condition).
   const BOUND_SELECTOR = '.var-badge, .calc-badge, img.editor-image[data-var-table], img.editor-image[data-qr-text], .conditional-text, .conditional-value, .conditional-checkbox';
   function bindingOf(el) { return (el && bindings.get(el)) || null; }
-  // Ligne du tour ajoutée à ce qu'un élément tient déjà d'une zone englobante (une zone répétée dans une autre, copiée-collée : chacune garde sa table).
+  // Ligne du tour ajoutée à ce qu'un élément tient déjà d'une zone englobante (une zone répétée dans une autre, copiée-collée : chacune garde sa
+  // table).
   function itemBinding(loop, item, inherited) {
     const next = { rows: Object.assign({}, inherited && inherited.rows), anchors: Object.assign({}, inherited && inherited.anchors) };
     next.rows[loop.table] = item.row;
@@ -192,7 +198,6 @@ const LoopRules = (function () {
     clone.querySelectorAll(BOUND_SELECTOR).forEach((el, i) => bindings.set(el, itemBinding(loop, item, src[i] ? bindings.get(src[i]) : null)));
   }
 
-  // === Zones répétées ===
   function zoneOf(badge, repeat, root) {
     let zone = null;
     if (repeat === 'row') zone = badge.closest('tr');
@@ -209,19 +214,21 @@ const LoopRules = (function () {
     }
     return null;
   }
-  // Retire un élément, puis la liste, le tableau ou l'encadré qu'il laisse vide (un <ul> ou un <table> sans ligne ne s'affiche pas, et n'a rien à exporter ; un encadré (js/callout.js)
-  // sans contenu se verrait encore : sa barre et son fond).
+  // Ce que chaque conteneur doit encore avoir pour rester : un <ul> ou un <table> sans ligne ne s'affiche pas et n'a rien à exporter ; un encadré
+  // (js/callout.js) sans contenu se verrait encore : sa barre et son fond.
+  const EMPTY_CONTAINERS = [
+    ['ul, ol', node => !node.querySelector(':scope > li')],
+    ['tbody, thead, tfoot', node => !node.querySelector(':scope > tr')],
+    ['table', node => !node.querySelector('tr')],
+    ['li, .callout', node => !node.children.length && !node.textContent.trim()],
+  ];
+  // Retire un élément, puis, de proche en proche, la liste, le tableau ou l'encadré qu'il laisse vide.
   function removeAndPrune(el) {
     let parent = el.parentElement;
     el.remove();
-    while (parent) {
+    while (parent && EMPTY_CONTAINERS.some(([selector, isEmpty]) => parent.matches(selector) && isEmpty(parent))) {
       const next = parent.parentElement;
-      if (parent.matches('ul, ol') && !parent.querySelector(':scope > li')) parent.remove();
-      else if (parent.matches('tbody, thead, tfoot') && !parent.querySelector(':scope > tr')) parent.remove();
-      else if (parent.matches('table') && !parent.querySelector('tr')) parent.remove();
-      else if (parent.matches('li') && !parent.children.length && !parent.textContent.trim()) parent.remove();
-      else if (parent.matches('.callout') && !parent.children.length && !parent.textContent.trim()) parent.remove();
-      else break;
+      parent.remove();
       parent = next;
     }
   }
@@ -252,8 +259,9 @@ const LoopRules = (function () {
   }
 
   // Déroule chaque zone répétée de `root` (HTML déjà assaini, pas encore résolu) : une copie par ligne retenue, associée à cette ligne ; « si aucune
-  // ligne » sinon. Une boucle qui ne trouve plus sa source (table plus liée) laisse la zone telle quelle : ses bulles affichent alors toutes les valeurs,
-  // jointes par des virgules, comme avant la boucle. Les boucles « dans la phrase » restent sur leur bulle (resolveInline, appelée par js/reader-mode.js).
+  // ligne » sinon. Une boucle qui ne trouve plus sa source (table plus liée) laisse la zone telle quelle : ses bulles affichent alors toutes les
+  // valeurs, jointes par des virgules, comme avant la boucle. Les boucles « dans la phrase » restent sur leur bulle (resolveInline, appelée par
+  // js/reader-mode.js).
   async function expandZones(root, tableId, record, ctx) {
     if (!root || !record || !tableId) return;
     const context = ctx || createContext();
@@ -284,7 +292,6 @@ const LoopRules = (function () {
     }
   }
 
-  // === Bulle en boucle « dans la phrase » ===
   function inlineLoopOf(badge) {
     const loop = parseLoop(badge.getAttribute('data-loop'));
     return loop && loop.repeat === 'inline' ? loop : null;
@@ -295,8 +302,8 @@ const LoopRules = (function () {
     return values.slice(0, -1).join(separator) + last + values[values.length - 1];
   }
   const HIDE_MARKER_CLASS = 'pp-loop-hide-block';
-  // Nœud qui remplace une bulle en boucle sans aucune ligne retenue ; « Masquer le paragraphe » pose un repère que removeHiddenBlocks traite une fois toutes
-  // les bulles remplacées (le paragraphe ne doit pas disparaître pendant que les autres bulles se résolvent encore).
+  // Nœud qui remplace une bulle en boucle sans aucune ligne retenue ; « Masquer le paragraphe » pose un repère que removeHiddenBlocks traite une fois
+  // toutes les bulles remplacées (le paragraphe ne doit pas disparaître pendant que les autres bulles se résolvent encore).
   function emptyInlineNode(loop) {
     if (loop.empty === 'text' && loop.emptyText) {
       const span = document.createElement('span');
@@ -319,9 +326,9 @@ const LoopRules = (function () {
       else marker.remove();
     });
   }
-  // Valeur d'une bulle en boucle « dans la phrase » : `valueFor(binding)` rend la valeur (texte formaté) de la bulle pour une ligne ; les valeurs vides
-  // sont sautées. Renvoie { text } ou { node } (aucune ligne retenue), ou null si la boucle ne trouve plus sa source - la bulle se résout alors comme
-  // avant la boucle.
+  // Valeur d'une bulle en boucle « dans la phrase » : `valueFor(binding)` rend la valeur (texte formaté) de la bulle pour une ligne ; les valeurs
+  // vides sont sautées. Renvoie { text } ou { node } (aucune ligne retenue), ou null si la boucle ne trouve plus sa source - la bulle se résout alors
+  // comme avant la boucle.
   async function resolveInline(badge, loop, tableId, record, ctx, valueFor) {
     const result = await iterate(loop, tableId, record, ctx);
     if (result.error) return null;
@@ -336,7 +343,7 @@ const LoopRules = (function () {
   }
 
   return {
-    EMPTY_MODES, defaultEmpty, normalizeLoop, parseLoop, sourceFor, createContext, iterate, itemBinding, bindingOf,
+    EMPTY_MODES, defaultEmpty, normalizeLoop, sourceFor, createContext, iterate, itemBinding, bindingOf,
     expandZones, inlineLoopOf, resolveInline, removeHiddenBlocks, removeAndPrune, joinValues,
   };
 })();

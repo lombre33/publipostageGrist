@@ -1,39 +1,43 @@
-// Avertissement d'ouverture (point 11 d'Antoine du 2026-10-02, carte « Prévenir quand Accès ou Selon la ligne cite une colonne renommée ou supprimée ? ») : Réglages > Accès
-// (js/access-rights.js) et Réglages > Selon la ligne (js/row-template.js) sont des OPTIONS DU WIDGET qui citent des colonnes - et, pour l'Accès, la table des droits - par leur NOM.
-// Un renommage ou une suppression dans Grist ne les atteint pas : js/schema-renames.js réécrit les modèles et les clés de correspondance, mais les options ne se partagent qu'une
-// fois la vue enregistrée (grist.setOption ne pose qu'un brouillon). La colonne citée compte alors pour « Aucune », sans rien dire : une colonne de droit renommée lève le verrou
-// d'interface, une règle « Selon la ligne » ne correspond plus à rien.
-// Ici, à l'ouverture et une fois le modèle affiché, le coin d'état dit QUEL réglage cite QUOI qui n'existe plus ; rien n'est réécrit, la personne re-choisit dans les Réglages.
-// Sans réglage activé, ce n'est qu'un test : aucun appel à Grist.
-//   SettingsColumns.problems()            -> Promise<{ access, rowTemplate }> : access = { table } (la table des droits a disparu) ou { columns: [noms] } ; rowTemplate = { columns: [noms
-//                                            tels que la règle les cite] } ; null pour un réglage sain, coupé ou incomplet
-//   SettingsColumns.message(found)        -> le texte du coin d'état, dans la langue de l'interface ('' sans problème)
-//   SettingsColumns.checkAfterOpen(hooks) -> Promise<{ message, skipped? }> ; hooks = { notify(texte, estUneErreur), isUntouched() } (js/main.js)
-//   SettingsColumns.tableGone(table)      -> Promise<boolean> : la table est SUPPRIMÉE ou renommée (et pas seulement cachée à cette personne par une règle d'accès) ; faux quand on ne peut pas le
-//                                            savoir. js/access-rights.js s'en sert pour laisser l'onglet Accès modifiable quand la table des droits n'existe plus (choix d'Antoine du 2026-10-02)
+// Avertissement d'ouverture : Réglages > Accès (js/access-rights.js) et Réglages > Selon la ligne (js/row-template.js) sont des options du widget qui
+// citent des colonnes (et, pour l'Accès, la table des droits) par leur nom. Un renommage ou une suppression dans Grist ne les atteint pas :
+// js/schema-renames.js réécrit les modèles et les clés de correspondance, mais les options ne se partagent qu'une fois la vue enregistrée
+// (grist.setOption ne pose qu'un brouillon). La colonne citée compte alors pour « Aucune », sans rien dire : une colonne de droit renommée lève le
+// verrou d'interface, une règle « Selon la ligne » ne correspond plus à rien.
+// À l'ouverture et une fois le modèle affiché, le coin d'état dit donc quel réglage cite quoi qui n'existe plus ; rien n'est réécrit, la personne
+// re-choisit dans les Réglages. Sans réglage activé, ce n'est qu'un test : aucun appel à Grist.
+// - SettingsColumns.problems() -> Promise<{ access, rowTemplate }> : access = { table } (la table des droits a disparu) ou { columns: [noms] } ;
+//   rowTemplate = { columns: [noms tels que la règle les cite] } ; null pour un réglage sain, coupé ou incomplet.
+// - SettingsColumns.message(found) -> le texte du coin d'état, dans la langue de l'interface ('' sans problème).
+// - SettingsColumns.checkAfterOpen(hooks) -> Promise<{ message, skipped? }> ; hooks = { notify(texte, estUneErreur), isUntouched() } (js/main.js).
+// - SettingsColumns.tableGone(table) -> Promise<boolean> : la table est supprimée ou renommée (pas seulement cachée à cette personne par une règle
+//   d'accès) ; faux quand on ne peut pas le savoir. js/access-rights.js s'en sert pour laisser l'onglet Accès modifiable quand la table des droits
+//   n'existe plus.
 const SettingsColumns = (function () {
-  const unique = list => list.filter((name, i) => list.indexOf(name) === i);
+  const unique = list => [...new Set(list)];
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-  // Grist ne connaît pas encore le schéma (métadonnées illisibles : js/grist-api.js:refreshColumnTypes laisse alors tout vide) : on ne sait rien, donc on ne dit rien.
+  // Grist ne connaît pas encore le schéma (métadonnées illisibles : js/grist-api.js:refreshColumnTypes laisse alors tout vide) : on ne sait rien,
+  // donc on ne dit rien.
   function schemaKnown() { return GristAPI.getTables().length > 0; }
   // Les colonnes de `table` sont connues : les types viennent des mêmes métadonnées que cette liste (js/grist-api.js:runSchemaPass).
   function columnsKnown(table) { return GristAPI.getColumns(table).length > 0; }
   function tableExists(table) { return GristAPI.getTables().indexOf(table) !== -1; }
-  // Une table absente de la liste est supprimée OU cachée à cette personne par une règle d'accès : Grist ne liste pas ces tables-là et laisse leur ligne de _grist_Tables, au nom
-  // blanchi (WidgetFrame.ts:listTables, vérifié à la source grist-core le 2026-10-02). Sans aucune ligne blanchie elle est bien supprimée ; avec, on ne peut pas savoir laquelle
-  // des deux c'est, et un message « n'existe plus » serait faux pour qui n'a simplement pas le droit de la lire. Lue une fois, et seulement quand une table manque.
+  // Une table absente de la liste est supprimée ou cachée à cette personne par une règle d'accès : Grist ne liste pas ces tables-là et laisse leur
+  // ligne de _grist_Tables, au nom blanchi (WidgetFrame.ts:listTables dans grist-core). Sans aucune ligne blanchie elle est bien supprimée ; avec, on
+  // ne peut pas savoir laquelle des deux c'est, et un message « n'existe plus » serait faux pour qui n'a simplement pas le droit de la lire. Lue une
+  // fois, et seulement quand une table manque.
   async function mayBeHidden() {
     try { return (await GristAPI.fetchTableRows('_grist_Tables')).some(row => row.tableId === ''); }
     catch (e) { return true; }
   }
-  // Table réellement disparue : le schéma est lu, elle n'y figure plus et aucune table n'est cachée dans le document. Dans le doute (schéma inconnu, liste des tables illisible, table
-  // peut-être cachée) : faux - jamais « disparue » pour qui n'a simplement pas le droit de la lire.
+  // Table réellement disparue : le schéma est lu, elle n'y figure plus et aucune table n'est cachée dans le document. Dans le doute (schéma inconnu,
+  // liste des tables illisible, table peut-être cachée) : faux - jamais « disparue » pour qui n'a simplement pas le droit de la lire.
   async function tableGone(table) {
     return !!table && schemaKnown() && !tableExists(table) && !(await mayBeHidden());
   }
 
-  // Réglage Accès : { table } si la table des droits a disparu (ses colonnes ne se comptent alors pas), { columns } pour celles qui manquent dans l'ordre de l'onglet, null sinon.
+  // Réglage Accès : { table } si la table des droits a disparu (ses colonnes ne se comptent alors pas), { columns } pour celles qui manquent dans
+  // l'ordre de l'onglet, null sinon.
   async function accessProblem() {
     const config = AccessRights.getConfig();
     if (!config || !schemaKnown()) return null;
@@ -44,8 +48,9 @@ const SettingsColumns = (function () {
     return missing.length ? { columns: missing } : null;
   }
 
-  // Réglage Selon la ligne : les colonnes de ses règles qui n'existent plus, écrites comme la règle les cite (nue pour la table de la page, « Table.Colonne » sinon, chemin de
-  // références compris). Coupé, le réglage ne sert à rien : ses règles gardées ne comptent pas. Une colonne nue ne se vérifie qu'avec la table de la page.
+  // Réglage Selon la ligne : les colonnes de ses règles qui n'existent plus, écrites comme la règle les cite (nue pour la table de la page,
+  // « Table.Colonne » sinon, chemin de références compris). Coupé, le réglage ne sert à rien : ses règles gardées ne comptent pas. Une colonne nue ne
+  // se vérifie qu'avec la table de la page.
   async function rowTemplateProblem() {
     const raw = RowTemplate.readRaw();
     if (!raw || !raw.enabled || !raw.rules.length || !schemaKnown()) return null;
@@ -90,8 +95,8 @@ const SettingsColumns = (function () {
     return parts.length ? I18n.t('settingsColumns.status', { parts: parts.join(' ') }) : '';
   }
 
-  // Une personne que son propre droit met en lecture seule n'a pas à lire un message qui ne regarde que qui règle l'Accès. Pas celle que la table des droits illisible verrouille (état
-  // « error » : tout le monde l'est, y compris qui l'a réglée) ni celle dont les droits se calculent encore.
+  // Une personne que son propre droit met en lecture seule n'a pas à lire un message qui ne regarde que qui règle l'Accès. Pas celle que la table des
+  // droits illisible verrouille (état « error » : tout le monde l'est, y compris qui l'a réglée) ni celle dont les droits se calculent encore.
   async function restricted() {
     for (let i = 0; i < 30 && AccessRights.getStatus().state === 'pending'; i++) await sleep(100);
     return AccessRights.getStatus().state === 'found' && AccessRights.get().readOnly;

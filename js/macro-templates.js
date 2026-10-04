@@ -1,38 +1,45 @@
-// Macro modèles (planning/feature-macro-modeles.md) — résolution d'un modèle TypeModele='macro' en un document unique, assemblé à partir d'autres modèles.
-// Aucune dépendance DOM : ce module ne fait que choisir/concaténer du HTML BRUT (non résolu), toujours contre la MÊME ligne/table courante pour tous les
-// slots (décision d'Antoine, 2026-09-20 - cf. le document de cadrage pour le "pourquoi", lié au Select By de Grist). Le HTML résultant est ensuite passé
-// tel quel à ReaderMode.render()/preview() et aux exports PDF/DOCX, EXACTEMENT comme le contenu d'un modèle normal - aucun changement nécessaire dans ces
-// modules pour ce qui est de la résolution #Variable/pagination, qui tourne une seule fois sur le document déjà assemblé.
+// Macro-modèles (planning/feature-macro-modeles.md) : un modèle de type « macro » devient un document unique, assemblé à partir d'autres modèles.
+// Aucune dépendance au DOM : ce module ne fait que choisir et concaténer du HTML brut (non résolu), toujours contre la même ligne et la même table
+// courantes pour tous les slots (le « Select By » de Grist en dépend ; voir le document de cadrage). Le HTML obtenu passe tel quel à
+// ReaderMode.render()/preview() et aux exports PDF et Word, comme le contenu d'un modèle ordinaire : la résolution des #Variable et la pagination
+// tournent une seule fois, sur le document déjà assemblé.
 const MacroTemplates = (function () {
-  // Même marqueur que le nœud TipTap "Saut de page" (js/editor-nodes.js:899) - en réutilisant EXACTEMENT ce HTML, la pagination (reader-mode.js) et les
-  // exports (pdf-export.js/docx-export.js) traitent une frontière de slot comme un saut de page manuel ordinaire, sans code spécifique aux macro modèles.
+  // Même marqueur que le nœud TipTap « Saut de page » (js/editor-nodes.js) : avec exactement ce HTML, la pagination (reader-mode.js) et les exports
+  // (pdf-export.js, docx-export.js) traitent la frontière entre deux slots comme un saut de page manuel ordinaire, sans code propre aux
+  // macro-modèles.
   const PAGE_BREAK_HTML = '<div class="page-break-marker" contenteditable="false">Saut de page</div>';
-  // Le saut de page qui OUVRE le slot de rang `rank` (le 2e, le 3e... du document assemblé) : le même HTML, plus data-macro-slot. Les `top` des images en calque d'un
-  // modèle se comptent depuis le haut de SA première page ; une fois les slots mis bout à bout, la Lecture (ReaderMode.render) et l'export PDF (js/pdf-export.js) s'en
-  // servent pour retrouver où chaque slot commence et y rebaser ses images, sans quoi elles s'empilaient toutes en haut du premier slot.
+  // Le saut de page qui ouvre le slot de rang `rank` (le 2e, le 3e... du document assemblé) : le même HTML, plus data-macro-slot. Les `top` des
+  // images en calque d'un modèle se comptent depuis le haut de sa première page ; une fois les slots mis bout à bout, la Lecture (ReaderMode.render)
+  // et l'export PDF (js/pdf-export.js) s'en servent pour retrouver où chaque slot commence et y rebaser ses images, sans quoi elles s'empileraient
+  // toutes en haut du premier slot.
   function slotBreakHtml(rank) { return PAGE_BREAK_HTML.replace('<div ', '<div data-macro-slot="' + rank + '" '); }
 
-  // Évaluation d'une règle { column, operator, value } contre la ligne courante (compareValues, Bool/Date/fuseau de colonne, avertissement "colonne
-  // absente de la ligne") : js/condition-rules.js, partagé avec les variables conditionnelles - jamais recopié ici.
+  // L'évaluation d'une règle { column, operator, value } contre la ligne courante (comparaison, colonnes Oui/Non et Date, fuseau, avertissement
+  // « colonne absente de la ligne ») est dans js/condition-rules.js, partagée avec les variables conditionnelles.
 
-  // Les modèles qu'une position de la composition peut donner, sans doublon : celui de la page de garde, ou celui de chaque règle d'une annexe puis son modèle par défaut. Le résumé du macro-modèle
-  // (js/macro-editor.js) en fait une ligne par position ; l'œil d'un modèle et l'enregistrement de la fenêtre de composition s'en servent pour savoir lesquels existent encore.
+  // Les modèles qu'une position de la composition peut donner, sans doublon : celui de la page de garde, ou celui de chaque règle d'une annexe puis
+  // son modèle par défaut. Le résumé du macro-modèle (js/macro-editor.js) en fait une ligne par position ; l'œil d'un modèle et l'enregistrement de
+  // la fenêtre de composition s'en servent pour savoir lesquels existent encore.
   function slotModelIds(slot) {
     if (!slot) return [];
-    const ids = slot.type === 'fixed' ? [slot.modeleId] : (Array.isArray(slot.rules) ? slot.rules : []).map(rule => rule && rule.modeleId).concat(slot.defaultModeleId);
-    return ids.filter((id, index) => id != null && id !== '' && ids.findIndex(other => other != null && String(other) === String(id)) === index);
+    const candidates = slot.type === 'fixed'
+      ? [slot.modeleId]
+      : (Array.isArray(slot.rules) ? slot.rules : []).map(rule => rule && rule.modeleId).concat(slot.defaultModeleId);
+    const ids = candidates.filter(id => id != null && id !== '');
+    return ids.filter((id, index) => ids.findIndex(other => String(other) === String(id)) === index);
   }
 
-  // Modèle masqué (œil du résumé, demande d'Antoine du 04/10) : `hiddenModeleIds`, dans SA position de la composition, liste les modèles de cette position que la Lecture et toutes les sorties
-  // (PDF, PDF unique, lots, Word, Excel, courrier) laissent de côté. Le modèle reste dans la composition, avec ses règles : masquer n'enlève rien, démasquer remet tout comme avant. Les
-  // identifiants se comparent en texte (la fenêtre de composition les écrit en texte, Grist les rend en nombre).
+  // Modèle masqué (l'œil du résumé) : `hiddenModeleIds`, dans sa position de la composition, liste les modèles de cette position que la Lecture et
+  // toutes les sorties (PDF, PDF unique, lots, Word, Excel, courrier) laissent de côté. Le modèle reste dans la composition, avec ses règles :
+  // masquer n'enlève rien, démasquer remet tout comme avant. Les identifiants se comparent en texte (la fenêtre de composition les écrit en texte,
+  // Grist les rend en nombre).
   function isModelHidden(slot, modeleId) {
     const hidden = slot && Array.isArray(slot.hiddenModeleIds) ? slot.hiddenModeleIds : [];
     return modeleId != null && modeleId !== '' && hidden.some(id => String(id) === String(modeleId));
   }
 
-  // La composition avec ce modèle masqué (hidden = true) ou affiché (false) dans la position `slotIndex` : une copie, jamais la composition reçue. Une position qui n'a plus rien de masqué perd sa
-  // liste, pour qu'une composition sans modèle masqué reste telle qu'elle était avant cette fonction.
+  // La composition avec ce modèle masqué (hidden = true) ou affiché (false) dans la position `slotIndex` : une copie, jamais la composition reçue.
+  // Une position qui n'a plus rien de masqué perd sa liste, pour qu'une composition sans modèle masqué ne porte aucune clé en plus.
   function withModelHidden(macroSlots, slotIndex, modeleId, hidden) {
     const copy = JSON.parse(JSON.stringify(macroSlots && Array.isArray(macroSlots.slots) ? macroSlots : { slots: [] }));
     const slot = copy.slots[slotIndex];
@@ -43,16 +50,17 @@ const MacroTemplates = (function () {
     return copy;
   }
 
-  // Reporte sur `target` (une position qu'on vient de reconstruire) ceux de ses modèles que `source` (la même position avant la reconstruction) masquait : un modèle retiré de la position ne laisse
-  // pas son masquage derrière lui, un autre modèle mis à sa place repart affiché.
+  // Reporte sur `target` (une position qu'on vient de reconstruire) ceux de ses modèles que `source` (la même position avant la reconstruction)
+  // masquait : un modèle retiré de la position ne laisse pas son masquage derrière lui, un autre modèle mis à sa place repart affiché.
   function keepHidden(target, source) {
     const ids = slotModelIds(target).filter(id => isModelHidden(source, id));
     if (ids.length) target.hiddenModeleIds = ids;
     return target;
   }
 
-  // Renvoie l'id de modèle choisi pour ce slot contre cette ligne/table, ou null si le slot doit être absent du document assemblé (ni règle ni modèle par défaut, ou modèle masqué par son œil).
-  // Le modèle choisi par la première règle qui correspond est le seul candidat, masqué ou non : masquer un modèle ne fait jamais passer une règle suivante ni le modèle par défaut à sa place.
+  // Renvoie l'id de modèle choisi pour ce slot contre cette ligne/table, ou null si le slot doit être absent du document assemblé (ni règle ni modèle
+  // par défaut, ou modèle masqué par son œil). Le modèle choisi par la première règle qui correspond est le seul candidat, masqué ou non : masquer un
+  // modèle ne fait jamais passer une règle suivante ni le modèle par défaut à sa place.
   async function pickModeleId(slot, tableId, record) {
     const chosen = await chooseModeleId(slot, tableId, record);
     return chosen != null && isModelHidden(slot, chosen) ? null : chosen;
@@ -71,8 +79,8 @@ const MacroTemplates = (function () {
     return null;
   }
 
-  // Construit le HTML BRUT (pas encore résolu) du document assemblé : un fragment par slot retenu, séparés par un saut de page. `templates` = le tableau
-  // déjà chargé (Templates.getCached()), passé en paramètre plutôt que lu ici pour rester testable sans dépendre du module Templates dans dev-tests.
+  // Construit le HTML brut (pas encore résolu) du document assemblé : un fragment par slot retenu, séparés par un saut de page. `templates` : le
+  // tableau déjà chargé (Templates.getCached()), passé en paramètre plutôt que lu ici pour rester testable sans le module Templates.
   async function buildConcatenatedHtml(macroSlots, tableId, record, templates) {
     const slots = (macroSlots && Array.isArray(macroSlots.slots)) ? macroSlots.slots : [];
     const fragments = [];
@@ -88,6 +96,5 @@ const MacroTemplates = (function () {
     return fragments.reduce((html, fragment, rank) => html + (rank ? slotBreakHtml(rank) : '') + fragment, '');
   }
 
-  // compareValues/parseColumnRef restent exposés ici (même API qu'avant le déplacement, utilisée par dev-tests/scenarios-macro-modeles.js).
-  return { compareValues: ConditionRules.compareValues, parseColumnRef: ConditionRules.parseColumnRef, pickModeleId, buildConcatenatedHtml, PAGE_BREAK_HTML, slotBreakHtml, slotModelIds, isModelHidden, withModelHidden, keepHidden };
+  return { pickModeleId, buildConcatenatedHtml, PAGE_BREAK_HTML, slotBreakHtml, slotModelIds, isModelHidden, withModelHidden, keepHidden };
 })();
