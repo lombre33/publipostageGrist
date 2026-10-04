@@ -26,7 +26,8 @@
     });
   });
 
-  ['numeric', 'alpha', 'roman'].forEach(style => {
+  // Le style par défaut (decimal) ne s'écrit pas dans le HTML : son absence est le bon résultat.
+  [['numeric', null], ['alpha', 'alpha'], ['roman', 'roman']].forEach(([style, attr]) => {
     cases.push({
       id: 'list_ordered_' + style,
       description: 'Liste numérotée style "' + style + '"',
@@ -36,12 +37,14 @@
         await h.typeText('Item ' + style);
         await h.clickButton('v2-btn-ordered-' + style);
         const html = Editor.getHTML();
-        return { pass: html.includes('<ol'), notes: html };
+        const styled = /data-number-style="([^"]+)"/.exec(html);
+        return { pass: html.includes('<ol') && (styled ? styled[1] : null) === attr, notes: html };
       },
     });
   });
 
-  ['accent-strike', 'classic', 'accent-plain'].forEach(style => {
+  // Le style par défaut (accentStrike) ne s'écrit pas dans le HTML : son absence est le bon résultat.
+  [['accent-strike', null], ['classic', 'classic'], ['accent-plain', 'accentPlain']].forEach(([style, attr]) => {
     cases.push({
       id: 'list_checklist_' + style,
       description: 'Case à cocher style "' + style + '"',
@@ -51,7 +54,8 @@
         await h.typeText('Tâche ' + style);
         await h.clickButton('v2-btn-checklist-' + style);
         const html = Editor.getHTML();
-        return { pass: /data-type="taskList"/.test(html) && /data-checked/.test(html), notes: html };
+        const styled = /data-tasklist-style="([^"]+)"/.exec(html);
+        return { pass: /data-type="taskList"/.test(html) && /data-checked/.test(html) && (styled ? styled[1] : null) === attr, notes: html };
       },
     });
   });

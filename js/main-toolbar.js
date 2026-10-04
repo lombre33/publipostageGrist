@@ -4,6 +4,7 @@
 const MainToolbar = (function () {
   let editor = null;
   function setEditor(ed) { editor = ed; }
+  const byId = id => document.getElementById(id);
   let currentAlign = 'left';
   // Mode email (planning/feature-email-mode.md) : posé par js/main.js quand le modèle courant est un modèle email - pas de module dédié, un simple drapeau
   // relu à chaque syncToolbarState comme inHfMode ci-dessous (HeaderFooterPreview.getHfMode()).
@@ -54,6 +55,12 @@ const MainToolbar = (function () {
     try { search.destroy(); } catch (e) { /* déjà défait */ }
     host.remove();
   }
+  // Ancre = la ligne du menu Image ; si ce menu s'est déjà refermé (ligne en display:none, rectangle nul), repli sur le bouton Image lui-même plutôt que
+  // le coin haut-gauche de la fenêtre.
+  function anchorRectOf(anchorEl) {
+    const rect = anchorEl.getBoundingClientRect();
+    return rect.width || rect.height ? rect : byId('v2-btn-image').getBoundingClientRect();
+  }
   // Rend faux si le composant n'est pas disponible (fichier introuvable, erreur) : l'appelant garde alors la liste simple d'avant.
   function openImageVariableSearch(candidates, anchorEl) {
     let host = null;
@@ -72,15 +79,9 @@ const MainToolbar = (function () {
       host.appendChild(select);
       document.body.appendChild(host);
       select.selectedIndex = -1; // rien de choisi au départ : même la première ligne déclenche `change`
-      // Ancre = la ligne du menu Image ; si ce menu s'est déjà refermé (ligne en display:none, rectangle nul), repli sur le bouton Image lui-même plutôt que
-      // le coin haut-gauche de la fenêtre.
-      const anchorRect = () => {
-        const rect = anchorEl.getBoundingClientRect();
-        return rect.width || rect.height ? rect : document.getElementById('v2-btn-image').getBoundingClientRect();
-      };
       const search = SearchSelect.attachColumns(select, {
         popup: true,
-        anchor: anchorRect,
+        anchor: () => anchorRectOf(anchorEl),
         // Défait après la fin de l'évènement en cours (un blur ou un clic qui ferme le panneau ne doit pas retirer l'élément qui le porte). Le focus revient à
         // l'éditeur quand la fermeture vient du clavier (Échap) ou d'un choix ; après un clic ailleurs, il est déjà là où la personne a cliqué.
         onClose: refocus => { if (refocus) editor.commands.focus(); setTimeout(() => closeImageVariableSearch(instance), 0); },
@@ -131,10 +132,8 @@ const MainToolbar = (function () {
         box.appendChild(item);
       });
     }
-    // Ancre = la ligne du menu Image ; si ce menu s'est déjà refermé (ligne en display:none, rectangle nul), repli sur le bouton Image lui-même plutôt que
-    // le coin haut-gauche de la fenêtre. Placé une fois affiché, pour rester dans la fenêtre (ViewportFit.placePopup).
-    let rect = anchorEl.getBoundingClientRect();
-    if (!rect.width && !rect.height) rect = document.getElementById('v2-btn-image').getBoundingClientRect();
+    // Placé une fois affiché, pour rester dans la fenêtre (ViewportFit.placePopup).
+    const rect = anchorRectOf(anchorEl);
     box.style.display = 'block';
     ViewportFit.placePopup(box, rect, { gap: 4 });
   }
@@ -162,7 +161,7 @@ const MainToolbar = (function () {
     }
   }
   function applyToolbarIcons() {
-    const set = (id, icon) => { const el = document.getElementById(id); if (el) el.innerHTML = Icons.svg(icon); };
+    const set = (id, icon) => { const el = byId(id); if (el) el.innerHTML = Icons.svg(icon); };
     set('v2-btn-bold', 'bold'); set('v2-btn-italic', 'italic');
     set('v2-btn-underline', 'underline'); set('v2-btn-strike', 'strike');
     set('v2-btn-align-left', 'alignLeft'); set('v2-btn-align-center', 'alignCenter');
@@ -196,16 +195,25 @@ const MainToolbar = (function () {
     set('v2-font-chip-caret', 'caretDown');
   }
 
-  const byId = id => document.getElementById(id);
   const setActive = (id, on) => { const el = byId(id); if (el) el.classList.toggle('is-active', !!on); };
   const setDisabled = (id, off) => { const el = byId(id); if (el) el.disabled = !!off; };
   const MARK_BUTTONS = { 'v2-btn-bold': 'bold', 'v2-btn-italic': 'italic', 'v2-btn-underline': 'underline', 'v2-btn-strike': 'strike' };
   const ALIGNMENTS = ['left', 'center', 'right', 'justify'];
-  // Liste -> [attribut qui porte son style, style sans attribut, bouton de chaque style] : dans la liste où est le curseur, le bouton de son style est enfoncé.
-  const LIST_STYLE_BUTTONS = {
-    bulletList: ['bulletStyle', 'disc', { 'v2-btn-bullet-disc': 'disc', 'v2-btn-bullet-circle': 'circle', 'v2-btn-bullet-square': 'square' }],
-    orderedList: ['numberStyle', 'decimal', { 'v2-btn-ordered-numeric': 'decimal', 'v2-btn-ordered-alpha': 'alpha', 'v2-btn-ordered-roman': 'roman' }],
-    taskList: ['taskListStyle', 'accentStrike', { 'v2-btn-checklist-accent-strike': 'accentStrike', 'v2-btn-checklist-classic': 'classic', 'v2-btn-checklist-accent-plain': 'accentPlain' }],
+  // Liste -> attribut qui porte son style, style sans attribut, commande qui la pose, bouton de chaque style : dans la liste où est le curseur, le bouton de son
+  // style est enfoncé.
+  const LIST_STYLES = {
+    bulletList: {
+      attr: 'bulletStyle', fallback: 'disc', command: 'toggleBulletList',
+      buttons: { 'v2-btn-bullet-disc': 'disc', 'v2-btn-bullet-circle': 'circle', 'v2-btn-bullet-square': 'square' },
+    },
+    orderedList: {
+      attr: 'numberStyle', fallback: 'decimal', command: 'toggleOrderedList',
+      buttons: { 'v2-btn-ordered-numeric': 'decimal', 'v2-btn-ordered-alpha': 'alpha', 'v2-btn-ordered-roman': 'roman' },
+    },
+    taskList: {
+      attr: 'taskListStyle', fallback: 'accentStrike', command: 'toggleTaskList',
+      buttons: { 'v2-btn-checklist-accent-strike': 'accentStrike', 'v2-btn-checklist-classic': 'classic', 'v2-btn-checklist-accent-plain': 'accentPlain' },
+    },
   };
 
   // Retour visuel d'état actif, recalculé à chaque sélection/transaction (pas seulement au clic) pour rester juste au clavier/à la souris aussi.
@@ -227,8 +235,8 @@ const MainToolbar = (function () {
     const alignMain = byId('v2-btn-align-main');
     if (alignMain) alignMain.innerHTML = Icons.svg('align' + currentAlign[0].toUpperCase() + currentAlign.slice(1));
     // Bouton "Liste" fusionné : actif dès qu'un des trois types l'est.
-    setActive('v2-btn-bullet', Object.keys(LIST_STYLE_BUTTONS).some(list => editor.isActive(list)));
-    Object.entries(LIST_STYLE_BUTTONS).forEach(([list, [attr, fallback, buttons]]) => {
+    setActive('v2-btn-bullet', Object.keys(LIST_STYLES).some(list => editor.isActive(list)));
+    Object.entries(LIST_STYLES).forEach(([list, { attr, fallback, buttons }]) => {
       const style = editor.isActive(list) ? editor.getAttributes(list)[attr] || fallback : null;
       Object.entries(buttons).forEach(([id, name]) => setActive(id, style === name));
     });
@@ -397,15 +405,15 @@ const MainToolbar = (function () {
   // Libellé de la ligne « Encadré… » : « Modifier l'encadré… » quand le curseur est dans un encadré. Réécrit à chaque changement d'état et de langue (data-i18n ne porte que
   // la version « insérer »).
   function relabelCallout(inside) {
-    const label = document.getElementById('v2-btn-callout-label');
+    const label = byId('v2-btn-callout-label');
     if (label) label.textContent = I18n.t(inside ? 'insert.callout.rowEdit' : 'insert.callout.row');
   }
   // Libellé de la ligne « QR code… » (menu « Lien et blocs de contenu ») : « Modifier le QR code… » quand un QR code est sélectionné. Réécrit à chaque changement d'état et de langue.
   function relabelQr(selected) {
-    const label = document.getElementById('v2-btn-qr-label');
+    const label = byId('v2-btn-qr-label');
     if (label) label.textContent = I18n.t(selected ? 'insert.qr.rowEdit' : 'insert.qr.row');
     // Le nom accessible porte le même verbe que le libellé vu (« Modifier … » / « Insérer … ») ; data-i18n-aria le garde juste au changement de langue.
-    const row = document.getElementById('v2-btn-qr');
+    const row = byId('v2-btn-qr');
     if (row) {
       const key = selected ? 'insert.qr.ariaEdit' : 'insert.qr.aria';
       row.setAttribute('data-i18n-aria', key);
@@ -415,7 +423,7 @@ const MainToolbar = (function () {
   // La loupe (js/find-replace.js) : sa touche (Ctrl+F, ⌘F selon la plateforme, ou celle qu'on a choisie dans Réglages > Raccourcis, js/shortcuts.js) est posée sur l'infobulle et l'aria-label,
   // réécrits à chaque changement de langue ou de touche ; sans touche, sans parenthèses.
   function decorateFindShortcut() {
-    const button = document.getElementById('v2-btn-find');
+    const button = byId('v2-btn-find');
     if (!button) return;
     const label = Shortcuts.label('find');
     const suffix = label ? ' (' + label + ')' : '';
@@ -424,24 +432,21 @@ const MainToolbar = (function () {
   }
   function decorateLinkShortcut() {
     const label = LinkDialog.shortcutLabel();
-    const button = document.getElementById('v2-btn-link');
+    const button = byId('v2-btn-link');
     if (button) button.setAttribute('aria-label', I18n.t('insert.link.aria') + (label ? ' (' + label + ')' : ''));
-    const kbd = document.getElementById('v2-row-link-kbd');
+    const kbd = byId('v2-row-link-kbd');
     if (kbd) kbd.textContent = label;
   }
   // Une seule instance, une seule toolbar : chaque bouton appelle directement une commande TipTap sur la sélection réelle, jamais besoin de savoir "suis-je
   // dans une cellule/colonne" avant d'agir.
   function wireToolbar() {
     applyToolbarIcons();
-    const bind = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('click', fn); };
+    const bind = (id, fn) => { const el = byId(id); if (el) el.addEventListener('click', fn); };
     bind('v2-btn-bold', () => editor.chain().focus().toggleBold().run());
     bind('v2-btn-italic', () => editor.chain().focus().toggleItalic().run());
     bind('v2-btn-underline', () => editor.chain().focus().toggleUnderline().run());
     bind('v2-btn-strike', () => editor.chain().focus().toggleStrike().run());
-    bind('v2-btn-align-left', () => editor.chain().focus().setTextAlign('left').run());
-    bind('v2-btn-align-center', () => editor.chain().focus().setTextAlign('center').run());
-    bind('v2-btn-align-right', () => editor.chain().focus().setTextAlign('right').run());
-    bind('v2-btn-align-justify', () => editor.chain().focus().setTextAlign('justify').run());
+    ALIGNMENTS.forEach(align => bind('v2-btn-align-' + align, () => editor.chain().focus().setTextAlign(align).run()));
     // Bouton principal du groupe survol - réapplique l'alignement qu'il montre actuellement (currentAlign, tenu à jour par syncToolbarState) ; les 4 boutons
     // ci-dessus vivent maintenant dans le panneau révélé au survol (cf. index.html .v2-hover-flyout), inchangés sinon.
     bind('v2-btn-align-main', () => editor.chain().focus().setTextAlign(currentAlign).run());
@@ -457,19 +462,9 @@ const MainToolbar = (function () {
       chain => chain
         .command(({ state, commands }) => { if (!EditorCore.isInsideNode(state.selection.$from, name)) commands[command](); return true; })
         .updateAttributes(name, attrs));
-    // Styles de puce, révélés au survol du bouton "Liste à puces" (maquette "Options au survol").
-    const applyBulletStyle = style => applyListStyle('bulletList', 'toggleBulletList', { bulletStyle: style });
-    bind('v2-btn-bullet-disc', () => applyBulletStyle('disc'));
-    bind('v2-btn-bullet-circle', () => applyBulletStyle('circle'));
-    bind('v2-btn-bullet-square', () => applyBulletStyle('square'));
-    const applyOrderedStyle = style => applyListStyle('orderedList', 'toggleOrderedList', { numberStyle: style });
-    bind('v2-btn-ordered-numeric', () => applyOrderedStyle('decimal'));
-    bind('v2-btn-ordered-alpha', () => applyOrderedStyle('alpha'));
-    bind('v2-btn-ordered-roman', () => applyOrderedStyle('roman'));
-    const applyTaskListStyle = style => applyListStyle('taskList', 'toggleTaskList', { taskListStyle: style });
-    bind('v2-btn-checklist-accent-strike', () => applyTaskListStyle('accentStrike'));
-    bind('v2-btn-checklist-classic', () => applyTaskListStyle('classic'));
-    bind('v2-btn-checklist-accent-plain', () => applyTaskListStyle('accentPlain'));
+    // Les styles, révélés au survol du bouton « Liste à puces ».
+    Object.entries(LIST_STYLES).forEach(([list, { attr, command, buttons }]) =>
+      Object.entries(buttons).forEach(([id, style]) => bind(id, () => applyListStyle(list, command, { [attr]: style }))));
     // No-op sans erreur hors d'une liste, d'où l'état désactivé (syncToolbarState) plutôt qu'un masquage complet du bouton. Sur une sélection de cases, chaque liste des cases se décale
     // (EditorCore.shiftListsInSelectedCells : les commandes ne regardent sinon que la case de tête, et se grisent) ; le premier élément d'une liste ne se décale pas, comme dans une case seule.
     bind('v2-btn-outdent', () => { if (!EditorCore.shiftListsInSelectedCells('out')) editor.chain().focus().liftListItem('listItem').run(); });
@@ -482,7 +477,7 @@ const MainToolbar = (function () {
       const src = await urlToDataUriOrWarn(url);
       await Editor.insertImageAtDefaultSize(src);
     });
-    bind('v2-btn-image-from-variable', () => openImageVariablePicker(document.getElementById('v2-btn-image-from-variable')));
+    bind('v2-btn-image-from-variable', () => openImageVariablePicker(byId('v2-btn-image-from-variable')));
     // Une grille n'a pas de page : le bouton y pose le saut de la ligne (le PDF y commence une page, l'Excel une feuille) ; un second clic le retire.
     bind('v2-btn-page-break', () => {
       if (GridEditor.isActive()) { GridEditor.togglePageBreak(editor); editor.chain().focus().run(); return; }
@@ -533,8 +528,8 @@ const MainToolbar = (function () {
   // Menu "Titre" fusionné (niveau + numérotation) : les deux réglages restent portés par un <select> caché comme source de vérité, le flyout se contente de
   // poser sa valeur puis redéclencher 'change' - pas de restauration de sélection nécessaire (un <span>/<button> ne vole jamais le focus comme un <select>).
   function wireHeadingMenu() {
-    const headerSelect = document.getElementById('v2-header-select');
-    const flyout = document.getElementById('v2-heading-flyout');
+    const headerSelect = byId('v2-header-select');
+    const flyout = byId('v2-heading-flyout');
     if (headerSelect && flyout) {
       flyout.querySelectorAll('.v2-hover-row[data-level]').forEach(row => {
         row.addEventListener('click', () => {
@@ -546,7 +541,7 @@ const MainToolbar = (function () {
     }
     // Réglage de document, pas de sélection : le data-attribute est posé avant de dispatcher la commande pour que le rafraîchissement synchrone du sommaire
     // (déclenché par elle) lise déjà la bonne valeur.
-    const select = document.getElementById('v2-heading-numbering-select');
+    const select = byId('v2-heading-numbering-select');
     if (!select) return;
     select.addEventListener('change', () => {
       editor.view.dom.dataset.headingStyle = select.value;
@@ -562,7 +557,7 @@ const MainToolbar = (function () {
       syncActiveNum();
     }));
     // Lu à la volée à chaque survol : la valeur peut aussi changer sans passer par ici (chargement d'un modèle pose select.value directement).
-    const group = document.getElementById('v2-heading-group');
+    const group = byId('v2-heading-group');
     if (group) group.addEventListener('mouseenter', syncActiveNum);
     syncActiveNum();
   }
@@ -572,7 +567,7 @@ const MainToolbar = (function () {
   function wireSelectionDependentSelects() {
     const { captureSelection, withSavedSelection } = EditorCore.createSelectionPreserver();
     const bindSelect = (id, onChange) => {
-      const el = document.getElementById(id);
+      const el = byId(id);
       if (!el) return;
       el.addEventListener('pointerdown', captureSelection);
       el.addEventListener('change', () => onChange(el.value));
@@ -603,14 +598,14 @@ const MainToolbar = (function () {
       withSavedSelection(chain => chain.setFontFamily(value));
       EditorCore.closeDropdownPanel();
     });
-    EditorCore.wireDropdownButton(document.getElementById('v2-font-chip'), fontPanel, captureSelection);
+    EditorCore.wireDropdownButton(byId('v2-font-chip'), fontPanel, captureSelection);
 
     const sizeHtml = FONT_SIZE_PRESETS.map(s => `<button data-action="${s}">${s}</button>`).join('');
     const sizePanel = EditorCore.createFloatingPanel('v2-format-panel', sizeHtml, (value) => {
       withSavedSelection(chain => chain.setFontSize(value));
       EditorCore.closeDropdownPanel();
     });
-    const sizeValBtn = document.getElementById('v2-size-chip-val');
+    const sizeValBtn = byId('v2-size-chip-val');
     EditorCore.wireDropdownButton(sizeValBtn, sizePanel, captureSelection);
     const stepSize = (delta) => {
       captureSelection();
@@ -619,8 +614,8 @@ const MainToolbar = (function () {
       const nextIdx = idx === -1 ? (delta > 0 ? 0 : FONT_SIZE_PRESETS.length - 1) : Math.min(FONT_SIZE_PRESETS.length - 1, Math.max(0, idx + delta));
       withSavedSelection(chain => chain.setFontSize(FONT_SIZE_PRESETS[nextIdx]));
     };
-    const minusBtn = document.getElementById('v2-size-minus');
-    const plusBtn = document.getElementById('v2-size-plus');
+    const minusBtn = byId('v2-size-minus');
+    const plusBtn = byId('v2-size-plus');
     if (minusBtn) minusBtn.addEventListener('mousedown', (event) => { event.preventDefault(); stepSize(-1); });
     if (plusBtn) plusBtn.addEventListener('mousedown', (event) => { event.preventDefault(); stepSize(1); });
   }
