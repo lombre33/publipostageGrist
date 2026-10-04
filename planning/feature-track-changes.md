@@ -525,12 +525,12 @@ pour :
    stocke l'email par id (`GristAPI.getCurrentUserEmail()`, même mécanisme déjà en cache que les
    commentaires), repli anonyme (`null`) si l'identification échoue. Pas de choix produit distinct
    restant ici.
-4. Comportement des exports (PDF/DOCX/mailto/mode Lecture) face à des changements non tranchés —
-   **toujours ouverte : défaut prudent retenu le 2026-09-21 en attendant, pas une décision produit.**
-   Ces 4 chemins ne sont pas suivi-aware dans l'intégration livrée : ils montrent le HTML brut
-   (`<ins>`/`<del>`/`<span data-type="modification">`) tel quel, jamais un état "propre" recalculé.
-   Reste à trancher : n'exporter que l'état accepté, exporter avec les marques visibles (défaut
-   actuel), ou bloquer l'export tant qu'il reste des changements en attente ?
+4. ~~Comportement des exports (PDF/DOCX/mailto/mode Lecture) face à des changements non tranchés~~ —
+   **tranchée le 2026-10-04 par Antoine** : la Lecture, l'e-mail, le PDF, le Word et l'Excel montrent
+   l'état accepté (la Lecture avec une légère teinte verte, les exports « Acceptées, sans teinte »),
+   le modèle garde ses suggestions en attente - voir « La Lecture comme si tout était accepté » et
+   « Les exports comme la Lecture » plus bas. Jusque-là, ces chemins montraient le HTML brut
+   (`<ins>`/`<del>`/`<span data-type="modification">`), le texte supprimé barré dans les exports.
 5. Rétention de l'historique une fois accepté/refusé — **toujours ouverte : défaut prudent retenu le
    2026-09-21 en attendant.** `TrackChanges.computeMetadata` (js/track-changes.js) ne recopie que les
    ids encore présents dans le document à chaque enregistrement : un id accepté/refusé disparaît donc
@@ -586,7 +586,7 @@ inaperçu jusqu'à ce qu'un utilisateur ouvre un macro-modèle).
   l'existant - `SuiviModifications` stocke `{ [id]: {author, createdAt} }`, `author` posé une seule
   fois par id (jamais réécrit) via `GristAPI.getCurrentUserEmail()`, repli `null` si l'identification
   échoue (même convention que `js/comments.js`).
-- **Questions n°4/n°5 (exports, rétention)** : toujours pas tranchées avec Antoine - défauts prudents
+- **Questions n°4/n°5 (exports, rétention)** : toujours pas tranchées avec Antoine à cette date (la n°4 l'est depuis le 2026-10-04) - défauts prudents
   retenus en attendant, à ne pas confondre avec une décision produit. (4) `pdf-export.js`/
   `docx-export.js`/`mailto-export.js`/`reader-mode.js` ne sont PAS suivi-aware dans ce lot : un document
   avec des suggestions en attente y montre le HTML brut (`<ins>`/`<del>`/`<span data-type=
@@ -650,7 +650,7 @@ prototype) :
   est un vrai risque de stabilité sur un document long, pas juste un détail : nécessite soit un
   arbitrage produit (accepter le risque pour la taille réelle des modèles Grist), soit d'intégrer la
   piste de mitigation par découpage avant tout déploiement à des utilisateurs réels.
-- Les 3 questions produit encore ouvertes (attribution par auteur, comportement des exports, rétention
+- Les 3 questions produit alors ouvertes (celle des exports est tranchée depuis le 2026-10-04) (attribution par auteur, comportement des exports, rétention
   de l'historique — voir plus bas) bloquent une spec complète ; rien n'empêche de commencer
   l'intégration technique du point 1 sans elles, mais l'UI finale (bouton accepter/refuser, export) en
   dépend.
@@ -765,7 +765,7 @@ la barre du haut ne bouge pas (« Tout accepter », « Tout refuser »). La barr
 ## La Lecture comme si tout était accepté (2026-10-04, demande d'Antoine)
 
 Antoine, en testant l'édition collaborative : « en mode lecture afficher comme si toutes les modifications étaient acceptées avec juste un léger changement de couleur là où des modifs sont présentes ».
-La Lecture (`ReaderMode.renderRecord`, `js/reader-mode.js`) passe maintenant le HTML nettoyé par `TrackChanges.acceptedView(wrapper)` (`js/track-changes.js`), avant les zones répétées, les blocs conditionnels
+La Lecture (`ReaderMode.renderRecord`, `js/reader-mode.js`, par `applyAcceptedView`) passe maintenant le HTML nettoyé par `TrackChanges.acceptedView(wrapper)` (`js/track-changes.js`), avant les zones répétées, les blocs conditionnels
 et les bulles : plus de `<ins>`, de `<del>` ni de `data-tc-*`, le texte supprimé a disparu, et ce qui est ajouté ou dont la mise en forme change porte la classe `.pp-tc-changed` (fond vert pâle).
 Le document de l'éditeur n'est jamais touché : rien n'est accepté pour de bon.
 
@@ -786,13 +786,33 @@ Le document de l'éditeur n'est jamais touché : rien n'est accepté pour de bon
   prend un contour de 2 px `#8fd3aa`. Le texte ajouté en ligne est enveloppé dans un `<span class="pp-tc-changed">`, un bloc ajouté ou modifié porte la classe lui-même.
 - **Les deux chemins du HTML** : `Comments.buildReaderHtml` écrivait le document avec un `AnnotatingSerializer` dérivé du sérialiseur de base de ProseMirror, pas de celui du schéma (`installSerializer`) :
   une case suivie s'y écrivait `<ins><td>`, que l'analyseur HTML sort du tableau. Il dérive maintenant de celui du schéma, comme `getHTML()`, et la marque d'une case s'écrit en attribut `data-tc-*`.
-- **Si la vue échoue** : `renderRecord` remet le HTML nettoyé tel quel (suggestions visibles) et écrit l'erreur à la console, plutôt qu'un document à moitié transformé ou une Lecture vide.
+- **Si la vue échoue** : `applyAcceptedView` remet le HTML nettoyé tel quel (suggestions visibles) et écrit l'erreur à la console, plutôt qu'un document à moitié transformé ou une Lecture vide.
 - **Sécurité** : la vue n'écrit aucun HTML (des nœuds seulement : `createElement`, `Range.deleteContents`, `Text.data`) ; le HTML qu'elle reçoit est celui de `HtmlSanitize.clean`, qui garde `ins`, `del`,
   `table`, `col` et les attributs `data-*` ; en cas d'échec, c'est ce même texte nettoyé qui est remis.
 - **Autres sorties** : le corps de l'e-mail (`onCreateEmail` lit le DOM de la Lecture) suit la vue acceptée. PDF, Word et Excel passent par `ReaderMode.preview` (`expandedWrapper`, son propre
-  `HtmlSanitize.clean`) : ils n'ont PAS changé, le texte supprimé y reste barré et le texte inséré n'est pas teinté ; Antoine est interrogé avant tout changement.
-- Tests : groupe `trackChanges` (`trackchanges_reading_*`, 5 cas : treize textes, sept tableaux, la vraie Lecture en clair et en sombre, les repères de position des commentaires, la vue qui échoue) et script
-  Node `suggestionReadingMouse` (`dev-tests/verify-suggestion-reading-mouse.mjs`, 29 vérifications à la vraie souris et au vrai clavier, 700×400 clair et sombre).
+  `HtmlSanitize.clean`) : ils ont suivi ensuite, sans teinte (section suivante).
+- **En-têtes et pieds de page de la Lecture** (`resolveHeaderFooterZone`) : ils passent par la même vue, avec la teinte. L'espaceur du bord de la feuille et les bandes de couture ne sont pas dans
+  `.reader-content` : les règles `.pp-tc-changed` de `css/track-changes.css` les nomment aussi.
+- Tests : groupe `trackChanges` (`trackchanges_reading_*`, 6 cas : treize textes, sept tableaux, la vraie Lecture en clair et en sombre, les repères de position des commentaires, la vue qui échoue, les
+  en-têtes et pieds) et script Node `suggestionReadingMouse` (`dev-tests/verify-suggestion-reading-mouse.mjs`, 29 vérifications à la vraie souris et au vrai clavier, 700×400 clair et sombre).
+
+## Les exports comme la Lecture (2026-10-04, choix d'Antoine)
+
+Carte posée à Antoine : « Faire sortir le PDF, le Word et l'Excel comme la Lecture, modifications acceptées ? » (trois réponses : acceptées sans teinte, avec teinte, laisser tel quel). Il a choisi
+**« Acceptées, sans teinte »** : le PDF, le Word et l'Excel sortent comme si toutes les modifications étaient acceptées, sans couleur ; le modèle garde ses suggestions en attente.
+
+- **Où** : les trois exports lisent le HTML du modèle par `ReaderMode.preview` (`js/reader-mode.js:expandedWrapper`), qui le passe maintenant par `applyAcceptedView(wrapper, cleanHtml, { tint: false })` juste
+  après `HtmlSanitize.clean`, avant les zones répétées, les blocs conditionnels et les bulles - le même ordre que la Lecture. `TrackChanges.acceptedView(root, options)` ne teinte plus quand `options.tint`
+  est faux : `tintAndUnwrap` ne fait que défaire l'enveloppe, `acceptTableSuggestions` ne pose pas `.pp-tc-changed` sur les cases ajoutées. Aucune ligne de `js/pdf-export.js`, `js/docx-export.js` ni
+  `js/xlsx-export.js` n'a changé : le `<del>` n'arrive plus jusqu'à eux (ils le lisaient comme du texte barré).
+- **Ce qui passe par là** : le corps, les quatre fragments d'en-tête et de pied de page de l'export (`js/export-common.js:resolveZone` et `js/pdf-export.js`, tous par `ReaderMode.preview`), les exports par
+  lot, l'assemblage de feuilles, le macro-modèle (son HTML assemblé), et « Un document par valeur » (`ReaderMode.splitBadges` lit `expandedWrapper` : une bulle dans un texte supprimé n'est plus comptée).
+  Sans suggestion en attente, `acceptedView` rend la main d'un seul `querySelector` : rien ne change.
+- **Le modèle** : l'export lit une chaîne de HTML, jamais l'éditeur. Les suggestions restent en attente dans le modèle et dans la colonne Grist ; elles se tranchent comme avant (barre sur la modification,
+  « Tout accepter » / « Tout refuser »).
+- Tests : groupe `trackChanges`, cas `trackchanges_exports_*` (4 : l'aperçu des exports comparé à « Tout accepter » pour les treize textes et sept tableaux, le `.docx` avec ses en-têtes et pieds, le PDF relu par
+  pdf.js, les quatre fragments d'en-tête et de pied) et `trackchanges_reading_header_footer_zones_show_the_accepted_text_with_the_tint` ; groupe `xlsx`, cas
+  `xlsx_pending_suggestions_come_out_as_accepted_without_strike_or_tint`. Les six échouent sans le changement.
 
 ## Sources externes consultées (recherche du 2026-09-18)
 
