@@ -246,7 +246,9 @@ const HeaderFooterPreview = (function () {
   // ainsi (ligne plus haute que la page, cases fusionnées, grille...) suit la règle des blocs que l'export coupe. Une légende d'image ou de tableau
   // (js/caption.js) reste avec son bloc, jamais seule en haut de la page suivante : le bloc et ses légendes comptent pour un seul bloc. Pour un
   // tableau coupé entre deux lignes, la dernière ligne et la légende font ce bloc. Un bloc et sa légende qui ne tiennent pas ensemble dans une page
-  // (Caption.fitsWithCaption) ne sont pas gardés ensemble.
+  // (Caption.fitsWithCaption) ne sont pas gardés ensemble. « Garder avec le suivant » (js/keep-with-next.js) : une suite de paragraphes gardés et le bloc qui la suit passent à la page
+  // suivante d'un seul tenant quand ils ne tiennent pas dans la place restante (le bloc qui la suit compte par sa tête : la première ligne d'un tableau qu'on coupe entre deux lignes), sauf
+  // au-delà de 90 % d'une page.
   function computePageBreaks(tiptapEl, pageContentHeightPx) {
     const breaks = [];
     const zoom = layoutZoom(tiptapEl);
@@ -266,6 +268,24 @@ const HeaderFooterPreview = (function () {
         return;
       }
       if (index >= blankTailStart) return;
+      // « Garder avec le suivant » (js/keep-with-next.js) : les blocs gardés qui se suivent et le bloc qui les suit ne se coupent pas entre deux pages. S'ils ne tiennent pas dans la
+      // place restante, c'est toute la suite qui ouvre la page suivante, au lieu du seul bloc qui ne tient plus.
+      const run = KeepWithNext.runFrom(children, index, blankTailStart);
+      if (consumed > 0 && run) {
+        const heightOf = el => el.getBoundingClientRect().height / zoom;
+        let unit = run.members.reduce((sum, el) => sum + heightOf(el), 0);
+        if (run.target) {
+          const targetCaptions = Caption.captionsAfter(run.target, children[blankTailStart]);
+          const targetCaptionPx = targetCaptions.reduce((sum, el) => sum + heightOf(el), 0);
+          const targetPx = heightOf(run.target);
+          const targetTable = cuttableTable(run.target, pageContentHeightPx, zoom, 0);
+          unit += targetTable ? targetTable.segs[0] : (targetCaptions.length > 0 && Caption.fitsWithCaption(targetPx + targetCaptionPx, pageContentHeightPx) ? targetPx + targetCaptionPx : targetPx);
+        }
+        if (unit > pageContentHeightPx - consumed && KeepWithNext.fits(unit, pageContentHeightPx)) {
+          breaks.push({ afterEl: lastBlock, forced: false, remainingPx: 0 });
+          consumed = 0;
+        }
+      }
       const captions = Caption.captionsAfter(child, children[blankTailStart]);
       const captionPx = captions.reduce((sum, el) => sum + el.getBoundingClientRect().height / zoom, 0);
       const lastCaption = captions[captions.length - 1];

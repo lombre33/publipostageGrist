@@ -193,6 +193,10 @@ const I18n = (function () {
     'align.center': { fr: 'Centrer', en: 'Center' },
     'align.right': { fr: 'Aligner à droite', en: 'Align right' },
     'align.justify': { fr: 'Justifier', en: 'Justify' },
+    // « Garder avec le suivant » (js/keep-with-next.js) : la ligne à cocher du menu Alignement, son nom accessible et la raison de son grisage (info-bulle).
+    'keepNext.row': { fr: 'Garder avec le suivant', en: 'Keep with next' },
+    'keepNext.aria': { fr: 'Garder avec le suivant : le paragraphe reste sur la même page que le bloc qui le suit', en: 'Keep with next: the paragraph stays on the same page as the block that follows it' },
+    'keepNext.notHere': { fr: 'Seulement pour les paragraphes du texte (ni titre, ni légende, ni tableau, liste, colonne, encadré ou citation, ni en-tête ou pied de page)', en: 'Only for text paragraphs (not headings, captions, tables, lists, columns, callouts, quotes, headers or footers)' },
 
     // --- Listes ---
     'list.main.tip': { fr: 'Liste', en: 'List' },

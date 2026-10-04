@@ -2116,6 +2116,42 @@ const PdfExport = (function () {
     const captionPairs = [];
     let captionOwner = null;
     const inFlow = block => !!block && !block._pendingImgNode && !block.absolutePosition;
+    // Un bloc ne porte qu'un `id` : une seconde paire qui part du même bloc (un paragraphe gardé qui porte une image et sa légende) se range sous la première (`more`).
+    const claimKeepId = pair => {
+      const own = typeof pair.start.id === 'string' && pair.start.id.indexOf(CAPTION_KEEP_ID) === 0 ? captionPairs[parseInt(pair.start.id.slice(CAPTION_KEEP_ID.length), 10)] : null;
+      if (own) { own.more = (own.more || []).concat(pair); return; }
+      pair.start.id = CAPTION_KEEP_ID + captionPairs.length;
+      captionPairs.push(pair);
+    };
+    // « Garder avec le suivant » (js/keep-with-next.js) : la suite de paragraphes gardés en cours - { start, last, unitPt, count } : son premier et son dernier bloc posés, la hauteur qu'elle porte (en
+    // points) et son nombre de paragraphes. Le bloc qui la suit la referme en paire que captionKeepRule garde sur une même page (`headOnly` : seule la tête de ce bloc doit y tenir). Tout ce qui
+    // n'est pas un bloc à garder la referme de même quand elle compte au moins deux paragraphes. Au-delà de 90 % d'une page, rien à garder (Caption.fitsWithCaption, même plafond).
+    let keepRun = null;
+    // Un tableau dont les lignes ne se coupent pas (dontBreakRows) range chaque ligne dans un bloc insécable : pdfmake y note la page où elle a commencé de se ranger, avant de la passer à la
+    // suivante, et ne corrige cette page que pour un texte qui porte un `id` (elementWriter.addFragment). Pour un tel tableau, `head` est le premier texte de sa première ligne hors titres (celle
+    // des titres, reprise en haut de chaque page, y fausserait la page de nouveau), muni d'un `id` : captionKeepRule y lit la page où la tête du tableau tombe vraiment.
+    let keepHeadCount = 0;
+    const firstTextOf = node => {
+      if (!node || typeof node !== 'object') return null;
+      if (node.text !== undefined) return node;
+      const inner = node.stack || node.columns || node.ul || node.ol || (node.table && node.table.body && node.table.body[0]);
+      for (const child of inner || []) { const found = firstTextOf(child); if (found) return found; }
+      return null;
+    };
+    const keepHeadOf = block => {
+      if (!block || !block.table || !block.table.dontBreakRows) return null;
+      const body = block.table.body || [];
+      for (const cell of body[Math.min(block.table.headerRows || 0, body.length - 1)] || []) {
+        const text = firstTextOf(cell);
+        if (text) { if (!text.id) text.id = KEEP_HEAD_ID + keepHeadCount++; return text; }
+      }
+      return null;
+    };
+    const closeKeepRun = (run, target, targetPt) => {
+      const last = target || (run && run.count > 1 ? run.last : null);
+      if (!run || !last || !KeepWithNext.fits(run.unitPt + (target ? targetPt : 0), tablePageHeightPt)) return;
+      claimKeepId({ start: run.start, last, head: target ? keepHeadOf(target) : null, headOnly: true });
+    };
     // Le bas, dans l'hôte de mesure, du dernier bloc posé.
     let lastBlockBottomPx = null;
     const push = (block, node) => {
@@ -2123,17 +2159,21 @@ const PdfExport = (function () {
       blocks.push(block); sourceNodes.push(node); blockSlots.push(currentSlot);
     };
     const visit = async node => {
-      if (node.nodeType === Node.TEXT_NODE) { if (node.nodeValue.trim()) { captionOwner = null; push({ ...glyphText(node.nodeValue, { lineHeight: LINE_HEIGHT_RATIO }), margin: [0, 2, 0, 4], ...(pendingPageBreak ? { pageBreak: 'before' } : {}) }, node.parentElement); } pendingPageBreak = false; return; }
+      if (node.nodeType === Node.TEXT_NODE) { if (node.nodeValue.trim()) { captionOwner = null; closeKeepRun(keepRun); keepRun = null; push({ ...glyphText(node.nodeValue, { lineHeight: LINE_HEIGHT_RATIO }), margin: [0, 2, 0, 4], ...(pendingPageBreak ? { pageBreak: 'before' } : {}) }, node.parentElement); } pendingPageBreak = false; return; }
       if (node.nodeType !== Node.ELEMENT_NODE) return;
       const owner = captionOwner;
       captionOwner = null;
+      const run = keepRun;
+      keepRun = null;
       if (node.classList.contains('page-break-marker')) {
+        closeKeepRun(run);
         pendingPageBreak = true; floatCarry = null;
         if (isTopLevel && node.hasAttribute('data-macro-slot')) { currentSlot = pendingSlotStart = node.getAttribute('data-macro-slot'); }
         return;
       }
-      if (node.classList.contains('heading-numbering-config')) return;
+      if (node.classList.contains('heading-numbering-config')) { keepRun = run; return; }
       if (node.classList.contains('toc-marker')) {
+        closeKeepRun(run);
         const tocBlock = { stack: [{ text: I18n.t('pdf.tocTitle'), bold: true, fontSize: 16 }], ...(pendingPageBreak ? { pageBreak: 'before' } : {}) };
         push(tocBlock, node); tocBlocks.push(tocBlock); pendingPageBreak = false; floatCarry = null;
         return;
@@ -2150,6 +2190,7 @@ const PdfExport = (function () {
         // la note.
         if (footnoteEntries.length > footnoteCheckpoint) footnoteBlocks.push(...footnoteEntries.slice(footnoteCheckpoint).map(fe => ({ block: zoneBlock, number: fe.number, text: fe.text })));
         push(zoneBlock, node);
+        closeKeepRun(run, zoneBlock, node.getBoundingClientRect().height * PX_TO_PT);
         pendingPageBreak = false; floatCarry = null;
         return;
       }
@@ -2161,6 +2202,7 @@ const PdfExport = (function () {
         if (calloutBlock && calloutBlock._nestedPending) { nestedPendingAll.push(...calloutBlock._nestedPending); delete calloutBlock._nestedPending; }
         if (footnoteEntries.length > footnoteCheckpoint) footnoteBlocks.push(...footnoteEntries.slice(footnoteCheckpoint).map(fe => ({ block: calloutBlock, number: fe.number, text: fe.text })));
         push(calloutBlock, node);
+        closeKeepRun(run, calloutBlock, node.getBoundingClientRect().height * PX_TO_PT);
         pendingPageBreak = false;
         floatCarry = (calloutBlock && calloutBlock._floatCarryOut) || null;
         if (calloutBlock) delete calloutBlock._floatCarryOut;
@@ -2201,12 +2243,25 @@ const PdfExport = (function () {
           if (i === 0 && newFootnotes) footnoteBlocks.push(...newFootnotes.map(fe => ({ block: b, number: fe.number, text: fe.text })));
         });
         pendingPageBreak = breakLeavesWithLayers;
+        // « Garder avec le suivant » : un paragraphe gardé ouvre ou prolonge la suite, tout autre bloc la referme (il en est la cible : sa tête, la première ligne d'un tableau ou le bloc avec ses légendes,
+        // doit tenir avec elle). Un paragraphe sans bloc dans le flux (rien que des images en calque) ne compte pas.
+        const firstFlow = produced.find(inFlow);
+        const nodePt = nodeRect.height * PX_TO_PT;
+        if (keepable && KeepWithNext.isKeptElement(node)) {
+          keepRun = !firstFlow ? run : run ? Object.assign(run, { last: firstFlow, unitPt: run.unitPt + nodePt, count: run.count + 1 }) : { start: firstFlow, last: firstFlow, unitPt: nodePt, count: 1 };
+        } else if (run && firstFlow) {
+          const firstRow = node.tagName === 'TABLE' ? node.querySelector('tr') : null;
+          const headPt = firstRow ? Math.min(nodePt, firstRow.getBoundingClientRect().height * PX_TO_PT) : (captions.length && Caption.fitsWithCaption(nodePt + captionPt, tablePageHeightPt) ? nodePt + captionPt : nodePt);
+          closeKeepRun(run, firstFlow, headPt);
+        } else if (run) {
+          keepRun = run;
+        }
         if (keepable) {
           if (owner && Caption.isCaptionElement(node)) {
             // Une légende de l'image ou du tableau qui précède : le dernier bloc posé de la paire est celui de cette légende (une autre légende à la suite le prolongera).
             const lastBlock = produced.filter(inFlow).pop();
             if (lastBlock) {
-              if (!owner.pair) { owner.pair = { start: owner.start, last: lastBlock }; owner.start.id = CAPTION_KEEP_ID + captionPairs.length; captionPairs.push(owner.pair); }
+              if (!owner.pair) { owner.pair = { start: owner.start, last: lastBlock }; claimKeepId(owner.pair); }
               else owner.pair.last = lastBlock;
               captionOwner = owner;
             }
@@ -2220,9 +2275,13 @@ const PdfExport = (function () {
         }
         return;
       }
+      // Un conteneur sans bloc propre (une liste) : son premier élément est le bloc qui suit la suite gardée.
+      keepRun = run;
       for (const child of Array.from(node.childNodes)) { await visit(child); }
     };
     for (const child of Array.from(root.childNodes)) { await visit(child); }
+    closeKeepRun(keepRun);
+    keepRun = null;
     // Repli si structure de titres inattendue : le tocBlock garde son stack par défaut (le titre du sommaire seul, posé à sa création) plutôt que de faire
     // échouer tout l'export - même granularité de repli que blockFrom pour un bloc de contenu.
     tocBlocks.forEach(tocBlock => {
@@ -2455,18 +2514,29 @@ const PdfExport = (function () {
   // suivante quand lui et sa légende ne sont plus sur la même page (pdfmake remet alors tout en page, la légende suit). Un bloc déjà en haut de sa page ne bouge pas : le passer à la
   // suivante n'ajouterait qu'une page blanche. Pas d'`unbreakable` : pdfmake note les positions d'un bloc insécable à l'endroit où il ne tient pas, avant de le déplacer - la page d'une note ou
   // d'une image en calque ancrée sur lui serait fausse. Un seul paramètre : pdfmake ne dresse les listes des nœuds voisins (en O(n²)) que pour un rappel qui en déclare davantage.
+  // « Garder avec le suivant » (js/keep-with-next.js) passe par la même règle : la paire d'une suite de paragraphes gardés a pour `last` le bloc qui la suit (`headOnly`) et se sépare quand la TÊTE de
+  // ce bloc n'est pas sur la page du début de la suite (pour un tableau dont les lignes ne se coupent pas, son premier texte hors titres : `head`) ; si ce bloc porte lui-même une légende (sa propre
+  // paire), c'est la fin de la légende qui compte, comme pour lui.
   const CAPTION_KEEP_ID = 'pp-keep-';
+  const KEEP_HEAD_ID = 'pp-head-';
   function captionKeepRule(pairs) {
+    const endOf = pair => {
+      const own = pair.headOnly ? pairs.find(p => p !== pair && p.start === pair.last) : null;
+      const at = (own ? own.last : (pair.head || pair.last)).positions;
+      return at && (pair.headOnly && !own ? at[0] : at[at.length - 1]);
+    };
+    const splits = pair => {
+      const first = pair.start.positions && pair.start.positions[0];
+      const end = endOf(pair);
+      if (!first || !end || first.pageNumber === end.pageNumber) return false;
+      const ownTopMargin = (pair.start._margin && pair.start._margin[1]) || 0;
+      return first.verticalRatio * first.pageInnerHeight > ownTopMargin + 2;
+    };
     return function (currentNode) {
       const id = currentNode && currentNode.id;
       if (typeof id !== 'string' || id.indexOf(CAPTION_KEEP_ID) !== 0) return false;
       const pair = pairs[parseInt(id.slice(CAPTION_KEEP_ID.length), 10)];
-      if (!pair) return false;
-      const first = pair.start.positions && pair.start.positions[0];
-      const end = pair.last.positions && pair.last.positions[pair.last.positions.length - 1];
-      if (!first || !end || first.pageNumber === end.pageNumber) return false;
-      const ownTopMargin = (pair.start._margin && pair.start._margin[1]) || 0;
-      return first.verticalRatio * first.pageInnerHeight > ownTopMargin + 2;
+      return !!pair && [pair].concat(pair.more || []).some(splits);
     };
   }
 

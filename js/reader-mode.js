@@ -60,14 +60,16 @@ const ReaderMode = (function () {
   // tiennent pas ouvrent la page suivante. Le décalage porte alors `rowIndex` (rang de la première ligne de la page qui commence) et `afterIndex` est celui du tableau. Un
   // tableau qu'on ne sait pas couper ainsi (ligne plus haute que la page, cases fusionnées sur plusieurs lignes...) garde la règle ci-dessus.
   // La légende d'une image ou d'un tableau reste avec son bloc, comme dans l'éditeur (js/header-footer-preview.js:computePageBreaks, « Rester ensemble ») : le bloc et ses légendes comptent pour
-  // UN bloc d'une pièce ; pour un tableau coupé entre deux lignes, la dernière ligne et la légende.
+  // UN bloc d'une pièce ; pour un tableau coupé entre deux lignes, la dernière ligne et la légende. « Garder avec le suivant » (js/keep-with-next.js) : une suite de paragraphes gardés et le bloc
+  // qui la suit passent à la page suivante d'un seul tenant quand ils ne tiennent pas dans la place restante, sauf au-delà de 90 % d'une page.
   function computePageBreakOffsets(rootEl, pageContentHeightPx) {
     const rootRect = rootEl.getBoundingClientRect();
     const zoom = layoutZoom(rootEl);
     const offsets = [];
     let consumed = 0;
     let counted = 0;
-    Array.from(rootEl.children).forEach((child, index) => {
+    const children = Array.from(rootEl.children);
+    children.forEach((child, index) => {
       if (index < counted) return;
       const rect = child.getBoundingClientRect();
       const top = (rect.top - rootRect.top) / zoom;
@@ -76,6 +78,24 @@ const ReaderMode = (function () {
         offsets.push({ top: top + height, afterIndex: index, remainingPx: Math.max(0, pageContentHeightPx - consumed) });
         consumed = 0;
         return;
+      }
+      // « Garder avec le suivant » (js/keep-with-next.js), comme dans l'éditeur : les paragraphes gardés qui se suivent et le bloc qui les suit passent ensemble à la page suivante quand
+      // ils ne tiennent pas dans la place restante.
+      const run = KeepWithNext.runFrom(children, index, children.length);
+      if (consumed > 0 && run) {
+        const heightOf = el => el.getBoundingClientRect().height / zoom;
+        let unit = run.members.reduce((sum, el) => sum + heightOf(el), 0);
+        if (run.target) {
+          const targetCaptions = Caption.captionsAfter(run.target);
+          const targetCaptionPx = targetCaptions.reduce((sum, el) => sum + heightOf(el), 0);
+          const targetPx = heightOf(run.target);
+          const targetTable = run.target.tagName === 'TABLE' ? TablePageCut.measure(run.target, run.target, zoom, pageContentHeightPx, null, 0) : null;
+          unit += targetTable ? targetTable.segs[0] : (targetCaptions.length > 0 && Caption.fitsWithCaption(targetPx + targetCaptionPx, pageContentHeightPx) ? targetPx + targetCaptionPx : targetPx);
+        }
+        if (unit > pageContentHeightPx - consumed && KeepWithNext.fits(unit, pageContentHeightPx)) {
+          offsets.push({ top, afterIndex: index - 1, remainingPx: 0 });
+          consumed = 0;
+        }
       }
       const captions = Caption.captionsAfter(child);
       const captionPx = captions.reduce((sum, el) => sum + el.getBoundingClientRect().height / zoom, 0);
