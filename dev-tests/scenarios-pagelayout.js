@@ -38,6 +38,31 @@ window.EditorTestSuites.pageLayout = (function () {
     return zip.file('word/document.xml').async('string');
   }
 
+  // Les éléments que le câblage de js/settings.js manipule dans la fenêtre Réglages.
+  function settingsParts() {
+    const byId = id => document.getElementById(id);
+    return {
+      modal: byId('settings-modal'),
+      open: byId('v2-btn-settings'),
+      close: byId('settings-close'),
+      langRadios: Array.from(document.querySelectorAll('input[name="settings-lang"]')),
+      themeRadios: Array.from(document.querySelectorAll('input[name="settings-theme"]')),
+      trigger: byId('settings-trigger-char'),
+      notice: byId('settings-trigger-reload-notice'),
+      reload: byId('settings-trigger-reload-btn'),
+      margins: { top: byId('settings-margin-top'), right: byId('settings-margin-right'), bottom: byId('settings-margin-bottom'), left: byId('settings-margin-left') },
+      tabs: Array.from(document.querySelectorAll('.settings-tab')),
+      panels: Array.from(document.querySelectorAll('.settings-panel')),
+      version: byId('settings-credits-version'),
+    };
+  }
+  const checkedValue = radios => { const radio = radios.find(r => r.checked); return radio ? radio.value : null; };
+  const fieldValues = margins => Object.keys(margins).reduce((out, side) => { out[side] = margins[side].value; return out; }, {});
+  const fieldMaxes = margins => Object.keys(margins).reduce((out, side) => { out[side] = margins[side].max; return out; }, {});
+  // Ce que ces cas touchent hors de la page (thème, langue, touche de déclenchement dans le stockage local) est remis tel quel à la fin.
+  function stored(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+  function restoreStored(key, value) { try { if (value === null) localStorage.removeItem(key); else localStorage.setItem(key, value); } catch (e) { /* stockage indisponible */ } }
+
   return [
     {
       id: 'margins_preview_padding',
@@ -97,6 +122,192 @@ window.EditorTestSuites.pageLayout = (function () {
           pass: near(shown.left, Math.round(applied.left * 10) / 10, .05) && near(shown.right, Math.round(applied.right * 10) / 10, .05) && shown.left < 150,
           notes: 'affiche=' + JSON.stringify(shown) + ' applique=' + JSON.stringify(applied),
         };
+      },
+    },
+    {
+      id: 'settings_open_shows_the_choices_in_force',
+      description: 'À l\'ouverture des Réglages, la langue, le thème, la touche de déclenchement et les marges affichés sont ceux en vigueur (même si les champs avaient été déréglés), le plafond des marges suit l\'orientation, l\'avis de rechargement est masqué, le numéro de version est celui de js/version.js et « Fermer » masque la fenêtre',
+      async run(h) {
+        const saved = { theme: stored('pp_theme'), trigger: stored('pp_trigger_char') };
+        const p = settingsParts();
+        const out = {};
+        try {
+          await setupA4(h, { top: 30, right: 25, bottom: 20, left: 35 });
+          Settings.setTheme('dark');
+          localStorage.setItem('pp_trigger_char', '@');
+          // Les champs sont déréglés avant l'ouverture : ce qui s'affiche ensuite vient de l'état réel, pas de ce qu'ils contenaient.
+          p.langRadios.forEach(r => { r.checked = false; });
+          p.themeRadios.forEach(r => { r.checked = false; });
+          p.trigger.value = '#';
+          p.notice.hidden = false;
+          Object.keys(p.margins).forEach(side => { p.margins[side].value = '1'; });
+          p.open.click();
+          await h.sleep(80);
+          out.display = p.modal.style.display;
+          out.lang = checkedValue(p.langRadios);
+          out.theme = checkedValue(p.themeRadios);
+          out.trigger = p.trigger.value;
+          out.noticeHidden = p.notice.hidden;
+          out.fields = fieldValues(p.margins);
+          out.maxPortrait = fieldMaxes(p.margins);
+          out.version = p.version.textContent === PP_VERSION && PP_VERSION.length > 0;
+          p.close.click();
+          out.displayAfterClose = p.modal.style.display;
+          PageLayout.setOrientation('landscape');
+          p.open.click();
+          await h.sleep(80);
+          out.maxLandscape = fieldMaxes(p.margins);
+          p.close.click();
+        } finally {
+          PageLayout.setOrientation('portrait');
+          Settings.setTheme(saved.theme || 'system');
+          restoreStored('pp_theme', saved.theme);
+          restoreStored('pp_trigger_char', saved.trigger);
+          p.modal.style.display = 'none';
+        }
+        const pass = out.display === 'flex' && out.displayAfterClose === 'none'
+          && out.lang === I18n.getLang() && out.theme === 'dark' && out.trigger === '@' && out.noticeHidden === true
+          && JSON.stringify(out.fields) === JSON.stringify({ top: '30', right: '25', bottom: '20', left: '35' })
+          && JSON.stringify(out.maxPortrait) === JSON.stringify({ top: '277', right: '190', bottom: '277', left: '190' })
+          && JSON.stringify(out.maxLandscape) === JSON.stringify({ top: '190', right: '277', bottom: '190', left: '277' })
+          && out.version === true;
+        return { pass, notes: JSON.stringify(out) + ' langue=' + I18n.getLang() };
+      },
+    },
+    {
+      id: 'settings_choices_apply_at_once',
+      description: 'Dans les Réglages, un thème, une langue ou une touche de déclenchement choisis s\'appliquent à l\'instant (et se retiennent), une case décochée ne change rien, le choix de la touche fait apparaître l\'avis de rechargement que la réouverture masque, et « Recharger maintenant » recharge la page',
+      async run(h) {
+        const saved = { theme: stored('pp_theme'), trigger: stored('pp_trigger_char'), langKey: stored('pp_lang'), lang: I18n.getLang() };
+        const p = settingsParts();
+        const root = document.documentElement;
+        const themeNow = () => (root.getAttribute('data-theme') || 'aucun') + ':' + stored('pp_theme');
+        const radio = (radios, value) => radios.find(r => r.value === value);
+        const unchecked = r => { r.checked = false; r.dispatchEvent(new Event('change', { bubbles: true })); };
+        const out = { themes: [] };
+        let reloads = 0;
+        const guard = e => { if (e.navigationType === 'reload') { reloads++; e.preventDefault(); } };
+        try {
+          p.open.click();
+          await h.sleep(60);
+          ['dark', 'light', 'system'].forEach(value => { radio(p.themeRadios, value).click(); out.themes.push(value + ' -> ' + themeNow()); });
+          unchecked(radio(p.themeRadios, 'light'));
+          out.themeUnchecked = themeNow();
+          radio(p.langRadios, 'en').click();
+          out.langEn = I18n.getLang();
+          unchecked(radio(p.langRadios, 'fr'));
+          out.langUnchecked = I18n.getLang();
+          radio(p.langRadios, 'fr').click();
+          out.langFr = I18n.getLang();
+          p.trigger.value = '!';
+          p.trigger.dispatchEvent(new Event('change', { bubbles: true }));
+          out.trigger = { stored: stored('pp_trigger_char'), char: Variables.triggerChar(), noticeHidden: p.notice.hidden };
+          if (typeof navigation === 'undefined') {
+            out.reload = 'non mesuré (API Navigation absente)';
+          } else {
+            navigation.addEventListener('navigate', guard);
+            p.reload.click();
+            await h.sleep(80);
+            out.reload = reloads;
+          }
+          p.close.click();
+          p.open.click();
+          await h.sleep(60);
+          out.reopened = { noticeHidden: p.notice.hidden, trigger: p.trigger.value };
+        } finally {
+          if (typeof navigation !== 'undefined') navigation.removeEventListener('navigate', guard);
+          if (I18n.getLang() !== saved.lang) I18n.setLang(saved.lang);
+          restoreStored('pp_lang', saved.langKey);
+          Settings.setTheme(saved.theme || 'system');
+          restoreStored('pp_theme', saved.theme);
+          restoreStored('pp_trigger_char', saved.trigger);
+          p.close.click();
+        }
+        const pass = JSON.stringify(out.themes) === JSON.stringify(['dark -> dark:dark', 'light -> light:light', 'system -> aucun:system'])
+          && out.themeUnchecked === 'aucun:system'
+          && out.langEn === 'en' && out.langUnchecked === 'en' && out.langFr === 'fr'
+          && out.trigger.stored === '!' && out.trigger.char === '!' && out.trigger.noticeHidden === false
+          && (out.reload === 1 || typeof out.reload === 'string')
+          && out.reopened.noticeHidden === true && out.reopened.trigger === '!';
+        return { pass, notes: JSON.stringify(out) };
+      },
+    },
+    {
+      id: 'settings_margin_fields_apply_what_is_typed',
+      description: 'Une marge saisie dans les Réglages s\'applique à la page, rafraîchit la mise en page et prévient la page par pp:marginsChanged ; une saisie vide ou négative ne change rien et ne prévient personne ; le champ ne montre que la valeur retenue (arrondie au dixième, bornée)',
+      async run(h) {
+        await setupA4(h, DEFAULT_MARGINS);
+        const p = settingsParts();
+        let events = 0;
+        let refreshes = 0;
+        const onChanged = () => { events++; };
+        const refresh = Editor.refreshLayout;
+        Editor.refreshLayout = function () { refreshes++; return refresh.apply(this, arguments); };
+        document.addEventListener('pp:marginsChanged', onChanged);
+        const steps = [];
+        try {
+          p.open.click();
+          await h.sleep(80);
+          const type = async (side, text) => {
+            const input = p.margins[side];
+            input.value = text;
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            await h.sleep(60);
+            const m = PageLayout.getMarginsMm();
+            const pad = Math.round(mmOf(parseFloat(getComputedStyle(h.tiptap()).paddingLeft)) * 10) / 10;
+            steps.push({ typed: side + '=' + text, field: input.value, kept: Math.round(m[side] * 100) / 100, events, refreshes, leftOnScreen: pad });
+          };
+          await type('left', '35');
+          await type('top', '12.34');
+          await type('bottom', '12.0');
+          await type('right', '');
+          await type('right', '-5');
+          await type('right', '0');
+          await type('right', '80');
+          await type('left', '150');
+        } finally {
+          Editor.refreshLayout = refresh;
+          document.removeEventListener('pp:marginsChanged', onChanged);
+          p.close.click();
+        }
+        const expected = [
+          { typed: 'left=35', field: '35', kept: 35, events: 1, refreshes: 1, leftOnScreen: 35 },
+          { typed: 'top=12.34', field: '12.3', kept: 12.34, events: 2, refreshes: 2, leftOnScreen: 35 },
+          { typed: 'bottom=12.0', field: '12.0', kept: 12, events: 3, refreshes: 3, leftOnScreen: 35 },
+          { typed: 'right=', field: '', kept: 9.88, events: 3, refreshes: 3, leftOnScreen: 35 },
+          { typed: 'right=-5', field: '-5', kept: 9.88, events: 3, refreshes: 3, leftOnScreen: 35 },
+          { typed: 'right=0', field: '0', kept: 0, events: 4, refreshes: 4, leftOnScreen: 35 },
+          { typed: 'right=80', field: '80', kept: 80, events: 5, refreshes: 5, leftOnScreen: 35 },
+          { typed: 'left=150', field: '123.9', kept: 123.91, events: 6, refreshes: 6, leftOnScreen: 123.9 },
+        ];
+        return { pass: JSON.stringify(steps) === JSON.stringify(expected), notes: JSON.stringify(steps) };
+      },
+    },
+    {
+      id: 'settings_tab_click_marks_the_tab_and_shows_its_panel_alone',
+      description: 'Un clic sur un onglet des Réglages le marque actif (lui seul) et ne laisse visible que son panneau',
+      async run(h) {
+        const p = settingsParts();
+        const startTab = p.tabs.find(t => t.classList.contains('active')) || p.tabs[0];
+        const rows = [];
+        p.open.click();
+        await h.sleep(60);
+        try {
+          p.tabs.forEach(tab => {
+            tab.click();
+            rows.push({
+              tab: tab.getAttribute('data-settings-tab'),
+              active: p.tabs.filter(t => t.classList.contains('active')).map(t => t.getAttribute('data-settings-tab')).join(','),
+              shown: p.panels.filter(panel => !panel.hidden).map(panel => panel.getAttribute('data-settings-panel')).join(','),
+            });
+          });
+        } finally {
+          // Les Réglages se rouvrent sur l'onglet laissé affiché : on remet celui du départ.
+          startTab.click();
+          p.close.click();
+        }
+        const pass = rows.length === p.tabs.length && rows.length >= 6 && rows.every(r => r.active === r.tab && r.shown === r.tab);
+        return { pass, notes: JSON.stringify(rows) };
       },
     },
     {
