@@ -1271,6 +1271,7 @@
       controls.forEach(el => setExportControlLocked(el, true));
       // Un clic = un lancement (un lot entier compris) : les sites d'images déjà acceptés ne sont pas redemandés, un refus arrête tout (js/external-images.js).
       ExternalImages.beginRun();
+      ExportCommon.resetUnreadImages();
       try {
         await fn(...args);
       } finally {
@@ -1281,6 +1282,13 @@
         restoreKeyboardFocus(keyboardFocus);
       }
     };
+  }
+
+  // L'état de fin d'un export réussi : son texte, précédé - quand des images n'ont pas pu être lues et manquent dans le fichier (ExportCommon.noteUnreadImage) - de leur nombre, en tête : le coin
+  // d'état coupe ce qui dépasse, à droite. Le fichier est bien produit : ce n'est pas une erreur (pas de rouge), mais la personne n'a plus à ouvrir le fichier pour s'en apercevoir.
+  function setExportDoneStatus(text) {
+    const unread = ExportCommon.unreadImageCount();
+    setStatus(unread ? I18n.t('status.imagesUnread', { n: unread }) + ' ' + text : text);
   }
 
   // Le document de la ligne courante pour un export seul : { html, headerFooterData } - ceux du modèle, avec la valeur de chaque liste réglée « Un document par valeur » (js/list-split.js) quand elle n'en a qu'une -, ou
@@ -1303,7 +1311,7 @@
       const doc = await currentRecordDocument(tableId, record);
       if (doc.split) { await onExportBatch('pdfZip', doc.split); return; }
       await PdfExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsPt());
-      setStatus(I18n.t('status.pdfGenerated'));
+      setExportDoneStatus(I18n.t('status.pdfGenerated'));
     } catch (e) {
       // « Annuler » sur la fenêtre des images d'un site externe (js/external-images.js) : un choix, pas une erreur.
       if (ExternalImages.isCancel(e)) { setStatus(I18n.t('status.exportCancelled')); return; }
@@ -1358,7 +1366,7 @@
       const doc = await currentRecordDocument(tableId, record);
       if (doc.split) { await onExportBatch('docxZip', doc.split); return; }
       await DocxExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsTwip());
-      setStatus(I18n.t('status.docxGenerated'));
+      setExportDoneStatus(I18n.t('status.docxGenerated'));
     } catch (e) {
       if (ExternalImages.isCancel(e)) { setStatus(I18n.t('status.exportCancelled')); return; }
       console.error(e);
@@ -1378,7 +1386,7 @@
       const doc = await currentRecordDocument(tableId, record);
       if (doc.split) { await onExportBatch('xlsxZip', doc.split); return; }
       await XlsxExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate());
-      setStatus(I18n.t('status.xlsxGenerated'));
+      setExportDoneStatus(I18n.t('status.xlsxGenerated'));
     } catch (e) {
       if (ExternalImages.isCancel(e)) { setStatus(I18n.t('status.exportCancelled')); return; }
       console.error(e);
@@ -1628,7 +1636,7 @@
     const sheetCount = sheets ? mergedPdf.sheetCount : 0;
     const useSplitTexts = splitting && cfg.splitDone;
     const doneKey = failed ? (useSplitTexts ? cfg.splitDoneWithFailures : cfg.doneWithFailures) : (useSplitTexts ? cfg.splitDone : cfg.done);
-    setStatus(failed ? exportText(doneKey, { ok, failed, sheets: sheetCount }) : exportText(doneKey, { ok, sheets: sheetCount }));
+    setExportDoneStatus(failed ? exportText(doneKey, { ok, failed, sheets: sheetCount }) : exportText(doneKey, { ok, sheets: sheetCount }));
   }
 
   async function switchMode(mode) {
