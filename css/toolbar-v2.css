@@ -294,7 +294,8 @@
 /* La phrase prend --text (choix d'Antoine, 02/10) : --text-muted sur le fond --surface-sunken du panneau n'y faisait que 4,39:1 en clair, sous les 4,5:1 de la charte (F5). */
 .macro-summary-text { font-size: 13px; color: var(--text); margin: 0 0 12px; }
 /* Les modèles de la composition (js/macro-editor.js:renderParts) : une ligne par page de garde ou annexe, le nom de chaque modèle suivi de son stylo, qui l'ouvre dans l'éditeur (le bandeau
-   « Revenir au macro-modèle » ramène ici, js/main.js). Un modèle supprimé depuis reste dit (grisé, stylo grisé), jamais retiré. */
+   « Revenir au macro-modèle » ramène ici, js/main.js), puis de son œil, qui le masque de la Lecture et des exports (demande d'Antoine, 04/10). Un modèle masqué reste dans la composition : son nom
+   se grise et son œil est barré et enfoncé (rien ne disparaît, on grise). Un modèle supprimé depuis reste dit (grisé, stylo et œil grisés), jamais retiré. */
 .macro-summary-parts { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 6px; text-align: left; }
 .macro-summary-part { display: flex; align-items: flex-start; gap: 8px; padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
 .macro-summary-part-label { flex: none; width: 88px; box-sizing: border-box; font-size: 11px; font-weight: 700; line-height: 24px; color: var(--text-muted); }
@@ -302,12 +303,15 @@
 .macro-summary-model { display: inline-flex; align-items: center; gap: 2px; min-width: 0; max-width: 100%; }
 .macro-summary-model-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; color: var(--text); }
 .macro-summary-model.is-missing .macro-summary-model-name { color: var(--text-muted); font-style: italic; }
-.macro-summary-edit { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--text-muted); cursor: pointer; }
-.macro-summary-edit svg { width: 14px; height: 14px; pointer-events: none; }
-.macro-summary-edit:hover { background: var(--surface-sunken); border-color: var(--border-strong); color: var(--text); }
-.macro-summary-edit:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.macro-summary-edit:disabled { opacity: .35; cursor: default; }
-.macro-summary-edit:disabled:hover { background: transparent; border-color: transparent; color: var(--text-muted); }
+.macro-summary-edit, .macro-summary-eye { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--text-muted); cursor: pointer; }
+.macro-summary-edit svg, .macro-summary-eye svg { width: 14px; height: 14px; pointer-events: none; }
+.macro-summary-edit:hover, .macro-summary-eye:hover { background: var(--surface-sunken); border-color: var(--border-strong); color: var(--text); }
+.macro-summary-edit:focus-visible, .macro-summary-eye:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.macro-summary-edit:disabled, .macro-summary-eye:disabled { opacity: .35; cursor: default; }
+.macro-summary-edit:disabled:hover, .macro-summary-eye:disabled:hover { background: transparent; border-color: transparent; color: var(--text-muted); }
+/* L'œil d'un modèle masqué : enfoncé (fond et bordure des boutons actifs, texte plein), pour que l'état ne tienne pas seulement à l'icône barrée ; le nom du modèle se grise. */
+.macro-summary-eye[aria-pressed="true"] { background: var(--surface-sunken); border-color: var(--border-strong); color: var(--text); }
+.macro-summary-model.is-hidden-model .macro-summary-model-name { color: var(--text-muted); }
 /* Bandeau « Revenir au macro-modèle » (#macro-return-bar, index.html ; js/main.js:syncMacroReturnBar) : une ligne fine entre la barre d'outils et le texte, tant que le modèle à l'écran a été ouvert
    par le stylo du résumé d'un macro-modèle (pas une icône de plus dans la barre d'outils gelée). Jetons de css/style.css seulement : clair et sombre. */
 .macro-return-bar { flex: none; display: flex; align-items: center; gap: 10px; padding: 4px 10px; box-sizing: border-box; border-bottom: 1px solid var(--border); background: var(--surface); color: var(--text-muted); font-family: var(--font-ui); font-size: 12px; }

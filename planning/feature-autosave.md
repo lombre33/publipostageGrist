@@ -1,5 +1,7 @@
 # Sauvegarde automatique
 
+> **Statut au 4 octobre 2026 : livré le 18 septembre.** L'enregistrement automatique tourne toutes les 2,5 s pendant l'édition, avec détection de conflit (`js/main.js`, `js/templates.js`) ; un menu sous « Enregistrer » le coupe ou le rallume. Ce document garde la conception d'origine.
+
 **Priorité 1.** Toutes les X secondes ou à chaque modification, avec un interrupteur on/off. Demandée
 deux fois par l'utilisateur dans sa liste brute (redondance dans la demande elle-même, pas dans ce
 plan) — signe probable d'une frustration réelle avec la perte de travail actuelle.

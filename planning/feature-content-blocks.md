@@ -1,5 +1,7 @@
 # Nouveaux blocs de contenu — Citation, Légende, Bloc de code, Bloc de signature, Encadré/remarque
 
+> **Statut au 4 octobre 2026 : livré.** Citation, bloc de code, encadré (Note, Attention, Important) et bloc de signature sont des lignes du menu « Lien et blocs de contenu » de la barre d'outils (`js/callout.js` pour l'encadré et la signature) ; la légende est un bouton de la barre flottante d'une image et d'un tableau (`js/caption.js`). Ce document garde la conception d'origine.
+
 **Priorité 2.** Regroupés car ils partagent le même patron d'implémentation dans ce projet : soit un
 nœud TipTap standard déjà supporté mais sans accès UI, soit un nouveau nœud personnalisé (même famille
 que les nœuds déjà présents dans `js/editor-nodes.js` : image, zone 2-colonnes, saut de page…), plus

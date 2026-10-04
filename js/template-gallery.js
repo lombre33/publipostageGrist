@@ -1,13 +1,12 @@
-// Galerie de templates (feature "Créer à partir d'un template", js/main.js wireTemplateGalleryModal) — catalogue statique versionné dans ce dépôt
-// (templates-gallery/), servi par GitHub Pages en même origine que le reste de l'app (aucun souci CORS, contrairement aux images externes d'un modèle).
+// Galerie de modèles (« Créer à partir d'un modèle », js/main.js wireTemplateGalleryModal) : catalogue statique versionné dans templates-gallery/,
+// servi par GitHub Pages en même origine que l'app (pas de CORS, contrairement aux images externes d'un modèle).
 const TemplateGallery = (function () {
-  // Les chemins d'un manifest.json sont relatifs au dossier du manifeste, pas à la page qui charge ce module - fetch() résolvant les URL par rapport à la
-  // page courante, chaque chemin doit être préfixé de ce dossier.
+  // Les chemins d'un manifest.json sont relatifs à son dossier, pas à la page (fetch() résout par rapport à la page courante) : chaque chemin est
+  // préfixé de ce dossier.
   const BASE = 'templates-gallery/';
-  // Catalogue SÉPARÉ pour les modèles de test/démo (« Test — … », « Vitrine des fonctionnalités »), qui n'ont rien à faire devant un utilisateur final mais
-  // servent au protocole de test manuel (cf. dev-tests/PROTOCOLE_TEST_MANUEL.md). Dossier à part, et jamais chargé sans `?dev` dans l'adresse du widget
-  // (`https://…/publipostageGrist/?dev`) : le dossier reste publié sur Pages, mais la galerie ne le lit pas pour un utilisateur ordinaire. Un déploiement
-  // qui ne le publie pas du tout reste un cas normal, pas une erreur (cf. loadOneManifest ci-dessous, qui l'ignore alors en silence).
+  // Catalogue séparé pour les modèles de test et de démonstration (« Test — … », « Vitrine des fonctionnalités »), utilisés par le protocole de test
+  // manuel (dev-tests/PROTOCOLE_TEST_MANUEL.md). Jamais chargé sans `?dev` dans l'adresse du widget ; un déploiement qui ne le publie pas est un cas
+  // normal (loadOneManifest l'ignore alors en silence).
   const DEV_BASE = 'templates-gallery-dev/';
   let manifestCache = null;
   let manifestCacheWithDev = false;
@@ -17,16 +16,16 @@ const TemplateGallery = (function () {
     catch (e) { return false; }
   }
 
-  // Chaque entrée porte son propre dossier de base depuis loadManifest() : les chemins d'un manifeste sont relatifs à SON dossier, et il y en a
-  // maintenant deux. Repli sur BASE pour une entrée construite à la main (tests) qui n'aurait pas de __base.
+  // Chaque entrée porte le dossier de base de son manifeste (loadManifest) : il y en a deux. Repli sur BASE pour une entrée construite à la main
+  // (tests) sans __base.
   function resolveUrl(relPath, entry) { return ((entry && entry.__base) || BASE) + relPath; }
 
-  // {cache:'no-store'} : ces fichiers de contenu n'ont pas de ?v=X.Y comme les .js/.css de index.html, rien ne force sinon un navigateur/CDN GitHub Pages à
-  // en récupérer une version fraîche.
+  // cache: 'no-store' : ces fichiers n'ont pas de ?v= comme les .js/.css de index.html, rien ne forcerait sinon le navigateur ou le CDN de GitHub
+  // Pages à les rafraîchir.
   async function fetchNoStore(url) { return fetch(url, { cache: 'no-store' }); }
 
-  // Lit un manifeste et tague chaque entrée avec son dossier de base. `optional` couvre le catalogue de dev : absent d'un déploiement live, un 404 (ou
-  // un JSON invalide servi à sa place par certains hébergeurs) ne doit surtout pas vider la galerie des vrais modèles.
+  // Lit un manifeste et tague chaque entrée avec son dossier de base. `optional` (catalogue de dev) : absent d'un déploiement live, un 404 (ou un
+  // JSON invalide servi à sa place par certains hébergeurs) ne doit pas vider la galerie des vrais modèles.
   async function loadOneManifest(base, optional) {
     try {
       const res = await fetchNoStore(base + 'manifest.json');
@@ -53,14 +52,14 @@ const TemplateGallery = (function () {
     return (await fetchNoStore(resolveUrl(entry.html, entry))).text();
   }
 
-  // Optionnel - la plupart des templates n'ont pas d'en-tête/pied. Même forme que Editor.getHeaderFooterData()/setHeaderFooterData().
+  // Optionnel (la plupart des modèles n'ont pas d'en-tête ni de pied). Même forme que Editor.getHeaderFooterData() / setHeaderFooterData().
   async function fetchHeaderFooter(entry) {
     if (!entry.headerFooter) return null;
     return (await fetchNoStore(resolveUrl(entry.headerFooter, entry))).json();
   }
 
-  // Retire entièrement le badge #Variable (pas de texte de substitution), pour le mode "Modèle vierge" : un template unique sert aux deux modes (vide / +
-  // data), pas deux fichiers HTML à maintenir en double. Sans table de données derrière, "#key" en texte ne représenterait plus rien.
+  // Retire entièrement le badge #Variable (pas de texte de substitution) pour le mode « Modèle vierge » : un seul fichier sert aux deux modes (vide,
+  // avec données). Sans table derrière, « #key » en texte ne représenterait rien.
   function stripVariableBadges(html) {
     const root = document.createElement('div');
     root.innerHTML = html;
@@ -68,8 +67,8 @@ const TemplateGallery = (function () {
     return root.innerHTML;
   }
 
-  // Parse le "Code View" natif de Grist (`@grist.UserTable` / `class Nom:` / `Col = grist.Type()`) - ne gère que cette syntaxe machine-générée précise, pas
-  // du Python arbitraire.
+  // Parse le « Code View » natif de Grist (`@grist.UserTable`, `class Nom:`, `Col = grist.Type()`) : cette seule syntaxe générée par machine, pas du
+  // Python arbitraire.
   const PY_TYPE_TO_GRIST_TYPE = {
     Text: 'Text', Numeric: 'Numeric', Int: 'Int', Bool: 'Bool',
     Date: 'Date', DateTime: 'DateTime', Choice: 'Choice', ChoiceList: 'ChoiceList',
@@ -101,8 +100,9 @@ const TemplateGallery = (function () {
     return parseGristSchema(text);
   }
 
-  // Les badges #Variable d'un template "+ data" portent en dur le nom de table tiré du schema.py à l'authoring. La table réellement créée par useWithData()
-  // (js/main.js) peut porter un autre nom (modifié dans le prompt, ou renommé par Grist en cas de collision) - sans ce réalignement elles pointeraient vers une table inexistante.
+  // Les badges #Variable d'un modèle « avec données » portent le nom de table du schema.py d'écriture. La table créée par useWithData() (js/main.js)
+  // peut en porter un autre (modifié dans le prompt, ou renommé par Grist en cas de collision) : sans ce réalignement, elles pointeraient vers une
+  // table inexistante.
   function rebindVariableTable(html, fromTable, toTable) {
     if (!fromTable || !toTable || fromTable === toTable) return html;
     const root = document.createElement('div');

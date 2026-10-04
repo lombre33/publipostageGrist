@@ -1,5 +1,7 @@
 # Suivi des modifications (track changes)
 
+> **Statut au 4 octobre 2026 : en ligne depuis le 21 septembre** (`js/track-changes.js` ; boutons « Suivi des modifications », « Tout accepter » et « Tout refuser »). Le texte qui suit décrit l'état avant l'intégration ; la fin du document (« Mise à jour du 2026-09-21 ») dit ce qui est livré et ce qui reste ouvert.
+
 **Jalon BETA**, roadmap RICE d'Antoine, famille « Édition collaborative », statut « à faire — rien
 dans le dépôt ». Volontairement écarté du chantier Commentaires le 2026-09-14 : `js/comments.js:1-4`
 documente explicitement qu'un commentaire « s'AJOUTE par-dessus le texte sans jamais le modifier »,

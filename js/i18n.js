@@ -433,10 +433,17 @@ const I18n = (function () {
     'macro.summary.edit': { fr: 'Modifier le modèle « {name} »', en: 'Edit the template “{name}”' },
     'macro.summary.missing': { fr: 'modèle introuvable', en: 'template not found' },
     'macro.summary.noTemplate': { fr: 'aucun modèle choisi', en: 'no template chosen' },
+    // L'œil de chaque modèle du résumé (js/macro-editor.js) : il masque le modèle de la Lecture et de toutes les sorties du macro-modèle, sans le retirer de la composition. Le nom accessible dit le geste
+    // et ne change pas (c'est `aria-pressed` qui dit l'état) ; l'info-bulle dit l'état et ce que le clic fait.
+    'macro.summary.hide': { fr: 'Masquer le modèle « {name} »', en: 'Hide the template “{name}”' },
+    'macro.summary.hideTip': { fr: 'Masquer « {name} » de la Lecture et des exports', en: 'Hide “{name}” from Reading and exports' },
+    'macro.summary.hiddenTip': { fr: '« {name} » est masqué de la Lecture et des exports : cliquer pour l’afficher', en: '“{name}” is hidden from Reading and exports: click to show it' },
     'macro.return.aria': { fr: 'Retour au macro-modèle', en: 'Back to the macro template' },
     'macro.return.text': { fr: 'Modèle ouvert depuis le macro-modèle « {name} ».', en: 'Template opened from the macro template “{name}”.' },
     'macro.return.button': { fr: 'Revenir au macro-modèle', en: 'Back to the macro template' },
     'status.macroSaved': { fr: 'Macro-modèle enregistré.', en: 'Macro template saved.' },
+    'status.macroModelHidden': { fr: 'Modèle masqué de la Lecture et des exports : « {name} »', en: 'Template hidden from Reading and exports: “{name}”' },
+    'status.macroModelShown': { fr: 'Modèle de nouveau dans la Lecture et les exports : « {name} »', en: 'Template back in Reading and exports: “{name}”' },
 
     // --- Panneau Réglages ---
     'settings.tooltip': { fr: 'Réglages', en: 'Settings' },

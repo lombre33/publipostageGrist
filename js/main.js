@@ -510,6 +510,12 @@
     done();
   }
 
+  // Rappel de MacroEditor quand l'œil d'un modèle du résumé a fini d'écrire la composition (masqué ou affiché, `ok` à faux si Grist a refusé) : le coin d'état le dit, dans la langue de l'interface.
+  function onMacroModelVisibility({ name, hidden, ok }) {
+    if (!ok) { setStatus(I18n.t('status.saveError'), true); return; }
+    setStatus(I18n.t(hidden ? 'status.macroModelHidden' : 'status.macroModelShown', { name }));
+  }
+
   // === Ouvrir un modèle d'un macro-modèle, et y revenir ===
   // Le stylo d'une ligne du résumé d'un macro-modèle (js/macro-editor.js:showSummary) ouvre ce modèle dans l'éditeur comme un choix de la liste ; tant qu'il est à l'écran, le bandeau « Revenir au
   // macro-modèle » (#macro-return-bar) ramène au macro-modèle d'où l'on vient. macroOrigin = { macroId, templateId }, remis à null dès qu'un AUTRE modèle se charge (liste, « + », galerie, suppression :
@@ -2073,7 +2079,7 @@
     if (btnNewGrid) btnNewGrid.addEventListener('click', onNewGrid);
     const btnImportXlsx = document.getElementById('v2-btn-import-xlsx');
     if (btnImportXlsx) btnImportXlsx.addEventListener('click', onImportXlsx);
-    MacroEditor.wire(onMacroSaved, macroSettingsOnScreen, openTemplateFromMacro);
+    MacroEditor.wire(onMacroSaved, macroSettingsOnScreen, openTemplateFromMacro, onMacroModelVisibility);
     TemplateOrganizeModal.wire();
     document.getElementById('btn-delete').addEventListener('click', onDelete);
     document.getElementById('btn-export-pdf').addEventListener('click', withExportLock(onExportPdf));
