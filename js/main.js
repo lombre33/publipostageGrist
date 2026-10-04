@@ -1283,6 +1283,16 @@
     };
   }
 
+  // Le document de la ligne courante pour un export seul : { html, headerFooterData } - ceux du modèle, avec la valeur de chaque liste réglée « Un document par valeur » (js/list-split.js) quand elle n'en a qu'une -, ou
+  // { split } quand la ligne fait plusieurs documents : l'appelant passe alors à l'archive d'onExportBatch (PDF, Word ou Excel, un fichier par valeur). Sans liste ainsi réglée, le HTML et les en-têtes du modèle, tels quels.
+  async function currentRecordDocument(tableId, record) {
+    const html = await currentDocumentHtml(tableId, record);
+    const headerFooterData = Editor.getHeaderFooterData();
+    const plan = await ListSplit.plan(ListSplit.partsOf(html, headerFooterData), tableId, record);
+    if (plan.variants.length > 1) return { split: { record, plan, html } };
+    return { html: ListSplit.pin(html, plan.variants[0]), headerFooterData: ListSplit.pinHeaderFooter(headerFooterData, plan.variants[0]) };
+  }
+
   async function onExportPdf() {
     Editor.exitHeaderFooterModeIfActive();
     const record = GristAPI.getCurrentRecord();
@@ -1292,8 +1302,9 @@
       const qualitySelect = document.getElementById('v2-pdf-quality');
       const quality = qualitySelect ? qualitySelect.value : 'native';
       const tableId = currentTableId || GristAPI.getCurrentTableId();
-      const html = await currentDocumentHtml(tableId, record);
-      await PdfExport.exportCurrentRecord(html, tableId, record, getPdfFilenameTemplate(), quality, Editor.getHeaderFooterData(), PageLayout.getMarginsPt());
+      const doc = await currentRecordDocument(tableId, record);
+      if (doc.split) { await onExportBatch('pdfZip', doc.split); return; }
+      await PdfExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), quality, doc.headerFooterData, PageLayout.getMarginsPt());
       setStatus(I18n.t('status.pdfGenerated'));
     } catch (e) {
       // « Annuler » sur la fenêtre des images d'un site externe (js/external-images.js) : un choix, pas une erreur.
@@ -1346,8 +1357,9 @@
     setStatus(I18n.t('status.docxGenerating'));
     try {
       const tableId = currentTableId || GristAPI.getCurrentTableId();
-      const html = await currentDocumentHtml(tableId, record);
-      await DocxExport.exportCurrentRecord(html, tableId, record, getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsTwip());
+      const doc = await currentRecordDocument(tableId, record);
+      if (doc.split) { await onExportBatch('docxZip', doc.split); return; }
+      await DocxExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsTwip());
       setStatus(I18n.t('status.docxGenerated'));
     } catch (e) {
       if (ExternalImages.isCancel(e)) { setStatus(I18n.t('status.exportCancelled')); return; }
@@ -1365,8 +1377,9 @@
     setStatus(I18n.t('status.xlsxGenerating'));
     try {
       const tableId = currentTableId || GristAPI.getCurrentTableId();
-      const html = await currentDocumentHtml(tableId, record);
-      await XlsxExport.exportCurrentRecord(html, tableId, record, getPdfFilenameTemplate());
+      const doc = await currentRecordDocument(tableId, record);
+      if (doc.split) { await onExportBatch('xlsxZip', doc.split); return; }
+      await XlsxExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate());
       setStatus(I18n.t('status.xlsxGenerated'));
     } catch (e) {
       if (ExternalImages.isCancel(e)) { setStatus(I18n.t('status.exportCancelled')); return; }
@@ -1452,6 +1465,7 @@
     pdfMerged: {
       label: 'PDF', confirm: 'confirm.mergedExport', loading: 'status.loadingPdfLibs', loadError: 'status.pdfLibsLoadError', progress: 'status.batchExportProgress',
       noFile: 'status.exportError', done: 'status.mergedExportDone', doneWithFailures: 'status.mergedExportDoneWithFailures',
+      splitDone: 'status.splitMergedDone', splitDoneWithFailures: 'status.splitMergedDoneWithFailures',
       merged: true, fileSuffix: '-export.pdf', margins: () => PageLayout.getMarginsPt(),
       loadLibs: async () => { await PdfExport.ensurePdfLibsLoaded(); await PdfMerge.ensureLibLoaded(); },
       renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins) => PdfExport.getNativePdfBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, margins),
@@ -1461,6 +1475,7 @@
     pdfSheets: {
       label: 'PDF', loading: 'status.loadingPdfLibs', loadError: 'status.pdfLibsLoadError', progress: 'status.batchExportProgress',
       noFile: 'status.exportError', done: 'status.sheetsExportDone', doneWithFailures: 'status.sheetsExportDoneWithFailures',
+      splitDone: 'status.splitSheetsDone', splitDoneWithFailures: 'status.splitSheetsDoneWithFailures',
       merged: true, sheets: true, fileSuffix: '-assemblage.pdf', margins: () => PageLayout.getMarginsPt(),
       loadLibs: async () => { await PdfExport.ensurePdfLibsLoaded(); await PdfMerge.ensureLibLoaded(); },
       renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins) => PdfExport.getNativePdfBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, margins),
@@ -1482,12 +1497,37 @@
     xlsxSingle: {
       label: 'Excel', confirm: 'confirm.singleWorkbookExport', loading: 'status.loadingExportLibs', loadError: 'status.exportLibsLoadError', progress: 'status.batchExportProgressXlsx',
       noFile: 'status.exportErrorXlsx', done: 'status.singleWorkbookDone', doneWithFailures: 'status.singleWorkbookDoneWithFailures',
+      splitDone: 'status.splitSingleWorkbookDone', splitDoneWithFailures: 'status.splitSingleWorkbookDoneWithFailures',
       single: true, fileSuffix: '-export.xlsx',
       loadLibs: () => XlsxExport.ensureExcelLibLoaded(),
     },
   };
 
-  async function onExportBatch(kind) {
+  // Les documents d'un export en lot, dans l'ordre : un par ligne, ou un par valeur d'une liste réglée « Un document par valeur » (js/list-split.js ; un macro-modèle assemble ici le HTML de chaque ligne, gardé pour le
+  // rendu). Sans bulle réglée ainsi dans le modèle, ses en-têtes ni ses modèles, rien n'est lu ni calculé de plus : un document par ligne, `variant` nul, comme avant. Une ligne dont le plan échoue garde son document.
+  async function planExportJobs(rows, { tableId, isMacro, html, templatesCache, headerFooterData, buildRowHtml }) {
+    const footerParts = ListSplit.partsOf('', headerFooterData).slice(1);
+    const mayHaveSplit = ListSplit.hasMarker(footerParts) || (isMacro ? templatesCache.some(tpl => ListSplit.hasMarker([tpl.contenu])) : ListSplit.hasMarker([html]));
+    if (!mayHaveSplit) return rows.map(row => ({ row, variant: null }));
+    const jobs = [];
+    for (const row of rows) {
+      let rowHtml;
+      let plan = null;
+      try {
+        rowHtml = await buildRowHtml(row);
+        plan = await ListSplit.plan(ListSplit.partsOf(rowHtml, headerFooterData), tableId, row);
+      } catch (e) {
+        console.error('[main] export en lot : plan « un document par valeur » impossible pour la ligne', row.id, e);
+      }
+      if (!plan) { jobs.push({ row, variant: null }); continue; }
+      plan.variants.forEach(variant => jobs.push({ row, rowHtml, variant }));
+    }
+    return jobs;
+  }
+
+  // `only` (facultatif) : la ligne courante seule - { record, plan, html } -, quand son document se découpe en plusieurs (« Un document par valeur », js/list-split.js) : une archive de ses documents, sans lire la table
+  // ni demander confirmation (le clic d'un export seul vaut accord), nommée comme la ligne.
+  async function onExportBatch(kind, only) {
     const cfg = BATCH_EXPORTS[kind];
     const merged = !!cfg.merged;
     const single = !!cfg.single;
@@ -1496,20 +1536,43 @@
     const tableId = currentTableId || GristAPI.getCurrentTableId();
     if (!tableId) { setStatus(I18n.t('status.currentTableNotFound'), true); return; }
     let rows;
-    try { rows = await GristAPI.fetchTableRows(tableId); }
-    catch (e) {
-      console.error('[main] export ' + cfg.label + ' en lot : échec de lecture de la table', e);
-      setStatus(exportText('status.cannotReadRows'), true);
-      return;
+    if (only) rows = [only.record];
+    else {
+      try { rows = await GristAPI.fetchTableRows(tableId); }
+      catch (e) {
+        console.error('[main] export ' + cfg.label + ' en lot : échec de lecture de la table', e);
+        setStatus(exportText('status.cannotReadRows'), true);
+        return;
+      }
     }
     if (!rows.length) { setStatus(exportText('status.noRowsInTable', { table: tableId }), true); return; }
+
+    // Pas de HTML unique calculé une fois pour tout le lot : pour un macro-modèle, le choix des annexes dépend des valeurs de CHAQUE ligne (cf.
+    // MacroTemplates), donc la concaténation doit être refaite ligne par ligne dans la boucle ci-dessous plutôt que réutilisée telle quelle comme pour un
+    // modèle normal (où le même gabarit HTML suffit pour toutes les lignes, seule sa résolution #Variable variant par ligne).
+    const isMacro = currentTypeModele === 'macro';
+    const html = isMacro ? null : Editor.getHTML();
+    const macroSlots = isMacro ? getCurrentMacroSlots() : null;
+    const templatesCache = isMacro ? Templates.getCached() : null;
+    const filenameTemplate = getPdfFilenameTemplate();
+    const headerFooterData = Editor.getHeaderFooterData();
+    const margins = cfg.margins ? cfg.margins() : null;
+    const buildRowHtml = row => (isMacro ? MacroTemplates.buildConcatenatedHtml(macroSlots, tableId, row, templatesCache) : html);
+    // Compté avant la confirmation : « Un document par valeur » fait plus de documents que de lignes.
+    const jobs = only ? only.plan.variants.map(variant => ({ row: only.record, rowHtml: only.html, variant }))
+      : await planExportJobs(rows, { tableId, isMacro, html, templatesCache, headerFooterData, buildRowHtml });
+    const splitting = jobs.some(job => ListSplit.hasPins(job.variant));
+
     // Les planches se règlent dans leur propre fenêtre (feuille, emplacements, traits de coupe) : elle tient lieu de confirmation.
     let sheetSetup = null;
-    if (sheets) {
-      sheetSetup = await SheetAssemblyDialog.open({ count: rows.length, table: tableId, grid: GridEditor.isGridType(currentTypeModele) });
+    if (only) {
+      // Un export seul : pas de confirmation.
+    } else if (sheets) {
+      sheetSetup = await SheetAssemblyDialog.open({ count: jobs.length, table: tableId, grid: GridEditor.isGridType(currentTypeModele) });
       if (!sheetSetup) return;
     } else {
-      const proceed = await Dialogs.confirm({ title: exportText('dialog.batchExport.title'), message: exportText(cfg.confirm, { count: rows.length, table: tableId }), confirmLabel: I18n.t('common.generate') });
+      const note = splitting ? '\n\n' + I18n.t('confirm.splitNote', { documents: jobs.length }) : '';
+      const proceed = await Dialogs.confirm({ title: exportText('dialog.batchExport.title'), message: exportText(cfg.confirm, { count: rows.length, table: tableId }) + note, confirmLabel: I18n.t('common.generate') });
       if (!proceed) return;
     }
 
@@ -1523,16 +1586,6 @@
       return;
     }
 
-    // Pas de HTML unique calculé une fois pour tout le lot : pour un macro-modèle, le choix des annexes dépend des valeurs de CHAQUE ligne (cf.
-    // MacroTemplates), donc la concaténation doit être refaite ligne par ligne dans la boucle ci-dessous plutôt que réutilisée telle quelle comme pour un
-    // modèle normal (où le même gabarit HTML suffit pour toutes les lignes, seule sa résolution #Variable variant par ligne).
-    const isMacro = currentTypeModele === 'macro';
-    const html = isMacro ? null : Editor.getHTML();
-    const macroSlots = isMacro ? getCurrentMacroSlots() : null;
-    const templatesCache = isMacro ? Templates.getCached() : null;
-    const filenameTemplate = getPdfFilenameTemplate();
-    const headerFooterData = Editor.getHeaderFooterData();
-    const margins = cfg.margins ? cfg.margins() : null;
     const zip = merged || single ? null : new JSZip();
     const mergedPdf = merged ? (sheets ? await PdfMerge.createSheets(tableId, sheetSetup.layout) : await PdfMerge.create(tableId)) : null;
     const workbook = single ? await XlsxExport.createSingleWorkbook() : null;
@@ -1540,18 +1593,22 @@
     let ok = 0;
     let failed = 0;
     let cancelled = false;
-    for (let i = 0; i < rows.length; i++) {
-      setStatus(I18n.t(cfg.progress, { current: i + 1, total: rows.length }));
+    for (let i = 0; i < jobs.length; i++) {
+      const { row, variant } = jobs[i];
+      setStatus(I18n.t(cfg.progress, { current: i + 1, total: jobs.length }));
       try {
-        const rowHtml = isMacro ? await MacroTemplates.buildConcatenatedHtml(macroSlots, tableId, rows[i], templatesCache) : html;
+        // Le document de cette valeur : les bulles réglées « Un document par valeur » y écrivent leur k-ième valeur (js/list-split.js) ; sans découpage, le HTML et les en-têtes sont ceux de la ligne, tels quels.
+        const rowHtml = ListSplit.pin(jobs[i].rowHtml !== undefined ? jobs[i].rowHtml : await buildRowHtml(row), variant);
+        const jobHeaderFooter = ListSplit.pinHeaderFooter(headerFooterData, variant);
+        const valueName = variant && variant.label ? sanitizeFilenamePart(variant.label) : '';
         if (single) {
-          await workbook.appendRecord(rowHtml, tableId, rows[i], filenameTemplate);
+          await workbook.appendRecord(rowHtml, tableId, row, filenameTemplate, valueName);
         } else {
-          const { blob, filename } = await cfg.renderRow(rowHtml, tableId, rows[i], filenameTemplate, headerFooterData, margins);
+          const { blob, filename } = await cfg.renderRow(rowHtml, tableId, row, filenameTemplate, jobHeaderFooter, margins);
           if (merged) {
             await mergedPdf.append(blob);
           } else {
-            const base = sanitizeFilenamePart(filename) || ('document-' + rows[i].id);
+            const base = (sanitizeFilenamePart(filename) || ('document-' + row.id)) + (valueName ? ' - ' + valueName : '');
             zip.file(uniqueZipFilename(base, usedNames) + cfg.entryExt, blob);
           }
         }
@@ -1559,7 +1616,7 @@
       } catch (e) {
         // « Annuler » sur la fenêtre des images d'un site externe arrête tout le lot, pas seulement cette ligne : rien n'est téléchargé.
         if (ExternalImages.isCancel(e)) { cancelled = true; break; }
-        console.error('[main] export ' + cfg.label + ' en lot : échec pour la ligne', rows[i].id, e);
+        console.error('[main] export ' + cfg.label + ' en lot : échec pour la ligne', row.id, e);
         failed++;
       }
     }
@@ -1568,9 +1625,13 @@
 
     setStatus(I18n.t(sheets ? 'status.sheetsAssembling' : merged ? 'status.pdfMerging' : single ? 'status.xlsxAssembling' : 'status.zipCompressing'));
     const outBlob = merged ? await mergedPdf.toBlob() : single ? await workbook.toBlob() : await zip.generateAsync({ type: 'blob' });
-    ExportCommon.downloadBlob(outBlob, sanitizeFilenamePart(tableId) + cfg.fileSuffix);
+    // Archive d'un export seul : nommée comme la ligne ; sinon comme la table.
+    const outBase = only ? (sanitizeFilenamePart(await ReaderMode.resolveFilename(filenameTemplate, tableId, rows[0])) || sanitizeFilenamePart(tableId)) : sanitizeFilenamePart(tableId);
+    ExportCommon.downloadBlob(outBlob, outBase + cfg.fileSuffix);
     const sheetCount = sheets ? mergedPdf.sheetCount : 0;
-    setStatus(failed ? exportText(cfg.doneWithFailures, { ok, failed, sheets: sheetCount }) : exportText(cfg.done, { ok, sheets: sheetCount }));
+    const useSplitTexts = splitting && cfg.splitDone;
+    const doneKey = failed ? (useSplitTexts ? cfg.splitDoneWithFailures : cfg.doneWithFailures) : (useSplitTexts ? cfg.splitDone : cfg.done);
+    setStatus(failed ? exportText(doneKey, { ok, failed, sheets: sheetCount }) : exportText(doneKey, { ok, sheets: sheetCount }));
   }
 
   async function switchMode(mode) {

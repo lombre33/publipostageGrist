@@ -490,7 +490,8 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   comme un tiret à 15 px). Il ouvre une fenêtre de la base commune (dans 700×400, titre et boutons fixes) : « Afficher », puis quatre choix sur une même ligne, en boutons à la manière de ceux
   de la Boucle (`aria-pressed`) : « Toutes les valeurs » (celui du départ), « La première », « La dernière » et « La n-ième ». « Toutes les valeurs » montre « Séparateur » (« , » au départ,
   espaces comprises) et « Avant la dernière » (vide = le même séparateur ; « , » puis « et » écrit « A, B et C ») ; « La n-ième » montre « Numéro » (de 1 à 999, 1 au départ ; sans valeur à ce
-  rang la bulle n'écrit rien) ; la première et la dernière n'ont aucun champ. Les champs sont en grille, l'étiquette puis le champ, et l'indication qui suit commence sous le champ. Dessous, un
+  rang la bulle n'écrit rien) ; la première et la dernière n'ont aucun champ. Les champs sont en grille, l'étiquette puis le champ, et l'indication qui suit commence sous le champ ; les deux séparateurs tiennent sur une seule ligne quand la fenêtre fait au moins 520 px de large
+  (un panneau de 700×400 n'a pas la place d'une ligne de plus), l'un sous l'autre sinon. Dessous, un
   aperçu d'une ligne, calculé avec le vrai formatage sur la ligne sélectionnée du tableau et mis à jour à chaque frappe (« Ligne sélectionnée (n° 3) : 2 valeurs (A, B). Le document écrit
   « A et B ». »). Rien n'est écrit dans le modèle avant « Enregistrer » ; Échap et « Annuler » le laissent tel quel ; « Remettre par défaut » (texte rouge sans cadre, à gauche) n'existe que si la
   bulle a déjà un réglage, il le retire tout de suite. Sans réglage, la bulle écrit exactement ce qu'elle écrivait avant (les valeurs séparées par « , ») : aucun modèle déjà enregistré ne
@@ -498,6 +499,17 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   des bulles réglées et vaut partout où la bulle s'écrit (Lecture, PDF, Word, Excel, e-mail, lot). Il suit une colonne remplacée (« Autres attributs », Remplacer) seulement vers une autre
   colonne liste. Une bulle dans une boucle reçoit déjà une valeur par tour : le réglage n'y servirait à rien, le bouton est grisé (`aria-disabled`, raison en info-bulle) ; il l'est aussi sur
   une colonne qui n'est pas une liste, un calcul, un bloc de texte conditionnel, une valeur conditionnelle et une case conditionnelle : grisé, jamais retiré.
+- « Un document par valeur » (second volet de la demande d'Antoine du 04/10 sur les listes : « une feature qui indiquera que ça fera un export par valeur ») : dans la fenêtre « Liste », sous les
+  champs et au-dessus de l'aperçu, une case « Un document par valeur » (décochée au départ ; libellé en gras 12 px, assez haut - 22 px - pour une souris), suivie sur la même ligne de son indication
+  (« Exports PDF, Word et Excel seulement. » ; elle passe sous le libellé, pas sous la case, quand la place manque). Cochée, l'aperçu gagne une seconde ligne verte sous la première (« Export :
+  3 documents, un par valeur (A, B, C). » ; « un seul document » pour une ligne à une valeur ou à liste vide) et la fenêtre la fait venir en vue dans un panneau bas ; la case va avec
+  n'importe lequel des quatre choix (ils règlent ce que la Lecture écrit). Enregistrer l'écrit dans `format.list` (clé `perValue`, qui suffit seule à allumer le bouton « Liste » et le point bleu) et la
+  bulle porte à droite une petite icône bleue (deux pages l'une sur l'autre, 10 px, jeton `--pp-split-icon-accent`), posée en image de fond comme celle d'une boucle « dans la phrase » pour laisser le
+  point bleu - sauf dans une boucle, où le réglage ne s'applique jamais. Les exports sortent alors un document par valeur de la ligne, tout le reste identique : l'archive ZIP de PDF (un PDF par valeur,
+  nommé « ligne - valeur »), le PDF unique (chaque document commence sur une nouvelle page), les archives de Word et d'Excel, le classeur Excel unique (une feuille « ligne - valeur », 31 caractères au
+  plus, la valeur toujours lisible) et l'export d'une seule ligne (une archive à partir de deux documents, le fichier ordinaire sinon) ; la confirmation d'un lot ajoute une phrase avec le nombre de
+  documents. Deux listes réglées sur des colonnes différentes donnent un document par combinaison (la première change le plus lentement), deux bulles sur la même colonne prennent la même valeur, une
+  ligne à liste vide garde un seul document (la bulle n'écrit rien). Ni la Lecture ni l'e-mail ne découpent : ils écrivent la liste comme réglée. Sans bulle réglée ainsi, un export reste ce qu'il était.
 - Variable Oui / Non (demande d'Antoine du 01/10) : une bulle sur une colonne Oui / Non a sa propre barre flottante, comme une date ou
   une image, à quatre boutons d'une même rangée : les trois styles de la liste à cases (`accentStrike`, `classic`, `accentPlain`, mêmes
   icônes, mêmes noms que les boutons de la liste) puis « vrai / faux » (« true / false » en interface anglaise). Sans réglage la bulle
