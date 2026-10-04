@@ -61,9 +61,9 @@ const Callout = (function () {
       + iconOf(iconKey).map(d => '<path d="' + d + '"/>').join('') + '</svg>';
   }
 
-  // L'icône en PNG, de la couleur d'accent : pdfmake et Word n'embarquent que des images (les glyphes d'icône, eux, manquent aux polices des PDF).
-  // `pixels` de côté ; dessinée à partir des mêmes tracés que le CSS, par Path2D. Retourne une URL de données.
   function iconPng(iconKey, hexColor, pixels) {
+    // L'icône en PNG, de la couleur d'accent : pdfmake et Word n'embarquent que des images (les glyphes d'icône, eux, manquent aux polices des PDF).
+    // `pixels` de côté ; dessinée à partir des mêmes tracés que le CSS, par Path2D. Retourne une URL de données.
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = pixels;
     const ctx = canvas.getContext('2d');
@@ -95,9 +95,9 @@ const Callout = (function () {
   }
 
   // Le nœud
-  // Un bloc qui contient des blocs (comme la citation) : défini (`defining`), pour que le copier-coller et la transformation gardent l'encadré autour
-  // de son contenu.
   function createNode(Node, mergeAttributes) {
+    // Un bloc qui contient des blocs (comme la citation) : défini (`defining`), pour que le copier-coller et la transformation gardent l'encadré autour
+    // de son contenu.
     return Node.create({
       name: 'callout',
       group: 'block',
@@ -115,8 +115,8 @@ const Callout = (function () {
     });
   }
 
-  // L'encadré le plus proche autour d'une position : { pos, node } ou null.
   function findAround($pos) {
+    // L'encadré le plus proche autour d'une position : { pos, node } ou null.
     for (let depth = $pos.depth; depth >= 1; depth--) {
       const node = $pos.node(depth);
       if (node.type.name === 'callout') return { pos: $pos.before(depth), node };
@@ -125,9 +125,9 @@ const Callout = (function () {
   }
   const isInside = ed => !!ed && !!findAround(ed.state.selection.$from);
 
-  // Entoure la sélection : les blocs choisis (ou celui du curseur) se retrouvent dans l'encadré. Dans une liste, un encadré ne peut pas prendre la
-  // place d'un paragraphe d'élément (le premier enfant d'un élément est un paragraphe) : c'est alors la liste entière qui est entourée.
   function wrapSelection(ed, attrs) {
+    // Entoure la sélection : les blocs choisis (ou celui du curseur) se retrouvent dans l'encadré. Dans une liste, un encadré ne peut pas prendre la
+    // place d'un paragraphe d'élément (le premier enfant d'un élément est un paragraphe) : c'est alors la liste entière qui est entourée.
     if (ed.can().wrapIn('callout', attrs)) return ed.chain().focus().wrapIn('callout', attrs).run();
     const { $from } = ed.state.selection;
     for (let depth = $from.depth; depth >= 1; depth--) {
@@ -138,13 +138,13 @@ const Callout = (function () {
     return false;
   }
 
-  // Retire l'encadré autour du curseur sans toucher à son contenu : le cadre est remplacé par ses blocs, et la sélection reste où elle était dans le
-  // texte (un cran plus bas : le jeton d'ouverture du cadre n'est plus devant elle). Pas `tr.lift` : en mode suivi, la bibliothèque traduit une levée
-  // en texte barré dans le cadre et le même texte inséré après lui (le cadre, vide, reste une fois tout accepté), alors qu'un remplacement donne le
-  // cadre entier barré et son contenu inséré : « Tout accepter » rend exactement le document sans l'encadré, « Tout refuser » celui d'avant (même
-  // technique que ConditionalText.unwrap, js/conditional-text.js). Faux, sans rien changer, quand le parent n'accepte pas ces blocs à la place du
-  // cadre (le premier bloc d'un élément de liste doit être un paragraphe).
   function unwrapAround(ed) {
+    // Retire l'encadré autour du curseur sans toucher à son contenu : le cadre est remplacé par ses blocs, et la sélection reste où elle était dans le
+    // texte (un cran plus bas : le jeton d'ouverture du cadre n'est plus devant elle). Pas `tr.lift` : en mode suivi, la bibliothèque traduit une levée
+    // en texte barré dans le cadre et le même texte inséré après lui (le cadre, vide, reste une fois tout accepté), alors qu'un remplacement donne le
+    // cadre entier barré et son contenu inséré : « Tout accepter » rend exactement le document sans l'encadré, « Tout refuser » celui d'avant (même
+    // technique que ConditionalText.unwrap, js/conditional-text.js). Faux, sans rien changer, quand le parent n'accepte pas ces blocs à la place du
+    // cadre (le premier bloc d'un élément de liste doit être un paragraphe).
     const found = findAround(ed.state.selection.$from);
     if (!found) return false;
     return ed.chain().focus().command(({ tr }) => {
@@ -240,9 +240,9 @@ const Callout = (function () {
     if (ed) ed.commands.focus();
   }
 
-  // Ouvre la fenêtre : pour modifier l'encadré autour du curseur s'il y en a un, sinon pour en insérer un (autour de la sélection). Faux quand
-  // l'éditeur n'est pas modifiable.
   function open() {
+    // Ouvre la fenêtre : pour modifier l'encadré autour du curseur s'il y en a un, sinon pour en insérer un (autour de la sélection). Faux quand
+    // l'éditeur n'est pas modifiable.
     const ed = EditorCore.getEditor();
     if (!ed || !ed.isEditable) return false;
     ensure();
@@ -286,11 +286,11 @@ const Callout = (function () {
   }
 
   // Le bloc de signature
-  // Une zone 2 colonnes : trois lignes vides pour signer (~1,6 cm), une ligne de tirets bas, puis la légende (« Nom et signature » à gauche, « Date »
-  // à droite). Les tirets bas font une ligne dans tous les rendus sans rien de nouveau à exporter, et se remplacent comme du texte (une variable, une
-  // autre légende...).
-  const SIGNATURE_LINE = '_'.repeat(30);
   function signatureContent() {
+    // Une zone 2 colonnes : trois lignes vides pour signer (~1,6 cm), une ligne de tirets bas, puis la légende (« Nom et signature » à gauche, « Date »
+    // à droite). Les tirets bas font une ligne dans tous les rendus sans rien de nouveau à exporter, et se remplacent comme du texte (une variable, une
+    // autre légende...).
+    const SIGNATURE_LINE = '_'.repeat(30);
     const column = caption => ({
       type: 'twoColumnsColumn',
       content: [{ type: 'paragraph' }, { type: 'paragraph' }, { type: 'paragraph' },
@@ -300,9 +300,9 @@ const Callout = (function () {
     return { type: 'twoColumnsZone', content: [column(I18n.t('signature.name')), column(I18n.t('signature.date'))] };
   }
 
-  // Insère le bloc sous le bloc du curseur (au premier niveau du document : sous la liste, le tableau, l'encadré où il se trouve) ; un paragraphe
-  // vide est remplacé, pour ne pas laisser une ligne vide devant. Le curseur se pose dans la légende de gauche, prête à être changée.
   function insertSignature(ed) {
+    // Insère le bloc sous le bloc du curseur (au premier niveau du document : sous la liste, le tableau, l'encadré où il se trouve) ; un paragraphe
+    // vide est remplacé, pour ne pas laisser une ligne vide devant. Le curseur se pose dans la légende de gauche, prête à être changée.
     if (!ed || !ed.isEditable) return false;
     const { $from } = ed.state.selection;
     const top = $from.depth >= 1 ? $from.node(1) : null;
