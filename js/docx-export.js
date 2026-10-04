@@ -493,6 +493,8 @@ const DocxExport = (function () {
       ? measuredPx.map(px => Math.max(200, Math.round(px * PX_TO_TWIP) + WORD_DEFAULT_CELL_MARGIN_TWIP))
       : equalColumnWidthsTwip(columnCount);
     const tableRows = [];
+    // Les lignes de titres (cases <th> en tête) : Word les reprend en haut de chaque page où le tableau se poursuit (`tblHeader`), comme le PDF.
+    const headerRowCount = ExportCommon.headerRowCount(rows);
     for (const tr of rows) {
       const cells = Array.from(tr.children).filter(c => /^(TD|TH)$/i.test(c.tagName));
       const tableCells = [];
@@ -513,7 +515,7 @@ const DocxExport = (function () {
       }
       // cantSplit : une ligne ne se coupe pas entre deux pages, elle passe en entier à la suivante (comme dans l'éditeur, la Lecture et le PDF, js/table-page-cut.js). Word
       // la coupe quand même si elle est plus haute que la page.
-      tableRows.push(new docx.TableRow({ children: tableCells, cantSplit: true }));
+      tableRows.push(new docx.TableRow(Object.assign({ children: tableCells, cantSplit: true }, tableRows.length < headerRowCount ? { tableHeader: true } : {})));
     }
     // columnWidths pilote le <w:tblGrid> (déclaration structurelle des colonnes) - SANS lui, docx.js retombe sur son propre défaut interne
     // (100 twips/colonne, vérifié dans son bundle), incohérent avec les largeurs réelles posées ci-dessus sur chaque TableCell.width. Un <w:tblGrid> qui ne

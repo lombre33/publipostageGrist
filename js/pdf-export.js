@@ -793,8 +793,11 @@ const PdfExport = (function () {
     const hasFloatedImage = Array.from(node.querySelectorAll('img.editor-image')).some(img => (img.getAttribute('data-layer') || 'normal') === 'normal' && /^(left|right)$/.test(img.getAttribute('data-align') || ''));
     const keepRowsWhole = !!cutRows && !isGrid && !!inMainFlow && !hasLayeredImage && !hasFloatedImage && tablePageHeightPt > 0 && !(node.parentElement && node.parentElement.closest('td, th, li, blockquote, .callout, .two-columns-column'))
       && TablePageCut.rowsFit(cutRows.map(row => row.getBoundingClientRect().height * PX_TO_PT), tablePageHeightPt);
+    // Les lignes de titres (cases <th> en tête) reviennent en haut de chaque page où le tableau se poursuit - comme dans le Word (`tblHeader`). Pour un tableau du texte courant seulement : celui d'une
+    // case, d'une liste, d'une citation, d'un encadré ou d'une colonne ne passe pas d'une page à l'autre, et une grille (js/grid-editor.js) n'a pas de feuille.
+    const repeatedHeaderRows = !isGrid && !!inMainFlow && !(node.parentElement && node.parentElement.closest('td, th, li, blockquote, .callout, .two-columns-column')) ? ExportCommon.headerRowCount(rawRows) : 0;
     const table = {
-      table: Object.assign({ headerRows: 0, widths, body: body.length ? body : [[{ text: ' ' }].concat(Array(Math.max(0, columnCount - 1)).fill({}))] }, isGrid && body.length ? { heights: gridRowAreaPt } : {}, keepRowsWhole ? { dontBreakRows: true } : {}),
+      table: Object.assign({ headerRows: repeatedHeaderRows, widths, body: body.length ? body : [[{ text: ' ' }].concat(Array(Math.max(0, columnCount - 1)).fill({}))] }, isGrid && body.length ? { heights: gridRowAreaPt } : {}, keepRowsWhole ? { dontBreakRows: true } : {}),
       layout: {
         hLineWidth: () => 0.5, vLineWidth: () => 0.5, hLineColor: () => TABLE_BORDER_COLOR, vLineColor: () => TABLE_BORDER_COLOR,
         paddingLeft: () => cellPadLeftPt, paddingRight: () => cellPadRightPt, paddingTop: () => cellPadTopPt, paddingBottom: () => cellPadBottomPt,
@@ -823,10 +826,11 @@ const PdfExport = (function () {
     if (!table.table.dontBreakRows || body.length < 2 || !rows || rows.length !== body.length) return null;
     const tailPt = rows[rows.length - 1].getBoundingClientRect().height * PX_TO_PT + captionPt;
     if (!Caption.fitsWithCaption(tailPt, tablePageHeightPt)) return null;
-    const head = Object.assign({}, table, { table: Object.assign({}, table.table, { body: body.slice(0, -1) }), margin: [0, 5, 0, 0] });
+    // Les lignes de titres restent au premier morceau (jamais toutes les lignes de lui : pdfmake ne reprend rien au-dessus de rien) ; la dernière ligne, seule, n'en reprend pas.
+    const head = Object.assign({}, table, { table: Object.assign({}, table.table, { body: body.slice(0, -1), headerRows: Math.min(table.table.headerRows || 0, body.length - 2) }), margin: [0, 5, 0, 0] });
     const baseLayout = table.layout;
     const tail = Object.assign({}, table, {
-      table: Object.assign({}, table.table, { body: body.slice(-1) }),
+      table: Object.assign({}, table.table, { body: body.slice(-1), headerRows: 0 }),
       margin: [0, 0, 0, 5],
       layout: Object.assign({}, baseLayout, { hLineWidth: (i, tableNode) => (i === 0 && tableNode.pageBreak !== 'before' ? 0 : baseLayout.hLineWidth(i, tableNode)) }),
       _keepTail: true,

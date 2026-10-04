@@ -25,6 +25,9 @@
   }
   const rowsHtml = (from, to, lines) => Array.from({ length: to - from }, (_, i) => rowHtml(from + i, lines || 1)).join('');
   const tableHtml = (rows, lines) => '<table><tbody>' + rowsHtml(0, rows, lines) + '</tbody></table>';
+  // Le même tableau précédé de `titles` lignes de titres (cases <th>) : « TITREA0 », « TITREB0 »... (B2 du rapport du 04/10 : les titres de colonnes ne revenaient pas sur les pages suivantes).
+  const titleRowsHtml = titles => Array.from({ length: titles }, (_, i) => '<tr><th><p>TITREA' + i + '</p></th><th><p>TITREB' + i + '</p></th></tr>').join('');
+  const titledTableHtml = (rows, lines, titles) => '<table><tbody>' + titleRowsHtml(titles === undefined ? 1 : titles) + rowsHtml(0, rows, lines) + '</tbody></table>';
   const intro = n => Array.from({ length: n }, (_, i) => '<p>Introduction ' + i + '</p>').join('');
   const HEADER_FOOTER = { enabled: true, differentFirstPage: false, header: { default: '<p>EN-TETE</p>', first: '' }, footer: { default: '<p>PIED DE PAGE</p>', first: '' } };
   const NO_HEADER_FOOTER = { enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } };
@@ -708,6 +711,129 @@
         const rows = Array.from(parts.doc.getElementsByTagName('w:tr'));
         const flagged = rows.filter(tr => tr.getElementsByTagName('w:cantSplit').length === 1);
         return { pass: rows.length === 9 && flagged.length === 9, notes: JSON.stringify({ rows: rows.length, flagged: flagged.length }) };
+      } finally { restoreEditor(); }
+    },
+  });
+
+  // --- Lignes de titres : elles reviennent en haut de chaque page où le tableau se poursuit (PDF : headerRows de pdfmake ; Word : tblHeader). L'aperçu de l'éditeur et la Lecture coupent le
+  // tableau au même endroit qu'avant et ne montrent pas ce rappel : la règle ne vaut que pour les deux fichiers. ---
+  cases.push({
+    id: 'table_page_cut_pdf_title_rows_come_back_at_the_top_of_every_page',
+    description: 'PDF (relu par pdf.js) : un tableau dont la première ligne est faite de cases de titre (<th>) répète ces titres en haut de CHAQUE page où il se poursuit, tout en haut de la page ; chaque ligne de données reste une fois, entière',
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        PageLayout.setMarginsMm(null);
+        const { gt, tokens } = await pdfOf(h, titledTableHtml(40, 3, 1));
+        const perPage = gt.pages.map(page => {
+          const titles = page.textItems.filter(it => it.str.includes('TITREA0'));
+          const topY = Math.min(...page.textItems.map(it => it.y));
+          return { titles: titles.length, atTop: titles.length === 1 && Math.abs(titles[0].y - topY) < 1 };
+        });
+        const pass = gt.pages.length >= 3 && perPage.every(p => p.titles === 1 && p.atTop) && tokens.length === 40 * 3 && splitRows(tokens).length === 0;
+        return { pass, notes: JSON.stringify({ pages: gt.pages.length, perPage, tokens: tokens.length, split: splitRows(tokens) }) };
+      } finally { restoreEditor(); }
+    },
+  });
+
+  cases.push({
+    id: 'table_page_cut_pdf_two_title_rows_both_come_back',
+    description: 'PDF : deux lignes de titres en tête reviennent toutes les deux, dans l\'ordre, en haut de chaque page',
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        PageLayout.setMarginsMm(null);
+        const { gt } = await pdfOf(h, titledTableHtml(40, 3, 2));
+        const perPage = gt.pages.map(page => {
+          const sorted = page.textItems.slice().sort((a, b) => a.y - b.y || a.x - b.x).map(it => it.str.trim()).filter(Boolean);
+          return sorted.slice(0, 4).join('|');
+        });
+        const expected = 'TITREA0|TITREB0|TITREA1|TITREB1';
+        const pass = gt.pages.length >= 3 && perPage.every(top => top === expected);
+        return { pass, notes: JSON.stringify({ pages: gt.pages.length, perPage }) };
+      } finally { restoreEditor(); }
+    },
+  });
+
+  cases.push({
+    id: 'table_page_cut_pdf_title_rows_flag_follows_the_cells',
+    description: 'PDF : headerRows vaut le nombre de lignes du début dont TOUTES les cases sont des cases de titre ; zéro sans cases de titre, avec une ligne mêlant titres et données, quand une case de titre fusionnée déborde sur une ligne de données, quand tout le tableau est fait de titres, dans une colonne et dans une grille',
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        PageLayout.setMarginsMm(null);
+        const flagOf = async html => {
+          const { result } = await pdfOf(h, html);
+          const tables = findTables(result.content);
+          return tables.length ? tables.map(t => t.table.headerRows) : null;
+        };
+        const mixed = '<table><tbody><tr><th><p>T</p></th><td><p>D</p></td></tr>' + rowsHtml(0, 5, 1) + '</tbody></table>';
+        const spanning = '<table><tbody><tr><th rowspan="2"><p>T</p></th><th><p>U</p></th></tr><tr><td><p>D</p></td></tr>' + rowsHtml(0, 5, 1) + '</tbody></table>';
+        const allTitles = '<table><tbody>' + titleRowsHtml(4) + '</tbody></table>';
+        const inColumn = '<div class="two-columns-zone" style="--layout-left: 50%"><div class="two-columns-column">' + titledTableHtml(6, 1, 1) + '</div><div class="two-columns-column"><p>Texte à côté</p></div></div>';
+        const grid = '<table><tbody><tr data-row-height="30"><th><p>T</p></th><th><p>U</p></th></tr><tr data-row-height="30"><td><p>1</p></td><td><p>2</p></td></tr><tr data-row-height="30"><td><p>3</p></td><td><p>4</p></td></tr></tbody></table>';
+        const got = {
+          plain: await flagOf(tableHtml(8, 1)), one: await flagOf(titledTableHtml(8, 1, 1)), two: await flagOf(titledTableHtml(8, 1, 2)),
+          mixed: await flagOf(mixed), spanning: await flagOf(spanning), allTitles: await flagOf(allTitles), inColumn: await flagOf(inColumn), grid: await flagOf(grid),
+        };
+        const pass = JSON.stringify(got.plain) === '[0]' && JSON.stringify(got.one) === '[1]' && JSON.stringify(got.two) === '[2]' && JSON.stringify(got.mixed) === '[0]'
+          && JSON.stringify(got.spanning) === '[0]' && JSON.stringify(got.allTitles) === '[0]' && !!got.inColumn && got.inColumn.every(n => n === 0) && JSON.stringify(got.grid) === '[0]';
+        return { pass, notes: JSON.stringify(got) };
+      } finally { restoreEditor(); }
+    },
+  });
+
+  cases.push({
+    id: 'table_page_cut_pdf_title_rows_stay_with_the_first_piece_when_a_caption_follows',
+    description: 'PDF : un tableau suivi d\'une légende (« Rester ensemble ») est rendu en deux morceaux ; les lignes de titres restent au premier, la dernière ligne seule n\'en reprend pas',
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        PageLayout.setMarginsMm(null);
+        const { result } = await pdfOf(h, titledTableHtml(6, 1, 1) + '<p data-caption="true">Tableau un</p>');
+        const tables = findTables(result.content);
+        const pass = tables.length === 2 && tables[0].table.headerRows === 1 && tables[1].table.headerRows === 0 && tables[0].table.body.length === 6 && tables[1].table.body.length === 1;
+        return { pass, notes: JSON.stringify({ tables: tables.map(t => ({ headerRows: t.table.headerRows, rows: t.table.body.length })) }) };
+      } finally { restoreEditor(); }
+    },
+  });
+
+  // Une ligne que Word reprend en haut de chaque page : <w:tblHeader/> dans ses propriétés, sauf valeur « false » ou « 0 ».
+  const isTitleRow = tr => Array.from(tr.getElementsByTagName('w:tblHeader')).some(el => !/^(false|0|off)$/i.test(el.getAttribute('w:val') || 'true'));
+  cases.push({
+    id: 'table_page_cut_docx_title_rows_repeat_on_every_page',
+    description: 'Word : la ligne de cases de titre porte tblHeader (lu dans le .docx généré) - Word la reprend en haut de chaque page - et elle seule ; chaque ligne garde cantSplit',
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        const parts = await h.exportDocxParts(intro(1) + titledTableHtml(9, 2, 1), null, null);
+        const rows = Array.from(parts.doc.getElementsByTagName('w:tr'));
+        const headed = rows.map(tr => isTitleRow(tr));
+        const cantSplit = rows.every(tr => tr.getElementsByTagName('w:cantSplit').length === 1);
+        const pass = rows.length === 10 && headed[0] === true && headed.slice(1).every(f => f === false) && cantSplit;
+        return { pass, notes: JSON.stringify({ rows: rows.length, headed, cantSplit }) };
+      } finally { restoreEditor(); }
+    },
+  });
+
+  cases.push({
+    id: 'table_page_cut_docx_title_rows_flag_follows_the_cells',
+    description: 'Word : tblHeader sur les lignes du début dont TOUTES les cases sont des cases de titre (deux lignes : les deux) ; aucune sans cases de titre, avec une ligne mêlant titres et données, quand une case de titre fusionnée déborde sur une ligne de données, ni quand tout le tableau est fait de titres',
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        const headedOf = async html => {
+          const parts = await h.exportDocxParts(html, null, null);
+          return Array.from(parts.doc.getElementsByTagName('w:tr')).map(tr => (isTitleRow(tr) ? 1 : 0)).join('');
+        };
+        const mixed = '<table><tbody><tr><th><p>T</p></th><td><p>D</p></td></tr>' + rowsHtml(0, 3, 1) + '</tbody></table>';
+        const spanning = '<table><tbody><tr><th rowspan="2"><p>T</p></th><th><p>U</p></th></tr><tr><td><p>D</p></td></tr>' + rowsHtml(0, 3, 1) + '</tbody></table>';
+        const got = {
+          plain: await headedOf(tableHtml(4, 1)), one: await headedOf(titledTableHtml(4, 1, 1)), two: await headedOf(titledTableHtml(4, 1, 2)),
+          mixed: await headedOf(mixed), spanning: await headedOf(spanning), allTitles: await headedOf('<table><tbody>' + titleRowsHtml(3) + '</tbody></table>'),
+        };
+        const pass = got.plain === '0000' && got.one === '10000' && got.two === '110000' && got.mixed === '0000' && got.spanning === '00000' && got.allTitles === '000';
+        return { pass, notes: JSON.stringify(got) };
       } finally { restoreEditor(); }
     },
   });

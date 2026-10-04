@@ -182,6 +182,23 @@ const ExportCommon = (function () {
     return starts.map((from, i) => [from, i + 1 < starts.length ? starts[i + 1] : rows.length]);
   }
 
+  // Les lignes de titres d'un tableau, celles que le PDF et le Word reprennent en haut de chaque page où le tableau se poursuit : les lignes du début dont toutes les cases sont des cases de
+  // titre (<th>). Rien ne se répète quand le tableau n'est fait que de lignes de titres (rien à répéter au-dessus de quoi que ce soit), ni quand une case fusionnée sur plusieurs lignes déborde
+  // sous elles (le bloc répété serait coupé en deux) : on s'arrête alors avant elle. `rows` : les <tr> du tableau, dans l'ordre.
+  function headerRowCount(rows) {
+    const cellsOf = tr => Array.from(tr.children).filter(cell => /^(TD|TH)$/i.test(cell.tagName));
+    const rowSpanOf = cell => Math.max(1, parseInt(cell.getAttribute('rowspan') || '1', 10) || 1);
+    let count = 0;
+    while (count < rows.length) {
+      const cells = cellsOf(rows[count]);
+      if (!cells.length || !cells.every(cell => /^TH$/i.test(cell.tagName))) break;
+      count += 1;
+    }
+    if (count === rows.length) return 0;
+    while (count > 0 && rows.slice(0, count).some((tr, i) => cellsOf(tr).some(cell => i + rowSpanOf(cell) > count))) count -= 1;
+    return count;
+  }
+
   // Les images qu'un export laisse de côté faute de pouvoir les lire (pièce jointe supprimée du document, adresse qui ne répond plus, format illisible) : le reste du fichier s'écrit, mais
   // la personne doit le savoir (js/main.js : l'état sous les boutons). Comptées sans doublon sur la durée d'un clic, un lot entier compris - la même image dans l'en-tête de chaque ligne n'est
   // qu'une image. Une pièce jointe se reconnaît à son numéro (le jeton de son adresse change d'un appel à l'autre), toute autre image à son adresse.
@@ -199,5 +216,5 @@ const ExportCommon = (function () {
   function resetUnreadImages() { unreadImages.clear(); }
 
   return { loadScriptOnce, ensureJsZipLoaded, downloadBlob, attachMeasureHost, measuredColumnWidthsPx, shownImageWidthPx, cellBorderSides, gridRowSegments, resolveHeaderFooterVariables, codeLinesOf, calloutMetricsPx,
-    noteUnreadImage, noteImageWithoutSource, unreadImageCount, resetUnreadImages };
+    headerRowCount, noteUnreadImage, noteImageWithoutSource, unreadImageCount, resetUnreadImages };
 })();
