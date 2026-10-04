@@ -100,7 +100,7 @@ contenu exportable :
 - **Police du contenu produit** : celle qui part réellement à l'export. Sur Publipostage+, c'est **Roboto**,
   auto-hébergée (`css/roboto-fonts.css`) en regular/italique/gras/gras-italique — délibérément les MÊMES fichiers
   que ceux embarqués dans le PDF par `pdfmake`, pour que la pagination affichée à l'écran soit identique à celle
-  du PDF. Ne jamais laisser la police du contenu dériver de celle réellement exportée.
+  du PDF. Ne jamais laisser la police du contenu dériver de celle réellement exportée. Dans le PDF, un caractère que la police du texte n'a pas (du grec, du cyrillique ou du vietnamien dans Arial ou en gras, un ✓ → ★ ① ₿ ✅) s'écrit dans une police de repli, Roboto de la même graisse puis PPSymbols (`js/pdf-glyph-fallback.js`), jamais en case vide ; le chinois, le japonais, l'arabe, l'hébreu et le thaï restent des cases vides (aucune police assez légère, et pdfmake ne dessine pas de droite à gauche).
 - Base non stylée (avant les tokens) : `Arial, sans-serif` — n'apparaît jamais telle quelle une fois l'app chargée.
 
 ### Thème sombre : uniquement le chrome, jamais le contenu produit

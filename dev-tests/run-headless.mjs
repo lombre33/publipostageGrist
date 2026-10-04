@@ -97,6 +97,7 @@ const GROUPS = {
   linkConfig: 'scenarios-link-config',
   columnSearch: 'scenarios-column-search',
   pdfBatch: 'scenarios-pdf-batch',
+  pdfGlyphs: 'scenarios-pdf-glyphs', // un caractère que la police n'a pas ne s'imprime plus en case vide dans le PDF (js/pdf-glyph-fallback.js, js/pdf-fonts.js, js/pdf-fonts-symbols.js, inlineRuns et glyphText de js/pdf-export.js) : PDF relu par pdf.js, glyphes .notdef comptés
   sheetAssembly: 'scenarios-sheet-assembly', // « Assemblage avant impression » (js/sheet-layout.js, js/sheet-assembly-dialog.js, js/pdf-merge.js:createSheets) : géométrie des planches, fenêtre de réglage, PDF relu par pdf.js (feuilles, texte par emplacement, traits de coupe tracés et peints), menu, droits d'export, grille
   accessRights: 'scenarios-access-rights',
   linksBlocks: 'scenarios-links-blocks',

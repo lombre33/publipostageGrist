@@ -7,10 +7,12 @@ const PdfExport = (function () {
     { src: 'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js', integrity: 'sha384-VFQrHzqBh5qiJIU0uGU5CIW3+OWpdGGJM9LBnGbuIH2mkICcFZ7lPd/AAtI7SNf7' },
     { src: 'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.min.js', integrity: 'sha384-dWs4+zGqy/KS6giKxiK+6iowhidQwjVFaiE1lMar36QwIulE44VyBSQp0brMCx4D' },
     // Chemins relatifs à index.html, même origine que la page : pas de SRI nécessaire (une compromission serait déjà celle du dépôt lui-même).
-    { src: 'js/pdf-fonts.js?v=0.67' },
+    { src: 'js/pdf-fonts.js?v=0.68' },
     { src: 'js/pdf-fonts-extra.js?v=0.67' },
     // Les deux polices de cases à cocher des variables Oui / Non (dev-tests/build-pdf-boxes-font.py) : ~3 Ko, lues par inlineRuns.
     { src: 'js/pdf-fonts-boxes.js?v=0.1' },
+    // PPSymbols (dev-tests/build-pdf-fonts-fallback.py) : ✓ → ★ ① ₿ ✅... que ni Roboto ni les cinq autres familles n'ont ; js/pdf-glyph-fallback.js (chargé avec la page) y renvoie ces caractères. ~380 Ko.
+    { src: 'js/pdf-fonts-symbols.js?v=0.1' },
   ];
   let pdfLibsPromise = null;
   // Séquentiel (pas Promise.all) : pdf-fonts*.js lisent window.pdfMake.vfs à l'exécution, donc doivent s'exécuter après pdfmake.min.js/vfs_fonts.min.js.
@@ -209,7 +211,7 @@ const PdfExport = (function () {
       const pageCell = { text: '', alignment: 'right', width: 30, bold: isH1, fontSize };
       pageNumberCells.push(pageCell);
       return {
-        columns: [{ text: hb._headingText || '', bold: isH1, fontSize }, pageCell],
+        columns: [glyphText(hb._headingText || '', { bold: isH1, fontSize }), pageCell],
         columnGap: 4,
         margin: [Math.max(0, level - 1) * 14, isH1 ? 6 : 2, 0, 2],
       };
@@ -335,21 +337,28 @@ const PdfExport = (function () {
     return number;
   }
 
+  // Un texte qui ne passe pas par inlineRuns (entrée du sommaire, ligne de code, note de bas de page) : le même repli de police par caractère. `style` : ce qui se pose sur un caractère (police,
+  // taille, graisse, couleur, interligne) ; le bloc rendu le garde, et seul le texte devient une suite de runs quand la police en manque un caractère - sinon rien ne change.
+  function glyphText(text, style) {
+    return Object.assign({}, style, { text: PdfGlyphFallback.split(text, style) || text });
+  }
+
   // IMPORTANT : ne retourne jamais d'image dans ce tableau de "runs" - un objet { image: ... } glissé dans le texte n'est pas une syntaxe pdfmake valide
   // (silencieusement ignoré). Les images rencontrées sont accumulées à part (`images`) pour être ajoutées par l'appelant comme blocs propres.
   function inlineRuns(node, parentStyle, images) {
     const style = inheritedStyle(node, parentStyle || { fontSize: DEFAULT_FONT_SIZE });
-    if (node.nodeType === Node.TEXT_NODE) return node.nodeValue ? [{ text: node.nodeValue, ...style }] : [];
+    // Tout texte écrit passe par PdfGlyphFallback : un caractère que la police du texte n'a pas (✓ → ★ ①, un mot grec ou cyrillique en Arial...) s'écrit dans une police qui l'a, jamais en case vide.
+    if (node.nodeType === Node.TEXT_NODE) return node.nodeValue ? PdfGlyphFallback.runsFor(node.nodeValue, style) : [];
     if (node.nodeType !== Node.ELEMENT_NODE) return [];
     if (node.classList.contains('page-break-marker')) return [];
     // Ne devrait normalement jamais être rencontré ici : ReaderMode.preview résout déjà chaque badge en texte simple avant ce module - gardé par robustesse.
-    if (node.classList.contains('var-badge')) return [{ text: node.textContent || '', ...style }];
+    if (node.classList.contains('var-badge')) return PdfGlyphFallback.runsFor(node.textContent || '', style);
     // Contrairement à .var-badge, aucune valeur réelle n'existe avant que pdfmake choisisse le numéro de page final - marqueur résolu plus tard par
     // resolvePageNumberPlaceholders à chaque callback header/footer natif.
     if (node.classList.contains('page-number-badge')) {
       return [{ text: '#', ...style, _pendingPageNumber: { format: node.getAttribute('data-format') || 'n' } }];
     }
-    if (node.classList.contains('smart-chip')) return [{ text: node.textContent || '', ...style }];
+    if (node.classList.contains('smart-chip')) return PdfGlyphFallback.runsFor(node.textContent || '', style);
     // Case à cocher d'une variable Oui / Non (js/reader-mode.js:checkboxNode) : un glyphe des polices de cases (js/pdf-fonts-boxes.js) - la police du texte n'a ni ☑ ni ☐ -, de la taille du texte et de
     // la couleur de la case (style en ligne, déjà lu par inheritedStyle). Jamais barrée, grasse ni en italique : le barré d'une case d'accent cochée vise le texte qui la suit, pas une autre case.
     if (node.classList.contains('resolved-checkbox')) {
@@ -1896,7 +1905,7 @@ const PdfExport = (function () {
   // Espaces de tête gardés (preserveLeadingSpaces), ligne vide = une ligne d'un espace. 6pt de haut/bas, 7.5pt de côté et 0.75pt de filet reprennent le padding 8px/10px et la
   // bordure 1px de `.tiptap pre` ; marge de 3pt = `margin: 4px 0`.
   function codeBlockFrom(node, pageBreakBefore, inCell) {
-    const body = ExportCommon.codeLinesOf(node).map(line => [{ text: line === '' ? ' ' : line, font: CODE_FONT, fontSize: CODE_FONT_SIZE, color: CODE_TEXT_COLOR, lineHeight: CODE_LINE_HEIGHT_RATIO, preserveLeadingSpaces: true }]);
+    const body = ExportCommon.codeLinesOf(node).map(line => [glyphText(line === '' ? ' ' : line, { font: CODE_FONT, fontSize: CODE_FONT_SIZE, color: CODE_TEXT_COLOR, lineHeight: CODE_LINE_HEIGHT_RATIO, preserveLeadingSpaces: true })]);
     const last = body.length - 1;
     const block = {
       table: { widths: ['*'], body },
@@ -2114,7 +2123,7 @@ const PdfExport = (function () {
       blocks.push(block); sourceNodes.push(node); blockSlots.push(currentSlot);
     };
     const visit = async node => {
-      if (node.nodeType === Node.TEXT_NODE) { if (node.nodeValue.trim()) { captionOwner = null; push({ text: node.nodeValue, margin: [0, 2, 0, 4], lineHeight: LINE_HEIGHT_RATIO, ...(pendingPageBreak ? { pageBreak: 'before' } : {}) }, node.parentElement); } pendingPageBreak = false; return; }
+      if (node.nodeType === Node.TEXT_NODE) { if (node.nodeValue.trim()) { captionOwner = null; push({ ...glyphText(node.nodeValue, { lineHeight: LINE_HEIGHT_RATIO }), margin: [0, 2, 0, 4], ...(pendingPageBreak ? { pageBreak: 'before' } : {}) }, node.parentElement); } pendingPageBreak = false; return; }
       if (node.nodeType !== Node.ELEMENT_NODE) return;
       const owner = captionOwner;
       captionOwner = null;
@@ -2515,7 +2524,7 @@ const PdfExport = (function () {
         if (notesForPage && notesForPage.length) {
           stackParts.push({ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 120, y2: 0, lineWidth: 0.5, lineColor: '#999999' }], margin: [0, 2, 0, 2] });
           notesForPage.forEach(fn => {
-            stackParts.push({ text: [{ text: fn.number + '. ', bold: true, fontSize: 8 }, { text: fn.text, fontSize: 8 }], margin: [0, 0, 0, 1] });
+            stackParts.push({ text: [{ text: fn.number + '. ', bold: true, fontSize: 8 }, glyphText(fn.text, { fontSize: 8 })], margin: [0, 0, 0, 1] });
           });
         }
         if (!stackParts.length) return null;
