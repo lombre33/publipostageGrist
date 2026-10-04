@@ -1,8 +1,8 @@
-// Fabriques de nœuds/extensions TipTap personnalisés - extrait de editor.js (découpage 2026). Aucune ne ferme sur une référence d'éditeur partagée : chaque
-// NodeView reçoit la sienne via le paramètre `({ node, editor, getPos }) => {...}` fourni par TipTap à chaque rendu (vérifié pour toutes celles ci-dessous).
+// Fabriques de nœuds et d'extensions TipTap personnalisés. Aucune ne ferme sur une référence d'éditeur partagée : chaque NodeView reçoit la sienne
+// par le paramètre `({ node, editor, getPos })` que TipTap fournit à chaque rendu.
 const EditorNodes = (function () {
-  // Touche de déclenchement configurable (panneau Réglages) - lue directement depuis localStorage, même clé que js/variables.js (pas de dépendance de module
-  // croisée pour une simple lecture, cf. son en-tête).
+  // Touche de déclenchement configurable (panneau Réglages), lue directement dans localStorage, même clé que js/variables.js : pas de dépendance
+  // croisée pour une simple lecture.
   function varBadgeTriggerChar() {
     try {
       const v = localStorage.getItem('pp_trigger_char');
@@ -10,11 +10,42 @@ const EditorNodes = (function () {
     } catch (e) { return '#'; }
   }
 
-  // Coupe le libellé d'une bulle en un DÉBUT et une FIN, pour qu'une case de tableau ou une colonne de zone 2 colonnes trop étroite tronque le MILIEU du nom
-  // (« #Projets.Det…Fonctionnement » plutôt que « #Projets.Details_depense_s_Fonc… ») : ce qui identifie une variable, c'est sa table au début et sa colonne au
-  // bout. La fin est le dernier mot du nom en entier (« Fonctionnement », « Email ») complété des mots qui le précèdent tant qu'elle reste courte
-  // (« du_client », « s_Personnel ») ; un dernier mot trop long est coupé à ses derniers caractères. C'est la case qui dit ensuite combien de cette fin se voit
-  // (css/variable-actions.css : elle se coupe par la gauche, jamais par la droite, donc le bout du nom reste lisible). Un nom court n'est pas coupé.
+  // Un attribut gardé dans le JSON du nœud, jamais rendu en attribut HTML : sans `renderHTML` vide, TipTap écrirait aussi chaque attribut par défaut
+  // en attribut nu (table="...") en plus des data-* posés à la main, un doublon.
+  const internalAttr = defaultValue => ({ default: defaultValue, renderHTML: () => ({}) });
+  // Nœud atome en ligne et sélectionnable : une bulle, une puce, une note de bas de page, une image.
+  const inlineAtom = (Node, config) => Node.create(Object.assign({ group: 'inline', inline: true, atom: true, selectable: true }, config));
+  // L'objet qu'un attribut data-* porte en JSON (condition, format, boucle) ; null quand il est absent ou illisible.
+  function jsonAttr(el, name) {
+    const raw = el.getAttribute(name);
+    if (!raw) return null;
+    try { return JSON.parse(raw); } catch (e) { return null; }
+  }
+  // Pose sur `dom` les attributs d'une spécification de rendu, sauf les null.
+  function setAttrs(dom, attrs) {
+    Object.keys(attrs).forEach(name => { if (attrs[name] != null) dom.setAttribute(name, attrs[name]); });
+  }
+  // Les vues qui réécrivent leurs textes au changement de langue : une seule écoute pour toutes (I18n.onChange ne se désabonne pas), chaque vue
+  // s'inscrit tant qu'elle vit.
+  function languageViews() {
+    const views = new Set();
+    I18n.onChange(() => views.forEach(refresh => refresh()));
+    return views;
+  }
+  // Le nœud d'une NodeView tel que le document l'a maintenant, avec sa position ; null s'il n'y est plus. Jamais le `node` reçu au premier rendu :
+  // seul `update` le rafraîchit.
+  function liveNode(editor, getPos) {
+    const pos = getPos();
+    const node = typeof pos === 'number' ? editor.state.doc.nodeAt(pos) : null;
+    return node ? { pos, node } : null;
+  }
+
+  // Coupe le libellé d'une bulle en un début et une fin, pour qu'une case de tableau ou une colonne de zone 2 colonnes trop étroite tronque le milieu
+  // du nom (« #Projets.Det…Fonctionnement » plutôt que « #Projets.Details_depense_s_Fonc… ») : ce qui identifie une variable, c'est sa table au début
+  // et sa colonne au bout. La fin est le dernier mot du nom en entier (« Fonctionnement », « Email ») complété des mots qui le précèdent tant qu'elle
+  // reste courte (« du_client », « s_Personnel ») ; un dernier mot trop long est coupé à ses derniers caractères. C'est la case qui dit ensuite
+  // combien de cette fin se voit (css/variable-actions.css : elle se coupe par la gauche, donc le bout du nom reste lisible). Un nom court n'est pas
+  // coupé.
   const BADGE_TAIL_MAX = 12;
   const BADGE_LAST_WORD_MAX = 16;
   function splitBadgeLabel(label) {
@@ -28,14 +59,15 @@ const EditorNodes = (function () {
     return { head: label.slice(0, label.length - tail.length), tail };
   }
 
-  // Vue de l'éditeur d'une bulle (variable ou calcul) : le texte de la bulle y est coupé en deux morceaux (début / fin) pour qu'une case de tableau ou une colonne de zone 2
-  // colonnes trop étroite tronque le MILIEU du nom avec « … » (css/variable-actions.css, css/variable-calc.css) au lieu de laisser la bulle traverser la case. Mêmes attributs et
-  // même texte que renderHTML (badgeSpec), donc getHTML(), le presse-papiers et les exports gardent le nom entier dans un seul texte, et textContent le rend entier aux lecteurs
-  // d'écran. `prefix` : la classe de la bulle ('var-badge' ou 'calc-badge'), qui nomme aussi celles du début (-head) et de la fin (-tail) et l'état cassé (-broken).
+  // Vue de l'éditeur d'une bulle (variable ou calcul) : le texte est coupé en deux morceaux (début, fin) pour qu'une case de tableau ou une colonne
+  // de zone 2 colonnes trop étroite tronque le milieu du nom avec « … » (css/variable-actions.css, css/variable-calc.css) au lieu de laisser la bulle
+  // traverser la case. Mêmes attributs et même texte que renderHTML (badgeSpec) : getHTML(), le presse-papiers et les exports gardent le nom entier,
+  // et textContent le rend entier aux lecteurs d'écran. `prefix` : la classe de la bulle ('var-badge' ou 'calc-badge'), qui nomme aussi celles du
+  // début (-head), de la fin (-tail) et l'état cassé (-broken).
   function splitBadgeView(spec, prefix) {
     const [, attrs, label] = spec;
     const dom = document.createElement('span');
-    Object.keys(attrs).forEach(name => { if (attrs[name] != null) dom.setAttribute(name, attrs[name]); });
+    setAttrs(dom, attrs);
     const parts = splitBadgeLabel(label);
     const head = document.createElement('span');
     head.className = prefix + '-head';
@@ -44,7 +76,8 @@ const EditorNodes = (function () {
     let tail = null;
     let tailText = null;
     if (parts.tail) {
-      // La fin est dans une boîte qui la cale à droite : quand la case ou la colonne est trop étroite, c'est son début qui est rogné (css/variable-actions.css).
+      // La fin est dans une boîte qui la cale à droite : quand la case ou la colonne est trop étroite, c'est son début qui est rogné
+      // (css/variable-actions.css).
       tail = document.createElement('span');
       tail.className = prefix + '-tail';
       tailText = document.createElement('span');
@@ -52,9 +85,9 @@ const EditorNodes = (function () {
       tail.appendChild(tailText);
       dom.appendChild(tail);
     }
-    // Nom coupé par la case ou la colonne : le nom entier en info-bulle, posé au survol seulement quand il est vraiment coupé (une bulle cassée garde son message,
-    // posé par Editor.refreshVariableBadgeValidity, qui retire aussi ce titre à chaque mise à jour du document). La fin se coupe par la gauche, ce que
-    // scrollWidth ne compte pas : on compare les rectangles.
+    // Nom coupé par la case ou la colonne : le nom entier en info-bulle, posé au survol seulement quand il est vraiment coupé (une bulle cassée garde
+    // son message, posé par Editor.refreshVariableBadgeValidity, qui retire aussi ce titre à chaque mise à jour du document). La fin se coupe par la
+    // gauche, ce que scrollWidth ne compte pas : on compare les rectangles.
     dom.addEventListener('mouseenter', () => {
       if (dom.classList.contains(prefix + '-broken')) return;
       const cut = head.scrollWidth > head.clientWidth || (tail && tailText.getBoundingClientRect().width > tail.getBoundingClientRect().width + 0.5);
@@ -64,8 +97,8 @@ const EditorNodes = (function () {
     return { dom };
   }
 
-  // Badge de variable #Variable — nœud "atome" en ligne, non éditable au caractère près (contenteditable="false") : <span class="var-badge" data-table
-  // data-column data-key>, reconnu tel quel par reader-mode.js/pdf-export.js.
+  // Bulle de variable #Variable : nœud atome en ligne, non éditable au caractère près (contenteditable="false") : <span class="var-badge" data-table
+  // data-column data-key>, reconnu tel quel par reader-mode.js et pdf-export.js.
   function createVarBadgeNode(Node, mergeAttributes) {
     // Spécification DOM de la bulle, une seule pour renderHTML (HTML enregistré, presse-papiers, exports) et pour la vue de l'éditeur (addNodeView).
     function badgeSpec(HTMLAttributes, node) {
@@ -80,55 +113,43 @@ const EditorNodes = (function () {
       // Préfixe décoratif régénéré à chaque rendu (jamais stocké) : suit la touche de déclenchement configurée, rétroactif sans migration.
       return ['span', attrs, varBadgeTriggerChar() + node.attrs.key];
     }
-    return Node.create({
+    return inlineAtom(Node, {
       name: 'varBadge',
-      group: 'inline',
-      inline: true,
-      atom: true,
-      selectable: true,
       addAttributes() {
-        // renderHTML: () => ({}) sur chaque attribut : sans ça, TipTap rend aussi CHAQUE attribut par défaut comme attribut HTML bare (table="...") EN PLUS
-        // des data-table/data-column/data-key posés à la main ci-dessous - doublon. Ces attributs ne doivent exister que dans le JSON interne du nœud.
-        const noBareRender = { default: null, renderHTML: () => ({}) };
-        // `format` : { type:'number', style, decimals, currency, words } ou { type:'date', preset } - choisi via la barre flottante (cf.
-        // wireVariableFloatingToolbar), `null` tant que l'utilisateur n'a rien réglé (comportement historique, String(val) brut).
-        // `condition` : { mode:'all'|'any', rules:[{ column, operator, value }] } - condition d'affichage (js/variable-condition.js), évaluée en lecture et
-        // à l'export par js/reader-mode.js ; `null` = toujours affichée.
-        // `loop` : { table, via, repeat, filter, sort, empty, … } - boucle sur les lignes liées (js/variable-loop.js), déroulée en lecture et à l'export par
-        // js/loop-rules.js ; `repeat` dit ce qui se répète autour de la bulle (sa ligne de tableau, son élément de liste, son paragraphe, ou elle seule).
-        return { table: noBareRender, column: noBareRender, key: noBareRender, format: noBareRender, condition: noBareRender, loop: noBareRender };
+        // `format` : { type:'number', style, decimals, currency, words } ou { type:'date', preset }, choisi par la barre flottante (cf.
+        // wireVariableFloatingToolbar) ; `null` tant que rien n'est réglé (valeur brute, String(val)).
+        // `condition` : { mode:'all'|'any', rules:[{ column, operator, value }] } - condition d'affichage (js/variable-condition.js), évaluée en
+        // lecture et à l'export par js/reader-mode.js ; `null` = toujours affichée.
+        // `loop` : { table, via, repeat, filter, sort, empty, … } - boucle sur les lignes liées (js/variable-loop.js), déroulée en lecture et à
+        // l'export par js/loop-rules.js ; `repeat` dit ce qui se répète autour de la bulle (sa ligne de tableau, son élément de liste, son
+        // paragraphe, ou elle seule).
+        return { table: internalAttr(null), column: internalAttr(null), key: internalAttr(null), format: internalAttr(null), condition: internalAttr(null), loop: internalAttr(null) };
       },
       parseHTML() {
         return [{
           tag: 'span.var-badge',
-          getAttrs: el => {
-            const parseJsonAttr = name => {
-              const raw = el.getAttribute(name);
-              if (!raw) return null;
-              try { return JSON.parse(raw); } catch (e) { return null; }
-            };
-            return {
-              table: el.getAttribute('data-table'), column: el.getAttribute('data-column'), key: el.getAttribute('data-key'),
-              format: parseJsonAttr('data-format'), condition: parseJsonAttr('data-condition'), loop: parseJsonAttr('data-loop'),
-            };
-          },
+          getAttrs: el => ({
+            table: el.getAttribute('data-table'), column: el.getAttribute('data-column'), key: el.getAttribute('data-key'),
+            format: jsonAttr(el, 'data-format'), condition: jsonAttr(el, 'data-condition'), loop: jsonAttr(el, 'data-loop'),
+          }),
         }];
       },
       renderHTML({ HTMLAttributes, node }) {
         return badgeSpec(HTMLAttributes, node);
       },
-      // Vue de l'éditeur SEULEMENT : cf. splitBadgeView. Pas de `update` : ProseMirror garde la vue tant que le nœud est identique et la refait sinon, comme il le faisait
-      // avec renderHTML.
+      // Vue de l'éditeur seulement : cf. splitBadgeView. Pas de `update` : ProseMirror garde la vue tant que le nœud est identique et la refait
+      // sinon.
       addNodeView() {
         return ({ node, HTMLAttributes }) => splitBadgeView(badgeSpec(HTMLAttributes, node), 'var-badge');
       },
     });
   }
 
-  // Bulle « Calcul » (js/variable-calc.js) : une FORMULE à la place d'une colonne, posée depuis la ligne « Calcul » du menu des variables (onglet Chips). Atome en ligne comme
-  // varBadge ; `formula` est l'écriture enregistrée de js/formula.js (variables {Table.Colonne}, décimales au point, noms de fonction anglais), jamais le texte saisi : la même
-  // formule se relit dans la langue de l'interface et avec la touche de déclenchement du moment. `format` : le réglage nombre de la barre flottante, comme une bulle de colonne
-  // numérique. Vert comme les chips (« valeur calculée, pas une colonne Grist »). Résolue en lecture et à l'export par js/reader-mode.js, avec la ligne du tour dans une zone répétée.
+  // Bulle « Calcul » (js/variable-calc.js) : une formule à la place d'une colonne, posée depuis la ligne « Calcul » du menu des variables (onglet
+  // Chips). Atome en ligne comme varBadge ; `formula` est l'écriture enregistrée de js/formula.js (variables {Table.Colonne}, décimales au point,
+  // noms de fonction anglais), jamais le texte saisi : la même formule se relit dans la langue de l'interface et avec la touche de déclenchement du
+  // moment. `format` : le réglage nombre de la barre flottante, comme une bulle de colonne numérique. Verte comme les chips (« valeur calculée, pas
+  // une colonne Grist »). Résolue en lecture et à l'export par js/reader-mode.js, avec la ligne du tour dans une zone répétée.
   function createCalcBadgeNode(Node, mergeAttributes) {
     // Le texte de la bulle : « = » puis la formule dans l'écriture saisie, × ÷ − à la place de * / - (régénéré à chaque rendu, jamais stocké).
     function calcLabel(formula) {
@@ -139,30 +160,19 @@ const EditorNodes = (function () {
       if (node.attrs.format) attrs['data-format'] = JSON.stringify(node.attrs.format);
       return ['span', attrs, calcLabel(node.attrs.formula)];
     }
-    return Node.create({
+    return inlineAtom(Node, {
       name: 'calcBadge',
-      group: 'inline',
-      inline: true,
-      atom: true,
-      selectable: true,
       addAttributes() {
-        const noBareRender = { default: null, renderHTML: () => ({}) };
-        return { formula: { default: '', renderHTML: () => ({}) }, format: noBareRender };
+        return { formula: internalAttr(''), format: internalAttr(null) };
       },
       parseHTML() {
-        return [{
-          tag: 'span.calc-badge',
-          getAttrs: el => {
-            let format = null;
-            try { format = JSON.parse(el.getAttribute('data-format') || 'null'); } catch (e) { format = null; }
-            return { formula: el.getAttribute('data-formula') || '', format };
-          },
-        }];
+        return [{ tag: 'span.calc-badge', getAttrs: el => ({ formula: el.getAttribute('data-formula') || '', format: jsonAttr(el, 'data-format') }) }];
       },
       renderHTML({ HTMLAttributes, node }) {
         return badgeSpec(HTMLAttributes, node);
       },
-      // Même vue que celle d'une bulle de variable (début / fin, cf. splitBadgeView), et un double-clic ouvre le calcul : la barre flottante a le même bouton.
+      // Même vue que celle d'une bulle de variable (début / fin, cf. splitBadgeView), et un double-clic ouvre le calcul : la barre flottante a le
+      // même bouton.
       addNodeView() {
         return ({ node, editor, getPos, HTMLAttributes }) => {
           const view = splitBadgeView(badgeSpec(HTMLAttributes, node), 'calc-badge');
@@ -178,8 +188,8 @@ const EditorNodes = (function () {
     });
   }
 
-  // Entrée sur une bulle « Calcul » sélectionnée ouvre son calcul (sans elle, TipTap couperait le paragraphe devant la bulle). Dans une extension à part, de priorité haute,
-  // pour passer avant les touches de base sans changer l'ordre des nœuds du schéma (même précédent : js/grid-editor.js).
+  // Entrée sur une bulle « Calcul » sélectionnée ouvre son calcul (sans elle, TipTap couperait le paragraphe devant la bulle). Dans une extension à
+  // part, de priorité haute, pour passer avant les touches de base sans changer l'ordre des nœuds du schéma (même précédent : js/grid-editor.js).
   function createCalcBadgeKeysExtension(Extension) {
     return Extension.create({
       name: 'calcBadgeKeys',
@@ -197,18 +207,14 @@ const EditorNodes = (function () {
     });
   }
 
-  // Badge de numéro de page - même schéma que VarBadge. Le libellé rendu dans l'éditeur n'est qu'un espace réservé visuel (format choisi), résolu en vrai
-  // numéro seulement à l'export/l'aperçu paginé.
+  // Bulle de numéro de page, même schéma que varBadge. Le libellé rendu dans l'éditeur n'est qu'un espace réservé (selon le format choisi), résolu en
+  // vrai numéro seulement à l'export et dans l'aperçu paginé.
   function createPageNumberBadgeNode(Node, mergeAttributes) {
     const LABELS = { n: '#', 'page-n': 'Page #', 'n-slash-total': '#/#' };
-    return Node.create({
+    return inlineAtom(Node, {
       name: 'pageNumberBadge',
-      group: 'inline',
-      inline: true,
-      atom: true,
-      selectable: true,
       addAttributes() {
-        return { format: { default: 'n', renderHTML: () => ({}) } };
+        return { format: internalAttr('n') };
       },
       parseHTML() {
         return [{ tag: 'span.page-number-badge', getAttrs: el => ({ format: el.getAttribute('data-format') || 'n' }) }];
@@ -223,22 +229,18 @@ const EditorNodes = (function () {
     });
   }
 
-  // Chip intelligent - date/heure/email/nom, même schéma que VarBadge. Jamais de vraie valeur dans l'éditeur (résolu en mode Lecture/export, cf.
-  // js/reader-mode.js:resolveSmartChips) - vert plutôt que bleu pour signaler "valeur calculée, pas une colonne Grist".
+  // Chip intelligent (date, heure, email, nom), même schéma que varBadge. Jamais de vraie valeur dans l'éditeur (résolu en Lecture et à l'export, cf.
+  // js/reader-mode.js:resolveSmartChips) ; vert plutôt que bleu pour signaler « valeur calculée, pas une colonne Grist ».
   function createSmartChipNode(Node, mergeAttributes) {
     const KIND_I18N_KEYS = { date: 'chips.date', time: 'chips.time', email: 'chips.email', name: 'chips.name' };
     function labelFor(kind) {
       const key = KIND_I18N_KEYS[kind];
       return key ? I18n.t(key) : '?';
     }
-    return Node.create({
+    return inlineAtom(Node, {
       name: 'smartChip',
-      group: 'inline',
-      inline: true,
-      atom: true,
-      selectable: true,
       addAttributes() {
-        return { kind: { default: 'date', renderHTML: () => ({}) } };
+        return { kind: internalAttr('date') };
       },
       parseHTML() {
         return [{ tag: 'span.smart-chip', getAttrs: el => ({ kind: el.getAttribute('data-chip-kind') || 'date' }) }];
@@ -250,20 +252,13 @@ const EditorNodes = (function () {
     });
   }
 
-  // Note de bas de page - nœud atome portant le texte en attribut (`text`, texte brut). Numérotation continue sur tout le document via le seul compteur CSS
-  // `footnote-ref` (cf. editor-v2.css), jamais compté en JS.
+  // Note de bas de page : nœud atome portant son texte brut en attribut (`text`). La numérotation continue sur tout le document vient du seul
+  // compteur CSS `footnote-ref` (css/editor-v2.css), jamais comptée en JS.
   function createFootnoteRefNode(Node, mergeAttributes) {
-    return Node.create({
+    return inlineAtom(Node, {
       name: 'footnoteRef',
-      group: 'inline',
-      inline: true,
-      atom: true,
-      selectable: true,
       addAttributes() {
-        return {
-          id: { default: null, renderHTML: () => ({}) },
-          text: { default: '', renderHTML: () => ({}) },
-        };
+        return { id: internalAttr(null), text: internalAttr('') };
       },
       parseHTML() {
         return [{ tag: 'sup.footnote-ref-marker', getAttrs: el => ({ id: el.getAttribute('data-note-id'), text: el.getAttribute('data-note-text') || '' }) }];
@@ -282,8 +277,8 @@ const EditorNodes = (function () {
           marker.className = 'footnote-ref-marker';
           marker.addEventListener('mousedown', event => {
             event.preventDefault();
-            // PAS de stopPropagation() : ProseMirror sélectionne ce nœud via un gestionnaire posé sur .tiptap (un ancêtre) - la bloquer casserait la
-            // sélection au clic donc la suppression au clavier.
+            // Pas de stopPropagation() : ProseMirror sélectionne ce nœud par un gestionnaire posé sur .tiptap (un ancêtre) ; le bloquer casserait la
+            // sélection au clic, donc la suppression au clavier.
             const pos = getPos();
             if (typeof pos === 'number') Editor.openFootnoteEditorAt(pos);
           });
@@ -293,15 +288,15 @@ const EditorNodes = (function () {
     });
   }
 
-  // Commentaire - une MARQUE (pas un nœud) : contrairement à une note de bas de page (un point unique), un commentaire s'attache à une PORTÉE de texte
-  // existant, exactement comme gras/italique - ProseMirror la déplace/étend/découpe automatiquement au fil des modifications, sans code de suivi à écrire
-  // à la main (cf. js/comments.js pour le pourquoi de ce choix face à un vrai suivi de modifications). Le FIL de discussion (auteur, texte, réponses) vit
-  // dans la table Grist Publipostage_Commentaires (js/comments.js) - seul un identifiant y est stocké, pour relier la portée de texte à SON fil. `resolved`
-  // en revanche vit ICI, dans le document lui-même (pas dans Grist) : c'est une propriété de CETTE portée de texte précise, pas du message échangé - la
-  // garder dans le document la fait voyager gratuitement avec le reste (auto-save, Annuler/Rétablir, export) sans re-synchronisation à écrire.
-  // `excludes: ''` (au lieu du défaut - le nom de la marque elle-même) : sans ça, une deuxième marque commentaire (id différent) posée sur une portée qui
-  // chevauche une première ferait disparaître la première au lieu de les superposer - deux fils de discussion indépendants doivent pouvoir coexister sur un
-  // chevauchement, comme le fait l'exemple officiel ProseMirror pour ce même besoin.
+  // Commentaire : une marque, pas un nœud. Contrairement à une note de bas de page (un point unique), un commentaire s'attache à une portée de texte
+  // existant, comme gras ou italique : ProseMirror la déplace, l'étend et la découpe au fil des modifications, sans code de suivi (cf. js/comments.js
+  // pour le choix face à un vrai suivi de modifications). Le fil de discussion (auteur, texte, réponses) vit dans la table Grist
+  // Publipostage_Commentaires (js/comments.js), seul un identifiant relie la portée à son fil. `resolved` vit ici, dans le document : c'est une
+  // propriété de cette portée, pas du message échangé, et dans le document elle voyage avec le reste (enregistrement automatique, Annuler/Rétablir,
+  // export) sans resynchronisation.
+  // `excludes: ''` (au lieu du défaut, le nom de la marque) : sans cela, une deuxième marque commentaire (id différent) sur une portée qui chevauche
+  // la première la ferait disparaître au lieu de les superposer ; deux fils indépendants doivent pouvoir coexister sur un chevauchement, comme dans
+  // l'exemple officiel de ProseMirror.
   function createCommentMark(Mark, mergeAttributes) {
     return Mark.create({
       name: 'commentMark',
@@ -327,150 +322,69 @@ const EditorNodes = (function () {
     });
   }
 
-  // Augmente la marque 'textStyle' via addGlobalAttributes (comme FontFamily/Color officiels) - 'textStyle' doit être enregistrée à part (TextStyle, câblée
-  // dans init()), sinon ProseMirror lève une erreur.
-  function createFontSizeExtension(Extension) {
+  // Un réglage de style en ligne (`attribute` : fontSize, color, backgroundColor) : lu sur le style de l'élément, rendu en `style="propriété:
+  // valeur"`.
+  function inlineStyleAttribute(attribute) {
+    const property = attribute.replace(/[A-Z]/g, letter => '-' + letter.toLowerCase());
+    return {
+      default: null,
+      parseHTML: el => el.style[attribute] || null,
+      renderHTML: attrs => (attrs[attribute] ? { style: `${property}: ${attrs[attribute]}` } : {}),
+    };
+  }
+  // Augmente la marque 'textStyle' via addGlobalAttributes (comme FontFamily/Color officiels) - 'textStyle' doit être enregistrée à part (TextStyle,
+  // câblée dans init()), sinon ProseMirror lève une erreur. `setter` et `unsetter` : les noms des commandes (une taille de police ne s'efface pas).
+  function createTextStyleExtension(Extension, { name, attribute, setter, unsetter }) {
     return Extension.create({
-      name: 'fontSize',
+      name,
       addGlobalAttributes() {
-        return [{
-          types: ['textStyle'],
-          attributes: {
-            fontSize: {
-              default: null,
-              parseHTML: el => el.style.fontSize || null,
-              renderHTML: attrs => (attrs.fontSize ? { style: `font-size: ${attrs.fontSize}` } : {}),
-            },
-          },
-        }];
+        return [{ types: ['textStyle'], attributes: { [attribute]: inlineStyleAttribute(attribute) } }];
       },
       addCommands() {
-        return { setFontSize: fontSize => ({ chain }) => chain().setMark('textStyle', { fontSize }).run() };
+        const commands = { [setter]: value => ({ chain }) => chain().setMark('textStyle', { [attribute]: value }).run() };
+        if (unsetter) commands[unsetter] = () => ({ chain }) => chain().setMark('textStyle', { [attribute]: null }).run();
+        return commands;
       },
     });
   }
+  const createFontSizeExtension = Extension => createTextStyleExtension(Extension, { name: 'fontSize', attribute: 'fontSize', setter: 'setFontSize' });
+  // Couleur de police et surlignage : même schéma que la taille.
+  const createTextColorExtension = Extension => createTextStyleExtension(Extension, { name: 'textColor', attribute: 'color', setter: 'setTextColor', unsetter: 'unsetTextColor' });
+  const createHighlightExtension = Extension => createTextStyleExtension(Extension, { name: 'highlightColor', attribute: 'backgroundColor', setter: 'setHighlight', unsetter: 'unsetHighlight' });
 
-  // Couleur de police/surlignage - même schéma que FontSize.
-  function createTextColorExtension(Extension) {
+  // Un réglage de liste (style de puce, de numérotation, de case) : posé sur le type de liste `type` et sérialisé en `dataAttribute` quand il
+  // s'écarte de `fallback`. Le rendu réel est en CSS.
+  function createListStyleExtension(Extension, { name, type, attribute, dataAttribute, fallback }) {
     return Extension.create({
-      name: 'textColor',
+      name,
       addGlobalAttributes() {
         return [{
-          types: ['textStyle'],
+          types: [type],
           attributes: {
-            color: {
-              default: null,
-              parseHTML: el => el.style.color || null,
-              renderHTML: attrs => (attrs.color ? { style: `color: ${attrs.color}` } : {}),
-            },
-          },
-        }];
-      },
-      addCommands() {
-        return {
-          setTextColor: color => ({ chain }) => chain().setMark('textStyle', { color }).run(),
-          unsetTextColor: () => ({ chain }) => chain().setMark('textStyle', { color: null }).run(),
-        };
-      },
-    });
-  }
-  function createHighlightExtension(Extension) {
-    return Extension.create({
-      name: 'highlightColor',
-      addGlobalAttributes() {
-        return [{
-          types: ['textStyle'],
-          attributes: {
-            backgroundColor: {
-              default: null,
-              parseHTML: el => el.style.backgroundColor || null,
-              renderHTML: attrs => (attrs.backgroundColor ? { style: `background-color: ${attrs.backgroundColor}` } : {}),
-            },
-          },
-        }];
-      },
-      addCommands() {
-        return {
-          setHighlight: backgroundColor => ({ chain }) => chain().setMark('textStyle', { backgroundColor }).run(),
-          unsetHighlight: () => ({ chain }) => chain().setMark('textStyle', { backgroundColor: null }).run(),
-        };
-      },
-    });
-  }
-
-  // Style de puce - augmente 'bulletList' (StarterKit) plutôt que 'textStyle'.
-  function createBulletStyleExtension(Extension) {
-    return Extension.create({
-      name: 'bulletStyle',
-      addGlobalAttributes() {
-        return [{
-          types: ['bulletList'],
-          attributes: {
-            bulletStyle: {
-              default: 'disc',
-              parseHTML: el => el.getAttribute('data-bullet-style') || 'disc',
-              renderHTML: attrs => (attrs.bulletStyle && attrs.bulletStyle !== 'disc' ? { 'data-bullet-style': attrs.bulletStyle } : {}),
+            [attribute]: {
+              default: fallback,
+              parseHTML: el => el.getAttribute(dataAttribute) || fallback,
+              renderHTML: attrs => (attrs[attribute] && attrs[attribute] !== fallback ? { [dataAttribute]: attrs[attribute] } : {}),
             },
           },
         }];
       },
     });
   }
+  const createBulletStyleExtension = Extension => createListStyleExtension(Extension, { name: 'bulletStyle', type: 'bulletList', attribute: 'bulletStyle', dataAttribute: 'data-bullet-style', fallback: 'disc' });
+  const createOrderedListStyleExtension = Extension => createListStyleExtension(Extension, { name: 'orderedListStyle', type: 'orderedList', attribute: 'numberStyle', dataAttribute: 'data-number-style', fallback: 'decimal' });
+  const createTaskListStyleExtension = Extension => createListStyleExtension(Extension, { name: 'taskListStyle', type: 'taskList', attribute: 'taskListStyle', dataAttribute: 'data-tasklist-style', fallback: 'accentStrike' });
 
-  // Style de numérotation - augmente 'orderedList'.
-  function createOrderedListStyleExtension(Extension) {
-    return Extension.create({
-      name: 'orderedListStyle',
-      addGlobalAttributes() {
-        return [{
-          types: ['orderedList'],
-          attributes: {
-            numberStyle: {
-              default: 'decimal',
-              parseHTML: el => el.getAttribute('data-number-style') || 'decimal',
-              renderHTML: attrs => (attrs.numberStyle && attrs.numberStyle !== 'decimal' ? { 'data-number-style': attrs.numberStyle } : {}),
-            },
-          },
-        }];
-      },
-    });
-  }
-
-  // Style de case à cocher - augmente 'taskList'. Rendu réel en CSS (data-tasklist-style), cette extension ne fait que sérialiser le choix.
-  function createTaskListStyleExtension(Extension) {
-    return Extension.create({
-      name: 'taskListStyle',
-      addGlobalAttributes() {
-        return [{
-          types: ['taskList'],
-          attributes: {
-            taskListStyle: {
-              default: 'accentStrike',
-              parseHTML: el => el.getAttribute('data-tasklist-style') || 'accentStrike',
-              renderHTML: attrs => (attrs.taskListStyle && attrs.taskListStyle !== 'accentStrike' ? { 'data-tasklist-style': attrs.taskListStyle } : {}),
-            },
-          },
-        }];
-      },
-    });
-  }
-
-  // Fond de cellule - augmente TableCell/TableHeader du même backgroundColor que le surlignage de texte (lu par pdf-export.js:tableFrom, pas inheritedStyle).
+  // Fond de cellule - augmente TableCell/TableHeader du même backgroundColor que le surlignage de texte (lu par pdf-export.js:tableFrom, pas
+  // inheritedStyle).
   function withCellBackground(CellExtension) {
     return CellExtension.extend({
       addAttributes() {
-        return Object.assign({}, this.parent(), {
-          backgroundColor: {
-            default: null,
-            parseHTML: el => el.style.backgroundColor || null,
-            renderHTML: attrs => (attrs.backgroundColor ? { style: `background-color: ${attrs.backgroundColor}` } : {}),
-          },
-        });
+        return Object.assign({}, this.parent(), { backgroundColor: inlineStyleAttribute('backgroundColor') });
       },
     });
   }
-  // Zone 2 colonnes - paire de nœuds imbriqués. `isolating: true` empêche backspace/suppr de fusionner la zone avec le paragraphe voisin. Tab/Shift-Tab
-  // court-circuitent d'abord l'indentation de liste (Table sinon l'emporte sur StarterKit en cellule), sinon déplacent/sortent le curseur de colonne.
+  // La colonne d'une zone 2 colonnes où se trouve le curseur : { columnDepth, zoneDepth, colIndex }, ou null hors d'une zone.
   function findTwoColumnsContext($from) {
     let columnDepth = -1;
     for (let d = $from.depth; d > 0; d -= 1) {
@@ -481,7 +395,12 @@ const EditorNodes = (function () {
     if (zoneDepth < 1 || $from.node(zoneDepth).type.name !== 'twoColumnsZone') return null;
     return { columnDepth, zoneDepth, colIndex: $from.index(zoneDepth) };
   }
+
+  // Tab / Shift-Tab : dans une liste, indente ou désindente l'élément (la touche est toujours consommée, jamais de passage à la cellule ou à la
+  // colonne suivante) ; dans une zone 2 colonnes, passe d'une colonne à l'autre ou sort de la zone.
   function createTabNavigationExtension(Extension) {
+    // Le curseur au plus près de `pos`, dans le sens `dir`.
+    const moveNear = (ed, pos, dir) => ed.chain().focus().setTextSelection(EditorCore.getTextSelectionClass().near(ed.state.doc.resolve(pos), dir)).run();
     return Extension.create({
       name: 'tabNavigation',
       addKeyboardShortcuts() {
@@ -495,19 +414,14 @@ const EditorNodes = (function () {
             const { $from } = ed.state.selection;
             const ctx = findTwoColumnsContext($from);
             if (!ctx) return false;
-            const { columnDepth, zoneDepth, colIndex } = ctx;
-            if (colIndex === 0) {
-              const afterLeftCol = $from.after(columnDepth);
-              const target = ed.state.doc.resolve(Math.min(afterLeftCol + 1, ed.state.doc.content.size));
-              ed.chain().focus().setTextSelection(EditorCore.getTextSelectionClass().near(target, 1)).run();
+            const size = ed.state.doc.content.size;
+            if (ctx.colIndex === 0) {
+              moveNear(ed, Math.min($from.after(ctx.columnDepth) + 1, size), 1);
               return true;
             }
-            const afterZone = $from.after(zoneDepth);
-            if (afterZone >= ed.state.doc.content.size) {
-              ed.chain().focus().insertContentAt(afterZone, { type: 'paragraph' }).setTextSelection(afterZone + 1).run();
-              return true;
-            }
-            ed.chain().focus().setTextSelection(EditorCore.getTextSelectionClass().near(ed.state.doc.resolve(afterZone), 1)).run();
+            const afterZone = $from.after(ctx.zoneDepth);
+            if (afterZone >= size) ed.chain().focus().insertContentAt(afterZone, { type: 'paragraph' }).setTextSelection(afterZone + 1).run();
+            else moveNear(ed, afterZone, 1);
             return true;
           },
           'Shift-Tab': ({ editor: ed }) => {
@@ -518,16 +432,12 @@ const EditorNodes = (function () {
             const { $from } = ed.state.selection;
             const ctx = findTwoColumnsContext($from);
             if (!ctx) return false;
-            const { columnDepth, zoneDepth, colIndex } = ctx;
-            if (colIndex === 1) {
-              const beforeRightCol = $from.before(columnDepth);
-              const target = ed.state.doc.resolve(Math.max(beforeRightCol - 1, 0));
-              ed.chain().focus().setTextSelection(EditorCore.getTextSelectionClass().near(target, -1)).run();
+            if (ctx.colIndex === 1) {
+              moveNear(ed, Math.max($from.before(ctx.columnDepth) - 1, 0), -1);
               return true;
             }
-            const beforeZone = $from.before(zoneDepth);
-            if (beforeZone <= 0) return true; // rien avant la zone - sans effet
-            ed.chain().focus().setTextSelection(EditorCore.getTextSelectionClass().near(ed.state.doc.resolve(beforeZone - 1), -1)).run();
+            const beforeZone = $from.before(ctx.zoneDepth);
+            if (beforeZone > 0) moveNear(ed, beforeZone - 1, -1); // rien avant la zone : sans effet
             return true;
           },
         };
@@ -535,8 +445,8 @@ const EditorNodes = (function () {
     });
   }
 
-  // TipTap v3 n'expose plus de commande clearHistory (seulement undo/redo) : reconstruire l'EditorState avec les mêmes plugins réinitialise leur état (dont
-  // l'historique) sans recréer la vue ni perdre le document.
+  // TipTap v3 n'expose plus de commande clearHistory (seulement undo/redo) : reconstruire l'EditorState avec les mêmes plugins réinitialise leur état
+  // (dont l'historique) sans recréer la vue ni perdre le document.
   function createClearHistoryExtension(Extension, EditorState) {
     return Extension.create({
       name: 'clearHistory',
@@ -552,6 +462,11 @@ const EditorNodes = (function () {
     });
   }
 
+  // La largeur de la colonne de gauche d'une zone 2 colonnes : une longueur en mm, ou un pourcentage de la boîte de contenu.
+  const leftTrack = attrs => (Number.isFinite(attrs.layoutLeftMm) ? attrs.layoutLeftMm + 'mm' : (attrs.layoutLeft || 50) + '%');
+
+  // Zone 2 colonnes : une paire de colonnes imbriquées. `isolating: true` empêche Retour arrière et Suppr de fusionner la zone avec le paragraphe
+  // voisin.
   function createTwoColumnsNodes(Node, mergeAttributes) {
     const TwoColumnsColumn = Node.create({
       name: 'twoColumnsColumn',
@@ -567,9 +482,9 @@ const EditorNodes = (function () {
       isolating: true,
       addAttributes() {
         return {
-          // Largeur (%) de la colonne gauche, clampée 20-80 au glisser, sérialisée en variable CSS --layout-left. Reste la SEULE source de vérité tant
-          // que layoutLeftMm est absent (mode pourcentage, comportement historique). En mode mm, --layout-left porte une LONGUEUR ("60mm") et non plus un
-          // pourcentage : on ne la relit alors pas ici (layoutLeftMm fait foi), sans quoi "60mm" serait relu comme "60 %".
+          // Largeur (%) de la colonne gauche, bornée à 20-80 au glisser, sérialisée en variable CSS --layout-left. Seule source de vérité tant que
+          // layoutLeftMm est absent (mode pourcentage). En mode mm, --layout-left porte une longueur (« 60mm ») et plus un pourcentage : on ne la
+          // relit pas ici (layoutLeftMm fait foi), sans quoi « 60mm » serait relu comme « 60 % ».
           layoutLeft: {
             default: 50,
             parseHTML: el => {
@@ -579,10 +494,10 @@ const EditorNodes = (function () {
             },
             renderHTML: () => ({}),
           },
-          // Largeur ABSOLUE (mm) de la colonne gauche - `null` = mode pourcentage (défaut, comportement inchangé). Non-null = mode mm : --layout-left est
-          // alors posée en MILLIMÈTRES, pas en pourcentage. La différence n'est pas cosmétique : un pourcentage s'applique à la boîte de CONTENU de la
-          // zone (amputée de son padding/bordure), donc "60mm" converti en % ne donnait 60mm nulle part - 57.7mm à l'écran et dans le PDF, 60mm dans le
-          // DOCX. Une longueur absolue vaut 60mm partout, et le moteur CSS la réévalue tout seul quand les marges de page changent, sans redessin JS.
+          // Largeur absolue (mm) de la colonne gauche ; `null` = mode pourcentage (défaut). Non null = mode mm : --layout-left est posée en
+          // millimètres. La différence n'est pas cosmétique : un pourcentage s'applique à la boîte de contenu de la zone (amputée de son padding et
+          // de sa bordure), donc « 60mm » converti en % ne donnait 60 mm nulle part (57,7 mm à l'écran et dans le PDF, 60 mm dans le DOCX). Une
+          // longueur absolue vaut 60 mm partout, et le moteur CSS la réévalue seul quand les marges de page changent, sans redessin JS.
           layoutLeftMm: {
             default: null,
             parseHTML: el => { const v = parseFloat(el.style.getPropertyValue('--layout-left-mm')); return Number.isFinite(v) ? v : null; },
@@ -593,9 +508,7 @@ const EditorNodes = (function () {
       parseHTML() { return [{ tag: 'div.two-columns-zone' }]; },
       renderHTML({ HTMLAttributes, node }) {
         const mm = node.attrs.layoutLeftMm;
-        const style = Number.isFinite(mm)
-          ? `--layout-left: ${mm}mm; --layout-left-mm: ${mm}mm`
-          : `--layout-left: ${node.attrs.layoutLeft || 50}%`;
+        const style = `--layout-left: ${leftTrack(node.attrs)}` + (Number.isFinite(mm) ? `; --layout-left-mm: ${mm}mm` : '');
         return ['div', mergeAttributes(HTMLAttributes, { class: 'two-columns-zone', style }), 0];
       },
       addCommands() {
@@ -609,8 +522,8 @@ const EditorNodes = (function () {
           }).run(),
         };
       },
-      // dom = wrapper externe (ancre la poignée en absolu) englobant contentDOM (les 2 colonnes) et la poignée, hors contentDOM pour éviter qu'une future
-      // réconciliation la retire. --layout-left posé sur le wrapper (hérite vers le bas ; la poignée ne le verrait pas posé sur contentDOM).
+      // dom = wrapper externe (ancre la poignée en absolu) englobant contentDOM (les 2 colonnes) et la poignée, hors contentDOM pour éviter qu'une
+      // future réconciliation la retire. --layout-left posé sur le wrapper (hérite vers le bas ; la poignée ne le verrait pas posé sur contentDOM).
       addNodeView() {
         return ({ node, editor: nodeEditor, getPos }) => {
           const wrap = document.createElement('div');
@@ -622,8 +535,8 @@ const EditorNodes = (function () {
           grip.className = 'two-columns-resize-grip';
           grip.title = I18n.t('twoColumns.resizeGrip');
           wrap.appendChild(grip);
-          // Bouton dédié, indépendant de la poignée de glisser (pas de clic-sans-bouger ambigu à détecter) : ouvre un popover avec les DEUX largeurs
-          // (gauche saisissable, droite affichée en direct) plutôt qu'un seul champ ambigu ("largeur de QUOI ?").
+          // Bouton dédié, indépendant de la poignée de glisser (pas de clic sans mouvement ambigu à détecter) : il ouvre un popover avec les deux
+          // largeurs (gauche saisissable, droite affichée en direct) plutôt qu'un seul champ ambigu.
           const mmButton = document.createElement('button');
           mmButton.type = 'button';
           mmButton.className = 'two-columns-mm-button';
@@ -631,13 +544,10 @@ const EditorNodes = (function () {
           mmButton.textContent = 'mm';
           wrap.appendChild(mmButton);
 
-          // En mode mm, --layout-left porte la longueur elle-même : plus rien à recalculer quand les marges de page changent (le CSS s'en charge), là où
-          // le pourcentage dérivé d'avant restait figé à sa valeur d'origine - Editor.refreshLayout() dispatchait une transaction vide qui ne déclenchait
-          // aucune réconciliation de NodeView, si bien que l'écran gardait l'ancien ratio pendant que getHTML() sérialisait déjà le nouveau.
-          const effectiveTrack = attrs => Number.isFinite(attrs.layoutLeftMm)
-            ? attrs.layoutLeftMm + 'mm'
-            : (attrs.layoutLeft || 50) + '%';
-          const applyLayout = attrs => wrap.style.setProperty('--layout-left', effectiveTrack(attrs));
+          // En mode mm, --layout-left porte la longueur elle-même : le CSS suit seul les changements de marges de page. Un pourcentage dérivé
+          // resterait figé, car Editor.refreshLayout() dispatche une transaction vide qui ne réconcilie aucune NodeView : l'écran garderait l'ancien
+          // ratio pendant que getHTML() sérialise déjà le nouveau.
+          const applyLayout = attrs => wrap.style.setProperty('--layout-left', leftTrack(attrs));
           applyLayout(node.attrs);
 
           let dragging = false;
@@ -651,17 +561,14 @@ const EditorNodes = (function () {
             dragging = false;
             document.removeEventListener('mousemove', onMove);
             const finalLeftPercent = Math.max(20, Math.min(80, parseFloat(wrap.style.getPropertyValue('--layout-left')) || 50));
-            const pos = getPos();
-            if (typeof pos !== 'number') return;
-            const { state, view } = nodeEditor;
-            const current = state.doc.nodeAt(pos);
-            if (!current) return;
-            const newAttrs = Object.assign({}, current.attrs, { layoutLeft: Math.round(finalLeftPercent) });
+            const live = liveNode(nodeEditor, getPos);
+            if (!live) return;
+            const newAttrs = Object.assign({}, live.node.attrs, { layoutLeft: Math.round(finalLeftPercent) });
             // Reste en mode mm après un glisser (ne repasse pas silencieusement en mode pourcentage) : reconvertit la position finale en mm.
-            if (Number.isFinite(current.attrs.layoutLeftMm)) {
+            if (Number.isFinite(live.node.attrs.layoutLeftMm)) {
               newAttrs.layoutLeftMm = Math.round(finalLeftPercent / 100 * PageLayout.getContentWidthMm());
             }
-            view.dispatch(state.tr.setNodeMarkup(pos, undefined, newAttrs));
+            nodeEditor.view.dispatch(nodeEditor.state.tr.setNodeMarkup(live.pos, undefined, newAttrs));
           }
           grip.addEventListener('mousedown', event => {
             event.preventDefault(); event.stopPropagation();
@@ -670,14 +577,14 @@ const EditorNodes = (function () {
             document.addEventListener('mouseup', onUp, { once: true });
           });
 
-          // Popover du bouton "mm" (séparé de la poignée, cf. mmButton ci-dessus) : deux valeurs affichées (gauche saisissable, droite = le reste de la
-          // largeur de contenu, recalculée en direct) - plus clair qu'un seul champ dont on ne sait pas s'il décrit la colonne de gauche ou de droite.
+          // Popover du bouton « mm » : deux valeurs affichées (la gauche saisissable, la droite = le reste de la largeur de contenu, recalculée en
+          // direct), plus clair qu'un seul champ dont on ne sait pas s'il décrit la colonne de gauche ou de droite.
           let popover = null;
           function closePopover() {
             if (!popover) return;
-            // `remove()` sur un nœud que ProseMirror a déjà détaché en recréant la NodeView lève une exception : le blur de l'input, déclenché PAR ce
-            // détachement, rappelle closePopover alors que le popover n'a plus de parent. On remet `popover` à null d'abord, pour que ce second appel
-            // sorte tout de suite quoi qu'il arrive.
+            // `remove()` sur un nœud que ProseMirror a déjà détaché en recréant la NodeView lève une exception : le blur de l'input, déclenché par ce
+            // détachement, rappelle closePopover alors que le popover n'a plus de parent. `popover` est donc remis à null d'abord, pour que ce second
+            // appel sorte tout de suite.
             const el = popover;
             popover = null;
             document.removeEventListener('mousedown', onDocMouseDown, true);
@@ -687,28 +594,20 @@ const EditorNodes = (function () {
             if (popover && !popover.contains(event.target) && event.target !== mmButton) closePopover();
           }
           function commitMm(value) {
-            const pos = getPos();
-            if (typeof pos !== 'number') return;
-            const { state, view } = nodeEditor;
-            const current = state.doc.nodeAt(pos);
-            if (!current) return;
+            const live = liveNode(nodeEditor, getPos);
+            if (!live) return;
             const contentWidthMm = PageLayout.getContentWidthMm();
             // La gouttière (PageLayout.getColumnGapMm()) est prise sur la largeur de contenu comme n'importe quelle colonne : la borne haute doit la
-            // retrancher, sinon une saisie "largeur de contenu - 10" laisse une colonne droite NÉGATIVE.
+            // retrancher, sinon une saisie « largeur de contenu - 10 » laisse une colonne droite négative.
             const gapMm = PageLayout.getColumnGapMm();
             const clamped = Math.max(10, Math.min(contentWidthMm - gapMm - 10, value));
             const pct = (clamped / contentWidthMm) * 100;
-            view.dispatch(state.tr.setNodeMarkup(pos, undefined, Object.assign({}, current.attrs, { layoutLeftMm: clamped, layoutLeft: Math.round(pct) })));
-          }
-          function currentNodeAttrs() {
-            const pos = getPos();
-            if (typeof pos !== 'number') return node.attrs;
-            const current = nodeEditor.state.doc.nodeAt(pos);
-            return current ? current.attrs : node.attrs;
+            nodeEditor.view.dispatch(nodeEditor.state.tr.setNodeMarkup(live.pos, undefined, Object.assign({}, live.node.attrs, { layoutLeftMm: clamped, layoutLeft: Math.round(pct) })));
           }
           function openPopover() {
             if (popover) { closePopover(); return; }
-            const currentAttrs = currentNodeAttrs();
+            const live = liveNode(nodeEditor, getPos);
+            const currentAttrs = (live ? live.node : node).attrs;
             const contentWidthMm = PageLayout.getContentWidthMm();
             const startLeftMm = Number.isFinite(currentAttrs.layoutLeftMm)
               ? currentAttrs.layoutLeftMm
@@ -733,8 +632,7 @@ const EditorNodes = (function () {
             popover.appendChild(rightLabel);
             wrap.appendChild(popover);
 
-            // La colonne droite, c'est le reste de la largeur de contenu MOINS la gouttière - l'afficher sans la retrancher promettait 90mm là où
-            // l'éditeur, le PDF et le DOCX rendent 85.8mm.
+            // La colonne droite est le reste de la largeur de contenu moins la gouttière, comme l'éditeur, le PDF et le DOCX la rendent.
             const gapMm = PageLayout.getColumnGapMm();
             const refreshRightDisplay = () => {
               const v = parseFloat(leftInput.value);
@@ -745,8 +643,8 @@ const EditorNodes = (function () {
             leftInput.focus();
             leftInput.select();
 
-            // `settled` évite qu'Escape committe quand même : retirer le popover du DOM déclenche un blur natif sur l'input encore focus, qui sans ce
-            // garde-fou rappellerait commitAndClose() une seconde fois (Escape est censé annuler, pas valider).
+            // `settled` évite qu'Échap valide quand même : retirer le popover du DOM déclenche un blur natif sur l'input encore actif, qui
+            // rappellerait commitAndClose() une seconde fois (Échap annule, il ne valide pas).
             let settled = false;
             function commitAndClose() {
               if (settled) return;
@@ -760,18 +658,18 @@ const EditorNodes = (function () {
               closePopover();
             }
             leftInput.addEventListener('keydown', event => {
-              // `wrap` (donc ce popover) vit DANS l'arbre contentEditable de ProseMirror (c'est le `dom` de cette NodeView) : sans stopPropagation, un
-              // keydown tapé ici remonte jusqu'au gestionnaire posé par ProseMirror sur .tiptap, qui l'intercepte comme une commande d'édition du
-              // DOCUMENT (baseKeymap: Suppr -> joinForward/selectNodeForward, etc.) et appelle preventDefault - la touche Suppr semblait alors mangée,
-              // sans jamais supprimer le caractère dans ce simple champ number. Repéré par l'utilisateur (Suppr inopérant dans ce champ précis, mais pas
-              // dans les autres champs de l'app - eux vivent hors de .tiptap, posés sur document.body par EditorCore.createFloatingPanel).
+              // `wrap` (donc ce popover) vit dans l'arbre contentEditable de ProseMirror (c'est le `dom` de cette NodeView) : sans stopPropagation,
+              // un keydown tapé ici remonte jusqu'au gestionnaire de ProseMirror sur .tiptap, qui l'intercepte comme une commande d'édition du
+              // document (baseKeymap : Suppr -> joinForward/selectNodeForward) et appelle preventDefault ; Suppr n'effacerait alors jamais le
+              // caractère de ce champ nombre. Les autres champs de l'application vivent hors de .tiptap (EditorCore.createFloatingPanel les pose sur
+              // document.body).
               event.stopPropagation();
               if (event.key === 'Enter') { event.preventDefault(); commitAndClose(); }
               else if (event.key === 'Escape') { event.preventDefault(); cancelAndClose(); }
             });
             leftInput.addEventListener('blur', commitAndClose);
-            // Capture (pas bubble) : doit voir le mousedown AVANT que le blur de l'input ne ferme déjà le popover, sinon un clic sur le fond de l'éditeur
-            // rouvrirait/fermerait de façon incohérente.
+            // Capture (pas bubble) : doit voir le mousedown avant que le blur de l'input ne ferme déjà le popover, sinon un clic sur le fond de
+            // l'éditeur ouvrirait ou fermerait de façon incohérente.
             setTimeout(() => document.addEventListener('mousedown', onDocMouseDown, true), 0);
           }
           mmButton.addEventListener('click', event => {
@@ -788,8 +686,8 @@ const EditorNodes = (function () {
               return true;
             },
             destroy: () => { document.removeEventListener('mousemove', onMove); closePopover(); },
-            // Sans ça, ProseMirror voit la mutation de style pendant le glisser (hors transaction) comme inattendue et recrée le NodeView - le wrapper
-            // devient alors détaché avant le mouseup, et le commit final s'applique à un nœud fantôme.
+            // Sans cela, ProseMirror voit la mutation de style du glisser (hors transaction) comme inattendue et recrée la NodeView : le wrapper est
+            // alors détaché avant le mouseup et le commit final s'applique à un nœud fantôme.
             ignoreMutation: () => true,
           };
         };
@@ -798,15 +696,14 @@ const EditorNodes = (function () {
     return { TwoColumnsColumn, TwoColumnsZone };
   }
 
-  // Bloc de texte conditionnel (menu des variables, onglet Chips) : un conteneur de blocs - paragraphes mis en forme, titres, listes, tableaux et d'autres blocs
-  // conditionnels, à toute profondeur - qui n'apparaît en lecture et à l'export que si sa condition d'affichage est remplie (js/conditional-text.js). Même condition
-  // que celle d'une bulle ({ mode, rules }, fenêtre js/variable-condition.js, barre flottante js/floating-toolbars.js) ; sans condition, le bloc est toujours affiché.
-  // Le cadre et l'étiquette « Si … » n'existent que dans l'éditeur (NodeView) : renderHTML, donc l'enregistrement, le presse-papiers et les exports, ne sérialise
-  // que <div class="conditional-text" data-condition>, que le rendu défait (condition remplie) ou retire (sinon).
+  // Bloc de texte conditionnel (menu des variables, onglet Chips) : un conteneur de blocs - paragraphes mis en forme, titres, listes, tableaux et
+  // d'autres blocs conditionnels, à toute profondeur - qui n'apparaît en lecture et à l'export que si sa condition d'affichage est remplie
+  // (js/conditional-text.js). Même condition que celle d'une bulle ({ mode, rules }, fenêtre js/variable-condition.js, barre flottante
+  // js/floating-toolbars.js) ; sans condition, le bloc est toujours affiché. Le cadre et l'étiquette « Si … » n'existent que dans l'éditeur
+  // (NodeView) : renderHTML, donc l'enregistrement, le presse-papiers et les exports, ne sérialise que <div class="conditional-text" data-condition>,
+  // que le rendu défait (condition remplie) ou retire (sinon).
   function createConditionalTextNode(Node, mergeAttributes) {
-    // Les étiquettes d'un changement de langue : une seule écoute pour toutes les vues (I18n.onChange ne se désabonne pas), chaque vue s'inscrit tant qu'elle vit.
-    const views = new Set();
-    I18n.onChange(() => views.forEach(refresh => refresh()));
+    const views = languageViews();
     return Node.create({
       name: 'conditionalText',
       group: 'block',
@@ -814,25 +711,19 @@ const EditorNodes = (function () {
       // Le premier paragraphe d'un bloc qu'on vide ou qu'on colle ailleurs garde son bloc autour de lui, comme une citation.
       defining: true,
       addAttributes() {
-        return { condition: { default: null, renderHTML: () => ({}) } };
+        return { condition: internalAttr(null) };
       },
       parseHTML() {
-        return [{
-          tag: 'div.conditional-text',
-          getAttrs: el => {
-            const raw = el.getAttribute('data-condition');
-            if (!raw) return { condition: null };
-            try { return { condition: JSON.parse(raw) }; } catch (e) { return { condition: null }; }
-          },
-        }];
+        return [{ tag: 'div.conditional-text', getAttrs: el => ({ condition: jsonAttr(el, 'data-condition') }) }];
       },
       renderHTML({ HTMLAttributes, node }) {
         const attrs = mergeAttributes(HTMLAttributes, { class: 'conditional-text' });
         if (node.attrs.condition) attrs['data-condition'] = JSON.stringify(node.attrs.condition);
         return ['div', attrs, 0];
       },
-      // Vue de l'éditeur SEULEMENT. L'étiquette est hors du contentDOM (jamais lue comme contenu du bloc) ; un clic dessus sélectionne le bloc entier - un
-      // conteneur ne se sélectionne pas d'un clic simple - ce qui ouvre sa barre flottante (js/floating-toolbars.js:wireVariableFloatingToolbar).
+      // Vue de l'éditeur seulement. L'étiquette est hors du contentDOM (jamais lue comme contenu du bloc) ; un clic dessus sélectionne le bloc entier
+      // - un conteneur ne se sélectionne pas d'un clic simple - ce qui ouvre sa barre flottante
+      // (js/floating-toolbars.js:wireVariableFloatingToolbar).
       addNodeView() {
         return ({ node: initialNode, editor: nodeEditor, getPos }) => {
           let node = initialNode;
@@ -860,13 +751,13 @@ const EditorNodes = (function () {
           views.add(refresh);
           tag.addEventListener('mousedown', event => {
             event.preventDefault(); event.stopPropagation();
-            const pos = getPos();
-            if (typeof pos === 'number') nodeEditor.chain().focus().setNodeSelection(pos).run();
+            const live = liveNode(nodeEditor, getPos);
+            if (live) nodeEditor.chain().focus().setNodeSelection(live.pos).run();
           });
-          // Un clic dans le texte d'un bloc resté sélectionné (la fenêtre de condition se referme sur lui) ne déplaçait pas la sélection : le bloc sélectionné est déplaçable
-          // à la souris, et Chrome ne pose pas le curseur dans ce qui peut être glissé - ProseMirror ne le rattrape qu'à deux positions de la fin du bloc. Le cadre épousant
-          // son texte, la marge vide à droite de la ligne, qui y échappait, n'existe plus : le clic pose le curseur là où il tombe. Une bulle, une image, l'étiquette gardent
-          // leur propre clic.
+          // Un clic dans le texte d'un bloc resté sélectionné (la fenêtre de condition se referme sur lui) doit poser le curseur : le bloc
+          // sélectionné est déplaçable à la souris, et Chrome ne pose pas le curseur dans ce qui peut être glissé (ProseMirror ne le rattrape qu'à
+          // deux positions de la fin du bloc). Le clic pose donc le curseur là où il tombe ; une bulle, une image et l'étiquette gardent leur propre
+          // clic.
           dom.addEventListener('click', event => {
             if (!dom.classList.contains('conditional-text-selected') || event.target.closest('[contenteditable="false"], .editor-image-view, hr')) return;
             const hit = nodeEditor.view.posAtCoords({ left: event.clientX, top: event.clientY });
@@ -883,11 +774,12 @@ const EditorNodes = (function () {
               refresh();
               return true;
             },
-            // Le bloc sélectionné (clic sur son étiquette) porte sa propre classe, comme l'image (editor-image-selected) ; ProseMirror, pour un conteneur sélectionné,
-            // le rend aussi déplaçable à la souris - on garde ce comportement.
+            // Le bloc sélectionné (clic sur son étiquette) porte sa propre classe, comme l'image (editor-image-selected) ; ProseMirror, pour un
+            // conteneur sélectionné, le rend aussi déplaçable à la souris - on garde ce comportement.
             selectNode: () => { dom.classList.add('conditional-text-selected'); dom.draggable = true; },
             deselectNode: () => { dom.classList.remove('conditional-text-selected'); dom.removeAttribute('draggable'); },
-            // L'étiquette et les attributs du cadre sont posés hors transaction : ProseMirror ne doit pas les lire comme une modification du document.
+            // L'étiquette et les attributs du cadre sont posés hors transaction : ProseMirror ne doit pas les lire comme une modification du
+            // document.
             ignoreMutation: mutation => mutation.type !== 'selection' && (tag.contains(mutation.target) || mutation.target === dom),
             stopEvent: event => tag.contains(event.target),
             destroy: () => views.delete(refresh),
@@ -897,52 +789,40 @@ const EditorNodes = (function () {
     });
   }
 
-  // Case conditionnelle (menu des variables, onglet Chips ; demande d'Antoine du 01/10) : une puce en ligne qui se lit comme une case cochée quand sa condition est remplie, décochée sinon
-  // (js/conditional-checkbox.js). Même condition que celle d'une bulle ou d'un bloc de texte ({ mode, rules }, fenêtre js/variable-condition.js, barre flottante
-  // js/floating-toolbars.js) ; `style` : l'un des trois styles de case de la liste à cases (VariableFormat.BOOL_CHECKBOX_STYLES). Dans l'éditeur la puce montre sa case décochée, dessinée
-  // comme à la Lecture (la classe `.resolved-checkbox`), et « Si Statut = Urgent » (ou « sans condition ») ; renderHTML, donc l'enregistrement, le presse-papiers et les exports,
-  // ne sérialise que <span class="conditional-checkbox" data-condition data-checkbox-style>, que le rendu remplace par la case cochée ou non.
+  // Case conditionnelle (menu des variables, onglet Chips) : une puce en ligne qui se lit comme une case cochée quand sa condition est remplie,
+  // décochée sinon (js/conditional-checkbox.js). Même condition que celle d'une bulle ou d'un bloc de texte ({ mode, rules }, fenêtre
+  // js/variable-condition.js, barre flottante js/floating-toolbars.js) ; `style` : l'un des trois styles de case de la liste à cases
+  // (VariableFormat.BOOL_CHECKBOX_STYLES). Dans l'éditeur la puce montre sa case décochée, dessinée comme à la Lecture (classe `.resolved-checkbox`),
+  // et « Si Statut = Urgent » (ou « sans condition ») ; renderHTML, donc l'enregistrement, le presse-papiers et les exports, ne sérialise que <span
+  // class="conditional-checkbox" data-condition data-checkbox-style>, que le rendu remplace par la case cochée ou non.
   function createConditionalCheckboxNode(Node, mergeAttributes) {
-    // Les libellés d'un changement de langue : une seule écoute pour toutes les vues (I18n.onChange ne se désabonne pas), chaque vue s'inscrit tant qu'elle vit.
-    const views = new Set();
-    I18n.onChange(() => views.forEach(refresh => refresh()));
+    const views = languageViews();
     function attrsOf(HTMLAttributes, node) {
       const attrs = mergeAttributes(HTMLAttributes, { class: 'conditional-checkbox', contenteditable: 'false', 'data-checkbox-style': ConditionalCheckbox.styleOf(node.attrs.style) });
       if (node.attrs.condition) attrs['data-condition'] = JSON.stringify(node.attrs.condition);
       return attrs;
     }
-    return Node.create({
+    return inlineAtom(Node, {
       name: 'conditionalCheckbox',
-      group: 'inline',
-      inline: true,
-      atom: true,
-      selectable: true,
       addAttributes() {
-        return {
-          condition: { default: null, renderHTML: () => ({}) },
-          style: { default: ConditionalCheckbox.DEFAULT_STYLE, renderHTML: () => ({}) },
-        };
+        return { condition: internalAttr(null), style: internalAttr(ConditionalCheckbox.DEFAULT_STYLE) };
       },
       parseHTML() {
         return [{
           tag: 'span.conditional-checkbox',
-          getAttrs: el => {
-            let condition = null;
-            try { condition = JSON.parse(el.getAttribute('data-condition') || 'null'); } catch (e) { condition = null; }
-            return { condition, style: ConditionalCheckbox.styleOf(el.getAttribute('data-checkbox-style')) };
-          },
+          getAttrs: el => ({ condition: jsonAttr(el, 'data-condition'), style: ConditionalCheckbox.styleOf(el.getAttribute('data-checkbox-style')) }),
         }];
       },
       renderHTML({ HTMLAttributes, node }) {
         return ['span', attrsOf(HTMLAttributes, node), VariableFormat.UNCHECKED_BOX];
       },
-      // Vue de l'éditeur SEULEMENT : la case dessinée, puis le libellé de la condition (coupé par « … » quand la case ou la colonne qui le porte est trop étroite, css/conditional-checkbox.css) ;
-      // le texte entier est dans son info-bulle et dans son nom accessible. Pas de `update` : ProseMirror garde la vue tant que le nœud est identique et la refait sinon.
+      // Vue de l'éditeur seulement : la case dessinée, puis le libellé de la condition (coupé par « … » quand la case ou la colonne qui le porte est
+      // trop étroite, css/conditional-checkbox.css) ; le texte entier est dans son info-bulle et dans son nom accessible. Pas de `update` :
+      // ProseMirror garde la vue tant que le nœud est identique et la refait sinon.
       addNodeView() {
         return ({ node, HTMLAttributes }) => {
-          const attrs = attrsOf(HTMLAttributes, node);
           const dom = document.createElement('span');
-          Object.keys(attrs).forEach(name => { if (attrs[name] != null) dom.setAttribute(name, attrs[name]); });
+          setAttrs(dom, attrsOf(HTMLAttributes, node));
           // Comme l'étiquette d'un bloc de texte conditionnel : sans rôle, l'`aria-label` d'un simple <span> n'est pas lu.
           dom.setAttribute('role', 'button');
           const style = ConditionalCheckbox.styleOf(node.attrs.style);
@@ -953,7 +833,8 @@ const EditorNodes = (function () {
           box.setAttribute('aria-hidden', 'true');
           box.style.color = VariableFormat.checkboxColor(false, style);
           box.textContent = VariableFormat.UNCHECKED_BOX;
-          // Le libellé en deux morceaux, comme une bulle (splitBadgeLabel) : trop long pour sa case ou sa colonne, c'est son MILIEU que « … » remplace, jamais le bout (css/conditional-checkbox.css).
+          // Le libellé en deux morceaux, comme une bulle (splitBadgeLabel) : trop long pour sa case ou sa colonne, c'est son milieu que « … »
+          // remplace, jamais le bout (css/conditional-checkbox.css).
           const head = document.createElement('span');
           head.className = 'conditional-checkbox-head';
           const tail = document.createElement('span');
@@ -981,35 +862,32 @@ const EditorNodes = (function () {
     });
   }
 
-  // Valeur conditionnelle (menu des variables, onglet Chips ; demande d'Antoine du 02/10, « une valeur - un ou plusieurs mots, un nombre... - qui s'affiche de manière conditionnelle », posée
-  // DANS la phrase, petite, son contour grandissant avec le texte et les retours à la ligne) : le pendant en ligne du bloc de texte conditionnel. Un nœud en ligne qui CONTIENT du texte (marques,
-  // bulles, retours à la ligne) et que sa condition fait apparaître en lecture et à l'export (js/conditional-value.js) ou disparaître. Même condition que celle d'une bulle ou d'un bloc
-  // ({ mode, rules }, fenêtre js/variable-condition.js, barre flottante js/floating-toolbars.js) ; sans condition, la valeur est toujours affichée. Dans l'éditeur le texte est celui de la
-  // phrase, simplement entouré d'un cadre (css/conditional-value.css) : aucune étiquette ne prend de place dans la ligne, le texte passe donc à la ligne exactement où il le fera à
-  // l'export. renderHTML, donc l'enregistrement, le presse-papiers et les exports, ne sérialise que <span class="conditional-value" data-condition>.
+  // Valeur conditionnelle (menu des variables, onglet Chips) : une valeur - un ou plusieurs mots, un nombre... - qui s'affiche de manière
+  // conditionnelle, posée dans la phrase, petite, son contour grandissant avec le texte et les retours à la ligne : le pendant en ligne du bloc de
+  // texte conditionnel. Un nœud en ligne qui contient du texte (marques, bulles, retours à la ligne) et que sa condition fait apparaître en lecture
+  // et à l'export (js/conditional-value.js) ou disparaître. Même condition que celle d'une bulle ou d'un bloc ({ mode, rules }, fenêtre
+  // js/variable-condition.js, barre flottante js/floating-toolbars.js) ; sans condition, la valeur est toujours affichée. Dans l'éditeur le texte est
+  // celui de la phrase, simplement entouré d'un cadre (css/conditional-value.css) : aucune étiquette ne prend de place dans la ligne, le texte passe
+  // donc à la ligne exactement où il le fera à l'export. renderHTML, donc l'enregistrement, le presse-papiers et les exports, ne sérialise que <span
+  // class="conditional-value" data-condition>.
   function createConditionalValueNode(Node, mergeAttributes) {
-    // Les textes d'un changement de langue : une seule écoute pour toutes les vues (I18n.onChange ne se désabonne pas), chaque vue s'inscrit tant qu'elle vit.
-    const views = new Set();
-    I18n.onChange(() => views.forEach(refresh => refresh()));
+    const views = languageViews();
     return Node.create({
       name: 'conditionalValue',
       group: 'inline',
       inline: true,
       content: 'inline*',
       addAttributes() {
-        return { condition: { default: null, renderHTML: () => ({}) } };
+        return { condition: internalAttr(null) };
       },
       parseHTML() {
         return [{
           tag: 'span.conditional-value',
-          // ProseMirror traite le contenu d'un nœud comme celui d'un bloc : il en retire l'espace du début et celle de la fin (« Dossier<valeur> urgent</valeur> » relu, « urgent » collait au
-          // mot d'avant). Une valeur garde les siennes - c'est ce qui permet de masquer l'espace avec le mot -, les retours à la ligne du source HTML devenant des espaces.
+          // ProseMirror traite le contenu d'un nœud comme celui d'un bloc : il en retire l'espace du début et celle de la fin (« Dossier<valeur>
+          // urgent</valeur> » relu, « urgent » collait au mot d'avant). Une valeur garde les siennes - c'est ce qui permet de masquer l'espace avec
+          // le mot -, les retours à la ligne du source HTML devenant des espaces.
           preserveWhitespace: true,
-          getAttrs: el => {
-            let condition = null;
-            try { condition = JSON.parse(el.getAttribute('data-condition') || 'null'); } catch (e) { condition = null; }
-            return { condition };
-          },
+          getAttrs: el => ({ condition: jsonAttr(el, 'data-condition') }),
         }];
       },
       renderHTML({ HTMLAttributes, node }) {
@@ -1017,7 +895,8 @@ const EditorNodes = (function () {
         if (node.attrs.condition) attrs['data-condition'] = JSON.stringify(node.attrs.condition);
         return ['span', attrs, 0];
       },
-      // Vue de l'éditeur SEULEMENT : la même balise, son texte d'attente quand elle est vide, son info-bulle (la condition en toutes lettres) et sa classe `has-condition`.
+      // Vue de l'éditeur seulement : la même balise, son texte d'attente quand elle est vide, son info-bulle (la condition en toutes lettres) et sa
+      // classe `has-condition`.
       addNodeView() {
         return ({ node: initialNode }) => {
           let node = initialNode;
@@ -1053,19 +932,22 @@ const EditorNodes = (function () {
     });
   }
 
-  // Touches d'une valeur conditionnelle, dans une extension à part (pour ne pas changer l'ordre des nœuds du schéma) rangée comme celle de l'Entrée d'une grille (js/editor.js) : après
-  // StarterKit, donc essayée avant ses touches, et avant Variables et TextExpansion, donc après elles - leurs listes ouvertes gardent Entrée.
-  // - Entrée est un retour à la ligne DANS la valeur (le cadre grandit d'une ligne) : sans elle, la valeur n'étant pas un bloc, TipTap couperait le paragraphe autour d'elle.
-  // - Retour arrière au début de la valeur, Suppr à sa fin : les commandes de base de TipTap (joinBackward, joinForward), appelées sans la vue, prennent le bord de la valeur pour celui d'un
-  //   paragraphe et mangent le texte voisin (« Avant » entier disparaissait). Le curseur passe donc d'abord de l'autre côté du bord, et la touche suit son cours : elle efface le caractère
-  //   voisin, comme si la valeur n'était pas là. Dans une valeur vide, elles la retirent : sinon rien ne l'ôterait une fois son texte effacé.
-  // - Une suppression qui viderait la valeur (le dernier caractère, un mot entier) se fait ici : le navigateur retire alors la balise vide, avec sa condition (`beforeinput`, cible lue par
-  //   `getTargetRanges`). Effacer le texte d'une valeur la laisse vide, avec son texte d'attente.
-  // - Flèche droite à la FIN d'une valeur, flèche gauche à son DÉBUT : le curseur sort de la valeur, sans bouger à l'écran - la frappe suivante se pose juste derrière (ou devant) son cadre.
-  //   Sans elles, une valeur en fin de paragraphe ne se quittait pas au clavier (la flèche passait au paragraphe suivant) et ce qu'on tapait pour finir la phrase, un point, entrait dans la valeur.
-  // - Une frappe AU BORD d'une valeur (juste dehors, ou dedans au début ou à la fin de son contenu, valeur vide comprise) se pose là où ProseMirror a le curseur. Un bord de cadre n'a qu'une
-  //   place à l'écran, et Chrome choisit seul de quel côté la frappe tombe - l'élément qui précède, le plus souvent : la valeur avalait la suite de la phrase tapée derrière elle, et ce
-  //   qu'on tapait après un retour à la ligne en fin de valeur, ou dans une valeur vide rendue par Ctrl+Z, se retrouvait dehors.
+  // Touches d'une valeur conditionnelle, dans une extension à part (pour ne pas changer l'ordre des nœuds du schéma), rangée comme celle de l'Entrée
+  // d'une grille (js/editor.js) : après StarterKit, donc essayée avant ses touches, et avant Variables et TextExpansion, donc après elles - leurs
+  // listes ouvertes gardent Entrée.
+  // - Entrée est un retour à la ligne dans la valeur (le cadre grandit d'une ligne) : sans elle, la valeur n'étant pas un bloc, TipTap couperait le
+  //   paragraphe autour d'elle.
+  // - Retour arrière au début de la valeur, Suppr à sa fin : les commandes de base de TipTap (joinBackward, joinForward), appelées sans la vue,
+  //   prennent le bord de la valeur pour celui d'un paragraphe et mangent le texte voisin. Le curseur passe donc d'abord de l'autre côté du bord, et
+  //   la touche suit son cours : elle efface le caractère voisin, comme si la valeur n'était pas là. Dans une valeur vide, elles la retirent : sinon
+  //   rien ne l'ôterait une fois son texte effacé.
+  // - Une suppression qui viderait la valeur : voir deleteWholeContent.
+  // - Flèche droite à la fin d'une valeur, flèche gauche à son début : le curseur sort de la valeur sans bouger à l'écran, la frappe suivante se pose
+  //   juste derrière (ou devant) son cadre. Sans elles, une valeur en fin de paragraphe ne se quittait pas au clavier (la flèche passait au
+  //   paragraphe suivant) et ce qu'on tapait pour finir la phrase entrait dans la valeur.
+  // - Une frappe au bord d'une valeur (juste dehors, ou dedans au début ou à la fin de son contenu, valeur vide comprise) se pose là où ProseMirror a
+  //   le curseur. Un bord de cadre n'a qu'une place à l'écran et Chrome choisit seul de quel côté la frappe tombe (l'élément qui précède, le plus
+  //   souvent) : la valeur avalait la suite de la phrase tapée derrière elle.
   function createConditionalValueKeysExtension(Extension, Plugin, PluginKey) {
     const valueAt = state => {
       const { $from, empty } = state.selection;
@@ -1092,8 +974,8 @@ const EditorNodes = (function () {
       else if (dir > 0 && $from.parentOffset === size) moveTo(editor, $from.after());
       return false;
     };
-    // Flèche droite (`dir` 1) à la fin d'une valeur, flèche gauche (-1) à son début : le curseur passe de l'autre côté du bord. Rend vrai quand la touche est consommée ; ailleurs dans la valeur,
-    // avec une sélection ou avec Maj, la flèche suit son cours.
+    // Flèche droite (`dir` 1) à la fin d'une valeur, flèche gauche (-1) à son début : le curseur passe de l'autre côté du bord. Rend vrai quand la
+    // touche est consommée ; ailleurs dans la valeur, avec une sélection ou avec Maj, la flèche suit son cours.
     const leave = (editor, dir) => {
       const here = valueAt(editor.state);
       if (!here || !here.empty || !editor.isEditable) return false;
@@ -1102,9 +984,9 @@ const EditorNodes = (function () {
       moveTo(editor, dir > 0 ? $from.after() : $from.before());
       return true;
     };
-    // Frappe (`beforeinput`, insertText) quand le curseur de ProseMirror est au bord d'une valeur - juste dehors, ou dedans au début ou à la fin de son contenu : le texte entre à cet
-    // endroit, par la même voie que la frappe de ProseMirror (`handleTextInput`, donc les règles de saisie), et non là où le navigateur le mettrait. Au milieu du texte, il tape comme
-    // d'habitude.
+    // Frappe (`beforeinput`, insertText) quand le curseur de ProseMirror est au bord d'une valeur - juste dehors, ou dedans au début ou à la fin de
+    // son contenu : le texte entre à cet endroit, par la même voie que la frappe de ProseMirror (`handleTextInput`, donc les règles de saisie), et
+    // non là où le navigateur le mettrait. Au milieu du texte, il tape comme d'habitude.
     const typeAtEdge = (view, event) => {
       const { selection, schema } = view.state;
       if (event.isComposing || !event.data || !selection.empty) return false;
@@ -1118,6 +1000,48 @@ const EditorNodes = (function () {
       if (!view.someProp('handleTextInput', f => f(view, selection.from, selection.to, event.data, () => tr))) view.dispatch(tr.scrollIntoView());
       return true;
     };
+    // Suivi des modifications : la bibliothèque (js/track-changes.js) ne marque que le texte d'une valeur - un nœud qui n'est pas une feuille ne
+    // porte pas ses marques -, jamais la valeur elle-même. « Tout accepter » d'une valeur supprimée ou défaite, « Tout refuser » d'une valeur insérée
+    // (ou d'un texte tapé dedans) ne lui laissent donc qu'un cadre vide, avec sa condition : il part avec son contenu. Seule la résolution des
+    // suggestions est concernée (sa transaction porte le méta `skip` de la bibliothèque), et seule une valeur dont tout le contenu était suggéré
+    // (inséré ou supprimé) et qui s'est vidée par elle : un texte effacé à la main dans une valeur la laisse vide, comme hors suivi.
+    function dropEmptiedValues(transactions, oldState, newState) {
+      if (!transactions.some(tr => tr.docChanged && TrackChanges.isSkipped(tr))) return null;
+      const type = newState.schema.nodes.conditionalValue;
+      const emptied = [];
+      newState.doc.descendants((node, pos) => { if (node.type === type && node.content.size === 0) emptied.push({ pos, size: node.nodeSize }); });
+      if (!emptied.length) return null;
+      // La position d'une valeur dans le document d'avant : les transactions reprises à l'envers, chacune par sa table inversée.
+      const positionBefore = pos => transactions.slice().reverse().reduce((at, tr) => tr.mapping.invert().map(at, 1), pos);
+      const suggested = child => child.marks.some(mark => mark.type.name === 'insertion' || mark.type.name === 'deletion');
+      const gone = emptied.filter(({ pos }) => {
+        const before = oldState.doc.nodeAt(positionBefore(pos));
+        return !!before && before.type === type && before.childCount > 0 && Array.from({ length: before.childCount }, (_, i) => before.child(i)).every(suggested);
+      });
+      if (!gone.length) return null;
+      const tr = newState.tr;
+      gone.reverse().forEach(({ pos, size }) => tr.delete(pos, pos + size));
+      return tr;
+    }
+    // Une suppression qui viderait la valeur (le dernier caractère, un mot entier) se fait ici : le navigateur retirerait la balise vide, avec sa
+    // condition (`beforeinput`, cible lue par `getTargetRanges`). Effacer le texte d'une valeur la laisse vide, avec son texte d'attente.
+    function deleteWholeContent(view, event) {
+      if (!view.editable || !/^delete/.test(event.inputType || '') || typeof event.getTargetRanges !== 'function') return false;
+      const ranges = event.getTargetRanges();
+      if (ranges.length !== 1) return false;
+      let from;
+      let to;
+      try {
+        from = view.posAtDOM(ranges[0].startContainer, ranges[0].startOffset);
+        to = view.posAtDOM(ranges[0].endContainer, ranges[0].endOffset);
+      } catch (e) { return false; }
+      if (!(from < to) || to > view.state.doc.content.size) return false;
+      const $from = view.state.doc.resolve(from);
+      if ($from.parent.type.name !== 'conditionalValue' || from !== $from.start() || to !== $from.end()) return false;
+      event.preventDefault();
+      view.dispatch(view.state.tr.delete(from, to).scrollIntoView());
+      return true;
+    }
     return Extension.create({
       name: 'conditionalValueKeys',
       addKeyboardShortcuts() {
@@ -1132,48 +1056,10 @@ const EditorNodes = (function () {
       addProseMirrorPlugins() {
         return [new Plugin({
           key: new PluginKey('conditionalValueInput'),
-          // Suivi des modifications : la bibliothèque (js/track-changes.js) ne marque que le TEXTE d'une valeur - un nœud qui n'est pas une feuille ne porte pas ses marques -, jamais la valeur
-          // elle-même. « Tout accepter » d'une valeur supprimée ou défaite, « Tout refuser » d'une valeur insérée (ou d'un texte tapé dedans) ne lui laissent donc qu'un cadre VIDE,
-          // avec sa condition : il part avec son contenu. Seule la résolution des suggestions est concernée (sa transaction porte le méta `skip` de la bibliothèque), et seule une valeur
-          // dont TOUT le contenu était suggéré (inséré ou supprimé) et qui s'est vidée par elle : un texte effacé à la main dans une valeur la laisse vide, comme hors suivi.
-          appendTransaction(transactions, oldState, newState) {
-            if (!transactions.some(tr => tr.docChanged && TrackChanges.isSkipped(tr))) return null;
-            const type = newState.schema.nodes.conditionalValue;
-            const emptied = [];
-            newState.doc.descendants((node, pos) => { if (node.type === type && node.content.size === 0) emptied.push({ pos, size: node.nodeSize }); });
-            if (!emptied.length) return null;
-            // La position d'une valeur dans le document d'AVANT : les transactions reprises à l'envers, chacune par sa table inversée.
-            const positionBefore = pos => transactions.slice().reverse().reduce((at, tr) => tr.mapping.invert().map(at, 1), pos);
-            const suggested = child => child.marks.some(mark => mark.type.name === 'insertion' || mark.type.name === 'deletion');
-            const gone = emptied.filter(({ pos }) => {
-              const before = oldState.doc.nodeAt(positionBefore(pos));
-              return !!before && before.type === type && before.childCount > 0 && Array.from({ length: before.childCount }, (_, i) => before.child(i)).every(suggested);
-            });
-            if (!gone.length) return null;
-            const tr = newState.tr;
-            gone.reverse().forEach(({ pos, size }) => tr.delete(pos, pos + size));
-            return tr;
-          },
+          appendTransaction: dropEmptiedValues,
           props: {
             handleDOMEvents: {
-              beforeinput: (view, event) => {
-                if (view.editable && event.inputType === 'insertText') return typeAtEdge(view, event);
-                if (!view.editable || !/^delete/.test(event.inputType || '') || typeof event.getTargetRanges !== 'function') return false;
-                const ranges = event.getTargetRanges();
-                if (ranges.length !== 1) return false;
-                let from;
-                let to;
-                try {
-                  from = view.posAtDOM(ranges[0].startContainer, ranges[0].startOffset);
-                  to = view.posAtDOM(ranges[0].endContainer, ranges[0].endOffset);
-                } catch (e) { return false; }
-                if (!(from < to) || to > view.state.doc.content.size) return false;
-                const $from = view.state.doc.resolve(from);
-                if ($from.parent.type.name !== 'conditionalValue' || from !== $from.start() || to !== $from.end()) return false;
-                event.preventDefault();
-                view.dispatch(view.state.tr.delete(from, to).scrollIntoView());
-                return true;
-              },
+              beforeinput: (view, event) => (view.editable && event.inputType === 'insertText' ? typeAtEdge(view, event) : deleteWholeContent(view, event)),
             },
           },
         })];
@@ -1181,14 +1067,15 @@ const EditorNodes = (function () {
     });
   }
 
-  // Écrit la nouvelle position d'une image en calque que la personne vient de DÉPLACER : une seule voie pour le glisser de la NodeView (`onMoveUp`) et les flèches du clavier
-  // (`nudgeSelectedImage`, js/floating-toolbars.js). `patch` : left, top et la grille page (pageIndex, pageLeftPt, pageTopPt). Rend true si le document a changé.
-  // Rien ne s'écrit quand aucune valeur ne change (un simple clic sur l'image déjà sélectionnée, une flèche contre le bord de la page) : ni étape d'historique, ni suggestion.
-  // Suivi des modifications actif (choix d'Antoine, 01/10 : « le déplacement d'une image laisse une trace, quel que soit le mode de déplacement »), l'écriture est SUIVIE : la
-  // bibliothèque laisse l'image d'origine à sa place en suppression suggérée et pose la copie à la nouvelle position en insertion suggérée (accepter garde la copie, refuser rend
-  // l'original). Elle ne garde pas la sélection : la copie est resélectionnée, sinon la flèche suivante ferait avancer le curseur et la barre de l'image se fermerait. Une image DÉJÀ
-  // insérée par une suggestion (la copie du premier appui d'une rafale, d'un déplacement précédent) se déplace en place, hors suivi : sa suggestion couvre déjà sa position, et une
-  // trace par appui empilerait les copies. Une image en suppression suggérée ne bouge pas : elle attend d'être acceptée ou refusée.
+  // Écrit la nouvelle position d'une image en calque que la personne vient de déplacer : une seule voie pour le glisser de la NodeView (`onMoveUp`)
+  // et les flèches du clavier (`nudgeSelectedImage`, js/floating-toolbars.js). `patch` : left, top et la grille page (pageIndex, pageLeftPt,
+  // pageTopPt). Rend true si le document a changé. Rien ne s'écrit quand aucune valeur ne change (un simple clic sur l'image déjà sélectionnée, une
+  // flèche contre le bord de la page) : ni étape d'historique, ni suggestion.
+  // Suivi des modifications actif, l'écriture est suivie : la bibliothèque laisse l'image d'origine en suppression suggérée et pose la copie à la
+  // nouvelle position en insertion suggérée (accepter garde la copie, refuser rend l'original). La copie est resélectionnée : sinon la flèche
+  // suivante ferait avancer le curseur et la barre de l'image se fermerait. Une image déjà insérée par une suggestion (la copie du premier appui
+  // d'une rafale, d'un déplacement précédent) se déplace en place, hors suivi : sa suggestion couvre déjà sa position, et une trace par appui
+  // empilerait les copies. Une image en suppression suggérée ne bouge pas : elle attend d'être acceptée ou refusée.
   function moveImageNode(editor, pos, patch) {
     const node = editor.state.doc.nodeAt(pos);
     if (!node || node.type.name !== 'editorImage') return false;
@@ -1206,8 +1093,9 @@ const EditorNodes = (function () {
       if (copyPos >= 0) editor.commands.setNodeSelection(copyPos);
       return true;
     }
-    // Sans suivi, ou sur une image déjà insérée : le nœud est remplacé (setNodeMarkup) et la NodeSelection recréée dessus dans la MÊME transaction (cf. EditorCore.patchNodeAndReselect),
-    // avec la classe de la sélection courante - d'abord posée sur l'image si ce n'était pas elle (glisser par la poignée d'une image non sélectionnée).
+    // Sans suivi, ou sur une image déjà insérée : le nœud est remplacé (setNodeMarkup) et la NodeSelection recréée dessus dans la même transaction
+    // (cf. EditorCore.patchNodeAndReselect), avec la classe de la sélection courante - d'abord posée sur l'image si ce n'était pas elle (glisser par
+    // la poignée d'une image non sélectionnée).
     if (!editor.state.selection.node) editor.commands.setNodeSelection(pos);
     const tr = editor.state.tr.setNodeMarkup(pos, undefined, attrs);
     tr.setSelection(editor.state.selection.constructor.create(tr.doc, pos));
@@ -1215,7 +1103,7 @@ const EditorNodes = (function () {
     return true;
   }
 
-  // Image - nœud atome en ligne : `layer` (normal/devant/derrière), `opacity`, `align`, `wrap`. Chaque attribut garde renderHTML: () => ({}) - le nœud
+  // Image : nœud atome en ligne (`layer` normal/devant/derrière, `opacity`, `align`, `wrap`). Chaque attribut garde un renderHTML vide : le nœud
   // construit lui-même la chaîne `style` complète ci-dessous.
   function createEditorImageNode(Node) {
     const noBareRender = () => ({});
@@ -1232,12 +1120,8 @@ const EditorNodes = (function () {
       if (a.opacity !== 1 && a.opacity != null) parts.push(`opacity: ${a.opacity}`);
       return parts.join('; ');
     }
-    return Node.create({
+    return inlineAtom(Node, {
       name: 'editorImage',
-      group: 'inline',
-      inline: true,
-      atom: true,
-      selectable: true,
       addAttributes() {
         return {
           src: { default: null },
@@ -1250,21 +1134,23 @@ const EditorNodes = (function () {
           opacity: { default: 1, parseHTML: el => (el.style.opacity !== '' ? parseFloat(el.style.opacity) : 1), renderHTML: noBareRender },
           align: { default: null, parseHTML: el => el.getAttribute('data-align') || null, renderHTML: noBareRender },
           wrap: { default: 'inline', parseHTML: el => el.getAttribute('data-wrap') || 'inline', renderHTML: noBareRender },
-          // Position "grille page" : capturée UNE FOIS, directement depuis le rendu réel de l'éditeur (Aperçu A4), au moment où l'image est positionnée
-          // (setLayer/glisser/aligner) - pdf-export.js l'utilise telle quelle, sans reconstruction ni ancrage textuel, pour garantir un rendu identique
-          // entre l'éditeur et le PDF. `null` = jamais positionnée ainsi (document ancien, ou positionnée hors Aperçu A4) - repli sur l'ancien système.
+          // Position « grille page » : capturée une fois, directement sur le rendu réel de l'éditeur (Aperçu A4), au moment où l'image est
+          // positionnée (setLayer, glisser, aligner) ; pdf-export.js l'utilise telle quelle, sans reconstruction ni ancrage textuel, pour un rendu
+          // identique entre l'éditeur et le PDF. `null` = jamais positionnée ainsi (document ancien, ou positionnée hors Aperçu A4) : repli sur
+          // l'ancien système.
           pageIndex: { default: null, parseHTML: el => (el.hasAttribute('data-page-index') ? parseInt(el.getAttribute('data-page-index'), 10) : null), renderHTML: noBareRender },
           pageLeftPt: { default: null, parseHTML: el => (el.hasAttribute('data-page-left-pt') ? parseFloat(el.getAttribute('data-page-left-pt')) : null), renderHTML: noBareRender },
           pageTopPt: { default: null, parseHTML: el => (el.hasAttribute('data-page-top-pt') ? parseFloat(el.getAttribute('data-page-top-pt')) : null), renderHTML: noBareRender },
-          // « Sur toutes les pages » (js/page-layer.js) : l'image « derrière le texte » est peinte à la même place de chaque page. Posé par la barre flottante, effacé dès que
-          // l'image quitte « derrière le texte » ; sans grille page il ne produit rien (PageLayer.isRepeatedAttrs).
+          // « Sur toutes les pages » (js/page-layer.js) : l'image « derrière le texte » est peinte à la même place de chaque page. Posé par la barre
+          // flottante, effacé dès que l'image quitte « derrière le texte » ; sans grille page il ne produit rien (PageLayer.isRepeatedAttrs).
           repeat: { default: false, parseHTML: el => el.getAttribute('data-repeat') === 'true', renderHTML: noBareRender },
           // Posés ensemble : transforment ce nœud en placeholder de #Variable Attachments (jamais de vraie image dans l'éditeur).
           varTable: { default: null, parseHTML: el => el.getAttribute('data-var-table') || null, renderHTML: noBareRender },
           varColumn: { default: null, parseHTML: el => el.getAttribute('data-var-column') || null, renderHTML: noBareRender },
           varKey: { default: null, parseHTML: el => el.getAttribute('data-var-key') || null, renderHTML: noBareRender },
-          // QR code (js/qr-code.js) : le texte à encoder, « #Table.Colonne » compris. Posé avec un `src`, l'image est le QR code déjà dessiné ; sans `src`, le texte contient une
-          // colonne et le QR code n'est dessiné qu'à la Lecture et à l'export, pour la ligne affichée (reader-mode.js:resolveQrCodes).
+          // QR code (js/qr-code.js) : le texte à encoder, « #Table.Colonne » compris. Posé avec un `src`, l'image est le QR code déjà dessiné ; sans
+          // `src`, le texte contient une colonne et le QR code n'est dessiné qu'à la Lecture et à l'export, pour la ligne affichée
+          // (reader-mode.js:resolveQrCodes).
           qrText: { default: null, parseHTML: el => el.getAttribute('data-qr-text') || null, renderHTML: noBareRender },
         };
       },
@@ -1299,8 +1185,8 @@ const EditorNodes = (function () {
           img.draggable = false;
           wrap.appendChild(img);
 
-          // Placeholder de #Variable : <span> superposé (icône + "#Table.Colonne") plutôt que de compter sur le rendu natif d'un <img src="">. Le <img> reste
-          // dans le DOM, invisible, pour continuer à porter width/height (poignées, toolbar flottante).
+          // Placeholder de #Variable : <span> superposé (icône + "#Table.Colonne") plutôt que de compter sur le rendu natif d'un <img src="">. Le
+          // <img> reste dans le DOM, invisible, pour continuer à porter width/height (poignées, toolbar flottante).
           const varLabel = document.createElement('span');
           varLabel.className = 'editor-image-var-label';
           wrap.appendChild(varLabel);
@@ -1316,16 +1202,16 @@ const EditorNodes = (function () {
             h.addEventListener('mousedown', event => startResize(event, corner));
           });
           moveHandle.addEventListener('mousedown', startMove);
-          // Une fois DÉJÀ sélectionnée, permet de glisser directement au clic sur l'image (pas seulement sur la poignée de déplacement) - le tout premier
-          // clic suit le chemin normal de sélection ProseMirror.
+          // Une fois sélectionnée, l'image se glisse directement au clic (pas seulement par la poignée de déplacement) ; le tout premier clic suit le
+          // chemin normal de sélection de ProseMirror.
           img.addEventListener('mousedown', event => {
             if (!wrap.classList.contains('editor-image-layered')) return;
             if (!wrap.classList.contains('editor-image-selected')) return;
             startMove(event);
           });
 
-          // Le z-index négatif ("derrière le texte") est posé sur l'<img> seule, pas le wrapper : sinon la poignée de déplacement (enfant du wrapper) serait
-          // entraînée derrière le texte avec lui, devenant impossible à re-sélectionner une fois cachée.
+          // Le z-index négatif ("derrière le texte") est posé sur l'<img> seule, pas le wrapper : sinon la poignée de déplacement (enfant du wrapper)
+          // serait entraînée derrière le texte avec lui, devenant impossible à re-sélectionner une fois cachée.
           function applyAttrs(attrs) {
             const isVarBox = !!attrs.varTable;
             // Un QR code dont le texte contient une colonne : le même cadre qu'une image de variable, carré, avec son texte pour libellé.
@@ -1349,8 +1235,8 @@ const EditorNodes = (function () {
               wrap.style.position = 'absolute';
               wrap.style.left = (attrs.left || 0) + 'px';
               wrap.style.top = (attrs.top || 0) + 'px';
-              // Largeur explicite (pas de shrink-to-fit implicite) : dans une cellule de tableau étroite, le shrink-to-fit par défaut s'effondre à 0 quand
-              // l'image approche la largeur du bloc englobant.
+              // Largeur explicite (pas de shrink-to-fit implicite) : dans une cellule de tableau étroite, le shrink-to-fit par défaut s'effondre à 0
+              // quand l'image approche la largeur du bloc englobant.
               wrap.style.width = attrs.width || '';
             } else {
               wrap.style.position = ''; wrap.style.left = ''; wrap.style.top = ''; wrap.style.width = '';
@@ -1361,22 +1247,17 @@ const EditorNodes = (function () {
           }
           applyAttrs(node.attrs);
 
-          // Le retour visuel de sélection (classe CSS) n'est pas géré ici ni via selectNode/deselectNode (peu fiable après un setNodeMarkup qui remplace le
-          // nœud) : centralisé dans wireImageFloatingToolbar.check(), qui recalcule l'état à chaque transaction depuis editor.isActive('editorImage').
+          // Le retour visuel de sélection (classe CSS) n'est pas géré ici ni par selectNode/deselectNode (peu fiable après un setNodeMarkup qui
+          // remplace le nœud) : wireImageFloatingToolbar.check() le recalcule à chaque transaction d'après la sélection.
           function updateAttrs(patch) {
-            const pos = getPos();
-            if (typeof pos !== 'number') return;
-            const current = nodeEditor.state.doc.nodeAt(pos);
-            if (!current) return;
-            EditorCore.patchNodeAndReselect(nodeEditor, pos, Object.assign({}, current.attrs, patch));
+            const live = liveNode(nodeEditor, getPos);
+            if (live) EditorCore.patchNodeAndReselect(nodeEditor, live.pos, Object.assign({}, live.node.attrs, patch));
           }
 
-          // Attributs COURANTS - jamais `node.attrs` directement : ce paramètre de closure ne reflète que le premier rendu de cette NodeView, seul
-          // `update(updatedNode)` reçoit le nœud frais.
+          // Attributs courants - jamais `node.attrs` directement : ce paramètre de closure ne reflète que le premier rendu de cette NodeView.
           function currentAttrs() {
-            const pos = getPos();
-            const current = typeof pos === 'number' ? nodeEditor.state.doc.nodeAt(pos) : null;
-            return (current && current.attrs) || node.attrs;
+            const live = liveNode(nodeEditor, getPos);
+            return (live ? live.node : node).attrs;
           }
 
           let resizeState = null;
@@ -1384,8 +1265,8 @@ const EditorNodes = (function () {
             event.preventDefault(); event.stopPropagation();
             const rect = img.getBoundingClientRect();
             const attrsNow = currentAttrs();
-            // La souris et getBoundingClientRect parlent en pixels ÉCRAN, `width`/`height` s'écrivent en pixels de MISE EN PAGE : la feuille est réduite à ~0,85 dans
-            // un panneau de ~700 px (cf. EditorCore.layoutZoom). Sans cette conversion, agrandir de 100 px rétrécissait l'image.
+            // La souris et getBoundingClientRect parlent en pixels écran, `width`/`height` s'écrivent en pixels de mise en page : la feuille est
+            // réduite à ~0,85 dans un panneau de ~700 px (cf. EditorCore.layoutZoom).
             const zoom = EditorCore.layoutZoom(wrap);
             resizeState = {
               startX: event.clientX, startY: event.clientY, zoom,
@@ -1423,13 +1304,14 @@ const EditorNodes = (function () {
 
           let moveState = null;
           function startMove(event) {
-            // Attributs courants via getPos()/nodeAt, pas `node` (figé au 1er rendu).
-            const pos = getPos();
-            const current = (typeof pos === 'number' && nodeEditor.state.doc.nodeAt(pos)) || node;
-            // Une image en suppression suggérée (l'original d'un déplacement suivi) attend d'être acceptée ou refusée : elle ne se glisse pas, le clic reste un clic.
+            const live = liveNode(nodeEditor, getPos);
+            const current = live ? live.node : node;
+            // Une image en suppression suggérée (l'original d'un déplacement suivi) attend d'être acceptée ou refusée : elle ne se glisse pas, le
+            // clic reste un clic.
             if (current.marks.some(m => m.type.name === 'deletion')) return;
             event.preventDefault(); event.stopPropagation();
-            // Déplacement de la souris en pixels écran, `left`/`top` en pixels de mise en page (cf. startResize) : sans la division, l'image traînait derrière le pointeur.
+            // Déplacement de la souris en pixels écran, `left`/`top` en pixels de mise en page (cf. startResize) : sans la division, l'image traînait
+            // derrière le pointeur.
             moveState = { startX: event.clientX, startY: event.clientY, zoom: EditorCore.layoutZoom(wrap), startLeft: current.attrs.left || 0, startTop: current.attrs.top || 0 };
             document.addEventListener('mousemove', onMoveMove);
             document.addEventListener('mouseup', onMoveUp, { once: true });
@@ -1445,15 +1327,15 @@ const EditorNodes = (function () {
               // `wrap` porte déjà la position finale (onMoveMove l'a suivie en direct pendant le glisser) - mesurable immédiatement, même schéma que
               // setLayer/alignOrSnap : c'est cette grille page, pas left/top, que pdf-export.js utilise pour garantir un rendu identique éditeur/PDF.
               const grid = HeaderFooterPreview.computePageGridPosition(wrap);
-              // Lu APRÈS computePageGridPosition (pas recalculé depuis event.clientX/Y) : cette fonction repositionne `wrap` si le glisser sort de la page
-              // physique (cf. son propre commentaire) - offsetLeft/offsetTop reflètent alors la position CORRIGÉE, jamais désynchronisée de la grille.
+              // Lu après computePageGridPosition (et non recalculé depuis event.clientX/Y) : cette fonction repositionne `wrap` si le glisser sort de
+              // la page physique, offsetLeft/offsetTop reflètent alors la position corrigée, jamais désynchronisée de la grille.
               const patch = { left: Math.round(wrap.offsetLeft), top: Math.round(wrap.offsetTop) };
               if (grid) Object.assign(patch, grid);
-              // Même voie que les flèches du clavier : en suivi, le déplacement laisse sa trace (l'original barré, la copie à la nouvelle place). Rien ne s'écrit sans changement (un simple
-              // clic sur l'image déjà sélectionnée) ni sur une image en suppression suggérée : le DOM, que le glisser a déplacé en direct, retrouve alors la position du document.
-              const pos = getPos();
-              const current = typeof pos === 'number' ? nodeEditor.state.doc.nodeAt(pos) : null;
-              if (current && !moveImageNode(nodeEditor, pos, patch)) applyAttrs(current.attrs);
+              // Même voie que les flèches du clavier : en suivi, le déplacement laisse sa trace (l'original barré, la copie à la nouvelle place).
+              // Rien ne s'écrit sans changement (un simple clic sur l'image déjà sélectionnée) ni sur une image en suppression suggérée : le DOM, que
+              // le glisser a déplacé en direct, retrouve alors la position du document.
+              const live = liveNode(nodeEditor, getPos);
+              if (live && !moveImageNode(nodeEditor, live.pos, patch)) applyAttrs(live.node.attrs);
             }
             moveState = null;
           }
@@ -1492,8 +1374,8 @@ const EditorNodes = (function () {
     });
   }
 
-  // Numérotation des titres - configuration persistée comme un nœud dans le contenu plutôt qu'une colonne Grist séparée (évite une migration de schéma).
-  // Attribut nommé `numberingStyle` pas `style` (collision HTML).
+  // Numérotation des titres : configuration persistée comme un nœud du contenu plutôt que dans une colonne Grist séparée (pas de migration de
+  // schéma). L'attribut s'appelle `numberingStyle` et non `style` (collision HTML).
   function createHeadingNumberingConfigNode(Node) {
     return Node.create({
       name: 'headingNumberingConfig',
@@ -1501,7 +1383,7 @@ const EditorNodes = (function () {
       atom: true,
       selectable: false,
       addAttributes() {
-        return { numberingStyle: { default: 'none', renderHTML: () => ({}) } };
+        return { numberingStyle: internalAttr('none') };
       },
       parseHTML() {
         return [{ tag: 'div.heading-numbering-config', getAttrs: el => ({ numberingStyle: el.dataset.style || 'none' }) }];
@@ -1511,8 +1393,8 @@ const EditorNodes = (function () {
       },
       addCommands() {
         return {
-          // Un seul nœud de config par document : cherche parmi les enfants directs (doc.forEach), sinon l'insère en tête. `dispatch` peut être absent (mode
-          // "can-run") - ne muter `tr` que s'il est présent.
+          // Un seul nœud de config par document : cherche parmi les enfants directs (doc.forEach), sinon l'insère en tête. `dispatch` peut être
+          // absent (mode "can-run") - ne muter `tr` que s'il est présent.
           setHeadingNumberingStyle: numberingStyle => ({ tr, state, dispatch }) => {
             let foundPos = null;
             state.doc.forEach((node, pos) => { if (node.type.name === 'headingNumberingConfig') foundPos = pos; });
@@ -1527,9 +1409,10 @@ const EditorNodes = (function () {
     });
   }
 
-  // Sommaire - nœud atome de bloc. Le HTML sérialisé reste un placeholder (résolu par reader-mode.js/pdf-export.js) ; l'éditeur affiche un aperçu vivant via
-  // un NodeView, isolé du modèle par `ignoreMutation`. Le texte du placeholder suit la langue de l'interface (même clé que le NodeView) : il n'est lu par
-  // personne au rechargement (`parseHTML` ne regarde que la classe), mais Ctrl+C le colle tel quel dans un autre document ou une autre application.
+  // Sommaire - nœud atome de bloc. Le HTML sérialisé reste un placeholder (résolu par reader-mode.js/pdf-export.js) ; l'éditeur affiche un aperçu
+  // vivant via un NodeView, isolé du modèle par `ignoreMutation`. Le texte du placeholder suit la langue de l'interface (même clé que le NodeView) :
+  // il n'est lu par personne au rechargement (`parseHTML` ne regarde que la classe), mais Ctrl+C le colle tel quel dans un autre document ou une
+  // autre application.
   function createTocNode(Node) {
     return Node.create({
       name: 'toc',
