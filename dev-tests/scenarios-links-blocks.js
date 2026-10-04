@@ -99,6 +99,51 @@
   });
 
   cases.push({
+    id: 'lb_normalize_returns_href_and_displayed_text_for_each_kind_of_address',
+    description: 'Adresse saisie : pour chaque famille (web avec ou sans schéma, e-mail, mailto:, téléphone, tel:, hôte avec port, //hôte) normalizeUrl rend l\'adresse ET le texte à afficher ; un schéma web sans « // », un autre schéma et une adresse incomplète rendent « invalid »',
+    run: async () => {
+      const n = LinkDialog.normalizeUrl;
+      const ok = (href, text) => JSON.stringify({ href, text });
+      const bad = JSON.stringify({ error: 'invalid' });
+      const want = [
+        ['  https://exemple.fr/a  ', ok('https://exemple.fr/a', 'https://exemple.fr/a')],
+        ['http://exemple.fr/un deux', ok('http://exemple.fr/un%20deux', 'http://exemple.fr/un deux')],
+        ['HTTP://EXEMPLE.FR', ok('http://EXEMPLE.FR', 'HTTP://EXEMPLE.FR')],
+        ['https:exemple.fr', bad],
+        ['https://', bad],
+        ['mailto:nom@exemple.fr?subject=Bonjour', ok('mailto:nom@exemple.fr?subject=Bonjour', 'nom@exemple.fr')],
+        ['MAILTO:x@y.fr?cc=z', ok('mailto:x@y.fr?cc=z', 'x@y.fr')],
+        ['mailto:a@b', ok('mailto:a@b', 'a@b')],
+        ['mailto:nom', bad],
+        ['mailto:', bad],
+        ['tel:+33 1 23 45 67 89', ok('tel:+33123456789', '+33 1 23 45 67 89')],
+        ['tel:12', bad],
+        ['tel:', bad],
+        ['javascript:alert(1)', bad],
+        ['ftp://exemple.fr', bad],
+        ['a:b', bad],
+        ['localhost:3000/x', ok('https://localhost:3000/x', 'localhost:3000/x')],
+        ['exemple.fr:8080', ok('https://exemple.fr:8080', 'exemple.fr:8080')],
+        ['x:80?y', bad],
+        ['nom@exemple.fr', ok('mailto:nom@exemple.fr', 'nom@exemple.fr')],
+        ['a@b', bad],
+        ['01 23 45 67 89', ok('tel:0123456789', '01 23 45 67 89')],
+        ['+33 1 23 45 67 89', ok('tel:+33123456789', '+33 1 23 45 67 89')],
+        ['123456', ok('tel:123456', '123456')],
+        ['12345', bad],
+        ['//exemple.fr/x', ok('https://exemple.fr/x', '//exemple.fr/x')],
+        ['//', bad],
+        ['www.exemple.fr/page?x=1#haut', ok('https://www.exemple.fr/page?x=1#haut', 'www.exemple.fr/page?x=1#haut')],
+        ['münchen.de', ok('https://münchen.de', 'münchen.de')],
+        ['exemple', bad],
+        ['a b.fr', bad],
+      ];
+      const wrong = want.filter(([raw, expected]) => JSON.stringify(n(raw)) !== expected).map(([raw]) => raw + ' -> ' + JSON.stringify(n(raw)));
+      return { pass: wrong.length === 0, notes: JSON.stringify({ wrong }) };
+    },
+  });
+
+  cases.push({
     id: 'lb_sanitizer_keeps_only_safe_link_addresses',
     description: 'HtmlSanitize : un lien ne garde que http(s), mailto et tel (adresse nettoyée des espaces) ; data:, vbscript:, adresse relative et javascript: perdent leur href, le texte reste',
     run: async () => {

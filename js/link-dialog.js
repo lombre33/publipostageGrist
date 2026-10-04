@@ -35,30 +35,34 @@ const LinkDialog = (function () {
     return /[\s"<>]/.test(candidate) ? url.href : candidate;
   }
 
+  // { href, text } d'une adresse web que le navigateur accepte, sinon { error: 'invalid' }.
+  function webResult(candidate, text) {
+    const href = webHref(candidate);
+    return href ? { href, text } : { error: 'invalid' };
+  }
+
+  // Une adresse qui commence par un schéma : seuls http(s), mailto et tel passent, les autres (javascript:, data:, file:...) sont refusés.
+  function schemeResult(scheme, rest, value) {
+    if (scheme === 'http' || scheme === 'https') return rest.startsWith('//') ? webResult(scheme + ':' + rest, value) : { error: 'invalid' };
+    if (scheme === 'mailto') {
+      return /^[^\s?#]+@[^\s?#]+(?:\?\S*)?$/.test(rest) ? { href: 'mailto:' + rest, text: rest.replace(/\?.*$/, '') } : { error: 'invalid' };
+    }
+    if (scheme === 'tel') return isPhone(rest) ? { href: telHref(rest), text: rest.trim() } : { error: 'invalid' };
+    return { error: 'invalid' };
+  }
+
   function normalizeUrl(raw) {
     const value = String(raw == null ? '' : raw).trim();
     if (!value) return { error: 'empty' };
     const schemeMatch = value.match(SCHEME);
+    const rest = schemeMatch ? value.slice(schemeMatch[0].length) : '';
     // « localhost:3000 » et « exemple.fr:8080/x » ressemblent à un schéma : un numéro de port derrière les deux-points dit que c'est une machine.
-    const looksLikePort = schemeMatch && /^\d+(?:[/?#]|$)/.test(value.slice(schemeMatch[0].length));
-    if (schemeMatch && !looksLikePort) {
-      const scheme = schemeMatch[1].toLowerCase();
-      const rest = value.slice(schemeMatch[0].length);
-      if (scheme === 'http' || scheme === 'https') {
-        if (!rest.startsWith('//')) return { error: 'invalid' };
-        const href = webHref(scheme + ':' + rest);
-        return href ? { href, text: value } : { error: 'invalid' };
-      }
-      if (scheme === 'mailto') {
-        return /^[^\s?#]+@[^\s?#]+(?:\?\S*)?$/.test(rest) ? { href: 'mailto:' + rest, text: rest.replace(/\?.*$/, '') } : { error: 'invalid' };
-      }
-      if (scheme === 'tel') return isPhone(rest) ? { href: telHref(rest), text: rest.trim() } : { error: 'invalid' };
-      return { error: 'invalid' };
-    }
+    const looksLikePort = schemeMatch && /^\d+(?:[/?#]|$)/.test(rest);
+    if (schemeMatch && !looksLikePort) return schemeResult(schemeMatch[1].toLowerCase(), rest, value);
     if (EMAIL.test(value)) return { href: 'mailto:' + value, text: value };
     if (isPhone(value)) return { href: telHref(value), text: value };
-    if (value.startsWith('//')) { const href = webHref('https:' + value); return href ? { href, text: value } : { error: 'invalid' }; }
-    if (HOST.test(value)) { const href = webHref('https://' + value); return href ? { href, text: value } : { error: 'invalid' }; }
+    if (value.startsWith('//')) return webResult('https:' + value, value);
+    if (HOST.test(value)) return webResult('https://' + value, value);
     return { error: 'invalid' };
   }
 
