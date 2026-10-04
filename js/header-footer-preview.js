@@ -61,8 +61,9 @@ const HeaderFooterPreview = (function () {
   // première entrée.
   function enterHeaderFooterMode(zone, variant) {
     if (!editor || inEmailMode) return;
-    // Une page trop basse pour la bande d'un en-tête ou d'un pied (un format libre de la taille d'une étiquette : PageLayout.fitsHeaderFooter) n'en reçoit plus de nouveau, mais
-    // une zone qui a déjà un contenu s'ouvre, pour qu'on puisse le retirer. Depuis l'édition d'une zone, passer à l'autre reste permis.
+    // Une page trop basse pour la bande d'un en-tête ou d'un pied (un format libre de la taille d'une étiquette : PageLayout.fitsHeaderFooter) n'en
+    // reçoit plus de nouveau, mais une zone qui a déjà un contenu s'ouvre, pour qu'on puisse le retirer. Depuis l'édition d'une zone, passer à
+    // l'autre reste permis.
     if (!hfMode && !PageLayout.fitsHeaderFooter() && !hasZoneContent(headerFooterDraft[zone][variant])) return;
     if (hfMode) headerFooterDraft[hfMode.zone][hfMode.variant] = editor.getHTML();
     else mainDocSnapshot = editor.getHTML();
@@ -203,15 +204,10 @@ const HeaderFooterPreview = (function () {
   function marginsPx() { return PageLayout.getMarginsPx(); }
   const HEADER_FOOTER_GAP_PX = 10 * PT_TO_PX; // même écart que HEADER_FOOTER_GAP_PT, pdf-export.js
 
-  // Facteur `zoom` effectif de la feuille (js/main.js:applyPageFitZoom). Les rectangles de getBoundingClientRect() sont en pixels écran, donc déjà
-  // multipliés par ce facteur, alors que pageContentHeightPx, offsetTop/offsetLeft et les styles des bandes sont en pixels de mise en page : toute
-  // mesure se divise par lui, sinon les coupures tombent au mauvais endroit sur une feuille réduite. Vaut 1 sans feuille, sans zoom ou sans Aperçu
-  // A4.
-  function layoutZoom(el) {
-    const sheet = el && el.closest ? el.closest('.v2-page-sheet, .reader-content') : null;
-    const z = sheet ? parseFloat(getComputedStyle(sheet).zoom) : NaN;
-    return (isFinite(z) && z > 0) ? z : 1;
-  }
+  // Facteur `zoom` effectif de la feuille (EditorCore.layoutZoom, js/main.js:applyPageFitZoom). Les rectangles de getBoundingClientRect() sont en
+  // pixels écran, donc déjà multipliés par ce facteur, alors que pageContentHeightPx, offsetTop/offsetLeft et les styles des bandes sont en pixels de
+  // mise en page : toute mesure se divise par lui, sinon les coupures tombent au mauvais endroit sur une feuille réduite.
+  const layoutZoom = EditorCore.layoutZoom;
 
   // Blocs que l'export coupe au pixel (pdfmake : une colonne, un tableau, une liste) mais que l'aperçu, qui ne coupe pas le DOM, traite d'une pièce.
   // Un bloc de texte conditionnel en fait partie : son cadre n'existe que dans l'éditeur, à l'export son texte coule d'une page à l'autre.
