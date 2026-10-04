@@ -213,6 +213,7 @@ const NODE_SCRIPTS = {
   formatPainterMouse: 'verify-format-painter-mouse.mjs', // pinceau de mise en forme à la vraie souris et au vrai clavier à 700x400 : le bouton sur la 2e rangée sans en ajouter, un mot, un glissé, un triple-clic, des cases de tableau, le double-clic qui garde le pinceau, Échap, Alt+Maj+C / V, clair, sombre et anglais
   startupReadsUnit: 'unit-startup-reads.mjs', // Node pur (vm + faux docApi qui compte ses appels) : ce que l'ouverture lit dans Grist - Templates.loadAll (une lecture), GristAPI.init (aucune table du document), GristAPI.refreshSchema (colonnes exactes, une passe à la fois), câblage d'index.html et de js/main.js
   startupOpenMouse: 'verify-startup-open-mouse.mjs', // ouverture sur un document aux tables lentes, vrai navigateur à 700x400, vraie souris et vrai clavier : table des modèles lue une fois, modèle affiché avant la lecture complète des tables, bulles jugées tout de suite, « # » liste les colonnes, colonnes exactes ensuite
+  cspLoad: 'verify-csp.mjs', // politique de sécurité du contenu de index.html SANS contournement : le widget démarre, s'écrit, se lit et exporte sous la politique ; un script en ligne, un gestionnaire, une adresse javascript:, une balise de base, un cadre, un objet, un formulaire ne passent plus ; le vrai fichier d'API de Grist (réseau) s'évalue ; cadre à bac à sable
 };
 
 const argv = process.argv.slice(2);
@@ -320,7 +321,7 @@ const DEV_FILES = ['helpers', 'runner'];
 
 async function runGroup(name, probeExpr) {
   const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hinting=none'] });
-  const context = await browser.newContext({ viewport: { width: viewportWidth, height: viewportHeight } });
+  const context = await browser.newContext({ bypassCSP: true, viewport: { width: viewportWidth, height: viewportHeight } });
   const page = await context.newPage();
   const consoleErrors = [];
   page.on('console', m => { if (m.type() === 'error') consoleErrors.push(m.text()); });

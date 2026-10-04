@@ -99,7 +99,7 @@ const DOC_HTML = '<h1>Fiche de suivi</h1><p>Introduction du document.</p><table>
   + '</tbody></table><p>Fin du document.</p>';
 
 async function openWidget(colorScheme) {
-  const context = await browser.newContext({ viewport: { width: WIDTH, height: HEIGHT }, colorScheme, acceptDownloads: true });
+  const context = await browser.newContext({ bypassCSP: true, viewport: { width: WIDTH, height: HEIGHT }, colorScheme, acceptDownloads: true });
   const page = await context.newPage();
   page.on('pageerror', e => { pageErrors.push(e.message); console.log('[pageerror]', e.message); });
   const dialogs = [];
