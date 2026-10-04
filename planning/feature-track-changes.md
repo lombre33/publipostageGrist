@@ -1,6 +1,6 @@
 # Suivi des modifications (track changes)
 
-> **Statut au 4 octobre 2026 : en ligne depuis le 21 septembre** (`js/track-changes.js` ; boutons « Suivi des modifications », « Tout accepter » et « Tout refuser »). Le texte qui suit décrit l'état avant l'intégration ; la fin du document (« Mise à jour du 2026-09-21 ») dit ce qui est livré et ce qui reste ouvert.
+> **Statut au 4 octobre 2026 : en ligne depuis le 21 septembre** (`js/track-changes.js` ; boutons « Suivi des modifications », « Tout accepter » et « Tout refuser »). Le code est réparti sur six scripts, chargés dans cet ordre : `js/track-changes-core.js` (les marques et leurs repères, la bibliothèque une fois chargée), `-selection.js` (quelles modifications une action touche), `-resolve.js` (les résoudre), `-reading.js` (la Lecture et les exports), `-commands.js` (les commandes de la bibliothèque) puis `js/track-changes.js` (les métadonnées de chaque modification, le pont avec Tiptap et l'API `TrackChanges`). Le texte qui suit décrit l'état avant l'intégration ; la fin du document (« Mise à jour du 2026-09-21 ») dit ce qui est livré et ce qui reste ouvert.
 
 **Jalon BETA**, roadmap RICE d'Antoine, famille « Édition collaborative », statut « à faire — rien
 dans le dépôt ». Volontairement écarté du chantier Commentaires le 2026-09-14 : `js/comments.js:1-4`

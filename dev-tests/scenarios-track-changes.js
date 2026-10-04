@@ -1209,7 +1209,7 @@
 
   // === « Tout refuser » et « Tout accepter » quand il ne reste que des réglages de paragraphe en attente (demande d'Antoine du 04/10, carte « Corriger ») ===
   // Un réglage de paragraphe suivi (l'alignement, « Garder avec le suivant ») n'est ni un texte ajouté ni un texte supprimé : c'est une marque `modification` posée sur le paragraphe. La commande de la lib
-  // qui refuse (revertSuggestion) rend « rien à faire » sans y toucher quand elle n'a aucun texte à défaire, et js/track-changes.js:runChunkedLibCommand, qui recommençait tant qu'une marque restait, tournait sans
+  // qui refuse (revertSuggestion) rend « rien à faire » sans y toucher quand elle n'a aucun texte à défaire, et js/track-changes-commands.js:runChunkedLibCommand, qui recommençait tant qu'une marque restait, tournait sans
   // fin : la page se figeait et le rendu montait à plusieurs Go. Chaque cas lance la commande du bouton de la barre (editor.chain().focus().…AllSuggestionsChunked().run()) sous un garde-fou : chaque lecture de
   // `editor.state` est comptée et, passé `limit`, la lecture lève une erreur - une seule fois - au lieu de laisser tourner la boucle d'avant la correction.
   async function runAllChunked(h, kind, limit, chunkSize) {
@@ -1388,7 +1388,7 @@
   // Avec le suivi allumé, le fond d'une cellule (la puce « Fond de cellule » de la barre du tableau) et la largeur d'une colonne (la poignée du bord) posent une marque `modification` sur chaque case touchée. Elle
   // ne se voit pas dans l'éditeur ; la barre « Accepter / Refuser » ne la proposait pas non plus, et la lib, à qui « Tout refuser » confie le texte, n'y touche pas quand elle n'a rien d'autre à défaire : le fond
   // ou la largeur restait, en attente, après « Tout refuser » (et, avant la correction précédente, la page se figeait). Les cas lancent la commande du bouton sous le garde-fou de runAllChunked, comme ceux des
-  // réglages de paragraphe plus haut ; la barre les propose maintenant un par un (cas `trackchanges_bar_*` plus bas, js/track-changes.js:ridesAlong).
+  // réglages de paragraphe plus haut ; la barre les propose maintenant un par un (cas `trackchanges_bar_*` plus bas, js/track-changes-selection.js:ridesAlong).
   const FILL = '#fff2a8';
   const FILL_CSS = /background-color: rgb\(255, 242, 168\)/;
   const cellModifications = () => (Editor.getHTML().match(/data-tc-modification/g) || []).length;
@@ -1486,7 +1486,7 @@
 
   // === La barre « Accepter / Refuser » propose le fond d'une cellule et la largeur d'une colonne (demande d'Antoine du 04/10, carte « Corriger ») ===
   // Ces deux réglages posent une marque `modification` sur chaque case touchée, que la barre ne voyait pas : seul « Tout refuser » les rendait. Elle les propose maintenant comme l'alignement d'un paragraphe, un par
-  // un (js/track-changes.js:selectionSuggestionIds) ; la largeur d'une colonne se résout sur toute la colonne - une marque par case, un id chacune (expandSuggestionIds). Les marques qui suivent une colonne ajoutée
+  // un (js/track-changes-selection.js:selectionSuggestionIds) ; la largeur d'une colonne se résout sur toute la colonne - une marque par case, un id chacune (expandSuggestionIds). Les marques qui suivent une colonne ajoutée
   // à travers une case fusionnée (colspan, colwidth, rowspan : ridesAlong) restent cachées, elles se résolvent avec leur colonne. Les parcours à la vraie souris sont dans le script Node trackColumnsMouse.
   const TABLE_FIXED_3X3 = '<table><tbody>' + ['1', '2', '3'].map(r => '<tr>' + ['a', 'b', 'c'].map(c => '<td colwidth="150"><p>' + c + r + '</p></td>').join('') + '</tr>').join('') + '</tbody></table><p>fin</p>';
   const TABLE_MERGED_FIXED = '<table><tbody><tr><td colspan="2" colwidth="100,100"><p>ab</p></td><td colwidth="100"><p>c1</p></td></tr><tr><td colwidth="100"><p>a2</p></td><td colwidth="100"><p>b2</p></td><td colwidth="100"><p>c2</p></td></tr></tbody></table><p>fin</p>';
@@ -1666,7 +1666,7 @@
   });
 
   // La valeur que « Refuser » rend est celle d'ORIGINE, même après plusieurs changements du même réglage (deux couleurs, deux glissés du même bord) : la lib note, à chaque remplacement de la marque d'une case, la valeur
-  // d'avant le dernier changement ; js/track-changes.js:keepOriginalNodeSettings garde la première. Sur un tableau inséré à la main (largeurs jamais fixées), le widget fige aussitôt les autres colonnes à leur largeur
+  // d'avant le dernier changement ; js/track-changes-resolve.js:keepOriginalNodeSettings garde la première. Sur un tableau inséré à la main (largeurs jamais fixées), le widget fige aussitôt les autres colonnes à leur largeur
   // (js/editor.js:backfillAutoColumnWidths, hors suivi) : refuser la largeur tirée rend aussi ces colonnes à « automatique », sans quoi le tableau ne retrouvait jamais sa mise en page.
   async function pickNoCellFill(h) {
     await pressTableButton(h, 'fill-open');
@@ -2280,7 +2280,7 @@
 
   // === Lecture : le document comme si toutes les suggestions étaient acceptées (demande d'Antoine du 04/10) ===
   // « En mode lecture afficher comme si toutes les modifications étaient acceptées, avec juste un léger changement de couleur là où des modifs sont présentes. » La Lecture retouche le HTML qu'elle
-  // reçoit (js/track-changes.js:acceptedView, appelée par js/reader-mode.js:renderRecord) : le résultat doit être EXACTEMENT celui de « Tout accepter » (comparé ici, cas par cas, au vrai
+  // reçoit (js/track-changes-reading.js:acceptedView, appelée par js/reader-mode.js:renderRecord) : le résultat doit être EXACTEMENT celui de « Tout accepter » (comparé ici, cas par cas, au vrai
   // résultat de la lib), la teinte étant la seule différence voulue. Les deux sources de HTML y passent : editor.getHTML() et js/comments.js:buildReaderHtml (Lecture avec commentaires).
   // HTML comparable : la teinte et les repères de position déroulés, les U+200B (repères de saut de paragraphe, que la lib laisse parfois devant un texte) retirés, les mises en forme voisines identiques réunies.
   function comparableHtml(html) {
@@ -2382,7 +2382,7 @@
 
   cases.push({
     id: 'trackchanges_reading_view_equals_accept_all_on_text_edits',
-    description: "Le document que la Lecture montre (js/track-changes.js:acceptedView) est exactement celui que « Tout accepter » donne, pour treize façons de modifier du texte : insertion, mot supprimé entre deux espaces (une seule reste), remplacement, suppression sur deux ou trois paragraphes ou sur deux items de liste, Entrée, Retour arrière, item ajouté, gras, alignement - depuis le HTML de l'éditeur comme depuis celui de la Lecture avec commentaires - sans <ins>, <del> ni marque de suivi, avec de la teinte là où du texte est ajouté ou une mise en forme change.",
+    description: "Le document que la Lecture montre (js/track-changes-reading.js:acceptedView) est exactement celui que « Tout accepter » donne, pour treize façons de modifier du texte : insertion, mot supprimé entre deux espaces (une seule reste), remplacement, suppression sur deux ou trois paragraphes ou sur deux items de liste, Entrée, Retour arrière, item ajouté, gras, alignement - depuis le HTML de l'éditeur comme depuis celui de la Lecture avec commentaires - sans <ins>, <del> ni marque de suivi, avec de la teinte là où du texte est ajouté ou une mise en forme change.",
     run: async (h) => {
       try {
         const failures = [];

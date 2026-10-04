@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // La Lecture « comme si toutes les modifications étaient acceptées », à la vraie souris et au vrai clavier, à la taille du panneau Grist d'Antoine (~700x400), en thème clair puis sombre.
 // Demande d'Antoine du 04/10 (« En mode lecture afficher comme si toutes les modifications était acceptées avec juste un léger changement de couleur là où des modifs sont présentes ») :
-// js/reader-mode.js:renderRecord passe le HTML par js/track-changes.js:acceptedView. Le script allume le suivi au bouton, tape, supprime et remplace au clavier, ouvre la Lecture au vrai clic, puis lit : le texte
+// js/reader-mode.js:renderRecord passe le HTML par js/track-changes-reading.js:acceptedView. Le script allume le suivi au bouton, tape, supprime et remplace au clavier, ouvre la Lecture au vrai clic, puis lit : le texte
 // supprimé a disparu (pas barré : parti), le texte ajouté et le texte de remplacement sont là, plus aucun <ins> ni <del>, le fond peint aux pixels derrière le texte ajouté (vert pâle, le même dans les deux
 // thèmes, la page restant blanche), la couleur du texte inchangée et sans soulignement, 4,5:1 au moins ; puis le retour à l'édition : les suggestions y sont toujours en attente (rien n'a été accepté pour de bon).
 // Lancé par run-headless.mjs (groupe Node "suggestionReadingMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-suggestion-reading-mouse.mjs
