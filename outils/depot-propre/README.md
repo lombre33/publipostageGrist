@@ -25,7 +25,9 @@ Ce dossier ne part pas sur le dépôt public (`outils/` est dans les exclusions 
    puis `git -C ../Publipostage-Plus diff --cached --stat`. Le clone public revient à zéro avec
    `git reset --hard && git clean -fd`.
 5. Préparer et committer, sous l'identité qui signera dans l'historique public (aucune valeur par défaut) :
-   `PP_AUTEUR_NOM="…" PP_AUTEUR_EMAIL="…" bash outils/depot-propre/publier.sh --propre ../Publipostage-Plus`
+   `PP_AUTEUR_NOM="grist-factory" PP_AUTEUR_EMAIL="328957858+grist-factory@users.noreply.github.com" bash outils/depot-propre/publier.sh --propre ../Publipostage-Plus`
+   C'est l'adresse noreply du compte public (GitHub > Réglages > E-mails), choix d'Antoine du 04/10 ; le script refuse
+   toute autre adresse, pour que l'adresse personnelle des commits de l'alpha ne s'ajoute pas à ceux de la bêta.
 6. Relire le commit (`git -C ../Publipostage-Plus show --stat`), puis pousser :
    `git -C ../Publipostage-Plus push origin main vX.Y.Z`.
 7. Vérifier que GitHub Pages sert la nouvelle version : le flux « pages build and deployment » part, puis
@@ -55,7 +57,7 @@ la GPL v3 ; prénom du développeur, compte personnel, lien ou trace de session,
 secret ; politique de sécurité du contenu absente, après un script, avec `'unsafe-inline'`, ou dont les
 empreintes ne sont pas celles des scripts en ligne de `index.html` ; fichier cité par la page absent ;
 adresse du dépôt de développement ; gabarit `{{…}}` resté en place ; lien ou ancre cassé dans les documents
-publics ; `CHANGELOG.md` sans la section de la version ; `js/version.js` qui annonce une autre version.
+publics ; `CHANGELOG.md` sans la section de la version ; `js/version.js` absent, non chargé par `index.html` ou qui annonce une autre version.
 
 AVERTISSEMENT (à relire) : renvoi à un dossier non publié (`planning`, `dev-tests`…) ; entrée inconnue à la
 racine ; adresse e-mail non fictive ; `console.log` ou `console.info` dans `js/` ; fichier de plus de 2,5 Mo.

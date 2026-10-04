@@ -17,7 +17,7 @@
 #   5. pose par-dessus les documents publics de outils/depot-propre/public/ (README, SECURITY, CONTRIBUTING, CODE_OF_CONDUCT, CHANGELOG, NOTICE),
 #      où {{VERSION}}, {{DATE}} (2026-10-04), {{DATE_FR}} (4 octobre 2026) et {{DATE_EN}} (October 4, 2026) sont remplacés ;
 #   6. lance controles.mjs sur l'arbre obtenu : une ERREUR empêche le commit ;
-#   7. committe sous l'identité donnée (jamais d'identité par défaut : sans PP_AUTEUR_NOM et PP_AUTEUR_EMAIL, il s'arrête), pose l'étiquette vX.Y.Z,
+#   7. committe sous l'identité donnée (jamais d'identité par défaut : sans PP_AUTEUR_NOM et PP_AUTEUR_EMAIL, il s'arrête ; l'adresse doit être l'adresse noreply de GitHub du compte grist-factory), pose l'étiquette vX.Y.Z,
 #      écrit un résumé et une sauvegarde (.bundle) dans le dossier de sortie.
 # Quand il s'arrête avant le commit (erreur, ou identité absente), le clone public revient à son état d'origine.
 set -euo pipefail
@@ -177,6 +177,12 @@ fi
 [ "$statut" -eq 0 ] || die "les contrôles ont signalé des erreurs : rien n'est committé (relire $SORTIE/controles.txt)"
 if [ -z "${PP_AUTEUR_NOM:-}" ] || [ -z "${PP_AUTEUR_EMAIL:-}" ]; then
   die "donne l'identité du commit : PP_AUTEUR_NOM et PP_AUTEUR_EMAIL (aucune valeur par défaut)"
+fi
+# Choix d'Antoine du 04/10 : le commit de la bêta ne porte pas son adresse personnelle (celle de l'alpha reste lisible dans l'historique public), mais
+# l'adresse « noreply » de GitHub du compte public, 328957858+grist-factory@users.noreply.github.com (GitHub > Réglages > E-mails). Celle d'un autre
+# compte (la sienne, en noreply, ferait renvoyer chaque commit vers son profil personnel) est refusée aussi.
+if ! [[ "$PP_AUTEUR_EMAIL" =~ ^[0-9]+\+grist-factory@users\.noreply\.github\.com$ ]]; then
+  die "l'adresse du commit doit être l'adresse noreply de GitHub du compte public (<numéro>+grist-factory@users.noreply.github.com, GitHub > Réglages > E-mails), pas une adresse personnelle ni celle d'un autre compte"
 fi
 
 # --- 7. Le commit et l'étiquette -----------------------------------------------------------------------------------------------------------

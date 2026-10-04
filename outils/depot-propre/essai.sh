@@ -16,7 +16,7 @@ attend() { if grep -q -- "$2" <<<"$3"; then ok "$1"; else ko "$1" "« $2 » abse
 # vrai(description, commande…)
 vrai() { local d="$1"; shift; if "$@" >/dev/null 2>&1; then ok "$d"; else ko "$d"; fi; }
 
-PUBLIER_ENV=(PP_DATE=2026-10-04 PP_AUTEUR_NOM=Essai PP_AUTEUR_EMAIL=essai@example.invalid)
+PUBLIER_ENV=(PP_DATE=2026-10-04 PP_AUTEUR_NOM=Essai PP_AUTEUR_EMAIL=1+grist-factory@users.noreply.github.com)
 publier() { env "${PUBLIER_ENV[@]}" bash "$T/dev/outils/depot-propre/publier.sh" --propre "$T/propre" "$@" 2>&1; }
 
 # --- Un faux dépôt de développement, avec les vrais outils et les vrais documents publics ----------------------------------------------------
@@ -76,7 +76,7 @@ echo "publier.sh : publication"
 SORTIE="$(publier --sortie "$T/sortie1")"
 attend "publie quand tout est en règle" "Commit .* et étiquette v1.0.0-beta.1 prêts" "$SORTIE"
 P="$T/propre"
-vrai "identité du commit" test "$(git -C "$P" log -1 --format='%an <%ae>')" = "Essai <essai@example.invalid>"
+vrai "identité du commit" test "$(git -C "$P" log -1 --format='%an <%ae>')" = "Essai <1+grist-factory@users.noreply.github.com>"
 vrai "étiquette annotée v1.0.0-beta.1" test "$(git -C "$P" cat-file -t v1.0.0-beta.1)" = "tag"
 vrai "un commit de plus sur l'historique existant" test "$(git -C "$P" rev-parse HEAD~1)" = "$AVANT"
 vrai "le message ne porte aucune trace de session" test -z "$(git -C "$P" log -1 --format=%B | grep -i -E 'claude|session|co-authored')"
@@ -100,6 +100,13 @@ SORTIE="$(env PP_DATE=2026-10-04 bash "$T/dev/outils/depot-propre/publier.sh" --
 attend "--ecraser passe, mais prévient" "vont être remplacés" "$SORTIE"
 attend "sans identité, il s'arrête" "PP_AUTEUR_NOM" "$SORTIE"
 vrai "et remet le clone public à son état d'origine" test -z "$(git -C "$P" status --porcelain)"
+SORTIE="$(env PP_DATE=2026-10-04 PP_AUTEUR_NOM=Essai PP_AUTEUR_EMAIL=essai@gmail.com bash "$T/dev/outils/depot-propre/publier.sh" --propre "$P" --version 1.0.0-beta.2 --sortie "$T/sortie4b" --ecraser 2>&1)"
+attend "une adresse personnelle est refusée (seule l'adresse noreply de GitHub signe)" "noreply" "$SORTIE"
+vrai "et rien n'est committé : le clone public est à son état d'origine" test -z "$(git -C "$P" status --porcelain)"
+vrai "... ni étiqueté" test -z "$(git -C "$P" tag --list 'v1.0.0-beta.2')"
+SORTIE="$(env PP_DATE=2026-10-04 PP_AUTEUR_NOM=Essai PP_AUTEUR_EMAIL=44994092+autre-compte@users.noreply.github.com bash "$T/dev/outils/depot-propre/publier.sh" --propre "$P" --version 1.0.0-beta.2 --sortie "$T/sortie4c" --ecraser 2>&1)"
+attend "l'adresse noreply d'un autre compte est refusée aussi" "ni celle d'un autre compte" "$SORTIE"
+vrai "... et le clone public est toujours à son état d'origine" test -z "$(git -C "$P" status --porcelain)"
 PUBLIER_ENV+=(PP_DATE=2026-11-01)
 SORTIE="$(publier --version 1.0.0-beta.2 --sortie "$T/sortie5" --ecraser)"
 attend "--ecraser avec identité publie" "étiquette v1.0.0-beta.2 prêts" "$SORTIE"
@@ -126,6 +133,9 @@ muter "un dossier de développement" "présente à la racine" "mkdir dev-tests; 
 muter "un fichier cité par la page, absent" "cite des fichiers absents" "rm img/logo.jpg"
 muter "une licence qui n'est pas la GPL" "GNU GPL version 3" "echo 'MIT' > LICENSE"
 muter "un CHANGELOG sans la version" "aucune section" "sed -i 's/^## \[1.0.0-beta.2\]/## [9.9.9]/' CHANGELOG.md"
+muter "js/version.js absent (et la page qui le chargeait retirée)" "js/version.js absent" "rm js/version.js; sed -i 's#<script src=\"js/version.js\"></script>##' index.html"
+muter "une page qui ne charge pas js/version.js" "ne charge pas js/version.js" "sed -i 's#<script src=\"js/version.js\"></script>##' index.html"
+muter "js/version.js qui annonce une autre version" "annonce 1.0.0-beta.1" "echo \"const PP_VERSION = '1.0.0-beta.1';\" > js/version.js"
 
 echo
 echo "$OK réussi(s), $KO échec(s)."

@@ -171,9 +171,14 @@ if (version) {
   if (has('CHANGELOG.md') && !new RegExp(`^##\\s*\\[?${version.replace(/[.+*?^${}()|[\]\\]/g, '\\$&')}\\]?`, 'm').test(read('CHANGELOG.md'))) {
     fail(`CHANGELOG.md : aucune section « ## [${version}] »`);
   }
-  if (has('js/version.js')) {
+  // Réglages > Crédits lit PP_VERSION : sans ce fichier, ou sans la page qui le charge, la version n'apparaît nulle part.
+  if (!has('js/version.js')) {
+    fail('js/version.js absent de l\'arbre : Réglages > Crédits n\'afficherait aucune version');
+  } else {
     const declared = (read('js/version.js').match(/PP_VERSION\s*=\s*['"]([^'"]+)['"]/) || [])[1];
-    if (declared && declared !== version) fail(`js/version.js annonce ${declared}, la publication vise ${version}`);
+    if (!declared) fail('js/version.js ne déclare pas PP_VERSION');
+    else if (declared !== version) fail(`js/version.js annonce ${declared}, la publication vise ${version}`);
+    if (has('index.html') && !/<script\b[^>]*\bsrc\s*=\s*["']js\/version\.js(?:\?[^"']*)?["']/.test(read('index.html'))) fail('index.html ne charge pas js/version.js');
   }
 }
 
