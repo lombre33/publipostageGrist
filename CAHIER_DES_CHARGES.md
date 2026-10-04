@@ -5,7 +5,7 @@
 **Hébergement** : GitHub Pages (widget custom Grist, servi en statique, sans build step)
 **Rédaction initiale** : 03/09/2026 — **mis à jour le 12/09/2026** pour refléter la réécriture TipTap/ProseMirror (ancien moteur Quill.js retiré du dépôt).
 
-> Ce document décrit l'état fonctionnel actuel du widget. Pour l'installation/configuration/dépendances, voir [`README.md`](README.md). Pour l'état de l'audit qualité/sécurité, voir [`AUDIT_CODE.md`](AUDIT_CODE.md).
+> **Document historique : état fonctionnel du 12 septembre 2026, plus tenu à jour.** Depuis, le widget a gagné les modèles de type grille, e-mail et macro-modèle, les boucles et les conditions, le suivi des modifications, les droits par personne, les exports Word et Excel, les formats de page et bien d'autres fonctions : l'état actuel est décrit dans [`README.md`](README.md), avec l'installation, la configuration et les dépendances. Pour l'audit qualité/sécurité, voir [`AUDIT_CODE.md`](AUDIT_CODE.md).
 
 ---
 

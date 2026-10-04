@@ -1,5 +1,7 @@
 # Feuille de route — fonctionnalités Beta
 
+> **Statut au 4 octobre 2026 : liste du 14 septembre, plus tenue à jour** (seules les lignes 14 et 15 portent un « Livré le 01/10 »). La feuille de route de référence est le classeur `RoadMap_Suite_Grist_Factory_fusionnee.xlsx` du dossier du projet, relu sur `main` le 01/10/2026 ; les fonctions en ligne sont décrites dans le [README](../README.md).
+
 Consolidation de la liste de fonctionnalités fournie par l'utilisateur le 2026-09-14 (deux jets : une
 liste brute au fil de l'eau, puis une liste affinée listant les items jugés les plus prioritaires) —
 dédupliquée et organisée par thème. **Rien de cette liste n'a été implémenté ni retouché ce soir**
@@ -51,20 +53,20 @@ nœud TipTap + rendu éditeur/lecture/PDF + entrée toolbar) : [feature-content-
 | # | Fonctionnalité | Impact | Effort | Détail |
 |---|---|---|---|---|
 | 13 | **Fiabiliser les autres modes d'export PDF** (impression navigateur, raster basse/ultra — actuellement isolés dans `js/pdf-export-alt.js`, désactivés dans l'UI) | Moyen (offre déjà annoncée mais grisée) | Élevé | [feature-pdf-export-alt-modes.md](feature-pdf-export-alt-modes.md) — l'utilisateur a explicitement autorisé à commencer ce chantier dès ce soir si le temps le permettait |
-| 14 | Watermark (filigrane) | Moyen | Livré le 01/10 : un texte (diagonale ou horizontal, couleur, opacité) en travers de chaque page du modèle, dans l'éditeur, la Lecture, le PDF et le Word (`js/watermark-dialog.js`, menu du bouton Page > « Filigrane… ») ; reste un filigrane image seul | [feature-misc-editor-and-output.md](feature-misc-editor-and-output.md#watermark) |
+| 14 | Watermark (filigrane) | Moyen | Livré le 01/10 : un texte (diagonale ou horizontal, couleur, opacité) en travers de chaque page du modèle, dans l'éditeur, la Lecture, le PDF et le Word (`js/watermark-dialog.js`, menu du bouton Page > « Filigrane… ») ; reste un filigrane image seul | [feature-misc-editor-and-output.md](feature-misc-editor-and-output.md#watermark-filigrane) |
 | 15 | Changement de taille de page (A1-A6) et orientation portrait/paysage | Moyen | Livré le 01/10 pour les modèles classiques et les macro-modèles : portrait / paysage et A3 à A6 (`js/page-layout.js`, menu du bouton Page) ; reste d'autres formats (carte) et la galerie | [feature-misc-editor-and-output.md](feature-misc-editor-and-output.md#taille-et-orientation-de-page) |
 | 16 | QR code / code-barres (lien de paiement, suivi — basé sur une URL stockée dans une cellule Grist) | Moyen (très utile factures) | Faible-Moyen (génération QR pure client-side, plusieurs libs légères existent) | [feature-misc-editor-and-output.md](feature-misc-editor-and-output.md#qr-code--code-barres) |
 | 17 | Fusion de plusieurs modèles en un seul PDF (ex. lettre de couverture + CGV + facture) | Moyen-Élevé | Moyen | [feature-misc-editor-and-output.md](feature-misc-editor-and-output.md#fusion-de-plusieurs-modèles) |
-| 18 | Fusion à la suite de plusieurs documents conditionnels (ex. notification puis annexe qui varie selon le projet) | Moyen | Moyen-Élevé | Recoupe largement l'item 17 + les blocs conditionnels (item 2) — traité comme une **combinaison** des deux dans [feature-conditional-content.md](feature-conditional-content.md#fusion-conditionnelle-de-documents), pas une 3ᵉ fonctionnalité séparée |
+| 18 | Fusion à la suite de plusieurs documents conditionnels (ex. notification puis annexe qui varie selon le projet) | Moyen | Moyen-Élevé | Recoupe largement l'item 17 + les blocs conditionnels (item 2) — traité comme une **combinaison** des deux dans [feature-conditional-content.md](feature-conditional-content.md#3-fusion-conditionnelle-de-plusieurs-documents), pas une 3ᵉ fonctionnalité séparée |
 
 ## Priorité 5 — organisation et confort d'édition
 
 | # | Fonctionnalité | Impact | Effort | Détail |
 |---|---|---|---|---|
-| 19 | Dossiers/favoris dans la galerie de modèles | Moyen (utile à l'échelle d'une organisation) | Faible-Moyen | [feature-misc-editor-and-output.md](feature-misc-editor-and-output.md#dossiers-et-favoris-galerie) |
+| 19 | Dossiers/favoris dans la galerie de modèles | Moyen (utile à l'échelle d'une organisation) | Faible-Moyen | [feature-misc-editor-and-output.md](feature-misc-editor-and-output.md#dossiersfavoris-galerie-de-modèles) |
 | 20 | Recherche/Remplacer | Moyen | Faible-Moyen | [feature-misc-editor-and-output.md](feature-misc-editor-and-output.md#recherche--remplacer) |
 | 21 | Fusion de cellules de tableau | Moyen | Moyen (TipTap `prosemirror-tables` le supporte nativement — vérifier l'étendue déjà couverte) | [feature-misc-editor-and-output.md](feature-misc-editor-and-output.md#fusion-de-cellules-de-tableau) |
-| 22 | Copier/coller des images dans l'éditeur (dupliquer une image en copiant/collant) | Moyen | Faible-Moyen | [feature-misc-editor-and-output.md](feature-misc-editor-and-output.md#copier-coller-dimages) — déjà identifié comme trou de test dans `PROTOCOLE_TEST_MANUEL.md` §4 |
+| 22 | Copier/coller des images dans l'éditeur (dupliquer une image en copiant/collant) | Moyen | Faible-Moyen | [feature-misc-editor-and-output.md](feature-misc-editor-and-output.md#copiercoller-dimages-dans-léditeur) — déjà identifié comme trou de test dans `PROTOCOLE_TEST_MANUEL.md` §4 |
 | 23 | Si nom de modèle déjà pris, ajouter automatiquement "(1)" | Faible | Très faible | [feature-misc-editor-and-output.md](feature-misc-editor-and-output.md#nom-de-modèle-dupliqué) — confirmé : `js/templates.js:save()` n'a aujourd'hui AUCUNE vérification de nom dupliqué |
 | 24 | Choix de modèle conditionnel à une variable ("gros module UX" selon l'utilisateur) | Élevé | Élevé | [feature-misc-editor-and-output.md](feature-misc-editor-and-output.md#choix-de-modèle-conditionnel) |
 | 25 | Variantes multi-langues d'un même modèle (+ réflexion sur la gestion des modifications) | Moyen-Élevé | Élevé (question de conception produit autant que technique) | [feature-misc-editor-and-output.md](feature-misc-editor-and-output.md#variantes-multi-langues) |
