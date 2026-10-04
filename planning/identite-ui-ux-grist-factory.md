@@ -600,7 +600,9 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   une colonne PJ » : la règle vaut pour l'image d'un fichier comme pour celle d'une colonne PJ) : un clic ou sa poignée la sélectionne, puis Suppr ou Retour arrière ; le bouton « Supprimer » de sa barre ; Ctrl + A puis
   Suppr (tout le document). Le texte qu'on efface autour d'elle ne l'emporte jamais : Retour arrière et Suppr passent par-dessus son ancre invisible (la ligne qui ne porte qu'elle semble vide : elle se joint à sa voisine,
   l'image avec elle, au même endroit de l'écran et de la page), et un texte sélectionné qui la contient part sans elle (elle est reposée là où la sélection se referme, dans la même étape d'Annuler). Suivi des
-  modifications allumé, la bibliothèque marque la suppression comme pour le texte.
+  modifications allumé, la bibliothèque marque la suppression comme pour le texte. Un clic sur du texte posé sur une image « derrière le texte » atteint le texte, pas l'image (Antoine, même demande) : le curseur
+  se pose, le double clic prend le mot, le triple clic la ligne, le glissé sélectionne, et Suppr efface ce texte. La poignée de déplacement de l'image et sa partie sans texte (à droite des lignes, au-dessous, au
+  bout d'une ligne) gardent leur clic : il sélectionne l'image comme avant, qui reste ainsi toujours atteignable. Une image « devant le texte » se clique partout, texte dessous ou non.
 - Image « Au cœur du texte » et texte autour (Antoine, 02/10, point 9, et sa carte du point 10, « La rendre fidèle ») : l'éditeur, la Lecture, le PDF et le Word posent l'image et son texte de la même façon.
   Sans alignement et « en ligne », l'image est dans la ligne de texte, son pied sur la ligne de base (la ligne grandit) ; sans alignement et « bloc », elle est seule sur sa ligne, à gauche, le texte d'avant finit sa
   ligne et celui d'après repart dessous ; centrée, seule sur sa ligne, au centre ; alignée à gauche ou à droite, elle flotte et le texte l'habille, celui des paragraphes suivants aussi tant qu'elle les dépasse (12 px côté

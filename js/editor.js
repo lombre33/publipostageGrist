@@ -344,6 +344,9 @@ const Editor = (function () {
         // Retour arrière et Suppr n'emportent plus une image en calque avec le texte voisin (la ligne qui la porte n'est qu'une ancre invisible) :
         // même rang, même raison.
         EditorNodes.createFloatingImageKeysExtension(Extension),
+        // Un clic sur du texte posé sur une image « derrière le texte » atteint le texte, pas l'image (le cadre de l'image laisse passer les
+        // clics quand le pointeur est sur un caractère).
+        EditorNodes.createBehindImageClickThroughExtension(Extension, Plugin, PluginKey),
         Variables.createExtension(Extension, Suggestion),
         TextExpansion.createExtension(Extension, Suggestion, InputRule, PluginKey),
         LinkDialog.createExtension(Extension),

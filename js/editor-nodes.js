@@ -1133,6 +1133,70 @@ const EditorNodes = (function () {
     });
   }
 
+  // Les cadres des images « derrière le texte » vivants (un par NodeView, cf. applyAttrs) : le survol de l'éditeur les passe en revue sans chercher dans le document.
+  const behindImageViews = new Set();
+
+  // Une image « derrière le texte » est peinte sous le texte, mais son cadre (le `<span class="editor-image-view">`) reste au-dessus : sa poignée de
+  // déplacement, enfant du cadre, doit rester atteignable (cf. applyAttrs). Il recevait donc aussi les clics tombés sur le texte posé sur l'image : un
+  // clic sur une ligne sélectionnait l'image, et Suppr l'effaçait au lieu du texte (demande du 2026-10-04 : « des fois je veux supprimer une ligne et ça
+  // me supprime l'image à proximité »). Le survol décide : quand le pointeur est sur un caractère, le cadre laisse passer les clics
+  // (`editor-image-click-through`, css/editor-v2.css - ses poignées gardent les leurs) et le clic, le double clic, le triple clic et le glissé tombent
+  // sur le texte ; ailleurs sur l'image, le clic la sélectionne comme avant. Un mouvement précède toujours un clic : l'état est prêt quand le bouton
+  // s'enfonce.
+  function createBehindImageClickThroughExtension(Extension, Plugin, PluginKey) {
+    // Le pointeur est-il sur un caractère ? Le cadre est déjà transparent aux clics : l'élément sous le pointeur est ce qu'il y a derrière. La ligne
+    // compte en entier en hauteur (interligne compris), pas le seul corps de ses lettres : entre deux lignes le clic reste au texte. Seul le bloc de
+    // texte sous le pointeur est parcouru (jamais un tableau ou une zone entière : le coût d'un mouvement ne dépend pas de la taille du document).
+    function overText(view, x, y) {
+      const hit = document.elementFromPoint(x, y);
+      if (!hit || hit === view.dom || !view.dom.contains(hit) || hit.closest('.editor-image-view')) return false;
+      const el = hit.closest('p, h1, h2, h3, h4, h5, h6, pre');
+      if (!el || !view.dom.contains(el)) return false;
+      const lineHeight = parseFloat(getComputedStyle(el).lineHeight);
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      const range = document.createRange();
+      while (walker.nextNode()) {
+        const node = walker.currentNode;
+        if (!node.nodeValue.trim() || node.parentElement.closest('.editor-image-view')) continue;
+        range.selectNodeContents(node);
+        for (const rect of range.getClientRects()) {
+          const half = lineHeight > rect.height ? lineHeight / 2 : rect.height / 2;
+          const middle = (rect.top + rect.bottom) / 2;
+          if (x >= rect.left - 1 && x <= rect.right + 1 && y >= middle - half && y <= middle + half) return true;
+        }
+      }
+      return false;
+    }
+    return Extension.create({
+      name: 'behindImageClickThrough',
+      addProseMirrorPlugins() {
+        return [new Plugin({
+          key: new PluginKey('behindImageClickThrough'),
+          props: {
+            handleDOMEvents: {
+              mousemove: (view, event) => {
+                // Un geste commencé (bouton enfoncé : un glissé de sélection, le glissé d'une poignée) garde l'état où il a commencé.
+                if (event.buttons) return false;
+                const under = [];
+                behindImageViews.forEach(wrap => {
+                  if (!view.dom.contains(wrap)) return;
+                  const box = wrap.getBoundingClientRect();
+                  if (event.clientX >= box.left && event.clientX <= box.right && event.clientY >= box.top && event.clientY <= box.bottom) under.push(wrap);
+                  else wrap.classList.remove('editor-image-click-through');
+                });
+                // Tous les cadres sous le pointeur deviennent transparents aux clics le temps de voir ce qu'il y a derrière (deux images qui se recouvrent
+                // se cachent l'une l'autre sinon), puis le reprennent si ce n'est pas du texte.
+                under.forEach(wrap => wrap.classList.add('editor-image-click-through'));
+                if (under.length && !overText(view, event.clientX, event.clientY)) under.forEach(wrap => wrap.classList.remove('editor-image-click-through'));
+                return false;
+              },
+            },
+          },
+        })];
+      },
+    });
+  }
+
   // Écrit la nouvelle position d'une image en calque que la personne vient de déplacer : une seule voie pour le glisser de la NodeView (`onMoveUp`)
   // et les flèches du clavier (`nudgeSelectedImage`, js/floating-toolbars.js). `patch` : left, top et la grille page (pageIndex, pageLeftPt,
   // pageTopPt). Rend true si le document a changé. Rien ne s'écrit quand aucune valeur ne change (un simple clic sur l'image déjà sélectionnée, une
@@ -1297,6 +1361,7 @@ const EditorNodes = (function () {
             const layered = attrs.layer !== 'normal';
             wrap.classList.toggle('editor-image-layered', layered);
             wrap.classList.toggle('editor-image-repeated', PageLayer.isRepeatedAttrs(attrs));
+            if (attrs.layer === 'behind') behindImageViews.add(wrap); else { behindImageViews.delete(wrap); wrap.classList.remove('editor-image-click-through'); }
             if (layered) {
               wrap.style.position = 'absolute';
               wrap.style.left = (attrs.left || 0) + 'px';
@@ -1416,6 +1481,7 @@ const EditorNodes = (function () {
             selectNode: () => wrap.classList.add('editor-image-selected'),
             deselectNode: () => wrap.classList.remove('editor-image-selected'),
             destroy: () => {
+              behindImageViews.delete(wrap);
               document.removeEventListener('mousemove', onResizeMove);
               document.removeEventListener('mousemove', onMoveMove);
             },
@@ -1521,7 +1587,7 @@ const EditorNodes = (function () {
     createFontSizeExtension, createTextColorExtension, createHighlightExtension,
     createBulletStyleExtension, createOrderedListStyleExtension, createTaskListStyleExtension,
     withCellBackground, createTableView, createTabNavigationExtension, createClearHistoryExtension,
-    createTwoColumnsNodes, createConditionalTextNode, createConditionalCheckboxNode, createConditionalValueNode, createConditionalValueKeysExtension, createFloatingImageKeysExtension, createEditorImageNode, moveImageNode, createPageBreakNode,
+    createTwoColumnsNodes, createConditionalTextNode, createConditionalCheckboxNode, createConditionalValueNode, createConditionalValueKeysExtension, createFloatingImageKeysExtension, createBehindImageClickThroughExtension, createEditorImageNode, moveImageNode, createPageBreakNode,
     createHeadingNumberingConfigNode, createTocNode,
   };
 })();

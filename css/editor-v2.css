@@ -253,6 +253,10 @@
    sert de bouton de sélection ; le glissé, une fois l'image sélectionnée, se fait directement sur l'image (addNodeView, mousedown sur `img`).
    Placée à gauche et non au-dessus : la barre flottante apparaît par défaut au-dessus de l'image et s'y superposerait. */
 .tiptap .editor-image-view.editor-image-layered .editor-image-move-handle { display: flex; align-items: center; justify-content: center; top: 50%; left: -12px; transform: translateY(-50%); width: 20px; height: 20px; border-radius: 50%; background: var(--accent, #2f6fed); cursor: move; z-index: 10; }
+/* Une image « derrière le texte » : quand le pointeur est sur un caractère posé sur elle, son cadre laisse passer les clics (le clic, le double clic, le
+   glissé tombent sur le texte, js/editor-nodes.js:createBehindImageClickThroughExtension) ; ses poignées gardent les leurs. */
+.tiptap .editor-image-view.editor-image-click-through { pointer-events: none; }
+.tiptap .editor-image-view.editor-image-click-through .editor-image-handle, .tiptap .editor-image-view.editor-image-click-through .editor-image-move-handle { pointer-events: auto; }
 
 #editor-container { position: relative; flex: 1; min-height: 0; padding: 14px; overflow: auto; background: #fff; }
 /* Pas d'ancrage de défilement : à chaque calcul des pages (js/header-footer-preview.js:renderPaginationOverlay) les réserves de coupure sont
