@@ -136,11 +136,11 @@
 </head>
 <body>
 <div id="app">
-  <div id="toolbar-top">
+  <div id="toolbar-top" role="banner">
     <div class="bar-row">
       <div class="title-cluster" id="v2-title-cluster">
         <select id="template-select" class="template-select" aria-label="Modèle" data-i18n-aria="template.select"><option value="" data-i18n="template.newOption">— Nouveau modèle —</option></select>
-        <input id="template-name" type="text" class="title-cluster-input" placeholder="Nom du modèle" data-i18n-placeholder="template.namePlaceholder" hidden>
+        <input id="template-name" type="text" class="title-cluster-input" placeholder="Nom du modèle" data-i18n-placeholder="template.namePlaceholder" aria-label="Nom du modèle" data-i18n-aria="template.namePlaceholder" hidden>
         <button id="btn-rename-template" type="button" class="rename-btn" aria-label="Renommer le modèle" data-tip="Renommer" data-i18n-aria="template.rename.aria" data-i18n-tip="template.rename.tip"></button>
         <button id="btn-set-default-template" type="button" class="rename-btn" aria-label="Définir ce modèle comme modèle par défaut à l'ouverture" data-tip="Modèle par défaut" data-i18n-aria="template.setDefault.aria" data-i18n-tip="template.setDefault.tip"></button>
       </div>
@@ -225,7 +225,7 @@
       </span>
       <span class="v2-pdf-filename-cluster" id="v2-pdf-filename-cluster">
         <button type="button" id="btn-toggle-pdf-filename" aria-label="Nom de fichier PDF personnalisé" data-tip="Nom du fichier PDF" data-i18n-aria="toolbar.pdfFilename.aria" data-i18n-tip="toolbar.pdfFilename.tip"></button>
-        <input id="pdf-filename-template" type="text" placeholder="Nom de fichier PDF (variables #… autorisées)" data-i18n-placeholder="toolbar.pdfFilename.placeholder" hidden>
+        <input id="pdf-filename-template" type="text" placeholder="Nom de fichier PDF (variables #… autorisées)" data-i18n-placeholder="toolbar.pdfFilename.placeholder" aria-label="Nom de fichier PDF (variables #… autorisées)" data-i18n-aria="toolbar.pdfFilename.placeholder" hidden>
       </span>
       <span id="v2-email-char-counter" class="v2-email-char-counter" hidden></span>
       <button type="button" id="btn-create-email" aria-label="Créer l'email" data-i18n="email.createButton" data-i18n-aria="email.createButton" hidden>Créer l'email</button>
@@ -234,14 +234,14 @@
       <img id="v2-brand-logo" src="img/grist-factory-logo.jpg?v=1" alt="Grist Factory" width="20" height="20">
     </div>
     <div id="v2-email-fields-row" hidden>
-      <span class="v2-email-field-label" data-i18n="email.subject.label">Objet</span>
-      <input type="text" id="v2-email-subject" class="v2-email-field-input v2-email-field-subject" data-i18n-placeholder="email.subject.placeholder" placeholder="Objet de l'email (#Variable autorisée)">
-      <span class="v2-email-field-label" data-i18n="email.to.label">À</span>
-      <input type="text" id="v2-email-to" class="v2-email-field-input" data-i18n-placeholder="email.to.placeholder" placeholder="Destinataires (#Variable ou adresses séparées par des virgules)">
-      <span class="v2-email-field-label" data-i18n="email.cc.label">Cc</span>
-      <input type="text" id="v2-email-cc" class="v2-email-field-input" data-i18n-placeholder="email.cc.placeholder" placeholder="Copie">
+      <span class="v2-email-field-label" id="v2-email-subject-label" data-i18n="email.subject.label">Objet</span>
+      <input type="text" id="v2-email-subject" class="v2-email-field-input v2-email-field-subject" aria-labelledby="v2-email-subject-label" data-i18n-placeholder="email.subject.placeholder" placeholder="Objet de l'email (#Variable autorisée)">
+      <span class="v2-email-field-label" id="v2-email-to-label" data-i18n="email.to.label">À</span>
+      <input type="text" id="v2-email-to" class="v2-email-field-input" aria-labelledby="v2-email-to-label" data-i18n-placeholder="email.to.placeholder" placeholder="Destinataires (#Variable ou adresses séparées par des virgules)">
+      <span class="v2-email-field-label" id="v2-email-cc-label" data-i18n="email.cc.label">Cc</span>
+      <input type="text" id="v2-email-cc" class="v2-email-field-input" aria-labelledby="v2-email-cc-label" data-i18n-placeholder="email.cc.placeholder" placeholder="Copie">
       <button type="button" id="v2-btn-toggle-cci" class="v2-email-cci-toggle" data-i18n="email.cci.show">+ Cci</button>
-      <input type="text" id="v2-email-cci" class="v2-email-field-input" data-i18n-placeholder="email.cci.placeholder" placeholder="Copie cachée" hidden>
+      <input type="text" id="v2-email-cci" class="v2-email-field-input" data-i18n-placeholder="email.cci.placeholder" placeholder="Copie cachée" aria-label="Copie cachée" data-i18n-aria="email.cci.placeholder" hidden>
     </div>
     <div id="v2-toolbar">
       <span class="v2-hover-group" id="v2-heading-group">
@@ -402,15 +402,15 @@
     <button type="button" id="btn-macro-return" class="macro-return-btn" data-i18n="macro.return.button">Revenir au macro-modèle</button>
   </div>
   <div id="v2-cell-bar-dock" class="v2-cell-bar-dock" role="toolbar" aria-label="Barre de la case" data-i18n-aria="grid.cellBar"></div>
-  <div id="editor-container"></div>
-  <div id="macro-summary-container" style="display:none;">
+  <div id="editor-container" role="main"></div>
+  <div id="macro-summary-container" role="main" style="display:none;">
     <div class="macro-summary-box">
       <p class="macro-summary-text" id="macro-summary-text"></p>
       <ul class="macro-summary-parts" id="macro-summary-parts" aria-label="Modèles assemblés" data-i18n-aria="macro.summary.partsAria"></ul>
       <button type="button" id="btn-edit-macro" data-i18n="macro.editButton">Modifier la composition</button>
     </div>
   </div>
-  <div id="reader-container" style="display:none;"></div>
+  <div id="reader-container" role="main" style="display:none;"></div>
   <!-- Sortie de la Lecture épurée (js/clean-reading.js) : caché sauf dans cet état, où il reste seul à l'écran avec le document. Hors de #toolbar-top, qui est masqué : l'info-bulle est le title posé par le script. -->
   <button type="button" id="btn-exit-clean-reading" aria-label="Quitter la lecture épurée (Échap)" data-i18n-aria="cleanReading.exit"></button>
   <div id="link-rules-modal" class="pp-modal pp-modal-page" style="display:none;" tabindex="-1"><div class="pp-modal-box modal-content link-rules-modal-content" data-size="sm" role="dialog" aria-modal="true" aria-labelledby="link-rules-title" tabindex="-1">
@@ -422,9 +422,9 @@
     <div class="pp-modal-header"><h3 id="link-config-title"></h3></div>
     <div class="pp-modal-body">
       <div id="link-config-match-fields" class="link-config-bridge" hidden>
-        <div class="link-config-bridge-col"><label id="link-config-table-source-name"></label><select id="link-config-col-source"></select></div>
+        <div class="link-config-bridge-col"><label id="link-config-table-source-name" for="link-config-col-source"></label><select id="link-config-col-source"></select></div>
         <span class="link-config-eq">=</span>
-        <div class="link-config-bridge-col"><label id="link-config-table-cible-name"></label><select id="link-config-col-cible"></select></div>
+        <div class="link-config-bridge-col"><label id="link-config-table-cible-name" for="link-config-col-cible"></label><select id="link-config-col-cible"></select></div>
       </div>
       <div id="link-config-preview" class="link-config-preview" aria-live="polite"></div>
       <button type="button" id="link-config-toggle-singleton" class="link-config-toggle-link" data-i18n="linkConfig.useSingleton">Utiliser plutôt toujours la même ligne</button>
@@ -436,7 +436,7 @@
     <div class="pp-modal-header">
       <h3 id="tpl-gallery-title" data-i18n="gallery.title">Créer à partir d'un modèle</h3>
       <div class="tpl-gallery-filters">
-        <input type="search" id="tpl-gallery-search" placeholder="Rechercher un modèle…" data-i18n-placeholder="gallery.searchPlaceholder">
+        <input type="search" id="tpl-gallery-search" placeholder="Rechercher un modèle…" data-i18n-placeholder="gallery.searchPlaceholder" aria-label="Rechercher un modèle…" data-i18n-aria="gallery.searchPlaceholder">
         <div class="tpl-gallery-tags" id="tpl-gallery-tags"></div>
       </div>
     </div>
@@ -469,7 +469,7 @@
       <h3 id="template-organize-title" data-i18n="organize.modal.title">Organiser mes modèles</h3>
       <p class="template-organize-intro" data-i18n="organize.modal.intro">Ce rangement est personnel : les autres personnes qui utilisent ce document ne le voient pas.</p>
       <div class="template-organize-search">
-        <input type="search" id="template-organize-search" data-i18n-placeholder="organize.modal.searchPlaceholder" placeholder="Rechercher un modèle…">
+        <input type="search" id="template-organize-search" data-i18n-placeholder="organize.modal.searchPlaceholder" placeholder="Rechercher un modèle…" aria-label="Rechercher un modèle…" data-i18n-aria="organize.modal.searchPlaceholder">
         <button id="template-organize-new-folder" class="tom-new-folder-btn" data-i18n="organize.modal.newFolderRoot">+ Nouveau dossier</button>
       </div>
     </div>
@@ -518,8 +518,8 @@
         </div>
       </div>
       <div class="settings-panel" data-settings-panel="triggerKey" hidden>
-        <p class="settings-panel-intro" data-i18n="settings.triggerKey.intro">Caractère qui ouvre le panneau #Variable/Chips en cours de frappe.</p>
-        <select id="settings-trigger-char">
+        <p class="settings-panel-intro" id="settings-trigger-intro" data-i18n="settings.triggerKey.intro">Caractère qui ouvre le panneau #Variable/Chips en cours de frappe.</p>
+        <select id="settings-trigger-char" aria-labelledby="settings-trigger-intro">
           <option value="#">#</option>
           <option value="@">@</option>
           <option value="!">!</option>
@@ -742,7 +742,7 @@
 <script src="js/sheet-assembly-dialog.js?v=0.4"></script>
 <script src="js/orientation-toggle.js?v=0.10"></script>
 <script src="js/clean-reading.js?v=0.4"></script>
-<script src="js/page-zoom.js?v=0.1"></script>
+<script src="js/page-zoom.js?v=0.2"></script>
 <script src="js/main.js?v=0.115"></script>
 </body>
 </html>

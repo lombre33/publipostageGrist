@@ -323,7 +323,7 @@ const PageZoom = (function () {
   function build() {
     pill = Dom.el('div', 'pp-page-zoom');
     pill.id = 'pp-page-zoom';
-    pill.setAttribute('role', 'group');
+    pill.setAttribute('role', 'region'); // un repère nommé (l'étiquette est posée par applyTexts) : une pastille hors repère est du contenu hors repère pour un lecteur d'écran et pour l'audit (axe, règle region)
     outButton = Dom.button('pp-page-zoom-step', '−');
     outButton.id = 'pp-page-zoom-out';
     valueButton = Dom.button('pp-page-zoom-value');

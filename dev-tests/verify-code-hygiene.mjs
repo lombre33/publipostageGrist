@@ -24,6 +24,8 @@
 //      fenêtre « réseau bloqué » (js/first-contact.js) qui ne liste plus les sites que la politique de sécurité du contenu laisse charger des scripts (bêta : « Tout soigner »).
 //  14. un des cinq mots anglais du travail à reprendre écrit en capitales (MARKERS, section 14 : l'audit externe du 04/10 les compte comme travail inachevé), ou un littéral assigné à `token`, `secret`,
 //      `password`, `apiKey` qui n'est pas le faux jeton `stub-token` des tests (contrôle de l'audit externe : « valeur en dur dans token »).
+//  15. un champ de saisie de index.html (input, select, textarea) sans nom accessible : ni aria-label, ni aria-labelledby vers un élément qui existe, ni <label for> ou <label> englobante, ni title
+//      (audit externe du 04/10, point F-RGAA-04 ; un texte d'exemple, placeholder, n'est pas un nom).
 //
 // Volontairement PERMISSIF : un nom cité seulement dans un commentaire compte comme utilisé, un préfixe construit (`'toc-level-' + n`) couvre toute la
 // famille. Le but est de ne jamais faire échouer un changement légitime, seulement d'attraper ce qui n'a plus AUCUN point d'entrée. Une classe posée
@@ -519,6 +521,35 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('travail inachevé : l\'analyse lit bien le dépôt (garde-fou de l\'analyse elle-même : au moins 150 fichiers texte, le faux jeton `stub-token` du faux Grist est vu)', textFiles.length >= 150 && stubSeen >= 1, `${textFiles.length} fichiers, ${stubSeen} faux jeton(s)`);
   check('travail inachevé : aucun des cinq mots anglais du travail à reprendre (MARKERS) en capitales et mot entier, ni dans le code, ni dans les tests, les documents ou les modèles - écrire « défaut » ou un libellé en toutes lettres', markers.length === 0, markers.slice(0, 12).join(', '));
   check('jetons : un littéral assigné à token, secret, password ou apiKey est le faux jeton `stub-token` des tests (ou un texte de remplacement), jamais une valeur choisie à la main', hardCoded.length === 0, hardCoded.slice(0, 8).join(', '));
+}
+
+// ============================================================================
+// 15. Chaque champ de index.html a un nom accessible (audit externe de la bêta, 04/10, point F-RGAA-04)
+// ============================================================================
+// Un lecteur d'écran lit le nom d'un champ, pas son texte d'exemple (placeholder) : un champ de saisie (input, select, textarea) porte donc un aria-label, un aria-labelledby vers un élément qui existe, un <label for>
+// qui le vise, une <label> qui l'entoure, ou un title. L'audit en trouvait onze sans (nom du modèle, nom de fichier PDF, objet / À / Cc / Cci de l'e-mail, les deux colonnes de la fenêtre des liens, deux recherches, le
+// caractère déclencheur). Un champ ajouté à index.html sans nom fait échouer ce contrôle ; les noms posés par `data-i18n-aria` suivent la langue de l'interface (dev-tests/scenarios-landmarks.js, groupe `landmarks`).
+{
+  const page = read('index.html').replace(/<!--[\s\S]*?-->/g, m => m.replace(/[^\n]/g, ' '));
+  const ids = new Set([...page.matchAll(/\bid="([^"]+)"/g)].map(m => m[1]));
+  const unnamed = [];
+  let fields = 0;
+  for (const m of page.matchAll(/<(input|select|textarea)\b([^>]*)>/gi)) {
+    const attrs = m[2];
+    const type = ((attrs.match(/\btype="([^"]*)"/i) || [])[1] || (m[1].toLowerCase() === 'input' ? 'text' : '')).toLowerCase();
+    if (['hidden', 'button', 'submit', 'reset', 'image'].includes(type)) continue;
+    fields++;
+    const before = page.slice(0, m.index);
+    const id = (attrs.match(/\bid="([^"]+)"/) || [])[1];
+    const labelledBy = (attrs.match(/\baria-labelledby="([^"]+)"/) || [])[1];
+    const named = /\baria-label="[^"]+"/.test(attrs) || /\btitle="[^"]+"/.test(attrs)
+      || (!!labelledBy && labelledBy.split(/\s+/).every(target => ids.has(target)))
+      || (!!id && new RegExp(`<label\\b[^>]*\\bfor="${id}"`).test(page))
+      || before.lastIndexOf('<label') > before.lastIndexOf('</label>');
+    if (!named) unnamed.push(id ? `#${id}` : `${m[1]} (${attrs.trim().slice(0, 40)})`);
+  }
+  check('champs : index.html se lit bien (garde-fou de l\'analyse elle-même : une trentaine de champs au moins)', fields >= 30, `${fields} champs`);
+  check('champs : chaque champ de saisie de index.html a un nom accessible (aria-label, aria-labelledby, <label for> ou <label> englobante, title) - un texte d\'exemple n\'en est pas un', unnamed.length === 0, unnamed.join(', '));
 }
 
 summarizeAndExit();

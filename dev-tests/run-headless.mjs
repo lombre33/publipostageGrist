@@ -144,6 +144,7 @@ const GROUPS = {
   tableMerge: 'scenarios-table-merge', // fusionner et scinder des cases d'un tableau de DOCUMENT (js/table-merge.js, barre du tableau) : texte gardé à la suite, largeurs rendues, un seul Annuler, gardes (une case, case fusionnée qui dépasse, suivi, ligne répétée par une boucle) et grisé avec sa raison, puis la Lecture, le PDF (pdf.js) et le Word (OOXML) : mêmes cases, mêmes colonnes
   htmlSanitize: 'scenarios-html-sanitize', // HTML qui ne vient pas de l'éditeur (js/html-sanitize.js, Editor.setHTML) : rien ne s'exécute, rien d'actif ne survit, tout ce que l'éditeur écrit reste
   pageZoom: 'scenarios-page-zoom', // zoom de la page (js/page-zoom.js, css/page-zoom.css) : pastille du coin bas droit (moins, pourcentage, plus, Ajuster), échelle des niveaux et bornes, Ctrl + molette, Ctrl + plus / moins / 0, ajustement à la largeur du panneau, grisé avec sa raison, Édition et Lecture, niveau gardé par modèle, anglais ; affichage seulement
+  landmarks: 'scenarios-landmarks', // repères de la page et noms des champs (index.html ; audit externe du 04/10, D-RGAA-region et F-RGAA-04) : la barre du haut est le « banner », l'éditeur, le résumé d'un macro-modèle et la Lecture sont les trois « main » (un seul à l'écran), onze champs nommés en français et en anglais, étiquettes de la fenêtre des liens
 };
 
 // Scripts Node autonomes (page.mouse réel, pas de page.evaluate) : structurellement à part de GROUPS

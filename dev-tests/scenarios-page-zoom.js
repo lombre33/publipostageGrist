@@ -119,7 +119,7 @@
           factor: factorOf(editorBox()), outText: part('out') && part('out').textContent, inText: part('in') && part('in').textContent, fitText: part('fit') && part('fit').textContent,
           outAria: part('out') && part('out').getAttribute('aria-label'), types: buttons.map(b => b && b.type),
         };
-        const pass = got.pill && got.inBody && got.role === 'group' && got.aria === 'Zoom de la page' && got.four && got.fixed === 'fixed' && got.z === '1400' && got.tokenZoom === '1400'
+        const pass = got.pill && got.inBody && got.role === 'region' && got.aria === 'Zoom de la page' && got.four && got.fixed === 'fixed' && got.z === '1400' && got.tokenZoom === '1400'
           && Number(got.tokenZoom) < Number(got.tokenToolbar) && got.rightGap >= 16 && got.rightGap <= 40 && got.bottomGap >= 16 && got.bottomGap <= 40 && got.height <= 34
           && got.value === '100 %' && got.pressed === 'false' && !got.anyOff && (got.factor === 1 || isNaN(got.factor)) && got.outText === '−' && got.inText === '+' && got.fitText === 'Ajuster'
           && got.outAria === 'Zoom arrière (' + (/Mac/.test(navigator.platform) ? '⌘' : 'Ctrl') + ' −)' && got.types.every(t => t === 'button');
