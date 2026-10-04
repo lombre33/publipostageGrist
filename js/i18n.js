@@ -505,8 +505,8 @@ const I18n = (function () {
     'settings.viewTemplate.cannotStart': { fr: 'Un modèle email ou un macro-modèle ne peut pas s’ouvrir au démarrage.', en: 'An email template or a macro template cannot open at startup.' },
     'settings.viewTemplate.locked': { fr: 'Vous êtes en lecture seule : ce réglage est verrouillé.', en: 'You are read-only: this setting is locked.' },
     'settings.rowTemplate.exportHint': {
-      fr: 'Un export en lot garde le modèle ouvert pour toutes les lignes exportées.',
-      en: 'A batch export keeps the open template for all exported rows.',
+      fr: 'Quand ce réglage est coché, un export en lot rend chaque ligne avec le modèle que les règles lui désignent.',
+      en: 'When this setting is on, a batch export renders each row with the template the rules pick for it.',
     },
     'settings.access.intro': {
       fr: 'Droits par personne, lus dans une table du document : une ligne par personne, repérée par son email Grist, et une case à cocher par droit.',

@@ -393,6 +393,26 @@
     },
   });
 
+  // Le texte d'aide du bas de l'onglet : depuis qu'un export en lot donne à chaque ligne son modèle (js/main.js rowSourceResolver), il ne dit plus « garde le modèle ouvert ».
+  cases.push({
+    id: 'row_template_panel_export_hint_says_a_batch_export_follows_the_rules_in_both_languages',
+    description: "Le texte d'aide de l'onglet « Selon la ligne » dit qu'un export en lot rend chaque ligne avec le modèle que les règles lui désignent (et non plus qu'il garde le modèle ouvert), en français comme en anglais",
+    run: async (h) => {
+      await ensureFixture(h);
+      const lang = I18n.getLang();
+      const hint = () => (document.querySelector('[data-settings-panel="rowTemplate"] [data-i18n="settings.rowTemplate.exportHint"]') || {}).textContent || '';
+      await openPanel();
+      const out = {};
+      try {
+        I18n.setLang('fr'); await sleep(100); out.fr = hint();
+        I18n.setLang('en'); await sleep(100); out.en = hint();
+      } finally { I18n.setLang(lang); await sleep(100); await closeSettings(); }
+      const pass = /chaque ligne/.test(out.fr) && /règles/.test(out.fr) && !/garde le modèle ouvert/.test(out.fr)
+        && /each (exported )?row/.test(out.en) && /rules/.test(out.en) && !/keeps the open template/.test(out.en);
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
   cases.push({
     id: 'row_template_panel_fills_a_rule_with_the_real_fields_writes_the_option_and_opens_the_row_template_on_close',
     description: "Colonne, opérateur, valeur et modèle se choisissent avec les vrais champs (listes avec recherche) ; chaque saisie écrit l'option du widget sans rien ouvrir ; à la fermeture des Réglages le modèle de la ligne s'ouvre",
