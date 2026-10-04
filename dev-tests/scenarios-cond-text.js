@@ -262,6 +262,33 @@
   });
 
   cases.push({
+    id: 'condtext_empty_block_goes_after_the_first_paragraph_of_a_list_item_when_it_cannot_replace_or_precede_it',
+    description: 'Dans un élément de liste, le bloc ne peut ni prendre la place du premier paragraphe vide ni le précéder : il se pose après lui, dans l’élément, le curseur dedans',
+    run: async (h) => {
+      const results = {};
+      const caretBlock = () => { const $from = ed().state.selection.$from; return $from.node($from.depth - 1).type.name; };
+      await seed(h);
+      Editor.setHTML('<ul><li><p></p></li><li><p>deux</p></li></ul>');
+      await h.sleep(40);
+      ed().commands.setTextSelection(3);
+      ed().view.focus();
+      results.emptyPicked = await insertViaPanel(h);
+      results.empty = Editor.getHTML();
+      results.emptyCaret = caretBlock();
+      await seed(h);
+      Editor.setHTML('<ul><li><p>un</p></li><li><p>deux</p></li></ul>');
+      await h.sleep(40);
+      cursorIn('un', 0);
+      results.startPicked = await insertViaPanel(h);
+      results.start = Editor.getHTML();
+      results.startCaret = caretBlock();
+      const pass = results.emptyPicked && results.empty === '<ul><li><p></p>' + block('<p></p>') + '</li><li><p>deux</p></li></ul><p></p>' && results.emptyCaret === 'conditionalText'
+        && results.startPicked && results.start === '<ul><li><p>un</p>' + block('<p></p>') + '</li><li><p>deux</p></li></ul><p></p>' && results.startCaret === 'conditionalText';
+      return { pass, notes: JSON.stringify(results) };
+    },
+  });
+
+  cases.push({
     id: 'condtext_block_nests_inside_a_block_at_any_depth',
     description: 'Dans un bloc, « Texte conditionnel » pose un second bloc, puis un troisième : le HTML garde l’emboîtement et chaque bloc sa propre condition',
     run: async (h) => {

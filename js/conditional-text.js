@@ -89,41 +89,55 @@ const ConditionalText = (function () {
     return range.start;
   }
 
-  // Un bloc vide à la place de « #requête » : à la place du paragraphe s'il n'en reste rien, avant lui si la requête était à son début, après si elle
-  // était à sa fin, sinon le paragraphe est coupé en deux et le bloc se pose entre les deux moitiés. Un bloc qui ne peut pas aller là (premier enfant
-  // d'un élément de liste) se pose après, puis après chaque bloc qui contient le paragraphe. Rend la position du bloc, ou -1.
+  // Le bloc vide dans le paragraphe de `$pos` : à sa place s'il n'en reste rien, avant lui si la requête était à son début, après si elle était à sa
+  // fin, sinon le paragraphe est coupé en deux et le bloc se pose entre les deux moitiés. Rend la position du bloc, ou -1 quand son conteneur n'en veut
+  // pas à cet endroit.
+  function insertAroundParagraph(tr, $pos, pos, type, block) {
+    const depth = $pos.depth;
+    const container = $pos.node(depth - 1);
+    const index = $pos.index(depth - 1);
+    const offset = $pos.parentOffset;
+    const size = $pos.parent.content.size;
+    let at = -1;
+    if (!size) {
+      if (!container.canReplaceWith(index, index + 1, type)) return -1;
+      at = $pos.before(depth);
+      tr.replaceWith(at, $pos.after(depth), block);
+    } else if (offset === 0 && container.canReplaceWith(index, index, type)) {
+      at = $pos.before(depth);
+      tr.insert(at, block);
+    } else if (offset === size && container.canReplaceWith(index + 1, index + 1, type)) {
+      at = $pos.after(depth);
+      tr.insert(at, block);
+    } else if (offset > 0 && offset < size && container.canReplaceWith(index + 1, index + 1, type)) {
+      tr.split(pos);
+      at = pos + 1;
+      tr.insert(at, block);
+    }
+    return at;
+  }
+
+  // Un bloc qui ne peut pas aller dans le paragraphe (premier enfant d'un élément de liste) se pose après lui, puis après chaque bloc qui le contient,
+  // en remontant. Rend la position du bloc, ou -1.
+  function insertAfterAncestor(tr, $pos, type, block) {
+    let at = -1;
+    for (let d = $pos.depth; d >= 1 && at < 0; d--) {
+      if ($pos.node(d - 1).canReplaceWith($pos.index(d - 1) + 1, $pos.index(d - 1) + 1, type)) { at = $pos.after(d); tr.insert(at, block); }
+    }
+    return at;
+  }
+
+  // Un bloc vide à la place de « #requête » : dans son paragraphe (insertAroundParagraph), sinon après lui ou après l'un des blocs qui le contiennent.
+  // Rend la position du bloc, ou -1.
   function insertEmptyInTransaction(tr, pos) {
     const { schema } = tr.doc.type;
     const type = schema.nodes[TYPE];
     if (!type) return -1;
     const block = type.create(null, schema.nodes.paragraph.create());
     const $pos = tr.doc.resolve(pos);
-    let at = -1;
-    if ($pos.parent.isTextblock && $pos.depth > 0) {
-      const depth = $pos.depth;
-      const container = $pos.node(depth - 1);
-      const index = $pos.index(depth - 1);
-      const size = $pos.parent.content.size;
-      if (!size && container.canReplaceWith(index, index + 1, type)) {
-        at = $pos.before(depth);
-        tr.replaceWith(at, $pos.after(depth), block);
-      } else if (size && $pos.parentOffset === 0 && container.canReplaceWith(index, index, type)) {
-        at = $pos.before(depth);
-        tr.insert(at, block);
-      } else if (size && $pos.parentOffset === size && container.canReplaceWith(index + 1, index + 1, type)) {
-        at = $pos.after(depth);
-        tr.insert(at, block);
-      } else if (size && $pos.parentOffset > 0 && $pos.parentOffset < size && container.canReplaceWith(index + 1, index + 1, type)) {
-        tr.split(pos);
-        at = pos + 1;
-        tr.insert(at, block);
-      } else {
-        for (let d = depth; d >= 1 && at < 0; d--) {
-          if ($pos.node(d - 1).canReplaceWith($pos.index(d - 1) + 1, $pos.index(d - 1) + 1, type)) { at = $pos.after(d); tr.insert(at, block); }
-        }
-      }
-    }
-    return at;
+    if (!$pos.parent.isTextblock || $pos.depth <= 0) return -1;
+    const at = insertAroundParagraph(tr, $pos, pos, type, block);
+    return at >= 0 ? at : insertAfterAncestor(tr, $pos, type, block);
   }
 
   // Choix de « Texte conditionnel » dans la liste « # » : `range` est « #requête » (js/variables.js:command). Avec du texte retenu par
