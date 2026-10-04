@@ -1,7 +1,7 @@
 // Suite "pageTree" - rangement des pages que Grist crée avec les tables du widget (js/page-tree.js ; retour d'Antoine, 2026-10-02, point 15).
 //
-// AddTable crée une page au premier niveau, tout en bas du volet des pages du document (grist-core, useractions.py:doAddView). Le widget crée jusqu'à six tables :
-// sans rangement, six lignes de plus dans la navigation. La page de Publipostage_Modeles reste au premier niveau et se replie par défaut (option du document, la case
+// AddTable crée une page au premier niveau, tout en bas du volet des pages du document (grist-core, useractions.py:doAddView). Le widget crée jusqu'à sept tables :
+// sans rangement, sept lignes de plus dans la navigation. La page de Publipostage_Modeles reste au premier niveau et se replie par défaut (option du document, la case
 // « Replier par défaut » du menu d'une page) ; les pages des autres tables passent dessous, après son dernier enfant.
 //
 // Le stub (dev-tests/grist-stub.js) fait ce que fait Grist : AddTable crée une vue et une page en bas du volet, UpdateRecord sur `pagePos` place la page juste avant celle
@@ -207,23 +207,24 @@
 
   cases.push({
     id: 'pagetree_every_table_creation_of_the_widget_calls_the_pane_tidy',
-    description: 'Chaque AddTable d’une table du widget (modèles, commentaires, préférences, abréviations, liens, sonde de l’e-mail) est suivi de PageTree.afterTableCreated pour cette table',
+    description: 'Chaque table du widget (modèles, commentaires, préférences, abréviations, formats de page, liens, sonde de l’e-mail) est créée par GristAPI.ensureTable ou addTableIfMissing, le seul endroit qui écrit un AddTable, et celui-ci est suivi de PageTree.afterTableCreated pour cette table',
     run: async () => {
       const sources = Array.from(document.querySelectorAll('script[src^="js/"]')).map(s => s.getAttribute('src').split('?')[0]).filter(src => src !== 'js/page-tree.js');
-      const missing = [];
-      const found = [];
+      const direct = [];
+      const created = [];
+      let tidied = false;
       for (const src of sources) {
-        const text = await (await fetch(src)).text();
-        const lines = text.split('\n');
+        const lines = (await (await fetch(src)).text()).split('\n');
         lines.forEach((line, i) => {
-          const m = /\[\s*'AddTable'\s*,\s*([A-Z_]*TABLE_NAME)\b/.exec(line);
-          if (!m) return;
-          const hooked = lines.slice(i, i + 25).some(l => l.indexOf('PageTree.afterTableCreated(' + m[1] + ')') !== -1);
-          found.push(src + ' ' + m[1]);
-          if (!hooked) missing.push(src + ':' + (i + 1) + ' ' + m[1]);
+          if (/\[\s*'AddTable'\s*,\s*(?:[A-Z_]*TABLE_NAME|name)\b/.test(line)) {
+            if (src === 'js/grist-api.js') tidied = lines.slice(i, i + 25).some(l => l.indexOf('PageTree.afterTableCreated(name)') !== -1);
+            else direct.push(src + ':' + (i + 1));
+          }
+          const table = /\b(?:ensureTable|addTableIfMissing)\(/.test(line) && !/function /.test(line) && /\b([A-Z_]*TABLE_NAME)\b/.exec(line);
+          if (table) created.push(src + ' ' + table[1]);
         });
       }
-      return { pass: found.length >= 6 && missing.length === 0, notes: JSON.stringify({ found, missing }) }; // six tables aujourd'hui ; une septième doit avoir son appel
+      return { pass: tidied && direct.length === 0 && created.length >= 7, notes: JSON.stringify({ created, direct, tidied }) }; // sept tables aujourd'hui ; une huitième doit passer par là
     },
   });
 

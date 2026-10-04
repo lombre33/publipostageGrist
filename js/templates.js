@@ -38,18 +38,12 @@ const Templates = (function () {
 
   const ensureTableExists = ensureOnce(async function () {
     try {
-      const tables = await grist.docApi.listTables();
-      if (tables.includes(TABLE_NAME)) return true;
-      await grist.docApi.applyUserActions([
-        ['AddTable', TABLE_NAME, [
-          { id: 'Nom', type: 'Text' },
-          { id: 'Contenu', type: 'Text' },
-          { id: 'NomFichierPDF', type: 'Text' },
-          { id: 'DateModif', type: 'DateTime' }
-        ]]
+      await GristAPI.ensureTable(TABLE_NAME, [
+        { id: 'Nom', type: 'Text' },
+        { id: 'Contenu', type: 'Text' },
+        { id: 'NomFichierPDF', type: 'Text' },
+        { id: 'DateModif', type: 'DateTime' },
       ]);
-      // La page est repliée par défaut dans le volet des pages (js/page-tree.js) ; sans attendre : rien n'en dépend.
-      if (typeof PageTree !== 'undefined') PageTree.afterTableCreated(TABLE_NAME);
       return true;
     } catch (e) {
       console.error('Erreur création table modèles', e);

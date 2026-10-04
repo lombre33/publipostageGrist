@@ -12,15 +12,13 @@ const TABLE_NAME = 'Publipostage_PreferencesModeles';
 // exactement comme un vrai rechargement de page recharge js/template-preferences.js à zéro.
 function freshModule({ initialTables = [], email = 'a@exemple.fr', emailFails = false, docOptions } = {}) {
   const docApi = new FakeDocApi(initialTables, docOptions);
-  const ctx = createContext({
-    grist: { docApi },
-    GristAPI: {
-      async getCurrentUserEmail() {
-        if (emailFails) throw new Error('identification indisponible (test)');
-        return email;
-      },
-    },
-  });
+  const ctx = createContext({ grist: { docApi } });
+  // Le vrai js/grist-api.js (création de la table, file d'écriture) ; seule l'identification est simulée.
+  loadScript(ctx, 'js/grist-api.js');
+  evalIn(ctx, 'GristAPI').getCurrentUserEmail = async () => {
+    if (emailFails) throw new Error('identification indisponible (test)');
+    return email;
+  };
   loadScript(ctx, 'js/template-preferences.js');
   return { ctx, docApi, run: (expr) => evalIn(ctx, expr) };
 }

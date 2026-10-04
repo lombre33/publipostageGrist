@@ -12,35 +12,30 @@ const TemplatePreferences = (function () {
   // Sentinelle de la ligne « état d'un dossier » : un vrai ModeleId (id de ligne Grist) est toujours >= 1.
   const FOLDER_ROW_MODELE_ID = 0;
 
+  const TABLE_COLUMNS = [
+    { id: 'Utilisateur', type: 'Text' },
+    { id: 'ModeleId', type: 'Int' },
+    { id: 'Epingle', type: 'Bool' },
+    // Chemin complet séparé par « / » (ex. « Factures/Clients A ») : des dossiers imbriqués sans changer de schéma.
+    { id: 'Dossier', type: 'Text' },
+    // Replie : uniquement sur les lignes ModeleId = 0 (état d'un dossier).
+    { id: 'Replie', type: 'Bool' },
+  ];
+
   let tableChecked = false;
   async function ensureTableExists() {
     if (tableChecked) return;
-    const tables = await grist.docApi.listTables();
-    if (!tables.includes(TABLE_NAME)) {
-      try {
-        await grist.docApi.applyUserActions([
-          ['AddTable', TABLE_NAME, [
-            { id: 'Utilisateur', type: 'Text' },
-            { id: 'ModeleId', type: 'Int' },
-            { id: 'Epingle', type: 'Bool' },
-            // Chemin complet séparé par « / » (ex. « Factures/Clients A ») : des dossiers imbriqués sans changer de schéma.
-            { id: 'Dossier', type: 'Text' },
-            // Replie : uniquement sur les lignes ModeleId = 0 (état d'un dossier).
-            { id: 'Replie', type: 'Bool' },
-          ]]
-        ]);
-        if (typeof PageTree !== 'undefined') PageTree.afterTableCreated(TABLE_NAME);
-      } catch (e) {
-        console.error('Erreur création table préférences de rangement', e);
-        return;
-      }
+    try {
+      await GristAPI.ensureTable(TABLE_NAME, TABLE_COLUMNS);
+      tableChecked = true;
+    } catch (e) {
+      console.error('Erreur création table préférences de rangement', e);
     }
-    tableChecked = true;
   }
 
   // Absente des documents créés avant cette fonction, et AddRecord/UpdateRecord sur une colonne inconnue annule toute l'action : relire le schéma
   // puis n'ajouter la colonne que si elle manque (deux AddVisibleColumn simultanés créeraient Replie et Replie2). Seul setFolderCollapsed l'appelle,
-  // en série par folderWriteQueue ; jamais au démarrage.
+  // en série par folderWrites ; jamais au démarrage.
   let replieColumnPresent = false;
   async function ensureReplieColumn() {
     if (replieColumnPresent) return;
@@ -140,7 +135,7 @@ const TemplatePreferences = (function () {
 
   // Écritures d'état de dossier en file : deux clics rapides sur le même interrupteur ne doivent pas créer deux lignes (la seconde ne verrait pas
   // encore le rowId de la première).
-  let folderWriteQueue = Promise.resolve();
+  const folderWrites = GristAPI.createWriteQueue();
 
   function isFolderCollapsed(path) {
     const key = normalizeFolderPath(path);
@@ -155,7 +150,7 @@ const TemplatePreferences = (function () {
     if (!key) return Promise.resolve(null);
     const state = folderStates[key] || (folderStates[key] = { rowId: null, replie: false, saved: false });
     state.replie = !!collapsed;
-    const job = folderWriteQueue.then(async () => {
+    const job = folderWrites.enqueue(async () => {
       await ensureTableExists();
       await ensureReplieColumn();
       const wanted = state.replie;  // l'état le plus récent : plusieurs clics de suite font une seule écriture utile
@@ -173,7 +168,6 @@ const TemplatePreferences = (function () {
       state.saved = wanted;
       return state;
     });
-    folderWriteQueue = job.catch(() => {});
     return job.catch((e) => { state.replie = state.saved; throw e; });
   }
 

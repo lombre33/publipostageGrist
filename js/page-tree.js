@@ -1,6 +1,6 @@
 // Rangement des pages que Grist crée avec les tables du widget. grist-core (sandbox/grist/useractions.py : AddTable -> doAddView) crée pour chaque
-// AddTable une page au premier niveau, tout en bas du volet des pages ; le widget en crée jusqu'à six (modèles, commentaires, préférences de
-// rangement, abréviations, liens entre tables, sonde de l'e-mail), autant de lignes dans la navigation.
+// AddTable une page au premier niveau, tout en bas du volet des pages ; le widget en crée jusqu'à sept (modèles, commentaires, préférences de
+// rangement, abréviations, formats de page, liens entre tables, sonde de l'identité), autant de lignes dans la navigation.
 // Ici : la page de `Publipostage_Modeles` reste au premier niveau et se replie par défaut ; celle de chaque autre table passe juste dessous, comme le
 // glisser-déposer de Grist (app/client/models/TreeModel.ts : UpdateRecord sur `_grist_Pages`, `indentation` et `pagePos` = position de la page qui
 // doit la suivre). Le « replié par défaut » est l'option que Grist lit (app/client/models/entities/PageRec.ts : `_grist_Pages.options` =

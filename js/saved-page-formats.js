@@ -14,13 +14,20 @@
 // retenue à l'enregistrement, jamais refusée.
 const SavedPageFormats = (function () {
   const TABLE_NAME = 'Publipostage_FormatsPage';
+  const TABLE_COLUMNS = [
+    { id: 'Nom', type: 'Text' },
+    { id: 'Largeur', type: 'Numeric' },
+    { id: 'Hauteur', type: 'Numeric' },
+  ];
   const MAX_NAME_LENGTH = 120; // large : une coupe silencieuse n'a de sens que pour un collage absurde
 
   // [{ rowId, name, widthMm, heightMm }] ; null tant que rien n'est lu.
   let entries = null;
   let loading = null;
   let tableKnown = false; // la table existe dans le document (vue ou créée)
-  let writeQueue = Promise.resolve();
+  // Écritures mises en file : deux « Enregistrer » rapprochés ne doivent ni se doubler ni voir un état périmé (le second cherche son nom libre après
+  // que le premier a fini).
+  const writes = GristAPI.createWriteQueue();
 
   function lang() { return (typeof I18n !== 'undefined' && I18n.getLang()) || 'fr'; }
   const sameName = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
@@ -66,7 +73,7 @@ const SavedPageFormats = (function () {
   }
 
   // Oublie tout (tests, changement de document) : la prochaine lecture repart de Grist.
-  function reset() { entries = null; loading = null; tableKnown = false; writeQueue = Promise.resolve(); }
+  function reset() { entries = null; loading = null; tableKnown = false; writes.reset(); }
 
   // Les formats enregistrés, du premier au dernier par nom (« Étiquette 2 » avant « Étiquette 10 »). Vide tant que rien n'est lu.
   function list() {
@@ -96,25 +103,9 @@ const SavedPageFormats = (function () {
 
   // Écriture
 
-  // Écritures mises en file : deux « Enregistrer » rapprochés ne doivent ni se doubler ni voir un état périmé (le second cherche son nom libre après
-  // que le premier a fini).
-  function enqueue(job) {
-    const run = writeQueue.then(job);
-    writeQueue = run.catch(() => {});
-    return run;
-  }
-
   async function ensureTable() {
     if (tableKnown) return;
-    const tables = await grist.docApi.listTables();
-    if (tables.indexOf(TABLE_NAME) === -1) {
-      await grist.docApi.applyUserActions([['AddTable', TABLE_NAME, [
-        { id: 'Nom', type: 'Text' },
-        { id: 'Largeur', type: 'Numeric' },
-        { id: 'Hauteur', type: 'Numeric' },
-      ]]]);
-      if (typeof PageTree !== 'undefined') PageTree.afterTableCreated(TABLE_NAME);
-    }
+    await GristAPI.ensureTable(TABLE_NAME, TABLE_COLUMNS);
     tableKnown = true;
   }
 
@@ -128,7 +119,7 @@ const SavedPageFormats = (function () {
   // voit, sens compris. Refuse une taille hors bornes ('range') ou un nom vide ('name') : la fenêtre ne l'appelle qu'avec une taille bonne et un nom
   // proposé par défaut, ces gardes protègent le document.
   function add(rawName, widthMm, heightMm) {
-    return enqueue(async () => {
+    return writes.enqueue(async () => {
       await load();
       const w = tenth(Number(widthMm));
       const h = tenth(Number(heightMm));
@@ -144,7 +135,7 @@ const SavedPageFormats = (function () {
   }
 
   function remove(rowId) {
-    return enqueue(async () => {
+    return writes.enqueue(async () => {
       await load();
       const index = entries.findIndex(e => String(e.rowId) === String(rowId));
       if (index === -1) return false; // retiré entre-temps (autre onglet) : rien à supprimer

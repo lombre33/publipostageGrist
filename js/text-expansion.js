@@ -12,6 +12,11 @@
 // que le `char` du panneau # (js/variables.js) est figé à la construction de l'éditeur.
 const TextExpansion = (function () {
   const TABLE_NAME = 'Publipostage_Abreviations';
+  const TABLE_COLUMNS = [
+    { id: 'Utilisateur', type: 'Text' },
+    { id: 'Abreviation', type: 'Text' },
+    { id: 'Texte', type: 'Text' },
+  ];
   const CHAR_STORAGE = 'pp_expansion_char';
   const DEFAULT_CHAR = '§';
   const MAX_ABBREVIATION_LENGTH = 30;
@@ -74,7 +79,9 @@ const TextExpansion = (function () {
   let entries = null;
   let loading = null;
   let tableKnown = false; // la table existe dans le document (vue ou créée)
-  let writeQueue = Promise.resolve();
+  // Écritures mises en file : deux « Ajouter » rapprochés ne doivent ni se doubler ni voir un état périmé (le second contrôle les doublons après que
+  // le premier a fini).
+  const writes = GristAPI.createWriteQueue();
 
   // Même repli que js/template-preferences.js:currentUserEmail : identification impossible (lecteur Grist, document sans formule déclenchée) =
   // personne anonyme, '' ; jamais bloquant. undefined = jamais tentée, null = tentée et échouée.
@@ -118,7 +125,7 @@ const TextExpansion = (function () {
   }
 
   // Oublie tout (tests, changement d'identité) : la prochaine lecture repart de Grist.
-  function reset() { entries = null; loading = null; tableKnown = false; cachedEmail = undefined; writeQueue = Promise.resolve(); }
+  function reset() { entries = null; loading = null; tableKnown = false; cachedEmail = undefined; writes.reset(); }
 
   const normalizeKey = value => String(value || '').trim().toLowerCase();
   function lookup(abbreviation) {
@@ -188,30 +195,14 @@ const TextExpansion = (function () {
     return error;
   }
 
-  // Écritures mises en file : deux « Ajouter » rapprochés ne doivent ni se doubler ni voir un état périmé (le second contrôle les doublons après que
-  // le premier a fini).
-  function enqueue(job) {
-    const run = writeQueue.then(job);
-    writeQueue = run.catch(() => {});
-    return run;
-  }
-
   async function ensureTable() {
     if (tableKnown) return;
-    const tables = await grist.docApi.listTables();
-    if (tables.indexOf(TABLE_NAME) === -1) {
-      await grist.docApi.applyUserActions([['AddTable', TABLE_NAME, [
-        { id: 'Utilisateur', type: 'Text' },
-        { id: 'Abreviation', type: 'Text' },
-        { id: 'Texte', type: 'Text' },
-      ]]]);
-      if (typeof PageTree !== 'undefined') PageTree.afterTableCreated(TABLE_NAME);
-    }
+    await GristAPI.ensureTable(TABLE_NAME, TABLE_COLUMNS);
     tableKnown = true;
   }
 
   function add(rawAbbreviation, rawText) {
-    return enqueue(async () => {
+    return writes.enqueue(async () => {
       await load();
       const clean = cleanEntry(rawAbbreviation, rawText);
       const problem = checkEntry(clean.abbreviation, clean.text, null);
@@ -226,7 +217,7 @@ const TextExpansion = (function () {
   }
 
   function update(rowId, rawAbbreviation, rawText) {
-    return enqueue(async () => {
+    return writes.enqueue(async () => {
       await load();
       const entry = entries.find(e => e.rowId === rowId);
       if (!entry) return null; // retirée entre-temps (autre onglet) : rien à modifier
@@ -241,7 +232,7 @@ const TextExpansion = (function () {
   }
 
   function remove(rowId) {
-    return enqueue(async () => {
+    return writes.enqueue(async () => {
       await load();
       const index = entries.findIndex(e => e.rowId === rowId);
       if (index === -1) return false;

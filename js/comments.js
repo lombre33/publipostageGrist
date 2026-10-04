@@ -10,6 +10,13 @@ const Comments = (function () {
   const element = Dom.el;
 
   const TABLE_NAME = 'Publipostage_Commentaires';
+  const TABLE_COLUMNS = [
+    { id: 'ModeleId', type: 'Int' },
+    { id: 'CommentId', type: 'Text' },
+    { id: 'Auteur', type: 'Text' },
+    { id: 'Texte', type: 'Text' },
+    { id: 'CreeLe', type: 'DateTime' },
+  ];
   let editor = null;
   function setEditor(ed) { editor = ed; }
 
@@ -55,20 +62,7 @@ const Comments = (function () {
   }
 
   async function ensureTableExists() {
-    const tables = await grist.docApi.listTables();
-    if (tables.includes(TABLE_NAME)) return;
-    try {
-      await grist.docApi.applyUserActions([
-        ['AddTable', TABLE_NAME, [
-          { id: 'ModeleId', type: 'Int' },
-          { id: 'CommentId', type: 'Text' },
-          { id: 'Auteur', type: 'Text' },
-          { id: 'Texte', type: 'Text' },
-          { id: 'CreeLe', type: 'DateTime' },
-        ]]
-      ]);
-      if (typeof PageTree !== 'undefined') PageTree.afterTableCreated(TABLE_NAME);
-    } catch (e) { console.error('[Comments] Erreur création table commentaires', e); }
+    try { await GristAPI.ensureTable(TABLE_NAME, TABLE_COLUMNS); } catch (e) { console.error('[Comments] Erreur création table commentaires', e); }
   }
 
   // Un modèle sans la moindre marque de commentaire - ni dans son texte, ni dans son en-tête ou son pied - n'a aucun fil à relire. `tpl` est sa

@@ -28,6 +28,8 @@
 //      (audit externe du 04/10, point F-RGAA-04 ; un texte d'exemple, placeholder, n'est pas un nom).
 //  16. une fonction reçue en paramètre donnée telle quelle à setTimeout (`onLinked` de js/condition-fields.js, `update` de js/variable-modal.js : audit externe du 04/10, point C-XSS-04) au lieu d'une
 //      flèche qui l'appelle ; le chargeur de scripts des exports (js/export-common.js) garde sa liste blanche (dev-tests/unit-script-loader.mjs, script Node `scriptLoaderUnit`).
+//  17. le prénom de la personne qui a demandé le widget écrit dans ce que le dépôt public reprend (index.html, css, js, img, templates-gallery, LICENSE) : commentaire, texte ou donnée (contrôle d'avant la
+//      bêta ; dev-tests et planning ne sont pas publiés et gardent leurs références).
 //
 // Volontairement PERMISSIF : un nom cité seulement dans un commentaire compte comme utilisé, un préfixe construit (`'toc-level-' + n`) couvre toute la
 // famille. Le but est de ne jamais faire échouer un changement légitime, seulement d'attraper ce qui n'a plus AUCUN point d'entrée. Une classe posée
@@ -569,6 +571,25 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   });
   check('minuteurs : les deux appels que l\'audit signalait existent toujours, derrière une flèche (garde-fou de l\'analyse elle-même)', timers.every(t => t.wrapped), JSON.stringify(timers.filter(t => !t.wrapped)));
   check('minuteurs : ni `onLinked` ni `update` n\'est donné tel quel à setTimeout ou setInterval - une flèche l\'appelle', timers.every(t => !t.bare), timers.filter(t => t.bare).map(t => `${t.rel} : ${t.name}`).join(', '));
+}
+
+// ============================================================================
+// 17. Le prénom de la personne qui a demandé le widget n'est pas dans ce qui est publié (contrôle d'avant la bêta)
+// ============================================================================
+// Le dépôt public ne reprend que index.html, css, js, img, templates-gallery et LICENSE : un commentaire, un texte ou un modèle qui cite la personne par son prénom y serait lu par tout le monde.
+// Les tests (dev-tests) et les notes de travail (planning) ne sont pas publiés : ils gardent leurs références.
+{
+  const published = ['index.html', 'LICENSE', ...['css', 'js', 'img', 'templates-gallery'].flatMap(dir => listFiles(dir, /./))];
+  const named = [];
+  let scanned = 0;
+  for (const rel of published) {
+    const text = read(rel);
+    if (text.includes('\0')) continue; // une image : rien à lire
+    scanned++;
+    text.split('\n').forEach((line, i) => { if (/\bAntoine\b/.test(line)) named.push(`${rel}:${i + 1}`); });
+  }
+  check('prénom : l\'analyse lit bien le code publié (garde-fou de l\'analyse elle-même : au moins 100 fichiers texte)', scanned >= 100, `${scanned} fichiers`);
+  check('prénom : le prénom de la personne qui a demandé le widget n\'est écrit nulle part dans index.html, css, js, img, templates-gallery ni LICENSE - un commentaire dit la raison d\'un choix, pas qui l\'a demandé', named.length === 0, named.join(', '));
 }
 
 summarizeAndExit();
