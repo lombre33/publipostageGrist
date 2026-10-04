@@ -404,6 +404,8 @@ const Editor = (function () {
         GridEditor.createEnterExtension(Extension),
         // Les touches d'une valeur conditionnelle (Entrée = retour à la ligne dans la valeur, Retour arrière la retire vide) : même rang que l'Entrée d'une grille, pour la même raison.
         EditorNodes.createConditionalValueKeysExtension(Extension, Plugin, PluginKey),
+        // Retour arrière et Suppr n'emportent plus une image en calque avec le texte voisin (la ligne qui la porte n'est qu'une ancre invisible) : même rang, même raison.
+        EditorNodes.createFloatingImageKeysExtension(Extension),
         Variables.createExtension(Extension, Suggestion),
         TextExpansion.createExtension(Extension, Suggestion, InputRule, PluginKey),
         LinkDialog.createExtension(Extension),

@@ -596,6 +596,11 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   Le paragraphe qui ne porte qu'une image en calque, la ligne où on l'a posée, garde sa ligne vide dans l'éditeur, la Lecture, le PDF et le Word (Antoine, 02/10, « écart entre l'éditeur et le mode
   lecture ») : le texte qui suit descend d'une ligne dans les quatre, les coupures de page tombent aux mêmes lignes, en haut du modèle comme après un saut de page, dans une case ou une colonne.
   Seule la ligne de FIN de document fait exception (voir « Fin de document »).
+  Une image en calque ne part que par un geste sur elle-même (Antoine, 04/10, « des fois je veux supprimer une ligne et ça me supprime l'image à proximité », puis « important ! l'image est une image importée via
+  une colonne PJ » : la règle vaut pour l'image d'un fichier comme pour celle d'une colonne PJ) : un clic ou sa poignée la sélectionne, puis Suppr ou Retour arrière ; le bouton « Supprimer » de sa barre ; Ctrl + A puis
+  Suppr (tout le document). Le texte qu'on efface autour d'elle ne l'emporte jamais : Retour arrière et Suppr passent par-dessus son ancre invisible (la ligne qui ne porte qu'elle semble vide : elle se joint à sa voisine,
+  l'image avec elle, au même endroit de l'écran et de la page), et un texte sélectionné qui la contient part sans elle (elle est reposée là où la sélection se referme, dans la même étape d'Annuler). Suivi des
+  modifications allumé, la bibliothèque marque la suppression comme pour le texte.
 - Image « Au cœur du texte » et texte autour (Antoine, 02/10, point 9, et sa carte du point 10, « La rendre fidèle ») : l'éditeur, la Lecture, le PDF et le Word posent l'image et son texte de la même façon.
   Sans alignement et « en ligne », l'image est dans la ligne de texte, son pied sur la ligne de base (la ligne grandit) ; sans alignement et « bloc », elle est seule sur sa ligne, à gauche, le texte d'avant finit sa
   ligne et celui d'après repart dessous ; centrée, seule sur sa ligne, au centre ; alignée à gauche ou à droite, elle flotte et le texte l'habille, celui des paragraphes suivants aussi tant qu'elle les dépasse (12 px côté

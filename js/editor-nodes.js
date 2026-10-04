@@ -1076,6 +1076,63 @@ const EditorNodes = (function () {
     });
   }
 
+  // Une image en calque (devant ou derrière le texte) se place par sa grille de page, pas par sa ligne : le paragraphe qui la porte n'est qu'une
+  // ancre, un caractère sans largeur qui ne se voit pas à l'écran.
+  function isFloatingImage(node) { return !!node && node.type.name === 'editorImage' && !!node.attrs.layer && node.attrs.layer !== 'normal'; }
+
+  // Retour arrière et Suppr n'emportent plus une image en calque avec le texte qui l'entoure (demande du 2026-10-04 : « des fois je veux supprimer
+  // une ligne et ça me supprime l'image à proximité ») : elle ne part que par un geste sur elle-même, un clic ou sa poignée qui la sélectionne puis
+  // Suppr, ou le bouton « Supprimer » de sa barre. Une extension à part, rangée comme celle d'une valeur conditionnelle (après StarterKit, donc
+  // essayée avant ses touches).
+  // - Curseur seul, une ancre juste derrière lui (Retour arrière) ou juste devant (Suppr) : le curseur passe de l'autre côté, il ne bouge pas à
+  //   l'écran, et la touche suit son cours - elle efface le caractère voisin, ou joint la ligne à sa voisine, comme si l'ancre n'était pas là. Une
+  //   ligne qui ne porte que l'image (elle semble vide) se joint ainsi à celle d'avant, l'image avec elle.
+  // - Texte sélectionné avec une ancre dedans (triple clic sur une ligne, Maj + flèches) : le texte part comme d'habitude, les images en calque de
+  //   la sélection sont reposées là où elle se referme, dans la même étape d'annulation.
+  // - Le reste suit son cours : une image sélectionnée part, tout le document sélectionné (Ctrl + A, ou un texte qui le couvre en entier) aussi, et
+  //   suivi des modifications actif la bibliothèque marque la suppression (js/track-changes.js).
+  function createFloatingImageKeysExtension(Extension) {
+    const free = editor => editor.isEditable && !Editor.isTrackChangesOn() && editor.state.selection instanceof EditorCore.getTextSelectionClass();
+    // Curseur seul : passe par-dessus les ancres collées à lui dans le sens de la touche (`dir` -1 Retour arrière, 1 Suppr). Ne consomme jamais la touche.
+    const stepOver = (editor, dir) => {
+      if (!free(editor) || !editor.state.selection.empty) return false;
+      const { doc, selection } = editor.state;
+      let pos = selection.from;
+      for (;;) {
+        const $pos = doc.resolve(pos);
+        const next = dir < 0 ? $pos.nodeBefore : $pos.nodeAfter;
+        if (!isFloatingImage(next)) break;
+        pos += dir * next.nodeSize;
+      }
+      if (pos !== selection.from) editor.view.dispatch(editor.state.tr.setSelection(EditorCore.getTextSelectionClass().create(doc, pos)));
+      return false;
+    };
+    // Texte sélectionné : rend vrai quand la suppression est faite ici (une ancre dans la sélection), faux quand la touche suit son cours.
+    const deleteKeepingImages = editor => {
+      if (!free(editor) || editor.state.selection.empty) return false;
+      const TextSelection = EditorCore.getTextSelectionClass();
+      const { doc, selection } = editor.state;
+      if (selection.from <= TextSelection.atStart(doc).from && selection.to >= TextSelection.atEnd(doc).to) return false;
+      const images = [];
+      doc.nodesBetween(selection.from, selection.to, node => { if (isFloatingImage(node)) images.push(node); });
+      if (!images.length) return false;
+      const tr = editor.state.tr.deleteSelection();
+      const at = tr.selection.from;
+      if (!tr.doc.resolve(at).parent.inlineContent) return false;
+      let end = at;
+      images.forEach(image => { tr.insert(end, image); end += image.nodeSize; });
+      editor.view.dispatch(tr.setSelection(TextSelection.create(tr.doc, at)).scrollIntoView());
+      return true;
+    };
+    const keys = (names, dir) => names.reduce((all, name) => Object.assign(all, { [name]: ({ editor }) => deleteKeepingImages(editor) || stepOver(editor, dir) }), {});
+    return Extension.create({
+      name: 'floatingImageKeys',
+      addKeyboardShortcuts() {
+        return Object.assign(keys(['Backspace', 'Shift-Backspace', 'Mod-Backspace', 'Alt-Backspace'], -1), keys(['Delete', 'Mod-Delete', 'Alt-Delete'], 1));
+      },
+    });
+  }
+
   // Écrit la nouvelle position d'une image en calque que la personne vient de déplacer : une seule voie pour le glisser de la NodeView (`onMoveUp`)
   // et les flèches du clavier (`nudgeSelectedImage`, js/floating-toolbars.js). `patch` : left, top et la grille page (pageIndex, pageLeftPt,
   // pageTopPt). Rend true si le document a changé. Rien ne s'écrit quand aucune valeur ne change (un simple clic sur l'image déjà sélectionnée, une
@@ -1464,7 +1521,7 @@ const EditorNodes = (function () {
     createFontSizeExtension, createTextColorExtension, createHighlightExtension,
     createBulletStyleExtension, createOrderedListStyleExtension, createTaskListStyleExtension,
     withCellBackground, createTableView, createTabNavigationExtension, createClearHistoryExtension,
-    createTwoColumnsNodes, createConditionalTextNode, createConditionalCheckboxNode, createConditionalValueNode, createConditionalValueKeysExtension, createEditorImageNode, moveImageNode, createPageBreakNode,
+    createTwoColumnsNodes, createConditionalTextNode, createConditionalCheckboxNode, createConditionalValueNode, createConditionalValueKeysExtension, createFloatingImageKeysExtension, createEditorImageNode, moveImageNode, createPageBreakNode,
     createHeadingNumberingConfigNode, createTocNode,
   };
 })();
