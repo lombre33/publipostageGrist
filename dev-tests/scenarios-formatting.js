@@ -221,7 +221,7 @@
 
   cases.push({
     id: 'fmt_undo_history_not_cleared_by_sethtml',
-    // BUG CONFIRMÉ (cf. BUGS.md) : Editor.setHTML() (chemin réel de "Nouveau
+    // DÉFAUT CONFIRMÉ (cf. BUGS.md) : Editor.setHTML() (chemin réel de "Nouveau
     // modèle"/changement de modèle, cf. js/main.js:loadTemplateIntoEditor)
     // ne vide PAS l'historique annuler/rétablir de TipTap - après avoir
     // chargé un AUTRE contenu, appuyer sur Annuler peut faire réapparaître le
@@ -251,7 +251,7 @@
       const alsoBadButNarrower = afterUndo.includes('premier modèle');
       return {
         pass: !bugReproduced && !alsoBadButNarrower,
-        notes: 'beforeUndo=' + beforeUndo + ' afterUndo=' + afterUndo + (bugReproduced ? ' -- BUG REPRODUIT (grave) : Annuler a fait réapparaître le contenu d\'un scénario totalement étranger.' : alsoBadButNarrower ? ' -- BUG REPRODUIT : Annuler a fait réapparaître le modèle précédent.' : ''),
+        notes: 'beforeUndo=' + beforeUndo + ' afterUndo=' + afterUndo + (bugReproduced ? ' -- DÉFAUT REPRODUIT (grave) : Annuler a fait réapparaître le contenu d\'un scénario totalement étranger.' : alsoBadButNarrower ? ' -- DÉFAUT REPRODUIT : Annuler a fait réapparaître le modèle précédent.' : ''),
       };
     },
   });

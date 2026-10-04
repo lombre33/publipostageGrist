@@ -135,7 +135,7 @@ await page.route('**/api/docs/stub/attachments/*/download*', async route => {
   route.fulfill({ status: 200, contentType: 'image/png', body: png });
 });
 await page.evaluate(base => {
-  window.grist.docApi.getAccessToken = async () => ({ token: 'jeton-test', baseUrl: base + '/api/docs/stub', ttlMsecs: 600000 });
+  window.grist.docApi.getAccessToken = async () => ({ token: 'stub-token', baseUrl: base + '/api/docs/stub', ttlMsecs: 600000 });
 }, BASE);
 
 const center = sel => page.evaluate(s => { const r = document.querySelector(s).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }, sel);

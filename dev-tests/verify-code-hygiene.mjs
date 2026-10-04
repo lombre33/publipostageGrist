@@ -22,6 +22,8 @@
 //      système (choix d'Antoine du 04/10 : « une police système similaire, pas de Google Fonts ou autre »).
 //  13. un console.log, console.info, console.debug ou console.trace dans js/ ou index.html (la console ne reçoit que les avertissements et les erreurs : un widget public ne raconte pas son démarrage), et la
 //      fenêtre « réseau bloqué » (js/first-contact.js) qui ne liste plus les sites que la politique de sécurité du contenu laisse charger des scripts (bêta : « Tout soigner »).
+//  14. un des cinq mots anglais du travail à reprendre écrit en capitales (MARKERS, section 14 : l'audit externe du 04/10 les compte comme travail inachevé), ou un littéral assigné à `token`, `secret`,
+//      `password`, `apiKey` qui n'est pas le faux jeton `stub-token` des tests (contrôle de l'audit externe : « valeur en dur dans token »).
 //
 // Volontairement PERMISSIF : un nom cité seulement dans un commentaire compte comme utilisé, un préfixe construit (`'toc-level-' + n`) couvre toute la
 // famille. Le but est de ne jamais faire échouer un changement légitime, seulement d'attraper ce qui n'a plus AUCUN point d'entrée. Une classe posée
@@ -477,6 +479,46 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const allowed = [...new Set([...scriptSrc.matchAll(/https:\/\/([a-z0-9.-]+)/gi)].map(m => m[1]))].sort();
   const listed = [...noCommentsJs(read('js/first-contact.js')).matchAll(/host:\s*'([^']+)'/g)].map(m => m[1]).sort();
   check('premier contact : la fenêtre « réseau bloqué » (HOSTS de js/first-contact.js) liste exactement les sites dont la politique de sécurité du contenu laisse charger des scripts', allowed.length >= 4 && JSON.stringify(allowed) === JSON.stringify(listed), `politique : ${allowed.join(', ')} ; fenêtre : ${listed.join(', ')}`);
+}
+
+// ============================================================================
+// 14. Aucun mot de travail inachevé, aucun jeton en dur (audit externe de la bêta, 04/10)
+// ============================================================================
+// L'audit externe (gwaudit, 04/10) a compté douze « marqueurs de travail inachevé » : des commentaires d'anciens tests et du prototype du suivi qui disaient le mot anglais du défaut en capitales, les trois croix
+// d'un numéro de SIRET de modèle. Aucun n'était du travail oublié ; ils sont reformulés (« défaut », « numéro à 14 chiffres ») et ce contrôle garde le compte à zéro : aucun des cinq mots de MARKERS, en capitales et
+// mot entier, nulle part (code, tests, documents, modèles de la galerie). L'audit signalait aussi une valeur en dur dans `token` (le faux jeton d'un test de la Lecture) : un faux jeton s'appelle `stub-token`, comme
+// celui du faux Grist (dev-tests/grist-stub.js). Les mots sont écrits en morceaux dans le code pour que ce fichier ne se compte pas lui-même ; les dossiers cachés (le miroir hors ligne) et node_modules sont ignorés.
+{
+  const walkText = (dir, exts, out = []) => {
+    for (const name of readdirSync(join(ROOT, dir))) {
+      if (name.startsWith('.') || name === 'node_modules') continue;
+      const rel = dir ? `${dir}/${name}` : name;
+      if (statSync(join(ROOT, rel)).isDirectory()) walkText(rel, exts, out);
+      else if (exts.test(name)) out.push(rel);
+    }
+    return out;
+  };
+  const withoutBlobs = text => text.replace(/[A-Za-z0-9+/=]{120,}/g, ''); // une police ou une image en base64 n'est pas du texte écrit à la main
+  const textFiles = walkText('', /\.(?:js|mjs|css|html|md|sh|json|txt)$/);
+  const MARKERS = ['TO' + 'DO', 'FIX' + 'ME', 'X'.repeat(3), 'HA' + 'CK', 'B' + 'UG'];
+  const markerRe = new RegExp(`\\b(?:${MARKERS.join('|')})\\b`);
+  const markers = [];
+  const secretRe = /\b(?:token|secret|passwd|password|apiKey|api_key)\b['"]?\s*[:=]\s*(['"])([^'"\n]{6,})\1/g;
+  const hardCoded = [];
+  let stubSeen = 0;
+  for (const rel of textFiles) {
+    const text = withoutBlobs(read(rel));
+    text.split('\n').forEach((line, i) => { if (markerRe.test(line)) markers.push(`${rel}:${i + 1}`); });
+    if (!/\.(?:js|mjs|html|sh)$/.test(rel)) continue;
+    for (const m of text.matchAll(secretRe)) {
+      const value = m[2];
+      if (value.startsWith('stub-token')) stubSeen++;
+      else if (!/[{}]/.test(value) && !/^(?:YOUR_|CHANGE_?ME|PLACEHOLDER)/i.test(value)) hardCoded.push(`${rel} (« ${value} »)`);
+    }
+  }
+  check('travail inachevé : l\'analyse lit bien le dépôt (garde-fou de l\'analyse elle-même : au moins 150 fichiers texte, le faux jeton `stub-token` du faux Grist est vu)', textFiles.length >= 150 && stubSeen >= 1, `${textFiles.length} fichiers, ${stubSeen} faux jeton(s)`);
+  check('travail inachevé : aucun des cinq mots anglais du travail à reprendre (MARKERS) en capitales et mot entier, ni dans le code, ni dans les tests, les documents ou les modèles - écrire « défaut » ou un libellé en toutes lettres', markers.length === 0, markers.slice(0, 12).join(', '));
+  check('jetons : un littéral assigné à token, secret, password ou apiKey est le faux jeton `stub-token` des tests (ou un texte de remplacement), jamais une valeur choisie à la main', hardCoded.length === 0, hardCoded.slice(0, 8).join(', '));
 }
 
 summarizeAndExit();

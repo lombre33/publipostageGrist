@@ -212,7 +212,7 @@ Vérifié : reproduction du bug AVANT correctif (confirmé cassé), puis re-test
 
 **Élagage des commentaires** (demande explicite de l'utilisateur, cf. guide Grist.Gouv §8.2 "watch out for verbosity") : deux passes successives (2026-09-12, jour puis nuit) ont ramené tout bloc de 5 lignes ou plus à 1-3 lignes dans l'ensemble du fichier, gardant le "pourquoi" et retirant la narration ("signalé par l'utilisateur", "vérifié en conditions réelles", détails déjà expliqués ailleurs). **Terminé**, plus de blocs disproportionnés restants.
 
-**Aucun code mort trouvé** (pas de fonction/variable inutilisée, pas de branche toujours vraie/fausse, pas de `TODO` oublié). **Aucune fuite de portée de variable** (pas de globale accidentelle, tout l'état reste dans l'IIFE).
+**Aucun code mort trouvé** (pas de fonction/variable inutilisée, pas de branche toujours vraie/fausse, pas de marqueur de travail inachevé oublié). **Aucune fuite de portée de variable** (pas de globale accidentelle, tout l'état reste dans l'IIFE).
 
 **Structure** : le fichier est **trop long pour sa propre lisibilité** malgré un code interne propre — pertinent aussi au regard du critère « portée fonctionnelle raisonnablement étroite » du guide Grist.Gouv (§8). Découpage recommandé, sans dépendance circulaire :
 1. Nœuds/extensions TipTap personnalisés (image, 2-colonnes, saut de page, variables, notes...) → `editor-nodes.js`

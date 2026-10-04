@@ -17,7 +17,7 @@ function fresh() {
   const tokenRequests = [];
   const warnings = [];
   const grist = {
-    docApi: { async getAccessToken(options) { tokenRequests.push(options); return { token: 'jeton-' + tokenRequests.length, baseUrl: BASE, ttlMsecs: 600000 }; } },
+    docApi: { async getAccessToken(options) { tokenRequests.push(options); return { token: 'stub-token-' + tokenRequests.length, baseUrl: BASE, ttlMsecs: 600000 }; } },
     ready() {}, onRecord() {}, onOptions() {}, async getOptions() { return null; },
   };
   const ctx = createContext({ grist, URL, console: { log() {}, warn: (...args) => warnings.push(args.map(String).join(' ')), error() {} } });
@@ -47,13 +47,13 @@ async function main() {
     const second = await run('GristAPI.getAttachmentDownloadUrl(8)');
     check('jeton : demandé en lecture seule (readOnly: true), jamais en écriture', tokenRequests.length >= 1 && tokenRequests.every((o) => o && o.readOnly === true), JSON.stringify(tokenRequests));
     check('jeton : un seul pour deux adresses du même rendu', tokenRequests.length === 1, tokenRequests.length);
-    check('adresse : le serveur de Grist, le numéro de la pièce jointe, le jeton', first === BASE + '/attachments/7/download?auth=jeton-1' && second === BASE + '/attachments/8/download?auth=jeton-1', first + ' | ' + second);
+    check('adresse : le serveur de Grist, le numéro de la pièce jointe, le jeton', first === BASE + '/attachments/7/download?auth=stub-token-1' && second === BASE + '/attachments/8/download?auth=stub-token-1', first + ' | ' + second);
   });
 
   // 2. Les identifiants valides : un numéro, sous forme de nombre ou de texte, blancs autour permis (rien de plus ne change).
   await section('identifiants valides', async () => {
     const { run } = fresh();
-    const expected = (id) => BASE + '/attachments/' + id + '/download?auth=jeton-1';
+    const expected = (id) => BASE + '/attachments/' + id + '/download?auth=stub-token-1';
     check('identifiant valide : un nombre', await run('GristAPI.getAttachmentDownloadUrl(12)') === expected(12));
     check('identifiant valide : un texte de chiffres', await run('GristAPI.getAttachmentDownloadUrl("345")') === expected(345));
     check('identifiant valide : des blancs autour sont ignorés', await run('GristAPI.getAttachmentDownloadUrl(" 6 \\n")') === expected(6));
@@ -72,7 +72,7 @@ async function main() {
     check('identifiants refusés : ' + HOSTILE.length + ' identifiants piégés ou sans sens, aucune adresse pour aucun', accepted.length === 0, accepted.slice(0, 3).join(' ; '));
     check('identifiants refusés : aucun jeton n\'est demandé pour eux', tokenRequests.length === 0, tokenRequests.length);
     // Et un identifiant valide juste après sort une adresse : le refus ne casse rien.
-    check('identifiants refusés : un identifiant valide ensuite sort son adresse, sur le serveur de Grist', await run('GristAPI.getAttachmentDownloadUrl(7)') === BASE + '/attachments/7/download?auth=jeton-1');
+    check('identifiants refusés : un identifiant valide ensuite sort son adresse, sur le serveur de Grist', await run('GristAPI.getAttachmentDownloadUrl(7)') === BASE + '/attachments/7/download?auth=stub-token-1');
   });
 
   // 4. Toute adresse sortie reste sur le serveur de Grist, sous son chemin d'API (tous les identifiants essayés, valides ou non).
@@ -99,7 +99,7 @@ async function main() {
     ctx.root = { querySelectorAll: () => [valid, hostile, blanks, slash, empty] };
     await run('GristAPI.hydrateAttachmentImages(root)');
     // Les images d'une page s'hydratent en parallèle : chacune qui trouve le cache vide demande son jeton (comportement d'avant, inchangé) ; le numéro du jeton n'est donc pas comparé.
-    const addressOf = (id) => new RegExp('^' + BASE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '/attachments/' + id + '/download\\?auth=jeton-\\d+$');
+    const addressOf = (id) => new RegExp('^' + BASE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '/attachments/' + id + '/download\\?auth=stub-token-\\d+$');
     check('images : une pièce jointe valide reçoit son adresse', addressOf(7).test(valid.src), valid.src);
     check('images : un identifiant entouré de blancs reçoit son adresse', addressOf(9).test(blanks.src), blanks.src);
     check('images : un identifiant refusé laisse le src tel quel (ni vidé, ni adresse bricolée)', hostile.src === 'https://evil.example/p.png' && slash.src === '', hostile.src + ' | ' + slash.src);

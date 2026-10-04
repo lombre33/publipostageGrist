@@ -629,7 +629,7 @@ try {
 const acceptRatio = perfError ? null : acceptRes.large.ms / acceptRes.small.ms
 const rejectRatio = perfError ? null : rejectRes.large.ms / rejectRes.small.ms
 const sizeRatio = LARGE / SMALL // = 4
-// BUG DE PERFORMANCE CONFIRMÉ EN MESURANT (2026-09-19), pas une simple hypothèse : le temps de
+// DÉFAUT DE PERFORMANCE CONFIRMÉ EN MESURANT (2026-09-19), pas une simple hypothèse : le temps de
 // "tout accepter"/"tout refuser" croît nettement plus vite que la taille du document/le nombre de
 // marques (ratio mesuré ci-dessous, très supérieur à `sizeRatio` = 4 attendu pour une opération
 // linéaire). Root-cause identifiée en lisant le code source réel (minifié) de
