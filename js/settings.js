@@ -1,5 +1,6 @@
 // Panneau Réglages - Langue (I18n.setLang), Thème (localStorage + data-theme sur <html>), Touche de déclenchement (localStorage, lu directement par
-// variables.js/editor.js), Marges de page (par modèle) et Crédits (statique). Même convention d'ouverture/fermeture que les autres modales (style.display, pas de fermeture au clic sur le fond).
+// variables.js/editor.js), Marges de page (par modèle) et Crédits (statique). Même convention d'ouverture/fermeture que les autres modales
+// (style.display, pas de fermeture au clic sur le fond).
 const Settings = (function () {
   const TRIGGER_KEY_STORAGE = 'pp_trigger_char';
   const DEFAULT_TRIGGER_CHAR = '#';
@@ -30,8 +31,8 @@ const Settings = (function () {
   // Appliqué dès le chargement de ce fichier, pas seulement à l'ouverture des Réglages : sinon l'app s'affiche en clair puis bascule, ce qui se voit.
   applyTheme(getTheme());
 
-  // js/variables.js et js/editor.js relisent la même clé indépendamment - exposé ici pour que ce fichier reste la référence documentée de la valeur par
-  // défaut/nom de clé.
+  // js/variables.js et js/editor.js relisent la même clé indépendamment - exposé ici pour que ce fichier reste la référence documentée de la valeur
+  // par défaut/nom de clé.
   function getTriggerChar() {
     try {
       const v = localStorage.getItem(TRIGGER_KEY_STORAGE);
@@ -50,7 +51,7 @@ const Settings = (function () {
     const triggerSelect = document.getElementById('settings-trigger-char');
     const reloadNotice = document.getElementById('settings-trigger-reload-notice');
     const reloadBtn = document.getElementById('settings-trigger-reload-btn');
-    // Réglage PAR MODÈLE (pas global comme langue/touche ci-dessus) : brouillon dans PageLayout, persisté seulement au prochain "Enregistrer" - même
+    // Réglage par modèle (pas global comme langue/touche ci-dessus) : brouillon dans PageLayout, persisté seulement au prochain "Enregistrer" - même
     // philosophie que l'en-tête/pied de page (js/header-footer-preview.js).
     const marginInputs = {
       top: document.getElementById('settings-margin-top'),
@@ -70,13 +71,14 @@ const Settings = (function () {
     });
     closeBtn.addEventListener('click', () => { modal.style.display = 'none'; });
 
-    // Recopie l'état RÉEL de PageLayout dans les 4 champs. PageLayout borne les marges (cf. MIN_CONTENT_MM) : sans cette recopie, un champ pouvait
-    // afficher 150 alors que la mise en page appliquait 137.4, et l'utilisateur n'avait aucun moyen de le savoir. Un champ dont l'affichage correspond
-    // déjà à la valeur retenue n'est pas réécrit - réécrire pendant la frappe déplacerait le curseur.
+    // Recopie l'état réel de PageLayout dans les 4 champs. PageLayout borne les marges (cf. MIN_CONTENT_MM) : sans cette recopie, un champ pouvait
+    // afficher 150 alors que la mise en page appliquait 137.4, et l'utilisateur n'avait aucun moyen de le savoir. Un champ dont l'affichage
+    // correspond déjà à la valeur retenue n'est pas réécrit - réécrire pendant la frappe déplacerait le curseur.
     function syncMarginInputs() {
       const margins = PageLayout.getMarginsMm();
-      // Plafond de chaque champ = dimension de la page dans son sens, moins la surface imprimable minimale (index.html garde les valeurs du portrait : 277 en
-      // haut/bas, 190 à gauche/droite). En paysage les deux paires s'échangent - sans cela le sélecteur plafonnait à 190 un côté qui peut aller à 277.
+      // Plafond de chaque champ = dimension de la page dans son sens, moins la surface imprimable minimale (index.html garde les valeurs du portrait
+      // : 277 en haut/bas, 190 à gauche/droite). En paysage les deux paires s'échangent - sans cela le sélecteur plafonnait à 190 un côté qui peut
+      // aller à 277.
       const page = PageLayout.getPageSizeMm();
       const maxBySide = { top: page.height, bottom: page.height, left: page.width, right: page.width };
       Object.keys(marginInputs).forEach(side => {
@@ -97,8 +99,8 @@ const Settings = (function () {
         PageLayout.setMarginsMm(Object.assign({}, PageLayout.getMarginsMm(), { [side]: v }));
         syncMarginInputs();
         Editor.refreshLayout();
-        // Événement DOM plutôt qu'un appel direct : ce module n'a aucune raison de connaître js/main.js (auto-save). main.js écoute cet événement pour
-        // marquer le brouillon "modifié" - sans ça, changer uniquement les marges sans toucher au texte ne déclenchait jamais d'auto-save.
+        // Événement DOM plutôt qu'un appel direct : ce module n'a aucune raison de connaître js/main.js (auto-save). main.js écoute cet événement
+        // pour marquer le brouillon "modifié" - sans ça, changer uniquement les marges sans toucher au texte ne déclenchait jamais d'auto-save.
         document.dispatchEvent(new CustomEvent('pp:marginsChanged'));
       });
     });
@@ -121,9 +123,10 @@ const Settings = (function () {
 
     if (triggerSelect && reloadNotice && reloadBtn) {
       triggerSelect.addEventListener('change', () => {
-        try { localStorage.setItem(TRIGGER_KEY_STORAGE, triggerSelect.value); } catch (e) { /* stockage indisponible - le choix ne survivra pas au rechargement */ }
-        // Pas de reconfiguration à chaud du plugin Suggestion (son `char` est un littéral capturé une fois à la construction de l'éditeur) - un rechargement
-        // est plus simple pour un réglage qui change rarement.
+        // Stockage indisponible : le choix ne survivra pas au rechargement.
+        try { localStorage.setItem(TRIGGER_KEY_STORAGE, triggerSelect.value); } catch (e) { /* ignoré */ }
+        // Pas de reconfiguration à chaud du plugin Suggestion (son `char` est un littéral capturé une fois à la construction de l'éditeur) - un
+        // rechargement est plus simple pour un réglage qui change rarement.
         reloadNotice.hidden = false;
       });
       reloadBtn.addEventListener('click', () => location.reload());

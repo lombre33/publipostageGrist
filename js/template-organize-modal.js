@@ -15,24 +15,9 @@ const TemplateOrganizeModal = (function () {
   let pendingFolder = null;
   let pendingCollapsed = false; // interrupteur du dossier en attente, écrit seulement quand il devient réel (cf. applyPendingFolderState)
 
-  function currentTemplates() {
-    return (typeof Templates !== 'undefined' && Templates.getCached()) || [];
-  }
-  function currentPreferences() {
-    return (typeof TemplatePreferences !== 'undefined' && TemplatePreferences.getCached()) || {};
-  }
-
-  function iconSpan(typeModele) {
-    const span = document.createElement('span');
-    span.className = 'tts-icon tts-icon-' + (typeModele || 'document');
-    return span;
-  }
-
   // Après toute écriture (épingle, dossier), l'arbre de la barre d'outils se met à jour sans fermeture ni réouverture (TemplateTreeSelect.refresh(),
   // aussi appelé au chargement asynchrone des préférences).
-  function refreshTree() {
-    if (typeof TemplateTreeSelect !== 'undefined') TemplateTreeSelect.refresh();
-  }
+  function refreshTree() { TemplateTreeSelect.refresh(); }
 
   function findFolderInTree(nodes, path) {
     for (const n of nodes) {
@@ -104,7 +89,7 @@ const TemplateOrganizeModal = (function () {
     }
   }
 
-  // Bascule « déplié / replié » d'un dossier RÉEL. Le nouvel état est lu au clic (deux clics rapides doivent revenir à l'état de départ) et
+  // Bascule « déplié / replié » d'un dossier réel. Le nouvel état est lu au clic (deux clics rapides doivent revenir à l'état de départ) et
   // l'interface suit tout de suite ; si Grist refuse l'écriture, retour au dernier état confirmé et redessin.
   async function toggleFolderDefault(path) {
     const pending = TemplatePreferences.setFolderCollapsed(path, !TemplatePreferences.isFolderCollapsed(path));
@@ -141,7 +126,7 @@ const TemplateOrganizeModal = (function () {
     row.style.setProperty('--tts-depth', String(depth));
     row.dataset.templateId = String(node.id);
 
-    // Glisser-déposer : seules les FEUILLES sont draggable (un dossier n'a pas d'identité propre à déplacer). dragend se déclenche toujours (drop
+    // Glisser-déposer : seules les feuilles sont draggable (un dossier n'a pas d'identité propre à déplacer). dragend se déclenche toujours (drop
     // réussi, annulé ou hors cible) : sans lui une ligne resterait « figée » en cours de glissement.
     row.draggable = true;
     row.addEventListener('dragstart', (e) => {
@@ -151,7 +136,7 @@ const TemplateOrganizeModal = (function () {
     });
     row.addEventListener('dragend', () => row.classList.remove('tom-dragging'));
 
-    row.appendChild(iconSpan(node.typeModele));
+    row.appendChild(TemplateTreeSelect.iconSpan(node.typeModele));
     const label = document.createElement('span');
     label.className = 'tts-row-label';
     label.textContent = node.nom;
@@ -163,7 +148,7 @@ const TemplateOrganizeModal = (function () {
       row.appendChild(hint);
     }
 
-    const prefs = currentPreferences();
+    const prefs = TemplatePreferences.getCached();
     const pref = prefs[node.id];
     const pinned = !!(pref && pref.epingle);
     const pinBtn = document.createElement('button');
@@ -205,7 +190,7 @@ const TemplateOrganizeModal = (function () {
     row.setAttribute('aria-expanded', 'true');
     row.style.setProperty('--tts-depth', String(depth));
     row.appendChild(Object.assign(document.createElement('span'), { className: 'tts-folder-caret' }));
-    row.appendChild(iconSpan('folder'));
+    row.appendChild(TemplateTreeSelect.iconSpan('folder'));
     const label = document.createElement('span');
     label.className = 'tts-row-label';
     label.textContent = node.nom;
@@ -270,7 +255,7 @@ const TemplateOrganizeModal = (function () {
     row.className = 'tts-row tts-row-folder tom-pending-folder';
     row.style.setProperty('--tts-depth', '0');
     row.appendChild(Object.assign(document.createElement('span'), { className: 'tts-folder-caret' }));
-    row.appendChild(iconSpan('folder'));
+    row.appendChild(TemplateTreeSelect.iconSpan('folder'));
     const label = document.createElement('span');
     label.className = 'tts-row-label';
     label.textContent = path;
@@ -317,7 +302,7 @@ const TemplateOrganizeModal = (function () {
   function renderList() {
     list.innerHTML = '';
     const term = searchTerm.trim().toLowerCase();
-    const templates = currentTemplates().filter((t) => !term || String(t.nom ?? '').toLowerCase().includes(term));
+    const templates = Templates.getCached().filter((t) => !term || String(t.nom ?? '').toLowerCase().includes(term));
 
     if (!templates.length) {
       const empty = document.createElement('div');
@@ -327,7 +312,7 @@ const TemplateOrganizeModal = (function () {
       return;
     }
 
-    const view = TemplateOrganizer.buildView(templates, currentPreferences());
+    const view = TemplateOrganizer.buildView(templates, TemplatePreferences.getCached());
 
     // Le dossier en attente est devenu réel (un modèle y a été rangé) : il apparaît à sa vraie place dans view.tree.
     if (pendingFolder && findFolderInTree(view.tree, pendingFolder)) pendingFolder = null;

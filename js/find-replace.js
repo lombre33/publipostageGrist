@@ -13,6 +13,8 @@
 // le plugin ProseMirror : un changement de modèle reconstruit l'état de l'éditeur (Editor.setHTML) et remettrait sinon la recherche à zéro sous le
 // panneau resté ouvert. Styles : css/find-replace.css.
 const FindReplace = (function () {
+  const el = Dom.el;
+
   const isMac = () => /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent || '');
 
   // Le moteur : un document ProseMirror, une requête, des options
@@ -271,12 +273,6 @@ const FindReplace = (function () {
   let bar = null;
   let refs = null;
 
-  function el(tag, className, text) {
-    const e = document.createElement(tag);
-    if (className) e.className = className;
-    if (text !== undefined) e.textContent = text;
-    return e;
-  }
   function iconButton(icon, className) {
     const b = el('button', 'pp-find-btn' + (className ? ' ' + className : ''));
     b.type = 'button';

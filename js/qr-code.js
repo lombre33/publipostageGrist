@@ -9,6 +9,8 @@
 // ; le dessin (PNG, modules de pixels entiers, marge de 4 modules) se fait ici. La fenêtre « QR code… » s'ouvre depuis le menu « Lien et blocs de
 // contenu » (index.html, js/main-toolbar.js) ; styles dans css/qr-code.css.
 const QrCode = (function () {
+  const el = Dom.el;
+
   // Recalculer le hash si la version change : `curl -s <url> | openssl dgst -sha384 -binary | openssl base64 -A`.
   const LIB = { src: 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js', integrity: 'sha384-mZT2gIty7ZDdOGkxfP6joZcYdMW1Jvj9dRlfpTmaJAKKXTqzygtB22k7FLe+KZC1' };
   const ERROR_LEVEL = 'M';      // 15 % de la surface peut manquer : le niveau d'usage pour une adresse imprimée
@@ -154,13 +156,6 @@ const QrCode = (function () {
   let previewTimer = 0;
   let columnSearch = null;
 
-  function el(tag, className, text) {
-    const node = document.createElement(tag);
-    if (className) node.className = className;
-    if (text !== undefined) node.textContent = text;
-    return node;
-  }
-
   function ensure() {
     if (win) return;
     // restoreFocus: false : le focus revient à l'éditeur (closeWindow), pas à la ligne du menu - la sélection y est restée.
@@ -199,12 +194,7 @@ const QrCode = (function () {
     grid.append(form, side);
     win.body.appendChild(grid);
 
-    const spacer = el('span', 'var-modal-spacer');
-    const cancel = el('button');
-    cancel.type = 'button';
-    const ok = el('button', 'var-modal-primary');
-    ok.type = 'button';
-    win.actions.append(spacer, cancel, ok);
+    const { cancel, ok } = win.addButtons();
     refs = { label, input, column, hint, error, previewLabel, paper, image, message, caption, cancel, ok };
 
     // La saisie d'une colonne au clavier : « # » ouvre la même liste que dans l'objet d'un e-mail (js/variables.js), rangée par-dessus la fenêtre

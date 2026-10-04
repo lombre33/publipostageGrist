@@ -13,16 +13,11 @@
 // focus arrive sur le champ (texte sélectionné) ou sur « Valider » ; pour une confirmation destructrice (`danger`), sur « Annuler », pour qu'un
 // Entrée distrait ne supprime rien. À la fermeture, le focus revient à l'élément qui l'avait à l'ouverture.
 const Dialogs = (function () {
+  const el = Dom.el;
+
   let win = null;
   let refs = null;
   let current = null; // demande en cours : { finish(value), cancelValue }
-
-  function el(tag, className, text) {
-    const e = document.createElement(tag);
-    if (className) e.className = className;
-    if (text !== undefined) e.textContent = text;
-    return e;
-  }
 
   function ensure() {
     if (win) return;
@@ -41,12 +36,7 @@ const Dialogs = (function () {
     input.autocomplete = 'off';
     input.spellcheck = false;
     win.body.append(message, label, input);
-    const spacer = el('span', 'var-modal-spacer');
-    const cancel = el('button');
-    cancel.type = 'button';
-    const ok = el('button', 'var-modal-primary');
-    ok.type = 'button';
-    win.actions.append(spacer, cancel, ok);
+    const { cancel, ok } = win.addButtons();
     refs = { message, label, input, cancel, ok, choices: [] };
   }
 

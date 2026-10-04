@@ -6,6 +6,8 @@
 //    clic simple place le curseur, sinon on ne pourrait plus corriger le lien.
 // Le rendu (Lecture, PDF, Word, email) est dans leurs modules ; styles de la fenêtre : css/link-dialog.css, du lien : css/editor-v2.css.
 const LinkDialog = (function () {
+  const el = Dom.el;
+
   const isMac = () => /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent || '');
   const modKey = () => (isMac() ? '⌘' : 'Ctrl');
   // Même écriture que l'infobulle de Enregistrer (decorateSaveButtonShortcut dans js/main.js) : ⌘K sur macOS, Ctrl+K ailleurs, ou la touche choisie
@@ -89,13 +91,6 @@ const LinkDialog = (function () {
   let refs = null;
   let ctx = null; // { from, to, empty, href, withText } : la sélection à l'ouverture
 
-  function el(tag, className, text) {
-    const e = document.createElement(tag);
-    if (className) e.className = className;
-    if (text !== undefined) e.textContent = text;
-    return e;
-  }
-
   function ensure() {
     if (win) return;
     // restoreFocus: false : le focus revient à l'éditeur (closeWindow), pas au bouton de la barre : la sélection y est restée.
@@ -125,14 +120,7 @@ const LinkDialog = (function () {
     text.autocomplete = 'off';
     textField.append(textLabel, text);
     win.body.append(urlLabel, url, hint, error, textField);
-    const remove = el('button', 'var-modal-danger');
-    remove.type = 'button';
-    const spacer = el('span', 'var-modal-spacer');
-    const cancel = el('button');
-    cancel.type = 'button';
-    const ok = el('button', 'var-modal-primary');
-    ok.type = 'button';
-    win.actions.append(remove, spacer, cancel, ok);
+    const { first: remove, cancel, ok } = win.addButtons('var-modal-danger');
     refs = { urlLabel, url, hint, error, textField, textLabel, text, remove, cancel, ok };
 
     // Le texte de l'erreur est vidé avec elle : un élément caché que aria-describedby désigne serait encore lu.

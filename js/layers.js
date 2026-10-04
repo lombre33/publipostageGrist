@@ -16,7 +16,8 @@
 const Layers = (function () {
   const WIDTH = 100; // largeur d'un niveau : le rang ne le dépasse jamais, deux niveaux ne se recouvrent donc pas
   const stacks = new Map(); // niveau -> éléments ouverts à ce niveau, du plus bas au plus haut
-  const levels = new WeakMap(); // élément -> son niveau, lu une seule fois : le premier rang posé en ligne masquerait ensuite celui de la feuille de style
+  // élément -> son niveau, lu une seule fois : le premier rang posé en ligne masquerait ensuite celui de la feuille de style
+  const levels = new WeakMap();
   let toolbarLevel; // niveau des barres flottantes (jeton --z-floating-toolbar de :root), lu une fois la feuille de style chargée
 
   function levelOf(el) {

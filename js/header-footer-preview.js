@@ -531,7 +531,7 @@ const HeaderFooterPreview = (function () {
     const footerHasContent = enabled && (hasZoneContent(footerHtml) || hasZoneContent(footerFirstHtml));
     const headerHeightPx = headerHasContent ? HF_MAX_IMAGE_HEIGHT_PX : 0;
     const footerHeightPx = footerHasContent ? HF_MAX_IMAGE_HEIGHT_PX : 0;
-    // Les bandes que le PDF réserve sous la marge du haut et au-dessus de la marge du bas : sur TOUTES les pages dès qu'une variante a du contenu,
+    // Les bandes que le PDF réserve sous la marge du haut et au-dessus de la marge du bas : sur toutes les pages dès qu'une variante a du contenu,
     // rien sinon.
     const topExtraPx = headerHeightPx ? headerHeightPx + HEADER_FOOTER_GAP_PX : 0;
     const bottomExtraPx = footerHeightPx ? footerHeightPx + HEADER_FOOTER_GAP_PX : 0;
@@ -568,7 +568,7 @@ const HeaderFooterPreview = (function () {
     const breaks = computePageBreaks(tiptapEl, pageContentHeightPx);
     const children = Array.from(tiptapEl.children);
     const elIdx = children.indexOf(topLevelEl);
-    // Un élément DANS un tableau coupé entre deux lignes est sur la page de sa ligne : rang de la ligne parmi celles du tableau, -1 s'il n'est dans
+    // Un élément dans un tableau coupé entre deux lignes est sur la page de sa ligne : rang de la ligne parmi celles du tableau, -1 s'il n'est dans
     // aucune.
     const rowRankIn = (wrapper) => {
       const rows = TablePageCut.rowsOf(wrapper.querySelector(':scope > table'));
@@ -904,7 +904,7 @@ const HeaderFooterPreview = (function () {
       seam.style.left = sheetLeft + 'px';
       seam.style.width = sheetWidth + 'px';
       const seamHeight = seam.getBoundingClientRect().height / zoom;
-      // Coupure ENTRE DEUX LIGNES d'un tableau (brk.rowIndex, js/table-page-cut.js) : le bas de la page qui finit est celui de la ligne qui précède
+      // Coupure entre deux lignes d'un tableau (brk.rowIndex, js/table-page-cut.js) : le bas de la page qui finit est celui de la ligne qui précède
       // celle qui ouvre la page, non celui du tableau entier (le tableau est le bloc des deux pages).
       const tableEl = brk.rowIndex != null ? brk.afterEl.querySelector(':scope > table') : null;
       const tableRows = tableEl ? (TablePageCut.rowsOf(tableEl) || []) : [];

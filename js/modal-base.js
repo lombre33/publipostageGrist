@@ -9,16 +9,12 @@
 // Un clic sur le voile ne ferme rien, à dessein : il protège une saisie en cours. Aucun texte ici (chaque fenêtre porte les siens, en français et en
 // anglais).
 const ModalBase = (function () {
+  const el = Dom.el;
+
   const stack = [];          // fenêtres ouvertes, la dernière est au-dessus : c'est elle qui reçoit le clavier
   const pages = new Set();   // fenêtres reprises d'index.html : leur module les ouvre et les ferme, la base le constate (MutationObserver)
   const FOCUSABLE = 'a[href], button, input:not([type="hidden"]), select, textarea, [tabindex]';
-  let lastOutside = null;    // dernier élément à avoir eu le focus hors d'une fenêtre reprise : l'ouvreur quand le module a déjà mis le focus dans la fenêtre
-
-  function el(tag, className) {
-    const e = document.createElement(tag);
-    if (className) e.className = className;
-    return e;
-  }
+  let lastOutside = null;    // dernier élément focalisé hors d'une fenêtre reprise : l'ouvreur quand le module a déjà mis le focus dedans
 
   // Éléments atteignables à Tab dans `root`, dans l'ordre du document : ni désactivés, ni cachés (hidden, display:none d'un ancêtre), ni retirés de
   // l'ordre de tabulation (tabindex="-1", comme les lignes d'une liste avec recherche).
@@ -97,11 +93,11 @@ const ModalBase = (function () {
   }
   const observer = new MutationObserver(syncPages);
 
-  // Le cadre de la fenêtre, sans rien dedans : à remplir par `win.title`, `win.body` (contenu) et `win.actions` (boutons), puis à ouvrir par
-  // `win.show()`. Options : id (du voile : styles et tests s'y accrochent), titleId (du <h3>, aria-labelledby), boxClass et actionsClass, size ('sm'
-  // 400 px, 'md' 480 px par défaut, 'lg' 960 px, plafonné à la largeur du panneau), onEscape (défaut : fermer), restoreFocus (rendre le focus à
-  // l'élément qui l'avait à l'ouverture, vrai par défaut ; les fenêtres de variable le rendent elles-mêmes à l'éditeur pour que la barre flottante
-  // revienne).
+  // Le cadre de la fenêtre, sans rien dedans : à remplir par `win.title`, `win.body` (contenu) et `win.actions` (boutons, ou `win.addButtons`), puis
+  // à ouvrir par `win.show()`. Options : id (du voile : styles et tests s'y accrochent), titleId (du <h3>, aria-labelledby), boxClass et
+  // actionsClass, size ('sm' 400 px, 'md' 480 px par défaut, 'lg' 960 px, plafonné à la largeur du panneau), onEscape (défaut : fermer), restoreFocus
+  // (rendre le focus à l'élément qui l'avait à l'ouverture, vrai par défaut ; les fenêtres de variable le rendent elles-mêmes à l'éditeur pour que la
+  // barre flottante revienne).
   function create(opts) {
     const overlay = el('div', 'pp-modal');
     overlay.id = opts.id;
@@ -127,6 +123,14 @@ const ModalBase = (function () {
       overlay, box, title, body, actions, opener: null, restoreFocus: opts.restoreFocus,
       isOpen: () => stack.includes(win),
       onEscape: () => (opts.onEscape ? opts.onEscape() : win.hide()),
+      // Les boutons habituels, dans l'ordre : `first` (un bouton de tête, de la classe donnée : « var-modal-danger » pour « Retirer »), un espace,
+      // Annuler, le bouton principal. Chaque module pose ses libellés.
+      addButtons(firstClass) {
+        const button = className => Object.assign(el('button', className), { type: 'button' });
+        const buttons = { first: firstClass ? button(firstClass) : null, cancel: button(), ok: button('var-modal-primary') };
+        actions.append(...[buttons.first, el('span', 'var-modal-spacer'), buttons.cancel, buttons.ok].filter(Boolean));
+        return buttons;
+      },
       // `target` : l'élément (ou la fonction qui le donne) à mettre au premier plan du clavier ; par défaut le premier champ du contenu.
       show(target) {
         if (!win.isOpen()) {

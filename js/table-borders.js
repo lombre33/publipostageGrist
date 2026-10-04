@@ -1,22 +1,23 @@
-// Bordures des cases d'un tableau de grille (planning/feature-mode-grille-excel.md, lot B2) : la règle qui décide de la valeur d'un trait, écrite UNE fois pour l'éditeur
-// (js/grid-editor.js), la Lecture, le PDF (js/pdf-export.js) et l'Excel (js/xlsx-export.js) - sinon l'écran, le PDF et le classeur ne s'accorderaient pas sur un trait que
-// deux cases se partagent. Pur : ni DOM ni ProseMirror, il lit une description du tableau
+// Bordures des cases d'un tableau de grille (planning/feature-mode-grille-excel.md) : la règle qui décide de la valeur d'un trait, écrite une fois
+// pour l'éditeur (js/grid-editor.js), la Lecture, le PDF (js/pdf-export.js) et l'Excel (js/xlsx-export.js) - sinon l'écran, le PDF et le classeur ne
+// s'accorderaient pas sur un trait que deux cases se partagent. Pur : ni DOM ni ProseMirror, il lit une description du tableau
 //   { width, height, cells: [{ row, col, rowspan, colspan, top, right, bottom, left }] }
 // (cases dans l'ordre de lecture ; `row`/`col` = emplacement de départ, `width`/`height` = nombre de colonnes et de lignes du tableau).
 //
-// Chaque côté d'une case vaut : null = le trait fin gris de départ, 'none' = pas de trait, '#rrggbb' = trait fin de cette couleur. Une case garde UNE valeur par côté, écrite
-// sur les DEUX cases voisines d'un trait qu'elles se partagent ; une case fusionnée n'a, elle aussi, qu'une valeur par côté : tous les traits de ce côté (et les cases d'en face)
-// forment un seul groupe qui prend la même valeur.
+// Chaque côté d'une case vaut : null = le trait fin gris de départ, 'none' = pas de trait, '#rrggbb' = trait fin de cette couleur. Une case garde une
+// valeur par côté, écrite sur les deux cases voisines d'un trait qu'elles se partagent ; une case fusionnée n'a, elle aussi, qu'une valeur par côté :
+// tous les traits de ce côté (et les cases d'en face) forment un seul groupe qui prend la même valeur.
 //
-// Un groupe, quand ses membres divergent (fusion, ligne ou colonne supprimée, HTML d'ailleurs) : « pas de trait » l'emporte, puis la première couleur dans l'ordre de lecture
-// (case de gauche ou du dessus), sinon le trait de départ. C'est la règle des bordures fusionnées de CSS (`border-collapse: collapse`) : l'éditeur l'applique en écrivant la valeur
-// choisie sur toutes les cases du groupe, et les exports la rejouent sur ce qu'ils lisent.
+// Un groupe, quand ses membres divergent (fusion, ligne ou colonne supprimée, HTML d'ailleurs) : « pas de trait » l'emporte, puis la première couleur
+// dans l'ordre de lecture (case de gauche ou du dessus), sinon le trait de départ. C'est la règle des bordures fusionnées de CSS (`border-collapse:
+// collapse`) : l'éditeur l'applique en écrivant la valeur choisie sur toutes les cases du groupe, et les exports la rejouent sur ce qu'ils lisent.
 const TableBorders = (function () {
   const SIDES = ['top', 'right', 'bottom', 'left'];
   const NONE = 'none';
   const COLOR_RE = /^#[0-9a-f]{6}$/;
 
-  // Réglages du menu « Bordures » d'une grille ; `none` pose « pas de trait » partout, les autres posent la couleur du stylo (null = trait de départ).
+  // Réglages du menu « Bordures » d'une grille ; `none` pose « pas de trait » partout, les autres posent la couleur du stylo (null = trait de
+  // départ).
   const PRESET_PARTS = {
     all: ['top', 'bottom', 'left', 'right', 'inner'],
     outer: ['top', 'bottom', 'left', 'right'],
@@ -48,9 +49,10 @@ const TableBorders = (function () {
 
   function edgeKey(edge) { return edge.kind + ':' + edge.row + ':' + edge.col; }
 
-  // Les traits de la grille : `h` = trait HORIZONTAL au-dessus de la ligne `row` (0 = bord haut, `height` = bord bas) sous la colonne `col` ; `v` = trait VERTICAL à gauche de la
-  // colonne `col` (0 = bord gauche, `width` = bord droit) le long de la ligne `row`. Un trait entre deux cases relie leurs deux côtés ; un trait à l'intérieur d'une case fusionnée
-  // n'existe pas. Chaque côté de case (case × 4 + côté) est un nœud, les traits les relient : un groupe = une valeur.
+  // Les traits de la grille : `h` = trait horizontal au-dessus de la ligne `row` (0 = bord haut, `height` = bord bas) sous la colonne `col` ; `v` =
+  // trait vertical à gauche de la colonne `col` (0 = bord gauche, `width` = bord droit) le long de la ligne `row`. Un trait entre deux cases relie
+  // leurs deux côtés ; un trait à l'intérieur d'une case fusionnée n'existe pas. Chaque côté de case (case × 4 + côté) est un nœud, les traits les
+  // relient : un groupe = une valeur.
   function analyze(spec) {
     const { width, height, cells } = spec;
     const owner = new Array(width * height).fill(-1);
@@ -123,7 +125,8 @@ const TableBorders = (function () {
     return sidesOf(spec, analysis, groupValues(spec, analysis));
   }
 
-  // Comme `resolve`, après avoir posé `value` sur chaque groupe qui contient un des traits `edges` : ce que la personne vient de choisir l'emporte, même sur « pas de trait ».
+  // Comme `resolve`, après avoir posé `value` sur chaque groupe qui contient un des traits `edges` : ce que la personne vient de choisir l'emporte,
+  // même sur « pas de trait ».
   function set(spec, edges, value) {
     const analysis = analyze(spec);
     const values = groupValues(spec, analysis);
@@ -135,7 +138,8 @@ const TableBorders = (function () {
     return sidesOf(spec, analysis, values);
   }
 
-  // La valeur courante de chaque trait demandé (null pour un trait qui n'existe pas) : de quoi calculer les côtés d'une case qui en remplace plusieurs.
+  // La valeur courante de chaque trait demandé (null pour un trait qui n'existe pas) : de quoi calculer les côtés d'une case qui en remplace
+  // plusieurs.
   function valuesOf(spec, edges) {
     const analysis = analyze(spec);
     const values = groupValues(spec, analysis);
@@ -151,7 +155,8 @@ const TableBorders = (function () {
     return edges.filter(edge => analysis.edges.has(edgeKey(edge)));
   }
 
-  // Les traits qu'un réglage du menu vise pour des cases formant le rectangle `rect` ({ left, top, right, bottom } : `right` et `bottom` exclus, en emplacements de la grille).
+  // Les traits qu'un réglage du menu vise pour des cases formant le rectangle `rect` ({ left, top, right, bottom } : `right` et `bottom` exclus, en
+  // emplacements de la grille).
   function presetEdges(preset, rect) {
     const parts = PRESET_PARTS[preset] || [];
     const { left, top, right, bottom } = rect;

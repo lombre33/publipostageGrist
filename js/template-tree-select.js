@@ -27,16 +27,6 @@ const TemplateTreeSelect = (function () {
     return isDefault ? (tpl.nom + ' ★') : tpl.nom;
   }
 
-  // Arbre affiché, à partir des mêmes données que le <select> réel (Templates.getCached(), TemplatePreferences.getCached()) et non de ses <option> :
-  // celles-ci ne portent ni typeModele ni le statut « par défaut » en donnée structurée, seulement un texte déjà mis en forme par refreshTemplateList
-  // (js/main.js).
-  function currentTemplates() {
-    return (typeof Templates !== 'undefined' && Templates.getCached()) || [];
-  }
-  function currentPreferences() {
-    return (typeof TemplatePreferences !== 'undefined' && TemplatePreferences.getCached()) || {};
-  }
-
   function makeRow(node, depth) {
     if (node.type === 'dossier') return makeFolderRow(node, depth);
     return makeLeafRow(node, depth);
@@ -46,7 +36,7 @@ const TemplateTreeSelect = (function () {
   // mes modèles ») ou l'a basculé à la main depuis l'ouverture du panneau.
   function isFolderOpen(chemin) {
     if (folderOverrides.has(chemin)) return folderOverrides.get(chemin);
-    return !(typeof TemplatePreferences !== 'undefined' && TemplatePreferences.isFolderCollapsed(chemin));
+    return !TemplatePreferences.isFolderCollapsed(chemin);
   }
 
   function makeFolderRow(node, depth) {
@@ -119,7 +109,7 @@ const TemplateTreeSelect = (function () {
     // -1 : un <button> est un arrêt de tabulation natif, ce qui casserait le focus roulant de l'arbre (Tab sortirait de la ligne vers ce bouton au
     // lieu de sortir du widget). Pas de raccourci clavier pour épingler : seule la souris y accède.
     pinBtn.tabIndex = -1;
-    const prefs = currentPreferences();
+    const prefs = TemplatePreferences.getCached();
     const pinned = !!(prefs[node.id] && prefs[node.id].epingle);
     pinBtn.classList.toggle('is-pinned', pinned);
     pinBtn.setAttribute('aria-pressed', String(pinned));
@@ -156,8 +146,10 @@ const TemplateTreeSelect = (function () {
     Array.from(popup.children).forEach((child) => { if (child !== head) popup.removeChild(child); });
 
     // Pas de ligne « — Nouveau modèle — » (value '') : le bouton « + » de la barre sert à ça. La 1re <option> du <select> réel reste : c'est l'état «
-    // modèle pas encore enregistré », que le déclencheur affiche.
-    const view = TemplateOrganizer.buildView(currentTemplates(), currentPreferences());
+    // modèle pas encore enregistré », que le déclencheur affiche. L'arbre vient des mêmes données que ce <select> (Templates.getCached(),
+    // TemplatePreferences.getCached()), pas de ses <option> : elles ne portent ni typeModele ni le statut « par défaut » en donnée structurée,
+    // seulement un texte déjà mis en forme par refreshTemplateList (js/main.js).
+    const view = TemplateOrganizer.buildView(Templates.getCached(), TemplatePreferences.getCached());
 
     if (!view.pinned.length && !view.tree.length) {
       const empty = document.createElement('div');
@@ -194,7 +186,7 @@ const TemplateTreeSelect = (function () {
   // Synchronisation du déclencheur avec le <select> réel
   function findTemplateById(id) {
     if (id === '' || id == null) return null;
-    return currentTemplates().find((t) => String(t.id) === String(id)) || null;
+    return Templates.getCached().find((t) => String(t.id) === String(id)) || null;
   }
 
   function syncTriggerLabel() {
@@ -384,7 +376,8 @@ const TemplateTreeSelect = (function () {
   function attach(select, options) {
     if (realSelect) detach();
     realSelect = select;
-    // Gardé d'un attach() à l'autre quand on n'en repasse pas : la même vue rattachée sans options (après un échec, dev-tests) continue d'ouvrir « Organiser ».
+    // Gardé d'un attach() à l'autre quand on n'en repasse pas : la même vue rattachée sans options (après un échec, dev-tests) continue d'ouvrir
+    // « Organiser ».
     if (options && typeof options.onOrganize === 'function') onOrganize = options.onOrganize;
 
     // Piège 4 : le <select> réel est masqué (classe, tabIndex, aria-hidden ci-dessous) avant que le reste d'attach() (construction de l'arbre,
@@ -530,11 +523,9 @@ const TemplateTreeSelect = (function () {
 
   // Abonnement unique au niveau module (pas dans attach()) : I18n.onChange() ne permet pas de se désabonner, un ré-abonnement par attach()/detach()
   // empilerait des écouteurs fantômes. La garde `if (popup)` le rend inoffensif tant que rien n'est attaché.
-  if (typeof I18n !== 'undefined') {
-    I18n.onChange(() => {
-      if (popup) { popup.setAttribute('aria-label', I18n.t('template.select')); syncHeadTexts(); render(); }
-    });
-  }
+  I18n.onChange(() => {
+    if (popup) { popup.setAttribute('aria-label', I18n.t('template.select')); syncHeadTexts(); render(); }
+  });
 
-  return { attach, refresh };
+  return { attach, refresh, iconSpan };
 })();

@@ -15,7 +15,8 @@ const PageTree = (function () {
   const MAIN_TABLE = 'Publipostage_Modeles';
   const PAGES = '_grist_Pages';
 
-  let pendingNest = new Set();     // tables créées pendant la session dont la page n'est pas encore rangée (la page des modèles peut ne pas exister encore)
+  // Tables créées pendant la session dont la page n'est pas encore rangée (la page des modèles peut ne pas exister encore).
+  let pendingNest = new Set();
   let collapsePending = false;     // la table des modèles vient d'être créée : sa page doit être repliée par défaut
   let queue = Promise.resolve();   // un rangement à la fois : deux créations qui se croisent lisent chacune l'état laissé par l'autre
 
@@ -90,10 +91,11 @@ const PageTree = (function () {
     if (!collapsePending && !pendingNest.size) return;
     const snap = await snapshot();
     if (collapsePending && await collapseMain(snap)) collapsePending = false;
-    // Une page rangée n'est plus touchée ensuite : l'utilisateur peut la déplacer. Un rangement refusé (droits, réseau) reste en attente et se retente à la création suivante.
+    // Une page rangée n'est plus touchée ensuite : l'utilisateur peut la déplacer. Un rangement refusé (droits, réseau) reste en attente et se
+    // retente à la création suivante.
     for (const tableId of Array.from(pendingNest)) {
       const fresh = await snapshot();
-      if (!pageOfTable(MAIN_TABLE, fresh) || !pageOfTable(tableId, fresh)) continue; // la page des modèles ou la sienne n'est pas encore là : au prochain passage
+      if (!pageOfTable(MAIN_TABLE, fresh) || !pageOfTable(tableId, fresh)) continue; // la page des modèles ou la sienne manque : au prochain passage
       await nestPage(tableId, fresh);
       pendingNest.delete(tableId);
     }

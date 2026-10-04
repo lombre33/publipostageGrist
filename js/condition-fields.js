@@ -2,14 +2,10 @@
 // .macro-rule-* (css/toolbar-v2.css), donc une seule copie des styles et des sélecteurs de test. Chaque champ mute `rule` en place ; l'appelant
 // décide quand l'enregistrer.
 const ConditionFields = (function () {
+  const el = Dom.el;
+
   const ADVANCED_COLUMN_VALUE = '__advanced__';
   const ADVANCED_VALUE = '__advanced_value__';
-
-  function el(tag, className) {
-    const node = document.createElement(tag);
-    node.className = className;
-    return node;
-  }
 
   function textInput(className, placeholder) {
     const input = el('input', className);

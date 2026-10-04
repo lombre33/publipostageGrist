@@ -396,7 +396,7 @@ const GridXlsxImport = (function () {
         search = SearchSelect.attachSheets(select, {
           popup: true,
           anchor: options && options.anchor,
-          // Un choix ferme la liste AVANT d'envoyer `change` : la fermeture sans choix attend la fin de l'évènement, pour que le choix passe en
+          // Un choix ferme la liste avant d'envoyer `change` : la fermeture sans choix attend la fin de l'évènement, pour que le choix passe en
           // premier (une promesse ne se tient qu'une fois).
           onClose: () => setTimeout(() => { cleanup(); resolve(null); }, 0),
         });

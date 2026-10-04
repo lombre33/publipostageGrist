@@ -9,6 +9,8 @@
 //    PDF, le Word ou l'e-mail, et tout reste modifiable (une variable à la place du nom, une autre légende...).
 // Styles de la fenêtre et de l'encadré : css/callout.css ; le menu est dans index.html (#v2-blocks-group), ses actions dans js/main-toolbar.js.
 const Callout = (function () {
+  const el = Dom.el;
+
   // La palette et les icônes
   // Couleur d'accent (barre, icône : 3:1 au moins sur la teinte, 4,4 à 6,7:1 en pratique) et teinte de fond (le texte du document, #1b2430, y reste à
   // plus de 14:1). Le papier du document reste blanc dans le thème sombre : ces couleurs ne changent pas avec lui.
@@ -168,49 +170,8 @@ const Callout = (function () {
   let refs = null;
   let state = { color: DEFAULT.color, icon: DEFAULT.icon, editing: false };
 
-  function el(tag, className, text) {
-    const e = document.createElement(tag);
-    if (className) e.className = className;
-    if (text !== undefined) e.textContent = text;
-    return e;
-  }
-
-  // Un groupe de choix à une seule réponse (rôle radiogroup) : flèches pour passer de l'un à l'autre (le choix suit le focus), Entrée pour valider la
-  // fenêtre, un seul arrêt de Tab par groupe (celui qui est choisi, ou le premier quand rien ne l'est).
-  function radioGroup(labelId, options, onPick) {
-    const group = el('div', 'pp-callout-options');
-    group.setAttribute('role', 'radiogroup');
-    group.setAttribute('aria-labelledby', labelId);
-    const buttons = options.map(option => {
-      const button = el('button', option.className);
-      button.type = 'button';
-      button.setAttribute('role', 'radio');
-      button.dataset.value = option.value;
-      option.fill(button);
-      button.addEventListener('click', () => onPick(option.value));
-      return button;
-    });
-    group.append(...buttons);
-    group.addEventListener('keydown', event => {
-      const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
-      const at = buttons.indexOf(document.activeElement);
-      // Entrée sur un choix valide la fenêtre : les flèches choisissent déjà au passage, il n'y a plus rien à « activer ».
-      if (at >= 0 && event.key === 'Enter') { event.preventDefault(); apply(); return; }
-      if (at < 0 || (step === undefined && event.key !== 'Home' && event.key !== 'End')) return;
-      event.preventDefault();
-      const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (at + step + buttons.length) % buttons.length;
-      buttons[next].focus();
-      onPick(options[next].value);
-    });
-    return {
-      group,
-      buttons,
-      check(value) {
-        let stop = buttons.find(b => b.dataset.value === value) || buttons[0];
-        buttons.forEach(b => { const on = b.dataset.value === value; b.setAttribute('aria-checked', on ? 'true' : 'false'); b.tabIndex = b === stop ? 0 : -1; });
-      },
-    };
-  }
+  // Les groupes de choix de la fenêtre : Entrée la valide (Dom.radioGroup).
+  const radioGroup = (labelId, options, onPick) => Dom.radioGroup({ className: 'pp-callout-options', labelId, options, onPick, onEnter: apply });
 
   function ensure() {
     if (win) return;
@@ -251,14 +212,7 @@ const Callout = (function () {
     grid.append(typeLabel, types.group, colorLabel, colors.group, iconLabel, icons.group, previewLabel, paper);
     win.body.appendChild(grid);
 
-    const remove = el('button', 'var-modal-danger');
-    remove.type = 'button';
-    const spacer = el('span', 'var-modal-spacer');
-    const cancel = el('button');
-    cancel.type = 'button';
-    const ok = el('button', 'var-modal-primary');
-    ok.type = 'button';
-    win.actions.append(remove, spacer, cancel, ok);
+    const { first: remove, cancel, ok } = win.addButtons('var-modal-danger');
     refs = { typeLabel, colorLabel, iconLabel, previewLabel, types, colors, icons, preview, sample, remove, cancel, ok };
     cancel.addEventListener('click', () => closeWindow());
     ok.addEventListener('click', apply);

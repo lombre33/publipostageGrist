@@ -17,6 +17,8 @@
 //   l'une l'affiche à sa taille réelle, un second la rétrécit.
 // Script classique (pas type="module"), même convention de portée globale que CleanReading ; js/reader-mode.js l'appelle (ReaderGuide.render).
 const ReaderGuide = (function () {
+  const el = Dom.el;
+
   const IMAGE_DIR = 'img/reader-guide/';
   const IMAGE_VERSION = '2';
   // Une étape : l'identifiant de ses textes (readerGuide.<id>.*), le nombre de repères numérotés de sa capture (une ligne de liste chacun), si elle
@@ -30,12 +32,6 @@ const ReaderGuide = (function () {
   ];
   let wired = false;
 
-  function el(tag, className, text) {
-    const node = document.createElement(tag);
-    node.className = className;
-    if (text != null) node.textContent = text;
-    return node;
-  }
   // Titres : des <p role="heading">, pas des <h2>/<h3> - css/style.css peint tout titre du conteneur de la Lecture en gris-bleu foncé (les titres du
   // document, sur la page blanche), invisible sur le fond sombre du plan de travail en thème sombre.
   function heading(level, className, text) {

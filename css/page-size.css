@@ -1,10 +1,12 @@
-/* La fenêtre « Format libre… » (js/page-size-dialog.js) et la ligne du même nom dans le menu Page (js/orientation-toggle.js). Libellé et champ à gauche - la liste des formats
-   enregistrés, puis la largeur et la hauteur en centimètres -, la feuille d'aperçu à droite, l'indication et l'erreur sous les champs : tout tient dans les 376 px de haut du panneau
-   de 700x400, sans défiler. Chargé après css/modal-base.css, css/variable-actions.css et css/search-select.css (le cadre, le champ, les boutons et la liste de la fenêtre en viennent). */
+/* La fenêtre « Format libre… » (js/page-size-dialog.js) et la ligne du même nom dans le menu Page (js/orientation-toggle.js). Libellé et champ à
+   gauche - la liste des formats enregistrés, puis la largeur et la hauteur en centimètres -, la feuille d'aperçu à droite, l'indication et
+   l'erreur sous les champs : tout tient dans les 376 px de haut du panneau de 700x400, sans défiler. Chargé après css/modal-base.css,
+   css/variable-actions.css et css/search-select.css (le cadre, le champ, les boutons et la liste de la fenêtre en viennent). */
 .pp-pagesize-grid { display: grid; grid-template-columns: 72px minmax(0, 1fr) 112px; column-gap: 12px; row-gap: 12px; align-items: start; padding-bottom: 2px; }
 /* Le libellé se cale sur le champ (30 px de haut). */
 .pp-pagesize-label { font-size: 12px; font-weight: 700; line-height: 30px; color: var(--text); }
-/* Les formats enregistrés : la liste avec recherche (30 px de haut, comme les champs) et la corbeille du format choisi, grisée tant qu'aucun n'est choisi. */
+/* Les formats enregistrés : la liste avec recherche (30 px de haut, comme les champs) et la corbeille du format choisi, grisée tant qu'aucun n'est
+   choisi. */
 .pp-pagesize-saved { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .pp-pagesize-saved .ss-wrap { flex: 1 1 auto; width: auto; min-width: 0; }
 .pp-pagesize-remove { flex: none; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; width: 30px; height: 30px; padding: 0; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); cursor: pointer; }
@@ -24,7 +26,8 @@
 .pp-pagesize-error { margin-top: 6px; padding-left: 8px; border-left: 3px solid var(--danger); font-weight: 600; color: var(--text); }
 .pp-pagesize-box .pp-dialog-input[aria-invalid="true"] { border-color: var(--danger); }
 .pp-pagesize-box .pp-dialog-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-/* La feuille d'aperçu : la page à l'échelle d'un carré de 96 px (sens compris), sa taille et son sens dessous. Le papier est blanc dans les deux thèmes. */
+/* La feuille d'aperçu : la page à l'échelle d'un carré de 96 px (sens compris), sa taille et son sens dessous. Le papier est blanc dans les deux
+   thèmes. */
 .pp-pagesize-preview { grid-column: 3; grid-row: 1 / span 4; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
 .pp-pagesize-stage { display: flex; align-items: center; justify-content: center; width: 98px; height: 98px; }
 .pp-pagesize-sheet { flex: none; box-sizing: content-box; background: #fff; border: 1px solid var(--border-strong); box-shadow: 0 1px 3px rgba(15, 23, 42, .18); }

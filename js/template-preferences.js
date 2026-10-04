@@ -1,4 +1,4 @@
-// Rangement des modèles PAR PERSONNE (épingle, dossier, dossier replié par défaut) : planning/feature-rangement-tri-modeles.md.
+// Rangement des modèles par personne (épingle, dossier, dossier replié par défaut) : planning/feature-rangement-tri-modeles.md.
 // Table dédiée Publipostage_PreferencesModeles : une préférence est une relation (personne × modèle), pas un attribut du modèle (même principe que
 // Publipostage_Commentaires, js/comments.js) ; elle évite aussi de toucher aux colonnes de Templates.save().
 // Identification : GristAPI.getCurrentUserEmail(). Si elle échoue, repli anonyme silencieux (Utilisateur = '') plutôt que de bloquer l'action :
@@ -74,7 +74,7 @@ const TemplatePreferences = (function () {
   // Préférences de la personne courante uniquement : { [modeleId]: { rowId, epingle, dossier } }, jamais celles des autres.
   let cache = null;
 
-  // { [chemin normalisé]: { rowId, replie, saved } } pour la personne courante. `replie` est l'état AFFICHÉ (mis à jour avant l'écriture), `saved` le
+  // { [chemin normalisé]: { rowId, replie, saved } } pour la personne courante. `replie` est l'état affiché (mis à jour avant l'écriture), `saved` le
   // dernier état confirmé par Grist (retour arrière si l'écriture échoue). Object.create(null) : un dossier nommé « constructor » ou « __proto__ » ne
   // doit pas retrouver une propriété héritée.
   let folderStates = Object.create(null);

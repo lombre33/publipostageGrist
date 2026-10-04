@@ -1,15 +1,19 @@
-// Fenêtre « Format libre… » du menu Page (js/orientation-toggle.js) : la taille de la page du modèle saisie en centimètres, largeur et hauteur, avec une feuille d'aperçu
-// à l'échelle. Elle ne pose rien elle-même : « Valider » passe la taille à OrientationToggle.selectPageSize (mêmes gardes que les autres gestes de la page : type de
-// modèle suivi, export en cours, lecture seule). PageLayout.setPageSize borne la page et annonce pp:pageLayoutChanged, d'où l'éditeur, la Lecture, le PDF, le Word et
-// l'assemblage avant impression la suivent ; pp:marginsChanged prévient l'enregistrement automatique, et la taille voyage avec le modèle (clé `format` de sa colonne Margins).
-// Les nombres s'écrivent avec la virgule ou le point (« 10,5 », « 10.5 », « 10,5 cm »). Une valeur hors de PageLayout.CUSTOM_MIN_MM … CUSTOM_MAX_MM est refusée sous le
-// champ au lieu d'être corrigée en silence, et « Valider » reste grisé tant que l'un des deux champs n'est pas bon. La fenêtre ne demande pas le sens : plus large que
+// Fenêtre « Format libre… » du menu Page (js/orientation-toggle.js) : la taille de la page du modèle saisie en centimètres, largeur et hauteur, avec
+// une feuille d'aperçu à l'échelle. Elle ne pose rien elle-même : « Valider » passe la taille à OrientationToggle.selectPageSize (mêmes gardes que
+// les autres gestes de la page : type de modèle suivi, export en cours, lecture seule). PageLayout.setPageSize borne la page et annonce
+// pp:pageLayoutChanged, d'où l'éditeur, la Lecture, le PDF, le Word et l'assemblage avant impression la suivent ; pp:marginsChanged prévient
+// l'enregistrement automatique, et la taille voyage avec le modèle (clé `format` de sa colonne Margins). Les nombres s'écrivent avec la virgule ou le
+// point (« 10,5 », « 10.5 », « 10,5 cm »). Une valeur hors de PageLayout.CUSTOM_MIN_MM … CUSTOM_MAX_MM est refusée sous le champ au lieu d'être
+// corrigée en silence, et « Valider » reste grisé tant que l'un des deux champs n'est pas bon. La fenêtre ne demande pas le sens : plus large que
 // haute, la page est en paysage (la ligne « Paysage » du menu se coche d'elle-même).
 //
-// Formats enregistrés (js/saved-page-formats.js, table Publipostage_FormatsPage du document) : une liste avec recherche en tête de fenêtre remplit les deux champs - la taille ne
-// s'applique toujours qu'à « Valider » - ; « Enregistrer ce format… » donne un nom à la taille des champs ; la corbeille retire de la liste le format choisi. Modifier un champ après
-// avoir choisi un format remet la liste à « — Choisir un format — » : le format choisi n'est plus celui qu'on voit. Le modèle garde sa taille, pas le nom du format : une copie.
+// Formats enregistrés (js/saved-page-formats.js, table Publipostage_FormatsPage du document) : une liste avec recherche en tête de fenêtre remplit
+// les deux champs - la taille ne s'applique toujours qu'à « Valider » - ; « Enregistrer ce format… » donne un nom à la taille des champs ; la
+// corbeille retire de la liste le format choisi. Modifier un champ après avoir choisi un format remet la liste à « — Choisir un format — » : le
+// format choisi n'est plus celui qu'on voit. Le modèle garde sa taille, pas le nom du format : une copie.
 const PageSizeDialog = (function () {
+  const el = Dom.el;
+
   const PREVIEW_PX = 96; // côté du carré où la feuille d'aperçu tient, quel que soit son sens
 
   let win = null;
@@ -18,14 +22,8 @@ const PageSizeDialog = (function () {
   let notice = '';  // l'échec d'une écriture dans le document ('write' | 'delete'), dit sous les champs jusqu'au prochain geste
   let busy = false; // une écriture est en cours : « Enregistrer ce format… » et la corbeille attendent
 
-  function el(tag, className, text) {
-    const e = document.createElement(tag);
-    if (className) e.className = className;
-    if (text !== undefined) e.textContent = text;
-    return e;
-  }
-
-  // « 7,5 », « 7.5 » ou « 7,5 cm » -> millimètres, au dixième ; null si ce n'est pas un nombre. Le point ou la virgule seule (« 7. », « ,5 ») passe : on tape un nombre.
+  // « 7,5 », « 7.5 » ou « 7,5 cm » -> millimètres, au dixième ; null si ce n'est pas un nombre. Le point ou la virgule seule (« 7. », « ,5 ») passe :
+  // on tape un nombre.
   function parseCm(text) {
     const match = /^\s*(\d+(?:[.,]\d*)?|[.,]\d+)\s*(?:cm)?\s*$/i.exec(String(text));
     return match ? Math.round(Number(match[1].replace(',', '.')) * 100) / 10 : null;
@@ -78,8 +76,8 @@ const PageSizeDialog = (function () {
     const heightLabel = el('label', 'pp-pagesize-label'); heightLabel.htmlFor = 'pp-pagesize-height';
     const height = field('pp-pagesize-height');
 
-    // L'indication et l'erreur commencent sous les champs, pas sous leur libellé. L'état (« Format enregistré ») n'est dit qu'aux lecteurs d'écran : la liste, qui montre
-    // alors le nouveau format, est son témoin à l'écran.
+    // L'indication et l'erreur commencent sous les champs, pas sous leur libellé. L'état (« Format enregistré ») n'est dit qu'aux lecteurs d'écran :
+    // la liste, qui montre alors le nouveau format, est son témoin à l'écran.
     const notes = el('div', 'pp-pagesize-notes');
     const hint = el('p', 'pp-pagesize-note'); hint.id = 'pp-pagesize-hint';
     const error = el('p', 'pp-pagesize-note pp-pagesize-error'); error.id = 'pp-pagesize-error';
@@ -90,7 +88,8 @@ const PageSizeDialog = (function () {
     status.setAttribute('aria-live', 'polite');
     notes.append(hint, error, status);
 
-    // La feuille d'aperçu : la page à l'échelle d'un carré, sa taille et son sens dessous. Le papier est blanc dans les deux thèmes, comme celui du document.
+    // La feuille d'aperçu : la page à l'échelle d'un carré, sa taille et son sens dessous. Le papier est blanc dans les deux thèmes, comme celui du
+    // document.
     const preview = el('div', 'pp-pagesize-preview');
     preview.setAttribute('aria-hidden', 'true');
     const stage = el('div', 'pp-pagesize-stage');
@@ -103,18 +102,11 @@ const PageSizeDialog = (function () {
     grid.append(savedLabel, savedCell, widthLabel, width.cell, heightLabel, height.cell, notes, preview);
     win.body.appendChild(grid);
 
-    const save = el('button', 'pp-pagesize-save');
-    save.type = 'button';
-    const spacer = el('span', 'var-modal-spacer');
-    const cancel = el('button');
-    cancel.type = 'button';
-    const ok = el('button', 'var-modal-primary');
-    ok.type = 'button';
-    win.actions.append(save, spacer, cancel, ok);
+    const { first: save, cancel, ok } = win.addButtons('pp-pagesize-save');
     refs = { savedLabel, saved, savedControl: null, remove, widthLabel, width: width.input, heightLabel, height: height.input, hint, error, status, sheet, caption, orientation, save, cancel, ok };
 
-    // La liste avec recherche reprend le <select> (qui reste la source de vérité) ; si le composant manque, la liste native fait le même travail. Le nom seul dans le champ fermé :
-    // la taille est dans les champs juste dessous, et dans la liste ouverte à côté de chaque nom.
+    // La liste avec recherche reprend le <select> (qui reste la source de vérité) ; si le composant manque, la liste native fait le même travail. Le
+    // nom seul dans le champ fermé : la taille est dans les champs juste dessous, et dans la liste ouverte à côté de chaque nom.
     try {
       refs.savedControl = SearchSelect.attach(saved, {
         hintInTrigger: false,
@@ -145,19 +137,21 @@ const PageSizeDialog = (function () {
     return { min: PageLayout.cmText(PageLayout.CUSTOM_MIN_MM), max: PageLayout.cmText(PageLayout.CUSTOM_MAX_MM) };
   }
 
-  // === Formats enregistrés ===================================================================================================================================
+  // Formats enregistrés
 
   // Le format enregistré que la liste montre (null : « — Choisir un format — »).
   function selectedFormat() { return refs.saved.value ? SavedPageFormats.find(refs.saved.value) : null; }
 
   function syncSavedList() { if (refs.savedControl) refs.savedControl.sync(); }
 
-  // Un bouton grisé le temps d'une écriture perd le focus, que le navigateur rend au document : l'écriture finie, il le retrouve (sauf si la personne l'a déjà posé ailleurs).
+  // Un bouton grisé le temps d'une écriture perd le focus, que le navigateur rend au document : l'écriture finie, il le retrouve (sauf si la personne
+  // l'a déjà posé ailleurs).
   function restoreFocus(button) {
     if (win.isOpen() && !button.disabled && (!document.activeElement || document.activeElement === document.body)) button.focus();
   }
 
-  // Refait les lignes de la liste d'après le document ; `selectedId` : le format à montrer choisi (aucun par défaut). Le nom est ce que la liste cherche et affiche, la taille son indice.
+  // Refait les lignes de la liste d'après le document ; `selectedId` : le format à montrer choisi (aucun par défaut). Le nom est ce que la liste
+  // cherche et affiche, la taille son indice.
   function rebuildFormats(selectedId) {
     const { saved } = refs;
     saved.textContent = '';
@@ -187,7 +181,8 @@ const PageSizeDialog = (function () {
     render();
   }
 
-  // « Enregistrer ce format… » : le nom est demandé (la taille en toutes lettres, sous le premier nom libre, par défaut : Entrée suffit) puis la taille des champs entre dans la liste, choisie.
+  // « Enregistrer ce format… » : le nom est demandé (la taille en toutes lettres, sous le premier nom libre, par défaut : Entrée suffit) puis la
+  // taille des champs entre dans la liste, choisie.
   async function saveCurrent() {
     const { width, height, status } = refs;
     const w = readField(width);
@@ -220,7 +215,8 @@ const PageSizeDialog = (function () {
     restoreFocus(refs.save);
   }
 
-  // La corbeille : après confirmation, le format choisi quitte la liste. Les modèles qui l'ont utilisé gardent leur taille (le format n'était qu'une façon de la saisir).
+  // La corbeille : après confirmation, le format choisi quitte la liste. Les modèles qui l'ont utilisé gardent leur taille (le format n'était qu'une
+  // façon de la saisir).
   async function removeSelected() {
     const entry = selectedFormat();
     if (busy || !entry || typeof Dialogs === 'undefined') return;
@@ -247,12 +243,13 @@ const PageSizeDialog = (function () {
       refs.status.textContent = I18n.t('pageSize.saved.deleted', { name: entry.name });
     }
     render();
-    // La corbeille vient de se griser : le focus retourne à la liste plutôt que de tomber sur le document (le <select> masqué passe le focus à son champ visible).
+    // La corbeille vient de se griser : le focus retourne à la liste plutôt que de tomber sur le document (le <select> masqué passe le focus à son
+    // champ visible).
     if (gone && win.isOpen()) refs.saved.focus();
     else restoreFocus(refs.remove);
   }
 
-  // === La fenêtre ============================================================================================================================================
+  // La fenêtre
 
   function renderPreview() {
     const { sheet, caption, orientation } = refs;
@@ -314,7 +311,8 @@ const PageSizeDialog = (function () {
     status.textContent = '';
     width.value = PageLayout.cmText(size.width);
     height.value = PageLayout.cmText(size.height);
-    // Les formats enregistrés sont relus du document à chaque ouverture (un format ajouté depuis un autre onglet ou à la main dans Grist y figure) ; la liste attend leur arrivée, grisée.
+    // Les formats enregistrés sont relus du document à chaque ouverture (un format ajouté depuis un autre onglet ou à la main dans Grist y figure) ;
+    // la liste attend leur arrivée, grisée.
     rebuildFormats(null);
     saved.disabled = true;
     syncSavedList();
@@ -328,7 +326,8 @@ const PageSizeDialog = (function () {
     return true;
   }
 
-  // « Valider » : la page change par OrientationToggle (qui refuse hors des gardes) ; un champ qui n'est pas bon garde la fenêtre ouverte et reprend le focus.
+  // « Valider » : la page change par OrientationToggle (qui refuse hors des gardes) ; un champ qui n'est pas bon garde la fenêtre ouverte et reprend
+  // le focus.
   function apply() {
     const { width, height } = refs;
     const w = readField(width);

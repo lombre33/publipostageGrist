@@ -43,17 +43,15 @@ const MacroEditor = (function () {
     catch (e) { console.warn('[MacroEditor] recherche de modèle indisponible, liste native conservée', e); return null; }
   }
 
-  // Le modèle du cache (Templates.getCached) qui porte cet identifiant, comparé en texte : la fenêtre de composition écrit les identifiants en texte, Grist
-  // les rend en nombre.
+  // Le modèle du cache (Templates.getCached) qui porte cet identifiant, comparé en texte : la fenêtre de composition écrit les identifiants en texte,
+  // Grist les rend en nombre.
   function cachedTemplate(id) {
     return Templates.getCached().find(t => String(t.id) === String(id));
   }
 
   // Un élément avec sa classe, son texte et ses enfants (tous facultatifs).
   function node(tag, className, text, children) {
-    const element = document.createElement(tag);
-    if (className) element.className = className;
-    if (text != null) element.textContent = text;
+    const element = Dom.el(tag, className, text);
     (children || []).forEach(child => element.appendChild(child));
     return element;
   }

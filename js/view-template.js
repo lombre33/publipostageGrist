@@ -14,7 +14,8 @@ const ViewTemplate = (function () {
   const OPTION_KEY = 'modeleDeLaVue';
 
   let currentId = null;      // id choisi (texte) ou null
-  // Ce que cet écran vient d'écrire dans les options : Grist le renvoie par onOptions, parfois après un choix plus récent (même garde que js/row-template.js).
+  // Ce que cet écran vient d'écrire dans les options : Grist le renvoie par onOptions, parfois après un choix plus récent (même garde que
+  // js/row-template.js).
   const expectedEchoes = [];
 
   const normalize = value => (value != null && value !== '' ? String(value) : null);

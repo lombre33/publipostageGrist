@@ -23,65 +23,73 @@ const ConditionalValue = (function () {
     });
   }
 
+  // Entoure de la valeur le texte retenu par ConditionalText.startFromSelection, quand il tient dans un seul paragraphe que la valeur accepte : le
+  // texte reste sélectionné, une marque d'ouverture plus loin, la valeur s'ouvrant juste avant lui. Rend la sélection, ou null sans rien changer.
+  function wrapPending(tr, wrap, type) {
+    const from = tr.mapping.map(wrap.from, 1);
+    const to = tr.mapping.map(wrap.to, -1);
+    if (from >= to || to > tr.doc.content.size) return null;
+    const $from = tr.doc.resolve(from);
+    const $to = tr.doc.resolve(to);
+    const content = tr.doc.slice(from, to).content;
+    if (!$from.sameParent($to) || !$from.parent.isTextblock || !$from.parent.canReplaceWith($from.index(), $to.index(), type) || !type.validContent(content)) return null;
+    tr.replaceWith(from, to, type.create(null, content));
+    return EditorCore.getTextSelectionClass().create(tr.doc, from + 1, from + 1 + content.size);
+  }
+
+  // Une valeur vide en `at`, le curseur dedans (juste après son ouverture). Rend la sélection, ou null sans rien changer si une valeur n'a pas sa
+  // place là (un bloc de code).
+  function insertEmpty(tr, at, type) {
+    const $at = tr.doc.resolve(at);
+    if (!$at.parent.inlineContent || $at.parent.type.spec.code || !$at.parent.canReplaceWith($at.index(), $at.index(), type)) return null;
+    tr.insert(at, type.create());
+    return EditorCore.getTextSelectionClass().create(tr.doc, at + 1);
+  }
+
+  // Suivi des modifications : la bibliothèque réécrit la transaction en suggestion et pose le curseur derrière le contenu inséré, hors de la valeur :
+  // la frappe suivante n'y serait pas. La valeur est alors juste avant le curseur : il y retourne (son texte sélectionné, quand elle entoure un
+  // texte).
+  function returnIntoValue(view, type, wanted) {
+    const placed = view.state.selection;
+    const inserted = placed.empty ? placed.$from.nodeBefore : null;
+    if (!inserted || inserted.type !== type || placed.$from.parent.type === type) return;
+    const start = placed.from - inserted.nodeSize + 1;
+    view.dispatch(view.state.tr.setSelection(EditorCore.getTextSelectionClass().create(view.state.doc, start, wanted.empty ? start : start + inserted.content.size)));
+  }
+
+  // Une valeur vide n'a aucune largeur : pour le curseur du navigateur, « dedans » et « juste derrière » sont la même place, ProseMirror le laisse
+  // donc où il est et la frappe suivante tomberait derrière la valeur (surtout après un « Tout refuser » qui la laisse vide). Le curseur se pose
+  // dans la valeur, à la main.
+  function collapseIntoEmptyValue(view, type) {
+    const { selection } = view.state;
+    if (!selection.empty || selection.$from.parent.type !== type || selection.$from.parent.content.size !== 0) return;
+    const dom = view.nodeDOM(selection.$from.before());
+    const domSelection = view.root.getSelection && view.root.getSelection();
+    if (dom && domSelection) domSelection.collapse(dom, 0);
+  }
+
   // Choix de « Valeur conditionnelle » dans la liste « # » : `range` est « #requête » (js/variables.js:command). Avec du texte retenu par
   // ConditionalText.startFromSelection (le bouton « Insérer une variable » sur du texte sélectionné) et d'un seul paragraphe, la valeur l'entoure et
   // la sélection reprend son texte ; sinon une valeur vide se pose et le curseur s'y met, prêt à taper. Dans les deux cas, « #requête » disparaît.
   // Faux, sans rien changer, si le curseur est là où une valeur n'a pas sa place (un bloc de code).
   function insertFromPanel(editor, range) {
     const { state, view } = editor;
-    const TextSelection = EditorCore.getTextSelectionClass();
     const type = state.schema.nodes[TYPE];
     if (!type) return false;
     const wrap = ConditionalText.takePending();
     const tr = state.tr.delete(range.from, range.to);
-    let selection = null;
-    if (wrap) {
-      const from = tr.mapping.map(wrap.from, 1);
-      const to = tr.mapping.map(wrap.to, -1);
-      if (from < to && to <= tr.doc.content.size) {
-        const $from = tr.doc.resolve(from);
-        const content = tr.doc.slice(from, to).content;
-        if ($from.sameParent(tr.doc.resolve(to)) && $from.parent.isTextblock && $from.parent.canReplaceWith($from.index(), tr.doc.resolve(to).index(), type) && type.validContent(content)) {
-          tr.replaceWith(from, to, type.create(null, content));
-          // Le texte sélectionné reste sélectionné, une marque d'ouverture plus loin : la valeur s'ouvre juste avant lui.
-          selection = TextSelection.create(tr.doc, from + 1, from + 1 + content.size);
-        }
-      }
-    }
+    // Rien à entourer : la valeur vide se pose à la place de « #requête » - ou, quand un texte avait été sélectionné (sur plusieurs paragraphes, une
+    // valeur ne les contient pas), au début de cette sélection : la requête, elle, est tout au début du paragraphe, loin de l'endroit où la personne
+    // avait choisi.
+    const selection = (wrap && wrapPending(tr, wrap, type)) || insertEmpty(tr, tr.mapping.map(wrap ? wrap.from : range.from, wrap ? 1 : -1), type);
     if (!selection) {
-      // Rien à entourer : la valeur vide se pose à la place de « #requête » - ou, quand un texte avait été sélectionné (sur plusieurs paragraphes,
-      // une valeur ne les contient pas), au début de cette sélection : la requête, elle, est tout au début du paragraphe, loin de l'endroit où la
-      // personne avait choisi.
-      const at = wrap ? tr.mapping.map(wrap.from, 1) : tr.mapping.map(range.from, -1);
-      const $at = tr.doc.resolve(at);
-      if (!$at.parent.inlineContent || $at.parent.type.spec.code || !$at.parent.canReplaceWith($at.index(), $at.index(), type)) {
-        console.warn('[ConditionalValue] aucun endroit où poser une valeur conditionnelle ici.');
-        return false;
-      }
-      tr.insert(at, type.create());
-      // Curseur dans la valeur : juste après son ouverture.
-      selection = TextSelection.create(tr.doc, at + 1);
+      console.warn('[ConditionalValue] aucun endroit où poser une valeur conditionnelle ici.');
+      return false;
     }
     view.dispatch(tr.setSelection(selection).scrollIntoView());
-    // Suivi des modifications : la bibliothèque réécrit la transaction en suggestion et pose le curseur derrière le contenu inséré, hors de la valeur
-    // : la frappe suivante n'y serait pas. La valeur est alors juste avant le curseur : il y retourne (son texte sélectionné, quand elle entoure un
-    // texte).
-    const placed = view.state.selection;
-    const inserted = placed.empty ? placed.$from.nodeBefore : null;
-    if (inserted && inserted.type === type && placed.$from.parent.type !== type) {
-      const start = placed.from - inserted.nodeSize + 1;
-      view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, start, selection.empty ? start : start + inserted.content.size)));
-    }
+    returnIntoValue(view, type, selection);
     view.focus();
-    // Une valeur vide n'a aucune largeur : pour le curseur du navigateur, « dedans » et « juste derrière » sont la même place, ProseMirror le laisse
-    // donc où il est et la frappe suivante tomberait derrière la valeur (surtout après un « Tout refuser » qui la laisse vide). Le curseur se pose
-    // dans la valeur, à la main.
-    const now = view.state.selection;
-    if (now.empty && now.$from.parent.type === type && now.$from.parent.content.size === 0) {
-      const dom = view.nodeDOM(now.$from.before());
-      const domSelection = view.root.getSelection && view.root.getSelection();
-      if (dom && domSelection) domSelection.collapse(dom, 0);
-    }
+    collapseIntoEmptyValue(view, type);
     // Un clic sur une ligne de la liste referme les barres flottantes à la fin de son « mousedown » (js/editor-core.js : un clic hors de l'éditeur et
     // de toute barre) : la barre de la valeur, que ce curseur vient d'ouvrir, se refermerait aussitôt. Une transaction sans effet la rouvre juste
     // après, quand le clic est fini (la barre se règle sur le curseur du moment).

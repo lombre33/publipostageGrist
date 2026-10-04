@@ -57,8 +57,8 @@ const OrientationToggle = (function () {
     afterChange();
   }
 
-  // La page saisie dans la fenêtre « Format libre… » (largeur et hauteur en mm, dans le sens où on la voit). Même garde que les autres gestes : un type non suivi, un export
-  // en cours ou la lecture seule la refusent, même si la fenêtre était déjà ouverte. Rend vrai si la page a changé.
+  // La page saisie dans la fenêtre « Format libre… » (largeur et hauteur en mm, dans le sens où on la voit). Même garde que les autres gestes : un
+  // type non suivi, un export en cours ou la lecture seule la refusent, même si la fenêtre était déjà ouverte. Rend vrai si la page a changé.
   function selectPageSize(widthMm, heightMm) {
     if (!canChange() || !PageLayout.setPageSize(widthMm, heightMm)) return false;
     afterChange();
@@ -136,7 +136,8 @@ const OrientationToggle = (function () {
       row.appendChild(size);
       host.appendChild(row);
     });
-    // Le format libre : une ligne cochée quand la page n'est pas un des formats ci-dessus, qui ouvre la fenêtre de la taille en cm ; la taille en cours reste discrète à droite.
+    // Le format libre : une ligne cochée quand la page n'est pas un des formats ci-dessus, qui ouvre la fenêtre de la taille en cm ; la taille en
+    // cours reste discrète à droite.
     const custom = makeRow('data-page-format', CUSTOM_KEY, openPageSize);
     custom.id = CUSTOM_ROW_ID;
     custom.classList.add('v2-page-custom-row');
@@ -196,8 +197,8 @@ const OrientationToggle = (function () {
     }
   }
 
-  // « Aperçu A4 » devient « Aperçu A5 » (ou « Aperçu 7 × 3,7 cm ») : la case limite l'éditeur à la largeur de la page du modèle, pas d'un A4. `format` : le nom du format
-  // dans la phrase (PageLayout.getFormatLabel).
+  // « Aperçu A4 » devient « Aperçu A5 » (ou « Aperçu 7 × 3,7 cm ») : la case limite l'éditeur à la largeur de la page du modèle, pas d'un A4.
+  // `format` : le nom du format dans la phrase (PageLayout.getFormatLabel).
   function syncPreviewToggle(format) {
     const label = document.getElementById(A4_TOGGLE_ID);
     if (!label) return;

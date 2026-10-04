@@ -16,6 +16,8 @@
 // Tout est inerte tant que setActive(true) n'a pas été appelé (js/main.js:loadTemplateIntoEditor) : un document, un email ou un macro-modèle ne
 // voient rien de ce fichier. Les classes TipTap/ProseMirror arrivent par configure() (editor.js).
 const GridEditor = (function () {
+  const el = Dom.el;
+
   const TYPE = 'grille';
   const DEFAULT_COLS = 6;
   const DEFAULT_ROWS = 15;
@@ -865,12 +867,6 @@ const GridEditor = (function () {
     const cols = Array.from(table.querySelectorAll(':scope > colgroup > col'));
     const rows = Array.from(table.querySelectorAll(':scope > tbody > tr'));
     return { table, width: rect.width, height: rect.height, rows, widths: cols.map(c => c.getBoundingClientRect().width), heights: rows.map(r => r.getBoundingClientRect().height) };
-  }
-
-  function el(tag, className) {
-    const node = document.createElement(tag);
-    node.className = className;
-    return node;
   }
 
   function buildStrips() {

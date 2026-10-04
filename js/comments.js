@@ -7,6 +7,8 @@
 // fil (qui a écrit quoi, quand) vit dans une table Grist compagnon (Publipostage_Commentaires, comme Publipostage_LiensTables), partagée entre toutes
 // les personnes du document, contrairement à un stockage local.
 const Comments = (function () {
+  const element = Dom.el;
+
   const TABLE_NAME = 'Publipostage_Commentaires';
   let editor = null;
   function setEditor(ed) { editor = ed; }
@@ -172,7 +174,8 @@ const Comments = (function () {
   // jamais au clic extérieur, comme celui des notes de bas de page.
   let popupBox = null;
   let popupCommentId = null;
-  let popupIsNewThread = false; // true tant qu'un tout nouveau fil n'a pas reçu son premier message - Annuler retire alors la marque posée à sa création.
+  // Vrai tant qu'un tout nouveau fil n'a pas reçu son premier message : Annuler retire alors la marque posée à sa création.
+  let popupIsNewThread = false;
 
   function ensurePopupBox() {
     if (popupBox) return popupBox;
@@ -201,13 +204,6 @@ const Comments = (function () {
     if (!iso) return '';
     const d = new Date(iso);
     return isNaN(d.getTime()) ? '' : d.toLocaleString(I18n.getLang() === 'en' ? 'en-US' : 'fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-  }
-
-  function element(tag, className, text) {
-    const el = document.createElement(tag);
-    el.className = className;
-    if (text != null) el.textContent = text;
-    return el;
   }
 
   // Un bouton d'action du popup : il réagit au mousedown (pas au click, comme celui des notes de bas de page) et se grise pour qui ne peut pas
@@ -360,7 +356,8 @@ const Comments = (function () {
   let pmModel = null;
   let readerRenderVersion = 0;
   const readerDocs = new Map(); // numéro de rendu -> document ProseMirror sérialisé pour ce rendu (les derniers seulement)
-  let readerRange = null; // dernière sélection non vide faite dans le mode Lecture - le clic sur le bouton Commenter peut la faire perdre au navigateur
+  // Dernière sélection non vide faite dans le mode Lecture : le clic sur le bouton Commenter peut la faire perdre au navigateur.
+  let readerRange = null;
 
   // Même sortie qu'editor.getHTML() (DOMSerializer du schéma, cf. @tiptap/core getHTMLFromFragment), repères de position en plus. Sous-classe plutôt
   // que la table `nodes` du sérialiseur : prosemirror-model 1.25 écrit les textes sans jamais la consulter (serializeNodeInner). Sous-classe du

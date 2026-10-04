@@ -21,6 +21,8 @@
 // vaut vrai si la fermeture vient du clavier ou d'un choix. À l'appelant de défaire ensuite le <select> (destroy()), de préférence après la fin de
 // l'évènement en cours.
 const SearchSelect = (function () {
+  const el = Dom.el;
+
   const MARGIN = 8;              // marge minimale entre le panneau et le bord de la fenêtre
   const GAP = 4;                 // écart entre le champ et son panneau
   const MIN_WIDTH = 300;         // un libellé « colonne (Référence → Table) » tient sur une ligne même si le champ est étroit
@@ -31,13 +33,6 @@ const SearchSelect = (function () {
   const MAX_ROWS = 500;
   let _uid = 0;
   const _controllers = new WeakMap();
-
-  function el(tag, className, text) {
-    const node = document.createElement(tag);
-    if (className) node.className = className;
-    if (text != null) node.textContent = text;
-    return node;
-  }
 
   // Sans accents ni casse : « tel » retrouve « Téléphone », « reference » retrouve « Référence ».
   function normalize(text) {

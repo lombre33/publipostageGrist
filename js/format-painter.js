@@ -23,7 +23,8 @@ const FormatPainter = (function () {
   let editor = null;
   let button = null;
   let wired = false;
-  let snapshot = null; // { marks: [Mark], block: { type, level, align } | null } : la dernière mise en forme copiée, gardée tant qu'on n'en copie pas une autre
+  // { marks: [Mark], block: { type, level, align } | null } : la dernière mise en forme copiée, gardée tant qu'on n'en copie pas une autre.
+  let snapshot = null;
   let armed = false; // le pinceau attend la prochaine sélection
   let sticky = false; // armé par un double-clic : il le reste après chaque application
   let pointerInEditor = false; // l'appui de souris en cours a commencé dans le texte, pinceau armé
@@ -153,7 +154,8 @@ const FormatPainter = (function () {
     const cells = releasedCells && releasedCells.$anchorCell.doc === state.doc ? releasedCells : null;
     const { tr, reachable } = paintTransaction(state, snapshot, cells);
     if (!reachable) return false;
-    if (cells && cells !== state.selection) tr.setSelection(cells.map(tr.doc, tr.mapping)); // ProseMirror l'avait reconvertie en texte : les cases restent sélectionnées
+    // ProseMirror avait reconverti la sélection en texte : les cases restent sélectionnées.
+    if (cells && cells !== state.selection) tr.setSelection(cells.map(tr.doc, tr.mapping));
     if (tr.docChanged || tr.selectionSet) editor.view.dispatch(tr);
     editor.view.focus();
     if (armed && !sticky) disarm();

@@ -5,6 +5,8 @@
 // PageLayout à l'export. La géométrie et le dessin sont à PageLayer, les mêmes pour les quatre rendus : la feuille d'aperçu les réutilise à
 // l'échelle, donc ce qu'elle montre est ce que la page portera.
 const WatermarkDialog = (function () {
+  const el = Dom.el;
+
   // Six couleurs, le gris d'abord (PageLayout.WATERMARK_DEFAULT) : celles d'un filigrane qui ne gêne pas la lecture une fois éclaircies par
   // l'opacité. Un réglage enregistré avec une autre couleur (JSON écrit à la main, version plus récente) est gardé tel quel tant qu'on n'en choisit
   // pas une de la liste.
@@ -19,49 +21,8 @@ const WatermarkDialog = (function () {
   let refs = null;
   let state = null; // { text, angle, color, opacity } - l'opacité en pour cent entier
 
-  function el(tag, className, text) {
-    const e = document.createElement(tag);
-    if (className) e.className = className;
-    if (text !== undefined) e.textContent = text;
-    return e;
-  }
-
-  // Un groupe de choix à une seule réponse (rôle radiogroup) : flèches pour passer de l'un à l'autre (le choix suit le focus), Entrée pour valider la
-  // fenêtre, un seul arrêt de Tab par groupe (celui qui est choisi, ou le premier quand rien ne l'est).
-  function radioGroup(labelId, options, onPick) {
-    const group = el('div', 'pp-watermark-options');
-    group.setAttribute('role', 'radiogroup');
-    group.setAttribute('aria-labelledby', labelId);
-    const buttons = options.map(option => {
-      const button = el('button', option.className);
-      button.type = 'button';
-      button.setAttribute('role', 'radio');
-      button.dataset.value = option.value;
-      if (option.fill) option.fill(button);
-      button.addEventListener('click', () => onPick(option.value));
-      return button;
-    });
-    group.append(...buttons);
-    group.addEventListener('keydown', event => {
-      const at = buttons.indexOf(document.activeElement);
-      if (at < 0) return;
-      if (event.key === 'Enter') { event.preventDefault(); apply(); return; }
-      const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
-      if (step === undefined && event.key !== 'Home' && event.key !== 'End') return;
-      event.preventDefault();
-      const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (at + step + buttons.length) % buttons.length;
-      buttons[next].focus();
-      onPick(options[next].value);
-    });
-    return {
-      group,
-      buttons,
-      check(value) {
-        const stop = buttons.find(b => b.dataset.value === value) || buttons[0];
-        buttons.forEach(b => { b.setAttribute('aria-checked', b.dataset.value === value ? 'true' : 'false'); b.tabIndex = b === stop ? 0 : -1; });
-      },
-    };
-  }
+  // Les groupes de choix de la fenêtre : Entrée la valide (Dom.radioGroup).
+  const radioGroup = (labelId, options, onPick) => Dom.radioGroup({ className: 'pp-watermark-options', labelId, options, onPick, onEnter: apply });
 
   function ensure() {
     if (win) return;
@@ -113,14 +74,7 @@ const WatermarkDialog = (function () {
     grid.append(textLabel, textCell, angleLabel, angles.group, colorLabel, colors.group, opacityLabel, opacityCell, preview);
     win.body.appendChild(grid);
 
-    const remove = el('button', 'var-modal-danger');
-    remove.type = 'button';
-    const spacer = el('span', 'var-modal-spacer');
-    const cancel = el('button');
-    cancel.type = 'button';
-    const ok = el('button', 'var-modal-primary');
-    ok.type = 'button';
-    win.actions.append(remove, spacer, cancel, ok);
+    const { first: remove, cancel, ok } = win.addButtons('var-modal-danger');
     refs = { textLabel, text, hint, angleLabel, angles, colorLabel, colors, opacityLabel, range, percent, sheet, page, remove, cancel, ok };
 
     text.addEventListener('input', () => pick({ text: text.value }));
