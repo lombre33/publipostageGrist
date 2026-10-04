@@ -48,8 +48,9 @@ const MailtoExport = (function () {
   // de l'item ; citation : « > » devant chaque ligne (« >> » pour une citation dans une citation) ; toute mise en forme est ignorée (voir les
   // contraintes du protocole plus haut).
   function plainTextFromHtml(html) {
-    const root = document.createElement('div');
-    root.innerHTML = html || '';
+    const holder = document.createElement('template'); // inerte : le HTML se lit sans que rien ne charge ni ne s'exécute
+    holder.innerHTML = html || '';
+    const root = holder.content;
 
     // Un lien : en texte brut il n'y a plus de cible cliquable, l'adresse s'écrit donc à la suite du texte, entre parenthèses (« le site
     // (https://exemple.fr) »), sauf si le texte est déjà l'adresse (avec ou sans « https:// »), qui n'est alors écrite qu'une fois. Un lien sans

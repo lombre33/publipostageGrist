@@ -106,15 +106,23 @@ const Templates = (function () {
   function safeParseHeaderFooter(json) {
     const empty = { enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } };
     if (!json) return empty;
+    let merged;
     try {
       const parsed = JSON.parse(json);
-      return Object.assign(empty, parsed, {
+      merged = Object.assign(empty, parsed, {
         header: Object.assign({}, empty.header, parsed.header),
         footer: Object.assign({}, empty.footer, parsed.footer),
       });
     } catch (e) {
       return empty;
     }
+    // La colonne peut être écrite par un autre collaborateur : le HTML des quatre zones passe par le même filtre que le corps (js/html-sanitize.js), une
+    // seule fois, ici, pour tout ce qui le lit ensuite (aperçu paginé, Lecture, PDF, Word). Hors du try : un filtre absent doit se voir, pas vider l'en-tête.
+    ['header', 'footer'].forEach(zone => ['default', 'first'].forEach(which => {
+      const html = merged[zone][which];
+      merged[zone][which] = typeof html === 'string' ? HtmlSanitize.clean(html) : '';
+    }));
+    return merged;
   }
 
   // Macro-modèles (planning/feature-macro-modeles.md) : TypeModele = 'macro' réutilise la colonne Contenu pour y ranger du JSON (la liste ordonnée

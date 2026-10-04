@@ -49,10 +49,27 @@ const ExportCommon = (function () {
     return cssColorCache.get(v);
   }
 
-  // Charge un script CDN (`integrity` : SRI sha384, avec `crossOrigin`) ou un fichier du dépôt (sans SRI : même origine que la page). Résolu au
-  // `load`, rejeté si le script ne charge pas ; l'appelant mémorise sa propre promesse pour ne charger qu'une fois.
+  // D'où un script peut venir : les deux CDN que la politique de sécurité du contenu d'index.html laisse charger des scripts, avec une empreinte (SRI) que
+  // le navigateur vérifie, ou le dépôt lui-même (même origine que la page, sans SRI). Le texte de refus, ou '' quand la bibliothèque est permise ; la
+  // politique du navigateur refuserait déjà le reste, ceci le dit avant d'ajouter la balise.
+  const SCRIPT_CDN_ORIGINS = new Set(['https://cdnjs.cloudflare.com', 'https://cdn.jsdelivr.net']);
+  function scriptRefusal(lib) {
+    const src = String((lib && lib.src) || '').trim();
+    if (!src) return 'adresse absente';
+    let url;
+    try { url = new URL(src, document.baseURI); } catch (e) { return 'adresse illisible'; }
+    if (url.origin === window.location.origin && /^https?:$/.test(url.protocol)) return '';
+    if (!SCRIPT_CDN_ORIGINS.has(url.origin)) return 'origine non permise';
+    if (!/^sha(?:256|384|512)-[A-Za-z0-9+/]+={0,2}$/.test(String(lib.integrity || ''))) return 'empreinte absente ou illisible';
+    return '';
+  }
+
+  // Charge un script CDN (`integrity` : SRI sha384, avec `crossOrigin`) ou un fichier du dépôt (sans SRI : même origine que la page), sous réserve de
+  // scriptRefusal. Résolu au `load`, rejeté si le script est refusé ou ne charge pas ; l'appelant mémorise sa propre promesse pour ne charger qu'une fois.
   function loadScriptOnce(lib) {
     return new Promise((resolve, reject) => {
+      const refusal = scriptRefusal(lib);
+      if (refusal) { reject(new Error('Script refusé (' + refusal + ') : ' + (lib && lib.src))); return; }
       const s = document.createElement('script');
       s.src = lib.src;
       if (lib.integrity) { s.integrity = lib.integrity; s.crossOrigin = 'anonymous'; }
@@ -272,6 +289,6 @@ const ExportCommon = (function () {
   function unreadImageCount() { return unreadImages.size; }
   function resetUnreadImages() { unreadImages.clear(); }
 
-  return { EDITOR_STYLE, hexOf, cssColorHex, loadScriptOnce, ensureJsZipLoaded, downloadBlob, attachMeasureHost, tableRows, cellsOf, spanOf, placeCells, measuredColumnWidthsPx, shownImageWidthPx, cellBorderSides, gridRowSegments, resolveHeaderFooterVariables,
+  return { EDITOR_STYLE, hexOf, cssColorHex, scriptRefusal, loadScriptOnce, ensureJsZipLoaded, downloadBlob, attachMeasureHost, tableRows, cellsOf, spanOf, placeCells, measuredColumnWidthsPx, shownImageWidthPx, cellBorderSides, gridRowSegments, resolveHeaderFooterVariables,
     resolveRecord, codeLinesOf, calloutMetricsPx, headerRowCount, noteUnreadImage, noteImageWithoutSource, unreadImageCount, resetUnreadImages };
 })();

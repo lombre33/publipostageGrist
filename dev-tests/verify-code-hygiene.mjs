@@ -26,6 +26,8 @@
 //      `password`, `apiKey` qui n'est pas le faux jeton `stub-token` des tests (contrôle de l'audit externe : « valeur en dur dans token »).
 //  15. un champ de saisie de index.html (input, select, textarea) sans nom accessible : ni aria-label, ni aria-labelledby vers un élément qui existe, ni <label for> ou <label> englobante, ni title
 //      (audit externe du 04/10, point F-RGAA-04 ; un texte d'exemple, placeholder, n'est pas un nom).
+//  16. une fonction reçue en paramètre donnée telle quelle à setTimeout (`onLinked` de js/condition-fields.js, `update` de js/variable-modal.js : audit externe du 04/10, point C-XSS-04) au lieu d'une
+//      flèche qui l'appelle ; le chargeur de scripts des exports (js/export-common.js) garde sa liste blanche (dev-tests/unit-script-loader.mjs, script Node `scriptLoaderUnit`).
 //
 // Volontairement PERMISSIF : un nom cité seulement dans un commentaire compte comme utilisé, un préfixe construit (`'toc-level-' + n`) couvre toute la
 // famille. Le but est de ne jamais faire échouer un changement légitime, seulement d'attraper ce qui n'a plus AUCUN point d'entrée. Une classe posée
@@ -550,6 +552,23 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   }
   check('champs : index.html se lit bien (garde-fou de l\'analyse elle-même : une trentaine de champs au moins)', fields >= 30, `${fields} champs`);
   check('champs : chaque champ de saisie de index.html a un nom accessible (aria-label, aria-labelledby, <label for> ou <label> englobante, title) - un texte d\'exemple n\'en est pas un', unnamed.length === 0, unnamed.join(', '));
+}
+
+// ============================================================================
+// 16. Une fonction reçue en paramètre ne va pas telle quelle à setTimeout (audit externe de la bêta, 04/10, point C-XSS-04)
+// ============================================================================
+// L'audit lit `setTimeout(param, délai)` comme un minuteur dont le premier argument pourrait être un texte (exécuté comme du code) : `onLinked` (js/condition-fields.js, rappel de ensureTableLinked) et `update`
+// (js/variable-modal.js, calcul de l'aperçu d'une fenêtre) étaient donnés tels quels. Ils passent par une flèche (`() => onLinked()`), qui ne peut rien être d'autre qu'une fonction ; le comportement est le
+// même. Ce contrôle garde ces deux appels.
+{
+  const timers = [['js/condition-fields.js', 'onLinked'], ['js/variable-modal.js', 'update']].map(([rel, name]) => {
+    const bare = new RegExp(`\\bset(?:Timeout|Interval)\\(\\s*${name}\\s*[,)]`);
+    const wrapped = new RegExp(`\\bsetTimeout\\(\\s*\\(\\)\\s*=>\\s*${name}\\(\\)`);
+    const code = noCommentsJs(read(rel));
+    return { rel, name, bare: bare.test(code), wrapped: wrapped.test(code) };
+  });
+  check('minuteurs : les deux appels que l\'audit signalait existent toujours, derrière une flèche (garde-fou de l\'analyse elle-même)', timers.every(t => t.wrapped), JSON.stringify(timers.filter(t => !t.wrapped)));
+  check('minuteurs : ni `onLinked` ni `update` n\'est donné tel quel à setTimeout ou setInterval - une flèche l\'appelle', timers.every(t => !t.bare), timers.filter(t => t.bare).map(t => `${t.rel} : ${t.name}`).join(', '));
 }
 
 summarizeAndExit();

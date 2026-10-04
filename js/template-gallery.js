@@ -61,9 +61,9 @@ const TemplateGallery = (function () {
   // Retire entièrement le badge #Variable (pas de texte de substitution) pour le mode « Modèle vierge » : un seul fichier sert aux deux modes (vide,
   // avec données). Sans table derrière, « #key » en texte ne représenterait rien.
   function stripVariableBadges(html) {
-    const root = document.createElement('div');
+    const root = document.createElement('template'); // le contenu d'un <template> est inerte : rien ne charge, aucun gestionnaire ne part
     root.innerHTML = html;
-    root.querySelectorAll('span.var-badge').forEach(el => el.remove());
+    root.content.querySelectorAll('span.var-badge').forEach(el => el.remove());
     return root.innerHTML;
   }
 
@@ -105,9 +105,9 @@ const TemplateGallery = (function () {
   // table inexistante.
   function rebindVariableTable(html, fromTable, toTable) {
     if (!fromTable || !toTable || fromTable === toTable) return html;
-    const root = document.createElement('div');
+    const root = document.createElement('template');
     root.innerHTML = html;
-    root.querySelectorAll('span.var-badge[data-table="' + fromTable + '"]').forEach(el => {
+    root.content.querySelectorAll('span.var-badge[data-table="' + fromTable + '"]').forEach(el => {
       el.setAttribute('data-table', toTable);
       const key = el.getAttribute('data-key') || '';
       if (key.indexOf(fromTable + '.') === 0) {

@@ -69,7 +69,7 @@ const VariableModal = (function () {
     let generation = 0;
     let timer = null;
     return {
-      schedule() { clearTimeout(timer); timer = setTimeout(update, 250); },
+      schedule() { clearTimeout(timer); timer = setTimeout(() => update(), 250); },
       begin() {
         clearTimeout(timer);
         const mine = ++generation;

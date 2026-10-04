@@ -160,6 +160,68 @@
   });
 
   cases.push({
+    id: 'hs_header_footer_read_from_the_column_is_filtered_at_the_source',
+    description: 'En-tête et pied écrits dans la colonne HeaderFooter par un autre collaborateur : Templates les rend filtrés (quatre zones), avant la Lecture, les exports et les lots qui les lisent sans passer par l\'éditeur ; le texte, les bulles et les numéros de page restent, un contenu qui n\'est pas du texte devient vide, un JSON illisible donne la forme vide',
+    run: async (h) => {
+      await h.resetEditor();
+      window.__hsHits = {};
+      const saved = await Templates.save(null, 'Modèle du collègue (en-tête)', '<p>ok</p>', '', null, null, 'document', null);
+      const badges = '<span class="var-badge" data-table="Clients" data-column="Nom" data-key="Clients.Nom">#Clients.Nom</span><span class="page-number-badge" data-format="page-n" contenteditable="false">Page 1</span>';
+      const hostile = { ...NO_HF, enabled: true, differentFirstPage: true,
+        header: { default: '<p>En-tête</p>' + badges + PAYLOADS.img_onerror, first: '<p>Première</p>' + PAYLOADS.script },
+        footer: { default: '<p>Pied</p>' + PAYLOADS.iframe_srcdoc + PAYLOADS.javascript_src, first: '<p>Pied première</p>' + PAYLOADS.form_math_mutation } };
+      window.__gristStub.remoteWrite('Publipostage_Modeles', saved.id, { HeaderFooter: JSON.stringify(hostile) });
+      await Templates.loadAll();
+      const hf = Templates.byId(saved.id).headerFooter;
+      const zones = [hf.header.default, hf.header.first, hf.footer.default, hf.footer.first];
+      const texts = ['En-tête', 'Première', 'Pied', 'Pied première'];
+      const result = {
+        ran: hits(),
+        kept: zones.map((z, i) => z.indexOf(texts[i]) !== -1),
+        clutter: zones.map(z => clutter(new DOMParser().parseFromString(z, 'text/html').body)),
+        flags: [hf.enabled, hf.differentFirstPage],
+        badges: [/data-key="Clients\.Nom"/.test(hf.header.default), /class="page-number-badge"[^>]*data-format="page-n"|data-format="page-n"[^>]*class="page-number-badge"/.test(hf.header.default)],
+      };
+      // Des zones qui ne sont pas du texte (un nombre, un objet, null) deviennent vides ; un JSON illisible donne la forme vide, sans exception.
+      window.__gristStub.remoteWrite('Publipostage_Modeles', saved.id, { HeaderFooter: JSON.stringify({ enabled: true, header: { default: 42, first: { a: 1 } }, footer: null }) });
+      await Templates.loadAll();
+      const odd = Templates.byId(saved.id).headerFooter;
+      window.__gristStub.remoteWrite('Publipostage_Modeles', saved.id, { HeaderFooter: '{pas du JSON' });
+      await Templates.loadAll();
+      const broken = Templates.byId(saved.id).headerFooter;
+      result.odd = [odd.header.default, odd.header.first, odd.footer.default, odd.footer.first];
+      result.broken = [broken.enabled, broken.header.default, broken.footer.default];
+      await h.resetEditor();
+      const pass = result.ran.length === 0 && result.kept.every(Boolean) && result.clutter.every(n => n === 0) && result.flags[0] === true && result.flags[1] === true
+        && result.badges.every(Boolean) && result.odd.every(z => z === '') && result.broken[0] === false && result.broken[1] === '' && result.broken[2] === '';
+      return { pass, notes: JSON.stringify(result) };
+    },
+  });
+
+  cases.push({
+    id: 'hs_helpers_that_reread_html_do_it_inertly',
+    description: 'Les aides qui relisent du HTML pour le réécrire ou en tirer du texte (numéros de page d\'un en-tête, texte brut d\'un e-mail, retrait ou réalignement des bulles d\'un modèle de la galerie) le font dans un contenu inerte : une image piégée n\'est pas chargée, son gestionnaire ne part pas ; le résultat reste ce qu\'il était',
+    run: async () => {
+      window.__hsHits = {};
+      const trap = `<img src="x" onerror="${hit('helper_img')}">`;
+      const pages = PageLayout.resolvePageNumberBadges('<p>Pied <span class="page-number-badge" data-format="n-slash-total">?</span></p>' + trap, 2, 5);
+      const mail = MailtoExport.plainTextFromHtml('<p>Bonjour</p><p>Deuxième ligne</p>' + trap);
+      const badge = '<span class="var-badge" data-table="Client" data-column="Nom" data-key="Client.Nom">#Client.Nom</span>';
+      const stripped = TemplateGallery.stripVariableBadges('<p>Bonjour ' + badge + '</p>' + trap);
+      const rebound = TemplateGallery.rebindVariableTable('<p>Bonjour ' + badge + '</p>' + trap, 'Client', 'Clients_2');
+      await sleep(500);
+      const result = {
+        ran: hits(),
+        pages: /2\/5/.test(pages) && !/\?/.test(pages.replace(/<img[^>]*>/g, '')),
+        mail: mail === 'Bonjour\n\nDeuxième ligne',
+        stripped: !/var-badge/.test(stripped) && /Bonjour/.test(stripped),
+        rebound: /data-table="Clients_2"/.test(rebound) && /data-key="Clients_2\.Nom"/.test(rebound) && /#Clients_2\.Nom/.test(rebound),
+      };
+      return { pass: result.ran.length === 0 && result.pages && result.mail && result.stripped && result.rebound, notes: JSON.stringify({ result, pages, mail }) };
+    },
+  });
+
+  cases.push({
     id: 'hs_reader_mode_neutralizes_the_mutation_and_cadre_payloads',
     description: 'Mode Lecture : le HTML brut d\'un modèle (celui d\'un macro-modèle va tel quel à la Lecture) ne fait rien courir et n\'y laisse ni cadre, ni balise de base',
     run: async (h) => {

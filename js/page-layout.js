@@ -361,9 +361,9 @@ const PageLayout = (function () {
   }
   // Résout chaque badge .page-number-badge d'un fragment HTML en son texte pour cette page ; renvoie le HTML résolu.
   function resolvePageNumberBadges(html, pageNum, totalPages) {
-    const host = document.createElement('div');
+    const host = document.createElement('template'); // inerte : rien ne charge ni ne s'exécute pendant la lecture
     host.innerHTML = html || '';
-    host.querySelectorAll('.page-number-badge').forEach(badge => {
+    host.content.querySelectorAll('.page-number-badge').forEach(badge => {
       badge.textContent = pageNumberText(badge.getAttribute('data-format') || 'n', pageNum, totalPages);
     });
     return host.innerHTML;

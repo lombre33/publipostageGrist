@@ -120,6 +120,58 @@
     },
   });
 
+  cases.push({
+    id: 'gallery_card_shows_manifest_text_as_text_and_the_preview_is_filtered',
+    description: 'Un manifeste dont le nom et les mots-clés portent du HTML : la fiche les montre comme du texte (aucune balise ajoutée, rien ne court) ; l\'aperçu du modèle passe par le filtre (ni balise active, ni gestionnaire, ni lien javascript:) et garde le texte',
+    run: async () => {
+      const restore = setSearch('');
+      const NAME = 'Facture <img src="x" onerror="window.__galleryHit=1"> & Cie';
+      const TAG = '<b>promo</b>';
+      const realFetchHtml = TemplateGallery.fetchHtml;
+      const modal = document.getElementById('template-gallery-modal');
+      window.__galleryHit = 0;
+      TemplateGallery.fetchHtml = async () => '<p>Texte du modèle</p><img src="x" onerror="window.__galleryHit=2"><script>window.__galleryHit=3</script><a href="javascript:window.__galleryHit=4">lien</a>';
+      let entry = null;
+      let kept = null;
+      try {
+        document.getElementById('v2-btn-new-from-template').click();
+        await waitFor(() => document.querySelectorAll('#tpl-gallery-grid .tpl-gallery-card').length > 0, 5000);
+        // Le tableau du manifeste est celui de la fenêtre (gardé en cache par TemplateGallery) : la première entrée prend un nom et un mot-clé piégés, la grille est redessinée.
+        entry = (await TemplateGallery.loadManifest())[0];
+        kept = { name: entry.name, tags: entry.tags };
+        entry.name = NAME;
+        entry.tags = [TAG];
+        const search = document.getElementById('tpl-gallery-search');
+        search.value = '';
+        search.dispatchEvent(new Event('input', { bubbles: true }));
+        await sleep(200);
+        const card = document.querySelector('#tpl-gallery-grid .tpl-gallery-card');
+        const nameEl = card && card.querySelector('.tpl-gallery-card-name');
+        const tagEls = card ? Array.from(card.querySelectorAll('.tpl-gallery-card-tags > span')) : [];
+        const shot = card && card.querySelector(':scope > img');
+        const cardResult = { name: nameEl && nameEl.textContent, nameChildren: nameEl ? nameEl.children.length : -1, tags: tagEls.map(t => t.textContent), tagChildren: tagEls.map(t => t.children.length),
+          alt: shot && shot.getAttribute('alt'), imgs: card ? card.querySelectorAll('img').length : -1 };
+        if (card) card.click();
+        const previewed = await waitFor(() => document.getElementById('tpl-preview-tiptap').textContent.indexOf('Texte du modèle') !== -1, 5000);
+        await sleep(400);
+        const pv = document.getElementById('tpl-preview-tiptap');
+        const preview = { text: previewed, scripts: pv.querySelectorAll('script').length, handlers: Array.from(pv.querySelectorAll('*')).filter(el => Array.from(el.attributes).some(a => /^on/i.test(a.name))).length,
+          jsHref: Array.from(pv.querySelectorAll('a')).filter(a => /^javascript:/i.test(a.getAttribute('href') || '')).length, hit: window.__galleryHit };
+        const pass = cardResult.name === NAME && cardResult.nameChildren === 0 && cardResult.tags.length === 1 && cardResult.tags[0] === TAG && cardResult.tagChildren[0] === 0
+          && cardResult.alt === NAME && cardResult.imgs === 1 && preview.text && preview.scripts === 0 && preview.handlers === 0 && preview.jsHref === 0 && preview.hit === 0;
+        return { pass, notes: JSON.stringify({ cardResult, preview }) };
+      } finally {
+        TemplateGallery.fetchHtml = realFetchHtml;
+        if (entry && kept) { entry.name = kept.name; entry.tags = kept.tags; }
+        const closePreview = document.getElementById('tpl-preview-close');
+        if (closePreview) closePreview.click();
+        if (modal) modal.style.display = 'none';
+        delete window.__galleryHit;
+        restore();
+      }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.templateGallery = cases;
 })();

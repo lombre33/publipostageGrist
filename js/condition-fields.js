@@ -66,7 +66,7 @@ const ConditionFields = (function () {
     if (!ref || !ref.table || !currentTableId || ref.table === currentTableId) return true;
     if (GristAPI.getLinkRule(ref.table)) return true;
     const linking = Variables.ensureLinkConfigured({ table: ref.table });
-    return onLinked ? linking.then(ok => { if (ok) setTimeout(onLinked, 0); return ok; }) : linking;
+    return onLinked ? linking.then(ok => { if (ok) setTimeout(() => onLinked(), 0); return ok; }) : linking;
   }
 
   // Liste des colonnes selon les options de buildColumnField : celles de `table` seule, de toutes les tables, ou de la page.

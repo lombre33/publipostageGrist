@@ -2047,8 +2047,17 @@
         const card = document.createElement('button');
         card.type = 'button';
         card.className = 'tpl-gallery-card';
-        const tagsHtml = (entry.tags || []).map(t => `<span>${t}</span>`).join('');
-        card.innerHTML = `<img src="${TemplateGallery.resolveUrl(entry.screenshot, entry)}" alt="${entry.name}"><span class="tpl-gallery-card-name">${entry.name}</span><span class="tpl-gallery-card-tags">${tagsHtml}</span>`;
+        // Le nom et les mots-clés viennent d'un manifeste : du texte, jamais du HTML.
+        const shot = document.createElement('img');
+        shot.src = TemplateGallery.resolveUrl(entry.screenshot, entry);
+        shot.alt = entry.name;
+        const cardName = document.createElement('span');
+        cardName.className = 'tpl-gallery-card-name';
+        cardName.textContent = entry.name;
+        const cardTags = document.createElement('span');
+        cardTags.className = 'tpl-gallery-card-tags';
+        (entry.tags || []).forEach(t => { const tag = document.createElement('span'); tag.textContent = t; cardTags.appendChild(tag); });
+        card.append(shot, cardName, cardTags);
         card.addEventListener('click', () => openPreview(entry));
         grid.appendChild(card);
       });
@@ -2096,7 +2105,7 @@
       previewUseData.hidden = !entry.schema;
       try {
         currentHtml = await TemplateGallery.fetchHtml(entry);
-        previewTiptap.innerHTML = currentHtml;
+        previewTiptap.innerHTML = HtmlSanitize.clean(currentHtml);
       } catch (e) {
         console.error('[main] galerie de templates : échec du chargement du template', e);
         setStatus(I18n.t('status.templateLoadError'), true);
