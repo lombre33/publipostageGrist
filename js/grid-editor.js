@@ -37,6 +37,9 @@ const GridEditor = (function () {
   const DEFAULT_VALIGN = 'middle';
   // Les quatre bords d'une case (js/table-borders.js : null = trait de départ, 'none' = pas de trait, '#rrggbb' = couleur) : un attribut par côté, écrit sur les deux cases d'un trait partagé.
   const BORDER_ATTRS = { top: 'borderTop', right: 'borderRight', bottom: 'borderBottom', left: 'borderLeft' };
+  // Les bords qu'une ligne neuve (ou une colonne neuve) reprend de sa voisine : ceux qui la longent (`sides`) et ceux de ses deux bouts (`before`, `after`).
+  const ROW_EDGES = { before: BORDER_ATTRS.top, after: BORDER_ATTRS.bottom, sides: [BORDER_ATTRS.left, BORDER_ATTRS.right] };
+  const COLUMN_EDGES = { before: BORDER_ATTRS.left, after: BORDER_ATTRS.right, sides: [BORDER_ATTRS.top, BORDER_ATTRS.bottom] };
 
   let libs = null;
   let editor = null;
@@ -123,6 +126,13 @@ const GridEditor = (function () {
     return first && first.type.name === 'table' ? { node: first, pos: 0 } : null;
   }
 
+  // La position, dans le document, de la ligne de rang `index` du tableau.
+  function rowPos(info, index) {
+    let pos = info.pos + 1;
+    for (let i = 0; i < index; i++) pos += info.node.child(i).nodeSize;
+    return pos;
+  }
+
   function isEmptyParagraph(node) { return node.type.name === 'paragraph' && node.content.size === 0; }
 
   // Un seul tableau en tête du document, éventuellement suivi du paragraphe vide que TipTap range sous un tableau final (TrailingNode de StarterKit : on ne
@@ -154,28 +164,30 @@ const GridEditor = (function () {
     return table.create(null, rows);
   }
 
+  // Chaque case une seule fois (une case fusionnée occupe plusieurs emplacements de la grille), avec l'emplacement de son coin haut gauche, dans l'ordre de lecture.
+  function cellOrigins(tableNode, map) {
+    const seen = new Set();
+    const cells = [];
+    map.map.forEach((pos, i) => {
+      if (seen.has(pos)) return;
+      seen.add(pos);
+      cells.push({ pos, row: Math.floor(i / map.width), col: i % map.width, node: tableNode.nodeAt(pos) });
+    });
+    return cells;
+  }
+
   // Largeur de chaque colonne de la grille, lue sur les `colwidth` des cases (la première largeur connue de la colonne gagne : toutes les lignes doivent s'y
   // accorder) ; DEFAULT_COL_WIDTH_PX quand aucune case ne la porte (colonne ajoutée par la barre de la case : ses cases naissent sans largeur).
   function columnWidths(tableNode) {
     const map = libs.TableMap.get(tableNode);
     const widths = new Array(map.width).fill(0);
-    for (let row = 0; row < map.height; row++) {
-      let col = 0;
-      while (col < map.width) {
-        const pos = map.map[row * map.width + col];
-        const cell = tableNode.nodeAt(pos);
-        const span = cell.attrs.colspan || 1;
-        const known = cell.attrs.colwidth || [];
-        for (let j = 0; j < span; j++) if (!widths[col + j] && known[j]) widths[col + j] = known[j];
-        col += span;
-      }
-    }
+    cellOrigins(tableNode, map).forEach(({ node, col }) => {
+      const known = node.attrs.colwidth || [];
+      for (let j = 0; j < (node.attrs.colspan || 1); j++) if (!widths[col + j] && known[j]) widths[col + j] = known[j];
+    });
     return widths.map(w => w || DEFAULT_COL_WIDTH_PX);
   }
 
-  // Pose la largeur de chaque case qui n'en a pas (ou qui n'a pas celle de sa colonne) et la hauteur de chaque ligne qui n'en a pas, sur la transaction `tr` (ou
-  // une neuve) ; null s'il n'y a rien à faire. Une ligne ajoutée par la barre de la case naît sans hauteur : elle prend celle de la ligne du dessus (du dessous pour
-  // la première), comme dans un tableur.
   // Seule une case dont le type porte l'attribut peut le recevoir : sinon le « correctif » ne corrigerait jamais rien et appendTransaction tournerait sans fin.
   function hasCellAttr(cell, name) { return !!cell.type.spec.attrs && name in cell.type.spec.attrs; }
   // Une case neuve (ligne ou colonne ajoutée, collage) : aucun alignement vertical encore posé.
@@ -186,89 +198,79 @@ const GridEditor = (function () {
   // est celui d'avant (js/table-borders.js : la valeur du voisin l'emporte sur le trait de départ de la case neuve). En bout de grille, le bord extérieur reste à l'extérieur, passe à la
   // case neuve - et le trait qui était extérieur devient un trait intérieur, comme celui d'à côté (sinon un cadre caché ou coloré se prolongerait entre l'ancienne case et la nouvelle).
   // Rend une Map position de case -> attributs à écrire.
-  function borderSeeds(tableNode, map, fresh) {
+  function borderSeeds(tableNode, map, cells, fresh) {
     const seeds = new Map();
     if (!fresh.size) return seeds;
-    const origin = new Map();
-    for (let i = 0; i < map.map.length; i++) if (!origin.has(map.map[i])) origin.set(map.map[i], { row: Math.floor(i / map.width), col: i % map.width });
     const rowCells = Array.from({ length: map.height }, () => []);
     const colCells = Array.from({ length: map.width }, () => []);
-    origin.forEach((where, pos) => { rowCells[where.row].push(pos); colCells[where.col].push(pos); });
+    cells.forEach(({ pos, row, col }) => { rowCells[row].push(pos); colCells[col].push(pos); });
     const allFresh = list => list.length > 0 && list.every(pos => fresh.has(pos));
     const rowFresh = rowCells.map(allFresh);
     const colFresh = colCells.map(allFresh);
     const nearest = (flags, from, step) => { for (let i = from + step; i >= 0 && i < flags.length; i += step) if (!flags[i]) return i; return -1; };
-    const posAt = (row, col) => map.map[row * map.width + col];
-    const attrsAt = (row, col) => tableNode.nodeAt(posAt(row, col)).attrs;
     const put = (pos, attrs) => seeds.set(pos, Object.assign(seeds.get(pos) || {}, attrs));
-    fresh.forEach((pos) => {
-      const { row, col } = origin.get(pos);
-      if (rowFresh[row]) {
-        const up = nearest(rowFresh, row, -1);
-        const refRow = up >= 0 ? up : nearest(rowFresh, row, 1);
-        if (refRow < 0) return;
-        const ref = attrsAt(refRow, col);
-        const seed = { borderLeft: ref.borderLeft || null, borderRight: ref.borderRight || null };
-        if (up >= 0 && row === map.height - 1) {
-          const inner = refRow >= 1 ? ref.borderTop || null : null;
-          Object.assign(seed, { borderTop: inner, borderBottom: ref.borderBottom || null });
-          put(posAt(refRow, col), { borderBottom: inner });
-        } else if (up < 0 && row === 0) {
-          const inner = refRow + 1 < map.height ? ref.borderBottom || null : null;
-          Object.assign(seed, { borderTop: ref.borderTop || null, borderBottom: inner });
-          put(posAt(refRow, col), { borderTop: inner });
-        }
-        put(pos, seed);
-      } else if (colFresh[col]) {
-        const left = nearest(colFresh, col, -1);
-        const refCol = left >= 0 ? left : nearest(colFresh, col, 1);
-        if (refCol < 0) return;
-        const ref = attrsAt(row, refCol);
-        const seed = { borderTop: ref.borderTop || null, borderBottom: ref.borderBottom || null };
-        if (left >= 0 && col === map.width - 1) {
-          const inner = refCol >= 1 ? ref.borderLeft || null : null;
-          Object.assign(seed, { borderLeft: inner, borderRight: ref.borderRight || null });
-          put(posAt(row, refCol), { borderRight: inner });
-        } else if (left < 0 && col === 0) {
-          const inner = refCol + 1 < map.width ? ref.borderRight || null : null;
-          Object.assign(seed, { borderLeft: ref.borderLeft || null, borderRight: inner });
-          put(posAt(row, refCol), { borderLeft: inner });
-        }
-        put(pos, seed);
+    // La case neuve `pos`, de rang `index` dans les `flags` de sa ligne (ou de sa colonne) ; `cellAt(i)` : la position de la case de rang i dans cette même ligne.
+    const seedFrom = (edges, flags, pos, index, cellAt) => {
+      const before = nearest(flags, index, -1);
+      const refIndex = before >= 0 ? before : nearest(flags, index, 1);
+      if (refIndex < 0) return;
+      const refPos = cellAt(refIndex);
+      const ref = tableNode.nodeAt(refPos).attrs;
+      const seed = {};
+      edges.sides.forEach((side) => { seed[side] = ref[side] || null; });
+      if (before >= 0 && index === flags.length - 1) {
+        const inner = refIndex >= 1 ? ref[edges.before] || null : null;
+        Object.assign(seed, { [edges.before]: inner, [edges.after]: ref[edges.after] || null });
+        put(refPos, { [edges.after]: inner });
+      } else if (before < 0 && index === 0) {
+        const inner = refIndex + 1 < flags.length ? ref[edges.after] || null : null;
+        Object.assign(seed, { [edges.before]: ref[edges.before] || null, [edges.after]: inner });
+        put(refPos, { [edges.before]: inner });
       }
+      put(pos, seed);
+    };
+    cells.forEach(({ pos, row, col }) => {
+      if (!fresh.has(pos)) return;
+      if (rowFresh[row]) seedFrom(ROW_EDGES, rowFresh, pos, row, i => map.map[i * map.width + col]);
+      else if (colFresh[col]) seedFrom(COLUMN_EDGES, colFresh, pos, col, i => map.map[row * map.width + i]);
     });
     return seeds;
   }
 
-  function fixDimensions(state, tr) {
+  // Pose la largeur de chaque case qui n'en a pas (ou qui n'a pas celle de sa colonne), l'alignement vertical de départ et les bords de départ des cases neuves, sur la
+  // transaction `tr` (ou une neuve) ; null s'il n'y a rien à faire.
+  function fixCellDimensions(state, tr) {
     const info = tableInfo(tr ? tr.doc : state.doc);
     if (!info) return null;
     const widths = columnWidths(info.node);
     const map = libs.TableMap.get(info.node);
-    const fresh = new Set();
-    map.map.forEach((pos) => { if (!fresh.has(pos) && isFreshCell(info.node.nodeAt(pos))) fresh.add(pos); });
-    const seeds = borderSeeds(info.node, map, fresh);
+    const cells = cellOrigins(info.node, map);
+    const fresh = new Set(cells.filter(({ node }) => isFreshCell(node)).map(({ pos }) => pos));
+    const seeds = borderSeeds(info.node, map, cells, fresh);
     let out = tr;
     let changed = false;
-    const seen = new Set();
-    for (let i = 0; i < map.map.length; i++) {
-      const pos = map.map[i];
-      if (seen.has(pos)) continue;
-      seen.add(pos);
-      const cell = info.node.nodeAt(pos);
-      const col = i % map.width;
-      const want = widths.slice(col, col + (cell.attrs.colspan || 1));
-      const have = cell.attrs.colwidth;
+    cells.forEach(({ pos, col, node }) => {
+      const want = widths.slice(col, col + (node.attrs.colspan || 1));
+      const have = node.attrs.colwidth;
       const widthOk = !!have && have.length === want.length && have.every((w, k) => w === want[k]);
       const alignOk = !fresh.has(pos);
-      const seed = hasCellAttr(cell, BORDER_ATTRS.top) ? seeds.get(pos) : null;
-      if (widthOk && alignOk && !seed) continue;
+      const seed = hasCellAttr(node, BORDER_ATTRS.top) ? seeds.get(pos) : null;
+      if (widthOk && alignOk && !seed) return;
       if (!out) out = state.tr;
-      out.setNodeMarkup(info.pos + 1 + pos, undefined, Object.assign({}, cell.attrs, { colwidth: want }, alignOk ? {} : { verticalAlign: DEFAULT_VALIGN }, seed));
+      out.setNodeMarkup(info.pos + 1 + pos, undefined, Object.assign({}, node.attrs, { colwidth: want }, alignOk ? {} : { verticalAlign: DEFAULT_VALIGN }, seed));
       changed = true;
-    }
+    });
+    return changed ? out : null;
+  }
+
+  // Une ligne ajoutée par la barre de la case naît sans hauteur : elle prend celle de la ligne du dessus (du dessous pour la première), comme dans un tableur.
+  function fixRowHeights(state, tr) {
+    const info = tableInfo(tr ? tr.doc : state.doc);
+    if (!info) return null;
     const heights = [];
     info.node.forEach(row => heights.push(row.attrs.rowHeight || 0));
+    let out = tr;
+    let changed = false;
     info.node.forEach((row, offset, index) => {
       if (heights[index]) return;
       heights[index] = heights[index - 1] || heights.slice(index + 1).find(Boolean) || DEFAULT_ROW_HEIGHT_PX;
@@ -345,6 +347,11 @@ const GridEditor = (function () {
     return changed ? out : null;
   }
 
+  // Les réparations d'une grille l'une après l'autre, chacune sur la transaction de la précédente (`tr` : celle de départ, ou null) ; null quand il n'y avait rien à réparer.
+  function repairGrid(state, tr) {
+    return [fixCellDimensions, fixRowHeights, fixBorders, fixPageBreaks].reduce((out, fix) => fix(state, out) || out, tr);
+  }
+
   // Le document est déjà « une grille » ? Sinon (modèle vide, contenu abîmé) on garde le premier tableau trouvé s'il est valable, sinon la grille de départ.
   // Hors historique et sans signal « modifié » : ouvrir un modèle n'est pas une modification de la personne.
   function normalizeDocument() {
@@ -360,12 +367,7 @@ const GridEditor = (function () {
       if (table && !isValidGridDoc(state.schema.topNodeType.create(null, table))) table = null;
       tr = state.tr.replaceWith(0, state.doc.content.size, table || buildDefaultTable(state.schema));
     }
-    const fixed = fixDimensions(state, tr);
-    if (fixed) tr = fixed;
-    const bordered = fixBorders(state, tr);
-    if (bordered) tr = bordered;
-    const broken = fixPageBreaks(state, tr);
-    if (broken) tr = broken;
+    tr = repairGrid(state, tr);
     if (tr) view.dispatch(tr.setMeta('addToHistory', false).setMeta('preventUpdate', true));
     selectFirstCell();
   }
@@ -431,16 +433,21 @@ const GridEditor = (function () {
     return true;
   }
 
-  // La case qui porte la sélection (la tête d'une sélection de cases) : ancre de la barre flottante de la case et décoration « case courante ».
-  function currentCellPos(state) {
-    const sel = state.selection;
-    if (isCellSelection(sel)) return sel.$headCell.pos;
-    const $head = sel.$head;
-    for (let d = $head.depth; d > 0; d--) {
-      if (CELL_NODES.has($head.node(d).type.name)) return $head.before(d);
-    }
-    return null;
+  // La profondeur de l'ancêtre le plus proche de `$pos` dont le type est dans `names`, 0 sans.
+  function ancestorDepth($pos, names) {
+    for (let d = $pos.depth; d > 0; d--) if (names.has($pos.node(d).type.name)) return d;
+    return 0;
   }
+
+  // La case qui porte le curseur ; pour des cases choisies, celle de `end` : `$headCell`, la tête, ou `$anchorCell`, d'où la sélection est partie.
+  function cellPosOf(sel, end) {
+    if (isCellSelection(sel)) return sel[end].pos;
+    const depth = ancestorDepth(sel.$head, CELL_NODES);
+    return depth ? sel.$head.before(depth) : null;
+  }
+
+  // La case qui porte la sélection (la tête d'une sélection de cases) : ancre de la barre flottante de la case et décoration « case courante ».
+  function currentCellPos(state) { return cellPosOf(state.selection, '$headCell'); }
   function currentCellDom() {
     if (!editor) return null;
     const pos = currentCellPos(editor.state);
@@ -481,7 +488,8 @@ const GridEditor = (function () {
     if (!active || !ed.can().mergeCells()) return false;
     const info = tableInfo(ed.state.doc);
     const rect = info && selectionRect(ed.state, info);
-    for (let row = rect ? rect.top + 1 : 0; rect && row < rect.bottom; row++) if (info.node.child(row).attrs.pageBreakBefore) return false;
+    if (!rect) return true;
+    for (let row = rect.top + 1; row < rect.bottom; row++) if (info.node.child(row).attrs.pageBreakBefore) return false;
     return true;
   }
   function canSplit(ed) { return active && ed.can().splitCell(); }
@@ -605,10 +613,8 @@ const GridEditor = (function () {
   function togglePageBreak(ed) {
     if (!canTogglePageBreak(ed)) return false;
     const { info, row } = pageBreakRow(ed.state);
-    let pos = info.pos + 1;
-    for (let i = 0; i < row; i++) pos += info.node.child(i).nodeSize;
     const node = info.node.child(row);
-    ed.view.dispatch(ed.state.tr.setNodeMarkup(pos, undefined, Object.assign({}, node.attrs, { pageBreakBefore: !node.attrs.pageBreakBefore })));
+    ed.view.dispatch(ed.state.tr.setNodeMarkup(rowPos(info, row), undefined, Object.assign({}, node.attrs, { pageBreakBefore: !node.attrs.pageBreakBefore })));
     return true;
   }
 
@@ -710,18 +716,7 @@ const GridEditor = (function () {
   // tableau ajoutée en passant, pas de paragraphe vide. Dans une liste (puces, numéros, tâches) Entrée garde son sens de liste, sinon on n'y ajouterait jamais un point.
   const LIST_ITEMS = new Set(['listItem', 'taskItem']);
 
-  function inListItem(sel) {
-    if (isCellSelection(sel)) return false;
-    for (let d = sel.$head.depth; d > 0; d--) if (LIST_ITEMS.has(sel.$head.node(d).type.name)) return true;
-    return false;
-  }
-
-  // La case « active » : celle du curseur ; pour des cases choisies, celle d'où la sélection est partie (comme Excel : Entrée se range alors sous elle).
-  function activeCellPos(sel) {
-    if (isCellSelection(sel)) return sel.$anchorCell.pos;
-    for (let d = sel.$head.depth; d > 0; d--) if (CELL_NODES.has(sel.$head.node(d).type.name)) return sel.$head.before(d);
-    return null;
-  }
+  function inListItem(sel) { return !isCellSelection(sel) && ancestorDepth(sel.$head, LIST_ITEMS) > 0; }
 
   // La case sous la case active, dans sa colonne de gauche ; sous une case fusionnée sur plusieurs lignes, la case qui suit sa dernière ligne. Null sur la dernière ligne.
   function cellBelowPos(info, cellPos) {
@@ -736,7 +731,7 @@ const GridEditor = (function () {
     const sel = state.selection;
     const info = tableInfo(state.doc);
     if (!info || !selectionInsideTable(sel) || inListItem(sel)) return false;
-    const here = activeCellPos(sel);
+    const here = cellPosOf(sel, '$anchorCell'); // des cases choisies : celle d'où la sélection est partie (comme Excel, Entrée se range sous elle)
     if (here == null) return false;
     const below = cellBelowPos(info, here);
     if (below == null) return true;
@@ -784,14 +779,7 @@ const GridEditor = (function () {
           },
           appendTransaction(trs, oldState, newState) {
             if (!active) return null;
-            let tr = null;
-            if (trs.some(t => t.docChanged)) {
-              tr = fixDimensions(newState, null);
-              const bordered = fixBorders(newState, tr);
-              if (bordered) tr = bordered;
-              const broken = fixPageBreaks(newState, tr);
-              if (broken) tr = broken;
-            }
+            let tr = trs.some(t => t.docChanged) ? repairGrid(newState, null) : null;
             const sel = tr ? tr.selection : newState.selection;
             if (!selectionInsideTable(sel)) {
               const back = selectionBackInside(tr ? tr.doc : newState.doc, sel);
@@ -843,11 +831,9 @@ const GridEditor = (function () {
     const { state, view } = editor;
     const info = tableInfo(state.doc);
     if (!info || rowIndex >= info.node.childCount) return;
-    let pos = info.pos + 1;
-    for (let i = 0; i < rowIndex; i++) pos += info.node.child(i).nodeSize;
     const row = info.node.child(rowIndex);
     if (row.attrs.rowHeight === height) return;
-    view.dispatch(state.tr.setNodeMarkup(pos, undefined, Object.assign({}, row.attrs, { rowHeight: height })));
+    view.dispatch(state.tr.setNodeMarkup(rowPos(info, rowIndex), undefined, Object.assign({}, row.attrs, { rowHeight: height })));
   }
 
   // --- Bandeaux A, B, C / 1, 2, 3 ---------------------------------------------------------------------------------------------------------------------------------
@@ -869,7 +855,7 @@ const GridEditor = (function () {
     if (!(rect.width > 0) || !(rect.height > 0)) return null;
     const cols = Array.from(table.querySelectorAll(':scope > colgroup > col'));
     const rows = Array.from(table.querySelectorAll(':scope > tbody > tr'));
-    return { table, width: rect.width, height: rect.height, cols, rows, widths: cols.map(c => c.getBoundingClientRect().width), heights: rows.map(r => r.getBoundingClientRect().height) };
+    return { table, width: rect.width, height: rect.height, rows, widths: cols.map(c => c.getBoundingClientRect().width), heights: rows.map(r => r.getBoundingClientRect().height) };
   }
 
   function el(tag, className) {
@@ -1020,7 +1006,7 @@ const GridEditor = (function () {
     const sel = editor.state.selection;
     let anchorIndex = index;
     if (extend) {
-      const cell = isCellSelection(sel) ? sel.$anchorCell.pos : currentCellPos(editor.state);
+      const cell = cellPosOf(sel, '$anchorCell');
       if (cell != null) { const rect = map.findCell(cell - start); anchorIndex = kind === 'col' ? rect.left : rect.top; }
     }
     const anchorCell = kind === 'col' ? cellAt(0, anchorIndex) : cellAt(anchorIndex, 0);
@@ -1193,9 +1179,9 @@ const GridEditor = (function () {
   function refresh() { if (active) { lastKey = ''; scheduleSync(); } }
 
   return {
-    TYPE, DEFAULT_COLS, DEFAULT_ROWS, DEFAULT_COL_WIDTH_PX, DEFAULT_ROW_HEIGHT_PX, MIN_COL_WIDTH_PX, DEFAULT_VALIGN,
+    TYPE, DEFAULT_VALIGN,
     configure, attach, createExtension, createEnterExtension, withRowAttributes, withCellAttributes, serialize, setActive, isActive, isGridType, refresh,
-    currentCellDom, columnWidths, colName, floatingOptions, barSlot,
+    currentCellDom, colName, floatingOptions, barSlot,
     canMerge, canSplit, mergeCells, splitCell, setVerticalAlign, selectedVerticalAlign, applyBorders, canApplyBorders, canTogglePageBreak, hasPageBreak, togglePageBreak,
   };
 })();

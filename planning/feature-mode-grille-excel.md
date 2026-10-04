@@ -39,7 +39,7 @@ Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Le
   « Fusionner » (`GridEditor.mergeCells`) n'est actif que sur plusieurs cases (`editor.can().mergeCells()`), « Scinder » (`splitCell`) que sur une case fusionnée : grisés sinon (`v2-hf-locked` + `aria-disabled`),
   jamais retirés. Fusionner garde le texte de toutes les cases (à la suite dans la première : rien n'est perdu), le fond et l'alignement de la première, UN seul Annuler. prosemirror-tables ne laisse à la case
   fusionnée que la largeur de sa première colonne (les autres à 0) : `mergeCells` la remet, dans la même transaction, d'après les largeurs d'avant (`columnWidths`) - sinon fusionner toutes les lignes de deux
-  colonnes ramenait la seconde à 100 px, `fixDimensions` ne la retrouvant dans aucune autre case. `setColumnWidth` (poignée du bandeau) règle déjà la seule part d'une case fusionnée. Alignement vertical :
+  colonnes ramenait la seconde à 100 px, `fixCellDimensions` ne la retrouvant dans aucune autre case. `setColumnWidth` (poignée du bandeau) règle déjà la seule part d'une case fusionnée. Alignement vertical :
   `setVerticalAlign` change toutes les cases choisies d'un coup, le bouton enfoncé (`is-active`, `aria-pressed`) dit l'alignement de toutes les cases choisies, aucun quand elles diffèrent.
   Rendu : l'éditeur et la Lecture montrent `colspan` / `rowspan` tels quels ; l'Excel les fusionnait déjà (`placeCells`) ; le PDF (`tableFrom`) sait maintenant `rowSpan` (une case fusionnée sur plusieurs lignes
   laisse un emplacement vide `{}` dans chaque colonne qu'elle couvre, aux lignes d'après ; le centrage vertical se calcule sur la hauteur de toutes les lignes couvertes) et `ExportCommon.measuredColumnWidthsPx`
@@ -54,7 +54,7 @@ Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Le
   `border-<côté>: hidden | 1px solid #hex` en ligne (`border-collapse: collapse` : `hidden` l'emporte, l'éditeur et la Lecture dessinent comme le PDF). Un trait entre deux cases est UN trait : `js/table-borders.js`
   (module pur, `TableBorders`) donne la règle une seule fois pour l'éditeur, la Lecture, le PDF et l'Excel - un trait est un nœud par côté de case, un trait partagé relie ses deux côtés, une case fusionnée n'a qu'une
   valeur par côté (le trait de chaque côté et les cases d'en face forment un groupe), un groupe qui diverge prend « pas de trait » d'abord, puis la première couleur dans l'ordre de lecture, sinon le trait de départ ;
-  le réglage choisi l'emporte sur tout (`TableBorders.set`). L'éditeur (`fixBorders`, après `fixDimensions`) remet d'accord ce que fusionner, supprimer une ligne ou coller ont laissé divergent ; `mergeCells` donne à la
+  le réglage choisi l'emporte sur tout (`TableBorders.set`). L'éditeur (`fixBorders`, après `fixCellDimensions`) remet d'accord ce que fusionner, supprimer une ligne ou coller ont laissé divergent ; `mergeCells` donne à la
   case fusionnée le pourtour des cases fusionnées (leurs traits intérieurs disparaissent), `splitCell` rend le pourtour aux cases du bord et le trait de départ à l'intérieur ; une ligne ou une colonne ajoutée prolonge les
   traits intérieurs (`borderSeeds` : une nouvelle ligne copie le gauche et le droit de la ligne de référence, une nouvelle colonne le haut et le bas ; en bout de tableau le cadre reste dehors et le trait intérieur
   suit). PDF (`tableFrom`) : `border: [gauche, haut, droite, bas]` et `borderColor` sur chaque case, lus par `ExportCommon.cellBorderSides` (la même règle, sur les `data-border-*`) - pdfmake dessine un trait dès que
@@ -78,7 +78,7 @@ Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Le
   (`CellSelection`) jusqu'à la case qui arrive sous le bord ; le voile `.selectedCell::after` (`css/editor-v2.css`) rend la sélection visible sur une case colorée. Tableau de document et grille. Limite : le défilement
   horizontal d'un `.tableWrapper` d'un document classique n'est pas suivi (seul `#editor-container` défile ; un tableau de document est ramené à la largeur de la page).
 - Alignement vertical : attribut `verticalAlign` de `tableCell` et `tableHeader` (`GridEditor.withCellAttributes`), `null` hors grille, « au milieu » par défaut dans une grille
-  (`fixDimensions` le pose sur toute case qui n'en a pas ou qui a une valeur inconnue). Enregistré dans `data-valign` + `style="vertical-align: …"` ; lu dans `data-valign` seulement,
+  (`fixCellDimensions` le pose sur toute case qui n'en a pas ou qui a une valeur inconnue). Enregistré dans `data-valign` + `style="vertical-align: …"` ; lu dans `data-valign` seulement,
   jamais dans le `vertical-align` d'un tableau collé d'Excel (l'export n'applique l'alignement que dans une grille).
 - Le HTML enregistré d'une grille est son tableau, sans la ligne vide cachée de TipTap : `GridEditor.serialize`, appelée par `Editor.getHTML()` et par `Comments.buildReaderHtml()`
   (le chemin de la Lecture quand on a le droit de commenter). Les exports n'ont donc jamais à la deviner.
