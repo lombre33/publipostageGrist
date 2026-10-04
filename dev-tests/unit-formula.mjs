@@ -101,6 +101,13 @@ check('accolade non fermée : {A.B -> unclosedBrace', run('{A.B+1').error === 'u
 check('clé de variable invalide : {Facture} (sans colonne) et {A. B} -> badKey', run('{Facture}').error === 'badKey' && run('{1A.B}').error === 'badKey');
 check('imbrication trop profonde : tooDeep (50 parenthèses)', run('('.repeat(50) + '1' + ')'.repeat(50)).error === 'tooDeep');
 check('imbrication raisonnable : 20 parenthèses', value('('.repeat(20) + '1' + ')'.repeat(20)) === 1);
+check('parenthèse refermée trop tard ou au mauvais endroit : (1+2 3) et SUM(1;2 3) citent le « 3 » ; (1+2 et SUM(1;2 restent non fermées', run('(1+2 3)').error === 'unexpected' && run('(1+2 3)').detail.token === '3' && run('SUM(1;2 3)').error === 'unexpected' && run('SUM(1;2 3)').detail.token === '3' && run('(1+2').error === 'unclosedParen' && run('SUM(1;2').error === 'unclosedParen');
+check('« inattendu » cite le jeton comme il s\'écrit : un nombre, une variable {…}, un mot, un opérateur, avec sa place', (() => {
+  const at = stored => run(stored).detail;
+  return at('1 2').token === '2' && at('1 2').pos === 2 && at('1 {A.B}').token === '{A.B}' && at('1 {A.B}').pos === 2 && at('1 abc').token === 'abc' && at('1 abc').pos === 2 && at('1*/2').token === '/' && at('1*/2').pos === 2 && at('SUM(1;;2)').token === ';';
+})(), JSON.stringify(run('1 abc')));
+check('mot seul dans une fonction ou après un opérateur : SUM(abc) et 1+abc -> unknownName avec sa place', run('SUM(abc)').error === 'unknownName' && run('SUM(abc)').detail.pos === 4 && run('1+abc').error === 'unknownName' && run('1+abc').detail.pos === 2);
+check('fonctions emboîtées et variées : ROUND(AVERAGE(1;2;4) ; 1) = 2,3 ; MAX(MIN(5;3);(2+1)) = 3 ; SUM(1;(2);ROUND(2.5))', value('ROUND(AVERAGE(1;2;4);1)') === 2.3 && value('MAX(MIN(5;3);(2+1))') === 3 && value('SUM(1;(2);ROUND(2.5))') === 6);
 check('aucune injection : un texte de code n\'est jamais exécuté (badChar / unknownName)', run('alert(1)').error === 'unknownFunction' && run('1;alert(1)').error === 'unexpected' && run('constructor').error === 'unknownName');
 
 // 7. toNumber : ce qu'une cellule peut valoir.
@@ -155,6 +162,13 @@ check('saisie EN : un point décimal et les noms de fonction anglais se lisent',
   check('signes : -{A.B}, 5 - -2, +3 ne prennent pas d\'espace de trop', toDisplay('-{A.B}+5--2') === '-#A.B + 5 - -2' && toDisplay('+3') === '+3', toDisplay('-{A.B}+5--2'));
   check('toDisplay d\'un texte illisible : rendu tel quel', toDisplay('{A.B') === '{A.B' && toDisplay('1 $ 2') === '1 $ 2');
   check('toDisplay d\'un nom inconnu : gardé tel quel', toDisplay('FOO(1)') === 'FOO(1)');
+  const all = 'SUM({L.M};-2)*3%+(4-1)/2-ROUND(.5;0)+-{A.B}%';
+  check('toDisplay : chaque sorte de jeton, FR, EN, texte de bulle et touche « § »', toDisplay(all, { trigger: '#', lang: 'fr' }) === 'SOMME(#L.M; -2) * 3% + (4 - 1) / 2 - ARRONDI(0,5; 0) + -#A.B%'
+    && toDisplay(all, { trigger: '#', lang: 'en' }) === 'SUM(#L.M; -2) * 3% + (4 - 1) / 2 - ROUND(0.5; 0) + -#A.B%'
+    && toDisplay(all, { trigger: '§', lang: 'fr', pretty: true }) === 'SOMME(§L.M; −2) × 3% + (4 − 1) ÷ 2 − ARRONDI(0,5; 0) + −§A.B%'
+    && toDisplay(all) === 'SOMME(#L.M; -2) * 3% + (4 - 1) / 2 - ARRONDI(0,5; 0) + -#A.B%', toDisplay(all, { lang: 'fr', pretty: true }));
+  check('toDisplay : un signe après une parenthèse ouvrante, un point-virgule ou un opérateur est un signe, après une valeur ou « ) » une opération', toDisplay('(-1)+(+2)-(-3)') === '(-1) + (+2) - (-3)' && toDisplay('SUM(-1;+2)') === 'SOMME(-1; +2)' && toDisplay('2*-3/+4') === '2 * -3 / +4' && toDisplay('{A.B}-1') === '#A.B - 1' && toDisplay('50%-1') === '50% - 1');
+  check('toDisplay : null et indéfini rendent un texte vide', toDisplay(null) === '' && toDisplay(undefined) === '');
 }
 
 // 10. functionNames et errorMessage.
@@ -171,6 +185,17 @@ check('functionNames : français puis anglais', same(JSON.parse(evalIn(ctx, 'JSO
   check('errorMessage : « inattendu » écrit une variable avec sa touche de déclenchement, un nombre tel quel', msg({ code: 'unexpected', token: '{A.B}' }) === 'formula.error.unexpected|token=#A.B' && msg({ code: 'unexpected', token: ')' }) === 'formula.error.unexpected|token=)', msg({ code: 'unexpected', token: '{A.B}' }));
   check('errorMessage : une faute réelle de saisie (variable posée à la place d\'un opérateur) cite la touche', msgOf('1 {A.B}') === 'formula.error.unexpected|token=#A.B', msgOf('1 {A.B}'));
   check('errorMessage : un code sans paramètre', msg({ code: 'divZero' }).indexOf('formula.error.divZero') === 0 && msg({ code: 'unclosedParen' }).indexOf('formula.error.unclosedParen') === 0);
+  check('errorMessage : caractère étranger, nombre illisible, variable inconnue, listes de longueurs différentes, plusieurs valeurs',
+    msg({ code: 'badChar', char: '$' }) === 'formula.error.badChar|char=$' && msg({ code: 'notNumber', key: 'F.A', text: '12 EUR' }) === 'formula.error.notNumber|key=F.A,text=12 EUR'
+    && msg({ code: 'unknownVariable', key: 'F.A' }) === 'formula.error.unknownVariable|key=F.A' && msg({ code: 'lengthMismatch', a: 2, b: 3 }) === 'formula.error.lengthMismatch|a=2,b=3'
+    && msg({ code: 'manyValues', count: 4 }) === 'formula.error.manyValues|count=4', msg({ code: 'manyValues', count: 4 }));
+  check('errorMessage : un code inconnu, ou pas d\'erreur du tout, retombe sur « résultat impossible » ; ses paramètres suivent', msg({ code: 'zzz', key: 'k' }) === 'formula.error.zzz|key=k' && msg({}) === 'formula.error.badResult|' && evalIn(ctx, 'Formula.errorMessage(undefined, __T)') === 'formula.error.badResult|' && evalIn(ctx, 'Formula.errorMessage(null, __T, {})') === 'formula.error.badResult|');
+  check('errorMessage : sans options, la langue est le français et la touche « # » ; en anglais les noms de fonction passent en anglais', evalIn(ctx, `Formula.errorMessage({ code: 'unknownName', name: 'x' }, __T)`) === 'formula.error.unknownName|name=x,trigger=#'
+    && evalIn(ctx, `Formula.errorMessage({ code: 'badArgs', name: 'SUM', max: Infinity }, __T)`) === 'formula.error.badArgsMin|name=SOMME'
+    && evalIn(ctx, `Formula.errorMessage({ code: 'badArgs', name: 'SUM', max: Infinity }, __T, { lang: 'en' })`) === 'formula.error.badArgsMin|name=SUM'
+    && evalIn(ctx, `Formula.errorMessage({ code: 'unknownFunction', name: 'X' }, __T, { lang: 'en' })`) === 'formula.error.unknownFunction|list=SUM, AVERAGE, MIN, MAX, COUNT, ROUND,name=X'
+    && evalIn(ctx, `Formula.errorMessage({ code: 'unclosedBrace' }, __T, { trigger: '§' })`) === 'formula.error.unclosedBrace|trigger=§');
+  check('errorMessage : badArgs d\'un nom que le moteur ne connaît pas garde le nom reçu', msg({ code: 'badArgs', name: 'FOO', max: 2 }) === 'formula.error.badArgsRound|name=FOO', msg({ code: 'badArgs', name: 'FOO', max: 2 }));
 }
 
 // 11. Le moteur n'exécute jamais de code : ni eval, ni Function, ni setTimeout de chaîne.

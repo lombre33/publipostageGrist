@@ -33,15 +33,14 @@ const Formula = (function () {
   FUNCTION_ORDER.forEach(name => { FUNCTION_BY_TYPED[FUNCTIONS[name].fr] = name; FUNCTION_BY_TYPED[FUNCTIONS[name].en] = name; });
   const MAX_DEPTH = 40; // parenthèses et fonctions imbriquées : au-delà, c'est une erreur plutôt qu'un dépassement de pile
 
-  const KEY = /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+$/;
-  const NUMBER = /^(?:\d+(?:\.\d*)?|\.\d+)/;
-  const IDENT = /^[A-Za-z_][A-Za-z0-9_]*/;
-
   function fail(code, extra) { return Object.assign({ code }, extra); }
 
   // Lecture : le texte enregistré en jetons. Retourne { tokens } ou { error }. Un jeton : { t: 'num'|'var'|'name'|'op', pos, ... } - `op` est l'un de
   // + - * / % ( ) ;
   function tokenize(src) {
+    const KEY = /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+$/;
+    const NUMBER = /^(?:\d+(?:\.\d*)?|\.\d+)/;
+    const IDENT = /^[A-Za-z_][A-Za-z0-9_]*/;
     const tokens = [];
     let i = 0;
     while (i < src.length) {
@@ -81,6 +80,30 @@ const Formula = (function () {
     const describe = token => (token.t === 'num' ? String(token.value) : token.t === 'var' ? '{' + token.key + '}' : token.t === 'name' ? token.name : token.op);
     const unexpected = token => (token ? fail('unexpected', { token: describe(token), pos: token.pos }) : fail('unexpectedEnd'));
 
+    // La parenthèse fermante d'un groupe ou d'une fonction ; sans elle, la faute dit ce qui vient à la place (rien : la parenthèse n'est pas fermée).
+    function closeParen() {
+      if (!isOp(peek(), ')')) throw (peek() ? unexpected(peek()) : fail('unclosedParen'));
+      at += 1;
+    }
+    function call(token, depth) {
+      // Un mot seul n'est ni une variable (elle commence par la touche de déclenchement, ou s'écrit {…} une fois enregistrée) ni une fonction (elle
+      // porte ses parenthèses).
+      if (!isOp(tokens[at + 1], '(')) throw fail('unknownName', { name: token.name, pos: token.pos });
+      const name = FUNCTION_BY_TYPED[token.name.toUpperCase()];
+      if (!name) throw fail('unknownFunction', { name: token.name, pos: token.pos });
+      at += 2;
+      const args = [];
+      if (isOp(peek(), ')')) throw fail('badArgs', { name, min: FUNCTIONS[name].args[0], max: FUNCTIONS[name].args[1] });
+      for (;;) {
+        args.push(expr(depth + 1));
+        if (isOp(peek(), ';')) { at += 1; continue; }
+        break;
+      }
+      closeParen();
+      const [min, max] = FUNCTIONS[name].args;
+      if (args.length < min || args.length > max) throw fail('badArgs', { name, min, max });
+      return { t: 'call', name, args };
+    }
     function primary(depth) {
       const token = peek();
       if (!token) throw fail('unexpectedEnd');
@@ -90,30 +113,10 @@ const Formula = (function () {
       if (isOp(token, '(')) {
         at += 1;
         const inner = expr(depth + 1);
-        if (!isOp(peek(), ')')) throw (peek() ? unexpected(peek()) : fail('unclosedParen'));
-        at += 1;
+        closeParen();
         return inner;
       }
-      if (token.t === 'name') {
-        // Un mot seul n'est ni une variable (elle commence par la touche de déclenchement, ou s'écrit {…} une fois enregistrée) ni une fonction (elle
-        // porte ses parenthèses).
-        if (!isOp(tokens[at + 1], '(')) throw fail('unknownName', { name: token.name, pos: token.pos });
-        const name = FUNCTION_BY_TYPED[token.name.toUpperCase()];
-        if (!name) throw fail('unknownFunction', { name: token.name, pos: token.pos });
-        at += 2;
-        const args = [];
-        if (isOp(peek(), ')')) throw fail('badArgs', { name, min: FUNCTIONS[name].args[0], max: FUNCTIONS[name].args[1] });
-        for (;;) {
-          args.push(expr(depth + 1));
-          if (isOp(peek(), ';')) { at += 1; continue; }
-          break;
-        }
-        if (!isOp(peek(), ')')) throw (peek() ? unexpected(peek()) : fail('unclosedParen'));
-        at += 1;
-        const [min, max] = FUNCTIONS[name].args;
-        if (args.length < min || args.length > max) throw fail('badArgs', { name, min, max });
-        return { t: 'call', name, args };
-      }
+      if (token.t === 'name') return call(token, depth);
       throw unexpected(token);
     }
     function postfix(depth) {
@@ -186,8 +189,7 @@ const Formula = (function () {
     return { error: fail('notNumber', { text: String(raw) }) };
   }
 
-  // Le bruit des nombres à virgule (0,1 + 0,2 = 0,30000000000000004) : quinze chiffres significatifs, ce que Grist et les tableurs montrent. Jamais
-  // de « -0 » : Intl l'écrirait.
+  // Le bruit des nombres à virgule (0,1 + 0,2 = 0,30000000000000004) : quinze chiffres significatifs, comme Grist et les tableurs ; jamais de « -0 ».
   function clean(n) {
     const rounded = Number(n.toPrecision(15));
     return rounded === 0 ? 0 : rounded;
@@ -212,8 +214,7 @@ const Formula = (function () {
     '/': (x, y) => { if (y === 0) throw fail('divZero'); return x / y; },
   };
   const num = v => (v === null || v === undefined ? 0 : v);
-  // Applique `fn` à deux valeurs, ligne à ligne quand l'une est une liste : un nombre seul vaut pour chaque ligne, deux listes veulent la même
-  // longueur.
+  // Applique `fn` à deux valeurs, ligne à ligne si l'une est une liste (un nombre seul vaut pour chaque ligne ; deux listes : la même longueur).
   function zip(a, b, fn) {
     if (!isList(a) && !isList(b)) return fn(a, b);
     if (isList(a) && isList(b)) {
@@ -322,38 +323,33 @@ const Formula = (function () {
     const lexed = tokenize(String(stored == null ? '' : stored));
     if (lexed.error) return String(stored == null ? '' : stored);
     const sym = { '*': o.pretty ? '×' : '*', '/': o.pretty ? '÷' : '/', '-': o.pretty ? '−' : '-' };
-    let out = '';
-    let operand = false; // le jeton précédent finit une valeur : un + ou un - qui suit est une opération, sinon un signe
-    lexed.tokens.forEach(token => {
+    // Ce que chaque jeton écrit, et si une valeur finit là (`operand`) : un + ou un - qui suit est alors une opération, sinon un signe.
+    function showValue(token) {
       if (token.t === 'num') {
         const text = String(token.value);
-        out += o.lang === 'fr' ? text.replace('.', ',') : text;
-        operand = true;
-      } else if (token.t === 'var') {
-        out += o.trigger + token.key;
-        operand = true;
-      } else if (token.t === 'name') {
-        const name = FUNCTIONS[token.name.toUpperCase()];
-        out += name ? name[o.lang === 'fr' ? 'fr' : 'en'] : token.name;
-        operand = false;
-      } else if (token.op === '(') {
-        out += '(';
-        operand = false;
-      } else if (token.op === ')') {
-        out += ')';
-        operand = true;
-      } else if (token.op === '%') {
-        out += '%';
-        operand = true;
-      } else if (token.op === ';') {
-        out += '; ';
-        operand = false;
-      } else if ((token.op === '+' || token.op === '-') && !operand) {
-        out += token.op === '-' ? sym['-'] : '+';
-      } else {
-        out += ' ' + (sym[token.op] || token.op) + ' ';
-        operand = false;
+        return { text: o.lang === 'fr' ? text.replace('.', ',') : text, operand: true };
       }
+      if (token.t === 'var') return { text: o.trigger + token.key, operand: true };
+      const name = FUNCTIONS[token.name.toUpperCase()];
+      return { text: name ? name[o.lang === 'fr' ? 'fr' : 'en'] : token.name, operand: false };
+    }
+    function showOperator(token, operand) {
+      switch (token.op) {
+        case '(': return { text: '(', operand: false };
+        case ')': return { text: ')', operand: true };
+        case '%': return { text: '%', operand: true };
+        case ';': return { text: '; ', operand: false };
+        default: break;
+      }
+      if ((token.op === '+' || token.op === '-') && !operand) return { text: token.op === '-' ? sym['-'] : '+', operand };
+      return { text: ' ' + (sym[token.op] || token.op) + ' ', operand: false };
+    }
+    let out = '';
+    let operand = false; // le jeton précédent finit une valeur
+    lexed.tokens.forEach(token => {
+      const shown = token.t === 'op' ? showOperator(token, operand) : showValue(token);
+      out += shown.text;
+      operand = shown.operand;
     });
     return out.trim();
   }
@@ -369,22 +365,32 @@ const Formula = (function () {
     const lang = opts && opts.lang;
     const trigger = (opts && opts.trigger) || '#';
     const e = error || {};
-    switch (e.code) {
-      case 'variable': return e.message;
-      case 'unknownName': return t('formula.error.unknownName', { name: e.name, trigger });
-      case 'unknownFunction': return t('formula.error.unknownFunction', { name: e.name, list: functionNames(lang).join(', ') });
-      case 'badArgs': return t(e.max === Infinity ? 'formula.error.badArgsMin' : 'formula.error.badArgsRound', { name: FUNCTIONS[e.name] ? FUNCTIONS[e.name][lang === 'en' ? 'en' : 'fr'] : e.name });
-      // Une variable lue par le moteur s'écrit {Table.Colonne} : la personne la connaît sous sa touche de déclenchement.
-      case 'unexpected': return t('formula.error.unexpected', { token: String(e.token).replace(/^\{(.*)\}$/, trigger + '$1') });
-      case 'badChar': return t('formula.error.badChar', { char: e.char });
-      case 'notNumber': return t('formula.error.notNumber', { key: e.key, text: e.text });
-      case 'unknownVariable': return t('formula.error.unknownVariable', { key: e.key });
-      case 'unclosedBrace': return t('formula.error.unclosedBrace', { trigger });
-      case 'badKey': return t('formula.error.badKey', { key: e.key, trigger });
-      case 'lengthMismatch': return t('formula.error.lengthMismatch', { a: e.a, b: e.b });
-      case 'manyValues': return t('formula.error.manyValues', { count: e.count });
-      default: return t('formula.error.' + (e.code || 'badResult'), e);
+    // Les fautes de calcul : une variable, un nombre ou une liste qui ne vont pas.
+    function calcMessage() {
+      switch (e.code) {
+        case 'variable': return e.message;
+        case 'notNumber': return t('formula.error.notNumber', { key: e.key, text: e.text });
+        case 'unknownVariable': return t('formula.error.unknownVariable', { key: e.key });
+        case 'lengthMismatch': return t('formula.error.lengthMismatch', { a: e.a, b: e.b });
+        case 'manyValues': return t('formula.error.manyValues', { count: e.count });
+        default: return t('formula.error.' + (e.code || 'badResult'), e);
+      }
     }
+    // Les fautes de lecture du texte : un mot, une fonction, des valeurs, un signe ou une accolade qui n'ont pas leur place.
+    function readMessage() {
+      switch (e.code) {
+        case 'unknownName': return t('formula.error.unknownName', { name: e.name, trigger });
+        case 'unknownFunction': return t('formula.error.unknownFunction', { name: e.name, list: functionNames(lang).join(', ') });
+        case 'badArgs': return t(e.max === Infinity ? 'formula.error.badArgsMin' : 'formula.error.badArgsRound', { name: FUNCTIONS[e.name] ? FUNCTIONS[e.name][lang === 'en' ? 'en' : 'fr'] : e.name });
+        // Une variable lue par le moteur s'écrit {Table.Colonne} : la personne la connaît sous sa touche de déclenchement.
+        case 'unexpected': return t('formula.error.unexpected', { token: String(e.token).replace(/^\{(.*)\}$/, trigger + '$1') });
+        case 'badChar': return t('formula.error.badChar', { char: e.char });
+        case 'unclosedBrace': return t('formula.error.unclosedBrace', { trigger });
+        case 'badKey': return t('formula.error.badKey', { key: e.key, trigger });
+        default: return calcMessage();
+      }
+    }
+    return readMessage();
   }
 
   return { parse, variablesOf, evaluate, toNumber, fromDisplay, toDisplay, functionNames, errorMessage, FUNCTIONS, FUNCTION_ORDER };
