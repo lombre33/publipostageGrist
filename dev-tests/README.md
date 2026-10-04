@@ -767,7 +767,9 @@ Deux options utiles :
   molette posée sur la liste), UN clic pose la puce à la place du « # » et la frappe suivante s'écrit derrière elle, la Lecture écrit le nom à côté de l'adresse lue dans la même passe, un compte sans nom
   donne « [Nom indisponible] » (« [Name unavailable] » en anglais), et le modèle garde sa puce au retour en Édition. Le script gare la souris avant de cliquer dans le texte : sur son chemin vers un
   paragraphe haut dans la feuille, elle survole la barre du haut, un menu au survol s'ouvre sous le pointeur et reçoit le clic (constaté : le paragraphe devenait un titre 2). Sur l'ancien code, le premier ne passe que 11 de ses 20
-  vérifications (un scénario qui lève compte pour une) et le second 20 sur 46 ; quatre cas du groupe `chips` échouent aussi.
+  vérifications (un scénario qui lève compte pour une) et le second 20 sur 46 ; quatre cas du groupe `chips` échouent aussi. Le cinquième, un nom qui ressemble à du HTML (`<img onerror>`,
+  `<script>`, entités : le nom est une donnée que choisit la personne, il s'écrit comme du texte en Lecture, dans l'aperçu des exports, le PDF et le Word), est vérifié par altération : avec `innerHTML`
+  à la place de `textContent` dans `resolveSmartChips`, il échoue.
 - Un groupe Node à part, `wheelScroll` (`dev-tests/verify-wheel-scroll.mjs`),
   tourne automatiquement en plus des groupes `EditorTestSuites` ci-dessus dans
   un `run-headless.mjs` sans argument (ou seul via

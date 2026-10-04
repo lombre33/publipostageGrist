@@ -5,7 +5,7 @@
 // suit la langue de l'interface, l'échec est alors fabriqué dans le test).
 // Le chip Nom de l'utilisateur, lui, se lit aussi par le faux Grist (colonne Name
 // de la table-sonde) et se vérifie en Lecture, dans l'aperçu des exports, le PDF
-// et le Word.
+// et le Word ; un nom qui ressemble à du HTML s'y écrit comme du texte.
 (function () {
   const cases = [];
 
@@ -327,6 +327,45 @@
       } finally {
         GristAPI.getCurrentUserName = realGetName;
         I18n.setLang(previousLang);
+        document.getElementById('btn-mode-edit').click();
+        await h.sleep(60);
+      }
+    },
+  });
+
+  // Le nom est une donnée que choisit la personne (son nom de profil Grist) : js/reader-mode.js:resolveSmartChips l'écrit en TEXTE (textContent), jamais en HTML. Un nom qui ressemble à des balises, à
+  // une entité ou à un script garde tous ses caractères en Lecture, dans l'aperçu des exports relu comme un export le relit (innerHTML), le PDF et le Word, et ne crée ni élément ni appel de code.
+  cases.push({
+    id: 'chip_name_that_looks_like_html_is_written_as_plain_text',
+    description: 'Chip Nom : un nom qui ressemble à du HTML (balise, entité, script) s\'écrit tel quel - Lecture, aperçu des exports relu comme le fait un export, PDF et Word - sans créer d\'élément ni lancer de code',
+    run: async (h) => {
+      const previousLang = I18n.getLang();
+      const realGetName = GristAPI.getCurrentUserName;
+      const hostile = '<img src=x onerror="window.__nameChipRan=1"><b>Ada</b> &amp; <script>window.__nameChipRan=2<\/script>';
+      try {
+        I18n.setLang('fr');
+        window.__nameChipRan = 0;
+        GristAPI.getCurrentUserName = async () => hostile;
+        await ReaderMode.render(NAME_CHIP_HTML, 'FakeTable', {});
+        const inReader = document.getElementById('reader-container').querySelector('.resolved-var');
+        const box = document.createElement('div');
+        box.innerHTML = await ReaderMode.preview(NAME_CHIP_HTML, 'FakeTable', {});
+        const inPreview = box.querySelector('.resolved-var');
+        const pdf = await h.exportPdfContent(NAME_CHIP_HTML, null);
+        const docx = await h.exportDocxParts(NAME_CHIP_HTML, null);
+        const pdfBody = h.findTextBlocks(pdf.content, b => h.blockPlainText(b).includes('Par')).map(b => h.blockPlainText(b)).join(' | ');
+        // Une image « onerror » lancerait son code après le chargement : on lui laisse le temps.
+        await h.sleep(250);
+        const created = el => el ? el.querySelectorAll('img, b, script, [onerror]').length : -1;
+        const pass = !!inReader && inReader.textContent === hostile && created(inReader) === 0
+          && !!inPreview && inPreview.textContent === hostile && created(inPreview) === 0
+          && pdfBody.includes('Par ' + hostile + '.') && docx.doc.documentElement.textContent.includes('Par ' + hostile + '.')
+          && window.__nameChipRan === 0;
+        return { pass, notes: JSON.stringify({ reader: inReader && inReader.innerHTML, preview: inPreview && inPreview.innerHTML, pdfBody, ran: window.__nameChipRan }) };
+      } finally {
+        GristAPI.getCurrentUserName = realGetName;
+        I18n.setLang(previousLang);
+        delete window.__nameChipRan;
         document.getElementById('btn-mode-edit').click();
         await h.sleep(60);
       }

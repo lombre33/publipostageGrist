@@ -91,7 +91,7 @@ const pageErrors = [];
 
 // Le widget d'une personne qui a choisi sa langue dans Réglages : elle est lue dans le stockage local avant tout autre script.
 async function openWidget(lang) {
-  const context = await browser.newContext({ viewport: { width: WIDTH, height: HEIGHT } });
+  const context = await browser.newContext({ viewport: { width: WIDTH, height: HEIGHT }, bypassCSP: true });
   const page = await context.newPage();
   page.on('pageerror', e => { pageErrors.push(e.message); console.log('[pageerror]', e.message); });
   page.on('dialog', d => { pageErrors.push('boîte inattendue : ' + d.message()); d.accept().catch(() => {}); });
