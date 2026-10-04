@@ -655,6 +655,9 @@ const I18n = (function () {
     'readerGuide.access.mark2': { fr: 'Vérifiez « Niveau d’accès » : il doit afficher « Accès complet au document »', en: 'Check “Access level”: it must read “Full document access”' },
     'readerGuide.access.mark3': { fr: 'Sinon, cliquez sur « Accepter »', en: 'If not, click “Accept”' },
     'readerGuide.access.alt': { fr: 'Le panneau de droite de Grist : l’onglet « Vue » (1), la liste « Niveau d’accès » (2) et le bouton « Accepter » de la demande d’accès complet (3).', en: 'Grist’s right-hand panel: the “Widget” tab (1), the “Access level” list (2) and the “Accept” button of the full-access request (3).' },
+    // Widget relié mais sans accès complet (choix d'Antoine du 2026-10-04, carte « Guider aussi un widget relié mais sans accès complet ? » : « Étape accès seule ») : cette seule étape, sans son numéro ni son titre (c'est celui de la carte).
+    'readerGuide.accessOnly.intro': { fr: 'Ce widget est relié à un tableau, mais Grist ne lui envoie aucune ligne tant qu’il n’a pas l’accès complet au document.', en: 'This widget is linked to a table, but Grist sends it no row until it has full access to the document.' },
+    'readerGuide.accessOnly.lead': { fr: 'Cliquez sur ce widget pour le sélectionner : Grist ouvre son panneau de droite.', en: 'Click this widget to select it: Grist opens its right-hand panel.' },
     'readerGuide.add.title': { fr: 'Mettez votre tableau sur cette page', en: 'Put your table on this page' },
     'readerGuide.add.lead': { fr: 'Il y est déjà ? Passez à l’étape {next}. Sinon, dans Grist, ouvrez « Ajouter », puis « Ajouter une vue à la page ».', en: 'Already there? Go to step {next}. Otherwise, in Grist, open “Add new”, then “Add widget to page”.' },
     'readerGuide.add.mark1': { fr: 'Choisissez « Table »', en: 'Pick “Table”' },

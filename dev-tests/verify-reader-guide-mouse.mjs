@@ -4,7 +4,8 @@
 // "Aucune ligne sélectionnée" : il faudrait guider l'utilisateur proprement sur ce qu'il faut faire, avec du texte et des captures d'écran, au lieu de ce message ».
 // dev-tests/scenarios-reader-guide.js vérifie les états et les textes DANS la page ; ici, ce qui se mesure aux PIXELS et au geste réel : le vrai clic sur Mode lecture, le titre et le début de la première étape dans
 // le panneau sans rien faire, les quatre étapes atteignables à la molette (accès complet au widget, tableau sur la page, « Sélectionner par », ligne choisie), rien qui dépasse à droite (700 px comme 420 px), les captures réellement peintes (le bleu de leurs repères à l'écran), un vrai clic et
-// Entrée / Espace qui les agrandissent et les rétrécissent, le lien changé en direct (court message puis guide), la ligne qui arrive et efface le guide, aucune image introuvable.
+// Entrée / Espace qui les agrandissent et les rétrécissent, le lien changé en direct (court message puis guide), un widget relié mais sans accès complet (la carte réduite à l'étape de l'accès,
+// capture peinte et cliquable, puis le court message une fois l'accès accordé), la ligne qui arrive et efface le guide, aucune image introuvable.
 // Lancé par run-headless.mjs (groupe Node "readerGuideMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-reader-guide-mouse.mjs
 // (READER_GUIDE_SHOTS=<dossier> y range une capture par étape, à regarder - aucune vérification n'en dépend).
 import { createServer } from 'node:http';
@@ -223,14 +224,14 @@ async function blueOf(page, selector) {
   }, png.toString('base64'));
 }
 
-const fireLinking = (page, linking) => page.evaluate((l) => {
+const fireLinking = (page, linking, accessLevel) => page.evaluate(([l, level]) => {
   const s = window.__gristStub.state;
-  s.optionsCallback(s.options, { accessLevel: s.accessLevel, linking: l });
-}, linking);
+  s.optionsCallback(s.options, { accessLevel: level || s.accessLevel, linking: l });
+}, [linking, accessLevel || null]);
 
 const TEXTS = {
-  fr: { title: 'Reliez ce widget à votre tableau', short: 'Aucune ligne sélectionnée', stepTitles: ['Donnez l’accès complet à ce widget', 'Mettez votre tableau sur cette page', 'Reliez ce widget au tableau', 'Cliquez sur une ligne du tableau'], pickLead: 'Le tableau est vide ? Ajoutez-y d’abord une ligne.', zoom: 'Cliquer pour agrandir la capture', unzoom: 'Cliquer pour réduire la capture' },
-  en: { title: 'Link this widget to your table', short: 'No row selected', stepTitles: ['Give this widget full access', 'Put your table on this page', 'Link this widget to the table', 'Click a row of the table'], pickLead: 'Is the table empty? Add a row to it first.', zoom: 'Click to enlarge the screenshot', unzoom: 'Click to shrink the screenshot' },
+  fr: { title: 'Reliez ce widget à votre tableau', short: 'Aucune ligne sélectionnée', stepTitles: ['Donnez l’accès complet à ce widget', 'Mettez votre tableau sur cette page', 'Reliez ce widget au tableau', 'Cliquez sur une ligne du tableau'], pickLead: 'Le tableau est vide ? Ajoutez-y d’abord une ligne.', accessOnlyLead: 'Cliquez sur ce widget pour le sélectionner : Grist ouvre son panneau de droite.', zoom: 'Cliquer pour agrandir la capture', unzoom: 'Cliquer pour réduire la capture' },
+  en: { title: 'Link this widget to your table', short: 'No row selected', stepTitles: ['Give this widget full access', 'Put your table on this page', 'Link this widget to the table', 'Click a row of the table'], pickLead: 'Is the table empty? Add a row to it first.', accessOnlyLead: 'Click this widget to select it: Grist opens its right-hand panel.', zoom: 'Click to enlarge the screenshot', unzoom: 'Click to shrink the screenshot' },
 };
 
 async function runPass(theme, lang) {
@@ -331,6 +332,34 @@ async function runPass(theme, lang) {
   const again = await page.evaluate(() => !!document.querySelector('#reader-container > .reader-guide') && !document.querySelector('#reader-container .reader-empty'));
   check(`${label} - « Sélectionner par » vidé : le guide revient`, again, { again });
 
+  // Relié mais SANS accès complet (Grist n'envoie aucune ligne : « Aucune ligne sélectionnée » serait faux) : la carte se réduit à l'étape de l'accès - choix d'Antoine du 2026-10-04, « Étape accès seule ».
+  await fireLinking(page, { asTarget: 'Cursor:Same-Table', asSource: false }, 'none');
+  await page.waitForFunction(() => document.querySelectorAll('#reader-container .reader-guide-step').length === 1, null, { timeout: 4000 }).catch(() => {});
+  await page.evaluate(() => { document.getElementById('reader-container').scrollTop = 0; });
+  await page.waitForTimeout(250);
+  const only = await view(page);
+  const onlyTexts = await page.evaluate(() => ({ title: (document.querySelector('.reader-guide-title') || {}).textContent, eyebrows: document.querySelectorAll('.reader-guide-eyebrow').length, stepTitles: document.querySelectorAll('.reader-guide-step-title').length, message: !!document.querySelector('#reader-container .reader-empty'), lead: (document.querySelector('.reader-guide-lead') || {}).textContent, img: (document.querySelector('.reader-guide-shot img') || { getAttribute: () => '' }).getAttribute('src').replace(/\?.*$/, '') }));
+  await shot(page, `${theme}-${lang}-acces-seul`);
+  check(`${label} - relié mais sans accès complet : la carte se réduit à l'étape « ${T.stepTitles[0]} », seule, sans « Étape n » ni titre propre, au lieu de « ${T.short} »`,
+    only.steps.length === 1 && onlyTexts.title === T.stepTitles[0] && onlyTexts.eyebrows === 0 && onlyTexts.stepTitles === 0 && !onlyTexts.message && onlyTexts.lead === T.accessOnlyLead, { onlyTexts, steps: only.steps.length });
+  check(`${label} - relié sans accès complet : le titre et le début de l'étape sont dans le panneau, rien ne dépasse à droite`,
+    only.title.inView && only.steps.length === 1 && only.steps[0].seen && only.steps[0].box.top < only.clientH - 60 && only.scrollW <= only.clientW && only.guide.right <= only.clientW && only.guide.left >= 0, { title: only.title, step: only.steps[0] && only.steps[0].box, scrollW: only.scrollW, clientW: only.clientW });
+  const onlyBlue = await blueOf(page, '.reader-guide-step .reader-guide-shot img');
+  check(`${label} - relié sans accès complet : la capture ${lang}-1 est peinte à l'écran (repères bleus visibles), à droite du texte, à 66 % de sa taille`,
+    onlyBlue > 40 && onlyTexts.img === `img/reader-guide/${lang}-1.png` && only.steps.length === 1 && only.steps[0].shot.left >= only.steps[0].body.right - 1 && only.steps[0].shot.w < 175, { onlyBlue, img: onlyTexts.img, shot: only.steps[0] && only.steps[0].shot });
+  await realClick(page, '.reader-guide-step .reader-guide-shot');
+  await page.waitForTimeout(200);
+  const onlyZoom = await view(page);
+  check(`${label} - relié sans accès complet : un vrai clic agrandit la capture à sa taille réelle (244 px), sans défilement horizontal`,
+    onlyZoom.steps.length === 1 && onlyZoom.steps[0].zoomed && Math.abs(onlyZoom.steps[0].shot.w - 244) <= 4 && onlyZoom.scrollW <= onlyZoom.clientW && onlyZoom.steps[0].shot.right <= onlyZoom.clientW, { shot: onlyZoom.steps[0] && onlyZoom.steps[0].shot, scrollW: onlyZoom.scrollW });
+  // L'accès accordé (Grist renvoie les options) : le court message prend la place, sans rendu demandé ; puis tout revient comme avant ce bloc.
+  await fireLinking(page, { asTarget: 'Cursor:Same-Table', asSource: false }, 'full');
+  await page.waitForTimeout(250);
+  const granted = await page.evaluate(() => ({ guide: !!document.querySelector('#reader-container > .reader-guide'), title: (document.querySelector('#reader-container .reader-empty-title') || {}).textContent }));
+  check(`${label} - l'accès complet accordé : l'étape laisse la place au court message « ${T.short} », sans recharger`, !granted.guide && granted.title === T.short, granted);
+  await fireLinking(page, unlinked);
+  await page.waitForTimeout(200);
+
   // La ligne arrive (un clic dans le tableau relié) : le document remplace le guide ; à 420 px de large le guide, lui, ne déborde pas (capture sous le texte).
   await page.evaluate(() => window.__gristStub.fireRecord({ id: 1, Nom: 'Dupont' }, 'Clients'));
   await page.waitForFunction(() => { const c = document.querySelector('#reader-container .reader-content'); return !!c && (c.textContent || '').indexOf('Dupont') !== -1; }, null, { timeout: 8000 }).catch(() => {});
@@ -363,6 +392,14 @@ async function runNarrow() {
   check('panneau de 420 px : une capture agrandie se réduit à la largeur de la carte, sans défilement horizontal', z.steps[1].zoomed && z.scrollW <= z.clientW && z.steps[1].shot.right <= z.guide.right, { scrollW: z.scrollW, clientW: z.clientW, shot: z.steps[1].shot, guide: z.guide });
   const zs = z.steps[1].shot;
   check('panneau de 420 px : la capture agrandie reste à l\'écran après le clic', Math.min(zs.bottom, z.clientH) - Math.max(zs.top, 0) >= Math.min(zs.h, z.clientH) - 4, { zoomed: zs, clientH: z.clientH });
+  // Relié mais sans accès complet : l'étape de l'accès seule, sa capture sous le texte et dans la carte.
+  await fireLinking(page, { asTarget: 'Cursor:Same-Table', asSource: false }, 'none');
+  await page.waitForFunction(() => document.querySelectorAll('#reader-container .reader-guide-step').length === 1, null, { timeout: 4000 }).catch(() => {});
+  await page.evaluate(() => { document.getElementById('reader-container').scrollTop = 0; });
+  await page.waitForTimeout(250);
+  const only = await view(page);
+  await shot(page, 'etroit-acces-seul');
+  check('panneau de 420 px, relié sans accès complet : une seule étape, aucun défilement horizontal, sa capture passe sous le texte, entière dans la carte', only.steps.length === 1 && only.scrollW <= only.clientW && only.guide.right <= only.clientW && only.steps[0].shot.top >= only.steps[0].body.bottom - 1 && only.steps[0].shot.right <= only.guide.right, { steps: only.steps.length, scrollW: only.scrollW, clientW: only.clientW, step: only.steps[0] && { body: only.steps[0].body, shot: only.steps[0].shot }, guide: only.guide });
   await context.close();
 }
 
