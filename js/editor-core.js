@@ -1,7 +1,6 @@
-// Boîte à outils bas niveau partagée par editor-nodes.js/header-footer-preview.js/floating-toolbars.js/main-toolbar.js/editor.js - extrait de editor.js
-// (découpage 2026) pour les quelques utilitaires utilisés par 2+ de ces fichiers sans propriétaire naturel unique (patchNodeAndReselect, le kit de
-// panneaux flottants, createSelectionPreserver). Aucune logique métier propre : que des primitives. Script classique (pas type="module"), même convention
-// de partage de portée globale que GristAPI/Editor/Variables.
+// Boîte à outils bas niveau de l'éditeur : les utilitaires utilisés par plusieurs modules sans propriétaire naturel (patchNodeAndReselect, le kit de
+// panneaux flottants, createSelectionPreserver, les commandes sur une sélection de cases). Aucune logique métier, que des primitives. Script
+// classique (pas type="module"), même partage de portée globale que GristAPI, Editor et Variables.
 const EditorCore = (function () {
   let editor = null;
   let floatingUi = null;
@@ -23,27 +22,29 @@ const EditorCore = (function () {
     view.dispatch(tr);
   }
 
-  // clientWidth inclut SON PROPRE padding (marge de page en Aperçu A4) ; partagé entre clampOverflowingTables et l'alignement des images en calque.
-  // Jamais négative : un éditeur masqué (Lecture, macro-modèle) a un clientWidth de 0 mais garde son padding calculé, la soustraction rendait donc une
-  // largeur négative que clampOverflowingTables prenait pour une vraie mesure et ramenait toutes les colonnes d'un tableau à 25 px. 0 veut dire « pas de
-  // mise en page, rien à mesurer ».
+  // clientWidth inclut son propre padding (la marge de page de l'Aperçu A4) ; partagé entre clampOverflowingTables et l'alignement des images en
+  // calque. Jamais négative : un éditeur masqué (Lecture, macro-modèle) a un clientWidth de 0 mais garde son padding calculé, et la soustraction
+  // donnerait une largeur négative que clampOverflowingTables prendrait pour une vraie mesure, ramenant toutes les colonnes d'un tableau à 25 px. 0
+  // veut dire « pas de mise en page, rien à mesurer ».
   function editorContentWidthPx(currentEditor) {
     const rootEl = currentEditor.view.dom;
     const rootCs = getComputedStyle(rootEl);
     return Math.max(0, rootEl.clientWidth - (parseFloat(rootCs.paddingLeft) || 0) - (parseFloat(rootCs.paddingRight) || 0));
   }
 
-  // Facteur de réduction de la feuille A4 (`zoom: var(--pp-fit-zoom)` sur .v2-page-sheet et .reader-content, posé par applyPageFitZoom de js/main.js) : à ~700 px de
-  // panneau il vaut ~0,85. Les rectangles de getBoundingClientRect et les déplacements de la souris sont en pixels ÉCRAN, alors que `left`, `top` et `width` d'une
-  // image s'écrivent en pixels de MISE EN PAGE : tout geste qui passe de l'un à l'autre divise par ce facteur (redimensionner, déplacer, aligner, passer en calque).
-  // Même lecture que layoutZoom de js/header-footer-preview.js (copie locale à son module). Repli sur 1 : feuille non réduite (grand panneau, Aperçu A4 décoché).
+  // Facteur de réduction de la feuille A4 (`zoom: var(--pp-fit-zoom)` sur .v2-page-sheet et .reader-content, posé par applyPageFitZoom de js/main.js)
+  // : à ~700 px de panneau il vaut ~0,85. Les rectangles de getBoundingClientRect et les déplacements de la souris sont en pixels écran, alors que
+  // `left`, `top` et `width` d'une image s'écrivent en pixels de mise en page : tout geste qui passe de l'un à l'autre divise par ce facteur
+  // (redimensionner, déplacer, aligner, passer en calque). Repli sur 1 : feuille non réduite (grand panneau, Aperçu A4 décoché). js/reader-mode.js
+  // garde sa propre copie : il se charge avant ce fichier.
   function layoutZoom(el) {
     const sheet = el && el.closest ? el.closest('.v2-page-sheet, .reader-content') : null;
     const z = sheet ? parseFloat(getComputedStyle(sheet).zoom) : NaN;
     return (isFinite(z) && z > 0) ? z : 1;
   }
 
-  // Toolbar contextuelle flottante, positionnée par @floating-ui/dom, ancrée dans document.body (évite tout souci de contexte d'empilement avec un ancêtre).
+  // Barre contextuelle flottante, positionnée par @floating-ui/dom et ancrée dans document.body (aucun contexte d'empilement d'un ancêtre ne la
+  // gêne).
   function createFloatingPanel(className, innerHTML, onAction, onInput) {
     const el = document.createElement('div');
     el.className = className;
@@ -63,8 +64,8 @@ const EditorCore = (function () {
       const input = event.target.closest('[data-role]');
       if (input) onInput(input.dataset.role, input.value);
     });
-    // Un bouton de la barre se déclenche aussi au clavier (Tab puis Entrée ou Espace) : ce clic-là n'est précédé d'aucun mousedown ; celui de la souris est déjà passé par
-    // le mousedown ci-dessus.
+    // Un bouton de la barre se déclenche aussi au clavier (Tab puis Entrée ou Espace) : ce clic-là n'est précédé d'aucun mousedown ; celui de la
+    // souris est déjà passé par le mousedown ci-dessus.
     el.addEventListener('click', (event) => {
       const btn = event.target.closest('button[data-action]');
       if (!btn) return;
@@ -84,9 +85,9 @@ const EditorCore = (function () {
     }
     return {
       el,
-      // Fixée dans `slot` (une bande de la page, hors du défilement) au lieu de flotter : dans une grille la barre de la case posée sur la case courante recouvrait les cases
-      // voisines, un appui dessus tombait sur ses boutons et rien ne pouvait plus être sélectionné à la souris (js/grid-editor.js, css/grid.css). Une barre fixée reste
-      // visible : hide() n'y fait plus rien, c'est la bande qui se montre ou se cache (css/grid.css).
+      // Fixée dans `slot` (une bande de la page, hors du défilement) au lieu de flotter : dans une grille, la barre de la case posée sur la case
+      // courante recouvrirait les cases voisines, et un appui dessus tomberait sur ses boutons (js/grid-editor.js, css/grid.css). Une barre fixée
+      // reste visible : hide() n'y fait plus rien, c'est la bande qui se montre ou se cache.
       dock(slot) {
         if (stopAutoUpdate) { stopAutoUpdate(); stopAutoUpdate = null; }
         if (el.parentElement !== slot) slot.appendChild(el);
@@ -95,13 +96,15 @@ const EditorCore = (function () {
       },
       undock,
       isDocked() { return docked; },
-      // `options` (facultatif, valeur ou fonction relue à chaque calcul) : { flip, shift } passés tels quels aux intergiciels de floating-ui - la grille s'en sert pour que
-      // la barre ne recouvre pas ses bandeaux (js/grid-editor.js:floatingOptions) - et { placement } (au-dessus par défaut : le menu d'une barre fixée en haut de la page, comme celle de
-      // la case d'une grille, s'ouvre dessous plutôt que sur la barre d'outils). Sans lui, rien ne change.
+      // `options` (facultatif, valeur ou fonction relue à chaque calcul) : { flip, shift } passés tels quels aux intergiciels de floating-ui (la
+      // grille s'en sert pour que la barre ne recouvre pas ses bandeaux, js/grid-editor.js:floatingOptions) et { placement } (au-dessus par défaut :
+      // le menu d'une barre fixée en haut de la page, comme celle de la case d'une grille, s'ouvre dessous plutôt que sur la barre d'outils). Sans
+      // `options`, rien ne change.
       show(referenceEl, options) {
         undock();
-        // À l'OUVERTURE seulement : show est rappelé à chaque transaction, panneau déjà affiché. Un menu (couleur, police) passe au-dessus de ceux déjà ouverts et de toute barre flottante ;
-        // une barre flottante garde l'ordre du DOM (celle d'une bulle ou d'une image reste au-dessus de celle du tableau que le même clic ouvre : Layers.raise la laisse, js/layers.js).
+        // À l'ouverture seulement : show est rappelé à chaque transaction, panneau déjà affiché. Un menu (couleur, police) passe au-dessus de ceux
+        // déjà ouverts et de toute barre flottante ; une barre flottante garde l'ordre du DOM (celle d'une bulle ou d'une image reste au-dessus de
+        // celle du tableau que le même clic ouvre : Layers.raise la laisse, js/layers.js).
         const opening = !el.classList.contains('visible');
         el.classList.add('visible');
         if (opening) Layers.raise(el);
@@ -123,8 +126,9 @@ const EditorCore = (function () {
     };
   }
 
-  // Filet de sécurité : les toolbars contextuelles (tableau/image/variable) ne se ferment normalement que sur un changement réel de sélection ProseMirror -
-  // un clic hors de `.tiptap` ET hors `.v2-floating-toolbar` les referme toutes, pour les cas sans évènement ProseMirror (ex. clic sur "Mode lecture").
+  // Filet de sécurité : les barres contextuelles (tableau, image, variable) ne se ferment normalement que sur un vrai changement de sélection
+  // ProseMirror ; un clic hors de `.tiptap` et hors de `.v2-floating-toolbar` les referme toutes, pour les cas sans évènement ProseMirror (ex. clic
+  // sur "Mode lecture").
   const floatingContextPanels = [];
   function registerFloatingPanel(panel) { floatingContextPanels.push(panel); }
   function hideFloatingContextToolbars() { floatingContextPanels.forEach(p => p.hide()); }
@@ -137,7 +141,8 @@ const EditorCore = (function () {
   let openDropdownPanel = null;
   let openDropdownButton = null;
   function getOpenDropdownPanel() { return openDropdownPanel; }
-  // `button` (facultatif) : le bouton qui a ouvert `panel` - il annonce son état ouvert (aria-expanded) jusqu'à ce que closeDropdownPanel referme le menu, comme ceux de wireDropdownButton.
+  // `button` (facultatif) : le bouton qui a ouvert `panel` - il annonce son état ouvert (aria-expanded) jusqu'à ce que closeDropdownPanel referme le
+  // menu, comme ceux de wireDropdownButton.
   function setOpenDropdownPanel(panel, button) {
     openDropdownPanel = panel;
     openDropdownButton = button || null;
@@ -150,18 +155,18 @@ const EditorCore = (function () {
       || event.target.closest('.v2-stepper') || event.target.closest('.v2-fill-chip')) return;
     closeDropdownPanel();
   });
-  // aria-expanded posé/retiré sur le bouton déclencheur pendant que son panneau est ouvert - même convention que TemplateTreeSelect
-  // (js/template-tree-select.js, trigger.setAttribute('aria-expanded', ...)) et signal générique lu par la règle CSS qui masque l'info-bulle [data-tip]
-  // d'un bouton à menu tant que celui-ci est ouvert (css/toolbar-v2.css) - cf. la délégation mouseover/mouseout/focusin/focusout plus bas pour le pendant
-  // "survol d'un .v2-hover-group", câblée une fois pour toutes au chargement de ce script, jamais à rappeler depuis un autre fichier.
+  // aria-expanded est posé sur le bouton déclencheur tant que son panneau est ouvert, comme dans TemplateTreeSelect (js/template-tree-select.js) :
+  // c'est aussi le signal que lit la règle CSS qui masque l'info-bulle [data-tip] d'un bouton à menu ouvert (css/toolbar-v2.css). Le pendant pour le
+  // survol d'un .v2-hover-group est la délégation mouseover/mouseout/focusin/focusout plus bas, câblée une fois au chargement de ce script.
   function closeDropdownPanel() {
     if (!openDropdownPanel) return;
     openDropdownPanel.hide();
     openDropdownPanel = null;
     if (openDropdownButton) { openDropdownButton.setAttribute('aria-expanded', 'false'); openDropdownButton = null; }
   }
-  // Ouvre/ferme `panel` au clic sur `btn` - mousedown+preventDefault (pas click), comme la toolbar tableau/image, pour ne pas perdre la sélection avant
-  // l'ouverture. `getSelection` capture la sélection AU MOMENT du clic, restaurée par `withSavedSelection` quand une couleur est vraiment choisie.
+  // Ouvre ou ferme `panel` au clic sur `btn`, sur mousedown + preventDefault (pas click) comme les barres du tableau et de l'image, pour ne pas
+  // perdre la sélection avant l'ouverture. `captureSelection` mémorise la sélection au moment du clic, que `withSavedSelection` rétablit quand une
+  // couleur est vraiment choisie.
   function wireDropdownButton(btn, panel, captureSelection) {
     if (!btn) return;
     btn.setAttribute('aria-haspopup', 'true');
@@ -177,48 +182,40 @@ const EditorCore = (function () {
       btn.setAttribute('aria-expanded', 'true');
     });
   }
-  // Bug récurrent (retour Antoine, bouton "image" 2026-09-28 - déjà corrigé une fois au cas par cas pour #v2-btn-quality/#btn-export-pdf en leur retirant
-  // purement et simplement data-tip, cf. commentaire .v2-hover-flyout-label dans editor-v2.css) : un bouton qui ouvre un `.v2-hover-flyout` au survol
-  // (css/editor-v2.css, `.v2-hover-group:hover .v2-hover-flyout`) affiche AUSSI sa propre info-bulle [data-tip] au survol (css/toolbar-v2.css) - les deux
-  // apparaissent juste sous le bouton et se chevauchent. Mécanisme commun plutôt qu'un correctif par bouton : pose aria-expanded="true"/"false" sur le
-  // déclencheur du `.v2-hover-group` pendant que son flyout est visible - la même règle CSS ([data-tip][aria-expanded="true"]::after, css/toolbar-v2.css)
-  // masque alors son info-bulle, exactement comme pour wireDropdownButton/closeDropdownPanel ci-dessus et TemplateTreeSelect.
-  //
-  // PAR DÉLÉGATION sur document (mousedown ci-dessus l'est déjà) plutôt qu'un scan ponctuel des .v2-hover-group au chargement : un groupe créé APRÈS ce
-  // script - ex. #v2-hf-pagenum-group, injecté à la demande par ensureHfPill() (js/header-footer-preview.js) - a exactement le même bug et doit être
-  // couvert sans qu'aucun autre fichier n'ait à rappeler une fonction de câblage ici. Un scan ponctuel avait exactement raté ce cas.
-  //
-  // mouseover/mouseout (pas mouseenter/mouseleave, qui ne remontent pas et ne peuvent donc pas être délégués sur document) avec vérification de
-  // relatedTarget : émulation standard d'une VRAIE entrée/sortie du groupe (ignore un simple passage entre deux de ses descendants). focusin/focusout
-  // remontent nativement, la délégation est directe. Que des évènements DOM RÉELS (jamais les pseudo-classes :hover/:focus-within elles-mêmes, qui
-  // pilotent déjà l'ouverture du flyout, inchangée) : :hover ne peut pas être déclenché par dispatchEvent() dans le harnais de test automatisé (cf.
-  // openFlyout, dev-tests/helpers.js) - un mécanisme basé uniquement sur :hover n'aurait donc jamais été vérifiable par un test exécutable.
+  // Un bouton qui ouvre un `.v2-hover-flyout` au survol (css/editor-v2.css, `.v2-hover-group:hover .v2-hover-flyout`) afficherait aussi sa propre
+  // info-bulle [data-tip] (css/toolbar-v2.css) : les deux apparaîtraient sous le bouton et se chevaucheraient. Mécanisme commun plutôt qu'un
+  // correctif par bouton : aria-expanded="true"/"false" est posé sur le déclencheur du `.v2-hover-group` pendant que son flyout est visible, et la
+  // même règle CSS ([data-tip][aria-expanded="true"]::after) masque alors l'info-bulle, comme pour wireDropdownButton, closeDropdownPanel et
+  // TemplateTreeSelect.
+  // Par délégation sur document (comme mousedown plus haut) plutôt qu'en balayant les .v2-hover-group au chargement : un groupe créé après ce script
+  // (ex. #v2-hf-pagenum-group, injecté à la demande par ensureHfPill(), js/header-footer-preview.js) a le même défaut et doit être couvert sans
+  // qu'aucun autre fichier rappelle une fonction de câblage ici.
+  // mouseover/mouseout (pas mouseenter/mouseleave, qui ne remontent pas et ne se délèguent donc pas sur document), avec vérification de relatedTarget
+  // : c'est l'émulation usuelle d'une vraie entrée ou sortie du groupe (un simple passage entre deux de ses descendants est ignoré). focusin/focusout
+  // remontent nativement. Ce sont de vrais évènements DOM, jamais les pseudo-classes :hover/:focus-within qui pilotent déjà l'ouverture du flyout :
+  // dispatchEvent() ne peut pas déclencher :hover dans le banc de test (openFlyout, dev-tests/helpers.js), et un mécanisme fondé sur :hover seul n'y
+  // serait pas vérifiable.
   function groupOf(target) { return target.closest && target.closest('.v2-hover-group'); }
-  // Une VRAIE entrée/sortie du groupe : ignore un simple passage entre deux de ses propres descendants (relatedTarget encore/déjà dans le groupe).
+  // Une vraie entrée ou sortie du groupe : ignore un simple passage entre deux de ses descendants (relatedTarget encore ou déjà dans le groupe).
   function realCrossing(event, group) { return !event.relatedTarget || !group.contains(event.relatedTarget); }
-  // positionFlyout : même principe que positionPopup() de TemplateTreeSelect (js/template-tree-select.js)
-  // - un flyout `.v2-hover-flyout` (position:absolute; top:100%; left:0, CSS) suppose une barre d'outils
-  // toujours à peu près à la même hauteur/largeur, faux dans un petit panneau Grist réel (~700x400) : le
-  // mode email (avec Cci déplié) ajoute deux lignes AU-DESSUS de la barre (#v2-email-fields-row), qui finit
-  // alors à 311-387px selon la taille (mesure indépendante du coordinateur, 2026-09-28) - aucune constante
-  // CSS ne peut suivre toutes ces variantes. Calculé ici depuis la position RÉELLE du groupe à CHAQUE
-  // ouverture (délégation déjà en place pour les 8 groupes existants ET tout futur groupe créé après coup,
-  // ex. #v2-hf-pagenum-group), display:none entre-temps (cf. commentaire CSS .v2-hover-flyout) rendant une
-  // correction proactive (redimensionnement, bascule email) inutile - measurer un flyout display:none donne
-  // un rect à zéro, sans intérêt.
-  // La correction horizontale (left) s'applique à tous les flyouts - un left ne change que leur position,
-  // jamais le clipping de leur contenu. Le max-height/scrollTop ne touchent QUE .v2-hover-flyout-scrollable
-  // (aujourd'hui #v2-heading-flyout) : un max-height sur un flyout resté overflow:visible ne fait que
-  // rétrécir sa BOÎTE, son contenu continue de déborder par-dessus, visible mais désormais hors d'une boîte
-  // trop courte - inutile sur les 7 flyouts qui tiennent déjà naturellement, risque de les rendre moches
-  // sans rien régler. scrollTop remis à 0 à chaque ouverture : sans ça, un défilement interne resterait
-  // mémorisé à la fermeture (constaté par le coordinateur, comportement Chromium déjà rencontré pour
-  // TemplateTreeSelect) et rouvrirait sur une portion du menu qui cache "Normal"/"Titre 1".
+  // positionFlyout : même principe que positionPopup() de TemplateTreeSelect (js/template-tree-select.js). Un flyout `.v2-hover-flyout`
+  // (position:absolute; top:100%; left:0, CSS) suppose une barre d'outils toujours à peu près à la même hauteur et largeur, ce qui est faux dans un
+  // petit panneau Grist : le mode email (avec Cci déplié) ajoute deux lignes au-dessus de la barre (#v2-email-fields-row), qui finit alors à 311-387
+  // px selon la taille, et aucune constante CSS ne suit toutes ces variantes. La position est donc calculée depuis celle du groupe à chaque ouverture
+  // (délégation déjà en place pour tous les groupes, y compris ceux créés après coup, ex. #v2-hf-pagenum-group) ; entre deux ouvertures le flyout est
+  // en display:none (cf. le commentaire CSS de .v2-hover-flyout), ce qui rend inutile une correction proactive (redimensionnement, bascule email) :
+  // un flyout en display:none se mesure à zéro.
+  // La correction horizontale (left) s'applique à tous les flyouts : un left ne change que leur position, jamais le clipping de leur contenu. Le
+  // max-height et le scrollTop ne touchent que .v2-hover-flyout-scrollable (#v2-heading-flyout) : un max-height sur un flyout resté en
+  // overflow:visible ne ferait que rétrécir sa boîte, son contenu continuerait de déborder par-dessus, hors de la boîte. scrollTop est remis à 0 à
+  // chaque ouverture : sans cela, le défilement interne mémorisé à la fermeture rouvrirait le menu sur une portion qui cache « Normal » et « Titre
+  // 1 » (comportement de Chromium, déjà rencontré avec TemplateTreeSelect).
   function positionFlyout(group, opening) {
     const flyout = group.querySelector(':scope > .v2-hover-flyout');
     if (!flyout) return;
-    // À l'OUVERTURE seulement (js/layers.js) : le menu passe au-dessus de l'existant - une barre flottante de tableau, un autre menu. Le navigateur renvoie un `mouseover` au groupe déjà ouvert dès que
-    // l'icône de son bouton est redessinée sous une souris au repos (l'alignement, à chaque frappe) : il ne doit pas repasser devant la liste # ouverte après lui.
+    // À l'ouverture seulement (js/layers.js) : le menu passe au-dessus de l'existant, barre flottante de tableau ou autre menu. Le navigateur renvoie
+    // un `mouseover` au groupe déjà ouvert dès que l'icône de son bouton est redessinée sous une souris au repos (l'alignement, à chaque frappe) : il
+    // ne doit pas repasser devant la liste # ouverte après lui.
     if (opening) Layers.raise(flyout);
     flyout.style.left = '';
     const overflowRight = flyout.getBoundingClientRect().right - (window.innerWidth - 8);
@@ -253,13 +250,13 @@ const EditorCore = (function () {
     const group = groupOf(event.target);
     if (group && realCrossing(event, group)) setGroupExpanded(group, false);
   });
-  // Un clic de souris sur le bouton d'un menu au survol ne lui donne pas le focus (retours d'Antoine du 2026-10-01 : « + », « Qualité PDF » et « Titre » restaient ouverts une
-  // fois la souris partie) : le menu s'ouvre et se referme avec le survol, le focus est pour le clavier. Sans ça le bouton cliqué le gardait, son menu avec lui (:focus-within,
-  // css/editor-v2.css), et le curseur quittait le texte en cours - rien ne se tapait plus tant qu'on n'avait pas recliqué dans l'éditeur. Tab, Entrée et Espace ne changent pas.
-  // Un champ de saisie qui avait le focus (nom du modèle en renommage, nom du PDF, objet de l'email...) le perdait à ce clic et se validait à la perte du focus : il le perd donc
-  // au CLIC, avant le gestionnaire du bouton (phase de capture), et non à l'appui - le nom validé peut être plus large, la barre se redessine et le bouton quitterait la souris
-  // avant le relâchement, le clic serait perdu (relevé à la vraie souris sur Enregistrer). Seul l'éditeur garde son focus. Mécanisme commun, par délégation, pour la même raison
-  // que ci-dessus : tout groupe à menu, y compris créé après ce script, en hérite.
+  // Un clic de souris sur le bouton d'un menu au survol ne lui donne pas le focus : le menu s'ouvre et se referme avec le survol, le focus est pour
+  // le clavier. Sinon le bouton cliqué le garde, son menu avec lui (:focus-within, css/editor-v2.css), et le curseur quitte le texte en cours : rien
+  // ne se tape plus tant qu'on n'a pas recliqué dans l'éditeur. Tab, Entrée et Espace ne changent pas.
+  // Un champ de saisie qui avait le focus (nom du modèle en renommage, nom du PDF, objet de l'email...) le perd à ce clic et se valide à la perte du
+  // focus : il le perd donc au clic, avant le gestionnaire du bouton (phase de capture), et non à l'appui. Le nom validé peut être plus large, la
+  // barre se redessine et le bouton quitterait la souris avant le relâchement : le clic serait perdu. Seul l'éditeur garde son focus. Mécanisme
+  // commun, par délégation, pour la même raison que ci-dessus : tout groupe à menu, y compris créé après ce script, en hérite.
   function menuTriggerOf(target) {
     const group = groupOf(target);
     const trigger = group && group.querySelector(':scope > button');
@@ -280,14 +277,15 @@ const EditorCore = (function () {
     if (el) el.style.color = color || '';
   }
 
-  // Une sélection de cases (CellSelection de prosemirror-tables) se reconnaît à `forEachCell` et à sa case d'ancrage, sans importer la classe : même convention que
-  // setCellsBackground de js/floating-toolbars.js. Ses deux cases d'angle suffisent à la refaire ; son `from` / `to` n'est que le texte de la case de tête.
+  // Une sélection de cases (CellSelection de prosemirror-tables) se reconnaît à `forEachCell` et à sa case d'ancrage, sans importer la classe : même
+  // convention que setCellsBackground de js/floating-toolbars.js. Ses deux cases d'angle suffisent à la refaire ; son `from` / `to` n'est que le
+  // texte de la case de tête.
   function isCellSelection(selection) { return !!selection && typeof selection.forEachCell === 'function' && !!selection.$anchorCell; }
   const cellEnds = selection => ({ anchorCell: selection.$anchorCell.pos, headCell: selection.$headCell.pos });
 
-  // Un menu/panneau flottant vole le focus au clic - sans mémoriser la sélection avant de l'ouvrir, `editor.chain().focus()` retomberait sur la position du
-  // curseur, pas la sélection réellement visée par l'utilisateur. Une sélection de cases est mémorisée par ses deux cases d'angle : rétablie en simple texte, elle ne
-  // mettait en forme que la case de tête (police, taille, couleur, surlignage) et éteignait la sélection de cases (Antoine, 02/10).
+  // Un menu ou panneau flottant vole le focus au clic : sans mémoriser la sélection avant de l'ouvrir, `editor.chain().focus()` retomberait sur la
+  // position du curseur, pas sur la sélection visée. Une sélection de cases est mémorisée par ses deux cases d'angle : rétablie en simple texte, elle
+  // ne mettrait en forme que la case de tête (police, taille, couleur, surlignage) et éteindrait la sélection de cases.
   function createSelectionPreserver() {
     let savedSelection = null;
     const captureSelection = () => {
@@ -308,7 +306,8 @@ const EditorCore = (function () {
     return commands.setTextSelection({ from: saved.from, to: saved.to });
   }
 
-  // Plage de texte d'une case (de son premier à son dernier bloc de texte), `pos` étant la position AVANT la case ; null pour une case sans bloc de texte.
+  // Plage de texte d'une case (de son premier à son dernier bloc de texte), `pos` étant la position avant la case ; null pour une case sans bloc de
+  // texte.
   function cellTextRange(node, pos) {
     let from = null, to = null;
     node.descendants((child, offset) => {
@@ -321,12 +320,14 @@ const EditorCore = (function () {
     return from === null ? null : { from, to };
   }
 
-  // Une commande de bloc (liste...) se calcule sur le bloc commun à `$from.blockRange($to)`, qui pour une sélection de cases est celui de la seule case de tête : le gras, l'italique
-  // ou l'alignement, eux, parcourent les `ranges` de la sélection. Ici elle est rejouée dans CHAQUE case, de la dernière à la première (envelopper le contenu d'une case décale tout
-  // ce qui la suit), en UNE transaction (un seul Annuler) : pour chaque case, le texte de la case devient la sélection puis `perCell(chain)` ajoute ses commandes à la chaîne, avant
-  // que la sélection de cases soit rétablie. Chaque commande de la chaîne s'exécute tout de suite, sur l'état que la case précédente a laissé : une condition ou une seconde commande
-  // qui dépend de la première (poser une liste, puis régler son style) est donc une commande de plus dans la chaîne (`chain.command(({ state, commands }) => ...)`), pas la suite d'un
-  // même rappel qui lirait encore l'état d'avant. Hors sélection de cases, `ordinary()` fait ce qu'on faisait avant, inchangé.
+  // Une commande de bloc (liste...) se calcule sur le bloc commun à `$from.blockRange($to)`, qui pour une sélection de cases est celui de la seule
+  // case de tête : le gras, l'italique ou l'alignement, eux, parcourent les `ranges` de la sélection. Ici la commande est rejouée dans chaque case,
+  // de la dernière à la première (envelopper le contenu d'une case décale tout ce qui la suit), en une seule transaction (un seul Annuler) : pour
+  // chaque case, son texte devient la sélection puis `perCell(chain)` ajoute ses commandes à la chaîne, avant que la sélection de cases soit
+  // rétablie. Chaque commande de la chaîne s'exécute tout de suite, sur l'état que la case précédente a laissé : une seconde commande ou une
+  // condition qui dépend de la première (poser une liste, puis régler son style) est donc une commande de plus dans la chaîne
+  // (`chain.command(({ state, commands }) => ...)`), pas la suite d'un même rappel, qui lirait encore l'état d'avant. Hors sélection de cases,
+  // `ordinary()` fait ce qu'on faisait sans cases sélectionnées.
   function runOnSelectedCells(ordinary, perCell) {
     const selection = editor.state.selection;
     if (!isCellSelection(selection)) return ordinary();
@@ -339,24 +340,27 @@ const EditorCore = (function () {
     });
     return keepCellSelection(chain, cellEnds(selection)).run();
   }
-  // Les cases d'une sélection de cases, dans l'ordre du document : { node, pos }, `pos` étant la position AVANT la case.
+  // Les cases d'une sélection de cases, dans l'ordre du document : { node, pos }, `pos` étant la position avant la case.
   function selectedCells(selection) {
     const cells = [];
     selection.forEachCell((node, pos) => cells.push({ node, pos }));
     return cells.sort((a, b) => a.pos - b.pos);
   }
-  // Dernière commande d'une chaîne qui a déplacé le curseur de case en case : les deux cases d'angle, suivies à travers les changements, redeviennent la sélection de cases.
+  // Dernière commande d'une chaîne qui a déplacé le curseur de case en case : les deux cases d'angle, suivies à travers les changements, redeviennent
+  // la sélection de cases.
   function keepCellSelection(chain, ends) {
     return chain.command(({ tr, commands }) => commands.setCellSelection({ anchorCell: tr.mapping.map(ends.anchorCell, -1), headCell: tr.mapping.map(ends.headCell, -1) }));
   }
-  // Le curseur est-il dans un nœud de ce type ? (une liste, une citation...) - lu sur l'état d'une commande en chaîne, qui voit les cases déjà traitées.
+  // Le curseur est-il dans un nœud de ce type ? (une liste, une citation...) - lu sur l'état d'une commande en chaîne, qui voit les cases déjà
+  // traitées.
   function isInsideNode($pos, typeName) {
     for (let depth = $pos.depth; depth > 0; depth--) if ($pos.node(depth).type.name === typeName) return true;
     return false;
   }
-  // Pose la liste `name` (bulletList, orderedList...) avec la commande `command` de TipTap, ou la retire : ce que font le bouton « Liste à puces » et les touches Ctrl+Maj+8 et Ctrl+Maj+7
-  // (js/shortcuts.js). Sur une sélection de cases, dans TOUTES les cases, l'état voulu étant l'inverse de celui que montre la case de tête : enfoncé, un appui retire la liste de chaque
-  // case, sinon il la pose dans chacune. Hors sélection de cases, la bascule de TipTap, inchangée.
+  // Pose la liste `name` (bulletList, orderedList...) avec la commande `command` de TipTap, ou la retire : ce que font le bouton « Liste à puces » et
+  // les touches Ctrl+Maj+8 et Ctrl+Maj+7 (js/shortcuts.js). Sur une sélection de cases, dans toutes les cases, l'état voulu étant l'inverse de celui
+  // que montre la case de tête : enfoncé, un appui retire la liste de chaque case, sinon il la pose dans chacune. Hors sélection de cases, c'est la
+  // bascule de TipTap.
   function toggleList(name, command) {
     const wanted = !editor.isActive(name);
     return runOnSelectedCells(
@@ -364,12 +368,12 @@ const EditorCore = (function () {
       chain => chain.command(({ state, commands }) => { if (isInsideNode(state.selection.$from, name) !== wanted) commands[command](); return true; }));
   }
 
-  // ---- Citation et retrait d'une sélection de cases ----
-  // `toggleBlockquote`, `sinkListItem` et `liftListItem` partent de `$from.blockRange($to)`, donc de la seule case de tête, et les boutons du retrait se grisent (`can()` faux : le
-  // début d'une sélection de cases est avant la liste, pas dedans). Ici chaque case est traitée pour elle-même.
+  // Citation et retrait sur une sélection de cases : `toggleBlockquote`, `sinkListItem` et `liftListItem` partent de `$from.blockRange($to)`, donc de
+  // la seule case de tête, et les boutons du retrait se grisent (`can()` faux : le début d'une sélection de cases est avant la liste, pas dedans).
+  // Ici chaque case est traitée pour elle-même.
 
-  // Une case « en citation » : tout ce qu'elle contient est dans une citation (c'est ce que fait le bouton : il entoure le contenu entier de la case). Le bouton la montre enfoncée
-  // pour la case de tête d'une sélection de cases.
+  // Une case « en citation » : tout ce qu'elle contient est dans une citation (c'est ce que fait le bouton : il entoure le contenu entier de la
+  // case). Le bouton la montre enfoncée pour la case de tête d'une sélection de cases.
   const hasQuote = cell => { let found = false; cell.forEach(child => { if (child.type.name === 'blockquote') found = true; }); return found; };
   function isQuotedCell(cell) {
     let quoted = cell.childCount > 0;
@@ -389,15 +393,16 @@ const EditorCore = (function () {
       if (range) tr.lift(range, tr.doc.resolve(at).depth);
     });
   }
-  // Entoure le contenu entier d'une case d'UNE citation (la case de tête, aujourd'hui, via le `blockRange` de la sélection de cases).
+  // Entoure le contenu entier d'une case d'une seule citation (le `blockRange` du contenu de la case).
   function quoteCell(tr, pos) {
     const quote = tr.doc.type.schema.nodes.blockquote;
     const cell = tr.doc.nodeAt(pos);
     const range = tr.doc.resolve(pos + 1).blockRange(tr.doc.resolve(pos + 1 + cell.content.size));
     if (range && quote.validContent(cell.content)) tr.wrap(range, [{ type: quote }]);
   }
-  // Met chaque case de la sélection en citation (`wanted` vrai : celles qui ne le sont pas encore, une citation partielle est d'abord défaite pour qu'il n'y en ait qu'une) ou l'en sort
-  // (faux), en UNE transaction (un seul Annuler) ; la sélection de cases suit d'elle-même (les cases ne bougent pas, leur contenu seul change). Faux si ce n'est pas une sélection de cases.
+  // Met chaque case de la sélection en citation (`wanted` vrai : celles qui ne le sont pas encore, une citation partielle est d'abord défaite pour
+  // qu'il n'y en ait qu'une) ou l'en sort (faux), en une seule transaction (un seul Annuler) ; la sélection de cases suit d'elle-même (les cases ne
+  // bougent pas, leur contenu seul change). Faux si ce n'est pas une sélection de cases.
   function quoteSelectedCells(wanted) {
     const selection = editor.state.selection;
     if (!isCellSelection(selection)) return false;
@@ -413,9 +418,10 @@ const EditorCore = (function () {
     return true;
   }
 
-  // Les listes de plus haut niveau (à puces ou numérotées) des cases, une plage de texte chacune, dans l'ordre du document : ce que le retrait décale d'un niveau, leurs sous-listes
-  // suivent leur élément. Le retrait va du deuxième élément au dernier (le premier n'a aucun frère avant lui où s'emboîter, comme dans une case seule : une liste d'un seul élément n'a
-  // rien à décaler) ; le retrait inverse prend la liste entière, qui sort de la liste (ses éléments deviennent des paragraphes, ses sous-listes d'un niveau de moins).
+  // Les listes de plus haut niveau (à puces ou numérotées) des cases, une plage de texte chacune, dans l'ordre du document : ce que le retrait décale
+  // d'un niveau, leurs sous-listes suivent leur élément. Le retrait va du deuxième élément au dernier (le premier n'a aucun frère avant lui où
+  // s'emboîter, comme dans une case seule : une liste d'un seul élément n'a rien à décaler) ; le retrait inverse prend la liste entière, qui sort de
+  // la liste (ses éléments deviennent des paragraphes, ses sous-listes d'un niveau de moins).
   function listRangesInCells(cells, direction) {
     const ranges = [];
     cells.forEach(({ node, pos }) => {
@@ -431,13 +437,14 @@ const EditorCore = (function () {
     });
     return ranges;
   }
-  // Le bouton de retrait (`direction` 'in') ou de retrait inverse ('out') a-t-il quelque chose à faire dans la sélection de cases ? (sinon il reste grisé)
+  // Le bouton de retrait (`direction` 'in') ou de retrait inverse ('out') a-t-il quelque chose à faire dans la sélection de cases ? (sinon il reste
+  // grisé)
   function canShiftListsInSelectedCells(direction) {
     const selection = editor.state.selection;
     return isCellSelection(selection) && listRangesInCells(selectedCells(selection), direction).length > 0;
   }
-  // Décale chaque liste des cases sélectionnées : une commande par liste, de la dernière à la première (les positions des précédentes ne bougent pas), la plage de la liste étant le
-  // texte sélectionné comme le ferait la souris dans une case seule. Faux si ce n'est pas une sélection de cases.
+  // Décale chaque liste des cases sélectionnées : une commande par liste, de la dernière à la première (les positions des précédentes ne bougent
+  // pas), la plage de la liste étant le texte sélectionné comme le ferait la souris dans une case seule. Faux si ce n'est pas une sélection de cases.
   function shiftListsInSelectedCells(direction) {
     const selection = editor.state.selection;
     if (!isCellSelection(selection)) return false;
