@@ -131,9 +131,9 @@ const I18n = (function () {
     'sheetAssembly.marks.label': { fr: 'Traits de coupe', en: 'Crop marks' },
     'sheetAssembly.marks.off': { fr: 'Sans', en: 'Without' },
     'sheetAssembly.marks.on': { fr: 'Avec', en: 'With' },
-    'sheetAssembly.summary': { fr: '{slots} {slots|emplacement|emplacements} par feuille ({cols} × {rows}) : {count} {count|ligne|lignes} sur {sheets} {sheets|feuille|feuilles} {sheet}.', en: '{slots} {slots|slot|slots} per sheet ({cols} × {rows}): {count} {count|row|rows} on {sheets} {sheet} {sheets|sheet|sheets}.' },
-    'sheetAssembly.summaryGrid': { fr: '{slots} {slots|emplacement|emplacements} par feuille ({cols} × {rows}) : {count} {count|valeur|valeurs} de la table sur {sheets} {sheets|feuille|feuilles} {sheet}.', en: '{slots} {slots|slot|slots} per sheet ({cols} × {rows}): {count} table {count|value|values} on {sheets} {sheet} {sheets|sheet|sheets}.' },
-    'sheetAssembly.hint': { fr: 'Une page par emplacement, dans l’ordre de la table.', en: 'One page per slot, in table order.' },
+    'sheetAssembly.summary': { fr: '{slots} {slots|emplacement|emplacements} par feuille ({cols} × {rows}) : {count} {count|ligne|lignes}, au moins {sheets} {sheets|feuille|feuilles} {sheet}.', en: '{slots} {slots|slot|slots} per sheet ({cols} × {rows}): {count} {count|row|rows}, at least {sheets} {sheet} {sheets|sheet|sheets}.' },
+    'sheetAssembly.summaryGrid': { fr: '{slots} {slots|emplacement|emplacements} par feuille ({cols} × {rows}) : {count} {count|valeur|valeurs} de la table, au moins {sheets} {sheets|feuille|feuilles} {sheet}.', en: '{slots} {slots|slot|slots} per sheet ({cols} × {rows}): {count} table {count|value|values}, at least {sheets} {sheet} {sheets|sheet|sheets}.' },
+    'sheetAssembly.hint': { fr: 'Un emplacement par page, dans l’ordre de la table.', en: 'One slot per page, in table order.' },
     'sheetAssembly.scaled': { fr: 'Pages réduites à {n} % pour laisser la place aux traits de coupe.', en: 'Pages reduced to {n}% to leave room for the crop marks.' },
     'toolbar.autosave.row': { fr: 'Enregistrement automatique', en: 'Auto-save' },
     // Mode grille (js/grid-editor.js) : infobulles des bandeaux A, B, C / 1, 2, 3.

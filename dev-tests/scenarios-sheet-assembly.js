@@ -322,7 +322,7 @@
   // --- 4) La fenêtre : réglages de départ et changements ---------------------------------------------------------------------------------------------------------------
   cases.push({
     id: 'sheetassembly_dialog_defaults_and_choices',
-    description: 'La fenêtre « Assemblage avant impression » pour des A6 : départ en A4 portrait, 2 x 2 emplacements, sans traits de coupe, résumé « 4 emplacements par feuille (2 × 2) : 6 lignes sur 2 feuilles A4. », focus sur la feuille cochée ; A3 repart du meilleur sens (4 x 2), le sens et chaque nombre se changent, « Avec » les traits ; « Générer » rend le réglage et ferme',
+    description: 'La fenêtre « Assemblage avant impression » pour des A6 : départ en A4 portrait, 2 x 2 emplacements, sans traits de coupe, résumé « 4 emplacements par feuille (2 × 2) : 6 lignes, au moins 2 feuilles A4. », focus sur la feuille cochée ; A3 repart du meilleur sens (4 x 2), le sens et chaque nombre se changent, « Avec » les traits ; « Générer » rend le réglage et ferme',
     run: async (h) => {
       const bad = [];
       forgetChoice();
@@ -332,8 +332,8 @@
           const s0 = state();
           const want0 = { sheet: 'A4', orientation: 'portrait', marks: 'off', cols: 2, rows: 2, colsMax: 2, rowsMax: 2, svgSlots: 4, svgMarks: 0, okDisabled: false };
           Object.keys(want0).forEach(k => { if (s0[k] !== want0[k]) bad.push(`départ : ${k} = ${s0[k]} au lieu de ${want0[k]}`); });
-          if (s0.summary !== '4 emplacements par feuille (2 × 2) : 6 lignes sur 2 feuilles A4.') bad.push('résumé : ' + s0.summary);
-          if (s0.hint !== 'Une page par emplacement, dans l’ordre de la table.' || s0.scaled !== '') bad.push('notes : ' + JSON.stringify([s0.hint, s0.scaled]));
+          if (s0.summary !== '4 emplacements par feuille (2 × 2) : 6 lignes, au moins 2 feuilles A4.') bad.push('résumé : ' + s0.summary);
+          if (s0.hint !== 'Un emplacement par page, dans l’ordre de la table.' || s0.scaled !== '') bad.push('notes : ' + JSON.stringify([s0.hint, s0.scaled]));
           if (modal().querySelector('h3').textContent !== 'Assemblage avant impression') bad.push('titre : ' + modal().querySelector('h3').textContent);
           if (document.activeElement !== radioInput('pp-sheets-sheet', 'A4')) bad.push('le focus n’est pas sur la feuille cochée : ' + (document.activeElement && (document.activeElement.name || document.activeElement.tagName)));
           if (s0.viewBox !== '0 0 595.28 841.89') bad.push('feuille d’aperçu : ' + s0.viewBox);
@@ -341,15 +341,15 @@
           pickRadio('pp-sheets-sheet', 'A3');
           const s1 = state();
           if (s1.sheet !== 'A3' || s1.orientation !== 'landscape' || s1.cols !== 4 || s1.rows !== 2 || s1.svgSlots !== 8) bad.push('A3 : ' + JSON.stringify(s1));
-          if (s1.summary !== '8 emplacements par feuille (4 × 2) : 6 lignes sur 1 feuille A3.') bad.push('résumé A3 : ' + s1.summary);
+          if (s1.summary !== '8 emplacements par feuille (4 × 2) : 6 lignes, au moins 1 feuille A3.') bad.push('résumé A3 : ' + s1.summary);
           // Portrait : tous les emplacements de ce sens.
           pickRadio('pp-sheets-orientation', 'portrait');
           const s2 = state();
-          if (s2.orientation !== 'portrait' || s2.cols !== 2 || s2.rows !== 2 || s2.summary !== '4 emplacements par feuille (2 × 2) : 6 lignes sur 2 feuilles A3.') bad.push('A3 portrait : ' + JSON.stringify(s2));
+          if (s2.orientation !== 'portrait' || s2.cols !== 2 || s2.rows !== 2 || s2.summary !== '4 emplacements par feuille (2 × 2) : 6 lignes, au moins 2 feuilles A3.') bad.push('A3 portrait : ' + JSON.stringify(s2));
           // Un nombre d'emplacements en largeur : une seule colonne, deux lignes.
           pickSelect('pp-sheets-cols', 1);
           const s3 = state();
-          if (s3.cols !== 1 || s3.rows !== 2 || s3.svgSlots !== 2 || s3.summary !== '2 emplacements par feuille (1 × 2) : 6 lignes sur 3 feuilles A3.') bad.push('1 x 2 : ' + JSON.stringify(s3));
+          if (s3.cols !== 1 || s3.rows !== 2 || s3.svgSlots !== 2 || s3.summary !== '2 emplacements par feuille (1 × 2) : 6 lignes, au moins 3 feuilles A3.') bad.push('1 x 2 : ' + JSON.stringify(s3));
           // Revenir à l'A4 repart de son meilleur réglage, pas des nombres de la feuille d'avant.
           pickRadio('pp-sheets-sheet', 'A4');
           const s4 = state();
@@ -365,7 +365,7 @@
           // Une ligne, une feuille, un seul emplacement : les accords du résumé.
           const second = openDialog({ count: 1 });
           const one = state().summary;
-          if (one !== '4 emplacements par feuille (2 × 2) : 1 ligne sur 1 feuille A4.') bad.push('une ligne : ' + one);
+          if (one !== '4 emplacements par feuille (2 × 2) : 1 ligne, au moins 1 feuille A4.') bad.push('une ligne : ' + one);
           cancelButton().click();
           await second;
         });
@@ -373,7 +373,7 @@
           forgetChoice();
           const promise = openDialog({ count: 6 });
           const single = state().summary;
-          if (single !== '1 emplacement par feuille (1 × 1) : 6 lignes sur 6 feuilles A4.') bad.push('un emplacement : ' + single);
+          if (single !== '1 emplacement par feuille (1 × 1) : 6 lignes, au moins 6 feuilles A4.') bad.push('un emplacement : ' + single);
           cancelButton().click();
           await promise;
         });
@@ -394,7 +394,7 @@
           const promise = openDialog({ count: 6 });
           const s = state();
           if (s.sheet !== 'A3' || s.orientation !== 'portrait' || s.cols !== 1 || s.rows !== 1 || s.colsMax !== 1 || s.rowsMax !== 1) bad.push('A3 : ' + JSON.stringify(s));
-          if (s.summary !== '1 emplacement par feuille (1 × 1) : 6 lignes sur 6 feuilles A3.') bad.push('résumé : ' + s.summary);
+          if (s.summary !== '1 emplacement par feuille (1 × 1) : 6 lignes, au moins 6 feuilles A3.') bad.push('résumé : ' + s.summary);
           const a4 = radioInput('pp-sheets-sheet', 'A4');
           if (!a4 || !a4.disabled || !radioLabel('pp-sheets-sheet', 'A4').classList.contains('pp-sheets-option-off') || radioLabel('pp-sheets-sheet', 'A4').title !== 'Trop petite pour une page A3.') bad.push('la feuille A4 n’est pas grisée avec sa raison : ' + (a4 && a4.disabled) + ' / ' + (a4 && radioLabel('pp-sheets-sheet', 'A4').title));
           const land = radioInput('pp-sheets-orientation', 'landscape');
@@ -421,7 +421,7 @@
           // L'A3, elle, reçoit deux A4 en paysage.
           pickRadio('pp-sheets-sheet', 'A3');
           const s = state();
-          if (s.sheet !== 'A3' || s.orientation !== 'landscape' || s.cols !== 2 || s.rows !== 1 || s.summary !== '2 emplacements par feuille (2 × 1) : 6 lignes sur 3 feuilles A3.') bad.push('A4 sur A3 : ' + JSON.stringify(s));
+          if (s.sheet !== 'A3' || s.orientation !== 'landscape' || s.cols !== 2 || s.rows !== 1 || s.summary !== '2 emplacements par feuille (2 × 1) : 6 lignes, au moins 3 feuilles A3.') bad.push('A4 sur A3 : ' + JSON.stringify(s));
           cancelButton().click();
           await promise;
         });
@@ -457,7 +457,7 @@
           pickSelect('pp-sheets-cols', 1);
           pickSelect('pp-sheets-rows', 1);
           const one = state();
-          if (one.svgSlots !== 1 || one.svgMarks !== 8 || one.scaled !== '' || one.summary !== '1 emplacement par feuille (1 × 1) : 6 lignes sur 6 feuilles A4.') bad.push('un seul emplacement : ' + JSON.stringify(one));
+          if (one.svgSlots !== 1 || one.svgMarks !== 8 || one.scaled !== '' || one.summary !== '1 emplacement par feuille (1 × 1) : 6 lignes, au moins 6 feuilles A4.') bad.push('un seul emplacement : ' + JSON.stringify(one));
           cancelButton().click();
           await promise;
         });
@@ -568,7 +568,7 @@
           const second = SheetAssemblyDialog.open({ count: 2, table: TABLE });
           await h.sleep(60);
           const firstResult = await first;
-          if (firstResult !== null || !isOpen() || state().summary !== '4 emplacements par feuille (2 × 2) : 2 lignes sur 1 feuille A4.') bad.push('seconde demande : première = ' + JSON.stringify(firstResult) + ', ouverte ' + isOpen() + ', ' + state().summary);
+          if (firstResult !== null || !isOpen() || state().summary !== '4 emplacements par feuille (2 × 2) : 2 lignes, au moins 1 feuille A4.') bad.push('seconde demande : première = ' + JSON.stringify(firstResult) + ', ouverte ' + isOpen() + ', ' + state().summary);
           okButton().click();
           const secondResult = await second;
           if (!secondResult || isOpen()) bad.push('seconde demande : réponse ' + JSON.stringify(secondResult && secondResult.sheet));
@@ -600,7 +600,7 @@
           let promise = openDialog({ count: 6 });
           pickRadio('pp-sheets-marks', 'on');
           const fr = Object.assign(labels(), { notes: [state().hint, state().scaled].filter(Boolean).join(' / ') });
-          const wantFr = { title: 'Assemblage avant impression', labels: 'Feuille,Orientation,Traits de coupe,Emplacements', options: 'A4,A3,Portrait,Paysage,Sans,Avec', slots: 'en largeur,en hauteur', buttons: 'Annuler,Générer', notes: 'Une page par emplacement, dans l’ordre de la table. / Pages réduites à 93 % pour laisser la place aux traits de coupe.' };
+          const wantFr = { title: 'Assemblage avant impression', labels: 'Feuille,Orientation,Traits de coupe,Emplacements', options: 'A4,A3,Portrait,Paysage,Sans,Avec', slots: 'en largeur,en hauteur', buttons: 'Annuler,Générer', notes: 'Un emplacement par page, dans l’ordre de la table. / Pages réduites à 93 % pour laisser la place aux traits de coupe.' };
           Object.keys(wantFr).forEach(k => { if (fr[k] !== wantFr[k]) bad.push(`français, ${k} : ${fr[k]}`); });
           if (!/^pp-sheets-slots-label pp-sheets-(cols|rows)-text$/.test(fr.names.split(',')[0]) || !/^pp-sheets-slots-label pp-sheets-(cols|rows)-text$/.test(fr.names.split(',')[1])) bad.push('noms accessibles des deux listes : ' + fr.names);
           cancelButton().click();
@@ -608,30 +608,30 @@
           // Une grille : « valeurs de la table ».
           promise = openDialog({ count: 3, grid: true });
           const grid = state().summary;
-          if (grid !== '4 emplacements par feuille (2 × 2) : 3 valeurs de la table sur 1 feuille A4.' || /ligne/.test(grid)) bad.push('grille, français : ' + grid);
+          if (grid !== '4 emplacements par feuille (2 × 2) : 3 valeurs de la table, au moins 1 feuille A4.' || /ligne/.test(grid)) bad.push('grille, français : ' + grid);
           cancelButton().click();
           await promise;
           promise = openDialog({ count: 1, grid: true });
           const gridOne = state().summary;
-          if (gridOne !== '4 emplacements par feuille (2 × 2) : 1 valeur de la table sur 1 feuille A4.') bad.push('grille, une valeur : ' + gridOne);
+          if (gridOne !== '4 emplacements par feuille (2 × 2) : 1 valeur de la table, au moins 1 feuille A4.') bad.push('grille, une valeur : ' + gridOne);
           cancelButton().click();
           await promise;
           I18n.setLang('en');
           promise = openDialog({ count: 6 });
           pickRadio('pp-sheets-marks', 'on');
           const en = Object.assign(labels(), { summary: state().summary, notes: [state().hint, state().scaled].filter(Boolean).join(' / ') });
-          const wantEn = { title: 'Assemble before printing', labels: 'Sheet,Orientation,Crop marks,Slots', options: 'A4,A3,Portrait,Landscape,Without,With', slots: 'across,down', buttons: 'Cancel,Generate', summary: '4 slots per sheet (2 × 2): 6 rows on 2 A4 sheets.', notes: 'One page per slot, in table order. / Pages reduced to 93% to leave room for the crop marks.' };
+          const wantEn = { title: 'Assemble before printing', labels: 'Sheet,Orientation,Crop marks,Slots', options: 'A4,A3,Portrait,Landscape,Without,With', slots: 'across,down', buttons: 'Cancel,Generate', summary: '4 slots per sheet (2 × 2): 6 rows, at least 2 A4 sheets.', notes: 'One slot per page, in table order. / Pages reduced to 93% to leave room for the crop marks.' };
           Object.keys(wantEn).forEach(k => { if (en[k] !== wantEn[k]) bad.push(`anglais, ${k} : ${en[k]}`); });
           cancelButton().click();
           await promise;
           promise = openDialog({ count: 1 });
           const enOne = state().summary;
-          if (enOne !== '4 slots per sheet (2 × 2): 1 row on 1 A4 sheet.') bad.push('anglais, une ligne : ' + enOne);
+          if (enOne !== '4 slots per sheet (2 × 2): 1 row, at least 1 A4 sheet.') bad.push('anglais, une ligne : ' + enOne);
           cancelButton().click();
           await promise;
           promise = openDialog({ count: 3, grid: true });
           const enGrid = state().summary;
-          if (enGrid !== '4 slots per sheet (2 × 2): 3 table values on 1 A4 sheet.' || /\brows?\b/.test(enGrid)) bad.push('grille, anglais : ' + enGrid);
+          if (enGrid !== '4 slots per sheet (2 × 2): 3 table values, at least 1 A4 sheet.' || /\brows?\b/.test(enGrid)) bad.push('grille, anglais : ' + enGrid);
           cancelButton().click();
           await promise;
         });
@@ -756,7 +756,7 @@
           const res = await exportSheets(h, async () => { pickRadio('pp-sheets-sheet', 'A3'); pickSelect('pp-sheets-cols', 3); pickSelect('pp-sheets-rows', 1); summary = state().summary; okButton().click(); });
           const dl = res.downloads[0];
           if (!res.opened || res.downloads.length !== 1 || !dl || !dl.blob) return bad.push('opened=' + res.opened + ' téléchargements=' + res.downloads.length + ' états=' + JSON.stringify(res.statuses));
-          if (summary !== '3 emplacements par feuille (3 × 1) : 6 lignes sur 2 feuilles A3.') bad.push('résumé : ' + summary);
+          if (summary !== '3 emplacements par feuille (3 × 1) : 6 lignes, au moins 2 feuilles A3.') bad.push('résumé : ' + summary);
           if (res.status !== '6 lignes placées sur 2 feuilles — fichier téléchargé.') bad.push('message final : ' + res.status);
           const layout = SheetLayout.compute({ sheet: SheetLayout.sheetSize('A3', 'landscape'), page: PageLayout.getPageSizePt(), cols: 3, rows: 1, marks: false });
           if (!near(layout.x0, (1190.55 - 3 * 297.64) / 2, 0.02) || !near(layout.y0, (841.89 - 419.53) / 2, 0.02)) bad.push('grille attendue : ' + layout.x0 + ', ' + layout.y0);
@@ -826,6 +826,58 @@
           if (seen.bonjour !== 3 || seen.suite !== 3 || seen.named !== 6) bad.push('textes vérifiés : ' + JSON.stringify(seen));
         });
       } finally { closeIfOpen(); forgetChoice(); }
+      return result(bad);
+    },
+  });
+
+  // --- 13 bis) Le résumé annonce un minimum quand une ligne peut prendre plusieurs pages ------------------------------------------------------------------------------------------
+  // B5 du 04/10 (rapport « cas d'usage ») : la fenêtre disait « 3 lignes sur 1 feuille A4 » pour un modèle de deux pages, dont le fichier a deux feuilles (et « 48 lignes sur 12 feuilles »
+  // pour 22 feuilles réelles) : elle ne sait pas, avant de générer, combien de pages donne chaque ligne. Un nombre de feuilles que le fichier peut dépasser est donc dit « au moins ».
+  cases.push({
+    id: 'sheetassembly_summary_announces_a_minimum_when_a_row_can_take_several_pages',
+    description: 'Une ligne de deux pages prend deux emplacements : pour trois lignes la fenêtre ne dit plus « sur 1 feuille » alors que le fichier en a 2, elle annonce « au moins 1 feuille A4 » (« at least 1 A4 sheet » en anglais, aussi pour des valeurs de grille) et la note parle d’un emplacement par page, pas par ligne ; un nombre exact ne serait permis que s’il égalait celui du fichier',
+    run: async (h) => {
+      const bad = [];
+      forgetChoice();
+      try {
+        await withPage('A6', 'portrait', async () => {
+          await seed(h, `<p>Bonjour ${badge('Nom')}</p><div class="page-break-marker">Saut de page</div><p>Suite pour ${badge('Nom')}</p>`, 3);
+          let fr = null;
+          const res = await exportSheets(h, async () => { fr = state(); okButton().click(); });
+          const dl = res.downloads[0];
+          if (!res.opened || res.downloads.length !== 1 || !dl || !dl.blob) return bad.push('opened=' + res.opened + ' téléchargements=' + res.downloads.length + ' états=' + JSON.stringify(res.statuses));
+          const real = (await readSheets(h, dl.blob)).length;
+          // Ce que la fenêtre promet : « au moins N feuilles » ne dépasse jamais le fichier, « sur N feuilles » (un nombre exact) doit l'égaler.
+          const claim = summary => {
+            const m = summary.match(/(\d+) (?:feuilles?|A[34] sheets?)/);
+            const exact = !/au moins|at least/.test(summary);
+            return m ? { sheets: Number(m[1]), exact } : null;
+          };
+          const said = claim(fr.summary);
+          if (real !== 2) bad.push('le fichier devait avoir 2 feuilles : ' + real);
+          if (!said) bad.push('nombre de feuilles introuvable dans le résumé : ' + fr.summary);
+          else if (said.exact ? said.sheets !== real : said.sheets > real) bad.push('le résumé dit « ' + fr.summary + ' », le fichier a ' + real + ' feuilles');
+          if (said && said.exact) bad.push('un nombre exact alors que chaque ligne peut prendre plusieurs pages : ' + fr.summary);
+          if (!/emplacement par page/.test(fr.hint)) bad.push('la note ne dit pas qu’un emplacement est pris par page, non par ligne : ' + fr.hint);
+          // Anglais, et une grille (« valeurs de la table ») : même promesse.
+          I18n.setLang('en');
+          try {
+            openDialog({ count: 3 });
+            const en = state();
+            closeIfOpen();
+            openDialog({ count: 3, grid: true });
+            const gridEn = state();
+            closeIfOpen();
+            I18n.setLang('fr');
+            openDialog({ count: 3, grid: true });
+            const gridFr = state();
+            closeIfOpen();
+            if (!/at least \d+ A4 sheets?\.$/.test(en.summary) || !/slot per page/.test(en.hint)) bad.push('anglais : ' + JSON.stringify([en.summary, en.hint]));
+            if (!/at least \d+ A4 sheets?\.$/.test(gridEn.summary) || /\brows?\b/.test(gridEn.summary)) bad.push('grille, anglais : ' + gridEn.summary);
+            if (!/valeurs de la table, au moins \d+ feuilles? A4\.$/.test(gridFr.summary) || /ligne/.test(gridFr.summary)) bad.push('grille, français : ' + gridFr.summary);
+          } finally { I18n.setLang('fr'); }
+        });
+      } finally { closeIfOpen(); forgetChoice(); I18n.setLang('fr'); }
       return result(bad);
     },
   });
@@ -925,7 +977,7 @@
           const res = await exportSheets(h, async () => { summary = state().summary; okButton().click(); });
           const dl = res.downloads[0];
           if (!res.opened || res.downloads.length !== 1 || !dl || !dl.blob) return bad.push('opened=' + res.opened + ' téléchargements=' + res.downloads.length + ' états=' + JSON.stringify(res.statuses));
-          if (summary !== '4 emplacements par feuille (2 × 2) : 3 valeurs de la table sur 1 feuille A4.') bad.push('résumé : ' + summary);
+          if (summary !== '4 emplacements par feuille (2 × 2) : 3 valeurs de la table, au moins 1 feuille A4.') bad.push('résumé : ' + summary);
           if (res.status !== '3 valeurs placées sur 1 feuille — fichier téléchargé.' || /ligne/.test(res.status)) bad.push('message final : ' + res.status);
           const layout = SheetLayout.compute({ sheet: SheetLayout.sheetSize('A4', 'portrait'), page: PageLayout.getPageSizePt(), cols: 2, rows: 2, marks: false });
           const sheets = await readSheets(h, dl.blob);
@@ -976,15 +1028,15 @@
           const s0 = state();
           const want0 = { sheet: 'A4', orientation: 'portrait', marks: 'off', cols: 3, rows: 8, colsMax: 3, rowsMax: 8, svgSlots: 24, svgMarks: 0, okDisabled: false };
           Object.keys(want0).forEach(k => { if (s0[k] !== want0[k]) bad.push(`départ : ${k} = ${s0[k]} au lieu de ${want0[k]}`); });
-          if (s0.summary !== '24 emplacements par feuille (3 × 8) : 6 lignes sur 1 feuille A4.') bad.push('résumé : ' + s0.summary);
+          if (s0.summary !== '24 emplacements par feuille (3 × 8) : 6 lignes, au moins 1 feuille A4.') bad.push('résumé : ' + s0.summary);
           if (s0.scaled !== '' || s0.viewBox !== '0 0 595.28 841.89') bad.push('note ou feuille d’aperçu : ' + JSON.stringify([s0.scaled, s0.viewBox]));
           if (radioInput('pp-sheets-orientation', 'landscape').disabled || radioInput('pp-sheets-sheet', 'A3').disabled) bad.push('un choix possible est grisé');
           pickRadio('pp-sheets-orientation', 'landscape');
           const s1 = state();
-          if (s1.orientation !== 'landscape' || s1.cols !== 4 || s1.rows !== 5 || s1.svgSlots !== 20 || s1.summary !== '20 emplacements par feuille (4 × 5) : 6 lignes sur 1 feuille A4.') bad.push('A4 paysage : ' + JSON.stringify(s1));
+          if (s1.orientation !== 'landscape' || s1.cols !== 4 || s1.rows !== 5 || s1.svgSlots !== 20 || s1.summary !== '20 emplacements par feuille (4 × 5) : 6 lignes, au moins 1 feuille A4.') bad.push('A4 paysage : ' + JSON.stringify(s1));
           pickRadio('pp-sheets-sheet', 'A3');
           const s2 = state();
-          if (s2.sheet !== 'A3' || s2.orientation !== 'landscape' || s2.cols !== 6 || s2.rows !== 8 || s2.svgSlots !== 48 || s2.summary !== '48 emplacements par feuille (6 × 8) : 6 lignes sur 1 feuille A3.') bad.push('A3 : ' + JSON.stringify(s2));
+          if (s2.sheet !== 'A3' || s2.orientation !== 'landscape' || s2.cols !== 6 || s2.rows !== 8 || s2.svgSlots !== 48 || s2.summary !== '48 emplacements par feuille (6 × 8) : 6 lignes, au moins 1 feuille A3.') bad.push('A3 : ' + JSON.stringify(s2));
           pickRadio('pp-sheets-orientation', 'portrait');
           const s3 = state();
           if (s3.cols !== 4 || s3.rows !== 11 || s3.svgSlots !== 44) bad.push('A3 portrait : ' + JSON.stringify(s3));
@@ -997,7 +1049,7 @@
           await promise;
           forgetChoice();
           const one = openDialog({ count: 1 });
-          if (state().summary !== '24 emplacements par feuille (3 × 8) : 1 ligne sur 1 feuille A4.') bad.push('une ligne : ' + state().summary);
+          if (state().summary !== '24 emplacements par feuille (3 × 8) : 1 ligne, au moins 1 feuille A4.') bad.push('une ligne : ' + state().summary);
           cancelButton().click();
           await one;
         });
@@ -1007,10 +1059,10 @@
           if (!near(page.width, 283.46, 0.02) || !near(page.height, 425.2, 0.02)) bad.push('page 10 x 15 cm : ' + page.width + ' x ' + page.height + ' pt');
           const promise = openDialog({ count: 6 });
           const a4 = state();
-          if (a4.sheet !== 'A4' || a4.orientation !== 'portrait' || a4.cols !== 2 || a4.rows !== 1 || a4.summary !== '2 emplacements par feuille (2 × 1) : 6 lignes sur 3 feuilles A4.') bad.push('10 x 15 cm sur A4 : ' + JSON.stringify(a4));
+          if (a4.sheet !== 'A4' || a4.orientation !== 'portrait' || a4.cols !== 2 || a4.rows !== 1 || a4.summary !== '2 emplacements par feuille (2 × 1) : 6 lignes, au moins 3 feuilles A4.') bad.push('10 x 15 cm sur A4 : ' + JSON.stringify(a4));
           pickRadio('pp-sheets-sheet', 'A3');
           const a3 = state();
-          if (a3.sheet !== 'A3' || a3.orientation !== 'portrait' || a3.cols !== 2 || a3.rows !== 2 || a3.svgSlots !== 4 || a3.summary !== '4 emplacements par feuille (2 × 2) : 6 lignes sur 2 feuilles A3.') bad.push('10 x 15 cm sur A3 : ' + JSON.stringify(a3));
+          if (a3.sheet !== 'A3' || a3.orientation !== 'portrait' || a3.cols !== 2 || a3.rows !== 2 || a3.svgSlots !== 4 || a3.summary !== '4 emplacements par feuille (2 × 2) : 6 lignes, au moins 2 feuilles A3.') bad.push('10 x 15 cm sur A3 : ' + JSON.stringify(a3));
           cancelButton().click();
           await promise;
         });
@@ -1019,7 +1071,7 @@
           forgetChoice();
           const promise = openDialog({ count: 6 });
           const s = state();
-          if (s.sheet !== 'A3' || s.orientation !== 'portrait' || s.cols !== 1 || s.rows !== 1 || s.svgSlots !== 1 || s.okDisabled || s.summary !== '1 emplacement par feuille (1 × 1) : 6 lignes sur 6 feuilles A3.') bad.push('28 x 40 cm : ' + JSON.stringify(s));
+          if (s.sheet !== 'A3' || s.orientation !== 'portrait' || s.cols !== 1 || s.rows !== 1 || s.svgSlots !== 1 || s.okDisabled || s.summary !== '1 emplacement par feuille (1 × 1) : 6 lignes, au moins 6 feuilles A3.') bad.push('28 x 40 cm : ' + JSON.stringify(s));
           const a4 = radioInput('pp-sheets-sheet', 'A4');
           if (!a4.disabled || radioLabel('pp-sheets-sheet', 'A4').title !== 'Trop petite pour une page 28 × 40 cm.') bad.push('la feuille A4 n’est pas grisée avec sa raison : ' + a4.disabled + ' / ' + radioLabel('pp-sheets-sheet', 'A4').title);
           const land = radioInput('pp-sheets-orientation', 'landscape');
