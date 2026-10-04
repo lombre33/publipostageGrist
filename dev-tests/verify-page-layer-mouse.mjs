@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // « Sur toutes les pages » (js/page-layer.js) à la vraie souris, à la taille du panneau Grist d'Antoine (~700x400, feuille réduite à ~0,85) : le bouton de la barre flottante d'une
 // image derrière le texte coche puis décoche la case (HTML, bouton enfoncé, fond qui change), la barre entière reste dans le panneau avec ce bouton en plus, le curseur reste dans
-// l'éditeur après le clic, la case survit aux flèches du clavier (la grille page suit, la case reste) et à un aller-retour par le HTML enregistré. Devant le texte ou dans le texte, le
+// l'éditeur après le clic, la case survit aux flèches du clavier (la grille page suit, la case reste) et à un aller-retour par le HTML enregistré (l'image se rechoisit alors par un clic
+// là où aucune lettre ne la couvre : un clic sur une lettre posée sur elle va au texte). Devant le texte ou dans le texte, le
 // bouton est grisé (jamais retiré), son info-bulle dit pourquoi, et un clic dessus ne change rien ; revenue derrière le texte, l'image n'a pas retrouvé la case. En anglais, les
 // textes sont ceux de l'anglais. Le PDF et le Word de cette case sont dans le groupe pageLayer (dev-tests/scenarios-page-layer.js).
 // Fonctionnalité du 01/10 (la Fiche mission d'Antoine) : js/floating-toolbars.js (wireImageFloatingToolbar, bouton data-action="repeat"), js/page-layer.js.
@@ -155,6 +156,23 @@ async function selectImage() {
   await clickAt(c.x, c.y);
   return (await selection()).image;
 }
+// Une image derrière le texte se choisit là où aucune lettre ne la couvre : un clic sur une lettre va au texte (js/editor-nodes.js,
+// createBehindImageClickThroughExtension ; groupe Node behindClicksMouse). On cherche à la vraie souris, du coin haut droit vers le bas, un point du
+// cadre où le clic tombe sur l'image (elementFromPoint), puis on y clique.
+async function selectBehindImage() {
+  const frame = await rectOf('.tiptap .editor-image-view');
+  if (!frame) return false;
+  for (let y = frame.top + 4; y < frame.bottom - 2; y += 6) {
+    for (let x = frame.right - 6; x > frame.left + 2; x -= 12) {
+      await page.mouse.move(x, y);
+      if (await page.evaluate(([px, py]) => { const el = document.elementFromPoint(px, py); return !!el && !!el.closest('.editor-image-view'); }, [x, y])) {
+        await clickAt(x, y);
+        return (await selection()).image;
+      }
+    }
+  }
+  return false;
+}
 
 // Document neuf : une image dans le texte (320 x 160) et des lignes dessous, Aperçu A4 actif, sans en-tête ni pied.
 async function freshDocument() {
@@ -220,7 +238,7 @@ async function run(label) {
   await sleep(400);
   const back = await imageInfo();
   check(label + ' : rechargée depuis le HTML enregistré, l\'image est toujours cochée, à la même place', !!back && back.repeat === true && back.layer === 'behind' && back.pageLeftPt === moved.pageLeftPt && back.pageTopPt === moved.pageTopPt, { moved, back });
-  await selectImage();
+  check(label + ' : rechargée, l\'image derrière le texte se sélectionne par un clic là où aucune lettre ne la couvre', await selectBehindImage());
 
   // Un second clic décoche.
   const r1 = await rectOf(REPEAT);

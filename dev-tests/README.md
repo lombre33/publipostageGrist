@@ -434,12 +434,13 @@ Deux options utiles :
   et `-marge` à gauche (28 pt) ; que la souris touche l'image (pas la zone) et qu'un clic la sélectionne sans ouvrir l'en-tête ; que la marge à droite de l'image allume la zone, donne le curseur
   main et ouvre l'en-tête (pastille d'édition comprise), et que le pied s'ouvre de même. À 700 px la feuille est réduite à ~0,85 : l'origine de la grille de `computePageGridPosition` additionnait
   le remplissage de `.tiptap` (pixels de mise en page) à des rectangles écran, et l'image tirée au coin s'arrêtait ~6 px en retrait. 14 vérifications sur 35 échouent sur l'ancien code (7 par taille).
-- `pageLayerMouse` (`dev-tests/verify-page-layer-mouse.mjs`, 38 vérifications) clique à la vraie souris, à 700×400 puis en témoin à 1400×1000, le bouton « Sur toutes les pages » de la barre
+- `pageLayerMouse` (`dev-tests/verify-page-layer-mouse.mjs`, 40 vérifications) clique à la vraie souris, à 700×400 puis en témoin à 1400×1000, le bouton « Sur toutes les pages » de la barre
   flottante d'une image. Dans le texte, il est là mais grisé (jamais retiré), son info-bulle dit pourquoi ; derrière le texte il est actif et la barre entière (avec ce bouton en plus) tient dans
   le panneau (8 à 519 px sur 700) ; un clic coche la case (`data-repeat="true"` dans le HTML, le modèle et le bouton enfoncé d'accord, fond différent, curseur resté dans l'éditeur, l'image ne
-  bouge pas), une flèche du clavier la déplace sans la décocher, le HTML enregistré rechargé la retrouve cochée à la même place, un second clic la décoche. « Devant le texte » efface la case, le
-  bouton grisé ne change plus rien au clic, et revenue derrière le texte l'image n'a pas retrouvé la case. En anglais : « On every page » et la raison en anglais. Sur l'ancien code le bouton
-  n'existe pas : 7 vérifications échouent et le script s'arrête faute de bouton (5 passent avant, les garde-fous de l'image).
+  bouge pas), une flèche du clavier la déplace sans la décocher, le HTML enregistré rechargé la retrouve cochée à la même place (l'image derrière le texte se rechoisit alors là où aucune lettre ne la
+  couvre : un clic sur une lettre va au texte, `behindClicksMouse` ; le script cherche à la vraie souris un point du cadre où le clic tombe sur l'image, `elementFromPoint`), un second clic la décoche.
+  « Devant le texte » efface la case, le bouton grisé ne change plus rien au clic, et revenue derrière le texte l'image n'a pas retrouvé la case. En anglais : « On every page » et la raison en
+  anglais. Sur l'ancien code le bouton n'existe pas : 7 vérifications échouent et le script s'arrête faute de bouton (5 passent avant, les garde-fous de l'image).
 - `fullPagesMouse` (`dev-tests/verify-full-pages-mouse.mjs`, 43 vérifications) rejoue « Pages entières » à la vraie souris, à 700×400 (feuille réduite à ~0,85) puis en témoin à 1400×1000, sur un modèle de
   trois feuilles avec un en-tête, un pied, un triangle « Sur toutes les pages » au coin de la page 1 et une image sur la page 2. Les copies du triangle sont au coin de leurs feuilles (1 px près à l'écran) ; en
   bas de la page 1 la souris touche le texte (la couture ne vole aucun clic) ; un clic sur le pied de la couture ouvre le pied de page, un clic sur l'en-tête de la couture ouvre l'en-tête, un clic dans la
