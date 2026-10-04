@@ -1,8 +1,10 @@
-// Réglages > Raccourcis > Touches (js/shortcuts.js) : la liste de toutes les actions, rangées par groupe, avec leur touche actuelle. Un clic sur la touche écoute la combinaison
-// suivante ; Échap abandonne, Retour arrière retire la touche, « Par défaut » rend celle d'origine. Une combinaison refusée dit pourquoi, sous la touche concernée, et la liste
-// continue d'écouter. Pendant l'écoute, Shortcuts envoie toutes les touches ici : aucune action ne part et Échap ne ferme pas la fenêtre.
+// Réglages > Raccourcis > Touches (js/shortcuts.js) : la liste de toutes les actions, rangées par groupe, avec leur touche actuelle. Un clic sur la
+// touche écoute la combinaison suivante ; Échap abandonne, Retour arrière retire la touche, « Par défaut » rend celle d'origine. Une combinaison
+// refusée dit pourquoi, sous la touche concernée, et la liste continue d'écouter. Pendant l'écoute, Shortcuts envoie toutes les touches ici : aucune
+// action ne part et Échap ne ferme pas la fenêtre.
 //
-// L'onglet réunit deux choses, un commutateur les montre l'une après l'autre : « Touches » (ici) et « Abréviations » (js/text-expansion.js). Le choix est gardé par navigateur.
+// L'onglet réunit deux choses, qu'un commutateur montre l'une après l'autre : « Touches » (ici) et « Abréviations » (js/text-expansion.js). Le choix
+// est gardé par navigateur.
 const ShortcutsPanel = (function () {
   const VIEW_STORAGE = 'pp_shortcuts_view';
   const VIEWS = ['keys', 'expansion'];
@@ -38,7 +40,7 @@ const ShortcutsPanel = (function () {
     if (first) first.focus();
   }
 
-  // === Écoute d'une combinaison ==============================================================================================================================
+  // Écoute d'une combinaison
 
   function showError(id, message) {
     const row = rows[id];
@@ -88,7 +90,7 @@ const ShortcutsPanel = (function () {
     stopRecording();
   }
 
-  // === Lignes ================================================================================================================================================
+  // Lignes
 
   function renderRow(id) {
     const row = rows[id];

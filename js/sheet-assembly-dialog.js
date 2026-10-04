@@ -1,9 +1,11 @@
-// Fenêtre « Assemblage avant impression… » du menu Exporter en PDF (js/main.js:onExportBatch, export 'pdfSheets' ; demande d'Antoine du 02/10) : pose les pages de chaque ligne sur des feuilles A4
-// ou A3, une page par emplacement et dans l'ordre de la table, avec ou sans traits de coupe, pour sortir des planches prêtes à imprimer (4 A6 sur une A4, 2 A5 sur une A4 en paysage...). Elle ne fait que
-// CHOISIR - la feuille, son sens, le nombre d'emplacements (en largeur et en hauteur) et les traits de coupe - et tient lieu de confirmation du lot. La géométrie est à SheetLayout, la même pour
-// l'aperçu que la fenêtre dessine et pour le PDF que js/pdf-merge.js (createSheets) écrit : l'aperçu montre ce que le fichier porte. `open` rend une promesse : le réglage
-// { sheet, orientation, cols, rows, marks, layout } ou null (Annuler, Échap). Le dernier choix (feuille, sens, traits) est gardé par navigateur (localStorage, comme la langue et le thème) ; les emplacements
-// repartent du maximum que la feuille reçoit, la page du modèle pouvant avoir changé entre-temps. Une feuille où la page ne tient pas reste affichée, grisée, avec la raison en info-bulle.
+// Fenêtre « Assemblage avant impression… » du menu Exporter en PDF (js/main.js:onExportBatch, export 'pdfSheets') : pose les pages de chaque ligne
+// sur des feuilles A4 ou A3, une page par emplacement et dans l'ordre de la table, avec ou sans traits de coupe, pour sortir des planches prêtes à
+// imprimer (4 A6 sur une A4, 2 A5 sur une A4 en paysage...). Elle ne fait que choisir (la feuille, son sens, le nombre d'emplacements en largeur et
+// en hauteur, les traits de coupe) et tient lieu de confirmation du lot. La géométrie est à SheetLayout, la même pour l'aperçu de la fenêtre et pour
+// le PDF que js/pdf-merge.js (createSheets) écrit : l'aperçu montre ce que le fichier porte.
+// `open` rend une promesse : le réglage { sheet, orientation, cols, rows, marks, layout } ou null (Annuler, Échap). Le dernier choix (feuille, sens,
+// traits) est gardé par navigateur (localStorage, comme la langue et le thème) ; les emplacements repartent du maximum que la feuille reçoit, la page
+// du modèle pouvant avoir changé entre-temps. Une feuille où la page ne tient pas reste affichée, grisée, avec la raison en info-bulle.
 const SheetAssemblyDialog = (function () {
   const STORAGE = 'pp_sheet_assembly';
   const PREVIEW_PX = 108; // côté du carré où la feuille d'aperçu tient, quel que soit son sens
@@ -59,7 +61,8 @@ const SheetAssemblyDialog = (function () {
     return { group, items };
   }
 
-  // Un nombre d'emplacements (1 au maximum que la feuille reçoit dans ce sens), nommé par son libellé de ligne puis par son texte (« Emplacements en largeur »).
+  // Un nombre d'emplacements (1 au maximum que la feuille reçoit dans ce sens), nommé par son libellé de ligne puis par son texte (« Emplacements en
+  // largeur »).
   function slotField(id, rowLabelId, onPick) {
     const field = el('label', 'pp-sheets-slot-field');
     const select = el('select', 'pp-sheets-select');
@@ -100,14 +103,16 @@ const SheetAssemblyDialog = (function () {
     const marksLabel = el('span', 'pp-sheets-label'); marksLabel.id = 'pp-sheets-marks-label';
     const marks = radioGroup('pp-sheets-marks', 'pp-sheets-marks-label', ['off', 'on'], value => pick({ marks: value === 'on' }));
 
-    // La feuille d'aperçu occupe la dernière colonne des trois premières lignes de réglage (la 4e, les emplacements, a besoin de toute la largeur) ; le papier est blanc dans les deux thèmes, comme celui du document.
+    // La feuille d'aperçu occupe la dernière colonne des trois premières lignes de réglage (la 4e, les emplacements, a besoin de toute la largeur) ;
+    // le papier est blanc dans les deux thèmes, comme celui du document.
     const preview = el('div', 'pp-sheets-preview');
     preview.setAttribute('aria-hidden', 'true');
     const svg = svgEl('svg', { class: 'pp-sheets-svg' });
     preview.appendChild(svg);
 
-    // Chaque indication commence sous le champ qu'elle concerne, jamais sous son libellé (règle d'Antoine) : l'échelle - seulement si les pages sont réduites - sous les traits de coupe, la règle
-    // de l'ordre sous les emplacements. Le résumé de ce que le choix donne ferme la fenêtre (aria-live : il suit chaque changement).
+    // Chaque indication commence sous le champ qu'elle concerne, jamais sous son libellé : l'échelle (seulement si les pages sont réduites) sous les
+    // traits de coupe, la règle de l'ordre sous les emplacements. Le résumé de ce que le choix donne ferme la fenêtre (aria-live : il suit chaque
+    // changement).
     const scaled = el('p', 'pp-sheets-note'); scaled.id = 'pp-sheets-scaled';
     scaled.setAttribute('aria-live', 'polite');
     marks.group.setAttribute('aria-describedby', scaled.id);
@@ -136,7 +141,8 @@ const SheetAssemblyDialog = (function () {
     ok.addEventListener('click', apply);
   }
 
-  // Les réglages de départ : le dernier choix gardé s'il laisse une page tenir sur la feuille, sinon le meilleur pour ces pages (la feuille A4, le sens qui en place le plus) ; les emplacements au maximum.
+  // Les réglages de départ : le dernier choix gardé s'il laisse une page tenir sur la feuille, sinon le meilleur pour ces pages (la feuille A4, le
+  // sens qui en place le plus) ; les emplacements au maximum.
   function initialState() {
     const saved = readSaved();
     const page = pageSize();
@@ -178,8 +184,9 @@ const SheetAssemblyDialog = (function () {
     });
   }
 
-  // La feuille d'aperçu : la feuille entière à l'échelle du carré de PREVIEW_PX, ses emplacements numérotés dans l'ordre de lecture et ses traits de coupe, d'après les mêmes mesures que le PDF. L'épaisseur
-  // des traits est fixe à l'écran (vector-effect, css/sheet-assembly.css) : à cette échelle, un trait de 0,5 pt ne se verrait pas.
+  // La feuille d'aperçu : la feuille entière à l'échelle du carré de PREVIEW_PX, ses emplacements numérotés dans l'ordre de lecture et ses traits de
+  // coupe, d'après les mêmes mesures que le PDF. L'épaisseur des traits est fixe à l'écran (vector-effect, css/sheet-assembly.css) : à cette échelle,
+  // un trait de 0,5 pt ne se verrait pas.
   function renderPreview(layout) {
     const { svg } = refs;
     const { sheet } = layout;
@@ -249,8 +256,8 @@ const SheetAssemblyDialog = (function () {
     current.finish({ sheet: state.sheet, orientation: state.orientation, cols: layout.cols, rows: layout.rows, marks: state.marks, layout });
   }
 
-  // Ouvre la fenêtre pour `count` lignes de la table (`grid` : un modèle de grille, dont les lignes sont des « valeurs »). La page est celle du modèle ouvert. Une demande qui arrive pendant qu'une autre est ouverte
-  // annule la première (elle se résout comme un clic sur Annuler).
+  // Ouvre la fenêtre pour `count` lignes de la table (`grid` : un modèle de grille, dont les lignes sont des « valeurs »). La page est celle du
+  // modèle ouvert. Une demande qui arrive pendant qu'une autre est ouverte annule la première (elle se résout comme un clic sur Annuler).
   function open(opts) {
     if (typeof PageLayout === 'undefined' || typeof ModalBase === 'undefined' || typeof SheetLayout === 'undefined') return Promise.resolve(null);
     ensure();

@@ -1,16 +1,17 @@
-// Saisies et confirmations du widget : deux fenêtres en remplacement de window.prompt et window.confirm (choix d'Antoine, 2026-09-29 « Saisies et
-// confirmations »). Elles reposent sur la base commune (js/modal-base.js) : titre et boutons fixes, Tab et Échap tenus dans la fenêtre, rendu du thème.
-//   Dialogs.prompt({ title, label?, message?, value?, placeholder?, confirmLabel? })  -> Promise<string | null>   (null : annulé ; '' : champ laissé vide)
-//   Dialogs.confirm({ title, message, confirmLabel?, danger? })                       -> Promise<boolean>
-//   Dialogs.choose({ title, message, choices, cancelLabel? })                         -> Promise<string | null>   (la `value` du choix cliqué ; null : annulé, Échap compris)
-//     choices : [{ value, label, primary? }] dans l'ordre d'affichage, à droite de « Annuler » (qui reste le premier bouton, « Valider » laisse sa place) ; le focus arrive sur
-//     le choix `primary`, à défaut sur « Annuler » (retours d'Antoine du 01/10 : « Enregistrer / Abandonner / Annuler » avant de quitter un modèle non enregistré).
-// Ne s'appelle qu'avec `await` : la fenêtre n'arrête plus le script comme le faisait la boîte du navigateur. Une seule fenêtre existe, réutilisée : une demande
-// qui arrive pendant qu'une autre est ouverte annule la première (elle se résout comme un clic sur Annuler). Aucun texte ici sauf les deux boutons par défaut
-// (« Annuler », « Valider ») : le titre, le libellé et le verbe du bouton sont ceux de l'appelant, dans la langue de l'interface.
-// Clavier : Entrée valide depuis le champ (pas pendant une composition de texte), Échap annule, Tab tourne entre le champ et les deux boutons. Le focus arrive
-// sur le champ (texte sélectionné) ou sur « Valider » ; pour une confirmation destructrice (`danger`), sur « Annuler », pour qu'une frappe d'Entrée distraite ne
-// supprime rien. À la fermeture le focus revient à l'élément qui l'avait à l'ouverture (le bouton de la barre, la ligne de la fenêtre dessous).
+// Saisies et confirmations du widget : deux fenêtres à la place de window.prompt et window.confirm, sur la base commune (js/modal-base.js : titre et
+// boutons fixes, Tab et Échap tenus, thème).
+//  Dialogs.prompt({ title, label?, message?, value?, placeholder?, confirmLabel? }) -> Promise<string | null> (null : annulé ; '' : champ laissé
+//  vide)
+//  Dialogs.confirm({ title, message, confirmLabel?, danger? }) -> Promise<boolean>
+//  Dialogs.choose({ title, message, choices, cancelLabel? }) -> Promise<string | null> (`value` du choix cliqué ; null : annulé, Échap compris)
+//    choices : [{ value, label, primary? }] dans l'ordre d'affichage, à droite de « Annuler » (qui reste le premier bouton) ; le focus arrive sur le
+//    choix `primary`, à défaut sur « Annuler ».
+// Ne s'appelle qu'avec `await` : la fenêtre n'arrête pas le script comme la boîte du navigateur. Une seule fenêtre, réutilisée : une demande qui
+// arrive pendant qu'une autre est ouverte annule la première (résolue comme un clic sur Annuler). Aucun texte ici sauf « Annuler » et « Valider » par
+// défaut ; titre, libellé et verbe du bouton viennent de l'appelant.
+// Clavier : Entrée valide depuis le champ (pas pendant une composition de texte), Échap annule, Tab tourne entre le champ et les deux boutons. Le
+// focus arrive sur le champ (texte sélectionné) ou sur « Valider » ; pour une confirmation destructrice (`danger`), sur « Annuler », pour qu'un
+// Entrée distrait ne supprime rien. À la fermeture, le focus revient à l'élément qui l'avait à l'ouverture.
 const Dialogs = (function () {
   let win = null;
   let refs = null;
@@ -49,7 +50,8 @@ const Dialogs = (function () {
     refs = { message, label, input, cancel, ok, choices: [] };
   }
 
-  // Les boutons d'une demande `choose` n'existent que le temps de la fenêtre : retirés à la fermeture, « Valider » reprend sa place pour la demande suivante.
+  // Les boutons d'une demande `choose` n'existent que le temps de la fenêtre : retirés à la fermeture, « Valider » reprend sa place pour la demande
+  // suivante.
   function clearChoices() {
     refs.choices.forEach(button => button.remove());
     refs.choices = [];

@@ -1,19 +1,20 @@
-/* Raccourcis clavier (js/shortcuts.js, js/shortcuts-panel.js) - demande d'Antoine du 2026-10-01. Trois morceaux : la touche qui s'affiche dans les infobulles, les lignes de menu et
-   les titres de menu de la barre, le commutateur Touches / Abréviations de Réglages > Raccourcis, et la liste des touches. */
+/* Raccourcis clavier (js/shortcuts.js, js/shortcuts-panel.js) : la touche affichée dans les infobulles, les lignes de menu et les titres de menu de
+   la barre, le commutateur Touches / Abréviations de Réglages > Raccourcis, et la liste des touches. */
 
-/* === La touche, là où le bouton se nomme ===================================================================================================================
-   js/shortcuts.js pose `data-keytip` (« (Ctrl+B) ») et `data-keyhint` (« Ctrl+B ») sur l'élément qui nomme l'action ; ni l'un ni l'autre n'est réécrit par un changement de
-   langue (applyTranslations ne touche que les attributs data-i18n*). */
-/* Infobulle d'un bouton : la touche après son texte (css/toolbar-v2.css pose le texte, `fitTooltip` de js/viewport-fit.js mesure ensuite la largeur réelle). */
+/* La touche, là où le bouton se nomme : js/shortcuts.js pose `data-keytip` (« (Ctrl+B) ») et `data-keyhint` (« Ctrl+B ») sur l'élément qui nomme
+   l'action ; ni l'un ni l'autre n'est réécrit par un changement de langue (applyTranslations ne touche que les attributs data-i18n*). */
+/* Infobulle d'un bouton : la touche après son texte (css/toolbar-v2.css pose le texte, `fitTooltip` de js/viewport-fit.js mesure ensuite la largeur
+   réelle). */
 .bar-row [data-tip][data-keytip]::after, #v2-toolbar [data-tip][data-keytip]::after { content: attr(data-tip) attr(data-keytip); }
-/* Ligne d'un menu de la barre (Citation, Bloc de code, Titre 1...) : la touche à droite, comme le « Ctrl+K » de « Lien… » (.v2-menu-row-kbd, css/editor-v2.css). En --text : sur la
-   ligne survolée (--surface-sunken) le gris des textes discrets ne ferait que 4,4:1. */
+/* Ligne d'un menu de la barre (Citation, Bloc de code, Titre 1...) : la touche à droite, comme le « Ctrl+K » de « Lien… » (.v2-menu-row-kbd,
+   css/editor-v2.css). En --text : sur la ligne survolée (--surface-sunken), le gris des textes discrets ferait 4,4:1. */
 .v2-menu-row[data-keyhint]::after, .v2-hover-row[data-keyhint]::after { content: attr(data-keyhint); margin-left: auto; padding-left: 18px; font-size: 11px; font-weight: 400; color: var(--text); }
 .v2-hover-row[data-keyhint] { display: flex; align-items: center; }
-/* Titre d'un menu à ouvrir au survol (Exporter en PDF, Nouveau modèle...) : la touche entre parenthèses, comme « Enregistrer (Ctrl+S) » (js/main.js). */
+/* Titre d'un menu à ouvrir au survol (Exporter en PDF, Nouveau modèle...) : la touche entre parenthèses, comme « Enregistrer (Ctrl+S) »
+   (js/main.js). */
 .v2-hover-flyout-label[data-keytip]::after { content: attr(data-keytip); }
 
-/* === Commutateur Touches / Abréviations ====================================================================================================================== */
+/* Commutateur Touches / Abréviations */
 .settings-switch { display: inline-flex; margin: 0 0 12px; overflow: hidden; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); }
 .settings-switch-btn { height: 26px; padding: 0 14px; font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; color: var(--text); background: var(--surface); border: 0; cursor: pointer; }
 .settings-switch-btn + .settings-switch-btn { border-left: 1px solid var(--border-strong); }
@@ -22,7 +23,7 @@
 .settings-switch-btn.active:hover { background: var(--accent-solid-hover); }
 .settings-switch-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
-/* === Liste des touches ======================================================================================================================================= */
+/* Liste des touches */
 .settings-keys-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 6px; }
 .settings-keys-head .settings-section-title { margin: 0; }
 .settings-keys-head button, .settings-key-reset { font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; height: 26px; padding: 0 10px; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); cursor: pointer; }
@@ -39,8 +40,8 @@
 .settings-key-btn.is-recording { background: var(--accent-soft); border-color: var(--accent); }
 .settings-key-btn[aria-invalid="true"] { border-color: var(--danger); }
 .settings-key-reset { height: 26px; }
-/* Une indication ou un avertissement commence sous le champ qu'il concerne, jamais sous son libellé (règle d'Antoine) : l'erreur d'une touche prend la place de la touche et de son
-   bouton « Par défaut », et revient à la ligne dans cette largeur (`width: 0` + `min-width: 100%` : elle ne fait pas grandir les colonnes de la ligne). Le texte garde la couleur du
-   texte (le rouge ne fait que 4,4:1 sur blanc) ; c'est le filet rouge qui la désigne. */
+/* Une indication ou un avertissement commence sous le champ qu'il concerne : l'erreur d'une touche prend la place de la touche et de son bouton « Par
+   défaut », et revient à la ligne dans cette largeur (`width: 0` + `min-width: 100%` : elle ne fait pas grandir les colonnes de la ligne). Texte en
+   --text (le rouge n'a pas 4,5:1 en texte) ; c'est le filet rouge qui la désigne. */
 .settings-key-error { grid-column: 2 / 4; width: 0; min-width: 100%; box-sizing: border-box; margin: 4px 0 2px; padding-left: 8px; border-left: 3px solid var(--danger); font-size: 12.5px; font-weight: 600; color: var(--text); }
 .settings-key-error[hidden] { display: none; }
