@@ -93,7 +93,10 @@ boutons pleins à 3,08:1 en sombre). Règles à suivre :
 Un principe distinctif, présent dès l'origine sur Publipostage+ et à reproduire sur tout widget qui génère un
 contenu exportable :
 - **Police de chrome** (barres d'outils, boutons, libellés, tout ce qui n'est pas le document produit) :
-  **Manrope** (poids 500/600/700/800), géométrique et moderne.
+  **celle du système** (`system-ui`, puis Segoe UI, Roboto, Helvetica Neue, Arial : `--font-ui` de `css/style.css`), poids
+  400, 600 et 700 seulement (un 800 s'afficherait en « Black » avec Segoe UI). **Jamais une police chargée depuis un autre
+  site** (Google Fonts ou autre) : elle dirait à ce site, à chaque ouverture du widget, l'adresse IP et l'heure de la
+  personne. Choix d'Antoine du 04/10 : « une police système similaire, pas de Google Fonts ou autre » (avant : Manrope).
 - **Police du contenu produit** : celle qui part réellement à l'export. Sur Publipostage+, c'est **Roboto**,
   auto-hébergée (`css/roboto-fonts.css`) en regular/italique/gras/gras-italique — délibérément les MÊMES fichiers
   que ceux embarqués dans le PDF par `pdfmake`, pour que la pagination affichée à l'écran soit identique à celle

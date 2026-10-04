@@ -18,6 +18,8 @@
 //  10. un texte rouge posé avec --danger (4,37:1 sur blanc) au lieu de --danger-ink (4,5:1 au moins sur tous les fonds) : seuls quatre boutons à icône seule gardent --danger (contrôle du 03/10).
 //  11. la politique de sécurité du contenu d'index.html qui ne dit plus ce que la page charge : un script en ligne (la carte d'importation comprise) dont l'empreinte n'est plus la sienne, une bibliothèque
 //      d'un CDN qu'elle ne permet pas, une empreinte ou une adresse que plus rien n'utilise (contrôle de sécurité du 04/10).
+//  12. une police ou une feuille de style chargée depuis un autre site (Google Fonts ou autre : @import, url(), <link>, adresse d'un service de polices), ou une police d'interface qui n'est plus celle du
+//      système (choix d'Antoine du 04/10 : « une police système similaire, pas de Google Fonts ou autre »).
 //
 // Volontairement PERMISSIF : un nom cité seulement dans un commentaire compte comme utilisé, un préfixe construit (`'toc-level-' + n`) couvre toute la
 // famille. Le but est de ne jamais faire échouer un changement légitime, seulement d'attraper ce qui n'a plus AUCUN point d'entrée. Une classe posée
@@ -420,6 +422,36 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   // Le remettre, c'est d'abord le mettre à jour, puis ajouter son adresse à la politique.
   const html2pdfRefs = [...jsFiles.filter(rel => /html2pdf/i.test(noCommentsJs(read(rel)))), ...(/html2pdf/i.test(pageOutsidePolicy) ? ['index.html'] : [])];
   check('politique : html2pdf.js (jsPDF et DOMPurify périmés) n\'est chargé par aucun fichier de js/ ni par index.html - le remettre, c\'est d\'abord le mettre à jour', html2pdfRefs.length === 0, html2pdfRefs.join(', '));
+}
+
+// ============================================================================
+// 12. Aucune police ni feuille de style d'un autre site : l'interface prend la police du système
+// ============================================================================
+// Choix d'Antoine du 04/10 (contrôle de sécurité, point sur Google Fonts) : « une police système similaire, pas de Google Fonts ou autre ». Une feuille de style ou une police chargée depuis un autre site lui
+// dit, à chaque ouverture du widget, l'adresse IP et l'heure de la personne, et la politique de sécurité du contenu laisse les styles et les polices libres : rien d'autre ne l'arrêterait. L'interface prend donc
+// la police du système (--font-ui commence par system-ui, css/style.css), le contenu du courrier le Roboto de css/roboto-fonts.css (en data:, sans réseau). dev-tests/verify-csp.mjs (script Node `cspLoad`) le
+// confirme dans un vrai navigateur (aucune feuille ni police demandée à un autre site) ; ce contrôle-ci garde les sources, sans navigateur.
+{
+  const remote = '(?:https?:)?//[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)+';
+  const isRemote = target => new RegExp('^' + remote, 'i').test(target);
+  const offenders = [];
+  const scanStyles = (where, text) => {
+    // Les polices embarquées (data:) pèsent des centaines de Ko et ne sortent pas du widget : écartées avant de chercher.
+    const css = stripComments(text).replace(/url\(\s*['"]?data:[^)]*\)/gi, 'url(data:)');
+    for (const m of css.matchAll(/@import\s+(?:url\(\s*)?['"]?([^'")\s;]+)/gi)) if (isRemote(m[1])) offenders.push(`${where} : @import ${m[1].slice(0, 80)}`);
+    for (const m of css.matchAll(new RegExp(`url\\(\\s*['"]?(${remote}[^'")\\s]*)`, 'gi'))) offenders.push(`${where} : url(${m[1].slice(0, 80)})`);
+  };
+  for (const rel of cssFiles) scanStyles(rel, read(rel));
+  const page = read('index.html').replace(/<!--[\s\S]*?-->/g, m => m.replace(/[^\n]/g, ' '));
+  scanStyles('index.html', page);
+  for (const m of page.matchAll(new RegExp(`<link\\b[^>]*\\bhref\\s*=\\s*["']?(${remote}[^"'\\s>]*)`, 'gi'))) offenders.push(`index.html : <link href="${m[1].slice(0, 80)}">`);
+  const FONT_SERVICES = /fonts\.googleapis\.com|fonts\.gstatic\.com|fonts\.bunny\.net|use\.typekit\.net|(?:kit|use)\.fontawesome\.com/i;
+  for (const rel of jsFiles) if (FONT_SERVICES.test(noCommentsJs(read(rel)))) offenders.push(`${rel} : adresse d'un service de polices`);
+  const embedded = (read('css/roboto-fonts.css').match(/url\(data:font\/woff2/g) || []).length;
+  check('polices : les feuilles se lisent bien (garde-fou de l\'analyse elle-même : le Roboto embarqué y est, en data:)', cssFiles.length >= 25 && embedded >= 4, `${cssFiles.length} feuilles, ${embedded} polices embarquées`);
+  check('polices : ni feuille de style, ni page, ni script ne charge de police ou de feuille d\'un autre site (@import, url(), <link>, service de polices) - une police du système, jamais Google Fonts', offenders.length === 0, '\n    ' + offenders.join('\n    '));
+  const fontUi = ((stripComments(read('css/style.css')).match(/--font-ui\s*:\s*([^;]+);/) || [])[1] || '').trim();
+  check('polices : --font-ui, la police de l\'interface, commence par system-ui (la police du système)', /^system-ui\b/.test(fontUi), fontUi);
 }
 
 summarizeAndExit();

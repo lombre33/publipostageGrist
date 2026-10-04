@@ -7,7 +7,8 @@
      balise de base. Les trois scripts en ligne de cette page y sont cités par leur empreinte : en modifier un (la carte d'importation comprise) change son empreinte, et dev-tests/verify-code-hygiene.mjs
      (groupe codeHygiene) dit laquelle écrire. esm.sh est ouvert en entier : le chemin de ses modules change à chaque nouvelle version de leur fabrication. 'unsafe-eval' reste, faute de mieux : le fichier
      que Grist sert (docs.getgrist.com/grist-plugin-api.js) est un bundle de développement dont chaque module s'évalue par eval(), et sans lui l'objet grist n'existe pas (dev-tests/verify-csp.mjs charge
-     le vrai fichier). Styles, polices (Google Fonts, css/style.css), images et connexions ne sont pas limités : le widget lit des images et des pièces jointes de n'importe quel site. -->
+     le vrai fichier). Styles, polices, images et connexions ne sont pas limités : le widget lit des images et des pièces jointes de n'importe quel site. Aucune feuille de style ni police ne vient
+     pourtant d'un autre site : l'interface prend la police du système (--font-ui de css/style.css, choix d'Antoine du 04/10), et codeHygiene comme cspLoad refusent qu'une autre apparaisse. -->
 <meta http-equiv="Content-Security-Policy" content="
   script-src 'self' 'unsafe-eval' https://esm.sh https://docs.getgrist.com/grist-plugin-api.js
     https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.min.js
@@ -97,15 +98,15 @@
 }
 </script>
 <link rel="stylesheet" href="css/roboto-fonts.css?v=0.68">
-<link rel="stylesheet" href="css/style.css?v=0.86">
+<link rel="stylesheet" href="css/style.css?v=0.87">
 <link rel="stylesheet" href="css/reader-guide.css?v=0.2">
 <link rel="stylesheet" href="css/editor-v2.css?v=0.96">
-<link rel="stylesheet" href="css/toolbar-v2.css?v=0.53">
+<link rel="stylesheet" href="css/toolbar-v2.css?v=0.54">
 <link rel="stylesheet" href="css/grid.css?v=0.6">
-<link rel="stylesheet" href="css/template-tree-select.css?v=0.16">
+<link rel="stylesheet" href="css/template-tree-select.css?v=0.17">
 <link rel="stylesheet" href="css/template-organize-modal.css?v=0.7">
 <link rel="stylesheet" href="css/track-changes.css?v=0.8">
-<link rel="stylesheet" href="css/modal-base.css?v=0.7">
+<link rel="stylesheet" href="css/modal-base.css?v=0.8">
 <link rel="stylesheet" href="css/variable-actions.css?v=0.15">
 <link rel="stylesheet" href="css/variable-list.css?v=0.2">
 <link rel="stylesheet" href="css/conditional-text.css?v=0.2">

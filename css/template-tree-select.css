@@ -49,7 +49,7 @@
    outsideScrollHandler (js/template-tree-select.js), il faisait défiler la page et révélait un débordement latent (#v2-heading-flyout) qui remontait
    la barre d'outils hors de portée en petite fenêtre. */
 /* color explicite : <body> ne fixe aucune couleur de texte, le panneau (fond var(--surface), sombre en thème sombre) héritait du noir du navigateur. */
-/* font-family explicite : rattaché à document.body, le panneau sort de la cascade de la barre d'outils (Manrope) et retombait sur l'Arial du body
+/* font-family explicite : rattaché à document.body, le panneau sort de la cascade de la barre d'outils (--font-ui) et retombait sur l'Arial du body
    (css/style.css). */
 /* font-size explicite : rattaché à <body>, le panneau héritait des 16 px du navigateur, plus que le déclencheur (13 px) et que les menus au survol
    (12,5 px, .v2-hover-row). Même taille que ces menus. */
@@ -85,7 +85,7 @@
 .tts-group.is-collapsed { display: none; }
 
 /* Dossiers et modèles se distinguent d'un coup d'œil, pas seulement par l'icône : nom de dossier en gras sur une bande pleine largeur, nom de modèle
-   en graisse normale sans fond, un trait vertical relie chaque dossier déplié à son contenu. Poids 700 (présent dans Manrope), aucune couleur ajoutée
+   en graisse normale sans fond, un trait vertical relie chaque dossier déplié à son contenu. Poids 700 (que toute police du système sert), aucune couleur ajoutée
    : --surface-sunken et --border-strong suivent le thème sombre. Ces règles servent aussi la fenêtre « Organiser mes modèles » ; la liste déroulante
    allège le gras juste après. */
 .tts-row-folder { background: var(--surface-sunken); font-weight: 700; margin-top: 2px; }

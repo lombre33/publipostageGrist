@@ -32,7 +32,7 @@
 /* Deux écarts propres à chaque fenêtre : sous le titre (ou sous ce que l'en-tête porte en plus : onglets, recherche) et au-dessus des boutons. Une
    fenêtre les règle en posant --pp-modal-title-gap et --pp-modal-actions-gap sur son cadre. */
 .pp-modal-header { flex: none; padding: 18px 20px var(--pp-modal-title-gap, 6px); }
-.pp-modal-header h3 { margin: 0; font-size: 14.5px; font-weight: 800; color: var(--text); overflow-wrap: anywhere; }
+.pp-modal-header h3 { margin: 0; font-size: 14.5px; font-weight: 700; color: var(--text); overflow-wrap: anywhere; }
 /* overscroll-behavior : au bout de la zone, la molette ne fait pas défiler la page derrière le voile. */
 .pp-modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 20px; }
 /* 20 px au-dessus des boutons par défaut (16 px de marge + 4 px de la ligne collante) : les fenêtres de variable qui tenaient sans défiler gardent

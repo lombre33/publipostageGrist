@@ -8,7 +8,9 @@
 //   3) le VRAI fichier d'API de Grist (docs.getgrist.com/grist-plugin-api.js) s'évalue sous la politique : c'est un bundle de développement dont chaque module passe par eval(), le faux
 //      Grist des autres tests n'en a pas besoin, et une politique sans 'unsafe-eval' laisserait le widget sans objet grist, donc mort, chez Antoine ; ce contrôle demande le réseau ;
 //   4) le widget démarre dans un cadre à bac à sable comme celui d'un document Grist, avec et sans allow-same-origin ;
-//   5) la politique ne limite ni les styles, ni les polices (Google Fonts), ni les images, ni les connexions.
+//   5) la politique ne limite ni les styles, ni les polices, ni les images, ni les connexions ;
+//   6) le widget n'a besoin d'aucune feuille de style ni d'aucune police d'un autre site (choix d'Antoine du 04/10 : « une police système similaire, pas de Google Fonts ou autre ») : le parcours
+//      entier n'en demande aucune, c'est la seule garde contre une police qui reviendrait, puisque la politique laisse les polices libres.
 // Lancé par run-headless.mjs (script Node « cspLoad », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-csp.mjs
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
@@ -89,6 +91,12 @@ const pageErrors = [];
 const consoleRefusals = [];
 page.on('pageerror', e => pageErrors.push(e.message));
 page.on('console', m => { if (/Content Security Policy|Refused to/i.test(m.text())) consoleRefusals.push(m.text().slice(0, 160)); });
+// Toute feuille de style ou police demandée à un autre site que le widget est notée (le type de la requête vient du navigateur : une feuille importée par @import est une `stylesheet`).
+const otherSiteStyles = [];
+page.on('request', r => {
+  const type = r.resourceType();
+  if ((type === 'stylesheet' || type === 'font') && /^https?:/i.test(r.url()) && new URL(r.url()).origin !== BASE) otherSiteStyles.push(type + ' ' + r.url().slice(0, 100));
+});
 
 if (OFFLINE) {
   await context.route('**://esm.sh/**', async route => {
@@ -110,8 +118,6 @@ if (OFFLINE) {
   await context.addInitScript(() => {
     Object.defineProperty(HTMLScriptElement.prototype, 'integrity', { configurable: true, get: () => '', set: () => {} });
   });
-  await context.route('**://fonts.googleapis.com/**', route => route.fulfill({ status: 200, contentType: 'text/css', body: '' }));
-  await context.route('**://fonts.gstatic.com/**', route => route.fulfill({ status: 200, body: '' }));
 }
 // L'API Grist vient de son adresse réelle, sous la politique ; le contenu servi est celui du faux Grist du dépôt.
 await context.route('https://docs.getgrist.com/grist-plugin-api.js', route => route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', body: readFileSync(join(ROOT, 'dev-tests', 'grist-stub.js'), 'utf8') }));
@@ -161,6 +167,7 @@ for (const [name, label] of [['pdf', 'PDF (pdfmake, polices du dépôt)'], ['zip
   check('export : ' + label + ' se charge et produit son fichier sous la politique', exportsRun[name] === true, exportsRun[name]);
 }
 check('rien n\'a été refusé pendant tout ce parcours (aucune violation, aucun message du navigateur)', (await violations()).length === 0 && consoleRefusals.length === 0, { violations: await violations(), consoleRefusals });
+check('aucune feuille de style ni police n\'est demandée à un autre site pendant tout ce parcours (la police du système, choix d\'Antoine du 04/10)', otherSiteStyles.length === 0, otherSiteStyles);
 
 // 2) Du HTML piégé posé tel quel, comme si le filtre l'avait laissé passer.
 async function attempt(label, expectedDirective, run) {

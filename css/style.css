@@ -1,10 +1,12 @@
 /* Publipostage Grist – stylesheet. Référencé par index.html (mode édition) et par reader-mode.js (mode lecture via #reader-container). */
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap');
+/* Aucune police ni feuille de style d'un autre site (choix d'Antoine, 04/10 : « une police système similaire, pas de Google Fonts ou autre ») : la police chargée depuis Google Fonts
+   lui disait, à chaque ouverture du widget, l'adresse IP et l'heure de la personne. L'interface prend la police du système (--font-ui), le contenu du courrier le Roboto ci-dessous ;
+   dev-tests/verify-code-hygiene.mjs (groupe codeHygiene) et dev-tests/verify-csp.mjs (groupe cspLoad) gardent cette règle. */
 /* Roboto (regular/italic/bold/bold-italic) : voir css/roboto-fonts.css, lié séparément avant cette feuille. Auto-hébergée pour garantir que l'éditeur/
    #reader-container utilisent EXACTEMENT les mêmes fichiers que ceux embarqués dans le PDF par pdfmake - sinon le texte ne coupe pas ses lignes pareil. */
 
 /* === Design tokens === --font-ui n'est appliqué qu'au chrome de l'application (barres d'outils, boutons, libellés) : le contenu du courrier garde
-   volontairement Roboto (pour matcher l'export PDF) plutôt que Manrope. */
+   volontairement Roboto (pour matcher l'export PDF) plutôt que la police du système. */
 :root {
   --bg: #f4f6fa;
   --surface: #ffffff;
@@ -47,7 +49,8 @@
   --radius-sm: 7px;
   --shadow-float: 0 14px 32px -8px rgba(9,16,35,.35), 0 2px 8px rgba(9,16,35,.12);
   --shadow-card: 0 1px 2px rgba(20,28,46,.05);
-  --font-ui: 'Manrope', system-ui, sans-serif;
+  /* La police du système de la personne (Segoe UI, SF, Roboto, Cantarell...) : rien n'est téléchargé. Poids 400, 600 et 700 seulement (jamais 800, que Segoe UI sert en « Black »). */
+  --font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   /* Gouttière entre deux pages de l'aperçu paginé (cf. .v2-page-seam-divider / .v2-page-break-line) : c'est elle qui fait lire le flux continu de
      l'éditeur comme une pile de feuilles distinctes. Assez haute pour se voir, assez basse pour ne pas repousser tout le document. */
   --pp-page-gap: 28px;
