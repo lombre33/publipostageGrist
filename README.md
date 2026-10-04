@@ -154,6 +154,7 @@ L'interface prend la police du système (`--font-ui` de `css/style.css`) : aucun
 | `dev-tests/` | La suite de tests, le harnais et le simulateur de Grist. |
 | `planning/` | Les notes de conception par chantier, la feuille de route et la charte UI/UX. |
 | `prototypes/` | Le prototype du suivi des modifications, avec ses tests. |
+| `outils/` | Les outils d'envoi d'une version vers le dépôt public (`outils/depot-propre/` : script, contrôles, essais, documents publics). Rien n'y est poussé sans geste manuel, et rien n'en part sur le dépôt public. |
 | `AUDIT_CODE.md` | L'audit de code (qualité, sécurité, publication) du 12 septembre 2026. |
 | `CAHIER_DES_CHARGES.md` | Le cahier des charges initial, gardé comme document historique. |
 | `LICENSE` | La licence GNU GPL v3.0. |
