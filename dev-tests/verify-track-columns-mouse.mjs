@@ -5,6 +5,7 @@
 // refusée (console.warn « Invalid content for node tableRow »). Elles posent maintenant une marque d'insertion ou de suppression sur chaque case, que ProseMirror
 // dessine en <ins> / <del> directement dans le <tr> : sans règle d'affichage la case sortait de la ligne, d'où les mesures de géométrie ci-dessous (cases bord à bord,
 // dans le tableau). Le HTML enregistré porte la marque en attribut de la case, parce qu'un <ins> posé autour d'un <td> ne survit pas à l'analyseur HTML du navigateur.
+// Le fond d'une cellule et la largeur d'une colonne posent aussi une marque de modification sur les cases touchées : « Tout refuser » doit les rendre et « Tout accepter » les garder (section 7, 04/10).
 // Lancé par run-headless.mjs (groupe Node "trackColumnsMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-track-columns-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -293,7 +294,53 @@ for (const dark of [false, true]) {
   check(`[${theme}] suivi coupé : « Colonne après » ajoute la colonne pour de bon, sans marque`, colsOf(plainAdded) === '4,4' && !plainAdded.pending && !/data-tc-|<ins|<del/.test(plainAdded.html), { cols: colsOf(plainAdded) });
 
   if (!dark) {
-    // 7) Langue : l'explication du bouton grisé suit la langue de l'interface.
+    // 7) Fond de cellule et largeur de colonne avec le suivi (demande d'Antoine du 04/10, carte « Corriger ») : l'un et l'autre posent une marque de modification sur les cases touchées, que la barre
+    // « Accepter / Refuser » ne propose jamais ; « Tout refuser » (vraie souris) les rend, d'un seul Ctrl+Z, et « Tout accepter » les garde. Avant la correction, la page se figeait (puis, une fois
+    // débloquée, le fond et la largeur restaient en attente).
+    await loadDoc(FIXED);
+    const cellOriginal = plain((await tableState()).html);
+    await trackOn();
+    await clickCell(1);
+    await page.click('#v2-table-fill-btn');
+    await sleep(250);
+    await page.click('.v2-color-dropdown.visible button[data-action="pick:#fff2a8"]');
+    await settle();
+    const filled = await tableState();
+    check(`[${theme}] fond de cellule (puce « Fond de cellule », vraie souris) avec le suivi : la case b1 est jaune, une marque de modification en attente`,
+      filled.rows[0][1].bg === 'rgb(255, 242, 168)' && (filled.html.match(/data-tc-modification/g) || []).length === 1 && filled.pending, { bg: filled.rows[0][1].bg, html: filled.html });
+    const border = await page.evaluate(() => { const r = document.querySelector('.tiptap td').getBoundingClientRect(); return { x: r.right - 1, y: r.top + r.height / 2 }; });
+    await page.mouse.move(border.x - 30, border.y);
+    await page.mouse.move(border.x, border.y, { steps: 4 });
+    await sleep(200);
+    await page.mouse.down();
+    await page.mouse.move(border.x - 40, border.y, { steps: 6 });
+    await page.mouse.up();
+    await settle();
+    const dragged = await tableState();
+    const firstWidth = Number((dragged.html.match(/colwidth="(\d+)"/) || [])[1]);
+    check(`[${theme}] largeur de colonne (bord glissé à la vraie souris) avec le suivi : la première colonne est plus étroite, une marque par case touchée (3 en tout avec le fond)`,
+      firstWidth > 0 && firstWidth < 150 && (dragged.html.match(/data-tc-modification/g) || []).length === 3 && dragged.pending, { firstWidth, html: dragged.html });
+    check(`[${theme}] la barre « Accepter / Refuser » ne propose rien pour ces réglages (curseur dans la case)`,
+      await page.evaluate(() => TrackChanges.selectionSuggestionIds(EditorCore.getEditor().state).length === 0));
+    await resolveAll('v2-btn-reject-all');
+    const answers = await Promise.race([page.evaluate(() => true), sleep(5000).then(() => false)]);
+    check(`[${theme}] « Tout refuser » (vraie souris) : la page répond, elle ne se fige pas`, answers === true);
+    const refused = await tableState();
+    check(`[${theme}] « Tout refuser » rend le tableau d'avant : largeurs d'origine, case b1 sans fond, aucune marque, plus aucune suggestion`,
+      plain(refused.html) === cellOriginal && refused.rows[0][1].bg === 'rgba(0, 0, 0, 0)' && !/data-tc-modification|background-color/.test(refused.html) && !refused.pending, { html: refused.html, bg: refused.rows[0][1].bg });
+    await undo();
+    const refusedUndone = await tableState();
+    check(`[${theme}] un seul Ctrl+Z (vraie touche) remet le fond et la largeur en attente`,
+      refusedUndone.rows[0][1].bg === 'rgb(255, 242, 168)' && (refusedUndone.html.match(/data-tc-modification/g) || []).length === 3 && refusedUndone.pending, { html: refusedUndone.html });
+    await resolveAll('v2-btn-accept-all');
+    const kept = await tableState();
+    check(`[${theme}] « Tout accepter » (vraie souris) garde le fond et la largeur, sans marque`,
+      kept.rows[0][1].bg === 'rgb(255, 242, 168)' && Number((kept.html.match(/colwidth="(\d+)"/) || [])[1]) === firstWidth && !/data-tc-modification/.test(kept.html) && !kept.pending, { html: kept.html });
+    await page.evaluate(() => Editor.setTrackChanges(false));
+  }
+
+  if (!dark) {
+    // 8) Langue : l'explication du bouton grisé suit la langue de l'interface.
     await page.evaluate(() => I18n.setLang('en'));
     await loadDoc(MERGED);
     await trackOn();

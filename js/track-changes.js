@@ -97,8 +97,9 @@ const TrackChanges = (function () {
   // --- Accepter ou refuser UNE modification (barre flottante, js/floating-toolbars.js) -----------------------------------------------------------
   const suggestionMarksOf = node => node.marks.filter(m => MARK_NAMES.includes(m.type.name));
   const sameId = (a, b) => String(a) === String(b);
-  // Une marque `modification` d'une case ou d'une ligne (la largeur d'une case fusionnée qui gagne une colonne) ne se voit pas dans l'éditeur : elle
-  // ne déclenche jamais la barre « Accepter / Refuser », elle suit seulement la colonne ou la ligne dont elle fait partie (expandSuggestionIds).
+  // Une marque `modification` d'une case ou d'une ligne (la largeur d'une case fusionnée qui gagne une colonne, le fond d'une cellule, la largeur d'une
+  // colonne) ne se voit pas dans l'éditeur : elle ne déclenche jamais la barre « Accepter / Refuser », elle suit seulement la colonne ou la ligne dont
+  // elle fait partie (expandSuggestionIds) ; « Tout refuser » rend celles qui ne suivent rien (pendingAttributeIds), « Tout accepter » toutes.
   const isTableMod = (node, mark) => mark.type.name === 'modification' && CELL_NODE_TYPES.includes(node.type.name);
 
   // Les ids des suggestions que la sélection touche. Un curseur seul : le texte ou l'objet tout contre lui, celui d'AVANT d'abord (ce que le curseur
@@ -608,16 +609,25 @@ const TrackChanges = (function () {
       });
       return found;
     }
-    // Les réglages de paragraphe en attente (un alignement, « Garder avec le suivant ») : les marques `modification` hors cases et lignes de tableau, qui suivent leur colonne ou leur ligne (isTableMod).
-    // Leurs ids tels que le document les écrit.
-    function pendingAttributeIds(doc) {
+    // Les réglages en attente (un alignement, « Garder avec le suivant », le fond d'une cellule, la largeur d'une colonne) : les marques `modification`, avec leurs ids tels que le document les écrit. Celles
+    // d'une case ou d'une ligne de tableau (isTableMod) suivent leur colonne ou leur ligne tant que l'une d'elles attend : `withTableMods` les prend aussi, pour quand il n'en reste plus.
+    function pendingAttributeIds(doc, withTableMods) {
       const ids = [];
       doc.descendants(node => {
         node.marks.forEach(mark => {
-          if (mark.type.name === 'modification' && !isTableMod(node, mark) && mark.attrs.id != null && !ids.some(id => sameId(id, mark.attrs.id))) ids.push(mark.attrs.id);
+          if (mark.type.name === 'modification' && (withTableMods || !isTableMod(node, mark)) && mark.attrs.id != null && !ids.some(id => sameId(id, mark.attrs.id))) ids.push(mark.attrs.id);
         });
       });
       return ids;
+    }
+    // Vrai tant qu'une insertion ou une suppression (un texte, un objet, une case, une colonne, une ligne) attend.
+    function hasInsertionOrDeletion(doc) {
+      let found = false;
+      doc.descendants(node => {
+        if (!found && node.marks.some(mark => mark.type.name !== 'modification' && MARK_NAMES.includes(mark.type.name))) found = true;
+        return !found;
+      });
+      return found;
     }
     // Reprend une tranche après l'autre jusqu'à ce qu'il ne reste plus de marque. Une tranche qui ne change rien ne mènerait nulle part : revertSuggestion de la lib rend « rien à faire » AVANT de résoudre
     // les modifications dès qu'elle n'a aucun texte à défaire, et la boucle retrouvait la même marque à chaque tour - avec un seul réglage de paragraphe suivi, « Tout refuser » ne finissait jamais (la page
@@ -654,9 +664,10 @@ const TrackChanges = (function () {
           rejectAllSuggestionsChunked: (chunkSize = 200) => ({ editor, dispatch, tr }) => {
             if (!dispatch) return true;
             tr.setMeta('preventDispatch', true);
-            // Les réglages de paragraphe seuls (la lib n'a rien à défaire) se refusent comme « Refuser » une modification : resolveSuggestionIds, une transaction, un seul Annuler.
+            // Les réglages seuls (la lib n'a rien à défaire : un alignement, le fond d'une cellule, la largeur d'une colonne) se refusent comme « Refuser » une modification : resolveSuggestionIds, une transaction,
+            // un seul Annuler. Ceux d'une case ou d'une ligne ne passent là que quand plus aucune insertion ni suppression n'attend : avec une colonne ou une ligne suivie, ils s'en vont avec elle.
             runChunkedLibCommand((from, to) => revertSuggestion(undefined, from, to), editor, chunkSize, () => {
-              const ids = pendingAttributeIds(editor.state.doc);
+              const ids = pendingAttributeIds(editor.state.doc, !hasInsertionOrDeletion(editor.state.doc));
               return ids.length > 0 && resolveSuggestionIds(editor, ids, false);
             });
             return true;

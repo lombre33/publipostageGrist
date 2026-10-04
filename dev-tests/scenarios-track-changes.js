@@ -1384,6 +1384,107 @@
     },
   });
 
+  // === « Tout refuser » rend aussi le fond d'une cellule et la largeur d'une colonne (demande d'Antoine du 04/10, carte « Corriger ») ===
+  // Avec le suivi allumé, le fond d'une cellule (la puce « Fond de cellule » de la barre du tableau) et la largeur d'une colonne (la poignée du bord) posent une marque `modification` sur chaque case touchée. Elle
+  // ne se voit pas dans l'éditeur et la barre « Accepter / Refuser » ne la propose jamais (js/track-changes.js:isTableMod) ; la lib, à qui « Tout refuser » confie le texte, n'y touche pas non plus quand elle n'a rien
+  // d'autre à défaire : le fond ou la largeur restait, en attente, après « Tout refuser » (et, avant la correction précédente, la page se figeait). Les cas lancent la commande du bouton sous le garde-fou de
+  // runAllChunked, comme ceux des réglages de paragraphe plus haut.
+  const FILL = '#fff2a8';
+  const FILL_CSS = /background-color: rgb\(255, 242, 168\)/;
+  const cellModifications = () => (Editor.getHTML().match(/data-tc-modification/g) || []).length;
+  // Le fond posé comme le fait la barre du tableau : un appui de souris sur la puce « Fond de cellule », puis sur une nuance du menu.
+  async function pickCellFill(h, color) {
+    await pressTableButton(h, 'fill-open');
+    const swatch = document.querySelector('.v2-color-dropdown.visible button[data-action="pick:' + color + '"]');
+    if (!swatch) throw new Error('nuance « ' + color + ' » introuvable dans le menu du fond de cellule');
+    swatch.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    await h.sleep(250);
+  }
+  // La largeur d'une colonne posée comme le fait la poignée du bord (updateColumnWidth de prosemirror-tables) : `colwidth` de chaque case de la colonne, dans une seule transaction.
+  async function setColumnWidth(h, texts, width) {
+    const ed = EditorCore.getEditor();
+    const tr = ed.state.tr;
+    texts.forEach(text => {
+      let pos = -1;
+      tr.doc.descendants((node, p) => { if (pos < 0 && (node.type.name === 'tableCell' || node.type.name === 'tableHeader') && node.textContent === text) pos = p; });
+      if (pos < 0) throw new Error('case « ' + text + ' » introuvable');
+      tr.setNodeMarkup(pos, undefined, Object.assign({}, tr.doc.nodeAt(pos).attrs, { colwidth: [width] }));
+    });
+    ed.view.dispatch(tr);
+    await h.sleep(200);
+  }
+
+  cases.push({
+    id: 'trackchanges_reject_all_gives_back_a_cell_background_and_accept_all_keeps_it',
+    description: "Suivi allumé, le fond d'une cellule posé par la puce « Fond de cellule » de la barre du tableau (une marque de modification sur la case, que la barre Accepter / Refuser ne propose pas) : « Tout refuser » rend la main et la case sans fond, aucune marque, boutons regrisés - d'un seul Annuler ; refait, « Tout accepter » garde le fond, sans marque",
+    run: async (h) => {
+      try {
+        const out = {};
+        await loadTable(h, TABLE_3X2, 'b1', true);
+        const original = plainHtml(Editor.getHTML());
+        await pickCellFill(h, FILL);
+        out.pending = cellModifications() === 1 && FILL_CSS.test(Editor.getHTML()) && Editor.hasPendingTrackedChanges() && !rejectBtn().disabled;
+        out.noBar = TrackChanges.selectionSuggestionIds(EditorCore.getEditor().state).length === 0;
+        const rejected = await runAllChunked(h, 'reject');
+        out.rejectNoLoop = !rejected.looped;
+        const afterReject = Editor.getHTML();
+        out.rejectOriginal = plainHtml(afterReject) === original && !/background-color/.test(afterReject) && cellModifications() === 0 && !Editor.hasPendingTrackedChanges() && acceptBtn().disabled && rejectBtn().disabled;
+        await h.sleep(700);
+        EditorCore.getEditor().commands.undo();
+        await h.sleep(250);
+        out.undone = cellModifications() === 1 && FILL_CSS.test(Editor.getHTML()) && Editor.hasPendingTrackedChanges();
+        const accepted = await runAllChunked(h, 'accept');
+        out.acceptNoLoop = !accepted.looped;
+        out.acceptKept = FILL_CSS.test(Editor.getHTML()) && cellModifications() === 0 && !Editor.hasPendingTrackedChanges();
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_reject_all_gives_back_a_column_width_and_accept_all_keeps_it',
+    description: "Suivi allumé, la largeur d'une colonne changée comme le fait la poignée du bord (colwidth de chaque case de la colonne, une marque de modification par case) : « Tout refuser » rend la main et la largeur d'avant aux deux cases, aucune marque ; refait, « Tout accepter » garde la nouvelle largeur, sans marque",
+    run: async (h) => {
+      try {
+        const out = {};
+        const widthsOf = () => (Editor.getHTML().match(/colwidth="\d+"/g) || []).join(' ');
+        await loadTable(h, TABLE_FIXED_WIDTHS, 'Nom', true);
+        const originalWidths = widthsOf();
+        await setColumnWidth(h, ['Nom', 'Date'], 180);
+        out.pending = cellModifications() === 2 && widthsOf().split(' ').filter(w => w === 'colwidth="180"').length === 2 && Editor.hasPendingTrackedChanges();
+        const rejected = await runAllChunked(h, 'reject');
+        out.rejectNoLoop = !rejected.looped;
+        out.rejectOriginal = widthsOf() === originalWidths && cellModifications() === 0 && !Editor.hasPendingTrackedChanges();
+        await setColumnWidth(h, ['Nom', 'Date'], 180);
+        const accepted = await runAllChunked(h, 'accept');
+        out.acceptNoLoop = !accepted.looped;
+        out.acceptKept = widthsOf().split(' ').filter(w => w === 'colwidth="180"').length === 2 && cellModifications() === 0 && !Editor.hasPendingTrackedChanges();
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_reject_all_with_a_column_through_a_merged_cell_and_a_cell_background',
+    description: "Une colonne ajoutée à travers une cellule fusionnée (insertions, plus la largeur de la cellule fusionnée qui suit la colonne) ET le fond d'une cellule : « Tout refuser » rend le tableau d'avant, cellule fusionnée comprise, sans case vide ajoutée par la réparation du tableau, sans fond ni marque",
+    run: async (h) => {
+      try {
+        const out = {};
+        await loadTable(h, TABLE_MERGED, 'b2', true);
+        const original = plainHtml(Editor.getHTML());
+        await pressTableButton(h, 'col-before');
+        await placeInCell(h, 'c2');
+        await pickCellFill(h, FILL);
+        out.pending = cellRows().map(c => c.length).join() === '2,4' && /colspan="3"/.test(Editor.getHTML()) && FILL_CSS.test(Editor.getHTML()) && Editor.hasPendingTrackedChanges();
+        const rejected = await runAllChunked(h, 'reject');
+        out.noLoop = !rejected.looped;
+        const html = Editor.getHTML();
+        out.original = plainHtml(html) === original && !/background-color/.test(html) && html.indexOf('data-tc-') === -1 && !Editor.hasPendingTrackedChanges();
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
   // === Lecture : le document comme si toutes les suggestions étaient acceptées (demande d'Antoine du 04/10) ===
   // « En mode lecture afficher comme si toutes les modifications étaient acceptées, avec juste un léger changement de couleur là où des modifs sont présentes. » La Lecture retouche le HTML qu'elle
   // reçoit (js/track-changes.js:acceptedView, appelée par js/reader-mode.js:renderRecord) : le résultat doit être EXACTEMENT celui de « Tout accepter » (comparé ici, cas par cas, au vrai
