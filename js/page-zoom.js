@@ -249,16 +249,21 @@ const PageZoom = (function () {
 
   // Glisser la bordure d'une colonne de tableau (prosemirror-tables) : la bibliothèque ajoute le déplacement de la souris, en pixels de l'écran, à une
   // largeur en pixels de mise en page. Sous un zoom la bordure ne suit plus le pointeur (deux fois trop vite à 200 %, deux fois trop lentement à 50 %).
-  // Pendant le glisser, la position de la souris que la bibliothèque lit est donc ramenée à l'échelle de la feuille : départ + déplacement / zoom. Sans
-  // zoom (facteur 1) rien n'est touché. La poignée est « prise » quand l'éditeur porte la classe resize-cursor au moment de l'appui.
+  // Pendant le glisser, la position de la souris que la bibliothèque lit est donc ramenée à l'échelle de la feuille : départ + déplacement / zoom, au pixel
+  // de mise en page près - le document n'écrit ni ne relit que des largeurs entières (colwidth repasse par parseInt) : une largeur à fraction (102,774) serait
+  // enregistrée autrement qu'elle est tirée. Le départ est arrondi lui aussi (un écran à échelle fractionnaire donne un clientX à fraction) pour que la
+  // différence que la bibliothèque calcule reste exacte. Sans zoom (facteur 1) rien n'est touché. La poignée est « prise » quand l'éditeur porte la classe
+  // resize-cursor au moment de l'appui.
+  const shadowClientX = (e, x) => Object.defineProperty(e, 'clientX', { configurable: true, value: x });
   function onColumnDragStart(event) {
     if (event.button !== 0 || !event.target || !event.target.closest) return;
     const editorDom = event.target.closest('.tiptap');
     if (!editorDom || !editorDom.classList.contains('resize-cursor')) return;
     const z = EditorCore.layoutZoom(editorDom);
     if (Math.abs(z - 1) < 0.001) return;
-    const startX = event.clientX;
-    const rescale = e => Object.defineProperty(e, 'clientX', { configurable: true, value: startX + (e.clientX - startX) / z });
+    const startX = Math.round(event.clientX);
+    shadowClientX(event, startX);
+    const rescale = e => shadowClientX(e, startX + Math.round((e.clientX - startX) / z));
     const release = e => {
       rescale(e);
       window.removeEventListener('mousemove', rescale, true);

@@ -318,6 +318,46 @@ async function pill() {
   });
 }
 
+// Une colonne de tableau tirée à la vraie souris : la bordure suit le pointeur (prosemirror-tables lit la souris en pixels de l'écran, js/page-zoom.js la ramène à l'échelle de la
+// feuille) ET la largeur écrite dans le document est un nombre entier de pixels de mise en page, celui que l'enregistrement relit (colwidth repasse par parseInt) : une largeur à fraction
+// (102,774, tirée à la souris sous un facteur de 0,847) était enregistrée autrement qu'elle était tirée, et le suivi des modifications ne lisait plus la largeur de la colonne.
+// 61 px et non 60 : sous un facteur de 2 la moitié est un demi-pixel de mise en page, que seul l'arrondi tranche.
+const DRAG_PX = 61;
+const cell = (w, t) => `<td colwidth="${w}" style="width:${w}px"><p>${t}</p></td>`;
+const tableHtml = '<p>Avant le tableau</p><table><tbody><tr>' + cell(100, 'A') + cell(100, 'B') + '</tr></tbody></table><p>Après le tableau</p>';
+async function dragFirstBorder(dx) {
+  await page.evaluate(() => { const c = document.getElementById('editor-container'); const td = document.querySelector('.tiptap table td'); const r = td.getBoundingClientRect(), cr = c.getBoundingClientRect(); c.scrollTop += r.top - cr.top - 120; c.scrollLeft += r.left - cr.left - 20; });
+  await sleep(200);
+  const border = await page.evaluate(() => { const r = document.querySelector('.tiptap table td').getBoundingClientRect(); return { x: r.right - 1, y: r.top + r.height / 2, lw: document.querySelector('.tiptap table td').offsetWidth }; });
+  await page.mouse.move(border.x - 30, border.y);
+  await page.mouse.move(border.x, border.y, { steps: 4 });
+  await sleep(200);
+  const handle = await page.evaluate(() => !!document.querySelector('.resize-cursor'));
+  await page.mouse.down();
+  await page.mouse.move(border.x + dx, border.y, { steps: 8 });
+  await page.mouse.up();
+  await sleep(450);
+  const after = await page.evaluate(() => {
+    const td = document.querySelector('.tiptap table td');
+    let docWidth = null;
+    EditorCore.getEditor().state.doc.descendants(node => { if (docWidth === null && node.attrs && node.attrs.colwidth) docWidth = node.attrs.colwidth[0]; });
+    const written = Editor.getHTML().match(/colwidth="([^"]*)"/);
+    return { right: td.getBoundingClientRect().right, lw: td.offsetWidth, docWidth, savedWidth: written ? written[1] : null };
+  });
+  return { handle, moved: after.right - (border.x + 1), layoutBefore: border.lw, layoutAfter: after.lw, docWidth: after.docWidth, savedWidth: after.savedWidth };
+}
+async function checkColumnDrag(label, name, shotName) {
+  const z = (await view()).factor;
+  await page.evaluate(h => { Editor.setHTML(h); }, tableHtml);
+  await sleep(500);
+  const drag = await dragFirstBorder(DRAG_PX);
+  check(`${label} - tableau à ${name} : la poignée de la bordure apparaît sous la souris`, drag.handle, drag);
+  check(`${label} - tableau à ${name} : la bordure de la colonne suit la souris (${DRAG_PX} px de souris = ${r2(drag.moved)} px à l'écran), ${drag.layoutBefore} → ${drag.layoutAfter} px de mise en page`, near(drag.moved, DRAG_PX, 2) && near(drag.layoutAfter - drag.layoutBefore, DRAG_PX / z, 2.5), { drag, z });
+  check(`${label} - tableau à ${name} : la largeur tirée (${drag.docWidth}) est un nombre entier de pixels de mise en page, celui que l'enregistrement écrit (${drag.savedWidth}) et que la réouverture relit`,
+    Number.isInteger(drag.docWidth) && String(drag.docWidth) === drag.savedWidth && drag.docWidth === parseInt(drag.savedWidth, 10) && near(drag.docWidth - 100, DRAG_PX / z, 1), { drag, z });
+  if (shotName) await shot(shotName);
+}
+
 // === Le badge : une page de 90 x 120 mm, toute petite au milieu du gris ===
 async function runBadge(theme) {
   const label = theme === 'dark' ? 'sombre' : 'clair';
@@ -654,23 +694,6 @@ async function runContract(theme, lang) {
     c.scrollLeft += r.left - cr.left - 40;
   });
   const selection = () => page.evaluate(() => { const s = EditorCore.getEditor().state.selection; return { from: s.from, to: s.to }; });
-  const cell = (w, t) => `<td colwidth="${w}" style="width:${w}px"><p>${t}</p></td>`;
-  const tableHtml = '<p>Avant le tableau</p><table><tbody><tr>' + cell(100, 'A') + cell(100, 'B') + '</tr></tbody></table><p>Après le tableau</p>';
-  async function dragFirstBorder(dx) {
-    await page.evaluate(() => { const c = document.getElementById('editor-container'); const td = document.querySelector('.tiptap table td'); const r = td.getBoundingClientRect(), cr = c.getBoundingClientRect(); c.scrollTop += r.top - cr.top - 120; c.scrollLeft += r.left - cr.left - 20; });
-    await sleep(200);
-    const border = await page.evaluate(() => { const r = document.querySelector('.tiptap table td').getBoundingClientRect(); return { x: r.right - 1, y: r.top + r.height / 2, lw: document.querySelector('.tiptap table td').offsetWidth }; });
-    await page.mouse.move(border.x - 30, border.y);
-    await page.mouse.move(border.x, border.y, { steps: 4 });
-    await sleep(200);
-    const handle = await page.evaluate(() => !!document.querySelector('.resize-cursor'));
-    await page.mouse.down();
-    await page.mouse.move(border.x + dx, border.y, { steps: 8 });
-    await page.mouse.up();
-    await sleep(450);
-    const after = await page.evaluate(() => { const td = document.querySelector('.tiptap table td'); return { right: td.getBoundingClientRect().right, lw: td.offsetWidth }; });
-    return { handle, moved: after.right - (border.x + 1), layoutBefore: border.lw, layoutAfter: after.lw };
-  }
   const geometry = () => page.evaluate(() => {
     const img = document.querySelector('.tiptap .editor-image-view img');
     const r = img.getBoundingClientRect();
@@ -700,6 +723,11 @@ async function runContract(theme, lang) {
     });
     await sleep(500);
   }
+  // L'affichage d'origine (« 100 % » à la pastille : à 700 px c'est le facteur d'ajustement de la feuille, ~0,85) : la bordure d'une colonne et sa largeur écrite, comme à 200 % et à 50 %.
+  await page.keyboard.press('Control+Digit0');
+  await settle();
+  await parkMouse();
+  await checkColumnDrag(label, `l'affichage d'origine (facteur ${r2((await view()).factor)})`, null);
   for (const [name, setup] of LEVELS) {
     await page.keyboard.press('Control+Digit0');
     await settle();
@@ -723,12 +751,7 @@ async function runContract(theme, lang) {
     check(`${label} - texte à ${name} : glisser de la lettre 10 à la lettre 24 sélectionne cette plage (${picked.from} → ${picked.to} pour ${from.pos} → ${to.pos})`, Math.abs(picked.from - from.pos) <= 1 && Math.abs(picked.to - to.pos) <= 1, { picked, from, to });
 
     // Une colonne de tableau.
-    await page.evaluate(h => { Editor.setHTML(h); }, tableHtml);
-    await sleep(500);
-    const drag = await dragFirstBorder(60);
-    check(`${label} - tableau à ${name} : la poignée de la bordure apparaît sous la souris`, drag.handle, drag);
-    check(`${label} - tableau à ${name} : la bordure de la colonne suit la souris (60 px de souris = ${r2(drag.moved)} px à l'écran), ${drag.layoutBefore} → ${drag.layoutAfter} px de mise en page`, near(drag.moved, 60, 2) && near(drag.layoutAfter - drag.layoutBefore, 60 / z, 2.5), { drag, z });
-    await shot(`zoom-${theme}-contrat-5-colonne-${name.replace(/\D/g, '')}`);
+    await checkColumnDrag(label, name, `zoom-${theme}-contrat-5-colonne-${name.replace(/\D/g, '')}`);
 
     // Une image : sélection, passage en calque par la barre flottante, déplacement, agrandissement.
     await freshImageDocument();
@@ -778,6 +801,7 @@ async function runWide() {
   const p0 = await pill();
   check('1400x1000 - un A4 est à sa taille au départ (100 %, ancien calcul)', v0.factor === 1 && v0.value === '100 %' && near(oldFactor(v0), 1, 0.0006), v0);
   check('1400x1000 - la pastille est à 24 px du coin bas droit', !!p0 && p0.inViewport && near(p0.rightGap, 24, 1) && near(p0.bottomGap, 24, 1), p0);
+  await checkColumnDrag('1400x1000', '100 % (facteur 1)', null);
   await page.mouse.move(700, 300);
   await realClick('#pp-page-zoom-fit');
   await settle();
