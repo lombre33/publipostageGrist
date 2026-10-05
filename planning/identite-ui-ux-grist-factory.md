@@ -817,8 +817,13 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   sont celles d'un grand panneau ; les PDF sont identiques quelle que soit la taille du panneau.
 - Zoom de la page (« pouvoir zoomer dans l'éditeur à la fois en mode lecture et en mode édition » : un
   badge aux dimensions personnalisées apparaissait tout petit au milieu du gris) : la barre d'outils reste gelée, le zoom est une
-  **pastille fixée au coin bas droit du document** (moins, pourcentage, plus, « Ajuster » ; 30 px de haut, 24 px du bord, hors de la
-  barre de défilement, sous les barres flottantes, les menus et les fenêtres), ni icône ni ligne de menu de plus. Elle reste là en
+  **pastille collée au coin bas droit du document** (choix d'Antoine du 05/10 : la première, large et à 24 px du bord, couvrait la fin des
+  lignes ; « le coller au bas de la page, ne mettre que le pourcentage, le décaller au max à droite pour qu'il soit sur le fond autour
+  plutôt que sur la page »). **Au repos elle n'est que le pourcentage** (« 85 % », 24 px de haut, à 3 px du bord du document et de sa
+  barre de défilement, qu'elle longe sans la recouvrir ; sous les barres flottantes, les menus et les fenêtres) ; **le survol et le
+  clavier (Tab) ouvrent moins, plus et « Ajuster » à sa gauche**, le pourcentage ne bouge pas (un clic dessus rend toujours l'affichage
+  d'origine) ; un écran tactile seul, sans survol, la garde ouverte. Rien n'est retiré : au repos ces trois commandes sont seulement
+  rognées, un lecteur d'écran les lit et Tab les atteint. Ni icône ni ligne de menu de plus. Elle reste là en
   Édition, en Lecture et en Lecture épurée, et **grisée avec sa raison dans l'infobulle, jamais retirée**, quand rien ne s'affiche en
   page (aperçu de la page décoché, grille, résumé d'un macro-modèle) ; ses textes et ses touches suivent la langue et la plateforme
   (Ctrl ou ⌘). Même mécanisme que l'ajustement ci-dessus (`--pp-fit-zoom`, `PageZoom.factorFor` dans `js/page-zoom.js`), trois états :

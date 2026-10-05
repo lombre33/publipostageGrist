@@ -7,7 +7,9 @@
 //    plus avec le panneau).
 //  - Commandes : la pastille du coin bas droit du document (moins, pourcentage, plus, Ajuster - la barre d'outils reste gelée), Ctrl (⌘) + molette ou
 //    pincement, Ctrl (⌘) + plus, moins ou 0 (0 rend l'affichage d'origine, comme un clic sur le pourcentage). Le point sous le pointeur ne bouge pas
-//    (le centre du panneau pour les boutons et le clavier).
+//    (le centre du panneau pour les boutons et le clavier). Au repos la pastille n'est que le pourcentage, collée au coin le plus à droite possible
+//    (placePill : contre la barre de défilement, sans la recouvrir) pour tomber sur le fond gris autour de la feuille plutôt que sur son texte ; le
+//    survol et Tab ouvrent les autres commandes à sa gauche (moins, plus, Ajuster : css/page-zoom.css), un écran tactile seul les garde ouvertes.
 //  - Indisponible - grisé, jamais retiré - quand rien ne s'affiche en page : aperçu de la page décoché, grille, résumé d'un macro-modèle. Les touches
 //    et la molette laissent alors le navigateur faire ce qu'il faisait.
 //  - Le niveau est gardé par modèle, dans ce navigateur (localStorage, comme la langue) ; un modèle jamais zoomé repart de l'affichage d'origine.
@@ -308,8 +310,22 @@ const PageZoom = (function () {
     fitButton.textContent = I18n.t('pageZoom.fit');
   }
 
+  // L'angle du panneau, au plus près : la pastille longe la barre de défilement du document qu'on voit (verticale à droite, horizontale en bas quand la
+  // feuille dépasse) sans la recouvrir. Ce que les barres prennent à `clientWidth` et `clientHeight` (0 avec des barres qui se superposent au contenu)
+  // est posé en variables, css/page-zoom.css y ajoute l'écart au bord. Sans document à l'écran (résumé d'un macro-modèle), la dernière place est gardée.
+  function placePill() {
+    if (!pill) return;
+    const c = visibleContainer();
+    if (!c) return;
+    const box = c.getBoundingClientRect();
+    const root = document.documentElement;
+    pill.style.setProperty('--pp-zoom-right', Math.max(0, Math.round(root.clientWidth - (box.left + c.clientLeft + c.clientWidth))) + 'px');
+    pill.style.setProperty('--pp-zoom-bottom', Math.max(0, Math.round(root.clientHeight - (box.top + c.clientTop + c.clientHeight))) + 'px');
+  }
+
   function updatePill() {
     if (!pill) return;
+    placePill();
     const c = zoomable();
     const z = c ? appliedFactor(c) : 1;
     valueButton.textContent = I18n.t('pageZoom.value', { n: Math.round(z * 100) });
@@ -336,7 +352,9 @@ const PageZoom = (function () {
     separator.setAttribute('aria-hidden', 'true');
     fitButton = Dom.button('pp-page-zoom-fit');
     fitButton.id = 'pp-page-zoom-fit';
-    pill.append(outButton, valueButton, inButton, separator, fitButton);
+    // Le pourcentage en dernier, au bord droit : à l'ouverture (survol ou Tab) les autres commandes apparaissent à sa gauche et il ne bouge pas, sous la
+    // souris qui l'a trouvé - un clic dessus rend toujours l'affichage d'origine, ouverte ou non.
+    pill.append(outButton, inButton, fitButton, separator, valueButton);
     // Un appui sur la pastille ne prend pas le focus : le curseur et la sélection restent où ils sont (même geste que les barres flottantes). Au
     // clavier, Tab puis Entrée ou Espace font ce que fait le clic.
     pill.addEventListener('mousedown', event => event.preventDefault());
@@ -360,6 +378,12 @@ const PageZoom = (function () {
       const observer = new MutationObserver(updatePill);
       [containerOf(EDITOR_ID), containerOf(READER_ID)].forEach(c => { if (c) observer.observe(c, { attributes: true, attributeFilter: ['class', 'style'] }); });
     }
+    // Une barre de défilement qui apparaît ou disparaît (le texte s'allonge, un niveau plus grand fait dépasser la feuille) et un panneau qu'on
+    // redimensionne changent la taille utile du document sans toucher à sa classe ni à son style : la pastille se replace.
+    if (typeof ResizeObserver === 'function') {
+      const sizes = new ResizeObserver(placePill);
+      [containerOf(EDITOR_ID), containerOf(READER_ID)].forEach(c => { if (c) sizes.observe(c); });
+    } else window.addEventListener('resize', placePill);
     I18n.onChange(updatePill);
     updatePill();
   }

@@ -3,18 +3,19 @@
 // Node/Playwright) et à la taille du panneau Grist (~700x400), en thème clair puis sombre, puis en anglais. Un petit document aux dimensions
 // personnalisées (un badge) apparaîtrait sinon tout petit au milieu du gris.
 // dev-tests/scenarios-page-zoom.js vérifie la structure, les niveaux, les états et les textes dans la page (clics, touches et molette synthétiques) ;
-// ici, ce qui se mesure aux pixels et au geste réel : la pastille du coin bas droit (entière dans le panneau, hors de la barre de défilement,
-// atteignable sous la souris, ses couleurs à 4,5:1 et réellement peintes), « Ajuster » qui donne au badge toute la largeur du panneau sans barre de
-// défilement horizontale, plus et moins, Ctrl + plus / moins / 0 au vrai clavier (le navigateur ne zoome pas lui-même), Ctrl + molette qui garde sous
+// ici, ce qui se mesure aux pixels et au geste réel : la pastille collée au coin bas droit (au repos le pourcentage seul, entière dans le panneau, à 3 px du
+// bord et hors de la barre de défilement, sur le fond gris autour d'un petit badge ; le survol ou Tab ouvre moins, plus et « Ajuster » à gauche du pourcentage,
+// qui ne bouge pas ; atteignable sous la souris, ses couleurs à 4,5:1 et réellement peintes), « Ajuster » qui donne au badge toute la largeur du panneau sans
+// barre de défilement horizontale, plus et moins, Ctrl + plus / moins / 0 au vrai clavier (le navigateur ne zoome pas lui-même), Ctrl + molette qui garde sous
 // le pointeur le mot qu'il survole (Édition et Lecture), la molette sans Ctrl qui défile comme avant, le curseur du texte gardé quand on clique la
 // pastille, la Lecture et la Lecture épurée, une fenêtre ouverte qui passe devant la pastille et garde ses touches, le niveau retrouvé après un
-// rechargement de la page.
+// rechargement de la page, et, dans un Chromium qui garde les vraies barres de défilement (15 px), la pastille qui les longe sans les recouvrir.
 // Le zoom change l'échelle des gestes : la bordure d'une colonne de tableau (prosemirror-tables lit la souris en pixels écran) et les poignées d'une
 // image doivent encore suivre le pointeur à 200 % et à 50 % (un pixel de souris = un pixel écran). L'affichage d'origine (jamais zoomé) est celui
 // d'avant : même facteur d'ajustement que l'ancien calcul.
 // Lancé par run-headless.mjs (groupe Node "pageZoomMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-page-zoom-mouse.mjs
 // (PAGE_ZOOM_SHOTS=<dossier> y range une capture par étape, à regarder - aucune vérification n'en dépend ; PAGE_ZOOM_ONLY=<partie> n'en lance
-// qu'une : badge, contrat, english, wide).
+// qu'une : badge, contrat, english, wide, scrollbars, touch).
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
@@ -118,9 +119,9 @@ async function waitReady(page) {
   await page.waitForTimeout(900);
 }
 
-async function openWidget(colorScheme, first, size) {
+async function openWidget(colorScheme, first, size, host = browser, contextOptions = {}) {
   const viewport = size || { width: WIDTH, height: HEIGHT };
-  const context = await browser.newContext({ bypassCSP: true, viewport, colorScheme });
+  const context = await host.newContext({ bypassCSP: true, viewport, colorScheme, ...contextOptions });
   const page = await context.newPage();
   page.on('pageerror', e => { pageErrors.push(e.message); console.log('[pageerror]', e.message); });
   page.on('dialog', d => { d.accept().catch(() => {}); });
@@ -192,17 +193,32 @@ const boxOf = sel => page.evaluate(s => {
   return { x: r.x + r.width / 2, y: r.y + r.height / 2, left: r.left, top: r.top, right: r.right, bottom: r.bottom, w: r.width, h: r.height,
     inViewport: r.width > 0 && r.height > 0 && r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight };
 }, sel);
+// La pastille se réduit au pourcentage tant que la souris n'est pas dessus : moins, plus et Ajuster s'ouvrent à sa gauche au survol, le pourcentage ne bouge
+// pas. Pour toucher l'un d'eux, la souris survole donc d'abord le pourcentage (openPill) ; une pastille déjà ouverte, sous la souris ou au focus, reste telle.
+const PILL_PART = /^#pp-page-zoom-(out|in|fit|value)$/;
+const pillOpen = () => page.evaluate(() => { const b = document.getElementById('pp-page-zoom-out'); return !!b && b.getBoundingClientRect().width > 10; });
+async function openPill() {
+  if (await pillOpen()) return;
+  const v = await boxOf('#pp-page-zoom-value');
+  if (!v) return;
+  await page.mouse.move(v.x, v.y - 3, { steps: 3 });
+  await page.waitForFunction(() => document.getElementById('pp-page-zoom-out').getBoundingClientRect().width > 10, null, { timeout: 3000 }).catch(() => {});
+}
 // Ce que la souris toucherait vraiment au centre de l'élément : lui-même (ou un de ses enfants), pas autre chose posé par-dessus.
-const reachable = sel => page.evaluate(s => {
-  const el = document.querySelector(s);
-  if (!el) return false;
-  const r = el.getBoundingClientRect();
-  const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
-  return !!hit && (hit === el || el.contains(hit));
-}, sel);
+async function reachable(sel) {
+  if (PILL_PART.test(sel)) await openPill();
+  return page.evaluate(s => {
+    const el = document.querySelector(s);
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+    return !!hit && (hit === el || el.contains(hit));
+  }, sel);
+}
 
 // Vrai geste : la souris rejoint le centre en quelques pas puis clique.
 async function realClick(sel) {
+  if (PILL_PART.test(sel)) await openPill();
   const b = await boxOf(sel);
   if (!b) return null;
   await page.mouse.move(b.x - 5, b.y, { steps: 2 });
@@ -367,25 +383,43 @@ async function runBadge(theme) {
   await recordEvents();
   await parkMouse();
 
-  // 1) L'affichage d'origine : la page toute petite (facteur 1), la pastille posée dans le coin bas droit.
+  // 1) L'affichage d'origine : la page toute petite (facteur 1), la pastille réduite au pourcentage, collée au coin bas droit, sur le fond gris.
   const v0 = await view();
   const p0 = await pill();
   check(`${label} - badge - au départ la page est à sa taille (100 %, facteur ${v0.factor}) : une petite page au milieu du gris`, v0.factor === 1 && v0.value === '100 %' && v0.screenW < v0.available * 0.6, v0);
   check(`${label} - badge - le facteur d'origine est celui d'avant le zoom de la page (ancien calcul : ${r2(oldFactor(v0))})`, near(v0.factor, oldFactor(v0), 0.0006), { factor: v0.factor, ancien: oldFactor(v0) });
-  check(`${label} - la pastille est entière dans le panneau, à 24 px du coin bas droit, de 30 px de haut`, !!p0 && p0.inViewport && p0.position === 'fixed' && near(p0.rightGap, 24, 1) && near(p0.bottomGap, 24, 1) && near(p0.h, 30, 1), p0);
+  check(`${label} - au repos la pastille n'est que le pourcentage : entière dans le panneau, collée au coin bas droit (à 3 px du bord, ${r2(p0.h)} px de haut, ${r2(p0.w)} px de large)`, !!p0 && p0.inViewport && p0.position === 'fixed' && near(p0.rightGap, 3, 1) && near(p0.bottomGap, 3, 1) && near(p0.h, 24, 1) && p0.w < 62, p0);
   check(`${label} - elle ne recouvre pas la barre de défilement du panneau (elle reste dans le contenu)`, !!p0 && p0.right <= v0.cRight + 0.5 && p0.bottom <= v0.cBottom + 0.5, { pill: p0 && [p0.right, p0.bottom], contenu: [v0.cRight, v0.cBottom] });
-  for (const part of ['out', 'value', 'in', 'fit']) check(`${label} - la souris atteint le bouton « ${part} » de la pastille (rien ne le recouvre)`, await reachable('#pp-page-zoom-' + part));
+  check(`${label} - badge - elle est sur le fond gris autour de la page, pas sur la page (la page s'arrête à ${r2(v0.right)} px, la pastille commence à ${r2(p0.left)})`, !!p0 && p0.left >= v0.right + 2, { page: v0.right, pastille: p0 && p0.left });
+  const restParts = await page.evaluate(() => ['out', 'in', 'fit'].map(k => document.getElementById('pp-page-zoom-' + k).getBoundingClientRect().width));
+  check(`${label} - au repos moins, plus et Ajuster ne prennent aucune place (1 px chacun) mais restent dans la page, pour Tab et pour un lecteur d'écran`, restParts.every(w => w <= 2), restParts);
   check(`${label} - rien n'est grisé ni enfoncé au départ`, v0.off.every(o => !o) && v0.pressed === 'false', v0);
-  // Les couleurs : texte ≥ 4,5:1 sur le fond, fond réellement peint.
+  // Le fond réellement peint (au repos, la pastille est le pourcentage seul).
+  const bg = parseRgb(p0.bg);
+  const painted = await pixelAt(p0.left + p0.w / 2, p0.top + 2);
+  check(`${label} - le fond de la pastille est peint (pixel ${painted.r},${painted.g},${painted.b} = ${p0.bg})`, samePixel(painted, bg), { painted, attendu: bg });
+  await shot(`zoom-${theme}-badge-1-origine`);
+  // Le survol l'ouvre : moins, plus et Ajuster à gauche du pourcentage, qui ne bouge pas (un clic dessus rend donc toujours l'affichage d'origine).
+  const valueRest = await boxOf('#pp-page-zoom-value');
+  await openPill();
+  const pOpen = await pill();
+  const valueOpen = await boxOf('#pp-page-zoom-value');
+  const parts = await page.evaluate(() => Object.fromEntries(['out', 'in', 'fit', 'value'].map(k => { const r = document.getElementById('pp-page-zoom-' + k).getBoundingClientRect(); return [k, { left: r.left, right: r.right, width: r.width }]; })));
+  check(`${label} - le survol ouvre la pastille : moins, plus et Ajuster à gauche du pourcentage (${r2(pOpen.w)} px de large au lieu de ${r2(p0.w)}), le bord droit et le pourcentage ne bougent pas`,
+    pOpen.w > p0.w + 80 && near(pOpen.right, p0.right, 0.6) && near(pOpen.bottom, p0.bottom, 0.6) && near(valueOpen.left, valueRest.left, 0.6) && near(valueOpen.right, valueRest.right, 0.6)
+    && parts.out.width >= 20 && parts.in.width >= 20 && parts.fit.width >= 40 && parts.out.right <= parts.in.left && parts.in.right <= parts.fit.left && parts.fit.right <= parts.value.left, { p0, pOpen, valueRest, valueOpen, parts });
+  check(`${label} - ouverte, la pastille reste entière dans le panneau et hors de la barre de défilement`, pOpen.inViewport && pOpen.right <= v0.cRight + 0.5 && pOpen.bottom <= v0.cBottom + 0.5, { pOpen, contenu: [v0.cRight, v0.cBottom] });
+  for (const part of ['out', 'value', 'in', 'fit']) check(`${label} - la souris atteint le bouton « ${part} » de la pastille (rien ne le recouvre)`, await reachable('#pp-page-zoom-' + part));
+  // Les couleurs : texte ≥ 4,5:1 sur le fond.
   for (const [part, name] of [['out', 'moins'], ['value', 'pourcentage'], ['in', 'plus'], ['fit', 'Ajuster']]) {
     const c = await colorsOf('#pp-page-zoom-' + part);
     const ratio = contrast(parseRgb(c.color), parseRgb(c.bg));
     check(`${label} - ${name} : texte à ${r2(ratio)}:1 sur son fond (≥ 4,5:1)`, ratio >= 4.5, c);
   }
-  const bg = parseRgb(p0.bg);
-  const painted = await pixelAt(p0.left + p0.w / 2, p0.top + 2);
-  check(`${label} - le fond de la pastille est peint (pixel ${painted.r},${painted.g},${painted.b} = ${p0.bg})`, samePixel(painted, bg), { painted, attendu: bg });
-  await shot(`zoom-${theme}-badge-1-origine`);
+  await shot(`zoom-${theme}-badge-1b-pastille-ouverte`);
+  await parkMouse();
+  const pShut = await pill();
+  check(`${label} - la souris partie, la pastille se referme sur le pourcentage (${r2(pShut.w)} px)`, near(pShut.w, p0.w, 0.6) && near(pShut.right, p0.right, 0.6), { p0, pShut });
 
   // 2) « Ajuster » : la page prend toute la largeur du panneau, sans barre de défilement horizontale.
   await realClick('#pp-page-zoom-fit');
@@ -399,7 +433,7 @@ async function runBadge(theme) {
   const pFit = await pill();
   const fitColors = await colorsOf('#pp-page-zoom-fit');
   check(`${label} - « Ajuster » enfoncé : texte à ${r2(contrast(parseRgb(fitColors.color), parseRgb(fitColors.bg)))}:1 (≥ 4,5:1)`, contrast(parseRgb(fitColors.color), parseRgb(fitColors.bg)) >= 4.5, fitColors);
-  check(`${label} - la pastille garde sa place quand la barre de défilement apparaît`, near(pFit.rightGap, 24, 1) && pFit.right <= vFit.cRight + 0.5, { pill: pFit.right, contenu: vFit.cRight });
+  check(`${label} - la pastille garde sa place quand la page grandit`, near(pFit.rightGap, 3, 1) && near(pFit.bottomGap, 3, 1) && pFit.right <= vFit.cRight + 0.5, { pill: pFit.right, contenu: vFit.cRight });
   await shot(`zoom-${theme}-badge-2-ajuste`);
 
   // 3) Plus et moins au vrai clic : le cran suivant de l'échelle, la page grandit ou rétrécit à l'écran seulement.
@@ -462,18 +496,24 @@ async function runBadge(theme) {
   await page.keyboard.press('Control+Digit0');
   await settle();
 
-  // 6) Au clavier seul : Tab jusqu'à la pastille, Entrée. Le bouton focalisé a un contour visible (≥ 3:1 sur son fond).
+  // 6) Au clavier seul : Tab jusqu'à la pastille, Entrée. Au repos moins, plus et Ajuster sont rognés, mais Tab les atteint : le focus dans la pastille l'ouvre.
+  //    Le bouton focalisé a un contour visible (≥ 3:1 sur son fond).
+  await parkMouse();
   await page.evaluate(() => document.getElementById('pp-page-zoom-out').focus());
+  const openedByFocus = await pillOpen();
   await page.keyboard.press('Tab');
   const focused = await page.evaluate(() => document.activeElement && document.activeElement.id);
-  const ring = await colorsOf('#pp-page-zoom-value');
-  check(`${label} - Tab déplace le focus sur le bouton suivant de la pastille (le pourcentage)`, focused === 'pp-page-zoom-value', focused);
+  const ring = await colorsOf('#pp-page-zoom-in');
+  check(`${label} - le focus dans la pastille l'ouvre (moins, plus et Ajuster apparaissent sans souris)`, openedByFocus, openedByFocus);
+  check(`${label} - Tab déplace le focus sur le bouton suivant de la pastille (plus)`, focused === 'pp-page-zoom-in', focused);
   check(`${label} - le bouton focalisé a un contour visible (${ring.outlineWidth} ${ring.outlineStyle}) à ${r2(contrast(parseRgb(ring.outlineColor), parseRgb(ring.bg)))}:1 (≥ 3:1)`, ring.outlineStyle !== 'none' && parseFloat(ring.outlineWidth) >= 1 && contrast(parseRgb(ring.outlineColor), parseRgb(ring.bg)) >= 3, ring);
-  await page.keyboard.press('Tab');
   await page.keyboard.press('Enter');
   await settle();
   const vKeyboard = await view();
   check(`${label} - Tab puis Entrée sur « + » : ${pct(1.1)}`, near(vKeyboard.factor, 1.1, 0.0006), vKeyboard);
+  await page.evaluate(() => document.activeElement && document.activeElement.blur());
+  const shutByBlur = !(await pillOpen());
+  check(`${label} - le focus parti, la pastille se referme sur le pourcentage`, shutByBlur, shutByBlur);
   await page.keyboard.press('Control+Digit0');
   await settle();
 
@@ -521,10 +561,13 @@ async function runContract(theme, lang) {
   const v0 = await view();
   const p0 = await pill();
   check(`${label} - contrat - au départ la feuille A4 est réduite pour tenir (facteur ${v0.factor}, ancien calcul ${r2(oldFactor(v0))}), pourcentage ${v0.value}`, near(v0.factor, oldFactor(v0), 0.0006) && v0.factor < 1 && v0.value === (lang === 'en' ? pct(v0.factor).replace(' ', '') : pct(v0.factor)), { v0 });
-  check(`${label} - la pastille est entière dans le panneau, ${lang === 'en' ? 'son texte anglais compris' : 'au coin bas droit'}`, !!p0 && p0.inViewport && near(p0.rightGap, 24, 1) && near(p0.bottomGap, 24, 1), p0);
+  check(`${label} - la pastille est entière dans le panneau, ${lang === 'en' ? 'son texte anglais compris' : 'collée au coin bas droit'}`, !!p0 && p0.inViewport && near(p0.rightGap, 3, 1) && near(p0.bottomGap, 3, 1), p0);
   if (lang === 'en') {
     const texts = await page.evaluate(() => ({ fit: document.getElementById('pp-page-zoom-fit').textContent, out: document.getElementById('pp-page-zoom-out').title, inn: document.getElementById('pp-page-zoom-in').title, value: document.getElementById('pp-page-zoom-value').title, group: document.getElementById('pp-page-zoom').getAttribute('aria-label') }));
     check('anglais - les textes de la pastille sont en anglais (Fit, Zoom out / in, Back to the original view, Page zoom)', texts.fit === 'Fit' && /^Zoom out/.test(texts.out) && /^Zoom in/.test(texts.inn) && /^Back to the original view/.test(texts.value) && texts.group === 'Page zoom', texts);
+    await openPill();
+    const openEn = await pill();
+    check('anglais - ouverte, la pastille et son « Fit » restent entiers dans le panneau', openEn.inViewport && near(openEn.rightGap, 3, 1), openEn);
     await shot(`zoom-${theme}-en-1-pastille`);
     await opened.context.close();
     return;
@@ -800,7 +843,7 @@ async function runWide() {
   const v0 = await view();
   const p0 = await pill();
   check('1400x1000 - un A4 est à sa taille au départ (100 %, ancien calcul)', v0.factor === 1 && v0.value === '100 %' && near(oldFactor(v0), 1, 0.0006), v0);
-  check('1400x1000 - la pastille est à 24 px du coin bas droit', !!p0 && p0.inViewport && near(p0.rightGap, 24, 1) && near(p0.bottomGap, 24, 1), p0);
+  check('1400x1000 - la pastille est collée au coin bas droit, à 3 px du bord', !!p0 && p0.inViewport && near(p0.rightGap, 3, 1) && near(p0.bottomGap, 3, 1), p0);
   await checkColumnDrag('1400x1000', '100 % (facteur 1)', null);
   await page.mouse.move(700, 300);
   await realClick('#pp-page-zoom-fit');
@@ -812,10 +855,93 @@ async function runWide() {
   await opened.context.close();
 }
 
+// === Les vraies barres de défilement : la pastille les longe sans les recouvrir ===
+// Le Chromium de test cache les barres (--hide-scrollbars) : elles ne prennent aucune place et la pastille n'aurait rien à longer. Un second Chromium, lancé sans cet
+// argument, a les vraies (15 px) : la barre verticale du panneau dès que la feuille dépasse en hauteur, l'horizontale dès qu'elle dépasse en largeur (à 125 % un A4).
+async function runScrollbars() {
+  console.log(`\n=== Zoom de la page, vraies barres de défilement, contrat A4, ${WIDTH}x${HEIGHT} ===`);
+  const classic = await chromium.launch({ args: ['--no-sandbox', '--font-render-hinting=none'], ignoreDefaultArgs: ['--hide-scrollbars'] });
+  try {
+    const opened = await openWidget('light', 'Contrat', null, classic);
+    page = opened.page;
+    await recordEvents();
+    await parkMouse();
+    const bars = () => page.evaluate(() => {
+      const reader = document.getElementById('reader-container');
+      const c = reader.style.display === 'block' ? reader : document.getElementById('editor-container');
+      return { vertical: c.offsetWidth - c.clientWidth - 2 * c.clientLeft, horizontal: c.offsetHeight - c.clientHeight - 2 * c.clientTop };
+    });
+    const along = async (label, wantHorizontal) => {
+      const v = await view(), b = await bars(), p = await pill();
+      check(`${label} : la barre de défilement verticale est réelle (${b.vertical} px) et la pastille la longe, à ${r2(v.cRight - p.right)} px de son bord (3 px), sans la recouvrir`, b.vertical > 5 && near(v.cRight - p.right, 3, 1) && near(p.rightGap, b.vertical + 3, 1.5), { b, v: { cRight: v.cRight }, p });
+      if (wantHorizontal) check(`${label} : la barre horizontale apparaît (${b.horizontal} px) et la pastille passe au-dessus, à ${r2(v.cBottom - p.bottom)} px de son bord (3 px)`, v.hScroll && b.horizontal > 5 && near(v.cBottom - p.bottom, 3, 1) && near(p.bottomGap, b.horizontal + 3, 1.5), { b, v: { cBottom: v.cBottom, hScroll: v.hScroll }, p });
+      else check(`${label} : pas de barre horizontale, la pastille est à ${r2(v.cBottom - p.bottom)} px du bas du panneau (3 px)`, !v.hScroll && b.horizontal <= 1 && near(v.cBottom - p.bottom, 3, 1) && near(p.bottomGap, 3, 1.5), { b, v: { cBottom: v.cBottom, hScroll: v.hScroll }, p });
+    };
+    await along('édition à l\u2019affichage d\u2019origine', false);
+    await shot('zoom-barres-1-edition-origine');
+    await page.keyboard.press('Control+Equal');
+    await settle();
+    for (let i = 0; i < 3; i++) { await page.keyboard.press('Control+Equal'); await settle(); }
+    await along(`édition à ${(await view()).value}`, true);
+    await shot('zoom-barres-2-edition-zoomee');
+    await openPill();
+    const open = await pill(), vOpen = await view();
+    check('édition zoomée : ouverte, la pastille garde son bord droit et reste au-dessus de la barre horizontale', open.right <= vOpen.cRight + 0.5 && open.bottom <= vOpen.cBottom + 0.5 && near(vOpen.cRight - open.right, 3, 1), { open, vOpen: { cRight: vOpen.cRight, cBottom: vOpen.cBottom } });
+    await shot('zoom-barres-3-edition-ouverte');
+    await realClick('#btn-mode-read');
+    await page.waitForFunction(() => { const c = document.querySelector('#reader-container .reader-content'); return document.getElementById('reader-container').style.display === 'block' && !!c; }, null, { timeout: 10000 }).catch(() => {});
+    await settle();
+    await parkMouse();
+    await along(`lecture à ${(await view()).value}`, true);
+    await shot('zoom-barres-4-lecture');
+    await page.keyboard.press('Control+Digit0');
+    await settle();
+    await along('lecture à l\u2019affichage d\u2019origine', false);
+    await realClick('#btn-mode-edit');
+    await settle();
+    await opened.context.close();
+  } finally {
+    await classic.close();
+  }
+}
+
+// === Un écran tactile : pas de survol, la pastille reste ouverte ===
+// Sans souris rien ne l'ouvrirait : moins, plus et « Ajuster » restent visibles (media (any-hover: hover) de css/page-zoom.css, `hasTouch` de Playwright retire le survol) et un
+// vrai toucher les actionne.
+async function runTouch() {
+  console.log(`\n=== Zoom de la page, écran tactile sans survol, badge 90 x 120 mm, ${WIDTH}x${HEIGHT} ===`);
+  const opened = await openWidget('light', 'Badge', null, browser, { hasTouch: true });
+  page = opened.page;
+  const noHover = await page.evaluate(() => !matchMedia('(any-hover: hover)').matches);
+  const p0 = await pill();
+  const parts = await page.evaluate(() => Object.fromEntries(['out', 'in', 'fit', 'value'].map(k => { const r = document.getElementById('pp-page-zoom-' + k).getBoundingClientRect(); return [k, { x: r.x + r.width / 2, y: r.y + r.height / 2, left: r.left, right: r.right, width: r.width }]; })));
+  check(`tactile - le navigateur n'a aucun survol (any-hover: none), le cas de ce test`, noHover, noHover);
+  check(`tactile - la pastille reste ouverte au repos (${r2(p0.w)} px) : moins, plus et Ajuster sont visibles, dans l'ordre, à gauche du pourcentage`,
+    p0.w > 150 && parts.out.width >= 20 && parts.in.width >= 20 && parts.fit.width >= 40 && parts.out.right <= parts.in.left && parts.in.right <= parts.fit.left && parts.fit.right <= parts.value.left, { p0, parts });
+  check('tactile - elle reste entière dans le panneau, collée au coin bas droit (à 3 px du bord)', p0.inViewport && near(p0.rightGap, 3, 1) && near(p0.bottomGap, 3, 1), p0);
+  const before = await view();
+  await page.touchscreen.tap(parts.in.x, parts.in.y);
+  await settle();
+  const after = await view();
+  check(`tactile - un toucher sur « + » zoome (${before.value} → ${after.value})`, after.factor > before.factor + 0.05 && after.value === pct(stepAbove(before.factor)), { before: before.factor, after: after.factor });
+  await page.touchscreen.tap(parts.fit.x, parts.fit.y);
+  await settle();
+  const fitted = await view();
+  check(`tactile - un toucher sur « Ajuster » donne toute la largeur au badge (${fitted.value})`, fitted.pressed === 'true' && fitted.screenW <= fitted.available + 0.01 && fitted.available - fitted.screenW <= 2.5, fitted);
+  await page.touchscreen.tap(parts.value.x, parts.value.y);
+  await settle();
+  const back = await view();
+  check(`tactile - un toucher sur le pourcentage rend l'affichage d'origine (${back.value})`, back.factor === 1 && back.value === '100 %' && back.pressed === 'false', back);
+  await shot('zoom-tactile-1-pastille-ouverte');
+  await opened.context.close();
+}
+
 if (wanted('badge')) { await runBadge('light'); await runBadge('dark'); }
 if (wanted('contrat')) { await runContract('light', 'fr'); await runContract('dark', 'fr'); }
 if (wanted('english')) { await runContract('light', 'en'); await runContract('dark', 'en'); }
 if (wanted('wide')) await runWide();
+if (wanted('scrollbars')) await runScrollbars();
+if (wanted('touch')) await runTouch();
 
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 

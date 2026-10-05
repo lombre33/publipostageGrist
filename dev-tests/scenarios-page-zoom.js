@@ -1,6 +1,6 @@
 // Suite "pageZoom" - zoom de la page (js/page-zoom.js, css/page-zoom.css), en Édition et en Lecture : un petit document aux dimensions personnalisées
-// apparaîtrait sinon tout petit au milieu du gris. Une pastille dans le coin bas droit du document (moins, pourcentage, plus, Ajuster), Ctrl (⌘) +
-// molette, Ctrl (⌘) + plus / moins / 0 ; affichage seulement ; le niveau est gardé par modèle, dans ce navigateur.
+// apparaîtrait sinon tout petit au milieu du gris. Une pastille collée au coin bas droit du document (au repos le pourcentage seul ; moins, plus et
+// Ajuster s'ouvrent à sa gauche), Ctrl (⌘) + molette, Ctrl (⌘) + plus / moins / 0 ; affichage seulement ; le niveau est gardé par modèle, dans ce navigateur.
 // Ici : la structure, les niveaux, les états et les textes, dans la page (clics, touches et molette synthétiques) ;
 // dev-tests/verify-page-zoom-mouse.mjs en mesure les pixels à 700x400 à la vraie souris, à la vraie molette et au vrai clavier, en clair, en sombre
 // et en anglais.
@@ -104,29 +104,77 @@
 
   cases.push({
     id: 'page_zoom_pill_sits_in_the_corner_with_its_four_controls',
-    description: 'Une pastille dans le coin bas droit du document, hors de la barre d’outils : moins, pourcentage (100 % au départ), plus, Ajuster ; sous les barres flottantes et les menus (jeton --z-page-zoom), rien de grisé, rien d’enfoncé',
+    description: 'Une pastille collée au coin bas droit du document, hors de la barre d’outils : au repos le pourcentage seul (100 % au départ), le dernier de la rangée ; moins, plus et Ajuster restent dans la page mais hors de la mise en page, et le focus les rouvre à gauche du pourcentage, qui ne bouge pas ; sous les barres flottantes et les menus (jeton --z-page-zoom), rien de grisé, rien d’enfoncé',
     run: async (h) => {
       try {
         await setup(h);
         const pill = el('pp-page-zoom');
+        const box = e => { const r = e.getBoundingClientRect(); return { left: r.left, right: r.right, width: r.width, height: r.height }; };
+        const rows = () => ({ pill: box(pill), value: box(part('value')), out: box(part('out')), inn: box(part('in')), fit: box(part('fit')) });
         const r = pill && pill.getBoundingClientRect();
         const cs = pill && getComputedStyle(pill);
         const root = getComputedStyle(document.documentElement);
         const buttons = ['out', 'value', 'in', 'fit'].map(k => part(k));
+        const rest = pill && rows();
+        // Le focus dans la pastille (Tab, au clavier) l'ouvre, comme le survol : moins, plus et Ajuster à gauche du pourcentage, qui ne bouge pas.
+        part('out').focus();
+        await sleep(60);
+        const open = rows();
+        const focused = document.activeElement === part('out');
+        part('out').blur();
+        await sleep(60);
+        const closed = rows();
         const got = {
           pill: !!pill, inBody: !!pill && pill.parentElement === document.body, role: pill && pill.getAttribute('role'), aria: pill && pill.getAttribute('aria-label'),
           four: buttons.every(Boolean), fixed: cs && cs.position, z: cs && cs.zIndex, tokenZoom: root.getPropertyValue('--z-page-zoom').trim(), tokenToolbar: root.getPropertyValue('--z-floating-toolbar').trim(),
           rightGap: r && Math.round(window.innerWidth - r.right), bottomGap: r && Math.round(window.innerHeight - r.bottom), height: r && Math.round(r.height),
+          valueLast: !!pill && pill.lastElementChild === part('value'), rest, open, closed, focused,
           value: shown(), pressed: part('fit') && part('fit').getAttribute('aria-pressed'), anyOff: ['out', 'value', 'in', 'fit'].some(isOff),
           factor: factorOf(editorBox()), outText: part('out') && part('out').textContent, inText: part('in') && part('in').textContent, fitText: part('fit') && part('fit').textContent,
           outAria: part('out') && part('out').getAttribute('aria-label'), types: buttons.map(b => b && b.type),
         };
+        const atRest = !!rest && rest.value.width >= 30 && rest.out.width <= 2 && rest.inn.width <= 2 && rest.fit.width <= 2 && rest.pill.width <= 80;
+        const opened = !!rest && focused && open.out.width >= 20 && open.inn.width >= 20 && open.fit.width >= 40 && open.out.right <= open.inn.left && open.inn.right <= open.fit.left && open.fit.right <= open.value.left
+          && Math.abs(open.pill.right - rest.pill.right) <= 0.5 && Math.abs(open.value.right - rest.value.right) <= 0.5 && Math.abs(open.value.left - rest.value.left) <= 0.5 && open.pill.width > rest.pill.width + 80;
+        const shut = !!rest && closed.fit.width <= 2 && closed.out.width <= 2 && Math.abs(closed.pill.width - rest.pill.width) <= 0.5;
         const pass = got.pill && got.inBody && got.role === 'region' && got.aria === 'Zoom de la page' && got.four && got.fixed === 'fixed' && got.z === '1400' && got.tokenZoom === '1400'
-          && Number(got.tokenZoom) < Number(got.tokenToolbar) && got.rightGap >= 16 && got.rightGap <= 40 && got.bottomGap >= 16 && got.bottomGap <= 40 && got.height <= 34
+          && Number(got.tokenZoom) < Number(got.tokenToolbar) && got.rightGap >= 0 && got.rightGap <= 12 && got.bottomGap >= 0 && got.bottomGap <= 12 && got.height <= 30
+          && got.valueLast && atRest && opened && shut
           && got.value === '100 %' && got.pressed === 'false' && !got.anyOff && (got.factor === 1 || isNaN(got.factor)) && got.outText === '−' && got.inText === '+' && got.fitText === 'Ajuster'
           && got.outAria === 'Zoom arrière (' + (/Mac/.test(navigator.platform) ? '⌘' : 'Ctrl') + ' −)' && got.types.every(t => t === 'button');
         return { pass, notes: JSON.stringify(got) };
       } finally { await finish(h); }
+    },
+  });
+
+  cases.push({
+    id: 'page_zoom_pill_hugs_the_inner_edge_of_the_document_it_shows',
+    description: 'La pastille longe le bord intérieur du document qu’on voit, à 3 px : un conteneur plus étroit ou plus court (comme une barre de défilement qui prend sa place) la ramène avec lui, sans la recouvrir ; le document rendu, elle revient au coin du panneau',
+    run: async (h) => {
+      const box = editorBox();
+      try {
+        await setup(h);
+        const pill = el('pp-page-zoom');
+        const gaps = () => {
+          const r = pill.getBoundingClientRect(), c = box.getBoundingClientRect();
+          return { right: Math.round(c.left + box.clientLeft + box.clientWidth - r.right), bottom: Math.round(c.top + box.clientTop + box.clientHeight - r.bottom), cRight: Math.round(c.left + box.clientLeft + box.clientWidth), cBottom: Math.round(c.top + box.clientTop + box.clientHeight) };
+        };
+        const corner = gaps();
+        box.style.maxWidth = (window.innerWidth - 120) + 'px';
+        box.style.marginBottom = '50px';
+        await sleep(250);
+        const narrow = gaps();
+        const moved = { left: Math.round(window.innerWidth - pill.getBoundingClientRect().right), up: Math.round(window.innerHeight - pill.getBoundingClientRect().bottom) };
+        box.style.maxWidth = '';
+        box.style.marginBottom = '';
+        await sleep(250);
+        const back = gaps();
+        const pass = corner.right >= 2 && corner.right <= 4 && corner.bottom >= 2 && corner.bottom <= 4
+          && narrow.right >= 2 && narrow.right <= 4 && narrow.bottom >= 2 && narrow.bottom <= 4 && narrow.cRight <= corner.cRight - 60 && narrow.cBottom <= corner.cBottom - 40
+          && moved.left >= corner.cRight - narrow.cRight + 2 && moved.up >= corner.cBottom - narrow.cBottom + 2
+          && back.right >= 2 && back.right <= 4 && back.bottom >= 2 && back.bottom <= 4;
+        return { pass, notes: JSON.stringify({ corner, narrow, moved, back }) };
+      } finally { box.style.maxWidth = ''; box.style.marginBottom = ''; await finish(h); }
     },
   });
 
