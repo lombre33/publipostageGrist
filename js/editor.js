@@ -4,25 +4,22 @@
 const Editor = (function () {
   const el = Dom.el;
   let editor = null;
-  // Suivi des modifications : métadonnée (auteur, horodatage) par id de suggestion en attente, hors du document ProseMirror (l'id suffit à l'ancrer
-  // dans le HTML). Elle voyage dans la colonne Grist SuiviModifications, dans le même UpdateRecord que Contenu (planning/feature-track-changes.md).
-  // Repartie de zéro à chaque chargement de modèle (setHTML), jamais conservée d'un modèle à l'autre.
+  // Suivi des modifications : auteur et horodatage par id de suggestion en attente, hors du document ProseMirror ; ils voyagent dans la colonne Grist
+  // SuiviModifications (même UpdateRecord que Contenu, planning/feature-track-changes.md) et repartent de zéro à chaque setHTML.
   let suiviMetadataCache = {};
-  // Qui est devant l'écran : { email, name }, lu une fois par session (GristAPI.getCurrentUserEmail et getCurrentUserName) ; null tant qu'on ne l'a
-  // pas lu ou quand Grist ne le donne pas. Une lecture qui échoue n'est retentée par la barre qu'au bout d'une minute (chaque lecture écrit dans la
-  // table interne du document), par l'enregistrement à chaque fois qu'une modification neuve attend son auteur.
+  // Qui est devant l'écran : { email, name }, lu une fois par session ; null avant la lecture ou si Grist ne le donne pas. Une lecture ratée n'est
+  // retentée qu'après une minute par la barre (chaque lecture écrit dans la table interne), à chaque modification neuve par l'enregistrement.
   let currentAuthor = null;
   let currentAuthorRead = null;
   let currentAuthorFailedAt = 0;
   const AUTHOR_RETRY_MS = 60000;
   const authorListeners = [];
-  // API renvoyée par TrackChanges.createExtensions() (js/track-changes.js), construite une fois dans init() : isSuggestModeOn a besoin des fonctions
-  // de la librairie, importées dynamiquement dans ce module.
+  // API de TrackChanges.createExtensions() (js/track-changes.js), construite dans init() : isSuggestModeOn a besoin des fonctions de la librairie.
   let trackChangesApi = null;
   let tableTools = null; // { selectedRect, isInTable } de prosemirror-tables, posés par init()
 
-  // Partagée par le bouton toolbar et le collage presse-papiers (src = URL ou data URI).
   async function insertImageAtDefaultSize(src) {
+    // Partagée par le bouton toolbar et le collage presse-papiers (src = URL ou data URI).
     let width = 320;
     if (HeaderFooterPreview.getHfMode()) {
       try {
@@ -59,9 +56,9 @@ const Editor = (function () {
     footnotePopup = { box, textarea };
     return footnotePopup;
   }
-  // Ferme le popup et rend le nœud footnoteRef qu'il éditait, relu au moment du clic (footnotePopupPos) : le document a pu changer depuis l'ouverture
-  // (texte tapé ailleurs). Rien si le popup était fermé ou si le nœud n'existe plus.
   function closeFootnotePopup() {
+    // Ferme le popup et rend le nœud footnoteRef qu'il éditait, relu au moment du clic (footnotePopupPos) : le document a pu changer depuis
+    // l'ouverture (texte tapé ailleurs). Rien si le popup était fermé ou si le nœud n'existe plus.
     const pos = footnotePopupPos;
     footnotePopupPos = null;
     if (footnotePopup) footnotePopup.box.style.display = 'none';
@@ -73,8 +70,8 @@ const Editor = (function () {
     const note = closeFootnotePopup();
     if (note) editor.view.dispatch(editor.state.tr.setNodeMarkup(note.pos, undefined, Object.assign({}, note.node.attrs, { text: footnotePopup.textarea.value })));
   }
-  // Retire le nœud footnoteRef lui-même, pas seulement son texte.
   function deleteFootnotePopupNode() {
+    // Retire le nœud footnoteRef lui-même, pas seulement son texte.
     const note = closeFootnotePopup();
     if (note) editor.view.dispatch(editor.state.tr.delete(note.pos, note.pos + note.node.nodeSize));
   }
@@ -107,8 +104,8 @@ const Editor = (function () {
     setTimeout(() => { textarea.focus(); }, 0);
   }
 
-  // Image collée depuis le presse-papiers, convertie en data URI (forme requise par pdf-export.js) avant insertion.
   async function pasteImageFile(file) {
+    // Image collée depuis le presse-papiers, convertie en data URI (forme requise par pdf-export.js) avant insertion.
     let dataUri;
     try {
       dataUri = await ImageIo.toDataUri(file);
@@ -119,14 +116,14 @@ const Editor = (function () {
     await insertImageAtDefaultSize(dataUri);
   }
 
-  // Applique une correction de largeurs de colonnes lancée depuis onUpdate : les fonctions ci-dessous mesurent le DOM, elles ne peuvent donc pas
-  // passer par un appendTransaction. Rangée à part, la correction formerait son propre événement d'historique : Annuler ne défairait qu'elle,
-  // qu'onUpdate rejouerait aussitôt (l'état rétabli redevient « à corriger »), et l'action d'origine (ajout d'une colonne, glissement d'une bordure)
-  // ne pourrait plus jamais être annulée dans un tableau qui a des largeurs. `appendedTransaction` est le contrat que ProseMirror pose lui-même sur
-  // les transactions d'un appendTransaction : prosemirror-history les range dans l'événement de la transaction racine, y compris pendant un Annuler
-  // ou un Rétablir. Sans transaction d'origine (chargement d'un modèle, changement de marges), la correction ne vient pas d'un geste de la personne :
-  // hors historique.
   function dispatchColumnWidthFix(currentEditor, tr, trigger) {
+    // Applique une correction de largeurs de colonnes lancée depuis onUpdate : les fonctions ci-dessous mesurent le DOM, elles ne peuvent donc pas
+    // passer par un appendTransaction. Rangée à part, la correction formerait son propre événement d'historique : Annuler ne défairait qu'elle,
+    // qu'onUpdate rejouerait aussitôt (l'état rétabli redevient « à corriger »), et l'action d'origine (ajout d'une colonne, glissement d'une
+    // bordure) ne pourrait plus jamais être annulée dans un tableau qui a des largeurs. `appendedTransaction` est le contrat que ProseMirror pose
+    // lui-même sur les transactions d'un appendTransaction : prosemirror-history les range dans l'événement de la transaction racine, y compris
+    // pendant un Annuler ou un Rétablir. Sans transaction d'origine (chargement d'un modèle, changement de marges), la correction ne vient pas d'un
+    // geste de la personne : hors historique.
     if (trigger) tr.setMeta('appendedTransaction', trigger.getMeta('appendedTransaction') || trigger);
     else tr.setMeta('addToHistory', false);
     // Avec le suivi, ces largeurs ne sont pas une modification de la personne mais le widget qui remet le tableau d'aplomb : suivies, elles posaient
@@ -136,10 +133,10 @@ const Editor = (function () {
     currentEditor.view.dispatch(tr);
   }
 
-  // Pose sur les cases des tableaux du document les largeurs que choisit `widthsFor(table)` : pour un tableau, la fonction (case, position) ->
-  // `colwidth` voulu (undefined : case laissée telle quelle), ou null pour ne pas toucher au tableau. Les tableaux imbriqués dans une case ne sont
-  // pas parcourus.
   function fixColumnWidths(currentEditor, trigger, widthsFor) {
+    // Pose sur les cases des tableaux du document les largeurs que choisit `widthsFor(table)` : pour un tableau, la fonction (case, position) ->
+    // `colwidth` voulu (undefined : case laissée telle quelle), ou null pour ne pas toucher au tableau. Les tableaux imbriqués dans une case ne sont
+    // pas parcourus.
     const { state } = currentEditor;
     let tr = null;
     state.doc.descendants((table, pos) => {
@@ -161,9 +158,9 @@ const Editor = (function () {
 
   const DEFAULT_COL_PX = 25;
 
-  // Tant qu'une colonne reste "auto" (sans `colwidth`), le tableau garde `width:100%` et une poignée de bord droit ne peut jamais l'agrandir ; on
-  // gèle donc la largeur rendue de chaque colonne "auto" dès le premier redimensionnement, pour libérer le `width` exact du tableau.
   function backfillAutoColumnWidths(currentEditor, trigger) {
+    // Tant qu'une colonne reste "auto" (sans `colwidth`), le tableau garde `width:100%` et une poignée de bord droit ne peut jamais l'agrandir ; on
+    // gèle donc la largeur rendue de chaque colonne "auto" dès le premier redimensionnement, pour libérer le `width` exact du tableau.
     fixColumnWidths(currentEditor, trigger, table => {
       let hasExplicit = false; let hasAuto = false;
       table.firstChild.forEach(cell => { if (cell.attrs.colwidth) hasExplicit = true; else hasAuto = true; });
@@ -182,9 +179,9 @@ const Editor = (function () {
     });
   }
 
-  // Un <col> à largeur explicite n'a pas de plafond naturel (contrairement à min-width) : rétrécit après coup les colonnes redimensionnées quand le
-  // tableau dépasse la page en Aperçu A4 (léger rebond au relâcher, tolérable).
   function clampOverflowingTables(currentEditor, trigger) {
+    // Un <col> à largeur explicite n'a pas de plafond naturel (contrairement à min-width) : rétrécit après coup les colonnes redimensionnées quand le
+    // tableau dépasse la page en Aperçu A4 (léger rebond au relâcher, tolérable).
     const editorContainer = document.getElementById('editor-container');
     if (!editorContainer || !editorContainer.classList.contains('a4-preview')) return;
     const containerWidth = EditorCore.editorContentWidthPx(currentEditor);
@@ -206,10 +203,10 @@ const Editor = (function () {
     });
   }
 
-  // TipTap et ProseMirror se chargent par import() : leurs classes n'existent pas avant. Aucune dépendance d'ordre entre ces modules (chacun
-  // n'alimente que sa propre variable) : ils partent en parallèle plutôt qu'en `await` séquentiels, car un import() est une requête réseau vers
-  // esm.sh et la cascade ajoutait jusqu'à 1 à 2 s au démarrage sur une connexion lente ou à cache froid.
   async function loadLibraries() {
+    // TipTap et ProseMirror se chargent par import() : leurs classes n'existent pas avant. Aucune dépendance d'ordre entre ces modules (chacun
+    // n'alimente que sa propre variable) : ils partent en parallèle plutôt qu'en `await` séquentiels, car un import() est une requête réseau vers
+    // esm.sh et la cascade ajoutait jusqu'à 1 à 2 s au démarrage sur une connexion lente ou à cache froid.
     const [
       { Editor: TiptapEditor, Extension, Node, Mark, mergeAttributes, InputRule },
       { StarterKit },
@@ -256,11 +253,11 @@ const Editor = (function () {
     };
   }
 
-  // Remet aux modules du widget les classes de TipTap et de ProseMirror dont ils ont besoin : bulles flottantes, sélections, tableaux, grille.
   function configureModules({
     computePosition, offset, flip, shift, autoUpdate, NodeSelection, TextSelection, Plugin, PluginKey, Decoration, DecorationSet,
     TableMap, CellSelection, selectedRect, isInTable,
   }) {
+    // Remet aux modules du widget les classes de TipTap et de ProseMirror dont ils ont besoin : bulles flottantes, sélections, tableaux, grille.
     EditorCore.setFloatingUi({ computePosition, offset, flip, shift, autoUpdate });
     GridEditor.configure({ Plugin, PluginKey, TextSelection, Decoration, DecorationSet, TableMap, CellSelection });
     tableTools = { selectedRect, isInTable };
@@ -269,9 +266,9 @@ const Editor = (function () {
     EditorCore.setTextSelectionClass(TextSelection);
   }
 
-  // Suivi des modifications (planning/feature-track-changes.md) : `doc` et tout conteneur de bloc dont un enfant direct peut être supprimé ou inséré
-  // en bloc (pas seulement son texte) doivent autoriser explicitement les trois marques de suivi par `.extend({marks: '...'})`, sans quoi ProseMirror
-  // lève « Invalid content for node X » dès la première suppression de bloc entier sous suivi actif (js/track-changes.js).
+  // `doc` et tout conteneur de bloc dont un enfant direct peut être supprimé ou inséré en bloc autorisent les trois marques de suivi par
+  // `.extend({marks: '...'})`, sans quoi ProseMirror lève « Invalid content for node X » à la première suppression de bloc entier sous suivi
+  // (js/track-changes.js).
   function tracked(extension) { return TrackChanges.extendForTracking(extension); }
 
   function onEditorUpdate({ editor: updatedEditor, transaction }) {
@@ -307,10 +304,10 @@ const Editor = (function () {
     };
   }
 
-  // Le texte et ses styles, les listes, les pastilles en ligne, les commentaires et le suivi des modifications.
   function textExtensions({
     Extension, Node, Mark, mergeAttributes, StarterKit, Document, TextAlign, TextStyle, FontFamily, TaskList, TaskItem, Placeholder,
   }) {
+    // Le texte et ses styles, les listes, les pastilles en ligne, les commentaires et le suivi des modifications.
     return [
       // Liens (js/link-dialog.js) : un clic place le curseur (Ctrl/⌘+clic ouvre le lien) ; une adresse tapée sans schéma prend https, plus http.
       // StarterKit embarque son propre `Document`, jamais extensible de l'extérieur : `document: false` le désactive pour lui substituer la version
@@ -349,12 +346,12 @@ const Editor = (function () {
     ];
   }
 
-  // Les touches, les variables, les liens, la recherche, les tableaux, les colonnes, les blocs conditionnels, la légende, les images et les pages,
-  // puis la grille.
   function structureExtensions({
     Extension, Node, mergeAttributes, Plugin, PluginKey, Decoration, DecorationSet, EditorState, Suggestion, InputRule,
     Table, TableView, TableRow, TableHeader, TableCell,
   }) {
+    // Les touches, les variables, les liens, la recherche, les tableaux, les colonnes, les blocs conditionnels, la légende, les images et les pages,
+    // puis la grille.
     const withCellStyle = Cell => EditorNodes.withCellBackground(GridEditor.withCellAttributes(EditorNodes.withFastColwidth(Cell)));
     const { TwoColumnsColumn, TwoColumnsZone } = EditorNodes.createTwoColumnsNodes(Node, mergeAttributes);
     return [
@@ -425,8 +422,8 @@ const Editor = (function () {
     return editor;
   }
 
-  // Branche l'éditeur construit sur les modules qui le pilotent (barres d'outils, boîtes, pagination).
   function wireEditor() {
+    // Branche l'éditeur construit sur les modules qui le pilotent (barres d'outils, boîtes, pagination).
     EditorCore.setEditor(editor);
     trackChangesApi.installSerializer(editor.schema);
     HeaderFooterPreview.setEditor(editor);
@@ -470,8 +467,8 @@ const Editor = (function () {
     return style;
   }
 
-  // Message en info-bulle d'une bulle #Variable dont la table, la colonne ou un maillon du chemin n'existe plus ; '' quand tout va bien.
   function badgeProblemText(table, column) {
+    // Message en info-bulle d'une bulle #Variable dont la table, la colonne ou un maillon du chemin n'existe plus ; '' quand tout va bien.
     switch (Variables.badgeProblem(table, column)) {
       case 'table': return `La table « ${table} » n'existe plus dans ce document.`;
       // Bulle qui descend de référence en référence (« Accompagnateur.Email ») : chaque maillon doit exister et, sauf le dernier, être une Référence.
@@ -481,11 +478,11 @@ const Editor = (function () {
     }
   }
 
-  // Signale les bulles #Variable dont la table ou la colonne n'existe plus : une classe et un title sur le <span> rendu, jamais un attribut du nœud
-  // (cela dépend d'un état externe, pas du contenu). ProseMirror peut reconstruire ce span à tout moment : le signalement est donc rejoué à chaque
-  // déclencheur pertinent plutôt que posé une fois. Une bulle « Calcul » est cassée quand sa formule ne se lit plus ou cite une colonne qui n'existe
-  // plus (Variables.calcProblem), avec le message en info-bulle.
   function refreshVariableBadgeValidity() {
+    // Signale les bulles #Variable dont la table ou la colonne n'existe plus : une classe et un title sur le <span> rendu, jamais un attribut du nœud
+    // (cela dépend d'un état externe, pas du contenu). ProseMirror peut reconstruire ce span à tout moment : le signalement est donc rejoué à chaque
+    // déclencheur pertinent plutôt que posé une fois. Une bulle « Calcul » est cassée quand sa formule ne se lit plus ou cite une colonne qui
+    // n'existe plus (Variables.calcProblem), avec le message en info-bulle.
     if (!editor) return;
     const mark = (badge, brokenClass, reason) => {
       badge.classList.toggle(brokenClass, !!reason);
@@ -495,15 +492,14 @@ const Editor = (function () {
     editor.view.dom.querySelectorAll('span.calc-badge').forEach(badge => mark(badge, 'calc-badge-broken', Variables.calcProblem(badge.getAttribute('data-formula') || '')));
   }
 
-  // Âge au-delà duquel l'affichage d'un modèle relit le schéma exact même quand aucune bulle n'est rouge (setHTML) ; le même qu'au démarrage
-  // (js/main.js).
+  // Âge au-delà duquel l'affichage d'un modèle relit le schéma exact même sans bulle rouge (setHTML) ; le même qu'au démarrage (js/main.js).
   const SCHEMA_MAX_AGE_MS = 60000;
 
-  // `suiviModifications` : métadonnée { [id]: {author, createdAt} } relue depuis la colonne Grist du modèle (null pour un modèle jamais suivi, ou de
-  // type macro, cf. js/templates.js). Le chargement passe par `loadTrackedDocument` (js/track-changes.js), pas par `setContent` : le suivi peut être
-  // actif à ce moment (rien ne l'aurait désactivé entre deux modèles), et le pont TipTap interpréterait un `setContent` comme une suggestion géante,
-  // qui doublerait tout le contenu au lieu de le remplacer (planning/feature-track-changes.md).
   function setHTML(html, suiviModifications) {
+    // `suiviModifications` : métadonnée { [id]: {author, createdAt} } relue depuis la colonne Grist du modèle (null pour un modèle jamais suivi, ou
+    // de type macro, cf. js/templates.js). Le chargement passe par `loadTrackedDocument` (js/track-changes.js), pas par `setContent` : le suivi peut
+    // être actif à ce moment (rien ne l'aurait désactivé entre deux modèles), et le pont TipTap interpréterait un `setContent` comme une suggestion
+    // géante, qui doublerait tout le contenu au lieu de le remplacer (planning/feature-track-changes.md).
     if (!editor) return;
     suiviMetadataCache = suiviModifications || {};
     const wasTrackChangesOn = isTrackChangesOn();
@@ -539,13 +535,13 @@ const Editor = (function () {
       .catch(e => console.warn('[Editor] refreshSchema pour la validation des #Variable a échoué', e));
   }
 
-  // Appelé après un changement de marges de page (js/page-layout.js) et chaque fois que l'éditeur redevient visible
-  // (js/main.js:syncEditorVisibilityForMode). Les zones à deux colonnes n'ont rien à recalculer ici : `--layout-left` porte une longueur en mm (cf.
-  // js/editor-nodes.js), que le moteur CSS réévalue seul quand le padding de `.tiptap` change. Reste ce que CSS ne sait pas faire : la pagination
-  // affichée dépend de la hauteur de contenu d'une page, donc des marges haut et bas, et sans ce recalcul les bandes de couture restaient figées sur
-  // la géométrie des marges précédentes. Un modèle chargé pendant que l'éditeur était masqué (Lecture, macro-modèle) n'a pu ni geler ses colonnes
-  // automatiques ni ramener un tableau trop large dans la page : ces deux mesures exigent une mise en page réelle.
   function refreshLayout() {
+    // Appelé après un changement de marges de page (js/page-layout.js) et chaque fois que l'éditeur redevient visible
+    // (js/main.js:syncEditorVisibilityForMode). Les zones à deux colonnes n'ont rien à recalculer ici : `--layout-left` porte une longueur en mm (cf.
+    // js/editor-nodes.js), que le moteur CSS réévalue seul quand le padding de `.tiptap` change. Reste ce que CSS ne sait pas faire : la pagination
+    // affichée dépend de la hauteur de contenu d'une page, donc des marges haut et bas, et sans ce recalcul les bandes de couture restaient figées
+    // sur la géométrie des marges précédentes. Un modèle chargé pendant que l'éditeur était masqué (Lecture, macro-modèle) n'a pu ni geler ses
+    // colonnes automatiques ni ramener un tableau trop large dans la page : ces deux mesures exigent une mise en page réelle.
     if (!editor) return;
     backfillAutoColumnWidths(editor);
     clampOverflowingTables(editor);
@@ -562,18 +558,18 @@ const Editor = (function () {
     return !!editor && !!trackChangesApi && trackChangesApi.isSuggestModeOn(editor.state);
   }
 
-  // Allume ou éteint le suivi sans passer par le bouton de la barre : une grille l'éteint à l'ouverture (js/grid-editor.js:setActive).
   function setTrackChanges(on) {
+    // Allume ou éteint le suivi sans passer par le bouton de la barre : une grille l'éteint à l'ouverture (js/grid-editor.js:setActive).
     if (!editor || !trackChangesApi || isTrackChangesOn() === !!on) return;
     trackChangesApi.toggleSuggestMode(editor);
   }
 
-  // La ou les colonnes de la sélection sont-elles traversées par une case fusionnée en largeur ? Les supprimer revient à réduire la largeur de cette
-  // case et à retirer les autres cases de la colonne ; avec le suivi, le premier changement s'applique tout de suite et le second seulement à
-  // l'acceptation. Entre les deux, le tableau n'est plus rectangulaire et prosemirror-tables le « répare » en ajoutant des cases vides : le tableau
-  // accepté (ou refusé) n'a plus la forme voulue. La barre du tableau grise donc « Supprimer la colonne » dans ce cas (js/floating-toolbars.js).
-  // Ajouter une colonne à travers une case fusionnée se résout proprement.
   function selectedColumnsCrossMergedCell() {
+    // La ou les colonnes de la sélection sont-elles traversées par une case fusionnée en largeur ? Les supprimer revient à réduire la largeur de
+    // cette case et à retirer les autres cases de la colonne ; avec le suivi, le premier changement s'applique tout de suite et le second seulement à
+    // l'acceptation. Entre les deux, le tableau n'est plus rectangulaire et prosemirror-tables le « répare » en ajoutant des cases vides : le tableau
+    // accepté (ou refusé) n'a plus la forme voulue. La barre du tableau grise donc « Supprimer la colonne » dans ce cas (js/floating-toolbars.js).
+    // Ajouter une colonne à travers une case fusionnée se résout proprement.
     if (!editor || !tableTools || !tableTools.isInTable(editor.state)) return false;
     const { map, left, right } = tableTools.selectedRect(editor.state);
     // Chaque ligne, colonne par colonne (cellsInRect, lui, ne rend pas les cases qui commencent avant `left`).
@@ -586,12 +582,12 @@ const Editor = (function () {
     return false;
   }
 
-  // Même question pour la ou les lignes de la sélection, traversées par une case fusionnée en hauteur (rowspan). Supprimer une ligne réduit la
-  // hauteur de cette case et retire les autres cases de la ligne ; avec le suivi, le premier changement s'applique tout de suite et le second
-  // seulement à l'acceptation. Mesuré : « Tout refuser » rendait un tableau d'une colonne de trop (prosemirror-tables « répare » le tableau devenu
-  // non rectangulaire en ajoutant des cases vides), « Tout accepter » des cases décalées. La barre du tableau grise donc « Supprimer la ligne » dans
-  // ce cas (js/floating-toolbars.js). Ajouter une ligne à travers une case fusionnée se résout proprement.
   function selectedRowsCrossMergedCell() {
+    // Même question pour la ou les lignes de la sélection, traversées par une case fusionnée en hauteur (rowspan). Supprimer une ligne réduit la
+    // hauteur de cette case et retire les autres cases de la ligne ; avec le suivi, le premier changement s'applique tout de suite et le second
+    // seulement à l'acceptation. Mesuré : « Tout refuser » rendait un tableau d'une colonne de trop (prosemirror-tables « répare » le tableau devenu
+    // non rectangulaire en ajoutant des cases vides), « Tout accepter » des cases décalées. La barre du tableau grise donc « Supprimer la ligne »
+    // dans ce cas (js/floating-toolbars.js). Ajouter une ligne à travers une case fusionnée se résout proprement.
     if (!editor || !tableTools || !tableTools.isInTable(editor.state)) return false;
     const { map, top, bottom } = tableTools.selectedRect(editor.state);
     for (let col = 0; col < map.width; col++) {
@@ -607,10 +603,10 @@ const Editor = (function () {
     return !!editor && TrackChanges.hasPendingSuggestions(editor.state);
   }
 
-  // Qui est devant l'écran, lu une fois (les demandes qui se chevauchent n'en font qu'une). Le nom d'abord demandé ajoute une colonne à la table
-  // interne de l'identification (js/grist-api.js) : une personne sans droit sur la structure du document ne l'obtient pas, son adresse suffit alors.
-  // Repli anonyme silencieux (null) si l'identification échoue, même convention que js/comments.js.
   function readCurrentAuthor() {
+    // Qui est devant l'écran, lu une fois (les demandes qui se chevauchent n'en font qu'une). Le nom d'abord demandé ajoute une colonne à la table
+    // interne de l'identification (js/grist-api.js) : une personne sans droit sur la structure du document ne l'obtient pas, son adresse suffit
+    // alors. Repli anonyme silencieux (null) si l'identification échoue, même convention que js/comments.js.
     if (currentAuthor) return Promise.resolve(currentAuthor);
     if (!currentAuthorRead) {
       currentAuthorRead = (async () => {
@@ -629,10 +625,10 @@ const Editor = (function () {
     return currentAuthorRead;
   }
 
-  // Les personnes derrière les modifications d'ids donnés : [{ name, email }] (js/track-changes.js:authorsOfSuggestions), pour la barre « Accepter /
-  // Refuser ». Une modification que les métadonnées ne connaissent pas est celle de la personne devant l'écran : tant qu'on ne l'a pas lue, la liste
-  // ne la compte pas, et sa lecture part (la barre est prévenue par onSuggestionAuthorsChange quand elle arrive).
   function getSuggestionAuthors(ids) {
+    // Les personnes derrière les modifications d'ids donnés : [{ name, email }] (js/track-changes.js:authorsOfSuggestions), pour la barre « Accepter
+    // / Refuser ». Une modification que les métadonnées ne connaissent pas est celle de la personne devant l'écran : tant qu'on ne l'a pas lue, la
+    // liste ne la compte pas, et sa lecture part (la barre est prévenue par onSuggestionAuthorsChange quand elle arrive).
     const fresh = ids.some(id => !suiviMetadataCache[String(id)]);
     if (fresh && !currentAuthor && !currentAuthorRead && Date.now() - currentAuthorFailedAt > AUTHOR_RETRY_MS) readCurrentAuthor();
     return TrackChanges.authorsOfSuggestions(ids, suiviMetadataCache, currentAuthor);
@@ -641,13 +637,13 @@ const Editor = (function () {
     if (typeof fn === 'function') authorListeners.push(fn);
   }
 
-  // Auteur et horodatage par suggestion en attente (colonne Grist SuiviModifications, cf. suiviMetadataCache plus haut). Appelée juste avant chaque
-  // Templates.save() (enregistrement manuel et automatique, js/main.js), jamais séparément : cette colonne ne s'écrit jamais hors du même
-  // UpdateRecord que Contenu et DateModif (planning/feature-track-changes.md, fenêtre de risque en cas de conflit). Le nom de la personne devant
-  // l'écran ne se lit que quand une modification neuve attend son auteur (il ajoute une colonne à la table d'identification). Le JSON rendu ne garde
-  // que les modifications en attente ; la session garde tout ce qu'elle a vu, y compris ce qui est résolu depuis : « Annuler » le ramène avec son
-  // auteur.
   async function getSuiviModificationsForSave() {
+    // Auteur et horodatage par suggestion en attente (colonne Grist SuiviModifications, cf. suiviMetadataCache plus haut). Appelée juste avant chaque
+    // Templates.save() (enregistrement manuel et automatique, js/main.js), jamais séparément : cette colonne ne s'écrit jamais hors du même
+    // UpdateRecord que Contenu et DateModif (planning/feature-track-changes.md, fenêtre de risque en cas de conflit). Le nom de la personne devant
+    // l'écran ne se lit que quand une modification neuve attend son auteur (il ajoute une colonne à la table d'identification). Le JSON rendu ne
+    // garde que les modifications en attente ; la session garde tout ce qu'elle a vu, y compris ce qui est résolu depuis : « Annuler » le ramène avec
+    // son auteur.
     if (!editor) return suiviMetadataCache;
     const fresh = Array.from(TrackChanges.collectPendingIds(editor.state)).some(id => !suiviMetadataCache[id]);
     let author = null;
@@ -666,22 +662,13 @@ const Editor = (function () {
 
   return {
     init, getHTML, setHTML, getHeadingNumberingStyle, insertImageAtDefaultSize,
-    getHeaderFooterData: HeaderFooterPreview.getHeaderFooterData,
-    setHeaderFooterData: HeaderFooterPreview.setHeaderFooterData,
+    getHeaderFooterData: HeaderFooterPreview.getHeaderFooterData, setHeaderFooterData: HeaderFooterPreview.setHeaderFooterData,
     exitHeaderFooterModeIfActive: HeaderFooterPreview.exitHeaderFooterModeIfActive,
     // Aperçu A4 rallumé, facteur d'ajustement changé... : la pagination est refaite, et la position des images d'un modèle chargé sans mise en page
     // se relit sur leur grille.
     refreshPaginationPreview: () => { HeaderFooterPreview.renderPaginationOverlay(); HeaderFooterPreview.reconcileLayerImagesWithGrid({ onlyIfPending: true }); },
-    refreshLayout,
-    openFootnoteEditorAt,
-    isEditingHeaderFooter: HeaderFooterPreview.isEditingHeaderFooter,
-    isTrackChangesOn,
-    setTrackChanges,
-    hasPendingTrackedChanges,
-    selectedColumnsCrossMergedCell,
-    selectedRowsCrossMergedCell,
-    getSuiviModificationsForSave,
-    getSuggestionAuthors,
+    refreshLayout, openFootnoteEditorAt, isEditingHeaderFooter: HeaderFooterPreview.isEditingHeaderFooter, isTrackChangesOn, setTrackChanges,
+    hasPendingTrackedChanges, selectedColumnsCrossMergedCell, selectedRowsCrossMergedCell, getSuiviModificationsForSave, getSuggestionAuthors,
     onSuggestionAuthorsChange,
   };
 })();

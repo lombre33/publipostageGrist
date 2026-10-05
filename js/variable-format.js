@@ -14,28 +14,28 @@ const VariableFormat = (function () {
   ];
   // I18n est absent des tests qui chargent ce fichier seul : le français est alors la langue.
   const interfaceIsEnglish = () => typeof I18n !== 'undefined' && I18n.getLang() === 'en';
-  // Suit la langue de l'interface, jamais le style fr / us éventuellement choisi sur cette variable : un libellé anglais dans une interface française
-  // prêterait à confusion.
   function presetLabel(preset) {
+    // Suit la langue de l'interface, jamais le style fr / us éventuellement choisi sur cette variable : un libellé anglais dans une interface française
+    // prêterait à confusion.
     return interfaceIsEnglish() ? (preset.labelEn || preset.label) : preset.label;
   }
   // Une date n'a pas de réglage de langue par variable, contrairement au nombre (opts.style) : elle suit la langue de l'interface.
   const dateLocale = () => (interfaceIsEnglish() ? 'en-US' : 'fr-FR');
 
-  // Une date arrive en timestamp Unix (secondes) ou en chaîne déjà formatée : la chaîne va telle quelle au constructeur Date, jamais parseFloat *
-  // 1000 (« 2026-09-12 » serait pris pour un timestamp). Lu en UTC partout dans ce fichier : une colonne Date pure est ancrée à minuit UTC pour son
-  // jour civil.
   function gristDateToJsDate(val) {
+    // Une date arrive en timestamp Unix (secondes) ou en chaîne déjà formatée : la chaîne va telle quelle au constructeur Date, jamais parseFloat *
+    // 1000 (« 2026-09-12 » serait pris pour un timestamp). Lu en UTC partout dans ce fichier : une colonne Date pure est ancrée à minuit UTC pour son
+    // jour civil.
     if (val == null || val === '') return null;
     if (typeof val === 'number') return Number.isFinite(val) ? new Date(val * 1000) : null;
     const parsed = new Date(val);
     return Number.isNaN(parsed.getTime()) ? null : parsed;
   }
 
-  // Assemble la chaîne des « parts » d'Intl.DateTimeFormat#formatToParts en ne gardant que le jour, le mois, l'année demandés (boutons J / M / A). Un
-  // séparateur n'est gardé qu'entre deux composants gardés, jamais en tête, en fin ni collé à un composant retiré (« M A » garderait sinon un « / »
-  // fantôme).
   function buildDateStringFromParts(parts, keep) {
+    // Assemble la chaîne des « parts » d'Intl.DateTimeFormat#formatToParts en ne gardant que le jour, le mois, l'année demandés (boutons J / M / A). Un
+    // séparateur n'est gardé qu'entre deux composants gardés, jamais en tête, en fin ni collé à un composant retiré (« M A » garderait sinon un « / »
+    // fantôme).
     let result = '';
     let pendingLiteral = '';
     let wroteAny = false;
@@ -50,9 +50,9 @@ const VariableFormat = (function () {
     });
     return result;
   }
-  // Écrit en toutes lettres chaque composant encore purement numérique après filtrage : un mois déjà écrit en lettres reste tel quel, seuls le jour,
-  // l'année (et un mois numérique) sont convertis.
   function wordifyDateParts(parts) {
+    // Écrit en toutes lettres chaque composant encore purement numérique après filtrage : un mois déjà écrit en lettres reste tel quel, seuls le jour,
+    // l'année (et un mois numérique) sont convertis.
     const lang = numberLang();
     return parts.map(part => (/^\d+$/.test(part.value) ? Object.assign({}, part, { value: numberToWords(parseInt(part.value, 10), 0, lang) }) : part));
   }
@@ -93,10 +93,10 @@ const VariableFormat = (function () {
   const UNITS = ['zéro', 'un', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf', 'dix', 'onze', 'douze', 'treize', 'quatorze', 'quinze', 'seize', 'dix-sept', 'dix-huit', 'dix-neuf'];
   const TENS = ['', '', 'vingt', 'trente', 'quarante', 'cinquante', 'soixante', 'soixante-dix', 'quatre-vingt', 'quatre-vingt-dix'];
 
-  // n dans [0, 99]. « et » pour 21, 31, 41, 51, 61, 71 mais pas 81 (quatre-vingt-un) ; 71 et 91 passent par soixante / quatre-vingt + un nombre de 10
-  // à 19. `hasFollowing` : autre chose s'écrit après ce nombre dans le nombre entier, « vingt » perdant alors son « s » (quatre-vingts seul, mais
-  // quatre-vingt mille, quatre-vingt-un).
   function twoDigitsToWords(n, hasFollowing) {
+    // n dans [0, 99]. « et » pour 21, 31, 41, 51, 61, 71 mais pas 81 (quatre-vingt-un) ; 71 et 91 passent par soixante / quatre-vingt + un nombre de 10
+    // à 19. `hasFollowing` : autre chose s'écrit après ce nombre dans le nombre entier, « vingt » perdant alors son « s » (quatre-vingts seul, mais
+    // quatre-vingt mille, quatre-vingt-un).
     if (n < 20) return UNITS[n];
     const tens = Math.floor(n / 10);
     const unit = n % 10;
@@ -109,9 +109,9 @@ const VariableFormat = (function () {
     if (unit === 1 && tens >= 2 && tens !== 8) return TENS[tens] + ' et un';
     return TENS[tens] + '-' + UNITS[unit];
   }
-  // n dans [0, 999]. « cent » prend un « s » seulement s'il est multiplié (> 1) et que rien ne suit ce nombre : « vingt » et « cent » sont les deux
-  // seuls mots de nombre à porter la marque du pluriel, et la perdent dès qu'un autre mot de nombre les suit.
   function threeDigitsToWords(n, hasFollowing) {
+    // n dans [0, 999]. « cent » prend un « s » seulement s'il est multiplié (> 1) et que rien ne suit ce nombre : « vingt » et « cent » sont les deux
+    // seuls mots de nombre à porter la marque du pluriel, et la perdent dès qu'un autre mot de nombre les suit.
     const h = Math.floor(n / 100);
     const rest = n % 100;
     let words = '';
@@ -124,9 +124,9 @@ const VariableFormat = (function () {
     }
     return words;
   }
-  // « mille » est invariable et jamais précédé de « un », contrairement à « million » et « milliard », de vrais noms qui prennent « un » et un « s »
-  // au pluriel. Écrit la partie entière seule (numberToWords écrit les décimales).
   function integerToWordsFr(rounded) {
+    // « mille » est invariable et jamais précédé de « un », contrairement à « million » et « milliard », de vrais noms qui prennent « un » et un « s »
+    // au pluriel. Écrit la partie entière seule (numberToWords écrit les décimales).
     if (rounded === 0) return 'zéro';
     const scales = [
       { divisor: 1e9, singular: 'milliard', plural: 'milliards' },
@@ -153,17 +153,17 @@ const VariableFormat = (function () {
     if (unitsCount > 0 || groups.length === 0) parts.push(threeDigitsToWords(unitsCount, false));
     return parts.join(' ').replace(/\s+/g, ' ').trim();
   }
-  // La valeur absolue de `n` arrondie à `decimals` décimales comme le chiffre l'écrit (par Intl, comme formatNumber : un 1,005 que les chiffres
-  // montrent « 1,01 » ne s'écrit pas « un euro » en lettres) : { intPart, fracDigits }, la partie entière et les décimales en chiffres, zéros de tête
-  // compris (« 05 »).
   function splitAbsolute(n, decimals) {
+    // La valeur absolue de `n` arrondie à `decimals` décimales comme le chiffre l'écrit (par Intl, comme formatNumber : un 1,005 que les chiffres
+    // montrent « 1,01 » ne s'écrit pas « un euro » en lettres) : { intPart, fracDigits }, la partie entière et les décimales en chiffres, zéros de tête
+    // compris (« 05 »).
     const text = new Intl.NumberFormat('en-US', { useGrouping: false, minimumFractionDigits: decimals, maximumFractionDigits: decimals }).format(Math.abs(n));
     const dot = text.indexOf('.');
     return { intPart: parseInt(dot === -1 ? text : text.slice(0, dot), 10), fracDigits: dot === -1 ? '' : text.slice(dot + 1) };
   }
-  // Les décimales dites comme elles s'écrivent : chaque zéro de tête se dit (« 1,05 » : « un virgule zéro cinq »), le reste est un nombre (« 56 » :
-  // « cinquante-six »).
   function fractionToWords(digits, toWords, zeroWord) {
+    // Les décimales dites comme elles s'écrivent : chaque zéro de tête se dit (« 1,05 » : « un virgule zéro cinq »), le reste est un nombre (« 56 » :
+    // « cinquante-six »).
     const zeros = /^0*/.exec(digits)[0].length;
     const words = new Array(zeros).fill(zeroWord);
     if (zeros < digits.length) words.push(toWords(parseInt(digits.slice(zeros), 10)));
@@ -208,10 +208,10 @@ const VariableFormat = (function () {
     if (remaining > 0 || parts.length === 0) parts.push(threeDigitsToWordsEn(remaining));
     return parts.join(' ');
   }
-  // Ce qui change d'une langue à l'autre dans l'écriture d'un nombre ou d'un montant : l'entier en lettres ; les mots de la virgule, du zéro, du moins
-  // et du « et » entre les unités et les centimes ; les devises connues, accolées au nombre en lettres (« mille euros », « a thousand euros », pas
-  // « mille € ») avec leur petite unité au singulier et au pluriel : les décimales d'un montant sont ses centimes. Une devise personnalisée non
-  // reconnue reste le symbole ou le texte tel quel.
+  // Ce qui change d'une langue à l'autre dans l'écriture d'un nombre ou d'un montant : l'entier en lettres, les mots de la virgule, du zéro, du moins
+  // et du « et » entre unités et centimes, les devises connues, accolées au nombre (« mille euros », « a thousand euros », pas « mille € ») avec leur
+  // petite unité au singulier et au pluriel (les décimales d'un montant sont ses centimes). Une devise inconnue (symbole ou texte libre) reste telle
+  // quelle.
   const WORDS = {
     fr: {
       integer: integerToWordsFr, point: ' virgule ', zero: 'zéro', minus: 'moins ', and: ' et ',
@@ -224,10 +224,10 @@ const VariableFormat = (function () {
       subunit: { '€': ['cent', 'cents'], '$': ['cent', 'cents'], '£': ['penny', 'pence'] },
     },
   };
-  // Écrit un nombre en toutes lettres, décimales comprises quand `decimals` est renseigné (0 à 3) : « 1234,56 » doit pouvoir s'écrire avec sa partie
-  // décimale. Sans `decimals`, l'entier le plus proche. Un montant dans une devise connue ne passe pas par ici : ses décimales sont des centimes
-  // (amountToWords).
   function numberToWords(n, decimals, lang) {
+    // Écrit un nombre en toutes lettres, décimales comprises quand `decimals` est renseigné (0 à 3) : « 1234,56 » doit pouvoir s'écrire avec sa partie
+    // décimale. Sans `decimals`, l'entier le plus proche. Un montant dans une devise connue ne passe pas par ici : ses décimales sont des centimes
+    // (amountToWords).
     const w = WORDS[lang];
     const d = decimals == null ? 0 : decimals;
     const { intPart, fracDigits } = splitAbsolute(n, d);
@@ -243,18 +243,18 @@ const VariableFormat = (function () {
   const isPlural = (count, lang) => (lang === 'en' ? count !== 1 : count > 1);
   // Les centimes d'un montant écrit avec 0, 1 ou 2 décimales : « 0,5 » vaut cinquante centimes.
   const centsOf = (fracDigits, decimals) => (decimals === 0 ? 0 : parseInt(fracDigits, 10) * (decimals === 1 ? 10 : 1));
-  // Les unités entières d'un montant. Un million rond ou un milliard rond veut « de » en français : « un million d’euros ».
   function unitsToWords(count, unit, lang) {
+    // Les unités entières d'un montant. Un million rond ou un milliard rond veut « de » en français : « un million d’euros ».
     const name = isPlural(count, lang) ? unit + 's' : unit;
     const roundMillions = lang !== 'en' && count > 0 && count % 1e6 === 0;
     const de = roundMillions ? (/^[aeiouyéèêàâîôû]/i.test(name) ? 'd’' : 'de ') : '';
     return WORDS[lang].integer(count) + ' ' + de + name;
   }
-  // Un montant dans une devise connue, en toutes lettres : les unités entières puis, s'il y en a, les centimes (« six cent cinquante euros », « un
-  // euro et un centime », « cinquante centimes », « mille deux cent trente-quatre euros et cinq centimes »), jamais « virgule ». Deux décimales au
-  // plus : un montant qui en a trois s'écrit comme un nombre (null, comme pour une devise inconnue : l'appelant écrit le nombre puis la devise telle
-  // quelle).
   function amountToWords(n, decimals, symbol, lang) {
+    // Un montant dans une devise connue, en toutes lettres : les unités entières puis, s'il y en a, les centimes (« six cent cinquante euros », « un
+    // euro et un centime », « cinquante centimes », « mille deux cent trente-quatre euros et cinq centimes »), jamais « virgule ». Deux décimales au
+    // plus : un montant qui en a trois s'écrit comme un nombre (null, comme pour une devise inconnue : l'appelant écrit le nombre puis la devise telle
+    // quelle).
     const w = WORDS[lang];
     const unit = w.currency[symbol];
     const d = decimals == null ? 0 : decimals;
@@ -267,53 +267,51 @@ const VariableFormat = (function () {
     return (n < 0 && (intPart > 0 || cents > 0) ? w.minus : '') + parts.join(w.and);
   }
 
-  // La langue d'écriture en lettres et la locale Intl d'un nombre : un réglage de la variable (opts.style 'fr' ou 'us') l'emporte sur la langue de
-  // l'interface ; 'none' (qui ne touche pas à la langue) et l'absence de réglage la suivent.
   function numberLang(style) {
+    // La langue d'écriture en lettres et la locale Intl d'un nombre : un réglage de la variable (opts.style 'fr' ou 'us') l'emporte sur la langue de
+    // l'interface ; 'none' (qui ne touche pas à la langue) et l'absence de réglage la suivent.
     if (style === 'us') return 'en';
     if (style === 'fr') return 'fr';
     return interfaceIsEnglish() ? 'en' : 'fr';
   }
 
-  // Vrai pour une valeur qui est zéro : le nombre 0, ou un texte qui ne s'écrit que 0 (« 0 », « 0,00 », « 0.0 »). Une valeur que l'arrondi seul fait
-  // afficher 0 (0,004 à deux décimales) n'est pas nulle. C'est ce que lit l'option « Si la valeur vaut zéro » d'une bulle nombre (`zero: 'hide'`,
-  // Variables.formatValue).
   function isZero(val) {
+    // Vrai pour une valeur qui est zéro : le nombre 0, ou un texte qui ne s'écrit que 0 (« 0 », « 0,00 », « 0.0 »). Une valeur que l'arrondi seul fait
+    // afficher 0 (0,004 à deux décimales) n'est pas nulle. C'est ce que lit l'option « Si la valeur vaut zéro » d'une bulle nombre (`zero: 'hide'`,
+    // Variables.formatValue).
     if (typeof val === 'number') return val === 0;
     return typeof val === 'string' && /^\s*[-+]?0+(?:[.,]0*)?\s*$/.test(val);
   }
 
   // --- Oui / Non (colonne booléenne) ---
-  // format = { type: 'bool', style } : 'text' écrit « vrai » / « faux » (« true » / « false » en anglais), l'écriture aussi d'une bulle sans
-  // réglage ; 'accentStrike', 'classic' et 'accentPlain' écrivent une case, cochée ou non, les trois styles de la liste à cases
-  // (`data-tasklist-style`, js/main-toolbar.js), au même nom pour que la barre de la bulle et celle de la liste se ressemblent. Dans le texte que
-  // rend formatBool, la case est le caractère ☑ ou ☐ : ReaderMode.checkboxNode en fait une vraie case dessinée (`.resolved-checkbox`). Partout où
-  // seul du texte compte (champs Objet, À, Cc, Cci, nom du PDF, fenêtres), Variables.formatValue écrit « vrai » / « faux » à la place (option
-  // `rawNumbers`). Les deux styles « accent » dessinent la même case : le texte qui suit n'est jamais barré, le barré n'existe que dans la liste à
-  // cases.
   const BOOL_CHECKBOX_STYLES = ['accentStrike', 'classic', 'accentPlain'];
   const CHECKED_BOX = '☑';
   const UNCHECKED_BOX = '☐';
   function isCheckboxStyle(style) { return BOOL_CHECKBOX_STYLES.indexOf(style) !== -1; }
-  // Le style d'une bulle Oui / Non : l'un des trois styles de case, sinon 'text' (sans réglage, ou réglage d'un autre type).
   function boolStyle(format) {
+    // format = { type: 'bool', style } : l'un des trois styles de case, nommés comme ceux de la liste à cases (`data-tasklist-style`,
+    // js/main-toolbar.js), sinon 'text' (sans réglage, ou réglage d'un autre type). Les deux styles « accent » dessinent la même case : le texte qui
+    // suit n'est jamais barré, le barré n'existe que dans la liste à cases.
     return format && format.type === 'bool' && isCheckboxStyle(format.style) ? format.style : 'text';
   }
-  // Couleur d'une case (hexa), celle que la Lecture dessine (`currentColor`) et que le PDF, le Word et l'Excel reprennent pour la case : accent plein
-  // quand elle est cochée, gris du contour sinon ; « classic » reste noir et gris, comme la case de la liste.
   function checkboxColor(checked, style) {
+    // Couleur d'une case (hexa), celle que la Lecture dessine (`currentColor`) et que le PDF, le Word et l'Excel reprennent pour la case : accent plein
+    // quand elle est cochée, gris du contour sinon ; « classic » reste noir et gris, comme la case de la liste.
     if (style === 'classic') return checked ? '#222222' : '#6b7684';
     return checked ? '#2f6fed' : '#767676';
   }
   function formatBool(val, format) {
+    // 'text' écrit « vrai » ou « faux » (« true » ou « false » en anglais), une case le caractère ☑ ou ☐ que ReaderMode.checkboxNode dessine en vraie
+    // case (`.resolved-checkbox`). Là où seul du texte compte (champs Objet, À, Cc, Cci, nom du PDF, fenêtres), Variables.formatValue écrit « vrai »
+    // ou « faux » (option `rawNumbers`).
     if (typeof val !== 'boolean') return val == null ? '' : String(val);
     if (boolStyle(format) === 'text') return I18n.t(val ? 'varFmt.boolTrue' : 'varFmt.boolFalse');
     return val ? CHECKED_BOX : UNCHECKED_BOX;
   }
 
-  // opts = { style: 'fr' | 'us' | 'none', decimals: 0-3 | null, currency: '' | '€' | '$' | texte, words: bool } ; l'option `zero` est traitée avant
-  // cet appel, par Variables.formatValue.
   function formatNumber(val, opts) {
+    // opts = { style: 'fr' | 'us' | 'none', decimals: 0-3 | null, currency: '' | '€' | '$' | texte, words: bool } ; l'option `zero` est traitée avant
+    // cet appel, par Variables.formatValue.
     if (val == null || val === '') return '';
     const n = typeof val === 'number' ? val : parseFloat(val);
     if (!Number.isFinite(n)) return String(val);
@@ -337,19 +335,16 @@ const VariableFormat = (function () {
   }
 
   // --- Liste (colonne Choix multiple ou Référence multiple) ---
-  // format.list = { pick, index, separator, lastSeparator, perValue } : ce que règle la fenêtre « Liste » (js/variable-list.js). Sans réglage, toutes
-  // les valeurs s'écrivent dans l'ordre de la cellule, séparées par « , » (Variables.formatValue). `pick` : 'all' (toutes : `separator` entre
-  // chacune, `lastSeparator` avant la dernière, le même séparateur si vide), 'first', 'last' ou 'nth' (la n-ième, `index` compté depuis 1 ; une liste
-  // plus courte n'écrit rien). Seules les clés qui s'écartent du défaut sont enregistrées (storedList) : une bulle remise au défaut n'a plus de
-  // réglage, ni de point bleu.
   const LIST_PICKS = ['all', 'first', 'last', 'nth'];
   const LIST_SEPARATOR = ', ';
   const LIST_INDEX_MAX = 999;
   // Les types de colonne que ces réglages concernent.
   function isListType(type) { return type === 'ChoiceList' || (typeof type === 'string' && type.indexOf('RefList:') === 0); }
-  // Les réglages complets d'un `format.list` quelconque (absent, illisible, incomplet) : toujours un objet, chaque clé à sa valeur par défaut au
-  // besoin.
   function normalizeList(raw) {
+    // format.list = { pick, index, separator, lastSeparator, perValue } : ce que règle la fenêtre « Liste » (js/variable-list.js). `pick` : 'all'
+    // (`separator` entre chacune, `lastSeparator` avant la dernière, le même si vide), 'first', 'last' ou 'nth' (la n-ième, `index` depuis 1 ; une
+    // liste plus courte n'écrit rien). Ici, les réglages complets d'un `format.list` quelconque (absent, illisible, incomplet) : toujours un objet,
+    // chaque clé à sa valeur par défaut au besoin.
     const list = raw && typeof raw === 'object' ? raw : {};
     return {
       pick: LIST_PICKS.indexOf(list.pick) !== -1 ? list.pick : 'all',
@@ -359,14 +354,14 @@ const VariableFormat = (function () {
       perValue: list.perValue === true,
     };
   }
-  // Vrai quand ces réglages ne changent rien : ni la façon d'écrire la liste, ni le nombre de documents à l'export.
   function isDefaultList(raw) {
+    // Vrai quand ces réglages ne changent rien : ni la façon d'écrire la liste, ni le nombre de documents à l'export.
     const list = normalizeList(raw);
     return list.pick === 'all' && list.separator === LIST_SEPARATOR && list.lastSeparator === '' && !list.perValue;
   }
-  // Ce que la bulle enregistre : seulement les clés utiles (le numéro ne sert qu'à « n-ième », les séparateurs qu'à « toutes »), ou null quand tout
-  // est par défaut.
   function storedList(raw) {
+    // Ce que la bulle enregistre : seulement les clés utiles (le numéro ne sert qu'à « n-ième », les séparateurs qu'à « toutes »), ou null quand tout
+    // est par défaut : une bulle remise au défaut n'a plus de réglage, ni de point bleu.
     const list = normalizeList(raw);
     if (isDefaultList(list)) return null;
     const out = {};
@@ -379,17 +374,17 @@ const VariableFormat = (function () {
     if (list.perValue) out.perValue = true;
     return out;
   }
-  // Les réglages d'écriture du `format` d'une bulle quand ils diffèrent du défaut, sinon null : c'est ce que lit Variables.formatValue, une bulle
-  // sans eux s'écrit comme avant.
   function listStyle(format) {
+    // Les réglages d'écriture du `format` d'une bulle quand ils diffèrent du défaut, sinon null : c'est ce que lit Variables.formatValue, une bulle
+    // sans eux s'écrit comme avant (toutes les valeurs, dans l'ordre de la cellule, séparées par « , »).
     if (!format || !format.list) return null;
     const list = normalizeList(format.list);
     return list.pick === 'all' && list.separator === LIST_SEPARATOR && list.lastSeparator === '' ? null : list;
   }
   // Les valeurs d'une liste à plat : une liste de listes (une colonne Choix multiple lue sur plusieurs lignes liées) n'en fait qu'une.
   function flattenList(value) { return Array.isArray(value) ? value.flat(Infinity) : [value]; }
-  // Le texte d'une liste dont les valeurs sont déjà écrites (`texts`) : les valeurs vides sont sautées, puis le choix de `list` s'applique.
   function listText(texts, raw) {
+    // Le texte d'une liste dont les valeurs sont déjà écrites (`texts`) : les valeurs vides sont sautées, puis le choix de `list` s'applique.
     const list = normalizeList(raw);
     const shown = texts.filter(text => text !== '' && text != null);
     if (list.pick === 'first') return shown.length ? shown[0] : '';

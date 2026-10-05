@@ -15,9 +15,8 @@ const TemplateTreeSelect = (function () {
   let onOrganize = null;
   let mo = null;
   let outsideClickHandler = null;
-  // Dossiers dépliés ou repliés à la main pendant que le panneau est ouvert (chemin -> ouvert ?). Le panneau se redessine en entier à chaque écriture
-  // (clic sur une épingle...) : sans cette mémoire, chaque dossier retomberait sur son état par défaut. Vidée à chaque ouverture (openPopup). Map,
-  // pas {} : un dossier peut s'appeler « constructor » ou « __proto__ ».
+  // Dossiers dépliés ou repliés à la main pendant que le panneau est ouvert (chemin -> ouvert ?), pour qu'un redessin (clic sur une épingle...) ne
+  // les remette pas à leur état par défaut ; vidée à chaque ouverture (openPopup). Map, pas {} : un dossier peut s'appeler « __proto__ ».
   const folderOverrides = new Map();
 
   const iconSpan = typeModele => el('span', 'tts-icon tts-icon-' + (typeModele || 'document'));
@@ -26,9 +25,9 @@ const TemplateTreeSelect = (function () {
     return Templates.isDefault(tpl.id) ? (tpl.nom + ' ★') : tpl.nom;
   }
 
-  // Une ligne de l'arbre, `kind` « folder » ou « leaf » : chevron (dossier seulement), icône, libellé. css/template-tree-select.css en dépend, dans
-  // cet ordre.
   function rowShell(kind, depth, typeModele, text) {
+    // Une ligne de l'arbre, `kind` « folder » ou « leaf » : chevron (dossier seulement), icône, libellé. css/template-tree-select.css en dépend, dans
+    // cet ordre.
     const row = el('div', 'tts-row tts-row-' + kind);
     row.style.setProperty('--tts-depth', String(depth));
     if (kind === 'folder') row.appendChild(el('span', 'tts-folder-caret'));
@@ -36,8 +35,8 @@ const TemplateTreeSelect = (function () {
     return row;
   }
 
-  // Le groupe des enfants d'un dossier : `makeChild(enfant, profondeur)` pour chacun.
   function makeGroup(depth, children, makeChild) {
+    // Le groupe des enfants d'un dossier : `makeChild(enfant, profondeur)` pour chacun.
     const group = el('div', 'tts-group');
     // Profondeur du dossier (pas celle de ses enfants) : css/template-tree-select.css cale le trait guide du groupe sur le caret de CE dossier ;
     // posée explicitement, sinon le groupe hériterait de celle du groupe parent.
@@ -46,10 +45,10 @@ const TemplateTreeSelect = (function () {
     return group;
   }
 
-  // Le bouton épingle d'une ligne de modèle. Info-bulle native (le panneau et la fenêtre « Organiser » vivent hors de #toolbar-top : le [data-tip] de
-  // la barre ne s'y applique pas) : elle dit ce que fait le clic dans l'état courant, pour ne pas le confondre avec l'étoile « modèle par défaut »
-  // de la barre.
   function pinButton(pinned) {
+    // Le bouton épingle d'une ligne de modèle. Info-bulle native (le panneau et la fenêtre « Organiser » vivent hors de #toolbar-top : le [data-tip] de
+    // la barre ne s'y applique pas) : elle dit ce que fait le clic dans l'état courant, pour ne pas le confondre avec l'étoile « modèle par défaut »
+    // de la barre.
     const pin = button('tts-pin-btn');
     pin.classList.toggle('is-pinned', pinned);
     pin.setAttribute('aria-pressed', String(pinned));
@@ -58,8 +57,8 @@ const TemplateTreeSelect = (function () {
     return pin;
   }
 
-  // Les deux sections de la liste : « Épinglés » (à plat), puis « Tous les modèles » (l'arbre), chacune seulement si elle a des lignes.
   function appendSections(container, view, makePinnedRow, makeTreeRow) {
+    // Les deux sections de la liste : « Épinglés » (à plat), puis « Tous les modèles » (l'arbre), chacune seulement si elle a des lignes.
     const section = (titleKey, nodes, makeRow) => {
       if (!nodes.length) return;
       container.appendChild(el('div', 'tts-section-label', I18n.t(titleKey)));
@@ -73,9 +72,9 @@ const TemplateTreeSelect = (function () {
     return node.type === 'dossier' ? makeFolderRow(node, depth) : makeLeafRow(node, depth);
   }
 
-  // Un dossier s'ouvre déplié, sauf si cette personne l'a réglé « replié par défaut » (TemplatePreferences.isFolderCollapsed, posé depuis « Organiser
-  // mes modèles ») ou l'a basculé à la main depuis l'ouverture du panneau.
   function isFolderOpen(chemin) {
+    // Un dossier s'ouvre déplié, sauf si cette personne l'a réglé « replié par défaut » (TemplatePreferences.isFolderCollapsed, posé depuis « Organiser
+    // mes modèles ») ou l'a basculé à la main depuis l'ouverture du panneau.
     if (folderOverrides.has(chemin)) return folderOverrides.get(chemin);
     return !TemplatePreferences.isFolderCollapsed(chemin);
   }
@@ -166,8 +165,8 @@ const TemplateTreeSelect = (function () {
     }
   }
 
-  // Synchronisation du déclencheur avec le <select> réel
   function syncTriggerLabel() {
+    // Synchronisation du déclencheur avec le <select> réel
     const id = realSelect.value;
     const tpl = Templates.byId(id);
     triggerIcon.className = 'tts-icon tts-icon-' + (tpl ? (tpl.typeModele || 'document') : 'new');
@@ -188,10 +187,10 @@ const TemplateTreeSelect = (function () {
     if (realSelect.hidden) closePopup();
   }
 
-  // Redéfinit l'accesseur `value` sur cette instance de <select> : seule façon fiable de détecter les écritures directes `templateSelect.value = ...`
-  // de js/main.js sans modifier ce code. Ces écritures ne déclenchent pas d'évènement 'change' natif (réservé aux interactions de la personne) : les
-  // écouter laisserait l'arbre désynchronisé du <select>.
   function interceptValueWrites(el, onChange) {
+    // Redéfinit l'accesseur `value` sur cette instance de <select> : seule façon fiable de détecter les écritures directes `templateSelect.value = ...`
+    // de js/main.js sans modifier ce code. Ces écritures ne déclenchent pas d'évènement 'change' natif (réservé aux interactions de la personne) : les
+    // écouter laisserait l'arbre désynchronisé du <select>.
     let proto = Object.getPrototypeOf(el);
     let desc;
     while (proto && !desc) {
@@ -215,9 +214,9 @@ const TemplateTreeSelect = (function () {
     trigger.focus({ preventScroll: true });
   }
 
-  // Ouverture, fermeture et navigation clavier (patron WAI-ARIA « Tree View »)
-  // Une ligne est visible si aucun de ses groupes ancêtres n'est replié.
   function visibleRows() {
+    // Ouverture, fermeture et navigation clavier (patron WAI-ARIA « Tree View »)
+    // Une ligne est visible si aucun de ses groupes ancêtres n'est replié.
     return Array.from(popup.querySelectorAll('.tts-row')).filter(row => !row.closest('.tts-group.is-collapsed'));
   }
 
@@ -230,9 +229,9 @@ const TemplateTreeSelect = (function () {
     row.focus({ preventScroll: true });
   }
 
-  // Calé sur le rect réel du déclencheur (le panneau vit dans document.body, voir .tts-popup dans le CSS). Mesuré après classList.add('is-open')
-  // (display:none n'a pas de taille) pour pouvoir caler `left` en cas de débordement à droite.
   function positionPopup() {
+    // Calé sur le rect réel du déclencheur (le panneau vit dans document.body, voir .tts-popup dans le CSS). Mesuré après classList.add('is-open')
+    // (display:none n'a pas de taille) pour pouvoir caler `left` en cas de débordement à droite.
     const rect = trigger.getBoundingClientRect();
     popup.style.top = (rect.bottom + 4) + 'px';
     popup.style.left = rect.left + 'px';
@@ -290,23 +289,21 @@ const TemplateTreeSelect = (function () {
   const leaveForTrigger = () => { closePopup(); trigger.focus({ preventScroll: true }); };
   const isFolderRow = row => row.classList.contains('tts-row-folder');
   const toggleFolderRow = row => toggleFolder(row, row.nextElementSibling);
-  // Entrée et Espace : un dossier se replie ou se déplie, une ligne de modèle se choisit.
   function activateRow(e, { current }) {
+    // Entrée et Espace : un dossier se replie ou se déplie, une ligne de modèle se choisit.
     if (!current) return;
     e.preventDefault();
     if (isFolderRow(current)) toggleFolderRow(current);
     else selectValue(current.dataset.templateId);
   }
 
-  // Les touches du panneau, une fonction chacune : elle reçoit l'évènement et { rows (les lignes visibles), current (la ligne qui a le focus, à
-  // défaut la première), idx (son rang) } et appelle preventDefault quand elle prend la touche : une touche non prise reste au navigateur. Droite et
-  // Gauche suivent le patron WAI-ARIA « Tree View » : Droite ouvre un dossier fermé et entre dans un dossier ouvert (1er enfant) ; Gauche referme un
-  // dossier ouvert, sinon remonte au dossier parent.
+  // Les touches du panneau, une fonction chacune : elle reçoit l'évènement et { rows (lignes visibles), current (la ligne au focus, à défaut la
+  // première), idx } et appelle preventDefault quand elle prend la touche (sinon la touche reste au navigateur). Droite et Gauche suivent le patron
+  // WAI-ARIA « Tree View » : Droite ouvre un dossier fermé ou entre dans un dossier ouvert, Gauche referme un dossier ouvert ou remonte au parent.
   const ROW_KEYS = {
     Escape: e => { e.preventDefault(); leaveForTrigger(); },
-    // Tab : le panneau vit dans document.body, pas juste après le déclencheur, donc l'ordre naturel du DOM atterrirait n'importe où avec le panneau
-    // resté ouvert. Pas de preventDefault : on referme et on redonne le focus au déclencheur avant que le navigateur poursuive son Tab, qui part
-    // alors de la place du déclencheur dans la barre.
+    // Tab : le panneau vit dans document.body, loin du déclencheur : laissé ouvert, l'ordre du DOM atterrirait n'importe où. Pas de preventDefault :
+    // on referme et on redonne le focus au déclencheur avant que le navigateur poursuive son Tab, qui part de sa place dans la barre.
     Tab: leaveForTrigger,
     ArrowDown: (e, { rows, idx }) => { e.preventDefault(); setRovingFocus(rows[Math.min(idx + 1, rows.length - 1)]); },
     ArrowUp: (e, { rows, idx }) => {
@@ -334,9 +331,8 @@ const TemplateTreeSelect = (function () {
     Enter: activateRow,
     ' ': activateRow,
   };
-  // « Organiser » (en-tête) fait partie du parcours : Flèche haut depuis la première ligne l'atteint, Flèche bas le quitte pour la première ligne,
-  // Fin pour la dernière. Les autres flèches, Début compris, ne bougent rien mais restent à la liste ; Entrée et Espace restent au clic natif du
-  // bouton ; Échap et Tab s'y traitent comme depuis une ligne.
+  // « Organiser » (en-tête) est dans le parcours : Flèche haut depuis la première ligne l'atteint, Flèche bas le quitte pour la première ligne, Fin
+  // pour la dernière ; les autres flèches et Début restent à la liste, Entrée et Espace au clic natif du bouton, Échap et Tab comme depuis une ligne.
   const keepKey = e => e.preventDefault();
   const leaveKey = () => {};
   const ORGANIZE_KEYS = {
@@ -353,8 +349,8 @@ const TemplateTreeSelect = (function () {
     action(e, { rows, current, idx: rows.indexOf(current) });
   }
 
-  // Attache et détache
   function attach(select, options) {
+    // Attache et détache
     if (realSelect) detach();
     realSelect = select;
     // Gardé d'un attach() à l'autre quand on n'en repasse pas : la même vue rattachée sans options (après un échec, dev-tests) continue d'ouvrir
@@ -474,8 +470,7 @@ const TemplateTreeSelect = (function () {
     organizeBtn.setAttribute('aria-label', I18n.t('toolbar.organizeTemplates'));
   }
 
-  // Force un nouveau rendu depuis les données actuelles : utile après TemplatePreferences.loadForCurrentUser(), qui résout après le premier
-  // attach()/render() (identification asynchrone).
+  // Nouveau rendu depuis les données actuelles, après TemplatePreferences.loadForCurrentUser() (identification asynchrone).
   function refresh() { if (realSelect) render(); }
 
   // Abonnement unique au niveau module (pas dans attach()) : I18n.onChange() ne permet pas de se désabonner, un ré-abonnement par attach()/detach()
