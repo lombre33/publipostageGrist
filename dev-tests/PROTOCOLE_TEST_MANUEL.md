@@ -114,7 +114,10 @@ testée), sommaire (TOC), couleur de texte/surlignage.
 `table_add_col_after`, `table_delete_row`, `table_delete_table`, `table_cell_text_formatting`,
 `table_cell_list` (`scenarios-tables.js`). **Étage 3** : `pdffid_table_column_widths_proportional`
 (largeurs proportionnelles, construites via HTML avec `colwidth` déjà posé — **pas** via un vrai
-glisser de poignée). **Étage 2** : non couvert.
+glisser de poignée), puis la largeur et les retours à la ligne d'un tableau exporté en PDF :
+`pdffid_table_fills_the_content_width_and_keeps_its_columns`, `pdffid_table_default_reaches_the_right_margin`,
+`pdffid_table_cells_wrap_like_the_browser` et `pdffid_table_cell_wraps_follow_the_browser_across_widths`.
+**Étage 2** : non couvert.
 **Gap confirmé** : aucun test ne simule un vrai glisser de la poignée de redimensionnement de
 colonne puis ne vérifie la largeur résultante (contrairement à la 2-colonnes, qui a
 `twocol_resize_grip` côté éditeur ET une vérification PDF dédiée) — alors que ce mécanisme a

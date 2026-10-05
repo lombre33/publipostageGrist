@@ -126,6 +126,144 @@
     },
   });
 
+  // Le tableau d'Antoine (« Budget validé », 05/10) : sept colonnes de 123, 221, 81, 69, 83, 70 et 73 px (720 px, toute la largeur utile de la page), des
+  // en-têtes gras et centrés, des montants alignés à droite. Son PDF était plus étroit que l'écran (l'export retranchait une espace et demie de chaque
+  // colonne : ~27 pt sur la page, qui s'arrêtait avant la marge de droite) et deux en-têtes (« Montant 2029 (€) », « Total Projet (€) ») se coupaient sur
+  // trois lignes au lieu de deux.
+  const BUDGET_COLUMN_PX = [123, 221, 81, 69, 83, 70, 73];
+  const BUDGET_ROWS = [
+    ['Catégorie de ressources', 'Type de ressources', 'Montant 2026 (€)', 'Montant 2027 (€)', 'Montant 2028 (€)', 'Montant 2029 (€)', 'Total Projet (€)'],
+    ['Fonctionnement (Masse 10)', 'Dépenses de fonctionnement', '10 000', '5 000', '', '', '15 000'],
+    ['Total', '', '10 000', '5 000', '', '', '15 000'],
+  ];
+  const budgetTableHtml = () => {
+    const cell = (text, col, head) => '<td colspan="1" rowspan="1" colwidth="' + BUDGET_COLUMN_PX[col] + '"' + (head ? ' style="background-color: rgb(200, 230, 255);"' : '')
+      + '><p style="text-align: ' + (head ? 'center' : (col >= 2 ? 'right' : 'left')) + ';">' + (head ? '<strong>' + text + '</strong>' : text) + '</p></td>';
+    return '<table style="width: 720px;"><colgroup>' + BUDGET_COLUMN_PX.map(w => '<col style="width: ' + w + 'px;">').join('') + '</colgroup><tbody>'
+      + BUDGET_ROWS.map((row, r) => '<tr>' + row.map((text, col) => cell(text, col, r === 0)).join('') + '</tr>').join('') + '</tbody></table>';
+  };
+
+  // Ce que le PDF peint d'un tableau (pdf.js, les octets du fichier) : les x des traits verticaux, les y des traits horizontaux, le bord droit de la zone
+  // utile de la page, et le texte de chaque case rangé par ligne - sans espaces, qu'un PDF ne garde pas.
+  async function paintedTable(h, html) {
+    const result = await h.exportPdfContent(html, null);
+    const painted = (await h.extractPdfLines(result.base64)).pages[0];
+    const distinct = values => values.sort((a, b) => a - b).filter((v, i, all) => i === 0 || v - all[i - 1] > 1);
+    const xs = distinct(painted.lines.filter(l => Math.abs(l.x1 - l.x2) < 0.01).map(l => l.x1));
+    const ys = distinct(painted.lines.filter(l => Math.abs(l.y1 - l.y2) < 0.01).map(l => l.y1));
+    const ground = (await h.extractPdfGroundTruth(result.base64)).pages[0];
+    const cells = ys.slice(0, -1).map((top, r) => xs.slice(0, -1).map((left, c) => {
+      const byBaseline = {};
+      ground.textItems.filter(it => it.x >= left - 0.5 && it.x < xs[c + 1] && it.y > top && it.y <= ys[r + 1] + 2)
+        .forEach(it => { (byBaseline[Math.round(it.y)] = byBaseline[Math.round(it.y)] || []).push(it); });
+      return Object.keys(byBaseline).map(Number).sort((a, b) => a - b).map(y => byBaseline[y].sort((a, b) => a.x - b.x).map(it => it.str).join('').replace(/\s+/g, ''));
+    }));
+    return { xs, ys, cells, contentRightPt: ground.width - result.docDefinition.pageMargins[2], contentLeftPt: result.docDefinition.pageMargins[0] };
+  }
+
+  // Ce que le navigateur fait du même HTML : l'hôte de mesure de l'export (mêmes règles que l'éditeur, css/editor-v2.css), à la largeur utile d'une page
+  // A4 de marges 28 pt. Le texte de chaque case rangé par ligne, sans espaces.
+  function browserCellLines(html) {
+    const host = document.createElement('div');
+    const detach = ExportCommon.attachMeasureHost(host, 719.04, 'pdf-measure-host');
+    host.innerHTML = html;
+    const rows = Array.from(host.querySelectorAll('tr')).map(tr => Array.from(tr.children).map(td => {
+      const lines = [];
+      let lastTop = null;
+      const walker = document.createTreeWalker(td, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        for (const word of node.nodeValue.matchAll(/\S+/g)) {
+          const range = document.createRange();
+          range.setStart(node, word.index);
+          range.setEnd(node, word.index + word[0].length);
+          const top = range.getBoundingClientRect().top;
+          if (lastTop === null || Math.abs(top - lastTop) > 4) { lines.push(''); lastTop = top; }
+          lines[lines.length - 1] += word[0];
+        }
+      }
+      return lines;
+    }));
+    detach();
+    return rows;
+  }
+
+  cases.push({
+    id: 'pdffid_table_fills_the_content_width_and_keeps_its_columns',
+    description: 'Un tableau de la largeur de la page (le budget d\'Antoine, sept colonnes) va jusqu\'à la marge de droite du PDF, et chaque colonne a la largeur qu\'elle a à l\'écran',
+    run: async (h) => {
+      await h.resetEditor();
+      const table = await paintedTable(h, budgetTableHtml());
+      if (table.xs.length !== BUDGET_COLUMN_PX.length + 1) return { pass: false, notes: 'traits verticaux peints : ' + JSON.stringify(table.xs) };
+      // Une colonne mesure sa largeur à l'écran moins un quart de point (le trait de pdfmake est plus fin que la bordure du navigateur).
+      const columnPt = table.xs.slice(1).map((x, i) => x - table.xs[i]);
+      const columnGapsPt = columnPt.map((w, i) => Math.round((w - BUDGET_COLUMN_PX[i] * 0.75) * 100) / 100);
+      const checks = {
+        startsAtTheMargin: Math.abs(table.xs[0] - table.contentLeftPt) < 1.5,
+        reachesTheRightMargin: Math.abs(table.xs[table.xs.length - 1] - table.contentRightPt) < 2.5,
+        columnsKeepTheirWidths: columnGapsPt.every(gap => Math.abs(gap) < 1.5),
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: JSON.stringify({ failed, xs: table.xs, contentRightPt: table.contentRightPt, columnGapsPt }) };
+    },
+  });
+
+  cases.push({
+    id: 'pdffid_table_default_reaches_the_right_margin',
+    description: 'Le tableau que le bouton insère (deux colonnes, toute la largeur) va jusqu\'à la marge de droite du PDF : plus aucune espace retranchée à chaque colonne',
+    run: async (h) => {
+      await h.resetEditor();
+      await h.focusAtEnd();
+      await h.clickButton('v2-btn-table');
+      await h.sleep(60);
+      const table = await paintedTable(h, Editor.getHTML());
+      const rightEdge = table.xs[table.xs.length - 1];
+      return { pass: table.xs.length === 3 && Math.abs(rightEdge - table.contentRightPt) < 2.5, notes: JSON.stringify({ xs: table.xs, contentRightPt: table.contentRightPt }) };
+    },
+  });
+
+  cases.push({
+    id: 'pdffid_table_cells_wrap_like_the_browser',
+    description: 'Chaque case du budget d\'Antoine se coupe dans le PDF comme dans le navigateur : « Montant 2029 (€) » et « Total Projet (€) » restent sur deux lignes',
+    run: async (h) => {
+      await h.resetEditor();
+      const html = budgetTableHtml();
+      const table = await paintedTable(h, html);
+      const reference = browserCellLines(html);
+      const differences = [];
+      reference.forEach((row, r) => row.forEach((lines, c) => {
+        const painted = (table.cells[r] && table.cells[r][c]) || [];
+        if (JSON.stringify(lines) !== JSON.stringify(painted)) differences.push({ row: r, column: c, navigateur: lines, pdf: painted });
+      }));
+      return { pass: differences.length === 0 && table.cells.length === reference.length, notes: JSON.stringify({ differences, rows: table.cells.length }) };
+    },
+  });
+
+  // L'ancien retrait (une espace et demie de chaque colonne) coupait autrement que le navigateur sur ~12 % des largeurs d'une case : ces largeurs-là, relevées
+  // sur deux textes de plusieurs lignes (le second, gras, italique et sur une bordure d'en-tête étroite), plus quelques-unes où il coupait bien.
+  cases.push({
+    id: 'pdffid_table_cell_wraps_follow_the_browser_across_widths',
+    description: 'Un texte de plusieurs lignes dans une case de largeur variable se coupe dans le PDF aux mêmes endroits que dans le navigateur (au plus un écart sur treize largeurs)',
+    run: async (h) => {
+      await h.resetEditor();
+      const samples = [
+        ['Achat de petit matériel, de livres et de logiciels pour le laboratoire de chimie du site', [128, 148, 168, 172, 176, 180, 200]],
+        ['<strong>Total Projet (€)</strong> hors taxes et hors <em>frais</em> de gestion', [96, 116, 124, 140, 160, 188]],
+      ];
+      const differences = [];
+      let tested = 0;
+      for (const [text, widths] of samples) {
+        for (const width of widths) {
+          const html = '<table style="width: ' + (width + 13) + 'px;"><colgroup><col style="width: ' + (width + 13) + 'px;"></colgroup><tbody><tr><td colspan="1" rowspan="1" colwidth="' + (width + 13) + '"><p>' + text + '</p></td></tr></tbody></table>';
+          const table = await paintedTable(h, html);
+          const lines = browserCellLines(html)[0][0];
+          tested += 1;
+          if (JSON.stringify(lines) !== JSON.stringify(table.cells[0] && table.cells[0][0])) differences.push({ width, navigateur: lines, pdf: table.cells[0] && table.cells[0][0] });
+        }
+      }
+      return { pass: differences.length <= 1, notes: JSON.stringify({ tested, differences }) };
+    },
+  });
+
   cases.push({
     id: 'pdffid_twocolumns_width_ratio',
     description: 'Une zone 2-colonnes redimensionnée (63/37) donne des largeurs PDF dans le même ratio (±5%)',
@@ -718,10 +856,10 @@
           // L'image est désormais positionnée en grille page (capturée dans l'éditeur, indépendante du texte, cf. computePageGridPosition) - elle n'est
           // plus "recalée" sur la position PDF réelle du texte comme avec l'ancien ancrage. Dans une colonne 2-colonnes, le moteur de mise en page pdfmake
           // (twoColumnsFrom, largeur/chrome mesurés sur le rendu réel) reproduit le live quasi exactement (±3pt observé). Dans une cellule de TABLEAU,
-          // pdfmake calcule ses propres largeurs/paddings de colonnes (tableFrom) qui ne collent pas aussi finement au rendu natif du <table> du
-          // navigateur (±5-6pt observé, limitation pré-existante du moteur de tableau, distincte du positionnement d'image lui-même - confirmé : la
-          // position de l'image correspond exactement à ce qui a été capturé dans l'éditeur, écart entièrement du côté du texte de référence).
-          const tolerance = context === 'tableCell' ? 6 : 3;
+          // les colonnes du PDF ont la largeur de celles de l'éditeur (columnWidthsPt) : elles perdaient chacune une espace et le texte de la 2e colonne
+          // tombait 5 pt trop à gauche (la tolérance était de 6 pt, « limitation du moteur de tableau »), aujourd'hui 1,2 pt - la position de l'image
+          // elle-même correspond exactement à ce qui a été capturé dans l'éditeur, l'écart était du côté du texte de référence.
+          const tolerance = 3;
           const pass = Math.abs(deltaX) < tolerance && abs.y >= textTop - tolerance && abs.y < textTop + 200;
           return { pass, notes: JSON.stringify({ imageAbs: abs, textLeft, textTop, deltaX, tolerance }) };
         },

@@ -626,7 +626,7 @@ const PdfExport = (function () {
   function inlineCellObject(line, cellAlign, cellBaseStyle, images, rootRect, nestedPending) {
     const before = images.length;
     const runs = trimEdgeWhitespace(stripImageMarkers(line.inline.flatMap(n => inlineRuns(n, cellBaseStyle, images))));
-    const obj = { text: runs.length ? runs : ' ' };
+    const obj = { text: runs.length ? runs : ' ', margin: [0, 0, runs.length ? spaceWidthPt() : 0, 0] };
     if (cellAlign) obj.alignment = cellAlign;
     attributeNestedPendingImages(images, before, obj, line.inline[0].parentElement || line.inline[0], rootRect, nestedPending);
     return obj;
@@ -652,8 +652,52 @@ const PdfExport = (function () {
     return flowBlocks;
   }
 
+  // Ce qu'un texte de case rend de sa largeur à la coupure des lignes (marge droite de son bloc, en pt), pour que pdfmake coupe là où le navigateur a
+  // coupé. ProseMirror pose `white-space: break-spaces` : l'espace qui finit une ligne compte dans sa largeur, pas chez pdfmake (qui coupe comme
+  // `normal`), d'où un mot de plus sur une ligne que l'éditeur coupe. En retrancher une espace partout (comme le flux principal) règle ce cas et en
+  // crée un autre : la dernière ligne, sans espace à sa fin, peut remplir la case à moins d'une espace près (un en-tête étroit : « 2027 (€) »,
+  // « Projet (€) ») et pdfmake la coupe alors que l'éditeur la tient. On lit donc les lignes du navigateur (l'hôte de mesure) : la largeur de coupure doit
+  // tenir dans la fenêtre qu'elles dessinent, au moins la plus large d'entre elles (aucune ne se recoupe), au plus la plus étroite d'une ligne et du
+  // premier mot de la suivante (le mot que le navigateur n'a pas pu y mettre n'y tient pas non plus), la plus proche de la largeur de la case : ni le
+  // centrage ni l'alignement à droite ne bougent quand rien ne presse. Négative quand la ligne la plus large touche le bord : le texte déborde de
+  // WRAP_NOISE_PT dans le rembourrage plutôt que d'être recoupé par un écart de mesure entre le navigateur et pdfmake. Une espace, comme le flux
+  // principal, quand les lignes ne se lisent pas ainsi (saut de ligne forcé, liste ou tableau dans le bloc) ou quand pdfmake a dû ramener la colonne
+  // dans la page (les lignes du navigateur ne sont plus celles de cette largeur).
+  const WRAP_NOISE_PT = 0.5;
+  function cellWrapMarginPt(node, cellWidthPt) {
+    const spacePt = spaceWidthPt();
+    if (!(cellWidthPt > 0) || !node.isConnected || node.querySelector('br, ul, ol, table')) return spacePt;
+    const rect = node.getBoundingClientRect();
+    const style = getComputedStyle(node);
+    const insetPx = ['paddingLeft', 'paddingRight', 'borderLeftWidth', 'borderRightWidth'].reduce((sum, property) => sum + (parseFloat(style[property]) || 0), 0);
+    if (cellWidthPt < (rect.width - insetPx) * PX_TO_PT - 1) return spacePt;
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    // Une seule ligne dans le navigateur : rien à y couper, sauf à ne pas la recouper quand elle touche le bord.
+    if (parseFloat(style.lineHeight) > 0 && rect.height < parseFloat(style.lineHeight) * 1.5) {
+      return Math.max(-WRAP_NOISE_PT, Math.min(0, cellWidthPt - range.getBoundingClientRect().width * PX_TO_PT - WRAP_NOISE_PT));
+    }
+    const lines = groupWordsIntoLines(collectWords(node));
+    const naturalPt = line => line.reduce((sum, w) => sum + w.right - w.left, 0) * PX_TO_PT + (line.length - 1) * spacePt;
+    let widestPt = 0;
+    let narrowestWithNextPt = Infinity;
+    lines.forEach((line, i) => {
+      widestPt = Math.max(widestPt, naturalPt(line));
+      const next = lines[i + 1];
+      if (next) narrowestWithNextPt = Math.min(narrowestWithNextPt, naturalPt(line) + spacePt + (next[0].right - next[0].left) * PX_TO_PT);
+    });
+    const floorPt = widestPt + WRAP_NOISE_PT;
+    const ceilingPt = narrowestWithNextPt - WRAP_NOISE_PT;
+    let wrapPt;
+    if (floorPt <= ceilingPt) wrapPt = Math.min(Math.max(cellWidthPt, floorPt), ceilingPt);
+    else wrapPt = narrowestWithNextPt > widestPt ? (widestPt + narrowestWithNextPt) / 2 : floorPt;
+    // Jamais plus de débord que l'écart de mesure, jamais plus de retrait qu'une espace : le navigateur n'en a pas davantage.
+    wrapPt = Math.min(Math.max(wrapPt, cellWidthPt - spacePt), cellWidthPt + WRAP_NOISE_PT);
+    return cellWidthPt - wrapPt;
+  }
+
   // Un élément de liste ou un paragraphe de la case, en un bloc de texte (une case à cocher et ses colonnes pour un élément de liste de tâches).
-  function cellTextObject(node, runs, cellAlign) {
+  function cellTextObject(node, runs, cellAlign, cellWidthPt) {
     const isLi = node.tagName === 'LI';
     const align = alignment(node) || cellAlign;
     if (isLi && isTaskListItem(node)) {
@@ -661,7 +705,8 @@ const PdfExport = (function () {
     }
     const marker = isLi ? listMarkerFor(node) : '';
     const text = marker ? [{ text: marker, fontSize: DEFAULT_FONT_SIZE }].concat(runs.length ? runs : [{ text: ' ' }]) : (runs.length ? runs : ' ');
-    const obj = { text, margin: [isLi ? measureIndentPt(node, 'box') : 0, 0, 0, 0] };
+    const wrapMarginPt = !runs.length ? 0 : (isLi ? spaceWidthPt() : cellWrapMarginPt(node, cellWidthPt));
+    const obj = { text, margin: [isLi ? measureIndentPt(node, 'box') : 0, 0, wrapMarginPt, 0] };
     if (align) obj.alignment = align;
     if (!runs.length && node.tagName === 'P' && node.hasAttribute('data-caption')) obj.fontSize = Caption.SIZE_PT;
     return obj;
@@ -684,7 +729,7 @@ const PdfExport = (function () {
       const signLines = signLineBlocksFrom(node, false, { nested: true, maxWidthPt: cellWidthPt, baseStyle: cellBaseStyle, textAlign: cellAlign });
       if (signLines) return signLines;
     }
-    const obj = cellTextObject(node, trimEdgeWhitespace(stripImageMarkers(rawRuns)), cellAlign);
+    const obj = cellTextObject(node, trimEdgeWhitespace(stripImageMarkers(rawRuns)), cellAlign, cellWidthPt);
     attributeNestedPendingImages(images, before, obj, node, rootRect, nestedPending);
     return obj;
   }
@@ -706,7 +751,7 @@ const PdfExport = (function () {
     if (!lines.length) return { text: ' ' };
     if (lines.length === 1 && lines[0].inline) {
       const runs = trimEdgeWhitespace(stripImageMarkers(inlineRuns(cell, { fontSize: DEFAULT_FONT_SIZE }, images)));
-      const textObj = { text: runs.length ? runs : ' ' };
+      const textObj = { text: runs.length ? runs : ' ', margin: [0, 0, runs.length ? cellWrapMarginPt(cell, cellWidthPt) : 0, 0] };
       if (!images.length) return textObj;
       const finalStack = [textObj].concat(images);
       attributeNestedPendingImages(images, 0, textObj, cell, rootRect, nestedPending);
@@ -774,20 +819,20 @@ const PdfExport = (function () {
     return { left: measured('paddingLeft', 4.5), right: measured('paddingRight', 4.5), top: measured('paddingTop', 3), bottom: measured('paddingBottom', 3) };
   }
 
-  // Les largeurs des colonnes, en pt : celles du tableau mesuré dans l'éditeur, ramenées dans la page. pdfmake ajoute paddingLeft + paddingRight à
-  // chaque colonne en plus de `widths` (vérifié en décodant le PDF) : retiré avant de répartir, pour que le total rendu retombe sur la largeur de page.
+  // Les largeurs des colonnes, en pt : celles du tableau mesuré dans l'éditeur, ramenées dans la page, sans rien retrancher d'autre : les traits et le
+  // texte des colonnes tombent où l'éditeur les met (un tableau d'une page entière va jusqu'à la marge de droite, comme à l'écran). pdfmake ajoute
+  // paddingLeft + paddingRight et un trait vertical à chaque colonne en plus de `widths`, et un trait de plus à la fin (vérifié en décodant le PDF) :
+  // retirés avant de répartir, pour que le total rendu retombe sur la largeur de page. La coupure des lignes de chaque case se règle dans la case
+  // (cellWrapMarginPt), pas ici : une largeur retranchée à chaque colonne rétrécissait le tableau (près de 5 % pour sept colonnes) et les en-têtes
+  // étroits se coupaient sur une ligne de plus que dans l'éditeur.
   function columnWidthsPt(node, columnCount, cellPaddingPt) {
-    const usablePt = Math.max(MIN_COLUMN_WIDTH_PT * columnCount, CONTENT_WIDTH_PT - columnCount * cellPaddingPt);
+    const usablePt = Math.max(MIN_COLUMN_WIDTH_PT * columnCount, CONTENT_WIDTH_PT - columnCount * (cellPaddingPt + TABLE_LINE_PT) - TABLE_LINE_PT);
     const measuredPx = ExportCommon.measuredColumnWidthsPx(node, columnCount);
     const measuredPt = measuredPx ? measuredPx.map(px => px * PX_TO_PT) : null;
     const measuredSum = measuredPt ? measuredPt.reduce((sum, w) => sum + w, 0) : 0;
-    const widths = measuredSum > 0
+    return measuredSum > 0
       ? fitColumnWidths(measuredPt, measuredSum, usablePt)
       : Array(columnCount).fill(Math.max(MIN_COLUMN_WIDTH_PT, usablePt / columnCount));
-    // spaceWidthPt() est retranché par colonne après la répartition (dans le budget total, il serait dilué au prorata des colonnes) : compense
-    // white-space: break-spaces. ×1.5 trouvé par dichotomie : avec ×1, un mot de trop tenait encore de justesse.
-    const trimPt = spaceWidthPt() * 1.5;
-    return widths.map(w => Math.max(MIN_COLUMN_WIDTH_PT, w - trimPt));
   }
 
   // Les largeurs mesurées (`measuredPt`, de somme `sum`) sur le total visé : la largeur réelle du tableau si elle tient dans la page (un tableau
