@@ -264,6 +264,122 @@
   });
 
   cases.push({
+    id: 'linkcfg_title_modes_preview_and_answers_of_the_window',
+    description: 'La fenêtre dit « table de la page → table liée », bascule entre « correspondance » et « ligne fixe » (champs et boutons-liens), dit dans l’aperçu chaque issue (colonnes à choisir, aucune ligne, lecture en cours ou impossible, correspondances, ligne fixe, table vide), refuse Valider sans les deux colonnes, enregistre ce qu’elle affiche et, une fois fermée, n’écoute plus rien',
+    run: async (h) => {
+      await seed(h);
+      const $ = id => document.getElementById('link-config-' + id);
+      const fire = el => el.dispatchEvent(new Event('change', { bubbles: true }));
+      const parts = () => ({ fields: !$('match-fields').hidden, toSingleton: !$('toggle-singleton').hidden, toMatch: !$('toggle-match').hidden });
+      const good = () => $('preview').classList.contains('is-good');
+      const pick = async (which, value) => { select(which).value = value; fire(select(which)); await h.sleep(30); };
+      const warn = console.warn;
+      const realFetch = GristAPI.fetchTableRows;
+      const realRecord = GristAPI.getCurrentRecord;
+      const stub = window.__gristStub;
+      const notes = {};
+      const checks = [];
+      const same = (name, actual, expected) => { const ok = JSON.stringify(actual) === JSON.stringify(expected); checks.push(ok); if (!ok) notes[name] = { actual, expected }; };
+      const saved = () => { const rule = GristAPI.getLinkRule('LcContacts'); return rule && [rule.mode, rule.colonneCible, rule.colonneSource]; };
+      // Écouteurs de clic en cours sur les quatre boutons de la fenêtre (posés moins retirés) : à la fermeture, il n'en reste aucun.
+      const listening = {};
+      const spies = ['confirm', 'cancel', 'toggle-singleton', 'toggle-match'].map(name => {
+        const el = $(name);
+        const add = el.addEventListener, remove = el.removeEventListener;
+        listening[name] = 0;
+        el.addEventListener = function (type, ...rest) { if (type === 'click') listening[name]++; return add.call(this, type, ...rest); };
+        el.removeEventListener = function (type, ...rest) { if (type === 'click') listening[name]--; return remove.call(this, type, ...rest); };
+        return el;
+      });
+      const box = modal();
+      let closed;
+      console.warn = () => {};
+      try {
+        ({ closed } = await openKeyWindow(h));
+        same('listenersWhileOpen', { ...listening }, { confirm: 1, cancel: 1, 'toggle-singleton': 1, 'toggle-match': 1 });
+        same('titles',[$('title').textContent, $('table-cible-name').textContent, $('table-source-name').textContent, modal().style.display], ['LcDossiers → LcContacts', 'LcContacts', 'LcDossiers', 'flex']);
+        same('initialValues', [select('source').value, select('cible').value], ['id', 'Dossier']);
+        same('initialParts', parts(), { fields: true, toSingleton: true, toMatch: false });
+        same('initialPreview', [preview(), good()], [I18n.t('linkConfig.previewMatches', { count: 1, table: 'LcContacts', ids: '1' }), true]);
+
+        $('toggle-singleton').click();
+        await h.sleep(30);
+        same('singletonParts', parts(), { fields: false, toSingleton: false, toMatch: true });
+        same('singletonPreview', [preview(), good()], [I18n.t('linkConfig.previewSingleton', { id: 1, table: 'LcContacts' }), true]);
+        stub.setRows('LcContacts', []);
+        $('toggle-match').click();
+        await h.sleep(30);
+        same('matchAgainParts', parts(), { fields: true, toSingleton: true, toMatch: false });
+        same('emptyTableMatch', [preview(), good()], [I18n.t('linkConfig.previewNoMatch', { table: 'LcContacts', value: 1 }), false]);
+        $('toggle-singleton').click();
+        await h.sleep(30);
+        same('emptyTableSingleton', [preview(), good()], [I18n.t('linkConfig.previewTableEmpty', { table: 'LcContacts' }), false]);
+        stub.setRows('LcContacts', [{ id: 1, Dossier: 1, Role: 'Client', Nom: 'Xavier', gristHelper_Display: 'Dossier A' }]);
+        $('toggle-match').click();
+        await h.sleep(30);
+        await pick('source', 'Titre');
+        same('noMatch', [preview(), good()], [I18n.t('linkConfig.previewNoMatch', { table: 'LcContacts', value: 'Dossier A' }), false]);
+
+        await pick('source', '');
+        same('chooseColumns', [preview(), good()], [I18n.t('linkConfig.previewChooseColumns'), false]);
+        $('confirm').click();
+        await h.sleep(30);
+        same('refusedConfirm', [preview(), box.style.display, await Promise.race([closed, Promise.resolve('open')])], [I18n.t('linkConfig.chooseBeforeConfirm'), 'flex', 'open']);
+
+        await pick('source', 'id');
+        GristAPI.fetchTableRows = () => new Promise(() => {});
+        await pick('cible', 'Role');
+        same('computing', [preview(), good()], [I18n.t('linkConfig.previewComputing'), false]);
+        GristAPI.fetchTableRows = () => Promise.reject(new Error('lecture impossible'));
+        await pick('cible', 'Dossier');
+        same('unavailable', [preview(), good()], [I18n.t('linkConfig.previewUnavailable'), false]);
+        GristAPI.fetchTableRows = realFetch;
+        GristAPI.getCurrentRecord = () => null;
+        await pick('cible', 'Role');
+        same('noRecord', [preview(), good()], [I18n.t('linkConfig.previewNoRecord'), false]);
+        GristAPI.getCurrentRecord = realRecord;
+        await pick('cible', 'Dossier');
+        same('backToMatches', [preview(), good()], [I18n.t('linkConfig.previewMatches', { count: 1, table: 'LcContacts', ids: '1' }), true]);
+
+        $('confirm').click();
+        same('answer', [await settled(closed), saved(), box.style.display], [true, ['match', 'Dossier', 'id'], 'none']);
+        same('listenersAfterClose', { ...listening }, { confirm: 0, cancel: 0, 'toggle-singleton': 0, 'toggle-match': 0 });
+        const afterClose = { preview: preview(), parts: parts() };
+        $('toggle-singleton').click();
+        await pick('source', 'Titre');
+        same('deafAfterClose', { preview: preview(), parts: parts() }, afterClose);
+
+        const edited = Variables.editLinkRule('LcContacts');
+        await h.sleep(150);
+        $('toggle-singleton').click();
+        await h.sleep(30);
+        $('confirm').click();
+        same('singletonAnswer', [await settled(edited), saved()], [true, ['singleton', '', '']]);
+
+        const cancelled = Variables.editLinkRule('LcContacts');
+        await h.sleep(150);
+        same('reopenedAsSingleton', parts(), { fields: false, toSingleton: false, toMatch: true });
+        $('cancel').click();
+        same('cancelAnswer', [await settled(cancelled), saved(), box.style.display, { ...listening }], [false, ['singleton', '', ''], 'none', { confirm: 0, cancel: 0, 'toggle-singleton': 0, 'toggle-match': 0 }]);
+
+        box.id = 'link-config-modal-absent';
+        const noWindow = await settled(Variables.editLinkRule('LcContacts'));
+        box.id = 'link-config-modal';
+        same('noWindow', noWindow, false);
+      } finally {
+        console.warn = warn;
+        GristAPI.fetchTableRows = realFetch;
+        GristAPI.getCurrentRecord = realRecord;
+        box.id = 'link-config-modal';
+        spies.forEach(el => { delete el.addEventListener; delete el.removeEventListener; });
+        stub.setRows('LcContacts', [{ id: 1, Dossier: 1, Role: 'Client', Nom: 'Xavier', gristHelper_Display: 'Dossier A' }]);
+        await GristAPI.deleteLinkRule('LcContacts');
+      }
+      return { pass: checks.length === 24 && checks.every(Boolean), notes: JSON.stringify({ checks: checks.length, failed: notes }) };
+    },
+  });
+
+  cases.push({
     id: 'searchselect_filter_ignores_case_accents_and_word_order',
     description: 'SearchSelect.filterItems : sans accents ni casse, tous les mots requis dans n’importe quel ordre, ordre d’origine conservé, recherche vide = tout',
     run: async () => {

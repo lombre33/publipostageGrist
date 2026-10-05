@@ -1282,6 +1282,15 @@ négative ne change rien ; le champ montre la valeur retenue au dixième, borné
 `settings_tab_click_marks_the_tab_and_shows_its_panel_alone` (un clic marque l'onglet actif, lui seul, et ne laisse visible que son panneau). La mise en page
 des onglets (une ligne, défilement) est tenue par `toolbarChrome` (`settings_window_holds_seven_tabs_on_one_row_and_only_the_panel_scrolls`).
 
+La fenêtre de choix de la clé entre deux tables (`js/variables.js` : `showLinkConfigModal`, découpée en petites fonctions par l'audit du 05/10) a, en plus de ses
+scénarios `linkcfg_*` d'origine, `linkcfg_title_modes_preview_and_answers_of_the_window` (24 vérifications, valeurs relevées sur l'ancien code puis figées) : le
+titre « table de la page → table liée » et le nom des deux tables, les colonnes proposées d'office, la bascule entre « correspondance » et « ligne fixe » (les
+champs et les deux boutons-liens), chaque issue de l'aperçu (colonnes à choisir, aucune ligne, table vide, lecture en cours, lecture impossible, pas de ligne
+courante, correspondances, ligne fixe) et son marquage vert, le refus de Valider sans les deux colonnes (la fenêtre reste ouverte), la règle enregistrée
+(correspondance, puis ligne fixe), Annuler (rien d'enregistré), la page sans la fenêtre, et les écouteurs des quatre boutons (posés à l'ouverture, tous retirés
+à la fermeture : la fenêtre ne réagit plus ensuite). Quinze altérations de la fenêtre ont été essayées une à une : quatorze font échouer le scénario, la quinzième
+ne change rien de visible (une règle « ligne fixe » garde ses colonnes vides quoi qu'on passe à `saveLinkRule`).
+
 **Orientation de la page** (01/10, `js/page-layout.js`) : `getOrientation`, `isLandscape`, `setOrientation` et
 `getPageSizeMm/Pt/Px/Twip`, enregistrés dans la colonne `Margins` du modèle (clé `orientation` ; absente, c'est le
 portrait). Cinq scénarios `orientation_*` gardent l'API et son enregistrement : portrait inchangé sans réglage (A4 210 × 297,
