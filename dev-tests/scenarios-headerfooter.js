@@ -487,6 +487,43 @@
     },
   });
 
+  // Une variable d'en-tête ou de pied dont la valeur ne se lit pas : la bulle reste telle quelle (le reste de la zone se rend), mais l'erreur ne
+  // s'avale plus sans trace, elle va à la console comme celle de la vue « comme acceptée » (js/reader-mode.js:resolveHeaderFooterZone).
+  cases.push({
+    id: 'hf_reader_unreadable_variable_is_logged_and_keeps_its_bubble',
+    description: 'En Lecture, une variable d\'en-tête dont la valeur ne se lit pas est signalée à la console et sa bulle reste, au lieu d\'être avalée sans trace',
+    run: async (h) => {
+      await h.resetEditor();
+      h.setA4Preview(true); // la Lecture ne pose ses bandes que sous a4-preview
+      PageLayout.setMarginsMm(null);
+      const realResolve = Variables.resolveVariable;
+      const realWarn = console.warn;
+      const warnings = [];
+      Variables.resolveVariable = async () => { throw new Error('lecture impossible'); };
+      console.warn = (...args) => { warnings.push(args.map(a => (a && a.message) || String(a)).join(' ')); };
+      const header = '<p><span class="var-badge" data-table="Ventes" data-column="Total">#Total</span> Rapport</p>';
+      let kept = false;
+      let zoneText = '';
+      try {
+        await h.renderReaderMode('<p>Corps</p>', { enabled: true, differentFirstPage: false, header: { default: header, first: '' }, footer: { default: '', first: '' } });
+        await h.sleep(250);
+        const zone = document.querySelector('#reader-container .v2-page-edge-top');
+        kept = !!(zone && zone.querySelector('.var-badge'));
+        zoneText = zone ? zone.textContent : '';
+      } finally {
+        Variables.resolveVariable = realResolve;
+        console.warn = realWarn;
+        // renderReaderMode montre les deux conteneurs à la fois (jamais le cas en usage réel) : retour au Mode édition pour les scénarios suivants.
+        document.getElementById('reader-container').style.display = '';
+        document.getElementById('editor-container').style.display = '';
+        document.getElementById('btn-mode-edit').click();
+        await h.sleep(60);
+      }
+      const logged = warnings.filter(w => w.includes('[reader-mode]') && w.includes('lecture impossible'));
+      return { pass: logged.length === 1 && kept && zoneText.includes('Rapport'), notes: JSON.stringify({ logged: logged.length, warnings: warnings.slice(0, 3), kept, zoneText }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.headerFooter = cases;
 })();

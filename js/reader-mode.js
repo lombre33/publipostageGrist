@@ -56,10 +56,49 @@ const ReaderMode = (function () {
   function computePageBreakOffsets(rootEl, pageContentHeightPx) {
     const rootRect = rootEl.getBoundingClientRect();
     const zoom = EditorCore.layoutZoom(rootEl);
+    const heightOf = el => el.getBoundingClientRect().height / zoom;
+    const totalHeight = els => els.reduce((sum, el) => sum + heightOf(el), 0);
+    const children = Array.from(rootEl.children);
     const offsets = [];
     let consumed = 0;
     let counted = 0;
-    const children = Array.from(rootEl.children);
+    const cutBefore = (top, index) => offsets.push({ top, afterIndex: index - 1, remainingPx: 0 });
+    // Hauteur d'une suite « Garder avec le suivant » d'un seul tenant : ses paragraphes et le bloc qui la suit, avec sa légende ou, pour un tableau,
+    // sa première tranche.
+    const keptRunPx = run => {
+      const membersPx = totalHeight(run.members);
+      if (!run.target) return membersPx;
+      const captions = Caption.captionsAfter(run.target);
+      const targetPx = heightOf(run.target);
+      const withCaptionPx = targetPx + totalHeight(captions);
+      const table = run.target.tagName === 'TABLE' ? TablePageCut.measure(run.target, run.target, zoom, pageContentHeightPx, null, 0) : null;
+      if (table) return membersPx + table.segs[0];
+      return membersPx + (captions.length > 0 && Caption.fitsWithCaption(withCaptionPx, pageContentHeightPx) ? withCaptionPx : targetPx);
+    };
+    // Les paragraphes gardés qui se suivent et le bloc qui les suit passent ensemble à la page suivante s'ils ne tiennent pas dans la place restante.
+    const keepRunTogether = (index, top) => {
+      const run = KeepWithNext.runFrom(children, index, children.length);
+      if (!(consumed > 0 && run)) return;
+      const unit = keptRunPx(run);
+      if (unit > pageContentHeightPx - consumed && KeepWithNext.fits(unit, pageContentHeightPx)) { cutBefore(top, index); consumed = 0; }
+    };
+    const placeCutTable = (block, cuttable) => {
+      const { index, top } = block;
+      const tablePlan = TablePageCut.plan(consumed, cuttable.segs, pageContentHeightPx, cuttable.starts);
+      if (tablePlan.blockBreakBefore) cutBefore(top, index);
+      tablePlan.cuts.forEach((rowIndex, k) => offsets.push({ top: top + cuttable.segs.slice(0, tablePlan.ranks[k]).reduce((sum, seg) => sum + seg, 0), afterIndex: index, rowIndex, remainingPx: 0 }));
+      consumed = tablePlan.consumedAfter;
+      if (cuttable.keepsTail) counted = index + 1 + block.captions.length;
+    };
+    const placeBlock = block => {
+      const { child, index, top, height, captions, captionPx } = block;
+      const keeps = captions.length > 0 && Caption.fitsWithCaption(height + captionPx, pageContentHeightPx);
+      const unitHeight = keeps ? height + captionPx : height;
+      const staysOnPage = !keeps && isSplittableByExport(child) && pageContentHeightPx - consumed > height / 2;
+      if (consumed > 0 && consumed + unitHeight > pageContentHeightPx && !staysOnPage) { cutBefore(top, index); consumed = unitHeight; }
+      else { consumed += unitHeight; }
+      if (keeps) counted = index + 1 + captions.length;
+    };
     children.forEach((child, index) => {
       if (index < counted) return;
       const rect = child.getBoundingClientRect();
@@ -70,41 +109,13 @@ const ReaderMode = (function () {
         consumed = 0;
         return;
       }
-      // « Garder avec le suivant » : les paragraphes gardés qui se suivent et le bloc qui les suit passent ensemble à la page suivante s'ils ne
-      // tiennent pas dans la place restante.
-      const run = KeepWithNext.runFrom(children, index, children.length);
-      if (consumed > 0 && run) {
-        const heightOf = el => el.getBoundingClientRect().height / zoom;
-        let unit = run.members.reduce((sum, el) => sum + heightOf(el), 0);
-        if (run.target) {
-          const targetCaptions = Caption.captionsAfter(run.target);
-          const targetCaptionPx = targetCaptions.reduce((sum, el) => sum + heightOf(el), 0);
-          const targetPx = heightOf(run.target);
-          const targetTable = run.target.tagName === 'TABLE' ? TablePageCut.measure(run.target, run.target, zoom, pageContentHeightPx, null, 0) : null;
-          unit += targetTable ? targetTable.segs[0] : (targetCaptions.length > 0 && Caption.fitsWithCaption(targetPx + targetCaptionPx, pageContentHeightPx) ? targetPx + targetCaptionPx : targetPx);
-        }
-        if (unit > pageContentHeightPx - consumed && KeepWithNext.fits(unit, pageContentHeightPx)) {
-          offsets.push({ top, afterIndex: index - 1, remainingPx: 0 });
-          consumed = 0;
-        }
-      }
+      keepRunTogether(index, top);
       const captions = Caption.captionsAfter(child);
-      const captionPx = captions.reduce((sum, el) => sum + el.getBoundingClientRect().height / zoom, 0);
+      const captionPx = totalHeight(captions);
+      const block = { child, index, top, height, captions, captionPx };
       const cuttable = child.tagName === 'TABLE' ? TablePageCut.measure(child, child, zoom, pageContentHeightPx, null, captionPx) : null;
-      if (cuttable) {
-        const tablePlan = TablePageCut.plan(consumed, cuttable.segs, pageContentHeightPx, cuttable.starts);
-        if (tablePlan.blockBreakBefore) offsets.push({ top, afterIndex: index - 1, remainingPx: 0 });
-        tablePlan.cuts.forEach((rowIndex, k) => offsets.push({ top: top + cuttable.segs.slice(0, tablePlan.ranks[k]).reduce((sum, seg) => sum + seg, 0), afterIndex: index, rowIndex, remainingPx: 0 }));
-        consumed = tablePlan.consumedAfter;
-        if (cuttable.keepsTail) counted = index + 1 + captions.length;
-        return;
-      }
-      const keeps = captions.length > 0 && Caption.fitsWithCaption(height + captionPx, pageContentHeightPx);
-      const unitHeight = keeps ? height + captionPx : height;
-      const staysOnPage = !keeps && isSplittableByExport(child) && pageContentHeightPx - consumed > height / 2;
-      if (consumed > 0 && consumed + unitHeight > pageContentHeightPx && !staysOnPage) { offsets.push({ top, afterIndex: index - 1, remainingPx: 0 }); consumed = unitHeight; }
-      else { consumed += unitHeight; }
-      if (keeps) counted = index + 1 + captions.length;
+      if (cuttable) placeCutTable(block, cuttable);
+      else placeBlock(block);
     });
     return offsets;
   }
@@ -227,7 +238,8 @@ const ReaderMode = (function () {
       if (!(await badgeConditionHolds(badge, tableId, record, binding))) { badge.replaceWith(document.createTextNode('')); return; }
       const inline = await resolveInlineLoop(badge, table, column, tableId, record, format, loopCtx);
       if (inline) { badge.replaceWith(inline.node); return; }
-      try { const value = await Variables.resolveVariable(table, column, tableId, record, format, loopOpts(binding)); badge.replaceWith(valueNode(value, format, '')); } catch (e) {}
+      try { const value = await Variables.resolveVariable(table, column, tableId, record, format, loopOpts(binding)); badge.replaceWith(valueNode(value, format, '')); }
+      catch (e) { console.warn('[reader-mode] variable d\'en-tête ou de pied illisible, sa bulle reste telle quelle', e); }
     }));
     LoopRules.removeHiddenBlocks(wrapper);
     // La note de bas de page n'est volontairement pas insérable en en-tête ni en pied (aucun repère de page dans une zone répétée sur chaque page) :
@@ -291,50 +303,105 @@ const ReaderMode = (function () {
     const footerFirst = differentFirstPage ? await resolveHeaderFooterZone(headerFooterData.footer && headerFooterData.footer.first, tableId, record) : null;
     return { differentFirstPage, headerDefault, headerFirst, footerDefault, footerFirst };
   }
-  // Insère les espaceurs de bord (vrais frères DOM de `wrapper`, en flux normal) et les bandes "couture" aux limites intermédiaires
-  // (position:absolute, peuvent recouvrir un peu de texte pile à la limite - résidu assumé). Synchrone et refaisable : clearPagination retire tout ce
-  // qu'elle pose.
-  function renderPaginationPreview(container, wrapper, zones) {
-    const { differentFirstPage, headerDefault, headerFirst, footerDefault, footerFirst } = zones;
-    const headerForPage = n => (n === 1 && differentFirstPage) ? headerFirst : headerDefault;
-    const footerForPage = n => (n === 1 && differentFirstPage) ? footerFirst : footerDefault;
-
+  // La variante d'en-tête ou de pied de la page `n` (`kind` : 'header' ou 'footer') : celle de la première page quand elle a la sienne.
+  function zoneForPage(zones, kind, n) {
+    return (n === 1 && zones.differentFirstPage) ? zones[kind + 'First'] : zones[kind + 'Default'];
+  }
+  // Bandes et hauteur utile d'une page : une bande n'est réservée que si une de ses variantes a du contenu. Les marges du modèle, lues à chaud
+  // (js/page-layout.js) : le padding de `.reader-content` en Aperçu A4 (css/editor-v2.css) en prend les valeurs.
+  function paginationGeometry(zones) {
     const { hasZoneContent, HEADER_FOOTER_BAND_PX } = PageLayout;
-    const topBandPx = (hasZoneContent(headerDefault) || hasZoneContent(headerFirst)) ? HEADER_FOOTER_BAND_PX : 0;
-    const bottomBandPx = (hasZoneContent(footerDefault) || hasZoneContent(footerFirst)) ? HEADER_FOOTER_BAND_PX : 0;
-    // Les marges du modèle, lues à chaud (js/page-layout.js) : le padding de `.reader-content` en Aperçu A4 (css/editor-v2.css) en prend les valeurs.
+    const topBandPx = (hasZoneContent(zones.headerDefault) || hasZoneContent(zones.headerFirst)) ? HEADER_FOOTER_BAND_PX : 0;
+    const bottomBandPx = (hasZoneContent(zones.footerDefault) || hasZoneContent(zones.footerFirst)) ? HEADER_FOOTER_BAND_PX : 0;
     const mPx = PageLayout.getMarginsPx();
     const pageContentHeightPx = Math.max(50, PageLayout.getPageSizePx().height - mPx.top - mPx.bottom - topBandPx - bottomBandPx);
-    const offsets = computePageBreakOffsets(wrapper, pageContentHeightPx);
-    const totalPages = offsets.length + 1;
-
-    const wrapperChildren = Array.from(wrapper.children);
-
-    // Un rendu plus récent peut avoir déjà repeint `container` : `wrapper` ne serait alors plus attaché et insertBefore lèverait une exception.
-    if (!wrapper.isConnected) return null;
-
-    // Les bandes du PDF, sur la première et la dernière page : un espaceur par bande réservée, vide quand la variante de cette page n'a rien (page 1
-    // sans en-tête alors que les autres en ont un). Collés à la feuille, dont ils prolongent la page : le haut de la page est le haut de l'espaceur,
-    // le contenu de l'en-tête à la moitié de la marge du haut comme dans le PDF ; le pied recouvre la marge du bas de la feuille et commence juste
-    // sous le texte, là où le PDF le peint.
+    return { topBandPx, bottomBandPx, mPx, pageContentHeightPx };
+  }
+  function edgeSpacer(side, zoneHtml, page, totalPages) {
+    const el = document.createElement('div');
+    el.className = 'v2-page-edge-spacer v2-page-edge-' + side;
+    el.innerHTML = zoneHtml ? PageLayout.resolvePageNumberBadges(zoneHtml, page, totalPages) : '';
+    return el;
+  }
+  // Les bandes du PDF, sur la première et la dernière page : un espaceur par bande réservée, vide quand la variante de cette page n'a rien (page 1
+  // sans en-tête alors que les autres en ont un). Collés à la feuille, dont ils prolongent la page : le haut de la page est le haut de l'espaceur,
+  // le contenu de l'en-tête à la moitié de la marge du haut comme dans le PDF ; le pied recouvre la marge du bas de la feuille et commence juste
+  // sous le texte, là où le PDF le peint.
+  function addEdgeSpacers(container, wrapper, zones, geometry, totalPages) {
+    const { topBandPx, bottomBandPx, mPx } = geometry;
     let edgeTopEl = null; let edgeBottomEl = null;
     if (topBandPx) {
-      edgeTopEl = document.createElement('div');
-      edgeTopEl.className = 'v2-page-edge-spacer v2-page-edge-top';
-      edgeTopEl.innerHTML = headerForPage(1) ? PageLayout.resolvePageNumberBadges(headerForPage(1), 1, totalPages) : '';
+      edgeTopEl = edgeSpacer('top', zoneForPage(zones, 'header', 1), 1, totalPages);
       edgeTopEl.style.height = topBandPx + 'px';
       edgeTopEl.style.paddingTop = (mPx.top / 2) + 'px';
       container.insertBefore(edgeTopEl, wrapper);
     }
     if (bottomBandPx) {
-      edgeBottomEl = document.createElement('div');
-      edgeBottomEl.className = 'v2-page-edge-spacer v2-page-edge-bottom';
-      edgeBottomEl.innerHTML = footerForPage(totalPages) ? PageLayout.resolvePageNumberBadges(footerForPage(totalPages), totalPages, totalPages) : '';
+      edgeBottomEl = edgeSpacer('bottom', zoneForPage(zones, 'footer', totalPages), totalPages, totalPages);
       edgeBottomEl.style.height = (bottomBandPx + mPx.bottom) + 'px';
       edgeBottomEl.style.marginTop = (-mPx.bottom) + 'px';
       container.appendChild(edgeBottomEl);
     }
-
+    return { edgeTopEl, edgeBottomEl };
+  }
+  // Pose la couture qui sépare la page `i + 1` de la suivante : sa bande, la réserve sous le dernier bloc de la page qui finit, et la page qui
+  // commence. `pass` porte les mesures de la pagination et son état courant (haut du corps de page, règles de marge, rognages, pages).
+  function placeSeam(pass, offset, i) {
+    const { zones, geometry, totalPages, wrapperChildren, wrapperRect, wrapperLeft, wrapperWidth, zoom, toLayoutY, overlay, steps, marginRules, tableStrips, pages, footAreaPx, headAreaPx } = pass;
+    const pageEnding = i + 1; const pageStarting = i + 2;
+    const footerText = zoneForPage(zones, 'footer', pageEnding);
+    const headerText = zoneForPage(zones, 'header', pageStarting);
+    const { seam, divider } = buildSeam({ footerText, headerText, pageEnding, pageStarting, totalPages, footAreaPx, headAreaPx, topMarginPx: geometry.mPx.top });
+    overlay.appendChild(seam);
+    seam.style.left = wrapperLeft + 'px';
+    seam.style.width = wrapperWidth + 'px';
+    const seamHeight = seam.getBoundingClientRect().height / zoom;
+    const el = wrapperChildren[offset.afterIndex];
+    // Bas du contenu de la page qui finit, lu après les réserves déjà posées : la frontière suivante doit voir leur effet avant de mesurer sa
+    // propre position. getBoundingClientRect() ne compte jamais la marge propre de l'élément (margin-bottom pousse le frère suivant, pas sa propre
+    // boîte) : `remaining` se rajoute à la main pour retrouver la vraie frontière. Coupure entre deux lignes d'un tableau (même principe que
+    // l'éditeur, js/header-footer-preview.js) : le bas de la page qui finit est celui de la ligne qui précède celle qui ouvre la page, non celui du
+    // tableau entier.
+    const tableRows = offset.rowIndex != null ? (TablePageCut.rowsOf(el) || []) : [];
+    const rowAbove = tableRows[offset.rowIndex - 1] || null;
+    const rowOpening = rowAbove ? tableRows[offset.rowIndex] : null;
+    const afterBottomScreen = rowAbove ? rowAbove.getBoundingClientRect().bottom : (el ? el.getBoundingClientRect().bottom : wrapperRect.top + offset.top * zoom);
+    const afterBottomRel = (afterBottomScreen - wrapperRect.top) / zoom;
+    const remaining = Math.max(0, geometry.pageContentHeightPx - (afterBottomRel - pass.bodyTopRel));
+    if (rowOpening) {
+      // La ligne qui ouvre la page descend de la réserve de la page qui finit, puis de la couture (rembourrage haut de ses cases) ; le tableau est
+      // rogné sur cette hauteur (TablePageCut.clipRule, plus bas) : la réserve et les marges de la couture, transparentes, ne montrent ni le fond
+      // ni les traits verticaux des cases. Le trait du haut de la ligne, rogné avec le reste, est redessiné au bord bas de la bande
+      // (css/editor-v2.css).
+      const restingPad = TablePageCut.restingPadTop(rowOpening);
+      marginRules.push(TablePageCut.padRule('#reader-container .reader-content > *:nth-child(' + (offset.afterIndex + 1) + ')', offset.rowIndex, restingPad + seamHeight + remaining));
+      const stripTop = (afterBottomScreen - el.getBoundingClientRect().top) / zoom;
+      if (!tableStrips.has(offset.afterIndex)) tableStrips.set(offset.afterIndex, []);
+      tableStrips.get(offset.afterIndex).push({ top: stripTop + 1, bottom: stripTop + remaining + seamHeight });
+      const tableRect = el.getBoundingClientRect();
+      const cap = document.createElement('div');
+      cap.className = 'v2-page-seam-cap';
+      cap.style.left = ((tableRect.left - wrapperRect.left) / zoom) + 'px';
+      cap.style.width = (tableRect.width / zoom) + 'px';
+      seam.appendChild(cap);
+    } else if (el) {
+      // Sélecteur préfixé de #reader-container : `#reader-container p { margin: 0 }` (css/editor-v2.css) est plus spécifique qu'un simple
+      // `.reader-content > *:nth-child(N)` et écraserait la réserve dès que le dernier bloc d'une page est un paragraphe : la gouttière
+      // recouvrirait alors une ligne de texte. Les sauts de page forcés, seuls à poser cette règle jusque-là, ont pour bloc un <div
+      // class="page-break-marker">, jamais un <p>.
+      marginRules.push('#reader-container .reader-content > *:nth-child(' + (offset.afterIndex + 1) + ') { margin-bottom: ' + (seamHeight + remaining) + 'px; }');
+    }
+    // Posée tout de suite : la frontière suivante doit voir l'effet des marges déjà posées avant de mesurer sa propre position.
+    steps.add(marginRules[marginRules.length - 1]);
+    const seamTop = toLayoutY(afterBottomScreen) + remaining;
+    seam.style.top = seamTop + 'px';
+    pass.bodyTopRel = afterBottomRel + remaining + seamHeight;
+    pages.push({ top: seamTop + footAreaPx + divider.getBoundingClientRect().height / zoom, bodyTop: seamTop + seamHeight });
+  }
+  // Les coutures de toutes les frontières de page et les règles de marge qui réservent leur place. Rend les mesures dont la suite a besoin.
+  function layoutSeams(ctx) {
+    const { container, wrapper, geometry, offsets, edges } = ctx;
+    const { mPx, topBandPx, bottomBandPx, pageContentHeightPx } = geometry;
     const overlay = document.createElement('div');
     overlay.className = 'v2-pagination-overlay';
     container.appendChild(overlay);
@@ -363,79 +430,35 @@ const ReaderMode = (function () {
     const footAreaPx = mPx.bottom + bottomBandPx;
     const headAreaPx = mPx.top + topBandPx;
     const wrapperPaddingTop = parseFloat(getComputedStyle(wrapper).paddingTop) || 0;
-    // Haut du corps de la page courante depuis le haut de `.reader-content`, en pixels de mise en page (la première page : sa marge du haut).
-    let bodyTopRel = wrapperPaddingTop;
-    const pages = [{ top: toLayoutY((edgeTopEl || wrapper).getBoundingClientRect().top), bodyTop: toLayoutY(wrapperRect.top) + wrapperPaddingTop }];
-    // Tableaux coupés entre deux lignes : pour chacun (rang de son bloc), les bandes de sa hauteur à rogner (cf. TablePageCut.clipRule).
-    const tableStrips = new Map();
-    offsets.forEach((offset, i) => {
-      const pageEnding = i + 1; const pageStarting = i + 2;
-      const footerText = footerForPage(pageEnding);
-      const headerText = headerForPage(pageStarting);
-      const { seam, divider } = buildSeam({ footerText, headerText, pageEnding, pageStarting, totalPages, footAreaPx, headAreaPx, topMarginPx: mPx.top });
-      overlay.appendChild(seam);
-      seam.style.left = wrapperLeft + 'px';
-      seam.style.width = wrapperWidth + 'px';
-      const seamHeight = seam.getBoundingClientRect().height / zoom;
-      const el = wrapperChildren[offset.afterIndex];
-      // Bas du contenu de la page qui finit, lu après les réserves déjà posées : la frontière suivante doit voir leur effet avant de mesurer sa
-      // propre position. getBoundingClientRect() ne compte jamais la marge propre de l'élément (margin-bottom pousse le frère suivant, pas sa propre
-      // boîte) : `remaining` se rajoute à la main pour retrouver la vraie frontière. Coupure entre deux lignes d'un tableau (même principe que
-      // l'éditeur, js/header-footer-preview.js) : le bas de la page qui finit est celui de la ligne qui précède celle qui ouvre la page, non celui du
-      // tableau entier.
-      const tableRows = offset.rowIndex != null ? (TablePageCut.rowsOf(el) || []) : [];
-      const rowAbove = tableRows[offset.rowIndex - 1] || null;
-      const rowOpening = rowAbove ? tableRows[offset.rowIndex] : null;
-      const afterBottomScreen = rowAbove ? rowAbove.getBoundingClientRect().bottom : (el ? el.getBoundingClientRect().bottom : wrapperRect.top + offset.top * zoom);
-      const afterBottomRel = (afterBottomScreen - wrapperRect.top) / zoom;
-      const remaining = Math.max(0, pageContentHeightPx - (afterBottomRel - bodyTopRel));
-      if (rowOpening) {
-        // La ligne qui ouvre la page descend de la réserve de la page qui finit, puis de la couture (rembourrage haut de ses cases) ; le tableau est
-        // rogné sur cette hauteur (TablePageCut.clipRule, plus bas) : la réserve et les marges de la couture, transparentes, ne montrent ni le fond
-        // ni les traits verticaux des cases. Le trait du haut de la ligne, rogné avec le reste, est redessiné au bord bas de la bande
-        // (css/editor-v2.css).
-        const restingPad = TablePageCut.restingPadTop(rowOpening);
-        marginRules.push(TablePageCut.padRule('#reader-container .reader-content > *:nth-child(' + (offset.afterIndex + 1) + ')', offset.rowIndex, restingPad + seamHeight + remaining));
-        const stripTop = (afterBottomScreen - el.getBoundingClientRect().top) / zoom;
-        if (!tableStrips.has(offset.afterIndex)) tableStrips.set(offset.afterIndex, []);
-        tableStrips.get(offset.afterIndex).push({ top: stripTop + 1, bottom: stripTop + remaining + seamHeight });
-        const tableRect = el.getBoundingClientRect();
-        const cap = document.createElement('div');
-        cap.className = 'v2-page-seam-cap';
-        cap.style.left = ((tableRect.left - wrapperRect.left) / zoom) + 'px';
-        cap.style.width = (tableRect.width / zoom) + 'px';
-        seam.appendChild(cap);
-      } else if (el) {
-        // Sélecteur préfixé de #reader-container : `#reader-container p { margin: 0 }` (css/editor-v2.css) est plus spécifique qu'un simple
-        // `.reader-content > *:nth-child(N)` et écraserait la réserve dès que le dernier bloc d'une page est un paragraphe : la gouttière
-        // recouvrirait alors une ligne de texte. Les sauts de page forcés, seuls à poser cette règle jusque-là, ont pour bloc un <div
-        // class="page-break-marker">, jamais un <p>.
-        marginRules.push('#reader-container .reader-content > *:nth-child(' + (offset.afterIndex + 1) + ') { margin-bottom: ' + (seamHeight + remaining) + 'px; }');
-      }
-      // Posée tout de suite : la frontière suivante doit voir l'effet des marges déjà posées avant de mesurer sa propre position.
-      steps.add(marginRules[marginRules.length - 1]);
-      const seamTop = toLayoutY(afterBottomScreen) + remaining;
-      seam.style.top = seamTop + 'px';
-      bodyTopRel = afterBottomRel + remaining + seamHeight;
-      pages.push({ top: seamTop + footAreaPx + divider.getBoundingClientRect().height / zoom, bodyTop: seamTop + seamHeight });
-    });
+    const pages = [{ top: toLayoutY((edges.edgeTopEl || wrapper).getBoundingClientRect().top), bodyTop: toLayoutY(wrapperRect.top) + wrapperPaddingTop }];
+    // `bodyTopRel` : haut du corps de la page courante depuis le haut de `.reader-content`, en pixels de mise en page (la première page : sa marge du
+    // haut). `tableStrips` : pour chaque tableau coupé entre deux lignes (rang de son bloc), les bandes de sa hauteur à rogner (cf.
+    // TablePageCut.clipRule).
+    const pass = {
+      zones: ctx.zones, geometry, totalPages: ctx.totalPages, wrapperChildren: ctx.wrapperChildren, wrapperRect, wrapperLeft, wrapperWidth, zoom, toLayoutY, overlay, steps,
+      marginRules, tableStrips: new Map(), pages, footAreaPx, headAreaPx, bodyTopRel: wrapperPaddingTop,
+    };
+    offsets.forEach((offset, i) => placeSeam(pass, offset, i));
     // La dernière page, jusqu'à sa hauteur réelle : la feuille ne descend jamais sous le haut du corps de cette page, plus la hauteur utile d'une
     // page, plus sa marge du bas (le plancher ne gêne pas un contenu plus long).
-    marginRules.push('#reader-container .reader-content { min-height: ' + (bodyTopRel + pageContentHeightPx + mPx.bottom) + 'px; }');
-    tableStrips.forEach((strips, index) => marginRules.push(TablePageCut.clipRule('#reader-container .reader-content > *:nth-child(' + (index + 1) + ')', strips)));
+    marginRules.push('#reader-container .reader-content { min-height: ' + (pass.bodyTopRel + pageContentHeightPx + mPx.bottom) + 'px; }');
+    pass.tableStrips.forEach((strips, index) => marginRules.push(TablePageCut.clipRule('#reader-container .reader-content > *:nth-child(' + (index + 1) + ')', strips)));
     styleEl.textContent = marginRules.join('\n');
     steps.clear();
-
-    // Le fond de la feuille : une seule page blanche pour toute la pile, bandes d'en-tête et de pied comprises, derrière le corps (z-index -1 dans le
-    // conteneur, qui est un contexte d'empilement). Le corps, les espaceurs de bord et la feuille elle-même sont transparents : une image « derrière
-    // le texte » posée dans la bande de l'en-tête n'est ainsi pas cachée par le fond blanc de l'espaceur. C'est aussi là que se peignent les copies
-    // de « Sur toutes les pages » (js/page-layer.js).
+    return { pages, zoom, toLayoutY, wrapperLeft, wrapperWidth };
+  }
+  // Le fond de la feuille : une seule page blanche pour toute la pile, bandes d'en-tête et de pied comprises, derrière le corps (z-index -1 dans le
+  // conteneur, qui est un contexte d'empilement). Le corps, les espaceurs de bord et la feuille elle-même sont transparents : une image « derrière
+  // le texte » posée dans la bande de l'en-tête n'est ainsi pas cachée par le fond blanc de l'espaceur. C'est aussi là que se peignent les copies
+  // de « Sur toutes les pages » (js/page-layer.js). Rend la couche de ces copies.
+  function addBackdrop(container, wrapper, edges, sheet) {
+    const { toLayoutY, wrapperLeft, wrapperWidth, zoom } = sheet;
     const backdrop = document.createElement('div');
     backdrop.className = 'v2-reader-backdrop';
     const paper = document.createElement('div');
     paper.className = 'v2-reader-paper';
-    const paperTopScreen = (edgeTopEl || wrapper).getBoundingClientRect().top;
-    const paperBottomScreen = (edgeBottomEl || wrapper).getBoundingClientRect().bottom;
+    const paperTopScreen = (edges.edgeTopEl || wrapper).getBoundingClientRect().top;
+    const paperBottomScreen = (edges.edgeBottomEl || wrapper).getBoundingClientRect().bottom;
     paper.style.left = wrapperLeft + 'px';
     paper.style.width = wrapperWidth + 'px';
     paper.style.top = toLayoutY(paperTopScreen) + 'px';
@@ -449,7 +472,24 @@ const ReaderMode = (function () {
     backdrop.appendChild(layer);
     container.appendChild(backdrop);
     wrapper.classList.add('v2-paper-backed');
-    return { offsets, pages, layer, zoom, toLayoutY, sheetLeft: wrapperLeft, sheetWidth: wrapperWidth, contentLeftPx: mPx.left };
+    return layer;
+  }
+  // Insère les espaceurs de bord (vrais frères DOM de `wrapper`, en flux normal) et les bandes "couture" aux limites intermédiaires
+  // (position:absolute, peuvent recouvrir un peu de texte pile à la limite - résidu assumé). Synchrone et refaisable : clearPagination retire tout ce
+  // qu'elle pose.
+  function renderPaginationPreview(container, wrapper, zones) {
+    const geometry = paginationGeometry(zones);
+    const offsets = computePageBreakOffsets(wrapper, geometry.pageContentHeightPx);
+    const totalPages = offsets.length + 1;
+    const wrapperChildren = Array.from(wrapper.children);
+
+    // Un rendu plus récent peut avoir déjà repeint `container` : `wrapper` ne serait alors plus attaché et insertBefore lèverait une exception.
+    if (!wrapper.isConnected) return null;
+
+    const edges = addEdgeSpacers(container, wrapper, zones, geometry, totalPages);
+    const sheet = layoutSeams({ container, wrapper, zones, geometry, offsets, totalPages, wrapperChildren, edges });
+    const layer = addBackdrop(container, wrapper, edges, sheet);
+    return { offsets, pages: sheet.pages, layer, zoom: sheet.zoom, toLayoutY: sheet.toLayoutY, sheetLeft: sheet.wrapperLeft, sheetWidth: sheet.wrapperWidth, contentLeftPx: geometry.mPx.left };
   }
 
   // `top` d'une image en calque avant que la Lecture le décale (par slot, par page), gardé à la première écriture : la mise en page refaite
@@ -650,11 +690,9 @@ const ReaderMode = (function () {
     }
     return GristAPI.withReadPass(() => renderRecord(renderId, container, htmlContent, tableId, record, headerFooterData));
   }
-  async function renderRecord(renderId, container, htmlContent, tableId, record, headerFooterData) {
-    // Un rendu plus récent a démarré : celui-ci sera écarté au remplacement final, inutile de poursuivre ses lectures et ses résolutions.
-    const stale = () => renderId !== renderGeneration;
-    if (typeof htmlContent === 'function') htmlContent = await htmlContent();
-    if (stale()) return;
+  // Le <div class="reader-content"> du document, pas encore résolu : HTML nettoyé, suggestions du suivi acceptées, liens ouverts dans un nouvel
+  // onglet, style de numérotation des titres.
+  function readerWrapperFrom(htmlContent) {
     // .reader-content : le parent direct des titres de premier niveau, celui qui porte data-heading-style (#reader-container ne peut pas jouer ce
     // rôle, ce <div> s'intercale toujours entre les deux).
     const wrapper = document.createElement('div'); wrapper.className = 'reader-content';
@@ -668,44 +706,59 @@ const ReaderMode = (function () {
     wrapper.querySelectorAll('a[href^="http"]').forEach(a => { a.target = '_blank'; a.rel = 'noopener noreferrer'; });
     const configEl = wrapper.querySelector(':scope > .heading-numbering-config');
     wrapper.dataset.headingStyle = (configEl && configEl.dataset.style) || 'none';
+    return wrapper;
+  }
+  // Résout le contenu de `wrapper` pour `record` (boucles, blocs conditionnels, bulles, images, codes QR, puces, sommaire). Rend `{ hasError }`
+  // (une bulle n'a pas pu être résolue), ou `null` dès qu'un rendu plus récent a démarré (`stale`) : le reste de ses lectures serait inutile.
+  async function resolveReaderBody(wrapper, tableId, record, stale) {
     // Rafraîchit les types de colonnes avant de résoudre les bulles : resolveBadgeNode a besoin de GristAPI.getColumnType à jour pour détecter une
     // colonne Attachments récemment ajoutée. Pas refreshSchema : il relirait chaque table du document en entier, à chaque rendu, pour une liste de
     // colonnes que la Lecture n'utilise pas.
     await GristAPI.refreshColumnTypes().catch(() => {});
-    if (stale()) return;
+    if (stale()) return null;
     // Zones répétées d'une boucle (js/loop-rules.js) déroulées avant la résolution : chaque copie porte la ligne de son tour, lue par
     // resolveBadgeNode.
     const loopCtx = LoopRules.createContext();
     await LoopRules.expandZones(wrapper, tableId, record, loopCtx);
-    if (stale()) return;
+    if (stale()) return null;
     // Blocs de texte conditionnels (js/conditional-text.js) : défaits ou retirés ici, avant les bulles - celles d'un bloc retiré n'ont rien à
     // résoudre.
     await ConditionalText.resolve(wrapper, tableId, record);
     await ConditionalValue.resolve(wrapper, tableId, record);
     await ConditionalCheckbox.resolve(wrapper, tableId, record);
-    if (stale()) return;
+    if (stale()) return null;
     const badges = wrapper.querySelectorAll(BADGE_SELECTOR); let hasError = false;
     const results = await Promise.all(Array.from(badges).map(async badge => {
       const format = parseBadgeFormat(badge);
       const { node, isError } = await resolveBadgeNode(badge, tableId, record, format, loopCtx);
       return { badge, node, isError };
     }));
-    if (stale()) return;
+    if (stale()) return null;
     for (const r of results) { if (r.isError) hasError = true; carryReaderAtom(r.badge, r.node); r.badge.replaceWith(r.node); }
     LoopRules.removeHiddenBlocks(wrapper);
     await resolveVariableImages(wrapper, tableId, record);
     await resolveQrCodes(wrapper, tableId, record);
     await resolveSmartChips(wrapper);
-    if (stale()) return;
+    if (stale()) return null;
     trimTrailingBlankBlocks(wrapper);
     keepBlankLines(wrapper);
     await GristAPI.hydrateAttachmentImages(wrapper);
     await settleImages(wrapper, IMAGE_SETTLE_MS);
-    // Variables déjà résolues (texte des titres définitif) : peut construire le sommaire maintenant, avant le swap DOM final ci-dessous.
+    // Variables déjà résolues (texte des titres définitif) : le sommaire se construit maintenant, avant que `renderRecord` remplace le contenu affiché.
     resolveTocMarkers(wrapper);
+    if (stale()) return null;
+    return { hasError };
+  }
+  async function renderRecord(renderId, container, htmlContent, tableId, record, headerFooterData) {
+    // Un rendu plus récent a démarré : celui-ci sera écarté au remplacement final, inutile de poursuivre ses lectures et ses résolutions.
+    const stale = () => renderId !== renderGeneration;
+    if (typeof htmlContent === 'function') htmlContent = await htmlContent();
     if (stale()) return;
+    const wrapper = readerWrapperFrom(htmlContent);
+    const resolved = await resolveReaderBody(wrapper, tableId, record, stale);
+    if (!resolved) return;
     container.innerHTML = '';
-    if (hasError) { const warn = document.createElement('p'); warn.className = 'error-msg'; warn.textContent = I18n.t('reader.unresolvedVariables'); container.appendChild(warn); }
+    if (resolved.hasError) { const warn = document.createElement('p'); warn.className = 'error-msg'; warn.textContent = I18n.t('reader.unresolvedVariables'); container.appendChild(warn); }
     container.appendChild(wrapper);
     const zones = container.classList.contains('a4-preview') ? await resolvePaginationZones(headerFooterData, tableId, record) : null;
     // Les résolutions ci-dessus sont asynchrones : un rendu plus récent peut avoir déjà repeint `container`, `wrapper` ne serait alors plus attaché.
