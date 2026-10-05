@@ -33,8 +33,8 @@ Première bêta publique. Elle reprend l'alpha du 14 septembre 2026 et ajoute l'
   remplacer, zoom de la page à l'écran (pastille du coin, Ajuster, Ctrl + molette), fusion et scission de
   cases dans les tableaux d'un document (Word et PDF les suivent ; au saut de page, les lignes liées par
   une case fusionnée restent ensemble).
-- **Lecture** : lecture épurée, guide quand le widget n'est lié à aucune ligne, commentaires depuis la
-  Lecture.
+- **Lecture** : lecture épurée, guide quand le widget n'est lié à aucune ligne (et, sans l'accès complet au
+  document, la même carte d'accès à la place de l'éditeur), commentaires depuis la Lecture.
 - **Exports** : Word (`.docx`, bêta), un seul PDF pour toutes les lignes, assemblage avant impression
   (feuilles A4 ou A3, traits de coupe), repli de police par caractère dans le PDF (grec, cyrillique,
   vietnamien, flèches, coches, monnaies), fenêtre de confirmation avant le téléchargement d'images
@@ -123,8 +123,8 @@ except those postponed to V1 (see the [README](README.md#roadmap-1)).
   signature block, QR code, format painter, abbreviations, find / replace, on-screen page zoom (corner
   pill, Fit, Ctrl + wheel), merging and splitting cells in document tables (Word and PDF follow; at a
   page break, rows tied by a merged cell stay together).
-- **Reading**: clean reading, a guide when the widget is not linked to any row, comments from Reading
-  mode.
+- **Reading**: clean reading, a guide when the widget is not linked to any row (and, without full access to
+  the document, the same access card in place of the editor), comments from Reading mode.
 - **Exports**: Word (`.docx`, beta), a single PDF for all rows, sheet assembly before printing (A4 or A3
   sheets, crop marks), per-character font fallback in the PDF (Greek, Cyrillic, Vietnamese, arrows,
   check marks, currencies), a confirmation window before downloading images from another site.

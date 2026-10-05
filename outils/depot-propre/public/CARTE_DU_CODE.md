@@ -142,7 +142,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | Fichier | Rôle |
 |---|---|
 | `js/reader-mode.js` | Le document résolu pour une ligne et paginé ; `preview()` sert aussi tous les exports. |
-| `js/reader-guide.js` | Le guide affiché quand aucune ligne n'est choisie. |
+| `js/reader-guide.js` | Le guide affiché quand aucune ligne n'est choisie, et la carte « Donnez l'accès complet à ce widget » que l'éditeur montre à la place du document quand Grist ne lui donne pas l'accès complet. |
 
 ### Mode grille (5 fichiers, 2 700 lignes)
 
@@ -386,7 +386,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | File | Role |
 |---|---|
 | `js/reader-mode.js` | The document resolved for a row and paginated; `preview()` also serves all the exports. |
-| `js/reader-guide.js` | The guide shown when no row is chosen. |
+| `js/reader-guide.js` | The guide shown when no row is chosen, and the "Give this widget full access" card the editor shows in place of the document when Grist does not give it full access. |
 
 ### Grid mode (5 files, 2,700 lines)
 
