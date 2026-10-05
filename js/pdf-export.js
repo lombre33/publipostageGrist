@@ -688,6 +688,14 @@ const PdfExport = (function () {
     attributeNestedPendingImages(images, before, obj, node, rootRect, nestedPending);
     return obj;
   }
+  // La case rendue en stack pdfmake : les images en attente d'une position retrouvent leur tableau parent, et la case garde la liste de ce qui reste à
+  // placer.
+  function stackCell(finalStack, nestedPending) {
+    nestedPending.forEach(p => { p.parentArray = finalStack; });
+    const result = { stack: finalStack };
+    if (nestedPending.length) result._nestedPending = nestedPending;
+    return result;
+  }
   // Une cellule multi-lignes devient un stack pdfmake ; sinon le texte reste à plat, sauf si des images ont été trouvées (pdfmake n'accepte pas
   // d'image au milieu d'un tableau de `text`, elle atterrit après le texte).
   function cellContentFrom(cell, cellWidthPt, rootRect) {
@@ -702,10 +710,7 @@ const PdfExport = (function () {
       if (!images.length) return textObj;
       const finalStack = [textObj].concat(images);
       attributeNestedPendingImages(images, 0, textObj, cell, rootRect, nestedPending);
-      nestedPending.forEach(p => { p.parentArray = finalStack; });
-      const result = { stack: finalStack };
-      if (nestedPending.length) result._nestedPending = nestedPending;
-      return result;
+      return stackCell(finalStack, nestedPending);
     }
     const cellAlign = alignment(cell);
     const cellBaseStyle = inheritedStyle(cell, { fontSize: DEFAULT_FONT_SIZE });
@@ -722,11 +727,7 @@ const PdfExport = (function () {
       const extraPt = (floatState.floatCarry.floatBottomPx - floatState.lastBottomPx) * PX_TO_PT;
       if (extraPt > 0.5 && lastFlow) addBottomMargin(lastFlow, extraPt);
     }
-    const finalStack = stack.concat(images);
-    nestedPending.forEach(p => { p.parentArray = finalStack; });
-    const result = { stack: finalStack };
-    if (nestedPending.length) result._nestedPending = nestedPending;
-    return result;
+    return stackCell(stack.concat(images), nestedPending);
   }
 
   const TABLE_BORDER_COLOR = '#777777'; // le trait fin d'un tableau, celui de départ d'une case de grille
@@ -2114,15 +2115,7 @@ const PdfExport = (function () {
     const hasAfter = besideEnd < words.length;
     const blocks = [];
     if (textAlign === 'justify') {
-      const groupIntoLines = wordsSlice => {
-        const lines = [];
-        wordsSlice.forEach(w => {
-          const last = lines[lines.length - 1];
-          if (last && Math.abs(last[0].top - w.top) < 2) last.push(w); else lines.push([w]);
-        });
-        return lines;
-      };
-      const besideLines = groupIntoLines(words.slice(0, besideEnd));
+      const besideLines = groupByTop(words.slice(0, besideEnd));
       let cursor = null;
       besideLines.forEach((line, li) => {
         const isLastLine = li === besideLines.length - 1;
