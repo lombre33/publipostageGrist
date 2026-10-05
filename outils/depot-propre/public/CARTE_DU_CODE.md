@@ -3,7 +3,7 @@
 *🇬🇧 An English version of this document is available [below](#publipostage-code-map).*
 
 Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lignes sont ceux de `wc -l` au
-4 octobre 2026 ; ils bougent, les rôles pas.
+{{DATE_FR}} ; ils bougent, les rôles pas.
 
 ## L'essentiel
 
@@ -23,7 +23,7 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
   vérifie.
 - **Les données** : les modèles et les réglages vivent dans des tables `Publipostage_*` du document Grist ;
   les préférences d'affichage (langue, thème, raccourcis…) dans le navigateur.
-- **Le volume** : 107 fichiers dans `js/` (40 600 lignes : 30 200 de code, 7 900 de commentaires, 2 500 de
+- **Le volume** : 107 fichiers dans `js/` (40 700 lignes : 30 300 de code, 7 900 de commentaires, 2 500 de
   blanc), 34 feuilles de style (3 100 lignes), une page de 760 lignes. Quatre fichiers de polices du PDF
   pèsent 2,5 Mo en quelques lignes (des données) ; `js/i18n.js` est du texte à traduire, pas de la logique.
 
@@ -154,7 +154,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/table-borders.js` | La règle des bordures, écrite une fois pour l'éditeur, la Lecture, le PDF et l'Excel. |
 | `js/xlsx-number-format.js` | Le texte qu'Excel montrerait pour un format de nombre ou de date. |
 
-### Exports (13 fichiers, 6 200 lignes)
+### Exports (13 fichiers, 6 300 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -249,7 +249,7 @@ notes de conception, qui ne sont pas publiés ici.
 *🇫🇷 Une version française de ce document est disponible [en haut de cette page](#carte-du-code-de-publipostage).*
 
 For anyone reading the code: what is where, and where to start. Line counts are those of `wc -l` as of
-October 4, 2026; they move, the roles don't.
+{{DATE_EN}}; they move, the roles don't.
 
 ## The essentials
 
@@ -268,7 +268,7 @@ October 4, 2026; they move, the roles don't.
   **Each export** loads its library on first use, with an integrity hash (SRI) that the browser checks.
 - **The data**: templates and settings live in `Publipostage_*` tables of the Grist document; display
   preferences (language, theme, shortcuts…) in the browser.
-- **The size**: 107 files in `js/` (40,600 lines: 30,200 of code, 7,900 of comments, 2,500 blank), 34
+- **The size**: 107 files in `js/` (40,700 lines: 30,300 of code, 7,900 of comments, 2,500 blank), 34
   stylesheets (3,100 lines), a 760-line page. Four PDF font files weigh 2.5 MB in a few lines (data);
   `js/i18n.js` is text to translate, not logic.
 
@@ -398,7 +398,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/table-borders.js` | The border rule, written once for the editor, Reading mode, the PDF and the Excel file. |
 | `js/xlsx-number-format.js` | The text Excel would show for a number or date format. |
 
-### Exports (13 files, 6,200 lines)
+### Exports (13 files, 6,300 lines)
 
 | File | Role |
 |---|---|
