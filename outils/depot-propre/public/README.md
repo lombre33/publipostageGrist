@@ -57,12 +57,15 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 - Listes à puces, numérotées et de tâches à cocher
 - Tableaux (fusion et scission de cases, fond de case, légende), zones 2 colonnes
 - Images, y compris flottantes (habillage de texte, calque devant ou derrière, opacité, légende),
-  collées, ajoutées par adresse ou prises dans une colonne Pièces jointes de Grist
+  collées, ajoutées par adresse ou prises dans une colonne Pièces jointes de Grist ; une image
+  hébergée sur un autre site n'apparaît qu'après un clic sur « Afficher »
 - En-têtes et pieds de page (première page différente, numéro de page), notes de bas de page, sommaire
   généré, sauts de page, filigrane
 - Citation, bloc de code, encadré (Note, Attention, Important), bloc de signature, QR code
 - Rechercher / remplacer, abréviations qui se développent à la frappe
 - Aperçu « format A4 » fidèle, WYSIWYG (ce que vous voyez est ce que vous obtenez)
+- Zoom de la page à l'écran, en Édition comme en Lecture (pastille du coin, Ajuster, Ctrl + molette) : le
+  PDF, le Word et l'impression gardent les dimensions réelles
 
 **Variables Grist intelligentes**
 - Autocomplétion `#Table.Colonne` sur toutes les tables du document, avec une clé de correspondance à
@@ -82,7 +85,8 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 - Commentaires sur le texte sélectionné, avec réponses et résolution, partagés entre les personnes qui
   ouvrent le document
 - Suivi des modifications (bêta) : les changements sont proposés dans le texte, puis acceptés ou
-  refusés un par un ou tous ensemble
+  refusés un par un ou tous ensemble ; la barre Accepter / Refuser dit qui a proposé la modification
+  (son nom, à défaut son adresse e-mail)
 - Droits par personne (lecture seule, export, commentaires), lus dans une table du document
 - Rangement personnel des modèles : épingles et dossiers que les autres personnes ne voient pas
 
@@ -117,8 +121,10 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 3. Grist demande une autorisation d'accès au chargement du widget (voir
    [Sécurité et permissions](#sécurité-et-permissions) plus bas) : elle est nécessaire au bon
    fonctionnement du widget.
-4. Au premier lancement, le widget crée ses tables internes `Publipostage_*` dans le document : il faut
-   donc avoir le droit de le modifier. Leurs pages sont rangées sous celle des modèles, repliée.
+4. Au premier lancement dans un document, le widget demande s'il peut y créer ses tables internes
+   `Publipostage_*` (« Créer les tables du widget dans ce document ? ») : il faut donc avoir le droit de
+   le modifier. Refusé, rien n'est créé ni enregistré, et la question revient à l'action suivante. Leurs
+   pages sont rangées sous celle des modèles, repliée.
 5. Après une mise à jour du widget, rechargez la page du document Grist, sans quoi le navigateur peut
    garder l'ancienne version.
 
@@ -131,7 +137,7 @@ Passez en mode lecture pour voir le document rempli avec la ligne sélectionnée
 ## Configuration
 
 - **Créer ou éditer un modèle** : bouton "Nouveau modèle", ou sélecteur de modèle en haut de
-  l'éditeur. Chaque modèle est stocké dans une table Grist interne créée automatiquement (préfixée
+  l'éditeur. Chaque modèle est stocké dans une table Grist interne, créée avec votre accord (préfixée
   `Publipostage_`), qui n'apparaît pas dans les sélecteurs de table habituels.
 - **Variables d'une autre table** : le panneau `#` propose un bouton dédié (« Tables liées ») pour
   configurer une fois pour toutes la correspondance entre deux tables (la « clé de correspondance »),
@@ -164,7 +170,11 @@ Le widget écrit dans sept tables du document, toutes préfixées `Publipostage_
 (les modèles), `Publipostage_Commentaires`, `Publipostage_PreferencesModeles` (épingles et dossiers de
 chaque personne), `Publipostage_Abreviations`, `Publipostage_FormatsPage`, `Publipostage_LiensTables`
 (les clés de correspondance entre tables) et `Publipostage_UserProbe` (qui sert à lire l'e-mail de la
-personne connectée).
+personne connectée). Il ne les crée qu'avec l'accord de la personne : avant la première création, une
+fenêtre demande « Créer les tables du widget dans ce document ? » (« Créer les tables » ou « Ne pas
+créer »). Un oui vaut jusqu'à la fermeture de la page ; un refus n'écrit rien, n'est jamais gardé, et la
+question revient à l'action suivante de la personne. Un document qui porte déjà une table du widget ne
+pose aucune question.
 
 Le widget charge des bibliothèques tierces à l'exécution, depuis `esm.sh` (moteur d'édition
 TipTap/ProseMirror), `cdnjs.cloudflare.com` et `cdn.jsdelivr.net` (exports PDF, Word, Excel et QR
@@ -180,8 +190,13 @@ d'événements en ligne, les adresses `javascript:`, les cadres, les objets et l
 refusés. `'unsafe-eval'` y reste faute de mieux : le script d'API que sert Grist en a besoin. Le
 HTML d'un modèle relu depuis le document, qu'une autre personne a pu modifier, est assaini avant
 d'être affiché, et les formules de calcul ne passent jamais par `eval`. Les images et les connexions ne
-sont pas limitées par la CSP : le widget lit des images et des pièces jointes de n'importe quel site, et
-demande confirmation avant un export quand des images viennent d'un autre site que le widget ou Grist.
+sont pas limitées par la CSP : le widget lit des images et des pièces jointes de n'importe quel site.
+Mais une image hébergée sur un autre site que le widget ou Grist ne se charge qu'après un clic sur
+« Afficher » (dans l'éditeur, la Lecture, les en-têtes et pieds de page et la galerie), car la charger
+apprend à ce site l'adresse IP de la personne et l'heure d'ouverture du document : le clic affiche toutes
+les images de ce site jusqu'à la fermeture de la page, et rien n'est retenu, ni dans le navigateur ni dans
+le document. Avant un export qui téléchargerait de telles images, une fenêtre liste les sites et demande
+confirmation.
 
 Aucune donnée n'est stockée hors de Grist. Les seules informations conservées dans le navigateur
 (`localStorage`) sont des préférences d'interface (langue, thème, touches, raccourcis et vue de leur
@@ -223,6 +238,12 @@ bibliothèques et polices sont dans [NOTICE](NOTICE).
   `cdnjs.cloudflare.com` et `cdn.jsdelivr.net` le sont au premier export. Un pare-feu qui bloque l'un
   d'eux empêche le widget de démarrer ou l'export de se faire : il faut les autoriser. Au démarrage, le
   widget le dit dans une fenêtre qui liste ces adresses.
+- **Audit externe** : un audit du code (outil gwaudit, 4 octobre 2026) conclut « NON CONFORME » et compte
+  69 points bloquants. Tous tiennent à un seul choix : l'éditeur (TipTap et ProseMirror) se charge depuis
+  `esm.sh`, un site tiers, sans intégrité SRI (ce qu'un import map ne permet pas ; voir
+  [Dépendances](#dépendances)). Ce choix est gardé pour la bêta, donc le verdict reste « NON CONFORME », et
+  l'outil en tire qu'un hébergement sur une instance officielle (DINUM, ANCT) est exclu en l'état. Le
+  widget reste installable ailleurs : à chaque personne de juger si ce risque convient à son usage.
 - **Navigateurs** : les tests automatisés tournent sur Chromium (Chrome, Edge), avec un simulateur de
   Grist ; Firefox et Safari ne sont pas testés automatiquement.
 - **Enregistrement** : deux personnes qui modifient le même modèle en même temps ne sont pas fusionnées.
@@ -361,12 +382,15 @@ GitHub Pages, with no backend and no build step.
 - Bullet lists, numbered lists and checkable task lists
 - Tables (merging and splitting cells, cell background, caption), two-column zones
 - Images, including floating ones (text wrap, layered in front of/behind, opacity, caption), pasted,
-  added by address or taken from a Grist Attachments column
+  added by address or taken from a Grist Attachments column; an image hosted on another site only
+  appears after a click on "Show"
 - Headers and footers (different first page, page number), footnotes, generated table of contents,
   page breaks, watermark
 - Quote, code block, callout (Note, Warning, Important), signature block, QR code
 - Find / replace, abbreviations that expand as you type
 - Faithful "A4 format" preview, WYSIWYG (what you see is what you get)
+- On-screen page zoom, in Edit and Reading modes (corner pill, Fit, Ctrl + wheel): the PDF, the Word file
+  and printing keep the real dimensions
 
 **Smart Grist variables**
 - `#Table.Column` autocomplete across every table in the document, with a matching key to set up once
@@ -385,7 +409,8 @@ GitHub Pages, with no backend and no build step.
 - Comments on the selected text, with replies and resolution, shared between the people who open the
   document
 - Track changes (beta): changes are proposed in the text, then accepted or rejected one by one or all
-  together
+  together; the Accept / Reject bar says who proposed the change (their name, or their e-mail address
+  when there is no name)
 - Per-person rights (read-only, export, comments), read from a table of the document
 - Personal organization of templates: pins and folders that other people don't see
 
@@ -420,8 +445,10 @@ GitHub Pages, with no backend and no build step.
 3. Grist will ask for an access permission when the widget loads (see
    [Security and permissions](#security-and-permissions) below): granting it is required for the widget
    to work.
-4. On first launch, the widget creates its internal `Publipostage_*` tables in the document, so you
-   need the right to edit it. Their pages are filed under the templates page, collapsed.
+4. On first launch in a document, the widget asks whether it may create its internal `Publipostage_*`
+   tables there ("Create the widget’s tables in this document?"), so you need the right to edit it. If
+   you decline, nothing is created or saved, and the question comes back at your next action. Their pages
+   are filed under the templates page, collapsed.
 5. After a widget update, reload the Grist document's page, otherwise the browser may keep the old
    version.
 
@@ -434,7 +461,7 @@ see the document filled with the selected row, then export it.
 ## Configuration
 
 - **Create or edit a template**: the "New template" button, or the template picker at the top of the
-  editor. Each template is stored in an internal Grist table created automatically (prefixed
+  editor. Each template is stored in an internal Grist table, created with your consent (prefixed
   `Publipostage_`), which doesn't show up in the usual table pickers.
 - **Variables from another table**: the `#` panel has a dedicated button ("Linked tables") to set up the
   relationship between two tables once, for good (the "matching key"), valid for every template in the
@@ -463,7 +490,11 @@ the Grist document level, not in the widget's configuration. The widget's "per-p
 The widget writes to seven tables of the document, all prefixed `Publipostage_`: `Publipostage_Modeles`
 (the templates), `Publipostage_Commentaires`, `Publipostage_PreferencesModeles` (each person's pins and
 folders), `Publipostage_Abreviations`, `Publipostage_FormatsPage`, `Publipostage_LiensTables` (the
-matching keys between tables) and `Publipostage_UserProbe` (used to read the connected user's e-mail).
+matching keys between tables) and `Publipostage_UserProbe` (used to read the connected user's e-mail). It
+only creates them with the person's consent: before the first creation, a window asks "Create the
+widget’s tables in this document?" ("Create the tables" or "Don’t create"). A yes holds until the page
+is closed; a refusal writes nothing, is never remembered, and the question comes back at the person's
+next action. A document that already has one of the widget's tables is never asked.
 
 The widget loads third-party libraries at runtime, from `esm.sh` (the TipTap/ProseMirror editing
 engine), `cdnjs.cloudflare.com` and `cdn.jsdelivr.net` (PDF, Word, Excel and QR code, loaded on first
@@ -478,8 +509,12 @@ above and three inline scripts cited by their hash are allowed to run. Inline ev
 better option: the API script that Grist serves needs it. The HTML of a template read back from the
 document, which another person may have edited, is sanitized before being displayed, and calculation
 formulas never go through `eval`. Images and connections are not limited by the CSP: the widget reads
-images and attachments from any site, and asks for confirmation before an export when images come from
-a site other than the widget's or Grist's.
+images and attachments from any site. Still, an image hosted on a site other than the widget's or
+Grist's only loads after a click on "Show" (in the editor, Reading mode, headers and footers and the
+gallery), because loading it tells that site the person's IP address and when the document was opened:
+the click shows every image from that site until the page is closed, and nothing is remembered, neither
+in the browser nor in the document. Before an export that would download such images, a window lists the
+sites and asks for confirmation.
 
 No data is ever stored outside of Grist. The only things kept in the browser (`localStorage`) are
 interface preferences (language, theme, keys, shortcuts and the view of their panel, autosave state, last
@@ -520,6 +555,13 @@ libraries and fonts are in [NOTICE](NOTICE).
   `cdnjs.cloudflare.com` and `cdn.jsdelivr.net` are needed at the first export. A firewall that blocks
   one of them prevents the widget from starting or the export from working: they must be allowed. At
   startup, the widget says so in a window that lists these addresses.
+- **External audit**: an audit of the code (gwaudit tool, October 4, 2026) concludes "NON CONFORME"
+  (non-compliant) and counts 69 blocking points. They all come down to one choice: the editor (TipTap and
+  ProseMirror) is loaded from `esm.sh`, a third-party site, without an SRI integrity hash (which an import
+  map doesn't allow; see [Dependencies](#dependencies)). That choice is kept for the beta, so the verdict
+  stays "NON CONFORME", and the tool concludes that hosting the widget on an official instance (DINUM,
+  ANCT) is ruled out as it stands. The widget remains installable elsewhere: it is up to each person to
+  judge whether this risk suits their use.
 - **Browsers**: automated tests run on Chromium (Chrome, Edge), with a Grist simulator; Firefox and
   Safari are not tested automatically.
 - **Saving**: two people editing the same template at the same time are not merged. Autosave detects

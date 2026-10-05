@@ -19,9 +19,10 @@ Première bêta publique. Elle reprend l'alpha du 14 septembre 2026 et ajoute l'
   choisies par des règles sur la ligne).
 - **Enregistrement et collaboration** : enregistrement automatique avec détection de conflit, menu
   « Enregistrer » et « Enregistrer sous… », nom de modèle déjà pris devenu « nom (2) », commentaires
-  avec réponses et résolution, suivi des modifications (bêta), droits par personne (lecture seule,
-  export, commentaires), rangement personnel des modèles (dossiers, épingles), modèle par défaut d'une
-  vue et choix du modèle selon la ligne.
+  avec réponses et résolution, suivi des modifications (bêta ; la barre Accepter / Refuser dit qui a
+  proposé la modification), droits par personne (lecture seule, export, commentaires), rangement
+  personnel des modèles (dossiers, épingles), modèle par défaut d'une vue et choix du modèle selon la
+  ligne.
 - **Variables et logique** : conditions d'affichage (variable, bloc de texte, valeur dans la phrase, case
   cochée), boucles sur les lignes liées, « Autres attributs », variables d'une table liée sans règle
   préalable, calculs (SOMME, MOYENNE, MIN, MAX, NB, ARRONDI), puce de l'heure, mise en forme des nombres,
@@ -30,8 +31,9 @@ Première bêta publique. Elle reprend l'alpha du 14 septembre 2026 et ajoute l'
   par modèle, titres numérotés, sommaire, notes de bas de page, listes numérotées et de tâches, première
   page différente, filigrane, images en calque (déplacées aux flèches du clavier, opacité, légende),
   citation, bloc de code, encadré, bloc de signature, QR code, pinceau de mise en forme, abréviations,
-  rechercher / remplacer, fusion et scission de cases dans les tableaux d'un document (Word et PDF les
-  suivent ; au saut de page, les lignes liées par une case fusionnée restent ensemble).
+  rechercher / remplacer, zoom de la page à l'écran (pastille du coin, Ajuster, Ctrl + molette), fusion
+  et scission de cases dans les tableaux d'un document (Word et PDF les suivent ; au saut de page, les
+  lignes liées par une case fusionnée restent ensemble).
 - **Lecture** : lecture épurée, guide quand le widget n'est lié à aucune ligne, commentaires depuis la
   Lecture.
 - **Exports** : Word (`.docx`, bêta), un seul PDF pour toutes les lignes, assemblage avant impression
@@ -55,8 +57,8 @@ Première bêta publique. Elle reprend l'alpha du 14 septembre 2026 et ajoute l'
 
 ### Modifié
 
-- Les bibliothèques d'export (PDF, ZIP, Excel, Word, QR code) ne se chargent qu'au premier usage : le
-  widget s'ouvre plus vite.
+- Les bibliothèques d'export (PDF, ZIP, Excel, Word, QR code) et les scripts d'export du widget lui-même
+  ne se chargent qu'au premier usage : le widget s'ouvre plus vite.
 - La console du navigateur ne reçoit plus que les avertissements et les erreurs : le widget n'y raconte
   plus son démarrage.
 - L'interface prend la police du système : la police Manrope n'est plus téléchargée depuis Google Fonts,
@@ -76,6 +78,16 @@ Première bêta publique. Elle reprend l'alpha du 14 septembre 2026 et ajoute l'
   scripts en ligne cités par leur empreinte.
 - Le HTML d'un modèle relu depuis le document est assaini avant d'être affiché.
 - Bibliothèques d'export en versions figées, avec intégrité SRI.
+- Une image hébergée sur un autre site n'est chargée qu'après un clic sur « Afficher » (éditeur, Lecture,
+  en-têtes et pieds de page, galerie) : ouvrir un document ne révèle plus à ce site l'adresse IP ni
+  l'heure d'ouverture. Rien n'est retenu d'une séance à l'autre.
+- Le widget demande l'accord de la personne avant de créer ses tables dans le document ; un refus
+  n'écrit rien.
+- Suites d'un audit externe (4 octobre 2026) : l'en-tête et le pied de page sont filtrés dès la lecture,
+  la galerie construit ses cartes avec du texte et non du HTML, et le chargeur de scripts des exports
+  refuse toute adresse hors de cdnjs, de jsDelivr (avec empreinte) et du site du widget. L'éditeur reste
+  chargé depuis `esm.sh` : l'audit reste « NON CONFORME » (voir les
+  [limites connues](README.md#limites-connues)).
 
 ### Corrigé
 
@@ -99,9 +111,10 @@ except those postponed to V1 (see the [README](README.md#roadmap-1)).
   (spreadsheet, paste from Excel, Google Sheets or LibreOffice Calc, `.xlsx` workbook import, cell merge
   and split, Excel export) and Macro template (a cover page and appendices chosen by rules on the row).
 - **Saving and collaboration**: autosave with conflict detection, "Save" and "Save as…" menu, a taken
-  template name becomes "name (2)", comments with replies and resolution, track changes (beta),
-  per-person rights (read-only, export, comments), personal organization of templates (folders, pins),
-  a view's default template and template choice by row.
+  template name becomes "name (2)", comments with replies and resolution, track changes (beta; the
+  Accept / Reject bar says who proposed the change), per-person rights (read-only, export, comments),
+  personal organization of templates (folders, pins), a view's default template and template choice by
+  row.
 - **Variables and logic**: display conditions (variable, text block, value in a sentence, checked box),
   loops over linked rows, "Other attributes", variables from a linked table without a prior rule,
   calculations (SUM, AVERAGE, MIN, MAX, COUNT, ROUND), time chip, formatting of numbers, dates and
@@ -109,9 +122,9 @@ except those postponed to V1 (see the [README](README.md#roadmap-1)).
 - **Layout**: A3 to A6 page formats in portrait or landscape, free and named formats, per-template
   margins, numbered headings, table of contents, footnotes, numbered and task lists, different first
   page, watermark, layered images (moved with the arrow keys, opacity, caption), quote, code block,
-  callout, signature block, QR code, format painter, abbreviations, find / replace, merging and splitting
-  cells in document tables (Word and PDF follow; at a page break, rows tied by a merged cell stay
-  together).
+  callout, signature block, QR code, format painter, abbreviations, find / replace, on-screen page zoom
+  (corner pill, Fit, Ctrl + wheel), merging and splitting cells in document tables (Word and PDF follow;
+  at a page break, rows tied by a merged cell stay together).
 - **Reading**: clean reading, a guide when the widget is not linked to any row, comments from Reading
   mode.
 - **Exports**: Word (`.docx`, beta), a single PDF for all rows, sheet assembly before printing (A4 or A3
@@ -133,7 +146,8 @@ except those postponed to V1 (see the [README](README.md#roadmap-1)).
 
 ### Changed
 
-- The export libraries (PDF, ZIP, Excel, Word, QR code) only load on first use: the widget opens faster.
+- The export libraries (PDF, ZIP, Excel, Word, QR code) and the widget's own export scripts only load on
+  first use: the widget opens faster.
 - The browser console now only receives warnings and errors: the widget no longer narrates its startup
   there.
 - The interface uses the system font: the Manrope font is no longer downloaded from Google Fonts, and no
@@ -153,6 +167,16 @@ except those postponed to V1 (see the [README](README.md#roadmap-1)).
   scripts cited by their hash.
 - The HTML of a template read back from the document is sanitized before being displayed.
 - Export libraries at pinned versions, with SRI integrity.
+- An image hosted on another site is only loaded after a click on "Show" (editor, Reading mode, headers
+  and footers, gallery): opening a document no longer tells that site the IP address or the time of
+  opening. Nothing is remembered from one session to the next.
+- The widget asks for the person's consent before creating its tables in the document; a refusal writes
+  nothing.
+- Follow-ups to an external audit (October 4, 2026): headers and footers are filtered as soon as they
+  are read, the gallery builds its cards from text rather than HTML, and the export script loader refuses
+  any address outside cdnjs, jsDelivr (with an integrity hash) and the widget's own site. The editor is
+  still loaded from `esm.sh`: the audit stays "NON CONFORME" (see the
+  [known limitations](README.md#known-limitations)).
 
 ### Fixed
 
