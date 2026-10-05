@@ -72,7 +72,7 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
   configurer une fois pour les tables liées
 - Mise en forme sur mesure des nombres (écriture française ou américaine, décimales, devise, en toutes
   lettres), des dates (formats prédéfinis, en toutes lettres) et des Oui/Non (texte ou case cochée)
-- Chips intelligents (date du jour, heure, e-mail de la personne connectée) et calculs (SOMME,
+- Puces intelligentes (date du jour, heure, e-mail de la personne connectée) et calculs (SOMME,
   MOYENNE, MIN, MAX, NB, ARRONDI)
 - Conditions d'affichage (variable, bloc de texte, valeur dans la phrase, case cochée) et boucles sur
   les lignes liées (ligne de tableau, élément de liste, paragraphe), avec filtre, tri et séparateurs
