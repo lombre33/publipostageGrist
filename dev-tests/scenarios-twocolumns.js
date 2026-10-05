@@ -285,6 +285,42 @@
   });
 
   cases.push({
+    id: 'twocol_view_grip_click_leaves_a_millimetre_width_alone',
+    description: 'En mode mm, un clic sur la poignée sans la bouger ne change rien (60 mm ne deviennent pas 114 mm), même hors des bornes 20-80 % ; un clic après un glisser garde la largeur du glisser',
+    run: async (h) => {
+      // Un clic sans mouvement : --layout-left du cadre porte une longueur (« 60mm »), que la poignée lisait comme « 60 % » avant d'écrire 114 mm.
+      const seen = {};
+      const expected = {};
+      for (const mm of [60, 30, 12, 170]) {
+        const wrap = await zoneSetup(h, '--layout-left: ' + mm + 'mm; --layout-left-mm: ' + mm + 'mm');
+        const html = Editor.getHTML();
+        const start = zoneAttrs();
+        const press = gripDown(wrap);
+        pointer('mouseup', press.rect, 0.5);
+        await h.sleep(100);
+        const a = zoneAttrs();
+        seen['mm' + mm] = [a.layoutLeft, a.layoutLeftMm, liveLeft(wrap), Editor.getHTML() === html].join(' ');
+        expected['mm' + mm] = [start.layoutLeft, mm, mm + 'mm', true].join(' ');
+      }
+      // Un glisser puis un clic : l'appui suivant ne garde rien du mouvement du premier.
+      const wrap = await zoneSetup(h, IN_MM);
+      const down = gripDown(wrap);
+      pointer('mousemove', down.rect, 0.3);
+      pointer('mouseup', down.rect, 0.3);
+      await h.sleep(100);
+      const dragged = zoneAttrs();
+      const draggedLive = liveLeft(wrap);
+      const press = gripDown(wrap);
+      pointer('mouseup', press.rect, 0.5);
+      await h.sleep(100);
+      const clicked = zoneAttrs();
+      seen.afterDrag = [dragged.layoutLeftMm !== 60, clicked.layoutLeft === dragged.layoutLeft, clicked.layoutLeftMm === dragged.layoutLeftMm, liveLeft(wrap) === draggedLive].join(' ');
+      expected.afterDrag = 'true true true true';
+      return { pass: same(seen, expected), notes: JSON.stringify({ seen, expected, dragged, clicked }) };
+    },
+  });
+
+  cases.push({
     id: 'twocol_view_update_waits_for_the_drag',
     description: 'Une mise à jour du nœud pendant un glisser ne touche pas la largeur vivante ; au repos elle s\'applique tout de suite, en % comme en mm',
     run: async (h) => {

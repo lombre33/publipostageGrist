@@ -614,11 +614,14 @@ const EditorNodes = (function () {
     function twoColumnsGripDrag(wrap, grip, nodeEditor, getPos) {
       // Le glisser de la poignée : le pourcentage suit la souris sur le wrapper, puis s'écrit dans le nœud au relâchement.
       let dragging = false;
+      // Vrai dès que la souris a bougé depuis l'appui : alors seulement --layout-left du wrapper porte un pourcentage lu sur la souris.
+      let moved = false;
       function onMove(event) {
         const rect = wrap.getBoundingClientRect();
         if (!rect.width) return;
         const left = ((event.clientX - rect.left) / rect.width) * 100;
         wrap.style.setProperty('--layout-left', Math.max(20, Math.min(80, left)) + '%');
+        moved = true;
       }
       function onUp() {
         dragging = false;
@@ -626,6 +629,9 @@ const EditorNodes = (function () {
         const finalLeftPercent = Math.max(20, Math.min(80, parseFloat(wrap.style.getPropertyValue('--layout-left')) || 50));
         const live = liveNode(nodeEditor, getPos);
         if (!live) return;
+        // Un clic sans mouvement laisse une zone en mm telle quelle : --layout-left y porte une longueur (« 60mm ») que parseFloat lirait comme
+        // « 60 % » (60 mm deviendraient 114 mm).
+        if (!moved && Number.isFinite(live.node.attrs.layoutLeftMm)) return;
         const newAttrs = Object.assign({}, live.node.attrs, { layoutLeft: Math.round(finalLeftPercent) });
         // Reste en mode mm après un glisser (ne repasse pas silencieusement en mode pourcentage) : reconvertit la position finale en mm.
         if (Number.isFinite(live.node.attrs.layoutLeftMm)) {
@@ -636,6 +642,7 @@ const EditorNodes = (function () {
       grip.addEventListener('mousedown', event => {
         event.preventDefault(); event.stopPropagation();
         dragging = true;
+        moved = false;
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp, { once: true });
       });
