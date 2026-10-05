@@ -108,7 +108,9 @@
 #reader-container .reader-content pre { margin: 4px 0; padding: 8px 10px; background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 4px; color: #1b2430; font-family: 'Cousine', 'Courier New', Courier, monospace; font-size: 9.5pt; line-height: 1.42; white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 4; }
 #reader-container .reader-content pre code { font: inherit; color: inherit; background: none; padding: 0; white-space: inherit; }
 #reader-container table { border-collapse: collapse; table-layout: fixed; width: 100%; margin: 6px 0; }
-#reader-container td, #reader-container th { border: 1px solid #b8c0c9; padding: 4px 6px; position: relative; vertical-align: top; text-align: left; font-weight: normal; }
+/* `overflow-wrap: break-word` : un mot plus large que sa case se coupe dans la case, comme dans l'éditeur (ProseMirror l'impose à `.tiptap`, jamais présent
+   dans le HTML résolu de la Lecture) et dans le PDF ; sans lui il restait sur une ligne et passait sur la case voisine. */
+#reader-container td, #reader-container th { border: 1px solid #b8c0c9; padding: 4px 6px; position: relative; vertical-align: top; text-align: left; font-weight: normal; overflow-wrap: break-word; }
 /* Zone 2 colonnes en Lecture : les règles génériques .two-columns-zone et .two-columns-column de css/style.css (bordure pleine sur chaque colonne,
    gap 18 px au lieu de 16, padding de colonne 6 px au lieu de 4) feraient couper le texte ailleurs qu'en édition. */
 /* `border: 0` plutôt que la bordure transparente de css/style.css : sous `box-sizing: border-box`, 1 px de bordure de chaque côté retire 2 px à la

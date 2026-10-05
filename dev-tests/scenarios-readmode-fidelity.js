@@ -117,6 +117,76 @@
     },
   });
 
+  // Un mot plus large que sa case de tableau (une adresse, un identifiant, un long nom) : l'éditeur le coupe dans la case (ProseMirror pose `overflow-wrap: break-word`
+  // à `.tiptap`) et le PDF aussi (pdfmake) ; la Lecture le laissait sur une ligne, qui passait sur la case voisine (choix « Couper » du 05/10, carte « Couper dans la
+  // Lecture un mot plus large que sa case de tableau ? »). Les mots n'ont ni tiret ni ponctuation : le contenteditable ne coupe qu'après une espace (`line-break`).
+  const longWordTable = (cellPx, text) => '<table style="width: ' + (cellPx + 200) + 'px;"><colgroup><col style="width: ' + cellPx + 'px;"><col style="width: 200px;"></colgroup><tbody><tr>'
+    + '<td colspan="1" rowspan="1" colwidth="' + cellPx + '"><p>' + text + '</p></td><td colspan="1" rowspan="1" colwidth="200"><p>court</p></td></tr></tbody></table>';
+  // Ce que la première case d'un tableau montre de son paragraphe : le nombre de lignes, le bord droit du texte, celui de la place utile de la case, ce qui dépasse de sa boîte.
+  function firstCellLayout(root) {
+    const td = root.querySelector('td');
+    const range = document.createRange();
+    range.selectNodeContents(td.querySelector('p'));
+    const rects = Array.from(range.getClientRects()).filter(r => r.width > 0);
+    const tops = [];
+    rects.forEach(r => { if (!tops.some(t => Math.abs(t - r.top) < 2)) tops.push(r.top); });
+    const style = getComputedStyle(td);
+    const round = v => Math.round(v * 10) / 10;
+    return {
+      lines: tops.length,
+      textRight: round(Math.max(...rects.map(r => r.right))),
+      roomRight: round(td.getBoundingClientRect().right - (parseFloat(style.paddingRight) || 0) - (parseFloat(style.borderRightWidth) || 0)),
+      boxOverflow: td.scrollWidth - td.clientWidth,
+    };
+  }
+  async function renderBoth(h, html) {
+    await h.resetEditor();
+    Editor.setHTML(html);
+    h.setA4Preview(true);
+    await h.sleep(150);
+    await h.renderReaderMode(html, null);
+    await h.sleep(150);
+    return { editor: firstCellLayout(h.tiptap()), reader: firstCellLayout(document.querySelector('.reader-content')) };
+  }
+
+  cases.push({
+    id: 'readmode_table_long_word_breaks_in_its_cell_like_the_editor',
+    description: 'Un mot plus large que sa case de tableau se coupe dans la case en Lecture comme dans l\'éditeur (même nombre de lignes) : rien ne passe sur la case voisine',
+    run: async (h) => {
+      const failures = [];
+      const seen = [];
+      const variants = [
+        { name: 'un mot seul', cellPx: 60, text: 'Anticonstitutionnellement' },
+        { name: 'des mots avant et après', cellPx: 90, text: 'Référence Anticonstitutionnellement 2027' },
+        { name: 'deux mots trop larges', cellPx: 70, text: 'Anticonstitutionnellement Électroencéphalographiste' },
+      ];
+      for (const { name, cellPx, text } of variants) {
+        const { editor, reader } = await renderBoth(h, longWordTable(cellPx, text));
+        seen.push({ name, editor, reader });
+        if (editor.lines < 2) failures.push(name + ' : l\'éditeur ne coupe pas (' + editor.lines + ' ligne), le cas ne prouve rien');
+        else if (reader.lines !== editor.lines) failures.push(name + ' : ' + reader.lines + ' ligne(s) en Lecture, ' + editor.lines + ' dans l\'éditeur');
+        if (reader.textRight > reader.roomRight + 1) failures.push(name + ' : le texte dépasse la case de ' + (reader.textRight - reader.roomRight).toFixed(1) + ' px en Lecture');
+        if (reader.boxOverflow > 1) failures.push(name + ' : la case déborde de ' + reader.boxOverflow + ' px en Lecture');
+      }
+      return { pass: !failures.length, notes: failures.length ? failures.join(' ; ') : JSON.stringify(seen) };
+    },
+  });
+
+  // Garde-fou : la règle ne touche pas aux retours à la ligne ordinaires (entre les mots) d'une case étroite.
+  cases.push({
+    id: 'readmode_table_cell_text_wraps_at_spaces_like_the_editor',
+    description: 'Un texte qui se coupe entre ses mots dans une case étroite a le même nombre de lignes en Lecture et dans l\'éditeur',
+    run: async (h) => {
+      const failures = [];
+      for (const cellPx of [90, 110, 140]) {
+        const { editor, reader } = await renderBoth(h, longWordTable(cellPx, 'Total général des dépenses prévues pour la période'));
+        if (editor.lines < 2) failures.push(cellPx + ' px : l\'éditeur ne coupe pas, le cas ne prouve rien');
+        else if (reader.lines !== editor.lines) failures.push(cellPx + ' px : ' + reader.lines + ' ligne(s) en Lecture, ' + editor.lines + ' dans l\'éditeur');
+      }
+      return { pass: !failures.length, notes: failures.join(' ; ') };
+    },
+  });
+
   cases.push({
     id: 'readmode_twocolumns_ratio_match',
     description: 'Le ratio de largeur d\'une zone 2-colonnes (34/66) est identique en éditeur et en mode Lecture',

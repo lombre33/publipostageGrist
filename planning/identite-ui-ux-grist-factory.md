@@ -926,6 +926,9 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
 - Image plus large que sa place (carte d'Antoine du 01/10, « Ramener à la page les images trop larges dans le PDF et le Word ? » : « logique de WYSIWYG, si ça dépend en éditeur ça dépasse partout sinon nulle
   part ») : l'éditeur est la référence, la Lecture, le PDF et le Word montrent ce qu'il montre. Une image dans le texte plus large que la zone de texte, la case de tableau ou la colonne qui la porte y est
   ramenée partout, proportions gardées, et suit le format de page et les marges ; une image qui tient garde sa taille réglée. Une image en calque garde sa taille réglée (son placement est une autre règle).
+- Mot plus large que sa case de tableau (carte d'Antoine du 05/10, « Couper dans la Lecture un mot plus large que sa case de tableau ? » : « Couper ») : l'éditeur est la référence, il coupe le mot
+  dans la case, au milieu du mot, sans rien laisser passer sur la case voisine ; le PDF fait de même et la Lecture s'y est alignée (`overflow-wrap: break-word` sur ses cases). Un mot qui tient, ou un texte qui
+  se coupe entre ses mots, ne change pas. Le Word n'a pas été vérifié.
 - Fin de document (demande d'Antoine du 01/10, « s'il n'y a pas de contenu, peu importe les marges, on ne crée pas de nouvelle page ») : une dernière ligne vide, un saut de
   page sans rien derrière et les lignes vides au bas des colonnes d'une dernière zone à deux colonnes ne s'impriment pas et ne créent jamais de page, en Lecture, en PDF et en
   Word, même quand le texte arrive pile à la marge du bas. Les lignes vides du milieu gardent leur hauteur. L'éditeur garde ses lignes vides (il faut pouvoir écrire à la suite), mais celles de la fin

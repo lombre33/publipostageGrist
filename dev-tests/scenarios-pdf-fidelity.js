@@ -264,6 +264,31 @@
     },
   });
 
+  // Un mot plus large que sa case (une adresse, un identifiant) : l'éditeur le coupe dans la case (contenteditable : `overflow-wrap: break-word`) et le PDF aussi
+  // (pdfmake) ; seuls l'hôte de mesure de l'export et la Lecture (non éditables, `overflow-wrap: normal`) le laissaient sur une ligne. Garde-fou : le PDF a toujours coupé
+  // (la Lecture : readmode_table_long_word_breaks_in_its_cell_like_the_editor).
+  cases.push({
+    id: 'pdffid_table_long_word_breaks_in_its_cell_like_the_editor',
+    description: 'Un mot plus large que sa case de tableau se coupe dans la case du PDF comme dans l\'éditeur : même nombre de lignes, tout le mot, rien dans la case voisine',
+    run: async (h) => {
+      await h.resetEditor();
+      const word = 'Anticonstitutionnellement';
+      const html = '<table style="width: 260px;"><colgroup><col style="width: 60px;"><col style="width: 200px;"></colgroup><tbody><tr><td colspan="1" rowspan="1" colwidth="60"><p>' + word
+        + '</p></td><td colspan="1" rowspan="1" colwidth="200"><p>court</p></td></tr></tbody></table>';
+      Editor.setHTML(html);
+      await h.sleep(200);
+      const range = document.createRange();
+      range.selectNodeContents(h.tiptap().querySelector('td p'));
+      const tops = [];
+      Array.from(range.getClientRects()).filter(r => r.width > 0).forEach(r => { if (!tops.some(t => Math.abs(t - r.top) < 2)) tops.push(r.top); });
+      const table = await paintedTable(h, html);
+      const lines = (table.cells[0] && table.cells[0][0]) || [];
+      const neighbour = (table.cells[0] && table.cells[0][1]) || [];
+      const pass = tops.length >= 2 && lines.length === tops.length && lines.join('') === word && neighbour.join('|') === 'court';
+      return { pass, notes: JSON.stringify({ lignesEditeur: tops.length, lignesPdf: lines, caseVoisine: neighbour }) };
+    },
+  });
+
   cases.push({
     id: 'pdffid_twocolumns_width_ratio',
     description: 'Une zone 2-colonnes redimensionnée (63/37) donne des largeurs PDF dans le même ratio (±5%)',
