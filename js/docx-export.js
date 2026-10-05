@@ -391,14 +391,14 @@ const DocxExport = (function () {
   // aplatie dans le texte de son <li> parent. Même rôle que inlineRunsExcludingNestedLists, js/pdf-export.js.
   async function inlineNodesExcludingNestedLists(node, parentStyle, ctx) {
     const style = inheritedRunStyle(node, parentStyle);
-    let out = [];
+    const out = [];
     let sawLineBlock = false;
     for (const child of Array.from(node.childNodes)) {
       if (child.nodeType === Node.ELEMENT_NODE && /^(UL|OL)$/.test(child.tagName)) continue;
       const isLineBlock = child.nodeType === Node.ELEMENT_NODE && /^(P|DIV|H[1-6]|PRE)$/.test(child.tagName);
       if (isLineBlock && sawLineBlock) out.push(new docx.TextRun({ break: 1 }));
       if (isLineBlock) sawLineBlock = true;
-      out = out.concat(await inlineNodesFrom(child, style, ctx));
+      for (const run of await inlineNodesFrom(child, style, ctx)) out.push(run);
     }
     return out;
   }
@@ -440,7 +440,7 @@ const DocxExport = (function () {
     const items = Array.from(listEl.children).filter(c => c.tagName === 'LI');
     const isTask = listEl.getAttribute('data-type') === 'taskList';
     const numberingRef = isTask ? null : registerListNumbering(listEl, depth, ctx);
-    let blocks = [];
+    const blocks = [];
     for (const [i, li] of items.entries()) {
       const baseStyle = isTask ? taskItemBaseStyle(li) : { size: DEFAULT_HALF_PT };
       const runs = await inlineNodesExcludingNestedLists(li, baseStyle, ctx);
@@ -461,7 +461,7 @@ const DocxExport = (function () {
       }
       blocks.push(new docx.Paragraph(opts));
       const nested = Array.from(li.children).filter(c => /^(UL|OL)$/.test(c.tagName));
-      for (const sub of nested) blocks = blocks.concat(await listBlocksFrom(sub, depth + 1, ctx));
+      for (const sub of nested) for (const block of await listBlocksFrom(sub, depth + 1, ctx)) blocks.push(block);
     }
     return blocks;
   }
