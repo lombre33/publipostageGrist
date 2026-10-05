@@ -544,6 +544,34 @@
     }),
   });
 
+  cases.push({
+    id: 'grid_delete_table_button_is_announced_available_again_in_a_document_table',
+    description: '« Supprimer le tableau » est grisé et déclaré indisponible aux lecteurs d\'écran dans une grille, puis ni l\'un ni l\'autre dans le tableau d\'un document ouvert juste après (la classe de grisé partait, la déclaration restait)',
+    run: async (h) => {
+      const state = () => {
+        const del = document.querySelector('.v2-floating-toolbar button[data-action="table-del"]');
+        return del ? { locked: del.classList.contains('v2-hf-locked'), aria: del.getAttribute('aria-disabled') } : null;
+      };
+      let inside = null;
+      await inGrid(h, async () => {
+        await placeCursor(0, 0);
+        await sleep(250);
+        inside = state();
+      });
+      // Le geste d'une personne : un tableau dans un document, un clic dans une case.
+      await h.resetEditor();
+      await h.focusAtEnd();
+      await h.clickButton('v2-btn-table');
+      await sleep(60);
+      const cell = h.tiptap().querySelector('table td, table th');
+      cell.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      cell.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await sleep(250);
+      const outside = state();
+      return { pass: !!inside && inside.locked && inside.aria === 'true' && !!outside && !outside.locked && outside.aria !== 'true', notes: JSON.stringify({ inside, outside }) };
+    },
+  });
+
   // === 6) Le suivi des modifications est coupé ======================================================================================================================
 
   cases.push({

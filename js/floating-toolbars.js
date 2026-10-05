@@ -303,8 +303,7 @@ const FloatingToolbars = (function () {
       const dom = depth > 0 ? editor.view.nodeDOM($from.before(depth)) : null;
       if (!dom) { panel.hide(); return; }
       panel.show(dom.tagName === 'TABLE' ? dom : (dom.querySelector && dom.querySelector('table')) || dom);
-      const tableDelBtn = button('table-del');
-      if (tableDelBtn) tableDelBtn.classList.remove('v2-hf-locked');
+      setLocked('table-del', false);
       const colBlocked = columnDeleteBlocked();
       setDisabled('col-del', colBlocked, I18n.t(colBlocked ? 'table.colDelMerged' : 'table.colDel'));
       const rowBlocked = rowDeleteBlocked();
