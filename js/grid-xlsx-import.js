@@ -223,6 +223,7 @@ const GridXlsxImport = (function () {
 
   // L'étendue utile : ExcelJS ne rend que les lignes qui ont une valeur ; dans chacune, une case compte si elle a une valeur, un fond ou un trait
   // (des cases mises en forme mais vides au loin ne comptent pas). Les cases d'une plage fusionnée comptent toutes : ExcelJS les crée à la lecture.
+  // Les lignes sans valeur mais mises en forme, collées sous la dernière ligne de valeurs, en font partie (`withFormattedRows`).
   function usedExtent(sheet, palette) {
     let rows = 0;
     let cols = 0;
@@ -231,7 +232,25 @@ const GridXlsxImport = (function () {
         if (cell.type !== T.Null || hasLook(cell, palette)) { rows = Math.max(rows, r); cols = Math.max(cols, c); }
       });
     });
-    return { rows, cols };
+    return rows ? withFormattedRows(sheet, palette, { rows, cols }) : { rows, cols };
+  }
+
+  // La suite de lignes sans valeur mais avec un fond ou un trait, juste sous la dernière ligne de valeurs (un tableau dessiné jusqu'en bas) : la
+  // première ligne sans mise en forme l'arrête, et ses colonnes élargissent l'étendue au besoin. Qu'elle fasse dépasser les limites d'une grille, elle
+  // est laissée de côté (sans être lue au-delà de la dernière ligne permise) : une mise en forme n'a jamais rendu une feuille trop grande.
+  function withFormattedRows(sheet, palette, extent) {
+    let rows = extent.rows;
+    let cols = extent.cols;
+    for (let r = rows + 1; r <= sheet.rowCount; r++) {
+      if (r > MAX_ROWS) return extent;
+      const row = sheet.findRow(r);
+      let reach = 0;
+      if (row) row.eachCell({ includeEmpty: true }, (cell, c) => { if (hasLook(cell, palette)) reach = c; });
+      if (!reach) break;
+      rows = r;
+      cols = Math.max(cols, reach);
+    }
+    return rows <= MAX_ROWS && cols <= MAX_COLS && rows * cols <= MAX_CELLS ? { rows, cols } : extent;
   }
 
   // Les fusions, ramenées aux lignes et colonnes qui restent : l'ancre est la première case visible de la plage, le contenu et la mise en forme sont

@@ -1193,6 +1193,61 @@
     },
   });
 
+  // Les lignes sans valeur mais mises en forme (fond, trait), collées sous la dernière ligne de valeurs : un tableau dessiné jusqu'en bas. ExcelJS ne rend (eachRow) que les lignes qui ont une valeur : sans
+  // elles l'import s'arrêtait à la dernière valeur et perdait le bas du tableau.
+  const FORMATTED_ROWS = {
+    fills: ['<fill><patternFill patternType="none"/></fill>', '<fill><patternFill patternType="gray125"/></fill>', SOLID('rgb="FFFFCC00"')],
+    borders: ['<border><left/><right/><top/><bottom/><diagonal/></border>', '<border><left/><right/><top/><bottom style="thin"><color rgb="FF0000FF"/></bottom><diagonal/></border>'],
+    xfs: [{}, { fillId: 2 }, { borderId: 1 }, { numFmtId: 14 }],
+  };
+  cases.push({
+    id: 'gridImport_empty_formatted_rows_right_under_the_last_value_are_imported',
+    description: 'Une ligne sans valeur mais colorée ou bordée, collée sous la dernière ligne de valeurs, est importée avec son fond ou son trait (et la suite de lignes de ce genre aussi, avec ses colonnes en plus) ; la première ligne sans fond ni trait (même avec un format de date) l\'arrête, une ligne mise en forme plus bas ne vient pas',
+    run: async () => {
+      const spec = Object.assign({}, FORMATTED_ROWS, {
+        sheets: [{
+          name: 'Bas',
+          rows: [
+            ['Nom', 'Montant'],
+            ['Alpha', 12],
+            [{ s: 1 }, { s: 1 }, { s: 1 }, { s: 1 }],
+            [{ s: 2 }, { s: 2 }],
+            [{ s: 3 }],
+            [{ s: 1 }, { s: 1 }],
+          ],
+        }],
+      });
+      const out = await importModel(spec);
+      const digest = digestOf(out.model);
+      // Quatre lignes : les deux de valeurs, la ligne de quatre cases jaunes (elle porte la grille à quatre colonnes), la ligne de deux cases soulignées de bleu ; la ligne dont la seule case a un format de date, sans fond ni trait, l'arrête, la ligne jaune d'après ne vient pas.
+      const EXPECTED = [
+        "0 1x1 - - middle . . . . Nom | 1 1x1 - - middle . . . . Montant | 2 1x1 - - middle . . . .  | 3 1x1 - - middle . . . . ",
+        "0 1x1 - - middle . . . . Alpha | 1 1x1 - right middle . . . . 12 | 2 1x1 - - middle . . . .  | 3 1x1 - - middle . . . . ",
+        "0 1x1 #ffcc00 - middle . . . .  | 1 1x1 #ffcc00 - middle . . . .  | 2 1x1 #ffcc00 - middle . . . .  | 3 1x1 #ffcc00 - middle . . . . ",
+        "0 1x1 - - middle . . #0000ff .  | 1 1x1 - - middle . . #0000ff .  | 2 1x1 - - middle . . . .  | 3 1x1 - - middle . . . . "
+      ];
+      return { pass: JSON.stringify(digest) === JSON.stringify(EXPECTED) && out.rows === 4 && out.cols === 4, notes: JSON.stringify({ digest, rows: out.rows, cols: out.cols }) };
+    },
+  });
+
+  cases.push({
+    id: 'gridImport_formatted_rows_never_make_a_sheet_too_big_and_a_valueless_sheet_stays_empty',
+    description: 'Une suite de lignes mises en forme qui ferait dépasser les limites d\'une grille (plus de 1 000 lignes, ou plus de 5 000 cases) est laissée de côté : la feuille s\'importe comme avant, sans erreur « trop grande » ; une feuille sans aucune valeur reste « sans case », même mise en forme',
+    run: async () => {
+      const book = rows => Object.assign({}, FORMATTED_ROWS, { sheets: [{ name: 'Bas', rows }] });
+      const head = [['Nom', 'Montant'], ['Alpha', 12]];
+      const tall = await importModel(book(head.concat(Array.from({ length: 1100 }, () => [{ s: 1 }, { s: 1 }]))));
+      const wide = await importModel(book(head.concat(Array.from({ length: 600 }, () => Array.from({ length: 10 }, () => ({ s: 1 }))))));
+      const got = {
+        tall: [tall.rows, tall.cols].join('x'),
+        wide: [wide.rows, wide.cols].join('x'),
+        valueless: await importError(book(Array.from({ length: 300 }, () => [{ s: 1 }, { s: 2 }]))),
+      };
+      const EXPECTED = { tall: '2x2', wide: '2x2', valueless: 'empty : La feuille ne contient aucune case.' };
+      return { pass: JSON.stringify(got) === JSON.stringify(EXPECTED), notes: JSON.stringify(got) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.gridImport = cases;
 })();
