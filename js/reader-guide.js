@@ -15,6 +15,12 @@
 //   repères numérotés et flèche ajoutés par-dessus. À refaire, avec IMAGE_VERSION montée, si Grist déplace ces réglages.
 // - Dans le panneau de 700×400, le guide défile (le conteneur de la Lecture défile déjà) : les captures s'y lisent à 66 % de leur taille, un clic sur
 //   l'une l'affiche à sa taille réelle, un second la rétrécit.
+// - L'éditeur sans accès complet (renderAccess, appelé par js/main.js:syncEditorVisibilityForMode) : la même carte, réduite à l'étape de l'accès, dans
+//   #access-guide-container à la place du document. Sans l'accès complet ('none', ou 'read table' qui ne lit que la table liée) Grist refuse au widget
+//   toute lecture et toute écriture hors de cette table (WidgetFrame.ts, grist-core : GristDocAPI exige l'accès complet) : ni la liste des modèles ni
+//   l'enregistrement ne marchent, et l'éditeur n'avait à montrer que « Échec de l'enregistrement ». Seule l'introduction change (celle de la Lecture
+//   parle d'une ligne) ; le titre, la phrase, les trois repères et la capture sont les mêmes. Grist reconstruit le cadre du widget à chaque changement
+//   d'accès : la carte disparaît avec le rechargement, js/main.js n'a pas à rouvrir quoi que ce soit.
 // Script classique (pas type="module"), même convention de portée globale que CleanReading ; js/reader-mode.js l'appelle (ReaderGuide.render).
 const ReaderGuide = (function () {
   const el = Dom.el;
@@ -31,6 +37,13 @@ const ReaderGuide = (function () {
     { id: 'pick', marks: 2, lead: true, width: 282 },
   ];
   let wired = false;
+  // La carte de l'éditeur vit dans son propre conteneur (index.html), à côté de #reader-container : la Lecture garde son contenu quand on repasse en
+  // Édition, les deux cartes peuvent donc exister ensemble - d'où un autre identifiant de titre.
+  const EDITOR_CONTAINER_ID = 'access-guide-container';
+  // Niveaux d'accès (settings.accessLevel de Grist) qui ne suffisent pas à l'éditeur. Liste fermée : un niveau que ce code ne connaît pas ne fait jamais
+  // apparaître la carte.
+  const EDITOR_INSUFFICIENT_ACCESS = ['none', 'read table'];
+  const editorLacksAccess = () => EDITOR_INSUFFICIENT_ACCESS.indexOf(GristAPI.getAccessLevel()) !== -1;
 
   // Titres : des <p role="heading">, pas des <h2>/<h3> - css/style.css peint tout titre du conteneur de la Lecture en gris-bleu foncé (les titres du
   // document, sur la page blanche), invisible sur le fond sombre du plan de travail en thème sombre.
@@ -105,15 +118,16 @@ const ReaderGuide = (function () {
   }
 
   // Widget relié sans accès complet : la même carte réduite à l'étape de l'accès, sous le titre de cette étape et une phrase qui dit pourquoi aucune
-  // ligne n'arrive.
-  function buildAccessOnly() {
+  // ligne n'arrive. `editor` : la carte de l'éditeur, dont l'introduction dit ce que l'accès manquant empêche là (lire et enregistrer les modèles).
+  function buildAccessOnly(editor) {
     const step = STEPS.find(s => s.id === 'access');
+    const titleId = editor ? 'access-guide-title' : 'reader-guide-title';
     const root = el('section', 'reader-guide');
-    root.setAttribute('aria-labelledby', 'reader-guide-title');
+    root.setAttribute('aria-labelledby', titleId);
     const title = heading(2, 'reader-guide-title', I18n.t('readerGuide.' + step.id + '.title'));
-    title.id = 'reader-guide-title';
+    title.id = titleId;
     root.appendChild(title);
-    root.appendChild(el('p', 'reader-guide-intro', I18n.t('readerGuide.accessOnly.intro')));
+    root.appendChild(el('p', 'reader-guide-intro', I18n.t(editor ? 'readerGuide.accessEditor.intro' : 'readerGuide.accessOnly.intro')));
     const steps = el('ol', 'reader-guide-steps');
     steps.setAttribute('role', 'list');
     steps.appendChild(buildStep(step, STEPS.indexOf(step), true));
@@ -142,6 +156,11 @@ const ReaderGuide = (function () {
     GristAPI.onLinkStateChange(refresh);
     GristAPI.onAccessLevelChange(refresh);
     I18n.onChange(refresh);
+    // La carte de l'éditeur n'a que la langue à suivre : sa venue et son départ, c'est js/main.js qui les décide (mode, type du modèle).
+    I18n.onChange(() => {
+      const container = document.getElementById(EDITOR_CONTAINER_ID);
+      if (container && container.querySelector(':scope > .reader-guide')) renderAccess(container);
+    });
   }
 
   function render(container) {
@@ -152,5 +171,12 @@ const ReaderGuide = (function () {
     else container.appendChild(GristAPI.getAccessLevel() === 'none' ? buildAccessOnly() : buildMessage());
   }
 
-  return { render };
+  // L'éditeur sans accès complet : la carte de l'accès, seule, dans `container` (#access-guide-container).
+  function renderAccess(container) {
+    wire();
+    container.innerHTML = '';
+    container.appendChild(buildAccessOnly(true));
+  }
+
+  return { render, renderAccess, editorLacksAccess };
 })();

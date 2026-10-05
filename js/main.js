@@ -22,6 +22,7 @@
   const editorContainer = document.getElementById('editor-container');
   const readerContainer = document.getElementById('reader-container');
   const macroSummaryContainer = document.getElementById('macro-summary-container');
+  const accessGuideContainer = document.getElementById('access-guide-container');
   const btnEdit = document.getElementById('btn-mode-edit');
   const btnRead = document.getElementById('btn-mode-read');
   const conflictBanner = document.getElementById('autosave-conflict-banner');
@@ -176,15 +177,31 @@
     resetAutosaveState(tpl);
   }
 
-  // Affiche l'éditeur, le résumé du macro-modèle ou la Lecture selon le mode et le type du modèle chargé. Partagé par switchMode et les deux
-  // chargeurs : un changement de modèle en pleine édition ne repasse pas par switchMode.
+  // Sans l'accès complet au document, Grist refuse au widget la lecture et l'écriture des modèles (js/reader-guide.js : editorLacksAccess) : en Édition,
+  // la carte « Donnez l'accès complet à ce widget » prend la place du document et du résumé d'un macro-modèle. La Lecture a la sienne
+  // (ReaderGuide.render, js/reader-mode.js).
+  function isAccessGuideShown() { return currentMode === 'edit' && ReaderGuide.editorLacksAccess(); }
+
+  // Construite à l'affichage et vidée au départ : une carte cachée garderait pour rien son identifiant de titre (celui de la Lecture est un autre) et
+  // ses images.
+  function syncAccessGuide(shown) {
+    if (!accessGuideContainer) return;
+    if (shown && !accessGuideContainer.firstElementChild) ReaderGuide.renderAccess(accessGuideContainer);
+    if (!shown) accessGuideContainer.replaceChildren();
+    accessGuideContainer.style.display = shown ? 'block' : 'none';
+  }
+
+  // Affiche l'éditeur, le résumé du macro-modèle, la carte de l'accès ou la Lecture selon le mode, l'accès du widget et le type du modèle chargé.
+  // Partagé par switchMode et les deux chargeurs : un changement de modèle en pleine édition ne repasse pas par switchMode.
   function syncEditorVisibilityForMode() {
-    const showEditor = currentMode === 'edit' && currentTypeModele !== 'macro';
-    const showMacroSummary = currentMode === 'edit' && currentTypeModele === 'macro';
+    const accessGuide = isAccessGuideShown();
+    const showEditor = currentMode === 'edit' && currentTypeModele !== 'macro' && !accessGuide;
+    const showMacroSummary = currentMode === 'edit' && currentTypeModele === 'macro' && !accessGuide;
     editorContainer.style.display = showEditor ? 'block' : 'none';
-    // La bande de la barre de la case d'une grille (css/grid.css) disparaît avec l'éditeur : Lecture, résumé d'un macro-modèle.
+    // La bande de la barre de la case d'une grille (css/grid.css) disparaît avec l'éditeur : Lecture, résumé d'un macro-modèle, carte de l'accès.
     document.body.classList.toggle('pp-editor-hidden', !showEditor);
     if (macroSummaryContainer) macroSummaryContainer.style.display = showMacroSummary ? 'block' : 'none';
+    syncAccessGuide(accessGuide);
     // Les barres flottantes d'une bulle, d'un tableau ou d'une image sont ancrées dans l'éditeur : masqué, elles n'ont plus rien à montrer. Sans
     // cela, la barre d'une bulle restée sélectionnée sautait en haut à gauche, par-dessus les boutons Lecture et Édition, et le blur de l'éditeur la
     // réaffichait aussitôt après un clic sur « Lecture ».
@@ -787,15 +804,15 @@
     else el.removeAttribute('aria-disabled');
   }
 
-  // Barre de mise en forme et d'insertion (#v2-toolbar) : grisée en lecture seule et dès que la Lecture est affichée, choisie ou imposée. L'éditeur y
-  // est masqué mais ses commandes restent actives : un clic sur Tableau, Sommaire ou Citation modifierait le modèle caché, que l'enregistrement
-  // automatique écrirait sans rien montrer. Commenter suit son propre droit, jamais le mode : dans la Lecture il agit sur le texte sélectionné dans
-  // la Lecture (applyCommentsPermissions). Modes, aperçu A4, réglages, arbre des modèles et exports ne font pas partie de #v2-toolbar et restent
-  // actifs. Rappelée par applyAccessRights (droits) et switchMode (mode).
+  // Barre de mise en forme et d'insertion (#v2-toolbar) : grisée en lecture seule, dès que la Lecture est affichée, choisie ou imposée, et tant que la
+  // carte de l'accès remplace l'éditeur. L'éditeur y est masqué mais ses commandes restent actives : un clic sur Tableau, Sommaire ou Citation
+  // modifierait le modèle caché, que l'enregistrement automatique écrirait sans rien montrer. Commenter suit son propre droit, jamais le mode : dans la
+  // Lecture il agit sur le texte sélectionné dans la Lecture (applyCommentsPermissions). Modes, aperçu A4, réglages, arbre des modèles et exports ne
+  // font pas partie de #v2-toolbar et restent actifs. Rappelée par applyAccessRights (droits), switchMode (mode) et onWidgetAccessChange (accès).
   function applyFormattingBarLock() {
     const formattingBar = document.getElementById('v2-toolbar');
     if (!formattingBar) return;
-    const locked = isReadOnly() || currentMode === 'read';
+    const locked = isReadOnly() || currentMode === 'read' || isAccessGuideShown();
     Array.from(formattingBar.children).forEach(child => { if (child.id !== 'v2-btn-comment') setAccessLocked(child, locked); });
   }
 
@@ -817,6 +834,14 @@
     READ_ONLY_DISABLED_INPUTS.forEach(id => { const input = document.getElementById(id); if (input) input.disabled = rights.readOnly; });
     applyCommentsPermissions();
     updateSaveStatus();
+  }
+
+  // Grist rend les options du widget quand son accès change (GristAPI.onAccessLevelChange) : la carte de l'accès arrive ou s'en va tout de suite, et la
+  // barre de mise en forme se grise ou se dégrise avec elle. Grist reconstruit en fait le cadre du widget à chaque changement d'accès (WidgetFrame.ts) :
+  // la page repart alors de zéro, ce rappel couvre seulement la réponse qui arrive après le premier affichage.
+  function onWidgetAccessChange() {
+    syncEditorVisibilityForMode();
+    applyFormattingBarLock();
   }
 
   // Droits changés en cours de session (case cochée dans la table, réglage modifié) : switchMode force lui-même le mode Lecture en lecture seule ;
@@ -2294,6 +2319,7 @@
     await Promise.race([accessReady, new Promise(resolve => setTimeout(resolve, ACCESS_STARTUP_WAIT_MS))]);
     applyAccessRights();
     AccessRights.onChange(onAccessRightsChange);
+    GristAPI.onAccessLevelChange(onWidgetAccessChange);
     await switchMode('edit');
     FirstContact.ready();
     setStatus(I18n.t(isReadOnly() ? 'status.readyReadOnly' : 'status.ready'));

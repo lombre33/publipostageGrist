@@ -731,6 +731,9 @@ const I18n = (function () {
     // Widget relié mais sans accès complet : cette seule étape, sans son numéro ni son titre (c'est celui de la carte).
     'readerGuide.accessOnly.intro': { fr: 'Ce widget est relié à un tableau, mais Grist ne lui envoie aucune ligne tant qu’il n’a pas l’accès complet au document.', en: 'This widget is linked to a table, but Grist sends it no row until it has full access to the document.' },
     'readerGuide.accessOnly.lead': { fr: 'Cliquez sur ce widget pour le sélectionner : Grist ouvre son panneau de droite.', en: 'Click this widget to select it: Grist opens its right-hand panel.' },
+    // Éditeur sans accès complet (js/reader-guide.js : renderAccess) : la même carte, seule l'introduction change - ce que Grist refuse alors n'est pas
+    // une ligne, c'est la lecture et l'enregistrement des modèles.
+    'readerGuide.accessEditor.intro': { fr: 'Ce widget a besoin de l’accès complet au document pour lire et enregistrer vos modèles.', en: 'This widget needs full access to the document to read and save your templates.' },
     'readerGuide.add.title': { fr: 'Mettez votre tableau sur cette page', en: 'Put your table on this page' },
     'readerGuide.add.lead': { fr: 'Il y est déjà ? Passez à l’étape {next}. Sinon, dans Grist, ouvrez « Ajouter », puis « Ajouter une vue à la page ».', en: 'Already there? Go to step {next}. Otherwise, in Grist, open “Add new”, then “Add widget to page”.' },
     'readerGuide.add.mark1': { fr: 'Choisissez « Table »', en: 'Pick “Table”' },

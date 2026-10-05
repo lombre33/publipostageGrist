@@ -6,6 +6,11 @@
 // le panneau sans rien faire, les quatre étapes atteignables à la molette (accès complet au widget, tableau sur la page, « Sélectionner par », ligne choisie), rien qui dépasse à droite (700 px comme 420 px), les captures réellement peintes (le bleu de leurs repères à l'écran), un vrai clic et
 // Entrée / Espace qui les agrandissent et les rétrécissent, le lien changé en direct (court message puis guide), un widget relié mais sans accès complet (la carte réduite à l'étape de l'accès,
 // capture peinte et cliquable, puis le court message une fois l'accès accordé), la ligne qui arrive et efface le guide, aucune image introuvable.
+// Même carte dans l'éditeur (demande d'Antoine du 2026-10-05 : « tout ce que tu affiches dans le mode lecture tant que le widget n'a pas les bons accès, est-ce que tu pourras l'afficher aussi en mode éditeur
+// au moins la partie sur les droits d'accès ? car pour l'instant seul un message "échec de l'enregistrement" est présent ») : le widget démarre pour de vrai SANS accès complet (le faux Grist refuse alors
+// listTables, fetchTable et applyUserActions comme le vrai : « Access not granted. Current access level none »), sans un seul geste la carte de l'accès est dans le panneau à la place du document, le titre
+// et le début de l'étape se lisent, la capture est peinte, la molette atteint la fin de la carte, un vrai clic sur Tableau n'insère rien (barre grisée), Lecture puis Édition ramènent la carte, l'accès
+// accordé rend le document, en clair et en sombre, en français et en anglais, puis à 420 px.
 // Lancé par run-headless.mjs (groupe Node "readerGuideMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-reader-guide-mouse.mjs
 // (READER_GUIDE_SHOTS=<dossier> y range une capture par étape, à regarder - aucune vérification n'en dépend).
 import { createServer } from 'node:http';
@@ -87,7 +92,7 @@ const pageErrors = [];
 const imageRequests = [];
 let shotCount = 0;
 
-async function openWidget(colorScheme, lang) {
+async function openWidget(colorScheme, lang, access) {
   // bypassCSP : la politique de sécurité du contenu d'index.html bloquerait les scripts que le harnais injecte (cf. verify-*.mjs voisins) ; elle n'est pas ce que ce script vérifie.
   const context = await browser.newContext({ viewport: { width: WIDTH, height: HEIGHT }, colorScheme, bypassCSP: true });
   const page = await context.newPage();
@@ -119,8 +124,20 @@ async function openWidget(colorScheme, lang) {
   }
   if (lang === 'en') await page.addInitScript(() => { try { localStorage.setItem('pp_lang', 'en'); } catch (e) { /* stockage indisponible */ } });
   // Semé avant le démarrage : un modèle « Facture » enregistré et ouvert par défaut (une variable de la table Clients), une ligne de données - mais AUCUNE ligne sélectionnée par Grist.
-  await page.addInitScript(() => {
+  await page.addInitScript((level) => {
     window.__preSeedGristStub = (stub) => {
+      // Un accès au départ qui n'est pas complet : le widget démarre comme dans un Grist qui ne le lui a pas accordé (le niveau arrive par onOptions) et chaque appel GristDocAPI est refusé, comme le vrai
+      // (WidgetFrame.ts de grist-core : tout GristDocAPI exige l'accès complet).
+      if (level) {
+        stub.state.accessLevel = level;
+        for (const name of ['listTables', 'fetchTable', 'applyUserActions', 'getAccessToken']) {
+          const real = window.grist.docApi[name];
+          window.grist.docApi[name] = function () {
+            if (stub.state.accessLevel !== 'full') return Promise.reject(new Error('Access not granted. Current access level ' + stub.state.accessLevel));
+            return real.apply(this, arguments);
+          };
+        }
+      }
       stub.setVariables('Clients', { Nom: 'Text' });
       stub.setRows('Clients', [{ id: 1, Nom: 'Dupont' }]);
       const m = stub.state.rows.Publipostage_Modeles;
@@ -129,13 +146,15 @@ async function openWidget(colorScheme, lang) {
       m.NomFichierPDF.push(''); m.HeaderFooter.push(''); m.DateModif.push(1790000000); m.Margins.push(''); m.EstParDefaut.push(true);
       stub.state.nextRowId.Publipostage_Modeles = 2;
     };
-  });
+  }, access || null);
   await page.goto(`${BASE}/_test-harness.html`, { waitUntil: 'load' });
   await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
-  await page.waitForFunction(() => {
+  // Sans accès complet le démarrage peut ne jamais dire « prêt » (sur un code qui ne sait pas cet état) : on ne s'arrête pas là, les vérifications échouent chacune à leur tour.
+  const ready = page.waitForFunction(() => {
     const el = document.getElementById('status-msg');
     return !!el && /prêt|ready/i.test(el.textContent || '');
-  }, null, { timeout: 90000 });
+  }, null, { timeout: access ? 20000 : 90000 });
+  await (access ? ready.catch(() => {}) : ready);
   return { context, page };
 }
 
@@ -156,7 +175,7 @@ async function realClick(page, selector) {
     if (!el) return null;
     const r = el.getBoundingClientRect();
     let left = Math.max(r.left, 0), top = Math.max(r.top, 0), right = Math.min(r.right, innerWidth), bottom = Math.min(r.bottom, innerHeight);
-    const scroller = el.closest('#reader-container');
+    const scroller = el.closest('#reader-container, #access-guide-container');
     if (scroller) { const c = scroller.getBoundingClientRect(); left = Math.max(left, c.left); top = Math.max(top, c.top); right = Math.min(right, c.right); bottom = Math.min(bottom, c.bottom); }
     if (right - left < 4 || bottom - top < 4) return { x: -1, y: -1, hit: false };
     const x = (left + right) / 2, y = (top + bottom) / 2;
@@ -176,9 +195,11 @@ async function wheelTo(page, selector) {
   for (let i = 0; i < 20; i++) {
     const visible = await page.evaluate((sel) => {
       const el = document.querySelector(sel);
-      const r = el.getBoundingClientRect(), c = el.closest('#reader-container').getBoundingClientRect();
+      if (!el) return null;
+      const r = el.getBoundingClientRect(), c = el.closest('#reader-container, #access-guide-container').getBoundingClientRect();
       return Math.min(r.bottom, c.bottom) - Math.max(r.top, c.top);
     }, selector);
+    if (visible === null) return false;
     if (visible >= 60) return true;
     await page.mouse.wheel(0, 120);
     await page.waitForTimeout(100);
@@ -403,11 +424,169 @@ async function runNarrow() {
   await context.close();
 }
 
+// --- L'éditeur sans accès complet : le widget démarre pour de vrai sans l'accès que Grist lui a demandé (openWidget(..., 'none')).
+const EDITOR_TEXTS = {
+  fr: { title: 'Donnez l’accès complet à ce widget', intro: 'Ce widget a besoin de l’accès complet au document pour lire et enregistrer vos modèles.', lead: 'Cliquez sur ce widget pour le sélectionner : Grist ouvre son panneau de droite.', readTitle: 'Reliez ce widget à votre tableau', unzoom: 'Cliquer pour réduire la capture' },
+  en: { title: 'Give this widget full access', intro: 'This widget needs full access to the document to read and save your templates.', lead: 'Click this widget to select it: Grist opens its right-hand panel.', readTitle: 'Link this widget to your table', unzoom: 'Click to shrink the screenshot' },
+};
+
+// Ce que montre le conteneur de la carte de l'accès (#access-guide-container, dans l'éditeur) : sa fenêtre, et chaque morceau de la carte par rapport à elle.
+const accessView = page => page.evaluate(() => {
+  const c = document.getElementById('access-guide-container');
+  if (!c) return null;
+  const cr = c.getBoundingClientRect();
+  const rel = el => { if (!el) return null; const r = el.getBoundingClientRect(); return { top: Math.round(r.top - cr.top), bottom: Math.round(r.bottom - cr.top), left: Math.round(r.left - cr.left), right: Math.round(r.right - cr.left), w: Math.round(r.width), h: Math.round(r.height) }; };
+  const inView = el => { const r = rel(el); return !!r && r.top >= 0 && r.bottom <= c.clientHeight; };
+  const seen = el => { const r = rel(el); return !!r && r.bottom > 0 && r.top < c.clientHeight; };
+  const card = c.querySelector(':scope > .reader-guide');
+  const step = c.querySelector('.reader-guide-step');
+  const shotBtn = c.querySelector('.reader-guide-shot');
+  const editor = document.getElementById('editor-container');
+  const tiptap = document.querySelector('#editor-container .tiptap');
+  const bar = Array.from(document.querySelectorAll('#v2-toolbar > *')).filter(e => e.id !== 'v2-btn-comment');
+  const txt = sel => { const e = c.querySelector(sel); return e ? e.textContent.replace(/\s+/g, ' ').trim() : null; };
+  return {
+    shown: getComputedStyle(c).display !== 'none', clientW: c.clientWidth, clientH: c.clientHeight, scrollW: c.scrollWidth, scrollH: c.scrollHeight, scrollTop: Math.round(c.scrollTop),
+    containerTop: Math.round(cr.top), card: rel(card),
+    title: txt('.reader-guide-title'), titleInView: inView(c.querySelector('.reader-guide-title')), intro: txt('.reader-guide-intro'), lead: txt('.reader-guide-lead'), leadInView: inView(c.querySelector('.reader-guide-lead')),
+    steps: c.querySelectorAll('.reader-guide-step').length, eyebrows: c.querySelectorAll('.reader-guide-eyebrow').length, marks: Array.from(c.querySelectorAll('.reader-guide-mark-text')).map(e => ({ text: e.textContent.trim(), inView: inView(e) })),
+    seenStep: seen(step), stepBox: rel(step), body: rel(c.querySelector('.reader-guide-step-body')), shot: rel(shotBtn), zoomed: !!step && step.classList.contains('is-zoomed'),
+    pressed: shotBtn ? shotBtn.getAttribute('aria-pressed') : null, shotTitle: shotBtn ? shotBtn.title : null,
+    img: c.querySelector('.reader-guide-shot img') ? c.querySelector('.reader-guide-shot img').getAttribute('src').replace(/\?.*$/, '') : null,
+    editorShown: !!editor && getComputedStyle(editor).display !== 'none', tiptapW: tiptap ? Math.round(tiptap.getBoundingClientRect().width) : 0, tiptapH: tiptap ? Math.round(tiptap.getBoundingClientRect().height) : 0,
+    barLocked: bar.length > 0 && bar.every(e => e.classList.contains('pp-access-locked')), barFree: bar.length > 0 && bar.every(e => !e.classList.contains('pp-access-locked')),
+    html: typeof Editor !== 'undefined' ? Editor.getHTML() : null,
+  };
+});
+const setAccess = (page, level) => page.evaluate(l => window.__gristStub.setAccessLevel(l), level);
+
+async function runEditorAccess(theme, lang) {
+  const label = `${theme === 'dark' ? 'sombre' : 'clair'}, ${lang === 'en' ? 'anglais' : 'français'}`;
+  const T = EDITOR_TEXTS[lang];
+  console.log(`\n=== Éditeur sans accès complet à la vraie souris, ${WIDTH}x${HEIGHT}, ${label} ===`);
+  const { context, page } = await openWidget(theme, lang, 'none');
+  await page.mouse.move(WIDTH / 2, HEIGHT - 60, { steps: 3 });
+  await page.waitForTimeout(600);
+  await shot(page, `${theme}-${lang}-editeur-sans-acces`);
+  const first = await accessView(page);
+
+  // Sans un seul geste : la carte est dans le panneau, à la place du document.
+  check(`${label} - le widget démarré sans accès complet montre, sans un geste, la carte « ${T.title} » à la place du document`,
+    !!first && first.shown && first.card !== null && first.title === T.title && !first.editorShown && first.steps === 1 && first.eyebrows === 0, first && { shown: first.shown, title: first.title, editorShown: first.editorShown, steps: first.steps });
+  if (!first || !first.card) { await context.close(); return; }
+  check(`${label} - l'introduction dit ce que l'accès manquant empêche (lire et enregistrer les modèles), la phrase dit où cliquer`, first.intro === T.intro && first.lead === T.lead, { intro: first.intro, lead: first.lead });
+  check(`${label} - le titre et le début de l'étape sont dans le panneau, sous la barre du haut (rien n'est caché dessous)`,
+    first.titleInView && first.seenStep && first.stepBox.top < first.clientH - 40 && first.containerTop > 60, { titleInView: first.titleInView, step: first.stepBox, clientH: first.clientH, containerTop: first.containerTop });
+  check(`${label} - la carte tient dans la largeur du panneau : aucun défilement horizontal, rien ne dépasse à droite`,
+    first.scrollW <= first.clientW && first.card.right <= first.clientW && first.card.left >= 0, { scrollW: first.scrollW, clientW: first.clientW, card: first.card });
+  check(`${label} - la capture ${lang}-1 est à droite du texte, à 66 % de sa taille`, first.img === `img/reader-guide/${lang}-1.png` && first.shot.left >= first.body.right - 1 && first.shot.w < 175, { img: first.img, shot: first.shot, body: first.body });
+  const blue = await blueOf(page, '#access-guide-container .reader-guide-shot img');
+  check(`${label} - la capture est réellement peinte à l'écran (repères bleus visibles)`, blue > 40, { blue });
+  check(`${label} - la barre de mise en forme est grisée, le document n'est pas à l'écran`, first.barLocked && !first.barFree && first.tiptapH === 0, { barLocked: first.barLocked, tiptapH: first.tiptapH });
+
+  // Un vrai clic sur « Tableau » (la barre est grisée, l'éditeur masqué) n'insère rien dans le document caché.
+  const tableBox = await boxOf(page, '#v2-btn-table');
+  const htmlBefore = first.html;
+  if (tableBox) { await page.mouse.move(tableBox.x - 4, tableBox.y, { steps: 2 }); await page.mouse.click(tableBox.x, tableBox.y); }
+  await page.waitForTimeout(250);
+  const afterTable = await accessView(page);
+  check(`${label} - un vrai clic sur « Tableau » n'insère rien dans le document masqué`, !!tableBox && afterTable.html === htmlBefore && !/<table/.test(afterTable.html || ''), { before: htmlBefore, after: afterTable.html });
+
+  // La molette (la souris revient sur la carte : le clic sur « Tableau » l'a laissée sur la barre) : jusqu'au bas de la carte, les trois repères et la capture se lisent dans le panneau.
+  await page.mouse.move(WIDTH / 2, HEIGHT - 60, { steps: 3 });
+  const reached = { marks: [false, false, false], shot: false };
+  let bottomReached = false;
+  for (let i = 0; i < 12 && !bottomReached; i++) {
+    const v = await accessView(page);
+    v.marks.forEach((m, k) => { if (m.inView) reached.marks[k] = true; });
+    if (Math.min(v.shot.bottom, v.clientH) - Math.max(v.shot.top, 0) >= 0.6 * v.shot.h) reached.shot = true;
+    bottomReached = v.scrollTop + v.clientH >= v.scrollH - 1;
+    if (!bottomReached) { await page.mouse.wheel(0, 100); await page.waitForTimeout(100); }
+  }
+  const bottomView = await accessView(page);
+  bottomReached = bottomReached || bottomView.scrollTop + bottomView.clientH >= bottomView.scrollH - 1;
+  await shot(page, `${theme}-${lang}-editeur-sans-acces-bas`);
+  check(`${label} - à la molette, on atteint le bas de la carte : les trois repères et l'essentiel de la capture se lisent dans le panneau`, bottomReached && reached.marks.every(Boolean) && reached.shot, { bottomReached, reached });
+  await page.evaluate(() => { document.getElementById('access-guide-container').scrollTop = 0; });
+  await page.waitForTimeout(150);
+
+  // Un vrai clic sur la capture l'affiche à sa taille réelle (244 px), un second la rétrécit.
+  await realClick(page, '#access-guide-container .reader-guide-shot');
+  await page.waitForTimeout(200);
+  const zoomed = await accessView(page);
+  check(`${label} - un vrai clic sur la capture l'affiche à sa taille réelle (244 px), sans défilement horizontal`, zoomed.zoomed && Math.abs(zoomed.shot.w - 244) <= 4 && zoomed.pressed === 'true' && zoomed.shotTitle === T.unzoom && zoomed.scrollW <= zoomed.clientW, { shot: zoomed.shot, pressed: zoomed.pressed, title: zoomed.shotTitle, scrollW: zoomed.scrollW });
+  await realClick(page, '#access-guide-container .reader-guide-shot');
+  await page.waitForTimeout(200);
+  const shrunk = await accessView(page);
+  check(`${label} - un second clic la rétrécit`, !shrunk.zoomed && shrunk.shot.w < 175, { shot: shrunk.shot });
+
+  // Lecture : la carte de la Lecture (le guide), pas celle de l'éditeur ; Édition : la carte de l'accès revient.
+  await realClick(page, '#btn-mode-read');
+  await page.waitForFunction(() => !!document.querySelector('#reader-container > .reader-guide'), null, { timeout: 8000 }).catch(() => {});
+  await page.mouse.move(WIDTH / 2, HEIGHT - 60, { steps: 3 });
+  await page.waitForTimeout(300);
+  const reading = await page.evaluate(() => ({
+    readerShown: getComputedStyle(document.getElementById('reader-container')).display !== 'none',
+    readerTitle: (document.querySelector('#reader-container .reader-guide-title') || {}).textContent || null,
+    hostShown: getComputedStyle(document.getElementById('access-guide-container')).display !== 'none', hostEmpty: document.getElementById('access-guide-container').childElementCount === 0,
+  }));
+  check(`${label} - vrai clic sur Mode lecture : la Lecture montre son guide « ${T.readTitle} », la carte de l'éditeur n'est plus là`, reading.readerShown && reading.readerTitle === T.readTitle && !reading.hostShown && reading.hostEmpty, reading);
+  await realClick(page, '#btn-mode-edit');
+  await page.waitForFunction(() => !!document.querySelector('#access-guide-container > .reader-guide'), null, { timeout: 4000 }).catch(() => {});
+  await page.mouse.move(WIDTH / 2, HEIGHT - 60, { steps: 3 });
+  await page.waitForTimeout(300);
+  const backToEdit = await accessView(page);
+  check(`${label} - vrai clic sur Mode édition : la carte de l'accès revient à la place du document`, backToEdit.shown && backToEdit.title === T.title && !backToEdit.editorShown && backToEdit.barLocked, { shown: backToEdit.shown, title: backToEdit.title, editorShown: backToEdit.editorShown });
+
+  // L'accès accordé (Grist renvoie les options) : le document revient, la barre se dégrise, on peut écrire dedans ; retiré, la carte revient.
+  await setAccess(page, 'full');
+  await page.waitForTimeout(500);
+  const granted = await accessView(page);
+  check(`${label} - l'accès complet accordé : la carte s'en va, le document revient (page entière à l'écran) et la barre se dégrise`, !granted.shown && granted.steps === 0 && granted.editorShown && granted.tiptapW > 200 && granted.tiptapH > 30 && granted.barFree && !granted.barLocked, { shown: granted.shown, editorShown: granted.editorShown, tiptapW: granted.tiptapW, tiptapH: granted.tiptapH, barFree: granted.barFree });
+  const tip = await boxOf(page, '#editor-container .tiptap');
+  if (tip) { await page.mouse.move(tip.left + 80, tip.top + 40, { steps: 3 }); await page.mouse.click(tip.left + 80, tip.top + 40); await page.keyboard.type('Bonjour'); }
+  await page.waitForTimeout(250);
+  const typed = await accessView(page);
+  check(`${label} - le document rendu se tape à la vraie touche`, /Bonjour/.test(typed.html || ''), { html: typed.html });
+  await setAccess(page, 'none');
+  await page.waitForTimeout(400);
+  const again = await accessView(page);
+  check(`${label} - l'accès retiré : la carte revient et masque le document`, again.shown && again.title === T.title && !again.editorShown && again.barLocked, { shown: again.shown, title: again.title, editorShown: again.editorShown });
+  await setAccess(page, 'full');
+  await context.close();
+}
+
+// Un panneau plus étroit que 700 px : la capture passe sous le texte, rien ne déborde.
+async function runEditorNarrow() {
+  console.log(`\n=== Éditeur sans accès complet, panneau étroit (420x${HEIGHT}), clair, français ===`);
+  const { context, page } = await openWidget('light', 'fr', 'none');
+  await page.setViewportSize({ width: 420, height: HEIGHT });
+  await page.waitForFunction(() => !!document.querySelector('#access-guide-container > .reader-guide'), null, { timeout: 4000 }).catch(() => {});
+  await page.mouse.move(210, HEIGHT - 60, { steps: 3 });
+  await page.waitForTimeout(500);
+  await shot(page, 'editeur-etroit-sans-acces');
+  const v = await accessView(page);
+  check('panneau de 420 px, éditeur sans accès complet : la carte est là, aucun défilement horizontal, rien ne dépasse', !!v && v.shown && !!v.card && v.scrollW <= v.clientW && v.card.right <= v.clientW && v.card.left >= 0, v && { scrollW: v.scrollW, clientW: v.clientW, card: v.card });
+  check('panneau de 420 px : la capture passe sous le texte, entière dans la carte', !!v && !!v.shot && v.shot.top >= v.body.bottom - 1 && v.shot.right <= v.card.right, v && { shot: v.shot, body: v.body, card: v.card });
+  if (!v || !v.card) { await context.close(); return; }
+  check('panneau de 420 px : la capture s\'atteint à la molette', await wheelTo(page, '#access-guide-container .reader-guide-shot'), {});
+  await realClick(page, '#access-guide-container .reader-guide-shot');
+  await page.waitForTimeout(200);
+  const z = await accessView(page);
+  check('panneau de 420 px : la capture agrandie reste dans la carte, sans défilement horizontal', !!z && z.zoomed && z.scrollW <= z.clientW && z.shot.right <= z.card.right, z && { shot: z.shot, card: z.card, scrollW: z.scrollW });
+  await context.close();
+}
+
 await runPass('light', 'fr');
 await runPass('dark', 'fr');
 await runPass('light', 'en');
 await runPass('dark', 'en');
 await runNarrow();
+await runEditorAccess('light', 'fr');
+await runEditorAccess('dark', 'fr');
+await runEditorAccess('light', 'en');
+await runEditorAccess('dark', 'en');
+await runEditorNarrow();
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 const missing = imageRequests.filter(r => r.status !== 200);
 check('les huit captures sont servies (aucune image introuvable ni refusée)', imageRequests.length >= 8 && missing.length === 0, { requested: imageRequests.length, missing });

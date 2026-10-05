@@ -5,6 +5,9 @@
 // « Sélectionner par », clic sur une ligne), les captures dans les deux langues, sa mise à jour sans recharger, sa disparition quand une ligne arrive, le clic sur une capture, les contrastes en
 // clair et en sombre - DANS la page ; et, pour un widget relié mais SANS accès complet (Grist ne lui envoie alors aucune ligne), la carte réduite à l'étape de l'accès (choix d'Antoine du même jour,
 // carte « Guider aussi un widget relié mais sans accès complet ? » : « Étape accès seule »).
+// Même carte dans l'éditeur (demande d'Antoine du 2026-10-05 : « tout ce que tu affiches dans le mode lecture tant que le widget n'a pas les bons accès, est-ce que tu pourras l'afficher aussi en mode
+// éditeur au moins la partie sur les droits d'accès ? car pour l'instant seul un message "échec de l'enregistrement" est présent ») : sans l'accès complet ('none', 'read table'), la carte de l'accès prend
+// la place du document dans #access-guide-container, la barre de mise en forme est grisée, et tout revient quand l'accès est accordé ; la Lecture garde la sienne.
 // dev-tests/verify-reader-guide-mouse.mjs le mesure à 700x400 à la vraie souris (défilement à la molette, clic sur une vraie capture, toutes les étapes atteignables).
 (function () {
   const cases = [];
@@ -466,6 +469,211 @@
       const bad = [];
       for (const theme of Object.keys(byTheme)) for (const [name, value] of Object.entries(byTheme[theme])) if (!(value >= 4.5)) bad.push(theme + ' ' + name + ' ' + value);
       return { pass: bad.length === 0, notes: JSON.stringify({ bad, byTheme }) };
+    },
+  });
+
+  // --- L'éditeur sans accès complet : la même carte, dans #access-guide-container, à la place du document.
+  const host = () => document.getElementById('access-guide-container');
+  const editorCard = () => host().querySelector(':scope > .reader-guide');
+  const editorPane = () => document.getElementById('editor-container');
+  const isShown = el => !!el && getComputedStyle(el).display !== 'none';
+  // La barre de mise en forme et d'insertion : chaque enfant de #v2-toolbar sauf Commenter (qui suit son propre droit) porte la classe de grisage.
+  const barChildren = () => Array.from(document.querySelectorAll('#v2-toolbar > *')).filter(c => c.id !== 'v2-btn-comment');
+  const barLocked = () => barChildren().length > 0 && barChildren().every(c => c.classList.contains('pp-access-locked'));
+  const barFree = () => barChildren().length > 0 && barChildren().every(c => !c.classList.contains('pp-access-locked'));
+  const modeButton = id => { document.getElementById(id).click(); return sleep(120); };
+  // Ce que Grist rend au widget quand son accès change (settings.accessLevel de onOptions) : `level` null = une version de Grist qui ne le dit pas.
+  const grantAccess = level => { fireLinking({}, level); return sleep(120); };
+  async function editorSetup(h, lang) {
+    await h.resetEditor();
+    I18n.setLang(lang || 'fr');
+    await modeButton('btn-mode-edit');
+  }
+  async function editorFinish() {
+    I18n.setLang('fr');
+    fireLinking({}, 'full');
+    await modeButton('btn-mode-edit');
+    const r = reader();
+    r.style.display = 'none';
+    r.innerHTML = '';
+  }
+  const editorView = () => {
+    const card = editorCard();
+    return {
+      host: isShown(host()),
+      editorHidden: !isShown(editorPane()),
+      card: !!card,
+      title: text(card && card.querySelector('.reader-guide-title')),
+      titleId: card && card.querySelector('.reader-guide-title') ? card.querySelector('.reader-guide-title').id : null,
+      labelledby: card ? card.getAttribute('aria-labelledby') : null,
+      intro: text(card && card.querySelector('.reader-guide-intro')),
+      lead: text(card && card.querySelector('.reader-guide-lead')),
+      steps: card ? card.querySelectorAll('.reader-guide-step').length : 0,
+      eyebrows: card ? card.querySelectorAll('.reader-guide-eyebrow').length : 0,
+      stepTitles: card ? card.querySelectorAll('.reader-guide-step-title').length : 0,
+      unsure: card ? !!card.querySelector('.reader-guide-unsure') : false,
+      marks: card ? Array.from(card.querySelectorAll('.reader-guide-mark-text')).map(text) : [],
+      img: card && card.querySelector('.reader-guide-shot img') ? card.querySelector('.reader-guide-shot img').getAttribute('src').replace(/\?.*$/, '') : null,
+      imgLoaded: !!(card && card.querySelector('.reader-guide-shot img') && card.querySelector('.reader-guide-shot img').complete && card.querySelector('.reader-guide-shot img').naturalWidth > 0),
+      bodyHidden: document.body.classList.contains('pp-editor-hidden'),
+      barLocked: barLocked(),
+      barFree: barFree(),
+    };
+  };
+
+  cases.push({
+    id: 'reader_guide_editor_without_full_access_shows_the_access_card_instead_of_the_document',
+    description: 'Sans l\'accès complet (« aucun » ou « lecture de table »), l\'éditeur ne montre plus seulement un échec d\'enregistrement : la carte « Donnez l\'accès complet à ce widget » - la même que la Lecture, avec son introduction propre à l\'éditeur, sa phrase, ses trois repères et sa capture fr-1 - prend la place du document dans #access-guide-container, sans « Étape n » ni titre d\'étape ; la barre de mise en forme est grisée ; l\'accès complet rend le document et dégrise la barre',
+    run: async (h) => {
+      await editorSetup(h);
+      const start = editorView();
+      const seen = {};
+      for (const level of ['none', 'read table']) {
+        await grantAccess(level);
+        await waitFor(() => { const i = editorCard() && editorCard().querySelector('.reader-guide-shot img'); return !!i && i.complete; }, 3000);
+        seen[level] = editorView();
+      }
+      await grantAccess('full');
+      const full = editorView();
+      await editorFinish();
+      const ok = v => v.host && v.editorHidden && v.card && v.title === 'Donnez l’accès complet à ce widget'
+        && v.intro === 'Ce widget a besoin de l’accès complet au document pour lire et enregistrer vos modèles.'
+        && v.lead === 'Cliquez sur ce widget pour le sélectionner : Grist ouvre son panneau de droite.'
+        && v.steps === 1 && v.eyebrows === 0 && v.stepTitles === 0 && !v.unsure && v.marks.length === 3
+        && v.marks[0] === 'Ouvrez l’onglet « Vue »' && v.marks[2] === 'Sinon, cliquez sur « Accepter »'
+        && v.img === 'img/reader-guide/fr-1.png' && v.imgLoaded && v.bodyHidden && v.barLocked && !v.barFree
+        && v.titleId === 'access-guide-title' && v.labelledby === 'access-guide-title';
+      const pass = !start.host && !start.card && !start.editorHidden && start.barFree && ok(seen.none) && ok(seen['read table'])
+        && !full.host && !full.card && !full.editorHidden && !full.bodyHidden && full.barFree && !full.barLocked;
+      return { pass, notes: JSON.stringify({ start, none: seen.none, readTable: seen['read table'], full }) };
+    },
+  });
+
+  cases.push({
+    id: 'reader_guide_editor_shows_no_access_card_when_the_access_is_unknown_or_unheard_of',
+    description: 'La carte de l\'éditeur ne vient que pour un niveau d\'accès connu pour insuffisant (« aucun », « lecture de table ») : une version de Grist qui ne dit pas le niveau, ou un niveau que le widget ne connaît pas, laisse le document',
+    run: async (h) => {
+      await editorSetup(h);
+      const seen = {};
+      for (const [name, level] of [['inconnu', null], ['nouveau niveau', 'read doc'], ['complet', 'full']]) {
+        await grantAccess(level);
+        seen[name] = editorView();
+      }
+      await editorFinish();
+      const pass = Object.values(seen).every(v => !v.host && !v.card && !v.editorHidden && !v.bodyHidden && v.barFree);
+      return { pass, notes: JSON.stringify(seen) };
+    },
+  });
+
+  cases.push({
+    id: 'reader_guide_editor_access_card_follows_the_interface_language_live',
+    description: 'La carte de l\'éditeur est écrite dans la langue de l\'interface (introduction comprise, aucun mot français en anglais, capture en-1) et se réécrit seule quand la langue change, sans repasser par le mode',
+    run: async (h) => {
+      await editorSetup(h);
+      await grantAccess('none');
+      const fr = editorView();
+      I18n.setLang('en');
+      await waitFor(() => /full access/i.test(text(editorCard() && editorCard().querySelector('.reader-guide-title'))), 2000);
+      await sleep(80);
+      const en = editorView();
+      I18n.setLang('fr');
+      await sleep(120);
+      const back = editorView();
+      await editorFinish();
+      const frenchInEnglish = /[éèêàçù]|accès|widget a besoin|modèles/i.test([en.title, en.intro, en.lead, en.marks.join(' ')].join(' ').replace(/widget/gi, ''));
+      const pass = fr.card && fr.title === 'Donnez l’accès complet à ce widget' && fr.img === 'img/reader-guide/fr-1.png'
+        && en.card && en.title === 'Give this widget full access' && en.intro === 'This widget needs full access to the document to read and save your templates.'
+        && en.lead === 'Click this widget to select it: Grist opens its right-hand panel.' && en.marks[0] === 'Open the “Widget” tab' && en.marks[2] === 'If not, click “Accept”'
+        && en.img === 'img/reader-guide/en-1.png' && !frenchInEnglish
+        && back.title === fr.title && back.intro === fr.intro && back.img === 'img/reader-guide/fr-1.png';
+      return { pass, notes: JSON.stringify({ fr, en, back, frenchInEnglish }) };
+    },
+  });
+
+  cases.push({
+    id: 'reader_guide_editor_access_card_leaves_the_reading_mode_alone_and_comes_back_with_the_edit_mode',
+    description: 'Le mode Lecture garde sa carte (le guide, avec son propre identifiant de titre) sans que celle de l\'éditeur s\'y mêle : en Lecture le conteneur de l\'éditeur est vide et caché, un retour en Édition ramène la carte de l\'accès, et il n\'y a jamais deux titres de même identifiant dans la page',
+    run: async (h) => {
+      await editorSetup(h);
+      stub().fireRecord(null, TABLE); // aucune ligne choisie : sans elle (une ligne reste d'un cas d'avant), la Lecture montrerait le document, pas le guide
+      await grantAccess('none');
+      const edit1 = editorView();
+      await modeButton('btn-mode-read');
+      await waitFor(() => !!reader().querySelector(':scope > .reader-guide'), 3000);
+      const read = {
+        host: isShown(host()), hostEmpty: host().childElementCount === 0, readerShown: isShown(reader()), readerCard: !!reader().querySelector(':scope > .reader-guide'),
+        readerTitle: text(reader().querySelector('.reader-guide-title')), readerTitleId: (reader().querySelector('.reader-guide-title') || {}).id,
+        barLocked: barLocked(),
+      };
+      await modeButton('btn-mode-edit');
+      await waitFor(() => !!editorCard(), 3000);
+      const edit2 = editorView();
+      const duplicates = Array.from(document.querySelectorAll('[id$="guide-title"]')).map(e => e.id).filter((id, i, all) => all.indexOf(id) !== i);
+      await editorFinish();
+      const pass = edit1.card && edit1.editorHidden && !read.host && read.hostEmpty && read.readerShown && read.readerCard && read.readerTitleId === 'reader-guide-title'
+        && read.readerTitle !== edit1.title && read.barLocked
+        && edit2.card && edit2.host && edit2.editorHidden && edit2.title === 'Donnez l’accès complet à ce widget' && duplicates.length === 0;
+      return { pass, notes: JSON.stringify({ edit1, read, edit2, duplicates }) };
+    },
+  });
+
+  cases.push({
+    id: 'reader_guide_editor_access_card_has_the_same_look_as_the_reading_one_and_reaches_4_5',
+    description: 'La carte de l\'éditeur est mise en forme comme celle de la Lecture (mêmes règles : corps, graisse, marges, couleurs du titre, de l\'introduction, de la phrase, des repères, de la capture) et son texte passe 4,5:1 sur sa carte en clair comme en sombre',
+    run: async (h) => {
+      await editorSetup(h);
+      const html = document.documentElement;
+      const before = html.getAttribute('data-theme');
+      const noMotion = document.createElement('style');
+      noMotion.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; }';
+      document.head.appendChild(noMotion);
+      const byTheme = {};
+      let sameLook = null;
+      try {
+        // La carte de la Lecture (relié, sans accès) et celle de l'éditeur, côte à côte et visibles ensemble : les mêmes éléments, les mêmes styles calculés.
+        fireLinking({ asTarget: 'Cursor:Same-Table', asSource: false }, 'none');
+        await showEmptyReader();
+        await sleep(120);
+        const read = reader();
+        const props = ['fontSize', 'fontWeight', 'lineHeight', 'marginTop', 'marginBottom', 'color', 'backgroundColor', 'fontFamily', 'paddingTop', 'borderTopWidth'];
+        const look = root => {
+          const out = {};
+          for (const sel of ['.reader-guide', '.reader-guide-title', '.reader-guide-intro', '.reader-guide-lead', '.reader-guide-mark-item', '.reader-guide-mark', '.reader-guide-mark-text', '.reader-guide-shot', '.reader-guide-step']) {
+            const e = root.querySelector(sel);
+            const cs = e && getComputedStyle(e);
+            out[sel] = cs ? props.map(k => cs[k]).join('|') : null;
+          }
+          return out;
+        };
+        await sleep(60);
+        const editorHost = host();
+        editorHost.style.display = 'block';
+        ReaderGuide.renderAccess(editorHost);
+        await sleep(120);
+        const a = look(read), b = look(editorHost);
+        sameLook = { diff: Object.keys(a).filter(k => a[k] === null || a[k] !== b[k]).map(k => ({ sel: k, reading: a[k], editor: b[k] })) };
+        editorHost.replaceChildren();
+        editorHost.style.display = 'none';
+        await finish();
+        // Contrastes : dans l'éditeur lui-même, sur son vrai fond.
+        await grantAccess('none');
+        for (const theme of ['light', 'dark']) {
+          html.setAttribute('data-theme', theme);
+          await sleep(60);
+          const pick = sel => editorCard().querySelector(sel);
+          byTheme[theme] = {
+            titre: textRatio(pick('.reader-guide-title')), introduction: textRatio(pick('.reader-guide-intro')), phrase: textRatio(pick('.reader-guide-lead')),
+            repere: textRatio(pick('.reader-guide-mark-text')), ronds: textRatio(pick('.reader-guide-mark')),
+          };
+        }
+      } finally {
+        if (before === null) html.removeAttribute('data-theme'); else html.setAttribute('data-theme', before);
+        noMotion.remove();
+      }
+      await editorFinish();
+      const bad = [];
+      for (const theme of Object.keys(byTheme)) for (const [name, value] of Object.entries(byTheme[theme])) if (!(value >= 4.5)) bad.push(theme + ' ' + name + ' ' + value);
+      return { pass: !!sameLook && sameLook.diff.length === 0 && bad.length === 0, notes: JSON.stringify({ sameLook, bad, byTheme }) };
     },
   });
 
