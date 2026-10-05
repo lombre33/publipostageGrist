@@ -991,6 +991,62 @@
   });
 
   cases.push({
+    id: 'trackchanges_bar_stays_closed_while_the_editor_has_no_box',
+    description: "Le curseur sur une suggestion, l'éditeur masqué (Lecture, résumé d'un macro-modèle) : une transaction qui arrive alors (le blur d'un clic sur « Lecture ») ne rouvre pas la barre, qui se posait en haut à gauche ; l'éditeur revenu, la barre se rouvre",
+    run: async (h) => {
+      try {
+        await documentWithInsertions(h, '<p>Alpha beta</p><p>Gamma delta</p>', [['Alpha beta', ' XX']]);
+        await caretIn(h, ' XX', 2);
+        const ed = EditorCore.getEditor();
+        const opened = barVisible();
+        const container = document.getElementById('editor-container');
+        const display = container.style.display;
+        container.style.display = 'none';
+        // Dans la même tâche : le focus n'a pas encore quitté l'éditeur, seule sa boîte a disparu.
+        ed.view.dispatch(ed.state.tr.setSelection(EditorCore.getTextSelectionClass().create(ed.state.doc, textPos(' XX', 1))));
+        const stillFocused = ed.view.hasFocus() && ed.view.dom.getClientRects().length === 0;
+        await h.sleep(150);
+        const closedHidden = !barVisible();
+        container.style.display = display;
+        await caretIn(h, ' XX', 2);
+        const reopened = barVisible();
+        const checks = { opened, stillFocused, closedHidden, reopened };
+        return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify(checks) };
+      } finally { document.getElementById('editor-container').style.display = ''; await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_bar_ignores_a_press_of_another_mouse_button_but_waits_for_the_left_one',
+    description: "Un appui du bouton droit dans le texte ne ferme pas la barre ; un appui du bouton gauche la ferme jusqu'au relâchement (même quand la sélection bouge), puis elle se rouvre",
+    run: async (h) => {
+      try {
+        await documentWithInsertions(h, '<p>Alpha beta</p><p>Gamma delta</p>', [['Alpha beta', ' XX']]);
+        await caretIn(h, ' XX', 2);
+        const ed = EditorCore.getEditor();
+        const move = n => ed.view.dispatch(ed.state.tr.setSelection(EditorCore.getTextSelectionClass().create(ed.state.doc, textPos(' XX', n))));
+        const opened = barVisible();
+        ed.view.dom.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 2 }));
+        move(1);
+        await h.sleep(120);
+        const rightKeepsIt = barVisible();
+        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 2 }));
+        await h.sleep(120);
+        const rightRelease = barVisible();
+        ed.view.dom.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }));
+        move(2);
+        await h.sleep(120);
+        const leftClosesIt = !barVisible();
+        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0 }));
+        await h.sleep(150);
+        const reopened = barVisible();
+        const checks = { opened, rightKeepsIt, rightRelease, leftClosesIt, reopened };
+        return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify(checks) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
     id: 'trackchanges_bar_resolves_a_replacement_and_a_deletion_across_paragraphs_as_one',
     description: "Un remplacement (l'ancien texte barré ET le nouveau) se résout d'un seul clic depuis l'un ou l'autre ; une suppression à cheval sur deux paragraphes aussi - accepter fusionne les deux paragraphes, refuser les rend tels quels ; un gras posé sur un mot (supprimé + inséré) de même",
     run: async (h) => {
