@@ -145,7 +145,8 @@
     } catch (error) {
       const code = error && error.code;
       if (VALIDATION_CODES.indexOf(code) === -1) console.warn('[text-expansion] enregistrement impossible', error);
-      setFormStatus(ui, code);
+      // Une erreur sans code (une écriture que Grist refuse) est un échec d'enregistrement comme les autres.
+      setFormStatus(ui, code || 'saveFailed');
       (code === 'textEmpty' || code === 'textTooLong' ? ui.textInput : ui.abbreviationInput).focus();
     } finally {
       ui.submitButton.disabled = false;

@@ -680,6 +680,71 @@
   });
 
   cases.push({
+    id: 'te_settings_pane_says_when_a_write_fails_without_an_error_code',
+    description: 'Une écriture que Grist refuse sans code d\'erreur (une erreur ordinaire, ou un rejet qui ne porte rien) affiche le même message d\'échec d\'enregistrement que celle qui en porte un, à l\'ajout comme à la modification : la saisie, la ligne et le mode (Ajouter ou Enregistrer) restent, le bouton est rendu, le focus revient à l\'abréviation ; une saisie refusée (doublon) garde son propre message',
+    run: async () => {
+      wipe();
+      stub().setUserEmail(ALICE);
+      await seed([[ALICE, 'ub', 'université de Bordeaux']]);
+      const results = {};
+      const api = grist.docApi;
+      const realApply = api.applyUserActions;
+      const realWarn = console.warn;
+      const warned = [];
+      console.warn = (...args) => { warned.push(String(args[0])); };
+      const state = () => ({ form: paneForm(), rows: paneRows(), focus: focusedId(), submitDisabled: byId('settings-expansion-submit').disabled, table: rowsOf().map(r => r.abbr + '=' + r.text) });
+      try {
+        await openExpansionPane();
+        // Ajout : une erreur ordinaire, sans `code`.
+        api.applyUserActions = async () => { throw new Error('écriture refusée (simulée)'); };
+        byId('settings-expansion-abbr').value = 'nouv';
+        byId('settings-expansion-text').value = 'nouvelle abréviation';
+        byId('settings-expansion-form').requestSubmit();
+        await sleep(250);
+        results.addPlainError = state();
+        // Ajout : un rejet qui ne porte rien.
+        api.applyUserActions = () => Promise.reject();
+        byId('settings-expansion-abbr').focus();
+        byId('settings-expansion-form').requestSubmit();
+        await sleep(250);
+        results.addBareRejection = state();
+        // Modification : la même erreur ordinaire ; la ligne garde son texte, le formulaire reste en modification.
+        api.applyUserActions = async () => { throw new Error('écriture refusée (simulée)'); };
+        rowButton('§ub', 0).click();
+        await sleep(30);
+        byId('settings-expansion-text').value = 'université de Bordeaux, campus';
+        byId('settings-expansion-form').requestSubmit();
+        await sleep(250);
+        results.editPlainError = state();
+        // Une saisie refusée garde son message à elle : l'écriture n'est même pas tentée.
+        api.applyUserActions = realApply;
+        byId('settings-expansion-cancel').click();
+        byId('settings-expansion-abbr').value = 'UB';
+        byId('settings-expansion-text').value = 'doublon';
+        byId('settings-expansion-form').requestSubmit();
+        await sleep(250);
+        results.duplicate = state();
+      } finally {
+        api.applyUserActions = realApply;
+        console.warn = realWarn;
+        closeSettings();
+      }
+      results.warned = warned;
+      const failed = I18n.t('settings.expansion.error.saveFailed');
+      const duplicate = I18n.t('settings.expansion.error.duplicate');
+      const adding = (abbr, text, status, focus) => ({ form: { abbr, text, submit: 'Ajouter', cancelShown: false, status }, rows: ['§ub'], focus, submitDisabled: false, table: ['ub=université de Bordeaux'] });
+      const wanted = {
+        addPlainError: adding('nouv', 'nouvelle abréviation', failed, 'settings-expansion-abbr'),
+        addBareRejection: adding('nouv', 'nouvelle abréviation', failed, 'settings-expansion-abbr'),
+        editPlainError: { form: { abbr: 'ub', text: 'université de Bordeaux, campus', submit: 'Enregistrer', cancelShown: true, status: failed }, rows: ['§ub'], focus: 'settings-expansion-abbr', submitDisabled: false, table: ['ub=université de Bordeaux'] },
+        duplicate: adding('UB', 'doublon', duplicate, 'settings-expansion-abbr'),
+        warned: ['[text-expansion] enregistrement impossible', '[text-expansion] enregistrement impossible', '[text-expansion] enregistrement impossible'],
+      };
+      return { pass: failed === 'L’enregistrement dans le document a échoué.' && duplicate !== failed && JSON.stringify(results) === JSON.stringify(wanted), notes: JSON.stringify(results) };
+    },
+  });
+
+  cases.push({
     id: 'te_settings_pane_follows_a_language_change_even_while_a_line_is_being_edited',
     description: 'Un changement de langue en pleine modification refait le texte d\'explication, les boutons des lignes et le bouton d\'envoi, et ramène le formulaire à un ajout vide',
     run: async () => {
