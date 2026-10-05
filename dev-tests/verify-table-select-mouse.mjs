@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Sélectionner plusieurs cases en glissant la souris, dans un tableau de document et dans une grille (demande d'Antoine, 01/10), à la VRAIE souris (page.mouse, Node/Playwright), à la
 // taille du panneau Grist (~700x400), en thème clair puis sombre. Une page.evaluate ne déclenche ni un appui « trusted », ni le survol, ni le glissé : c'est ici qu'on s'assure que
-//   - glisser d'une case à une autre sélectionne exactement le rectangle entre les deux, dans tous les sens, depuis n'importe quelle case (texte compris) ;
+//   - glisser d'une case à une autre sélectionne exactement le rectangle entre les deux, dans tous les sens, depuis n'importe quelle case (texte compris) ; une case du bas que la pastille
+//     de zoom recouvre (coin bas droit du panneau) se glisse après un défilement du document, comme le ferait une personne ;
 //   - Maj + clic étend la sélection ; la sélection se voit même sur une case colorée (voile, pas fond) et le texte y reste lisible ;
 //   - dans une grille, la barre de la case est fixée dans sa bande au-dessus du tableau, jamais posée sur une case : aucune case n'est recouverte, un appui tombe toujours sur la
 //     case visée (flottante, elle recouvrait les cases voisines de la case courante) ;
@@ -155,6 +156,26 @@ async function realDrag(page, from, to, during) {
 
 const cellBox = (page, r, c) => boxOf(page, `.tiptap table tr:nth-child(${r}) > :nth-child(${c})`);
 
+// Qui reçoit le pointeur au centre de la case (r, c) ? null quand c'est la case elle-même, sinon l'élément qui la recouvre.
+const coverOf = (page, r, c) => page.evaluate(([row, col]) => {
+  const td = document.querySelector(`.tiptap table tr:nth-child(${row}) > :nth-child(${col})`);
+  const b = td.getBoundingClientRect();
+  const hit = document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2);
+  if (hit && td.contains(hit)) return null;
+  return hit ? hit.tagName + (hit.id ? '#' + hit.id : '') + (hit.className ? '.' + String(hit.className).split(' ')[0] : '') : 'rien';
+}, [r, c]);
+// La pastille de zoom (js/page-zoom.js) est fixe au coin bas droit du panneau et, à 700x400, recouvre la dernière case d'un tableau de six lignes : un appui n'y tombe pas sur la case.
+// Une personne fait défiler le document ; le script aussi, de 40 px à la fois, jusqu'à ce que les cases du glissé reçoivent le pointeur. Rend ce qui les recouvre encore, ou null.
+async function bringIntoReach(page, ...cells) {
+  for (let step = 0; ; step++) {
+    let cover = null;
+    for (const [r, c] of cells) cover = cover || await coverOf(page, r, c);
+    if (!cover || step === 8) return cover;
+    await page.evaluate(() => { document.getElementById('editor-container').scrollTop += 40; });
+    await page.waitForTimeout(60);
+  }
+}
+
 // Les cases sélectionnées, lues sur le rendu : rectangle (lignes et colonnes, depuis 1) et nombre ; la sélection de ProseMirror doit être une sélection de cases.
 const selectedRect = page => page.evaluate(() => {
   const els = Array.from(document.querySelectorAll('.tiptap td.selectedCell, .tiptap th.selectedCell'));
@@ -267,8 +288,10 @@ async function runTheme(theme) {
     ['vers la gauche : de D6 à B6', [6, 4], [6, 2]],
   ];
   for (const [text, from, to] of cases) {
+    const cover = await bringIntoReach(page, from, to);
     const got = (await dragCells(page, from, to)).rect;
-    check(`${label} - tableau de document, glissé ${text} : ${show(wantRect(from, to))}`, sameRect(got, wantRect(from, to)), { got: show(got) });
+    await page.evaluate(() => { document.getElementById('editor-container').scrollTop = 0; });
+    check(`${label} - tableau de document, glissé ${text} : ${show(wantRect(from, to))}`, sameRect(got, wantRect(from, to)), { got: show(got), cover });
   }
   const fromText = await dragCells(page, [2, 2], [4, 3], { dx: -70 });
   check(`${label} - tableau de document : un glissé qui commence sur le texte de la case (B2) sélectionne bien les cases (B2 à C4)`, sameRect(fromText.rect, wantRect([2, 2], [4, 3])), show(fromText.rect));
