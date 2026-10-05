@@ -57,7 +57,8 @@ const LinkDialog = (function () {
     const schemeMatch = value.match(SCHEME);
     const rest = schemeMatch ? value.slice(schemeMatch[0].length) : '';
     // « localhost:3000 » et « exemple.fr:8080/x » ressemblent à un schéma : un numéro de port derrière les deux-points dit que c'est une machine.
-    const looksLikePort = schemeMatch && /^\d+(?:[/?#]|$)/.test(rest);
+    // « tel: » fait exception, son adresse est un numéro (« tel:0612345678 »).
+    const looksLikePort = schemeMatch && schemeMatch[1].toLowerCase() !== 'tel' && /^\d+(?:[/?#]|$)/.test(rest);
     if (schemeMatch && !looksLikePort) return schemeResult(schemeMatch[1].toLowerCase(), rest, value);
     if (EMAIL.test(value)) return { href: 'mailto:' + value, text: value };
     if (isPhone(value)) return { href: telHref(value), text: value };

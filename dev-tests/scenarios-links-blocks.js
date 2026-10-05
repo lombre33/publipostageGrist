@@ -144,6 +144,35 @@
   });
 
   cases.push({
+    id: 'lb_normalize_accepts_tel_with_glued_digits_but_keeps_ports_for_machines',
+    description: 'Adresse saisie : « tel:0612345678 » (chiffres collés, sans espace ni +) est un numéro de téléphone, pas un port : tel:0612345678, comme « tel:+33612345678 » et « tel:06 12 34 56 78 » ; trop court ou trop long reste refusé ; « localhost:3000 » et « exemple.fr:8080 » restent des machines, « x:80?y » reste refusé',
+    run: async () => {
+      const n = LinkDialog.normalizeUrl;
+      const ok = (href, text) => JSON.stringify({ href, text });
+      const bad = JSON.stringify({ error: 'invalid' });
+      const want = [
+        ['tel:0612345678', ok('tel:0612345678', '0612345678')],
+        ['TEL:0612345678', ok('tel:0612345678', '0612345678')],
+        ['  tel:0612345678  ', ok('tel:0612345678', '0612345678')],
+        ['tel:+33612345678', ok('tel:+33612345678', '+33612345678')],
+        ['tel:06 12 34 56 78', ok('tel:0612345678', '06 12 34 56 78')],
+        ['tel:123456', ok('tel:123456', '123456')],
+        ['tel:123456789012345', ok('tel:123456789012345', '123456789012345')],
+        ['tel:12345', bad],
+        ['tel:1234567890123456', bad],
+        ['tel:0612345678/x', bad],
+        ['localhost:3000', ok('https://localhost:3000', 'localhost:3000')],
+        ['exemple.fr:8080', ok('https://exemple.fr:8080', 'exemple.fr:8080')],
+        ['x:80?y', bad],
+        ['mailto:0612345678', bad],
+        ['javascript:0612345678', bad],
+      ];
+      const wrong = want.filter(([raw, expected]) => JSON.stringify(n(raw)) !== expected).map(([raw]) => raw + ' -> ' + JSON.stringify(n(raw)));
+      return { pass: wrong.length === 0, notes: JSON.stringify({ wrong }) };
+    },
+  });
+
+  cases.push({
     id: 'lb_sanitizer_keeps_only_safe_link_addresses',
     description: 'HtmlSanitize : un lien ne garde que http(s), mailto et tel (adresse nettoyée des espaces) ; data:, vbscript:, adresse relative et javascript: perdent leur href, le texte reste',
     run: async () => {
@@ -396,6 +425,31 @@
         pass: invalid.open && invalid.shown && invalid.role === 'alert' && invalid.aria === 'true' && invalid.focus && invalidMsg.length > 5 && emptyMsg.length > 5 && emptyMsg !== invalidMsg && unchanged && cleared,
         notes: JSON.stringify({ invalid, emptyMsg, unchanged, cleared }),
       };
+    },
+  });
+
+  cases.push({
+    id: 'lb_link_window_accepts_a_phone_number_typed_as_tel_with_glued_digits',
+    description: 'Fenêtre du lien : « tel:0612345678 » (chiffres collés) est accepté comme « tel:+33612345678 » et « tel:06 12 34 56 78 » : la fenêtre se ferme, le lien porte l\'adresse tel: attendue, aucune alerte « adresse invalide » ne reste',
+    run: async (h) => {
+      const results = {};
+      for (const [typed, href] of [['tel:0612345678', 'tel:0612345678'], ['tel:+33612345678', 'tel:+33612345678'], ['tel:06 12 34 56 78', 'tel:0612345678']]) {
+        await h.resetEditor();
+        Editor.setHTML('<p>Appelez le standard</p>');
+        await sleep(100);
+        await selectText('standard');
+        await h.clickButton('v2-btn-link');
+        setField('pp-link-url', typed);
+        okButton().click();
+        await sleep(150);
+        const a = parse(Editor.getHTML()).querySelector('a');
+        const error = document.getElementById('pp-link-error');
+        results[typed] = { href: a && a.getAttribute('href'), text: a && a.textContent, open: modalOpen(), error: error.hidden ? '' : error.textContent };
+        await closeWindowIfOpen();
+        results[typed].expected = href;
+      }
+      const wrong = Object.keys(results).filter(typed => results[typed].href !== results[typed].expected || results[typed].text !== 'standard' || results[typed].open || results[typed].error !== '');
+      return { pass: wrong.length === 0, notes: JSON.stringify({ wrong, results }) };
     },
   });
 
