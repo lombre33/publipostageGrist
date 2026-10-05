@@ -1298,7 +1298,18 @@ const EditorNodes = (function () {
       editor.view.dispatch(tr.setSelection(TextSelection.create(tr.doc, caretBeside(tr.doc, at))).scrollIntoView());
       return true;
     };
-    const keys = (names, dir) => names.reduce((all, name) => Object.assign(all, { [name]: ({ editor }) => deleteKeepingImages(editor) || stepOver(editor, dir) }), {});
+    const selectInlineImage = (editor, dir) => {
+      // Curseur seul juste derrière une image au fil du texte (Retour arrière) ou juste devant (Suppr) : la touche la sélectionne au lieu de l'effacer, la
+      // touche suivante (une image sélectionnée part comme d'habitude) l'efface et Annuler la rend. Rend vrai quand l'image est sélectionnée. Suivi des
+      // modifications actif, la bibliothèque marque la suppression (visible, refusable) puis laisse le curseur passer par-dessus : une image sélectionnée
+      // à chaque touche l'en empêcherait, la touche suit son cours.
+      if (!free(editor) || !editor.state.selection.empty) return false;
+      const { selection } = editor.state;
+      const image = dir < 0 ? selection.$from.nodeBefore : selection.$from.nodeAfter;
+      if (!image || image.type.name !== 'editorImage' || isFloatingImage(image)) return false;
+      return editor.commands.setNodeSelection(dir < 0 ? selection.from - image.nodeSize : selection.from);
+    };
+    const keys = (names, dir) => names.reduce((all, name) => Object.assign(all, { [name]: ({ editor }) => deleteKeepingImages(editor) || stepOver(editor, dir) || selectInlineImage(editor, dir) }), {});
     return { isFloatingImage, caretBeside, keys };
   })();
   const { keepImagesOfReplacedText } = (function () {
@@ -1383,6 +1394,10 @@ const EditorNodes = (function () {
       // - Texte tapé, Entrée, texte collé ou composé sur un texte sélectionné qui contient une ancre, mot effacé en entier (Ctrl + Suppr) : aucune de
       //   ces touches n'est jouée ici (le navigateur remplace le texte lui-même), la garde `keepImagesOfReplacedText` pose donc les images au même
       //   endroit après le remplacement.
+      // - Une image au fil du texte (la classique), curseur seul juste derrière elle (Retour arrière) ou juste devant (Suppr) : la touche la
+      //   sélectionne au lieu de l'effacer ; la touche suivante, sur l'image sélectionnée, l'efface, et Annuler la rend. Les ancres collées au
+      //   curseur sont enjambées d'abord : l'image à côté du curseur est celle que l'écran montre. Suivi des modifications actif, la touche suit son
+      //   cours (la bibliothèque marque l'image supprimée, puis le curseur passe par-dessus).
       // - Le reste suit son cours : une image sélectionnée part, tout le document sélectionné (Ctrl + A, ou un texte qui le couvre en entier) aussi, et
       //   suivi des modifications actif la bibliothèque marque la suppression (js/track-changes.js).
       const keepKey = new PluginKey('floatingImageKeep');

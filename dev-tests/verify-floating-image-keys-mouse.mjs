@@ -8,7 +8,8 @@
 //  - un triple clic sur une ligne qui porte une image, puis Retour arrière : le texte part, l'image reste là où elle était ; la ligne vide se joint ensuite à celle d'avant sans l'image ;
 //  - Suppr en fin de titre, la ligne suivante ne portant que l'image : elle se joint, l'image reste, et le Suppr suivant joint la ligne d'après au lieu d'effacer l'image ;
 //  - ce qui doit partir part : un vrai clic sur l'image la sélectionne, Suppr l'enlève et elle seule (Ctrl+Z la rend), Ctrl+A puis Suppr vide tout le document ;
-//  - une image au fil du texte garde son comportement (Retour arrière juste après elle l'efface) ;
+//  - une image au fil du texte : Retour arrière juste après elle (ou Suppr juste avant, ou avec Ctrl) la sélectionne au lieu de l'effacer, la seconde frappe l'efface, Ctrl+Z la rend ; collée à l'ancre d'une image
+//    en calque, l'ancre est enjambée ; ailleurs dans la ligne, au début de la ligne d'après et suivi des modifications actif, la touche garde son cours ;
 //  - un texte tapé, Entrée, un texte collé (saisie IME) ou Ctrl+Suppr sur une ligne qui porte l'image : le texte est remplacé ou effacé, l'image reste au même endroit de l'écran, la frappe suivante
 //    se joint au texte tapé (jamais à la ligne du dessus), Ctrl+Z rend la ligne et l'image en une étape ; Couper (Ctrl+X) emporte l'image avec le texte, Coller (Ctrl+V) la rend à sa place.
 // Lancé par run-headless.mjs (groupe Node "floatingKeysMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-floating-image-keys-mouse.mjs
@@ -165,7 +166,8 @@ async function runTheme(theme, variant) {
     });
     const sel = ed.state.selection;
     const views = Array.from(document.querySelectorAll('.tiptap .editor-image-view.editor-image-layered')).map(v => { const r = v.getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height }; });
-    return { text: lines.join(' | '), images, node: sel.node ? sel.node.type.name : null, empty: sel.empty, from: sel.from, to: sel.to, views };
+    const framed = document.querySelectorAll('.tiptap .editor-image-view.editor-image-selected').length;
+    return { text: lines.join(' | '), images, node: sel.node ? sel.node.type.name : null, empty: sel.empty, from: sel.from, to: sel.to, views, framed };
   });
   const sameSpot = (a, b) => !!a && !!b && near(a.left, b.left, 1) && near(a.top, b.top, 1) && near(a.width, b.width, 1) && near(a.height, b.height, 1);
   async function load(html) {
@@ -204,6 +206,8 @@ async function runTheme(theme, variant) {
   }
   const clickLine = async i => { const b = await lineBox(i); await click(b.para.left + 6, (b.para.top + b.para.bottom) / 2); };
   const clickEndOfLine = async i => { const b = await lineBox(i); await click(b.text ? b.text.right + 4 : b.para.right - 6, (b.para.top + b.para.bottom) / 2); };
+  // Un vrai clic tout à droite de la ligne : le curseur va au bout de la ligne (jamais sur une image, qui serait sélectionnée).
+  const clickRightOfLine = async i => { const b = await lineBox(i); await click(b.para.right - 6, (b.para.top + b.para.bottom) / 2); };
   const tripleClickLine = async i => { const b = await lineBox(i); await click(b.text.left + 8, (b.text.top + b.text.bottom) / 2, { clickCount: 3 }); };
   async function press(...keys) { for (const key of keys) { await page.keyboard.press(key); await sleep(180); } }
 
@@ -275,6 +279,34 @@ async function runTheme(theme, variant) {
     s = await state();
     check(`${label} - Ctrl+A puis Suppr vide tout le document, l'image comprise (« ${s.text} », ${s.images} image)`, s.images === 0 && s.text.replace(/\s|\|/g, '') === '', s);
 
+    // --- 4 bis. Une image au fil du texte collée à l'ancre : l'ancre est enjambée, la touche sélectionne l'image que l'écran montre à côté du curseur ---
+    // Un clic tout à droite d'une ligne qui finit par une image et une ancre tombe au début de la ligne (le navigateur choisit mal) : un clic dans la ligne puis Fin ou Début posent le curseur.
+    await load('<p>Titre</p><p>Ligne A' + classicImage(png) + F + '</p><p>Ligne B</p>');
+    start = await state();
+    await clickLine(1);
+    await press('End');
+    s = await state();
+    check(`${label} - Fin met le curseur derrière l'image au fil du texte et l'ancre (en ${s.from}), rien n'est sélectionné`, s.empty && s.node === null && s.from === 17 && s.framed === 0, s);
+    await press('Backspace');
+    s = await state();
+    check(`${label} - Retour arrière : l'image au fil du texte est sélectionnée (cadre à l'écran), rien ne part (« ${s.text} »)`, s.node === 'editorImage' && s.framed === 1 && s.images === 2 && s.text === start.text && s.views.length === 1 && sameSpot(s.views[0], start.views[0]), { depart: start, apres: s });
+    await press('Backspace');
+    s = await state();
+    check(`${label} - la seconde frappe efface l'image au fil du texte et elle seule : l'image en calque reste à sa place (« ${s.text} »)`, s.images === 1 && s.text === 'Titre | Ligne A⟨image⟩ | Ligne B' && s.views.length === 1 && sameSpot(s.views[0], start.views[0]), { depart: start.views, apres: s });
+    await load('<p>Titre</p><p>' + F + classicImage(png) + 'Ligne A</p><p>Ligne B</p>');
+    start = await state();
+    // Le curseur est posé par le script : sur une ligne qui commence par une ancre et une image, Début ne quitte pas le bout de la ligne (le navigateur ne place pas de curseur devant elles).
+    await page.evaluate(() => { const ed = EditorCore.getEditor(); ed.commands.setTextSelection(8); ed.view.focus(); });
+    await sleep(150);
+    s = await state();
+    check(`${label} - le curseur est devant l'ancre et l'image au fil du texte (en ${s.from}), rien n'est sélectionné`, s.empty && s.node === null && s.from === 8 && s.framed === 0, s);
+    await press('Delete');
+    s = await state();
+    check(`${label} - Suppr : l'ancre est enjambée, l'image au fil du texte est sélectionnée, rien ne part (« ${s.text} »)`, s.node === 'editorImage' && s.framed === 1 && s.images === 2 && s.text === start.text && s.views.length === 1 && sameSpot(s.views[0], start.views[0]), { depart: start, apres: s });
+    await press('Delete');
+    s = await state();
+    check(`${label} - la seconde frappe efface l'image au fil du texte et elle seule (« ${s.text} »)`, s.images === 1 && s.text === 'Titre | ⟨image⟩Ligne A | Ligne B' && s.views.length === 1 && sameSpot(s.views[0], start.views[0]), { depart: start.views, apres: s });
+
     // --- 6. Texte tapé, Entrée, collé, mot effacé, Couper sur une ligne qui porte l'image ---
     const line = 'Titre | Ligne A⟨image⟩ | Ligne B';
     await load('<p>Titre</p><p>Ligne A' + F + '</p><p>Ligne B</p>');
@@ -343,13 +375,81 @@ async function runTheme(theme, variant) {
     check(`${label} - Coller rend le texte et l'image, à la même place à l'écran (« ${s.text} »)`, s.images === 1 && s.text === 'Titre |  | Ligne B | FinLigne A⟨image⟩' && s.views.length === 1 && sameSpot(s.views[0], start.views[0]), { texte: s.text, avant: start.views, apres: s.views });
   }
 
-  // --- 5. Une image au fil du texte (classique) : Retour arrière juste après elle l'efface, comme avant ---
+  // --- 5. Une image au fil du texte (classique) : la touche la sélectionne d'abord, la seconde l'efface, Annuler la rend ---
+  const flow = `${themeLabel}${attachment ? ', image PJ' : ''} - image au fil du texte`;
   await load('<p>Titre</p><p>Ligne A' + classicImage(png) + '</p><p>Ligne B</p>');
-  const lastLine = await lineBox(1);
-  await click(lastLine.para.right - 6, (lastLine.para.top + lastLine.para.bottom) / 2);
+  let s = await state();
+  await clickRightOfLine(1);
+  s = await state();
+  check(`${flow} : un vrai clic au bout de la ligne pose le curseur derrière l'image (en ${s.from}), rien n'est sélectionné`, s.empty && s.node === null && s.from === 16 && s.framed === 0, s);
   await press('Backspace');
-  const classic = await state();
-  check(`${themeLabel}${attachment ? ', image PJ' : ''} - une image au fil du texte garde son comportement : Retour arrière juste après elle l'efface (« ${classic.text} »)`, classic.images === 0 && classic.text === 'Titre | Ligne A | Ligne B', classic);
+  s = await state();
+  check(`${flow} : Retour arrière juste derrière elle la sélectionne (cadre et poignées à l'écran), rien ne part (« ${s.text} »)`, s.node === 'editorImage' && s.framed === 1 && s.images === 1 && s.text === 'Titre | Ligne A⟨classique⟩ | Ligne B', s);
+  await snap('classique-selectionnee');
+  await press('Backspace');
+  s = await state();
+  check(`${flow} : la seconde frappe l'efface (« ${s.text} »), le curseur reste au bout de « Ligne A » (en ${s.from})`, s.images === 0 && s.text === 'Titre | Ligne A | Ligne B' && s.empty && s.from === 15 && s.framed === 0, s);
+  await press('Control+z');
+  s = await state();
+  check(`${flow} : Ctrl+Z la rend (${s.images} image, « ${s.text} »)`, s.images === 1 && s.text === 'Titre | Ligne A⟨classique⟩ | Ligne B', s);
+
+  await load('<p>Titre</p><p>Ligne A' + classicImage(png) + '</p><p>Ligne B</p>');
+  await clickRightOfLine(1);
+  await press('Backspace', 'Backspace', 'Backspace');
+  s = await state();
+  check(`${flow} : trois Retour arrière de suite : l'image est sélectionnée, effacée, puis le caractère d'avant part (« ${s.text} »)`, s.images === 0 && s.text === 'Titre | Ligne  | Ligne B', s);
+
+  await load('<p>Titre</p><p>' + classicImage(png) + 'Ligne A</p><p>Ligne B</p>');
+  await clickRightOfLine(1);
+  await press('Home');
+  s = await state();
+  check(`${flow} : Début mène le curseur devant l'image (en ${s.from}), rien n'est sélectionné`, s.empty && s.node === null && s.from === 8, s);
+  await press('Delete');
+  s = await state();
+  check(`${flow} : Suppr juste devant elle la sélectionne, rien ne part (« ${s.text} »)`, s.node === 'editorImage' && s.framed === 1 && s.images === 1 && s.text === 'Titre | ⟨classique⟩Ligne A | Ligne B', s);
+  await press('Delete');
+  s = await state();
+  check(`${flow} : la seconde frappe l'efface (« ${s.text} »)`, s.images === 0 && s.text === 'Titre | Ligne A | Ligne B' && s.empty && s.from === 8, s);
+  await press('Delete');
+  s = await state();
+  check(`${flow} : et la suivante efface le caractère d'après (« ${s.text} »)`, s.text === 'Titre | igne A | Ligne B', s);
+
+  await load('<p>Titre</p><p>Ligne A' + classicImage(png) + '</p><p>Ligne B</p>');
+  await clickRightOfLine(1);
+  await press('Control+Backspace');
+  s = await state();
+  check(`${flow} : Ctrl + Retour arrière juste derrière elle la sélectionne aussi, sans emporter « Ligne A » (« ${s.text} »)`, s.node === 'editorImage' && s.framed === 1 && s.images === 1 && s.text === 'Titre | Ligne A⟨classique⟩ | Ligne B', s);
+  await press('Control+Backspace');
+  s = await state();
+  check(`${flow} : et le suivant l'efface seule (« ${s.text} »)`, s.images === 0 && s.text === 'Titre | Ligne A | Ligne B', s);
+
+  await load('<p>Titre</p><p>Ligne A' + classicImage(png) + ' fin</p><p>Ligne B</p>');
+  await clickRightOfLine(1);
+  await press('Backspace');
+  s = await state();
+  check(`${flow} : Retour arrière ailleurs dans la ligne (derrière du texte) : le navigateur efface le caractère, l'image reste, non sélectionnée (« ${s.text} »)`, s.images === 1 && s.node === null && s.framed === 0 && s.text === 'Titre | Ligne A⟨classique⟩ fi | Ligne B', s);
+
+  await load('<p>Titre</p><p>Ligne A</p><p>' + classicImage(png) + 'Ligne B</p>');
+  const nextLine = await lineBox(2);
+  await click(nextLine.para.right - 6, (nextLine.para.top + nextLine.para.bottom) / 2);
+  await press('Home', 'Backspace');
+  s = await state();
+  check(`${flow} : Retour arrière au début de la ligne d'après : les deux lignes se joignent, l'image reste (« ${s.text} »)`, s.images === 1 && s.node === null && s.text === 'Titre | Ligne A⟨classique⟩Ligne B', s);
+
+  // Suivi des modifications actif : la bibliothèque garde la touche (elle marque l'image supprimée puis le curseur la quitte) ; une image sélectionnée à chaque touche l'en empêcherait.
+  await load('<p>Titre</p><p>Ligne A' + classicImage(png) + '</p><p>Ligne B</p>');
+  await page.evaluate(() => Editor.setTrackChanges(true));
+  await sleep(300);
+  await clickRightOfLine(1);
+  await press('Backspace');
+  s = await state();
+  const marked = await page.evaluate(() => /<del[^>]*><img/.test(Editor.getHTML()));
+  check(`${flow}, suivi des modifications actif : Retour arrière marque l'image supprimée sans la sélectionner, le curseur la quitte (en ${s.from})`, marked && s.images === 1 && s.node === null && s.framed === 0 && s.empty && s.from === 15, { marked, s });
+  await press('Backspace');
+  s = await state();
+  check(`${flow}, suivi des modifications actif : le Retour arrière suivant marque « A » supprimé, le curseur passe devant (en ${s.from})`, s.node === null && s.empty && s.from === 14, s);
+  await page.evaluate(() => Editor.setTrackChanges(false));
+  await sleep(200);
 
   await context.close();
 }

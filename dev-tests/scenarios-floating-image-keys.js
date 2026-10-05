@@ -70,8 +70,22 @@
     ed().commands.setTextSelection({ from, to });
     ed().view.focus();
   }
+  // Rend vrai quand l'éditeur a pris la touche (keydown « default prevented ») ; faux quand il la laisse au navigateur (qui efface alors lui-même le caractère voisin).
   function press(key, mods) {
-    document.querySelector('.tiptap').dispatchEvent(new KeyboardEvent('keydown', Object.assign({ key, bubbles: true, cancelable: true }, mods || {})));
+    return !document.querySelector('.tiptap').dispatchEvent(new KeyboardEvent('keydown', Object.assign({ key, bubbles: true, cancelable: true }, mods || {})));
+  }
+  const MOD = /Mac|iP(hone|[oa]d)/.test(navigator.platform) ? { metaKey: true } : { ctrlKey: true };
+  // L'image au fil du texte que la sélection de ProseMirror enveloppe (une NodeSelection), sinon null.
+  function selectedClassic() {
+    const node = ed().state.selection.node;
+    return node && node.type.name === 'editorImage' && node.attrs.layer === 'normal' ? node : null;
+  }
+  // La position de la première image au fil du texte du paragraphe de rang i.
+  function classicPos(i) {
+    const range = paragraphRange(i);
+    let found = null;
+    ed().state.doc.nodesBetween(range.start, range.end, (node, pos) => { if (found == null && node.type.name === 'editorImage' && !isFloating(node)) found = pos; });
+    return found;
   }
   async function setDoc(h, html) {
     await h.resetEditor();
@@ -259,21 +273,21 @@
   });
 
   cases.push({
-    id: 'floating_keys_images_in_the_flow_and_other_selections_keep_their_behaviour',
-    description: 'Une image au fil du texte (classique) n\'est pas concernée : la touche ne déplace pas le curseur ; sans ancre, un texte sélectionné s\'efface comme avant ; le suivi des modifications actif garde la gestion de la bibliothèque (le curseur ne bouge pas)',
+    id: 'floating_keys_selected_text_without_an_anchor_and_track_changes_keep_their_behaviour',
+    description: 'Sans ancre, un texte sélectionné s\'efface comme avant (une image au fil du texte qu\'il contient part avec lui) ; le suivi des modifications actif garde la gestion de la bibliothèque (le curseur ne bouge pas)',
     run: async (h) => {
       const problems = [];
       await setDoc(h, '<p>Titre</p><p>Ligne A' + classic + '</p><p>Ligne B</p>');
       const range = paragraphRange(1);
-      caretAt(range.end);
-      press('Backspace');
-      await sleep(40);
-      if (ed().state.selection.from !== range.end) problems.push('image classique : le curseur a bougé (' + ed().state.selection.from + ' au lieu de ' + range.end + ')');
       selectText(range.start, range.start + 4);
       press('Backspace');
       await sleep(40);
       if (summary() !== 'Titre | e A⟨classique⟩ | Ligne B') problems.push('texte sélectionné sans ancre : ' + summary());
       if (imageCount() !== 1) problems.push('texte sélectionné sans ancre : ' + imageCount() + ' image(s)');
+      selectText(paragraphRange(1).start, paragraphRange(1).end);
+      press('Backspace');
+      await sleep(40);
+      if (summary() !== 'Titre |  | Ligne B' || imageCount() !== 0) problems.push('texte sélectionné jusqu\'à l\'image : ' + summary() + ' (' + imageCount() + ' image)');
       await setDoc(h, '<p>Titre</p><p>' + floating(KINDS[0]) + '</p><p>Ligne A</p>');
       Editor.setTrackChanges(true);
       await sleep(80);
@@ -282,6 +296,147 @@
       press('Backspace');
       await sleep(60);
       if (ed().state.selection.from !== edge) problems.push('suivi des modifications : le curseur a bougé (' + ed().state.selection.from + ' au lieu de ' + edge + ')');
+      Editor.setTrackChanges(false);
+      await sleep(60);
+      return { pass: problems.length === 0, notes: JSON.stringify(problems) };
+    },
+  });
+
+  cases.push({
+    id: 'floating_keys_backspace_or_delete_next_to_an_image_in_the_flow_selects_it_first',
+    description: 'Une image au fil du texte (classique) : Retour arrière juste après elle, ou Suppr juste avant, la sélectionne au lieu de l\'effacer (le document ne change pas) ; la touche suivante l\'efface, le curseur reste là où elle était, et Annuler la rend',
+    run: async (h) => {
+      const problems = [];
+      const cases2 = [
+        { label: 'Retour arrière juste après l\'image', key: 'Backspace', html: '<p>Titre</p><p>Ligne A' + classic + '</p><p>Ligne B</p>', wanted: 'Titre | Ligne A | Ligne B', caret: pos => pos + 1 },
+        { label: 'Retour arrière juste après l\'image, du texte devant et derrière', key: 'Backspace', html: '<p>Titre</p><p>Ligne A' + classic + ' fin</p><p>Ligne B</p>', wanted: 'Titre | Ligne A fin | Ligne B', caret: pos => pos + 1 },
+        { label: 'Suppr juste avant l\'image', key: 'Delete', html: '<p>Titre</p><p>' + classic + 'Ligne A</p><p>Ligne B</p>', wanted: 'Titre | Ligne A | Ligne B', caret: pos => pos },
+        { label: 'Suppr juste avant l\'image, du texte devant et derrière', key: 'Delete', html: '<p>Titre</p><p>Ligne A' + classic + ' fin</p><p>Ligne B</p>', wanted: 'Titre | Ligne A fin | Ligne B', caret: pos => pos },
+        { label: 'Retour arrière, l\'image seule dans sa ligne', key: 'Backspace', html: '<p>Titre</p><p>' + classic + '</p><p>Ligne B</p>', wanted: 'Titre |  | Ligne B', caret: pos => pos + 1 },
+      ];
+      for (const c of cases2) {
+        await setDoc(h, c.html);
+        const before = summary();
+        const pos = classicPos(1);
+        caretAt(c.caret(pos));
+        const doc = ed().state.doc;
+        if (!press(c.key)) problems.push(c.label + ' : la touche n\'est pas prise par l\'éditeur (le navigateur efface l\'image)');
+        await sleep(40);
+        if (!selectedClassic()) problems.push(c.label + ' : l\'image n\'est pas sélectionnée (sélection ' + ed().state.selection.constructor.name + ' ' + ed().state.selection.from + '-' + ed().state.selection.to + ')');
+        else if (ed().state.selection.from !== pos) problems.push(c.label + ' : l\'image sélectionnée est en ' + ed().state.selection.from + ' (' + pos + ' attendu)');
+        if (!ed().state.doc.eq(doc) || summary() !== before) problems.push(c.label + ' : la première touche a changé le document (' + summary() + ')');
+        press(c.key);
+        await sleep(40);
+        if (summary() !== c.wanted || imageCount() !== 0) problems.push(c.label + ', seconde touche : ' + summary() + ' (' + imageCount() + ' image, ' + c.wanted + ' attendu)');
+        if (!ed().state.selection.empty || ed().state.selection.from !== pos) problems.push(c.label + ', seconde touche : le curseur est en ' + ed().state.selection.from + ' (' + pos + ' attendu)');
+        ed().commands.undo();
+        await sleep(60);
+        if (summary() !== before || imageCount() !== 1) problems.push(c.label + ', Annuler : ' + summary() + ' (' + imageCount() + ' image, ' + before + ' attendu)');
+      }
+      return { pass: problems.length === 0, notes: JSON.stringify(problems) };
+    },
+  });
+
+  cases.push({
+    id: 'floating_keys_every_deleting_key_next_to_an_image_in_the_flow_selects_it_first',
+    description: 'Toutes les touches qui effacent derrière ou devant le curseur sélectionnent d\'abord l\'image au fil du texte voisine : Maj + Retour arrière, Ctrl + Retour arrière, Alt + Retour arrière, Ctrl + Suppr, Alt + Suppr ; la seconde touche l\'efface quand ProseMirror la connaît (les Alt sont celles du Mac : sous Linux le navigateur les traite lui-même, hors de ce scénario)',
+    run: async (h) => {
+      const problems = [];
+      const keys = [
+        { label: 'Maj + Retour arrière', key: 'Backspace', mods: { shiftKey: true }, after: true, erases: true },
+        { label: 'Ctrl + Retour arrière', key: 'Backspace', mods: MOD, after: true, erases: true },
+        { label: 'Alt + Retour arrière', key: 'Backspace', mods: { altKey: true }, after: true, erases: false },
+        { label: 'Ctrl + Suppr', key: 'Delete', mods: MOD, after: false, erases: true },
+        { label: 'Alt + Suppr', key: 'Delete', mods: { altKey: true }, after: false, erases: false },
+      ];
+      for (const k of keys) {
+        await setDoc(h, '<p>Titre</p><p>Ligne A' + classic + 'B</p><p>Ligne B</p>');
+        const before = summary();
+        const pos = classicPos(1);
+        caretAt(k.after ? pos + 1 : pos);
+        if (!press(k.key, k.mods)) problems.push(k.label + ' : la touche n\'est pas prise par l\'éditeur');
+        await sleep(40);
+        if (!selectedClassic() || summary() !== before) problems.push(k.label + ' : image non sélectionnée ou document changé (' + summary() + ')');
+        if (!k.erases) continue;
+        press(k.key, k.mods);
+        await sleep(40);
+        if (imageCount() !== 0 || summary() !== 'Titre | Ligne AB | Ligne B') problems.push(k.label + ', seconde touche : ' + summary());
+      }
+      return { pass: problems.length === 0, notes: JSON.stringify(problems) };
+    },
+  });
+
+  cases.push({
+    id: 'floating_keys_an_anchor_between_the_caret_and_an_image_in_the_flow_is_stepped_over_first',
+    description: 'Une ancre invisible entre le curseur et une image au fil du texte est enjambée : la touche sélectionne l\'image que l\'écran montre à côté du curseur, la seconde touche l\'efface et elle seule, l\'image en calque reste à sa place (image d\'un fichier ou PJ, devant ou derrière)',
+    run: async (h) => {
+      const problems = [];
+      for (const kind of KINDS) {
+        for (const key of ['Backspace', 'Delete']) {
+          const html = key === 'Backspace'
+            ? '<p>Titre</p><p>Ligne A' + classic + floating(kind) + '</p><p>Ligne B</p>'
+            : '<p>Titre</p><p>' + floating(kind) + classic + 'Ligne A</p><p>Ligne B</p>';
+          await setDoc(h, html);
+          const placed = floatingImages().map(image => placement(image));
+          const before = summary();
+          const range = paragraphRange(1);
+          caretAt(key === 'Backspace' ? range.end : range.start);
+          const label = kind.label + ', ' + (key === 'Backspace' ? 'Retour arrière' : 'Suppr');
+          if (!press(key)) problems.push(label + ' : la touche n\'est pas prise par l\'éditeur');
+          await sleep(40);
+          if (!selectedClassic()) problems.push(label + ' : l\'image au fil du texte n\'est pas sélectionnée (sélection ' + ed().state.selection.from + '-' + ed().state.selection.to + ')');
+          if (summary() !== before) problems.push(label + ' : la première touche a changé le document (' + summary() + ')');
+          press(key);
+          await sleep(40);
+          const left = floatingImages();
+          if (imageCount() !== 1 || left.length !== 1 || placement(left[0]) !== placed[0]) problems.push(label + ', seconde touche : ' + summary() + ' (' + imageCount() + ' image, l\'image en calque doit rester à sa place)');
+        }
+      }
+      return { pass: problems.length === 0, notes: JSON.stringify(problems) };
+    },
+  });
+
+  cases.push({
+    id: 'floating_keys_an_image_in_the_flow_is_left_alone_when_the_caret_is_not_beside_it',
+    description: 'Seul un curseur collé à l\'image la sélectionne : ailleurs dans la ligne la touche est laissée au navigateur ; au début de la ligne suivante, Retour arrière joint les deux lignes et l\'image reste (de même Suppr en fin de la ligne d\'avant) ; une image déjà sélectionnée part dès la première touche ; le suivi des modifications actif garde la gestion de la bibliothèque',
+    run: async (h) => {
+      const problems = [];
+      await setDoc(h, '<p>Titre</p><p>Ligne A' + classic + ' B</p><p>Ligne B</p>');
+      let pos = classicPos(1);
+      caretAt(paragraphRange(1).end);
+      const doc = ed().state.doc;
+      if (press('Backspace')) problems.push('Retour arrière après du texte : la touche est prise par l\'éditeur');
+      caretAt(pos);
+      if (press('Backspace')) problems.push('Retour arrière devant l\'image, à la fin du texte : la touche est prise par l\'éditeur');
+      caretAt(pos + 1);
+      if (press('Delete')) problems.push('Suppr derrière l\'image, devant du texte : la touche est prise par l\'éditeur');
+      if (selectedClassic() || !ed().state.doc.eq(doc)) problems.push('ailleurs que contre l\'image : la sélection ou le document a changé');
+      await setDoc(h, '<p>Titre</p><p>Ligne A' + classic + '</p><p>Ligne B</p>');
+      caretAt(paragraphRange(2).start);
+      press('Backspace');
+      await sleep(40);
+      if (summary() !== 'Titre | Ligne A⟨classique⟩Ligne B' || selectedClassic()) problems.push('Retour arrière au début de la ligne d\'après : ' + summary());
+      await setDoc(h, '<p>Titre</p><p>Ligne A</p><p>' + classic + 'Ligne B</p>');
+      caretAt(paragraphRange(1).end);
+      press('Delete');
+      await sleep(40);
+      if (summary() !== 'Titre | Ligne A⟨classique⟩Ligne B' || selectedClassic()) problems.push('Suppr en fin de la ligne d\'avant : ' + summary());
+      await setDoc(h, '<p>Titre</p><p>Ligne A' + classic + '</p><p>Ligne B</p>');
+      for (const key of ['Backspace', 'Delete']) {
+        await setDoc(h, '<p>Titre</p><p>Ligne A' + classic + '</p><p>Ligne B</p>');
+        ed().commands.setNodeSelection(classicPos(1));
+        ed().view.focus();
+        press(key);
+        await sleep(40);
+        if (summary() !== 'Titre | Ligne A | Ligne B') problems.push(key + ' sur l\'image déjà sélectionnée : ' + summary());
+      }
+      await setDoc(h, '<p>Titre</p><p>Ligne A' + classic + '</p><p>Ligne B</p>');
+      Editor.setTrackChanges(true);
+      await sleep(80);
+      pos = classicPos(1);
+      caretAt(pos + 1);
+      if (press('Backspace')) problems.push('suivi des modifications : la touche est prise par l\'éditeur (la bibliothèque marque la suppression, comme avant)');
+      if (selectedClassic() || ed().state.selection.from !== pos + 1) problems.push('suivi des modifications : image sélectionnée ou curseur déplacé');
       Editor.setTrackChanges(false);
       await sleep(60);
       return { pass: problems.length === 0, notes: JSON.stringify(problems) };

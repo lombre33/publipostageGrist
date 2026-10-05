@@ -602,7 +602,12 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   l'image avec elle, au même endroit de l'écran et de la page), et un texte sélectionné qui la contient part sans elle (elle est reposée là où la sélection se referme, dans la même étape d'Annuler), qu'on l'efface, qu'on le remplace en
   tapant, par Entrée ou en collant, ou qu'on efface un mot d'un coup (Ctrl + Suppr). Le curseur se pose derrière elle quand aucun texte ne la précède : devant, la frappe partirait à la ligne du dessus. Couper
   emporte l'image avec le texte dans le presse-papiers, Coller la rend à sa place sur la page. Suivi des
-  modifications allumé, la bibliothèque marque la suppression comme pour le texte. Un clic sur du texte posé sur une image « derrière le texte » atteint le texte, pas l'image (Antoine, même demande) : le curseur
+  modifications allumé, la bibliothèque marque la suppression comme pour le texte.
+  Une image au fil du texte a la même prudence, en deux temps (Antoine, 05/10, sa carte « Retour arrière juste après une image au fil du texte : l'effacer tout de suite ou la sélectionner d'abord ? »,
+  choix « Sélectionner d'abord ») : Retour arrière juste derrière elle, ou Suppr juste devant (avec Maj, Ctrl ou Alt aussi), la sélectionne au lieu de l'effacer, avec son cadre, ses poignées et sa barre, comme
+  après un clic ; la touche suivante l'efface, le curseur reste où elle était, et Annuler la rend. L'ancre invisible d'une image en calque collée au curseur est enjambée d'abord : l'image sélectionnée est celle que
+  l'écran montre à côté du curseur. Ailleurs dans la ligne, au début de la ligne d'après (Retour arrière joint les deux lignes, l'image reste), pour un texte sélectionné qui la contient, et suivi des modifications
+  allumé (la bibliothèque marque l'image supprimée), la touche garde son cours. Un clic sur du texte posé sur une image « derrière le texte » atteint le texte, pas l'image (Antoine, même demande) : le curseur
   se pose, le double clic prend le mot, le triple clic la ligne, le glissé sélectionne, et Suppr efface ce texte. La poignée de déplacement de l'image et sa partie sans texte (à droite des lignes, au-dessous, au
   bout d'une ligne) gardent leur clic : il sélectionne l'image comme avant, qui reste ainsi toujours atteignable. Une image « devant le texte » se clique partout, texte dessous ou non.
 - Image « Au cœur du texte » et texte autour (Antoine, 02/10, point 9, et sa carte du point 10, « La rendre fidèle ») : l'éditeur, la Lecture, le PDF et le Word posent l'image et son texte de la même façon.
