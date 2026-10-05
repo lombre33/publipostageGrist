@@ -397,9 +397,11 @@ const PageLayout = (function () {
     return String(pageNum);
   }
   function resolvePageNumberBadges(html, pageNum, totalPages) {
-    // Résout chaque badge .page-number-badge d'un fragment HTML en son texte pour cette page ; renvoie le HTML résolu.
+    // Résout chaque badge .page-number-badge d'un fragment HTML en son texte pour cette page ; renvoie le HTML résolu, prêt à s'afficher.
     const host = document.createElement('template'); // inerte : rien ne charge ni ne s'exécute pendant la lecture
     host.innerHTML = html || '';
+    // Ce HTML va s'afficher (aperçu paginé, Lecture) : une image d'un autre site que la personne n'a pas affichée y prend son cadre « Afficher ».
+    if (typeof ExternalImages !== 'undefined') ExternalImages.blockIn(host.content);
     host.content.querySelectorAll('.page-number-badge').forEach(badge => {
       badge.textContent = pageNumberText(badge.getAttribute('data-format') || 'n', pageNum, totalPages);
     });

@@ -143,12 +143,15 @@ const MainToolbar = (function () {
     } catch (e) {
       console.warn('[Editor] image par URL non convertible en data URI (CORS/réseau), URL brute conservée :', src, e);
       window.alert(I18n.t('image.corsWarning'));
+      // La personne vient de taper cette adresse et de demander à la copier : le site n'a rien à apprendre d'un affichage de plus, l'image s'affiche
+      // (js/external-images.js ; à la prochaine ouverture du modèle, elle attendra un clic « Afficher »).
+      ExternalImages.allow(ExternalImages.siteOf(src));
       return src;
     }
   }
   // L'adresse d'une image d'un autre site (ExternalImages.siteOf) se choisit une fois, à l'insertion (contrôle de sécurité) : « Intégrer l'image »
-  // (par défaut) la copie dans le modèle, « Garder le lien » garde l'adresse - elle se charge alors depuis ce site à chaque ouverture et reste
-  // signalée en rouge (js/external-images.js). Une adresse data: ou du même site que le widget n'envoie personne ailleurs : elle est intégrée sans
+  // (par défaut) la copie dans le modèle, « Garder le lien » garde l'adresse - elle se charge alors depuis ce site (après un clic « Afficher » à chaque
+  // ouverture du modèle) et reste signalée en rouge (js/external-images.js). Une adresse data: ou du même site que le widget n'envoie personne ailleurs : elle est intégrée sans
   // question. Renvoie null quand la question est annulée (Annuler, Échap) : rien ne s'insère.
   async function imageSourceFromUrl(url) {
     const site = ExternalImages.siteOf(url);
@@ -161,7 +164,9 @@ const MainToolbar = (function () {
         { value: 'embed', label: I18n.t('dialog.imageExternal.embed'), primary: true },
       ],
     });
-    if (choice === 'keep') return url;
+    // « Garder le lien » est l'accord de la personne pour ce site : l'image s'affiche tout de suite. À la prochaine ouverture du modèle, elle attendra
+    // un clic « Afficher » comme toute image d'un autre site.
+    if (choice === 'keep') { ExternalImages.allow(site); return url; }
     return choice === 'embed' ? urlToDataUriOrWarn(url) : null;
   }
   function applyToolbarIcons() {

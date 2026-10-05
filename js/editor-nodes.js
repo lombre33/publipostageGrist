@@ -1582,6 +1582,20 @@ const EditorNodes = (function () {
       varLabel.className = 'editor-image-var-label';
       wrap.appendChild(varLabel);
 
+      // Image d'un autre site pas encore affichée (js/external-images.js) : l'<img> n'a pas d'adresse, le cadre montre le site et le vrai bouton
+      // « Afficher » (le clic affiche toutes les images de ce site, pour la session). Caché tant que l'image n'est pas bloquée.
+      const blockedBox = document.createElement('span');
+      blockedBox.className = 'editor-image-blocked-box';
+      const blockedSiteLabel = document.createElement('span');
+      blockedSiteLabel.className = 'editor-image-blocked-site';
+      const revealButton = document.createElement('button');
+      revealButton.type = 'button';
+      revealButton.className = 'editor-image-reveal';
+      revealButton.addEventListener('click', () => ExternalImages.allow(wrap.dataset.blockedSite));
+      blockedBox.appendChild(blockedSiteLabel);
+      blockedBox.appendChild(revealButton);
+      wrap.appendChild(blockedBox);
+
       const moveHandle = document.createElement('span');
       moveHandle.className = 'editor-image-move-handle';
       moveHandle.title = I18n.t('image.moveHandle');
@@ -1593,7 +1607,7 @@ const EditorNodes = (function () {
         wrap.appendChild(h);
         corners[corner] = h;
       });
-      return { wrap, img, varLabel, moveHandle, corners };
+      return { wrap, img, varLabel, blockedSiteLabel, revealButton, moveHandle, corners };
     }
 
     function imageInnerStyle(attrs, isVarBox, isQrBox) {
@@ -1630,7 +1644,17 @@ const EditorNodes = (function () {
       const isVarBox = !!attrs.varTable;
       // Un QR code dont le texte contient une colonne : le même cadre qu'une image de variable, carré, avec son texte pour libellé.
       const isQrBox = !!attrs.qrText && !attrs.src && !isVarBox;
-      img.src = isVarBox ? '' : (attrs.src || '');
+      // Une image d'un autre site que la personne n'a pas affiché : pas d'adresse donnée au navigateur (le modèle, lui, la garde), un cadre à la place.
+      const blockedSite = isVarBox ? '' : ExternalImages.blockedSiteOf(attrs.src);
+      img.src = (isVarBox || blockedSite) ? '' : (attrs.src || '');
+      wrap.classList.toggle('editor-image-blocked', !!blockedSite);
+      if (blockedSite) {
+        wrap.dataset.blockedSite = blockedSite;
+        view.blockedSiteLabel.textContent = blockedSite;
+        view.revealButton.textContent = I18n.t('image.blocked.show');
+        view.revealButton.title = ExternalImages.hintOf(blockedSite);
+        view.revealButton.setAttribute('aria-label', I18n.t('image.blocked.alt', { site: blockedSite }));
+      } else delete wrap.dataset.blockedSite;
       img.alt = attrs.alt || '';
       img.setAttribute('style', imageInnerStyle(attrs, isVarBox, isQrBox));
       wrap.classList.toggle('editor-image-var-placeholder', isVarBox || isQrBox);
@@ -1754,10 +1778,26 @@ const EditorNodes = (function () {
       return { start: startMove, release: () => document.removeEventListener('mousemove', onMoveMove) };
     }
 
+    // Les vues d'image qui attendent peut-être le clic « Afficher » d'un site : chacune se redessine d'après ses attributs quand un site est affiché
+    // (js/external-images.js). L'abonnement est pris à la première vue : le module de l'éditeur se charge avant celui des images d'un autre site.
+    const revealHooks = new Set();
+    let revealHooked = false;
+    function hookReveal() {
+      if (revealHooked) return;
+      revealHooked = true;
+      const redrawAll = () => revealHooks.forEach(hook => hook());
+      ExternalImages.onReveal(redrawAll);
+      I18n.onChange(redrawAll); // le bouton « Afficher » et son nom accessible suivent la langue
+    }
+
     function imageNodeView({ node, editor: nodeEditor, getPos }) {
       const view = imageViewDom();
       const { wrap, img, moveHandle } = view;
-      const applyAttrs = attrs => applyImageAttrs(view, attrs);
+      let shown = node.attrs;
+      const applyAttrs = attrs => { shown = attrs; applyImageAttrs(view, attrs); };
+      const redraw = () => applyImageAttrs(view, shown);
+      hookReveal();
+      revealHooks.add(redraw);
       applyAttrs(node.attrs);
       const resize = imageResizeGesture(view, node, nodeEditor, getPos);
       const move = imageMoveGesture(view, node, nodeEditor, getPos, applyAttrs);
@@ -1779,7 +1819,10 @@ const EditorNodes = (function () {
         },
         selectNode: () => wrap.classList.add('editor-image-selected'),
         deselectNode: () => wrap.classList.remove('editor-image-selected'),
+        // Le bouton « Afficher » d'une image bloquée est à lui : ni sélection de l'image, ni glissé, ni autre geste de l'éditeur sur son clic.
+        stopEvent: event => !!event.target.closest && !!event.target.closest('.editor-image-blocked-box'),
         destroy: () => {
+          revealHooks.delete(redraw);
           behindImageViews.delete(wrap);
           resize.release();
           move.release();

@@ -408,7 +408,7 @@ const Comments = (function () {
       AnnotatingSerializer = class extends annotatingBase {
         serializeNodeInner(node, options) {
           if (node.isText) {
-            const span = document.createElement('span');
+            const span = ((options && options.document) || document).createElement('span');
             const tag = this.takeTag(node);
             if (tag) span.setAttribute('data-pp-pos', tag);
             span.textContent = node.text;
@@ -437,8 +437,11 @@ const Comments = (function () {
     });
     const serializer = new AnnotatingSerializer(base.nodes, base.marks);
     serializer.takeTag = node => { const list = positions.get(node); return list && list.length ? version + ':' + list.shift() : null; };
-    const host = document.createElement('div');
-    host.appendChild(serializer.serializeFragment(doc.content, { document }));
+    // Dans un document inerte : une <img> créée dans celui de la page charge son adresse dès que son src est écrit, même détachée, et la Lecture
+    // préviendrait ainsi un site que la personne n'a pas encore affiché (js/external-images.js). editor.getHTML() en fait autant (document à part).
+    const inert = document.implementation.createHTMLDocument('');
+    const host = inert.createElement('div');
+    host.appendChild(serializer.serializeFragment(doc.content, { document: inert }));
     // Même retouche que Editor.getHTML() : la grille n'a pas la ligne vide cachée qui suit son tableau dans l'éditeur, sinon la Lecture lui ajoutait
     // une ligne de blanc.
     return GridEditor.serialize(host.innerHTML);

@@ -3,11 +3,54 @@
    pagination, ni le PDF ne changent), se peint par-dessus l'image et tient aussi sur une image habillée à gauche ou à droite, derrière le texte ou
    posée dans une case de tableau. La page (éditeur, Lecture) reste blanche dans les deux thèmes : le rouge est celui du thème clair dans les deux
    (4,67:1 sur blanc, comme --danger-ink), jamais le jeton du thème sombre (#f08a8a, 2,3:1 sur blanc). Le texte explicatif est l'infobulle de
-   l'image. 3 px : la feuille est mise à l'échelle du panneau (zoom ~0,6 à 700×400), le trait y mesure ~1,8 px à l'écran ; 2 px n'en faisait que
-   ~1,2. */
+   l'image. 3 px : la feuille est mise à l'échelle du panneau (zoom ~0,85 à 700×400), le trait y mesure ~2,5 px à l'écran ; 2 px n'en faisait que
+   ~1,7. */
 :root { --paper-danger: #c53030; }
 
 /* Les deux sélecteurs : `img.editor-image[...]` passe devant `.editor-image:hover` (css/style.css) qui, sinon, repeindrait le contour en bleu au
    survol. */
 img[data-external-site],
 img.editor-image[data-external-site] { outline: 3px dashed var(--paper-danger); outline-offset: -3px; }
+
+/* Image d'un autre site pas encore affichée (js/external-images.js ; choix du 05/10 : « Bloquer jusqu'à un clic »). Deux formes, un même cadre :
+   - dans l'éditeur, la vue de l'image (js/editor-nodes.js : applyImageAttrs) ne donne pas l'adresse au navigateur et montre un cadre, le site et un vrai
+     bouton « Afficher » ; l'<img> reste là, masquée, pour porter la largeur (poignées, barre flottante), comme pour l'espace réservé d'une variable ;
+   - ailleurs (Lecture, en-têtes et pieds), l'<img> garde sa place et porte un cadre dessiné (SVG, data-blocked-src) ; le clic sur le cadre l'affiche.
+   La feuille est blanche dans les deux thèmes : le cadre prend les couleurs de la feuille (jamais celles du thème sombre), comme le rouge ci-dessus.
+   Blanc sur --paper-accent : 4,55:1 ; --paper-ink sur --paper-frame : plus de 13:1.
+   La feuille est réduite à l'écran (`zoom: var(--pp-fit-zoom)`, ~0,85 dans un panneau de 700 px) : le texte et le bouton du cadre sont à l'envers de ce facteur,
+   donc à leur taille d'écran (11 px, un bouton de 64 × 22 px), et le cadre ne descend pas sous 112 × 56 px d'écran pour les contenir. */
+:root { --paper-frame: #f2f4f7; --paper-frame-line: #6b7686; --paper-ink: #1b2430; --paper-accent: #2f6fed; --paper-accent-hover: #1f58c4; }
+
+/* Sans largeur dans le modèle, le cadre en prend une ; avec elle (style en ligne de l'image), il la garde, sauf sous le minimum lisible. Les proportions sont
+   celles d'un logo : l'image réelle n'est pas encore connue. */
+.tiptap .editor-image-view.editor-image-blocked .editor-image {
+  visibility: hidden; width: 160px; min-width: calc(112px / var(--pp-fit-zoom, 1)); min-height: calc(56px / var(--pp-fit-zoom, 1)); aspect-ratio: 2 / 1;
+}
+.editor-image-blocked-box { display: none; }
+.editor-image-blocked .editor-image-blocked-box {
+  position: absolute; inset: 0; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: calc(6px / var(--pp-fit-zoom, 1)); padding: calc(4px / var(--pp-fit-zoom, 1)); font-family: var(--font-ui); overflow: hidden;
+  /* Le cadre est dessiné DANS la boîte de l'image : elle garde exactement la largeur du modèle, et rien ne bouge quand la personne affiche le site. */
+  background: var(--paper-frame); border: calc(1.5px / var(--pp-fit-zoom, 1)) dashed var(--paper-frame-line); border-radius: calc(4px / var(--pp-fit-zoom, 1));
+}
+.editor-image-blocked-box > * { zoom: calc(1 / var(--pp-fit-zoom, 1)); }
+.editor-image-blocked-site {
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 600; line-height: 1.2; color: var(--paper-ink);
+}
+.editor-image-reveal {
+  flex: none; padding: 3px 14px; border: 0; border-radius: 12px; background: var(--paper-accent); color: #fff; font: 600 11px/1.3 var(--font-ui); cursor: pointer;
+}
+.editor-image-reveal:hover { background: var(--paper-accent-hover); }
+.editor-image-reveal:focus-visible { outline: 2px solid var(--paper-ink); outline-offset: 2px; }
+
+/* Le cadre dessiné (Lecture, en-têtes et pieds, galerie) : le fond et les tirets sont ici, le SVG ne porte que le texte et le bouton. L'outline ne prend
+   aucune place. */
+img[data-blocked-src] {
+  min-width: calc(112px / var(--pp-fit-zoom, 1)); min-height: calc(56px / var(--pp-fit-zoom, 1)); cursor: pointer; background: var(--paper-frame);
+  outline: calc(1.5px / var(--pp-fit-zoom, 1)) dashed var(--paper-frame-line); outline-offset: calc(-3px / var(--pp-fit-zoom, 1));
+}
+img[data-blocked-src]:focus-visible { outline: 2px solid var(--paper-ink); outline-offset: 2px; }
+/* L'aperçu paginé de l'éditeur ne donne pas la souris aux espaceurs d'en-tête et de pied (le clic va à la feuille, qui ouvre la zone pour la modifier) ni à la
+   couche de pagination : le cadre « Afficher » d'une image de ces zones la reçoit, comme l'invitation « + Ajouter un en-tête ». */
+.v2-hf-zone img[data-blocked-src] { pointer-events: auto; }

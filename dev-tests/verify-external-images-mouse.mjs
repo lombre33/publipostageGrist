@@ -5,13 +5,19 @@
 // Un vrai réseau de test : les adresses en « .test » sont servies par la page de Playwright (page.route) et chaque requête est notée avec son type. L'image que
 // l'éditeur AFFICHE est une requête 'image' (inchangée) ; le téléchargement de l'EXPORT est une requête 'fetch' : c'est elle qui ne doit jamais partir avant
 // « Continuer », ni après « Annuler ». Les téléchargements de fichiers sont les vrais (événement `download` de Playwright).
-// Six parties : 1) un PDF d'une ligne (Annuler au clic, Échap, Tab, Continuer) ; 2) un DOCX d'une ligne ; 3) un lot ZIP (deux fenêtres à la suite, un refus arrête
+// Huit parties : 1) un PDF d'une ligne (Annuler au clic, Échap, Tab, Continuer) ; 2) un DOCX d'une ligne ; 3) un lot ZIP (deux fenêtres à la suite, un refus arrête
 // tout le lot, une seule question pour toutes les lignes) ; 4) quarante sites (le titre et les boutons restent, seule la liste défile), un seul site, anglais ;
-// 5) l'AFFICHAGE (contrôle de sécurité du 04/10, « Tout corriger ») : l'image d'un autre site porte un contour en tirets rouges et une infobulle qui nomme le site, dans
-// l'éditeur (au repos, au survol, sélectionnée) puis dans la Lecture, en clair, en sombre et en anglais, mesuré sur une vraie capture ; l'image intégrée n'en a pas ;
-// 6) l'INSERTION par adresse (choix d'Antoine du 04/10, « Demander à l'insertion ») : « Insérer une image », l'adresse d'un autre site, puis la question « Intégrer l'image »
-// / « Garder le lien » à la vraie souris et au vrai clavier : Annuler, Échap, Tab, un lien gardé qui reste en tirets rouges sur une vraie capture, une image intégrée qui n'en a
-// pas, un site dont le téléchargement échoue (fetch refusé), une adresse data: sans question ; clair, sombre et anglais.
+// 5) le BLOCAGE jusqu'au clic (choix du 05/10, « Bloquer jusqu'à un clic ») : une image d'un autre site ne charge pas à l'ouverture, un cadre « Afficher » prend sa place
+// dans l'éditeur, dans la Lecture et dans l'en-tête d'une feuille ; aucune requête d'image avant le clic ; texte et bouton à leur taille d'écran sur la feuille réduite du
+// panneau, mesurés sur de vrais pixels, avec leurs contrastes, en clair, en sombre et en anglais ; le vrai clic (Entrée et Espace au clavier) affiche les images de CE site,
+// pas celles des autres, sans modifier le HTML du modèle ;
+// 6) l'AFFICHAGE d'une image affichée (contrôle de sécurité du 04/10, « Tout corriger ») : un contour en tirets rouges et une infobulle qui nomme le site, dans l'éditeur (au
+// repos, au survol, sélectionnée) puis dans la Lecture, mesuré sur une vraie capture ; l'image intégrée n'en a pas ; l'export ne redemande pas un site déjà affiché ;
+// 7) l'INSERTION par adresse (choix du 04/10, « Demander à l'insertion ») : « Insérer une image », l'adresse d'un autre site, puis la question « Intégrer l'image »
+// / « Garder le lien » à la vraie souris et au vrai clavier : Annuler, Échap, Tab, un lien gardé qui s'affiche tout de suite et reste en tirets rouges sur une vraie capture,
+// une image intégrée qui n'en a pas, un site dont le téléchargement échoue (fetch refusé), une adresse data: sans question ; clair, sombre et anglais ;
+// 8) l'affichage d'un site ne dure que la séance de la page : le vrai clic n'écrit rien (ni localStorage, ni sessionStorage, ni le document Grist) et, la page rechargée, le cadre est
+// de retour sans qu'aucune requête soit partie vers le site.
 // Lancé par run-headless.mjs (groupe Node "externalImagesMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-external-images-mouse.mjs
 // EXTERNAL_IMAGES_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans elle, rien n'est écrit.
 import { createServer } from 'node:http';
@@ -141,12 +147,17 @@ await page.route(url => url.hostname === REFUSE_HOST, async route => {
   await route.fulfill({ status: 200, contentType: 'image/png', body: PNG });
 });
 
-await page.goto(`${BASE}/_test-harness.html`, { waitUntil: 'load' });
-await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
-await page.waitForFunction(() => {
-  const el = document.getElementById('status-msg');
-  return !!el && /prêt|ready/i.test(el.textContent || '');
-}, null, { timeout: 90000 });
+// Ouvre (ou rouvre, `reload`) la page du widget et attend qu'elle soit prête.
+async function openHarness(reload = false) {
+  if (reload) await page.reload({ waitUntil: 'load' });
+  else await page.goto(`${BASE}/_test-harness.html`, { waitUntil: 'load' });
+  await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
+  await page.waitForFunction(() => {
+    const el = document.getElementById('status-msg');
+    return !!el && /prêt|ready/i.test(el.textContent || '');
+  }, null, { timeout: 90000 });
+}
+await openHarness();
 
 // Centre d'un élément et ce qui s'y trouve réellement au premier plan.
 async function hitTest(selector) {
@@ -203,8 +214,16 @@ async function realHover(selector) {
 }
 // Le verrou d'export (withExportLock, js/main.js) retire les clics du bouton ou de la ligne de menu (et grise le bouton) pendant l'export, fenêtre comprise.
 const isLocked = id => page.evaluate(id => document.getElementById(id).style.pointerEvents === 'none', id);
-// Les images du document, telles que l'éditeur les affiche : toutes chargées, comme avant.
-const imagesDisplayed = () => page.evaluate(() => { const list = Array.from(document.querySelectorAll('.tiptap img.editor-image')); return list.length > 0 && list.every(i => i.complete && i.naturalWidth > 0); });
+// Les images du document dans l'éditeur, depuis le choix du 05/10 : celles d'un autre site attendent leur clic « Afficher » (un cadre, aucune requête), l'intégrée est chargée.
+const editorImages = () => page.evaluate(() => {
+  const views = Array.from(document.querySelectorAll('.tiptap .editor-image-view'));
+  const blocked = views.filter(v => v.classList.contains('editor-image-blocked'));
+  const loaded = views.filter(v => !v.classList.contains('editor-image-blocked')).map(v => v.querySelector('img')).filter(i => i && i.complete && i.naturalWidth > 0);
+  return { total: views.length, blocked: blocked.length, loaded: loaded.length };
+});
+// Luminance relative et rapport de contraste (WCAG) de deux couleurs « rgb(r, g, b) ».
+const lum = c => { const [r, g, b] = c.match(/[\d.]+/g).slice(0, 3).map(Number).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
 
 // La fenêtre d'une demande : ce qui est affiché, où, et où est le focus.
 const windowState = () => page.evaluate(() => {
@@ -305,7 +324,9 @@ async function runSingle(T, kind) {
   check(`${NAME} : boutons ${cancelLabel} et ${okLabel}, le focus est sur ${okLabel}`, JSON.stringify(s.buttons) === JSON.stringify([cancelLabel, okLabel]) && s.focus === okLabel, s);
   const [t1, o1, c1] = [await hitTest('#pp-dialog-modal h3'), await hitTest(OK), await hitTest(CANCEL)];
   check(`${NAME} : titre et boutons visibles et au premier plan`, seen(t1) && seen(o1) && seen(c1), { t1, o1, c1 });
-  check(`${NAME} : rien n’est téléchargé tant que la fenêtre est ouverte (l’éditeur, lui, affiche ses images comme avant)`, net.fetch.length === 0 && await imagesDisplayed(), { fetch: net.fetch });
+  const shownInEditor = await editorImages();
+  check(`${NAME} : rien n’est téléchargé tant que la fenêtre est ouverte (l’éditeur montre les ${HOSTS.length} cadres « Afficher » sans demander d’image à ces sites, l’image intégrée est chargée)`,
+    net.fetch.length === 0 && net.image.length === 0 && shownInEditor.blocked === HOSTS.length && shownInEditor.loaded === 1, { fetch: net.fetch, image: net.image, shownInEditor });
   check(`${NAME} : l’export est verrouillé pendant la fenêtre (pas de second export possible)`, await isLocked(E.button) === true, await isLocked(E.button));
   await snap(`${T}-${kind}-1-fenetre`);
   const inside = [];
@@ -470,8 +491,6 @@ async function runDark() {
     const cs = e => getComputedStyle(e);
     return { box: cs(ov.querySelector('.modal-content')).backgroundColor, text: cs(ov.querySelector('.pp-dialog-message')).color, title: cs(ov.querySelector('h3')).color };
   });
-  const lum = c => { const [r, g, b] = c.match(/[\d.]+/g).slice(0, 3).map(Number).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
-  const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
   check('sombre : le texte et le titre de la fenêtre se lisent sur son fond (≥ 4,5:1)', ratio(colors.text, colors.box) >= 4.5 && ratio(colors.title, colors.box) >= 4.5,
     { colors, text: ratio(colors.text, colors.box), title: ratio(colors.title, colors.box) });
   await snap('sombre-pdf-fenetre');
@@ -512,12 +531,21 @@ async function runEnglish() {
   await page.evaluate(() => I18n.setLang('fr'));
 }
 
-// 5) L'affichage : le contour en tirets rouges et l'infobulle d'une image qui charge depuis un autre site (js/external-images.js, css/external-images.css).
-const DISPLAY_HOST = 'affiche.exemple.test';
+// 5) et 6) Le BLOCAGE jusqu'au clic « Afficher » (choix du 05/10), puis l'AFFICHAGE de l'image que la personne a affichée : le contour en tirets rouges et l'infobulle d'une image
+// qui charge depuis un autre site (js/external-images.js, css/external-images.css). Un site affiché le reste pour toute la séance de la page : chaque passage (clair, sombre,
+// anglais) a ses propres sites.
+let DISPLAY_HOST = '', OTHER_HOST = '', KEY_HOST = '', READER_KEY_HOST = '';
+function useDisplayHosts(T) {
+  DISPLAY_HOST = `affiche-${T}.exemple.test`;        // affiché par un vrai clic dans l'éditeur
+  OTHER_HOST = `autre-${T}.exemple.test`;            // bloqué dans l'éditeur, affiché par un vrai clic dans la Lecture
+  KEY_HOST = `clavier-${T}.exemple.test`;            // affiché au clavier (Entrée) dans l'éditeur
+  READER_KEY_HOST = `lecture-${T}.exemple.test`;     // affiché au clavier (Espace) dans la Lecture
+}
+const displayHosts = () => [DISPLAY_HOST, OTHER_HOST, KEY_HOST, READER_KEY_HOST];
 const displayImg = src => `<img class="editor-image" src="${src}" alt="Image" style="width: 90px;">`;
-const displayHtml = () => `<p>Dossier : ${badge('ExtDossiers', 'Titre')}</p><p>${displayImg('https://' + DISPLAY_HOST + '/logo.png')}</p><p>${displayImg(DATA_PNG)}</p>`;
+const displayHtml = () => `<p>Dossier : ${badge('ExtDossiers', 'Titre')}</p>` + displayHosts().map(h => `<p>${displayImg('https://' + h + '/logo.png')}</p>`).join('') + `<p>${displayImg(DATA_PNG)}</p>`;
 const externalIn = root => `${root} img[src^="https://${DISPLAY_HOST}"]`;
-const embeddedIn = root => `${root} img[src^="data:"]`;
+const embeddedIn = root => `${root} img[src^="data:image/png"]`;
 // Le rectangle d'une image, amenée au milieu de la vue (la capture et le clic partent de là).
 async function boxOf(selector) {
   return page.evaluate(sel => {
@@ -551,7 +579,7 @@ const outlineOf = selector => page.evaluate(sel => {
   const css = getComputedStyle(e);
   return { style: css.outlineStyle, width: css.outlineWidth, color: css.outlineColor, site: e.getAttribute('data-external-site'), title: e.title };
 }, selector);
-// Le panneau met la feuille à l'échelle (zoom ~0,6 à 700×400) : un trait de 3 px y mesure ~1,8 px ; la VRAIE capture (pixels rouges) dit s'il se voit.
+// Le panneau met la feuille à l'échelle (zoom ~0,85 à 700×400) : un trait de 3 px y mesure ~2,5 px ; la VRAIE capture (pixels rouges) dit s'il se voit.
 const DASHED_RED = o => !!o && o.style === 'dashed' && o.color === 'rgb(197, 48, 48)' && parseFloat(o.width) >= 1 && parseFloat(o.width) <= 3;
 
 async function checkDisplay(T, where, root) {
@@ -567,11 +595,177 @@ async function checkDisplay(T, where, root) {
   check(`${T}, ${where} : les tirets rouges se voient sur une vraie capture (${redOutside} pixels rouges au bord de l'image d'un autre site, ${redEmbedded} sur l'image intégrée)`, redOutside >= 25 && redEmbedded === 0, { redOutside, redEmbedded });
 }
 
-async function runDisplay(T, { dark = false, english = false } = {}) {
+// Le cadre d'une image bloquée sur une VRAIE capture : le fond clair de la feuille (même en thème sombre), le bleu du bouton, le texte du site.
+async function paintOf(box) {
+  const x = Math.max(0, Math.floor(box.left)), y = Math.max(0, Math.floor(box.top));
+  const png = await page.screenshot({ clip: { x, y, width: Math.max(1, Math.min(WIDTH - x, Math.ceil(box.width))), height: Math.max(1, Math.min(HEIGHT - y, Math.ceil(box.height))) } });
+  return page.evaluate(async b64 => {
+    const img = new Image();
+    img.src = 'data:image/png;base64,' + b64;
+    await img.decode();
+    const c = document.createElement('canvas');
+    c.width = img.width; c.height = img.height;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    const d = ctx.getImageData(0, 0, c.width, c.height).data;
+    let light = 0, blue = 0, dark = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      const [r, g, b] = [d[i], d[i + 1], d[i + 2]];
+      if (r > 225 && g > 225 && b > 225) light++;
+      else if (Math.abs(r - 47) < 40 && Math.abs(g - 111) < 40 && Math.abs(b - 237) < 40) blue++;
+      else if (r < 90 && g < 90 && b < 110) dark++;
+    }
+    return { light: Math.round(light / (d.length / 4) * 100) / 100, blue, dark, pixels: d.length / 4 };
+  }, png.toString('base64'));
+}
+const editorFrame = host => `.tiptap .editor-image-view.editor-image-blocked[data-blocked-site="${host}"]`;
+const frameCount = root => page.evaluate(root => document.querySelectorAll(`${root} .editor-image-blocked, ${root} img[data-blocked-src]`).length, root);
+const imageLoaded = (root, host) => page.waitForFunction(({ root, host }) => { const i = document.querySelector(`${root} img[src^="https://${host}"]`); return !!i && i.complete && i.naturalWidth > 0; }, { root, host }, { timeout: 15000 });
+
+// 5a) L'éditeur à l'ouverture : quatre cadres, aucune requête d'image, texte et bouton à leur taille d'écran, vrais pixels, contrastes, HTML du modèle intact.
+async function checkBlockedEditor(T, { dark = false, english = false } = {}) {
+  await page.mouse.move(2, 2);
+  await page.waitForTimeout(700);
+  const site = DISPLAY_HOST;
+  const [show, aria, hint] = await Promise.all([tr('image.blocked.show'), tr('image.blocked.alt', { site }), tr('image.blocked.hint', { site })]);
+  const info = await page.evaluate(selector => {
+    const view = document.querySelector(selector);
+    const sheet = document.querySelector('#editor-container .v2-page-sheet');
+    const all = document.querySelectorAll('.tiptap .editor-image-view.editor-image-blocked').length;
+    const sheetZoom = sheet ? parseFloat(getComputedStyle(sheet).zoom) : 1;
+    if (!view) return { found: false, all, sheetZoom };
+    view.scrollIntoView({ block: 'center', inline: 'nearest' });
+    const rect = e => { const b = e.getBoundingClientRect(); return { left: b.left, top: b.top, right: b.right, bottom: b.bottom, width: b.width, height: b.height }; };
+    const box = view.querySelector('.editor-image-blocked-box'), label = view.querySelector('.editor-image-blocked-site'), button = view.querySelector('.editor-image-reveal');
+    const cs = e => getComputedStyle(e);
+    return {
+      found: true, all, sheetZoom, view: rect(view), box: rect(box), label: rect(label), button: rect(button), labelText: label.textContent, buttonText: button.textContent,
+      aria: button.getAttribute('aria-label'), title: button.title, address: view.querySelector('img').getAttribute('src'),
+      colors: { frame: cs(box).backgroundColor, ink: cs(label).color, button: cs(button).backgroundColor, buttonText: cs(button).color },
+    };
+  }, editorFrame(site));
+  const label = english ? 'en anglais' : (dark ? 'en sombre' : 'en clair');
+  check(`${T}, éditeur : les quatre images d’un autre site ont leur cadre « ${show} » à l’ouverture, l’image intégrée est chargée`, info.found && info.all === 4 && (await editorImages()).loaded === 1, { info: { found: info.found, all: info.all }, images: await editorImages() });
+  check(`${T}, éditeur : aucune image n’est demandée à ces sites tant qu’aucun clic n’a eu lieu (net.image : ${net.image.length} requête)`, displayHosts().every(h => requestsTo(h) === 0), { image: net.image, fetch: net.fetch });
+  check(`${T}, éditeur : le cadre n’a pas d’adresse dans la page (l’<img> n’a pas de src)`, info.address === '' || info.address === null, info.address);
+  check(`${T}, éditeur : la feuille est réduite dans ce panneau (zoom ${info.sheetZoom}) : c’est ce que le cadre doit compenser`, info.sheetZoom > 0 && info.sheetZoom < 0.95, info.sheetZoom);
+  check(`${T}, éditeur : le cadre fait au moins 112 × 56 px à l’écran (${Math.round(info.view.width)} × ${Math.round(info.view.height)})`, info.view.width >= 111.5 && info.view.height >= 55.5, info.view);
+  check(`${T}, éditeur : le bouton « ${show} » et le site gardent leur taille d’écran sur la feuille réduite (bouton ${Math.round(info.button.width)} × ${Math.round(info.button.height)}, ligne du site ${Math.round(info.label.height)} px de haut)`,
+    info.buttonText === show && info.labelText === site && info.button.height >= 18 && info.button.height <= 25 && info.button.width >= 56 && info.label.height >= 11.5, { button: info.button, label: info.label });
+  check(`${T}, éditeur : le site et le bouton tiennent dans le cadre`, info.label.left >= info.box.left - 0.5 && info.label.right <= info.box.right + 0.5 && info.button.left >= info.box.left - 0.5 && info.button.right <= info.box.right + 0.5
+    && info.button.top >= info.box.top - 0.5 && info.button.bottom <= info.box.bottom + 0.5 && info.label.bottom <= info.button.top + 0.5, { box: info.box, label: info.label, button: info.button });
+  check(`${T}, éditeur : nom accessible « ${aria} » et infobulle sur le bouton`, info.aria === aria && info.title === hint, { aria: info.aria, title: info.title });
+  const button = await hitTest(`${editorFrame(site)} .editor-image-reveal`);
+  check(`${T}, éditeur : le bouton est dans la zone visible et au premier plan (rien ne le couvre)`, seen(button), button);
+  const contrastText = ratio(info.colors.ink, info.colors.frame), contrastButton = ratio(info.colors.buttonText, info.colors.button);
+  check(`${T}, éditeur, ${label} : le site se lit sur le cadre (${contrastText.toFixed(1)}:1) et « ${show} » sur le bouton (${contrastButton.toFixed(2)}:1), au moins 4,5:1`, contrastText >= 4.5 && contrastButton >= 4.5, { colors: info.colors, contrastText, contrastButton });
+  check(`${T}, éditeur, ${label} : le cadre garde le papier clair, jamais le fond du thème`, lum(info.colors.frame) > 0.85, info.colors.frame);
+  const paint = await paintOf(info.view);
+  check(`${T}, éditeur, ${label} : sur une vraie capture, un fond clair (${Math.round(paint.light * 100)} %), le bouton bleu (${paint.blue} pixels) et le texte du site (${paint.dark} pixels sombres)`, paint.light >= 0.4 && paint.blue >= 400 && paint.dark >= 20, paint);
+  await snap(`blocage-${T}-editeur`);
+  // Un seul saut de la souris, sans passer par la barre d'outils (ses menus s'ouvrent au survol et couvriraient le bouton).
+  const target = await centerOf(`${editorFrame(site)} .editor-image-reveal`);
+  await page.mouse.move(target.x, target.y);
+  await page.waitForTimeout(450);
+  const hover = await page.evaluate(sel => getComputedStyle(document.querySelector(sel)).backgroundColor, `${editorFrame(site)} .editor-image-reveal`);
+  check(`${T}, éditeur : au survol le bouton s’assombrit (${hover})`, hover === 'rgb(31, 88, 196)', hover);
+  await page.mouse.move(2, 2);
+  const saved = await page.evaluate(() => Editor.getHTML());
+  check(`${T}, éditeur : le HTML du modèle garde les quatre adresses, sans cadre ni data:image/svg`, displayHosts().every(h => saved.includes(`src="https://${h}/logo.png"`)) && !/data-blocked|image\/svg/.test(saved), saved.slice(0, 300));
+}
+
+// 5b) Le vrai clic sur « Afficher » : l'image de CE site se charge, les autres cadres restent, le HTML du modèle ne bouge pas, le clic ne sélectionne rien.
+async function revealEditorByMouse(T) {
+  const before = await page.evaluate(() => Editor.getHTML());
+  net.image.length = 0;
+  await realClick(`${editorFrame(DISPLAY_HOST)} .editor-image-reveal`, 500);
+  await imageLoaded('.tiptap', DISPLAY_HOST);
+  const state = await page.evaluate(() => ({
+    frames: Array.from(document.querySelectorAll('.tiptap .editor-image-view.editor-image-blocked')).map(v => v.dataset.blockedSite),
+    html: Editor.getHTML(), selected: !!document.querySelector('.tiptap .editor-image-view.editor-image-selected'),
+  }));
+  check(`${T}, éditeur : le vrai clic sur « Afficher » charge l’image de ce site (${requestsTo(DISPLAY_HOST)} requête), il n’y a plus de cadre pour elle`, requestsTo(DISPLAY_HOST) >= 1 && !state.frames.includes(DISPLAY_HOST), { frames: state.frames, image: net.image });
+  check(`${T}, éditeur : les trois autres sites restent bloqués et n’ont reçu aucune requête`, JSON.stringify(state.frames.sort()) === JSON.stringify([OTHER_HOST, KEY_HOST, READER_KEY_HOST].sort()) && [OTHER_HOST, KEY_HOST, READER_KEY_HOST].every(h => requestsTo(h) === 0), { frames: state.frames, image: net.image });
+  check(`${T}, éditeur : le HTML du modèle n’a pas bougé et le clic sur le bouton n’a pas sélectionné l’image`, state.html === before && state.selected === false, { same: state.html === before, selected: state.selected });
+}
+
+// 5c) Le clavier dans l'éditeur : l'anneau de focus du bouton, Entrée affiche le site (rien n'est écrit dans le document).
+async function revealEditorByKeyboard(T) {
+  const selector = `${editorFrame(KEY_HOST)} .editor-image-reveal`;
+  const before = await page.evaluate(() => Editor.getHTML());
+  await page.keyboard.press('Shift');
+  await page.evaluate(sel => { const b = document.querySelector(sel); b.scrollIntoView({ block: 'center', inline: 'nearest' }); b.focus(); }, selector);
+  await page.waitForTimeout(150);
+  const ring = await page.evaluate(sel => { const b = document.querySelector(sel); const css = getComputedStyle(b); return { focused: document.activeElement === b, style: css.outlineStyle, width: css.outlineWidth, color: css.outlineColor }; }, selector);
+  check(`${T}, éditeur : le bouton a le focus au clavier et un anneau de focus visible (${ring.style} ${ring.width} ${ring.color})`, ring.focused && ring.style === 'solid' && parseFloat(ring.width) >= 2, ring);
+  await page.keyboard.press('Enter');
+  await imageLoaded('.tiptap', KEY_HOST);
+  const after = await page.evaluate(() => Editor.getHTML());
+  check(`${T}, éditeur : Entrée sur le bouton affiche le site au clavier (${requestsTo(KEY_HOST)} requête) sans rien écrire dans le document`, requestsTo(KEY_HOST) >= 1 && after === before, { same: after === before, image: net.image });
+}
+
+// 5d) La Lecture : les frères du site affiché sont déjà montrés, les autres ont leur cadre dessiné (SVG) ; le vrai clic, puis Espace au clavier.
+async function checkBlockedReader(T, { dark = false, english = false, keyboard = false } = {}) {
+  const frameSel = host => `#reader-container img[data-blocked-site="${host}"]`;
+  await page.mouse.move(2, 2);
+  await page.waitForTimeout(500);
+  const expected = [OTHER_HOST, READER_KEY_HOST].concat(keyboard ? [] : [KEY_HOST]).sort();
+  const [show, aria, hint] = await Promise.all([tr('image.blocked.show'), tr('image.blocked.alt', { site: OTHER_HOST }), tr('image.blocked.hint', { site: OTHER_HOST })]);
+  const info = await page.evaluate(({ selector }) => {
+    const frames = Array.from(document.querySelectorAll('#reader-container img[data-blocked-src]')).map(i => i.dataset.blockedSite).sort();
+    const frame = document.querySelector(selector);
+    const sheet = document.querySelector('#reader-container .reader-content');
+    const sheetZoom = sheet ? parseFloat(getComputedStyle(sheet).zoom) : 1;
+    if (!frame) return { found: false, frames, sheetZoom };
+    frame.scrollIntoView({ block: 'center', inline: 'nearest' });
+    const b = frame.getBoundingClientRect();
+    return {
+      found: true, frames, sheetZoom, rect: { left: b.left, top: b.top, width: b.width, height: b.height }, role: frame.getAttribute('role'), tab: frame.getAttribute('tabindex'),
+      alt: frame.getAttribute('alt'), title: frame.getAttribute('title'), src: frame.getAttribute('src').slice(0, 24), kept: frame.getAttribute('data-blocked-src'), background: getComputedStyle(frame).backgroundColor,
+    };
+  }, { selector: frameSel(OTHER_HOST) });
+  check(`${T}, Lecture : les images des sites pas encore affichés ont leur cadre dessiné (${info.frames.length}), celle du site déjà affiché est montrée`, JSON.stringify(info.frames) === JSON.stringify(expected), { frames: info.frames, expected });
+  check(`${T}, Lecture : aucune requête d’image vers un site bloqué`, [OTHER_HOST, READER_KEY_HOST].every(h => requestsTo(h) === 0), { image: net.image });
+  check(`${T}, Lecture : le cadre est un bouton (role, tabindex), garde l’adresse du modèle et son nom accessible « ${aria} »`, info.found && info.role === 'button' && info.tab === '0' && info.alt === aria && info.title === hint && info.src.startsWith('data:image/svg+xml') && info.kept === `https://${OTHER_HOST}/logo.png`, info);
+  check(`${T}, Lecture : la feuille est réduite (zoom ${info.sheetZoom}) et le cadre fait pourtant au moins 112 × 56 px à l’écran (${Math.round(info.rect.width)} × ${Math.round(info.rect.height)})`, info.sheetZoom < 0.95 && info.rect.width >= 111.5 && info.rect.height >= 55.5, { zoom: info.sheetZoom, rect: info.rect });
+  const label = english ? 'en anglais' : (dark ? 'en sombre' : 'en clair');
+  const paint = await paintOf(info.rect);
+  check(`${T}, Lecture, ${label} : sur une vraie capture, un fond clair (${Math.round(paint.light * 100)} %), le bouton bleu (${paint.blue} pixels) et le texte (${paint.dark} pixels sombres) à leur taille d’écran`, paint.light >= 0.4 && paint.blue >= 400 && paint.dark >= 20 && lum(info.background) > 0.85, { paint, background: info.background });
+  if (english) check(`${T}, Lecture : le cadre dessiné est en anglais`, decodeURIComponent(await page.evaluate(sel => document.querySelector(sel).getAttribute('src'), frameSel(OTHER_HOST))).includes('>Show<') && info.alt === `Show the image from ${OTHER_HOST}`, info.alt);
+  await snap(`blocage-${T}-lecture`);
+  const frameBox = await hitTest(frameSel(OTHER_HOST));
+  check(`${T}, Lecture : le cadre est dans la zone visible et au premier plan`, seen(frameBox), frameBox);
+  // Le vrai clic sur le cadre.
+  net.image.length = 0;
+  await realClick(frameSel(OTHER_HOST), 600);
+  await imageLoaded('#reader-container', OTHER_HOST);
+  const afterClick = await page.evaluate(() => Array.from(document.querySelectorAll('#reader-container img[data-blocked-src]')).map(i => i.dataset.blockedSite).sort());
+  check(`${T}, Lecture : le vrai clic sur le cadre charge l’image de ce site (${requestsTo(OTHER_HOST)} requête), les autres cadres restent et n’ont reçu aucune requête`,
+    requestsTo(OTHER_HOST) >= 1 && JSON.stringify(afterClick) === JSON.stringify(expected.filter(h => h !== OTHER_HOST)) && requestsTo(READER_KEY_HOST) === 0, { afterClick, image: net.image });
+  if (keyboard) {
+    // Espace sur le cadre qui a le focus : il s'affiche, et la Lecture ne défile pas (la touche n'est pas laissée au navigateur).
+    const scrollBefore = await page.evaluate(() => document.getElementById('reader-container').scrollTop);
+    await page.keyboard.press('Shift');
+    await page.evaluate(sel => { const i = document.querySelector(sel); i.scrollIntoView({ block: 'center', inline: 'nearest' }); i.focus(); }, frameSel(READER_KEY_HOST));
+    const scrolledToIt = await page.evaluate(() => document.getElementById('reader-container').scrollTop);
+    await page.keyboard.press('Space');
+    await imageLoaded('#reader-container', READER_KEY_HOST);
+    await page.waitForTimeout(300);
+    const scrollAfter = await page.evaluate(() => document.getElementById('reader-container').scrollTop);
+    check(`${T}, Lecture : Espace sur le cadre qui a le focus l’affiche (${requestsTo(READER_KEY_HOST)} requête) sans faire défiler la Lecture (${scrolledToIt} → ${scrollAfter})`, requestsTo(READER_KEY_HOST) >= 1 && scrollAfter === scrolledToIt, { scrollBefore, scrolledToIt, scrollAfter });
+  }
+}
+
+async function runDisplay(T, { dark = false, english = false, keyboard = false } = {}) {
+  useDisplayHosts(T);
   if (dark) await page.evaluate(() => Settings.setTheme('dark'));
   if (english) await page.evaluate(() => I18n.setLang('en'));
   await page.waitForTimeout(200);
+  net.image.length = 0; net.fetch.length = 0;
   await seed(displayHtml());
+  await checkBlockedEditor(T, { dark, english });
+  await revealEditorByMouse(T);
+  if (keyboard) await revealEditorByKeyboard(T);
   await checkDisplay(T, 'éditeur', '.tiptap');
   await snap(`affichage-${T}-editeur`);
   // Au survol, l'image garde ses tirets rouges (le contour bleu de survol d'une image ne les remplace pas) ; sélectionnée, l'éditeur ajoute sa sélection sans les retirer.
@@ -587,15 +781,63 @@ async function runDisplay(T, { dark = false, english = false } = {}) {
   await page.waitForTimeout(500);
   await checkDisplay(T, 'Lecture', '#reader-container');
   await snap(`affichage-${T}-lecture`);
+  await checkBlockedReader(T, { dark, english, keyboard });
   await realClick('#btn-mode-edit', 500);
   if (dark) await page.evaluate(() => Settings.setTheme('light'));
   if (english) await page.evaluate(() => I18n.setLang('fr'));
 }
 
-// 6) L'insertion par adresse (js/main-toolbar.js:imageSourceFromUrl, choix d'Antoine du 04/10 « Demander à l'insertion ») : « Insérer une image », l'adresse d'un autre site, puis la
-// question « Intégrer l'image » (par défaut) / « Garder le lien » - un lien gardé reste signalé en rouge, une image intégrée n'a plus rien d'un autre site.
-const INSERT_HOST = 'insere.exemple.test';
-const INSERT_URL = `https://${INSERT_HOST}/logo.png`;
+// 5e) L'en-tête d'une feuille (aperçu paginé de l'éditeur) : le cadre y est aussi, le clic l'affiche sans ouvrir la zone d'en-tête.
+async function runZone(T) {
+  const host = `entete-${T}.exemple.test`;
+  await seed('<p>Corps du modèle</p>');
+  net.image.length = 0;
+  await page.evaluate(src => Editor.setHeaderFooterData({ enabled: true, differentFirstPage: false, header: { default: `<p><img class="editor-image" src="${src}" alt="Logo" style="width: 90px;"></p>`, first: '' }, footer: { default: '', first: '' } }), `https://${host}/entete.png`);
+  await page.waitForTimeout(800);
+  const selector = `#editor-container .v2-hf-zone img[data-blocked-site="${host}"]`;
+  const frame = await hitTest(selector);
+  check(`${T}, en-tête de la feuille : l’image d’un autre site y a son cadre « Afficher » et aucune requête n’est partie (${requestsTo(host)})`, frame.found && requestsTo(host) === 0, { frame, image: net.image });
+  const box = await page.evaluate(sel => { const i = document.querySelector(sel); i.scrollIntoView({ block: 'nearest', inline: 'nearest' }); const b = i.getBoundingClientRect(); return { left: b.left, top: b.top, width: b.width, height: b.height }; }, selector);
+  const paint = await paintOf(box);
+  check(`${T}, en-tête de la feuille : sur une vraie capture, le cadre se voit (${Math.round(paint.light * 100)} % de clair, ${paint.blue} pixels de bouton bleu) et fait au moins 112 × 56 px d’écran (${Math.round(box.width)} × ${Math.round(box.height)})`, paint.blue >= 400 && box.width >= 111.5 && box.height >= 55.5, { paint, box });
+  await realClick(selector, 700);
+  await imageLoaded('#editor-container .v2-hf-zone', host);
+  const state = await page.evaluate(() => ({ editing: document.getElementById('editor-container').classList.contains('hf-editing') }));
+  check(`${T}, en-tête de la feuille : le vrai clic charge l’image (${requestsTo(host)} requête) sans ouvrir la zone d’en-tête pour la modifier`, requestsTo(host) >= 1 && state.editing === false, { state, image: net.image });
+  await page.evaluate(() => Editor.setHeaderFooterData({ enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } }));
+}
+
+// 5f) L'export attend un accord par site : un site affiché n'est pas redemandé, les autres le sont ; tous affichés, plus aucune fenêtre.
+async function runExportAfterReveal(T) {
+  const hosts = ['un', 'deux', 'trois'].map(n => `export-${n}-${T}.exemple.test`);
+  await seed(documentHtml(hosts));
+  net.fetch.length = 0; net.image.length = 0; downloads.length = 0;
+  await clearStatus();
+  await realClick(`${editorFrame(hosts[0])} .editor-image-reveal`, 500);
+  await startExport(EXPORTS.pdf);
+  await waitImagesWindow();
+  const s = await windowState();
+  const intro = (await tr('confirm.externalImages', { count: 2, sites: '' })).split('\n')[0];
+  check(`${T}, export : le site affiché par un clic n’est pas redemandé, la fenêtre liste les deux autres (${s.bullets.join(', ')})`, JSON.stringify(s.bullets) === JSON.stringify(hosts.slice(1)) && s.intro === intro, s);
+  await page.keyboard.press('Escape');
+  await waitClosed();
+  await waitStatus(await tr('status.exportCancelled'), 10000);
+  check(`${T}, export : Échap annule, rien n’est téléchargé`, net.fetch.length === 0 && downloads.length === 0, { fetch: net.fetch, downloads });
+  for (const host of hosts.slice(1)) await realClick(`${editorFrame(host)} .editor-image-reveal`, 500);
+  const windowsBefore = await windowsOpened();
+  await clearStatus();
+  await startExport(EXPORTS.pdf);
+  await waitStatus(await tr(EXPORTS.pdf.done), 60000);
+  await waitDownload(EXPORTS.pdf.file);
+  check(`${T}, export, trois sites affichés : aucune fenêtre ne s’ouvre, le PDF est généré et les trois images sont lues`,
+    (await windowsOpened()) === windowsBefore && downloads.some(n => EXPORTS.pdf.file.test(n)) && JSON.stringify(fetchedHosts().sort()) === JSON.stringify(hosts.slice().sort()), { opened: (await windowsOpened()) - windowsBefore, downloads, fetched: fetchedHosts() });
+}
+
+// 7) L'insertion par adresse (js/main-toolbar.js:imageSourceFromUrl, choix d'Antoine du 04/10 « Demander à l'insertion ») : « Insérer une image », l'adresse d'un autre site, puis la
+// question « Intégrer l'image » (par défaut) / « Garder le lien » - un lien gardé s'affiche tout de suite (c'est l'accord de la personne pour ce site) et reste signalé en rouge, une
+// image intégrée n'a plus rien d'un autre site. Un site par passage : celui d'un lien gardé reste affiché pour la séance.
+let INSERT_HOST = '', INSERT_URL = '';
+function useInsertHost(T) { INSERT_HOST = `insere-${T}.exemple.test`; INSERT_URL = `https://${INSERT_HOST}/logo.png`; }
 const QUESTION_TITLE = () => tr('dialog.imageExternal.title');
 const insertedImages = () => page.evaluate(() => document.querySelectorAll('.tiptap img.editor-image').length);
 const insertedSrc = () => page.evaluate(() => { const i = document.querySelector('.tiptap img.editor-image'); return i ? i.getAttribute('src') : null; });
@@ -690,6 +932,7 @@ async function checkQuestionWindow(T, { english = false } = {}) {
 }
 
 async function runInsert(T, { dark = false, english = false } = {}) {
+  useInsertHost(T);
   if (dark) await page.evaluate(() => Settings.setTheme('dark'));
   if (english) await page.evaluate(() => I18n.setLang('en'));
   await page.waitForTimeout(200);
@@ -706,8 +949,6 @@ async function runInsert(T, { dark = false, english = false } = {}) {
       const cs = e => getComputedStyle(e);
       return { box: cs(ov.querySelector('.modal-content')).backgroundColor, text: cs(ov.querySelector('.pp-dialog-message')).color, title: cs(ov.querySelector('h3')).color };
     });
-    const lum = c => { const [r, g, b] = c.match(/[\d.]+/g).slice(0, 3).map(Number).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
-    const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
     check(`${T}, insertion : le texte et le titre de la question se lisent sur son fond (≥ 4,5:1)`, ratio(colors.text, colors.box) >= 4.5 && ratio(colors.title, colors.box) >= 4.5, { colors, text: ratio(colors.text, colors.box), title: ratio(colors.title, colors.box) });
   }
 
@@ -728,6 +969,8 @@ async function runInsert(T, { dark = false, english = false } = {}) {
   await waitInserted(1);
   check(`${T}, insertion : « ${keep} » (vrai clic) insère l'image avec l'adresse tapée, sans que le widget la télécharge`, !(await isOpen()) && (await insertedSrc()) === INSERT_URL && net.fetch.length === 0, { src: await insertedSrc(), fetch: net.fetch });
   await leaveImage();
+  const keptState = await editorImages();
+  check(`${T}, insertion : le lien gardé s'affiche tout de suite, sans cadre « ${await tr('image.blocked.show')} » (l'accord pour ce site est donné) : l'image est chargée`, keptState.blocked === 0 && keptState.loaded === 1 && requestsTo(INSERT_HOST) >= 1, { keptState, image: net.image });
   const kept = await outlineOf(`.tiptap img[src^="https://${INSERT_HOST}"]`);
   const tip = await tr('image.externalSite', { site: INSERT_HOST });
   const keptBox = await imageTop(`.tiptap img[src^="https://${INSERT_HOST}"]`);
@@ -784,18 +1027,43 @@ async function runInsertMore(T) {
   check(`${T}, insertion : ce lien gardé malgré lui est signalé en tirets rouges`, !!refused && refused.site === REFUSE_HOST && DASHED_RED(refused), refused);
 }
 
+// 8) L'affichage d'un site ne dure que la séance de la page : le vrai clic n'écrit rien, et la page rechargée remet le cadre (rien n'a été retenu, aucune requête vers le site).
+// Dernière partie : le rechargement repart d'une page neuve (le compteur de fenêtres d'export de la page, entre autres, est remis à zéro).
+async function runReload(T) {
+  const host = `recharge-${T}.exemple.test`;
+  const stored = () => page.evaluate(() => JSON.stringify({ local: Object.entries(localStorage).sort(), session: Object.entries(sessionStorage).sort() }));
+  const written = () => page.evaluate(() => window.__gristStub.getActionLog().length);
+  await seed(documentHtml([host]));
+  net.image.length = 0; net.fetch.length = 0;
+  const storedBefore = await stored(), writtenBefore = await written();
+  check(`${T}, rechargement : avant le clic, le site a son cadre « Afficher » et aucune requête n'est partie (${requestsTo(host)})`, (await frameCount('.tiptap')) === 1 && requestsTo(host) === 0, { frames: await frameCount('.tiptap'), image: net.image });
+  await realClick(`${editorFrame(host)} .editor-image-reveal`, 500);
+  await imageLoaded('.tiptap', host);
+  await page.waitForTimeout(800);
+  check(`${T}, rechargement : le vrai clic affiche l'image (${requestsTo(host)} requête) sans rien écrire (ni localStorage, ni sessionStorage, ni action dans le document Grist)`,
+    requestsTo(host) >= 1 && (await frameCount('.tiptap')) === 0 && (await stored()) === storedBefore && (await written()) === writtenBefore, { before: storedBefore, after: await stored(), actions: await page.evaluate(() => window.__gristStub.getActionLog()) });
+  await openHarness(true);
+  net.image.length = 0; net.fetch.length = 0;
+  await seed(documentHtml([host]));
+  await page.waitForTimeout(500);
+  check(`${T}, rechargement : la page rechargée remet le cadre « Afficher » à ce site (rien n'a été retenu) et n'a envoyé aucune requête vers lui (${requestsTo(host)})`, (await frameCount('.tiptap')) === 1 && requestsTo(host) === 0, { frames: await frameCount('.tiptap'), image: net.image });
+}
+
 // Un arrêt (la fenêtre ne s'ouvre pas, un élément manque) est un échec rapporté, pas un plantage : le navigateur est fermé dans tous les cas.
 try {
   await run('clair');
   await runDark();
   await runEnglish();
-  await runDisplay('clair');
+  await runDisplay('clair', { keyboard: true });
+  await runZone('clair');
+  await runExportAfterReveal('clair');
   await runDisplay('sombre', { dark: true });
   await runDisplay('anglais', { english: true });
   await runInsert('clair');
   await runInsertMore('clair');
   await runInsert('sombre', { dark: true });
   await runInsert('anglais', { english: true });
+  await runReload('clair');
 } catch (e) { total++; failures++; console.log('  FAIL - le parcours s’arrête : ' + e.message); }
 
 check('aucune boîte native (prompt, confirm, alert) ne s’est ouverte', nativeDialogs.length === 0, nativeDialogs);

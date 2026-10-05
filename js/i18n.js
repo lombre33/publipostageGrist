@@ -901,12 +901,17 @@ const I18n = (function () {
     'confirm.externalImages': { fr: 'Pour cet export, le widget doit télécharger des images hébergées {count|sur un site externe|sur des sites externes} :\n{sites}\n\nAnnuler arrête l’export.', en: 'For this export, the widget has to download images hosted {count|on an external site|on external sites}:\n{sites}\n\nCancel stops the export.' },
     // Image insérée par son adresse quand elle vient d'un autre site (js/main-toolbar.js) : la question posée une fois, à l'insertion.
     'dialog.imageExternal.title': { fr: 'Image d’un site externe', en: 'Image from an external site' },
-    'dialog.imageExternal.message': { fr: 'Cette image est hébergée sur un site externe ({site}).\n\nIntégrer l’image la copie dans le modèle : elle ne dépend plus de ce site.\nGarder le lien l’affiche depuis ce site à chaque ouverture du modèle : elle sera signalée en rouge.', en: 'This image is hosted on an external site ({site}).\n\nEmbedding the image copies it into the template: it no longer depends on that site.\nKeeping the link shows it from that site each time the template is opened: it will be flagged in red.' },
+    'dialog.imageExternal.message': { fr: 'Cette image est hébergée sur un site externe ({site}).\n\nIntégrer l’image la copie dans le modèle : elle ne dépend plus de ce site.\nGarder le lien l’affiche depuis ce site : à chaque ouverture du modèle, elle n’apparaîtra qu’après un clic sur « Afficher » et sera signalée en rouge.', en: 'This image is hosted on an external site ({site}).\n\nEmbedding the image copies it into the template: it no longer depends on that site.\nKeeping the link shows it from that site: each time the template is opened, it will only appear after a click on “Show” and will be flagged in red.' },
     'dialog.imageExternal.embed': { fr: 'Intégrer l’image', en: 'Embed image' },
     'dialog.imageExternal.keep': { fr: 'Garder le lien', en: 'Keep link' },
     // Image d'un site externe à l'affichage (js/external-images.js) : l'infobulle de toute image qui charge depuis un autre site que le widget et
     // Grist (contour en tirets, css/external-images.css).
     'image.externalSite': { fr: 'Image hébergée sur un site externe ({site}) : chaque affichage la télécharge depuis ce site.', en: 'Image hosted on an external site ({site}): every display downloads it from that site.' },
+    // Image d'un site externe pas encore affichée (js/external-images.js, cadre « Afficher » de l'éditeur, de la Lecture, des en-têtes et pieds) : le texte
+    // du bouton, le texte alternatif qu'un lecteur d'écran lit, et l'infobulle qui dit ce que le clic fait.
+    'image.blocked.show': { fr: 'Afficher', en: 'Show' },
+    'image.blocked.alt': { fr: 'Afficher l’image de {site}', en: 'Show the image from {site}' },
+    'image.blocked.hint': { fr: 'Image hébergée sur un site externe ({site}), pas encore chargée. Afficher la télécharge depuis ce site, qui apprend que le document est ouvert ; les autres images de ce site s’affichent aussi.', en: 'Image hosted on an external site ({site}), not loaded yet. Showing it downloads it from that site, which learns that the document is open; the other images from that site are shown too.' },
     'status.exportCancelled': { fr: 'Export annulé.', en: 'Export cancelled.' },
     'prompt.newTemplateName': { fr: 'Nom du nouveau modèle :', en: 'Name of the new template:' },
     'prompt.newTableName': { fr: 'Nom de la nouvelle table Grist :', en: 'Name of the new Grist table:' },

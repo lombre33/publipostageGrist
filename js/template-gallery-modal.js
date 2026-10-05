@@ -97,7 +97,8 @@ const TemplateGalleryModal = (function () {
     previewUseData.hidden = !entry.schema;
     try {
       currentHtml = await TemplateGallery.fetchHtml(entry);
-      previewTiptap.innerHTML = HtmlSanitize.clean(currentHtml);
+      // Un aperçu s'affiche : une image d'un autre site (la vitrine de ?dev en a) y prend son cadre « Afficher » ; le modèle enregistré garde son HTML.
+      previewTiptap.innerHTML = ExternalImages.block(HtmlSanitize.clean(currentHtml), { zoom: 1 }); // pas de feuille réduite dans cette fenêtre
     } catch (e) {
       console.error('[template-gallery-modal] échec du chargement du modèle', e);
       host.setStatus(I18n.t('status.templateLoadError'), true);

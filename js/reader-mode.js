@@ -217,6 +217,8 @@ const ReaderMode = (function () {
     // Les #Variable d'un fragment d'en-tête ou de pied, résolues comme celles du corps (bulles remplacées par leur valeur) avec l'enregistrement
     // Grist affiché en Lecture.
     if (!html) return html;
+    // Cette zone s'affiche (aperçu paginé de la Lecture) : ses images d'un autre site pas encore affichées prennent leur cadre avant l'innerHTML.
+    html = ExternalImages.block(html);
     const wrapper = document.createElement('div'); wrapper.innerHTML = html;
     // Comme le corps : les suggestions du suivi acceptées, avec la teinte légère.
     applyAcceptedView(wrapper, html);
@@ -542,7 +544,8 @@ const ReaderMode = (function () {
     // même place de page. Un macro-modèle (js/macro-templates.js) assemble plusieurs courriers : une image n'est répétée que sur les pages de son
     // courrier (js/pdf-export.js:slotPageRange), du saut de page qui l'ouvre à celui qui suit. Appelée une fois les images décalées par slot
     // (rebaseLayerImagesBySlot) : l'original est alors à sa vraie place, d'où se lit sa page.
-    const images = PageLayer.collect(wrapper).filter(img => img.getAttribute('src'));
+    // Une image encore bloquée (son cadre « Afficher ») n'est pas répétée : ses copies se peindraient le cadre sur chaque feuille.
+    const images = PageLayer.collect(wrapper).filter(img => img.getAttribute('src') && !img.hasAttribute('data-blocked-src'));
     // Le filigrane du modèle (PageLayout.getWatermark) se peint dans la même couche, sur chaque feuille, sous les copies d'images.
     const pageSize = PageLayout.getPageSizePt();
     const watermark = PageLayer.watermarkLayout(PageLayout.getWatermark(), pageSize.width, pageSize.height);
@@ -613,6 +616,14 @@ const ReaderMode = (function () {
   let geometryWatch = null;
   const GEOMETRY_RECOMPUTES_MAX = 8; // par fenêtre de 3 s, comme l'éditeur : une mise en page qui ne se stabilise pas ne tourne pas en boucle
   const GEOMETRY_DEBOUNCE_MS = 40;
+  // Un site vient d'être affiché (js/external-images.js) : ses images, remises à leur adresse dans la page, changent la hauteur des feuilles et ce que
+  // les copies d'image répétées peignent. La mise en page se refait par le chemin des images qui arrivent tard (sans effet si la Lecture est masquée).
+  let revealHooked = false;
+  function hookReveal() {
+    if (revealHooked) return;
+    revealHooked = true;
+    ExternalImages.onReveal(() => { if (geometryWatch && geometryWatch.schedule) geometryWatch.schedule(); });
+  }
   function stopGeometryWatch() {
     const w = geometryWatch;
     if (!w) return;
@@ -650,6 +661,7 @@ const ReaderMode = (function () {
       clearTimeout(w.timer);
       w.timer = setTimeout(recompute, GEOMETRY_DEBOUNCE_MS);
     }
+    w.schedule = schedule;
     geometryWatch = w;
     remember();
     w.observer = new ResizeObserver(() => { if (changed()) schedule(); });
@@ -677,6 +689,7 @@ const ReaderMode = (function () {
     // ce qui relit des tables : l'appel se fait donc dans les lectures partagées de ce rendu, cf. GristAPI.withReadPass).
     const renderId = ++renderGeneration;
     const container = document.getElementById('reader-container'); if (!container) return;
+    hookReveal();
     // Le contenu affiché est sur le point d'être remplacé : sa mise en page n'a plus à être suivie.
     stopGeometryWatch();
     // État vide : js/main.js:renderReader() appelle render() avec record=null quand aucune ligne n'est choisie. Pas une erreur, juste une étape que
@@ -694,7 +707,9 @@ const ReaderMode = (function () {
     // .reader-content : le parent direct des titres de premier niveau, celui qui porte data-heading-style (#reader-container ne peut pas jouer ce
     // rôle, ce <div> s'intercale toujours entre les deux).
     const wrapper = document.createElement('div'); wrapper.className = 'reader-content';
-    const cleanHtml = HtmlSanitize.clean(htmlContent);
+    // Ce HTML s'affiche : une image d'un autre site que la personne n'a pas affichée y prend son cadre « Afficher » (js/external-images.js) avant d'entrer
+    // dans la page, sans quoi le navigateur la télécharge dès l'innerHTML. Les exports (expandedWrapper) lisent le HTML du modèle tel quel.
+    const cleanHtml = ExternalImages.block(HtmlSanitize.clean(htmlContent));
     wrapper.innerHTML = cleanHtml;
     // La Lecture montre le document comme si les suggestions du suivi en attente étaient toutes acceptées, avec une légère teinte là où quelque
     // chose a changé. Avant tout le reste : les boucles, les blocs conditionnels et les bulles ne voient plus ni <ins> ni <del>.

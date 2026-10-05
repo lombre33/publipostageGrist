@@ -2,7 +2,15 @@
 // le document principal et le fragment en cours d'édition (enterHeaderFooterMode, exitHeaderFooterMode).
 const HeaderFooterPreview = (function () {
   let editor = null;
-  function setEditor(ed) { editor = ed; watchPaginationGeometry(); }
+  // Une image d'un autre site que la personne affiche (js/external-images.js) change la hauteur de sa zone et de la page : les zones d'en-tête et de pied,
+  // les copies d'images répétées et les coupures de page se redessinent d'après le modèle.
+  let revealHooked = false;
+  function hookReveal() {
+    if (revealHooked || typeof ExternalImages === 'undefined') return;
+    revealHooked = true;
+    ExternalImages.onReveal(() => renderPaginationOverlay());
+  }
+  function setEditor(ed) { editor = ed; watchPaginationGeometry(); hookReveal(); }
 
   const ZONES = ['header', 'footer'];
   const VARIANTS = ['default', 'first'];
@@ -819,6 +827,8 @@ const HeaderFooterPreview = (function () {
     if (tiptapShowsLayout(view.tiptapEl)) {
       editor.state.doc.descendants((node, pos) => {
         if (node.type.name !== 'editorImage' || node.attrs.varTable || !node.attrs.src || !PageLayer.isRepeatedAttrs(node.attrs)) return;
+        // Une image d'un autre site pas encore affichée n'est pas répétée : ses copies se peindraient hors de son cadre « Afficher ».
+        if (ExternalImages.blockedSiteOf(node.attrs.src)) return;
         const dom = editor.view.nodeDOM(pos);
         const img = dom && dom.querySelector ? dom.querySelector('img') : null;
         if (!img) return;

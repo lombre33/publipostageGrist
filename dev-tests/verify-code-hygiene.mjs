@@ -35,6 +35,9 @@
 //  19. une table du widget créée sans passer par la question « Créer les tables du widget dans ce document ? » : un `AddTable` écrit ailleurs que dans js/grist-api.js (addTableIfMissing) et dans la galerie de
 //      modèles (la table que la personne nomme elle-même), la question qui n'est plus posée avant l'écriture, ou js/table-consent.js qui n'est plus branché avant le démarrage anticipé d'index.html
 //      (choix d'Antoine du 05/10 : « demander une fois, mais si la personne refuse, lui redemander à chaque action de sa part sur le widget »).
+//  20. une image d'un autre site qui charge sans le clic « Afficher » : une surface (Lecture, en-têtes et pieds, galerie, vue d'image de l'éditeur) qui écrit le HTML d'un modèle dans la page sans passer par
+//      ExternalImages (block, blockIn, blockedSiteOf), ou la Lecture avec commentaires qui sérialise le document dans celui de la page (une <img> créée là charge son adresse même détachée)
+//      (choix d'Antoine du 05/10 : « Bloquer jusqu'à un clic »).
 //
 // Volontairement PERMISSIF : un nom cité seulement dans un commentaire compte comme utilisé, un préfixe construit (`'toc-level-' + n`) couvre toute la
 // famille. Le but est de ne jamais faire échouer un changement légitime, seulement d'attraper ce qui n'a plus AUCUN point d'entrée. Une classe posée
@@ -671,6 +674,54 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('tables : index.html charge js/table-consent.js (une fois) après js/grist-api.js et js/templates.js, et AVANT le script en ligne du démarrage anticipé (qui lance la première création de table)',
     (page.match(/<script src="js\/table-consent\.js\?v=/g) || []).length === 1 && early !== -1
       && at('js/grist-api.js?v=') < at('js/table-consent.js?v=') && at('js/table-consent.js?v=') < early, `grist-api ${at('js/grist-api.js?v=')}, table-consent ${at('js/table-consent.js?v=')}, démarrage anticipé ${early}`);
+}
+
+// ============================================================================
+// 20. Une image d'un autre site ne charge qu'après un clic « Afficher » (choix d'Antoine du 05/10, « Bloquer jusqu'à un clic »)
+// ============================================================================
+// Une <img> dont l'adresse est un autre site télécharge cette adresse dès que le navigateur la voit : le site apprend alors que le document est ouvert. Les surfaces qui écrivent le HTML du modèle dans la page
+// passent donc par js/external-images.js (block, blockIn : le cadre « Afficher » à la place de l'adresse) ; la vue d'image de l'éditeur ne donne pas d'adresse à son <img> (blockedSiteOf). dev-tests/
+// scenarios-external-images.js et verify-external-images-mouse.mjs gardent le comportement, requêtes du navigateur comprises ; ce contrôle garde les points d'entrée qu'un nouveau code oublierait.
+{
+  // Le corps d'une fonction : de sa ligne de déclaration à la première ligne qui ferme à la même indentation.
+  const bodyOf = (code, needle) => {
+    const at = code.indexOf(needle);
+    if (at === -1) return '';
+    const lineStart = code.lastIndexOf('\n', at) + 1;
+    const indent = code.slice(lineStart).match(/^ */)[0];
+    const end = code.indexOf('\n' + indent + '}', at);
+    return end === -1 ? '' : code.slice(at, end);
+  };
+  // `first` doit venir avant `then` dans le corps : le cadre est posé AVANT que le HTML entre dans la page.
+  const before = (body, first, then) => { const a = body.indexOf(first), b = body.indexOf(then); return a !== -1 && b !== -1 && a < b; };
+
+  const reader = noCommentsJs(read('js/reader-mode.js'));
+  check('images externes : la Lecture passe le HTML du document par ExternalImages.block AVANT de l\'écrire dans la page (readerWrapperFrom)',
+    before(bodyOf(reader, 'function readerWrapperFrom'), 'ExternalImages.block(', 'wrapper.innerHTML ='), bodyOf(reader, 'function readerWrapperFrom').length + ' caractères');
+  check('images externes : la Lecture passe aussi chaque zone d\'en-tête et de pied par ExternalImages.block AVANT l\'écrire (resolveHeaderFooterZone)',
+    before(bodyOf(reader, 'async function resolveHeaderFooterZone'), 'ExternalImages.block(', 'wrapper.innerHTML ='), bodyOf(reader, 'async function resolveHeaderFooterZone').length + ' caractères');
+  const layout = noCommentsJs(read('js/page-layout.js'));
+  check('images externes : les en-têtes et pieds de l\'aperçu paginé (PageLayout.resolvePageNumberBadges) passent par ExternalImages.blockIn (dans le <template> inerte) avant que le HTML ne soit rendu',
+    before(bodyOf(layout, 'function resolvePageNumberBadges'), 'ExternalImages.blockIn(', 'return host.innerHTML'), bodyOf(layout, 'function resolvePageNumberBadges').length + ' caractères');
+  check('images externes : l\'aperçu d\'un modèle de la galerie passe par ExternalImages.block (sans feuille réduite : zoom 1)',
+    /previewTiptap\.innerHTML\s*=\s*ExternalImages\.block\(/.test(noCommentsJs(read('js/template-gallery-modal.js'))), 'previewTiptap.innerHTML');
+  const nodes = noCommentsJs(read('js/editor-nodes.js'));
+  const apply = bodyOf(nodes, 'function applyImageAttrs');
+  check('images externes : la vue d\'image de l\'éditeur (applyImageAttrs) ne donne pas d\'adresse à son <img> tant que le site n\'est pas affiché (ExternalImages.blockedSiteOf)',
+    /ExternalImages\.blockedSiteOf\(/.test(apply) && /img\.src\s*=\s*\(isVarBox \|\| blockedSite\)\s*\?\s*''/.test(apply), apply.length + ' caractères');
+  const comments = noCommentsJs(read('js/comments.js'));
+  const readerHtml = bodyOf(comments, 'async function buildReaderHtml');
+  check('images externes : la Lecture avec commentaires (buildReaderHtml) sérialise le document dans un document inerte (createHTMLDocument), jamais dans celui de la page : une <img> créée là charge son adresse même détachée',
+    /createHTMLDocument\(/.test(readerHtml) && !/serializeFragment\([^)]*\{\s*document\s*\}/.test(readerHtml) && !/\bdocument\.createElement\('div'\)/.test(readerHtml), readerHtml.length + ' caractères');
+
+  const page = read('index.html').replace(/<!--[\s\S]*?-->/g, m => m.replace(/[^\n]/g, ' '));
+  const at = needle => page.indexOf(needle);
+  check('images externes : index.html charge js/external-images.js une fois, avant js/main.js, et css/external-images.css une fois',
+    (page.match(/<script src="js\/external-images\.js\?v=/g) || []).length === 1 && at('js/external-images.js?v=') !== -1 && at('js/external-images.js?v=') < at('js/main.js?v=')
+      && (page.match(/<link[^>]*href="css\/external-images\.css\?v=/g) || []).length === 1, `external-images ${at('js/external-images.js?v=')}, main ${at('js/main.js?v=')}`);
+  const ext = noCommentsJs(read('js/external-images.js'));
+  check('images externes : js/external-images.js lit le HTML dans un <template> inerte (jamais innerHTML sur un nœud de la page) et ne garde rien nulle part (ni localStorage, ni sessionStorage, ni appel à Grist)',
+    /document\.createElement\('template'\)/.test(ext) && !/localStorage|sessionStorage|applyUserActions|GristAPI\.(?!getAttachmentDownloadUrl)/.test(ext), 'external-images.js');
 }
 
 summarizeAndExit();

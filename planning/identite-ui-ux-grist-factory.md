@@ -295,18 +295,26 @@ Arbitré le 29/09 (en ligne `87a2a63`). Ce que le widget écrit lui-même dans l
 se résout pas (« [ERREUR : … ] »), le titre du sommaire — suit la **langue de l'interface** de qui lit ou exporte, en
 Lecture comme en PDF et en Word (clés `variables.error.*` et `pdf.tocTitle` de `js/i18n.js`).
 
-### Une image d'un autre site est signalée à l'affichage, jamais retirée
-Arbitré le 04/10 (contrôle de sécurité du code, « Tout corriger », correction 4). Une image qui charge depuis un autre site que le widget et Grist révèle à ce site l'ouverture du document
-(adresse IP, heure). Rien ne la retire (non-régression : rien ne disparaît), mais elle est signalée en permanence, dans l'éditeur comme dans la Lecture, en-têtes et pieds compris :
-- un **contour en tirets rouges de 3 px** à l'intérieur de l'image (`--paper-danger`, `css/external-images.css` ; ~1,8 px à l'écran du panneau, la feuille y étant mise à l'échelle) et une **infobulle** qui nomme le site (`image.externalSite`, français et anglais) ;
-- le signalement ne prend aucune place (`outline`, jamais une bordure ni un cadre : la mise en page, la pagination et le PDF ne bougent pas), n'entre jamais dans le HTML enregistré, et tient
-  aussi pour une image habillée, derrière le texte ou posée dans une case ;
-- aucun écran n'a à y penser : l'observateur de `js/external-images.js` signale toute `<img>` de la page (`data-external-site`) ; le widget n'a aucune image d'un autre site dans sa propre interface ;
+### Une image d'un autre site attend un clic « Afficher », puis reste signalée
+Arbitré le 04/10 (contrôle de sécurité du code, « Tout corriger », correction 4), puis le 05/10 (« Bloquer jusqu'à un clic »). Une image qui charge depuis un autre site que le widget et Grist révèle à ce site l'ouverture du document
+(adresse IP, heure) : elle ne charge qu'après un clic, et rien ne la retire (non-régression : le modèle garde son adresse, rien n'y est modifié) :
+- à l'ouverture, un **cadre « Afficher »** prend sa place (`js/external-images.js`) : le fond gris clair et le texte noir bleuté de la feuille (`--paper-frame`, `--paper-ink`, jamais ceux du thème sombre : la feuille y est blanche), un tracé gris en tirets,
+  le nom du site et un **bouton bleu plein** (`--paper-accent`, blanc dessus à 4,55:1) ; aucune requête ne part vers ce site avant le clic, nulle part (éditeur, Lecture, en-têtes et pieds, galerie, sérialisation de la Lecture dans un document inerte) ;
+- trois formes d'un même cadre : dans l'éditeur, la vue de l'image (`js/editor-nodes.js`) n'a pas d'adresse et porte un vrai `<button>` (nom accessible « Afficher l'image de {site} », anneau de focus de la charte ; le clic ne sélectionne pas l'image) ;
+  dans la Lecture, les en-têtes et pieds (aperçu paginé de l'éditeur compris : le cadre reçoit la souris, pas la zone) et la galerie, l'`<img>` prend un cadre dessiné en SVG (`ExternalImages.block`, adresse gardée dans `data-blocked-src`, `role="button"`, `tabindex="0"`)
+  que le clic, Entrée et Espace affichent sans rien ouvrir d'autre ; les exports ne bloquent rien, ils lisent le HTML du modèle derrière la fenêtre d'avant l'export ;
+- le cadre garde sa **taille d'écran** sur la feuille réduite du panneau (`--pp-fit-zoom`, ~0,85 à 700×400) : le texte (11 px) et le bouton (64 × 22 px) sont dessinés à l'envers du facteur de la feuille (`ExternalImages.block`, `sheetZoom`), le cadre ne descend pas sous
+  112 × 56 px d'écran et son contenu est centré sans suivre la boîte de l'image (la galerie, qui n'a pas de feuille réduite, passe `{ zoom: 1 }`) ;
+- le clic affiche **toutes les images de ce site, pour la séance** (`ExternalImages.allow`) : rien n'est gardé nulle part, à la prochaine ouverture du modèle elles attendent de nouveau le clic ; le HTML enregistré ne change jamais ; une image de pièce jointe (serveur de Grist)
+  n'est jamais bloquée ; une image « sur toutes les pages » encore bloquée n'est pas répétée sur les autres feuilles ;
+- une image affichée reste signalée en permanence, dans l'éditeur comme dans la Lecture, en-têtes et pieds compris : un **contour en tirets rouges de 3 px** à l'intérieur de l'image (`--paper-danger`, `css/external-images.css` ; ~2,5 px à l'écran du panneau, la feuille y étant mise à l'échelle)
+  et une **infobulle** qui nomme le site (`image.externalSite`, français et anglais) ; le signalement ne prend aucune place (`outline`, jamais une bordure ni un cadre : la mise en page, la pagination et le PDF ne bougent pas), n'entre jamais dans le HTML enregistré, et tient
+  aussi pour une image habillée, derrière le texte ou posée dans une case ; l'observateur de `js/external-images.js` signale toute `<img>` de la page (`data-external-site`) : aucun écran n'a à y penser ;
 - à l'insertion par adresse (« Insérer une image »), l'adresse d'une image d'un autre site pose une fois la question « Intégrer l'image » (par défaut : copiée dans le modèle) ou « Garder le lien »
-  (choix du 04/10, « Demander à l'insertion » ; `imageSourceFromUrl` de `js/main-toolbar.js`) : un lien gardé reste signalé comme ci-dessus, Annuler et Échap n'insèrent rien, une adresse `data:` ou du même site que le widget
-  s'intègre sans question ;
-- avant l'export, la fenêtre « Images d'un site externe » liste les sites (choix du 01/10, `Dialogs.confirm`). Limite connue : le signalement n'empêche pas la requête, et une image invisible
-  (un pixel) l'échappe ; seul un blocage jusqu'à acceptation l'arrêterait.
+  (choix du 04/10, « Demander à l'insertion » ; `imageSourceFromUrl` de `js/main-toolbar.js`) : « Garder le lien » vaut accord pour ce site, l'image s'affiche tout de suite (comme quand la copie échoue : l'adresse vient d'être tapée) et reste signalée en rouge ;
+  Annuler et Échap n'insèrent rien, une adresse `data:` ou du même site que le widget s'intègre sans question ;
+- avant l'export, la fenêtre « Images d'un site externe » liste les sites (choix du 01/10, `Dialogs.confirm`) : **un site déjà affiché par un clic n'y est pas redemandé** (le clic est l'accord), et tous affichés = aucune fenêtre ; l'export attend donc toujours un accord par site,
+  « Afficher » dans le document ou « Continuer » dans la fenêtre. Limite connue : seul l'affichage est bloqué, l'adresse reste dans le modèle ; les 3 points d'audit de lecture d'image à l'export (PDF, Word, Excel) restent comptés.
 
 ### Pas de framework, pas d'étape de build, dépendances tierces encadrées
 Les deux widgets sont des pages statiques (HTML/CSS/JS vanilla, pas de React/Vue, pas de bundler) servies telles
