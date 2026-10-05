@@ -144,8 +144,7 @@ const LinkDialog = (function () {
 
   function closeWindow() {
     if (win) win.hide();
-    const ed = EditorCore.getEditor();
-    if (ed) ed.commands.focus();
+    EditorCore.focusEditor();
   }
 
   // Ouvre la fenêtre sur la sélection de l'éditeur ; faux (sans rien ouvrir) quand un lien n'a pas de sens ici : le raccourci avale alors quand même

@@ -443,12 +443,7 @@ const VariableLoop = (function () {
 
   function close() {
     if (!win) return;
-    const editor = state && state.editor;
-    win.hide();
-    state = null;
-    previewRun.cancel();
-    // La bulle est toujours sélectionnée : rendre le focus à l'éditeur fait réapparaître sa barre flottante.
-    if (editor) editor.view.focus();
+    VariableModal.closeWindow(win, state && state.editor, previewRun, () => { state = null; });
   }
 
   // Une boucle déplacée depuis (d'un tableau vers un paragraphe, par exemple) reprend le premier choix permis de son nouvel endroit.

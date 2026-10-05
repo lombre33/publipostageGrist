@@ -674,6 +674,36 @@
     },
   });
 
+  // La fermeture de la fenêtre : `close` de js/variable-loop.js (celle des fenêtres Condition et Liste passe par la même aide, VariableModal.closeWindow).
+  cases.push({
+    id: 'loop_window_closing_hides_it_and_gives_the_keyboard_back_to_the_selected_bubble',
+    description: '« Annuler » et « Enregistrer » dans la fenêtre Boucle : la fenêtre se ferme, le clavier revient dans l\'éditeur et la bulle reste sélectionnée ; rouverte, la fenêtre repart de la bulle',
+    run: async (h) => {
+      await seed(h);
+      const loop = { repeat: 'inline', table: 'LpParticipants', separator: ', ', lastSeparator: ' et ', empty: 'hide' };
+      Editor.setHTML(`<p>Avec ${badgeHtml('LpParticipants', 'NomComplet', loop)}</p>`);
+      await h.sleep(150);
+      const ed = EditorCore.getEditor();
+      const out = {};
+      const notes = {};
+      for (const [name, label] of [['cancel', I18n.t('common.cancel')], ['save', I18n.t('common.save')], ['cancelAgain', I18n.t('common.cancel')]]) {
+        await selectBadge(h, 'LpParticipants.NomComplet');
+        VariableLoop.open(ed, badgeNodes(ed)[0].pos);
+        await h.sleep(300);
+        const opened = VariableLoop.isOpen() && visible(modal());
+        document.activeElement.blur();
+        actionButton(label).click();
+        await h.sleep(250);
+        const selection = ed.state.selection;
+        const focusInEditor = document.querySelector('.tiptap').contains(document.activeElement);
+        const bubbleSelected = !!selection.node && selection.node.type.name === 'varBadge';
+        out[name] = opened && !VariableLoop.isOpen() && !visible(modal()) && focusInEditor && bubbleSelected;
+        notes[name] = { opened, isOpen: VariableLoop.isOpen(), modalVisible: visible(modal()), focusInEditor, bubbleSelected };
+      }
+      return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) + ' ' + JSON.stringify(notes) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.varLoop = cases;
 })();

@@ -236,8 +236,7 @@ const Callout = (function () {
 
   function closeWindow() {
     if (win) win.hide();
-    const ed = EditorCore.getEditor();
-    if (ed) ed.commands.focus();
+    EditorCore.focusEditor();
   }
 
   function open() {

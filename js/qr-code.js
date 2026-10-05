@@ -327,8 +327,7 @@ const QrCode = (function () {
     previewToken += 1;
     closeColumnList();
     if (win) win.hide();
-    const ed = EditorCore.getEditor();
-    if (ed) ed.commands.focus();
+    EditorCore.focusEditor();
   }
 
   // Ouvre la fenêtre : pour modifier le QR code sélectionné s'il y en a un, sinon pour en insérer un à la place du curseur. Faux quand l'éditeur

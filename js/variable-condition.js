@@ -327,13 +327,7 @@ const VariableCondition = (function () {
 
   function close() {
     if (!win) return;
-    const editor = state && state.editor;
-    win.hide();
-    state = null;
-    previewRun.cancel();
-    clearTimeout(copiedFlashTimer);
-    // La bulle est toujours sélectionnée : rendre le focus à l'éditeur fait réapparaître sa barre flottante.
-    if (editor) editor.view.focus();
+    VariableModal.closeWindow(win, state && state.editor, previewRun, () => { state = null; clearTimeout(copiedFlashTimer); });
   }
 
   // `pos` : position de la bulle, du bloc, de la valeur ou de la case dans le document, capturée au clic sur l'icône (la sélection de l'éditeur est

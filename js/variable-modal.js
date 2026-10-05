@@ -79,6 +79,16 @@ const VariableModal = (function () {
     };
   }
 
+  // La fermeture commune des fenêtres d'une bulle : la fenêtre se cache, `reset()` remet le module à zéro (son état, ses minuteries), l'aperçu en cours
+  // est abandonné, puis le clavier revient à l'éditeur d'où la fenêtre est partie (`editor`, null quand elle n'était pas ouverte sur un éditeur). La
+  // bulle est toujours sélectionnée : rendre le focus à l'éditeur fait réapparaître sa barre flottante.
+  function closeWindow(win, editor, previewRun, reset) {
+    win.hide();
+    reset();
+    previewRun.cancel();
+    if (editor) editor.view.focus();
+  }
+
   // Le nœud dont la fenêtre est ouverte, retrouvé à la position capturée au clic, ou null s'il a bougé ou disparu depuis - alerte `lostKey`, rien
   // n'est écrit. Une bulle doit encore porter la même variable. `tag` : le module, pour le journal.
   function nodeAtOrigin({ editor, pos, node: original }, lostKey, tag) {
@@ -91,5 +101,5 @@ const VariableModal = (function () {
     return null;
   }
 
-  return { badgeText, shorten, labelledInput, separatorFields, previewBox, setLine, previewRunner, nodeAtOrigin };
+  return { badgeText, shorten, labelledInput, separatorFields, previewBox, setLine, previewRunner, closeWindow, nodeAtOrigin };
 })();

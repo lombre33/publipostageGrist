@@ -8,6 +8,8 @@ const EditorCore = (function () {
   let TextSelectionClass = null;
   function setEditor(ed) { editor = ed; }
   function getEditor() { return editor; }
+  // Rend le clavier à l'éditeur quand une fenêtre se referme ; sans éditeur, rien.
+  function focusEditor() { if (editor) editor.commands.focus(); }
   function setFloatingUi(lib) { floatingUi = lib; }
   function setNodeSelectionClass(cls) { NodeSelectionClass = cls; }
   function getTextSelectionClass() { return TextSelectionClass; }
@@ -480,7 +482,7 @@ const EditorCore = (function () {
   }
 
   return {
-    setEditor, getEditor, setFloatingUi, setNodeSelectionClass, getTextSelectionClass, setTextSelectionClass,
+    setEditor, getEditor, focusEditor, setFloatingUi, setNodeSelectionClass, getTextSelectionClass, setTextSelectionClass,
     patchNodeAndReselect, editorContentWidthPx, layoutZoom, createStepSheets, createFloatingPanel,
     registerFloatingPanel, hideFloatingContextToolbars,
     getOpenDropdownPanel, setOpenDropdownPanel, closeDropdownPanel, wireDropdownButton,
