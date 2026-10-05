@@ -10,9 +10,9 @@ const TABLE_NAME = 'Publipostage_PreferencesModeles';
 // Une instance vm.createContext + loadScript par scénario : TemplatePreferences garde un état
 // module-niveau (cache, cachedEmail, tableChecked) qui ne doit pas fuiter d'un scénario à l'autre,
 // exactement comme un vrai rechargement de page recharge js/template-preferences.js à zéro.
-function freshModule({ initialTables = [], email = 'a@exemple.fr', emailFails = false, docOptions } = {}) {
+function freshModule({ initialTables = [], email = 'a@exemple.fr', emailFails = false, docOptions, console } = {}) {
   const docApi = new FakeDocApi(initialTables, docOptions);
-  const ctx = createContext({ grist: { docApi } });
+  const ctx = createContext(Object.assign({ grist: { docApi } }, console ? { console } : {}));
   // Le vrai js/grist-api.js (création de la table, file d'écriture) ; seule l'identification est simulée.
   loadScript(ctx, 'js/grist-api.js');
   evalIn(ctx, 'GristAPI').getCurrentUserEmail = async () => {
@@ -177,6 +177,25 @@ async function main() {
     check('refus de Grist : l’état affiché revient à l’état confirmé', await run('TemplatePreferences.isFolderCollapsed("S")') === false);
     await run('TemplatePreferences.setFolderCollapsed("S", true)');
     check('refus de Grist : la file n’est pas bloquée, l’écriture suivante réussit', docApi.rows[TABLE_NAME].some((r) => r.Dossier === 'S' && r.Replie === true));
+  }
+
+  // 10. Table lue avec des rangées mais sans ses colonnes (règle d'accès qui les cache, lecture partielle : la forme que l'audit externe du 04/10 a rencontrée pour les autres
+  // tables du widget) : aucune préférence, et aucune erreur écrite dans la console - avant, une TypeError (le cache restait vide, avec une erreur). Dossier et Epingle absents seuls
+  // se lisent vides, la ligne reste lue.
+  {
+    const errors = [];
+    const spyConsole = { log() {}, warn() {}, error: (...a) => errors.push(a.join(' ')) };
+    const { docApi, run } = freshModule({ initialTables: [TABLE_NAME], console: spyConsole });
+    docApi.fetchTable = async () => ({ id: [1, 2, 3] });
+    const cache = await run('TemplatePreferences.loadForCurrentUser()');
+    check('lecture sans colonnes : aucune erreur dans la console (avant : TypeError)', errors.length === 0, errors);
+    check('lecture sans colonnes : aucune préférence, le cache est vide', cache && Object.keys(cache).length === 0, cache);
+    check('lecture sans colonnes : les dossiers proposés sont vides', (await run('TemplatePreferences.listFolders()')).length === 0);
+
+    const partial = freshModule({ initialTables: [TABLE_NAME], console: spyConsole });
+    partial.docApi.fetchTable = async () => ({ id: [7], Utilisateur: ['a@exemple.fr'], ModeleId: [3] });
+    const kept = await partial.run('TemplatePreferences.loadForCurrentUser()');
+    check('lecture sans Dossier ni Epingle : la ligne de la personne est lue, non épinglée, sans dossier', errors.length === 0 && kept[3] && kept[3].rowId === 7 && kept[3].epingle === false && kept[3].dossier === null, kept);
   }
 
   summarizeAndExit();

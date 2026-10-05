@@ -85,10 +85,14 @@ const TemplatePreferences = (function () {
       const data = await grist.docApi.fetchTable(TABLE_NAME);
       // Schéma relu à chaque chargement : Replie peut manquer (document ancien) ou avoir été ajoutée ailleurs.
       replieColumnPresent = ('Replie' in data);
-      for (let i = 0; i < data.id.length; i++) {
+      // Une lecture sans Utilisateur ni ModeleId (règle d'accès qui les cache, lecture partielle) ne dit rien de la personne : aucune préférence, sans erreur.
+      // Dossier et Epingle absents se lisent vides.
+      const count = data.Utilisateur && data.ModeleId ? data.id.length : 0;
+      const folderOf = i => normalizeFolderPath(data.Dossier ? data.Dossier[i] : null);
+      for (let i = 0; i < count; i++) {
         if ((data.Utilisateur[i] || '') !== email) continue;
         if (data.ModeleId[i] === FOLDER_ROW_MODELE_ID) {
-          const chemin = normalizeFolderPath(data.Dossier[i]);
+          const chemin = folderOf(i);
           const replie = !!(data.Replie && data.Replie[i]);
           // Plusieurs lignes pour un même dossier (double écriture d'un autre onglet) : la première fait foi, c'est celle que setFolderCollapsed met
           // à jour.
@@ -97,8 +101,8 @@ const TemplatePreferences = (function () {
         }
         cache[data.ModeleId[i]] = {
           rowId: data.id[i],
-          epingle: !!data.Epingle[i],
-          dossier: normalizeFolderPath(data.Dossier[i]),
+          epingle: !!(data.Epingle && data.Epingle[i]),
+          dossier: folderOf(i),
         };
       }
     } catch (e) {
