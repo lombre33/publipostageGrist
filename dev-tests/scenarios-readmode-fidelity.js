@@ -119,10 +119,28 @@
 
   // Un mot plus large que sa case de tableau (une adresse, un identifiant, un long nom) : l'éditeur le coupe dans la case (ProseMirror pose `overflow-wrap: break-word`
   // à `.tiptap`) et le PDF aussi (pdfmake) ; la Lecture le laissait sur une ligne, qui passait sur la case voisine (choix « Couper » du 05/10, carte « Couper dans la
-  // Lecture un mot plus large que sa case de tableau ? »). Les mots n'ont ni tiret ni ponctuation : le contenteditable ne coupe qu'après une espace (`line-break`).
+  // Lecture un mot plus large que sa case de tableau ? »). Les mots de ces cas n'ont ni tiret ni ponctuation ; le tiret a son garde-fou plus bas.
   const longWordTable = (cellPx, text) => '<table style="width: ' + (cellPx + 200) + 'px;"><colgroup><col style="width: ' + cellPx + 'px;"><col style="width: 200px;"></colgroup><tbody><tr>'
     + '<td colspan="1" rowspan="1" colwidth="' + cellPx + '"><p>' + text + '</p></td><td colspan="1" rowspan="1" colwidth="200"><p>court</p></td></tr></tbody></table>';
-  // Ce que la première case d'un tableau montre de son paragraphe : le nombre de lignes, le bord droit du texte, celui de la place utile de la case, ce qui dépasse de sa boîte.
+  // Le texte de chaque ligne d'un paragraphe, sans espaces : une lettre est sur la ligne que lit le sommet de son rectangle.
+  function lineTextsOf(paragraph) {
+    const lines = [];
+    let lastTop = null;
+    const walker = document.createTreeWalker(paragraph, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      for (let i = 0; i < node.nodeValue.length; i++) {
+        if (/\s/.test(node.nodeValue[i])) continue;
+        const range = document.createRange();
+        range.setStart(node, i);
+        range.setEnd(node, i + 1);
+        const top = range.getBoundingClientRect().top;
+        if (lastTop === null || Math.abs(top - lastTop) > 2) { lines.push(''); lastTop = top; }
+        lines[lines.length - 1] += node.nodeValue[i];
+      }
+    }
+    return lines;
+  }
+  // Ce que la première case d'un tableau montre de son paragraphe : le nombre de lignes et leur texte, le bord droit du texte, celui de la place utile de la case, ce qui dépasse de sa boîte.
   function firstCellLayout(root) {
     const td = root.querySelector('td');
     const range = document.createRange();
@@ -134,6 +152,7 @@
     const round = v => Math.round(v * 10) / 10;
     return {
       lines: tops.length,
+      texts: lineTextsOf(td.querySelector('p')),
       textRight: round(Math.max(...rects.map(r => r.right))),
       roomRight: round(td.getBoundingClientRect().right - (parseFloat(style.paddingRight) || 0) - (parseFloat(style.borderRightWidth) || 0)),
       boxOverflow: td.scrollWidth - td.clientWidth,
@@ -184,6 +203,27 @@
         else if (reader.lines !== editor.lines) failures.push(cellPx + ' px : ' + reader.lines + ' ligne(s) en Lecture, ' + editor.lines + ' dans l\'éditeur');
       }
       return { pass: !failures.length, notes: failures.join(' ; ') };
+    },
+  });
+
+  // Garde-fou : le tiret. L'éditeur coupe après un tiret, comme la Lecture et le PDF (mesuré le 05/10 ; la règle `line-break: after-white-space` de ProseMirror n'y change rien) :
+  // un mot composé se coupe aux mêmes endroits partout, et la règle `overflow-wrap` de la Lecture ne coupe que ce qui ne tient pas, après ces coupes permises.
+  cases.push({
+    id: 'readmode_table_hyphenated_word_breaks_after_its_hyphens_like_the_editor',
+    description: 'Un mot composé (avec tirets) dans une case étroite se coupe après ses tirets, aux mêmes endroits en Lecture et dans l\'éditeur',
+    run: async (h) => {
+      const failures = [];
+      const seen = [];
+      // Le mot seul se coupe après chaque tiret (80 px) ou après le second seulement (110 et 130 px) ; dans une phrase, après le premier seulement (110 px).
+      const variants = [[80, 'porte-parole-adjoint'], [110, 'porte-parole-adjoint'], [130, 'porte-parole-adjoint'], [110, 'Le porte-parole-adjoint du groupe']];
+      for (const [cellPx, text] of variants) {
+        const { editor, reader } = await renderBoth(h, longWordTable(cellPx, text));
+        const name = cellPx + ' px « ' + text + ' »';
+        seen.push({ name, editor: editor.texts, reader: reader.texts });
+        if (!editor.texts.slice(0, -1).some(line => line.endsWith('-'))) failures.push(name + ' : l\'éditeur ne coupe pas après un tiret (' + JSON.stringify(editor.texts) + '), le cas ne prouve rien');
+        else if (JSON.stringify(reader.texts) !== JSON.stringify(editor.texts)) failures.push(name + ' : lignes de la Lecture ' + JSON.stringify(reader.texts) + ', de l\'éditeur ' + JSON.stringify(editor.texts));
+      }
+      return { pass: !failures.length, notes: failures.length ? failures.join(' ; ') : JSON.stringify(seen) };
     },
   });
 

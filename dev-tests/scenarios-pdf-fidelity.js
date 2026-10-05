@@ -266,7 +266,9 @@
 
   // Un mot plus large que sa case (une adresse, un identifiant) : l'éditeur le coupe dans la case (contenteditable : `overflow-wrap: break-word`) et le PDF aussi
   // (pdfmake) ; seuls l'hôte de mesure de l'export et la Lecture (non éditables, `overflow-wrap: normal`) le laissaient sur une ligne. Garde-fou : le PDF a toujours coupé
-  // (la Lecture : readmode_table_long_word_breaks_in_its_cell_like_the_editor).
+  // (la Lecture : readmode_table_long_word_breaks_in_its_cell_like_the_editor). Le PDF ne coupe pas toujours à la même lettre : pdfmake 0.2.7 (`buildNextLine`) compte les lettres
+  // d'une ligne sur la largeur moyenne d'une lettre du mot, le navigateur sur la largeur de chacune ; relevé le 05/10 sur 243 largeurs de case (50 à 130 px, trois textes), la coupe
+  // diffère à deux largeurs sur trois et le nombre de lignes à une sur huit : ce garde-fou ne compare que le cas de 60 px, il ne fixe aucune position de coupe.
   cases.push({
     id: 'pdffid_table_long_word_breaks_in_its_cell_like_the_editor',
     description: 'Un mot plus large que sa case de tableau se coupe dans la case du PDF comme dans l\'éditeur : même nombre de lignes, tout le mot, rien dans la case voisine',
