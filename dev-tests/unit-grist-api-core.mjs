@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Tests purs (sans navigateur) du cœur de js/grist-api.js - cf. dev-tests/unit-harness.mjs pour le contexte général :
-//  - ensureTable et createWriteQueue, que les modules du widget (modèles, commentaires, préférences, abréviations, formats de page) prennent au lieu de leurs copies ;
+//  - ensureTable, createWriteQueue, createUserEmailCache et createMemoizedLoad, que les modules du widget (modèles, commentaires, préférences, abréviations, formats de page) prennent au lieu de leurs copies ;
 //  - init : les deux souscriptions onRecord (« shown » en repli, « normal » dès qu'elle a livré), les options, le lien « Sélectionner par » et le niveau d'accès ;
 //  - detectTableId : mappings, grist.getTable(), puis les clés de la ligne courante ;
 //  - refreshColumnTypes : types, choix, colonnes d'aide d'affichage et colonnes montrées des Références, tirés des métadonnées.
@@ -199,6 +199,170 @@ async function main() {
       return Promise.race([b.enqueue(async () => 'libre'), new Promise(r => setTimeout(() => r('bloquée'), 50))]);
     })()`);
     check('deux files sont indépendantes', separate === 'libre', separate);
+  });
+
+  // === createUserEmailCache ===
+  await section('createUserEmailCache', async () => {
+    const { run } = fresh(new Doc());
+    const once = await run(`(async () => {
+      let calls = 0;
+      const cache = GristAPI.createUserEmailCache(async () => { calls++; return 'ada@exemple.fr'; });
+      const beforeAnyAsk = calls;
+      const first = await cache.get();
+      const second = await cache.get();
+      return { beforeAnyAsk, first, second, calls };
+    })()`);
+    check('l\'adresse n\'est lue qu\'à la première demande, puis reprise telle quelle', once.beforeAnyAsk === 0 && once.first === 'ada@exemple.fr' && once.second === 'ada@exemple.fr' && once.calls === 1, JSON.stringify(once));
+
+    const failure = await run(`(async () => {
+      let calls = 0;
+      const cache = GristAPI.createUserEmailCache(async () => { calls++; throw new Error('identification impossible (test)'); });
+      const first = await cache.get();
+      const second = await cache.get();
+      return { first, second, calls };
+    })()`);
+    check('identification impossible : personne anonyme (null), sans bloquer ni retenter', failure.first === null && failure.second === null && failure.calls === 1, JSON.stringify(failure));
+
+    const reset = await run(`(async () => {
+      let calls = 0, answer = 'ada@exemple.fr';
+      const cache = GristAPI.createUserEmailCache(async () => { calls++; return answer; });
+      const before = await cache.get();
+      answer = 'grace@exemple.fr';
+      const kept = await cache.get();
+      cache.reset();
+      const after = await cache.get();
+      return { before, kept, after, calls };
+    })()`);
+    check('reset oublie l\'adresse : la demande suivante la relit', reset.before === 'ada@exemple.fr' && reset.kept === 'ada@exemple.fr' && reset.after === 'grace@exemple.fr' && reset.calls === 2, JSON.stringify(reset));
+
+    const retried = await run(`(async () => {
+      let calls = 0, broken = true;
+      const cache = GristAPI.createUserEmailCache(async () => { calls++; if (broken) throw new Error('identification impossible (test)'); return 'ada@exemple.fr'; });
+      const failed = await cache.get();
+      broken = false;
+      const stillAnonymous = await cache.get();
+      cache.reset();
+      return { failed, stillAnonymous, after: await cache.get(), calls };
+    })()`);
+    check('un échec reste gardé jusqu\'à reset, qui permet un nouvel essai', retried.failed === null && retried.stillAnonymous === null && retried.after === 'ada@exemple.fr' && retried.calls === 2, JSON.stringify(retried));
+
+    const declined = await run(`(async () => {
+      let calls = 0, refuse = true;
+      const cache = GristAPI.createUserEmailCache(async () => {
+        calls++;
+        if (refuse) throw Object.assign(new Error('Création des tables du widget refusée par la personne.'), { tablesDeclined: true });
+        return 'ada@exemple.fr';
+      });
+      const whileDeclined = await cache.get();
+      const stillDeclined = await cache.get();
+      refuse = false;
+      const accepted = await cache.get();
+      const kept = await cache.get();
+      return { whileDeclined, stillDeclined, accepted, kept, calls };
+    })()`);
+    check('le refus de créer la table d\'identification n\'est pas gardé : null cette fois, relue à chaque demande jusqu\'à l\'accord, puis gardée',
+      declined.whileDeclined === null && declined.stillDeclined === null && declined.accepted === 'ada@exemple.fr' && declined.kept === 'ada@exemple.fr' && declined.calls === 3, JSON.stringify(declined));
+
+    const separate = await run(`(async () => {
+      const a = GristAPI.createUserEmailCache(async () => 'ada@exemple.fr');
+      const b = GristAPI.createUserEmailCache(async () => { throw new Error('identification impossible (test)'); });
+      return [await a.get(), await b.get(), await a.get()];
+    })()`);
+    check('deux modules ont chacun leur mémoire', same(separate, ['ada@exemple.fr', null, 'ada@exemple.fr']), JSON.stringify(separate));
+  });
+
+  // === createMemoizedLoad ===
+  await section('createMemoizedLoad', async () => {
+    const { run } = fresh(new Doc());
+    const once = await run(`(async () => {
+      let reads = 0;
+      const memo = GristAPI.createMemoizedLoad(async () => { reads++; return [{ id: reads }]; });
+      const nothingYet = memo.get();
+      const first = await memo.load();
+      const second = await memo.load();
+      return { nothingYet, sameList: first === second, heldList: memo.get() === first, reads, first };
+    })()`);
+    check('la liste n\'est lue qu\'une fois ; get() la rend, null tant que rien n\'est lu', once.nothingYet === null && once.sameList && once.heldList && once.reads === 1 && same(once.first, [{ id: 1 }]), JSON.stringify(once));
+
+    const empty = await run(`(async () => {
+      let reads = 0;
+      const memo = GristAPI.createMemoizedLoad(async () => { reads++; return []; });
+      await memo.load();
+      await memo.load();
+      return reads;
+    })()`);
+    check('une liste vide est gardée comme les autres', empty === 1, String(empty));
+
+    const forced = await run(`(async () => {
+      let reads = 0;
+      const memo = GristAPI.createMemoizedLoad(async () => { reads++; return ['lecture ' + reads]; });
+      const first = await memo.load();
+      const again = await memo.load(true);
+      return { first, again, held: memo.get(), reads };
+    })()`);
+    check('load(true) relit et remplace la liste gardée', same(forced.first, ['lecture 1']) && same(forced.again, ['lecture 2']) && same(forced.held, ['lecture 2']) && forced.reads === 2, JSON.stringify(forced));
+
+    const shared = await run(`(async () => {
+      let reads = 0;
+      const releases = [];
+      const memo = GristAPI.createMemoizedLoad(() => { reads++; return new Promise(resolve => { releases.push(() => resolve(['lue'])); }); });
+      const lists = [memo.load(), memo.load(), memo.load(true)];
+      releases.forEach(release => release());
+      const results = await Promise.all(lists);
+      return { reads, same: results[0] === results[1] && results[1] === results[2] };
+    })()`);
+    check('des appels simultanés, relecture comprise, partagent une seule lecture', shared.reads === 1 && shared.same, JSON.stringify(shared));
+
+    const afterFailure = await run(`(async () => {
+      let reads = 0;
+      const memo = GristAPI.createMemoizedLoad(async () => { reads++; if (reads === 1) throw new Error('lecture impossible (test)'); return ['lue']; });
+      let message = null;
+      try { await memo.load(); } catch (e) { message = e.message; }
+      const held = memo.get();
+      const next = await memo.load();
+      return { message, held, next, reads };
+    })()`);
+    check('une lecture qui échoue remonte, ne laisse rien en mémoire et la suivante repart', afterFailure.message === 'lecture impossible (test)' && afterFailure.held === null && same(afterFailure.next, ['lue']) && afterFailure.reads === 2, JSON.stringify(afterFailure));
+
+    const reset = await run(`(async () => {
+      let reads = 0;
+      let release;
+      const memo = GristAPI.createMemoizedLoad(() => { reads++; return reads === 1 ? new Promise(resolve => { release = () => resolve(['avant']); }) : Promise.resolve(['après']); });
+      const pending = memo.load();
+      memo.reset();
+      const fresh = await Promise.race([memo.load(), new Promise(r => setTimeout(() => r('bloquée'), 50))]);
+      release();
+      await pending;
+      return { fresh, reads };
+    })()`);
+    check('reset oublie aussi la lecture en cours : la suivante n\'attend pas celle d\'avant', same(reset.fresh, ['après']) && reset.reads === 2, JSON.stringify(reset));
+
+    const forgotten = await run(`(async () => {
+      let reads = 0;
+      const memo = GristAPI.createMemoizedLoad(async () => { reads++; return ['lecture ' + reads]; });
+      await memo.load();
+      memo.reset();
+      const emptied = memo.get();
+      const again = await memo.load();
+      return { emptied, again, reads };
+    })()`);
+    check('reset vide la liste gardée : get() rend null, load() relit', forgotten.emptied === null && same(forgotten.again, ['lecture 2']) && forgotten.reads === 2, JSON.stringify(forgotten));
+
+    const inPlace = await run(`(async () => {
+      const memo = GristAPI.createMemoizedLoad(async () => [{ id: 1 }]);
+      const list = await memo.load();
+      list.push({ id: 2 });
+      return { held: memo.get().length, again: (await memo.load()).length };
+    })()`);
+    check('la liste rendue est celle qui est gardée : un module y ajoute ou en retire des lignes', inPlace.held === 2 && inPlace.again === 2, JSON.stringify(inPlace));
+
+    const separate = await run(`(async () => {
+      const a = GristAPI.createMemoizedLoad(async () => ['a']);
+      const b = GristAPI.createMemoizedLoad(async () => ['b']);
+      await a.load();
+      return { a: a.get(), b: b.get() };
+    })()`);
+    check('deux modules ont chacun leur liste', same(separate, { a: ['a'], b: null }), JSON.stringify(separate));
   });
 
   // === init : souscriptions, options, lien, accès ===

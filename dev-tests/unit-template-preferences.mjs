@@ -10,13 +10,19 @@ const TABLE_NAME = 'Publipostage_PreferencesModeles';
 // Une instance vm.createContext + loadScript par scénario : TemplatePreferences garde un état
 // module-niveau (cache, cachedEmail, tableChecked) qui ne doit pas fuiter d'un scénario à l'autre,
 // exactement comme un vrai rechargement de page recharge js/template-preferences.js à zéro.
-function freshModule({ initialTables = [], email = 'a@exemple.fr', emailFails = false, docOptions, console } = {}) {
+function freshModule({ initialTables = [], email = 'a@exemple.fr', emailFails = false, emailDeclinesFirst = false, emailCalls, docOptions, console } = {}) {
   const docApi = new FakeDocApi(initialTables, docOptions);
   const ctx = createContext(Object.assign({ grist: { docApi } }, console ? { console } : {}));
   // Le vrai js/grist-api.js (création de la table, file d'écriture) ; seule l'identification est simulée.
   loadScript(ctx, 'js/grist-api.js');
+  let declined = emailDeclinesFirst;
   evalIn(ctx, 'GristAPI').getCurrentUserEmail = async () => {
+    if (emailCalls) emailCalls.n++;
     if (emailFails) throw new Error('identification indisponible (test)');
+    if (declined) {
+      declined = false; // la première demande tombe sur la question « Créer les tables ? », la personne refuse ; la suivante, elle accepte
+      throw Object.assign(new Error('Création des tables du widget refusée par la personne.'), { tablesDeclined: true });
+    }
     return email;
   };
   loadScript(ctx, 'js/template-preferences.js');
@@ -48,6 +54,40 @@ async function main() {
     await run('TemplatePreferences.loadForCurrentUser()');
     await run('TemplatePreferences.setPinned(1, true)');
     check('idempotence : un seul AddTable même après plusieurs appels', docApi.addTableCalls === 1);
+  }
+
+  // 2ter. L'adresse de la personne n'est demandée qu'une fois par module, avec ou sans identification : un échec (repli anonyme) n'est pas retenté.
+  {
+    const emailCalls = { n: 0 };
+    const { run } = freshModule({ initialTables: [TABLE_NAME], emailCalls });
+    await run('TemplatePreferences.loadForCurrentUser()');
+    await run('TemplatePreferences.setPinned(1, true)');
+    await run('TemplatePreferences.setFolder(1, "Factures")');
+    await run('TemplatePreferences.setFolderCollapsed("Factures", true)');
+    check('identification : l\'adresse n\'est demandée qu\'une fois pour toutes les lectures et écritures', emailCalls.n === 1, String(emailCalls.n));
+  }
+  {
+    const emailCalls = { n: 0 };
+    const { docApi, run } = freshModule({ initialTables: [TABLE_NAME], emailFails: true, emailCalls });
+    await run('TemplatePreferences.loadForCurrentUser()');
+    await run('TemplatePreferences.setPinned(1, true)');
+    await run('TemplatePreferences.setFolderCollapsed("Factures", true)');
+    const row = docApi.rows[TABLE_NAME].find((r) => r.ModeleId === 1);
+    check('identification impossible : une seule tentative, les écritures se font au nom de personne', emailCalls.n === 1 && !!row && row.Utilisateur === '', emailCalls.n + ' ' + JSON.stringify(row));
+  }
+  // 2quater. Le refus de créer la table d'identification n'est pas gardé comme une identification impossible : la personne qui accepte à l'action
+  // suivante est reconnue, ses épingles ne vont pas au repli anonyme (partagé) ; une fois reconnue, plus aucune demande.
+  {
+    const emailCalls = { n: 0 };
+    const { docApi, run } = freshModule({ initialTables: [TABLE_NAME], emailDeclinesFirst: true, emailCalls });
+    const cache = await run('TemplatePreferences.loadForCurrentUser()');
+    const readWhileDeclined = { calls: emailCalls.n, kept: Object.keys(cache).length };
+    await run('TemplatePreferences.setPinned(1, true)');
+    await run('TemplatePreferences.setFolder(1, "Factures")');
+    const row = docApi.rows[TABLE_NAME].find((r) => r.ModeleId === 1);
+    check('refus de l\'identification : la lecture se fait au nom de personne (aucune préférence) après une seule demande', readWhileDeclined.kept === 0 && readWhileDeclined.calls === 1, JSON.stringify(readWhileDeclined));
+    check('refus de l\'identification : l\'action suivante demande de nouveau l\'adresse, puis la garde (deux demandes en tout)', emailCalls.n === 2, String(emailCalls.n));
+    check('refus de l\'identification : la ligne écrite ensuite est au nom de la personne, pas du repli anonyme', !!row && row.Utilisateur === 'a@exemple.fr' && row.Epingle === true && row.Dossier === 'Factures', JSON.stringify(row));
   }
 
   // 3. Aller-retour setPinned/setFolder : indépendants l'un de l'autre (patch ne touche que le champ fourni).

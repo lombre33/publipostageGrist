@@ -50,19 +50,9 @@ const TemplatePreferences = (function () {
     replieColumnPresent = true;
   }
 
-  let cachedEmail; // undefined = jamais résolu, null = résolution tentée et échouée (repli anonyme)
-  async function currentUserEmail() {
-    if (cachedEmail !== undefined) return cachedEmail;
-    try {
-      cachedEmail = await GristAPI.getCurrentUserEmail();
-    } catch (e) {
-      // Refus de créer la table d'identification : pas gardé, la personne qui accepte plus tard doit être reconnue (sinon ses épingles iraient au repli
-      // anonyme, partagé).
-      if (GristAPI.isTablesDeclined(e)) return null;
-      cachedEmail = null;  // repli anonyme, jamais bloquant
-    }
-    return cachedEmail;
-  }
+  // La personne courante : identification impossible = repli anonyme (Utilisateur = ''), jamais bloquant ; le refus de créer la table d'identification
+  // n'est pas gardé (js/grist-api.js:createUserEmailCache).
+  const userEmail = GristAPI.createUserEmailCache(() => GristAPI.getCurrentUserEmail());
 
   // "  Factures / / 2024 " -> "Factures/2024" ; chaîne vide/segments vides -> null (aucun dossier).
   function normalizeFolderPath(path) {
@@ -91,7 +81,7 @@ const TemplatePreferences = (function () {
     folderStates = Object.create(null);
     // '' sans court-circuit : une préférence écrite en repli anonyme doit se relire dans la même session anonyme, sinon épingler puis rouvrir l'arbre
     // « oublierait » l'épingle.
-    const email = (await currentUserEmail()) || '';
+    const email = (await userEmail.get()) || '';
     try {
       const data = await grist.docApi.fetchTable(TABLE_NAME);
       // Schéma relu à chaque chargement : Replie peut manquer (document ancien) ou avoir été ajoutée ailleurs.
@@ -128,7 +118,7 @@ const TemplatePreferences = (function () {
   // l'appelant.
   async function upsert(modeleId, patch) {
     await ensureTableExists();
-    const email = (await currentUserEmail()) || '';
+    const email = (await userEmail.get()) || '';
     if (!cache) await loadForCurrentUser();
     const id = Number(modeleId);
     const existing = cache[id];
@@ -174,7 +164,7 @@ const TemplatePreferences = (function () {
         await grist.docApi.applyUserActions([['UpdateRecord', TABLE_NAME, state.rowId, { Replie: wanted }]]);
       } else {
         if (!wanted) return state;  // « déplié » est l'état par défaut : pas de ligne à créer
-        const email = (await currentUserEmail()) || '';
+        const email = (await userEmail.get()) || '';
         const result = await grist.docApi.applyUserActions([['AddRecord', TABLE_NAME, null, {
           Utilisateur: email, ModeleId: FOLDER_ROW_MODELE_ID, Epingle: false, Dossier: key, Replie: true,
         }]]);

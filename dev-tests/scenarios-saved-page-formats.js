@@ -223,6 +223,43 @@ window.EditorTestSuites.savedFormats = (function () {
       },
     },
     {
+      id: 'savedfmt_the_list_is_read_once_shared_by_simultaneous_reads_read_again_on_demand_and_forgotten_by_reset',
+      description: 'Le module ne lit la table qu\'une fois et garde la liste (un second appel ne relit pas) ; deux relectures simultanées n\'en font qu\'une ; load(true) relit et voit un format ajouté dans le document entre-temps ; add et remove tiennent la liste gardée à jour sans relire ; reset l\'oublie (vide, la lecture suivante repart du document).',
+      async run(h) {
+        await setup(h);
+        const problems = [];
+        const fetches = countFetches();
+        const names = () => SavedPageFormats.list().map(e => e.name).join();
+        try {
+          await seed([['Étiquette 70 × 37', 70, 37]]);
+          if (SavedPageFormats.list().length !== 0) problems.push('liste avant toute lecture : ' + names());
+          await SavedPageFormats.load();
+          await SavedPageFormats.load();
+          if (names() !== 'Étiquette 70 × 37' || fetches.n !== 1) problems.push('deux lectures de suite : liste=' + names() + ' lectures=' + fetches.n);
+          // Un format ajouté dans le document sans passer par le module : la liste gardée ne le voit qu\'après une relecture.
+          await stub().applyUserActions([['AddRecord', TABLE, null, { Nom: 'Carte 85 × 55', Largeur: 85, Hauteur: 55 }]]);
+          stub().clearActionLog();
+          if (names() !== 'Étiquette 70 × 37') problems.push('liste gardée : ' + names());
+          const lists = await Promise.all([SavedPageFormats.load(true), SavedPageFormats.load(true)]);
+          if (fetches.n !== 2 || names() !== 'Carte 85 × 55,Étiquette 70 × 37' || lists[0] !== lists[1]) problems.push('deux relectures simultanées : lectures=' + fetches.n + ' liste=' + names());
+          const added = await SavedPageFormats.add('Ticket', 80, 200);
+          if (fetches.n !== 2 || names() !== 'Carte 85 × 55,Étiquette 70 × 37,Ticket') problems.push('après un ajout : lectures=' + fetches.n + ' liste=' + names());
+          const removed = await SavedPageFormats.remove(added.rowId);
+          if (removed !== true || fetches.n !== 2 || names() !== 'Carte 85 × 55,Étiquette 70 × 37') problems.push('après une suppression : retour=' + removed + ' lectures=' + fetches.n + ' liste=' + names());
+          const inDocument = rowsOf().map(r => r.name).sort().join();
+          if (inDocument !== 'Carte 85 × 55,Étiquette 70 × 37') problems.push('document après la suppression : ' + inDocument);
+          SavedPageFormats.reset();
+          if (SavedPageFormats.list().length !== 0) problems.push('après reset, la liste devrait être vide : ' + names());
+          await SavedPageFormats.load();
+          if (fetches.n !== 3 || names() !== 'Carte 85 × 55,Étiquette 70 × 37') problems.push('lecture après reset : lectures=' + fetches.n + ' liste=' + names());
+        } finally {
+          fetches.restore();
+          resetPage();
+        }
+        return { pass: problems.length === 0, notes: JSON.stringify(problems) };
+      },
+    },
+    {
       id: 'savedfmt_table_is_never_offered_as_a_user_table',
       description: 'La table Publipostage_FormatsPage fait partie des tables internes du widget : #Variable et les sélecteurs de table ne la proposent jamais (le vrai listTables() la rend, comme toutes les autres)',
       async run(h) {

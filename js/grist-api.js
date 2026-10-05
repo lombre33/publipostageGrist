@@ -123,6 +123,42 @@ const GristAPI = (function () {
       reset() { tail = Promise.resolve(); },
     };
   }
+  // L'adresse de la personne connectée, lue une seule fois par module (`read` : la lecture à faire, GristAPI.getCurrentUserEmail passée en fonction
+  // pour que le module la relise à chaque essai). Identification impossible (lecteur Grist, document sans formule déclenchée) : personne anonyme,
+  // `null`, jamais bloquant - et pas de nouvel essai avant `reset()`. Sauf le refus de créer la table d'identification : `null` cette fois-ci, mais
+  // pas gardé - la personne qui accepte plus tard doit être reconnue (sinon ses données iraient au repli anonyme, partagé).
+  function createUserEmailCache(read) {
+    let cached; // undefined = jamais tentée, null = tentée et échouée
+    return {
+      async get() {
+        if (cached !== undefined) return cached;
+        try {
+          cached = await read();
+        } catch (e) {
+          if (isTablesDeclined(e)) return null;
+          cached = null;
+        }
+        return cached;
+      },
+      reset() { cached = undefined; },
+    };
+  }
+  // Une liste lue dans Grist (`read()`, qui rend la liste) et gardée en mémoire : `load()` rend la liste en mémoire, `load(true)` la relit ; une seule
+  // lecture à la fois, que les appels simultanés partagent. `get()` rend la liste en mémoire (null tant que rien n'est lu), `reset()` oublie tout.
+  function createMemoizedLoad(read) {
+    let list = null;
+    let loading = null;
+    return {
+      load(force) {
+        if (!force && list) return Promise.resolve(list);
+        if (loading) return loading;
+        loading = read().then(found => { list = found; return list; }).finally(() => { loading = null; });
+        return loading;
+      },
+      get() { return list; },
+      reset() { list = null; loading = null; },
+    };
+  }
   // Lectures de tables partagées pendant un rendu. fetchTable est un aller-retour jusqu'au serveur de Grist, qui renvoie la table entière
   // (WidgetFrame.ts : docComm.fetchTable, dans grist-core). Une bulle d'une autre table en demandait plusieurs d'affilée (la ligne de la table liée,
   // celle de la page, les deux tables de métadonnées pour trouver la colonne Référence) : des centaines de lectures identiques pour un macro-modèle,
@@ -999,5 +1035,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnChoices, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, getCurrentUserName, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, createWriteQueue };
+  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnChoices, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, getCurrentUserName, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, createWriteQueue, createUserEmailCache, createMemoizedLoad };
 })();

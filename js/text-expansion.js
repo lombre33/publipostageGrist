@@ -71,29 +71,18 @@ const TextExpansion = (function () {
 
   // [{ rowId, abbreviation, text }] pour la personne courante seulement - jamais celles des autres, ni en cache ni lues dans la liste. null tant que
   // rien n'est lu.
-  let entries = null;
-  let loading = null;
+  const entries = GristAPI.createMemoizedLoad(readEntries);
   let tableKnown = false; // la table existe dans le document (vue ou créée)
   // Écritures mises en file : deux « Ajouter » rapprochés ne doivent ni se doubler ni voir un état périmé (le second contrôle les doublons après que
   // le premier a fini).
   const writes = GristAPI.createWriteQueue();
 
-  // Même repli que js/template-preferences.js:currentUserEmail : identification impossible (lecteur Grist, document sans formule déclenchée) =
-  // personne anonyme, '' ; jamais bloquant. undefined = jamais tentée, null = tentée et échouée.
-  let cachedEmail;
-  async function currentUserEmail() {
-    if (cachedEmail !== undefined) return cachedEmail;
-    try {
-      cachedEmail = await GristAPI.getCurrentUserEmail();
-    } catch (e) {
-      if (GristAPI.isTablesDeclined(e)) return null; // refus de créer la table d'identification : pas gardé, la personne qui accepte plus tard doit être reconnue
-      cachedEmail = null;
-    }
-    return cachedEmail;
-  }
+  // La personne courante : identification impossible (lecteur Grist, document sans formule déclenchée) = personne anonyme, '' ; jamais bloquant. Le
+  // refus de créer la table d'identification n'est pas gardé (js/grist-api.js:createUserEmailCache).
+  const userEmail = GristAPI.createUserEmailCache(() => GristAPI.getCurrentUserEmail());
 
   async function readEntries() {
-    const email = (await currentUserEmail()) || '';
+    const email = (await userEmail.get()) || '';
     const found = [];
     let tables;
     try { tables = await grist.docApi.listTables(); } catch (e) { console.warn('[text-expansion] liste des tables illisible', e); return found; }
@@ -111,26 +100,22 @@ const TextExpansion = (function () {
     return found;
   }
 
-  function load(force) {
-    // Une seule lecture à la fois, mémorisée ; `force` relit (ouverture de l'onglet Réglages : une abréviation ajoutée depuis un autre onglet du
-    // navigateur ou à la main dans Grist y apparaît).
-    if (!force && entries) return Promise.resolve(entries);
-    if (loading) return loading;
-    loading = readEntries().then(found => { entries = found; return entries; }).finally(() => { loading = null; });
-    return loading;
-  }
+  // Une seule lecture à la fois, mémorisée ; `force` relit (ouverture de l'onglet Réglages : une abréviation ajoutée depuis un autre onglet du
+  // navigateur ou à la main dans Grist y apparaît).
+  const load = entries.load;
 
   // Oublie tout (tests, changement d'identité) : la prochaine lecture repart de Grist.
-  function reset() { entries = null; loading = null; tableKnown = false; cachedEmail = undefined; writes.reset(); }
+  function reset() { entries.reset(); tableKnown = false; userEmail.reset(); writes.reset(); }
 
   const normalizeKey = value => String(value || '').trim().toLowerCase();
   function lookup(abbreviation) {
     const key = normalizeKey(abbreviation);
-    return (entries && key && entries.find(e => normalizeKey(e.abbreviation) === key)) || null;
+    const known = entries.get();
+    return (known && key && known.find(e => normalizeKey(e.abbreviation) === key)) || null;
   }
 
   function list() {
-    return (entries || []).slice().sort((a, b) => a.abbreviation.localeCompare(b.abbreviation, lang()));
+    return (entries.get() || []).slice().sort((a, b) => a.abbreviation.localeCompare(b.abbreviation, lang()));
   }
 
   function rankEntries(query) {
@@ -140,7 +125,7 @@ const TextExpansion = (function () {
     const q = normalizeKey(query);
     const wordStart = q && new RegExp('(^|[^\\p{L}\\p{N}])' + escapeRegExp(q), 'iu');
     const ranked = [];
-    (entries || []).forEach(entry => {
+    (entries.get() || []).forEach(entry => {
       const key = normalizeKey(entry.abbreviation);
       let rank;
       if (!q) rank = 1;
@@ -189,7 +174,7 @@ const TextExpansion = (function () {
     if (!text) return 'textEmpty';
     if (text.length > MAX_TEXT_LENGTH) return 'textTooLong';
     const key = normalizeKey(abbreviation);
-    if ((entries || []).some(e => e.rowId !== exceptRowId && normalizeKey(e.abbreviation) === key)) return 'duplicate';
+    if ((entries.get() || []).some(e => e.rowId !== exceptRowId && normalizeKey(e.abbreviation) === key)) return 'duplicate';
     return '';
   }
 
@@ -212,10 +197,10 @@ const TextExpansion = (function () {
       const problem = checkEntry(clean.abbreviation, clean.text, null);
       if (problem) throw validationError(problem);
       await ensureTable();
-      const email = (await currentUserEmail()) || '';
+      const email = (await userEmail.get()) || '';
       const result = await grist.docApi.applyUserActions([['AddRecord', TABLE_NAME, null, { Utilisateur: email, Abreviation: clean.abbreviation, Texte: clean.text }]]);
       const entry = { rowId: result.retValues[0], abbreviation: clean.abbreviation, text: clean.text };
-      entries.push(entry);
+      entries.get().push(entry);
       return Object.assign({}, entry);
     });
   }
@@ -223,7 +208,7 @@ const TextExpansion = (function () {
   function update(rowId, rawAbbreviation, rawText) {
     return writes.enqueue(async () => {
       await load();
-      const entry = entries.find(e => e.rowId === rowId);
+      const entry = entries.get().find(e => e.rowId === rowId);
       if (!entry) return null; // retirée entre-temps (autre onglet) : rien à modifier
       const clean = cleanEntry(rawAbbreviation, rawText);
       const problem = checkEntry(clean.abbreviation, clean.text, rowId);
@@ -238,10 +223,10 @@ const TextExpansion = (function () {
   function remove(rowId) {
     return writes.enqueue(async () => {
       await load();
-      const index = entries.findIndex(e => e.rowId === rowId);
+      const index = entries.get().findIndex(e => e.rowId === rowId);
       if (index === -1) return false;
       await grist.docApi.applyUserActions([['RemoveRecord', TABLE_NAME, rowId]]);
-      entries.splice(index, 1);
+      entries.get().splice(index, 1);
       return true;
     });
   }
@@ -269,7 +254,8 @@ const TextExpansion = (function () {
     // autres atomes y sont écrits « %leaf% » : ils comptent comme un caractère qui n'est ni lettre ni chiffre, donc « [bulle]§ub » s'étend. Le
     // déclencheur doit suivre le début du paragraphe ou un caractère qui n'est ni lettre, ni chiffre, ni tiret bas : « a§b » (une adresse, un code) ne
     // s'étend jamais.
-    if (!entries || !entries.length) return null;
+    const known = entries.get();
+    if (!known || !known.length) return null;
     const char = triggerChar();
     if (!char || text.length < 3) return null;
     const typed = text.slice(-1);

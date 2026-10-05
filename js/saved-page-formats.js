@@ -22,8 +22,7 @@ const SavedPageFormats = (function () {
   const MAX_NAME_LENGTH = 120; // large : une coupe silencieuse n'a de sens que pour un collage absurde
 
   // [{ rowId, name, widthMm, heightMm }] ; null tant que rien n'est lu.
-  let entries = null;
-  let loading = null;
+  const entries = GristAPI.createMemoizedLoad(readEntries);
   let tableKnown = false; // la table existe dans le document (vue ou créée)
   // Écritures mises en file : deux « Enregistrer » rapprochés ne doivent ni se doubler ni voir un état périmé (le second cherche son nom libre après
   // que le premier a fini).
@@ -65,29 +64,24 @@ const SavedPageFormats = (function () {
 
   // Une seule lecture à la fois, mémorisée ; `force` relit (une ouverture de la fenêtre voit ainsi un format ajouté depuis un autre onglet ou à la
   // main dans Grist).
-  function load(force) {
-    if (!force && entries) return Promise.resolve(entries);
-    if (loading) return loading;
-    loading = readEntries().then(found => { entries = found; return entries; }).finally(() => { loading = null; });
-    return loading;
-  }
+  const load = entries.load;
 
   // Oublie tout (tests, changement de document) : la prochaine lecture repart de Grist.
-  function reset() { entries = null; loading = null; tableKnown = false; writes.reset(); }
+  function reset() { entries.reset(); tableKnown = false; writes.reset(); }
 
   // Les formats enregistrés, du premier au dernier par nom (« Étiquette 2 » avant « Étiquette 10 »). Vide tant que rien n'est lu.
   function list() {
-    return (entries || []).map(e => Object.assign({}, e))
+    return (entries.get() || []).map(e => Object.assign({}, e))
       .sort((a, b) => a.name.localeCompare(b.name, lang(), { numeric: true, sensitivity: 'base' }) || a.rowId - b.rowId);
   }
 
   function find(rowId) {
-    const entry = (entries || []).find(e => String(e.rowId) === String(rowId));
+    const entry = (entries.get() || []).find(e => String(e.rowId) === String(rowId));
     return entry ? Object.assign({}, entry) : null;
   }
 
   // Un autre format porte-t-il déjà ce nom ?
-  function isNameTaken(name) { return (entries || []).some(e => sameName(e.name, name)); }
+  function isNameTaken(name) { return (entries.get() || []).some(e => sameName(e.name, name)); }
 
   // Nom libre le plus proche de `name` : lui-même s'il est libre, sinon « nom (2) », « nom (3) »... Un nom qui finit déjà par « (n) » continue sa
   // série au numéro suivant (même règle que Templates.uniqueName : enregistrer « Étiquette (2) » donne « Étiquette (3) », pas « Étiquette (2) (2) »).
@@ -129,7 +123,7 @@ const SavedPageFormats = (function () {
       await ensureTable();
       const result = await grist.docApi.applyUserActions([['AddRecord', TABLE_NAME, null, { Nom: name, Largeur: w, Hauteur: h }]]);
       const entry = { rowId: result.retValues[0], name, widthMm: w, heightMm: h };
-      entries.push(entry);
+      entries.get().push(entry);
       return Object.assign({}, entry);
     });
   }
@@ -137,10 +131,10 @@ const SavedPageFormats = (function () {
   function remove(rowId) {
     return writes.enqueue(async () => {
       await load();
-      const index = entries.findIndex(e => String(e.rowId) === String(rowId));
+      const index = entries.get().findIndex(e => String(e.rowId) === String(rowId));
       if (index === -1) return false; // retiré entre-temps (autre onglet) : rien à supprimer
-      await grist.docApi.applyUserActions([['RemoveRecord', TABLE_NAME, entries[index].rowId]]);
-      entries.splice(index, 1);
+      await grist.docApi.applyUserActions([['RemoveRecord', TABLE_NAME, entries.get()[index].rowId]]);
+      entries.get().splice(index, 1);
       return true;
     });
   }

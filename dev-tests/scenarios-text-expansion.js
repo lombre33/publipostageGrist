@@ -92,6 +92,62 @@
   });
 
   cases.push({
+    id: 'te_the_person_is_identified_once_and_asked_again_only_after_reset',
+    description: 'L\'adresse de la personne n\'est demandée qu\'une fois (lectures et ajouts compris) : une personne qui change ensuite n\'est pas vue avant reset, qui oublie aussi la lecture d\'avant ; une identification impossible n\'est pas retentée et laisse la personne anonyme ; le refus de créer la table d\'identification n\'est pas gardé : la personne qui accepte ensuite est reconnue',
+    run: async () => {
+      wipe();
+      await seed([['alice@example.fr', 'a1', 'texte A1'], ['bob@example.fr', 'b1', 'texte B1'], ['', 'anon', 'texte anonyme']]);
+      const original = GristAPI.getCurrentUserEmail;
+      let calls = 0;
+      let identify = async () => 'alice@example.fr';
+      GristAPI.getCurrentUserEmail = () => { calls++; return identify(); };
+      try {
+        await TextExpansion.load(true);
+        await TextExpansion.add('a2', 'texte A2');
+        await TextExpansion.load(true);
+        const once = { calls, names: names(TextExpansion.list()) };
+        identify = async () => 'bob@example.fr';
+        await TextExpansion.load(true);
+        const kept = { calls, names: names(TextExpansion.list()) };
+        TextExpansion.reset();
+        await TextExpansion.load(true);
+        const afterReset = { calls, names: names(TextExpansion.list()) };
+        calls = 0;
+        identify = async () => { throw new Error('identification impossible (essai)'); };
+        TextExpansion.reset();
+        await TextExpansion.load(true);
+        await TextExpansion.add('zz', 'texte zz');
+        await TextExpansion.load(true);
+        const anonymous = { calls, names: names(TextExpansion.list()), user: (rowsOf().find(r => r.abbr === 'zz') || {}).user };
+        // Le refus de créer la table d'identification (la question de js/table-consent.js) : lecture anonyme cette fois-ci, mais rien n'est retenu ; à l'accord
+        // la personne est reconnue, puis plus aucune demande.
+        calls = 0;
+        let refuse = true;
+        identify = async () => {
+          if (refuse) { refuse = false; throw Object.assign(new Error('Création des tables du widget refusée par la personne.'), { tablesDeclined: true }); }
+          return 'alice@example.fr';
+        };
+        TextExpansion.reset();
+        await TextExpansion.load(true);
+        const refused = { calls, names: names(TextExpansion.list()) };
+        await TextExpansion.load(true);
+        const accepted = { calls, names: names(TextExpansion.list()) };
+        await TextExpansion.add('a3', 'texte A3');
+        const recognised = { calls, user: (rowsOf().find(r => r.abbr === 'a3') || {}).user };
+        return {
+          pass: once.calls === 1 && once.names === 'a1,a2' && kept.calls === 1 && kept.names === 'a1,a2' && afterReset.calls === 2 && afterReset.names === 'b1'
+            && anonymous.calls === 1 && anonymous.names === 'anon,zz' && anonymous.user === ''
+            && refused.calls === 1 && refused.names === 'anon,zz' && accepted.calls === 2 && accepted.names === 'a1,a2' && recognised.calls === 2 && recognised.user === 'alice@example.fr',
+          notes: JSON.stringify({ once, kept, afterReset, anonymous, refused, accepted, recognised }),
+        };
+      } finally {
+        GristAPI.getCurrentUserEmail = original;
+        wipe();
+      }
+    },
+  });
+
+  cases.push({
     id: 'te_table_is_created_only_by_the_first_add_and_hidden_from_variables',
     description: 'La table Publipostage_Abreviations n\'est ni créée ni lue à vide au démarrage ni à l\'ouverture de l\'onglet : seul le premier ajout la crée (une seule fois), et elle n\'est jamais offerte comme table de #Variable',
     run: async (h) => {
