@@ -274,7 +274,7 @@ const I18n = (function () {
     'insert.citation.tip': { fr: 'Citation', en: 'Quote' },
     'insert.citation.aria': { fr: 'Insérer une citation', en: 'Insert a quote' },
     'insert.variable.tip': { fr: 'Insérer une variable', en: 'Insert a variable' },
-    'insert.variable.aria': { fr: 'Insérer une variable (#Variable ou chip)', en: 'Insert a variable (#Variable or chip)' },
+    'insert.variable.aria': { fr: 'Insérer une variable (#Variable ou puce)', en: 'Insert a variable (#Variable or chip)' },
     // Une seule icône de la barre pour le lien, la citation, le bloc de code, l'encadré et le bloc de signature : le bouton principal ouvre la
     // fenêtre du lien, le menu au survol porte les lignes. Le raccourci (Ctrl+K ou ⌘K selon la plateforme) s'ajoute à l'aria-label par
     // js/link-dialog.js.
@@ -618,7 +618,7 @@ const I18n = (function () {
     'settings.language.intro': { fr: 'Langue de l’interface (textes, infobulles, messages).', en: 'Interface language (text, tooltips, messages).' },
     'settings.language.fr': { fr: 'Français', en: 'French' },
     'settings.language.en': { fr: 'Anglais', en: 'English' },
-    'settings.triggerKey.intro': { fr: 'Caractère qui ouvre le panneau #Variable/Chips en cours de frappe.', en: 'Character that opens the #Variable/Chips panel while typing.' },
+    'settings.triggerKey.intro': { fr: 'Caractère qui ouvre le panneau #Variable/Puces en cours de frappe.', en: 'Character that opens the #Variable/Chips panel while typing.' },
     'settings.pageMargins.intro': { fr: 'Marges de page (mm) - propres à ce modèle, appliquées à l’aperçu et aux exports PDF/DOCX.', en: 'Page margins (mm) - specific to this template, applied to the preview and to PDF/DOCX exports.' },
     'settings.pageMargins.top': { fr: 'Haut', en: 'Top' },
     'settings.pageMargins.right': { fr: 'Droite', en: 'Right' },
@@ -918,7 +918,7 @@ const I18n = (function () {
 
     // --- Panneau `#` : onglets ---
     'panel.tabVariables': { fr: 'Variables', en: 'Variables' },
-    'panel.tabChips': { fr: 'Chips', en: 'Chips' },
+    'panel.tabChips': { fr: 'Puces', en: 'Chips' },
     'chips.footnote': { fr: 'Note de bas de page', en: 'Footnote' },
     'chips.date': { fr: 'Date du jour', en: 'Today’s date' },
     'chips.time': { fr: 'Heure actuelle', en: 'Current time' },

@@ -21,8 +21,8 @@
     run: async (h) => {
       await h.resetEditor();
       await openHashPanel(h);
-      const tabChips = Array.from(document.querySelectorAll('.ac-tab')).find(t => t.textContent === 'Chips' || t.textContent === 'Chips');
-      if (!tabChips) return { pass: false, notes: 'onglet Chips introuvable' };
+      const tabChips = Array.from(document.querySelectorAll('.ac-tab')).find(t => t.dataset.tab === 'chips');
+      if (!tabChips) return { pass: false, notes: 'onglet des puces introuvable' };
       tabChips.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
       await h.sleep(40);
       const item = Array.from(document.querySelectorAll('.ac-item')).find(i => /note de bas de page|footnote/i.test(i.textContent));
@@ -49,7 +49,7 @@
     run: async (h) => {
       await h.resetEditor();
       await openHashPanel(h);
-      document.querySelectorAll('.ac-tab').forEach(t => { if (t.textContent === 'Chips') t.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); });
+      document.querySelectorAll('.ac-tab').forEach(t => { if (t.dataset.tab === 'chips') t.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); });
       await h.sleep(40);
       const item = Array.from(document.querySelectorAll('.ac-item')).find(i => /note de bas de page/i.test(i.textContent));
       item.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
@@ -101,7 +101,7 @@
         await h.focusAtEnd();
         await h.typeText('texte ' + i + ' #');
         await h.sleep(60);
-        document.querySelectorAll('.ac-tab').forEach(t => { if (t.textContent === 'Chips') t.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); });
+        document.querySelectorAll('.ac-tab').forEach(t => { if (t.dataset.tab === 'chips') t.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); });
         await h.sleep(40);
         const item = Array.from(document.querySelectorAll('.ac-item')).find(it => /note de bas de page/i.test(it.textContent));
         item.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
@@ -124,7 +124,7 @@
       await h.focusAtEnd();
       await h.typeText('Corps avec une note #');
       await h.sleep(60);
-      document.querySelectorAll('.ac-tab').forEach(t => { if (t.textContent === 'Chips') t.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); });
+      document.querySelectorAll('.ac-tab').forEach(t => { if (t.dataset.tab === 'chips') t.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); });
       await h.sleep(40);
       const item = Array.from(document.querySelectorAll('.ac-item')).find(it => /note de bas de page/i.test(it.textContent));
       item.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
@@ -156,7 +156,7 @@
         await h.focusAtEnd();
         await h.typeText('#');
         await h.sleep(60);
-        document.querySelectorAll('.ac-tab').forEach(t => { if (t.textContent === 'Chips') t.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); });
+        document.querySelectorAll('.ac-tab').forEach(t => { if (t.dataset.tab === 'chips') t.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); });
         await h.sleep(40);
         const label = kind === 'date' ? /date du jour|today/i : /heure actuelle|current time/i;
         const item = Array.from(document.querySelectorAll('.ac-item')).find(it => label.test(it.textContent));
@@ -181,6 +181,39 @@
         return { pass: hasChip && looksResolved, notes: 'hasChip=' + hasChip + ' resolvedText="' + resolvedText.trim() + '"' };
       },
     });
+  });
+
+  // L'onglet des puces du panneau « # » (demande d'Antoine du 05/10 : corriger « Chips » en « puces » en français) : « Puces » en français, « Chips » en anglais, et le même mot partout où l'interface
+  // française en parle - le nom du bouton « Insérer une variable » et l'aide du caractère déclencheur (Réglages). Les onglets sont créés une seule fois avec la liste : ils doivent suivre un changement
+  // de langue (data-i18n) sans rouvrir la page, ce que personne ne voyait tant que les deux langues écrivaient « Chips ». Le test ouvre la liste, puis change de langue devant elle, dans les deux sens.
+  cases.push({
+    id: 'chip_tab_is_called_puces_in_french_and_chips_in_english',
+    description: 'L\'onglet des puces du panneau « # » se lit « Puces » en français et « Chips » en anglais (« Variables » dans les deux), la liste déjà créée suit un changement de langue dans les deux sens, et le nom du bouton « Insérer une variable » (« puce » / « chip ») comme l\'aide du caractère déclencheur (« Puces » / « Chips ») disent le même mot',
+    run: async (h) => {
+      const previousLang = I18n.getLang();
+      try {
+        await h.resetEditor();
+        I18n.setLang('fr');
+        await openHashPanel(h);
+        const read = () => ({
+          tabs: Array.from(document.querySelectorAll('#autocomplete-box .ac-tab')).map(t => t.dataset.tab + '=' + t.textContent).join(' | '),
+          button: document.getElementById('v2-btn-insert-variable').getAttribute('aria-label'),
+          help: document.getElementById('settings-trigger-intro').textContent,
+        });
+        const fr = read();
+        I18n.setLang('en');
+        const en = read();
+        I18n.setLang('fr');
+        const back = read();
+        const wantFr = { tabs: 'variables=Variables | chips=Puces', button: 'Insérer une variable (#Variable ou puce)', help: 'Caractère qui ouvre le panneau #Variable/Puces en cours de frappe.' };
+        const wantEn = { tabs: 'variables=Variables | chips=Chips', button: 'Insert a variable (#Variable or chip)', help: 'Character that opens the #Variable/Chips panel while typing.' };
+        const same = (got, want) => Object.keys(want).every(key => got[key] === want[key]);
+        return { pass: same(fr, wantFr) && same(en, wantEn) && same(back, wantFr), notes: JSON.stringify({ fr, en, back }) };
+      } finally {
+        I18n.setLang(previousLang);
+        await h.resetEditor();
+      }
+    },
   });
 
   // Le chip « Email de l'utilisateur » écrit « [Email indisponible] » quand l'adresse ne peut pas être lue (réseau, portée du jeton insuffisante) : en Lecture et dans

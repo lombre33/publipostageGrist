@@ -195,6 +195,12 @@ async function placeChip(page, label, { lang, paragraph, before, entry, measure 
   check(`${label} - la liste « # » s'ouvre entièrement dans le panneau`, panel.found && panel.inViewport, panel);
   const chipsTab = await hitTest(page, '#autocomplete-box .ac-tab[data-tab="chips"]');
   check(`${label} - l'onglet Chips est atteignable à la vraie souris`, chipsTab.found && chipsTab.inViewport && chipsTab.onTop, chipsTab);
+  if (measure) {
+    // L'onglet porte son nom dans la langue de l'interface (demande d'Antoine du 05/10) : « Puces » en français, « Chips » en anglais, lu en entier à 700x400.
+    const tabName = lang === 'en' ? 'Chips' : 'Puces';
+    const named = await hitByText(page, '#autocomplete-box .ac-tab[data-tab="chips"]', tabName);
+    check(`${label} - l'onglet des puces s'appelle « ${tabName} », entier dans le panneau, au premier plan, texte non rogné`, named.found && named.inViewport && named.onTop && named.fits, named);
+  }
   await realClick(page, chipsTab);
   await page.waitForTimeout(150);
   const wanted = await hitByText(page, '#autocomplete-box .ac-item', entry);

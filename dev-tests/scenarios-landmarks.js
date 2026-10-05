@@ -93,7 +93,7 @@
         ['v2-email-cci', 'Copie cachée', 'Bcc'],
         ['tpl-gallery-search', 'Rechercher un modèle…', 'Search for a template…'],
         ['template-organize-search', 'Rechercher un modèle…', 'Search for a template…'],
-        ['settings-trigger-char', 'Caractère qui ouvre le panneau #Variable/Chips en cours de frappe.', 'Character that opens the #Variable/Chips panel while typing.'],
+        ['settings-trigger-char', 'Caractère qui ouvre le panneau #Variable/Puces en cours de frappe.', 'Character that opens the #Variable/Chips panel while typing.'],
       ];
       const got = { fr: {}, en: {}, labels: {} };
       I18n.setLang('fr');

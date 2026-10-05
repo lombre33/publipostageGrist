@@ -225,6 +225,14 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const htmlTemplate = htmlText.match(/[^<>"\n]*\b(?:un|ce|ces|de|des|le|du)\s+templates?\b[^<>"\n]*/gi) || [];
   check('vocabulaire : « modèle », jamais « template », dans les textes français', template.length === 0 && htmlTemplate.length === 0, '\n    ' + [...template, ...htmlTemplate].join('\n    '));
 
+  // « Puces » : en français, l'onglet du menu « # », l'aide du caractère déclencheur (Réglages) et le nom du bouton « Insérer une variable » disent « puces », jamais « chips » (choix d'Antoine du 05/10) ;
+  // l'anglais garde « chip(s) ». Seuls les textes lus comptent : un nom de classe ou d'id d'index.html (`v2-format-chip`) n'en est pas un, d'où les nœuds de texte et les attributs lus par une personne.
+  const readableHtml = [...htmlText.matchAll(/>([^<>]*)</g), ...htmlText.matchAll(/\b(?:aria-label|data-tip|title|placeholder|alt)="([^"]*)"/g)].map(m => m[1].trim()).filter(Boolean);
+  check('vocabulaire : les textes d\'index.html se lisent bien (garde-fou de l\'analyse elle-même)', readableHtml.length > 100, `${readableHtml.length} textes trouvés`);
+  const chipFr = bad(t => /\bchips?\b/i.test(t), 'fr');
+  const chipHtml = readableHtml.filter(t => /\bchips?\b/i.test(t));
+  check('vocabulaire : « puce », jamais « chip » ni « chips », dans les textes français', chipFr.length === 0 && chipHtml.length === 0, '\n    ' + [...chipFr, ...chipHtml].join('\n    '));
+
   const dashes = [...bad(t => /^--\s/.test(t), 'fr'), ...bad(t => /^--\s/.test(t), 'en')];
   const htmlDashes = htmlText.match(/>--\s[^<]*</g) || [];
   check('vocabulaire : l\'option vide d\'une liste s\'écrit « — Choisir … — » (tirets longs), jamais « -- … -- »', dashes.length === 0 && htmlDashes.length === 0, '\n    ' + [...dashes, ...htmlDashes].join('\n    '));

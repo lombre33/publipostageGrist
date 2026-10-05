@@ -69,6 +69,8 @@ const Variables = (function () {
       [['variables', 'panel.tabVariables'], ['chips', 'panel.tabChips']].forEach(([name, label]) => {
         const tab = Dom.el('div', 'ac-tab', I18n.t(label));
         tab.dataset.tab = name;
+        // La liste n'est créée qu'une fois : data-i18n fait relire le libellé à I18n.applyTranslations quand la personne change de langue (« Puces » / « Chips »).
+        tab.setAttribute('data-i18n', label);
         // mousedown + preventDefault (pas click) : un blur du focus de l'éditeur ne perturbe pas le changement d'onglet.
         tab.addEventListener('mousedown', e => {
           e.preventDefault();

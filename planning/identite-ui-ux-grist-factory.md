@@ -172,12 +172,15 @@ Arbitré le 29/09 (« Oui, partout », en ligne `fc44fb1`) après un relevé de 
 entre parenthèses et trois écritures du vide :
 - Le mot est **« modèle »**, jamais « template » dans un texte français (fichiers et identifiants peuvent garder
   `template`) ; on écrit « Macro-modèle », avec majuscule et trait d'union.
+- L'onglet du panneau « # » qui propose les puces (date du jour, heure, e-mail, nom, note de bas de page, texte, valeur et case conditionnels,
+  calcul) s'appelle **« Puces »** en français et « Chips » en anglais (choix d'Antoine du 05/10) ; jamais « chip(s) » dans un texte français, l'aide
+  du caractère déclencheur et le nom du bouton « Insérer une variable » compris. Les lignes de cette charte qui disent « l'onglet Chips » parlent de lui.
 - **Pas de pluriel entre parenthèses** (« 1 ligne(s) trouvée(s) ») : les pluriels s'écrivent `{n|singulier|pluriel}` dans
   `js/i18n.js` (« {count} {count|ligne trouvée|lignes trouvées} » ; en français 0 et 1 sont au singulier, en anglais
   seul 1).
 - **Le vide d'une liste** s'écrit « — Choisir … — » (tirets longs) ; « — Aucune — » seulement quand « aucun » est un
   vrai choix.
-- Le groupe de tests `codeHygiene` refuse « ligne(s) », « template » en français et « -- … -- ».
+- Le groupe de tests `codeHygiene` refuse « ligne(s) », « template » et « chip » en français et « -- … -- ».
 - Une indication ou un avertissement sous un champ commence **sous ce champ**, pas sous son libellé.
 
 ### Fenêtres : une seule base pour toutes
