@@ -340,6 +340,15 @@ const VariableFormat = (function () {
   const LIST_INDEX_MAX = 999;
   // Les types de colonne que ces réglages concernent.
   function isListType(type) { return type === 'ChoiceList' || (typeof type === 'string' && type.indexOf('RefList:') === 0); }
+  // Genre de réglage de format qu'une colonne de ce type permet : nombre, date, Oui / Non ou liste, sinon null (même répartition que la barre
+  // flottante, js/floating-toolbars.js:wireVariableFloatingToolbar). Un format ne se garde que sur une colonne du même genre - une date sur un
+  // texte donnerait n'importe quoi - : « Colonne… » (js/variable-column.js) et « Remplacer » (js/variable-linked-attrs.js) le lisent ici.
+  function columnKind(type) {
+    if (type === 'Numeric' || type === 'Int') return 'number';
+    if (type === 'Date' || type === 'DateTime') return 'date';
+    if (isListType(type)) return 'list';
+    return type === 'Bool' ? 'bool' : null;
+  }
   function normalizeList(raw) {
     // format.list = { pick, index, separator, lastSeparator, perValue } : ce que règle la fenêtre « Liste » (js/variable-list.js). `pick` : 'all'
     // (`separator` entre chacune, `lastSeparator` avant la dernière, le même si vide), 'first', 'last' ou 'nth' (la n-ième, `index` depuis 1 ; une
@@ -398,6 +407,6 @@ const VariableFormat = (function () {
   return {
     DATE_PRESETS, presetLabel, formatDate, formatNumber, numberLang, isZero,
     BOOL_CHECKBOX_STYLES, CHECKED_BOX, UNCHECKED_BOX, isCheckboxStyle, boolStyle, checkboxColor, formatBool,
-    LIST_INDEX_MAX, isListType, normalizeList, isDefaultList, storedList, listStyle, flattenList, listText,
+    LIST_INDEX_MAX, isListType, columnKind, normalizeList, isDefaultList, storedList, listStyle, flattenList, listText,
   };
 })();

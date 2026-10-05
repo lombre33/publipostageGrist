@@ -19,20 +19,14 @@ const VariableColumn = (function () {
   // n'est plus une Référence.
   const isBroken = attrs => !!(attrs && attrs.column && Variables.badgeProblem(attrs.table, attrs.column));
 
-  // Genre de réglage que porte un format de bulle, et que permet une colonne : nombre, date, Oui / Non, liste. Le zéro se règle seul, sans `type`
-  // (js/floating-toolbars.js, num-zero) : c'est un réglage nombre ; la liste aussi (`list`, js/variable-list.js) : elle suit d'une liste de choix à
-  // une liste de références, pas sur une colonne qui n'est pas une liste.
+  // Genre de réglage que porte un format de bulle : nombre, date, Oui / Non, liste ; celui que permet une colonne est `VariableFormat.columnKind`.
+  // Le zéro se règle seul, sans `type` (js/floating-toolbars.js, num-zero) : c'est un réglage nombre ; la liste aussi (`list`, js/variable-list.js) :
+  // elle suit d'une liste de choix à une liste de références, pas sur une colonne qui n'est pas une liste.
   function formatKindOf(format) {
     if (!format) return null;
     if (format.type === 'number' || format.type === 'date' || format.type === 'bool') return format.type;
     if (format.zero) return 'number';
     return format.list ? 'list' : null;
-  }
-  function columnKindOf(type) {
-    if (type === 'Numeric' || type === 'Int') return 'number';
-    if (type === 'Date' || type === 'DateTime') return 'date';
-    if (VariableFormat.isListType(type)) return 'list';
-    return type === 'Bool' ? 'bool' : null;
   }
   const sameVia = (a, b) => (!a && !b) || (!!a && !!b && a.table === b.table && a.column === b.column);
 
@@ -41,7 +35,7 @@ const VariableColumn = (function () {
   function replacementAttrs(node, item) {
     const attrs = Object.assign({}, node.attrs, { table: item.table, column: item.column, key: item.key });
     const kind = formatKindOf(node.attrs.format);
-    if (kind && kind !== columnKindOf(GristAPI.getColumnType(item.table, item.column))) attrs.format = null;
+    if (kind && kind !== VariableFormat.columnKind(GristAPI.getColumnType(item.table, item.column))) attrs.format = null;
     if (node.attrs.loop) {
       const loop = LoopRules.normalizeLoop(node.attrs.loop);
       const source = LoopRules.sourceFor(attrs, GristAPI.getCurrentTableId());

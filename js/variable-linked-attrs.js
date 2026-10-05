@@ -356,14 +356,6 @@ const VariableLinkedAttrs = (function () {
     editor.chain().focus().insertContentAt(insertAt, content).run();
   }
 
-  // Genre du format que porte une colonne : un format nombre n'a de sens que sur un nombre, un format date que sur une date, un réglage de liste
-  // (js/variable-list.js) que sur une liste de choix ou de références (même répartition que la barre flottante,
-  // js/floating-toolbars.js:wireVariableFloatingToolbar).
-  function formatKind(type) {
-    if (type === 'Numeric' || type === 'Int') return 'number';
-    if (VariableFormat.isListType(type)) return 'list';
-    return type === 'Date' || type === 'DateTime' ? 'date' : null;
-  }
   // « Remplacer » : la bulle d'origine prend la colonne du premier attribut coché, les autres cochés suivent, séparés par une espace, comme à
   // l'insertion. Elle reste la même bulle : ses autres réglages restent (mise en forme du texte, boucle, condition, format), sauf ce qui ne vaut que
   // pour l'ancienne colonne - le format d'un autre genre (une date sur un texte donnerait n'importe quoi), la boucle d'une autre table, la condition
@@ -377,8 +369,8 @@ const VariableLinkedAttrs = (function () {
     const [first, ...others] = orderedPicks();
     const attrs = Object.assign({}, node.attrs, pickAttrs(first));
     if (!refs.inheritRow.hidden && !refs.inheritBox.checked) attrs.condition = null;
-    const oldKind = formatKind(GristAPI.getColumnType(node.attrs.table, node.attrs.column));
-    if (!oldKind || oldKind !== formatKind(GristAPI.getColumnType(attrs.table, attrs.column))) attrs.format = null;
+    const oldKind = VariableFormat.columnKind(GristAPI.getColumnType(node.attrs.table, node.attrs.column));
+    if (!oldKind || oldKind !== VariableFormat.columnKind(GristAPI.getColumnType(attrs.table, attrs.column))) attrs.format = null;
     if (attrs.table !== node.attrs.table) attrs.loop = null;
     const after = pos + node.nodeSize;
     const content = badgesContent(others, node);

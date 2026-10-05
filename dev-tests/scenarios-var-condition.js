@@ -1147,6 +1147,47 @@
   });
 
   cases.push({
+    id: 'varlinked_replace_keeps_the_yes_no_style_for_another_boolean_column',
+    description: 'Autres attributs : « Remplacer » garde le style Oui / Non (case) de la bulle quand la nouvelle colonne est aussi un Oui / Non, comme « Colonne… », et l’enlève pour une colonne d’un autre genre ; une bulle sans style n’en prend pas',
+    run: async (h) => {
+      await seed(h);
+      const stub = window.__gristStub;
+      stub.setVariables('VcAnnuaire', { NomPrenom: 'Text', Actif: 'Bool', Valide: 'Bool', Age: 'Int' });
+      stub.setRows('VcAnnuaire', [
+        { id: 7, NomPrenom: 'Dupont Jean', Actif: true, Valide: false, Age: 36 },
+        { id: 8, NomPrenom: 'Martin Anne', Actif: false, Valide: true, Age: 35 },
+      ]);
+      await GristAPI.refreshSchema();
+      stub.fireRecord(Object.assign({}, RECORD_1), 'VcDossiers');
+      await h.sleep(50);
+      const ed = EditorCore.getEditor();
+      const style = { type: 'bool', style: 'classic' };
+      async function replaceWith(from, format, to) {
+        Editor.setHTML(`<p>${configuredBadgeHtml('VcAnnuaire', from, { format })}</p>`);
+        const modal = await openLinked(h, from);
+        if (!replaceButton(modal)) { cancelLinked(modal); return null; }
+        tickLinked(modal, [to]);
+        replaceButton(modal).click();
+        await h.sleep(120);
+        const node = badgeNodes(ed)[0].node;
+        return { key: node.attrs.key, format: node.attrs.format };
+      }
+      const got = {
+        boolToBool: await replaceWith('Actif', style, 'Valide'),
+        boolToNumber: await replaceWith('Actif', style, 'Age'),
+        boolToText: await replaceWith('Actif', style, 'NomPrenom'),
+        plainBoolStaysPlain: await replaceWith('Actif', null, 'Valide'),
+      };
+      if (Object.values(got).some(v => !v)) return NO_REPLACE_BUTTON;
+      const pass = got.boolToBool.key === 'VcAnnuaire.Valide' && JSON.stringify(got.boolToBool.format) === JSON.stringify(style)
+        && got.boolToNumber.key === 'VcAnnuaire.Age' && got.boolToNumber.format == null
+        && got.boolToText.key === 'VcAnnuaire.NomPrenom' && got.boolToText.format == null
+        && got.plainBoolStaysPlain.key === 'VcAnnuaire.Valide' && got.plainBoolStaysPlain.format == null;
+      return { pass, notes: JSON.stringify(got) };
+    },
+  });
+
+  cases.push({
     id: 'varlinked_replace_drops_a_loop_that_belongs_to_another_table',
     description: 'Autres attributs : une boucle ne suit que la table de sa bulle - une bulle d’une colonne Référence de la page qui porte encore une boucle (colonne devenue Référence depuis) la perd en passant à une colonne de la table référencée, au lieu de garder une boucle qui ne veut plus rien dire',
     run: async (h) => {
