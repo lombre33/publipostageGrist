@@ -682,6 +682,9 @@
         hideConflictBanner();
       }
     } catch (e) {
+      // La personne a refusé de créer les tables du widget : rien n'est enregistré, et le coin d'état le dit (ni échec ni journal d'erreur : elle a
+      // répondu elle-même, et Enregistrer lui reposera la question).
+      if (GristAPI.isTablesDeclined(e)) { setStatus(I18n.t('status.saveDeclined'), true); return; }
       // Un échec ici (par exemple une colonne Grist manquante) doit se voir : sans ce traitement, la fonction s'interromprait sans message, la liste
       // et le coin d'état ne seraient pas mis à jour, et rien ne dirait que « Enregistrer » n'a rien enregistré.
       console.error('[main] échec de l’enregistrement manuel', e);

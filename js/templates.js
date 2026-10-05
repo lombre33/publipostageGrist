@@ -15,7 +15,7 @@ const Templates = (function () {
     // document qui vient de recevoir une nouvelle colonne, deux appels qui se chevauchent peuvent lire tous les deux la colonne absente avant que
     // l'un l'ait ajoutée, puis l'ajouter tous les deux sous le même identifiant : le vrai Grist le refuse, pas dev-tests/grist-stub.js, dont les
     // ajouts sont idempotents. ensureOnce fait partager l'appel en cours à tout appelant concurrent ; un nouvel essai n'a lieu, au prochain appel,
-    // que si le premier a échoué.
+    // que si le premier a échoué (faux, ou une erreur : le refus de créer la table, cf. ensureTableExists).
     //
     // Pour l'ouverture, `columns` (les colonnes que la migration garantit, [] pour la table elle-même) inscrit la migration dans `columnMigrations` :
     // loadAll lit la table une seule fois et tient pour faites celles dont toutes les colonnes s'y trouvent, au lieu d'une lecture complète par
@@ -24,7 +24,7 @@ const Templates = (function () {
     function ensure() {
       if (!inFlight) {
         migrationRuns++;
-        inFlight = worker().then(ok => { if (!ok) inFlight = null; return ok; });
+        inFlight = worker().then(ok => { if (!ok) inFlight = null; return ok; }, error => { inFlight = null; throw error; });
       }
       return inFlight;
     }
@@ -46,6 +46,8 @@ const Templates = (function () {
       ]);
       return true;
     } catch (e) {
+      // La personne refuse de créer la table : tout ce qui en dépend s'arrête (loadAll rend une liste vide, Enregistrer le dit), sans journal d'erreur.
+      if (GristAPI.isTablesDeclined(e)) throw e;
       console.error('Erreur création table modèles', e);
       return false;
     }
@@ -226,13 +228,21 @@ const Templates = (function () {
     const first = await readTable();
     if (first) columnMigrations.forEach(migration => { if (migration.satisfiedBy(first)) migration.markDone(); });
     const runsBefore = migrationRuns;
-    await ensureTableExists();
-    await ensureHeaderFooterColumn();
-    await ensureDefaultColumn();
-    await ensureMarginsColumn();
-    await ensureDateModifColumn();
-    await ensureEmailColumns();
-    await ensureTrackChangesColumn();
+    try {
+      await ensureTableExists();
+      await ensureHeaderFooterColumn();
+      await ensureDefaultColumn();
+      await ensureMarginsColumn();
+      await ensureDateModifColumn();
+      await ensureEmailColumns();
+      await ensureTrackChangesColumn();
+    } catch (e) {
+      // Table refusée par la personne : aucun modèle à lire, et rien d'une erreur (ni ici ni dans le démarrage qui attend cette liste).
+      if (!GristAPI.isTablesDeclined(e)) throw e;
+      templatesCache = [];
+      loadedChars = 0;
+      return templatesCache;
+    }
     try {
       // Aucune migration n'a tourné (ni écrit une colonne) depuis la lecture initiale : elle est encore la table, inutile de la relire.
       const data = first && migrationRuns === runsBefore ? first : await grist.docApi.fetchTable(TABLE_NAME);

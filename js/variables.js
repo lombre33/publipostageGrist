@@ -1108,7 +1108,11 @@ const Variables = (function () {
     async function configureLink(targetTable, currentTableId, existingRule) {
       const rule = await showLinkConfigModal(targetTable, currentTableId, existingRule);
       if (!rule) return false;
-      await GristAPI.saveLinkRule(targetTable, rule);
+      try { await GristAPI.saveLinkRule(targetTable, rule); }
+      catch (e) {
+        if (GristAPI.isTablesDeclined(e)) return false; // la personne refuse de créer la table des règles : comme une annulation, rien n'est inséré
+        throw e;
+      }
       refreshLinkRulesPanel();
       return true;
     }

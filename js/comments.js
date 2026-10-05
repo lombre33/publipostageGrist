@@ -63,8 +63,14 @@ const Comments = (function () {
     return root.querySelector('.comment-mark[data-comment-id="' + commentId + '"]');
   }
 
+  // Faux quand la personne refuse de créer la table : l'appelant s'arrête, sans journal d'erreur (une autre panne est journalisée et la suite la rencontre).
   async function ensureTableExists() {
-    try { await GristAPI.ensureTable(TABLE_NAME, TABLE_COLUMNS); } catch (e) { console.error('[Comments] Erreur création table commentaires', e); }
+    try { await GristAPI.ensureTable(TABLE_NAME, TABLE_COLUMNS); }
+    catch (e) {
+      if (GristAPI.isTablesDeclined(e)) return false;
+      console.error('[Comments] Erreur création table commentaires', e);
+    }
+    return true;
   }
 
   function carriesCommentMarks(tpl) {
@@ -86,7 +92,7 @@ const Comments = (function () {
     closePopup();
     if (!modeleId) return;
     if (!carriesCommentMarks(tpl)) return;
-    await ensureTableExists();
+    if (!(await ensureTableExists())) return;
     try {
       const data = await grist.docApi.fetchTable(TABLE_NAME);
       for (let i = 0; i < data.id.length; i++) {
@@ -107,7 +113,7 @@ const Comments = (function () {
     const trimmed = (texte || '').trim();
     if (!trimmed) return false;
     if (!currentModeleId) return false;
-    await ensureTableExists();
+    if (!(await ensureTableExists())) return false;
     let auteur = '';
     try { auteur = await GristAPI.getCurrentUserEmail(); } catch (e) { /* repli anonyme silencieux, cohérent avec le reste de l'app (chip #Email) */ }
     const creeLe = new Date().toISOString();

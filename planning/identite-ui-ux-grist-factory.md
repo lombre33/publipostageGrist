@@ -283,6 +283,13 @@ Choix d'Antoine du 04/10 (« Tout soigner »). Un widget qui ne démarre pas ne 
 - **erreur** : toute autre erreur de démarrage ; le message technique déplié, « Recharger la page ».
 Seule la fenêtre « chargement long » se ferme par Échap, et rien ne s'affiche avec `?dev` dans l'adresse. Les adresses listées sont celles de la politique de sécurité (gardé par `codeHygiene`, section 13). Le numéro de version se lit dans Réglages > Crédits (`js/version.js`) ; la console ne reçoit que des avertissements et des erreurs. Gardé par le script Node `firstContact`.
 
+### Créer les tables du widget : on demande d'abord, et on redemande à chaque action si la personne refuse
+Choix d'Antoine du 05/10 (« demander une fois, mais si la personne refuse, il faudra lui redemander à chaque action de sa part sur le widget »). Le widget range ses modèles, ses commentaires, ses abréviations, ses formats de page et ses réglages dans des tables du document (`Publipostage_…`, visibles dans la liste des pages de Grist) ; il n'en crée aucune sans l'accord de la personne :
+- au premier lancement sur un document qui n'en porte aucune, le démarrage s'arrête sur la fenêtre « Créer les tables du widget dans ce document ? » (`js/table-consent.js`, `Dialogs.confirm`, base commune des fenêtres) : « Créer les tables » (le focus) et « Ne pas créer », Échap vaut un refus ; le message dit ce que sont ces tables et ce que vaut un refus ; une seule question même quand quatre tables partent ensemble ;
+- un document qui porte déjà une table du widget ne pose aucune question (l'accord est déjà donné) ; « oui » vaut pour la session, donc pour les tables créées plus tard ;
+- un refus ne se retient jamais : le widget démarre quand même (aucun modèle, rien d'écrit, aucune erreur), et la question revient à la prochaine action de la personne qui demande une table (Enregistrer, Ctrl+S, règle de liaison…), jamais d'elle-même (l'enregistrement automatique n'en pose aucune) ; le coin d'état dit alors « Non enregistré : les tables du widget n'ont pas été créées dans ce document. » ;
+- la fenêtre « chargement long » est suspendue tant que la question est ouverte. Gardé par les scripts Node `tableConsentUnit` et `tableConsentMouse`, et par `codeHygiene` (section 19 : toute création d'une table passe par `addTableIfMissing`).
+
 ### La langue de ce que le widget écrit dans le document
 Arbitré le 29/09 (en ligne `87a2a63`). Ce que le widget écrit lui-même dans le document — le message d'une variable qui ne
 se résout pas (« [ERREUR : … ] »), le titre du sommaire — suit la **langue de l'interface** de qui lit ou exporte, en

@@ -29,6 +29,8 @@ const TemplatePreferences = (function () {
       await GristAPI.ensureTable(TABLE_NAME, TABLE_COLUMNS);
       tableChecked = true;
     } catch (e) {
+      // La personne refuse de créer la table : l'appelant s'arrête (rien à lire, rien à écrire), sans journal d'erreur.
+      if (GristAPI.isTablesDeclined(e)) throw e;
       console.error('Erreur création table préférences de rangement', e);
     }
   }
@@ -54,6 +56,9 @@ const TemplatePreferences = (function () {
     try {
       cachedEmail = await GristAPI.getCurrentUserEmail();
     } catch (e) {
+      // Refus de créer la table d'identification : pas gardé, la personne qui accepte plus tard doit être reconnue (sinon ses épingles iraient au repli
+      // anonyme, partagé).
+      if (GristAPI.isTablesDeclined(e)) return null;
       cachedEmail = null;  // repli anonyme, jamais bloquant
     }
     return cachedEmail;
@@ -75,7 +80,13 @@ const TemplatePreferences = (function () {
   let folderStates = Object.create(null);
 
   async function loadForCurrentUser() {
-    await ensureTableExists();
+    try { await ensureTableExists(); }
+    catch (e) {
+      if (!GristAPI.isTablesDeclined(e)) throw e;
+      cache = {}; // pas de table, donc aucune préférence
+      folderStates = Object.create(null);
+      return cache;
+    }
     cache = {};
     folderStates = Object.create(null);
     // '' sans court-circuit : une préférence écrite en repli anonyme doit se relire dans la même session anonyme, sinon épingler puis rouvrir l'arbre

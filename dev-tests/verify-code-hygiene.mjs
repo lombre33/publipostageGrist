@@ -32,6 +32,9 @@
 //      bêta ; dev-tests et planning ne sont pas publiés et gardent leurs références).
 //  18. un moteur d'export (PDF, fusion, feuilles, Word, Excel, format des nombres : ~380 Ko) qui redevient un <script src> ordinaire de index.html, donc chargé à l'ouverture, ou qu'un script appelle
 //      sans passer par js/export-engines.js (choix d'Antoine du 05/10 : « Charger les moteurs d'export seulement au premier export »).
+//  19. une table du widget créée sans passer par la question « Créer les tables du widget dans ce document ? » : un `AddTable` écrit ailleurs que dans js/grist-api.js (addTableIfMissing) et dans la galerie de
+//      modèles (la table que la personne nomme elle-même), la question qui n'est plus posée avant l'écriture, ou js/table-consent.js qui n'est plus branché avant le démarrage anticipé d'index.html
+//      (choix d'Antoine du 05/10 : « demander une fois, mais si la personne refuse, lui redemander à chaque action de sa part sur le widget »).
 //
 // Volontairement PERMISSIF : un nom cité seulement dans un commentaire compte comme utilisé, un préfixe construit (`'toc-level-' + n`) couvre toute la
 // famille. Le but est de ne jamais faire échouer un changement légitime, seulement d'attraper ce qui n'a plus AUCUN point d'entrée. Une classe posée
@@ -637,6 +640,37 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const unguarded = users.filter(u => !u.ensures && !CALLED_AFTER_ENSURE.includes(u.rel)).map(u => `${u.rel} (${u.named.join(', ')})`);
   check('moteurs d\'export : un script qui appelle PdfExport, PdfMerge, SheetLayout, DocxExport, XlsxExport ou XlsxNumberFormat hors de son fichier nomme ExportEngines (il fait charger le moteur avant) - sinon le premier export, seul, échoue',
     users.length >= 2 && unguarded.length === 0, unguarded.length ? unguarded.join(', ') : `${users.length} fichiers`);
+}
+
+// ============================================================================
+// 19. Une table du widget ne se crée qu'après l'accord de la personne (choix d'Antoine du 05/10)
+// ============================================================================
+// Le widget range ses modèles, ses commentaires et ses réglages dans des tables du document (Publipostage_…, visibles dans la liste des pages de Grist). Leur création passe par UNE porte, addTableIfMissing
+// de js/grist-api.js, qui pose la question de js/table-consent.js avant d'écrire (dev-tests/unit-table-consent.mjs et verify-table-consent-mouse.mjs en gardent le comportement). Ce contrôle garde ce que
+// ces deux scripts ne voient pas : un `AddTable` écrit ailleurs (une table créée sans question), la question sautée dans addTableIfMissing, et js/table-consent.js qui n'est plus chargé avant le démarrage
+// anticipé d'index.html (la première création partirait sans qu'elle soit branchée : le widget créerait ses tables sans demander).
+{
+  // Seule exception : la galerie de modèles crée la table de DONNÉES que la personne vient de nommer elle-même dans une fenêtre (js/template-gallery-modal.js, useWithData) : un geste explicite, pas une table du widget.
+  const ALLOWED = ['js/grist-api.js', 'js/template-gallery-modal.js'];
+  const creators = jsFiles.filter(rel => /['"]AddTable['"]/.test(noCommentsJs(read(rel))));
+  check('tables : l\'analyse lit bien le code (garde-fou de l\'analyse elle-même : js/grist-api.js écrit un AddTable)', creators.includes('js/grist-api.js'), creators.join(', '));
+  check('tables : « AddTable » n\'est écrit que dans js/grist-api.js (addTableIfMissing, qui pose la question) et dans la galerie de modèles (la table que la personne nomme elle-même) - toute autre création de table passerait sans question',
+    creators.every(rel => ALLOWED.includes(rel)), creators.filter(rel => !ALLOWED.includes(rel)).join(', '));
+
+  const api = noCommentsJs(read('js/grist-api.js'));
+  const start = api.indexOf('async function addTableIfMissing');
+  const body = start === -1 ? '' : api.slice(start, api.indexOf('\n  }\n', start));
+  const asks = body.indexOf('tableCreationConsent(');
+  const writes = body.indexOf('\'AddTable\'');
+  check('tables : addTableIfMissing demande l\'accord (tableCreationConsent) AVANT d\'écrire l\'AddTable, et lève l\'erreur « refusée » (tablesDeclinedError) quand la personne refuse',
+    asks !== -1 && writes !== -1 && asks < writes && /tablesDeclinedError\(\)/.test(body), `${body.length} caractères, question en ${asks}, écriture en ${writes}`);
+
+  const page = read('index.html').replace(/<!--[\s\S]*?-->/g, m => m.replace(/[^\n]/g, ' '));
+  const at = needle => page.indexOf(needle);
+  const early = at('GristAPI.init()');
+  check('tables : index.html charge js/table-consent.js (une fois) après js/grist-api.js et js/templates.js, et AVANT le script en ligne du démarrage anticipé (qui lance la première création de table)',
+    (page.match(/<script src="js\/table-consent\.js\?v=/g) || []).length === 1 && early !== -1
+      && at('js/grist-api.js?v=') < at('js/table-consent.js?v=') && at('js/table-consent.js?v=') < early, `grist-api ${at('js/grist-api.js?v=')}, table-consent ${at('js/table-consent.js?v=')}, démarrage anticipé ${early}`);
 }
 
 summarizeAndExit();

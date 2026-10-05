@@ -187,6 +187,8 @@ const MacroEditor = (function () {
       closeModal();
       if (onSaved) await onSaved(id, finalName !== nom ? finalName : null);
     } catch (e) {
+      // La personne a refusé de créer les tables du widget : la fenêtre reste ouverte, le macro-modèle n'est pas perdu.
+      if (GristAPI.isTablesDeclined(e)) { alert(I18n.t('status.saveDeclined')); return; }
       console.error('[MacroEditor] échec de l’enregistrement', e);
       alert(I18n.t('macro.modal.saveError'));
     } finally {

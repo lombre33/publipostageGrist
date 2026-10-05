@@ -46,12 +46,62 @@ const GristAPI = (function () {
   async function listAllTablesCached() {
     return _rawTables || loadRawTables();
   }
-  // Crée la table interne `name` (colonnes `columns`) quand `tables`, la liste que l'appelant vient de lire, ne la contient pas ; vrai si elle vient
-  // d'être créée. Grist crée une page avec la table : js/page-tree.js la range sous celle des modèles, sans qu'on l'attende, rien n'en dépend.
+  // Accord de la personne pour créer les tables internes (choix du 05/10 : demander une fois, puis à chaque action si elle refuse). js/table-consent.js branche la question (`ask`) et le compteur de
+  // gestes (`gesture`) ; sans eux (un module essayé seul), rien n'est demandé.
+  //  - Un document qui porte déjà une table du widget a déjà donné son accord (la personne a dit oui, ou le widget y est installé d'avant cette question) :
+  //    aucune question, pour les sept tables comme pour celles qu'une fonction rare crée plus tard (commentaires, abréviations, formats de page).
+  //  - Sinon la première création pose la question ; celles qui arrivent pendant qu'elle est ouverte (au premier lancement, quatre tables partent
+  //    ensemble) attendent la même réponse. « Oui » vaut pour la session.
+  //  - « Non » n'est jamais gardé : une création demandée après un geste de la personne (clic, touche) repose la question ; sans geste depuis le refus,
+  //    elle est refusée sans bruit (ce que le même geste demande ensuite, la lecture du démarrage, l'enregistrement automatique).
+  let _consentHooks = null;
+  let _consentGranted = false;
+  let _consentAsking = null;
+  let _declinedAtGesture = null;
+  function setTableConsent(hooks) { _consentHooks = hooks; }
+  // Le refus : une erreur à part, que les gestes de la personne (Enregistrer, règle de liaison...) reconnaissent pour s'arrêter sans message d'échec ni
+  // journal d'erreur.
+  function tablesDeclinedError() {
+    const error = new Error('Création des tables du widget refusée par la personne.');
+    error.tablesDeclined = true;
+    return error;
+  }
+  function isTablesDeclined(error) { return !!error && error.tablesDeclined === true; }
+  async function askToCreateTables(hooks) {
+    let granted = false;
+    try { granted = (await hooks.ask()) === true; }
+    catch (e) { console.error('[GristAPI] la question de création des tables a échoué', e); }
+    if (granted) _consentGranted = true;
+    else _declinedAtGesture = hooks.gesture();
+    return granted;
+  }
+  // { granted, asked } : `asked` quand la création a attendu la réponse de la personne (le document a pu changer pendant ce temps).
+  async function tableCreationConsent(tables) {
+    if (_consentGranted) return { granted: true, asked: false };
+    if (tables.some(name => INTERNAL_TABLES.includes(name))) { _consentGranted = true; return { granted: true, asked: false }; }
+    const hooks = _consentHooks;
+    if (!hooks) return { granted: true, asked: false };
+    if (!_consentAsking) {
+      if (_declinedAtGesture !== null && hooks.gesture() === _declinedAtGesture) return { granted: false, asked: false };
+      _consentAsking = askToCreateTables(hooks).finally(() => { _consentAsking = null; });
+    }
+    return { granted: await _consentAsking, asked: true };
+  }
+  function rememberRawTable(name) {
+    if (_rawTables && !_rawTables.includes(name)) _rawTables.push(name);
+  }
+  // Crée la table interne `name` (colonnes `columns`) quand `tables`, la liste que l'appelant vient de lire, ne la contient pas, et que la personne y
+  // consent (tableCreationConsent : lève l'erreur de refus, cf. isTablesDeclined) ; vrai si elle vient d'être créée. Grist crée une page avec la table :
+  // js/page-tree.js la range sous celle des modèles, sans qu'on l'attende, rien n'en dépend.
   async function addTableIfMissing(tables, name, columns) {
     if (tables.includes(name)) return false;
+    const { granted, asked } = await tableCreationConsent(tables);
+    if (!granted) throw tablesDeclinedError();
+    // La question a pu durer : une autre fenêtre du même document a pu créer la table entre-temps, et la créer une seconde fois la doublerait (Grist
+    // nommerait la seconde « …2 »).
+    if (asked && (await grist.docApi.listTables()).includes(name)) { rememberRawTable(name); return false; }
     await grist.docApi.applyUserActions([['AddTable', name, columns]]);
-    if (_rawTables && !_rawTables.includes(name)) _rawTables.push(name);
+    rememberRawTable(name);
     if (typeof PageTree !== 'undefined') PageTree.afterTableCreated(name);
     return true;
   }
@@ -721,12 +771,18 @@ const GristAPI = (function () {
         { id: 'ColonneSource', type: 'Text' },
       ]);
     } catch (e) {
+      if (isTablesDeclined(e)) throw e; // la personne refuse la table : l'appelant s'arrête (lire ne demande rien, enregistrer une règle s'interrompt)
       console.error('[GristAPI] Erreur création table de liaison', e);
     }
   }
 
   async function loadLinkRules() {
-    await ensureLinksTableExists();
+    try { await ensureLinksTableExists(); }
+    catch (e) {
+      if (!isTablesDeclined(e)) throw e;
+      _linkRulesByTable = {}; // pas de table, donc aucune règle : rien à lire
+      return;
+    }
     _linkRulesByTable = {};
     try {
       const data = await grist.docApi.fetchTable(LINKS_TABLE_NAME);
@@ -943,5 +999,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnChoices, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, getCurrentUserName, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, createWriteQueue };
+  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnChoices, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, getCurrentUserName, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, createWriteQueue };
 })();

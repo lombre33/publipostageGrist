@@ -61,7 +61,11 @@ const VariableLinkedAttrs = (function () {
   async function ensureLink(target, refColumn) {
     if (GristAPI.getLinkRule(target) || !GristAPI.getCurrentTableId()) return true;
     if (refColumn) {
-      await GristAPI.saveLinkRule(target, { mode: 'match', colonneCible: 'id', colonneSource: refColumn });
+      try { await GristAPI.saveLinkRule(target, { mode: 'match', colonneCible: 'id', colonneSource: refColumn }); }
+      catch (e) {
+        if (GristAPI.isTablesDeclined(e)) return false; // la personne refuse de créer la table des règles : comme une annulation
+        throw e;
+      }
       Variables.refreshLinkRulesPanel();
       return true;
     }

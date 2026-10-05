@@ -40,6 +40,7 @@ const FirstContact = (function () {
   let kind = null;         // la sorte de fenêtre ouverte, null : aucune
   let technical = '';      // le message d'erreur tel que le navigateur l'a donné
   let slowTimer = 0;
+  let finished = false;    // ready() ou failed() a clos le démarrage : plus de fenêtre « lent » à attendre
 
   const devMode = () => { try { return new URLSearchParams(window.location.search).has('dev'); } catch (e) { return false; } };
   const alone = () => window.parent === window;
@@ -157,21 +158,38 @@ const FirstContact = (function () {
     started = true;
     if (alone()) setTimeout(() => { if (!gristAnswered()) show('outside'); }, OUTSIDE_WAIT_MS);
     else if (typeof grist === 'undefined') show('network', 'The Grist API script did not load (https://docs.getgrist.com/grist-plugin-api.js).');
+    armSlowTimer();
+  }
+
+  function armSlowTimer() {
+    clearTimeout(slowTimer);
     slowTimer = setTimeout(() => { if (!kind) show('slow'); }, SLOW_MS);
+  }
+
+  // Le démarrage attend la réponse de la personne (js/table-consent.js : créer les tables du widget ?) : ce temps n'est pas une lenteur du réseau, la
+  // fenêtre « chargement long » ne doit pas s'ouvrir par-dessus la question. resume() relance le compte à zéro.
+  function pause() {
+    if (started) clearTimeout(slowTimer);
+  }
+
+  function resume() {
+    if (started && !finished && !kind) armSlowTimer();
   }
 
   function ready() {
     if (!started) return;
+    finished = true;
     clearTimeout(slowTimer);
     if (kind === 'slow') close();
   }
 
   function failed(error) {
     if (!started || kind === 'outside') return;
+    finished = true;
     clearTimeout(slowTimer);
     const message = String((error && error.message) || error || '');
     show(DOWNLOAD_FAILED.test(message) ? 'network' : 'error', message);
   }
 
-  return { start, ready, failed };
+  return { start, pause, resume, ready, failed };
 })();

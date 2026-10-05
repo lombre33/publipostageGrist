@@ -86,6 +86,7 @@ const TextExpansion = (function () {
     try {
       cachedEmail = await GristAPI.getCurrentUserEmail();
     } catch (e) {
+      if (GristAPI.isTablesDeclined(e)) return null; // refus de créer la table d'identification : pas gardé, la personne qui accepte plus tard doit être reconnue
       cachedEmail = null;
     }
     return cachedEmail;

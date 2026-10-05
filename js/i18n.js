@@ -430,6 +430,16 @@ const I18n = (function () {
     'common.generate': { fr: 'Générer', en: 'Generate' },
     'common.move': { fr: 'Déplacer', en: 'Move' },
 
+    // Fenêtre « Créer les tables du widget dans ce document ? » (js/table-consent.js) : posée avant la première création d'une table interne, reposée à
+    // chaque action de la personne tant qu'elle refuse. Le widget range ses données dans des tables du document, et Grist ajoute une page par table.
+    'tableConsent.title': { fr: 'Créer les tables du widget dans ce document ?', en: 'Create the widget’s tables in this document?' },
+    'tableConsent.message': {
+      fr: 'Publipostage+ range vos modèles, vos commentaires et vos réglages dans des tables de ce document, nommées « Publipostage_… » et visibles dans la liste des pages de Grist. Sans elles, rien ne peut être enregistré. Si vous refusez, la question vous sera reposée à votre prochaine action.',
+      en: 'Publipostage+ keeps your templates, comments and settings in tables of this document, named “Publipostage_…” and shown in Grist’s page list. Without them, nothing can be saved. If you decline, you will be asked again at your next action.',
+    },
+    'tableConsent.create': { fr: 'Créer les tables', en: 'Create the tables' },
+    'tableConsent.decline': { fr: 'Ne pas créer', en: 'Don’t create' },
+
     // --- Modale "Tables liées" / configuration de correspondance ---
     'linkRules.title': { fr: 'Tables liées (correspondance pour #Variable)', en: 'Linked tables (matching for #Variable)' },
     'linkConfig.useSingleton': { fr: 'Utiliser plutôt toujours la même ligne', en: 'Always use the same row instead' },
@@ -777,6 +787,8 @@ const I18n = (function () {
     'status.autosaveEnabled': { fr: 'Enregistrement automatique réactivé.', en: 'Auto-save turned back on.' },
     'status.autosaveError': { fr: 'Échec de l’enregistrement automatique.', en: 'Auto-save failed.' },
     'status.saveError': { fr: 'Échec de l’enregistrement.', en: 'Save failed.' },
+    // Les tables du widget n'ont pas été créées (réponse de la personne à la fenêtre « tableConsent ») : Enregistrer ne peut rien écrire, et le dit.
+    'status.saveDeclined': { fr: 'Non enregistré : les tables du widget n’ont pas été créées dans ce document.', en: 'Not saved: the widget’s tables were not created in this document.' },
     'status.noTemplateSelected': { fr: 'Aucun modèle sélectionné.', en: 'No template selected.' },
     'status.defaultTemplateSet': { fr: 'Modèle par défaut défini : il s’ouvrira automatiquement.', en: 'Default template set: it will open automatically.' },
     'status.defaultTemplateCleared': { fr: 'Modèle par défaut retiré.', en: 'Default template cleared.' },
