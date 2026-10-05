@@ -1409,7 +1409,7 @@
       run: (doc, tableId, record) => PdfExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsPt()),
     },
     docx: {
-      batch: 'docxZip', noRecord: 'alert.noRecordForExport', generating: 'status.docxGenerating', generated: 'status.docxGenerated', failed: 'status.docxGenerationError',
+      batch: 'docxZip', noRecord: 'alert.noRecordForExportDocx', generating: 'status.docxGenerating', generated: 'status.docxGenerated', failed: 'status.docxGenerationError',
       run: (doc, tableId, record) => DocxExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsTwip()),
     },
     xlsx: {

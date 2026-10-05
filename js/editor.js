@@ -470,10 +470,10 @@ const Editor = (function () {
   function badgeProblemText(table, column) {
     // Message en info-bulle d'une bulle #Variable dont la table, la colonne ou un maillon du chemin n'existe plus ; '' quand tout va bien.
     switch (Variables.badgeProblem(table, column)) {
-      case 'table': return `La table « ${table} » n'existe plus dans ce document.`;
+      case 'table': return I18n.t('varBadge.brokenTable', { table });
       // Bulle qui descend de référence en référence (« Accompagnateur.Email ») : chaque maillon doit exister et, sauf le dernier, être une Référence.
       case 'path': return I18n.t('varBadge.brokenPath', { column, table });
-      case 'column': return `La colonne « ${column} » n'existe plus dans la table « ${table} ».`;
+      case 'column': return I18n.t('varBadge.brokenColumn', { column, table });
       default: return '';
     }
   }

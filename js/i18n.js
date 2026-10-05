@@ -872,6 +872,7 @@ const I18n = (function () {
     'dialog.unsaved.messageNoName': { fr: 'Ce nouveau modèle n’a pas de nom et n’est pas enregistré. Annulez pour lui en donner un, ou abandonnez-le.', en: 'This new template has no name and is not saved. Cancel to name it, or discard it.' },
     'dialog.unsaved.discard': { fr: 'Abandonner', en: 'Discard' },
     'alert.noRecordForExport': { fr: 'Aucune ligne sélectionnée : impossible d’exporter en PDF.', en: 'No row selected: cannot export to PDF.' },
+    'alert.noRecordForExportDocx': { fr: 'Aucune ligne sélectionnée : impossible d’exporter en Word.', en: 'No row selected: cannot export to Word.' },
     'alert.noRecordForExportXlsx': { fr: 'Aucune valeur de la table sélectionnée : impossible d’exporter en Excel.', en: 'No table value selected: cannot export to Excel.' },
     'alert.noRecordForExportGrid': { fr: 'Aucune valeur de la table sélectionnée : impossible d’exporter en PDF.', en: 'No table value selected: cannot export to PDF.' },
     'confirm.deleteTemplate': { fr: 'Supprimer ce modèle ?', en: 'Delete this template?' },
@@ -1233,6 +1234,8 @@ const I18n = (function () {
     'varLinked.upTo': { fr: 'Remonter à « {table} »', en: 'Go back up to “{table}”' },
     'varLinked.inherit': { fr: 'Reprendre la condition d’affichage', en: 'Reuse the display condition' },
     'varLinked.inheritTitle': { fr: 'Chaque variable insérée, ou mise à la place de {badge}, reçoit la même condition d’affichage que {badge} : {summary}. Décochez pour les poser sans condition.', en: 'Each variable inserted, or put in place of {badge}, gets the same display condition as {badge}: {summary}. Untick to place them without a condition.' },
+    'varBadge.brokenTable': { fr: 'La table « {table} » n’existe plus dans ce document.', en: 'Table “{table}” no longer exists in this document.' },
+    'varBadge.brokenColumn': { fr: 'La colonne « {column} » n’existe plus dans la table « {table} ».', en: 'Column “{column}” no longer exists in table “{table}”.' },
     'varBadge.brokenPath': { fr: 'La colonne « {column} » n’est plus atteignable depuis la table « {table} » : un maillon du chemin a disparu ou n’est plus une référence.', en: 'Column “{column}” can no longer be reached from table “{table}”: a link in the path was removed or is no longer a reference.' },
 
     // --- Fenêtre « Boucle » d'une variable (js/variable-loop.js ; moteur js/loop-rules.js) ---

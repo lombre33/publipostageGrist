@@ -1050,7 +1050,7 @@ const DocxExport = (function () {
     return { blob, filename };
   }
   async function exportCurrentRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsTwip) {
-    if (!record) { alert(I18n.t('alert.noRecordForExport')); return; }
+    if (!record) { alert(I18n.t('alert.noRecordForExportDocx')); return; }
     const { blob, filename } = await getDocxBlobForRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsTwip);
     ExportCommon.downloadBlob(blob, (filename || 'publipostage') + '.docx');
   }

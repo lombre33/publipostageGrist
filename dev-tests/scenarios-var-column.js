@@ -132,6 +132,26 @@
   });
 
   cases.push({
+    id: 'varcolumn_broken_badge_tooltips_follow_the_interface_language',
+    description: 'L’info-bulle d’une bulle dont la table ou la colonne a disparu est écrite dans la langue de l’interface, en français comme en anglais ; une bulle saine n’en a pas',
+    run: async (h) => {
+      const html = `<p>${[badge(PAGE, 'Titre'), badge('VcoDisparue', 'Nom'), badge(PAGE, 'Ancien')].join(' ')}</p>`;
+      const got = {};
+      for (const lang of ['fr', 'en']) {
+        await inLang(lang, async () => {
+          await seed(h, html);
+          got[lang] = Array.from(document.querySelectorAll('.tiptap .var-badge')).map(b => b.getAttribute('title'));
+        });
+      }
+      const EXPECTED = {
+        fr: [null, 'La table « VcoDisparue » n’existe plus dans ce document.', 'La colonne « Ancien » n’existe plus dans la table « VcoNotifications ».'],
+        en: [null, 'Table “VcoDisparue” no longer exists in this document.', 'Column “Ancien” no longer exists in table “VcoNotifications”.'],
+      };
+      return { pass: JSON.stringify(got) === JSON.stringify(EXPECTED), notes: JSON.stringify(got) };
+    },
+  });
+
+  cases.push({
     id: 'varcolumn_list_offers_every_column_page_table_first_without_helper_columns',
     description: 'La liste propose toutes les colonnes de toutes les tables, celles de la table de la page en tête, sans les colonnes techniques gristHelper_ ; un clic sur le bouton l’ouvre, Échap la referme sans rien changer',
     run: async (h) => {

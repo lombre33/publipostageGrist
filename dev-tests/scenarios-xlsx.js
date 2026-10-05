@@ -744,6 +744,43 @@
     },
   });
 
+  cases.push({
+    id: 'xlsx_menu_word_row_without_a_selected_row_says_so_in_word_words',
+    description: '« Exporter en Word… » sans ligne sélectionnée dans Grist affiche une alerte qui parle de Word (jamais de PDF), dans les deux langues, et ne télécharge rien ; l\'appel direct de DocxExport.exportCurrentRecord dit la même chose',
+    run: async (h) => {
+      await seed(h);
+      await leaveGrid(h);
+      const messages = [];
+      const downloads = [];
+      const origAlert = window.alert;
+      const origDownload = ExportCommon.downloadBlob;
+      window.alert = message => { messages.push(String(message)); };
+      ExportCommon.downloadBlob = (blob, filename) => { downloads.push(filename); };
+      const EXPECTED = { fr: 'Aucune ligne sélectionnée : impossible d’exporter en Word.', en: 'No row selected: cannot export to Word.' };
+      const bad = [];
+      try {
+        window.__gristStub.fireRecord(null, TABLE);
+        await sleep(80);
+        for (const lang of ['fr', 'en']) {
+          await inLang(lang, async () => {
+            messages.length = 0;
+            document.getElementById(ROWS.docx).click();
+            await sleep(250);
+            await DocxExport.exportCurrentRecord('<p>x</p>', TABLE, null, '', null, 0);
+            if (messages.length !== 2 || messages.some(message => message !== EXPECTED[lang])) bad.push(lang + ' : alertes=' + JSON.stringify(messages));
+          });
+        }
+        if (downloads.length) bad.push('téléchargements=' + JSON.stringify(downloads));
+      } finally {
+        window.alert = origAlert;
+        ExportCommon.downloadBlob = origDownload;
+        window.__gristStub.fireRecord(Object.assign({}, RECORD), TABLE);
+        await sleep(80);
+      }
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
   // --- 11) Toutes les valeurs de la table : archive ZIP de classeurs et classeur unique -------------------------------------------------------------------------------
   const VALUES = [
     { id: 1, Nom: 'Alpha Durand', Montant: 1234.5 },
