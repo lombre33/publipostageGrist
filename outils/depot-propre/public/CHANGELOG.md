@@ -25,15 +25,14 @@ Première bêta publique. Elle reprend l'alpha du 14 septembre 2026 et ajoute l'
   ligne.
 - **Variables et logique** : conditions d'affichage (variable, bloc de texte, valeur dans la phrase, case
   cochée), boucles sur les lignes liées, « Autres attributs », variables d'une table liée sans règle
-  préalable, calculs (SOMME, MOYENNE, MIN, MAX, NB, ARRONDI), puce de l'heure, mise en forme des nombres,
-  des dates et des Oui/Non, zéro masqué, renommages de tables et de colonnes suivis.
+  préalable, calculs (SOMME, MOYENNE, MIN, MAX, NB, ARRONDI), mise en forme des Oui/Non, zéro masqué,
+  renommages de tables et de colonnes suivis.
 - **Mise en page** : formats de page A3 à A6 en portrait ou en paysage, formats libres et nommés, marges
-  par modèle, titres numérotés, sommaire, notes de bas de page, listes numérotées et de tâches, première
-  page différente, filigrane, images en calque (déplacées aux flèches du clavier, opacité, légende),
-  citation, bloc de code, encadré, bloc de signature, QR code, pinceau de mise en forme, abréviations,
-  rechercher / remplacer, zoom de la page à l'écran (pastille du coin, Ajuster, Ctrl + molette), fusion
-  et scission de cases dans les tableaux d'un document (Word et PDF les suivent ; au saut de page, les
-  lignes liées par une case fusionnée restent ensemble).
+  par modèle, filigrane, images en calque (déplacées aux flèches du clavier, légende), citation, bloc de
+  code, encadré, bloc de signature, QR code, pinceau de mise en forme, abréviations, rechercher /
+  remplacer, zoom de la page à l'écran (pastille du coin, Ajuster, Ctrl + molette), fusion et scission de
+  cases dans les tableaux d'un document (Word et PDF les suivent ; au saut de page, les lignes liées par
+  une case fusionnée restent ensemble).
 - **Lecture** : lecture épurée, guide quand le widget n'est lié à aucune ligne, commentaires depuis la
   Lecture.
 - **Exports** : Word (`.docx`, bêta), un seul PDF pour toutes les lignes, assemblage avant impression
@@ -117,14 +116,13 @@ except those postponed to V1 (see the [README](README.md#roadmap-1)).
   row.
 - **Variables and logic**: display conditions (variable, text block, value in a sentence, checked box),
   loops over linked rows, "Other attributes", variables from a linked table without a prior rule,
-  calculations (SUM, AVERAGE, MIN, MAX, COUNT, ROUND), time chip, formatting of numbers, dates and
-  Yes/No values, hidden zero, tracked table and column renames.
+  calculations (SUM, AVERAGE, MIN, MAX, COUNT, ROUND), formatting of Yes/No values, hidden zero, tracked
+  table and column renames.
 - **Layout**: A3 to A6 page formats in portrait or landscape, free and named formats, per-template
-  margins, numbered headings, table of contents, footnotes, numbered and task lists, different first
-  page, watermark, layered images (moved with the arrow keys, opacity, caption), quote, code block,
-  callout, signature block, QR code, format painter, abbreviations, find / replace, on-screen page zoom
-  (corner pill, Fit, Ctrl + wheel), merging and splitting cells in document tables (Word and PDF follow;
-  at a page break, rows tied by a merged cell stay together).
+  margins, watermark, layered images (moved with the arrow keys, caption), quote, code block, callout,
+  signature block, QR code, format painter, abbreviations, find / replace, on-screen page zoom (corner
+  pill, Fit, Ctrl + wheel), merging and splitting cells in document tables (Word and PDF follow; at a
+  page break, rows tied by a merged cell stay together).
 - **Reading**: clean reading, a guide when the widget is not linked to any row, comments from Reading
   mode.
 - **Exports**: Word (`.docx`, beta), a single PDF for all rows, sheet assembly before printing (A4 or A3
