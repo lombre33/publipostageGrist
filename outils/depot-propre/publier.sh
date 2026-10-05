@@ -13,9 +13,10 @@
 #   2. refuse toute entrée de la racine du dépôt de développement qu'il ne connaît pas (PUBLIES ou EXCLUS ci-dessous) : un nouveau dossier ne part jamais par oubli ;
 #   3. refuse d'écraser des changements faits dans le dépôt public depuis la dernière étiquette vX.Y.Z (contribution acceptée là-bas et pas reportée ici) ;
 #   4. remplace dans le clone public les entrées PUBLIEES par celles du dépôt de développement (fichiers suivis seulement, les fichiers retirés disparaissent) ;
-#      les entrées que seul le dépôt public porte (screenshots/, .github/…) ne sont pas touchées ;
+#      les entrées que seul le dépôt public porte (.github/…) ne sont pas touchées ;
 #   5. pose par-dessus les documents publics de outils/depot-propre/public/ (README, SECURITY, CONTRIBUTING, CODE_OF_CONDUCT, CHANGELOG, NOTICE, CARTE_DU_CODE),
-#      où {{VERSION}}, {{DATE}} (2026-10-04), {{DATE_FR}} (4 octobre 2026) et {{DATE_EN}} (October 4, 2026) sont remplacés ;
+#      où {{VERSION}}, {{DATE}} (2026-10-04), {{DATE_FR}} (4 octobre 2026) et {{DATE_EN}} (October 4, 2026) sont remplacés, et les captures du README
+#      de outils/depot-propre/public/screenshots/ (des .png) dans screenshots/ du clone public : une capture du même nom est remplacée, les autres sont gardées ;
 #   6. lance controles.mjs sur l'arbre obtenu : une ERREUR empêche le commit ;
 #   7. committe sous l'identité donnée (jamais d'identité par défaut : sans PP_AUTEUR_NOM et PP_AUTEUR_EMAIL, il s'arrête ; l'adresse doit être l'adresse noreply de GitHub du compte grist-factory), pose l'étiquette vX.Y.Z,
 #      écrit un résumé et une sauvegarde (.bundle) dans le dossier de sortie.
@@ -119,12 +120,25 @@ for x in "${PUBLIES[@]}"; do
 done
 [ -d "$ICI/public" ] || die "$ICI/public est introuvable (les documents publics)"
 DOCS=()
-for doc in "$ICI"/public/*; do [ -f "$doc" ] || die "$doc n'est pas un fichier : public/ ne contient que des documents à la racine"; DOCS+=("$(basename "$doc")"); done
+for doc in "$ICI"/public/*; do
+  [ "$(basename "$doc")" = screenshots ] && [ -d "$doc" ] && continue   # les captures du README : traitées plus bas
+  [ -f "$doc" ] || die "$doc n'est pas un fichier : public/ ne contient que des documents à la racine (et le dossier screenshots/)"
+  DOCS+=("$(basename "$doc")")
+done
+CAPTURES=()
+NB_CAPTURES=0
+if [ -d "$ICI/public/screenshots" ]; then
+  for img in "$ICI"/public/screenshots/*; do
+    [ -e "$img" ] || continue   # dossier vide
+    [ -f "$img" ] && [ "${img##*.}" = png ] || die "$img n'est pas une image .png : public/screenshots/ ne contient que les captures du README"
+    CAPTURES+=("screenshots/$(basename "$img")"); NB_CAPTURES=$((NB_CAPTURES + 1))
+  done
+fi
 
 # --- 3. Rien de ce que le dépôt public a reçu depuis la dernière publication ne doit être écrasé --------------------------------------------
 derniere="$(git -C "$PROPRE" tag --list 'v*' --merged HEAD --sort=-creatordate | head -1)"
 if [ -n "$derniere" ]; then
-  recus="$(git -C "$PROPRE" diff --name-only "$derniere" HEAD -- "${PUBLIES[@]}" "${DOCS[@]}")"
+  recus="$(git -C "$PROPRE" diff --name-only "$derniere" HEAD -- "${PUBLIES[@]}" "${DOCS[@]}" ${CAPTURES[@]+"${CAPTURES[@]}"})"
   if [ -n "$recus" ]; then
     if [ "$ECRASER" -eq 1 ]; then
       echo "Attention : ces fichiers du dépôt public ont changé depuis $derniere et vont être remplacés (--ecraser) :" >&2
@@ -145,6 +159,11 @@ for nom in "${DOCS[@]}"; do
   sed -e "s/{{VERSION}}/$VERSION/g" -e "s/{{DATE_FR}}/$DATE_FR/g" -e "s/{{DATE_EN}}/$DATE_EN/g" -e "s/{{DATE}}/$DATE_PUB/g" \
     "$ICI/public/$nom" > "$PROPRE/$nom"
 done
+# Les captures du README : posées telles quelles (des images, aucun gabarit). Celles que seul le dépôt public porte restent.
+if [ "$NB_CAPTURES" -gt 0 ]; then
+  mkdir -p "$PROPRE/screenshots"
+  for img in "${CAPTURES[@]}"; do cp "$ICI/public/$img" "$PROPRE/$img"; done
+fi
 
 # --- 6. Les contrôles ----------------------------------------------------------------------------------------------------------------------
 [ -n "$SORTIE" ] || SORTIE="$(mktemp -d "${TMPDIR:-/tmp}/publication-XXXXXX")"

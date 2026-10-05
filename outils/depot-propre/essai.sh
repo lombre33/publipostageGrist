@@ -40,7 +40,7 @@ HTML
   printf 'GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007\n' > LICENSE
   echo '# dev' > README.md; echo x > dev-tests/a.mjs; echo x > planning/a.md
   cp "$ICI/publier.sh" "$ICI/controles.mjs" outils/depot-propre/
-  cp "$ICI"/public/* outils/depot-propre/public/
+  cp -r "$ICI"/public/* outils/depot-propre/public/
   # La carte du code cite chaque fichier du widget : le faux dépôt les porte (vides), pour que ses références tiennent.
   grep -oE '`(js|css)/[A-Za-z0-9_./-]+\.(js|css)`' "$ICI/public/CARTE_DU_CODE.md" | tr -d '`' | sort -u | while read -r f; do [ -e "$f" ] || echo "/* $f */" > "$f"; done
   G add -A; G commit -qm essai
@@ -51,7 +51,7 @@ HTML
 git init -q -b main "$T/propre-src"
 (
   cd "$T/propre-src"
-  mkdir -p screenshots; echo png > screenshots/edition-variables.png; echo png > screenshots/lecture-resolue.png
+  mkdir -p screenshots; echo png > screenshots/edition-variables.png; echo png > screenshots/lecture-resolue.png; echo png > screenshots/ancienne.png
   echo '# alpha' > README.md; echo old > index.html
   G add -A; G commit -qm alpha
 )
@@ -67,7 +67,13 @@ git -C "$T/dev" checkout -q -- README.md
 mkdir -p "$T/dev/nouveau-dossier"; echo x > "$T/dev/nouveau-dossier/a"
 (cd "$T/dev" && G add -A && G commit -qm "dossier inconnu" && git push -q origin main)
 attend "refuse une entrée inconnue à la racine" "à classer dans PUBLIES ou EXCLUS" "$(publier)"
-(cd "$T/dev" && G rm -rq nouveau-dossier && G commit -qm "retrait" && echo "// Antoine l'a demandé" >> js/main.js && G commit -qam "prénom" && git push -q origin main)
+(cd "$T/dev" && G rm -rq nouveau-dossier && G commit -qm "retrait" && git push -q origin main)
+mkdir -p "$T/dev/outils/depot-propre/public/autre"; echo x > "$T/dev/outils/depot-propre/public/autre/a"
+(cd "$T/dev" && G add -A && G commit -qm "sous-dossier inconnu dans public/" && git push -q origin main)
+attend "refuse un sous-dossier inconnu dans public/" "ne contient que des documents" "$(publier)"
+(cd "$T/dev" && G rm -rq outils/depot-propre/public/autre && G commit -qm "retrait" && echo x > outils/depot-propre/public/screenshots/note.txt && G add -A && G commit -qm "fichier qui n'est pas une capture" && git push -q origin main)
+attend "refuse un fichier qui n'est pas un .png dans public/screenshots/" "ne contient que les captures du README" "$(publier)"
+(cd "$T/dev" && G rm -rq outils/depot-propre/public/screenshots/note.txt && G commit -qm "retrait" && echo "// Antoine l'a demandé" >> js/main.js && G commit -qam "prénom" && git push -q origin main)
 SORTIE="$(publier)"
 attend "refuse quand les contrôles trouvent le prénom" "le prénom du développeur" "$SORTIE"
 attend "ne committe rien quand les contrôles échouent" "rien n'est committé" "$SORTIE"
@@ -85,7 +91,8 @@ vrai "le message ne porte aucune trace de session" test -z "$(git -C "$P" log -1
 vrai "dev-tests, planning et outils ne partent pas" test -z "$(git -C "$P" ls-tree --name-only HEAD | grep -E '^(dev-tests|planning|outils)$')"
 vrai "les documents publics sont là, README du dépôt de développement absent" test -f "$P/SECURITY.md" -a -f "$P/NOTICE" -a "$(head -1 "$P/README.md")" = "# Publipostage+ pour Grist"
 vrai "la carte du code part avec les documents publics, version et date remplacées" bash -c "grep -q '^# Carte du code de Publipostage+' '$P/CARTE_DU_CODE.md' && ! grep -q '{{' '$P/CARTE_DU_CODE.md'"
-vrai "screenshots/ (propre au dépôt public) est intact" test -f "$P/screenshots/edition-variables.png"
+vrai "les captures de public/screenshots/ sont posées dans screenshots/ du dépôt public, identiques" bash -c "cmp -s '$T/dev/outils/depot-propre/public/screenshots/edition-variables.png' '$P/screenshots/edition-variables.png' && cmp -s '$T/dev/outils/depot-propre/public/screenshots/lecture-resolue.png' '$P/screenshots/lecture-resolue.png'"
+vrai "une capture que seul le dépôt public porte est gardée" test "$(cat "$P/screenshots/ancienne.png")" = png
 vrai "la date est écrite en toutes lettres" grep -q "4 octobre 2026" "$P/README.md"
 vrai "la sauvegarde .bundle existe" test -s "$T/sortie1/publication-1.0.0-beta.1.bundle"
 vrai "le clone public est propre" test -z "$(git -C "$P" status --porcelain)"
@@ -93,10 +100,11 @@ vrai "le clone public est propre" test -z "$(git -C "$P" status --porcelain)"
 echo "publier.sh : garde contre l'écrasement"
 (cd "$T/dev" && sed -i 's/beta\.1/beta.2/' js/version.js && G commit -qam "version" && git push -q origin main)
 git -C "$P" push -q origin main v1.0.0-beta.1
-echo '// reçu côté public' >> "$P/js/main.js"; G -C "$P" commit -qam "contribution"; git -C "$P" push -q origin main
+echo '// reçu côté public' >> "$P/js/main.js"; echo 'retouchée côté public' >> "$P/screenshots/lecture-resolue.png"; G -C "$P" commit -qam "contribution"; git -C "$P" push -q origin main
 SORTIE="$(publier --version 1.0.0-beta.2 --sortie "$T/sortie2")"
 attend "refuse d'écraser un changement reçu côté public" "a reçu des changements depuis v1.0.0-beta.1" "$SORTIE"
 attend "nomme le fichier concerné" "js/main.js" "$SORTIE"
+attend "nomme aussi la capture retouchée côté public" "screenshots/lecture-resolue.png" "$SORTIE"
 SORTIE="$(publier --version 1.0.0-beta.1 --sortie "$T/sortie3")"
 attend "refuse une étiquette déjà prise" "existe déjà" "$SORTIE"
 SORTIE="$(env PP_DATE=2026-10-04 bash "$T/dev/outils/depot-propre/publier.sh" --propre "$P" --version 1.0.0-beta.2 --sortie "$T/sortie4" --ecraser 2>&1)"
