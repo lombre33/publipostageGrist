@@ -676,6 +676,14 @@ await englishPart();
 await macPart();
 await resetAll();
 
+// Un vrai rechargement de la page : les touches choisies sont relues au chargement du module (les essais du groupe `shortcuts` ne passent que par Shortcuts.reload()).
+await page.evaluate(() => { Shortcuts.setKey('bold', 'Alt+b'); Shortcuts.setKey('modeRead', ''); });
+await page.reload({ waitUntil: 'load' });
+await page.waitForFunction(() => typeof Shortcuts !== 'undefined' && typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
+const reloaded = await page.evaluate(() => ({ bold: Shortcuts.keyFor('bold'), read: Shortcuts.keyFor('modeRead'), edit: Shortcuts.keyFor('modeEdit'), changed: Shortcuts.isChanged('bold') }));
+check('un vrai rechargement relit les touches choisies (Alt+B au gras, aucune touche à Mode lecture, les autres d\'origine)', reloaded.bold === 'Alt+b' && reloaded.read === '' && reloaded.edit === 'Alt+e' && reloaded.changed === true, reloaded);
+await resetAll();
+
 check('aucune boîte native (prompt, confirm, alert) ne s’est ouverte', nativeDialogs.length === 0, nativeDialogs);
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 

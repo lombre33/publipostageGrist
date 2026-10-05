@@ -1056,6 +1056,174 @@
     },
   });
 
+  // === 4) L'écouteur du clavier : qui prend la touche ===================================================================================================
+
+  // Ce que l'écouteur `keydown` de js/shortcuts.js fait d'une touche (l'action `id` remplacée par un espion, rien ne part pour de bon) : arrêtée (preventDefault), refusée aux écouteurs
+  // posés après lui sur le document (stopImmediatePropagation : `passed` dit si l'un d'eux l'a vue), nombre de lancements de l'action (et de la fonction `cells` de l'action, quand elle en a une), erreurs levées vers la page. `early` : un écouteur de la
+  // fenêtre, plus tôt que lui, prend la touche d'abord (defaultPrevented).
+  function keyDecision(combo, id, options) {
+    const o = options || {};
+    const action = Shortcuts.action(id);
+    const realRun = action.run;
+    const realCells = action.cells;
+    const seen = { prevented: null, passed: false, ran: 0, cellsRan: 0, errors: 0, warned: 0 };
+    action.run = o.throws ? () => { seen.ran++; throw new Error('essai : l\'action échoue'); } : () => { seen.ran++; return true; };
+    if (typeof realCells === 'function') action.cells = () => { seen.cellsRan++; return true; };
+    const later = () => { seen.passed = true; };
+    const early = event => event.preventDefault();
+    const onError = event => { seen.errors++; event.preventDefault(); };
+    const realWarn = console.warn;
+    console.warn = () => { seen.warned++; };
+    document.addEventListener('keydown', later, true);
+    if (o.early) window.addEventListener('keydown', early, true);
+    window.addEventListener('error', onError);
+    try {
+      const event = new KeyboardEvent('keydown', Object.assign(eventInit(combo), o.extra || {}));
+      (o.target || document.body).dispatchEvent(event);
+      seen.prevented = event.defaultPrevented;
+    } finally {
+      document.removeEventListener('keydown', later, true);
+      window.removeEventListener('keydown', early, true);
+      window.removeEventListener('error', onError);
+      console.warn = realWarn;
+      action.run = realRun;
+      if (typeof realCells === 'function') action.cells = realCells;
+    }
+    return seen;
+  }
+  const decision = seen => [seen.prevented ? 'prise' : 'laissée', seen.passed ? 'vue après' : 'cachée aux autres', seen.ran + ' lancement' + (seen.ran > 1 ? 's' : ''), seen.errors + ' erreur', seen.warned + ' avis'].join(', ');
+
+  cases.push({
+    id: 'sc_the_keydown_listener_decides_who_takes_the_key',
+    description: 'L\'écouteur du clavier prend la touche d\'une action changée (preventDefault, aucun autre écouteur ne la voit, l\'action part une fois), la laisse quand une saisie est en cours (isComposing ou code 229), quand un écouteur plus tôt l\'a déjà prise, pour AltGr, ou quand une fenêtre est ouverte ; une action qui échoue est signalée sans erreur de page ; pendant l\'écoute de Réglages seul l\'enregistreur la reçoit ; une touche d\'origine rendue est avalée (même dans un champ si l\'action est « partout »), sauf sous une fenêtre',
+    run: async (h) => {
+      await reset(h);
+      Shortcuts.setPlatform('other');
+      const out = {};
+      Shortcuts.setKey('new', 'Alt+n');
+      out.taken = decision(keyDecision('Alt+n', 'new'));
+      out.composing = decision(keyDecision('Alt+n', 'new', { extra: { isComposing: true } }));
+      out.code229 = decision(keyDecision('Alt+n', 'new', { extra: { keyCode: 229 } }));
+      out.takenEarlier = decision(keyDecision('Alt+n', 'new', { early: true }));
+      out.repeated = decision(keyDecision('Alt+n', 'new', { extra: { repeat: true } }));
+      out.otherKey = decision(keyDecision('Alt+x', 'new'));
+      // AltGr (Ctrl + Alt sous Windows et Linux) écrit des caractères : jamais un raccourci, même quand une action porte cette combinaison.
+      Shortcuts.setKey('new', 'Mod+Alt+n');
+      out.altGr = decision(keyDecision('Ctrl+Alt+n', 'new'));
+      Shortcuts.setKey('new', 'Alt+n');
+      // Une action qui échoue : l'écouteur le dit (console.warn) et ne laisse rien remonter à la page.
+      out.failing = decision(keyDecision('Alt+n', 'new', { throws: true }));
+      // Une fenêtre ouverte : la touche d'une action reste à la page.
+      const modal = document.createElement('div');
+      modal.className = 'pp-modal';
+      modal.style.cssText = 'display:block;position:fixed;left:0;top:0;width:10px;height:10px';
+      document.body.appendChild(modal);
+      out.underModal = decision(keyDecision('Alt+n', 'new'));
+      modal.remove();
+      // L'écoute de Réglages : l'enregistreur reçoit toutes les touches, la touche est prise sans que l'action parte ni qu'un autre écouteur la voie.
+      const recorded = [];
+      Shortcuts.setRecorder(event => recorded.push(event.key));
+      out.recording = decision(keyDecision('Alt+n', 'new')) + ', enregistreur ' + recorded.length;
+      Shortcuts.setRecorder(null);
+      // Une touche d'origine rendue (Ctrl+S n'est plus à « Enregistrer ») ne fait plus ce qu'elle faisait : avalée, sans lancer d'action, même dans un champ de saisie (« Enregistrer » vaut
+      // partout) ; une action « éditeur » (gras) la laisse à un champ de saisie ; sous une fenêtre ouverte elle reste à la page (js/main.js prend Ctrl+S lui-même, les écouteurs d'après la voient).
+      Shortcuts.setKey('save', '');
+      Shortcuts.setKey('bold', '');
+      out.freedApp = decision(keyDecision('Ctrl+s', 'save'));
+      const input = textField();
+      out.freedAppInField = decision(keyDecision('Ctrl+s', 'save', { target: input }));
+      out.freedEditorInField = decision(keyDecision('Ctrl+b', 'bold', { target: input }));
+      input.remove();
+      out.freedEditor = decision(keyDecision('Ctrl+b', 'bold', { target: inEditor() }));
+      document.body.appendChild(modal);
+      out.freedUnderModal = decision(keyDecision('Ctrl+s', 'save'));
+      modal.remove();
+      Shortcuts.resetAll();
+      // Une touche d'origine « native » (Ctrl+B est celle de l'éditeur, qui la prend lui-même : elle reste visible aux écouteurs d'après, l'action ne part pas) ; enregistrée telle quelle dans
+      // le choix de la personne, elle passe par l'action.
+      out.nativeLeft = decision(keyDecision('Ctrl+b', 'bold', { target: inEditor() }));
+      try { localStorage.setItem('pp_shortcuts', JSON.stringify({ bold: 'Mod+b' })); } catch (e) { /* stockage indisponible */ }
+      Shortcuts.reload();
+      out.nativeKept = decision(keyDecision('Ctrl+b', 'bold', { target: inEditor() })) + ', changée ' + Shortcuts.isChanged('bold');
+      await reset(h);
+      const prise = '0 erreur, 0 avis';
+      const expected = {
+        taken: 'prise, cachée aux autres, 1 lancement, ' + prise,
+        composing: 'laissée, vue après, 0 lancement, ' + prise,
+        code229: 'laissée, vue après, 0 lancement, ' + prise,
+        takenEarlier: 'prise, vue après, 0 lancement, ' + prise,
+        repeated: 'prise, cachée aux autres, 0 lancement, ' + prise,
+        otherKey: 'laissée, vue après, 0 lancement, ' + prise,
+        altGr: 'laissée, vue après, 0 lancement, ' + prise,
+        failing: 'prise, cachée aux autres, 1 lancement, 0 erreur, 1 avis',
+        underModal: 'laissée, vue après, 0 lancement, ' + prise,
+        recording: 'prise, cachée aux autres, 0 lancement, ' + prise + ', enregistreur 1',
+        freedApp: 'prise, cachée aux autres, 0 lancement, ' + prise,
+        freedAppInField: 'prise, cachée aux autres, 0 lancement, ' + prise,
+        freedEditorInField: 'laissée, vue après, 0 lancement, ' + prise,
+        freedEditor: 'prise, cachée aux autres, 0 lancement, ' + prise,
+        freedUnderModal: 'prise, vue après, 0 lancement, ' + prise,
+        nativeLeft: 'prise, vue après, 0 lancement, ' + prise,
+        nativeKept: 'prise, cachée aux autres, 1 lancement, ' + prise + ', changée true',
+      };
+      return { pass: JSON.stringify(out) === JSON.stringify(expected), notes: JSON.stringify(out) };
+    },
+  });
+
+  // Une sélection de cases : l'éditeur ne traiterait que la case de tête, alors une touche d'origine « native » qui le demande (`cells`) passe par l'action - par la fonction que `cells` donne, quand le
+  // bouton ne fait pas comme la touche d'origine -, et à sa touche d'origine seulement ; les autres touches natives, et ces mêmes touches avec un simple curseur, restent à l'éditeur.
+  cases.push({
+    id: 'sc_native_keys_on_a_cell_selection_go_through_their_action_only_when_asked',
+    description: 'Sur une sélection de cases, Ctrl+Maj+B (citation, `cells: true`) lance l\'action et l\'éditeur ne la voit pas, Ctrl+Maj+7 (liste numérotée, `cells` est une fonction) lance cette fonction et pas l\'action ; Ctrl+B (gras, sans `cells`) reste à l\'éditeur ; avec un simple curseur dans une case ces deux touches aussi ; la liste numérotée changée de touche lance son action, pas la fonction des cases',
+    run: async (h) => {
+      await reset(h);
+      Shortcuts.setPlatform('other');
+      const TABLE = '<table><tbody><tr><td><p>A</p></td><td><p>B</p></td></tr><tr><td><p>C</p></td><td><p>D</p></td></tr></tbody></table><p>Fin</p>';
+      // Le tableau remis à neuf (une touche laissée à l'éditeur change le document), puis quatre cases sélectionnées ou un simple curseur dans la première ; dit si c'est une sélection de cases.
+      async function fresh(selectingCells) {
+        Editor.setHTML(TABLE);
+        await sleep(150);
+        const editor = EditorCore.getEditor();
+        const cells = [];
+        editor.state.doc.descendants((node, pos) => { if (node.type.name === 'tableCell' || node.type.name === 'tableHeader') cells.push(pos); });
+        if (selectingCells) editor.commands.setCellSelection({ anchorCell: cells[0], headCell: cells[3] });
+        else editor.commands.setTextSelection(cells[0] + 2);
+        await sleep(60);
+        return EditorCore.isCellSelection(editor.state.selection);
+      }
+      const seenOn = (combo, id) => keyDecision(combo, id, { target: inEditor() });
+      const withCells = seen => decision(seen) + ', fonction des cases ' + seen.cellsRan;
+      const out = {};
+      out.cellSelection = [await fresh(true), await fresh(false)];
+      await fresh(true);
+      out.quoteOnCells = withCells(seenOn('Ctrl+Shift+b', 'citation'));
+      await fresh(true);
+      out.orderedOnCells = withCells(seenOn('Ctrl+Shift+7', 'orderedList'));
+      await fresh(true);
+      out.boldOnCells = withCells(seenOn('Ctrl+b', 'bold'));
+      await fresh(false);
+      out.quoteOnCursor = withCells(seenOn('Ctrl+Shift+b', 'citation'));
+      await fresh(false);
+      out.orderedOnCursor = withCells(seenOn('Ctrl+Shift+7', 'orderedList'));
+      // Une touche changée n'est plus « la touche d'origine » : l'action part par son bouton, jamais par la fonction des cases.
+      Shortcuts.setKey('orderedList', 'Alt+Shift+7');
+      await fresh(true);
+      out.orderedChangedOnCells = withCells(seenOn('Alt+Shift+7', 'orderedList'));
+      await reset(h);
+      const taken = 'prise, cachée aux autres, ', left = 'prise, vue après, ', none = ', 0 erreur, 0 avis, fonction des cases ';
+      const expected = {
+        cellSelection: [true, false],
+        quoteOnCells: taken + '1 lancement' + none + '0',
+        orderedOnCells: taken + '0 lancement' + none + '1',
+        boldOnCells: left + '0 lancement' + none + '0',
+        quoteOnCursor: left + '0 lancement' + none + '0',
+        orderedOnCursor: left + '0 lancement' + none + '0',
+        orderedChangedOnCells: taken + '1 lancement' + none + '0',
+      };
+      return { pass: JSON.stringify(out) === JSON.stringify(expected), notes: JSON.stringify(out) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.shortcuts = cases;
 })();

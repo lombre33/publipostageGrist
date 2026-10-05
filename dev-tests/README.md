@@ -310,7 +310,7 @@ Deux options utiles :
   du caractère collé au bord droit de son champ et sous lui, jamais sous le titre. `EXPANSION_SHOTS=<dossier>` enregistre aussi des captures à relire à l'œil. Piège (vu le 01/10, les deux
   scripts de touches rouges sur main) : un clic à 20 px du haut de `.tiptap` tombe dans la bande de l'en-tête (24 px au bord de la feuille, `js/header-footer-preview.js` : un clic dessus
   ouvre l'en-tête) et la frappe suivante y va, pas dans le texte ; `focusEnd()` clique donc au milieu du dernier bloc et s'arrête net si le clavier n'est pas dans le document.
-- Le groupe `shortcuts` (`dev-tests/scenarios-shortcuts.js`, 18 scénarios) couvre les raccourcis clavier personnalisables de `js/shortcuts.js` (demande d'Antoine du 01/10 :
+- Le groupe `shortcuts` (`dev-tests/scenarios-shortcuts.js`, 20 scénarios) couvre les raccourcis clavier personnalisables de `js/shortcuts.js` (demande d'Antoine du 01/10 :
   « définir des raccourcis personnalisés », choix de la carte « Tout, par personne »). Une combinaison s'écrit `Mod+Alt+Shift+k` (Mod = Ctrl, ⌘ sur Mac) : lue d'un évènement
   (les chiffres par le code physique, Maj retiré pour un signe, Ctrl+Alt = AltGr ignoré hors Mac, la touche Windows jamais), écrite pour l'écran (« Ctrl+Alt+Maj+K », « ⌥⇧⌘K ») et
   pour les lecteurs d'écran (`aria-keyshortcuts`). Chacune des 54 actions a un nom français et anglais, un groupe et un vrai contrôle ; lancée une fois avec tous les clics avalés,
@@ -327,6 +327,15 @@ Deux options utiles :
   la liste de Réglages (54 lignes, cinq groupes, commutateur Touches / Abréviations), l'écoute, les refus, « Par défaut » et « Tout remettre par défaut » avec confirmation, les
   textes anglais et le mode Mac ; les contrastes ≥ 4,5:1 en clair et en sombre. Piège : le champ « Objet » de l'e-mail est masqué hors du mode e-mail - un `focus()` n'y prend rien et
   le test passerait avec le curseur resté dans le document : `textField()` crée un vrai champ visible.
+  L'écouteur `keydown` (`runOwnerKey` et `swallowFreedKey` de `js/shortcuts.js`) a ses deux cas de décisions, l'action de la touche remplacée par un espion (`keyDecision`) : on lit si la touche est prise
+  (`preventDefault`), cachée aux écouteurs d'après (`stopImmediatePropagation`), combien de fois l'action part et ce que la page en voit. `sc_the_keydown_listener_decides_who_takes_the_key` : la touche d'une action
+  changée est prise et l'action part une fois ; une saisie en cours (`isComposing`, code 229), un écouteur plus tôt qui l'a déjà prise, AltGr, une fenêtre ouverte et la répétition d'une action qui ne la demande
+  pas la laissent ; l'écoute de Réglages ne laisse que l'enregistreur la recevoir ; une action qui échoue est signalée (`console.warn`) sans erreur de page ; une touche d'origine rendue est avalée, même dans
+  un champ de saisie pour une action « partout », sauf sous une fenêtre. `sc_native_keys_on_a_cell_selection_go_through_their_action_only_when_asked` : sur une sélection de cases Ctrl+Maj+B lance l'action et l'éditeur ne la voit pas,
+  Ctrl+Maj+7 lance la fonction `cells` de la liste numérotée et pas son bouton, Ctrl+B reste à l'éditeur, comme ces touches avec un simple curseur ; la liste numérotée changée de touche part par son bouton.
+  Altérations essayées une à une sur le code rangé : 40, 36 vues (les cinq de `cells` par le second cas, la lecture du stockage au chargement par le vrai rechargement de `shortcutsKeyboard`), quatre sans effet visible
+  (la fin de la branche de l'enregistreur - `defaultPrevented` arrête déjà la touche -, une touche sans nom - elle n'est la touche d'aucune action -, `defaultOf(owner) === combo` - vrai dès que l'action n'est pas changée -,
+  `isConnected` d'une fenêtre - `querySelectorAll` ne rend que des éléments du document).
 - Le groupe `cleanReading` (`dev-tests/scenarios-clean-reading.js`, 8 scénarios) couvre la Lecture épurée de `js/clean-reading.js` (demande d'Antoine du 02/10, point 19). Ce n'est pas un
   troisième mode : c'est la Lecture avec la classe `pp-clean-reading` sur `<body>` (`css/clean-reading.css` cache `#toolbar-top`, le document prend le panneau). Le bouton Mode lecture
   vit dans un `.v2-hover-group` dont le menu porte la ligne « Lecture épurée » - la barre d'outils reste gelée, aucune icône de plus - : le scénario de structure vérifie que le bouton garde
@@ -348,7 +357,7 @@ Deux options utiles :
   nom ignoré, stockage illisible) ; un appui sur la pastille ne ferme pas la barre flottante de l'image, un appui ailleurs la ferme toujours. Pièges : la Lecture n'affiche rien sans ligne de Grist
   (`setVariables`, `setRows`, `refreshSchema`, `fireRecord`, comme `cleanReading`) ; un modèle écrit par `Templates.save` n'est pas dans la liste cachée `#template-select` - `Templates.loadAll()` puis
   l'`<option>` posée à la main, comme `orientation` ; le niveau d'un scénario est rendu par `toOriginal` (le pourcentage), jamais laissé au suivant.
-- `shortcutsKeyboard` (`dev-tests/verify-shortcuts-keyboard.mjs`, 201 contrôles) tape pour de vrai à 700×400, en clair, en sombre, en anglais, puis en mode Mac : les touches de départ
+- `shortcutsKeyboard` (`dev-tests/verify-shortcuts-keyboard.mjs`, 202 contrôles) tape pour de vrai à 700×400, en clair, en sombre, en anglais, puis en mode Mac : les touches de départ
   (Alt+L et Alt+E avec le curseur rendu au document, Alt+Maj+1 2 3 et le retour au paragraphe, Alt+Entrée, Alt+Maj+D, Alt+Maj+H, F2 qui bascule le champ de nom, Alt+M, Alt+P, Ctrl+/ ;
   rien n'est écrit dans le texte, rien ne part fenêtre ouverte) ; Ctrl+F et Ctrl+H qui ouvrent la barre de recherche d'origine, puis Rechercher mis sur Alt+F dans la liste (la barre
   s'ouvre, une seconde fois elle reste ouverte, Ctrl+F ne fait plus rien, l'infobulle de la loupe dit Alt+F) ; changer la touche du gras à la souris (Alt+B prise, Ctrl+B qui ne met plus en gras, Alt+B qui bascule, l'infobulle
@@ -356,7 +365,7 @@ Deux options utiles :
   leur vraie place - dans la colonne de la touche, sous elle, sans élargir la ligne ; Échap qui abandonne puis ferme ; au clavier seul (Ctrl+/, Tab, Entrée, la touche tapée, « Par
   défaut ») ; la liste de 54 lignes dans le cadre (seul `.settings-body` défile, titre, onglets et « Fermer » en place, aucun nom coupé) ; les infobulles de tous les boutons de la barre
   qui montrent une touche, entières dans la fenêtre, dont la plus longue sur le bouton le plus à droite (l'infobulle ne paraît qu'après .35 s : `hover()` attend son opacité) ; les
-  lignes du menu Titre ; le mode Mac (⌥L, ⌘B, Ctrl+lettre refusée, ⌘/ qui ouvre la liste). `SHORTCUTS_SHOTS=<dossier>` enregistre aussi des captures à relire à l'œil. Même piège que `textExpansionKeyboard` : son `focusEnd()` clique au milieu du dernier bloc, jamais à 20 px du haut
+  lignes du menu Titre ; le mode Mac (⌥L, ⌘B, Ctrl+lettre refusée, ⌘/ qui ouvre la liste) ; à la fin, un vrai rechargement de la page relit les touches choisies (Alt+B au gras, aucune touche à Mode lecture) : le module les lit au chargement, ce que les essais du groupe, qui passent par `Shortcuts.reload()`, ne voient pas. `SHORTCUTS_SHOTS=<dossier>` enregistre aussi des captures à relire à l'œil. Même piège que `textExpansionKeyboard` : son `focusEnd()` clique au milieu du dernier bloc, jamais à 20 px du haut
   de la feuille (bande de l'en-tête), et s'arrête net si le clavier n'est pas dans le document.
 - Le groupe `formatPainter` (`dev-tests/scenarios-format-painter.js`, 10 scénarios) couvre le pinceau de mise en forme de `js/format-painter.js` (demande d'Antoine du 02/10, point 8 :
   « ajout d'un bouton pour copier/coller la mise en forme »). Le bouton suit le surlignage (icône, nom, touche dans l'infobulle, français et anglais) ; la mise en forme du caractère (gras,
