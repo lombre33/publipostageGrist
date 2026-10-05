@@ -1109,10 +1109,9 @@ const EditorNodes = (function () {
   // ancre, un caractère sans largeur qui ne se voit pas à l'écran.
   function isFloatingImage(node) { return !!node && node.type.name === 'editorImage' && !!node.attrs.layer && node.attrs.layer !== 'normal'; }
 
-  // Retour arrière et Suppr n'emportent plus une image en calque avec le texte qui l'entoure (demande du 2026-10-04 : « des fois je veux supprimer
-  // une ligne et ça me supprime l'image à proximité ») : elle ne part que par un geste sur elle-même, un clic ou sa poignée qui la sélectionne puis
-  // Suppr, ou le bouton « Supprimer » de sa barre. Une extension à part, rangée comme celle d'une valeur conditionnelle (après StarterKit, donc
-  // essayée avant ses touches).
+  // Retour arrière et Suppr n'emportent plus une image en calque avec le texte qui l'entoure : elle ne part que par un geste sur elle-même, un clic
+  // ou sa poignée qui la sélectionne puis Suppr, ou le bouton « Supprimer » de sa barre. Une extension à part, rangée comme celle d'une valeur
+  // conditionnelle (après StarterKit, donc essayée avant ses touches).
   // - Curseur seul, une ancre juste derrière lui (Retour arrière) ou juste devant (Suppr) : le curseur passe de l'autre côté, il ne bouge pas à
   //   l'écran, et la touche suit son cours - elle efface le caractère voisin, ou joint la ligne à sa voisine, comme si l'ancre n'était pas là. Une
   //   ligne qui ne porte que l'image (elle semble vide) se joint ainsi à celle d'avant, l'image avec elle.
@@ -1240,16 +1239,16 @@ const EditorNodes = (function () {
     });
   }
 
-  // Les cadres des images « derrière le texte » vivants (un par NodeView, cf. applyAttrs) : le survol de l'éditeur les passe en revue sans chercher dans le document.
+  // Les cadres des images « derrière le texte » vivants (un par NodeView, cf. applyAttrs) : le survol de l'éditeur les passe en revue sans chercher
+  // dans le document.
   const behindImageViews = new Set();
 
   // Une image « derrière le texte » est peinte sous le texte, mais son cadre (le `<span class="editor-image-view">`) reste au-dessus : sa poignée de
   // déplacement, enfant du cadre, doit rester atteignable (cf. applyAttrs). Il recevait donc aussi les clics tombés sur le texte posé sur l'image : un
-  // clic sur une ligne sélectionnait l'image, et Suppr l'effaçait au lieu du texte (demande du 2026-10-04 : « des fois je veux supprimer une ligne et ça
-  // me supprime l'image à proximité »). Le survol décide : quand le pointeur est sur un caractère, le cadre laisse passer les clics
-  // (`editor-image-click-through`, css/editor-v2.css - ses poignées gardent les leurs) et le clic, le double clic, le triple clic et le glissé tombent
-  // sur le texte ; ailleurs sur l'image, le clic la sélectionne comme avant. Un mouvement précède toujours un clic : l'état est prêt quand le bouton
-  // s'enfonce.
+  // clic sur une ligne sélectionnait l'image, et Suppr l'effaçait au lieu du texte. Le survol décide : quand le pointeur est sur un caractère,
+  // le cadre laisse passer les clics (`editor-image-click-through`, css/editor-v2.css - ses poignées gardent les leurs) et le clic, le double clic,
+  // le triple clic et le glissé tombent sur le texte ; ailleurs sur l'image, le clic la sélectionne comme avant. Un mouvement précède toujours un
+  // clic : l'état est prêt quand le bouton s'enfonce.
   function createBehindImageClickThroughExtension(Extension, Plugin, PluginKey) {
     // Le pointeur est-il sur un caractère ? Le cadre est déjà transparent aux clics : l'élément sous le pointeur est ce qu'il y a derrière. La ligne
     // compte en entier en hauteur (interligne compris), pas le seul corps de ses lettres : entre deux lignes le clic reste au texte. Seul le bloc de
