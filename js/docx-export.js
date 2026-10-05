@@ -96,28 +96,26 @@ const DocxExport = (function () {
     return Math.round(Math.max(6, Math.min(72, pt)) * 2);
   }
 
-  // Même point de passage que inheritedStyle (js/pdf-export.js), adapté à la forme attendue par docx.TextRun. Le sous-ensemble de formats reconnus
-  // est volontairement identique (pas de sup/sub générique : l'éditeur n'a pas de bouton pour ça hors note de bas de page, gérée à part).
-  function inheritedRunStyle(node, parent) {
-    const style = node.nodeType === 1 ? (node.getAttribute('style') || '') : '';
-    const css = name => { const m = style.match(new RegExp('(?:^|;)\\s*' + name + '\\s*:\\s*([^;]+)', 'i')); return m && m[1].trim(); };
-    const tag = node.nodeType === 1 ? node.tagName : '';
-    const out = Object.assign({}, parent);
+  // Le style des balises qui en posent un : titre, gras, italique, soulignement, lien, code, légende et barré.
+  function applyTagRunStyle(out, node, tag) {
     // 'auto' (pas de couleur explicite dans le HTML) plutôt que de laisser le style Word « Titre N » imposer sa couleur par défaut (accent du thème,
     // souvent bleu) : un titre de l'éditeur n'a pas de couleur particulière, il hérite du noir du corps du texte (`.tiptap { color }`).
-    // `css('color')` juste en dessous garde la priorité si la personne a choisi une couleur.
+    // La couleur d'un <span> posé dedans (applyInlineRunStyle) garde la priorité si la personne a choisi une couleur.
     if (/^H[1-6]$/.test(tag)) { out.bold = true; out.size = HEADING_HALF_PT[tag]; out.color = 'auto'; }
     if (tag === 'STRONG' || tag === 'B') out.bold = true;
     if (tag === 'EM' || tag === 'I') out.italics = true;
     if (tag === 'U') out.underline = { type: 'single' };
-    // Lien : couleur et soulignement de lien ; la couleur d'un <span> posé dedans (css('color') plus bas) l'emporte, comme `.tiptap a` face à un
-    // texte coloré.
+    // Lien : couleur et soulignement de lien ; la couleur d'un <span> posé dedans l'emporte, comme `.tiptap a` face à un texte coloré.
     if (tag === 'A' && HtmlSanitize.safeLinkHref(node.getAttribute('href'))) { out.color = LINK_COLOR_HEX; out.underline = { type: 'single' }; }
     if (tag === 'PRE') { out.font = CODE_FONT; out.size = CODE_HALF_PT; out.color = CODE_TEXT_HEX; }
     // Légende (js/caption.js) : un paragraphe `data-caption` est en petit, italique, gris, la base de ses runs ; la taille ou la couleur d'un <span>
-    // posé dedans l'emportent plus bas, comme dans l'éditeur.
+    // posé dedans l'emportent ensuite, comme dans l'éditeur.
     if (tag === 'P' && node.hasAttribute('data-caption')) { out.italics = true; out.size = Math.round(Caption.SIZE_PT * 2); out.color = Caption.COLOR.replace('#', '').toUpperCase(); }
     if (tag === 'S' || tag === 'STRIKE' || tag === 'DEL') out.strike = true;
+  }
+
+  // Le style en ligne (`style="…"`), lu par `css(nom)` : gras, italique, soulignement, barré, taille, police, couleur et fond.
+  function applyInlineRunStyle(out, css) {
     if (css('font-weight') && /bold|[6-9]00/i.test(css('font-weight'))) out.bold = true;
     if (css('font-style') === 'italic') out.italics = true;
     if (css('text-decoration')) {
@@ -131,6 +129,17 @@ const DocxExport = (function () {
     if (color) out.color = color;
     const fill = css('background-color') && cssColorHex(css('background-color'));
     if (fill) out.shading = { fill, type: docx.ShadingType.CLEAR };
+  }
+
+  // Même point de passage que inheritedStyle (js/pdf-export.js), adapté à la forme attendue par docx.TextRun. Le sous-ensemble de formats reconnus
+  // est volontairement identique (pas de sup/sub générique : l'éditeur n'a pas de bouton pour ça hors note de bas de page, gérée à part).
+  function inheritedRunStyle(node, parent) {
+    const isElement = node.nodeType === 1;
+    const style = isElement ? (node.getAttribute('style') || '') : '';
+    const css = name => { const m = style.match(new RegExp('(?:^|;)\\s*' + name + '\\s*:\\s*([^;]+)', 'i')); return m && m[1].trim(); };
+    const out = Object.assign({}, parent);
+    applyTagRunStyle(out, node, isElement ? node.tagName : '');
+    applyInlineRunStyle(out, css);
     return out;
   }
   function runOpts(style) {
@@ -260,74 +269,103 @@ const DocxExport = (function () {
     };
   }
 
+  const textRun = (text, style) => new docx.TextRun(Object.assign({ text }, runOpts(style)));
+
+  // Case à cocher d'une variable Oui / Non (js/reader-mode.js:checkboxNode) : le caractère ☑ ou ☐ en « Segoe UI Symbol » (Word, Google Docs et
+  // LibreOffice en prennent une autre si elle manque), dans la couleur de la case (style en ligne, déjà lu par inheritedRunStyle) et jamais barré :
+  // le barré d'une case d'accent cochée vise le texte qui la suit.
+  function checkboxRuns(node, style) {
+    return [textRun(node.textContent, Object.assign({}, style, { strike: false, font: 'Segoe UI Symbol' }))];
+  }
+
+  // .var-badge et .smart-chip ne devraient jamais arriver ici (ReaderMode.preview les résout déjà en <span class="resolved-var"> ou en texte simple) :
+  // gardés par robustesse, comme dans js/pdf-export.js.
+  function valueRuns(node, style) {
+    return node.textContent ? [textRun(node.textContent, style)] : [];
+  }
+
+  function pageNumberRuns(node, style) {
+    const format = node.getAttribute('data-format') || 'n';
+    const opts = runOpts(style);
+    const current = new docx.TextRun(Object.assign({ children: [docx.PageNumber.CURRENT] }, opts));
+    if (format === 'page-n') return [new docx.TextRun(Object.assign({ text: 'Page ' }, opts)), current];
+    if (format === 'n-slash-total') return [current, new docx.TextRun(Object.assign({ text: '/' }, opts)), new docx.TextRun(Object.assign({ children: [docx.PageNumber.TOTAL_PAGES] }, opts))];
+    return [current];
+  }
+
+  function footnoteRuns(node, style, ctx) {
+    ctx.footnoteCounter += 1;
+    const id = ctx.footnoteCounter;
+    ctx.footnotes[String(id)] = { children: [new docx.Paragraph({ children: [new docx.TextRun(node.getAttribute('data-note-text') || '')] })] };
+    return [new docx.FootnoteReferenceRun(id)];
+  }
+
+  // Bloc de code au milieu d'un autre bloc (dans une citation, un item de liste) : ses lignes se suivent par des sauts de ligne ; le cadre gris
+  // n'existe que pour un bloc de code posé directement dans le document, une cellule, une colonne ou un en-tête (codeBlockFrom).
+  function codeRuns(node, style) {
+    return ExportCommon.codeLinesOf(node).map((line, i) => new docx.TextRun(Object.assign({ text: line }, runOpts(style), i ? { break: 1 } : {})));
+  }
+
+  async function imageRunsFrom(node, style, ctx) {
+    if (node.hasAttribute('data-pdf-skip')) return [];
+    // « Sur toutes les pages » (js/page-layer.js) : ancrée dans l'en-tête de chaque page (buildDocxDocument), pas dans le paragraphe qui la porte.
+    if (PageLayer.isRepeatedEl(node)) return [];
+    const imgData = await docxImageDataFrom(node);
+    if (!imgData) return [];
+    // docx.js régénère un compteur wp:docPr/id frais (à partir de 1) à chaque ImageRun au lieu d'en partager un pour tout le document (défaut de la
+    // bibliothèque) : sans id explicite, deux images prennent id="1", ce que Word refuse d'ouvrir sans signaler un contenu illisible. altText.id
+    // donne un id unique par image du document.
+    ctx.imageIdCounter += 1;
+    const runOptions = { type: imgData.type, data: imgData.data, transformation: { width: imgData.width, height: imgData.height }, altText: { id: ctx.imageIdCounter, name: '', description: '', title: '' } };
+    const floatingOptions = docxFloatingOptionsFrom(node, ctx.imageIdCounter, ctx);
+    if (floatingOptions) runOptions.floating = floatingOptions;
+    const imgRun = new docx.ImageRun(runOptions);
+    markImageRun(imgRun, node, floatingOptions);
+    return [imgRun];
+  }
+
+  // Ce que paragraphBlockFrom (splitRunsAtFloatedImages ci-dessous) lit sur le run d'une image pour la ranger dans son propre paragraphe Word.
+  function markImageRun(imgRun, node, floatingOptions) {
+    // Google Docs ne respecte pas relativeFrom="line", d'où le découpage en paragraphes Word plutôt qu'un ancrage à la ligne.
+    if (floatingOptions && floatingOptions.__isAlignFloat) imgRun.__docxSplitBefore = true;
+    // data-align="center" : pas un flottant (le texte ne contourne rien), mais l'image doit rester centrée : `.editor-image[data-align="center"]`
+    // vaut `display:block; margin:auto` dans l'éditeur et la Lecture (css/style.css), et le PDF pose `alignment:'center'` sur le bloc image
+    // (js/pdf-export.js:pdfImageFromNode). L'alignement est une propriété de paragraphe en OOXML (w:jc), pas de run : l'image occupe donc son propre
+    // <w:p> centré, ce que splitRunsAtFloatedImages fait ci-dessous.
+    if (!floatingOptions && node.getAttribute('data-align') === 'center') imgRun.__docxCenterBlock = true;
+    // « Bloc » sans alignement (barre de l'image, « Basculer en ligne / bloc ») : seule sur sa ligne, à gauche :
+    // `.editor-image-view[data-wrap="block"] { display: block; width: fit-content }` dans l'éditeur, le texte d'avant finit sa ligne et celui d'après
+    // repart dessous. Même raison que le centre : l'alignement est une propriété de paragraphe, l'image prend donc son propre <w:p>, aligné à gauche
+    // (un paragraphe centré ou justifié ne la déplace pas : un bloc ne suit pas le text-align de son parent).
+    if (!floatingOptions && !node.getAttribute('data-align') && node.getAttribute('data-wrap') === 'block') imgRun.__docxBlock = true;
+  }
+
+  // Les runs des nœuds sans enfants à parcourir, par classe ou par balise : [test, runs(node, style, ctx)], le premier qui convient ; un nœud qui n'en
+  // a aucun descend dans ses enfants (inlineChildrenFrom). Un sommaire, un saut de page et la numérotation des titres n'écrivent rien ici ; une valeur
+  // qui porte une case (« ☑, ☐ » d'une liste de valeurs) passe par ses enfants, case par case.
+  const LEAF_RUNS = [
+    [node => node.classList.contains('page-break-marker') || node.classList.contains('heading-numbering-config') || node.classList.contains('toc-marker'), () => []],
+    [node => node.classList.contains('resolved-checkbox'), checkboxRuns],
+    [node => node.classList.contains('var-badge') || (node.classList.contains('resolved-var') && !node.querySelector('.resolved-checkbox')) || node.classList.contains('smart-chip'), valueRuns],
+    [node => node.classList.contains('page-number-badge'), pageNumberRuns],
+    [node => node.classList.contains('footnote-ref-marker'), footnoteRuns],
+    [node => node.tagName === 'IMG', imageRunsFrom],
+    [node => node.tagName === 'BR', () => [new docx.TextRun({ break: 1 })]],
+    [node => node.tagName === 'PRE', codeRuns],
+  ];
+
   // Équivalent de inlineRuns (js/pdf-export.js), en composants docx (TextRun, ImageRun, FootnoteReferenceRun) au lieu de « runs » pdfmake. Asynchrone
   // (une image se télécharge) : le parcours est séquentiel, largement suffisant pour le nombre d'images d'un courrier.
   async function inlineNodesFrom(node, parentStyle, ctx) {
     const style = inheritedRunStyle(node, parentStyle);
-    if (node.nodeType === Node.TEXT_NODE) return node.nodeValue ? [new docx.TextRun(Object.assign({ text: node.nodeValue }, runOpts(style)))] : [];
+    if (node.nodeType === Node.TEXT_NODE) return node.nodeValue ? [textRun(node.nodeValue, style)] : [];
     if (node.nodeType !== Node.ELEMENT_NODE) return [];
-    if (node.classList.contains('page-break-marker')) return [];
-    if (node.classList.contains('heading-numbering-config') || node.classList.contains('toc-marker')) return [];
-    // Case à cocher d'une variable Oui / Non (js/reader-mode.js:checkboxNode) : le caractère ☑ ou ☐ en « Segoe UI Symbol » (Word, Google Docs et
-    // LibreOffice en prennent une autre si elle manque), dans la couleur de la case (style en ligne, déjà lu par inheritedRunStyle) et jamais barré :
-    // le barré d'une case d'accent cochée vise le texte qui la suit.
-    if (node.classList.contains('resolved-checkbox')) {
-      return [new docx.TextRun(Object.assign({ text: node.textContent }, runOpts(Object.assign({}, style, { strike: false, font: 'Segoe UI Symbol' }))))];
-    }
-    // .var-badge et .smart-chip ne devraient jamais arriver ici (ReaderMode.preview les résout déjà en <span class="resolved-var"> ou en texte
-    // simple) : gardés par robustesse, comme dans js/pdf-export.js. Une valeur qui porte une case (« ☑, ☐ » d'une liste de valeurs) passe par ses
-    // enfants, case par case.
-    if (node.classList.contains('var-badge') || (node.classList.contains('resolved-var') && !node.querySelector('.resolved-checkbox')) || node.classList.contains('smart-chip')) {
-      return node.textContent ? [new docx.TextRun(Object.assign({ text: node.textContent }, runOpts(style)))] : [];
-    }
-    if (node.classList.contains('page-number-badge')) {
-      const format = node.getAttribute('data-format') || 'n';
-      const opts = runOpts(style);
-      const current = new docx.TextRun(Object.assign({ children: [docx.PageNumber.CURRENT] }, opts));
-      if (format === 'page-n') return [new docx.TextRun(Object.assign({ text: 'Page ' }, opts)), current];
-      if (format === 'n-slash-total') return [current, new docx.TextRun(Object.assign({ text: '/' }, opts)), new docx.TextRun(Object.assign({ children: [docx.PageNumber.TOTAL_PAGES] }, opts))];
-      return [current];
-    }
-    if (node.classList.contains('footnote-ref-marker')) {
-      ctx.footnoteCounter += 1;
-      const id = ctx.footnoteCounter;
-      ctx.footnotes[String(id)] = { children: [new docx.Paragraph({ children: [new docx.TextRun(node.getAttribute('data-note-text') || '')] })] };
-      return [new docx.FootnoteReferenceRun(id)];
-    }
-    if (node.tagName === 'IMG') {
-      if (node.hasAttribute('data-pdf-skip')) return [];
-      // « Sur toutes les pages » (js/page-layer.js) : ancrée dans l'en-tête de chaque page (buildDocxDocument), pas dans le paragraphe qui la porte.
-      if (PageLayer.isRepeatedEl(node)) return [];
-      const imgData = await docxImageDataFrom(node);
-      if (!imgData) return [];
-      // docx.js régénère un compteur wp:docPr/id frais (à partir de 1) à chaque ImageRun au lieu d'en partager un pour tout le document (défaut de la
-      // bibliothèque) : sans id explicite, deux images prennent id="1", ce que Word refuse d'ouvrir sans signaler un contenu illisible. altText.id
-      // donne un id unique par image du document.
-      ctx.imageIdCounter += 1;
-      const runOptions = { type: imgData.type, data: imgData.data, transformation: { width: imgData.width, height: imgData.height }, altText: { id: ctx.imageIdCounter, name: '', description: '', title: '' } };
-      const floatingOptions = docxFloatingOptionsFrom(node, ctx.imageIdCounter, ctx);
-      if (floatingOptions) runOptions.floating = floatingOptions;
-      const imgRun = new docx.ImageRun(runOptions);
-      // Marque ce run pour paragraphBlockFrom (splitRunsAtFloatedImages ci-dessous) : Google Docs ne respecte pas relativeFrom="line", d'où le
-      // découpage en paragraphes Word plutôt qu'un ancrage à la ligne.
-      if (floatingOptions && floatingOptions.__isAlignFloat) imgRun.__docxSplitBefore = true;
-      // data-align="center" : pas un flottant (le texte ne contourne rien), mais l'image doit rester centrée : `.editor-image[data-align="center"]`
-      // vaut `display:block; margin:auto` dans l'éditeur et la Lecture (css/style.css), et le PDF pose `alignment:'center'` sur le bloc image
-      // (js/pdf-export.js:pdfImageFromNode). L'alignement est une propriété de paragraphe en OOXML (w:jc), pas de run : l'image occupe donc son
-      // propre <w:p> centré, ce que splitRunsAtFloatedImages fait ci-dessous.
-      if (!floatingOptions && node.getAttribute('data-align') === 'center') imgRun.__docxCenterBlock = true;
-      // « Bloc » sans alignement (barre de l'image, « Basculer en ligne / bloc ») : seule sur sa ligne, à gauche :
-      // `.editor-image-view[data-wrap="block"] { display: block; width: fit-content }` dans l'éditeur, le texte d'avant finit sa ligne et celui
-      // d'après repart dessous. Même raison que le centre : l'alignement est une propriété de paragraphe, l'image prend donc son propre <w:p>, aligné
-      // à gauche (un paragraphe centré ou justifié ne la déplace pas : un bloc ne suit pas le text-align de son parent).
-      if (!floatingOptions && !node.getAttribute('data-align') && node.getAttribute('data-wrap') === 'block') imgRun.__docxBlock = true;
-      return [imgRun];
-    }
-    if (node.tagName === 'BR') return [new docx.TextRun({ break: 1 })];
-    // Bloc de code au milieu d'un autre bloc (dans une citation, un item de liste) : ses lignes se suivent par des sauts de ligne ; le cadre gris
-    // n'existe que pour un bloc de code posé directement dans le document, une cellule, une colonne ou un en-tête (codeBlockFrom).
-    if (node.tagName === 'PRE') return ExportCommon.codeLinesOf(node).map((line, i) => new docx.TextRun(Object.assign({ text: line }, runOpts(style), i ? { break: 1 } : {})));
-    let out = [];
+    const leaf = LEAF_RUNS.find(([matches]) => matches(node));
+    return leaf ? leaf[1](node, style, ctx) : inlineChildrenFrom(node, style, ctx);
+  }
+
+  async function inlineChildrenFrom(node, style, ctx) {
+    const out = [];
     let sawLineBlock = false;
     for (const child of Array.from(node.childNodes)) {
       // Comme inlineRuns (js/pdf-export.js) : un paragraphe, un titre ou un bloc de code qui en suit un autre dans le même bloc (citation de deux
@@ -335,7 +373,7 @@ const DocxExport = (function () {
       const isLineBlock = child.nodeType === Node.ELEMENT_NODE && /^(P|DIV|H[1-6]|PRE)$/.test(child.tagName);
       if (isLineBlock && sawLineBlock) out.push(new docx.TextRun({ break: 1 }));
       if (isLineBlock) sawLineBlock = true;
-      out = out.concat(await inlineNodesFrom(child, style, ctx));
+      for (const run of await inlineNodesFrom(child, style, ctx)) out.push(run);
     }
     const linkHref = node.tagName === 'A' ? HtmlSanitize.safeLinkHref(node.getAttribute('href')) : null;
     return linkHref ? hyperlinkRuns(out, linkHref) : out;
@@ -454,53 +492,75 @@ const DocxExport = (function () {
   async function tableBlockFrom(tableEl, ctx, keepWithCaption) {
     const rows = ExportCommon.tableRows(tableEl);
     if (!rows.length) return null;
-    const cutRows = TablePageCut.rowsOf(tableEl);
-    const units = cutRows && cutRows.length === rows.length ? TablePageCut.unitsOf(cutRows) : null;
-    const keptRows = new Set(keepWithCaption ? (units ? rows.slice(units[units.length - 1].from) : rows) : []);
-    const joinedRows = new Set();
-    (units || []).forEach((unit) => { for (let r = unit.from; r < unit.to - 1; r += 1) joinedRows.add(rows[r]); });
+    const { keptRows, joinedRows } = rowsKeptWithNext(tableEl, rows, keepWithCaption);
     const columnCount = ExportCommon.cellsOf(rows[0]).reduce((sum, c) => sum + ExportCommon.spanOf(c, 'colspan'), 0) || 1;
-    // Largeurs à parts égales quand le tableau n'est pas attaché au document (zone d'en-tête ou de pied, hors du périmètre de la mesure :
-    // buildDocxDocument) : aucun rendu à mesurer.
-    const measuredPx = tableEl.isConnected ? ExportCommon.measuredColumnWidthsPx(tableEl, columnCount) : null;
-    const colWidthsTwip = (measuredPx && measuredPx.every(w => w > 0))
-      ? measuredPx.map(px => Math.max(200, Math.round(px * PX_TO_TWIP) + WORD_DEFAULT_CELL_MARGIN_TWIP))
-      : equalColumnWidthsTwip(columnCount);
-    const tableRows = [];
+    const colWidthsTwip = tableColumnWidthsTwip(tableEl, columnCount);
     // Les lignes de titres (cases <th> en tête) : Word les reprend en haut de chaque page où le tableau se poursuit (`tblHeader`), comme le PDF.
     const headerRowCount = ExportCommon.headerRowCount(rows);
     // Où chaque case commence dans la grille du tableau : une case fusionnée sur plusieurs lignes tient sa place dans les lignes d'après, dont les
     // cases se décalent d'autant (Word n'écrit que les cases de continuation). Sans cela, la case suivante prenait la largeur d'une autre colonne.
     const placement = new Map(ExportCommon.placeCells(rows).placed.map(placed => [placed.el, placed]));
+    const tableRows = [];
     for (const tr of rows) {
-      const tableCells = [];
-      for (const cell of ExportCommon.cellsOf(tr)) {
-        const { col, colspan: span, rowspan: rowSpan } = placement.get(cell);
-        const width = colWidthsTwip.slice(col, col + span).reduce((a, b) => a + b, 0) || Math.floor(CONTENT_WIDTH_TWIP / columnCount);
-        const children = await blocksFromContainer(cell, ctx, false, Math.max(200, width - WORD_DEFAULT_CELL_MARGIN_TWIP), keptRows.has(tr) || joinedRows.has(tr));
-        tableCells.push(new docx.TableCell({
-          children: children.length ? children : [new docx.Paragraph('')],
-          width: { size: width, type: docx.WidthType.DXA },
-          columnSpan: span > 1 ? span : undefined,
-          rowSpan: rowSpan > 1 ? rowSpan : undefined,
-          shading: cellShadingFrom(cell),
-        }));
-      }
-      // cantSplit : une ligne ne se coupe pas entre deux pages, elle passe en entier à la suivante (comme dans l'éditeur, la Lecture et le PDF :
-      // js/table-page-cut.js). Word la coupe quand même si elle est plus haute que la page.
-      tableRows.push(new docx.TableRow(Object.assign({ children: tableCells, cantSplit: true }, tableRows.length < headerRowCount ? { tableHeader: true } : {})));
+      const keepNext = keptRows.has(tr) || joinedRows.has(tr);
+      tableRows.push(await wordRowFrom(tr, { ctx, placement, colWidthsTwip, columnCount, keepNext, isHeader: tableRows.length < headerRowCount }));
     }
     // columnWidths pilote le <w:tblGrid>, la déclaration des colonnes : sans lui docx.js retombe sur son défaut (100 twips par colonne), incohérent
     // avec les largeurs posées sur chaque TableCell.width. Un <w:tblGrid> qui ne correspond pas aux tcW est un tableau non conforme, que Word peut
     // signaler comme contenu à réparer.
     const wordTable = new docx.Table({ rows: tableRows, width: { size: CONTENT_WIDTH_TWIP, type: docx.WidthType.DXA }, columnWidths: colWidthsTwip });
-    // La case de continuation d'une case fusionnée (docx.js la crée dans la ligne recouverte, sans contenu) : un paragraphe vide qui garde, lui
-    // aussi, avec le suivant. Word ne tient la ligne avec la suivante que si les paragraphes de toutes ses cases le demandent.
+    keepContinuationCellsWithNext(tableRows, rows, joinedRows, keptRows);
+    return wordTable;
+  }
+
+  // Les lignes gardées avec la suivante : `keptRows` (la dernière ligne ou le dernier groupe de lignes quand une légende suit le tableau),
+  // `joinedRows` (toutes sauf la dernière de chaque groupe de lignes qu'une case fusionnée lie).
+  function rowsKeptWithNext(tableEl, rows, keepWithCaption) {
+    const cutRows = TablePageCut.rowsOf(tableEl);
+    const units = cutRows && cutRows.length === rows.length ? TablePageCut.unitsOf(cutRows) : null;
+    const keptRows = new Set(keepWithCaption ? (units ? rows.slice(units[units.length - 1].from) : rows) : []);
+    const joinedRows = new Set();
+    (units || []).forEach((unit) => { for (let r = unit.from; r < unit.to - 1; r += 1) joinedRows.add(rows[r]); });
+    return { keptRows, joinedRows };
+  }
+
+  // Largeurs à parts égales quand le tableau n'est pas attaché au document (zone d'en-tête ou de pied, hors du périmètre de la mesure :
+  // buildDocxDocument) : aucun rendu à mesurer.
+  function tableColumnWidthsTwip(tableEl, columnCount) {
+    const measuredPx = tableEl.isConnected ? ExportCommon.measuredColumnWidthsPx(tableEl, columnCount) : null;
+    return (measuredPx && measuredPx.every(w => w > 0))
+      ? measuredPx.map(px => Math.max(200, Math.round(px * PX_TO_TWIP) + WORD_DEFAULT_CELL_MARGIN_TWIP))
+      : equalColumnWidthsTwip(columnCount);
+  }
+
+  async function wordRowFrom(tr, t) {
+    const cells = [];
+    for (const cell of ExportCommon.cellsOf(tr)) cells.push(await wordCellFrom(cell, t));
+    // cantSplit : une ligne ne se coupe pas entre deux pages, elle passe en entier à la suivante (comme dans l'éditeur, la Lecture et le PDF :
+    // js/table-page-cut.js). Word la coupe quand même si elle est plus haute que la page.
+    return new docx.TableRow(Object.assign({ children: cells, cantSplit: true }, t.isHeader ? { tableHeader: true } : {}));
+  }
+
+  async function wordCellFrom(cell, t) {
+    const { col, colspan: span, rowspan: rowSpan } = t.placement.get(cell);
+    const width = t.colWidthsTwip.slice(col, col + span).reduce((a, b) => a + b, 0) || Math.floor(CONTENT_WIDTH_TWIP / t.columnCount);
+    const children = await blocksFromContainer(cell, t.ctx, false, Math.max(200, width - WORD_DEFAULT_CELL_MARGIN_TWIP), t.keepNext);
+    return new docx.TableCell({
+      children: children.length ? children : [new docx.Paragraph('')],
+      width: { size: width, type: docx.WidthType.DXA },
+      columnSpan: span > 1 ? span : undefined,
+      rowSpan: rowSpan > 1 ? rowSpan : undefined,
+      shading: cellShadingFrom(cell),
+    });
+  }
+
+  // La case de continuation d'une case fusionnée (docx.js la crée dans la ligne recouverte, sans contenu) : un paragraphe vide qui garde, lui aussi,
+  // avec le suivant. Word ne tient la ligne avec la suivante que si les paragraphes de toutes ses cases le demandent.
+  function keepContinuationCellsWithNext(tableRows, rows, joinedRows, keptRows) {
     tableRows.forEach((tableRow, i) => {
       if (!joinedRows.has(rows[i]) && !keptRows.has(rows[i])) return;
       tableRow.cells.forEach((tableCell) => { if (tableCell.options && tableCell.options.verticalMerge === docx.VerticalMergeType.CONTINUE) tableCell.addChildElement(new docx.Paragraph({ keepNext: true })); });
     });
-    return wordTable;
   }
 
   const NO_BORDER = { style: 'none', size: 0, color: 'FFFFFF' };
@@ -701,89 +761,78 @@ const DocxExport = (function () {
   // Paragraph et de Table, prêt à poser dans `children` (Document, TableCell, Header et Footer acceptent la même forme). `keepNext` : tous les
   // paragraphes construits ici gardent le suivant (la dernière ligne d'un tableau que suit une légende, voir tableBlockFrom).
   async function blocksFromContainer(container, ctx, isTopLevel, widthTwip, keepNext) {
-    let headingMarkers = null;
-    if (isTopLevel) {
-      const config = container.querySelector(':scope > .heading-numbering-config');
-      const style = (config && config.dataset.style) || 'none';
-      const headingEls = Array.from(container.querySelectorAll(':scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6'));
-      const markers = HeadingNumbering.markersFor(headingEls, style);
-      headingMarkers = new Map(headingEls.map((el, i) => [el, markers[i]]));
-    }
+    const flow = { ctx, isTopLevel, widthTwip, keepNext, headingMarkers: isTopLevel ? headingMarkersOf(container) : null, pendingPageBreak: false };
     const blocks = [];
-    let pendingPageBreak = false;
     for (const node of Array.from(container.childNodes)) {
-      if (node.nodeType === Node.TEXT_NODE) {
-        if (node.nodeValue && node.nodeValue.trim()) blocks.push(new docx.Paragraph({ children: [new docx.TextRun(node.nodeValue)], pageBreakBefore: pendingPageBreak, keepNext: keepNext ? true : undefined }));
-        pendingPageBreak = false;
-        continue;
-      }
-      if (node.nodeType !== Node.ELEMENT_NODE) continue;
-      if (node.classList.contains('page-break-marker')) { pendingPageBreak = true; continue; }
-      if (node.classList.contains('heading-numbering-config')) continue;
-      // Un sommaire n'a de sens qu'à la racine du document (l'interface ne permet de l'insérer que là) : ignoré sans bruit dans une cellule ou une
-      // colonne imbriquée, plutôt que de laisser fuiter un objet de réserve non résolu dans un Table ou un TableCell (plantage à la sérialisation).
-      if (node.classList.contains('toc-marker')) { if (isTopLevel) blocks.push({ __tocPlaceholder: true }); continue; }
-      if (node.classList.contains('two-columns-zone')) {
-        const block = await twoColumnsBlockFrom(node, ctx);
-        if (block) blocks.push(block);
-        pendingPageBreak = false;
-        continue;
-      }
-      if (node.classList.contains('callout')) {
-        blocks.push(...await calloutBlocksFrom(node, ctx, widthTwip, pendingPageBreak));
-        pendingPageBreak = false;
-        continue;
-      }
-      if (node.tagName === 'TABLE') {
-        const block = await tableBlockFrom(node, ctx, isTopLevel && Caption.captionsAfter(node).length > 0);
-        if (block) blocks.push(block);
-        pendingPageBreak = false;
-        continue;
-      }
-      if (/^(UL|OL)$/.test(node.tagName)) {
-        const items = await listBlocksFrom(node, 0, ctx, pendingPageBreak);
-        blocks.push(...items);
-        pendingPageBreak = false;
-        continue;
-      }
-      if (node.tagName === 'PRE') {
-        blocks.push(...codeBlockFrom(node, pendingPageBreak));
-        pendingPageBreak = false;
-        continue;
-      }
-      if (/^(P|DIV|H[1-6]|BLOCKQUOTE)$/.test(node.tagName)) {
-        const items = await paragraphBlockFrom(node, ctx, headingMarkers, pendingPageBreak, keepNext || (isTopLevel && (keepsWithCaption(node) || KeepWithNext.isKeptElement(node))));
-        blocks.push(...items);
-        pendingPageBreak = false;
-        continue;
-      }
-      if (node.tagName === 'HR') {
-        blocks.push(new docx.Paragraph({ border: { bottom: { style: 'single', size: 6, color: 'CBD5E1' } }, spacing: { after: 120 } }));
-        pendingPageBreak = false;
-        continue;
-      }
-      // <img> directement enfant du conteneur (hors d'un <p> : une image en calque insérée hors flux, js/editor-nodes.js) : sans cette branche, le
-      // nœud tombait dans le repli générique plus bas, qui recurse sur ses enfants ; une image n'en a aucun, elle disparaissait de l'export.
-      if (node.tagName === 'IMG') {
-        const runs = await inlineNodesFrom(node, { size: DEFAULT_HALF_PT }, ctx);
-        // Même centrage que dans un <p> (splitRunsAtFloatedImages) : ce paragraphe est construit ici, il ne passe pas par paragraphBlockFrom et
-        // n'hériterait sinon d'aucun alignement.
-        const centered = runs.some(r => r && r.__docxCenterBlock);
-        if (runs.length) blocks.push(new docx.Paragraph({ children: runs, alignment: centered ? docx.AlignmentType.CENTER : undefined, spacing: { after: 0, line: LINE_SPACING_240THS, lineRule: 'auto' }, pageBreakBefore: !!pendingPageBreak }));
-        pendingPageBreak = false;
-        continue;
-      }
-      // Nœud non reconnu (wrapper générique...) : on continue de creuser dedans plutôt que d'ignorer tout son contenu.
-      const nested = await blocksFromContainer(node, ctx, false);
-      blocks.push(...nested);
+      for (const block of await blocksFromNode(node, flow)) blocks.push(block);
     }
-    if (isTopLevel) {
-      const flat = [];
-      blocks.forEach(b => { if (b && b.__tocPlaceholder) flat.push(...buildTocParagraphs(ctx.headingBlocks)); else flat.push(b); });
-      return flat;
-    }
-    return blocks;
+    // Un sommaire n'a de sens qu'à la racine du document : il y prend la place de son repère.
+    return isTopLevel ? blocks.flatMap(b => (b && b.__tocPlaceholder ? buildTocParagraphs(ctx.headingBlocks) : [b])) : blocks;
   }
+
+  function headingMarkersOf(container) {
+    const config = container.querySelector(':scope > .heading-numbering-config');
+    const style = (config && config.dataset.style) || 'none';
+    const headingEls = Array.from(container.querySelectorAll(':scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6'));
+    const markers = HeadingNumbering.markersFor(headingEls, style);
+    return new Map(headingEls.map((el, i) => [el, markers[i]]));
+  }
+
+  // Les blocs d'un enfant du conteneur ; `flow.pendingPageBreak` : un saut de page vient d'être lu, le prochain bloc l'ouvre (et le consomme).
+  async function blocksFromNode(node, flow) {
+    if (node.nodeType === Node.TEXT_NODE) return consumedTextBlocks(node, flow);
+    if (node.nodeType !== Node.ELEMENT_NODE) return [];
+    const handler = CONTAINER_NODE_BLOCKS.find(([matches]) => matches(node));
+    if (handler) return handler[1](node, flow);
+    // Nœud non reconnu (wrapper générique...) : on continue de creuser dedans plutôt que d'ignorer tout son contenu.
+    return blocksFromContainer(node, flow.ctx, false);
+  }
+
+  // Un bloc qui ouvre une page quand un saut de page le précède : le saut est consommé, que le bloc existe ou non.
+  function consumingBreak(blocksOf) {
+    return async (node, flow) => {
+      const blocks = await blocksOf(node, flow);
+      flow.pendingPageBreak = false;
+      return blocks;
+    };
+  }
+
+  function textBlocks(node, flow) {
+    if (!node.nodeValue || !node.nodeValue.trim()) return [];
+    return [new docx.Paragraph({ children: [new docx.TextRun(node.nodeValue)], pageBreakBefore: flow.pendingPageBreak, keepNext: flow.keepNext ? true : undefined })];
+  }
+
+  const consumedTextBlocks = consumingBreak(textBlocks);
+
+  const optionalBlock = block => (block ? [block] : []);
+
+  // <img> directement enfant du conteneur (hors d'un <p> : une image en calque insérée hors flux, js/editor-nodes.js) : sans cette branche, le nœud
+  // tombait dans le repli générique, qui recurse sur ses enfants ; une image n'en a aucun, elle disparaissait de l'export.
+  async function bareImageBlocks(node, flow) {
+    const runs = await inlineNodesFrom(node, { size: DEFAULT_HALF_PT }, flow.ctx);
+    if (!runs.length) return [];
+    // Même centrage que dans un <p> (splitRunsAtFloatedImages) : ce paragraphe est construit ici, il ne passe pas par paragraphBlockFrom et n'hériterait
+    // sinon d'aucun alignement.
+    const centered = runs.some(r => r && r.__docxCenterBlock);
+    return [new docx.Paragraph({ children: runs, alignment: centered ? docx.AlignmentType.CENTER : undefined, spacing: { after: 0, line: LINE_SPACING_240THS, lineRule: 'auto' }, pageBreakBefore: !!flow.pendingPageBreak })];
+  }
+
+  // Les blocs des enfants d'un conteneur, par classe ou par balise : [test, blocs(node, flow)], le premier qui convient. Les repères (saut de page,
+  // numérotation des titres) n'écrivent rien ; un sommaire est ignoré sans bruit hors de la racine, plutôt que de laisser fuiter un objet de réserve non
+  // résolu dans un Table ou un TableCell (plantage à la sérialisation).
+  const CONTAINER_NODE_BLOCKS = [
+    [node => node.classList.contains('page-break-marker'), (node, flow) => { flow.pendingPageBreak = true; return []; }],
+    [node => node.classList.contains('heading-numbering-config'), () => []],
+    [node => node.classList.contains('toc-marker'), (node, flow) => (flow.isTopLevel ? [{ __tocPlaceholder: true }] : [])],
+    [node => node.classList.contains('two-columns-zone'), consumingBreak(async (node, flow) => optionalBlock(await twoColumnsBlockFrom(node, flow.ctx)))],
+    [node => node.classList.contains('callout'), consumingBreak((node, flow) => calloutBlocksFrom(node, flow.ctx, flow.widthTwip, flow.pendingPageBreak))],
+    [node => node.tagName === 'TABLE', consumingBreak(async (node, flow) => optionalBlock(await tableBlockFrom(node, flow.ctx, flow.isTopLevel && Caption.captionsAfter(node).length > 0)))],
+    [node => /^(UL|OL)$/.test(node.tagName), consumingBreak((node, flow) => listBlocksFrom(node, 0, flow.ctx, flow.pendingPageBreak))],
+    [node => node.tagName === 'PRE', consumingBreak((node, flow) => codeBlockFrom(node, flow.pendingPageBreak))],
+    [node => /^(P|DIV|H[1-6]|BLOCKQUOTE)$/.test(node.tagName), consumingBreak((node, flow) => paragraphBlockFrom(node, flow.ctx, flow.headingMarkers, flow.pendingPageBreak, flow.keepNext || (flow.isTopLevel && (keepsWithCaption(node) || KeepWithNext.isKeptElement(node)))))],
+    [node => node.tagName === 'HR', consumingBreak(() => [new docx.Paragraph({ border: { bottom: { style: 'single', size: 6, color: 'CBD5E1' } }, spacing: { after: 120 } })])],
+    [node => node.tagName === 'IMG', consumingBreak(bareImageBlocks)],
+  ];
 
   // Hauteur rendue d'un fragment d'en-tête ou de pied à la largeur du contenu, en twips : elle sert à placer le pied (Word l'ancre par son bas).
   // Mesurée comme le fait js/pdf-export.js:resolveZone, images décodées d'abord (sinon elles mesurent 0).
@@ -882,6 +931,88 @@ const DocxExport = (function () {
     return blocksFromContainer(root, ctx, false);
   }
 
+  // Les zones d'en-tête et de pied, comme dans le PDF : sur toutes les pages dès qu'une variante a du contenu (la page 1 sans en-tête garde la marge des
+  // autres), rien sinon. `bandTwip(zone)` : la bande que la zone prend en haut ou en bas de la page.
+  function zonesFrom(headerFooterData) {
+    const enabled = !!(headerFooterData && headerFooterData.enabled);
+    const differentFirstPage = enabled && !!headerFooterData.differentFirstPage;
+    const variants = differentFirstPage ? ['default', 'first'] : ['default'];
+    const html = (zone, variant) => (enabled && headerFooterData[zone] && headerFooterData[zone][variant]) || '';
+    const bandTwip = zone => (variants.some(v => PageLayout.hasZoneContent(html(zone, v))) ? HF_BAND_TWIP : 0);
+    return { enabled, differentFirstPage, variants, html, bandTwip };
+  }
+
+  // Les blocs du corps. Hôte de mesure hors écran le temps du parcours : measuredColumnWidthsPx a besoin d'un rendu réel, impossible sur un <div>
+  // détaché du document. Word veut un paragraphe après un tableau placé en fin de document (un tableau, une zone à deux colonnes et un encadré en sont) :
+  // réduit à 1 pt, celui-ci ne rouvre pas une page blanche quand le tableau touche la marge du bas, ce que faisait le paragraphe vide d'une ligne de
+  // l'éditeur.
+  async function bodyBlocksFrom(root, ctx) {
+    const detachMeasureHost = ExportCommon.attachMeasureHost(root, Math.round(CONTENT_WIDTH_TWIP / PX_TO_TWIP));
+    let bodyBlocks;
+    try {
+      await Promise.all(Array.from(root.querySelectorAll('img')).map(img => img.decode().catch(() => {})));
+      bodyBlocks = await blocksFromContainer(root, ctx, true);
+    } finally { detachMeasureHost(); }
+    if (bodyBlocks.length && bodyBlocks[bodyBlocks.length - 1] instanceof docx.Table) {
+      bodyBlocks.push(new docx.Paragraph({ spacing: { before: 0, after: 0, line: 20, lineRule: 'exact' }, run: { size: 2 } }));
+    }
+    return bodyBlocks;
+  }
+
+  // Le pied : Word l'ancre par son bas (distance du bord de la feuille au bas du pied), le PDF par son haut, juste sous le texte. La distance qui met le
+  // haut du pied le plus haut des deux variantes là où le PDF le met est donc marge du bas + bande - sa hauteur ; une variante plus basse est complétée
+  // d'une ligne vide à hauteur fixe pour que la sienne commence aussi au même endroit.
+  async function footerLayoutFrom(zones, ctx, bottomBandTwip) {
+    const heights = {};
+    for (const v of zones.variants) heights[v] = await measureZoneHeightTwip(zones.html('footer', v));
+    const heightTwip = Math.max(0, ...Object.values(heights));
+    const distanceTwip = bottomBandTwip ? Math.max(0, marginBottomTwip + bottomBandTwip - heightTwip) : Math.round(marginBottomTwip / 2);
+    async function blocksFor(variant) {
+      const blocks = await headerFooterBlocksFrom(zones.html('footer', variant), ctx);
+      const pad = heightTwip - (heights[variant] || 0);
+      if (blocks.length && pad >= TWIPS_PER_PT) blocks.push(new docx.Paragraph({ spacing: { before: 0, after: 0, line: pad, lineRule: 'exact' } }));
+      return blocks;
+    }
+    return { distanceTwip, blocksFor };
+  }
+
+  function sectionPropertiesFrom(zones, bottomBandTwip, footerDistanceTwip) {
+    return {
+      page: {
+        // docx.js échange largeur et hauteur de lui-même quand l'orientation vaut LANDSCAPE : lui donner les dimensions déjà échangées les
+        // ré-échangerait (page portrait étiquetée paysage). Toujours le portrait du format ici, l'orientation seule dit le sens.
+        size: Object.assign(PageLayout.pageSizeTwipFor('portrait', pageFormat), pageOrientation === 'landscape' ? { orientation: docx.PageOrientation.LANDSCAPE } : {}),
+        margin: { top: marginTopTwip + topBandTwip, bottom: marginBottomTwip + bottomBandTwip, left: marginLeftTwip, right: marginRightTwip, header: Math.round(marginTopTwip / 2), footer: footerDistanceTwip },
+      },
+      titlePage: zones.differentFirstPage,
+    };
+  }
+
+  // Les pieds de la section, variante par variante ; rend les blocs d'en-tête de chaque variante, que addHeaders complète.
+  async function addHeaderFooterZones(section, zones, ctx, footer) {
+    const headerBlocks = {};
+    if (!zones.enabled) return headerBlocks;
+    for (const variant of zones.variants) {
+      headerBlocks[variant] = await headerFooterBlocksFrom(zones.html('header', variant), ctx);
+      const footerBlocks = await footer.blocksFor(variant);
+      if (footerBlocks.length) section.footers = Object.assign({}, section.footers, { [variant]: new docx.Footer({ children: footerBlocks }) });
+    }
+    return headerBlocks;
+  }
+
+  // Chaque en-tête que Word peut montrer (celui de la première page aussi quand elle diffère) porte les images répétées ; sans en-tête du tout, il est
+  // créé pour elles. Le filigrane du modèle rejoint ces images : la même ancre dans chaque en-tête, créé pour lui s'il manque.
+  async function addHeaders(section, variants, headerBlocks, layerImages, ctx) {
+    const pageSizePt = PageLayout.pageSizePtFor(pageOrientation, pageFormat);
+    const watermarkImage = await watermarkImageData(PageLayer.watermarkLayout(pageWatermark, pageSizePt.width, pageSizePt.height));
+    for (const variant of variants) {
+      const blocks = headerBlocks[variant] || [];
+      const layerParagraph = (layerImages.length || watermarkImage) ? await repeatedLayerParagraph(layerImages, ctx, watermarkImage) : null;
+      if (layerParagraph) blocks.push(layerParagraph);
+      if (blocks.length) section.headers = Object.assign({}, section.headers, { [variant]: new docx.Header({ children: blocks }) });
+    }
+  }
+
   async function buildDocxDocument(resolvedHtml, headerFooterData) {
     const root = document.createElement('div'); root.innerHTML = resolvedHtml || '';
     // Ni ligne vide ni saut de page orphelin en fin de document : quand le texte arrive à la marge du bas, ils ouvrent une page blanche.
@@ -890,71 +1021,18 @@ const DocxExport = (function () {
     // « Sur toutes les pages » : les images répétées partent dans l'en-tête, le corps ne les compte plus (inlineNodesFrom).
     const layerImages = PageLayer.collect(root);
     layerObjectId = 9000;
-    // Les bandes d'en-tête et de pied, comme dans le PDF : sur toutes les pages dès qu'une variante a du contenu (la page 1 sans en-tête garde la
-    // marge des autres), rien sinon. Posées avant les blocs : l'ancrage d'une image en calque compte la bande du haut.
-    const hfOn = !!(headerFooterData && headerFooterData.enabled);
-    const differentFirstPage = hfOn && !!headerFooterData.differentFirstPage;
-    const zoneVariants = differentFirstPage ? ['default', 'first'] : ['default'];
-    const zoneHtml = (zone, variant) => (hfOn && headerFooterData[zone] && headerFooterData[zone][variant]) || '';
-    topBandTwip = zoneVariants.some(v => PageLayout.hasZoneContent(zoneHtml('header', v))) ? HF_BAND_TWIP : 0;
-    const bottomBandTwip = zoneVariants.some(v => PageLayout.hasZoneContent(zoneHtml('footer', v))) ? HF_BAND_TWIP : 0;
-    // Hôte de mesure hors écran le temps du parcours : measuredColumnWidthsPx a besoin d'un rendu réel, impossible sur un <div> détaché du document.
-    const detachMeasureHost = ExportCommon.attachMeasureHost(root, Math.round(CONTENT_WIDTH_TWIP / PX_TO_TWIP));
-    let bodyBlocks;
-    try {
-      await Promise.all(Array.from(root.querySelectorAll('img')).map(img => img.decode().catch(() => {})));
-      bodyBlocks = await blocksFromContainer(root, ctx, true);
-    } finally { detachMeasureHost(); }
-    // Word veut un paragraphe après un tableau placé en fin de document (un tableau, une zone à deux colonnes et un encadré en sont) : réduit à 1 pt,
-    // celui-ci ne rouvre pas une page blanche quand le tableau touche la marge du bas, ce que faisait le paragraphe vide d'une ligne de l'éditeur.
-    if (bodyBlocks.length && bodyBlocks[bodyBlocks.length - 1] instanceof docx.Table) {
-      bodyBlocks.push(new docx.Paragraph({ spacing: { before: 0, after: 0, line: 20, lineRule: 'exact' }, run: { size: 2 } }));
-    }
-
-    // Le pied : Word l'ancre par son bas (distance du bord de la feuille au bas du pied), le PDF par son haut, juste sous le texte. La distance qui
-    // met le haut du pied le plus haut des deux variantes là où le PDF le met est donc marge du bas + bande - sa hauteur ; une variante plus basse
-    // est complétée d'une ligne vide à hauteur fixe pour que la sienne commence aussi au même endroit.
-    const footerHeights = {};
-    for (const v of zoneVariants) footerHeights[v] = await measureZoneHeightTwip(zoneHtml('footer', v));
-    const footerHeightTwip = Math.max(0, ...Object.values(footerHeights));
-    const footerDistanceTwip = bottomBandTwip ? Math.max(0, marginBottomTwip + bottomBandTwip - footerHeightTwip) : Math.round(marginBottomTwip / 2);
-    async function footerBlocksFor(variant) {
-      const blocks = await headerFooterBlocksFrom(zoneHtml('footer', variant), ctx);
-      const pad = footerHeightTwip - (footerHeights[variant] || 0);
-      if (blocks.length && pad >= TWIPS_PER_PT) blocks.push(new docx.Paragraph({ spacing: { before: 0, after: 0, line: pad, lineRule: 'exact' } }));
-      return blocks;
-    }
-    const sectionProps = {
-      page: {
-        // docx.js échange largeur et hauteur de lui-même quand l'orientation vaut LANDSCAPE : lui donner les dimensions déjà échangées les
-        // ré-échangerait (page portrait étiquetée paysage). Toujours le portrait du format ici, l'orientation seule dit le sens.
-        size: Object.assign(PageLayout.pageSizeTwipFor('portrait', pageFormat), pageOrientation === 'landscape' ? { orientation: docx.PageOrientation.LANDSCAPE } : {}),
-        margin: { top: marginTopTwip + topBandTwip, bottom: marginBottomTwip + bottomBandTwip, left: marginLeftTwip, right: marginRightTwip, header: Math.round(marginTopTwip / 2), footer: footerDistanceTwip },
-      },
-      titlePage: differentFirstPage,
+    // Les bandes d'en-tête et de pied sont posées avant les blocs : l'ancrage d'une image en calque compte la bande du haut.
+    const zones = zonesFrom(headerFooterData);
+    topBandTwip = zones.bandTwip('header');
+    const bottomBandTwip = zones.bandTwip('footer');
+    const bodyBlocks = await bodyBlocksFrom(root, ctx);
+    const footer = await footerLayoutFrom(zones, ctx, bottomBandTwip);
+    const section = {
+      properties: sectionPropertiesFrom(zones, bottomBandTwip, footer.distanceTwip),
+      children: bodyBlocks.length ? bodyBlocks : [new docx.Paragraph('')],
     };
-    const section = { properties: sectionProps, children: bodyBlocks.length ? bodyBlocks : [new docx.Paragraph('')] };
-    const headerBlocks = {};
-    if (hfOn) {
-      headerBlocks.default = await headerFooterBlocksFrom(zoneHtml('header', 'default'), ctx);
-      const footerDefaultBlocks = await footerBlocksFor('default');
-      if (footerDefaultBlocks.length) section.footers = Object.assign({}, section.footers, { default: new docx.Footer({ children: footerDefaultBlocks }) });
-      if (differentFirstPage) {
-        headerBlocks.first = await headerFooterBlocksFrom(zoneHtml('header', 'first'), ctx);
-        const footerFirstBlocks = await footerBlocksFor('first');
-        if (footerFirstBlocks.length) section.footers = Object.assign({}, section.footers, { first: new docx.Footer({ children: footerFirstBlocks }) });
-      }
-    }
-    // Chaque en-tête que Word peut montrer (celui de la première page aussi quand elle diffère) porte les images répétées ; sans en-tête du tout, il
-    // est créé pour elles. Le filigrane du modèle rejoint ces images : la même ancre dans chaque en-tête, créé pour lui s'il manque.
-    const pageSizePt = PageLayout.pageSizePtFor(pageOrientation, pageFormat);
-    const watermarkImage = await watermarkImageData(PageLayer.watermarkLayout(pageWatermark, pageSizePt.width, pageSizePt.height));
-    for (const variant of zoneVariants) {
-      const blocks = headerBlocks[variant] || [];
-      const layerParagraph = (layerImages.length || watermarkImage) ? await repeatedLayerParagraph(layerImages, ctx, watermarkImage) : null;
-      if (layerParagraph) blocks.push(layerParagraph);
-      if (blocks.length) section.headers = Object.assign({}, section.headers, { [variant]: new docx.Header({ children: blocks }) });
-    }
+    const headerBlocks = await addHeaderFooterZones(section, zones, ctx, footer);
+    await addHeaders(section, zones.variants, headerBlocks, layerImages, ctx);
     const doc = { sections: [section], footnotes: ctx.footnotes };
     if (ctx.numberingConfigs.length) doc.numbering = { config: ctx.numberingConfigs };
     return new docx.Document(doc);
