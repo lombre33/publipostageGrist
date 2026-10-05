@@ -64,11 +64,13 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || '/opt/node22/lib/n
 
 // open({ spec, width, height, port, theme, lang }) -> { page, errors, stats(), resetStats(), ready, close }
 //   spec : la description du document (voir dev-tests/load-doc.js). `ready` : millisecondes depuis le début de la navigation jusqu'à « Widget prêt. ».
-export async function open({ spec = {}, width = 700, height = 400, port = Number(process.env.LOAD_PORT || 8971), theme = 'light', lang = 'fr', acceptDownloads = true, settleMs = 2500 } = {}) {
+//   onPage(page, context) : appelé dès que la page existe, avant sa première navigation (pour écouter les requêtes du chargement, par exemple).
+export async function open({ spec = {}, width = 700, height = 400, port = Number(process.env.LOAD_PORT || 8971), theme = 'light', lang = 'fr', acceptDownloads = true, settleMs = 2500, onPage = null } = {}) {
   const base = await startServer(port);
   const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hinting=none', '--enable-precise-memory-info', '--js-flags=--expose-gc'] });
   const context = await browser.newContext({ bypassCSP: true, viewport: { width, height }, colorScheme: theme === 'dark' ? 'dark' : 'light', acceptDownloads });
   const page = await context.newPage();
+  if (onPage) await onPage(page, context);
   const errors = [];
   const dialogs = [];
   page.on('pageerror', e => errors.push('pageerror: ' + e.message));

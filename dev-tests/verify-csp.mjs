@@ -155,6 +155,11 @@ const exportsRun = await page.evaluate(async () => {
   const out = {};
   const step = async (name, fn) => { try { out[name] = await fn(); } catch (e) { out[name] = 'ERREUR ' + (e && e.message || e); } };
   let pdf = null;
+  await step('moteurs', async () => {
+    await ExportEngines.loadAll();
+    return typeof PdfExport !== 'undefined' && typeof PdfMerge !== 'undefined' && typeof SheetLayout !== 'undefined' && typeof DocxExport !== 'undefined'
+      && typeof XlsxExport !== 'undefined' && typeof XlsxNumberFormat !== 'undefined';
+  });
   await step('pdf', async () => { await PdfExport.ensurePdfLibsLoaded(); pdf = (await PdfExport.getNativePdfBlobForRecord('<p>Texte du PDF</p>', null, {}, '', null, undefined)).blob; return pdf.size > 1000 && new TextDecoder().decode(new Uint8Array(await pdf.slice(0, 5).arrayBuffer())) === '%PDF-'; });
   await step('zip', async () => { await ExportCommon.ensureJsZipLoaded(); const z = new JSZip(); z.file('a.txt', 'x'); return (await z.generateAsync({ type: 'uint8array' })).length > 20; });
   await step('pdfMerge', async () => { const merged = await PdfMerge.create('t'); await merged.append(pdf); return (await merged.toBlob()).size > 1000; });
@@ -163,7 +168,7 @@ const exportsRun = await page.evaluate(async () => {
   await step('qr', async () => { await QrCode.ensureLibrary(); return /^data:image\/png/.test(await QrCode.dataUri('https://exemple.fr')); });
   return out;
 });
-for (const [name, label] of [['pdf', 'PDF (pdfmake, polices du dépôt)'], ['zip', 'archive ZIP (JSZip)'], ['pdfMerge', 'PDF unique (pdf-lib)'], ['docx', 'Word (docx)'], ['xlsx', 'Excel (ExcelJS)'], ['qr', 'QR code (qrcode-generator)']]) {
+for (const [name, label] of [['moteurs', 'les six moteurs du widget (PDF, fusion, feuilles, Word, Excel, format des nombres : js/export-engines.js, au premier export)'], ['pdf', 'PDF (pdfmake, polices du dépôt)'], ['zip', 'archive ZIP (JSZip)'], ['pdfMerge', 'PDF unique (pdf-lib)'], ['docx', 'Word (docx)'], ['xlsx', 'Excel (ExcelJS)'], ['qr', 'QR code (qrcode-generator)']]) {
   check('export : ' + label + ' se charge et produit son fichier sous la politique', exportsRun[name] === true, exportsRun[name]);
 }
 check('rien n\'a été refusé pendant tout ce parcours (aucune violation, aucun message du navigateur)', (await violations()).length === 0 && consoleRefusals.length === 0, { violations: await violations(), consoleRefusals });

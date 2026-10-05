@@ -18,7 +18,8 @@
 // Les feuilles, lignes et colonnes masquées ne sont pas importées. Un classeur qui a plusieurs feuilles visibles demande laquelle devient la grille
 // (une liste avec recherche) : une seule est importée, les autres ne le sont pas. Pas importés : formules (le résultat calculé est écrit), images,
 // graphiques, commentaires, mise en forme conditionnelle, police, retrait, orientation du texte. Dépend de GridTable (js/grid-table.js), TableBorders
-// (js/table-borders.js), XlsxNumberFormat (js/xlsx-number-format.js) et XlsxExport (chargement paresseux d'ExcelJS).
+// (js/table-borders.js), XlsxNumberFormat (js/xlsx-number-format.js) et XlsxExport (chargement paresseux d'ExcelJS), deux moteurs que
+// ExportEngines (js/export-engines.js) charge au premier import.
 const GridXlsxImport = (function () {
   const MAX_ROWS = 1000;
   const MAX_COLS = 100;
@@ -385,6 +386,7 @@ const GridXlsxImport = (function () {
     const bytes = new Uint8Array(buffer);
     // Un .xls (ou un classeur protégé par un mot de passe) est un conteneur OLE (D0 CF 11 E0), pas un zip (50 4B).
     if (bytes.length >= 4 && bytes[0] === 0xd0 && bytes[1] === 0xcf && bytes[2] === 0x11 && bytes[3] === 0xe0) throw fail('oldFormat', 'Format .xls ou classeur protégé.');
+    await ExportEngines.ensure('xlsx', 'xlsxFormat');
     await XlsxExport.ensureExcelLibLoaded();
     const workbook = new ExcelJS.Workbook();
     try { await workbook.xlsx.load(buffer); } catch (e) { throw fail('unreadable', 'Fichier illisible.', { cause: e }); }

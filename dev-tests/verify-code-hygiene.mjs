@@ -30,6 +30,8 @@
 //      flèche qui l'appelle ; le chargeur de scripts des exports (js/export-common.js) garde sa liste blanche (dev-tests/unit-script-loader.mjs, script Node `scriptLoaderUnit`).
 //  17. le prénom de la personne qui a demandé le widget écrit dans ce que le dépôt public reprend (index.html, css, js, img, templates-gallery, LICENSE) : commentaire, texte ou donnée (contrôle d'avant la
 //      bêta ; dev-tests et planning ne sont pas publiés et gardent leurs références).
+//  18. un moteur d'export (PDF, fusion, feuilles, Word, Excel, format des nombres : ~380 Ko) qui redevient un <script src> ordinaire de index.html, donc chargé à l'ouverture, ou qu'un script appelle
+//      sans passer par js/export-engines.js (choix d'Antoine du 05/10 : « Charger les moteurs d'export seulement au premier export »).
 //
 // Volontairement PERMISSIF : un nom cité seulement dans un commentaire compte comme utilisé, un préfixe construit (`'toc-level-' + n`) couvre toute la
 // famille. Le but est de ne jamais faire échouer un changement légitime, seulement d'attraper ce qui n'a plus AUCUN point d'entrée. Une classe posée
@@ -590,6 +592,51 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   }
   check('prénom : l\'analyse lit bien le code publié (garde-fou de l\'analyse elle-même : au moins 100 fichiers texte)', scanned >= 100, `${scanned} fichiers`);
   check('prénom : le prénom de la personne qui a demandé le widget n\'est écrit nulle part dans index.html, css, js, img, templates-gallery ni LICENSE - un commentaire dit la raison d\'un choix, pas qui l\'a demandé', named.length === 0, named.join(', '));
+}
+
+// ============================================================================
+// 18. Les moteurs d'export ne se chargent qu'au premier export (choix d'Antoine du 05/10 : « Maintenant »)
+// ============================================================================
+// PDF, fusion des PDF, feuilles d'assemblage, Word, Excel et le format des nombres d'Excel font ~380 Ko (~118 Ko compressés) : index.html les déclare en balises inertes
+// (`<script type="text/x-lazy-engine" data-engine="…" src="…">`, que le navigateur ne lit pas) et js/export-engines.js les charge au premier besoin (`ExportEngines.ensure`). Ce contrôle garde
+// ce que le banc dev-tests/verify-lazy-engines.mjs ne voit pas d'un coup d'œil : un des six fichiers qui redevient une balise ordinaire (chargé à l'ouverture, comme avant), un nom de moteur
+// écrit de travers dans un export, et un script qui appelle un moteur sans le faire charger (une erreur « PdfExport n'est pas défini » au premier clic, que seul cet export-là montre).
+{
+  const ENGINE_FILES = { pdf: 'pdf-export', sheets: 'sheet-layout', merge: 'pdf-merge', docx: 'docx-export', xlsx: 'xlsx-export', xlsxFormat: 'xlsx-number-format' };
+  const ENGINE_GLOBALS = { PdfExport: 'pdf-export', SheetLayout: 'sheet-layout', PdfMerge: 'pdf-merge', DocxExport: 'docx-export', XlsxExport: 'xlsx-export', XlsxNumberFormat: 'xlsx-number-format' };
+  // Les fichiers qui nomment un moteur sans nommer ExportEngines : la fenêtre des planches, que js/main.js (onExportBatch) n'ouvre qu'après avoir chargé « sheets ».
+  const CALLED_AFTER_ENSURE = ['js/sheet-assembly-dialog.js'];
+  const page = read('index.html').replace(/<!--[\s\S]*?-->/g, m => m.replace(/[^\n]/g, ' '));
+  const attr = (attrs, name) => (attrs.match(new RegExp(`\\b${name}="([^"]*)"`)) || [])[1];
+  const tags = [...page.matchAll(/<script\b([^>]*)>/g)].map(m => m[1]);
+  const inert = tags.filter(attrs => attr(attrs, 'type') === 'text/x-lazy-engine').map(attrs => ({ engine: attr(attrs, 'data-engine'), src: attr(attrs, 'src') }));
+  const ordinary = tags.filter(attrs => !attr(attrs, 'type')).map(attrs => attr(attrs, 'src')).filter(Boolean);
+  const engineFileNames = Object.values(ENGINE_FILES);
+  check('moteurs d\'export : index.html déclare six balises inertes, une par moteur, chacune vers son fichier avec une version de cache (?v=)',
+    inert.length === 6 && Object.entries(ENGINE_FILES).every(([engine, file]) => inert.filter(t => t.engine === engine && new RegExp(`^js/${file}\\.js\\?v=\\d+(\\.\\d+)*$`).test(t.src || '')).length === 1), JSON.stringify(inert));
+  check('moteurs d\'export : aucun des six fichiers n\'est un <script src> ordinaire de index.html (le navigateur le chargerait à l\'ouverture) ; js/export-engines.js l\'est, une fois',
+    ordinary.every(src => !engineFileNames.some(file => src.startsWith(`js/${file}.js`))) && ordinary.filter(src => /^js\/export-engines\.js\?v=/.test(src)).length === 1, ordinary.filter(src => engineFileNames.some(file => src.startsWith(`js/${file}.js`))).join(', '));
+
+  // Les noms de moteurs que le code demande : `engines: ['pdf', 'merge']` (js/main.js) et `ExportEngines.ensure('xlsx', 'xlsxFormat')`.
+  const asked = [];
+  const users = [];
+  for (const rel of jsFiles) {
+    if (rel === 'js/export-engines.js') continue;
+    const code = noCommentsJs(read(rel));
+    for (const m of code.matchAll(/\bengines:\s*\[([^\]]*)\]/g)) for (const n of m[1].matchAll(/'([^']+)'/g)) asked.push([rel, n[1]]);
+    for (const m of code.matchAll(/\bExportEngines\.ensure\(([^)]*)\)/g)) for (const n of m[1].matchAll(/'([^']+)'/g)) asked.push([rel, n[1]]);
+    const ownFile = rel.replace(/^js\//, '').replace(/\.js$/, '');
+    const named = Object.entries(ENGINE_GLOBALS).filter(([name, file]) => file !== ownFile && new RegExp(`\\b${name}\\b`).test(code)).map(([name]) => name);
+    if (named.length) users.push({ rel, named, ensures: /\bExportEngines\b/.test(code) });
+  }
+  const unknown = asked.filter(([, name]) => !ENGINE_FILES[name]).map(([rel, name]) => `${rel} : « ${name} »`);
+  check('moteurs d\'export : l\'analyse lit bien le code (garde-fou de l\'analyse elle-même : au moins dix noms de moteur demandés, js/main.js et js/grid-xlsx-import.js parmi les fichiers qui en demandent)',
+    asked.length >= 10 && ['js/main.js', 'js/grid-xlsx-import.js'].every(rel => asked.some(([file]) => file === rel)), `${asked.length} noms`);
+  check('moteurs d\'export : chaque nom de moteur demandé (engines: [...], ExportEngines.ensure(...)) est un moteur déclaré dans index.html', unknown.length === 0, unknown.join(', '));
+  check('moteurs d\'export : chacun des six moteurs est demandé quelque part (un moteur que rien ne charge ne s\'exécuterait jamais)', Object.keys(ENGINE_FILES).every(name => asked.some(([, asking]) => asking === name)), Object.keys(ENGINE_FILES).filter(name => !asked.some(([, asking]) => asking === name)).join(', '));
+  const unguarded = users.filter(u => !u.ensures && !CALLED_AFTER_ENSURE.includes(u.rel)).map(u => `${u.rel} (${u.named.join(', ')})`);
+  check('moteurs d\'export : un script qui appelle PdfExport, PdfMerge, SheetLayout, DocxExport, XlsxExport ou XlsxNumberFormat hors de son fichier nomme ExportEngines (il fait charger le moteur avant) - sinon le premier export, seul, échoue',
+    users.length >= 2 && unguarded.length === 0, unguarded.length ? unguarded.join(', ') : `${users.length} fichiers`);
 }
 
 summarizeAndExit();

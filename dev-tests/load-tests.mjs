@@ -812,6 +812,7 @@ async function limits(r) {
     const plans = q([[1000, 5], [1001, 5], [50, 100], [51, 100], [60, 101]], [[1001, 5], [51, 100]]);
     for (const [rows, cols] of plans) {
       const res = await page.evaluate(async ({ rows, cols }) => {
+        await ExportEngines.ensure('xlsx'); // le moteur ne se charge qu'au premier export ou import (js/export-engines.js)
         await XlsxExport.ensureExcelLibLoaded();
         const wb = new ExcelJS.Workbook();
         const ws = wb.addWorksheet('Feuille');

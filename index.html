@@ -693,13 +693,16 @@
 <script src="js/editor.js?v=2.31"></script>
 <script src="js/export-common.js?v=0.13"></script>
 <script src="js/pdf-glyph-fallback.js?v=0.2"></script>
-<script src="js/pdf-export.js?v=1.35"></script>
-<script src="js/sheet-layout.js?v=0.2"></script>
-<script src="js/pdf-merge.js?v=0.5"></script>
-<script src="js/docx-export.js?v=0.44"></script>
-<script src="js/xlsx-export.js?v=0.16"></script>
-<script src="js/xlsx-number-format.js?v=0.3"></script>
-<script src="js/grid-xlsx-import.js?v=0.6"></script>
+<!-- Moteurs d'export : js/export-engines.js les charge au premier export (ExportEngines.ensure), pas à l'ouverture. Ces balises ne s'exécutent pas (le
+     navigateur ne connaît pas leur type) ; leur version de cache se monte comme celle de tout script. -->
+<script src="js/export-engines.js?v=0.1"></script>
+<script type="text/x-lazy-engine" data-engine="pdf" src="js/pdf-export.js?v=1.35"></script>
+<script type="text/x-lazy-engine" data-engine="sheets" src="js/sheet-layout.js?v=0.2"></script>
+<script type="text/x-lazy-engine" data-engine="merge" src="js/pdf-merge.js?v=0.5"></script>
+<script type="text/x-lazy-engine" data-engine="docx" src="js/docx-export.js?v=0.44"></script>
+<script type="text/x-lazy-engine" data-engine="xlsx" src="js/xlsx-export.js?v=0.16"></script>
+<script type="text/x-lazy-engine" data-engine="xlsxFormat" src="js/xlsx-number-format.js?v=0.3"></script>
+<script src="js/grid-xlsx-import.js?v=0.7"></script>
 <script src="js/mailto-export.js?v=0.11"></script>
 <script src="js/template-gallery.js?v=0.12"></script>
 <script src="js/template-gallery-modal.js?v=0.1"></script>
@@ -750,6 +753,6 @@
 <script src="js/orientation-toggle.js?v=0.10"></script>
 <script src="js/clean-reading.js?v=0.4"></script>
 <script src="js/page-zoom.js?v=0.4"></script>
-<script src="js/main.js?v=0.119"></script>
+<script src="js/main.js?v=0.120"></script>
 </body>
 </html>

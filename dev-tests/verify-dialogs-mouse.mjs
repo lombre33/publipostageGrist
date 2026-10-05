@@ -647,7 +647,8 @@ async function runSites(theme) {
 
   // Les exports lancés au clavier passent par le même verrou : à la fin de l'export le clavier revient sur « Exporter en PDF » ; si le focus est allé ailleurs pendant
   // l'export (clic réel dans le document), il n'est pas ramené au bouton. L'export lui-même est remplacé par une promesse qu'on libère à la main.
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
+    await ExportEngines.ensure('pdf'); // le moteur ne se charge qu'au premier export (js/export-engines.js) : il doit exister pour être remplacé
     window.__realExportCurrent = PdfExport.exportCurrentRecord;
     PdfExport.exportCurrentRecord = () => new Promise(done => { window.__releaseExport = done; });
     document.getElementById('status-msg').textContent = '';

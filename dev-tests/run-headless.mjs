@@ -255,6 +255,7 @@ const NODE_SCRIPTS = {
   startupOpenMouse: 'verify-startup-open-mouse.mjs', // ouverture sur un document aux tables lentes, vrai navigateur à 700x400, vraie souris et vrai clavier : table des modèles lue une fois, modèle affiché avant la lecture complète des tables, bulles jugées tout de suite, « # » liste les colonnes, colonnes exactes ensuite
   cspLoad: 'verify-csp.mjs', // politique de sécurité du contenu de index.html SANS contournement : le widget démarre, s'écrit, se lit et exporte sous la politique ; un script en ligne, un gestionnaire, une adresse javascript:, une balise de base, un cadre, un objet, un formulaire ne passent plus ; le vrai fichier d'API de Grist (réseau) s'évalue ; cadre à bac à sable
   firstContact: 'verify-first-contact.mjs', // premier contact avant la bêta : onglet (titre, icône, description), console muette, version des Crédits, langue du navigateur et choix enregistré, fenêtres « hors de Grist », « réseau bloqué », « chargement long » et « erreur » à la vraie souris et au vrai clavier (700x400, français et anglais, clair et sombre, contrastes), avertissement de la galerie
+  lazyEngines: 'verify-lazy-engines.mjs', // chargement paresseux des moteurs d'export (js/export-engines.js), une page neuve par scénario : ni requête ni variable de moteur à l'ouverture, chaque export (PDF, Word, Excel d'une ligne ; ZIP de PDF, PDF unique, assemblage, ZIP de Word, ZIP d'Excel, classeur unique ; import d'un classeur) ne demande que ses moteurs, une fois, et produit son fichier ; un moteur injoignable arrête l'export, puis le même geste aboutit
 };
 
 const argv = process.argv.slice(2);
@@ -418,6 +419,9 @@ async function runGroup(name, probeExpr) {
     const el = document.getElementById('status-msg');
     return !!el && /prêt|ready/i.test(el.textContent || '');
   }, null, { timeout: 90000 });
+  // Les moteurs d'export ne se chargent qu'au premier export (js/export-engines.js) : les scénarios appellent PdfExport, DocxExport, XlsxExport, SheetLayout...
+  // directement, ou les remplacent par un espion, et les trouvent chargés comme avant. Le chemin paresseux a son banc (dev-tests/verify-lazy-engines.mjs).
+  await page.evaluate(() => ExportEngines.loadAll());
   // .a4-preview n'est jamais posée toute seule dans le harnais (piège documenté, README) : toute
   // mesure pixel dépend d'elle.
   await page.evaluate(() => { document.getElementById('editor-container').classList.add('a4-preview'); });

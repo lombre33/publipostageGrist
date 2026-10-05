@@ -165,6 +165,7 @@ const BACKGROUND_FN = `(el) => {
 // page A4, ce qu'une classe a4-preview restée sur l'éditeur ramènerait à la page) et une seconde feuille visible (le message dit alors laquelle est lue).
 async function buildInvoice(page) {
   const base64 = await page.evaluate(async () => {
+    await ExportEngines.ensure('xlsx'); // le moteur ne se charge qu'au premier export ou import (js/export-engines.js)
     await XlsxExport.ensureExcelLibLoaded();
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Facture');

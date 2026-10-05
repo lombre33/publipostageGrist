@@ -1402,17 +1402,20 @@
   // Les exports d'une seule ligne : le lot que prend son document quand « Un document par valeur » le découpe, l'alerte sans ligne, les textes du
   // coin d'état et l'export lui-même (`doc` : { html, headerFooterData }, cf. currentRecordDocument). Word n'a ni sélecteur de qualité ni autre mode
   // (cf. en-tête de js/docx-export.js). Excel exporte le tableau d'une grille, sans en-tête ni pied de page ni marges du document : la feuille
-  // reprend l'orientation et les marges de PageLayout.
+  // reprend l'orientation et les marges de PageLayout. `engines` : les moteurs de js/export-engines.js que `run` appelle, chargés au premier export.
   const SINGLE_EXPORTS = {
     pdf: {
+      engines: ['pdf'],
       batch: 'pdfZip', noRecord: 'alert.noRecordForExport', generating: 'status.pdfGenerating', generated: 'status.pdfGenerated', failed: 'status.pdfGenerationError',
       run: (doc, tableId, record) => PdfExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsPt()),
     },
     docx: {
+      engines: ['docx'],
       batch: 'docxZip', noRecord: 'alert.noRecordForExportDocx', generating: 'status.docxGenerating', generated: 'status.docxGenerated', failed: 'status.docxGenerationError',
       run: (doc, tableId, record) => DocxExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsTwip()),
     },
     xlsx: {
+      engines: ['xlsx'],
       batch: 'xlsxZip', noRecord: 'alert.noRecordForExportXlsx', generating: 'status.xlsxGenerating', generated: 'status.xlsxGenerated', failed: 'status.xlsxGenerationError',
       run: (doc, tableId, record) => XlsxExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate()),
     },
@@ -1428,6 +1431,7 @@
       const tableId = currentTableId || GristAPI.getCurrentTableId();
       const doc = await currentRecordDocument(tableId, record);
       if (doc.split) { await onExportBatch(spec.batch, doc.split); return; }
+      await ExportEngines.ensure(spec.engines);
       await spec.run(doc, tableId, record);
       setExportDoneStatus(I18n.t(spec.generated));
     } catch (e) {
@@ -1541,9 +1545,11 @@
   //   dont « Modèle selon la ligne » désigne un modèle d'un autre genre n'est pas générée (comptée en échec).
   // - `pageOptions` : la page d'une feuille Excel, lue sur les réglages de page posés (ceux de l'écran, ou ceux du modèle d'une ligne, cf.
   //   templateSource).
+  // - `engines` : les moteurs de js/export-engines.js que l'export appelle. Ils ne se chargent qu'au premier export, et avant tout le reste : le plan du
+  //   lot lit déjà la page de l'Excel, et la fenêtre des planches la géométrie des feuilles.
   const PDF_BATCH = {
     label: 'PDF', loading: 'status.loadingPdfLibs', loadError: 'status.pdfLibsLoadError', progress: 'status.batchExportProgress', noFile: 'status.exportError',
-    margins: () => PageLayout.getMarginsPt(),
+    engines: ['pdf'], margins: () => PageLayout.getMarginsPt(),
     renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins) => PdfExport.getNativePdfBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, margins),
   };
   const BATCH_EXPORTS = {
@@ -1555,7 +1561,7 @@
     pdfMerged: Object.assign({}, PDF_BATCH, {
       confirm: 'confirm.mergedExport', done: 'status.mergedExportDone', doneWithFailures: 'status.mergedExportDoneWithFailures',
       splitDone: 'status.splitMergedDone', splitDoneWithFailures: 'status.splitMergedDoneWithFailures',
-      merged: true, fileSuffix: '-export.pdf',
+      merged: true, fileSuffix: '-export.pdf', engines: ['pdf', 'merge'],
       loadLibs: async () => { await PdfExport.ensurePdfLibsLoaded(); await PdfMerge.ensureLibLoaded(); },
     }),
     // Assemblage avant impression (js/sheet-assembly-dialog.js, js/sheet-layout.js) : les mêmes PDF par ligne que le PDF unique, posés sur des
@@ -1564,20 +1570,20 @@
     pdfSheets: Object.assign({}, PDF_BATCH, {
       done: 'status.sheetsExportDone', doneWithFailures: 'status.sheetsExportDoneWithFailures',
       splitDone: 'status.splitSheetsDone', splitDoneWithFailures: 'status.splitSheetsDoneWithFailures',
-      merged: true, sheets: true, fileSuffix: '-assemblage.pdf',
+      merged: true, sheets: true, fileSuffix: '-assemblage.pdf', engines: ['pdf', 'merge', 'sheets'],
       loadLibs: async () => { await PdfExport.ensurePdfLibsLoaded(); await PdfMerge.ensureLibLoaded(); },
     }),
     docxZip: {
       label: 'DOCX', confirm: 'confirm.batchExportDocx', loading: 'status.loadingExportLibs', loadError: 'status.exportLibsLoadError', progress: 'status.batchExportProgressDocx',
       noFile: 'status.exportErrorDocx', done: 'status.batchExportDoneDocx', doneWithFailures: 'status.batchExportDoneWithFailuresDocx',
-      entryExt: '.docx', fileSuffix: '-export-docx.zip', margins: () => PageLayout.getMarginsTwip(), grid: false,
+      entryExt: '.docx', fileSuffix: '-export-docx.zip', margins: () => PageLayout.getMarginsTwip(), grid: false, engines: ['docx'],
       loadLibs: () => ExportCommon.ensureJsZipLoaded(),
       renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins) => DocxExport.getDocxBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, margins),
     },
     xlsxZip: {
       label: 'Excel', confirm: 'confirm.batchExportXlsx', loading: 'status.loadingExportLibs', loadError: 'status.exportLibsLoadError', progress: 'status.batchExportProgressXlsx',
       noFile: 'status.exportErrorXlsx', done: 'status.batchExportDoneXlsx', doneWithFailures: 'status.batchExportDoneWithFailuresXlsx',
-      entryExt: '.xlsx', fileSuffix: '-export-xlsx.zip', grid: true, pageOptions: () => XlsxExport.pageOptionsFromLayout(),
+      entryExt: '.xlsx', fileSuffix: '-export-xlsx.zip', grid: true, engines: ['xlsx'], pageOptions: () => XlsxExport.pageOptionsFromLayout(),
       loadLibs: async () => { await ExportCommon.ensureJsZipLoaded(); await XlsxExport.ensureExcelLibLoaded(); },
       renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins, pageOptions) => XlsxExport.getXlsxBlobForRecord(html, tableId, row, filenameTemplate, pageOptions || undefined),
     },
@@ -1585,7 +1591,7 @@
       label: 'Excel', confirm: 'confirm.singleWorkbookExport', loading: 'status.loadingExportLibs', loadError: 'status.exportLibsLoadError', progress: 'status.batchExportProgressXlsx',
       noFile: 'status.exportErrorXlsx', done: 'status.singleWorkbookDone', doneWithFailures: 'status.singleWorkbookDoneWithFailures',
       splitDone: 'status.splitSingleWorkbookDone', splitDoneWithFailures: 'status.splitSingleWorkbookDoneWithFailures',
-      single: true, fileSuffix: '-export.xlsx', grid: true, pageOptions: () => XlsxExport.pageOptionsFromLayout(),
+      single: true, fileSuffix: '-export.xlsx', grid: true, engines: ['xlsx'], pageOptions: () => XlsxExport.pageOptionsFromLayout(),
       loadLibs: () => XlsxExport.ensureExcelLibLoaded(),
     },
   };
@@ -1758,6 +1764,13 @@
     Editor.exitHeaderFooterModeIfActive();
     const tableId = currentTableId || GristAPI.getCurrentTableId();
     if (!tableId) { setStatus(I18n.t('status.currentTableNotFound'), true); return; }
+    try {
+      await ExportEngines.ensure(cfg.engines);
+    } catch (e) {
+      console.error('[main] export ' + cfg.label + ' en lot : échec de chargement du moteur', e);
+      setStatus(I18n.t(cfg.loadError), true);
+      return;
+    }
     const rows = await readBatchRows(cfg, tableId, only);
     if (!rows) return;
 

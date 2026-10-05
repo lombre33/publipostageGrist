@@ -161,7 +161,8 @@ async function hitTest(selector) {
 }
 
 // 2) Vrais clics sur des commandes grisées : Mode édition et Exporter en PDF ne font rien.
-await page.evaluate(() => {
+await page.evaluate(async () => {
+  await ExportEngines.ensure('pdf'); // le moteur ne se charge qu'au premier export (js/export-engines.js) : il doit exister pour être remplacé
   window.__exportCalls = 0;
   PdfExport.exportCurrentRecord = async () => { window.__exportCalls++; };
 });
