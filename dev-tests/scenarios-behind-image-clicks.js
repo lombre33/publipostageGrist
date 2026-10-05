@@ -298,6 +298,59 @@
     },
   });
 
+  // Ce que « sur un caractère » veut dire à l'entier près (createBehindImageClickThroughExtension : `onTextLine`) : la ligne compte en entier en hauteur, la plus haute de l'interligne du
+  // paragraphe et des lettres, et un pixel de plus que les lettres de chaque côté. Chaque point d'essai se calcule sur le texte mesuré : le dernier point dedans, puis celui d'après, dehors.
+  cases.push({
+    id: 'behind_clicks_a_text_line_reaches_one_pixel_beyond_its_letters_and_covers_the_whole_line_height',
+    description: 'Le cadre d\'une image derrière le texte laisse passer le clic jusqu\'à un pixel au-delà des lettres de la ligne, de chaque côté, et sur toute la hauteur de la ligne (l\'interligne du paragraphe, ou les lettres quand elles sont plus hautes : un mot en gros caractères) ; un pixel plus loin, le clic reste à l\'image',
+    run: async (h) => {
+      const problems = [];
+      // La ligne B est centrée (de la place libre de chaque côté des lettres, dans son paragraphe) et porte un mot en gros caractères, plus haut que l'interligne du paragraphe.
+      const html = image => '<p>Titre' + image + '</p><p>Ligne A</p><p style="text-align: center">Ligne <span style="font-size: 36px">B</span></p><p>Ligne C</p><p>Ligne D</p>';
+      await setDoc(h, html(''));
+      const tip = document.querySelector('.tiptap').getBoundingClientRect();
+      const first = textBox(2);
+      Editor.setHTML(html(floating(KINDS[0], 'behind', Math.round(first.left - tip.left - 30), Math.round(first.top - tip.top - 40))));
+      await sleep(300);
+      const container = document.getElementById('editor-container');
+      if (container) container.scrollTop = 0;
+      await sleep(80);
+      const paragraph = document.querySelectorAll('.tiptap > p')[2];
+      const big = paragraph.querySelector('span');
+      if (!wrapEl() || !big) return { pass: false, notes: JSON.stringify(['le décor manque : image ' + !!wrapEl() + ', gros caractères ' + !!big]) };
+      const rectOf = node => { const range = document.createRange(); range.selectNodeContents(node); return range.getClientRects()[0]; };
+      const small = rectOf(paragraph.firstChild), large = rectOf(big.firstChild);
+      const lineHeight = parseFloat(getComputedStyle(paragraph).lineHeight);
+      const middle = rect => (rect.top + rect.bottom) / 2;
+      const half = rect => Math.max(lineHeight, rect.height) / 2;
+      const smallX = Math.round((small.left + small.right) / 2), largeX = Math.round((large.left + large.right) / 2);
+      const probes = [
+        ['un pixel avant les lettres', Math.ceil(small.left) - 1, Math.round(middle(small)), true],
+        ['deux pixels avant les lettres', Math.ceil(small.left) - 2, Math.round(middle(small)), false],
+        ['un pixel après les lettres', Math.floor(large.right) + 1, Math.round(middle(large)), true],
+        ['deux pixels après les lettres', Math.floor(large.right) + 2, Math.round(middle(large)), false],
+        ['haut de la ligne des petites lettres', smallX, Math.ceil(middle(small) - half(small)), true],
+        ['juste au-dessus de la ligne des petites lettres', smallX, Math.ceil(middle(small) - half(small)) - 1, false],
+        ['bas de la ligne des petites lettres', smallX, Math.floor(middle(small) + half(small)), true],
+        ['juste au-dessous de la ligne des petites lettres', smallX, Math.floor(middle(small) + half(small)) + 1, false],
+        ['haut des gros caractères', largeX, Math.ceil(middle(large) - half(large)), true],
+        ['juste au-dessus des gros caractères', largeX, Math.ceil(middle(large) - half(large)) - 1, false],
+        ['bas des gros caractères', largeX, Math.floor(middle(large) + half(large)), true],
+        ['juste au-dessous des gros caractères', largeX, Math.floor(middle(large) + half(large)) + 1, false],
+      ];
+      if (!(large.height > lineHeight) || !(small.height < lineHeight)) problems.push('le décor ne donne pas ce qu\'il faut : lettres ' + Math.round(small.height) + ' px et ' + Math.round(large.height) + ' px, interligne ' + lineHeight + ' px');
+      const frame = wrapEl().getBoundingClientRect();
+      const outside = probes.filter(probe => !(probe[1] >= frame.left && probe[1] <= frame.right && probe[2] >= frame.top && probe[2] <= frame.bottom)).map(probe => probe[0]);
+      if (outside.length) problems.push('le décor ne recouvre pas ces points : ' + outside.join(', '));
+      probes.forEach(([name, x, y, expected]) => {
+        hover(frame.right + 40, frame.top + 5);
+        hover(x, y);
+        if (passes() !== expected) problems.push(name + ' (' + x + ', ' + y + ') : le cadre ' + (passes() ? 'laisse passer' : 'garde') + ' le clic (' + (expected ? 'passage' : 'image') + ' attendu)');
+      });
+      return { pass: problems.length === 0, notes: JSON.stringify(problems) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.behindClicks = cases;
 })();

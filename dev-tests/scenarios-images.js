@@ -961,6 +961,344 @@
     },
   });
 
+  // ---------------------------------------------------------------------------------------------------------------------------------------------
+  // La vue de l'image (js/editor-nodes.js, NodeView de editorImage) : le DOM qu'elle construit, ce que chaque attribut en fait (applyImageAttrs), les
+  // poignées qu'on tire et qu'on glisse. Écrits sur l'ancien code, une seule fonction de 180 lignes, avant son découpage : ils fixent ce que la vue
+  // fait, ni plus ni moins. Les événements sont envoyés à la main (même schéma que h.dragFromTo), à la taille du harnais : la feuille n'y est pas
+  // réduite, un pixel de souris vaut un pixel de mise en page (la réduction à ~0,85 est celle des scripts `imageZoomMouse`, à la vraie souris).
+  const mouse = (type, x, y) => new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y });
+  // Deux objets plats égaux, quel que soit l'ordre de leurs clés.
+  const same = (a, b) => { const keys = Object.keys(Object.assign({}, a, b)).sort(); return JSON.stringify(a, keys) === JSON.stringify(b, keys); };
+  const imageHtml = (attrs, style) => '<p>Texte <img class="editor-image" src="' + DATA_PNG + '" alt="Logo"' + (style == null ? '' : ' style="' + style + '"') + (attrs || '') + '></p>';
+
+  async function imageSetup(h, html) {
+    await h.resetEditor();
+    Editor.setHTML(html);
+    await h.sleep(150);
+    return h.tiptap().querySelector('.editor-image-view');
+  }
+  function imageNodeAt() {
+    let found = null;
+    EditorCore.getEditor().state.doc.descendants((node, pos) => { if (!found && node.type.name === 'editorImage') found = { node, pos }; });
+    return found;
+  }
+  function setImageAttrs(patch) {
+    const ed = EditorCore.getEditor();
+    const image = imageNodeAt();
+    ed.view.dispatch(ed.state.tr.setNodeMarkup(image.pos, undefined, Object.assign({}, image.node.attrs, patch)));
+  }
+  // Ce que la vue montre d'une image : les classes (sans celle de la sélection), le style du cadre et de l'<img>, le libellé, la poignée de déplacement.
+  function viewSnapshot(wrap) {
+    const img = wrap.querySelector('img.editor-image');
+    return {
+      cls: Array.from(wrap.classList).filter(c => c !== 'editor-image-selected').sort().join(' '),
+      wrapStyle: wrap.getAttribute('style') || '',
+      src: img.getAttribute('src'), alt: img.getAttribute('alt'), imgStyle: img.getAttribute('style'),
+      label: wrap.querySelector('.editor-image-var-label').textContent,
+      handle: wrap.querySelector('.editor-image-move-handle').style.display,
+      align: wrap.getAttribute('data-align'), wrapAttr: wrap.getAttribute('data-wrap'),
+    };
+  }
+  const VIEW_DEFAULTS = { cls: 'editor-image-view', wrapStyle: '', src: DATA_PNG, alt: 'Logo', imgStyle: 'width: 120px', label: '', handle: 'none', align: null, wrapAttr: 'inline' };
+  const viewExpected = overrides => Object.assign({}, VIEW_DEFAULTS, overrides);
+  const FRONT_STYLE = 'width: 100px; position: absolute; left: 30px; top: 40px; z-index: 5';
+  const GRID = ' data-page-index="0" data-page-left-pt="10" data-page-top-pt="20"';
+  const VAR = ' data-var-table="Docs" data-var-column="Photo" data-var-key="Docs.Photo"';
+
+  cases.push({
+    id: 'image_view_builds_its_dom',
+    description: 'La vue de l\'image : le cadre, l\'<img>, le libellé, la poignée de déplacement puis les quatre poignées de coin',
+    run: async (h) => {
+      const wrap = await imageSetup(h, imageHtml(' data-layer="normal" data-wrap="inline"', 'width: 120px'));
+      const kids = Array.from(wrap.children);
+      const move = wrap.querySelector('.editor-image-move-handle');
+      const seen = {
+        frame: wrap.tagName + ' ' + wrap.className,
+        order: kids.map(k => k.tagName + '.' + Array.from(k.classList).join('.')).join(' '),
+        draggable: wrap.querySelector('img').draggable,
+        moveTitle: move.title === I18n.t('image.moveHandle') && move.title !== '',
+        selected: wrap.classList.contains('editor-image-selected'),
+      };
+      const expected = {
+        frame: 'SPAN editor-image-view',
+        order: 'IMG.editor-image SPAN.editor-image-var-label SPAN.editor-image-move-handle SPAN.editor-image-handle.editor-image-handle-nw SPAN.editor-image-handle.editor-image-handle-ne SPAN.editor-image-handle.editor-image-handle-sw SPAN.editor-image-handle.editor-image-handle-se',
+        draggable: false, moveTitle: true, selected: false,
+      };
+      await h.selectAtomNode(wrap.querySelector('img'));
+      seen.selectedAfterClick = wrap.classList.contains('editor-image-selected');
+      expected.selectedAfterClick = true;
+      document.body.dispatchEvent(mouse('mousedown', 3, 3));
+      EditorCore.getEditor().commands.setTextSelection(1);
+      await h.sleep(60);
+      seen.selectedAfterLeaving = wrap.classList.contains('editor-image-selected');
+      expected.selectedAfterLeaving = false;
+      return { pass: same(seen, expected), notes: JSON.stringify({ seen, expected }) };
+    },
+  });
+
+  cases.push({
+    id: 'image_view_attributes_grid',
+    description: 'Ce que la vue de l\'image fait de chaque attribut : style de l\'<img>, classes et style du cadre, libellé d\'une variable ou d\'un QR code, alignement, enveloppement',
+    run: async (h) => {
+      const table = [
+        ['plain', imageHtml(' data-layer="normal" data-wrap="inline"', 'width: 120px'), {}],
+        ['opacity', imageHtml('', 'width: 120px; opacity: 0.4'), { imgStyle: 'width: 120px; opacity: 0.4' }],
+        ['opacityOne', imageHtml('', 'width: 120px; opacity: 1'), {}],
+        ['defaultWidth', imageHtml('', 'opacity: 0.5'), { imgStyle: 'width: 320px; opacity: 0.5' }],
+        ['front', imageHtml(' data-layer="front"', FRONT_STYLE), { cls: 'editor-image-layered editor-image-view', wrapStyle: 'position: absolute; left: 30px; top: 40px; width: 100px;', imgStyle: 'width: 100px; position: relative; z-index: 5', handle: '' }],
+        ['behind', imageHtml(' data-layer="behind"', 'width: 100px; position: absolute; left: 30px; top: 40px; z-index: -1; opacity: 0.5'), { cls: 'editor-image-layered editor-image-view', wrapStyle: 'position: absolute; left: 30px; top: 40px; width: 100px;', imgStyle: 'width: 100px; opacity: 0.5; position: relative; z-index: -1', handle: '' }],
+        ['layeredWithoutPosition', imageHtml(' data-layer="front"', 'width: 100px'), { cls: 'editor-image-layered editor-image-view', wrapStyle: 'position: absolute; left: 0px; top: 0px; width: 100px;', imgStyle: 'width: 100px; position: relative; z-index: 5', handle: '' }],
+        ['behindRepeated', imageHtml(' data-layer="behind" data-repeat="true"' + GRID, 'width: 100px; position: absolute; left: 30px; top: 40px; z-index: -1'), { cls: 'editor-image-layered editor-image-repeated editor-image-view', wrapStyle: 'position: absolute; left: 30px; top: 40px; width: 100px;', imgStyle: 'width: 100px; position: relative; z-index: -1', handle: '' }],
+        ['frontNotRepeated', imageHtml(' data-layer="front" data-repeat="true"' + GRID, FRONT_STYLE), { cls: 'editor-image-layered editor-image-view', wrapStyle: 'position: absolute; left: 30px; top: 40px; width: 100px;', imgStyle: 'width: 100px; position: relative; z-index: 5', handle: '' }],
+        ['variable', imageHtml(VAR, 'width: 200px; height: 80px'), { cls: 'editor-image-var-placeholder editor-image-view', src: '', imgStyle: 'width: 200px; height: 80px', label: '#Docs.Photo' }],
+        ['variableWithoutHeight', imageHtml(VAR, 'width: 200px'), { cls: 'editor-image-var-placeholder editor-image-view', src: '', imgStyle: 'width: 200px', label: '#Docs.Photo' }],
+        ['variableWithoutKey', imageHtml(' data-var-table="Docs" data-var-column="Photo"', 'width: 200px; height: 80px'), { cls: 'editor-image-var-placeholder editor-image-view', src: '', imgStyle: 'width: 200px; height: 80px', label: '#' }],
+        ['heightIgnoredOutsideVariable', imageHtml('', 'width: 120px; height: 50px'), {}],
+        ['qrBox', '<p>Texte <img class="editor-image" alt="QR" data-qr-text="#Table.Colonne" style="width: 120px"></p>', { cls: 'editor-image-qr-placeholder editor-image-var-placeholder editor-image-view', src: '', alt: 'QR', imgStyle: 'width: 120px; aspect-ratio: 1 / 1', label: '#Table.Colonne' }],
+        ['qrDrawn', imageHtml(' data-qr-text="https://exemple.test"', 'width: 120px'), { alt: 'Logo' }],
+        ['qrInVariable', '<p>Texte <img class="editor-image" alt="V" data-qr-text="#T.C"' + VAR + ' style="width: 200px; height: 80px"></p>', { cls: 'editor-image-var-placeholder editor-image-view', src: '', alt: 'V', imgStyle: 'width: 200px; height: 80px', label: '#Docs.Photo' }],
+        ['alignAndBlock', imageHtml(' data-align="center" data-wrap="block"', 'width: 120px'), { align: 'center', wrapAttr: 'block' }],
+        ['emptyAlt', '<p>Texte <img class="editor-image" src="' + DATA_PNG + '" alt="" style="width: 120px"></p>', { alt: '' }],
+      ];
+      const seen = {};
+      const expected = {};
+      for (const [name, html, overrides] of table) {
+        const wrap = await imageSetup(h, html);
+        const snapshot = wrap ? viewSnapshot(wrap) : 'cadre absent';
+        const want = viewExpected(overrides);
+        seen[name] = same(snapshot, want) ? 'ok' : snapshot;
+        expected[name] = 'ok';
+      }
+      return { pass: same(seen, expected), notes: JSON.stringify(seen) };
+    },
+  });
+
+  cases.push({
+    id: 'image_view_attributes_update',
+    description: 'Une mise à jour des attributs réécrit la vue de l\'image en place : le calque se pose et se retire, la classe de clic au travers part avec « derrière », une variable devient image et inversement',
+    run: async (h) => {
+      const wrap = await imageSetup(h, imageHtml(' data-layer="front"', FRONT_STYLE));
+      const steps = [];
+      const record = (name, expectedOverrides) => {
+        const view = h.tiptap().querySelector('.editor-image-view');
+        steps.push([name, view === wrap && same(viewSnapshot(wrap), viewExpected(expectedOverrides)) ? 'ok' : (view === wrap ? viewSnapshot(wrap) : 'vue recréée')]);
+      };
+      const FRONT = { cls: 'editor-image-layered editor-image-view', wrapStyle: 'position: absolute; left: 30px; top: 40px; width: 100px;', imgStyle: 'width: 100px; position: relative; z-index: 5', handle: '' };
+      record('initial', FRONT);
+      setImageAttrs({ layer: 'normal' }); await h.sleep(60);
+      record('toNormal', { imgStyle: 'width: 100px' });
+      setImageAttrs({ layer: 'behind', left: 12, top: 34 }); await h.sleep(60);
+      record('toBehind', { cls: 'editor-image-layered editor-image-view', wrapStyle: 'position: absolute; left: 12px; top: 34px; width: 100px;', imgStyle: 'width: 100px; position: relative; z-index: -1', handle: '' });
+      wrap.classList.add('editor-image-click-through');
+      setImageAttrs({ opacity: 0.25 }); await h.sleep(60);
+      record('behindStaysClickThrough', { cls: 'editor-image-click-through editor-image-layered editor-image-view', wrapStyle: 'position: absolute; left: 12px; top: 34px; width: 100px;', imgStyle: 'width: 100px; opacity: 0.25; position: relative; z-index: -1', handle: '' });
+      setImageAttrs({ layer: 'front', opacity: null }); await h.sleep(60);
+      record('toFrontDropsClickThrough', { cls: 'editor-image-layered editor-image-view', wrapStyle: 'position: absolute; left: 12px; top: 34px; width: 100px;', imgStyle: 'width: 100px; position: relative; z-index: 5', handle: '' });
+      setImageAttrs({ layer: 'normal', varTable: 'Docs', varColumn: 'Photo', varKey: 'Docs.Photo', height: '80px' }); await h.sleep(60);
+      record('toVariable', { cls: 'editor-image-var-placeholder editor-image-view', src: '', imgStyle: 'width: 100px; height: 80px', label: '#Docs.Photo' });
+      setImageAttrs({ varTable: null, varColumn: null, varKey: null }); await h.sleep(60);
+      record('backToImage', { imgStyle: 'width: 100px' });
+      setImageAttrs({ align: 'right', wrap: 'block' }); await h.sleep(60);
+      record('alignRight', { imgStyle: 'width: 100px', align: 'right', wrapAttr: 'block' });
+      setImageAttrs({ align: null, wrap: null }); await h.sleep(60);
+      record('alignCleared', { imgStyle: 'width: 100px' });
+      setImageAttrs({ alt: null, width: null }); await h.sleep(60);
+      record('altAndWidthCleared', { alt: '', imgStyle: '' });
+      const seen = {}; const expected = {};
+      steps.forEach(([name, result]) => { seen[name] = result; expected[name] = 'ok'; });
+      return { pass: same(seen, expected), notes: JSON.stringify(seen) };
+    },
+  });
+
+  // Appuie sur `target` (mousedown en son centre) sans relâcher. Rend l'abscisse et l'ordonnée de l'appui, si le mousedown a été annulé (preventDefault)
+  // et s'il est remonté jusqu'au <body>.
+  function pressOn(target) {
+    const rect = target.getBoundingClientRect();
+    const x = Math.round(rect.left + rect.width / 2);
+    const y = Math.round(rect.top + rect.height / 2);
+    const reached = [];
+    const spy = event => reached.push(event.type);
+    document.body.addEventListener('mousedown', spy);
+    const notPrevented = target.dispatchEvent(mouse('mousedown', x, y));
+    document.body.removeEventListener('mousedown', spy);
+    return { x, y, prevented: !notPrevented, reachedBody: reached.length > 0 };
+  }
+  const dragBy = (press, dx, dy) => document.dispatchEvent(mouse('mousemove', press.x + dx, press.y + dy));
+  const releaseBy = (press, dx, dy) => document.dispatchEvent(mouse('mouseup', press.x + dx, press.y + dy));
+
+  // Les ajouts et retraits d'écouteurs de souris sur `document` pendant `action`, avec la fonction (cf. scenarios-twocolumns.js).
+  async function documentListeners(action) {
+    const log = [];
+    const add = document.addEventListener;
+    const remove = document.removeEventListener;
+    const watched = type => type === 'mousemove' || type === 'mouseup';
+    document.addEventListener = function (type, fn) { if (watched(type)) log.push({ op: 'add', type, fn }); return add.apply(this, arguments); };
+    document.removeEventListener = function (type, fn) { if (watched(type)) log.push({ op: 'remove', type, fn }); return remove.apply(this, arguments); };
+    try { await action(log); } finally { document.addEventListener = add; document.removeEventListener = remove; }
+    return log;
+  }
+  // Ce qui reste posé à la fin du journal : un retrait ne défait que l'ajout qui le précède (même fonction).
+  const leaked = (log, type) => {
+    const live = [];
+    log.forEach(e => {
+      if (e.type !== type) return;
+      const at = live.findIndex(l => l.fn === e.fn && l.capture === e.capture);
+      if (e.op === 'add') { if (at === -1) live.push(e); } else if (at !== -1) live.splice(at, 1);
+    });
+    return live.length;
+  };
+  const widthOf = () => { const n = imageNodeAt(); return n.node.attrs.width + ' ' + n.node.attrs.height; };
+
+  cases.push({
+    id: 'image_view_resize_gestures',
+    description: 'Les poignées de coin : le signe de chaque coin, le plancher de 30 px, la hauteur d\'un placeholder de variable, la largeur du cadre d\'un calque, le glisser qui se détache',
+    run: async (h) => {
+      const seen = {};
+      const gesture = async (name, html, corner, dx, dy) => {
+        const wrap = await imageSetup(h, html);
+        const img = wrap.querySelector('img.editor-image');
+        const press = pressOn(wrap.querySelector('.editor-image-handle-' + corner));
+        dragBy(press, dx, dy);
+        const live = img.style.width + '|' + img.style.height + '|' + wrap.style.width;
+        releaseBy(press, dx, dy);
+        await h.sleep(80);
+        const after = viewSnapshot(h.tiptap().querySelector('.editor-image-view'));
+        seen[name] = [press.prevented, press.reachedBody, live, widthOf(), after.wrapStyle ? 'cadre ' + after.wrapStyle : 'cadre libre', after.imgStyle].join(' ; ');
+      };
+      const PLAIN = imageHtml('', 'width: 150px');
+      const BOX = imageHtml(VAR, 'width: 200px; height: 80px');
+      const LAYER = imageHtml(' data-layer="front"', FRONT_STYLE);
+      await gesture('se', PLAIN, 'se', 40, 0);
+      await gesture('sw', PLAIN, 'sw', -40, 0);
+      await gesture('nw', PLAIN, 'nw', -40, 0);
+      await gesture('ne', PLAIN, 'ne', 40, 0);
+      await gesture('seFloor', PLAIN, 'se', -1000, 0);
+      await gesture('swFloor', PLAIN, 'sw', 1000, 0);
+      await gesture('heightIgnored', PLAIN, 'se', 40, 500);
+      await gesture('noMove', PLAIN, 'se', 0, 0);
+      await gesture('boxSe', BOX, 'se', 30, 20);
+      await gesture('boxNw', BOX, 'nw', -30, -20);
+      await gesture('boxNe', BOX, 'ne', 30, -20);
+      await gesture('boxSw', BOX, 'sw', -30, 20);
+      await gesture('boxFloor', BOX, 'se', -1000, -1000);
+      await gesture('layered', LAYER, 'se', 25, 10);
+      // Les attributs lus au début du geste sont ceux du document à ce moment-là, pas ceux du premier rendu de la vue.
+      const late = await imageSetup(h, PLAIN);
+      setImageAttrs({ layer: 'front', left: 30, top: 40 });
+      await h.sleep(80);
+      const latePress = pressOn(late.querySelector('.editor-image-handle-se'));
+      dragBy(latePress, 25, 0);
+      seen.layeredAfterUpdate = late.style.width + ' ' + late.querySelector('img').style.width;
+      releaseBy(latePress, 25, 0);
+      await h.sleep(80);
+      // Détaché : un mousemove après le relâchement ne bouge plus rien ; détruite en plein glisser, la vue n'a plus d'écouteur de mouvement.
+      const wrap = await imageSetup(h, PLAIN);
+      const img = wrap.querySelector('img.editor-image');
+      await documentListeners(async (log) => {
+        let press = pressOn(wrap.querySelector('.editor-image-handle-se'));
+        dragBy(press, 10, 0);
+        releaseBy(press, 10, 0);
+        await h.sleep(80);
+        seen.leakedAfterRelease = leaked(log.slice(), 'mousemove');
+        const widthAfter = img.style.width;
+        dragBy(press, 90, 0);
+        seen.detached = widthAfter + ' ' + img.style.width;
+        const again = h.tiptap().querySelector('.editor-image-view');
+        press = pressOn(again.querySelector('.editor-image-handle-se'));
+        dragBy(press, 10, 0);
+        Editor.setHTML('<p>Apres</p>');
+        await h.sleep(150);
+        seen.leakedAtDestroy = leaked(log.slice(), 'mousemove');
+      });
+      const expected = {
+        se: 'true ; false ; 190px|| ; 190px null ; cadre libre ; width: 190px', sw: 'true ; false ; 190px|| ; 190px null ; cadre libre ; width: 190px',
+        nw: 'true ; false ; 190px|| ; 190px null ; cadre libre ; width: 190px', ne: 'true ; false ; 190px|| ; 190px null ; cadre libre ; width: 190px',
+        seFloor: 'true ; false ; 30px|| ; 30px null ; cadre libre ; width: 30px', swFloor: 'true ; false ; 30px|| ; 30px null ; cadre libre ; width: 30px',
+        heightIgnored: 'true ; false ; 190px|| ; 190px null ; cadre libre ; width: 190px', noMove: 'true ; false ; 150px|| ; 150px null ; cadre libre ; width: 150px',
+        boxSe: 'true ; false ; 230px|100px| ; 230px 100px ; cadre libre ; width: 230px; height: 100px', boxNw: 'true ; false ; 230px|100px| ; 230px 100px ; cadre libre ; width: 230px; height: 100px',
+        boxNe: 'true ; false ; 230px|100px| ; 230px 100px ; cadre libre ; width: 230px; height: 100px', boxSw: 'true ; false ; 230px|100px| ; 230px 100px ; cadre libre ; width: 230px; height: 100px',
+        boxFloor: 'true ; false ; 30px|30px| ; 30px 30px ; cadre libre ; width: 30px; height: 30px',
+        layered: 'true ; false ; 125px||125px ; 125px null ; cadre position: absolute; left: 30px; top: 40px; width: 125px; ; width: 125px; position: relative; z-index: 5',
+        layeredAfterUpdate: '175px 175px', leakedAfterRelease: 0, detached: '160px 160px', leakedAtDestroy: 0,
+      };
+      return { pass: same(seen, expected), notes: JSON.stringify(seen) };
+    },
+  });
+
+  cases.push({
+    id: 'image_view_move_gestures',
+    description: 'Glisser une image en calque : par sa poignée, ou directement quand elle est sélectionnée ; sans mouvement rien ne s\'écrit ; une image en ligne ne se glisse pas',
+    run: async (h) => {
+      const seen = {};
+      const wrap = await imageSetup(h, imageHtml(' data-layer="front"', FRONT_STYLE));
+      const img = wrap.querySelector('img.editor-image');
+      const pos = () => wrap.style.left + ' ' + wrap.style.top;
+      const attrsNow = () => { const a = imageNodeAt().node.attrs; return a.left + ' ' + a.top; };
+      // Pas encore sélectionnée : l'appui sur l'image n'est pas un glisser.
+      let press = pressOn(img);
+      dragBy(press, 20, 15);
+      seen.unselectedLive = pos();
+      releaseBy(press, 20, 15);
+      await h.sleep(60);
+      seen.unselectedAttrs = attrsNow() + ' ' + press.prevented + ' ' + press.reachedBody;
+      // Sélectionnée : l'appui sur l'image se glisse. Le cadre suit la souris en direct, les attributs s'écrivent au relâchement. (La sélection se pose par
+      // la commande, pas par un clic : un second clic au même endroit dans la demi-seconde serait pour ProseMirror un double clic.)
+      EditorCore.getEditor().commands.setNodeSelection(imageNodeAt().pos);
+      await h.sleep(80);
+      seen.selected = wrap.classList.contains('editor-image-selected');
+      press = pressOn(img);
+      dragBy(press, 20, 15);
+      seen.imageLive = pos() + ' ' + press.prevented + ' ' + press.reachedBody;
+      releaseBy(press, 20, 15);
+      await h.sleep(80);
+      seen.imageAfter = attrsNow() + ' ' + pos();
+      // Par la poignée de déplacement, sélectionnée ou non.
+      press = pressOn(wrap.querySelector('.editor-image-move-handle'));
+      dragBy(press, -10, -5);
+      seen.handleLive = pos() + ' ' + press.prevented + ' ' + press.reachedBody;
+      releaseBy(press, -10, -5);
+      await h.sleep(80);
+      seen.handleAfter = attrsNow() + ' ' + pos();
+      // Sans mouvement : rien ne s'écrit.
+      const docBefore = EditorCore.getEditor().state.doc;
+      await documentListeners(async (inner) => {
+        press = pressOn(wrap.querySelector('.editor-image-move-handle'));
+        releaseBy(press, 0, 0);
+        await h.sleep(80);
+        seen.leakedAfterRelease = leaked(inner.slice(), 'mousemove');
+      });
+      seen.noMove = (EditorCore.getEditor().state.doc === docBefore) + ' ' + attrsNow();
+      // Détaché : un mousemove après le relâchement ne bouge plus rien.
+      dragBy(press, 50, 50);
+      seen.detached = pos();
+      // Détruite en plein glisser : plus d'écouteur de mouvement.
+      await documentListeners(async (inner) => {
+        const again = pressOn(wrap.querySelector('.editor-image-move-handle'));
+        dragBy(again, 5, 5);
+        Editor.setHTML('<p>Apres</p>');
+        await h.sleep(150);
+        seen.leakedAtDestroy = leaked(inner.slice(), 'mousemove');
+        releaseBy(again, 5, 5);
+        await h.sleep(60);
+      });
+      // Une image en ligne : pas de poignée de déplacement visible, et l'appui sur l'image ne glisse rien.
+      const inline = await imageSetup(h, imageHtml(' data-layer="normal"', 'width: 120px'));
+      EditorCore.getEditor().commands.setNodeSelection(imageNodeAt().pos);
+      await h.sleep(80);
+      const inlinePress = pressOn(inline.querySelector('img'));
+      seen.inline = inline.querySelector('.editor-image-move-handle').style.display + ' ' + inlinePress.prevented + ' ' + inlinePress.reachedBody;
+      releaseBy(inlinePress, 0, 0);
+      const expected = {
+        unselectedLive: '30px 40px', unselectedAttrs: '30 40 false true',
+        selected: true, imageLive: '50px 55px true false', imageAfter: '50 55 50px 55px',
+        handleLive: '40px 50px true false', handleAfter: '40 50 40px 50px',
+        noMove: 'true 40 50', leakedAfterRelease: 0, detached: '40px 50px', leakedAtDestroy: 0,
+        inline: 'none false true',
+      };
+      return { pass: same(seen, expected), notes: JSON.stringify(seen) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.images = cases;
 })();
