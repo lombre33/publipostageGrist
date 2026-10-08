@@ -1241,6 +1241,64 @@ const affixCancel = await hitTest('#var-condition-modal .var-modal-actions butto
 if (affixCancel.found) await page.mouse.click(affixCancel.x, affixCancel.y);
 await page.waitForTimeout(200);
 
+// 3c) Deux colonnes Référence vers la même table (demande d'Antoine, 2026-10-08 : « Demandeur » et « Valideur » désignent deux personnes de l'annuaire dans la même ligne) :
+// « Autres attributs » d'une bulle Référence de la page suit la colonne cliquée - la personne de Valideur, pas celle du lien de VcAnnuaire (Demandeur) -, sans toucher à ce lien. Tout
+// à la vraie souris à 700x400 : la fenêtre tient dans le panneau, le fil d'Ariane (VcBinome › Valideur) est affiché, la case et Insérer se cliquent, la bulle posée porte le chemin.
+await page.evaluate(async () => {
+  document.querySelector('.tiptap').blur();
+  const stub = window.__gristStub;
+  stub.setVariables('VcBinome', { Titre: 'Text', Demandeur: 'Ref:VcAnnuaire', Valideur: 'Ref:VcAnnuaire', gristHelper_Display: 'Text', gristHelper_Display2: 'Text' },
+    null, { Demandeur: 'gristHelper_Display', Valideur: 'gristHelper_Display2' });
+  stub.setRows('VcBinome', [{ id: 1, Titre: 'Binôme 1', Demandeur: 7, Valideur: 8, gristHelper_Display: 'Dupont Jean', gristHelper_Display2: 'Martin Anne' }]);
+  await GristAPI.refreshSchema();
+  await GristAPI.deleteLinkRule('VcAnnuaire');
+  await GristAPI.saveLinkRule('VcAnnuaire', { mode: 'match', colonneCible: 'id', colonneSource: 'Demandeur' });
+  stub.fireRecord({ id: 1, Titre: 'Binôme 1', Demandeur: 'Dupont Jean', Valideur: 'Martin Anne' }, 'VcBinome');
+  const badge = col => `<span class="var-badge" data-table="VcBinome" data-column="${col}" data-key="VcBinome.${col}"></span>`;
+  Editor.setHTML(`<p>Demandeur ${badge('Demandeur')}.</p><p>Valideur : ${badge('Valideur')} fin.</p>`);
+  document.querySelector('.tiptap .var-badge[data-column="Valideur"]').scrollIntoView({ block: 'center' });
+});
+await page.waitForTimeout(400);
+const linkedValues = () => page.evaluate(() => Object.fromEntries(Array.from(document.querySelectorAll('#var-linked-modal .var-linked-row')).map(r => [r.dataset.col, r.querySelector('.var-linked-value').textContent])));
+await openLinkedFor('Valideur');
+const twoRefs = await linkedState();
+const twoRefsValues = await linkedValues();
+check('deux Références vers VcAnnuaire : Autres attributs sur #VcBinome.Valideur s’ouvre sur les colonnes de VcAnnuaire, fil d’Ariane VcBinome › Valideur, fenêtre dans le panneau',
+  twoRefs.open && twoRefs.title.includes('VcAnnuaire') && JSON.stringify(twoRefs.cols) === JSON.stringify(['NomPrenom', 'Telephone', 'Naissance', 'Service']) && !twoRefs.crumbsHidden
+  && JSON.stringify(twoRefs.crumbs) === JSON.stringify(['VcBinome', 'Valideur']) && twoRefs.inViewport && twoRefs.overflow <= 0, twoRefs);
+check('... avec les valeurs de la personne de Valideur (Martin Anne), pas celles du lien de VcAnnuaire (Demandeur, Dupont Jean)',
+  twoRefsValues.NomPrenom === 'Martin Anne' && twoRefsValues.Telephone === '06 55 66 77 88', twoRefsValues);
+const binomePhone = await hitTest('#var-linked-modal .var-linked-row[data-col="Telephone"] .var-linked-pick');
+check('la ligne Telephone est visible et au premier plan', binomePhone.found && binomePhone.inViewport && binomePhone.onTop, binomePhone);
+if (binomePhone.found) await page.mouse.click(binomePhone.x, binomePhone.y);
+await page.waitForTimeout(100);
+const binomeInsert = await hitTest('#var-linked-modal .var-modal-primary');
+check('Insérer est visible, au premier plan et actif', binomeInsert.found && binomeInsert.inViewport && binomeInsert.onTop && (await linkedState()).insert.includes('1'), binomeInsert);
+if (binomeInsert.found) await page.mouse.click(binomeInsert.x, binomeInsert.y);
+await page.waitForTimeout(250);
+const binomeSeq = await page.evaluate(() => {
+  const out = [];
+  EditorCore.getEditor().state.doc.lastChild.forEach(n => out.push(n.type.name === 'varBadge' ? '#' + n.attrs.key : n.text));
+  return out;
+});
+check('Insérer (vrai clic) ajoute #VcBinome.Valideur.Telephone (un chemin) juste après la variable, pas #VcAnnuaire.Telephone',
+  JSON.stringify(binomeSeq) === JSON.stringify(['Valideur : ', '#VcBinome.Valideur', ' ', '#VcBinome.Valideur.Telephone', ' fin.']), binomeSeq);
+const binomeAfter = await page.evaluate(async () => {
+  const box = document.createElement('div');
+  box.innerHTML = await ReaderMode.preview(Editor.getHTML(), 'VcBinome', GristAPI.getCurrentRecord());
+  const rule = GristAPI.getLinkRule('VcAnnuaire');
+  return { text: box.textContent, rule: rule ? rule.colonneSource : null };
+});
+check('la bulle se lit avec la personne de Valideur (Martin Anne 06 55 66 77 88) et le lien de VcAnnuaire reste celui de Demandeur',
+  binomeAfter.text.includes('Valideur : Martin Anne 06 55 66 77 88 fin.') && binomeAfter.text.includes('Demandeur Dupont Jean.') && binomeAfter.rule === 'Demandeur', binomeAfter);
+await openLinkedFor('Demandeur');
+const demandeurState = await linkedState();
+const demandeurValues = await linkedValues();
+check('Autres attributs sur #VcBinome.Demandeur : la personne de Demandeur (Dupont Jean), fil d’Ariane VcBinome › Demandeur',
+  demandeurState.open && demandeurValues.NomPrenom === 'Dupont Jean' && JSON.stringify(demandeurState.crumbs) === JSON.stringify(['VcBinome', 'Demandeur']), { demandeurState, demandeurValues });
+await page.keyboard.press('Escape');
+await page.waitForTimeout(200);
+
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 
 await browser.close();

@@ -63,17 +63,58 @@
     await h.sleep(50);
   }
 
-  async function renderReader(html) {
+  // --- Plusieurs colonnes Référence de la page vers une même table (demande d'Antoine du 08/10) : sur une même ligne, Demandeur et Valideur désignent deux
+  // personnes différentes du même répertoire. Le lien d'une table avec la page est unique par document : « Autres attributs » d'une de ces colonnes lisait la
+  // personne de celle qui avait créé le lien. Il suit désormais la colonne cliquée et pose son chemin (#VpBinomes.Valideur.Email), sans lien pour le répertoire.
+  // VpBinomes : Demandeur et Valideur vers VpRepertoire, une liste (Equipe) vers le même répertoire, Lieu seule vers VpLieux. VpTaches : UNE Référence
+  // (Responsable) et une liste (Equipe) vers VpRepertoire, donc rien d'ambigu. `ruleSource` : colonne de la page qui lie VpRepertoire, ou rien. ---
+  async function seedPersons(h, pageTable, ruleSource) {
+    VariableLinkedAttrs.close({ keepFocus: true });
+    await h.resetEditor();
+    const stub = window.__gristStub;
+    stub.setVariables('VpRepertoire', { Nom: 'Text', Email: 'Text' });
+    stub.setRows('VpRepertoire', [
+      { id: 1, Nom: 'Dupont Jean', Email: 'jean.dupont@ex.fr' },
+      { id: 2, Nom: 'Martin Anne', Email: 'anne.martin@ex.fr' },
+      { id: 3, Nom: 'Durand Paul', Email: 'paul.durand@ex.fr' },
+    ]);
+    stub.setVariables('VpLieux', { Ville: 'Text' });
+    stub.setRows('VpLieux', [{ id: 1, Ville: 'Paris' }, { id: 2, Ville: 'Lyon' }]);
+    stub.setVariables('VpBinomes', {
+      Titre: 'Text', Demandeur: 'Ref:VpRepertoire', Valideur: 'Ref:VpRepertoire', Equipe: 'RefList:VpRepertoire', Lieu: 'Ref:VpLieux',
+      gristHelper_Display: 'Text', gristHelper_Display2: 'Text', gristHelper_Display3: 'Any', gristHelper_Display4: 'Text',
+    }, null, { Demandeur: 'gristHelper_Display', Valideur: 'gristHelper_Display2', Equipe: 'gristHelper_Display3', Lieu: 'gristHelper_Display4' });
+    stub.setRows('VpBinomes', [
+      { id: 1, Titre: 'Binôme 1', Demandeur: 1, Valideur: 2, Equipe: ['L', 1, 3], Lieu: 1,
+        gristHelper_Display: 'Dupont Jean', gristHelper_Display2: 'Martin Anne', gristHelper_Display3: ['L', 'Dupont Jean', 'Durand Paul'], gristHelper_Display4: 'Paris' },
+      // Valideur vide : la bulle d'une colonne vide n'écrit rien, sans message d'erreur.
+      { id: 2, Titre: 'Binôme 2', Demandeur: 3, Valideur: 0, Equipe: null, Lieu: 2,
+        gristHelper_Display: 'Durand Paul', gristHelper_Display2: '', gristHelper_Display3: null, gristHelper_Display4: 'Lyon' },
+    ]);
+    stub.setVariables('VpTaches', {
+      Libelle: 'Text', Responsable: 'Ref:VpRepertoire', Equipe: 'RefList:VpRepertoire', gristHelper_Display: 'Text', gristHelper_Display2: 'Any',
+    }, null, { Responsable: 'gristHelper_Display', Equipe: 'gristHelper_Display2' });
+    stub.setRows('VpTaches', [{ id: 1, Libelle: 'Tâche 1', Responsable: 2, Equipe: ['L', 1, 2], gristHelper_Display: 'Martin Anne', gristHelper_Display2: ['L', 'Dupont Jean', 'Martin Anne'] }]);
+    await GristAPI.refreshSchema();
+    for (const t of ['VpRepertoire', 'VpLieux']) await GristAPI.deleteLinkRule(t);
+    if (ruleSource) await GristAPI.saveLinkRule('VpRepertoire', { mode: 'match', colonneCible: 'id', colonneSource: ruleSource });
+    stub.fireRecord(pageTable === 'VpTaches' ? { id: 1, Libelle: 'Tâche 1', Responsable: 'Martin Anne' }
+      : { id: 1, Titre: 'Binôme 1', Demandeur: 'Dupont Jean', Valideur: 'Martin Anne', Lieu: 'Paris' }, pageTable);
+    await h.sleep(50);
+  }
+
+  // `tableId` : la table de la page, VpNotifications sauf pour les cas à plusieurs Références vers une même table (VpBinomes, VpTaches).
+  async function renderReader(html, tableId) {
     const reader = document.getElementById('reader-container');
     reader.style.display = 'block';
-    await ReaderMode.render(html, 'VpNotifications', GristAPI.getCurrentRecord(), NO_HF);
+    await ReaderMode.render(html, tableId || 'VpNotifications', GristAPI.getCurrentRecord(), NO_HF);
     return reader;
   }
-  async function readerText(html) { return (await renderReader(html)).querySelector('.reader-content').textContent; }
+  async function readerText(html, tableId) { return (await renderReader(html, tableId)).querySelector('.reader-content').textContent; }
   // Même modèle pour une ligne lue par fetchTable, comme l'export en lot.
-  async function previewText(html, row) {
+  async function previewText(html, row, tableId) {
     const box = document.createElement('div');
-    box.innerHTML = await ReaderMode.preview(html, 'VpNotifications', row);
+    box.innerHTML = await ReaderMode.preview(html, tableId || 'VpNotifications', row);
     return box.textContent;
   }
 
@@ -108,6 +149,7 @@
       buttons: Array.from(nav.querySelectorAll('button.var-linked-crumb')).map(c => c.textContent) };
   };
   const title = () => modal().querySelector('h3').textContent;
+  const subtitle = () => modal().querySelector('.var-modal-intro').textContent;
   const insertButton = () => modal().querySelector('.var-modal-primary');
   const tick = col => {
     const input = rowOf(col).querySelector('input');
@@ -367,6 +409,127 @@
         && JSON.stringify(seq) === JSON.stringify(['#VpNotifications.Projet.Accompagnateur', ' ', '#VpNotifications.Projet.Accompagnateur.Email', ' ', '#VpNotifications.Projet.Porteur.NomPrenom'])
         && text === 'Dupont Jean jean.dupont@ex.fr Martin Anne';
       return { pass, notes: JSON.stringify({ info, up, seq, text }) };
+    },
+  });
+
+  cases.push({
+    id: 'varpath_several_references_to_one_table_the_window_follows_the_clicked_column',
+    description: 'Demandeur et Valideur (deux colonnes de la page) désignent le même répertoire, déjà lié par Demandeur : « Autres attributs » sur #VpBinomes.Valideur montre la personne de CETTE colonne, sans remonter aux colonnes ordinaires de la page, et pose #VpBinomes.Valideur.Email ; sur Demandeur, la personne de Demandeur ; le lien du répertoire ne change pas et #VpRepertoire.Email le suit toujours',
+    run: async (h) => {
+      await seedPersons(h, 'VpBinomes', 'Demandeur');
+      const ruleBefore = GristAPI.getLinkRule('VpRepertoire');
+      const got = {};
+      for (const column of ['Valideur', 'Demandeur']) {
+        Editor.setHTML(`<p>${badgeHtml('VpBinomes', column)}</p>`);
+        const ed = await openWindow(h, 'VpBinomes', column);
+        const info = { title: title(), subtitle: subtitle(), crumbs: crumbs(), cols: columns(), nom: valueOf('Nom'), email: valueOf('Email') };
+        tick('Email');
+        insertButton().click();
+        await h.sleep(100);
+        got[column] = { info, seq: keysAfter(ed), text: await readerText(Editor.getHTML(), 'VpBinomes') };
+      }
+      const ruleAfter = GristAPI.getLinkRule('VpRepertoire');
+      const linkedBubble = await readerText(`<p>${badgeHtml('VpRepertoire', 'Email')}</p>`, 'VpBinomes');
+      const persons = { Valideur: ['Martin Anne', 'anne.martin@ex.fr'], Demandeur: ['Dupont Jean', 'jean.dupont@ex.fr'] };
+      const wrong = [];
+      Object.keys(persons).forEach(column => {
+        const { info, seq, text } = got[column];
+        const [nom, email] = persons[column];
+        if (info.title !== I18n.t('varLinked.title', { table: 'VpRepertoire' })) wrong.push(column + ' : titre « ' + info.title + ' »');
+        if (info.subtitle !== I18n.t('varLinked.subtitlePath', { table: 'VpRepertoire', path: Variables.triggerChar() + 'VpBinomes.' + column })) wrong.push(column + ' : sous-titre « ' + info.subtitle + ' »');
+        if (JSON.stringify(info.crumbs.texts) !== JSON.stringify(['VpBinomes', column]) || info.crumbs.buttons.length) wrong.push(column + ' : fil d’Ariane ' + JSON.stringify(info.crumbs));
+        if (JSON.stringify(info.cols) !== JSON.stringify(['Nom', 'Email'])) wrong.push(column + ' : colonnes ' + JSON.stringify(info.cols));
+        if (info.nom !== nom || info.email !== email) wrong.push(column + ' : valeurs ' + info.nom + ' / ' + info.email);
+        if (JSON.stringify(seq) !== JSON.stringify(['#VpBinomes.' + column, ' ', '#VpBinomes.' + column + '.Email'])) wrong.push(column + ' : bulles ' + JSON.stringify(seq));
+        if (text !== nom + ' ' + email) wrong.push(column + ' : lecture « ' + text + ' »');
+      });
+      if (!ruleBefore || !ruleAfter || ruleAfter.id !== ruleBefore.id || ruleAfter.colonneSource !== 'Demandeur') wrong.push('lien du répertoire changé : ' + JSON.stringify({ ruleBefore, ruleAfter }));
+      if (linkedBubble !== 'jean.dupont@ex.fr') wrong.push('bulle du lien du document : « ' + linkedBubble + ' »');
+      return { pass: wrong.length === 0, notes: JSON.stringify(wrong.length ? wrong : got) };
+    },
+  });
+
+  cases.push({
+    id: 'varpath_several_references_to_one_table_create_no_link_and_each_column_reads_its_person',
+    description: 'Sans aucun lien pour le répertoire, ouvrir « Autres attributs » sur #VpBinomes.Valideur n’en crée pas (avant, la colonne cliquée devenait le lien unique de la table) ; les bulles de chaque colonne se lisent, en Lecture et pour chaque ligne d’un export en lot, avec la personne de leur colonne (une colonne vide n’écrit rien)',
+    run: async (h) => {
+      await seedPersons(h, 'VpBinomes', null);
+      Editor.setHTML(`<p>${badgeHtml('VpBinomes', 'Valideur')}</p>`);
+      const ed = await openWindow(h, 'VpBinomes', 'Valideur');
+      const whileOpen = GristAPI.getLinkRule('VpRepertoire');
+      const email = valueOf('Email');
+      tick('Email');
+      insertButton().click();
+      await h.sleep(100);
+      const afterInsert = GristAPI.getLinkRule('VpRepertoire');
+      const seq = keysAfter(ed);
+      const html = `<p>${badgeHtml('VpBinomes', 'Demandeur.Email')} / ${badgeHtml('VpBinomes', 'Valideur.Email')}</p>`;
+      const reading = await readerText(html, 'VpBinomes');
+      const rows = await GristAPI.fetchTableRows('VpBinomes');
+      const batch = [await previewText(html, rows[0], 'VpBinomes'), await previewText(html, rows[1], 'VpBinomes')];
+      const pass = !whileOpen && !afterInsert && email === 'anne.martin@ex.fr' && JSON.stringify(seq) === JSON.stringify(['#VpBinomes.Valideur', ' ', '#VpBinomes.Valideur.Email'])
+        && reading === 'jean.dupont@ex.fr / anne.martin@ex.fr' && JSON.stringify(batch) === JSON.stringify(['jean.dupont@ex.fr / anne.martin@ex.fr', 'paul.durand@ex.fr / ']);
+      return { pass, notes: JSON.stringify({ whileOpen, afterInsert, email, seq, reading, batch }) };
+    },
+  });
+
+  cases.push({
+    id: 'varpath_one_reference_to_a_table_keeps_the_shared_link_in_a_page_that_has_two_others',
+    description: 'Lieu est la seule colonne de la page vers VpLieux (alors que Demandeur et Valideur visent le même répertoire) : « Autres attributs » lie la table par cette colonne, comme avant, et pose #VpLieux.Ville',
+    run: async (h) => {
+      await seedPersons(h, 'VpBinomes', null);
+      Editor.setHTML(`<p>${badgeHtml('VpBinomes', 'Lieu')}</p>`);
+      const ed = await openWindow(h, 'VpBinomes', 'Lieu');
+      const rule = GristAPI.getLinkRule('VpLieux');
+      const info = { title: title(), crumbsHidden: crumbs().hidden };
+      tick('Ville');
+      insertButton().click();
+      await h.sleep(100);
+      const seq = keysAfter(ed);
+      const text = await readerText(Editor.getHTML(), 'VpBinomes');
+      const pass = !!rule && rule.mode === 'match' && rule.colonneCible === 'id' && rule.colonneSource === 'Lieu'
+        && info.title === I18n.t('varLinked.title', { table: 'VpLieux' }) && info.crumbsHidden
+        && JSON.stringify(seq) === JSON.stringify(['#VpBinomes.Lieu', ' ', '#VpLieux.Ville']) && text === 'Paris Paris';
+      return { pass, notes: JSON.stringify({ rule, info, seq, text }) };
+    },
+  });
+
+  cases.push({
+    id: 'varpath_a_list_of_references_does_not_make_a_single_reference_ambiguous',
+    description: 'Responsable est la seule Référence simple de VpTaches vers VpRepertoire (Equipe est une liste de références, qu’un lien ne peut pas suivre) : « Autres attributs » lie le répertoire par Responsable, comme avant, et pose #VpRepertoire.Email',
+    run: async (h) => {
+      await seedPersons(h, 'VpTaches', null);
+      Editor.setHTML(`<p>${badgeHtml('VpTaches', 'Responsable')}</p>`);
+      const ed = await openWindow(h, 'VpTaches', 'Responsable');
+      const rule = GristAPI.getLinkRule('VpRepertoire');
+      tick('Email');
+      insertButton().click();
+      await h.sleep(100);
+      const seq = keysAfter(ed);
+      const text = await readerText(Editor.getHTML(), 'VpTaches');
+      const pass = !!rule && rule.mode === 'match' && rule.colonneCible === 'id' && rule.colonneSource === 'Responsable'
+        && JSON.stringify(seq) === JSON.stringify(['#VpTaches.Responsable', ' ', '#VpRepertoire.Email']) && text === 'Martin Anne anne.martin@ex.fr';
+      return { pass, notes: JSON.stringify({ rule, seq, text }) };
+    },
+  });
+
+  cases.push({
+    id: 'varpath_several_references_to_one_table_replace_puts_the_path_in_the_bubble',
+    description: '« Remplacer » sur #VpBinomes.Valideur met #VpBinomes.Valideur.Email à la place de la bulle (une seule bulle, qui lit l’email de la personne de sa colonne) et un seul Annuler rend la colonne',
+    run: async (h) => {
+      await seedPersons(h, 'VpBinomes', 'Demandeur');
+      Editor.setHTML(`<p>${badgeHtml('VpBinomes', 'Valideur')}</p>`);
+      const ed = await openWindow(h, 'VpBinomes', 'Valideur');
+      tick('Email');
+      modal().querySelector('button.var-linked-replace').click();
+      await h.sleep(150);
+      const replaced = keysAfter(ed);
+      const text = await readerText(Editor.getHTML(), 'VpBinomes');
+      ed.commands.undo();
+      await h.sleep(100);
+      const undone = keysAfter(ed);
+      const pass = JSON.stringify(replaced) === JSON.stringify(['#VpBinomes.Valideur.Email']) && text === 'anne.martin@ex.fr' && JSON.stringify(undone) === JSON.stringify(['#VpBinomes.Valideur']);
+      return { pass, notes: JSON.stringify({ replaced, text, undone }) };
     },
   });
 

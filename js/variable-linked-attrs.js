@@ -4,7 +4,8 @@
 // table et par document, Publipostage_LiensTables), donc désignent la même ligne, en lecture comme à l'export. Proposée pour :
 //  - une variable d'une autre table (liée à son insertion ; sinon la fenêtre de choix de la clé s'ouvre d'abord, comme à l'insertion) ;
 //  - une colonne Référence de la table de la page (ex. #Dossiers.Responsable) : la table référencée est liée par cette colonne si elle ne l'est pas
-//    encore.
+//    encore. Quand la page a plusieurs colonnes Référence vers cette même table (ex. Demandeur et Valideur vers l'Annuaire, deux personnes dans la
+//    même ligne), la fenêtre suit la colonne cliquée et pose des bulles en chemin (#Dossiers.Valideur.Email) : aucun lien n'est créé ni changé.
 // Grisée dans la barre flottante ailleurs (js/floating-toolbars.js:linkedAttrsAvailable, même règle que targetFor ci-dessous).
 //
 // Descente de référence en référence : une colonne Référence de la liste a une flèche qui ouvre les colonnes de la table qu'elle désigne, et sur une
@@ -30,10 +31,23 @@ const VariableLinkedAttrs = (function () {
   const isOpen = () => opening || !!state;
   const sameHops = (a, b) => a.length === b.length && a.every((hop, i) => hop === b[i]);
 
+  // Nombre de colonnes Référence simples de la page qui désignent `table`. Une liste de références n'en compte pas : un lien ne la suit pas
+  // (GristAPI.findReferenceColumns).
+  function pageReferencesTo(table) {
+    const page = GristAPI.getCurrentTableId();
+    return GristAPI.getColumns(page).filter(column => {
+      const ref = GristAPI.referenceOf(GristAPI.getColumnType(page, column));
+      return !!ref && !ref.list && ref.table === table;
+    }).length;
+  }
+
   // D'où la fenêtre part, ou null si elle n'a pas de sens ici : { base, hops, refColumn, minHops }.
   //  - variable d'une autre table que celle de la page : sa table, liée par sa règle ; sur une colonne Référence (éventuellement au bout d'un
   //    chemin), le niveau de la ligne qu'elle désigne - « l'élément le plus bas » -, d'où l'on peut remonter à celui de la table de la variable ;
-  //  - colonne Référence de la page (ex. #Dossiers.Responsable) : la table référencée, liée par cette colonne (`refColumn`) ;
+  //  - colonne Référence de la page (ex. #Dossiers.Responsable) : la table référencée, liée par cette colonne (`refColumn`). Sauf si la page a
+  //    plusieurs Références vers cette même table (ex. Demandeur et Valideur vers l'Annuaire, deux personnes dans la même ligne) : un lien, un seul
+  //    par table, n'en suivrait qu'une. La fenêtre part alors de la colonne cliquée, comme pour une bulle déjà en chemin (ci-dessous), sans créer de
+  //    lien : #Dossiers.Valideur.Email lit la personne de Valideur, #Dossiers.Demandeur.Email celle de Demandeur ;
   //  - bulle de la table de la page déjà en chemin (ex. #Projet.Accompagnateur.Email dans un widget sur Projet) : ses niveaux, sans remonter aux
   //    colonnes ordinaires de la page (`minHops` 1), qui ne sont pas des attributs d'une autre ligne.
   // Null pour une colonne ordinaire de la page, une liste de références (plusieurs lignes) ou une référence vers la page elle-même.
@@ -49,7 +63,9 @@ const VariableLinkedAttrs = (function () {
     if (!onPage || parts.length > 1) {
       found = { base: attrs.table, hops: endIsRef ? parts : parts.slice(0, -1), refColumn: null, minHops: onPage ? 1 : 0 };
     } else if (endIsRef && ref.table !== currentTableId) {
-      found = { base: ref.table, hops: [], refColumn: attrs.column, minHops: 0 };
+      found = pageReferencesTo(ref.table) > 1
+        ? { base: currentTableId, hops: [attrs.column], refColumn: null, minHops: 1 }
+        : { base: ref.table, hops: [], refColumn: attrs.column, minHops: 0 };
     }
     return found && GristAPI.tableAtEndOf(found.base, found.hops) ? found : null;
   }
