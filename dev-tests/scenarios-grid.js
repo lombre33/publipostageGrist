@@ -1160,7 +1160,7 @@
         usableInner: 3, usableInnerInsideOneMergedCell: 0,
         presetCounts: '17,10,7,3,3,2,2,17',
         normalized: `none,${RED},-,-,-`,
-        values: `none,${RED},-`,
+        values: `none,${RED},auto`, // « Par défaut » pose le trait de départ pour de bon (« auto »), pas le quadrillage (null)
       };
       const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
       return { pass: !bad.length, notes: bad.length ? bad.map(k => `${k}: ${JSON.stringify(got[k])} (attendu ${JSON.stringify(want[k])})`).join(' | ') : 'ok' };
@@ -1169,7 +1169,7 @@
 
   cases.push({
     id: 'grid_borders_each_setting_writes_both_cells_of_a_shared_edge_and_is_one_undo',
-    description: 'Menu « Bordures » : chaque réglage (toutes, extérieures, intérieures, un côté, aucune) pose la couleur du stylo sur les traits qu\'il vise ET sur la case voisine de chaque trait (sinon le trait partagé se contredit), en une seule transaction - un seul Annuler ; « Aucune » cache aussi les traits partagés avec les cases d\'à côté ; la couleur par défaut rend le trait de départ ; « Intérieures » n\'a rien à tracer pour une seule case',
+    description: 'Menu « Bordures » : chaque réglage (toutes, extérieures, intérieures, un côté, aucune) pose la couleur du stylo sur les traits qu\'il vise ET sur la case voisine de chaque trait (sinon le trait partagé se contredit), en une seule transaction - un seul Annuler ; « Aucune » cache aussi les traits partagés avec les cases d\'à côté ; la couleur par défaut pose le trait de départ pour de bon (« auto », que le quadrillage masqué laisse) ; « Intérieures » n\'a rien à tracer pour une seule case',
     run: async (h) => inGrid(h, async () => {
       const read = () => ({ corner: sidesOf(1, 1), centre: sidesOf(2, 2), lowerRight: sidesOf(3, 3), above: sidesOf(0, 1), leftOf: sidesOf(1, 0), below: sidesOf(4, 3), rightOf: sidesOf(3, 4), far: sidesOf(0, 0) });
       await selectCells(1, 1, 3, 3);
@@ -1186,9 +1186,9 @@
         start: { corner: dash, centre: dash, lowerRight: dash, above: dash, leftOf: dash, below: dash, rightOf: dash, far: dash },
         outer: { corner: `${RED},-,-,${RED}`, centre: dash, lowerRight: `-,${RED},${RED},-`, above: `-,-,${RED},-`, leftOf: `-,${RED},-,-`, below: `${RED},-,-,-`, rightOf: `-,-,-,${RED}`, far: dash },
         inner: { corner: `${RED},${GREEN},${GREEN},${RED}`, centre: `${GREEN},${GREEN},${GREEN},${GREEN}`, lowerRight: `${GREEN},${RED},${RED},${GREEN}`, above: `-,-,${RED},-`, leftOf: `-,${RED},-,-`, below: `${RED},-,-,-`, rightOf: `-,-,-,${RED}`, far: dash },
-        top: { corner: `-,${GREEN},${GREEN},${RED}`, centre: `${GREEN},${GREEN},${GREEN},${GREEN}`, lowerRight: `${GREEN},${RED},${RED},${GREEN}`, above: dash, leftOf: `-,${RED},-,-`, below: `${RED},-,-,-`, rightOf: `-,-,-,${RED}`, far: dash },
+        top: { corner: `auto,${GREEN},${GREEN},${RED}`, centre: `${GREEN},${GREEN},${GREEN},${GREEN}`, lowerRight: `${GREEN},${RED},${RED},${GREEN}`, above: '-,-,auto,-', leftOf: `-,${RED},-,-`, below: `${RED},-,-,-`, rightOf: `-,-,-,${RED}`, far: dash },
         none: { corner: 'none,none,none,none', centre: 'none,none,none,none', lowerRight: 'none,none,none,none', above: '-,-,none,-', leftOf: '-,none,-,-', below: 'none,-,-,-', rightOf: '-,-,-,none', far: dash },
-        all: { corner: dash, centre: dash, lowerRight: dash, above: dash, leftOf: dash, below: dash, rightOf: dash, far: dash },
+        all: { corner: 'auto,auto,auto,auto', centre: 'auto,auto,auto,auto', lowerRight: 'auto,auto,auto,auto', above: '-,-,auto,-', leftOf: '-,auto,-,-', below: 'auto,-,-,-', rightOf: '-,-,-,auto', far: dash },
       };
       want.undoNone = want.top;
       const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
@@ -1252,7 +1252,7 @@
 
   cases.push({
     id: 'grid_borders_a_row_or_column_added_at_an_end_keeps_the_frame_outside_and_the_inner_lines_inside',
-    description: 'Une grille sans cadre (bords extérieurs cachés, traits intérieurs de départ) : une colonne ou une ligne ajoutée au bout ou au début garde le cadre caché à l\'extérieur et un trait intérieur visible entre l\'ancienne case et la nouvelle (le trait qui était extérieur devient intérieur) ; au milieu, la nouvelle ligne ou colonne prolonge le trait coloré qu\'elle coupe',
+    description: 'Une grille sans cadre (bords extérieurs cachés, traits intérieurs posés en « Par défaut ») : une colonne ou une ligne ajoutée au bout ou au début garde le cadre caché à l\'extérieur et un trait intérieur visible entre l\'ancienne case et la nouvelle (le trait qui était extérieur devient intérieur) ; au milieu, la nouvelle ligne ou colonne prolonge le trait coloré qu\'elle coupe',
     run: async (h) => inGrid(h, async () => {
       await selectCells(0, 0, 14, 5);
       await apply('none');
@@ -1277,13 +1277,15 @@
       await placeCursor(3, 2);
       ed().chain().focus().addColumnAfter().run(); await sleep(250);
       got.middle = [sidesOf(3, 2), sidesOf(3, 3), sidesOf(3, 4)].join(' ');
-      const dash = '-,-,-,-';
+      // Les traits intérieurs sont ceux du stylo « Par défaut » : « auto » (le gris de départ, posé), le cadre caché « none ».
+      const inner = list => list.replace(/-/g, 'auto');
+      const dash = inner('-,-,-,-');
       const want = {
-        frame: `none,-,-,none -,none,-,- -,none,none,- ${dash}`,
-        columnAtEnd: `${dash} -,none,-,- none,none,-,- -,none,none,-`,
-        rowAtEnd: `-,-,-,none -,-,none,none -,-,none,- -,none,none,-`,
-        columnAtStart: `-,-,-,none ${dash} none,-,-,none`,
-        rowAtStart: `none,-,-,- ${dash} none,-,-,none`,
+        frame: inner(`none,-,-,none -,none,-,- -,none,none,- ${dash}`),
+        columnAtEnd: inner(`${dash} -,none,-,- none,none,-,- -,none,none,-`),
+        rowAtEnd: inner(`-,-,-,none -,-,none,none -,-,none,- -,none,none,-`),
+        columnAtStart: inner(`-,-,-,none ${dash} none,-,-,none`),
+        rowAtStart: inner(`none,-,-,- ${dash} none,-,-,none`),
         middle: `${RED},${RED},${RED},${RED} ${RED},${RED},${RED},${RED} ${RED},${RED},${RED},${RED}`,
       };
       const bad = Object.keys(want).filter(k => got[k] !== want[k]);
@@ -1416,6 +1418,175 @@
       const pass = reds.length > 0 && Math.abs(got.top - w) <= 2 && Math.abs(got.bottom - w) <= 2 && Math.abs(got.left - hgt) <= 2 && Math.abs(got.right - hgt) <= 2
         && got.inside === 0 && Math.abs(got.redTotal - (2 * w + 2 * hgt)) <= 6 && got.greyAround > 20;
       return { pass, notes: JSON.stringify({ got, w, hgt, xs: view.xs.slice(0, 4), ys: view.ys.slice(0, 4) }) };
+    }),
+  });
+
+  // === 10 bis) Quadrillage : montré ou masqué en Lecture et dans les exports ===================================================================================================
+  // Le quadrillage de départ (les traits que personne n'a posés) se masque par modèle de grille - `gridLines` du tableau, `data-grid-lines="off"` dans le HTML enregistré - sans toucher à ce
+  // que la personne a posé, le stylo « Par défaut » compris (« auto »). L'éditeur garde le sien. Ici : la règle, la commande et l'enregistrement, la Lecture, le PDF lu sur ses traits tracés.
+  // L'Excel est dans la suite xlsx ; la ligne « Quadrillage » du menu « Bordures » à la vraie souris (dev-tests/verify-grid-borders-mouse.mjs).
+  const GRID_GREY_PDF = '#777777';
+  const GRID_GREY_SCREEN = 'rgb(184, 192, 201)';
+  const hideGridLines = async () => { const done = GridEditor.setGridLinesShown(ed(), false); await sleep(650); return done; };
+
+  cases.push({
+    id: 'grid_gridlines_rule_auto_is_a_placed_default_line_and_only_the_starting_grid_hides',
+    description: 'La règle du quadrillage (js/table-borders.js) : « auto » est une valeur de trait connue (le stylo « Par défaut » la pose), elle passe devant le trait de départ dans un trait partagé et derrière « pas de trait » ; à dessiner (`drawn`), quadrillage montré chaque côté garde son trait, quadrillage masqué seul le trait de départ (null) disparaît - « auto », une couleur et « pas de trait » restent tels quels',
+    run: async () => {
+      const cell = (row, col, extra) => Object.assign({ row, col, rowspan: 1, colspan: 1, top: null, right: null, bottom: null, left: null }, extra);
+      const show = sides => sides.map(x => [x.top, x.right, x.bottom, x.left].map(v => v || '-').join(',')).join(' | ');
+      const pair = (a, b) => show(TableBorders.resolve({ width: 2, height: 1, cells: [cell(0, 0, { right: a }), cell(0, 1, { left: b })] }));
+      const mixed = { top: null, right: 'auto', bottom: 'none', left: RED };
+      const line = side => [side.top, side.right, side.bottom, side.left].map(v => v || '-').join(',');
+      const got = {
+        normalized: [TableBorders.normalizeValue('AUTO'), TableBorders.normalizeValue(' auto '), TableBorders.normalizeValue('automatic'), TableBorders.normalizeValue('#C0392B')].map(v => v || '-').join(','),
+        valueFor: [TableBorders.valueFor('all', null), TableBorders.valueFor('outer', RED), TableBorders.valueFor('none', null), TableBorders.valueFor('inner', 'auto')].join(','),
+        autoOverDefault: pair('auto', null),
+        defaultUnderAuto: pair(null, 'auto'),
+        hiddenOverAuto: pair('auto', 'none'),
+        firstOfColorAndAuto: pair(RED, 'auto'),
+        drawnShown: line(TableBorders.drawn(mixed, true)),
+        drawnHidden: line(TableBorders.drawn(mixed, false)),
+        defaultOnlyIsHiddenWithTheGrid: line(TableBorders.drawn({ top: null, right: null, bottom: null, left: null }, false)),
+      };
+      const want = {
+        normalized: `auto,auto,-,${RED}`,
+        valueFor: `auto,${RED},none,auto`,
+        autoOverDefault: '-,auto,-,- | -,-,-,auto',
+        defaultUnderAuto: '-,auto,-,- | -,-,-,auto',
+        hiddenOverAuto: '-,none,-,- | -,-,-,none',
+        firstOfColorAndAuto: `-,${RED},-,- | -,-,-,${RED}`,
+        // null et « auto » se dessinent tous deux en trait de départ (« - ») : la différence n'est que de savoir s'ils survivent au masquage
+        drawnShown: `-,-,none,${RED}`,
+        drawnHidden: `none,-,none,${RED}`,
+        defaultOnlyIsHiddenWithTheGrid: 'none,none,none,none',
+      };
+      const bad = Object.keys(want).filter(k => got[k] !== want[k]);
+      return { pass: !bad.length, notes: bad.length ? bad.map(k => `${k}: ${JSON.stringify(got[k])} (attendu ${JSON.stringify(want[k])})`).join(' | ') : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'grid_gridlines_option_is_saved_on_the_table_keeps_the_editor_grid_and_is_one_undo',
+    description: 'Quadrillage masqué : `GridEditor.setGridLinesShown(ed, false)` écrit `data-grid-lines="off"` sur le tableau du HTML enregistré (relu à l\'ouverture, retiré quand on le remontre) ; une grille qui n\'y touche pas n\'écrit rien ; un seul Annuler le défait, Rétablir le rend ; l\'éditeur dessine le même quadrillage montré ou masqué',
+    run: async (h) => inGrid(h, async () => {
+      const look = () => { const style = getComputedStyle(cellOf(2, 2)); return ['Top', 'Right', 'Bottom', 'Left'].map(side => `${style['border' + side + 'Style']} ${style['border' + side + 'Color']} ${style['border' + side + 'Width']}`).join(' / '); };
+      const attrOf = html => (html.match(/<table[^>]*>/) || [''])[0].includes('data-grid-lines="off"');
+      const start = { shown: GridEditor.gridLinesShown(ed()), attr: attrOf(Editor.getHTML()), anywhere: /data-grid-lines/.test(Editor.getHTML()), look: look() };
+      await sleep(650);
+      const done = await hideGridLines();
+      const hidden = { done, shown: GridEditor.gridLinesShown(ed()), attr: attrOf(Editor.getHTML()), look: look(), nodeAttr: tableNode().attrs.gridLines };
+      const again = GridEditor.setGridLinesShown(ed(), false); // déjà masqué : rien de plus à écrire
+      const noopHtml = Editor.getHTML();
+      await sleep(650);
+      ed().commands.undo(); await sleep(120);
+      const undone = { shown: GridEditor.gridLinesShown(ed()), attr: attrOf(Editor.getHTML()), anywhere: /data-grid-lines/.test(Editor.getHTML()) };
+      ed().commands.redo(); await sleep(120);
+      const redone = { shown: GridEditor.gridLinesShown(ed()), attr: attrOf(Editor.getHTML()) };
+      const html = Editor.getHTML();
+      await loadGrid(html);
+      const reloaded = { shown: GridEditor.gridLinesShown(ed()), attr: attrOf(Editor.getHTML()), same: Editor.getHTML() === html };
+      await sleep(650);
+      GridEditor.setGridLinesShown(ed(), true); await sleep(120);
+      const shownAgain = { shown: GridEditor.gridLinesShown(ed()), anywhere: /data-grid-lines/.test(Editor.getHTML()) };
+      GridEditor.setActive(false);
+      const outsideGrid = GridEditor.setGridLinesShown(ed(), false);
+      GridEditor.setActive(true);
+      const pass = start.shown && !start.attr && !start.anywhere
+        && hidden.done === true && !hidden.shown && hidden.attr && hidden.nodeAttr === 'off' && hidden.look === start.look && /^solid /.test(hidden.look)
+        && again === true && attrOf(noopHtml)
+        && undone.shown && !undone.attr && !undone.anywhere
+        && !redone.shown && redone.attr
+        && !reloaded.shown && reloaded.attr
+        && shownAgain.shown && !shownAgain.anywhere
+        && outsideGrid === false;
+      return { pass, notes: JSON.stringify({ start, hidden, again, undone, redone, reloaded, shownAgain, outsideGrid }) };
+    }),
+  });
+
+  cases.push({
+    id: 'grid_gridlines_hidden_reading_mode_draws_only_the_placed_borders_and_the_editor_keeps_its_grid',
+    description: 'Lecture d\'une grille au quadrillage masqué : une case que personne n\'a bordée n\'a plus aucun trait, le cadre rouge, le trait posé en « Par défaut » (gris de départ) et le « pas de trait » restent comme dans l\'éditeur ; montré, la Lecture dessine le quadrillage comme avant ; l\'éditeur garde son quadrillage dans les deux cas',
+    run: async (h) => inGrid(h, async () => {
+      await useReadRecord();
+      await selectCells(0, 0, 2, 2);
+      await apply('outer', RED);
+      await selectCells(4, 0, 4, 2);
+      await apply('top', null); // « Par défaut » : le haut des trois cases de la ligne 5 (et le bas de celles d'au-dessus)
+      await selectCells(1, 4, 1, 4);
+      await apply('none');
+      const html = Editor.getHTML();
+      const probe = (root) => {
+        const rows = root.querySelectorAll('table > tbody > tr');
+        const side = (r, c, name) => { const style = getComputedStyle(rows[r].cells[c]); return style['border' + name + 'Style'] + ' ' + style['border' + name + 'Color']; };
+        return {
+          frameTop: side(0, 0, 'Top'), frameLeft: side(0, 0, 'Left'), frameInside: side(1, 1, 'Top'),
+          placedDefaultTop: side(4, 1, 'Top'), placedDefaultAbove: side(3, 1, 'Bottom'), placedDefaultLeft: side(4, 1, 'Left'),
+          plainTop: side(8, 3, 'Top'), plainLeft: side(8, 3, 'Left'), plainBottom: side(8, 3, 'Bottom'), plainRight: side(8, 3, 'Right'),
+          noLine: side(1, 4, 'Top'), noLineNeighbour: side(1, 3, 'Right'),
+        };
+      };
+      // Le tableau lu dans la Lecture : on attend son rendu plutôt qu'un délai fixe (la première Lecture d'une page peut tarder).
+      const reading = async () => {
+        await h.clickButton('btn-mode-read');
+        try {
+          for (let waited = 0; waited < 8000 && document.querySelectorAll('#reader-container table > tbody > tr').length < 15; waited += 100) await sleep(100);
+          await sleep(200);
+          return probe(document.getElementById('reader-container'));
+        }
+        finally { await h.clickButton('btn-mode-edit'); await sleep(300); }
+      };
+      const shownEditor = probe(document.querySelector('.tiptap'));
+      const shownReading = await reading();
+      await loadGrid(html);
+      await hideGridLines();
+      const hiddenEditor = probe(document.querySelector('.tiptap'));
+      const hiddenReading = await reading();
+      const red = 'solid rgb(192, 57, 43)';
+      const grey = 'solid ' + GRID_GREY_SCREEN;
+      const isNone = v => v.startsWith('none');
+      const placed = r => r.frameTop === red && r.frameLeft === red && r.placedDefaultTop === grey && r.placedDefaultAbove === grey && r.noLine.startsWith('hidden') && r.noLineNeighbour.startsWith('hidden');
+      const pass = placed(shownReading) && placed(hiddenReading) && placed(hiddenEditor)
+        && [shownReading.frameInside, shownReading.plainTop, shownReading.plainLeft, shownReading.plainBottom, shownReading.plainRight, shownReading.placedDefaultLeft].every(v => v === grey)
+        && [hiddenReading.frameInside, hiddenReading.plainTop, hiddenReading.plainLeft, hiddenReading.plainBottom, hiddenReading.plainRight, hiddenReading.placedDefaultLeft].every(isNone)
+        && JSON.stringify(hiddenEditor) === JSON.stringify(shownEditor) && hiddenEditor.plainTop === grey;
+      return { pass, notes: JSON.stringify({ shownReading, hiddenReading, hiddenEditor }) };
+    }),
+  });
+
+  cases.push({
+    id: 'grid_pdf_gridlines_hidden_draws_only_the_placed_lines_merged_cells_included',
+    description: 'PDF d\'une grille au quadrillage masqué, lu sur les traits peints : sans rien de posé aucun trait n\'est peint (le quadrillage montré en peint des dizaines) ; un cadre rouge et un trait posé en « Par défaut » (le gris du PDF) sont les seuls traits ; une case fusionnée bordée en « Par défaut » ne peint que son pourtour, sans trait à l\'intérieur ni autour',
+    run: async (h) => inGrid(h, async () => {
+      const shown = await pdfStrokes(h);
+      await hideGridLines();
+      const bare = await pdfStrokes(h);
+      await selectCells(0, 0, 2, 2);
+      await apply('outer', RED);
+      await selectCells(4, 0, 4, 2);
+      await apply('top', null);
+      const placed = await pdfStrokes(h);
+      const reds = placed.byColor(RED);
+      const greys = placed.byColor(GRID_GREY_PDF);
+      const near = (a, b) => Math.abs(a - b) < 0.8;
+      const xRed = reds.length ? [Math.min(...reds.flatMap(l => [l.x1, l.x2])), Math.max(...reds.flatMap(l => [l.x1, l.x2]))] : [0, 0];
+      const yGrey = greys.length ? greys[0].y1 : -1;
+      const placedOk = reds.length > 0 && greys.length > 0 && placed.lines.length === reds.length + greys.length
+        && greys.every(l => placed.horizontal(l) && near(l.y1, yGrey)) && near(lengthOf(greys), xRed[1] - xRed[0]) && !reds.some(l => near(l.y1, yGrey) && placed.horizontal(l));
+      // une case fusionnée sur deux colonnes et deux lignes, bordée en « Par défaut », dans une grille neuve elle aussi au quadrillage masqué : son pourtour seul
+      await enterGrid(h);
+      await hideGridLines();
+      await selectCells(5, 0, 6, 1);
+      GridEditor.mergeCells(ed()); await sleep(650);
+      await selectCells(5, 0, 5, 0);
+      await apply('outer', null);
+      const merged = await pdfStrokes(h);
+      const lines = merged.lines;
+      const xs = merged.xs; const ys = merged.ys;
+      const w = xs[xs.length - 1] - xs[0]; const hgt = ys[ys.length - 1] - ys[0];
+      const mergedOk = lines.length > 0 && lines.every(l => l.color === GRID_GREY_PDF) && xs.length === 2 && ys.length === 2 && Math.abs(lengthOf(lines) - (2 * w + 2 * hgt)) <= 6 && w > 100 && hgt > 30;
+      const pass = shown.lines.length > 20 && bare.lines.length === 0 && placedOk && mergedOk;
+      return { pass, notes: JSON.stringify({ shown: shown.lines.length, bare: bare.lines.length, placed: { reds: reds.length, greys: greys.length, total: placed.lines.length, xRed, yGrey }, merged: { lines: lines.length, xs, ys, total: lengthOf(lines), w, hgt } }) };
     }),
   });
 

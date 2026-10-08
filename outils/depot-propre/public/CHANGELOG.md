@@ -37,6 +37,12 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   bouton, une règle sans autre colonne choisie est ignorée, le résumé nomme l'autre colonne entre accolades
   (`Montant = {Paye}`) et un renommage de colonne la suit. Une condition enregistrée avant se relit telle
   quelle ; les macro-modèles, « Modèle selon la ligne » et le filtre d'une boucle gardent la valeur saisie.
+- **Quadrillage d'une grille en Lecture et dans les exports** : le menu « Bordures » de la barre de la case
+  a une ligne à cocher « Quadrillage » (« Lecture et exports »). Décochée, la Lecture, le PDF et l'Excel de
+  la grille ne dessinent plus les traits gris de départ, mais gardent ceux que vous avez posés, couleur
+  « Par défaut » comprise ; l'éditeur garde son quadrillage. Une grille déjà enregistrée ne change pas tant
+  que la case reste cochée. Les bordures posées avec « Par défaut » avant cette version ne se distinguent
+  pas du quadrillage : elles disparaissent avec lui, à reposer.
 
 ### Modifié
 
@@ -182,6 +188,12 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   out, a rule with no other column chosen is ignored, the summary names the other column in braces
   (`Amount = {Paid}`) and a column rename follows it. A condition saved earlier reads back as it was; macro
   templates, "Template by row" and a loop's filter keep the typed value.
+- **Gridlines of a grid in Reading mode and in exports**: the "Borders" menu of the cell bar has a
+  "Gridlines" check row ("Reading and exports"). Unchecked, Reading mode, the PDF and the Excel file of the
+  grid no longer draw the starting grey lines, but keep the ones you placed, "Default" color included; the
+  editor keeps its gridlines. A grid saved earlier does not change while the box stays checked. Borders
+  placed with "Default" before this version cannot be told apart from the gridlines: they disappear with
+  them, so place them again.
 
 ### Changed
 

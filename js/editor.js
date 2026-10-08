@@ -381,7 +381,7 @@ const Editor = (function () {
       // Rechercher / Remplacer (js/find-replace.js) : surlignage des résultats par décorations (Ctrl+F et Ctrl+H sont écoutés sur le document, cf.
       // wireEditor).
       FindReplace.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
-      tracked(Table).configure({ resizable: true, View: EditorNodes.createTableView(TableView) }),
+      tracked(GridEditor.withTableAttributes(Table)).configure({ resizable: true, View: EditorNodes.createTableView(TableView) }),
       // La ligne aussi : « Colonne avant / après » et « Supprimer la colonne » posent une marque sur chaque case de la colonne, des enfants directs
       // d'une ligne.
       tracked(GridEditor.withRowAttributes(TableRow)),

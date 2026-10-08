@@ -4,16 +4,22 @@
 //   { width, height, cells: [{ row, col, rowspan, colspan, top, right, bottom, left }] }
 // (cases dans l'ordre de lecture ; `row`/`col` = emplacement de départ, `width`/`height` = nombre de colonnes et de lignes du tableau).
 //
-// Chaque côté d'une case vaut : null = le trait fin gris de départ, 'none' = pas de trait, '#rrggbb' = trait fin de cette couleur. Une case garde une
-// valeur par côté, écrite sur les deux cases voisines d'un trait qu'elles se partagent ; une case fusionnée n'a, elle aussi, qu'une valeur par côté :
-// tous les traits de ce côté (et les cases d'en face) forment un seul groupe qui prend la même valeur.
+// Chaque côté d'une case vaut : null = le trait fin gris de départ (le quadrillage), 'auto' = ce même trait fin gris, mais posé par la personne
+// (réglage « Par défaut » du stylo), 'none' = pas de trait, '#rrggbb' = trait fin de cette couleur. Une case garde une valeur par côté, écrite sur
+// les deux cases voisines d'un trait qu'elles se partagent ; une case fusionnée n'a, elle aussi, qu'une valeur par côté : tous les traits de ce côté
+// (et les cases d'en face) forment un seul groupe qui prend la même valeur.
+//
+// Le quadrillage (null) peut être masqué en Lecture et dans les exports (`data-grid-lines="off"` sur le tableau, js/grid-editor.js) ; un trait posé
+// par la personne reste, lui : 'auto' sert à le distinguer du quadrillage (`drawn`).
 //
 // Un groupe, quand ses membres divergent (fusion, ligne ou colonne supprimée, HTML d'ailleurs) : « pas de trait » l'emporte, puis la première couleur
-// dans l'ordre de lecture (case de gauche ou du dessus), sinon le trait de départ. C'est la règle des bordures fusionnées de CSS (`border-collapse:
-// collapse`) : l'éditeur l'applique en écrivant la valeur choisie sur toutes les cases du groupe, et les exports la rejouent sur ce qu'ils lisent.
+// dans l'ordre de lecture (case de gauche ou du dessus ; 'auto' compte pour une couleur), sinon le trait de départ. C'est la règle des bordures
+// fusionnées de CSS (`border-collapse: collapse`) : l'éditeur l'applique en écrivant la valeur choisie sur toutes les cases du groupe, et les exports
+// la rejouent sur ce qu'ils lisent.
 const TableBorders = (function () {
   const SIDES = ['top', 'right', 'bottom', 'left'];
   const NONE = 'none';
+  const AUTO = 'auto';
   const COLOR_RE = /^#[0-9a-f]{6}$/;
 
   // Réglages du menu « Bordures » d'une grille ; `none` pose « pas de trait » partout, les autres posent la couleur du stylo (null = trait de
@@ -30,11 +36,11 @@ const TableBorders = (function () {
   };
   const PRESETS = Object.keys(PRESET_PARTS);
 
-  // Une valeur de côté connue (null, 'none' ou '#rrggbb' en minuscules) ; tout le reste vaut null : un attribut `data-border-*` abîmé ne casse rien.
+  // Une valeur de côté connue (null, 'none', 'auto' ou '#rrggbb' en minuscules) ; tout le reste vaut null : un attribut `data-border-*` abîmé ne
+  // casse rien.
   function normalizeValue(value) {
-    if (value === NONE) return NONE;
     const text = typeof value === 'string' ? value.trim().toLowerCase() : '';
-    if (text === NONE) return NONE;
+    if (text === NONE || text === AUTO) return text;
     return COLOR_RE.test(text) ? text : null;
   }
 
@@ -174,10 +180,18 @@ const TableBorders = (function () {
     return out;
   }
 
-  // La valeur que pose un réglage : « Aucune » = pas de trait, les autres la couleur du stylo (null : le trait de départ).
+  // La valeur que pose un réglage : « Aucune » = pas de trait, les autres la couleur du stylo (« Par défaut » : le trait de départ, posé pour de
+  // bon, donc 'auto' et non null : null est le quadrillage, que la personne peut masquer).
   function valueFor(preset, color) {
-    return preset === 'none' ? NONE : normalizeValue(color);
+    return preset === 'none' ? NONE : normalizeValue(color) || AUTO;
   }
 
-  return { SIDES, NONE, PRESETS, normalizeValue, combineAll, resolve, set, valuesOf, usableEdges, presetEdges, valueFor };
+  // Les côtés d'une case tels que la Lecture et les exports les dessinent : null = le trait de départ, 'none' = rien, '#rrggbb' = cette couleur. Le
+  // quadrillage (null) disparaît quand il est masqué (`gridShown` faux) ; 'auto', lui, est toujours dessiné, comme le trait de départ.
+  function drawn(sides, gridShown) {
+    const value = side => (side === AUTO ? null : side === null && !gridShown ? NONE : side);
+    return { top: value(sides.top), right: value(sides.right), bottom: value(sides.bottom), left: value(sides.left) };
+  }
+
+  return { SIDES, NONE, AUTO, PRESETS, normalizeValue, combineAll, resolve, set, valuesOf, usableEdges, presetEdges, valueFor, drawn };
 })();

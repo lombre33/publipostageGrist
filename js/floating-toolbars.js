@@ -78,9 +78,10 @@ const FloatingToolbars = (function () {
   }
 
   // Menu « Bordures » d'une grille (css/grid.css) : une rangée de réglages en icônes, puis la couleur du stylo - la grille de nuances et le pied
-  // « personnalisé » / « par défaut » du menu de couleur ci-dessus, sans refermer le menu au choix d'une couleur. `onPreset(preset)` et `onPen(color
-  // | null)` ne touchent pas à l'éditeur eux-mêmes.
-  function createBordersDropdown(presets, colors, { onPreset, onPen }) {
+  // « personnalisé » / « par défaut » du menu de couleur ci-dessus, sans refermer le menu au choix d'une couleur - et, tout en bas, la ligne à cocher
+  // « Quadrillage » (montré ou masqué en Lecture et dans les exports, sans refermer le menu non plus : la coche répond). `onPreset(preset)`,
+  // `onPen(color | null)` et `onGridLines()` ne touchent pas à l'éditeur eux-mêmes.
+  function createBordersDropdown(presets, colors, { onPreset, onPen, onGridLines }) {
     const buttons = presets.map(([preset, icon, title]) => `<button data-action="borders:${preset}" title="${title}" aria-label="${title}">${Icons.svg(icon)}</button>`).join('');
     const swatches = colors.map(c => `<button data-action="pen:${c}" style="background:${c}" title="${c}" aria-label="${c}"></button>`).join('');
     const html = '<div class="v2-borders-presets">' + buttons + '</div>'
@@ -90,9 +91,14 @@ const FloatingToolbars = (function () {
       + `<button data-action="pen-custom" title="${I18n.t('colorDropdown.custom')}">${Icons.svg('fill')}<span>${I18n.t('colorDropdown.customLabel')}</span></button>`
       + `<button data-action="pen-auto" title="${I18n.t('colorDropdown.noneDefault')}">${Icons.svg('noColor')}<span>${I18n.t('colorDropdown.noneDefault')}</span></button>`
       + '</div>'
+      + '<div class="v2-borders-gridlines">'
+      + `<button type="button" class="v2-hover-row v2-hover-row-check" data-action="gridlines" role="checkbox" aria-checked="true" title="${I18n.t('table.gridLinesTip')}">`
+      + `<span><span class="v2-borders-gridlines-name">${I18n.t('table.gridLines')}</span><small>${I18n.t('table.gridLinesHint')}</small></span></button>`
+      + '</div>'
       + '<input type="color" class="v2-color-dropdown-native">';
     const panel = EditorCore.createFloatingPanel('v2-color-dropdown v2-borders-dropdown', html, (action) => {
       if (action.indexOf('borders:') === 0) { onPreset(action.slice('borders:'.length)); return; }
+      if (action === 'gridlines') { onGridLines(); return; }
       if (action === 'pen-custom') { panel.el.querySelector('.v2-color-dropdown-native').click(); return; }
       if (action === 'pen-auto') { onPen(null); return; }
       if (action.indexOf('pen:') === 0) onPen(action.slice('pen:'.length));
@@ -203,11 +209,13 @@ const FloatingToolbars = (function () {
     function tableBordersMenu(presets) {
       // Menu « Bordures » : un réglage pose la couleur du stylo sur les traits qu'il vise (une seule transaction, un seul Annuler) et referme le menu ;
       // une couleur se choisit sans le refermer. La couleur du stylo (null = le trait de départ) se choisit une fois et reste pour les réglages
-      // suivants. `sync` : à l'ouverture du menu.
+      // suivants. Le « Quadrillage » se coche ou se décoche sans refermer le menu non plus (une transaction, un Annuler). `sync` : à l'ouverture du
+      // menu.
       let penColor = null;
       const panel = createBordersDropdown(presets, TEXT_COLOR_PRESETS, {
         onPreset: (preset) => { if (GridEditor.applyBorders(editor, preset, penColor)) EditorCore.closeDropdownPanel(); },
         onPen: (color) => { penColor = color; markPen(); },
+        onGridLines: () => { GridEditor.setGridLinesShown(editor, !GridEditor.gridLinesShown(editor)); markGridLines(); },
       });
       const markPen = () => {
         panel.el.querySelectorAll('button[data-action^="pen:"]').forEach(btn => btn.classList.toggle('is-active', btn.dataset.action === 'pen:' + penColor));
@@ -216,11 +224,16 @@ const FloatingToolbars = (function () {
         const custom = panel.el.querySelector('button[data-action="pen-custom"]');
         if (custom) custom.classList.toggle('is-active', penColor !== null && !TEXT_COLOR_PRESETS.includes(penColor));
       };
+      const markGridLines = () => {
+        const row = panel.el.querySelector('button[data-action="gridlines"]');
+        if (row) row.setAttribute('aria-checked', GridEditor.gridLinesShown(editor) ? 'true' : 'false');
+      };
       // « Intérieures » n'a rien à tracer pour une seule case : grisé (jamais retiré), un clic dessus ne fait rien.
       const sync = () => {
         const inner = panel.el.querySelector('button[data-action="borders:inner"]');
         if (inner) inner.setAttribute('aria-disabled', GridEditor.canApplyBorders(editor, 'inner') ? 'false' : 'true');
         markPen();
+        markGridLines();
       };
       return { panel, sync };
     }

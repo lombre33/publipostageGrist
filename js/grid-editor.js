@@ -9,6 +9,8 @@
 //   - la hauteur de ligne (`rowHeight` sur tableRow, plancher = la hauteur de son texte) et la largeur de colonne (`colwidth` de chaque case),
 //     toujours posées ;
 //   - le saut de page porté par une ligne (`pageBreakBefore`) : le PDF y commence une page, l'Excel une feuille ;
+//   - le quadrillage (`gridLines` du tableau) : montré ou masqué en Lecture, dans le PDF et dans l'Excel - les traits que la personne a posés restent,
+//     l'éditeur garde le sien ;
 //   - le collage dans une case sans les lignes vides de fin (`trimPastedSlice`), et celui d'un tableau de tableur case par case, mise en forme
 //     comprise (`transformPastedHTML`, js/grid-table.js) ;
 //   - Entrée qui descend d'une case (`enterGoesDown`), Maj+Entrée et Ctrl+Entrée qui ajoutent une ligne dans la case ;
@@ -19,12 +21,16 @@ const GridEditor = (function () {
   const el = Dom.el;
 
   const {
-    TYPE, DEFAULT_COLS, DEFAULT_ROWS, DEFAULT_COL_WIDTH_PX, DEFAULT_ROW_HEIGHT_PX, MIN_COL_WIDTH_PX, MAX_COL_WIDTH_PX, MAX_ROW_HEIGHT_PX,
-    FORBIDDEN_NODES, CELL_NODES, VALIGNS, DEFAULT_VALIGN, BORDER_ATTRS, ROW_EDGES, COLUMN_EDGES,
+    TYPE, GRID_LINES_OFF, DEFAULT_LINE_COLOR, DEFAULT_COLS, DEFAULT_ROWS, DEFAULT_COL_WIDTH_PX, DEFAULT_ROW_HEIGHT_PX, MIN_COL_WIDTH_PX, MAX_COL_WIDTH_PX,
+    MAX_ROW_HEIGHT_PX, FORBIDDEN_NODES, CELL_NODES, VALIGNS, DEFAULT_VALIGN, BORDER_ATTRS, ROW_EDGES, COLUMN_EDGES,
   } = (function () {
     // Les constantes de la grille : tailles, nœuds interdits, alignement vertical, bords des cases.
 
     const TYPE = 'grille';
+    // `gridLines` du tableau quand le quadrillage de départ est masqué en Lecture et dans les exports (null : montré).
+    const GRID_LINES_OFF = 'off';
+    // Le gris du trait de départ à l'écran (css/editor-v2.css), celui qu'un trait « auto » porte en ligne pour rester quand le quadrillage est masqué.
+    const DEFAULT_LINE_COLOR = '#b8c0c9';
     const DEFAULT_COLS = 6;
     const DEFAULT_ROWS = 15;
     const DEFAULT_COL_WIDTH_PX = 100;
@@ -44,16 +50,16 @@ const GridEditor = (function () {
     // Posé sur chaque case : l'éditeur, la Lecture, le PDF et l'Excel le lisent au même endroit.
     const VALIGNS = new Set(['top', 'middle', 'bottom']);
     const DEFAULT_VALIGN = 'middle';
-    // Les quatre bords d'une case (js/table-borders.js : null = trait de départ, 'none' = pas de trait, '#rrggbb' = couleur) : un attribut par côté,
-    // écrit sur les deux cases d'un trait partagé.
+    // Les quatre bords d'une case (js/table-borders.js : null = trait de départ, 'auto' = trait de départ posé par la personne, 'none' = pas de trait,
+    // '#rrggbb' = couleur) : un attribut par côté, écrit sur les deux cases d'un trait partagé.
     const BORDER_ATTRS = { top: 'borderTop', right: 'borderRight', bottom: 'borderBottom', left: 'borderLeft' };
     // Les bords qu'une ligne neuve (ou une colonne neuve) reprend de sa voisine : ceux qui la longent (`sides`) et ceux de ses deux bouts (`before`,
     // `after`).
     const ROW_EDGES = { before: BORDER_ATTRS.top, after: BORDER_ATTRS.bottom, sides: [BORDER_ATTRS.left, BORDER_ATTRS.right] };
     const COLUMN_EDGES = { before: BORDER_ATTRS.left, after: BORDER_ATTRS.right, sides: [BORDER_ATTRS.top, BORDER_ATTRS.bottom] };
     return {
-      TYPE, DEFAULT_COLS, DEFAULT_ROWS, DEFAULT_COL_WIDTH_PX, DEFAULT_ROW_HEIGHT_PX, MIN_COL_WIDTH_PX, MAX_COL_WIDTH_PX, MAX_ROW_HEIGHT_PX,
-      FORBIDDEN_NODES, CELL_NODES, VALIGNS, DEFAULT_VALIGN, BORDER_ATTRS, ROW_EDGES, COLUMN_EDGES,
+      TYPE, GRID_LINES_OFF, DEFAULT_LINE_COLOR, DEFAULT_COLS, DEFAULT_ROWS, DEFAULT_COL_WIDTH_PX, DEFAULT_ROW_HEIGHT_PX, MIN_COL_WIDTH_PX, MAX_COL_WIDTH_PX,
+      MAX_ROW_HEIGHT_PX, FORBIDDEN_NODES, CELL_NODES, VALIGNS, DEFAULT_VALIGN, BORDER_ATTRS, ROW_EDGES, COLUMN_EDGES,
     };
   })();
 
@@ -71,8 +77,27 @@ const GridEditor = (function () {
   function isActive() { return active; }
   function isGridType(typeModele) { return typeModele === TYPE; }
 
-  const { withRowAttributes, withCellAttributes, serialize, tableInfo } = (function () {
-    // Les attributs d'une ligne et d'une case (hauteur, largeur, alignement, bords) et l'enregistrement de la grille.
+  const { withTableAttributes, withRowAttributes, withCellAttributes, serialize, tableInfo } = (function () {
+    // Les attributs du tableau, d'une ligne et d'une case (quadrillage, hauteur, largeur, alignement, bords) et l'enregistrement de la grille.
+
+    // `gridLines` : 'off' quand le quadrillage de départ (les traits que la personne n'a pas posés) est masqué en Lecture et dans les exports, null
+    // quand il est montré (tout tableau de document, toute grille jusqu'ici : aucun changement de rendu ni de HTML). L'éditeur garde son quadrillage
+    // quoi qu'il en soit : l'attribut n'est lu que par la Lecture (css/grid.css) et les exports (js/export-common.js:cellBorderSides), sur
+    // `data-grid-lines`, la marque de l'enregistrement.
+    function withTableAttributes(TableExtension) {
+      return TableExtension.extend({
+        addAttributes() {
+          const parent = this.parent ? this.parent() : {};
+          return Object.assign({}, parent, {
+            gridLines: {
+              default: null,
+              parseHTML: el => (el.getAttribute('data-grid-lines') === GRID_LINES_OFF ? GRID_LINES_OFF : null),
+              renderHTML: attrs => (attrs.gridLines === GRID_LINES_OFF ? { 'data-grid-lines': GRID_LINES_OFF } : {}),
+            },
+          });
+        },
+      });
+    }
 
     // `rowHeight` : hauteur minimale en px (une ligne que son texte agrandit garde sa hauteur de texte, comme un <tr style="height">). Null pour tout
     // tableau de document : aucun changement de rendu ni de HTML hors grille.
@@ -100,11 +125,13 @@ const GridEditor = (function () {
     }
 
     // Les attributs HTML d'un bord : `data-border-<côté>`, la marque de l'enregistrement, et le `border-*` en ligne, `hidden` pour « pas de trait » (il
-    // l'emporte sur le trait de la case voisine, bordures fusionnées).
+    // l'emporte sur le trait de la case voisine, bordures fusionnées). Un trait « auto » a le gris de départ, écrit en ligne : c'est lui qui reste à
+    // l'écran quand la Lecture masque le quadrillage.
     function borderHtml(side, value) {
       const v = TableBorders.normalizeValue(value);
       if (!v) return {};
-      return { ['data-border-' + side]: v, style: 'border-' + side + ': ' + (v === TableBorders.NONE ? 'hidden' : '1px solid ' + v) };
+      const line = v === TableBorders.NONE ? 'hidden' : '1px solid ' + (v === TableBorders.AUTO ? DEFAULT_LINE_COLOR : v);
+      return { ['data-border-' + side]: v, style: 'border-' + side + ': ' + line };
     }
     // `verticalAlign` et les bords (`borderTop`...) : null pour toute case d'un tableau de document, donc aucun changement de rendu ni de HTML hors
     // grille ; dans une grille, 'top', 'middle' ou 'bottom' pour l'alignement. Lus dans `data-valign` et `data-border-*` seulement, la marque de
@@ -146,7 +173,7 @@ const GridEditor = (function () {
       const first = doc.firstChild;
       return first && first.type.name === 'table' ? { node: first, pos: 0 } : null;
     }
-    return { withRowAttributes, withCellAttributes, serialize, tableInfo };
+    return { withTableAttributes, withRowAttributes, withCellAttributes, serialize, tableInfo };
   })();
 
   const { rowPos, isEmptyParagraph, isValidGridDoc, buildDefaultTable, cellOrigins, columnWidths, hasCellAttr, isFreshCell } = (function () {
@@ -587,8 +614,8 @@ const GridEditor = (function () {
     return { selectedVerticalAlign, setVerticalAlign, canMerge, canSplit, selectionRect, mergeCells };
   })();
 
-  const { splitCell, applyBorders, canApplyBorders, boundaryCrossed, pageBreakRow } = (function () {
-    // Scinder une case, les bordures et la ligne que vise le saut de page.
+  const { splitCell, applyBorders, canApplyBorders, gridLinesShown, setGridLinesShown, boundaryCrossed, pageBreakRow } = (function () {
+    // Scinder une case, les bordures, le quadrillage et la ligne que vise le saut de page.
 
     // Scinde la case fusionnée en autant de cases qu'elle en recouvrait : la première garde le contenu, les autres naissent vides, avec le fond,
     // l'alignement et la largeur de leur colonne. Les bords du pourtour restent aux cases du pourtour ; les traits entre les nouvelles cases sont ceux
@@ -644,6 +671,23 @@ const GridEditor = (function () {
       return !!rect && TableBorders.usableEdges(borderSpec(info.node), TableBorders.presetEdges(preset, rect)).length > 0;
     }
 
+    // Le quadrillage de départ est-il montré en Lecture et dans les exports ? (oui tant que la personne ne l'a pas masqué)
+    function gridLinesShown(ed) {
+      const info = tableInfo(ed.state.doc);
+      return !info || info.node.attrs.gridLines !== GRID_LINES_OFF;
+    }
+
+    // Montre ou masque le quadrillage en Lecture et dans les exports ; les traits posés par la personne restent. L'éditeur, lui, n'en change pas. Une
+    // seule transaction : un seul Annuler, et l'enregistrement automatique la voit passer.
+    function setGridLinesShown(ed, shown) {
+      if (!active) return false;
+      const info = tableInfo(ed.state.doc);
+      if (!info) return false;
+      if (gridLinesShown(ed) === !!shown) return true;
+      ed.view.dispatch(ed.state.tr.setNodeMarkup(info.pos, undefined, Object.assign({}, info.node.attrs, { gridLines: shown ? null : GRID_LINES_OFF })));
+      return true;
+    }
+
     // Une case couvre-t-elle la limite entre la ligne `row - 1` et la ligne `row` ? (la même case dans les deux, dans l'une des colonnes)
     function boundaryCrossed(map, row) {
       for (let col = 0; col < map.width; col++) if (map.map[(row - 1) * map.width + col] === map.map[row * map.width + col]) return true;
@@ -656,7 +700,7 @@ const GridEditor = (function () {
       const rect = info && selectionRect(state, info);
       return rect ? { info, map: libs.TableMap.get(info.node), row: rect.top } : null;
     }
-    return { splitCell, applyBorders, canApplyBorders, boundaryCrossed, pageBreakRow };
+    return { splitCell, applyBorders, canApplyBorders, gridLinesShown, setGridLinesShown, boundaryCrossed, pageBreakRow };
   })();
 
   const { canTogglePageBreak, hasPageBreak, togglePageBreak, pageBreakRows, trimPastedSlice } = (function () {
@@ -1278,8 +1322,9 @@ const GridEditor = (function () {
 
   return {
     TYPE, DEFAULT_VALIGN,
-    configure, attach, createExtension, createEnterExtension, withRowAttributes, withCellAttributes, serialize, setActive, isActive, isGridType, refresh,
-    currentCellDom, colName, floatingOptions, barSlot,
-    canMerge, canSplit, mergeCells, splitCell, setVerticalAlign, selectedVerticalAlign, applyBorders, canApplyBorders, canTogglePageBreak, hasPageBreak, togglePageBreak,
+    configure, attach, createExtension, createEnterExtension, withTableAttributes, withRowAttributes, withCellAttributes, serialize, setActive, isActive, isGridType,
+    refresh, currentCellDom, colName, floatingOptions, barSlot,
+    canMerge, canSplit, mergeCells, splitCell, setVerticalAlign, selectedVerticalAlign, applyBorders, canApplyBorders, gridLinesShown, setGridLinesShown,
+    canTogglePageBreak, hasPageBreak, togglePageBreak,
   };
 })();

@@ -116,3 +116,15 @@ body.pp-grid-mode .v2-floating-toolbar .v2-floating-sep.v2-grid-only { display: 
 .v2-borders-dropdown button.is-active { outline: 2px solid var(--accent); outline-offset: 1px; }
 /* La puce de la barre : l'icône, puis un chevron plus petit. */
 .v2-borders-chip svg:last-child { width: 10px; height: 10px; }
+/* Pied du menu « Bordures » : la ligne à cocher « Quadrillage » (montré ou masqué en Lecture et dans les exports), une ligne de menu à coche
+   (`.v2-hover-row-check`, css/editor-v2.css) faite d'un vrai bouton : le libellé, et dessous, discret, là où il agit. */
+.v2-borders-gridlines { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border); }
+.v2-borders-gridlines button { width: 100%; box-sizing: border-box; padding: 4px 7px; border: 0; background: transparent; font: 12.5px/1.3 var(--font-ui); text-align: left; }
+.v2-borders-gridlines small { display: block; font-size: 11px; color: var(--text-muted); }
+
+/* Lecture : le quadrillage de départ masqué (`data-grid-lines="off"` sur le tableau, GridEditor.setGridLinesShown) ne se dessine pas. Un trait posé
+   par la personne (`border-*` en ligne, « auto » compris) reste : un style en ligne l'emporte sur cette règle, et `none` perd, en bordures
+   fusionnées, contre tout autre style. L'éditeur garde son quadrillage ; le PDF et l'Excel suivent la même marque (ExportCommon.cellBorderSides).
+   Réservé à une grille (`pp-grid-mode`) : la marque, venue d'un collage, ne change rien au tableau d'un document. */
+body.pp-grid-mode #reader-container table[data-grid-lines="off"] td,
+body.pp-grid-mode #reader-container table[data-grid-lines="off"] th { border-style: none; }

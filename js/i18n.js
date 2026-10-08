@@ -1038,6 +1038,14 @@ const I18n = (function () {
     'table.bordersRight': { fr: 'Bordure de droite', en: 'Right border' },
     'table.bordersNone': { fr: 'Aucune bordure', en: 'No border' },
     'table.bordersPen': { fr: 'Couleur du trait', en: 'Line color' },
+    // Ligne à cocher au pied du menu « Bordures » d'une grille (js/floating-toolbars.js:createBordersDropdown) : le quadrillage de départ, montré ou
+    // masqué en Lecture et dans les exports ; les bordures posées restent, l'éditeur garde le sien.
+    'table.gridLines': { fr: 'Quadrillage', en: 'Gridlines' },
+    'table.gridLinesHint': { fr: 'Lecture et exports', en: 'Reading and exports' },
+    'table.gridLinesTip': {
+      fr: 'Montrer le quadrillage dans la Lecture et dans les exports PDF et Excel. Les bordures que vous posez restent ; l’éditeur garde son quadrillage.',
+      en: 'Show the gridlines in Reading and in the PDF and Excel exports. Borders you set stay; the editor keeps its gridlines.',
+    },
     'twoColumns.resizeGrip': { fr: 'Redimensionner les colonnes', en: 'Resize columns' },
     'twoColumns.widthMmButton': { fr: 'Régler les largeurs en mm', en: 'Set widths in mm' },
     'twoColumns.widthMmLeftLabel': { fr: 'Gauche (mm)', en: 'Left (mm)' },

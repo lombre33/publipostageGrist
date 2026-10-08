@@ -6,7 +6,9 @@
 //   - choisir une couleur ne referme pas le menu, un réglage l'applique à la sélection de cases (une transaction, un Ctrl+Z) et le referme ;
 //   - « Intérieures » est grisé (jamais retiré) pour une seule case ou une case fusionnée, un clic dessus ne fait rien ;
 //   - le trait choisi est celui des DEUX cases qui se le partagent, « Aucune bordure » le cache des deux côtés, l'éditeur le montre comme enregistré ;
-//   - le menu de fond s'ouvre lui aussi sous la bande, et le texte du menu reste lisible en clair comme en sombre.
+//   - le menu de fond s'ouvre lui aussi sous la bande, et le texte du menu reste lisible en clair comme en sombre ;
+//   - la ligne à cocher « Quadrillage » tout en bas du menu (cochée au départ, sous le pointeur dans 700x400, texte lisible) : un clic la décoche sans refermer le menu, le tableau enregistré porte
+//     `data-grid-lines="off"`, l'éditeur garde son quadrillage, et la Lecture, relue sur de vrais pixels, ne peint plus que les traits posés (cadre rouge, trait « Par défaut ») ; un second clic la recoche.
 // Lancé par run-headless.mjs (groupe Node « gridBordersMouse », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-grid-borders-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -309,6 +311,24 @@ const lookOf = (page, r, c, side) => page.evaluate(([row, col, s]) => {
   return style['border' + s + 'Style'] + ' ' + style['border' + s + 'Color'];
 }, [r, c, side]);
 
+// Les pixels d'une petite zone de l'écran (clip en px de page), lus sur une vraie capture : [[r, g, b], ...] ligne par ligne.
+async function pixelsOf(page, clip) {
+  const png = await page.screenshot({ clip, type: 'png' });
+  return page.evaluate(async (base64) => {
+    const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+    const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width; canvas.height = bitmap.height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(bitmap, 0, 0);
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    const out = [];
+    for (let i = 0; i < data.length; i += 4) out.push([data[i], data[i + 1], data[i + 2]]);
+    return out;
+  }, png.toString('base64'));
+}
+const colorGap = (a, b) => Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]), Math.abs(a[2] - b[2]));
+
 async function runTheme(theme) {
   const label = theme === 'dark' ? 'sombre' : 'clair';
   console.log(`\n=== Menu « Bordures » à la souris, ${WIDTH}x${HEIGHT}, thème ${label} ===`);
@@ -331,7 +351,7 @@ async function runTheme(theme) {
   let menu = await menuState(page);
   check(`${label} - un clic sur « Bordures » ouvre le menu SOUS la bande de la barre, tout entier dans le panneau`, !!menu && menu.shown && menu.below && menu.inside, menu && { top: menu.top, bottom: menu.bottom, dockBottom: menu.dockBottom, right: menu.right });
   check(`${label} - le bouton « Bordures » annonce son menu ouvert : aria-expanded vaut « true » (et « false » avant le clic)`, (await expandedOf(page)) === 'true' && !!chip && chip.shown, await expandedOf(page));
-  check(`${label} - chaque bouton du menu (8 réglages, 8 nuances, « Personnalisé », « Par défaut ») est sous le pointeur`, !!menu && Object.keys(menu.reach).length === 18 && menu.unreachable.length === 0, menu && menu.unreachable);
+  check(`${label} - chaque bouton du menu (8 réglages, 8 nuances, « Personnalisé », « Par défaut », « Quadrillage ») est sous le pointeur`, !!menu && Object.keys(menu.reach).length === 19 && menu.unreachable.length === 0, menu && menu.unreachable);
   check(`${label} - les huit réglages sont des boutons d'au moins 24 px de côté, dans l'ordre Toutes, Extérieures, Intérieures, Haut, Bas, Gauche, Droite, Aucune`,
     !!menu && PRESET_IDS.every(id => menu.states['borders:' + id] && menu.states['borders:' + id].w >= 24 && menu.states['borders:' + id].h >= 24)
     && await page.evaluate(ids => JSON.stringify(Array.from(document.querySelectorAll('.v2-borders-dropdown .v2-borders-presets button')).map(b => b.dataset.action.slice(8))) === JSON.stringify(ids), PRESET_IDS));
@@ -414,6 +434,120 @@ async function runTheme(theme) {
   const mergedSides = await sidesOf(page, 2, 2);
   const mergedCount = await borderAttrCount(page);
   check(`${label} - « Toutes les bordures » sur la case fusionnée : le trait rouge sur son pourtour, une seule valeur par côté (${mergedSides}), ${mergedCount} bords écrits : les 4 de la case et un par case voisine du pourtour`, mergedSides === `${RED},${RED},${RED},${RED}` && mergedCount === 12, { mergedSides, mergedCount });
+  await page.waitForTimeout(650);
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(200);
+
+  // ---------- 7 bis) « Quadrillage » : la ligne à cocher du menu, la Lecture sur de vrais pixels ----------
+  const GRIDLINES = `${MENU} button[data-action="gridlines"]`;
+  const gridLinesChecked = () => page.evaluate(sel => document.querySelector(sel).getAttribute('aria-checked'), GRIDLINES);
+  const savedOff = () => page.evaluate(() => /<table[^>]*data-grid-lines="off"/.test(Editor.getHTML()));
+  const shownNow = () => page.evaluate(() => GridEditor.gridLinesShown(EditorCore.getEditor()));
+  const plainLook = () => page.evaluate(() => { const cell = document.querySelectorAll('.tiptap table > tbody > tr')[3].cells[3]; const s = getComputedStyle(cell); return `${s.borderTopStyle} ${s.borderTopColor} ${s.borderLeftStyle} ${s.borderLeftColor}`; });
+  // La Lecture a besoin d'une ligne à lire : un enregistrement de test, comme celui des scénarios (dev-tests/scenarios-grid.js:useReadRecord).
+  await page.evaluate(async () => {
+    const stub = window.__gristStub;
+    const record = { id: 1, Nom: 'Alpha Durand' };
+    stub.setVariables('GrilleLecture', { Nom: 'Text' });
+    stub.setRows('GrilleLecture', [record]);
+    await GristAPI.refreshSchema();
+    stub.fireRecord(record, 'GrilleLecture');
+  });
+  await loadGrid(page, gridHtml([100, 100, 100, 100], [30, 30, 30, 30], () => ''));
+  await dragGrid(page, [2, 2], [3, 3]);
+  await realClick(page, button('borders-open'));
+  await realClick(page, swatch(RED));
+  await realClick(page, preset('outer')); // le cadre rouge de B2:C3
+  await clickGrid(page, 1, 1);
+  await realClick(page, button('borders-open'));
+  await realClick(page, `${MENU} button[data-action="pen-auto"]`);
+  await realClick(page, preset('bottom')); // un trait « Par défaut » sous A1
+  await page.waitForTimeout(650);
+  await clickGrid(page, 4, 4);
+  await realClick(page, button('borders-open'));
+  menu = await menuState(page);
+  const row = await page.evaluate(([sel, menuSel]) => {
+    const btn = document.querySelector(sel);
+    const menuEl = document.querySelector(menuSel);
+    const bg = getComputedStyle(menuEl).backgroundColor;
+    const name = btn.querySelector('.v2-borders-gridlines-name');
+    const hint = btn.querySelector('small');
+    const r = btn.getBoundingClientRect();
+    return {
+      checked: btn.getAttribute('aria-checked'), role: btn.getAttribute('role'), name: name.textContent, hint: hint.textContent, title: btn.title,
+      nameRatio: Math.round(window.__ratio(getComputedStyle(name).color, bg) * 100) / 100, hintRatio: Math.round(window.__ratio(getComputedStyle(hint).color, bg) * 100) / 100,
+      w: Math.round(r.width), h: Math.round(r.height), bottom: r.bottom, font: getComputedStyle(btn).fontFamily,
+    };
+  }, [GRIDLINES, MENU]);
+  check(`${label} - la ligne « Quadrillage » est tout en bas du menu, sous le pointeur, tout dans le panneau (bas du menu à ${menu && Math.round(menu.bottom)} px sur ${HEIGHT}), cochée au départ`,
+    !!menu && menu.shown && menu.inside && menu.reach.gridlines === true && row.checked === 'true' && row.role === 'checkbox' && row.name === 'Quadrillage' && row.hint === 'Lecture et exports' && row.w >= 150 && row.h >= 24 && row.bottom <= menu.bottom, { row, menu: menu && { bottom: menu.bottom, inside: menu.inside } });
+  check(`${label} - son libellé (${row.nameRatio}:1) et sa mention « ${row.hint} » (${row.hintRatio}:1) sont lisibles (≥ 4,5:1), dans la police du système`, row.nameRatio >= 4.5 && row.hintRatio >= 4.5 && !/manrope/i.test(row.font), row);
+  const editorBefore = await plainLook();
+
+  // un clic décoche, sans refermer le menu
+  await realClick(page, GRIDLINES);
+  menu = await menuState(page);
+  check(`${label} - un clic sur « Quadrillage » le décoche et laisse le menu ouvert ; le modèle enregistré porte data-grid-lines="off", l'éditeur garde son quadrillage (${editorBefore})`,
+    !!menu && menu.shown && (await gridLinesChecked()) === 'false' && !(await shownNow()) && (await savedOff()) && (await plainLook()) === editorBefore && editorBefore.startsWith('solid '), { checked: await gridLinesChecked(), look: await plainLook() });
+  await page.mouse.click(WIDTH - 10, HEIGHT - 10);
+  await page.waitForTimeout(200);
+
+  // la Lecture, sur de vrais pixels : à plat (case vide) le fond de la case ; à la frontière de deux cases le trait, ou rien
+  const readingPaint = async () => {
+    await page.evaluate(() => document.getElementById('btn-mode-read').click());
+    await page.waitForFunction(() => document.querySelectorAll('#reader-container table > tbody > tr').length >= 4, null, { timeout: 15000 });
+    await page.waitForTimeout(500);
+    const spots = await page.evaluate(() => {
+      const rows = document.querySelectorAll('#reader-container table > tbody > tr');
+      const box = (r, c) => rows[r].cells[c].getBoundingClientRect();
+      const inside = box(3, 3);
+      const left = box(3, 3).left; // frontière entre D4 et C4 : aucun trait posé
+      const bFrame = box(1, 1); // B2
+      const a1 = box(0, 0);
+      return {
+        background: [inside.left + inside.width / 2, inside.top + inside.height / 2],
+        plain: [left, inside.top + inside.height / 2],
+        frame: [bFrame.left, bFrame.top + bFrame.height / 2],
+        placed: [a1.left + a1.width / 2, a1.bottom],
+      };
+    });
+    const sample = async ([x, y]) => pixelsOf(page, { x: Math.round(x) - 3, y: Math.round(y) - 3, width: 7, height: 7 });
+    const bg = (await sample(spots.background))[24];
+    const nearest = (pixels, wanted) => Math.min(...pixels.map(p => colorGap(p, wanted)));
+    const out = {
+      plainDiffers: Math.max(...(await sample(spots.plain)).map(p => colorGap(p, bg))) > 25,
+      plainGrey: nearest(await sample(spots.plain), [184, 192, 201]) <= 12,
+      frameRed: nearest(await sample(spots.frame), [192, 57, 43]) <= 12,
+      placedGrey: nearest(await sample(spots.placed), [184, 192, 201]) <= 12,
+    };
+    await page.evaluate(() => document.getElementById('btn-mode-edit').click());
+    await page.waitForFunction(() => !document.body.classList.contains('pp-editor-hidden'), null, { timeout: 15000 });
+    await page.waitForTimeout(400);
+    return out;
+  };
+  const hiddenPaint = await readingPaint();
+  check(`${label} - Lecture, quadrillage masqué : plus aucun trait entre deux cases que rien ne borde, mais le cadre rouge et le trait « Par défaut » sont peints (pixels relus : ${JSON.stringify(hiddenPaint)})`,
+    !hiddenPaint.plainDiffers && !hiddenPaint.plainGrey && hiddenPaint.frameRed && hiddenPaint.placedGrey, hiddenPaint);
+
+  // un second clic recoche : la Lecture retrouve son quadrillage
+  await clickGrid(page, 4, 4);
+  await realClick(page, button('borders-open'));
+  check(`${label} - rouvert, le menu montre « Quadrillage » décoché`, (await gridLinesChecked()) === 'false');
+  await realClick(page, GRIDLINES);
+  menu = await menuState(page);
+  check(`${label} - un second clic recoche « Quadrillage » (menu toujours ouvert) et retire la marque du modèle enregistré`, !!menu && menu.shown && (await gridLinesChecked()) === 'true' && (await shownNow()) && !(await page.evaluate(() => /data-grid-lines/.test(Editor.getHTML()))));
+  await page.mouse.click(WIDTH - 10, HEIGHT - 10);
+  await page.waitForTimeout(200);
+  const shownPaint = await readingPaint();
+  check(`${label} - Lecture, quadrillage montré : le trait entre deux cases est de nouveau peint, avec le cadre rouge et le trait « Par défaut » (pixels relus : ${JSON.stringify(shownPaint)})`,
+    shownPaint.plainDiffers && shownPaint.plainGrey && shownPaint.frameRed && shownPaint.placedGrey, shownPaint);
+
+  // un seul Ctrl+Z défait le dernier geste (la coche remise)
+  await page.waitForTimeout(650);
+  await page.evaluate(() => EditorCore.getEditor().commands.focus());
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(200);
+  check(`${label} - un seul Ctrl+Z défait le dernier clic sur « Quadrillage » : le quadrillage est de nouveau masqué`, !(await shownNow()) && (await savedOff()), { shown: await shownNow() });
   await page.waitForTimeout(650);
   await page.keyboard.press('Control+z');
   await page.waitForTimeout(200);

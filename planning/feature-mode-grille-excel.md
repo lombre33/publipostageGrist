@@ -62,6 +62,18 @@ Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Le
   trait n'est pas écrit, toutes les cases d'une plage fusionnée portent le même pourtour. Limites : un trait fin et plein seulement (ni épaisseur, ni pointillé : pdfmake n'a que des épaisseurs de trait par ligne) ;
   le côté d'une case fusionnée est un seul trait (celui des cases d'en face le suit : « bavure » assumée) ; fusionner perd les traits intérieurs, scinder rend le trait de départ à l'intérieur ; une case fusionnée ne
   chevauche jamais un saut de page (lot C).
+- Quadrillage, lot B3 (08/10, demande d'Antoine : « pour le mode lecture et export du mode grille, il faudrait une option pour savoir si on affiche ou pas la grille (hors bordure) ») : une option PAR MODÈLE de grille, cochée
+  au départ, pour montrer ou masquer en Lecture, dans le PDF et dans l'Excel le quadrillage de départ - les traits que personne n'a posés. L'éditeur garde le sien ; les traits posés restent (« hors bordure »). Stockage : un
+  attribut du TABLEAU, `gridLines` (`'off'` ou null ; `GridEditor.withTableAttributes`), enregistré `data-grid-lines="off"` sur le `<table>` du HTML du modèle - donc rien de plus à brancher (ni colonne, ni `Margins`, ni
+  `main.js`) : la Lecture, le PDF, l'Excel, l'export en lot, « Modèle selon la ligne » et l'enregistrement le portent déjà ; `GridEditor.gridLinesShown` / `setGridLinesShown` (un `setNodeMarkup` sur le tableau : un seul Annuler,
+  l'enregistrement automatique le voit). Pour que « hors bordure » veuille dire quelque chose, une nouvelle valeur de bord : `'auto'` (`data-border-*="auto"`) = le trait fin gris de départ POSÉ par la personne - le stylo
+  « Par défaut » l'écrit désormais (`TableBorders.valueFor`) au lieu de null, qui reste le quadrillage ; l'éditeur et la Lecture le dessinent en ligne (`1px solid #b8c0c9`, `borderHtml`), comme null quand le quadrillage est montré.
+  `TableBorders.drawn(sides, gridShown)` donne ce qu'il faut dessiner (null -> « pas de trait » quand le quadrillage est masqué, `auto` -> le trait de départ) : `ExportCommon.cellBorderSides` l'applique et rend alors
+  toujours une Map, le PDF (`tableFrom` : la case de remplissage d'une ligne trop courte n'a plus de trait) et l'Excel n'ont rien d'autre à savoir. Lecture : `body.pp-grid-mode #reader-container table[data-grid-lines="off"]
+  td, th { border-style: none }` (`css/grid.css` : un trait posé est en ligne et l'emporte, `none` perd en bordures fusionnées ; réservé à une grille). Les largeurs du PDF ne changent pas (le layout garde 0,5 pt par trait,
+  seulement non peint). Menu : une ligne à cocher « Quadrillage » (« Lecture et exports ») au pied du menu « Bordures » (`createBordersDropdown`, `data-action="gridlines"`), qui ne referme pas le menu. Limite connue : une
+  bordure posée en « Par défaut » AVANT ce lot est stockée comme le quadrillage (null) et disparaît avec lui, à reposer. Tests : `grid` (règle, enregistrement, Lecture, PDF), `xlsx`, `gridBordersMouse` (700x400, clair et sombre,
+  Lecture relue sur de vrais pixels).
 - Saut de page, lot C (01/10) : attribut `pageBreakBefore` de `tableRow` (`data-page-break-before="true"` sur le `<tr>`, faux par défaut et hors grille). Le bouton « Saut de page » de la barre d'outils le pose AVANT la
   première ligne de la sélection (`GridEditor.togglePageBreak` : un `setNodeMarkup` sur la ligne, un seul Annuler) et s'enfonce quand cette ligne en porte un ; son info-bulle et son nom accessible changent avec le mode
   (`insert.pageBreak.gridTip` / `gridAria`, relus par `I18n.applyTranslations`). Il est grisé sur la première ligne et là où une case fusionnée couvre la limite (`boundaryCrossed` : la même case sur les lignes r - 1
@@ -169,6 +181,7 @@ Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Le
 | A2 | Lecture et PDF d'une grille (sans feuille A4, `rowHeight` et `colwidth` respectés, texte au milieu de sa case, grille plus large que la page ramenée à la largeur) | en ligne (01/10, `418e609`) |
 | B1 | Barre de la case : fusion et scission, alignement vertical ; cases fusionnées dans le PDF (`rowSpan`) et colonnes mesurées sur une case simple | prêt (01/10) |
 | B2 | Barre de la case : bordures (menu, règle commune `js/table-borders.js`, éditeur, Lecture, PDF, Excel) | prêt (01/10) |
+| B3 | Quadrillage montré ou masqué en Lecture et dans les exports (ligne à cocher du menu « Bordures », `gridLines` du tableau, bord `auto`) | prêt (08/10) |
 | C | Saut de page porté par la ligne (bouton, marqueur, PDF : nouvelle page, Excel : nouvelle feuille) ; bascule portrait / paysage et format active pour `grille` (`OrientationToggle.TYPES`) | prêt (01/10) |
 | D | Export Excel d'un enregistrement (ExcelJS 4.4.0, cdnjs, chargé à la demande) : ligne « Exporter en Excel… » du menu Qualité PDF, grisée hors grille ; les deux lignes Word grisées dans une grille | en ligne (01/10) |
 | E | « Exporter toutes les valeurs de la table » : une archive ZIP d'un classeur par valeur et un classeur unique d'une feuille par valeur ; dans une grille, « lignes » devient « valeurs de la table » (lot PDF compris) ; « Nouvelle grille » visible sans `?dev` (second commit, séparé) | en ligne (01/10) |

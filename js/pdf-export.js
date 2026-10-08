@@ -796,6 +796,8 @@ const PdfExport = (function () {
       // changent rien : vérifié en lisant les traits du PDF) - chaque case porte donc ses quatre côtés, et les cases voisines, d'accord avec elle sur
       // le trait qu'elles se partagent, disent la même chose.
       borderSides: isGrid ? ExportCommon.cellBorderSides(node) : null,
+      // Quadrillage de départ masqué : aucun trait pour une case que le HTML ne donne pas (ligne trop courte), les cases du HTML ont déjà leurs bords.
+      gridLinesHidden: isGrid && ExportCommon.gridLinesHidden(node),
       rowAreasPt: isGrid ? gridRowAreasPt(rawRows, pads) : null,
       // Images en calque imbriquées dans une case, portées sur `table._nestedPending`, remontées jusqu'à buildPdfContentFromRoot (même résolution que le
       // top-level).
@@ -909,7 +911,8 @@ const PdfExport = (function () {
       for (let i = 1; i < colSpan; i += 1) output.push({});
     });
     skipCovered();
-    while (output.length < columnCount) output.push({ text: ' ', border: [true, true, true, true] });
+    const fillerLine = !t.gridLinesHidden;
+    while (output.length < columnCount) output.push({ text: ' ', border: [fillerLine, fillerLine, fillerLine, fillerLine] });
     return output.slice(0, columnCount);
   }
 

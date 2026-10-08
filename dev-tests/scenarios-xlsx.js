@@ -173,7 +173,9 @@
   // Charge la grille, l'enregistre comme le modèle le serait (Editor.getHTML), l'exporte et ouvre le fichier.
   async function exportGrid(widths, heights, rows, options) {
     const o = options || {};
-    await loadGrid(gridHtml(widths, heights, rows, o.breaks));
+    const html = gridHtml(widths, heights, rows, o.breaks);
+    // `tableAttrs` : des attributs du <table> (le quadrillage masqué, `data-grid-lines="off"`), relus par l'éditeur comme à l'ouverture d'un modèle.
+    await loadGrid(o.tableAttrs ? html.replace('<table ', `<table ${o.tableAttrs} `) : html);
     const { blob, filename } = await XlsxExport.getXlsxBlobForRecord(Editor.getHTML(), o.tableId || TABLE, o.record || RECORD, o.template || '', o.options);
     return Object.assign(await openXlsx(blob), { filename, blob });
   }
@@ -1191,6 +1193,40 @@
       };
       const bad = Object.keys(want).filter(ref => sidesOf(s, ref) !== want[ref]).map(ref => `${ref} = ${sidesOf(s, ref)} (attendu ${want[ref]})`);
       if (JSON.stringify(s.merges) !== JSON.stringify(['A1:B2'])) bad.push('fusions=' + s.merges);
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'xlsx_gridlines_hidden_leaves_only_the_borders_the_person_placed',
+    description: 'Excel d\'une grille au quadrillage masqué (`data-grid-lines="off"` sur le tableau) : une case sans bord posé n\'a plus aucun filet ; un bord en couleur, un bord posé en « Par défaut » (« auto », le gris de départ) restent des deux côtés d\'un trait partagé ; le même tableau au quadrillage montré garde ses filets gris partout ; une case fusionnée bordée en « auto » ne garde que son pourtour, sur toutes les cases de sa plage',
+    run: async (h) => {
+      await seed(h);
+      const rows = [
+        [td('A1', withSide('right', RED) + withSide('bottom', 'auto')), td('B1', withSide('left', RED)), 'C1'],
+        [td('A2', withSide('top', 'auto')), 'B2', 'C2'],
+        ['A3', 'B3', 'C3'],
+      ];
+      const hidden = (await exportGrid([80, 80, 80], [30, 30, 30], rows, { tableAttrs: 'data-grid-lines="off"' })).sheet;
+      const shown = (await exportGrid([80, 80, 80], [30, 30, 30], rows)).sheet;
+      const outline = td('Bloc', ' colspan="2" rowspan="2"' + ['top', 'right', 'bottom', 'left'].map(side => withSide(side, 'auto')).join(''));
+      const merged = (await exportGrid([80, 80, 80], [30, 30, 30], [[outline, 'C1'], ['C2'], ['A3', 'B3', 'C3']], { tableAttrs: 'data-grid-lines="off"' })).sheet;
+      const ring = `${GREY},${GREY},${GREY},${GREY}`;
+      const want = {
+        hidden: {
+          A1: `-,C0392B,${GREY},-`, B1: '-,-,-,C0392B', C1: '-,-,-,-',
+          A2: `${GREY},-,-,-`, B2: '-,-,-,-', C2: '-,-,-,-', A3: '-,-,-,-', B3: '-,-,-,-', C3: '-,-,-,-',
+        },
+        shown: { A1: `${GREY},C0392B,${GREY},${GREY}`, B1: `${GREY},${GREY},${GREY},C0392B`, C3: ring, B2: ring },
+        merged: { A1: ring, B1: ring, A2: ring, B2: ring, C1: `-,-,-,${GREY}`, C2: `-,-,-,${GREY}`, A3: `${GREY},-,-,-`, B3: `${GREY},-,-,-`, C3: '-,-,-,-' },
+      };
+      const got = {
+        hidden: Object.fromEntries(Object.keys(want.hidden).map(ref => [ref, sidesOf(hidden, ref)])),
+        shown: Object.fromEntries(Object.keys(want.shown).map(ref => [ref, sidesOf(shown, ref)])),
+        merged: Object.fromEntries(Object.keys(want.merged).map(ref => [ref, sidesOf(merged, ref)])),
+      };
+      const bad = [];
+      Object.keys(want).forEach(kind => Object.keys(want[kind]).forEach((ref) => { if (got[kind][ref] !== want[kind][ref]) bad.push(`${kind} ${ref} = ${got[kind][ref]} (attendu ${want[kind][ref]})`); }));
       return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
     },
   });

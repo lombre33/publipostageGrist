@@ -224,13 +224,19 @@ const ExportCommon = (function () {
     };
   }
 
+  // Le quadrillage de départ d'une grille est-il masqué ? (`data-grid-lines="off"` sur le tableau, js/grid-editor.js : la Lecture, le PDF et l'Excel
+  // le lisent au même endroit.)
+  function gridLinesHidden(table) { return table.getAttribute('data-grid-lines') === 'off'; }
+
   // Les bords de chaque case d'un tableau de grille, tels que l'éditeur les montre (js/table-borders.js : un trait que deux cases se partagent n'a
   // qu'une valeur, quoi que dise le HTML) : une Map case -> { top, right, bottom, left } (null = trait fin gris de départ, 'none' = pas de trait,
-  // '#rrggbb'). Lue sur les `data-border-*`, jamais sur le style calculé, qui suit le thème sombre. null quand aucune case n'en porte (tout tableau
-  // de document, la plupart des grilles) : le PDF et l'Excel gardent alors leur trait de départ.
+  // '#rrggbb'), ce qu'il faut dessiner : quand le quadrillage est masqué, le trait de départ que la personne n'a pas posé devient « pas de trait »
+  // (TableBorders.drawn). Lue sur les `data-border-*`, jamais sur le style calculé, qui suit le thème sombre. null quand aucune case ne porte de bord
+  // et que le quadrillage est montré (tout tableau de document, la plupart des grilles) : le PDF et l'Excel gardent alors leur trait de départ.
   function cellBorderSides(table) {
     const rows = tableRows(table);
     const { placed, width } = placeCells(rows);
+    const gridShown = !gridLinesHidden(table);
     let any = false;
     placed.forEach((cell) => {
       TableBorders.SIDES.forEach((side) => {
@@ -238,9 +244,9 @@ const ExportCommon = (function () {
         if (cell[side]) any = true;
       });
     });
-    if (!any) return null;
+    if (!any && gridShown) return null;
     const sides = TableBorders.resolve({ width, height: rows.length, cells: placed });
-    return new Map(placed.map((cell, i) => [cell.el, sides[i]]));
+    return new Map(placed.map((cell, i) => [cell.el, TableBorders.drawn(sides[i], gridShown)]));
   }
 
   // Les tranches d'une grille que ses sauts de page découpent (`data-page-break-before` sur une ligne : js/grid-editor.js), une par page du PDF et
@@ -289,6 +295,6 @@ const ExportCommon = (function () {
   function unreadImageCount() { return unreadImages.size; }
   function resetUnreadImages() { unreadImages.clear(); }
 
-  return { EDITOR_STYLE, hexOf, cssColorHex, scriptRefusal, loadScriptOnce, ensureJsZipLoaded, downloadBlob, attachMeasureHost, tableRows, cellsOf, spanOf, placeCells, measuredColumnWidthsPx, shownImageWidthPx, cellBorderSides, gridRowSegments, resolveHeaderFooterVariables,
+  return { EDITOR_STYLE, hexOf, cssColorHex, scriptRefusal, loadScriptOnce, ensureJsZipLoaded, downloadBlob, attachMeasureHost, tableRows, cellsOf, spanOf, placeCells, measuredColumnWidthsPx, shownImageWidthPx, gridLinesHidden, cellBorderSides, gridRowSegments, resolveHeaderFooterVariables,
     resolveRecord, codeLinesOf, calloutMetricsPx, headerRowCount, noteUnreadImage, noteImageWithoutSource, unreadImageCount, resetUnreadImages };
 })();
