@@ -8,7 +8,9 @@
 //   - « Ligne avant », « Ligne après », « Colonne avant » et « Colonne après » ajoutent autant de lignes (de colonnes) que la sélection en couvre, en UN Ctrl+Z, la sélection restant sur les mêmes
 //     lignes ; un simple curseur n'en ajoute qu'une, et un tableau de document aussi ;
 //   - gras, taille, police, couleurs, puces, alignements, fond, alignement vertical, bordures, Suppr, Retour arrière, Ctrl+X, fusion et suppression de lignes ou de colonnes touchent toutes
-//     les cases choisies, et elles seules.
+//     les cases choisies, et elles seules ;
+//   - tirer le trait (la poignée) d'une des lignes ou colonnes choisies par leurs bandeaux les règle toutes à la même taille, en direct puis en UNE transaction ; le trait d'une ligne hors de la
+//     sélection, d'une seule ligne choisie ou d'un bloc qui ne couvre pas toute la largeur ne règle que sa ligne.
 // Lancé par run-headless.mjs (groupe Node « gridLinesMouse », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-grid-lines-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -281,6 +283,60 @@ async function undo(page) {
   await page.waitForTimeout(300);
 }
 
+// « + » puis « Nouvelle grille » à la vraie souris : une vraie grille, dont la feuille n'est pas réduite à l'écran (le zoom de la page ne s'applique pas à une grille) - une taille tirée de N px
+// y est une taille de N px. Une grille modifiée et pas enregistrée ouvre d'abord « Modifications non enregistrées » : on clique « Abandonner ».
+async function freshGrid(page) {
+  const newBtn = await boxOf(page, '#btn-new');
+  await page.mouse.move(newBtn.x, newBtn.y, { steps: 3 });
+  await page.waitForTimeout(350);
+  const entry = await boxOf(page, '#v2-btn-new-grid');
+  await page.mouse.move(entry.x, entry.y, { steps: 4 });
+  await page.mouse.click(entry.x, entry.y);
+  await page.waitForTimeout(250);
+  const discard = await page.evaluate(() => {
+    const ov = document.getElementById('pp-dialog-modal');
+    if (!ov || getComputedStyle(ov).display === 'none') return null;
+    const button = Array.from(ov.querySelectorAll('.pp-modal-actions button')).filter(b => !b.hidden).find(b => b.textContent === 'Abandonner');
+    if (!button) return null;
+    const r = button.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  });
+  if (discard) {
+    await page.mouse.move(discard.x - 10, discard.y, { steps: 2 });
+    await page.mouse.click(discard.x, discard.y);
+  }
+  await page.waitForFunction(() => GridEditor.isActive() && document.querySelectorAll('.v2-grid-colhead').length > 0, null, { timeout: 8000 }).catch(() => {});
+  await page.waitForTimeout(400);
+  await page.mouse.move(WIDTH - 10, HEIGHT - 10);
+}
+
+// La poignée du trait sous le numéro d'une ligne ou à droite de la lettre d'une colonne (`index` depuis 0).
+const handleOf = (kind, index) => (kind === 'row' ? `.v2-grid-rows .v2-grid-rowhead[data-index="${index}"] .v2-grid-handle` : `.v2-grid-cols .v2-grid-colhead[data-index="${index}"] .v2-grid-handle`);
+// Tire cette poignée de `delta` px (vers le bas pour une ligne, vers la droite pour une colonne) à la vraie souris ; `during` mesure pendant que le bouton est enfoncé.
+async function dragHandle(page, kind, index, delta, during) {
+  const b = await boxOf(page, handleOf(kind, index));
+  const to = kind === 'row' ? { x: b.x, y: b.y + delta } : { x: b.x + delta, y: b.y };
+  await page.mouse.move(b.x, b.y, { steps: 3 });
+  await page.mouse.down();
+  await page.mouse.move(to.x, to.y, { steps: 8 });
+  const live = during ? await during() : null;
+  await page.mouse.up();
+  await page.waitForTimeout(250);
+  return live;
+}
+const headSizes = (page, kind) => page.evaluate(k => Array.from(document.querySelectorAll(k === 'row' ? '.v2-grid-rows .v2-grid-rowhead' : '.v2-grid-cols .v2-grid-colhead')).map(h => Math.round(h.getBoundingClientRect()[k === 'row' ? 'height' : 'width'] * 10) / 10), kind);
+const tipText = page => page.evaluate(() => (document.querySelector('.v2-grid-tip') || {}).textContent || null);
+const tableWidth = page => page.evaluate(() => Math.round(document.querySelector('.tiptap table').getBoundingClientRect().width * 10) / 10);
+// Les transactions qui changent le document depuis la dernière remise à zéro.
+async function countTransactions(page) {
+  await page.evaluate(() => {
+    window.__tx = 0;
+    if (!window.__txSpy) { window.__txSpy = true; EditorCore.getEditor().on('transaction', ({ transaction }) => { if (transaction.docChanged) window.__tx++; }); }
+  });
+}
+const transactions = page => page.evaluate(() => window.__tx);
+const sizesAre = (list, want, tolerance = 0.6) => list.length === want.length && list.every((x, i) => Math.abs(x - want[i]) <= tolerance);
+
 const BAR = '.v2-cell-bar-dock .v2-floating-toolbar';
 const barButton = action => `${BAR} button[data-action="${action}"]`;
 
@@ -520,6 +576,181 @@ await pickLines(page, 'col', 1, 2);
 await realClick(page, barButton('col-del'));
 await page.waitForTimeout(250);
 checkGrid('« Supprimer la colonne » sur les lettres B et C supprime les deux colonnes', await texts(page), matrix(ROWS, COLS - 2, (r, c) => nameOf(r, c === 1 ? 1 : c + 2)));
+
+// ---------- 5) Tirer le trait d'une ligne ou d'une colonne choisie : toutes les choisies prennent la même taille ----------
+await freshGrid(page);
+await loadGrid(page, GRID);
+await countTransactions(page);
+const PX = { row: (await rowHeights(page))[0], col: (await colWidths(page))[0] };
+check('une vraie grille (« Nouvelle grille ») n\'est pas réduite à l\'écran : colonnes de 100 px, lignes à la hauteur de leur texte (un peu moins de 30 px)', PX.col === 100 && PX.row >= 28 && PX.row < 30, PX);
+// Ce qu'une poignée tirée de `delta` px annonce et pose : la taille de départ plus le déplacement, arrondie.
+const rowAt = delta => Math.round(PX.row + delta);
+const liveRows = async () => ({ heights: await rowHeights(page), heads: await headSizes(page, 'row'), tip: await tipText(page), tx: await transactions(page) });
+const liveCols = async () => ({ widths: await colWidths(page), heads: await headSizes(page, 'col'), tip: await tipText(page), table: await tableWidth(page), tx: await transactions(page) });
+const ROW_START = Array(ROWS).fill(PX.row);
+const COL_START = Array(COLS).fill(PX.col);
+
+// Plusieurs lignes choisies par leurs numéros : tirer le trait de l'une les règle toutes
+await pickLines(page, 'row', 1, 3);
+check('les numéros 2 à 4 sélectionnent trois lignes entières', same(await selectedAt(page), cellsBetween(2, 4, 1, COLS)), await selectedAt(page));
+await countTransactions(page);
+let live = await dragHandle(page, 'row', 2, 20, liveRows);
+let wantRows = [PX.row, rowAt(20), rowAt(20), rowAt(20), PX.row, PX.row];
+check(`tirer de 20 px le trait sous le numéro 3 (les numéros 2 à 4 sont choisis) : les trois lignes passent à ${rowAt(20)} px EN DIRECT, leurs numéros aussi, l'info-bulle l'annonce, rien n'est enregistré avant le relâcher`,
+  sizesAre(live.heights, wantRows) && sizesAre(live.heads, wantRows) && live.tip === `${rowAt(20)} px` && live.tx === 0, live);
+check(`au relâcher : UNE transaction, les trois lignes à ${rowAt(20)} px, les autres inchangées, la sélection reste sur les lignes 2 à 4`,
+  sizesAre(await rowHeights(page), wantRows) && (await transactions(page)) === 1 && same(await selectedAt(page), cellsBetween(2, 4, 1, COLS)), { heights: await rowHeights(page), tx: await transactions(page), selected: (await selectedAt(page)).length });
+await undo(page);
+check('un seul Ctrl+Z rend les six lignes à leur hauteur de départ', sizesAre(await rowHeights(page), ROW_START), await rowHeights(page));
+
+// Le trait d'une autre ligne de la sélection (la dernière) règle aussi les trois, vers le haut comme vers le bas (des lignes de 40 px peuvent rétrécir jusqu'à la hauteur de leur texte)
+await loadGrid(page, gridHtml(Array(COLS).fill(100), Array(ROWS).fill(40), nameOf));
+const mid = (await rowHeights(page))[0];
+check('des lignes de 40 px sont plus hautes que leur texte', Math.abs(mid - 40) <= 0.6, mid);
+await pickLines(page, 'row', 1, 3);
+live = await dragHandle(page, 'row', 3, -8, liveRows);
+check(`le trait sous la dernière ligne choisie (le numéro 4), tiré vers le haut de 8 px, règle les trois lignes à ${Math.round(mid - 8)} px EN DIRECT`, sizesAre(live.heights, [mid, ...Array(3).fill(Math.round(mid - 8)), mid, mid]) && live.tip === `${Math.round(mid - 8)} px`, live);
+check(`au relâcher : les trois lignes à ${Math.round(mid - 8)} px, les trois autres gardent leurs 40 px`, sizesAre(await rowHeights(page), [mid, ...Array(3).fill(Math.round(mid - 8)), mid, mid]), await rowHeights(page));
+await undo(page);
+check('un seul Ctrl+Z rend les six lignes à 40 px', sizesAre(await rowHeights(page), Array(ROWS).fill(mid)), await rowHeights(page));
+
+// Ce qui ne règle qu'une ligne : une seule ligne choisie, un curseur, un trait hors de la sélection, un bloc qui ne couvre pas toute la largeur
+await loadGrid(page, GRID);
+await pickLines(page, 'row', 2);
+await dragHandle(page, 'row', 2, 20);
+check('une seule ligne choisie (le numéro 3) : tirer son trait ne change que cette ligne', sizesAre(await rowHeights(page), [PX.row, PX.row, rowAt(20), PX.row, PX.row, PX.row]), await rowHeights(page));
+await loadGrid(page, GRID);
+await clickGrid(page, 2, 2);
+await dragHandle(page, 'row', 3, 20);
+check('un curseur dans une case : tirer le trait du numéro 4 ne change que la ligne 4', sizesAre(await rowHeights(page), [PX.row, PX.row, PX.row, rowAt(20), PX.row, PX.row]), await rowHeights(page));
+await loadGrid(page, GRID);
+await pickLines(page, 'row', 1, 3);
+await countTransactions(page);
+await dragHandle(page, 'row', 5, 20);
+check('le trait d\'une ligne hors de la sélection (le numéro 6, alors que 2 à 4 sont choisis) ne règle que cette ligne, la sélection reste', sizesAre(await rowHeights(page), [PX.row, PX.row, PX.row, PX.row, PX.row, rowAt(20)]) && same(await selectedAt(page), cellsBetween(2, 4, 1, COLS)), { heights: await rowHeights(page), selected: (await selectedAt(page)).length });
+await loadGrid(page, GRID);
+await dragGrid(page, [2, 2], [4, 3]);
+check('B2:C4 choisi en glissant couvre trois lignes mais pas toute la largeur', same(await selectedAt(page), cellsBetween(2, 4, 2, 3)), await selectedAt(page));
+await dragHandle(page, 'row', 2, 20);
+check('un bloc qui ne couvre pas toute la largeur (B2:C4) : le trait du numéro 3 ne règle que la ligne 3', sizesAre(await rowHeights(page), [PX.row, PX.row, rowAt(20), PX.row, PX.row, PX.row]), await rowHeights(page));
+
+// Plusieurs colonnes choisies par leurs lettres
+await loadGrid(page, GRID);
+await pickLines(page, 'col', 1, 3);
+check('les lettres B à D sélectionnent trois colonnes entières', same(await selectedAt(page), cellsBetween(1, ROWS, 2, 4)), (await selectedAt(page)).length);
+await countTransactions(page);
+live = await dragHandle(page, 'col', 2, 30, liveCols);
+let wantCols = [PX.col, PX.col + 30, PX.col + 30, PX.col + 30, PX.col];
+check('tirer de 30 px le trait à droite de la lettre C (B à D sont choisies) : les trois colonnes passent à 130 px EN DIRECT, leurs lettres aussi, le tableau s\'élargit de 90 px, l\'info-bulle l\'annonce, rien n\'est enregistré avant le relâcher',
+  sizesAre(live.widths, wantCols) && sizesAre(live.heads, wantCols) && Math.abs(live.table - (COLS * PX.col + 90)) <= 1 && live.tip === `${PX.col + 30} px` && live.tx === 0, live);
+check('au relâcher : UNE transaction, les trois colonnes à 130 px, les autres à 100 px, le tableau mesure la somme des colonnes, la sélection reste sur les colonnes B à D',
+  sizesAre(await colWidths(page), wantCols) && (await transactions(page)) === 1 && Math.abs((await tableWidth(page)) - (COLS * PX.col + 90)) <= 1 && same(await selectedAt(page), cellsBetween(1, ROWS, 2, 4)), { widths: await colWidths(page), tx: await transactions(page), table: await tableWidth(page) });
+await undo(page);
+check('un seul Ctrl+Z rend les cinq colonnes à 100 px', sizesAre(await colWidths(page), COL_START), await colWidths(page));
+
+await loadGrid(page, GRID);
+await pickLines(page, 'col', 1, 3);
+await dragHandle(page, 'col', 1, -40);
+check('le trait à droite de la première colonne choisie (B), tiré vers la gauche de 40 px, règle B, C et D à 60 px', sizesAre(await colWidths(page), [PX.col, PX.col - 40, PX.col - 40, PX.col - 40, PX.col]), await colWidths(page));
+await loadGrid(page, GRID);
+await pickLines(page, 'col', 1);
+await dragHandle(page, 'col', 1, 30);
+check('une seule colonne choisie (B) : tirer son trait ne change que cette colonne', sizesAre(await colWidths(page), [PX.col, PX.col + 30, PX.col, PX.col, PX.col]), await colWidths(page));
+await loadGrid(page, GRID);
+await pickLines(page, 'col', 1, 3);
+await dragHandle(page, 'col', 4, 30);
+check('le trait d\'une colonne hors de la sélection (E, alors que B à D sont choisies) ne règle que cette colonne', sizesAre(await colWidths(page), [PX.col, PX.col, PX.col, PX.col, PX.col + 30]), await colWidths(page));
+await loadGrid(page, GRID);
+await dragGrid(page, [2, 2], [4, 3]);
+await dragHandle(page, 'col', 1, 30);
+check('un bloc qui ne couvre pas toute la hauteur (B2:C4) : le trait de la lettre B ne règle que la colonne B', sizesAre(await colWidths(page), [PX.col, PX.col + 30, PX.col, PX.col, PX.col]), await colWidths(page));
+// Une seule case choisie n'est pas « plusieurs colonnes » : B et C fusionnées en une case (qui reste choisie), le trait de C ne règle que C
+await loadGrid(page, GRID);
+await parkMouse(page);
+await pickLines(page, 'col', 1, 2);
+await realClick(page, barButton('cell-merge'));
+await page.waitForTimeout(250);
+const mergedPair = await page.evaluate(() => Array.from(document.querySelectorAll('.tiptap table td')).filter(td => td.colSpan > 1 || td.rowSpan > 1).map(td => `${td.rowSpan}x${td.colSpan}`));
+await dragHandle(page, 'col', 2, 25);
+check('colonnes B et C fusionnées en UNE case (elle reste choisie) : tirer le trait de C ne règle que C, B garde sa largeur',
+  same(mergedPair, [`${ROWS}x2`]) && sizesAre(await colWidths(page), [PX.col, PX.col, PX.col + 25, PX.col, PX.col]), { mergedPair, widths: await colWidths(page) });
+
+// Toute la grille choisie (le coin) : le trait de n'importe quelle ligne règle toutes les lignes, celui de n'importe quelle colonne toutes les colonnes
+await loadGrid(page, GRID);
+await realClick(page, '.v2-grid-corner');
+check('le coin sélectionne les trente cases', (await selectedAt(page)).length === ROWS * COLS, (await selectedAt(page)).length);
+await dragHandle(page, 'row', 3, 12);
+check(`toute la grille choisie : le trait sous le numéro 4 règle les six lignes à ${rowAt(12)} px`, sizesAre(await rowHeights(page), Array(ROWS).fill(rowAt(12))), await rowHeights(page));
+await dragHandle(page, 'col', 3, 10);
+check('toute la grille choisie : le trait à droite de la lettre D règle les cinq colonnes à 110 px', sizesAre(await colWidths(page), Array(COLS).fill(PX.col + 10)), await colWidths(page));
+
+// Le plancher : toutes les lignes tirées ensemble s'arrêtent à la plus haute des hauteurs de leur texte
+const LONG = 'Un texte long sur trois lignes';
+const TALL = gridHtml(Array(COLS).fill(100), Array(ROWS).fill(28), (r, c) => (r === 3 && c === 1 ? LONG : nameOf(r, c)));
+await loadGrid(page, TALL);
+const tallRow = (await rowHeights(page))[2];
+check('une ligne au texte long est nettement plus haute que les autres (son plancher), et les numéros 2 à 4 restent dans le panneau', tallRow > 2 * PX.row && tallRow < 100, await rowHeights(page));
+await pickLines(page, 'row', 1, 3);
+check('les numéros 2 à 4 sélectionnent les quinze cases des trois lignes', same(await selectedAt(page), cellsBetween(2, 4, 1, COLS)), (await selectedAt(page)).length);
+await countTransactions(page);
+live = await dragHandle(page, 'row', 1, -120, liveRows);
+check('tirer vers le haut le trait de la ligne 2 (lignes 2 à 4 choisies) : les trois lignes s\'arrêtent EN DIRECT à la hauteur du texte de la plus haute, jamais en dessous',
+  sizesAre(live.heights.slice(1, 4), Array(3).fill(tallRow), 1.2) && Math.abs(parseFloat(live.tip) - tallRow) <= 1.2 && live.tx === 0, { live, tallRow });
+const floorRows = await rowHeights(page);
+check('au relâcher : UNE transaction, les trois lignes ont la même hauteur (celle du texte de la plus haute), les autres gardent la leur', sizesAre(floorRows.slice(1, 4), Array(3).fill(floorRows[2]), 0.6) && Math.abs(floorRows[2] - tallRow) <= 1.2 && sizesAre([floorRows[0], ...floorRows.slice(4)], Array(3).fill(PX.row)) && (await transactions(page)) === 1, { floorRows, tallRow, tx: await transactions(page) });
+
+// Un simple appui sur la poignée, sans la bouger, ne change rien (les lignes gardent chacune leur hauteur)
+await loadGrid(page, TALL);
+await pickLines(page, 'row', 1, 3);
+check('les numéros 2 à 4 sont choisis avant l\'appui', same(await selectedAt(page), cellsBetween(2, 4, 1, COLS)), (await selectedAt(page)).length);
+await countTransactions(page);
+const beforeClick = await rowHeights(page);
+await dragHandle(page, 'row', 1, 0);
+check('un appui sur la poignée sans la bouger ne change aucune hauteur et n\'enregistre rien', sizesAre(await rowHeights(page), beforeClick) && (await transactions(page)) === 0, { before: beforeClick, after: await rowHeights(page), tx: await transactions(page) });
+// Un aller-retour qui revient au point de départ avant le relâcher : même chose
+const handleBack = await boxOf(page, handleOf('row', 1));
+await page.mouse.move(handleBack.x, handleBack.y, { steps: 3 });
+await page.mouse.down();
+await page.mouse.move(handleBack.x, handleBack.y + 40, { steps: 6 });
+const duringBack = await rowHeights(page);
+await page.mouse.move(handleBack.x, handleBack.y, { steps: 6 });
+await page.mouse.up();
+await page.waitForTimeout(250);
+check('tirer la poignée puis la ramener au point de départ avant de relâcher ne change aucune hauteur et n\'enregistre rien', duringBack[1] > beforeClick[1] + 20 && sizesAre(await rowHeights(page), beforeClick) && (await transactions(page)) === 0, { before: beforeClick, during: duringBack, after: await rowHeights(page), tx: await transactions(page) });
+
+// Échap pendant le geste : tout est rendu
+await loadGrid(page, GRID);
+await pickLines(page, 'row', 1, 3);
+await countTransactions(page);
+const handleEsc = await boxOf(page, handleOf('row', 2));
+await page.mouse.move(handleEsc.x, handleEsc.y, { steps: 3 });
+await page.mouse.down();
+await page.mouse.move(handleEsc.x, handleEsc.y + 30, { steps: 6 });
+const duringEsc = await rowHeights(page);
+await page.keyboard.press('Escape');
+await page.mouse.up();
+await page.waitForTimeout(250);
+const afterEsc = await rowHeights(page);
+const leftOver = await page.evaluate(() => ({ preview: !!document.getElementById('pp-grid-resize-preview'), cls: document.body.className, heads: Array.from(document.querySelectorAll('.v2-grid-rowhead')).map(h => Math.round(h.getBoundingClientRect().height * 10) / 10) }));
+check('Échap pendant le geste : les trois lignes reprennent leur hauteur, rien n\'est enregistré, l\'aperçu est retiré, la sélection reste',
+  sizesAre(duringEsc, [PX.row, PX.row + 30, PX.row + 30, PX.row + 30, PX.row, PX.row]) && sizesAre(afterEsc, ROW_START) && sizesAre(leftOver.heads, ROW_START) && !leftOver.preview && !/pp-grid-resizing/.test(leftOver.cls)
+    && (await transactions(page)) === 0 && same(await selectedAt(page), cellsBetween(2, 4, 1, COLS)), { duringEsc, afterEsc, leftOver, tx: await transactions(page) });
+
+// Une case fusionnée sur deux colonnes tirées ensemble reçoit les deux parts de sa largeur
+const MERGED = `<table style="width: 500px;"><colgroup>${'<col style="width: 100px;">'.repeat(5)}</colgroup><tbody>`
+  + '<tr data-row-height="28" style="height: 28px"><td colwidth="100"><p>A1</p></td><td colspan="2" colwidth="100,100"><p>B1C1</p></td><td colwidth="100"><p>D1</p></td><td colwidth="100"><p>E1</p></td></tr>'
+  + [2, 3].map(r => `<tr data-row-height="28" style="height: 28px">${[1, 2, 3, 4, 5].map(c => `<td colwidth="100"><p>${nameOf(r, c)}</p></td>`).join('')}</tr>`).join('') + '</tbody></table>';
+await loadGrid(page, MERGED);
+await pickLines(page, 'col', 1, 2);
+await dragHandle(page, 'col', 1, 30);
+const mergedNow = await page.evaluate(() => {
+  let colwidth = null;
+  EditorCore.getEditor().state.doc.descendants(node => { if (node.type.name === 'tableCell' && node.attrs.colspan === 2) colwidth = node.attrs.colwidth; });
+  const td = Array.from(document.querySelectorAll('.tiptap table td')).find(x => x.colSpan === 2);
+  return { colwidth, width: td ? Math.round(td.getBoundingClientRect().width * 10) / 10 : null };
+});
+check('colonnes B et C choisies, B tirée de 30 px : B et C passent à 130 px, la case fusionnée sur les deux porte les deux parts (130 + 130) et mesure 260 px',
+  sizesAre(await colWidths(page), [PX.col, PX.col + 30, PX.col + 30, PX.col, PX.col]) && same(mergedNow.colwidth, [PX.col + 30, PX.col + 30]) && Math.abs(mergedNow.width - 2 * (PX.col + 30)) <= 1, { widths: await colWidths(page), mergedNow });
 
 await context.close();
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);

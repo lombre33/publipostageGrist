@@ -23,7 +23,7 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
   vérifie.
 - **Les données** : les modèles et les réglages vivent dans des tables `Publipostage_*` du document Grist ;
   les préférences d'affichage (langue, thème, raccourcis…) dans le navigateur.
-- **Le volume** : 113 fichiers dans `js/` (42 800 lignes : 31 800 de code, 8 400 de commentaires, 2 600 de
+- **Le volume** : 113 fichiers dans `js/` (42 900 lignes : 31 800 de code, 8 400 de commentaires, 2 600 de
   blanc), 36 feuilles de style (3 300 lignes), une page de 770 lignes. Quatre fichiers de polices du PDF
   pèsent 2,5 Mo en quelques lignes (des données) ; `js/i18n.js` est du texte à traduire, pas de la logique.
 
@@ -146,7 +146,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/reader-mode.js` | Le document résolu pour une ligne et paginé ; `preview()` sert aussi tous les exports. |
 | `js/reader-guide.js` | Le guide affiché quand aucune ligne n'est choisie, et la carte « Donnez l'accès complet à ce widget » que l'éditeur montre à la place du document quand Grist ne lui donne pas l'accès complet. |
 
-### Mode grille (5 fichiers, 2 800 lignes)
+### Mode grille (5 fichiers, 2 900 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -272,7 +272,7 @@ For anyone reading the code: what is where, and where to start. Line counts are 
   **Each export** loads its library on first use, with an integrity hash (SRI) that the browser checks.
 - **The data**: templates and settings live in `Publipostage_*` tables of the Grist document; display
   preferences (language, theme, shortcuts…) in the browser.
-- **The size**: 113 files in `js/` (42,800 lines: 31,800 of code, 8,400 of comments, 2,600 blank), 36
+- **The size**: 113 files in `js/` (42,900 lines: 31,800 of code, 8,400 of comments, 2,600 blank), 36
   stylesheets (3,300 lines), a 770-line page. Four PDF font files weigh 2.5 MB in a few lines (data);
   `js/i18n.js` is text to translate, not logic.
 
@@ -394,7 +394,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/reader-mode.js` | The document resolved for a row and paginated; `preview()` also serves all the exports. |
 | `js/reader-guide.js` | The guide shown when no row is chosen, and the "Give this widget full access" card the editor shows in place of the document when Grist does not give it full access. |
 
-### Grid mode (5 files, 2,800 lines)
+### Grid mode (5 files, 2,900 lines)
 
 | File | Role |
 |---|---|

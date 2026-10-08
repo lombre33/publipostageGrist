@@ -5,7 +5,8 @@
 //     grille ne sait pas exporter : la barre grise ces boutons, le garde-fou tient aussi pour le collage et le clavier ;
 //   - la sélection toujours dans une case (jamais le paragraphe vide que TipTap range sous un tableau final, jamais le curseur « gap » après lui) ;
 //   - les bandeaux A, B, C / 1, 2, 3, collants au défilement, dont les poignées règlent la largeur d'une colonne et la hauteur d'une ligne (aperçu en
-//     direct, une seule transaction au relâcher : un seul Annuler) ;
+//     direct, une seule transaction au relâcher : un seul Annuler) ; tirer la poignée d'une ligne (d'une colonne) parmi plusieurs choisies par leurs
+//     bandeaux les règle toutes à la même taille (`chosenLines`) ;
 //   - la hauteur de ligne (`rowHeight` sur tableRow, plancher = la hauteur de son texte) et la largeur de colonne (`colwidth` de chaque case),
 //     toujours posées ;
 //   - le saut de page porté par une ligne (`pageBreakBefore`) : le PDF y commence une page, l'Excel une feuille ;
@@ -985,36 +986,43 @@ const GridEditor = (function () {
   const { setColumnWidth, setRowHeight, colName, tableDom, measure } = (function () {
     // La largeur d'une colonne, la hauteur d'une ligne, le nom d'une colonne et la taille mesurée sur le rendu.
 
-    // Même parcours que `updateColumnWidth` de prosemirror-tables (poignée du bord d'une case) : toutes les cases de la colonne reçoivent la largeur,
-    // une case fusionnée sur plusieurs colonnes ne change que sa part de `colwidth`. Une seule transaction.
-    function setColumnWidth(colIndex, width) {
+    // Même parcours que `updateColumnWidth` de prosemirror-tables (poignée du bord d'une case) : toutes les cases de chaque colonne reçoivent la largeur,
+    // une case fusionnée sur plusieurs colonnes ne change que sa part de `colwidth`. Une seule transaction, quel que soit le nombre de colonnes tirées
+    // ensemble ; la case est relue sur la transaction, pour qu'une case fusionnée sur deux colonnes tirées ensemble reçoive ses deux parts.
+    function setColumnWidth(colIndexes, width) {
       const { state, view } = editor;
       const info = tableInfo(state.doc);
       if (!info) return;
       const map = libs.TableMap.get(info.node);
       const tr = state.tr;
-      for (let row = 0; row < map.height; row++) {
-        const index = row * map.width + colIndex;
-        if (row && map.map[index] === map.map[index - map.width]) continue;
-        const pos = map.map[index];
-        const cell = info.node.nodeAt(pos);
-        const attrs = cell.attrs;
-        const spanIndex = (attrs.colspan || 1) === 1 ? 0 : colIndex - map.colCount(pos);
-        if (attrs.colwidth && attrs.colwidth[spanIndex] === width) continue;
-        const colwidth = attrs.colwidth ? attrs.colwidth.slice() : new Array(attrs.colspan || 1).fill(0);
-        colwidth[spanIndex] = width;
-        tr.setNodeMarkup(info.pos + 1 + pos, undefined, Object.assign({}, attrs, { colwidth }));
-      }
+      colIndexes.forEach(colIndex => {
+        for (let row = 0; row < map.height; row++) {
+          const index = row * map.width + colIndex;
+          if (row && map.map[index] === map.map[index - map.width]) continue;
+          const pos = map.map[index];
+          const attrs = tr.doc.nodeAt(info.pos + 1 + pos).attrs;
+          const spanIndex = (attrs.colspan || 1) === 1 ? 0 : colIndex - map.colCount(pos);
+          if (attrs.colwidth && attrs.colwidth[spanIndex] === width) continue;
+          const colwidth = attrs.colwidth ? attrs.colwidth.slice() : new Array(attrs.colspan || 1).fill(0);
+          colwidth[spanIndex] = width;
+          tr.setNodeMarkup(info.pos + 1 + pos, undefined, Object.assign({}, attrs, { colwidth }));
+        }
+      });
       if (tr.docChanged) view.dispatch(tr);
     }
 
-    function setRowHeight(rowIndex, height) {
+    // La même hauteur pour chaque ligne de `rowIndexes`, en une seule transaction.
+    function setRowHeight(rowIndexes, height) {
       const { state, view } = editor;
       const info = tableInfo(state.doc);
-      if (!info || rowIndex >= info.node.childCount) return;
-      const row = info.node.child(rowIndex);
-      if (row.attrs.rowHeight === height) return;
-      view.dispatch(state.tr.setNodeMarkup(rowPos(info, rowIndex), undefined, Object.assign({}, row.attrs, { rowHeight: height })));
+      if (!info) return;
+      const tr = state.tr;
+      rowIndexes.forEach(rowIndex => {
+        if (rowIndex >= info.node.childCount) return;
+        const row = info.node.child(rowIndex);
+        if (row.attrs.rowHeight !== height) tr.setNodeMarkup(rowPos(info, rowIndex), undefined, Object.assign({}, row.attrs, { rowHeight: height }));
+      });
+      if (tr.docChanged) view.dispatch(tr);
     }
 
     function colName(index) {
@@ -1221,13 +1229,14 @@ const GridEditor = (function () {
     }
     function hideTip() { if (tip) { tip.remove(); tip = null; } }
 
-    // Hauteur d'une ligne réduite à son contenu : le plancher du glissé (« une ligne ne descend pas sous la hauteur de son texte »). Mesurée par une
-    // feuille de style d'un instant, pas en changeant le style de la ligne : ProseMirror verrait la ligne modifiée et la redessinerait.
-    function naturalRowHeight(tr, index) {
+    // Hauteur d'une ligne réduite à son contenu : le plancher du glissé (« une ligne ne descend pas sous la hauteur de son texte »). Pour des lignes
+    // tirées ensemble, la plus haute de leurs hauteurs : elles reçoivent toutes la même. Mesurée par une feuille de style d'un instant, pas en
+    // changeant le style d'une ligne : ProseMirror verrait la ligne modifiée et la redessinerait. Une seule feuille pour toutes les lignes.
+    function naturalRowHeight(rows, indexes) {
       const probe = document.createElement('style');
-      probe.textContent = `.tiptap table > tbody > tr:nth-child(${index + 1}) { height: 0 !important; }`;
+      probe.textContent = `${indexes.map(index => `.tiptap table > tbody > tr:nth-child(${index + 1})`).join(', ')} { height: 0 !important; }`;
       document.head.appendChild(probe);
-      const height = tr.getBoundingClientRect().height;
+      const height = Math.max(...indexes.map(index => rows[index].getBoundingClientRect().height));
       probe.remove();
       return Math.ceil(height);
     }
@@ -1235,20 +1244,44 @@ const GridEditor = (function () {
   })();
 
   const { startResize } = (function () {
-    // Le glissé d'une poignée : la largeur d'une colonne ou la hauteur d'une ligne.
+    // Le glissé d'une poignée : la largeur d'une colonne ou la hauteur d'une ligne, celle de toutes les lignes (colonnes) choisies quand elle en est une.
+
+    // Les lignes (ou colonnes) que la poignée `index` règle : toutes celles que la sélection couvre en entier quand `index` en fait partie (plusieurs
+    // lignes choisies par leurs numéros, tirer le trait de l'une les règle toutes à la même hauteur, comme dans un tableur), sinon `index` seule. Une
+    // sélection qui ne couvre pas toute la largeur (toute la hauteur pour des colonnes) du tableau, un simple curseur, une poignée hors de la
+    // sélection, ou UNE seule case choisie (des colonnes entières fusionnées en une case, que la fusion laisse choisie) : le trait ne règle que sa ligne.
+    function chosenLines(kind, index) {
+      const info = tableInfo(editor.state.doc);
+      const selection = editor.state.selection;
+      const rect = info && isCellSelection(selection) && selection.ranges.length > 1 && selectionRect(editor.state, info);
+      if (!rect) return [index];
+      const map = libs.TableMap.get(info.node);
+      const isCol = kind === 'col';
+      const whole = isCol ? rect.top === 0 && rect.bottom === map.height : rect.left === 0 && rect.right === map.width;
+      const from = isCol ? rect.left : rect.top;
+      const to = (isCol ? rect.right : rect.bottom) - 1;
+      if (!whole || index < from || index > to) return [index];
+      return Array.from({ length: to - from + 1 }, (_, i) => from + i);
+    }
 
     function startResize(kind, index, event) {
       const m = measure();
       if (!m) return;
       const isCol = kind === 'col';
       const target = event.target;
-      const head = (isCol ? strips.cols : strips.rows).children[index];
+      const lines = chosenLines(kind, index);
+      const heads = lines.map(i => (isCol ? strips.cols : strips.rows).children[i]);
+      const sizes = lines.map(i => (isCol ? m.widths[i] : m.heights[i]));
       const start = isCol ? event.clientX : event.clientY;
-      const startSize = isCol ? m.widths[index] : m.heights[index];
+      const startSize = sizes[lines.indexOf(index)];
       const startTableSize = isCol ? m.width : m.height;
-      const min = isCol ? MIN_COL_WIDTH_PX : naturalRowHeight(m.rows[index], index);
+      const min = isCol ? MIN_COL_WIDTH_PX : naturalRowHeight(m.rows, lines);
       const max = isCol ? MAX_COL_WIDTH_PX : MAX_ROW_HEIGHT_PX;
       let size = Math.max(min, Math.round(startSize));
+      // Plusieurs lignes tirées ensemble : rien ne change avant le premier déplacement de la poignée (leur plancher commun peut dépasser la taille de départ de celle qu'on
+      // tire), et un appui sans déplacement net, ou un retour au point de départ, n'enregistre rien.
+      let moved = lines.length === 1;
+      let at = start;
       try { target.setPointerCapture(event.pointerId); } catch (e) { /* capture indisponible : les écouteurs du document suffisent */ }
       document.body.classList.add(isCol ? 'pp-grid-resizing-col' : 'pp-grid-resizing-row');
       showTip(size + ' px', event);
@@ -1261,13 +1294,16 @@ const GridEditor = (function () {
       document.head.appendChild(preview);
       const apply = value => {
         preview.textContent = isCol
-          ? `.tiptap table > colgroup > col:nth-child(${index + 1}) { width: ${value}px !important; } .tiptap table { width: ${startTableSize + value - startSize}px !important; }`
-          : `.tiptap table > tbody > tr:nth-child(${index + 1}) { height: ${value}px !important; }`;
-        head.style[isCol ? 'width' : 'height'] = value + 'px';
+          ? `${lines.map(i => `.tiptap table > colgroup > col:nth-child(${i + 1}) { width: ${value}px !important; }`).join(' ')} .tiptap table { width: ${startTableSize + sizes.reduce((sum, one) => sum + value - one, 0)}px !important; }`
+          : lines.map(i => `.tiptap table > tbody > tr:nth-child(${i + 1}) { height: ${value}px !important; }`).join(' ');
+        heads.forEach(head => { head.style[isCol ? 'width' : 'height'] = value + 'px'; });
       };
-      apply(size);
+      if (moved) apply(size);
       const onMove = e => {
-        size = Math.min(max, Math.max(min, Math.round(startSize + (isCol ? e.clientX : e.clientY) - start)));
+        at = isCol ? e.clientX : e.clientY;
+        if (!moved && at === start) return;
+        moved = true;
+        size = Math.min(max, Math.max(min, Math.round(startSize + at - start)));
         apply(size);
         showTip(size + ' px', e);
       };
@@ -1280,8 +1316,8 @@ const GridEditor = (function () {
         document.body.classList.remove('pp-grid-resizing-col', 'pp-grid-resizing-row');
         hideTip();
         // L'enregistrement redessine le tableau à sa nouvelle taille (synchrone) avant que l'aperçu ne soit retiré : pas de saut.
-        if (commit && size !== Math.round(startSize)) { if (isCol) setColumnWidth(index, size); else setRowHeight(index, size); }
-        else head.style[isCol ? 'width' : 'height'] = startSize + 'px';
+        if (commit && moved && (lines.length === 1 || at !== start) && sizes.some(one => Math.round(one) !== size)) { if (isCol) setColumnWidth(lines, size); else setRowHeight(lines, size); }
+        else heads.forEach((head, k) => { head.style[isCol ? 'width' : 'height'] = sizes[k] + 'px'; });
         preview.remove();
         lastKey = '';
         scheduleSync();

@@ -54,6 +54,13 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   choix de la liste, le champ Valeur suit la dernière colonne du chemin et la recherche d'un niveau ne
   cherche que ce niveau. Le filtre et le tri d'une boucle, Réglages > Accès et les clés de correspondance
   gardent leur liste à plat ; une liste de références ne se descend pas.
+- **Taille commune des lignes et des colonnes choisies d'une grille** : quand plusieurs lignes (ou colonnes)
+  sont choisies par leurs numéros (leurs lettres), tirer le trait de l'une d'elles les règle toutes à la
+  même hauteur (largeur), en direct puis en un seul Annuler, comme dans un tableur ; une ligne ne descend
+  pas sous la hauteur de son texte, la plus haute de celles choisies fixe le plancher commun. Le trait d'une
+  seule ligne choisie, d'une ligne hors de la sélection, d'une case fusionnée choisie seule ou d'un bloc de
+  cases qui ne couvre pas toute la largeur (toute la hauteur pour des colonnes) ne règle que sa ligne. Un
+  appui sur le trait sans le bouger ne change rien, et Échap annule le geste.
 
 ### Modifié
 
@@ -234,6 +241,13 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   between the tables; the reopened window shows it as a choice of the list, the Value field follows the
   path's last column, and the search of a level only searches that level. A loop's filter and sorting,
   Settings > Access and the matching keys keep their flat list; a list of references cannot be walked down.
+- **Common size for the chosen rows and columns of a grid**: when several rows (or columns) are chosen by
+  their numbers (letters), dragging the edge of one of them sets them all to the same height (width), live
+  and then in a single Undo, as in a spreadsheet; a row never goes below the height of its text, the
+  tallest of the chosen ones sets the shared floor. The edge of a single chosen row, of a row outside the
+  selection, of a merged cell chosen on its own or of a block of cells that does not cover the full width
+  (full height for columns) sets only its own row. Pressing the edge without moving it changes nothing, and
+  Escape cancels the gesture.
 
 ### Changed
 

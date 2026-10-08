@@ -24,7 +24,7 @@ Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Le
   - le **garde-fou** (`filterTransaction`) : le document reste UN tableau en tête (+ le paragraphe vide que `StarterKit` range sous un tableau final, caché par CSS) ; refusés :
     second tableau, deux colonnes, sommaire, saut de page de document, citation, encadré, bloc de code, trait horizontal, note de bas de page, numéro de page, image en calque ;
   - la **sélection** toujours dans une case (`appendTransaction`) ; Ctrl+A prend les cases, Suppr les vide ;
-  - les **bandeaux** A, B, C / 1, 2, 3 (collés au défilement, `css/grid.css`) et leurs **poignées** : largeur de colonne et hauteur de ligne en aperçu direct, UNE transaction ;
+  - les **bandeaux** A, B, C / 1, 2, 3 (collés au défilement, `css/grid.css`) et leurs **poignées** : largeur de colonne et hauteur de ligne en aperçu direct, UNE transaction ; quand plusieurs lignes (colonnes) entières sont choisies par leurs bandeaux, tirer le trait de l'une les règle toutes à la même taille, plancher = la plus haute de leurs hauteurs de texte (08/10, `chosenLines`) ;
   - la **hauteur de ligne** : attribut `rowHeight` de `tableRow` (minimum en px ; le plancher du glissé est la hauteur du texte) et `colwidth` posé sur toutes les cases ;
     une colonne ou une ligne ajoutée par la barre de la case prend la taille de sa voisine.
 - Pas de feuille : `js/main.js` retire `a4-preview` des deux conteneurs pour une grille (`syncA4PreviewForModelType`) et grise la case ; ni zone d'en-tête/pied, ni pagination.
