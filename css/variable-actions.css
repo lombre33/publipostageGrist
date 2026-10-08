@@ -6,6 +6,15 @@
 /* Bulle conditionnelle dans l'éditeur : bordure en pointillés. En lecture et à l'export, la bulle est remplacée par sa valeur ou retirée. */
 .tiptap .var-badge[data-condition] { border-style: dashed; border-color: #5b7fc0; }
 
+/* Texte « Avant » / « Après » d'une bulle (fenêtre de js/variable-condition.js) : une petite pastille de chaque côté du nom, avec le texte que la
+   Lecture écrira. Son texte vient de data-text (js/editor-nodes.js:splitBadgeView), jamais du DOM : textContent garde le nom seul. Les espaces
+   comptent (white-space: pre) ; une espace seule garde une pastille visible (min-width). Fond et texte de la bulle, un cran plus soutenu (texte
+   8:1). */
+.tiptap .var-badge-affix { display: inline-block; flex: none; min-width: .55em; margin: 0 3px; padding: 0 3px; border-radius: 2px; background: #cfe0fb; color: #12406b; font-weight: 700; white-space: pre; }
+.tiptap .var-badge-affix::before { content: attr(data-text); }
+.tiptap .var-badge-affix:first-child { margin-left: 0; }
+.tiptap .var-badge-affix:last-child { margin-right: 0; }
+
 /* Bulle sélectionnée par un clic : ProseMirror pose `ProseMirror-selectednode` mais masque alors la sélection du navigateur
    (`ProseMirror-hideselection`), rien ne la montrait. Le fond passe à un bleu plus soutenu (texte 6,9:1), liseré inchangé ; même teinte en sombre,
    la page du document restant blanche. `background-color` seulement : le repère de boucle d'une bulle en ligne est un `background-image`. Une
@@ -85,6 +94,19 @@
 .var-condition-clip-btn.is-disabled:hover { color: var(--text-muted); border-color: var(--border-strong); }
 .var-condition-clip-btn.is-done, .var-condition-clip-btn.is-done:hover { color: var(--good, #146c48); border-color: var(--good-soft-border, #bfe6d3); background: var(--good-soft, #e5f6ee); }
 .var-condition-clip-status { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+/* « Avant » / « Après » d'une bulle : l'étiquette puis le champ, l'un sous l'autre ; quand la fenêtre est assez large, les deux champs tiennent sur une
+   seule ligne (la fenêtre est basse dans un panneau Grist) et l'indication commence sous le premier champ, pas sous son étiquette. Le texte
+   des champs garde ses espaces. */
+.var-condition-affix { display: grid; grid-template-columns: max-content 1fr; align-items: center; gap: 6px 8px; margin-top: 10px; font-size: 12px; font-weight: 600; color: var(--text); }
+.var-condition-affix[hidden] { display: none; }
+.var-condition-affix input { width: 120px; height: 26px; box-sizing: border-box; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-family: var(--font-ui); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
+.var-condition-affix .var-loop-hint { grid-column: 2; }
+@media (min-width: 520px) {
+  .var-condition-affix { grid-template-columns: repeat(4, max-content); }
+  .var-condition-affix label:nth-of-type(2) { padding-left: 12px; }
+  .var-condition-affix input { width: 96px; }
+  .var-condition-affix .var-loop-hint { grid-column: 2 / -1; }
+}
 .var-condition-debug { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
 .var-condition-debug-line { display: flex; align-items: flex-start; gap: 8px; padding: 7px 10px; border-radius: 6px; font-size: 12px; line-height: 1.45; background: var(--surface-sunken); border: 1px solid var(--border); color: var(--text-muted); overflow-wrap: anywhere; }
 .var-condition-debug-line[hidden] { display: none; }

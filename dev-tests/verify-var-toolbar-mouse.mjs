@@ -1151,6 +1151,96 @@ check('... et sur une bulle cassée « Colonne… » est atteignable à la vraie
 await page.setViewportSize({ width: WIDTH, height: HEIGHT });
 await page.waitForTimeout(300);
 
+// Texte « Avant » / « Après » d'une variable conditionnelle (demande d'Antoine, 2026-10-08 : « mettre une virgule que si la variable est activée par sa condition »), à la vraie
+// souris et au clavier dans 700x400 : les deux champs de la fenêtre se trouvent (le corps défile, le titre et les boutons restent), la frappe réelle les remplit, l'aperçu cite la
+// valeur avec son texte, Enregistrer le pose, la pastille de l'éditeur le montre et l'icône Condition s'allume ; rouverte, la fenêtre le reprend ; à 360 px de large, rien ne déborde.
+await page.evaluate(() => {
+  document.querySelector('.tiptap').blur();
+  Editor.setHTML('<p>Projet <span class="var-badge" data-table="VcDossiers" data-column="Titre" data-key="VcDossiers.Titre"></span>porté par Dupont.</p>');
+  document.querySelector('.tiptap .var-badge[data-column="Titre"]').scrollIntoView({ block: 'center' });
+});
+await page.waitForTimeout(400);
+const AFFIX_BADGE = '.tiptap .var-badge[data-column="Titre"]';
+async function openAffixWindow() {
+  const badgeBox = await hitTest(AFFIX_BADGE);
+  await page.mouse.click(badgeBox.x, badgeBox.y);
+  await page.waitForTimeout(300);
+  const icon = await hitTest('.v2-varfmt-toolbar.visible button[data-action="var-condition"]');
+  if (icon.found) await page.mouse.click(icon.x, icon.y);
+  await page.waitForTimeout(300);
+  return icon;
+}
+// Fait défiler le corps de la fenêtre à la molette réelle jusqu'à ce que le champ reçoive le clic (un champ rogné par la zone de défilement ne le reçoit pas).
+async function revealField(selector) {
+  let box = await hitTest(selector);
+  const body = await hitTest('#var-condition-modal .var-modal-body');
+  for (let i = 0; i < 6 && box.found && !box.onTop && body.found; i++) {
+    await page.mouse.move(body.x, body.y);
+    await page.mouse.wheel(0, 120);
+    await page.waitForTimeout(100);
+    box = await hitTest(selector);
+  }
+  return box;
+}
+const affixIcon = await openAffixWindow();
+check('bulle Titre sans condition : l’icône Condition est atteignable', affixIcon.found && affixIcon.inViewport && affixIcon.onTop, affixIcon);
+const affixWindow = await hitTest('#var-condition-modal .var-modal-content');
+check('fenêtre de condition ouverte, entière dans 700x400', affixWindow.found && affixWindow.inViewport, affixWindow);
+const beforeField = await revealField('#var-condition-before');
+check('« Avant » : le champ est atteignable à la molette puis au clic', beforeField.found && beforeField.onTop && beforeField.inViewport, beforeField);
+if (beforeField.found) { await page.mouse.click(beforeField.x, beforeField.y); await page.keyboard.type('('); }
+const afterField = await revealField('#var-condition-after');
+check('« Après » : le champ est atteignable', afterField.found && afterField.onTop && afterField.inViewport, afterField);
+if (afterField.found) { await page.mouse.click(afterField.x, afterField.y); await page.keyboard.type('), '); }
+await page.waitForTimeout(700);
+const affixPreview = await page.evaluate(() => Array.from(document.querySelectorAll('#var-condition-modal .var-condition-debug-line')).filter(l => !l.hidden).map(l => l.textContent));
+check('la frappe réelle remplit les deux champs, espaces comprises, et l’aperçu cite la valeur avec son texte',
+  (await page.evaluate(() => [document.getElementById('var-condition-before').value, document.getElementById('var-condition-after').value])).join('|') === '(|), '
+  && affixPreview.length === 1 && /^Ligne sélectionnée \(n° 1\) : la variable affiche « \(Dossier A\), {2}»\.$/.test(affixPreview[0]), affixPreview);
+const affixSave = await hitTest('#var-condition-modal .var-modal-primary');
+const affixTitle = await hitTest('#var-condition-title');
+check('titre et Enregistrer restent visibles et non recouverts pendant que le corps défile', affixSave.found && affixSave.inViewport && affixSave.onTop && affixTitle.found && affixTitle.inViewport && affixTitle.onTop, { affixSave, affixTitle });
+if (affixSave.found) await page.mouse.click(affixSave.x, affixSave.y);
+await page.waitForTimeout(300);
+const affixSaved = await page.evaluate(() => {
+  let attrs = null;
+  EditorCore.getEditor().state.doc.descendants(n => { if (n.type.name === 'varBadge') attrs = { before: n.attrs.before, after: n.attrs.after, condition: n.attrs.condition }; });
+  const badge = document.querySelector('.tiptap .var-badge[data-column="Titre"]');
+  const br = badge.getBoundingClientRect();
+  const chips = Array.from(badge.querySelectorAll('.var-badge-affix')).map(c => {
+    const r = c.getBoundingClientRect();
+    return { text: c.getAttribute('data-text'), shown: getComputedStyle(c, '::before').content, width: Math.round(r.width), inside: r.left >= br.left - 0.5 && r.right <= br.right + 0.5 && r.top >= br.top - 0.5 && r.bottom <= br.bottom + 0.5 };
+  });
+  return { attrs, chips, closed: document.getElementById('var-condition-modal').style.display === 'none' };
+});
+check('Enregistrer (vrai clic) pose le texte sur la bulle sans condition et ferme la fenêtre', affixSaved.closed && !!affixSaved.attrs && affixSaved.attrs.before === '(' && affixSaved.attrs.after === '), ' && !affixSaved.attrs.condition, affixSaved);
+check('la pastille de l’éditeur montre « ( » avant et « ), » après, dans la bulle', affixSaved.chips.length === 2 && affixSaved.chips[0].text === '(' && affixSaved.chips[1].text === '), '
+  && affixSaved.chips[0].shown === '"("' && affixSaved.chips[1].shown === '"), "' && affixSaved.chips.every(c => c.width > 0 && c.inside), affixSaved.chips);
+const affixBadgeBox = await hitTest(AFFIX_BADGE);
+await page.mouse.click(affixBadgeBox.x, affixBadgeBox.y);
+await page.waitForTimeout(300);
+const affixLit = await page.evaluate(() => { const b = document.querySelector('.v2-varfmt-toolbar.visible button[data-action="var-condition"]'); return !!b && b.classList.contains('is-active'); });
+check('l’icône Condition est allumée sur une bulle qui a du texte « Avant » / « Après », sans condition', affixLit);
+await openAffixWindow();
+const reopenedAffix = await page.evaluate(() => [document.getElementById('var-condition-before').value, document.getElementById('var-condition-after').value]);
+check('rouverte, la fenêtre reprend le texte enregistré', reopenedAffix.join('|') === '(|), ', reopenedAffix);
+// Panneau étroit : la rangée passe sur deux colonnes, rien ne déborde de la fenêtre ni de la page, les champs restent atteignables.
+await page.setViewportSize({ width: 360, height: HEIGHT });
+await page.waitForTimeout(400);
+const narrowWindow = await page.evaluate(() => {
+  const content = document.querySelector('#var-condition-modal .var-modal-content');
+  const r = content.getBoundingClientRect();
+  const fields = ['var-condition-before', 'var-condition-after'].map(id => { const f = document.getElementById(id).getBoundingClientRect(); return { left: f.left, right: f.right, width: Math.round(f.width) }; });
+  return { left: r.left, right: r.right, viewport: innerWidth, docOverflowX: document.scrollingElement.scrollWidth - innerWidth, contentOverflowX: content.scrollWidth - content.clientWidth, fields };
+});
+check('fenêtre de 360 px : la fenêtre et les deux champs restent dans la fenêtre, sans défilement horizontal', narrowWindow.left >= 0 && narrowWindow.right <= narrowWindow.viewport + 0.5 && narrowWindow.docOverflowX <= 0
+  && narrowWindow.contentOverflowX <= 0 && narrowWindow.fields.every(f => f.left >= 0 && f.right <= narrowWindow.viewport + 0.5 && f.width >= 60), narrowWindow);
+await page.setViewportSize({ width: WIDTH, height: HEIGHT });
+await page.waitForTimeout(300);
+const affixCancel = await hitTest('#var-condition-modal .var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)');
+if (affixCancel.found) await page.mouse.click(affixCancel.x, affixCancel.y);
+await page.waitForTimeout(200);
+
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 
 await browser.close();

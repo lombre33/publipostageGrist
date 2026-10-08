@@ -963,13 +963,15 @@ const FloatingToolbars = (function () {
       ui.setActive('var-list', status.active);
     }
     // La condition garde son nom d'origine pour une bulle et un bloc ; une case conditionnelle dit « cochée si… » (une condition d'affichage n'aurait
-    // pas de sens pour elle). `reasonKey` : grisée avec cette raison (un calcul).
+    // pas de sens pour elle). `reasonKey` : grisée avec cette raison (un calcul). Allumée aussi pour une bulle qui n'a que du texte « Avant » /
+    // « Après » : la même fenêtre le règle.
     function syncConditionButton(ui, node, labelKey, reasonKey) {
       const btn = ui.button('var-condition');
       if (!btn) return;
       btn.setAttribute('aria-label', I18n.t(labelKey));
       ui.setDisabled('var-condition', !!reasonKey, I18n.t(reasonKey || labelKey));
-      ui.setActive('var-condition', !reasonKey && !!ConditionRules.normalizeCondition(node.attrs.condition));
+      const set = !!ConditionRules.normalizeCondition(node.attrs.condition) || !!VariableFormat.affixes(node.attrs.before, node.attrs.after);
+      ui.setActive('var-condition', !reasonKey && set);
     }
     // « Modifier le calcul » n'est là que pour un calcul : un calcul choisi juste avant l'a montré, l'autre sélection le cache.
     function showCalcEdit(ui, shown) {

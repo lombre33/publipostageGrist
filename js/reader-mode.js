@@ -26,6 +26,18 @@ const ReaderMode = (function () {
     try { return await ConditionRules.conditionHolds(condition, tableId, record, loopOpts(binding)); }
     catch (e) { console.error('[ReaderMode] échec de l\'évaluation d\'une condition de variable', e); return false; }
   }
+  // Le texte « Avant » / « Après » d'une bulle #Variable (data-before / data-after, fenêtre de js/variable-condition.js), écrit tout contre sa valeur
+  // résolue `node` et dans le même élément : le style de la valeur (gras, couleur, taille) est aussi le sien dans la Lecture comme dans tous les
+  // exports. Seulement quand il y a quelque chose à lire, du texte ou une image : la virgule d'une variable masquée, vide, sans valeur ou en erreur
+  // (`isError`) ne s'écrit pas. Rend `node`.
+  function withAffixes(badge, node, isError) {
+    const around = VariableFormat.affixes(badge.getAttribute('data-before'), badge.getAttribute('data-after'));
+    if (!around || isError || node.nodeType === Node.TEXT_NODE) return node;
+    if (node.textContent.trim() === '' && !node.querySelector('img')) return node;
+    if (around.before) node.prepend(document.createTextNode(around.before));
+    if (around.after) node.append(document.createTextNode(around.after));
+    return node;
+  }
   // === Aperçu paginé réel - mode Lecture ===
   // Parallèle à l'aperçu de l'éditeur (js/header-footer-preview.js:computePageBreaks, renderPaginationOverlay), sur du contenu statique déjà résolu :
   // pas de débounce nécessaire. Les deux sont à tenir d'accord, mais lisent un DOM différent : l'éditeur mesure les enfants de `.tiptap` (avec les
@@ -237,8 +249,8 @@ const ReaderMode = (function () {
       if (isCalcBadge(badge)) { const span = document.createElement('span'); span.textContent = await Variables.resolveCalc(badge.getAttribute('data-formula') || '', tableId, record, format, loopOpts(binding)); badge.replaceWith(span); return; }
       if (!(await badgeConditionHolds(badge, tableId, record, binding))) { badge.replaceWith(document.createTextNode('')); return; }
       const inline = await resolveInlineLoop(badge, table, column, tableId, record, format, loopCtx);
-      if (inline) { badge.replaceWith(inline.node); return; }
-      try { const value = await Variables.resolveVariable(table, column, tableId, record, format, loopOpts(binding)); badge.replaceWith(valueNode(value, format, '')); }
+      if (inline) { badge.replaceWith(withAffixes(badge, inline.node, inline.isError)); return; }
+      try { const value = await Variables.resolveVariable(table, column, tableId, record, format, loopOpts(binding)); badge.replaceWith(withAffixes(badge, valueNode(value, format, ''))); }
       catch (e) { console.warn('[reader-mode] variable d\'en-tête ou de pied illisible, sa bulle reste telle quelle', e); }
     }));
     LoopRules.removeHiddenBlocks(wrapper);
@@ -945,6 +957,12 @@ const ReaderMode = (function () {
     }
   }
   async function resolveBadgeNode(badge, tableId, record, format, loopCtx) {
+    // La valeur de la bulle, puis son texte « Avant » / « Après » : une seule porte pour la Lecture et pour tous les exports (un calcul n'en a pas).
+    const resolved = await resolveBadgeValue(badge, tableId, record, format, loopCtx);
+    if (!isCalcBadge(badge)) withAffixes(badge, resolved.node, resolved.isError);
+    return resolved;
+  }
+  async function resolveBadgeValue(badge, tableId, record, format, loopCtx) {
     const binding = LoopRules.bindingOf(badge);
     // Bulle « Calcul » (js/variable-calc.js) : le résultat de sa formule, avec la ligne du tour quand elle est dans une zone répétée - comme une
     // bulle de variable de cette table.

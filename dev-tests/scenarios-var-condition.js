@@ -1308,6 +1308,401 @@
     },
   });
 
+  // === Texte « Avant » / « Après » d'une bulle (demande d'Antoine, 2026-10-08) ===
+  // « Mettre une virgule que si la variable est activée par sa condition » : deux champs de la fenêtre de condition (js/variable-condition.js), attributs `before` et
+  // `after` du nœud (data-before / data-after, js/editor-nodes.js), écrits par js/reader-mode.js:withAffixes seulement quand la bulle montre une valeur - la Lecture, le
+  // PDF, le Word, l'Excel et les en-têtes passent tous par cette résolution. Aides communes : js/variable-format.js (affix, affixes, withAffixes).
+  const attrText = text => String(text).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+  function affixBadge(column, o) {
+    const opts = o || {};
+    const table = opts.table || 'VcDossiers';
+    const condition = opts.condition ? ` data-condition="${attrText(JSON.stringify(opts.condition))}"` : '';
+    const before = opts.before == null ? '' : ` data-before="${attrText(opts.before)}"`;
+    const after = opts.after == null ? '' : ` data-after="${attrText(opts.after)}"`;
+    return `<span class="var-badge" data-table="${table}" data-column="${column}" data-key="${table}.${column}"${condition}${before}${after}${opts.extra || ''}></span>`;
+  }
+  function paragraphTexts(html) {
+    const box = document.createElement('div');
+    box.innerHTML = html;
+    return Array.from(box.querySelectorAll('p')).map(p => p.textContent);
+  }
+  const affixOf = node => [node.attrs.before || null, node.attrs.after || null];
+  const AFFIX_LOOP = { repeat: 'inline', table: 'VcContacts', empty: 'hide', separator: ', ', lastSeparator: ' et ' };
+
+  cases.push({
+    id: 'varcond_affix_attrs_roundtrip',
+    description: 'Le texte « Avant » / « Après » d’une bulle survit à l’aller-retour HTML (data-before, data-after) avec ses espaces ; borné à 40 signes, sans saut de ligne ; une bulle qui n’en a pas ne porte rien ; l’éditeur le montre dans la bulle sans l’ajouter à son texte',
+    run: async (h) => {
+      await seed(h);
+      const long = 'x'.repeat(60);
+      Editor.setHTML(`<p>${affixBadge('Titre', { before: '(', after: ', ' })} ${affixBadge('Statut')} ${affixBadge('Montant', { after: '' })} ${affixBadge('Responsable', { before: 'a\tb\nc', after: long })}</p>`);
+      const ed = EditorCore.getEditor();
+      const attrs = badgeNodes(ed).map(n => affixOf(n.node));
+      const box = document.createElement('div');
+      box.innerHTML = Editor.getHTML();
+      const saved = Array.from(box.querySelectorAll('span.var-badge')).map(s => [s.getAttribute('data-before'), s.getAttribute('data-after')]);
+      const chips = Array.from(document.querySelectorAll('.tiptap .var-badge .var-badge-affix'));
+      const expected = [['(', ', '], [null, null], [null, null], ['a b c', 'x'.repeat(40)]];
+      const pass = JSON.stringify(attrs) === JSON.stringify(expected) && JSON.stringify(saved) === JSON.stringify(expected)
+        && JSON.stringify(chips.map(c => c.getAttribute('data-text'))) === JSON.stringify(['(', ', ', 'a b c', 'x'.repeat(40)]) && chips.every(c => c.textContent === '');
+      return { pass, notes: JSON.stringify({ attrs, saved, chips: chips.map(c => c.getAttribute('data-text')) }) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_affix_helpers_keep_spaces_and_skip_blank_values',
+    description: 'VariableFormat.affix / affixes / withAffixes : espaces gardées (une espace seule compte), 40 signes au plus, caractères de contrôle remplacés, entrée qui n’est pas du texte ignorée ; rien n’entoure une valeur vide ou faite d’espaces',
+    run: async () => {
+      const VF = VariableFormat;
+      const around = VF.affixes('(', ')');
+      const checks = {
+        spaceKept: VF.affix(' ') === ' ' && VF.affix(', ') === ', ',
+        empty: VF.affix('') === null && VF.affix(null) === null && VF.affix(undefined) === null && VF.affix(5) === null && VF.affix({}) === null,
+        control: VF.affix('a\r\nb\u0000') === 'a  b ',
+        max: VF.affix('y'.repeat(41)) === 'y'.repeat(40) && VF.AFFIX_MAX === 40,
+        pair: JSON.stringify(VF.affixes('(', null)) === '{"before":"(","after":null}' && VF.affixes('', undefined) === null && VF.affixes(null, ' ') !== null,
+        around: VF.withAffixes('Dossier A', around) === '(Dossier A)' && VF.withAffixes('x', null) === 'x',
+        blank: VF.withAffixes('', around) === '' && VF.withAffixes('  ', around) === '  ' && VF.withAffixes(null, around) === null,
+      };
+      return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify(checks) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_affix_reader_and_export_write_only_with_a_value',
+    description: 'Lecture et export (ReaderMode.preview, commun au PDF, au Word et à l’email) : le texte « Avant » / « Après » s’écrit avec la valeur - sans condition comme avec une condition remplie -, disparaît avec la bulle quand la condition est fausse et ne s’écrit pas autour d’une valeur vide',
+    run: async (h) => {
+      await seed(h);
+      const html = [
+        `<p>A ${affixBadge('Titre', { before: '(', after: ')' })} B</p>`,
+        `<p>C${affixBadge('Titre', { condition: COND_NORMAL, before: '[', after: ', ' })}D</p>`,
+        `<p>E${affixBadge('Titre', { condition: COND_URGENT, after: ', ' })}F</p>`,
+        `<p>G${affixBadge('Titre', { before: ' - ' })}H</p>`,
+      ].join('');
+      const results = {};
+      const readerParagraphs = async () => Array.from((await renderReader(html)).querySelectorAll('.reader-content p')).map(p => p.textContent);
+      results.reader = await readerParagraphs();
+      results.preview = paragraphTexts(await ReaderMode.preview(html, 'VcDossiers', GristAPI.getCurrentRecord()));
+      // Valeur vide : ni parenthèses ni virgule autour de rien.
+      window.__gristStub.fireRecord(Object.assign({}, RECORD_1, { Titre: '' }), 'VcDossiers');
+      await h.sleep(50);
+      results.readerEmpty = await readerParagraphs();
+      results.previewEmpty = paragraphTexts(await ReaderMode.preview(html, 'VcDossiers', GristAPI.getCurrentRecord()));
+      const written = ['A (Dossier A) B', 'CD', 'EDossier A, F', 'G - Dossier AH'];
+      const blank = ['A  B', 'CD', 'EF', 'GH'];
+      const pass = JSON.stringify(results.reader) === JSON.stringify(written) && JSON.stringify(results.preview) === JSON.stringify(written)
+        && JSON.stringify(results.readerEmpty) === JSON.stringify(blank) && JSON.stringify(results.previewEmpty) === JSON.stringify(blank);
+      return { pass, notes: JSON.stringify(results) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_affix_header_and_footer_follow_the_same_rule',
+    description: 'En-tête et pied de page (aperçu paginé de la Lecture, même résolution que le PDF et le Word) : le texte « Avant » / « Après » suit la valeur, que la bulle soit seule, en boucle dans la phrase ou conditionnelle',
+    run: async (h) => {
+      await seed(h);
+      h.setA4Preview(true);
+      const results = {};
+      try {
+        const loopAttrs = ` data-loop="${attrText(JSON.stringify(AFFIX_LOOP))}" data-loop-repeat="inline"`;
+        const hf = {
+          enabled: true, differentFirstPage: false,
+          header: { default: `<p>En-tête [${affixBadge('Titre', { condition: COND_NORMAL, before: '(', after: ')' })}] [${affixBadge('Titre', { condition: COND_URGENT, before: '(', after: ')' })}]</p>`, first: '' },
+          footer: { default: `<p>Pied ${affixBadge('Statut', { before: '/ ', after: ' !' })} ${affixBadge('Nom', { table: 'VcContacts', before: '<', after: '>', extra: loopAttrs })}</p>`, first: '' },
+        };
+        const read = async () => {
+          const reader = await renderReader('<p>Corps</p>', hf);
+          return { header: reader.querySelector('.v2-page-edge-top').textContent, footer: reader.querySelector('.v2-page-edge-bottom').textContent };
+        };
+        results.shown = await read();
+        window.__gristStub.fireRecord(Object.assign({}, RECORD_1, { Titre: '', Statut: '' }), 'VcDossiers');
+        await h.sleep(50);
+        results.empty = await read();
+      } finally {
+        h.setA4Preview(false);
+      }
+      const pass = results.shown.header.includes('En-tête [] [(Dossier A)]') && results.shown.footer.includes('Pied / Urgent ! <Xavier et Yvonne>')
+        && results.empty.header.includes('En-tête [] []') && results.empty.footer.includes('Pied  <Xavier et Yvonne>') && !results.empty.footer.includes('/');
+      return { pass, notes: JSON.stringify(results) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_affix_wraps_a_loop_an_image_and_stays_in_the_value_style',
+    description: 'Le texte « Avant » / « Après » entoure une fois la suite d’une boucle dans la phrase et une image de colonne Pièces jointes, et se range dans la même balise que la valeur (gras, taille et couleur de la bulle)',
+    run: async (h) => {
+      await seed(h);
+      const stub = window.__gristStub;
+      stub.setVariables('VcDossiers', { Titre: 'Text', Statut: 'Text', Responsable: 'Ref:VcAnnuaire', Montant: 'Numeric', Photo: 'Attachments' });
+      stub.setRows('VcDossiers', [{ id: 1, Titre: 'Dossier A', Statut: 'Urgent', Responsable: 7, Montant: 1200, Photo: ['L', 11] }]);
+      await GristAPI.refreshSchema();
+      stub.fireRecord(Object.assign({}, RECORD_1, { Photo: ['L', 11] }), 'VcDossiers');
+      await h.sleep(60);
+      const loopAttrs = ` data-loop="${attrText(JSON.stringify(AFFIX_LOOP))}" data-loop-repeat="inline"`;
+      const html = `<p>${affixBadge('Nom', { table: 'VcContacts', before: '(', after: ')', extra: loopAttrs })}</p>`
+        + `<p>${affixBadge('Photo', { before: '[', after: ']' })}</p>`
+        + `<p><strong>${affixBadge('Titre', { after: ',' })}</strong> suite</p>`;
+      const box = document.createElement('div');
+      box.innerHTML = await ReaderMode.preview(html, 'VcDossiers', GristAPI.getCurrentRecord());
+      const [loop, photo, bold] = Array.from(box.querySelectorAll('p'));
+      const photoNodes = Array.from(photo.childNodes).map(n => (n.nodeType === Node.TEXT_NODE ? n.textContent : n.nodeName.toLowerCase()));
+      const boldValue = bold.querySelector('strong > .resolved-var');
+      const pass = loop.textContent === '(Xavier et Yvonne)' && JSON.stringify(photoNodes) === JSON.stringify(['[', 'img', ']'])
+        && !!boldValue && boldValue.textContent === 'Dossier A,' && bold.textContent === 'Dossier A, suite';
+      return { pass, notes: JSON.stringify({ loop: loop.textContent, photoNodes, bold: bold.innerHTML }) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_affix_window_saves_keeps_and_clears_the_text',
+    description: 'Fenêtre de condition d’une bulle : deux champs « Avant » et « Après » (40 signes, espaces compris) sous les règles ; Enregistrer pose la condition et le texte en un seul pas d’annulation, l’aperçu cite la valeur avec son texte, Retirer la condition garde le texte, vider les deux champs le retire du HTML',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML(`<p>Objet : ${badgeHtml('VcDossiers', 'Titre')}</p>`);
+      const ed = EditorCore.getEditor();
+      let modal = await openWindow(h, 'Titre');
+      const before = () => modal.querySelector('#var-condition-before');
+      const after = () => modal.querySelector('#var-condition-after');
+      const row = modal.querySelector('.var-condition-affix');
+      const opened = {
+        shown: visible(modal) && !!row && !row.hidden && row.getClientRects().length > 0,
+        labels: [modal.querySelector('label[for="var-condition-before"]').textContent, modal.querySelector('label[for="var-condition-after"]').textContent],
+        empty: before().value === '' && after().value === '', max: [before().maxLength, after().maxLength],
+        hint: modal.querySelector('.var-condition-affix .var-loop-hint').textContent,
+      };
+      const rule = modal.querySelector('.macro-rule-row');
+      setSelect(rule.querySelector('select.macro-rule-column'), 'Statut');
+      await h.sleep(30);
+      setInput(rule.querySelector('.macro-rule-value'), 'Urgent');
+      setInput(before(), '(');
+      setInput(after(), '), ');
+      await h.sleep(700);
+      const debug = Array.from(modal.querySelectorAll('.var-condition-debug-line')).map(l => l.textContent);
+      saveWindow(modal);
+      await h.sleep(80);
+      const saved = { condition: badgeNodes(ed)[0].node.attrs.condition, around: affixOf(badgeNodes(ed)[0].node), html: Editor.getHTML(), closed: !visible(conditionModal()) };
+      // Un seul Annuler rend la bulle d'avant, condition et texte ensemble ; Rétablir les remet.
+      ed.commands.undo();
+      await h.sleep(80);
+      const undone = { condition: badgeNodes(ed)[0].node.attrs.condition || null, around: affixOf(badgeNodes(ed)[0].node) };
+      ed.commands.redo();
+      await h.sleep(80);
+      const redone = { condition: badgeNodes(ed)[0].node.attrs.condition, around: affixOf(badgeNodes(ed)[0].node) };
+      modal = await openWindow(h, 'Titre');
+      const reopened = { values: [before().value, after().value], removeShown: !modal.querySelector('.var-modal-danger').hidden };
+      modal.querySelector('.var-modal-danger').click();
+      await h.sleep(80);
+      const removed = { condition: badgeNodes(ed)[0].node.attrs.condition || null, around: affixOf(badgeNodes(ed)[0].node) };
+      modal = await openWindow(h, 'Titre');
+      const kept = [before().value, after().value];
+      setInput(before(), '');
+      setInput(after(), '');
+      saveWindow(modal);
+      await h.sleep(80);
+      const cleared = { around: affixOf(badgeNodes(ed)[0].node), html: Editor.getHTML() };
+      const around = ['(', '), '];
+      const pass = opened.shown && opened.labels.join('|') === 'Avant|Après' && opened.empty && opened.max.join() === '40,40' && opened.hint === 'Écrits seulement si la variable s’affiche avec une valeur.'
+        && debug[0] === I18n.t('varCond.debug.currentMet', { id: 1, value: '(Dossier A), ' }) && debug[1].includes('2 lignes sur 3 remplissent la condition')
+        && saved.closed && JSON.stringify(saved.condition) === JSON.stringify(COND_URGENT) && JSON.stringify(saved.around) === JSON.stringify(around)
+        && saved.html.includes('data-before="("') && saved.html.includes('data-after="), "') && saved.html.includes('data-condition')
+        && undone.condition === null && JSON.stringify(undone.around) === '[null,null]'
+        && JSON.stringify(redone.condition) === JSON.stringify(COND_URGENT) && JSON.stringify(redone.around) === JSON.stringify(around)
+        && JSON.stringify(reopened.values) === JSON.stringify(around) && reopened.removeShown
+        && removed.condition === null && JSON.stringify(removed.around) === JSON.stringify(around) && JSON.stringify(kept) === JSON.stringify(around)
+        && JSON.stringify(cleared.around) === '[null,null]' && !cleared.html.includes('data-before') && !cleared.html.includes('data-after');
+      return { pass, notes: JSON.stringify({ opened, debug, saved, undone, redone, reopened, removed, kept, cleared }) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_affix_window_cancel_leaves_the_bubble_alone',
+    description: 'Fenêtre de condition : Annuler ne touche pas à la bulle, et la fenêtre rouverte reprend le texte « Avant » / « Après » enregistré, pas celui qui a été tapé puis abandonné',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML(`<p>Objet : ${affixBadge('Titre', { condition: COND_URGENT, before: '(', after: ')' })}</p>`);
+      const htmlBefore = Editor.getHTML();
+      let modal = await openWindow(h, 'Titre');
+      const values = () => [modal.querySelector('#var-condition-before').value, modal.querySelector('#var-condition-after').value];
+      const opened = values();
+      setInput(modal.querySelector('#var-condition-before'), 'XX');
+      setInput(modal.querySelector('#var-condition-after'), '');
+      cancelWindow(modal);
+      await h.sleep(60);
+      const unchanged = Editor.getHTML() === htmlBefore && !visible(conditionModal());
+      modal = await openWindow(h, 'Titre');
+      const reopened = values();
+      cancelWindow(modal);
+      const pass = JSON.stringify(opened) === '["(",")"]' && unchanged && JSON.stringify(reopened) === '["(",")"]';
+      return { pass, notes: JSON.stringify({ opened, unchanged, reopened }) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_affix_fields_are_only_for_variables',
+    description: 'Les champs « Avant » / « Après » ne sont que dans la fenêtre d’une bulle : celle d’un bloc, d’une valeur ou d’une case conditionnels ne les montre pas, et la fenêtre les remontre pour la bulle suivante',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML(`<p>${affixBadge('Titre', { before: '(' })}</p><div class="conditional-text"><p>Bloc</p></div><p>Début <span class="conditional-value">valeur</span> fin</p><p><span class="conditional-checkbox">☐</span> case</p>`);
+      const ed = EditorCore.getEditor();
+      const found = [];
+      ed.state.doc.descendants((node, pos) => {
+        if (['varBadge', 'conditionalText', 'conditionalValue', 'conditionalCheckbox'].includes(node.type.name)) found.push({ type: node.type.name, pos });
+      });
+      const order = ['varBadge', 'conditionalText', 'conditionalValue', 'conditionalCheckbox', 'varBadge'];
+      const states = [];
+      for (const type of order) {
+        const target = found.find(f => f.type === type);
+        if (!target) { states.push({ type, missing: true }); continue; }
+        VariableCondition.open(ed, target.pos);
+        await h.sleep(60);
+        const modal = conditionModal();
+        const row = modal.querySelector('.var-condition-affix');
+        states.push({ type, shown: visible(modal) && !row.hidden && row.getClientRects().length > 0 });
+        cancelWindow(modal);
+        await h.sleep(30);
+      }
+      const pass = JSON.stringify(states.map(s => s.shown)) === '[true,false,false,false,true]';
+      return { pass, notes: JSON.stringify(states) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_affix_preview_shows_the_value_as_it_will_be_written',
+    description: 'Aperçu de la fenêtre de condition : sans règle mais avec du texte « Avant » / « Après » la variable s’affiche toujours (une ligne, sans compte de lignes) ; avec une règle, la valeur est citée avec son texte quand la condition est remplie et sans quand elle ne l’est pas',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML(`<p>Objet : ${badgeHtml('VcDossiers', 'Titre')}</p>`);
+      const modal = await openWindow(h, 'Titre');
+      const lines = () => Array.from(modal.querySelectorAll('.var-condition-debug-line')).map(l => l.textContent);
+      const results = {};
+      await h.sleep(400);
+      results.empty = lines();
+      setInput(modal.querySelector('#var-condition-after'), ',');
+      await h.sleep(700);
+      results.alwaysShown = lines();
+      setInput(modal.querySelector('#var-condition-after'), '');
+      await h.sleep(700);
+      results.cleared = lines();
+      setInput(modal.querySelector('#var-condition-after'), ',');
+      const rule = modal.querySelector('.macro-rule-row');
+      setSelect(rule.querySelector('select.macro-rule-column'), 'Statut');
+      await h.sleep(30);
+      setInput(modal.querySelector('.macro-rule-row .macro-rule-value'), 'Normal');
+      await h.sleep(700);
+      results.unmet = lines();
+      setInput(modal.querySelector('.macro-rule-row .macro-rule-value'), 'Urgent');
+      await h.sleep(700);
+      results.met = lines();
+      cancelWindow(modal);
+      const chooseColumn = [I18n.t('varCond.debug.chooseColumn'), ''];
+      const pass = JSON.stringify(results.empty) === JSON.stringify(chooseColumn) && JSON.stringify(results.cleared) === JSON.stringify(chooseColumn)
+        && JSON.stringify(results.alwaysShown) === JSON.stringify([I18n.t('varCond.debug.currentShown', { id: 1, value: 'Dossier A,' }), ''])
+        && results.alwaysShown[0] === 'Ligne sélectionnée (n° 1) : la variable affiche « Dossier A, ».'
+        && results.unmet[0] === I18n.t('varCond.debug.currentNotMet', { id: 1 }) && !results.unmet[0].includes('Dossier A')
+        && results.met[0] === I18n.t('varCond.debug.currentMet', { id: 1, value: 'Dossier A,' }) && results.met[1].includes('2 lignes sur 3 remplissent la condition');
+      return { pass, notes: JSON.stringify(results) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_affix_lights_the_condition_button',
+    description: 'L’icône de condition de la barre flottante est allumée pour une bulle qui a du texte « Avant » / « Après », même sans condition, et éteinte pour une bulle qui n’a rien',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML(`<p>${affixBadge('Titre', { after: ',' })} ${badgeHtml('VcDossiers', 'Statut')} ${affixBadge('Montant', { condition: COND_URGENT })}</p>`);
+      const active = {};
+      for (const column of ['Titre', 'Statut', 'Montant']) {
+        await selectBadge(h, column);
+        active[column] = toolbarButton('var-condition').classList.contains('is-active');
+      }
+      return { pass: active.Titre === true && active.Statut === false && active.Montant === true, notes: JSON.stringify(active) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_affix_speaks_english',
+    description: 'Interface en anglais : « Before » / « After », leur info-bulle, l’indication sous les champs et la ligne d’aperçu ; chaque phrase du texte « Avant » / « Après » est traduite',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML(`<p>Objet : ${affixBadge('Titre', { before: '(', after: ')' })}</p>`);
+      const keys = ['varCond.affixBefore', 'varCond.affixAfter', 'varCond.affixBeforeTitle', 'varCond.affixAfterTitle', 'varCond.affixHint', 'varCond.debug.currentShown'];
+      const lang = I18n.getLang();
+      let english = null;
+      let untranslated = null;
+      try {
+        I18n.setLang('fr');
+        const fr = keys.map(k => I18n.t(k, { id: 1, value: 'V' }));
+        I18n.setLang('en');
+        const en = keys.map(k => I18n.t(k, { id: 1, value: 'V' }));
+        untranslated = keys.filter((k, i) => en[i] === fr[i] || en[i] === k);
+        const modal = await openWindow(h, 'Titre');
+        await h.sleep(700);
+        english = {
+          labels: [modal.querySelector('label[for="var-condition-before"]').textContent, modal.querySelector('label[for="var-condition-after"]').textContent],
+          titles: [modal.querySelector('#var-condition-before').title, modal.querySelector('#var-condition-after').title],
+          hint: modal.querySelector('.var-condition-affix .var-loop-hint').textContent,
+          line: modal.querySelector('.var-condition-debug-line').textContent,
+        };
+        cancelWindow(modal);
+      } finally {
+        I18n.setLang(lang);
+      }
+      const pass = untranslated.length === 0 && english.labels.join('|') === 'Before|After'
+        && english.titles[0] === 'Text written right before the value, for example a comma or a parenthesis. Spaces count.'
+        && english.titles[1] === 'Text written right after the value, for example a comma or a parenthesis. Spaces count.'
+        && english.hint === 'Only written if the variable is shown with a value.' && english.line === 'Selected row (#1): the variable shows “(Dossier A)”.';
+      return { pass, notes: JSON.stringify({ untranslated, english }) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_affix_word_and_pdf_keep_the_text_and_its_spaces',
+    description: 'Export Word et PDF : le texte « Avant » / « Après » s’écrit avec la valeur, espaces comprises, et disparaît avec une bulle dont la condition est fausse',
+    run: async (h) => {
+      await seed(h);
+      const html = `<p>Voir ${affixBadge('Titre', { condition: COND_URGENT, before: '(', after: ') ' })}puis ${affixBadge('Titre', { condition: COND_NORMAL, after: ', ' })}fin.</p>`;
+      const resolved = await ReaderMode.preview(html, 'VcDossiers', GristAPI.getCurrentRecord());
+      const parts = await h.exportDocxParts(resolved);
+      const docx = h.docxParagraphs(parts.doc).map(p => p.text).filter(t => t.trim());
+      const pdf = await h.exportPdfContent(resolved);
+      const pdfTexts = h.findTextBlocks(pdf.content, b => h.blockPlainText(b).includes('Voir')).map(b => h.blockPlainText(b));
+      const expected = 'Voir (Dossier A) puis fin.';
+      const pass = docx.length === 1 && docx[0] === expected && pdfTexts.includes(expected);
+      return { pass, notes: JSON.stringify({ resolved, docx, pdfTexts }) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_affix_stays_on_its_variable_when_attributes_are_inserted_or_replaced',
+    description: 'Autres attributs : « Insérer » laisse le texte « Avant » / « Après » à la bulle d’origine (la virgule n’est pas recopiée sur les attributs ajoutés) ; « Remplacer » et le changement de colonne le gardent sur la bulle qui change de colonne',
+    run: async (h) => {
+      await seed(h);
+      const original = affixBadge('NomPrenom', { table: 'VcAnnuaire', before: '(', after: ')' });
+      const state = ed => badgeNodes(ed).map(b => ({ key: b.node.attrs.key, around: affixOf(b.node) }));
+      Editor.setHTML(`<p>Responsable : ${original} fin</p>`);
+      const ed = EditorCore.getEditor();
+      let modal = await openLinked(h, 'NomPrenom');
+      tickLinked(modal, ['Telephone']);
+      modal.querySelector('.var-modal-primary').click();
+      await h.sleep(100);
+      const inserted = state(ed);
+      Editor.setHTML(`<p>Responsable : ${original} fin</p>`);
+      modal = await openLinked(h, 'NomPrenom');
+      const replaceBtn = replaceButton(modal);
+      if (!replaceBtn) { cancelLinked(modal); return NO_REPLACE_BUTTON; }
+      tickLinked(modal, ['Telephone']);
+      replaceBtn.click();
+      await h.sleep(150);
+      const replaced = state(ed);
+      const node = badgeNodes(ed)[0].node;
+      const moved = VariableColumn.replacementAttrs(node, { table: 'VcAnnuaire', column: 'NomPrenom', key: 'VcAnnuaire.NomPrenom' });
+      const pass = JSON.stringify(inserted) === JSON.stringify([{ key: 'VcAnnuaire.NomPrenom', around: ['(', ')'] }, { key: 'VcAnnuaire.Telephone', around: [null, null] }])
+        && JSON.stringify(replaced) === JSON.stringify([{ key: 'VcAnnuaire.Telephone', around: ['(', ')'] }])
+        && moved.before === '(' && moved.after === ')';
+      return { pass, notes: JSON.stringify({ inserted, replaced, moved: [moved.before, moved.after] }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.varCondition = cases;
 })();

@@ -71,6 +71,16 @@ const EditorNodes = (function () {
       const head = document.createElement('span');
       head.className = prefix + '-head';
       head.textContent = parts.head;
+      // Le texte « Avant » / « Après » de la bulle (js/variable-condition.js), en petites pastilles de chaque côté du nom : leur texte est dessiné par
+      // le CSS (data-text), donc absent de textContent, qui garde le nom entier pour les lecteurs d'écran, le presse-papiers et les tests.
+      const affixChip = text => {
+        const chip = document.createElement('span');
+        chip.className = 'var-badge-affix';
+        chip.setAttribute('aria-hidden', 'true');
+        chip.setAttribute('data-text', text);
+        return chip;
+      };
+      if (attrs['data-before']) dom.appendChild(affixChip(attrs['data-before']));
       dom.appendChild(head);
       let tail = null;
       let tailText = null;
@@ -84,6 +94,7 @@ const EditorNodes = (function () {
         tail.appendChild(tailText);
         dom.appendChild(tail);
       }
+      if (attrs['data-after']) dom.appendChild(affixChip(attrs['data-after']));
       // Nom coupé par la case ou la colonne : le nom entier en info-bulle, posé au survol seulement quand il est vraiment coupé (une bulle cassée garde
       // son message, posé par Editor.refreshVariableBadgeValidity, qui retire aussi ce titre à chaque mise à jour du document). La fin se coupe par la
       // gauche, ce que scrollWidth ne compte pas : on compare les rectangles.
@@ -112,6 +123,10 @@ const EditorNodes = (function () {
         });
         if (node.attrs.format) attrs['data-format'] = JSON.stringify(node.attrs.format);
         if (node.attrs.condition) attrs['data-condition'] = JSON.stringify(node.attrs.condition);
+        // Le texte « Avant » / « Après » (js/variable-condition.js) : deux attributs simples, écrits seulement quand ils existent.
+        const around = VariableFormat.affixes(node.attrs.before, node.attrs.after);
+        if (around && around.before) attrs['data-before'] = around.before;
+        if (around && around.after) attrs['data-after'] = around.after;
         // `data-loop-repeat` à part : les repères de la zone répétée (css/variable-actions.css) la trouvent par sélecteur, sans lire le JSON.
         if (node.attrs.loop) { attrs['data-loop'] = JSON.stringify(node.attrs.loop); attrs['data-loop-repeat'] = node.attrs.loop.repeat || 'inline'; }
         // Préfixe décoratif régénéré à chaque rendu (jamais stocké) : suit la touche de déclenchement configurée, rétroactif sans migration.
@@ -127,7 +142,12 @@ const EditorNodes = (function () {
           // `loop` : { table, via, repeat, filter, sort, empty, … } - boucle sur les lignes liées (js/variable-loop.js), déroulée en lecture et à
           // l'export par js/loop-rules.js ; `repeat` dit ce qui se répète autour de la bulle (sa ligne de tableau, son élément de liste, son
           // paragraphe, ou elle seule).
-          return { table: internalAttr(null), column: internalAttr(null), key: internalAttr(null), format: internalAttr(null), condition: internalAttr(null), loop: internalAttr(null) };
+          // `before` et `after` : le texte collé à la valeur, écrit seulement quand la bulle s'affiche avec une valeur (VariableFormat.withAffixes) ;
+          // `null` = rien.
+          return {
+            table: internalAttr(null), column: internalAttr(null), key: internalAttr(null), format: internalAttr(null), condition: internalAttr(null), loop: internalAttr(null),
+            before: internalAttr(null), after: internalAttr(null),
+          };
         },
         parseHTML() {
           return [{
@@ -135,6 +155,7 @@ const EditorNodes = (function () {
             getAttrs: el => ({
               table: el.getAttribute('data-table'), column: el.getAttribute('data-column'), key: el.getAttribute('data-key'),
               format: jsonAttr(el, 'data-format'), condition: jsonAttr(el, 'data-condition'), loop: jsonAttr(el, 'data-loop'),
+              before: VariableFormat.affix(el.getAttribute('data-before')), after: VariableFormat.affix(el.getAttribute('data-after')),
             }),
           }];
         },

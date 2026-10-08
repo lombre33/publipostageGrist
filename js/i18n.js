@@ -1158,6 +1158,13 @@ const I18n = (function () {
     'varCond.debug.none': { fr: 'Dans « {table} » : aucune des {total} lignes ne remplit la condition.', en: 'In “{table}”: none of the {total} rows meets the condition.' },
     'varCond.debug.emptyValue': { fr: '(vide)', en: '(empty)' },
     'varCond.debug.imageValue': { fr: '(image)', en: '(image)' },
+    // Le texte « Avant » / « Après » d'une bulle : collé à sa valeur, écrit seulement quand la variable s'affiche avec une valeur.
+    'varCond.affixBefore': { fr: 'Avant', en: 'Before' },
+    'varCond.affixAfter': { fr: 'Après', en: 'After' },
+    'varCond.affixBeforeTitle': { fr: 'Texte écrit juste avant la valeur, par exemple une virgule ou une parenthèse. Les espaces comptent.', en: 'Text written right before the value, for example a comma or a parenthesis. Spaces count.' },
+    'varCond.affixAfterTitle': { fr: 'Texte écrit juste après la valeur, par exemple une virgule ou une parenthèse. Les espaces comptent.', en: 'Text written right after the value, for example a comma or a parenthesis. Spaces count.' },
+    'varCond.affixHint': { fr: 'Écrits seulement si la variable s’affiche avec une valeur.', en: 'Only written if the variable is shown with a value.' },
+    'varCond.debug.currentShown': { fr: 'Ligne sélectionnée (n° {id}) : la variable affiche « {value} ».', en: 'Selected row (#{id}): the variable shows “{value}”.' },
     'varCond.remove': { fr: 'Retirer la condition', en: 'Remove condition' },
     'varCond.saveLost': { fr: 'La variable a été déplacée ou supprimée pendant l’édition : la condition n’a pas été enregistrée.', en: 'The variable was moved or deleted while editing: the condition was not saved.' },
     'varCond.clip.copy': { fr: 'Copier', en: 'Copy' },

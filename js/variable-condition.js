@@ -7,6 +7,9 @@
 // Ouverte depuis la barre flottante (js/floating-toolbars.js:wireVariableFloatingToolbar). La même fenêtre sert aux nœuds conditionnels - bloc de
 // texte (js/conditional-text.js), valeur dans la phrase (js/conditional-value.js), case à cocher (js/conditional-checkbox.js) - avec leurs propres
 // phrases ; « Défaire le bloc » / « Défaire la valeur » retire le cadre et la condition, le texte reste.
+// Une bulle a en plus deux petits champs, « Avant » et « Après » : le texte collé à sa valeur (une virgule, une parenthèse), écrit seulement quand
+// la variable s'affiche avec une valeur (attributs `before` et `after` du nœud, VariableFormat.withAffixes ; js/reader-mode.js les écrit). Ils se règlent
+// ici parce que le cas d'usage est la virgule d'une variable conditionnelle, mais valent aussi pour une bulle sans condition.
 const VariableCondition = (function () {
   const { el, option, button } = Dom;
   const { setLine, shorten } = VariableModal;
@@ -47,6 +50,8 @@ const VariableCondition = (function () {
   const texts = () => TEXTS[state.node.type.name];
   // Seule une bulle a une valeur à montrer dans l'aperçu : un bloc, une valeur conditionnelle ou une case s'affiche, ou se coche, sans valeur à lire.
   const showsValue = () => state.node.type.name === 'varBadge';
+  // Le texte « Avant » / « Après » tel qu'il est tapé dans la fenêtre ({ before, after }), ou null : sans bulle, sans texte ou fenêtre fermée.
+  const draftAffixes = () => (state && refs && showsValue() ? VariableFormat.affixes(refs.beforeInput.value, refs.afterInput.value) : null);
 
   // « Statut = Urgent et VcContacts.Role = Avocat » : une condition sur une ligne, sans valeur pour « vide » / « non vide ». Ce que « Coller » va
   // poser (info-bulle du bouton) et la condition que reprennent les attributs insérés (js/variable-linked-attrs.js), qui la donnent en entier
@@ -76,6 +81,20 @@ const VariableCondition = (function () {
     const modeRow = el('div', 'var-condition-mode');
     modeRow.append(modeBefore, modeSelect, modeAfter);
     const rulesBox = el('div', 'var-condition-rules');
+    // « Avant » / « Après » : propres à la bulle (cachés pour un bloc, une valeur ou une case, qui n'ont pas de valeur à entourer). Deux champs de
+    // texte libre, espaces compris, et une indication qui commence sous le premier (css/variable-actions.css).
+    const affixRow = el('div', 'var-condition-affix');
+    const beforeField = VariableModal.labelledInput('var-condition-before', 'var-condition-affix-input');
+    const afterField = VariableModal.labelledInput('var-condition-after', 'var-condition-affix-input');
+    const affixHint = el('span', 'var-loop-hint');
+    for (const input of [beforeField.input, afterField.input]) {
+      input.maxLength = VariableFormat.AFFIX_MAX;
+      input.autocomplete = 'off';
+      input.spellcheck = false;
+      // L'aperçu montre le texte tel qu'il s'écrira : il se recalcule à chaque saisie, comme pour une règle.
+      input.addEventListener('input', () => previewRun.schedule());
+    }
+    affixRow.append(beforeField.label, beforeField.input, afterField.label, afterField.input, affixHint);
     const { box: previewArea, lines: [currentLine, countLine] } = VariableModal.previewBox(2);
     // « Défaire le bloc » / « Défaire la valeur » vient juste après « Retirer la condition » : le premier `.var-modal-danger` reste celui-ci (les
     // tests et les autres fenêtres trouvent « Annuler » par `button:not(.var-modal-primary):not(.var-modal-danger)`) ; son texte garde la couleur du
@@ -98,10 +117,11 @@ const VariableCondition = (function () {
     clipStatus.setAttribute('role', 'status');
     const clip = el('span', 'var-condition-clip');
     clip.append(copyBtn, pasteBtn, clipStatus);
-    win.body.append(intro, modeRow, rulesBox, previewArea);
+    win.body.append(intro, modeRow, rulesBox, affixRow, previewArea);
     refs = {
       title: win.title, intro, modeRow, modeBefore, modeSelect, modeAfter, rulesBox, clip, copyBtn, pasteBtn, clipStatus, currentLine, countLine,
       removeBtn, unwrapBtn, cancelBtn, saveBtn,
+      affixRow, beforeLabel: beforeField.label, beforeInput: beforeField.input, afterLabel: afterField.label, afterInput: afterField.input, affixHint,
     };
 
     modeSelect.addEventListener('change', () => {
@@ -109,7 +129,7 @@ const VariableCondition = (function () {
       state.working.mode = modeSelect.value === 'any' ? 'any' : 'all';
       redraw();
     });
-    removeBtn.addEventListener('click', () => { if (state) { applyCondition(null); close(); } });
+    removeBtn.addEventListener('click', () => { if (state) { applyAttrs({ condition: null }); close(); } });
     unwrapBtn.addEventListener('click', unwrapNode);
     cancelBtn.addEventListener('click', close);
     saveBtn.addEventListener('click', save);
@@ -229,7 +249,8 @@ const VariableCondition = (function () {
     const { table, column, format } = state.node.attrs;
     if (GristAPI.getColumnType(table, column) === 'Attachments') return I18n.t('varCond.debug.imageValue');
     const value = await Variables.resolveVariable(table, column, tableId, record, format);
-    return value === '' ? I18n.t('varCond.debug.emptyValue') : value;
+    // Avec son texte « Avant » / « Après » comme la Lecture l'écrira ; une valeur vide n'en reçoit pas.
+    return value === '' ? I18n.t('varCond.debug.emptyValue') : VariableFormat.withAffixes(value, draftAffixes());
   }
   // Repère lisible de la première ligne trouvée : le texte de la première colonne de la table, s'il y en a un (un identifiant de ligne seul ne se
   // voit pas dans Grist).
@@ -238,12 +259,14 @@ const VariableCondition = (function () {
     const value = firstCol ? row[firstCol] : null;
     return typeof value !== 'string' || !value.trim() ? '' : ' (' + shorten(value.trim(), 40) + ')';
   }
-  // Première ligne de l'aperçu : la condition pour la ligne sélectionnée dans Grist. Rend faux quand la fenêtre a changé pendant le calcul.
+  // Première ligne de l'aperçu : la condition pour la ligne sélectionnée dans Grist - ou, sans condition mais avec du texte « Avant » / « Après », ce que
+  // la variable écrit, toujours. Rend faux quand la fenêtre a changé pendant le calcul.
   async function previewSelectedRow({ condition, tableId, t, stale, currentLine }, record) {
     const holds = await ConditionRules.conditionHolds(condition, tableId, record);
     const shown = holds && showsValue() ? await displayValue(record, tableId) : '';
     if (stale()) return false;
-    setLine(currentLine, I18n.t(holds ? t.met : t.notMet, { id: record.id, value: shown }), holds);
+    const key = !condition ? 'varCond.debug.currentShown' : (holds ? t.met : t.notMet);
+    setLine(currentLine, I18n.t(key, { id: record.id, value: shown }), holds);
     return true;
   }
   // Combien de lignes remplissent la condition, et la première. Rend null quand la fenêtre a changé pendant le parcours.
@@ -286,23 +309,26 @@ const VariableCondition = (function () {
     const record = GristAPI.getCurrentRecord();
     const view = { condition, tableId, t: texts(), stale, currentLine, countLine };
     setLine(countLine, '', false);
-    if (!condition) { setLine(currentLine, I18n.t('varCond.debug.chooseColumn'), false); return; }
+    // Sans condition mais avec du texte « Avant » / « Après » : la variable s'affiche toujours, il n'y a pas de lignes à compter.
+    const alwaysShown = !condition && !!draftAffixes();
+    if (!condition && !alwaysShown) { setLine(currentLine, I18n.t('varCond.debug.chooseColumn'), false); return; }
     if (!record || !tableId) { setLine(currentLine, I18n.t('varCond.debug.noRecord'), false); return; }
     setLine(currentLine, I18n.t('varCond.debug.computing'), false);
     try {
-      if (await previewSelectedRow(view, record)) await previewAllRows(view);
+      if ((await previewSelectedRow(view, record)) && !alwaysShown) await previewAllRows(view);
     } catch (e) {
       console.warn('[VariableCondition] aperçu indisponible', e);
       if (!stale()) setLine(currentLine, I18n.t('linkConfig.previewUnavailable'), false);
     }
   }
 
-  // Réécrit l'attribut `condition` du nœud d'origine, retrouvé à sa position capturée au clic.
-  function applyCondition(condition) {
+  // Réécrit des attributs du nœud d'origine (`condition`, et pour une bulle `before` / `after`), retrouvé à sa position capturée au clic. Ce que
+  // `patch` ne nomme pas reste tel quel.
+  function applyAttrs(patch) {
     const { editor, pos } = state;
     const node = VariableModal.nodeAtOrigin(state, texts().saveLost, 'VariableCondition');
     if (!node) return;
-    const attrs = Object.assign({}, node.attrs, { condition });
+    const attrs = Object.assign({}, node.attrs, patch);
     // Une valeur garde le curseur là où il était, dans son texte : une NodeSelection posée sur elle ferait remplacer la valeur entière par la
     // prochaine frappe.
     if (node.type.name === 'conditionalValue') editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, undefined, attrs));
@@ -310,7 +336,13 @@ const VariableCondition = (function () {
   }
   function save() {
     if (!state) return;
-    applyCondition(ConditionRules.plainCondition(state.working));
+    const patch = { condition: ConditionRules.plainCondition(state.working) };
+    if (showsValue()) {
+      const around = draftAffixes();
+      patch.before = around && around.before;
+      patch.after = around && around.after;
+    }
+    applyAttrs(patch);
     close();
   }
   // « Défaire le bloc » / « Défaire la valeur » : le cadre et la condition disparaissent, le texte reste (js/conditional-text.js:unwrap,
@@ -356,6 +388,14 @@ const VariableCondition = (function () {
     }
     r.cancelBtn.textContent = I18n.t('common.cancel');
     r.saveBtn.textContent = I18n.t('common.save');
+    r.affixRow.hidden = !showsValue();
+    r.beforeLabel.textContent = I18n.t('varCond.affixBefore');
+    r.afterLabel.textContent = I18n.t('varCond.affixAfter');
+    r.beforeInput.title = I18n.t('varCond.affixBeforeTitle');
+    r.afterInput.title = I18n.t('varCond.affixAfterTitle');
+    r.affixHint.textContent = I18n.t('varCond.affixHint');
+    r.beforeInput.value = VariableFormat.affix(node.attrs.before) || '';
+    r.afterInput.value = VariableFormat.affix(node.attrs.after) || '';
     resetCopyLabel();
     r.pasteBtn.textContent = I18n.t('varCond.clip.paste');
     r.clipStatus.textContent = '';

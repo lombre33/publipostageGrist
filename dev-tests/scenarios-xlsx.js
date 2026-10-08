@@ -258,6 +258,33 @@
     },
   });
 
+  // Antoine, 08/10 : le texte « Avant » / « Après » d'une bulle (une virgule, une parenthèse) ne tient pas dans un nombre : une case qui l'a n'est plus un vrai nombre, c'est le texte tel que la
+  // Lecture et le PDF l'écrivent. Sans valeur à montrer (condition fausse, zéro masqué), rien n'est écrit, pas même le texte.
+  const withAffix = (before, after) => (before ? ` data-before="${before}"` : '') + (after ? ` data-after="${after}"` : '');
+  cases.push({
+    id: 'xlsx_a_number_with_text_before_or_after_is_written_as_text',
+    description: 'Une case qui ne contient qu\'une bulle nombre ou date reste un vrai nombre, sauf si la bulle a du texte « Avant » / « Après » : la case devient du texte, avec ce texte ; une valeur masquée (condition fausse, zéro) n\'écrit rien',
+    run: async (h) => {
+      await seed(h);
+      const never = withCondition({ mode: 'all', rules: [{ column: 'Nom', operator: '=', value: 'personne' }] });
+      const x = await exportGrid([100, 100, 100], [30, 30], [
+        [badge('Montant', withAffix('', ' €')), badge('Date', withAffix('(', ')')), badge('Montant', withAffix('', ',') + never)],
+        [badge('Montant'), badge('Zero', withAffix('(', ')')), badge('Nom', withAffix('', ','))],
+      ]);
+      const c = ref => x.sheet.cell(ref);
+      const bad = [];
+      const a1 = c('A1');
+      if (a1.kind !== 'text' || !/^1\s234,5 €$/.test(String(a1.value))) bad.push('A1=' + a1.kind + ' ' + JSON.stringify(a1.value));
+      const b1 = c('B1');
+      if (b1.kind !== 'text' || !/^\(.+\)$/.test(String(b1.value)) || !/2026/.test(String(b1.value))) bad.push('B1=' + b1.kind + ' ' + JSON.stringify(b1.value));
+      if (c('C1').kind !== 'empty') bad.push('C1=' + c('C1').kind + ' ' + JSON.stringify(c('C1').value));
+      if (c('A2').kind !== 'number' || c('A2').value !== 1234.5) bad.push('A2=' + c('A2').kind + ' ' + JSON.stringify(c('A2').value));
+      if (c('B2').kind !== 'empty') bad.push('B2=' + c('B2').kind + ' ' + JSON.stringify(c('B2').value));
+      if (c('C2').kind !== 'text' || c('C2').value !== 'Alpha Durand,') bad.push('C2=' + c('C2').kind + ' ' + JSON.stringify(c('C2').value));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
   // Antoine, 02/10 : « Écrire en nombre, dans l'Excel, un calcul seul dans une case de grille ? » - « Oui, en nombre ». Même règle que la bulle d'une colonne : seul dans sa case, le
   // résultat est un VRAI nombre au format de la bulle ; avec du texte autour, avec une autre bulle, en erreur, en toutes lettres, caché (zéro) ou trop long, du texte (ou rien).
   cases.push({

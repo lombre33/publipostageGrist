@@ -481,6 +481,12 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   en édition, une bulle à condition est en pointillés ; les fenêtres correspondantes reposent sur la base commune. Dans
   une règle, « = » sur une colonne à choix multiples ou une liste de références veut dire « contient ce choix » (arbitré
   le 29/09).
+- Texte « Avant » / « Après » d'une variable (demande d'Antoine du 08/10 : « mettre une virgule que si la variable est activée par sa condition ») : deux petits champs sous les
+  règles de la fenêtre de condition d'une bulle, absents de celle d'un bloc, d'une valeur ou d'une case ; 40 signes au plus, espaces comprises, sans retour à la ligne. Le texte
+  s'écrit collé à la valeur, dans le même style, seulement quand la variable s'affiche avec une valeur : condition fausse, valeur vide, zéro masqué ou erreur n'écrivent rien, pas même la
+  virgule. Il vaut aussi sans condition et passe par la même résolution partout (Lecture, PDF, Word, Excel, en-têtes et pieds) ; l'éditeur le montre dans de petites pastilles de la
+  bulle (son nom reste le texte de la bulle) et l'icône Condition de la barre s'allume avec lui. « Retirer la condition » le garde ; une case Excel qui l'a reste du texte. Les
+  attributs ajoutés par « Autres attributs » ne le recopient pas ; « Remplacer » et « Colonne… » le gardent sur la bulle.
 - « Changer la colonne de la variable… » (point 11 des retours du 02/10 : réparer une variable dont Grist a renommé ou supprimé la colonne ; restreint le 04/10 : « pas à chaque fois, uniquement
   quand une variable est cassée ») : bouton `varColumn` de la barre flottante d'une variable, **là seulement quand la bulle est rouge** (colonne, chemin de références ou table disparus), caché - pas
   grisé : seconde exception, expresse, à « grisée, jamais masquée » - sur une variable saine, un calcul (même cassé), un bloc de texte, une valeur et une case conditionnelle ; il suit la bulle

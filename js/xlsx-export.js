@@ -94,10 +94,11 @@ const XlsxExport = (function () {
   const BUBBLES = '.var-badge, .calc-badge';
   function isSoleBadge(cell, badge) {
     // Vrai si `badge` est tout le contenu de sa case : une seule bulle, pas d'autre texte ni d'image, pas de boucle « dans la phrase » ou de zone
-    // répétée.
+    // répétée, pas de texte « Avant » / « Après » (la case écrit alors « 1 200, » : du texte, pas un nombre).
     // Les bulles qui prennent une valeur : celles d'une variable et celles d'un calcul (js/variable-calc.js), comme BADGE_SELECTOR de
     // js/reader-mode.js.
     if (cell.querySelectorAll(BUBBLES).length !== 1 || cell.querySelector('img') || badge.hasAttribute('data-loop')) return false;
+    if (VariableFormat.affixes(badge.getAttribute('data-before'), badge.getAttribute('data-after'))) return false;
     const rest = cell.cloneNode(true);
     rest.querySelector(BUBBLES).remove();
     return rest.textContent.replace(/[\s\u00a0]+/g, '') === '';

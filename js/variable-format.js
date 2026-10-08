@@ -404,9 +404,34 @@ const VariableFormat = (function () {
     return shown.slice(0, -1).join(list.separator) + last + shown[shown.length - 1];
   }
 
+  // === Texte autour de la valeur === « Avant » et « Après » d'une bulle (fenêtre de js/variable-condition.js) : un texte collé à la valeur, par exemple
+  // la virgule qui ne s'écrit que si la variable s'affiche. Deux attributs du nœud (`before` et `after`, data-before et data-after dans le HTML), pas
+  // des clés du `format` : retirer un réglage de nombre ou de date ne les efface pas. La Lecture et tous les exports (PDF, Word, Excel, en-têtes et
+  // pieds) les écrivent dans ReaderMode.resolveBadgeNode, au contact de la valeur ; `withAffixes` est la même règle sur un texte déjà résolu (l'aperçu
+  // de la fenêtre, un champ de texte brut qui résout une bulle).
+  const AFFIX_MAX = 40;
+  function affix(raw) {
+    // Un de ces textes tel qu'il se garde : au plus AFFIX_MAX caractères, espaces compris - une espace seule est un vrai choix -, sans caractère de
+    // contrôle (un retour à la ligne ferait une ligne de plus dans le PDF) ; null quand il est vide ou n'est pas du texte.
+    const text = typeof raw === 'string' ? raw.replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, AFFIX_MAX) : '';
+    return text === '' ? null : text;
+  }
+  function affixes(before, after) {
+    // Les deux textes d'une bulle : { before, after } (l'un des deux peut être null), ou null quand elle n'en a aucun.
+    const out = { before: affix(before), after: affix(after) };
+    return out.before || out.after ? out : null;
+  }
+  function withAffixes(text, around) {
+    // La valeur écrite d'une bulle avec son texte autour. Rien n'est ajouté à une valeur vide (ou d'espaces seules) : la virgule ne s'écrit que pour
+    // une variable qui montre quelque chose.
+    if (!around || text == null || String(text).trim() === '') return text;
+    return (around.before || '') + text + (around.after || '');
+  }
+
   return {
     DATE_PRESETS, presetLabel, formatDate, formatNumber, numberLang, isZero,
     BOOL_CHECKBOX_STYLES, CHECKED_BOX, UNCHECKED_BOX, isCheckboxStyle, boolStyle, checkboxColor, formatBool,
     LIST_INDEX_MAX, isListType, columnKind, normalizeList, isDefaultList, storedList, listStyle, flattenList, listText,
+    AFFIX_MAX, affix, affixes, withAffixes,
   };
 })();
