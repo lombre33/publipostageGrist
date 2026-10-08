@@ -95,6 +95,7 @@ const GROUPS = {
   varPath: 'scenarios-var-path',
   varLookup: 'scenarios-var-lookup',
   varTextPath: 'scenarios-var-text-path',
+  fieldEditor: 'scenarios-field-editor', // champs texte à bulles (Objet, À, Cc, Cci, nom du PDF ; js/field-editor.js, js/field-codec.js) : interface d'<input>, valeur enregistrée, compatibilité des modèles déjà enregistrés, réglages d'une bulle (condition, format, boucle, liste), liste #, Lecture, barre et fenêtres
   varColumn: 'scenarios-var-column', // bouton « Colonne… » de la barre d'une bulle : changer ou réparer la colonne d'une variable (js/variable-column.js)
   schemaRenames: 'scenarios-schema-renames', // suivi des renommages de tables et de colonnes faits dans Grist : mappeur, réécriture des modèles et des clés de correspondance, lecture seule, modèle affiché (js/schema-renames.js)
   settingsColumns: 'scenarios-settings-columns', // avertissement d'ouverture : Réglages > Accès ou > Selon la ligne cite une colonne (ou la table des droits) qui n'existe plus dans Grist (js/settings-columns.js)
@@ -177,6 +178,7 @@ const NODE_SCRIPTS = {
   settingsColumnsOpen: 'verify-settings-columns-open.mjs', // ouverture réelle du widget quand Accès ou Selon la ligne cite une colonne disparue : rien avant l'affichage du modèle, avertissement devant « Mis à jour après un renommage… », entier au survol dans 700x400, rien d'écrit, table des droits renommée (l'onglet Accès reste modifiable, l'onglet Vue se dégrise tout de suite)
   templateStartupMouse: 'verify-template-startup-mouse.mjs', // modèle ouvert au démarrage, faux Grist semé avant l'init : la ligne qui désigne un modèle, puis le modèle de la vue, puis le ★ ; un choix de vue supprimé est ignoré, un email ou un macro-modèle choisi s'ouvre (le ★ reste réservé aux modèles ordinaires)
   emailMouse: 'verify-email-mouse.mjs', // « Créer l'email » au vrai clic à 700x400 : le lien mailto: ouvert est capté puis décodé - objet et destinataire tapés au vrai clavier, puces de l'éditeur, retraits sous le texte, « > » devant la citation, CRLF, jauge égale à la longueur du lien
+  fieldEditorMouse: 'verify-field-editor-mouse.mjs', // les champs à bulles (Objet, À, Cc, Cci, nom du PDF) à la vraie souris et au vrai clavier à 700x400 : « # » et sa liste, la barre et la fenêtre de condition (avec « Avant » / « Après »), « Autres attributs », « Créer l'email » (lien mailto: capté), Lecture, enregistrement et réouverture
   runnerGroupLoad: 'verify-runner-group-load.mjs', // le lanceur lui-même : un groupe dont le fichier existe mais ne se charge pas (SyntaxError) est un ECHEC avec l'erreur de la page, un fichier absent de la branche reste annoncé et sauté ; lance une copie du lanceur sur deux groupes d'essai, un navigateur
   linksBlocksMouse: 'verify-links-blocks-mouse.mjs', // lien, citation, bloc de code sous une icône (js/link-dialog.js) : survol du menu, fenêtre et Ctrl+K au vrai clavier, Ctrl+clic, info-bulle, 700x400 clair, sombre et anglais
   calloutMouse: 'verify-callout-mouse.mjs', // encadré et bloc de signature (js/callout.js) : menu de cinq lignes, fenêtre sans défilement, vraie souris et vrai clavier, 700x400 clair, sombre et anglais

@@ -3,8 +3,10 @@
    l'éditeur. Les lignes de règle réutilisent les classes .macro-rule-* de css/toolbar-v2.css (mêmes champs que les macro-modèles,
    js/condition-fields.js). */
 
-/* Bulle conditionnelle dans l'éditeur : bordure en pointillés. En lecture et à l'export, la bulle est remplacée par sa valeur ou retirée. */
-.tiptap .var-badge[data-condition] { border-style: dashed; border-color: #5b7fc0; }
+/* Bulle conditionnelle dans l'éditeur : bordure en pointillés. En lecture et à l'export, la bulle est remplacée par sa valeur ou retirée. Les champs
+   texte à bulles (js/field-editor.js : Objet, À, Cc, Cci, nom du PDF) montrent les bulles de la même façon, ici et dans les règles suivantes qui visent
+   « :is(.tiptap, .pp-field-editor) ». */
+:is(.tiptap, .pp-field-editor) .var-badge[data-condition] { border-style: dashed; border-color: #5b7fc0; }
 
 /* Texte « Avant » / « Après » d'une bulle (fenêtre de js/variable-condition.js) : une petite pastille de chaque côté du nom, avec le texte que la
    Lecture écrira. Son texte vient de data-text (js/editor-nodes.js:splitBadgeView), jamais du DOM : textContent garde le nom seul. Les espaces
@@ -19,8 +21,8 @@
    (`ProseMirror-hideselection`), rien ne la montrait. Le fond passe à un bleu plus soutenu (texte 6,9:1), liseré inchangé ; même teinte en sombre,
    la page du document restant blanche. `background-color` seulement : le repère de boucle d'une bulle en ligne est un `background-image`. Une
    bulle cassée garde son rouge, un cran plus soutenu. Même retour pour la bulle « Calcul » (css/variable-calc.css). */
-.tiptap .var-badge.ProseMirror-selectednode { background-color: #b9d2f8; }
-.tiptap .var-badge.var-badge-broken.ProseMirror-selectednode { background-color: #f3cccc; }
+:is(.tiptap, .pp-field-editor) .var-badge.ProseMirror-selectednode { background-color: #b9d2f8; }
+:is(.tiptap, .pp-field-editor) .var-badge.var-badge-broken.ProseMirror-selectednode { background-color: #f3cccc; }
 
 /* Bulle dans une case de tableau ou une colonne de zone 2 colonnes : un nom trop long recouvrait la case voisine ou, avec `overflow-wrap:
    anywhere` (css/style.css), passait sur 2 ou 3 lignes et rendait la zone plus haute dans l'éditeur qu'en Lecture et à l'export. Le nom y est
@@ -222,4 +224,4 @@ button.var-linked-crumb:focus-visible { outline: 2px solid var(--accent); outlin
 #editor-container:not(.a4-preview) .tiptap:has(.var-badge[data-loop-repeat="row"], .var-badge[data-loop-repeat="item"], .var-badge[data-loop-repeat="paragraph"]) { padding-left: 22px; }
 #editor-container:not(.a4-preview) .tiptap .tableWrapper:has(.var-badge[data-loop-repeat="row"]) { padding-left: 32px; margin-left: -32px; }
 /* Bulle en boucle « dans la phrase » : petite icône bleue à droite dans la bulle (fond, pour laisser ::after aux autres repères de la bulle). */
-.tiptap .var-badge[data-loop-repeat="inline"], .var-modal-intro .var-badge[data-loop-repeat="inline"] { padding-right: 17px; background-image: var(--pp-loop-icon-accent); background-repeat: no-repeat; background-position: right 3px center; background-size: 10px 10px; }
+:is(.tiptap, .pp-field-editor) .var-badge[data-loop-repeat="inline"], .var-modal-intro .var-badge[data-loop-repeat="inline"] { padding-right: 17px; background-image: var(--pp-loop-icon-accent); background-repeat: no-repeat; background-position: right 3px center; background-size: 10px 10px; }

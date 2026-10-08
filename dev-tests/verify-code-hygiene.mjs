@@ -24,8 +24,9 @@
 //      fenêtre « réseau bloqué » (js/first-contact.js) qui ne liste plus les sites que la politique de sécurité du contenu laisse charger des scripts (bêta : « Tout soigner »).
 //  14. un des cinq mots anglais du travail à reprendre écrit en capitales (MARKERS, section 14 : l'audit externe du 04/10 les compte comme travail inachevé), ou un littéral assigné à `token`, `secret`,
 //      `password`, `apiKey` qui n'est pas le faux jeton `stub-token` des tests (contrôle de l'audit externe : « valeur en dur dans token »).
-//  15. un champ de saisie de index.html (input, select, textarea) sans nom accessible : ni aria-label, ni aria-labelledby vers un élément qui existe, ni <label for> ou <label> englobante, ni title
-//      (audit externe du 04/10, point F-RGAA-04 ; un texte d'exemple, placeholder, n'est pas un nom).
+//  15. un champ de saisie de index.html (input, select, textarea, ou l'élément d'un champ texte à bulles `pp-field-editor`) sans nom accessible : ni aria-label, ni aria-labelledby vers un élément qui existe,
+//      ni <label for> ou <label> englobante, ni title (audit externe du 04/10, point F-RGAA-04 ; un texte d'exemple, placeholder, n'est pas un nom) ; les cinq champs à bulles (Objet, À, Cc, Cci, nom du
+//      PDF) sont bien là, et index.html charge leur feuille de style et leurs deux scripts une fois chacun, avant js/main.js.
 //  16. une fonction reçue en paramètre donnée telle quelle à setTimeout (`onLinked` de js/condition-fields.js, `update` de js/variable-modal.js : audit externe du 04/10, point C-XSS-04) au lieu d'une
 //      flèche qui l'appelle ; le chargeur de scripts des exports (js/export-common.js) garde sa liste blanche (dev-tests/unit-script-loader.mjs, script Node `scriptLoaderUnit`).
 //  17. le prénom de la personne qui a demandé le widget écrit dans ce que le dépôt public reprend (index.html, css, js, img, templates-gallery, LICENSE) : commentaire, texte ou donnée (contrôle d'avant la
@@ -554,7 +555,9 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const ids = new Set([...page.matchAll(/\bid="([^"]+)"/g)].map(m => m[1]));
   const unnamed = [];
   let fields = 0;
-  for (const m of page.matchAll(/<(input|select|textarea)\b([^>]*)>/gi)) {
+  // Les champs texte à bulles (js/field-editor.js) sont des <div> : un lecteur d'écran lit le nom de la zone de saisie que l'éditeur y monte, qui reprend celui de l'élément (aria-label, aria-labelledby).
+  const bubbleFields = [...page.matchAll(/<(div)\b([^>]*\bclass="[^"]*\bpp-field-editor\b[^"]*"[^>]*)>/gi)];
+  for (const m of [...page.matchAll(/<(input|select|textarea)\b([^>]*)>/gi), ...bubbleFields]) {
     const attrs = m[2];
     const type = ((attrs.match(/\btype="([^"]*)"/i) || [])[1] || (m[1].toLowerCase() === 'input' ? 'text' : '')).toLowerCase();
     if (['hidden', 'button', 'submit', 'reset', 'image'].includes(type)) continue;
@@ -570,6 +573,14 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   }
   check('champs : index.html se lit bien (garde-fou de l\'analyse elle-même : une trentaine de champs au moins)', fields >= 30, `${fields} champs`);
   check('champs : chaque champ de saisie de index.html a un nom accessible (aria-label, aria-labelledby, <label for> ou <label> englobante, title) - un texte d\'exemple n\'en est pas un', unnamed.length === 0, unnamed.join(', '));
+  const bubbleIds = bubbleFields.map(m => (m[2].match(/\bid="([^"]+)"/) || [])[1]).sort();
+  check('champs à bulles : index.html a les cinq champs texte à bulles (Objet, À, Cc, Cci, nom du PDF) en éléments `pp-field-editor`, jamais un <input> : un <input> ne porte pas de bulle', JSON.stringify(bubbleIds) === JSON.stringify(['pdf-filename-template', 'v2-email-cc', 'v2-email-cci', 'v2-email-subject', 'v2-email-to'])
+    && !/<input\b[^>]*\bid="(pdf-filename-template|v2-email-subject|v2-email-to|v2-email-cc|v2-email-cci)"/.test(page), bubbleIds.join(', '));
+  const at = needle => page.indexOf(needle);
+  const once = pattern => (page.match(pattern) || []).length === 1;
+  check('champs à bulles : index.html charge css/field-editor.css, js/field-codec.js et js/field-editor.js une fois chacun, le codec avant le champ et les deux avant js/main.js (qui monte les champs au démarrage)',
+    once(/<link[^>]*href="css\/field-editor\.css\?v=/g) && once(/<script src="js\/field-codec\.js\?v=/g) && once(/<script src="js\/field-editor\.js\?v=/g)
+      && at('js/field-codec.js?v=') < at('js/field-editor.js?v=') && at('js/field-editor.js?v=') < at('js/main.js?v='), `codec ${at('js/field-codec.js?v=')}, champ ${at('js/field-editor.js?v=')}, main ${at('js/main.js?v=')}`);
 }
 
 // ============================================================================

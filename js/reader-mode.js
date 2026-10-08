@@ -930,9 +930,10 @@ const ReaderMode = (function () {
     });
     return frag;
   }
-  async function resolveInlineLoop(badge, table, column, tableId, record, format, loopCtx) {
+  async function resolveInlineLoop(badge, table, column, tableId, record, format, loopCtx, textOpts) {
     // Bulle en boucle « dans la phrase » (js/loop-rules.js) : ses valeurs pour chaque ligne retenue, jointes par les séparateurs de la boucle (les
-    // images d'une colonne Pièces jointes, à la suite). Null sans boucle, ou si la boucle ne trouve plus sa source : résolution ordinaire.
+    // images d'une colonne Pièces jointes, à la suite). Null sans boucle, ou si la boucle ne trouve plus sa source : résolution ordinaire. `textOpts` :
+    // les options de lecture d'un champ texte (Variables.formatValue : `rawNumbers`), cf. fieldText.
     const loop = LoopRules.inlineLoopOf(badge);
     if (!loop) return null;
     try {
@@ -947,7 +948,7 @@ const ReaderMode = (function () {
         return { node: res.node || attachmentImages(ids), isError: false };
       }
       const res = await LoopRules.resolveInline(badge, loop, tableId, record, loopCtx,
-        binding => Variables.resolveVariable(table, column, tableId, record, format, loopOpts(binding)));
+        binding => Variables.resolveVariable(table, column, tableId, record, format, Object.assign({}, textOpts, loopOpts(binding))));
       if (!res) return null;
       if (res.node) return { node: res.node, isError: false };
       return { node: valueNode(res.text, format, 'resolved-var'), isError: false };
@@ -956,13 +957,14 @@ const ReaderMode = (function () {
       return null;
     }
   }
-  async function resolveBadgeNode(badge, tableId, record, format, loopCtx) {
+  async function resolveBadgeNode(badge, tableId, record, format, loopCtx, textOpts) {
     // La valeur de la bulle, puis son texte « Avant » / « Après » : une seule porte pour la Lecture et pour tous les exports (un calcul n'en a pas).
-    const resolved = await resolveBadgeValue(badge, tableId, record, format, loopCtx);
+    // `textOpts` : les options de lecture d'un champ texte (fieldText), rien pour le corps d'un modèle.
+    const resolved = await resolveBadgeValue(badge, tableId, record, format, loopCtx, textOpts);
     if (!isCalcBadge(badge)) withAffixes(badge, resolved.node, resolved.isError);
     return resolved;
   }
-  async function resolveBadgeValue(badge, tableId, record, format, loopCtx) {
+  async function resolveBadgeValue(badge, tableId, record, format, loopCtx, textOpts) {
     const binding = LoopRules.bindingOf(badge);
     // Bulle « Calcul » (js/variable-calc.js) : le résultat de sa formule, avec la ligne du tour quand elle est dans une zone répétée - comme une
     // bulle de variable de cette table.
@@ -974,7 +976,7 @@ const ReaderMode = (function () {
     if (!(await badgeConditionHolds(badge, tableId, record, binding))) return { node: document.createTextNode(''), isError: false };
     const table = badge.getAttribute('data-table');
     const column = badge.getAttribute('data-column');
-    const inline = await resolveInlineLoop(badge, table, column, tableId, record, format, loopCtx);
+    const inline = await resolveInlineLoop(badge, table, column, tableId, record, format, loopCtx, textOpts);
     if (inline) return inline;
     const isAttachments = GristAPI.getColumnType(table, column) === 'Attachments';
     if (isAttachments) {
@@ -986,7 +988,7 @@ const ReaderMode = (function () {
     }
     try {
       // isError vient de Variables.resolveVariableResult, jamais des premiers mots du texte : le message d'erreur suit la langue de l'interface.
-      const { text, isError } = await Variables.resolveVariableResult(table, column, tableId, record, format, loopOpts(binding));
+      const { text, isError } = await Variables.resolveVariableResult(table, column, tableId, record, format, Object.assign({}, textOpts, loopOpts(binding)));
       return { node: valueNode(text, format, 'resolved-var' + (isError ? ' error-msg' : '')), isError };
     } catch (e) {
       const span = document.createElement('span'); span.textContent = I18n.t('variables.error.generic', { message: e.message }); span.className = 'resolved-var error-msg';
@@ -1054,15 +1056,38 @@ const ReaderMode = (function () {
     await GristAPI.hydrateAttachmentImages(wrapper);
     return wrapper.innerHTML;
   }
+  // Un champ texte (Objet, À, Cc, Cci, nom du PDF) dont une bulle porte un réglage, enregistré en HTML (js/field-codec.js) : chaque bulle devient son
+  // texte pour la ligne `record` - condition, autres attributs, boucle dans la phrase, liste, format de nombre ou de date comme dans le corps d'un
+  // modèle (resolveBadgeNode) -, le texte autour reste tel quel. Les champs gardent leurs règles d'avant : un nombre, un zéro et un Oui / Non s'écrivent
+  // tels que Grist les stocke (`rawNumbers`, Variables.formatValue), sauf si la bulle choisit son format. `valueText` (facultatif) : ce qui se fait de la
+  // valeur de chaque bulle avant de la poser (les caractères interdits d'un nom de fichier). Une image (colonne Pièces jointes) ne s'écrit pas : rien.
+  async function fieldText(html, tableId, record, valueText) {
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = HtmlSanitize.clean(html);
+    const loopCtx = LoopRules.createContext();
+    const badges = wrapper.querySelectorAll(BADGE_SELECTOR);
+    await Promise.all(Array.from(badges).map(async badge => {
+      let text = '';
+      try {
+        const { node } = await resolveBadgeNode(badge, tableId || lastCurrentTableId, record, parseBadgeFormat(badge), loopCtx, { rawNumbers: true });
+        text = node.textContent || '';
+      } catch (e) { /* une valeur illisible donne un texte vide, jamais un export en échec */ }
+      badge.replaceWith(document.createTextNode(valueText ? valueText(text) : text));
+    }));
+    return wrapper.textContent;
+  }
+  // Les caractères qu'un nom de fichier ne peut pas porter, dans la valeur d'une variable.
+  const fileSafe = text => String(text || '').replace(/[\\/:*?"<>|]/g, '_');
   async function resolveFilename(filenameTemplate, tableId, record) {
     // Le nom d'un fichier : les variables de son modèle remplacées par leur valeur (Variables.replaceTextVariables, comme les champs de l'email), les
     // caractères interdits d'un nom de fichier remplacés par « _ » dans chaque valeur. Une valeur illisible donne un texte vide, jamais un export en
     // échec.
     if (!filenameTemplate) return 'publipostage';
+    if (FieldCodec.isRich(filenameTemplate)) return fieldText(filenameTemplate, tableId, record, fileSafe);
     return Variables.replaceTextVariables(filenameTemplate, async m => {
-      try { return String(await Variables.resolveVariable(m.table, m.column, tableId, record, null, { rawNumbers: true }) || '').replace(/[\\/:*?"<>|]/g, '_'); }
+      try { return fileSafe(await Variables.resolveVariable(m.table, m.column, tableId, record, null, { rawNumbers: true })); }
       catch (e) { return ''; }
     });
   }
-  return { render, preview, resolveFilename, splitBadges, trimTrailingBlankBlocks, checkboxNode };
+  return { render, preview, resolveFilename, fieldText, splitBadges, trimTrailingBlankBlocks, checkboxNode };
 })();

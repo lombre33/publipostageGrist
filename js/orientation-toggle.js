@@ -86,7 +86,7 @@ const OrientationToggle = (function () {
     row.addEventListener('mousedown', (event) => event.preventDefault());
     row.addEventListener('click', () => {
       const active = document.activeElement;
-      if (active && active !== document.body && !active.closest('.ProseMirror') && active.matches('input, textarea, select')) active.blur();
+      if (EditorCore.isFormFieldFocus(active)) active.blur();
       action();
     });
     row.addEventListener('keydown', (event) => {

@@ -504,8 +504,15 @@ const SchemaRenames = (function () {
       const headers = rewriteHeaderFooter(row.HeaderFooter, m, ctx);
       keep('HeaderFooter', headers.text, headers.count);
     }
+    // Un champ dont une bulle porte un réglage est enregistré en HTML (js/field-codec.js) et se lit comme le corps d'un modèle ; les autres restent du
+    // texte brut.
+    const rewriteField = value => {
+      if (!FieldCodec.isRich(value)) return rewriteText(value, m, ctx.trigger);
+      const next = rewriteHtml(value, m, ctx);
+      return { text: next.html, count: next.count };
+    };
     TEXT_COLUMNS.forEach(column => {
-      const next = rewriteText(row[column], m, ctx.trigger);
+      const next = rewriteField(row[column]);
       keep(column, next.text, next.count);
     });
     return count ? { id: row.id, fields, count } : null;

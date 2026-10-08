@@ -155,12 +155,19 @@ const EditorCore = (function () {
   // ProseMirror ; un clic hors de `.tiptap` et hors de `.v2-floating-toolbar` les referme toutes, pour les cas sans évènement ProseMirror (ex. clic
   // sur "Mode lecture"). La pastille du zoom de la page (js/page-zoom.js) n'en fait pas partie : un appui dessus ne prend pas le focus et ne change ni la
   // sélection ni le contexte, la barre de l'image ou du tableau reste ouverte et suit la feuille qui change d'échelle.
+  // `ownerEl` (facultatif) : le champ texte à bulles (js/field-editor.js) dont `panel` est la barre ; sans lui, c'est une barre de l'éditeur du
+  // document. Un clic dans l'un laisse ouvertes les barres de CET éditeur et referme celles des autres : le curseur d'un champ ne bouge pas quand on
+  // clique dans le document, et inversement.
   const floatingContextPanels = [];
-  function registerFloatingPanel(panel) { floatingContextPanels.push(panel); }
-  function hideFloatingContextToolbars() { floatingContextPanels.forEach(p => p.hide()); }
+  function registerFloatingPanel(panel, ownerEl) { floatingContextPanels.push({ panel, ownerEl: ownerEl || null }); }
+  function hideFloatingContextToolbars() { floatingContextPanels.forEach(entry => entry.panel.hide()); }
   document.addEventListener('mousedown', (event) => {
-    if (event.target.closest('.tiptap') || event.target.closest('.v2-floating-toolbar') || event.target.closest('.pp-page-zoom')) return;
-    hideFloatingContextToolbars();
+    const target = event.target;
+    if (target.closest('.v2-floating-toolbar') || target.closest('.pp-page-zoom')) return;
+    const inDocument = !!target.closest('.tiptap');
+    floatingContextPanels.forEach(({ panel, ownerEl }) => {
+      if (!(ownerEl ? ownerEl.contains(target) : inDocument)) panel.hide();
+    });
   });
 
   // Un seul menu déroulant à la fois (couleur/police/taille), fermé au clic ailleurs.
@@ -288,11 +295,19 @@ const EditorCore = (function () {
     const trigger = group && group.querySelector(':scope > button');
     return trigger && trigger.contains(target) ? trigger : null;
   }
+  // Le champ de saisie, autre que l'éditeur du document, qui a le focus : un <input>, un <textarea> ou un <select> de la page, ou un champ texte à
+  // bulles (js/field-editor.js, un éditeur lui aussi, mais dont la saisie se valide à la perte du focus comme celle d'un <input>). Un clic sur un menu
+  // ou sur une ligne de menu le lui retire (ici, js/main.js:wireSaveMenu et js/orientation-toggle.js:wireRow).
+  function isFormFieldFocus(active) {
+    if (!active || active === document.body) return false;
+    if (active.closest('.pp-field-editor')) return true;
+    return !active.closest('.ProseMirror') && active.matches('input, textarea, select');
+  }
   document.addEventListener('mousedown', (event) => { if (menuTriggerOf(event.target)) event.preventDefault(); });
   document.addEventListener('click', (event) => {
     if (!menuTriggerOf(event.target)) return;
     const active = document.activeElement;
-    if (active && active !== document.body && !active.closest('.ProseMirror') && active.matches('input, textarea, select')) active.blur();
+    if (isFormFieldFocus(active)) active.blur();
   }, true);
   function setColorBar(id, color) {
     const el = document.getElementById(id);
@@ -484,7 +499,7 @@ const EditorCore = (function () {
   return {
     setEditor, getEditor, focusEditor, setFloatingUi, setNodeSelectionClass, getTextSelectionClass, setTextSelectionClass,
     patchNodeAndReselect, editorContentWidthPx, layoutZoom, createStepSheets, createFloatingPanel,
-    registerFloatingPanel, hideFloatingContextToolbars,
+    registerFloatingPanel, hideFloatingContextToolbars, isFormFieldFocus,
     getOpenDropdownPanel, setOpenDropdownPanel, closeDropdownPanel, wireDropdownButton,
     setColorBar, setColorIcon, createSelectionPreserver, isCellSelection, runOnSelectedCells, isInsideNode,
     toggleList, isQuoteActive, quoteSelectedCells, canShiftListsInSelectedCells, shiftListsInSelectedCells,

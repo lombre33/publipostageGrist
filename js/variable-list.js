@@ -199,15 +199,19 @@ const VariableList = (function () {
   }
 
   // `pos` : position de la bulle dans le document, capturée au clic sur l'icône (la sélection de l'éditeur est une NodeSelection sur elle).
-  function open(editor, pos) {
+  // `options.field` : la bulle d'un champ texte (Objet, À, Cc, Cci, nom du PDF) ; « Un document par valeur » n'y a pas d'objet - il se règle sur les
+  // bulles du corps du modèle -, la case reste là, grisée et décochée.
+  function open(editor, pos, options) {
     const node = editor && editor.state.doc.nodeAt(pos);
     if (!node || node.type.name !== 'varBadge' || !status(node).enabled) return;
     ensureModal();
+    const inField = !!(options && options.field);
     state = {
       editor, pos, node,
       had: !VariableFormat.isDefaultList(node.attrs.format && node.attrs.format.list),
       working: listOf(node),
     };
+    if (inField) state.working.perValue = false;
     const { title, pickLabel, pickButtons, separators, number, numberHint, split, splitHint, resetBtn, cancelBtn, saveBtn } = refs;
     title.textContent = I18n.t('varList.title');
     pickLabel.textContent = I18n.t('varList.section.pick');
@@ -222,8 +226,9 @@ const VariableList = (function () {
     numberHint.textContent = I18n.t('varList.numberHint');
     number.input.value = String(state.working.index);
     split.label.textContent = I18n.t('varList.split.label');
-    splitHint.textContent = I18n.t('varList.split.hint');
+    splitHint.textContent = I18n.t(inField ? 'varList.split.hintField' : 'varList.split.hint');
     split.input.checked = state.working.perValue;
+    split.input.disabled = inField;
     resetBtn.textContent = I18n.t('varList.reset');
     resetBtn.hidden = !state.had;
     cancelBtn.textContent = I18n.t('common.cancel');

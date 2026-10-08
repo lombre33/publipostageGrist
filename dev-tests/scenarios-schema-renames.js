@@ -546,6 +546,47 @@
   );
 
   scenario(
+    'schemarenames_email_and_file_name_fields_written_as_html_follow_a_renamed_column_table_and_loop',
+    'Objet et nom du PDF écrits en HTML (js/field-codec.js : une bulle à condition ou à format, une boucle dans la phrase) suivent un renommage de colonne puis de table comme les bulles du corps - colonne, clé et texte de la bulle, colonne de sa condition, format, table et filtre de la boucle -, le champ À resté en texte brut suit comme avant ; un champ vide reste vide',
+    async (h) => {
+      const bubbleItem = (table, column, extra) => ({ badge: Object.assign({ table, column, key: table + '.' + column, format: null, condition: null, loop: null }, extra || {}) });
+      const field = list => FieldCodec.serializeRich(list);
+      const loop = { repeat: 'inline', table: 'SrLignes', via: null, filter: cond([['Prix', '>', '10']]), sort: { column: 'Designation', direction: 'asc' }, empty: 'blank', emptyText: '', separator: ', ', lastSeparator: null };
+      const objet = field([
+        { text: 'Dossier ' }, bubbleItem(PAGE, 'Montant', { format: { type: 'number', decimals: 2 }, condition: cond([['Statut', '=', 'Ouvert']]) }),
+        { text: ' - ' }, bubbleItem('SrLignes', 'Designation', { loop }),
+      ]);
+      const pdf = field([bubbleItem(PAGE, 'Titre'), { text: ' - ' }, bubbleItem(PAGE, 'MontantTTC', { condition: cond([['Montant', '>', '100']]) })]);
+      const id = await addTemplate({ nom: 'Sr mail riche', type: 'email', html: '<p>Bonjour</p>', pdf, email: { destinataires: text('§SrDossiers.Responsable.Email'), cc: '', cci: '', objet } });
+      await bootstrap(h);
+      await renamed(s => { s.renameColumn(PAGE, 'Montant', 'Total'); s.renameColumn('SrLignes', 'Prix', 'Tarif'); s.renameColumn('SrAnnuaire', 'Email', 'Courriel'); });
+      const first = await pass(h);
+      const afterColumns = rowOf(id);
+      await renamed(s => s.renameTable('SrLignes', 'SrPrestations'));
+      const second = await pass(h);
+      const row = rowOf(id);
+      const subject = FieldCodec.itemsOf(row.Objet).filter(item => !FieldCodec.isText(item)).map(item => item.badge);
+      const name = FieldCodec.itemsOf(row.NomFichierPDF).filter(item => !FieldCodec.isText(item)).map(item => item.badge);
+      const loopOut = LoopRules.normalizeLoop(subject[1] && subject[1].loop);
+      const checks = {
+        stillHtml: FieldCodec.isRich(row.Objet) && FieldCodec.isRich(row.NomFichierPDF),
+        amount: subject[0].column === 'Total' && subject[0].key === PAGE + '.Total' && subject[0].table === PAGE,
+        amountKeepsFormatAndCondition: same(subject[0].format, { type: 'number', decimals: 2 }) && same(subject[0].condition, cond([['Statut', '=', 'Ouvert']])),
+        text: FieldCodec.itemsOf(row.Objet).length === 4 && all(row.Objet, '.var-badge')[0].textContent === trigger() + PAGE + '.Total',
+        loopTable: subject[1].table === 'SrPrestations' && subject[1].key === 'SrPrestations.Designation' && !!loopOut && loopOut.table === 'SrPrestations',
+        loopFilterAndSort: !!loopOut && same(loopOut.filter, cond([['Tarif', '>', '10']])) && !!loopOut.sort && loopOut.sort.column === 'Designation',
+        fileName: name.length === 2 && name[0].key === PAGE + '.Titre' && name[1].key === PAGE + '.MontantTTC' && same(name[1].condition, cond([['Total', '>', '100']])),
+        plainField: row.Destinataires === text('§SrDossiers.Responsable.Courriel'),
+        emptyFields: row.Cc === '' && row.Cci === '',
+        summaries: first.renames === 3 && first.templates === 1 && second.renames === 1 && second.templates === 1,
+        firstPassAlreadyRewroteTheColumns: FieldCodec.itemsOf(afterColumns.Objet).filter(item => !FieldCodec.isText(item))[0].badge.column === 'Total',
+      };
+      const v = verdict(checks);
+      return { pass: v.pass, notes: v.failed.join(', ') || 'ok' };
+    },
+  );
+
+  scenario(
     'schemarenames_a_name_that_still_reads_is_never_rewritten_and_a_deleted_column_is_left_alone',
     'Une colonne renommée dont le nom est repris par une AUTRE colonne, deux noms échangés, une colonne supprimée, une supprimée puis remplacée par une colonne neuve : leurs bulles restent comme elles étaient ; un vrai renommage fait en même temps suit quand même ; rien ne plante',
     async (h) => {

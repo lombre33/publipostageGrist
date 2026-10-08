@@ -556,6 +556,8 @@ async function emailPathPopup(width, height) {
   });
   await page.waitForTimeout(100);
   await enterEmailWithCci(page);
+  // Objet, À, Cc, Cci et le nom du PDF sont des éditeurs d'une ligne (js/field-editor.js) : le focus est dans leur zone de saisie, que l'élément du champ contient.
+  await page.evaluate(() => { window.fieldIdOf = el => (el && ((el.closest && el.closest('.pp-field-editor')) || el).id) || null; });
   const COLUMNS = ['Projets.Accompagnateur.NomPrenom', 'Projets.Accompagnateur.Email', 'Projets.Accompagnateur.Telephone', 'Projets.Accompagnateur.Service'];
   const opened = () => page.waitForFunction(() => {
     const b = document.getElementById('autocomplete-box');
@@ -610,7 +612,7 @@ async function emailPathPopup(width, height) {
   if (third) await page.mouse.click(third.x, third.y);
   await page.waitForTimeout(100);
   const ccValue = await valueOf('v2-email-cc');
-  const ccState = await page.evaluate(() => ({ focus: document.activeElement && document.activeElement.id, open: (() => { const b = document.getElementById('autocomplete-box'); return !!b && getComputedStyle(b).display !== 'none'; })() }));
+  const ccState = await page.evaluate(() => ({ focus: fieldIdOf(document.activeElement), open: (() => { const b = document.getElementById('autocomplete-box'); return !!b && getComputedStyle(b).display !== 'none'; })() }));
   check(`${width}x${height} - Cc : clic de la souris sur la 3e ligne -> "#Projets.Accompagnateur.Telephone", liste fermée, le focus reste dans le champ`,
     !!third && third.hit && ccValue === '#Projets.Accompagnateur.Telephone' && ccState.focus === 'v2-email-cc' && ccState.open === false, { third, ccValue, ccState });
   await clear('v2-email-cc');
@@ -637,7 +639,7 @@ async function emailPathPopup(width, height) {
   const typedInFull = await listed();
   await page.keyboard.press('Tab');
   await page.waitForTimeout(100);
-  const afterTab = await page.evaluate(() => document.activeElement && document.activeElement.id);
+  const afterTab = await page.evaluate(() => fieldIdOf(document.activeElement));
   check(`${width}x${height} - "#Projets.Titre." (pas une Référence) et "#Projets.Accompagnateur.Email" tapé en entier -> aucune liste, Tab passe au champ suivant`,
     notReference === null && typedInFull === null && afterTab !== 'v2-email-to', { notReference, typedInFull, afterTab });
   await clear('v2-email-to');

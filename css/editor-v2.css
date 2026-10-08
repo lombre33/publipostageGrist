@@ -489,9 +489,9 @@
 .tiptap .toc-entry-preview { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* Petit repère (point plein en haut à droite de la bulle) quand un format de nombre ou de date a été choisi par la barre flottante dédiée : sans
-   lui, rien ne distingue une bulle formatée d'une bulle par défaut. `.var-badge` reste dans css/style.css, scopé ici à `.tiptap`. */
-.tiptap .var-badge { position: relative; }
-.tiptap .var-badge[data-format]::after { content: ''; position: absolute; top: -3px; right: -3px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent, #2f6fed); border: 1px solid #fff; }
+   lui, rien ne distingue une bulle formatée d'une bulle par défaut. `.var-badge` reste dans css/style.css, scopé ici à `.tiptap` et aux champs texte à bulles (`.pp-field-editor`, js/field-editor.js). */
+:is(.tiptap, .pp-field-editor) .var-badge { position: relative; }
+:is(.tiptap, .pp-field-editor) .var-badge[data-format]::after { content: ''; position: absolute; top: -3px; right: -3px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent, #2f6fed); border: 1px solid #fff; }
 
 /* Badge de numéro de page (js/editor.js:createPageNumberBadgeNode) : même gabarit que `.var-badge` ci-dessus, mais d'une teinte propre (vert
    plutôt que bleu) pour rester distinct d'une bulle #Variable, les deux pouvant cohabiter dans un en-tête ou un pied. Il n'est résolu en vrai

@@ -454,7 +454,8 @@ const Shortcuts = (function () {
     function inTextField() {
       const el = document.activeElement;
       if (!el || el === document.body) return false;
-      if (el.closest && el.closest('.ProseMirror')) return false;
+      // Un champ texte à bulles (js/field-editor.js) est un éditeur ProseMirror, mais pas celui du document : ces touches n'y ont rien à faire non plus.
+      if (el.closest && el.closest('.ProseMirror') && !el.closest('.pp-field-editor')) return false;
       return /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable;
     }
 

@@ -135,16 +135,25 @@ const Variables = (function () {
     }
 
     // Les entrées de l'onglet actif, pour l'`items()` de @tiptap/suggestion (à chaque frappe) comme pour le clic sur un onglet. `editor` (facultatif) :
-    // les colonnes de la table de la page viennent en tête ; dans une zone répétée, celles de la table parcourue passent avant elles.
-    function computeItems(query, editor) {
-      if (activeTab === 'chips') {
+    // les colonnes de la table de la page viennent en tête ; dans une zone répétée, celles de la table parcourue passent avant elles. `fieldMode` : la
+    // liste d'un champ texte (Objet, À, Cc, Cci, nom du PDF), qui n'a que des variables - ni onglet des puces, ni note de bas de page, ni date.
+    function computeItems(query, editor, fieldMode) {
+      if (!fieldMode && activeTab === 'chips') {
         // Pas de note de bas de page dans un en-tête ou un pied : la zone est répétée sur chaque page, sans repère de page physique où ancrer une note.
         const items = Editor.isEditingHeaderFooter() ? SMART_CHIP_ITEMS.filter(v => v.chipKind !== 'footnote') : SMART_CHIP_ITEMS;
         const wanted = SearchSelect.normalize(query);
         return items.filter(v => SearchSelect.normalize(displayKey(v)).includes(wanted));
       }
       refreshSchemaOnce();
-      return prioritizeTables(matchingVariables(query), currentTables(editor));
+      return fieldMode ? fieldItems(query, editor) : prioritizeTables(matchingVariables(query), currentTables(editor));
+    }
+    // La liste d'un champ texte : après « Projet.Accompagnateur. », les colonnes de la ligne que désigne cette Référence (pathItems) ; sinon la saisie filtre
+    // les clés « Table.Colonne », celles de la table de la page d'abord. Une clé tapée en entier, seule proposition, n'a rien à compléter : la liste reste
+    // fermée.
+    function fieldItems(query, editor) {
+      const items = pathItems(query) || prioritizeTables(matchingVariables(query), currentTables(editor));
+      if (!items.length || (items.length === 1 && SearchSelect.normalize(items[0].key) === SearchSelect.normalize(query))) return [];
+      return items;
     }
     return { currentTables, prioritizeTables, matchingVariables, refreshSchemaOnce, computeItems };
   })();
@@ -216,14 +225,15 @@ const Variables = (function () {
   const { updateItems, hide, suggestionRender } = (function () {
     // La mise à jour de la liste et l'objet de rendu de @tiptap/suggestion
 
-    function updateItems(props) {
+    // `fieldMode` : la liste d'un champ texte, sans l'onglet des puces.
+    function updateItems(props, fieldMode) {
       latestProps = props;
       currentItems = props.items || [];
       // Avec un texte à entourer en attente, « Texte conditionnel » est l'entrée choisie : Entrée suffit.
-      const wrapIndex = ConditionalText.hasPending() ? currentItems.findIndex(item => item.chipKind === 'conditionalText') : -1;
+      const wrapIndex = !fieldMode && ConditionalText.hasPending() ? currentItems.findIndex(item => item.chipKind === 'conditionalText') : -1;
       selectedIndex = wrapIndex > 0 ? wrapIndex : 0;
       latestCommand = props.command;
-      setTabsVisible(true);
+      setTabsVisible(!fieldMode);
       render();
       // La liste de l'éditeur retrouve son étage de menu : un champ de fenêtre l'a peut-être montée devant sa fenêtre (checkForFilenameTrigger).
       listWindow = null;
@@ -235,10 +245,10 @@ const Variables = (function () {
 
     // L'objet de rendu de @tiptap/suggestion : onStart et onUpdate à chaque frappe après le déclencheur, onKeyDown pour intercepter flèches, Entrée et
     // Échap (true : géré, l'éditeur ne les reçoit pas), onExit quand le déclencheur n'est plus actif (curseur sorti, espace tapé...).
-    function suggestionRender() {
+    function suggestionRender(fieldMode) {
       return {
-        onStart: updateItems,
-        onUpdate: updateItems,
+        onStart: props => updateItems(props, fieldMode),
+        onUpdate: props => updateItems(props, fieldMode),
         onKeyDown(props) {
           if (!currentItems.length) return false;
           if (props.event.key === 'ArrowDown') { moveSelection(1); return true; }
@@ -247,13 +257,18 @@ const Variables = (function () {
           if (props.event.key === 'Escape') { hide(); return true; }
           return false;
         },
-        onExit() { hide(); schemaRefreshedForSession = false; activeTab = 'variables'; ConditionalText.cancelPending(); },
+        onExit() {
+          hide();
+          schemaRefreshedForSession = false;
+          activeTab = 'variables';
+          if (!fieldMode) ConditionalText.cancelPending();
+        },
       };
     }
     return { updateItems, hide, suggestionRender };
   })();
 
-  const { createExtension } = (function () {
+  const { createExtension, createFieldExtension } = (function () {
     // Les insertions (puces, note de bas de page, variable) et l'extension TipTap
 
     // Les puces qui ouvrent leur propre insertion. Appelées à l'usage : ces modules sont chargés après celui-ci.
@@ -317,10 +332,36 @@ const Variables = (function () {
         },
       });
     }
-    return { createExtension };
+    // L'extension TipTap d'un champ texte à bulles (js/field-editor.js) : le « # » ouvre la même liste que dans l'éditeur, sans l'onglet des puces, et
+    // le choix pose une bulle. Même demande de clé de correspondance qu'à l'insertion d'une bulle du corps (insertVariable). Le déclencheur s'ouvre
+    // derrière n'importe quel caractère (`allowedPrefixes: null`), comme dans le champ texte d'avant : « Suivi_#Projet.Nom » est le nom de fichier
+    // type, et l'éditeur du corps, lui, n'ouvre la liste qu'après une espace.
+    function createFieldExtension(Extension, Suggestion) {
+      return Extension.create({
+        name: 'fieldVariableSuggestion',
+        // La liste, partagée par tous les champs et par le document, ne reste pas ouverte sous un champ que le curseur a quitté. Un clic sur une ligne
+        // de la liste garde le focus du champ (mousedown sans effet par défaut, cf. ensureBox) : il n'arrive pas ici.
+        onBlur() { hide(); },
+        addProseMirrorPlugins() {
+          return [
+            Suggestion({
+              editor: this.editor,
+              char: triggerChar(),
+              allowedPrefixes: null,
+              items: ({ query, editor }) => computeItems(query, editor, true),
+              // La liste se ferme au choix : la fenêtre de la clé de correspondance, si elle s'ouvre, ne la retrouve pas ouverte derrière elle, et un refus laisse le
+              // texte tapé sans liste, comme le champ d'avant.
+              command: ({ editor, range, props }) => { hide(); insertVariable(editor, range, props); },
+              render: () => suggestionRender(true),
+            }),
+          ];
+        },
+      });
+    }
+    return { createExtension, createFieldExtension };
   })();
 
-  const { checkForFilenameTrigger } = (function () {
+  const { checkForFilenameTrigger, pathItems } = (function () {
     // La liste d'un champ texte : chemins de références et déclencheur
 
     // Saisie « Table.Colonne.… » d'un champ texte (`raw`, casse tapée) : quand ce qui précède le dernier point est un chemin de colonnes Référence qui
@@ -378,7 +419,7 @@ const Variables = (function () {
       ensureBox().style.display = 'flex';
       position(() => el.getBoundingClientRect());
     }
-    return { checkForFilenameTrigger };
+    return { checkForFilenameTrigger, pathItems };
   })();
   const { insertFilenameVariable, initFilenameInput } = (function () {
     // L'insertion dans un champ texte et son clavier
@@ -898,6 +939,8 @@ const Variables = (function () {
     // ou une adresse.
     async function resolveTextVariables(text, currentTableId, record) {
       if (!text) return '';
+      // Un champ dont une bulle porte un réglage est enregistré en HTML (js/field-codec.js) : la Lecture le déroule comme le corps d'un modèle.
+      if (FieldCodec.isRich(text)) return ReaderMode.fieldText(text, currentTableId, record);
       return replaceTextVariables(text, m => resolveVariable(m.table, m.column, currentTableId, record, null, { rawNumbers: true }));
     }
 
@@ -1141,10 +1184,13 @@ const Variables = (function () {
       return currentTableId + '.' + rule.colonneSource + ' = ' + tableCible + '.' + rule.colonneCible;
     }
     // Les modèles dont le contenu contient au moins une bulle #Variable vers `tableCible` : une recherche brute sur l'attribut sérialisé suffit, sans
-    // DOMParser. Sert à avertir avant de supprimer une règle encore utilisée ailleurs.
+    // DOMParser. Les champs texte (Objet, À, Cc, Cci, nom du PDF) y comptent aussi : leurs variables suivent la même règle de liaison. Sert à avertir
+    // avant de supprimer une règle encore utilisée ailleurs.
     function findTemplatesUsingTable(tableCible) {
       const needle = 'data-table="' + tableCible + '"';
-      return Templates.getCached().filter(tpl => tpl.contenu && tpl.contenu.indexOf(needle) !== -1);
+      const fields = tpl => [tpl.nomFichierPDF, tpl.objet, tpl.destinataires, tpl.cc, tpl.cci];
+      return Templates.getCached().filter(tpl => (tpl.contenu && tpl.contenu.indexOf(needle) !== -1)
+        || fields(tpl).some(value => value && FieldCodec.variablesIn(value).some(v => v.table === tableCible)));
     }
     async function confirmDeleteLinkRule(rule) {
       const affected = findTemplatesUsingTable(rule.tableCible);
@@ -1193,7 +1239,7 @@ const Variables = (function () {
   // js/floating-toolbars.js, lit la même règle que le rendu) ; currentTables et prioritizeTables (le menu Image de la barre, js/main-toolbar.js,
   // classe ses colonnes comme la liste « # »).
   return {
-    createExtension, resolveVariable, resolveVariableResult, resolveRawValue, resolveTextVariables, replaceTextVariables, findTextVariables, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar,
+    createExtension, createFieldExtension, resolveVariable, resolveVariableResult, resolveRawValue, resolveTextVariables, replaceTextVariables, findTextVariables, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar,
     preferChipsTab, ensureLinkConfigured, editLinkRule, describeLinkVia, resolveLinkedRows, resolveRows, formatValue, listTexts, resolveListTexts, zeroHidden, cellValue, currentTables, prioritizeTables,
     resolveCalcResult, resolveCalc, badgeProblem, calcProblem, formulaErrorText,
   };

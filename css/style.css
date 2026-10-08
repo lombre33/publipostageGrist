@@ -164,6 +164,13 @@ body { display:flex; flex-direction:column; }
   background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
   padding: 4px 8px; height: 28px;
 }
+/* Les champs texte à bulles (`.pp-field-editor`, js/field-editor.js : Objet, À, Cc, Cci, nom du PDF) ont le cadre des <input> qu'ils remplacent ; leur
+   règle est à part : un sélecteur commun relèverait la spécificité des <select> (`#toolbar-top select`) au-dessus de leurs règles propres. */
+#toolbar-top .pp-field-editor {
+  font-family: Arial, sans-serif; font-size: 13px; color: var(--text);
+  background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  padding: 4px 8px; height: 28px;
+}
 .template-select { max-width: 160px; }
 #toolbar-top button {
   font-family: var(--font-ui); font-weight: 600; font-size: 13px;

@@ -1,0 +1,22 @@
+/* Les champs texte à bulles (js/field-editor.js) : Objet, À, Cc, Cci du mode email et nom du fichier PDF. Chacun est un éditeur d'une seule ligne monté
+   dans un <div> qui garde la place, la taille et le cadre de l'<input> qu'il remplace (css/style.css : `#toolbar-top .pp-field-editor`, css/toolbar-v2.css :
+   `.v2-email-field-input`, `#pdf-filename-template`). Les bulles s'y dessinent comme dans le document (css/style.css : `.var-badge`, css/variable-actions.css). */
+.pp-field-editor { display: flex; align-items: center; position: relative; overflow: hidden; cursor: text; }
+/* `display: flex` ci-dessus l'emporte sur la règle native `[hidden]` : sans cette ligne, le champ Cci replié et le nom du PDF replié resteraient visibles. */
+.pp-field-editor[hidden] { display: none; }
+/* Le nom du PDF a une largeur fixe, comme son <input> (`min-width` de css/toolbar-v2.css) : un <div> grandirait avec son texte. */
+#pdf-filename-template.pp-field-editor { width: 220px; }
+/* En Lecture, la valeur résolue s'y lit sans s'y écrire. */
+.pp-field-editor.is-readonly { cursor: default; }
+/* Le curseur dans le champ : le liseré d'accent des listes à recherche (css/search-select.css), là où l'<input> gardait le cadre de focus du navigateur. */
+#toolbar-top .pp-field-editor:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+
+/* La zone de saisie remplit le champ ; une seule ligne, sans retour à la ligne ni barre de défilement - le navigateur fait défiler le texte avec le
+   curseur. `white-space: pre` garde les espaces telles quelles, comme un <input>. */
+/* `position: relative` et `font-variant-ligatures` : ce que le style de TipTap donne à `.ProseMirror`, classe que la zone de saisie n'a pas (js/field-editor.js). */
+.pp-field-editor > .pp-field-text { position: relative; flex: 1 1 auto; align-self: stretch; min-width: 0; outline: none; white-space: pre; overflow: hidden; line-height: 28px; font-variant-ligatures: none; }
+.pp-field-editor p { margin: 0; }
+
+/* L'indication du champ vide : l'attribut `placeholder` de l'élément, lu à l'affichage - la langue de l'interface la change sans transaction. Le gris des
+   textes secondaires (4,6:1 au moins, css/style.css), comme l'indication des <input> en thème sombre. */
+.pp-field-editor.is-empty::before { content: attr(placeholder); position: absolute; left: 8px; right: 8px; top: 50%; transform: translateY(-50%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; pointer-events: none; color: var(--text-muted); }

@@ -2686,14 +2686,12 @@
   }
 
   // Les champs texte qui ont la liste « # » : comme le navigateur à chaque frappe, la valeur posée, le curseur à la fin, l'évènement input ; la liste lue puis refermée.
+  // Ces champs sont des éditeurs d'une ligne (js/field-editor.js) : la saisie est écrite comme une frappe, la touche part à leur zone de saisie.
   async function textFieldList(h, id, value) {
     const input = document.getElementById(id);
-    input.value = value;
-    input.setSelectionRange(value.length, value.length);
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    await h.sleep(40);
+    await h.fieldType(id, value);
     const items = acListed();
-    press(input, 'Escape');
+    h.fieldKey(id, 'Escape');
     input.value = '';
     await h.sleep(20);
     return items;

@@ -12,7 +12,7 @@
   // openTemplateFromMacro).
   let macroOrigin = null;
   // Valeurs brutes (gabarits #Variable) des quatre champs, capturées juste avant de passer en Lecture : la Lecture affiche les valeurs résolues dans
-  // les mêmes <input>, sans zone en double. Non nul seulement pendant la Lecture (cf. updateEmailFieldsDisplay).
+  // les mêmes champs, sans zone en double. Non nul seulement pendant la Lecture (cf. updateEmailFieldsDisplay).
   let emailFieldsRawCache = null;
 
   const statusMsg = document.getElementById('status-msg');
@@ -49,12 +49,13 @@
     return { objet, destinataires, cc, cci };
   }
 
-  // Les quatre champs de l'email : leur clé, la même dans les réglages du modèle et dans les valeurs résolues, et leur <input>.
+  // Les quatre champs de l'email : leur clé, la même dans les réglages du modèle et dans les valeurs résolues, et leur champ (un champ texte à bulles,
+  // js/field-editor.js : l'élément se lit et s'écrit comme un <input>).
   const EMAIL_FIELDS = [['objet', emailSubjectInput], ['destinataires', emailToInput], ['cc', emailCcInput], ['cci', emailCciInput]];
   const eachEmailInput = fn => EMAIL_FIELDS.forEach(([key, input]) => { if (input) fn(input, key); });
 
   function getEmailFieldsFromInputs() {
-    // En Lecture, les <input> montrent des valeurs résolues, jamais ce qu'il faut enregistrer (Ctrl+S et l'enregistrement automatique ne regardent
+    // En Lecture, les champs montrent des valeurs résolues, jamais ce qu'il faut enregistrer (Ctrl+S et l'enregistrement automatique ne regardent
     // pas le mode) : le cache tient les gabarits bruts, dans la même forme, tant qu'il n'est pas nul.
     if (emailFieldsRawCache) return emailFieldsRawCache;
     return Object.fromEntries(EMAIL_FIELDS.map(([key, input]) => [key, input ? input.value.trim() : '']));
@@ -67,6 +68,12 @@
       emailCciToggle.classList.toggle('is-active', !emailCciInput.hidden);
       if (!emailCciInput.hidden) emailCciInput.focus();
     });
+  }
+
+  // Les cinq champs texte à bulles (nom du fichier PDF, Objet, À, Cc, Cci) : des éditeurs d'une ligne montés dans leurs éléments (js/field-editor.js),
+  // après celui du document - la barre d'une bulle réutilise ses réglages.
+  function attachFieldEditors(libs) {
+    [pdfFilenameInput, emailSubjectInput, emailToInput, emailCcInput, emailCciInput].forEach(host => FieldEditor.attach(host, libs));
   }
 
   function setStatus(msg, isError) {
@@ -1147,7 +1154,7 @@
     const holdFocus = (event) => event.preventDefault();
     const blurTextField = () => {
       const active = document.activeElement;
-      if (active && active !== document.body && !active.closest('.ProseMirror') && active.matches('input, textarea, select')) active.blur();
+      if (EditorCore.isFormFieldFocus(active)) active.blur();
     };
     saveBtn.addEventListener('click', onSave);
     // La coche du menu et l'aspect du bouton disent le même état.
@@ -1291,8 +1298,8 @@
     }
   }
 
-  // Bascule l'affichage d'Objet/À/Cc/Cci entre gabarit brut (édition) et valeurs résolues (lecture) sur les mêmes <input>, jamais dupliqués (cf.
-  // emailFieldsRawCache ci-dessus). Sans ligne sélectionnée, les gabarits bruts restent affichés (rien à résoudre) plutôt qu'un champ vidé sans
+  // Bascule l'affichage d'Objet/À/Cc/Cci entre gabarit brut (édition) et valeurs résolues (lecture) sur les mêmes champs, jamais dupliqués (cf.
+  // emailFieldsRawCache ci-dessus). La valeur résolue s'écrit par showText : un texte, que le champ ne relit pas comme un modèle. Sans ligne sélectionnée, les gabarits bruts restent affichés (rien à résoudre) plutôt qu'un champ vidé sans
   // explication.
   async function updateEmailFieldsDisplay() {
     if (!emailFieldsRow || currentTypeModele !== 'email') return;
@@ -1315,7 +1322,7 @@
     // Repassé en édition (ou modèle changé) pendant la résolution : emailFieldsRawCache a déjà été traité par la branche ci-dessus, ne pas écraser
     // son travail avec ce résultat maintenant obsolète.
     if (currentMode !== 'read' || emailFieldsRawCache !== raw) return;
-    eachEmailInput((input, key) => { input.value = resolved[key]; });
+    eachEmailInput((input, key) => { input.showText(resolved[key]); });
   }
 
   // L'URL mailto: de cette ligne : les champs résolus, et le corps lu dans le rendu de la Lecture (ReaderMode.render : mêmes bulles et chips que le
@@ -1953,7 +1960,8 @@
       if (pdfFilenameInput.hidden) { pdfFilenameInput.hidden = false; pdfFilenameInput.focus(); } else close();
     });
     pdfFilenameInput.addEventListener('blur', close);
-    pdfFilenameInput.addEventListener('keydown', e => { if (e.key === 'Enter') pdfFilenameInput.blur(); });
+    // Entrée valide le nom (la liste # ouverte garde l'Entrée qui choisit une variable : l'évènement ne part pas dans ce cas).
+    pdfFilenameInput.addEventListener('fieldenter', () => pdfFilenameInput.blur());
   }
 
   // Qualité PDF : bouton + panneau au survol plutôt qu'un <select> toujours affiché. Seul le vectoriel existe : l'export ne lit plus la valeur
@@ -2138,13 +2146,11 @@
     EditorCore.getEditor().on('update', scheduleEmailLengthGauge);
     if (templateNameInput) templateNameInput.addEventListener('input', markAutosaveDirty);
     if (pdfFilenameInput) pdfFilenameInput.addEventListener('input', markAutosaveDirty);
+    // Les champs sont des éditeurs de bulles (js/field-editor.js) : la liste # n'y propose que des variables, jamais de puces - une note de bas de
+    // page, une date ou une heure n'a aucun sens dans un objet ou une liste d'adresses.
     eachEmailInput(el => {
       el.addEventListener('input', markAutosaveDirty);
       el.addEventListener('input', scheduleEmailLengthGauge);
-      // Même mécanisme #Variable que le champ « nom de fichier PDF » (texte brut, cf. le commentaire CSS de #v2-email-fields-row), sans suggestion de
-      // chips (setTabsVisible(false) dans checkForFilenameTrigger) : une note de bas de page, une date ou une heure n'a aucun sens dans un objet ou
-      // une liste d'adresses.
-      Variables.initFilenameInput(el);
     });
     wireCciToggle();
     // Émis par js/settings.js à chaque saisie dans les quatre champs de marge (onglet Réglages) : changer seulement les marges ne touche pas au
@@ -2232,7 +2238,6 @@
     // Le message « Modifications non enregistrées » dure tant que rien n'est enregistré : il suit un changement de langue au lieu de rester dans
     // l'ancienne.
     I18n.onChange(() => { if (statusMsg.classList.contains('is-unsaved')) statusMsg.textContent = I18n.t('status.unsavedChanges'); });
-    Variables.initFilenameInput(pdfFilenameInput);
     wireAutosaveConflictBanner();
     wirePasteTooBigNotice();
     wireMacroReturn();
@@ -2278,6 +2283,7 @@
       currentRecord: () => ({ record: latestRecord, tableId: latestRecordTableId }),
     });
     await editorReady;
+    attachFieldEditors(await Editor.loadLibraries());
     Comments.setReaderHooks({ save: saveReaderCommentAnchors, refresh: () => renderReader() });
     Comments.wireReader(readerContainer);
     wireEditTracking();

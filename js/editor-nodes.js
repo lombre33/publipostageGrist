@@ -109,26 +109,48 @@ const EditorNodes = (function () {
     return { splitBadgeLabel, splitBadgeView };
   })();
 
-  const { createVarBadgeNode } = (function () {
+  const { createVarBadgeNode, varBadgeAttrsOf, varBadgeHtml } = (function () {
     // La bulle de variable
+
+    // Les attributs DOM d'une bulle (HTML enregistré, presse-papiers, exports) d'après les attributs de son nœud : sans TipTap, pour que les champs
+    // texte (js/field-codec.js) écrivent la même bulle que l'éditeur.
+    function varBadgeAttributes(nodeAttrs) {
+      const attrs = {
+        class: 'var-badge', contenteditable: 'false',
+        'data-table': nodeAttrs.table, 'data-column': nodeAttrs.column, 'data-key': nodeAttrs.key,
+      };
+      if (nodeAttrs.format) attrs['data-format'] = JSON.stringify(nodeAttrs.format);
+      if (nodeAttrs.condition) attrs['data-condition'] = JSON.stringify(nodeAttrs.condition);
+      // Le texte « Avant » / « Après » (js/variable-condition.js) : deux attributs simples, écrits seulement quand ils existent.
+      const around = VariableFormat.affixes(nodeAttrs.before, nodeAttrs.after);
+      if (around && around.before) attrs['data-before'] = around.before;
+      if (around && around.after) attrs['data-after'] = around.after;
+      // `data-loop-repeat` à part : les repères de la zone répétée (css/variable-actions.css) la trouvent par sélecteur, sans lire le JSON.
+      if (nodeAttrs.loop) { attrs['data-loop'] = JSON.stringify(nodeAttrs.loop); attrs['data-loop-repeat'] = nodeAttrs.loop.repeat || 'inline'; }
+      return attrs;
+    }
+    // Les attributs d'un nœud bulle d'après son <span> : l'inverse de varBadgeAttributes.
+    function varBadgeAttrsOf(el) {
+      return {
+        table: el.getAttribute('data-table'), column: el.getAttribute('data-column'), key: el.getAttribute('data-key'),
+        format: jsonAttr(el, 'data-format'), condition: jsonAttr(el, 'data-condition'), loop: jsonAttr(el, 'data-loop'),
+        before: VariableFormat.affix(el.getAttribute('data-before')), after: VariableFormat.affix(el.getAttribute('data-after')),
+      };
+    }
+    // Le HTML d'une bulle, comme renderHTML l'écrit (préfixe décoratif compris, cf. ci-dessous).
+    function varBadgeHtml(nodeAttrs) {
+      const span = document.createElement('span');
+      setAttrs(span, varBadgeAttributes(nodeAttrs));
+      span.textContent = Variables.triggerChar() + nodeAttrs.key;
+      return span.outerHTML;
+    }
 
     // Bulle de variable #Variable : nœud atome en ligne, non éditable au caractère près (contenteditable="false") : <span class="var-badge" data-table
     // data-column data-key>, reconnu tel quel par reader-mode.js et pdf-export.js.
     function createVarBadgeNode(Node, mergeAttributes) {
       // Spécification DOM de la bulle, une seule pour renderHTML (HTML enregistré, presse-papiers, exports) et pour la vue de l'éditeur (addNodeView).
       function badgeSpec(HTMLAttributes, node) {
-        const attrs = mergeAttributes(HTMLAttributes, {
-          class: 'var-badge', contenteditable: 'false',
-          'data-table': node.attrs.table, 'data-column': node.attrs.column, 'data-key': node.attrs.key,
-        });
-        if (node.attrs.format) attrs['data-format'] = JSON.stringify(node.attrs.format);
-        if (node.attrs.condition) attrs['data-condition'] = JSON.stringify(node.attrs.condition);
-        // Le texte « Avant » / « Après » (js/variable-condition.js) : deux attributs simples, écrits seulement quand ils existent.
-        const around = VariableFormat.affixes(node.attrs.before, node.attrs.after);
-        if (around && around.before) attrs['data-before'] = around.before;
-        if (around && around.after) attrs['data-after'] = around.after;
-        // `data-loop-repeat` à part : les repères de la zone répétée (css/variable-actions.css) la trouvent par sélecteur, sans lire le JSON.
-        if (node.attrs.loop) { attrs['data-loop'] = JSON.stringify(node.attrs.loop); attrs['data-loop-repeat'] = node.attrs.loop.repeat || 'inline'; }
+        const attrs = mergeAttributes(HTMLAttributes, varBadgeAttributes(node.attrs));
         // Préfixe décoratif régénéré à chaque rendu (jamais stocké) : suit la touche de déclenchement configurée, rétroactif sans migration.
         return ['span', attrs, Variables.triggerChar() + node.attrs.key];
       }
@@ -150,14 +172,7 @@ const EditorNodes = (function () {
           };
         },
         parseHTML() {
-          return [{
-            tag: 'span.var-badge',
-            getAttrs: el => ({
-              table: el.getAttribute('data-table'), column: el.getAttribute('data-column'), key: el.getAttribute('data-key'),
-              format: jsonAttr(el, 'data-format'), condition: jsonAttr(el, 'data-condition'), loop: jsonAttr(el, 'data-loop'),
-              before: VariableFormat.affix(el.getAttribute('data-before')), after: VariableFormat.affix(el.getAttribute('data-after')),
-            }),
-          }];
+          return [{ tag: 'span.var-badge', getAttrs: varBadgeAttrsOf }];
         },
         renderHTML({ HTMLAttributes, node }) {
           return badgeSpec(HTMLAttributes, node);
@@ -169,7 +184,7 @@ const EditorNodes = (function () {
         },
       });
     }
-    return { createVarBadgeNode };
+    return { createVarBadgeNode, varBadgeAttrsOf, varBadgeHtml };
   })();
 
   const { createCalcBadgeNode, createCalcBadgeKeysExtension } = (function () {
@@ -1999,7 +2014,7 @@ const EditorNodes = (function () {
 
 
   return {
-    createVarBadgeNode, createCalcBadgeNode, createCalcBadgeKeysExtension, createPageNumberBadgeNode, createSmartChipNode, createFootnoteRefNode, createCommentMark,
+    createVarBadgeNode, varBadgeAttrsOf, varBadgeHtml, createCalcBadgeNode, createCalcBadgeKeysExtension, createPageNumberBadgeNode, createSmartChipNode, createFootnoteRefNode, createCommentMark,
     createFontSizeExtension, createTextColorExtension, createHighlightExtension,
     createBulletStyleExtension, createOrderedListStyleExtension, createTaskListStyleExtension,
     withCellBackground, withFastColwidth, parseColwidthOnce, createTableView, createTabNavigationExtension, createClearHistoryExtension,

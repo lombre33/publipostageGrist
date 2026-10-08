@@ -193,6 +193,44 @@
     },
   });
 
+  // Les champs texte à bulles de l'email (js/field-editor.js) : l'indication du champ vide est dessinée par la feuille de style (css/field-editor.css, `::before` de l'élément), non plus par le
+  // `::placeholder` d'un <input> ; le curseur dans le champ se voit à son liseré d'accent (`:focus-within`).
+  cases.push({
+    id: 'contrast_email_bubble_fields_hint_reaches_4_5_and_focus_border_3_to_1',
+    description: 'Champs de l’email à bulles (Objet, À, Cc) : indication du champ vide 4,5:1 au moins sur le fond du champ ; le curseur dedans, liseré d’accent 3:1 au moins contre le fond de la barre ; en clair et en sombre',
+    run: async (h) => {
+      h.openFlyout('#v2-new-template-group');
+      await h.clickButton('v2-btn-new-email');
+      await h.sleep(300);
+      const ids = ['v2-email-subject', 'v2-email-to', 'v2-email-cc'];
+      try {
+        const byTheme = inBothThemes(() => {
+          const out = {};
+          ids.forEach(id => {
+            const host = document.getElementById(id);
+            host.value = '';
+            out['indication de ' + id] = round2(textRatio(host, '::before'));
+          });
+          const host = document.getElementById(ids[0]);
+          host.focus();
+          const ring = parseColor(getComputedStyle(host).borderTopColor);
+          const bg = backgroundOf(host.parentElement);
+          out['liseré de focus (3:1)'] = host.matches(':focus-within') && ring ? round2(ratio(over(ring, bg), bg)) : 0;
+          host.blur();
+          return out;
+        });
+        const ringLow = Object.keys(byTheme).filter(t => !(byTheme[t]['liseré de focus (3:1)'] >= 3));
+        const textsBad = [];
+        for (const theme of Object.keys(byTheme)) for (const [name, value] of Object.entries(byTheme[theme])) if (name !== 'liseré de focus (3:1)' && !(value >= 4.5)) textsBad.push(theme + ' ' + name + ' ' + value);
+        return { pass: textsBad.length === 0 && ringLow.length === 0, notes: JSON.stringify({ textsBad, ringLow, byTheme }) };
+      } finally {
+        h.openFlyout('#v2-new-template-group');
+        await h.clickButton('v2-btn-new-document');
+        await h.sleep(200);
+      }
+    },
+  });
+
   cases.push({
     id: 'contrast_template_picker_focus_ring_is_3_to_1_against_what_it_borders',
     description: 'Anneau de focus du sélecteur de modèle (bouton et lignes de la liste) : 3:1 au moins contre le fond qu’il borde, en clair et en sombre',

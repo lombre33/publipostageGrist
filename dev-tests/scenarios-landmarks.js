@@ -35,8 +35,11 @@
   }
   async function backToEdit() { if (!inEdit()) { el('btn-mode-edit').click(); await waitFor(inEdit, 4000); await sleep(200); } }
 
-  // Le nom qu'un lecteur d'écran donnerait au champ : aria-label, puis aria-labelledby, puis <label for>, puis <label> englobante, puis title.
-  function nameOf(field) {
+  // Le nom qu'un lecteur d'écran donnerait au champ : aria-label, puis aria-labelledby, puis <label for>, puis <label> englobante, puis title. Objet, À, Cc, Cci et le nom du
+  // PDF sont des éditeurs d'une ligne (js/field-editor.js) : le champ de texte est la zone de saisie (role="textbox") que leur élément contient, et c'est elle qui porte le nom.
+  function nameOf(host) {
+    const field = host.classList.contains('pp-field-editor') ? host.querySelector('[role="textbox"]') : host;
+    if (!field) return '';
     const own = (field.getAttribute('aria-label') || '').trim();
     if (own) return own;
     const by = field.getAttribute('aria-labelledby');

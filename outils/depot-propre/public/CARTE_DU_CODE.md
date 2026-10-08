@@ -113,6 +113,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/variable-format.js` | Format d'une bulle : nombre, date, Oui / Non, liste, nombre en toutes lettres. |
 | `js/variable-modal.js` | Ce que partagent les fenêtres d'une bulle. |
 | `js/variable-condition.js`, `js/variable-loop.js`, `js/variable-list.js`, `js/variable-linked-attrs.js`, `js/variable-calc.js`, `js/variable-column.js` | Les fenêtres d'une bulle : Condition, Boucle, Liste, Autres attributs, Calcul, Colonne. |
+| `js/field-editor.js`, `js/field-codec.js` | Les champs texte du mode E-mail (Objet, À, Cc, Cci) et du nom du PDF : un éditeur d'une ligne qui pose les mêmes bulles que le document, avec leur barre et leurs fenêtres ; la valeur enregistrée reste du texte brut tant qu'aucune bulle n'a de réglage. |
 | `js/formula.js` | Le moteur de calcul d'une bulle « Calcul » (module pur : ni DOM, ni Grist). |
 | `js/condition-rules.js`, `js/condition-fields.js` | L'évaluation des règles « colonne, opérateur, valeur » (module pur) et leurs champs partagés par toutes les fenêtres. |
 | `js/loop-rules.js`, `js/list-split.js` | Le moteur de boucle sur les lignes liées ; « Un document par valeur ». |
@@ -357,6 +358,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/variable-format.js` | A bubble's format: number, date, Yes / No, list, number in words. |
 | `js/variable-modal.js` | What a bubble's windows have in common. |
 | `js/variable-condition.js`, `js/variable-loop.js`, `js/variable-list.js`, `js/variable-linked-attrs.js`, `js/variable-calc.js`, `js/variable-column.js` | A bubble's windows: Condition, Loop, List, Other attributes, Calculation, Column. |
+| `js/field-editor.js`, `js/field-codec.js` | The text fields of E-mail mode (Subject, To, Cc, Bcc) and of the PDF file name: a one-line editor that places the same bubbles as the document, with their toolbar and windows; the stored value stays plain text as long as no bubble has a setting. |
 | `js/formula.js` | The calculation engine of a "Calculation" bubble (a pure module: no DOM, no Grist). |
 | `js/condition-rules.js`, `js/condition-fields.js` | Evaluation of "column, operator, value" rules (a pure module) and their fields shared by all the windows. |
 | `js/loop-rules.js`, `js/list-split.js` | The loop engine over linked rows; "One document per value". |

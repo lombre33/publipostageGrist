@@ -188,6 +188,38 @@ window.TestHelpers = (function () {
     await sleep(40);
   }
 
+  // --- Les champs texte à bulles : Objet, À, Cc, Cci du mode email et nom du fichier PDF (js/field-editor.js) ---
+  // Chacun est un éditeur d'une ligne dans un <div> qui garde l'identifiant de l'ancien <input>. Ces aides le pilotent par ProseMirror, sans passer par la
+  // mise en page : un champ replié (Cci, nom du PDF) ou le bandeau d'un modèle qui n'est pas un email n'a pas de boîte, et execCommand('insertText') n'y
+  // écrirait rien. Une transaction fait le même travail qu'une frappe (la liste « # » s'ouvre ou non de la même façon) ; la frappe au vrai clavier, avec le
+  // curseur dans un champ visible, est celle des vérifications à la souris (verify-field-editor-mouse.mjs).
+  const fieldEditor = id => FieldEditor.of(document.getElementById(id));
+  // Écrit `text` dans le champ : à la place du contenu, ou à la suite avec `append`, le curseur derrière ce qui vient d'être posé.
+  async function fieldType(id, text, append) {
+    const host = document.getElementById(id);
+    const editor = FieldEditor.of(host);
+    const { TextSelection } = await Editor.loadLibraries();
+    if (!append) host.value = '';
+    const end = editor.state.doc.content.size - 1;
+    const tr = editor.state.tr.insertText(text, end);
+    editor.view.dispatch(tr.setSelection(TextSelection.atEnd(tr.doc)));
+    await sleep(30);
+  }
+  // Une touche (Entrée, Échap, flèches...) envoyée à la zone de saisie du champ, comme le fait le navigateur ; vrai si la touche a été prise.
+  function fieldKey(id, key, options) {
+    const event = new KeyboardEvent('keydown', Object.assign({ key, bubbles: true, cancelable: true }, options));
+    FieldEditor.of(document.getElementById(id)).view.dom.dispatchEvent(event);
+    return event.defaultPrevented;
+  }
+  // Le curseur à la position `pos` du document du champ (1 = au début, avant tout texte ; `fieldEnd(id)` = derrière tout).
+  async function fieldSelect(id, pos) {
+    const editor = fieldEditor(id);
+    const { TextSelection } = await Editor.loadLibraries();
+    editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, pos)));
+    await sleep(30);
+  }
+  const fieldEnd = id => fieldEditor(id).state.doc.content.size - 1;
+
   // ASYNC + court délai - ProseMirror synchronise son PROPRE modèle de
   // sélection interne (editor.state.selection) sur un changement de
   // sélection natif (execCommand('selectAll') ou un Range manuel) via son
@@ -747,7 +779,7 @@ window.TestHelpers = (function () {
   }
 
   return {
-    sleep, tiptap, resetEditor, stubDialogs, withRealChoose, choosePrompts, focusAtEnd, focusInElement, typeText,
+    sleep, tiptap, resetEditor, stubDialogs, withRealChoose, choosePrompts, focusAtEnd, focusInElement, typeText, fieldEditor, fieldType, fieldKey, fieldSelect, fieldEnd,
     selectAllInEditor, selectAllInElement, clickButton, selectAtomNode, openFlyout, clickRow,
     dragFromTo, exportPdfContent, flattenPdfContent, findTextBlocks, findImages, blockPlainText,
     ensurePdfJsLoaded, extractPdfGroundTruth, extractPdfLines,

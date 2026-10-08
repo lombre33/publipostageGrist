@@ -684,8 +684,17 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   manifeste, lu seulement avec `?dev` dans l'adresse du widget — le dépôt public (`grist-factory/Publipostage-Plus`) ne le
   publie pas.
 - Mode Email (livré le 2026-09-18) : règle tranchée — **strictement l'UI existante**, aucun nouveau composant visuel ;
-  en cas de doute, réutiliser un pattern déjà en place plutôt que d'en inventer un. Objet / À / Cc / Cci sont de simples
-  champs texte ; « Créer l'email » ouvre le logiciel de messagerie (`mailto:`) et la fenêtre « Email trop long »
+  en cas de doute, réutiliser un pattern déjà en place plutôt que d'en inventer un. Objet / À / Cc / Cci (et le nom du
+  fichier PDF) sont des champs d'une ligne à bulles, comme le texte du document (demande d'Antoine du 08/10 : « les variables avec leur
+  bulle bleue et les mêmes fonctions que dans le document » ; elle rouvre son choix du 18/09, de simples champs texte). Le champ garde la place,
+  la hauteur, le cadre et l'indication grisée de l'ancien champ ; « # » y ouvre la liste des variables seulement (ni onglets ni Puces), Entrée
+  choisit, Échap ferme la liste, Entrée sans liste valide le champ ; un clic sur une bulle ouvre la barre du document, entièrement dans le panneau
+  (condition avec « Avant » / « Après », autres attributs, boucle « dans la phrase » seulement, liste sans « un document par valeur », format ;
+  le zéro et Oui / Non s'y écrivent toujours en clair : « 0 » grisé avec sa raison), et la bulle y prend la forme de celle du document (trait pointillé
+  d'une condition, point d'un format, bulle rouge d'une colonne disparue). Ce que le champ enregistre reste le texte brut d'avant tant qu'aucune bulle
+  n'a de réglage (un modèle déjà enregistré se relit tel quel) ; un réglage l'écrit en HTML dans la même colonne. En Lecture, les champs de l'email
+  montrent la valeur résolue de la ligne, sans curseur ni barre, et rendent les bulles au retour en édition. Un collage reste sur une ligne, sans
+  mise en forme. « Créer l'email » ouvre le logiciel de messagerie (`mailto:`) et la fenêtre « Email trop long »
   avertit au-delà de ~2000 caractères sans bloquer ; ce qui n'a pas de sens en Email (en-tête et pied de page, modèle par
   défaut) est grisé, pas masqué. Le texte du lien suit l'éditeur autant qu'un `mailto:` le permet (texte brut seulement ;
   Zimbra web n'en garde que les lignes et les retraits) : mêmes puces (•, °, *), mêmes numéros (1., a., i., à partir de leur

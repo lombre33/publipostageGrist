@@ -1,9 +1,11 @@
 // Suite "varTextPath" - chemins de références dans les champs texte : Objet, À, Cc, Cci du mode email et nom du fichier PDF (retour d'Antoine du 2026-09-29,
-// carte « Oui, l'ajouter » : #Projet.Accompagnateur.Email doit se résoudre là aussi, comme dans le corps du modèle - cf. scenarios-var-path.js). Ces champs sont
-// de simples <input> sans bulle : Variables.findTextVariables scanne le texte, une clé de colonne Référence se prolonge par « .Colonne » de la ligne qu'elle
-// désigne, et le reste (fin de phrase, « .pdf ») demeure du texte. Un seul scan pour tous les champs (Variables.resolveTextVariables, ReaderMode.resolveFilename).
+// carte « Oui, l'ajouter » : #Projet.Accompagnateur.Email doit se résoudre là aussi, comme dans le corps du modèle - cf. scenarios-var-path.js). La valeur d'un
+// champ s'enregistre en texte brut tant que ses bulles n'ont aucun réglage : Variables.findTextVariables scanne ce texte, une clé de colonne Référence se
+// prolonge par « .Colonne » de la ligne qu'elle désigne, et le reste (fin de phrase, « .pdf ») demeure du texte. Un seul scan pour tous les champs
+// (Variables.resolveTextVariables, ReaderMode.resolveFilename). Depuis le 2026-10-08 ces champs sont des éditeurs d'une ligne (js/field-editor.js) : une clé choisie
+// dans la liste y devient une bulle, que le champ relit « #Clé » ; les cas de saisie pilotent donc l'éditeur (TestHelpers.fieldType, fieldKey, fieldSelect), pas un <input>.
 // Deuxième carte d'Antoine (« Oui, la proposer ») : la liste # de ces champs propose aussi, après « #Projet.Accompagnateur. », les colonnes de la ligne que
-// désigne la Référence (Variables.pathItems, dans checkForFilenameTrigger) - le clavier et la souris réels à 700x400 sont dans verify-small-panel.mjs.
+// désigne la Référence (Variables.pathItems, Variables.createFieldExtension) - le clavier et la souris réels à 700x400 sont dans verify-small-panel.mjs.
 (function () {
   const cases = [];
 
@@ -154,17 +156,12 @@
     },
   });
 
-  // --- Saisie assistée : la liste # sous les champs texte. `type` pose la valeur, le curseur à la fin et l'évènement input, comme le fait le navigateur à chaque
-  // frappe ; `listed` relit les lignes de la liste comme on les lit à l'écran (null = fermée). ---
+  // --- Saisie assistée : la liste # sous les champs texte. `type` écrit dans le champ comme une frappe (le curseur derrière), `press` envoie une touche à sa zone de
+  // saisie ; `listed` relit les lignes de la liste comme on les lit à l'écran (null = fermée). ---
   const acBox = () => document.getElementById('autocomplete-box');
   const listed = () => (acBox() && acBox().style.display !== 'none' ? Array.from(acBox().querySelectorAll('.ac-item')).map(e => e.textContent) : null);
-  async function type(h, input, value) {
-    input.value = value;
-    input.setSelectionRange(value.length, value.length);
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    await h.sleep(30);
-  }
-  const press = (input, key) => input.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+  async function type(h, input, value) { await h.fieldType(input.id, value); }
+  const press = (input, key) => window.TestHelpers.fieldKey(input.id, key);
   async function reset(h, input) { press(input, 'Escape'); input.value = ''; await h.sleep(10); }
   const field = id => document.getElementById(id);
   const sameSet = (got, expected) => JSON.stringify((got || []).slice().sort()) === JSON.stringify(expected.slice().sort());
@@ -271,13 +268,9 @@
       await reset(h, to);
       await type(h, to, '#TpProjet.Accompagnateur.Email');
       const typedInFull = listed();
-      to.setSelectionRange(0, 0);
-      to.dispatchEvent(new KeyboardEvent('keyup', { key: 'Home', bubbles: true }));
-      await h.sleep(30);
+      await h.fieldSelect(to.id, 1);
       const caretAtStart = listed();
-      to.setSelectionRange(to.value.length, to.value.length);
-      to.dispatchEvent(new KeyboardEvent('keyup', { key: 'End', bubbles: true }));
-      await h.sleep(30);
+      await h.fieldSelect(to.id, h.fieldEnd(to.id));
       const caretBehind = listed();
       await reset(h, to);
       await type(h, to, '#TpProjet.Accompagnateur.Emai');

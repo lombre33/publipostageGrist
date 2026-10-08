@@ -76,8 +76,10 @@ const VariableLoop = (function () {
   }
   // Où est la bulle : décide des choix « Ce qui se répète » (le plus proche l'emporte : une liste dans une cellule propose l'élément de liste).
   // `rowMerged` : une case fusionnée sur plusieurs lignes traverse la ligne de la bulle (js/table-merge.js) ; la copier pour chaque ligne liée
-  // casserait le tableau, « La ligne du tableau » est alors grisée.
-  function placeOf(editorState, pos) {
+  // casserait le tableau, « La ligne du tableau » est alors grisée. `inlineOnly` : la bulle d'un champ texte (Objet, À, Cc, Cci, nom du PDF), une seule
+  // ligne de texte sans tableau ni liste ni paragraphes à répéter : la boucle n'y est que « dans la phrase ».
+  function placeOf(editorState, pos, inlineOnly) {
+    if (inlineOnly) return { kind: 'paragraph', repeats: ['inline'], inCell: false };
     const $pos = editorState.doc.resolve(pos);
     const rowDepth = nearestDepth($pos, ZONE_NODES.row);
     const itemDepth = nearestDepth($pos, ZONE_NODES.item);
@@ -468,14 +470,15 @@ const VariableLoop = (function () {
   }
 
   // `pos` : position de la bulle dans le document, capturée au clic sur l'icône (la sélection de l'éditeur est une NodeSelection sur elle).
-  function open(editor, pos) {
+  // `options.inlineOnly` : la bulle d'un champ texte, cf. placeOf.
+  function open(editor, pos, options) {
     const node = editor && editor.state.doc.nodeAt(pos);
     if (!node || node.type.name !== 'varBadge') return;
     const existing = LoopRules.normalizeLoop(node.attrs.loop);
     const source = existing ? { table: existing.table, via: existing.via } : LoopRules.sourceFor(node.attrs, GristAPI.getCurrentTableId());
     if (!source) return;
     ensureModal();
-    const place = placeOf(editor.state, pos);
+    const place = placeOf(editor.state, pos, !!(options && options.inlineOnly));
     state = { editor, pos, node, place, source, had: !!existing, working: workingCopy(existing, repeatFor(existing, place), place) };
     const r = refs;
     r.title.textContent = I18n.t('varLoop.title', { table: source.table });

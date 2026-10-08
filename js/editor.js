@@ -203,7 +203,14 @@ const Editor = (function () {
     });
   }
 
-  async function loadLibraries() {
+  // Les classes de TipTap et de ProseMirror, chargées une seule fois : l'éditeur du document (init) et les champs texte à bulles (js/field-editor.js)
+  // les prennent au même endroit.
+  let librariesLoading = null;
+  function loadLibraries() {
+    if (!librariesLoading) librariesLoading = importLibraries();
+    return librariesLoading;
+  }
+  async function importLibraries() {
     // TipTap et ProseMirror se chargent par import() : leurs classes n'existent pas avant. Aucune dépendance d'ordre entre ces modules (chacun
     // n'alimente que sa propre variable) : ils partent en parallèle plutôt qu'en `await` séquentiels, car un import() est une requête réseau vers
     // esm.sh et la cascade ajoutait jusqu'à 1 à 2 s au démarrage sur une connexion lente ou à cache froid.
@@ -478,18 +485,23 @@ const Editor = (function () {
     }
   }
 
-  function refreshVariableBadgeValidity() {
-    // Signale les bulles #Variable dont la table ou la colonne n'existe plus : une classe et un title sur le <span> rendu, jamais un attribut du nœud
-    // (cela dépend d'un état externe, pas du contenu). ProseMirror peut reconstruire ce span à tout moment : le signalement est donc rejoué à chaque
-    // déclencheur pertinent plutôt que posé une fois. Une bulle « Calcul » est cassée quand sa formule ne se lit plus ou cite une colonne qui
-    // n'existe plus (Variables.calcProblem), avec le message en info-bulle.
-    if (!editor) return;
+  // Signale, dans `root` (le DOM d'un éditeur), les bulles #Variable dont la table ou la colonne n'existe plus : une classe et un title sur le <span>
+  // rendu, jamais un attribut du nœud (cela dépend d'un état externe, pas du contenu). Une bulle « Calcul » est cassée quand sa formule ne se lit plus
+  // ou cite une colonne qui n'existe plus (Variables.calcProblem), avec le message en info-bulle.
+  function markBadgeValidity(root) {
     const mark = (badge, brokenClass, reason) => {
       badge.classList.toggle(brokenClass, !!reason);
       if (reason) badge.title = reason; else badge.removeAttribute('title');
     };
-    editor.view.dom.querySelectorAll('span.var-badge').forEach(badge => mark(badge, 'var-badge-broken', badgeProblemText(badge.dataset.table, badge.dataset.column)));
-    editor.view.dom.querySelectorAll('span.calc-badge').forEach(badge => mark(badge, 'calc-badge-broken', Variables.calcProblem(badge.getAttribute('data-formula') || '')));
+    root.querySelectorAll('span.var-badge').forEach(badge => mark(badge, 'var-badge-broken', badgeProblemText(badge.dataset.table, badge.dataset.column)));
+    root.querySelectorAll('span.calc-badge').forEach(badge => mark(badge, 'calc-badge-broken', Variables.calcProblem(badge.getAttribute('data-formula') || '')));
+  }
+  function refreshVariableBadgeValidity() {
+    // ProseMirror peut reconstruire le <span> d'une bulle à tout moment : le signalement est rejoué à chaque déclencheur pertinent plutôt que posé une
+    // fois. Les champs texte à bulles (Objet, À, Cc, Cci, nom du PDF) y passent aussi.
+    if (!editor) return;
+    markBadgeValidity(editor.view.dom);
+    FieldEditor.refreshBadgeValidity();
   }
 
   // Âge au-delà duquel l'affichage d'un modèle relit le schéma exact même sans bulle rouge (setHTML) ; le même qu'au démarrage (js/main.js).
@@ -661,7 +673,7 @@ const Editor = (function () {
   }
 
   return {
-    init, getHTML, setHTML, getHeadingNumberingStyle, insertImageAtDefaultSize,
+    init, loadLibraries, markBadgeValidity, getHTML, setHTML, getHeadingNumberingStyle, insertImageAtDefaultSize,
     getHeaderFooterData: HeaderFooterPreview.getHeaderFooterData, setHeaderFooterData: HeaderFooterPreview.setHeaderFooterData,
     exitHeaderFooterModeIfActive: HeaderFooterPreview.exitHeaderFooterModeIfActive,
     // Aperçu A4 rallumé, facteur d'ajustement changé... : la pagination est refaite, et la position des images d'un modèle chargé sans mise en page
