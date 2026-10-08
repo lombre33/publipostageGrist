@@ -268,8 +268,10 @@ const barState = page => page.evaluate((sel) => {
 
 
 const MENU = '.v2-borders-dropdown';
-const RED = '#c0392b';
-const RED_RGB = 'rgb(192, 57, 43)';
+const RED = '#b91c1c';
+const RED_RGB = 'rgb(185, 28, 28)';
+const RED_PARTS = [185, 28, 28];
+const sameKept = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const PRESET_IDS = ['all', 'outer', 'inner', 'top', 'bottom', 'left', 'right', 'none'];
 const preset = id => `${MENU} button[data-action="borders:${id}"]`;
 const swatch = color => `${MENU} button[data-action="pen:${color}"]`;
@@ -296,6 +298,22 @@ const menuState = page => page.evaluate(([menuSel, barSel]) => {
     reach, states, unreachable: Object.keys(reach).filter(k => !reach[k]),
   };
 }, [MENU, BAR]);
+
+// Le menu de couleur ouvert (celui du fond ou celui des bordures) : sous la bande ? tout entier dans le panneau ? chaque bouton sous le pointeur ? sa hauteur, ses rangées de couleurs gardées.
+const openMenuInfo = page => page.evaluate(() => {
+  const dock = document.getElementById('v2-cell-bar-dock').getBoundingClientRect();
+  const panels = Array.from(document.querySelectorAll('.v2-color-dropdown.visible'));
+  const p = panels[0];
+  if (!p) return null;
+  const r = p.getBoundingClientRect();
+  const buttons = Array.from(p.querySelectorAll('button:not(.cp-forget)'));
+  const unreachable = buttons.filter((b) => { const q = b.getBoundingClientRect(); const hit = document.elementFromPoint(q.left + q.width / 2, q.top + q.height / 2); return !(hit === b || b.contains(hit)); }).length;
+  const palette = p.querySelector('.cp-grid').getBoundingClientRect();
+  const rows = p.querySelector('.cp-rows').getBoundingClientRect();
+  return { n: panels.length, buttons: buttons.length, unreachable, kept: Array.from(p.querySelectorAll('.cp-row')).map(row => row.querySelectorAll('.cp-saved').length),
+    below: r.top >= dock.bottom - 1, inside: r.left >= 0 && r.right <= innerWidth && r.bottom <= innerHeight && r.top >= 0, top: Math.round(r.top), bottom: Math.round(r.bottom), h: Math.round(r.height), dockBottom: Math.round(dock.bottom),
+    rowsRightOfPalette: rows.left >= palette.right && rows.left >= p.querySelector('.v2-color-dropdown-footer').getBoundingClientRect().right - 1 };
+});
 
 // Les bords des cases (lus sur ce que le document porte, comme l'enregistrement) : « haut,droite,bas,gauche » de la case (ligne, colonne depuis 1), « - » pour un côté sans valeur.
 const sidesOf = (page, r, c) => page.evaluate(([row, col]) => {
@@ -351,7 +369,7 @@ async function runTheme(theme) {
   let menu = await menuState(page);
   check(`${label} - un clic sur « Bordures » ouvre le menu SOUS la bande de la barre, tout entier dans le panneau`, !!menu && menu.shown && menu.below && menu.inside, menu && { top: menu.top, bottom: menu.bottom, dockBottom: menu.dockBottom, right: menu.right });
   check(`${label} - le bouton « Bordures » annonce son menu ouvert : aria-expanded vaut « true » (et « false » avant le clic)`, (await expandedOf(page)) === 'true' && !!chip && chip.shown, await expandedOf(page));
-  check(`${label} - chaque bouton du menu (8 réglages, 8 nuances, « Personnalisé », « Par défaut », « Quadrillage ») est sous le pointeur`, !!menu && Object.keys(menu.reach).length === 19 && menu.unreachable.length === 0, menu && menu.unreachable);
+  check(`${label} - chaque bouton du menu (8 réglages, 20 nuances en deux rangées, « Personnalisé », « Par défaut », « Quadrillage ») est sous le pointeur`, !!menu && Object.keys(menu.reach).length === 31 && menu.unreachable.length === 0, menu && menu.unreachable);
   check(`${label} - les huit réglages sont des boutons d'au moins 24 px de côté, dans l'ordre Toutes, Extérieures, Intérieures, Haut, Bas, Gauche, Droite, Aucune`,
     !!menu && PRESET_IDS.every(id => menu.states['borders:' + id] && menu.states['borders:' + id].w >= 24 && menu.states['borders:' + id].h >= 24)
     && await page.evaluate(ids => JSON.stringify(Array.from(document.querySelectorAll('.v2-borders-dropdown .v2-borders-presets button')).map(b => b.dataset.action.slice(8))) === JSON.stringify(ids), PRESET_IDS));
@@ -377,13 +395,44 @@ async function runTheme(theme) {
   await realClick(page, swatch(RED));
   menu = await menuState(page);
   check(`${label} - choisir le rouge laisse le menu ouvert, la nuance est cochée et « Par défaut » ne l'est plus, aucun trait écrit`, !!menu && menu.shown && menu.states['pen:' + RED].active && !menu.states['pen-auto'].active && (await borderAttrCount(page)) === 0, menu && { shown: menu.shown, red: menu.states['pen:' + RED], auto: menu.states['pen-auto'] });
+  // ---------- 4 bis) « Personnalisé… » : la fenêtre s'ouvre sur la couleur du stylo, la couleur composée devient celle du stylo et le menu revient ----------
+  await realClick(page, `${MENU} button[data-action="pen-custom"]`);
+  const dialog = await page.evaluate(() => {
+    const modal = document.getElementById('pp-color-modal');
+    const box = modal && modal.querySelector('.pp-modal-box');
+    const r = box ? box.getBoundingClientRect() : null;
+    const hex = document.getElementById('pp-color-hex');
+    return {
+      shown: !!modal && getComputedStyle(modal).display !== 'none', menuOpen: !!document.querySelector('.v2-borders-dropdown.visible'), hex: hex && hex.value, focused: !!hex && document.activeElement === hex,
+      inside: !!r && r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight,
+    };
+  });
+  check(`${label} - « Personnalisé… » du menu Bordures ferme le menu et ouvre la fenêtre sur le rouge du stylo (${RED.toUpperCase()}), tout entière dans le panneau, le champ du code au clavier`, dialog.shown && !dialog.menuOpen && dialog.hex === RED.toUpperCase() && dialog.focused && dialog.inside, dialog);
+  await page.keyboard.type('ff8800');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(250);
+  menu = await menuState(page);
+  check(`${label} - Entrée applique : la fenêtre se ferme, le menu Bordures revient sous la bande avec la pastille gardée enfoncée (le stylo y est) ; ni nuance, ni « Personnalisé… », ni « Par défaut » ne l'est`,
+    !!menu && menu.shown && menu.below && menu.inside && menu.states['pen:#ff8800'] && menu.states['pen:#ff8800'].active && !menu.states['pen-custom'].active && !menu.states['pen-auto'].active && !menu.states['pen:' + RED].active
+    && menu.unreachable.every(action => action.indexOf('forget:') === 0) && !(await page.evaluate(() => getComputedStyle(document.getElementById('pp-color-modal')).display !== 'none')), menu && { shown: menu.shown, below: menu.below, inside: menu.inside, kept: menu.states['pen:#ff8800'], custom: menu.states['pen-custom'], auto: menu.states['pen-auto'], unreachable: menu.unreachable });
+  const penRow = await page.evaluate(() => Array.from(document.querySelectorAll('.v2-borders-dropdown .cp-row .cp-swatch')).map(b => b.dataset.color));
+  check(`${label} - la couleur composée est gardée dans la rangée « Couleurs du modèle » du menu Bordures : une pastille de plus`, JSON.stringify(penRow) === JSON.stringify(['#ff8800']), penRow);
+  await realClick(page, swatch(RED));
+  await realClick(page, `${MENU} .cp-row .cp-swatch[data-color="#ff8800"]`);
+  menu = await menuState(page);
+  check(`${label} - un clic sur la pastille gardée la rend couleur du stylo sans refermer le menu : sa pastille est enfoncée, le rouge ne l'est plus`, !!menu && menu.shown && menu.states['pen:#ff8800'].active && !menu.states['pen:' + RED].active, menu && menu.states['pen:#ff8800']);
+  await realClick(page, swatch(RED));
+  menu = await menuState(page);
+  check(`${label} - le rouge redevient la couleur du stylo : sa nuance est enfoncée, la pastille gardée ne l'est plus`, !!menu && menu.states['pen:' + RED].active && !menu.states['pen:#ff8800'].active && !menu.states['pen-custom'].active, menu && menu.states);
   await page.mouse.move(WIDTH - 10, HEIGHT - 10, { steps: 3 });
 
   // ---------- 5) Un réglage s'applique à la sélection, referme le menu, un Ctrl+Z l'annule ----------
   await page.waitForTimeout(650);
-  await dragGrid(page, [2, 2], [4, 4]);
+  // Le menu (palette et rangées de couleurs gardées côte à côte, ~390 px de large) couvre la moitié gauche de la grille : le clic qui le referme est sur la colonne F.
+  await clickGrid(page, 2, 6);
   menu = await menuState(page);
-  check(`${label} - un clic dans la grille referme le menu : le bouton annonce « false »`, !!menu && !menu.shown && (await expandedOf(page)) === 'false', { shown: menu && menu.shown, expanded: await expandedOf(page) });
+  check(`${label} - un clic dans la grille, hors du menu, referme le menu : le bouton annonce « false »`, !!menu && !menu.shown && (await expandedOf(page)) === 'false', { shown: menu && menu.shown, expanded: await expandedOf(page) });
+  await dragGrid(page, [2, 2], [4, 4]);
   await realClick(page, button('borders-open'));
   menu = await menuState(page);
   check(`${label} - à trois cases de large, « Intérieures » est actif et le rouge est toujours la couleur du stylo`, !!menu && menu.shown && !menu.states['borders:inner'].disabled && menu.states['pen:' + RED].active, menu && menu.states);
@@ -517,7 +566,7 @@ async function runTheme(theme) {
     const out = {
       plainDiffers: Math.max(...(await sample(spots.plain)).map(p => colorGap(p, bg))) > 25,
       plainGrey: nearest(await sample(spots.plain), [184, 192, 201]) <= 12,
-      frameRed: nearest(await sample(spots.frame), [192, 57, 43]) <= 12,
+      frameRed: nearest(await sample(spots.frame), RED_PARTS) <= 12,
       placedGrey: nearest(await sample(spots.placed), [184, 192, 201]) <= 12,
     };
     await page.evaluate(() => document.getElementById('btn-mode-edit').click());
@@ -561,10 +610,28 @@ async function runTheme(theme) {
     const p = panels[0];
     if (!p) return null;
     const r = p.getBoundingClientRect();
-    const unreachable = Array.from(p.querySelectorAll('button')).filter(b => { const q = b.getBoundingClientRect(); const hit = document.elementFromPoint(q.left + q.width / 2, q.top + q.height / 2); return !(hit === b || b.contains(hit)); }).length;
-    return { below: r.top >= dock.bottom - 1, inside: r.left >= 0 && r.right <= innerWidth && r.bottom <= innerHeight && r.top >= 0, unreachable, n: panels.length };
+    const unreachable = Array.from(p.querySelectorAll('button:not(.cp-forget)')).filter(b => { const q = b.getBoundingClientRect(); const hit = document.elementFromPoint(q.left + q.width / 2, q.top + q.height / 2); return !(hit === b || b.contains(hit)); }).length;
+    return { below: r.top >= dock.bottom - 1, inside: r.left >= 0 && r.right <= innerWidth && r.bottom <= innerHeight && r.top >= 0, unreachable, n: panels.length, top: r.top, bottom: r.bottom, dockBottom: dock.bottom };
   });
   check(`${label} - le menu de fond s'ouvre sous la bande, tout dans le panneau et sous le pointeur, et un seul menu est ouvert à la fois`, !!fill && fill.below && fill.inside && fill.unreachable === 0 && fill.n === 1, fill);
+  // ---------- 8 bis) Dix couleurs gardées dans chaque rangée : les deux menus restent sous la bande ----------
+  // Les rangées « Couleurs du modèle » et « Couleurs du document » passent à droite de la palette dans un panneau court : le menu ne grandit pas avec elles (en passant à la ligne sous la palette
+  // il aurait glissé sur la bande de la barre).
+  await realClick(page, button('fill-open'));
+  await page.evaluate(() => {
+    ['#7c3aed', '#be123c', '#0f766e', '#4338ca', '#9a3412', '#334155', '#a21caf', '#0369a1', '#15803d', '#ca8a04'].forEach(color => ColorStore.add('model', color));
+    ['#111827', '#7f1d1d', '#14532d', '#1e3a8a', '#4c1d95', '#831843', '#713f12', '#164e63', '#3f6212', '#9f1239'].forEach(color => ColorStore.add('document', color));
+  });
+  await realClick(page, button('fill-open'));
+  const fullFill = await openMenuInfo(page);
+  check(`${label} - avec dix couleurs gardées dans chaque rangée (${fullFill && fullFill.kept.join(' et ')}) le menu de fond s'ouvre toujours sous la bande (haut ${fullFill && fullFill.top} pour une bande qui finit à ${fullFill && fullFill.dockBottom}), tout entier dans le panneau (${fullFill && fullFill.h} px de haut, au plus 207), ses ${fullFill && fullFill.buttons} boutons sous le pointeur, les rangées à droite de la palette et de son pied`,
+    !!fullFill && fullFill.below && fullFill.inside && fullFill.h <= 207 && fullFill.unreachable === 0 && fullFill.n === 1 && fullFill.buttons === 72 && sameKept(fullFill.kept, [10, 10]) && fullFill.rowsRightOfPalette, fullFill);
+  await realClick(page, button('borders-open'));
+  const fullBorders = await openMenuInfo(page);
+  check(`${label} - le menu Bordures aussi (${fullBorders && fullBorders.kept.join(' et ')} couleurs gardées) : sous la bande (haut ${fullBorders && fullBorders.top} pour une bande qui finit à ${fullBorders && fullBorders.dockBottom}), tout entier dans le panneau (${fullBorders && fullBorders.h} px de haut, au plus 207), ses ${fullBorders && fullBorders.buttons} boutons sous le pointeur, les rangées à droite de la palette et de son pied`,
+    !!fullBorders && fullBorders.below && fullBorders.inside && fullBorders.h <= 207 && fullBorders.unreachable === 0 && fullBorders.n === 1 && fullBorders.buttons === 51 && sameKept(fullBorders.kept, [10, 10]) && fullBorders.rowsRightOfPalette, fullBorders);
+  await page.evaluate(() => { PageLayout.setCustomColors(['#ff8800']); Templates.updateDocumentSettings({ colors: null }); });
+  await realClick(page, button('fill-open'));
   await realClick(page, button('borders-open'));
   menu = await menuState(page);
   const stillFill = await page.evaluate(() => Array.from(document.querySelectorAll('.v2-color-dropdown')).filter(p => p.classList.contains('visible')).length);

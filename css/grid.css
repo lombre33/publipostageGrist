@@ -103,9 +103,9 @@ body.pp-grid-mode:not(.pp-editor-hidden) .v2-cell-bar-dock { display: flex; }
 body.pp-grid-mode .v2-floating-toolbar button.v2-grid-only { display: inline-flex; }
 body.pp-grid-mode .v2-floating-toolbar .v2-floating-sep.v2-grid-only { display: block; }
 
-/* Menu « Bordures » (js/floating-toolbars.js:createBordersDropdown) : une rangée de huit réglages en icônes, puis la couleur du trait : la grille
-   de nuances et le pied du menu de couleur (css/editor-v2.css). `v2-color-dropdown` lui donne le niveau des menus (--z-menu), au-dessus de la
-   bande de la barre. Un réglage grisé (« Intérieures » pour une seule case) reste atteignable : un clic dessus ne fait rien. */
+/* Menu « Bordures » (js/floating-toolbars.js:createBordersDropdown) : une rangée de huit réglages en icônes, puis la couleur du trait : la palette
+   et le pied du menu de couleur (css/color-palette.css). `v2-color-dropdown` lui donne le niveau des menus (--z-menu), au-dessus de la bande de la
+   barre. Un réglage grisé (« Intérieures » pour une seule case) reste atteignable : un clic dessus ne fait rien. */
 .v2-borders-presets { display: grid; grid-template-columns: repeat(8, 28px); gap: 3px; }
 .v2-borders-presets button { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 26px; padding: 0; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--text); cursor: pointer; }
 .v2-borders-presets button svg { width: 16px; height: 16px; }
@@ -113,7 +113,6 @@ body.pp-grid-mode .v2-floating-toolbar .v2-floating-sep.v2-grid-only { display: 
 .v2-borders-pen { margin: 8px 0 5px; font: 600 11px/1.2 var(--font-ui); color: var(--text-muted); }
 .v2-borders-dropdown [aria-disabled="true"] { opacity: .35; cursor: default; }
 .v2-borders-dropdown [aria-disabled="true"]:hover { background: transparent; border-color: transparent; }
-.v2-borders-dropdown button.is-active { outline: 2px solid var(--accent); outline-offset: 1px; }
 /* La puce de la barre : l'icône, puis un chevron plus petit. */
 .v2-borders-chip svg:last-child { width: 10px; height: 10px; }
 /* Pied du menu « Bordures » : la ligne à cocher « Quadrillage » (montré ou masqué en Lecture et dans les exports), une ligne de menu à coche

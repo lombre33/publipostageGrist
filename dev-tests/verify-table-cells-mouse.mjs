@@ -254,7 +254,7 @@ async function runTheme(colorScheme) {
     ['gras', async () => realClick(page, '#v2-btn-bold'), s => s.bold],
     ['taille 12 pt (menu)', () => openMenuAndPick('#v2-size-chip-val', '.v2-format-panel.visible button[data-action="12pt"]'), s => s.size === '12pt'],
     ['police Georgia (menu)', () => openMenuAndPick('#v2-font-chip', '.v2-format-panel.visible button[data-action="Georgia"]'), s => /Georgia/.test(s.family)],
-    ['couleur de police rouge (palette)', () => openMenuAndPick('#v2-btn-text-color-caret', '.v2-color-dropdown.visible button[data-action="pick:#c0392b"]'), s => s.color === 'rgb(192, 57, 43)'],
+    ['couleur de police rouge (palette)', () => openMenuAndPick('#v2-btn-text-color-caret', '.v2-color-dropdown.visible button[data-action="pick:#b91c1c"]'), s => s.color === 'rgb(185, 28, 28)'],
     ['surlignage jaune (palette)', () => openMenuAndPick('#v2-btn-highlight-caret', '.v2-color-dropdown.visible button[data-action="pick:#fff2a8"]'), s => s.background === 'rgb(255, 242, 168)'],
     ['« + » de la taille', () => realClick(page, '#v2-size-plus'), s => s.size !== ''],
     ['liste à puces', () => realClick(page, '#v2-btn-bullet'), s => s.list],
@@ -284,7 +284,7 @@ async function runTheme(colorScheme) {
   await dragCells(page, FROM, TO);
   await openMenuAndPick('#v2-size-chip-val', '.v2-format-panel.visible button[data-action="14pt"]');
   await page.waitForTimeout(150);
-  await openMenuAndPick('#v2-btn-text-color-caret', '.v2-color-dropdown.visible button[data-action="pick:#1e8449"]');
+  await openMenuAndPick('#v2-btn-text-color-caret', '.v2-color-dropdown.visible button[data-action="pick:#15803d"]');
   await page.waitForTimeout(250);
   let state = await cellsState(page);
   check(`${label} - une taille puis une couleur sur la même sélection : les quatre cases portent les deux`, INSIDE.every(k => state[k].size === '14pt' && state[k].color !== ''), INSIDE.map(k => [k, state[k].size, state[k].color]));

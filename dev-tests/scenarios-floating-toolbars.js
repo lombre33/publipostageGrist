@@ -64,7 +64,7 @@
       if (!shown(bar)) return { pass: false, notes: 'barre du tableau fermée, curseur dans une case' };
       const out = {};
       await press_(h, bar, 'fill-open');
-      out.opened = openMenus().length === 1 && openMenus()[0].querySelectorAll('button[data-action^="pick:"]').length === 7;
+      out.opened = openMenus().length === 1 && openMenus()[0].querySelectorAll('.cp-grid button[data-action^="pick:"]').length === ColorPalette.ROWS.flat().length;
       const before = Editor.getHTML();
       await press_(h, bar, 'fill-open');
       out.closed = openMenus().length === 0;

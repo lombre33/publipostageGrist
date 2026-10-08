@@ -468,7 +468,7 @@ const FORMATS = [
   ['gras', () => realClick(page, '#v2-btn-bold'), s => s.bold],
   ['taille 12 pt', () => openMenuAndPick(page, '#v2-size-chip-val', '.v2-format-panel.visible button[data-action="12pt"]'), s => s.size === '12pt'],
   ['police Georgia', () => openMenuAndPick(page, '#v2-font-chip', '.v2-format-panel.visible button[data-action="Georgia"]'), s => /Georgia/.test(s.family)],
-  ['couleur de police', () => openMenuAndPick(page, '#v2-btn-text-color-caret', '.v2-color-dropdown.visible button[data-action="pick:#c0392b"]'), s => s.color === 'rgb(192, 57, 43)'],
+  ['couleur de police', () => openMenuAndPick(page, '#v2-btn-text-color-caret', '.v2-color-dropdown.visible button[data-action="pick:#b91c1c"]'), s => s.color === 'rgb(185, 28, 28)'],
   ['surlignage', () => openMenuAndPick(page, '#v2-btn-highlight-caret', '.v2-color-dropdown.visible button[data-action="pick:#fff2a8"]'), s => s.background === 'rgb(255, 242, 168)'],
   ['liste à puces', () => realClick(page, '#v2-btn-bullet'), s => s.list],
   ['alignement centré', () => hoverAndClick(page, '#v2-btn-align-main', '#v2-btn-align-center'), s => s.align === 'center'],

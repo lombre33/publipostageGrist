@@ -52,85 +52,80 @@ const FloatingToolbars = (function () {
     }
     nodeEditor.chain().updateAttributes('tableCell', { backgroundColor: color }).updateAttributes('tableHeader', { backgroundColor: color }).run();
   }
-  const TEXT_COLOR_PRESETS = ['#000000', '#5f6368', '#c0392b', '#d68910', '#8a7000', '#1e8449', '#2874a6', '#7d3c98'];
-  const FILL_COLOR_PRESETS = ['#fff2a8', '#c8f7c5', '#c8e6ff', '#ffd6d6', '#e6d6ff', '#ffe0b3', '#e0e0e0'];
 
-  // Grille de nuances + case "personnalisé"/"aucune", partagée entre police, surlignage et fond de cellule. `onPick`/`onNone` reçoivent une chaîne
-  // déjà focus+sélection restaurée et ne doivent jamais appeler .run() eux-mêmes.
-  function createColorDropdown(presets, { noneLabel, onPick, onNone, withSavedSelection }) {
-    const swatches = presets.map(c => `<button data-action="pick:${c}" style="background:${c}" title="${c}"></button>`).join('');
-    const html = '<div class="v2-color-grid">' + swatches + '</div>'
-      + '<div class="v2-color-dropdown-footer">'
-      + `<button data-action="custom" title="${I18n.t('colorDropdown.custom')}">${Icons.svg('fill')}<span>${I18n.t('colorDropdown.customLabel')}</span></button>`
-      + (onNone ? `<button data-action="none" title="${noneLabel}">${Icons.svg('noColor')}<span>${noneLabel}</span></button>` : '')
-      + '</div>'
-      + '<input type="color" class="v2-color-dropdown-native">';
-    const panel = EditorCore.createFloatingPanel('v2-color-dropdown', html, (action) => {
-      if (action === 'custom') { panel.el.querySelector('.v2-color-dropdown-native').click(); return; }
-      if (action === 'none') { withSavedSelection(chain => onNone(chain)); EditorCore.closeDropdownPanel(); return; }
-      if (action.indexOf('pick:') === 0) { const color = action.slice(5); withSavedSelection(chain => onPick(chain, color)); EditorCore.closeDropdownPanel(); }
+  // Menu de couleur partagé entre police, surlignage et fond de cellule (la palette, les couleurs gardées et le pied « Personnalisé… » / « aucune »
+  // sont à js/color-palette.js). `onPick`/`onNone` reçoivent une chaîne déjà focus+sélection restaurée et ne doivent jamais appeler .run() eux-mêmes ;
+  // `current` rend la couleur du moment, marquée dans la palette.
+  function createColorDropdown({ noneKey, onPick, onNone, withSavedSelection, current }) {
+    const apply = fn => { withSavedSelection(fn); EditorCore.closeDropdownPanel(); };
+    return ColorPalette.createMenu({
+      className: 'v2-color-dropdown',
+      noneKey,
+      current,
+      onPick: color => apply(chain => onPick(chain, color)),
+      onNone: () => apply(chain => onNone(chain)),
     });
-    panel.el.querySelector('.v2-color-dropdown-native').addEventListener('input', (event) => {
-      withSavedSelection(chain => onPick(chain, event.target.value));
-      EditorCore.closeDropdownPanel();
-    });
-    return panel;
   }
 
-  // Menu « Bordures » d'une grille (css/grid.css) : une rangée de réglages en icônes, puis la couleur du stylo - la grille de nuances et le pied
-  // « personnalisé » / « par défaut » du menu de couleur ci-dessus, sans refermer le menu au choix d'une couleur - et, tout en bas, la ligne à cocher
-  // « Quadrillage » (montré ou masqué en Lecture et dans les exports, sans refermer le menu non plus : la coche répond). `onPreset(preset)`,
-  // `onPen(color | null)` et `onGridLines()` ne touchent pas à l'éditeur eux-mêmes.
-  function createBordersDropdown(presets, colors, { onPreset, onPen, onGridLines }) {
+  // Menu « Bordures » d'une grille (css/grid.css) : une rangée de réglages en icônes, puis la couleur du stylo - le menu de couleur ci-dessus, réduit à
+  // deux rangées de la palette (les gris et les tons foncés, ceux d'un trait) pour tenir sous la bande de la barre dans un petit panneau, sans refermer
+  // le menu au choix d'une couleur (la fenêtre « Personnalisé… » le rouvre en se fermant) - et, tout en bas, la ligne à cocher « Quadrillage » (montré ou
+  // masqué en Lecture et dans les exports, sans refermer le menu non plus : la coche répond). `onPreset(preset)`, `onPen(color | null)` et `onGridLines()`
+  // ne touchent pas à l'éditeur eux-mêmes.
+  function createBordersDropdown(presets, { onPreset, onPen, onGridLines, current, afterRender }) {
     const buttons = presets.map(([preset, icon, title]) => `<button data-action="borders:${preset}" title="${title}" aria-label="${title}">${Icons.svg(icon)}</button>`).join('');
-    const swatches = colors.map(c => `<button data-action="pen:${c}" style="background:${c}" title="${c}" aria-label="${c}"></button>`).join('');
-    const html = '<div class="v2-borders-presets">' + buttons + '</div>'
-      + `<div class="v2-borders-pen">${I18n.t('table.bordersPen')}</div>`
-      + '<div class="v2-color-grid">' + swatches + '</div>'
-      + '<div class="v2-color-dropdown-footer">'
-      + `<button data-action="pen-custom" title="${I18n.t('colorDropdown.custom')}">${Icons.svg('fill')}<span>${I18n.t('colorDropdown.customLabel')}</span></button>`
-      + `<button data-action="pen-auto" title="${I18n.t('colorDropdown.noneDefault')}">${Icons.svg('noColor')}<span>${I18n.t('colorDropdown.noneDefault')}</span></button>`
-      + '</div>'
-      + '<div class="v2-borders-gridlines">'
+    const gridLines = '<div class="v2-borders-gridlines">'
       + `<button type="button" class="v2-hover-row v2-hover-row-check" data-action="gridlines" role="checkbox" aria-checked="true" title="${I18n.t('table.gridLinesTip')}">`
       + `<span><span class="v2-borders-gridlines-name">${I18n.t('table.gridLines')}</span><small>${I18n.t('table.gridLinesHint')}</small></span></button>`
-      + '</div>'
-      + '<input type="color" class="v2-color-dropdown-native">';
-    const panel = EditorCore.createFloatingPanel('v2-color-dropdown v2-borders-dropdown', html, (action) => {
-      if (action.indexOf('borders:') === 0) { onPreset(action.slice('borders:'.length)); return; }
-      if (action === 'gridlines') { onGridLines(); return; }
-      if (action === 'pen-custom') { panel.el.querySelector('.v2-color-dropdown-native').click(); return; }
-      if (action === 'pen-auto') { onPen(null); return; }
-      if (action.indexOf('pen:') === 0) onPen(action.slice('pen:'.length));
+      + '</div>';
+    return ColorPalette.createMenu({
+      className: 'v2-color-dropdown v2-borders-dropdown',
+      head: '<div class="v2-borders-presets">' + buttons + '</div>' + `<div class="v2-borders-pen">${I18n.t('table.bordersPen')}</div>`,
+      tail: gridLines,
+      rows: [0, 1],
+      pickAction: 'pen',
+      customAction: 'pen-custom',
+      noneAction: 'pen-auto',
+      noneKey: 'colorDropdown.noneDefault',
+      markNone: true,
+      reopenAfterCustom: true,
+      current,
+      afterRender,
+      onPick: color => onPen(color),
+      onNone: () => onPen(null),
+      onAction: (action) => {
+        if (action.indexOf('borders:') === 0) onPreset(action.slice('borders:'.length));
+        else if (action === 'gridlines') onGridLines();
+      },
     });
-    panel.el.querySelector('.v2-color-dropdown-native').addEventListener('input', event => onPen(event.target.value.toLowerCase()));
-    return panel;
   }
 
   // Couleur de police / surlignage : bouton "appliquer" (réapplique la dernière couleur choisie) + bouton chevron séparé (menu de nuances).
   function wireColorPickers() {
     const { captureSelection, withSavedSelection } = EditorCore.createSelectionPreserver();
     // « Aucune couleur » n'est jamais mémorisée comme dernier choix : un clic rapide sur l'icône doit toujours appliquer une vraie couleur.
-    let lastTextColor = TEXT_COLOR_PRESETS[0];
-    let lastHighlightColor = FILL_COLOR_PRESETS[0];
+    let lastTextColor = ColorPalette.DEFAULT_TEXT;
+    let lastHighlightColor = ColorPalette.DEFAULT_HIGHLIGHT;
     const wireQuickApply = (id, fn) => {
       const btn = document.getElementById(id);
       if (!btn) return;
       btn.addEventListener('mousedown', (event) => { event.preventDefault(); captureSelection(); withSavedSelection(fn); });
     };
 
-    const textColorPanel = createColorDropdown(TEXT_COLOR_PRESETS, {
-      noneLabel: I18n.t('colorDropdown.noneDefault'),
+    const textColorPanel = createColorDropdown({
+      noneKey: 'colorDropdown.noneDefault',
       withSavedSelection,
+      current: () => editor.getAttributes('textStyle').color || null,
       onPick: (chain, color) => { lastTextColor = color; chain.setTextColor(color); EditorCore.setColorIcon('v2-text-color-icon', color); },
       onNone: (chain) => { chain.unsetTextColor(); EditorCore.setColorIcon('v2-text-color-icon', null); },
     });
     wireQuickApply('v2-btn-text-color', chain => chain.setTextColor(lastTextColor));
     EditorCore.wireDropdownButton(document.getElementById('v2-btn-text-color-caret'), textColorPanel, captureSelection);
 
-    const highlightPanel = createColorDropdown(FILL_COLOR_PRESETS, {
-      noneLabel: I18n.t('colorDropdown.none'),
+    const highlightPanel = createColorDropdown({
+      noneKey: 'colorDropdown.none',
       withSavedSelection,
+      current: () => editor.getAttributes('textStyle').backgroundColor || null,
       onPick: (chain, color) => { lastHighlightColor = color; chain.setHighlight(color); EditorCore.setColorIcon('v2-highlight-icon', color); },
       onNone: (chain) => { chain.unsetHighlight(); EditorCore.setColorIcon('v2-highlight-icon', null); },
     });
@@ -198,9 +193,10 @@ const FloatingToolbars = (function () {
 
     function tableFillMenu() {
       // Pas de sélection à restaurer ici : setCellsBackground lit editor.state.selection directement (persiste indépendamment du focus DOM).
-      return createColorDropdown(FILL_COLOR_PRESETS, {
-        noneLabel: I18n.t('colorDropdown.none'),
+      return createColorDropdown({
+        noneKey: 'colorDropdown.none',
         withSavedSelection: fn => fn(null),
+        current: () => editor.getAttributes('tableCell').backgroundColor || editor.getAttributes('tableHeader').backgroundColor || null,
         onPick: (chain, color) => { setCellsBackground(editor, color); EditorCore.setColorBar('v2-table-fill-bar', color); },
         onNone: () => { setCellsBackground(editor, null); EditorCore.setColorBar('v2-table-fill-bar', null); },
       });
@@ -209,33 +205,25 @@ const FloatingToolbars = (function () {
     function tableBordersMenu(presets) {
       // Menu « Bordures » : un réglage pose la couleur du stylo sur les traits qu'il vise (une seule transaction, un seul Annuler) et referme le menu ;
       // une couleur se choisit sans le refermer. La couleur du stylo (null = le trait de départ) se choisit une fois et reste pour les réglages
-      // suivants. Le « Quadrillage » se coche ou se décoche sans refermer le menu non plus (une transaction, un Annuler). `sync` : à l'ouverture du
-      // menu.
+      // suivants. Le « Quadrillage » se coche ou se décoche sans refermer le menu non plus (une transaction, un Annuler). À chaque ouverture le menu se
+      // redessine : « Intérieures » n'a rien à tracer pour une seule case, grisé (jamais retiré), un clic dessus ne fait rien.
       let penColor = null;
-      const panel = createBordersDropdown(presets, TEXT_COLOR_PRESETS, {
-        onPreset: (preset) => { if (GridEditor.applyBorders(editor, preset, penColor)) EditorCore.closeDropdownPanel(); },
-        onPen: (color) => { penColor = color; markPen(); },
-        onGridLines: () => { GridEditor.setGridLinesShown(editor, !GridEditor.gridLinesShown(editor)); markGridLines(); },
-      });
-      const markPen = () => {
-        panel.el.querySelectorAll('button[data-action^="pen:"]').forEach(btn => btn.classList.toggle('is-active', btn.dataset.action === 'pen:' + penColor));
-        const auto = panel.el.querySelector('button[data-action="pen-auto"]');
-        if (auto) auto.classList.toggle('is-active', penColor === null);
-        const custom = panel.el.querySelector('button[data-action="pen-custom"]');
-        if (custom) custom.classList.toggle('is-active', penColor !== null && !TEXT_COLOR_PRESETS.includes(penColor));
-      };
-      const markGridLines = () => {
-        const row = panel.el.querySelector('button[data-action="gridlines"]');
+      const markGridLines = (menu) => {
+        const row = menu.el.querySelector('button[data-action="gridlines"]');
         if (row) row.setAttribute('aria-checked', GridEditor.gridLinesShown(editor) ? 'true' : 'false');
       };
-      // « Intérieures » n'a rien à tracer pour une seule case : grisé (jamais retiré), un clic dessus ne fait rien.
-      const sync = () => {
-        const inner = panel.el.querySelector('button[data-action="borders:inner"]');
-        if (inner) inner.setAttribute('aria-disabled', GridEditor.canApplyBorders(editor, 'inner') ? 'false' : 'true');
-        markPen();
-        markGridLines();
-      };
-      return { panel, sync };
+      const panel = createBordersDropdown(presets, {
+        current: () => penColor,
+        onPreset: (preset) => { if (GridEditor.applyBorders(editor, preset, penColor)) EditorCore.closeDropdownPanel(); },
+        onPen: (color) => { penColor = color; panel.mark(penColor); },
+        onGridLines: () => { GridEditor.setGridLinesShown(editor, !GridEditor.gridLinesShown(editor)); markGridLines(panel); },
+        afterRender: (menu) => {
+          const inner = menu.el.querySelector('button[data-action="borders:inner"]');
+          if (inner) inner.setAttribute('aria-disabled', GridEditor.canApplyBorders(editor, 'inner') ? 'false' : 'true');
+          markGridLines(menu);
+        },
+      });
+      return panel;
     }
 
     function tableMenuPlacement() {
@@ -247,7 +235,6 @@ const FloatingToolbars = (function () {
       const btn = document.getElementById('v2-table-borders-btn');
       if (EditorCore.getOpenDropdownPanel() === menus.borders) { EditorCore.closeDropdownPanel(); return; }
       EditorCore.closeDropdownPanel();
-      menus.syncBorders();
       menus.borders.show(btn, tableMenuPlacement());
       EditorCore.setOpenDropdownPanel(menus.borders, btn);
     }
@@ -399,9 +386,7 @@ const FloatingToolbars = (function () {
         (tableCommands(menus)[action] || (() => {}))();
       });
       menus.fill = tableFillMenu();
-      const borders = tableBordersMenu(spec.borders);
-      menus.borders = borders.panel;
-      menus.syncBorders = borders.sync;
+      menus.borders = tableBordersMenu(spec.borders);
       EditorCore.registerFloatingPanel(panel);
       const check = tableToolbarCheck(panel, tableButtonSync(panel, spec.valign));
       editor.on('selectionUpdate', check);

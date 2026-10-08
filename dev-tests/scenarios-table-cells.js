@@ -90,8 +90,8 @@
   [
     ['taille choisie dans le menu', () => pickFromPanel('v2-size-chip-val', '.v2-format-panel button[data-action="14pt"]'), i => i.size.includes('14pt')],
     ['police choisie dans le menu', () => pickFromPanel('v2-font-chip', '.v2-format-panel button[data-action="Georgia"]'), i => i.family.includes('Georgia')],
-    ['couleur de police choisie dans la palette', () => pickFromPanel('v2-btn-text-color-caret', '.v2-color-dropdown button[data-action="pick:#c0392b"]'), i => i.color.length > 0],
-    ['surlignage choisi dans la palette', () => pickFromPanel('v2-btn-highlight-caret', '.v2-color-dropdown button[data-action="pick:#fff2a8"]'), i => i.background.length > 0],
+    ['couleur de police choisie dans la palette', () => pickFromPanel('v2-btn-text-color-caret', '.v2-color-dropdown.visible button[data-action="pick:#b91c1c"]'), i => i.color.length > 0],
+    ['surlignage choisi dans la palette', () => pickFromPanel('v2-btn-highlight-caret', '.v2-color-dropdown.visible button[data-action="pick:#fff2a8"]'), i => i.background.length > 0],
     ['dernière couleur de police (clic direct sur l\'icône)', () => pressById('v2-btn-text-color'), i => i.color.length > 0],
     ['dernier surlignage (clic direct sur l\'icône)', () => pressById('v2-btn-highlight'), i => i.background.length > 0],
     ['bouton « + » de la taille', () => pressById('v2-size-plus'), i => i.size.length > 0],
@@ -115,7 +115,7 @@
     run: async (h) => withTable(h, async () => {
       await selectCells(...RECT);
       await pickFromPanel('v2-size-chip-val', '.v2-format-panel button[data-action="12pt"]');
-      await pickFromPanel('v2-btn-text-color-caret', '.v2-color-dropdown button[data-action="pick:#1e8449"]');
+      await pickFromPanel('v2-btn-text-color-caret', '.v2-color-dropdown.visible button[data-action="pick:#15803d"]');
       const v = verdict(RECT, i => i.size.includes('12pt') && i.color.length > 0);
       return { pass: v.pass && stillSelected(RECT), notes: failNotes(v) };
     }),

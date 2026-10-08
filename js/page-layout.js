@@ -16,7 +16,9 @@
 //   assemblage avant impression) le suit sans autre changement. Une dimension égale à celle d'un format de FORMATS (21 x 29,7 cm) redevient ce format
 //   : le menu le coche, rien n'est enregistré en double ;
 // - `watermark` : un texte en travers de chaque page, propre au modèle (absent = pas de filigrane). Ce module le garde et le borne
-//   (normalizeWatermark) ; sa géométrie et son dessin sont à js/page-layer.js.
+//   (normalizeWatermark) ; sa géométrie et son dessin sont à js/page-layer.js ;
+// - `colors` : les couleurs personnalisées du modèle, la rangée « Couleurs du modèle » des menus de couleur (absente = aucune). Ce module les garde
+//   et les borne (normalizeCustomColors) ; js/color-store.js les ajoute et les retire, js/color-palette.js les montre.
 const PageLayout = (function () {
   // Les nombres de la page : A4, sens, unités (mm, pt, px, twip), marge par défaut, bandes réservées, planchers. Des constantes, sans état.
   const Units = (function () {
@@ -196,6 +198,20 @@ const PageLayout = (function () {
   })();
   const { WATERMARK_MAX_CHARS, WATERMARK_DEFAULT, normalizeWatermark } = Watermark;
 
+  // Les couleurs personnalisées d'un modèle : leur borne et leur lecture.
+  const CustomColors = (function () {
+    // Jusqu'à CUSTOM_COLORS_MAX codes #rrggbb, la plus récente d'abord : une rangée de la palette. Tout ce qui n'est pas un code à six chiffres, les
+    // doublons et les couleurs de trop (JSON écrit à la main, version plus récente) sont écartés sans erreur.
+    const CUSTOM_COLORS_MAX = 10;
+    function normalizeCustomColors(value) {
+      if (!Array.isArray(value)) return [];
+      const colors = value.filter(color => typeof color === 'string' && /^#[0-9a-f]{6}$/i.test(color)).map(color => color.toLowerCase());
+      return colors.filter((color, at) => colors.indexOf(color) === at).slice(0, CUSTOM_COLORS_MAX);
+    }
+    return { CUSTOM_COLORS_MAX, normalizeCustomColors };
+  })();
+  const { CUSTOM_COLORS_MAX, normalizeCustomColors } = CustomColors;
+
   function emptyMargins() {
     return { top: DEFAULT_MARGIN_MM, right: DEFAULT_MARGIN_MM, bottom: DEFAULT_MARGIN_MM, left: DEFAULT_MARGIN_MM, orientation: PORTRAIT, format: DEFAULT_FORMAT };
   }
@@ -203,7 +219,7 @@ const PageLayout = (function () {
   let marginsDraft = emptyMargins();
 
   function getMarginsMm() {
-    // Les quatre marges (mm), l'orientation, le format et le filigrane : js/main.js passe cet objet tel quel à Templates.save (colonne Margins) et
+    // Les quatre marges (mm), l'orientation, le format, le filigrane et les couleurs : js/main.js passe cet objet tel quel à Templates.save (colonne Margins) et
     // Templates.loadAll le rend dans `marginsMm`, si bien que le sens et le format voyagent avec les marges sans appel de plus aux trois sites
     // d'enregistrement.
     return marginsDraft;
@@ -243,6 +259,9 @@ const PageLayout = (function () {
     // La clé n'existe que pour un modèle qui a un filigrane : l'objet d'un modèle sans filigrane ne porte aucune clé en plus.
     const watermark = normalizeWatermark(merged.watermark);
     if (watermark) marginsDraft.watermark = watermark;
+    // Idem pour les couleurs personnalisées : la clé n'existe que pour un modèle qui en a.
+    const colors = normalizeCustomColors(merged.colors);
+    if (colors.length) marginsDraft.colors = colors;
     applyToPreviewCss();
   }
 
@@ -334,6 +353,18 @@ const PageLayout = (function () {
     return true;
   }
 
+  function getCustomColors() { return (marginsDraft.colors || []).slice(); }
+  function setCustomColors(value) {
+    // Remplace les couleurs personnalisées du modèle en gardant tout le reste ; une liste vide les retire. Aucune page ne change : rien à annoncer
+    // ni à repeindre, l'appelant marque seulement le brouillon modifié (pp:marginsChanged). Rend vrai si quelque chose a changé.
+    const next = normalizeCustomColors(value);
+    if (JSON.stringify(next) === JSON.stringify(marginsDraft.colors || [])) return false;
+    const rest = Object.assign({}, marginsDraft);
+    delete rest.colors;
+    setMarginsMm(next.length ? Object.assign(rest, { colors: next }) : rest);
+    return true;
+  }
+
   // Page courante (sens et format compris) dans chaque unité des moteurs : mm, pt (pdfmake), px CSS (aperçu, pagination), twip (docx).
   function getPageSizeMm() { return pageSizeMm(marginsDraft.orientation, marginsDraft.format); }
   function getPageSizePt() { const s = getPageSizeMm(); return { width: s.width * MM_TO_PT, height: s.height * MM_TO_PT }; }
@@ -416,6 +447,7 @@ const PageLayout = (function () {
     getFormats, getFormat, setFormat, normalizeFormat, pageSizeMmFor, pdfPageNameFor,
     CUSTOM_MIN_MM, CUSTOM_MAX_MM, isCustomFormat, cmText, formatLabel, getFormatLabel, setPageSize, fitsHeaderFooter,
     WATERMARK_MAX_CHARS, WATERMARK_DEFAULT, normalizeWatermark, getWatermark, setWatermark,
+    CUSTOM_COLORS_MAX, normalizeCustomColors, getCustomColors, setCustomColors,
     pageNumberText, resolvePageNumberBadges,
   };
 })();

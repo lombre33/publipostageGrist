@@ -144,9 +144,8 @@ const Templates = (function () {
     }
   }
 
-  function safeParseSuiviModifications(json) {
-    // Forme par défaut si la colonne est vide ou illisible : {} (aucune suggestion connue) plutôt que null, pour que TrackChanges.computeMetadata
-    // (js/track-changes.js) puisse s'en servir directement comme previousMetadata.
+  // Un objet JSON rangé dans une colonne : {} si elle est vide, illisible, ou si ce qu'elle porte n'est pas un objet.
+  function safeParseObject(json) {
     if (!json) return {};
     try {
       const parsed = JSON.parse(json);
@@ -154,6 +153,12 @@ const Templates = (function () {
     } catch (e) {
       return {};
     }
+  }
+
+  function safeParseSuiviModifications(json) {
+    // Forme par défaut si la colonne est vide ou illisible : {} (aucune suggestion connue) plutôt que null, pour que TrackChanges.computeMetadata
+    // (js/track-changes.js) puisse s'en servir directement comme previousMetadata.
+    return safeParseObject(json);
   }
 
   function safeParseMargins(json) {
@@ -223,7 +228,68 @@ const Templates = (function () {
     };
   }
 
+  // Les réglages du document : une ligne réservée de cette table (TypeModele = 'reglages', leur JSON dans Contenu, comme un macro-modèle y range ses
+  // slots) pour ce qui vaut pour tous les modèles du document et toute l'équipe sans mériter une table de plus (les couleurs du document,
+  // js/color-store.js). Jamais dans templatesCache : loadAll la met de côté, si bien qu'aucune liste de modèles, aucun sélecteur et aucune opération
+  // sur tous les modèles ne la voit, et que uniqueName ne la compte pas. Créée à la première écriture, jamais pour lire. S'il y en a plusieurs (deux
+  // personnes qui écrivent en premier au même moment), la première fait foi ; une écriture ne touche jamais qu'elle.
+  const SETTINGS_TYPE = 'reglages';
+  const SETTINGS_NAME = 'Réglages du document';
+  let documentSettings = {};  // ce que voient les lecteurs : l'état lu, ou celui qu'une écriture en cours vient de poser
+  let settingsSaved = {};     // le dernier état que Grist a confirmé (retour arrière quand une écriture échoue)
+  let settingsRowId = null;
+  let settingsPending = 0;    // écritures en file : tant qu'il y en a, une lecture ne défait pas ce qu'elles posent
+  let settingsEpoch = 0;      // change au début et à la fin de chaque écriture : une lecture qui en a croisé une n'est pas l'état du document
+  let settingsQueue = null;   // créée à la première écriture : GristAPI n'est pas toujours chargé avec ce script (tests de ce module seul)
+
+  const isSettingsRow = (data, i) => !!data.TypeModele && data.TypeModele[i] === SETTINGS_TYPE;
+
+  // `at` : le rang de la ligne réservée dans `data` (-1 quand la table n'en a pas) ; `epoch` : settingsEpoch quand la lecture a commencé. Une lecture
+  // qui a croisé une écriture de ce widget (partie avant elle, ou finie pendant) montre un état d'avant : elle n'est pas adoptée, la suivante le sera.
+  function adoptDocumentSettings(data, at, epoch) {
+    if (epoch !== settingsEpoch || settingsPending > 0) return;
+    settingsRowId = at === -1 ? null : data.id[at];
+    settingsSaved = at === -1 ? {} : safeParseObject(data.Contenu ? data.Contenu[at] : null);
+    documentSettings = settingsSaved;
+  }
+
+  // Une copie des réglages du document ({} tant que rien n'est écrit ou lu).
+  function getDocumentSettings() { return JSON.parse(JSON.stringify(documentSettings)); }
+
+  // Fusionne `patch` ({ clé: valeur }, une valeur null ou absente retire la clé) dans les réglages du document et les écrit. Le changement vaut tout
+  // de suite pour getDocumentSettings ; la promesse rend vrai quand Grist l'a écrit, faux sinon (table refusée, droit d'écriture absent, Grist
+  // injoignable) : les lecteurs retrouvent alors le dernier état confirmé. Plusieurs changements de suite font une écriture utile, de l'état le plus
+  // récent.
+  function updateDocumentSettings(patch) {
+    const next = Object.assign({}, documentSettings);
+    Object.keys(patch).forEach(key => { if (patch[key] == null) delete next[key]; else next[key] = patch[key]; });
+    if (JSON.stringify(next) === JSON.stringify(documentSettings)) return Promise.resolve(true);
+    documentSettings = next;
+    settingsPending++;
+    settingsEpoch++;
+    settingsQueue = settingsQueue || GristAPI.createWriteQueue();
+    return settingsQueue.enqueue(async () => {
+      const wanted = JSON.stringify(documentSettings);
+      if (wanted === JSON.stringify(settingsSaved)) return;
+      await ensureEmailColumns(); // TypeModele : la colonne qui désigne la ligne
+      if (settingsRowId != null) {
+        await grist.docApi.applyUserActions([['UpdateRecord', TABLE_NAME, settingsRowId, { Contenu: wanted }]]);
+      } else {
+        const result = await grist.docApi.applyUserActions([['AddRecord', TABLE_NAME, null, { Nom: SETTINGS_NAME, Contenu: wanted, TypeModele: SETTINGS_TYPE }]]);
+        settingsRowId = result.retValues[0];
+      }
+      settingsSaved = JSON.parse(wanted);
+    }).then(() => { settingsPending--; settingsEpoch++; return true; }, (e) => {
+      settingsPending--;
+      settingsEpoch++;
+      if (!GristAPI.isTablesDeclined(e)) console.warn('[Templates] réglages du document non enregistrés', e);
+      if (settingsPending === 0) documentSettings = settingsSaved;
+      return false;
+    });
+  }
+
   async function loadAll() {
+    const settingsEpochAtStart = settingsEpoch;
     // Une seule lecture pour tout vérifier : les migrations dont les colonnes sont déjà là n'ont plus rien à relire (cf. ensureOnce).
     const first = await readTable();
     if (first) columnMigrations.forEach(migration => { if (migration.satisfiedBy(first)) migration.markDone(); });
@@ -247,7 +313,15 @@ const Templates = (function () {
       // Aucune migration n'a tourné (ni écrit une colonne) depuis la lecture initiale : elle est encore la table, inutile de la relire.
       const data = first && migrationRuns === runsBefore ? first : await grist.docApi.fetchTable(TABLE_NAME);
       loadedChars = charsOf(data);
-      templatesCache = data.id.map((id, i) => templateFromRow(data, i));
+      // La ligne des réglages du document n'est pas un modèle : mise de côté, jamais dans le cache.
+      const templates = [];
+      let settingsAt = -1;
+      data.id.forEach((id, i) => {
+        if (!isSettingsRow(data, i)) templates.push(templateFromRow(data, i));
+        else if (settingsAt === -1) settingsAt = i;
+      });
+      templatesCache = templates;
+      adoptDocumentSettings(data, settingsAt, settingsEpochAtStart);
     } catch (e) {
       console.error('Erreur chargement modèles', e);
       templatesCache = [];
@@ -465,6 +539,6 @@ const Templates = (function () {
   return {
     loadAll, getCached, byId, getCurrentId, setCurrentId, isCurrent, getDefaultId, isDefault, canBeDocumentDefault, setDefault, save, remove, sameName, uniqueName,
     getWriteSeq: writes.seq, isWriting: writes.isWriting, whenIdle: writes.whenIdle, lastWritten: writes.lastWritten,
-    sameDateModif, getLoadedChars, TABLE_NAME,
+    sameDateModif, getLoadedChars, TABLE_NAME, getDocumentSettings, updateDocumentSettings,
   };
 })();

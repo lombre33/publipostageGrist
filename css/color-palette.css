@@ -1,0 +1,91 @@
+/* Le menu de couleur (js/color-palette.js) et la fenêtre « Couleur personnalisée » (js/color-dialog.js). Le panneau lui-même (`.v2-color-dropdown` :
+   position, niveau --z-menu, fond) est à css/editor-v2.css ; ici la palette, les rangées de couleurs gardées, le pied, et la fenêtre. Chargé après
+   css/modal-base.css et css/variable-actions.css (le cadre, le champ et les boutons de la fenêtre en viennent). Toutes les couleurs de l'interface
+   passent par les jetons (css/style.css), clairs et sombres ; seules les pastilles ont la couleur qu'elles portent.
+   Hauteur : dans un panneau haut, les deux rangées de couleurs gardées (modèle, document) se posent sous la palette, le pied dessous (menu de ~245 px).
+   Dans un panneau court (700x400 : la palette seule en occupe déjà la moitié), elles passent à DROITE de la palette, l'une sous l'autre, cinq pastilles
+   de large, et le pied reste sous la palette : le menu mesure alors ~165 px (palette de cinq rangées 116, pied 37, marges), vide ou avec dix couleurs
+   gardées par rangée (deux lignes de cinq), et ~200 px pour le menu Bordures avec ses réglages et sa ligne « Quadrillage » : il reste sous la bande de
+   la barre d'une grille (207 px à sa disposition, à 8 px du bas du panneau) sans glisser dessus.
+   Les pastilles gardent 20 px et 4 px d'écart (24 px d'un centre à l'autre, la taille d'une cible tactile). */
+
+/* La palette : dix colonnes, cinq rangées (les gris, puis quatre tons). Le liseré de chaque pastille suit le texte à 18 % pour qu'un blanc se voie sur
+   le fond clair et un noir sur le fond sombre. */
+.cp-grid { display: grid; grid-template-columns: repeat(10, 20px); gap: 4px; }
+.cp-swatch { position: relative; box-sizing: border-box; width: 20px; height: 20px; padding: 0; border: 1px solid color-mix(in srgb, var(--text) 18%, transparent); border-radius: 5px; background: var(--swatch); cursor: pointer; }
+.cp-swatch:hover { transform: scale(1.14); z-index: 1; }
+.cp-swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* La pastille choisie : un anneau d'accent et une coche dans l'encre qui se lit sur sa couleur (--ink, posée par js/color-palette.js). Le même
+   anneau marque « Personnalisé… » quand la couleur du moment n'est dans aucune rangée, et « Par défaut » du menu Bordures. */
+.v2-color-dropdown button.is-active { outline: 2px solid var(--accent); outline-offset: 1px; }
+.cp-swatch.is-active::after { content: ''; position: absolute; left: 50%; top: 45%; box-sizing: border-box; width: 5px; height: 9px; margin: -5px 0 0 -2.5px; border: solid var(--ink); border-width: 0 2px 2px 0; transform: rotate(45deg); }
+
+/* Les rangées de couleurs gardées (modèle, document) : leur nom, puis leurs pastilles (dix au plus, la largeur de la palette). La croix de chacune
+   n'apparaît qu'au survol ou au focus : un geste de souris pour la retirer, Suppr au clavier. Une rangée vide tient sur une ligne : son nom, puis
+   « Aucune ». */
+.cp-row { margin-top: 5px; }
+.cp-row-label { margin: 0 0 3px; font: 600 11px/1.1 var(--font-ui); color: var(--text-muted); }
+.cp-row-list { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; min-height: 20px; }
+.cp-row-empty { font: 12px/1.2 var(--font-ui); color: var(--text-muted); }
+.cp-row.is-empty { display: flex; align-items: baseline; gap: 8px; }
+.cp-row.is-empty .cp-row-label { flex: none; min-width: 11.5em; margin: 0; }
+.cp-row.is-empty .cp-row-list { min-height: 0; }
+/* Panneau court et assez large (700x400) : le corps du menu se met sur deux colonnes, à gauche le réglage éventuel, la palette et le pied, à droite les
+   deux rangées, l'une sous l'autre, cinq pastilles de large (116 px). Une rangée de dix couleurs passe sur deux lignes, sans rien ajouter à la hauteur du
+   menu : la colonne de droite reste moins haute que la palette et son pied. Un nom trop long pour sa colonne est coupé (son infobulle le dit en entier). */
+@media (max-height: 480px) and (min-width: 480px) {
+  .cp-body { display: grid; grid-template-columns: auto 116px; grid-template-areas: "main rows" "foot rows"; column-gap: 14px; align-items: start; }
+  .cp-main { grid-area: main; }
+  .cp-rows { grid-area: rows; }
+  .cp-body > .v2-color-dropdown-footer { grid-area: foot; }
+  .cp-row:first-child { margin-top: 0; }
+  .cp-row-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; }
+  .cp-row.is-empty { display: block; }
+  .cp-row.is-empty .cp-row-label { min-width: 0; margin: 0 0 3px; }
+  .cp-row.is-empty .cp-row-list { min-height: 20px; }
+}
+.cp-saved { position: relative; display: inline-flex; }
+.cp-forget { position: absolute; top: -6px; right: -6px; z-index: 2; display: none; align-items: center; justify-content: center; box-sizing: border-box; width: 15px; height: 15px; padding: 0; border: 1px solid var(--border-strong); border-radius: 50%; background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(20, 28, 46, .25); cursor: pointer; }
+.cp-forget svg { width: 8px; height: 8px; }
+.cp-forget:hover { background: var(--danger-soft); border-color: var(--danger); }
+.cp-saved:hover .cp-forget, .cp-saved:focus-within .cp-forget { display: inline-flex; }
+
+/* Le pied : « Personnalisé… » et, selon le menu, « Par défaut » ou « Aucun ». */
+.v2-color-dropdown-footer { display: flex; gap: 6px; margin-top: 5px; padding-top: 6px; border-top: 1px solid var(--border, #d7dde3); }
+.v2-color-dropdown-footer button { display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px; border: 1px solid var(--border, #d7dde3); border-radius: 5px; background: var(--surface, #fff); cursor: pointer; font: 12px var(--font-ui); color: var(--text, #3a4452); white-space: nowrap; }
+.v2-color-dropdown-footer button svg { width: 13px; height: 13px; }
+.v2-color-dropdown-footer button:hover { background: var(--surface-sunken, #f2f4f7); }
+.v2-color-dropdown-footer button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* La fenêtre « Couleur personnalisée » : à gauche le carré et le curseur de teinte, à droite l'aperçu, le code et les trois champs, dessous les cases
+   « garder ». Tout tient dans les 376 px du panneau de 700x400, sans défiler. */
+.pp-color-picker { display: grid; grid-template-columns: 200px minmax(0, 1fr); column-gap: 20px; align-items: start; }
+.pp-color-left, .pp-color-right { min-width: 0; }
+.pp-color-area { position: relative; height: 124px; border-radius: 6px; box-shadow: inset 0 0 0 1px var(--border-strong); cursor: crosshair; touch-action: none; user-select: none; background: linear-gradient(to top, #000, rgba(0, 0, 0, 0)), linear-gradient(to right, #fff, var(--hue, #f00)); }
+.pp-color-area:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Le curseur du carré : un anneau blanc cerné de sombre, qui se lit sur toutes les couleurs du carré. */
+.pp-color-thumb { position: absolute; box-sizing: border-box; width: 14px; height: 14px; margin: -7px 0 0 -7px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0, 0, 0, .55), 0 1px 3px rgba(0, 0, 0, .4); pointer-events: none; }
+.pp-color-hue { display: block; box-sizing: border-box; width: 100%; height: 14px; margin: 12px 0 0; padding: 0; border: 1px solid var(--border-strong); border-radius: 7px; background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); -webkit-appearance: none; appearance: none; cursor: pointer; }
+.pp-color-hue::-webkit-slider-runnable-track { height: 12px; background: transparent; }
+.pp-color-hue::-webkit-slider-thumb { -webkit-appearance: none; box-sizing: border-box; width: 16px; height: 16px; margin-top: -2px; border: 2px solid #fff; border-radius: 50%; background: transparent; box-shadow: 0 0 0 1px rgba(0, 0, 0, .55), 0 1px 3px rgba(0, 0, 0, .4); }
+.pp-color-hue::-moz-range-track { height: 12px; background: transparent; }
+.pp-color-hue::-moz-range-thumb { box-sizing: border-box; width: 16px; height: 16px; border: 2px solid #fff; border-radius: 50%; background: transparent; box-shadow: 0 0 0 1px rgba(0, 0, 0, .55), 0 1px 3px rgba(0, 0, 0, .4); }
+.pp-color-hue:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* L'aperçu : la couleur de départ et la nouvelle côte à côte (la nouvelle seule quand il n'y a pas de couleur de départ). */
+.pp-color-compare { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 8px; }
+.pp-color-compare-cell[hidden] { display: none; }
+.pp-color-chip { height: 34px; border-radius: 6px; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 18%, transparent); }
+.pp-color-caption { display: block; margin-top: 3px; font: 600 11px/1.2 var(--font-ui); color: var(--text-muted); text-align: center; }
+.pp-color-label { display: block; margin: 10px 0 4px; font-size: 12px; font-weight: 700; color: var(--text); }
+.pp-color-hex { max-width: 140px; font-variant-numeric: tabular-nums; }
+.pp-color-hint { min-height: 14px; margin: 3px 0 0; font-size: 11.5px; line-height: 1.25; color: var(--danger-ink); }
+.pp-color-channels { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 4px; }
+.pp-color-channel { display: flex; flex-direction: column; gap: 3px; font-size: 12px; font-weight: 700; color: var(--text); }
+.pp-color-number { padding-right: 2px; font-variant-numeric: tabular-nums; }
+.pp-color-box .pp-dialog-input[aria-invalid="true"] { border-color: var(--danger); }
+.pp-color-box .pp-dialog-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pp-color-keep { min-width: 0; margin: 12px 0 2px; padding: 0; border: 0; }
+.pp-color-keep-legend { margin: 0 0 6px; padding: 0; font-size: 12px; font-weight: 700; color: var(--text); }
+.pp-color-keep-row { display: flex; align-items: center; gap: 6px; margin: 0 0 4px; font-size: 12.5px; color: var(--text); cursor: pointer; }
+.pp-color-keep-row input { flex: none; margin: 0; }
