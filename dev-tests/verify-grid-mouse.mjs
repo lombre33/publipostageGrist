@@ -207,12 +207,18 @@ async function freshGrid(page) {
 }
 
 // Un clic réel exige que la cible soit DANS le panneau : sinon page.mouse clique dans le vide et le test échouerait pour une mauvaise raison.
+// Le centre d'abord ; la pastille de zoom (#pp-page-zoom) couvre le coin bas droit du panneau et la dernière case d'une grille défilée jusqu'au bout passe
+// dessous (son centre tombe sur le pourcentage) : elle se vise alors sur son côté gauche, que la pastille laisse libre.
 async function clickInPanel(page, selector, label) {
   const b = await boxOf(page, selector);
-  const touched = b && await page.evaluate(({ sel, x, y }) => { const top = document.elementFromPoint(x, y); const el = document.querySelector(sel); return !!top && el.contains(top); }, { sel: selector, x: b.x, y: b.y });
-  if (!b || !b.inViewport || !touched) { check(`${label} : ${selector} est sous le pointeur, dans le panneau (cible d'un vrai clic)`, false, { b, touched }); return null; }
-  await page.mouse.move(b.x - 6, b.y, { steps: 2 });
-  await page.mouse.click(b.x, b.y);
+  const at = b && await page.evaluate(({ sel, box }) => {
+    const el = document.querySelector(sel);
+    const reached = p => { const top = document.elementFromPoint(p.x, p.y); return !!top && el.contains(top); };
+    return [{ x: box.x, y: box.y }, { x: box.left + box.w / 4, y: box.y }, { x: box.left + 10, y: box.y }].find(reached) || null;
+  }, { sel: selector, box: b });
+  if (!b || !b.inViewport || !at) { check(`${label} : ${selector} est sous le pointeur, dans le panneau (cible d'un vrai clic)`, false, { b, at }); return null; }
+  await page.mouse.move(at.x - 6, at.y, { steps: 2 });
+  await page.mouse.click(at.x, at.y);
   return b;
 }
 
