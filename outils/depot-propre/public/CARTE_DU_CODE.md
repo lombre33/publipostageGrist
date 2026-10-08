@@ -23,8 +23,8 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
   vérifie.
 - **Les données** : les modèles et les réglages vivent dans des tables `Publipostage_*` du document Grist ;
   les préférences d'affichage (langue, thème, raccourcis…) dans le navigateur.
-- **Le volume** : 109 fichiers dans `js/` (42 100 lignes : 31 300 de code, 8 300 de commentaires, 2 600 de
-  blanc), 35 feuilles de style (3 200 lignes), une page de 760 lignes. Quatre fichiers de polices du PDF
+- **Le volume** : 113 fichiers dans `js/` (42 800 lignes : 31 800 de code, 8 400 de commentaires, 2 600 de
+  blanc), 36 feuilles de style (3 300 lignes), une page de 770 lignes. Quatre fichiers de polices du PDF
   pèsent 2,5 Mo en quelques lignes (des données) ; `js/i18n.js` est du texte à traduire, pas de la logique.
 
 ## Par où commencer
@@ -69,7 +69,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 |---|---|
 | `js/grist-api.js` | L'enveloppe de l'API Grist : démarrage et accès, lectures, écritures, création des tables internes (après l'accord de la personne), clés de correspondance, sonde de l'e-mail. |
 | `js/table-consent.js` | La fenêtre « Créer les tables du widget dans ce document ? » et le compteur de gestes qui la repose après un refus ; `js/grist-api.js` décide quand la poser. |
-| `js/templates.js` | Les modèles : la table `Publipostage_Modeles`, lecture, enregistrement, en-tête et pied (JSON). |
+| `js/templates.js` | Les modèles : la table `Publipostage_Modeles`, lecture, enregistrement, en-tête et pied (JSON), et sa ligne réservée aux réglages du document (`TypeModele` = `reglages`). |
 | `js/template-preferences.js` | Épingles et dossiers de chaque personne (`Publipostage_PreferencesModeles`). |
 | `js/template-organizer.js`, `js/template-tree-select.js`, `js/template-organize-modal.js` | La liste des modèles en arbre « épinglés + dossiers » et la fenêtre « Organiser mes modèles ». |
 | `js/template-gallery.js`, `js/template-gallery-modal.js` | Le catalogue de modèles prêts à l'emploi (dossier `templates-gallery/`, même site que le widget) et la fenêtre de la galerie : grille, aperçu, « Utiliser ce modèle ». |
@@ -88,7 +88,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/html-sanitize.js` | Filtre à liste blanche, lu dans un document inerte, pour le HTML des colonnes Grist, des modèles importés et de la galerie. |
 | `js/external-images.js` | Images d'un autre site : un cadre « Afficher » à leur place jusqu'au clic (rien n'est retenu), signalées ensuite en permanence, et une fenêtre avant tout export qui les lirait. |
 
-### L'éditeur (24 fichiers, 10 000 lignes)
+### L'éditeur (28 fichiers, 10 500 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -96,6 +96,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/editor-core.js` | Outils bas niveau partagés par les modules de l'éditeur (aucune logique métier). |
 | `js/editor-nodes.js` | Les nœuds et extensions sur mesure : bulles `#Variable`, calcul, cases et blocs conditionnels, images, sommaire. |
 | `js/floating-toolbars.js` | Les barres flottantes d'une sélection : couleur, tableau, image, variable, modification suivie. |
+| `js/color-palette.js`, `js/color-dialog.js`, `js/color-store.js`, `js/color-math.js` | Le menu de couleur (texte, surlignage, fond de case, trait des bordures) : la palette ; la fenêtre « Couleur personnalisée » ; les couleurs gardées par modèle et par document ; les calculs de couleur (module pur). |
 | `js/main-toolbar.js` | La barre d'outils : état des boutons, câblage des clics, insertion d'une image. |
 | `js/format-painter.js`, `js/find-replace.js`, `js/link-dialog.js` | Pinceau de mise en forme, Rechercher / Remplacer, liens. |
 | `js/callout.js`, `js/caption.js`, `js/keep-with-next.js`, `js/qr-code.js` | Encadrés et signature, légendes, « Garder avec le suivant », QR code. |
@@ -130,7 +131,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 
 | Fichier | Rôle |
 |---|---|
-| `js/page-layout.js` | Marges, orientation, format et filigrane de chaque modèle : la source unique de la largeur de contenu. |
+| `js/page-layout.js` | Marges, orientation, format, filigrane et couleurs gardées de chaque modèle : la source unique de la largeur de contenu. |
 | `js/page-layer.js` | Les images « sur toutes les pages » et le filigrane. |
 | `js/orientation-toggle.js`, `js/page-size-dialog.js`, `js/watermark-dialog.js` | Le menu Page et ses fenêtres : sens et format, « Format libre… », « Filigrane… ». |
 | `js/page-zoom.js` | Le zoom de la page à l'écran, en Édition et en Lecture (pastille du coin, Ajuster, Ctrl + molette) ; affichage seulement, les exports gardent les dimensions réelles. |
@@ -194,7 +195,7 @@ fichier, un lot), câblage de la galerie et de Grist. C'est le fichier qui conna
 ### Les feuilles de style
 
 `css/style.css` (jetons de couleur, thème clair et sombre, `--font-ui`), `css/toolbar-v2.css` (la barre du
-haut), `css/editor-v2.css` (le texte de l'éditeur) ; les 32 autres vont chacune avec un module ou une
+haut), `css/editor-v2.css` (le texte de l'éditeur) ; les 33 autres vont chacune avec un module ou une
 fenêtre de `js/` (`css/callout.css` pour `js/callout.js`) et le disent dans leur premier commentaire ;
 `css/roboto-fonts.css` embarque la police des documents.
 
@@ -241,6 +242,7 @@ notes de conception, qui ne sont pas publiés ici.
 | Ajouter une bibliothèque d'export | `js/export-common.js` (chargeur, empreinte) et la politique de sécurité de `index.html`. |
 | Ajouter un moteur d'export du widget (un script que seul un export utilise) | Une balise inerte `<script type="text/x-lazy-engine" data-engine="…">` dans `index.html`, puis son nom dans la liste `engines` de l'export qui s'en sert (`js/main.js`) : `js/export-engines.js` le charge au premier besoin. |
 | Un nouvel élément de document (nœud, mise en forme) | `js/editor-nodes.js` (l'éditeur), sa feuille de `css/` (l'écran et la Lecture), puis `js/pdf-export.js` et `js/docx-export.js` : chaque export le convertit à part. |
+| Changer la palette de couleurs, ou ajouter un menu de couleur | `js/color-palette.js` (la palette et ses rangées ; un menu s'y branche par `createMenu`), `js/color-dialog.js` (la fenêtre « Couleur personnalisée »), `js/color-store.js` (les couleurs gardées : `PageLayout.getCustomColors` pour le modèle, `Templates.getDocumentSettings` pour le document), `css/color-palette.css`. |
 | Mettre des bulles de variable ou des puces (date, heure, email, nom de l'utilisateur) dans un champ texte (Objet, À, Cc, Cci, nom du PDF) | `js/field-editor.js` (un éditeur d'une ligne qui se comporte comme l'`<input>` qu'il remplace), `js/field-codec.js` (la valeur enregistrée : texte brut ou HTML), `ReaderMode.fieldText` et `ReaderMode.smartChipValue` dans `js/reader-mode.js` (la valeur résolue, celle des puces), `css/field-editor.css`. |
 | Modifier un fichier de `css/` ou de `js/` | Monter son numéro `?v=` dans `index.html`, sinon le navigateur garde l'ancien. |
 
@@ -270,8 +272,8 @@ For anyone reading the code: what is where, and where to start. Line counts are 
   **Each export** loads its library on first use, with an integrity hash (SRI) that the browser checks.
 - **The data**: templates and settings live in `Publipostage_*` tables of the Grist document; display
   preferences (language, theme, shortcuts…) in the browser.
-- **The size**: 109 files in `js/` (42,100 lines: 31,300 of code, 8,300 of comments, 2,600 blank), 35
-  stylesheets (3,200 lines), a 760-line page. Four PDF font files weigh 2.5 MB in a few lines (data);
+- **The size**: 113 files in `js/` (42,800 lines: 31,800 of code, 8,400 of comments, 2,600 blank), 36
+  stylesheets (3,300 lines), a 770-line page. Four PDF font files weigh 2.5 MB in a few lines (data);
   `js/i18n.js` is text to translate, not logic.
 
 ## Where to start
@@ -315,7 +317,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 |---|---|
 | `js/grist-api.js` | The wrapper around the Grist API: startup and access, reads, writes, creation of the internal tables (after the person's consent), matching keys, the e-mail probe. |
 | `js/table-consent.js` | The "Create the widget’s tables in this document?" window and the gesture counter that asks again after a refusal; `js/grist-api.js` decides when to ask. |
-| `js/templates.js` | Templates: the `Publipostage_Modeles` table, reading, saving, header and footer (JSON). |
+| `js/templates.js` | Templates: the `Publipostage_Modeles` table, reading, saving, header and footer (JSON), and its row reserved for the document's settings (`TypeModele` = `reglages`). |
 | `js/template-preferences.js` | Each person's pins and folders (`Publipostage_PreferencesModeles`). |
 | `js/template-organizer.js`, `js/template-tree-select.js`, `js/template-organize-modal.js` | The template list as a "pinned + folders" tree and the "Organize my templates" window. |
 | `js/template-gallery.js`, `js/template-gallery-modal.js` | The catalog of ready-to-use templates (the `templates-gallery/` folder, same site as the widget) and the gallery window: grid, preview, "Use this template". |
@@ -334,7 +336,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/html-sanitize.js` | Allow-list filter, parsed in an inert document, for the HTML of Grist columns, imported templates and the gallery. |
 | `js/external-images.js` | Images from another site: a "Show" frame in their place until the click (nothing is remembered), flagged at all times afterwards, and a window before any export that would read them. |
 
-### The editor (24 files, 10,000 lines)
+### The editor (28 files, 10,500 lines)
 
 | File | Role |
 |---|---|
@@ -342,6 +344,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/editor-core.js` | Low-level helpers shared by the editor modules (no business logic). |
 | `js/editor-nodes.js` | The custom nodes and extensions: `#Variable` bubbles, calculation, conditional cells and blocks, images, table of contents. |
 | `js/floating-toolbars.js` | The floating bars of a selection: color, table, image, variable, tracked change. |
+| `js/color-palette.js`, `js/color-dialog.js`, `js/color-store.js`, `js/color-math.js` | The color menu (text, highlight, cell background, border line): the palette; the "Custom color" window; the colors kept per template and per document; the color calculations (a pure module). |
 | `js/main-toolbar.js` | The toolbar: button state, click wiring, image insertion. |
 | `js/format-painter.js`, `js/find-replace.js`, `js/link-dialog.js` | Format painter, Find / Replace, links. |
 | `js/callout.js`, `js/caption.js`, `js/keep-with-next.js`, `js/qr-code.js` | Callouts and signature, captions, "Keep with next", QR code. |
@@ -376,7 +379,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 
 | File | Role |
 |---|---|
-| `js/page-layout.js` | Margins, orientation, size and watermark of each template: the single source of the content width. |
+| `js/page-layout.js` | Margins, orientation, size, watermark and kept colors of each template: the single source of the content width. |
 | `js/page-layer.js` | "On every page" images and the watermark. |
 | `js/orientation-toggle.js`, `js/page-size-dialog.js`, `js/watermark-dialog.js` | The Page menu and its windows: orientation and size, "Custom size…", "Watermark…". |
 | `js/page-zoom.js` | On-screen page zoom, in Edit and Reading modes (corner pill, Fit, Ctrl + wheel); display only, the exports keep the real dimensions. |
@@ -440,7 +443,7 @@ wiring of the gallery and of Grist. It is the file that knows all the others.
 ### Stylesheets
 
 `css/style.css` (color tokens, light and dark theme, `--font-ui`), `css/toolbar-v2.css` (the top bar),
-`css/editor-v2.css` (the editor's text); the other 32 each go with a module or a window of `js/`
+`css/editor-v2.css` (the editor's text); the other 33 each go with a module or a window of `js/`
 (`css/callout.css` for `js/callout.js`) and say so in their first comment; `css/roboto-fonts.css` embeds
 the documents' font.
 
@@ -485,5 +488,6 @@ notes, which are not published here.
 | Add an export library | `js/export-common.js` (loader, integrity hash) and the security policy of `index.html`. |
 | Add an export engine of the widget (a script that only an export uses) | An inert `<script type="text/x-lazy-engine" data-engine="…">` tag in `index.html`, then its name in the `engines` list of the export that uses it (`js/main.js`): `js/export-engines.js` loads it when needed. |
 | A new document element (node, formatting) | `js/editor-nodes.js` (the editor), its sheet in `css/` (screen and Reading mode), then `js/pdf-export.js` and `js/docx-export.js`: each export converts it separately. |
+| Change the color palette, or add a color menu | `js/color-palette.js` (the palette and its rows; a menu plugs in through `createMenu`), `js/color-dialog.js` (the "Custom color" window), `js/color-store.js` (the kept colors: `PageLayout.getCustomColors` for the template, `Templates.getDocumentSettings` for the document), `css/color-palette.css`. |
 | Put variable bubbles or chips (date, time, user's email and name) in a text field (Subject, To, Cc, Bcc, PDF name) | `js/field-editor.js` (a one-line editor that behaves like the `<input>` it replaces), `js/field-codec.js` (the saved value: plain text or HTML), `ReaderMode.fieldText` and `ReaderMode.smartChipValue` in `js/reader-mode.js` (the resolved value, and the chips' value), `css/field-editor.css`. |
 | Modify a file in `css/` or `js/` | Bump its `?v=` number in `index.html`, otherwise the browser keeps the old one. |

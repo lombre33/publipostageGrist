@@ -66,6 +66,18 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   montre en tête de la colonne se cherche aussi. La même règle vaut pour « Organiser mes modèles », la
   galerie « Créer à partir d'un modèle » (« validé budget » retrouve « Budget validé ») et le filtre
   « Filtrer les colonnes… » d'« Autres attributs », où la valeur affichée en face se cherche aussi.
+- **Menu de couleur** : le texte, le surlignage, le fond de case et le trait des bordures ouvrent la même
+  palette, de dix colonnes sur cinq rangées (les gris, puis dix teintes en quatre tons, dont un ton foncé qui
+  se lit en texte sur la page blanche, avec un contraste d'au moins 4,5:1), au lieu de huit nuances et d'un
+  sélecteur caché sous un bouton : un clic sur une pastille pose la couleur. « Personnalisé… » ouvre la
+  fenêtre « Couleur personnalisée » (un carré saturation-luminosité, un curseur de teinte, le code
+  hexadécimal à 3 ou 6 chiffres, le rouge, le vert et le bleu) ; « Appliquer » pose la couleur et peut la
+  garder dans deux rangées de la palette, « Couleurs du modèle » (elles voyagent avec le modèle) et
+  « Couleurs du document » (partagées par tous les modèles et toute l'équipe). Une rangée garde dix
+  couleurs, la plus récente d'abord ; une croix, ou Suppr au clavier, en retire une. Les couleurs du
+  document sont écrites dans une ligne réservée de la table `Publipostage_Modeles` (« Réglages du
+  document »), créée à la première couleur gardée pour le document : aucune table de plus, et aucune liste
+  de modèles ne la montre.
 
 ### Corrigé
 
@@ -234,6 +246,16 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   to "Organize my templates", the "Create from a template" gallery ("validé budget" finds "Budget validé")
   and the "Filter columns…" filter of "Other attributes", where the displayed value next to each column is
   searched too.
+- **Color menu**: text, highlight, cell background and border line color open the same palette, ten columns
+  by five rows (the greys, then ten hues in four tones, one dark enough to read as text on the white page,
+  with a contrast of at least 4.5:1), instead of eight shades and a picker hidden under a button: a click on
+  a swatch applies the color. "Custom…" opens the "Custom color" window (a saturation-brightness square, a
+  hue slider, the 3- or 6-digit hex code, and the red, green and blue values); "Apply" applies the color and
+  can keep it in two rows of the palette, "Template colors" (they travel with the template) and "Document
+  colors" (shared by every template and the whole team). A row keeps ten colors, the most recent first; a
+  cross, or Delete on the keyboard, removes one. The document colors are written to a reserved row of the
+  `Publipostage_Modeles` table ("Réglages du document"), created when the first color is kept for the
+  document: no extra table, and no template list shows it.
 
 ### Fixed
 
