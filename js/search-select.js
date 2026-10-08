@@ -1,10 +1,11 @@
 // Liste déroulante avec recherche pour un <select> existant. Le <select> reste la source de vérité : masqué, il garde sa valeur et reçoit un
 // évènement `change` à chaque choix, donc le code qui l'écoute ou lit `.value` ne change pas. Un clic (ou ↓, ou une lettre) sur le champ ouvre un
-// panneau avec une zone de recherche et la liste ; les mots tapés (accents et casse ignorés, dans n'importe quel ordre) doivent tous figurer dans le
-// libellé.
+// panneau avec une zone de recherche et la liste ; les mots tapés (séparés par une espace) doivent tous figurer dans les noms de la ligne, dans
+// n'importe quel ordre, sans compter les accents, la casse, « _ », « . » et « - » : voir « Recherche par nom » plus bas.
 // Une <option> peut porter `data-name` (le nom) et `data-hint` (affiché entre parenthèses, plus discret) ; sans eux, son texte sert de nom. Le
 // libellé complet (« nom (indice) ») reste le texte de l'<option> (ce que voit et cherche quiconque n'a pas le panneau) et la recherche porte aussi
-// sur l'indice. Une <option> désactivée (le « — Choisissez… — » de départ) n'est jamais proposée : elle n'affiche que le champ fermé.
+// sur l'indice. `data-search` ajoute d'autres noms à chercher sans les afficher (la table et le libellé Grist d'une colonne). Une <option> désactivée
+// (le « — Choisissez… — » de départ) n'est jamais proposée : elle n'affiche que le champ fermé.
 // Autres cas lus dans le <select> :
 //  - <optgroup> : son libellé devient un intitulé au-dessus de ses lignes, et disparaît avec elles quand la recherche les écarte ;
 //  - <option> sans valeur mais permise (« -- Choisir une colonne -- », « — Aucune — ») : le choix « rien », proposé en tête tant qu'on ne cherche
@@ -39,12 +40,44 @@ const SearchSelect = (function () {
     return String(text == null ? '' : text).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   }
 
-  // Éléments de `items` (produits par readItems) dont le libellé contient tous les mots de `query`, dans l'ordre d'origine ; tout si la recherche est
+  // === Recherche par nom ===
+  // La même partout où une colonne, une table ou un modèle se cherche par son nom : les listes de ce fichier et la liste « # » (js/variables.js). Une
+  // espace sépare les mots de la saisie, qui peuvent venir dans n'importe quel ordre ; « _ », « . », « - » et le reste de la ponctuation ne comptent pas,
+  // ni dans la saisie ni dans les noms du candidat : « porteur 3 », « Porteur3 », « 3 porteur » et « projets porteur_3 » retrouvent tous Projets.Porteur_3,
+  // alors que « Porteur_3 », tapé en entier, ne retrouve pas Porteur_13 (c'est un seul mot, comme dans le nom).
+  const SEPARATORS = /[^\p{L}\p{N}]+/gu;
+  // Les noms déjà préparés : la liste « # » prépare chaque colonne du document à chaque frappe.
+  const MAX_PREPARED_NAMES = 20000;
+  const _prepared = new Map();
+  function prepareName(name) {
+    let key = _prepared.get(name);
+    if (key === undefined) {
+      key = normalize(name).replace(SEPARATORS, '');
+      if (_prepared.size >= MAX_PREPARED_NAMES) _prepared.clear();
+      _prepared.set(name, key);
+    }
+    return key;
+  }
+  // Les mots d'une saisie, sans séparateurs ; aucun quand elle ne porte ni lettre ni chiffre (la recherche est alors vide).
+  function searchWords(query) {
+    return normalize(query).split(/\s+/).map(word => word.replace(SEPARATORS, '')).filter(Boolean);
+  }
+  // Le texte où chercher un candidat : ses noms (nom affiché, indice, libellé, table...), chacun sans séparateurs, séparés par une espace pour qu'un mot ne
+  // passe pas de l'un à l'autre.
+  function searchKey(...names) {
+    return names.map(prepareName).join(' ');
+  }
+  // Vrai quand chaque mot de `words` (searchWords) se trouve dans `key` (searchKey) ; toujours vrai sans mot.
+  function foundIn(words, key) {
+    return words.every(word => key.indexOf(word) !== -1);
+  }
+
+  // Éléments de `items` (produits par readItems) dont les noms contiennent tous les mots de `query`, dans l'ordre d'origine ; tout si la recherche est
   // vide. Une ligne épinglée reste toujours ; le choix « rien » (`empty`) ne se propose que sans recherche.
   function filterItems(items, query) {
-    const words = normalize(query).split(/\s+/).filter(Boolean);
+    const words = searchWords(query);
     if (!words.length) return items.slice();
-    return items.filter(item => item.pinned || (!item.empty && words.every(word => item.haystack.indexOf(word) !== -1)));
+    return items.filter(item => item.pinned || (!item.empty && foundIn(words, item.haystack)));
   }
 
   // Le choix « rien » : une option de valeur vide, sauf si elle se déclare vrai choix (data-placeholder="false").
@@ -60,7 +93,7 @@ const SearchSelect = (function () {
       const hint = opt.dataset.hint || '';
       const parent = opt.parentElement;
       items.push({
-        value: opt.value, name, hint, haystack: normalize(name + ' ' + hint),
+        value: opt.value, name, hint, haystack: searchKey(name, hint, opt.dataset.search || ''),
         group: parent && parent.tagName === 'OPTGROUP' ? parent.label : '',
         pinned: opt.dataset.pinned === 'true',
         empty: isNoChoice(opt),
@@ -445,5 +478,5 @@ const SearchSelect = (function () {
     if (controller) controller.sync();
   }
 
-  return { attach, attachColumns, attachTables, attachTemplates, attachValues, attachSheets, sync, filterItems, readItems, normalize };
+  return { attach, attachColumns, attachTables, attachTemplates, attachValues, attachSheets, sync, filterItems, readItems, normalize, searchWords, searchKey, foundIn };
 })();

@@ -215,7 +215,8 @@ const AccessRights = (function () {
 
   function el(id) { return document.getElementById(id); }
 
-  function fillSelect(select, values, current, noneLabel) {
+  // `columnsOf` : la table dont `values` sont les colonnes, pour que leur libellé Grist se cherche aussi (rien pour la liste des tables).
+  function fillSelect(select, values, current, noneLabel, columnsOf) {
     if (!select) return;
     select.innerHTML = '';
     if (noneLabel !== null) {
@@ -231,6 +232,7 @@ const AccessRights = (function () {
       const opt = document.createElement('option');
       opt.value = v;
       opt.textContent = v;
+      if (columnsOf) opt.dataset.search = Variables.columnSearchText(columnsOf, v);
       select.appendChild(opt);
     });
     select.value = current || '';
@@ -267,11 +269,11 @@ const AccessRights = (function () {
     fillSelect(tableSelect, GristAPI.getTables(), current.table, none);
     const table = tableSelect.value;
     // Types proposés pour l'email : ceux qui livrent du texte brut par fetchTable (une Référence y arrive en id de ligne, jamais en email).
-    fillSelect(el(ids.email), table ? columnsOfType(table, ['Text', 'Choice', 'Any']) : [], current.emailColumn, none);
+    fillSelect(el(ids.email), table ? columnsOfType(table, ['Text', 'Choice', 'Any']) : [], current.emailColumn, none, table);
     const bools = table ? columnsOfType(table, ['Bool']) : [];
-    fillSelect(el(ids.readOnly), bools, current.readOnlyColumn, none);
-    fillSelect(el(ids.exportCol), bools, current.exportColumn, none);
-    fillSelect(el(ids.comments), bools, current.commentsColumn, none);
+    fillSelect(el(ids.readOnly), bools, current.readOnlyColumn, none, table);
+    fillSelect(el(ids.exportCol), bools, current.exportColumn, none, table);
+    fillSelect(el(ids.comments), bools, current.commentsColumn, none, table);
     // Verrouillé pour qui est lui-même en lecture seule : sinon l'onglet suffirait à se déverrouiller. Sauf quand la table des droits n'existe plus
     // (`tableGone`) : tout le monde est alors en lecture seule par précaution, y compris qui l'a réglée, et rien d'autre ne permettrait d'en choisir
     // une autre. Les droits restent en lecture seule jusqu'à ce qu'une table soit rechoisie.

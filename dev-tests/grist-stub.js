@@ -40,6 +40,7 @@ try {
     choices: {}, // { tableId: { colId: string[] } } - colonnes Choice/ChoiceList (widgetOptions.choices, cf. setVariables)
     displayCols: {}, // { tableId: { colId: colonne d'affichage } } - Références affichées par une colonne d'aide gristHelper_Display* (cf. setVariables)
     visibleCols: {}, // { tableId: { colId: colonne de la table liée } } - « Colonne à afficher » d'une Référence (visibleCol, cf. setVariables)
+    labels: {}, // { tableId: { colId: libellé } } - le nom de l'en-tête quand il diffère de l'identifiant (label de _grist_Tables_column, cf. setColumnLabels) ; absent = le libellé est l'identifiant
     rows: {}, // { tableId: { id: [...], col: [...] } } forme columnaire Grist
     // Un widget réel ne peut jamais désinscrire un onRecord (pas d'"offRecord" dans l'API publique) et PLUSIEURS souscriptions coexistent, chacune
     // recevant CHAQUE événement indépendamment (grist-plugin-api.ts : chaque appel à onRecord() ajoute son propre écouteur 'message' interne) - donc
@@ -138,6 +139,14 @@ try {
     rebuildColumnMeta();
   }
 
+  // Le libellé (l'en-tête que Grist montre) de colonnes de `tableId`, quand il n'est pas leur identifiant : { colId: libellé }. Grist tire l'identifiant du libellé
+  // (accents retirés, le reste en « _ ») mais les deux se changent ensuite l'un sans l'autre ; sans appel ici, le libellé d'une colonne est son identifiant, comme
+  // pour une colonne créée par l'API. Gardé d'un setVariables à l'autre de la même table.
+  function setColumnLabels(tableId, labels) {
+    state.labels[tableId] = Object.assign({}, state.labels[tableId], labels);
+    rebuildColumnMeta();
+  }
+
   // Identifiants de ligne de _grist_Tables et de _grist_Tables_column, comme Grist les donne : attribués à la création d'une table ou d'une colonne, jamais décalés ni réutilisés
   // (un renommage garde le sien - renameColumn / renameTable ci-dessous ; supprimer une colonne ou une table ne change pas ceux des autres ; une colonne recréée sous le même nom en reçoit un neuf).
   // Les colonnes sont rangées par identifiant de leur table + nom : renommer une table ne les déplace pas.
@@ -149,7 +158,7 @@ try {
   // (refreshColumnTypes, cf. js/grist-api.js) - un seul appel idempotent suffit,
   // reconstruit tout à chaque fois à partir de state.tables/columns/choices, avec les identifiants de ligne de metaIds ci-dessus.
   function rebuildColumnMeta() {
-    const gtc = columnarEmpty(['parentId', 'colId', 'type', 'widgetOptions', 'displayCol', 'visibleCol']);
+    const gtc = columnarEmpty(['parentId', 'colId', 'type', 'widgetOptions', 'displayCol', 'visibleCol', 'label']);
     const rowIdOf = {}; // "table.colonne" -> id de ligne dans _grist_Tables_column, pour displayCol
     state.tables.forEach(t => Object.keys(state.columns[t] || {}).forEach(colId => { rowIdOf[t + '.' + colId] = columnRowId(t, colId); }));
     state.tables.forEach(t => {
@@ -162,6 +171,7 @@ try {
         const shown = state.visibleCols[t] && state.visibleCols[t][colId];
         const linked = /^Ref(?:List)?:(.+)$/.exec(state.columns[t][colId]);
         gtc.visibleCol.push((shown && linked && rowIdOf[linked[1] + '.' + shown]) || 0);
+        gtc.label.push((state.labels[t] && state.labels[t][colId]) || colId);
       });
     });
     // Ce qui a disparu du schéma perd son identifiant (jamais redonné : les compteurs ne reculent pas).
@@ -200,7 +210,7 @@ try {
     delete metaIds.columns[prefix + oldId];
     state.columns[tableId] = renameKey(columns, oldId, newId);
     if (state.rows[tableId] && oldId in state.rows[tableId]) state.rows[tableId] = renameKey(state.rows[tableId], oldId, newId);
-    ['choices', 'displayCols', 'visibleCols'].forEach(bag => { if (state[bag][tableId]) state[bag][tableId] = renameKey(state[bag][tableId], oldId, newId); });
+    ['choices', 'displayCols', 'visibleCols', 'labels'].forEach(bag => { if (state[bag][tableId]) state[bag][tableId] = renameKey(state[bag][tableId], oldId, newId); });
     Object.keys(state.displayCols[tableId] || {}).forEach(k => { if (state.displayCols[tableId][k] === oldId) state.displayCols[tableId][k] = newId; });
     state.tables.forEach(t => Object.keys(state.visibleCols[t] || {}).forEach(k => {
       const linked = /^Ref(?:List)?:(.+)$/.exec((state.columns[t] || {})[k] || '');
@@ -217,7 +227,7 @@ try {
     metaIds.tables[newId] = tableRowId(oldId);
     delete metaIds.tables[oldId];
     state.tables[at] = newId;
-    ['columns', 'choices', 'displayCols', 'visibleCols', 'rows', 'nextRowId', 'primaryViewOf'].forEach(bag => {
+    ['columns', 'choices', 'displayCols', 'visibleCols', 'labels', 'rows', 'nextRowId', 'primaryViewOf'].forEach(bag => {
       if (state[bag] && oldId in state[bag]) { state[bag][newId] = state[bag][oldId]; delete state[bag][oldId]; }
     });
     state.tables.forEach(t => Object.keys(state.columns[t] || {}).forEach(k => {
@@ -234,7 +244,7 @@ try {
     if (!state.columns[tableId] || !(colId in state.columns[tableId])) return false;
     delete state.columns[tableId][colId];
     if (state.rows[tableId]) delete state.rows[tableId][colId];
-    ['choices', 'displayCols', 'visibleCols'].forEach(bag => { if (state[bag][tableId]) delete state[bag][tableId][colId]; });
+    ['choices', 'displayCols', 'visibleCols', 'labels'].forEach(bag => { if (state[bag][tableId]) delete state[bag][tableId][colId]; });
     rebuildColumnMeta();
     return true;
   }
@@ -244,7 +254,7 @@ try {
     const at = state.tables.indexOf(tableId);
     if (at === -1) return false;
     state.tables.splice(at, 1);
-    ['columns', 'choices', 'displayCols', 'visibleCols', 'rows', 'nextRowId', 'primaryViewOf'].forEach(bag => { if (state[bag]) delete state[bag][tableId]; });
+    ['columns', 'choices', 'displayCols', 'visibleCols', 'labels', 'rows', 'nextRowId', 'primaryViewOf'].forEach(bag => { if (state[bag]) delete state[bag][tableId]; });
     rebuildColumnMeta();
     return true;
   }
@@ -609,7 +619,7 @@ try {
     },
   };
 
-  window.__gristStub = { state, setVariables, setRows, setHiddenColumns, setAccessLevel, setWidgetOptions, setUserEmail, setUserName, setDocId, renameColumn, renameTable, deleteColumn, dropTable, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, remoteWrite, getRow, dropColumn, resetPages, readPages, setLatency, resetInFlightStats, failReadBackOnce };
+  window.__gristStub = { state, setVariables, setColumnLabels, setRows, setHiddenColumns, setAccessLevel, setWidgetOptions, setUserEmail, setUserName, setDocId, renameColumn, renameTable, deleteColumn, dropTable, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, remoteWrite, getRow, dropColumn, resetPages, readPages, setLatency, resetInFlightStats, failReadBackOnce };
   // Point d'ancrage pour seeder AVANT que main.js:init() ne tourne (donc avant le tout premier
   // fetchTable de GristAPI.init()) - contrairement à un appel de setVariables/setRows APRÈS "Widget
   // prêt.", qui ne peut jamais tester "le widget démarre avec tel modèle déjà marqué par défaut" (cf.

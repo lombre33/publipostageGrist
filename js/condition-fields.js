@@ -39,10 +39,12 @@ const ConditionFields = (function () {
   function appendColumnOption(parent, value, table, column) {
     // Une colonne de la liste : `value` est « Colonne » (table de la page) ou « Table.Colonne », et c'est aussi son nom à l'écran. Le type Grist en est
     // l'indice dans la liste avec recherche (« Date de début (date) »), qui permet de chercher « date » ; le texte de l'<option>, « nom (indice) »,
-    // sert à la liste native de repli. Exportée : le tri d'une boucle (js/variable-loop.js) liste ses colonnes pareil.
+    // sert à la liste native de repli. Sa table et son libellé Grist se cherchent aussi (`data-search`). Exportée : le tri d'une boucle
+    // (js/variable-loop.js) liste ses colonnes pareil.
     const hint = friendlyTypeLabel(GristAPI.getColumnType(table, column));
     const option = Dom.option(value, hint ? value + ' (' + hint + ')' : value);
     option.dataset.name = value;
+    option.dataset.search = Variables.columnSearchText(table, column);
     if (hint) option.dataset.hint = hint;
     parent.appendChild(option);
   }

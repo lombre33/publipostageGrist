@@ -10,6 +10,12 @@ const Variables = (function () {
     } catch (e) { return '#'; }
   }
 
+  // Ce que la liste « # » lit après le déclencheur : des lettres, des chiffres, des espaces (le navigateur écrit une espace insécable en fin de ligne),
+  // « _ », « . » et « - », les mots d'un nom de colonne (js/search-select.js:searchWords). Une espace juste après le déclencheur n'ouvre rien (« # » puis
+  // une espace est du texte, comme avant) et toute autre ponctuation ferme la liste : « #Titre, » n'est pas une recherche, Entrée n'y pose pas la variable.
+  const QUERY_CHARS = '[\\p{L}\\p{N}_.\\s-]*';
+  const NAME_QUERY = new RegExp('^(?!\\s)' + QUERY_CHARS + '$', 'u');
+
   let acBox = null;
   let acItemsBox = null;
   let currentItems = [];
@@ -101,7 +107,7 @@ const Variables = (function () {
     return { SMART_CHIP_ITEMS, displayKey, ensureBox };
   })();
 
-  const { currentTables, prioritizeTables, matchingVariables, refreshSchemaOnce, computeItems } = (function () {
+  const { currentTables, prioritizeTables, matchingVariables, columnSearchText, refreshSchemaOnce, computeItems } = (function () {
     // Les entrées de la liste : tables en cours, variables qui correspondent, onglet actif
 
     // Tables « en cours », la plus proche d'abord : celle que parcourt la zone répétée où est le curseur (js/variable-loop.js:loopTableAt ; `editor`
@@ -120,12 +126,31 @@ const Variables = (function () {
       return [].concat(...groups, others);
     }
 
-    // Les variables dont la clé « Table.Colonne » contient la saisie `query`, sans les colonnes d'aide. Sans accents ni casse, comme toutes les listes
-    // à recherche (js/search-select.js:normalize) : « télé » retrouve Telephone, les identifiants de Grist n'ayant jamais d'accent. Aucune limite de
-    // longueur : la personne cherche par le nom, elle ne fait pas défiler la liste.
+    // Les noms sous lesquels une colonne se cherche, d'un seul tenant : sa clé « Table.Colonne » (la table se cherche avec la colonne) et son libellé Grist
+    // (js/grist-api.js:getColumnLabel). Pour la liste « # » comme pour le `data-search` des listes avec recherche (js/search-select.js).
+    function columnSearchText(table, column) {
+      const label = GristAPI.getColumnLabel(table, column);
+      return table + '.' + column + (label ? ' ' + label : '');
+    }
+
+    // Le test d'un nom pour la saisie `query` de la liste « # » : tous ses mots (js/search-select.js:searchWords) dans `search` (les noms de l'entrée, d'un
+    // seul tenant) et, pour un mot qui finit par un point, ce point-là dans `key`, tel quel. Un point ne compte pas dans un nom (« Porteur.3 » vaut
+    // « Porteur 3 »), sauf tout à la fin d'un mot, où il peut finir la phrase : « #Projets. » propose les colonnes de Projets, comme avant, mais « Voir
+    // #Projets.Nom. » ne propose plus rien (la liste se refermait au point, Entrée ne pose pas la variable).
+    function nameTest(query) {
+      const words = SearchSelect.searchWords(query);
+      const dotted = SearchSelect.normalize(query).split(/\s+/).filter(word => word.endsWith('.'));
+      return (search, key) => SearchSelect.foundIn(words, SearchSelect.searchKey(search))
+        && (!dotted.length || dotted.every(word => SearchSelect.normalize(key).includes(word)));
+    }
+
+    // Les variables dont les noms contiennent les mots de la saisie `query`, sans les colonnes d'aide : la recherche par nom de toutes les listes
+    // (js/search-select.js:searchWords), donc sans accents ni casse, sans compter « _ », « . » ni « - », les mots (séparés par une espace) dans n'importe
+    // quel ordre : « porteur 3 » et « Porteur3 » retrouvent Projets.Porteur_3. Aucune limite de longueur : la personne cherche par le nom, elle ne fait
+    // pas défiler la liste.
     function matchingVariables(query) {
-      const wanted = SearchSelect.normalize(query);
-      return GristAPI.getAllVariables().filter(v => !GristAPI.isHelperColumn(v.column) && SearchSelect.normalize(v.key).includes(wanted));
+      const found = nameTest(query);
+      return GristAPI.getAllVariables().filter(v => !GristAPI.isHelperColumn(v.column) && found(columnSearchText(v.table, v.column), v.key));
     }
 
     function refreshSchemaOnce() {
@@ -138,24 +163,26 @@ const Variables = (function () {
     // les colonnes de la table de la page viennent en tête ; dans une zone répétée, celles de la table parcourue passent avant elles. `fieldMode` : la
     // liste d'un champ texte (Objet, À, Cc, Cci, nom du PDF), qui n'a que des variables - ni onglet des puces, ni note de bas de page, ni date.
     function computeItems(query, editor, fieldMode) {
+      if (!NAME_QUERY.test(query)) return [];
       if (!fieldMode && activeTab === 'chips') {
         // Pas de note de bas de page dans un en-tête ou un pied : la zone est répétée sur chaque page, sans repère de page physique où ancrer une note.
         const items = Editor.isEditingHeaderFooter() ? SMART_CHIP_ITEMS.filter(v => v.chipKind !== 'footnote') : SMART_CHIP_ITEMS;
-        const wanted = SearchSelect.normalize(query);
-        return items.filter(v => SearchSelect.normalize(displayKey(v)).includes(wanted));
+        const found = nameTest(query);
+        return items.filter(v => found(displayKey(v), displayKey(v)));
       }
       refreshSchemaOnce();
       return fieldMode ? fieldItems(query, editor) : prioritizeTables(matchingVariables(query), currentTables(editor));
     }
-    // La liste d'un champ texte : après « Projet.Accompagnateur. », les colonnes de la ligne que désigne cette Référence (pathItems) ; sinon la saisie filtre
-    // les clés « Table.Colonne », celles de la table de la page d'abord. Une clé tapée en entier, seule proposition, n'a rien à compléter : la liste reste
-    // fermée.
+    // La liste d'un champ texte : après « Projet.Accompagnateur. », les colonnes de la ligne que désigne cette Référence (pathItems) ; sinon la saisie cherche
+    // la colonne par son nom (matchingVariables), celles de la table de la page d'abord. Une clé tapée en entier, seule proposition, n'a rien à compléter : la
+    // liste reste fermée, une espace ou un tiret tapé derrière elle n'y change rien.
     function fieldItems(query, editor) {
       const items = pathItems(query) || prioritizeTables(matchingVariables(query), currentTables(editor));
-      if (!items.length || (items.length === 1 && SearchSelect.normalize(items[0].key) === SearchSelect.normalize(query))) return [];
+      const typed = SearchSelect.normalize(query).replace(/[\s-]+$/, '');
+      if (!items.length || (items.length === 1 && SearchSelect.normalize(items[0].key) === typed)) return [];
       return items;
     }
-    return { currentTables, prioritizeTables, matchingVariables, refreshSchemaOnce, computeItems };
+    return { currentTables, prioritizeTables, matchingVariables, columnSearchText, refreshSchemaOnce, computeItems };
   })();
 
   const { setTabsVisible, render, select, moveSelection, position, preferChipsTab } = (function () {
@@ -318,6 +345,9 @@ const Variables = (function () {
               // Réglable dans le panneau Réglages ; un changement n'a effet qu'après rechargement, ce `char` étant lu une fois, à la construction de
               // l'éditeur.
               char: triggerChar(),
+              // La saisie va jusqu'au curseur, espaces comprises : « #porteur 3 » cherche les deux mots (la liste se vide, et se tait, dès qu'aucune colonne ne
+              // les porte tous).
+              allowSpaces: true,
               // Jamais dans un bloc de code : un « # » de commentaire ou de couleur (#fff) y ouvrirait la liste, et une bulle ne peut pas vivre dans du
               // texte brut.
               allow: ({ state, range }) => !state.doc.resolve(range.from).parent.type.spec.code,
@@ -348,6 +378,8 @@ const Variables = (function () {
               editor: this.editor,
               char: triggerChar(),
               allowedPrefixes: null,
+              // Comme dans le corps : la saisie va jusqu'au curseur, espaces comprises (« #porteur 3 »).
+              allowSpaces: true,
               items: ({ query, editor }) => computeItems(query, editor, true),
               // La liste se ferme au choix : la fenêtre de la clé de correspondance, si elle s'ouvre, ne la retrouve pas ouverte derrière elle, et un refus laisse le
               // texte tapé sans liste, comme le champ d'avant.
@@ -384,8 +416,9 @@ const Variables = (function () {
         if (!reached) return null;
         hops.push(column);
       }
-      const partial = SearchSelect.normalize(raw.slice(cut + 1));
-      return GristAPI.getVisibleColumns(reached).filter(c => SearchSelect.normalize(c).includes(partial)).map(c => {
+      const words = SearchSelect.searchWords(raw.slice(cut + 1));
+      const found = c => SearchSelect.foundIn(words, SearchSelect.searchKey(c, GristAPI.getColumnLabel(reached, c)));
+      return GristAPI.getVisibleColumns(reached).filter(found).map(c => {
         const path = hops.concat(c).join('.');
         return { key: table + '.' + path, table, column: path };
       });
@@ -395,18 +428,18 @@ const Variables = (function () {
       const closeList = () => { hide(); filenameInputState = null; schemaRefreshedForSession = false; };
       const caret = el.selectionStart;
       if (caret == null) { closeList(); return; }
-      // Lettres accentuées comprises : « #télé » retrouve Telephone comme dans l'éditeur.
-      const match = el.value.slice(0, caret).match(new RegExp(triggerChar().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([\\p{L}\\p{N}_.]*)$', 'u'));
+      // Les mêmes caractères que dans l'éditeur (QUERY_CHARS) : « #télé » retrouve Telephone et « #porteur 3 » Projets.Porteur_3.
+      const match = el.value.slice(0, caret).match(new RegExp(triggerChar().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '((?!\\s)' + QUERY_CHARS + ')$', 'u'));
       if (!match) { closeList(); return; }
       // Relu dès le premier caractère tapé après le déclencheur : sinon chercher une colonne toute neuve ne trouverait rien, la liste vide se fermant
       // avant d'avoir pu relire.
       refreshSchemaOnce();
-      const query = SearchSelect.normalize(match[1]);
-      // Après « Projet.Accompagnateur. » : les colonnes de la ligne que désigne cette Référence ; sinon la saisie filtre les clés « Table.Colonne »,
-      // celles de la table de la page d'abord.
+      const query = SearchSelect.normalize(match[1]).replace(/[\s-]+$/, '');
+      // Après « Projet.Accompagnateur. » : les colonnes de la ligne que désigne cette Référence ; sinon la saisie cherche la colonne par son nom
+      // (matchingVariables), celles de la table de la page d'abord.
       const items = pathItems(match[1]) || prioritizeTables(matchingVariables(match[1]), currentTables());
-      // Une clé tapée en entier, seule proposition, n'a rien à compléter (clé tapée à la main, curseur revenu derrière une variable posée) : la liste
-      // reste fermée.
+      // Une clé tapée en entier, seule proposition, n'a rien à compléter (clé tapée à la main, curseur revenu derrière une variable posée, espace ou tiret
+      // tapé derrière) : la liste reste fermée.
       if (!items.length || (items.length === 1 && SearchSelect.normalize(items[0].key) === query)) { hide(); filenameInputState = null; return; }
       filenameInputState = { el, start: caret - match[0].length, end: caret };
       currentItems = items;
@@ -992,14 +1025,15 @@ const Variables = (function () {
       placeholder.disabled = true;
       placeholder.selected = true;
       select.appendChild(placeholder);
-      const add = (value, name, hint) => {
+      const add = (value, name, hint, search) => {
         const option = Dom.option(value, name + ' (' + hint + ')');
         option.dataset.name = name;
         option.dataset.hint = hint;
+        if (search) option.dataset.search = search;
         select.appendChild(option);
       };
       add('id', I18n.t('linkConfig.rowId'), tableId);
-      GristAPI.getColumns(tableId).forEach(colId => add(colId, colId, columnHint(tableId, colId)));
+      GristAPI.getColumns(tableId).forEach(colId => add(colId, colId, columnHint(tableId, colId), columnSearchText(tableId, colId)));
     }
     function describeRule(rule) {
       if (rule.mode === 'singleton') return I18n.t('linkConfig.describeSingleton');
@@ -1240,7 +1274,7 @@ const Variables = (function () {
   // classe ses colonnes comme la liste « # »).
   return {
     createExtension, createFieldExtension, resolveVariable, resolveVariableResult, resolveRawValue, resolveTextVariables, replaceTextVariables, findTextVariables, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar,
-    preferChipsTab, ensureLinkConfigured, editLinkRule, describeLinkVia, resolveLinkedRows, resolveRows, formatValue, listTexts, resolveListTexts, zeroHidden, cellValue, currentTables, prioritizeTables,
+    preferChipsTab, ensureLinkConfigured, editLinkRule, describeLinkVia, resolveLinkedRows, resolveRows, formatValue, listTexts, resolveListTexts, zeroHidden, cellValue, currentTables, prioritizeTables, columnSearchText,
     resolveCalcResult, resolveCalc, badgeProblem, calcProblem, formulaErrorText,
   };
 })();

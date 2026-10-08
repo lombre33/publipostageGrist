@@ -86,7 +86,11 @@ const VariableColumn = (function () {
       host = Dom.el('div');
       host.id = 'v2-var-column-search';
       const select = Dom.el('select');
-      select.append(...candidates.map(v => Dom.option(v.key, v.key)));
+      select.append(...candidates.map(v => {
+        const option = Dom.option(v.key, v.key);
+        option.dataset.search = Variables.columnSearchText(v.table, v.column);
+        return option;
+      }));
       host.appendChild(select);
       document.body.appendChild(host);
       select.selectedIndex = -1; // rien de choisi au départ : même la première ligne déclenche `change`

@@ -22,6 +22,8 @@ const GristAPI = (function () {
   // { tableId: { colId: colonne d'affichage } } - pour une Référence, la colonne d'aide (« gristHelper_Display… ») que Grist calcule dans la même
   // table avec la valeur affichée, cf. getDisplayColumn.
   let _displayColByTable = {};
+  // { tableId: { colId: libellé } } - le nom que Grist montre dans l'en-tête de la colonne, seulement quand il diffère de l'identifiant, cf. getColumnLabel.
+  let _columnLabelsByTable = {};
   // { tableId: { colId: { table, column } } } - pour une colonne Référence / liste de références, la colonne de la table liée que Grist affiche à la
   // place de l'id (visibleCol, « Colonne à afficher » du panneau de droite), cf. getReferenceColumn. Seules celles dont le type se lit comme du texte
   // ou un nombre.
@@ -546,6 +548,11 @@ const GristAPI = (function () {
       return null;
     }
   }
+  // Le libellé de la colonne `i` (label, schema.ts : le nom de son en-tête dans Grist), '' quand il manque ou qu'il redit l'identifiant.
+  function labelOf(colsMeta, i) {
+    const label = colsMeta.label && colsMeta.label[i];
+    return typeof label === 'string' && label !== colsMeta.colId[i] ? label : '';
+  }
   // displayCol (schema.ts : Ref:_grist_Tables_column) : la colonne dont Grist affiche la valeur, la colonne elle-même si 0
   // (ColumnRec.displayColModel, grist-core). L'identifiant de colonne de l'aide d'affichage de la colonne `i`, null si elle s'affiche elle-même.
   function displayColIdOf(colsMeta, i, colIdByRowId) {
@@ -572,6 +579,7 @@ const GristAPI = (function () {
     const choices = {};
     const displayCols = {};
     const referenceCols = {};
+    const labels = {};
     try {
       const [tablesMeta, colsMeta] = await (metaRead || readColumnMeta());
       const tableIdByRowId = tableIdsByRowId(tablesMeta);
@@ -589,11 +597,14 @@ const GristAPI = (function () {
         if (shown) rowOf(referenceCols, tableId)[colId] = shown;
         const columnChoices = choicesOf(colsMeta, i);
         if (columnChoices) rowOf(choices, tableId)[colId] = columnChoices;
+        const label = labelOf(colsMeta, i);
+        if (label) rowOf(labels, tableId)[colId] = label;
       }
       _columnTypesByTable = types;
       _columnChoicesByTable = choices;
       _displayColByTable = displayCols;
       _referenceColumnByTable = referenceCols;
+      _columnLabelsByTable = labels;
     } catch (e) {
       console.warn('[GristAPI] refreshColumnTypes: échec', e);
     }
@@ -680,6 +691,13 @@ const GristAPI = (function () {
   // Liste des choix configurés (widgetOptions.choices) d'une colonne Choice/ChoiceList, ou null si absente/non applicable - cf. refreshColumnTypes.
   function getColumnChoices(tableId, colId) {
     return (_columnChoicesByTable[tableId] && _columnChoicesByTable[tableId][colId]) || null;
+  }
+
+  // Le libellé que Grist montre en tête d'une colonne, '' quand il redit l'identifiant. Grist tire l'identifiant du libellé en retirant les accents et
+  // en remplaçant le reste (espaces, ponctuation, « œ ») par « _ » (« Date d'envoi » devient Date_d_envoi), mais les deux peuvent ensuite être
+  // changés l'un sans l'autre : la recherche par nom (js/variables.js:columnSearchText) cherche dans les deux.
+  function getColumnLabel(tableId, colId) {
+    return (_columnLabelsByTable[tableId] && _columnLabelsByTable[tableId][colId]) || '';
   }
 
   function getTables() { return _tables; }
@@ -1035,5 +1053,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnChoices, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, getCurrentUserName, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, createWriteQueue, createUserEmailCache, createMemoizedLoad };
+  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnChoices, getColumnLabel, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, getCurrentUserName, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, createWriteQueue, createUserEmailCache, createMemoizedLoad };
 })();

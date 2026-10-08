@@ -6,7 +6,7 @@
 // Écrans : fenêtre de condition, filtre et « Trier par » de la boucle, règles et listes de modèles des macro-modèles (et la règle sur deux lignes, section ruleRows, en
 // clair et en sombre), Réglages > Accès (la table et les colonnes), menu « Image depuis une variable » de la barre, champ Valeur d'une règle (section values : colonne
 // à choix, Référence, très longue liste plafonnée à 500 lignes, en clair et en sombre ; section boolValues : la liste Oui / Non d'une colonne Oui / Non ; section hashList et fin de
-// imagePicker : la table de la page en tête de la liste « # » et du menu Image).
+// imagePicker : la table de la page en tête de la liste « # » et du menu Image ; section nameSearch : « porteur 3 », « Porteur3 » et le libellé Grist dans la liste « # », la fenêtre de condition et le champ Nom du PDF).
 // Lancé par run-headless.mjs (groupe Node "columnSearchMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-column-search-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -1087,6 +1087,234 @@ const SECTIONS = {
     });
     await parkMouse();
     await page.evaluate(() => {
+      const badge = (table, column) => `<span class="var-badge" data-table="${table}" data-column="${column}" data-key="${table}.${column}"></span>`;
+      Editor.setHTML(`<p>Objet : ${badge('CsDossiers', 'Titre')}</p><p>Lignes : ${badge('CsLignes', 'Designation')}.</p>`);
+    });
+    await page.waitForTimeout(250);
+  },
+
+  // Recherche par nom (Antoine, 2026-10-08 : « si la colonne est Projets.Porteur_3, en tapant "porteur 3" ou "Porteur3" je ne la trouve pas ; plus exhaustif ») à la vraie frappe et à la vraie souris à
+  // 700×400, dans les trois endroits où une colonne se cherche : la liste « # » du corps (les espaces tapés restent dans la recherche, y compris l'espace de fin de ligne que le navigateur écrit en insécable),
+  // la liste de la fenêtre de condition et celle du champ Nom du PDF. Les tables NsAnnuaire / NsProjets sont retirées à la fin.
+  async nameSearch() {
+    const box = HASH_BOX;
+    const P1 = 'NsProjets.Porteur_1', P3 = 'NsProjets.Porteur_3', P13 = 'NsProjets.Porteur_13';
+    const sameRows = (got, expected) => !!got && JSON.stringify(got.rows) === JSON.stringify(expected);
+    await page.evaluate(async () => {
+      const stub = window.__gristStub;
+      stub.setVariables('NsAnnuaire', { Nom: 'Text', Telephone: 'Text' });
+      stub.setVariables('NsProjets', { Titre: 'Text', Porteur_1: 'Text', Porteur_3: 'Text', Porteur_13: 'Text', Responsable: 'Ref:NsAnnuaire', Echeance: 'Date' });
+      stub.setColumnLabels('NsProjets', { Porteur_3: 'Chef de projet n°3' });
+      stub.setRows('NsAnnuaire', [{ id: 7, Nom: 'Dupont Jean', Telephone: '06 11 22 33 44' }]);
+      stub.setRows('NsProjets', [{ id: 1, Titre: 'Projet A', Porteur_1: 'a', Porteur_3: 'c', Porteur_13: 'm', Responsable: 7, Echeance: 631152000 }]);
+      await GristAPI.refreshSchema();
+      stub.fireRecord({ id: 1, Titre: 'Projet A', Porteur_1: 'a', Porteur_3: 'c', Porteur_13: 'm', Responsable: 'Dupont Jean', Echeance: 631152000 }, 'NsProjets');
+      Editor.setHTML('<p></p>');
+    });
+    const badgeKeys = () => page.evaluate(() => {
+      const out = [];
+      EditorCore.getEditor().state.doc.descendants(node => { if (node.type.name === 'varBadge') out.push(node.attrs.key); });
+      return out;
+    });
+    const paragraphs = () => page.evaluate(() => { const out = []; EditorCore.getEditor().state.doc.forEach(node => out.push(node.textContent)); return out; });
+    const emptyParagraph = async () => {
+      await page.evaluate(() => Editor.setHTML('<p></p>'));
+      await parkMouse();
+      const paragraph = await hitTest('.tiptap p');
+      await page.mouse.click(paragraph.x, paragraph.y);
+      await page.waitForTimeout(150);
+      return paragraph;
+    };
+    // --- La liste « # » du corps.
+    const paragraph = await emptyParagraph();
+    check('recherche par nom : le paragraphe vide, où le clic va tomber, est au premier plan', paragraph.found && paragraph.inViewport && paragraph.onTop, paragraph);
+    await page.keyboard.type('#porteur 3');
+    await page.waitForTimeout(250);
+    const spaced = await hashListed();
+    const firstRow = await hitTest(box + ' .ac-item');
+    check('recherche par nom : « #porteur 3 » tapé (l’espace comprise) ouvre la liste sur Porteur_3 puis Porteur_13 de la table de la page, entière dans le panneau, première ligne choisie, visible et au premier plan',
+      sameRows(spaced, [P3, P13]) && spaced.inside && spaced.selected === P3 && firstRow.found && firstRow.inViewport && firstRow.onTop, { spaced, firstRow });
+    await page.keyboard.press('Backspace');
+    await page.keyboard.press('Backspace');
+    await page.waitForTimeout(150);
+    const stem = await hashListed();
+    await page.keyboard.type(' ');
+    await page.waitForTimeout(200);
+    const trailing = await hashListed();
+    await page.keyboard.type('3');
+    await page.waitForTimeout(200);
+    const again = await hashListed();
+    check('recherche par nom : « #porteur » liste les trois Porteur ; l’espace tapée derrière (écrite en insécable en fin de ligne) laisse la liste ouverte sur les mêmes lignes ; le « 3 » qui suit la réduit à Porteur_3 et Porteur_13',
+      sameRows(stem, [P1, P3, P13]) && sameRows(trailing, [P1, P3, P13]) && sameRows(again, [P3, P13]), { stem, trailing, again });
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(250);
+    const inserted = { keys: await badgeKeys(), texts: await paragraphs(), list: await hashListed() };
+    check('recherche par nom : Entrée pose la variable de la première ligne (NsProjets.Porteur_3) à la place de tout ce qui a été tapé, espace comprise, et ferme la liste',
+      JSON.stringify(inserted.keys) === JSON.stringify([P3]) && inserted.texts.length === 1 && inserted.texts[0] === '' && inserted.list === null, inserted);
+    await emptyParagraph();
+    await page.keyboard.type('#Porteur3');
+    await page.waitForTimeout(250);
+    const glued = await hashListed();
+    await page.keyboard.press('Escape');
+    await emptyParagraph();
+    await page.keyboard.type('#3 porteur');
+    await page.waitForTimeout(250);
+    const reversed = await hashListed();
+    await page.keyboard.press('Escape');
+    await emptyParagraph();
+    await page.keyboard.type('#chef projet');
+    await page.waitForTimeout(250);
+    const labelled = await hashListed();
+    await page.keyboard.press('Escape');
+    check('recherche par nom : « #Porteur3 » ne garde que Porteur_3 ; « #3 porteur » (autre ordre) garde Porteur_3 et Porteur_13 ; « #chef projet » retrouve Porteur_3 par son libellé Grist (« Chef de projet n°3 »)',
+      sameRows(glued, [P3]) && sameRows(reversed, [P3, P13]) && sameRows(labelled, [P3]), { glued, reversed, labelled });
+    // Rien ne correspond : Entrée n'est pas prise par la liste.
+    await emptyParagraph();
+    await page.keyboard.type('#zzz qqq');
+    await page.waitForTimeout(250);
+    const noMatch = await hashListed();
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(200);
+    const split = { keys: await badgeKeys(), texts: await paragraphs() };
+    await emptyParagraph();
+    await page.keyboard.type('#Titre,');
+    await page.waitForTimeout(250);
+    const punctuated = await hashListed();
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(200);
+    const splitComma = { keys: await badgeKeys(), texts: await paragraphs() };
+    check('recherche par nom : quand rien ne correspond (« #zzz qqq »), ou derrière une virgule (« #Titre, »), la liste est fermée et Entrée coupe le paragraphe sans poser de variable, le texte tapé intact',
+      noMatch === null && split.keys.length === 0 && JSON.stringify(split.texts) === JSON.stringify(['#zzz qqq', '']) && punctuated === null && splitComma.keys.length === 0 && JSON.stringify(splitComma.texts) === JSON.stringify(['#Titre,', '']),
+      { noMatch, split, punctuated, splitComma });
+    // Le point : celui qui finit la phrase ferme la liste (comme avant), derrière le nom d'une table il liste ses colonnes, au milieu d'un nom il ne compte pas.
+    await emptyParagraph();
+    await page.keyboard.type('Voir #NsProjets.Titre.');
+    await page.waitForTimeout(250);
+    const sentenceEnd = await hashListed();
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(200);
+    const splitDot = { keys: await badgeKeys(), texts: await paragraphs() };
+    await emptyParagraph();
+    await page.keyboard.type('#NsProjets.');
+    await page.waitForTimeout(250);
+    const tableDot = await hashListed();
+    await page.keyboard.press('Escape');
+    await emptyParagraph();
+    await page.keyboard.type('#porteur.');
+    await page.waitForTimeout(250);
+    const dotOnly = await hashListed();
+    await page.keyboard.type('3');
+    await page.waitForTimeout(250);
+    const dotThree = await hashListed();
+    await page.keyboard.press('Escape');
+    check('recherche par nom : « Voir #NsProjets.Titre. » (le point qui finit la phrase) ferme la liste et Entrée coupe le paragraphe sans variable ; « #NsProjets. » liste les six colonnes de la table ; « #porteur. » ne propose rien et « #porteur.3 » rouvre la liste sur Porteur_3',
+      sentenceEnd === null && splitDot.keys.length === 0 && JSON.stringify(splitDot.texts) === JSON.stringify(['Voir #NsProjets.Titre.', ''])
+      && sameRows(tableDot, ['NsProjets.Titre', P1, P3, P13, 'NsProjets.Responsable', 'NsProjets.Echeance']) && dotOnly === null && sameRows(dotThree, [P3]),
+      { sentenceEnd, splitDot, tableDot, dotOnly, dotThree });
+    // --- La liste de la fenêtre de condition (champ de recherche d'une liste avec recherche).
+    await page.evaluate(() => {
+      const badge = (table, column) => `<span class="var-badge" data-table="${table}" data-column="${column}" data-key="${table}.${column}"></span>`;
+      Editor.setHTML(`<p>Objet : ${badge('NsProjets', 'Titre')}</p>`);
+    });
+    await parkMouse();
+    const win = await openWindowFor('Titre', 'var-condition', cond);
+    check('recherche par nom : la fenêtre de condition est ouverte et entièrement dans le panneau', win.found && win.inViewport, win);
+    const field = await hitTest(cond + ' .macro-rule-column-wrap .ss-trigger');
+    await page.mouse.click(field.x, field.y);
+    await page.waitForTimeout(150);
+    const advanced = 'Autre (colonne d\'une autre table…)';
+    await page.keyboard.type('porteur 3');
+    await page.waitForTimeout(150);
+    const listSpaced = await panelInfo(cond);
+    await page.keyboard.press('Control+A');
+    await page.keyboard.type('Porteur3');
+    await page.waitForTimeout(150);
+    const listGlued = await panelInfo(cond);
+    await page.keyboard.press('Control+A');
+    await page.keyboard.type('nsprojets 3 porteur');
+    await page.waitForTimeout(150);
+    const listTable = await panelInfo(cond);
+    await page.keyboard.press('Control+A');
+    await page.keyboard.type('N°3 chef');
+    await page.waitForTimeout(150);
+    const listLabel = await panelInfo(cond);
+    check('recherche par nom, fenêtre de condition : « porteur 3 » garde Porteur_3 et Porteur_13, « Porteur3 » Porteur_3 seule, la table de la page tapée avec un nom nu (« nsprojets 3 porteur ») les deux, et « N°3 chef » retrouve Porteur_3 par son libellé ; la saisie avancée reste en bas, la liste dans le panneau',
+      !!listSpaced && !!listGlued && !!listTable && !!listLabel && listSpaced.inside && JSON.stringify(listSpaced.rows) === JSON.stringify(['Porteur_3', 'Porteur_13', advanced]) && JSON.stringify(listGlued.rows) === JSON.stringify(['Porteur_3', advanced])
+      && JSON.stringify(listTable.rows) === JSON.stringify(['Porteur_3', 'Porteur_13', advanced]) && JSON.stringify(listLabel.rows) === JSON.stringify(['Porteur_3', advanced]), { listSpaced, listGlued, listTable, listLabel });
+    await page.keyboard.press('Control+A');
+    await page.keyboard.type('porteur 3');
+    await page.waitForTimeout(150);
+    const row = await rowCenter(cond, 'Porteur_13');
+    check('recherche par nom, fenêtre de condition : la ligne Porteur_13, retrouvée par « porteur 3 », est visible et au premier plan', !!row && row.onTop && row.inViewport, row);
+    if (row) await page.mouse.click(row.x, row.y);
+    await page.waitForTimeout(150);
+    const chosen = await page.evaluate(() => ({
+      value: document.querySelector('#var-condition-modal select.macro-rule-column').value,
+      shown: document.querySelector('#var-condition-modal .macro-rule-column-wrap .ss-trigger').textContent,
+      listOpen: !!document.querySelector('#var-condition-modal .ss-panel:not([hidden])'),
+      windowOpen: document.getElementById('var-condition-modal').style.display !== 'none',
+    }));
+    check('recherche par nom, fenêtre de condition : le clic sur la ligne choisit Porteur_13, ferme la liste, la fenêtre reste ouverte', chosen.value === 'Porteur_13' && chosen.shown === 'Porteur_13' && !chosen.listOpen && chosen.windowOpen, chosen);
+    const cancel = await hitTest(cond + ' .var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)');
+    if (cancel.found) await page.mouse.click(cancel.x, cancel.y);
+    await page.waitForTimeout(200);
+    // --- Le champ Nom du PDF : la même liste, Entrée écrit la clé à la place de ce qui a été tapé.
+    await page.evaluate(() => Editor.setHTML('<p></p>'));
+    await parkMouse();
+    const pdfToggle = await hitTest('#btn-toggle-pdf-filename');
+    await page.mouse.click(pdfToggle.x, pdfToggle.y);
+    await page.waitForTimeout(150);
+    await page.keyboard.type('Facture #porteur 3');
+    await page.waitForTimeout(250);
+    const pdfList = await hashListed();
+    await page.keyboard.press('ArrowDown');
+    await page.waitForTimeout(80);
+    const pdfDown = await hashListed();
+    await page.keyboard.press('ArrowUp');
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(250);
+    const pdfValue = await page.evaluate(() => document.getElementById('pdf-filename-template').value);
+    const pdfClosed = await hashListed();
+    check('recherche par nom, champ Nom du PDF : « Facture #porteur 3 » ouvre la liste sur Porteur_3 et Porteur_13, la flèche bas descend sur Porteur_13, la flèche haut revient, Entrée écrit « Facture #NsProjets.Porteur_3 » et ferme la liste',
+      sameRows(pdfList, [P3, P13]) && pdfList.inside && pdfList.selected === P3 && !!pdfDown && pdfDown.selected === P13 && pdfValue === 'Facture #NsProjets.Porteur_3' && pdfClosed === null, { pdfList, pdfDown, pdfValue, pdfClosed });
+    await page.keyboard.type(' - #zzz qqq');
+    await page.waitForTimeout(250);
+    const pdfNone = await hashListed();
+    check('recherche par nom, champ Nom du PDF : deux mots qui ne correspondent à aucune colonne ferment la liste', pdfNone === null, pdfNone);
+    await page.evaluate(() => {
+      const field = document.getElementById('pdf-filename-template');
+      field.value = '';
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+      field.blur();
+    });
+    await parkMouse();
+    // --- Le coût : 3 000 colonnes, la recherche à deux mots, à froid (les noms ne sont pas encore préparés) puis à chaud.
+    const cost = await page.evaluate(async () => {
+      const stub = window.__gristStub;
+      const columns = {};
+      for (let i = 1; i <= 100; i++) columns['Colonne_' + String(i).padStart(3, '0')] = 'Text';
+      const tables = [];
+      for (let t = 1; t <= 30; t++) { const name = 'NsCharge' + String(t).padStart(2, '0'); tables.push(name); stub.setVariables(name, Object.assign({}, columns)); }
+      await GristAPI.refreshSchema();
+      const words = SearchSelect.searchWords('colonne 100');
+      const run = () => {
+        const started = performance.now();
+        const found = GristAPI.getAllVariables().filter(v => SearchSelect.foundIn(words, SearchSelect.searchKey(Variables.columnSearchText(v.table, v.column))));
+        return { ms: performance.now() - started, count: found.length };
+      };
+      const cold = run();
+      const warm = run();
+      tables.forEach(name => stub.dropTable(name));
+      await GristAPI.refreshSchema();
+      return { variables: tables.length * 100, cold, warm };
+    });
+    check('recherche par nom : sur 3 000 colonnes, « colonne 100 » trouve la centième de chaque table (30) en moins de 300 ms à froid et 100 ms à chaud',
+      cost.cold.count === 30 && cost.warm.count === 30 && cost.cold.ms < 300 && cost.warm.ms < 100, cost);
+    await page.evaluate(async () => {
+      const stub = window.__gristStub;
+      ['NsProjets', 'NsAnnuaire'].forEach(table => stub.dropTable(table));
+      await GristAPI.refreshSchema();
+      stub.fireRecord({ id: 1, Titre: 'Dossier A', Statut: 'Urgent', Responsable: 'Dupont Jean', Montant: 1200, Echeance: 631152000, Actif: true }, 'CsDossiers');
       const badge = (table, column) => `<span class="var-badge" data-table="${table}" data-column="${column}" data-key="${table}.${column}"></span>`;
       Editor.setHTML(`<p>Objet : ${badge('CsDossiers', 'Titre')}</p><p>Lignes : ${badge('CsLignes', 'Designation')}.</p>`);
     });

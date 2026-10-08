@@ -70,6 +70,7 @@ const MainToolbar = (function () {
         const option = document.createElement('option');
         option.value = v.key;
         option.textContent = v.key;
+        option.dataset.search = Variables.columnSearchText(v.table, v.column);
         select.appendChild(option);
       });
       host.appendChild(select);
