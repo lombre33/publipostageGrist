@@ -88,7 +88,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/html-sanitize.js` | Filtre à liste blanche, lu dans un document inerte, pour le HTML des colonnes Grist, des modèles importés et de la galerie. |
 | `js/external-images.js` | Images d'un autre site : un cadre « Afficher » à leur place jusqu'au clic (rien n'est retenu), signalées ensuite en permanence, et une fenêtre avant tout export qui les lirait. |
 
-### L'éditeur (28 fichiers, 10 500 lignes)
+### L'éditeur (28 fichiers, 10 600 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -106,7 +106,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/table-select.js`, `js/table-merge.js` | Sélection de cases à la souris ; fusion et scission de cases d'un tableau de document. |
 | `js/heading-numbering.js` | Numérotation des titres, la même pour l'éditeur, la Lecture, le PDF et le Word. |
 
-### Variables et conditions (20 fichiers, 6 300 lignes)
+### Variables et conditions (20 fichiers, 6 600 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -172,7 +172,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/xlsx-export.js` | L'Excel d'une grille (ExcelJS). |
 | `js/mailto-export.js` | Le lien `mailto:` du mode E-mail. |
 
-### Socle de l'interface et réglages (14 fichiers, 4 100 lignes)
+### Socle de l'interface et réglages (14 fichiers, 4 200 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -337,7 +337,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/html-sanitize.js` | Allow-list filter, parsed in an inert document, for the HTML of Grist columns, imported templates and the gallery. |
 | `js/external-images.js` | Images from another site: a "Show" frame in their place until the click (nothing is remembered), flagged at all times afterwards, and a window before any export that would read them. |
 
-### The editor (28 files, 10,500 lines)
+### The editor (28 files, 10,600 lines)
 
 | File | Role |
 |---|---|
@@ -355,7 +355,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/table-select.js`, `js/table-merge.js` | Mouse selection of cells; merging and splitting cells of a document table. |
 | `js/heading-numbering.js` | Heading numbering, the same for the editor, Reading mode, the PDF and the Word file. |
 
-### Variables and conditions (20 files, 6,300 lines)
+### Variables and conditions (20 files, 6,600 lines)
 
 | File | Role |
 |---|---|
@@ -421,7 +421,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/xlsx-export.js` | The Excel file of a grid (ExcelJS). |
 | `js/mailto-export.js` | The `mailto:` link of E-mail mode. |
 
-### Interface foundations and settings (14 files, 4,100 lines)
+### Interface foundations and settings (14 files, 4,200 lines)
 
 | File | Role |
 |---|---|

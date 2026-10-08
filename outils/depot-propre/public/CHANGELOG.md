@@ -64,18 +64,18 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 - **« Sinon afficher » dans la condition d'une bulle** : la fenêtre de condition d'une bulle de variable a
   une ligne « Sinon afficher » : l'autre variable que la bulle écrit quand sa condition n'est pas remplie, au
   lieu de deux bulles côte à côte aux conditions opposées. On la choisit dans la liste des variables avec
-  recherche (celle de « Colonne… », avec la flèche « › » des Références) ; elle a son propre « Avant » et son
-  propre « Après », repris de ceux de la bulle au premier choix, à changer (« Payée le », « Échéance : »). La
-  ligne reste grisée tant qu'aucune règle n'est complète ; « — Aucune — » la retire, et « Retirer la
-  condition » la retire avec la condition. Le sinon vaut dans la Lecture, le PDF, le Word, l'Excel, les
-  en-têtes et pieds de page, les champs de l'e-mail et une ligne répétée de tableau (qui lit la ligne du
-  tour) ; le format de la bulle (nombre, date, Oui / Non) passe à son sinon quand sa colonne est du même
-  genre, jamais un réglage de liste ni de boucle. L'aperçu de la fenêtre dit ce que la ligne sélectionnée
-  écrit et combien de lignes affichent le sinon ; la ligne est la dernière de la fenêtre, sous l'aperçu.
-  Dans l'éditeur, la bulle porte une pastille « sinon » avec la variable et son texte, qui rougit seule
-  quand sa colonne disparaît ; les renommages de colonnes et de tables la suivent, et la confirmation
-  avant de supprimer un lien entre tables compte aussi les modèles dont seul un sinon lit cette table. Un
-  modèle enregistré avant se relit tel quel.
+  recherche (les colonnes de la table de la page en tête, avec la flèche « › » des Références) ; elle a son
+  propre « Avant » et son propre « Après », repris de ceux de la bulle au premier choix, à changer
+  (« Payée le », « Échéance : »). La ligne reste grisée tant qu'aucune règle n'est complète ; « — Aucune — »
+  la retire, et « Retirer la condition » la retire avec la condition. Le sinon vaut dans la Lecture, le PDF,
+  le Word, l'Excel, les en-têtes et pieds de page, les champs de l'e-mail et une ligne répétée de tableau
+  (qui lit la ligne du tour) ; le format de la bulle (nombre, date, Oui / Non) passe à son sinon quand sa
+  colonne est du même genre, jamais un réglage de liste ni de boucle. L'aperçu de la fenêtre dit ce que la
+  ligne sélectionnée écrit et combien de lignes affichent le sinon ; la ligne est la dernière de la fenêtre,
+  sous l'aperçu. Dans l'éditeur, la bulle porte une pastille « sinon » avec la variable et son texte, qui
+  rougit seule quand sa colonne disparaît ; les renommages de colonnes et de tables la suivent, et la
+  confirmation avant de supprimer la correspondance d'une table liée compte aussi les modèles dont seul un
+  sinon lit cette table. Un modèle enregistré avant se relit tel quel.
 
 ### Modifié
 
@@ -265,17 +265,17 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   Escape cancels the gesture.
 - **"Otherwise show" in a bubble's condition**: the condition window of a variable bubble has an
   "Otherwise show" row: the other variable the bubble writes when its condition is not met, instead of two
-  bubbles side by side with opposite conditions. It is picked in the variable list with search (the one of
-  "Column…", with the "›" arrow of References); it has its own "Before" and its own "After", copied from the
-  bubble's the first time a variable is picked, to change ("Paid on", "Due: "). The row stays greyed until a
-  rule is complete; "— None —" removes it, and "Remove condition" removes it along with the condition. The
-  "otherwise" applies in Reading mode, the PDF, the Word, the Excel, headers and footers, the e-mail fields
-  and a repeated table row (which reads the row of the turn); the bubble's format (number, date, Yes / No)
-  carries over to it when its column is of the same kind, never a list or loop setting. The window's
-  preview says what the selected row writes and how many rows show the "otherwise" value; the row is the
-  last of the window, under the preview. In the editor, the bubble carries an "otherwise" chip with the
+  bubbles side by side with opposite conditions. It is picked in the variable list with search (the columns
+  of the page's table first, with the "›" arrow of References); it has its own "Before" and its own "After",
+  copied from the bubble's when a variable is first picked, to change ("Paid on", "Due: "). The row stays
+  greyed until a rule is complete; "— None —" removes it, and "Remove condition" removes it along with the
+  condition. The "otherwise" applies in Reading mode, the PDF, the Word, the Excel, headers and footers, the
+  e-mail fields and a repeated table row (which reads the row of the turn); the bubble's format (number,
+  date, Yes / No) carries over to it when its column is of the same kind, never a list or loop setting. The
+  window's preview says what the selected row writes and how many rows show the "otherwise" value; the row is
+  the last of the window, under the preview. In the editor, the bubble carries an "otherwise" chip with the
   variable and its text, which turns red alone when its column disappears; renames of columns and tables
-  follow it, and the confirmation before deleting a link between tables also counts the templates where
+  follow it, and the confirmation before deleting a linked table's matching also counts the templates where
   only an "otherwise" reads that table. A template saved before reads back as it was.
 
 ### Changed
