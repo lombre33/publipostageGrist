@@ -251,6 +251,33 @@
   });
 
   cases.push({
+    id: 'organize_search_finds_words_in_any_order_ignoring_accents_case_and_separators',
+    description: 'La recherche suit la recherche par nom du widget (SearchSelect.nameMatcher) : « validé budget » (autre ordre), « VALIDE   budget » (sans accent, en capitales, espaces en trop) et « facture client 2 » (pour Facture_client-2) retrouvent leur modèle ; deux mots de deux modèles différents ne retrouvent rien ; vider la recherche rend la liste',
+    run: async (h) => {
+      await createTemplate(h, 'Organiser - Budget validé');
+      await createTemplate(h, 'Organiser - Facture_client-2');
+      TemplateOrganizeModal.open();
+      await h.sleep(30);
+      const searchInput = document.getElementById('template-organize-search');
+      const search = async (text) => {
+        searchInput.value = text;
+        searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+        await h.sleep(30);
+        return { budget: !!rowByName('Organiser - Budget validé'), facture: !!rowByName('Organiser - Facture_client-2'), emptyMessage: !!list().querySelector('.tom-empty') };
+      };
+      const otherOrder = await search('validé budget');
+      const plain = await search('  VALIDE   budget ');
+      const separators = await search('facture client 2');
+      const mixed = await search('budget facture');
+      const cleared = await search('');
+      TemplateOrganizeModal.close();
+      const pass = otherOrder.budget && !otherOrder.facture && plain.budget && !plain.facture && separators.facture && !separators.budget
+        && !mixed.budget && !mixed.facture && mixed.emptyMessage && cleared.budget && cleared.facture && !cleared.emptyMessage;
+      return { pass, notes: JSON.stringify({ otherOrder, plain, separators, mixed, cleared }) };
+    },
+  });
+
+  cases.push({
     id: 'organize_escape_closes_modal_via_shared_accessibility_wiring',
     description: 'Échap referme la modale - confirme qu\'elle est bien reprise par la base commune des fenêtres (ModalBase.adopt, js/main.js:wirePageModals), pas seulement dessinée',
     run: async (h) => {

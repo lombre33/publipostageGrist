@@ -172,6 +172,59 @@
     },
   });
 
+  cases.push({
+    id: 'gallery_search_finds_words_in_any_order_ignoring_accents_case_and_separators',
+    description: 'La recherche suit la recherche par nom du widget (SearchSelect.nameMatcher) : « validé budget » (autre ordre), « VALIDE   budget » (sans accent, en capitales, espaces en trop) et « facture client 2 » (pour Facture_client-2) retrouvent leur modèle ; deux mots de deux modèles différents ne retrouvent rien ; le mot-clé choisi se combine avec elle ; vider la recherche rend la grille',
+    run: async () => {
+      const restore = setSearch('');
+      const modal = document.getElementById('template-gallery-modal');
+      const search = document.getElementById('tpl-gallery-search');
+      const BUDGET = 'Budget validé';
+      const INVOICE = 'Facture_client-2';
+      let entries = [];
+      let kept = [];
+      try {
+        document.getElementById('v2-btn-new-from-template').click();
+        await waitFor(() => document.querySelectorAll('#tpl-gallery-grid .tpl-gallery-card').length > 0, 5000);
+        // Les deux premières entrées du manifeste (celui de la fenêtre, gardé en cache par TemplateGallery) prennent un nom d'essai ; leurs mots-clés restent ceux de ces modèles.
+        entries = (await TemplateGallery.loadManifest()).slice(0, 2);
+        kept = entries.map(e => e.name);
+        entries[0].name = BUDGET;
+        entries[1].name = INVOICE;
+        const shown = async (text) => {
+          search.value = text;
+          search.dispatchEvent(new Event('input', { bubbles: true }));
+          await sleep(60);
+          const names = Array.from(document.querySelectorAll('#tpl-gallery-grid .tpl-gallery-card-name')).map(n => n.textContent.trim());
+          return { budget: names.indexOf(BUDGET) !== -1, invoice: names.indexOf(INVOICE) !== -1, count: names.length, emptyMessage: !!document.querySelector('#tpl-gallery-grid .tpl-gallery-empty') };
+        };
+        const otherOrder = await shown('validé budget');
+        const plain = await shown('  VALIDE   budget ');
+        const separators = await shown('facture client 2');
+        const mixed = await shown('budget facture');
+        // Un mot-clé que seule la première entrée porte garde sa règle : la recherche s'y ajoute.
+        const ownTag = (entries[0].tags || []).find(t => (entries[1].tags || []).indexOf(t) === -1);
+        const chip = Array.from(document.querySelectorAll('#tpl-gallery-tags .tpl-gallery-tag')).find(t => t.textContent.trim() === ownTag);
+        if (chip) chip.click();
+        const withTag = await shown('validé budget');
+        const withTagOther = await shown('facture client 2');
+        document.querySelector('#tpl-gallery-tags .tpl-gallery-tag').click(); // « Tous »
+        const cleared = await shown('');
+        const pass = !!chip && otherOrder.budget && !otherOrder.invoice && plain.budget && !plain.invoice && separators.invoice && !separators.budget
+          && !mixed.budget && !mixed.invoice && withTag.budget && !withTag.invoice && !withTagOther.invoice && !withTagOther.budget && cleared.count >= 4;
+        return { pass, notes: JSON.stringify({ ownTag, chip: !!chip, otherOrder, plain, separators, mixed, withTag, withTagOther, cleared }) };
+      } finally {
+        entries.forEach((e, i) => { e.name = kept[i]; });
+        const allChip = document.querySelector('#tpl-gallery-tags .tpl-gallery-tag');
+        if (allChip) allChip.click();
+        search.value = '';
+        search.dispatchEvent(new Event('input', { bubbles: true }));
+        if (modal) modal.style.display = 'none';
+        restore();
+      }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.templateGallery = cases;
 })();

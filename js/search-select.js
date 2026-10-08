@@ -71,6 +71,13 @@ const SearchSelect = (function () {
   function foundIn(words, key) {
     return words.every(word => key.indexOf(word) !== -1);
   }
+  // Le test d'une saisie pour une liste qui n'est pas une liste avec recherche (le champ de recherche de « Ranger les modèles », celui de la galerie, le filtre
+  // de « Autres attributs ») : `matcher(...noms)` dit si chaque mot de `query` se trouve dans les noms ; une saisie sans lettre ni chiffre retient tout. Les
+  // mots ne sont lus qu'une fois pour toute la liste.
+  function nameMatcher(query) {
+    const words = searchWords(query);
+    return (...names) => foundIn(words, searchKey(...names));
+  }
 
   // Éléments de `items` (produits par readItems) dont les noms contiennent tous les mots de `query`, dans l'ordre d'origine ; tout si la recherche est
   // vide. Une ligne épinglée reste toujours ; le choix « rien » (`empty`) ne se propose que sans recherche.
@@ -478,5 +485,5 @@ const SearchSelect = (function () {
     if (controller) controller.sync();
   }
 
-  return { attach, attachColumns, attachTables, attachTemplates, attachValues, attachSheets, sync, filterItems, readItems, normalize, searchWords, searchKey, foundIn };
+  return { attach, attachColumns, attachTables, attachTemplates, attachValues, attachSheets, sync, filterItems, readItems, normalize, searchWords, searchKey, foundIn, nameMatcher };
 })();

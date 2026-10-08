@@ -148,11 +148,13 @@ const VariableLinkedAttrs = (function () {
     refs.insertBtn.disabled = count === 0;
     refs.replaceBtn.disabled = count === 0;
   }
+  // Le filtre cherche comme toutes les listes de colonnes (js/search-select.js:nameMatcher) : des mots dans n'importe quel ordre, dans les noms de la
+  // colonne (table, identifiant, libellé Grist) et dans la valeur affichée en face.
   function applyFilter() {
-    const q = refs.filter.value.trim().toLowerCase();
+    const matches = SearchSelect.nameMatcher(refs.filter.value);
     let visible = 0;
     refs.list.querySelectorAll('.var-linked-row').forEach(row => {
-      row.hidden = !!q && row.dataset.search.indexOf(q) === -1;
+      row.hidden = !matches(row.dataset.search, row.dataset.value || '');
       if (!row.hidden) visible += 1;
     });
     const noMatch = refs.list.querySelector('.var-linked-empty[data-role="no-match"]');
@@ -174,7 +176,7 @@ const VariableLinkedAttrs = (function () {
   function columnRow(table, col, isCurrent) {
     const row = el('div', isCurrent ? 'var-linked-row is-current' : 'var-linked-row');
     row.dataset.col = col;
-    row.dataset.search = col.toLowerCase();
+    row.dataset.search = Variables.columnSearchText(table, col);
     const box = el('input');
     box.type = 'checkbox';
     box.value = col;
@@ -278,7 +280,7 @@ const VariableLinkedAttrs = (function () {
       const text = displayValue(table, rows, row.dataset.col);
       row.querySelector('.var-linked-value').textContent = text;
       row.title = text;
-      row.dataset.search = (row.dataset.col + ' ' + text).toLowerCase();
+      row.dataset.value = text;
     });
     applyFilter();
     note.textContent = I18n.t('varLinked.noteRow', { id: record.id }) + ' ' + insertHint;

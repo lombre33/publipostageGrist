@@ -1,12 +1,13 @@
 #!/usr/bin/env node
-// Tests purs (sans navigateur) de la recherche par nom partagée : js/search-select.js (searchWords, searchKey, foundIn et filterItems) - cf. dev-tests/unit-harness.mjs pour le contexte
+// Tests purs (sans navigateur) de la recherche par nom partagée : js/search-select.js (searchWords, searchKey, foundIn, filterItems et nameMatcher) - cf. dev-tests/unit-harness.mjs pour le contexte
 // général. Demande d'Antoine du 08/10 : « si la colonne est Projets.Porteur_3, en tapant "porteur 3" ou "Porteur3" je ne la trouve pas ; plus exhaustif, qui teste tous les noms ». Les
 // attendus sont ceux de la personne qui tape, pas ceux de la fonction :
 //  1) « porteur 3 », « Porteur3 », « 3 porteur », « porteur_3 », « PORTEUR-3 », « projets porteur_3 » et « Projets.Porteur_3 » retrouvent tous Projets.Porteur_3 ; « porteur 4 », « porteur 33 » et une
 //     faute de frappe ne la retrouvent pas ; « Porteur_3 » tapé en entier ne retrouve pas Porteur_13, « porteur 3 » (deux mots) oui ;
 //  2) les accents et la casse ne comptent pas, ni le nombre d'espaces ni leur place ;
 //  3) tous les noms se cherchent : l'identifiant et la table, le libellé Grist (`data-search`), l'indice ; un mot ne passe pas d'un nom à l'autre ;
-//  4) une liste garde son ordre, la ligne épinglée reste, le choix « rien » ne se propose que sans recherche, et une saisie sans lettre ni chiffre ne filtre rien.
+//  4) une liste garde son ordre, la ligne épinglée reste, le choix « rien » ne se propose que sans recherche, et une saisie sans lettre ni chiffre ne filtre rien ;
+//  5) les champs de recherche de « Ranger les modèles » et de la galerie (nameMatcher) cherchent un nom de modèle de la même façon, sans liste avec recherche.
 // Lancer : node dev-tests/unit-name-search.mjs
 import { createContext, loadScript, evalIn, check, summarizeAndExit } from './unit-harness.mjs';
 
@@ -23,6 +24,8 @@ const filtered = (items, query) => {
   ctx.__ITEMS = items; ctx.__Q = query;
   return evalIn(ctx, `SearchSelect.filterItems(__ITEMS.map(i => Object.assign({}, i, { haystack: SearchSelect.searchKey(i.name, i.hint, i.search) })), __Q).map(i => i.value)`);
 };
+// Les noms de modèles que garde le champ de recherche de « Ranger les modèles » ou de la galerie pour `query`, dans l'ordre de la liste.
+const keptNames = (query, names) => { ctx.__Q = query; ctx.__NAMES = names; return evalIn(ctx, '(() => { const matches = SearchSelect.nameMatcher(__Q); return __NAMES.filter(name => matches(name)); })()'); };
 
 // 1. Projets.Porteur_3, trouvée de toutes les façons dont on peut l'écrire.
 {
@@ -86,7 +89,21 @@ const filtered = (items, query) => {
   check('liste : rien ne correspond, il ne reste que la ligne épinglée', JSON.stringify(filtered(items, 'zzz')) === keep('__advanced'));
 }
 
-// 5. Le coût : la liste « # » prépare toutes les colonnes du document à chaque frappe. 20 000 colonnes, une recherche à deux mots, à froid (les noms ne sont pas encore
+// 5. nameMatcher : les champs de recherche de « Ranger les modèles » et de la galerie, qui cherchent dans le nom du modèle seul.
+{
+  const names = ['Budget validé', 'Budget 2026 — validé par le comité', 'Facture_client-2', 'Courrier de relance', ''];
+  const only = (query, ...expected) => JSON.stringify(keptNames(query, names)) === JSON.stringify(expected);
+  check('modèles : « validé budget » (autre ordre) garde les deux budgets, dans l\'ordre de la liste, pas la facture', only('validé budget', names[0], names[1]));
+  check('modèles : « VALIDE   budget » (sans accent, en capitales, espaces en trop) garde les deux mêmes', only('  VALIDE   budget ', names[0], names[1]));
+  check('modèles : un morceau de mot suffit (« valid »), comme avant', only('valid', names[0], names[1]));
+  check('modèles : « _ », « . » et « - » ne comptent pas (« facture client 2 », « FACTURE-CLIENT_2 », « client2 » gardent Facture_client-2)',
+    only('facture client 2', names[2]) && only('FACTURE-CLIENT_2', names[2]) && only('client2', names[2]) && only('courrier relance', names[3]) && only('relance courrier', names[3]));
+  check('modèles : deux mots de deux modèles différents ne gardent rien (« budget client », « budget facture »), pas plus qu\'une faute de frappe', only('budget client') && only('budget facture') && only('zzz') && only('budjet'));
+  check('modèles : une saisie vide ou sans lettre ni chiffre garde tout, le nom vide compris', only('', ...names) && only('   ', ...names) && only(' _ . ', ...names) && only('—', ...names));
+  check('modèles : un nom vide ne reste pas dès qu\'on cherche un mot', !keptNames('budget', names).includes(''));
+}
+
+// 6. Le coût : la liste « # » prépare toutes les colonnes du document à chaque frappe. 20 000 colonnes, une recherche à deux mots, à froid (les noms ne sont pas encore
 // préparés) puis à chaud ; les bornes sont larges (une machine chargée), le but est de garder une recherche qui reste immédiate sur un très gros document.
 {
   const candidates = [];

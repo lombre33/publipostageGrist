@@ -365,6 +365,47 @@
   });
 
   cases.push({
+    id: 'varpath_filter_finds_words_in_any_order_in_names_labels_and_values',
+    description: 'Le filtre « Filtrer les colonnes… » cherche comme les listes de colonnes (SearchSelect.nameMatcher) : des mots dans n’importe quel ordre, sans compter accents, casse ni « _ . - », dans la table, l’identifiant et le libellé Grist de la colonne et dans la valeur affichée en face, sans mêler deux colonnes ; vide, il rend toutes les colonnes',
+    run: async (h) => {
+      await seed(h);
+      window.__gristStub.setColumnLabels('VpProjet', { Porteur: 'Chef de projet n°3' });
+      await GristAPI.refreshSchema();
+      try {
+        Editor.setHTML(`<p>${badgeHtml('VpProjet', 'Nom')}</p>`);
+        await openWindow(h, 'VpProjet', 'Nom');
+        const filter = modal().querySelector('.var-linked-filter');
+        const typed = text => {
+          filter.value = text;
+          filter.dispatchEvent(new Event('input', { bubbles: true }));
+          return columns().filter(c => !rowOf(c).hidden);
+        };
+        const all = columns();
+        const accompanist = valueOf('Accompagnateur');
+        const byColumnThenTable = typed('statut VPPROJET');
+        const byValue = typed('jean dupont');
+        const byValueAsShown = typed(accompanist);
+        const byLabel = typed('N°3 CHEF');
+        const byValuePart = typed('cours');
+        const mixed = typed('statut jean');
+        const none = typed('zzz qqq');
+        const noneMessage = !modal().querySelector('.var-linked-empty[data-role="no-match"]').hidden;
+        const cleared = typed('');
+        const pass = accompanist.indexOf('Dupont') !== -1 && all.length === 5
+          && JSON.stringify(byColumnThenTable) === JSON.stringify(['Statut'])
+          && byValue.indexOf('Accompagnateur') !== -1 && byValue.indexOf('Porteur') === -1 && byValue.indexOf('Statut') === -1 && byValueAsShown.indexOf('Accompagnateur') !== -1
+          && JSON.stringify(byLabel) === JSON.stringify(['Porteur']) && JSON.stringify(byValuePart) === JSON.stringify(['Statut'])
+          && mixed.length === 0 && none.length === 0 && noneMessage && JSON.stringify(cleared) === JSON.stringify(all);
+        return { pass, notes: JSON.stringify({ all, accompanist, byColumnThenTable, byValue, byValueAsShown, byLabel, byValuePart, mixed, none, noneMessage, cleared }) };
+      } finally {
+        VariableLinkedAttrs.close({ keepFocus: true });
+        window.__gristStub.setColumnLabels('VpProjet', { Porteur: 'Porteur' });
+        await GristAPI.refreshSchema();
+      }
+    },
+  });
+
+  cases.push({
     id: 'varpath_page_reference_links_its_table_then_descends',
     description: 'Depuis une colonne Référence de la page sans règle pour sa table (#VpNotifications.Projet) : la table est liée par cette colonne, comme avant, et l’on descend jusqu’à l’email de l’accompagnateur (bulle #VpProjet.Accompagnateur.Email)',
     run: async (h) => {

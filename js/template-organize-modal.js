@@ -234,8 +234,8 @@ const TemplateOrganizeModal = (function () {
 
   function renderList() {
     list.innerHTML = '';
-    const term = searchTerm.trim().toLowerCase();
-    const templates = Templates.getCached().filter((t) => !term || String(t.nom ?? '').toLowerCase().includes(term));
+    const matchesName = SearchSelect.nameMatcher(searchTerm);
+    const templates = Templates.getCached().filter((t) => matchesName(String(t.nom ?? '')));
 
     if (!templates.length) {
       list.appendChild(el('div', 'tom-empty', I18n.t('organize.modal.noMatch')));

@@ -21,9 +21,9 @@ const TemplateGalleryModal = (function () {
   let useStartedAt = 0; // 0 : aucune création en cours
 
   function renderGrid() {
-    const term = (searchInput.value || '').trim().toLowerCase();
+    const matchesName = SearchSelect.nameMatcher(searchInput.value);
     const filtered = manifest.filter(entry => {
-      const matchesTerm = !term || entry.name.toLowerCase().includes(term);
+      const matchesTerm = matchesName(entry.name);
       const matchesTag = !activeTag || (entry.tags || []).includes(activeTag);
       return matchesTerm && matchesTag;
     });
