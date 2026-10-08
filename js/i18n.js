@@ -1206,6 +1206,17 @@ const I18n = (function () {
     'varCond.affixBeforeTitle': { fr: 'Texte écrit juste avant la valeur, par exemple une virgule ou une parenthèse. Les espaces comptent.', en: 'Text written right before the value, for example a comma or a parenthesis. Spaces count.' },
     'varCond.affixAfterTitle': { fr: 'Texte écrit juste après la valeur, par exemple une virgule ou une parenthèse. Les espaces comptent.', en: 'Text written right after the value, for example a comma or a parenthesis. Spaces count.' },
     'varCond.affixHint': { fr: 'Écrits seulement si la variable s’affiche avec une valeur.', en: 'Only written if the variable is shown with a value.' },
+    // « Sinon afficher » : la variable qu'une bulle écrit à sa place quand sa condition n'est pas remplie (js/variable-otherwise.js), avec son propre
+    // « Avant » / « Après ».
+    'varCond.otherwiseLabel': { fr: 'Sinon afficher', en: 'Otherwise show' },
+    'varCond.otherwiseNone': { fr: '— Aucune —', en: '— None —' },
+    'varCond.otherwiseTitle': { fr: 'La variable écrite à la place de celle-ci quand la condition n’est pas remplie.', en: 'The variable written in place of this one when the condition is not met.' },
+    'varCond.otherwiseNeedsRule': { fr: 'Complétez d’abord une condition : le sinon s’affiche quand elle n’est pas remplie.', en: 'Complete a condition first: the “otherwise” variable is shown when it is not met.' },
+    'varCond.otherwiseBeforeAria': { fr: 'Avant, pour le sinon', en: 'Before, for the “otherwise” variable' },
+    'varCond.otherwiseAfterAria': { fr: 'Après, pour le sinon', en: 'After, for the “otherwise” variable' },
+    'varCond.debug.currentNotMetOtherwise': { fr: 'Ligne sélectionnée (n° {id}) : condition non remplie, la variable affiche son sinon « {value} ».', en: 'Selected row (#{id}): condition not met, the variable shows its “otherwise” value “{value}”.' },
+    'varCond.debug.countOtherwise': { fr: 'Dans « {table} » : {count} {count|ligne|lignes} sur {total} {count|remplit|remplissent} la condition ; {others} {others|autre affiche|autres affichent} le sinon.', en: 'In “{table}”: {count} of {total} {total|row|rows} {count|meets|meet} the condition; {others} {others|other shows|others show} the “otherwise” value.' },
+    'varCond.debug.noneOtherwise': { fr: 'Dans « {table} » : aucune des {total} lignes ne remplit la condition, toutes affichent le sinon.', en: 'In “{table}”: none of the {total} rows meets the condition, all show the “otherwise” value.' },
     'varCond.debug.currentShown': { fr: 'Ligne sélectionnée (n° {id}) : la variable affiche « {value} ».', en: 'Selected row (#{id}): the variable shows “{value}”.' },
     'varCond.remove': { fr: 'Retirer la condition', en: 'Remove condition' },
     'varCond.saveLost': { fr: 'La variable a été déplacée ou supprimée pendant l’édition : la condition n’a pas été enregistrée.', en: 'The variable was moved or deleted while editing: the condition was not saved.' },
@@ -1305,6 +1316,9 @@ const I18n = (function () {
     'varBadge.brokenTable': { fr: 'La table « {table} » n’existe plus dans ce document.', en: 'Table “{table}” no longer exists in this document.' },
     'varBadge.brokenColumn': { fr: 'La colonne « {column} » n’existe plus dans la table « {table} ».', en: 'Column “{column}” no longer exists in table “{table}”.' },
     'varBadge.brokenPath': { fr: 'La colonne « {column} » n’est plus atteignable depuis la table « {table} » : un maillon du chemin a disparu ou n’est plus une référence.', en: 'Column “{column}” can no longer be reached from table “{table}”: a link in the path was removed or is no longer a reference.' },
+    // Le « sinon » d'une bulle dans l'éditeur : le mot de sa pastille, et l'info-bulle quand sa colonne a disparu.
+    'varBadge.otherwise': { fr: 'sinon', en: 'otherwise' },
+    'varBadge.brokenOtherwise': { fr: 'Sinon : {problem}', en: 'Otherwise: {problem}' },
 
     // --- Fenêtre « Boucle » d'une variable (js/variable-loop.js ; moteur js/loop-rules.js) ---
     'varLoop.title': { fr: 'Boucle sur « {table} »', en: 'Loop over “{table}”' },

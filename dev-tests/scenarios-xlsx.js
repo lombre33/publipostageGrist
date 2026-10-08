@@ -287,6 +287,40 @@
     },
   });
 
+  // Antoine, 08/10 : « Sinon afficher » dans la condition d'une bulle (js/variable-otherwise.js, résolu avant les bulles par js/reader-mode.js) : la case est celle de la variable que la bulle
+  // écrit pour cette ligne - un vrai nombre (ou une vraie date) quand c'est le sinon qui s'écrit et qu'il est seul dans sa case, du texte sinon.
+  const withOtherwise = (column, extra) => ` data-otherwise-table="${TABLE}" data-otherwise-column="${column}" data-otherwise-key="${TABLE}.${column}"${extra || ''}`;
+  cases.push({
+    id: 'xlsx_a_bubble_with_an_otherwise_is_the_cell_of_the_variable_it_writes',
+    description: 'Une bulle à sinon seule dans sa case : condition remplie, c\'est la case de la bulle ; condition non remplie, c\'est celle de la variable du sinon - un vrai nombre ou une vraie date au bon format (celui de la bulle quand la colonne du sinon est du même genre), du texte pour une colonne texte ou avec le texte « Avant » du sinon',
+    run: async (h) => {
+      await seed(h);
+      const never = withCondition({ mode: 'all', rules: [{ column: 'Nom', operator: '=', value: 'personne' }] });
+      const holds = withCondition({ mode: 'all', rules: [{ column: 'Nom', operator: '=', value: 'Alpha Durand' }] });
+      const x = await exportGrid([100, 100, 100, 100], [30, 30], [
+        [badge('Nom', never + withOtherwise('Montant')), badge('Nom', never + withOtherwise('Quantite')), badge('Montant', holds + withOtherwise('Quantite')), badge('Montant', withFormat({ type: 'number', decimals: 2, currency: '€' }) + never + withOtherwise('Quantite'))],
+        [badge('Montant', never + withOtherwise('Nom')), badge('Nom', never + withOtherwise('Date')), badge('Nom', never + withOtherwise('Montant', ' data-otherwise-before="~"')), badge('Quantite', never)],
+      ]);
+      const c = ref => x.sheet.cell(ref);
+      const bad = [];
+      const expect = (ref, kind, value, fmt) => {
+        const cell = c(ref);
+        if (cell.kind !== kind) bad.push(ref + ' type=' + cell.kind + ' (attendu ' + kind + ', valeur ' + JSON.stringify(cell.value) + ')');
+        else if (value !== undefined && cell.value !== value) bad.push(ref + ' valeur=' + JSON.stringify(cell.value) + ' (attendu ' + JSON.stringify(value) + ')');
+        if (fmt !== undefined && cell.style.numFmt !== fmt) bad.push(ref + ' format=' + cell.style.numFmt + ' (attendu ' + fmt + ')');
+      };
+      expect('A1', 'number', 1234.5, '#,##0.###'); // le sinon est un nombre : la case en est un, au format d'un nombre
+      expect('B1', 'number', 12, '#,##0');
+      expect('C1', 'number', 1234.5, '#,##0.###'); // condition remplie : la bulle, pas son sinon
+      expect('D1', 'number', 12, '#,##0.00 "€"'); // le format de la bulle passe au sinon du même genre
+      expect('A2', 'text', 'Alpha Durand'); // le sinon est du texte : la case est du texte
+      expect('B2', 'number', serial(2026, 9, 12), 'dd/mm/yyyy');
+      expect('C2', 'text'); if (!/^~1\s234,5$/.test(String(c('C2').value))) bad.push('C2=' + JSON.stringify(c('C2').value)); // « Avant » du sinon : du texte
+      expect('D2', 'empty'); // sans sinon, la condition fausse masque la bulle comme avant
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
   // Antoine, 02/10 : « Écrire en nombre, dans l'Excel, un calcul seul dans une case de grille ? » - « Oui, en nombre ». Même règle que la bulle d'une colonne : seul dans sa case, le
   // résultat est un VRAI nombre au format de la bulle ; avec du texte autour, avec une autre bulle, en erreur, en toutes lettres, caché (zéro) ou trop long, du texte (ou rien).
   cases.push({

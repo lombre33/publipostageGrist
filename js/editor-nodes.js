@@ -95,6 +95,25 @@ const EditorNodes = (function () {
         dom.appendChild(tail);
       }
       if (attrs['data-after']) dom.appendChild(affixChip(attrs['data-after']));
+      // Le « sinon » de la bulle (js/variable-otherwise.js) : « sinon », son texte « Avant », le nom de sa variable et son « Après », dessinés par le CSS
+      // comme ceux de la bulle (data-text) : textContent garde le seul nom de la bulle. Le mot « sinon » suit la langue de l'interface (cf. la vue de la
+      // bulle de variable plus bas).
+      if (attrs['data-otherwise-key']) {
+        const otherwise = document.createElement('span');
+        otherwise.className = 'var-badge-otherwise';
+        otherwise.setAttribute('aria-hidden', 'true');
+        const word = document.createElement('span');
+        word.className = 'var-badge-otherwise-word';
+        word.setAttribute('data-text', I18n.t('varBadge.otherwise'));
+        const name = document.createElement('span');
+        name.className = 'var-badge-otherwise-name';
+        name.setAttribute('data-text', Variables.triggerChar() + attrs['data-otherwise-key']);
+        otherwise.appendChild(word);
+        if (attrs['data-otherwise-before']) otherwise.appendChild(affixChip(attrs['data-otherwise-before']));
+        otherwise.appendChild(name);
+        if (attrs['data-otherwise-after']) otherwise.appendChild(affixChip(attrs['data-otherwise-after']));
+        dom.appendChild(otherwise);
+      }
       // Nom coupé par la case ou la colonne : le nom entier en info-bulle, posé au survol seulement quand il est vraiment coupé (une bulle cassée garde
       // son message, posé par Editor.refreshVariableBadgeValidity, qui retire aussi ce titre à chaque mise à jour du document). La fin se coupe par la
       // gauche, ce que scrollWidth ne compte pas : on compare les rectangles.
@@ -109,7 +128,7 @@ const EditorNodes = (function () {
     return { splitBadgeLabel, splitBadgeView };
   })();
 
-  const { createVarBadgeNode, varBadgeAttrsOf, varBadgeHtml } = (function () {
+  const { createVarBadgeNode, varBadgeAttributes, varBadgeAttrsOf, varBadgeHtml } = (function () {
     // La bulle de variable
 
     // Les attributs DOM d'une bulle (HTML enregistré, presse-papiers, exports) d'après les attributs de son nœud : sans TipTap, pour que les champs
@@ -125,6 +144,8 @@ const EditorNodes = (function () {
       const around = VariableFormat.affixes(nodeAttrs.before, nodeAttrs.after);
       if (around && around.before) attrs['data-before'] = around.before;
       if (around && around.after) attrs['data-after'] = around.after;
+      // Le sinon (js/variable-otherwise.js) : cinq attributs simples, écrits seulement quand il existe.
+      Object.assign(attrs, VariableOtherwise.toAttributes(nodeAttrs.otherwise));
       // `data-loop-repeat` à part : les repères de la zone répétée (css/variable-actions.css) la trouvent par sélecteur, sans lire le JSON.
       if (nodeAttrs.loop) { attrs['data-loop'] = JSON.stringify(nodeAttrs.loop); attrs['data-loop-repeat'] = nodeAttrs.loop.repeat || 'inline'; }
       return attrs;
@@ -135,6 +156,7 @@ const EditorNodes = (function () {
         table: el.getAttribute('data-table'), column: el.getAttribute('data-column'), key: el.getAttribute('data-key'),
         format: jsonAttr(el, 'data-format'), condition: jsonAttr(el, 'data-condition'), loop: jsonAttr(el, 'data-loop'),
         before: VariableFormat.affix(el.getAttribute('data-before')), after: VariableFormat.affix(el.getAttribute('data-after')),
+        otherwise: VariableOtherwise.fromElement(el),
       };
     }
     // Le HTML d'une bulle, comme renderHTML l'écrit (préfixe décoratif compris, cf. ci-dessous).
@@ -148,6 +170,7 @@ const EditorNodes = (function () {
     // Bulle de variable #Variable : nœud atome en ligne, non éditable au caractère près (contenteditable="false") : <span class="var-badge" data-table
     // data-column data-key>, reconnu tel quel par reader-mode.js et pdf-export.js.
     function createVarBadgeNode(Node, mergeAttributes) {
+      const views = languageViews();
       // Spécification DOM de la bulle, une seule pour renderHTML (HTML enregistré, presse-papiers, exports) et pour la vue de l'éditeur (addNodeView).
       function badgeSpec(HTMLAttributes, node) {
         const attrs = mergeAttributes(HTMLAttributes, varBadgeAttributes(node.attrs));
@@ -166,9 +189,11 @@ const EditorNodes = (function () {
           // paragraphe, ou elle seule).
           // `before` et `after` : le texte collé à la valeur, écrit seulement quand la bulle s'affiche avec une valeur (VariableFormat.withAffixes) ;
           // `null` = rien.
+          // `otherwise` : { table, column, key, before, after } - la variable que la bulle écrit à sa place quand sa condition n'est pas remplie
+          // (js/variable-otherwise.js, ligne « Sinon afficher » de js/variable-condition.js) ; `null` = pas de sinon.
           return {
             table: internalAttr(null), column: internalAttr(null), key: internalAttr(null), format: internalAttr(null), condition: internalAttr(null), loop: internalAttr(null),
-            before: internalAttr(null), after: internalAttr(null),
+            before: internalAttr(null), after: internalAttr(null), otherwise: internalAttr(null),
           };
         },
         parseHTML() {
@@ -180,11 +205,19 @@ const EditorNodes = (function () {
         // Vue de l'éditeur seulement : cf. splitBadgeView. Pas de `update` : ProseMirror garde la vue tant que le nœud est identique et la refait
         // sinon.
         addNodeView() {
-          return ({ node, HTMLAttributes }) => splitBadgeView(badgeSpec(HTMLAttributes, node), 'var-badge');
+          return ({ node, HTMLAttributes }) => {
+            const view = splitBadgeView(badgeSpec(HTMLAttributes, node), 'var-badge');
+            // Le mot « sinon » de la pastille du sinon suit la langue de l'interface, comme l'étiquette d'un bloc conditionnel.
+            const word = view.dom.querySelector('.var-badge-otherwise-word');
+            if (!word) return view;
+            const refresh = () => word.setAttribute('data-text', I18n.t('varBadge.otherwise'));
+            views.add(refresh);
+            return { dom: view.dom, destroy: () => views.delete(refresh) };
+          };
         },
       });
     }
-    return { createVarBadgeNode, varBadgeAttrsOf, varBadgeHtml };
+    return { createVarBadgeNode, varBadgeAttributes, varBadgeAttrsOf, varBadgeHtml };
   })();
 
   const { createCalcBadgeNode, createCalcBadgeKeysExtension } = (function () {
@@ -2024,7 +2057,7 @@ const EditorNodes = (function () {
 
 
   return {
-    createVarBadgeNode, varBadgeAttrsOf, varBadgeHtml, createCalcBadgeNode, createCalcBadgeKeysExtension, createPageNumberBadgeNode, createSmartChipNode, smartChipAttrsOf, smartChipHtml, smartChipLabel, createFootnoteRefNode, createCommentMark,
+    createVarBadgeNode, varBadgeAttributes, varBadgeAttrsOf, varBadgeHtml, createCalcBadgeNode, createCalcBadgeKeysExtension, createPageNumberBadgeNode, createSmartChipNode, smartChipAttrsOf, smartChipHtml, smartChipLabel, createFootnoteRefNode, createCommentMark,
     createFontSizeExtension, createTextColorExtension, createHighlightExtension,
     createBulletStyleExtension, createOrderedListStyleExtension, createTaskListStyleExtension,
     withCellBackground, withFastColwidth, parseColwidthOnce, createTableView, createTabNavigationExtension, createClearHistoryExtension,

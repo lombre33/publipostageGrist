@@ -1256,13 +1256,13 @@ const Variables = (function () {
       if (rule.colonneSource === 'id') return tableCible + '.' + rule.colonneCible;
       return currentTableId + '.' + rule.colonneSource + ' = ' + tableCible + '.' + rule.colonneCible;
     }
-    // Les modèles dont le contenu contient au moins une bulle #Variable vers `tableCible` : une recherche brute sur l'attribut sérialisé suffit, sans
-    // DOMParser. Les champs texte (Objet, À, Cc, Cci, nom du PDF) y comptent aussi : leurs variables suivent la même règle de liaison. Sert à avertir
-    // avant de supprimer une règle encore utilisée ailleurs.
+    // Les modèles dont le contenu contient au moins une bulle #Variable vers `tableCible`, ou une bulle dont le sinon (js/variable-otherwise.js) y va : une
+    // recherche brute sur l'attribut sérialisé suffit, sans DOMParser. Les champs texte (Objet, À, Cc, Cci, nom du PDF) y comptent aussi : leurs variables
+    // suivent la même règle de liaison. Sert à avertir avant de supprimer une règle encore utilisée ailleurs.
     function findTemplatesUsingTable(tableCible) {
-      const needle = 'data-table="' + tableCible + '"';
+      const needles = ['data-table="' + tableCible + '"', 'data-otherwise-table="' + tableCible + '"'];
       const fields = tpl => [tpl.nomFichierPDF, tpl.objet, tpl.destinataires, tpl.cc, tpl.cci];
-      return Templates.getCached().filter(tpl => (tpl.contenu && tpl.contenu.indexOf(needle) !== -1)
+      return Templates.getCached().filter(tpl => (tpl.contenu && needles.some(needle => tpl.contenu.indexOf(needle) !== -1))
         || fields(tpl).some(value => value && FieldCodec.variablesIn(value).some(v => v.table === tableCible)));
     }
     async function confirmDeleteLinkRule(rule) {

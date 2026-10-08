@@ -349,6 +349,15 @@ const VariableFormat = (function () {
     if (isListType(type)) return 'list';
     return type === 'Bool' ? 'bool' : null;
   }
+  // Le genre de réglage que porte un format de bulle (celui que permet une colonne est `columnKind`) : nombre, date, Oui / Non, liste, sinon null.
+  // Le zéro se règle seul, sans `type` (js/floating-toolbars.js, num-zero) : c'est un réglage nombre ; la liste aussi (`list`, js/variable-list.js) :
+  // elle suit d'une liste de choix à une liste de références, pas sur une colonne qui n'est pas une liste.
+  function formatKindOf(format) {
+    if (!format) return null;
+    if (format.type === 'number' || format.type === 'date' || format.type === 'bool') return format.type;
+    if (format.zero) return 'number';
+    return format.list ? 'list' : null;
+  }
   function normalizeList(raw) {
     // format.list = { pick, index, separator, lastSeparator, perValue } : ce que règle la fenêtre « Liste » (js/variable-list.js). `pick` : 'all'
     // (`separator` entre chacune, `lastSeparator` avant la dernière, le même si vide), 'first', 'last' ou 'nth' (la n-ième, `index` depuis 1 ; une
@@ -431,7 +440,7 @@ const VariableFormat = (function () {
   return {
     DATE_PRESETS, presetLabel, formatDate, formatNumber, numberLang, isZero,
     BOOL_CHECKBOX_STYLES, CHECKED_BOX, UNCHECKED_BOX, isCheckboxStyle, boolStyle, checkboxColor, formatBool,
-    LIST_INDEX_MAX, isListType, columnKind, normalizeList, isDefaultList, storedList, listStyle, flattenList, listText,
+    LIST_INDEX_MAX, isListType, columnKind, formatKindOf, normalizeList, isDefaultList, storedList, listStyle, flattenList, listText,
     AFFIX_MAX, affix, affixes, withAffixes,
   };
 })();

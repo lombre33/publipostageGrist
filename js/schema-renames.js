@@ -364,6 +364,14 @@ const SchemaRenames = (function () {
     return { text: count ? out : src, count };
   }
 
+  // Les attributs qui nomment la table, la colonne et la clé d'une variable : ceux d'une bulle, d'une image liée, et ceux du sinon d'une bulle
+  // (js/variable-otherwise.js).
+  const REFERENCE_ATTRS = {
+    badge: { table: 'data-table', column: 'data-column', key: 'data-key' },
+    image: { table: 'data-var-table', column: 'data-var-column', key: 'data-var-key' },
+    otherwise: { table: 'data-otherwise-table', column: 'data-otherwise-column', key: 'data-otherwise-key' },
+  };
+
   // Les tables que le contenu nomme en toutes lettres : bulles, images liées, formules, boucles, règles « Table.Colonne ».
   function explicitTablesOf(elements) {
     const tables = new Set();
@@ -378,6 +386,8 @@ const SchemaRenames = (function () {
     elements.forEach(el => {
       const table = el.getAttribute('data-table') || el.getAttribute('data-var-table');
       if (table) tables.add(table);
+      const otherwise = el.getAttribute(REFERENCE_ATTRS.otherwise.table);
+      if (otherwise) tables.add(otherwise);
       for (const found of (el.getAttribute('data-formula') || '').matchAll(/\{([A-Za-z_][A-Za-z0-9_]*)\./g)) tables.add(found[1]);
       addRules(parseJson(el.getAttribute('data-condition')));
       const loop = parseJson(el.getAttribute('data-loop'));
@@ -390,30 +400,27 @@ const SchemaRenames = (function () {
     return tables;
   }
 
-  // La table et la colonne que nomme une bulle ou une image liée (data-table / data-column, ou data-var-table / data-var-column pour l'image) : 1
-  // quand la référence est réécrite, 0 sinon.
-  function rewriteReference(el, m) {
-    const isImage = el.tagName === 'IMG';
-    const tableAttr = isImage ? 'data-var-table' : 'data-table';
-    const columnAttr = isImage ? 'data-var-column' : 'data-column';
-    const keyAttr = isImage ? 'data-var-key' : 'data-key';
-    const table = el.getAttribute(tableAttr);
-    const column = el.getAttribute(columnAttr);
+  // La table et la colonne que nomment les attributs `names` d'une bulle, d'une image liée ou d'un sinon : 1 quand la référence est réécrite, 0 sinon.
+  function rewriteReference(el, m, names) {
+    const table = el.getAttribute(names.table);
+    const column = el.getAttribute(names.column);
     const next = table && column ? m.mapQualified(table, column) : null;
     if (!next) return 0;
-    const oldKey = el.getAttribute(keyAttr);
+    const oldKey = el.getAttribute(names.key);
     const newKey = next.table + '.' + next.column;
-    el.setAttribute(tableAttr, next.table);
-    el.setAttribute(columnAttr, next.column);
-    if (oldKey === table + '.' + column) el.setAttribute(keyAttr, newKey);
-    // Le texte de la bulle (touche de déclenchement + clé) : régénéré au chargement dans l'éditeur, mais gardé juste dans le HTML enregistré.
-    if (!isImage && oldKey && el.textContent.endsWith(oldKey)) el.textContent = el.textContent.slice(0, el.textContent.length - oldKey.length) + newKey;
+    el.setAttribute(names.table, next.table);
+    el.setAttribute(names.column, next.column);
+    if (oldKey === table + '.' + column) el.setAttribute(names.key, newKey);
+    // Le texte de la bulle (touche de déclenchement + clé) : régénéré au chargement dans l'éditeur, mais gardé juste dans le HTML enregistré. Celui du
+    // sinon n'est écrit nulle part : l'éditeur le dessine d'après sa clé.
+    if (names === REFERENCE_ATTRS.badge && oldKey && el.textContent.endsWith(oldKey)) el.textContent = el.textContent.slice(0, el.textContent.length - oldKey.length) + newKey;
     return 1;
   }
 
-  // Un élément du modèle (bulle, bulle de calcul, image liée ou QR code, bloc, valeur ou case conditionnels) : le nombre de références réécrites.
+  // Un élément du modèle (bulle et son sinon, bulle de calcul, image liée ou QR code, bloc, valeur ou case conditionnels) : le nombre de références
+  // réécrites.
   function rewriteElement(el, m, page, trigger) {
-    let count = rewriteReference(el, m);
+    let count = rewriteReference(el, m, el.tagName === 'IMG' ? REFERENCE_ATTRS.image : REFERENCE_ATTRS.badge) + rewriteReference(el, m, REFERENCE_ATTRS.otherwise);
     const formula = el.getAttribute('data-formula');
     if (formula) {
       const next = rewriteFormula(formula, m);

@@ -3,7 +3,7 @@
 //  - le TEXTE BRUT d'avant, « Suivi_#TpProjet.Nom » : tout modèle déjà enregistré se relit tel quel, et un champ dont les variables n'ont aucun réglage
 //    s'enregistre encore ainsi (Variables.findTextVariables les retrouve) ;
 //  - le HTML `<p class="pp-field">…<span class="var-badge" …>…</span></p>` dès qu'une bulle porte un réglage (condition, autre format, boucle, liste,
-//    texte « Avant » / « Après »), qu'une puce (date, heure, email, nom) y est posée, ou que le texte autour d'une bulle la collerait à d'autres
+//    texte « Avant » / « Après », sinon), qu'une puce (date, heure, email, nom) y est posée, ou que le texte autour d'une bulle la collerait à d'autres
 //    lettres d'une clé (« #Projet.Nom » puis « Long » se relirait « #Projet.NomLong »). Les bulles et les puces y sont écrites comme dans le corps d'un
 //    modèle (EditorNodes.varBadgeHtml, smartChipHtml), pour que le suivi des renommages et la résolution les lisent pareil.
 // Une valeur est une suite d'éléments : { text }, { badge } (les attributs d'un nœud varBadge) ou { chip } (ceux d'un nœud smartChip : son genre). Sans
@@ -15,9 +15,9 @@ const FieldCodec = (function () {
   const isRich = value => typeof value === 'string' && value.startsWith(RICH_OPEN) && value.endsWith(RICH_CLOSE);
   const isText = item => item.text != null;
   const isChip = item => item.chip != null;
-  // Une bulle sans réglage s'écrit « #Clé » en texte brut ; les réglages (format, condition, boucle, texte « Avant » / « Après ») ne tiennent que
+  // Une bulle sans réglage s'écrit « #Clé » en texte brut ; les réglages (format, condition, boucle, texte « Avant » / « Après », sinon) ne tiennent que
   // dans le HTML.
-  const isPlainBadge = attrs => !attrs.format && !attrs.condition && !attrs.loop && !attrs.before && !attrs.after;
+  const isPlainBadge = attrs => !attrs.format && !attrs.condition && !attrs.loop && !attrs.before && !attrs.after && !attrs.otherwise;
 
   // Les textes voisins n'en font qu'un, un texte vide disparaît.
   function mergeText(items) {
@@ -120,9 +120,10 @@ const FieldCodec = (function () {
     return serializeRich(list);
   }
 
-  // Les variables que cite une valeur enregistrée : [{ table, column }], pour savoir quels modèles une règle de liaison concerne.
+  // Les variables que cite une valeur enregistrée : [{ table, column }], pour savoir quels modèles une règle de liaison concerne - celle d'un sinon
+  // (js/variable-otherwise.js) comprise.
   function variablesIn(value) {
-    return itemsOf(value).filter(item => item.badge).map(item => ({ table: item.badge.table, column: item.badge.column }));
+    return itemsOf(value).filter(item => item.badge).flatMap(({ badge }) => [badge, badge.otherwise].filter(Boolean).map(({ table, column }) => ({ table, column })));
   }
 
   return { isRich, isText, isChip, isPlainBadge, itemsOf, toStored, serializePlain, serializeRich, parsePlain, sameItems, variablesIn, escapeText };

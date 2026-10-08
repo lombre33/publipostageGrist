@@ -491,6 +491,21 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   virgule. Il vaut aussi sans condition et passe par la même résolution partout (Lecture, PDF, Word, Excel, en-têtes et pieds) ; l'éditeur le montre dans de petites pastilles de la
   bulle (son nom reste le texte de la bulle) et l'icône Condition de la barre s'allume avec lui. « Retirer la condition » le garde ; une case Excel qui l'a reste du texte. Les
   attributs ajoutés par « Autres attributs » ne le recopient pas ; « Remplacer » et « Colonne… » le gardent sur la bulle.
+- Sinon afficher (demande d'Antoine du 08/10 : un champ « sinon » dans la condition d'une variable, pour afficher une autre variable plutôt que de poser deux bulles aux conditions
+  opposées - des conditions qui ne le sont pas toujours : pas d'opérateur « ne contient pas », une cellule vide rend faux tous les ordres d'une comparaison de deux colonnes) : une
+  ligne **« Sinon afficher »**, la dernière de la fenêtre de condition d'une bulle (sous l'aperçu : dans un panneau de 700 × 400 la fenêtre défile déjà, et ce qui s'y voit à l'ouverture - les règles, « Avant » / « Après »,
+  la première ligne de l'aperçu - ne descend pas), absente de celle d'un bloc, d'une valeur ou d'une case (elles n'ont pas de
+  variable à remplacer). Elle n'a pas de sens sans condition : **grisée, jamais retirée**, tant qu'aucune règle n'est complète, avec une info-bulle sur l'étiquette ET sur le champ qui
+  dit pourquoi (le champ grisé laisse passer la souris) ; elle se dégrise dès que la règle est complète, sans attendre l'aperçu. Un seul choix, la variable, dans la **liste avec
+  recherche de « Colonne… »** (la table de la page en tête, la flèche « › » des colonnes Référence : un chemin se choisit), « — Aucune — » étant un vrai choix ; son **propre « Avant »
+  / « Après »** apparaît une fois la variable choisie, repris de ceux de la bulle la première fois (la virgule suit toute seule, on change l'étiquette : « Payée le », « Échéance : »).
+  Le sinon est une valeur simple : jamais de boucle, de liste ni de condition, et le format de la bulle ne passe que pour une colonne du même genre (nombre, date, Oui / Non). Une
+  variable d'une table pas encore liée ouvre d'abord le choix de la clé, le choix d'avant revient si on la refuse ; une colonne disparue reste dans la liste sous son nom avec son
+  indication en `--danger-ink`, jamais effacée en silence. L'aperçu dit ce que la ligne sélectionnée écrit et combien de lignes affichent le sinon. Dans l'éditeur, la bulle porte une
+  **pastille « sinon »** (le mot en italique, le texte « Avant », le nom de la variable, le texte « Après »), séparée du nom par un trait en pointillés et sans rien ajouter au texte de
+  la bulle ; elle rougit seule quand sa colonne disparaît, la bulle gardant son aspect. La Lecture, les exports, les en-têtes et pieds, les champs de l'e-mail et les lignes répétées
+  lisent le sinon par la même résolution ; « Retirer la condition » le retire avec elle, « Autres attributs » le laisse à la bulle d'origine (les attributs ajoutés reprennent la
+  condition, pas le sinon).
 - Comparer à une autre colonne (demande d'Antoine du 08/10 : « si colonne 1 == colonne 2, donc pas forcément une valeur », en gardant la liste des valeurs possibles du champ Valeur) :
   dans la fenêtre de condition d'une bulle, d'un bloc, d'une valeur ou d'une case (jamais dans celle d'un macro-modèle, de « Modèle selon la ligne » ou du filtre d'une boucle, qui ne lisent
   qu'une valeur saisie), un **bouton à deux états** à gauche du champ Valeur (icône `compareColumns` : deux colonnes et le signe « = » ; info-bulle et nom accessible « Comparer à une
@@ -707,7 +722,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   la hauteur, le cadre et l'indication grisée de l'ancien champ ; « # » y ouvre la liste du document, avec l'onglet Variables et un onglet Puces réduit à
   celles qui s'écrivent en texte (Date du jour, Heure actuelle, Email et Nom de l'utilisateur : carte du 08/10, « Date, heure, utilisateur » ;
   ni note de bas de page, ni bloc conditionnel, ni calcul), Entrée choisit, Échap ferme la liste, Entrée sans liste valide le champ ; un clic sur une bulle ouvre la barre du document, entièrement dans le panneau
-  (condition avec « Avant » / « Après », autres attributs, boucle « dans la phrase » seulement, liste dont « un document par valeur » est grisé, format ;
+  (condition avec « Avant » / « Après » et « Sinon afficher », autres attributs, boucle « dans la phrase » seulement, liste dont « un document par valeur » est grisé, format ;
   le zéro et Oui / Non s'y écrivent toujours en clair : « 0 » grisé avec sa raison), et la bulle y prend la forme de celle du document (trait pointillé
   d'une condition, point d'un format, bulle rouge d'une colonne disparue). Ce que le champ enregistre reste le texte brut d'avant tant qu'aucune bulle
   n'a de réglage et qu'aucune puce n'est posée (un modèle déjà enregistré se relit tel quel) ; un réglage ou une puce l'écrit en HTML dans la même

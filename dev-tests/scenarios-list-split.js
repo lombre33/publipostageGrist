@@ -541,6 +541,22 @@
     },
   });
 
+  // --- Le sinon d'une bulle (demande d'Antoine du 2026-10-08 : « Sinon afficher » dans la condition d'une bulle, js/variable-otherwise.js) ---
+  cases.push({
+    id: 'listsplit_plan_follows_the_variable_a_bubble_with_an_otherwise_writes',
+    description: 'Une bulle de liste réglée « Un document par valeur » dont la condition n’est pas remplie écrit son sinon, une valeur simple qui ne se découpe pas : un seul document, sans épingle, même quand la colonne du sinon est elle aussi une liste (le réglage de liste ne passe jamais au sinon) ; condition remplie, la liste se découpe comme avant',
+    run: async (h) => {
+      await seed(h);
+      const rows = await GristAPI.fetchTableRows(TABLE);
+      const sinon = column => ` data-otherwise-table="${TABLE}" data-otherwise-column="${column}" data-otherwise-key="${TABLE}.${column}"`;
+      const unmet = await ListSplit.plan([`<p>${badge('Themes', PER, never + sinon('Langues'))}</p>`], TABLE, rows[0]);
+      const held = await ListSplit.plan([`<p>${badge('Themes', PER, onlyAlpha + sinon('Langues'))}</p>`], TABLE, rows[0]);
+      const r = { unmet: [unmet.variants.length, unmet.groups.length, Object.keys(unmet.variants[0].pins).length], held: labelsOf(held) };
+      const pass = JSON.stringify(r.unmet) === '[1,0,0]' && JSON.stringify(r.held) === JSON.stringify(['Santé', 'Social']);
+      return { pass, notes: JSON.stringify(r) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.listSplit = cases;
 })();

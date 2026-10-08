@@ -282,6 +282,35 @@
   });
 
   cases.push({
+    id: 'schemarenames_the_otherwise_of_a_bubble_follows_a_rename_too',
+    description: 'Le sinon d’une bulle (data-otherwise-table, -column, -key ; « Sinon afficher » de la fenêtre de condition) suit un renommage comme la bulle : table, colonne et clé réécrites ensemble, la bulle intacte quand seul son sinon change et inversement, le texte de la bulle jamais touché, son « Avant » gardé ; un modèle qui ne nomme la table de la page que par un sinon est lu comme un modèle de cette page (ses colonnes sans nom de table suivent)',
+    run: async () => {
+      const m = mapper();
+      const ctx = { page: m.tableContext('Dossiers'), trigger: trigger() };
+      const sinon = (table, column) => ` data-otherwise-table="${table}" data-otherwise-column="${column}" data-otherwise-key="${table}.${column}" data-otherwise-before="("`;
+      const first = out => all(out.html, '.var-badge')[0];
+      const only = SchemaRenames.rewriteHtml(`<p>${badge('Dossiers', 'Titre', sinon('Dossiers', 'Montant'))}</p>`, m, ctx);
+      const both = SchemaRenames.rewriteHtml(`<p>${badge('Dossiers', 'Montant', sinon('Projets', 'Nom'))}</p>`, m, ctx);
+      const mainOnly = SchemaRenames.rewriteHtml(`<p>${badge('Dossiers', 'Montant', sinon('Dossiers', 'Titre'))}</p>`, m, ctx);
+      const unchanged = `<p>${badge('Dossiers', 'Titre', sinon('Dossiers', 'Titre'))}</p>`;
+      const quiet = SchemaRenames.rewriteHtml(unchanged, m, ctx);
+      // La seule mention de la table de la page est dans le sinon : la condition sans nom de table se lit dans cette table.
+      const viaOtherwise = SchemaRenames.rewriteHtml(`<p>${badge('Annuaire', 'Email', attr('data-condition', cond([['Montant', '>', '1']])) + sinon('Dossiers', 'Titre'))}</p>`, m, ctx);
+      const attrsOf = el => ['data-table', 'data-column', 'data-key', 'data-otherwise-table', 'data-otherwise-column', 'data-otherwise-key', 'data-otherwise-before'].map(name => el.getAttribute(name));
+      const checks = {
+        otherwiseOnly: only.count === 1 && same(attrsOf(first(only)), ['Dossiers', 'Titre', 'Dossiers.Titre', 'Dossiers', 'Total', 'Dossiers.Total', '(']),
+        mainAndOtherwise: both.count === 2 && same(attrsOf(first(both)), ['Dossiers', 'Total', 'Dossiers.Total', 'Portefeuille', 'Intitule', 'Portefeuille.Intitule', '('])
+          && first(both).textContent === text('§Dossiers.Total'),
+        mainOnly: mainOnly.count === 1 && same(attrsOf(first(mainOnly)), ['Dossiers', 'Total', 'Dossiers.Total', 'Dossiers', 'Titre', 'Dossiers.Titre', '(']),
+        untouched: quiet.count === 0 && quiet.html === unchanged,
+        pageReadThroughTheOtherwise: viaOtherwise.count === 2 && same(json(first(viaOtherwise), 'data-condition').rules.map(r => r.column), ['Total']) && first(viaOtherwise).getAttribute('data-column') === 'Courriel',
+      };
+      const v = verdict(checks);
+      return { pass: v.pass, notes: v.failed.join(', ') || 'ok' };
+    },
+  });
+
+  cases.push({
     id: 'schemarenames_a_bare_column_that_another_table_still_has_is_left_where_the_loop_table_is_certain',
     description: 'Une colonne nue dont une autre table porte encore le nom (le modèle peut servir sur l’autre page) ne bouge pas, dans une condition comme dans un macro-modèle ; le filtre et le tri d’une boucle, sur une table certaine, suivent quand même',
     run: async () => {

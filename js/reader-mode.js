@@ -38,6 +38,15 @@ const ReaderMode = (function () {
     if (around.after) node.append(document.createTextNode(around.after));
     return node;
   }
+  // Les nœuds à condition du modèle, défaits ou retirés avant que les bulles soient remplacées par leur valeur : les blocs de texte (js/conditional-text.js)
+  // - les bulles d'un bloc retiré n'ont rien à résoudre -, les valeurs, les cases, puis le sinon des bulles (js/variable-otherwise.js : une bulle dont la
+  // condition n'est pas remplie devient la variable de son sinon, sa seule valeur à lire ensuite). Une seule fois, pour la Lecture comme pour tous les exports.
+  async function resolveConditionalNodes(wrapper, tableId, record) {
+    await ConditionalText.resolve(wrapper, tableId, record);
+    await ConditionalValue.resolve(wrapper, tableId, record);
+    await ConditionalCheckbox.resolve(wrapper, tableId, record);
+    await VariableOtherwise.resolve(wrapper, tableId, record);
+  }
   // === Aperçu paginé réel - mode Lecture ===
   // Parallèle à l'aperçu de l'éditeur (js/header-footer-preview.js:computePageBreaks, renderPaginationOverlay), sur du contenu statique déjà résolu :
   // pas de débounce nécessaire. Les deux sont à tenir d'accord, mais lisent un DOM différent : l'éditeur mesure les enfants de `.tiptap` (avec les
@@ -236,11 +245,9 @@ const ReaderMode = (function () {
     applyAcceptedView(wrapper, html);
     const loopCtx = LoopRules.createContext();
     await LoopRules.expandZones(wrapper, tableId, record, loopCtx);
-    // Blocs de texte conditionnels (js/conditional-text.js) : défaits ou retirés ici, avant les bulles - celles d'un bloc retiré n'ont rien à
+    // Blocs de texte, valeurs et cases conditionnels, sinon des bulles : défaits ou retirés ici, avant les bulles - celles d'un bloc retiré n'ont rien à
     // résoudre.
-    await ConditionalText.resolve(wrapper, tableId, record);
-    await ConditionalValue.resolve(wrapper, tableId, record);
-    await ConditionalCheckbox.resolve(wrapper, tableId, record);
+    await resolveConditionalNodes(wrapper, tableId, record);
     const badges = wrapper.querySelectorAll(BADGE_SELECTOR);
     await Promise.all(Array.from(badges).map(async badge => {
       const table = badge.getAttribute('data-table'); const column = badge.getAttribute('data-column');
@@ -746,11 +753,9 @@ const ReaderMode = (function () {
     const loopCtx = LoopRules.createContext();
     await LoopRules.expandZones(wrapper, tableId, record, loopCtx);
     if (stale()) return null;
-    // Blocs de texte conditionnels (js/conditional-text.js) : défaits ou retirés ici, avant les bulles - celles d'un bloc retiré n'ont rien à
+    // Blocs de texte, valeurs et cases conditionnels, sinon des bulles : défaits ou retirés ici, avant les bulles - celles d'un bloc retiré n'ont rien à
     // résoudre.
-    await ConditionalText.resolve(wrapper, tableId, record);
-    await ConditionalValue.resolve(wrapper, tableId, record);
-    await ConditionalCheckbox.resolve(wrapper, tableId, record);
+    await resolveConditionalNodes(wrapper, tableId, record);
     if (stale()) return null;
     const badges = wrapper.querySelectorAll(BADGE_SELECTOR); let hasError = false;
     const results = await Promise.all(Array.from(badges).map(async badge => {
@@ -1001,7 +1006,7 @@ const ReaderMode = (function () {
   }
   async function expandedWrapper(htmlContent, tableId, record) {
     // Le document tel que preview() le déroule avant de remplacer les bulles : les zones répétées (leurs copies comprises) et les conditions de bloc,
-    // de valeur et de case résolues. Partagé avec splitBadges.
+    // de valeur et de case résolues, le sinon des bulles basculé. Partagé avec splitBadges.
     const cleanHtml = HtmlSanitize.clean(htmlContent);
     const wrapper = document.createElement('div'); wrapper.innerHTML = cleanHtml;
     // Le PDF, le Word et l'Excel sortent le document comme la Lecture, suggestions du suivi acceptées, mais sans teinte : le texte supprimé n'y est
@@ -1015,9 +1020,7 @@ const ReaderMode = (function () {
     // Mêmes zones répétées que le mode Lecture (cf. render()), avant de lister les bulles : les copies en font partie.
     const loopCtx = LoopRules.createContext();
     await LoopRules.expandZones(wrapper, tableId || lastCurrentTableId, record, loopCtx);
-    await ConditionalText.resolve(wrapper, tableId || lastCurrentTableId, record);
-    await ConditionalValue.resolve(wrapper, tableId || lastCurrentTableId, record);
-    await ConditionalCheckbox.resolve(wrapper, tableId || lastCurrentTableId, record);
+    await resolveConditionalNodes(wrapper, tableId || lastCurrentTableId, record);
     return { wrapper, loopCtx };
   }
   async function splitBadges(parts, tableId, record) {
@@ -1070,6 +1073,8 @@ const ReaderMode = (function () {
     const wrapper = document.createElement('div');
     wrapper.innerHTML = HtmlSanitize.clean(html);
     const loopCtx = LoopRules.createContext();
+    // Une bulle à sinon : celle de sa condition remplie, ou la variable de son sinon (js/variable-otherwise.js), avant de lire les bulles.
+    await VariableOtherwise.resolve(wrapper, tableId || lastCurrentTableId, record);
     const atoms = wrapper.querySelectorAll(BADGE_SELECTOR + ', .smart-chip');
     await Promise.all(Array.from(atoms).map(async atom => {
       let text = '';

@@ -12,6 +12,10 @@
 // Une bulle a en plus deux petits champs, « Avant » et « Après » : le texte collé à sa valeur (une virgule, une parenthèse), écrit seulement quand
 // la variable s'affiche avec une valeur (attributs `before` et `after` du nœud, VariableFormat.withAffixes ; js/reader-mode.js les écrit). Ils se règlent
 // ici parce que le cas d'usage est la virgule d'une variable conditionnelle, mais valent aussi pour une bulle sans condition.
+// Et une ligne « Sinon afficher » : la variable que la bulle écrit à sa place quand la condition n'est pas remplie, avec son propre « Avant » / « Après »
+// (attribut `otherwise` du nœud, js/variable-otherwise.js). La liste est celle de « Colonne… » (js/variable-column.js) ; grisée sans règle complète,
+// puisqu'un sinon n'a de sens que pour une condition. Elle est la dernière de la fenêtre, sous l'aperçu : à 700 × 400 la fenêtre défile déjà, et rien de ce qui s'y
+// voyait à l'ouverture (les règles, « Avant » / « Après », l'aperçu) ne doit descendre. L'aperçu dit ce que la ligne sélectionnée écrit, sinon compris.
 const VariableCondition = (function () {
   const { el, option, button } = Dom;
   const { setLine, shorten } = VariableModal;
@@ -21,6 +25,7 @@ const VariableCondition = (function () {
     varBadge: {
       title: 'varCond.title', intro: 'varCond.intro', modeBefore: 'varCond.modeBefore', saveLost: 'varCond.saveLost', pasted: 'varCond.clip.pastedStatus',
       met: 'varCond.debug.currentMet', notMet: 'varCond.debug.currentNotMet', first: 'varCond.debug.first',
+      notMetOtherwise: 'varCond.debug.currentNotMetOtherwise',
     },
     conditionalText: {
       title: 'varCond.title', intro: 'varCond.introBlock', modeBefore: 'varCond.modeBefore', saveLost: 'varCond.saveLostBlock', pasted: 'varCond.clip.pastedStatusBlock',
@@ -54,6 +59,11 @@ const VariableCondition = (function () {
   const showsValue = () => state.node.type.name === 'varBadge';
   // Le texte « Avant » / « Après » tel qu'il est tapé dans la fenêtre ({ before, after }), ou null : sans bulle, sans texte ou fenêtre fermée.
   const draftAffixes = () => (state && refs && showsValue() ? VariableFormat.affixes(refs.beforeInput.value, refs.afterInput.value) : null);
+  // Le sinon tel que la fenêtre le règle ({ table, column, key, before, after }, js/variable-otherwise.js), ou null : sans bulle, sans variable choisie
+  // ou fenêtre fermée.
+  const draftOtherwise = () => (state && refs && showsValue() && state.otherwise
+    ? VariableOtherwise.normalize(Object.assign({}, state.otherwise, { before: refs.otherwiseBeforeInput.value, after: refs.otherwiseAfterInput.value }))
+    : null);
 
   // « Statut = Urgent et VcContacts.Role = Avocat » : une condition sur une ligne, sans valeur pour « vide » / « non vide ». Une règle qui compare à une
   // autre colonne la nomme entre accolades, comme une colonne dans un calcul : « Montant = {Paye} », qui ne se lit pas comme la valeur « Paye ». Ce que
@@ -68,6 +78,27 @@ const VariableCondition = (function () {
       return (r.column + ' ' + operator + (noValue ? '' : ' ' + shown)).trim();
     }).join(glue);
     return opts && opts.full ? text : shorten(text, 110);
+  }
+
+  // Les champs de la ligne « Sinon afficher » : l'étiquette, la liste des variables (le <select> ; la liste avec recherche vient dessus à la création de la
+  // fenêtre, ses lignes à chaque ouverture : `fillOtherwiseChoices`), l'indication d'une colonne disparue, puis l'« Avant » / « Après » du sinon.
+  // `nodes` : ce que sa grille - `otherwiseRow`, sous l'aperçu - reçoit, dans l'ordre.
+  function buildOtherwiseFields() {
+    const label = el('label');
+    label.htmlFor = 'var-condition-otherwise';
+    const select = el('select');
+    select.id = 'var-condition-otherwise';
+    const field = el('div', 'var-condition-otherwise-field');
+    field.appendChild(select);
+    const hint = el('span', 'var-condition-otherwise-hint');
+    hint.hidden = true;
+    const before = VariableModal.labelledInput('var-condition-otherwise-before', 'var-condition-affix-input');
+    const after = VariableModal.labelledInput('var-condition-otherwise-after', 'var-condition-affix-input');
+    after.label.className = 'var-condition-affix-after';
+    return {
+      label, field, select, hint, beforeLabel: before.label, beforeInput: before.input, afterLabel: after.label, afterInput: after.input,
+      nodes: [label, field, hint, before.label, before.input, after.label, after.input],
+    };
   }
 
   function ensureModal() {
@@ -90,8 +121,10 @@ const VariableCondition = (function () {
     const affixRow = el('div', 'var-condition-affix');
     const beforeField = VariableModal.labelledInput('var-condition-before', 'var-condition-affix-input');
     const afterField = VariableModal.labelledInput('var-condition-after', 'var-condition-affix-input');
+    afterField.label.className = 'var-condition-affix-after';
     const affixHint = el('span', 'var-loop-hint');
-    for (const input of [beforeField.input, afterField.input]) {
+    const otherwise = buildOtherwiseFields();
+    for (const input of [beforeField.input, afterField.input, otherwise.beforeInput, otherwise.afterInput]) {
       input.maxLength = VariableFormat.AFFIX_MAX;
       input.autocomplete = 'off';
       input.spellcheck = false;
@@ -99,6 +132,11 @@ const VariableCondition = (function () {
       input.addEventListener('input', () => previewRun.schedule());
     }
     affixRow.append(beforeField.label, beforeField.input, afterField.label, afterField.input, affixHint);
+    // « Sinon afficher » (js/variable-otherwise.js) et son propre « Avant » / « Après » : une seconde grille, la même, tout en bas. L'aperçu garde sa place, entre
+    // les deux : à 700 × 400 ce qui se voyait dès l'ouverture - les règles, « Avant » / « Après », la première ligne de l'aperçu - reste où c'était, la ligne
+    // nouvelle vient en dessous.
+    const otherwiseRow = el('div', 'var-condition-affix var-condition-otherwise-row');
+    otherwiseRow.append(...otherwise.nodes);
     const { box: previewArea, lines: [currentLine, countLine] } = VariableModal.previewBox(2);
     // « Défaire le bloc » / « Défaire la valeur » vient juste après « Retirer la condition » : le premier `.var-modal-danger` reste celui-ci (les
     // tests et les autres fenêtres trouvent « Annuler » par `button:not(.var-modal-primary):not(.var-modal-danger)`) ; son texte garde la couleur du
@@ -121,27 +159,37 @@ const VariableCondition = (function () {
     clipStatus.setAttribute('role', 'status');
     const clip = el('span', 'var-condition-clip');
     clip.append(copyBtn, pasteBtn, clipStatus);
-    win.body.append(intro, modeRow, rulesBox, affixRow, previewArea);
+    win.body.append(intro, modeRow, rulesBox, affixRow, previewArea, otherwiseRow);
     refs = {
       title: win.title, intro, modeRow, modeBefore, modeSelect, modeAfter, rulesBox, clip, copyBtn, pasteBtn, clipStatus, currentLine, countLine,
       removeBtn, unwrapBtn, cancelBtn, saveBtn,
       affixRow, beforeLabel: beforeField.label, beforeInput: beforeField.input, afterLabel: afterField.label, afterInput: afterField.input, affixHint,
+      otherwiseRow, otherwiseLabel: otherwise.label, otherwiseField: otherwise.field, otherwiseSelect: otherwise.select, otherwiseHint: otherwise.hint,
+      otherwiseBeforeLabel: otherwise.beforeLabel, otherwiseBeforeInput: otherwise.beforeInput,
+      otherwiseAfterLabel: otherwise.afterLabel, otherwiseAfterInput: otherwise.afterInput, otherwiseSearch: null,
     };
+    // Liste avec recherche posée par-dessus le <select> (js/search-select.js), une fois la ligne dans la fenêtre : le <select> garde le choix, et son
+    // étiquette lui donne son nom. Si le composant échoue, la liste native reste.
+    try { refs.otherwiseSearch = SearchSelect.attachColumns(otherwise.select, { inline: true, hintInTrigger: false, expand: VariableColumn.expand }); }
+    catch (e) { console.warn('[VariableCondition] recherche de variable indisponible, liste native conservée', e); }
+    otherwise.select.addEventListener('change', () => chooseOtherwise(otherwise.select.value));
 
     modeSelect.addEventListener('change', () => {
       if (!state) return;
       state.working.mode = modeSelect.value === 'any' ? 'any' : 'all';
       redraw();
     });
-    removeBtn.addEventListener('click', () => { if (state) { applyAttrs({ condition: null }); close(); } });
+    removeBtn.addEventListener('click', () => { if (state) { applyAttrs(showsValue() ? { condition: null, otherwise: null } : { condition: null }); close(); } });
     unwrapBtn.addEventListener('click', unwrapNode);
     cancelBtn.addEventListener('click', close);
     saveBtn.addEventListener('click', save);
     copyBtn.addEventListener('click', copyCondition);
     pasteBtn.addEventListener('click', pasteCondition);
-    // Toute saisie dans les lignes (colonne, opérateur, valeur, « au moins une ») relance l'aperçu.
-    win.box.addEventListener('input', previewRun.schedule);
-    win.box.addEventListener('change', previewRun.schedule);
+    // Toute saisie dans les lignes (colonne, opérateur, valeur, « au moins une ») relance l'aperçu, et dégrise - ou regrise - tout de suite la ligne « Sinon
+    // afficher » selon que les règles sont complètes.
+    const edited = () => { syncOtherwiseRow(); previewRun.schedule(); };
+    win.box.addEventListener('input', edited);
+    win.box.addEventListener('change', edited);
   }
 
   // « ligne d'Annuaire trouvée via Dossiers.Responsable · Modifier le lien » sous une règle portant sur une autre table déjà liée.
@@ -164,6 +212,7 @@ const VariableCondition = (function () {
   function redraw() {
     if (!state) return;
     renderRules();
+    syncOtherwiseRow();
     previewRun.schedule();
   }
 
@@ -252,15 +301,80 @@ const VariableCondition = (function () {
     syncClipboardButtons();
   }
 
+  // === Sinon afficher === La liste des variables est celle de « Colonne… » (VariableColumn.candidates : la table de la page en tête, sans les colonnes d'aide),
+  // relue à chaque ouverture ; un sinon enregistré dont la colonne a disparu y reste sous son nom, avec son indication : jamais effacé en silence.
+  function fillOtherwiseChoices() {
+    const saved = state.otherwise;
+    const choices = VariableColumn.candidates(state.editor);
+    state.choices = saved && !choices.some(v => v.key === saved.key) ? choices.concat(saved) : choices;
+    // « — Aucune — » est un vrai choix (`data-placeholder`) : la liste le traite comme les autres lignes.
+    const none = Dom.option('', I18n.t('varCond.otherwiseNone'));
+    none.dataset.placeholder = 'false';
+    refs.otherwiseSelect.replaceChildren(none, ...state.choices.map(VariableColumn.optionOf));
+    refs.otherwiseSelect.value = saved ? saved.key : '';
+    if (refs.otherwiseSearch) refs.otherwiseSearch.sync();
+  }
+  // L'état de la ligne : grisée tant qu'aucune règle n'est complète (jamais retirée : l'info-bulle dit pourquoi, sur l'étiquette et sur le champ), l'« Avant » /
+  // « Après » du sinon visibles une fois une variable choisie, et l'indication quand cette colonne n'existe plus.
+  function syncOtherwiseRow() {
+    if (!state || !refs || !showsValue()) return;
+    const ready = !!ConditionRules.plainCondition(state.working);
+    const title = I18n.t(ready ? 'varCond.otherwiseTitle' : 'varCond.otherwiseNeedsRule');
+    refs.otherwiseSelect.disabled = !ready;
+    if (refs.otherwiseSearch) refs.otherwiseSearch.sync();
+    refs.otherwiseLabel.title = title;
+    refs.otherwiseField.title = title;
+    const chosen = !!state.otherwise;
+    [refs.otherwiseBeforeLabel, refs.otherwiseBeforeInput, refs.otherwiseAfterLabel, refs.otherwiseAfterInput].forEach(node => { node.hidden = !chosen; });
+    refs.otherwiseBeforeInput.disabled = !ready;
+    refs.otherwiseAfterInput.disabled = !ready;
+    const problem = chosen ? Editor.badgeProblemText(state.otherwise.table, state.otherwise.column) : '';
+    refs.otherwiseHint.textContent = problem;
+    refs.otherwiseHint.hidden = !problem;
+  }
+  // Un choix dans la liste (`key` vide : « — Aucune — », le sinon s'en va). Une variable d'une table pas encore liée ouvre d'abord la fenêtre de la clé
+  // (VariableColumn.ensureLinked) ; refusée, la liste revient à son choix d'avant. Un sinon qui vient d'être choisi prend l'« Avant » / « Après » de la
+  // bulle : la virgule du cas d'usage suit toute seule, la personne change ensuite l'étiquette (« Payée le », « Échéance : »).
+  async function chooseOtherwise(key) {
+    if (!state) return;
+    const previous = state.otherwise;
+    const item = key ? VariableColumn.itemOf(state.choices, key) : null;
+    if (key && !item) return;
+    // Refusé, le choix d'avant se remet : la liste est refaite d'après `state.otherwise`, qui n'a pas encore bougé.
+    if (item && !(await VariableColumn.ensureLinked(state.editor, state.pos, item))) {
+      if (state) fillOtherwiseChoices();
+      return;
+    }
+    if (!state) return;
+    state.otherwise = item ? { table: item.table, column: item.column, key: item.key } : null;
+    if (item && !previous && !refs.otherwiseBeforeInput.value && !refs.otherwiseAfterInput.value) {
+      refs.otherwiseBeforeInput.value = refs.beforeInput.value;
+      refs.otherwiseAfterInput.value = refs.afterInput.value;
+    }
+    syncOtherwiseRow();
+    previewRun.schedule();
+  }
+
   // === Aperçu === Même évaluation que le mode Lecture (ConditionRules.conditionHolds) : d'abord la ligne sélectionnée dans Grist, puis toutes les
   // lignes de la table de la page, chaque table n'étant lue qu'une fois (LoopRules.createContext : sinon chaque ligne relirait chaque table liée).
-  async function displayValue(record, tableId) {
-    const { table, column, format } = state.node.attrs;
+  // `shown` : la bulle à lire ({ table, column, format, before, after }) - celle que la fenêtre règle (`shownMain`) ou, condition non remplie, celle de son
+  // sinon (VariableOtherwise.whenNotMet).
+  async function displayValue(record, tableId, shown) {
+    const { table, column, format } = shown;
     if (GristAPI.getColumnType(table, column) === 'Attachments') return I18n.t('varCond.debug.imageValue');
     const value = await Variables.resolveVariable(table, column, tableId, record, format);
     // Avec son texte « Avant » / « Après » comme la Lecture l'écrira ; une valeur vide n'en reçoit pas.
-    return value === '' ? I18n.t('varCond.debug.emptyValue') : VariableFormat.withAffixes(value, draftAffixes());
+    return value === '' ? I18n.t('varCond.debug.emptyValue') : VariableFormat.withAffixes(value, VariableFormat.affixes(shown.before, shown.after));
   }
+  // La bulle telle que la fenêtre la règle : sa variable, son format et son texte « Avant » / « Après » du moment (pas ceux du nœud, qui ne bougent
+  // qu'à « Enregistrer »).
+  function shownMain() {
+    const { table, column, format } = state.node.attrs;
+    const around = draftAffixes();
+    return { table, column, format, before: around && around.before, after: around && around.after };
+  }
+  // La bulle du sinon réglé dans la fenêtre, ou null quand il n'y en a pas : ce que la ligne écrit quand la condition n'est pas remplie.
+  const shownOtherwise = () => VariableOtherwise.whenNotMet(Object.assign({}, state.node.attrs, { otherwise: draftOtherwise() }));
   // Repère lisible de la première ligne trouvée : le texte de la première colonne de la table, s'il y en a un (un identifiant de ligne seul ne se
   // voit pas dans Grist).
   function rowLabel(row, tableId) {
@@ -272,10 +386,12 @@ const VariableCondition = (function () {
   // la variable écrit, toujours. Rend faux quand la fenêtre a changé pendant le calcul.
   async function previewSelectedRow({ condition, tableId, t, stale, currentLine }, record) {
     const holds = await ConditionRules.conditionHolds(condition, tableId, record);
-    const shown = holds && showsValue() ? await displayValue(record, tableId) : '';
+    // Condition non remplie : ce que le sinon réglé dans la fenêtre écrit à la place, quand il y en a un.
+    const fallback = !holds && condition && showsValue() ? shownOtherwise() : null;
+    const shown = showsValue() && (holds || fallback) ? await displayValue(record, tableId, holds ? shownMain() : fallback) : '';
     if (stale()) return false;
-    const key = !condition ? 'varCond.debug.currentShown' : (holds ? t.met : t.notMet);
-    setLine(currentLine, I18n.t(key, { id: record.id, value: shown }), holds);
+    const key = !condition ? 'varCond.debug.currentShown' : (holds ? t.met : (fallback ? t.notMetOtherwise : t.notMet));
+    setLine(currentLine, I18n.t(key, { id: record.id, value: shown }), holds || !!fallback);
     return true;
   }
   // Combien de lignes remplissent la condition, et la première. Rend null quand la fenêtre a changé pendant le parcours.
@@ -301,15 +417,20 @@ const VariableCondition = (function () {
     const found = await countHolding(condition, tableId, rows, fetchRows, stale);
     if (!found || stale()) return;
     const { count, first } = found;
-    if (!count) { setLine(countLine, I18n.t('varCond.debug.none', { table: tableId, total: rows.length }), false); return; }
-    const firstValue = showsValue() ? await displayValue(first, tableId) : '';
+    // Avec un sinon réglé, les lignes qui ne remplissent pas la condition ne sont plus masquées : la phrase dit qu'elles affichent le sinon.
+    const withOtherwise = showsValue() && !!draftOtherwise();
+    if (!count) { setLine(countLine, I18n.t(withOtherwise ? 'varCond.debug.noneOtherwise' : 'varCond.debug.none', { table: tableId, total: rows.length }), false); return; }
+    const firstValue = showsValue() ? await displayValue(first, tableId, shownMain()) : '';
     if (stale()) return;
-    setLine(countLine, I18n.t('varCond.debug.count', { table: tableId, count, total: rows.length }) + ' '
+    const others = rows.length - count;
+    const countKey = withOtherwise && others > 0 ? 'varCond.debug.countOtherwise' : 'varCond.debug.count';
+    setLine(countLine, I18n.t(countKey, { table: tableId, count, total: rows.length, others }) + ' '
       + I18n.t(t.first, { id: first.id, label: rowLabel(first, tableId), value: firstValue }), false);
   }
   async function updatePreview() {
     if (!state || !refs) return;
     syncClipboardButtons();
+    syncOtherwiseRow();
     const outdated = previewRun.begin();
     const stale = () => outdated() || !state;
     const { currentLine, countLine } = refs;
@@ -331,8 +452,8 @@ const VariableCondition = (function () {
     }
   }
 
-  // Réécrit des attributs du nœud d'origine (`condition`, et pour une bulle `before` / `after`), retrouvé à sa position capturée au clic. Ce que
-  // `patch` ne nomme pas reste tel quel.
+  // Réécrit des attributs du nœud d'origine (`condition`, et pour une bulle `before`, `after` et `otherwise`), retrouvé à sa position capturée au clic.
+  // Ce que `patch` ne nomme pas reste tel quel.
   function applyAttrs(patch) {
     const { editor, pos } = state;
     const node = VariableModal.nodeAtOrigin(state, texts().saveLost, 'VariableCondition');
@@ -345,11 +466,14 @@ const VariableCondition = (function () {
   }
   function save() {
     if (!state) return;
-    const patch = { condition: ConditionRules.plainCondition(state.working) };
+    const condition = ConditionRules.plainCondition(state.working);
+    const patch = { condition };
     if (showsValue()) {
       const around = draftAffixes();
       patch.before = around && around.before;
       patch.after = around && around.after;
+      // Un sinon n'a de sens que pour une condition : sans règle complète, il s'en va avec elle.
+      patch.otherwise = condition ? draftOtherwise() : null;
     }
     applyAttrs(patch);
     close();
@@ -378,7 +502,12 @@ const VariableCondition = (function () {
     if (!node || !TEXTS[node.type.name]) return;
     ensureModal();
     const existing = ConditionRules.plainCondition(node.attrs.condition);
-    state = { editor, pos, node, hadCondition: !!existing, working: existing || { mode: 'all', rules: [ConditionFields.emptyRule()] } };
+    const saved = VariableOtherwise.normalize(node.attrs.otherwise);
+    state = {
+      editor, pos, node, hadCondition: !!existing, working: existing || { mode: 'all', rules: [ConditionFields.emptyRule()] },
+      // « Sinon afficher » : la variable choisie ({ table, column, key }, null = aucune) et les variables qui se proposent (fillOtherwiseChoices).
+      otherwise: node.type.name === 'varBadge' && saved ? { table: saved.table, column: saved.column, key: saved.key } : null, choices: [],
+    };
     const t = texts();
     const r = refs;
     r.title.textContent = I18n.t(t.title);
@@ -398,6 +527,7 @@ const VariableCondition = (function () {
     r.cancelBtn.textContent = I18n.t('common.cancel');
     r.saveBtn.textContent = I18n.t('common.save');
     r.affixRow.hidden = !showsValue();
+    r.otherwiseRow.hidden = !showsValue();
     r.beforeLabel.textContent = I18n.t('varCond.affixBefore');
     r.afterLabel.textContent = I18n.t('varCond.affixAfter');
     r.beforeInput.title = I18n.t('varCond.affixBeforeTitle');
@@ -405,10 +535,21 @@ const VariableCondition = (function () {
     r.affixHint.textContent = I18n.t('varCond.affixHint');
     r.beforeInput.value = VariableFormat.affix(node.attrs.before) || '';
     r.afterInput.value = VariableFormat.affix(node.attrs.after) || '';
+    r.otherwiseLabel.textContent = I18n.t('varCond.otherwiseLabel');
+    r.otherwiseBeforeLabel.textContent = I18n.t('varCond.affixBefore');
+    r.otherwiseAfterLabel.textContent = I18n.t('varCond.affixAfter');
+    r.otherwiseBeforeInput.setAttribute('aria-label', I18n.t('varCond.otherwiseBeforeAria'));
+    r.otherwiseAfterInput.setAttribute('aria-label', I18n.t('varCond.otherwiseAfterAria'));
+    r.otherwiseBeforeInput.title = I18n.t('varCond.affixBeforeTitle');
+    r.otherwiseAfterInput.title = I18n.t('varCond.affixAfterTitle');
+    r.otherwiseBeforeInput.value = (state.otherwise && saved && saved.before) || '';
+    r.otherwiseAfterInput.value = (state.otherwise && saved && saved.after) || '';
+    if (showsValue()) fillOtherwiseChoices();
     resetCopyLabel();
     r.pasteBtn.textContent = I18n.t('varCond.clip.paste');
     r.clipStatus.textContent = '';
     renderRules();
+    syncOtherwiseRow();
     // La barre flottante de la bulle reste masquée tant que la fenêtre est ouverte ; elle est sous le voile de toute façon (--z-floating-toolbar,
     // css/style.css).
     EditorCore.hideFloatingContextToolbars();

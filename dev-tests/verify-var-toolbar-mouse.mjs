@@ -1173,7 +1173,7 @@ async function openAffixWindow() {
 // Fait défiler le corps de la fenêtre à la molette réelle jusqu'à ce que le champ reçoive le clic (un champ rogné par la zone de défilement ne le reçoit pas).
 async function revealField(selector) {
   let box = await hitTest(selector);
-  const body = await hitTest('#var-condition-modal .var-modal-body');
+  const body = await hitTest('#var-condition-modal .pp-modal-body');
   for (let i = 0; i < 6 && box.found && !box.onTop && body.found; i++) {
     await page.mouse.move(body.x, body.y);
     await page.mouse.wheel(0, 120);
@@ -1239,6 +1239,196 @@ await page.setViewportSize({ width: WIDTH, height: HEIGHT });
 await page.waitForTimeout(300);
 const affixCancel = await hitTest('#var-condition-modal .var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)');
 if (affixCancel.found) await page.mouse.click(affixCancel.x, affixCancel.y);
+await page.waitForTimeout(200);
+
+// « Sinon afficher » (demande d'Antoine, 2026-10-08 : afficher une autre variable plutôt que de poser deux bulles aux conditions opposées), à la vraie souris et au clavier dans 700x400 :
+// la ligne est là mais grisée tant qu'aucune règle n'est complète - la souris traverse le champ grisé, pour que l'info-bulle de la ligne dise pourquoi -, elle se dégrise dès que la règle
+// est complète, sa liste avec recherche s'ouvre entière dans le panneau, un vrai clic choisit la variable, son « Avant » / « Après » reprennent ceux de la bulle et se modifient au clavier,
+// l'aperçu dit ce que la ligne écrit, Enregistrer pose le sinon et la pastille « sinon » s'affiche DANS la bulle (un clic dessus sélectionne la bulle) ; rouverte, la fenêtre le reprend ;
+// à 360 px de large, rien ne déborde.
+await page.evaluate(() => {
+  document.querySelector('.tiptap').blur();
+  Editor.setHTML('<p>Dossier <span class="var-badge" data-table="VcDossiers" data-column="Titre" data-key="VcDossiers.Titre"></span> suivi.</p>');
+  document.querySelector('.tiptap .var-badge[data-column="Titre"]').scrollIntoView({ block: 'center' });
+});
+await page.waitForTimeout(400);
+const OTHERWISE_FIELD = '#var-condition-modal .var-condition-otherwise-field';
+// Le corps de la fenêtre défile à la molette réelle, titre et boutons en place : vers le bas, ou vers le haut avec un nombre négatif.
+async function scrollWindowBody(dy) {
+  const body = await hitTest('#var-condition-modal .pp-modal-body');
+  await page.mouse.move(body.x, body.y);
+  await page.mouse.wheel(0, dy);
+  await page.waitForTimeout(120);
+}
+// La ligne « Sinon afficher » telle qu'une personne la voit : grisée ou non, valeur affichée, info-bulle, « Avant » / « Après » du sinon.
+const otherwiseState = () => page.evaluate(() => {
+  const byId = id => document.getElementById(id);
+  const field = document.querySelector('#var-condition-modal .var-condition-otherwise-field');
+  const trigger = field.querySelector('.ss-trigger');
+  const label = document.querySelector('#var-condition-modal label[for="var-condition-otherwise"]');
+  const shown = node => !node.hidden && node.getClientRects().length > 0;
+  const r = field.getBoundingClientRect();
+  const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+  return {
+    label: label.textContent, greyed: byId('var-condition-otherwise').disabled && trigger.disabled, value: byId('var-condition-otherwise').value, shown: trigger.textContent,
+    fieldTitle: field.title, labelTitle: label.title, mouseReachesRow: !!top && field.contains(top),
+    couple: [shown(byId('var-condition-otherwise-before')), shown(byId('var-condition-otherwise-after'))],
+    texts: [byId('var-condition-otherwise-before').value, byId('var-condition-otherwise-after').value],
+  };
+});
+await openAffixWindow();
+const otherwiseWindow = await hitTest('#var-condition-modal .var-modal-content');
+check('Sinon afficher : la fenêtre de condition d’une bulle s’ouvre entière dans 700x400', otherwiseWindow.found && otherwiseWindow.inViewport, otherwiseWindow);
+const greyedBox = await revealField(OTHERWISE_FIELD);
+const greyed = await otherwiseState();
+check('... la ligne est là, grisée sans règle complète : « — Aucune — » affiché, ni « Avant » ni « Après » du sinon', greyedBox.found && greyedBox.inViewport && greyed.label === 'Sinon afficher' && greyed.greyed
+  && greyed.shown === '— Aucune —' && greyed.couple.join() === 'false,false', { greyedBox, greyed });
+check('... la souris traverse le champ grisé jusqu’à la ligne, dont l’info-bulle (champ et étiquette) dit quoi faire', greyed.mouseReachesRow && /^Complétez d.abord une condition/.test(greyed.fieldTitle)
+  && greyed.labelTitle === greyed.fieldTitle, greyed);
+await page.mouse.click(greyedBox.x, greyedBox.y);
+await page.waitForTimeout(150);
+const greyedClick = await page.evaluate(() => ({ list: !!Array.from(document.querySelectorAll('.ss-panel')).find(p => !p.hidden), open: document.getElementById('var-condition-modal').style.display !== 'none' }));
+check('... un vrai clic sur le champ grisé n’ouvre pas la liste et laisse la fenêtre ouverte', !greyedClick.list && greyedClick.open, greyedClick);
+await scrollWindowBody(-1000);
+check('... colonne Statut de la règle choisie à la vraie souris', await pickColumn('#var-condition-modal', 'Statut'));
+const normalValue = await hitTest('#var-condition-modal .macro-rule-value');
+if (normalValue.found) { await page.mouse.click(normalValue.x, normalValue.y); await page.keyboard.type('Normal'); }
+await page.waitForTimeout(60);
+const ungreyed = await otherwiseState();
+check('... la règle complète (« Statut = Normal » tapée au clavier) dégrise la ligne tout de suite, sans attendre l’aperçu, et l’info-bulle change', !ungreyed.greyed
+  && /^La variable écrite à la place/.test(ungreyed.fieldTitle) && ungreyed.labelTitle === ungreyed.fieldTitle, ungreyed);
+// À l'ouverture, dans le panneau bas, ce qui se voyait AVANT le sinon doit rester où c'était : les règles, « Avant » / « Après » et la première ligne de l'aperçu entiers dans le corps
+// de la fenêtre, sans défiler ; la ligne « Sinon afficher » vient en dessous de l'aperçu (un premier jet remontait l'aperçu sous les règles et faisait descendre « Avant » / « Après »
+// sous le pli : seule une mesure l'a montré).
+await page.waitForTimeout(450);
+const openingView = await page.evaluate(() => {
+  const body = document.querySelector('#var-condition-modal .pp-modal-body');
+  const view = body.getBoundingClientRect();
+  const inView = node => { const r = node.getBoundingClientRect(); return r.top >= view.top - 0.5 && r.bottom <= view.bottom + 0.5; };
+  const lines = Array.from(document.querySelectorAll('#var-condition-modal .var-condition-debug-line')).filter(line => !line.hidden);
+  const field = document.querySelector('#var-condition-modal .var-condition-otherwise-field');
+  return {
+    scrollTop: body.scrollTop,
+    rules: inView(document.querySelector('#var-condition-modal .var-condition-rules')),
+    affix: inView(document.getElementById('var-condition-before')) && inView(document.getElementById('var-condition-after')),
+    firstLine: lines.length > 0 && inView(lines[0]),
+    sinonUnderPreview: lines.length > 0 && field.getBoundingClientRect().top >= lines[lines.length - 1].getBoundingClientRect().bottom,
+  };
+});
+check('... à l’ouverture, les règles, « Avant » / « Après » et la première ligne de l’aperçu tiennent entiers sans défiler, la ligne « Sinon afficher » vient sous l’aperçu',
+  openingView.scrollTop === 0 && openingView.rules && openingView.affix && openingView.firstLine && openingView.sinonUnderPreview, openingView);
+const mainBefore = await revealField('#var-condition-before');
+if (mainBefore.found) { await page.mouse.click(mainBefore.x, mainBefore.y); await page.keyboard.type('('); }
+const mainAfter = await revealField('#var-condition-after');
+if (mainAfter.found) { await page.mouse.click(mainAfter.x, mainAfter.y); await page.keyboard.type('), '); }
+const sinonTrigger = await revealField(OTHERWISE_FIELD);
+check('... le champ est atteignable à la molette puis au clic, une fois la règle complète', sinonTrigger.found && sinonTrigger.inViewport && sinonTrigger.onTop, sinonTrigger);
+if (sinonTrigger.found) await page.mouse.click(sinonTrigger.x, sinonTrigger.y);
+await page.waitForTimeout(250);
+const sinonList = await page.evaluate(() => {
+  const panel = Array.from(document.querySelectorAll('.ss-panel')).find(p => !p.hidden);
+  if (!panel) return null;
+  const r = panel.getBoundingClientRect();
+  const first = panel.querySelector('.ss-option');
+  const fr = first ? first.getBoundingClientRect() : null;
+  const hit = fr ? document.elementFromPoint(fr.left + fr.width / 2, fr.top + fr.height / 2) : null;
+  const names = Array.from(panel.querySelectorAll('.ss-option .ss-name')).map(n => n.textContent);
+  return {
+    left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: innerWidth, height: innerHeight, docOverflowX: document.scrollingElement.scrollWidth - innerWidth,
+    firstOnTop: !!first && !!hit && (hit === first || first.contains(hit)), names: names.slice(0, 4), focusInSearch: document.activeElement === panel.querySelector('.ss-input'),
+  };
+});
+check('un vrai clic sur le champ ouvre la liste : entière dans la fenêtre, première ligne au premier plan, la zone de recherche prend le focus', !!sinonList && sinonList.left >= 0 && sinonList.top >= 0
+  && sinonList.right <= sinonList.width + 0.5 && sinonList.bottom <= sinonList.height + 0.5 && sinonList.docOverflowX <= 0 && sinonList.firstOnTop && sinonList.focusInSearch, sinonList);
+check('... « — Aucune — » vient en tête, puis les colonnes de la table de la page', !!sinonList && sinonList.names[0] === '— Aucune —' && sinonList.names.slice(1).every(n => n.indexOf('VcDossiers.') === 0), sinonList && sinonList.names);
+await page.keyboard.type('NomPrenom');
+await page.waitForTimeout(200);
+const sinonRow = await page.evaluate(() => {
+  const panel = Array.from(document.querySelectorAll('.ss-panel')).find(p => !p.hidden);
+  const row = panel && Array.from(panel.querySelectorAll('.ss-option')).find(r => r.querySelector('.ss-name').textContent === 'VcAnnuaire.NomPrenom');
+  if (!row) return null;
+  const r = row.getBoundingClientRect();
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2, shown: Array.from(panel.querySelectorAll('.ss-option .ss-name')).map(n => n.textContent) };
+});
+check('... la frappe filtre la liste : « NomPrenom » ne laisse que les colonnes qui le contiennent', !!sinonRow && sinonRow.shown.every(n => /nomprenom/i.test(n)), sinonRow);
+if (sinonRow) await page.mouse.click(sinonRow.x, sinonRow.y);
+await page.waitForTimeout(400);
+const chosen = await otherwiseState();
+const listClosed = await page.evaluate(() => !Array.from(document.querySelectorAll('.ss-panel')).find(p => !p.hidden));
+check('... un vrai clic sur la ligne choisit la variable : liste fermée, « Avant » / « Après » du sinon visibles et repris de ceux de la bulle', chosen.value === 'VcAnnuaire.NomPrenom'
+  && chosen.shown === 'VcAnnuaire.NomPrenom' && listClosed && chosen.couple.join() === 'true,true' && chosen.texts.join('|') === '(|), ', { chosen, listClosed });
+const sinonBefore = await revealField('#var-condition-otherwise-before');
+if (sinonBefore.found) { await page.mouse.click(sinonBefore.x, sinonBefore.y); await page.keyboard.press('Control+A'); await page.keyboard.type('['); }
+const sinonAfter = await revealField('#var-condition-otherwise-after');
+if (sinonAfter.found) { await page.mouse.click(sinonAfter.x, sinonAfter.y); await page.keyboard.press('Control+A'); await page.keyboard.type('], '); }
+const typed = await otherwiseState();
+check('... « Avant » et « Après » du sinon sont atteignables à la molette et se remplacent au clavier, espaces comprises', sinonBefore.found && sinonBefore.onTop && sinonAfter.found && sinonAfter.onTop
+  && typed.texts.join('|') === '[|], ', { sinonBefore, sinonAfter, typed });
+await page.waitForTimeout(700);
+const sinonPreview = await page.evaluate(() => ({
+  lines: Array.from(document.querySelectorAll('#var-condition-modal .var-condition-debug-line')).filter(l => !l.hidden).map(l => l.textContent),
+  expected: I18n.t('varCond.debug.currentNotMetOtherwise', { id: 1, value: '[Dupont Jean], ' }),
+}));
+check('l’aperçu dit ce que la ligne écrit : la ligne sélectionnée (Urgent) ne remplit pas « Statut = Normal », la variable affiche le sinon avec son texte, et il compte les autres lignes',
+  sinonPreview.lines.length === 2 && sinonPreview.lines[0] === sinonPreview.expected && /1 ligne sur 2 remplit la condition ; 1 autre affiche le sinon\./.test(sinonPreview.lines[1]), sinonPreview);
+const sinonSave = await hitTest('#var-condition-modal .var-modal-primary');
+const sinonTitle = await hitTest('#var-condition-title');
+const sinonWindow = await hitTest('#var-condition-modal .var-modal-content');
+check('titre et Enregistrer restent visibles et non recouverts, la fenêtre entière dans le panneau, la ligne du sinon remplie', sinonSave.found && sinonSave.inViewport && sinonSave.onTop
+  && sinonTitle.found && sinonTitle.inViewport && sinonTitle.onTop && sinonWindow.found && sinonWindow.inViewport, { sinonSave, sinonTitle, sinonWindow });
+if (sinonSave.found) await page.mouse.click(sinonSave.x, sinonSave.y);
+await page.waitForTimeout(300);
+const sinonSaved = await page.evaluate(() => {
+  let attrs = null;
+  EditorCore.getEditor().state.doc.descendants(n => { if (n.type.name === 'varBadge') attrs = { condition: n.attrs.condition, before: n.attrs.before, after: n.attrs.after, otherwise: n.attrs.otherwise }; });
+  const badge = document.querySelector('.tiptap .var-badge[data-column="Titre"]');
+  const part = badge.querySelector('.var-badge-otherwise');
+  const br = badge.getBoundingClientRect();
+  const pr = part ? part.getBoundingClientRect() : null;
+  const drawn = selector => { const node = badge.querySelector(selector); return node ? getComputedStyle(node, '::before').content : null; };
+  return {
+    attrs, closed: document.getElementById('var-condition-modal').style.display === 'none', word: drawn('.var-badge-otherwise-word'), name: drawn('.var-badge-otherwise-name'),
+    chips: Array.from(badge.querySelectorAll('.var-badge-otherwise .var-badge-affix')).map(c => c.getAttribute('data-text')),
+    inside: !!pr && pr.width > 0 && pr.left >= br.left - 0.5 && pr.right <= br.right + 0.5 && pr.right <= innerWidth + 0.5, ownText: badge.textContent,
+  };
+});
+const sinonAttrs = sinonSaved.attrs;
+check('Enregistrer (vrai clic) pose la condition, le texte de la bulle et le sinon d’un seul geste, et ferme la fenêtre', sinonSaved.closed && !!sinonAttrs && !!sinonAttrs.condition
+  && sinonAttrs.condition.rules.length === 1 && sinonAttrs.condition.rules[0].column === 'Statut' && sinonAttrs.condition.rules[0].value === 'Normal' && sinonAttrs.before === '(' && sinonAttrs.after === '), '
+  && JSON.stringify(sinonAttrs.otherwise) === JSON.stringify({ table: 'VcAnnuaire', column: 'NomPrenom', key: 'VcAnnuaire.NomPrenom', before: '[', after: '], ' }), sinonSaved);
+check('la pastille de l’éditeur montre « sinon », « [ », la variable du sinon et « ], » dans la bulle, sans ajouter de texte à la bulle', sinonSaved.word === '"sinon"' && sinonSaved.name === '"#VcAnnuaire.NomPrenom"'
+  && sinonSaved.chips.join('|') === '[|], ' && sinonSaved.inside && !/sinon|NomPrenom/.test(sinonSaved.ownText), sinonSaved);
+const pastilleBox = await hitTest(AFFIX_BADGE + ' .var-badge-otherwise');
+if (pastilleBox.found) await page.mouse.click(pastilleBox.x, pastilleBox.y);
+await page.waitForTimeout(300);
+const reopenIcon = await hitTest('.v2-varfmt-toolbar.visible button[data-action="var-condition"]');
+const reopenLit = await page.evaluate(() => { const b = document.querySelector('.v2-varfmt-toolbar.visible button[data-action="var-condition"]'); return !!b && b.classList.contains('is-active'); });
+check('un vrai clic sur la pastille « sinon » sélectionne la bulle : sa barre s’ouvre, l’icône Condition est atteignable et allumée', pastilleBox.found && pastilleBox.onTop && reopenIcon.found
+  && reopenIcon.inViewport && reopenIcon.onTop && reopenLit, { pastilleBox, reopenIcon, reopenLit });
+if (reopenIcon.found) await page.mouse.click(reopenIcon.x, reopenIcon.y);
+await page.waitForTimeout(300);
+const reopenedBox = await revealField(OTHERWISE_FIELD);
+const reopenedOtherwise = await otherwiseState();
+check('rouverte, la fenêtre reprend le sinon : variable, « Avant » / « Après », ligne dégrisée', reopenedBox.found && reopenedBox.inViewport && !reopenedOtherwise.greyed
+  && reopenedOtherwise.value === 'VcAnnuaire.NomPrenom' && reopenedOtherwise.shown === 'VcAnnuaire.NomPrenom' && reopenedOtherwise.couple.join() === 'true,true' && reopenedOtherwise.texts.join('|') === '[|], ', reopenedOtherwise);
+// Panneau étroit : la ligne et ses deux champs restent dans la fenêtre, rien ne fait défiler la page.
+await page.setViewportSize({ width: 360, height: HEIGHT });
+await page.waitForTimeout(400);
+const sinonNarrow = await page.evaluate(() => {
+  const content = document.querySelector('#var-condition-modal .var-modal-content');
+  const r = content.getBoundingClientRect();
+  const boxes = ['.var-condition-otherwise-field', '#var-condition-otherwise-before', '#var-condition-otherwise-after'].map(selector => {
+    const f = document.querySelector('#var-condition-modal ' + selector).getBoundingClientRect();
+    return { left: f.left, right: f.right, width: Math.round(f.width) };
+  });
+  return { left: r.left, right: r.right, viewport: innerWidth, docOverflowX: document.scrollingElement.scrollWidth - innerWidth, contentOverflowX: content.scrollWidth - content.clientWidth, boxes };
+});
+check('fenêtre de 360 px : la ligne du sinon et ses deux champs restent dans la fenêtre, sans défilement horizontal', sinonNarrow.left >= 0 && sinonNarrow.right <= sinonNarrow.viewport + 0.5
+  && sinonNarrow.docOverflowX <= 0 && sinonNarrow.contentOverflowX <= 0 && sinonNarrow.boxes.every(b => b.left >= 0 && b.right <= sinonNarrow.viewport + 0.5 && b.width >= 60), sinonNarrow);
+await page.setViewportSize({ width: WIDTH, height: HEIGHT });
+await page.waitForTimeout(300);
+const sinonCancel = await hitTest('#var-condition-modal .var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)');
+if (sinonCancel.found) await page.mouse.click(sinonCancel.x, sinonCancel.y);
 await page.waitForTimeout(200);
 
 // 3c) Deux colonnes Référence vers la même table (demande d'Antoine, 2026-10-08 : « Demandeur » et « Valideur » désignent deux personnes de l'annuaire dans la même ligne) :

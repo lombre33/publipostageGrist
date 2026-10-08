@@ -488,13 +488,20 @@ const Editor = (function () {
 
   // Signale, dans `root` (le DOM d'un éditeur), les bulles #Variable dont la table ou la colonne n'existe plus : une classe et un title sur le <span>
   // rendu, jamais un attribut du nœud (cela dépend d'un état externe, pas du contenu). Une bulle « Calcul » est cassée quand sa formule ne se lit plus
-  // ou cite une colonne qui n'existe plus (Variables.calcProblem), avec le message en info-bulle.
+  // ou cite une colonne qui n'existe plus (Variables.calcProblem), avec le message en info-bulle. Le sinon d'une bulle (js/variable-otherwise.js) qui
+  // n'existe plus rougit sa seule pastille (`var-badge-otherwise-broken`), la bulle gardant son aspect : sa condition peut très bien être remplie.
   function markBadgeValidity(root) {
     const mark = (badge, brokenClass, reason) => {
       badge.classList.toggle(brokenClass, !!reason);
       if (reason) badge.title = reason; else badge.removeAttribute('title');
     };
-    root.querySelectorAll('span.var-badge').forEach(badge => mark(badge, 'var-badge-broken', badgeProblemText(badge.dataset.table, badge.dataset.column)));
+    root.querySelectorAll('span.var-badge').forEach(badge => {
+      const problem = badgeProblemText(badge.dataset.table, badge.dataset.column);
+      const otherwise = badge.dataset.otherwiseKey ? badgeProblemText(badge.dataset.otherwiseTable, badge.dataset.otherwiseColumn) : '';
+      badge.classList.toggle('var-badge-otherwise-broken', !!otherwise);
+      mark(badge, 'var-badge-broken', problem);
+      if (!problem && otherwise) badge.title = I18n.t('varBadge.brokenOtherwise', { problem: otherwise });
+    });
     root.querySelectorAll('span.calc-badge').forEach(badge => mark(badge, 'calc-badge-broken', Variables.calcProblem(badge.getAttribute('data-formula') || '')));
   }
   function refreshVariableBadgeValidity() {
@@ -674,7 +681,7 @@ const Editor = (function () {
   }
 
   return {
-    init, loadLibraries, markBadgeValidity, getHTML, setHTML, getHeadingNumberingStyle, insertImageAtDefaultSize,
+    init, loadLibraries, markBadgeValidity, badgeProblemText, getHTML, setHTML, getHeadingNumberingStyle, insertImageAtDefaultSize,
     getHeaderFooterData: HeaderFooterPreview.getHeaderFooterData, setHeaderFooterData: HeaderFooterPreview.setHeaderFooterData,
     exitHeaderFooterModeIfActive: HeaderFooterPreview.exitHeaderFooterModeIfActive,
     // Aperçu A4 rallumé, facteur d'ajustement changé... : la pagination est refaite, et la position des images d'un modèle chargé sans mise en page

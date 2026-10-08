@@ -2108,6 +2108,690 @@
     },
   });
 
+  // === « Sinon afficher » : une autre variable quand la condition d'une bulle n'est pas remplie (demande d'Antoine, 2026-10-08) ===
+  // Au lieu de deux bulles côte à côte aux conditions opposées (qui ne le sont pas toujours : pas d'opérateur « ne contient pas », une cellule vide rend faux tous les
+  // ordres d'une comparaison de deux colonnes). La ligne « Sinon afficher » de la fenêtre de condition d'une bulle (js/variable-condition.js) règle l'attribut
+  // `otherwise` du nœud - { table, column, key, before, after } -, que le HTML enregistré écrit en cinq attributs data-otherwise-*. js/reader-mode.js le résout une
+  // fois, avant les bulles (js/variable-otherwise.js:resolve) : la Lecture, tous les exports, les en-têtes et pieds, les champs de l'email et l'Excel n'ont ensuite
+  // qu'une bulle ordinaire à lire. L'éditeur le dessine en pastille « sinon … » dans la bulle (css/variable-actions.css). Ces cas écrivent les attributs enregistrés
+  // tels quels, sans passer par VariableOtherwise : ils sont le contrat des modèles déjà enregistrés. Ailleurs : champs de l'email (scenarios-field-editor.js),
+  // renommages (scenarios-schema-renames.js), Excel (scenarios-xlsx.js), « Un document par valeur » (scenarios-list-split.js).
+  const RECORD_2 = { id: 2, Titre: 'Dossier B', Statut: 'Normal', Responsable: 'Martin Anne', Montant: 50 };
+  const sameJson = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  // Une bulle telle que l'éditeur l'enregistre quand elle a un sinon ; `o.otherwise` : { table, column, key, before, after } (la table de la page par défaut).
+  function otherwiseBadge(column, o) {
+    const opts = o || {};
+    const other = opts.otherwise;
+    let extra = opts.extra || '';
+    if (other) {
+      const table = other.table || 'VcDossiers';
+      extra += ` data-otherwise-table="${table}" data-otherwise-column="${other.column}" data-otherwise-key="${other.key || table + '.' + other.column}"`;
+      if (other.before != null) extra += ` data-otherwise-before="${attrText(other.before)}"`;
+      if (other.after != null) extra += ` data-otherwise-after="${attrText(other.after)}"`;
+    }
+    return affixBadge(column, Object.assign({}, opts, { extra }));
+  }
+  const otherwiseOf = (ed, column) => { const found = badgeNodes(ed).find(b => b.node.attrs.column === column); return found ? found.node.attrs.otherwise : undefined; };
+  async function fireRow(h, record) {
+    window.__gristStub.fireRecord(Object.assign({}, record), 'VcDossiers');
+    await h.sleep(50);
+  }
+  const readerParas = async html => Array.from((await renderReader(html)).querySelectorAll('.reader-content p')).map(p => p.textContent);
+  const previewParas = async html => paragraphTexts(await ReaderMode.preview(html, 'VcDossiers', GristAPI.getCurrentRecord()));
+  const SINON_STATUT = { column: 'Statut', before: '(', after: ')' };
+
+  cases.push({
+    id: 'varcond_otherwise_attrs_roundtrip',
+    description: 'Le sinon d’une bulle survit à l’aller-retour HTML en cinq attributs simples (data-otherwise-table, -column, -key, -before, -after), avec son propre texte « Avant » / « Après » (espaces gardées, 40 signes au plus, clé refaite si elle manque) ; une bulle sans sinon ne porte rien, un sinon sans colonne est ignoré, et la pastille « sinon … » ne met aucun texte dans la bulle ni dans le HTML enregistré',
+    run: async (h) => {
+      await seed(h);
+      const long = 'x'.repeat(60);
+      const lost = '<span class="var-badge" data-table="VcDossiers" data-column="Montant" data-key="VcDossiers.Montant" data-otherwise-table="VcDossiers"></span>';
+      const noKey = `<span class="var-badge" data-table="VcDossiers" data-column="Statut" data-key="VcDossiers.Statut" data-otherwise-table="VcAnnuaire" data-otherwise-column="NomPrenom" data-otherwise-before="${long}"></span>`;
+      Editor.setHTML(`<p>${otherwiseBadge('Titre', { condition: COND_URGENT, otherwise: { column: 'Statut', before: '(', after: ') ' } })} ${affixBadge('Responsable')} ${lost} ${noKey}</p>`);
+      const ed = EditorCore.getEditor();
+      const attrs = badgeNodes(ed).map(n => n.node.attrs.otherwise);
+      const box = document.createElement('div');
+      box.innerHTML = Editor.getHTML();
+      const names = ['table', 'column', 'key', 'before', 'after'];
+      const saved = Array.from(box.querySelectorAll('span.var-badge')).map(s => names.map(n => s.getAttribute('data-otherwise-' + n)));
+      const none = [null, null, null, null, null];
+      const expectedAttrs = [
+        { table: 'VcDossiers', column: 'Statut', key: 'VcDossiers.Statut', before: '(', after: ') ' }, null, null,
+        { table: 'VcAnnuaire', column: 'NomPrenom', key: 'VcAnnuaire.NomPrenom', before: 'x'.repeat(40), after: null },
+      ];
+      const expectedSaved = [['VcDossiers', 'Statut', 'VcDossiers.Statut', '(', ') '], none, none, ['VcAnnuaire', 'NomPrenom', 'VcAnnuaire.NomPrenom', 'x'.repeat(40), null]];
+      // La pastille « sinon … » : le mot, la variable (avec la touche de déclenchement) et le texte du sinon, dessinés par le CSS d'après `data-text`.
+      const pastilles = Array.from(document.querySelectorAll('.tiptap .var-badge .var-badge-otherwise'));
+      const first = pastilles[0];
+      const drawn = first ? {
+        word: first.querySelector('.var-badge-otherwise-word').getAttribute('data-text'),
+        name: first.querySelector('.var-badge-otherwise-name').getAttribute('data-text'),
+        chips: Array.from(first.querySelectorAll('.var-badge-affix')).map(c => c.getAttribute('data-text')),
+        empty: first.textContent === '',
+      } : null;
+      const pass = sameJson(attrs, expectedAttrs) && sameJson(saved, expectedSaved) && pastilles.length === 2 && !box.querySelector('.var-badge-otherwise')
+        && !!drawn && drawn.word === 'sinon' && drawn.name === Variables.triggerChar() + 'VcDossiers.Statut' && sameJson(drawn.chips, ['(', ') ']) && drawn.empty;
+      return { pass, notes: JSON.stringify({ attrs, saved, pastilles: pastilles.length, drawn }) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_otherwise_reader_and_export_write_the_variable_of_the_otherwise',
+    description: 'Lecture et export (ReaderMode.preview, commun au PDF, au Word, à l’Excel et à l’email) : condition remplie, la bulle s’écrit comme avant avec son « Avant » / « Après » ; condition non remplie, la variable du sinon s’écrit à sa place avec le texte du sinon et sans celui de la bulle - d’une autre table liée aussi ; valeur du sinon vide, rien n’est écrit ; une bulle sans condition n’écrit jamais son sinon ; sans sinon, la bulle reste masquée comme avant',
+    run: async (h) => {
+      await seed(h);
+      const html = [
+        `<p>A${otherwiseBadge('Titre', { condition: COND_URGENT, before: '[', after: ']', otherwise: SINON_STATUT })}B</p>`,
+        `<p>C${otherwiseBadge('Titre', { condition: COND_URGENT, otherwise: { table: 'VcAnnuaire', column: 'NomPrenom' } })}D</p>`,
+        `<p>E${otherwiseBadge('Titre', { condition: COND_URGENT, before: '[', after: ']', otherwise: { column: 'Statut' } })}F</p>`,
+        `<p>G${otherwiseBadge('Titre', { otherwise: SINON_STATUT })}H</p>`,
+        `<p>I${affixBadge('Titre', { condition: COND_URGENT })}J</p>`,
+      ].join('');
+      const rows = {};
+      for (const [name, record] of [['met', RECORD_1], ['notMet', RECORD_2], ['emptyOtherwise', Object.assign({}, RECORD_2, { Statut: '' })]]) {
+        await fireRow(h, record);
+        rows[name] = { reader: await readerParas(html), preview: await previewParas(html) };
+      }
+      const expected = {
+        met: ['A[Dossier A]B', 'CDossier AD', 'E[Dossier A]F', 'GDossier AH', 'IDossier AJ'],
+        notMet: ['A(Normal)B', 'CMartin AnneD', 'ENormalF', 'GDossier BH', 'IJ'],
+        emptyOtherwise: ['AB', 'CMartin AnneD', 'EF', 'GDossier BH', 'IJ'],
+      };
+      const pass = Object.keys(expected).every(name => sameJson(rows[name].reader, expected[name]) && sameJson(rows[name].preview, expected[name]));
+      return { pass, notes: JSON.stringify(rows) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_otherwise_unreadable_condition_counts_as_not_met',
+    description: 'Une condition illisible compte comme non remplie : la bulle écrit son sinon (sans sinon elle reste masquée, comme avant), en Lecture comme à l’export',
+    run: async (h) => {
+      await seed(h);
+      const broken = ' data-condition="pas du json"';
+      const html = `<p>A${otherwiseBadge('Titre', { extra: broken, otherwise: SINON_STATUT })}B</p><p>C${affixBadge('Titre', { extra: broken })}D</p>`;
+      const quiet = console.error;
+      let reader = null;
+      let preview = null;
+      console.error = () => {}; // la condition illisible est signalée à la console (js/condition-rules.js, js/reader-mode.js), c'est voulu
+      try {
+        reader = await readerParas(html);
+        preview = await previewParas(html);
+      } finally {
+        console.error = quiet;
+      }
+      const expected = ['A(Urgent)B', 'CD'];
+      return { pass: sameJson(reader, expected) && sameJson(preview, expected), notes: JSON.stringify({ reader, preview }) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_otherwise_header_and_footer_follow_the_same_rule',
+    description: 'En-tête et pied de page (aperçu paginé de la Lecture, même résolution que le PDF et le Word) : une bulle à sinon écrit sa variable ou son sinon selon sa condition, comme dans le corps',
+    run: async (h) => {
+      await seed(h);
+      h.setA4Preview(true);
+      const results = {};
+      try {
+        const hf = {
+          enabled: true, differentFirstPage: false,
+          header: { default: `<p>En-tête [${otherwiseBadge('Titre', { condition: COND_NORMAL, otherwise: SINON_STATUT })}] [${otherwiseBadge('Titre', { condition: COND_URGENT, otherwise: SINON_STATUT })}]</p>`, first: '' },
+          footer: { default: `<p>Pied ${otherwiseBadge('Titre', { condition: COND_NORMAL, otherwise: { column: 'Statut', before: '/ ', after: ' !' } })}</p>`, first: '' },
+        };
+        const read = async () => {
+          const reader = await renderReader('<p>Corps</p>', hf);
+          return { header: reader.querySelector('.v2-page-edge-top').textContent, footer: reader.querySelector('.v2-page-edge-bottom').textContent };
+        };
+        await fireRow(h, RECORD_1);
+        results.urgent = await read();
+        await fireRow(h, RECORD_2);
+        results.normal = await read();
+      } finally {
+        h.setA4Preview(false);
+      }
+      const pass = results.urgent.header.includes('En-tête [(Urgent)] [Dossier A]') && results.urgent.footer.includes('Pied / Urgent !')
+        && results.normal.header.includes('En-tête [Dossier B] [(Normal)]') && results.normal.footer.includes('Pied Dossier B');
+      return { pass, notes: JSON.stringify(results) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_otherwise_in_a_repeated_row_reads_the_row_of_each_turn',
+    description: 'Dans une zone répétée (ligne de tableau), la condition et le sinon d’une bulle lisent la ligne du tour : chaque copie écrit sa propre valeur, ou le sinon de SA ligne',
+    run: async (h) => {
+      await seed(h);
+      const loop = ` data-loop="${attrText(JSON.stringify({ repeat: 'row', table: 'VcContacts', empty: 'header' }))}" data-loop-repeat="row"`;
+      const client = { mode: 'all', rules: [{ column: 'VcContacts.Role', operator: '=', value: 'Client' }] };
+      const cell = content => `<td><p>${content}</p></td>`;
+      const html = '<table><tbody>'
+        + `<tr><th><p>Nom</p></th><th><p>Rôle ou nom</p></th></tr>`
+        + `<tr>${cell(affixBadge('Nom', { table: 'VcContacts', extra: loop }))}`
+        + `${cell(otherwiseBadge('Nom', { table: 'VcContacts', condition: client, otherwise: { table: 'VcContacts', column: 'Role', before: '(', after: ')' } }))}</tr>`
+        + '</tbody></table>';
+      const rowsOf = root => Array.from(root.querySelectorAll('tr')).map(tr => Array.from(tr.cells).map(c => c.textContent));
+      const box = document.createElement('div');
+      box.innerHTML = await ReaderMode.preview(html, 'VcDossiers', GristAPI.getCurrentRecord());
+      const reader = rowsOf(await renderReader(html));
+      const preview = rowsOf(box);
+      const expected = [['Nom', 'Rôle ou nom'], ['Xavier', 'Xavier'], ['Yvonne', '(Avocat)']];
+      return { pass: sameJson(reader, expected) && sameJson(preview, expected), notes: JSON.stringify({ reader, preview }) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_otherwise_keeps_the_format_only_for_a_variable_of_the_same_kind',
+    description: 'Le format de la bulle (nombre, date, Oui / Non) passe à son sinon quand la colonne du sinon est du même genre, sinon la valeur s’écrit sans réglage ; un réglage de liste (« Un document par valeur ») ne passe jamais',
+    run: async (h) => {
+      await seedCompare(h, { refAttrs: true });
+      const number = { type: 'number', decimals: 2 };
+      const asNumber = ` data-format='${JSON.stringify(number)}'`;
+      const html = `<p>A${otherwiseBadge('Montant', { condition: COND_NORMAL, extra: asNumber, otherwise: { column: 'Paye' } })}B</p>`
+        + `<p>C${otherwiseBadge('Montant', { condition: COND_NORMAL, extra: asNumber, otherwise: { column: 'Libelle' } })}D</p>`;
+      const record = GristAPI.getCurrentRecord();
+      const formatted = await Variables.resolveVariable('VcDossiers', 'Paye', 'VcDossiers', record, number);
+      const plain = await Variables.resolveVariable('VcDossiers', 'Paye', 'VcDossiers', record, null);
+      const reader = await readerParas(html);
+      const preview = await previewParas(html);
+      const expected = [`A${formatted}B`, 'CDossier AD'];
+      const date = { type: 'date', preset: 'iso' };
+      const perValue = { list: { perValue: true } };
+      const inherited = (format, table, column) => VariableOtherwise.inheritedFormat(format, { table, column });
+      const checks = {
+        sourcesDiffer: formatted !== plain && formatted.includes(',') === true,
+        reader: sameJson(reader, expected),
+        preview: sameJson(preview, expected),
+        numberOnNumber: sameJson(inherited(number, 'VcDossiers', 'Paye'), number),
+        numberOnText: inherited(number, 'VcDossiers', 'Titre') === null,
+        dateOnNumber: inherited(date, 'VcDossiers', 'Paye') === null,
+        dateOnDate: sameJson(inherited(date, 'VcAnnuaire', 'Naissance'), date),
+        listNeverPasses: inherited(perValue, 'VcAnnuaire', 'Langues') === null && inherited({ list: { pick: 'first' } }, 'VcAnnuaire', 'Competences') === null,
+        noFormat: inherited(null, 'VcDossiers', 'Paye') === null,
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: failed.join(', ') || JSON.stringify({ reader, preview, expected }) };
+    },
+  });
+
+  // --- La ligne « Sinon afficher » de la fenêtre de condition d'une bulle ---
+  const seen = el => !!el && !el.hidden && el.getClientRects().length > 0;
+  const otherwiseRow = modal => ({
+    label: modal.querySelector('label[for="var-condition-otherwise"]'),
+    field: modal.querySelector('.var-condition-otherwise-field'),
+    select: modal.querySelector('#var-condition-otherwise'),
+    trigger: modal.querySelector('.var-condition-otherwise-field .ss-trigger'),
+    hint: modal.querySelector('.var-condition-otherwise-hint'),
+    before: modal.querySelector('#var-condition-otherwise-before'),
+    after: modal.querySelector('#var-condition-otherwise-after'),
+  });
+  // Choisit le sinon comme une personne, dans la liste avec recherche de la ligne (clic sur le champ, frappe du nom, Entrée sur le premier résultat) ; un nom vide
+  // prend la ligne « — Aucune — ».
+  async function pickOtherwise(h, modal, name) {
+    const { field } = otherwiseRow(modal);
+    field.querySelector('.ss-trigger').click();
+    await h.sleep(30);
+    const panel = field.querySelector('.ss-panel');
+    if (name === '') {
+      const none = Array.from(panel.querySelectorAll('.ss-option')).find(o => o.querySelector('.ss-name').textContent === I18n.t('varCond.otherwiseNone'));
+      if (none) none.click();
+    } else {
+      const input = panel.querySelector('.ss-input');
+      setInput(input, name);
+      await h.sleep(10);
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    }
+    await h.sleep(80);
+  }
+  async function completeRule(h, modal, column, value) {
+    const rule = modal.querySelector('.macro-rule-row');
+    setSelect(rule.querySelector('select.macro-rule-column'), column);
+    await h.sleep(30);
+    setInput(rule.querySelector('.macro-rule-value'), value);
+    await h.sleep(60);
+  }
+
+  cases.push({
+    id: 'varcond_otherwise_row_is_greyed_until_a_rule_is_complete_and_belongs_to_variables',
+    description: 'Fenêtre de condition d’une bulle : la ligne « Sinon afficher » est là dès l’ouverture mais grisée tant qu’aucune règle n’est complète - l’info-bulle de l’étiquette et du champ dit pourquoi, rien n’est retiré -, se dégrise avec une règle complète et se regrise si on la vide ; « — Aucune — » est choisi d’office, son « Avant » / « Après » cachés ; un bloc, une valeur et une case conditionnels n’ont pas cette ligne',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML(`<p>${badgeHtml('VcDossiers', 'Titre')}</p><div class="conditional-text"><p>Bloc</p></div><p>Début <span class="conditional-value">valeur</span> fin</p><p><span class="conditional-checkbox">☐</span> case</p>`);
+      const ed = EditorCore.getEditor();
+      const modal = await openWindow(h, 'Titre');
+      const row = otherwiseRow(modal);
+      const state = () => ({ disabled: row.select.disabled && row.trigger.disabled, field: row.field.title, label: row.label.title });
+      const opened = Object.assign({ text: row.label.textContent, shown: seen(row.field) && seen(row.label), value: row.trigger.textContent, couple: [seen(row.before), seen(row.after)] }, state());
+      await completeRule(h, modal, 'Statut', 'Urgent');
+      const ready = state();
+      setSelect(modal.querySelector('.macro-rule-row select.macro-rule-column'), '');
+      await h.sleep(60);
+      const emptied = state();
+      cancelWindow(modal);
+      await h.sleep(30);
+      // Un bloc, une valeur et une case conditionnels n'ont pas de variable à remplacer : pas de ligne.
+      const targets = [];
+      ed.state.doc.descendants((node, pos) => { if (['conditionalText', 'conditionalValue', 'conditionalCheckbox'].includes(node.type.name)) targets.push({ type: node.type.name, pos }); });
+      const others = [];
+      for (const target of targets) {
+        VariableCondition.open(ed, target.pos);
+        await h.sleep(60);
+        const other = conditionModal();
+        others.push({ type: target.type, shown: seen(otherwiseRow(other).field) });
+        cancelWindow(other);
+        await h.sleep(30);
+      }
+      const waits = I18n.t('varCond.otherwiseNeedsRule');
+      const asks = I18n.t('varCond.otherwiseTitle');
+      const pass = opened.text === 'Sinon afficher' && opened.shown && opened.disabled && opened.field === waits && opened.label === waits && opened.value === '— Aucune —' && sameJson(opened.couple, [false, false])
+        && !ready.disabled && ready.field === asks && ready.label === asks
+        && emptied.disabled && emptied.field === waits
+        && targets.length === 3 && others.every(o => o.shown === false);
+      return { pass, notes: JSON.stringify({ opened, ready, emptied, others }) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_otherwise_window_chooses_prefills_saves_and_removes_the_variable',
+    description: 'Fenêtre de condition : le sinon se choisit dans la liste avec recherche (frappe du nom, Entrée), reprend d’office l’« Avant » / « Après » de la bulle - modifiables - et s’enregistre avec la condition et le texte de la bulle en un seul pas d’annulation ; l’aperçu dit ce que la ligne écrit, sinon compris ; rouverte, la fenêtre reprend le choix ; « Retirer la condition » retire aussi le sinon',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML(`<p>Objet : ${badgeHtml('VcDossiers', 'Titre')}</p>`);
+      const ed = EditorCore.getEditor();
+      let modal = await openWindow(h, 'Titre');
+      await completeRule(h, modal, 'Statut', 'Urgent');
+      setInput(modal.querySelector('#var-condition-before'), '[');
+      setInput(modal.querySelector('#var-condition-after'), ']');
+      await pickOtherwise(h, modal, 'Statut');
+      let row = otherwiseRow(modal);
+      const chosen = { value: row.select.value, shown: row.trigger.textContent, couple: [seen(row.before), seen(row.after)], prefilled: [row.before.value, row.after.value], hint: seen(row.hint), max: [row.before.maxLength, row.after.maxLength] };
+      setInput(row.before, '(');
+      setInput(row.after, ')');
+      await h.sleep(700);
+      const debug = previewLines(modal);
+      saveWindow(modal);
+      await h.sleep(80);
+      const other = { table: 'VcDossiers', column: 'Statut', key: 'VcDossiers.Statut', before: '(', after: ')' };
+      const node = () => badgeNodes(ed)[0].node;
+      const saved = { condition: node().attrs.condition, around: affixOf(node()), otherwise: otherwiseOf(ed, 'Titre'), html: Editor.getHTML(), closed: !visible(conditionModal()) };
+      // Un seul Annuler rend la bulle d'avant, condition, texte et sinon ensemble ; Rétablir les remet.
+      ed.commands.undo();
+      await h.sleep(80);
+      const undone = { condition: node().attrs.condition || null, around: affixOf(node()), otherwise: otherwiseOf(ed, 'Titre') };
+      ed.commands.redo();
+      await h.sleep(80);
+      const redone = { condition: node().attrs.condition, otherwise: otherwiseOf(ed, 'Titre') };
+      modal = await openWindow(h, 'Titre');
+      row = otherwiseRow(modal);
+      const reopened = { value: row.select.value, couple: [row.before.value, row.after.value], coupleShown: [seen(row.before), seen(row.after)], removeShown: !modal.querySelector('.var-modal-danger').hidden };
+      modal.querySelector('.var-modal-danger').click();
+      await h.sleep(80);
+      const removed = { condition: node().attrs.condition || null, around: affixOf(node()), otherwise: otherwiseOf(ed, 'Titre'), html: Editor.getHTML() };
+      const pass = chosen.value === 'VcDossiers.Statut' && chosen.shown === 'VcDossiers.Statut' && sameJson(chosen.couple, [true, true]) && sameJson(chosen.prefilled, ['[', ']']) && !chosen.hint && sameJson(chosen.max, [40, 40])
+        && debug[0] === I18n.t('varCond.debug.currentMet', { id: 1, value: '[Dossier A]' }) && debug[1].includes('2 lignes sur 3 remplissent la condition ; 1 autre affiche le sinon.')
+        && saved.closed && sameJson(saved.condition, COND_URGENT) && sameJson(saved.around, ['[', ']']) && sameJson(saved.otherwise, other)
+        && saved.html.includes('data-otherwise-table="VcDossiers"') && saved.html.includes('data-otherwise-column="Statut"') && saved.html.includes('data-otherwise-key="VcDossiers.Statut"')
+        && saved.html.includes('data-otherwise-before="("') && saved.html.includes('data-otherwise-after=")"')
+        && undone.condition === null && sameJson(undone.around, [null, null]) && undone.otherwise === null
+        && sameJson(redone.condition, COND_URGENT) && sameJson(redone.otherwise, other)
+        && reopened.value === 'VcDossiers.Statut' && sameJson(reopened.couple, ['(', ')']) && sameJson(reopened.coupleShown, [true, true]) && reopened.removeShown
+        && removed.condition === null && removed.otherwise === null && sameJson(removed.around, ['[', ']']) && !removed.html.includes('data-otherwise') && !removed.html.includes('data-condition');
+      return { pass, notes: JSON.stringify({ chosen, debug, saved, undone, redone, reopened, removed }) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_otherwise_window_none_and_emptied_rules_drop_the_variable',
+    description: 'Fenêtre de condition : « — Aucune — » retire le sinon (son « Avant » / « Après » se cachent) tout en gardant la condition, et des règles vidées avant Enregistrer le retirent aussi - un sinon n’a de sens que pour une condition',
+    run: async (h) => {
+      await seed(h);
+      const withSinon = `<p>Objet : ${otherwiseBadge('Titre', { condition: COND_URGENT, otherwise: SINON_STATUT })}</p>`;
+      Editor.setHTML(withSinon);
+      const ed = EditorCore.getEditor();
+      const node = () => badgeNodes(ed)[0].node;
+      let modal = await openWindow(h, 'Titre');
+      let row = otherwiseRow(modal);
+      const start = { value: row.select.value, couple: [seen(row.before), seen(row.after)], values: [row.before.value, row.after.value] };
+      await pickOtherwise(h, modal, '');
+      row = otherwiseRow(modal);
+      const afterNone = { value: row.select.value, shown: row.trigger.textContent, couple: [seen(row.before), seen(row.after)] };
+      saveWindow(modal);
+      await h.sleep(80);
+      const noneSaved = { condition: node().attrs.condition, otherwise: otherwiseOf(ed, 'Titre') };
+      // Des règles vidées : la ligne se grise, et rien du sinon n'est enregistré.
+      Editor.setHTML(withSinon);
+      modal = await openWindow(h, 'Titre');
+      setSelect(modal.querySelector('.macro-rule-row select.macro-rule-column'), '');
+      await h.sleep(60);
+      const emptied = { disabled: otherwiseRow(modal).select.disabled };
+      saveWindow(modal);
+      await h.sleep(80);
+      const emptiedSaved = { condition: node().attrs.condition || null, otherwise: otherwiseOf(ed, 'Titre'), html: Editor.getHTML() };
+      const pass = start.value === 'VcDossiers.Statut' && sameJson(start.couple, [true, true]) && sameJson(start.values, ['(', ')'])
+        && afterNone.value === '' && afterNone.shown === '— Aucune —' && sameJson(afterNone.couple, [false, false])
+        && sameJson(noneSaved.condition, COND_URGENT) && noneSaved.otherwise === null
+        && emptied.disabled && emptiedSaved.condition === null && emptiedSaved.otherwise === null && !emptiedSaved.html.includes('data-otherwise');
+      return { pass, notes: JSON.stringify({ start, afterNone, noneSaved, emptied, emptiedSaved }) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_otherwise_window_cancel_leaves_the_bubble_alone',
+    description: 'Fenêtre de condition : Annuler ne touche pas à la bulle, et la fenêtre rouverte reprend le sinon enregistré avec son « Avant » / « Après », pas ceux qui ont été choisis puis abandonnés',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML(`<p>Objet : ${otherwiseBadge('Titre', { condition: COND_URGENT, otherwise: SINON_STATUT })}</p>`);
+      const htmlBefore = Editor.getHTML();
+      let modal = await openWindow(h, 'Titre');
+      const values = () => { const row = otherwiseRow(modal); return [row.select.value, row.before.value, row.after.value]; };
+      const opened = values();
+      setSelect(otherwiseRow(modal).select, 'VcDossiers.Montant');
+      await h.sleep(80);
+      setInput(otherwiseRow(modal).before, 'XX');
+      setInput(otherwiseRow(modal).after, '');
+      cancelWindow(modal);
+      await h.sleep(60);
+      const unchanged = Editor.getHTML() === htmlBefore && !visible(conditionModal());
+      modal = await openWindow(h, 'Titre');
+      const reopened = values();
+      cancelWindow(modal);
+      const pass = sameJson(opened, ['VcDossiers.Statut', '(', ')']) && unchanged && sameJson(reopened, ['VcDossiers.Statut', '(', ')']);
+      return { pass, notes: JSON.stringify({ opened, unchanged, reopened }) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_otherwise_window_keeps_a_vanished_column_and_says_so',
+    description: 'Un sinon dont la colonne a disparu de Grist reste dans la fenêtre sous son nom, avec l’indication de ce qui manque, et « Enregistrer » le garde : il n’est jamais effacé en silence ; en choisir un autre efface l’indication',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML(`<p>Objet : ${otherwiseBadge('Titre', { condition: COND_URGENT, otherwise: { column: 'Disparue', before: '(', after: ')' } })}</p>`);
+      const ed = EditorCore.getEditor();
+      let modal = await openWindow(h, 'Titre');
+      let row = otherwiseRow(modal);
+      const missing = I18n.t('varBadge.brokenColumn', { column: 'Disparue', table: 'VcDossiers' });
+      const opened = { value: row.select.value, shown: row.trigger.textContent, hint: seen(row.hint) ? row.hint.textContent : null, couple: [seen(row.before), seen(row.after)] };
+      saveWindow(modal);
+      await h.sleep(80);
+      const kept = otherwiseOf(ed, 'Titre');
+      modal = await openWindow(h, 'Titre');
+      await pickOtherwise(h, modal, 'Statut');
+      row = otherwiseRow(modal);
+      const replaced = { value: row.select.value, hint: seen(row.hint) };
+      cancelWindow(modal);
+      const pass = opened.value === 'VcDossiers.Disparue' && opened.shown === 'VcDossiers.Disparue' && opened.hint === missing && missing.includes('Disparue') && sameJson(opened.couple, [true, true])
+        && !!kept && kept.column === 'Disparue' && kept.before === '(' && kept.after === ')'
+        && replaced.value === 'VcDossiers.Statut' && replaced.hint === false;
+      return { pass, notes: JSON.stringify({ opened, kept, replaced }) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_otherwise_unlinked_table_asks_for_the_key',
+    description: 'Fenêtre de condition : un sinon d’une table pas encore liée ouvre le choix de la clé ; Annuler remet le choix d’avant (« — Aucune — »), Valider enregistre le lien et garde la variable',
+    run: async (h) => {
+      await seed(h, { noLinks: true });
+      Editor.setHTML(`<p>Objet : ${affixBadge('Titre', { condition: COND_URGENT })}</p>`);
+      const ed = EditorCore.getEditor();
+      const modal = await openWindow(h, 'Titre');
+      const linkModal = document.getElementById('link-config-modal');
+      const select = otherwiseRow(modal).select;
+      setSelect(select, 'VcContacts.Nom');
+      await h.sleep(150);
+      const askedFirst = visible(linkModal);
+      document.getElementById('link-config-cancel').click();
+      await h.sleep(80);
+      const reverted = { value: select.value, shown: otherwiseRow(modal).trigger.textContent, couple: [seen(otherwiseRow(modal).before), seen(otherwiseRow(modal).after)], rule: GristAPI.getLinkRule('VcContacts') };
+      setSelect(select, 'VcContacts.Nom');
+      await h.sleep(150);
+      const askedAgain = visible(linkModal);
+      document.getElementById('link-config-confirm').click();
+      await h.sleep(150);
+      const kept = { value: select.value, couple: [seen(otherwiseRow(modal).before), seen(otherwiseRow(modal).after)], rule: GristAPI.getLinkRule('VcContacts') };
+      saveWindow(modal);
+      await h.sleep(80);
+      const saved = otherwiseOf(ed, 'Titre');
+      const pass = askedFirst && reverted.value === '' && reverted.shown === '— Aucune —' && sameJson(reverted.couple, [false, false]) && !reverted.rule
+        && askedAgain && kept.value === 'VcContacts.Nom' && sameJson(kept.couple, [true, true]) && !!kept.rule && kept.rule.mode === 'match' && kept.rule.colonneCible === 'Dossier' && kept.rule.colonneSource === 'id'
+        && !!saved && saved.table === 'VcContacts' && saved.column === 'Nom' && saved.key === 'VcContacts.Nom';
+      return { pass, notes: JSON.stringify({ askedFirst, reverted, askedAgain, kept, saved }) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_otherwise_preview_says_what_each_row_writes',
+    description: 'Aperçu de la fenêtre de condition : avec un sinon, la ligne sélectionnée dit ce qu’elle écrit quand la condition n’est pas remplie (la valeur du sinon, avec son texte), et le compte des lignes dit combien affichent le sinon - ou que toutes le font ; sans ligne qui l’affiche, la phrase d’avant',
+    run: async (h) => {
+      await seed(h);
+      await fireRow(h, RECORD_2);
+      Editor.setHTML(`<p>Objet : ${otherwiseBadge('Titre', { condition: COND_URGENT, otherwise: SINON_STATUT })}</p>`);
+      const modal = await openWindow(h, 'Titre');
+      const rule = () => modal.querySelector('.macro-rule-row');
+      const results = {};
+      await h.sleep(700);
+      results.urgent = previewLines(modal);
+      setInput(rule().querySelector('.macro-rule-value'), 'Jamais');
+      await h.sleep(700);
+      results.never = previewLines(modal);
+      setSelect(rule().querySelector('select.macro-rule-column'), 'Montant');
+      await h.sleep(30);
+      setSelect(rule().querySelector(':scope > select'), '>');
+      await h.sleep(30);
+      setInput(rule().querySelector('.macro-rule-value'), '0');
+      await h.sleep(700);
+      results.always = previewLines(modal);
+      await pickOtherwise(h, modal, '');
+      await h.sleep(700);
+      results.noOtherwise = previewLines(modal);
+      cancelWindow(modal);
+      const pass = results.urgent[0] === 'Ligne sélectionnée (n° 2) : condition non remplie, la variable affiche son sinon « (Normal) ».'
+        && results.urgent[1].startsWith('Dans « VcDossiers » : 2 lignes sur 3 remplissent la condition ; 1 autre affiche le sinon.')
+        && results.never[0] === 'Ligne sélectionnée (n° 2) : condition non remplie, la variable affiche son sinon « (Normal) ».'
+        && results.never[1] === 'Dans « VcDossiers » : aucune des 3 lignes ne remplit la condition, toutes affichent le sinon.'
+        && results.always[0] === 'Ligne sélectionnée (n° 2) : condition remplie, la variable affiche « Dossier B ».' && results.always[1].startsWith('Dans « VcDossiers » : 3 lignes sur 3 remplissent la condition.')
+        && !results.always[1].includes('sinon')
+        && results.noOtherwise[0] === I18n.t('varCond.debug.currentMet', { id: 2, value: 'Dossier B' }) && !results.noOtherwise[1].includes('sinon');
+      return { pass, notes: JSON.stringify(results) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_otherwise_window_and_bubble_speak_english',
+    description: 'Interface en anglais : « Otherwise show », « — None — », leurs info-bulles, les phrases de l’aperçu, le mot « otherwise » de la pastille et l’indication d’un sinon disparu ; chaque phrase du sinon est traduite',
+    run: async (h) => {
+      await seed(h);
+      await fireRow(h, RECORD_2);
+      Editor.setHTML(`<p>Objet : ${otherwiseBadge('Titre', { condition: COND_URGENT, otherwise: SINON_STATUT })} ${otherwiseBadge('Montant', { condition: COND_URGENT, otherwise: { column: 'Disparue' } })}</p>`);
+      const keys = ['varCond.otherwiseLabel', 'varCond.otherwiseNone', 'varCond.otherwiseTitle', 'varCond.otherwiseNeedsRule', 'varCond.otherwiseBeforeAria', 'varCond.otherwiseAfterAria',
+        'varCond.debug.currentNotMetOtherwise', 'varCond.debug.countOtherwise', 'varCond.debug.noneOtherwise', 'varBadge.otherwise', 'varBadge.brokenOtherwise'];
+      const params = { id: 2, value: 'V', table: 'T', count: 2, total: 3, others: 1, problem: 'P' };
+      const lang = I18n.getLang();
+      let english = null;
+      let untranslated = null;
+      try {
+        I18n.setLang('fr');
+        const fr = keys.map(k => I18n.t(k, params));
+        I18n.setLang('en');
+        const en = keys.map(k => I18n.t(k, params));
+        untranslated = keys.filter((k, i) => en[i] === fr[i] || en[i] === k);
+        const modal = await openWindow(h, 'Titre');
+        await h.sleep(700);
+        const row = otherwiseRow(modal);
+        english = {
+          label: row.label.textContent, shown: row.trigger.textContent, title: row.field.title, aria: [row.before.getAttribute('aria-label'), row.after.getAttribute('aria-label')],
+          line: previewLines(modal)[0],
+        };
+        cancelWindow(modal);
+        await h.sleep(30);
+        // Le mot de la pastille et l'info-bulle d'un sinon disparu suivent la langue du moment.
+        const words = Array.from(document.querySelectorAll('.tiptap .var-badge-otherwise-word')).map(w => w.getAttribute('data-text'));
+        Editor.markBadgeValidity(document.querySelector('.tiptap'));
+        const lost = document.querySelectorAll('.tiptap .var-badge')[1];
+        english.words = words;
+        english.lostTitle = lost.title;
+        I18n.setLang('fr');
+        await h.sleep(60);
+        english.wordsAfterSwitch = Array.from(document.querySelectorAll('.tiptap .var-badge-otherwise-word')).map(w => w.getAttribute('data-text'));
+      } finally {
+        I18n.setLang(lang);
+      }
+      const pass = untranslated.length === 0 && english.label === 'Otherwise show' && english.shown === 'VcDossiers.Statut'
+        && english.title === 'The variable written in place of this one when the condition is not met.'
+        && sameJson(english.aria, ['Before, for the “otherwise” variable', 'After, for the “otherwise” variable'])
+        && english.line === 'Selected row (#2): condition not met, the variable shows its “otherwise” value “(Normal)”.'
+        && sameJson(english.words, ['otherwise', 'otherwise']) && english.lostTitle === 'Otherwise: Column “Disparue” no longer exists in table “VcDossiers”.'
+        && sameJson(english.wordsAfterSwitch, ['sinon', 'sinon']);
+      return { pass, notes: JSON.stringify({ untranslated, english }) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_otherwise_pastille_turns_red_alone_when_its_column_disappears',
+    description: 'Un sinon dont la colonne n’existe plus rougit sa seule pastille (classe `var-badge-otherwise-broken`, info-bulle « Sinon : … ») sans rougir la bulle ; une bulle dont c’est la variable qui a disparu reste rouge comme avant, avec son message, et les deux peuvent l’être ensemble',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML(`<p>${otherwiseBadge('Titre', { condition: COND_URGENT, otherwise: { column: 'Disparue' } })} ${otherwiseBadge('Titre', { condition: COND_URGENT, otherwise: SINON_STATUT })} `
+        + `${otherwiseBadge('Absente', { condition: COND_URGENT, otherwise: SINON_STATUT })} ${otherwiseBadge('Absente', { condition: COND_URGENT, otherwise: { column: 'Disparue' } })}</p>`);
+      await h.sleep(150);
+      const states = Array.from(document.querySelectorAll('.tiptap span.var-badge')).map(b => ({ main: b.classList.contains('var-badge-broken'), other: b.classList.contains('var-badge-otherwise-broken'), title: b.title }));
+      const lostOtherwise = I18n.t('varBadge.brokenColumn', { column: 'Disparue', table: 'VcDossiers' });
+      const lostMain = I18n.t('varBadge.brokenColumn', { column: 'Absente', table: 'VcDossiers' });
+      const expected = [
+        { main: false, other: true, title: I18n.t('varBadge.brokenOtherwise', { problem: lostOtherwise }) },
+        { main: false, other: false, title: '' },
+        { main: true, other: false, title: lostMain },
+        { main: true, other: true, title: lostMain },
+      ];
+      const pass = sameJson(states, expected) && states[0].title === 'Sinon : La colonne « Disparue » n’existe plus dans la table « VcDossiers ».';
+      return { pass, notes: JSON.stringify(states) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_otherwise_stays_with_its_variable_when_attributes_are_inserted_or_replaced',
+    description: 'Autres attributs : « Insérer » laisse le sinon à la bulle d’origine (les attributs ajoutés reprennent la condition, pas le sinon) ; « Remplacer » le garde avec la condition, et la case « Reprendre la condition d’affichage » décochée retire l’un et l’autre ; le changement de colonne (« Colonne… ») garde aussi le sinon',
+    run: async (h) => {
+      await seed(h);
+      const original = `<p>Responsable : ${otherwiseBadge('NomPrenom', { table: 'VcAnnuaire', condition: COND_URGENT, otherwise: { table: 'VcAnnuaire', column: 'Naissance', before: '(', after: ')' } })} fin</p>`;
+      const state = ed => badgeNodes(ed).map(b => ({ key: b.node.attrs.key, condition: !!b.node.attrs.condition, otherwise: b.node.attrs.otherwise ? b.node.attrs.otherwise.key : null }));
+      Editor.setHTML(original);
+      const ed = EditorCore.getEditor();
+      let modal = await openLinked(h, 'NomPrenom');
+      tickLinked(modal, ['Telephone']);
+      modal.querySelector('.var-modal-primary').click();
+      await h.sleep(100);
+      const inserted = state(ed);
+      Editor.setHTML(original);
+      modal = await openLinked(h, 'NomPrenom');
+      const replaceBtn = replaceButton(modal);
+      if (!replaceBtn) { cancelLinked(modal); return NO_REPLACE_BUTTON; }
+      tickLinked(modal, ['Telephone']);
+      replaceBtn.click();
+      await h.sleep(150);
+      const replaced = state(ed);
+      Editor.setHTML(original);
+      modal = await openLinked(h, 'NomPrenom');
+      const box = inheritRow(modal).querySelector('input');
+      box.checked = false;
+      box.dispatchEvent(new Event('change', { bubbles: true }));
+      tickLinked(modal, ['Telephone']);
+      replaceButton(modal).click();
+      await h.sleep(150);
+      const dropped = state(ed);
+      Editor.setHTML(original);
+      const moved = VariableColumn.replacementAttrs(badgeNodes(ed)[0].node, { table: 'VcAnnuaire', column: 'Telephone', key: 'VcAnnuaire.Telephone' });
+      const pass = sameJson(inserted, [{ key: 'VcAnnuaire.NomPrenom', condition: true, otherwise: 'VcAnnuaire.Naissance' }, { key: 'VcAnnuaire.Telephone', condition: true, otherwise: null }])
+        && sameJson(replaced, [{ key: 'VcAnnuaire.Telephone', condition: true, otherwise: 'VcAnnuaire.Naissance' }])
+        && sameJson(dropped, [{ key: 'VcAnnuaire.Telephone', condition: false, otherwise: null }])
+        && moved.key === 'VcAnnuaire.Telephone' && !!moved.otherwise && moved.otherwise.key === 'VcAnnuaire.Naissance' && sameJson(moved.condition, COND_URGENT);
+      return { pass, notes: JSON.stringify({ inserted, replaced, dropped, moved: [moved.key, moved.otherwise && moved.otherwise.key] }) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_otherwise_counts_as_a_use_of_its_table_when_a_link_rule_is_deleted',
+    description: 'Supprimer la règle de liaison d’une table : la confirmation nomme aussi le modèle dont seul le sinon d’une bulle lit cette table, et pas un modèle qui ne la lit pas',
+    run: async (h) => {
+      await seed(h);
+      const cache = Templates.getCached();
+      const viaOtherwise = { id: 987001, nom: 'Modèle à sinon', contenu: `<p>${otherwiseBadge('Titre', { condition: COND_URGENT, otherwise: { table: 'VcAnnuaire', column: 'NomPrenom' } })}</p>` };
+      const unrelated = { id: 987002, nom: 'Modèle sans lien', contenu: `<p>${affixBadge('Titre')}</p>` };
+      cache.push(viaOtherwise, unrelated);
+      const dialogs = h.stubDialogs({ confirm: () => false });
+      let asked = null;
+      try {
+        Variables.refreshLinkRulesPanel();
+        const row = Array.from(document.querySelectorAll('#link-rules-list .link-rule-row')).find(r => r.querySelector('.link-rule-label').textContent.startsWith('VcAnnuaire'));
+        if (!row) return { pass: false, notes: 'règle VcAnnuaire absente de la fenêtre Tables liées' };
+        row.querySelector('.link-rule-btn-delete').click();
+        await h.sleep(80);
+        asked = dialogs.asked.find(a => a.kind === 'confirm') || null;
+      } finally {
+        dialogs.restore();
+        [viaOtherwise, unrelated].forEach(t => cache.splice(cache.indexOf(t), 1));
+      }
+      const pass = !!asked && asked.title === I18n.t('linkRules.confirmDelete', { table: 'VcAnnuaire' }) && asked.message.includes('Modèle à sinon') && !asked.message.includes('Modèle sans lien');
+      return { pass, notes: JSON.stringify(asked) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_otherwise_list_goes_down_into_a_reference_and_writes_the_path',
+    description: 'Fenêtre de condition : la liste du sinon porte la flèche « › » des colonnes Référence comme « Colonne… » (VcDossiers.Responsable ouvre les colonnes de VcAnnuaire sous un fil d’Ariane, une colonne texte ou nombre n’en a pas) ; le choix fait plus bas est un chemin que la bulle enregistre, que la Lecture suit pour écrire la valeur de la personne et que la fenêtre rouverte reprend comme un choix de la liste ; une colonne du chemin qui disparaît rougit la pastille seule',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML(`<p>Objet : ${badgeHtml('VcDossiers', 'Titre', COND_NORMAL)}</p>`);
+      const ed = EditorCore.getEditor();
+      let modal = await openWindow(h, 'Titre');
+      let row = otherwiseRow(modal);
+      row.trigger.click();
+      await h.sleep(30);
+      const panel = row.field.querySelector('.ss-panel');
+      const rowNamed = name => Array.from(panel.querySelectorAll('.ss-option')).find(o => o.querySelector('.ss-name').textContent === name);
+      const arrowOn = name => { const found = rowNamed(name); return !!found && !!found.querySelector('.ss-descend'); };
+      const arrows = { reference: arrowOn('VcDossiers.Responsable'), text: arrowOn('VcDossiers.Titre'), number: arrowOn('VcDossiers.Montant') };
+      rowNamed('VcDossiers.Responsable').querySelector('.ss-descend').click();
+      await h.sleep(30);
+      const crumbs = Array.from(panel.querySelectorAll('.ss-path .ss-crumb')).map(c => c.textContent);
+      const level = Array.from(panel.querySelectorAll('.ss-option .ss-name')).map(n => n.textContent);
+      rowNamed('Telephone').click();
+      await h.sleep(80);
+      row = otherwiseRow(modal);
+      const chosen = { value: row.select.value, shown: row.trigger.textContent, couple: [seen(row.before), seen(row.after)], hint: seen(row.hint) };
+      setInput(row.before, 'Tél. ');
+      await h.sleep(700);
+      const debug = previewLines(modal);
+      saveWindow(modal);
+      await h.sleep(80);
+      const other = { table: 'VcDossiers', column: 'Responsable.Telephone', key: 'VcDossiers.Responsable.Telephone', before: 'Tél. ', after: null };
+      const saved = otherwiseOf(ed, 'Titre');
+      const html = Editor.getHTML();
+      const first = await readerParas(html);
+      await fireRow(h, RECORD_2);
+      const second = await readerParas(html);
+      await fireRow(h, RECORD_1);
+      modal = await openWindow(h, 'Titre');
+      row = otherwiseRow(modal);
+      const reopened = { value: row.select.value, shown: row.trigger.textContent, couple: [row.before.value, row.after.value], hint: seen(row.hint) };
+      cancelWindow(modal);
+      await h.sleep(30);
+      // Une colonne du chemin disparaît de Grist : la pastille du sinon rougit, pas la bulle.
+      window.__gristStub.setVariables('VcAnnuaire', { NomPrenom: 'Text', Naissance: 'Date' });
+      await GristAPI.refreshSchema();
+      Editor.setHTML(html);
+      await h.sleep(150);
+      const badge = document.querySelector('.tiptap span.var-badge');
+      const lost = { main: badge.classList.contains('var-badge-broken'), other: badge.classList.contains('var-badge-otherwise-broken') };
+      const pass = sameJson(arrows, { reference: true, text: false, number: false })
+        && sameJson(crumbs, [I18n.t('searchSelect.rootCrumb'), 'VcDossiers.Responsable']) && sameJson(level, ['NomPrenom', 'Telephone', 'Naissance'])
+        && chosen.value === 'VcDossiers.Responsable.Telephone' && chosen.shown === 'VcDossiers.Responsable.Telephone' && sameJson(chosen.couple, [true, true]) && !chosen.hint
+        && debug[0] === I18n.t('varCond.debug.currentNotMetOtherwise', { id: 1, value: 'Tél. 06 11 22 33 44' })
+        && sameJson(saved, other) && html.includes('data-otherwise-column="Responsable.Telephone"') && html.includes('data-otherwise-key="VcDossiers.Responsable.Telephone"')
+        && sameJson(first, ['Objet : Tél. 06 11 22 33 44']) && sameJson(second, ['Objet : Dossier B'])
+        && reopened.value === 'VcDossiers.Responsable.Telephone' && reopened.shown === 'VcDossiers.Responsable.Telephone' && sameJson(reopened.couple, ['Tél. ', '']) && !reopened.hint
+        && sameJson(lost, { main: false, other: true });
+      return { pass, notes: JSON.stringify({ arrows, crumbs, level, chosen, debug, saved, first, second, reopened, lost }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.varCondition = cases;
 })();

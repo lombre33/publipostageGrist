@@ -1285,6 +1285,45 @@
     { email: true },
   );
 
+  // ============================================================================================================
+  // Le sinon d'une bulle (demande d'Antoine du 2026-10-08 ; la fenêtre et la Lecture sont dans scenarios-var-condition.js)
+  // ============================================================================================================
+  scenario(
+    'fieldeditor_an_otherwise_is_stored_in_html_drawn_and_written_when_the_condition_is_not_met',
+    'Une bulle à sinon fait passer le champ en HTML (les cinq attributs data-otherwise-*, relus à l’identique) et s’y dessine en pastille « sinon … » ; l’Objet et le nom du PDF écrivent la variable du sinon quand la condition n’est pas remplie, la variable de la bulle sinon ; les variables que cite la valeur comptent celle du sinon (les règles de liaison concernent aussi ce modèle)',
+    async () => {
+      const NORMAL = { mode: 'all', rules: [{ column: 'Statut', operator: '=', value: 'Normal' }] };
+      const other = { table: 'FeAnnuaire', column: 'NomPrenom', key: 'FeAnnuaire.NomPrenom', before: '(', after: ')' };
+      const stored = FieldCodec.toStored([T('Suivi '), B('Titre', { condition: NORMAL, otherwise: other })]);
+      const host = field(SUBJECT);
+      host.value = stored;
+      const again = host.value;
+      const kept = FieldCodec.itemsOf(stored).filter(item => item.badge).map(item => item.badge.otherwise);
+      const pastille = editorOf(SUBJECT).view.dom.querySelector('.var-badge-otherwise');
+      const drawn = pastille ? {
+        word: pastille.querySelector('.var-badge-otherwise-word').getAttribute('data-text'),
+        name: pastille.querySelector('.var-badge-otherwise-name').getAttribute('data-text'),
+        chips: Array.from(pastille.querySelectorAll('.var-badge-affix')).map(chip => chip.getAttribute('data-text')),
+      } : null;
+      host.value = '';
+      const written = { urgent: await text(stored, REC_1), normal: await text(stored, REC_2), fileUrgent: await filename(stored, REC_1) };
+      const plain = { table: PAGE, column: 'Titre', key: PAGE + '.Titre', format: null, condition: null, loop: null };
+      const checks = {
+        html: FieldCodec.isRich(stored) && stored.includes('data-otherwise-table="FeAnnuaire"') && stored.includes('data-otherwise-column="NomPrenom"')
+          && stored.includes('data-otherwise-key="FeAnnuaire.NomPrenom"') && stored.includes('data-otherwise-before="("') && stored.includes('data-otherwise-after=")"'),
+        stable: again === stored && same(kept, [other]),
+        drawn: !!drawn && drawn.word === 'sinon' && drawn.name === Variables.triggerChar() + 'FeAnnuaire.NomPrenom' && same(drawn.chips, ['(', ')']),
+        onlyTheOtherwiseIsNotPlain: FieldCodec.isPlainBadge(plain) === true && FieldCodec.isPlainBadge(Object.assign({ otherwise: other }, plain)) === false && FieldCodec.isPlainBadge(Object.assign({ otherwise: null }, plain)) === true,
+        variables: same(FieldCodec.variablesIn(stored), [{ table: PAGE, column: 'Titre' }, { table: 'FeAnnuaire', column: 'NomPrenom' }]),
+        subject: written.urgent === 'Suivi (Dupont Jean)' && written.normal === 'Suivi Dossier B',
+        fileName: written.fileUrgent === 'Suivi (Dupont Jean)',
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: failed.join(', ') || JSON.stringify({ stored, drawn, written }) };
+    },
+    { email: true },
+  );
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.fieldEditor = cases;
 })();

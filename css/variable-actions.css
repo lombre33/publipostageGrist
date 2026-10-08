@@ -17,6 +17,19 @@
 .tiptap .var-badge-affix:first-child { margin-left: 0; }
 .tiptap .var-badge-affix:last-child { margin-right: 0; }
 
+/* « Sinon » d'une bulle (js/variable-otherwise.js) : après le nom de la bulle, séparé par un trait en pointillés comme son cadre, le mot « sinon », le
+   texte « Avant » du sinon (les pastilles ci-dessus), le nom de sa variable et son « Après ». Tout est dessiné par le CSS (data-text), comme les
+   pastilles d'Avant / Après : textContent garde le seul nom de la bulle. Quand la colonne du sinon n'existe plus (js/editor.js:markBadgeValidity), la
+   pastille rougit seule, la bulle gardant son aspect. Dans une case étroite, la pastille se coupe la première (le nom de la bulle, lui, se coupe par le
+   milieu, plus haut). */
+.tiptap .var-badge-otherwise { display: inline-block; margin-left: 4px; padding-left: 5px; border-left: 1px dashed #5b7fc0; white-space: pre; }
+.tiptap .var-badge-otherwise-word { margin-right: 3px; font-style: italic; font-weight: 700; }
+.tiptap .var-badge-otherwise-word::before, .tiptap .var-badge-otherwise-name::before { content: attr(data-text); }
+.tiptap .var-badge-otherwise-broken { cursor: help; }
+.tiptap .var-badge-otherwise-broken .var-badge-otherwise { color: #a4231c; border-left-color: #a4231c; }
+.tiptap .var-badge-otherwise-broken .var-badge-otherwise .var-badge-affix { background: #f6d6d6; color: #a4231c; }
+.tiptap :where(td, th, .two-columns-column) .var-badge-otherwise { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
 /* Bulle sélectionnée par un clic : ProseMirror pose `ProseMirror-selectednode` mais masque alors la sélection du navigateur
    (`ProseMirror-hideselection`), rien ne la montrait. Le fond passe à un bleu plus soutenu (texte 6,9:1), liseré inchangé ; même teinte en sombre,
    la page du document restant blanche. `background-color` seulement : le repère de boucle d'une bulle en ligne est un `background-image`. Une
@@ -122,9 +135,16 @@
 .var-condition-affix[hidden] { display: none; }
 .var-condition-affix input { width: 120px; height: 26px; box-sizing: border-box; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-family: var(--font-ui); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
 .var-condition-affix .var-loop-hint { grid-column: 2; }
+/* « Sinon afficher » (js/variable-otherwise.js) : une seconde grille de même classe, sous l'aperçu - la liste des variables sur sa largeur (sans dépasser
+   288 px), son indication quand la colonne n'existe plus, puis son propre « Avant » / « Après » dans les mêmes colonnes. Grisée sans règle complète : son
+   champ grisé laisse passer la souris, pour que l'info-bulle de la ligne dise pourquoi. */
+.var-condition-affix .var-condition-otherwise-field { grid-column: 2 / -1; display: flex; max-width: 288px; }
+.var-condition-affix .var-condition-otherwise-field .ss-trigger:disabled { pointer-events: none; }
+.var-condition-affix .var-condition-otherwise-hint { grid-column: 2 / -1; font-size: 11px; font-weight: 600; line-height: 1.4; color: var(--danger-ink); }
+.var-condition-affix .var-condition-otherwise-hint[hidden] { display: none; }
 @media (min-width: 520px) {
   .var-condition-affix { grid-template-columns: repeat(4, max-content); }
-  .var-condition-affix label:nth-of-type(2) { padding-left: 12px; }
+  .var-condition-affix .var-condition-affix-after { padding-left: 12px; }
   .var-condition-affix input { width: 96px; }
   .var-condition-affix .var-loop-hint { grid-column: 2 / -1; }
 }

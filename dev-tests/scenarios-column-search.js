@@ -677,7 +677,8 @@
         const modal = await openConditionWindow(h);
         const ed = EditorCore.getEditor();
         const select = modal.querySelector('select.macro-rule-column');
-        const nativeVisible = visible(select) && !modal.querySelector('.ss-trigger') && select.getBoundingClientRect().width > 80;
+        // Les règles seulement : la liste de « Sinon afficher » est posée une seule fois, à la première ouverture de la fenêtre, et garde son champ.
+        const nativeVisible = visible(select) && !modal.querySelector('.var-condition-rules .ss-trigger') && select.getBoundingClientRect().width > 80;
         const labels = Array.from(select.options).map(o => o.textContent);
         select.value = 'Montant';
         select.dispatchEvent(new Event('change', { bubbles: true }));
