@@ -266,12 +266,14 @@ const FloatingToolbars = (function () {
     // Ce que fait chaque bouton de la barre d'un tableau
 
     function tableCommands(menus) {
+      // Dans une grille, ajouter autant de lignes ou de colonnes que la sélection en couvre (comme les supprimer) ; un tableau de document en ajoute une.
+      const lines = command => () => (GridEditor.isActive() ? GridEditor.insertLines(editor, command) : editor.chain().focus()[command]().run());
       return {
-        'row-before': () => editor.chain().focus().addRowBefore().run(),
-        'row-after': () => editor.chain().focus().addRowAfter().run(),
+        'row-before': lines('addRowBefore'),
+        'row-after': lines('addRowAfter'),
         'row-del': () => { if (!rowDeleteBlocked()) editor.chain().focus().deleteRow().run(); },
-        'col-before': () => editor.chain().focus().addColumnBefore().run(),
-        'col-after': () => editor.chain().focus().addColumnAfter().run(),
+        'col-before': lines('addColumnBefore'),
+        'col-after': lines('addColumnAfter'),
         'col-del': () => { if (!columnDeleteBlocked()) editor.chain().focus().deleteColumn().run(); },
         'table-del': () => editor.chain().focus().deleteTable().run(),
         'cell-merge': () => (GridEditor.isActive() ? GridEditor.mergeCells(editor) : TableMerge.mergeCells(editor)),

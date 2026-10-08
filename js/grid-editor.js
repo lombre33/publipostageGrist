@@ -13,6 +13,8 @@
 //     l'éditeur garde le sien ;
 //   - le collage dans une case sans les lignes vides de fin (`trimPastedSlice`), et celui d'un tableau de tableur case par case, mise en forme
 //     comprise (`transformPastedHTML`, js/grid-table.js) ;
+//   - le collage d'un bloc de cases sur des cases choisies, posé en entier depuis la case en haut à gauche (`pasteFromTopLeft`), et « Ligne/Colonne
+//     avant/après » qui ajoutent autant de lignes ou de colonnes que la sélection en couvre (`insertLines`) ;
 //   - Entrée qui descend d'une case (`enterGoesDown`), Maj+Entrée et Ctrl+Entrée qui ajoutent une ligne dans la case ;
 //   - le défilement vers la sélection qui tient compte des bandeaux (`revealSelection`).
 // Tout est inerte tant que setActive(true) n'a pas été appelé (js/main.js:loadTemplateIntoEditor) : un document, un email ou un macro-modèle ne
@@ -781,6 +783,56 @@ const GridEditor = (function () {
     return { canTogglePageBreak, hasPageBreak, togglePageBreak, pageBreakRows, trimPastedSlice };
   })();
 
+  const { insertLines, pasteFromTopLeft } = (function () {
+    // Les lignes et les colonnes que la sélection couvre (choisies par leurs numéros, leurs lettres ou en glissant) : en ajouter autant, y coller un
+    // bloc de cases.
+
+    // Dans un tableur, insérer des lignes en ajoute autant que la sélection en couvre : trois numéros choisis, trois lignes neuves au-dessus de la
+    // première ou sous la dernière. prosemirror-tables n'en ajoute qu'une par commande ; on appelle donc `addRow` / `addColumn` une fois par ligne (ou
+    // colonne) couverte, à la même place, chacune sur le tableau tel que la précédente l'a laissé. Le tout sur UNE transaction (un seul Annuler, une
+    // seule réparation de la grille, quelle que soit la taille de la sélection), la sélection restant sur les mêmes cases. Chaque appel a sa
+    // transaction neuve : `addColumn` repère ses cases par `tr.mapping`, qui ne doit compter que les pas de son propre appel. Un simple curseur n'ajoute
+    // qu'une ligne, même dans une case fusionnée.
+    function insertLines(ed, command) {
+      if (!active) return false;
+      const info = tableInfo(ed.state.doc);
+      const rect = info && selectionRect(ed.state, info);
+      if (!rect) return false;
+      const byRow = command === 'addRowBefore' || command === 'addRowAfter';
+      const after = command === 'addRowAfter' || command === 'addColumnAfter';
+      const count = isCellSelection(ed.state.selection) ? (byRow ? rect.bottom - rect.top : rect.right - rect.left) : 1;
+      const at = byRow ? (after ? rect.bottom : rect.top) : (after ? rect.right : rect.left);
+      const add = byRow ? libs.addRow : libs.addColumn;
+      return ed.chain().focus().command(({ tr }) => {
+        for (let i = 0; i < count; i++) {
+          const table = tableInfo(tr.doc);
+          const step = libs.EditorState.create({ doc: tr.doc }).tr;
+          add(step, { map: libs.TableMap.get(table.node), tableStart: table.pos + 1, table: table.node }, at);
+          step.steps.forEach(one => tr.step(one));
+        }
+        return true;
+      }).run();
+    }
+
+    // Coller sur des cases choisies : comme dans un tableur, le bloc copié se pose en entier à partir de la case en haut à gauche de la sélection.
+    // prosemirror-tables le rogne aux dimensions de la sélection : trois lignes collées sur le numéro d'une ligne n'en donnaient qu'une, sur la lettre
+    // d'une colonne que sa première colonne, répétée. Quand les dimensions de la sélection sont des multiples de celles du bloc (une case copiée et
+    // collée sur toute une colonne, une ligne sur cinq lignes), on lui laisse le répéter pour remplir la sélection, comme un tableur. Sinon le curseur
+    // passe dans la case en haut à gauche et prosemirror-tables colle le bloc, comme pour un curseur (la grille s'agrandit s'il le faut). Ne consomme
+    // jamais le collage.
+    function pasteFromTopLeft(view, slice) {
+      const block = isCellSelection(view.state.selection) ? libs.pastedCells(slice) : null;
+      const info = block && tableInfo(view.state.doc);
+      const rect = info && selectionRect(view.state, info);
+      if (!rect || ((rect.right - rect.left) % block.width === 0 && (rect.bottom - rect.top) % block.height === 0)) return false;
+      const map = libs.TableMap.get(info.node);
+      const corner = info.pos + 1 + map.map[rect.top * map.width + rect.left];
+      view.dispatch(view.state.tr.setSelection(libs.TextSelection.near(view.state.doc.resolve(corner + 1), 1)));
+      return false;
+    }
+    return { insertLines, pasteFromTopLeft };
+  })();
+
   const { revealSelection, enterGoesDown } = (function () {
     // Le défilement vers la sélection sous les bandeaux collés, et la touche Entrée qui descend d'une case.
 
@@ -915,6 +967,7 @@ const GridEditor = (function () {
               // alignements, traits (js/grid-table.js).
               transformPastedHTML(html) { return active ? GridTable.cleanPastedHtml(html) : html; },
               transformPasted(slice) { return active ? trimPastedSlice(slice) : slice; },
+              handlePaste(view, event, slice) { return active ? pasteFromTopLeft(view, slice) : false; },
               decorations(state) {
                 if (!active || isCellSelection(state.selection)) return null;
                 const pos = currentCellPos(state);
@@ -1325,6 +1378,6 @@ const GridEditor = (function () {
     configure, attach, createExtension, createEnterExtension, withTableAttributes, withRowAttributes, withCellAttributes, serialize, setActive, isActive, isGridType,
     refresh, currentCellDom, colName, floatingOptions, barSlot,
     canMerge, canSplit, mergeCells, splitCell, setVerticalAlign, selectedVerticalAlign, applyBorders, canApplyBorders, gridLinesShown, setGridLinesShown,
-    canTogglePageBreak, hasPageBreak, togglePageBreak,
+    canTogglePageBreak, hasPageBreak, togglePageBreak, insertLines,
   };
 })();

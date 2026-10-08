@@ -62,6 +62,13 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   annuaire, par exemple) : la fenêtre part de la colonne cliquée, montre la personne de cette colonne et
   pose `#Dossiers.Valideur.Email` ; elle ne lisait qu'une seule personne pour toute la ligne. Aucun lien
   n'est créé ni changé, et avec une seule colonne Référence vers la table rien ne change.
+- **Lignes et colonnes d'une grille choisies par leurs numéros et leurs lettres** : un bloc de cases copié
+  puis collé sur des lignes ou des colonnes choisies est posé en entier à partir de la case en haut à gauche
+  de la sélection (la grille gagne les lignes ou les colonnes qui manquent), au lieu d'être rogné à la
+  taille de la sélection ; comme dans un tableur, il ne se répète que si la sélection en est un multiple
+  exact (une case copiée remplit toute la ligne choisie). « Ligne avant », « Ligne après », « Colonne
+  avant » et « Colonne après » ajoutent autant de lignes (de colonnes) que la sélection en couvre, en un
+  seul Annuler, au lieu d'une seule.
 
 ## [1.0.0-beta.1] - 2026-10-05
 
@@ -213,6 +220,12 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   a directory, for example): the window starts from the clicked column, shows the person of that column
   and places `#Dossiers.Valideur.Email`; it used to read a single person for the whole row. No link is
   created or changed, and with a single Reference column to the table nothing changes.
+- **Rows and columns of a grid chosen by their numbers and letters**: a block of cells copied and pasted onto
+  chosen rows or columns is placed in full from the top-left cell of the selection (the grid gains the rows
+  or columns it lacks), instead of being cropped to the size of the selection; as in a spreadsheet, it
+  repeats only when the selection is an exact multiple of it (one copied cell fills the whole chosen row).
+  "Row before", "Row after", "Column before" and "Column after" add as many rows (columns) as the selection
+  covers, in a single Undo, instead of one.
 
 ## [1.0.0-beta.1] - 2026-10-05 (English)
 
