@@ -2910,6 +2910,99 @@
     },
   });
 
+
+  // === L'autre colonne d'une règle (bouton « autre colonne » du champ Valeur de la fenêtre de condition, demande d'Antoine du 2026-10-08) ===
+  cases.push({
+    id: 'colsearch_value_other_column_list_is_the_same_flat_searchable_list_as_the_rule_column',
+    description: 'Le bouton « autre colonne » du champ Valeur met à sa place la même liste avec recherche que celle de la colonne de la règle (mêmes lignes, mêmes types, même ordre, « rien » en tête, saisie avancée en dernier, sans groupes) ; elle se cherche par mots, Entrée prend le premier résultat, un clic aussi ; la saisie avancée ouvre le champ libre, dont la frappe est l’autre colonne enregistrée',
+    run: async (h) => {
+      await seed(h);
+      const modal = await openConditionWindow(h);
+      const ed = EditorCore.getEditor();
+      const row = modal.querySelector('.macro-rule-row');
+      const left = triggerIn(row);
+      left.click();
+      await h.sleep(30);
+      const leftRows = rowsOf(panelOf(left));
+      setInput(inputOf(panelOf(left)), 'montant');
+      await h.sleep(10);
+      press(inputOf(panelOf(left)), 'Enter');
+      await h.sleep(40);
+      const toggle = row.querySelector('.macro-rule-compare');
+      if (!toggle) { dismiss(modal); return { pass: false, notes: 'bouton « autre colonne » absent de la fenêtre de condition' }; }
+      toggle.click();
+      await h.sleep(40);
+      const slot = row.querySelector('.macro-rule-value-slot');
+      const right = slot.querySelector('.ss-trigger');
+      const rightSelect = selectOf(right);
+      const closed = { text: right.textContent, width: right.getBoundingClientRect().width, selectWidth: rightSelect.getBoundingClientRect().width, nativeKind: rightSelect.className };
+      right.click();
+      await h.sleep(30);
+      const panel = panelOf(right);
+      const rightRows = rowsOf(panel);
+      const heads = headersOf(panel);
+      const optgroups = rightSelect.querySelectorAll('optgroup').length;
+      const typed = async text => { setInput(inputOf(panel), text); await h.sleep(10); return rowsOf(panel); };
+      const advanced = I18n.t('macro.modal.columnAdvanced');
+      const byWords = await typed('annuaire nom');
+      const none = await typed('zzz');
+      await typed('annuaire nom');
+      press(inputOf(panel), 'Enter');
+      await h.sleep(40);
+      const afterEnter = { value: rightSelect.value, shown: right.textContent, closed: panelOf(right).hidden, focusBack: document.activeElement === right };
+      right.click();
+      await h.sleep(30);
+      const dateRow = Array.from(panelOf(right).querySelectorAll('.ss-option')).find(r => label(r) === 'Echeance' + hintOf('macro.modal.typeDate'));
+      dateRow.click();
+      await h.sleep(40);
+      const afterClick = { value: rightSelect.value, shown: right.textContent };
+      right.click();
+      await h.sleep(30);
+      panelOf(right).querySelector('.ss-option.is-pinned').click();
+      await h.sleep(40);
+      const free = slot.querySelector('.macro-rule-column-advanced');
+      const revealed = !free.hidden && document.activeElement === free && right.textContent === advanced;
+      setInput(free, 'CsInconnue.Colonne');
+      await h.sleep(20);
+      saveButton(modal).click();
+      await h.sleep(80);
+      const saved = badgeNodes(ed)[0].node.attrs.condition;
+      const pass = JSON.stringify(rightRows) === JSON.stringify(leftRows) && leftRows[0] === I18n.t('macro.modal.columnChoosePlaceholder') && leftRows[leftRows.length - 1] === advanced
+        && heads.length === 0 && optgroups === 0 && closed.text === I18n.t('macro.modal.columnChoosePlaceholder') && closed.width > 60 && closed.selectWidth === 0
+        && closed.nativeKind.indexOf('macro-rule-value-column') !== -1
+        && JSON.stringify(byWords) === JSON.stringify(['CsAnnuaire.NomPrenom', advanced]) && JSON.stringify(none) === JSON.stringify([advanced])
+        && afterEnter.value === 'CsAnnuaire.NomPrenom' && afterEnter.shown === 'CsAnnuaire.NomPrenom' && afterEnter.closed && afterEnter.focusBack
+        && afterClick.value === 'Echeance' && afterClick.shown === 'Echeance'
+        && revealed && !!saved && saved.rules.length === 1 && saved.rules[0].column === 'Montant' && saved.rules[0].valueColumn === 'CsInconnue.Colonne' && saved.rules[0].value === '';
+      return { pass, notes: JSON.stringify({ closed, heads, optgroups, byWords, none, afterEnter, afterClick, revealed, saved, same: JSON.stringify(rightRows) === JSON.stringify(leftRows) }) };
+    },
+  });
+
+  cases.push({
+    id: 'colsearch_value_other_column_button_is_only_in_the_condition_window',
+    description: 'Le bouton « autre colonne » n’existe que dans la fenêtre de condition (bulle, bloc, valeur, case) : le filtre d’une boucle et les règles d’un macro-modèle gardent leur champ Valeur seul, car leur évaluation ne lit qu’une valeur saisie',
+    run: async (h) => {
+      await seed(h);
+      const condition = await openConditionWindow(h);
+      const inCondition = condition.querySelectorAll('.macro-rule-row .macro-rule-compare').length;
+      dismiss(condition);
+      const loop = await openLoopWindow(h);
+      loop.querySelector('.var-loop-filter .var-condition-add').click();
+      await h.sleep(50);
+      const inLoop = { buttons: loop.querySelectorAll('.macro-rule-compare').length, rows: loop.querySelectorAll('.var-loop-filter .macro-rule-row').length, otherLists: loop.querySelectorAll('select.macro-rule-value-column').length };
+      dismiss(loop);
+      MacroEditor.openModal(null);
+      document.getElementById('macro-editor-add-slot').click();
+      await h.sleep(50);
+      const macro = document.getElementById('macro-editor-modal');
+      const inMacro = { buttons: macro.querySelectorAll('.macro-rule-compare').length, rows: macro.querySelectorAll('.macro-rule-row').length, otherLists: macro.querySelectorAll('select.macro-rule-value-column').length };
+      document.getElementById('macro-editor-cancel').click();
+      await h.sleep(30);
+      const pass = inCondition === 1 && inLoop.rows === 1 && inLoop.buttons === 0 && inLoop.otherLists === 0 && inMacro.rows >= 1 && inMacro.buttons === 0 && inMacro.otherLists === 0;
+      return { pass, notes: JSON.stringify({ inCondition, inLoop, inMacro }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.columnSearch = cases;
 })();

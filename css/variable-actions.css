@@ -45,6 +45,25 @@
 /* « vide » / « non vide » : le champ Valeur ne sert pas, il est grisé (partagé avec les macro-modèles, js/condition-fields.js:syncValueDisabled). */
 .macro-rule-value-slot.is-disabled { opacity: .45; }
 
+/* Bouton « autre colonne » d'une règle de la fenêtre de condition (js/condition-fields.js:buildCompareButton) : un petit bouton carré à gauche du champ
+   Valeur, de la hauteur des champs voisins. Enfoncé (aria-pressed, `.is-on`), le champ Valeur est la liste des colonnes à la place de la valeur saisie.
+   Grisé avec le champ par « vide » / « non vide » (l'atténuation est celle de `.macro-rule-value-slot.is-disabled`). */
+.macro-rule-value-slot.has-compare { align-items: center; gap: 4px; }
+.macro-rule-compare { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text-muted); cursor: pointer; }
+.macro-rule-compare svg { width: 15px; height: 15px; }
+.macro-rule-compare:hover:not(:disabled) { color: var(--accent-ink); border-color: var(--accent); }
+.macro-rule-compare:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.macro-rule-compare.is-on, .macro-rule-compare.is-on:hover:not(:disabled) { background: var(--accent-soft); border-color: var(--accent-soft-border); color: var(--accent-ink); }
+.macro-rule-compare:disabled { cursor: default; }
+/* Panneau étroit (480 px et moins) : le bouton prend 30 px à la ligne, le champ Valeur passerait sous les 90 px que garde une liste (celle de l'autre colonne recouvrirait
+   alors la croix). Le champ passe sur une seconde ligne, sous la colonne (même retrait de 39 px que l'indication de type) ; la croix reste en bout de la première ligne, les
+   indications (type, liens) suivent la seconde. Au-delà de 480 px, une seule ligne, le champ Valeur de 90 px au moins. */
+@media (max-width: 480px) {
+  .macro-rule-value-slot.has-compare { order: 1; flex: 1 0 100%; padding-left: 39px; box-sizing: border-box; }
+  .macro-rule-value-slot.has-compare ~ * { order: 2; }
+  .macro-rule-value-slot.has-compare ~ .macro-rule-remove { order: 0; }
+}
+
 /* Fenêtres : le voile, le cadre, le titre, la zone qui défile et la ligne de boutons viennent de la base commune (js/modal-base.js,
    css/modal-base.css), si bien que dans un panneau bas le titre et les boutons restent visibles et que seul le contenu défile. Ici : l'aspect du
    contenu et des boutons. */

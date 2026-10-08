@@ -489,6 +489,19 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   virgule. Il vaut aussi sans condition et passe par la même résolution partout (Lecture, PDF, Word, Excel, en-têtes et pieds) ; l'éditeur le montre dans de petites pastilles de la
   bulle (son nom reste le texte de la bulle) et l'icône Condition de la barre s'allume avec lui. « Retirer la condition » le garde ; une case Excel qui l'a reste du texte. Les
   attributs ajoutés par « Autres attributs » ne le recopient pas ; « Remplacer » et « Colonne… » le gardent sur la bulle.
+- Comparer à une autre colonne (demande d'Antoine du 08/10 : « si colonne 1 == colonne 2, donc pas forcément une valeur », en gardant la liste des valeurs possibles du champ Valeur) :
+  dans la fenêtre de condition d'une bulle, d'un bloc, d'une valeur ou d'une case (jamais dans celle d'un macro-modèle, de « Modèle selon la ligne » ou du filtre d'une boucle, qui ne lisent
+  qu'une valeur saisie), un **bouton à deux états** à gauche du champ Valeur (icône `compareColumns` : deux colonnes et le signe « = » ; info-bulle et nom accessible « Comparer à une
+  autre colonne », `aria-pressed`) fait passer le champ de « une valeur » à « une autre colonne » et inversement, au clic, à Entrée ou à Espace, en gardant le focus. Relâché, le champ Valeur
+  est celui d'avant, avec la liste des valeurs possibles de la colonne (choix, Oui / Non, valeurs affichées d'une référence ; texte, nombre et date restent un champ libre) ; enfoncé, c'est la
+  même liste avec recherche que celle de la colonne de la règle (colonnes de toutes les tables à plat, table en cours en tête, clé de liaison demandée pour une table pas encore liée,
+  avertissement « absente de la ligne affichée » sous la règle). La valeur saisie et l'autre colonne choisie se retrouvent en revenant. « vide » / « non vide » grisent le bouton avec le champ
+  (rien n'est lu). Une règle « autre colonne » sans colonne choisie est incomplète : ignorée à l'enregistrement, comme une règle sans colonne. La règle enregistrée est
+  `{ column, operator, value: "", valueColumn }` (une règle sans `valueColumn` se lit comme avant) et le résumé de la condition nomme l'autre colonne entre accolades (« Montant = {Paye} »).
+  Deux cellules vides sont égales, une seule vide les distingue, et un ordre ou un « contient » sur une cellule vide est faux ; deux listes sont égales quand elles ont les mêmes éléments, dans
+  n'importe quel ordre, une liste contre une valeur seule veut dire « contient » ; les dates se comparent au jour, dans le fuseau de chaque colonne ; deux colonnes de la même table liée se
+  lisent fiche par fiche. Le bouton suit les contrastes F5 (glyphe 4,5:1, liseré 3:1, cible de 24 px au moins, relâché comme enfoncé, clair et sombre). À 480 px et moins, le champ Valeur passe
+  sur une seconde ligne, sous la colonne, la croix restant en bout de la première.
 - « Changer la colonne de la variable… » (point 11 des retours du 02/10 : réparer une variable dont Grist a renommé ou supprimé la colonne ; restreint le 04/10 : « pas à chaque fois, uniquement
   quand une variable est cassée ») : bouton `varColumn` de la barre flottante d'une variable, **là seulement quand la bulle est rouge** (colonne, chemin de références ou table disparus), caché - pas
   grisé : seconde exception, expresse, à « grisée, jamais masquée » - sur une variable saine, un calcul (même cassé), un bloc de texte, une valeur et une case conditionnelle ; il suit la bulle

@@ -2,7 +2,9 @@
 // (js/reader-mode.js, ConditionRules.conditionHolds). La condition vit dans l'attribut `condition` du nœud : { mode: 'all'|'any', rules: [{ column,
 // operator, value }] }. Mêmes lignes Colonne / Opérateur / Valeur que les macro-modèles (js/condition-fields.js), avec les colonnes de toutes les
 // tables dans une seule liste avec recherche ; une colonne d'une table pas encore liée ouvre le choix de la clé
-// (js/variables.js:ensureLinkConfigured). Aperçu en direct : la ligne sélectionnée, puis combien de lignes de la table remplissent la condition et la
+// (js/variables.js:ensureLinkConfigured). Le champ Valeur a un bouton « autre colonne » : la règle compare alors la colonne à une autre colonne de la
+// même ligne, { column, operator, valueColumn } (options.compareColumn, js/condition-rules.js:compareOperands), au lieu d'une valeur saisie.
+// Aperçu en direct : la ligne sélectionnée, puis combien de lignes de la table remplissent la condition et la
 // première d'entre elles. « Copier » / « Coller » recolle la condition d'une fenêtre dans une autre, comme un brouillon : « Enregistrer » l'applique.
 // Ouverte depuis la barre flottante (js/floating-toolbars.js:wireVariableFloatingToolbar). La même fenêtre sert aux nœuds conditionnels - bloc de
 // texte (js/conditional-text.js), valeur dans la phrase (js/conditional-value.js), case à cocher (js/conditional-checkbox.js) - avec leurs propres
@@ -53,15 +55,17 @@ const VariableCondition = (function () {
   // Le texte « Avant » / « Après » tel qu'il est tapé dans la fenêtre ({ before, after }), ou null : sans bulle, sans texte ou fenêtre fermée.
   const draftAffixes = () => (state && refs && showsValue() ? VariableFormat.affixes(refs.beforeInput.value, refs.afterInput.value) : null);
 
-  // « Statut = Urgent et VcContacts.Role = Avocat » : une condition sur une ligne, sans valeur pour « vide » / « non vide ». Ce que « Coller » va
-  // poser (info-bulle du bouton) et la condition que reprennent les attributs insérés (js/variable-linked-attrs.js), qui la donnent en entier
-  // (`full`) ; sinon coupée à 110 caractères.
+  // « Statut = Urgent et VcContacts.Role = Avocat » : une condition sur une ligne, sans valeur pour « vide » / « non vide ». Une règle qui compare à une
+  // autre colonne la nomme entre accolades, comme une colonne dans un calcul : « Montant = {Paye} », qui ne se lit pas comme la valeur « Paye ». Ce que
+  // « Coller » va poser (info-bulle du bouton) et la condition que reprennent les attributs insérés (js/variable-linked-attrs.js), qui la donnent en
+  // entier (`full`) ; sinon coupée à 110 caractères.
   function conditionSummary(condition, opts) {
     const glue = ' ' + I18n.t(condition.mode === 'any' ? 'varCond.ruleOr' : 'varCond.ruleAnd').toLowerCase() + ' ';
     const text = condition.rules.map(r => {
       const operator = r.operator || '=';
-      const noValue = operator === 'vide' || operator === 'non vide' || r.value == null;
-      return (r.column + ' ' + operator + (noValue ? '' : ' ' + r.value)).trim();
+      const noValue = ConditionRules.VALUELESS_OPERATORS.indexOf(operator) !== -1 || (!ConditionRules.comparesColumn(r) && r.value == null);
+      const shown = ConditionRules.comparesColumn(r) ? '{' + r.valueColumn + '}' : r.value;
+      return (r.column + ' ' + operator + (noValue ? '' : ' ' + shown)).trim();
     }).join(glue);
     return opts && opts.full ? text : shorten(text, 110);
   }
@@ -174,21 +178,26 @@ const VariableCondition = (function () {
     const clipFocus = clip.contains(document.activeElement) ? document.activeElement : null;
     rulesBox.replaceChildren();
     rules.forEach((rule, index) => {
+      // Le lien de la table de la colonne de la règle, et celui de l'autre colonne quand la règle en compare une (bouton « autre colonne »).
       const linkHint = el('span', 'var-condition-link-hint');
       linkHint.hidden = true;
+      const valueLinkHint = el('span', 'var-condition-link-hint');
+      valueLinkHint.hidden = true;
       rulesBox.appendChild(ConditionFields.buildRuleRow(rule, index, {
         mode,
         options: {
           allTables: true,
+          compareColumn: true,
           onColumnChosen: ref => ConditionFields.ensureTableLinked(ref, redraw),
           onColumnResolved: table => updateLinkHint(linkHint, table),
+          onValueColumnResolved: table => updateLinkHint(valueLinkHint, table),
         },
         onRemove: () => {
           rules.splice(index, 1);
           if (!rules.length) rules.push(ConditionFields.emptyRule());
           redraw();
         },
-        extra: [linkHint],
+        extra: [linkHint, valueLinkHint],
       }));
     });
     // Copier / Coller portent sur l'ensemble des règles : sur la même ligne que « + Ajouter », à droite, sans hauteur en plus dans un panneau bas.

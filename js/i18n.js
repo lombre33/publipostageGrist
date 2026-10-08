@@ -478,6 +478,7 @@ const I18n = (function () {
     'macro.modal.typeNumeric': { fr: 'nombre', en: 'number' },
     'macro.modal.typeChoice': { fr: 'choix', en: 'choice' },
     'macro.modal.columnMissingFromRecord': { fr: '⚠ absente de la ligne affichée - cochez-la dans les colonnes de ce widget', en: '⚠ missing from the displayed row - check it in this widget\'s columns' },
+    'macro.modal.compareToColumn': { fr: 'Comparer à une autre colonne', en: 'Compare with another column' },
     'macro.modal.valuePlaceholder': { fr: 'Valeur', en: 'Value' },
     'macro.modal.valuePlaceholderDate': { fr: 'Valeur (ex. 2026-09-26 ou 26/09/2026)', en: 'Value (e.g. 2026-09-26)' },
     'macro.modal.valueChoosePlaceholder': { fr: '— Choisir une valeur —', en: '— Choose a value —' },

@@ -281,16 +281,22 @@ const SchemaRenames = (function () {
     return next ? next.table + '.' + next.column : null;
   }
 
-  // { mode, rules: [{ column, operator, value }] } - rend la condition elle-même quand rien ne change.
+  // { mode, rules: [{ column, operator, value }] } - rend la condition elle-même quand rien ne change. Une règle qui compare à une autre colonne
+  // (`valueColumn`, js/condition-rules.js) la cite comme `column` : les deux suivent un renommage, chacune pour son compte.
   function rewriteCondition(condition, m, ctx, ambiguous) {
     if (!condition || !Array.isArray(condition.rules)) return { condition, count: 0 };
     let count = 0;
     const rules = condition.rules.map(rule => {
-      if (!rule || typeof rule.column !== 'string' || !rule.column) return rule;
-      const next = mapRuleColumn(rule.column, m, ctx, ambiguous);
-      if (next === null) return rule;
-      count++;
-      return Object.assign({}, rule, { column: next });
+      if (!rule) return rule;
+      let next = rule;
+      for (const key of ['column', 'valueColumn']) {
+        if (typeof next[key] !== 'string' || !next[key]) continue;
+        const renamed = mapRuleColumn(next[key], m, ctx, ambiguous);
+        if (renamed === null) continue;
+        count++;
+        next = Object.assign({}, next, { [key]: renamed });
+      }
+      return next;
     });
     return count ? { condition: Object.assign({}, condition, { rules }), count } : { condition, count: 0 };
   }
@@ -363,8 +369,10 @@ const SchemaRenames = (function () {
     const tables = new Set();
     const addRules = condition => {
       for (const rule of (condition && Array.isArray(condition.rules) ? condition.rules : [])) {
-        const dot = rule && typeof rule.column === 'string' ? rule.column.indexOf('.') : -1;
-        if (dot > 0) tables.add(rule.column.slice(0, dot));
+        for (const key of ['column', 'valueColumn']) {
+          const dot = rule && typeof rule[key] === 'string' ? rule[key].indexOf('.') : -1;
+          if (dot > 0) tables.add(rule[key].slice(0, dot));
+        }
       }
     };
     elements.forEach(el => {

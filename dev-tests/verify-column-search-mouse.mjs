@@ -773,6 +773,229 @@ const SECTIONS = {
     }, previousTheme);
   },
 
+  // Fenêtre de condition d'une bulle, règle qui compare la colonne à UNE AUTRE COLONNE (demande d'Antoine, 2026-10-08), à la vraie souris et au vrai clavier à 700x400 : le
+  // bouton « Comparer à une autre colonne » du champ Valeur est entier dans la fenêtre, au premier plan et assez grand pour être visé (24 px), la règle garde sa ligne unique sans
+  // recouvrement, un vrai clic échange le champ Valeur contre la liste des colonnes (liste avec recherche, sans intitulé de groupe, entière dans le panneau), choisir « Paye » met
+  // l'aperçu à jour, Enregistrer pose { column, operator, value: "", valueColumn } sur la bulle, la fenêtre se rouvre sur « Paye », la barre d'espace bascule le bouton sans lui
+  // retirer le focus (Tab mène du bouton à la liste), et rien ne déborde à 360 px. Clair et sombre, français et anglais : la première passe (clair, français) fait tout, les trois
+  // autres mesurent la ligne, le bouton et les textes.
+  async otherColumn() {
+    const previousTheme = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
+    const previousLang = await page.evaluate(() => I18n.getLang());
+    await seedData();
+    // La table de la page reçoit « Paye » à côté de Montant : Montant = Paye sur la première ligne seulement (1200 / 1200 ; 50 / 20).
+    await page.evaluate(async () => {
+      const stub = window.__gristStub;
+      stub.setVariables('CsDossiers', { Titre: 'Text', Statut: 'Text', Responsable: 'Ref:CsAnnuaire', Montant: 'Numeric', Paye: 'Numeric', Echeance: 'Date', Actif: 'Bool' });
+      stub.setRows('CsDossiers', [
+        { id: 1, Titre: 'Dossier A', Statut: 'Urgent', Responsable: 7, Montant: 1200, Paye: 1200, Echeance: 631152000, Actif: true },
+        { id: 2, Titre: 'Dossier B', Statut: 'Normal', Responsable: 7, Montant: 50, Paye: 20, Echeance: 631152000, Actif: true },
+      ]);
+      await GristAPI.refreshSchema();
+      stub.fireRecord({ id: 1, Titre: 'Dossier A', Statut: 'Urgent', Responsable: 'Dupont Jean', Montant: 1200, Paye: 1200, Echeance: 631152000, Actif: true }, 'CsDossiers');
+    });
+    await page.waitForTimeout(250);
+    const conditionOn = column => page.evaluate(col => {
+      let found;
+      EditorCore.getEditor().state.doc.descendants(n => { if (n.type.name === 'varBadge' && n.attrs.column === col) found = n.attrs.condition; });
+      return found;
+    }, column);
+    // Un choix dans une liste avec recherche, comme une personne : clic sur le champ, frappe, clic sur la ligne.
+    const pickFrom = async (fieldSelector, typed, name) => {
+      const field = await reveal(fieldSelector, cond + ' .modal-content');
+      if (field.found) await page.mouse.click(field.x, field.y);
+      await page.waitForTimeout(150);
+      await page.keyboard.type(typed);
+      await page.waitForTimeout(100);
+      const row = await rowCenter(cond, name);
+      if (row) await page.mouse.click(row.x, row.y);
+      await page.waitForTimeout(350);
+    };
+    // Le bouton de la première règle et ce que le champ Valeur montre à côté : null quand le bouton manque (ancien code), pour que les mesures échouent une à une.
+    const toggleInfo = () => page.evaluate(() => {
+      const row = document.querySelector('#var-condition-modal .macro-rule-row');
+      const button = row && row.querySelector('.macro-rule-compare');
+      if (!button) return null;
+      const r = button.getBoundingClientRect();
+      const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      const trigger = row.querySelector('.macro-rule-value-slot .ss-trigger');
+      return {
+        pressed: button.getAttribute('aria-pressed'), title: button.title, label: button.getAttribute('aria-label'), width: r.width, height: r.height, disabled: button.disabled,
+        inViewport: r.left >= 0 && r.top >= 0 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5, onTop: !!top && (top === button || button.contains(top)),
+        focused: document.activeElement === button, background: getComputedStyle(button).backgroundColor,
+        shown: trigger ? trigger.textContent : null, typedField: !!row.querySelector('input.macro-rule-value, select.macro-rule-value'),
+        otherSelect: (row.querySelector('select.macro-rule-value-column') || {}).value || null,
+      };
+    });
+    const previewLines = () => page.evaluate(() => Array.from(document.querySelectorAll('#var-condition-modal .var-condition-debug-line')).map(l => l.textContent));
+    const otherTrigger = cond + ' .macro-rule-value-slot .macro-rule-column-wrap .ss-trigger';
+    const cancelOf = cond + ' .var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)';
+    const lineChecks = (boxes, rule) => !!rule && !rule.twoLines && sameLine(...Object.values(boxes)) && overlapping(boxes).length === 0 && Object.values(boxes).every(b => b.onTop) && insidePanel(boxes);
+    const MARK = (theme, lang) => `${theme === 'dark' ? 'sombre' : 'clair'}, ${lang === 'en' ? 'anglais' : 'français'}`;
+    for (const [theme, lang] of [['light', 'fr'], ['dark', 'fr'], ['light', 'en'], ['dark', 'en']]) {
+      const full = theme === 'light' && lang === 'fr';
+      const label = MARK(theme, lang);
+      await page.evaluate(({ theme, lang }) => { document.documentElement.setAttribute('data-theme', theme); I18n.setLang(lang); }, { theme, lang });
+      await page.waitForTimeout(150);
+      const words = await page.evaluate(() => ({
+        compare: I18n.t('macro.modal.compareToColumn'), choose: I18n.t('macro.modal.columnChoosePlaceholder'),
+        met: I18n.t('varCond.debug.currentMet', { id: 1, value: 'Dossier A' }), count: I18n.t('varCond.debug.count', { table: 'CsDossiers', count: 1, total: 2 }),
+      }));
+      const win = await openWindowFor('Titre', 'var-condition', cond);
+      check(`autre colonne (${label}) : la fenêtre de condition s’ouvre, entière dans le panneau`, win.found && win.inViewport, win);
+      await pickFrom(cond + ' .macro-rule-column-wrap .ss-trigger', 'mont', 'Montant');
+
+      // Mode valeur (le comportement d'avant) : la ligne tient sur une seule ligne avec le bouton, le champ Valeur reste utilisable.
+      const valueMode = await ruleBoxes(cond);
+      const rest = await toggleInfo();
+      check(`autre colonne (${label}) : mode valeur : la règle garde sa ligne unique (« Si », colonne, opérateur, valeur et bouton, croix), sans recouvrement, chaque contrôle au premier plan, dans le panneau`,
+        !!valueMode && lineChecks(valueMode.boxes, valueMode), valueMode);
+      check(`autre colonne (${label}) : le bouton « autre colonne » est entier dans la fenêtre, au premier plan, d’au moins 24 x 24 px, relâché, avec son info-bulle et son nom accessible dans la langue`,
+        !!rest && rest.inViewport && rest.onTop && rest.width >= 24 && rest.height >= 24 && !rest.disabled && rest.pressed === 'false' && rest.title === words.compare && rest.label === words.compare && rest.typedField, { rest, expected: words.compare });
+      const typedBox = await hitTest(cond + ' .macro-rule-value-slot .macro-rule-value');
+      check(`autre colonne (${label}) : mode valeur : le champ de la valeur garde une largeur lisible (80 px) à côté du bouton`, typedBox.found && typedBox.width >= 80 && typedBox.onTop, typedBox);
+
+      // Un vrai clic sur le bouton : la liste des colonnes remplace le champ de la valeur.
+      await clickCenter(cond + ' .macro-rule-compare');
+      const pressed = await toggleInfo();
+      const columnMode = await ruleBoxes(cond);
+      const otherBox = await hitTest(otherTrigger);
+      check(`autre colonne (${label}) : un vrai clic enfonce le bouton (aria-pressed, fond différent), il garde le focus, le champ de la valeur laisse la place à la liste des colonnes « ${words.choose} »`,
+        !!pressed && pressed.pressed === 'true' && pressed.focused && !pressed.typedField && pressed.shown === words.choose && !!rest && pressed.background !== rest.background, { pressed, rest });
+      check(`autre colonne (${label}) : mode « autre colonne » : la règle garde sa ligne unique, sans recouvrement, chaque contrôle au premier plan, dans le panneau`,
+        !!columnMode && lineChecks(columnMode.boxes, columnMode), columnMode);
+      check(`autre colonne (${label}) : la liste des colonnes est entière dans la fenêtre, au premier plan, assez large pour un nom de colonne (100 px)`,
+        otherBox.found && otherBox.inViewport && otherBox.onTop && otherBox.width >= 100, otherBox);
+
+      if (!full) {
+        await clickCenter(cancelOf);
+        continue;
+      }
+
+      // La liste s'ouvre à un vrai clic : la même liste à plat que celle de la colonne de la règle (colonnes de la page puis des autres tables, sans intitulé de groupe, saisie
+      // avancée en dernier), entière dans le panneau, la zone de recherche a le focus ; « paye » la réduit à la colonne cherchée.
+      if (otherBox.found) await page.mouse.click(otherBox.x, otherBox.y);
+      await page.waitForTimeout(200);
+      const listed = await panelInfo(cond);
+      check(`autre colonne (${label}) : un vrai clic ouvre la liste, entière dans le panneau, la zone de recherche a le focus ; le choix « rien » en tête, les colonnes des autres tables à la suite, aucun intitulé`,
+        !!listed && listed.inside && listed.searchFocused && listed.rows[0] === words.choose && listed.heads.length === 0 && listed.rows.some(r => r.indexOf('Paye') === 0) && listed.rows.includes('CsAnnuaire.NomPrenom'), listed);
+      await page.keyboard.type('paye');
+      await page.waitForTimeout(120);
+      const searched = await panelInfo(cond);
+      const payeRow = await rowCenter(cond, 'Paye');
+      check(`autre colonne (${label}) : « paye » réduit la liste à la colonne Paye (et à la saisie avancée), la ligne est visible et au premier plan`,
+        !!searched && searched.rows.length === 2 && searched.rows[0].indexOf('Paye') === 0 && !!payeRow && payeRow.onTop && payeRow.inViewport, { searched, payeRow });
+      if (payeRow) await page.mouse.click(payeRow.x, payeRow.y);
+      await page.waitForTimeout(300);
+      const chosen = await toggleInfo();
+      const afterChoice = await page.evaluate(() => ({
+        listOpen: !!document.querySelector('#var-condition-modal .ss-panel:not([hidden])'), windowOpen: document.getElementById('var-condition-modal').style.display !== 'none',
+      }));
+      check(`autre colonne (${label}) : le clic sur la ligne choisit Paye, ferme la liste, la fenêtre reste ouverte`,
+        !!chosen && chosen.otherSelect === 'Paye' && chosen.shown === 'Paye' && !afterChoice.listOpen && afterChoice.windowOpen, { chosen, afterChoice });
+
+      // L'aperçu compte les lignes qui remplissent « Montant = Paye » : une sur deux, et dit si la ligne choisie la remplit.
+      await page.waitForTimeout(800);
+      const lines = await previewLines();
+      check(`autre colonne (${label}) : l’aperçu dit que la ligne courante remplit la condition et compte 1 ligne sur 2`,
+        lines.length >= 2 && lines[0].includes(words.met) && lines[1].includes(words.count), { lines, expected: [words.met, words.count] });
+
+      // Enregistrer (vrai clic) : la bulle reçoit la règle avec l'autre colonne, sans valeur.
+      const save = await reveal(cond + ' .var-modal-primary', cond + ' .modal-content');
+      if (save.found) await page.mouse.click(save.x, save.y);
+      await page.waitForTimeout(300);
+      const saved = await conditionOn('Titre');
+      check(`autre colonne (${label}) : Enregistrer pose { column, operator, value: "", valueColumn } sur la bulle et ferme la fenêtre`,
+        JSON.stringify(saved) === JSON.stringify({ mode: 'all', rules: [{ column: 'Montant', operator: '=', value: '', valueColumn: 'Paye' }] })
+        && await page.evaluate(() => document.getElementById('var-condition-modal').style.display === 'none'), saved);
+
+      // La fenêtre se rouvre bouton enfoncé, sur « Paye ».
+      await openWindowFor('Titre', 'var-condition', cond);
+      const reopened = await toggleInfo();
+      check(`autre colonne (${label}) : la fenêtre se rouvre bouton enfoncé, la liste montre Paye`, !!reopened && reopened.pressed === 'true' && reopened.shown === 'Paye' && !reopened.typedField, reopened);
+
+      // Au clavier : un clic donne le focus au bouton ; la barre d'espace le bascule sans lui retirer le focus (valeur, puis de nouveau « Paye », que la ligne a gardée), Tab mène à la liste.
+      await clickCenter(cond + ' .macro-rule-compare');
+      const toValue = await toggleInfo();
+      await page.keyboard.press('Space');
+      await page.waitForTimeout(120);
+      const spaceOn = await toggleInfo();
+      await page.keyboard.press('Tab');
+      const tabbed = await page.evaluate(() => { const a = document.activeElement; return { onList: a.classList.contains('ss-trigger') && !!a.closest('.macro-rule-value-slot'), text: a.textContent }; });
+      await page.keyboard.press('Shift+Tab');
+      const backOnButton = !!((await toggleInfo()) || {}).focused;
+      await page.keyboard.press('Space');
+      await page.waitForTimeout(120);
+      const spaceOff = await toggleInfo();
+      check(`autre colonne (${label}) : au clavier, la barre d’espace bascule le bouton sans lui retirer le focus ; l’autre colonne choisie est retrouvée ; Tab mène à la liste et Maj+Tab revient au bouton`,
+        !!toValue && toValue.pressed === 'false' && toValue.typedField && !!spaceOn && spaceOn.pressed === 'true' && spaceOn.focused && spaceOn.shown === 'Paye'
+        && tabbed.onList && tabbed.text === 'Paye' && backOnButton && !!spaceOff && spaceOff.pressed === 'false' && spaceOff.focused && spaceOff.typedField, { toValue, spaceOn, tabbed, backOnButton, spaceOff });
+      await page.keyboard.press('Space');
+      await page.waitForTimeout(120);
+
+      // Panneau étroit : à 360 px (480 px et moins), le champ Valeur passe sur une seconde ligne, sous la colonne, la croix reste en bout de la première ; à 482 px la règle tient
+      // sur une seule ligne et le champ Valeur garde 90 px au moins. Dans les deux cas rien ne déborde, rien n'en recouvre un autre, tout reçoit le clic.
+      const narrowRule = async width => {
+        await page.setViewportSize({ width, height: HEIGHT });
+        await page.waitForTimeout(300);
+        await reveal(cond + ' .macro-rule-compare', cond + ' .modal-content');
+        return page.evaluate(() => {
+          const content = document.querySelector('#var-condition-modal .var-modal-content');
+          const row = document.querySelector('#var-condition-modal .macro-rule-row');
+          const box = el => {
+            if (!el) return null;
+            const r = el.getBoundingClientRect();
+            const top = document.elementFromPoint((r.left + r.right) / 2, (r.top + r.bottom) / 2);
+            return { l: r.left, r: r.right, t: r.top, b: r.bottom, w: r.width, cy: (r.top + r.bottom) / 2, onTop: !!top && (top === el || el.contains(top)) };
+          };
+          const field = row.querySelector('.macro-rule-value-slot input.macro-rule-value, .macro-rule-value-slot .ss-trigger');
+          return {
+            boxes: {
+              connector: box(row.querySelector('.macro-rule-connector')), column: box(row.querySelector('.macro-rule-column-wrap .ss-trigger')), operator: box(row.querySelector(':scope > select')),
+              button: box(row.querySelector('.macro-rule-compare')), field: box(field), remove: box(row.querySelector('.macro-rule-remove')),
+            },
+            hint: box(row.querySelector('.macro-rule-column-type')), overflowX: content.scrollWidth - content.clientWidth, docOverflowX: document.documentElement.scrollWidth - innerWidth,
+          };
+        });
+      };
+      const reachable = (rule, width) => Object.values(rule.boxes).every(b => !!b && b.l >= 0 && b.r <= width + 0.5 && b.onTop) && overlapping(rule.boxes).length === 0
+        && rule.overflowX <= 0 && rule.docOverflowX <= 0;
+      const narrow = await narrowRule(360);
+      const nb = narrow.boxes;
+      check('autre colonne (360 px) : ni la fenêtre ni la page ne débordent, rien n’en recouvre un autre, tout reçoit le clic ; le champ Valeur (la liste de Paye) est sur une seconde ligne, sous la colonne, le bouton à son retrait',
+        reachable(narrow, 360) && nb.field.t >= nb.column.b - 1 && Math.abs(nb.button.l - nb.column.l) <= 2 && nb.field.w >= 90, narrow);
+      check('autre colonne (360 px) : la croix reste en bout de la première ligne, après l’opérateur, et l’indication de type vient sous la seconde ligne',
+        nb.remove.l >= nb.operator.r - 0.5 && Math.abs(nb.remove.cy - nb.column.cy) <= 3 && !!narrow.hint && narrow.hint.t >= nb.field.b - 1, narrow);
+      await clickCenter(cond + ' .macro-rule-compare');
+      const narrowValue = await narrowRule(360);
+      check('autre colonne (360 px) : mode valeur : le champ de la valeur est aussi sur la seconde ligne, sans recouvrement, entier dans le panneau',
+        reachable(narrowValue, 360) && narrowValue.boxes.field.t >= narrowValue.boxes.column.b - 1 && narrowValue.boxes.field.w >= 90, narrowValue);
+      await clickCenter(cond + ' .macro-rule-compare');
+      const wide = await narrowRule(482);
+      const wb = wide.boxes;
+      check('autre colonne (482 px) : la règle tient sur une seule ligne, sans recouvrement, la liste de l’autre colonne garde 90 px et la croix reste libre',
+        reachable(wide, 482) && sameLine(...Object.values(wb)) && wb.field.w >= 90, wide);
+      await clickCenter(cond + ' .macro-rule-compare');
+      const wideValue = await narrowRule(482);
+      check('autre colonne (482 px) : mode valeur : le champ de la valeur garde 90 px à côté du bouton, sur la même ligne',
+        reachable(wideValue, 482) && sameLine(...Object.values(wideValue.boxes)) && wideValue.boxes.field.w >= 88, wideValue);
+      await clickCenter(cond + ' .macro-rule-compare');
+      await page.setViewportSize({ width: WIDTH, height: HEIGHT });
+      await page.waitForTimeout(300);
+
+      // « Retirer la condition » (vrai clic) enlève la règle de la bulle.
+      const remove = await reveal(cond + ' .var-modal-danger', cond + ' .modal-content');
+      if (remove.found) await page.mouse.click(remove.x, remove.y);
+      await page.waitForTimeout(300);
+      check(`autre colonne (${label}) : « Retirer la condition » enlève la règle de la bulle`, (await conditionOn('Titre')) == null, await conditionOn('Titre'));
+    }
+    await page.evaluate(({ theme, lang }) => {
+      if (theme) document.documentElement.setAttribute('data-theme', theme); else document.documentElement.removeAttribute('data-theme');
+      I18n.setLang(lang);
+    }, { theme: previousTheme, lang: previousLang });
+    await seedData();
+  },
+
   // Réglages > Accès : la table des droits (liste native) et quatre choix de colonne avec recherche, dans une fenêtre qui défile à 700x400.
   async access() {
     const scope = '#settings-modal';

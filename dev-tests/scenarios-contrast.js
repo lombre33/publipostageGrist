@@ -795,6 +795,33 @@
   });
 
   cases.push({
+    id: 'contrast_compare_button_of_the_condition_window_keeps_4_5_glyph_and_3_to_1_ring_at_rest_and_pressed_in_light_and_dark',
+    description: 'Bouton « autre colonne » du champ Valeur de la fenêtre de condition : son dessin à 4,5:1 au moins sur le fond du bouton, au repos comme enfoncé, son anneau de focus à 3:1 au moins contre le cadre des règles qui l’entoure, en clair et en sombre, et une cible d’au moins 24 x 24 px',
+    run: async () => {
+      // Les classes sont celles de la fenêtre : le cadre des règles (--surface-sunken) pose la ligne, le bouton a son propre fond (--surface, ou --accent-soft une fois enfoncé).
+      const markup = '<div class="pp-modal-box modal-content"><div class="var-condition-rules"><div class="macro-rule-row"><span class="macro-rule-value-slot has-compare">'
+        + '<button type="button" class="macro-rule-compare" aria-pressed="false"></button><button type="button" class="macro-rule-compare is-on" aria-pressed="true"></button>'
+        + '</span></div></div></div>';
+      return withProbe(markup, root => {
+        const [rest, pressed] = root.querySelectorAll('.macro-rule-compare');
+        const ring = el => {
+          el.focus();
+          const color = parseColor(getComputedStyle(el).outlineColor);
+          const surround = backgroundOf(el.parentElement);
+          return el.matches(':focus-visible') && color ? round2(ratio(over(color, surround), surround)) : 0;
+        };
+        const glyphs = inBothThemes(() => ({ 'au repos': round2(textRatio(rest)), 'enfoncé': round2(textRatio(pressed)) }));
+        const rings = inBothThemes(() => ({ 'au repos': ring(rest), 'enfoncé': ring(pressed) }));
+        const bad = failing(glyphs, 4.5).map(b => 'dessin ' + b).concat(failing(rings, 3).map(b => 'anneau ' + b));
+        // Cible d'au moins 24 x 24 px (WCAG 2.2, 2.5.8), mesurée sur le bouton tel que la feuille de style le dessine.
+        const size = [rest, pressed].map(el => { const r = el.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; });
+        if (size.some(([w, h]) => w < 24 || h < 24)) bad.push('cible ' + JSON.stringify(size));
+        return { pass: bad.length === 0, notes: JSON.stringify({ bad, glyphs, rings, size }) };
+      });
+    },
+  });
+
+  cases.push({
     id: 'contrast_red_text_of_the_status_error_remove_buttons_counter_and_warnings_reaches_4_5_in_light_and_dark',
     description: 'Texte rouge (message d’erreur de la barre, « Retirer la condition », « Supprimer » des bulles de note et de commentaire, compteur d’email dépassé, avertissement de colonne du macro-modèle, ligne « accès verrouillé » de Réglages) : 4,5:1 au moins sur son fond, en clair et en sombre (--danger n’avait que 4,37:1 en clair)',
     run: async () => {

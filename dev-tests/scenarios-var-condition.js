@@ -1703,6 +1703,411 @@
     },
   });
 
+  // === Une règle qui compare la colonne à UNE AUTRE COLONNE de la même ligne (demande d'Antoine, 2026-10-08) ===
+  // La table de la page reçoit trois colonnes de plus : Paye (nombre, égal à Montant sur les lignes 1 et 3), Libelle (texte, égal à Titre sur les lignes 1 et 3) et
+  // Priorite (choix : le champ Valeur doit rester la liste de ses choix). Un bouton du champ Valeur (`.macro-rule-compare`) passe de « une valeur saisie » à « une autre
+  // colonne » (`valueColumn` dans la règle, js/condition-rules.js:compareOperands).
+  const ROW_1 = { id: 1, Titre: 'Dossier A', Statut: 'Urgent', Responsable: 'Dupont Jean', Montant: 1200, Paye: 1200, Libelle: 'Dossier A', Priorite: 'Haute' };
+  const ROW_2 = { id: 2, Titre: 'Dossier B', Statut: 'Normal', Responsable: 'Martin Anne', Montant: 50, Paye: 20, Libelle: 'Autre', Priorite: 'Basse' };
+  const PAID = { mode: 'all', rules: [{ column: 'Montant', operator: '=', value: '', valueColumn: 'Paye' }] };
+  const UNPAID = { mode: 'all', rules: [{ column: 'Montant', operator: '≠', value: '', valueColumn: 'Paye' }] };
+  const NO_COMPARE_BUTTON = { pass: false, notes: 'bouton « autre colonne » absent de la fenêtre de condition' };
+
+  async function seedCompare(h, opts) {
+    await seed(h, opts);
+    const stub = window.__gristStub;
+    stub.setVariables('VcDossiers', { Titre: 'Text', Statut: 'Text', Responsable: 'Ref:VcAnnuaire', Montant: 'Numeric', Paye: 'Numeric', Libelle: 'Text', Priorite: 'Choice' },
+      { Priorite: ['Haute', 'Basse'] });
+    stub.setRows('VcDossiers', [
+      { id: 1, Titre: 'Dossier A', Statut: 'Urgent', Responsable: 7, Montant: 1200, Paye: 1200, Libelle: 'Dossier A', Priorite: 'Haute' },
+      { id: 2, Titre: 'Dossier B', Statut: 'Normal', Responsable: 8, Montant: 50, Paye: 20, Libelle: 'Autre', Priorite: 'Basse' },
+      { id: 3, Titre: 'Dossier C', Statut: 'Urgent', Responsable: 0, Montant: 10, Paye: 10, Libelle: 'Dossier C', Priorite: 'Haute' },
+    ]);
+    await GristAPI.refreshSchema();
+    stub.fireRecord(Object.assign({}, ROW_1), 'VcDossiers');
+    await h.sleep(50);
+  }
+  // Une règle de la fenêtre telle qu'à l'écran, en mode valeur comme en mode « autre colonne » : colonne, opérateur, valeur saisie (null en mode « autre colonne »),
+  // autre colonne (null en mode valeur) et état du bouton.
+  function ruleView(row) {
+    const toggle = row.querySelector('.macro-rule-compare');
+    const other = row.querySelector('select.macro-rule-value-column');
+    const value = row.querySelector('.macro-rule-value');
+    return {
+      column: row.querySelector('select.macro-rule-column').value,
+      operator: row.querySelector(':scope > select').value,
+      value: value ? value.value : null,
+      other: other ? other.value : null,
+      pressed: toggle ? toggle.getAttribute('aria-pressed') : null,
+    };
+  }
+  // Choisit l'autre colonne comme une personne, dans le champ avec recherche du champ Valeur (comme pickColumn pour la colonne de la règle).
+  async function pickOtherColumn(h, row, name) {
+    const wrap = row.querySelector('.macro-rule-value-slot .macro-rule-column-wrap');
+    wrap.querySelector('.ss-trigger').click();
+    await h.sleep(30);
+    const panel = wrap.querySelector('.ss-panel');
+    if (name === '') panel.querySelector('.ss-option.is-empty').click();
+    else {
+      const input = panel.querySelector('.ss-input');
+      setInput(input, name);
+      await h.sleep(10);
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    }
+    await h.sleep(40);
+  }
+  const previewLines = modal => Array.from(modal.querySelectorAll('.var-condition-debug-line')).map(l => l.textContent);
+
+  cases.push({
+    id: 'varcond_column_rule_compares_two_columns_in_reader_and_export',
+    description: 'Une règle « colonne = autre colonne » (valueColumn) : la Lecture et l’export (ReaderMode.preview) gardent la bulle quand les deux colonnes de la ligne s’accordent et la retirent sinon, « ≠ » fait l’inverse, une condition enregistrée sans valueColumn se lit comme avant',
+    run: async (h) => {
+      await seedCompare(h);
+      const sameTitle = { mode: 'all', rules: [{ column: 'Titre', operator: '=', value: '', valueColumn: 'Libelle' }] };
+      const html = `<p>[${badgeHtml('VcDossiers', 'Titre', PAID)}][${badgeHtml('VcDossiers', 'Titre', UNPAID)}][${badgeHtml('VcDossiers', 'Titre', COND_URGENT)}][${badgeHtml('VcDossiers', 'Titre', sameTitle)}]</p>`;
+      const readerText = async () => (await renderReader(html)).querySelector('.reader-content').textContent;
+      const exportText = async () => { const box = document.createElement('div'); box.innerHTML = await ReaderMode.preview(html, 'VcDossiers', GristAPI.getCurrentRecord()); return box.textContent; };
+      const results = { row1: await readerText(), export1: await exportText() };
+      window.__gristStub.fireRecord(Object.assign({}, ROW_2), 'VcDossiers');
+      await h.sleep(50);
+      results.row2 = await readerText();
+      results.export2 = await exportText();
+      const pass = results.row1.includes('[Dossier A][][Dossier A][Dossier A]') && results.export1 === '[Dossier A][][Dossier A][Dossier A]'
+        && results.row2.includes('[][Dossier B][][]') && results.export2 === '[][Dossier B][][]';
+      return { pass, notes: JSON.stringify(results) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_column_toggle_swaps_the_value_field_and_keeps_what_was_typed',
+    description: 'Le bouton « autre colonne » du champ Valeur : enfoncé, le champ est la liste des colonnes à la place de la valeur saisie (liste avec recherche, info-bulle et nom accessible, aria-pressed) ; relâché, la valeur tapée avant est toujours là ; renfoncé, l’autre colonne choisie aussi ; le bouton garde le focus',
+    run: async (h) => {
+      await seedCompare(h);
+      Editor.setHTML(`<p>Objet : ${badgeHtml('VcDossiers', 'Titre')}</p>`);
+      const modal = await openWindow(h, 'Titre');
+      const row = modal.querySelector('.macro-rule-row');
+      await pickColumn(h, row, 'Montant');
+      await h.sleep(30);
+      const toggle = row.querySelector('.macro-rule-compare');
+      if (!toggle) { cancelWindow(modal); return NO_COMPARE_BUTTON; }
+      setInput(row.querySelector('.macro-rule-value'), '5');
+      const valueMode = ruleView(row);
+      toggle.click();
+      await h.sleep(60);
+      const columnMode = ruleView(row);
+      const focusKept = document.activeElement === toggle;
+      const slot = row.querySelector('.macro-rule-value-slot');
+      const shown = slot.querySelector('.ss-trigger');
+      const placeholder = shown ? shown.textContent : null;
+      const noTypedFieldInColumnMode = !slot.querySelector('input.macro-rule-value');
+      const preview = previewLines(modal);
+      toggle.click();
+      await h.sleep(60);
+      const backToValue = ruleView(row);
+      // Comme la valeur saisie, l'autre colonne choisie se retrouve en revenant : valeur, colonne « Paye », valeur (toujours 5), colonne (toujours « Paye »).
+      toggle.click();
+      await h.sleep(40);
+      await pickOtherColumn(h, row, 'Paye');
+      toggle.click();
+      await h.sleep(40);
+      const valueAgain = ruleView(row);
+      toggle.click();
+      await h.sleep(40);
+      const columnAgain = ruleView(row);
+      const label = I18n.t('macro.modal.compareToColumn');
+      cancelWindow(modal);
+      const pass = valueMode.pressed === 'false' && valueMode.value === '5' && valueMode.other === null
+        && valueAgain.pressed === 'false' && valueAgain.value === '5' && valueAgain.other === null
+        && columnAgain.pressed === 'true' && columnAgain.other === 'Paye' && columnAgain.value === null
+        && columnMode.pressed === 'true' && columnMode.other === '' && columnMode.value === null && noTypedFieldInColumnMode && focusKept && placeholder === I18n.t('macro.modal.columnChoosePlaceholder')
+        && preview[0] === I18n.t('varCond.debug.chooseColumn')
+        && backToValue.pressed === 'false' && backToValue.value === '5' && backToValue.other === null
+        && toggle.title === label && toggle.getAttribute('aria-label') === label && toggle.tagName === 'BUTTON';
+      return { pass, notes: JSON.stringify({ valueMode, columnMode, focusKept, placeholder, noTypedFieldInColumnMode, preview, backToValue, valueAgain, columnAgain }) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_column_window_saves_previews_and_reopens_on_the_other_column',
+    description: 'Fenêtre de condition : Montant = Paye (autre colonne) - l’aperçu compte 2 lignes sur 3 et dit que la ligne choisie la remplit, Enregistrer pose { column, operator, value: "", valueColumn } sur la bulle, la fenêtre se rouvre bouton enfoncé sur « Paye », Retirer l’enlève',
+    run: async (h) => {
+      await seedCompare(h);
+      Editor.setHTML(`<p>Objet : ${badgeHtml('VcDossiers', 'Titre')}</p>`);
+      const ed = EditorCore.getEditor();
+      let modal = await openWindow(h, 'Titre');
+      let row = modal.querySelector('.macro-rule-row');
+      await pickColumn(h, row, 'Montant');
+      const toggle = row.querySelector('.macro-rule-compare');
+      if (!toggle) { cancelWindow(modal); return NO_COMPARE_BUTTON; }
+      setInput(row.querySelector('.macro-rule-value'), 'brouillon');
+      toggle.click();
+      await h.sleep(40);
+      await pickOtherColumn(h, row, 'Paye');
+      await h.sleep(700);
+      const during = { rule: ruleView(row), lines: previewLines(modal), shownOther: row.querySelector('.macro-rule-value-slot .ss-trigger').textContent };
+      saveWindow(modal);
+      await h.sleep(80);
+      const saved = conditionOf(ed, 'Titre');
+      const html = Editor.getHTML();
+      await selectBadge(h, 'Titre');
+      const active = toolbarButton('var-condition').classList.contains('is-active');
+      pressToolbarButton('var-condition');
+      await h.sleep(700);
+      modal = conditionModal();
+      row = modal.querySelector('.macro-rule-row');
+      const reopened = { rule: ruleView(row), lines: previewLines(modal), shownOther: row.querySelector('.macro-rule-value-slot .ss-trigger').textContent };
+      modal.querySelector('.var-modal-danger').click();
+      await h.sleep(80);
+      const afterRemove = conditionOf(ed, 'Titre');
+      const expected = { mode: 'all', rules: [{ column: 'Montant', operator: '=', value: '', valueColumn: 'Paye' }] };
+      const met = I18n.t('varCond.debug.currentMet', { id: 1, value: 'Dossier A' });
+      const count = I18n.t('varCond.debug.count', { table: 'VcDossiers', count: 2, total: 3 });
+      const pass = JSON.stringify(during.rule) === JSON.stringify({ column: 'Montant', operator: '=', value: null, other: 'Paye', pressed: 'true' })
+        && during.shownOther === 'Paye' && during.lines[0].includes(met) && during.lines[1].includes(count)
+        && JSON.stringify(saved) === JSON.stringify(expected) && html.includes('valueColumn') && !html.includes('brouillon') && active
+        && JSON.stringify(reopened.rule) === JSON.stringify(during.rule) && reopened.shownOther === 'Paye' && reopened.lines[0].includes(met) && reopened.lines[1].includes(count)
+        && afterRemove == null;
+      return { pass, notes: JSON.stringify({ during, saved, active, reopened, afterRemove }) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_column_choice_not_made_is_not_saved_and_cancel_changes_nothing',
+    description: 'Mode « autre colonne » sans la colonne choisie : la règle est incomplète, Enregistrer ne pose aucune condition (comme une règle sans colonne) ; Annuler après un vrai choix laisse la bulle telle quelle',
+    run: async (h) => {
+      await seedCompare(h);
+      Editor.setHTML(`<p>Objet : ${badgeHtml('VcDossiers', 'Titre')}</p>`);
+      const ed = EditorCore.getEditor();
+      let modal = await openWindow(h, 'Titre');
+      let row = modal.querySelector('.macro-rule-row');
+      await pickColumn(h, row, 'Montant');
+      const toggle = row.querySelector('.macro-rule-compare');
+      if (!toggle) { cancelWindow(modal); return NO_COMPARE_BUTTON; }
+      toggle.click();
+      await h.sleep(40);
+      const copyDisabled = clipButtons(modal).copy ? clipButtons(modal).copy.getAttribute('aria-disabled') : null;
+      saveWindow(modal);
+      await h.sleep(80);
+      const incompleteSaved = conditionOf(ed, 'Titre');
+      const htmlAfterIncomplete = Editor.getHTML();
+      // Un vrai choix puis Annuler : rien n'est écrit.
+      modal = await openWindow(h, 'Titre');
+      row = modal.querySelector('.macro-rule-row');
+      await pickColumn(h, row, 'Montant');
+      row.querySelector('.macro-rule-compare').click();
+      await h.sleep(40);
+      await pickOtherColumn(h, row, 'Paye');
+      await h.sleep(300);
+      cancelWindow(modal);
+      await h.sleep(60);
+      const afterCancel = conditionOf(ed, 'Titre');
+      const pass = copyDisabled === 'true' && incompleteSaved == null && !htmlAfterIncomplete.includes('data-condition') && afterCancel == null;
+      return { pass, notes: JSON.stringify({ copyDisabled, incompleteSaved, htmlAfterIncomplete, afterCancel }) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_column_empty_operators_grey_the_button_and_need_no_other_column',
+    description: '« vide » / « non vide » grisent le bouton et le champ de l’autre colonne avec le champ Valeur (rien n’est retiré) ; en mode « autre colonne » sans colonne choisie, « vide » reste une règle complète et s’enregistre sans valueColumn',
+    run: async (h) => {
+      await seedCompare(h);
+      Editor.setHTML(`<p>Objet : ${badgeHtml('VcDossiers', 'Titre')} ${badgeHtml('VcDossiers', 'Montant')}</p>`);
+      const ed = EditorCore.getEditor();
+      let modal = await openWindow(h, 'Titre');
+      let row = modal.querySelector('.macro-rule-row');
+      await pickColumn(h, row, 'Montant');
+      const toggle = row.querySelector('.macro-rule-compare');
+      if (!toggle) { cancelWindow(modal); return NO_COMPARE_BUTTON; }
+      const operator = row.querySelector(':scope > select');
+      const slot = row.querySelector('.macro-rule-value-slot');
+      const states = {};
+      const snap = () => ({ disabled: toggle.disabled, greyed: slot.classList.contains('is-disabled'), pressed: toggle.getAttribute('aria-pressed') });
+      states.initial = snap();
+      setSelect(operator, 'vide');
+      await h.sleep(40);
+      states.vide = snap();
+      toggle.click(); // grisé : sans effet
+      await h.sleep(30);
+      states.videClick = snap();
+      setSelect(operator, '=');
+      await h.sleep(40);
+      states.back = snap();
+      toggle.click();
+      await h.sleep(40);
+      await pickOtherColumn(h, row, 'Paye');
+      setSelect(operator, 'non vide');
+      await h.sleep(40);
+      states.nonVideColumnMode = Object.assign(snap(), { otherDisabled: row.querySelector('select.macro-rule-value-column').disabled, otherKept: row.querySelector('select.macro-rule-value-column').value });
+      cancelWindow(modal);
+      // Mode « autre colonne » sans colonne, « vide » : règle complète.
+      modal = await openWindow(h, 'Montant');
+      row = modal.querySelector('.macro-rule-row');
+      await pickColumn(h, row, 'Montant');
+      row.querySelector('.macro-rule-compare').click();
+      await h.sleep(40);
+      setSelect(row.querySelector(':scope > select'), 'vide');
+      await h.sleep(40);
+      saveWindow(modal);
+      await h.sleep(80);
+      const savedVide = conditionOf(ed, 'Montant');
+      const pass = !states.initial.disabled && !states.initial.greyed && states.initial.pressed === 'false'
+        && states.vide.disabled && states.vide.greyed && states.vide.pressed === 'false' && states.videClick.pressed === 'false'
+        && !states.back.disabled && !states.back.greyed
+        && states.nonVideColumnMode.pressed === 'true' && states.nonVideColumnMode.disabled && states.nonVideColumnMode.greyed
+        && states.nonVideColumnMode.otherDisabled && states.nonVideColumnMode.otherKept === 'Paye'
+        && JSON.stringify(savedVide) === JSON.stringify({ mode: 'all', rules: [{ column: 'Montant', operator: 'vide', value: '' }] });
+      return { pass, notes: JSON.stringify({ states, savedVide }) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_column_value_field_keeps_listing_the_values_of_the_column',
+    description: 'Le comportement par défaut du champ Valeur ne change pas : une colonne à choix liste ses choix (plus « Autre valeur… »), une colonne Oui / Non liste Oui / Non, une colonne de texte reste un champ libre ; passer en « autre colonne » puis revenir rend la même liste',
+    run: async (h) => {
+      await seedCompare(h);
+      Editor.setHTML(`<p>Objet : ${badgeHtml('VcDossiers', 'Titre')}</p>`);
+      const modal = await openWindow(h, 'Titre');
+      const row = modal.querySelector('.macro-rule-row');
+      const slot = row.querySelector('.macro-rule-value-slot');
+      const options = () => Array.from(slot.querySelectorAll('select.macro-rule-value option')).map(o => o.value).filter(Boolean);
+      const results = {};
+      await pickColumn(h, row, 'Priorite');
+      await h.sleep(40);
+      if (!row.querySelector('.macro-rule-compare')) { cancelWindow(modal); return NO_COMPARE_BUTTON; }
+      results.choice = options();
+      row.querySelector('.macro-rule-compare').click();
+      await h.sleep(40);
+      results.choiceInColumnMode = { values: options().length, other: ruleView(row).other };
+      row.querySelector('.macro-rule-compare').click();
+      await h.sleep(40);
+      results.choiceAgain = options();
+      await pickColumn(h, row, 'Titre');
+      await h.sleep(40);
+      results.text = { field: !!slot.querySelector('input.macro-rule-value'), list: slot.querySelectorAll('select.macro-rule-value').length };
+      cancelWindow(modal);
+      const pass = results.choice.includes('Haute') && results.choice.includes('Basse') && JSON.stringify(results.choiceAgain) === JSON.stringify(results.choice)
+        && results.choiceInColumnMode.values === 0 && results.choiceInColumnMode.other === '' && results.text.field && results.text.list === 0;
+      return { pass, notes: JSON.stringify(results) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_column_other_table_asks_for_the_key_and_says_how_it_is_linked',
+    description: 'Autre colonne d’une table pas encore liée : le choix de la clé s’ouvre comme pour la colonne de la règle, Annuler laisse le champ sans colonne, Valider enregistre le lien, garde la colonne et affiche le lien sous la règle (la colonne de la règle n’en affiche pas)',
+    run: async (h) => {
+      await seedCompare(h, { noLinks: true });
+      Editor.setHTML(`<p>Objet : ${badgeHtml('VcDossiers', 'Titre')}</p>`);
+      const modal = await openWindow(h, 'Titre');
+      const linkModal = document.getElementById('link-config-modal');
+      let row = modal.querySelector('.macro-rule-row');
+      await pickColumn(h, row, 'Statut');
+      if (!row.querySelector('.macro-rule-compare')) { cancelWindow(modal); return NO_COMPARE_BUTTON; }
+      row.querySelector('.macro-rule-compare').click();
+      await h.sleep(40);
+      let other = row.querySelector('select.macro-rule-value-column');
+      setSelect(other, 'Montant');
+      await h.sleep(30);
+      setSelect(other, 'VcContacts.Role');
+      await h.sleep(150);
+      const askedFirst = visible(linkModal);
+      document.getElementById('link-config-cancel').click();
+      await h.sleep(80);
+      const afterCancel = { other: other.value, rule: GristAPI.getLinkRule('VcContacts') };
+      setSelect(other, 'VcContacts.Role');
+      await h.sleep(150);
+      const askedAgain = visible(linkModal);
+      document.getElementById('link-config-confirm').click();
+      await h.sleep(150);
+      row = modal.querySelector('.macro-rule-row');
+      other = row.querySelector('select.macro-rule-value-column');
+      const hints = Array.from(row.querySelectorAll('.var-condition-link-hint')).map(hint => (hint.hidden ? '' : hint.textContent));
+      const view = ruleView(row);
+      const rule = GristAPI.getLinkRule('VcContacts');
+      cancelWindow(modal);
+      const pass = askedFirst && afterCancel.other === 'Montant' && !afterCancel.rule && askedAgain
+        && view.column === 'Statut' && view.other === 'VcContacts.Role' && view.pressed === 'true'
+        && !!rule && rule.mode === 'match' && rule.colonneCible === 'Dossier' && rule.colonneSource === 'id'
+        && hints.length === 2 && hints[0] === '' && hints[1].includes('VcContacts.Dossier');
+      return { pass, notes: JSON.stringify({ askedFirst, afterCancel, askedAgain, view, rule, hints }) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_column_summary_copy_paste_and_inherited_condition_keep_the_other_column',
+    description: 'Le résumé d’une règle « autre colonne » nomme la colonne entre accolades (Montant = {Paye}) pour ne pas la lire comme la valeur « Paye » ; Copier / Coller la reprend, Enregistrer aussi ; les attributs insérés depuis une variable qui a cette condition la reprennent avec sa valueColumn',
+    run: async (h) => {
+      await seedCompare(h);
+      VariableCondition.clearClipboard();
+      const mixed = { mode: 'any', rules: [PAID.rules[0], { column: 'Statut', operator: '=', value: 'Urgent' }, { column: 'Montant', operator: 'vide', value: '', valueColumn: 'Paye' }] };
+      const described = { column: VariableCondition.describe(PAID), mixed: VariableCondition.describe(mixed) };
+      Editor.setHTML(`<p>${badgeHtml('VcDossiers', 'Titre', PAID)} ${badgeHtml('VcDossiers', 'Montant')} ${badgeHtml('VcAnnuaire', 'NomPrenom', PAID)}</p>`);
+      const ed = EditorCore.getEditor();
+      let modal = await openWindow(h, 'Titre');
+      let { copy, paste } = clipButtons(modal);
+      if (!copy || !paste) { if (modal) cancelWindow(modal); return NO_CLIP_BUTTONS; }
+      copy.click();
+      cancelWindow(modal);
+      await h.sleep(30);
+      modal = await openWindow(h, 'Montant');
+      ({ copy, paste } = clipButtons(modal));
+      const pasteTitle = paste.title;
+      paste.click();
+      await h.sleep(700);
+      const pasted = { rule: ruleView(modal.querySelector('.macro-rule-row')), lines: previewLines(modal) };
+      saveWindow(modal);
+      await h.sleep(80);
+      const savedOnMontant = conditionOf(ed, 'Montant');
+      // Attributs insérés depuis la bulle NomPrenom, qui porte la condition.
+      const linked = await openLinked(h, 'NomPrenom');
+      const option = inheritInfo(linked);
+      if (!option) { cancelLinked(linked); return NO_INHERIT_ROW; }
+      tickLinked(linked, ['Telephone']);
+      linked.querySelector('.var-modal-primary').click();
+      await h.sleep(80);
+      const inserted = badgeNodes(ed).filter(b => b.node.attrs.column === 'Telephone').map(b => b.node.attrs.condition);
+      const pass = described.column === 'Montant = {Paye}' && described.mixed === 'Montant = {Paye} ' + I18n.t('varCond.ruleOr').toLowerCase() + ' Statut = Urgent ' + I18n.t('varCond.ruleOr').toLowerCase() + ' Montant vide'
+        && pasteTitle === I18n.t('varCond.clip.pasteTitle', { summary: 'Montant = {Paye}' })
+        && JSON.stringify(pasted.rule) === JSON.stringify({ column: 'Montant', operator: '=', value: null, other: 'Paye', pressed: 'true' }) && pasted.lines[0].includes('condition remplie') && pasted.lines[1].includes(I18n.t('varCond.debug.count', { table: 'VcDossiers', count: 2, total: 3 }))
+        && JSON.stringify(savedOnMontant) === JSON.stringify(PAID) && JSON.stringify(conditionOf(ed, 'Titre')) === JSON.stringify(PAID)
+        && option.summary === '· Montant = {Paye}' && inserted.length === 1 && JSON.stringify(inserted[0]) === JSON.stringify(PAID);
+      return { pass, notes: JSON.stringify({ described, pasteTitle, pasted, savedOnMontant, option, inserted }) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_column_speaks_english',
+    description: 'En anglais : info-bulle et nom accessible du bouton « Compare with another column », liste « — Choose a column — », résumé dans le texte du bouton Coller',
+    run: async (h) => {
+      await seedCompare(h);
+      VariableCondition.clearClipboard();
+      Editor.setHTML(`<p>${badgeHtml('VcDossiers', 'Titre', PAID)} ${badgeHtml('VcDossiers', 'Montant')}</p>`);
+      const lang = I18n.getLang();
+      const result = {};
+      try {
+        I18n.setLang('en');
+        const modal = await openWindow(h, 'Titre');
+        const toggle = modal.querySelector('.macro-rule-compare');
+        if (!toggle) { cancelWindow(modal); return NO_COMPARE_BUTTON; }
+        result.title = toggle.title;
+        result.aria = toggle.getAttribute('aria-label');
+        result.shownOther = modal.querySelector('.macro-rule-value-slot .ss-trigger').textContent;
+        cancelWindow(modal);
+        // Une bulle sans condition : la colonne de la règle choisie, puis l'autre colonne pas encore choisie.
+        const fresh = await openWindow(h, 'Montant');
+        const freshRow = fresh.querySelector('.macro-rule-row');
+        await pickColumn(h, freshRow, 'Montant');
+        freshRow.querySelector('.macro-rule-compare').click();
+        await h.sleep(40);
+        result.placeholder = freshRow.querySelector('.macro-rule-value-slot .ss-trigger').textContent;
+        cancelWindow(fresh);
+      } finally {
+        I18n.setLang(lang);
+      }
+      const pass = result.title === 'Compare with another column' && result.aria === 'Compare with another column' && result.shownOther === 'Paye' && result.placeholder === '— Choose a column —';
+      return { pass, notes: JSON.stringify(result) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.varCondition = cases;
 })();

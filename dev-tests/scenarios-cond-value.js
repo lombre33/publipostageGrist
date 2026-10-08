@@ -1389,6 +1389,65 @@
     },
   });
 
+  // L'AUTRE colonne d'une règle (bouton « autre colonne » du champ Valeur), choisie comme une personne dans son champ avec recherche.
+  async function pickOtherColumn(h, row, name) {
+    const wrap = row.querySelector('.macro-rule-value-slot .macro-rule-column-wrap');
+    wrap.querySelector('.ss-trigger').click();
+    await h.sleep(30);
+    const input = wrap.querySelector('.ss-panel .ss-input');
+    setInput(input, name);
+    await h.sleep(10);
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await h.sleep(40);
+  }
+
+  // === Une règle qui compare à une autre colonne : la fenêtre est celle des bulles, avec le même bouton (demande d'Antoine, 2026-10-08) ===
+  cases.push({
+    id: 'condvalue_condition_window_compares_with_another_column_and_the_reader_follows',
+    description: 'La fenêtre d’une valeur a le bouton « autre colonne » des bulles : Montant = Paye (autre colonne) s’enregistre sur la valeur (info-bulle « Si Montant = {Paye} »), la Lecture et l’aperçu d’export gardent le texte dans la phrase pour la ligne où les deux colonnes s’accordent et le retirent pour l’autre',
+    run: async (h) => {
+      try {
+        await seed(h);
+        const stub = window.__gristStub;
+        stub.setVariables(TABLE, { Titre: 'Text', Statut: 'Text', Responsable: 'Ref:CvAnnuaire', Montant: 'Numeric', Paye: 'Numeric' });
+        stub.setRows(TABLE, [
+          { id: 1, Titre: 'Dossier A', Statut: 'Urgent', Responsable: 7, Montant: 1200, Paye: 1200 },
+          { id: 2, Titre: 'Dossier B', Statut: 'Normal', Responsable: 8, Montant: 50, Paye: 20 },
+        ]);
+        await GristAPI.refreshSchema();
+        const rows = [Object.assign({}, RECORD_1, { Paye: 1200 }), Object.assign({}, RECORD_2, { Paye: 20 })];
+        await setRecord(h, rows[0]);
+        Editor.setHTML('<p>Dossier ' + val('urgent ') + 'à traiter</p>');
+        await h.sleep(80);
+        const modal = await openValueWindow(h, 0, 2);
+        const row = modal.querySelector('.macro-rule-row');
+        await pickColumn(h, row, 'Montant');
+        const toggle = row.querySelector('.macro-rule-compare');
+        if (!toggle) { cancelWindow(modal); return { pass: false, notes: 'bouton « autre colonne » absent de la fenêtre de la valeur' }; }
+        toggle.click();
+        await h.sleep(40);
+        await pickOtherColumn(h, row, 'Paye');
+        await h.sleep(700);
+        const debug = Array.from(modal.querySelectorAll('.var-condition-debug-line')).map(l => l.textContent);
+        modal.querySelector('.var-modal-actions .var-modal-primary').click();
+        await h.sleep(80);
+        const saved = valueNodes()[0].node.attrs.condition;
+        const title = valueEls()[0].title;
+        const html = Editor.getHTML();
+        const read1 = shape(await renderReader(html));
+        const prev1 = shape(await previewHtml(html));
+        await setRecord(h, rows[1]);
+        const read2 = shape(await renderReader(html));
+        const prev2 = shape(await previewHtml(html));
+        const pass = debug[0] === I18n.t('varCond.debug.currentMetValue', { id: 1 })
+          && JSON.stringify(saved) === JSON.stringify({ mode: 'all', rules: [{ column: 'Montant', operator: '=', value: '', valueColumn: 'Paye' }] })
+          && title === I18n.t('condValue.titleIf', { condition: 'Montant = {Paye}' })
+          && read1 === 'p:Dossier urgent à traiter' && prev1 === read1 && read2 === 'p:Dossier à traiter' && prev2 === read2;
+        return { pass, notes: JSON.stringify({ debug, saved, title, read1, prev1, read2, prev2 }) };
+      } finally { closeReader(); }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.condValue = cases;
 })();

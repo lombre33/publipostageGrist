@@ -106,17 +106,21 @@ const ConditionFields = (function () {
   // { allTables: true } liste les colonnes de toutes les tables (appendAllTablesOptions) ; { onColumnChosen(ref, value) } est appelé avant d'adopter
   // une colonne de la liste : `true` l'adopte tout de suite, une promesse qui ne résout pas vrai remet la colonne précédente ; { table } (boucle,
   // js/variable-loop.js) liste les colonnes de cette seule table, en valeur nue, car le filtre d'une boucle lit la table parcourue
-  // (js/loop-rules.js:ruleHolds). Sans options : les colonnes de la page seule.
+  // (js/loop-rules.js:ruleHolds). Sans options : les colonnes de la page seule. Le même champ sert à choisir l'AUTRE colonne d'une règle qui compare
+  // deux colonnes (buildOtherColumnField) : { property: 'valueColumn' } range alors le choix dans `rule.valueColumn` au lieu de `rule.column`,
+  // { typeHint } est la ligne d'indication que l'appelant garde (cachée tant qu'elle est vide) et { warningOnly: true } n'y écrit que l'avertissement
+  // « absente de la ligne affichée », pas le type de la colonne.
   function buildColumnField(rule, onTypeChange, options) {
     const opts = options || {};
+    const prop = opts.property || 'column';
     const baseTable = () => opts.table || GristAPI.getCurrentTableId();
     const wrap = el('span', 'macro-rule-column-wrap');
-    const select = el('select', 'macro-rule-column');
+    const select = el('select', prop === 'column' ? 'macro-rule-column' : 'macro-rule-column macro-rule-value-column');
     fillColumnList(select, opts);
     const listed = Array.from(select.options).map(o => o.value).filter(Boolean);
     select.appendChild(pinnedOption(ADVANCED_COLUMN_VALUE, I18n.t('macro.modal.columnAdvanced')));
     const advancedInput = textInput('macro-rule-column-advanced', I18n.t('macro.modal.columnAdvancedPlaceholder'));
-    const typeHint = el('span', 'macro-rule-column-type');
+    const typeHint = opts.typeHint || el('span', 'macro-rule-column-type');
 
     // Avertissement si la colonne choisie est absente de la ligne affichée (record) : probablement une colonne non cochée dans le panneau de droite
     // du widget, que grist.onRecord ne transmet pas (js/grist-api.js:includeColumns), si bien qu'une règle « = » échouerait sans rien dire
@@ -124,12 +128,15 @@ const ConditionFields = (function () {
     // transmet.
     function updateTypeHint() {
       const facts = columnFacts(select.value === ADVANCED_COLUMN_VALUE ? null : select.value, baseTable);
-      typeHint.textContent = facts.missingFromRecord ? I18n.t('macro.modal.columnMissingFromRecord') : (facts.type ? friendlyTypeLabel(facts.type) : '');
+      const label = facts.type && !opts.warningOnly ? friendlyTypeLabel(facts.type) : '';
+      typeHint.textContent = facts.missingFromRecord ? I18n.t('macro.modal.columnMissingFromRecord') : label;
       typeHint.classList.toggle('is-warning', facts.missingFromRecord);
+      // Une ligne d'indication confiée par l'appelant n'occupe de place sous la règle que quand elle dit quelque chose.
+      if (opts.typeHint) typeHint.hidden = !typeHint.textContent;
       if (onTypeChange) onTypeChange(facts.type, facts.col, facts.table);
     }
 
-    showSavedChoice(select, advancedInput, ADVANCED_COLUMN_VALUE, rule.column || '', listed);
+    showSavedChoice(select, advancedInput, ADVANCED_COLUMN_VALUE, rule[prop] || '', listed);
     updateTypeHint();
 
     // Liste avec recherche (js/search-select.js) posée plus bas par-dessus le <select>, qui reste la source de la valeur et des évènements `change`.
@@ -144,7 +151,7 @@ const ConditionFields = (function () {
     }
     function adopt(value) {
       advancedInput.hidden = true;
-      rule.column = value;
+      rule[prop] = value;
       adoptedSelectValue = value;
       updateTypeHint();
     }
@@ -152,7 +159,7 @@ const ConditionFields = (function () {
       if (select.value === ADVANCED_COLUMN_VALUE) {
         advancedInput.hidden = false;
         advancedInput.focus();
-        rule.column = advancedInput.value;
+        rule[prop] = advancedInput.value;
         adoptedSelectValue = ADVANCED_COLUMN_VALUE;
         updateTypeHint();
         return;
@@ -170,7 +177,7 @@ const ConditionFields = (function () {
         restoreAdopted();
       });
     });
-    advancedInput.addEventListener('input', () => { rule.column = advancedInput.value; });
+    advancedInput.addEventListener('input', () => { rule[prop] = advancedInput.value; });
 
     wrap.append(select, advancedInput);
     // L'indice de type est dit dans la liste ouverte, pas dans le champ fermé : il reste sous le champ (typeHint). Si le composant échoue, le
@@ -319,12 +326,11 @@ const ConditionFields = (function () {
   }
 
   // « vide » / « non vide » ne lisent jamais la valeur (js/condition-rules.js:compareValues) : le champ Valeur est grisé, pas retiré, et sa valeur
-  // reste si l'on revient à un autre opérateur.
-  const VALUELESS_OPERATORS = ['vide', 'non vide'];
+  // reste si l'on revient à un autre opérateur. Le bouton « autre colonne » (buildCompareButton) l'est avec lui : il n'y a rien à comparer.
   function syncValueDisabled(valueSlot, operator) {
-    const disabled = VALUELESS_OPERATORS.indexOf(operator) !== -1;
+    const disabled = ConditionRules.VALUELESS_OPERATORS.indexOf(operator) !== -1;
     valueSlot.classList.toggle('is-disabled', disabled);
-    valueSlot.querySelectorAll('select, input').forEach(field => {
+    valueSlot.querySelectorAll('select, input, .macro-rule-compare').forEach(field => {
       field.disabled = disabled;
       // La liste avec recherche ne lit l'état grisé de son <select> masqué qu'à sa demande (aucun évènement ne le lui dit).
       if (field.tagName === 'SELECT') SearchSelect.sync(field);
@@ -340,20 +346,72 @@ const ConditionFields = (function () {
     Array.from(operatorSelect.options).forEach(option => { option.disabled = bool && BOOL_MEANINGLESS_OPERATORS.indexOf(option.value) !== -1; });
   }
 
+  function buildCompareButton() {
+    // Le bouton qui fait passer le champ Valeur de « une valeur saisie » à « une autre colonne de la même ligne », et inversement. Un bouton à deux
+    // états (aria-pressed, enfoncé = on compare à une colonne) dont le nom ne change pas : c'est l'état qui le dit.
+    const label = I18n.t('macro.modal.compareToColumn');
+    const button = Dom.button('macro-rule-compare');
+    button.innerHTML = Icons.svg('compareColumns');
+    button.title = label;
+    button.setAttribute('aria-label', label);
+    return button;
+  }
+
+  function buildOtherColumnField(rule, options, valueHint) {
+    // Le champ Valeur d'une règle qui compare à une autre colonne : la même liste avec recherche que celle de la colonne de la règle (buildColumnField, qui
+    // range le choix dans `rule.valueColumn`), avec les mêmes colonnes et la même clé de correspondance pour une table pas encore liée. Seul son
+    // avertissement « absente de la ligne affichée » est dit, dans `valueHint`, sous la règle ; `options.onValueColumnResolved(table)` y affiche le
+    // lien de sa table.
+    const onChosen = (type, colId, table) => { if (options.onValueColumnResolved) options.onValueColumnResolved(table, colId, type); };
+    const field = buildColumnField(rule, onChosen, Object.assign({}, options, { property: 'valueColumn', typeHint: valueHint, warningOnly: true }));
+    return field.wrap;
+  }
+
   function buildConditionFields(rule, options) {
-    // Le champ Valeur est reconstruit à chaque changement de colonne (renderValue) : son type, liste ou texte, dépend de celui de la colonne.
+    // Le champ Valeur est reconstruit à chaque changement de colonne (fillValueSlot) : son type, liste ou texte, dépend de celui de la colonne.
     // buildColumnField appelle renderValue tout de suite pour la colonne déjà enregistrée : valueSlot et operatorSelect doivent donc exister avant lui.
     // `options` : transmis à buildColumnField, plus { onColumnResolved(table, colonne, type) } appelé à la construction puis à chaque colonne adoptée
     // (la fenêtre de condition y affiche le lien de la table). `typeHint` est à placer par l'appelant en dernier enfant de sa ligne (voir
     // buildColumnField).
+    // { compareColumn: true } (la fenêtre de condition d'une bulle, d'un bloc, d'une valeur ou d'une case) ajoute, dans le champ Valeur, le bouton
+    // « autre colonne » (buildCompareButton) : enfoncé, la règle compare la colonne à une autre colonne de la même ligne (`rule.valueColumn`, choisie
+    // dans la même liste avec recherche ; js/condition-rules.js:compareOperands) au lieu d'une valeur saisie, qui reste là pour quand on revient. Les
+    // macro-modèles, « Modèle selon la ligne » et le filtre d'une boucle ne le demandent pas : leur évaluation ne lit qu'une valeur saisie. Il rend
+    // alors aussi `valueHint`, la ligne d'indication de l'autre colonne, à placer sous celle de la colonne, et `options.onValueColumnResolved(table)`
+    // est appelé quand l'autre colonne change (le lien de sa table).
+    const compare = !!(options && options.compareColumn);
     const valueSlot = el('span', 'macro-rule-value-slot');
     const operatorSelect = el('select');
+    const compareButton = compare ? buildCompareButton() : null;
+    const valueHint = compare ? el('span', 'macro-rule-column-type') : null;
+    if (valueHint) valueHint.hidden = true;
     let columnType = null;
+    let columnId = null;
+    let columnTable = null;
+    function fillValueSlot() {
+      // La valeur saisie (liste ou texte selon la colonne) ou, en mode « autre colonne », la liste des colonnes ; le bouton reste le même élément, il
+      // garde donc son focus au clavier.
+      const otherColumn = compare && ConditionRules.inColumnMode(rule);
+      if (valueHint && !otherColumn) {
+        valueHint.textContent = '';
+        valueHint.hidden = true;
+        if (options.onValueColumnResolved) options.onValueColumnResolved(null);
+      }
+      const field = otherColumn ? buildOtherColumnField(rule, options, valueHint) : buildValueField(rule, columnType, columnId, columnTable);
+      valueSlot.replaceChildren(...(compare ? [compareButton, field] : [field]));
+      valueSlot.classList.toggle('has-compare', compare);
+      if (compare) {
+        compareButton.classList.toggle('is-on', otherColumn);
+        compareButton.setAttribute('aria-pressed', otherColumn ? 'true' : 'false');
+      }
+      syncValueDisabled(valueSlot, operatorSelect.value || rule.operator || '=');
+    }
     function renderValue(type, colId, table) {
       columnType = type;
+      columnId = colId;
+      columnTable = table;
       syncOperatorOptions(operatorSelect, type);
-      valueSlot.replaceChildren(buildValueField(rule, type, colId, table));
-      syncValueDisabled(valueSlot, operatorSelect.value || rule.operator || '=');
+      fillValueSlot();
       if (options && options.onColumnResolved) options.onColumnResolved(table, colId, type);
     }
 
@@ -365,8 +423,20 @@ const ConditionFields = (function () {
     syncOperatorOptions(operatorSelect, columnType);
     syncValueDisabled(valueSlot, operatorSelect.value);
     operatorSelect.addEventListener('change', () => { rule.operator = operatorSelect.value; syncValueDisabled(valueSlot, operatorSelect.value); });
+    if (compareButton) {
+      // Comme la valeur saisie, qui reste dans la règle pendant qu'on compare à une colonne, l'autre colonne choisie est gardée par la ligne tant qu'on est en mode
+      // « valeur » : un second clic sur le bouton, fait par erreur ou pour y regarder, la retrouve au lieu d'un champ vide.
+      let rememberedColumn = '';
+      compareButton.addEventListener('click', () => {
+        if (ConditionRules.inColumnMode(rule)) { rememberedColumn = rule.valueColumn; delete rule.valueColumn; } else rule.valueColumn = rememberedColumn;
+        fillValueSlot();
+        compareButton.focus();
+        // Aucun champ n'a parlé : la fenêtre relance son aperçu sur ce `change`, comme à toute saisie dans une règle.
+        valueSlot.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    }
 
-    return { columnWrap: columnField.wrap, operatorSelect, valueSlot, typeHint: columnField.typeHint };
+    return { columnWrap: columnField.wrap, operatorSelect, valueSlot, typeHint: columnField.typeHint, valueHint };
   }
 
   // Une règle sans colonne, telle que « + Ajouter une condition » la pose.
@@ -375,7 +445,8 @@ const ConditionFields = (function () {
   function buildRuleRow(rule, index, { mode, options, onRemove, extra = [] }) {
     // La ligne d'une règle de la condition d'une bulle ou du filtre d'une boucle (js/variable-condition.js, js/variable-loop.js), en une seule ligne :
     // le connecteur (« Si », puis « et » ou « ou » selon `mode`), la colonne, l'opérateur, la valeur, la croix qui retire la règle (`onRemove`), puis
-    // l'indication de type et les nœuds `extra` : en dernier, pour la raison donnée à buildTemplateRule. `options` : celles de buildConditionFields.
+    // l'indication de type (puis celle de l'autre colonne, quand la règle peut en comparer une) et les nœuds `extra` : en dernier, pour la raison donnée à
+    // buildTemplateRule. `options` : celles de buildConditionFields.
     const connectorKey = index === 0 ? 'macro.modal.ruleIf' : (mode === 'any' ? 'varCond.ruleOr' : 'varCond.ruleAnd');
     const fields = buildConditionFields(rule, options);
     const remove = el('button', 'macro-rule-remove');
@@ -384,7 +455,8 @@ const ConditionFields = (function () {
     remove.title = I18n.t('varCond.removeRule');
     remove.addEventListener('click', onRemove);
     const row = el('div', 'macro-rule-row');
-    row.append(el('span', 'macro-rule-connector', I18n.t(connectorKey)), fields.columnWrap, fields.operatorSelect, fields.valueSlot, remove, fields.typeHint, ...extra);
+    row.append(el('span', 'macro-rule-connector', I18n.t(connectorKey)), fields.columnWrap, fields.operatorSelect, fields.valueSlot, remove, fields.typeHint,
+      ...(fields.valueHint ? [fields.valueHint] : []), ...extra);
     return row;
   }
 
@@ -396,7 +468,7 @@ const ConditionFields = (function () {
     button.addEventListener('click', () => {
       rules.push(emptyRule());
       redraw();
-      const selects = box.querySelectorAll('select.macro-rule-column');
+      const selects = box.querySelectorAll('select.macro-rule-column:not(.macro-rule-value-column)');
       if (selects.length) selects[selects.length - 1].focus();
     });
     return button;

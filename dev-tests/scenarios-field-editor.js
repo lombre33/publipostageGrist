@@ -1001,6 +1001,48 @@
   );
 
   scenario(
+    'fieldeditor_condition_window_compares_with_another_column_in_a_field',
+    'La fenêtre de condition d’une bulle d’un champ offre le bouton « autre colonne » : « Montant = Zero » (autre colonne) enregistrée met { column, operator, value: "", valueColumn } dans la bulle, la valeur passe en HTML, l’Objet et le nom du PDF s’écrivent pour la ligne où les deux colonnes sont égales et la bulle disparaît pour l’autre',
+    async (h) => {
+      field(SUBJECT).value = 'Dossier #FeDossiers.Titre';
+      await selectBubble(h, SUBJECT, 0);
+      press('var-condition');
+      await h.sleep(120);
+      const modal = document.getElementById('var-condition-modal');
+      const row = modal.querySelector('.macro-rule-row');
+      setSelect(row.querySelector('select.macro-rule-column'), 'Montant');
+      await h.sleep(60);
+      const toggle = row.querySelector('.macro-rule-compare');
+      if (!toggle) { cancelWindow(modal); return { pass: false, notes: 'bouton « autre colonne » absent de la fenêtre de condition d’un champ' }; }
+      toggle.click();
+      await h.sleep(60);
+      setSelect(row.querySelector('select.macro-rule-value-column'), 'Zero');
+      await h.sleep(60);
+      saveWindow(modal);
+      await h.sleep(150);
+      const stored = field(SUBJECT).value;
+      const attrs = badgesOf(SUBJECT)[0].node.attrs;
+      // Montant vaut Zero sur cette ligne-ci seulement (1200.5 et 50 contre 0).
+      const equal = Object.assign({}, REC_1, { Zero: 1200.5 });
+      field(FILE).value = stored;
+      const seen = {
+        shown: await text(stored, equal), hidden: await text(stored, REC_2),
+        fileShown: await filename(field(FILE).value, equal), fileHidden: await filename(field(FILE).value, REC_2),
+      };
+      const expected = { mode: 'all', rules: [{ column: 'Montant', operator: '=', value: '', valueColumn: 'Zero' }] };
+      const checks = {
+        condition: same(attrs.condition, expected),
+        html: FieldCodec.isRich(stored) && /data-condition=/.test(stored) && /valueColumn/.test(stored),
+        rows: seen.shown === 'Dossier Dossier A' && seen.hidden === 'Dossier ',
+        file: seen.fileShown === 'Dossier Dossier A' && seen.fileHidden === 'Dossier ',
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: failed.join(', ') || JSON.stringify({ stored, seen }) };
+    },
+    { email: true },
+  );
+
+  scenario(
     'fieldeditor_text_before_and_after_a_bubble_is_written_only_when_it_shows_a_value_in_every_field',
     'Le texte « Avant » / « Après » d’une bulle (la virgule, les guillemets) suit dans l’Objet, les adresses et le nom du PDF : il force l’écriture en HTML, se relit avec la valeur du champ, ne s’écrit que si la bulle s’affiche avec une valeur (condition tenue, valeur non vide), et le nom du PDF nettoie ses caractères interdits APRÈS l’avoir ajouté ; un collage le garde',
     async (h) => {

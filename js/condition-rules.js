@@ -1,6 +1,8 @@
 // Conditions « colonne opérateur valeur » sur une ligne Grist, évaluées de la même façon par les macro-modèles (js/macro-templates.js, choix d'une
 // annexe) et les variables conditionnelles. Aucune dépendance DOM : seule elementHolds lit l'attribut de l'élément qu'on lui passe. Une règle =
-// { column, operator, value } ; `column` nue (table courante) ou qualifiée « Table.Colonne » (cf. parseColumnRef).
+// { column, operator, value } ; `column` nue (table courante) ou qualifiée « Table.Colonne » (cf. parseColumnRef). Une règle peut aussi comparer la
+// colonne à UNE AUTRE COLONNE de la même ligne au lieu d'une valeur saisie : { column, operator, valueColumn } (voir inColumnMode et compareOperands) ;
+// une règle sans `valueColumn` se lit comme avant.
 const ConditionRules = (function () {
   // Opérateurs des fenêtres de règles (macro-modèles, variables conditionnelles), dans l'ordre des listes déroulantes.
   const OPERATORS = ['=', '≠', '>', '<', '≥', '≤', 'contient', 'vide', 'non vide'];
@@ -141,6 +143,69 @@ const ConditionRules = (function () {
       ?? compareGeneral(actual, operator, expected);
   }
 
+  // « vide » et « non vide » ne lisent aucune valeur : ni celle qu'on saisit, ni celle d'une autre colonne.
+  const VALUELESS_OPERATORS = ['vide', 'non vide'];
+  const isValueless = operator => VALUELESS_OPERATORS.indexOf(operator) !== -1;
+
+  // Mode « autre colonne » d'une règle : `valueColumn` est une chaîne, « Colonne » ou « Table.Colonne » comme `column`. Vide tant que la colonne n'est
+  // pas choisie (la fenêtre de condition garde alors la règle en cours de saisie) : la règle est incomplète et ignorée, comme une règle sans colonne.
+  // Une règle sans `valueColumn` compare à `value`, comme avant.
+  const inColumnMode = rule => !!rule && typeof rule.valueColumn === 'string';
+  // Elle compare vraiment deux colonnes : colonne choisie et opérateur qui lit une valeur (la colonne d'un « vide » reste dite, elle ne sert pas).
+  const comparesColumn = rule => inColumnMode(rule) && rule.valueColumn !== '' && !isValueless(rule.operator);
+
+  // Une cellule vide pour une comparaison de colonnes : rien, chaîne vide, ou liste sans élément (une ChoiceList vide arrive aussi en tableau vide).
+  const isBlank = v => isEmpty(v) || (Array.isArray(v) && v.length === 0);
+
+  function expectedFromValue(value, type) {
+    // La valeur d'une colonne lue comme celle qu'on aurait tapée dans le champ Valeur, pour que compareValues la comprenne : une date devient son jour
+    // « AAAA-MM-JJ » (dans le fuseau de SA colonne, dayKeyInZone), qui est le format de GristDate.toString() que parseDateExpected sait lire ; un
+    // nombre, un texte et un booléen se lisent tels quels ; une liste reste une liste, élément par élément.
+    if (Array.isArray(value)) return value.map(item => expectedFromValue(item, type));
+    const t = String(type || '');
+    if (t === 'Date' || t.indexOf('DateTime') === 0) {
+      const instant = toUtcInstant(value);
+      if (instant) { const tz = dateTimeZone(t); return tz ? dayKeyInZone(instant, tz) : dayKey(instant); }
+    }
+    return value;
+  }
+
+  const itemKey = v => textOf(v).trim();
+  const sameItems = (a, b) => {
+    // Les deux listes ont les mêmes éléments, dans n'importe quel ordre : l'ordre d'un choix multiple est celui du clic, pas du sens.
+    const left = new Set(a.map(itemKey));
+    const right = new Set(b.map(itemKey));
+    return left.size === right.size && Array.from(left).every(k => right.has(k));
+  };
+
+  function compareOperands(actual, operator, other, columnType, otherType) {
+    // Une colonne contre une autre, sur la même ligne : `actual` est la valeur de la colonne de la règle (de type `columnType`), `other` celle de la
+    // colonne comparée (de type `otherType`). Même comparaison que contre une valeur saisie (compareValues : nombres comparés en nombres, dates au jour
+    // près, Oui / Non, « contient » en texte), sauf :
+    //  - une cellule vide : deux cellules vides sont égales (« = » vrai, « ≠ » faux), une seule vide les distingue (« = » faux, « ≠ » vrai) ; « > »,
+    //    « < », « ≥ », « ≤ » et « contient » ne disent rien d'une cellule vide, ils sont faux. Contre une valeur saisie, une cellule vide passait en
+    //    texte (« vide < 5 » était vrai), ce qui ferait afficher une date de fin non remplie comme « avant » la date de début ;
+    //  - une liste : contre une valeur seule, « = » veut dire « contient ce choix » (compareValues) ; à l'envers, la valeur seule est cherchée dans
+    //    la liste de l'autre colonne ; deux listes sont égales quand elles ont les mêmes éléments, quel que soit l'ordre.
+    if (isValueless(operator)) return compareValues(actual, operator, null, columnType);
+    const actualBlank = isBlank(actual);
+    const otherBlank = isBlank(other);
+    if (actualBlank || otherBlank) {
+      if (operator === '=') return actualBlank && otherBlank;
+      if (operator === '≠') return actualBlank !== otherBlank;
+      return false;
+    }
+    const expected = expectedFromValue(other, otherType);
+    const equalOrNot = operator === '=' || operator === '≠';
+    if (Array.isArray(expected) && equalOrNot) {
+      const holds = Array.isArray(actual)
+        ? sameItems(actual, expected)
+        : expected.some(item => compareValues(actual, '=', item, columnType));
+      return operator === '=' ? holds : !holds;
+    }
+    return compareValues(actual, operator, expected, columnType);
+  }
+
   function parseColumnRef(rawColumn, tableId) {
     // « Colonne » d'une règle : nue (colonne de la table courante, ex. « TypeDossier ») ou qualifiée « Table.Colonne » pour une valeur d'une autre
     // table, résolue par #Variable : une lecture ponctuelle contre la même ligne, jamais une itération.
@@ -149,59 +214,97 @@ const ConditionRules = (function () {
     return { table: rawColumn.slice(0, idx), column: rawColumn.slice(idx + 1) };
   }
 
-  async function matches(rule, tableId, record, opts) {
-    // `opts` (facultatif) est transmis tel quel à Variables.resolveRawValue, par exemple { fetchRows } pour lire chaque table une seule fois quand une
-    // même condition est évaluée sur toutes les lignes d'une table (aperçu de la fenêtre de condition d'une variable, js/variable-condition.js).
-    if (!rule || !rule.column) return false;
-    const { table, column } = parseColumnRef(rule.column, tableId);
-    let actual;
-    let perLinkedRow = false;
+  async function readOperand(rawColumn, rule, tableId, record, opts) {
+    // La valeur de la colonne `rawColumn` d'une règle pour cette ligne : { table, column, type, value, multi } (`multi` : une valeur par ligne liée, que
+    // js/variables.js:resolveRawValue range en tableau), ou null quand elle ne se lit pas (la raison est au journal : la règle n'est pas remplie).
+    const { table, column } = parseColumnRef(rawColumn, tableId);
+    let value;
+    let multi = false;
     try {
-      const { value, error, multi } = await Variables.resolveRawValue(table, column, tableId, record, opts);
-      if (error) { console.error('[ConditionRules] valeur illisible pour la règle', rule, error); return false; }
-      actual = value;
-      perLinkedRow = !!multi;
+      const found = await Variables.resolveRawValue(table, column, tableId, record, opts);
+      if (found.error) { console.error('[ConditionRules] valeur illisible pour la règle', rule, found.error); return null; }
+      value = found.value;
+      multi = !!found.multi;
     } catch (e) {
       console.error('[ConditionRules] échec de résolution de la règle', rule, e);
-      return false;
-    }
-    const columnType = GristAPI.getColumnType(table, column);
-    // Colonne d'une autre table liée par correspondance (règle « match ») : une valeur par ligne liée, que la bulle affiche séparées par des
-    // virgules. La règle est remplie si au moins une ligne liée la remplit : comparer le tableau entier retombait sur String(tableau) (« a,b »), donc
-    // jamais une date, un booléen ou « vide » correctement. Réservé à ce cas (`multi`, posé par js/variables.js) : une ChoiceList ou une RefList de
-    // la table courante arrive aussi en tableau, que compareValues lit comme une liste (« = » : contient ce choix).
-    if (perLinkedRow && Array.isArray(actual)) {
-      if (!actual.length) return compareValues(null, rule.operator, rule.value, columnType);
-      return actual.some(v => compareValues(v, rule.operator, rule.value, columnType));
+      return null;
     }
     // record[column] est undefined et la clé elle-même absente (pas seulement une valeur vide) : la colonne n'a jamais été transmise à ce widget pour
     // cette ligne. Cause la plus probable : colonne de la table courante non montrée dans le panneau de droite de ce widget (grist.onRecord,
     // includeColumns), ou renommée ou supprimée depuis la création de la règle. Sans cet avertissement, la règle échoue en « = » sans explication et
     // le cas par défaut l'emporte en silence.
-    if (table === tableId && record && typeof actual === 'undefined' && !(column in record)) {
+    if (table === tableId && record && typeof value === 'undefined' && !(column in record)) {
       console.warn('[ConditionRules] règle sur la colonne "' + column + '" : absente de la ligne courante (record) - vérifiez qu\'elle existe toujours '
         + 'et qu\'elle est cochée dans les colonnes visibles de CE widget (panneau de droite), ou qu\'elle a bien un accès complet.', rule);
     }
-    return compareValues(actual, rule.operator, rule.value, columnType);
+    return { table, column, type: GristAPI.getColumnType(table, column), value, multi };
   }
+
+  // Les valeurs à essayer une par une quand la colonne vient d'une table liée par correspondance (une valeur par ligne liée) : la règle est remplie si
+  // au moins une ligne liée la remplit, une liste vide de lignes valant une seule valeur vide. null pour une colonne à valeur unique : comparer le
+  // tableau entier retombait sur String(tableau) (« a,b »), donc jamais une date, un booléen ou « vide » correctement. Réservé à ce cas (`multi`, posé
+  // par js/variables.js) : une ChoiceList ou une RefList de la table courante arrive aussi en tableau, que compareValues lit comme une liste (« = » :
+  // contient ce choix).
+  const perLinkedRows = operand => (operand.multi && Array.isArray(operand.value) ? (operand.value.length ? operand.value : [null]) : null);
+
+  function holdsAgainstColumn(rule, left, right) {
+    // La règle compare deux colonnes. Une colonne d'une table liée à plusieurs lignes se lit ligne par ligne ; deux colonnes de la MÊME table liée se
+    // lisent ensemble, ligne liée par ligne liée (« Annuaire.Ville = Annuaire.Ville de naissance » vaut pour une même fiche), jamais l'une contre
+    // l'autre en croisant les fiches ; deux tables liées différentes n'ont pas de ligne commune : une paire qui convient suffit.
+    const one = (a, b) => compareOperands(a, rule.operator, b, left.type, right.type);
+    const leftRows = perLinkedRows(left);
+    const rightRows = perLinkedRows(right);
+    if (!leftRows && !rightRows) return one(left.value, right.value);
+    if (!rightRows) return leftRows.some(a => one(a, right.value));
+    if (!leftRows) return rightRows.some(b => one(left.value, b));
+    if (left.table === right.table && leftRows.length === rightRows.length) return leftRows.some((a, i) => one(a, rightRows[i]));
+    return leftRows.some(a => rightRows.some(b => one(a, b)));
+  }
+
+  async function matches(rule, tableId, record, opts) {
+    // `opts` (facultatif) est transmis tel quel à Variables.resolveRawValue, par exemple { fetchRows } pour lire chaque table une seule fois quand une
+    // même condition est évaluée sur toutes les lignes d'une table (aperçu de la fenêtre de condition d'une variable, js/variable-condition.js).
+    if (!rule || !rule.column) return false;
+    const columnRule = comparesColumn(rule);
+    const [left, right] = await Promise.all([
+      readOperand(rule.column, rule, tableId, record, opts),
+      columnRule ? readOperand(rule.valueColumn, rule, tableId, record, opts) : null,
+    ]);
+    if (!left || (columnRule && !right)) return false;
+    if (columnRule) return holdsAgainstColumn(rule, left, right);
+    // Colonne d'une autre table liée par correspondance (règle « match ») : une valeur par ligne liée, que la bulle affiche séparées par des virgules.
+    const rows = perLinkedRows(left);
+    if (rows) return rows.some(v => compareValues(v, rule.operator, rule.value, left.type));
+    return compareValues(left.value, rule.operator, rule.value, left.type);
+  }
+
+  // Une règle complète a une colonne et, en mode « autre colonne », cette autre colonne (sauf pour « vide » / « non vide », qui n'en lisent aucune).
+  const isCompleteRule = r => !!r && !!r.column && !(inColumnMode(r) && r.valueColumn === '' && !isValueless(r.operator));
 
   function normalizeCondition(condition) {
     // Condition d'affichage d'une bulle #Variable (attribut `condition` du nœud varBadge, js/editor-nodes.js) : { mode: 'all'|'any', rules: [...] }.
-    // Les règles sans colonne (ligne laissée vide dans la fenêtre) sont ignorées ; sans aucune règle complète, pas de condition (null).
+    // Les règles sans colonne (ligne laissée vide dans la fenêtre), ou qui comparent à une autre colonne pas encore choisie, sont ignorées ; sans
+    // aucune règle complète, pas de condition (null).
     if (!condition || !Array.isArray(condition.rules)) return null;
-    const rules = condition.rules.filter(r => r && r.column);
+    const rules = condition.rules.filter(isCompleteRule);
     if (!rules.length) return null;
     return { mode: condition.mode === 'any' ? 'any' : 'all', rules };
   }
 
+  function plainRule(r) {
+    // Une règle sous sa forme enregistrée : opérateur « = » par défaut, valeur en texte. Comparée à une autre colonne, elle garde `valueColumn` et n'a
+    // pas de valeur saisie (une valeur laissée dans le brouillon ne s'enregistre pas) ; un `valueColumn` vide (rien choisi, sur un « vide » / « non
+    // vide » qui n'en a pas besoin) ne s'enregistre pas non plus.
+    const rule = { column: r.column, operator: r.operator || '=', value: r.value == null ? '' : String(r.value) };
+    if (inColumnMode(r) && r.valueColumn !== '') { rule.value = ''; rule.valueColumn = r.valueColumn; }
+    return rule;
+  }
+
   function plainCondition(condition) {
     // La condition sous la forme enregistrée dans un nœud, ou gardée en brouillon par une fenêtre : une copie neuve (jamais un lien vers les règles que
-    // la fenêtre modifie en place), sans les règles vides, opérateur « = » par défaut, valeurs en texte ; null sans aucune règle complète.
+    // la fenêtre modifie en place), sans les règles incomplètes (plainRule) ; null sans aucune règle complète.
     const normalized = normalizeCondition(condition);
-    return normalized && {
-      mode: normalized.mode,
-      rules: normalized.rules.map(r => ({ column: r.column, operator: r.operator || '=', value: r.value == null ? '' : String(r.value) })),
-    };
+    return normalized && { mode: normalized.mode, rules: normalized.rules.map(plainRule) };
   }
 
   async function conditionHolds(condition, tableId, record, opts) {
@@ -239,5 +342,8 @@ const ConditionRules = (function () {
     elements.forEach((el, i) => { if (root.contains(el)) apply(el, verdicts[i]); });
   }
 
-  return { OPERATORS, compareValues, parseBoolExpected, parseColumnRef, matches, normalizeCondition, plainCondition, conditionHolds, elementHolds, resolveElements };
+  return {
+    OPERATORS, VALUELESS_OPERATORS, compareValues, compareOperands, inColumnMode, comparesColumn, parseBoolExpected, parseColumnRef, matches, normalizeCondition, plainCondition,
+    conditionHolds, elementHolds, resolveElements,
+  };
 })();

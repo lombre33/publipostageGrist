@@ -251,6 +251,37 @@
   });
 
   cases.push({
+    id: 'schemarenames_the_other_column_of_a_comparison_rule_follows_a_rename_too',
+    description: 'Une règle qui compare à une autre colonne (valueColumn, fenêtre de condition) : les deux colonnes suivent un renommage, chacune lue comme la colonne d’une règle (nue = table de la page, « Table.Colonne », chemin) et comptée ; une colonne supprimée, pas encore choisie ou la valeur saisie ne bougent pas, une condition sans rien à changer est rendue telle quelle',
+    run: async () => {
+      const m = mapper();
+      const page = m.tableContext('Dossiers');
+      const rule = (column, operator, valueColumn) => ({ column, operator, value: '', valueColumn });
+      const c = SchemaRenames.rewriteCondition({ mode: 'any', rules: [
+        rule('Montant', '=', 'MontantTTC'), // seule la colonne de la règle change
+        rule('Titre', '≠', 'Montant'), // seule l'autre colonne change
+        rule('Projets.Nom', '=', 'Dossiers.Montant'), // les deux sont qualifiées
+        rule('Dossiers.Projet.Nom', '=', 'Notes'), // un chemin ; Notes est supprimée : elle reste
+        rule('Montant', '>', ''), // l'autre colonne n'est pas encore choisie
+        { column: 'Titre', operator: '=', value: 'Montant' }, // une valeur saisie n'est jamais un nom de colonne
+      ] }, m, page);
+      const untouched = { mode: 'all', rules: [rule('Titre', '=', 'MontantTTC')] };
+      const same0 = SchemaRenames.rewriteCondition(untouched, m, page);
+      const noPage = SchemaRenames.rewriteCondition({ mode: 'all', rules: [rule('Montant', '=', 'Montant'), rule('Projets.Nom', '=', 'Projets.Chef')] }, m, null);
+      const checks = {
+        columns: same(c.condition.rules.map(r => r.column), ['Total', 'Titre', 'Portefeuille.Intitule', 'Dossiers.Programme.Intitule', 'Total', 'Titre']),
+        otherColumns: same(c.condition.rules.slice(0, 5).map(r => r.valueColumn), ['MontantTTC', 'Total', 'Dossiers.Total', 'Notes', '']),
+        valueKept: !('valueColumn' in c.condition.rules[5]) && c.condition.rules[5].value === 'Montant' && c.condition.rules.slice(0, 5).every(r => r.value === ''),
+        countAndMode: c.count === 6 && c.condition.mode === 'any' && c.condition.rules.map(r => r.operator).join('') === '=≠==>=',
+        untouchedIsTheSameObject: same0.count === 0 && same0.condition === untouched,
+        withoutAPageBareColumnsStay: same(noPage.condition.rules.map(r => [r.column, r.valueColumn]), [['Montant', 'Montant'], ['Portefeuille.Intitule', 'Portefeuille.Responsable']]) && noPage.count === 2,
+      };
+      const v = verdict(checks);
+      return { pass: v.pass, notes: v.failed.join(', ') || 'ok' };
+    },
+  });
+
+  cases.push({
     id: 'schemarenames_a_bare_column_that_another_table_still_has_is_left_where_the_loop_table_is_certain',
     description: 'Une colonne nue dont une autre table porte encore le nom (le modèle peut servir sur l’autre page) ne bouge pas, dans une condition comme dans un macro-modèle ; le filtre et le tri d’une boucle, sur une table certaine, suivent quand même',
     run: async () => {
@@ -401,6 +432,32 @@
         otherTemplateNotWritten: same(rowOf(otherId), otherBefore) && updates.length === 1 && updates[0][2] === id,
         oneBatch: written().length === 1,
         onlyChangedColumnsWritten: Object.keys(updates[0][3]).sort().join() === 'Contenu,NomFichierPDF',
+      };
+      const v = verdict(checks);
+      return { pass: v.pass, notes: v.failed.join(', ') || 'ok' };
+    },
+  );
+
+  scenario(
+    'schemarenames_the_other_column_of_a_comparison_rule_follows_in_bubbles_and_blocks',
+    'Une règle « colonne = autre colonne » dans la condition d’une bulle et d’un bloc de texte : Montant renommée « Total » et SrLignes.Prix « Tarif » dans Grist, les deux colonnes de la règle suivent (nue, « Table.Colonne »), la valeur saisie et les autres règles ne bougent pas ; un seul envoi',
+    async (h) => {
+      const rule = (column, operator, valueColumn) => ({ column, operator, value: '', valueColumn });
+      const bubble = badge(PAGE, 'Titre', attr('data-condition', { mode: 'all', rules: [rule('MontantTTC', '>', 'Montant'), { column: 'Statut', operator: '=', value: 'Montant' }] }));
+      const block = `<div class="conditional-text"${attr('data-condition', { mode: 'any', rules: [rule('Montant', '=', 'SrLignes.Prix'), rule('SrLignes.Prix', '≠', 'Montant')] })}><p>Écart</p></div>`;
+      const id = await addTemplate({ nom: 'Sr écart', html: `<p>${bubble}</p>${block}` });
+      await bootstrap(h);
+      await renamed(s => { s.renameColumn(PAGE, 'Montant', 'Total'); s.renameColumn('SrLignes', 'Prix', 'Tarif'); });
+      stub().clearActionLog();
+      const res = await pass(h);
+      const row = rowOf(id);
+      const bubbleRules = json(all(row.Contenu, '.var-badge')[0], 'data-condition').rules;
+      const blockRules = json(all(row.Contenu, '.conditional-text')[0], 'data-condition').rules;
+      const checks = {
+        summary: res.renames === 2 && res.templates === 1 && res.variables === 5,
+        bubble: same(bubbleRules, [rule('MontantTTC', '>', 'Total'), { column: 'Statut', operator: '=', value: 'Montant' }]),
+        block: same(blockRules, [rule('Total', '=', 'SrLignes.Tarif'), rule('SrLignes.Tarif', '≠', 'Total')]),
+        oneBatch: written().length === 1,
       };
       const v = verdict(checks);
       return { pass: v.pass, notes: v.failed.join(', ') || 'ok' };

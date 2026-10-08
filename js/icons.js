@@ -129,6 +129,10 @@ const Icons = (function () {
       // Bouton « Colonne… » de la même barre (js/variable-column.js : changer ou réparer la colonne d'une bulle) : une colonne de tableau avec sa case
       // d'en-tête et les deux chevrons, haut et bas, d'un choix dans une liste.
       varColumn: '<rect x="3" y="3" width="9" height="18" rx="1.5"/><path d="M3 8h9"/><path d="m16 9 2.5-2.5L21 9"/><path d="m16 15 2.5 2.5L21 15"/>',
+      // Bouton « autre colonne » d'une règle de la fenêtre de condition (js/condition-fields.js:buildCompareButton) : deux colonnes face à face et le
+      // signe « = » entre elles - on compare la colonne de la règle à une autre colonne, pas à une valeur. Plus étroites que celles de « Deux
+      // colonnes » (twoColumns) et séparées par le signe, qui se lit à 15 px : une icône ne porte qu'une fonction.
+      compareColumns: '<rect x="2" y="4" width="5" height="16" rx="1.5"/><rect x="17" y="4" width="5" height="16" rx="1.5"/><path d="M9.5 9.5h5M9.5 14.5h5"/>',
       // Bouton « Liste… » de la même barre (js/variable-list.js : quelles valeurs d'une liste le document écrit) : des crochets qui enferment trois
       // valeurs - une liste au sens de la donnée, qui ne se confond ni avec les puces ni avec les numéros de la barre (une icône ne porte qu'une
       // fonction). Les trois points sont espacés de 3,5 : à 15 px, plus près, ils se fondent en un tiret.
