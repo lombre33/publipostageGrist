@@ -48,8 +48,8 @@ const FieldCodec = (function () {
     let last = 0;
     Variables.findTextVariables(text).forEach(found => {
       if (found.start > last) items.push({ text: text.slice(last, found.start) });
-      const key = text.slice(found.start + 1, found.end);
-      items.push({ badge: { table: found.table, column: found.column, key, format: null, condition: null, loop: null, before: null, after: null } });
+      // Les autres attributs de la bulle (format, condition, boucle, texte autour) prennent la valeur par défaut du nœud (EditorNodes.createVarBadgeNode).
+      items.push({ badge: { table: found.table, column: found.column, key: text.slice(found.start + 1, found.end) } });
       last = found.end;
     });
     if (last < text.length) items.push({ text: text.slice(last) });
@@ -75,6 +75,7 @@ const FieldCodec = (function () {
     return text ? parsePlain(text) : [];
   }
 
+  // Un texte posé tel quel dans du HTML (partagé avec js/field-editor.js : le texte collé).
   const escapeText = text => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   function serializePlain(items) {
     const trigger = Variables.triggerChar();
@@ -112,5 +113,5 @@ const FieldCodec = (function () {
     return itemsOf(value).filter(item => !isText(item)).map(item => ({ table: item.badge.table, column: item.badge.column }));
   }
 
-  return { isRich, isText, isPlainBadge, itemsOf, toStored, serializePlain, serializeRich, parsePlain, sameItems, variablesIn };
+  return { isRich, isText, isPlainBadge, itemsOf, toStored, serializePlain, serializeRich, parsePlain, sameItems, variablesIn, escapeText };
 })();

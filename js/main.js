@@ -73,7 +73,8 @@
   // Les cinq champs texte à bulles (nom du fichier PDF, Objet, À, Cc, Cci) : des éditeurs d'une ligne montés dans leurs éléments (js/field-editor.js),
   // après celui du document - la barre d'une bulle réutilise ses réglages.
   function attachFieldEditors(libs) {
-    [pdfFilenameInput, emailSubjectInput, emailToInput, emailCcInput, emailCciInput].forEach(host => FieldEditor.attach(host, libs));
+    FieldEditor.attach(pdfFilenameInput, libs);
+    eachEmailInput(input => FieldEditor.attach(input, libs));
   }
 
   function setStatus(msg, isError) {

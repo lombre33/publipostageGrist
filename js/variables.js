@@ -107,7 +107,7 @@ const Variables = (function () {
     return { SMART_CHIP_ITEMS, displayKey, ensureBox };
   })();
 
-  const { currentTables, prioritizeTables, matchingVariables, columnSearchText, refreshSchemaOnce, computeItems } = (function () {
+  const { currentTables, prioritizeTables, matchingVariables, columnSearchText, refreshSchemaOnce, computeItems, fieldItems } = (function () {
     // Les entrées de la liste : tables en cours, variables qui correspondent, onglet actif
 
     // Tables « en cours », la plus proche d'abord : celle que parcourt la zone répétée où est le curseur (js/variable-loop.js:loopTableAt ; `editor`
@@ -173,16 +173,17 @@ const Variables = (function () {
       refreshSchemaOnce();
       return fieldMode ? fieldItems(query, editor) : prioritizeTables(matchingVariables(query), currentTables(editor));
     }
-    // La liste d'un champ texte : après « Projet.Accompagnateur. », les colonnes de la ligne que désigne cette Référence (pathItems) ; sinon la saisie cherche
-    // la colonne par son nom (matchingVariables), celles de la table de la page d'abord. Une clé tapée en entier, seule proposition, n'a rien à compléter : la
-    // liste reste fermée, une espace ou un tiret tapé derrière elle n'y change rien.
+    // La liste d'un champ texte, celle des champs à bulles (computeItems) comme celle d'un <input> (checkForFilenameTrigger) : après « Projet.Accompagnateur. »,
+    // les colonnes de la ligne que désigne cette Référence (pathItems) ; sinon la saisie cherche la colonne par son nom (matchingVariables), celles de la
+    // table de la page d'abord. Une clé tapée en entier, seule proposition, n'a rien à compléter (clé tapée à la main, curseur revenu derrière une variable
+    // posée) : la liste reste fermée, une espace ou un tiret tapé derrière elle n'y change rien.
     function fieldItems(query, editor) {
       const items = pathItems(query) || prioritizeTables(matchingVariables(query), currentTables(editor));
       const typed = SearchSelect.normalize(query).replace(/[\s-]+$/, '');
       if (!items.length || (items.length === 1 && SearchSelect.normalize(items[0].key) === typed)) return [];
       return items;
     }
-    return { currentTables, prioritizeTables, matchingVariables, columnSearchText, refreshSchemaOnce, computeItems };
+    return { currentTables, prioritizeTables, matchingVariables, columnSearchText, refreshSchemaOnce, computeItems, fieldItems };
   })();
 
   const { setTabsVisible, render, select, moveSelection, position, preferChipsTab } = (function () {
@@ -334,20 +335,18 @@ const Variables = (function () {
       editor.chain().focus().insertContentAt(range, { type: 'varBadge', attrs: { table: item.table, column: item.column, key: item.key } }).run();
     }
 
+    // Ce que les deux listes « # » (le corps du modèle, les champs texte à bulles) ont en commun : le déclencheur - réglable dans le panneau Réglages, un
+    // changement n'a effet qu'après rechargement, ce `char` étant lu une fois, à la construction de l'éditeur - et la saisie jusqu'au curseur, espaces
+    // comprises : « #porteur 3 » cherche les deux mots (la liste se vide, et se tait, dès qu'aucune colonne ne les porte tous).
+    const suggestionBase = editor => ({ editor, char: triggerChar(), allowSpaces: true });
+
     // Reçoit les classes Extension et Suggestion plutôt que de les importer : editor.js les a déjà chargées au même moment.
     function createExtension(Extension, Suggestion) {
       return Extension.create({
         name: 'varBadgeSuggestion',
         addProseMirrorPlugins() {
           return [
-            Suggestion({
-              editor: this.editor,
-              // Réglable dans le panneau Réglages ; un changement n'a effet qu'après rechargement, ce `char` étant lu une fois, à la construction de
-              // l'éditeur.
-              char: triggerChar(),
-              // La saisie va jusqu'au curseur, espaces comprises : « #porteur 3 » cherche les deux mots (la liste se vide, et se tait, dès qu'aucune colonne ne
-              // les porte tous).
-              allowSpaces: true,
+            Suggestion(Object.assign(suggestionBase(this.editor), {
               // Jamais dans un bloc de code : un « # » de commentaire ou de couleur (#fff) y ouvrirait la liste, et une bulle ne peut pas vivre dans du
               // texte brut.
               allow: ({ state, range }) => !state.doc.resolve(range.from).parent.type.spec.code,
@@ -357,7 +356,7 @@ const Variables = (function () {
                 else insertVariable(editor, range, props);
               },
               render: suggestionRender,
-            }),
+            })),
           ];
         },
       });
@@ -374,18 +373,14 @@ const Variables = (function () {
         onBlur() { hide(); },
         addProseMirrorPlugins() {
           return [
-            Suggestion({
-              editor: this.editor,
-              char: triggerChar(),
+            Suggestion(Object.assign(suggestionBase(this.editor), {
               allowedPrefixes: null,
-              // Comme dans le corps : la saisie va jusqu'au curseur, espaces comprises (« #porteur 3 »).
-              allowSpaces: true,
               items: ({ query, editor }) => computeItems(query, editor, true),
               // La liste se ferme au choix : la fenêtre de la clé de correspondance, si elle s'ouvre, ne la retrouve pas ouverte derrière elle, et un refus laisse le
               // texte tapé sans liste, comme le champ d'avant.
               command: ({ editor, range, props }) => { hide(); insertVariable(editor, range, props); },
               render: () => suggestionRender(true),
-            }),
+            })),
           ];
         },
       });
@@ -434,13 +429,9 @@ const Variables = (function () {
       // Relu dès le premier caractère tapé après le déclencheur : sinon chercher une colonne toute neuve ne trouverait rien, la liste vide se fermant
       // avant d'avoir pu relire.
       refreshSchemaOnce();
-      const query = SearchSelect.normalize(match[1]).replace(/[\s-]+$/, '');
-      // Après « Projet.Accompagnateur. » : les colonnes de la ligne que désigne cette Référence ; sinon la saisie cherche la colonne par son nom
-      // (matchingVariables), celles de la table de la page d'abord.
-      const items = pathItems(match[1]) || prioritizeTables(matchingVariables(match[1]), currentTables());
-      // Une clé tapée en entier, seule proposition, n'a rien à compléter (clé tapée à la main, curseur revenu derrière une variable posée, espace ou tiret
-      // tapé derrière) : la liste reste fermée.
-      if (!items.length || (items.length === 1 && SearchSelect.normalize(items[0].key) === query)) { hide(); filenameInputState = null; return; }
+      // La même liste que celle des champs à bulles ; vide, elle reste fermée.
+      const items = fieldItems(match[1]);
+      if (!items.length) { hide(); filenameInputState = null; return; }
       filenameInputState = { el, start: caret - match[0].length, end: caret };
       currentItems = items;
       selectedIndex = 0;

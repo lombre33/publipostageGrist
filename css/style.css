@@ -159,14 +159,8 @@ body { display:flex; flex-direction:column; }
 #toolbar-top { display:flex; flex-direction: column; border-bottom:1px solid var(--border); background: var(--surface); font-family: var(--font-ui); }
 .bar-row { display:flex; align-items:center; gap:5px; flex-wrap: wrap; padding:6px 10px; }
 .bar-sep { width:1px; align-self:stretch; margin:2px 2px; background: var(--border); flex:none; }
-#toolbar-top select, #toolbar-top input[type="text"] {
-  font-family: Arial, sans-serif; font-size: 13px; color: var(--text);
-  background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
-  padding: 4px 8px; height: 28px;
-}
-/* Les champs texte à bulles (`.pp-field-editor`, js/field-editor.js : Objet, À, Cc, Cci, nom du PDF) ont le cadre des <input> qu'ils remplacent ; leur
-   règle est à part : un sélecteur commun relèverait la spécificité des <select> (`#toolbar-top select`) au-dessus de leurs règles propres. */
-#toolbar-top .pp-field-editor {
+/* `.pp-field-editor` : les champs texte à bulles (js/field-editor.js : Objet, À, Cc, Cci, nom du PDF), qui ont le cadre des <input> qu'ils remplacent. */
+#toolbar-top select, #toolbar-top input[type="text"], #toolbar-top .pp-field-editor {
   font-family: Arial, sans-serif; font-size: 13px; color: var(--text);
   background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
   padding: 4px 8px; height: 28px;

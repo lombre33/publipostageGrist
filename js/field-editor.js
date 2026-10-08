@@ -30,7 +30,6 @@ const FieldEditor = (function () {
 
     const BLOCK_TAGS = /^(address|article|aside|blockquote|br|dd|details|div|dl|dt|fieldset|figcaption|figure|footer|form|h[1-6]|header|hr|li|main|nav|ol|p|pre|section|table|tr|ul)$/i;
     const SKIPPED_TAGS = /^(script|style|template|head|title|meta|link)$/i;
-    const escapeHtml = text => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
     // Le HTML collé, réduit à ce qu'un champ garde : le texte, sur une ligne (un changement de bloc ou de ligne devient une espace), et les bulles - une
     // bulle copiée dans un autre champ ou dans le document arrive avec ses réglages. Un <template> est inerte : rien ne s'exécute ni ne se charge.
@@ -39,7 +38,7 @@ const FieldEditor = (function () {
       template.innerHTML = html;
       let out = '';
       const walk = parent => parent.childNodes.forEach(node => {
-        if (node.nodeType === Node.TEXT_NODE) { out += escapeHtml(node.nodeValue.replace(/\s+/g, ' ')); return; }
+        if (node.nodeType === Node.TEXT_NODE) { out += FieldCodec.escapeText(node.nodeValue.replace(/\s+/g, ' ')); return; }
         if (node.nodeType !== Node.ELEMENT_NODE || SKIPPED_TAGS.test(node.tagName)) return;
         if (node.matches('span.var-badge')) {
           const attrs = EditorNodes.varBadgeAttrsOf(node);
@@ -60,15 +59,7 @@ const FieldEditor = (function () {
     // Le texte brut collé : sans retour à la ligne, ProseMirror en ferait un paragraphe par ligne.
     const flatText = text => text.replace(/\s*[\r\n]+\s*/g, ' ');
     // Le texte brut d'une sélection copiée : une bulle s'écrit « #Clé », comme dans la valeur enregistrée.
-    function plainText(slice) {
-      let out = '';
-      slice.content.descendants(node => {
-        if (node.isText) out += node.text;
-        else if (node.type.name === 'varBadge') out += Variables.triggerChar() + node.attrs.key;
-        return true;
-      });
-      return out;
-    }
+    const plainText = slice => FieldCodec.serializePlain(itemsOfDoc(slice.content));
 
     function editorProps() {
       return {
@@ -106,12 +97,11 @@ const FieldEditor = (function () {
     ];
   }
 
-  // Une fenêtre (condition, autres attributs, boucle, liste, calcul, colonne, clé de correspondance) tient une position de la bulle qu'elle règle : tant
-  // qu'elle est ouverte, le champ ne remplace pas son document.
+  // Une fenêtre de la bulle (FloatingToolbars.variableWindowOpen) ou la clé de correspondance tient une position de la bulle qu'elle règle : tant qu'elle
+  // est ouverte, le champ ne remplace pas son document.
   function windowOpen() {
     const link = document.getElementById('link-config-modal');
-    if (link && link.style.display === 'flex') return true;
-    return [VariableCondition, VariableLinkedAttrs, VariableLoop, VariableList, VariableCalc, VariableColumn].some(module => typeof module.isOpen === 'function' && module.isOpen());
+    return FloatingToolbars.variableWindowOpen() || !!(link && link.style.display === 'flex');
   }
 
   const { show, tidy, sync } = (function () {

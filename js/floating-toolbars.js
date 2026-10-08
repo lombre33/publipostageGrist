@@ -767,6 +767,12 @@ const FloatingToolbars = (function () {
     return { wireImageFloatingToolbar };
   })();
 
+  // Une fenêtre (condition, autres attributs, boucle, liste, calcul) est ouverte sur une bulle : sa barre reste masquée tant qu'elle l'est - son niveau,
+  // sous les fenêtres, la cacherait de toute façon derrière le voile - et le champ texte qui porte la bulle ne remplace pas son document (js/field-editor.js).
+  function variableWindowOpen() {
+    return VariableCondition.isOpen() || VariableLinkedAttrs.isOpen() || VariableLoop.isOpen() || VariableList.isOpen() || VariableCalc.isOpen();
+  }
+
   // La barre flottante d'une bulle #Variable pour UN éditeur : celui du document (wireVariableFloatingToolbar) ou celui d'un champ texte (Objet, À, Cc,
   // Cci, nom du PDF, js/field-editor.js:attachVariableToolbar). Tout ce qui suit lit `editor`, le paramètre, qui cache celui du module : une barre par
   // éditeur, chacune sur sa propre sélection. `options.field` : la barre d'un champ texte, qui n'écrit qu'une ligne de texte - la boucle n'y est que « dans
@@ -1119,12 +1125,6 @@ const FloatingToolbars = (function () {
         panel.el.querySelector('[data-var-sep]').hidden = !isNumber && !isDate && !isBool;
       }
 
-      function variableWindowOpen() {
-        // Une fenêtre (condition, autres attributs, boucle, liste, calcul) est ouverte sur cette bulle : la barre reste masquée tant qu'elle l'est ;
-        // son niveau, sous les fenêtres, la cacherait de toute façon derrière le voile.
-        return VariableCondition.isOpen() || VariableLinkedAttrs.isOpen() || VariableLoop.isOpen() || VariableList.isOpen() || VariableCalc.isOpen();
-      }
-
       function variableToolbarCheck(panel, ui) {
         return ({ transaction } = {}) => {
           // Le blur de l'éditeur est ignoré : cf. wireImageFloatingToolbar.
@@ -1322,5 +1322,5 @@ const FloatingToolbars = (function () {
     return { wireSuggestionFloatingToolbar };
   })();
 
-  return { setEditor, wireColorPickers, wireTableFloatingToolbar, wireImageFloatingToolbar, wireVariableFloatingToolbar, attachVariableToolbar, wireSuggestionFloatingToolbar };
+  return { setEditor, wireColorPickers, wireTableFloatingToolbar, wireImageFloatingToolbar, wireVariableFloatingToolbar, attachVariableToolbar, variableWindowOpen, wireSuggestionFloatingToolbar };
 })();
