@@ -71,6 +71,13 @@ const VariableColumn = (function () {
     }
   }
 
+  // Le choix fait en descendant dans une colonne Référence (« Projet.Accompagnateur.Email ») : une variable dont la colonne est le chemin, comme celles que
+  // pose Autres attributs (js/variables.js:pathItems).
+  function pathItem(key) {
+    const cut = String(key).indexOf('.');
+    return cut === -1 ? null : { table: key.slice(0, cut), column: key.slice(cut + 1), key };
+  }
+
   // `pos` : position de la bulle, capturée au clic sur l'icône de la barre flottante. Rend faux quand la liste ne s'ouvre pas (bulle introuvable,
   // aucune colonne, composant indisponible).
   function open(editor, pos) {
@@ -89,6 +96,10 @@ const VariableColumn = (function () {
       select.append(...candidates.map(v => {
         const option = Dom.option(v.key, v.key);
         option.dataset.search = Variables.columnSearchText(v.table, v.column);
+        // Une colonne Référence ouvre les colonnes de sa table (flèche de la liste) : la bulle peut prendre pour colonne un chemin, comme celles d'Autres
+        // attributs.
+        const target = Variables.referencedTable(v.table, v.column);
+        if (target) option.dataset.expand = target;
         return option;
       }));
       host.appendChild(select);
@@ -102,6 +113,7 @@ const VariableColumn = (function () {
       const search = SearchSelect.attachColumns(select, {
         popup: true,
         anchor,
+        expand: item => Variables.columnsBelow(item.value),
         // Défait après la fin de l'évènement en cours (un blur ou un clic qui ferme le panneau ne doit pas retirer l'élément qui le porte). Le focus
         // revient à l'éditeur quand la fermeture vient du clavier (Échap) ou d'un choix ; après un clic ailleurs, il est déjà là où la personne a
         // cliqué.
@@ -110,7 +122,7 @@ const VariableColumn = (function () {
       instance = { host, search };
       session = instance;
       select.addEventListener('change', () => {
-        const item = candidates.find(c => c.key === select.value);
+        const item = candidates.find(c => c.key === select.value) || pathItem(select.value);
         if (item) pick(editor, pos, node, item);
       });
       search.open();

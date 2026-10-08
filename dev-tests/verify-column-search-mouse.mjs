@@ -996,6 +996,223 @@ const SECTIONS = {
     await seedData();
   },
 
+  // Descendre dans une colonne Référence depuis la liste des colonnes d'une règle (demande d'Antoine du 2026-10-08) : la flèche des lignes Référence, le fil d'Ariane
+  // et le clavier, à la vraie souris à 700x400. La page est sur CsDossiers (Responsable : Référence vers CsAnnuaire) ; CsAnnuaire a Service, Référence vers CsServices.
+  async descend() {
+    const previousTheme = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
+    const previousLang = await page.evaluate(() => I18n.getLang());
+    await seedData();
+    await page.evaluate(async () => {
+      const stub = window.__gristStub;
+      stub.setVariables('CsServices', { Libelle: 'Text', Budget: 'Numeric' });
+      stub.setVariables('CsAnnuaire', { NomPrenom: 'Text', Telephone: 'Text', Naissance: 'Date', Service: 'Ref:CsServices' });
+      stub.setRows('CsServices', [{ id: 3, Libelle: 'Juridique', Budget: 500 }]);
+      stub.setRows('CsAnnuaire', [{ id: 7, NomPrenom: 'Dupont Jean', Telephone: '06 11 22 33 44', Naissance: 631152000, Service: 3 }]);
+      await GristAPI.refreshSchema();
+      stub.fireRecord({ id: 1, Titre: 'Dossier A', Statut: 'Urgent', Responsable: 'Dupont Jean', Montant: 1200, Echeance: 631152000, Actif: true }, 'CsDossiers');
+    });
+    await page.waitForTimeout(250);
+    const fieldSel = cond + ' .macro-rule-column-wrap .ss-trigger';
+    const cancelOf = cond + ' .var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)';
+    const conditionOn = column => page.evaluate(col => {
+      let found;
+      EditorCore.getEditor().state.doc.descendants(n => { if (n.type.name === 'varBadge' && n.attrs.column === col) found = n.attrs.condition; });
+      return found;
+    }, column);
+    // La flèche d'une ligne de la liste ouverte et ce qu'un vrai clic y trouve.
+    const arrowBox = name => page.evaluate(({ scope, name }) => {
+      const row = Array.from(document.querySelectorAll(scope + ' .ss-panel:not([hidden]) .ss-option')).find(r => r.querySelector('.ss-name').textContent === name);
+      const arrow = row && row.querySelector('.ss-descend');
+      if (!arrow) return null;
+      const r = arrow.getBoundingClientRect(), rr = row.getBoundingClientRect();
+      const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return {
+        x: r.left + r.width / 2, y: r.top + r.height / 2, width: r.width, height: r.height, title: arrow.title, label: arrow.getAttribute('aria-label'),
+        onTop: !!top && arrow.contains(top), inViewport: r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth,
+        insideRow: r.left >= rr.left - 0.5 && r.right <= rr.right + 0.5 && r.top >= rr.top - 0.5 && r.bottom <= rr.bottom + 0.5,
+      };
+    }, { scope: cond, name });
+    // Le niveau affiché du panneau ouvert : fil d'Ariane, lignes, lignes à flèche, saisie, place dans le panneau Grist.
+    const levelInfo = () => page.evaluate(scope => {
+      const panel = document.querySelector(scope + ' .ss-panel:not([hidden])');
+      if (!panel) return null;
+      const path = panel.querySelector('.ss-path'), r = panel.getBoundingClientRect(), pr = path.getBoundingClientRect(), list = panel.querySelector('.ss-list');
+      return {
+        crumbs: path.hidden ? null : Array.from(path.querySelectorAll('.ss-crumb')).map(c => c.textContent),
+        pathFits: path.hidden || (pr.left >= r.left - 0.5 && pr.right <= r.right + 0.5 && path.scrollWidth <= path.clientWidth + 1),
+        rows: Array.from(panel.querySelectorAll('.ss-option')).map(li => li.querySelector('.ss-name').textContent),
+        arrows: Array.from(panel.querySelectorAll('.ss-option.has-children')).map(li => li.querySelector('.ss-name').textContent),
+        input: panel.querySelector('.ss-input').value, searchFocused: document.activeElement === panel.querySelector('.ss-input'),
+        inside: r.left >= 0 && r.top >= 0 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5, height: r.height, listRows: list.querySelectorAll('.ss-option').length,
+        active: (panel.querySelector('.ss-option.is-active .ss-name') || {}).textContent || null,
+      };
+    }, cond);
+    const crumbBox = depth => page.evaluate(({ scope, depth }) => {
+      const crumb = document.querySelector(scope + ' .ss-panel:not([hidden]) .ss-crumb[data-depth="' + depth + '"]');
+      if (!crumb) return null;
+      const r = crumb.getBoundingClientRect(), top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2, width: r.width, height: r.height, onTop: !!top && crumb.contains(top), text: crumb.textContent, title: crumb.title };
+    }, { scope: cond, depth });
+    const windowOpen = () => page.evaluate(scope => document.querySelector(scope).style.display !== 'none', cond);
+    const listOpen = () => page.evaluate(scope => !!document.querySelector(scope + ' .ss-panel:not([hidden])'), cond);
+    const ruleField = () => page.evaluate(scope => {
+      const row = document.querySelector(scope + ' .macro-rule-row');
+      const advanced = row.querySelector('.macro-rule-column-advanced');
+      return { shown: row.querySelector('.macro-rule-column-wrap .ss-trigger').textContent, value: row.querySelector('select.macro-rule-column').value, advancedHidden: advanced.hidden };
+    }, cond);
+    const previewLines = () => page.evaluate(() => Array.from(document.querySelectorAll('#var-condition-modal .var-condition-debug-line')).map(l => l.textContent));
+    // Le contraste (WCAG) d'une couleur de texte sur son fond, lu sur les styles calculés : la flèche et le fil d'Ariane suivent les jetons de F5 (>= 4,5:1).
+    const contrastOf = (selector, surface) => page.evaluate(({ selector, surface }) => {
+      const parse = css => { const m = /rgba?\(([^)]+)\)/.exec(css); const [r, g, b, a] = m[1].split(',').map(Number); return { r, g, b, a: a === undefined ? 1 : a }; };
+      const lum = c => { const f = v => { const x = v / 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b); };
+      const el = document.querySelector(selector);
+      if (!el) return null;
+      const under = document.querySelector(surface);
+      const fg = parse(getComputedStyle(el).color);
+      let bg = parse(getComputedStyle(under).backgroundColor);
+      if (bg.a < 1) bg = parse(getComputedStyle(document.querySelector(surface).closest('.ss-panel')).backgroundColor);
+      const [a, b] = [lum(fg), lum(bg)].sort((x, y) => y - x);
+      return Math.round(((a + 0.05) / (b + 0.05)) * 100) / 100;
+    }, { selector, surface });
+
+    for (const [theme, lang] of [['light', 'fr'], ['dark', 'fr'], ['light', 'en']]) {
+      const full = theme === 'light' && lang === 'fr';
+      const label = `${theme === 'dark' ? 'sombre' : 'clair'}, ${lang === 'en' ? 'anglais' : 'français'}`;
+      await page.evaluate(({ theme, lang }) => { document.documentElement.setAttribute('data-theme', theme); I18n.setLang(lang); }, { theme, lang });
+      await page.waitForTimeout(150);
+      const words = await page.evaluate(() => ({
+        descend: I18n.t('searchSelect.descend', { table: 'CsAnnuaire', column: 'Responsable' }), root: I18n.t('searchSelect.rootCrumb'),
+        met: I18n.t('varCond.debug.currentMet', { id: 1, value: 'Dossier A' }), rootTitle: I18n.t('searchSelect.upToRoot'),
+      }));
+      const win = await openWindowFor('Titre', 'var-condition', cond);
+      check(`descendre (${label}) : la fenêtre de condition s’ouvre, entière dans le panneau`, win.found && win.inViewport, win);
+      const field = await reveal(fieldSel, cond + ' .modal-content');
+      if (field.found) await page.mouse.click(field.x, field.y);
+      await page.waitForTimeout(200);
+      await page.keyboard.type('respons');
+      await page.waitForTimeout(150);
+      const rootLevel = await levelInfo();
+      const arrow = await arrowBox('Responsable');
+      check(`descendre (${label}) : « respons » ne laisse que Responsable (et la saisie avancée), avec sa flèche entière dans la ligne, au premier plan, d’au moins 24 x 24 px, dite dans la langue`,
+        !!rootLevel && rootLevel.rows[0] === 'Responsable' && !!arrow && arrow.insideRow && arrow.onTop && arrow.inViewport && arrow.width >= 24 && arrow.height >= 24 && arrow.title === words.descend && arrow.label === words.descend,
+        { rootLevel, arrow, expected: words.descend });
+      const ink = await contrastOf('.ss-panel:not([hidden]) .ss-option.has-children .ss-descend', '.ss-panel:not([hidden]) .ss-option.has-children');
+      check(`descendre (${label}) : la flèche a un contraste d’au moins 4,5:1 sur sa ligne`, ink !== null && ink >= 4.5, ink);
+      if (!arrow) { await page.keyboard.press('Escape'); await clickCenter(cancelOf); continue; }
+
+      // Un vrai clic sur la flèche ouvre les colonnes de CsAnnuaire sous « Colonnes › Responsable ».
+      await page.mouse.click(arrow.x, arrow.y);
+      await page.waitForTimeout(200);
+      const below = await levelInfo();
+      check(`descendre (${label}) : un vrai clic sur la flèche ouvre les colonnes de CsAnnuaire (la flèche sur Service seulement), la saisie repart vide et garde le focus, le fil d’Ariane dit « ${words.root} › Responsable » et tient dans le panneau, le panneau reste entier dans la fenêtre`,
+        !!below && JSON.stringify(below.crumbs) === JSON.stringify([words.root, 'Responsable']) && below.pathFits && JSON.stringify(below.rows) === JSON.stringify(['NomPrenom', 'Telephone', 'Naissance', 'Service'])
+          && JSON.stringify(below.arrows) === JSON.stringify(['Service']) && below.input === '' && below.searchFocused && below.inside, below);
+      const rootCrumb = await crumbBox(0);
+      check(`descendre (${label}) : le niveau « ${words.root} » du fil d’Ariane est un bouton au premier plan, d’au moins 20 px de haut, avec son info-bulle`,
+        !!rootCrumb && rootCrumb.onTop && rootCrumb.height >= 20 && rootCrumb.title === words.rootTitle, rootCrumb);
+      const crumbInk = await contrastOf('.ss-panel:not([hidden]) .ss-crumb.is-here', '.ss-panel:not([hidden]) .ss-path');
+      const crumbButtonInk = await contrastOf('.ss-panel:not([hidden]) button.ss-crumb', '.ss-panel:not([hidden]) .ss-path');
+      check(`descendre (${label}) : le fil d’Ariane a un contraste d’au moins 4,5:1 (niveau affiché et boutons)`, crumbInk !== null && crumbInk >= 4.5 && crumbButtonInk !== null && crumbButtonInk >= 4.5, { crumbInk, crumbButtonInk });
+      if (!full) {
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(100);
+        await clickCenter(cancelOf);
+        continue;
+      }
+
+      // Un vrai clic sur le nom d'une colonne du niveau la choisit : la règle porte le chemin entier, le champ le dit, la fenêtre reste ouverte.
+      const telephone = await rowCenter(cond, 'Telephone');
+      check('descendre (clair, français) : la ligne Telephone est visible et au premier plan', !!telephone && telephone.onTop && telephone.inViewport, telephone);
+      if (telephone) await page.mouse.click(telephone.x, telephone.y);
+      await page.waitForTimeout(300);
+      const chosen = await ruleField();
+      check('descendre (clair, français) : le clic sur Telephone choisit « CsDossiers.Responsable.Telephone », ferme la liste, la fenêtre reste ouverte',
+        chosen.value === 'CsDossiers.Responsable.Telephone' && chosen.shown === 'CsDossiers.Responsable.Telephone' && chosen.advancedHidden && !(await listOpen()) && (await windowOpen()), chosen);
+
+      // La valeur se tape au vrai clavier ; l'aperçu lit la colonne du chemin pour la ligne courante (CsAnnuaire 7, Telephone 06 11 22 33 44).
+      const valueBox = await reveal(cond + ' .macro-rule-value', cond + ' .modal-content');
+      if (valueBox.found) await page.mouse.click(valueBox.x, valueBox.y);
+      await page.keyboard.type('06 11 22 33 44');
+      await page.waitForTimeout(900);
+      const lines = await previewLines();
+      check('descendre (clair, français) : l’aperçu dit que la ligne courante remplit « CsDossiers.Responsable.Telephone = 06 11 22 33 44 »', lines.length > 0 && lines[0].includes(words.met), lines);
+      const save = await reveal(cond + ' .var-modal-primary', cond + ' .modal-content');
+      if (save.found) await page.mouse.click(save.x, save.y);
+      await page.waitForTimeout(350);
+      const saved = await conditionOn('Titre');
+      check('descendre (clair, français) : Enregistrer pose la règle { column: chemin, operator: =, value } sur la bulle',
+        !!saved && saved.rules.length === 1 && saved.rules[0].column === 'CsDossiers.Responsable.Telephone' && saved.rules[0].operator === '=' && saved.rules[0].value === '06 11 22 33 44', saved);
+
+      // La fenêtre rouverte : le chemin est un choix de la liste (pas la saisie avancée), sa ligne suit Responsable et porte la coche.
+      await openWindowFor('Titre', 'var-condition', cond);
+      const reopened = await ruleField();
+      const field2 = await reveal(fieldSel, cond + ' .modal-content');
+      if (field2.found) await page.mouse.click(field2.x, field2.y);
+      await page.waitForTimeout(200);
+      const reopenedList = await page.evaluate(scope => {
+        const rows = Array.from(document.querySelectorAll(scope + ' .ss-panel:not([hidden]) .ss-option'));
+        const names = rows.map(li => li.querySelector('.ss-name').textContent);
+        const i = names.indexOf('Responsable');
+        return { next: names[i + 1], checked: rows.filter(li => li.getAttribute('aria-selected') === 'true').map(li => li.querySelector('.ss-name').textContent), active: (document.querySelector(scope + ' .ss-option.is-active .ss-name') || {}).textContent };
+      }, cond);
+      check('descendre (clair, français) : la fenêtre rouverte montre le chemin comme un choix de la liste, sa ligne juste sous Responsable, cochée et surlignée',
+        reopened.value === 'CsDossiers.Responsable.Telephone' && reopened.advancedHidden && reopenedList.next === 'CsDossiers.Responsable.Telephone'
+          && JSON.stringify(reopenedList.checked) === JSON.stringify(['CsDossiers.Responsable.Telephone']) && reopenedList.active === 'CsDossiers.Responsable.Telephone', { reopened, reopenedList });
+
+      // Au vrai clavier : « respons » puis → descend, quatre ↓ jusqu'à Service puis → descend encore, Échap ferme la liste sans fermer la fenêtre.
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(150);
+      check('descendre (clair, français) : Échap ferme la liste sans fermer la fenêtre', !(await listOpen()) && (await windowOpen()), { list: await listOpen(), win: await windowOpen() });
+      const field3 = await reveal(fieldSel, cond + ' .modal-content');
+      if (field3.found) await page.mouse.click(field3.x, field3.y);
+      await page.waitForTimeout(200);
+      await page.keyboard.type('respons');
+      await page.waitForTimeout(120);
+      await page.keyboard.press('ArrowRight');
+      await page.waitForTimeout(150);
+      const viaKey = await levelInfo();
+      check('descendre (clair, français) : → au bout de la saisie « respons » descend dans Responsable, sans quitter le clavier',
+        !!viaKey && JSON.stringify(viaKey.crumbs) === JSON.stringify(['Colonnes', 'Responsable']) && viaKey.input === '' && viaKey.searchFocused, viaKey);
+      for (let i = 0; i < 4; i++) await page.keyboard.press('ArrowDown');
+      await page.keyboard.press('ArrowRight');
+      await page.waitForTimeout(150);
+      const deeper = await levelInfo();
+      check('descendre (clair, français) : quatre ↓ puis → ouvrent les colonnes de CsServices sous « Colonnes › Responsable › Service », le fil tient sur le panneau',
+        !!deeper && JSON.stringify(deeper.crumbs) === JSON.stringify(['Colonnes', 'Responsable', 'Service']) && JSON.stringify(deeper.rows) === JSON.stringify(['Libelle', 'Budget']) && deeper.pathFits && deeper.inside, deeper);
+      await page.keyboard.press('ArrowLeft');
+      await page.waitForTimeout(120);
+      const left = await levelInfo();
+      await page.keyboard.press('Backspace');
+      await page.waitForTimeout(120);
+      const backspaced = await levelInfo();
+      check('descendre (clair, français) : ← puis Retour arrière (saisie vide) remontent d’un niveau chacun, Service puis Responsable surlignés au retour',
+        !!left && JSON.stringify(left.crumbs) === JSON.stringify(['Colonnes', 'Responsable']) && left.active === 'Service' && !!backspaced && backspaced.crumbs === null && backspaced.active === 'Responsable', { left, backspaced });
+      // Un vrai clic sur le niveau « Colonnes » du fil d'Ariane remonte tout d'un coup.
+      await page.keyboard.press('ArrowRight');
+      await page.waitForTimeout(120);
+      for (let i = 0; i < 4; i++) await page.keyboard.press('ArrowDown');
+      await page.keyboard.press('ArrowRight');
+      await page.waitForTimeout(150);
+      const crumb = await crumbBox(0);
+      if (crumb) await page.mouse.click(crumb.x, crumb.y);
+      await page.waitForTimeout(150);
+      const home = await levelInfo();
+      check('descendre (clair, français) : un vrai clic sur « Colonnes » remonte à toute la liste, le focus reste dans la saisie',
+        !!home && home.crumbs === null && home.rows.length > 5 && home.searchFocused && (await listOpen()) && (await windowOpen()), home);
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(100);
+      // Retirer la condition (vrai clic) pour la section suivante.
+      const remove = await reveal(cond + ' .var-modal-danger', cond + ' .modal-content');
+      if (remove.found) await page.mouse.click(remove.x, remove.y);
+      await page.waitForTimeout(300);
+    }
+    await page.evaluate(({ theme, lang }) => {
+      if (theme) document.documentElement.setAttribute('data-theme', theme); else document.documentElement.removeAttribute('data-theme');
+      I18n.setLang(lang);
+    }, { theme: previousTheme, lang: previousLang });
+    await seedData();
+  },
+
   // Réglages > Accès : la table des droits (liste native) et quatre choix de colonne avec recherche, dans une fenêtre qui défile à 700x400.
   async access() {
     const scope = '#settings-modal';

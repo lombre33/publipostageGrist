@@ -165,11 +165,6 @@ const VariableLinkedAttrs = (function () {
   // bulles).
   const levelTable = () => GristAPI.tableAtEndOf(state.base, state.hops) || state.base;
   const pathText = () => Variables.triggerChar() + [state.base].concat(state.hops).join('.');
-  // Table désignée par la colonne Référence `col` de `table` (celle qu'ouvre la flèche de sa ligne), null si ce n'est pas une Référence simple.
-  function referencedTable(table, col) {
-    const ref = GristAPI.referenceOf(GristAPI.getColumnType(table, col));
-    return ref && !ref.list && GristAPI.getTables().indexOf(ref.table) !== -1 ? ref.table : null;
-  }
 
   // Une colonne du niveau affiché : sa case, son nom, sa valeur (posée par loadValues) et, pour une Référence, la flèche qui descend dans sa table.
   // `isCurrent` : la colonne de la bulle d'origine, montrée mais pas cochable.
@@ -187,7 +182,8 @@ const VariableLinkedAttrs = (function () {
     const pick = el('label', 'var-linked-pick');
     pick.append(box, name, el('span', 'var-linked-value'));
     row.appendChild(pick);
-    const target = referencedTable(table, col);
+    // La table que désigne une Référence simple (celle qu'ouvre la flèche de sa ligne) : la même destination que la flèche des listes de colonnes.
+    const target = Variables.referencedTable(table, col);
     if (target) {
       const label = I18n.t('varLinked.descend', { table: target, column: col });
       const descend = button('var-linked-descend', '›');

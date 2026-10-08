@@ -36,17 +36,43 @@ const ConditionFields = (function () {
     return '';
   }
 
-  function appendColumnOption(parent, value, table, column) {
+  function appendColumnOption(parent, value, table, column, descend) {
     // Une colonne de la liste : `value` est « Colonne » (table de la page) ou « Table.Colonne », et c'est aussi son nom à l'écran. Le type Grist en est
     // l'indice dans la liste avec recherche (« Date de début (date) »), qui permet de chercher « date » ; le texte de l'<option>, « nom (indice) »,
-    // sert à la liste native de repli. Sa table et son libellé Grist se cherchent aussi (`data-search`). Exportée : le tri d'une boucle
-    // (js/variable-loop.js) liste ses colonnes pareil.
+    // sert à la liste native de repli. Sa table et son libellé Grist se cherchent aussi (`data-search`). `descend` : une colonne Référence porte alors la
+    // table qu'elle désigne (`data-expand`), pour que la liste lui montre la flèche qui en ouvre les colonnes (columnsBelow). Exportée : le tri d'une
+    // boucle (js/variable-loop.js) liste ses colonnes pareil, sans flèche.
     const hint = friendlyTypeLabel(GristAPI.getColumnType(table, column));
     const option = Dom.option(value, hint ? value + ' (' + hint + ')' : value);
     option.dataset.name = value;
     option.dataset.search = Variables.columnSearchText(table, column);
     if (hint) option.dataset.hint = hint;
+    const target = descend ? Variables.referencedTable(table, column) : null;
+    if (target) option.dataset.expand = target;
     parent.appendChild(option);
+  }
+
+  // La clé complète d'une ligne de la liste : « Colonne » (table de la page) devient « Table.Colonne ». C'est la forme d'un chemin
+  // (« Projet.Accompagnateur.Email ») que lit la règle : ConditionRules.parseColumnRef coupe au premier point, Variables.resolveRawValue suit le reste.
+  const fullKey = (value, pageTable) => (value.indexOf('.') === -1 ? pageTable + '.' + value : value);
+
+  function columnsBelow(item, pageTable) {
+    // Les lignes où mène la flèche de `item` dans la liste (js/search-select.js, option `expand`) : les colonnes de la table que désigne sa colonne
+    // Référence, chacune sous sa clé complète « Table.Référence.Colonne » (Variables.columnsBelow) avec le type pour indice.
+    return Variables.columnsBelow(fullKey(item.value, pageTable), (table, column) => friendlyTypeLabel(GristAPI.getColumnType(table, column)));
+  }
+
+  function addSavedPathOption(select, saved, pageTable) {
+    // Une colonne enregistrée qui est un chemin (« Projet.Accompagnateur.Email », choisi en descendant dans une Référence) n'a pas de ligne dans la liste :
+    // elle en reçoit une, comme à son choix (SearchSelect.addDynamicOption), pour s'afficher comme une colonne de la liste et non en saisie avancée. Un
+    // chemin dont un maillon a disparu reste en saisie avancée, comme toute colonne inconnue.
+    const parts = saved.split('.');
+    if (parts.length < 3) return;
+    const path = parts.slice(1).join('.');
+    const end = GristAPI.resolveColumnPath(parts[0], path);
+    if (!end) return;
+    const root = parts[0] === pageTable ? parts[1] : parts[0] + '.' + parts[1];
+    SearchSelect.addDynamicOption(select, { value: saved, hint: friendlyTypeLabel(end.type), search: Variables.columnSearchText(parts[0], path) }, root);
   }
 
   function appendAllTablesOptions(select, currentTableId) {
@@ -55,7 +81,7 @@ const ConditionFields = (function () {
     // quand même : l'appelant demande alors la clé du lien (options.onColumnChosen).
     const tables = GristAPI.getTables();
     const ordered = tables.includes(currentTableId) ? [currentTableId, ...tables.filter(t => t !== currentTableId)] : tables;
-    ordered.forEach(table => GristAPI.getVisibleColumns(table).forEach(c => appendColumnOption(select, table === currentTableId ? c : table + '.' + c, table, c)));
+    ordered.forEach(table => GristAPI.getVisibleColumns(table).forEach(c => appendColumnOption(select, table === currentTableId ? c : table + '.' + c, table, c, true)));
   }
 
   function ensureTableLinked(ref, onLinked) {
@@ -77,7 +103,7 @@ const ConditionFields = (function () {
     const pageTable = GristAPI.getCurrentTableId();
     if (opts.table) GristAPI.getVisibleColumns(opts.table).forEach(c => appendColumnOption(select, c, opts.table, c));
     else if (opts.allTables) appendAllTablesOptions(select, pageTable);
-    else if (pageTable) GristAPI.getColumns(pageTable).forEach(c => appendColumnOption(select, c, pageTable, c));
+    else if (pageTable) GristAPI.getColumns(pageTable).forEach(c => appendColumnOption(select, c, pageTable, c, true));
   }
 
   function showSavedChoice(select, advancedInput, advancedValue, saved, known) {
@@ -90,26 +116,36 @@ const ConditionFields = (function () {
   }
 
   function columnFacts(value, baseTable) {
-    // Ce que la ligne affichée sait de la colonne choisie (`value`, nue ou « Table.Colonne ») : sa colonne, sa table, son type, et si la ligne affichée
-    // ne la porte pas (colonne non transmise par grist.onRecord). `baseTable` : la table d'une colonne nue.
+    // Ce que la ligne affichée sait de la colonne choisie (`value`, nue, « Table.Colonne » ou un chemin « Table.Référence.Colonne ») : sa colonne, sa table,
+    // son type, et si la ligne affichée ne la porte pas (colonne non transmise par grist.onRecord). `baseTable` : la table d'une colonne nue. Pour un
+    // chemin, la colonne, la table et le type sont ceux où il aboutit (c'est la valeur à comparer, ses choix possibles) ; `linkTable` reste celle d'où il
+    // part, dont le lien lit la ligne, et aucune colonne de la page n'est requise (le chemin relit la ligne par son identifiant).
     const ref = value ? ConditionRules.parseColumnRef(value, baseTable()) : null;
-    const col = ref ? ref.column : null;
-    const table = ref ? ref.table : null;
-    const type = (col && table) ? GristAPI.getColumnType(table, col) : null;
-    const record = (col && table === GristAPI.getCurrentTableId()) ? GristAPI.getCurrentRecord() : null;
-    return { col, table, type, missingFromRecord: !!(col && record && !(col in record)) };
+    let col = ref ? ref.column : null;
+    let table = ref ? ref.table : null;
+    const linkTable = table;
+    const isPath = !!col && col.indexOf('.') !== -1;
+    let type = (col && table) ? GristAPI.getColumnType(table, col) : null;
+    if (isPath) {
+      const end = GristAPI.resolveColumnPath(table, col);
+      if (end) { table = end.table; col = end.column; type = end.type; }
+    }
+    const record = (col && !isPath && table === GristAPI.getCurrentTableId()) ? GristAPI.getCurrentRecord() : null;
+    return { col, table, linkTable, type, missingFromRecord: !!(col && record && !(col in record)) };
   }
 
   // Liste des colonnes réelles, plus une option « avancé » (jamais retirée) qui révèle un champ texte pour une colonne absente de la liste
-  // (« Table.Colonne », js/condition-rules.js:parseColumnRef). `onTypeChange(type, colonne, table)` prévient le champ Valeur de la colonne choisie,
-  // pour son placeholder et ses choix. Renvoie `{ wrap, typeHint }` : l'appelant place `typeHint` hors de `wrap` (voir plus bas). `options` :
+  // (« Table.Colonne », js/condition-rules.js:parseColumnRef). `onTypeChange(type, colonne, table, tableDuLien)` prévient le champ Valeur de la colonne
+  // choisie, pour son placeholder et ses choix (pour un chemin, la colonne et la table où il aboutit ; `tableDuLien` est celle d'où il part). Renvoie `{ wrap, typeHint }` : l'appelant place `typeHint` hors de `wrap` (voir plus bas). `options` :
   // { allTables: true } liste les colonnes de toutes les tables (appendAllTablesOptions) ; { onColumnChosen(ref, value) } est appelé avant d'adopter
   // une colonne de la liste : `true` l'adopte tout de suite, une promesse qui ne résout pas vrai remet la colonne précédente ; { table } (boucle,
   // js/variable-loop.js) liste les colonnes de cette seule table, en valeur nue, car le filtre d'une boucle lit la table parcourue
   // (js/loop-rules.js:ruleHolds). Sans options : les colonnes de la page seule. Le même champ sert à choisir l'AUTRE colonne d'une règle qui compare
   // deux colonnes (buildOtherColumnField) : { property: 'valueColumn' } range alors le choix dans `rule.valueColumn` au lieu de `rule.column`,
   // { typeHint } est la ligne d'indication que l'appelant garde (cachée tant qu'elle est vide) et { warningOnly: true } n'y écrit que l'avertissement
-  // « absente de la ligne affichée », pas le type de la colonne.
+  // « absente de la ligne affichée », pas le type de la colonne. Une colonne Référence de la liste montre une flèche qui ouvre les colonnes de sa table (les
+  // lignes de la liste sont alors des chemins « Table.Référence.Colonne », columnsBelow) ; pas avec { table }, où le filtre d'une boucle lit la ligne
+  // parcourue seule.
   function buildColumnField(rule, onTypeChange, options) {
     const opts = options || {};
     const prop = opts.property || 'column';
@@ -117,6 +153,7 @@ const ConditionFields = (function () {
     const wrap = el('span', 'macro-rule-column-wrap');
     const select = el('select', prop === 'column' ? 'macro-rule-column' : 'macro-rule-column macro-rule-value-column');
     fillColumnList(select, opts);
+    if (!opts.table) addSavedPathOption(select, rule[prop] || '', GristAPI.getCurrentTableId());
     const listed = Array.from(select.options).map(o => o.value).filter(Boolean);
     select.appendChild(pinnedOption(ADVANCED_COLUMN_VALUE, I18n.t('macro.modal.columnAdvanced')));
     const advancedInput = textInput('macro-rule-column-advanced', I18n.t('macro.modal.columnAdvancedPlaceholder'));
@@ -133,7 +170,7 @@ const ConditionFields = (function () {
       typeHint.classList.toggle('is-warning', facts.missingFromRecord);
       // Une ligne d'indication confiée par l'appelant n'occupe de place sous la règle que quand elle dit quelque chose.
       if (opts.typeHint) typeHint.hidden = !typeHint.textContent;
-      if (onTypeChange) onTypeChange(facts.type, facts.col, facts.table);
+      if (onTypeChange) onTypeChange(facts.type, facts.col, facts.table, facts.linkTable);
     }
 
     showSavedChoice(select, advancedInput, ADVANCED_COLUMN_VALUE, rule[prop] || '', listed);
@@ -182,8 +219,11 @@ const ConditionFields = (function () {
     wrap.append(select, advancedInput);
     // L'indice de type est dit dans la liste ouverte, pas dans le champ fermé : il reste sous le champ (typeHint). Si le composant échoue, le
     // <select> natif reste affiché.
-    try { search = SearchSelect.attachColumns(select, { inline: true, hintInTrigger: false }); }
-    catch (e) { console.warn('[ConditionFields] recherche de colonne indisponible, liste native conservée', e); }
+    try {
+      search = SearchSelect.attachColumns(select, {
+        inline: true, hintInTrigger: false, expand: opts.table ? undefined : item => columnsBelow(item, GristAPI.getCurrentTableId()),
+      });
+    } catch (e) { console.warn('[ConditionFields] recherche de colonne indisponible, liste native conservée', e); }
     // typeHint reste hors de `wrap` (largeur flex:1, un tiers de la ligne) : l'avertissement « colonne absente », long, écraserait le reste de la
     // ligne. L'appelant le place en pleine largeur sous la ligne (.macro-rule-column-type, css/toolbar-v2.css : flex-basis:100%).
     return { wrap, typeHint };
@@ -362,7 +402,7 @@ const ConditionFields = (function () {
     // range le choix dans `rule.valueColumn`), avec les mêmes colonnes et la même clé de correspondance pour une table pas encore liée. Seul son
     // avertissement « absente de la ligne affichée » est dit, dans `valueHint`, sous la règle ; `options.onValueColumnResolved(table)` y affiche le
     // lien de sa table.
-    const onChosen = (type, colId, table) => { if (options.onValueColumnResolved) options.onValueColumnResolved(table, colId, type); };
+    const onChosen = (type, colId, table, linkTable) => { if (options.onValueColumnResolved) options.onValueColumnResolved(linkTable || table, colId, type); };
     const field = buildColumnField(rule, onChosen, Object.assign({}, options, { property: 'valueColumn', typeHint: valueHint, warningOnly: true }));
     return field.wrap;
   }
@@ -406,13 +446,14 @@ const ConditionFields = (function () {
       }
       syncValueDisabled(valueSlot, operatorSelect.value || rule.operator || '=');
     }
-    function renderValue(type, colId, table) {
+    function renderValue(type, colId, table, linkTable) {
       columnType = type;
       columnId = colId;
       columnTable = table;
       syncOperatorOptions(operatorSelect, type);
       fillValueSlot();
-      if (options && options.onColumnResolved) options.onColumnResolved(table, colId, type);
+      // Le lien affiché sous la règle est celui de la table d'où part la colonne, pas de celle où un chemin aboutit.
+      if (options && options.onColumnResolved) options.onColumnResolved(linkTable || table, colId, type);
     }
 
     const columnField = buildColumnField(rule, renderValue, options);

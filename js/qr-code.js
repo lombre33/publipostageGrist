@@ -230,9 +230,17 @@ const QrCode = (function () {
     try { search.destroy(); } catch (e) { /* déjà défait */ }
     host.remove();
   }
+  // Les colonnes où mène la flèche d'une colonne Référence de la liste, sans les pièces jointes (comme la liste elle-même : un QR code est du texte).
+  function columnsBelow(key) {
+    const entries = Variables.columnsBelow(key);
+    return entries && entries.filter(entry => {
+      const cut = entry.value.indexOf('.');
+      return GristAPI.getColumnType(entry.value.slice(0, cut), entry.value.slice(cut + 1)) !== 'Attachments';
+    });
+  }
   // « Insérer une colonne… » : la liste avec recherche de toutes les colonnes (js/search-select.js), le même choix que partout ; la colonne choisie
-  // s'écrit « #Table.Colonne » à la place de la sélection du champ. Le <select> caché qui la porte vit dans la fenêtre, pour que son panneau soit
-  // au-dessus d'elle.
+  // s'écrit « #Table.Colonne » à la place de la sélection du champ, ou « #Table.Référence.Colonne » quand on est descendu dans une Référence. Le
+  // <select> caché qui la porte vit dans la fenêtre, pour que son panneau soit au-dessus d'elle.
   function openColumnList() {
     closeColumnList();
     const candidates = GristAPI.getAllVariables().filter(v => v.column.indexOf('gristHelper_') !== 0 && GristAPI.getColumnType(v.table, v.column) !== 'Attachments');
@@ -245,6 +253,9 @@ const QrCode = (function () {
       option.value = v.key;
       option.textContent = v.key;
       option.dataset.search = Variables.columnSearchText(v.table, v.column);
+      // Une colonne Référence ouvre les colonnes de sa table (flèche de la liste) : « #Projet.Accompagnateur.Email » est une variable comme une autre.
+      const target = Variables.referencedTable(v.table, v.column);
+      if (target) option.dataset.expand = target;
       select.appendChild(option);
     });
     host.appendChild(select);
@@ -255,6 +266,7 @@ const QrCode = (function () {
       const search = SearchSelect.attachColumns(select, {
         popup: true,
         anchor: () => column.getBoundingClientRect(),
+        expand: item => columnsBelow(item.value),
         // Défait après la fin de l'évènement en cours (un blur ou un clic qui ferme le panneau ne doit pas retirer l'élément qui le porte).
         onClose: refocus => { if (refocus) input.focus(); setTimeout(() => closeColumnList(instance), 0); },
       });

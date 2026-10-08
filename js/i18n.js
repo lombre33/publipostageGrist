@@ -942,6 +942,14 @@ const I18n = (function () {
     'searchSelect.count': { fr: '{count} {count|résultat|résultats}', en: '{count} {count|result|results}' },
     // Liste de plus de 500 résultats : seuls les premiers sont posés, cette ligne dit combien d'autres restent.
     'searchSelect.more': { fr: 'Encore {count} {count|résultat|résultats} : précisez la recherche.', en: '{count} more {count|result|results}: refine your search.' },
+    // Descendre dans une colonne Référence (la flèche d'une ligne de colonnes et le fil d'Ariane au-dessus de la liste : SearchSelect, option `expand`) : les
+    // mêmes mots que la flèche d'« Autres attributs » (varLinked.*). `level` est annoncé aux lecteurs d'écran à chaque niveau.
+    'searchSelect.descend': { fr: 'Voir les colonnes de « {table} » (via {column})', en: 'Show the columns of “{table}” (via {column})' },
+    'searchSelect.level': { fr: 'Colonnes de « {table} »', en: 'Columns of “{table}”' },
+    'searchSelect.path': { fr: 'Chemin des références', en: 'Reference path' },
+    'searchSelect.rootCrumb': { fr: 'Colonnes', en: 'Columns' },
+    'searchSelect.upTo': { fr: 'Remonter à « {table} »', en: 'Go back up to “{table}”' },
+    'searchSelect.upToRoot': { fr: 'Revenir à toutes les colonnes', en: 'Back to all columns' },
     // Même liste avec recherche pour une table (Réglages > Accès), un modèle (macro-modèle), une valeur possible d'une colonne (champ Valeur d'une
     // règle) et une feuille d'un classeur Excel (import d'une grille) : SearchSelect.attachTables / attachTemplates / attachValues / attachSheets.
     'searchSelect.searchTables': { fr: 'Rechercher une table…', en: 'Search for a table…' },

@@ -21,6 +21,13 @@
 // côté du rectangle de `anchor()` (relu à chaque placement), et `onClose(refocus)` prévient à la fermeture (choix, Échap, clic ailleurs) ; refocus
 // vaut vrai si la fermeture vient du clavier ou d'un choix. À l'appelant de défaire ensuite le <select> (destroy()), de préférence après la fin de
 // l'évènement en cours.
+// Descendre (une colonne Référence ouvre les colonnes de sa table, comme la flèche d'« Autres attributs ») : `expand(item)` rend les lignes où mène la
+// flèche d'une ligne, sous la forme `{ value, name, hint, search, expand }` (mêmes sens que `data-value`, `data-name`, `data-hint`, `data-search` et
+// `data-expand` plus bas), ou null quand elle ne mène nulle part. Une <option> porte `data-expand` (le nom de la destination, dit dans l'info-bulle de
+// la flèche) pour que la liste montre sa flèche sans rien demander à `expand` ; sans l'option `expand`, `data-expand` est ignoré. Un clic sur la ligne la
+// choisit, un clic sur sa flèche (ou → quand la saisie est vide ou que le curseur est à sa fin) ouvre ses lignes sous un fil d'Ariane ; ← (saisie vide),
+// Retour arrière (saisie vide) et un clic sur un niveau du fil remontent. Le choix d'une ligne de ces niveaux n'a pas d'<option> dans le <select> : la liste
+// lui en pose une (`data-dynamic`, addDynamicOption), qui ne reste dans la liste que tant qu'elle est choisie.
 const SearchSelect = (function () {
   const el = Dom.el;
 
@@ -98,15 +105,25 @@ const SearchSelect = (function () {
       if (opt.disabled) return;
       const name = opt.dataset.name || opt.textContent;
       const hint = opt.dataset.hint || '';
+      const search = opt.dataset.search || '';
       const parent = opt.parentElement;
       items.push({
-        value: opt.value, name, hint, haystack: searchKey(name, hint, opt.dataset.search || ''),
+        value: opt.value, name, hint, search, haystack: searchKey(name, hint, search),
         group: parent && parent.tagName === 'OPTGROUP' ? parent.label : '',
         pinned: opt.dataset.pinned === 'true',
         empty: isNoChoice(opt),
+        expand: opt.dataset.expand || '',
       });
     });
     return items;
+  }
+
+  // Une ligne d'un niveau où l'on est descendu (`entry` rendu par `expand`), faite comme celles de readItems.
+  function itemOf(entry) {
+    const name = entry.name == null ? String(entry.value) : String(entry.name);
+    const hint = entry.hint || '';
+    const search = entry.search || '';
+    return { value: String(entry.value), name, hint, search, haystack: searchKey(name, hint, search), group: '', pinned: false, empty: false, expand: entry.expand || '' };
   }
 
   // Textes de la zone de recherche et du message « aucun résultat » : une chaîne, ou une fonction relue à chaque ouverture, pour qu'une liste posée
@@ -123,6 +140,9 @@ const SearchSelect = (function () {
       emptyText: textOf(opts.emptyText, 'searchSelect.empty'),
       items: [], visible: [], active: -1, query: '', open: false, lastX: -1, lastY: -1,
       rows: [], // les <li> des lignes de `visible`, dans le même ordre (la liste contient aussi le message et les intitulés de groupe)
+      // Les niveaux ouverts, du premier (les lignes du <select>) à celui qu'on voit : { items, from (la ligne d'où l'on est descendu), table (sa destination) }.
+      // `items` est toujours ceux du dernier.
+      levels: [],
     };
     buildTrigger(s);
     buildPanel(s);
@@ -175,6 +195,9 @@ const SearchSelect = (function () {
     input.autocomplete = 'off';
     input.spellcheck = false;
     searchRow.appendChild(input);
+    // Le fil d'Ariane des niveaux ouverts (renderPath), caché tant qu'on n'est pas descendu.
+    const path = s.path = el('nav', 'ss-path');
+    path.hidden = true;
     const list = s.list = el('ul', 'ss-list');
     list.id = id + '-list';
     list.setAttribute('role', 'listbox');
@@ -184,7 +207,7 @@ const SearchSelect = (function () {
     const status = s.status = el('div', 'ss-status');
     status.setAttribute('role', 'status');
     status.setAttribute('aria-live', 'polite');
-    panel.append(searchRow, list, status);
+    panel.append(searchRow, path, list, status);
   }
 
   // Champ fermé : le choix courant (nom + indice discret), sinon le texte de l'<option> désactivée de départ ; le choix « rien » est grisé comme un
@@ -232,7 +255,8 @@ const SearchSelect = (function () {
     }
   }
 
-  function render(s) {
+  // `back` : la ligne d'où l'on vient de remonter, surlignée de préférence au choix courant (voir ascend).
+  function render(s, back) {
     const { select, list, empty, status, id } = s;
     const found = filterItems(s.items, s.query);
     const current = select.value;
@@ -270,16 +294,32 @@ const SearchSelect = (function () {
       row.dataset.index = String(i);
       row.appendChild(el('span', 'ss-name', item.name));
       if (item.hint) row.appendChild(el('span', 'ss-hint', '(' + item.hint + ')'));
+      // Une colonne Référence : la flèche qui ouvre les colonnes de sa table. Hors du clavier (Tab, la saisie garde le focus) : → fait la même chose.
+      if (item.expand && s.opts.expand) {
+        const label = I18n.t('searchSelect.descend', { table: item.expand, column: item.name });
+        const arrow = el('button', 'ss-descend', '›');
+        arrow.type = 'button';
+        arrow.tabIndex = -1;
+        arrow.title = label;
+        arrow.setAttribute('aria-label', label);
+        row.classList.add('has-children');
+        row.appendChild(arrow);
+      }
       list.appendChild(row);
       s.rows.push(row);
     });
     if (!moreShown) addMore();
     // Message quand la recherche ne trouve rien (ou qu'il n'y a rien à lister) ; pas pour une liste qui ne propose que « rien », sans recherche.
     empty.hidden = matches.length > 0 || (!searching && s.visible.length > 0);
-    status.textContent = !searching ? '' : (matches.length ? I18n.t('searchSelect.count', { count: matches.length }) : s.emptyText);
+    // Aux lecteurs d'écran : le nombre de résultats pendant une recherche, sinon la table dont on voit les colonnes quand on est descendu.
+    const depth = s.levels.length - 1;
+    status.textContent = searching ? (matches.length ? I18n.t('searchSelect.count', { count: matches.length }) : s.emptyText)
+      : (depth > 0 ? I18n.t('searchSelect.level', { table: s.levels[depth].table }) : '');
     // Recherche en cours : le premier résultat, pour que Entrée le prenne (jamais la ligne épinglée, pour qu'elle ne se choisisse pas par mégarde).
-    // Sinon le choix courant ; rien de surligné sans recherche ni choix, pour qu'un Entrée à vide ne choisisse pas la première colonne au hasard.
-    setActive(s, searching ? (matches.length ? s.visible.indexOf(matches[0]) : -1) : s.visible.findIndex(item => item.value === current), false);
+    // Sinon la ligne d'où l'on remonte, sinon le choix courant ; rien de surligné sans recherche ni choix, pour qu'un Entrée à vide ne choisisse pas la
+    // première colonne au hasard.
+    const wanted = back ? back.value : current;
+    setActive(s, searching ? (matches.length ? s.visible.indexOf(matches[0]) : -1) : s.visible.findIndex(item => item.value === wanted), false);
   }
 
   // Panneau en position fixe : hors de toute zone rognante (fenêtre à défilement, ancêtre overflow:hidden), sous le champ ou au-dessus si la place
@@ -315,7 +355,10 @@ const SearchSelect = (function () {
     const { select, input, panel, trigger, opts } = s;
     if (s.open || select.disabled) return;
     refreshTexts(s);
+    dropStaleDynamicOptions(select);
     s.items = readItems(select);
+    s.levels = [{ items: s.items, from: null, table: '' }];
+    renderPath(s);
     s.query = seed || '';
     input.value = s.query;
     s.open = true;
@@ -347,6 +390,12 @@ const SearchSelect = (function () {
   }
   function choose(s, item) {
     const { select } = s;
+    // Une ligne d'un niveau où l'on est descendu n'a pas d'<option> : elle en reçoit une, rangée après la ligne d'où l'on est parti, qui porte pour nom sa
+    // valeur (le chemin entier) et se cherche par les noms de toute la suite de colonnes.
+    if (s.levels.length > 1) {
+      const search = s.levels.slice(1).map(level => level.from.search).concat(item.search).join(' ');
+      addDynamicOption(select, { value: item.value, hint: item.hint, search }, s.levels[1].from.value);
+    }
     const changed = select.value !== item.value;
     select.value = item.value;
     syncTrigger(s);
@@ -357,6 +406,97 @@ const SearchSelect = (function () {
     const { visible, active } = s;
     if (!visible.length) return;
     setActive(s, active < 0 ? (delta > 0 ? 0 : visible.length - 1) : Math.min(visible.length - 1, Math.max(0, active + delta)));
+  }
+
+  // === Descendre === Les niveaux ouverts sont dans `s.levels` ; la zone de recherche et la liste ne montrent que le dernier.
+  // Ouvre les lignes où mène la flèche de `item` ; faux quand elle ne mène nulle part.
+  function descend(s, item) {
+    if (!s.open || !s.opts.expand || !item || !item.expand) return false;
+    let entries = null;
+    try { entries = s.opts.expand(item); } catch (e) { console.warn('[SearchSelect] lignes de la flèche illisibles', e); }
+    if (!entries) return false;
+    s.levels.push({ items: entries.map(itemOf), from: item, table: item.expand });
+    showLevel(s, null);
+    return true;
+  }
+  // Revient au niveau `depth` (0 : les lignes du <select>) ; la ligne d'où l'on remonte est surlignée, pour que → y redescende aussitôt.
+  function ascend(s, depth) {
+    if (!s.open || depth < 0 || depth >= s.levels.length - 1) return false;
+    const left = s.levels[depth + 1].from;
+    s.levels.length = depth + 1;
+    showLevel(s, left);
+    return true;
+  }
+  // Montre le dernier niveau : sa recherche repart à vide, sa liste au début (jusqu'à `back`, la ligne d'où l'on remonte).
+  function showLevel(s, back) {
+    s.items = s.levels[s.levels.length - 1].items;
+    s.query = '';
+    s.input.value = '';
+    s.list.scrollTop = 0;
+    renderPath(s);
+    render(s, back);
+    scrollToActive(s);
+  }
+  // Le fil d'Ariane « Colonnes › Accompagnateur », caché au premier niveau : chaque niveau au-dessus de celui qu'on voit revient à lui au clic (wirePath),
+  // celui qu'on voit est en gras. Des boutons hors du clavier, comme la flèche des lignes : la saisie garde le focus, ← remonte d'un niveau.
+  function renderPath(s) {
+    const { path, levels } = s;
+    path.replaceChildren();
+    path.hidden = levels.length < 2;
+    if (path.hidden) return;
+    path.setAttribute('aria-label', I18n.t('searchSelect.path'));
+    levels.forEach((level, depth) => {
+      if (depth) {
+        const sep = el('span', 'ss-sep', '›');
+        sep.setAttribute('aria-hidden', 'true');
+        path.appendChild(sep);
+      }
+      const label = depth ? level.from.name : I18n.t('searchSelect.rootCrumb');
+      if (depth === levels.length - 1) {
+        const here = el('span', 'ss-crumb is-here', label);
+        here.setAttribute('aria-current', 'location');
+        path.appendChild(here);
+        return;
+      }
+      const title = depth ? I18n.t('searchSelect.upTo', { table: level.table }) : I18n.t('searchSelect.upToRoot');
+      const up = el('button', 'ss-crumb', label);
+      up.type = 'button';
+      up.tabIndex = -1;
+      up.dataset.depth = String(depth);
+      up.title = title;
+      up.setAttribute('aria-label', title);
+      path.appendChild(up);
+    });
+  }
+
+  // La ligne d'un choix fait en descendant (`entry` : { value, name, hint, search }, le nom étant par défaut la valeur) : le <select> reste la source de
+  // la valeur, il lui faut donc une <option>. Elle se range juste après la ligne `rootValue` d'où l'on est parti (celle de la colonne Référence), à
+  // défaut en fin de liste avant la ligne épinglée ; marquée `data-dynamic`, elle ne reste dans la liste que tant qu'elle est choisie
+  // (dropStaleDynamicOptions). Exportée : une règle enregistrée avec un tel chemin reçoit sa ligne à sa construction (js/condition-fields.js).
+  function addDynamicOption(select, entry, rootValue) {
+    const existing = Array.prototype.find.call(select.options, option => option.value === entry.value);
+    if (existing) return existing;
+    const name = entry.name == null ? String(entry.value) : String(entry.name);
+    const option = document.createElement('option');
+    option.value = entry.value;
+    option.textContent = entry.hint ? name + ' (' + entry.hint + ')' : name;
+    option.dataset.name = name;
+    if (entry.hint) option.dataset.hint = entry.hint;
+    if (entry.search) option.dataset.search = entry.search;
+    option.dataset.dynamic = 'true';
+    const root = rootValue == null ? null : Array.prototype.find.call(select.options, o => o.value === rootValue);
+    if (root) {
+      root.after(option);
+    } else {
+      const pinned = Array.prototype.find.call(select.options, o => o.dataset.pinned === 'true');
+      select.insertBefore(option, pinned && pinned.parentNode === select ? pinned : null);
+    }
+    return option;
+  }
+  // Retire les lignes posées par addDynamicOption qui ne sont plus le choix : à l'ouverture du panneau, quand le choix est réglé (une colonne refusée
+  // par la fenêtre de la clé laisse la sienne jusque-là, pour que le choix d'avant se remette).
+  function dropStaleDynamicOptions(select) {
+    Array.prototype.slice.call(select.options).forEach(option => { if (option.dataset.dynamic === 'true' && !option.selected) option.remove(); });
   }
 
   // Champ fermé : un clic (ou Entrée / Espace, qui déclenchent le même clic) ouvre ou referme ; ↓/↑ ouvrent ; une lettre ouvre avec elle comme
@@ -376,6 +516,10 @@ const SearchSelect = (function () {
     });
   }
 
+  // Une touche seule : Maj, Ctrl, Alt et Cmd gardent leur sens dans le texte (sélection, saut de mot).
+  const plainKey = event => !(event.shiftKey || event.ctrlKey || event.altKey || event.metaKey);
+  const caretAtEnd = input => input.selectionStart === input.value.length && input.selectionEnd === input.value.length;
+
   function wireInput(s) {
     const { input, panel, trigger } = s;
     input.addEventListener('input', () => { s.query = input.value; render(s); });
@@ -386,6 +530,15 @@ const SearchSelect = (function () {
         case 'ArrowUp': event.preventDefault(); move(s, -1); break;
         case 'PageDown': event.preventDefault(); move(s, PAGE); break;
         case 'PageUp': event.preventDefault(); move(s, -PAGE); break;
+        // → ouvre les colonnes de la ligne surlignée quand le curseur est à la fin de la saisie (ailleurs, il se déplace dans le texte) ; ← et Retour
+        // arrière remontent d'un niveau quand la saisie est vide.
+        case 'ArrowRight':
+          if (plainKey(event) && caretAtEnd(input) && descend(s, s.visible[s.active])) event.preventDefault();
+          break;
+        case 'ArrowLeft':
+        case 'Backspace':
+          if (plainKey(event) && input.value === '' && ascend(s, s.levels.length - 2)) event.preventDefault();
+          break;
         case 'Enter': event.preventDefault(); if (s.visible[s.active]) choose(s, s.visible[s.active]); break;
         // Échap ferme le panneau seul : la fenêtre qui le contient (js/modal-base.js) se fermerait sinon avec lui.
         case 'Escape': event.preventDefault(); event.stopPropagation(); closePanel(s, true); break;
@@ -406,7 +559,10 @@ const SearchSelect = (function () {
     panel.addEventListener('mousedown', (event) => { if (event.target !== input) event.preventDefault(); });
     list.addEventListener('click', (event) => {
       const row = event.target.closest('.ss-option');
-      if (row && s.visible[Number(row.dataset.index)]) choose(s, s.visible[Number(row.dataset.index)]);
+      const item = row && s.visible[Number(row.dataset.index)];
+      if (!item) return;
+      // La flèche d'une colonne Référence ouvre ses colonnes ; le reste de la ligne la choisit.
+      if (event.target.closest('.ss-descend')) descend(s, item); else choose(s, item);
     });
     // Surbrillance à la souris seulement quand elle bouge : la liste change sous un pointeur immobile à chaque frappe, et le mousemove alors envoyé
     // volerait la ligne active (Entrée ne prendrait plus le premier résultat).
@@ -416,6 +572,14 @@ const SearchSelect = (function () {
       s.lastY = event.clientY;
       const row = event.target.closest('.ss-option');
       if (row && Number(row.dataset.index) !== s.active) setActive(s, Number(row.dataset.index), false);
+    });
+  }
+
+  // Le fil d'Ariane : un clic sur un niveau au-dessus de celui qu'on voit y revient.
+  function wirePath(s) {
+    s.path.addEventListener('click', (event) => {
+      const up = event.target.closest('.ss-crumb[data-depth]');
+      if (up) ascend(s, Number(up.dataset.depth));
     });
   }
 
@@ -449,6 +613,7 @@ const SearchSelect = (function () {
     wireTrigger(s);
     wireInput(s);
     wireList(s);
+    wirePath(s);
     syncTrigger(s);
     // D'abord l'insertion, seule étape qui peut lever (<select> hors de la page) : si elle échoue, le <select> n'a encore rien reçu.
     select.parentNode.insertBefore(s.wrap, select.nextSibling);
@@ -485,5 +650,5 @@ const SearchSelect = (function () {
     if (controller) controller.sync();
   }
 
-  return { attach, attachColumns, attachTables, attachTemplates, attachValues, attachSheets, sync, filterItems, readItems, normalize, searchWords, searchKey, foundIn, nameMatcher };
+  return { attach, attachColumns, attachTables, attachTemplates, attachValues, attachSheets, sync, filterItems, readItems, addDynamicOption, normalize, searchWords, searchKey, foundIn, nameMatcher };
 })();

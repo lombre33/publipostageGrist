@@ -106,6 +106,7 @@ const GROUPS = {
   varBool: 'scenarios-var-bool', // variable Oui / Non : barre à quatre écritures (trois cases de la liste à cases, vrai / faux), la case en Lecture, PDF (polices de cases), Word, Excel et e-mail, le barré, les champs texte inchangés
   linkConfig: 'scenarios-link-config',
   columnSearch: 'scenarios-column-search',
+  columnDescend: 'scenarios-column-descend', // descendre dans une colonne Référence depuis une liste de colonnes (js/search-select.js : flèche « › », fil d'Ariane, clavier, lignes posées par addDynamicOption ; js/variables.js:referencedTable / columnsBelow) : règles de condition et « Comparer à une autre colonne » (chemin « Table.Référence.Colonne » lu par la règle), QR code, « Colonne… »
   nameSearch: 'scenarios-name-search', // recherche d'une colonne par son nom (js/search-select.js:searchWords), la même partout : « porteur 3 », « Porteur3 » et les mots dans un autre ordre retrouvent Projets.Porteur_3 dans la liste « # » du corps et des champs texte, les listes avec recherche, l'onglet des puces ; le libellé Grist se cherche aussi
   pdfBatch: 'scenarios-pdf-batch',
   pdfGlyphs: 'scenarios-pdf-glyphs', // un caractère que la police n'a pas ne s'imprime plus en case vide dans le PDF (js/pdf-glyph-fallback.js, js/pdf-fonts.js, js/pdf-fonts-symbols.js, inlineRuns et glyphText de js/pdf-export.js) : PDF relu par pdf.js, glyphes .notdef comptés

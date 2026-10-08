@@ -57,5 +57,20 @@
 .ss-empty[hidden] { display: none; }
 /* Fin d'une liste tronquée (plus de 500 résultats) : une ligne sans coche ni survol qui dit d'affiner la recherche. */
 .ss-more { padding: 8px 8px 6px; font-size: 12px; line-height: 1.35; color: var(--text-faint); list-style: none; }
+/* Descendre (option `expand`, js/search-select.js) : à droite d'une colonne Référence, la flèche qui ouvre les colonnes de sa table, au même dessin que celle
+   d'« Autres attributs » (.var-linked-descend, css/variable-actions.css) ; la coche du choix courant passe à sa gauche. */
+.ss-option.has-children { padding-right: 58px; }
+.ss-option.has-children[aria-selected="true"]::after { right: 38px; }
+.ss-descend { position: absolute; top: 0; right: 0; bottom: 0; width: 30px; padding: 0; border: 0; border-left: 1px solid var(--border); border-radius: 0 5px 5px 0; background: transparent; color: var(--text-muted); font-family: var(--font-ui); font-size: 17px; line-height: 1; cursor: pointer; }
+.ss-descend:hover { background: var(--accent-soft); color: var(--accent-ink); }
+/* Fil d'Ariane des niveaux ouverts (« Colonnes › Accompagnateur »), sous la zone de recherche : les niveaux du dessus sont des boutons qui y reviennent, le
+   niveau affiché est en gras (comme .var-linked-path). */
+.ss-path { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 0 2px; padding: 2px 6px; border-bottom: 1px solid var(--border); font-size: 12px; line-height: 1.3; color: var(--text-muted); }
+.ss-path[hidden] { display: none; }
+.ss-crumb { display: inline-flex; align-items: center; min-height: 24px; padding: 0 7px; border: 0; border-radius: 5px; background: none; font: inherit; color: var(--text-muted); overflow-wrap: anywhere; }
+button.ss-crumb { cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+button.ss-crumb:hover { background: var(--surface-sunken); color: var(--text); }
+.ss-crumb.is-here { font-weight: 700; color: var(--text); }
+.ss-sep { color: var(--text-faint); }
 /* Annonce du nombre de résultats pour les lecteurs d'écran, sans rien afficher. */
 .ss-status { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }

@@ -110,7 +110,7 @@ const Variables = (function () {
     return { SMART_CHIP_ITEMS, displayKey, ensureBox };
   })();
 
-  const { currentTables, prioritizeTables, matchingVariables, columnSearchText, refreshSchemaOnce, computeItems, fieldItems } = (function () {
+  const { currentTables, prioritizeTables, matchingVariables, columnSearchText, referencedTable, columnsBelow, refreshSchemaOnce, computeItems, fieldItems } = (function () {
     // Les entrées de la liste : tables en cours, variables qui correspondent, onglet actif
 
     // Tables « en cours », la plus proche d'abord : celle que parcourt la zone répétée où est le curseur (js/variable-loop.js:loopTableAt ; `editor`
@@ -130,10 +130,47 @@ const Variables = (function () {
     }
 
     // Les noms sous lesquels une colonne se cherche, d'un seul tenant : sa clé « Table.Colonne » (la table se cherche avec la colonne) et son libellé Grist
-    // (js/grist-api.js:getColumnLabel). Pour la liste « # » comme pour le `data-search` des listes avec recherche (js/search-select.js).
+    // (js/grist-api.js:getColumnLabel). Pour la liste « # » comme pour le `data-search` des listes avec recherche (js/search-select.js). `column` peut être
+    // un chemin « Accompagnateur.Email » (GristAPI.resolveColumnPath) : le libellé de chacune de ses colonnes se cherche aussi.
     function columnSearchText(table, column) {
-      const label = GristAPI.getColumnLabel(table, column);
-      return table + '.' + column + (label ? ' ' + label : '');
+      if (String(column).indexOf('.') === -1) {
+        const label = GristAPI.getColumnLabel(table, column);
+        return table + '.' + column + (label ? ' ' + label : '');
+      }
+      const labels = [];
+      let at = table;
+      String(column).split('.').forEach(hop => {
+        const label = at && GristAPI.getColumnLabel(at, hop);
+        if (label) labels.push(label);
+        at = at && GristAPI.tableAtEndOf(at, [hop]);
+      });
+      return table + '.' + column + (labels.length ? ' ' + labels.join(' ') : '');
+    }
+
+    // La table que désigne la colonne Référence `column` de `table` (ou le chemin « Ref.Ref » qui y mène), null pour toute autre colonne : une liste de
+    // références désigne plusieurs lignes, on ne descend pas dedans. La destination de la flèche des listes de colonnes (js/search-select.js, `expand`)
+    // et d'« Autres attributs » (js/variable-linked-attrs.js).
+    function referencedTable(table, column) {
+      const target = GristAPI.tableAtEndOf(table, String(column).split('.'));
+      return target && GristAPI.getTables().indexOf(target) !== -1 ? target : null;
+    }
+
+    // Les lignes où mène la flèche de la colonne `key` (« Table.Colonne » ou le chemin « Table.Référence.Colonne » qui y mène) dans une liste de colonnes
+    // (js/search-select.js, option `expand`) : les colonnes de la table qu'elle désigne, null si `key` n'est pas une Référence simple. Chaque ligne est
+    // le chemin entier (« Projet.Accompagnateur.Email », celui que résout resolveRawValue) nommé par sa colonne seule : le fil d'Ariane de la liste dit
+    // par où l'on est descendu. `hintOf(table, colonne)`, facultatif, donne l'indice discret de la ligne (son type).
+    function columnsBelow(key, hintOf) {
+      const cut = String(key).indexOf('.');
+      const table = cut === -1 ? '' : key.slice(0, cut);
+      const target = table ? referencedTable(table, key.slice(cut + 1)) : null;
+      if (!target) return null;
+      return GristAPI.getVisibleColumns(target).map(column => ({
+        value: key + '.' + column,
+        name: column,
+        hint: hintOf ? hintOf(target, column) : '',
+        search: columnSearchText(target, column),
+        expand: referencedTable(target, column) || '',
+      }));
     }
 
     // Le test d'un nom pour la saisie `query` de la liste « # » : tous ses mots (js/search-select.js:searchWords) dans `search` (les noms de l'entrée, d'un
@@ -189,7 +226,7 @@ const Variables = (function () {
       if (!items.length || (items.length === 1 && SearchSelect.normalize(items[0].key) === typed)) return [];
       return items;
     }
-    return { currentTables, prioritizeTables, matchingVariables, columnSearchText, refreshSchemaOnce, computeItems, fieldItems };
+    return { currentTables, prioritizeTables, matchingVariables, columnSearchText, referencedTable, columnsBelow, refreshSchemaOnce, computeItems, fieldItems };
   })();
 
   const { setTabsVisible, render, select, moveSelection, position, preferChipsTab } = (function () {
@@ -1276,7 +1313,7 @@ const Variables = (function () {
   // classe ses colonnes comme la liste « # »).
   return {
     createExtension, createFieldExtension, resolveVariable, resolveVariableResult, resolveRawValue, resolveTextVariables, replaceTextVariables, findTextVariables, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar,
-    preferChipsTab, ensureLinkConfigured, editLinkRule, describeLinkVia, resolveLinkedRows, resolveRows, formatValue, listTexts, resolveListTexts, zeroHidden, cellValue, currentTables, prioritizeTables, columnSearchText,
+    preferChipsTab, ensureLinkConfigured, editLinkRule, describeLinkVia, resolveLinkedRows, resolveRows, formatValue, listTexts, resolveListTexts, zeroHidden, cellValue, currentTables, prioritizeTables, columnSearchText, referencedTable, columnsBelow,
     resolveCalcResult, resolveCalc, badgeProblem, calcProblem, formulaErrorText,
   };
 })();
