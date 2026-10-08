@@ -264,9 +264,9 @@ const Templates = (function () {
   // Le modèle du cache qui porte cet identifiant.
   function byId(id) { return id == null ? undefined : templatesCache.find(t => sameId(t.id, id)); }
 
-  // Un modèle email ou macro n'ouvre jamais le widget tout seul (modèle par défaut, de la vue ou de la ligne) : une action ponctuelle ou un mode
-  // spécialisé ne s'affiche que sur demande.
-  const canOpenAtStart = typeModele => typeModele !== 'email' && typeModele !== 'macro';
+  // Le ★ du document ne peut être ni un modèle email ni un macro-modèle : une action ponctuelle ou un mode spécialisé ne s'ouvre pas tout seul dans
+  // toutes les vues. Le modèle d'UNE vue (js/view-template.js) et celui qu'une règle de ligne désigne sont un choix explicite : ils peuvent l'être.
+  const canBeDocumentDefault = typeModele => typeModele !== 'email' && typeModele !== 'macro';
 
   // Deux noms sont le même quand ils ne diffèrent que par les majuscules ou les espaces autour : « contrat » et « Contrat » se confondent dans la
   // liste.
@@ -297,11 +297,11 @@ const Templates = (function () {
   function setCurrentId(id) { currentTemplateId = id; currentIdSeq++; }
 
   function getDefaultId() {
-    // Un modèle email ou macro n'est jamais le modèle de démarrage (cf. js/main.js, syncDefaultTemplateButton) : une ligne restée marquée
+    // Un modèle email ou macro n'est jamais le ★ du document (cf. js/main.js, syncDefaultTemplateButton) : une ligne restée marquée
     // EstParDefaut sur l'un d'eux (défaut posé avant cette règle, colonne éditée dans Grist) ne doit pas masquer un modèle document lui aussi marqué,
     // sinon le widget s'ouvrirait sur « Nouveau modèle » et l'étoile n'apparaîtrait sur aucun des deux. Plusieurs modèles document marqués : le
     // premier de la table.
-    const found = templatesCache.find(t => t.estParDefaut && canOpenAtStart(t.typeModele));
+    const found = templatesCache.find(t => t.estParDefaut && canBeDocumentDefault(t.typeModele));
     return found ? found.id : null;
   }
 
@@ -463,7 +463,7 @@ const Templates = (function () {
   }
 
   return {
-    loadAll, getCached, byId, getCurrentId, setCurrentId, isCurrent, getDefaultId, isDefault, canOpenAtStart, setDefault, save, remove, sameName, uniqueName,
+    loadAll, getCached, byId, getCurrentId, setCurrentId, isCurrent, getDefaultId, isDefault, canBeDocumentDefault, setDefault, save, remove, sameName, uniqueName,
     getWriteSeq: writes.seq, isWriting: writes.isWriting, whenIdle: writes.whenIdle, lastWritten: writes.lastWritten,
     sameDateModif, getLoadedChars, TABLE_NAME,
   };

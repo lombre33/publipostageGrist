@@ -566,13 +566,12 @@ const I18n = (function () {
       en: 'No template chosen for this view: the document’s default template (“{name}”) opens.',
     },
     'settings.viewTemplate.status.missing': {
-      fr: 'Le modèle choisi pour cette vue n’existe plus ou ne peut pas s’ouvrir seul : le modèle par défaut du document s’ouvre.',
-      en: 'The template chosen for this view no longer exists or cannot open on its own: the document’s default template opens.',
+      fr: 'Le modèle choisi pour cette vue n’existe plus : le modèle par défaut du document s’ouvre.',
+      en: 'The template chosen for this view no longer exists: the document’s default template opens.',
     },
     'settings.viewTemplate.use': { fr: 'Utiliser le modèle ouvert pour cette vue', en: 'Use the open template for this view' },
     'settings.viewTemplate.useNamed': { fr: 'Utiliser « {name} » pour cette vue', en: 'Use “{name}” for this view' },
     'settings.viewTemplate.clear': { fr: 'Retirer', en: 'Remove' },
-    'settings.viewTemplate.cannotStart': { fr: 'Un modèle email ou un macro-modèle ne peut pas s’ouvrir au démarrage.', en: 'An email template or a macro template cannot open at startup.' },
     'settings.viewTemplate.locked': { fr: 'Vous êtes en lecture seule : ce réglage est verrouillé.', en: 'You are read-only: this setting is locked.' },
     'settings.rowTemplate.exportHint': {
       fr: 'Quand ce réglage est coché, un export en lot rend chaque ligne avec le modèle que les règles lui désignent.',

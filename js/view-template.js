@@ -3,11 +3,12 @@
 // js/access-rights.js et js/row-template.js : lue avec le widget, partagée par tout le monde seulement une fois la vue enregistrée côté Grist
 // (grist.setOption ne pose qu'un brouillon).
 // À l'ouverture : la ligne qui désigne un modèle (js/row-template.js) l'emporte, puis le modèle de la vue, puis le modèle par défaut du document (★,
-// js/templates.js). Comme l'étoile, un modèle email ou un macro-modèle ne peut pas être ce modèle de départ (bouton grisé ; un choix enregistré
-// devenu invalide est ignoré).
+// js/templates.js). Le modèle de la vue peut être de n'importe quel type, un email ou un macro-modèle compris : c'est un choix explicite pour cette
+// vue (demande du 08/10). Le ★ du document reste réservé aux modèles ordinaires (Templates.canBeDocumentDefault). Un choix enregistré dont le modèle
+// n'existe plus est ignoré.
 // Écran : section « Modèle par défaut de cette vue » de Réglages > Vue (état, « Utiliser le modèle ouvert », « Retirer »).
 //   ViewTemplate.init() -> lit l'option et s'abonne à ses changements (après GristAPI.init)
-//   ViewTemplate.usableId() -> id du modèle de la vue s'il existe encore et peut servir de départ, sinon null
+//   ViewTemplate.usableId() -> id du modèle de la vue s'il existe encore, sinon null
 //   ViewTemplate.set(id) -> choisit ce modèle pour la vue ; clear() retire le choix
 //   ViewTemplate.wirePanel() -> branche la section de Réglages (redessinée à l'ouverture et à chaque changement de droits ; grisée en lecture seule)
 const ViewTemplate = (function () {
@@ -20,14 +21,12 @@ const ViewTemplate = (function () {
 
   const normalize = value => (value != null && value !== '' ? String(value) : null);
   const find = Templates.byId;
-  // Un modèle email ou macro ne démarre jamais le widget (cf. js/main.js:syncDefaultTemplateButton).
-  const canStart = tpl => !!tpl && Templates.canOpenAtStart(tpl.typeModele);
 
   function getId() { return currentId; }
 
   function usableId() {
     const tpl = currentId != null ? find(currentId) : null;
-    return canStart(tpl) ? String(tpl.id) : null;
+    return tpl ? String(tpl.id) : null;
   }
 
   function isReadOnly() { return typeof AccessRights !== 'undefined' && AccessRights.get().readOnly; }
@@ -68,12 +67,12 @@ const ViewTemplate = (function () {
 
   function statusText() {
     const chosen = currentId != null ? find(currentId) : null;
-    if (chosen && canStart(chosen)) return I18n.t('settings.viewTemplate.status.set', { name: chosen.nom });
-    // Choix enregistré mais le modèle n'existe plus (ou n'est plus un modèle de départ) : dit tel quel, le modèle par défaut du document s'ouvre.
+    if (chosen) return I18n.t('settings.viewTemplate.status.set', { name: chosen.nom });
+    // Choix enregistré mais le modèle n'existe plus : dit tel quel, le modèle par défaut du document s'ouvre.
     if (currentId != null) return I18n.t('settings.viewTemplate.status.missing');
     const defaultId = Templates.getDefaultId();
     const fallback = defaultId != null ? find(defaultId) : null;
-    return canStart(fallback)
+    return fallback
       ? I18n.t('settings.viewTemplate.status.noneWithDefault', { name: fallback.nom })
       : I18n.t('settings.viewTemplate.status.none');
   }
@@ -86,13 +85,13 @@ const ViewTemplate = (function () {
     const open = openTemplate();
     const setBtn = el('settings-viewtemplate-set');
     const clearBtn = el('settings-viewtemplate-clear');
-    // Grisés, jamais retirés : aucun modèle ouvert, email ou macro (comme l'étoile), déjà celui de la vue, ou lecture seule.
+    // Grisés, jamais retirés : aucun modèle enregistré ouvert (un nouveau modèle n'a pas encore d'id), déjà celui de la vue, ou lecture seule. Tous les
+    // types de modèle se choisissent : document, grille, email et macro-modèle.
     if (setBtn) {
-      setBtn.disabled = locked || !canStart(open) || String(open && open.id) === String(currentId);
-      setBtn.textContent = open && canStart(open)
+      setBtn.disabled = locked || !open || String(open.id) === String(currentId);
+      setBtn.textContent = open
         ? I18n.t('settings.viewTemplate.useNamed', { name: open.nom })
         : I18n.t('settings.viewTemplate.use');
-      setBtn.title = open && !canStart(open) ? I18n.t('settings.viewTemplate.cannotStart') : '';
     }
     if (clearBtn) clearBtn.disabled = locked || currentId == null;
     const lockedHint = el('settings-viewtemplate-locked');
@@ -105,7 +104,7 @@ const ViewTemplate = (function () {
     if (!setBtn || !clearBtn) return;
     setBtn.addEventListener('click', () => {
       const open = openTemplate();
-      if (!canStart(open) || isReadOnly()) return;
+      if (!open || isReadOnly()) return;
       set(open.id);
     });
     clearBtn.addEventListener('click', () => { if (!isReadOnly()) clear(); });

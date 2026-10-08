@@ -4,6 +4,8 @@
 // Le choix vit dans les options du widget (clé `modeleDeLaVue`), donc dans SA vue : chaque scénario le lit dans stub.state.options, comme Grist le garderait, et le pose par
 // stub.setWidgetOptions comme quelqu'un qui enregistre la vue. L'ouverture au démarrage (ligne > vue > ★) est dans dev-tests/verify-template-startup-mouse.mjs, qui sème le faux
 // Grist avant l'init : une fois la page prête, il est trop tard pour la rejouer ici.
+// Demande du 2026-10-08 : le modèle de la vue peut être un email ou un macro-modèle (« mail et macro modèle peuvent être des modèles par défaut d'une vue »). Le ★ du document
+// n'a pas changé : il reste réservé aux modèles ordinaires, et l'étoile de la barre reste grisée sur un email ou un macro-modèle.
 (function () {
   const cases = [];
   const stub = () => window.__gristStub;
@@ -33,6 +35,19 @@
     return Templates.getCurrentId();
   }
 
+  // Un macro-modèle par la vraie fenêtre de composition (page de garde = `coverId`) : il est enregistré, sélectionné et chargé comme par une personne.
+  async function createMacro(h, nom, coverId) {
+    await h.resetEditor();
+    MacroEditor.openModal(null);
+    el('macro-editor-name').value = nom;
+    const cover = el('macro-editor-cover');
+    cover.value = String(coverId);
+    cover.dispatchEvent(new Event('change', { bubbles: true }));
+    el('macro-editor-save').click();
+    await sleep(700);
+    return Templates.getCurrentId();
+  }
+
   let fixture = null;
   async function ensureFixture(h) {
     stub().setVariables(TABLE, { Nom: 'Text', Statut: 'Choice' }, { Statut: ['Urgent', 'Autre'] });
@@ -41,7 +56,8 @@
       const A = await createTemplate(h, 'document', 'Vue - A défaut', '<p>Contenu A défaut</p>');
       const B = await createTemplate(h, 'document', 'Vue - B de la vue', '<p>Contenu B vue</p>');
       const M = await createTemplate(h, 'email', 'Vue - M email', '<p>Contenu mail</p>');
-      fixture = { A, B, M };
+      const N = await createMacro(h, 'Vue - N macro', B);
+      fixture = { A, B, M, N };
     }
     const rows = stub().state.rows.Publipostage_Modeles;
     rows.id.forEach((rowId, i) => { rows.EstParDefaut[i] = same(rowId, fixture.A); }); // ★ sur A seul
@@ -105,14 +121,10 @@
   });
 
   cases.push({
-    id: 'view_template_button_is_greyed_for_an_email_a_new_template_and_when_already_chosen',
-    description: "Le bouton est grisé, jamais retiré : modèle email (comme l'étoile, avec son explication), nouveau modèle jamais enregistré, ou modèle déjà choisi pour la vue",
+    id: 'view_template_button_is_greyed_for_a_new_template_and_when_already_chosen',
+    description: "Le bouton est grisé, jamais retiré : nouveau modèle jamais enregistré (aucun id à choisir), ou modèle déjà choisi pour la vue",
     run: async (h) => {
       const f = await ensureFixture(h);
-      await openByHand(f.M);
-      await openSettings();
-      const onEmail = panel();
-      await closeSettings();
       await h.resetEditor();
       h.openFlyout('#v2-new-template-group');
       await h.clickButton('v2-btn-new-document'); // nouveau modèle, jamais enregistré : aucun id à choisir
@@ -126,16 +138,47 @@
       const already = panel();
       await closeSettings();
       await cleanup();
-      const pass = onEmail.setDisabled && onEmail.visible && /email/.test(onEmail.setTitle) && onEmail.setLabel === 'Utiliser le modèle ouvert pour cette vue'
-        && unsaved.currentId == null && unsaved.setDisabled && unsaved.visible
+      const pass = unsaved.currentId == null && unsaved.setDisabled && unsaved.visible
         && already.setDisabled && !already.clearDisabled && already.visible;
-      return { pass, notes: JSON.stringify({ onEmail, unsaved, already }) };
+      return { pass, notes: JSON.stringify({ unsaved, already }) };
+    },
+  });
+
+  // Demande du 2026-10-08 : un email et un macro-modèle se choisissent comme n'importe quel modèle. Avant, le bouton restait grisé (infobulle « ne peut pas s'ouvrir au démarrage »).
+  cases.push({
+    id: 'view_template_button_chooses_an_email_or_a_macro_template_then_clears_it',
+    description: "Un email ou un macro-modèle ouvert : « Utiliser « X » pour cette vue » est actif et sans infobulle d'interdit, il choisit ce modèle (option du widget, état, bouton grisé une fois choisi), « Retirer » le défait ; l'étoile ★ de la barre reste grisée",
+    run: async (h) => {
+      const f = await ensureFixture(h);
+      const seen = {};
+      for (const [label, id, nom] of [['email', f.M, 'Vue - M email'], ['macro', f.N, 'Vue - N macro']]) {
+        await openByHand(id);
+        const starGreyed = el('btn-set-default-template').disabled;
+        await openSettings();
+        const before = Object.assign({ option: optionNow() || null }, panel());
+        el('settings-viewtemplate-set').click();
+        await sleep(250);
+        const afterSet = Object.assign({ option: optionNow(), usable: ViewTemplate.usableId() }, panel());
+        el('settings-viewtemplate-clear').click();
+        await sleep(250);
+        const afterClear = Object.assign({ option: optionNow() || null }, panel());
+        await closeSettings();
+        seen[label] = { starGreyed, before, afterSet, afterClear };
+        const ok = starGreyed
+          && !before.setDisabled && before.visible && before.setTitle === '' && before.setLabel === 'Utiliser « ' + nom + ' » pour cette vue' && before.option === null
+          && same(afterSet.option, id) && same(afterSet.usable, id) && afterSet.status === 'Modèle de cette vue : « ' + nom + ' ».' && afterSet.setDisabled && !afterSet.clearDisabled
+          && afterClear.option === null && afterClear.clearDisabled && !afterClear.setDisabled;
+        seen[label].ok = ok;
+      }
+      await cleanup();
+      const pass = seen.email.ok && seen.macro.ok;
+      return { pass, notes: JSON.stringify(seen) };
     },
   });
 
   cases.push({
     id: 'view_template_chosen_elsewhere_shows_up_and_a_missing_template_is_said',
-    description: "Un choix enregistré par quelqu'un d'autre (onOptions) apparaît dans l'état ; un choix dont le modèle n'existe plus ou est un email est dit tel quel, le modèle par défaut du document s'ouvre ; ViewTemplate.usableId() les ignore",
+    description: "Un choix enregistré par quelqu'un d'autre (onOptions) apparaît dans l'état ; un choix dont le modèle n'existe plus est dit tel quel, le modèle par défaut du document s'ouvre, et ViewTemplate.usableId() l'ignore ; un email ou un macro-modèle choisi est utilisable comme les autres",
     run: async (h) => {
       const f = await ensureFixture(h);
       stub().setWidgetOptions({ [KEY]: String(f.B) });
@@ -150,11 +193,20 @@
       await closeSettings();
       stub().setWidgetOptions({ [KEY]: String(f.M) });
       await sleep(150);
-      const email = { usable: ViewTemplate.usableId() };
+      await openSettings();
+      const email = Object.assign({ usable: ViewTemplate.usableId() }, panel());
+      await closeSettings();
+      stub().setWidgetOptions({ [KEY]: String(f.N) });
+      await sleep(150);
+      await openSettings();
+      const macro = Object.assign({ usable: ViewTemplate.usableId() }, panel());
+      await closeSettings();
       await cleanup();
       const pass = same(chosen.usable, f.B) && chosen.status === 'Modèle de cette vue : « Vue - B de la vue ».'
-        && missing.usable === null && /n’existe plus/.test(missing.status) && email.usable === null;
-      return { pass, notes: JSON.stringify({ chosen, missing, email }) };
+        && missing.usable === null && /n’existe plus/.test(missing.status) && !/s’ouvrir seul/.test(missing.status)
+        && same(email.usable, f.M) && email.status === 'Modèle de cette vue : « Vue - M email ».'
+        && same(macro.usable, f.N) && macro.status === 'Modèle de cette vue : « Vue - N macro ».';
+      return { pass, notes: JSON.stringify({ chosen, missing, email, macro }) };
     },
   });
 
@@ -178,6 +230,25 @@
       await cleanup();
       const pass = same(withoutView, f.A) && same(withView, f.B);
       return { pass, notes: JSON.stringify({ withoutView, withView }) };
+    },
+  });
+
+  cases.push({
+    id: 'view_template_macro_is_the_default_that_a_row_rule_falls_back_to',
+    description: "« Si aucune règle ne correspond : ouvrir le modèle par défaut » ouvre le macro-modèle choisi pour la vue (avant, il était ignoré et le ★ s'ouvrait)",
+    run: async (h) => {
+      const f = await ensureFixture(h);
+      const rule = { column: 'Statut', operator: '=', value: 'Urgent', modeleId: String(f.B) };
+      await RowTemplate.save({ enabled: true, rules: [rule], otherwise: 'default' });
+      await ViewTemplate.set(f.N);
+      await openByHand(f.B);
+      stub().fireRecord({ id: 3, Nom: 'Ligne 3', Statut: 'Autre' }, TABLE);
+      await waitFor(() => same(Templates.getCurrentId(), f.N), 2500);
+      const opened = { id: Templates.getCurrentId(), type: (Templates.byId(Templates.getCurrentId()) || {}).typeModele, summary: el('macro-summary-container').style.display };
+      await RowTemplate.save(null);
+      await cleanup();
+      const pass = same(opened.id, f.N) && opened.type === 'macro' && opened.summary === 'block';
+      return { pass, notes: JSON.stringify(opened) };
     },
   });
 

@@ -109,10 +109,10 @@
     const currentId = Templates.getCurrentId();
     const isDefault = Templates.isDefault(currentId);
     btn.classList.toggle('is-default', isDefault);
-    // Un modèle email ou macro ne devient jamais le modèle par défaut (planning/feature-macro-modeles.md) : l'email est une action ponctuelle sur une
-    // ligne et le macro-modèle un mode spécialisé, pas des états où le widget doit démarrer. Le bouton est grisé (même traitement que « aucun modèle
-    // chargé »), jamais masqué.
-    btn.disabled = currentId == null || !Templates.canOpenAtStart(currentTypeModele);
+    // Un modèle email ou macro ne devient jamais le ★ du document (planning/feature-macro-modeles.md) : l'email est une action ponctuelle sur une ligne
+    // et le macro-modèle un mode spécialisé, pas des états où le widget doit démarrer dans toutes les vues. Pour UNE vue, ils le peuvent (Réglages > Vue,
+    // js/view-template.js). Le bouton est grisé (même traitement que « aucun modèle chargé »), jamais masqué.
+    btn.disabled = currentId == null || !Templates.canBeDocumentDefault(currentTypeModele);
   }
 
   function wireDefaultTemplateButton() {

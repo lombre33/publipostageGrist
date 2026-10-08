@@ -307,6 +307,54 @@ async function run() {
   const cleared = await page.evaluate(() => ({ option: (window.__gristStub.state.options || {}).modeleDeLaVue || null, status: document.getElementById('settings-viewtemplate-status').textContent, clearDisabled: document.getElementById('settings-viewtemplate-clear').disabled }));
   check('« Retirer » enlève le choix de la vue', cleared.option === null && /par défaut du document/.test(cleared.status) && cleared.clearDisabled, cleared);
   await realClick('#settings-close', 500);
+
+  // 9) Demande du 08/10, « mail et macro modèle peuvent être des modèles par défaut d'une vue » : un macro-modèle puis un email ouverts, le bouton de la vue est actif, nomme le modèle, tient
+  // dans la fenêtre 700x400 ; un vrai clic le choisit, « Retirer » le défait. La règle de ligne est coupée d'abord : à la fermeture des Réglages elle rouvrirait B par-dessus le modèle ouvert à la main.
+  await page.evaluate(async () => {
+    await RowTemplate.save(null);
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    document.getElementById('v2-btn-new-email').click();
+    await wait(80);
+    Editor.setHTML('<p>Contenu mail</p>');
+    document.getElementById('template-name').value = 'Ligne - M email';
+    document.getElementById('btn-save').click();
+    await wait(500);
+    const email = Templates.getCurrentId();
+    MacroEditor.openModal(null);
+    document.getElementById('macro-editor-name').value = 'Ligne - N macro';
+    const cover = document.getElementById('macro-editor-cover');
+    cover.value = String(window.__ids.A);
+    cover.dispatchEvent(new Event('change', { bubbles: true }));
+    document.getElementById('macro-editor-save').click();
+    await wait(700);
+    window.__ids.M = email;
+    window.__ids.N = Templates.getCurrentId();
+  });
+  const more = await page.evaluate(() => window.__ids);
+  for (const [kind, id, nom] of [['macro-modèle', more.N, 'Ligne - N macro'], ['email', more.M, 'Ligne - M email']]) {
+    await page.evaluate(i => { const select = document.getElementById('template-select'); select.value = String(i); select.dispatchEvent(new Event('change', { bubbles: true })); }, id);
+    check(`${kind} : il est ouvert`, await waitCurrent(id), await current());
+    await page.waitForTimeout(300);
+    await realClick('#v2-btn-settings', 500);
+    await realClick('.settings-tab[data-settings-tab="rowTemplate"]', 300);
+    await page.evaluate(() => document.getElementById('settings-viewtemplate-section').scrollIntoView({ block: 'end' }));
+    await page.waitForTimeout(200);
+    const button = await page.evaluate(() => {
+      const b = document.getElementById('settings-viewtemplate-set');
+      const r = b.getBoundingClientRect();
+      const m = document.querySelector('#settings-modal .modal-content').getBoundingClientRect();
+      return { disabled: b.disabled, label: b.textContent, title: b.title, fits: r.left >= m.left && r.right <= m.right && r.width > 40 && r.height >= 24 };
+    });
+    check(`${kind} ouvert : le bouton de la vue est actif, sans infobulle d'interdit, nomme le modèle et tient dans la fenêtre`, !button.disabled && button.title === '' && button.label === `Utiliser « ${nom} » pour cette vue` && button.fits, button);
+    await realClick('#settings-viewtemplate-set', 400);
+    const picked = await page.evaluate(() => ({ option: (window.__gristStub.state.options || {}).modeleDeLaVue, status: document.getElementById('settings-viewtemplate-status').textContent, setDisabled: document.getElementById('settings-viewtemplate-set').disabled, clearDisabled: document.getElementById('settings-viewtemplate-clear').disabled }));
+    check(`${kind} : un vrai clic le choisit pour la vue (option écrite, état à jour, bouton grisé)`, String(picked.option) === String(id) && picked.status === `Modèle de cette vue : « ${nom} ».` && picked.setDisabled && !picked.clearDisabled, picked);
+    if (SHOTS) await page.screenshot({ path: join(SHOTS, `view-template-${kind === 'email' ? 'email' : 'macro'}-700x400.png`) });
+    await realClick('#settings-viewtemplate-clear', 400);
+    const undone = await page.evaluate(() => ({ option: (window.__gristStub.state.options || {}).modeleDeLaVue || null, clearDisabled: document.getElementById('settings-viewtemplate-clear').disabled }));
+    check(`${kind} : « Retirer » défait le choix`, undone.option === null && undone.clearDisabled, undone);
+    await realClick('#settings-close', 500);
+  }
 }
 
 await run();

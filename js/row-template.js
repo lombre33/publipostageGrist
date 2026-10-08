@@ -75,8 +75,8 @@ const RowTemplate = (function () {
 
   const templateExists = id => !!Templates.byId(id);
 
-  // « Le modèle par défaut » : celui de la vue (js/view-template.js) s'il y en a un, sinon le ★ du document. Même garde qu'au démarrage
-  // (js/main.js) : un modèle email ou macro n'est jamais « le modèle par défaut » qu'on ouvre tout seul.
+  // « Le modèle par défaut » : celui de la vue (js/view-template.js, de n'importe quel type : email et macro-modèle compris) s'il y en a un, sinon le
+  // ★ du document (Templates.getDefaultId, jamais un email ni un macro-modèle). Même ordre qu'au démarrage (js/main.js).
   function defaultTemplateId() {
     const ofView = typeof ViewTemplate !== 'undefined' ? ViewTemplate.usableId() : null;
     if (ofView != null) return ofView;
