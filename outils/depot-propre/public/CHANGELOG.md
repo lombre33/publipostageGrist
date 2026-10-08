@@ -28,6 +28,15 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   Lecture, le PDF, le Word, l'Excel, les en-têtes et les pieds de page. Il ne s'écrit pas quand la
   condition est fausse, que la valeur est vide ou qu'elle est en erreur, et il vaut aussi sans condition :
   une virgule qui disparaît avec la variable.
+- **Comparer une colonne à une autre colonne** : dans la fenêtre de condition d'une bulle, d'un « Texte
+  conditionnel », d'une « Valeur conditionnelle », d'une « Case conditionnelle » et des bulles des champs de
+  l'e-mail, le bouton « Comparer à une autre colonne », à gauche du champ Valeur, remplace ce champ par la
+  liste des colonnes, avec sa recherche : la règle compare deux colonnes de la même ligne (« Montant =
+  Paye »). La comparaison suit les types comme avec une valeur saisie : deux cellules vides sont égales, les
+  dates se comparent au jour, les listes à l'ordre près. Les opérateurs « vide » et « non vide » grisent le
+  bouton, une règle sans autre colonne choisie est ignorée, le résumé nomme l'autre colonne entre accolades
+  (`Montant = {Paye}`) et un renommage de colonne la suit. Une condition enregistrée avant se relit telle
+  quelle ; les macro-modèles, « Modèle selon la ligne » et le filtre d'une boucle gardent la valeur saisie.
 
 ### Modifié
 
@@ -164,6 +173,15 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   mode, the PDF, the Word file, the Excel file, headers and footers. It is not written when the condition
   is false or when the value is empty or in error, and it also applies without a condition: a comma that
   disappears with the variable.
+- **Comparing a column with another column**: in the condition window of a bubble, of a "Conditional
+  text", of a "Conditional value", of a "Conditional checkbox" and of the bubbles in the e-mail fields, the
+  "Compare with another column" button, to the left of the Value field, replaces that field with the list
+  of columns, with its search: the rule compares two columns of the same row ("Amount = Paid"). The
+  comparison follows the types as with a typed value: two empty cells are equal, dates are compared by the
+  day, lists regardless of order. The "vide" and "non vide" operators (empty, not empty) grey the button
+  out, a rule with no other column chosen is ignored, the summary names the other column in braces
+  (`Amount = {Paid}`) and a column rename follows it. A condition saved earlier reads back as it was; macro
+  templates, "Template by row" and a loop's filter keep the typed value.
 
 ### Changed
 
