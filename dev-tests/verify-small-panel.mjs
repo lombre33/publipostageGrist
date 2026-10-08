@@ -351,17 +351,22 @@ async function popups(width, height) {
   await seedVariables(page);
   const long = 'Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. ';
   await page.evaluate((long) => EditorCore.getEditor().commands.setContent('<p>' + long.repeat(3) + '</p><p>' + long.repeat(6) + '</p>'), long);
+  // Le clic vise la dernière ligne visible, à gauche de la pastille de zoom (#pp-page-zoom, fixe au coin bas droit) : à l'extrême droite il tomberait sur elle et
+  // non sur le texte. Le curseur va de toute façon en fin de ligne (touche Fin) : l'abscisse du clic n'a pas d'autre rôle.
   const bottomRight = await page.evaluate(() => {
     const ec = document.getElementById('editor-container').getBoundingClientRect();
     const t = document.querySelector('.tiptap').getBoundingClientRect();
-    return { x: Math.min(ec.right, t.right) - 30, y: ec.bottom - 12 };
+    const zoom = document.getElementById('pp-page-zoom');
+    const x = Math.min(ec.right, t.right, zoom ? zoom.getBoundingClientRect().left : Infinity) - 30, y = ec.bottom - 12;
+    const hit = document.elementFromPoint(x, y);
+    return { x, y, inEditor: !!hit && !!hit.closest('.tiptap') };
   });
   await page.mouse.click(bottomRight.x, bottomRight.y);
   await page.keyboard.press('End');
   await page.keyboard.type(' #');
   await page.waitForTimeout(250);
   const ac = await boxOf(page, '#autocomplete-box');
-  check(`${width}x${height} - # tapé en bas de l'éditeur -> liste des variables entière dans la fenêtre`, insideViewport(ac, vp), ac);
+  check(`${width}x${height} - # tapé en bas de l'éditeur -> liste des variables entière dans la fenêtre`, bottomRight.inEditor && insideViewport(ac, vp), { ac, bottomRight });
   await browser.close();
 
   // Fil de commentaires de plusieurs messages, sur un texte en bas de la zone visible, puis rouvert depuis sa marque. Page neuve : la liste # ci-dessus,
