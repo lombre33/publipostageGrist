@@ -52,8 +52,8 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   Référence elle-même. La colonne choisie plus bas est un chemin (`Projets.Responsable.Email`) que la règle
   lit de référence en référence, sans créer de lien entre les tables ; la fenêtre rouverte le montre comme un
   choix de la liste, le champ Valeur suit la dernière colonne du chemin et la recherche d'un niveau ne
-  cherche que ce niveau. Le filtre et le tri d'une boucle, Réglages > Accès et les clés de liaison gardent
-  leur liste à plat ; une liste de références ne se descend pas.
+  cherche que ce niveau. Le filtre et le tri d'une boucle, Réglages > Accès et les clés de correspondance
+  gardent leur liste à plat ; une liste de références ne se descend pas.
 
 ### Modifié
 
@@ -213,7 +213,7 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   placed with "Default" before this version cannot be told apart from the gridlines: they disappear with
   them, so place them again.
 - **Going down into a reference from the column lists**: in a bubble's condition window (the rule's column
-  and "Compare to another column"), macro templates, "Template by row", the QR code's "Insert a column…" and
+  and "Compare with another column"), macro templates, "Template by row", the QR code's "Insert a column…" and
   the choice of another column for a broken bubble, a Reference column carries the "›" arrow of the "Other
   attributes" window. Clicking the arrow, or pressing → at the end of the search, opens the columns of the
   linked table under a breadcrumb ("Columns › Responsable"); ←, Backspace or a click on the breadcrumb go
@@ -221,7 +221,7 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   (`Projets.Responsable.Email`) that the rule reads from reference to reference, without creating a link
   between the tables; the reopened window shows it as a choice of the list, the Value field follows the
   path's last column, and the search of a level only searches that level. A loop's filter and sorting,
-  Settings > Access and the link keys keep their flat list; a list of references cannot be walked down.
+  Settings > Access and the matching keys keep their flat list; a list of references cannot be walked down.
 
 ### Changed
 

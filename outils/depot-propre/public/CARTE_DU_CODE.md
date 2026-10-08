@@ -23,7 +23,7 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
   vérifie.
 - **Les données** : les modèles et les réglages vivent dans des tables `Publipostage_*` du document Grist ;
   les préférences d'affichage (langue, thème, raccourcis…) dans le navigateur.
-- **Le volume** : 109 fichiers dans `js/` (41 900 lignes : 31 100 de code, 8 200 de commentaires, 2 600 de
+- **Le volume** : 109 fichiers dans `js/` (42 100 lignes : 31 300 de code, 8 300 de commentaires, 2 600 de
   blanc), 35 feuilles de style (3 200 lignes), une page de 760 lignes. Quatre fichiers de polices du PDF
   pèsent 2,5 Mo en quelques lignes (des données) ; `js/i18n.js` est du texte à traduire, pas de la logique.
 
@@ -88,7 +88,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/html-sanitize.js` | Filtre à liste blanche, lu dans un document inerte, pour le HTML des colonnes Grist, des modèles importés et de la galerie. |
 | `js/external-images.js` | Images d'un autre site : un cadre « Afficher » à leur place jusqu'au clic (rien n'est retenu), signalées ensuite en permanence, et une fenêtre avant tout export qui les lirait. |
 
-### L'éditeur (24 fichiers, 9 900 lignes)
+### L'éditeur (24 fichiers, 10 000 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -170,7 +170,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/xlsx-export.js` | L'Excel d'une grille (ExcelJS). |
 | `js/mailto-export.js` | Le lien `mailto:` du mode E-mail. |
 
-### Socle de l'interface et réglages (14 fichiers, 3 900 lignes)
+### Socle de l'interface et réglages (14 fichiers, 4 100 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -270,7 +270,7 @@ For anyone reading the code: what is where, and where to start. Line counts are 
   **Each export** loads its library on first use, with an integrity hash (SRI) that the browser checks.
 - **The data**: templates and settings live in `Publipostage_*` tables of the Grist document; display
   preferences (language, theme, shortcuts…) in the browser.
-- **The size**: 109 files in `js/` (41,900 lines: 31,100 of code, 8,200 of comments, 2,600 blank), 35
+- **The size**: 109 files in `js/` (42,100 lines: 31,300 of code, 8,300 of comments, 2,600 blank), 35
   stylesheets (3,200 lines), a 760-line page. Four PDF font files weigh 2.5 MB in a few lines (data);
   `js/i18n.js` is text to translate, not logic.
 
@@ -334,7 +334,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/html-sanitize.js` | Allow-list filter, parsed in an inert document, for the HTML of Grist columns, imported templates and the gallery. |
 | `js/external-images.js` | Images from another site: a "Show" frame in their place until the click (nothing is remembered), flagged at all times afterwards, and a window before any export that would read them. |
 
-### The editor (24 files, 9,900 lines)
+### The editor (24 files, 10,000 lines)
 
 | File | Role |
 |---|---|
@@ -416,7 +416,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/xlsx-export.js` | The Excel file of a grid (ExcelJS). |
 | `js/mailto-export.js` | The `mailto:` link of E-mail mode. |
 
-### Interface foundations and settings (14 files, 3,900 lines)
+### Interface foundations and settings (14 files, 4,100 lines)
 
 | File | Role |
 |---|---|
