@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Champs à bulles du mode Email (Objet, À, Cc, Cci) et nom du fichier PDF (js/field-editor.js) à 700x400 (le panneau d'Antoine), au VRAI clavier et à la VRAIE souris (page.mouse, page.keyboard) :
 // demande d'Antoine du 08/10 (« dans les champs d'email et de nomenclature, les variables avec leur bulle bleue et les mêmes fonctions que les variables du document : conditions, changement
-// d'attribut… »). Un nouvel email créé à la souris ; dans l'Objet, du texte puis « # » (la liste ne propose que des variables) et Entrée posent une bulle, un clic dessus ouvre la barre flottante
+// d'attribut… »). Un nouvel email créé à la souris ; dans l'Objet, du texte puis « # » (la liste du document, onglet Variables d'abord) et Entrée posent une bulle, un clic dessus ouvre la barre flottante
 // (entièrement dans le panneau, au-dessus de tout), la condition « Statut = Urgent » et le texte « Avant » / « Après » (les guillemets de la valeur) se règlent dans sa fenêtre, « Autres attributs » ajoute le téléphone du responsable ; dans À, la liste « # »
 // au clavier (flèches, Échap, clé tapée en entier qui devient bulle en quittant le champ, Retour arrière sur une bulle) ; dans Cc, une adresse plus longue que le champ garde le curseur
 // visible, Entrée y envoie `fieldenter` sans retour à la ligne ; dans Cci, un copier-coller au clavier d'une bulle réglée et un collage de texte mis en forme ; dans le nom du PDF (crayon),
@@ -208,18 +208,20 @@ const fieldInfo = id => page.evaluate(id => {
   const host = document.getElementById(id);
   const view = host.querySelector('[role="textbox"]');
   const clone = view.cloneNode(true);
-  clone.querySelectorAll('.var-badge').forEach(b => b.remove());
+  clone.querySelectorAll('.var-badge, .smart-chip').forEach(b => b.remove());
   return { hidden: host.hidden, value: host.value, text: view.textContent, outside: clone.textContent, readOnly: host.readOnly, editable: view.getAttribute('contenteditable'),
     bubbles: Array.from(host.querySelectorAll('.var-badge')).map(b => ({ key: b.dataset.key, condition: b.dataset.condition || null, format: b.dataset.format || null, before: b.dataset.before || null, after: b.dataset.after || null })),
+    chips: Array.from(host.querySelectorAll('.smart-chip')).map(c => c.dataset.chipKind),
     focused: !!document.activeElement && host.contains(document.activeElement) };
 }, id);
-// La liste « # » : ses lignes (la sélectionnée porte « * »), la barre d'onglets Variables / Puces cachée ou non, sa place.
+// La liste « # » : ses lignes (la sélectionnée porte « * »), la barre d'onglets Variables / Puces montrée ou non et l'onglet actif, sa place.
 const listNow = () => page.evaluate(() => {
   const box = document.getElementById('autocomplete-box');
   if (!box || box.style.display === 'none') return null;
-  const r = box.getBoundingClientRect(); const tabs = box.querySelector('.ac-tabs');
+  const r = box.getBoundingClientRect(); const tabs = box.querySelector('.ac-tabs'); const active = box.querySelector('.ac-tab.active');
   return { items: Array.from(box.querySelectorAll('.ac-item')).map(e => e.textContent + (e.classList.contains('selected') ? '*' : '')),
-    tabsHidden: !tabs || getComputedStyle(tabs).display === 'none', inViewport: r.left >= 0 && r.top >= 0 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5 };
+    tabsShown: !!tabs && getComputedStyle(tabs).display !== 'none', activeTab: active ? active.dataset.tab : null,
+    inViewport: r.left >= 0 && r.top >= 0 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5 };
 });
 const isRichField = value => typeof value === 'string' && value.startsWith('<p class="pp-field">') && value.endsWith('</p>');
 const conditionOf = bubble => { try { return JSON.parse(bubble.condition); } catch { return null; } };
@@ -281,7 +283,7 @@ async function run() {
   await page.keyboard.type('#MfDossiers.Tit');
   await page.waitForTimeout(300);
   const list1 = await listNow();
-  check('« # » ouvre la liste des variables, sans les onglets du document (ni Puces), dans le panneau', !!list1 && list1.items.length > 0 && list1.tabsHidden && list1.inViewport && list1.items.some(i => /Titre/.test(i)), list1);
+  check('« # » ouvre la liste du document, onglets Variables et Puces montrés, Variables d’abord, dans le panneau', !!list1 && list1.items.length > 0 && list1.tabsShown && list1.activeTab === 'variables' && list1.inViewport && list1.items.some(i => /Titre/.test(i)), list1);
   await page.keyboard.press('Enter');
   await page.waitForTimeout(250);
   await page.keyboard.type(' par ');
@@ -373,7 +375,7 @@ async function run() {
   await page.keyboard.type('#');
   await page.waitForTimeout(300);
   const hashAlone = await listNow();
-  check('« # » seul ouvre la liste de toutes les variables, la première ligne choisie', !!hashAlone && hashAlone.items.length > 3 && hashAlone.items[0].endsWith('*') && hashAlone.tabsHidden, hashAlone);
+  check('« # » seul ouvre la liste de toutes les variables, la première ligne choisie', !!hashAlone && hashAlone.items.length > 3 && hashAlone.items[0].endsWith('*') && hashAlone.tabsShown, hashAlone);
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('ArrowDown');
   const moved = await listNow();
@@ -551,6 +553,141 @@ async function run() {
   const reopened = await fieldInfo(SUBJECT);
   check('l’Objet rouvert a ses trois bulles, la première avec sa condition', reopened.bubbles.length === 3 && !!conditionOf(reopened.bubbles[0]), reopened.bubbles);
   await shot('11-modele-rouvert');
+
+  // ===== 12) Les puces Date du jour, Heure actuelle, Email et Nom de l'utilisateur : l'onglet Puces de la liste « # », à la souris et au clavier =====
+  // La personne connectée est posée en direct (sa lecture par la table-sonde est celle des suites des puces du document) ; la date et l'heure sont relevées avant et après chaque
+  // résolution, pour qu'une minute qui change entre-temps ne fausse rien.
+  await page.evaluate(() => {
+    GristAPI.getCurrentUserEmail = async () => 'moi@exemple.fr';
+    GristAPI.getCurrentUserName = async () => 'Ada Lovelace';
+  });
+  const dayNow = () => page.evaluate(() => {
+    const d = new Date(); const pad = n => String(n).padStart(2, '0');
+    return { date: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`, time: `${pad(d.getHours())}:${pad(d.getMinutes())}` };
+  });
+  const CHIP_ROWS = ['Date du jour', 'Heure actuelle', 'Email de l’utilisateur', 'Nom de l’utilisateur'];
+  const chipsTabButton = '#autocomplete-box .ac-tab[data-tab="chips"]';
+  await realHover('#v2-new-template-group #btn-new');
+  await realClick('#v2-btn-new-email', 900);
+  await realClick('#' + SUBJECT, 150);
+  await page.keyboard.type('Rapport du #');
+  await page.waitForTimeout(300);
+  const variablesFirst = await listNow();
+  check('« # » ouvre la liste sur l’onglet Variables, l’onglet Puces à côté', !!variablesFirst && variablesFirst.tabsShown && variablesFirst.activeTab === 'variables', variablesFirst);
+  await realClick(chipsTabButton, 250);
+  const chipsTab = await listNow();
+  check('un clic sur l’onglet Puces montre les quatre puces qui s’écrivent en texte, et elles seules, dans le panneau', !!chipsTab && chipsTab.activeTab === 'chips' && JSON.stringify(chipsTab.items.map(i => i.replace(/\*$/, ''))) === JSON.stringify(CHIP_ROWS) && chipsTab.inViewport, chipsTab);
+  check('le clic sur l’onglet laisse le curseur dans le champ', (await fieldInfo(SUBJECT)).focused);
+  await shot('12-onglet-puces');
+  await realClick('#autocomplete-box .ac-item[data-idx="0"]', 250);
+  let chipSubject = await fieldInfo(SUBJECT);
+  check('un clic sur « Date du jour » pose une puce à la place du « # » : le texte avant reste, la liste se ferme, le curseur est dans le champ', JSON.stringify(chipSubject.chips) === '["date"]' && chipSubject.outside === 'Rapport du ' && (await listNow()) === null && chipSubject.focused, chipSubject);
+  await page.keyboard.type(' à #');
+  await page.waitForTimeout(250);
+  const reopenedList = await listNow();
+  check('la liste rouverte recommence par l’onglet Variables', !!reopenedList && reopenedList.activeTab === 'variables' && reopenedList.items.some(i => /Titre/.test(i)), reopenedList);
+  await realClick(chipsTabButton, 250);
+  await page.keyboard.type('heu');
+  await page.waitForTimeout(250);
+  const typedList = await listNow();
+  check('taper dans l’onglet Puces filtre les puces : « heu » ne laisse que l’heure, déjà choisie', !!typedList && JSON.stringify(typedList.items) === '["Heure actuelle*"]', typedList);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(250);
+  chipSubject = await fieldInfo(SUBJECT);
+  check('Entrée pose la seconde puce : l’Objet en a deux, la valeur enregistrée est en HTML', JSON.stringify(chipSubject.chips) === '["date","time"]' && chipSubject.outside === 'Rapport du  à ' && isRichField(chipSubject.value), chipSubject);
+  const chipLook = await page.evaluate(() => {
+    const chip = document.querySelector('#v2-email-subject .smart-chip');
+    const style = getComputedStyle(chip); const r = chip.getBoundingClientRect(); const host = chip.closest('.pp-field-editor').getBoundingClientRect();
+    return { background: style.backgroundColor, color: style.color, inside: r.left >= host.left && r.right <= host.right + 0.5 && r.top >= host.top && r.bottom <= host.bottom + 0.5, label: chip.textContent };
+  });
+  check('la puce a le vert de celles du document et tient dans le champ', chipLook.background === 'rgb(231, 247, 238)' && chipLook.color === 'rgb(20, 108, 67)' && chipLook.inside && chipLook.label === 'Date du jour', chipLook);
+  await shot('12-objet-deux-puces');
+
+  // Le champ À au clavier : l'onglet par un clic, la ligne par les flèches.
+  const chipToEdge = await fieldEdge(TO, 'right');
+  await page.mouse.move(chipToEdge.x - 20, chipToEdge.y, { steps: 2 });
+  await page.mouse.click(chipToEdge.x, chipToEdge.y);
+  await page.waitForTimeout(150);
+  await page.keyboard.type('#');
+  await page.waitForTimeout(250);
+  await realClick(chipsTabButton, 250);
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('ArrowDown');
+  const arrowed = await listNow();
+  check('deux flèches vers le bas descendent la sélection sur « Email de l’utilisateur »', !!arrowed && arrowed.items[2] === 'Email de l’utilisateur*', arrowed);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(250);
+  const chipTo = await fieldInfo(TO);
+  check('Entrée pose la puce Email dans À : seule dans le champ, enregistrée en HTML', JSON.stringify(chipTo.chips) === '["email"]' && chipTo.outside === '' && isRichField(chipTo.value), chipTo);
+
+  // Le nom du PDF : la puce Date du jour, dont la valeur n'a plus les « / » qu'un nom de fichier ne porte pas.
+  await realClick('#btn-toggle-pdf-filename', 300);
+  await page.keyboard.type('Rapport_#');
+  await page.waitForTimeout(250);
+  await realClick(chipsTabButton, 250);
+  await realClick('#autocomplete-box .ac-item[data-idx="0"]', 250);
+  const chipFile = await fieldInfo(FILE);
+  check('dans le nom du PDF aussi, un clic sur « Date du jour » pose la puce', JSON.stringify(chipFile.chips) === '["date"]' && chipFile.outside === 'Rapport_' && isRichField(chipFile.value), chipFile);
+  const fileBefore = await dayNow();
+  const fileGot = await page.evaluate(value => ReaderMode.resolveFilename(value, 'MfDossiers', null), chipFile.value);
+  const fileAfter = await dayNow();
+  check('le nom du fichier porte la date du jour avec des « _ » à la place des « / »', [fileBefore, fileAfter].some(day => fileGot === 'Rapport_' + day.date.replace(/\//g, '_')), { fileGot, fileBefore });
+
+  // Le champ Cci : une puce, effacée d'un Retour arrière, rend le champ vide.
+  await realClick('#v2-btn-toggle-cci', 300);
+  await realClick('#' + CCI, 150);
+  await page.keyboard.type('#');
+  await page.waitForTimeout(250);
+  await realClick(chipsTabButton, 250);
+  await realClick('#autocomplete-box .ac-item[data-idx="3"]', 250);
+  check('dans Cci, un clic sur « Nom de l’utilisateur » pose la puce', JSON.stringify((await fieldInfo(CCI)).chips) === '["name"]');
+  await page.keyboard.press('Backspace');
+  await page.waitForTimeout(150);
+  const cleared = await fieldInfo(CCI);
+  check('Retour arrière efface la puce d’un coup : le champ est vide, enregistré comme tel, et retrouve son indication grisée', cleared.chips.length === 0 && cleared.value === '' && await page.evaluate(() => document.getElementById('v2-email-cci').classList.contains('is-empty')), cleared);
+
+  // « Créer l'email » : la date et l'heure du moment, l'adresse de la personne connectée.
+  const mailBefore = await dayNow();
+  const mailsSoFar = (await page.evaluate(() => window.__mailtos.length));
+  await realClick('#btn-create-email', 900);
+  const mailAfter = await dayNow();
+  const chipMail = readMailto((await page.evaluate(() => window.__mailtos.slice()))[mailsSoFar] || 'mailto:');
+  check('« Créer l’email » : l’adresse de la personne connectée dans À, la date et l’heure du jour dans l’objet, pas de Cci', chipMail.to === 'moi@exemple.fr' && [mailBefore, mailAfter].some(day => chipMail.subject === `Rapport du ${day.date} à ${day.time}`) && !chipMail.keys.includes('bcc'), chipMail);
+
+  // Lecture : la valeur des puces, sans puce à l'écran ; au retour en édition, les puces.
+  const chipsEditing = { subject: (await fieldInfo(SUBJECT)).value, to: (await fieldInfo(TO)).value };
+  const readBefore = await dayNow();
+  await realClick('#btn-mode-read', 700);
+  const readAfter = await dayNow();
+  const chipReading = { subject: await fieldInfo(SUBJECT), to: await fieldInfo(TO) };
+  check('en Lecture, l’Objet montre la date et l’heure et À l’adresse de la personne, sans puce à l’écran', [readBefore, readAfter].some(day => chipReading.subject.text === `Rapport du ${day.date} à ${day.time}`) && chipReading.to.text === 'moi@exemple.fr' && chipReading.subject.chips.length === 0 && chipReading.to.chips.length === 0, chipReading);
+  await realClick('#btn-mode-edit', 700);
+  const chipsBack = { subject: await fieldInfo(SUBJECT), to: await fieldInfo(TO) };
+  check('au retour à l’édition, les puces sont revenues et les valeurs enregistrées sont intactes', JSON.stringify(chipsBack.subject.chips) === '["date","time"]' && JSON.stringify(chipsBack.to.chips) === '["email"]' && chipsBack.subject.value === chipsEditing.subject && chipsBack.to.value === chipsEditing.to, { chipsBack, chipsEditing });
+
+  // Enregistrer, repartir d'un modèle vide, rouvrir : les puces reviennent.
+  await realClick('#btn-rename-template', 250);
+  await page.keyboard.type('Rapport daté');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(250);
+  await realClick('#btn-save', 900);
+  const chipSaved = await page.evaluate(async () => {
+    const all = await Templates.loadAll();
+    const row = (Array.isArray(all) ? all : Templates.getCached()).find(t => t.nom === 'Rapport daté');
+    return row && { objet: row.objet, destinataires: row.destinataires, cci: row.cci, nomFichierPDF: row.nomFichierPDF };
+  });
+  check('Objet, À et nom du PDF sont enregistrés en HTML avec leurs puces, Cci vide', !!chipSaved && [chipSaved.objet, chipSaved.destinataires, chipSaved.nomFichierPDF].every(isRichField) && /data-chip-kind="date"/.test(chipSaved.objet) && /data-chip-kind="time"/.test(chipSaved.objet) && /data-chip-kind="email"/.test(chipSaved.destinataires) && /data-chip-kind="date"/.test(chipSaved.nomFichierPDF) && chipSaved.cci === '', chipSaved);
+  await page.evaluate(() => { const sel = document.getElementById('template-select'); sel.value = ''; sel.dispatchEvent(new Event('change', { bubbles: true })); });
+  await page.waitForTimeout(900);
+  await page.evaluate(() => {
+    const sel = document.getElementById('template-select');
+    const opt = Array.from(sel.options).find(o => /Rapport daté/.test(o.textContent));
+    sel.value = opt.value; sel.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await page.waitForTimeout(1100);
+  const chipsReopened = { subject: await fieldInfo(SUBJECT), to: await fieldInfo(TO), file: await fieldInfo(FILE) };
+  check('rouvert, le modèle remet les puces dans l’Objet, À et le nom du PDF', JSON.stringify(chipsReopened.subject.chips) === '["date","time"]' && JSON.stringify(chipsReopened.to.chips) === '["email"]' && JSON.stringify(chipsReopened.file.chips) === '["date"]' && chipsReopened.subject.value === chipsEditing.subject, chipsReopened);
+  await shot('12-modele-rouvert');
 }
 try { await run(); } catch (e) { check('le parcours va jusqu’au bout', false, String(e && e.stack || e)); }
 

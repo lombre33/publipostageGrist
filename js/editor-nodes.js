@@ -254,7 +254,7 @@ const EditorNodes = (function () {
     return { createCalcBadgeNode, createCalcBadgeKeysExtension };
   })();
 
-  const { createPageNumberBadgeNode, createSmartChipNode } = (function () {
+  const { createPageNumberBadgeNode, createSmartChipNode, smartChipAttrsOf, smartChipHtml, smartChipLabel } = (function () {
     // La bulle de numéro de page et la puce intelligente
 
     // Bulle de numéro de page, même schéma que varBadge. Le libellé rendu dans l'éditeur n'est qu'un espace réservé (selon le format choisi), résolu en
@@ -281,27 +281,37 @@ const EditorNodes = (function () {
 
     // Chip intelligent (date, heure, email, nom), même schéma que varBadge. Jamais de vraie valeur dans l'éditeur (résolu en Lecture et à l'export, cf.
     // js/reader-mode.js:resolveSmartChips) ; vert plutôt que bleu pour signaler « valeur calculée, pas une colonne Grist ».
+    const KIND_I18N_KEYS = { date: 'chips.date', time: 'chips.time', email: 'chips.email', name: 'chips.name' };
+    // Le libellé d'une puce, dans la langue de l'interface (« Date du jour »).
+    function smartChipLabel(kind) {
+      const key = KIND_I18N_KEYS[kind];
+      return key ? I18n.t(key) : '?';
+    }
+    // Les attributs DOM d'une puce (HTML enregistré, presse-papiers) d'après son genre, et l'inverse : sans TipTap, pour que les champs texte
+    // (js/field-codec.js) écrivent la même puce que l'éditeur.
+    const smartChipAttributes = kind => ({ class: 'smart-chip', contenteditable: 'false', 'data-chip-kind': kind });
+    const smartChipAttrsOf = el => ({ kind: el.getAttribute('data-chip-kind') || 'date' });
+    function smartChipHtml(nodeAttrs) {
+      const span = document.createElement('span');
+      setAttrs(span, smartChipAttributes(nodeAttrs.kind));
+      span.textContent = smartChipLabel(nodeAttrs.kind);
+      return span.outerHTML;
+    }
     function createSmartChipNode(Node, mergeAttributes) {
-      const KIND_I18N_KEYS = { date: 'chips.date', time: 'chips.time', email: 'chips.email', name: 'chips.name' };
-      function labelFor(kind) {
-        const key = KIND_I18N_KEYS[kind];
-        return key ? I18n.t(key) : '?';
-      }
       return inlineAtom(Node, {
         name: 'smartChip',
         addAttributes() {
           return { kind: internalAttr('date') };
         },
         parseHTML() {
-          return [{ tag: 'span.smart-chip', getAttrs: el => ({ kind: el.getAttribute('data-chip-kind') || 'date' }) }];
+          return [{ tag: 'span.smart-chip', getAttrs: smartChipAttrsOf }];
         },
         renderHTML({ node }) {
-          const attrs = mergeAttributes({ class: 'smart-chip', contenteditable: 'false', 'data-chip-kind': node.attrs.kind });
-          return ['span', attrs, labelFor(node.attrs.kind)];
+          return ['span', mergeAttributes(smartChipAttributes(node.attrs.kind)), smartChipLabel(node.attrs.kind)];
         },
       });
     }
-    return { createPageNumberBadgeNode, createSmartChipNode };
+    return { createPageNumberBadgeNode, createSmartChipNode, smartChipAttrsOf, smartChipHtml, smartChipLabel };
   })();
 
   const { createFootnoteRefNode, createCommentMark } = (function () {
@@ -2014,7 +2024,7 @@ const EditorNodes = (function () {
 
 
   return {
-    createVarBadgeNode, varBadgeAttrsOf, varBadgeHtml, createCalcBadgeNode, createCalcBadgeKeysExtension, createPageNumberBadgeNode, createSmartChipNode, createFootnoteRefNode, createCommentMark,
+    createVarBadgeNode, varBadgeAttrsOf, varBadgeHtml, createCalcBadgeNode, createCalcBadgeKeysExtension, createPageNumberBadgeNode, createSmartChipNode, smartChipAttrsOf, smartChipHtml, smartChipLabel, createFootnoteRefNode, createCommentMark,
     createFontSizeExtension, createTextColorExtension, createHighlightExtension,
     createBulletStyleExtension, createOrderedListStyleExtension, createTaskListStyleExtension,
     withCellBackground, withFastColwidth, parseColwidthOnce, createTableView, createTabNavigationExtension, createClearHistoryExtension,

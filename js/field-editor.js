@@ -1,23 +1,30 @@
 // Les champs texte à bulles : Objet, À, Cc, Cci du mode email et nom du fichier PDF. Chacun est un mini-éditeur TipTap d'une seule ligne, monté dans son
 // élément de la page (un <div> qui garde son identifiant et ses classes), pour que les variables y soient les mêmes bulles bleues que dans le corps d'un
-// modèle - avec leur barre (condition, autres attributs, boucle dans la phrase, liste, format) - et que la liste « # » les pose.
+// modèle - avec leur barre (condition, autres attributs, boucle dans la phrase, liste, format) - et que la liste « # » les pose, avec les puces Date du
+// jour, Heure actuelle, Email et Nom de l'utilisateur.
 // Le reste de l'application les traite comme les <input> qu'ils remplacent, et js/main.js n'a presque pas changé : l'élément reçoit `value`, `readOnly`,
 // `focus()` et `blur()` et émet `input` (une modification de la personne) et `blur` ; deux ajouts : `showText(texte)`, par lequel la Lecture y écrit la
 // valeur résolue (jamais lue comme un modèle), et l'évènement `fieldenter`, Entrée quand la liste « # » n'est pas ouverte.
-// Ce qui s'enregistre dans la colonne du modèle est FieldCodec.toStored : le texte brut d'avant tant que les bulles n'ont aucun réglage, du HTML sinon.
+// Ce qui s'enregistre dans la colonne du modèle est FieldCodec.toStored : le texte brut d'avant tant que les bulles n'ont aucun réglage et qu'aucune
+// puce n'est posée, du HTML sinon.
 const FieldEditor = (function () {
   const fields = new Map(); // élément du champ -> { host, editor, libs, panel, shown, readOnly }
 
   const { docJson, itemsOfDoc } = (function () {
-    // Le document d'un champ : un seul paragraphe, du texte et des bulles (les éléments { text } ou { badge } de FieldCodec)
+    // Le document d'un champ : un seul paragraphe, du texte, des bulles et des puces (les éléments { text }, { badge } ou { chip } de FieldCodec)
 
-    const nodeJson = item => (FieldCodec.isText(item) ? { type: 'text', text: item.text } : { type: 'varBadge', attrs: Object.assign({}, item.badge) });
+    function nodeJson(item) {
+      if (FieldCodec.isText(item)) return { type: 'text', text: item.text };
+      if (FieldCodec.isChip(item)) return { type: 'smartChip', attrs: Object.assign({}, item.chip) };
+      return { type: 'varBadge', attrs: Object.assign({}, item.badge) };
+    }
     const docJson = items => ({ type: 'doc', content: [{ type: 'paragraph', content: items.map(nodeJson) }] });
     function itemsOfDoc(doc) {
       const items = [];
       doc.descendants(node => {
         if (node.isText) items.push({ text: node.text });
         else if (node.type.name === 'varBadge') items.push({ badge: Object.assign({}, node.attrs) });
+        else if (node.type.name === 'smartChip') items.push({ chip: Object.assign({}, node.attrs) });
         return true;
       });
       return items;
@@ -31,8 +38,8 @@ const FieldEditor = (function () {
     const BLOCK_TAGS = /^(address|article|aside|blockquote|br|dd|details|div|dl|dt|fieldset|figcaption|figure|footer|form|h[1-6]|header|hr|li|main|nav|ol|p|pre|section|table|tr|ul)$/i;
     const SKIPPED_TAGS = /^(script|style|template|head|title|meta|link)$/i;
 
-    // Le HTML collé, réduit à ce qu'un champ garde : le texte, sur une ligne (un changement de bloc ou de ligne devient une espace), et les bulles - une
-    // bulle copiée dans un autre champ ou dans le document arrive avec ses réglages. Un <template> est inerte : rien ne s'exécute ni ne se charge.
+    // Le HTML collé, réduit à ce qu'un champ garde : le texte, sur une ligne (un changement de bloc ou de ligne devient une espace), les bulles - une
+    // bulle copiée dans un autre champ ou dans le document arrive avec ses réglages - et les puces. Un <template> est inerte : rien ne s'exécute ni ne se charge.
     function inlineHtml(html) {
       const template = document.createElement('template');
       template.innerHTML = html;
@@ -48,6 +55,7 @@ const FieldEditor = (function () {
           out += EditorNodes.varBadgeHtml(attrs);
           return;
         }
+        if (node.matches('span.smart-chip')) { out += EditorNodes.smartChipHtml(EditorNodes.smartChipAttrsOf(node)); return; }
         const block = BLOCK_TAGS.test(node.tagName);
         if (block) out += ' ';
         walk(node);
@@ -78,7 +86,7 @@ const FieldEditor = (function () {
     return { editorProps };
   })();
 
-  // Les extensions d'un champ : le texte, un paragraphe unique, la bulle de variable, Entrée et la liste « # ». L'ordre compte : TipTap essaie la dernière
+  // Les extensions d'un champ : le texte, un paragraphe unique, la bulle de variable et la puce, Entrée et la liste « # ». L'ordre compte : TipTap essaie la dernière
   // extension rangée en premier, la liste ouverte garde donc Entrée, Tab, Échap et les flèches.
   function extensions(libs, host) {
     const { Extension, Node: TiptapNode, mergeAttributes, StarterKit, Document, Suggestion } = libs;
@@ -92,6 +100,7 @@ const FieldEditor = (function () {
       }),
       Document.extend({ content: 'paragraph' }),
       EditorNodes.createVarBadgeNode(TiptapNode, mergeAttributes),
+      EditorNodes.createSmartChipNode(TiptapNode, mergeAttributes),
       Extension.create({ name: 'fieldEnter', addKeyboardShortcuts: () => ({ Enter: press, 'Shift-Enter': press, 'Mod-Enter': press }) }),
       Variables.createFieldExtension(Extension, Suggestion),
     ];

@@ -113,7 +113,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/variable-format.js` | Format d'une bulle : nombre, date, Oui / Non, liste, nombre en toutes lettres. |
 | `js/variable-modal.js` | Ce que partagent les fenêtres d'une bulle. |
 | `js/variable-condition.js`, `js/variable-loop.js`, `js/variable-list.js`, `js/variable-linked-attrs.js`, `js/variable-calc.js`, `js/variable-column.js` | Les fenêtres d'une bulle : Condition, Boucle, Liste, Autres attributs, Calcul, Colonne. |
-| `js/field-editor.js`, `js/field-codec.js` | Les champs texte du mode E-mail (Objet, À, Cc, Cci) et du nom du PDF : un éditeur d'une ligne qui pose les mêmes bulles que le document, avec leur barre et leurs fenêtres ; la valeur enregistrée reste du texte brut tant qu'aucune bulle n'a de réglage. |
+| `js/field-editor.js`, `js/field-codec.js` | Les champs texte du mode E-mail (Objet, À, Cc, Cci) et du nom du PDF : un éditeur d'une ligne qui pose les mêmes bulles que le document, avec leur barre et leurs fenêtres, et les puces date, heure, email et nom de l'utilisateur ; la valeur enregistrée reste du texte brut tant qu'aucune bulle n'a de réglage et qu'aucune puce n'est posée. |
 | `js/formula.js` | Le moteur de calcul d'une bulle « Calcul » (module pur : ni DOM, ni Grist). |
 | `js/condition-rules.js`, `js/condition-fields.js` | L'évaluation des règles « colonne, opérateur, valeur » (module pur) et leurs champs partagés par toutes les fenêtres. |
 | `js/loop-rules.js`, `js/list-split.js` | Le moteur de boucle sur les lignes liées ; « Un document par valeur ». |
@@ -241,7 +241,7 @@ notes de conception, qui ne sont pas publiés ici.
 | Ajouter une bibliothèque d'export | `js/export-common.js` (chargeur, empreinte) et la politique de sécurité de `index.html`. |
 | Ajouter un moteur d'export du widget (un script que seul un export utilise) | Une balise inerte `<script type="text/x-lazy-engine" data-engine="…">` dans `index.html`, puis son nom dans la liste `engines` de l'export qui s'en sert (`js/main.js`) : `js/export-engines.js` le charge au premier besoin. |
 | Un nouvel élément de document (nœud, mise en forme) | `js/editor-nodes.js` (l'éditeur), sa feuille de `css/` (l'écran et la Lecture), puis `js/pdf-export.js` et `js/docx-export.js` : chaque export le convertit à part. |
-| Mettre des bulles de variable dans un champ texte (Objet, À, Cc, Cci, nom du PDF) | `js/field-editor.js` (un éditeur d'une ligne qui se comporte comme l'`<input>` qu'il remplace), `js/field-codec.js` (la valeur enregistrée : texte brut ou HTML), `ReaderMode.fieldText` dans `js/reader-mode.js` (la valeur résolue), `css/field-editor.css`. |
+| Mettre des bulles de variable ou des puces (date, heure, email, nom de l'utilisateur) dans un champ texte (Objet, À, Cc, Cci, nom du PDF) | `js/field-editor.js` (un éditeur d'une ligne qui se comporte comme l'`<input>` qu'il remplace), `js/field-codec.js` (la valeur enregistrée : texte brut ou HTML), `ReaderMode.fieldText` et `ReaderMode.smartChipValue` dans `js/reader-mode.js` (la valeur résolue, celle des puces), `css/field-editor.css`. |
 | Modifier un fichier de `css/` ou de `js/` | Monter son numéro `?v=` dans `index.html`, sinon le navigateur garde l'ancien. |
 
 ---
@@ -359,7 +359,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/variable-format.js` | A bubble's format: number, date, Yes / No, list, number in words. |
 | `js/variable-modal.js` | What a bubble's windows have in common. |
 | `js/variable-condition.js`, `js/variable-loop.js`, `js/variable-list.js`, `js/variable-linked-attrs.js`, `js/variable-calc.js`, `js/variable-column.js` | A bubble's windows: Condition, Loop, List, Other attributes, Calculation, Column. |
-| `js/field-editor.js`, `js/field-codec.js` | The text fields of E-mail mode (Subject, To, Cc, Bcc) and of the PDF file name: a one-line editor that places the same bubbles as the document, with their toolbar and windows; the stored value stays plain text as long as no bubble has a setting. |
+| `js/field-editor.js`, `js/field-codec.js` | The text fields of E-mail mode (Subject, To, Cc, Bcc) and of the PDF file name: a one-line editor that places the same bubbles as the document, with their toolbar and windows, and the user's date, time, email and name chips; the stored value stays plain text as long as no bubble has a setting and no chip is placed. |
 | `js/formula.js` | The calculation engine of a "Calculation" bubble (a pure module: no DOM, no Grist). |
 | `js/condition-rules.js`, `js/condition-fields.js` | Evaluation of "column, operator, value" rules (a pure module) and their fields shared by all the windows. |
 | `js/loop-rules.js`, `js/list-split.js` | The loop engine over linked rows; "One document per value". |
@@ -485,5 +485,5 @@ notes, which are not published here.
 | Add an export library | `js/export-common.js` (loader, integrity hash) and the security policy of `index.html`. |
 | Add an export engine of the widget (a script that only an export uses) | An inert `<script type="text/x-lazy-engine" data-engine="…">` tag in `index.html`, then its name in the `engines` list of the export that uses it (`js/main.js`): `js/export-engines.js` loads it when needed. |
 | A new document element (node, formatting) | `js/editor-nodes.js` (the editor), its sheet in `css/` (screen and Reading mode), then `js/pdf-export.js` and `js/docx-export.js`: each export converts it separately. |
-| Put variable bubbles in a text field (Subject, To, Cc, Bcc, PDF name) | `js/field-editor.js` (a one-line editor that behaves like the `<input>` it replaces), `js/field-codec.js` (the saved value: plain text or HTML), `ReaderMode.fieldText` in `js/reader-mode.js` (the resolved value), `css/field-editor.css`. |
+| Put variable bubbles or chips (date, time, user's email and name) in a text field (Subject, To, Cc, Bcc, PDF name) | `js/field-editor.js` (a one-line editor that behaves like the `<input>` it replaces), `js/field-codec.js` (the saved value: plain text or HTML), `ReaderMode.fieldText` and `ReaderMode.smartChipValue` in `js/reader-mode.js` (the resolved value, and the chips' value), `css/field-editor.css`. |
 | Modify a file in `css/` or `js/` | Bump its `?v=` number in `index.html`, otherwise the browser keeps the old one. |

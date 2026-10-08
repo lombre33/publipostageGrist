@@ -47,6 +47,13 @@
     return found;
   };
   const textOf = id => editorOf(id).state.doc.textContent;
+  // Les puces du champ (date, heure, email, nom de l'utilisateur) : le genre de chaque nœud smartChip, dans l'ordre ; `C` en écrit une dans une suite d'éléments.
+  const C = kind => ({ chip: { kind } });
+  const chipsOf = id => {
+    const found = [];
+    editorOf(id).state.doc.descendants(node => { if (node.type.name === 'smartChip') found.push(node.attrs.kind); });
+    return found;
+  };
   // Change des attributs de la bulle `index` du champ, comme le font la barre et les fenêtres (setNodeMarkup).
   function patchBubble(id, index, patch) {
     const editor = editorOf(id);
@@ -80,6 +87,15 @@
   // --- La liste « # » ---
   const acBox = () => document.getElementById('autocomplete-box');
   const listed = () => (acBox() && acBox().style.display !== 'none' ? Array.from(acBox().querySelectorAll('.ac-item')).map(e => e.textContent) : null);
+  // Les onglets de la liste : la barre est-elle montrée, lequel est actif, et le clic (mousedown, comme la souris) qui bascule de l'un à l'autre.
+  const tabBar = () => { const bar = acBox() && acBox().querySelector('.ac-tabs'); return bar ? { shown: bar.style.display !== 'none', active: Array.from(bar.querySelectorAll('.ac-tab.active')).map(tab => tab.dataset.tab) } : null; };
+  const openTab = name => acBox().querySelector(`.ac-tab[data-tab="${name}"]`).dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+  // Cliquer la ligne de la liste qui porte ce texte (mousedown, avant le blur du champ) ; vrai si elle y était.
+  function clickListRow(label) {
+    const row = acBox() && Array.from(acBox().querySelectorAll('.ac-item')).find(e => e.textContent === label);
+    if (row) row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    return !!row;
+  }
 
   // --- Le décor ---
   // La page est sur FeDossiers ; FeAnnuaire est liée par sa colonne Référence Responsable, FeLignes par sa colonne Dossier (plusieurs lignes par dossier).
@@ -432,12 +448,12 @@
   // La frappe : la liste « # », Entrée, les évènements, la mise en bulle au départ du curseur
   // ============================================================================================================
   scenario(
-    'fieldeditor_hash_list_offers_variables_only_and_a_pick_becomes_a_bubble',
-    'Taper « # » dans un champ ouvre la liste des variables (aucune puce, pas d’onglets) qui se filtre à la frappe ; Entrée, un clic et les flèches choisissent une entrée, qui devient une bulle à la place de la saisie, le texte avant est conservé, la liste se ferme et la valeur reste du texte brut',
+    'fieldeditor_hash_list_offers_variables_and_a_pick_becomes_a_bubble',
+    'Taper « # » dans un champ ouvre la liste du document, onglet Variables d’abord (l’onglet Puces a son cas), qui se filtre à la frappe ; Entrée, un clic et les flèches choisissent une variable, qui devient une bulle à la place de la saisie, le texte avant est conservé, la liste se ferme et la valeur reste du texte brut',
     async (h) => {
       await h.fieldType(SUBJECT, 'Suivi #FeDossiers.Ti');
       const filtered = listed();
-      const tabsHidden = acBox().querySelector('.ac-tabs').style.display === 'none';
+      const tabs = tabBar();
       const handled = h.fieldKey(SUBJECT, 'Enter');
       await h.sleep(40);
       const afterEnter = { bubbles: badgesOf(SUBJECT).map(b => b.node.attrs.key), before: textOf(SUBJECT).replace(/^(Suivi ).*$/, '$1'), list: listed(), value: field(SUBJECT).value };
@@ -447,13 +463,12 @@
       await h.sleep(40);
       const afterArrow = { bubbles: badgesOf(CC).map(b => b.node.attrs.key), value: field(CC).value };
       await h.fieldType(TO, '#FeDossiers.Mo');
-      const row = acBox() && Array.from(acBox().querySelectorAll('.ac-item')).find(e => e.textContent === 'FeDossiers.Montant');
-      if (row) row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+      clickListRow('FeDossiers.Montant');
       await h.sleep(40);
       const afterClick = { bubbles: badgesOf(TO).map(b => b.node.attrs.key), list: listed(), value: field(TO).value };
       const checks = {
         filtered: !!filtered && filtered.includes('FeDossiers.Titre') && filtered.includes('FeDossiers.TitreLong') && filtered.every(entry => entry.includes('.')),
-        tabsHidden,
+        tabs: !!tabs && tabs.shown && same(tabs.active, ['variables']),
         enterIsTaken: handled === true,
         enterBubble: same(afterEnter.bubbles, ['FeDossiers.Titre']) && afterEnter.before === 'Suivi ' && afterEnter.list === null && afterEnter.value === 'Suivi #FeDossiers.Titre',
         arrow: second === true && picked === true && same(afterArrow.bubbles, ['FeDossiers.TitreLong']) && afterArrow.value === 'a@x.fr, #FeDossiers.TitreLong',
@@ -461,6 +476,198 @@
       };
       const failed = Object.keys(checks).filter(k => !checks[k]);
       return { pass: failed.length === 0, notes: failed.join(', ') || JSON.stringify({ filtered, afterEnter, afterArrow, afterClick }) };
+    },
+  );
+
+  // ============================================================================================================
+  // Les puces : Date du jour, Heure actuelle, Email et Nom de l'utilisateur (demande d'Antoine du 2026-10-08, sur la carte « Ajouter aussi les puces… ? »)
+  // ============================================================================================================
+  // Les puces d'un champ sont celles du document (EditorNodes.createSmartChipNode, EditorNodes.smartChipHtml, ReaderMode.smartChipValue) : seules les quatre qui
+  // s'écrivent en texte y sont proposées - pas la note de bas de page, les blocs conditionnels ni le calcul, qui n'ont de sens que dans un corps de modèle.
+  const CHIP_ROWS = ['Date du jour', 'Heure actuelle', 'Email de l’utilisateur', 'Nom de l’utilisateur'];
+  // Date et heure comme les écrit le document (jj/mm/aaaa, hh:mm), relevées avant et après un appel pour qu'une minute qui change entre-temps ne fausse rien.
+  const pad = n => String(n).padStart(2, '0');
+  const today = () => { const d = new Date(); return { date: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`, time: `${pad(d.getHours())}:${pad(d.getMinutes())}` }; };
+  // Pose l'email et le nom de la personne connectée le temps de `body`, comme le font les suites des puces du document ; remis ensuite.
+  async function asUser(email, name, body) {
+    const kept = { email: GristAPI.getCurrentUserEmail, name: GristAPI.getCurrentUserName };
+    GristAPI.getCurrentUserEmail = email;
+    GristAPI.getCurrentUserName = name;
+    try { return await body(); } finally { GristAPI.getCurrentUserEmail = kept.email; GristAPI.getCurrentUserName = kept.name; }
+  }
+
+  scenario(
+    'fieldeditor_hash_list_chips_tab_offers_the_four_text_chips_and_a_pick_becomes_a_chip',
+    'L’onglet Puces de la liste « # » d’un champ n’a que les quatre puces qui s’écrivent en texte - Date du jour, Heure actuelle, Email et Nom de l’utilisateur -, ni la note de bas de page, ni les blocs conditionnels, ni le calcul ; il se filtre à la frappe ; Entrée, un clic et les flèches posent la puce à la place de la saisie (texte avant gardé, liste fermée, valeur enregistrée en HTML) ; la liste rouverte recommence par l’onglet Variables',
+    async (h) => {
+      I18n.setLang('fr');
+      await h.fieldType(SUBJECT, 'Le #');
+      const opened = tabBar();
+      openTab('chips');
+      await h.sleep(30);
+      const chipsTab = { bar: tabBar(), rows: listed() };
+      await h.fieldType(SUBJECT, 'heu', true);
+      await h.sleep(30);
+      const filtered = listed();
+      const handled = h.fieldKey(SUBJECT, 'Enter');
+      await h.sleep(40);
+      const afterEnter = { chips: chipsOf(SUBJECT), text: textOf(SUBJECT), list: listed(), value: field(SUBJECT).value };
+      await h.fieldType(CC, 'a@x.fr, #');
+      openTab('chips');
+      await h.sleep(30);
+      h.fieldKey(CC, 'ArrowDown');
+      h.fieldKey(CC, 'ArrowDown');
+      const chosen = Array.from(acBox().querySelectorAll('.ac-item.selected')).map(row => row.textContent);
+      h.fieldKey(CC, 'Enter');
+      await h.sleep(40);
+      const afterArrows = { chips: chipsOf(CC), text: textOf(CC), list: listed(), value: field(CC).value };
+      await h.fieldType(TO, '#');
+      openTab('chips');
+      await h.sleep(30);
+      const clickedName = clickListRow('Nom de l’utilisateur');
+      await h.sleep(40);
+      const afterClick = { chips: chipsOf(TO), list: listed(), value: field(TO).value };
+      await h.fieldType(FILE, 'Rapport_#');
+      openTab('chips');
+      await h.sleep(30);
+      clickListRow('Date du jour');
+      await h.sleep(40);
+      const inFile = { chips: chipsOf(FILE), value: field(FILE).value };
+      await h.fieldType(CCI, '#');
+      const reopened = { bar: tabBar(), rows: listed() };
+      const checks = {
+        variablesFirst: !!opened && opened.shown && same(opened.active, ['variables']),
+        chipsTab: !!chipsTab.bar && same(chipsTab.bar.active, ['chips']) && same(chipsTab.rows, CHIP_ROWS),
+        filtered: same(filtered, ['Heure actuelle']),
+        enter: handled === true && same(afterEnter.chips, ['time']) && afterEnter.text === 'Le ' && afterEnter.list === null && FieldCodec.isRich(afterEnter.value) && /data-chip-kind="time"/.test(afterEnter.value),
+        arrows: same(chosen, ['Email de l’utilisateur']) && same(afterArrows.chips, ['email']) && afterArrows.text === 'a@x.fr, ' && afterArrows.list === null && /data-chip-kind="email"/.test(afterArrows.value),
+        click: clickedName && same(afterClick.chips, ['name']) && afterClick.list === null && /data-chip-kind="name"/.test(afterClick.value),
+        fileName: same(inFile.chips, ['date']) && FieldCodec.isRich(inFile.value) && same(FieldCodec.itemsOf(inFile.value), [T('Rapport_'), C('date')]),
+        reopened: !!reopened.bar && same(reopened.bar.active, ['variables']) && !!reopened.rows && reopened.rows.every(entry => entry.includes('.')),
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: failed.join(', ') || JSON.stringify({ chipsTab, filtered, afterEnter, afterArrows, afterClick, inFile, reopened }) };
+    },
+  );
+
+  scenario(
+    'fieldeditor_a_chip_is_stored_as_html_and_comes_back_as_a_chip',
+    'Une puce fait passer la valeur du champ en HTML (`<span class="smart-chip" data-chip-kind>`, écrite comme dans le corps d’un modèle) ; elle se relit en puce, avec son libellé, sans que la valeur change d’un aller-retour ; ce n’est pas une variable (elle n’entre pas dans le suivi des liaisons) ; sans puce, le texte brut revient',
+    async () => {
+      const host = field(SUBJECT);
+      const items = [T('Le '), C('date'), T(' à '), C('time'), T(' par '), C('name'), T(' ('), C('email'), T(') - '), B('Titre')];
+      const stored = FieldCodec.toStored(items);
+      host.value = stored;
+      const again = host.value;
+      const shown = Array.from(editorOf(SUBJECT).view.dom.querySelectorAll('.smart-chip')).map(chip => ({ kind: chip.dataset.chipKind, label: chip.textContent, editable: chip.getAttribute('contenteditable') }));
+      const kept = FieldCodec.itemsOf(stored);
+      // Retirer la dernière puce, puis toutes : la valeur redevient celle du texte et des bulles seuls.
+      host.value = FieldCodec.toStored([T('Suivi '), C('date')]);
+      const editor = editorOf(SUBJECT);
+      editor.view.dispatch(editor.state.tr.delete(editor.state.doc.content.size - 2, editor.state.doc.content.size - 1));
+      const withoutChip = host.value;
+      const checks = {
+        html: FieldCodec.isRich(stored) && ['date', 'time', 'name', 'email'].every(kind => stored.includes(`data-chip-kind="${kind}"`)) && stored.includes('class="smart-chip"'),
+        sameAsDocument: items.filter(FieldCodec.isChip).every(item => stored.includes(EditorNodes.smartChipHtml(item.chip))),
+        drawn: same(shown.map(chip => chip.kind), ['date', 'time', 'name', 'email']) && same(shown.map(chip => chip.label), CHIP_ROWS.slice(0, 2).concat(['Nom de l’utilisateur', 'Email de l’utilisateur'])) && shown.every(chip => chip.editable === 'false'),
+        stable: again === stored && same(kept.map(item => (FieldCodec.isText(item) ? item.text : FieldCodec.isChip(item) ? item.chip.kind : item.badge.key)), ['Le ', 'date', ' à ', 'time', ' par ', 'name', ' (', 'email', ') - ', 'FeDossiers.Titre']),
+        notAVariable: same(FieldCodec.variablesIn(stored), [{ table: PAGE, column: 'Titre' }]) && FieldCodec.variablesIn(FieldCodec.toStored([C('date')])).length === 0,
+        alone: FieldCodec.isRich(FieldCodec.toStored([C('email')])) && FieldCodec.toStored([T('Sans puce '), B('Titre')]) === 'Sans puce #FeDossiers.Titre',
+        backToPlain: withoutChip === 'Suivi',
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: failed.join(', ') || JSON.stringify({ stored, shown, withoutChip }) };
+    },
+  );
+
+  scenario(
+    'fieldeditor_chips_resolve_in_the_subject_the_addresses_and_the_file_name',
+    'Les puces d’un champ valent leur valeur du moment, comme dans le document : la date du jour (jj/mm/aaaa), l’heure (hh:mm), l’adresse et le nom de la personne connectée - dans l’Objet, les adresses et le nom du PDF, où les caractères interdits d’un nom de fichier (« / », « : ») deviennent « _ » pour une puce comme pour une variable ; elles se mêlent aux bulles réglées ; une adresse ou un nom illisible donne le repli du document, dans la langue de l’interface',
+    async () => {
+      I18n.setLang('fr');
+      const mixed = FieldCodec.toStored([T('Rapport du '), C('date'), T(' à '), C('time'), T(' par '), C('name'), T(' - '), B('Titre'), T(' ('), C('email'), T(')')]);
+      const addresses = FieldCodec.toStored([C('email'), T(', copie@x.fr')]);
+      const withCondition = FieldCodec.toStored([B('Statut', { condition: URGENT }), T(' le '), C('date')]);
+      const subjectFor = ({ date, time }) => `Rapport du ${date} à ${time} par Ada / Lovelace: B - Dossier A (lecteur@exemple.fr)`;
+      const fileFor = ({ date, time }) => `Rapport du ${date.replace(/\//g, '_')} à ${time.replace(':', '_')} par Ada _ Lovelace_ B - Dossier A (lecteur@exemple.fr)`;
+      const got = await asUser(async () => 'lecteur@exemple.fr', async () => 'Ada / Lovelace: B', async () => {
+        const before = today();
+        const result = {
+          subject: await text(mixed), file: await filename(mixed), addresses: await text(addresses),
+          urgent: await text(withCondition), normal: await text(withCondition, REC_2),
+        };
+        return Object.assign(result, { before, after: today() });
+      });
+      const fallbacks = {};
+      for (const lang of ['fr', 'en']) {
+        I18n.setLang(lang);
+        const unavailable = FieldCodec.toStored([T('de '), C('email'), T(' / '), C('name')]);
+        fallbacks[lang] = await asUser(async () => { throw new Error('refusé'); }, async () => '', async () => ({ subject: await text(unavailable), file: await filename(unavailable) }));
+      }
+      const either = (value, make) => value === make(got.before) || value === make(got.after);
+      const dated = (value, make) => [got.before, got.after].some(day => value === make(day));
+      const checks = {
+        subject: either(got.subject, subjectFor),
+        fileName: either(got.file, fileFor),
+        addresses: got.addresses === 'lecteur@exemple.fr, copie@x.fr',
+        conditionAndChip: dated(got.urgent, ({ date }) => `Urgent le ${date}`) && dated(got.normal, ({ date }) => ` le ${date}`),
+        unavailableFr: fallbacks.fr.subject === 'de [Email indisponible] / [Nom indisponible]' && fallbacks.fr.file === 'de [Email indisponible] / [Nom indisponible]',
+        unavailableEn: fallbacks.en.subject === 'de [Email unavailable] / [Name unavailable]' && fallbacks.en.file === 'de [Email unavailable] / [Name unavailable]',
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: failed.join(', ') || JSON.stringify({ got, fallbacks }) };
+    },
+  );
+
+  scenario(
+    'fieldeditor_reading_mode_shows_the_value_of_a_chip_and_edit_mode_gives_the_chip_back',
+    'En Lecture, l’Objet et les adresses montrent la valeur de leurs puces (la date du jour, l’adresse de la personne connectée) et non leur libellé, sans puce à l’écran ; au retour en édition les puces sont revenues et les valeurs enregistrées sont intactes',
+    async (h) => {
+      I18n.setLang('fr');
+      const subject = rich([T('Au '), C('date'), T(' : '), B('Titre')]);
+      const to = rich([C('email'), T('; copie@x.fr')]);
+      return asUser(async () => 'lecteur@exemple.fr', async () => 'Ada', async () => {
+        field(SUBJECT).value = subject;
+        field(TO).value = to;
+        const before = today();
+        await h.clickButton('btn-mode-read');
+        await h.sleep(500);
+        const after = today();
+        const reading = { subject: field(SUBJECT).value, to: field(TO).value, chips: [SUBJECT, TO].map(id => chipsOf(id).length), drawn: field(SUBJECT).querySelectorAll('.smart-chip').length + field(TO).querySelectorAll('.smart-chip').length };
+        await h.clickButton('btn-mode-edit');
+        await h.sleep(500);
+        const edit = { subject: field(SUBJECT).value, to: field(TO).value, chips: [chipsOf(SUBJECT), chipsOf(TO)] };
+        const checks = {
+          reading: [before, after].some(day => reading.subject === `Au ${day.date} : Dossier A`) && reading.to === 'lecteur@exemple.fr; copie@x.fr',
+          noChipOnScreen: same(reading.chips, [0, 0]) && reading.drawn === 0,
+          back: edit.subject === subject && edit.to === to && same(edit.chips, [['date'], ['email']]),
+        };
+        const failed = Object.keys(checks).filter(k => !checks[k]);
+        return { pass: failed.length === 0, notes: failed.join(', ') || 'ok', detail: failed.length ? JSON.stringify({ reading, edit }) : undefined };
+      });
+    },
+    { email: true },
+  );
+
+  scenario(
+    'fieldeditor_a_chip_of_the_document_pastes_as_a_chip_and_copying_a_field_writes_its_label',
+    'Une puce du document collée dans un champ y reste une puce du même genre (le texte autour reste sur une ligne) ; copier une sélection du champ écrit le libellé de la puce - comme le texte d’une bulle écrit sa clé - et son HTML garde la puce, que le document relit',
+    async () => {
+      I18n.setLang('fr');
+      const view = editorOf(SUBJECT).view;
+      view.pasteHTML(`<p>Le ${EditorNodes.smartChipHtml({ kind: 'date' })} et ${EditorNodes.smartChipHtml({ kind: 'email' })}</p>`);
+      const pasted = { chips: chipsOf(SUBJECT), text: textOf(SUBJECT), value: field(SUBJECT).value };
+      field(SUBJECT).value = rich([T('Suivi '), C('time'), T(' - '), B('Titre')]);
+      const slice = view.state.doc.slice(0, view.state.doc.content.size);
+      const copiedText = view.someProp('clipboardTextSerializer', f => f(slice, view));
+      const copiedHtml = view.serializeForClipboard(slice).dom.innerHTML;
+      const checks = {
+        pasted: same(pasted.chips, ['date', 'email']) && pasted.text === 'Le  et ' && FieldCodec.isRich(pasted.value),
+        copiedText: copiedText === 'Suivi Heure actuelle - #FeDossiers.Titre',
+        copiedHtml: copiedHtml.includes(EditorNodes.smartChipHtml({ kind: 'time' })) && copiedHtml.includes('var-badge'),
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: failed.join(', ') || JSON.stringify({ pasted, copiedText, copiedHtml }) };
     },
   );
 

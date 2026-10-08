@@ -20,11 +20,13 @@ const Variables = (function () {
   let acItemsBox = null;
   let currentItems = [];
   let selectedIndex = 0;
-  // Dernières props de @tiptap/suggestion : un clic sur un onglet rejoue updateItems() avec elles, n'étant pas un évènement du plugin.
+  // Dernières props de @tiptap/suggestion : un clic sur un onglet rejoue updateItems() avec elles, n'étant pas un évènement du plugin. `latestFieldMode` :
+  // ce sont celles de la liste d'un champ texte à bulles (fieldMode).
   let latestProps = null;
+  let latestFieldMode = false;
   // La commande de l'entrée choisie : @tiptap/suggestion ne la donne qu'à onStart et onUpdate, jamais à onKeyDown ni au clic de souris.
   let latestCommand = null;
-  // Onglet actif du panneau « # » (le champ du nom de fichier PDF n'a pas celui des puces) ; 'variables' à chaque ouverture.
+  // Onglet actif du panneau « # » (le champ texte d'une fenêtre - QR code, calcul - n'a pas celui des puces) ; 'variables' à chaque ouverture.
   let activeTab = 'variables';
   // La fenêtre d'où la liste s'ouvre quand c'est depuis un de ses champs (le calcul d'une bulle) : la liste passe devant elle
   // (ViewportFit.placePopup, Layers.raise), les fenêtres étant au-dessus des menus où elle est posée. null pour la liste de l'éditeur et celle des
@@ -44,13 +46,14 @@ const Variables = (function () {
     // La boîte de la liste : les entrées fixes de l'onglet des puces et la création de la boîte
 
     // Entrées fixes de l'onglet des puces (jamais issues de GristAPI) : `kind: 'chip'` les distingue d'une #Variable ; `i18nKey` est résolu à
-    // l'affichage (displayKey), pour suivre un changement de langue.
+    // l'affichage (displayKey), pour suivre un changement de langue. `inField` : la puce se pose aussi dans un champ texte (Objet, À, Cc, Cci, nom du PDF),
+    // où elle s'écrit en texte - une valeur du moment, pas un bloc ni une note.
     const SMART_CHIP_ITEMS = [
       { key: 'Note de bas de page', i18nKey: 'chips.footnote', kind: 'chip', chipKind: 'footnote' },
-      { key: 'Date du jour', i18nKey: 'chips.date', kind: 'chip', chipKind: 'date' },
-      { key: 'Heure actuelle', i18nKey: 'chips.time', kind: 'chip', chipKind: 'time' },
-      { key: 'Email de l’utilisateur', i18nKey: 'chips.email', kind: 'chip', chipKind: 'email' },
-      { key: 'Nom de l’utilisateur', i18nKey: 'chips.name', kind: 'chip', chipKind: 'name' },
+      { key: 'Date du jour', i18nKey: 'chips.date', kind: 'chip', chipKind: 'date', inField: true },
+      { key: 'Heure actuelle', i18nKey: 'chips.time', kind: 'chip', chipKind: 'time', inField: true },
+      { key: 'Email de l’utilisateur', i18nKey: 'chips.email', kind: 'chip', chipKind: 'email', inField: true },
+      { key: 'Nom de l’utilisateur', i18nKey: 'chips.name', kind: 'chip', chipKind: 'name', inField: true },
       // Un bloc (js/conditional-text.js), pas une puce en ligne : il entoure le texte sélectionné quand le bouton « Insérer une variable » a ouvert la
       // liste dessus, sinon il se pose vide, curseur dedans.
       { key: 'Texte conditionnel', i18nKey: 'chips.conditionalText', kind: 'chip', chipKind: 'conditionalText' },
@@ -82,7 +85,7 @@ const Variables = (function () {
           e.preventDefault();
           if (activeTab === name) return;
           activeTab = name;
-          if (latestProps) updateItems(Object.assign({}, latestProps, { items: computeItems(latestProps.query, latestProps.editor) }));
+          if (latestProps) updateItems(Object.assign({}, latestProps, { items: computeItems(latestProps.query, latestProps.editor, latestFieldMode) }), latestFieldMode);
         });
         tabs.appendChild(tab);
       });
@@ -161,12 +164,15 @@ const Variables = (function () {
 
     // Les entrées de l'onglet actif, pour l'`items()` de @tiptap/suggestion (à chaque frappe) comme pour le clic sur un onglet. `editor` (facultatif) :
     // les colonnes de la table de la page viennent en tête ; dans une zone répétée, celles de la table parcourue passent avant elles. `fieldMode` : la
-    // liste d'un champ texte (Objet, À, Cc, Cci, nom du PDF), qui n'a que des variables - ni onglet des puces, ni note de bas de page, ni date.
+    // liste d'un champ texte (Objet, À, Cc, Cci, nom du PDF), qui n'a que des variables et les puces qui s'écrivent en texte (`inField` : date, heure,
+    // email et nom de l'utilisateur) - ni note de bas de page, ni bloc conditionnel, ni calcul.
     function computeItems(query, editor, fieldMode) {
       if (!NAME_QUERY.test(query)) return [];
-      if (!fieldMode && activeTab === 'chips') {
+      if (activeTab === 'chips') {
         // Pas de note de bas de page dans un en-tête ou un pied : la zone est répétée sur chaque page, sans repère de page physique où ancrer une note.
-        const items = Editor.isEditingHeaderFooter() ? SMART_CHIP_ITEMS.filter(v => v.chipKind !== 'footnote') : SMART_CHIP_ITEMS;
+        let items = SMART_CHIP_ITEMS;
+        if (fieldMode) items = items.filter(v => v.inField);
+        else if (Editor.isEditingHeaderFooter()) items = items.filter(v => v.chipKind !== 'footnote');
         const found = nameTest(query);
         return items.filter(v => found(displayKey(v), displayKey(v)));
       }
@@ -189,8 +195,8 @@ const Variables = (function () {
   const { setTabsVisible, render, select, moveSelection, position, preferChipsTab } = (function () {
     // L'affichage de la liste : onglets, lignes, ligne choisie, position
 
-    // Le champ du nom de fichier PDF réutilise cette boîte sans l'onglet des puces (aucun nœud ProseMirror à y insérer) : masqué plutôt que retiré du
-    // DOM.
+    // Le champ texte d'une fenêtre (le QR code, le calcul d'une bulle) réutilise cette boîte sans l'onglet des puces (aucun nœud ProseMirror à y insérer) :
+    // masqué plutôt que retiré du DOM.
     function setTabsVisible(visible) {
       ensureBox().querySelector('.ac-tabs').style.display = visible ? '' : 'none';
     }
@@ -253,15 +259,16 @@ const Variables = (function () {
   const { updateItems, hide, suggestionRender } = (function () {
     // La mise à jour de la liste et l'objet de rendu de @tiptap/suggestion
 
-    // `fieldMode` : la liste d'un champ texte, sans l'onglet des puces.
+    // `fieldMode` : la liste d'un champ texte, dont l'onglet des puces n'a que celles qui s'écrivent en texte.
     function updateItems(props, fieldMode) {
       latestProps = props;
+      latestFieldMode = !!fieldMode;
       currentItems = props.items || [];
       // Avec un texte à entourer en attente, « Texte conditionnel » est l'entrée choisie : Entrée suffit.
       const wrapIndex = !fieldMode && ConditionalText.hasPending() ? currentItems.findIndex(item => item.chipKind === 'conditionalText') : -1;
       selectedIndex = wrapIndex > 0 ? wrapIndex : 0;
       latestCommand = props.command;
-      setTabsVisible(!fieldMode);
+      setTabsVisible(true);
       render();
       // La liste de l'éditeur retrouve son étage de menu : un champ de fenêtre l'a peut-être montée devant sa fenêtre (checkForFilenameTrigger).
       listWindow = null;
@@ -335,6 +342,12 @@ const Variables = (function () {
       editor.chain().focus().insertContentAt(range, { type: 'varBadge', attrs: { table: item.table, column: item.column, key: item.key } }).run();
     }
 
+    // Le choix d'une ligne de la liste, dans l'éditeur du document comme dans un champ texte à bulles : une puce ou une bulle de variable.
+    function insertItem(editor, range, item) {
+      if (item.kind === 'chip') insertChip(editor, range, item.chipKind);
+      else insertVariable(editor, range, item);
+    }
+
     // Ce que les deux listes « # » (le corps du modèle, les champs texte à bulles) ont en commun : le déclencheur - réglable dans le panneau Réglages, un
     // changement n'a effet qu'après rechargement, ce `char` étant lu une fois, à la construction de l'éditeur - et la saisie jusqu'au curseur, espaces
     // comprises : « #porteur 3 » cherche les deux mots (la liste se vide, et se tait, dès qu'aucune colonne ne les porte tous).
@@ -351,18 +364,16 @@ const Variables = (function () {
               // texte brut.
               allow: ({ state, range }) => !state.doc.resolve(range.from).parent.type.spec.code,
               items: ({ query, editor }) => computeItems(query, editor),
-              command: ({ editor, range, props }) => {
-                if (props.kind === 'chip') insertChip(editor, range, props.chipKind);
-                else insertVariable(editor, range, props);
-              },
+              command: ({ editor, range, props }) => insertItem(editor, range, props),
               render: suggestionRender,
             })),
           ];
         },
       });
     }
-    // L'extension TipTap d'un champ texte à bulles (js/field-editor.js) : le « # » ouvre la même liste que dans l'éditeur, sans l'onglet des puces, et
-    // le choix pose une bulle. Même demande de clé de correspondance qu'à l'insertion d'une bulle du corps (insertVariable). Le déclencheur s'ouvre
+    // L'extension TipTap d'un champ texte à bulles (js/field-editor.js) : le « # » ouvre la même liste que dans l'éditeur, dont l'onglet des puces n'a que
+    // celles qui s'écrivent en texte, et le choix pose une bulle ou une puce. Même demande de clé de correspondance qu'à l'insertion d'une bulle du corps
+    // (insertVariable). Le déclencheur s'ouvre
     // derrière n'importe quel caractère (`allowedPrefixes: null`), comme dans le champ texte d'avant : « Suivi_#Projet.Nom » est le nom de fichier
     // type, et l'éditeur du corps, lui, n'ouvre la liste qu'après une espace.
     function createFieldExtension(Extension, Suggestion) {
@@ -378,7 +389,7 @@ const Variables = (function () {
               items: ({ query, editor }) => computeItems(query, editor, true),
               // La liste se ferme au choix : la fenêtre de la clé de correspondance, si elle s'ouvre, ne la retrouve pas ouverte derrière elle, et un refus laisse le
               // texte tapé sans liste, comme le champ d'avant.
-              command: ({ editor, range, props }) => { hide(); insertVariable(editor, range, props); },
+              command: ({ editor, range, props }) => { hide(); insertItem(editor, range, props); },
               render: () => suggestionRender(true),
             })),
           ];

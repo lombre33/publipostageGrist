@@ -500,7 +500,7 @@
 
 /* Chips intelligents (js/editor.js:createSmartChipNode, createFootnoteRefNode) : même palette verte que `.page-number-badge`, celle de « valeur
    calculée, pas une #Variable ». Le marqueur de note reste sans pastille ni fond (un chiffre vert en exposant). */
-.tiptap .smart-chip, .reader-content .smart-chip { display: inline-block; background: #e7f7ee; color: #146c43; border: 1px solid #b8e6cc; padding: 0 4px; border-radius: 3px; font-size: .92em; line-height: 1.4; }
+.tiptap .smart-chip, .pp-field-editor .smart-chip, .reader-content .smart-chip { display: inline-block; background: #e7f7ee; color: #146c43; border: 1px solid #b8e6cc; padding: 0 4px; border-radius: 3px; font-size: .92em; line-height: 1.4; }
 /* Numérotation continue sur tout le document (pas de remise à zéro par page) : un seul compteur racine, incrémenté en CSS, jamais recalculé en JS
    à l'écran. */
 .tiptap, .reader-content { counter-reset: footnote-ref; }

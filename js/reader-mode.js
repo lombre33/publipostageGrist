@@ -855,15 +855,19 @@ const ReaderMode = (function () {
     } catch (e) { /* repli ci-dessous */ }
     return { text: I18n.t(unavailableKey), isError: true };
   }
+  async function smartChipValue(kind) {
+    // La valeur d'une puce d'après son genre (date, heure, email, nom) : { text, isError }. Partagée par le document (resolveSmartChips) et par les
+    // champs texte à bulles (fieldText).
+    if (kind === 'date') return { text: formatTodayDate(), isError: false };
+    if (kind === 'time') return { text: formatNowTime(), isError: false };
+    if (kind === 'email') return userChipText(() => GristAPI.getCurrentUserEmail(), 'reader.emailUnavailable');
+    if (kind === 'name') return userChipText(() => GristAPI.getCurrentUserName(), 'reader.nameUnavailable');
+    return { text: '', isError: false };
+  }
   async function resolveSmartChips(wrapper) {
     const chips = Array.from(wrapper.querySelectorAll('.smart-chip'));
     await Promise.all(chips.map(async chip => {
-      const kind = chip.getAttribute('data-chip-kind');
-      let text = ''; let isError = false;
-      if (kind === 'date') text = formatTodayDate();
-      else if (kind === 'time') text = formatNowTime();
-      else if (kind === 'email') ({ text, isError } = await userChipText(() => GristAPI.getCurrentUserEmail(), 'reader.emailUnavailable'));
-      else if (kind === 'name') ({ text, isError } = await userChipText(() => GristAPI.getCurrentUserName(), 'reader.nameUnavailable'));
+      const { text, isError } = await smartChipValue(chip.getAttribute('data-chip-kind'));
       const span = document.createElement('span');
       span.textContent = text;
       span.className = 'resolved-var' + (isError ? ' error-msg' : '');
@@ -1056,23 +1060,28 @@ const ReaderMode = (function () {
     await GristAPI.hydrateAttachmentImages(wrapper);
     return wrapper.innerHTML;
   }
-  // Un champ texte (Objet, À, Cc, Cci, nom du PDF) dont une bulle porte un réglage, enregistré en HTML (js/field-codec.js) : chaque bulle devient son
-  // texte pour la ligne `record` - condition, autres attributs, boucle dans la phrase, liste, format de nombre ou de date comme dans le corps d'un
-  // modèle (resolveBadgeNode) -, le texte autour reste tel quel. Les champs gardent leurs règles d'avant : un nombre, un zéro et un Oui / Non s'écrivent
-  // tels que Grist les stocke (`rawNumbers`, Variables.formatValue), sauf si la bulle choisit son format. `valueText` (facultatif) : ce qui se fait de la
-  // valeur de chaque bulle avant de la poser (les caractères interdits d'un nom de fichier). Une image (colonne Pièces jointes) ne s'écrit pas : rien.
+  // Un champ texte (Objet, À, Cc, Cci, nom du PDF) dont une bulle porte un réglage ou qui a une puce, enregistré en HTML (js/field-codec.js) : chaque
+  // bulle devient son texte pour la ligne `record` - condition, autres attributs, boucle dans la phrase, liste, format de nombre ou de date comme dans le
+  // corps d'un modèle (resolveBadgeNode) -, chaque puce sa valeur du moment (smartChipValue), le texte autour reste tel quel. Les champs gardent leurs
+  // règles d'avant : un nombre, un zéro et un Oui / Non s'écrivent tels que Grist les stocke (`rawNumbers`, Variables.formatValue), sauf si la bulle
+  // choisit son format. `valueText` (facultatif) : ce qui se fait de la valeur de chaque bulle ou puce avant de la poser (les caractères interdits d'un
+  // nom de fichier). Une image (colonne Pièces jointes) ne s'écrit pas : rien.
   async function fieldText(html, tableId, record, valueText) {
     const wrapper = document.createElement('div');
     wrapper.innerHTML = HtmlSanitize.clean(html);
     const loopCtx = LoopRules.createContext();
-    const badges = wrapper.querySelectorAll(BADGE_SELECTOR);
-    await Promise.all(Array.from(badges).map(async badge => {
+    const atoms = wrapper.querySelectorAll(BADGE_SELECTOR + ', .smart-chip');
+    await Promise.all(Array.from(atoms).map(async atom => {
       let text = '';
       try {
-        const { node } = await resolveBadgeNode(badge, tableId || lastCurrentTableId, record, parseBadgeFormat(badge), loopCtx, { rawNumbers: true });
-        text = node.textContent || '';
+        if (atom.matches('.smart-chip')) {
+          text = (await smartChipValue(atom.getAttribute('data-chip-kind'))).text;
+        } else {
+          const { node } = await resolveBadgeNode(atom, tableId || lastCurrentTableId, record, parseBadgeFormat(atom), loopCtx, { rawNumbers: true });
+          text = node.textContent || '';
+        }
       } catch (e) { /* une valeur illisible donne un texte vide, jamais un export en échec */ }
-      badge.replaceWith(document.createTextNode(valueText ? valueText(text) : text));
+      atom.replaceWith(document.createTextNode(valueText ? valueText(text) : text));
     }));
     return wrapper.textContent;
   }

@@ -2147,8 +2147,9 @@
     EditorCore.getEditor().on('update', scheduleEmailLengthGauge);
     if (templateNameInput) templateNameInput.addEventListener('input', markAutosaveDirty);
     if (pdfFilenameInput) pdfFilenameInput.addEventListener('input', markAutosaveDirty);
-    // Les champs sont des éditeurs de bulles (js/field-editor.js) : la liste # n'y propose que des variables, jamais de puces - une note de bas de
-    // page, une date ou une heure n'a aucun sens dans un objet ou une liste d'adresses.
+    // Les champs sont des éditeurs de bulles (js/field-editor.js) : la liste # n'y propose que des variables et les puces qui s'écrivent en texte (date,
+    // heure, email et nom de l'utilisateur) - une note de bas de page, un bloc conditionnel ou un calcul n'ont aucun sens dans un objet ou une liste
+    // d'adresses.
     eachEmailInput(el => {
       el.addEventListener('input', markAutosaveDirty);
       el.addEventListener('input', scheduleEmailLengthGauge);
