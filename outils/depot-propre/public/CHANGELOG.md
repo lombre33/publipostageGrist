@@ -26,10 +26,19 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 - **Modèle de la vue** : Réglages > Vue > « Utiliser … pour cette vue » accepte aussi un e-mail ou un
   macro-modèle, qui s'ouvre au démarrage de la vue (un macro-modèle sur son résumé, un e-mail sur son
   bandeau Objet / À / Cc) ; l'étoile du document reste réservée aux modèles ordinaires.
-- **Recherche d'une colonne** : une colonne se retrouve en tapant ses mots, dans n'importe quel ordre, avec
-  ou sans « _ », « . » et « - » (« porteur 3 », « Porteur3 » et « 3 porteur » retrouvent
-  `Projets.Porteur_3`), dans la liste `#` et dans toutes les listes avec recherche. Le libellé que Grist
-  montre en tête de la colonne se cherche aussi.
+- **Recherche par mots** : une colonne se retrouve en tapant ses mots, dans n'importe quel ordre, avec ou
+  sans « _ », « . » et « - » (« porteur 3 », « Porteur3 » et « 3 porteur » retrouvent
+  `Projets.Porteur_3`), dans la liste `#` et dans toutes les listes avec recherche ; le libellé que Grist
+  montre en tête de la colonne se cherche aussi. La même règle vaut pour « Organiser mes modèles », la
+  galerie « Créer à partir d'un modèle » (« validé budget » retrouve « Budget validé ») et le filtre
+  « Filtrer les colonnes… » d'« Autres attributs », où la valeur affichée en face se cherche aussi.
+
+### Corrigé
+
+- **« Autres attributs » avec deux colonnes Référence vers une même table** (Demandeur et Valideur vers un
+  annuaire, par exemple) : la fenêtre part de la colonne cliquée, montre la personne de cette colonne et
+  pose `#Dossiers.Valideur.Email` ; elle ne lisait qu'une seule personne pour toute la ligne. Aucun lien
+  n'est créé ni changé, et avec une seule colonne Référence vers la table rien ne change.
 
 ## [1.0.0-beta.1] - 2026-10-05
 
@@ -146,9 +155,19 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 - **A view's template**: Settings > View > "Use … for this view" now also accepts an e-mail or a macro
   template, which opens when the view starts (a macro template on its summary, an e-mail on its
   Subject / To / Cc banner); the document's ★ stays reserved for ordinary templates.
-- **Column search**: a column is found by typing its words, in any order, with or without "_", "." and "-"
+- **Word search**: a column is found by typing its words, in any order, with or without "_", "." and "-"
   ("porteur 3", "Porteur3" and "3 porteur" find `Projets.Porteur_3`), in the `#` list and in every
-  searchable list. The label Grist shows at the top of the column is searched too.
+  searchable list; the label Grist shows at the top of the column is searched too. The same rule applies
+  to "Organize my templates", the "Create from a template" gallery ("validé budget" finds "Budget validé")
+  and the "Filter columns…" filter of "Other attributes", where the displayed value next to each column is
+  searched too.
+
+### Fixed
+
+- **"Other attributes" with two Reference columns to the same table** (Requester and Approver pointing to
+  a directory, for example): the window starts from the clicked column, shows the person of that column
+  and places `#Dossiers.Valideur.Email`; it used to read a single person for the whole row. No link is
+  created or changed, and with a single Reference column to the table nothing changes.
 
 ## [1.0.0-beta.1] - 2026-10-05 (English)
 
