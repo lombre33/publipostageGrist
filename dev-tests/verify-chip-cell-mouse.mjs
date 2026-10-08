@@ -274,8 +274,8 @@ await loadDoc('<p>Avant</p><table><tbody><tr>' + cell(90, chip('Colonne_supprime
 const broken = (await chipsInfo())[0];
 await hoverOn(broken);
 const brokenHover = (await chipsInfo())[0];
-check('bulle cassée dans une case étroite : dans sa case, et le survol garde le message d\'erreur (« n\'existe plus »)',
-  broken.broken && broken.outLeft <= 0.5 && broken.outRight <= 0.5 && /n'existe plus/.test(brokenHover.title) && brokenHover.title !== broken.label, { broken, title: brokenHover.title });
+check('bulle cassée dans une case étroite : dans sa case, et le survol garde le message d\'erreur (« n’existe plus »)',
+  broken.broken && broken.outLeft <= 0.5 && broken.outRight <= 0.5 && /n’existe plus/.test(brokenHover.title) && brokenHover.title !== broken.label, { broken, title: brokenHover.title });
 
 // 7) Case plus étroite que la fin du nom : la bulle reste quand même dans sa case (la fin est coupée à son tour).
 await loadDoc('<p>Avant</p><table><tbody><tr>' + cell(40, chip(LONG)) + cell(60, chip(LONG2)) + cell(120, 'x') + '</tr></tbody></table>');
