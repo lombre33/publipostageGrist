@@ -23,7 +23,7 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
   vérifie.
 - **Les données** : les modèles et les réglages vivent dans des tables `Publipostage_*` du document Grist ;
   les préférences d'affichage (langue, thème, raccourcis…) dans le navigateur.
-- **Le volume** : 109 fichiers dans `js/` (41 500 lignes : 30 800 de code, 8 100 de commentaires, 2 500 de
+- **Le volume** : 109 fichiers dans `js/` (41 500 lignes : 30 900 de code, 8 100 de commentaires, 2 500 de
   blanc), 35 feuilles de style (3 200 lignes), une page de 760 lignes. Quatre fichiers de polices du PDF
   pèsent 2,5 Mo en quelques lignes (des données) ; `js/i18n.js` est du texte à traduire, pas de la logique.
 
@@ -105,7 +105,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/table-select.js`, `js/table-merge.js` | Sélection de cases à la souris ; fusion et scission de cases d'un tableau de document. |
 | `js/heading-numbering.js` | Numérotation des titres, la même pour l'éditeur, la Lecture, le PDF et le Word. |
 
-### Variables et conditions (19 fichiers, 6 000 lignes)
+### Variables et conditions (19 fichiers, 6 100 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -270,7 +270,7 @@ For anyone reading the code: what is where, and where to start. Line counts are 
   **Each export** loads its library on first use, with an integrity hash (SRI) that the browser checks.
 - **The data**: templates and settings live in `Publipostage_*` tables of the Grist document; display
   preferences (language, theme, shortcuts…) in the browser.
-- **The size**: 109 files in `js/` (41,500 lines: 30,800 of code, 8,100 of comments, 2,500 blank), 35
+- **The size**: 109 files in `js/` (41,500 lines: 30,900 of code, 8,100 of comments, 2,500 blank), 35
   stylesheets (3,200 lines), a 760-line page. Four PDF font files weigh 2.5 MB in a few lines (data);
   `js/i18n.js` is text to translate, not logic.
 
@@ -351,7 +351,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/table-select.js`, `js/table-merge.js` | Mouse selection of cells; merging and splitting cells of a document table. |
 | `js/heading-numbering.js` | Heading numbering, the same for the editor, Reading mode, the PDF and the Word file. |
 
-### Variables and conditions (19 files, 6,000 lines)
+### Variables and conditions (19 files, 6,100 lines)
 
 | File | Role |
 |---|---|

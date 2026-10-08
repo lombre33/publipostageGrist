@@ -15,6 +15,14 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   format. Le zéro masqué et « Un document par valeur » restent propres au corps du modèle. Un modèle
   enregistré avant se relit tel quel (même objet, mêmes adresses, même nom de fichier), la Lecture montre
   la valeur résolue, et les renommages de colonnes et de tables sont suivis dans ces champs aussi.
+- **Puces dans les champs de l'e-mail et le nom du PDF** : dans l'Objet, À, Cc, Cci et le nom du PDF, `#`
+  ouvre la même liste que dans le document, avec ses deux onglets ; l'onglet « Puces » y propose « Date du
+  jour », « Heure actuelle », « Email de l'utilisateur » et « Nom de l'utilisateur » (la note de bas de
+  page, les blocs conditionnels et le calcul restent au corps du modèle). La puce garde son vert et prend sa
+  valeur du moment dans la Lecture, à « Créer l'email » et à l'export : date jj/mm/aaaa, heure hh:mm,
+  adresse et nom de la personne connectée, avec le texte de repli du document quand l'un des deux ne se lit
+  pas. Dans le nom du PDF, les caractères qu'un nom de fichier ne peut pas porter deviennent « _ »
+  (« 08/10/2026 » donne « 08_10_2026 »). Un modèle enregistré avant se relit tel quel.
 - **Texte « Avant » et « Après » d'une variable** : la fenêtre de condition d'une bulle a deux petits champs
   (40 signes, espaces comprises) dont le texte s'écrit collé à la valeur, dans le même style, dans la
   Lecture, le PDF, le Word, l'Excel, les en-têtes et les pieds de page. Il ne s'écrit pas quand la
@@ -144,6 +152,13 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   and "One document per value" remain specific to the template body. A template saved earlier reads back
   as it was (same subject, same addresses, same file name), Reading mode shows the resolved value, and
   column and table renames are followed in these fields too.
+- **Chips in the e-mail fields and the PDF name**: in Subject, To, Cc, Bcc and the PDF name, `#` opens the
+  same list as in the document, with its two tabs; the "Chips" tab offers "Today's date", "Current time",
+  "User's email" and "User's name" (the footnote, the conditional blocks and the calculation stay in the
+  template body). The chip keeps its green and takes its value of the moment in Reading mode, at "Create
+  email" and at export: date dd/mm/yyyy, time hh:mm, address and name of the signed-in person, with the
+  document's fallback text when either cannot be read. In the PDF name, the characters a file name cannot
+  hold become "_" ("08/10/2026" gives "08_10_2026"). A template saved earlier reads back as it was.
 - **"Before" and "After" text of a variable**: a bubble's condition window has two small fields (40
   characters, spaces included) whose text is written glued to the value, in the same style, in Reading
   mode, the PDF, the Word file, the Excel file, headers and footers. It is not written when the condition
