@@ -7,6 +7,32 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ## [{{VERSION}}] - {{DATE}}
 
+### Ajouté
+
+- **Variables dans les champs de l'e-mail et le nom du PDF** : Objet, À, Cc, Cci et le nom du PDF posent des
+  bulles de variable comme le corps du modèle (`#` ouvre la liste des variables, Entrée pose la bulle), avec
+  la même barre et les mêmes fenêtres : condition, « Autres attributs », boucle dans la phrase, liste,
+  format. Le zéro masqué et « Un document par valeur » restent propres au corps du modèle. Un modèle
+  enregistré avant se relit tel quel (même objet, mêmes adresses, même nom de fichier), la Lecture montre
+  la valeur résolue, et les renommages de colonnes et de tables sont suivis dans ces champs aussi.
+- **Texte « Avant » et « Après » d'une variable** : la fenêtre de condition d'une bulle a deux petits champs
+  (40 signes, espaces comprises) dont le texte s'écrit collé à la valeur, dans le même style, dans la
+  Lecture, le PDF, le Word, l'Excel, les en-têtes et les pieds de page. Il ne s'écrit pas quand la
+  condition est fausse, que la valeur est vide ou qu'elle est en erreur, et il vaut aussi sans condition :
+  une virgule qui disparaît avec la variable.
+
+### Modifié
+
+- **Modèle de la vue** : Réglages > Vue > « Utiliser … pour cette vue » accepte aussi un e-mail ou un
+  macro-modèle, qui s'ouvre au démarrage de la vue (un macro-modèle sur son résumé, un e-mail sur son
+  bandeau Objet / À / Cc) ; l'étoile du document reste réservée aux modèles ordinaires.
+- **Recherche d'une colonne** : une colonne se retrouve en tapant ses mots, dans n'importe quel ordre, avec
+  ou sans « _ », « . » et « - » (« porteur 3 », « Porteur3 » et « 3 porteur » retrouvent
+  `Projets.Porteur_3`), dans la liste `#` et dans toutes les listes avec recherche. Le libellé que Grist
+  montre en tête de la colonne se cherche aussi.
+
+## [1.0.0-beta.1] - 2026-10-05
+
 Première bêta publique. Elle reprend l'alpha du 14 septembre 2026 et ajoute l'essentiel des lignes
 « Bêta » de la roadmap, à l'exception de celles qui sont reportées en V1 (voir le
 [README](README.md#roadmap)).
@@ -100,6 +126,31 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 ---
 
 ## [{{VERSION}}] - {{DATE}} (English)
+
+### Added
+
+- **Variables in the e-mail fields and the PDF name**: Subject, To, Cc, Bcc and the PDF file name place
+  variable bubbles like the template body (`#` opens the variable list, Enter places the bubble), with the
+  same bar and windows: condition, "Other attributes", loop inside the sentence, list, format. Hidden zero
+  and "One document per value" remain specific to the template body. A template saved earlier reads back
+  as it was (same subject, same addresses, same file name), Reading mode shows the resolved value, and
+  column and table renames are followed in these fields too.
+- **"Before" and "After" text of a variable**: a bubble's condition window has two small fields (40
+  characters, spaces included) whose text is written glued to the value, in the same style, in Reading
+  mode, the PDF, the Word file, the Excel file, headers and footers. It is not written when the condition
+  is false or when the value is empty or in error, and it also applies without a condition: a comma that
+  disappears with the variable.
+
+### Changed
+
+- **A view's template**: Settings > View > "Use … for this view" now also accepts an e-mail or a macro
+  template, which opens when the view starts (a macro template on its summary, an e-mail on its
+  Subject / To / Cc banner); the document's ★ stays reserved for ordinary templates.
+- **Column search**: a column is found by typing its words, in any order, with or without "_", "." and "-"
+  ("porteur 3", "Porteur3" and "3 porteur" find `Projets.Porteur_3`), in the `#` list and in every
+  searchable list. The label Grist shows at the top of the column is searched too.
+
+## [1.0.0-beta.1] - 2026-10-05 (English)
 
 First public beta. It builds on the 14 September 2026 alpha and adds most of the roadmap's "Beta" lines,
 except those postponed to V1 (see the [README](README.md#roadmap-1)).

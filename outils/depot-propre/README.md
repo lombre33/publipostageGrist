@@ -19,7 +19,10 @@ Ce dossier ne part pas sur le dépôt public (`outils/` est dans les exclusions 
    sur un clone partiel). Tous les lots à publier y sont déjà.
 2. Clone du dépôt public, une fois pour toutes : `git clone https://github.com/grist-factory/Publipostage-Plus.git`.
 3. Version : `PP_VERSION` dans `js/version.js` (semver, `1.0.0-beta.1` pour la première bêta), et la section
-   `## [version] - {{DATE}}` du `public/CHANGELOG.md`, en français et en anglais. Relire `public/README.md`
+   `## [{{VERSION}}] - {{DATE}}` du `public/CHANGELOG.md`, en français et en anglais : elle reste ouverte entre
+   deux publications, et les changements s'y écrivent au fil de l'eau. Une fois la version publiée, la section
+   prend sa version et sa date en clair (`## [1.0.0-beta.1] - 2026-10-05`) et une nouvelle section
+   `## [{{VERSION}}] - {{DATE}}` s'ouvre au-dessus. Relire `public/README.md`
    (limites connues, roadmap) : il décrit l'état du jour de la publication, pas celui de la précédente.
    Relire aussi `public/CARTE_DU_CODE.md` : les contrôles voient un fichier cité qui n'existe plus ou un fichier de
    `js/` qui n'y figure pas, mais pas les nombres de lignes, qui se recomptent (`wc -l`). Si l'interface a changé

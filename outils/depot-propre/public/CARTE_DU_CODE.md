@@ -23,8 +23,8 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
   vérifie.
 - **Les données** : les modèles et les réglages vivent dans des tables `Publipostage_*` du document Grist ;
   les préférences d'affichage (langue, thème, raccourcis…) dans le navigateur.
-- **Le volume** : 107 fichiers dans `js/` (40 700 lignes : 30 300 de code, 7 900 de commentaires, 2 500 de
-  blanc), 34 feuilles de style (3 100 lignes), une page de 760 lignes. Quatre fichiers de polices du PDF
+- **Le volume** : 109 fichiers dans `js/` (41 500 lignes : 30 800 de code, 8 100 de commentaires, 2 500 de
+  blanc), 35 feuilles de style (3 200 lignes), une page de 760 lignes. Quatre fichiers de polices du PDF
   pèsent 2,5 Mo en quelques lignes (des données) ; `js/i18n.js` est du texte à traduire, pas de la logique.
 
 ## Par où commencer
@@ -63,7 +63,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 
 ## La carte, famille par famille
 
-### Grist et les données du document (17 fichiers, 4 700 lignes)
+### Grist et les données du document (17 fichiers, 4 800 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -88,7 +88,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/html-sanitize.js` | Filtre à liste blanche, lu dans un document inerte, pour le HTML des colonnes Grist, des modèles importés et de la galerie. |
 | `js/external-images.js` | Images d'un autre site : un cadre « Afficher » à leur place jusqu'au clic (rien n'est retenu), signalées ensuite en permanence, et une fenêtre avant tout export qui les lirait. |
 
-### L'éditeur (24 fichiers, 9 800 lignes)
+### L'éditeur (24 fichiers, 9 900 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -105,7 +105,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/table-select.js`, `js/table-merge.js` | Sélection de cases à la souris ; fusion et scission de cases d'un tableau de document. |
 | `js/heading-numbering.js` | Numérotation des titres, la même pour l'éditeur, la Lecture, le PDF et le Word. |
 
-### Variables et conditions (17 fichiers, 5 500 lignes)
+### Variables et conditions (19 fichiers, 6 000 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -138,7 +138,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/table-page-cut.js` | Où un tableau se coupe entre deux pages. |
 | `js/sheet-layout.js`, `js/sheet-assembly-dialog.js` | « Assemblage avant impression » : la géométrie d'une planche et sa fenêtre. |
 
-### Lecture (2 fichiers, 1 200 lignes)
+### Lecture (2 fichiers, 1 300 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -194,7 +194,7 @@ fichier, un lot), câblage de la galerie et de Grist. C'est le fichier qui conna
 ### Les feuilles de style
 
 `css/style.css` (jetons de couleur, thème clair et sombre, `--font-ui`), `css/toolbar-v2.css` (la barre du
-haut), `css/editor-v2.css` (le texte de l'éditeur) ; les 31 autres vont chacune avec un module ou une
+haut), `css/editor-v2.css` (le texte de l'éditeur) ; les 32 autres vont chacune avec un module ou une
 fenêtre de `js/` (`css/callout.css` pour `js/callout.js`) et le disent dans leur premier commentaire ;
 `css/roboto-fonts.css` embarque la police des documents.
 
@@ -241,6 +241,7 @@ notes de conception, qui ne sont pas publiés ici.
 | Ajouter une bibliothèque d'export | `js/export-common.js` (chargeur, empreinte) et la politique de sécurité de `index.html`. |
 | Ajouter un moteur d'export du widget (un script que seul un export utilise) | Une balise inerte `<script type="text/x-lazy-engine" data-engine="…">` dans `index.html`, puis son nom dans la liste `engines` de l'export qui s'en sert (`js/main.js`) : `js/export-engines.js` le charge au premier besoin. |
 | Un nouvel élément de document (nœud, mise en forme) | `js/editor-nodes.js` (l'éditeur), sa feuille de `css/` (l'écran et la Lecture), puis `js/pdf-export.js` et `js/docx-export.js` : chaque export le convertit à part. |
+| Mettre des bulles de variable dans un champ texte (Objet, À, Cc, Cci, nom du PDF) | `js/field-editor.js` (un éditeur d'une ligne qui se comporte comme l'`<input>` qu'il remplace), `js/field-codec.js` (la valeur enregistrée : texte brut ou HTML), `ReaderMode.fieldText` dans `js/reader-mode.js` (la valeur résolue), `css/field-editor.css`. |
 | Modifier un fichier de `css/` ou de `js/` | Monter son numéro `?v=` dans `index.html`, sinon le navigateur garde l'ancien. |
 
 ---
@@ -269,8 +270,8 @@ For anyone reading the code: what is where, and where to start. Line counts are 
   **Each export** loads its library on first use, with an integrity hash (SRI) that the browser checks.
 - **The data**: templates and settings live in `Publipostage_*` tables of the Grist document; display
   preferences (language, theme, shortcuts…) in the browser.
-- **The size**: 107 files in `js/` (40,700 lines: 30,300 of code, 7,900 of comments, 2,500 blank), 34
-  stylesheets (3,100 lines), a 760-line page. Four PDF font files weigh 2.5 MB in a few lines (data);
+- **The size**: 109 files in `js/` (41,500 lines: 30,800 of code, 8,100 of comments, 2,500 blank), 35
+  stylesheets (3,200 lines), a 760-line page. Four PDF font files weigh 2.5 MB in a few lines (data);
   `js/i18n.js` is text to translate, not logic.
 
 ## Where to start
@@ -308,7 +309,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 
 ## The map, family by family
 
-### Grist and the document's data (17 files, 4,700 lines)
+### Grist and the document's data (17 files, 4,800 lines)
 
 | File | Role |
 |---|---|
@@ -333,7 +334,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/html-sanitize.js` | Allow-list filter, parsed in an inert document, for the HTML of Grist columns, imported templates and the gallery. |
 | `js/external-images.js` | Images from another site: a "Show" frame in their place until the click (nothing is remembered), flagged at all times afterwards, and a window before any export that would read them. |
 
-### The editor (24 files, 9,800 lines)
+### The editor (24 files, 9,900 lines)
 
 | File | Role |
 |---|---|
@@ -350,7 +351,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/table-select.js`, `js/table-merge.js` | Mouse selection of cells; merging and splitting cells of a document table. |
 | `js/heading-numbering.js` | Heading numbering, the same for the editor, Reading mode, the PDF and the Word file. |
 
-### Variables and conditions (17 files, 5,500 lines)
+### Variables and conditions (19 files, 6,000 lines)
 
 | File | Role |
 |---|---|
@@ -383,7 +384,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/table-page-cut.js` | Where a table is cut between two pages. |
 | `js/sheet-layout.js`, `js/sheet-assembly-dialog.js` | "Assemble before printing": the geometry of a sheet and its window. |
 
-### Reading (2 files, 1,200 lines)
+### Reading (2 files, 1,300 lines)
 
 | File | Role |
 |---|---|
@@ -439,7 +440,7 @@ wiring of the gallery and of Grist. It is the file that knows all the others.
 ### Stylesheets
 
 `css/style.css` (color tokens, light and dark theme, `--font-ui`), `css/toolbar-v2.css` (the top bar),
-`css/editor-v2.css` (the editor's text); the other 31 each go with a module or a window of `js/`
+`css/editor-v2.css` (the editor's text); the other 32 each go with a module or a window of `js/`
 (`css/callout.css` for `js/callout.js`) and say so in their first comment; `css/roboto-fonts.css` embeds
 the documents' font.
 
@@ -484,4 +485,5 @@ notes, which are not published here.
 | Add an export library | `js/export-common.js` (loader, integrity hash) and the security policy of `index.html`. |
 | Add an export engine of the widget (a script that only an export uses) | An inert `<script type="text/x-lazy-engine" data-engine="…">` tag in `index.html`, then its name in the `engines` list of the export that uses it (`js/main.js`): `js/export-engines.js` loads it when needed. |
 | A new document element (node, formatting) | `js/editor-nodes.js` (the editor), its sheet in `css/` (screen and Reading mode), then `js/pdf-export.js` and `js/docx-export.js`: each export converts it separately. |
+| Put variable bubbles in a text field (Subject, To, Cc, Bcc, PDF name) | `js/field-editor.js` (a one-line editor that behaves like the `<input>` it replaces), `js/field-codec.js` (the saved value: plain text or HTML), `ReaderMode.fieldText` in `js/reader-mode.js` (the resolved value), `css/field-editor.css`. |
 | Modify a file in `css/` or `js/` | Bump its `?v=` number in `index.html`, otherwise the browser keeps the old one. |
