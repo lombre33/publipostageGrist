@@ -19,13 +19,15 @@
 //   - Entrée qui descend d'une case (`enterGoesDown`), Maj+Entrée et Ctrl+Entrée qui ajoutent une ligne dans la case ;
 //   - le défilement vers la sélection qui tient compte des bandeaux (`revealSelection`).
 // Tout est inerte tant que setActive(true) n'a pas été appelé (js/main.js:loadTemplateIntoEditor) : un document, un email ou un macro-modèle ne
-// voient rien de ce fichier. Les classes TipTap/ProseMirror arrivent par configure() (editor.js).
+// voient rien de ce fichier. Seuls les réglages de la barre du tableau - alignement vertical, bordures, quadrillage - valent aussi pour un tableau de
+// document : ils visent le tableau qui porte la sélection (`tableInfo`, `scopedTable`), la grille étant le cas où le modèle n'a qu'un tableau. Les
+// classes TipTap/ProseMirror arrivent par configure() (editor.js).
 const GridEditor = (function () {
   const el = Dom.el;
 
   const {
     TYPE, GRID_LINES_OFF, DEFAULT_LINE_COLOR, DEFAULT_COLS, DEFAULT_ROWS, DEFAULT_COL_WIDTH_PX, DEFAULT_ROW_HEIGHT_PX, MIN_COL_WIDTH_PX, MAX_COL_WIDTH_PX,
-    MAX_ROW_HEIGHT_PX, FORBIDDEN_NODES, CELL_NODES, VALIGNS, DEFAULT_VALIGN, BORDER_ATTRS, ROW_EDGES, COLUMN_EDGES,
+    MAX_ROW_HEIGHT_PX, FORBIDDEN_NODES, CELL_NODES, VALIGNS, DEFAULT_VALIGN, DOCUMENT_VALIGN, BORDER_ATTRS, ROW_EDGES, COLUMN_EDGES,
   } = (function () {
     // Les constantes de la grille : tailles, nœuds interdits, alignement vertical, bords des cases.
 
@@ -53,6 +55,8 @@ const GridEditor = (function () {
     // Posé sur chaque case : l'éditeur, la Lecture, le PDF et l'Excel le lisent au même endroit.
     const VALIGNS = new Set(['top', 'middle', 'bottom']);
     const DEFAULT_VALIGN = 'middle';
+    // Celui d'une case de document que personne n'a réglée : en haut (le `vertical-align` du navigateur, ce que les sorties font aussi).
+    const DOCUMENT_VALIGN = 'top';
     // Les quatre bords d'une case (js/table-borders.js : null = trait de départ, 'auto' = trait de départ posé par la personne, 'none' = pas de trait,
     // '#rrggbb' = couleur) : un attribut par côté, écrit sur les deux cases d'un trait partagé.
     const BORDER_ATTRS = { top: 'borderTop', right: 'borderRight', bottom: 'borderBottom', left: 'borderLeft' };
@@ -62,7 +66,7 @@ const GridEditor = (function () {
     const COLUMN_EDGES = { before: BORDER_ATTRS.left, after: BORDER_ATTRS.right, sides: [BORDER_ATTRS.top, BORDER_ATTRS.bottom] };
     return {
       TYPE, GRID_LINES_OFF, DEFAULT_LINE_COLOR, DEFAULT_COLS, DEFAULT_ROWS, DEFAULT_COL_WIDTH_PX, DEFAULT_ROW_HEIGHT_PX, MIN_COL_WIDTH_PX, MAX_COL_WIDTH_PX,
-      MAX_ROW_HEIGHT_PX, FORBIDDEN_NODES, CELL_NODES, VALIGNS, DEFAULT_VALIGN, BORDER_ATTRS, ROW_EDGES, COLUMN_EDGES,
+      MAX_ROW_HEIGHT_PX, FORBIDDEN_NODES, CELL_NODES, VALIGNS, DEFAULT_VALIGN, DOCUMENT_VALIGN, BORDER_ATTRS, ROW_EDGES, COLUMN_EDGES,
     };
   })();
 
@@ -172,12 +176,35 @@ const GridEditor = (function () {
       return active && typeof html === 'string' && html.endsWith(tail) ? html.slice(0, html.length - '<p></p>'.length) : html;
     }
 
-    function tableInfo(doc) {
-      const first = doc.firstChild;
-      return first && first.type.name === 'table' ? { node: first, pos: 0 } : null;
+    // Le tableau que vise la grille. Dans une grille, le seul du modèle, en tête du document. Dans un document, celui qui porte la sélection (`selection`) :
+    // le plus proche de la tête du curseur, celui des cases pour des cases choisies, celui d'un tableau choisi en entier ; null hors d'un tableau ou sans
+    // sélection. La grille est ainsi le cas où il n'y a qu'un tableau.
+    function tableInfo(doc, selection) {
+      if (active) {
+        const first = doc.firstChild;
+        return first && first.type.name === 'table' ? { node: first, pos: 0 } : null;
+      }
+      return selection ? tableAtSelection(selection) : null;
+    }
+
+    function tableAtSelection(selection) {
+      if (selection.node && selection.node.type.name === 'table') return { node: selection.node, pos: selection.from };
+      const $pos = selection.$anchorCell ? selection.$headCell : selection.$head;
+      for (let depth = $pos.depth; depth > 0; depth--) {
+        if ($pos.node(depth).type.name === 'table') return { node: $pos.node(depth), pos: $pos.before(depth) };
+      }
+      return null;
     }
     return { withTableAttributes, withRowAttributes, withCellAttributes, serialize, tableInfo };
   })();
+
+  // Le tableau que visent les réglages de la barre du tableau (alignement vertical, bordures, quadrillage) : celui de la grille, ou celui du document qui
+  // porte la sélection. Aucun dans un document dont le suivi des modifications est allumé : ces réglages sont des changements d'attributs, que le suivi ne
+  // voit pas (comme la fusion de cases, js/table-merge.js) ; ils s'écriraient sans laisser de suggestion.
+  function scopedTable(ed) {
+    if (!active && Editor.isTrackChangesOn()) return null;
+    return tableInfo(ed.state.doc, ed.state.selection);
+  }
 
   const { rowPos, isEmptyParagraph, isValidGridDoc, buildDefaultTable, cellOrigins, columnWidths, hasCellAttr, isFreshCell } = (function () {
     // Le document d'une grille : rang d'une ligne, ce qui est valable, la grille de départ, l'emplacement et la largeur des colonnes.
@@ -547,19 +574,23 @@ const GridEditor = (function () {
   const { selectedVerticalAlign, setVerticalAlign, canMerge, canSplit, selectionRect, mergeCells } = (function () {
     // L'alignement vertical, la fusion et le rectangle des cases visées.
 
-    // 'top', 'middle' ou 'bottom' quand toutes les cases visées s'accordent, null quand la sélection est mêlée (aucun bouton n'est alors enfoncé).
+    // 'top', 'middle' ou 'bottom' quand toutes les cases visées s'accordent, null quand la sélection est mêlée (aucun bouton n'est alors enfoncé) ou hors
+    // d'un tableau. Une case sans alignement posé est au milieu dans une grille (sa valeur de départ) et en haut dans un document (celle du navigateur).
     function selectedVerticalAlign(ed) {
-      if (!active) return null;
-      const values = new Set(selectedCells(ed.state).map(({ node }) => (VALIGNS.has(node.attrs.verticalAlign) ? node.attrs.verticalAlign : DEFAULT_VALIGN)));
+      if (!scopedTable(ed)) return null;
+      const unset = active ? DEFAULT_VALIGN : DOCUMENT_VALIGN;
+      const values = new Set(selectedCells(ed.state).map(({ node }) => (VALIGNS.has(node.attrs.verticalAlign) ? node.attrs.verticalAlign : unset)));
       return values.size === 1 ? Array.from(values)[0] : null;
     }
 
-    // Une seule transaction pour toutes les cases visées : un seul Annuler.
+    // Une seule transaction pour toutes les cases visées : un seul Annuler. Dans un document « en haut » est l'état de départ d'une case : il s'efface au lieu
+    // de s'écrire, et un tableau que personne n'a réglé garde un HTML sans marque.
     function setVerticalAlign(ed, value) {
-      if (!active || !VALIGNS.has(value)) return false;
+      if (!VALIGNS.has(value) || !scopedTable(ed)) return false;
+      const stored = !active && value === DOCUMENT_VALIGN ? null : value;
       const tr = ed.state.tr;
       selectedCells(ed.state).forEach(({ node, pos }) => {
-        if (node.attrs.verticalAlign !== value) tr.setNodeMarkup(pos, undefined, Object.assign({}, node.attrs, { verticalAlign: value }));
+        if ((node.attrs.verticalAlign || null) !== stored) tr.setNodeMarkup(pos, undefined, Object.assign({}, node.attrs, { verticalAlign: stored }));
       });
       if (tr.docChanged) ed.view.dispatch(tr);
       return true;
@@ -653,8 +684,8 @@ const GridEditor = (function () {
     // (« inner »), un côté, ou plus aucun trait (« none »). `color` : la couleur du stylo, null = le trait de départ. Une seule transaction pour toutes
     // les cases touchées : un seul Annuler.
     function applyBorders(ed, preset, color) {
-      if (!active || !TableBorders.PRESETS.includes(preset)) return false;
-      const info = tableInfo(ed.state.doc);
+      if (!TableBorders.PRESETS.includes(preset)) return false;
+      const info = scopedTable(ed);
       const rect = info && selectionRect(ed.state, info);
       if (!rect) return false;
       const spec = borderSpec(info.node);
@@ -668,23 +699,22 @@ const GridEditor = (function () {
     // Le réglage a-t-il un trait à poser ? « Intérieurs » n'en a pas pour une seule case (ni pour l'intérieur d'une case fusionnée) : le bouton se
     // grise.
     function canApplyBorders(ed, preset) {
-      if (!active || !TableBorders.PRESETS.includes(preset)) return false;
-      const info = tableInfo(ed.state.doc);
+      if (!TableBorders.PRESETS.includes(preset)) return false;
+      const info = scopedTable(ed);
       const rect = info && selectionRect(ed.state, info);
       return !!rect && TableBorders.usableEdges(borderSpec(info.node), TableBorders.presetEdges(preset, rect)).length > 0;
     }
 
     // Le quadrillage de départ est-il montré en Lecture et dans les exports ? (oui tant que la personne ne l'a pas masqué)
     function gridLinesShown(ed) {
-      const info = tableInfo(ed.state.doc);
+      const info = scopedTable(ed);
       return !info || info.node.attrs.gridLines !== GRID_LINES_OFF;
     }
 
     // Montre ou masque le quadrillage en Lecture et dans les exports ; les traits posés par la personne restent. L'éditeur, lui, n'en change pas. Une
     // seule transaction : un seul Annuler, et l'enregistrement automatique la voit passer.
     function setGridLinesShown(ed, shown) {
-      if (!active) return false;
-      const info = tableInfo(ed.state.doc);
+      const info = scopedTable(ed);
       if (!info) return false;
       if (gridLinesShown(ed) === !!shown) return true;
       ed.view.dispatch(ed.state.tr.setNodeMarkup(info.pos, undefined, Object.assign({}, info.node.attrs, { gridLines: shown ? null : GRID_LINES_OFF })));

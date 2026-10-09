@@ -1489,18 +1489,15 @@
       await sleep(650);
       GridEditor.setGridLinesShown(ed(), true); await sleep(120);
       const shownAgain = { shown: GridEditor.gridLinesShown(ed()), anywhere: /data-grid-lines/.test(Editor.getHTML()) };
-      GridEditor.setActive(false);
-      const outsideGrid = GridEditor.setGridLinesShown(ed(), false);
-      GridEditor.setActive(true);
       const pass = start.shown && !start.attr && !start.anywhere
         && hidden.done === true && !hidden.shown && hidden.attr && hidden.nodeAttr === 'off' && hidden.look === start.look && /^solid /.test(hidden.look)
         && again === true && attrOf(noopHtml)
         && undone.shown && !undone.attr && !undone.anywhere
         && !redone.shown && redone.attr
         && !reloaded.shown && reloaded.attr
-        && shownAgain.shown && !shownAgain.anywhere
-        && outsideGrid === false;
-      return { pass, notes: JSON.stringify({ start, hidden, again, undone, redone, reloaded, shownAgain, outsideGrid }) };
+        && shownAgain.shown && !shownAgain.anywhere;
+      // Hors d'une grille le réglage n'est plus refusé : il vise le tableau du curseur (dev-tests/scenarios-grid-in-document.js).
+      return { pass, notes: JSON.stringify({ start, hidden, again, undone, redone, reloaded, shownAgain }) };
     }),
   });
 
