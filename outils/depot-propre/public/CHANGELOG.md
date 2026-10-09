@@ -94,6 +94,10 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   est cochée, ces comptes ouvrent d'emblée sur la Lecture épurée, comme une personne de la table des droits
   mise en lecture seule. Comme le widget ne sait pas qui est un Lecteur, la colonne « Export autorisé » ne
   peut pas le restreindre : son export reste ouvert.
+- **Plusieurs lignes ou colonnes d'un coup dans un tableau de document** : quand plusieurs cases d'un tableau
+  sont choisies, « Ligne avant », « Ligne après », « Colonne avant » et « Colonne après », dans la barre du
+  tableau, ajoutent autant de lignes ou de colonnes que les cases choisies en couvrent, en un seul Annuler,
+  comme dans une grille. Un simple curseur en ajoute toujours une.
 
 ### Modifié
 
@@ -335,6 +339,9 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   Clean reading" box is ticked, these accounts open straight on Clean reading, like a person of the rights
   table set read-only. Since the widget does not know who a Viewer is, the "Export allowed" column cannot
   restrict them: their export stays open.
+- **Several rows or columns at once in a document table**: when several cells of a table are picked, "Row
+  before", "Row after", "Column before" and "Column after" in the table bar add as many rows or columns as the
+  picked cells cover, in a single Undo, as in a grid. A plain cursor still adds one.
 
 ### Changed
 

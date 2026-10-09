@@ -18,10 +18,12 @@
 //     avant/après » qui ajoutent autant de lignes ou de colonnes que la sélection en couvre (`insertLines`) ;
 //   - Entrée qui descend d'une case (`enterGoesDown`), Maj+Entrée et Ctrl+Entrée qui ajoutent une ligne dans la case ;
 //   - le défilement vers la sélection qui tient compte des bandeaux (`revealSelection`).
-// Tout est inerte tant que setActive(true) n'a pas été appelé (js/main.js:loadTemplateIntoEditor) : un document, un email ou un macro-modèle ne
-// voient rien de ce fichier. Seuls les réglages de la barre du tableau - alignement vertical, bordures, quadrillage - valent aussi pour un tableau de
-// document : ils visent le tableau qui porte la sélection (`tableInfo`, `scopedTable`), la grille étant le cas où le modèle n'a qu'un tableau. Les
-// classes TipTap/ProseMirror arrivent par configure() (editor.js).
+// Tout est inerte tant que setActive(true) n'a pas été appelé (js/main.js:loadTemplateIntoEditor), sauf ce que le tableau d'un document partage avec
+// la grille - « tout tableau est un tableau de grille à l'usage » : les réglages de la barre du tableau (alignement vertical, bordures, quadrillage)
+// visent le tableau qui porte la sélection (`tableInfo`, `scopedTable`), la grille étant le cas où le modèle n'a qu'un tableau ; « Ligne / Colonne avant /
+// après » (`insertLines`), la fusion et la scission (`mergeSelected`, `splitSelected`, appelées par js/table-merge.js) valent pour les deux ; et un
+// tableau de document qui porte des traits ou des hauteurs les garde quand on y ajoute ou retire une ligne (`repairDocumentTables`). Un email, un
+// macro-modèle ou un tableau sans trait ni hauteur n'y voient rien. Les classes TipTap/ProseMirror arrivent par configure() (editor.js).
 const GridEditor = (function () {
   const el = Dom.el;
 
@@ -206,7 +208,7 @@ const GridEditor = (function () {
     return tableInfo(ed.state.doc, ed.state.selection);
   }
 
-  const { rowPos, isEmptyParagraph, isValidGridDoc, buildDefaultTable, cellOrigins, columnWidths, hasCellAttr, isFreshCell } = (function () {
+  const { rowPos, isEmptyParagraph, isValidGridDoc, buildDefaultTable, cellOrigins, columnWidths, knownColumnWidths, hasCellAttr, isFreshCell } = (function () {
     // Le document d'une grille : rang d'une ligne, ce qui est valable, la grille de départ, l'emplacement et la largeur des colonnes.
 
     // La position, dans le document, de la ligne de rang `index` du tableau.
@@ -263,26 +265,28 @@ const GridEditor = (function () {
     }
 
     // Largeur de chaque colonne, lue sur les `colwidth` des cases (la première largeur connue de la colonne gagne : toutes les lignes doivent s'y
-    // accorder) ; DEFAULT_COL_WIDTH_PX quand aucune case ne la porte (une colonne ajoutée par la barre de la case naît sans largeur).
-    function columnWidths(tableNode) {
+    // accorder) ; 0 quand aucune case ne la porte (les colonnes automatiques d'un tableau de document).
+    function knownColumnWidths(tableNode) {
       const map = libs.TableMap.get(tableNode);
       const widths = new Array(map.width).fill(0);
       cellOrigins(tableNode, map).forEach(({ node, col }) => {
         const known = node.attrs.colwidth || [];
         for (let j = 0; j < (node.attrs.colspan || 1); j++) if (!widths[col + j] && known[j]) widths[col + j] = known[j];
       });
-      return widths.map(w => w || DEFAULT_COL_WIDTH_PX);
+      return widths;
     }
+    // Les mêmes, DEFAULT_COL_WIDTH_PX quand aucune case ne la porte (une colonne ajoutée par la barre de la case naît sans largeur) : une grille.
+    function columnWidths(tableNode) { return knownColumnWidths(tableNode).map(w => w || DEFAULT_COL_WIDTH_PX); }
 
     // Seule une case dont le type porte l'attribut peut le recevoir : sinon le « correctif » ne corrigerait jamais rien et appendTransaction tournerait
     // sans fin.
     function hasCellAttr(cell, name) { return !!cell.type.spec.attrs && name in cell.type.spec.attrs; }
     // Une case neuve (ligne ou colonne ajoutée, collage) : aucun alignement vertical encore posé.
     function isFreshCell(cell) { return hasCellAttr(cell, 'verticalAlign') && !VALIGNS.has(cell.attrs.verticalAlign); }
-    return { rowPos, isEmptyParagraph, isValidGridDoc, buildDefaultTable, cellOrigins, columnWidths, hasCellAttr, isFreshCell };
+    return { rowPos, isEmptyParagraph, isValidGridDoc, buildDefaultTable, cellOrigins, columnWidths, knownColumnWidths, hasCellAttr, isFreshCell };
   })();
 
-  const { fixCellDimensions } = (function () {
+  const { fixCellDimensions, borderSeeds } = (function () {
     // Les bords de départ des cases neuves et la réparation des largeurs et des alignements.
 
     // Les bords de départ des cases neuves, et ce qu'il faut changer chez leurs voisines. Une ligne ajoutée reprend les bords gauche et droit de la
@@ -356,7 +360,7 @@ const GridEditor = (function () {
       });
       return changed ? out : null;
     }
-    return { fixCellDimensions };
+    return { fixCellDimensions, borderSeeds };
   })();
 
   const { fixRowHeights, borderSpec, writeBorders, fixBorders } = (function () {
@@ -413,9 +417,9 @@ const GridEditor = (function () {
     }
 
     // Met d'accord les cases qui se partagent un trait (fusion, ligne ou colonne supprimée, collage) : « pas de trait » l'emporte, puis la première
-    // couleur, sinon le trait de départ. Null quand tout s'accorde déjà.
-    function fixBorders(state, tr) {
-      const info = tableInfo(tr ? tr.doc : state.doc);
+    // couleur, sinon le trait de départ. Null quand tout s'accorde déjà. `table` : le tableau d'un document (`{ node, pos }`) ; sans lui, celui de la grille.
+    function fixBorders(state, tr, table) {
+      const info = table || tableInfo(tr ? tr.doc : state.doc);
       if (!info) return null;
       const spec = borderSpec(info.node);
       return writeBorders(state, tr, info, spec, TableBorders.resolve(spec)) || null;
@@ -491,6 +495,108 @@ const GridEditor = (function () {
       return ends ? libs.CellSelection.create(doc, ends.first, ends.last) : null;
     }
     return { repairGrid, normalizeDocument, isCellSelection, selectionInsideTable, firstAndLastCell, allCellsSelection };
+  })();
+
+  const { repairDocumentTables } = (function () {
+    // Les tableaux d'un DOCUMENT. Pas de réparation générale : la grille impose une largeur et un alignement à chacune de ses cases, un document laisse
+    // ses colonnes automatiques et ses cases sans alignement. Mais un geste de structure ne doit pas défaire les traits ni les hauteurs d'un tableau qui
+    // en porte : une ligne ou une colonne ajoutée reprend le cadre et la hauteur de sa voisine, comme dans une grille, et les cases qui se partagent un
+    // trait s'accordent après une fusion ou une suppression. Un tableau sans trait ni hauteur n'est pas touché (ce que les réparations écriraient est nul).
+    // Pas de réparation : suivi des modifications allumé (ces écritures ne seraient pas suivies), Annuler et Rétablir (ils rendent un état qui s'accordait
+    // déjà), un tableau arrivé tout entier avec la transaction (chargé ou collé : il porte ses traits).
+
+    // Les zones que les pas de `trs` ont changées, en positions du document final ; `inserted` quand du contenu y est entré.
+    function changedRanges(trs) {
+      const maps = [];
+      trs.forEach(tr => tr.mapping.maps.forEach(map => maps.push(map)));
+      const ranges = [];
+      maps.forEach((map, index) => map.forEach((oldStart, oldEnd, newStart, newEnd) => {
+        let from = newStart;
+        let to = newEnd;
+        for (let next = index + 1; next < maps.length; next++) { from = maps[next].map(from, 1); to = maps[next].map(to, -1); }
+        ranges.push({ from, to: Math.max(from, to), inserted: newEnd > newStart });
+      }));
+      return ranges;
+    }
+
+    function hasBorders(cell) { return !!(cell.attrs.borderTop || cell.attrs.borderRight || cell.attrs.borderBottom || cell.attrs.borderLeft); }
+
+    // Les bords de départ des cases neuves (`fresh` : leurs positions dans le document), ceux de la grille (`borderSeeds`).
+    function seedFreshBorders(state, tr, info, fresh) {
+      const map = libs.TableMap.get(info.node);
+      const cells = cellOrigins(info.node, map);
+      const seeds = borderSeeds(info.node, map, cells, new Set(cells.filter(({ pos }) => fresh.has(info.pos + 1 + pos)).map(({ pos }) => pos)));
+      let out = tr;
+      seeds.forEach((attrs, pos) => {
+        const cell = info.node.nodeAt(pos);
+        if (!hasCellAttr(cell, BORDER_ATTRS.top) || Object.keys(attrs).every(name => (cell.attrs[name] || null) === (attrs[name] || null))) return;
+        if (!out) out = state.tr;
+        out.setNodeMarkup(info.pos + 1 + pos, undefined, Object.assign({}, cell.attrs, attrs));
+      });
+      return out === tr ? null : out;
+    }
+
+    // Une ligne neuve prend la hauteur de celle du dessus (de la première ligne gardée sous elle, pour une ligne neuve en tête), quand cette ligne en a une.
+    function seedFreshHeights(state, tr, info, fresh) {
+      const rows = [];
+      info.node.forEach((row, offset) => rows.push({ row, pos: info.pos + 1 + offset }));
+      const heights = rows.map(({ row }) => row.attrs.rowHeight || 0);
+      if (!heights.some(Boolean)) return null;
+      let out = tr;
+      rows.forEach(({ row, pos }, index) => {
+        if (!fresh.has(pos) || heights[index]) return;
+        let ref = index > 0 ? heights[index - 1] : 0;
+        for (let below = index + 1; index === 0 && below < rows.length && !ref; below++) if (!fresh.has(rows[below].pos)) ref = heights[below];
+        if (!ref) return;
+        heights[index] = ref;
+        if (!out) out = state.tr;
+        out.setNodeMarkup(pos, undefined, Object.assign({}, row.attrs, { rowHeight: ref }));
+      });
+      return out === tr ? null : out;
+    }
+
+    // Rend la transaction à ajouter (ou null) après `trs`, pour le document de `state`.
+    function repairDocumentTables(trs, state) {
+      if (!trs.some(tr => tr.docChanged) || Editor.isTrackChangesOn()) return null;
+      if (trs.some(tr => tr.getMeta('history$') || tr.getMeta('preventUpdate'))) return null;
+      const ranges = changedRanges(trs);
+      const inserted = ranges.filter(range => range.inserted);
+      const within = (from, to) => inserted.some(range => range.from <= from && to <= range.to);
+      // Les tableaux dont une ligne ou une case a été ajoutée, retirée ou remplacée (un texte tapé dans une case ne compte pas).
+      const tables = new Map();
+      ranges.forEach(({ from, to }) => [from, to].forEach((at) => {
+        if (at < 0 || at > state.doc.content.size) return;
+        const $at = state.doc.resolve(at);
+        const parent = $at.parent.type.name;
+        const depth = parent === 'table' ? $at.depth : (parent === 'tableRow' ? $at.depth - 1 : 0);
+        if (depth > 0 && !tables.has($at.before(depth))) tables.set($at.before(depth), $at.node(depth));
+      }));
+      let tr = null;
+      tables.forEach((node, pos) => {
+        if (within(pos, pos + node.nodeSize)) return;
+        // Un tableau mal formé (lignes de longueurs différentes après un collage) est remis d'aplomb par prosemirror-tables dans le tour suivant, où
+        // nous repassons. Une réparation ne doit jamais empêcher le geste qui l'a demandée : en cas d'erreur, le tableau reste tel quel.
+        const map = libs.TableMap.get(node);
+        if (map.problems) return;
+        try {
+          const freshCells = new Set();
+          const freshRows = new Set();
+          cellOrigins(node, map).forEach(({ pos: offset, node: cell }) => {
+            const start = pos + 1 + offset;
+            if (!hasBorders(cell) && within(start, start + cell.nodeSize)) freshCells.add(start);
+          });
+          node.forEach((row, offset) => { if (within(pos + 1 + offset, pos + 1 + offset + row.nodeSize)) freshRows.add(pos + 1 + offset); });
+          const info = () => ({ node: (tr || state).doc.nodeAt(pos), pos });
+          tr = seedFreshBorders(state, tr, info(), freshCells) || tr;
+          tr = seedFreshHeights(state, tr, info(), freshRows) || tr;
+          tr = fixBorders(state, tr, info()) || tr;
+        } catch (error) {
+          // rien à écrire pour ce tableau
+        }
+      });
+      return tr;
+    }
+    return { repairDocumentTables };
   })();
 
   const {
@@ -571,7 +677,7 @@ const GridEditor = (function () {
     return { selectionBackInside, selectFirstCell, selectAllCells, clearSelectedCells, ancestorDepth, cellPosOf, currentCellPos, currentCellDom, selectedCells };
   })();
 
-  const { selectedVerticalAlign, setVerticalAlign, canMerge, canSplit, selectionRect, mergeCells } = (function () {
+  const { selectedVerticalAlign, setVerticalAlign, canMerge, canSplit, selectionRect, sameAttrs, mergeSelected, mergeCells } = (function () {
     // L'alignement vertical, la fusion et le rectangle des cases visées.
 
     // 'top', 'middle' ou 'bottom' quand toutes les cases visées s'accordent, null quand la sélection est mêlée (aucun bouton n'est alors enfoncé) ou hors
@@ -594,6 +700,12 @@ const GridEditor = (function () {
       });
       if (tr.docChanged) ed.view.dispatch(tr);
       return true;
+    }
+
+    // Les deux jeux d'attributs disent-ils la même chose (une valeur absente vaut null) ? Évite d'écrire un pas qui ne change rien.
+    function sameAttrs(a, b) {
+      const norm = value => JSON.stringify(value == null ? null : value);
+      return Object.keys(a).every(name => norm(a[name]) === norm(b[name]));
     }
 
     // Fusionner n'a de sens que pour des cases d'une même page : une case ne s'étend jamais de part et d'autre d'un saut de page (le PDF et l'Excel la
@@ -627,58 +739,68 @@ const GridEditor = (function () {
     // : on lui rend, dans la même transaction, celle de chaque colonne qu'elle couvre, sinon fixCellDimensions remettrait la seconde à la largeur par
     // défaut. Ses bords sont ceux du pourtour des cases fusionnées (le côté droit de la première était un trait intérieur) ; les traits de l'intérieur
     // disparaissent.
-    function mergeCells(ed) {
-      if (!canMerge(ed)) return false;
-      const before = tableInfo(ed.state.doc);
-      const widths = columnWidths(before.node);
+    // Le même geste pour un tableau de document (js/table-merge.js : `TableMerge.mergeCells`, qui garde ses gardes - une seule case, suivi des
+    // modifications, ligne répétée par une boucle) : `mergeSelected` fait la fusion sans garde, `mergeCells` y ajoute celle d'une grille. Dans un document
+    // une colonne sans largeur reste sans largeur (un tableau aux colonnes automatiques n'en invente pas), et le pourtour ne s'écrit que s'il y a un trait.
+    function mergeSelected(ed) {
+      const before = tableInfo(ed.state.doc, ed.state.selection);
+      if (!before) return false;
+      const widths = (active ? columnWidths : knownColumnWidths)(before.node);
       const spec = borderSpec(before.node);
       const rect = selectionRect(ed.state, before);
       const borders = {};
       TableBorders.SIDES.forEach((side) => { borders[BORDER_ATTRS[side]] = TableBorders.combineAll(TableBorders.valuesOf(spec, TableBorders.presetEdges(side, rect))); });
       return ed.chain().focus().mergeCells().command(({ tr }) => {
         const merged = tr.selection.$anchorCell ? tr.selection.$anchorCell.pos : null;
-        const info = tableInfo(tr.doc);
-        if (merged == null || !info) return true;
+        const node = tr.doc.nodeAt(before.pos);
+        if (merged == null || !node) return true;
         const cell = tr.doc.nodeAt(merged);
-        const left = libs.TableMap.get(info.node).colCount(merged - (info.pos + 1));
-        tr.setNodeMarkup(merged, undefined, Object.assign({}, cell.attrs, { colwidth: widths.slice(left, left + (cell.attrs.colspan || 1)) }, hasCellAttr(cell, BORDER_ATTRS.top) ? borders : null));
+        const left = libs.TableMap.get(node).colCount(merged - (before.pos + 1));
+        const colwidth = widths.slice(left, left + (cell.attrs.colspan || 1));
+        const next = Object.assign({}, cell.attrs, colwidth.some(Boolean) ? { colwidth } : null, hasCellAttr(cell, BORDER_ATTRS.top) ? borders : null);
+        if (!sameAttrs(next, cell.attrs)) tr.setNodeMarkup(merged, undefined, next);
         return true;
       }).run();
     }
-    return { selectedVerticalAlign, setVerticalAlign, canMerge, canSplit, selectionRect, mergeCells };
+    function mergeCells(ed) { return canMerge(ed) ? mergeSelected(ed) : false; }
+    return { selectedVerticalAlign, setVerticalAlign, canMerge, canSplit, selectionRect, sameAttrs, mergeSelected, mergeCells };
   })();
 
-  const { splitCell, applyBorders, canApplyBorders, gridLinesShown, setGridLinesShown, boundaryCrossed, pageBreakRow } = (function () {
+  const { splitSelected, splitCell, applyBorders, canApplyBorders, gridLinesShown, setGridLinesShown, boundaryCrossed, pageBreakRow } = (function () {
     // Scinder une case, les bordures, le quadrillage et la ligne que vise le saut de page.
 
     // Scinde la case fusionnée en autant de cases qu'elle en recouvrait : la première garde le contenu, les autres naissent vides, avec le fond,
     // l'alignement et la largeur de leur colonne. Les bords du pourtour restent aux cases du pourtour ; les traits entre les nouvelles cases sont ceux
     // de départ.
-    function splitCell(ed) {
-      if (!canSplit(ed)) return false;
-      const before = tableInfo(ed.state.doc);
+    // Le même geste pour un tableau de document (js/table-merge.js : `TableMerge.splitCell`, qui garde sa garde du suivi des modifications) : `splitSelected`
+    // scinde sans garde, `splitCell` y ajoute celle d'une grille.
+    function splitSelected(ed) {
+      const before = tableInfo(ed.state.doc, ed.state.selection);
+      if (!before) return false;
       const rect = selectionRect(ed.state, before);
       const attrs = selectedCells(ed.state)[0].node.attrs;
       return ed.chain().focus().splitCell().command(({ tr }) => {
-        const info = tableInfo(tr.doc);
-        if (!info || !rect) return true;
-        const map = libs.TableMap.get(info.node);
+        const node = tr.doc.nodeAt(before.pos);
+        if (!node || !rect) return true;
+        const map = libs.TableMap.get(node);
         for (let r = rect.top; r < rect.bottom; r++) {
           for (let c = rect.left; c < rect.right; c++) {
             const pos = map.map[r * map.width + c];
-            const piece = info.node.nodeAt(pos);
+            const piece = node.nodeAt(pos);
             if (!hasCellAttr(piece, BORDER_ATTRS.top)) continue;
-            tr.setNodeMarkup(info.pos + 1 + pos, undefined, Object.assign({}, piece.attrs, {
+            const next = Object.assign({}, piece.attrs, {
               borderTop: r === rect.top ? attrs.borderTop || null : null,
               borderBottom: r === rect.bottom - 1 ? attrs.borderBottom || null : null,
               borderLeft: c === rect.left ? attrs.borderLeft || null : null,
               borderRight: c === rect.right - 1 ? attrs.borderRight || null : null,
-            }));
+            });
+            if (!sameAttrs(next, piece.attrs)) tr.setNodeMarkup(before.pos + 1 + pos, undefined, next);
           }
         }
         return true;
       }).run();
     }
+    function splitCell(ed) { return canSplit(ed) ? splitSelected(ed) : false; }
 
     // Les traits que visent les cases sélectionnées, selon le réglage du menu « Bordures » : tout (« all »), le pourtour (« outer »), l'intérieur
     // (« inner »), un côté, ou plus aucun trait (« none »). `color` : la couleur du stylo, null = le trait de départ. Une seule transaction pour toutes
@@ -733,7 +855,7 @@ const GridEditor = (function () {
       const rect = info && selectionRect(state, info);
       return rect ? { info, map: libs.TableMap.get(info.node), row: rect.top } : null;
     }
-    return { splitCell, applyBorders, canApplyBorders, gridLinesShown, setGridLinesShown, boundaryCrossed, pageBreakRow };
+    return { splitSelected, splitCell, applyBorders, canApplyBorders, gridLinesShown, setGridLinesShown, boundaryCrossed, pageBreakRow };
   })();
 
   const { canTogglePageBreak, hasPageBreak, togglePageBreak, pageBreakRows, trimPastedSlice } = (function () {
@@ -823,10 +945,10 @@ const GridEditor = (function () {
     // colonne) couverte, à la même place, chacune sur le tableau tel que la précédente l'a laissé. Le tout sur UNE transaction (un seul Annuler, une
     // seule réparation de la grille, quelle que soit la taille de la sélection), la sélection restant sur les mêmes cases. Chaque appel a sa
     // transaction neuve : `addColumn` repère ses cases par `tr.mapping`, qui ne doit compter que les pas de son propre appel. Un simple curseur n'ajoute
-    // qu'une ligne, même dans une case fusionnée.
+    // qu'une ligne, même dans une case fusionnée. Dans un document, le tableau est celui du curseur (le suivi des modifications n'y change rien : ce sont
+    // les mêmes pas que ceux de la commande d'une ligne, qu'il suit).
     function insertLines(ed, command) {
-      if (!active) return false;
-      const info = tableInfo(ed.state.doc);
+      const info = tableInfo(ed.state.doc, ed.state.selection);
       const rect = info && selectionRect(ed.state, info);
       if (!rect) return false;
       const byRow = command === 'addRowBefore' || command === 'addRowAfter';
@@ -836,7 +958,7 @@ const GridEditor = (function () {
       const add = byRow ? libs.addRow : libs.addColumn;
       return ed.chain().focus().command(({ tr }) => {
         for (let i = 0; i < count; i++) {
-          const table = tableInfo(tr.doc);
+          const table = { node: tr.doc.nodeAt(info.pos), pos: info.pos };
           const step = libs.EditorState.create({ doc: tr.doc }).tr;
           add(step, { map: libs.TableMap.get(table.node), tableStart: table.pos + 1, table: table.node }, at);
           step.steps.forEach(one => tr.step(one));
@@ -984,7 +1106,7 @@ const GridEditor = (function () {
               return isValidGridDoc(tr.doc);
             },
             appendTransaction(trs, oldState, newState) {
-              if (!active) return null;
+              if (!active) return repairDocumentTables(trs, newState);
               let tr = trs.some(t => t.docChanged) ? repairGrid(newState, null) : null;
               const sel = tr ? tr.selection : newState.selection;
               if (!selectionInsideTable(sel)) {
@@ -1443,7 +1565,7 @@ const GridEditor = (function () {
     TYPE, DEFAULT_VALIGN,
     configure, attach, createExtension, createEnterExtension, withTableAttributes, withRowAttributes, withCellAttributes, serialize, setActive, isActive, isGridType,
     refresh, currentCellDom, colName, floatingOptions, barSlot,
-    canMerge, canSplit, mergeCells, splitCell, setVerticalAlign, selectedVerticalAlign, applyBorders, canApplyBorders, gridLinesShown, setGridLinesShown,
+    canMerge, canSplit, mergeCells, splitCell, mergeSelected, splitSelected, setVerticalAlign, selectedVerticalAlign, applyBorders, canApplyBorders, gridLinesShown, setGridLinesShown,
     canTogglePageBreak, hasPageBreak, togglePageBreak, insertLines,
   };
 })();

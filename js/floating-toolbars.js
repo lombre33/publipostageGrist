@@ -253,8 +253,8 @@ const FloatingToolbars = (function () {
     // Ce que fait chaque bouton de la barre d'un tableau
 
     function tableCommands(menus) {
-      // Dans une grille, ajouter autant de lignes ou de colonnes que la sélection en couvre (comme les supprimer) ; un tableau de document en ajoute une.
-      const lines = command => () => (GridEditor.isActive() ? GridEditor.insertLines(editor, command) : editor.chain().focus()[command]().run());
+      // Ajouter autant de lignes ou de colonnes que la sélection en couvre (comme les supprimer), dans une grille comme dans un tableau de document.
+      const lines = command => () => GridEditor.insertLines(editor, command);
       return {
         'row-before': lines('addRowBefore'),
         'row-after': lines('addRowAfter'),

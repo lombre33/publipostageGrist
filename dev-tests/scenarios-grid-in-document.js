@@ -4,6 +4,8 @@
 // `scopedTable` de js/grid-editor.js), les autres restent comme ils étaient. Ici, sans aucun bouton (la barre du tableau d'un document ne les montre pas encore) : les
 // fonctions de `GridEditor` appelées sur l'éditeur d'un document à deux tableaux, un tableau dans une case, un curseur hors des tableaux, le suivi des modifications
 // allumé, puis le tableau réglé dans le Word (OOXML dézippé) : « ce que je règle sort pareil ». La grille elle-même (un seul tableau) garde sa suite "grid".
+// Lot 3 (a) : la structure - « Ligne / Colonne avant / après » sur toute la sélection, la ligne ou la colonne ajoutée qui reprend le cadre et la hauteur de sa
+// voisine, la fusion et la scission qui gardent le pourtour (`insertLines`, `repairDocumentTables`, `mergeSelected`, `splitSelected`).
 (function () {
   const cases = [];
   const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -43,6 +45,19 @@
     return found;
   }
   const BORDERS = ['borderTop', 'borderRight', 'borderBottom', 'borderLeft'];
+
+  const rowAttrs = (t, row) => tablesOf()[t].node.child(row).attrs;
+  const rowCount = t => tablesOf()[t].node.childCount;
+  const colCount = t => tablesOf()[t].node.child(0).childCount;
+  // Les quatre bords d'une case, « haut,droite,bas,gauche », '-' pour le trait de départ.
+  const borderLine = (t, row, col) => BORDERS.map(side => cellAttrs(t, row, col)[side] || '-').join(',');
+  function setRowHeight(t, row, px) {
+    const table = tablesOf()[t];
+    let pos = table.pos + 1;
+    for (let r = 0; r < row; r++) pos += table.node.child(r).nodeSize;
+    ed().view.dispatch(ed().state.tr.setNodeMarkup(pos, undefined, Object.assign({}, table.node.child(row).attrs, { rowHeight: px })));
+  }
+  const RED = '#ff0000';
 
   async function withDoc(h, html, body) {
     await h.resetEditor();
@@ -244,6 +259,229 @@
       await sleep(60);
       if (tablesOf()[0].node.attrs.gridLines !== 'off') bad.push('depuis la case voisine, le tableau extérieur devait être visé');
       return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'gridscope_insert_lines_adds_as_many_as_chosen_in_a_document_table',
+    description: 'Dans un tableau de document, « Ligne / Colonne avant / après » ajoute autant de lignes ou de colonnes que les cases choisies en couvrent (un simple curseur en ajoute une), sur le tableau du curseur seul (l\'autre ne change pas d\'un octet), en un seul Annuler',
+    run: async (h) => withDoc(h, TWO_TABLES, async () => {
+      const bad = [];
+      const aBefore = tableJson(0);
+      const bBefore = tableJson(1);
+      await selectCells(1, 1, 0, 2, 1); // les lignes 2 et 3 de B
+      const rowsDone = GridEditor.insertLines(ed(), 'addRowAfter');
+      await sleep(60);
+      if (!rowsDone || rowCount(1) !== 5) bad.push('deux lignes choisies : ' + JSON.stringify({ rowsDone, rows: rowCount(1) }));
+      if (tableJson(0) !== aBefore) bad.push('le tableau A a changé');
+      await undo();
+      if (tableJson(1) !== bBefore) bad.push('un Annuler doit rendre B tel qu\'il était');
+      await sleep(GROUP_GAP_MS);
+      await selectCells(1, 0, 0, 1, 0); // la colonne de gauche, deux lignes
+      const before = GridEditor.insertLines(ed(), 'addRowBefore');
+      await sleep(60);
+      if (!before || rowCount(1) !== 5) bad.push('avant, deux lignes : ' + rowCount(1));
+      await sleep(GROUP_GAP_MS);
+      await undo();
+      await sleep(GROUP_GAP_MS);
+      await selectCells(1, 0, 0, 0, 1); // les deux colonnes
+      const colsDone = GridEditor.insertLines(ed(), 'addColumnAfter');
+      await sleep(60);
+      if (!colsDone || colCount(1) !== 4) bad.push('deux colonnes choisies : ' + JSON.stringify({ colsDone, cols: colCount(1) }));
+      await sleep(GROUP_GAP_MS);
+      await undo();
+      if (tableJson(1) !== bBefore) bad.push('B doit revenir tel qu\'il était après les deux Annuler');
+      await sleep(GROUP_GAP_MS);
+      await cursorIn(1, 0, 0);
+      GridEditor.insertLines(ed(), 'addColumnBefore');
+      await sleep(60);
+      if (colCount(1) !== 3) bad.push('un curseur ajoute une colonne : ' + colCount(1));
+      if (tableJson(0) !== aBefore) bad.push('le tableau A a changé à la fin');
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'gridscope_added_line_takes_the_frame_and_the_height_of_its_neighbour',
+    description: 'Un tableau de document encadré en rouge, dont la dernière ligne a une hauteur : la ligne ajoutée dessous reprend le cadre (bas, gauche, droite) et la hauteur, l\'ancien bas devient un trait intérieur ; la colonne ajoutée à droite reprend le cadre (haut, bas, droite) ; un seul Annuler et Rétablir exacts ; l\'autre tableau ne bouge pas',
+    run: async (h) => withDoc(h, TWO_TABLES, async () => {
+      const bad = [];
+      await selectCells(1, 0, 0, 2, 1);
+      GridEditor.applyBorders(ed(), 'outer', RED);
+      setRowHeight(1, 2, 50);
+      await sleep(GROUP_GAP_MS);
+      const aBefore = tableJson(0);
+      const framed = tableJson(1);
+      await cursorIn(1, 2, 0);
+      const done = GridEditor.insertLines(ed(), 'addRowAfter');
+      await sleep(60);
+      const added = [0, 1].map(c => borderLine(1, 3, c));
+      const oldLast = [0, 1].map(c => borderLine(1, 2, c));
+      const afterRow = tableJson(1);
+      if (!done || rowCount(1) !== 4) bad.push('ligne ajoutée : ' + rowCount(1));
+      if (JSON.stringify(added) !== JSON.stringify(['-,-,' + RED + ',' + RED, '-,' + RED + ',' + RED + ',-'])) bad.push('bords de la ligne ajoutée : ' + JSON.stringify(added));
+      if (JSON.stringify(oldLast) !== JSON.stringify(['-,-,-,' + RED, '-,' + RED + ',-,-'])) bad.push('bords de l\'ancienne dernière ligne : ' + JSON.stringify(oldLast));
+      if (rowAttrs(1, 3).rowHeight !== 50) bad.push('hauteur de la ligne ajoutée : ' + rowAttrs(1, 3).rowHeight);
+      await sleep(GROUP_GAP_MS);
+      await undo();
+      if (tableJson(1) !== framed) bad.push('un Annuler doit rendre le tableau exact');
+      ed().commands.redo(); await sleep(100);
+      if (tableJson(1) !== afterRow) bad.push('un Rétablir doit rendre la ligne et ses bords exacts');
+      // Une colonne à droite, sur le tableau tel qu'il était.
+      await sleep(GROUP_GAP_MS);
+      await undo();
+      await sleep(GROUP_GAP_MS);
+      await cursorIn(1, 1, 1);
+      GridEditor.insertLines(ed(), 'addColumnAfter');
+      await sleep(60);
+      const column = [0, 1, 2].map(r => borderLine(1, r, 2));
+      const oldColumn = [0, 1, 2].map(r => borderLine(1, r, 1));
+      if (colCount(1) !== 3) bad.push('colonne ajoutée : ' + colCount(1));
+      if (JSON.stringify(column) !== JSON.stringify([RED + ',' + RED + ',-,-', '-,' + RED + ',-,-', '-,' + RED + ',' + RED + ',-'])) bad.push('bords de la colonne ajoutée : ' + JSON.stringify(column));
+      if (JSON.stringify(oldColumn) !== JSON.stringify([RED + ',-,-,-', '-,-,-,-', '-,-,' + RED + ',-'])) bad.push('bords de l\'ancienne dernière colonne : ' + JSON.stringify(oldColumn));
+      if (tableJson(0) !== aBefore) bad.push('le tableau A a changé');
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : JSON.stringify({ added, oldLast, column }) };
+    }),
+  });
+
+  cases.push({
+    id: 'gridscope_lines_added_to_a_table_without_marks_write_nothing',
+    description: 'Un tableau de document que personne n\'a réglé reste sans marque : une ligne, deux colonnes ajoutées, une case fusionnée puis scindée ne posent ni trait, ni hauteur, ni alignement, et le HTML enregistré n\'a aucun data-border, data-row-height ni data-valign',
+    run: async (h) => withDoc(h, TWO_TABLES, async () => {
+      const bad = [];
+      await cursorIn(0, 0, 0);
+      GridEditor.insertLines(ed(), 'addRowAfter');
+      await selectCells(0, 0, 0, 0, 1);
+      GridEditor.insertLines(ed(), 'addColumnAfter');
+      await selectCells(0, 0, 0, 1, 1);
+      const merged = TableMerge.mergeCells(ed());
+      await sleep(60);
+      const split = TableMerge.splitCell(ed());
+      await sleep(60);
+      const html = Editor.getHTML();
+      const marks = html.match(/data-(border|row-height|valign|grid-lines|page-break)[a-z-]*=/g) || [];
+      if (!merged || !split) bad.push('fusion / scission : ' + JSON.stringify({ merged, split }));
+      if (rowCount(0) !== 3 || colCount(0) !== 4) bad.push('forme de A : ' + rowCount(0) + ' x ' + colCount(0));
+      if (marks.length) bad.push('marques écrites : ' + marks.join(' '));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'gridscope_merge_and_split_keep_the_frame_and_the_widths',
+    description: 'Fusion et scission dans un tableau de document encadré : la case fusionnée porte le pourtour des cases fusionnées (le trait du dedans disparaît), garde la largeur de chaque colonne qu\'elle couvre, la scission rend les bords d\'avant ; un seul Annuler chacune ; le Word écrit les traits de la case fusionnée',
+    run: async (h) => withDoc(h, TWO_TABLES, async () => {
+      const bad = [];
+      // Colonnes de 200 et 100 px, cadre rouge.
+      const table = tablesOf()[1];
+      const tr = ed().state.tr;
+      table.node.forEach((row, rowOffset) => row.forEach((cell, cellOffset, index) => {
+        tr.setNodeMarkup(table.pos + 1 + rowOffset + 1 + cellOffset, undefined, Object.assign({}, cell.attrs, { colwidth: [index === 0 ? 200 : 100] }));
+      }));
+      ed().view.dispatch(tr);
+      await selectCells(1, 0, 0, 2, 1);
+      GridEditor.applyBorders(ed(), 'outer', RED);
+      await sleep(GROUP_GAP_MS);
+      const framed = tableJson(1);
+      const lines = () => [0, 1, 2].map(r => [0, 1].map(c => borderLine(1, r, c)));
+      const framedLines = lines();
+      // Les deux dernières cases de la colonne de gauche.
+      await selectCells(1, 1, 0, 2, 0);
+      const merged = TableMerge.mergeCells(ed());
+      await sleep(60);
+      const piece = cellAttrs(1, 1, 0);
+      if (!merged || piece.rowspan !== 2) bad.push('fusion verticale : ' + JSON.stringify({ merged, rowspan: piece.rowspan }));
+      if (borderLine(1, 1, 0) !== '-,-,' + RED + ',' + RED) bad.push('pourtour de la case fusionnée : ' + borderLine(1, 1, 0));
+      if (JSON.stringify(piece.colwidth) !== '[200]') bad.push('largeur de la case fusionnée : ' + JSON.stringify(piece.colwidth));
+      // Le Word : la case fusionnée porte le trait rouge à gauche et en bas.
+      const parts = await h.exportDocxParts(Editor.getHTML());
+      const cellsOfB = Array.from(parts.doc.getElementsByTagName('w:tbl'))[1];
+      const mergedCell = cellsOfB && Array.from(cellsOfB.getElementsByTagName('w:tc')).find(tc => tc.textContent.includes('B2A'));
+      const wordBorders = mergedCell ? Array.from(mergedCell.getElementsByTagName('w:tcBorders')[0] ? mergedCell.getElementsByTagName('w:tcBorders')[0].children : []).map(b => b.nodeName.slice(2) + '=' + b.getAttribute('w:val') + ':' + b.getAttribute('w:color')).join(',') : 'absente';
+      if (!/left=single:FF0000/.test(wordBorders) || !/bottom=single:FF0000/.test(wordBorders)) bad.push('traits de la case fusionnée dans le Word : ' + wordBorders);
+      await sleep(GROUP_GAP_MS);
+      await undo();
+      if (tableJson(1) !== framed) bad.push('un Annuler doit défaire la fusion en entier');
+      // Un bloc 2x2 en haut, puis scindé : le pourtour retrouve ses traits, le dedans les siens.
+      await sleep(GROUP_GAP_MS);
+      await selectCells(1, 0, 0, 1, 1);
+      TableMerge.mergeCells(ed());
+      await sleep(60);
+      const whole = borderLine(1, 0, 0);
+      if (whole !== RED + ',' + RED + ',-,' + RED) bad.push('pourtour du bloc 2x2 : ' + whole);
+      if (JSON.stringify(cellAttrs(1, 0, 0).colwidth) !== '[200,100]') bad.push('largeurs du bloc 2x2 : ' + JSON.stringify(cellAttrs(1, 0, 0).colwidth));
+      await sleep(GROUP_GAP_MS);
+      const split = TableMerge.splitCell(ed());
+      await sleep(60);
+      if (!split || JSON.stringify(lines()) !== JSON.stringify(framedLines)) bad.push('bords après la scission : ' + JSON.stringify(lines()) + ' (attendu ' + JSON.stringify(framedLines) + ')');
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : JSON.stringify({ whole, wordBorders }) };
+    }),
+  });
+
+  cases.push({
+    id: 'gridscope_load_undo_and_typing_leave_a_marked_table_alone',
+    description: 'Un tableau de document qui porte ses traits n\'est jamais « réparé » en passant : le charger, taper dans une case, supprimer une ligne puis Annuler le laissent exactement comme il était (le HTML enregistré se relit à l\'identique)',
+    run: async (h) => withDoc(h, TWO_TABLES, async () => {
+      const bad = [];
+      await selectCells(1, 0, 0, 2, 1);
+      GridEditor.applyBorders(ed(), 'outer', RED);
+      setRowHeight(1, 1, 40);
+      await sleep(GROUP_GAP_MS);
+      const html = Editor.getHTML();
+      Editor.setHTML(html);
+      await sleep(200);
+      if (Editor.getHTML() !== html) bad.push('le HTML relu diffère de celui enregistré');
+      const framed = tableJson(1);
+      await cursorIn(1, 1, 0);
+      ed().commands.insertContent('x');
+      await sleep(60);
+      if (tableJson(1) === framed) bad.push('la frappe doit changer le texte');
+      await sleep(GROUP_GAP_MS);
+      await undo();
+      if (tableJson(1) !== framed) bad.push('annuler la frappe doit rendre le tableau exact');
+      await sleep(GROUP_GAP_MS);
+      await cursorIn(1, 2, 1);
+      ed().chain().focus().deleteRow().run();
+      await sleep(60);
+      if (rowCount(1) !== 2) bad.push('suppression de ligne : ' + rowCount(1));
+      await sleep(GROUP_GAP_MS);
+      await undo();
+      if (tableJson(1) !== framed) bad.push('annuler la suppression doit rendre le tableau exact');
+      // Une case seule porte un trait à gauche : la ligne du milieu, supprimée puis rendue par Annuler, ne doit pas le reprendre (une ligne ajoutée, elle,
+      // le reprend ; Annuler rend ce qui était).
+      Editor.setHTML(TWO_TABLES);
+      await sleep(200);
+      await cursorIn(1, 0, 0);
+      GridEditor.applyBorders(ed(), 'left', RED);
+      await sleep(GROUP_GAP_MS);
+      const partial = tableJson(1);
+      await cursorIn(1, 1, 0);
+      ed().chain().focus().deleteRow().run();
+      await sleep(GROUP_GAP_MS);
+      await undo();
+      if (tableJson(1) !== partial) bad.push('annuler la suppression d\'une ligne vierge ne doit rien lui faire reprendre : ' + borderLine(1, 1, 0));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'gridscope_lines_added_under_track_changes_are_the_plain_command',
+    description: 'Suivi des modifications allumé : ajouter plusieurs lignes se fait comme la commande d\'une ligne (les lignes arrivent, le suivi les voit) et rien d\'autre n\'est écrit dans le tableau (ni trait repris, ni hauteur : ces écritures ne seraient pas suivies)',
+    run: async (h) => withDoc(h, TWO_TABLES, async () => {
+      const bad = [];
+      await selectCells(1, 0, 0, 2, 1);
+      GridEditor.applyBorders(ed(), 'outer', RED);
+      setRowHeight(1, 2, 50);
+      await sleep(GROUP_GAP_MS);
+      Editor.setTrackChanges(true);
+      await sleep(100);
+      await selectCells(1, 1, 0, 2, 1);
+      const done = GridEditor.insertLines(ed(), 'addRowAfter');
+      await sleep(100);
+      const tracked = [3, 4].map(r => ({ line: [0, 1].map(c => borderLine(1, r, c)).join(' '), height: rowAttrs(1, r).rowHeight || null }));
+      if (!done || rowCount(1) !== 5) bad.push('lignes sous le suivi : ' + JSON.stringify({ done, rows: rowCount(1) }));
+      if (tracked.some(row => row.line !== '-,-,-,- -,-,-,-' || row.height)) bad.push('rien ne devait être repris sous le suivi : ' + JSON.stringify(tracked));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : JSON.stringify(tracked) };
     }),
   });
 
