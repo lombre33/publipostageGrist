@@ -523,7 +523,7 @@ La référence est la largeur que l'éditeur donne à l'image (`max-width: 100%`
 
 **Couverture automatisée** : groupe `blankLastPage` (`scenarios-blank-last-page.js`, 15 cas : Lecture, PDF, Word et, pour l'éditeur, les quatre cas `blank_page_editor_*`), script Node `editorBlankTailMouse`
 (vrai clavier à 700×400 : Entrées de trop au bas d'une page, texte tapé puis effacé, saut de page au bouton de la barre). La capacité d'une page est mesurée, jamais écrite en dur.
-**Non couvert** : le rendu réel dans Word, l'impression du navigateur et les qualités raster du PDF (ils ne rognent pas les lignes vides de fin), une zone à deux colonnes encore vide en fin de document (l'éditeur la compte).
+**Non couvert** : le rendu réel dans Word, une zone à deux colonnes encore vide en fin de document (l'éditeur la compte). L'impression du navigateur imprime la Lecture et rogne comme elle (groupe `browserPrint`) ; les qualités raster n'existent plus.
 
 ### Protocole
 1. Dans un modèle A4 portrait (Aperçu A4 activé), taper du texte jusqu'à la marge du bas de la page 1 (la dernière ligne touche la marge), puis appuyer cinq fois sur Entrée : aucune bande « Page 2 »

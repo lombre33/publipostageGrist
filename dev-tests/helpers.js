@@ -338,7 +338,8 @@ window.TestHelpers = (function () {
   // retombe sur 28pt partout - c'est ce que font tous les scénarios qui ne testent pas les marges, et ça doit le rester.
   // `source` (optionnel) : { tableId, record } pour résoudre les #Variable avec un vrai enregistrement ; omis, l'enregistrement est vide et les bulles restent telles quelles.
   // `gridModel` (optionnel) : le genre du modèle de la ligne, comme un lot « Modèle selon la ligne » le dit à l'export (vrai : une grille, faux : un document) ; omis, c'est le modèle ouvert.
-  async function exportPdfContent(html, headerFooterData, marginsPt, source, gridModel) {
+  // `quality` (optionnel) : la ligne du menu Qualité PDF telle que js/main.js la transmet au moteur ('light' : « Léger », les images ramenées à leur définition) ; omis, les images sont reprises telles quelles.
+  async function exportPdfContent(html, headerFooterData, marginsPt, source, gridModel, quality) {
     await PdfExport.ensurePdfLibsLoaded();
     let lastContent = null;
     const gens = [];
@@ -353,7 +354,7 @@ window.TestHelpers = (function () {
     let error = null;
     let blob = null;
     try {
-      const result = await PdfExport.getNativePdfBlobForRecord(html, source ? source.tableId : null, source ? source.record : {}, '', headerFooterData || null, marginsPt || undefined, gridModel);
+      const result = await PdfExport.getNativePdfBlobForRecord(html, source ? source.tableId : null, source ? source.record : {}, '', headerFooterData || null, marginsPt || undefined, gridModel, quality);
       blob = result.blob;
     } catch (e) {
       error = e;
@@ -364,6 +365,43 @@ window.TestHelpers = (function () {
     const finalGen = gens[gens.length - 1];
     const base64 = await new Promise(resolve => finalGen.getBase64(resolve));
     return { docDefinition: lastContent, content: lastContent.content, pageCount: gens.length, base64, blob };
+  }
+
+  // --- Images de fixture ---
+  // Une image qui pèse comme une vraie, rendue par un canvas puis encodée : `options.type` ('image/jpeg' ou 'image/png', défaut PNG), `options.quality` (JPEG, 0 à 1), `options.noise` (l'amplitude du
+  // grain, 70 par défaut : c'est lui qui rend une photo lourde à enregistrer), `options.seed` (le grain est déterministe : deux appels égaux rendent les mêmes octets) et `options.logo` : un disque
+  // rouge net sur fond transparent, bord adouci sur 2 pixels (un logo). Rend une data URI.
+  function makeImage(width, height, options) {
+    const opts = options || {};
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d');
+    const pixels = context.createImageData(width, height);
+    const amplitude = opts.noise === undefined ? 70 : opts.noise;
+    let seed = opts.seed || 1;
+    const random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
+    const byte = value => Math.max(0, Math.min(255, Math.round(value)));
+    const radius = Math.min(width, height) / 2 - 2;
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const i = (y * width + x) * 4;
+        if (opts.logo) {
+          const distance = Math.hypot(x + 0.5 - width / 2, y + 0.5 - height / 2);
+          pixels.data[i] = 200; pixels.data[i + 1] = 30; pixels.data[i + 2] = 40;
+          pixels.data[i + 3] = distance <= radius - 2 ? 255 : (distance >= radius ? 0 : byte(255 * (radius - distance) / 2));
+          continue;
+        }
+        const wave = 100 * Math.sin(x / 90) * Math.cos(y / 70);
+        const noise = (random() - 0.5) * amplitude;
+        pixels.data[i] = byte(140 + wave + noise);
+        pixels.data[i + 1] = byte(120 + wave * 0.6 - noise * 0.5);
+        pixels.data[i + 2] = byte(100 - wave * 0.4 + noise);
+        pixels.data[i + 3] = 255;
+      }
+    }
+    context.putImageData(pixels, 0, 0);
+    return canvas.toDataURL(opts.type || 'image/png', opts.quality);
   }
 
   // --- Vérité terrain PDF (pdf.js) ---
@@ -784,7 +822,7 @@ window.TestHelpers = (function () {
     sleep, tiptap, resetEditor, stubDialogs, withRealChoose, choosePrompts, focusAtEnd, focusInElement, typeText, fieldEditor, fieldType, fieldKey, fieldSelect, fieldEnd,
     selectAllInEditor, selectAllInElement, clickButton, selectAtomNode, openFlyout, clickRow,
     dragFromTo, exportPdfContent, flattenPdfContent, findTextBlocks, findImages, blockPlainText,
-    ensurePdfJsLoaded, extractPdfGroundTruth, extractPdfLines,
+    ensurePdfJsLoaded, extractPdfGroundTruth, extractPdfLines, makeImage,
     exportDocxParts, docxDrawings, docxParagraphs, docxTables, docxSectionProps,
     docxFields, docxNumbering, docxFootnotes,
     renderReaderMode, setA4Preview, findByText, compareEditorReaderPosition, compareEditorReaderImage,

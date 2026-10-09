@@ -96,6 +96,9 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 - Export en PDF vectorisé, nom de fichier composé avec des variables
 - Impression par le navigateur : la Lecture imprimée page pour page par la fenêtre d'impression (« Enregistrer
   au format PDF » ou une imprimante), avec la mise en page de la Lecture
+- PDF « Léger » : le même PDF vectoriel dont les images sont ramenées à 150 points par pouce (une photo
+  devient un JPEG, un logo transparent reste un PNG, une petite image et un code QR ne sont pas touchés), pour
+  une ligne comme pour les lots
 - Export en lot en un clic : un PDF par ligne dans une archive ZIP, ou toutes les lignes dans un seul
   PDF. Il suit les lignes que le widget affiche dans Grist (ses filtres, son tri, le lien « Sélectionner
   par ») : quand il n'en affiche qu'une partie, il demande s'il faut exporter celles-ci ou toute la table
@@ -272,8 +275,8 @@ bibliothèques et polices sont dans [NOTICE](NOTICE).
 - **Suivi des modifications** (bêta) : la version complète est prévue en V1.
 - **PDF** : les caractères chinois, arabes, hébreux, thaï et la plupart des émojis ne sont pas pris en
   charge (une case vide les remplace) ; le grec, le cyrillique, le vietnamien, les flèches, coches,
-  étoiles et monnaies le sont. Dans le menu « Qualité d'export PDF », « Vectoriel » et « Impression navigateur » sont
-  disponibles ; « Basse qualité » et « Ultra HD » sont grisées (« bientôt »). L'impression navigateur imprime une
+  étoiles et monnaies le sont. Le menu « Qualité d'export PDF » propose « Vectoriel », « Impression navigateur » et « Léger » (le PDF
+  vectoriel aux images ramenées à 150 points par pouce). L'impression navigateur imprime une
   ligne à la fois, sur 60 pages au plus, et suppose que le navigateur ouvre sa fenêtre d'impression depuis le
   cadre du widget : si rien ne s'ouvre, choisissez « Vectoriel ».
 - **Word** (bêta) : les images devant ou derrière le texte et celles alignées à gauche ou à droite y
@@ -442,6 +445,8 @@ GitHub Pages, with no backend and no build step.
 - Vector PDF export, file name built with variables
 - Browser print: the Reading view printed page by page through the print window ("Save as PDF" or a printer),
   with the layout of the Reading view
+- Light PDF: the same vector PDF with its images brought down to 150 points per inch (a photo becomes a JPEG,
+  a transparent logo stays a PNG, a small image and a QR code are left alone), for one row and for batches
 - Batch export in one click: one PDF per row in a ZIP archive, or all rows in a single PDF. It follows
   the rows the widget shows in Grist (its filters, its sort, the "Select by" link): when it only shows
   part of the table, it asks whether to export those or the whole table
@@ -610,9 +615,9 @@ libraries and fonts are in [NOTICE](NOTICE).
   overwrites the saved version without checking. There is no real-time co-editing.
 - **Track changes** (beta): the complete version is planned for V1.
 - **PDF**: Chinese, Arabic, Hebrew and Thai characters and most emoji are not supported (an empty box
-  replaces them); Greek, Cyrillic, Vietnamese, arrows, check marks, stars and currencies are. In the
-  "PDF export quality" menu, "Vector" and "Browser print" are available; "Low quality" and "Ultra HD" are
-  greyed out ("soon"). Browser print prints one row at a time, up to 60 pages, and assumes the browser opens its
+  replaces them); Greek, Cyrillic, Vietnamese, arrows, check marks, stars and currencies are. The
+  "PDF export quality" menu offers "Vector", "Browser print" and "Light" (the vector PDF with its images brought
+  down to 150 points per inch). Browser print prints one row at a time, up to 60 pages, and assumes the browser opens its
   print window from the widget's frame: if nothing opens, choose "Vector".
 - **Word** (beta): images in front of or behind the text, and images aligned left or right, keep their
   place; the table of contents is a fixed list and fonts are not embedded.

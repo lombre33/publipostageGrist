@@ -229,7 +229,8 @@
   const PNG_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
   const PHOTO_IMG = `<img class="editor-image" src="" alt="Photo" style="width: 120px;" data-var-table="${TABLE}" data-var-column="Photo" data-var-key="${TABLE}.Photo">`;
   // Le serveur de Grist, côté pièces jointes : les numéros de `missing` reçoivent un 404, les autres une image. Les adresses demandées sont notées (le test ne prouve rien si l'image n'a jamais été demandée).
-  function stubAttachments(missing) {
+  // `imageBlob` (facultatif) : l'image que rend chaque pièce jointe ; par défaut, un PNG d'un pixel.
+  function stubAttachments(missing, imageBlob) {
     const original = window.fetch;
     const asked = [];
     window.fetch = function (input, init) {
@@ -239,7 +240,7 @@
       const id = Number(match[1]);
       asked.push(id);
       if (missing.includes(id)) return Promise.resolve(new Response('Not Found', { status: 404 }));
-      return Promise.resolve(new Response(new Blob([Uint8Array.from(atob(PNG_B64), c => c.charCodeAt(0))], { type: 'image/png' }), { status: 200 }));
+      return Promise.resolve(new Response(imageBlob || new Blob([Uint8Array.from(atob(PNG_B64), c => c.charCodeAt(0))], { type: 'image/png' }), { status: 200 }));
     };
     return { asked, restore() { window.fetch = original; } };
   }
@@ -1376,6 +1377,116 @@
       if (dateWrites().length || stub.state.deniedWrites.length) problems.push('écritures=' + dateWrites().length + ' refusées=' + stub.state.deniedWrites.length);
       return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
     }),
+  });
+
+  // --- Qualité « Léger » du menu Qualité PDF : le choix atteint le PDF d'une ligne et les lots (qualités et ppi : groupe pdfLight) ---
+  // La ligne du menu, cliquée comme le fait l'utilisateur ; le <select> caché porte la valeur que js/main.js lit (selectedPdfQuality).
+  const chooseQuality = name => document.querySelector('#v2-quality-flyout .v2-hover-row[data-quality="' + name + '"]').click();
+  // Une photo qui pèse (JPEG de 1800 x 1200 posé sur 360 px) : le poids du PDF en dépend presque seul.
+  const photoParagraph = h => '<p><img class="editor-image" src="' + h.makeImage(1800, 1200, { type: 'image/jpeg', quality: 0.9 }) + '" alt="" style="width: 360px;"></p>';
+  const KEEP_SIXTH = 1 / 6;
+
+  cases.push({
+    id: 'pdfbatch_light_row_lightens_the_single_pdf',
+    description: '« Léger » choisi dans le menu Qualité PDF : « Exporter en PDF » d\'une ligne sort un PDF de moins du sixième du poids du PDF « Vectoriel » (une photo de 1800 x 1200), avec le même texte',
+    run: async (h) => {
+      await seed(h, `<p>Bonjour ${badge('Nom')}, voici votre courrier.</p>` + photoParagraph(h));
+      try {
+        chooseQuality('light');
+        const light = await clickSinglePdf(h);
+        chooseQuality('native');
+        const native = await clickSinglePdf(h);
+        const lightBlob = light.downloads[0] && light.downloads[0].blob;
+        const nativeBlob = native.downloads[0] && native.downloads[0].blob;
+        const sameText = !!lightBlob && !!nativeBlob && squash((await pdfPageTexts(h, lightBlob)).join(' ')) === squash((await pdfPageTexts(h, nativeBlob)).join(' '));
+        const pass = !!lightBlob && !!nativeBlob && nativeBlob.size > 300 * 1024 && lightBlob.size < nativeBlob.size * KEEP_SIXTH && sameText && light.status === I18n.t('status.pdfGenerated');
+        return { pass, notes: JSON.stringify({ light: lightBlob && lightBlob.size, native: nativeBlob && nativeBlob.size, sameText, status: light.status }) };
+      } finally { chooseQuality('native'); }
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_light_row_holds_for_the_whole_batch',
+    description: '« Léger » choisi : l\'archive ZIP et le PDF unique rendent chaque ligne en « light », même si la ligne du menu change pendant le lot (la qualité est prise une fois, au départ) ; « Vectoriel » rend chaque ligne en « native » ; chaque PDF du ZIP pèse moins du sixième de son pendant',
+    run: async (h) => {
+      await seed(h, `<p>Bonjour ${badge('Nom')}, voici votre courrier.</p>` + photoParagraph(h));
+      await ExportEngines.ensure('pdf');
+      const original = PdfExport.getNativePdfBlobForRecord;
+      let seen = [];
+      let flipOnFirst = false;
+      // La qualité que chaque ligne reçoit du lot (8e argument) ; au premier PDF d'un lot « Léger », la ligne du menu repasse sur « Vectoriel ».
+      PdfExport.getNativePdfBlobForRecord = function () {
+        seen.push(arguments[7]);
+        const rendering = original.apply(this, arguments);
+        if (flipOnFirst && seen.length === 1) chooseQuality('native');
+        return rendering;
+      };
+      const sizesIn = async res => {
+        const zip = await JSZip.loadAsync(await res.downloads[0].blob.arrayBuffer());
+        const sizes = {};
+        for (const name of Object.keys(zip.files).sort()) sizes[name] = (await zip.file(name).async('blob')).size;
+        return sizes;
+      };
+      try {
+        chooseQuality('light');
+        flipOnFirst = true;
+        const light = await clickExportRow(h, 'v2-btn-export-pdf-batch');
+        const lightSeen = seen;
+        seen = [];
+        flipOnFirst = false;
+        chooseQuality('native');
+        const native = await clickExportRow(h, 'v2-btn-export-pdf-batch');
+        const nativeSeen = seen;
+        seen = [];
+        chooseQuality('light');
+        const merged = await clickExportRow(h, 'v2-btn-export-pdf-merged');
+        const mergedSeen = seen;
+        const lightSizes = await sizesIn(light);
+        const nativeSizes = await sizesIn(native);
+        const names = Object.keys(nativeSizes);
+        const allSame = (list, quality) => list.length === NAMES.length && list.every(q => q === quality);
+        const pass = allSame(lightSeen, 'light') && allSame(nativeSeen, 'native') && allSame(mergedSeen, 'light')
+          && names.length === NAMES.length && JSON.stringify(Object.keys(lightSizes)) === JSON.stringify(names)
+          && names.every(name => nativeSizes[name] > 300 * 1024 && lightSizes[name] < nativeSizes[name] * KEEP_SIXTH)
+          && !!merged.downloads[0] && merged.downloads[0].blob.size < names.reduce((sum, name) => sum + nativeSizes[name], 0) * KEEP_SIXTH;
+        return { pass, notes: JSON.stringify({ lightSeen, nativeSeen, mergedSeen, lightSizes, nativeSizes, merged: merged.downloads[0] && merged.downloads[0].blob.size }) };
+      } finally {
+        PdfExport.getNativePdfBlobForRecord = original;
+        chooseQuality('native');
+      }
+    },
+  });
+
+  // Une image liée à une colonne Pièces jointes s'inscrit dans une boîte (largeur ET hauteur, `fit` de pdfmake) sans se déformer : « Léger » compte ses pixels sur la plus petite des deux
+  // mesures et laisse la boîte telle quelle.
+  cases.push({
+    id: 'pdfbatch_light_attachment_photo_keeps_its_box',
+    description: '« Léger » : une photo en pièce jointe (2400 x 1600) dans une boîte de 200 x 80 px sort réduite à ce que la hauteur demande (~190 px de large, 150 ppi), dans la même boîte (`fit`) et au même endroit que dans le PDF « Vectoriel »',
+    run: async (h) => {
+      const photo = h.makeImage(2400, 1600, { type: 'image/jpeg', quality: 0.92 });
+      const net = stubAttachments([], await (await fetch(photo)).blob());
+      try {
+        const rows = await seedPhotos(h, [7], 0);
+        const html = `<p>Bonjour ${badge('Nom')}</p><img class="editor-image" src="" alt="Photo" style="width: 200px; height: 80px;" data-var-table="${TABLE}" data-var-column="Photo" data-var-key="${TABLE}.Photo">`;
+        const source = { tableId: TABLE, record: rows[0] };
+        const native = await h.exportPdfContent(html, NO_HF, PageLayout.getMarginsPt(), source);
+        const light = await h.exportPdfContent(html, NO_HF, PageLayout.getMarginsPt(), source, undefined, 'light');
+        const [nativeBlock] = h.findImages(native.content);
+        const [lightBlock] = h.findImages(light.content);
+        const sourceOf = (result, block) => (result.docDefinition.images || {})[block.image] || block.image;
+        const widthOf = async uri => (await ImageIo.load(uri)).naturalWidth;
+        const nativeWidth = nativeBlock ? await widthOf(sourceOf(native, nativeBlock)) : 0;
+        const lightWidth = lightBlock ? await widthOf(sourceOf(light, lightBlock)) : 0;
+        const a = await h.extractPdfGroundTruth(native.base64);
+        const b = await h.extractPdfGroundTruth(light.base64);
+        const ra = a.pages[0] && a.pages[0].images[0];
+        const rb = b.pages[0] && b.pages[0].images[0];
+        const sameRect = !!ra && !!rb && ['x', 'y', 'width', 'height'].every(key => Math.abs(ra[key] - rb[key]) <= 0.05);
+        const pass = !!nativeBlock && !!lightBlock && JSON.stringify(nativeBlock.fit) === '[150,60]' && JSON.stringify(lightBlock.fit) === '[150,60]'
+          && nativeWidth === 2400 && lightWidth >= 188 && lightWidth <= 200 && sameRect && light.blob.size < native.blob.size * KEEP_SIXTH;
+        return { pass, notes: JSON.stringify({ fit: [nativeBlock && nativeBlock.fit, lightBlock && lightBlock.fit], nativeWidth, lightWidth, sameRect, native: native.blob.size, light: light.blob.size, asked: net.asked }) };
+      } finally { net.restore(); }
+    },
   });
 
   window.EditorTestSuites = window.EditorTestSuites || {};

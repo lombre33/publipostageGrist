@@ -184,8 +184,7 @@ const I18n = (function () {
     // --- Qualité d'export PDF (options + rangées du menu) ---
     'quality.native': { fr: 'Vectoriel (par défaut)', en: 'Vector (default)' },
     'quality.browserPrint': { fr: 'Impression navigateur', en: 'Browser print' },
-    'quality.low': { fr: 'Basse qualité (bientôt)', en: 'Low quality (soon)' },
-    'quality.ultra': { fr: 'Ultra HD (bientôt)', en: 'Ultra HD (soon)' },
+    'quality.light': { fr: 'Léger (images réduites)', en: 'Light (smaller images)' },
 
     // --- Titre / numérotation des titres ---
     'heading.tip': { fr: 'Titre', en: 'Heading' },

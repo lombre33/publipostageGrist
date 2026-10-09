@@ -9,6 +9,15 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **PDF « Léger »** : le menu Qualité du bouton PDF propose « Léger (images réduites) ». C'est le même PDF
+  vectoriel, texte et mise en page intacts, dont les images sont ramenées à 150 points par pouce (la netteté
+  d'un courrier ou de l'écran) : une photo de 4 Mo posée sur 10 cm n'en pèse plus que quelques dizaines de Ko.
+  Une photo (JPEG ou PNG opaque) est recompressée en JPEG ; un logo à fond transparent reste un PNG
+  transparent ; une petite image, un code QR et une image déjà légère ne sont pas touchés ; une image n'est
+  jamais agrandie. La page ne bouge pas (le ratio de l'image est gardé, l'en-tête et le pied sont allégés
+  aussi). Le choix vaut pour le PDF d'une ligne et pour les lots (archive ZIP, PDF unique, assemblage avant
+  impression). « Vectoriel (par défaut) » reprend toujours les images telles quelles.
+
 - **Numéro de ligne dans une boucle** : la liste « # » (onglet « Puces ») propose « N° de ligne ». Posée dans
   une ligne de tableau, un élément de liste ou un paragraphe qu'une Boucle répète, la puce s'écrit 1, 2, 3…
   dans la Lecture et dans les exports (PDF, Word, lots, e-mail) : elle compte les lignes que la boucle retient,
@@ -280,6 +289,13 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   fichier contient. Le coin d'état ne renvoie plus à la console du navigateur. Les autres lignes sont
   téléchargées comme avant ; quand toutes échouent, rien n'est téléchargé et la fenêtre le dit.
 
+### Retiré
+
+- **« Basse qualité » et « Ultra HD »** : ces deux lignes du menu Qualité du bouton PDF, grisées (« bientôt »)
+  depuis le retrait de html2pdf.js, ne sont plus dans l'interface ni dans le code. Un PDF photographié page par
+  page serait plus lourd, sans texte sélectionnable et jamais plus net que le PDF vectoriel : pour alléger un
+  PDF, la ligne « Léger » réduit les images ; pour une affiche, le PDF vectoriel et « Format libre ».
+
 ### Corrigé
 
 - **Un lot d'une seule ligne parle au singulier** : « Générer un PDF pour la ligne de … », « 1 PDF généré »,
@@ -443,6 +459,14 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 ## [{{VERSION}}] - {{DATE}} (English)
 
 ### Added
+
+- **"Light" PDF**: the PDF button's Quality menu offers "Light (smaller images)". It is the same vector PDF,
+  text and layout untouched, with its images brought down to 150 points per inch (the sharpness of a letter
+  or a screen): a 4 MB photo placed over 10 cm weighs only a few dozen KB. A photo (JPEG or opaque PNG) is
+  recompressed as a JPEG; a logo on a transparent background stays a transparent PNG; a small image, a QR code
+  and an image that is already light are left alone; an image is never enlarged. The page does not move (the
+  image ratio is kept, the header and footer are lightened too). The choice applies to the PDF of one row and
+  to batches (ZIP archive, single PDF, sheet assembly). "Vector (default)" still takes images as they are.
 
 - **Row number in a loop**: the "#" list ("Chips" tab) offers "Row number". Placed in a table row, a list
   item or a paragraph that a Loop repeats, the chip is written as 1, 2, 3… in Reading and in the exports
@@ -694,6 +718,13 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   in Word) or the error met -, with the number of documents the file contains. The status corner no longer
   points to the browser console. The other rows are downloaded as before; when all of them fail, nothing is
   downloaded and the window says so.
+
+### Removed
+
+- **"Low quality" and "Ultra HD"**: these two rows of the PDF button's Quality menu, greyed out ("soon") since
+  html2pdf.js was removed, are no longer in the interface or in the code. A PDF photographed page by page
+  would be heavier, with no selectable text and never sharper than the vector PDF: to lighten a PDF, the
+  "Light" row reduces the images; for a poster, use the vector PDF and "Custom size".
 
 ### Fixed
 

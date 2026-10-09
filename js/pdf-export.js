@@ -1,5 +1,6 @@
-// Export PDF vectoriel (pdfmake). Les qualités raster (html2pdf.js) sont retirées (jsPDF et DOMPurify périmés) ; leur code reste dans l'historique git
-// (js/pdf-export-alt.js) et l'interface les montre grisées (« bientôt »). L'impression navigateur est revenue autrement : js/print-export.js.
+// Export PDF vectoriel (pdfmake). Les qualités raster (html2pdf.js : « Basse qualité », « Ultra HD ») sont retirées de l'interface comme du code (jsPDF et DOMPurify
+// périmés) ; leur code reste dans l'historique git (js/pdf-export-alt.js). L'impression navigateur est revenue autrement : js/print-export.js. « Léger » est ce même PDF
+// vectoriel dont les images sont ramenées à 150 ppi (ImageIo.lighten) : le texte, les traits et la page ne changent pas.
 const PdfExport = (function () {
   // Chargés au premier export (1-2 s d'ouverture gagnées). `integrity` (SRI sha384) à recalculer si la version change : `curl -s <url> | openssl dgst
   // -sha384 -binary | openssl base64 -A`.
@@ -75,6 +76,10 @@ const PdfExport = (function () {
   // un document. Posé par prepareRecord à chaque export ; les tableaux d'un document (macro-modèle compris) ne sont jamais ceux d'une grille, même
   // quand ils portent les mêmes réglages.
   let exportsGridModel = false;
+  // Les points par pouce où l'export en cours ramène ses images (qualité « Léger », ImageIo.lighten) ; 0 : les images sont reprises telles quelles, comme
+  // toujours. Posé par prepareRecord à chaque export, avec le genre du modèle.
+  let lightImagePpi = 0;
+  const LIGHT_IMAGE_PPI = 150;
   // `left` et `top` d'une image en calque sont relatifs au padding de `.tiptap` (la marge de page de l'Aperçu A4), alors que l'hôte de mesure PDF
   // n'en a pas : soustrait une seule fois avant toute comparaison ou interpolation. Deux valeurs, les marges pouvant être asymétriques.
   let A4_PREVIEW_PADDING_TOP_PX = marginTopPt / PX_TO_PT;
@@ -338,10 +343,16 @@ const PdfExport = (function () {
     FLOW_IMAGE_NODES.set(image, node);
   }
 
+  // La boîte où l'éditeur règle une image, en pixels : sa largeur (320 à défaut) et, pour une image liée à une colonne Pièces jointes, qui s'y inscrit sans
+  // se déformer, sa hauteur (240 à défaut) ; `null` pour toute autre, dont la hauteur suit le ratio.
+  function styleBoxOf(node) {
+    return { widthPx: parseFloat(node.style.width) || 320, heightPx: node.hasAttribute('data-var-table') ? (parseFloat(node.style.height) || 240) : null };
+  }
+
   function pdfImageFromNode(node) {
     const layer = node.getAttribute('data-layer') || 'normal';
     const layered = layer !== 'normal' && node.style.position === 'absolute';
-    const styleWidthPx = parseFloat(node.style.width) || 320;
+    const { widthPx: styleWidthPx, heightPx: styleHeightPx } = styleBoxOf(node);
     // Une image dans le texte est ramenée à la largeur de son conteneur, comme dans l'éditeur (ExportCommon.shownImageWidthPx) : réglée plus large
     // que la page, la case ou la colonne, elle déborderait. Une image en calque garde sa taille réglée.
     const widthPx = layered ? styleWidthPx : ExportCommon.shownImageWidthPx(node, styleWidthPx);
@@ -350,10 +361,7 @@ const PdfExport = (function () {
     // (pdfmake) la met à l'échelle sans la déformer. `width` reste posé aussi : pdfmake ne le lit pas ici, le bracketing d'une image en calque si
     // (sinon NaN).
     image.width = Math.max(15, widthPx * PX_TO_PT);
-    if (node.hasAttribute('data-var-table')) {
-      const heightPx = parseFloat(node.style.height) || 240;
-      image.fit = [image.width, Math.max(15, heightPx * PX_TO_PT)];
-    }
+    if (styleHeightPx !== null) image.fit = [image.width, Math.max(15, styleHeightPx * PX_TO_PT)];
     const opacity = parseFloat(node.style.opacity);
     if (Number.isFinite(opacity) && opacity < 1) image.opacity = opacity;
     if (layered) markLayeredImage(image, node, layer);
@@ -2924,7 +2932,8 @@ const PdfExport = (function () {
   // pdfmake exige une image en data URI base64 : un simple src http(s)://... (upload Grist ou URL externe) n'est jamais rendu, silencieusement. Il ne
   // sait embarquer que du JPEG et du PNG (SVG et WEBP le font bloquer indéfiniment ou lever "Unknown image format") : tout autre format est redessiné
   // en PNG, cas fréquent quand un CDN renvoie du WEBP par négociation de contenu même pour une URL en ".png". En cas d'échec (réseau, CORS...),
-  // marque l'image à ignorer plutôt que de faire planter tout l'export.
+  // marque l'image à ignorer plutôt que de faire planter tout l'export. En qualité « Léger », chaque image est ensuite ramenée à la définition de sa boîte
+  // (ImageIo.lighten) ; le code QR garde la sienne : adoucir ses modules le rendrait plus dur à lire.
   async function inlineEditorImagesAsDataUri(html) {
     const wrapper = document.createElement('div');
     wrapper.innerHTML = html || '';
@@ -2935,6 +2944,7 @@ const PdfExport = (function () {
       try {
         if (!src.startsWith('data:')) src = await ImageIo.toDataUri(await ImageIo.fetchBlob(src));
         if (!/^data:image\/(png|jpe?g);/.test(src)) src = (await ImageIo.draw(src)).toDataURL('image/png');
+        if (lightImagePpi && !img.hasAttribute('data-qr-text')) src = await ImageIo.lighten(src, styleBoxOf(img), lightImagePpi);
         img.setAttribute('src', src);
         // Décode ici, avant la resérialisation : une hauteur `auto` a besoin du ratio intrinsèque, connu une fois l'image décodée, sinon
         // floatedImageParagraphFrom mesurerait `imgRect.bottom` trop tôt. `decode()` pré-chauffe aussi le cache pour le <img> reparsé plus tard.
@@ -3554,25 +3564,26 @@ const PdfExport = (function () {
   // téléchargée pour ce PDF, la fenêtre la liste et peut tout arrêter ; dans un lot, un site déjà accepté n'est pas redemandé et un refus arrête tout
   // le lot, cf. ExternalImages.beginRun), les marges et les bibliothèques, puis le HTML, le nom du fichier et l'en-tête et le pied résolus pour la
   // ligne. `gridModel` : le modèle de la ligne est une grille ; absent, c'est le modèle ouvert (un lot « Modèle selon la ligne » peut mêler les deux
-  // genres, js/main.js).
-  async function prepareRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel) {
+  // genres, js/main.js). `quality` : 'light' ramène les images à LIGHT_IMAGE_PPI points par pouce ; absent, le PDF reprend les images telles quelles.
+  async function prepareRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel, quality) {
     await ExternalImages.confirmExport(htmlContent, headerFooterData);
     setPageMarginsPt(marginsPt);
     exportsGridModel = gridModel === undefined ? (typeof GridEditor !== 'undefined' && GridEditor.isActive()) : !!gridModel;
+    lightImagePpi = quality === 'light' ? LIGHT_IMAGE_PPI : 0;
     await ensurePdfLibsLoaded();
     const { resolvedHtml, filename, resolvedHeaderFooterData } = await ExportCommon.resolveRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData);
     return { docDefinition: await buildNativePdfDocDefinition(resolvedHtml, filename, resolvedHeaderFooterData), filename };
   }
 
-  async function exportCurrentRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel) {
+  async function exportCurrentRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel, quality) {
     if (!record) { alert(I18n.t('alert.noRecordForExport')); return; }
-    const { docDefinition, filename } = await prepareRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel);
+    const { docDefinition, filename } = await prepareRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel, quality);
     window.pdfMake.createPdf(docDefinition).download((filename || 'publipostage') + '.pdf');
   }
 
   // Export PDF en lot (une ligne Grist -> un blob PDF, cf. js/main.js onExportBatch).
-  async function getNativePdfBlobForRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel) {
-    const { docDefinition, filename } = await prepareRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel);
+  async function getNativePdfBlobForRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel, quality) {
+    const { docDefinition, filename } = await prepareRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel, quality);
     const blob = await new Promise((resolve, reject) => {
       try { window.pdfMake.createPdf(docDefinition).getBlob(resolve); } catch (e) { reject(e); }
     });

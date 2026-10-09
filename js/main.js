@@ -1456,7 +1456,7 @@
       engines: ['pdf'],
       batch: 'pdfZip', noRecord: 'alert.noRecordForExport', generating: 'status.pdfGenerating', generated: 'status.pdfGenerated', failed: 'status.pdfGenerationError',
       stampsExportDate: true,
-      run: (doc, tableId, record) => PdfExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsPt()),
+      run: (doc, tableId, record) => PdfExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsPt(), undefined, pdfImageQuality()),
     },
     // « Impression navigateur » (qualité du bouton PDF) : la Lecture, imprimée par le navigateur (js/print-export.js), sans moteur à charger. Un document
     // découpé « Un document par valeur » reste un lot : le lot PDF (archive ZIP), une impression ne faisant qu'un document.
@@ -1501,10 +1501,15 @@
     }
   }
   // Le bouton PDF suit la qualité choisie dans son menu : « Impression navigateur » imprime la Lecture par le navigateur, toute autre ligne garde le PDF
-  // vectoriel. Les lots (toutes les lignes, PDF fusionné, planches) restent vectoriels.
+  // vectoriel. Les lots (toutes les lignes, PDF fusionné, planches) restent vectoriels et suivent « Léger » comme le PDF d'une ligne : il ne change que le
+  // poids des images (PdfExport, ImageIo.lighten), jamais la page.
   function selectedPdfQuality() {
     const select = document.getElementById('v2-pdf-quality');
     return select ? select.value : 'native';
+  }
+  // Ce que le moteur PDF reçoit de la qualité choisie : 'light' ramène les images à leur définition, toute autre ligne les reprend telles quelles.
+  function pdfImageQuality() {
+    return selectedPdfQuality() === 'light' ? 'light' : 'native';
   }
   const onExportPdf = () => exportRecordAs(selectedPdfQuality() === 'browser-print' ? 'print' : 'pdf');
   const onExportDocx = () => exportRecordAs('docx');
@@ -1617,8 +1622,9 @@
     engines: ['pdf'], margins: () => PageLayout.getMarginsPt(),
     // La date du dernier export PDF s'écrit pour les lignes du fichier (js/export-date.js) : les trois lots PDF, ZIP, PDF unique et planche.
     stampsExportDate: true,
-    // Le PDF d'une ligne sait si son modèle est une grille (un lot « Modèle selon la ligne » peut mêler grilles et documents).
-    renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins, _pageOptions, typeModele) => PdfExport.getNativePdfBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, margins, GridEditor.isGridType(typeModele)),
+    // Le PDF d'une ligne sait si son modèle est une grille (un lot « Modèle selon la ligne » peut mêler grilles et documents), et la qualité du menu Qualité
+    // choisie au départ du lot (`imageQuality`, cf. openBatchSink) : 'light' ramène les images à leur définition.
+    renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins, _pageOptions, typeModele, imageQuality) => PdfExport.getNativePdfBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, margins, GridEditor.isGridType(typeModele), imageQuality),
   };
   const BATCH_EXPORTS = {
     pdfZip: Object.assign({}, PDF_BATCH, {
@@ -1803,7 +1809,9 @@
         finishing: 'status.xlsxAssembling',
       };
     }
-    const render = doc => cfg.renderRow(doc.html, tableId, doc.row, doc.source.filenameTemplate, doc.headerFooterData, doc.source.margins, doc.source.pageOptions, doc.source.typeModele);
+    // La qualité choisie au départ de l'export vaut pour tout le lot : un changement de ligne dans le menu pendant qu'il tourne n'y change rien.
+    const imageQuality = pdfImageQuality();
+    const render = doc => cfg.renderRow(doc.html, tableId, doc.row, doc.source.filenameTemplate, doc.headerFooterData, doc.source.margins, doc.source.pageOptions, doc.source.typeModele, imageQuality);
     if (cfg.merged) {
       const pdf = await (cfg.sheets ? PdfMerge.createSheets(tableId, sheetSetup.layout) : PdfMerge.create(tableId));
       return {
@@ -2029,8 +2037,8 @@
     pdfFilenameInput.addEventListener('fieldenter', () => pdfFilenameInput.blur());
   }
 
-  // Qualité PDF : bouton + panneau au survol plutôt qu'un <select> toujours affiché. Le vectoriel (par défaut) et l'impression par le navigateur existent :
-  // onExportPdf lit la valeur choisie, les autres lignes sont grisées (« bientôt »).
+  // Qualité PDF : bouton + panneau au survol plutôt qu'un <select> toujours affiché. Trois lignes, toutes actives : le vectoriel (par défaut), l'impression par
+  // le navigateur et « Léger » (le vectoriel aux images réduites) ; onExportPdf et les lots lisent la valeur choisie.
   function wireQualityDropdown() {
     const select = document.getElementById('v2-pdf-quality');
     const flyout = document.getElementById('v2-quality-flyout');
@@ -2038,10 +2046,7 @@
     if (!select || !flyout || !trigger) return;
     const rows = flyout.querySelectorAll('.v2-hover-row[data-quality]');
     const syncActiveRow = () => rows.forEach(row => row.classList.toggle('is-active', row.dataset.quality === select.value));
-    rows.forEach(row => {
-      if (row.classList.contains('v2-hover-row-disabled')) return;
-      row.addEventListener('click', () => { select.value = row.dataset.quality; syncActiveRow(); });
-    });
+    rows.forEach(row => row.addEventListener('click', () => { select.value = row.dataset.quality; syncActiveRow(); }));
     const group = trigger.closest('.v2-hover-group');
     if (group) group.addEventListener('mouseenter', syncActiveRow);
     syncActiveRow();

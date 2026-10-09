@@ -1,7 +1,7 @@
 // Suite "browserPrint" - l'impression par le navigateur (js/print-export.js, css/print.css, ReaderMode.renderInto), la qualité « Impression navigateur » du bouton PDF : la Lecture,
 // rendue dans un cadre caché et découpée en feuilles, que le navigateur imprime telle quelle (« même rendu que l'éditeur, la Lecture et le PDF classique », demande d'Antoine du 09/10).
 // Ce que cette suite garde, dans le widget :
-//  1) la ligne du menu « Qualité PDF » existe, s'appelle « Impression navigateur » (français et anglais) et se choisit ; les deux autres lignes restent grisées ;
+//  1) la ligne du menu « Qualité PDF » existe, s'appelle « Impression navigateur » (français et anglais) et se choisit ; les autres lignes du menu sont dans le groupe pdfLight ;
 //  2) le cadre : srcdoc à bac à sable sans script, hors de l'écran, retiré à la fin de l'impression et au début de la suivante ;
 //  3) la FIDÉLITÉ : une feuille par page de la Lecture, de la taille exacte de la page, le texte et les coutures aux mêmes endroits qu'en Lecture (écart nul à 0,05 px près), même
 //     en paysage A5 ; `@page` dans le cadre seulement ; la vue « comme acceptée » sans teinte ; une image d'un autre site montrée dans l'impression sans être montrée dans la Lecture ;
@@ -62,7 +62,7 @@
 
   cases.push({
     id: 'bprint_quality_menu_offers_browser_print',
-    description: 'Menu « Qualité PDF » : la ligne « Impression navigateur » (ex « Impr. navigateur (bientôt) ») n’est plus grisée, ni dans la liste cachée ni dans le panneau, se nomme ainsi en français et « Browser print » en anglais, et un clic dessus la choisit ; « Basse qualité » et « Ultra HD » restent grisées',
+    description: 'Menu « Qualité PDF » : la ligne « Impression navigateur » (ex « Impr. navigateur (bientôt) ») n’est plus grisée, ni dans la liste cachée ni dans le panneau, se nomme ainsi en français et « Browser print » en anglais, et un clic dessus la choisit (les autres lignes du menu : groupe pdfLight)',
     run: async () => {
       const select = document.getElementById('v2-pdf-quality');
       const row = name => document.querySelector('#v2-quality-flyout .v2-hover-row[data-quality="' + name + '"]');
@@ -77,7 +77,6 @@
       } finally { I18n.setLang(lang); }
       seen.optionDisabled = option('browser-print').disabled;
       seen.rowDisabled = row('browser-print').classList.contains('v2-hover-row-disabled');
-      seen.others = ['low', 'ultra'].map(name => option(name).disabled && row(name).classList.contains('v2-hover-row-disabled'));
       const before = select.value;
       row('browser-print').click();
       seen.chosen = select.value;
@@ -86,7 +85,7 @@
       seen.back = select.value;
       select.value = before;
       const pass = seen.fr[0] === 'Impression navigateur' && seen.fr[1] === 'Impression navigateur' && seen.en[0] === 'Browser print' && seen.en[1] === 'Browser print'
-        && !seen.optionDisabled && !seen.rowDisabled && seen.others.every(Boolean) && seen.chosen === 'browser-print' && seen.active && seen.back === 'native';
+        && !seen.optionDisabled && !seen.rowDisabled && seen.chosen === 'browser-print' && seen.active && seen.back === 'native';
       return { pass, notes: JSON.stringify(seen) };
     },
   });

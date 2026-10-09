@@ -77,7 +77,8 @@ La galerie **Créer à partir d'un modèle…** propose 21 modèles prêts à l'
 - **Excel** (`.xlsx`) pour les grilles : une archive ZIP d'un classeur par ligne de la table, ou un seul classeur d'une feuille par ligne.
 - Avant un export, une fenêtre liste les sites externes dont des images seraient téléchargées.
 - **PDF par impression navigateur** (ligne « Impression navigateur » du menu Qualité du bouton PDF) : la Lecture, page pour page, passe par la fenêtre d'impression du navigateur (« Enregistrer au format PDF » ou une imprimante), avec la même mise en page que la Lecture. Une ligne à la fois, 60 pages au plus ; le PDF vectoriel n'a pas cette limite.
-- Les qualités de PDF « raster » ne sont pas livrées : l'interface les montre grisées (« bientôt »), leur code (html2pdf.js) a été retiré le 4 octobre 2026 et reste dans l'historique git.
+- **PDF « Léger »** (ligne « Léger (images réduites) » du menu Qualité du bouton PDF) : le même PDF vectoriel, texte et page intacts, dont les images sont ramenées à 150 points par pouce (`ImageIo.lighten`, `js/image-io.js`) : une photo ou un PNG opaque devient un JPEG, un logo transparent reste un PNG, une petite image et un code QR ne sont pas touchés. Il vaut pour le PDF d'une ligne comme pour les lots ; « Vectoriel » reprend toujours les images telles quelles.
+- Les qualités de PDF « raster » (« Basse qualité », « Ultra HD ») ne sont pas livrées : leur code (html2pdf.js) a été retiré le 4 octobre 2026 et reste dans l'historique git, et leurs lignes grisées ont quitté le menu le 9 octobre 2026 ; un PDF photographié n'aurait jamais été plus net que le PDF vectoriel.
 
 ### Interface
 
