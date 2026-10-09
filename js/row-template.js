@@ -161,6 +161,9 @@ const RowTemplate = (function () {
 
   async function save(raw) {
     const clean = normalizeRaw(raw);
+    // Rien n'a changé (les Réglages s'ouvrent puis se ferment sans que l'onglet Vue soit touché) : rien n'est écrit. Écrire `null` pour un réglage qui
+    // n'existe pas ferait apparaître « Enregistrer » dans Grist (brouillon de la vue) sans rien à enregistrer.
+    if (JSON.stringify(clean) === JSON.stringify(normalizeRaw((GristAPI.getWidgetOptions() || {})[OPTION_KEY]))) return setConfig(normalizeConfig(clean), false);
     // Brouillon de Grist : visible par tous une fois la vue enregistrée (bouton Enregistrer en haut du widget). Un échec n'empêche pas de l'appliquer
     // ici.
     expectedEchoes.push(JSON.stringify(clean));

@@ -203,6 +203,8 @@ const GristAPI = (function () {
   let _tokenCache = null;
   // Abonnés aux options JSON du widget (js/access-rights.js) : grist.onOptions n'est enregistré qu'une fois, ici, et redistribué.
   let _optionsCallbacks = [];
+  // Abonnés aux écritures d'options faites par le widget (js/save-reminder.js) : ils reçoivent { before, after }.
+  let _optionWriteCallbacks = [];
   // Le lien « Sélectionner par » de ce widget, d'après settings.linking de grist.onOptions (js/reader-guide.js). 'unknown' tant que Grist ne le dit
   // pas.
   let _linkState = 'unknown';
@@ -267,9 +269,9 @@ const GristAPI = (function () {
   }
 
   // Prévient les abonnés d'un état : la panne de l'un n'empêche pas les suivants.
-  function notifyAll(callbacks, label, value) {
+  function notifyAll(callbacks, label, value, extra) {
     for (const cb of callbacks) {
-      try { cb(value); } catch (e) { console.error('[GristAPI] erreur callback ' + label + ':', e); }
+      try { cb(value, extra); } catch (e) { console.error('[GristAPI] erreur callback ' + label + ':', e); }
     }
   }
 
@@ -288,7 +290,9 @@ const GristAPI = (function () {
     _accessLevel = accessLevel;
     if (linkChanged) notifyAll(_linkStateCallbacks, 'onLinkStateChange', linkState);
     if (accessChanged) notifyAll(_accessLevelCallbacks, 'onAccessLevelChange', accessLevel);
-    notifyAll(_optionsCallbacks, 'onOptions', _currentOptions);
+    // Second argument : un message qui apporte aussi un changement du lien ou de l'accès n'est pas un « Retour » de Grist, qui rend les options
+    // enregistrées (js/save-reminder.js). Grist n'envoie rien du tout au clic sur « Enregistrer ».
+    notifyAll(_optionsCallbacks, 'onOptions', _currentOptions, { settingsChanged: linkChanged || accessChanged });
   }
 
   function subscribeToRecords() {
@@ -735,6 +739,7 @@ const GristAPI = (function () {
   // Options JSON propres au widget (jamais accessLevel, cf. init()) : lues au démarrage par getOptions puis tenues à jour par onOptions.
   function getWidgetOptions() { return _currentOptions; }
   function onWidgetOptionsChange(cb) { _optionsCallbacks.push(cb); }
+  function onWidgetOptionWrite(cb) { _optionWriteCallbacks.push(cb); }
   // 'linked' (relié à une autre vue), 'unlinked' (« Sélectionner par » vide) ou 'unknown' ; le rappel reçoit le nouvel état à chaque changement.
   function getLinkState() { return _linkState; }
   function onLinkStateChange(cb) { _linkStateCallbacks.push(cb); }
@@ -744,9 +749,11 @@ const GristAPI = (function () {
   function onAccessLevelChange(cb) { _accessLevelCallbacks.push(cb); }
   // grist.setOption ne pose qu'un brouillon des options de la section (ViewSectionRec.activeCustomOptions, grist-core) : Grist affiche alors un
   // bouton Enregistrer en haut du widget, seul moyen de le rendre durable et visible des autres personnes. Recopié localement tout de suite, sans
-  // attendre le retour d'onOptions.
+  // attendre le retour d'onOptions ; les abonnés aux écritures (le rappel « Enregistrer », js/save-reminder.js) en sont prévenus au même moment.
   async function setWidgetOption(key, value) {
+    const before = _currentOptions;
     _currentOptions = Object.assign({}, _currentOptions, { [key]: value });
+    notifyAll(_optionWriteCallbacks, 'onWidgetOptionWrite', { before, after: _currentOptions });
     await grist.setOption(key, value);
   }
 
@@ -1053,5 +1060,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnChoices, getColumnLabel, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, getCurrentUserName, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, createWriteQueue, createUserEmailCache, createMemoizedLoad };
+  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnChoices, getColumnLabel, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, getCurrentUserName, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, createWriteQueue, createUserEmailCache, createMemoizedLoad };
 })();

@@ -63,6 +63,12 @@ try {
     // Options JSON PROPRES au widget (activeCustomOptions côté grist-core) : null tant que rien n'est réglé, comme une vue neuve. setOption/setOptions
     // les modifient et rappellent onOptions, comme le vrai ConfigNotifier (vérifié à la source le 2026-09-28).
     options: null,
+    // Les options ENREGISTRÉES de la vue (celles que reçoivent les autres personnes) : `options` est le brouillon (activeCustomOptions), que « Enregistrer »
+    // (saveOptions) recopie ici et que « Retour » (revertOptions) rend. setWidgetOptions les pose toutes les deux : ce sont des options qui viennent de Grist.
+    savedOptions: null,
+    // Vrai : setOption ne rappelle onOptions que si les options changent vraiment, comme le vrai Grist (mesuré le 09/10 : aucun rappel pour une valeur qui ne
+    // change rien). Faux par défaut : un rappel à chaque appel, ce que supposent les scénarios existants.
+    echoOnlyChanges: false,
     // Email que renverrait la formule déclenchée user.Email de Publipostage_UserProbe (js/grist-api.js:getCurrentUserEmail). null = formule sans
     // valeur, comme avant ce champ : l'identification échoue, ce que tous les scénarios existants supposent.
     userEmail: null,
@@ -341,7 +347,23 @@ try {
   // ConfigNotifier, asynchrone comme lui.
   function setWidgetOptions(options) {
     state.options = options == null ? null : JSON.parse(JSON.stringify(options));
+    state.savedOptions = state.options == null ? null : JSON.parse(JSON.stringify(state.options));
     notifyOptions();
+  }
+  // Le clic sur « Enregistrer » de Grist : le brouillon devient l'état enregistré. Grist ne dit RIEN au widget (mesuré le 09/10 dans un vrai Grist : aucun
+  // message, ni onOptions ni autre, parce que les options actives ne changent pas) : le widget ne peut pas savoir qu'on a enregistré.
+  function saveOptions() {
+    state.savedOptions = state.options == null ? null : JSON.parse(JSON.stringify(state.options));
+  }
+  // Le clic sur « Retour » de Grist : le brouillon est remplacé par l'état enregistré, que Grist renvoie.
+  function revertOptions() {
+    state.options = state.savedOptions == null ? null : JSON.parse(JSON.stringify(state.savedOptions));
+    notifyOptions();
+  }
+  function sortKeys(value) {
+    if (Array.isArray(value)) return value.map(sortKeys);
+    if (value && typeof value === 'object') return Object.keys(value).sort().reduce((out, k) => { out[k] = sortKeys(value[k]); return out; }, {});
+    return value;
   }
   function notifyOptions() {
     const cb = state.optionsCallback;
@@ -583,8 +605,10 @@ try {
     getOptions: async function () { return state.options == null ? null : JSON.parse(JSON.stringify(state.options)); },
     getOption: async function (key) { return state.options ? state.options[key] : undefined; },
     setOption: async function (key, value) {
-      state.options = Object.assign({}, state.options, { [key]: value === undefined ? null : JSON.parse(JSON.stringify(value)) });
-      notifyOptions();
+      const next = Object.assign({}, state.options, { [key]: value === undefined ? null : JSON.parse(JSON.stringify(value)) });
+      const unchanged = state.options != null && JSON.stringify(sortKeys(next)) === JSON.stringify(sortKeys(state.options));
+      state.options = next;
+      if (!(state.echoOnlyChanges && unchanged)) notifyOptions();
     },
     setOptions: async function (options) { state.options = JSON.parse(JSON.stringify(options || {})); notifyOptions(); },
     clearOptions: async function () { state.options = null; notifyOptions(); },
@@ -619,7 +643,7 @@ try {
     },
   };
 
-  window.__gristStub = { state, setVariables, setColumnLabels, setRows, setHiddenColumns, setAccessLevel, setWidgetOptions, setUserEmail, setUserName, setDocId, renameColumn, renameTable, deleteColumn, dropTable, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, remoteWrite, getRow, dropColumn, resetPages, readPages, setLatency, resetInFlightStats, failReadBackOnce };
+  window.__gristStub = { state, setVariables, setColumnLabels, setRows, setHiddenColumns, setAccessLevel, setWidgetOptions, saveOptions, revertOptions, setUserEmail, setUserName, setDocId, renameColumn, renameTable, deleteColumn, dropTable, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, remoteWrite, getRow, dropColumn, resetPages, readPages, setLatency, resetInFlightStats, failReadBackOnce };
   // Point d'ancrage pour seeder AVANT que main.js:init() ne tourne (donc avant le tout premier
   // fetchTable de GristAPI.init()) - contrairement à un appel de setVariables/setRows APRÈS "Widget
   // prêt.", qui ne peut jamais tester "le widget démarre avec tel modèle déjà marqué par défaut" (cf.

@@ -1,0 +1,6 @@
+/* Rappel « Enregistrer » des Réglages (js/save-reminder.js) : une ligne colorée à gauche de « Fermer », sur les onglets Vue et Accès, après un changement de
+   réglage du widget (un brouillon pour Grist, que « Enregistrer » partage). Elle est dans la zone des boutons, qui ne défile pas : visible quel que soit
+   l'endroit où l'on est dans l'onglet, là où la souris va en quittant les Réglages. Elle prend la place libre à gauche du bouton, qui ne bouge pas ; le
+   texte passe sur deux lignes au plus dans cette place (fenêtre de 480 px). Couleurs : jetons d'accent de F5 (texte ≥ 4,5:1, clair et sombre). `hidden`
+   suffit à la cacher : aucune règle ici ne pose de `display`. */
+.settings-save-reminder { flex: 1 1 0; min-width: 0; margin: 0; padding: 3px 9px; border: 1px solid var(--accent-soft-border); border-radius: var(--radius-sm); background: var(--accent-soft); color: var(--accent-ink); font-size: 12px; font-weight: 600; line-height: 1.25; }

@@ -2279,6 +2279,7 @@
     // Lancé dès que les options du widget sont connues (GristAPI.init), attendu seulement avant le premier affichage, en fin d'init().
     const accessReady = AccessRights.init();
     ViewTemplate.init();
+    SaveReminder.init();
     RowTemplate.init({
       openTemplate: openTemplateForRow,
       currentId: () => Templates.getCurrentId(),

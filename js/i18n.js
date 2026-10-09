@@ -542,6 +542,13 @@ const I18n = (function () {
       fr: 'Réglages propres à cette vue. Pour les appliquer à tout le monde, enregistrez ensuite la vue dans Grist (bouton Enregistrer en haut du widget).',
       en: 'Settings for this view. To apply them to everyone, then save the view in Grist (Save button at the top of the widget).',
     },
+    // Ligne à gauche de « Fermer » dans les Réglages, onglets Vue et Accès, après un changement de réglage du widget (js/save-reminder.js). Une consigne, pas
+    // un constat : Grist ne dit pas au widget qu'on a cliqué sur « Enregistrer », la ligne reste donc jusqu'à la fermeture des Réglages.
+    // Espaces insécables dans les guillemets : la ligne passe à la ligne dans un panneau étroit, et un » ne doit pas commencer la seconde.
+    'settings.saveReminder': {
+      fr: 'Pour partager vos changements, cliquez sur «\u00a0Enregistrer\u00a0» en haut du widget, dans Grist.',
+      en: 'To share your changes, click “Save” at the top of the widget, in Grist.',
+    },
     'settings.rowTemplate.title': { fr: 'Modèle selon la ligne', en: 'Template by row' },
     'settings.rowTemplate.intro': {
       fr: 'Ouvre tout seul le bon modèle selon la ligne sélectionnée dans la table de la page, en édition comme en lecture. Les règles se lisent dans l’ordre : la première qui correspond choisit le modèle.',

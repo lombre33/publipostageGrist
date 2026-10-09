@@ -123,6 +123,7 @@
 <link rel="stylesheet" href="css/search-select.css?v=0.8">
 <link rel="stylesheet" href="css/access-rights.css?v=0.8">
 <link rel="stylesheet" href="css/row-template.css?v=0.3">
+<link rel="stylesheet" href="css/save-reminder.css?v=0.1">
 <link rel="stylesheet" href="css/text-expansion.css?v=0.3">
 <link rel="stylesheet" href="css/shortcuts.css?v=0.2">
 <link rel="stylesheet" href="css/watermark.css?v=0.2">
@@ -640,7 +641,8 @@
         </dl>
       </div>
     </div>
-    <div class="pp-modal-actions modal-actions"><button id="settings-close" data-i18n="common.close">Fermer</button></div>
+    <!-- Rappel « Enregistrer » (js/save-reminder.js) : à gauche de « Fermer », là où la souris va en quittant les Réglages (« Fermer » ne bouge pas : la ligne prend la place libre à sa gauche) ; visible seulement sur les onglets Vue et Accès, après un changement de réglage du widget (un brouillon pour Grist, que « Enregistrer » partage). -->
+    <div class="pp-modal-actions modal-actions"><p class="settings-save-reminder" id="settings-save-reminder" role="status" hidden></p><button id="settings-close" data-i18n="common.close">Fermer</button></div>
   </div></div>
 </div>
 <script src="js/dom.js?v=0.2"></script>
@@ -648,7 +650,7 @@
 <script src="js/version.js?v=0.1"></script>
 <script src="js/html-sanitize.js?v=0.6"></script>
 <script src="js/page-tree.js?v=0.5"></script>
-<script src="js/grist-api.js?v=0.102"></script>
+<script src="js/grist-api.js?v=0.103"></script>
 <script src="js/templates.js?v=0.94"></script>
 <script src="js/table-consent.js?v=0.1"></script>
 <script>
@@ -664,7 +666,7 @@
 </script>
 <script src="js/reader-mode.js?v=0.135"></script>
 <script src="js/reader-guide.js?v=0.6"></script>
-<script src="js/i18n.js?v=0.133"></script>
+<script src="js/i18n.js?v=0.134"></script>
 <script src="js/shortcuts.js?v=0.11"></script>
 <script src="js/page-layout.js?v=0.14"></script>
 <script src="js/color-math.js?v=0.1"></script>
@@ -746,13 +748,14 @@
 <script src="js/macro-templates.js?v=0.9"></script>
 <script src="js/macro-editor.js?v=0.47"></script>
 <script src="js/view-template.js?v=0.7"></script>
-<script src="js/row-template.js?v=0.5"></script>
+<script src="js/row-template.js?v=0.6"></script>
 <script src="js/row-template-panel.js?v=0.3"></script>
 <script src="js/template-organizer.js?v=0.4"></script>
 <script src="js/template-preferences.js?v=0.10"></script>
 <script src="js/template-organize-modal.js?v=0.12"></script>
 <script src="js/template-tree-select.js?v=0.19"></script>
 <script src="js/access-rights.js?v=0.8"></script>
+<script src="js/save-reminder.js?v=0.1"></script>
 <script src="js/schema-renames.js?v=0.7"></script>
 <script src="js/settings-columns.js?v=0.4"></script>
 <script src="js/watermark-dialog.js?v=0.5"></script>
@@ -765,6 +768,6 @@
 <script src="js/page-zoom.js?v=0.5"></script>
 <script src="js/field-codec.js?v=0.4"></script>
 <script src="js/field-editor.js?v=0.3"></script>
-<script src="js/main.js?v=0.126"></script>
+<script src="js/main.js?v=0.127"></script>
 </body>
 </html>

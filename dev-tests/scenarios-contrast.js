@@ -562,6 +562,18 @@
   });
 
   cases.push({
+    id: 'contrast_save_reminder_line_of_the_settings_reaches_4_5_in_light_and_dark',
+    description: 'Ligne « Pas encore enregistré… » des Réglages Vue et Accès (texte d’accent sur son fond d’accent clair, js/save-reminder.js) : 4,5:1 au moins en clair et en sombre',
+    run: async () => {
+      const byTheme = inBothThemes(() => ({
+        'ligne du rappel « Enregistrer »': withProbe('<div class="settings-modal-content"><div class="pp-modal-box"><div class="pp-modal-actions modal-actions"><p class="settings-save-reminder">Pas encore enregistré</p></div></div></div>', el => round2(textRatio(el.querySelector('.settings-save-reminder')))),
+      }));
+      const bad = failing(byTheme, 4.5);
+      return { pass: bad.length === 0, notes: JSON.stringify({ bad, byTheme }) };
+    },
+  });
+
+  cases.push({
     id: 'contrast_gallery_card_chips_reach_4_5_on_their_grey_in_light_and_dark',
     description: 'Puces d’étiquettes des cartes de la galerie (10,5 px sur fond gris) : 4,5:1 au moins en clair et en sombre',
     run: async () => {

@@ -76,6 +76,13 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   rougit seule quand sa colonne disparaît ; les renommages de colonnes et de tables la suivent, et la
   confirmation avant de supprimer la correspondance d'une table liée compte aussi les modèles dont seul un
   sinon lit cette table. Un modèle enregistré avant se relit tel quel.
+- **Rappel « Enregistrer » dans les Réglages Vue et Accès** : les réglages de ces deux onglets (le modèle de
+  la vue, « Modèle selon la ligne », les droits par personne) sont ceux de la vue : Grist n'en garde qu'un
+  brouillon, que les autres personnes ne reçoivent qu'après un clic sur « Enregistrer » en haut du widget.
+  Après un changement, une ligne colorée à gauche de « Fermer » le rappelle ; elle se retire au « Retour » de
+  Grist et à la prochaine ouverture des Réglages. Grist ne dit pas au widget qu'on a cliqué sur
+  « Enregistrer » : la ligne reste affichée jusqu'à la fermeture des Réglages, et son texte est une consigne,
+  vraie aussi après le clic.
 
 ### Modifié
 
@@ -114,6 +121,9 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   exact (une case copiée remplit toute la ligne choisie). « Ligne avant », « Ligne après », « Colonne
   avant » et « Colonne après » ajoutent autant de lignes (de colonnes) que la sélection en couvre, en un
   seul Annuler, au lieu d'une seule.
+- **Réglages ouverts puis fermés sans rien changer** : l'onglet Vue (« Modèle selon la ligne ») n'écrit plus
+  un réglage vide à la fermeture des Réglages. Grist y voyait un brouillon de la vue et montrait
+  « Enregistrer » et « Retour » alors que rien n'avait été touché.
 
 ## [1.0.0-beta.1] - 2026-10-05
 
@@ -277,6 +287,12 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   variable and its text, which turns red alone when its column disappears; renames of columns and tables
   follow it, and the confirmation before deleting a linked table's matching also counts the templates where
   only an "otherwise" reads that table. A template saved before reads back as it was.
+- **"Save" reminder in the Settings View and Access tabs**: the settings of these two tabs (the view's
+  template, "Template by row", the per-person rights) are the view's: Grist keeps only a draft of them, which
+  other people receive only after a click on "Save" at the top of the widget. After a change, a colored line
+  to the left of "Close" reminds you; it goes away on Grist's "Revert" and the next time Settings open.
+  Grist does not tell the widget that "Save" was clicked: the line stays until Settings are closed, and its
+  text is an instruction, true after the click as well.
 
 ### Changed
 
@@ -312,6 +328,9 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   repeats only when the selection is an exact multiple of it (one copied cell fills the whole chosen row).
   "Row before", "Row after", "Column before" and "Column after" add as many rows (columns) as the selection
   covers, in a single Undo, instead of one.
+- **Settings opened then closed without changing anything**: the View tab ("Template by row") no longer
+  writes an empty setting when Settings close. Grist saw it as a draft of the view and showed "Save" and
+  "Revert" although nothing had been touched.
 
 ## [1.0.0-beta.1] - 2026-10-05 (English)
 
