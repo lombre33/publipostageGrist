@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hash": "4b213fb69d9f5067",
+  "preview": [
+    {
+      "src": "etiquette-produit/capture-1.png",
+      "w": 422,
+      "h": 595
+    },
+    {
+      "src": "etiquette-produit/capture-2.png",
+      "w": 422,
+      "h": 595
+    },
+    {
+      "src": "etiquette-produit/capture-3.png",
+      "w": 637,
+      "h": 901
+    }
+  ],
+  "thumb": {
+    "src": "etiquette-produit/thumb.png",
+    "w": 240,
+    "h": 320
+  }
+}

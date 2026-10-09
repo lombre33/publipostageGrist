@@ -361,6 +361,194 @@
     ]
   },
   {
+    "id": "bon-de-commande",
+    "name": "Bon de commande fournisseur",
+    "tags": [
+      "stock"
+    ],
+    "screenshot": "bon-de-commande/thumb.png",
+    "preview": [
+      {
+        "src": "bon-de-commande/capture-1.png",
+        "w": 563,
+        "h": 796
+      },
+      {
+        "src": "bon-de-commande/capture-2.png",
+        "w": 563,
+        "h": 796
+      }
+    ],
+    "html": "bon-de-commande/template.html",
+    "pack": "bon-de-commande/pack.json",
+    "headerFooter": "bon-de-commande/header-footer.json",
+    "shows": [
+      "loop",
+      "calc",
+      "condition",
+      "qr",
+      "pageNumbers",
+      "linked"
+    ]
+  },
+  {
+    "id": "etiquette-produit",
+    "name": "Étiquette produit A6",
+    "tags": [
+      "stock",
+      "impression"
+    ],
+    "screenshot": "etiquette-produit/thumb.png",
+    "preview": [
+      {
+        "src": "etiquette-produit/capture-1.png",
+        "w": 422,
+        "h": 595
+      },
+      {
+        "src": "etiquette-produit/capture-2.png",
+        "w": 422,
+        "h": 595
+      },
+      {
+        "src": "etiquette-produit/capture-3.png",
+        "w": 637,
+        "h": 901
+      }
+    ],
+    "html": "etiquette-produit/template.html",
+    "pack": "etiquette-produit/pack.json",
+    "shows": [
+      "pageFormat",
+      "sheets",
+      "images",
+      "qr",
+      "twoColumns",
+      "condition"
+    ]
+  },
+  {
+    "id": "fiche-inventaire",
+    "name": "Fiche d’inventaire d’un emplacement",
+    "tags": [
+      "stock"
+    ],
+    "screenshot": "fiche-inventaire/thumb.png",
+    "preview": [
+      {
+        "src": "fiche-inventaire/capture-1.png",
+        "w": 563,
+        "h": 796
+      },
+      {
+        "src": "fiche-inventaire/capture-2.png",
+        "w": 563,
+        "h": 796
+      }
+    ],
+    "html": "fiche-inventaire/template.html",
+    "pack": "fiche-inventaire/pack.json",
+    "headerFooter": "fiche-inventaire/header-footer.json",
+    "shows": [
+      "refListLoop",
+      "sortFilter",
+      "conditionValue",
+      "today",
+      "pageNumbers",
+      "fileName"
+    ]
+  },
+  {
+    "id": "bon-de-mouvement",
+    "name": "Bon de mouvement de stock",
+    "tags": [
+      "stock"
+    ],
+    "screenshot": "bon-de-mouvement/thumb.png",
+    "preview": [
+      {
+        "src": "bon-de-mouvement/capture-1.png",
+        "w": 563,
+        "h": 796
+      },
+      {
+        "src": "bon-de-mouvement/capture-2.png",
+        "w": 563,
+        "h": 796
+      },
+      {
+        "src": "bon-de-mouvement/capture-3.png",
+        "w": 563,
+        "h": 796
+      }
+    ],
+    "html": "bon-de-mouvement/template.html",
+    "pack": "bon-de-mouvement/pack.json",
+    "shows": [
+      "condition",
+      "loop",
+      "calc",
+      "twoColumns",
+      "dateFormat",
+      "linked"
+    ]
+  },
+  {
+    "id": "reappro-email",
+    "name": "E-mail de réapprovisionnement",
+    "tags": [
+      "stock"
+    ],
+    "screenshot": "reappro-email/thumb.png",
+    "preview": [
+      {
+        "src": "reappro-email/capture-1.png",
+        "w": 980,
+        "h": 262
+      },
+      {
+        "src": "reappro-email/capture-2.png",
+        "w": 980,
+        "h": 222
+      }
+    ],
+    "html": "reappro-email/template.html",
+    "pack": "reappro-email/pack.json",
+    "shows": [
+      "email",
+      "refListLoop",
+      "sortFilter",
+      "calc",
+      "today",
+      "linked"
+    ]
+  },
+  {
+    "id": "valorisation-grille",
+    "name": "Valorisation du stock (Excel)",
+    "tags": [
+      "stock"
+    ],
+    "screenshot": "valorisation-grille/thumb.png",
+    "preview": [
+      {
+        "src": "valorisation-grille/capture-1.png",
+        "w": 1056,
+        "h": 205
+      }
+    ],
+    "html": "valorisation-grille/template.html",
+    "pack": "valorisation-grille/pack.json",
+    "shows": [
+      "grid",
+      "rowHeight",
+      "refListLoop",
+      "sortFilter",
+      "calc",
+      "fileName"
+    ]
+  },
+  {
     "id": "bulletin",
     "name": "Bulletin scolaire",
     "tags": [

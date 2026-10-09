@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "hash": "f0745fb625dc3b15",
+  "preview": [
+    {
+      "src": "reappro-email/capture-1.png",
+      "w": 980,
+      "h": 262
+    },
+    {
+      "src": "reappro-email/capture-2.png",
+      "w": 980,
+      "h": 222
+    }
+  ],
+  "thumb": {
+    "src": "reappro-email/thumb.png",
+    "w": 240,
+    "h": 320
+  }
+}

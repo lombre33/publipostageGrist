@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "family": "stock",
+  "main": "Mouvements",
+  "tables": ["Mouvements", "LignesMouvement"],
+  "links": [
+    {"table": "LignesMouvement", "mode": "match", "target": "Mouvement", "source": "id"}
+  ],
+  "template": {
+    "type": "document",
+    "pdfName": "#Mouvements.Numero",
+    "page": {
+      "format": "A4",
+      "orientation": "portrait",
+      "margins": [22, 18, 22, 18]
+    }
+  }
+}

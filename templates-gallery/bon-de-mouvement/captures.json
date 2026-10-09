@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hash": "2e827730de381988",
+  "preview": [
+    {
+      "src": "bon-de-mouvement/capture-1.png",
+      "w": 563,
+      "h": 796
+    },
+    {
+      "src": "bon-de-mouvement/capture-2.png",
+      "w": 563,
+      "h": 796
+    },
+    {
+      "src": "bon-de-mouvement/capture-3.png",
+      "w": 563,
+      "h": 796
+    }
+  ],
+  "thumb": {
+    "src": "bon-de-mouvement/thumb.png",
+    "w": 240,
+    "h": 320
+  }
+}

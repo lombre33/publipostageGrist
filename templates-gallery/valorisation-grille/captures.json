@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "hash": "2d9433b8e922ed44",
+  "preview": [
+    {
+      "src": "valorisation-grille/capture-1.png",
+      "w": 1056,
+      "h": 205
+    }
+  ],
+  "thumb": {
+    "src": "valorisation-grille/thumb.png",
+    "w": 240,
+    "h": 320
+  }
+}

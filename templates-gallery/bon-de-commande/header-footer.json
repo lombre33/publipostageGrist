@@ -1,0 +1,12 @@
+{
+  "enabled": true,
+  "differentFirstPage": false,
+  "header": {
+    "default": "<p><span style=\"font-size: 8pt\"><span class=\"var-badge\" data-table=\"Societe\" data-column=\"Nom\" data-key=\"Societe.Nom\"></span> — Bon de commande <span class=\"var-badge\" data-table=\"Commandes\" data-column=\"Numero\" data-key=\"Commandes.Numero\"></span></span></p>",
+    "first": ""
+  },
+  "footer": {
+    "default": "<p style=\"text-align: center\"><span style=\"font-size: 8pt\">Page <span class=\"page-number-badge\" data-format=\"n-slash-total\">#/#</span></span></p>",
+    "first": ""
+  }
+}

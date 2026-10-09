@@ -1,0 +1,129 @@
+{
+  "tables": [
+    {
+      "id": "Societe",
+      "columns": [
+        {"id": "Nom", "type": "Text", "label": "Nom"},
+        {"id": "Adresse", "type": "Text", "label": "Adresse"},
+        {"id": "SIRET", "type": "Text", "label": "SIRET"},
+        {"id": "TVAIntra", "type": "Text", "label": "N° de TVA"},
+        {"id": "Telephone", "type": "Text", "label": "Téléphone"},
+        {"id": "Email", "type": "Text", "label": "E-mail"},
+        {"id": "IBAN", "type": "Text", "label": "IBAN"},
+        {"id": "Logo", "type": "Attachments", "label": "Logo"}
+      ]
+    },
+    {
+      "id": "Fournisseurs",
+      "columns": [
+        {"id": "Nom", "type": "Text", "label": "Nom"},
+        {"id": "Contact", "type": "Text", "label": "Contact"},
+        {"id": "Email", "type": "Text", "label": "E-mail"},
+        {"id": "Adresse", "type": "Text", "label": "Adresse"},
+        {"id": "Telephone", "type": "Text", "label": "Téléphone"},
+        {"id": "ConditionsPaiement", "type": "Choice", "label": "Conditions de paiement", "choices": ["À réception", "30 jours fin de mois", "45 jours", "60 jours"]},
+        {"id": "DelaiJours", "type": "Int", "label": "Délai habituel (jours)"},
+        {"id": "Notes", "type": "Text", "label": "Notes"},
+        {"id": "Produits", "type": "RefList:Produits", "label": "Produits", "show": "SKU", "formula": "Produits.lookupRecords(Fournisseur=$id)"}
+      ]
+    },
+    {
+      "id": "Categories",
+      "columns": [
+        {"id": "Nom", "type": "Text", "label": "Nom"},
+        {"id": "Code", "type": "Text", "label": "Code"},
+        {"id": "Produits", "type": "RefList:Produits", "label": "Produits", "show": "SKU", "formula": "Produits.lookupRecords(Categorie=$id)"},
+        {"id": "NbReferences", "type": "Int", "label": "Nombre de références", "formula": "len($Produits)"},
+        {"id": "StockTotal", "type": "Int", "label": "Stock total", "formula": "SUM($Produits.Stock)"},
+        {"id": "ValeurStock", "type": "Numeric", "label": "Valeur du stock (€)", "formula": "round(SUM(p.Stock * p.PrixAchat for p in $Produits), 2)"}
+      ]
+    },
+    {
+      "id": "Emplacements",
+      "columns": [
+        {"id": "Code", "type": "Text", "label": "Code"},
+        {"id": "Zone", "type": "Choice", "label": "Zone", "choices": ["Réserve", "Picking", "Quai", "Froid"]},
+        {"id": "Allee", "type": "Text", "label": "Allée"},
+        {"id": "Produits", "type": "RefList:Produits", "label": "Produits", "show": "SKU", "formula": "Produits.lookupRecords(Emplacement=$id)"},
+        {"id": "NbReferences", "type": "Int", "label": "Nombre de références", "formula": "len($Produits)"},
+        {"id": "StockTotal", "type": "Int", "label": "Stock total", "formula": "SUM($Produits.Stock)"},
+        {"id": "ValeurStock", "type": "Numeric", "label": "Valeur du stock (€)", "formula": "round(SUM(p.Stock * p.PrixAchat for p in $Produits), 2)"}
+      ]
+    },
+    {
+      "id": "Produits",
+      "columns": [
+        {"id": "SKU", "type": "Text", "label": "Référence (SKU)"},
+        {"id": "Designation", "type": "Text", "label": "Désignation"},
+        {"id": "Categorie", "type": "Ref:Categories", "label": "Catégorie", "show": "Nom"},
+        {"id": "Fournisseur", "type": "Ref:Fournisseurs", "label": "Fournisseur", "show": "Nom"},
+        {"id": "Emplacement", "type": "Ref:Emplacements", "label": "Emplacement", "show": "Code"},
+        {"id": "Unite", "type": "Choice", "label": "Unité", "choices": ["pièce", "kg", "m", "L", "carton", "boîte"]},
+        {"id": "Stock", "type": "Int", "label": "Stock"},
+        {"id": "Seuil", "type": "Int", "label": "Seuil de réapprovisionnement"},
+        {"id": "PrixAchat", "type": "Numeric", "label": "Prix d’achat (€)"},
+        {"id": "PrixVente", "type": "Numeric", "label": "Prix de vente (€)"},
+        {"id": "TauxTVA", "type": "Numeric", "label": "Taux de TVA (%)"},
+        {"id": "Poids", "type": "Numeric", "label": "Poids (kg)"},
+        {"id": "Photo", "type": "Attachments", "label": "Photo"},
+        {"id": "Actif", "type": "Bool", "label": "Actif"},
+        {"id": "DLC", "type": "Date", "label": "Date limite de consommation"},
+        {"id": "Caracteristiques", "type": "Text", "label": "Caractéristiques"},
+        {"id": "Tags", "type": "ChoiceList", "label": "Étiquettes", "choices": ["Fragile", "Inflammable", "Lourd", "Promo", "Nouveau"]},
+        {"id": "Lot", "type": "Text", "label": "Lot"},
+        {"id": "SousSeuil", "type": "Bool", "label": "Sous le seuil", "formula": "($Stock or 0) < ($Seuil or 0)"}
+      ]
+    },
+    {
+      "id": "Commandes",
+      "columns": [
+        {"id": "Numero", "type": "Text", "label": "Numéro"},
+        {"id": "Fournisseur", "type": "Ref:Fournisseurs", "label": "Fournisseur", "show": "Nom"},
+        {"id": "DateCommande", "type": "Date", "label": "Date de commande"},
+        {"id": "DateLivraison", "type": "Date", "label": "Livraison souhaitée"},
+        {"id": "Statut", "type": "Choice", "label": "Statut", "choices": ["Brouillon", "Envoyée", "Reçue", "Annulée"]},
+        {"id": "AdresseLivraison", "type": "Text", "label": "Adresse de livraison"},
+        {"id": "Express", "type": "Bool", "label": "Livraison express"},
+        {"id": "RemisePct", "type": "Numeric", "label": "Remise (%)"},
+        {"id": "Commentaire", "type": "Text", "label": "Commentaire"},
+        {"id": "Acheteur", "type": "Text", "label": "Acheteur"}
+      ]
+    },
+    {
+      "id": "LignesCommande",
+      "columns": [
+        {"id": "Commande", "type": "Ref:Commandes", "label": "Commande", "show": "Numero"},
+        {"id": "Produit", "type": "Ref:Produits", "label": "Produit", "show": "SKU"},
+        {"id": "Reference", "type": "Text", "label": "Référence"},
+        {"id": "Designation", "type": "Text", "label": "Désignation"},
+        {"id": "Quantite", "type": "Numeric", "label": "Quantité"},
+        {"id": "Unite", "type": "Text", "label": "Unité"},
+        {"id": "PrixUnitaire", "type": "Numeric", "label": "Prix unitaire HT"},
+        {"id": "TauxTVA", "type": "Numeric", "label": "Taux de TVA (%)"}
+      ]
+    },
+    {
+      "id": "Mouvements",
+      "columns": [
+        {"id": "Numero", "type": "Text", "label": "Numéro"},
+        {"id": "Date", "type": "Date", "label": "Date"},
+        {"id": "Type", "type": "Choice", "label": "Type", "choices": ["Entrée", "Sortie", "Transfert"]},
+        {"id": "Source", "type": "Text", "label": "Origine"},
+        {"id": "Destination", "type": "Text", "label": "Destination"},
+        {"id": "Operateur", "type": "Text", "label": "Opérateur"},
+        {"id": "Motif", "type": "Text", "label": "Motif"}
+      ]
+    },
+    {
+      "id": "LignesMouvement",
+      "columns": [
+        {"id": "Mouvement", "type": "Ref:Mouvements", "label": "Mouvement", "show": "Numero"},
+        {"id": "SKU", "type": "Text", "label": "Référence (SKU)"},
+        {"id": "Designation", "type": "Text", "label": "Désignation"},
+        {"id": "Quantite", "type": "Int", "label": "Quantité"},
+        {"id": "Lot", "type": "Text", "label": "Lot"},
+        {"id": "DLC", "type": "Date", "label": "Date limite de consommation"}
+      ]
+    }
+  ]
+}

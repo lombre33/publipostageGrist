@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "family": "stock",
+  "main": "Categories",
+  "tables": ["Categories", "Produits", "Fournisseurs", "Emplacements"],
+  "links": [],
+  "template": {
+    "type": "grille",
+    "pdfName": "Valorisation #Categories.Code",
+    "page": {
+      "format": "A4",
+      "orientation": "portrait",
+      "margins": [15, 12, 15, 12]
+    }
+  }
+}
