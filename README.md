@@ -34,7 +34,7 @@ Moteur d'édition : [TipTap](https://tiptap.dev/)/ProseMirror. Le widget est une
 - **Grille** : un tableau de type tableur à la place de la page, aux colonnes et aux lignes redimensionnables. On peut y coller un tableau d'Excel, de Google Sheets ou de LibreOffice Calc, ou y importer un classeur `.xlsx`, puis l'exporter en Excel.
 - **Macro-modèle** : une page de garde toujours incluse, suivie d'annexes (d'autres modèles) choisies selon des règles évaluées sur la même ligne. Un œil à côté de chaque modèle du résumé le masque de la Lecture et des exports, sans le retirer de la composition.
 
-La galerie **Créer à partir d'un modèle…** propose des modèles prêts à l'emploi (facture, contrat de prestation de services, attestation, courrier de relance), à utiliser seuls ou avec une nouvelle table de données.
+La galerie **Créer à partir d'un modèle…** propose 21 modèles prêts à l'emploi : des documents d'entreprise (facture, contrat de prestation de services, attestation, courrier de relance, quittance de loyer, bon de commande…), des documents de métier (bulletin scolaire, fiche recette, émargement, fiche d'inventaire…) et des modèles à imprimer (flyer A6, invitation, affiche A3, badge, carte de visite, étiquettes). Un modèle se crée seul (**Utiliser ce modèle**) ou **avec ses tables** : elles sont créées vides, avec leurs colonnes de calcul, leurs colonnes d'affichage, les règles des Tables liées et la page du modèle. L'aperçu montre le document rempli de lignes d'exemple, en captures faites avec le vrai widget ; aucune ligne n'est écrite dans le document.
 
 ### Éditeur
 
@@ -150,7 +150,7 @@ L'interface prend la police du système (`--font-ui` de `css/style.css`) : aucun
 | `js/` | Le code du widget, un fichier par fonction (éditeur, barre d'outils, variables, exports, réglages…). |
 | `css/` | Les feuilles de style. |
 | `img/` | Le logo. |
-| `templates-gallery/` | Les modèles de la galerie, avec leur `manifest.json`. |
+| `templates-gallery/` | Les modèles de la galerie : `manifest.json`, un dossier par modèle (texte, `pack.json` des tables et de la page, captures) et `_tables/` (les tables de chaque famille de modèles, avec leurs lignes d'exemple, qui ne servent qu'aux captures). |
 | `templates-gallery-dev/` | Des modèles de test, chargés seulement quand l'adresse du widget contient `?dev`. |
 | `dev-tests/` | La suite de tests, le harnais et le simulateur de Grist. |
 | `planning/` | Les notes de conception par chantier, la feuille de route et la charte UI/UX. |
@@ -165,7 +165,7 @@ Règle de modification : un fichier `css/` ou `js/` modifié monte son numéro `
 
 ## Tests
 
-La suite de `dev-tests/` compte 102 groupes de scénarios, joués dans un Chromium sans écran (un navigateur neuf par groupe), et 111 scripts Node (parcours rejoués à la vraie souris dans un panneau de 700×400, tests unitaires, contrôle d'hygiène du code). Elle couvre l'éditeur, les modes Lecture, Grille et E-mail, et les exports PDF, Word et Excel. Le dernier contrôle complet (3 octobre 2026) a passé plus de 6 500 vérifications.
+La suite de `dev-tests/` compte 107 groupes de scénarios, joués dans un Chromium sans écran (un navigateur neuf par groupe), et 116 scripts Node (parcours rejoués à la vraie souris dans un panneau de 700×400, tests unitaires, contrôle d'hygiène du code). Elle couvre l'éditeur, les modes Lecture, Grille et E-mail, et les exports PDF, Word et Excel. Le dernier contrôle complet (3 octobre 2026) a passé plus de 6 500 vérifications.
 
 ```bash
 bash dev-tests/generate-harness.sh           # régénère _test-harness.html depuis index.html

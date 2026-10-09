@@ -11,6 +11,8 @@ manuel (cf. `dev-tests/PROTOCOLE_TEST_MANUEL.md`), pas à un utilisateur final :
 - `test-mise-en-page` — texte, titres, listes, notes de bas de page
 - `test-images-tableaux` — images, tableaux, zones 2 colonnes
 - `vitrine-fonctionnalites` — document de 4 pages exerçant tout l'éditeur
+- `test-tables` — un modèle livré avec ses tables (`pack.json`, une capture) : sert à essayer « Créer avec ses tables », l'aperçu en captures,
+  la question et le refus, à la main et par les essais `templatePack` et `templatePackMouse`
 
 ## Pourquoi un dossier à part
 

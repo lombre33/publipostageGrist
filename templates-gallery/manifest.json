@@ -42,15 +42,6 @@
       "vente"
     ],
     "screenshot": "courrier-relance/thumb.png",
-    "html": "courrier-relance/template.html",
-    "pack": "courrier-relance/pack.json",
-    "shows": [
-      "linked",
-      "condition",
-      "today",
-      "amountWords",
-      "dateFormat"
-    ],
     "preview": [
       {
         "src": "courrier-relance/capture-1.png",
@@ -67,6 +58,15 @@
         "w": 563,
         "h": 796
       }
+    ],
+    "html": "courrier-relance/template.html",
+    "pack": "courrier-relance/pack.json",
+    "shows": [
+      "linked",
+      "condition",
+      "today",
+      "amountWords",
+      "dateFormat"
     ]
   },
   {
@@ -112,16 +112,6 @@
       "administratif"
     ],
     "screenshot": "attestation/thumb.png",
-    "html": "attestation/template.html",
-    "pack": "attestation/pack.json",
-    "shows": [
-      "linked",
-      "condition",
-      "conditionValue",
-      "dateWords",
-      "images",
-      "qr"
-    ],
     "preview": [
       {
         "src": "attestation/capture-1.png",
@@ -133,6 +123,16 @@
         "w": 563,
         "h": 796
       }
+    ],
+    "html": "attestation/template.html",
+    "pack": "attestation/pack.json",
+    "shows": [
+      "linked",
+      "condition",
+      "conditionValue",
+      "dateWords",
+      "images",
+      "qr"
     ]
   },
   {
@@ -142,15 +142,6 @@
       "administratif"
     ],
     "screenshot": "quittance-loyer/thumb.png",
-    "html": "quittance-loyer/template.html",
-    "pack": "quittance-loyer/pack.json",
-    "shows": [
-      "calc",
-      "amountWords",
-      "dateFormat",
-      "images",
-      "fileName"
-    ],
     "preview": [
       {
         "src": "quittance-loyer/capture-1.png",
@@ -162,6 +153,15 @@
         "w": 563,
         "h": 796
       }
+    ],
+    "html": "quittance-loyer/template.html",
+    "pack": "quittance-loyer/pack.json",
+    "shows": [
+      "calc",
+      "amountWords",
+      "dateFormat",
+      "images",
+      "fileName"
     ]
   },
   {
@@ -172,16 +172,6 @@
       "impression"
     ],
     "screenshot": "flyer-a6/thumb.png",
-    "html": "flyer-a6/template.html",
-    "pack": "flyer-a6/pack.json",
-    "shows": [
-      "pageFormat",
-      "images",
-      "dateFormat",
-      "condition",
-      "qr",
-      "sheets"
-    ],
     "preview": [
       {
         "src": "flyer-a6/capture-1.png",
@@ -198,6 +188,16 @@
         "w": 637,
         "h": 901
       }
+    ],
+    "html": "flyer-a6/template.html",
+    "pack": "flyer-a6/pack.json",
+    "shows": [
+      "pageFormat",
+      "images",
+      "dateFormat",
+      "condition",
+      "qr",
+      "sheets"
     ]
   },
   {
@@ -208,16 +208,6 @@
       "impression"
     ],
     "screenshot": "invitation-a6/thumb.png",
-    "html": "invitation-a6/template.html",
-    "pack": "invitation-a6/pack.json",
-    "shows": [
-      "pageFormat",
-      "dateWords",
-      "condition",
-      "otherwise",
-      "qr",
-      "sheets"
-    ],
     "preview": [
       {
         "src": "invitation-a6/capture-1.png",
@@ -234,6 +224,16 @@
         "w": 644,
         "h": 455
       }
+    ],
+    "html": "invitation-a6/template.html",
+    "pack": "invitation-a6/pack.json",
+    "shows": [
+      "pageFormat",
+      "dateWords",
+      "condition",
+      "otherwise",
+      "qr",
+      "sheets"
     ]
   },
   {
@@ -244,6 +244,13 @@
       "impression"
     ],
     "screenshot": "affiche-a3/thumb.png",
+    "preview": [
+      {
+        "src": "affiche-a3/capture-1.png",
+        "w": 644,
+        "h": 910
+      }
+    ],
     "html": "affiche-a3/template.html",
     "pack": "affiche-a3/pack.json",
     "shows": [
@@ -253,13 +260,6 @@
       "condition",
       "qr",
       "twoColumns"
-    ],
-    "preview": [
-      {
-        "src": "affiche-a3/capture-1.png",
-        "w": 644,
-        "h": 910
-      }
     ]
   },
   {
@@ -270,16 +270,6 @@
       "impression"
     ],
     "screenshot": "badge-evenement/thumb.png",
-    "html": "badge-evenement/template.html",
-    "pack": "badge-evenement/pack.json",
-    "shows": [
-      "pageFormat",
-      "otherwise",
-      "condition",
-      "images",
-      "qr",
-      "sheets"
-    ],
     "preview": [
       {
         "src": "badge-evenement/capture-1.png",
@@ -296,6 +286,16 @@
         "w": 637,
         "h": 901
       }
+    ],
+    "html": "badge-evenement/template.html",
+    "pack": "badge-evenement/pack.json",
+    "shows": [
+      "pageFormat",
+      "otherwise",
+      "condition",
+      "images",
+      "qr",
+      "sheets"
     ]
   },
   {
@@ -305,16 +305,6 @@
       "impression"
     ],
     "screenshot": "carte-de-visite/thumb.png",
-    "html": "carte-de-visite/template.html",
-    "pack": "carte-de-visite/pack.json",
-    "shows": [
-      "pageFormat",
-      "images",
-      "qr",
-      "otherwise",
-      "condition",
-      "sheets"
-    ],
     "preview": [
       {
         "src": "carte-de-visite/capture-1.png",
@@ -331,6 +321,16 @@
         "w": 637,
         "h": 901
       }
+    ],
+    "html": "carte-de-visite/template.html",
+    "pack": "carte-de-visite/pack.json",
+    "shows": [
+      "pageFormat",
+      "images",
+      "qr",
+      "otherwise",
+      "condition",
+      "sheets"
     ]
   },
   {
@@ -340,13 +340,6 @@
       "impression"
     ],
     "screenshot": "etiquette-adresse/thumb.png",
-    "html": "etiquette-adresse/template.html",
-    "pack": "etiquette-adresse/pack.json",
-    "shows": [
-      "pageFormat",
-      "condition",
-      "sheets"
-    ],
     "preview": [
       {
         "src": "etiquette-adresse/capture-1.png",
@@ -358,6 +351,13 @@
         "w": 637,
         "h": 901
       }
+    ],
+    "html": "etiquette-adresse/template.html",
+    "pack": "etiquette-adresse/pack.json",
+    "shows": [
+      "pageFormat",
+      "condition",
+      "sheets"
     ]
   },
   {
@@ -367,17 +367,6 @@
       "stock"
     ],
     "screenshot": "bon-de-commande/thumb.png",
-    "html": "bon-de-commande/template.html",
-    "pack": "bon-de-commande/pack.json",
-    "headerFooter": "bon-de-commande/header-footer.json",
-    "shows": [
-      "loop",
-      "calc",
-      "condition",
-      "qr",
-      "pageNumbers",
-      "linked"
-    ],
     "preview": [
       {
         "src": "bon-de-commande/capture-1.png",
@@ -389,6 +378,17 @@
         "w": 563,
         "h": 796
       }
+    ],
+    "html": "bon-de-commande/template.html",
+    "pack": "bon-de-commande/pack.json",
+    "headerFooter": "bon-de-commande/header-footer.json",
+    "shows": [
+      "loop",
+      "calc",
+      "condition",
+      "qr",
+      "pageNumbers",
+      "linked"
     ]
   },
   {
@@ -399,16 +399,6 @@
       "impression"
     ],
     "screenshot": "etiquette-produit/thumb.png",
-    "html": "etiquette-produit/template.html",
-    "pack": "etiquette-produit/pack.json",
-    "shows": [
-      "pageFormat",
-      "sheets",
-      "images",
-      "qr",
-      "twoColumns",
-      "condition"
-    ],
     "preview": [
       {
         "src": "etiquette-produit/capture-1.png",
@@ -425,6 +415,16 @@
         "w": 637,
         "h": 901
       }
+    ],
+    "html": "etiquette-produit/template.html",
+    "pack": "etiquette-produit/pack.json",
+    "shows": [
+      "pageFormat",
+      "sheets",
+      "images",
+      "qr",
+      "twoColumns",
+      "condition"
     ]
   },
   {
@@ -434,17 +434,6 @@
       "stock"
     ],
     "screenshot": "fiche-inventaire/thumb.png",
-    "html": "fiche-inventaire/template.html",
-    "pack": "fiche-inventaire/pack.json",
-    "headerFooter": "fiche-inventaire/header-footer.json",
-    "shows": [
-      "refListLoop",
-      "sortFilter",
-      "conditionValue",
-      "today",
-      "pageNumbers",
-      "fileName"
-    ],
     "preview": [
       {
         "src": "fiche-inventaire/capture-1.png",
@@ -456,6 +445,17 @@
         "w": 563,
         "h": 796
       }
+    ],
+    "html": "fiche-inventaire/template.html",
+    "pack": "fiche-inventaire/pack.json",
+    "headerFooter": "fiche-inventaire/header-footer.json",
+    "shows": [
+      "refListLoop",
+      "sortFilter",
+      "conditionValue",
+      "today",
+      "pageNumbers",
+      "fileName"
     ]
   },
   {
@@ -465,16 +465,6 @@
       "stock"
     ],
     "screenshot": "bon-de-mouvement/thumb.png",
-    "html": "bon-de-mouvement/template.html",
-    "pack": "bon-de-mouvement/pack.json",
-    "shows": [
-      "condition",
-      "loop",
-      "calc",
-      "twoColumns",
-      "dateFormat",
-      "linked"
-    ],
     "preview": [
       {
         "src": "bon-de-mouvement/capture-1.png",
@@ -491,6 +481,16 @@
         "w": 563,
         "h": 796
       }
+    ],
+    "html": "bon-de-mouvement/template.html",
+    "pack": "bon-de-mouvement/pack.json",
+    "shows": [
+      "condition",
+      "loop",
+      "calc",
+      "twoColumns",
+      "dateFormat",
+      "linked"
     ]
   },
   {
@@ -501,16 +501,6 @@
       "e-mail"
     ],
     "screenshot": "reappro-email/thumb.png",
-    "html": "reappro-email/template.html",
-    "pack": "reappro-email/pack.json",
-    "shows": [
-      "email",
-      "refListLoop",
-      "sortFilter",
-      "calc",
-      "today",
-      "linked"
-    ],
     "preview": [
       {
         "src": "reappro-email/capture-1.png",
@@ -522,6 +512,16 @@
         "w": 980,
         "h": 222
       }
+    ],
+    "html": "reappro-email/template.html",
+    "pack": "reappro-email/pack.json",
+    "shows": [
+      "email",
+      "refListLoop",
+      "sortFilter",
+      "calc",
+      "today",
+      "linked"
     ]
   },
   {
@@ -532,6 +532,13 @@
       "grille"
     ],
     "screenshot": "valorisation-grille/thumb.png",
+    "preview": [
+      {
+        "src": "valorisation-grille/capture-1.png",
+        "w": 1056,
+        "h": 205
+      }
+    ],
     "html": "valorisation-grille/template.html",
     "pack": "valorisation-grille/pack.json",
     "shows": [
@@ -541,13 +548,6 @@
       "sortFilter",
       "calc",
       "fileName"
-    ],
-    "preview": [
-      {
-        "src": "valorisation-grille/capture-1.png",
-        "w": 1056,
-        "h": 205
-      }
     ]
   },
   {
@@ -557,15 +557,6 @@
       "école"
     ],
     "screenshot": "bulletin/thumb.png",
-    "html": "bulletin/template.html",
-    "pack": "bulletin/pack.json",
-    "shows": [
-      "loop",
-      "linked",
-      "condition",
-      "images",
-      "fileName"
-    ],
     "preview": [
       {
         "src": "bulletin/capture-1.png",
@@ -582,6 +573,15 @@
         "w": 563,
         "h": 796
       }
+    ],
+    "html": "bulletin/template.html",
+    "pack": "bulletin/pack.json",
+    "shows": [
+      "loop",
+      "linked",
+      "condition",
+      "images",
+      "fileName"
     ]
   },
   {
@@ -591,16 +591,6 @@
       "cuisine"
     ],
     "screenshot": "fiche-recette/thumb.png",
-    "html": "fiche-recette/template.html",
-    "pack": "fiche-recette/pack.json",
-    "shows": [
-      "loop",
-      "calc",
-      "linked",
-      "condition",
-      "images",
-      "fileName"
-    ],
     "preview": [
       {
         "src": "fiche-recette/capture-1.png",
@@ -617,6 +607,16 @@
         "w": 563,
         "h": 796
       }
+    ],
+    "html": "fiche-recette/template.html",
+    "pack": "fiche-recette/pack.json",
+    "shows": [
+      "loop",
+      "calc",
+      "linked",
+      "condition",
+      "images",
+      "fileName"
     ]
   },
   {
@@ -626,17 +626,6 @@
       "formation"
     ],
     "screenshot": "emargement/thumb.png",
-    "html": "emargement/template.html",
-    "pack": "emargement/pack.json",
-    "headerFooter": "emargement/header-footer.json",
-    "shows": [
-      "pageFormat",
-      "loop",
-      "linked",
-      "headerFooter",
-      "pageNumbers",
-      "calc"
-    ],
     "preview": [
       {
         "src": "emargement/capture-1.png",
@@ -653,6 +642,17 @@
         "w": 644,
         "h": 455
       }
+    ],
+    "html": "emargement/template.html",
+    "pack": "emargement/pack.json",
+    "headerFooter": "emargement/header-footer.json",
+    "shows": [
+      "pageFormat",
+      "loop",
+      "linked",
+      "headerFooter",
+      "pageNumbers",
+      "calc"
     ]
   },
   {
@@ -663,6 +663,13 @@
       "grille"
     ],
     "screenshot": "emargement-grille/thumb.png",
+    "preview": [
+      {
+        "src": "emargement-grille/capture-1.png",
+        "w": 1056,
+        "h": 686
+      }
+    ],
     "html": "emargement-grille/template.html",
     "pack": "emargement-grille/pack.json",
     "shows": [
@@ -670,13 +677,6 @@
       "rowHeight",
       "loop",
       "linked"
-    ],
-    "preview": [
-      {
-        "src": "emargement-grille/capture-1.png",
-        "w": 1056,
-        "h": 686
-      }
     ]
   }
 ]

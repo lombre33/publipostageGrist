@@ -20,8 +20,16 @@
 //                                                                         une Référence est l'id de la ligne visée, une date « AAAA-MM-JJ », une liste un tableau,
 //                                                                         une colonne de calcul sa valeur (le faux Grist ne calcule rien)
 //     "images": { "1": { "label": "LOGO", "from": "#1d4ed8", "to": "#60a5fa", "width": 480, "height": 320 } },   les pièces jointes (id -> image fabriquée)
-//     "captures": [{ "row": 1, "pages": [1, 2], "kind": "pdf", "width": 560, "alt": "..." }],             une ligne de la table principale par capture
+//     "captures": [{ "row": 1, "pages": [1, 2], "kind": "pdf", "width": 560, "expectPages": 2 }],         une ligne de la table principale par capture
 //     "thumb": { "capture": 1, "page": 1 } }                                                              (par défaut : la première page de la première capture)
+// Une capture : `row` (le rang de la ligne de la table principale, 1 au départ), `pages` (les pages du PDF à garder, [1] au départ), `width` (la largeur du PNG en px),
+// `expectPages` (le nombre de pages que le PDF doit avoir : un modèle qui déborde sur une page de plus échoue au lieu d'être photographié ; GALLERY_CAPTURES_KEEP=<dossier>
+// garde alors le PDF pour qu'on le regarde) et `kind` :
+//   "pdf"      le PDF que le vrai bouton « Exporter en PDF » produit (le défaut d'un modèle document) ;
+//   "sheets"   la planche de « Assemblage avant impression » (un flyer A6 posé sur une A4, une carte de visite ; `marks: false` pour la planche sans traits de coupe) ;
+//   "reading"  la Lecture photographiée (le défaut d'un e-mail ou d'une grille) : `selector` (un élément, `.reader-content` au départ) ou `clip` (des groupes de sélecteurs
+//              photographiés ensemble puis posés l'un sous l'autre, comme la barre Objet / À / Cc et le texte d'un e-mail, élargis de `pad` px : un nombre, [haut, droite, bas,
+//              gauche] ou une liste de ces formes, une par groupe) ; `viewport` [largeur, hauteur] change la fenêtre le temps de la photo.
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync, mkdtempSync, copyFileSync } from 'node:fs';

@@ -151,8 +151,17 @@ if (has('templates-gallery/manifest.json')) {
   try {
     const entries = JSON.parse(read('templates-gallery/manifest.json'));
     for (const entry of entries) {
-      for (const key of ['screenshot', 'html', 'schema']) {
+      for (const key of ['screenshot', 'html', 'schema', 'pack', 'headerFooter']) {
         if (entry[key] && !has(`templates-gallery/${entry[key]}`)) fail(`templates-gallery/manifest.json : « ${entry.id || entry.name} » cite ${entry[key]}, absent de l'arbre`);
+      }
+      // Les captures de l'aperçu, et le fichier de tables de la famille que le pack du modèle nomme.
+      for (const shot of Array.isArray(entry.preview) ? entry.preview : []) {
+        if (shot && shot.src && !has(`templates-gallery/${shot.src}`)) fail(`templates-gallery/manifest.json : « ${entry.id || entry.name} » cite la capture ${shot.src}, absente de l'arbre`);
+      }
+      if (entry.pack && has(`templates-gallery/${entry.pack}`)) {
+        let pack = null;
+        try { pack = JSON.parse(read(`templates-gallery/${entry.pack}`)); } catch (error) { fail(`templates-gallery/${entry.pack} illisible : ${error.message}`); }
+        if (pack && pack.family && !has(`templates-gallery/_tables/${pack.family}.json`)) fail(`templates-gallery/${entry.pack} : la famille ${pack.family} n'a pas de fichier templates-gallery/_tables/${pack.family}.json`);
       }
     }
   } catch (error) {

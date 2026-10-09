@@ -11,7 +11,7 @@
 //    ce soit d'autre : un nom pris entre-temps est renommé en silence (« Clients2 »), et les colonnes de calcul, qui visent leur table par son nom,
 //    se seraient posées sur une table qui n'est pas la nôtre. Puis les colonnes de calcul, puis les « Colonnes à afficher » (les identifiants de colonnes
 //    n'existent qu'après coup). Si l'un des deux derniers appels échoue, les tables créées sont retirées : le document ne garde pas des tables à moitié réglées.
-// Rien ici ne touche js/grist-api.js (tenu par un autre chantier) : les règles de liaison passent par ses fonctions publiques.
+// Les règles de liaison passent par les fonctions publiques de js/grist-api.js, auquel ce fichier n'ajoute rien.
 const TemplatePack = (function () {
   const VERSION = 1;
   const SIMPLE_TYPES = ['Text', 'Numeric', 'Int', 'Bool', 'Date', 'DateTime', 'Choice', 'ChoiceList', 'Attachments', 'Any'];

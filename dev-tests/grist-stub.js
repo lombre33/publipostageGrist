@@ -441,7 +441,7 @@ try {
     return state.actionLog.filter(a => a[0] === type && (!tableId || a[1] === tableId)).length;
   }
   // ---- Tables et colonnes créées par le widget pour le compte d'un modèle de la galerie (js/template-pack.js) ----
-  // Ce que Grist fait de ces actions a été essayé dans un vrai Grist le 09/10 (grist-static 0.1.6, labo : probe-pack.mjs, probe-names.mjs) : le stub n'invente rien.
+  // Ce que Grist fait de ces actions a été essayé dans un vrai Grist le 09/10 (grist-static 0.1.6, labo-grist-reel/probe-pack.mjs et probe-names.mjs) : le stub n'invente rien.
   // Les tables du widget (Publipostage_…) gardent leur ancien traitement : leurs colonnes n'ont jamais été déclarées ici et aucun scénario ne les lit par les métadonnées.
   const isWidgetTable = tableId => INTERNAL_TABLES.indexOf(tableId) !== -1 || /^Publipostage_/.test(tableId);
 
