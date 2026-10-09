@@ -946,6 +946,210 @@
     }),
   });
 
+  // ---------- « Égaliser » : la hauteur des lignes, la largeur des colonnes que les cases choisies couvrent prennent leur moyenne ----------
+  // Les tailles de chaque ligne et de chaque colonne du tableau de rang `t`, en pixels de mise en page (le rendu, divisé par la réduction de la feuille).
+  const layoutSizes = (t) => {
+    const table = docTables()[t];
+    const zoom = EditorCore.layoutZoom(table);
+    return {
+      // Sous le suivi des modifications une ligne proposée est enveloppée d'un <span> dans le <tbody>.
+      rows: Array.from(table.querySelectorAll(':scope > tbody > tr, :scope > tbody > span > tr')).map(tr => Math.round(tr.getBoundingClientRect().height / zoom * 10) / 10),
+      cols: Array.from(table.querySelectorAll(':scope > colgroup > col')).map(col => Math.round(col.getBoundingClientRect().width / zoom * 10) / 10),
+    };
+  };
+  const colWidths = t => tablesOf()[t].node.child(0).content.content.map(cell => (cell.attrs.colwidth || [null])[0]);
+  function setRowHeights(t, list) { list.forEach((px, row) => setRowHeight(t, row, px)); }
+  // Trois colonnes aux largeurs réglées (140, 190, 120 px), trois lignes.
+  const SIZED = '<p>avant</p><table><tbody>' + [1, 2, 3].map(r => '<tr>' + [140, 190, 120].map((w, c) => `<td colwidth="${w}"><p>${'ABC'[c]}${r}</p></td>`).join('') + '</tr>').join('') + '</tbody></table><p>après</p>';
+
+  cases.push({
+    id: 'equalize_rows_gives_the_chosen_rows_their_mean_height_in_one_undo',
+    description: 'Trois lignes de 40, 80 et 160 px choisies (un tableau parmi deux) : « Égaliser » leur donne à toutes la moyenne (93 px) en une seule transaction ; l\'autre tableau ne bouge pas ; le HTML et le Word reprennent la hauteur ; un Annuler rend les trois hauteurs ; sans deux lignes choisies (curseur, une seule ligne) rien ne se passe',
+    run: async (h) => withDoc(h, TWO_TABLES, async () => {
+      const bad = [];
+      setRowHeights(1, [40, 80, 160]);
+      await sleep(GROUP_GAP_MS);
+      await cursorIn(1, 1, 0);
+      if (GridEditor.canEqualize(ed(), 'row') || GridEditor.canEqualize(ed(), 'col') || GridEditor.equalizeLines(ed(), 'row')) bad.push('un curseur ne couvre rien à égaliser');
+      await selectCells(1, 1, 0, 1, 1);
+      if (GridEditor.canEqualize(ed(), 'row') || !GridEditor.canEqualize(ed(), 'col')) bad.push('une ligne choisie : ' + JSON.stringify([GridEditor.canEqualize(ed(), 'row'), GridEditor.canEqualize(ed(), 'col')]));
+      const same = docJson();
+      if (GridEditor.equalizeLines(ed(), 'row') || docJson() !== same) bad.push('une seule ligne choisie : rien ne doit changer');
+      await selectCells(1, 0, 0, 2, 1);
+      if (!GridEditor.canEqualize(ed(), 'row')) bad.push('trois lignes choisies : égalisable');
+      const before = layoutSizes(1).rows;
+      const mean = Math.round(before.reduce((a, b) => a + b, 0) / before.length);
+      await sleep(GROUP_GAP_MS);
+      if (!GridEditor.equalizeLines(ed(), 'row')) bad.push('equalizeLines devait réussir');
+      await sleep(100);
+      if (JSON.stringify(rowHeights(1)) !== JSON.stringify([mean, mean, mean]) || mean !== 93) bad.push('hauteurs posées : ' + JSON.stringify(rowHeights(1)) + ' (attendu 93 partout, mesuré ' + JSON.stringify(before) + ')');
+      if (rowHeights(0).some(v => v !== null)) bad.push('l\'autre tableau a bougé : ' + JSON.stringify(rowHeights(0)));
+      if (layoutSizes(1).rows.some(v => Math.abs(v - mean) > 0.6)) bad.push('rendu : ' + JSON.stringify(layoutSizes(1).rows));
+      if (!ed().state.selection.$anchorCell || tablesOf()[1].node.childCount !== 3) bad.push('la sélection de cases doit rester');
+      const html = Editor.getHTML();
+      if ((html.match(/data-row-height="93"/g) || []).length !== 3) bad.push('HTML : ' + (html.match(/data-row-height="\d+"/g) || []).join());
+      const parts = await h.exportDocxParts(html);
+      const word = Array.from(parts.doc.getElementsByTagName('w:tbl')).map(tbl => Array.from(tbl.getElementsByTagName('w:tr')).map((tr) => {
+        const node = tr.getElementsByTagName('w:trHeight')[0];
+        return node ? node.getAttribute('w:val') + ':' + node.getAttribute('w:hRule') : '-';
+      }).join());
+      const wantedWord = ['-,-', '1395:atLeast,1395:atLeast,1395:atLeast'];
+      if (JSON.stringify(word) !== JSON.stringify(wantedWord)) bad.push('Word : ' + JSON.stringify(word) + ' (attendu ' + JSON.stringify(wantedWord) + ')');
+      await undo();
+      if (JSON.stringify(rowHeights(1)) !== '[40,80,160]') bad.push('un Annuler devait rendre [40,80,160] : ' + JSON.stringify(rowHeights(1)));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : JSON.stringify({ avant: before, moyenne: mean, word }) };
+    }),
+  });
+
+  cases.push({
+    id: 'equalize_measures_in_page_pixels_when_the_sheet_is_shrunk_on_screen',
+    description: 'La feuille réduite à l\'écran (0,8, comme dans un panneau étroit) : des lignes de 40, 80 et 160 px prennent la moyenne en pixels de MISE EN PAGE (93 px, rendus 74,4 à l\'écran) et non celle de l\'écran (74), des colonnes de 140, 190 et 120 px prennent 150 px (non 120) : sans la division par le facteur de la feuille chaque appui réduirait le tableau',
+    run: async (h) => {
+      const bad = [];
+      const wasA4 = document.getElementById('editor-container').classList.contains('a4-preview');
+      // Le facteur se pose sur la feuille elle-même (le conteneur le réécrit à chaque rafraîchissement de la mise en page), et ne compte qu'avec l'Aperçu A4.
+      try {
+        await withDoc(h, SIZED, async () => {
+          h.setA4Preview(true);
+          ed().view.dom.closest('.v2-page-sheet').style.setProperty('--pp-fit-zoom', '0.8');
+          await sleep(250);
+          const zoom = EditorCore.layoutZoom(docTables()[0]);
+          if (Math.abs(zoom - 0.8) > 0.01) { bad.push('la feuille devait être réduite à 0,8 : ' + zoom); return; }
+          setRowHeights(0, [40, 80, 160]);
+          await sleep(GROUP_GAP_MS);
+          await selectCells(0, 0, 0, 2, 2);
+          GridEditor.equalizeLines(ed(), 'row');
+          await sleep(150);
+          if (JSON.stringify(rowHeights(0)) !== '[93,93,93]') bad.push('hauteurs posées : ' + JSON.stringify(rowHeights(0)) + ' (attendu 93 partout, la moyenne en pixels de mise en page)');
+          const onScreen = Array.from(docTables()[0].querySelectorAll(':scope > tbody > tr')).map(tr => tr.getBoundingClientRect().height);
+          if (onScreen.some(v => Math.abs(v - 93 * 0.8) > 0.8)) bad.push('rendu à l\'écran : ' + JSON.stringify(onScreen) + ' (attendu ' + (93 * 0.8) + ')');
+          await undo();
+          await sleep(GROUP_GAP_MS);
+          GridEditor.equalizeLines(ed(), 'col');
+          await sleep(150);
+          if (JSON.stringify(colWidths(0)) !== '[150,150,150]') bad.push('largeurs posées : ' + JSON.stringify(colWidths(0)) + ' (attendu 150 partout)');
+          const cols = layoutSizes(0).cols;
+          if (cols.some(v => Math.abs(v - 150) > 0.8)) bad.push('rendu des colonnes en pixels de mise en page : ' + JSON.stringify(cols));
+        });
+      } finally {
+        const sheet = ed().view.dom.closest('.v2-page-sheet');
+        if (sheet) sheet.style.removeProperty('--pp-fit-zoom');
+        h.setA4Preview(wasA4);
+      }
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'equalize_columns_gives_the_chosen_columns_their_mean_width_and_keeps_the_table_width',
+    description: 'Trois colonnes de 140, 190 et 120 px choisies : « Égaliser » leur donne la moyenne (150 px) en une seule transaction, la largeur du tableau ne change pas (la somme est conservée) ; une case fusionnée sur deux colonnes reçoit les deux parts ; deux colonnes sur trois : la troisième garde sa largeur ; un Annuler rend les largeurs',
+    run: async (h) => withDoc(h, SIZED, async () => {
+      const bad = [];
+      await cursorIn(0, 1, 1);
+      await selectCells(0, 0, 0, 2, 2);
+      if (!GridEditor.canEqualize(ed(), 'col')) bad.push('trois colonnes choisies : égalisables');
+      const before = layoutSizes(0);
+      await sleep(GROUP_GAP_MS);
+      GridEditor.equalizeLines(ed(), 'col');
+      await sleep(100);
+      const widths = [0, 1, 2].map(r => JSON.stringify(Array.from({ length: 3 }, (_, c) => cellAttrs(0, r, c).colwidth)));
+      if (widths.some(w => w !== '[[150],[150],[150]]')) bad.push('largeurs posées : ' + widths.join(' '));
+      const after = layoutSizes(0);
+      if (after.cols.some(v => Math.abs(v - 150) > 0.6) || Math.abs(after.cols.reduce((a, b) => a + b, 0) - before.cols.reduce((a, b) => a + b, 0)) > 1.5) bad.push('rendu : avant ' + JSON.stringify(before.cols) + ', après ' + JSON.stringify(after.cols));
+      await undo();
+      if (JSON.stringify(colWidths(0)) !== '[140,190,120]') bad.push('un Annuler devait rendre [140,190,120] : ' + JSON.stringify(colWidths(0)));
+      // Deux colonnes sur trois (A et B) : leur moyenne (165), C garde la sienne.
+      await sleep(GROUP_GAP_MS);
+      await selectCells(0, 0, 0, 2, 1);
+      GridEditor.equalizeLines(ed(), 'col');
+      await sleep(100);
+      if (JSON.stringify(colWidths(0)) !== '[165,165,120]') bad.push('deux colonnes sur trois : ' + JSON.stringify(colWidths(0)) + ' (attendu [165,165,120])');
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : JSON.stringify({ avant: before.cols, apres: after.cols }) };
+    }),
+  });
+
+  cases.push({
+    id: 'equalize_merged_cell_gets_both_shares_and_auto_columns_are_measured',
+    description: 'Une case fusionnée sur deux colonnes reçoit les parts des deux colonnes égalisées ; des colonnes automatiques (sans largeur posée) sont égalisées sur leur largeur de mise en page, la colonne laissée garde la sienne et le tableau garde sa largeur',
+    run: async (h) => {
+      const bad = [];
+      await withDoc(h, '<p>avant</p><table><tbody><tr><td colspan="2" colwidth="100,200"><p>Fusion</p></td><td colwidth="90"><p>C1</p></td></tr><tr><td colwidth="100"><p>A2</p></td><td colwidth="200"><p>B2</p></td><td colwidth="90"><p>C2</p></td></tr></tbody></table>', async () => {
+        // Une case fusionnée sur deux colonnes, choisie seule, n'est pas « plusieurs colonnes choisies » (la règle de `chosenLines`) : rien à égaliser.
+        await selectCells(0, 0, 0, 0, 0);
+        const lone = docJson();
+        if (GridEditor.canEqualize(ed(), 'col') || GridEditor.equalizeLines(ed(), 'col') || docJson() !== lone) bad.push('une case fusionnée choisie seule ne doit rien égaliser');
+        await sleep(GROUP_GAP_MS);
+        await selectCells(0, 1, 0, 1, 2);
+        GridEditor.equalizeLines(ed(), 'col');
+        await sleep(100);
+        const merged = JSON.stringify(cellAttrs(0, 0, 0).colwidth), second = JSON.stringify([cellAttrs(0, 1, 0).colwidth, cellAttrs(0, 1, 1).colwidth, cellAttrs(0, 1, 2).colwidth]);
+        if (merged !== '[130,130]' || second !== '[[130],[130],[130]]') bad.push('fusionnée ' + merged + ', seconde ligne ' + second);
+      });
+      await withDoc(h, '<p>avant</p>' + tableHtml('Z', 2, 3), async () => {
+        const before = layoutSizes(0);
+        await selectCells(0, 0, 0, 1, 1);
+        GridEditor.equalizeLines(ed(), 'col');
+        await sleep(300);
+        const after = layoutSizes(0);
+        if (Math.abs(after.cols[0] - after.cols[1]) > 1.5 || Math.abs(after.cols[2] - before.cols[2]) > 1.5 || Math.abs(after.cols.reduce((a, b) => a + b, 0) - before.cols.reduce((a, b) => a + b, 0)) > 2.5) bad.push('colonnes automatiques : avant ' + JSON.stringify(before.cols) + ', après ' + JSON.stringify(after.cols));
+      });
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'equalize_rows_never_goes_below_the_text_height',
+    description: 'Une ligne dont le texte est plus haut que la moyenne ne peut pas descendre : toutes les lignes choisies prennent alors sa hauteur (égales plutôt qu\'à la moyenne), le texte n\'est jamais rogné ; la moyenne est celle des hauteurs rendues (une hauteur posée plus basse que le texte compte pour celle du texte)',
+    run: async (h) => withDoc(h, '<p>avant</p><table><tbody><tr><td><p>' + 'mot '.repeat(70) + '</p></td><td><p>B1</p></td></tr><tr><td><p>A2</p></td><td><p>B2</p></td></tr><tr><td><p>A3</p></td><td><p>B3</p></td></tr></tbody></table>', async () => {
+      const bad = [];
+      const natural = layoutSizes(0).rows;
+      await selectCells(0, 0, 0, 2, 1);
+      GridEditor.equalizeLines(ed(), 'row');
+      await sleep(150);
+      const set = rowHeights(0);
+      const after = layoutSizes(0).rows;
+      if (new Set(set).size !== 1 || set[0] < natural[0] - 0.5 || set[0] > natural[0] + 1.5 || after.some(v => Math.abs(v - set[0]) > 0.6)) bad.push('lignes : texte ' + JSON.stringify(natural) + ', posées ' + JSON.stringify(set) + ', rendu ' + JSON.stringify(after));
+      await undo();
+      await sleep(GROUP_GAP_MS);
+      // Les lignes 2 et 3 : 10 px posés (sous le texte, qui en fait ~29) et 70 px. La moyenne est celle du rendu.
+      setRowHeight(0, 1, 10);
+      setRowHeight(0, 2, 70);
+      await sleep(GROUP_GAP_MS);
+      await selectCells(0, 1, 0, 2, 1);
+      const rendered = layoutSizes(0).rows;
+      const mean = Math.round((rendered[1] + rendered[2]) / 2);
+      GridEditor.equalizeLines(ed(), 'row');
+      await sleep(150);
+      const h2 = rowHeights(0);
+      if (h2[0] !== null || Math.abs(h2[1] - mean) > 1 || h2[1] !== h2[2]) bad.push('lignes 2 et 3 : ' + JSON.stringify(h2) + ' (rendu avant ' + JSON.stringify(rendered) + ', moyenne ' + mean + ')');
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : JSON.stringify({ natural, set, h2 }) };
+    }),
+  });
+
+  cases.push({
+    id: 'equalize_with_track_changes_is_suggested_and_refusable',
+    description: 'Suivi des modifications allumé : la hauteur des lignes et la largeur des colonnes égalisées sont proposées comme modifications (une marque par ligne ou par case touchée) et « Tout refuser » rend les tailles d\'origine',
+    run: async (h) => withDoc(h, SIZED, async () => {
+      const bad = [];
+      setRowHeights(0, [40, 80, 160]);
+      await sleep(GROUP_GAP_MS);
+      Editor.setTrackChanges(true);
+      await sleep(100);
+      await selectCells(0, 0, 0, 2, 2);
+      GridEditor.equalizeLines(ed(), 'row');
+      await sleep(GROUP_GAP_MS);
+      GridEditor.equalizeLines(ed(), 'col');
+      await sleep(200);
+      const rowMarks = tablesOf()[0].node.content.content.map(row => row.marks.map(mark => mark.type.name + ':' + mark.attrs.attrName).join());
+      if (JSON.stringify(rowHeights(0)) !== '[93,93,93]' || rowMarks.some(m => m !== 'modification:rowHeight')) bad.push('hauteurs : ' + JSON.stringify(rowHeights(0)) + ' marques ' + JSON.stringify(rowMarks));
+      if (JSON.stringify(colWidths(0)) !== '[150,150,150]' || !Editor.hasPendingTrackedChanges()) bad.push('largeurs : ' + JSON.stringify(colWidths(0)) + ', en attente : ' + Editor.hasPendingTrackedChanges());
+      ed().chain().focus().rejectAllSuggestionsChunked().run();
+      await sleep(600);
+      if (JSON.stringify(rowHeights(0)) !== '[40,80,160]' || JSON.stringify(colWidths(0)) !== '[140,190,120]') bad.push('Tout refuser : ' + JSON.stringify(rowHeights(0)) + ' ' + JSON.stringify(colWidths(0)));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.gridInDocument = cases;
 })();

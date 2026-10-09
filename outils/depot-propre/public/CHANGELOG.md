@@ -196,6 +196,15 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   son texte agrandit grandit, et le PDF et le Word la reprennent. Avec le suivi des modifications allumé, la
   hauteur est proposée comme une modification, que vous pouvez refuser. Les lettres n'ont pas encore de
   poignée : la largeur d'une colonne se règle toujours par le bord de ses cases.
+- **Égaliser la hauteur des lignes et la largeur des colonnes** : quand plusieurs lignes (ou plusieurs colonnes)
+  sont choisies, par leurs numéros (leurs lettres) ou en glissant sur le tableau, les boutons « Égaliser la
+  hauteur des lignes » et « Égaliser la largeur des colonnes » de la barre du tableau leur donnent à toutes la
+  moyenne de leurs tailles, en un seul geste (un seul Annuler). C'est la même barre dans un tableau de document
+  et dans une grille. Le tableau garde sa largeur d'ensemble ; une ligne ne descend pas sous la hauteur de son
+  texte (si l'une est plus haute que la moyenne à cause de son texte, toutes prennent sa hauteur). Les boutons
+  sont grisés, avec leur raison en info-bulle, tant que moins de deux lignes (colonnes) sont choisies. Avec le
+  suivi des modifications allumé, les nouvelles tailles sont proposées comme modifications, que vous pouvez
+  refuser.
 - **Marge autour de chaque page dans l'assemblage avant impression** : la fenêtre « Assemblage avant
   impression » a un champ « Marge » (en millimètres, 0 au départ, les flèches avancent de 0,5) qui laisse de la
   place autour de chaque page posée sur la feuille : la marge compte de chaque côté d'une page, donc deux
@@ -656,6 +665,13 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   height is a minimum: a row that its text makes taller grows, and the PDF and the Word export carry it over.
   With track changes on, the height is suggested as a change, which you can reject. The letters have no handle
   yet: a column's width is still set by the edge of its cells.
+- **Make rows the same height and columns the same width**: when several rows (or several columns) are picked,
+  by their numbers (their letters) or by dragging across the table, the "Make rows the same height" and "Make
+  columns the same width" buttons of the table bar give them all the average of their sizes, in one move (a
+  single Undo). It is the same bar in a document table and in a grid. The table keeps its overall width; a row
+  does not go below the height of its text (if one is taller than the average because of its text, they all
+  take its height). The buttons are greyed, with their reason as a tooltip, until at least two rows (columns)
+  are picked. With track changes on, the new sizes are suggested as changes, which you can reject.
 - **Margin around each page in sheet assembly**: the "Assemble before printing" window has a "Margin" field (in
   millimetres, 0 to start with, the arrows step by 0.5) that leaves room around each page laid on the
   sheet: the margin sits on every side of a page, so it counts twice between two pages and once at the edge

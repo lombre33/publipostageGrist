@@ -2,7 +2,7 @@
 // Fusionner et scinder des cases d'un tableau de DOCUMENT (js/table-merge.js, barre du tableau ; Antoine, 04/10 : « fusion de cellules dans les documents » à coder pour la bêta) à la VRAIE
 // souris et au vrai clavier (page.mouse, page.keyboard ; Node/Playwright), à la taille du panneau Grist (~700x400), en thème clair puis sombre. Une page.evaluate ne déclenche ni un appui
 // « trusted », ni le survol, ni le glissé : c'est ici qu'on s'assure que
-//   - la barre flottante du tableau porte ses 15 boutons sur une seule ligne, entière dans le panneau, avec « Fusionner les cases » et « Scinder la case » entre « Supprimer le tableau » et
+//   - la barre flottante du tableau porte ses 17 boutons sur une seule ligne, entière dans le panneau, avec « Fusionner les cases » et « Scinder la case » entre « Supprimer le tableau » et
 //     « Légende » (Bordures et alignement vertical : dev-tests/verify-doc-table-tools-mouse.mjs) ; les deux grisés (jamais retirés, survol gardé pour l'info-bulle) quand ils ne servent pas, avec leur raison ;
 //   - glisser sur quatre cases puis cliquer « Fusionner » en fait UNE case qui occupe exactement la place des quatre (les autres cases ne bougent pas), le texte à la suite ; UN Ctrl+Z la défait ;
 //   - « Scinder » rend les cases à leur place et à leur taille ; une ligne de titre se fusionne sur toute la largeur ;
@@ -240,9 +240,9 @@ async function runTheme(theme) {
 
   // ---------- 1) La barre, curseur dans une case ----------
   await clickCell(page, [2, 2]);
-  const SHOWN = ['row-before', 'row-after', 'row-del', 'col-before', 'col-after', 'col-del', 'table-del', 'cell-merge', 'cell-split', 'caption', 'fill-open', 'borders-open', 'valign-top', 'valign-middle', 'valign-bottom'];
+  const SHOWN = ['row-before', 'row-after', 'row-del', 'rows-equalize', 'col-before', 'col-after', 'col-del', 'cols-equalize', 'table-del', 'cell-merge', 'cell-split', 'caption', 'fill-open', 'borders-open', 'valign-top', 'valign-middle', 'valign-bottom'];
   let bar = await barState(page);
-  check(`${label} - la barre du tableau porte ses 15 boutons dans l'ordre Lignes, Colonnes, Tableau, Fusion, Légende, Fond, Bordures, Alignements, sur une seule ligne, entière dans le panneau`,
+  check(`${label} - la barre du tableau porte ses 17 boutons dans l'ordre Lignes, Colonnes (chacune avec son « Égaliser »), Tableau, Fusion, Légende, Fond, Bordures, Alignements, sur une seule ligne, entière dans le panneau`,
     !!bar && bar.order.join() === SHOWN.join() && bar.inside && bar.height <= 40 && SHOWN.every(a => bar.buttons[a].inside), { order: bar && bar.order, height: bar && bar.height, inside: bar && bar.inside });
   check(`${label} - une seule case choisie : « Fusionner » et « Scinder » sont grisés (visibles, atténués, survol gardé), avec leur raison pour info-bulle`,
     !!bar && ['cell-merge', 'cell-split'].every(a => bar.buttons[a].shown && bar.buttons[a].disabled && bar.buttons[a].aria === 'true' && bar.buttons[a].opacity < 0.5 && bar.buttons[a].pointer !== 'none')

@@ -6,6 +6,8 @@
 (function () {
   const DATA_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
   const cases = [];
+  // Plus de 500 ms entre deux gestes : prosemirror-history groupe sinon les transactions rapprochées en UN seul évènement.
+  const GAP = 700;
   const ed = () => EditorCore.getEditor();
   const press = el => el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
   // La barre (parmi les barres flottantes de la page) qui porte ce bouton : « Agrandir » est à l'image seule, « Ligne avant » au tableau seul.
@@ -93,6 +95,54 @@
       await press_(h, bar, 'col-after'); out.colAfter = dims() === '3x4';
       await press_(h, bar, 'col-del'); out.colDel = dims() === '3x3';
       await press_(h, bar, 'table-del'); out.tableDel = dims() === 'aucun' && /Après/.test(Editor.getHTML());
+      return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
+    id: 'ft_table_bar_equalize_buttons_are_greyed_with_their_reason_until_two_lines_are_chosen_then_run',
+    description: 'Les boutons « Égaliser la hauteur des lignes » et « Égaliser la largeur des colonnes » : toujours dans la barre du tableau, grisés avec leur raison en info-bulle tant que la sélection ne couvre pas deux lignes (colonnes) ; un appui sur un bouton grisé ne fait rien ; quatre cases choisies : libres, et chacun égalise ce que la sélection couvre',
+    run: async (h) => {
+      const bar = await tableWithCursor(h);
+      if (!shown(bar)) return { pass: false, notes: 'barre du tableau fermée, curseur dans une case' };
+      const out = {};
+      const state = (action, labelKey, needKey) => {
+        const btn = buttonOf(bar, action);
+        const grey = !!btn && btn.classList.contains('is-disabled') && btn.getAttribute('aria-disabled') === 'true';
+        const free = !!btn && !btn.classList.contains('is-disabled') && btn.getAttribute('aria-disabled') === 'false';
+        return { grey: grey && btn.title === I18n.t(needKey), free: free && btn.title === I18n.t(labelKey) };
+      };
+      const rows = () => state('rows-equalize', 'table.rowsEqualize', 'table.rowsEqualizeNeed');
+      const cols = () => state('cols-equalize', 'table.colsEqualize', 'table.colsEqualizeNeed');
+      out.present = !!buttonOf(bar, 'rows-equalize') && !!buttonOf(bar, 'cols-equalize') && !!buttonOf(bar, 'rows-equalize').querySelector('svg') && !!buttonOf(bar, 'cols-equalize').querySelector('svg');
+      out.greyAtCursor = rows().grey && cols().grey;
+      const doc = Editor.getHTML();
+      await press_(h, bar, 'rows-equalize');
+      await press_(h, bar, 'cols-equalize');
+      out.greyPressNothing = Editor.getHTML() === doc;
+      const cellPositions = [];
+      ed().state.doc.descendants((node, p) => { if (node.type.name === 'tableCell') cellPositions.push(p); });
+      // Une ligne choisie (deux cases côte à côte) : les colonnes se comptent, la ligne non.
+      ed().commands.setCellSelection({ anchorCell: cellPositions[0], headCell: cellPositions[1] });
+      await h.sleep(150);
+      out.oneRow = rows().grey && cols().free;
+      // Une colonne choisie (deux cases l'une sous l'autre).
+      ed().commands.setCellSelection({ anchorCell: cellPositions[0], headCell: cellPositions[2] });
+      await h.sleep(150);
+      out.oneColumn = rows().free && cols().grey;
+      // Les quatre cases : l'une et l'autre libres. Le pied de la case « Alpha » grandit, puis la barre égalise : les deux lignes ont la même hauteur posée.
+      ed().commands.setCellSelection({ anchorCell: cellPositions[0], headCell: cellPositions[3] });
+      await h.sleep(150);
+      out.allFour = rows().free && cols().free;
+      await press_(h, bar, 'rows-equalize');
+      const rowAttrs = []; ed().state.doc.descendants((node) => { if (node.type.name === 'tableRow') rowAttrs.push(node.attrs.rowHeight); });
+      out.rowsRun = rowAttrs.length === 2 && rowAttrs[0] > 0 && rowAttrs[0] === rowAttrs[1];
+      await h.sleep(GAP);
+      await press_(h, bar, 'cols-equalize');
+      const widths = []; ed().state.doc.descendants((node) => { if (node.type.name === 'tableCell') widths.push(node.attrs.colwidth && node.attrs.colwidth[0]); });
+      out.colsRun = widths.length === 4 && widths[0] > 0 && widths.every(w => w === widths[0]);
+      // Les mots des deux langues sont dans le dictionnaire.
+      out.words = ['table.rowsEqualize', 'table.rowsEqualizeNeed', 'table.colsEqualize', 'table.colsEqualizeNeed'].every(key => I18n.t(key) && I18n.t(key) !== key);
       return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
     },
   });

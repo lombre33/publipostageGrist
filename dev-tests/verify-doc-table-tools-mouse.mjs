@@ -2,7 +2,7 @@
 // Bordures, alignement vertical et quadrillage dans la barre du tableau d'un DOCUMENT (js/floating-toolbars.js ; Antoine, 09/10 : « le module d'insertion de tableau d'un doc classique est en fait un
 // tableau du mode grille », lot 3 sur 6) à la VRAIE souris et au vrai clavier (page.mouse, page.keyboard ; Node/Playwright), à la taille du panneau Grist (~700x400), en thème clair puis sombre.
 // Une page.evaluate ne déclenche ni un appui « trusted », ni le survol, ni le glissé : c'est ici qu'on s'assure que
-//   - la barre flottante du tableau porte ses 15 boutons sur une seule ligne, entière dans le panneau, avec « Bordures » après « Fond » et les trois alignements verticaux à la fin ;
+//   - la barre flottante du tableau porte ses 17 boutons sur une seule ligne, entière dans le panneau, avec « Bordures » après « Fond » et les trois alignements verticaux à la fin ;
 //   - les trois alignements placent vraiment le texte de la case en haut, au milieu ou en bas de sa case (mesure à l'écran), pour les cases glissées comme pour une seule, le bouton de la case
 //     visée est enfoncé, « en haut » (l'état d'une case que personne n'a réglée) efface la marque ;
 //   - « Bordures » ouvre son menu entier dans le panneau (il glisse le long de son bouton dans 400 px et en laisse de quoi le refermer), choisir la couleur du trait ne le referme pas, ne le
@@ -248,7 +248,7 @@ const DOC = '<p>Avant le tableau</p><table><tbody>'
   + '<tr><td colwidth="140"><p>A2</p><p>haut</p><p>de</p><p>case</p></td><td colwidth="190"><p>B2</p></td><td colwidth="120"><p>C2</p></td></tr>'
   + '<tr><td colwidth="140"><p>A3</p></td><td colwidth="190"><p>B3</p></td><td colwidth="120"><p>C3</p></td></tr>'
   + '</tbody></table><p>Après le tableau</p>';
-const ORDER = ['row-before', 'row-after', 'row-del', 'col-before', 'col-after', 'col-del', 'table-del', 'cell-merge', 'cell-split', 'caption', 'fill-open', 'borders-open', 'valign-top', 'valign-middle', 'valign-bottom'];
+const ORDER = ['row-before', 'row-after', 'row-del', 'rows-equalize', 'col-before', 'col-after', 'col-del', 'cols-equalize', 'table-del', 'cell-merge', 'cell-split', 'caption', 'fill-open', 'borders-open', 'valign-top', 'valign-middle', 'valign-bottom'];
 const VALIGNS = ['valign-top', 'valign-middle', 'valign-bottom'];
 const SETTINGS = ['borders-open', ...VALIGNS];
 const MENU = '.v2-borders-dropdown.visible';
@@ -312,7 +312,7 @@ async function runTheme(theme) {
   // ---------- 1) La barre, curseur dans une case ----------
   await clickCell(page, 'B2');
   let bar = await barState(page);
-  check(`${label} - la barre du tableau porte ses 15 boutons dans l'ordre Lignes, Colonnes, Tableau, Fusion, Légende, Fond, Bordures, Alignements, sur une seule ligne, entière dans le panneau`,
+  check(`${label} - la barre du tableau porte ses 17 boutons dans l'ordre Lignes, Colonnes (chacune avec son « Égaliser »), Tableau, Fusion, Légende, Fond, Bordures, Alignements, sur une seule ligne, entière dans le panneau`,
     !!bar && bar.order.join() === ORDER.join() && bar.inside && bar.height <= 40 && ORDER.every(a => bar.buttons[a].inside), { order: bar && bar.order, height: bar && bar.height, inside: bar && bar.inside });
   check(`${label} - « Bordures » et les trois alignements sont là, libres (ni grisés ni atténués), avec leur info-bulle ; une case que personne n'a réglée se lit « en haut »`,
     !!bar && SETTINGS.every(a => bar.buttons[a].shown && !bar.buttons[a].disabled && bar.buttons[a].opacity > 0.9) && bar.buttons['borders-open'].title === 'Bordures'
@@ -475,7 +475,7 @@ async function runTheme(theme) {
   await context.close();
 }
 
-// Un panneau plus étroit que la barre (quinze boutons, ~460 px) : elle passe à la ligne, aucun bouton n'est hors du panneau, le dernier (« Aligner en bas ») se clique.
+// Un panneau plus étroit que la barre (dix-sept boutons, ~520 px) : elle passe à la ligne, aucun bouton n'est hors du panneau, le dernier (« Aligner en bas ») se clique.
 async function runNarrow() {
   const NARROW = 420;
   console.log(`\n=== La barre d'un tableau de document dans un panneau étroit, ${NARROW}x${HEIGHT} ===`);
@@ -485,7 +485,7 @@ async function runNarrow() {
   await clickCell(page, 'B2');
   const bar = await barState(page);
   const tops = bar ? Array.from(new Set(ORDER.map(a => Math.round(bar.buttons[a].rect.top)))) : [];
-  check(`étroit - la barre passe à la ligne : ses 15 boutons sont tous visibles et entiers dans le panneau de ${NARROW} px, sur deux lignes au plus (${tops.length})`,
+  check(`étroit - la barre passe à la ligne : ses 17 boutons sont tous visibles et entiers dans le panneau de ${NARROW} px, sur deux lignes au plus (${tops.length})`,
     !!bar && bar.inside && ORDER.every(a => bar.buttons[a].shown && bar.buttons[a].inside) && tops.length >= 2 && tops.length <= 2, { inside: bar && bar.inside, tops, hidden: bar && ORDER.filter(a => !bar.buttons[a].inside) });
   await realClick(page, button('valign-bottom'));
   const down = await gapsOf(page, 'B2');

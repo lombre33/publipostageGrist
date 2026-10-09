@@ -1215,10 +1215,16 @@ const I18n = (function () {
     'table.rowAfter': { fr: 'Ligne après', en: 'Row after' },
     'table.rowDel': { fr: 'Supprimer la ligne', en: 'Delete row' },
     'table.rowDelMerged': { fr: 'Indisponible avec le suivi des modifications : une cellule fusionnée traverse cette ligne', en: 'Unavailable with track changes on: a merged cell runs across this row' },
+    // Égaliser la hauteur des lignes, la largeur des colonnes que la sélection couvre (leur moyenne) ; la seconde phrase de chacun est la raison du grisé
+    // (en info-bulle) tant que la sélection ne couvre pas au moins deux lignes (colonnes).
+    'table.rowsEqualize': { fr: 'Égaliser la hauteur des lignes (moyenne)', en: 'Make rows the same height (average)' },
+    'table.rowsEqualizeNeed': { fr: 'Égaliser la hauteur des lignes : sélectionnez-en au moins deux, en glissant sur le tableau', en: 'Make rows the same height: select at least two, by dragging across the table' },
     'table.colBefore': { fr: 'Colonne avant', en: 'Column before' },
     'table.colAfter': { fr: 'Colonne après', en: 'Column after' },
     'table.colDel': { fr: 'Supprimer la colonne', en: 'Delete column' },
     'table.colDelMerged': { fr: 'Indisponible avec le suivi des modifications : une cellule fusionnée traverse cette colonne', en: 'Unavailable with track changes on: a merged cell runs across this column' },
+    'table.colsEqualize': { fr: 'Égaliser la largeur des colonnes (moyenne)', en: 'Make columns the same width (average)' },
+    'table.colsEqualizeNeed': { fr: 'Égaliser la largeur des colonnes : sélectionnez-en au moins deux, en glissant sur le tableau', en: 'Make columns the same width: select at least two, by dragging across the table' },
     'table.tableDel': { fr: 'Supprimer le tableau', en: 'Delete table' },
     'table.fillOpen': { fr: 'Fond de cellule (remplir)', en: 'Cell background (fill)' },
     // Fusion et scission de cases (js/floating-toolbars.js : grille et tableau de document), puis l'alignement vertical, de la barre d'une grille comme de

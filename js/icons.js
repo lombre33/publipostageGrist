@@ -66,6 +66,9 @@ const Icons = (function () {
       colBefore: '<path d="M9 4v16M15 4v16M4 12h4"/>',
       colAfter: '<path d="M9 4v16M15 4v16M16 12h4"/>',
       colDel: '<path d="M9 4v16M15 4v16"/>',
+      // Égaliser les lignes (deux traits et, entre eux, une flèche à deux pointes : la même hauteur) et les colonnes (la même figure couchée).
+      rowsEqualize: '<path d="M4 6h16M4 18h16"/><path d="M12 9.5v5"/><polyline points="10 11.5 12 9.5 14 11.5"/><polyline points="10 12.5 12 14.5 14 12.5"/>',
+      colsEqualize: '<path d="M6 4v16M18 4v16"/><path d="M9.5 12h5"/><polyline points="11.5 10 9.5 12 11.5 14"/><polyline points="12.5 10 14.5 12 12.5 14"/>',
       // Barre de la case d'une grille : fusionner (deux flèches vers le centre) et scinder (deux flèches vers les bords), puis l'alignement vertical
       // (un trait de référence, haut, milieu ou bas, et la case posée contre lui).
       cellMerge: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 12h5"/><path d="M16 12h5"/><polyline points="9 9 12 12 9 15"/><polyline points="15 9 12 12 15 15"/>',

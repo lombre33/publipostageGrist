@@ -921,6 +921,66 @@
   const rowHeightsNow = () => rowEls().map(r => Math.round(r.getBoundingClientRect().height * 10) / 10);
 
   cases.push({
+    id: 'grid_cell_bar_equalize_buttons_grey_until_two_lines_are_chosen_then_give_them_the_mean_size',
+    description: 'Barre de la case d\'une grille : « Égaliser la hauteur » et « Égaliser la largeur » sont grisés avec leur raison (jamais retirés) tant que la sélection ne couvre pas deux lignes (colonnes) ; trois lignes de 40, 70 et 100 px choisies : 70 px chacune, les autres lignes ne bougent pas ; trois colonnes de 60, 100 et 140 px : 100 px chacune, la largeur de la grille ne change pas ; un seul Annuler pour chacun',
+    run: async (h) => inGrid(h, async () => {
+      const bad = [];
+      const rowStart = r => { let pos = 1; for (let i = 0; i < r; i++) pos += tableNode().child(i).nodeSize; return pos; };
+      const setHeights = (list) => {
+        const tr = ed().state.tr;
+        list.forEach((px, r) => tr.setNodeMarkup(rowStart(r), undefined, Object.assign({}, tableNode().child(r).attrs, { rowHeight: px })));
+        ed().view.dispatch(tr);
+      };
+      const setWidths = (list) => {
+        const tr = ed().state.tr;
+        for (let r = 0; r < tableNode().childCount; r++) list.forEach((px, c) => tr.setNodeMarkup(cellPos(r, c), undefined, Object.assign({}, tableNode().child(r).child(c).attrs, { colwidth: [px] })));
+        ed().view.dispatch(tr);
+      };
+      const rowAttr = () => Array.from({ length: 5 }, (_, r) => tableNode().child(r).attrs.rowHeight);
+      const widthAttr = () => Array.from({ length: 5 }, (_, c) => (tableNode().child(0).child(c).attrs.colwidth || [null])[0]);
+      const state = (action, labelKey, needKey) => {
+        const btn = barButton(action);
+        return { shown: !!btn && btn.getBoundingClientRect().width > 0, grey: !!btn && btn.classList.contains('is-disabled') && btn.getAttribute('aria-disabled') === 'true' && btn.title === I18n.t(needKey),
+          free: !!btn && !btn.classList.contains('is-disabled') && btn.getAttribute('aria-disabled') === 'false' && btn.title === I18n.t(labelKey) };
+      };
+      const rows = () => state('rows-equalize', 'table.rowsEqualize', 'table.rowsEqualizeNeed');
+      const cols = () => state('cols-equalize', 'table.colsEqualize', 'table.colsEqualizeNeed');
+      setHeights([40, 70, 100]);
+      setWidths([60, 100, 140, 100, 100, 100]);
+      await sleep(650);
+      await placeCursor(0, 0);
+      if (!(rows().shown && cols().shown && rows().grey && cols().grey)) bad.push('curseur : ' + JSON.stringify([rows(), cols()]));
+      const same = JSON.stringify(ed().state.doc.toJSON());
+      await pressBar('rows-equalize');
+      await pressBar('cols-equalize');
+      if (JSON.stringify(ed().state.doc.toJSON()) !== same) bad.push('un appui sur un bouton grisé ne doit rien changer');
+      await selectCells(0, 0, 2, 2);
+      if (!(rows().free && cols().free)) bad.push('trois lignes, trois colonnes : ' + JSON.stringify([rows(), cols()]));
+      const before = { cols: colWidthsNow(), rows: rowHeightsNow(), attrs: rowAttr() };
+      await sleep(650);
+      await pressBar('rows-equalize');
+      const afterRows = { attrs: rowAttr(), rows: rowHeightsNow() };
+      if (JSON.stringify(afterRows.attrs.slice(0, 3)) !== '[70,70,70]' || JSON.stringify(afterRows.attrs.slice(3)) !== JSON.stringify(before.attrs.slice(3))) bad.push('hauteurs : ' + JSON.stringify(afterRows.attrs) + ' avant ' + JSON.stringify(before.attrs));
+      if (!afterRows.rows.slice(0, 3).every(v => near(v, 70, 0.8)) || afterRows.rows.slice(3).some((v, i) => !near(v, before.rows[i + 3], 0.6))) bad.push('rendu des lignes : ' + JSON.stringify(afterRows.rows.slice(0, 5)) + ' avant ' + JSON.stringify(before.rows.slice(0, 5)));
+      if (!ed().state.selection.$anchorCell) bad.push('la sélection de cases doit rester');
+      await sleep(650);
+      ed().commands.undo();
+      await sleep(100);
+      if (JSON.stringify(rowAttr().slice(0, 3)) !== '[40,70,100]') bad.push('un Annuler devait rendre [40,70,100] : ' + JSON.stringify(rowAttr()));
+      await sleep(650);
+      await pressBar('cols-equalize');
+      const afterCols = { attrs: widthAttr(), cols: colWidthsNow() };
+      if (JSON.stringify(afterCols.attrs.slice(0, 3)) !== '[100,100,100]') bad.push('largeurs : ' + JSON.stringify(afterCols.attrs));
+      if (!afterCols.cols.slice(0, 3).every(v => near(v, 100, 0.8)) || !near(afterCols.cols.reduce((a, b) => a + b, 0), before.cols.reduce((a, b) => a + b, 0), 1.5)) bad.push('rendu des colonnes : ' + JSON.stringify(afterCols.cols) + ' avant ' + JSON.stringify(before.cols));
+      await sleep(650);
+      ed().commands.undo();
+      await sleep(100);
+      if (JSON.stringify(widthAttr().slice(0, 3)) !== '[60,100,140]') bad.push('un Annuler devait rendre [60,100,140] : ' + JSON.stringify(widthAttr()));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : JSON.stringify({ before, afterRows: afterRows.rows.slice(0, 4), afterCols: afterCols.cols.slice(0, 4) }) };
+    }),
+  });
+
+  cases.push({
     id: 'grid_cell_bar_merge_and_split_follow_the_selection_and_are_greyed_never_removed',
     description: 'Barre de la case d\'une grille : « Fusionner les cases » n\'est actif que si plusieurs cases sont choisies, « Scinder la case » que sur une case fusionnée - grisés (jamais retirés) le reste du temps ; fusionner fait une case de 2 colonnes x 2 lignes qui garde le texte des deux cases, scinder rend les cases ; chacun est annulé par un seul Annuler',
     run: async (h) => inGrid(h, async () => {

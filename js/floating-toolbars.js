@@ -151,9 +151,11 @@ const FloatingToolbars = (function () {
           ['row-before', 'rowBefore', I18n.t('table.rowBefore')],
           ['row-after', 'rowAfter', I18n.t('table.rowAfter')],
           ['row-del', 'rowDel', I18n.t('table.rowDel')],
+          ['rows-equalize', 'rowsEqualize', I18n.t('table.rowsEqualize')],
           ['col-before', 'colBefore', I18n.t('table.colBefore')],
           ['col-after', 'colAfter', I18n.t('table.colAfter')],
           ['col-del', 'colDel', I18n.t('table.colDel')],
+          ['cols-equalize', 'colsEqualize', I18n.t('table.colsEqualize')],
           ['table-del', 'trash', I18n.t('table.tableDel')],
         ],
         // Alignement vertical des cases : le même dans la barre d'une grille et dans celle d'un tableau de document (js/grid-editor.js). La fusion et
@@ -261,6 +263,9 @@ const FloatingToolbars = (function () {
         'col-before': lines('addColumnBefore'),
         'col-after': lines('addColumnAfter'),
         'col-del': () => { if (!columnDeleteBlocked()) editor.chain().focus().deleteColumn().run(); },
+        // Égaliser : la moyenne des lignes (colonnes) que la sélection couvre ; sans effet (le bouton est grisé) quand elle n'en couvre qu'une.
+        'rows-equalize': () => GridEditor.equalizeLines(editor, 'row'),
+        'cols-equalize': () => GridEditor.equalizeLines(editor, 'col'),
         'table-del': () => editor.chain().focus().deleteTable().run(),
         'cell-merge': () => (GridEditor.isActive() ? GridEditor.mergeCells(editor) : TableMerge.mergeCells(editor)),
         'cell-split': () => (GridEditor.isActive() ? GridEditor.splitCell(editor) : TableMerge.splitCell(editor)),
@@ -320,8 +325,18 @@ const FloatingToolbars = (function () {
         });
         setDisabled('borders-open', blocked, I18n.t(blocked ? 'table.settingTracked' : 'table.bordersOpen'));
       };
+      // « Égaliser » : grisé, avec sa raison pour info-bulle, tant que la sélection ne couvre pas au moins deux lignes (colonnes) - dans une grille comme
+      // dans un document, de la même façon (jamais retiré).
+      const EQUALIZE_BUTTONS = [['rows-equalize', 'row', 'table.rowsEqualize', 'table.rowsEqualizeNeed'], ['cols-equalize', 'col', 'table.colsEqualize', 'table.colsEqualizeNeed']];
+      const syncEqualizeButtons = () => {
+        EQUALIZE_BUTTONS.forEach(([action, kind, labelKey, needKey]) => {
+          const can = GridEditor.canEqualize(editor, kind);
+          setDisabled(action, !can, I18n.t(can ? labelKey : needKey));
+        });
+      };
       const syncGridButtons = () => {
         setLocked('table-del', true);
+        syncEqualizeButtons();
         // Pas de légende dans une grille : le bouton reste dans la barre, grisé, avec sa raison pour info-bulle (js/caption.js).
         Caption.syncButton(button('caption'), editor, 'table');
         MERGE_BUTTONS.forEach(([action, labelKey]) => setDisabled(action, false, I18n.t(labelKey)));
@@ -335,6 +350,7 @@ const FloatingToolbars = (function () {
         setDisabled('col-del', colBlocked, I18n.t(colBlocked ? 'table.colDelMerged' : 'table.colDel'));
         const rowBlocked = rowDeleteBlocked();
         setDisabled('row-del', rowBlocked, I18n.t(rowBlocked ? 'table.rowDelMerged' : 'table.rowDel'));
+        syncEqualizeButtons();
         syncDocumentMergeButtons();
         syncSettingButtons();
         Caption.syncButton(button('caption'), editor, 'table');

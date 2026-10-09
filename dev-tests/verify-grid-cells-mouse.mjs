@@ -276,9 +276,9 @@ async function runTheme(theme) {
 
   // ---------- 1) La barre, curseur dans la première case ----------
   await clickGrid(page, 1, 1);
-  const SHOWN = ['row-before', 'row-after', 'row-del', 'col-before', 'col-after', 'col-del', 'table-del', 'cell-merge', 'cell-split', 'caption', 'fill-open', 'borders-open', 'valign-top', 'valign-middle', 'valign-bottom'];
+  const SHOWN = ['row-before', 'row-after', 'row-del', 'rows-equalize', 'col-before', 'col-after', 'col-del', 'cols-equalize', 'table-del', 'cell-merge', 'cell-split', 'caption', 'fill-open', 'borders-open', 'valign-top', 'valign-middle', 'valign-bottom'];
   let bar = await barState(page);
-  check(`${label} - la barre de la case porte ses 15 boutons dans l'ordre Lignes, Colonnes, Fusion, Légende, Fond, Bordures, Alignement vertical, tous dans la bande, sur une seule ligne à ${WIDTH} px`,
+  check(`${label} - la barre de la case porte ses 17 boutons dans l'ordre Lignes, Colonnes (chacune avec son « Égaliser »), Fusion, Légende, Fond, Bordures, Alignement vertical, tous dans la bande, sur une seule ligne à ${WIDTH} px`,
     !!bar && bar.dockShown && bar.order.join() === SHOWN.join() && SHOWN.every(a => bar.buttons[a].inside) && bar.height <= 34 && bar.dockHeight <= 40, { order: bar && bar.order, height: bar && bar.height, dock: bar && bar.dockHeight });
   check(`${label} - « Fusionner les cases », « Scinder la case » et « Supprimer le tableau » sont grisés (pas retirés) quand une seule case est choisie`,
     !!bar && ['cell-merge', 'cell-split', 'table-del'].every(a => bar.buttons[a].locked && bar.buttons[a].shown && bar.buttons[a].opacity < 0.5) && !['row-before', 'col-after', 'fill-open', 'valign-top'].some(a => bar.buttons[a].locked), bar && bar.buttons);
@@ -471,8 +471,8 @@ async function runTheme(theme) {
     const greyedByReason = b => !!b && b.classList.contains('is-disabled') && !b.classList.contains('v2-hf-locked') && b.getAttribute('aria-disabled') === 'true' && !!b.title;
     return { floating: !bar.classList.contains('docked') && bar.parentElement === document.body, visible: bar.classList.contains('visible'), shown, seps, delGrey: del.classList.contains('v2-hf-locked'), mergeGrey: greyedByReason(merge), splitGrey: greyedByReason(split) };
   });
-  check(`${label} - tableau de document : la barre flotte, avec ses 15 boutons (lignes, colonnes, tableau, fusion, légende, fond, bordures, alignement vertical), « Fusionner » et « Scinder » grisés avec leur raison (une seule case)`,
-    !!classic && classic.floating && classic.visible && classic.shown.join() === 'row-before,row-after,row-del,col-before,col-after,col-del,table-del,cell-merge,cell-split,caption,fill-open,borders-open,valign-top,valign-middle,valign-bottom' && !classic.delGrey && classic.mergeGrey && classic.splitGrey, classic);
+  check(`${label} - tableau de document : la barre flotte, avec ses 17 boutons (lignes, colonnes, tableau, fusion, légende, fond, bordures, alignement vertical), « Fusionner » et « Scinder » grisés avec leur raison (une seule case)`,
+    !!classic && classic.floating && classic.visible && classic.shown.join() === 'row-before,row-after,row-del,rows-equalize,col-before,col-after,col-del,cols-equalize,table-del,cell-merge,cell-split,caption,fill-open,borders-open,valign-top,valign-middle,valign-bottom' && !classic.delGrey && classic.mergeGrey && classic.splitGrey, classic);
 
   await context.close();
 }

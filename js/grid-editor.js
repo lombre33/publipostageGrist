@@ -1144,7 +1144,7 @@ const GridEditor = (function () {
     return { createEnterExtension, createExtension };
   })();
 
-  const { setColumnWidth, setRowHeight, colName, tableElement, measure } = (function () {
+  const { setColumnWidth, setRowHeight, colName, tableElement, measure, measureTable } = (function () {
     // La largeur d'une colonne, la hauteur d'une ligne, le nom d'une colonne et la taille mesurée sur le rendu.
 
     // Même parcours que `updateColumnWidth` de prosemirror-tables (poignée du bord d'une case) : toutes les cases de chaque colonne reçoivent la largeur,
@@ -1201,8 +1201,10 @@ const GridEditor = (function () {
     // hauteur de son attribut). null quand il n'y a rien à mesurer : pas de tableau, ou éditeur masqué (Lecture, macro-modèle) ; les bandeaux d'une
     // grille gardent alors leur dernier état. Les lignes sont celles du document, retrouvées par leur position : une ligne que l'aperçu d'une page
     // descend sous une couture n'est qu'un style de plus, jamais une ligne de plus.
-    function measure(set) {
-      const info = set.ctx.info();
+    function measure(set) { return measureTable(set.ctx.info()); }
+
+    // La même mesure pour un tableau `info` quelconque (égaliser des lignes, des colonnes : js/grid-editor.js:equalizeLines), bandeaux montrés ou non.
+    function measureTable(info) {
       const table = info && tableElement(info);
       if (!table) return null;
       const rect = table.getBoundingClientRect();
@@ -1214,7 +1216,7 @@ const GridEditor = (function () {
       if (rows.some(row => !row)) return null;
       return { info, table, rect, width: rect.width, height: rect.height, rows, widths: cols.map(c => c.getBoundingClientRect().width), heights: rows.map(r => r.getBoundingClientRect().height) };
     }
-    return { setColumnWidth, setRowHeight, colName, tableElement, measure };
+    return { setColumnWidth, setRowHeight, colName, tableElement, measure, measureTable };
   })();
 
   const { newStripSet, buildStrips, destroyStrips, refreshLabels, scheduleSync, watch, fillHeads, buildHead, markPageBreak } = (function () {
@@ -1543,6 +1545,54 @@ const GridEditor = (function () {
     return { startResize };
   })();
 
+  const { canEqualize, equalizeLines } = (function () {
+    // Égaliser : la hauteur des lignes (la largeur des colonnes) que les cases choisies couvrent devient leur moyenne.
+
+    // Les rangs des lignes (`kind` 'row') ou des colonnes ('col') du tableau `info` que les cases choisies couvrent, de la première à la dernière ; [] hors d'un
+    // tableau, pour un simple curseur et pour UNE seule case choisie (une case fusionnée sur plusieurs lignes n'est pas « plusieurs lignes choisies » : la
+    // règle de `chosenLines`, le glissé d'une poignée).
+    function coveredLines(ed, info, kind) {
+      const selection = ed.state.selection;
+      const rect = info && isCellSelection(selection) && selection.ranges.length > 1 && selectionRect(ed.state, info);
+      if (!rect) return [];
+      const from = kind === 'col' ? rect.left : rect.top;
+      const to = kind === 'col' ? rect.right : rect.bottom;
+      return Array.from({ length: to - from }, (_, i) => from + i);
+    }
+
+    // Une moyenne n'a de sens que pour au moins deux lignes (colonnes) : le bouton est grisé sinon.
+    function canEqualize(ed, kind) {
+      return coveredLines(ed, tableInfo(ed.state.doc, ed.state.selection), kind).length >= 2;
+    }
+
+    // La taille de chaque ligne (colonne) couverte, lue sur le rendu en pixels de MISE EN PAGE (une ligne que son texte agrandit n'a pas la hauteur de son attribut ;
+    // une colonne automatique n'a pas de largeur posée), est remplacée par leur moyenne arrondie, en une seule transaction (un seul Annuler). Une somme qui ne
+    // bouge pas : le tableau garde sa taille, la page n'a rien à rogner. Une ligne ne descend pas sous la hauteur de son texte (le plancher du glissé d'une
+    // poignée, `naturalRowHeight`) : quand une ligne a plus de texte que la moyenne n'en laisse, toutes prennent sa hauteur, égales plutôt qu'à la moyenne.
+    // Une colonne ne descend pas sous la largeur minimale d'une colonne. Dans un document la sélection est celle du tableau du curseur.
+    function equalizeLines(ed, kind) {
+      const info = tableInfo(ed.state.doc, ed.state.selection);
+      const lines = coveredLines(ed, info, kind);
+      if (lines.length < 2) return false;
+      const m = measureTable(info);
+      if (!m) return false;
+      const zoom = active ? 1 : EditorCore.layoutZoom(m.table);
+      const isCol = kind === 'col';
+      const mean = Math.round(lines.reduce((sum, i) => sum + (isCol ? m.widths[i] : m.heights[i]), 0) / lines.length / zoom);
+      if (isCol) {
+        setColumnWidth(info, lines, Math.min(MAX_COL_WIDTH_PX, Math.max(MIN_COL_WIDTH_PX, mean)));
+        return true;
+      }
+      // Le plancher se mesure sur ce tableau seul (`SIZING_MARK`), comme pendant le glissé d'une poignée.
+      m.table.setAttribute(SIZING_MARK, '');
+      const floor = Math.ceil(naturalRowHeight(m.rows, lines) / zoom);
+      m.table.removeAttribute(SIZING_MARK);
+      setRowHeight(info, lines, Math.min(MAX_ROW_HEIGHT_PX, Math.max(floor, mean)));
+      return true;
+    }
+    return { canEqualize, equalizeLines };
+  })();
+
   // Les bandeaux de la grille : son seul tableau, sans réduction de la feuille, avec les sauts de page de ses lignes. Se rafraîchissent tant que le mode
   // grille est actif. Les tailles s'y disent en pixels, comme dans un tableur.
   const gridContext = {
@@ -1758,6 +1808,6 @@ const GridEditor = (function () {
     configure, attach, createExtension, createEnterExtension, withTableAttributes, withRowAttributes, withCellAttributes, serialize, setActive, isActive, isGridType,
     refresh, currentCellDom, colName, floatingOptions, barSlot,
     canMerge, canSplit, mergeCells, splitCell, mergeSelected, splitSelected, tableSettingsBlocked, setVerticalAlign, selectedVerticalAlign, applyBorders, canApplyBorders, gridLinesShown, setGridLinesShown,
-    canTogglePageBreak, hasPageBreak, togglePageBreak, insertLines, documentStripsOffset,
+    canTogglePageBreak, hasPageBreak, togglePageBreak, insertLines, canEqualize, equalizeLines, documentStripsOffset,
   };
 })();

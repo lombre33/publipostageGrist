@@ -362,7 +362,7 @@ async function runTheme(theme) {
   const order = bar ? bar.order : [];
   check(`${label} - le bouton « Bordures » est dans la barre de la case, entre le fond et l'alignement vertical, dans la bande, actif`,
     !!chip && chip.shown && chip.inside && !chip.locked && chip.title === 'Bordures' && order.indexOf('borders-open') === order.indexOf('fill-open') + 1 && order.indexOf('valign-top') === order.indexOf('borders-open') + 1, { chip, order });
-  check(`${label} - la barre, avec le bouton de plus, tient toujours sur une seule ligne à ${WIDTH} px`, !!bar && bar.height <= 34 && bar.dockHeight <= 40 && bar.order.length === 15, bar && { height: bar.height, dock: bar.dockHeight, n: bar.order.length });
+  check(`${label} - la barre, avec le bouton de plus, tient toujours sur une seule ligne à ${WIDTH} px`, !!bar && bar.height <= 34 && bar.dockHeight <= 40 && bar.order.length === 17, bar && { height: bar.height, dock: bar.dockHeight, n: bar.order.length });
 
   // ---------- 2) Le menu s'ouvre sous la bande, tout est sous le pointeur ----------
   await realClick(page, button('borders-open'));
@@ -664,7 +664,7 @@ async function runTheme(theme) {
     if (!bar) return null;
     return Array.from(bar.querySelectorAll('button[data-action]')).filter(b => getComputedStyle(b).display !== 'none' && b.getBoundingClientRect().width > 0).map(b => b.dataset.action);
   });
-  check(`${label} - tableau de document : la barre porte « Bordures » et l'alignement vertical comme celle d'une grille ; ses boutons de fusion sont ceux du tableau de document (essais à la souris : verify-doc-table-tools-mouse.mjs)`, !!classic && classic.join() === 'row-before,row-after,row-del,col-before,col-after,col-del,table-del,cell-merge,cell-split,caption,fill-open,borders-open,valign-top,valign-middle,valign-bottom', classic);
+  check(`${label} - tableau de document : la barre porte « Bordures » et l'alignement vertical comme celle d'une grille ; ses boutons de fusion sont ceux du tableau de document (essais à la souris : verify-doc-table-tools-mouse.mjs)`, !!classic && classic.join() === 'row-before,row-after,row-del,rows-equalize,col-before,col-after,col-del,cols-equalize,table-del,cell-merge,cell-split,caption,fill-open,borders-open,valign-top,valign-middle,valign-bottom', classic);
 
   await context.close();
 }
