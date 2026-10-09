@@ -361,6 +361,33 @@
   );
 
   scenario(
+    'settingscolumns_a_viewer_account_is_not_told_either',
+    'Un compte Lecteur de Grist (lecture seule d’office, jamais identifié) ne reçoit pas non plus le message qui ne regarde que qui règle l’Accès : même réglage, même colonne manquante que pour le responsable, qui, lui, est prévenu',
+    async () => {
+      await configure({ droitsAcces: ACCESS });
+      await renamed(s => s.deleteColumn(RIGHTS, 'Export'));
+      const owner = await open();
+      let viewer;
+      try {
+        stub().setViewer(true);
+        await AccessRights.refresh();
+        await sleep(80);
+        viewer = { state: AccessRights.getStatus().state, readOnly: AccessRights.get().readOnly, out: await open() };
+      } finally {
+        stub().setViewer(false);
+        await AccessRights.refresh();
+      }
+      const checks = {
+        ownerTold: owner.messages.length === 1 && /« Export »/.test(owner.messages[0].text),
+        reallyAViewer: viewer.state === 'viewer' && viewer.readOnly,
+        viewerSilent: viewer.out.messages.length === 0 && viewer.out.result.skipped === 'restricted',
+      };
+      const v = verdict(checks);
+      return { pass: v.pass, notes: v.failed.join(', ') || 'ok' };
+    },
+  );
+
+  scenario(
     'settingscolumns_waits_for_rights_still_being_computed_before_telling',
     'Les droits se calculent encore (état « pending », la table des droits met du temps à répondre) : on attend leur résultat avant de parler - une personne que sa ligne met en lecture seule ne reçoit pas le message, même quand le widget s’ouvre avant la fin du calcul',
     async () => {

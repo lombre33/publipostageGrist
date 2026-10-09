@@ -597,13 +597,13 @@ const I18n = (function () {
     // Case « Ouvrir les personnes en lecture seule sur la Lecture épurée » (js/access-rights.js, js/clean-reading.js).
     'settings.access.cleanReading': { fr: 'Ouvrir les personnes en lecture seule sur la Lecture épurée', en: 'Open read-only people on Clean reading' },
     'settings.access.cleanReadingHint': {
-      fr: 'Elles ouvrent sur le document seul, sans la barre d’outils ; le bouton rond du coin haut droit ou Échap leur rend la barre (Commenter, Exporter selon leurs droits). Choisissez d’abord la colonne « Lecture seule ».',
-      en: 'They open on the document alone, without the toolbar; the round button at the top right, or Esc, brings the toolbar back (Comment, Export, depending on their rights). Choose the “Read-only” column first.',
+      fr: 'Elles ouvrent sur le document seul, sans la barre d’outils ; le bouton rond du coin haut droit ou Échap leur rend la barre (Commenter, Exporter selon leurs droits). Les comptes Lecteur de Grist en font partie. Choisissez d’abord la colonne « Lecture seule ».',
+      en: 'They open on the document alone, without the toolbar; the round button at the top right, or Esc, brings the toolbar back (Comment, Export, depending on their rights). Grist Viewer accounts are included. Choose the “Read-only” column first.',
     },
     'settings.access.none': { fr: '— Aucune —', en: '— None —' },
     'settings.access.saveHint': {
-      fr: 'Pour l’appliquer à tout le monde, enregistrez ensuite la vue dans Grist (bouton Enregistrer en haut du widget). Une personne absente de la table garde tous les droits.',
-      en: 'To apply it to everyone, then save the view in Grist (Save button at the top of the widget). A person missing from the table keeps all rights.',
+      fr: 'Pour l’appliquer à tout le monde, enregistrez ensuite la vue dans Grist (bouton Enregistrer en haut du widget). Une personne absente de la table garde tous les droits ; un compte Lecteur de Grist ouvre toujours en lecture seule.',
+      en: 'To apply it to everyone, then save the view in Grist (Save button at the top of the widget). A person missing from the table keeps all rights; a Grist Viewer account always opens read-only.',
     },
     'settings.access.protectHint': {
       fr: 'Simple verrou d’interface : seules les règles d’accès de Grist protègent vraiment les modèles et les données.',
@@ -614,6 +614,8 @@ const I18n = (function () {
     'settings.access.status.found': { fr: 'Vous ({email}) : {rights}.', en: 'You ({email}): {rights}.' },
     'settings.access.status.notFound': { fr: 'Vous ({email}) n’êtes pas dans la table : tous les droits.', en: 'You ({email}) are not in the table: all rights.' },
     'settings.access.status.noEmail': { fr: 'Votre email Grist est introuvable : tous les droits.', en: 'Your Grist email could not be found: all rights.' },
+    // Compte Lecteur de Grist (js/access-rights.js, état « viewer ») : pas d'email lu, la table des droits ne compte pas pour lui.
+    'settings.access.status.viewer': { fr: 'Compte Lecteur dans Grist : {rights}.', en: 'Viewer account in Grist: {rights}.' },
     'settings.access.status.error': { fr: 'Table des droits illisible pour vous : lecture seule par précaution.', en: 'Rights table unreadable for you: read-only as a precaution.' },
     'settings.access.status.tableGone': { fr: 'La table des droits n’existe plus : choisissez-en une autre. Lecture seule d’ici là, par précaution.', en: 'The rights table no longer exists: choose another one. Read-only until then, as a precaution.' },
     'settings.access.right.readOnly': { fr: 'lecture seule', en: 'read-only' },

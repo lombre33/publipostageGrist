@@ -10,9 +10,10 @@
 //    seulement si l'on était entré au clavier : à la souris, un menu au survol dont le bouton reprend le focus s'ouvre et reste ouvert
 //    (js/editor-core.js) ;
 //  - ouverture d'emblée pour les personnes en lecture seule : la case de Réglages > Accès (js/access-rights.js, clé cleanReading, décochée au départ)
-//    fait ouvrir le widget sur la Lecture épurée à qui la table des droits dit « lecture seule ». Décidé une fois par session, à la première réponse
-//    confirmée des droits (js/main.js : fin d'init(), puis onAccessRightsChange si la réponse tarde ou si la table illisible finit par être lue) : la
-//    personne qui sort n'y est pas ramenée avant le prochain chargement ;
+//    fait ouvrir le widget sur la Lecture épurée à qui la table des droits dit « lecture seule », et aux comptes Lecteur de Grist (lecture seule d'office,
+//    js/access-rights.js). Décidé une fois par session, à la première réponse confirmée des droits (js/main.js : fin d'init(), puis
+//    onAccessRightsChange si la réponse tarde ou si la table illisible finit par être lue) : la personne qui sort n'y est pas ramenée avant le prochain
+//    chargement ;
 //  - exception assumée à « le changement de mode ne masque jamais la barre d'outils » (charte UX/UI, §3) : elle ne vaut que pour cet état, que rien
 //    n'allume sans un geste et que rien ne garde d'une ouverture du widget à l'autre.
 // Script classique (pas type="module"), même convention de portée globale que OrientationToggle ; js/main.js le câble (CleanReading.wire) et le
@@ -69,10 +70,11 @@ const CleanReading = (function () {
   }
 
   // Faut-il ouvrir d'emblée ? `access` = { state, readOnly, enabled } : l'état des droits, ce que dit AccessRights.get().readOnly (vrai aussi pour le
-  // verrou par précaution), la case cochée. Seule la personne trouvée dans la table des droits (found) dont la ligne dit « lecture seule » ouvre :
-  // une personne absente de la table, sans identité ou sans réglage, une table illisible ou une réponse qui n'est pas encore là n'ouvrent rien.
+  // verrou par précaution), la case cochée. Ouvrent la personne trouvée dans la table des droits (found) dont la ligne dit « lecture seule », et le
+  // compte Lecteur de Grist (viewer : lecture seule d'office, sans ligne à chercher) ; une personne absente de la table, sans identité ou sans réglage,
+  // une table illisible ou une réponse qui n'est pas encore là n'ouvrent rien.
   function wouldOpenForReadOnly(access) {
-    return !!access && access.state === 'found' && !!access.readOnly && !!access.enabled;
+    return !!access && (access.state === 'found' || access.state === 'viewer') && !!access.readOnly && !!access.enabled;
   }
 
   let startupDecided = false;

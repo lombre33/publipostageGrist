@@ -69,6 +69,18 @@ const GristAPI = (function () {
     return error;
   }
   function isTablesDeclined(error) { return !!error && error.tablesDeclined === true; }
+  // Un document que Grist ouvre en lecture seule pour cette personne (compte Lecteur du document, ou instantané de son historique) : Grist ajoute
+  // `readonly=true` à l'adresse du cadre du widget (WidgetFrame.ts, `gristDoc.isReadonly`, faux pour qui peut modifier le document). Il l'ajoute après les
+  // paramètres de l'adresse du widget : la dernière valeur est la sienne. Absent (Grist plus ancien) ou autre que `true` : personne n'est tenu pour
+  // lecteur, comme avant. `search` : la partie de l'adresse après le « ? » (`location.search`).
+  function isReadOnlyAddress(search) {
+    let values = [];
+    try { values = new URLSearchParams(search || '').getAll('readonly'); } catch (e) { return false; }
+    return values.length > 0 && values[values.length - 1] === 'true';
+  }
+  function isDocumentReadOnly() {
+    return isReadOnlyAddress(typeof location === 'undefined' ? '' : location.search);
+  }
   async function askToCreateTables(hooks) {
     let granted = false;
     try { granted = (await hooks.ask()) === true; }
@@ -79,6 +91,8 @@ const GristAPI = (function () {
   }
   // { granted, asked } : `asked` quand la création a attendu la réponse de la personne (le document a pu changer pendant ce temps).
   async function tableCreationConsent(tables) {
+    // Un compte Lecteur ne crée rien : la question serait posée pour rien, et Grist refuserait la création.
+    if (isDocumentReadOnly()) return { granted: false, asked: false };
     if (_consentGranted) return { granted: true, asked: false };
     if (tables.some(name => INTERNAL_TABLES.includes(name))) { _consentGranted = true; return { granted: true, asked: false }; }
     const hooks = _consentHooks;
@@ -961,6 +975,9 @@ const GristAPI = (function () {
   // auraient créé la table deux fois.
   let _userProbeRead = null;
   function probeUserRow() {
+    // La sonde écrit une ligne : un compte Lecteur ne le peut pas, la tenter ne ferait que fabriquer un refus (js/access-rights.js : un Lecteur n'est pas
+    // identifié, et ne cherche pas à l'être).
+    if (isDocumentReadOnly()) return Promise.reject(new Error('document ouvert en lecture seule : identification impossible'));
     if (!_userProbeRead) {
       _userProbeRead = readUserProbeRow();
       const done = () => { _userProbeRead = null; };
@@ -1060,5 +1077,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnChoices, getColumnLabel, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, getCurrentUserName, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, createWriteQueue, createUserEmailCache, createMemoizedLoad };
+  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnChoices, getColumnLabel, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, getCurrentUserName, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
 })();

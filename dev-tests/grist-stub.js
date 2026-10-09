@@ -75,6 +75,11 @@ try {
     // Nom que renverrait user.Name (js/grist-api.js:getCurrentUserName) : écrit dans la colonne Name de la table-sonde SI elle existe - comme la formule déclenchée, qui n'a rien à calculer
     // tant que la colonne n'a pas été ajoutée. null = Grist ne donne aucun nom à cette personne (compte sans nom : user.Name vaut None).
     userName: null,
+    // Compte Lecteur de Grist : Grist met `readonly=true` dans l'adresse du cadre du widget (setViewer le fait aussi, sans recharger la page) et refuse toute
+    // écriture du document (applyUserActions lève, la ligne refusée est gardée dans deniedWrites). Vrai dès le chargement quand l'adresse de la page porte
+    // déjà `readonly=true` (script Node qui ouvre la page ainsi).
+    viewer: /(?:^|[?&])readonly=true(?:&|$)/.test(location.search),
+    deniedWrites: [],
     docId: 'stub' + Math.random().toString(36).slice(2, 8),
   };
 
@@ -369,6 +374,16 @@ try {
     const cb = state.optionsCallback;
     if (cb) setTimeout(() => cb(state.options, { accessLevel: state.accessLevel, linking: {} }), 0);
   }
+  // Passe le widget en compte Lecteur de Grist (ou le rend à un compte qui modifie) : l'adresse de la page porte `readonly=true` comme celle du cadre d'un
+  // vrai Grist, et les écritures du document sont refusées. Le widget lit l'adresse à neuf à chaque fois (GristAPI.isDocumentReadOnly) : un scénario
+  // appelle ensuite AccessRights.refresh() pour qu'il en tire ses droits.
+  function setViewer(on) {
+    state.viewer = !!on;
+    state.deniedWrites = [];
+    const url = new URL(location.href);
+    if (on) url.searchParams.set('readonly', 'true'); else url.searchParams.delete('readonly');
+    history.replaceState(history.state, '', url.href);
+  }
   function setUserEmail(email) { state.userEmail = email || null; }
   function setUserName(name) { state.userName = name || null; }
   function setDocId(id) { state.docId = String(id); }
@@ -420,6 +435,10 @@ try {
     return state.actionLog.filter(a => a[0] === type && (!tableId || a[1] === tableId)).length;
   }
   async function applyUserActions(actions) {
+    if (state.viewer) {
+      actions.forEach(a => state.deniedWrites.push(a));
+      throw new Error('Blocked by access rules : ce compte ne peut pas modifier le document');
+    }
     actions.forEach(a => state.actionLog.push(a));
     // Une écriture dans la table des modèles vient d'avoir lieu : la prochaine lecture de cette table peut échouer (failReadBackOnce). Synchrone, aucun tour de microtâche de plus.
     if (actions.some(a => a[1] === 'Publipostage_Modeles' && (a[0] === 'UpdateRecord' || a[0] === 'AddRecord'))) state.modelsWriteSeen = true;
@@ -643,7 +662,7 @@ try {
     },
   };
 
-  window.__gristStub = { state, setVariables, setColumnLabels, setRows, setHiddenColumns, setAccessLevel, setWidgetOptions, saveOptions, revertOptions, setUserEmail, setUserName, setDocId, renameColumn, renameTable, deleteColumn, dropTable, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, remoteWrite, getRow, dropColumn, resetPages, readPages, setLatency, resetInFlightStats, failReadBackOnce };
+  window.__gristStub = { state, setViewer, setVariables, setColumnLabels, setRows, setHiddenColumns, setAccessLevel, setWidgetOptions, saveOptions, revertOptions, setUserEmail, setUserName, setDocId, renameColumn, renameTable, deleteColumn, dropTable, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, remoteWrite, getRow, dropColumn, resetPages, readPages, setLatency, resetInFlightStats, failReadBackOnce };
   // Point d'ancrage pour seeder AVANT que main.js:init() ne tourne (donc avant le tout premier
   // fetchTable de GristAPI.init()) - contrairement à un appel de setVariables/setRows APRÈS "Widget
   // prêt.", qui ne peut jamais tester "le widget démarre avec tel modèle déjà marqué par défaut" (cf.

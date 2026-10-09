@@ -83,6 +83,17 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   Grist et à la prochaine ouverture des Réglages. Grist ne dit pas au widget qu'on a cliqué sur
   « Enregistrer » : la ligne reste affichée jusqu'à la fermeture des Réglages, et son texte est une consigne,
   vraie aussi après le clic.
+- **Comptes Lecteur de Grist ouverts en lecture seule** : une personne que Grist ouvre en Lecteur (Grist le dit
+  au widget par l'adresse de la page, `readonly=true`) voit le widget en Lecture d'emblée, sans réglage à faire.
+  La barre reste affichée mais grisée (Mode édition, Enregistrer, Commenter et la mise en forme y sont,
+  inutilisables), les commentaires sont fermés et l'export (PDF, Word, Excel, e-mail) reste libre. Grist ne
+  laisse pas un Lecteur écrire dans le document : le widget ne l'identifie donc pas (ni table des droits ni
+  ligne par personne pour lui), ne lui propose pas de créer de table et ne tente aucune écriture. Réglages >
+  Accès dit « Compte Lecteur dans Grist : lecture seule, export, sans commentaires. », listes et case grisées,
+  et l'onglet Vue est verrouillé. Quand la case « Ouvrir les personnes en lecture seule sur la Lecture épurée »
+  est cochée, ces comptes ouvrent d'emblée sur la Lecture épurée, comme une personne de la table des droits
+  mise en lecture seule. Comme le widget ne sait pas qui est un Lecteur, la colonne « Export autorisé » ne
+  peut pas le restreindre : son export reste ouvert.
 
 ### Modifié
 
@@ -297,6 +308,16 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   to the left of "Close" reminds you; it goes away on Grist's "Revert" and the next time Settings open.
   Grist does not tell the widget that "Save" was clicked: the line stays until Settings are closed, and its
   text is an instruction, true after the click as well.
+- **Grist Viewer accounts open read-only**: a person Grist opens as a Viewer (Grist tells the widget through
+  the page address, `readonly=true`) sees the widget in Reading mode straight away, with nothing to set. The
+  toolbar stays shown but greyed (Edit mode, Save, Comment and the formatting are there, unusable), comments
+  are closed and export (PDF, Word, Excel, e-mail) stays free. Grist does not let a Viewer write to the
+  document, so the widget does not identify them (no rights table or per-person row for them), offers them no
+  table creation and attempts no write. Settings > Access reads "Viewer account in Grist: read-only, export,
+  no comments.", with its lists and box greyed, and the View tab is locked. When the "Open read-only people on
+  Clean reading" box is ticked, these accounts open straight on Clean reading, like a person of the rights
+  table set read-only. Since the widget does not know who a Viewer is, the "Export allowed" column cannot
+  restrict them: their export stays open.
 
 ### Changed
 

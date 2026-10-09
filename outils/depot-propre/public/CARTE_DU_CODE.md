@@ -67,7 +67,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 
 | Fichier | Rôle |
 |---|---|
-| `js/grist-api.js` | L'enveloppe de l'API Grist : démarrage et accès, lectures, écritures, création des tables internes (après l'accord de la personne), clés de correspondance, sonde de l'e-mail. |
+| `js/grist-api.js` | L'enveloppe de l'API Grist : démarrage et accès, lectures, écritures, création des tables internes (après l'accord de la personne), clés de correspondance, sonde de l'e-mail ; reconnaît un compte Lecteur à l'adresse `readonly=true` (pour lui, ni sonde ni table créée). |
 | `js/table-consent.js` | La fenêtre « Créer les tables du widget dans ce document ? » et le compteur de gestes qui la repose après un refus ; `js/grist-api.js` décide quand la poser. |
 | `js/templates.js` | Les modèles : la table `Publipostage_Modeles`, lecture, enregistrement, en-tête et pied (JSON), et sa ligne réservée aux réglages du document (`TypeModele` = `reglages`). |
 | `js/template-preferences.js` | Épingles et dossiers de chaque personne (`Publipostage_PreferencesModeles`). |
@@ -77,7 +77,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/row-template.js`, `js/row-template-panel.js` | « Selon la ligne » : un modèle relié à une condition sur la ligne ; le moteur et l'écran. |
 | `js/schema-renames.js` | Suivi des renommages de tables et de colonnes faits dans Grist (instantané des noms dans le navigateur). |
 | `js/settings-columns.js` | Avertit quand une colonne citée dans les réglages a disparu. |
-| `js/access-rights.js` | Droits par personne (lecture seule, export, commentaires) : un verrou d'interface, pas une protection des données. |
+| `js/access-rights.js` | Droits par personne (lecture seule, export, commentaires) : un verrou d'interface, pas une protection des données. Un compte Lecteur de Grist ouvre d'office en lecture seule, export gardé, sans commentaires. |
 | `js/page-tree.js` | Range les pages que Grist crée avec les tables du widget. |
 | `js/saved-page-formats.js` | Les formats de page nommés (`Publipostage_FormatsPage`). |
 
@@ -186,7 +186,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/save-reminder.js` | Le rappel « Enregistrer » des Réglages Vue et Accès : la ligne à gauche de « Fermer » après un changement, éteinte par le « Retour » de Grist (qui ne dit rien d'un clic sur « Enregistrer »). |
 | `js/shortcuts.js`, `js/shortcuts-panel.js` | Les raccourcis clavier personnalisables et leur liste. |
 | `js/first-contact.js` | La fenêtre de premier contact quand le widget ne démarre pas comme prévu. |
-| `js/clean-reading.js` | La Lecture épurée (sans la barre du haut). |
+| `js/clean-reading.js` | La Lecture épurée (sans la barre du haut), ouverte d'emblée pour les personnes en lecture seule, comptes Lecteur de Grist compris, quand la case des Réglages est cochée. |
 | `js/version.js` | Le numéro de version. |
 
 ### Orchestration
@@ -317,7 +317,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 
 | File | Role |
 |---|---|
-| `js/grist-api.js` | The wrapper around the Grist API: startup and access, reads, writes, creation of the internal tables (after the person's consent), matching keys, the e-mail probe. |
+| `js/grist-api.js` | The wrapper around the Grist API: startup and access, reads, writes, creation of the internal tables (after the person's consent), matching keys, the e-mail probe; recognises a Viewer account by the `readonly=true` address (for them, no probe and no table created). |
 | `js/table-consent.js` | The "Create the widget’s tables in this document?" window and the gesture counter that asks again after a refusal; `js/grist-api.js` decides when to ask. |
 | `js/templates.js` | Templates: the `Publipostage_Modeles` table, reading, saving, header and footer (JSON), and its row reserved for the document's settings (`TypeModele` = `reglages`). |
 | `js/template-preferences.js` | Each person's pins and folders (`Publipostage_PreferencesModeles`). |
@@ -327,7 +327,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/row-template.js`, `js/row-template-panel.js` | "According to the row": a template tied to a condition on the row; the engine and the screen. |
 | `js/schema-renames.js` | Tracking of table and column renames made in Grist (a snapshot of the names in the browser). |
 | `js/settings-columns.js` | Warns when a column named in the settings has disappeared. |
-| `js/access-rights.js` | Per-person rights (read-only, export, comments): an interface lock, not a protection of the data. |
+| `js/access-rights.js` | Per-person rights (read-only, export, comments): an interface lock, not a protection of the data. A Grist Viewer account opens read-only by default, export kept, without comments. |
 | `js/page-tree.js` | Tidies the pages Grist creates along with the widget's tables. |
 | `js/saved-page-formats.js` | Named page formats (`Publipostage_FormatsPage`). |
 
@@ -436,7 +436,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/save-reminder.js` | The "Save" reminder of the Settings View and Access tabs: the line to the left of "Close" after a change, switched off by Grist's "Revert" (which says nothing of a click on "Save"). |
 | `js/shortcuts.js`, `js/shortcuts-panel.js` | The customizable keyboard shortcuts and their list. |
 | `js/first-contact.js` | The first-contact window, when the widget doesn't start as expected. |
-| `js/clean-reading.js` | Clean reading (without the top bar). |
+| `js/clean-reading.js` | Clean reading (without the top bar), opened straight away for read-only people, Grist Viewer accounts included, when the Settings box is ticked. |
 | `js/version.js` | The version number. |
 
 ### Orchestration

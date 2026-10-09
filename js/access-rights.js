@@ -13,6 +13,12 @@
 // Accès, lui, reste modifiable pour en choisir une autre - sans cela, la personne qui a réglé l'Accès n'aurait aucun moyen de se débloquer depuis le
 // widget. Une table seulement cachée par une règle d'accès de Grist ne déverrouille rien (état « error » sans `tableGone`).
 //
+// Compte Lecteur de Grist (Grist ouvre le document en lecture seule pour lui : `readonly=true` dans l'adresse du cadre, GristAPI.isDocumentReadOnly) :
+// lecture seule d'office, export gardé, sans commentaires - il ne peut rien écrire. Il n'est pas identifié (la sonde de GristAPI.getCurrentUserEmail
+// écrit une ligne, que Grist refuse à un Lecteur) : la table des droits n'est pas lue pour lui, sa ligne éventuelle ne compte pas, et l'export ne se règle
+// pas pour lui. C'est connu dès l'adresse du cadre : aucune attente (état « viewer », jamais « pending »), et rien de ce qui est réglé dans l'onglet ne
+// le change.
+//
 // Case « Ouvrir les personnes en lecture seule sur la Lecture épurée » : clé cleanReading du même réglage, décochée au départ, grisée tant qu'aucune
 // colonne « Lecture seule » n'est choisie (sans elle, personne n'est en lecture seule). js/main.js la lit à la première réponse des droits
 // (CleanReading.openForReadOnly) : la personne dont la ligne dit « lecture seule » ouvre alors le widget sur le document seul, sans barre d'outils.
@@ -30,6 +36,10 @@ const AccessRights = (function () {
   // Table réglée mais illisible pour cette personne (règle d'accès Grist qui la lui cache, le plus souvent) : on ne sait pas si elle y figure.
   // Verrouillé par précaution plutôt que tous les droits - le propriétaire du document, qui lit toujours la table, n'est jamais concerné.
   const LOCKED_RIGHTS = Object.freeze({ readOnly: true, canExport: false, canComment: false });
+  // Compte Lecteur de Grist : l'export reste (il ne modifie rien, et la lecture seule d'un Lecteur doit pouvoir exporter), les commentaires non (ils
+  // s'écrivent dans le document).
+  const VIEWER_RIGHTS = Object.freeze({ readOnly: true, canExport: true, canComment: false });
+  const VIEWER_STATUS = Object.freeze({ state: 'viewer' });
 
   let config = null;
   let rights = FULL_RIGHTS;
@@ -74,6 +84,12 @@ const AccessRights = (function () {
     return a.readOnly === b.readOnly && a.canExport === b.canExport && a.canComment === b.canComment;
   }
 
+  // Lu à neuf à chaque fois (l'adresse du cadre ne change pas en vrai, mais les tests la changent en cours de route).
+  function isViewer() { return GristAPI.isDocumentReadOnly(); }
+  // Ce que la personne a sans réglage de la table des droits : tous les droits, ou ceux d'un Lecteur.
+  function baseRights() { return isViewer() ? VIEWER_RIGHTS : FULL_RIGHTS; }
+  function baseStatus() { return isViewer() ? VIEWER_STATUS : { state: 'off' }; }
+
   function get() { return pending ? LOCKED_RIGHTS : rights; }
   function getStatus() { return status; }
   function getConfig() { return config; }
@@ -91,6 +107,8 @@ const AccessRights = (function () {
   }
 
   async function compute(cfg) {
+    // Un Lecteur n'est pas identifié, réglage ou pas : ni sonde, ni lecture de la table.
+    if (isViewer()) return { rights: VIEWER_RIGHTS, status: VIEWER_STATUS };
     if (!cfg) return { rights: FULL_RIGHTS, status: { state: 'off' } };
     let email = null;
     if (!emailLookupFailed) {
@@ -165,12 +183,14 @@ const AccessRights = (function () {
   function setConfig(nextConfig) {
     if (JSON.stringify(nextConfig) === JSON.stringify(config)) return Promise.resolve();
     config = nextConfig;
-    if (!config) {
+    // Sans réglage, ou pour un Lecteur (la table n'est pas lue pour lui, mais le réglage reste connu : la case de la Lecture épurée s'y lit) : l'état de
+    // départ, sans relecture périodique.
+    if (!config || isViewer()) {
       ++computeGeneration;
       stopTimer();
       const before = get();
-      rights = FULL_RIGHTS;
-      status = { state: 'off' };
+      rights = baseRights();
+      status = baseStatus();
       pending = false;
       if (!sameRights(before, get())) notify();
       renderSettingsPanel();
@@ -189,8 +209,10 @@ const AccessRights = (function () {
       setConfig(configFromOptions(options)).catch(e => console.error('[AccessRights] calcul des droits impossible', e));
     });
     wireSettingsPanel();
+    // Un Lecteur est connu dès l'adresse du cadre : ses droits sont posés avant tout, même sans réglage (setConfig ne fait rien quand il n'y en a pas).
+    if (isViewer()) { rights = VIEWER_RIGHTS; status = VIEWER_STATUS; }
     const initial = configFromOptions(GristAPI.getWidgetOptions());
-    if (initial) pending = true;
+    if (initial && !isViewer()) pending = true;
     return setConfig(initial).catch(e => {
       console.error('[AccessRights] calcul des droits impossible', e);
       pending = false;
@@ -256,6 +278,7 @@ const AccessRights = (function () {
       case 'found': return I18n.t('settings.access.status.found', { email: status.email, rights: rightsSummary(rights) });
       case 'notFound': return I18n.t('settings.access.status.notFound', { email: status.email });
       case 'noEmail': return I18n.t('settings.access.status.noEmail');
+      case 'viewer': return I18n.t('settings.access.status.viewer', { rights: rightsSummary(rights) });
       case 'error': return I18n.t(status.tableGone ? 'settings.access.status.tableGone' : 'settings.access.status.error');
       default: return '';
     }
@@ -277,7 +300,8 @@ const AccessRights = (function () {
     // Verrouillé pour qui est lui-même en lecture seule : sinon l'onglet suffirait à se déverrouiller. Sauf quand la table des droits n'existe plus
     // (`tableGone`) : tout le monde est alors en lecture seule par précaution, y compris qui l'a réglée, et rien d'autre ne permettrait d'en choisir
     // une autre. Les droits restent en lecture seule jusqu'à ce qu'une table soit rechoisie.
-    const locked = get().readOnly && !!config && !status.tableGone;
+    // Un Lecteur de Grist ne peut rien enregistrer : verrouillé pour lui aussi, réglage ou non.
+    const locked = get().readOnly && (!!config || status.state === 'viewer') && !status.tableGone;
     Object.keys(ids).forEach(k => { const s = el(ids[k]); if (s) s.disabled = locked; });
     // La case reste là, grisée, tant qu'aucune colonne « Lecture seule » n'est choisie (rien ne disparaît, on grise) ; verrouillée aussi pour qui est
     // lui-même en lecture seule.

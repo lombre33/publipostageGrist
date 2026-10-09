@@ -102,11 +102,13 @@ const SettingsColumns = (function () {
     return parts.length ? I18n.t('settingsColumns.status', { parts: parts.join(' ') }) : '';
   }
 
-  // Une personne que son propre droit met en lecture seule n'a pas à lire un message qui ne regarde que qui règle l'Accès. Pas celle que la table des
-  // droits illisible verrouille (état « error » : tout le monde l'est, y compris qui l'a réglée) ni celle dont les droits se calculent encore.
+  // Une personne que son propre droit met en lecture seule n'a pas à lire un message qui ne regarde que qui règle l'Accès, ni un compte Lecteur de Grist
+  // (état « viewer »). Pas celle que la table des droits illisible verrouille (état « error » : tout le monde l'est, y compris qui l'a réglée) ni celle
+  // dont les droits se calculent encore.
   async function restricted() {
     for (let i = 0; i < 30 && AccessRights.getStatus().state === 'pending'; i++) await sleep(100);
-    return AccessRights.getStatus().state === 'found' && AccessRights.get().readOnly;
+    const state = AccessRights.getStatus().state;
+    return (state === 'found' || state === 'viewer') && AccessRights.get().readOnly;
   }
 
   async function checkAfterOpen(hooks) {
