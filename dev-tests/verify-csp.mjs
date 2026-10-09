@@ -2,7 +2,7 @@
 // Politique de sécurité du contenu de index.html (contrôle de sécurité du 04/10, correction 6), dans un vrai Chromium SANS contournement de la politique : tous les autres scripts de
 // dev-tests/ tournent avec `bypassCSP` (leurs aides injectent du code en ligne et chargent pdf.js), celui-ci est le seul qui la subit. C'est la vraie page index.html, la seule ligne
 // remplacée est l'adresse de l'API Grist, servie par le faux Grist du dépôt (le vrai fichier est vérifié à part, en 3).
-//   1) le widget démarre, s'édite, se lit et exporte (PDF, lot en un seul PDF, Word, Excel, QR code, archive ZIP) sans que le navigateur refuse quoi que ce soit ;
+//   1) le widget démarre, s'édite, se lit et exporte (PDF, lot en un seul PDF, Word, Excel, QR code, graphique de la page, archive ZIP) sans que le navigateur refuse quoi que ce soit ;
 //   2) ce que du HTML piégé, posé tel quel dans la page (comme si le filtre avait laissé passer), n'arrive plus à faire : gestionnaire en ligne, script en ligne, script d'une autre
 //      adresse ou d'une bibliothèque non figée, balise de base, cadre, objet, formulaire, adresse javascript: ;
 //   3) le VRAI fichier d'API de Grist (docs.getgrist.com/grist-plugin-api.js) s'évalue sous la politique : c'est un bundle de développement dont chaque module passe par eval(), le faux
@@ -59,6 +59,7 @@ const UMD_ROUTES = OFFLINE ? [
   [/^https:\/\/cdn\.jsdelivr\.net\/npm\/docx@[\d.]+\/dist\/index\.iife\.js$/, 'umd/docx.iife.js'],
   [/^https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/exceljs\/[\d.]+\/exceljs\.min\.js$/, 'umd/exceljs.min.js'],
   [/^https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/qrcode-generator\/[\d.]+\/qrcode\.min\.js$/, 'umd/qrcode.min.js'],
+  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/plotly\.js-basic-dist-min@[\d.]+\/plotly-basic\.min\.js$/, 'umd/plotly-basic.min.js'],
 ].filter(([, rel]) => existsSync(join(CACHE, rel))) : [];
 if (!OFFLINE) console.log('[verify-csp] miroir hors-ligne absent (dev-tests/offline-deps.sh) - les CDN seront appelés en direct.');
 
@@ -166,9 +167,13 @@ const exportsRun = await page.evaluate(async () => {
   await step('docx', async () => { await DocxExport.ensureDocxLibLoaded(); const r = await DocxExport.getDocxBlobForRecord('<p>Texte du Word</p>', null, {}, '', null, null); return r.blob.size > 1000; });
   await step('xlsx', async () => { await XlsxExport.ensureExcelLibLoaded(); const wb = new ExcelJS.Workbook(); wb.addWorksheet('a').getCell('A1').value = 'x'; return (await wb.xlsx.writeBuffer()).byteLength > 1000; });
   await step('qr', async () => { await QrCode.ensureLibrary(); return /^data:image\/png/.test(await QrCode.dataUri('https://exemple.fr')); });
+  await step('chart', async () => {
+    const fig = ChartPlot.figure('bar', [{ label: 'Mois', values: ['Janvier', 'Février'], pureType: 'Text' }, { label: 'Montant', values: [3, 5], pureType: 'Numeric' }], {});
+    return /^data:image\/png/.test(await ChartPlot.toImage(fig, 480, 300));
+  });
   return out;
 });
-for (const [name, label] of [['moteurs', 'les six moteurs du widget (PDF, fusion, feuilles, Word, Excel, format des nombres : js/export-engines.js, au premier export)'], ['pdf', 'PDF (pdfmake, polices du dépôt)'], ['zip', 'archive ZIP (JSZip)'], ['pdfMerge', 'PDF unique (pdf-lib)'], ['docx', 'Word (docx)'], ['xlsx', 'Excel (ExcelJS)'], ['qr', 'QR code (qrcode-generator)']]) {
+for (const [name, label] of [['moteurs', 'les six moteurs du widget (PDF, fusion, feuilles, Word, Excel, format des nombres : js/export-engines.js, au premier export)'], ['pdf', 'PDF (pdfmake, polices du dépôt)'], ['zip', 'archive ZIP (JSZip)'], ['pdfMerge', 'PDF unique (pdf-lib)'], ['docx', 'Word (docx)'], ['xlsx', 'Excel (ExcelJS)'], ['qr', 'QR code (qrcode-generator)'], ['chart', 'graphique de la page (Plotly)']]) {
   check('export : ' + label + ' se charge et produit son fichier sous la politique', exportsRun[name] === true, exportsRun[name]);
 }
 check('rien n\'a été refusé pendant tout ce parcours (aucune violation, aucun message du navigateur)', (await violations()).length === 0 && consoleRefusals.length === 0, { violations: await violations(), consoleRefusals });

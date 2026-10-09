@@ -189,11 +189,12 @@ const MainToolbar = (function () {
     set('v2-btn-two-columns', 'twoColumns'); set('v2-btn-image', 'image');
     set('v2-btn-page-break', 'pageBreak'); set('v2-btn-toc', 'toc');
     set('v2-btn-comment', 'comment');
-    // Menu « Lien et blocs de contenu » (js/link-dialog.js, js/callout.js, js/qr-code.js) : le bouton porte l'icône du lien, chaque ligne la sienne.
+    // Menu « Lien et blocs de contenu » (js/link-dialog.js, js/callout.js, js/qr-code.js, js/chart-block.js) : le bouton porte l'icône du lien, chaque ligne la
+    // sienne.
     set('v2-btn-link', 'link');
     const setRowIcon = (id, icon) => { const slot = document.querySelector('#' + id + ' .v2-menu-row-icon'); if (slot) slot.innerHTML = Icons.svg(icon); };
     setRowIcon('v2-row-link', 'link'); setRowIcon('v2-btn-citation', 'blockquote'); setRowIcon('v2-btn-code-block', 'codeBlock');
-    setRowIcon('v2-btn-callout', 'callout'); setRowIcon('v2-btn-signature', 'signature'); setRowIcon('v2-btn-qr', 'qr');
+    setRowIcon('v2-btn-callout', 'callout'); setRowIcon('v2-btn-signature', 'signature'); setRowIcon('v2-btn-qr', 'qr'); setRowIcon('v2-btn-chart', 'chart');
     set('v2-btn-insert-variable', 'variable');
     set('v2-btn-undo', 'undo'); set('v2-btn-redo', 'redo');
     set('v2-btn-find', 'search');
@@ -272,6 +273,10 @@ const MainToolbar = (function () {
     const qrSelected = QrCode.isSelected(editor);
     setActive('v2-btn-qr', qrSelected);
     relabelQr(qrSelected);
+    // Un graphique de la page sélectionné : la ligne « Graphique de la page… » devient « Modifier le graphique… » (la même fenêtre change de graphique ou de lignes).
+    const chartSelected = ChartBlock.isSelected(editor);
+    setActive('v2-btn-chart', chartSelected);
+    relabelChart(chartSelected);
     // Suivi des modifications : le bouton bascule reste actionnable ; accepter et refuser tout se grisent sans modification en attente, recalculés à
     // chaque transaction (accepter ou refuser une suggestion, bascule du mode).
     setActive('v2-btn-track-changes', Editor.isTrackChangesOn());
@@ -304,11 +309,11 @@ const MainToolbar = (function () {
       // de bloc de code qui effacerait une variable ou une image.
       [!LinkDialog.canLinkHere(editor), ['v2-btn-link', 'v2-row-link']],
       [!editor.isActive('codeBlock') && codeBlockWouldDropContent(), ['v2-btn-code-block']],
-      // Encadré et signature (une zone 2 colonnes) : sans objet dans un e-mail (texte brut) ni dans un en-tête ou un pied de page. QR code : une
-      // image, donc pas dans un e-mail, ni dans un en-tête ou un pied de page tant que la Lecture n'y résout pas les colonnes
+      // Encadré et signature (une zone 2 colonnes) : sans objet dans un e-mail (texte brut) ni dans un en-tête ou un pied de page. QR code et graphique de
+      // la page : des images, donc pas dans un e-mail, ni dans un en-tête ou un pied de page tant que la Lecture n'y résout pas les colonnes
       // (ReaderMode.resolveHeaderFooterZone). Dans une grille la ligne reste active : l'image se pose sur sa case, résolue par ReaderMode.preview
       // comme à la Lecture.
-      [inEmailMode || inHfMode, ['v2-btn-callout', 'v2-btn-signature', 'v2-btn-qr']],
+      [inEmailMode || inHfMode, ['v2-btn-callout', 'v2-btn-signature', 'v2-btn-qr', 'v2-btn-chart']],
     ];
     const lockedNow = new Set();
     groups.forEach(([locked, ids]) => ids.forEach(id => {
@@ -435,6 +440,17 @@ const MainToolbar = (function () {
       row.setAttribute('aria-label', I18n.t(key));
     }
   }
+  // Ligne « Graphique de la page… » : « Modifier le graphique… » quand un graphique est sélectionné, comme « QR code… » ci-dessus.
+  function relabelChart(selected) {
+    const label = byId('v2-btn-chart-label');
+    if (label) label.textContent = I18n.t(selected ? 'insert.chart.rowEdit' : 'insert.chart.row');
+    const row = byId('v2-btn-chart');
+    if (row) {
+      const key = selected ? 'insert.chart.ariaEdit' : 'insert.chart.aria';
+      row.setAttribute('data-i18n-aria', key);
+      row.setAttribute('aria-label', I18n.t(key));
+    }
+  }
   // La touche de la loupe (Ctrl+F, ⌘F, ou celle choisie dans Réglages > Raccourcis, js/shortcuts.js) est posée sur l'infobulle et l'aria-label,
   // réécrits à chaque changement de langue ou de touche ; sans touche, pas de parenthèses.
   function decorateFindShortcut() {
@@ -534,6 +550,8 @@ const MainToolbar = (function () {
     bind('v2-btn-signature', () => Callout.insertSignature(editor));
     // QR code : une fenêtre (adresse ou texte, colonnes comprises) pour l'insérer ou, quand il est sélectionné, le modifier.
     bind('v2-btn-qr', () => QrCode.open());
+    // Graphique de la page : une fenêtre (quel graphique de Grist, quelles lignes) pour l'insérer ou, quand il est sélectionné, le changer.
+    bind('v2-btn-chart', () => ChartBlock.open());
     decorateLinkShortcut();
     I18n.onChange(decorateLinkShortcut);
     Shortcuts.onChange(decorateLinkShortcut);
@@ -543,6 +561,7 @@ const MainToolbar = (function () {
     bind('v2-btn-find', () => FindReplace.toggle());
     I18n.onChange(() => relabelCallout(Callout.isInside(editor)));
     I18n.onChange(() => relabelQr(QrCode.isSelected(editor)));
+    I18n.onChange(() => relabelChart(ChartBlock.isSelected(editor)));
     // On insère seulement le caractère déclencheur : @tiptap/suggestion (Variables.createExtension) surveille le document, pas les frappes, donc le
     // caractère inséré par le code rouvre la même autocomplétion que s'il était tapé. Un texte sélectionné n'est pas remplacé par le « # » : la liste
     // s'ouvre devant lui, sur l'onglet Chips, pour l'entourer d'un bloc « Texte conditionnel » (js/conditional-text.js:startFromSelection).

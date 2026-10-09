@@ -117,6 +117,7 @@ const GROUPS = {
   linksBlocks: 'scenarios-links-blocks',
   calloutSignature: 'scenarios-callout-signature',
   qrCode: 'scenarios-qr-code', // QR code (js/qr-code.js) : ligne du menu de la chaîne, fenêtre, image et cadre de l'éditeur, Lecture, PDF, Word et Excel, relus par un décodeur (jsQR)
+  chart: 'scenarios-chart-block', // Graphique de la page (js/chart-plot.js, js/chart-source.js, js/chart-block.js) : lecture des réglages d'un graphique de Grist (type, colonnes, filtres, tri, lignes), figure Plotly de chaque type, ligne du menu, nœud et cadre de l'éditeur, fenêtre, Lecture, PDF, Word et Excel
   caption: 'scenarios-caption', // légende sous une image ou un tableau (js/caption.js) : attribut `data-caption`, boutons des barres flottantes, grisage, tableau / case / colonne, texte d'attente, suivi, style de l'éditeur et de la Lecture, PDF, Word, e-mail
   keepNext: 'scenarios-keep-next', // « Garder avec le suivant » (js/keep-with-next.js) : attribut `data-keep-next`, ligne à cocher du menu Alignement (pose, retrait, grisage et sa raison, deux langues, suivi), la suite de paragraphes gardés passe d'un seul tenant à la page suivante dans l'éditeur, la Lecture, le PDF et le Word
   grid: 'scenarios-grid', // mode grille (js/grid-editor.js) : un seul tableau sans feuille, bandeaux A, B, C / 1, 2, 3, barre grisée, garde-fou
@@ -188,10 +189,11 @@ const NODE_SCRIPTS = {
   fieldEditorMouse: 'verify-field-editor-mouse.mjs', // les champs à bulles (Objet, À, Cc, Cci, nom du PDF) à la vraie souris et au vrai clavier à 700x400 : « # » et sa liste, la barre et la fenêtre de condition (avec « Avant » / « Après »), « Autres attributs », « Créer l'email » (lien mailto: capté), Lecture, enregistrement et réouverture
   runnerGroupLoad: 'verify-runner-group-load.mjs', // le lanceur lui-même : un groupe dont le fichier existe mais ne se charge pas (SyntaxError) est un ECHEC avec l'erreur de la page, un fichier absent de la branche reste annoncé et sauté ; lance une copie du lanceur sur deux groupes d'essai, un navigateur
   linksBlocksMouse: 'verify-links-blocks-mouse.mjs', // lien, citation, bloc de code sous une icône (js/link-dialog.js) : survol du menu, fenêtre et Ctrl+K au vrai clavier, Ctrl+clic, info-bulle, 700x400 clair, sombre et anglais
-  calloutMouse: 'verify-callout-mouse.mjs', // encadré et bloc de signature (js/callout.js) : menu de cinq lignes, fenêtre sans défilement, vraie souris et vrai clavier, 700x400 clair, sombre et anglais
+  calloutMouse: 'verify-callout-mouse.mjs', // encadré et bloc de signature (js/callout.js) : menu de sept lignes, fenêtre sans défilement, vraie souris et vrai clavier, 700x400 clair, sombre et anglais
   watermarkMouse: 'verify-watermark-mouse.mjs', // filigrane (js/watermark-dialog.js, ligne « Filigrane… » du menu Page) : menu, fenêtre sans défilement, frappe, couleurs, curseur, aperçu, Valider / Annuler / Échap / Entrée / Retirer, éditeur et Lecture, vraie souris et vrai clavier, 700x400 clair, sombre et anglais
   sheetAssemblyMouse: 'verify-sheet-assembly-mouse.mjs', // assemblage avant impression (js/sheet-assembly-dialog.js, ligne du menu Exporter en PDF) : menu, fenêtre sans défilement dans tous ses états, vrais clics et flèches, choix grisé lisible, « Générer » / Annuler / Échap / Entrée, PDF téléchargé relu par pdf.js, 700x400 clair, sombre et anglais
   qrMouse: 'verify-qr-mouse.mjs', // QR code (js/qr-code.js) : ligne du menu de la chaîne, fenêtre sans défilement, liste des colonnes au-dessus de la fenêtre, cadre carré, menu devant la barre flottante, vraie souris et vrai clavier, 700x400 clair, sombre et anglais
+  chartMouse: 'verify-chart-mouse.mjs', // Graphique de la page (js/chart-block.js) : ligne du menu de la chaîne, fenêtre sans défilement, liste avec recherche au-dessus de la fenêtre (graphiques grisés avec leur raison, par page), aperçu du vrai graphique, lignes à tracer, cadre sans image, poignée, liaison à régler au-dessus de la fenêtre, Lecture ; vraie souris et vrai clavier, 700x400 clair, sombre et anglais
   gridImportMouse: 'verify-grid-import-mouse.mjs', // import d'un classeur Excel (ligne « Importer un Excel… » du menu « + ») : vrai clic, vrai sélecteur de fichier, grille visible et message d'état entier, « Modifications non enregistrées » après le choix du fichier, fichier illisible, 700x400 clair, sombre et anglais
   docPasteMouse: 'verify-doc-paste-mouse.mjs', // tableau copié dans Excel, Google Sheets ou LibreOffice Calc et collé dans un DOCUMENT : le VRAI presse-papiers de Chromium (HTML tel quel, texte tabulé, image PNG), un vrai Ctrl+V, Ctrl+Maj+V et Ctrl+Z à 700x400 clair et sombre - un tableau du document sans l'image, titre fusionné lisible, un seul Annuler, texte seul avec Ctrl+Maj+V, Sheets et LibreOffice, une image seule toujours collée comme image ; un tableur de 301 colonnes collé tel quel et sa fenêtre (Fermer, Échap, anglais)
   gridMouse: 'verify-grid-mouse.mjs', // mode grille (js/grid-editor.js) : « Nouvelle grille » à la souris, tirer un trait de colonne ou de ligne (aperçu, un seul Annuler), bandeaux, flèches et Ctrl+A, défilement collé, contrastes, 700x400 clair et sombre
@@ -363,7 +365,8 @@ const UMD_ROUTES = OFFLINE ? [
   [/^https:\/\/cdn\.jsdelivr\.net\/npm\/docx@.*$/, 'umd/docx.iife.js'],
   [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/exceljs\.min\.js$/, 'umd/exceljs.min.js'],
   [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/qrcode\.min\.js$/, 'umd/qrcode.min.js'],
-].filter(([, rel]) => (rel !== 'umd/exceljs.min.js' && rel !== 'umd/qrcode.min.js') || existsSync(join(CACHE, rel))) : [];
+  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/plotly\.js-basic-dist-min@.*$/, 'umd/plotly-basic.min.js'],
+].filter(([, rel]) => (rel !== 'umd/exceljs.min.js' && rel !== 'umd/qrcode.min.js' && rel !== 'umd/plotly-basic.min.js') || existsSync(join(CACHE, rel))) : [];
 if (!OFFLINE) console.log('[run-headless] miroir hors-ligne absent (dev-tests/offline-deps.sh) - les CDN seront appelés en direct.');
 
 const require = createRequire(import.meta.url);

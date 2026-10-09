@@ -156,7 +156,7 @@ const Icons = (function () {
     };
   }
   function findAndQrPaths() {
-    // Rechercher / Remplacer et le QR code.
+    // Rechercher / Remplacer, le QR code et le graphique de la page.
     return {
       // Rechercher / Remplacer (js/find-replace.js) : la loupe de la barre, puis les contrôles du panneau - chevrons précédent / suivant / afficher le
       // remplacement, « Aa » (respecter la casse), « ab » souligné d'un crochet (mot entier) et la croix de fermeture (distincte de rejectAll, qui est
@@ -171,6 +171,8 @@ const Icons = (function () {
       // QR code (js/qr-code.js) : ligne du même menu - trois repères d'angle et quelques modules, la même figure que le cadre d'un QR code dont le
       // texte contient une colonne (css/qr-code.css).
       qr: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20v.01M17 20h4v-3"/>',
+      // Graphique de la page (js/chart-block.js) : deux axes et trois barres, la même figure que le cadre d'un graphique dans l'éditeur (css/chart-block.css).
+      chart: '<path d="M3 3v18h18"/><path d="M8 17v-5M13 17V8M18 17v-3"/>',
     };
   }
   const PATHS = Object.assign({}, textAndBlockPaths(), tableAndImagePaths(), toolbarPaths(), findAndQrPaths());

@@ -61,7 +61,8 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
   hébergée sur un autre site n'apparaît qu'après un clic sur « Afficher »
 - En-têtes et pieds de page (première page différente, numéro de page), notes de bas de page, sommaire
   généré, sauts de page, filigrane
-- Citation, bloc de code, encadré (Note, Attention, Important), bloc de signature, QR code
+- Citation, bloc de code, encadré (Note, Attention, Important), bloc de signature, QR code, graphique de la
+  page (un graphique réglé dans Grist, redessiné dans le document)
 - Rechercher / remplacer, abréviations qui se développent à la frappe
 - Aperçu « format A4 » fidèle, WYSIWYG (ce que vous voyez est ce que vous obtenez)
 - Zoom de la page à l'écran, en Édition comme en Lecture (pastille du coin, Ajuster, Ctrl + molette) : le
@@ -179,8 +180,8 @@ question revient à l'action suivante de la personne. Un document qui porte déj
 pose aucune question.
 
 Le widget charge des bibliothèques tierces à l'exécution, depuis `esm.sh` (moteur d'édition
-TipTap/ProseMirror), `cdnjs.cloudflare.com` et `cdn.jsdelivr.net` (exports PDF, Word, Excel et QR
-code, chargés au premier usage) et `docs.getgrist.com` (API de Grist), à des versions figées, sauf le
+TipTap/ProseMirror), `cdnjs.cloudflare.com` et `cdn.jsdelivr.net` (exports PDF, Word, Excel, QR
+code et graphique de la page, chargés au premier usage) et `docs.getgrist.com` (API de Grist), à des versions figées, sauf le
 script de l'API de Grist, que Grist sert dans sa version courante. Les fichiers venant de `cdnjs` et
 de `jsDelivr` sont protégés par une intégrité SRI, qui empêche le navigateur d'exécuter un fichier
 altéré ; ce n'est techniquement pas possible pour l'import map `esm.sh`. Aucune police ni feuille de
@@ -225,6 +226,7 @@ chargées à l'exécution, à des versions toujours figées (sauf le script de l
 | ExcelJS 4.4.0 | Export Excel | `cdnjs.cloudflare.com` |
 | qrcode-generator 1.4.4 | QR code | `cdnjs.cloudflare.com` |
 | docx 9.7.1 | Export Word | `cdn.jsdelivr.net` |
+| Plotly.js 2.13.2 (`plotly.js-basic-dist-min`) | Graphique de la page | `cdn.jsdelivr.net` |
 
 L'interface prend la police du système. Les polices des documents sont dans le dépôt : Roboto pour
 l'éditeur, et pour le PDF Roboto, Arimo, Tinos, Cousine, Gelasio et Carlito, les équivalents libres de
@@ -237,9 +239,9 @@ bibliothèques et polices sont dans [NOTICE](NOTICE).
   `requiredAccess: 'full'` (voir [Sécurité et permissions](#sécurité-et-permissions)). Il n'existe pas
   de version avec les dépendances embarquées, pour éviter tout appel externe.
 - **Réseau** : `esm.sh` (éditeur) et `docs.getgrist.com` (API de Grist) sont nécessaires au démarrage ;
-  `cdnjs.cloudflare.com` et `cdn.jsdelivr.net` le sont au premier export. Un pare-feu qui bloque l'un
-  d'eux empêche le widget de démarrer ou l'export de se faire : il faut les autoriser. Au démarrage, le
-  widget le dit dans une fenêtre qui liste ces adresses.
+  `cdnjs.cloudflare.com` et `cdn.jsdelivr.net` le sont au premier export ou au premier graphique de la
+  page. Un pare-feu qui bloque l'un d'eux empêche le widget de démarrer ou l'export de se faire : il faut
+  les autoriser. Au démarrage, le widget le dit dans une fenêtre qui liste ces adresses.
 - **Audit externe** : un audit du code (outil gwaudit, 4 octobre 2026) conclut « NON CONFORME » et compte
   69 points bloquants. Tous tiennent à un seul choix : l'éditeur (TipTap et ProseMirror) se charge depuis
   `esm.sh`, un site tiers, sans intégrité SRI (ce qu'un import map ne permet pas ; voir
@@ -389,7 +391,8 @@ GitHub Pages, with no backend and no build step.
   appears after a click on "Show"
 - Headers and footers (different first page, page number), footnotes, generated table of contents,
   page breaks, watermark
-- Quote, code block, callout (Note, Warning, Important), signature block, QR code
+- Quote, code block, callout (Note, Warning, Important), signature block, QR code, chart from the page (a
+  chart set up in Grist, redrawn in the document)
 - Find / replace, abbreviations that expand as you type
 - Faithful "A4 format" preview, WYSIWYG (what you see is what you get)
 - On-screen page zoom, in Edit and Reading modes (corner pill, Fit, Ctrl + wheel): the PDF, the Word file
@@ -502,7 +505,7 @@ is closed; a refusal writes nothing, is never remembered, and the question comes
 next action. A document that already has one of the widget's tables is never asked.
 
 The widget loads third-party libraries at runtime, from `esm.sh` (the TipTap/ProseMirror editing
-engine), `cdnjs.cloudflare.com` and `cdn.jsdelivr.net` (PDF, Word, Excel and QR code, loaded on first
+engine), `cdnjs.cloudflare.com` and `cdn.jsdelivr.net` (PDF, Word, Excel, QR code and chart from the page, loaded on first
 use) and `docs.getgrist.com` (the Grist API), at pinned versions, except the Grist API script, which
 Grist serves in its current version. Files from `cdnjs` and `jsDelivr` are protected by SRI integrity
 hashes, which stop the browser from running a tampered file; this isn't technically possible for the
@@ -545,6 +548,7 @@ pinned versions (except the Grist API script):
 | ExcelJS 4.4.0 | Excel export | `cdnjs.cloudflare.com` |
 | qrcode-generator 1.4.4 | QR code | `cdnjs.cloudflare.com` |
 | docx 9.7.1 | Word export | `cdn.jsdelivr.net` |
+| Plotly.js 2.13.2 (`plotly.js-basic-dist-min`) | Chart from the page | `cdn.jsdelivr.net` |
 
 The interface uses the system font. The documents' fonts are in the repository: Roboto for the editor,
 and for the PDF Roboto, Arimo, Tinos, Cousine, Gelasio and Carlito, the free metric-compatible
@@ -557,9 +561,9 @@ libraries and fonts are in [NOTICE](NOTICE).
   `requiredAccess: 'full'` (see [Security and permissions](#security-and-permissions)). There is no
   version with bundled dependencies to avoid any external call.
 - **Network**: `esm.sh` (editor) and `docs.getgrist.com` (Grist API) are needed at startup;
-  `cdnjs.cloudflare.com` and `cdn.jsdelivr.net` are needed at the first export. A firewall that blocks
-  one of them prevents the widget from starting or the export from working: they must be allowed. At
-  startup, the widget says so in a window that lists these addresses.
+  `cdnjs.cloudflare.com` and `cdn.jsdelivr.net` are needed at the first export or the first chart from the
+  page. A firewall that blocks one of them prevents the widget from starting or the export from working:
+  they must be allowed. At startup, the widget says so in a window that lists these addresses.
 - **External audit**: an audit of the code (gwaudit tool, October 4, 2026) concludes "NON CONFORME"
   (non-compliant) and counts 69 blocking points. They all come down to one choice: the editor (TipTap and
   ProseMirror) is loaded from `esm.sh`, a third-party site, without an SRI integrity hash (which an import

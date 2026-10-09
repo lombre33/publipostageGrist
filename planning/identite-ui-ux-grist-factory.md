@@ -430,6 +430,19 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   s'écrit brut ; un texte trop long ou une bibliothèque qui ne charge pas laisse « [QR code : texte trop long] » ou « [QR code indisponible] » dans la langue de l'interface, jamais
   une image cassée. Le texte du cadre est en `--text`, comme celui d'un cadre d'image de variable (Antoine, 02/10 : « Foncer ce texte », le gris n'y faisait que 4,39:1 sur son fond en clair) ; l'icône garde le gris. Elle a son action dans Réglages > Raccourcis
   (« QR code… », sans touche d'origine), comme les autres lignes du menu.
+- Graphique de la page (demande d'Antoine du 09/10, « intégrer … les graphiques natifs » ; il a voulu un seul commit, pour tout annuler d'un coup si la fonction ne reste pas) : une ligne
+  « Graphique de la page… » dans le menu de l'icône chaîne « Lien et blocs de contenu », la dernière, sous « QR code… », jamais une nouvelle icône ; sur un graphique sélectionné elle devient
+  « Modifier le graphique… » (son nom accessible aussi). Elle est grisée, jamais masquée, en mode Email, dans un en-tête ou un pied de page et avec tout le menu en macro-modèle ; dans une grille
+  elle reste active. Le graphique se règle dans Grist, jamais dans le widget (une phrase le dit sous la liste). La fenêtre est de la base commune et tient dans 700×400 sans défiler : la liste avec
+  recherche des graphiques des pages du document (les pages en groupes ; sous chaque nom, le type et la table), deux choix de lignes avec chacun son explication (« Les lignes liées à la ligne du
+  document », indisponible quand le graphique est de la table du document, et « Toute la table »), et à droite l'aperçu sur une petite feuille blanche (le papier du document, aussi en sombre), avec la
+  légende « Pour la ligne en cours. ». Un graphique que le widget ne sait pas redessiner (widget personnalisé, Kaplan-Meier, « Split series », « Error bars », filtre sur des dates relatives) reste
+  dans la liste, **grisé avec sa raison sous son nom** (`aria-disabled`, jamais retiré) et ne se choisit ni au clic ni à Entrée ; la recherche met d'abord en avant le premier résultat qui se
+  choisit. « Insérer » est grisé tant qu'aucun graphique n'est choisi ; pour des lignes liées sans liaison réglée, la fenêtre de liaison s'ouvre à la validation et un refus laisse la fenêtre ouverte.
+  Dans l'éditeur, le graphique est un cadre pointillé comme celui d'une image de variable, de 480 × 300 px au départ, avec l'icône d'un graphique et son nom en `--text` (4,5:1 au moins) ; ses
+  poignées changent la largeur ET la hauteur. Le vrai graphique est dessiné à la Lecture et à l'export, le même PNG dans le PDF, le Word et l'Excel. Sans ligne à tracer il disparaît ; supprimé dans
+  Grist ou avec une bibliothèque qui ne charge pas, il laisse « [Graphique indisponible] » dans la langue de l'interface, jamais une image cassée. Elle a son action dans Réglages > Raccourcis
+  (« Graphique de la page… », sans touche d'origine), comme les autres lignes du menu.
 - Modes et droits : Édition, Lecture et Email partagent la même barre. En Lecture la barre de mise en forme est grisée
   (`applyFormattingBarLock`) ; les droits par personne (Réglages > Accès : lecture seule, export, commentaires) grisent
   aussi (`pp-access-locked`), sans jamais masquer. Commenter reste actif en Lecture et agit sur le texte sélectionné dans la

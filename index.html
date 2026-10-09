@@ -16,7 +16,7 @@
     https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.min.js
     https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js
     https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js
-    https://cdn.jsdelivr.net/npm/docx@9.7.1/dist/index.iife.js
+    https://cdn.jsdelivr.net/npm/docx@9.7.1/dist/index.iife.js https://cdn.jsdelivr.net/npm/plotly.js-basic-dist-min@2.13.2/plotly-basic.min.js
     'sha256-oL7hcWNReCnK8lxGRlbj0IXTGZm4dxBoOerWyA01uig=' 'sha256-QiCHlcX781nb04G2fDoZHC2TVBI4ztYMrMBu6LN+Vsk=' 'sha256-dr2nJ9qlSEpVpFpN01rgQ3bZHAcSZWrebqvX0xSlX7I=';
   object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'">
 <!-- Enregistrement automatique coupé (pp_autosave_enabled = 'false', cf. js/main.js:isAutosaveEnabled) : le bouton Enregistrer est noir et blanc dès le PREMIER affichage, pas bleu le temps que
@@ -120,7 +120,8 @@
 <link rel="stylesheet" href="css/callout.css?v=0.2">
 <link rel="stylesheet" href="css/caption.css?v=0.3">
 <link rel="stylesheet" href="css/qr-code.css?v=0.3">
-<link rel="stylesheet" href="css/search-select.css?v=0.9">
+<link rel="stylesheet" href="css/chart-block.css?v=0.1">
+<link rel="stylesheet" href="css/search-select.css?v=0.10">
 <link rel="stylesheet" href="css/access-rights.css?v=0.8">
 <link rel="stylesheet" href="css/row-template.css?v=0.3">
 <link rel="stylesheet" href="css/save-reminder.css?v=0.1">
@@ -383,6 +384,7 @@
           <button type="button" class="v2-menu-row" id="v2-btn-callout" aria-label="Insérer un encadré" data-i18n-aria="insert.callout.aria"><span class="v2-menu-row-icon"></span><span id="v2-btn-callout-label" data-i18n="insert.callout.row">Encadré…</span></button>
           <button type="button" class="v2-menu-row" id="v2-btn-signature" aria-label="Insérer un bloc de signature" data-i18n-aria="insert.signature.aria"><span class="v2-menu-row-icon"></span><span data-i18n="insert.signature.tip">Bloc de signature</span></button>
           <button type="button" class="v2-menu-row" id="v2-btn-qr" aria-label="Insérer un QR code" data-i18n-aria="insert.qr.aria"><span class="v2-menu-row-icon"></span><span id="v2-btn-qr-label" data-i18n="insert.qr.row">QR code…</span></button>
+          <button type="button" class="v2-menu-row" id="v2-btn-chart" aria-label="Insérer un graphique de la page" data-i18n-aria="insert.chart.aria"><span class="v2-menu-row-icon"></span><span id="v2-btn-chart-label" data-i18n="insert.chart.row">Graphique de la page…</span></button>
         </span>
       </span>
       <button type="button" id="v2-btn-insert-variable" class="v2-btn-variable" data-tip="Insérer une variable" aria-label="Insérer une variable (#Variable ou puce)" data-i18n-tip="insert.variable.tip" data-i18n-aria="insert.variable.aria"></button>
@@ -665,10 +667,10 @@
     window.__earlyStart = { grist: gristInit, templates: templatesLoaded };
   } catch (e) { console.error('[boot] démarrage anticipé impossible', e); }
 </script>
-<script src="js/reader-mode.js?v=0.136"></script>
+<script src="js/reader-mode.js?v=0.137"></script>
 <script src="js/reader-guide.js?v=0.6"></script>
-<script src="js/i18n.js?v=0.141"></script>
-<script src="js/shortcuts.js?v=0.11"></script>
+<script src="js/i18n.js?v=0.142"></script>
+<script src="js/shortcuts.js?v=0.12"></script>
 <script src="js/page-layout.js?v=0.14"></script>
 <script src="js/color-math.js?v=0.1"></script>
 <script src="js/color-store.js?v=0.1"></script>
@@ -679,15 +681,15 @@
 <script src="js/formula.js?v=0.3"></script>
 <script src="js/layers.js?v=0.4"></script>
 <script src="js/viewport-fit.js?v=0.6"></script>
-<script src="js/search-select.js?v=0.16"></script>
+<script src="js/search-select.js?v=0.17"></script>
 <script src="js/variables.js?v=0.68"></script>
-<script src="js/icons.js?v=0.42"></script>
+<script src="js/icons.js?v=0.43"></script>
 <script src="js/editor-core.js?v=0.22"></script>
 <script src="js/color-palette.js?v=0.1"></script>
 <script src="js/header-footer-preview.js?v=1.27"></script>
-<script src="js/editor-nodes.js?v=1.30"></script>
+<script src="js/editor-nodes.js?v=1.31"></script>
 <script src="js/floating-toolbars.js?v=0.51"></script>
-<script src="js/main-toolbar.js?v=1.15"></script>
+<script src="js/main-toolbar.js?v=1.16"></script>
 <script src="js/format-painter.js?v=0.3"></script>
 <script src="js/comments.js?v=0.16"></script>
 <script src="js/track-changes-core.js?v=0.1"></script>
@@ -733,6 +735,9 @@
 <script src="js/caption.js?v=0.4"></script>
 <script src="js/keep-with-next.js?v=0.2"></script>
 <script src="js/qr-code.js?v=0.7"></script>
+<script src="js/chart-plot.js?v=0.1"></script>
+<script src="js/chart-source.js?v=0.1"></script>
+<script src="js/chart-block.js?v=0.1"></script>
 <script src="js/text-expansion.js?v=0.8"></script>
 <script src="js/text-expansion-settings.js?v=0.2"></script>
 <script src="js/shortcuts-panel.js?v=0.2"></script>

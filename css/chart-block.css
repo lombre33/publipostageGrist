@@ -1,0 +1,41 @@
+/* Fenêtre « Insérer / Modifier le graphique » (js/chart-block.js) et cadre d'un graphique de la page dans l'éditeur. Le cadre, le libellé et la liste de la fenêtre
+   viennent de css/modal-base.css (.pp-dialog-label), de css/search-select.css (la liste avec recherche, ses lignes grisées) et de css/variable-actions.css (les
+   boutons). Chargé après css/editor-v2.css : le cadre reprend celui d'une image de variable (.editor-image-var-placeholder) et n'en change que l'icône et le
+   libellé. */
+
+/* La fenêtre : la liste, les lignes et leur aide à gauche, l'aperçu à droite ; tout tient dans les 376 px de haut du panneau de 700x400, sans défiler. */
+.pp-chart-grid { display: grid; grid-template-columns: minmax(0, 1fr) 232px; column-gap: 16px; align-items: start; padding-bottom: 2px; }
+.pp-chart-form, .pp-chart-side { min-width: 0; }
+.pp-chart-select { width: 100%; }
+.pp-chart-note { margin: 6px 0 0; font-size: 12px; line-height: 1.45; color: var(--text-muted); overflow-wrap: anywhere; }
+.pp-chart-note[hidden] { display: none; }
+.pp-chart-error { padding-left: 8px; border-left: 3px solid var(--danger); font-weight: 600; color: var(--text); }
+.pp-chart-box .pp-chart-select[aria-invalid="true"] + .ss-wrap .ss-trigger { border-color: var(--danger); }
+/* Les lignes du graphique : deux vraies cases d'option (flèches, Tab et grisage du navigateur), chacune avec son explication sous son nom. */
+.pp-chart-rows { min-width: 0; margin: 10px 0 0; padding: 0; border: 0; }
+.pp-chart-rows legend { padding: 0; }
+.pp-chart-option { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 6px; padding: 3px 0; cursor: pointer; }
+.pp-chart-option input { grid-row: 1 / span 2; margin: 2px 0 0; accent-color: var(--accent-solid); cursor: inherit; }
+.pp-chart-option input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pp-chart-option-name { font-size: 12.5px; font-weight: 600; line-height: 1.35; color: var(--text); overflow-wrap: anywhere; }
+.pp-chart-option-detail { font-size: 11.5px; line-height: 1.35; color: var(--text-muted); overflow-wrap: anywhere; }
+.pp-chart-option.is-off { cursor: not-allowed; }
+.pp-chart-option.is-off .pp-chart-option-name { color: var(--text-muted); }
+/* L'aperçu est une petite feuille blanche, comme le papier du document : le graphique y garde son fond blanc dans le thème sombre, et le texte y prend la
+   couleur du papier. Les proportions sont celles d'un graphique posé (480 x 300). */
+.pp-chart-paper { display: flex; align-items: center; justify-content: center; box-sizing: border-box; width: 232px; height: 145px; padding: 4px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: #fff; }
+.pp-chart-image { display: block; width: 100%; height: 100%; object-fit: contain; }
+.pp-chart-image[hidden], .pp-chart-message[hidden] { display: none; }
+.pp-chart-message { margin: 0; font-size: 11.5px; line-height: 1.4; text-align: center; color: #4b5563; overflow-wrap: anywhere; }
+.pp-chart-caption { margin-top: 4px; text-align: center; }
+
+/* Dans l'éditeur : un graphique n'a pas d'image avant la Lecture, seulement le cadre d'une image de variable, de la largeur et de la hauteur réglées, avec l'icône
+   d'un graphique et son nom. */
+/* Le nom du cadre est en --text, comme celui d'une image de variable (css/editor-v2.css : le gris n'y faisait que 4,39:1 sur le fond du cadre en clair) ;
+   l'icône, un tracé et non du texte, garde le gris (≥ 3:1). */
+.editor-image-chart-placeholder .editor-image-var-label { font-size: 11px; overflow-wrap: anywhere; line-height: 1.25; color: var(--text); }
+.editor-image-chart-placeholder .editor-image-var-label::before {
+  width: 28px; height: 28px; color: var(--text-muted);
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M3 3v18h18'/%3E%3Cpath d='M8 17v-5M13 17V8M18 17v-3'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M3 3v18h18'/%3E%3Cpath d='M8 17v-5M13 17V8M18 17v-3'/%3E%3C/svg%3E");
+}

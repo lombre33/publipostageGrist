@@ -150,6 +150,20 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   valeur appliquée. Avec 0, la planche est celle d'avant ; le dernier choix est gardé par navigateur avec la
   feuille et les traits de coupe. La fenêtre est un peu plus large pour tout garder lisible dans un panneau
   de 700 × 400.
+- **Graphique de la page dans le document** : « Graphique de la page… », au menu « Lien et blocs de contenu »,
+  pose dans le document un graphique déjà réglé dans Grist. La fenêtre liste, avec une recherche, les
+  graphiques des pages du document ; le graphique se règle dans Grist (type, colonnes, tri, filtres
+  enregistrés, empilement, axe logarithmique…) et le document le suit, sans second réglage. Il se redessine
+  avec Plotly 2.13.2, la version de Grist, en barres, courbe, aire, nuage de points, secteurs et anneau, et
+  entre dans la Lecture, le PDF, le Word et l'Excel comme une image. Deux choix de lignes : « Toute la
+  table » (le même graphique partout, comme dans Grist) ou « Les lignes liées à la ligne du document » (un
+  graphique propre à chaque élève, chaque facture… ; la liaison entre les deux tables se règle à la
+  validation). Dans l'éditeur, le cadre garde le nom du graphique ; ses poignées changent sa largeur et sa
+  hauteur et un clic le sélectionne : la ligne du menu devient « Modifier le graphique… ». Plotly se charge
+  au premier graphique seulement (jsDelivr, version et empreinte figées). Ce que le widget ne redessine pas
+  encore reste dans la liste, grisé, avec sa raison : widgets personnalisés, Kaplan-Meier, « Split series »,
+  « Error bars », filtres sur des dates relatives. Le total d'un anneau s'écrit sans le format de la
+  colonne.
 
 ### Modifié
 
@@ -459,6 +473,18 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   always shows the value that is applied. With 0, the sheet is the one you had before; the last choice is
   kept per browser along with the sheet and the crop marks. The window is a little wider so that
   everything stays readable in a 700 × 400 panel.
+- **Chart from the page in the document**: "Chart from the page…", in the "Link and content blocks" menu,
+  puts a chart already set up in Grist into the document. The window lists, with a search, the charts on the
+  document's pages; the chart is set up in Grist (type, columns, sort, saved filters, stacking, log axis…)
+  and the document follows it, with no second setup. It is redrawn with Plotly 2.13.2, the version Grist
+  uses, as bars, line, area, scatter, pie and donut, and goes into Reading, the PDF, the Word and the Excel
+  as an image. Two choices of rows: "The whole table" (the same chart everywhere, as in Grist) or "The rows
+  linked to the document's row" (a chart of its own for each student, each invoice…; the link between the two
+  tables is set when you confirm). In the editor, the frame keeps the chart's name; its handles change its width
+  and height and a click selects it: the menu row becomes "Edit chart…". Plotly loads for the
+  first chart only (jsDelivr, version and hash pinned). What the widget does not redraw yet stays in the list,
+  greyed, with its reason: custom widgets, Kaplan-Meier, "Split series", "Error bars", filters on relative
+  dates. A donut's total is written without the column's format.
 
 ### Changed
 

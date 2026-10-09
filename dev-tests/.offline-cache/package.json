@@ -45,6 +45,7 @@
     "exceljs": "4.4.0",
     "esbuild": "0.25.10",
     "qrcode-generator": "1.4.4",
-    "jsqr": "1.4.0"
+    "jsqr": "1.4.0",
+    "plotly.js-basic-dist-min": "2.13.2"
   }
 }

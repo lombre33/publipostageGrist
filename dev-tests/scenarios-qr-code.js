@@ -254,7 +254,7 @@
       const byClick = modalOpen();
       await closeWindowIfOpen();
       return {
-        pass: JSON.stringify(chain) === JSON.stringify(['v2-row-link', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-qr'])
+        pass: JSON.stringify(chain) === JSON.stringify(['v2-row-link', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-qr', 'v2-btn-chart'])
           && JSON.stringify(imageRows) === JSON.stringify(['v2-btn-image-from-variable'])
           && info.tag === 'BUTTON' && info.type === 'button' && info.label === 'QR code…' && info.aria === 'Insérer un QR code' && info.role === null && info.tabIndex === 0
           && info.flyoutLabel === 'Lien et blocs de contenu' && info.icons === 1 && info.hasIcon && !info.inImageMenu && !info.inToolbar && byClick,
