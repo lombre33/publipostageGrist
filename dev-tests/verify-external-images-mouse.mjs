@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Fenêtre qui précède un export dont le modèle contient une image d'un site externe (js/external-images.js, choix d'Antoine du 2026-10-01 « Fenêtre avant
 // l'export ») à 700x400 (le panneau d'Antoine), à la VRAIE souris (page.mouse) et au VRAI clavier (Tab, Échap), en clair, en sombre et en anglais, par le vrai
-// clic sur le vrai bouton : « Exporter en PDF », « Exporter en DOCX », « Exporter toutes les lignes (ZIP) ».
+// clic sur le vrai bouton : « Exporter en PDF », « Exporter en DOCX », « Exporter les lignes (ZIP) ».
 // Un vrai réseau de test : les adresses en « .test » sont servies par la page de Playwright (page.route) et chaque requête est notée avec son type. L'image que
 // l'éditeur AFFICHE est une requête 'image' (inchangée) ; le téléchargement de l'EXPORT est une requête 'fetch' : c'est elle qui ne doit jamais partir avant
 // « Continuer », ni après « Annuler ». Les téléchargements de fichiers sont les vrais (événement `download` de Playwright).
@@ -373,7 +373,7 @@ async function runBatch(T) {
   await clearStatus();
   await startExport({ id: '#v2-btn-export-pdf-batch', menu: '#btn-export-pdf' });
   const first = await windowState();
-  check(`${NAME} : la première fenêtre est celle du lot (« Exporter toutes les lignes »), pas celle des images`, first.open && first.title === 'Exporter toutes les lignes', first);
+  check(`${NAME} : la première fenêtre est celle du lot (« Exporter les lignes »), pas celle des images`, first.open && first.title === 'Exporter les lignes', first);
   await click(OK);
   await waitImagesWindow();
   const s = await windowState();

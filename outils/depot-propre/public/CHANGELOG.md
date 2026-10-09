@@ -9,6 +9,17 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Exports en lot sur les lignes que le widget affiche** : « Exporter les lignes (ZIP) », « Exporter les
+  lignes en un seul PDF », « Exporter les lignes en DOCX (ZIP) », les deux lignes Excel d'une grille et
+  « Assemblage avant impression » partent des lignes que le widget affiche dans Grist (ses filtres, son tri,
+  le lien « Sélectionner par » d'un autre widget), dans l'ordre du widget. Quand il n'en affiche qu'une
+  partie, une fenêtre dit combien (12 sur 340, par exemple) et demande « Quelles lignes exporter ? » :
+  « Celles affichées » (le choix mis en avant) ou « Toute la table ». Un widget qui
+  affiche toute la table ne pose pas la question, et son tri se retrouve dans le fichier ; s'il n'affiche
+  aucune ligne, la fenêtre le dit et ne propose que « Toute la table ». Les valeurs d'une ligne viennent
+  toujours de la table : un lot garde sa forme et ses noms de fichier. Dans une grille, « lignes » devient
+  « valeurs ». Si Grist ne donne pas les lignes affichées, le lot reste ce qu'il était : toute la table. Les
+  lignes de menu perdent le mot « toutes ».
 - **Variables dans les champs de l'e-mail et le nom du PDF** : Objet, À, Cc, Cci et le nom du PDF posent des
   bulles de variable comme le corps du modèle (`#` ouvre la liste des variables, Entrée pose la bulle), avec
   la même barre et les mêmes fenêtres : condition, « Autres attributs », boucle dans la phrase, liste,
@@ -154,6 +165,8 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Un lot d'une seule ligne parle au singulier** : « Générer un PDF pour la ligne de … », « 1 PDF généré »,
+  « 1 DOCX généré » et « 1 ligne réunie dans un seul PDF » au lieu de « 1 lignes » et « 1 PDF générés ».
 - **« Autres attributs » avec deux colonnes Référence vers une même table** (Demandeur et Valideur vers un
   annuaire, par exemple) : la fenêtre part de la colonne cliquée, montre la personne de cette colonne et
   pose `#Dossiers.Valideur.Email` ; elle ne lisait qu'une seule personne pour toute la ligne. Aucun lien
@@ -282,6 +295,16 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Added
 
+- **Batch exports on the rows the widget shows**: "Export rows (ZIP)", "Export rows as a single PDF",
+  "Export rows to DOCX (ZIP)", the two Excel lines of a grid and "Assemble before printing" start from
+  the rows the widget shows in Grist (its filters, its sort, the "Select by" link of another widget), in
+  the order of the widget. When it only shows part of the table, a window says how many (12 of 340, for
+  example) and asks "Which rows to export?": "Displayed rows" (the highlighted choice) or "Whole table".
+  A widget that shows the whole table asks nothing, and its sort carries over to the file;
+  if it shows no rows, the window says so and only offers "Whole table". The values of a row always come
+  from the table: a batch keeps its shape and its file names. In a grid, "rows" becomes "values". If Grist
+  does not give the displayed rows, the batch stays what it was: the whole table. The menu lines lose the
+  word "all".
 - **Variables in the e-mail fields and the PDF name**: Subject, To, Cc, Bcc and the PDF file name place
   variable bubbles like the template body (`#` opens the variable list, Enter places the bubble), with the
   same bar and windows: condition, "Other attributes", loop inside the sentence, list, format. Hidden zero
@@ -417,6 +440,8 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Fixed
 
+- **A batch of one row speaks in the singular**: "Generate a PDF for the row in …", "1 PDF generated",
+  "1 DOCX file generated" and "1 row combined into a single PDF" instead of "1 PDFs generated".
 - **"Other attributes" with two Reference columns to the same table** (Requester and Approver pointing to
   a directory, for example): the window starts from the clicked column, shows the person of that column
   and places `#Dossiers.Valideur.Email`; it used to read a single person for the whole row. No link is

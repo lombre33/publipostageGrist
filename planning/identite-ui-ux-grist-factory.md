@@ -868,8 +868,8 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   fond posé sur la case) ; une image ajoutée prend un contour de 2 px `#8fd3aa`. La couleur du texte ne change pas et rien n'est souligné (14:1 sur la teinte, un lien 5,3:1). Rien n'est accepté pour de bon :
   l'éditeur garde ses suggestions, et le corps de l'e-mail suit la Lecture, de même que ses en-têtes et ses pieds de page. Le PDF, le Word et l'Excel sortent aussi comme si tout était accepté, sans aucune
   teinte (choix d'Antoine du 04/10, « Acceptées, sans teinte ») : le texte supprimé n'y est plus, le texte ajouté s'y écrit comme le reste.
-- Export Excel d'une grille (demande d'Antoine du 01/10) : le menu « Qualité PDF » a trois lignes Excel, sous les deux lignes Word : « Exporter en Excel… », « Exporter toutes les
-  valeurs de la table en Excel (ZIP)… » et « Exporter toutes les valeurs de la table dans un seul classeur… ». Elles sont actives dans une grille et grisées ailleurs ; à l'inverse
+- Export Excel d'une grille (demande d'Antoine du 01/10) : le menu « Qualité PDF » a trois lignes Excel, sous les deux lignes Word : « Exporter en Excel… », « Exporter les
+  valeurs de la table en Excel (ZIP)… » et « Exporter les valeurs de la table dans un seul classeur… ». Elles sont actives dans une grille et grisées ailleurs ; à l'inverse
   les deux lignes Word sont grisées dans une grille — jamais retirées, `aria-disabled` posé, un clic dessus ne lance rien et n'ouvre aucune confirmation. « Exporter en Excel… »
   télécharge un classeur d'une feuille pour la ligne affichée, nommé comme le PDF avec l'extension .xlsx, et le coin d'état dit « Fichier Excel généré. ». La feuille reprend la
   grille : largeur des colonnes et hauteur des lignes, texte au milieu de sa case, cases fusionnées, gras, italique, souligné, barré, couleur et taille, fond de case, listes,
@@ -877,7 +877,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   ou une vraie date (au format de la bulle) que si elle ne contient que cette bulle, sinon c'est du texte ; un zéro masqué reste vide ; aucune couleur n'est inventée (une case
   sans format n'a ni couleur de texte ni fond, thème sombre compris).
 - Toutes les valeurs de la table, dans une grille (choix d'Antoine du 01/10) : « lignes » devient « valeurs de la table » partout où l'export en lot en parle — les deux lignes du
-  menu « Exporter en PDF » (« Exporter toutes les valeurs de la table (ZIP)… », « … en un seul PDF… »), leur confirmation et le message d'une table vide ; dans un document, ces
+  menu « Exporter en PDF » (« Exporter les valeurs de la table (ZIP)… », « … en un seul PDF… »), leur confirmation et le message d'une table vide ; dans un document, ces
   textes gardent « lignes ». L'export Excel en lot a deux formes, une ligne chacune : une archive « <table>-export-xlsx.zip » d'un classeur par valeur (nommé comme les PDF par le
   modèle de nom de fichier), ou un seul classeur « <table>-export.xlsx » d'une feuille par valeur, nommée comme son fichier (31 caractères au plus, « nom (2) » quand deux
   feuilles s'appellent pareil). Chacune demande confirmation, annonce sa progression (« Export Excel en lot : 2/10... ») et dit sa fin en mots d'Excel, jamais de PDF.
@@ -982,9 +982,9 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   couche de page, le PDF en vrai texte vectoriel au fond de chaque page, le Word en image dans l'en-tête, derrière le texte (une image, pas du texte modifiable : c'est ce que Word et Google Docs ouvrent sans surprise). Une image
   « Sur toutes les pages » et un filigrane partagent la même couche.
 - Assemblage avant impression (demande d'Antoine du 02/10, point 13 : « 4 A6 sur une A4, chacun prend une ligne dans l'ordre, une planche prête à imprimer », avec ou sans trait de coupe, sur A3 et A4) : « Assemblage avant
-  impression… » est la troisième ligne du volet « Exporter en PDF », sous « Exporter toutes les lignes (ZIP)… » et « … en un seul PDF… » : la barre ne gagne aucune icône. La ligne suit le reste du volet (grisée pendant un export
+  impression… » est la troisième ligne du volet « Exporter en PDF », sous « Exporter les lignes (ZIP)… » et « … en un seul PDF… » : la barre ne gagne aucune icône. La ligne suit le reste du volet (grisée pendant un export
   et sans le droit d'exporter, jamais retirée) et ouvre une fenêtre qui tient lieu de confirmation du lot : la feuille (A4, A3), son orientation, les traits de coupe (Sans, Avec), la marge laissée autour de chaque page (un champ en millimètres) et les emplacements (en largeur × en hauteur).
-  « Générer » écrit `<table>-assemblage.pdf` : chaque ligne de la table prend sa place, de gauche à droite puis de haut en bas, une ligne de plusieurs pages en prend autant ; la dernière feuille, à moitié pleine, garde ses
+  « Générer » écrit `<table>-assemblage.pdf` : chaque ligne du lot (celles que le widget affiche, ou toute la table : voir « Lignes d'un export en lot ») prend sa place, de gauche à droite puis de haut en bas, une ligne de plusieurs pages en prend autant ; la dernière feuille, à moitié pleine, garde ses
   repères de grille entière. La fenêtre tient dans 700×400 sans défiler, en français comme en anglais : libellé à gauche, réglage à droite, et une feuille d'aperçu dessinée par le même code que le PDF (ce qu'elle montre est ce
   que le fichier porte). Chaque indication commence SOUS le champ qu'elle concerne, pas sous son libellé (l'échelle sous la marge, le dernier des deux réglages qui la demandent, la règle de l'ordre sous les emplacements) et le résumé (« 4 emplacements par
   feuille (2 × 2) : 6 lignes, au moins 2 feuilles A4. ») ferme la fenêtre ; il dit « au moins » parce que la fenêtre ne sait pas, avant de générer, combien de pages donne chaque ligne (un modèle de deux pages
@@ -997,6 +997,14 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   descendent jamais sous la moitié de leur taille) et montre toujours la valeur appliquée ; il se grise, sans disparaître, quand aucune page ne tient. La fenêtre est large de 620 px
   pour que la note la plus longue tienne sur une ligne dans 700×400. La feuille, son
   orientation, les traits et la marge sont gardés par navigateur pour la prochaine fois, pas le nombre d'emplacements (la page du modèle a pu changer) ; Entrée valide, Échap annule.
+- Lignes d'un export en lot (demande d'Antoine du 09/10, « exporter seulement les lignes de ta vue Grist » : « Go ») : un lot (ZIP de PDF, PDF unique, DOCX en ZIP, les deux lignes Excel d'une grille, « Assemblage avant impression »)
+  part des lignes que le widget affiche dans Grist (ses filtres, son tri, le lien « Sélectionner par » ; `js/batch-scope.js`), dans l'ordre du widget ; les valeurs d'une ligne viennent toujours de la table. Les lignes de menu ne disent
+  donc pas « toutes » (« Exporter les lignes (ZIP)… », « Exporter les valeurs de la table (ZIP)… » dans une grille). Quand le widget n'affiche qu'une partie de la table, une fenêtre de choix (`Dialogs.choose`) demande « Quelles lignes
+  exporter ? » (« Quelles valeurs exporter ? » dans une grille) : le texte donne les nombres et la cause (« Ce widget n'affiche que 12 des 340 lignes de « Clients » (filtre ou lien « Sélectionner par »). ») et les deux boutons répondent à
+  la question sans nombre, pour tenir sur une ligne avec « Annuler » dans la fenêtre de 400 px, même au pluriel et avec une police plus large : « Toute la table » et « Celles affichées » (« Celle affichée » pour une seule ligne), ce dernier
+  mis en avant (Entrée). Un widget qui affiche toute la table ne pose pas la question (son tri se retrouve dans le fichier) ; s'il n'affiche aucune ligne, la fenêtre le dit et ne propose que « Toute la table », sans bouton en avant (Entrée
+  annule) ; si Grist ne donne pas les lignes affichées, le lot prend toute la table, sans question. Annuler ou Échap n'exporte rien. Un lot d'une seule ligne parle au singulier (« Générer un PDF pour la ligne de … », « 1 PDF généré »). Tout
+  futur bouton d'une fenêtre à choix reste court : un nombre ou un mot de trop le fait passer sur une seconde ligne.
 - Image plus large que sa place (carte d'Antoine du 01/10, « Ramener à la page les images trop larges dans le PDF et le Word ? » : « logique de WYSIWYG, si ça dépend en éditeur ça dépasse partout sinon nulle
   part ») : l'éditeur est la référence, la Lecture, le PDF et le Word montrent ce qu'il montre. Une image dans le texte plus large que la zone de texte, la case de tableau ou la colonne qui la porte y est
   ramenée partout, proportions gardées, et suit le format de page et les marges ; une image qui tient garde sa taille réglée. Une image en calque garde sa taille réglée (son placement est une autre règle).

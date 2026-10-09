@@ -52,6 +52,11 @@ try {
     // includeColumns:'shown' (vérifié à la source grist-core, GristAPI.ts/WidgetFrame.ts - cf. mémoire
     // d'équipe project-publipostage-macro-condition-columntype-fix) doit le déclarer explicitement.
     hiddenColumnsByTable: {},
+    // Les lignes que la VUE de ce widget affiche (GristView.fetchSelectedTable : la section une fois filtrée et triée, cf. setViewRows) : null = toute la table, dans
+    // l'ordre de ses lignes, pour ne rien changer aux tests qui ne s'en soucient pas. viewFailure : le message d'une panne simulée de l'appel (null : aucune).
+    viewRowIds: null,
+    viewFailure: null,
+    viewCalls: [],
     nextRowId: { Publipostage_Modeles: 1, Publipostage_LiensTables: 1, Publipostage_UserProbe: 1 },
     // Niveau d'accès RÉELLEMENT accordé au widget (settings.accessLevel de onOptions côté grist-core,
     // JAMAIS ce que grist.getOptions() renvoie - WidgetAPI.getOptions() est les options JSON PROPRES au
@@ -568,6 +573,34 @@ try {
     return row;
   }
 
+  // Pose ce que la vue du widget affiche : les identifiants des lignes, dans l'ordre de la vue (un filtre en retire, un tri les réordonne, un lien « Sélectionner par » les
+  // restreint). null : la vue montre toute la table. Un identifiant que la table ne porte pas est rendu tel quel, comme Grist le ferait d'une ligne supprimée entre-temps.
+  function setViewRows(ids) { state.viewRowIds = ids == null ? null : ids.slice(); }
+  // Fait échouer l'appel suivant et ceux d'après (le message de l'erreur) ; null le rétablit.
+  function setViewFailure(message) { state.viewFailure = message == null ? null : String(message); }
+
+  // GristView.fetchSelectedTable (WidgetFrame.ts : GristViewImpl.fetchSelectedTable, vérifié à la source de grist-static 0.1.6) : les lignes de BaseView.sortedRows - donc
+  // filtrées et triées comme la vue les montre - sous forme de colonnes, `id` compris, pour les colonnes que la section montre. Opère sur la table de CE widget
+  // (state.lastTableId), comme fetchSelectedRecord ; même refus d'accès que lui.
+  async function fetchSelectedTable(options) {
+    const includeColumns = (options && options.includeColumns) || 'shown';
+    state.viewCalls.push({ includeColumns, keepEncoded: !!(options && options.keepEncoded) });
+    if (state.viewFailure != null) throw new Error(state.viewFailure);
+    if (deniedByAccessLevel(includeColumns)) {
+      throw new Error('Setting includeColumns to ' + includeColumns + ' requires full access, but the current access level is ' + state.accessLevel);
+    }
+    const tableId = state.lastTableId;
+    const table = readTable(tableId);
+    const ids = state.viewRowIds ? state.viewRowIds.slice() : table.id.slice();
+    const hidden = includeColumns === 'shown' ? (state.hiddenColumnsByTable[tableId] || []) : [];
+    const data = { id: ids };
+    Object.keys(table).forEach(function (col) {
+      if (col === 'id' || hidden.indexOf(col) !== -1) return;
+      data[col] = ids.map(function (id) { const at = table.id.indexOf(id); return at === -1 ? null : table[col][at]; });
+    });
+    return data;
+  }
+
   // Latence simulée des appels réseau (grist.docApi.fetchTable / applyUserActions) : un vrai Grist met de quelques dizaines de millisecondes à plusieurs secondes
   // à répondre (la table des modèles se relit EN ENTIER, contenus compris, à chaque passage de l'enregistrement automatique), alors que ce stub répond dans la même
   // microtâche - un défaut qui ne naît que d'appels qui se chevauchent (deux passages de l'auto-save, un Enregistrer pendant un passage...) ne peut donc jamais s'y
@@ -631,6 +664,8 @@ try {
     },
     setOptions: async function (options) { state.options = JSON.parse(JSON.stringify(options || {})); notifyOptions(); },
     clearOptions: async function () { state.options = null; notifyOptions(); },
+    // Exposée aussi en haut de grist (grist-plugin-api.ts exporte fetchSelectedTable à la fois seule et dans docApi).
+    fetchSelectedTable: fetchSelectedTable,
     docApi: {
       listTables: async function () { return state.tables.slice(); },
       // Latence nulle (le défaut) : les mêmes fonctions qu'avant, appelées directement, sans minuteur ni tour de microtâche de plus - seuls les scénarios qui posent setLatency
@@ -649,6 +684,7 @@ try {
       // `docApi = {...coreDocApi, ...viewApi, fetchSelectedTable, fetchSelectedRecord}`) ne prend PAS de tableId : elle opère sur la section liée à
       // CE widget, state.lastTableId ci-dessus en tient lieu. Même filtrage que fireRecord (filterRecordForIncludeColumns), même refus d'accès
       // (deniedByAccessLevel) - c'est cet appel-ci, fait en interne par grist.onRecord (grist-plugin-api.ts), qui lève réellement côté vraie API.
+      fetchSelectedTable: fetchSelectedTable,
       fetchSelectedRecord: async function (rowId, options) {
         const includeColumns = (options && options.includeColumns) || 'shown';
         if (deniedByAccessLevel(includeColumns)) {
@@ -662,7 +698,7 @@ try {
     },
   };
 
-  window.__gristStub = { state, setViewer, setVariables, setColumnLabels, setRows, setHiddenColumns, setAccessLevel, setWidgetOptions, saveOptions, revertOptions, setUserEmail, setUserName, setDocId, renameColumn, renameTable, deleteColumn, dropTable, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, remoteWrite, getRow, dropColumn, resetPages, readPages, setLatency, resetInFlightStats, failReadBackOnce };
+  window.__gristStub = { state, setViewer, setVariables, setColumnLabels, setRows, setHiddenColumns, setAccessLevel, setWidgetOptions, saveOptions, revertOptions, setUserEmail, setUserName, setDocId, renameColumn, renameTable, deleteColumn, dropTable, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, remoteWrite, getRow, dropColumn, resetPages, readPages, setLatency, resetInFlightStats, failReadBackOnce, setViewRows, setViewFailure };
   // Point d'ancrage pour seeder AVANT que main.js:init() ne tourne (donc avant le tout premier
   // fetchTable de GristAPI.init()) - contrairement à un appel de setVariables/setRows APRÈS "Widget
   // prêt.", qui ne peut jamais tester "le widget démarre avec tel modèle déjà marqué par défaut" (cf.

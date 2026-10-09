@@ -29,14 +29,15 @@
   // Clique la ligne du menu et attend le téléchargement : la confirmation acceptée et notée (options reçues), le <a download> intercepté au lieu d'un vrai téléchargement.
   // `downloadsSink` (facultatif) : la liste où un autre chemin de téléchargement note aussi ses fichiers (un PDF seul, pdfmake.download : voir clickSinglePdf).
   // `until` (facultatif) : ce qui met fin à l'attente quand aucun fichier ne doit sortir (un lot dont toutes les lignes échouent) ; par défaut, un fichier téléchargé.
-  async function clickExportRow(h, rowId, downloadsSink, until) {
+  // `chooseAnswer` (facultatif) : la réponse aux fenêtres à choix (Dialogs.choose) pendant le lot, une valeur ou une fonction des options reçues ; `asked` rend celles reçues.
+  async function clickExportRow(h, rowId, downloadsSink, until, chooseAnswer) {
     const downloads = downloadsSink || [];
     const finished = until || (() => downloads.length > 0);
     const confirms = [];
     const blobsByUrl = new Map();
     const origCreate = URL.createObjectURL;
     const origClick = HTMLAnchorElement.prototype.click;
-    const dialogs = h.stubDialogs({ confirm: opts => { confirms.push(opts.message); return true; } });
+    const dialogs = h.stubDialogs(Object.assign({ confirm: opts => { confirms.push(opts.message); return true; } }, chooseAnswer ? { choose: chooseAnswer } : {}));
     URL.createObjectURL = obj => { const url = origCreate.call(URL, obj); blobsByUrl.set(url, obj); return url; };
     HTMLAnchorElement.prototype.click = function () {
       if (this.download) { downloads.push({ name: this.download, blob: blobsByUrl.get(this.href) }); return; }
@@ -58,7 +59,7 @@
       URL.createObjectURL = origCreate;
       HTMLAnchorElement.prototype.click = origClick;
     }
-    return { downloads, confirms, statuses, status: document.getElementById('status-msg').textContent };
+    return { downloads, confirms, statuses, status: document.getElementById('status-msg').textContent, asked: dialogs.asked.filter(a => a.kind === 'choose') };
   }
 
   // Texte de chaque page, dans l'ordre, lu dans les octets du PDF (pdf.js).
@@ -78,7 +79,7 @@
   const scriptsMatching = re => Array.from(document.scripts).filter(sc => re.test(sc.src)).length;
   cases.push({
     id: 'pdfbatch_docx_zip_loads_jszip_without_the_pdf_libs',
-    description: '« Exporter toutes les lignes en DOCX (ZIP)… » charge JSZip seul : ni pdfmake, ni ses polices (window.pdfMake absent, aucun de ces scripts ajouté), et l’archive contient bien un .docx par ligne',
+    description: '« Exporter les lignes en DOCX (ZIP)… » charge JSZip seul : ni pdfmake, ni ses polices (window.pdfMake absent, aucun de ces scripts ajouté), et l’archive contient bien un .docx par ligne',
     run: async (h) => {
       await seed(h, `<p>Bonjour ${badge('Nom')}, voici votre courrier.</p>`);
       const before = { jszip: typeof window.JSZip, pdfMake: typeof window.pdfMake, jszipScripts: scriptsMatching(/jszip/i), pdfScripts: scriptsMatching(/pdfmake|vfs_fonts|pdf-fonts/i) };
@@ -97,7 +98,7 @@
   // Une ligne courte par modèle : mises dans un même flux, les trois tiendraient sur une page - trois pages prouvent que chaque ligne en commence une.
   cases.push({
     id: 'pdfbatch_merged_single_pdf_rows_in_order',
-    description: '« Exporter toutes les lignes en un seul PDF… » télécharge un seul .pdf où les lignes se suivent dans l’ordre de la table, chacune sur une nouvelle page',
+    description: '« Exporter les lignes en un seul PDF… » télécharge un seul .pdf où les lignes se suivent dans l’ordre de la table, chacune sur une nouvelle page',
     run: async (h) => {
       await seed(h, `<p>Bonjour ${badge('Nom')}, voici votre courrier.</p>`);
       const res = await clickExportRow(h, 'v2-btn-export-pdf-merged');
@@ -135,7 +136,7 @@
   // Le ZIP passe par la même fonction que le PDF unique depuis son ajout : il doit rester une archive d'un PDF par ligne.
   cases.push({
     id: 'pdfbatch_zip_still_one_pdf_per_row',
-    description: '« Exporter toutes les lignes (ZIP)… » télécharge toujours une archive ZIP contenant un PDF par ligne',
+    description: '« Exporter les lignes (ZIP)… » télécharge toujours une archive ZIP contenant un PDF par ligne',
     run: async (h) => {
       await seed(h, `<p>Bonjour ${badge('Nom')}, voici votre courrier.</p>`);
       const res = await clickExportRow(h, 'v2-btn-export-pdf-batch');
@@ -181,7 +182,7 @@
 
   cases.push({
     id: 'pdfbatch_docx_zip_one_docx_per_row',
-    description: '« Exporter toutes les lignes en DOCX (ZIP)… » télécharge une archive ZIP contenant un .docx par ligne, chacun avec le texte de sa ligne',
+    description: '« Exporter les lignes en DOCX (ZIP)… » télécharge une archive ZIP contenant un .docx par ligne, chacun avec le texte de sa ligne',
     run: async (h) => {
       await seed(h, `<p>Bonjour ${badge('Nom')}, voici votre courrier.</p>`);
       const asked = h.choosePrompts.length;
@@ -927,6 +928,267 @@
           && res.status === I18n.t('status.mergedExportDone', { ok: MACRO_ROWS.length });
         return { pass, notes: JSON.stringify({ loaded, downloads: res.downloads.map(d => d.name), status: res.status, texts }) };
       } finally { await restoreDocumentMode(h); }
+    },
+  });
+
+  // --- Les lignes d'un lot : celles de la vue Grist, ou toute la table (js/batch-scope.js ; la vue du stub : __gristStub.setViewRows) ---
+  // Pose ce que la vue du widget affiche (les identifiants, dans l'ordre de la vue) le temps de `fn`, puis la rétablit : la vue de tous les autres cas est la table entière.
+  async function withView(ids, fn) {
+    const stub = window.__gristStub;
+    stub.setViewRows(ids);
+    try { return await fn(); } finally { stub.setViewRows(null); stub.setViewFailure(null); }
+  }
+  // Une page du PDF unique est celle de cette ligne seule : son nom y est, ceux des autres lignes n'y sont pas.
+  const pageIsOf = (text, name) => !!text && text.includes(squash(name)) && NAMES.every(other => other === name || !text.includes(squash(other)));
+  const pagesAre = (texts, names) => texts.length === names.length && names.every((name, i) => pageIsOf(texts[i], name));
+  // La fenêtre « Quelles lignes exporter ? » telle que le harnais l'a reçue : son titre, son texte, ses boutons (« value:libellé », * pour celui qui prend le focus).
+  function scopeWindowProblems(windows, { view, all, none, grid }) {
+    if (windows.length !== 1) return ['fenêtres « quelles lignes » : ' + windows.length];
+    const [win] = windows;
+    const problems = [];
+    const suffix = grid ? 'Grid' : '';
+    if (win.title !== I18n.t('batchScope.title' + suffix)) problems.push('titre=' + win.title);
+    const wantedText = I18n.t((none ? 'batchScope.messageNone' : 'batchScope.message') + suffix, { view, all, table: TABLE });
+    if (win.message !== wantedText) problems.push('texte=' + JSON.stringify(win.message) + ' au lieu de ' + JSON.stringify(wantedText));
+    const buttons = (win.choices || []).map(c => c.value + ':' + c.label + (c.primary ? '*' : ''));
+    const wanted = ['all:' + I18n.t('batchScope.all', { all })].concat(none ? [] : ['view:' + I18n.t('batchScope.view' + suffix, { view }) + '*']);
+    if (JSON.stringify(buttons) !== JSON.stringify(wanted)) problems.push('boutons=' + JSON.stringify(buttons) + ' au lieu de ' + JSON.stringify(wanted));
+    return problems;
+  }
+
+  cases.push({
+    id: 'pdfbatch_view_subset_asks_which_rows_and_the_displayed_ones_come_out_in_the_view_order',
+    description: 'Quand la vue Grist ne montre qu’une partie de la table (ici 2 lignes sur 3, dans un autre ordre), « Exporter les lignes en un seul PDF… » demande lesquelles ; « Les lignes affichées » donne un PDF de ces 2 lignes, dans l’ordre de la vue',
+    run: async (h) => {
+      await seed(h, `<p>Bonjour ${badge('Nom')}, voici votre courrier.</p>`);
+      return withView([3, 1], async () => {
+        const res = await clickExportRow(h, 'v2-btn-export-pdf-merged', undefined, undefined, () => 'view');
+        const dl = res.downloads[0];
+        const texts = dl && dl.blob ? (await pdfPageTexts(h, dl.blob)).map(squash) : [];
+        const problems = scopeWindowProblems(res.asked, { view: 2, all: 3 });
+        if (!pagesAre(texts, [NAMES[2], NAMES[0]])) problems.push('pages=' + JSON.stringify(texts));
+        if (res.downloads.length !== 1 || dl.name !== TABLE + '-export.pdf') problems.push('téléchargements=' + JSON.stringify(res.downloads.map(d => d.name)));
+        if (res.confirms.length !== 1 || res.confirms[0] !== I18n.t('confirm.mergedExport', { count: 2, table: TABLE })) problems.push('confirmation=' + JSON.stringify(res.confirms));
+        if (res.status !== I18n.t('status.mergedExportDone', { ok: 2 })) problems.push('statut=' + res.status);
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      });
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_view_subset_whole_table_choice_exports_every_row_in_the_table_order',
+    description: 'Même vue partielle : « Toute la table » donne un PDF des 3 lignes, dans l’ordre de la table (celui d’avant)',
+    run: async (h) => {
+      await seed(h, `<p>Bonjour ${badge('Nom')}, voici votre courrier.</p>`);
+      return withView([3, 1], async () => {
+        const res = await clickExportRow(h, 'v2-btn-export-pdf-merged', undefined, undefined, () => 'all');
+        const dl = res.downloads[0];
+        const texts = dl && dl.blob ? (await pdfPageTexts(h, dl.blob)).map(squash) : [];
+        const problems = scopeWindowProblems(res.asked, { view: 2, all: 3 });
+        if (!pagesAre(texts, NAMES)) problems.push('pages=' + JSON.stringify(texts));
+        if (res.confirms.length !== 1 || res.confirms[0] !== I18n.t('confirm.mergedExport', { count: 3, table: TABLE })) problems.push('confirmation=' + JSON.stringify(res.confirms));
+        if (res.status !== I18n.t('status.mergedExportDone', { ok: 3 })) problems.push('statut=' + res.status);
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      });
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_view_subset_cancel_exports_nothing',
+    description: 'Annuler (ou Échap) sur « Quelles lignes exporter ? » : ni confirmation, ni fichier, ni progression',
+    run: async (h) => {
+      await seed(h, `<p>Bonjour ${badge('Nom')}, voici votre courrier.</p>`);
+      return withView([2], async () => {
+        let asked = 0;
+        const res = await clickExportRow(h, 'v2-btn-export-pdf-batch', undefined, () => asked > 0, () => { asked++; return null; });
+        await h.sleep(300);
+        const problems = [];
+        if (res.asked.length !== 1) problems.push('fenêtres=' + res.asked.length);
+        if (res.downloads.length || res.confirms.length) problems.push('fichiers=' + res.downloads.length + ' confirmations=' + res.confirms.length);
+        if (res.statuses.some(text => text === I18n.t('status.loadingPdfLibs') || /\d+\s*\/\s*\d+/.test(text))) problems.push('progression=' + JSON.stringify(res.statuses));
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems, statuses: res.statuses }) };
+      });
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_view_showing_every_row_in_another_order_asks_nothing_and_follows_the_view',
+    description: 'Une vue qui montre toute la table mais triée autrement n’ouvre aucune fenêtre : le PDF unique suit l’ordre de la vue',
+    run: async (h) => {
+      await seed(h, `<p>Bonjour ${badge('Nom')}, voici votre courrier.</p>`);
+      return withView([3, 2, 1], async () => {
+        const res = await clickExportRow(h, 'v2-btn-export-pdf-merged');
+        const dl = res.downloads[0];
+        const texts = dl && dl.blob ? (await pdfPageTexts(h, dl.blob)).map(squash) : [];
+        const problems = [];
+        if (res.asked.length) problems.push('fenêtres=' + res.asked.length);
+        if (!pagesAre(texts, [NAMES[2], NAMES[1], NAMES[0]])) problems.push('pages=' + JSON.stringify(texts));
+        if (res.confirms.length !== 1 || res.confirms[0] !== I18n.t('confirm.mergedExport', { count: 3, table: TABLE })) problems.push('confirmation=' + JSON.stringify(res.confirms));
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      });
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_view_showing_nothing_offers_only_the_whole_table',
+    description: 'Une vue qui n’affiche aucune ligne (filtre trop strict, « Sélectionner par » vide) le dit et ne propose que « Toute la table », sans bouton mis en avant',
+    run: async (h) => {
+      await seed(h, `<p>Bonjour ${badge('Nom')}, voici votre courrier.</p>`);
+      return withView([], async () => {
+        const res = await clickExportRow(h, 'v2-btn-export-pdf-merged', undefined, undefined, () => 'all');
+        const dl = res.downloads[0];
+        const texts = dl && dl.blob ? (await pdfPageTexts(h, dl.blob)).map(squash) : [];
+        const problems = scopeWindowProblems(res.asked, { view: 0, all: 3, none: true });
+        if (!pagesAre(texts, NAMES)) problems.push('pages=' + JSON.stringify(texts));
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      });
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_view_unreadable_exports_the_whole_table_without_asking',
+    description: 'Si Grist ne donne pas les lignes de la vue, le lot reste ce qu’il était : toute la table, sans fenêtre',
+    run: async (h) => {
+      await seed(h, `<p>Bonjour ${badge('Nom')}, voici votre courrier.</p>`);
+      const stub = window.__gristStub;
+      return withView([2], async () => {
+        stub.setViewFailure('Grist ne répond pas');
+        const res = await clickExportRow(h, 'v2-btn-export-pdf-merged');
+        const dl = res.downloads[0];
+        const texts = dl && dl.blob ? (await pdfPageTexts(h, dl.blob)).map(squash) : [];
+        const problems = [];
+        if (res.asked.length) problems.push('fenêtres=' + res.asked.length);
+        if (!pagesAre(texts, NAMES)) problems.push('pages=' + JSON.stringify(texts));
+        if (res.status !== I18n.t('status.mergedExportDone', { ok: 3 })) problems.push('statut=' + res.status);
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      });
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_view_subset_zip_holds_one_pdf_per_displayed_row',
+    description: '« Exporter les lignes (ZIP)… » avec une vue réduite à la ligne 2 : l’archive ne contient que le PDF de cette ligne',
+    run: async (h) => {
+      await seed(h, `<p>Bonjour ${badge('Nom')}, voici votre courrier.</p>`);
+      return withView([2], async () => {
+        const res = await clickExportRow(h, 'v2-btn-export-pdf-batch', undefined, undefined, () => 'view');
+        const dl = res.downloads[0];
+        const zip = dl && dl.blob ? await JSZip.loadAsync(await dl.blob.arrayBuffer()) : null;
+        const files = zip ? Object.keys(zip.files).sort() : [];
+        const text = files.length ? squash((await pdfPageTexts(h, await zip.file(files[0]).async('blob'))).join(' ')) : '';
+        const problems = scopeWindowProblems(res.asked, { view: 1, all: 3 });
+        if (JSON.stringify(files) !== JSON.stringify(['publipostage.pdf'])) problems.push('fichiers=' + JSON.stringify(files));
+        if (!pageIsOf(text, NAMES[1])) problems.push('texte=' + text);
+        if (res.confirms.length !== 1 || res.confirms[0] !== I18n.t('confirm.batchExport', { count: 1, table: TABLE })) problems.push('confirmation=' + JSON.stringify(res.confirms));
+        if (res.status !== I18n.t('status.batchExportDone', { ok: 1 })) problems.push('statut=' + res.status);
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      });
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_view_subset_docx_zip_holds_one_docx_per_displayed_row',
+    description: 'Le lot DOCX suit aussi la vue : avec les lignes 1 et 3 affichées, l’archive ne contient que ces deux .docx',
+    run: async (h) => {
+      await seed(h, `<p>Bonjour ${badge('Nom')}, voici votre courrier.</p>`);
+      return withView([1, 3], async () => {
+        const res = await clickExportRow(h, 'v2-btn-export-docx-batch', undefined, undefined, () => 'view');
+        const dl = res.downloads[0];
+        const zip = dl && dl.blob ? await JSZip.loadAsync(await dl.blob.arrayBuffer()) : null;
+        // Les fichiers sont numérotés dans l'ordre du lot : le premier est la 1re ligne de la vue (Alpha), le second la 2e (Charlie).
+        const wanted = ['publipostage.docx', 'publipostage (2).docx'];
+        const files = zip ? Object.keys(zip.files) : [];
+        const texts = [];
+        for (const f of wanted) texts.push(zip && zip.file(f) ? squash(await docxBodyText(await zip.file(f).async('blob'))) : '');
+        const problems = scopeWindowProblems(res.asked, { view: 2, all: 3 });
+        if (JSON.stringify(files.slice().sort()) !== JSON.stringify(wanted.slice().sort()) || !pageIsOf(texts[0], NAMES[0]) || !pageIsOf(texts[1], NAMES[2])) problems.push('fichiers=' + JSON.stringify(files) + ' textes=' + JSON.stringify(texts));
+        if (res.confirms.length !== 1 || res.confirms[0] !== I18n.t('confirm.batchExportDocx', { count: 2, table: TABLE })) problems.push('confirmation=' + JSON.stringify(res.confirms));
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      });
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_view_subset_sheet_assembly_counts_the_displayed_rows',
+    description: '« Assemblage avant impression… » pose d’abord la question des lignes, puis sa fenêtre de réglage reçoit le nombre de lignes choisi (2 affichées sur 3)',
+    run: async (h) => {
+      await seed(h, `<p>Bonjour ${badge('Nom')}, voici votre courrier.</p>`);
+      const realOpen = SheetAssemblyDialog.open;
+      const opened = [];
+      SheetAssemblyDialog.open = async context => { opened.push(context); return null; };
+      try {
+        return await withView([2, 3], async () => {
+          const res = await clickExportRow(h, 'v2-btn-export-pdf-sheets', undefined, () => opened.length > 0, () => 'view');
+          const problems = scopeWindowProblems(res.asked, { view: 2, all: 3 });
+          if (opened.length !== 1 || opened[0].count !== 2 || opened[0].table !== TABLE) problems.push('fenêtre d’assemblage=' + JSON.stringify(opened));
+          if (res.downloads.length) problems.push('fichiers=' + res.downloads.length);
+          return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+        });
+      } finally { SheetAssemblyDialog.open = realOpen; }
+    },
+  });
+
+  // Une seule ligne dans le lot (la ligne affichée de la vue) : « 1 lignes » et « 1 PDF générés » seraient faux ; la confirmation et l'état de fin parlent au singulier.
+  cases.push({
+    id: 'pdfbatch_single_row_batch_speaks_in_the_singular_in_french_and_english',
+    description: 'Un lot d’une seule ligne (la ligne affichée de la vue) parle au singulier, en français et en anglais : confirmation et état de fin du ZIP de PDF, du ZIP de DOCX et du PDF unique',
+    run: async (h) => {
+      await seed(h, `<p>Bonjour ${badge('Nom')}, voici votre courrier.</p>`);
+      const wanted = {
+        fr: {
+          'v2-btn-export-pdf-batch': ['Générer un PDF pour la ligne de « PbClients » et le placer dans une archive ZIP ?', '1 PDF généré — archive ZIP téléchargée.'],
+          'v2-btn-export-docx-batch': ['Générer un DOCX pour la ligne de « PbClients » et le placer dans une archive ZIP ?', '1 DOCX généré — archive ZIP téléchargée.'],
+          'v2-btn-export-pdf-merged': ['Générer un PDF pour la ligne de « PbClients » ?', '1 ligne réunie dans un seul PDF — fichier téléchargé.'],
+        },
+        en: {
+          'v2-btn-export-pdf-batch': ['Generate a PDF for the row in “PbClients” and put it into a ZIP archive?', '1 PDF generated — ZIP archive downloaded.'],
+          'v2-btn-export-docx-batch': ['Generate a DOCX for the row in “PbClients” and put it into a ZIP archive?', '1 DOCX file generated — ZIP archive downloaded.'],
+          'v2-btn-export-pdf-merged': ['Generate a PDF for the row in “PbClients”?', '1 row combined into a single PDF — file downloaded.'],
+        },
+      };
+      const problems = [];
+      await withView([2], async () => {
+        for (const lang of ['fr', 'en']) {
+          await withLang(lang, async () => {
+            for (const [rowId, [confirm, status]] of Object.entries(wanted[lang])) {
+              const res = await clickExportRow(h, rowId, undefined, undefined, () => 'view');
+              if (res.confirms.length !== 1 || res.confirms[0] !== confirm) problems.push(lang + ' ' + rowId + ' confirmation=' + JSON.stringify(res.confirms));
+              if (res.status !== status) problems.push(lang + ' ' + rowId + ' état=' + JSON.stringify(res.status));
+            }
+          });
+        }
+      });
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+    },
+  });
+
+  // BatchScope seul : les lignes que la vue nomme, les mots d’une grille, la table que la vue ne montre pas.
+  cases.push({
+    id: 'pdfbatch_view_scope_module_reads_the_view_ids_and_words_a_grid_in_values',
+    description: 'BatchScope : les identifiants de la vue viennent de fetchSelectedTable (colonnes montrées, pour la table de la page seulement) ; un identifiant inconnu ou répété est ignoré ; un modèle de grille parle de valeurs',
+    run: async (h) => {
+      await seed(h, `<p>Bonjour ${badge('Nom')}, voici votre courrier.</p>`);
+      const stub = window.__gristStub;
+      const problems = [];
+      await withView([3, 1], async () => {
+        const before = stub.state.viewCalls.length;
+        const ids = await BatchScope.viewRowIds(TABLE);
+        if (JSON.stringify(ids) !== '[3,1]') problems.push('identifiants=' + JSON.stringify(ids));
+        const call = stub.state.viewCalls[before];
+        if (stub.state.viewCalls.length !== before + 1 || !call || call.includeColumns !== 'shown') problems.push('appel=' + JSON.stringify(stub.state.viewCalls.slice(before)));
+        const other = await BatchScope.viewRowIds('AutreTable');
+        if (other !== null || stub.state.viewCalls.length !== before + 1) problems.push('autre table : ' + JSON.stringify(other) + ', appels=' + (stub.state.viewCalls.length - before));
+      });
+      const all = NAMES.map((Nom, i) => ({ id: i + 1, Nom }));
+      const dialogs = h.stubDialogs({ choose: () => 'view' });
+      try {
+        const none = await BatchScope.pick(all, null, { table: TABLE });
+        if (!none || none.scope !== 'all' || none.rows !== all || dialogs.asked.length) problems.push('sans vue : ' + JSON.stringify(none) + ', fenêtres=' + dialogs.asked.length);
+        const picked = await BatchScope.pick(all, [3, 3, 99, 1], { table: TABLE, grid: true });
+        if (!picked || picked.scope !== 'view' || JSON.stringify(picked.rows.map(r => r.id)) !== '[3,1]') problems.push('vue avec doublon et inconnu : ' + JSON.stringify(picked && picked.rows));
+        problems.push(...scopeWindowProblems(dialogs.asked, { view: 2, all: 3, grid: true }));
+      } finally { dialogs.restore(); }
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
     },
   });
 

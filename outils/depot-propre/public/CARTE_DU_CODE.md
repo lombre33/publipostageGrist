@@ -23,7 +23,7 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
   vérifie.
 - **Les données** : les modèles et les réglages vivent dans des tables `Publipostage_*` du document Grist ;
   les préférences d'affichage (langue, thème, raccourcis…) dans le navigateur.
-- **Le volume** : 116 fichiers dans `js/` (43 300 lignes : 32 100 de code, 8 600 de commentaires, 2 600 de
+- **Le volume** : 117 fichiers dans `js/` (43 300 lignes : 32 100 de code, 8 600 de commentaires, 2 600 de
   blanc), 37 feuilles de style (3 300 lignes), une page de 770 lignes. Quatre fichiers de polices du PDF
   pèsent 2,5 Mo en quelques lignes (des données) ; `js/i18n.js` est du texte à traduire, pas de la logique.
 
@@ -157,7 +157,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/table-borders.js` | La règle des bordures, écrite une fois pour l'éditeur, la Lecture, le PDF et l'Excel. |
 | `js/xlsx-number-format.js` | Le texte qu'Excel montrerait pour un format de nombre ou de date. |
 
-### Exports (14 fichiers, 6 300 lignes)
+### Exports (15 fichiers, 6 300 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -171,7 +171,8 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/docx-export.js` | Le Word (docx). |
 | `js/xlsx-export.js` | L'Excel d'une grille (ExcelJS). |
 | `js/mailto-export.js` | Le lien `mailto:` du mode E-mail. |
-| `js/batch-failures.js` | La fenêtre qui s'ouvre à la fin d'un export en lot et liste les lignes qui n'ont pas pu être générées, avec leur raison (sur `js/dialogs.js`). |
+| `js/batch-failures.js` | La fenêtre qui s'ouvre à la fin d'un export en lot et liste les lignes qui n'ont pas pu être générées, avec leur raison (sur la fenêtre commune des saisies et des confirmations). |
+| `js/batch-scope.js` | Les lignes d'un export en lot : celles que le widget affiche dans Grist (ses filtres, son tri, le lien « Sélectionner par »), ou toute la table ; un widget qui n'en affiche qu'une partie fait poser la question. |
 
 ### Socle de l'interface et réglages (15 fichiers, 4 300 lignes)
 
@@ -275,7 +276,7 @@ For anyone reading the code: what is where, and where to start. Line counts are 
   **Each export** loads its library on first use, with an integrity hash (SRI) that the browser checks.
 - **The data**: templates and settings live in `Publipostage_*` tables of the Grist document; display
   preferences (language, theme, shortcuts…) in the browser.
-- **The size**: 116 files in `js/` (43,300 lines: 32,100 of code, 8,600 of comments, 2,600 blank), 37
+- **The size**: 117 files in `js/` (43,300 lines: 32,100 of code, 8,600 of comments, 2,600 blank), 37
   stylesheets (3,300 lines), a 770-line page. Four PDF font files weigh 2.5 MB in a few lines (data);
   `js/i18n.js` is text to translate, not logic.
 
@@ -408,7 +409,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/table-borders.js` | The border rule, written once for the editor, Reading mode, the PDF and the Excel file. |
 | `js/xlsx-number-format.js` | The text Excel would show for a number or date format. |
 
-### Exports (14 files, 6,300 lines)
+### Exports (15 files, 6,300 lines)
 
 | File | Role |
 |---|---|
@@ -422,7 +423,8 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/docx-export.js` | The Word file (docx). |
 | `js/xlsx-export.js` | The Excel file of a grid (ExcelJS). |
 | `js/mailto-export.js` | The `mailto:` link of E-mail mode. |
-| `js/batch-failures.js` | The window that opens at the end of a batch export and lists the rows that could not be generated, with their reason (on top of `js/dialogs.js`). |
+| `js/batch-failures.js` | The window that opens at the end of a batch export and lists the rows that could not be generated, with their reason (on top of the shared input and confirmation window). |
+| `js/batch-scope.js` | The rows of a batch export: the ones the widget shows in Grist (its filters, its sort, the "Select by" link), or the whole table; a widget that only shows part of the table triggers the question. |
 
 ### Interface foundations and settings (15 files, 4,300 lines)
 

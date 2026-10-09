@@ -414,7 +414,7 @@
 
   cases.push({
     id: 'extimg_batch_asks_once_for_all_rows',
-    description: '« Exporter toutes les lignes en un seul PDF » : une seule fenêtre des images pour les trois lignes (le site accepté n’est pas redemandé), les trois lignes sont exportées dans un seul PDF',
+    description: '« Exporter les lignes en un seul PDF » : une seule fenêtre des images pour les trois lignes (le site accepté n’est pas redemandé), les trois lignes sont exportées dans un seul PDF',
     run: async (h) => {
       await seed(h, '<p>Bonjour</p>' + img(EXTERNAL));
       const res = await clickExport(h, 'v2-btn-export-pdf-merged', true, c => c.dl.downloads.length > 0);

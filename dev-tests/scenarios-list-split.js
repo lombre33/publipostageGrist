@@ -243,7 +243,7 @@
   // --- Les exports en lot ---
   cases.push({
     id: 'listsplit_batch_pdf_zip_one_pdf_per_value_named_after_the_value',
-    description: '« Exporter toutes les lignes (ZIP)… » avec une liste réglée « Un document par valeur » : un PDF par valeur (Alpha en a deux, Beta un, Gamma, sans valeur, un seul), nommé d’après la ligne puis la valeur, le texte identique hors la valeur ; la confirmation annonce le nombre de documents, la fin dit combien de PDF',
+    description: '« Exporter les lignes (ZIP)… » avec une liste réglée « Un document par valeur » : un PDF par valeur (Alpha en a deux, Beta un, Gamma, sans valeur, un seul), nommé d’après la ligne puis la valeur, le texte identique hors la valeur ; la confirmation annonce le nombre de documents, la fin dit combien de PDF',
     run: async (h) => {
       await seed(h, BODY);
       const res = await withFilenameTemplate(NAME, () => clickExportRow(h, 'v2-btn-export-pdf-batch'));
@@ -286,7 +286,7 @@
 
   cases.push({
     id: 'listsplit_merged_pdf_pages_follow_the_rows_then_the_values',
-    description: '« Exporter toutes les lignes en un seul PDF… » : une page par document, dans l’ordre des lignes puis des valeurs, et la fin compte des documents (« 4 documents réunis »), pas des lignes',
+    description: '« Exporter les lignes en un seul PDF… » : une page par document, dans l’ordre des lignes puis des valeurs, et la fin compte des documents (« 4 documents réunis »), pas des lignes',
     run: async (h) => {
       await seed(h, BODY);
       const res = await clickExportRow(h, 'v2-btn-export-pdf-merged');
@@ -302,7 +302,7 @@
 
   cases.push({
     id: 'listsplit_batch_docx_zip_one_docx_per_value',
-    description: '« Exporter toutes les lignes en DOCX (ZIP)… » : un .docx par valeur, nommé d’après la ligne puis la valeur, chacun écrivant sa valeur et la liste non réglée en entier',
+    description: '« Exporter les lignes en DOCX (ZIP)… » : un .docx par valeur, nommé d’après la ligne puis la valeur, chacun écrivant sa valeur et la liste non réglée en entier',
     run: async (h) => {
       await seed(h, BODY);
       const res = await withFilenameTemplate(NAME, () => clickExportRow(h, 'v2-btn-export-docx-batch'));

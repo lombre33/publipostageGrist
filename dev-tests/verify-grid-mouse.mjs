@@ -667,7 +667,7 @@ async function runTheme(theme) {
   check(`${label} - menu d'export dans une grille : les cinq lignes sont là, visibles dans le panneau (les deux plus longues comprises) et atteignables ; les trois lignes Excel actives, les deux lignes Word grisées`,
     Object.values(g).every(r => r.shown && r.inPanel && r.reachable) && EXCEL_ROWS.every(id => !g[id].greyed && g[id].aria === null) && g['v2-btn-export-docx'].greyed && g['v2-btn-export-docx-batch'].greyed
     && g['v2-btn-export-docx'].aria === 'true' && g['v2-btn-export-docx-batch'].aria === 'true', g);
-  check(`${label} - menu d'export dans une grille : les lignes « toutes les valeurs » disent « valeurs de la table » (jamais « lignes »)`,
+  check(`${label} - menu d'export dans une grille : les lignes « valeurs de la table » disent « valeurs de la table » (jamais « lignes »)`,
     /valeurs de la table/.test(g['v2-btn-export-xlsx-batch'].text) && /valeurs de la table/.test(g['v2-btn-export-xlsx-single'].text) && !/lignes?/i.test(g['v2-btn-export-xlsx-batch'].text + g['v2-btn-export-xlsx-single'].text), { batch: g['v2-btn-export-xlsx-batch'].text, single: g['v2-btn-export-xlsx-single'].text });
   check(`${label} - menu d'export : le texte des lignes (grisées comprises) reste lisible, >= 4,5:1`, Object.values(g).every(r => r.contrast >= 4.5), Object.fromEntries(Object.entries(g).map(([k, v]) => [k, v.contrast])));
   // Une ligne grisée ne lance rien : vrai clic sur « Exporter en DOCX », aucun téléchargement.
@@ -718,18 +718,18 @@ async function runTheme(theme) {
     return { dialog, info, status: await page.evaluate(() => document.getElementById('status-msg').textContent) };
   };
   const zipRun = await downloadAfterConfirm('#v2-btn-quality', '#v2-btn-export-xlsx-batch');
-  check(`${label} - vrai clic sur « Exporter toutes les valeurs de la table en Excel (ZIP)… » : la confirmation parle d'Excel et de valeurs, tient dans le panneau, et l'archive « -export-xlsx.zip » contient un classeur`,
+  check(`${label} - vrai clic sur « Exporter les valeurs de la table en Excel (ZIP)… » : la confirmation parle d'Excel et de valeurs, tient dans le panneau, et l'archive « -export-xlsx.zip » contient un classeur`,
     !!zipRun.dialog && zipRun.dialog.boxInPanel && zipRun.dialog.okInPanel && /Excel/.test(zipRun.dialog.message) && /valeur/.test(zipRun.dialog.message) && !/ligne|PDF/i.test(zipRun.dialog.message + zipRun.dialog.title)
     && !!zipRun.info && /-export-xlsx\.zip$/.test(zipRun.info.name) && zipRun.info.zip && zipRun.info.hasWorkbookInside && /Excel/.test(zipRun.status), zipRun);
   const singleRun = await downloadAfterConfirm('#v2-btn-quality', '#v2-btn-export-xlsx-single');
-  check(`${label} - vrai clic sur « Exporter toutes les valeurs de la table dans un seul classeur… » : la confirmation tient dans le panneau, et le fichier « -export.xlsx » est un classeur d'une feuille par valeur`,
+  check(`${label} - vrai clic sur « Exporter les valeurs de la table dans un seul classeur… » : la confirmation tient dans le panneau, et le fichier « -export.xlsx » est un classeur d'une feuille par valeur`,
     !!singleRun.dialog && singleRun.dialog.boxInPanel && singleRun.dialog.okInPanel && /Excel/.test(singleRun.dialog.message) && !/ligne|PDF/i.test(singleRun.dialog.message)
     && !!singleRun.info && /-export\.xlsx$/.test(singleRun.info.name) && singleRun.info.zip && singleRun.info.hasSheet && /Excel/.test(singleRun.status), singleRun);
   // Les deux lignes du menu « Exporter en PDF » prennent, dans une grille, les mots de la grille : lisibles, atteignables, sans « lignes ».
   await page.mouse.move(WIDTH - 10, HEIGHT - 10);
   await openExportMenu('#btn-export-pdf');
   const pdfRows = await exportRows(PDF_ROWS);
-  check(`${label} - menu « Exporter en PDF » dans une grille : « Exporter toutes les valeurs de la table (ZIP)… » et « … en un seul PDF… » sont visibles dans le panneau, atteignables, lisibles (>= 4,5:1) et sans le mot « lignes »`,
+  check(`${label} - menu « Exporter en PDF » dans une grille : « Exporter les valeurs de la table (ZIP)… » et « … en un seul PDF… » sont visibles dans le panneau, atteignables, lisibles (>= 4,5:1) et sans le mot « lignes »`,
     Object.values(pdfRows).every(r => r.shown && r.inPanel && r.reachable && r.contrast >= 4.5 && /valeurs de la table/.test(r.text) && !/lignes?/i.test(r.text)), pdfRows);
   await page.mouse.move(WIDTH - 10, HEIGHT - 10);
 

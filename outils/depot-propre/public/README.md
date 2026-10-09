@@ -92,8 +92,9 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 
 **Export PDF, Word, Excel**
 - Export en PDF vectorisé, nom de fichier composé avec des variables
-- Export en lot sur toutes les lignes d'une table, en un clic : un PDF par ligne dans une archive ZIP,
-  ou toutes les lignes dans un seul PDF
+- Export en lot en un clic : un PDF par ligne dans une archive ZIP, ou toutes les lignes dans un seul
+  PDF. Il suit les lignes que le widget affiche dans Grist (ses filtres, son tri, le lien « Sélectionner
+  par ») : quand il n'en affiche qu'une partie, il demande s'il faut exporter celles-ci ou toute la table
 - Assemblage avant impression : les pages de chaque ligne posées sur des feuilles A4 ou A3, avec ou
   sans traits de coupe, et une marge réglable autour de chaque page (quatre A6 sur une A4, par exemple)
 - Word (`.docx`, bêta) et Excel (`.xlsx`, pour les grilles)
@@ -417,8 +418,9 @@ GitHub Pages, with no backend and no build step.
 
 **PDF, Word, Excel export**
 - Vector PDF export, file name built with variables
-- Batch export on every row of a table, in one click: one PDF per row in a ZIP archive, or all rows in
-  a single PDF
+- Batch export in one click: one PDF per row in a ZIP archive, or all rows in a single PDF. It follows
+  the rows the widget shows in Grist (its filters, its sort, the "Select by" link): when it only shows
+  part of the table, it asks whether to export those or the whole table
 - Sheet assembly before printing: each row's pages laid out on A4 or A3 sheets, with or without crop
   marks, and an adjustable margin around each page (four A6 on one A4, for example)
 - Word (`.docx`, beta) and Excel (`.xlsx`, for grids)
