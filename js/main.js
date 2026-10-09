@@ -168,6 +168,7 @@
     MainToolbar.setEmailMode(false);
     EmailPlainText.setActive(false);
     MainToolbar.setMacroMode(true);
+    Settings.setMacroMode(true);
     MainToolbar.setGridMode(false);
     syncExportRowsForModelType();
     HeaderFooterPreview.setEmailMode(false);
@@ -252,6 +253,7 @@
     MainToolbar.setEmailMode(currentTypeModele === 'email');
     EmailPlainText.setActive(currentTypeModele === 'email');
     MainToolbar.setMacroMode(false);
+    Settings.setMacroMode(false);
     MainToolbar.setGridMode(GridEditor.isGridType(currentTypeModele));
     syncExportRowsForModelType();
     HeaderFooterPreview.setEmailMode(currentTypeModele === 'email');

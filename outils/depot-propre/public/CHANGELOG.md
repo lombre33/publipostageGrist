@@ -278,6 +278,10 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Modifié
 
+- **Marges d'un macro-modèle** : l'onglet Marges des Réglages dit, tant qu'un macro-modèle est chargé, que ses marges
+  priment sur celles des modèles assemblés : elles valent pour toutes ses pages, dans la Lecture, le PDF, le Word et
+  l'impression ; les marges propres à un modèle ne servent que lorsqu'on l'ouvre seul. Rien ne change dans le calcul des
+  marges, seule la mention est nouvelle ; avec un modèle simple elle reste cachée.
 - **Entrée dans un tableau de document** : comme dans une grille (et dans Excel ou Google Sheets), Entrée descend
   d'une case et en sélectionne le texte, on tape par-dessus ; Maj+Entrée (ou Ctrl+Entrée) ajoute une ligne dans la
   case ; sur la dernière ligne, Entrée ne fait rien. Une liste, une citation, un bloc de code ou la liste « # »
@@ -744,6 +748,10 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Changed
 
+- **Margins of a macro template**: the Margins tab of Settings now says, while a macro template is loaded, that its margins
+  take precedence over those of the assembled templates: they apply to every page of its Reading view, PDF, Word and
+  print output, and a template's own margins only apply when it is opened on its own. The margins themselves are
+  unchanged, only the note is new; with an ordinary template it stays hidden.
 - **Enter in a document table**: as in a grid (and in Excel or Google Sheets), Enter moves down one cell and selects
   its text, so you type over it; Shift+Enter (or Ctrl+Enter) adds a line inside the cell; on the last row, Enter does
   nothing. A list, a quote, a code block or an open "#" list keep their Enter. Enter used to split the cell's

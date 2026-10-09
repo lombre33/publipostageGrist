@@ -758,6 +758,7 @@ const I18n = (function () {
     'settings.language.en': { fr: 'Anglais', en: 'English' },
     'settings.triggerKey.intro': { fr: 'Caractère qui ouvre le panneau #Variable/Puces en cours de frappe.', en: 'Character that opens the #Variable/Chips panel while typing.' },
     'settings.pageMargins.intro': { fr: 'Marges de page (mm) - propres à ce modèle, appliquées à l’aperçu et aux exports PDF/DOCX.', en: 'Page margins (mm) - specific to this template, applied to the preview and to PDF/DOCX exports.' },
+    'settings.pageMargins.macroNote': { fr: 'Macro-modèle : ces marges priment sur celles des modèles assemblés, dans l’aperçu comme dans les exports. Les marges propres à un modèle ne servent que lorsqu’on l’ouvre seul.', en: 'Macro template: these margins take precedence over those of the assembled templates, in the preview and in the exports. A template’s own margins only apply when it is opened on its own.' },
     'settings.pageMargins.top': { fr: 'Haut', en: 'Top' },
     'settings.pageMargins.right': { fr: 'Droite', en: 'Right' },
     'settings.pageMargins.bottom': { fr: 'Bas', en: 'Bottom' },

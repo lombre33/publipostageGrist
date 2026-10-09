@@ -1,5 +1,5 @@
 // Panneau Réglages : Langue (I18n.setLang), Thème (localStorage + data-theme sur <html>), Touche de déclenchement (localStorage, relue par
-// Variables.triggerChar), Marges de page (par modèle) et Crédits (statique). Même convention d'ouverture et de fermeture que les autres fenêtres
+// Variables.triggerChar), Marges de page (par modèle, avec la mention d'un macro-modèle) et Crédits (statique). Même convention d'ouverture et de fermeture que les autres fenêtres
 // (style.display, pas de fermeture au clic sur le fond).
 const Settings = (function () {
   const TRIGGER_KEY_STORAGE = 'pp_trigger_char';
@@ -148,5 +148,13 @@ const Settings = (function () {
     wireTriggerChar();
   }
 
-  return { setTheme, wireSettingsModal };
+  // Macro-modèle chargé (demande du 09/10 : « préciser que ça prend le pas sur les marges des modèles assemblés ») : l'onglet Marges le dit. Les marges du macro-modèle valent pour tous les modèles
+  // qu'il assemble (Lecture, PDF, Word, impression) ; celles d'un modèle ne servent que lorsqu'on l'ouvre seul. Posée par js/main.js à chaque changement de type de modèle : la mention est cachée, pas
+  // retirée, hors macro-modèle.
+  function setMacroMode(on) {
+    const note = byId('settings-margins-macro-note');
+    if (note) note.hidden = !on;
+  }
+
+  return { setTheme, setMacroMode, wireSettingsModal };
 })();

@@ -1437,6 +1437,135 @@
     },
   });
 
+  // --- Les marges d'un macro-modèle priment sur celles des modèles qu'il assemble, et l'onglet Marges le dit (09/10, Antoine : « préciser que ça prend le pas sur les marges des modèles assemblés ») ---
+  // Un macro-modèle impose SES marges à tous les modèles qu'il assemble (la Lecture, le PDF, le Word) ; celles d'un modèle ne servent que s'il est ouvert seul (js/main.js:loadMacroIntoEditor lit celles de
+  // la ligne du macro-modèle, MacroTemplates.buildConcatenatedHtml ne joint que les contenus). La mention de l'onglet Marges (js/settings.js:setMacroMode) affirme exactement cela : le premier cas le mesure
+  // sur les trois sorties, le second vérifie quand la mention est là.
+  const MACRO_MARGINS_MM = { top: 30, right: 25, bottom: 35, left: 40 };
+  // Distance (px de mise en page) du bord gauche de la feuille de la Lecture au premier texte qui contient `text`.
+  function readerTextLeft(root, text, zoom) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const range = document.createRange();
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (!node.textContent.includes(text)) continue;
+      range.selectNodeContents(node);
+      const rect = range.getClientRects()[0];
+      return rect ? (rect.left - root.getBoundingClientRect().left) / zoom : null;
+    }
+    return null;
+  }
+  // Abscisse (points) du premier texte de chaque page d'un PDF, relu par pdf.js.
+  async function pdfFirstTextX(h, blob) {
+    await h.ensurePdfJsLoaded();
+    const pdf = await window.pdfjsLib.getDocument({ data: new Uint8Array(await blob.arrayBuffer()) }).promise;
+    const xs = [];
+    for (let n = 1; n <= pdf.numPages; n++) {
+      const items = (await (await pdf.getPage(n)).getTextContent()).items.filter(it => it.str && it.str.trim());
+      xs.push(items.length ? +items[0].transform[4].toFixed(2) : null);
+    }
+    return xs;
+  }
+  // Marges déclarées par un .docx (w:pgMar de word/document.xml), en twips.
+  async function docxPageMargins(blob) {
+    await ExportCommon.ensureJsZipLoaded();
+    const xml = await (await JSZip.loadAsync(await blob.arrayBuffer())).file('word/document.xml').async('string');
+    const tag = (xml.match(/<w:pgMar[^>]*>/) || [''])[0];
+    const attr = name => { const m = tag.match(new RegExp('w:' + name + '="([^"]*)"')); return m ? Number(m[1]) : null; };
+    return { top: attr('top'), right: attr('right'), bottom: attr('bottom'), left: attr('left') };
+  }
+
+  cases.push({
+    id: 'macro_margins_replace_the_margins_of_the_models_it_assembles_in_reading_pdf_and_word',
+    description: 'Les marges d\'un macro-modèle valent pour tous les modèles qu\'il assemble : sa page de garde (gauche 12 mm) et le modèle de son annexe (gauche 60 mm) ont leur texte à 40 mm du bord de la feuille dans la Lecture et dans le PDF, et le Word porte les marges du macro-modèle ; c\'est ce que dit la mention de l\'onglet Marges',
+    run: async (h) => {
+      try {
+        const { id, coverId, thirdId } = await composedMacro(h, 'Macro marges rendus');
+        await feedRecord(h);
+        h.setA4Preview(true);
+        await h.sleep(300);
+        // Chaque modèle a SES marges (gauche 12 mm, gauche 60 mm), le macro-modèle les siennes (gauche 40 mm).
+        window.__gristStub.remoteWrite(MACRO_TABLE, coverId, { Margins: storedMargins({ left: 12 }) });
+        window.__gristStub.remoteWrite(MACRO_TABLE, thirdId, { Margins: storedMargins({ left: 60 }) });
+        window.__gristStub.remoteWrite(MACRO_TABLE, id, { Margins: storedMargins(MACRO_MARGINS_MM) });
+        await reopen(h, id);
+        const problems = [];
+        document.getElementById('btn-mode-read').click();
+        await h.sleep(900);
+        const content = document.querySelector('#reader-container .reader-content');
+        const zoom = parseFloat(getComputedStyle(content).zoom) || 1;
+        const lefts = ['Page de garde', 'Page par défaut'].map(text => readerTextLeft(content, text, zoom));
+        const wantedPx = MACRO_MARGINS_MM.left * 96 / 25.4;
+        if (lefts.some(left => left === null || !near(left, wantedPx, 1.5))) problems.push('Lecture : texte à ' + JSON.stringify(lefts) + ' px du bord de la feuille (' + wantedPx.toFixed(2) + ' attendus pour 40 mm)');
+        const pdf = await pdfDownloaded(h, async () => { document.getElementById('btn-export-pdf').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); });
+        const xs = pdf ? await pdfFirstTextX(h, pdf) : [];
+        const wantedPt = MACRO_MARGINS_MM.left * 72 / 25.4;
+        if (xs.length !== 2 || xs.some(x => x === null || !near(x, wantedPt, .6))) problems.push('PDF : premier texte de chaque page à ' + JSON.stringify(xs) + ' pt (' + wantedPt.toFixed(2) + ' attendus pour 40 mm)');
+        const word = await fileDownloaded(h, 'v2-btn-export-docx');
+        const wordMargins = word && word.blob ? await docxPageMargins(word.blob) : null;
+        const twips = mm => mm * 1440 / 25.4;
+        if (!wordMargins || ['top', 'right', 'bottom', 'left'].some(side => wordMargins[side] === null || !near(wordMargins[side], twips(MACRO_MARGINS_MM[side]), 2))) problems.push('Word : ' + JSON.stringify(wordMargins) + ' twips');
+        document.getElementById('btn-mode-edit').click();
+        await h.sleep(500);
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems, lefts, xs, wordMargins }) };
+      } finally {
+        const edit = document.getElementById('btn-mode-edit'); if (edit) edit.click();
+        await leaveMacro(h);
+      }
+    },
+  });
+
+  cases.push({
+    id: 'macro_margins_tab_says_the_macro_margins_take_precedence',
+    description: 'L\'onglet Marges des Réglages dit, tant qu\'un macro-modèle est chargé, que ses marges priment sur celles des modèles assemblés (français et anglais) ; la mention est cachée avec un modèle ouvert par le stylo du macro-modèle et avec un nouveau document, revient au retour au macro-modèle, et l\'ouvrir n\'écrit rien',
+    run: async (h) => {
+      try {
+        const macro = await composedMacro(h, 'Macro mention marges');
+        const problems = [];
+        // Ce que la personne voit : Réglages, onglet Marges ; la mention compte comme vue si rien ne la cache.
+        const seen = async () => {
+          document.getElementById('v2-btn-settings').click();
+          await h.sleep(150);
+          document.querySelector('.settings-tab[data-settings-tab="pageMargins"]').click();
+          await h.sleep(150);
+          const el = document.getElementById('settings-margins-macro-note');
+          const panel = el && el.closest('.settings-panel');
+          const out = !el ? null : {
+            shown: !el.hidden && !panel.hidden && getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().height > 0,
+            text: el.textContent,
+          };
+          document.getElementById('settings-close').click();
+          await h.sleep(100);
+          return out;
+        };
+        const writesNow = () => window.__gristStub.countActions('UpdateRecord', MACRO_TABLE) + window.__gristStub.countActions('AddRecord', MACRO_TABLE);
+        const writesBefore = writesNow();
+        const inMacro = await seen();
+        if (!inMacro) problems.push('la mention est absente de l\'onglet Marges');
+        else if (!inMacro.shown || !/priment sur celles des modèles assemblés/.test(inMacro.text)) problems.push('macro-modèle chargé, en français : ' + JSON.stringify(inMacro));
+        I18n.setLang('en');
+        await h.sleep(200);
+        const inMacroEnglish = await seen();
+        if (!inMacroEnglish || !inMacroEnglish.shown || !/take precedence over those of the assembled templates/.test(inMacroEnglish.text)) problems.push('macro-modèle chargé, en anglais : ' + JSON.stringify(inMacroEnglish));
+        I18n.setLang('fr');
+        await h.sleep(200);
+        // Le modèle ouvert par son stylo a SES marges : pas de mention.
+        pencilOf(macro.otherId).click();
+        await h.sleep(900);
+        const inModel = await seen();
+        if (!inModel || inModel.shown) problems.push('modèle ouvert par le stylo : ' + JSON.stringify(inModel));
+        document.getElementById('btn-macro-return').click();
+        await h.sleep(900);
+        const back = await seen();
+        if (!back || !back.shown) problems.push('retour au macro-modèle : ' + JSON.stringify(back));
+        await leaveMacro(h);
+        const inNew = await seen();
+        if (!inNew || inNew.shown) problems.push('nouveau document : ' + JSON.stringify(inNew));
+        if (writesNow() !== writesBefore) problems.push('ouvrir l\'onglet a écrit ' + (writesNow() - writesBefore) + ' fois dans la table des modèles');
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems, inMacro, inModel, inNew }) };
+      } finally { I18n.setLang('fr'); await leaveMacro(h); }
+    },
+  });
+
   // --- Ouvrir un modèle d'un macro-modèle par son stylo, et y revenir (02/10, retour d'Antoine : « modifier un sous-modèle en cliquant sur un stylo […] et, si possible, un bouton pour revenir au macro-modèle ») ---
   // Le résumé du macro-modèle (js/macro-editor.js:renderParts) liste ses modèles, un stylo chacun ; le stylo ouvre le modèle dans l'éditeur (js/main.js:openTemplateFromMacro) et le bandeau « Revenir au
   // macro-modèle » (#macro-return-bar) ramène au macro-modèle d'où l'on vient. Les gestes sont ceux de la personne (le vrai stylo, le vrai bouton, la vraie fenêtre « Modifications non enregistrées ») ; ce
