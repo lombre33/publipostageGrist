@@ -139,6 +139,10 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   tant qu'elle est affichée, au lieu de déplacer le curseur dans la case voisine (ce qui la refermait) ;
   Tab choisit la colonne en surbrillance, comme Entrée, au lieu de passer à la case suivante. Liste
   fermée (ou sans ligne), les flèches et Tab font comme avant.
+- **« Retour » de Grist avec les Réglages ouverts** : les onglets Vue et Accès reprennent le réglage enregistré
+  que Grist rend (la case « Choisir le modèle selon la ligne », les listes et la case de l'onglet Accès) au lieu
+  de garder le réglage annulé, et fermer les Réglages ne le réécrit plus : Grist ne remontre plus
+  « Enregistrer » pour un changement qu'on vient d'annuler.
 
 ## [1.0.0-beta.1] - 2026-10-05
 
@@ -360,6 +364,10 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   displayed, instead of moving the cursor to the neighbouring cell (which closed it); Tab picks the
   highlighted column, like Enter, instead of going to the next cell. With the list closed (or empty),
   the arrows and Tab work as before.
+- **Grist's "Revert" with Settings open**: the View and Access tabs take back the saved setting that Grist
+  hands back (the "Pick the template from the row" box, the lists and the box of the Access tab) instead of
+  keeping the cancelled one, and closing Settings no longer writes it again: Grist no longer shows "Save"
+  again for a change that was just cancelled.
 
 ## [1.0.0-beta.1] - 2026-10-05 (English)
 

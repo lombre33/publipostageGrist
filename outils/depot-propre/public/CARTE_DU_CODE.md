@@ -183,7 +183,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/icons.js` | Les icônes SVG. |
 | `js/i18n.js` | Les traductions FR et EN. |
 | `js/settings.js` | Le panneau Réglages : langue, thème, touche de déclenchement, marges, crédits. |
-| `js/save-reminder.js` | Le rappel « Enregistrer » des Réglages Vue et Accès : la ligne à gauche de « Fermer » après un changement, éteinte par le « Retour » de Grist (qui ne dit rien d'un clic sur « Enregistrer »). |
+| `js/save-reminder.js` | Le rappel « Enregistrer » des Réglages Vue et Accès : la ligne à gauche de « Fermer » après un changement, éteinte par le « Retour » de Grist (qui ne dit rien d'un clic sur « Enregistrer »), et les onglets reprennent alors le réglage enregistré. |
 | `js/shortcuts.js`, `js/shortcuts-panel.js` | Les raccourcis clavier personnalisables et leur liste. |
 | `js/first-contact.js` | La fenêtre de premier contact quand le widget ne démarre pas comme prévu. |
 | `js/clean-reading.js` | La Lecture épurée (sans la barre du haut), ouverte d'emblée pour les personnes en lecture seule, comptes Lecteur de Grist compris, quand la case des Réglages est cochée. |
@@ -433,7 +433,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/icons.js` | The SVG icons. |
 | `js/i18n.js` | The French and English translations. |
 | `js/settings.js` | The Settings panel: language, theme, trigger key, margins, credits. |
-| `js/save-reminder.js` | The "Save" reminder of the Settings View and Access tabs: the line to the left of "Close" after a change, switched off by Grist's "Revert" (which says nothing of a click on "Save"). |
+| `js/save-reminder.js` | The "Save" reminder of the Settings View and Access tabs: the line to the left of "Close" after a change, switched off by Grist's "Revert" (which says nothing of a click on "Save"), and the tabs then take back the saved setting. |
 | `js/shortcuts.js`, `js/shortcuts-panel.js` | The customizable keyboard shortcuts and their list. |
 | `js/first-contact.js` | The first-contact window, when the widget doesn't start as expected. |
 | `js/clean-reading.js` | Clean reading (without the top bar), opened straight away for read-only people, Grist Viewer accounts included, when the Settings box is ticked. |

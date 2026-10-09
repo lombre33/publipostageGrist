@@ -146,6 +146,40 @@
     },
   });
 
+  // Le suivi dit aussi si un message a REMPLACÉ les options qu'il tient : c'est ce qui fait reprendre l'état enregistré aux onglets (`onRevert`).
+  cases.push({
+    id: 'save_reminder_tracker_says_when_a_message_replaced_the_options_it_holds',
+    description: 'Le suivi rend vrai seulement pour un « Retour » qui remplace des options différentes de celles tenues : jamais pour l’écho d’une écriture, un message qui porte aussi un changement de lien ou d’accès, ni un renvoi des mêmes options ; `onRevert` est exposé',
+    run: async () => {
+      let t = 0;
+      const tracker = () => SaveReminder.createTracker(() => t);
+      const got = {};
+      let k = tracker(); k.start({});
+      k.wrote({}, { a: 1 });
+      got.echo = k.received({ a: 1 });
+      got.revert = k.received({});
+      got.again = k.received({});
+      k = tracker(); k.start({ a: 1 });
+      k.wrote({ a: 1 }, { a: 2 });
+      k.received({ a: 2 });
+      got.settings = k.received({ a: 1 }, true);
+      got.revertAfterSettings = k.received({ a: 1 });
+      k = tracker(); t = 0; k.start({});
+      k.wrote({}, { a: 1 });
+      t = SaveReminder.ECHO_WAIT_MS + 500;
+      got.lostEchoThenRevert = k.received({});
+      k = tracker(); k.start({});
+      k.wrote({}, { a: 1 });
+      k.received({ a: 1 });
+      k.wrote({ a: 1 }, { a: 1 });
+      got.noopThenRevert = k.received({});
+      got.onRevert = typeof SaveReminder.onRevert;
+      const pass = got.echo === false && got.revert === true && got.again === false && got.settings === false && got.revertAfterSettings === true
+        && got.lostEchoThenRevert === true && got.noopThenRevert === true && got.onRevert === 'function';
+      return { pass, notes: JSON.stringify(got) };
+    },
+  });
+
   // La ligne dans la fenêtre : un réglage de l'onglet Accès, puis « Enregistrer » ou « Retour » de Grist.
   cases.push({
     id: 'save_reminder_line_shows_on_the_view_and_access_tabs_after_a_setting_and_goes_with_revert_or_a_new_opening',
@@ -300,6 +334,126 @@
       }
       await finish();
       const pass = got.before === true && got.afterAccess === true && got.afterBack === true && got.afterRevert === false;
+      return { pass, notes: JSON.stringify(got) };
+    },
+  });
+
+  // « Retour » de Grist cliqué Réglages OUVERTS (constaté dans un vrai Grist le 09/10, labo-grist-reel/lab-save-reminder.mjs) : Grist rend les options
+  // enregistrées, mais l'onglet Vue gardait le réglage annulé (case encore cochée) et la fermeture des Réglages l'écrivait de nouveau, ce qui refaisait
+  // apparaître « Enregistrer » chez Grist pour un changement qu'on venait d'annuler. Choix d'Antoine du 09/10 : « Corriger ».
+  cases.push({
+    id: 'save_reminder_revert_puts_the_view_tab_back_to_the_saved_setting_and_closing_the_settings_writes_nothing',
+    description: 'Après « Retour » de Grist, Réglages ouverts, l’onglet Vue montre le réglage enregistré (case décochée, plus de règle) au lieu du réglage annulé, et fermer les Réglages n’écrit plus rien : Grist ne remontre pas « Enregistrer »',
+    run: async (h) => {
+      await setup(h);
+      let writes = 0;
+      const realSetOption = grist.setOption;
+      grist.setOption = function () { writes++; return realSetOption.apply(this, arguments); };
+      try {
+        const got = {};
+        await openSettings('rowTemplate');
+        el('settings-rowtemplate-enabled').click();
+        await sleep(600);
+        got.tickedChecked = el('settings-rowtemplate-enabled').checked;
+        got.tickedReminder = shown();
+        got.tickedOff = el('settings-rowtemplate-body').classList.contains('is-off');
+        got.tickedEmpty = !!document.querySelector('#settings-rowtemplate-rules .macro-slots-empty');
+        const writesBeforeRevert = writes;
+        stub().revertOptions();
+        await sleep(300);
+        got.checkedAfterRevert = el('settings-rowtemplate-enabled').checked;
+        got.offAfterRevert = el('settings-rowtemplate-body').classList.contains('is-off');
+        got.emptyAfterRevert = !!document.querySelector('#settings-rowtemplate-rules .macro-slots-empty');
+        got.reminderAfterRevert = shown();
+        await closeSettings();
+        await sleep(600);
+        got.writesAfterRevertAndClose = writes - writesBeforeRevert;
+        got.options = JSON.stringify(stub().state.options);
+        got.saved = JSON.stringify(stub().state.savedOptions);
+        got.gristWouldAskToSave = got.options !== got.saved;
+        got.unsaved = SaveReminder.isUnsaved();
+        await openSettings('rowTemplate');
+        got.checkedWhenReopened = el('settings-rowtemplate-enabled').checked;
+        await finish();
+        const pass = got.tickedChecked === true && got.tickedReminder === true && got.tickedOff === false && got.tickedEmpty === false
+          && got.checkedAfterRevert === false && got.offAfterRevert === true && got.emptyAfterRevert === true && got.reminderAfterRevert === false
+          && got.writesAfterRevertAndClose === 0 && got.gristWouldAskToSave === false && got.unsaved === false && got.checkedWhenReopened === false;
+        return { pass, notes: JSON.stringify(got) };
+      } finally {
+        grist.setOption = realSetOption;
+      }
+    },
+  });
+
+  // Même constat pour l'onglet Accès : ses listes et sa case montraient le réglage annulé, et le réglage suivant l'aurait récrit avec lui.
+  cases.push({
+    id: 'save_reminder_revert_puts_the_access_tab_back_to_the_saved_setting',
+    description: 'Après « Retour » de Grist, Réglages ouverts, l’onglet Accès montre le réglage enregistré (ici aucun : listes vides, case décochée et grisée) au lieu du réglage annulé ; un nouveau réglage ne reprend rien de ce qui a été annulé',
+    run: async (h) => {
+      await setup(h);
+      const RIGHTS = 'PpDroitsRetour';
+      stub().setVariables(RIGHTS, { Email: 'Text', LectureSeule: 'Bool', Export: 'Bool' });
+      stub().setRows(RIGHTS, [{ id: 1, Email: 'autre@exemple.fr', LectureSeule: true, Export: true }]);
+      await GristAPI.refreshSchema();
+      const choose = async (id, value) => { const s = el(id); s.value = value; s.dispatchEvent(new Event('change', { bubbles: true })); await sleep(450); };
+      const got = {};
+      await openSettings('access');
+      await choose('settings-access-table', RIGHTS);
+      await choose('settings-access-email', 'Email');
+      await choose('settings-access-readonly', 'LectureSeule');
+      await choose('settings-access-export', 'Export');
+      el('settings-access-clean-reading').click(); await sleep(450);
+      const drafted = (stub().state.options || {}).droitsAcces || {};
+      got.draftTable = drafted.table;
+      got.draftExport = drafted.exportColumn;
+      got.draftClean = drafted.cleanReading;
+      got.reminder = shown();
+      stub().revertOptions();
+      await sleep(300);
+      got.table = el('settings-access-table').value;
+      got.email = el('settings-access-email').value;
+      got.readOnly = el('settings-access-readonly').value;
+      got.exportColumn = el('settings-access-export').value;
+      got.clean = el('settings-access-clean-reading').checked;
+      got.cleanDisabled = el('settings-access-clean-reading').disabled;
+      got.config = JSON.stringify(AccessRights.getConfig());
+      got.reminderAfterRevert = shown();
+      // Un nouveau réglage, fait de zéro : rien de ce qui a été annulé n'y revient.
+      await choose('settings-access-table', RIGHTS);
+      await choose('settings-access-email', 'Email');
+      await choose('settings-access-readonly', 'LectureSeule');
+      const again = (stub().state.options || {}).droitsAcces || {};
+      got.againTable = again.table;
+      got.againReadOnly = again.readOnlyColumn;
+      got.againExport = again.exportColumn || '';
+      got.againClean = !!again.cleanReading;
+      await finish();
+      const pass = got.draftTable === RIGHTS && got.draftExport === 'Export' && got.draftClean === true && got.reminder === true
+        && got.table === '' && got.email === '' && got.readOnly === '' && got.exportColumn === '' && got.clean === false && got.cleanDisabled === true
+        && got.config === 'null' && got.reminderAfterRevert === false
+        && got.againTable === RIGHTS && got.againReadOnly === 'LectureSeule' && got.againExport === '' && got.againClean === false;
+      return { pass, notes: JSON.stringify(got) };
+    },
+  });
+
+  // Le garde-fou : l'écho d'une écriture du widget n'est pas un « Retour » et ne défait pas ce que la personne est en train de saisir.
+  cases.push({
+    id: 'save_reminder_the_echo_of_the_widget_own_write_does_not_reset_the_open_tabs',
+    description: 'Un réglage de l’onglet Vue écrit, Grist renvoie son écho : l’onglet garde la case cochée et la règle encore vide que la personne vient d’ajouter (le brouillon d’une saisie n’est pas rendu à l’état enregistré)',
+    run: async (h) => {
+      await setup(h);
+      const got = {};
+      await openSettings('rowTemplate');
+      el('settings-rowtemplate-enabled').click();
+      await sleep(80);
+      el('settings-rowtemplate-add').click();
+      await sleep(700);
+      const rows = () => Array.prototype.filter.call(el('settings-rowtemplate-rules').children, c => !c.classList.contains('macro-slots-empty')).length;
+      got.checked = el('settings-rowtemplate-enabled').checked;
+      got.rows = rows();
+      got.reminder = shown();
+      await finish();
+      const pass = got.checked === true && got.rows === 2 && got.reminder === true;
       return { pass, notes: JSON.stringify(got) };
     },
   });

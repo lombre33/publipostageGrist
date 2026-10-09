@@ -375,6 +375,9 @@ const AccessRights = (function () {
       GristAPI.refreshSchema().then(renderSettingsPanel).catch(() => {});
     });
     I18n.onChange(renderSettingsPanel);
+    // « Retour » de Grist (js/save-reminder.js) : les options enregistrées reviennent (setConfig les a déjà prises), l'onglet les montre à la place du
+    // brouillon annulé - sinon ses listes et sa case restaient sur le réglage annulé, et le suivant l'aurait récrit avec lui.
+    if (typeof SaveReminder !== 'undefined') SaveReminder.onRevert(() => { draft = null; renderSettingsPanel(); });
   }
 
   return { init, get, getStatus, getConfig, onChange, refresh };
