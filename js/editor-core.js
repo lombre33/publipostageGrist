@@ -122,7 +122,8 @@ const EditorCore = (function () {
       undock,
       isDocked() { return docked; },
       // `options` (facultatif, valeur ou fonction relue à chaque calcul) : { flip, shift } passés tels quels aux intergiciels de floating-ui (la
-      // grille s'en sert pour que la barre ne recouvre pas ses bandeaux, js/grid-editor.js:floatingOptions) et { placement } (au-dessus par défaut :
+      // grille s'en sert pour que la barre ne recouvre pas ses bandeaux, js/grid-editor.js:floatingOptions), { offset } (l'écart avec l'ancre, 8 px par
+      // défaut : la barre d'un tableau de document laisse la place aux lettres de ses bandeaux) et { placement } (au-dessus par défaut :
       // le menu d'une barre fixée en haut de la page, comme celle de la case d'une grille, s'ouvre dessous plutôt que sur la barre d'outils). Sans
       // `options`, rien ne change.
       show(referenceEl, options) {
@@ -137,7 +138,7 @@ const EditorCore = (function () {
           const opts = (typeof options === 'function' ? options() : options) || {};
           floatingUi.computePosition(referenceEl, el, {
             placement: opts.placement || 'top',
-            middleware: [floatingUi.offset(8), floatingUi.flip(opts.flip), floatingUi.shift(Object.assign({ padding: 8 }, opts.shift))],
+            middleware: [floatingUi.offset(opts.offset == null ? 8 : opts.offset), floatingUi.flip(opts.flip), floatingUi.shift(Object.assign({ padding: 8 }, opts.shift))],
           }).then(({ x, y }) => { el.style.left = `${x}px`; el.style.top = `${y}px`; });
         };
         if (stopAutoUpdate) stopAutoUpdate();
@@ -155,7 +156,9 @@ const EditorCore = (function () {
   // ProseMirror ; un clic hors de `.tiptap` et hors de `.v2-floating-toolbar` les referme toutes, pour les cas sans évènement ProseMirror (ex. clic
   // sur "Mode lecture"). La pastille du zoom de la page (js/page-zoom.js) n'en fait pas partie : un appui dessus ne prend pas le focus et ne change ni la
   // sélection ni le contexte, la barre de l'image ou du tableau reste ouverte et suit la feuille qui change d'échelle. Le menu qu'une de ces barres a
-  // ouvert (les bordures du tableau, setOpenDropdownPanel avec son bouton) n'en fait pas partie non plus.
+  // ouvert (les bordures du tableau, setOpenDropdownPanel avec son bouton) n'en fait pas partie non plus, ni les bandeaux d'un tableau de document
+  // (`.pp-doc-strips`, js/grid-editor.js) : un appui sur une lettre ou un numéro garde le focus de l'éditeur et choisit une colonne ou une ligne du
+  // tableau dont la barre est ouverte.
   // `ownerEl` (facultatif) : le champ texte à bulles (js/field-editor.js) dont `panel` est la barre ; sans lui, c'est une barre de l'éditeur du
   // document. Un clic dans l'un laisse ouvertes les barres de CET éditeur et referme celles des autres : le curseur d'un champ ne bouge pas quand on
   // clique dans le document, et inversement.
@@ -164,7 +167,7 @@ const EditorCore = (function () {
   function hideFloatingContextToolbars() { floatingContextPanels.forEach(entry => entry.panel.hide()); }
   document.addEventListener('mousedown', (event) => {
     const target = event.target;
-    if (target.closest('.v2-floating-toolbar') || target.closest('.pp-page-zoom')) return;
+    if (target.closest('.v2-floating-toolbar') || target.closest('.pp-page-zoom') || target.closest('.pp-doc-strips')) return;
     // Le menu qu'une barre flottante a ouvert (les bordures d'un tableau de document) fait partie de cette barre : choisir la couleur d'un trait ou
     // cocher le quadrillage ne la referme pas, sinon son bouton disparaît et le menu, resté ouvert, perd son ancre et saute dans un coin.
     if (openDropdownPanel && openDropdownButton && openDropdownButton.closest('.v2-floating-toolbar') && openDropdownPanel.el.contains(target)) return;

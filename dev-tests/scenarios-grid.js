@@ -691,7 +691,8 @@
       await h.clickButton('v2-btn-table');
       await sleep(80);
       const tables = h.tiptap().querySelectorAll('table').length;
-      const pass = !GridEditor.isActive() && !document.querySelector('.v2-grid-corner, .v2-grid-cols, .v2-grid-rows') && tables === 1 && !document.getElementById('v2-toggle-a4-preview').disabled
+      // Les bandeaux d'une grille sont dans la feuille de l'éditeur ; le tableau qu'on vient d'insérer porte ceux d'un tableau de document (`.pp-doc-strips`, dans le body).
+      const pass = !GridEditor.isActive() && !document.querySelector('#editor-container .v2-grid-corner, #editor-container .v2-grid-cols, #editor-container .v2-grid-rows') && tables === 1 && !document.getElementById('v2-toggle-a4-preview').disabled
         && !isLocked('v2-btn-table') && !isLocked('v2-btn-citation') && !isLocked('v2-btn-track-changes') && !document.body.classList.contains('pp-grid-mode');
       return { pass, notes: JSON.stringify({ tables, locks: GREYED_IN_GRID.filter(id => isLocked(id)) }) };
     },

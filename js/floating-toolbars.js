@@ -373,6 +373,10 @@ const FloatingToolbars = (function () {
       return dom.tagName === 'TABLE' ? dom : (dom.querySelector && dom.querySelector('table')) || dom;
     }
 
+    // L'écart entre la barre et son tableau : 8 px, plus la hauteur des lettres des bandeaux quand elles se montrent (js/grid-editor.js:documentStripsOffset),
+    // pour que la barre ne les recouvre pas. Relu à chaque calcul de position.
+    const tableBarOptions = () => ({ offset: 8 + GridEditor.documentStripsOffset() });
+
     function tableToolbarCheck(panel, sync) {
       return () => {
         if (dockInGridBar(panel, sync)) return;
@@ -381,7 +385,7 @@ const FloatingToolbars = (function () {
         if (!editor.view.hasFocus() || !editor.isActive('table')) { panel.hide(); return; }
         const anchor = tableUnderCursor();
         if (!anchor) { panel.hide(); return; }
-        panel.show(anchor);
+        panel.show(anchor, tableBarOptions);
         sync.syncDocumentButtons();
       };
     }

@@ -6,7 +6,9 @@
 // allumé, puis le tableau réglé dans le Word (OOXML dézippé) : « ce que je règle sort pareil ». La grille elle-même (un seul tableau) garde sa suite "grid".
 // Lot 3 (b) : `tableSettingsBlocked`, ce qui grise les boutons sous le suivi. Lot 3 (a) : la structure - « Ligne / Colonne avant / après » sur toute la sélection, la ligne ou la colonne ajoutée qui reprend le cadre et la hauteur de sa
 // voisine, la fusion et la scission qui gardent le pourtour (`insertLines`, `repairDocumentTables`, `mergeSelected`, `splitSelected`). Lot 3 (c) : Entrée qui descend d'une
-// case, comme dans la grille (`enterGoesDown`, `enterCellPos`).
+// case, comme dans la grille (`enterGoesDown`, `enterCellPos`). Lot 4 (a) : les bandeaux A, B, C / 1, 2, 3 posés par-dessus la page quand le curseur est dans un tableau du premier niveau
+// (`documentStrips` : étiquettes, sélection d'une colonne, d'une ligne ou du tableau par un appui, allumage, rien laissé dans la page hors d'un tableau) ; leur place à l'écran est mesurée par
+// dev-tests/verify-doc-strips-mouse.mjs (groupe docStripsMouse).
 (function () {
   const cases = [];
   const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -616,6 +618,181 @@
       const handled = key('Enter');
       await sleep(60);
       if (!handled || selectedText() !== 'B2A' || docJson() !== before || Editor.hasPendingTrackedChanges()) bad.push(JSON.stringify({ handled, selected: selectedText(), unchanged: docJson() === before, pending: Editor.hasPendingTrackedChanges() }));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  // ---------- Lot 4 (a) : les bandeaux d'un tableau de document ----------
+  const STRIPS = '.pp-doc-strips';
+  const stripCount = () => document.querySelectorAll(STRIPS).length;
+  const stripsShown = () => { const root = document.querySelector(STRIPS); return !!root && !root.hidden && getComputedStyle(root).display !== 'none'; };
+  const stripLabels = kind => Array.from(document.querySelectorAll(STRIPS + ' .v2-grid-' + kind + 'head')).map(head => head.textContent).join('');
+  const litHeads = kind => Array.from(document.querySelectorAll(STRIPS + ' .v2-grid-' + kind + 'head')).map((head, i) => (head.classList.contains('sel') ? i : -1)).filter(i => i >= 0).join(',');
+  const stripsNow = () => JSON.stringify([stripCount(), stripsShown(), stripLabels('col'), stripLabels('row')]);
+  // Un appui sur un bandeau, comme le pointeur le ferait (au centre de la lettre, du numéro ou du coin).
+  function pressStrip(selector, extra) {
+    const node = document.querySelector(selector);
+    if (!node) throw new Error('bandeau introuvable : ' + selector);
+    const r = node.getBoundingClientRect();
+    node.dispatchEvent(new PointerEvent('pointerdown', Object.assign({ bubbles: true, cancelable: true, button: 0, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, pointerId: 1, isPrimary: true }, extra || {})));
+  }
+  const selectedCellTexts = () => { const out = []; const sel = ed().state.selection; if (sel.forEachCell) sel.forEachCell(node => out.push(node.textContent)); return out.join(','); };
+  async function cursorInParagraph(text) {
+    let found = null;
+    ed().state.doc.descendants((node, pos) => { if (found == null && node.type.name === 'paragraph' && node.textContent === text) found = pos + 1; return found == null; });
+    ed().commands.setTextSelection(found);
+    await sleep(150);
+  }
+  const colHead = n => STRIPS + ' .v2-grid-colhead:nth-child(' + n + ')';
+  const rowHead = n => STRIPS + ' .v2-grid-rowhead:nth-child(' + n + ')';
+
+  cases.push({
+    id: 'docstrips_follow_the_cursor_in_a_top_level_table_and_leave_nothing_behind',
+    description: 'Le curseur dans un tableau du premier niveau : les lettres et les numéros de CE tableau, en un seul jeu ; dans l\'autre tableau, ils le suivent ; hors des tableaux, la page n\'en garde aucun (ni caché ni vide)',
+    run: async (h) => withDoc(h, TWO_TABLES, async () => {
+      const bad = [];
+      await cursorInParagraph('avant');
+      if (stripCount()) bad.push('curseur hors tableau : ' + stripsNow());
+      await cursorIn(0, 0, 0);
+      if (stripCount() !== 1 || !stripsShown() || stripLabels('col') !== 'AB' || stripLabels('row') !== '12') bad.push('tableau A : ' + stripsNow());
+      await cursorIn(1, 2, 1);
+      if (stripCount() !== 1 || !stripsShown() || stripLabels('col') !== 'AB' || stripLabels('row') !== '123') bad.push('tableau B : ' + stripsNow());
+      await cursorInParagraph('entre');
+      if (stripCount()) bad.push('entre les tableaux : ' + stripsNow());
+      await cursorIn(0, 1, 1);
+      await cursorInParagraph('après');
+      if (stripCount()) bad.push('sous les tableaux : ' + stripsNow());
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'docstrips_none_for_a_table_in_a_cell_or_in_a_column',
+    description: 'Pas de bandeaux pour un tableau posé dans une case ni dans une colonne (la place manque) ; le tableau extérieur, lui, garde les siens depuis sa case voisine',
+    run: async (h) => {
+      const bad = [];
+      await withDoc(h, '<p>avant</p><table><tbody><tr><td><p>dehors</p>' + tableHtml('N', 2, 2) + '</td><td><p>voisine</p></td></tr></tbody></table><p>après</p>', async () => {
+        await cursorIn(1, 0, 0);
+        if (stripCount()) bad.push('tableau dans une case : ' + stripsNow());
+        await cursorIn(0, 0, 1);
+        if (!stripsShown() || stripLabels('col') !== 'AB' || stripLabels('row') !== '1') bad.push('tableau extérieur : ' + stripsNow());
+      });
+      await h.resetEditor();
+      await h.focusAtEnd();
+      await h.clickButton('v2-btn-two-columns');
+      await sleep(60);
+      const column = h.tiptap().querySelector('.two-columns-column');
+      await h.focusInElement(column.querySelector('p') || column);
+      await h.clickButton('v2-btn-table');
+      await sleep(250);
+      if (!h.tiptap().querySelector('.two-columns-column table')) bad.push('le tableau n\'est pas dans la colonne');
+      else if (stripCount()) bad.push('tableau dans une colonne : ' + stripsNow());
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'docstrips_click_a_letter_a_number_or_the_corner_to_choose_cells',
+    description: 'Un appui sur une lettre choisit la colonne, sur un numéro la ligne, sur le coin tout le tableau ; Maj étend ; l\'éditeur garde le focus et les bandeaux restent',
+    run: async (h) => withDoc(h, TWO_TABLES, async () => {
+      const bad = [];
+      await cursorIn(1, 0, 0);
+      pressStrip(colHead(2));
+      await sleep(150);
+      if (selectedCellTexts() !== 'B1B,B2B,B3B' || !ed().view.hasFocus() || !stripsShown()) bad.push('lettre B : ' + JSON.stringify([selectedCellTexts(), ed().view.hasFocus(), stripsShown()]));
+      pressStrip(rowHead(2));
+      await sleep(150);
+      if (selectedCellTexts() !== 'B2A,B2B') bad.push('numéro 2 : ' + selectedCellTexts());
+      pressStrip(rowHead(3), { shiftKey: true });
+      await sleep(150);
+      if (selectedCellTexts() !== 'B2A,B2B,B3A,B3B') bad.push('Maj + numéro 3 : ' + selectedCellTexts());
+      pressStrip(colHead(1));
+      await sleep(150);
+      pressStrip(colHead(2), { shiftKey: true });
+      await sleep(150);
+      if (selectedCellTexts().split(',').length !== 6) bad.push('lettre A puis Maj + lettre B : ' + selectedCellTexts());
+      pressStrip(STRIPS + ' .v2-grid-corner');
+      await sleep(150);
+      if (selectedCellTexts().split(',').length !== 6 || litHeads('col') !== '0,1' || litHeads('row') !== '0,1,2') bad.push('coin : ' + JSON.stringify([selectedCellTexts(), litHeads('col'), litHeads('row')]));
+      // Les cases choisies sont celles du tableau B : le tableau A n'a pas bougé.
+      const otherCells = tablesOf()[0].node.textContent;
+      if (otherCells !== 'A1AA1BA2AA2B') bad.push('tableau A : ' + otherCells);
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'docstrips_light_up_the_columns_and_rows_the_selection_covers',
+    description: 'Les lettres et les numéros des cases touchées par le curseur ou par la sélection s\'allument, comme dans la grille',
+    run: async (h) => withDoc(h, TWO_TABLES, async () => {
+      const bad = [];
+      await cursorIn(1, 1, 1);
+      if (litHeads('col') !== '1' || litHeads('row') !== '1') bad.push('curseur : ' + JSON.stringify([litHeads('col'), litHeads('row')]));
+      await selectCells(1, 0, 0, 1, 1);
+      if (litHeads('col') !== '0,1' || litHeads('row') !== '0,1') bad.push('quatre cases : ' + JSON.stringify([litHeads('col'), litHeads('row')]));
+      await selectCells(1, 2, 0, 2, 1);
+      if (litHeads('col') !== '0,1' || litHeads('row') !== '2') bad.push('dernière ligne : ' + JSON.stringify([litHeads('col'), litHeads('row')]));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'docstrips_follow_a_structure_change_and_hide_when_the_editor_loses_focus',
+    description: 'Une ligne ajoutée ou retirée : un numéro de plus ou de moins ; l\'éditeur sans focus : plus aucun bandeau, et ils reviennent avec lui',
+    run: async (h) => withDoc(h, TWO_TABLES, async () => {
+      const bad = [];
+      await cursorIn(0, 1, 0);
+      ed().chain().focus().addRowAfter().run();
+      await sleep(200);
+      if (stripLabels('row') !== '123' || stripLabels('col') !== 'AB') bad.push('ligne de plus : ' + stripsNow());
+      await undo();
+      await sleep(150);
+      if (stripLabels('row') !== '12') bad.push('annulé : ' + stripsNow());
+      ed().chain().focus().addColumnAfter().run();
+      await sleep(200);
+      if (stripLabels('col') !== 'ABC') bad.push('colonne de plus : ' + stripsNow());
+      ed().commands.blur();
+      await sleep(200);
+      if (stripCount()) bad.push('sans focus : ' + stripsNow());
+      ed().commands.focus();
+      await sleep(200);
+      if (!stripsShown() || stripLabels('col') !== 'ABC') bad.push('focus rendu : ' + stripsNow());
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'docstrips_stay_with_track_changes_and_choosing_changes_nothing',
+    description: 'Suivi des modifications allumé : les bandeaux sont là, une lettre choisit sa colonne et le document ne change pas (aucune suggestion)',
+    run: async (h) => withDoc(h, TWO_TABLES, async () => {
+      const bad = [];
+      await cursorIn(1, 0, 0);
+      Editor.setTrackChanges(true);
+      await sleep(100);
+      const before = docJson();
+      pressStrip(colHead(2));
+      await sleep(150);
+      if (!stripsShown() || selectedCellTexts() !== 'B1B,B2B,B3B' || docJson() !== before || Editor.hasPendingTrackedChanges()) bad.push(JSON.stringify({ shown: stripsShown(), selected: selectedCellTexts(), unchanged: docJson() === before, pending: Editor.hasPendingTrackedChanges() }));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'docstrips_offset_keeps_the_table_bar_off_the_letters',
+    description: 'La barre du tableau laisse la hauteur des lettres libre au-dessus du tableau quand elles se montrent, et 0 sinon (hors d\'un tableau, tableau dans une case, éditeur sans focus)',
+    run: async (h) => withDoc(h, '<p>avant</p>' + tableHtml('A', 2, 2) + '<p>entre</p><table><tbody><tr><td><p>dehors</p>' + tableHtml('N', 2, 2) + '</td></tr></tbody></table><p>après</p>', async () => {
+      const bad = [];
+      const strip = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--grid-strip-h')) || 22;
+      await cursorInParagraph('avant');
+      if (GridEditor.documentStripsOffset() !== 0) bad.push('hors tableau : ' + GridEditor.documentStripsOffset());
+      await cursorIn(0, 0, 0);
+      if (GridEditor.documentStripsOffset() !== strip) bad.push('dans le tableau : ' + GridEditor.documentStripsOffset() + ' pour ' + strip);
+      await cursorIn(2, 0, 0);
+      if (GridEditor.documentStripsOffset() !== 0) bad.push('tableau dans une case : ' + GridEditor.documentStripsOffset());
+      await cursorIn(0, 0, 0);
+      ed().commands.blur();
+      await sleep(100);
+      if (GridEditor.documentStripsOffset() !== 0) bad.push('sans focus : ' + GridEditor.documentStripsOffset());
       return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
     }),
   });
