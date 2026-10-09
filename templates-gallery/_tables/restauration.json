@@ -1,0 +1,28 @@
+{
+  "tables": [
+    {
+      "id": "Recettes",
+      "columns": [
+        {"id": "Nom", "type": "Text", "label": "Nom"},
+        {"id": "Categorie", "type": "Choice", "label": "Catégorie", "choices": ["Entrée", "Plat", "Dessert"]},
+        {"id": "Portions", "type": "Int", "label": "Portions de la recette"},
+        {"id": "Couverts", "type": "Int", "label": "Couverts à servir"},
+        {"id": "Preparation", "type": "Int", "label": "Préparation (min)"},
+        {"id": "Cuisson", "type": "Int", "label": "Cuisson (min)"},
+        {"id": "Allergenes", "type": "ChoiceList", "label": "Allergènes", "choices": ["Gluten", "Lait", "Œufs", "Fruits à coque", "Céleri", "Poisson", "Sulfites"]},
+        {"id": "Etapes", "type": "Text", "label": "Déroulé"},
+        {"id": "Photo", "type": "Attachments", "label": "Photo"}
+      ]
+    },
+    {
+      "id": "Ingredients",
+      "columns": [
+        {"id": "Recette", "type": "Ref:Recettes", "label": "Recette", "show": "Nom"},
+        {"id": "Nom", "type": "Text", "label": "Ingrédient"},
+        {"id": "Quantite", "type": "Numeric", "label": "Quantité"},
+        {"id": "Unite", "type": "Text", "label": "Unité"},
+        {"id": "CoutUnitaire", "type": "Numeric", "label": "Coût par unité (€)"}
+      ]
+    }
+  ]
+}

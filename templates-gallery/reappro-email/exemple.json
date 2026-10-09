@@ -1,0 +1,33 @@
+{
+  "captures": [
+    {
+      "kind": "reading",
+      "row": 1,
+      "viewport": [980, 900],
+      "clip": [
+        ["#v2-email-fields-row"],
+        [".reader-content > *"]
+      ],
+      "pad": [
+        [0, 0, 4, 0],
+        [22, 0, 26, 0]
+      ]
+    },
+    {
+      "kind": "reading",
+      "row": 2,
+      "viewport": [980, 900],
+      "clip": [
+        ["#v2-email-fields-row"],
+        [".reader-content > *"]
+      ],
+      "pad": [
+        [0, 0, 4, 0],
+        [22, 0, 26, 0]
+      ]
+    }
+  ],
+  "thumb": {
+    "capture": 1
+  }
+}

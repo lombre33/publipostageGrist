@@ -1,0 +1,30 @@
+{
+  "rows": {
+    "Sessions": [
+      {"id": 1, "Numero": "AF-2026-118", "Intitule": "Sécurité incendie et évacuation — recyclage SSIAP 1", "Debut": "2026-11-09", "Fin": "2026-11-10", "Lieu": "Centre de formation Vaise — salle 4 — 18 rue Pierre Audry, 69009 Lyon", "Formateur": "Sandrine Roux", "Duree": 14, "Client": "Groupe Hospitalier Lyon-Sud"},
+      {"id": 2, "Numero": "AF-2026-121", "Intitule": "Gestes et postures", "Debut": "2026-11-20", "Fin": "2026-11-20", "Lieu": "Sur site (client)", "Formateur": "Paul Benoît", "Duree": 7, "Client": "Transports Delmas"}
+    ],
+    "Participants": [
+      {"id": 1, "Session": 1, "Ordre": 1, "Nom": "O’Connor", "Prenom": "Marie-Hélène", "Entreprise": "Clinique Charcot", "Email": "p1@example.org"},
+      {"id": 2, "Session": 1, "Ordre": 2, "Nom": "Kowalski", "Prenom": "Yannick", "Entreprise": "Sodexo Santé", "Email": "p2@example.org"},
+      {"id": 3, "Session": 1, "Ordre": 3, "Nom": "Vidal", "Prenom": "Zoé", "Entreprise": "ISS Facility Services", "Email": "p3@example.org"},
+      {"id": 4, "Session": 1, "Ordre": 4, "Nom": "Nguyễn", "Prenom": "François", "Entreprise": "Groupe Hospitalier Lyon-Sud", "Email": "p4@example.org"},
+      {"id": 5, "Session": 1, "Ordre": 5, "Nom": "Schmitt", "Prenom": "Mathieu", "Entreprise": "Clinique Charcot", "Email": "p5@example.org"},
+      {"id": 6, "Session": 1, "Ordre": 6, "Nom": "Amrani", "Prenom": "Łukasz", "Entreprise": "Sodexo Santé", "Email": "p6@example.org"},
+      {"id": 7, "Session": 1, "Ordre": 7, "Nom": "Ben Saïd", "Prenom": "Noël", "Entreprise": "ISS Facility Services", "Email": "p7@example.org"},
+      {"id": 8, "Session": 1, "Ordre": 8, "Nom": "Garcia", "Prenom": "Aïcha", "Entreprise": "Groupe Hospitalier Lyon-Sud", "Email": "p8@example.org"},
+      {"id": 9, "Session": 1, "Ordre": 9, "Nom": "Tessier", "Prenom": "Chloé", "Entreprise": "Clinique Charcot", "Email": "p9@example.org"},
+      {"id": 10, "Session": 1, "Ordre": 10, "Nom": "de la Fontaine-Beauregard", "Prenom": "Jean-Baptiste", "Entreprise": "Sodexo Santé", "Email": "p10@example.org"},
+      {"id": 11, "Session": 1, "Ordre": 11, "Nom": "Müller", "Prenom": "Émilie", "Entreprise": "ISS Facility Services", "Email": "p11@example.org"},
+      {"id": 12, "Session": 1, "Ordre": 12, "Nom": "Bouvier", "Prenom": "Élodie", "Entreprise": "Groupe Hospitalier Lyon-Sud", "Email": "p12@example.org"},
+      {"id": 13, "Session": 1, "Ordre": 13, "Nom": "Martin", "Prenom": "Søren", "Entreprise": "Clinique Charcot", "Email": "p13@example.org"},
+      {"id": 14, "Session": 1, "Ordre": 14, "Nom": "Lefèvre", "Prenom": "Inès", "Entreprise": "Sodexo Santé", "Email": "p14@example.org"},
+      {"id": 15, "Session": 2, "Ordre": 1, "Nom": "Martin", "Prenom": "Noël", "Entreprise": "Transports Delmas", "Email": "d1@example.org"},
+      {"id": 16, "Session": 2, "Ordre": 2, "Nom": "de la Fontaine-Beauregard", "Prenom": "Inès", "Entreprise": "Transports Delmas", "Email": "d2@example.org"},
+      {"id": 17, "Session": 2, "Ordre": 3, "Nom": "Ben Saïd", "Prenom": "Mathieu", "Entreprise": "Transports Delmas", "Email": "d3@example.org"},
+      {"id": 18, "Session": 2, "Ordre": 4, "Nom": "Nguyễn", "Prenom": "Élodie", "Entreprise": "Transports Delmas", "Email": "d4@example.org"},
+      {"id": 19, "Session": 2, "Ordre": 5, "Nom": "O’Connor", "Prenom": "Zoé", "Entreprise": "Transports Delmas", "Email": "d5@example.org"},
+      {"id": 20, "Session": 2, "Ordre": 6, "Nom": "Lefèvre", "Prenom": "Jean-Baptiste", "Entreprise": "Transports Delmas", "Email": "d6@example.org"}
+    ]
+  }
+}

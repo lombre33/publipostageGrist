@@ -1,0 +1,144 @@
+{
+  "rows": {
+    "Societe": [
+      {"id": 1, "Nom": "Atlas Logistique SAS", "Adresse": "48 avenue des Entrepôts\nZone Logistique Nord\n69120 Vaulx-en-Velin", "SIRET": "812 345 678 00027", "TVAIntra": "FR 12 812345678", "Telephone": "04 78 00 12 34", "Email": "achats@atlas-logistique.example", "IBAN": "FR76 3000 6000 0112 3456 7890 189", "Logo": [1]}
+    ],
+    "Fournisseurs": [
+      {"id": 1, "Nom": "Établissements Dupont & Fils (SARL)", "Contact": "Mme Hélène Dupont", "Email": "commandes@dupont-fils.example", "Adresse": "Zone industrielle des Bruyères\nBâtiment C — Quai 4\n69800 Saint-Priest\nFrance", "Telephone": "04 72 11 22 33", "ConditionsPaiement": "30 jours fin de mois", "DelaiJours": 5, "Notes": "", "Produits": [1,2,9,10]},
+      {"id": 2, "Nom": "Électro-Pro Distribution", "Contact": "M. Karim Benali", "Email": "k.benali@electropro.example", "Adresse": "15 rue de la République\n42000 Saint-Étienne", "Telephone": "04 77 55 66 77", "ConditionsPaiement": "45 jours", "DelaiJours": 3, "Notes": "Franco à partir de 500 € HT", "Produits": [4,5,6]},
+      {"id": 3, "Nom": "Quincaillerie de l'Est", "Contact": "M. Jean-Luc Schmitt", "Email": "jl.schmitt@qdest.example", "Adresse": "3 impasse du Moulin\n67000 Strasbourg", "Telephone": "03 88 12 34 56", "ConditionsPaiement": "À réception", "DelaiJours": 7, "Notes": "", "Produits": [3,7,8]},
+      {"id": 4, "Nom": "Sécurité & Protection Plus", "Contact": "Service commercial", "Email": "contact@secu-plus.example", "Adresse": "120 boulevard Jean-Jaurès\n38000 Grenoble", "Telephone": "04 76 98 76 54", "ConditionsPaiement": "60 jours", "DelaiJours": 10, "Notes": "", "Produits": [14,15,16]},
+      {"id": 5, "Nom": "Emballages du Sud-Ouest (EMBASO)", "Contact": "Mme Anne-Sophie Lacour", "Email": "a.sophie@embaso.example", "Adresse": "Parc d’activités de Montaudran\n31400 Toulouse", "Telephone": "05 61 00 11 22", "ConditionsPaiement": "30 jours fin de mois", "DelaiJours": 4, "Notes": "", "Produits": [11,12,13]}
+    ],
+    "Categories": [
+      {"id": 1, "Nom": "Visserie & fixation", "Code": "VIS", "Produits": [1,2,3], "NbReferences": 3, "StockTotal": 116, "ValeurStock": 925.4},
+      {"id": 2, "Nom": "Électricité", "Code": "ELE", "Produits": [4,5,6], "NbReferences": 3, "StockTotal": 624, "ValeurStock": 21577.4},
+      {"id": 3, "Nom": "Plomberie", "Code": "PLO", "Produits": [7,8], "NbReferences": 2, "StockTotal": 69, "ValeurStock": 329.1},
+      {"id": 4, "Nom": "Peinture & finition", "Code": "PEI", "Produits": [9,10], "NbReferences": 2, "StockTotal": 115, "ValeurStock": 368},
+      {"id": 5, "Nom": "Emballage", "Code": "EMB", "Produits": [11,12,13], "NbReferences": 3, "StockTotal": 521, "ValeurStock": 2944.02},
+      {"id": 6, "Nom": "Sécurité (EPI)", "Code": "EPI", "Produits": [14,15,16], "NbReferences": 3, "StockTotal": 90, "ValeurStock": 443}
+    ],
+    "Emplacements": [
+      {"id": 1, "Code": "A-01", "Zone": "Picking", "Allee": "A", "Produits": [1,2,3,12,14,15], "NbReferences": 6, "StockTotal": 294, "ValeurStock": 2577.85},
+      {"id": 2, "Code": "A-02", "Zone": "Quai", "Allee": "A", "Produits": [4,5,6], "NbReferences": 3, "StockTotal": 624, "ValeurStock": 21577.4},
+      {"id": 3, "Code": "A-03", "Zone": "Froid", "Allee": "A", "Produits": [10], "NbReferences": 1, "StockTotal": 115, "ValeurStock": 368},
+      {"id": 4, "Code": "A-04", "Zone": "Réserve", "Allee": "A", "Produits": [], "NbReferences": 0, "StockTotal": 0, "ValeurStock": 0},
+      {"id": 5, "Code": "B-01", "Zone": "Quai", "Allee": "B", "Produits": [8], "NbReferences": 1, "StockTotal": 66, "ValeurStock": 155.1},
+      {"id": 6, "Code": "B-02", "Zone": "Froid", "Allee": "B", "Produits": [13], "NbReferences": 1, "StockTotal": 174, "ValeurStock": 1287.6},
+      {"id": 7, "Code": "B-03", "Zone": "Réserve", "Allee": "B", "Produits": [], "NbReferences": 0, "StockTotal": 0, "ValeurStock": 0},
+      {"id": 8, "Code": "B-04", "Zone": "Picking", "Allee": "B", "Produits": [11], "NbReferences": 1, "StockTotal": 204, "ValeurStock": 240.72},
+      {"id": 9, "Code": "C-01", "Zone": "Froid", "Allee": "C", "Produits": [16], "NbReferences": 1, "StockTotal": 55, "ValeurStock": 206.25},
+      {"id": 10, "Code": "C-02", "Zone": "Réserve", "Allee": "C", "Produits": [9], "NbReferences": 1, "StockTotal": 0, "ValeurStock": 0},
+      {"id": 11, "Code": "C-03", "Zone": "Picking", "Allee": "C", "Produits": [], "NbReferences": 0, "StockTotal": 0, "ValeurStock": 0},
+      {"id": 12, "Code": "C-04", "Zone": "Quai", "Allee": "C", "Produits": [7], "NbReferences": 1, "StockTotal": 3, "ValeurStock": 174}
+    ],
+    "Produits": [
+      {"id": 1, "SKU": "ATL-VIS-0001", "Designation": "Vis à bois Ø 4 × 40 (× 200)", "Categorie": 1, "Fournisseur": 1, "Emplacement": 1, "Unite": "boîte", "Stock": 6, "Seuil": 8, "PrixAchat": 3.9, "PrixVente": 5.65, "TauxTVA": 20, "Poids": 6.98, "Photo": [6], "Actif": true, "DLC": null, "Caracteristiques": "Ø 4 mm · L 40 mm · inox A2", "Tags": null, "Lot": "", "SousSeuil": true},
+      {"id": 2, "SKU": "ATL-VIS-0002", "Designation": "Boulon hexagonal M8 × 60", "Categorie": 1, "Fournisseur": 1, "Emplacement": 1, "Unite": "boîte", "Stock": 0, "Seuil": 20, "PrixAchat": 6.45, "PrixVente": 9.35, "TauxTVA": 20, "Poids": 0.36, "Photo": [7], "Actif": true, "DLC": null, "Caracteristiques": "M8 · classe 8.8 · zingué ≥ 5 µm", "Tags": null, "Lot": "", "SousSeuil": true},
+      {"id": 3, "SKU": "ATL-VIS-0003", "Designation": "Cheville expansion Ø 10 × 50", "Categorie": 1, "Fournisseur": 3, "Emplacement": 1, "Unite": "boîte", "Stock": 110, "Seuil": 9, "PrixAchat": 8.2, "PrixVente": 11.89, "TauxTVA": 20, "Poids": 10.54, "Photo": [2], "Actif": true, "DLC": null, "Caracteristiques": "Ø 10 mm · charge ≥ 120 kg", "Tags": null, "Lot": "LOT-2603", "SousSeuil": false},
+      {"id": 4, "SKU": "ATL-ELE-0004", "Designation": "Câble U-1000 R2V 3G2,5 (50 m)", "Categorie": 2, "Fournisseur": 2, "Emplacement": 2, "Unite": "pièce", "Stock": 239, "Seuil": 35, "PrixAchat": 61.3, "PrixVente": 88.89, "TauxTVA": 20, "Poids": 6.05, "Photo": [3], "Actif": true, "DLC": null, "Caracteristiques": "3 × 2,5 mm² · −20 °C / +70 °C", "Tags": null, "Lot": "", "SousSeuil": false},
+      {"id": 5, "SKU": "ATL-ELE-0005", "Designation": "Disjoncteur 16 A courbe C", "Categorie": 2, "Fournisseur": 2, "Emplacement": 2, "Unite": "pièce", "Stock": 156, "Seuil": 36, "PrixAchat": 7.85, "PrixVente": 11.38, "TauxTVA": 20, "Poids": 7.21, "Photo": null, "Actif": true, "DLC": "2027-02-04", "Caracteristiques": "16 A · 230 V ± 10 %", "Tags": null, "Lot": "", "SousSeuil": false},
+      {"id": 6, "SKU": "ATL-ELE-0006", "Designation": "Gaine ICTA Ø 20 (100 m)", "Categorie": 2, "Fournisseur": 2, "Emplacement": 2, "Unite": "pièce", "Stock": 229, "Seuil": 38, "PrixAchat": 24.9, "PrixVente": 36.1, "TauxTVA": 20, "Poids": 10.72, "Photo": null, "Actif": true, "DLC": null, "Caracteristiques": "Ø 20 mm · IP 30", "Tags": ["Lourd"], "Lot": "LOT-2606", "SousSeuil": false},
+      {"id": 7, "SKU": "ATL-PLO-0007", "Designation": "Tube PER Ø 16 (100 m)", "Categorie": 3, "Fournisseur": 3, "Emplacement": 12, "Unite": "pièce", "Stock": 3, "Seuil": 11, "PrixAchat": 58, "PrixVente": 84.1, "TauxTVA": 10, "Poids": 6.65, "Photo": null, "Actif": true, "DLC": null, "Caracteristiques": "Ø 16 × 2 mm · 10 bar · ≤ 70 °C", "Tags": null, "Lot": "", "SousSeuil": true},
+      {"id": 8, "SKU": "ATL-PLO-0008", "Designation": "Raccord laiton 1/2\" M-F", "Categorie": 3, "Fournisseur": 3, "Emplacement": 5, "Unite": "pièce", "Stock": 66, "Seuil": 38, "PrixAchat": 2.35, "PrixVente": 3.41, "TauxTVA": 10, "Poids": 9.91, "Photo": null, "Actif": true, "DLC": null, "Caracteristiques": "½\" · laiton CW617N", "Tags": null, "Lot": "", "SousSeuil": false},
+      {"id": 9, "SKU": "ATL-PEI-0009", "Designation": "Peinture façade 10 L blanc", "Categorie": 4, "Fournisseur": 1, "Emplacement": 10, "Unite": "pièce", "Stock": 0, "Seuil": 10, "PrixAchat": 74.5, "PrixVente": 108.03, "TauxTVA": 20, "Poids": 10, "Photo": [4], "Actif": true, "DLC": null, "Caracteristiques": "10 L · rendement 6–8 m²/L · COV < 30 g/L", "Tags": null, "Lot": "LOT-2609", "SousSeuil": true},
+      {"id": 10, "SKU": "ATL-PEI-0010", "Designation": "Rouleau laqueur 110 mm", "Categorie": 4, "Fournisseur": 1, "Emplacement": 3, "Unite": "pièce", "Stock": 115, "Seuil": 7, "PrixAchat": 3.2, "PrixVente": 4.64, "TauxTVA": 20, "Poids": 0.32, "Photo": null, "Actif": true, "DLC": "2027-07-24", "Caracteristiques": "110 mm", "Tags": ["Fragile", "Promo"], "Lot": "", "SousSeuil": false},
+      {"id": 11, "SKU": "ATL-EMB-0011", "Designation": "Carton 40 × 30 × 30 cm", "Categorie": 5, "Fournisseur": 5, "Emplacement": 8, "Unite": "pièce", "Stock": 204, "Seuil": 29, "PrixAchat": 1.18, "PrixVente": 1.71, "TauxTVA": 20, "Poids": 4.62, "Photo": null, "Actif": false, "DLC": null, "Caracteristiques": "40 × 30 × 30 cm · charge max ≈ 25 kg", "Tags": null, "Lot": "", "SousSeuil": false},
+      {"id": 12, "SKU": "ATL-EMB-0012", "Designation": "Film étirable 500 mm × 300 m", "Categorie": 5, "Fournisseur": 5, "Emplacement": 1, "Unite": "pièce", "Stock": 143, "Seuil": 30, "PrixAchat": 9.9, "PrixVente": 14.36, "TauxTVA": 20, "Poids": 8.59, "Photo": null, "Actif": true, "DLC": null, "Caracteristiques": "500 mm × 300 m · 23 µm", "Tags": ["Lourd"], "Lot": "LOT-2612", "SousSeuil": false},
+      {"id": 13, "SKU": "ATL-EMB-0013", "Designation": "Ruban adhésif 50 mm (lot de 6)", "Categorie": 5, "Fournisseur": 5, "Emplacement": 6, "Unite": "carton", "Stock": 174, "Seuil": 40, "PrixAchat": 7.4, "PrixVente": 10.73, "TauxTVA": 20, "Poids": 5.45, "Photo": null, "Actif": true, "DLC": null, "Caracteristiques": "50 mm × 66 m", "Tags": null, "Lot": "", "SousSeuil": false},
+      {"id": 14, "SKU": "ATL-EPI-0014", "Designation": "Gants de manutention T9", "Categorie": 6, "Fournisseur": 4, "Emplacement": 1, "Unite": "pièce", "Stock": 1, "Seuil": 11, "PrixAchat": 2.15, "PrixVente": 3.12, "TauxTVA": 20, "Poids": 5.42, "Photo": null, "Actif": true, "DLC": null, "Caracteristiques": "cat. 2 · EN 388 · taille 9", "Tags": null, "Lot": "", "SousSeuil": true},
+      {"id": 15, "SKU": "ATL-EPI-0015", "Designation": "Casque de chantier jaune", "Categorie": 6, "Fournisseur": 4, "Emplacement": 1, "Unite": "pièce", "Stock": 34, "Seuil": 32, "PrixAchat": 6.9, "PrixVente": 10.01, "TauxTVA": 20, "Poids": 7.17, "Photo": [5], "Actif": true, "DLC": "2027-10-11", "Caracteristiques": "EN 397 · −30 °C / +50 °C", "Tags": null, "Lot": "LOT-2615", "SousSeuil": false},
+      {"id": 16, "SKU": "ATL-EPI-0016", "Designation": "Lunettes de protection", "Categorie": 6, "Fournisseur": 4, "Emplacement": 9, "Unite": "pièce", "Stock": 55, "Seuil": 14, "PrixAchat": 3.75, "PrixVente": 5.44, "TauxTVA": 20, "Poids": 0.28, "Photo": null, "Actif": true, "DLC": null, "Caracteristiques": "EN 166 · anti-rayures", "Tags": null, "Lot": "", "SousSeuil": false}
+    ],
+    "Commandes": [
+      {"id": 1, "Numero": "CF-2026-0041", "Fournisseur": 1, "DateCommande": "2026-10-02", "DateLivraison": "2026-10-12", "Statut": "Envoyée", "AdresseLivraison": "Atlas Logistique, quai 7\n48 avenue des Entrepôts\n69120 Vaulx-en-Velin", "Express": true, "RemisePct": 5, "Commentaire": "Merci de joindre le bordereau de livraison et les certificats de conformité.", "Acheteur": "Antoine L."},
+      {"id": 2, "Numero": "CF-2026-0042", "Fournisseur": 2, "DateCommande": "2026-10-03", "DateLivraison": "2026-10-09", "Statut": "Brouillon", "AdresseLivraison": "Atlas Logistique, quai 7\n48 avenue des Entrepôts\n69120 Vaulx-en-Velin", "Express": false, "RemisePct": 0, "Commentaire": "Dont une ligne de retour (avoir à émettre).", "Acheteur": "Antoine L."},
+      {"id": 3, "Numero": "CF-2026-0043", "Fournisseur": 3, "DateCommande": "2026-10-03", "DateLivraison": "2026-10-16", "Statut": "Envoyée", "AdresseLivraison": "Atlas Logistique, quai 7\n48 avenue des Entrepôts\n69120 Vaulx-en-Velin", "Express": false, "RemisePct": 0, "Commentaire": "", "Acheteur": "Antoine L."}
+    ],
+    "LignesCommande": [
+      {"id": 1, "Commande": 1, "Produit": 1, "Reference": "ATL-VIS-0001", "Designation": "Vis à bois Ø 4 × 40 (× 200)", "Quantite": 108, "Unite": "boîte", "PrixUnitaire": 3.9, "TauxTVA": 20},
+      {"id": 2, "Commande": 1, "Produit": 2, "Reference": "ATL-VIS-0002", "Designation": "Boulon hexagonal M8 × 60", "Quantite": 200, "Unite": "boîte", "PrixUnitaire": 6.45, "TauxTVA": 20},
+      {"id": 3, "Commande": 1, "Produit": 9, "Reference": "ATL-PEI-0009", "Designation": "Peinture façade 10 L blanc", "Quantite": 24, "Unite": "pièce", "PrixUnitaire": 74.5, "TauxTVA": 20},
+      {"id": 4, "Commande": 1, "Produit": 10, "Reference": "ATL-PEI-0010", "Designation": "Rouleau laqueur 110 mm", "Quantite": 60, "Unite": "pièce", "PrixUnitaire": 3.2, "TauxTVA": 20},
+      {"id": 5, "Commande": 2, "Produit": 4, "Reference": "ATL-ELE-0004", "Designation": "Câble U-1000 R2V 3G2,5 (50 m)", "Quantite": 10, "Unite": "pièce", "PrixUnitaire": 61.3, "TauxTVA": 20},
+      {"id": 6, "Commande": 2, "Produit": 5, "Reference": "ATL-ELE-0005", "Designation": "Disjoncteur 16 A courbe C", "Quantite": 60, "Unite": "pièce", "PrixUnitaire": 7.85, "TauxTVA": 20},
+      {"id": 7, "Commande": 2, "Produit": 6, "Reference": "ATL-ELE-0006", "Designation": "Gaine ICTA Ø 20 (100 m)", "Quantite": 20, "Unite": "pièce", "PrixUnitaire": 24.9, "TauxTVA": 20},
+      {"id": 8, "Commande": 2, "Produit": 4, "Reference": "ATL-ELE-0004", "Designation": "Câble U-1000 R2V 3G2,5 (50 m)", "Quantite": -2, "Unite": "pièce", "PrixUnitaire": 61.3, "TauxTVA": 20},
+      {"id": 9, "Commande": 3, "Produit": 7, "Reference": "ATL-PLO-0007", "Designation": "Tube PER Ø 16 (100 m)", "Quantite": 3, "Unite": "pièce", "PrixUnitaire": 58, "TauxTVA": 20},
+      {"id": 10, "Commande": 3, "Produit": 8, "Reference": "ATL-PLO-0008", "Designation": "Raccord laiton 1/2\" M-F", "Quantite": 100, "Unite": "pièce", "PrixUnitaire": 2.35, "TauxTVA": 20},
+      {"id": 11, "Commande": 3, "Produit": 3, "Reference": "ATL-VIS-0003", "Designation": "Cheville expansion Ø 10 × 50", "Quantite": 50, "Unite": "boîte", "PrixUnitaire": 8.2, "TauxTVA": 20}
+    ],
+    "Mouvements": [
+      {"id": 1, "Numero": "MV-2026-0310", "Date": "2026-10-01", "Type": "Entrée", "Source": "Dupont & Fils — BL 88231", "Destination": "Réserve A", "Operateur": "S. Laurent", "Motif": "Réception commande CF-2026-0038"},
+      {"id": 2, "Numero": "MV-2026-0311", "Date": "2026-10-02", "Type": "Sortie", "Source": "Picking B-02", "Destination": "Chantier Part-Dieu", "Operateur": "M. Petit", "Motif": "Bon de sortie n° 5521"},
+      {"id": 3, "Numero": "MV-2026-0312", "Date": "2026-10-02", "Type": "Transfert", "Source": "Réserve A", "Destination": "Picking C-01", "Operateur": "S. Laurent", "Motif": "Réassort picking"}
+    ],
+    "LignesMouvement": [
+      {"id": 1, "Mouvement": 1, "SKU": "ATL-VIS-0001", "Designation": "Vis à bois Ø 4 × 40 (× 200)", "Quantite": 120, "Lot": "LOT-2641", "DLC": null},
+      {"id": 2, "Mouvement": 1, "SKU": "ATL-ELE-0004", "Designation": "Câble U-1000 R2V 3G2,5 (50 m)", "Quantite": 8, "Lot": "", "DLC": null},
+      {"id": 3, "Mouvement": 1, "SKU": "ATL-PEI-0009", "Designation": "Peinture façade 10 L blanc", "Quantite": 24, "Lot": "LOT-2645", "DLC": "2027-03-31"},
+      {"id": 4, "Mouvement": 2, "SKU": "ATL-VIS-0003", "Designation": "Cheville expansion Ø 10 × 50", "Quantite": 15, "Lot": "", "DLC": null},
+      {"id": 5, "Mouvement": 2, "SKU": "ATL-PLO-0007", "Designation": "Tube PER Ø 16 (100 m)", "Quantite": 2, "Lot": "", "DLC": null},
+      {"id": 6, "Mouvement": 3, "SKU": "ATL-ELE-0005", "Designation": "Disjoncteur 16 A courbe C", "Quantite": 40, "Lot": "", "DLC": null},
+      {"id": 7, "Mouvement": 3, "SKU": "ATL-ELE-0006", "Designation": "Gaine ICTA Ø 20 (100 m)", "Quantite": 12, "Lot": "", "DLC": null}
+    ]
+  },
+  "images": {
+    "1": {
+      "label": "Atlas Logistique",
+      "from": "#0f766e",
+      "to": "#5eead4",
+      "width": 360,
+      "height": 160,
+      "pointsize": 34
+    },
+    "2": {
+      "label": "Cheville\nà expansion",
+      "from": "#475569",
+      "to": "#cbd5e1",
+      "width": 480,
+      "height": 320,
+      "pointsize": 40
+    },
+    "3": {
+      "label": "Câble U-1000\nR2V 3G2,5",
+      "from": "#b45309",
+      "to": "#fcd34d",
+      "width": 480,
+      "height": 320,
+      "pointsize": 40
+    },
+    "4": {
+      "label": "Peinture façade\npot de 10 L",
+      "from": "#1d4ed8",
+      "to": "#93c5fd",
+      "width": 480,
+      "height": 320,
+      "pointsize": 40
+    },
+    "5": {
+      "label": "Casque\nde chantier",
+      "from": "#a16207",
+      "to": "#fde047",
+      "width": 480,
+      "height": 320,
+      "pointsize": 40
+    },
+    "6": {
+      "label": "Vis à bois\nboîte de 200",
+      "from": "#166534",
+      "to": "#86efac",
+      "width": 480,
+      "height": 320,
+      "pointsize": 40
+    },
+    "7": {
+      "label": "Boulon\nhexagonal M8",
+      "from": "#9f1239",
+      "to": "#fda4af",
+      "width": 480,
+      "height": 320,
+      "pointsize": 40
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "rows": {
+    "Quittances": [
+      {"id": 1, "Bailleur": "Mme Odile Marchand", "AdresseBailleur": "14 rue du Président Carnot\n69002 Lyon", "Locataire": "M. Julien Rousseau", "AdresseBien": "Appartement 3B, 27 rue de la Charité\n69002 Lyon", "Debut": "2026-10-01", "Fin": "2026-10-31", "Loyer": 645.5, "Charges": 54, "DatePaiement": "2026-10-03", "Mode": "Virement", "Lieu": "Lyon", "Signature": [1]},
+      {"id": 2, "Bailleur": "Mme Odile Marchand", "AdresseBailleur": "14 rue du Président Carnot\n69002 Lyon", "Locataire": "Mme Sofia Benali", "AdresseBien": "Studio 12, 5 quai Saint-Vincent\n69001 Lyon", "Debut": "2026-10-01", "Fin": "2026-10-31", "Loyer": 1200, "Charges": 34.05, "DatePaiement": "2026-10-05", "Mode": "Chèque", "Lieu": "Lyon", "Signature": [1]},
+      {"id": 3, "Bailleur": "M. Louis Fabre", "AdresseBailleur": "8 rue Vendôme\n69006 Lyon", "Locataire": "M. et Mme Garnier", "AdresseBien": "Maison, 6 chemin des Vignes\n69390 Vourles", "Debut": "2026-11-01", "Fin": "2026-11-30", "Loyer": 650, "Charges": 0, "DatePaiement": "2026-11-02", "Mode": "Prélèvement", "Lieu": "Lyon", "Signature": [1]},
+      {"id": 4, "Bailleur": "M. Louis Fabre", "AdresseBailleur": "8 rue Vendôme\n69006 Lyon", "Locataire": "Mme Inès Roche", "AdresseBien": "Appartement 2A, 40 avenue Berthelot\n69007 Lyon", "Debut": "2026-12-01", "Fin": "2026-12-31", "Loyer": 950, "Charges": 51.02, "DatePaiement": "2026-12-01", "Mode": "Virement", "Lieu": "Lyon", "Signature": [1]}
+    ]
+  },
+  "images": {
+    "1": {
+      "label": "Votre signature",
+      "from": "#ffffff",
+      "to": "#e2e8f0",
+      "color": "#1e3a8a",
+      "width": 360,
+      "height": 140
+    }
+  }
+}

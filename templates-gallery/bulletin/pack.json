@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "family": "ecole",
+  "main": "Eleves",
+  "tables": ["Eleves", "Notes"],
+  "links": [
+    {"table": "Notes", "mode": "match", "target": "Eleve", "source": "id"}
+  ],
+  "template": {
+    "type": "document",
+    "pdfName": "Bulletin #Eleves.Nom #Eleves.Prenom",
+    "page": {
+      "format": "A4",
+      "orientation": "portrait",
+      "margins": [20, 18, 20, 18]
+    }
+  }
+}

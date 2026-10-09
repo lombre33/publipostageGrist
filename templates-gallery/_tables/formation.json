@@ -1,0 +1,28 @@
+{
+  "tables": [
+    {
+      "id": "Sessions",
+      "columns": [
+        {"id": "Numero", "type": "Text", "label": "Numéro"},
+        {"id": "Intitule", "type": "Text", "label": "Intitulé"},
+        {"id": "Debut", "type": "Date", "label": "Début"},
+        {"id": "Fin", "type": "Date", "label": "Fin"},
+        {"id": "Lieu", "type": "Text", "label": "Lieu"},
+        {"id": "Formateur", "type": "Text", "label": "Formateur"},
+        {"id": "Duree", "type": "Numeric", "label": "Durée (h)"},
+        {"id": "Client", "type": "Text", "label": "Client"}
+      ]
+    },
+    {
+      "id": "Participants",
+      "columns": [
+        {"id": "Session", "type": "Ref:Sessions", "label": "Session", "show": "Numero"},
+        {"id": "Ordre", "type": "Int", "label": "N°"},
+        {"id": "Nom", "type": "Text", "label": "Nom"},
+        {"id": "Prenom", "type": "Text", "label": "Prénom"},
+        {"id": "Entreprise", "type": "Text", "label": "Entreprise"},
+        {"id": "Email", "type": "Text", "label": "E-mail"}
+      ]
+    }
+  ]
+}

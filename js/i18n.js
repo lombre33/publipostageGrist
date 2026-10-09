@@ -482,6 +482,12 @@ const I18n = (function () {
     'gallery.shows.checkbox': { fr: 'Case à cocher', en: 'Checkbox' },
     'gallery.shows.headerFooter': { fr: 'En-tête et pied de page', en: 'Header and footer' },
     'gallery.shows.conditionValue': { fr: 'Valeur conditionnelle', en: 'Conditional value' },
+    'gallery.shows.fileName': { fr: 'Nom du PDF composé', en: 'Composed PDF name' },
+    'gallery.shows.grid': { fr: 'Grille et export Excel', en: 'Grid and Excel export' },
+    'gallery.shows.rowHeight': { fr: 'Hauteur de ligne réglée', en: 'Custom row height' },
+  'gallery.shows.email': { fr: 'Modèle d’e-mail', en: 'E-mail template' },
+  'gallery.shows.sortFilter': { fr: 'Boucle triée ou filtrée', en: 'Sorted or filtered loop' },
+  'gallery.shows.refListLoop': { fr: 'Boucle sur une colonne Références', en: 'Loop over a Reference list column' },
 
     // --- Macro modèles (page de garde + annexes conditionnelles, planning/feature-macro-modeles.md) ---
     'macro.editButton': { fr: 'Modifier la composition', en: 'Edit composition' },

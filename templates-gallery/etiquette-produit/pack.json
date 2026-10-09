@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "family": "stock",
+  "main": "Produits",
+  "tables": ["Societe", "Fournisseurs", "Categories", "Emplacements", "Produits"],
+  "links": [
+    {"table": "Fournisseurs", "mode": "match", "target": "id", "source": "Fournisseur"},
+    {"table": "Societe", "mode": "singleton"}
+  ],
+  "template": {
+    "type": "document",
+    "pdfName": "#Produits.SKU",
+    "page": {
+      "format": "A6",
+      "orientation": "portrait",
+      "margins": [8, 8, 8, 8]
+    }
+  }
+}

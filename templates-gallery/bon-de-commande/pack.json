@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "family": "stock",
+  "main": "Commandes",
+  "tables": ["Societe", "Fournisseurs", "Categories", "Emplacements", "Produits", "Commandes", "LignesCommande"],
+  "links": [
+    {"table": "LignesCommande", "mode": "match", "target": "Commande", "source": "id"},
+    {"table": "Fournisseurs", "mode": "match", "target": "id", "source": "Fournisseur"},
+    {"table": "Societe", "mode": "singleton"}
+  ],
+  "template": {
+    "type": "document",
+    "pdfName": "Bon de commande #Commandes.Numero",
+    "page": {
+      "format": "A4",
+      "orientation": "portrait",
+      "margins": [18, 18, 18, 18]
+    }
+  }
+}

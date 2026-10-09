@@ -1,0 +1,12 @@
+{
+  "enabled": true,
+  "differentFirstPage": false,
+  "header": {
+    "default": "<p><span style=\"font-size: 8pt\">Inventaire — <span class=\"var-badge\" data-table=\"Emplacements\" data-column=\"Code\" data-key=\"Emplacements.Code\"></span></span></p>",
+    "first": ""
+  },
+  "footer": {
+    "default": "<p style=\"text-align: center\"><span style=\"font-size: 8pt\">Page <span class=\"page-number-badge\" data-format=\"n-slash-total\">#/#</span></span></p>",
+    "first": ""
+  }
+}

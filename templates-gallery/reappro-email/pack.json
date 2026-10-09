@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "family": "stock",
+  "main": "Fournisseurs",
+  "tables": ["Societe", "Fournisseurs", "Categories", "Emplacements", "Produits"],
+  "links": [
+    {"table": "Societe", "mode": "singleton"}
+  ],
+  "template": {
+    "type": "email",
+    "email": {
+      "to": "#Fournisseurs.Email",
+      "cc": "#Societe.Email",
+      "bcc": "",
+      "subject": "Réapprovisionnement - #Fournisseurs.Nom"
+    }
+  }
+}

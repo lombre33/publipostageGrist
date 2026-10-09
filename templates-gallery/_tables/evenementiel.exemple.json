@@ -12,7 +12,9 @@
       {"id": 3, "Code": "INV-0003", "Civilite": "Madame", "Prenom": "Aïcha", "Nom": "Garcia", "Societe": "", "Fonction": "Journaliste", "Categorie": "Presse", "NumTable": 1, "Photo": null, "Evenement": 1},
       {"id": 4, "Code": "INV-0004", "Civilite": "Monsieur", "Prenom": "Jean-Baptiste", "Nom": "de la Fontaine-Beauregard", "Societe": "Association Greentech", "Fonction": "Directeur numérique", "Categorie": "Intervenant", "NumTable": 1, "Photo": null, "Evenement": 1},
       {"id": 5, "Code": "INV-0005", "Civilite": "Madame", "Prenom": "Élodie", "Nom": "Bouvier", "Societe": "Université Lumière Lyon 2", "Fonction": "Directrice numérique", "Categorie": "VIP", "NumTable": 1, "Photo": null, "Evenement": 1},
-      {"id": 6, "Code": "INV-0006", "Civilite": "Monsieur", "Prenom": "Lucas", "Nom": "Martin", "Societe": "Atos", "Fonction": "Étudiant", "Categorie": "Participant", "NumTable": 5, "Photo": null, "Evenement": 1}
+      {"id": 6, "Code": "INV-0006", "Civilite": "Monsieur", "Prenom": "Lucas", "Nom": "Martin", "Societe": "Atos", "Fonction": "Étudiant", "Categorie": "Participant", "NumTable": 5, "Photo": null, "Evenement": 1},
+      {"id": 7, "Code": "INV-0007", "Civilite": "Monsieur", "Prenom": "Karim", "Nom": "Benali", "Societe": "Collectif Numérique Responsable", "Fonction": "Accueil", "Categorie": "Staff", "NumTable": 0, "Photo": null, "Evenement": 1},
+      {"id": 8, "Code": "INV-0008", "Civilite": "Madame", "Prenom": "Élise", "Nom": "Marchand", "Societe": "Université de Lyon", "Fonction": "Enseignante-chercheuse", "Categorie": "Intervenant", "NumTable": 1, "Photo": null, "Evenement": 1}
     ]
   },
   "images": {

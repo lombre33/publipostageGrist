@@ -1,25 +1,25 @@
 {
   "version": 1,
-  "hash": "ea4450df0dafee09",
+  "hash": "a78f7f074dfff196",
   "preview": [
     {
-      "src": "flyer-a6/capture-1.png",
+      "src": "badge-evenement/capture-1.png",
       "w": 290,
       "h": 408
     },
     {
-      "src": "flyer-a6/capture-2.png",
+      "src": "badge-evenement/capture-2.png",
       "w": 290,
       "h": 408
     },
     {
-      "src": "flyer-a6/capture-3.png",
+      "src": "badge-evenement/capture-3.png",
       "w": 637,
       "h": 901
     }
   ],
   "thumb": {
-    "src": "flyer-a6/thumb.png",
+    "src": "badge-evenement/thumb.png",
     "w": 240,
     "h": 320
   }

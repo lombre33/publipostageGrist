@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hash": "c11290f980ee8bc2",
+  "preview": [
+    {
+      "src": "bulletin/capture-1.png",
+      "w": 563,
+      "h": 796
+    },
+    {
+      "src": "bulletin/capture-2.png",
+      "w": 563,
+      "h": 796
+    },
+    {
+      "src": "bulletin/capture-3.png",
+      "w": 563,
+      "h": 796
+    }
+  ],
+  "thumb": {
+    "src": "bulletin/thumb.png",
+    "w": 240,
+    "h": 320
+  }
+}

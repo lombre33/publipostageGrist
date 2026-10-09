@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "family": "evenementiel",
+  "main": "Invites",
+  "tables": ["Evenements", "Invites"],
+  "links": [
+    {"table": "Evenements", "mode": "match", "target": "id", "source": "Evenement"}
+  ],
+  "template": {
+    "type": "document",
+    "pdfName": "Badge #Invites.Code",
+    "page": {
+      "format": "A6",
+      "orientation": "portrait",
+      "margins": [8, 8, 8, 8]
+    }
+  }
+}

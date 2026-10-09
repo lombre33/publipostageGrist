@@ -60,6 +60,12 @@ const PROOFS = {
   checkbox: ({ html }) => formatJson(html).some((f) => /"type":"bool"/.test(f) && /"style":"(accentStrike|classic|accentPlain)"/.test(f)),
   headerFooter: ({ headerFooter }) => headerFooter !== '' && JSON.parse(headerFooter).enabled === true,
   conditionValue: ({ html }) => /class="conditional-value"/.test(html),
+  fileName: ({ pack }) => /#[A-Z][A-Za-z0-9_]*\.[A-Za-z]/.test((pack.template && pack.template.pdfName) || ''),
+  grid: ({ pack }) => !!pack.template && pack.template.type === 'grille',
+  rowHeight: ({ html }) => /data-row-height="\d+"/.test(html),
+  email: ({ pack }) => !!pack.template && pack.template.type === 'email' && !!pack.template.email && !!pack.template.email.subject,
+  sortFilter: ({ html }) => /data-loop="[^"]*&quot;(sort|filter)&quot;/.test(html), // le réglage de la boucle est du JSON dans un attribut : guillemets échappés
+  refListLoop: ({ html }) => /data-loop="[^"]*&quot;via&quot;/.test(html),
 };
 
 const galleries = [{ dir: 'templates-gallery', dev: false }, { dir: 'templates-gallery-dev', dev: true }];

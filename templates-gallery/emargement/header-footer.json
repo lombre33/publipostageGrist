@@ -1,0 +1,12 @@
+{
+  "enabled": true,
+  "differentFirstPage": false,
+  "header": {
+    "default": "<p><span style=\"font-size: 8pt\">Émargement <span class=\"var-badge\" data-table=\"Sessions\" data-column=\"Numero\" data-key=\"Sessions.Numero\"></span> — <span class=\"var-badge\" data-table=\"Sessions\" data-column=\"Client\" data-key=\"Sessions.Client\"></span></span></p>",
+    "first": ""
+  },
+  "footer": {
+    "default": "<p style=\"text-align: center\"><span style=\"font-size: 8pt\">Page <span class=\"page-number-badge\" data-format=\"n-slash-total\">#/#</span></span></p>",
+    "first": ""
+  }
+}

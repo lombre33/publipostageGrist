@@ -6,6 +6,17 @@
       "vente"
     ],
     "screenshot": "facture/thumb.png",
+    "html": "facture/template.html",
+    "pack": "facture/pack.json",
+    "headerFooter": "facture/header-footer.json",
+    "shows": [
+      "loop",
+      "calc",
+      "condition",
+      "amountWords",
+      "pageNumbers",
+      "linked"
+    ],
     "preview": [
       {
         "src": "facture/capture-1.png",
@@ -22,83 +33,6 @@
         "w": 563,
         "h": 796
       }
-    ],
-    "html": "facture/template.html",
-    "pack": "facture/pack.json",
-    "headerFooter": "facture/header-footer.json",
-    "shows": [
-      "loop",
-      "calc",
-      "condition",
-      "amountWords",
-      "pageNumbers",
-      "linked"
-    ]
-  },
-  {
-    "id": "contrat-prestation-services",
-    "name": "Contrat de prestation de services",
-    "tags": [
-      "administratif"
-    ],
-    "screenshot": "contrat-prestation-services/thumb.png",
-    "preview": [
-      {
-        "src": "contrat-prestation-services/capture-1.png",
-        "w": 563,
-        "h": 796
-      },
-      {
-        "src": "contrat-prestation-services/capture-2.png",
-        "w": 563,
-        "h": 796
-      },
-      {
-        "src": "contrat-prestation-services/capture-3.png",
-        "w": 563,
-        "h": 796
-      }
-    ],
-    "html": "contrat-prestation-services/template.html",
-    "pack": "contrat-prestation-services/pack.json",
-    "headerFooter": "contrat-prestation-services/header-footer.json",
-    "shows": [
-      "headings",
-      "footnote",
-      "checkbox",
-      "amountWords",
-      "headerFooter",
-      "linked"
-    ]
-  },
-  {
-    "id": "attestation",
-    "name": "Attestation d’emploi ou de stage",
-    "tags": [
-      "administratif"
-    ],
-    "screenshot": "attestation/thumb.png",
-    "preview": [
-      {
-        "src": "attestation/capture-1.png",
-        "w": 563,
-        "h": 796
-      },
-      {
-        "src": "attestation/capture-2.png",
-        "w": 563,
-        "h": 796
-      }
-    ],
-    "html": "attestation/template.html",
-    "pack": "attestation/pack.json",
-    "shows": [
-      "linked",
-      "condition",
-      "conditionValue",
-      "dateWords",
-      "images",
-      "qr"
     ]
   },
   {
@@ -108,6 +42,15 @@
       "vente"
     ],
     "screenshot": "courrier-relance/thumb.png",
+    "html": "courrier-relance/template.html",
+    "pack": "courrier-relance/pack.json",
+    "shows": [
+      "linked",
+      "condition",
+      "today",
+      "amountWords",
+      "dateFormat"
+    ],
     "preview": [
       {
         "src": "courrier-relance/capture-1.png",
@@ -124,15 +67,101 @@
         "w": 563,
         "h": 796
       }
+    ]
+  },
+  {
+    "id": "contrat-prestation-services",
+    "name": "Contrat de prestation de services",
+    "tags": [
+      "administratif"
     ],
-    "html": "courrier-relance/template.html",
-    "pack": "courrier-relance/pack.json",
+    "screenshot": "contrat-prestation-services/thumb.png",
+    "html": "contrat-prestation-services/template.html",
+    "pack": "contrat-prestation-services/pack.json",
+    "headerFooter": "contrat-prestation-services/header-footer.json",
+    "shows": [
+      "headings",
+      "footnote",
+      "checkbox",
+      "amountWords",
+      "headerFooter",
+      "linked"
+    ],
+    "preview": [
+      {
+        "src": "contrat-prestation-services/capture-1.png",
+        "w": 563,
+        "h": 796
+      },
+      {
+        "src": "contrat-prestation-services/capture-2.png",
+        "w": 563,
+        "h": 796
+      },
+      {
+        "src": "contrat-prestation-services/capture-3.png",
+        "w": 563,
+        "h": 796
+      }
+    ]
+  },
+  {
+    "id": "attestation",
+    "name": "Attestation d’emploi ou de stage",
+    "tags": [
+      "administratif"
+    ],
+    "screenshot": "attestation/thumb.png",
+    "html": "attestation/template.html",
+    "pack": "attestation/pack.json",
     "shows": [
       "linked",
       "condition",
-      "today",
+      "conditionValue",
+      "dateWords",
+      "images",
+      "qr"
+    ],
+    "preview": [
+      {
+        "src": "attestation/capture-1.png",
+        "w": 563,
+        "h": 796
+      },
+      {
+        "src": "attestation/capture-2.png",
+        "w": 563,
+        "h": 796
+      }
+    ]
+  },
+  {
+    "id": "quittance-loyer",
+    "name": "Quittance de loyer",
+    "tags": [
+      "administratif"
+    ],
+    "screenshot": "quittance-loyer/thumb.png",
+    "html": "quittance-loyer/template.html",
+    "pack": "quittance-loyer/pack.json",
+    "shows": [
+      "calc",
       "amountWords",
-      "dateFormat"
+      "dateFormat",
+      "images",
+      "fileName"
+    ],
+    "preview": [
+      {
+        "src": "quittance-loyer/capture-1.png",
+        "w": 563,
+        "h": 796
+      },
+      {
+        "src": "quittance-loyer/capture-2.png",
+        "w": 563,
+        "h": 796
+      }
     ]
   },
   {
@@ -166,70 +195,6 @@
       },
       {
         "src": "flyer-a6/capture-3.png",
-        "w": 637,
-        "h": 901
-      }
-    ]
-  },
-  {
-    "id": "carte-de-visite",
-    "name": "Carte de visite 85 × 55",
-    "tags": [
-      "impression",
-      "contact"
-    ],
-    "screenshot": "carte-de-visite/thumb.png",
-    "html": "carte-de-visite/template.html",
-    "pack": "carte-de-visite/pack.json",
-    "shows": [
-      "pageFormat",
-      "images",
-      "qr",
-      "otherwise",
-      "condition",
-      "sheets"
-    ],
-    "preview": [
-      {
-        "src": "carte-de-visite/capture-1.png",
-        "w": 439,
-        "h": 284
-      },
-      {
-        "src": "carte-de-visite/capture-2.png",
-        "w": 439,
-        "h": 284
-      },
-      {
-        "src": "carte-de-visite/capture-3.png",
-        "w": 637,
-        "h": 901
-      }
-    ]
-  },
-  {
-    "id": "etiquette-adresse",
-    "name": "Étiquette d’adresse 70 × 37",
-    "tags": [
-      "impression",
-      "contact"
-    ],
-    "screenshot": "etiquette-adresse/thumb.png",
-    "html": "etiquette-adresse/template.html",
-    "pack": "etiquette-adresse/pack.json",
-    "shows": [
-      "pageFormat",
-      "condition",
-      "sheets"
-    ],
-    "preview": [
-      {
-        "src": "etiquette-adresse/capture-1.png",
-        "w": 441,
-        "h": 234
-      },
-      {
-        "src": "etiquette-adresse/capture-2.png",
         "w": 637,
         "h": 901
       }
@@ -294,6 +259,423 @@
         "src": "affiche-a3/capture-1.png",
         "w": 644,
         "h": 910
+      }
+    ]
+  },
+  {
+    "id": "badge-evenement",
+    "name": "Badge d’événement A6",
+    "tags": [
+      "événement",
+      "impression"
+    ],
+    "screenshot": "badge-evenement/thumb.png",
+    "html": "badge-evenement/template.html",
+    "pack": "badge-evenement/pack.json",
+    "shows": [
+      "pageFormat",
+      "otherwise",
+      "condition",
+      "images",
+      "qr",
+      "sheets"
+    ],
+    "preview": [
+      {
+        "src": "badge-evenement/capture-1.png",
+        "w": 290,
+        "h": 408
+      },
+      {
+        "src": "badge-evenement/capture-2.png",
+        "w": 290,
+        "h": 408
+      },
+      {
+        "src": "badge-evenement/capture-3.png",
+        "w": 637,
+        "h": 901
+      }
+    ]
+  },
+  {
+    "id": "carte-de-visite",
+    "name": "Carte de visite 85 × 55",
+    "tags": [
+      "impression"
+    ],
+    "screenshot": "carte-de-visite/thumb.png",
+    "html": "carte-de-visite/template.html",
+    "pack": "carte-de-visite/pack.json",
+    "shows": [
+      "pageFormat",
+      "images",
+      "qr",
+      "otherwise",
+      "condition",
+      "sheets"
+    ],
+    "preview": [
+      {
+        "src": "carte-de-visite/capture-1.png",
+        "w": 439,
+        "h": 284
+      },
+      {
+        "src": "carte-de-visite/capture-2.png",
+        "w": 439,
+        "h": 284
+      },
+      {
+        "src": "carte-de-visite/capture-3.png",
+        "w": 637,
+        "h": 901
+      }
+    ]
+  },
+  {
+    "id": "etiquette-adresse",
+    "name": "Étiquette d’adresse 70 × 37",
+    "tags": [
+      "impression"
+    ],
+    "screenshot": "etiquette-adresse/thumb.png",
+    "html": "etiquette-adresse/template.html",
+    "pack": "etiquette-adresse/pack.json",
+    "shows": [
+      "pageFormat",
+      "condition",
+      "sheets"
+    ],
+    "preview": [
+      {
+        "src": "etiquette-adresse/capture-1.png",
+        "w": 441,
+        "h": 234
+      },
+      {
+        "src": "etiquette-adresse/capture-2.png",
+        "w": 637,
+        "h": 901
+      }
+    ]
+  },
+  {
+    "id": "bon-de-commande",
+    "name": "Bon de commande fournisseur",
+    "tags": [
+      "stock"
+    ],
+    "screenshot": "bon-de-commande/thumb.png",
+    "html": "bon-de-commande/template.html",
+    "pack": "bon-de-commande/pack.json",
+    "headerFooter": "bon-de-commande/header-footer.json",
+    "shows": [
+      "loop",
+      "calc",
+      "condition",
+      "qr",
+      "pageNumbers",
+      "linked"
+    ],
+    "preview": [
+      {
+        "src": "bon-de-commande/capture-1.png",
+        "w": 563,
+        "h": 796
+      },
+      {
+        "src": "bon-de-commande/capture-2.png",
+        "w": 563,
+        "h": 796
+      }
+    ]
+  },
+  {
+    "id": "etiquette-produit",
+    "name": "Étiquette produit A6",
+    "tags": [
+      "stock",
+      "impression"
+    ],
+    "screenshot": "etiquette-produit/thumb.png",
+    "html": "etiquette-produit/template.html",
+    "pack": "etiquette-produit/pack.json",
+    "shows": [
+      "pageFormat",
+      "sheets",
+      "images",
+      "qr",
+      "twoColumns",
+      "condition"
+    ],
+    "preview": [
+      {
+        "src": "etiquette-produit/capture-1.png",
+        "w": 422,
+        "h": 595
+      },
+      {
+        "src": "etiquette-produit/capture-2.png",
+        "w": 422,
+        "h": 595
+      },
+      {
+        "src": "etiquette-produit/capture-3.png",
+        "w": 637,
+        "h": 901
+      }
+    ]
+  },
+  {
+    "id": "fiche-inventaire",
+    "name": "Fiche d’inventaire d’un emplacement",
+    "tags": [
+      "stock"
+    ],
+    "screenshot": "fiche-inventaire/thumb.png",
+    "html": "fiche-inventaire/template.html",
+    "pack": "fiche-inventaire/pack.json",
+    "headerFooter": "fiche-inventaire/header-footer.json",
+    "shows": [
+      "refListLoop",
+      "sortFilter",
+      "conditionValue",
+      "today",
+      "pageNumbers",
+      "fileName"
+    ],
+    "preview": [
+      {
+        "src": "fiche-inventaire/capture-1.png",
+        "w": 563,
+        "h": 796
+      },
+      {
+        "src": "fiche-inventaire/capture-2.png",
+        "w": 563,
+        "h": 796
+      }
+    ]
+  },
+  {
+    "id": "bon-de-mouvement",
+    "name": "Bon de mouvement de stock",
+    "tags": [
+      "stock"
+    ],
+    "screenshot": "bon-de-mouvement/thumb.png",
+    "html": "bon-de-mouvement/template.html",
+    "pack": "bon-de-mouvement/pack.json",
+    "shows": [
+      "condition",
+      "loop",
+      "calc",
+      "twoColumns",
+      "dateFormat",
+      "linked"
+    ],
+    "preview": [
+      {
+        "src": "bon-de-mouvement/capture-1.png",
+        "w": 563,
+        "h": 796
+      },
+      {
+        "src": "bon-de-mouvement/capture-2.png",
+        "w": 563,
+        "h": 796
+      },
+      {
+        "src": "bon-de-mouvement/capture-3.png",
+        "w": 563,
+        "h": 796
+      }
+    ]
+  },
+  {
+    "id": "reappro-email",
+    "name": "E-mail de réapprovisionnement",
+    "tags": [
+      "stock",
+      "e-mail"
+    ],
+    "screenshot": "reappro-email/thumb.png",
+    "html": "reappro-email/template.html",
+    "pack": "reappro-email/pack.json",
+    "shows": [
+      "email",
+      "refListLoop",
+      "sortFilter",
+      "calc",
+      "today",
+      "linked"
+    ],
+    "preview": [
+      {
+        "src": "reappro-email/capture-1.png",
+        "w": 980,
+        "h": 262
+      },
+      {
+        "src": "reappro-email/capture-2.png",
+        "w": 980,
+        "h": 222
+      }
+    ]
+  },
+  {
+    "id": "valorisation-grille",
+    "name": "Valorisation du stock (Excel)",
+    "tags": [
+      "stock",
+      "grille"
+    ],
+    "screenshot": "valorisation-grille/thumb.png",
+    "html": "valorisation-grille/template.html",
+    "pack": "valorisation-grille/pack.json",
+    "shows": [
+      "grid",
+      "rowHeight",
+      "refListLoop",
+      "sortFilter",
+      "calc",
+      "fileName"
+    ],
+    "preview": [
+      {
+        "src": "valorisation-grille/capture-1.png",
+        "w": 1056,
+        "h": 205
+      }
+    ]
+  },
+  {
+    "id": "bulletin",
+    "name": "Bulletin scolaire",
+    "tags": [
+      "école"
+    ],
+    "screenshot": "bulletin/thumb.png",
+    "html": "bulletin/template.html",
+    "pack": "bulletin/pack.json",
+    "shows": [
+      "loop",
+      "linked",
+      "condition",
+      "images",
+      "fileName"
+    ],
+    "preview": [
+      {
+        "src": "bulletin/capture-1.png",
+        "w": 563,
+        "h": 796
+      },
+      {
+        "src": "bulletin/capture-2.png",
+        "w": 563,
+        "h": 796
+      },
+      {
+        "src": "bulletin/capture-3.png",
+        "w": 563,
+        "h": 796
+      }
+    ]
+  },
+  {
+    "id": "fiche-recette",
+    "name": "Fiche recette",
+    "tags": [
+      "cuisine"
+    ],
+    "screenshot": "fiche-recette/thumb.png",
+    "html": "fiche-recette/template.html",
+    "pack": "fiche-recette/pack.json",
+    "shows": [
+      "loop",
+      "calc",
+      "linked",
+      "condition",
+      "images",
+      "fileName"
+    ],
+    "preview": [
+      {
+        "src": "fiche-recette/capture-1.png",
+        "w": 563,
+        "h": 796
+      },
+      {
+        "src": "fiche-recette/capture-2.png",
+        "w": 563,
+        "h": 796
+      },
+      {
+        "src": "fiche-recette/capture-3.png",
+        "w": 563,
+        "h": 796
+      }
+    ]
+  },
+  {
+    "id": "emargement",
+    "name": "Feuille d’émargement",
+    "tags": [
+      "formation"
+    ],
+    "screenshot": "emargement/thumb.png",
+    "html": "emargement/template.html",
+    "pack": "emargement/pack.json",
+    "headerFooter": "emargement/header-footer.json",
+    "shows": [
+      "pageFormat",
+      "loop",
+      "linked",
+      "headerFooter",
+      "pageNumbers",
+      "calc"
+    ],
+    "preview": [
+      {
+        "src": "emargement/capture-1.png",
+        "w": 644,
+        "h": 455
+      },
+      {
+        "src": "emargement/capture-2.png",
+        "w": 644,
+        "h": 455
+      },
+      {
+        "src": "emargement/capture-3.png",
+        "w": 644,
+        "h": 455
+      }
+    ]
+  },
+  {
+    "id": "emargement-grille",
+    "name": "Émargement en grille (Excel)",
+    "tags": [
+      "formation",
+      "grille"
+    ],
+    "screenshot": "emargement-grille/thumb.png",
+    "html": "emargement-grille/template.html",
+    "pack": "emargement-grille/pack.json",
+    "shows": [
+      "grid",
+      "rowHeight",
+      "loop",
+      "linked"
+    ],
+    "preview": [
+      {
+        "src": "emargement-grille/capture-1.png",
+        "w": 1056,
+        "h": 686
       }
     ]
   }

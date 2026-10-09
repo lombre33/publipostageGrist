@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "hash": "a6f67070a4d55f56",
+  "preview": [
+    {
+      "src": "bon-de-commande/capture-1.png",
+      "w": 563,
+      "h": 796
+    },
+    {
+      "src": "bon-de-commande/capture-2.png",
+      "w": 563,
+      "h": 796
+    }
+  ],
+  "thumb": {
+    "src": "bon-de-commande/thumb.png",
+    "w": 240,
+    "h": 320
+  }
+}

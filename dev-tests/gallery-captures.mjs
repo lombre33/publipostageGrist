@@ -24,7 +24,7 @@
 //     "thumb": { "capture": 1, "page": 1 } }                                                              (par défaut : la première page de la première capture)
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
-import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync, mkdtempSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync, mkdtempSync, copyFileSync } from 'node:fs';
 import { extname, join, resolve, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
@@ -244,7 +244,9 @@ async function fillRows(page, tables, rows) {
           if (ref || refl) {
             const targetRows = rows[(ref || refl)[1]] || [];
             const shown = (id) => { const row = targetRows.find((x) => x.id === id); const value = row ? row[c.show] : ''; return value == null ? '' : value; };
-            out['gristHelper_Display' + c.id] = v === null ? '' : (refl ? ['L'].concat(r[c.id].map(shown)) : shown(v));
+            // La colonne d'aide que le vrai Grist (et le stub) a rangée pour cette Référence : gristHelper_Display, gristHelper_Display2... (le nom que l'installateur a obtenu).
+            const helper = ((stub.state.displayCols || {})[t.id] || {})[c.id] || ('gristHelper_Display' + c.id);
+            out[helper] = v === null ? '' : (refl ? ['L'].concat(r[c.id].map(shown)) : shown(v));
           }
         });
         return out;
@@ -370,15 +372,54 @@ for (const job of todo) {
         else await exportSheets(page, pdf, spec);
         const made = pdfPagesToPng(pdf, spec.pages || [1], spec.width, join(work, `${entry.id}-${n}`));
         // `expectPages` : le nombre de pages que ce PDF doit avoir (un flyer qui déborde sur une deuxième page ne se photographie pas sans le dire).
-        if (spec.expectPages && made.pages !== spec.expectPages) throw new Error(`capture ${n + 1} : le PDF a ${made.pages} page(s), pas ${spec.expectPages}`);
+        if (spec.expectPages && made.pages !== spec.expectPages) {
+          // GALLERY_CAPTURES_KEEP=<dossier> : le PDF trop long est gardé là pour qu'on le regarde (pdftoppm -png).
+          if (process.env.GALLERY_CAPTURES_KEEP) { mkdirSync(process.env.GALLERY_CAPTURES_KEEP, { recursive: true }); copyFileSync(pdf, join(process.env.GALLERY_CAPTURES_KEEP, `${entry.id}-${n + 1}.pdf`)); }
+          throw new Error(`capture ${n + 1} : le PDF a ${made.pages} page(s), pas ${spec.expectPages}`);
+        }
         made.files.forEach((png) => { outFiles.push(png); });
       } else {
+        if (spec.viewport) await page.setViewportSize({ width: spec.viewport[0], height: spec.viewport[1] });
         await click(page, '#btn-mode-read', 1200);
+        await page.mouse.move(10, 10); // la souris quitte le bouton : son menu de survol (« Lecture épurée ») ne reste pas sur la photo
+        await sleep(300);
         const png = join(work, `${entry.id}-${n}-reading.png`);
-        const el = await page.$(spec.selector || '.reader-content');
-        if (!el) throw new Error('Lecture : rien à photographier (' + (spec.selector || '.reader-content') + ')');
-        await el.screenshot({ path: png });
+        if (spec.clip) {
+          // `clip` : des éléments photographiés ensemble (la barre Objet / À / Cc d'un e-mail et le texte de la Lecture, sans la barre d'outils de l'éditeur qui les sépare) :
+          // une liste de groupes, chaque groupe une liste de sélecteurs ; chaque groupe a sa photo (le cadre qui contient tous ses éléments, élargi de `pad` px), toutes de
+          // la même largeur (celle du plus large), posées l'une sous l'autre. Les éléments qui n'occupent rien (le <style> que la Lecture ajoute à sa feuille) ne comptent pas.
+          const groups = Array.isArray(spec.clip[0]) ? spec.clip : [spec.clip];
+          const boxes = await page.evaluate(({ groups, pad }) => {
+            // `pad` : un nombre (partout), [haut, droite, bas, gauche], ou une liste de ces formes, une par groupe.
+            const padOf = (g) => { const p = Array.isArray(pad) && Array.isArray(pad[0]) ? pad[g] : pad; return Array.isArray(p) ? p : [p, p, p, p]; };
+            const out = groups.map((selectors) => {
+              const rects = [];
+              selectors.forEach((s) => {
+                const found = Array.from(document.querySelectorAll(s)).map((e) => e.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0);
+                if (!found.length) throw new Error('Lecture : rien à photographier (' + s + ')');
+                found.forEach((r) => rects.push(r));
+              });
+              return { left: Math.min(...rects.map((r) => r.left)), right: Math.max(...rects.map((r) => r.right)), top: Math.min(...rects.map((r) => r.top)), bottom: Math.max(...rects.map((r) => r.bottom)) };
+            });
+            const left = Math.max(0, Math.min(...out.map((b, g) => b.left - padOf(g)[3])));
+            const right = Math.max(...out.map((b, g) => b.right + padOf(g)[1]));
+            return out.map((b, g) => { const [pt, , pb] = padOf(g); return { x: left, y: Math.max(0, b.top - pt), width: right - left, height: b.bottom - b.top + pt + pb }; });
+          }, { groups, pad: spec.pad == null ? 8 : spec.pad });
+          const parts = [];
+          for (let g = 0; g < boxes.length; g += 1) {
+            const part = png.replace(/\.png$/, `-${g + 1}.png`);
+            await page.screenshot({ path: part, clip: boxes[g] });
+            parts.push(part);
+          }
+          if (parts.length === 1) copyFileSync(parts[0], png);
+          else { const r = sh('convert', parts.concat(['-background', 'white', '-append', png])); if (r.status !== 0) throw new Error('convert (-append) : ' + r.stderr); }
+        } else {
+          const el = await page.$(spec.selector || '.reader-content');
+          if (!el) throw new Error('Lecture : rien à photographier (' + (spec.selector || '.reader-content') + ')');
+          await el.screenshot({ path: png });
+        }
         await click(page, '#btn-mode-edit', 600);
+        if (spec.viewport) await page.setViewportSize({ width: VIEW_W, height: VIEW_H });
         outFiles.push(png);
       }
       n += 1;
