@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "family": "gestion",
+  "main": "Attestations",
+  "tables": ["Entreprise", "Attestations"],
+  "links": [
+    {"table": "Entreprise", "mode": "singleton"}
+  ],
+  "template": {
+    "type": "document",
+    "pdfName": "Attestation #Attestations.Nom",
+    "page": {
+      "format": "A4",
+      "orientation": "portrait",
+      "margins": [22, 22, 22, 22]
+    }
+  }
+}

@@ -1,46 +1,138 @@
 [
   {
     "id": "facture",
-    "name": "Facture",
+    "name": "Facture, devis ou avoir",
     "tags": [
-      "facture",
       "vente"
     ],
-    "screenshot": "facture/screenshot.svg",
+    "screenshot": "facture/thumb.png",
+    "preview": [
+      {
+        "src": "facture/capture-1.png",
+        "w": 563,
+        "h": 796
+      },
+      {
+        "src": "facture/capture-2.png",
+        "w": 563,
+        "h": 796
+      },
+      {
+        "src": "facture/capture-3.png",
+        "w": 563,
+        "h": 796
+      }
+    ],
     "html": "facture/template.html",
-    "schema": "facture/schema.py"
-  },
-  {
-    "id": "contrat-prestation-services",
-    "name": "Contrat de prestation de services",
-    "tags": [
-      "contrat",
-      "juridique"
-    ],
-    "screenshot": "contrat-prestation-services/screenshot.svg",
-    "html": "contrat-prestation-services/template.html",
-    "schema": "contrat-prestation-services/schema.py"
-  },
-  {
-    "id": "attestation",
-    "name": "Attestation",
-    "tags": [
-      "attestation",
-      "administratif"
-    ],
-    "screenshot": "attestation/screenshot.svg",
-    "html": "attestation/template.html",
-    "schema": "attestation/schema.py"
+    "pack": "facture/pack.json",
+    "headerFooter": "facture/header-footer.json",
+    "shows": [
+      "loop",
+      "calc",
+      "condition",
+      "amountWords",
+      "pageNumbers",
+      "linked"
+    ]
   },
   {
     "id": "courrier-relance",
     "name": "Courrier de relance",
     "tags": [
-      "relance",
-      "facture"
+      "vente"
     ],
-    "screenshot": "courrier-relance/screenshot.svg",
+    "screenshot": "courrier-relance/thumb.png",
+    "preview": [
+      {
+        "src": "courrier-relance/capture-1.png",
+        "w": 563,
+        "h": 796
+      },
+      {
+        "src": "courrier-relance/capture-2.png",
+        "w": 563,
+        "h": 796
+      },
+      {
+        "src": "courrier-relance/capture-3.png",
+        "w": 563,
+        "h": 796
+      }
+    ],
     "html": "courrier-relance/template.html",
-    "schema": "courrier-relance/schema.py"
+    "pack": "courrier-relance/pack.json",
+    "shows": [
+      "linked",
+      "condition",
+      "today",
+      "amountWords",
+      "dateFormat"
+    ]
+  },
+  {
+    "id": "contrat-prestation-services",
+    "name": "Contrat de prestation de services",
+    "tags": [
+      "administratif"
+    ],
+    "screenshot": "contrat-prestation-services/thumb.png",
+    "preview": [
+      {
+        "src": "contrat-prestation-services/capture-1.png",
+        "w": 563,
+        "h": 796
+      },
+      {
+        "src": "contrat-prestation-services/capture-2.png",
+        "w": 563,
+        "h": 796
+      },
+      {
+        "src": "contrat-prestation-services/capture-3.png",
+        "w": 563,
+        "h": 796
+      }
+    ],
+    "html": "contrat-prestation-services/template.html",
+    "pack": "contrat-prestation-services/pack.json",
+    "headerFooter": "contrat-prestation-services/header-footer.json",
+    "shows": [
+      "headings",
+      "footnote",
+      "checkbox",
+      "amountWords",
+      "headerFooter",
+      "linked"
+    ]
+  },
+  {
+    "id": "attestation",
+    "name": "Attestation d’emploi ou de stage",
+    "tags": [
+      "administratif"
+    ],
+    "screenshot": "attestation/thumb.png",
+    "preview": [
+      {
+        "src": "attestation/capture-1.png",
+        "w": 563,
+        "h": 796
+      },
+      {
+        "src": "attestation/capture-2.png",
+        "w": 563,
+        "h": 796
+      }
+    ],
+    "html": "attestation/template.html",
+    "pack": "attestation/pack.json",
+    "shows": [
+      "linked",
+      "condition",
+      "conditionValue",
+      "dateWords",
+      "images",
+      "qr"
+    ]
   }
 ]
