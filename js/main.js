@@ -166,6 +166,7 @@
     emailFieldsRawCache = null;
     eachEmailInput(input => { input.value = ''; input.readOnly = false; });
     MainToolbar.setEmailMode(false);
+    EmailPlainText.setActive(false);
     MainToolbar.setMacroMode(true);
     MainToolbar.setGridMode(false);
     syncExportRowsForModelType();
@@ -249,6 +250,7 @@
     currentTypeModele = typeModele;
     loadEmailFields(tpl);
     MainToolbar.setEmailMode(currentTypeModele === 'email');
+    EmailPlainText.setActive(currentTypeModele === 'email');
     MainToolbar.setMacroMode(false);
     MainToolbar.setGridMode(GridEditor.isGridType(currentTypeModele));
     syncExportRowsForModelType();
@@ -1572,7 +1574,7 @@
 
   // Export en lot : une ligne = un fichier, regroupés dans une archive ZIP (PDF, DOCX ou classeur Excel), ou mis bout à bout dans un seul PDF
   // (js/pdf-merge.js : même rendu par ligne que le ZIP, une nouvelle page par ligne) ou un seul classeur Excel (une feuille par ligne,
-  // js/xlsx-export.js). Lit toutes les lignes via docApi, sans le filtre de vue.
+  // js/xlsx-export.js). Lit les lignes de la vue Grist, ou toute la table via docApi (cf. readBatchRows).
   // Ce qui change d'un export à l'autre : ses textes (clés i18n), le nom des fichiers, la fonction qui rend une ligne et ses marges (points pour le
   // PDF, twips pour le DOCX, aucune pour l'Excel dont la feuille reprend la page du modèle) et ses bibliothèques (`loadLibs` : l'archive ZIP n'a
   // besoin que de JSZip, ~0,1 Mo, pas du lot PDF de ~4 Mo). Le reste (lecture des lignes, confirmation, boucle, archive, téléchargement) est commun.
@@ -1722,8 +1724,9 @@
     return source.maySplit;
   }
 
-  // Les lignes d'un export en lot : celles de la table (docApi, sans le filtre de vue), ou `only.record` seul. null : rien à exporter, le coin d'état
-  // le dit.
+  // Les lignes d'un export en lot : celles de la vue Grist - ses filtres, son tri -, ou toute la table (docApi, forme brute), au choix quand la vue n'en
+  // montre qu'une partie (js/batch-scope.js) ; ou `only.record` seul. null : rien à exporter, ou la personne renonce ; le coin d'état dit pourquoi dans le
+  // premier cas.
   async function readBatchRows(cfg, tableId, only) {
     if (only) return [only.record];
     let rows;
@@ -1734,7 +1737,8 @@
       return null;
     }
     if (!rows.length) { setStatus(exportText('status.noRowsInTable', { table: tableId }), true); return null; }
-    return rows;
+    const picked = await BatchScope.pick(rows, await BatchScope.viewRowIds(tableId), { table: tableId, grid: GridEditor.isGridType(currentTypeModele) });
+    return picked && picked.rows;
   }
 
   // Au-delà de ce nombre de documents, l'export d'une seule ligne que « Un document par valeur » découpe demande d'abord (deux listes de 20

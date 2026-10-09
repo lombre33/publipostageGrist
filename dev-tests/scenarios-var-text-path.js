@@ -189,6 +189,39 @@
   });
 
   cases.push({
+    id: 'vartextpath_assist_follows_a_list_of_references',
+    description: 'Dans le champ À, après « #TpNotifications.Equipe. » (Equipe : liste de références de la page vers l’annuaire) la liste propose les colonnes de l’annuaire, se filtre à la frappe, et Entrée met le chemin entier ; il se résout en une adresse par fiche de la liste, jointes par une virgule',
+    run: async (h) => {
+      await seed(h);
+      window.__gristStub.setVariables(PAGE, { Titre: 'Text', Projet: 'Ref:TpProjet', Equipe: 'RefList:TpAnnuaire', gristHelper_Display: 'Text', gristHelper_Display2: 'Any' },
+        null, { Projet: 'gristHelper_Display', Equipe: 'gristHelper_Display2' });
+      window.__gristStub.setRows(PAGE, [
+        { id: 1, Titre: 'Notif 1', Projet: 1, Equipe: ['L', 7, 8], gristHelper_Display: 'Projet Alpha', gristHelper_Display2: ['L', 'Dupont Jean', 'Martin Anne'] },
+        { id: 2, Titre: 'Notif 2', Projet: 2, Equipe: null, gristHelper_Display: 'Projet Beta', gristHelper_Display2: null },
+        { id: 3, Titre: 'Notif 3', Projet: 3, Equipe: ['L', 9], gristHelper_Display: 'Projet Gamma', gristHelper_Display2: ['L', 'Durand Paul'] },
+      ]);
+      await GristAPI.refreshSchema();
+      window.__gristStub.fireRecord(Object.assign({}, RECORD_1), PAGE);
+      await h.sleep(50);
+      const to = field('v2-email-to');
+      await type(h, to, '#TpNotifications.Equipe.');
+      const all = listed();
+      await type(h, to, '#TpNotifications.Equipe.em');
+      const filtered = listed();
+      press(to, 'Enter');
+      await h.sleep(30);
+      const value = to.value;
+      const resolved = await text(value);
+      const empty = await text(value, RECORD_2);
+      await reset(h, to);
+      const pass = sameSet(all, ['TpNotifications.Equipe.NomPrenom', 'TpNotifications.Equipe.Email', 'TpNotifications.Equipe.Service'])
+        && JSON.stringify(filtered) === JSON.stringify(['TpNotifications.Equipe.Email']) && value === '#TpNotifications.Equipe.Email'
+        && resolved === 'jean.dupont@ex.fr, anne.martin@ex.fr' && empty === '';
+      return { pass, notes: JSON.stringify({ all, filtered, value, resolved, empty }) };
+    },
+  });
+
+  cases.push({
     id: 'vartextpath_assist_continues_through_a_second_reference_and_after_text',
     description: 'La liste continue de référence en référence (« #TpProjet.Accompagnateur.Service. » propose les colonnes des services), même au milieu d’une phrase, et le texte avant le # est conservé à l’insertion',
     run: async (h) => {

@@ -11,8 +11,10 @@
 //  - <option> sans valeur mais permise (« -- Choisir une colonne -- », « — Aucune — ») : le choix « rien », proposé en tête tant qu'on ne cherche
 //    pas, écarté dès qu'on tape, grisé dans le champ fermé ; sauf `data-placeholder="false"` : une valeur vide qui est un vrai choix (« Ordre de la
 //    table »), traitée comme les autres ;
-//  - <option data-pinned="true"> (la saisie avancée) : toujours en bas de la liste, quelle que soit la recherche.
-// SearchSelect.attach(select, opts), ou attachColumns, attachTables, attachTemplates, attachValues, attachSheets (mêmes textes pour chaque sorte de
+//  - <option data-pinned="true"> (la saisie avancée) : toujours en bas de la liste, quelle que soit la recherche ;
+//  - <option data-unavailable="raison"> (un graphique que le widget ne sait pas redessiner) : proposée mais grisée, avec la raison sous son nom, et jamais
+//    choisie (clic, Entrée) ; une recherche surligne de préférence le premier résultat qui se choisit.
+// SearchSelect.attach(select, opts), ou attachColumns, attachTables, attachTemplates, attachValues, attachSheets, attachCharts (mêmes textes pour chaque sorte de
 // liste) ; .destroy() à la fermeture de la fenêtre (le <select> natif réapparaît). Si attach() lève, l'appelant garde le <select> natif.
 // Options : labelledBy, searchPlaceholder, emptyText (texte ou fonction relue à chaque ouverture : la langue peut changer), placeholder ; `inline`
 // (champ d'une ligne de règle : même hauteur que ses voisins, largeur qui suit la ligne) ; `hintInTrigger: false` (l'indice reste dans la liste, pas
@@ -121,6 +123,7 @@ const SearchSelect = (function () {
         pinned: opt.dataset.pinned === 'true',
         empty: isNoChoice(opt),
         expand: opt.dataset.expand || '',
+        unavailable: opt.dataset.unavailable || '',
       });
     });
     return items;
@@ -131,7 +134,7 @@ const SearchSelect = (function () {
     const name = entry.name == null ? String(entry.value) : String(entry.name);
     const hint = entry.hint || '';
     const search = entry.search || '';
-    return { value: String(entry.value), name, hint, search, haystack: searchKey(name, hint, search), group: '', pinned: false, empty: false, expand: entry.expand || '' };
+    return { value: String(entry.value), name, hint, search, haystack: searchKey(name, hint, search), group: '', pinned: false, empty: false, expand: entry.expand || '', unavailable: '' };
   }
 
   // Textes de la zone de recherche et du message « aucun résultat » : une chaîne, ou une fonction relue à chaque ouverture, pour qu'une liste posée
@@ -331,13 +334,16 @@ const SearchSelect = (function () {
         list.appendChild(header);
       }
       lastGroup = item.group;
-      const row = el('li', 'ss-option' + (item.pinned ? ' is-pinned' : '') + (item.empty ? ' is-empty' : ''));
+      const row = el('li', 'ss-option' + (item.pinned ? ' is-pinned' : '') + (item.empty ? ' is-empty' : '') + (item.unavailable ? ' is-unavailable' : ''));
       row.id = id + '-opt-' + i;
       row.setAttribute('role', 'option');
       row.setAttribute('aria-selected', item.value === current ? 'true' : 'false');
+      if (item.unavailable) row.setAttribute('aria-disabled', 'true');
       row.dataset.index = String(i);
       row.appendChild(el('span', 'ss-name', item.name));
       if (item.hint) row.appendChild(el('span', 'ss-hint', '(' + item.hint + ')'));
+      // La raison sous le nom : lue avec la ligne par les lecteurs d'écran.
+      if (item.unavailable) row.appendChild(el('span', 'ss-reason', item.unavailable));
       // Une colonne Référence : la flèche qui ouvre les colonnes de sa table. Hors du clavier (Tab, la saisie garde le focus) : → fait la même chose.
       if (item.expand && s.opts.expand) {
         const label = I18n.t('searchSelect.descend', { table: item.expand, column: item.name });
@@ -363,7 +369,8 @@ const SearchSelect = (function () {
     // Sinon la ligne d'où l'on remonte, sinon le choix courant ; rien de surligné sans recherche ni choix, pour qu'un Entrée à vide ne choisisse pas la
     // première colonne au hasard.
     const wanted = back ? back.value : current;
-    setActive(s, searching ? (matches.length ? s.visible.indexOf(matches[0]) : -1) : s.visible.findIndex(item => item.value === wanted), false);
+    const first = matches.find(item => !item.unavailable) || matches[0];
+    setActive(s, searching ? (first ? s.visible.indexOf(first) : -1) : s.visible.findIndex(item => item.value === wanted), false);
   }
 
   // Panneau en position fixe : hors de toute zone rognante (fenêtre à défilement, ancêtre overflow:hidden), sous le champ ou au-dessus si la place
@@ -439,6 +446,8 @@ const SearchSelect = (function () {
   }
   function choose(s, item) {
     const { select } = s;
+    // Une ligne grisée reste proposée, pour dire pourquoi elle ne l'est pas : elle ne se choisit pas.
+    if (item.unavailable) return;
     // Une ligne d'un niveau où l'on est descendu n'a pas d'<option> : elle en reçoit une, rangée après la ligne d'où l'on est parti, qui porte pour nom sa
     // valeur (le chemin entier) et se cherche par les noms de toute la suite de colonnes.
     if (s.levels.length > 1) {
@@ -721,6 +730,8 @@ const SearchSelect = (function () {
   function attachValues(select, opts) { return attachKind(select, opts, 'searchSelect.searchValues', 'searchSelect.noValueMatch'); }
   // Liste de feuilles d'un classeur Excel (import d'une grille : js/grid-xlsx-import.js).
   function attachSheets(select, opts) { return attachKind(select, opts, 'searchSelect.searchSheets', 'searchSelect.noSheetMatch'); }
+  // Liste des graphiques de la page (js/chart-block.js), les groupes étant les pages de Grist.
+  function attachCharts(select, opts) { return attachKind(select, opts, 'searchSelect.searchCharts', 'searchSelect.noChartMatch'); }
   // Remet à jour le champ visible d'un <select> déjà attaché après un changement par programme de sa valeur, de ses options ou de son état grisé ;
   // sans effet sur un <select> que le composant n'a pas pris (liste native de repli). Pour le code qui ne garde pas le contrôleur (grisage d'un champ
   // Valeur).
@@ -729,5 +740,5 @@ const SearchSelect = (function () {
     if (controller) controller.sync();
   }
 
-  return { attach, attachColumns, attachTables, attachTemplates, attachValues, attachSheets, sync, filterItems, readItems, addDynamicOption, normalize, searchWords, searchKey, foundIn, nameMatcher };
+  return { attach, attachColumns, attachTables, attachTemplates, attachValues, attachSheets, attachCharts, sync, filterItems, readItems, addDynamicOption, normalize, searchWords, searchKey, foundIn, nameMatcher };
 })();

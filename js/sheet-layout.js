@@ -5,11 +5,16 @@
 // Mesures en points (1/72 de pouce, l'unité du PDF), origine en haut à gauche, y vers le bas ; js/pdf-merge.js retourne y pour pdf-lib. Les
 // dimensions de la page et des feuilles viennent de PageLayout (sa table FORMATS : A4 = 595,28 x 841,89 pt), jamais d'une conversion de millimètres :
 // deux A6 en largeur font exactement l'A4 (297,64 x 2 = 595,28), un arrondi de plus les en ferait sortir.
-//  - Sans traits de coupe, les pages se touchent et gardent leur taille : la grille est centrée sur la feuille, rien n'est réduit (4 A6 = 210 x 296
-//    mm sur 210 x 297).
+//  - Sans traits de coupe ni marge, les pages se touchent et gardent leur taille : la grille est centrée sur la feuille, rien n'est réduit (4 A6 =
+//    210 x 296 mm sur 210 x 297).
 //  - Avec traits de coupe, chaque ligne de coupe porte deux repères hors de la grille (décalés de 3 mm, longs de 4 mm, comme les traits de coupe
 //    d'InDesign) : il faut donc 7 mm de marge autour d'elle. Quand la feuille ne les laisse pas (4 A6 sur une A4), toutes les pages sont réduites du
 //    même facteur ; l'échelle est dite dans la fenêtre, jamais appliquée en silence.
+//  - Une marge (en points ici, en millimètres dans la fenêtre) entoure chaque page sur ses quatre côtés : elle compte deux fois entre deux pages et
+//    une fois au bord de la grille. Chaque page occupe le centre de sa case (la page, plus la marge de chaque côté) et les traits de coupe passent au
+//    bord des cases, au milieu de l'espace entre deux pages : chaque morceau découpé garde sa marge. Comme pour les traits, quand la feuille ne
+//    laisse pas la place (4 A6 sur une A4 avec 3 mm), toutes les pages sont réduites du même facteur ; `maxMargin` plafonne la marge pour que les
+//    pages ne descendent pas sous la moitié de leur taille.
 //  - Les emplacements se suivent de gauche à droite puis de haut en bas : la ligne 1 de la table en haut à gauche, la suivante à sa droite, puis la
 //    rangée du dessous.
 const SheetLayout = (function () {
@@ -23,6 +28,8 @@ const SheetLayout = (function () {
   // Tolérance des comparaisons en points : un écart de table d'un centième ne retire pas un emplacement ; sous cet écart à 1, l'échelle vaut 1.
   const EPS = 0.05;
   const SCALE_EPS = 0.0005;
+  // Une marge ne ramène jamais les pages sous la moitié de leur taille : `maxMargin` la plafonne, la fenêtre borne son champ à ce maximum.
+  const MIN_SCALE = 0.5;
 
   function sheetSize(sheet, orientation) { return PageLayout.pageSizePtFor(orientation, sheet); }
 
@@ -77,9 +84,21 @@ const SheetLayout = (function () {
     return out;
   }
 
-  // La planche : { sheet, page } en points ({ width, height }), `cols` x `rows` emplacements, `marks` vrai pour les traits de coupe. Rend l'échelle
-  // des pages (1 sauf si les traits ne tiennent pas), la grille centrée sur la feuille (x0, y0 : son coin haut gauche) et chaque emplacement { index,
-  // col, row, x, y, width, height } dans l'ordre de lecture.
+  // La plus grande marge (pt) que cette grille accepte : celle qui ramène les pages à MIN_SCALE de leur taille, traits de coupe compris. 0 quand les
+  // traits seuls ne laissent déjà pas cette place. `opts` : { sheet, page, cols, rows, marks }, comme pour `compute`.
+  function maxMargin(opts) {
+    const zone = opts.marks ? MARK_ZONE : 0;
+    const cols = Math.max(1, Math.floor(opts.cols) || 1);
+    const rows = Math.max(1, Math.floor(opts.rows) || 1);
+    const byWidth = (opts.sheet.width - 2 * zone - MIN_SCALE * cols * opts.page.width) / (2 * cols);
+    const byHeight = (opts.sheet.height - 2 * zone - MIN_SCALE * rows * opts.page.height) / (2 * rows);
+    return Math.max(0, Math.min(byWidth, byHeight));
+  }
+
+  // La planche : { sheet, page } en points ({ width, height }), `cols` x `rows` emplacements, `marks` vrai pour les traits de coupe, `margin` la marge
+  // (pt) laissée autour de chaque page (0 : les pages se touchent ; plafonnée à `maxMargin`). Rend l'échelle des pages (1 sauf si les traits et la marge
+  // ne tiennent pas), la grille de cases centrée sur la feuille (x0, y0 : son coin haut gauche ; `cellWidth` x `cellHeight` : une case, page et marge)
+  // et chaque emplacement { index, col, row, x, y, width, height } dans l'ordre de lecture : la page elle-même, au centre de sa case.
   function compute(opts) {
     const sheet = { width: opts.sheet.width, height: opts.sheet.height };
     const page = { width: opts.page.width, height: opts.page.height };
@@ -87,20 +106,23 @@ const SheetLayout = (function () {
     const rows = Math.max(1, Math.floor(opts.rows) || 1);
     const hasMarks = !!opts.marks;
     const zone = hasMarks ? MARK_ZONE : 0;
-    let scale = Math.min(1, (sheet.width - 2 * zone) / (cols * page.width), (sheet.height - 2 * zone) / (rows * page.height));
+    const margin = Math.min(Math.max(0, Number(opts.margin) || 0), maxMargin({ sheet, page, cols, rows, marks: hasMarks }));
+    let scale = Math.min(1, (sheet.width - 2 * zone - 2 * cols * margin) / (cols * page.width), (sheet.height - 2 * zone - 2 * rows * margin) / (rows * page.height));
     if (scale > 1 - SCALE_EPS) scale = 1;
-    const cellWidth = page.width * scale;
-    const cellHeight = page.height * scale;
+    const slotWidth = page.width * scale;
+    const slotHeight = page.height * scale;
+    const cellWidth = slotWidth + 2 * margin;
+    const cellHeight = slotHeight + 2 * margin;
     const x0 = (sheet.width - cols * cellWidth) / 2;
     const y0 = (sheet.height - rows * cellHeight) / 2;
     const slots = [];
     for (let i = 0; i < cols * rows; i++) {
       const col = i % cols;
       const row = Math.floor(i / cols);
-      slots.push({ index: i, col, row, x: x0 + col * cellWidth, y: y0 + row * cellHeight, width: cellWidth, height: cellHeight });
+      slots.push({ index: i, col, row, x: x0 + col * cellWidth + margin, y: y0 + row * cellHeight + margin, width: slotWidth, height: slotHeight });
     }
     return {
-      sheet, page, cols, rows, count: cols * rows, scale, x0, y0, cellWidth, cellHeight, slots, hasMarks,
+      sheet, page, cols, rows, count: cols * rows, scale, margin, x0, y0, cellWidth, cellHeight, slotWidth, slotHeight, slots, hasMarks,
       cutMarks: hasMarks ? cutMarks(x0, y0, cellWidth, cellHeight, cols, rows) : [],
       markWidth: MARK.width,
     };
@@ -109,5 +131,5 @@ const SheetLayout = (function () {
   // Le nombre de feuilles qu'il faut pour `pages` pages à `slots` emplacements par feuille.
   function sheetCount(pages, slots) { return slots > 0 ? Math.ceil(pages / slots) : 0; }
 
-  return { SHEETS, ORIENTATIONS, MARK, MARK_ZONE, sheetSize, maxGrid, slotCount, bestOrientation, best, compute, sheetCount };
+  return { SHEETS, ORIENTATIONS, MM_TO_PT, MARK, MARK_ZONE, MIN_SCALE, sheetSize, maxGrid, slotCount, bestOrientation, best, maxMargin, compute, sheetCount };
 })();

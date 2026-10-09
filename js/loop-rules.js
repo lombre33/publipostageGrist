@@ -80,11 +80,6 @@ const LoopRules = (function () {
   }
   function createContext() { return { fetchRows: memoFetchRows() }; }
 
-  function listValues(value) {
-    if (value === null || value === undefined || value === '') return [];
-    if (Array.isArray(value)) return value[0] === 'L' ? value.slice(1) : value.slice();
-    return [value];
-  }
   // Ordre des lignes de la table dans Grist (manualSort, celui de la vue des données brutes), à défaut l'identifiant de ligne.
   function tableOrder(rows) {
     const rank = r => (typeof r.manualSort === 'number' ? r.manualSort : r.id);
@@ -101,10 +96,10 @@ const LoopRules = (function () {
       let pageRow = GristAPI.isRawRow(record) ? record : null;
       if (!pageRow && record.id != null) pageRow = (await fetchRows(tableId)).find(r => r.id === record.id) || null;
       if (!pageRow) return { items: [] };
-      const ids = listValues(pageRow[loop.via.column]);
+      const ids = Variables.listItems(pageRow[loop.via.column]);
       if (!ids.length) return { items: [] };
       const displayCol = GristAPI.getDisplayColumn(tableId, loop.via.column);
-      const displays = displayCol ? listValues(pageRow[displayCol]) : null;
+      const displays = displayCol ? Variables.listItems(pageRow[displayCol]) : null;
       const byId = new Map((await fetchRows(loop.table)).map(r => [r.id, r]));
       const items = [];
       ids.forEach((id, i) => {

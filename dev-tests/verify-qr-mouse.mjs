@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // QR code (js/qr-code.js, js/main-toolbar.js, css/qr-code.css, js/editor-nodes.js) : le panneau de 700x400 d'Antoine, à la VRAIE souris (page.mouse) et au VRAI clavier (frappe, Tab, Entrée,
 // Échap, Ctrl+Z), en clair, en sombre et en anglais. Ce que scenarios-qr-code.js ne peut pas voir depuis la page :
-//  - le survol de l'icône chaîne ouvre le menu « Lien et blocs de contenu » : ses six lignes, « QR code… » en dernier, tiennent dans le panneau et sont au premier plan, le volet ne déborde pas ;
+//  - le survol de l'icône chaîne ouvre le menu « Lien et blocs de contenu » : ses sept lignes, « QR code… » en sixième, tiennent dans le panneau et sont au premier plan, le volet ne déborde pas ;
 //  - un clic sur « QR code… » ouvre la fenêtre ; elle tient dans 700x400 sans défiler - titre, champ, « Insérer une colonne… », aperçu et boutons visibles ; le focus est dans le champ ;
 //  - taper une adresse montre son QR code (relu par un décodeur) ; « Insérer » le pose dans le document, à 120 px et carré, et rend le clavier à l'éditeur ;
 //  - un clic sur le QR code le sélectionne : la ligne devient « Modifier le QR code… », la fenêtre s'ouvre remplie, Entrée valide, un Ctrl+Z revient à l'ancien ;
@@ -184,7 +184,8 @@ async function openMenu() {
   return c;
 }
 async function closeMenu() {
-  await page.mouse.move(WIDTH / 2, HEIGHT - 20, { steps: 3 });
+  // Le volet à sept lignes (jusqu'à « Graphique de la page… ») descend à ~395 px et couvre le bas du milieu du panneau : la souris le quitte par le coin bas droit.
+  await page.mouse.move(WIDTH - 30, HEIGHT - 20, { steps: 3 });
   await page.waitForTimeout(250);
 }
 // Une ligne du menu, à la vraie souris : le volet s'ouvre au survol de l'icône, puis la main descend de l'icône sur la ligne (verticalement, sans quitter le volet) et clique.
@@ -207,7 +208,7 @@ await page.addScriptTag({ url: OFFLINE ? `${BASE}/dev-tests/.offline-cache/umd/j
 
 const MAIN = '#v2-btn-link';
 const ROW = '#v2-btn-qr';
-const ROWS = ['#v2-row-link', '#v2-btn-citation', '#v2-btn-code-block', '#v2-btn-callout', '#v2-btn-signature', ROW];
+const ROWS = ['#v2-row-link', '#v2-btn-citation', '#v2-btn-code-block', '#v2-btn-callout', '#v2-btn-signature', ROW, '#v2-btn-chart'];
 const FLYOUT = '#v2-blocks-flyout';
 const WIN = '#pp-qr-modal';
 const BOX = `${WIN} .modal-content`;
@@ -290,16 +291,16 @@ async function run(theme) {
   await setDoc('<p>Bonjour le monde entier</p><p>Deuxième ligne</p>');
   await seedRecord();
 
-  // 1) Le menu : un survol réel de l'icône chaîne ouvre le volet, ses six lignes sont dans le panneau et au premier plan.
+  // 1) Le menu : un survol réel de l'icône chaîne ouvre le volet, ses sept lignes sont dans le panneau et au premier plan.
   const mainBox = await hit(MAIN);
   check(`${T}, menu : l'icône chaîne est visible dans le panneau ${WIDTH}x${HEIGHT} et sous la souris`, seen(mainBox), mainBox);
   await openMenu();
   const flyout = await hit(FLYOUT);
   const rows = [];
   for (const sel of ROWS) rows.push(await hit(sel));
-  check(`${T}, menu : au survol, le volet s'ouvre dans le panneau avec ses six lignes au premier plan`, flyout.found && flyout.inPanel && rows.every(seen), { flyout, rows });
+  check(`${T}, menu : au survol, le volet s'ouvre dans le panneau avec ses sept lignes au premier plan`, flyout.found && flyout.inPanel && rows.every(seen), { flyout, rows });
   const labels = await rowLabels();
-  check(`${T}, menu : « Lien… », « Citation », « Bloc de code », « Encadré… », « Bloc de signature » puis « QR code… »`, labels.length === 6 && /^Lien…\s*Ctrl\+K$/.test(labels[0]) && labels[1] === 'Citation' && labels[2] === 'Bloc de code' && labels[3] === 'Encadré…' && labels[4] === 'Bloc de signature' && labels[QR_ROW_INDEX] === 'QR code…', labels);
+  check(`${T}, menu : « Lien… », « Citation », « Bloc de code », « Encadré… », « Bloc de signature », « QR code… » puis « Graphique de la page… »`, labels.length === 7 && /^Lien…\s*Ctrl\+K$/.test(labels[0]) && labels[1] === 'Citation' && labels[2] === 'Bloc de code' && labels[3] === 'Encadré…' && labels[4] === 'Bloc de signature' && labels[QR_ROW_INDEX] === 'QR code…' && labels[6] === 'Graphique de la page…', labels);
   await snap(`${T}-1-menu`);
   await closeMenu();
   const closed = await page.evaluate(() => getComputedStyle(document.getElementById('v2-blocks-flyout')).display === 'none');
@@ -488,7 +489,7 @@ async function runEnglish() {
   const flyout = await hit(FLYOUT);
   const rows = [];
   for (const sel of ROWS) rows.push(await hit(sel));
-  check('anglais, menu : le volet « Link and content blocks » montre « QR code… » en sixième ligne, dans le panneau', labels.length === 6 && /^Link…\s*Ctrl\+K$/.test(labels[0]) && labels[QR_ROW_INDEX] === 'QR code…' && flyout.inPanel && rows.every(seen), { labels, flyout, rows });
+  check('anglais, menu : le volet « Link and content blocks » montre « QR code… » en sixième ligne et « Chart from the page… » en septième, dans le panneau', labels.length === 7 && /^Link…\s*Ctrl\+K$/.test(labels[0]) && labels[QR_ROW_INDEX] === 'QR code…' && labels[6] === 'Chart from the page…' && flyout.inPanel && rows.every(seen), { labels, flyout, rows });
   await snap('en-1-menu');
   await clickRow(ROW);
   await page.waitForTimeout(150);
@@ -511,7 +512,7 @@ async function runEnglish() {
   await clickCenter(OK);
   await page.waitForTimeout(300);
   await openMenu();
-  await page.mouse.move(WIDTH / 2, HEIGHT - 20, { steps: 3 });
+  await page.mouse.move(WIDTH - 30, HEIGHT - 20, { steps: 3 });
   await page.waitForTimeout(250);
   const frameCenter = await centerOf(FRAME);
   await page.mouse.click(frameCenter.x, frameCenter.y);

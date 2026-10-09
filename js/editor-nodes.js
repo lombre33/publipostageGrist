@@ -1394,7 +1394,7 @@ const EditorNodes = (function () {
   const { keepImagesOfReplacedText } = (function () {
     // Images en calque : du texte remplacé
 
-    const sameImage = (a, b) => ['src', 'varTable', 'varColumn', 'varKey', 'qrText'].every(name => a.attrs[name] === b.attrs[name]);
+    const sameImage = (a, b) => ['src', 'varTable', 'varColumn', 'varKey', 'qrText', 'chartSection'].every(name => a.attrs[name] === b.attrs[name]);
     const imagesOf = doc => { const found = []; doc.descendants((node, pos) => { if (node.type.name === 'editorImage') found.push({ node, pos }); }); return found; };
     const wholeDocReplaced = trs => trs.some(tr => tr.steps.some((step, i) => typeof step.from === 'number' && typeof step.to === 'number' && step.from <= 0 && step.to >= tr.docs[i].content.size));
     function replacedTextRange(root, selection, doc) {
@@ -1413,7 +1413,7 @@ const EditorNodes = (function () {
       // un mot effacé en entier (Ctrl + Suppr). ProseMirror ou le navigateur le fait lui-même, aucune touche d'ici n'est jouée : les images en calque
       // du texte remplacé que la transaction a emportées sont reposées là où le remplacement se referme, dans la même étape d'annulation. Le texte
       // remplacé est la sélection, ou, curseur seul, la plage d'une seule étape de texte pur (sans image dans ce qu'elle pose) dans un seul bloc.
-      // Sont rendues les images dont la sorte (source, colonne PJ, QR code) compte moins d'exemplaires après qu'avant : une image déplacée,
+      // Sont rendues les images dont la sorte (source, colonne PJ, QR code, graphique) compte moins d'exemplaires après qu'avant : une image déplacée,
       // redimensionnée ou remplacée par un collage identique ne manque pas.
       // Suivent leur cours : Couper (l'image part avec le texte dans le presse-papiers), Annuler et Rétablir, une transaction hors historique ou que le
       // suivi laisse passer (une correction du widget, « Tout accepter » et « Tout refuser »), le suivi des modifications actif, une image sélectionnée
@@ -1638,6 +1638,12 @@ const EditorNodes = (function () {
         // `src`, le texte contient une colonne et le QR code n'est dessiné qu'à la Lecture et à l'export, pour la ligne affichée
         // (reader-mode.js:resolveQrCodes).
         qrText: { default: null, parseHTML: el => el.getAttribute('data-qr-text') || null, renderHTML: noBareRender },
+        // Graphique de la page (js/chart-block.js) : le numéro de la section de graphique de Grist, les lignes tracées (« linked » : celles que trouve la règle
+        // de liaison pour la ligne affichée ; « all » : toute la table) et le nom montré dans le cadre. Jamais de `src` : l'image est dessinée à la Lecture et
+        // à l'export (reader-mode.js:resolveCharts), pas enregistrée dans le modèle.
+        chartSection: { default: null, parseHTML: el => el.getAttribute('data-chart-section') || null, renderHTML: noBareRender },
+        chartScope: { default: null, parseHTML: el => el.getAttribute('data-chart-scope') || null, renderHTML: noBareRender },
+        chartName: { default: null, parseHTML: el => el.getAttribute('data-chart-name') || null, renderHTML: noBareRender },
       };
     }
     return { moveImageNode, imageAttributes };
@@ -1689,10 +1695,10 @@ const EditorNodes = (function () {
       return { wrap, img, varLabel, blockedSiteLabel, revealButton, moveHandle, corners };
     }
 
-    function imageInnerStyle(attrs, isVarBox, isQrBox) {
+    function imageInnerStyle(attrs, isVarBox, isQrBox, isChartBox) {
       const imgStyle = [];
       if (attrs.width) imgStyle.push(`width: ${attrs.width}`);
-      if (isVarBox && attrs.height) imgStyle.push(`height: ${attrs.height}`);
+      if ((isVarBox || isChartBox) && attrs.height) imgStyle.push(`height: ${attrs.height}`);
       if (isQrBox) imgStyle.push('aspect-ratio: 1 / 1');
       if (attrs.opacity !== 1 && attrs.opacity != null) imgStyle.push(`opacity: ${attrs.opacity}`);
       if (attrs.layer !== 'normal') imgStyle.push('position: relative', `z-index: ${attrs.layer === 'front' ? 5 : -1}`);
@@ -1723,6 +1729,8 @@ const EditorNodes = (function () {
       const isVarBox = !!attrs.varTable;
       // Un QR code dont le texte contient une colonne : le même cadre qu'une image de variable, carré, avec son texte pour libellé.
       const isQrBox = !!attrs.qrText && !attrs.src && !isVarBox;
+      // Un graphique de la page (js/chart-block.js) : le même cadre, de la largeur et de la hauteur réglées, avec son nom pour libellé.
+      const isChartBox = !!attrs.chartSection && !attrs.src && !isVarBox && !isQrBox;
       // Une image d'un autre site que la personne n'a pas affiché : pas d'adresse donnée au navigateur (le modèle, lui, la garde), un cadre à la place.
       const blockedSite = isVarBox ? '' : ExternalImages.blockedSiteOf(attrs.src);
       img.src = (isVarBox || blockedSite) ? '' : (attrs.src || '');
@@ -1735,10 +1743,11 @@ const EditorNodes = (function () {
         view.revealButton.setAttribute('aria-label', I18n.t('image.blocked.alt', { site: blockedSite }));
       } else delete wrap.dataset.blockedSite;
       img.alt = attrs.alt || '';
-      img.setAttribute('style', imageInnerStyle(attrs, isVarBox, isQrBox));
-      wrap.classList.toggle('editor-image-var-placeholder', isVarBox || isQrBox);
+      img.setAttribute('style', imageInnerStyle(attrs, isVarBox, isQrBox, isChartBox));
+      wrap.classList.toggle('editor-image-var-placeholder', isVarBox || isQrBox || isChartBox);
       wrap.classList.toggle('editor-image-qr-placeholder', isQrBox);
-      varLabel.textContent = isVarBox ? ('#' + (attrs.varKey || '')) : (isQrBox ? attrs.qrText : '');
+      wrap.classList.toggle('editor-image-chart-placeholder', isChartBox);
+      varLabel.textContent = isVarBox ? ('#' + (attrs.varKey || '')) : (isQrBox ? attrs.qrText : (isChartBox ? (attrs.chartName || I18n.t('chart.frame')) : ''));
       const layered = attrs.layer !== 'normal';
       wrap.classList.toggle('editor-image-layered', layered);
       wrap.classList.toggle('editor-image-repeated', PageLayer.isRepeatedAttrs(attrs));
@@ -1778,7 +1787,8 @@ const EditorNodes = (function () {
           startX: event.clientX, startY: event.clientY, zoom,
           startWidth: rect.width / zoom, startHeight: rect.height / zoom,
           signX: corner.includes('w') ? -1 : 1, signY: corner.includes('n') ? -1 : 1,
-          isVarBox: !!attrsNow.varTable,
+          // Un cadre sans image du modèle (colonne PJ, graphique) a une largeur ET une hauteur à lui ; les autres images gardent leurs proportions.
+          isVarBox: !!attrsNow.varTable || (!!attrsNow.chartSection && !attrsNow.src),
           // En calque, `wrap` a une largeur explicite (cf. applyImageAttrs) ; sans la faire grandir aussi pendant le glisser (pas seulement à la fin),
           // `.editor-image { max-width:100% }` plafonnerait l'<img> à l'ancienne largeur du wrap.
           isLayered: attrsNow.layer !== 'normal',
@@ -1917,11 +1927,11 @@ const EditorNodes = (function () {
     // Image : nœud atome en ligne (`layer` normal/devant/derrière, `opacity`, `align`, `wrap`). Chaque attribut garde un renderHTML vide : le nœud
     // construit lui-même la chaîne `style` complète ci-dessous.
     function createEditorImageNode(Node) {
-      // `height` n'est posé que pour une image liée à une variable (placeholder de taille fixe, mode "contain" côté rendu).
+      // `height` n'est posé que pour une image liée à une variable ou un graphique (placeholder de taille fixe, mode "contain" côté rendu).
       function styleFor(a) {
         const parts = [];
         if (a.width) parts.push(`width: ${a.width}`);
-        if (a.varTable && a.height) parts.push(`height: ${a.height}`);
+        if ((a.varTable || (a.chartSection && !a.src)) && a.height) parts.push(`height: ${a.height}`);
         // QR code sans image (une colonne dans son texte, js/qr-code.js) : un cadre carré, quelle que soit la largeur.
         if (a.qrText && !a.src) parts.push('aspect-ratio: 1 / 1');
         if (a.layer !== 'normal') {
@@ -1949,6 +1959,11 @@ const EditorNodes = (function () {
             attrs['data-var-key'] = a.varKey;
           }
           if (a.qrText) attrs['data-qr-text'] = a.qrText;
+          if (a.chartSection) {
+            attrs['data-chart-section'] = String(a.chartSection);
+            if (a.chartScope) attrs['data-chart-scope'] = a.chartScope;
+            if (a.chartName) attrs['data-chart-name'] = a.chartName;
+          }
           return ['img', attrs];
         },
         addCommands() {

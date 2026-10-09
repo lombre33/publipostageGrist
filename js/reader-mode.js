@@ -768,6 +768,7 @@ const ReaderMode = (function () {
     LoopRules.removeHiddenBlocks(wrapper);
     await resolveVariableImages(wrapper, tableId, record);
     await resolveQrCodes(wrapper, tableId, record);
+    await resolveCharts(wrapper, tableId, record);
     await resolveSmartChips(wrapper);
     if (stale()) return null;
     trimTrailingBlankBlocks(wrapper);
@@ -839,6 +840,12 @@ const ReaderMode = (function () {
     // répétée ; sans valeur, le QR code disparaît comme une image sans pièce jointe. Celui d'un texte seul est déjà une image du modèle.
     const nodes = Array.from(wrapper.querySelectorAll('img.editor-image[data-qr-text]')).filter(QrCode.needsImage);
     await Promise.all(nodes.map(img => QrCode.resolveImage(img, tableId, record, loopOpts(LoopRules.bindingOf(img)))));
+  }
+  async function resolveCharts(wrapper, tableId, record) {
+    // Graphiques de la page (js/chart-block.js) : dessinés ici pour la ligne affichée (dans une zone répétée, le même à chaque tour) ; sans ligne à tracer, le
+    // graphique disparaît comme une image sans pièce jointe, supprimé dans Grist il laisse une note. Ils n'ont jamais d'image dans le modèle.
+    const nodes = Array.from(wrapper.querySelectorAll('img.editor-image[data-chart-section]')).filter(ChartBlock.needsImage);
+    await Promise.all(nodes.map(img => ChartBlock.resolveImage(img, tableId, record)));
   }
   function formatTodayDate() {
     // Chips intelligents : date du jour, heure actuelle, email et nom de la personne connectée. Des valeurs calculées, jamais liées à une colonne
@@ -1059,6 +1066,7 @@ const ReaderMode = (function () {
     LoopRules.removeHiddenBlocks(wrapper);
     await resolveVariableImages(wrapper, tableId || lastCurrentTableId, record);
     await resolveQrCodes(wrapper, tableId || lastCurrentTableId, record);
+    await resolveCharts(wrapper, tableId || lastCurrentTableId, record);
     await resolveSmartChips(wrapper);
     await GristAPI.hydrateAttachmentImages(wrapper);
     return wrapper.innerHTML;

@@ -173,6 +173,28 @@ et dans le .xlsx) et script Node `qrMouse` (vraie souris, 700×400).
 **Reste ouvert** : pas de QR code dans un en-tête ni un pied de page (la ligne est grisée là) ; les codes-barres (`jsbarcode`) ; un QR code logo au centre ou une autre couleur ; la
 correction d'erreur est fixe (M).
 
+## Graphique de la page
+
+**Livré le 09/10** — demande d'Antoine : « pouvoir intégrer dans le document d'autre widget de data viz de Grist, a minimum les graphiques natifs ». L'étude (`/mnt/project-files/graphiques-grist/`) a conclu qu'un graphique
+natif ne s'intègre pas tel quel : l'API de Grist ne laisse ni afficher ni capturer une autre section, `frame-src` est à `'none'` dans la politique de sécurité, et un cadre n'entrerait jamais dans le PDF ni le Word.
+Le chemin retenu est celui du QR code : lire les RÉGLAGES du graphique dans les métadonnées du document (`_grist_Views_section` avec `parentKey = 'chart'`, `_grist_Views_section_field`, `_grist_Filters`,
+`_grist_Pages`, `_grist_Views`, `_grist_Tables`, `_grist_Tables_column`, via `GristAPI.fetchTableRows`) et le redessiner en PNG avec Plotly 2.13.2, la version de grist-core 1.7.20. Antoine a voulu UN SEUL commit
+(« pour pouvoir annuler d'un coup si je renonce ») : tout y est - bibliothèque, politique, code, textes, tests, NOTICE, documents - et `git revert` du hash retire la fonction entière.
+Plotly `plotly.js-basic-dist-min@2.13.2` (jsDelivr, SRI sha384 dans `LIB` de `js/chart-plot.js`, adresse exacte dans le `script-src` d'`index.html`), chargé à la demande par `ExportCommon.loadScriptOnce` au premier
+graphique ; `Plotly.toImage` à l'échelle 3. Trois modules : `js/chart-source.js` (lire les réglages d'une section : type, colonnes - la première est l'axe X -, tri, filtres de valeurs et de plages enregistrés,
+options ; lignes `all` ou `linked` par `Variables.resolveRows`, comme une bulle), `js/chart-plot.js` (le port des règles de grist-core 1.7.20 : `ChartView.ts`, `chartUtil.ts`, `SectionFilter.ts`, `ColumnFilterFunc.ts`,
+`SortFunc.ts` ; Apache-2.0, voir NOTICE) et `js/chart-block.js` (fenêtre, nœud, dessin). Le nœud est une image de l'éditeur (`editorImage`) SANS `src` : `chartSection`, `chartScope` (`linked` ou `all`) et `chartName`
+(`data-chart-*`), un cadre de la taille réglée (480 × 300 par défaut, largeur ET hauteur par les poignées) avec l'icône et le nom ; `ReaderMode.resolveCharts` le dessine pour la ligne affichée à la Lecture et à
+l'export (`ReaderMode.preview` : PDF, Word, Excel). Sans ligne à tracer il disparaît ; supprimé dans Grist ou illisible, il laisse « [Graphique indisponible] » dans la langue de l'interface. Entrée : la ligne
+« Graphique de la page… » (`#v2-btn-chart`, « Modifier le graphique… » quand le cadre est sélectionné) du menu « Lien et blocs de contenu », après « QR code… » ; action `chartBlock` des raccourcis (sans touche). La
+fenêtre (`#pp-chart-modal`, base commune) liste les graphiques par page avec la recherche de `js/search-select.js` (`attachCharts`) : un graphique que le widget ne sait pas redessiner reste dans la liste, grisé,
+avec sa raison, et ne se choisit pas ; deux choix de lignes - les lignes liées à la ligne du document (`Variables.ensureLinkConfigured` à la validation si la liaison n'est pas réglée ; indisponible quand le
+graphique est de la table du document) ou toute la table ; l'aperçu est une petite feuille blanche, comme le papier. Tests : groupe `chart` (44 scénarios, Plotly pour de vrai, figures relues dans leurs données et
+dans les pixels du PNG) et script Node `chartMouse` (80 vérifications à la vraie souris, 700×400, clair, sombre, anglais) ; `cspLoad` exporte aussi un graphique.
+**Reste ouvert** : les widgets personnalisés, Kaplan-Meier, « Split series », « Error bars » et les filtres sur des dates relatives ne sont pas redessinés (lignes grisées) ; le total d'un anneau s'écrit sans le format
+de la colonne ; pas de lien « Ouvrir dans Grist » ; la sélection qu'un graphique suit dans Grist (`selectBy`) n'est pas suivie - le document trace les lignes choisies dans la fenêtre ; pas de graphique dans un en-tête,
+un pied de page ni un e-mail (la ligne est grisée là, jamais retirée) ; dans une zone répétée le graphique n'est pas lié à la ligne du tour : c'est celui de la ligne affichée, à chaque tour.
+
 ## Fusion de plusieurs modèles
 
 Concaténer plusieurs modèles en un seul export PDF (ex. lettre de couverture + CGV + facture). Deux

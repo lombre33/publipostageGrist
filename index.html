@@ -16,7 +16,7 @@
     https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.min.js
     https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js
     https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js
-    https://cdn.jsdelivr.net/npm/docx@9.7.1/dist/index.iife.js
+    https://cdn.jsdelivr.net/npm/docx@9.7.1/dist/index.iife.js https://cdn.jsdelivr.net/npm/plotly.js-basic-dist-min@2.13.2/plotly-basic.min.js
     'sha256-oL7hcWNReCnK8lxGRlbj0IXTGZm4dxBoOerWyA01uig=' 'sha256-QiCHlcX781nb04G2fDoZHC2TVBI4ztYMrMBu6LN+Vsk=' 'sha256-dr2nJ9qlSEpVpFpN01rgQ3bZHAcSZWrebqvX0xSlX7I=';
   object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'">
 <!-- Enregistrement automatique coupé (pp_autosave_enabled = 'false', cf. js/main.js:isAutosaveEnabled) : le bouton Enregistrer est noir et blanc dès le PREMIER affichage, pas bleu le temps que
@@ -104,7 +104,7 @@
 <link rel="stylesheet" href="css/reader-guide.css?v=0.4">
 <link rel="stylesheet" href="css/editor-v2.css?v=0.102">
 <link rel="stylesheet" href="css/toolbar-v2.css?v=0.57">
-<link rel="stylesheet" href="css/grid.css?v=0.10">
+<link rel="stylesheet" href="css/grid.css?v=0.11">
 <link rel="stylesheet" href="css/template-tree-select.css?v=0.18">
 <link rel="stylesheet" href="css/template-organize-modal.css?v=0.8">
 <link rel="stylesheet" href="css/track-changes.css?v=0.11">
@@ -120,7 +120,8 @@
 <link rel="stylesheet" href="css/callout.css?v=0.2">
 <link rel="stylesheet" href="css/caption.css?v=0.3">
 <link rel="stylesheet" href="css/qr-code.css?v=0.3">
-<link rel="stylesheet" href="css/search-select.css?v=0.9">
+<link rel="stylesheet" href="css/chart-block.css?v=0.1">
+<link rel="stylesheet" href="css/search-select.css?v=0.10">
 <link rel="stylesheet" href="css/access-rights.css?v=0.8">
 <link rel="stylesheet" href="css/row-template.css?v=0.3">
 <link rel="stylesheet" href="css/save-reminder.css?v=0.1">
@@ -131,11 +132,12 @@
 <link rel="stylesheet" href="css/page-size.css?v=0.3">
 <link rel="stylesheet" href="css/clean-reading.css?v=0.2">
 <link rel="stylesheet" href="css/format-painter.css?v=0.2">
-<link rel="stylesheet" href="css/sheet-assembly.css?v=0.2">
+<link rel="stylesheet" href="css/sheet-assembly.css?v=0.3">
 <link rel="stylesheet" href="css/external-images.css?v=0.3">
 <link rel="stylesheet" href="css/first-contact.css?v=0.1">
 <link rel="stylesheet" href="css/page-zoom.css?v=0.2">
 <link rel="stylesheet" href="css/field-editor.css?v=0.1">
+<link rel="stylesheet" href="css/email-plain-text.css?v=0.2">
 <link rel="stylesheet" href="css/template-gallery.css?v=0.1">
 </head>
 <body>
@@ -212,18 +214,18 @@
           <span class="v2-hover-row v2-hover-row-disabled" data-quality="ultra" data-i18n="quality.ultra">Ultra HD (bientôt)</span>
           <span class="v2-hover-hsep"></span>
           <span class="v2-hover-row" id="v2-btn-export-docx" data-i18n="toolbar.exportDocx">Exporter en DOCX (bêta)…</span>
-          <span class="v2-hover-row" id="v2-btn-export-docx-batch" data-i18n="toolbar.exportDocxBatch">Exporter toutes les lignes en DOCX (ZIP)…</span>
+          <span class="v2-hover-row" id="v2-btn-export-docx-batch" data-i18n="toolbar.exportDocxBatch">Exporter les lignes en DOCX (ZIP)…</span>
           <span class="v2-hover-row v2-hover-row-disabled" id="v2-btn-export-xlsx" aria-disabled="true" data-i18n="toolbar.exportXlsx">Exporter en Excel…</span>
-          <span class="v2-hover-row v2-hover-row-disabled" id="v2-btn-export-xlsx-batch" aria-disabled="true" data-i18n="toolbar.exportXlsxBatch">Exporter toutes les valeurs de la table en Excel (ZIP)…</span>
-          <span class="v2-hover-row v2-hover-row-disabled" id="v2-btn-export-xlsx-single" aria-disabled="true" data-i18n="toolbar.exportXlsxSingle">Exporter toutes les valeurs de la table dans un seul classeur…</span>
+          <span class="v2-hover-row v2-hover-row-disabled" id="v2-btn-export-xlsx-batch" aria-disabled="true" data-i18n="toolbar.exportXlsxBatch">Exporter les valeurs de la table en Excel (ZIP)…</span>
+          <span class="v2-hover-row v2-hover-row-disabled" id="v2-btn-export-xlsx-single" aria-disabled="true" data-i18n="toolbar.exportXlsxSingle">Exporter les valeurs de la table dans un seul classeur…</span>
         </span>
       </span>
       <span class="v2-hover-group" id="v2-export-pdf-group">
         <button id="btn-export-pdf" aria-label="Exporter en PDF" data-i18n-aria="toolbar.exportPdf"></button>
         <span class="v2-hover-flyout v2-hover-flyout-v" id="v2-export-pdf-flyout">
           <span class="v2-hover-flyout-label" data-i18n="toolbar.exportPdf">Exporter en PDF</span>
-          <span class="v2-hover-row" id="v2-btn-export-pdf-batch" data-i18n="toolbar.exportPdfBatch">Exporter toutes les lignes (ZIP)…</span>
-          <span class="v2-hover-row" id="v2-btn-export-pdf-merged" data-i18n="toolbar.exportPdfMerged">Exporter toutes les lignes en un seul PDF…</span>
+          <span class="v2-hover-row" id="v2-btn-export-pdf-batch" data-i18n="toolbar.exportPdfBatch">Exporter les lignes (ZIP)…</span>
+          <span class="v2-hover-row" id="v2-btn-export-pdf-merged" data-i18n="toolbar.exportPdfMerged">Exporter les lignes en un seul PDF…</span>
           <span class="v2-hover-row" id="v2-btn-export-pdf-sheets" data-i18n="toolbar.exportPdfSheets">Assemblage avant impression…</span>
         </span>
       </span>
@@ -383,6 +385,7 @@
           <button type="button" class="v2-menu-row" id="v2-btn-callout" aria-label="Insérer un encadré" data-i18n-aria="insert.callout.aria"><span class="v2-menu-row-icon"></span><span id="v2-btn-callout-label" data-i18n="insert.callout.row">Encadré…</span></button>
           <button type="button" class="v2-menu-row" id="v2-btn-signature" aria-label="Insérer un bloc de signature" data-i18n-aria="insert.signature.aria"><span class="v2-menu-row-icon"></span><span data-i18n="insert.signature.tip">Bloc de signature</span></button>
           <button type="button" class="v2-menu-row" id="v2-btn-qr" aria-label="Insérer un QR code" data-i18n-aria="insert.qr.aria"><span class="v2-menu-row-icon"></span><span id="v2-btn-qr-label" data-i18n="insert.qr.row">QR code…</span></button>
+          <button type="button" class="v2-menu-row" id="v2-btn-chart" aria-label="Insérer un graphique de la page" data-i18n-aria="insert.chart.aria"><span class="v2-menu-row-icon"></span><span id="v2-btn-chart-label" data-i18n="insert.chart.row">Graphique de la page…</span></button>
         </span>
       </span>
       <button type="button" id="v2-btn-insert-variable" class="v2-btn-variable" data-tip="Insérer une variable" aria-label="Insérer une variable (#Variable ou puce)" data-i18n-tip="insert.variable.tip" data-i18n-aria="insert.variable.aria"></button>
@@ -660,7 +663,7 @@
 <script src="js/version.js?v=0.1"></script>
 <script src="js/html-sanitize.js?v=0.6"></script>
 <script src="js/page-tree.js?v=0.5"></script>
-<script src="js/grist-api.js?v=0.104"></script>
+<script src="js/grist-api.js?v=0.105"></script>
 <script src="js/templates.js?v=0.94"></script>
 <script src="js/table-consent.js?v=0.1"></script>
 <script>
@@ -674,10 +677,10 @@
     window.__earlyStart = { grist: gristInit, templates: templatesLoaded };
   } catch (e) { console.error('[boot] démarrage anticipé impossible', e); }
 </script>
-<script src="js/reader-mode.js?v=0.136"></script>
+<script src="js/reader-mode.js?v=0.137"></script>
 <script src="js/reader-guide.js?v=0.6"></script>
-<script src="js/i18n.js?v=0.137"></script>
-<script src="js/shortcuts.js?v=0.11"></script>
+<script src="js/i18n.js?v=0.144"></script>
+<script src="js/shortcuts.js?v=0.12"></script>
 <script src="js/page-layout.js?v=0.14"></script>
 <script src="js/color-math.js?v=0.1"></script>
 <script src="js/color-store.js?v=0.1"></script>
@@ -688,15 +691,15 @@
 <script src="js/formula.js?v=0.3"></script>
 <script src="js/layers.js?v=0.4"></script>
 <script src="js/viewport-fit.js?v=0.6"></script>
-<script src="js/search-select.js?v=0.16"></script>
-<script src="js/variables.js?v=0.67"></script>
-<script src="js/icons.js?v=0.42"></script>
-<script src="js/editor-core.js?v=0.21"></script>
+<script src="js/search-select.js?v=0.17"></script>
+<script src="js/variables.js?v=0.69"></script>
+<script src="js/icons.js?v=0.43"></script>
+<script src="js/editor-core.js?v=0.22"></script>
 <script src="js/color-palette.js?v=0.1"></script>
 <script src="js/header-footer-preview.js?v=1.27"></script>
-<script src="js/editor-nodes.js?v=1.30"></script>
-<script src="js/floating-toolbars.js?v=0.50"></script>
-<script src="js/main-toolbar.js?v=1.15"></script>
+<script src="js/editor-nodes.js?v=1.31"></script>
+<script src="js/floating-toolbars.js?v=0.51"></script>
+<script src="js/main-toolbar.js?v=1.17"></script>
 <script src="js/format-painter.js?v=0.3"></script>
 <script src="js/comments.js?v=0.16"></script>
 <script src="js/track-changes-core.js?v=0.1"></script>
@@ -707,23 +710,24 @@
 <script src="js/track-changes.js?v=0.18"></script>
 <script src="js/table-borders.js?v=0.3"></script>
 <script src="js/grid-table.js?v=0.7"></script>
-<script src="js/grid-editor.js?v=0.20"></script>
+<script src="js/grid-editor.js?v=0.21"></script>
 <script src="js/table-select.js?v=0.3"></script>
 <script src="js/table-merge.js?v=0.3"></script>
-<script src="js/editor.js?v=2.35"></script>
+<script src="js/email-plain-text.js?v=0.3"></script>
+<script src="js/editor.js?v=2.36"></script>
 <script src="js/export-common.js?v=0.15"></script>
 <script src="js/pdf-glyph-fallback.js?v=0.2"></script>
 <!-- Moteurs d'export : js/export-engines.js les charge au premier export (ExportEngines.ensure), pas à l'ouverture. Ces balises ne s'exécutent pas (le
      navigateur ne connaît pas leur type) ; leur version de cache se monte comme celle de tout script. -->
 <script src="js/export-engines.js?v=0.1"></script>
 <script type="text/x-lazy-engine" data-engine="pdf" src="js/pdf-export.js?v=1.38"></script>
-<script type="text/x-lazy-engine" data-engine="sheets" src="js/sheet-layout.js?v=0.2"></script>
+<script type="text/x-lazy-engine" data-engine="sheets" src="js/sheet-layout.js?v=0.3"></script>
 <script type="text/x-lazy-engine" data-engine="merge" src="js/pdf-merge.js?v=0.5"></script>
 <script type="text/x-lazy-engine" data-engine="docx" src="js/docx-export.js?v=0.45"></script>
 <script type="text/x-lazy-engine" data-engine="xlsx" src="js/xlsx-export.js?v=0.17"></script>
 <script type="text/x-lazy-engine" data-engine="xlsxFormat" src="js/xlsx-number-format.js?v=0.3"></script>
 <script src="js/grid-xlsx-import.js?v=0.7"></script>
-<script src="js/mailto-export.js?v=0.11"></script>
+<script src="js/mailto-export.js?v=0.13"></script>
 <script src="js/template-gallery.js?v=0.13"></script>
 <script src="js/template-pack.js?v=0.1"></script>
 <script src="js/template-gallery-modal.js?v=0.4"></script>
@@ -733,6 +737,7 @@
 <script src="js/modal-base.js?v=0.6"></script>
 <script src="js/dialogs.js?v=0.5"></script>
 <script src="js/batch-failures.js?v=0.1"></script>
+<script src="js/batch-scope.js?v=0.1"></script>
 <script src="js/first-contact.js?v=0.3"></script>
 <script src="js/external-images.js?v=0.4"></script>
 <script src="js/link-dialog.js?v=0.7"></script>
@@ -741,16 +746,19 @@
 <script src="js/caption.js?v=0.4"></script>
 <script src="js/keep-with-next.js?v=0.2"></script>
 <script src="js/qr-code.js?v=0.7"></script>
+<script src="js/chart-plot.js?v=0.1"></script>
+<script src="js/chart-source.js?v=0.1"></script>
+<script src="js/chart-block.js?v=0.1"></script>
 <script src="js/text-expansion.js?v=0.8"></script>
 <script src="js/text-expansion-settings.js?v=0.2"></script>
 <script src="js/shortcuts-panel.js?v=0.2"></script>
 <script src="js/variable-modal.js?v=0.3"></script>
 <script src="js/variable-condition.js?v=0.17"></script>
 <script src="js/variable-otherwise.js?v=0.1"></script>
-<script src="js/variable-linked-attrs.js?v=0.17"></script>
-<script src="js/loop-rules.js?v=0.11"></script>
+<script src="js/variable-linked-attrs.js?v=0.19"></script>
+<script src="js/loop-rules.js?v=0.12"></script>
 <script src="js/variable-loop.js?v=0.10"></script>
-<script src="js/variable-list.js?v=0.5"></script>
+<script src="js/variable-list.js?v=0.6"></script>
 <script src="js/list-split.js?v=0.2"></script>
 <script src="js/variable-calc.js?v=0.2"></script>
 <script src="js/variable-column.js?v=0.11"></script>
@@ -774,12 +782,12 @@
 <script src="js/color-dialog.js?v=0.1"></script>
 <script src="js/saved-page-formats.js?v=0.4"></script>
 <script src="js/page-size-dialog.js?v=0.4"></script>
-<script src="js/sheet-assembly-dialog.js?v=0.4"></script>
+<script src="js/sheet-assembly-dialog.js?v=0.5"></script>
 <script src="js/orientation-toggle.js?v=0.11"></script>
 <script src="js/clean-reading.js?v=0.5"></script>
 <script src="js/page-zoom.js?v=0.5"></script>
 <script src="js/field-codec.js?v=0.4"></script>
 <script src="js/field-editor.js?v=0.3"></script>
-<script src="js/main.js?v=0.129"></script>
+<script src="js/main.js?v=0.131"></script>
 </body>
 </html>

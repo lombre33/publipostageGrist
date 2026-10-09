@@ -83,8 +83,27 @@ docx 9.7.1
   Droits / Copyright : Copyright (c) 2016 Dolan
   Origine / Source : cdn.jsdelivr.net
 
+Plotly.js (paquet / package plotly.js-basic-dist-min) 2.13.2
+  Licence / License : MIT
+  Droits / Copyright : Copyright 2012-2022, Plotly, Inc.
+  Origine / Source : cdn.jsdelivr.net
+  C'est la version que Grist 1.7.20 utilise pour ses graphiques ; le widget la charge au premier graphique de la page seulement.
+  This is the version Grist 1.7.20 uses for its charts; the widget loads it for the first chart from the page only.
+
 Texte de la licence MIT / MIT license text :
   https://opensource.org/license/mit
+
+Code adapté de Grist / Code adapted from Grist
+  js/chart-plot.js et js/chart-source.js reprennent, en les adaptant (JavaScript sans types, sans les modèles de
+  l'application), des règles de grist-core 1.7.20 : app/client/components/ChartView.ts et app/client/lib/chartUtil.ts
+  (séries, traces, thème clair), app/client/models/SectionFilter.ts, app/common/ColumnFilterFunc.ts et FilterState.ts
+  (filtres), SortFunc.ts et SortSpec.ts (tri). Ils servent à dessiner dans le document le même graphique que Grist.
+  js/chart-plot.js and js/chart-source.js reuse, adapted (plain JavaScript, without the application's models), rules
+  from grist-core 1.7.20: app/client/components/ChartView.ts and app/client/lib/chartUtil.ts (series, traces, light
+  theme), app/client/models/SectionFilter.ts, app/common/ColumnFilterFunc.ts and FilterState.ts (filters), SortFunc.ts
+  and SortSpec.ts (sort). They draw in the document the same chart as Grist.
+  Licence / License : Apache License 2.0 (https://github.com/gristlabs/grist-core)
+  Droits / Copyright : Grist Labs et contributeurs / Grist Labs and contributors
 
 ============================================================
 3. Polices incluses dans ce dépôt / Fonts included in this repository
@@ -224,7 +243,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 5. Apache License 2.0
 ============================================================
 
-(Roboto Regular et Italic, et l'API de Grist / Roboto Regular and Italic, and the Grist API)
+(Roboto Regular et Italic, l'API de Grist et le code adapté de grist-core / Roboto Regular and Italic, the Grist API and the code adapted from grist-core)
 
 Apache License
 Version 2.0, January 2004

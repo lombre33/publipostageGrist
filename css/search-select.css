@@ -68,6 +68,10 @@
 /* Intitulé de groupe (<optgroup>) : la table, et son lien avec la page. Un filet le sépare du groupe précédent, pas du haut de la liste. */
 .ss-group { margin-top: 4px; padding: 7px 8px 3px; border-top: 1px solid var(--border); font-size: 11px; font-weight: 700; line-height: 1.3; color: var(--text-muted); overflow-wrap: anywhere; }
 .ss-empty[hidden] + .ss-group, .ss-group:first-child { margin-top: 0; padding-top: 3px; border-top: 0; }
+/* Une ligne que la liste montre sans la proposer (data-unavailable : un graphique que le widget ne sait pas redessiner) : grisée, la raison sous son nom ;
+   le gris reste lisible (--text-muted), le curseur dit qu'on ne peut pas la choisir. */
+.ss-option.is-unavailable { color: var(--text-muted); cursor: not-allowed; }
+.ss-reason { display: block; margin-top: 1px; font-size: 11.5px; line-height: 1.35; color: var(--text-muted); }
 .ss-option[aria-selected="true"] .ss-name { font-weight: 700; }
 .ss-option[aria-selected="true"]::after { content: "✓"; position: absolute; top: 5px; right: 8px; color: var(--accent); font-weight: 700; }
 .ss-empty { padding: 10px 12px; font-size: 12px; color: var(--text-faint); list-style: none; }

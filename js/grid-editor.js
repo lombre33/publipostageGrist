@@ -208,6 +208,10 @@ const GridEditor = (function () {
     return tableInfo(ed.state.doc, ed.state.selection);
   }
 
+  // Ces réglages ont-ils un tableau à régler ? La barre du tableau s'en sert pour griser leurs boutons sous le suivi des modifications (même règle que
+  // `scopedTable`, écrite une seule fois).
+  function tableSettingsAvailable(ed) { return !!scopedTable(ed); }
+
   const { rowPos, isEmptyParagraph, isValidGridDoc, buildDefaultTable, cellOrigins, columnWidths, knownColumnWidths, hasCellAttr, isFreshCell } = (function () {
     // Le document d'une grille : rang d'une ligne, ce qui est valable, la grille de départ, l'emplacement et la largeur des colonnes.
 
@@ -1565,7 +1569,7 @@ const GridEditor = (function () {
     TYPE, DEFAULT_VALIGN,
     configure, attach, createExtension, createEnterExtension, withTableAttributes, withRowAttributes, withCellAttributes, serialize, setActive, isActive, isGridType,
     refresh, currentCellDom, colName, floatingOptions, barSlot,
-    canMerge, canSplit, mergeCells, splitCell, mergeSelected, splitSelected, setVerticalAlign, selectedVerticalAlign, applyBorders, canApplyBorders, gridLinesShown, setGridLinesShown,
+    canMerge, canSplit, mergeCells, splitCell, mergeSelected, splitSelected, tableSettingsAvailable, setVerticalAlign, selectedVerticalAlign, applyBorders, canApplyBorders, gridLinesShown, setGridLinesShown,
     canTogglePageBreak, hasPageBreak, togglePageBreak, insertLines,
   };
 })();

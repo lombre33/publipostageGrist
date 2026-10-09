@@ -766,6 +766,95 @@
     },
   });
 
+  // --- Un chemin qui traverse une liste de références (#Projets.Membres.Nom : le nom de chaque membre) écrit une liste : même bouton, même fenêtre ---
+  // Retour d'Antoine du 09/10 : la colonne Liste de références de « À » portait un séparateur « ; » réglé dans « Liste » ; « Autres attributs »
+  // en faisait un chemin (#Dossiers.Equipe.Email) dont l'icône « Liste » était grisée et le séparateur perdu.
+  cases.push({
+    id: 'varlist_path_through_a_list_of_references_has_the_list_button_and_window',
+    description: 'Un chemin qui traverse une liste de références (#Projets.Membres.Nom : le nom de chaque membre) écrit une liste comme la colonne elle-même : le bouton « Liste » est actif (grisé pour un chemin de Références simples, #Projets.Responsable.Nom), la fenêtre dit « donne une valeur pour chaque ligne de la liste », son aperçu suit le séparateur, Enregistrer le pose dans la bulle et la Lecture l’écrit pour chaque ligne ; « Un document par valeur » compte une valeur par membre',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML(`<p>${badge('Responsable.Nom')}</p>`);
+      const got = {};
+      await selectBadge(h, 'Responsable.Nom');
+      got.refPath = buttonState();
+      Editor.setHTML(`<p>${badge('Membres.Nom')}</p>`);
+      await selectBadge(h, 'Membres.Nom');
+      got.listPath = buttonState();
+      got.opened = await openList(h, 'Membres.Nom');
+      got.initial = fields();
+      typeIn('#var-list-sep', ';');
+      await h.sleep(400);
+      got.semicolon = fields();
+      saveButton().click();
+      await h.sleep(250);
+      got.saved = { closed: !shown(), format: formatOf('Membres.Nom'), bar: buttonState() };
+      const html = Editor.getHTML();
+      got.reading = [];
+      for (const record of [RECORD_1, RECORD_2, RECORD_3]) got.reading.push(resolvedTexts(await renderReader(html, record)));
+      got.plan = (await ListSplit.plan([`<p>${badge('Membres.Nom', list('all', { perValue: true }))}</p>`], PAGE, RECORD_1)).variants.map(v => v.label);
+      const prev = 'Ligne sélectionnée (n° 1) : 3 valeurs (Dupont Jean, Martin Anne, Durand Paul). Le document écrit « ';
+      const checks = {
+        refPathGreyed: got.refPath.visible && got.refPath.disabled && !got.refPath.active && got.refPath.title === I18n.t('varToolbar.listDisabled'),
+        listPathEnabled: got.listPath.visible && got.listPath.enabled && !got.listPath.active && got.listPath.title === 'Liste : quelles valeurs écrire',
+        opened: got.opened,
+        intro: got.initial.intro === '#VlProjets.Membres.Nom donne une valeur pour chaque ligne de la liste (« VlPersonnes »). Réglez ce que le document en écrit.',
+        initial: got.initial.sepRow && got.initial.sep === ', ' && got.initial.preview === prev + 'Dupont Jean, Martin Anne, Durand Paul ».',
+        semicolon: got.semicolon.sep === ';' && got.semicolon.preview === prev + 'Dupont Jean;Martin Anne;Durand Paul ».',
+        saved: got.saved.closed && same(got.saved.format, { list: { separator: ';' } }) && got.saved.bar.visible && got.saved.bar.enabled && got.saved.bar.active,
+        reading: same(got.reading, [['Dupont Jean;Martin Anne;Durand Paul'], ['Martin Anne'], ['']]),
+        onePerValue: same(got.plan, ['Dupont Jean', 'Martin Anne', 'Durand Paul']),
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: JSON.stringify({ failed, got }) };
+    },
+  });
+
+  cases.push({
+    id: 'varlist_setting_stays_when_attributes_of_a_list_of_references_replace_the_column',
+    description: 'Autres attributs d’une colonne Liste de références réglée dans « Liste » (séparateur « ; ») : « Remplacer » met #Projets.Membres.Nom à sa place et garde le réglage - le bouton « Liste » reste actif, la Lecture écrit « Dupont Jean;Martin Anne;Durand Paul » - tandis qu’un attribut d’une Référence simple (#Projets.Responsable.Nom) ne garde que ce qui n’est pas une liste',
+    run: async (h) => {
+      await seed(h);
+      const setting = { list: { separator: ';' } };
+      const replaceWith = async (column, name) => {
+        await selectBadge(h, column);
+        press(toolbar().querySelector('button[data-action="var-linked"]'));
+        await h.sleep(300);
+        const linked = document.getElementById('var-linked-modal');
+        const input = linked && linked.querySelector(`.var-linked-row[data-col="${name}"] input`);
+        if (!input) return false;
+        input.checked = true;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        linked.querySelector('button.var-linked-replace').click();
+        await h.sleep(250);
+        return true;
+      };
+      const got = {};
+      Editor.setHTML(`<p>${badge('Membres', setting)}</p>`);
+      got.replaced = await replaceWith('Membres', 'Nom');
+      const node = badgeNodes()[0].node;
+      got.afterList = { column: node.attrs.column, format: node.attrs.format, bar: buttonState() };
+      got.reading = resolvedTexts(await renderReader(Editor.getHTML(), RECORD_1));
+      // Une liste de références vers une autre colonne de la même liste : le réglage suit encore.
+      got.replacedAgain = await replaceWith('Membres.Nom', 'Competences');
+      got.afterAgain = { column: badgeNodes()[0].node.attrs.column, format: badgeNodes()[0].node.attrs.format };
+      // Un attribut d'une Référence simple (la ligne de Responsable, lue par la règle de liaison de VlPersonnes) : une seule valeur, rien du réglage de
+      // liste ne reste.
+      Editor.setHTML(`<p>${badge('Responsable', setting)}</p>`);
+      got.replacedRef = await replaceWith('Responsable', 'Nom');
+      got.afterRef = { table: badgeNodes()[0].node.attrs.table, column: badgeNodes()[0].node.attrs.column, format: badgeNodes()[0].node.attrs.format };
+      const checks = {
+        replaced: got.replaced && got.afterList.column === 'Membres.Nom' && same(got.afterList.format, { list: { separator: ';' } }),
+        barActive: got.afterList.bar.visible && got.afterList.bar.enabled && got.afterList.bar.active,
+        reading: same(got.reading, ['Dupont Jean;Martin Anne;Durand Paul']),
+        replacedAgain: got.replacedAgain && got.afterAgain.column === 'Membres.Competences' && same(got.afterAgain.format, { list: { separator: ';' } }),
+        replacedRef: got.replacedRef && got.afterRef.table === PEOPLE && got.afterRef.column === 'Nom' && got.afterRef.format === null,
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: JSON.stringify({ failed, got }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.varList = cases;
 })();

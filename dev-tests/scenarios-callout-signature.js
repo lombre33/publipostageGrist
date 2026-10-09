@@ -102,7 +102,7 @@
 
   cases.push({
     id: 'co_menu_has_callout_and_signature_rows_after_the_code_block_and_before_the_qr_code',
-    description: 'Le volet de l\'icône unique porte six lignes (lien, citation, bloc de code, encadré, bloc de signature, QR code), chacune avec son icône ; aucune n\'est dans la barre elle-même ; l\'encadré ouvre une fenêtre (points de suspension), la signature agit tout de suite',
+    description: 'Le volet de l\'icône unique porte sept lignes (lien, citation, bloc de code, encadré, bloc de signature, QR code, graphique de la page), chacune avec son icône ; aucune n\'est dans la barre elle-même ; l\'encadré ouvre une fenêtre (points de suspension), la signature agit tout de suite',
     run: async (h) => {
       await h.resetEditor();
       const flyout = document.getElementById('v2-blocks-flyout');
@@ -113,7 +113,7 @@
       const aria = [calloutRow().getAttribute('aria-label'), signatureRow().getAttribute('aria-label')];
       const flyoutLabel = flyout.querySelector('.v2-hover-flyout-label').textContent;
       return {
-        pass: JSON.stringify(rows) === JSON.stringify(['v2-row-link', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-qr']) && iconOk && toolbarLevel.length === 0
+        pass: JSON.stringify(rows) === JSON.stringify(['v2-row-link', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-qr', 'v2-btn-chart']) && iconOk && toolbarLevel.length === 0
           && labels[3] === 'Encadré…' && labels[4] === 'Bloc de signature' && aria[0] === 'Insérer un encadré' && aria[1] === 'Insérer un bloc de signature' && flyoutLabel === 'Lien et blocs de contenu',
         notes: JSON.stringify({ rows, labels, iconOk, toolbarLevel, aria, flyoutLabel }),
       };
@@ -863,10 +863,10 @@
 
   cases.push({
     id: 'co_mailto_text_writes_the_callout_blocks_and_lists_like_the_body',
-    description: 'E-mail (texte brut) : un encadré n\'a ni fond ni barre, ses blocs s\'écrivent comme ceux du corps - un paragraphe par bloc, une ligne vide entre deux, listes à puces comprises (avec la puce de l\'éditeur) - sans titre ni mot ajouté',
+    description: 'E-mail (texte brut) : un encadré n\'a ni fond ni barre, ses blocs s\'écrivent comme ceux du corps - une ligne par paragraphe comme dans l\'éditeur (une ligne vide seulement là où l\'éditeur en montre une), listes à puces comprises (avec la puce de l\'éditeur) - sans titre ni mot ajouté',
     run: async (h) => {
       const text = MailtoExport.plainTextFromHtml('<p>Avant</p><div class="callout" data-color="amber" data-icon="warning"><p>Première ligne</p><p>Seconde ligne</p><ul><li><p>Un</p></li><li><p>Deux</p></li></ul></div><p>Après</p>');
-      return { pass: text === 'Avant\n\nPremière ligne\n\nSeconde ligne\n\n• Un\n• Deux\n\nAprès', notes: JSON.stringify({ text }) };
+      return { pass: text === 'Avant\nPremière ligne\nSeconde ligne\n• Un\n• Deux\nAprès', notes: JSON.stringify({ text }) };
     },
   });
 

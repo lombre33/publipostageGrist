@@ -649,7 +649,7 @@ async function runTheme(theme) {
   await page.mouse.click(WIDTH - 10, HEIGHT - 10);
   await page.waitForTimeout(150);
 
-  // ---------- 9) Un tableau de document : pas de bouton « Bordures » ----------
+  // ---------- 9) Un tableau de document : la même barre, ancrée sur le tableau ----------
   await page.evaluate(() => {
     GridEditor.setActive(false);
     EditorCore.getEditor().commands.setContent('<p>Avant</p><table><tbody><tr><td><p>a</p></td><td><p>b</p></td></tr><tr><td><p>c</p></td><td><p>d</p></td></tr></tbody></table><p>Après</p>');
@@ -664,7 +664,7 @@ async function runTheme(theme) {
     if (!bar) return null;
     return Array.from(bar.querySelectorAll('button[data-action]')).filter(b => getComputedStyle(b).display !== 'none' && b.getBoundingClientRect().width > 0).map(b => b.dataset.action);
   });
-  check(`${label} - tableau de document : la barre n'a pas de bouton « Bordures » (ni d'alignement vertical) ; ses boutons de fusion sont ceux du tableau de document`, !!classic && !classic.includes('borders-open') && classic.join() === 'row-before,row-after,row-del,col-before,col-after,col-del,table-del,cell-merge,cell-split,caption,fill-open', classic);
+  check(`${label} - tableau de document : la barre porte « Bordures » et l'alignement vertical comme celle d'une grille ; ses boutons de fusion sont ceux du tableau de document (essais à la souris : verify-doc-table-tools-mouse.mjs)`, !!classic && classic.join() === 'row-before,row-after,row-del,col-before,col-after,col-del,table-del,cell-merge,cell-split,caption,fill-open,borders-open,valign-top,valign-middle,valign-bottom', classic);
 
   await context.close();
 }

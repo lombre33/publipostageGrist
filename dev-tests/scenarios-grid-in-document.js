@@ -1,10 +1,10 @@
 // Suite "gridInDocument" - les réglages de la grille sur le tableau d'un DOCUMENT (09/10, demande d'Antoine : le module d'insertion de tableau d'un document classique
 // devient un tableau du mode grille ; lot 2 sur 6 : la grille « à portée de tableau »). Dans une grille, le modèle n'a qu'un tableau et `GridEditor` le prend en tête du
 // document ; dans un document les réglages de la barre du tableau - alignement vertical, bordures, quadrillage - visent le tableau qui porte la sélection (`tableInfo`,
-// `scopedTable` de js/grid-editor.js), les autres restent comme ils étaient. Ici, sans aucun bouton (la barre du tableau d'un document ne les montre pas encore) : les
-// fonctions de `GridEditor` appelées sur l'éditeur d'un document à deux tableaux, un tableau dans une case, un curseur hors des tableaux, le suivi des modifications
+// `scopedTable` de js/grid-editor.js), les autres restent comme ils étaient. Ici, sans bouton (ceux de la barre du tableau sont au groupe floatingToolbars et au script à la
+// souris verify-doc-table-tools-mouse.mjs) : les fonctions de `GridEditor` appelées sur l'éditeur d'un document à deux tableaux, un tableau dans une case, un curseur hors des tableaux, le suivi des modifications
 // allumé, puis le tableau réglé dans le Word (OOXML dézippé) : « ce que je règle sort pareil ». La grille elle-même (un seul tableau) garde sa suite "grid".
-// Lot 3 (a) : la structure - « Ligne / Colonne avant / après » sur toute la sélection, la ligne ou la colonne ajoutée qui reprend le cadre et la hauteur de sa
+// Lot 3 (b) : `tableSettingsAvailable`, ce qui grise les boutons sous le suivi. Lot 3 (a) : la structure - « Ligne / Colonne avant / après » sur toute la sélection, la ligne ou la colonne ajoutée qui reprend le cadre et la hauteur de sa
 // voisine, la fusion et la scission qui gardent le pourtour (`insertLines`, `repairDocumentTables`, `mergeSelected`, `splitSelected`).
 (function () {
   const cases = [];
@@ -203,9 +203,10 @@
         lines: GridEditor.setGridLinesShown(ed(), false),
         read: GridEditor.selectedVerticalAlign(ed()),
         shown: GridEditor.gridLinesShown(ed()),
+        available: GridEditor.tableSettingsAvailable(ed()),
       };
       const pass = got.valign === false && got.borders === false && got.canBorders === false && got.lines === false && got.read === null && got.shown === true
-        && JSON.stringify(ed().state.doc.toJSON()) === before;
+        && got.available === false && JSON.stringify(ed().state.doc.toJSON()) === before;
       return { pass, notes: JSON.stringify(got) };
     }),
   });
@@ -223,15 +224,17 @@
         borders: GridEditor.applyBorders(ed(), 'all', null),
         lines: GridEditor.setGridLinesShown(ed(), false),
         read: GridEditor.selectedVerticalAlign(ed()),
+        available: GridEditor.tableSettingsAvailable(ed()),
       };
       const unchanged = JSON.stringify(ed().state.doc.toJSON()) === before;
       Editor.setTrackChanges(false);
       await sleep(100);
+      const availableAgain = GridEditor.tableSettingsAvailable(ed());
       const free = GridEditor.setVerticalAlign(ed(), 'bottom');
       await sleep(60);
-      const pass = tracked.valign === false && tracked.borders === false && tracked.lines === false && tracked.read === null && unchanged
-        && free === true && cellAttrs(1, 1, 0).verticalAlign === 'bottom';
-      return { pass, notes: JSON.stringify({ tracked, unchanged, free }) };
+      const pass = tracked.valign === false && tracked.borders === false && tracked.lines === false && tracked.read === null && tracked.available === false && unchanged
+        && availableAgain === true && free === true && cellAttrs(1, 1, 0).verticalAlign === 'bottom';
+      return { pass, notes: JSON.stringify({ tracked, unchanged, availableAgain, free }) };
     }),
   });
 

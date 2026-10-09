@@ -9,6 +9,17 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Exports en lot sur les lignes que le widget affiche** : « Exporter les lignes (ZIP) », « Exporter les
+  lignes en un seul PDF », « Exporter les lignes en DOCX (ZIP) », les deux lignes Excel d'une grille et
+  « Assemblage avant impression » partent des lignes que le widget affiche dans Grist (ses filtres, son tri,
+  le lien « Sélectionner par » d'un autre widget), dans l'ordre du widget. Quand il n'en affiche qu'une
+  partie, une fenêtre dit combien (12 sur 340, par exemple) et demande « Quelles lignes exporter ? » :
+  « Celles affichées » (le choix mis en avant) ou « Toute la table ». Un widget qui
+  affiche toute la table ne pose pas la question, et son tri se retrouve dans le fichier ; s'il n'affiche
+  aucune ligne, la fenêtre le dit et ne propose que « Toute la table ». Les valeurs d'une ligne viennent
+  toujours de la table : un lot garde sa forme et ses noms de fichier. Dans une grille, « lignes » devient
+  « valeurs ». Si Grist ne donne pas les lignes affichées, le lot reste ce qu'il était : toute la table. Les
+  lignes de menu perdent le mot « toutes ».
 - **Variables dans les champs de l'e-mail et le nom du PDF** : Objet, À, Cc, Cci et le nom du PDF posent des
   bulles de variable comme le corps du modèle (`#` ouvre la liste des variables, Entrée pose la bulle), avec
   la même barre et les mêmes fenêtres : condition, « Autres attributs », boucle dans la phrase, liste,
@@ -65,6 +76,19 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   double-clic sur une ligne) pose la colonne comme la liste l'aurait fait ; « Annuler » et Échap ne changent
   rien. Un clic ailleurs dans le champ (sa flèche) ouvre la liste comme avant ; les macro-modèles et le filtre
   d'une boucle gardent leur champ et n'ont ni la bulle ni le bouton.
+- **« Autres attributs » d'une colonne Liste de références** : une colonne qui désigne plusieurs fiches (l'équipe
+  d'un dossier, des destinataires) posée dans le document, dans l'Objet ou dans « À » d'un e-mail n'a plus
+  l'icône « Autres attributs » grisée. La fenêtre montre les colonnes des fiches de la liste, avec la valeur de
+  chacune à la suite (séparées par une virgule), et « Insérer » ou « Remplacer » pose le chemin
+  (`#Dossiers.Equipe.Email`) qui écrit cette colonne pour toutes les fiches de la liste, dans l'ordre de la
+  liste : dans « À », « Créer l'email » reprend alors toutes les adresses. Le bouton « Liste » de la bulle en chemin
+  est actif aussi (le séparateur, la première, la dernière), et « Remplacer » garde le réglage de la colonne :
+  un point-virgule réglé entre les valeurs reste entre les adresses, que le lien de « Créer l'email » sépare
+  toujours par une virgule, comme tous les clients de messagerie la lisent. Une liste vide n'écrit rien, une fiche
+  disparue est ignorée, aucun lien entre tables n'est créé, et la flèche « › » d'une colonne Référence des fiches
+  continue le chemin. Le même chemin se lit dans la Lecture, le PDF, le Word, l'e-mail et l'export en lot, et
+  se tape dans les champs de l'e-mail (`#Dossiers.Equipe.Em` propose « Email »). Les flèches des listes de
+  colonnes et la boucle sur un chemin gardent leur règle : une liste de références ne s'y descend pas.
 - **Taille commune des lignes et des colonnes choisies d'une grille** : quand plusieurs lignes (ou colonnes)
   sont choisies par leurs numéros (leurs lettres), tirer le trait de l'une d'elles les règle toutes à la
   même hauteur (largeur), en direct puis en un seul Annuler, comme dans un tableur ; une ligne ne descend
@@ -109,6 +133,40 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   sont choisies, « Ligne avant », « Ligne après », « Colonne avant » et « Colonne après », dans la barre du
   tableau, ajoutent autant de lignes ou de colonnes que les cases choisies en couvrent, en un seul Annuler,
   comme dans une grille. Un simple curseur en ajoute toujours une.
+- **Bordures, alignement vertical et quadrillage dans un tableau de document** : la barre du tableau d'un
+  document porte, après le fond de case, le bouton « Bordures » (tous les traits, le pourtour, l'intérieur,
+  un côté ou aucun, dans la couleur choisie, et la ligne à cocher « Quadrillage » pour la Lecture et les
+  exports) puis « Aligner en haut », « au milieu » et « en bas », comme la barre d'une grille. Ils visent le
+  tableau du curseur, ou les cases que vous avez glissées, un seul Annuler défait un réglage, et la Lecture,
+  le PDF et le Word les reprennent. Avec le suivi des modifications allumé, ces quatre boutons sont grisés :
+  ces réglages ne seraient pas suivis. Dans un panneau étroit, la barre passe sur deux lignes au lieu de
+  déborder. Un tableau que vous n'avez pas réglé ne change pas.
+- **Marge autour de chaque page dans l'assemblage avant impression** : la fenêtre « Assemblage avant
+  impression » a un champ « Marge » (en millimètres, 0 au départ, les flèches avancent de 0,5) qui laisse de la
+  place autour de chaque page posée sur la feuille : la marge compte de chaque côté d'une page, donc deux
+  fois entre deux pages et une fois au bord de la grille. Les traits de coupe passent au milieu de l'espace
+  entre deux pages, si bien que chaque morceau découpé garde sa marge. Quand la feuille ne laisse pas la
+  place (quatre A6 sur une A4 avec 5 mm), toutes les pages sont réduites du même facteur, et la fenêtre le
+  dit (« Pages réduites à 90 % pour laisser la place à la marge. », ou « … aux traits de coupe et à la
+  marge. ») ; l'aperçu montre la feuille comme le fichier la portera. La marge est plafonnée à ce que la
+  feuille accepte (les pages ne descendent jamais sous la moitié de leur taille) et le champ dit toujours la
+  valeur appliquée. Avec 0, la planche est celle d'avant ; le dernier choix est gardé par navigateur avec la
+  feuille et les traits de coupe. La fenêtre est un peu plus large pour tout garder lisible dans un panneau
+  de 700 × 400.
+- **Graphique de la page dans le document** : « Graphique de la page… », au menu « Lien et blocs de contenu »,
+  pose dans le document un graphique déjà réglé dans Grist. La fenêtre liste, avec une recherche, les
+  graphiques des pages du document ; le graphique se règle dans Grist (type, colonnes, tri, filtres
+  enregistrés, empilement, axe logarithmique…) et le document le suit, sans second réglage. Il se redessine
+  avec Plotly 2.13.2, la version de Grist, en barres, courbe, aire, nuage de points, secteurs et anneau, et
+  entre dans la Lecture, le PDF, le Word et l'Excel comme une image. Deux choix de lignes : « Toute la
+  table » (le même graphique partout, comme dans Grist) ou « Les lignes liées à la ligne du document » (un
+  graphique propre à chaque élève, chaque facture… ; la liaison entre les deux tables se règle à la
+  validation). Dans l'éditeur, le cadre garde le nom du graphique ; ses poignées changent sa largeur et sa
+  hauteur et un clic le sélectionne : la ligne du menu devient « Modifier le graphique… ». Plotly se charge
+  au premier graphique seulement (jsDelivr, version et empreinte figées). Ce que le widget ne redessine pas
+  encore reste dans la liste, grisé, avec sa raison : widgets personnalisés, Kaplan-Meier, « Split series »,
+  « Error bars », filtres sur des dates relatives. Le total d'un anneau s'écrit sans le format de la
+  colonne.
 
 ### Modifié
 
@@ -142,6 +200,8 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Un lot d'une seule ligne parle au singulier** : « Générer un PDF pour la ligne de … », « 1 PDF généré »,
+  « 1 DOCX généré » et « 1 ligne réunie dans un seul PDF » au lieu de « 1 lignes » et « 1 PDF générés ».
 - **« Autres attributs » avec deux colonnes Référence vers une même table** (Demandeur et Valideur vers un
   annuaire, par exemple) : la fenêtre part de la colonne cliquée, montre la personne de cette colonne et
   pose `#Dossiers.Valideur.Email` ; elle ne lisait qu'une seule personne pour toute la ligne. Aucun lien
@@ -171,6 +231,22 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   mille neuf cent quatre-vingt-dix » en toutes lettres) au lieu de « 1 janvier 1990 » (« un janvier … »),
   dans la Lecture, le PDF, le Word et l'e-mail. Les autres jours, un mois en chiffres (« 01/01/1990 »), un
   mois masqué et l'interface anglaise ne changent pas.
+- **Texte du lien « Créer l'email » fidèle à l'éditeur** : le texte du message a les lignes de l'éditeur, une
+  pour une. Un paragraphe vide, deux de suite ou un retour à la ligne tapé (Maj+Entrée) donnent des lignes
+  vides ; des paragraphes qui se suivent restent collés. Le texte laissait tomber les paragraphes vides et
+  ajoutait une ligne vide entre deux blocs, d'où un écart entre l'éditeur et le message ouvert dans le
+  logiciel de messagerie.
+- **Un modèle e-mail n'écrit que du texte brut** : Ctrl+B, Ctrl+I, Ctrl+U, Ctrl+E, Ctrl+Maj+S, les
+  alignements (Ctrl+Maj+L, E, R, J) et les niveaux de titre (Ctrl+Alt+1 à 6) ne font plus rien dans un
+  modèle e-mail, dont les boutons étaient déjà grisés (le menu des titres l'est aussi maintenant), et les
+  signes de Markdown tapés (`**gras**`, `*italique*`, `~~barré~~`, `code`, `#` en début de ligne suivi d'une espace ou
+  d'Entrée) y restent du texte, tels que le lien les écrit, au lieu d'être mangés pour une mise en forme que le lien ne porte pas.
+  Un texte copié ailleurs perd à l'arrivée son gras, son italique, son souligné, sa couleur, sa taille,
+  sa police, son alignement et ses images, ses titres deviennent des lignes simples, et il garde son texte,
+  ses liens, ses listes, ses citations et ses lignes vides ; un texte brut collé garde lui aussi ses lignes
+  vides. Une mise en forme restée dans un modèle plus ancien (le gras des bulles d'une notification, un
+  titre, par exemple) ne s'affiche plus dans l'éditeur ni à la Lecture, sans rien changer au modèle
+  enregistré. Les documents, les grilles et les macro-modèles ne changent pas.
 
 ## [1.0.0-beta.1] - 2026-10-05
 
@@ -270,6 +346,16 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Added
 
+- **Batch exports on the rows the widget shows**: "Export rows (ZIP)", "Export rows as a single PDF",
+  "Export rows to DOCX (ZIP)", the two Excel lines of a grid and "Assemble before printing" start from
+  the rows the widget shows in Grist (its filters, its sort, the "Select by" link of another widget), in
+  the order of the widget. When it only shows part of the table, a window says how many (12 of 340, for
+  example) and asks "Which rows to export?": "Displayed rows" (the highlighted choice) or "Whole table".
+  A widget that shows the whole table asks nothing, and its sort carries over to the file;
+  if it shows no rows, the window says so and only offers "Whole table". The values of a row always come
+  from the table: a batch keeps its shape and its file names. In a grid, "rows" becomes "values". If Grist
+  does not give the displayed rows, the batch stays what it was: the whole table. The menu lines lose the
+  word "all".
 - **Variables in the e-mail fields and the PDF name**: Subject, To, Cc, Bcc and the PDF file name place
   variable bubbles like the template body (`#` opens the variable list, Enter places the bubble), with the
   same bar and windows: condition, "Other attributes", loop inside the sentence, list, format. Hidden zero
@@ -323,6 +409,19 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   Reference. "Choose" (or a double-click on a row) sets the column the way the list would have; "Cancel" and
   Esc change nothing. Clicking elsewhere in the field (its arrow) opens the list as before; macro templates
   and a loop's filter keep their field and have neither the bubble nor the button.
+- **"Other attributes" of a Reference List column**: a column that points to several rows (a file's team, some
+  recipients) placed in the document, in the Subject or in an e-mail's "To" no longer has its "Other
+  attributes" icon greyed out. The window shows the columns of the rows in the list, with each one's value one
+  after the other (comma-separated), and "Insert" or "Replace" sets the path (`#Files.Team.Email`) that writes
+  that column for every row of the list, in the list's order: in "To", "Create the email" then takes all the
+  addresses. The "List" button of the path bubble is active too (separator, first, last), and "Replace" keeps the
+  column's setting: a semicolon set between the values stays between the addresses, which the link of "Create the
+  email" always separates with a comma, the way every mail client reads it. An empty list writes nothing, a row
+  that has gone is skipped, no link between tables is created, and the "›" arrow of a Reference column of the
+  rows carries the path on. The same path reads in Reading mode,
+  the PDF, the Word, the e-mail and the batch export, and can be typed in the e-mail fields (`#Files.Team.Em`
+  suggests "Email"). The arrows of the column lists and a loop on a path keep their rule: a list of references
+  is not walked down there.
 - **Common size for the chosen rows and columns of a grid**: when several rows (or columns) are chosen by
   their numbers (letters), dragging the edge of one of them sets them all to the same height (width), live
   and then in a single Undo, as in a spreadsheet; a row never goes below the height of its text, the
@@ -363,6 +462,36 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 - **Several rows or columns at once in a document table**: when several cells of a table are picked, "Row
   before", "Row after", "Column before" and "Column after" in the table bar add as many rows or columns as the
   picked cells cover, in a single Undo, as in a grid. A plain cursor still adds one.
+- **Borders, vertical alignment and gridlines in a document table**: the table bar of a document now carries,
+  after the cell background, a "Borders" button (all lines, the outline, the inside, one side or none, in the
+  chosen color, and the "Gridlines" tick for Reading and the exports) then "Align to top", "to middle" and "to
+  bottom", like a grid's bar. They act on the table under the cursor, or on the cells you dragged across, a
+  single Undo reverts a setting, and Reading, the PDF and the Word export carry them over. With track changes
+  on, these four buttons are greyed: these settings would not be tracked. In a narrow panel the bar wraps onto
+  two lines instead of overflowing. A table you have not set does not change.
+- **Margin around each page in sheet assembly**: the "Assemble before printing" window has a "Margin" field (in
+  millimetres, 0 to start with, the arrows step by 0.5) that leaves room around each page laid on the
+  sheet: the margin sits on every side of a page, so it counts twice between two pages and once at the edge
+  of the grid. Crop marks run through the middle of the gap between two pages, so every piece you cut out
+  keeps its margin. When the sheet has no room for it (four A6 on one A4 with 5 mm), all the pages are
+  scaled down by the same factor, and the window says so ("Pages reduced to 90% to leave room for the
+  margin.", or "… for the crop marks and the margin."); the preview shows the sheet as the file will carry
+  it. The margin is capped at what the sheet accepts (pages never go below half their size) and the field
+  always shows the value that is applied. With 0, the sheet is the one you had before; the last choice is
+  kept per browser along with the sheet and the crop marks. The window is a little wider so that
+  everything stays readable in a 700 × 400 panel.
+- **Chart from the page in the document**: "Chart from the page…", in the "Link and content blocks" menu,
+  puts a chart already set up in Grist into the document. The window lists, with a search, the charts on the
+  document's pages; the chart is set up in Grist (type, columns, sort, saved filters, stacking, log axis…)
+  and the document follows it, with no second setup. It is redrawn with Plotly 2.13.2, the version Grist
+  uses, as bars, line, area, scatter, pie and donut, and goes into Reading, the PDF, the Word and the Excel
+  as an image. Two choices of rows: "The whole table" (the same chart everywhere, as in Grist) or "The rows
+  linked to the document's row" (a chart of its own for each student, each invoice…; the link between the two
+  tables is set when you confirm). In the editor, the frame keeps the chart's name; its handles change its width
+  and height and a click selects it: the menu row becomes "Edit chart…". Plotly loads for the
+  first chart only (jsDelivr, version and hash pinned). What the widget does not redraw yet stays in the list,
+  greyed, with its reason: custom widgets, Kaplan-Meier, "Split series", "Error bars", filters on relative
+  dates. A donut's total is written without the column's format.
 
 ### Changed
 
@@ -394,6 +523,8 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Fixed
 
+- **A batch of one row speaks in the singular**: "Generate a PDF for the row in …", "1 PDF generated",
+  "1 DOCX file generated" and "1 row combined into a single PDF" instead of "1 PDFs generated".
 - **"Other attributes" with two Reference columns to the same table** (Requester and Approver pointing to
   a directory, for example): the window starts from the clicked column, shows the person of that column
   and places `#Dossiers.Valideur.Email`; it used to read a single person for the whole row. No link is
@@ -422,6 +553,20 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   janvier mille neuf cent quatre-vingt-dix" in full words) instead of "1 janvier 1990" ("un janvier …"), in
   the Reading mode, the PDF, the Word file and the e-mail. Other days, a month in digits ("01/01/1990"), a
   hidden month and the English interface do not change.
+- **The text of the "Create the email" link matches the editor**: the text of the message has the editor's
+  lines, one for one. An empty paragraph, two in a row or a typed line break (Shift+Enter) give blank
+  lines; paragraphs that follow each other stay together. The text used to drop empty paragraphs and add a
+  blank line between two blocks, so the message opened in the mail client differed from the editor.
+- **An e-mail template only writes plain text**: Ctrl+B, Ctrl+I, Ctrl+U, Ctrl+E, Ctrl+Shift+S, the
+  alignments (Ctrl+Shift+L, E, R, J) and the heading levels (Ctrl+Alt+1 to 6) no longer do anything in an
+  e-mail template, whose buttons were already greyed out (the heading menu is now too), and typed Markdown
+  signs (`**bold**`, `*italic*`, `~~strike~~`, `code`, `#` at the start of a line followed by a space or Enter) stay text there, as the
+  link writes them, instead of being eaten for formatting the link does not carry.
+  Text copied from elsewhere loses its bold, italic, underline, colour, size, font, alignment
+  and images on arrival, its headings become plain lines, and it keeps its text, links, lists, quotes and
+  blank lines; pasted plain text keeps its blank lines too. Formatting left over in an older template (the
+  bold on the bubbles of a notification, a heading, for example) is no longer shown in the editor or in
+  Reading mode, without changing the saved template. Documents, grids and macro-templates do not change.
 
 ## [1.0.0-beta.1] - 2026-10-05 (English)
 

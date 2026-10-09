@@ -179,6 +179,34 @@ const state = () => page.evaluate(() => {
 });
 const scrimNow = () => page.evaluate(() => { const p = document.createElement('div'); p.style.background = 'var(--pp-scrim)'; document.body.appendChild(p); const c = getComputedStyle(p).backgroundColor; p.remove(); return c; });
 async function click(selector) { const b = await hitTest(selector); if (b.found) await page.mouse.click(b.x, b.y); await page.waitForTimeout(200); return b; }
+// Un bouton de la fenêtre, repéré par son texte (la fenêtre garde un bouton « Valider » masqué entre Annuler et les choix), cliqué à la vraie souris.
+const clickDialogButton = async text => {
+  const c = await page.evaluate(t => {
+    const b = Array.from(document.querySelectorAll('#pp-dialog-modal .pp-modal-actions button')).filter(x => !x.hidden).find(x => x.textContent === t);
+    if (!b) return null;
+    const r = b.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }, text);
+  if (!c) throw new Error('bouton introuvable : ' + text);
+  await page.mouse.move(c.x - 10, c.y, { steps: 2 });
+  await page.mouse.move(c.x, c.y, { steps: 2 });
+  await page.mouse.click(c.x, c.y);
+  await page.waitForTimeout(300);
+};
+// Les boutons de la fenêtre et son texte : chacun dans la fenêtre, entier, atteignable à la souris, sur quelle ligne (top).
+const dialogButtonsGeometry = () => page.evaluate(() => {
+  const ov = document.getElementById('pp-dialog-modal');
+  const box = ov.querySelector('.modal-content').getBoundingClientRect();
+  const buttons = Array.from(ov.querySelectorAll('.pp-modal-actions button')).filter(b => !b.hidden).map(b => {
+    const r = b.getBoundingClientRect();
+    const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return { text: b.textContent, inBox: r.left >= box.left - 0.5 && r.right <= box.right + 0.5 && r.top >= box.top - 0.5 && r.bottom <= box.bottom + 0.5, whole: b.scrollWidth <= b.clientWidth + 1, reachable: top === b || b.contains(top), top: Math.round(r.top) };
+  });
+  const message = ov.querySelector('.pp-dialog-message');
+  return { buttons, messageWhole: message.scrollWidth <= message.clientWidth + 1 };
+});
+// Les trois boutons de la question « Quelles lignes exporter ? » : tous dans la fenêtre, entiers, atteignables, sur une seule ligne.
+const threeButtonsOnOneRow = g => g.buttons.length === 3 && g.buttons.every(b => b.inBox && b.whole && b.reachable) && new Set(g.buttons.map(b => b.top)).size === 1 && g.messageWhole;
 const CANCEL = '#pp-dialog-modal .pp-modal-actions button:first-of-type';
 const OK = '#pp-dialog-modal .var-modal-primary';
 const LONG = 'Cet email dépasse 2000 caractères (limite conseillée : 1900) : certains logiciels de messagerie (Outlook notamment) tronqueront le message. Continuer quand même ?';
@@ -690,8 +718,8 @@ async function runSites(theme) {
     await realHover(e.hover);
     await realClick(e.row, 500);
     s = await state();
-    expectDialog(`${T}, export en lot ${e.name} : titre « Exporter toutes les lignes », le message de cet export, bouton Générer`, s,
-      { title: 'Exporter toutes les lignes', message: e.message, buttons: ['Annuler', 'Générer'], focus: 'Générer' });
+    expectDialog(`${T}, export en lot ${e.name} : titre « Exporter les lignes », le message de cet export, bouton Générer`, s,
+      { title: 'Exporter les lignes', message: e.message, buttons: ['Annuler', 'Générer'], focus: 'Générer' });
     if (e.name === 'PDF (ZIP)') await snap(`${T}-s5-export`);
     await click(CANCEL);
     check(`${T}, export en lot ${e.name} : Annuler ne lance rien (statut vide)`, (await statusText()) === '' && !(await isOpen()), await statusText());
@@ -758,6 +786,78 @@ async function runSites(theme) {
   await page.keyboard.press('Escape');
   await page.waitForTimeout(250);
   check(`${T}, lot en échec, 40 documents : Échap ferme la fenêtre`, !(await isOpen()) && (await result()).done === true);
+
+  // 5 ter) Une vue Grist qui n'affiche qu'une ligne des deux : « Exporter les lignes en un seul PDF… » demande d'abord lesquelles (js/batch-scope.js, sur Dialogs.choose) ; vrais clics
+  // sur chaque bouton ; le choix mène à la confirmation du lot avec le bon nombre. Annuler, Échap et les confirmations n'exportent rien (aucune bibliothèque chargée).
+  const openScopeQuestion = async () => {
+    await page.evaluate(() => { document.getElementById('status-msg').textContent = ''; });
+    await realHover('#btn-export-pdf');
+    await realClick('#v2-btn-export-pdf-merged', 500);
+  };
+  await page.evaluate(() => window.__gristStub.setViewRows([2]));
+  await openScopeQuestion();
+  s = await state();
+  expectDialog(`${T}, lignes du lot : la vue n’en montre qu’une sur deux, « Quelles lignes exporter ? » propose Toute la table ou Celle affichée, focus sur Celle affichée`, s,
+    { title: 'Quelles lignes exporter ?', message: 'Ce widget n’affiche que 1 des 2 lignes de « SiDossiers » (filtre ou lien « Sélectionner par »).', buttons: ['Annuler', 'Toute la table', 'Celle affichée'], focus: 'Celle affichée' });
+  check(`${T}, lignes du lot : « Celle affichée » est le bouton principal`, s.primary === 'Celle affichée', s.primary);
+  const scopeGeometry = await dialogButtonsGeometry();
+  check(`${T}, lignes du lot : les trois boutons tiennent sur une seule ligne dans la fenêtre, entiers et atteignables à la souris, le texte aussi`, threeButtonsOnOneRow(scopeGeometry), scopeGeometry);
+  await snap(`${T}-s5t-lignes-du-lot`);
+  await click(CANCEL);
+  check(`${T}, lignes du lot : Annuler (clic réel) ferme la question sans rien lancer ni confirmer (statut vide)`, !(await isOpen()) && (await statusText()) === '', await statusText());
+  await openScopeQuestion();
+  await clickDialogButton('Toute la table');
+  s = await state();
+  expectDialog(`${T}, lignes du lot : « Toute la table » (clic réel) mène à la confirmation des 2 lignes`, s,
+    { title: 'Exporter les lignes', message: 'Générer un PDF pour chacune des 2 lignes de « SiDossiers » et les réunir dans un seul fichier PDF, chaque ligne commençant sur une nouvelle page ?', buttons: ['Annuler', 'Générer'], focus: 'Générer' });
+  await click(CANCEL);
+  await openScopeQuestion();
+  await clickDialogButton('Celle affichée');
+  s = await state();
+  expectDialog(`${T}, lignes du lot : « Celle affichée » (clic réel) mène à la confirmation d’une seule ligne, au singulier`, s,
+    { title: 'Exporter les lignes', message: 'Générer un PDF pour la ligne de « SiDossiers » ?', buttons: ['Annuler', 'Générer'], focus: 'Générer' });
+  await click(CANCEL);
+  check(`${T}, lignes du lot : Annuler la confirmation n’exporte rien (statut vide, fenêtre fermée)`, !(await isOpen()) && (await statusText()) === '', await statusText());
+  await openScopeQuestion();
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(250);
+  check(`${T}, lignes du lot : Échap ferme la question sans rien lancer`, !(await isOpen()) && (await statusText()) === '', await statusText());
+  // Une vue qui n'affiche aucune ligne : un seul choix, « Toute la table », rien en avant (Entrée ne lance rien) ; une vue qui les montre toutes ne demande rien.
+  await page.evaluate(() => window.__gristStub.setViewRows([]));
+  await openScopeQuestion();
+  s = await state();
+  expectDialog(`${T}, lignes du lot : une vue vide le dit et ne laisse que « Toute la table », focus sur Annuler`, s,
+    { title: 'Quelles lignes exporter ?', message: 'Ce widget n’affiche aucune ligne de « SiDossiers » (filtre ou lien « Sélectionner par »).', buttons: ['Annuler', 'Toute la table'], focus: 'Annuler' });
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(250);
+  check(`${T}, lignes du lot : Entrée sur une vue vide annule (aucune confirmation, statut vide)`, !(await isOpen()) && (await statusText()) === '', await statusText());
+  await page.evaluate(() => window.__gristStub.setViewRows([2, 1]));
+  await openScopeQuestion();
+  s = await state();
+  expectDialog(`${T}, lignes du lot : une vue qui montre les 2 lignes (triées autrement) ne pose pas la question, la confirmation s’ouvre directement`, s,
+    { title: 'Exporter les lignes', message: 'Générer un PDF pour chacune des 2 lignes de « SiDossiers » et les réunir dans un seul fichier PDF, chaque ligne commençant sur une nouvelle page ?', buttons: ['Annuler', 'Générer'], focus: 'Générer' });
+  await click(CANCEL);
+  // Les mêmes boutons avec de plus grands nombres (12 lignes affichées sur 340) et, dans une grille, avec les mots « valeurs » : toujours sur une seule ligne dans la fenêtre.
+  // La question est posée directement (BatchScope.pick), sans passer par le menu.
+  for (const grid of [false, true]) {
+    await page.evaluate(g => {
+      const all = Array.from({ length: 340 }, (_, i) => ({ id: i + 1 }));
+      window.__dlg = { done: false, value: undefined };
+      BatchScope.pick(all, Array.from({ length: 12 }, (_, i) => i + 1), { table: 'Clients', grid: g }).then(v => { window.__dlg.done = true; window.__dlg.value = v; });
+    }, grid);
+    await page.waitForTimeout(300);
+    s = await state();
+    const word = grid ? 'valeurs' : 'lignes';
+    expectDialog(`${T}, lignes du lot${grid ? ' d’une grille' : ''} : 12 ${word} affichées sur 340, la question parle de ${word} et met « Celles affichées » en avant`, s,
+      { title: grid ? 'Quelles valeurs exporter ?' : 'Quelles lignes exporter ?', message: `Ce widget n’affiche que 12 des 340 ${word} de « Clients » (filtre ou lien « Sélectionner par »).`, buttons: ['Annuler', 'Toute la table', 'Celles affichées'], focus: 'Celles affichées' });
+    const g = await dialogButtonsGeometry();
+    check(`${T}, lignes du lot${grid ? ' d’une grille' : ''} : avec 12 sur 340, les trois boutons tiennent encore sur une seule ligne`, threeButtonsOnOneRow(g), g);
+    if (!grid) await snap(`${T}-s5t-lignes-du-lot-340`);
+    await clickDialogButton('Celles affichées');
+    const picked = await result();
+    check(`${T}, lignes du lot${grid ? ' d’une grille' : ''} : « Celles affichées » rend les 12 lignes de la vue`, picked.done === true && picked.value && picked.value.scope === 'view' && picked.value.rows.length === 12 && !(await isOpen()), picked);
+  }
+  await page.evaluate(() => window.__gristStub.setViewRows(null));
 
   // 6) Galerie : « Utiliser avec une nouvelle table de données » demande le nom de la table, par-dessus l'aperçu (fenêtre de 2000).
   await realHover('#v2-new-template-group #btn-new');
@@ -915,8 +1015,33 @@ async function runEnglish() {
   await realClick('#v2-btn-export-docx-batch', 500);
   s = await state();
   expectDialog(`${T}, export DOCX en lot : le message garde ses nombres et le nom de la table`, s,
-    { title: 'Export all rows', message: 'Generate a DOCX for each of the 2 rows in “SiDossiers” and bundle them into a ZIP archive?', buttons: ['Cancel', 'Generate'], focus: 'Generate' });
+    { title: 'Export rows', message: 'Generate a DOCX for each of the 2 rows in “SiDossiers” and bundle them into a ZIP archive?', buttons: ['Cancel', 'Generate'], focus: 'Generate' });
   await click(CANCEL);
+  // Les lignes d'un lot : la question de la vue Grist, dans la langue de l'interface (une ligne affichée sur deux).
+  await page.evaluate(() => { window.__gristStub.setViewRows([2]); document.getElementById('status-msg').textContent = ''; });
+  await realHover('#btn-export-pdf');
+  await realClick('#v2-btn-export-pdf-merged', 500);
+  s = await state();
+  expectDialog(`${T}, lignes du lot : la question, le texte et les choix sont dans la langue de l’interface`, s,
+    { title: 'Which rows to export?', message: 'This widget only shows 1 of the 2 rows of “SiDossiers” (filter or “Select by” link).', buttons: ['Cancel', 'Whole table', 'Displayed row'], focus: 'Displayed row' });
+  await clickDialogButton('Displayed row');
+  s = await state();
+  expectDialog(`${T}, lignes du lot : « Displayed row » mène à la confirmation d’une seule ligne, au singulier`, s,
+    { title: 'Export rows', message: 'Generate a PDF for the row in “SiDossiers”?', buttons: ['Cancel', 'Generate'], focus: 'Generate' });
+  await click(CANCEL);
+  await page.evaluate(() => {
+    const all = Array.from({ length: 340 }, (_, i) => ({ id: i + 1 }));
+    window.__dlg = { done: false, value: undefined };
+    BatchScope.pick(all, Array.from({ length: 12 }, (_, i) => i + 1), { table: 'Clients' }).then(v => { window.__dlg.done = true; window.__dlg.value = v; });
+  });
+  await page.waitForTimeout(300);
+  s = await state();
+  expectDialog(`${T}, lignes du lot : 12 lignes affichées sur 340, le texte et les boutons sont au pluriel anglais`, s,
+    { title: 'Which rows to export?', message: 'This widget only shows 12 of the 340 rows of “Clients” (filter or “Select by” link).', buttons: ['Cancel', 'Whole table', 'Displayed rows'], focus: 'Displayed rows' });
+  const geometryEn = await dialogButtonsGeometry();
+  check(`${T}, lignes du lot : les trois boutons anglais tiennent sur une seule ligne dans la fenêtre`, threeButtonsOnOneRow(geometryEn), geometryEn);
+  await click(CANCEL);
+  await page.evaluate(() => window.__gristStub.setViewRows(null));
   await openOrganize();
   await realClick('#template-organize-new-folder', 300);
   s = await state();

@@ -903,7 +903,7 @@
 
   cases.push({
     id: 'xlsx_batch_zip_has_one_workbook_per_value_named_like_the_pdf_files',
-    description: '« Exporter toutes les valeurs de la table en Excel (ZIP)… » télécharge une archive « <table>-export-xlsx.zip » avec un classeur par valeur (nommé par le modèle de nom de fichier), chacun d\'une feuille avec SES valeurs (vrais nombres) ; la confirmation, la progression et la fin parlent d\'Excel, jamais de PDF ni de lignes',
+    description: '« Exporter les valeurs de la table en Excel (ZIP)… » télécharge une archive « <table>-export-xlsx.zip » avec un classeur par valeur (nommé par le modèle de nom de fichier), chacun d\'une feuille avec SES valeurs (vrais nombres) ; la confirmation, la progression et la fin parlent d\'Excel, jamais de PDF ni de lignes',
     run: async (h) => {
       await seedValues(h, VALUES);
       const bad = [];
@@ -941,7 +941,7 @@
 
   cases.push({
     id: 'xlsx_single_workbook_has_one_sheet_per_value_named_like_the_files',
-    description: '« Exporter toutes les valeurs de la table dans un seul classeur… » télécharge « <table>-export.xlsx » : une feuille par valeur, nommée comme son fichier (31 caractères au plus, « nom (2) » si deux feuilles s\'appellent pareil), avec SES valeurs ; la confirmation, la progression et la fin parlent d\'Excel',
+    description: '« Exporter les valeurs de la table dans un seul classeur… » télécharge « <table>-export.xlsx » : une feuille par valeur, nommée comme son fichier (31 caractères au plus, « nom (2) » si deux feuilles s\'appellent pareil), avec SES valeurs ; la confirmation, la progression et la fin parlent d\'Excel',
     run: async (h) => {
       await seedValues(h, VALUES);
       const bad = [];
@@ -1019,7 +1019,7 @@
   const labelsNow = () => Object.fromEntries(BATCH_LABEL_IDS.map(id => [id, document.getElementById(id).textContent.trim()]));
   ['fr', 'en'].forEach(lang => cases.push({
     id: 'xlsx_grid_wording_says_values_of_the_table_not_rows_' + lang,
-    description: 'Dans une grille (' + lang + '), les quatre lignes « toutes les valeurs » du menu, la confirmation du ZIP de PDF et le message d\'une table vide parlent de « valeurs de la table », jamais de lignes ; dans un document les lignes PDF gardent « lignes » et le texte suit un changement de langue',
+    description: 'Dans une grille (' + lang + '), les quatre lignes « valeurs de la table » du menu, la confirmation du ZIP de PDF et le message d\'une table vide parlent de « valeurs de la table », jamais de lignes ; dans un document les lignes PDF gardent « lignes » et le texte suit un changement de langue',
     run: async (h) => {
       await seedValues(h, VALUES);
       const bad = [];
@@ -1052,8 +1052,8 @@
         await leaveGrid(h);
         const inDoc = labelsNow();
         const classic = lang === 'fr'
-          ? { 'v2-btn-export-pdf-batch': 'Exporter toutes les lignes (ZIP)…', 'v2-btn-export-pdf-merged': 'Exporter toutes les lignes en un seul PDF…' }
-          : { 'v2-btn-export-pdf-batch': 'Export all rows (ZIP)…', 'v2-btn-export-pdf-merged': 'Export all rows as a single PDF…' };
+          ? { 'v2-btn-export-pdf-batch': 'Exporter les lignes (ZIP)…', 'v2-btn-export-pdf-merged': 'Exporter les lignes en un seul PDF…' }
+          : { 'v2-btn-export-pdf-batch': 'Export rows (ZIP)…', 'v2-btn-export-pdf-merged': 'Export rows as a single PDF…' };
         Object.keys(classic).forEach(id => { if (inDoc[id] !== classic[id]) bad.push('document : ' + id + '=' + inDoc[id]); });
         const emptyDoc = await (async () => { window.__gristStub.setRows(TABLE, []); const r = await clickExportRow(h, 'v2-btn-export-pdf-batch', false); window.__gristStub.setRows(TABLE, VALUES); return r; })();
         if (!rowWord.test(emptyDoc.status)) bad.push('document, table vide=' + JSON.stringify(emptyDoc.status));
@@ -1074,7 +1074,7 @@
 
   cases.push({
     id: 'xlsx_grid_merged_pdf_says_values_when_done',
-    description: 'Dans une grille, « Exporter toutes les valeurs de la table en un seul PDF… » génère bien un PDF unique et le dit en « valeurs réunies », pas en lignes',
+    description: 'Dans une grille, « Exporter les valeurs de la table en un seul PDF… » génère bien un PDF unique et le dit en « valeurs réunies », pas en lignes',
     run: async (h) => {
       await seedValues(h, VALUES);
       const bad = [];

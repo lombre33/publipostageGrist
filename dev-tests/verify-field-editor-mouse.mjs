@@ -7,7 +7,10 @@
 // visible, Entrée y envoie `fieldenter` sans retour à la ligne ; dans Cci, un copier-coller au clavier d'une bulle réglée et un collage de texte mis en forme ; dans le nom du PDF (crayon),
 // une bulle réglée, la barre qui laisse le champ ouvert, Entrée qui valide le nom sans replier un champ qui a une valeur. Puis le résultat : « Créer l'email » ouvre le lien mailto: capté (objet, À, Cc résolus pour la ligne courante,
 // la condition fait disparaître la bulle d'une autre ligne, avec ses guillemets), la Lecture montre les valeurs résolues sans curseur ni barre et rend les bulles au retour, l'enregistrement puis la réouverture du modèle
-// rendent les cinq champs tels quels (texte brut pour les valeurs sans réglage, HTML pour la bulle réglée).
+// rendent les cinq champs tels quels (texte brut pour les valeurs sans réglage, HTML pour la bulle réglée). Enfin une colonne Liste de références (Equipe, des fiches de l'annuaire) posée dans À (retour d'Antoine du 09/10) :
+// l'icône « Autres attributs » de sa bulle est active, la fenêtre liste l'annuaire avec les valeurs de toute la liste dans le panneau, « Remplacer » met #MfDossiers.Equipe.Email, et « Créer l'email » et la Lecture portent les adresses de la liste, séparées par une virgule.
+// Puis le même parcours avec le séparateur « ; » réglé d'abord dans « Liste » (second retour d'Antoine du 09/10) : « Remplacer » le garde, l'icône « Liste » de la bulle d'email est active et sa fenêtre
+// l'écrit, la Lecture sépare les adresses par « ; » et le lien mailto: par une virgule.
 // Lancé par run-headless.mjs (groupe Node "fieldEditorMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-field-editor-mouse.mjs
 // FIELD_EDITOR_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans elle, rien n'est écrit.
 import { createServer } from 'node:http';
@@ -227,8 +230,8 @@ const isRichField = value => typeof value === 'string' && value.startsWith('<p c
 const conditionOf = bubble => { try { return JSON.parse(bubble.condition); } catch { return null; } };
 
 // Les lignes de l'exemple : un dossier, son responsable (colonne de référence, résolu par la règle de liaison de l'annuaire).
-const REC_1 = { id: 1, Titre: 'Dossier A', Statut: 'Urgent', Responsable: 'Dupont Jean', Montant: 1200.5 };
-const REC_2 = { id: 2, Titre: 'Dossier B', Statut: 'Normal', Responsable: 'Martin Anne', Montant: 50 };
+const REC_1 = { id: 1, Titre: 'Dossier A', Statut: 'Urgent', Responsable: 'Dupont Jean', Equipe: ['Dupont Jean', 'Martin Anne'], Montant: 1200.5 };
+const REC_2 = { id: 2, Titre: 'Dossier B', Statut: 'Normal', Responsable: 'Martin Anne', Equipe: ['Martin Anne'], Montant: 50 };
 const readMailto = url => {
   const [head, query = ''] = url.split('?');
   const params = {};
@@ -240,12 +243,15 @@ async function run() {
   await page.evaluate(async ({ REC_1, REC_2 }) => {
     const stub = window.__gristStub;
     stub.setVariables('MfAnnuaire', { NomPrenom: 'Text', Telephone: 'Text', Email: 'Text' });
-    stub.setVariables('MfDossiers', { Titre: 'Text', Statut: 'Text', Responsable: 'Ref:MfAnnuaire', Montant: 'Numeric' });
+    stub.setVariables('MfDossiers', { Titre: 'Text', Statut: 'Text', Responsable: 'Ref:MfAnnuaire', Equipe: 'RefList:MfAnnuaire', Montant: 'Numeric', gristHelper_Display: 'Any' }, null, { Equipe: 'gristHelper_Display' });
     stub.setRows('MfAnnuaire', [
       { id: 7, NomPrenom: 'Dupont Jean', Telephone: '06 11 22 33 44', Email: 'jean@ex.fr' },
       { id: 8, NomPrenom: 'Martin Anne', Telephone: '06 55 66 77 88', Email: 'anne@ex.fr' },
     ]);
-    stub.setRows('MfDossiers', [{ ...REC_1, Responsable: 7 }, { ...REC_2, Responsable: 8 }]);
+    stub.setRows('MfDossiers', [
+      { ...REC_1, Responsable: 7, Equipe: ['L', 7, 8], gristHelper_Display: ['L', 'Dupont Jean', 'Martin Anne'] },
+      { ...REC_2, Responsable: 8, Equipe: ['L', 8], gristHelper_Display: ['L', 'Martin Anne'] },
+    ]);
     await GristAPI.refreshSchema();
     await GristAPI.saveLinkRule('MfAnnuaire', { mode: 'match', colonneCible: 'id', colonneSource: 'Responsable' });
     stub.fireRecord(REC_1, 'MfDossiers');
@@ -688,6 +694,151 @@ async function run() {
   const chipsReopened = { subject: await fieldInfo(SUBJECT), to: await fieldInfo(TO), file: await fieldInfo(FILE) };
   check('rouvert, le modèle remet les puces dans l’Objet, À et le nom du PDF', JSON.stringify(chipsReopened.subject.chips) === '["date","time"]' && JSON.stringify(chipsReopened.to.chips) === '["email"]' && JSON.stringify(chipsReopened.file.chips) === '["date"]' && chipsReopened.subject.value === chipsEditing.subject, chipsReopened);
   await shot('12-modele-rouvert');
+
+  // ===== 13) Une liste de références (l'équipe du dossier) dans À : « Autres attributs » est actif et écrit l'email de toutes ses fiches =====
+  // Retour d'Antoine du 09/10 : une colonne « référence multiple » mise dans À, dont les fiches ont un attribut email ; l'icône de la barre était grisée.
+  await realClick('#' + TO, 150);
+  await page.keyboard.press('Control+a');
+  await page.keyboard.press('Backspace');
+  await page.waitForTimeout(150);
+  await page.keyboard.type('#MfDossiers.Equ');
+  await page.waitForTimeout(300);
+  const teamList = await listNow();
+  check('« #MfDossiers.Equ » propose la colonne Equipe (liste de références) dans À', !!teamList && teamList.items.some(i => /Equipe/.test(i)), teamList);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(250);
+  check('la bulle de l’équipe est posée dans À', (await fieldInfo(TO)).bubbles.map(b => b.key).join() === 'MfDossiers.Equipe', await fieldInfo(TO));
+  const teamBadge = await badgePoint('#' + TO + ' .var-badge[data-column="Equipe"]');
+  check('la bulle est visible dans le champ (à portée du clic)', teamBadge.found && teamBadge.onTop, teamBadge);
+  await page.mouse.move(teamBadge.x - 20, teamBadge.y + 8, { steps: 3 });
+  await page.mouse.click(teamBadge.x, teamBadge.y);
+  await page.waitForTimeout(350);
+  const teamLinked = await hitTest('.v2-varfmt-toolbar.visible button[data-action="var-linked"]');
+  const teamLinkedState = await page.evaluate(() => {
+    const b = document.querySelector('.v2-varfmt-toolbar.visible button[data-action="var-linked"]');
+    return b && { ariaDisabled: b.getAttribute('aria-disabled'), disabledClass: b.classList.contains('is-disabled') };
+  });
+  check('l’icône « Autres attributs » de la bulle de la liste n’est plus grisée, elle est cliquable dans le panneau', teamLinked.found && teamLinked.inViewport && teamLinked.onTop && !!teamLinkedState && teamLinkedState.ariaDisabled !== 'true' && !teamLinkedState.disabledClass, { teamLinked, teamLinkedState });
+  await page.mouse.click(teamLinked.x, teamLinked.y);
+  await page.waitForTimeout(450);
+  await shot('13-autres-attributs-de-la-liste');
+  const teamWindow = await hitTest('#var-linked-modal .var-modal-content');
+  const teamRows = await page.evaluate(() => Array.from(document.querySelectorAll('#var-linked-modal .var-linked-row')).map(r => ({ col: r.dataset.col, value: r.querySelector('.var-linked-value').textContent })));
+  const teamIntro = await page.evaluate(() => document.querySelector('#var-linked-modal .var-modal-intro').textContent);
+  check('la fenêtre « Autres attributs » s’ouvre dans le panneau, sans défilement horizontal', teamWindow.found && teamWindow.inViewport && await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 0.5), teamWindow);
+  check('elle liste les colonnes de l’annuaire, avec la valeur de toutes les fiches de l’équipe à la suite', teamRows.map(r => r.col).join() === 'NomPrenom,Telephone,Email' && teamRows.find(r => r.col === 'Email').value === 'jean@ex.fr, anne@ex.fr' && teamRows.find(r => r.col === 'NomPrenom').value === 'Dupont Jean, Martin Anne', teamRows);
+  check('la phrase sous le titre dit que ce sont les lignes désignées par la liste', /^Lignes de « MfAnnuaire » désignées par #MfDossiers\.Equipe\./.test(teamIntro), teamIntro);
+  const teamPick = await hitTest('#var-linked-modal .var-linked-row[data-col="Email"] .var-linked-pick');
+  check('la case de la colonne Email est à portée du clic', teamPick.found && teamPick.inViewport && teamPick.onTop, teamPick);
+  await page.mouse.click(teamPick.x, teamPick.y);
+  await page.waitForTimeout(200);
+  const teamReplace = await hitTest('#var-linked-modal button.var-linked-replace');
+  check('« Remplacer » est actif et à portée du clic', teamReplace.found && teamReplace.inViewport && teamReplace.onTop && !(await page.evaluate(() => document.querySelector('#var-linked-modal button.var-linked-replace').disabled)), teamReplace);
+  await page.mouse.click(teamReplace.x, teamReplace.y);
+  await page.waitForTimeout(450);
+  const teamTo = await fieldInfo(TO);
+  check('À n’a plus qu’une bulle : l’email de l’équipe (#MfDossiers.Equipe.Email), enregistrée en texte brut', teamTo.bubbles.map(b => b.key).join() === 'MfDossiers.Equipe.Email' && teamTo.value === '#MfDossiers.Equipe.Email', teamTo);
+  const annuaireRule = await page.evaluate(() => GristAPI.getLinkRule('MfAnnuaire'));
+  check('le lien de l’annuaire (par Responsable) n’a pas changé : la liste se lit par son chemin, sans lien', !!annuaireRule && annuaireRule.mode === 'match' && annuaireRule.colonneSource === 'Responsable', annuaireRule);
+  const teamRow1 = await page.evaluate(({ value, rec }) => Variables.resolveTextVariables(value, 'MfDossiers', rec), { value: teamTo.value, rec: REC_1 });
+  const teamRow2 = await page.evaluate(({ value, rec }) => Variables.resolveTextVariables(value, 'MfDossiers', rec), { value: teamTo.value, rec: REC_2 });
+  check('le dossier A écrit les deux adresses de son équipe, le dossier B la seule de la sienne', teamRow1 === 'jean@ex.fr, anne@ex.fr' && teamRow2 === 'anne@ex.fr', [teamRow1, teamRow2]);
+
+  // « Créer l'email » : le lien garde les deux adresses, une à une. Lecture : le champ les montre à la suite.
+  const mailsBeforeTeam = await page.evaluate(() => window.__mailtos.length);
+  await page.evaluate(rec => window.__gristStub.fireRecord(rec, 'MfDossiers'), REC_1);
+  await page.waitForTimeout(400);
+  await realClick('#btn-create-email', 900);
+  const teamMail = readMailto((await page.evaluate(() => window.__mailtos.slice()))[mailsBeforeTeam] || 'mailto:');
+  check('« Créer l’email » : le lien mailto: porte les deux adresses de l’équipe, séparées par une virgule', teamMail.to === 'jean@ex.fr,anne@ex.fr', teamMail);
+  await realClick('#btn-mode-read', 700);
+  const teamReading = await fieldInfo(TO);
+  check('en Lecture, À montre les deux adresses à la suite, sans bulle', teamReading.text === 'jean@ex.fr, anne@ex.fr' && teamReading.bubbles.length === 0, teamReading);
+  await realClick('#btn-mode-edit', 700);
+  const teamBack = await fieldInfo(TO);
+  check('au retour à l’édition, la bulle est revenue, sa valeur enregistrée intacte', teamBack.bubbles.map(b => b.key).join() === 'MfDossiers.Equipe.Email' && teamBack.value === '#MfDossiers.Equipe.Email', teamBack);
+
+  // ===== 14) Le même, avec le séparateur « ; » réglé dans « Liste » avant d'aller chercher l'email =====
+  // Retour d'Antoine du 09/10 : « j'ai utilisé le mode liste pour définir un point-virgule entre chaque » puis « tu viens de griser l'option liste sur les réf
+  // multiples » : « Remplacer » perdait le réglage et l'icône « Liste » de la bulle d'email était grisée.
+  const formatJson = bubble => { try { return JSON.parse(bubble.format); } catch { return null; } };
+  const sameJson = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  await realClick('#' + TO, 150);
+  await page.keyboard.press('Control+a');
+  await page.keyboard.press('Backspace');
+  await page.waitForTimeout(150);
+  await page.keyboard.type('#MfDossiers.Equ');
+  await page.waitForTimeout(300);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(250);
+  const semiBadge = await badgePoint('#' + TO + ' .var-badge[data-column="Equipe"]');
+  await page.mouse.move(semiBadge.x - 20, semiBadge.y + 8, { steps: 3 });
+  await page.mouse.click(semiBadge.x, semiBadge.y);
+  await page.waitForTimeout(350);
+  const semiListIcon = await hitTest('.v2-varfmt-toolbar.visible button[data-action="var-list"]');
+  check('l’icône « Liste » de la bulle de l’équipe est à portée du clic dans le panneau', semiListIcon.found && semiListIcon.inViewport && semiListIcon.onTop, semiListIcon);
+  await page.mouse.click(semiListIcon.x, semiListIcon.y);
+  await page.waitForTimeout(450);
+  const semiSep = await hitTest('#var-list-modal #var-list-sep');
+  check('la fenêtre « Liste » s’ouvre dans le panneau, son champ « Séparateur » est à portée du clic', semiSep.found && semiSep.inViewport && semiSep.onTop, semiSep);
+  await page.mouse.click(semiSep.x, semiSep.y, { clickCount: 3 });
+  await page.keyboard.type(';');
+  await page.waitForTimeout(450);
+  const semiPreview = await page.evaluate(() => document.querySelector('#var-list-modal .var-condition-debug-line').textContent);
+  check('l’aperçu de la fenêtre écrit les noms de l’équipe séparés par « ; »', /Dupont Jean;Martin Anne/.test(semiPreview), semiPreview);
+  const semiSave = await hitTest('#var-list-modal .var-modal-primary');
+  await page.mouse.click(semiSave.x, semiSave.y);
+  await page.waitForTimeout(450);
+  const semiSet = await fieldInfo(TO);
+  check('la bulle de l’équipe porte le séparateur « ; » et rien d’autre', semiSet.bubbles.length === 1 && sameJson(formatJson(semiSet.bubbles[0]), { list: { separator: ';' } }), semiSet);
+  const semiLinked = await hitTest('.v2-varfmt-toolbar.visible button[data-action="var-linked"]');
+  check('l’icône « Autres attributs » est à portée du clic (la bulle reste sélectionnée après l’enregistrement)', semiLinked.found && semiLinked.inViewport && semiLinked.onTop, semiLinked);
+  await page.mouse.click(semiLinked.x, semiLinked.y);
+  await page.waitForTimeout(450);
+  const semiPick = await hitTest('#var-linked-modal .var-linked-row[data-col="Email"] .var-linked-pick');
+  await page.mouse.click(semiPick.x, semiPick.y);
+  await page.waitForTimeout(200);
+  const semiReplace = await hitTest('#var-linked-modal button.var-linked-replace');
+  await page.mouse.click(semiReplace.x, semiReplace.y);
+  await page.waitForTimeout(450);
+  const semiTo = await fieldInfo(TO);
+  check('« Remplacer » : À n’a qu’une bulle, l’email de l’équipe, et elle garde le séparateur « ; »', semiTo.bubbles.length === 1 && semiTo.bubbles[0].key === 'MfDossiers.Equipe.Email' && sameJson(formatJson(semiTo.bubbles[0]), { list: { separator: ';' } }), semiTo);
+  const semiBar = await page.evaluate(() => {
+    const b = document.querySelector('.v2-varfmt-toolbar.visible button[data-action="var-list"]');
+    return b && { ariaDisabled: b.getAttribute('aria-disabled'), disabledClass: b.classList.contains('is-disabled'), active: b.classList.contains('is-active') };
+  });
+  check('l’icône « Liste » de la bulle d’email n’est pas grisée : elle est allumée, le séparateur est réglé', !!semiBar && semiBar.ariaDisabled !== 'true' && !semiBar.disabledClass && semiBar.active, semiBar);
+  const pathListIcon = await hitTest('.v2-varfmt-toolbar.visible button[data-action="var-list"]');
+  await page.mouse.click(pathListIcon.x, pathListIcon.y);
+  await page.waitForTimeout(450);
+  await shot('14-liste-de-l-email-de-l-equipe');
+  const pathWin = await hitTest('#var-list-modal .var-modal-content');
+  const pathWinState = await page.evaluate(() => ({
+    intro: document.querySelector('#var-list-modal .var-modal-intro').textContent,
+    preview: document.querySelector('#var-list-modal .var-condition-debug-line').textContent,
+    sep: document.querySelector('#var-list-modal #var-list-sep').value,
+    noOverflow: document.documentElement.scrollWidth <= window.innerWidth + 0.5,
+  }));
+  check('la fenêtre « Liste » de l’email s’ouvre entière dans le panneau, sans défilement horizontal', pathWin.found && pathWin.inViewport && pathWinState.noOverflow, { pathWin, noOverflow: pathWinState.noOverflow });
+  check('elle dit que l’email donne une valeur pour chaque ligne de la liste, reprend « ; » et son aperçu écrit les deux adresses', /donne une valeur pour chaque ligne de la liste \(« MfAnnuaire »\)/.test(pathWinState.intro) && pathWinState.sep === ';' && /jean@ex\.fr;anne@ex\.fr/.test(pathWinState.preview), pathWinState);
+  const pathCancel = await hitTest('#var-list-modal .var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)');
+  await page.mouse.click(pathCancel.x, pathCancel.y);
+  await page.waitForTimeout(350);
+  const semiRow1 = await page.evaluate(({ value, rec }) => Variables.resolveTextVariables(value, 'MfDossiers', rec), { value: semiTo.value, rec: REC_1 });
+  const semiRow2 = await page.evaluate(({ value, rec }) => Variables.resolveTextVariables(value, 'MfDossiers', rec), { value: semiTo.value, rec: REC_2 });
+  check('le dossier A écrit « jean@ex.fr;anne@ex.fr », le dossier B la seule adresse de son équipe', semiRow1 === 'jean@ex.fr;anne@ex.fr' && semiRow2 === 'anne@ex.fr', [semiRow1, semiRow2]);
+  const mailsBeforeSemi = await page.evaluate(() => window.__mailtos.length);
+  await page.evaluate(rec => window.__gristStub.fireRecord(rec, 'MfDossiers'), REC_1);
+  await page.waitForTimeout(400);
+  await realClick('#btn-create-email', 900);
+  const semiMail = readMailto((await page.evaluate(() => window.__mailtos.slice()))[mailsBeforeSemi] || 'mailto:');
+  check('« Créer l’email » : le lien mailto: sépare les deux adresses par une virgule, jamais par « ; »', semiMail.to === 'jean@ex.fr,anne@ex.fr', semiMail);
+  await realClick('#btn-mode-read', 700);
+  const semiReading = await fieldInfo(TO);
+  check('en Lecture, À écrit les deux adresses séparées par « ; », sans bulle', semiReading.text === 'jean@ex.fr;anne@ex.fr' && semiReading.bubbles.length === 0, semiReading);
+  await realClick('#btn-mode-edit', 700);
+  const semiBack = await fieldInfo(TO);
+  check('au retour à l’édition, la bulle est revenue avec son séparateur', semiBack.bubbles.length === 1 && semiBack.bubbles[0].key === 'MfDossiers.Equipe.Email' && sameJson(formatJson(semiBack.bubbles[0]), { list: { separator: ';' } }), semiBack);
 }
 try { await run(); } catch (e) { check('le parcours va jusqu’au bout', false, String(e && e.stack || e)); }
 

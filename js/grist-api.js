@@ -643,13 +643,14 @@ const GristAPI = (function () {
     }
     return (_columnTypesByTable[tableId] && _columnTypesByTable[tableId][colId]) || null;
   }
-  // Table où mène une suite de colonnes Référence simples à partir de `tableId` (la table elle-même si la suite est vide), null si un maillon manque
-  // ou n'est pas une Référence (une liste de références désigne plusieurs lignes : on ne descend pas dedans).
-  function tableAtEndOf(tableId, hops) {
+  // Table où mène une suite de colonnes Référence ou Liste de références à partir de `tableId` (la table elle-même si la suite est vide), null si un maillon
+  // manque ou n'est pas une référence. Une liste de références désigne plusieurs lignes : la suite les lit toutes (Variables.resolveRows) et ce qu'on y lit est
+  // une valeur par ligne. `singleOnly` : les seules Références simples, pour ce qui n'ouvre qu'une ligne (la flèche des listes de colonnes).
+  function tableAtEndOf(tableId, hops, singleOnly) {
     let table = tableId;
     for (let i = 0; i < hops.length; i++) {
       const ref = referenceOf(_columnTypesByTable[table] && _columnTypesByTable[table][hops[i]]);
-      if (!ref || ref.list) return null;
+      if (!ref || (ref.list && singleOnly)) return null;
       table = ref.table;
     }
     return table;

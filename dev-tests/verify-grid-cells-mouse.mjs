@@ -7,8 +7,9 @@
 //     « Scinder » rend les cases ; chacun est annulé par UN Ctrl+Z ;
 //   - fusionner toutes les lignes de deux colonnes de largeurs différentes ne les remet pas à la largeur par défaut, tirer le bord d'une de ces colonnes ne règle que la sienne ;
 //   - « Aligner en haut / au milieu / en bas » s'applique à toutes les cases choisies en une transaction, le bouton enfoncé dit l'alignement des cases choisies (aucun quand elles diffèrent) ;
-//   - hors d'une grille, la barre d'un tableau de document flotte comme avant et n'a ni Bordures ni Alignement vertical (ils restent à la grille) ; ses « Fusionner » et « Scinder » sont ceux
-//     du tableau de document (dev-tests/verify-table-merge-mouse.mjs), grisés par `is-disabled` avec leur raison, pas par `v2-hf-locked`.
+//   - hors d'une grille, la barre d'un tableau de document flotte, ancrée sur le tableau, et porte les mêmes Bordures et Alignement vertical que celle d'une grille (leurs essais à la souris :
+//     dev-tests/verify-doc-table-tools-mouse.mjs) ; ses « Fusionner » et « Scinder » sont ceux du tableau de document (dev-tests/verify-table-merge-mouse.mjs), grisés par `is-disabled` avec
+//     leur raison, pas par `v2-hf-locked`.
 // Lancé par run-headless.mjs (groupe Node « gridCellsMouse », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-grid-cells-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -470,8 +471,8 @@ async function runTheme(theme) {
     const greyedByReason = b => !!b && b.classList.contains('is-disabled') && !b.classList.contains('v2-hf-locked') && b.getAttribute('aria-disabled') === 'true' && !!b.title;
     return { floating: !bar.classList.contains('docked') && bar.parentElement === document.body, visible: bar.classList.contains('visible'), shown, seps, delGrey: del.classList.contains('v2-hf-locked'), mergeGrey: greyedByReason(merge), splitGrey: greyedByReason(split) };
   });
-  check(`${label} - tableau de document : la barre flotte comme avant, avec ses 11 boutons (lignes, colonnes, tableau, fusion, légende, fond), « Fusionner » et « Scinder » grisés avec leur raison (une seule case), et ni bordures ni alignement vertical`,
-    !!classic && classic.floating && classic.visible && classic.shown.join() === 'row-before,row-after,row-del,col-before,col-after,col-del,table-del,cell-merge,cell-split,caption,fill-open' && !classic.delGrey && classic.mergeGrey && classic.splitGrey, classic);
+  check(`${label} - tableau de document : la barre flotte, avec ses 15 boutons (lignes, colonnes, tableau, fusion, légende, fond, bordures, alignement vertical), « Fusionner » et « Scinder » grisés avec leur raison (une seule case)`,
+    !!classic && classic.floating && classic.visible && classic.shown.join() === 'row-before,row-after,row-del,col-before,col-after,col-del,table-del,cell-merge,cell-split,caption,fill-open,borders-open,valign-top,valign-middle,valign-bottom' && !classic.delGrey && classic.mergeGrey && classic.splitGrey, classic);
 
   await context.close();
 }

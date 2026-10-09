@@ -453,7 +453,7 @@ Node `orientationMouse` (vrai clic, Entrée et Espace à 700×400, clair et somb
 1. Ouvrir un modèle classique de plusieurs pages (texte, un tableau, une zone à deux colonnes, une image en calque), cliquer le bouton Portrait / Paysage (juste
    après Aperçu A4) : la feuille s'élargit, les sauts de page se recalculent, l'icône montre une page large et le bouton s'allume. En Lecture : même feuille, mêmes sauts.
 2. Exporter en PDF : le lecteur PDF annonce 297 × 210 mm, le texte et le tableau occupent toute la largeur, l'image en calque reste sur la page de son texte, l'en-tête et
-   le pied de page se placent sur la page paysage. Même résultat pour « Exporter toutes les lignes » (ZIP et PDF unique).
+   le pied de page se placent sur la page paysage. Même résultat pour « Exporter les lignes » (ZIP et PDF unique).
 3. Exporter en Word, ouvrir le fichier dans Word : Mise en page > Orientation indique Paysage, les marges sont celles du modèle, le tableau et la zone à deux colonnes
    remplissent la largeur.
 4. Repasser en portrait : la feuille, les sauts de page et les exports sont exactement ceux d'avant ; une colonne réglée à 200 mm en paysage ne laisse pas la colonne
@@ -483,7 +483,7 @@ impression navigateur), script Node `pageFormatMouse` (survol et vrai clic sur l
    Portrait et A4 sont cochés. Cliquer A5 : la feuille se rétrécit (148 mm de large), les sauts de page se recalculent, la case devient « Aperçu A5 », le menu se referme quand
    la souris part et le curseur reste dans le texte.
 2. Exporter en PDF : le lecteur PDF annonce 148 × 210 mm, le texte et le tableau occupent toute la largeur, l'en-tête et le pied de page (avec le numéro) se placent en haut et en bas
-   de chaque page A5. Même résultat pour « Exporter toutes les lignes ». Refaire en A3 (297 × 420 mm) et en A6 (105 × 148 mm), puis en paysage.
+   de chaque page A5. Même résultat pour « Exporter les lignes ». Refaire en A3 (297 × 420 mm) et en A6 (105 × 148 mm), puis en paysage.
 3. Exporter en Word, ouvrir le fichier dans Word : Mise en page > Taille indique A5 (ou A3, A6), les marges sont celles du modèle, le tableau et la zone à deux colonnes remplissent la largeur.
 4. Repasser en A4 : la feuille et les sauts de page sont exactement ceux d'avant. Les marges d'un petit format ont pu être réduites (elles ne reviennent pas toutes seules) et un
    tableau trop large pour A5 a été réduit pour de bon : à vérifier et à noter.
@@ -551,7 +551,7 @@ captures avec `WATERMARK_SHOTS=<dossier>`). Le texte, l'angle, la couleur et l'o
 3. Aperçu A4 allumé : chaque feuille de l'éditeur porte le mot, au centre exact de la page, derrière le texte ; cliquer et taper dessus place le curseur dans le texte du document (le filigrane ne se sélectionne pas).
    Passer en Mode lecture : même filigrane, même place. Décocher Aperçu A4 : il n'est plus peint (un filigrane n'a de sens que sur la feuille) ; le rallumer le ramène.
 4. « Exporter en PDF » : le mot est derrière le texte de chaque page (une image « Sur toutes les pages » le recouvre), à la couleur, à l'angle et à l'opacité choisis ; le texte du filigrane est un vrai texte
-   (le sélectionner, le chercher). Même résultat pour « Exporter toutes les lignes ».
+   (le sélectionner, le chercher). Même résultat pour « Exporter les lignes ».
 5. « Exporter en DOCX » : dans Word, le mot est derrière le texte de chaque page, centré sur la page, de la couleur choisie et pâle (c'est une image, pas du texte modifiable : il ne se retouche pas dans Word).
 6. Changer de format (A5 paysage, A3, A6) : le mot reste centré, tourné de la même façon, et rentre dans la page ; un texte de 40 « W » descend à un corps très petit mais reste dans la page.
 7. Enregistrer, recharger la page du document Grist : le filigrane est revenu avec le modèle ; un autre modèle n'en a pas ; un macro-modèle a le sien.

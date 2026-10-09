@@ -213,7 +213,7 @@
       const result = {
         ran: hits(),
         pages: /2\/5/.test(pages) && !/\?/.test(pages.replace(/<img[^>]*>/g, '')),
-        mail: mail === 'Bonjour\n\nDeuxième ligne',
+        mail: mail === 'Bonjour\nDeuxième ligne',
         stripped: !/var-badge/.test(stripped) && /Bonjour/.test(stripped),
         rebound: /data-table="Clients_2"/.test(rebound) && /data-key="Clients_2\.Nom"/.test(rebound) && /#Clients_2\.Nom/.test(rebound),
       };
