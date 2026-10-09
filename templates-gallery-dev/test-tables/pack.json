@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "main": "TestInvites",
+  "tables": [
+    {
+      "id": "TestEvenements",
+      "columns": [
+        { "id": "Nom", "type": "Text", "label": "Nom de l’événement" },
+        { "id": "Date", "type": "Date" },
+        { "id": "Statut", "type": "Choice", "choices": ["Brouillon", "Publié"] },
+        { "id": "NbInvites", "type": "Int", "label": "Nombre d’invités", "formula": "len(TestInvites.lookupRecords(Evenement=$id))" }
+      ]
+    },
+    {
+      "id": "TestInvites",
+      "columns": [
+        { "id": "Code", "type": "Text" },
+        { "id": "Nom", "type": "Text" },
+        { "id": "Categorie", "type": "Choice", "choices": ["Participant", "VIP"] },
+        { "id": "Evenement", "type": "Ref:TestEvenements", "show": "Nom" }
+      ]
+    }
+  ],
+  "links": [
+    { "table": "TestEvenements", "mode": "match", "target": "id", "source": "Evenement" }
+  ],
+  "template": {
+    "type": "document",
+    "pdfName": "Badge #TestInvites.Code",
+    "page": { "format": "A6", "orientation": "landscape", "margins": [8, 8, 8, 8] }
+  }
+}

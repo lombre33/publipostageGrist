@@ -30,5 +30,27 @@
     "html": "vitrine-fonctionnalites/template.html",
     "schema": "vitrine-fonctionnalites/schema.py",
     "headerFooter": "vitrine-fonctionnalites/headerfooter.json"
+  },
+  {
+    "id": "test-tables",
+    "name": "Test — Modèle avec ses tables",
+    "tags": [
+      "test"
+    ],
+    "screenshot": "test-tables/capture-1.png",
+    "html": "test-tables/template.html",
+    "pack": "test-tables/pack.json",
+    "shows": [
+      "qr",
+      "condition",
+      "pageFormat"
+    ],
+    "preview": [
+      {
+        "src": "test-tables/capture-1.png",
+        "w": 148,
+        "h": 105
+      }
+    ]
   }
 ]

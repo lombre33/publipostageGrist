@@ -33,8 +33,9 @@
 //      bêta ; dev-tests et planning ne sont pas publiés et gardent leurs références).
 //  18. un moteur d'export (PDF, fusion, feuilles, Word, Excel, format des nombres : ~380 Ko) qui redevient un <script src> ordinaire de index.html, donc chargé à l'ouverture, ou qu'un script appelle
 //      sans passer par js/export-engines.js (choix d'Antoine du 05/10 : « Charger les moteurs d'export seulement au premier export »).
-//  19. une table du widget créée sans passer par la question « Créer les tables du widget dans ce document ? » : un `AddTable` écrit ailleurs que dans js/grist-api.js (addTableIfMissing) et dans la galerie de
-//      modèles (la table que la personne nomme elle-même), la question qui n'est plus posée avant l'écriture, ou js/table-consent.js qui n'est plus branché avant le démarrage anticipé d'index.html
+//  19. une table du widget créée sans passer par la question « Créer les tables du widget dans ce document ? » : un `AddTable` écrit ailleurs que dans js/grist-api.js (addTableIfMissing), dans la galerie de
+//      modèles (la table que la personne nomme elle-même) et dans l'installateur des modèles à pack (js/template-pack.js, que seule la galerie appelle, APRÈS la question « Créer les tables du modèle ? » qui
+//      nomme chaque table), la question qui n'est plus posée avant l'écriture, ou js/table-consent.js qui n'est plus branché avant le démarrage anticipé d'index.html
 //      (choix d'Antoine du 05/10 : « demander une fois, mais si la personne refuse, lui redemander à chaque action de sa part sur le widget »).
 //  20. une image d'un autre site qui charge sans le clic « Afficher » : une surface (Lecture, en-têtes et pieds, galerie, vue d'image de l'éditeur) qui écrit le HTML d'un modèle dans la page sans passer par
 //      ExternalImages (block, blockIn, blockedSiteOf), ou la Lecture avec commentaires qui sérialise le document dans celui de la page (une <img> créée là charge son adresse même détachée)
@@ -683,12 +684,25 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 // ces deux scripts ne voient pas : un `AddTable` écrit ailleurs (une table créée sans question), la question sautée dans addTableIfMissing, et js/table-consent.js qui n'est plus chargé avant le démarrage
 // anticipé d'index.html (la première création partirait sans qu'elle soit branchée : le widget créerait ses tables sans demander).
 {
-  // Seule exception : la galerie de modèles crée la table de DONNÉES que la personne vient de nommer elle-même dans une fenêtre (js/template-gallery-modal.js, useWithData) : un geste explicite, pas une table du widget.
-  const ALLOWED = ['js/grist-api.js', 'js/template-gallery-modal.js'];
+  // Deux exceptions, deux gestes explicites qui ne sont pas des tables du widget : la galerie de modèles crée la table de DONNÉES que la personne vient de nommer elle-même dans une fenêtre
+  // (js/template-gallery-modal.js, useWithData) ; l'installateur des modèles à pack (js/template-pack.js) crée les tables du modèle que la personne a choisi, que la fenêtre lui a nommées une à une
+  // et qu'elle a acceptées (contrôle plus bas : la galerie est la seule à l'appeler, et la question précède l'appel).
+  const ALLOWED = ['js/grist-api.js', 'js/template-gallery-modal.js', 'js/template-pack.js'];
   const creators = jsFiles.filter(rel => /['"]AddTable['"]/.test(noCommentsJs(read(rel))));
   check('tables : l\'analyse lit bien le code (garde-fou de l\'analyse elle-même : js/grist-api.js écrit un AddTable)', creators.includes('js/grist-api.js'), creators.join(', '));
-  check('tables : « AddTable » n\'est écrit que dans js/grist-api.js (addTableIfMissing, qui pose la question) et dans la galerie de modèles (la table que la personne nomme elle-même) - toute autre création de table passerait sans question',
+  check('tables : « AddTable » n\'est écrit que dans js/grist-api.js (addTableIfMissing, qui pose la question), dans la galerie de modèles (la table que la personne nomme elle-même) et dans l\'installateur des modèles à pack - toute autre création de table passerait sans question',
     creators.every(rel => ALLOWED.includes(rel)), creators.filter(rel => !ALLOWED.includes(rel)).join(', '));
+
+  const installers = jsFiles.filter(rel => /TemplatePack\.apply\(/.test(noCommentsJs(read(rel))));
+  check('tables : l\'installateur des modèles à pack (TemplatePack.apply) n\'est appelé que par la galerie (js/template-gallery-modal.js)',
+    installers.length === 1 && installers[0] === 'js/template-gallery-modal.js', installers.join(', '));
+  const gallery = noCommentsJs(read('js/template-gallery-modal.js'));
+  const useAt = gallery.indexOf('async function useWithPack');
+  const useBody = useAt === -1 ? '' : gallery.slice(useAt, gallery.indexOf('\n  }\n', useAt));
+  const asksFirst = useBody.indexOf('Dialogs.confirm(');
+  const installs = useBody.indexOf('TemplatePack.apply(');
+  check('tables : la galerie pose la question « Créer les tables du modèle ? » (Dialogs.confirm) AVANT TemplatePack.apply, et ne crée rien si la personne répond non',
+    asksFirst !== -1 && installs !== -1 && asksFirst < installs && /Dialogs\.confirm\([^\n]*\)\)\)\s*return;/.test(useBody), `${useBody.length} caractères, question en ${asksFirst}, installation en ${installs}`);
 
   const api = noCommentsJs(read('js/grist-api.js'));
   const start = api.indexOf('async function addTableIfMissing');

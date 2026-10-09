@@ -74,13 +74,17 @@ attend "refuse un sous-dossier inconnu dans public/" "ne contient que des docume
 (cd "$T/dev" && G rm -rq outils/depot-propre/public/autre && G commit -qm "retrait" && echo x > outils/depot-propre/public/screenshots/note.txt && G add -A && G commit -qm "fichier qui n'est pas une capture" && git push -q origin main)
 attend "refuse un fichier qui n'est pas un .png dans public/screenshots/" "ne contient que les captures du README" "$(publier)"
 (cd "$T/dev" && G rm -rq outils/depot-propre/public/screenshots/note.txt && G commit -qm "retrait" && echo "// Antoine l'a demandé" >> js/main.js && G commit -qam "prénom" && git push -q origin main)
+# Un modèle de la galerie qui vient avec ses tables : sa capture et le fichier de tables de sa famille manquent, la publication le dit dans la même passe.
+(cd "$T/dev" && mkdir -p templates-gallery/m && echo '{"family":"f"}' > templates-gallery/m/pack.json && echo '[{"id":"m","name":"M","pack":"m/pack.json","preview":[{"src":"m/capture-1.png","w":1,"h":1}]}]' > templates-gallery/manifest.json && G add -A && G commit -qm "modèle à pack sans capture ni famille" && git push -q origin main)
 SORTIE="$(publier)"
 attend "refuse quand les contrôles trouvent le prénom" "le prénom du développeur" "$SORTIE"
+attend "refuse un modèle à pack dont la capture manque" "cite la capture m/capture-1.png" "$SORTIE"
+attend "refuse un modèle à pack dont la famille n'a pas de fichier de tables" "la famille f n'a pas de fichier" "$SORTIE"
 attend "ne committe rien quand les contrôles échouent" "rien n'est committé" "$SORTIE"
 vrai "remet le clone public à son état d'origine" test "$(git -C "$T/propre" rev-parse HEAD)" = "$AVANT" -a -z "$(git -C "$T/propre" status --porcelain)"
 
 echo "publier.sh : publication"
-(cd "$T/dev" && sed -i '/Antoine/d' js/main.js && G commit -qam "prénom retiré" && git push -q origin main)
+(cd "$T/dev" && sed -i '/Antoine/d' js/main.js && G rm -rq templates-gallery/m && echo '[]' > templates-gallery/manifest.json && G add -A && G commit -qm "prénom retiré, modèle à pack retiré" && git push -q origin main)
 SORTIE="$(publier --sortie "$T/sortie1")"
 attend "publie quand tout est en règle" "Commit .* et étiquette v1.0.0-beta.1 prêts" "$SORTIE"
 P="$T/propre"

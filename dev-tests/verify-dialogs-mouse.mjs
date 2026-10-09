@@ -860,6 +860,14 @@ async function runSites(theme) {
   await page.evaluate(() => window.__gristStub.setViewRows(null));
 
   // 6) Galerie : « Utiliser avec une nouvelle table de données » demande le nom de la table, par-dessus l'aperçu (fenêtre de 2000).
+  // Ce bouton n'existe plus que pour un modèle à schema.py sans pack, et aucun modèle du catalogue public n'en est un (ils s'installent avec leur pack) : le modèle d'essai du catalogue de dev
+  // (templates-gallery-dev), posé en tête de la liste le temps de cette partie.
+  await page.evaluate(async () => {
+    const list = await TemplateGallery.loadManifest();
+    const dev = await (await fetch('templates-gallery-dev/manifest.json', { cache: 'no-store' })).json();
+    window.__schemaEntry = Object.assign({}, dev.find(e => e.schema && !e.pack), { __base: 'templates-gallery-dev/' });
+    list.unshift(window.__schemaEntry);
+  });
   await realHover('#v2-new-template-group #btn-new');
   await realClick('#v2-btn-new-from-template', 1200);
   const card = await page.evaluate(() => { const rc = document.querySelector('.tpl-gallery-card').getBoundingClientRect(); return { x: rc.x + rc.width / 2, y: rc.top + 40 }; });
@@ -883,6 +891,7 @@ async function runSites(theme) {
   check(`${T}, galerie : Entrée crée la table sous le nom tapé et ferme la galerie`,
     await page.evaluate(name => window.__gristStub.getActionLog().some(a => a[0] === 'AddTable' && a[1] === name), `Table galerie ${T}`)
     && await page.evaluate(() => document.getElementById('template-preview-modal').style.display === 'none' && document.getElementById('template-gallery-modal').style.display === 'none'));
+  await page.evaluate(async () => { const list = await TemplateGallery.loadManifest(); list.splice(list.indexOf(window.__schemaEntry), 1); });
 
   // 7) Supprimer un fil de commentaires : la confirmation s'ouvre au clic et y RESTE (le bouton du fil réagit à l'appui, la fenêtre apparaît sous le pointeur).
   await page.evaluate(name => { Editor.setHTML('<p>Un paragraphe à commenter</p>'); document.getElementById('template-name').value = name; }, `Commentaires ${T}`);
