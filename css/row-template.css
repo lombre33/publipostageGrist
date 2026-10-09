@@ -17,3 +17,7 @@
 .settings-viewtemplate-actions button { font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; height: 26px; padding: 0 10px; min-width: 0; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); cursor: pointer; }
 .settings-viewtemplate-actions button:hover:not(:disabled) { background: var(--surface-sunken); }
 .settings-viewtemplate-actions button:disabled { opacity: .55; cursor: default; }
+/* Section « Date du dernier export PDF » (js/export-date.js) : ce qui s'écrit, sous la liste des colonnes - en encre rouge quand la colonne choisie ne peut plus la recevoir.
+   La liste elle-même reprend la grille et la hauteur de celles de l'onglet Accès (css/access-rights.css). */
+.settings-exportdate-status { font-size: 12.5px; color: var(--text); margin: 10px 0 0; overflow-wrap: anywhere; }
+.settings-exportdate-status.is-problem { color: var(--danger-ink); }

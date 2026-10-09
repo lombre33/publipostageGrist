@@ -124,7 +124,7 @@
 <link rel="stylesheet" href="css/chart-block.css?v=0.1">
 <link rel="stylesheet" href="css/search-select.css?v=0.10">
 <link rel="stylesheet" href="css/access-rights.css?v=0.8">
-<link rel="stylesheet" href="css/row-template.css?v=0.3">
+<link rel="stylesheet" href="css/row-template.css?v=0.4">
 <link rel="stylesheet" href="css/save-reminder.css?v=0.1">
 <link rel="stylesheet" href="css/text-expansion.css?v=0.3">
 <link rel="stylesheet" href="css/shortcuts.css?v=0.2">
@@ -622,6 +622,17 @@
           </div>
           <p class="settings-access-locked" id="settings-viewtemplate-locked" data-i18n="settings.viewTemplate.locked" hidden>Vous êtes en lecture seule : ce réglage est verrouillé.</p>
         </section>
+        <!-- Date du dernier export PDF (js/export-date.js) : une colonne de la table du widget qui garde la date du dernier export PDF de chaque ligne. -->
+        <section class="settings-section settings-view-section" id="settings-exportdate-section">
+          <h4 class="settings-section-title" data-i18n="settings.exportDate.title">Date du dernier export PDF</h4>
+          <p class="settings-panel-intro" data-i18n="settings.exportDate.intro">Après chaque export PDF, la date de l’export s’écrit dans la colonne choisie, pour chaque ligne exportée. La colonne doit être de type Date, Date et heure ou Texte, et ne pas porter de formule.</p>
+          <div class="settings-access-grid">
+            <label for="settings-exportdate-column" data-i18n="settings.exportDate.column">Colonne</label><select id="settings-exportdate-column"></select>
+          </div>
+          <p class="settings-exportdate-status" id="settings-exportdate-status" role="status" hidden></p>
+          <p class="settings-access-locked" id="settings-exportdate-locked" data-i18n="settings.exportDate.locked" hidden>Vous êtes en lecture seule : ce réglage est verrouillé.</p>
+          <p class="settings-access-hint" data-i18n="settings.exportDate.hint">La date s’écrit pour chaque ligne dont le PDF est dans le fichier téléchargé : « Exporter en PDF », « Exporter les lignes (ZIP) », « Exporter les lignes en un seul PDF » et « Assemblage avant impression ». Une ligne en échec n’est pas datée ; Word, Excel et « Impression navigateur » n’écrivent rien (le navigateur ne dit pas si la personne a imprimé). Un compte en lecture seule dans Grist ne peut rien écrire.</p>
+        </section>
       </div>
       <div class="settings-panel" data-settings-panel="access" hidden>
         <p class="settings-panel-intro" data-i18n="settings.access.intro">Droits par personne, lus dans une table du document : une ligne par personne, repérée par son email Grist, et une case à cocher par droit.</p>
@@ -659,7 +670,7 @@
 <script src="js/version.js?v=0.1"></script>
 <script src="js/html-sanitize.js?v=0.6"></script>
 <script src="js/page-tree.js?v=0.5"></script>
-<script src="js/grist-api.js?v=0.105"></script>
+<script src="js/grist-api.js?v=0.106"></script>
 <script src="js/templates.js?v=0.94"></script>
 <script src="js/table-consent.js?v=0.1"></script>
 <script>
@@ -675,7 +686,7 @@
 </script>
 <script src="js/reader-mode.js?v=0.138"></script>
 <script src="js/reader-guide.js?v=0.6"></script>
-<script src="js/i18n.js?v=0.145"></script>
+<script src="js/i18n.js?v=0.146"></script>
 <script src="js/shortcuts.js?v=0.13"></script>
 <script src="js/page-layout.js?v=0.14"></script>
 <script src="js/color-math.js?v=0.1"></script>
@@ -765,6 +776,7 @@
 <script src="js/macro-templates.js?v=0.9"></script>
 <script src="js/macro-editor.js?v=0.47"></script>
 <script src="js/view-template.js?v=0.7"></script>
+<script src="js/export-date.js?v=0.1"></script>
 <script src="js/row-template.js?v=0.6"></script>
 <script src="js/row-template-panel.js?v=0.4"></script>
 <script src="js/template-organizer.js?v=0.4"></script>
@@ -774,7 +786,7 @@
 <script src="js/access-rights.js?v=0.10"></script>
 <script src="js/save-reminder.js?v=0.2"></script>
 <script src="js/schema-renames.js?v=0.7"></script>
-<script src="js/settings-columns.js?v=0.5"></script>
+<script src="js/settings-columns.js?v=0.6"></script>
 <script src="js/watermark-dialog.js?v=0.5"></script>
 <script src="js/color-dialog.js?v=0.1"></script>
 <script src="js/saved-page-formats.js?v=0.4"></script>
@@ -785,6 +797,6 @@
 <script src="js/page-zoom.js?v=0.5"></script>
 <script src="js/field-codec.js?v=0.4"></script>
 <script src="js/field-editor.js?v=0.3"></script>
-<script src="js/main.js?v=0.132"></script>
+<script src="js/main.js?v=0.133"></script>
 </body>
 </html>

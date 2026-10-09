@@ -587,6 +587,32 @@ boutons de fonction, liste des colonnes devant la fenêtre, virgule décimale re
 
 ---
 
+## 20. Date du dernier export PDF (Réglages > Vue)
+
+**Couverture automatisée** : groupe `exportDate` (`scenarios-export-date.js`, 11 cas : la liste, l'option et ses échos, la valeur selon le type et le jour de l'appareil, ce que `stamp` écrit et refuse), les cas
+`pdfbatch_export_date_*` du groupe `pdfBatch` (le PDF seul, « Impression navigateur » qui n'écrit rien, le ZIP, le PDF unique, une ligne en échec, l'échec de la date dit en rouge, un compte Lecteur), un cas de `sheetAssembly` (la planche), un cas de `settingsColumns`
+(colonne disparue dite à l'ouverture) et le script Node `exportDateMouse` (vraie souris et vrai export PDF à 700×400, clair, sombre et anglais). L'essai dans un vrai Grist est le script du laboratoire grist-static
+(`/mnt/project-files/labo-grist-reel/lab-export-date.mjs`).
+**Non couvert** : un document Grist réel avec des règles d'accès (une colonne que la personne n'a pas le droit d'écrire : Grist refuse, le widget dit « Grist a refusé l'écriture »), une colonne Date et heure d'un autre fuseau
+lue dans Grist, un lot de plusieurs milliers de lignes.
+
+### Protocole
+1. Dans un document Grist, ajouter à la table du widget une colonne « Dernier export » de type Date et heure (et, pour l'essai, une colonne Texte, une colonne Date et une colonne à formule). Ouvrir Réglages > Vue :
+   la section « Date du dernier export PDF » propose « — Aucune — » puis les colonnes Date, Date et heure et Texte (type en indice), pas la colonne à formule ni les colonnes Numérique, Choix, Référence…
+2. Choisir « Dernier export » : une phrase dit « Chaque export PDF écrit le jour et l'heure de l'export dans « Dernier export ». » et la ligne « Pour partager vos changements, cliquez sur « Enregistrer »… » apparaît.
+   Cliquer « Enregistrer » en haut du widget, dans Grist.
+3. Sur une ligne, « Exporter en PDF » : le PDF est téléchargé, l'état dit « PDF généré. » et, dans Grist, la colonne de CETTE ligne montre la date et l'heure de l'export (celles de l'appareil) ; les autres lignes ne changent pas.
+4. « Exporter les lignes (ZIP) » puis « Exporter les lignes en un seul PDF » puis « Assemblage avant impression » : chaque ligne du fichier reçoit la date, toutes au même instant. Un lot dont une ligne échoue
+   (une image qui ne se lit pas, par exemple) : la fenêtre de fin de lot liste la ligne en échec, qui garde son ancienne date. « Exporter en DOCX », « Exporter en Excel », « Créer l'email » et le bouton PDF réglé sur « Impression navigateur » n'écrivent rien.
+5. Refaire avec une colonne Date (le jour seul, sans l'heure) et une colonne Texte (« 2026-10-09 14:32 »).
+6. Supprimer la colonne dans Grist, rouvrir Réglages > Vue : la liste la garde, la phrase en rouge dit qu'elle n'existe plus ; un export PDF produit quand même le fichier et le coin d'état commence, en rouge, par
+   « Date non écrite : la colonne … n'existe plus. ». Recharger la page du document : l'avertissement d'ouverture cite la colonne supprimée. Transformer une colonne en colonne à formule : la section et
+   l'export le disent aussi (« doit être de type Date, Date et heure ou Texte, sans formule »), sans rien écrire.
+7. Avec un compte Lecteur (ou une personne en lecture seule par la table des droits) : la section reste visible, grisée, avec « Vous êtes en lecture seule : ce réglage est verrouillé. » ; un export PDF n'écrit rien et ne se plaint de rien.
+8. Panneau de 700 × 400 : la section, sa liste avec recherche et la phrase tiennent dans la fenêtre sans défilement de côté ; en sombre aussi.
+
+---
+
 ## Prochaines étapes (pistes d'amélioration de la suite automatisée)
 
 **Fait le 2026-09-14** : étage 2 (mode Lecture) comblé pour un premier socle de cas

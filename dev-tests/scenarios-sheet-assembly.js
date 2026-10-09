@@ -1586,6 +1586,39 @@
     },
   });
 
+  // La date du dernier export PDF (js/export-date.js, Réglages > Vue) : la planche est un export PDF comme les autres, chaque ligne posée sur une feuille est datée. Le réglage lui-même et
+  // les refus de Grist sont dans la suite exportDate, les autres exports PDF dans pdfBatch.
+  cases.push({
+    id: 'sheetassembly_dates_every_placed_row_in_the_export_date_column',
+    description: '« Assemblage avant impression… » : une fois la planche téléchargée, la colonne choisie pour la date du dernier export PDF reçoit l’instant de l’export pour chaque ligne posée sur une feuille, en une seule écriture ; l’état de fin ne change pas',
+    run: async (h) => {
+      const bad = [];
+      forgetChoice();
+      const stub = window.__gristStub;
+      try {
+        await withPage('A6', 'portrait', async () => {
+          await seed(h, `<p>${badge('Nom')}</p>`);
+          stub.setVariables(TABLE, { Nom: 'Text', Dernier: 'DateTime:Europe/Paris' });
+          stub.setRows(TABLE, NAMES.map((Nom, i) => ({ id: i + 1, Nom })));
+          await GristAPI.refreshSchema();
+          stub.fireRecord({ id: 1, Nom: NAMES[0] }, TABLE);
+          stub.setWidgetOptions({ dateDernierExport: 'Dernier' });
+          await h.sleep(120);
+          stub.clearActionLog();
+          const from = Math.floor(Date.now() / 1000);
+          const res = await exportSheets(h);
+          const values = NAMES.map((_, i) => stub.getRow(TABLE, i + 1).Dernier);
+          const writes = stub.getActionLog().filter(a => a[0] === 'BulkUpdateRecord' && a[1] === TABLE).map(a => a[2]);
+          if (!res.opened || res.downloads.length !== 1) return bad.push('opened=' + res.opened + ' téléchargements=' + res.downloads.length);
+          if (res.status !== I18n.t('status.sheetsExportDone', { ok: NAMES.length, sheets: 2 })) bad.push('message final : ' + res.status);
+          if (!values.every(v => typeof v === 'number' && v >= from && v <= Math.floor(Date.now() / 1000)) || new Set(values).size !== 1) bad.push('valeurs : ' + JSON.stringify(values));
+          if (JSON.stringify(writes) !== JSON.stringify([NAMES.map((_, i) => i + 1)])) bad.push('écritures : ' + JSON.stringify(writes));
+        });
+      } finally { closeIfOpen(); forgetChoice(); stub.setWidgetOptions(null); await h.sleep(60); }
+      return result(bad);
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.sheetAssembly = cases;
 })();

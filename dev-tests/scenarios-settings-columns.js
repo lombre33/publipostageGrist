@@ -111,6 +111,38 @@
   );
 
   scenario(
+    'settingscolumns_export_date_names_the_column_that_no_longer_exists',
+    'Date du dernier export PDF : la colonne choisie renommée dans Grist - le message dit « Date du dernier export PDF : la colonne « Dernier » n’existe plus. À re-choisir dans les Réglages. », en erreur, en français et en anglais ; une colonne qui existe (même devenue à formule) n’est pas citée ici, l’export le dit',
+    async () => {
+      stub().setVariables(PAGE, { Titre: 'Text', Statut: 'Text', Projet: 'Ref:' + LINKED, Dernier: 'DateTime:Europe/Paris' });
+      stub().setRows(PAGE, [{ id: 1, Titre: 'Dossier 1', Statut: 'Ouvert', Projet: 1 }]);
+      await GristAPI.refreshSchema();
+      await configure({ dateDernierExport: 'Dernier' });
+      const healthyOut = await open();
+      const healthy = await SettingsColumns.problems();
+      stub().setFormulaColumn(PAGE, 'Dernier', '$Titre');
+      await GristAPI.refreshSchema();
+      const formula = await SettingsColumns.problems();
+      stub().setFormulaColumn(PAGE, 'Dernier', null);
+      await renamed(s => s.renameColumn(PAGE, 'Dernier', 'Dernier export'));
+      const out = await open();
+      const found = await SettingsColumns.problems();
+      const english = await inLang('en', async () => SettingsColumns.message(found));
+      const checks = {
+        reallySet: ExportDate.getColumn() === 'Dernier',
+        healthyIsSilent: healthy.exportDate === null && healthyOut.messages.length === 0,
+        formulaIsNotCitedHere: formula.exportDate === null,
+        found: same(found.exportDate, { columns: ['Dernier'] }) && found.access === null && found.rowTemplate === null,
+        oneMessage: out.messages.length === 1 && out.messages[0].isError === true,
+        text: out.messages.length === 1 && out.messages[0].text === 'Date du dernier export PDF : la colonne « Dernier » n’existe plus. ' + HINT_FR.trim(),
+        english: english === 'Date of the last PDF export: the column “Dernier” no longer exists. Choose again in Settings.',
+      };
+      const v = verdict(checks);
+      return { pass: v.pass, notes: v.failed.join(', ') || JSON.stringify({ messages: out.messages, english }) };
+    },
+  );
+
+  scenario(
     'settingscolumns_access_names_the_renamed_column',
     'Accès : la colonne Email renommée « Courriel » dans Grist - le message dit « Accès : la colonne « Email » n’existe plus. À re-choisir dans les Réglages. », en erreur, une seule fois, et rien d’autre n’est cité',
     async () => {

@@ -645,6 +645,38 @@ const I18n = (function () {
     'settings.viewTemplate.useNamed': { fr: 'Utiliser « {name} » pour cette vue', en: 'Use “{name}” for this view' },
     'settings.viewTemplate.clear': { fr: 'Retirer', en: 'Remove' },
     'settings.viewTemplate.locked': { fr: 'Vous êtes en lecture seule : ce réglage est verrouillé.', en: 'You are read-only: this setting is locked.' },
+    // Réglages > Vue > Date du dernier export PDF (js/export-date.js).
+    'settings.exportDate.title': { fr: 'Date du dernier export PDF', en: 'Date of the last PDF export' },
+    'settings.exportDate.intro': {
+      fr: 'Après chaque export PDF, la date de l’export s’écrit dans la colonne choisie, pour chaque ligne exportée. La colonne doit être de type Date, Date et heure ou Texte, et ne pas porter de formule.',
+      en: 'After each PDF export, the export date is written to the chosen column, for each exported row. The column must be a Date, Date and time or Text column, with no formula.',
+    },
+    'settings.exportDate.column': { fr: 'Colonne', en: 'Column' },
+    'settings.exportDate.none': { fr: '— Aucune —', en: '— None —' },
+    'settings.exportDate.typeText': { fr: 'texte', en: 'text' },
+    'settings.exportDate.status.date': { fr: 'Chaque export PDF écrit le jour de l’export dans « {column} ».', en: 'Each PDF export writes the export day to “{column}”.' },
+    'settings.exportDate.status.datetime': { fr: 'Chaque export PDF écrit le jour et l’heure de l’export dans « {column} ».', en: 'Each PDF export writes the export day and time to “{column}”.' },
+    'settings.exportDate.status.text': {
+      fr: 'Chaque export PDF écrit le jour et l’heure de l’export dans « {column} », en texte (2026-10-09 14:32).',
+      en: 'Each PDF export writes the export day and time to “{column}”, as text (2026-10-09 14:32).',
+    },
+    'settings.exportDate.status.missing': {
+      fr: 'La colonne « {column} » n’existe plus dans la table : aucune date n’est écrite. Choisissez-en une autre.',
+      en: 'The column “{column}” no longer exists in the table: no date is written. Choose another one.',
+    },
+    'settings.exportDate.status.unusable': {
+      fr: '« {column} » ne peut plus recevoir la date : il lui faut le type Date, Date et heure ou Texte, sans formule. Choisissez-en une autre.',
+      en: '“{column}” can no longer receive the date: it must be a Date, Date and time or Text column, with no formula. Choose another one.',
+    },
+    'settings.exportDate.status.noColumns': {
+      fr: 'La table « {table} » n’a aucune colonne de type Date, Date et heure ou Texte, sans formule. Ajoutez-en une dans Grist, puis rouvrez les Réglages.',
+      en: 'The table “{table}” has no Date, Date and time or Text column without a formula. Add one in Grist, then reopen Settings.',
+    },
+    'settings.exportDate.locked': { fr: 'Vous êtes en lecture seule : ce réglage est verrouillé.', en: 'You are read-only: this setting is locked.' },
+    'settings.exportDate.hint': {
+      fr: 'La date s’écrit pour chaque ligne dont le PDF est dans le fichier téléchargé : « Exporter en PDF », « Exporter les lignes (ZIP) », « Exporter les lignes en un seul PDF » et « Assemblage avant impression ». Une ligne en échec n’est pas datée ; Word, Excel et « Impression navigateur » n’écrivent rien (le navigateur ne dit pas si la personne a imprimé). Un compte en lecture seule dans Grist ne peut rien écrire.',
+      en: 'The date is written for each row whose PDF is in the downloaded file: “Export to PDF”, “Export rows (ZIP)”, “Export rows as a single PDF” and “Assemble before printing”. A failed row is not dated; Word, Excel and “Browser print” write nothing (the browser does not say whether the person printed). A read-only Grist account cannot write anything.',
+    },
     'settings.rowTemplate.exportHint': {
       fr: 'Quand ce réglage est coché, un export en lot rend chaque ligne avec le modèle que les règles lui désignent.',
       en: 'When this setting is on, a batch export renders each row with the template the rules pick for it.',
@@ -995,6 +1027,10 @@ const I18n = (function () {
     'image.blocked.alt': { fr: 'Afficher l’image de {site}', en: 'Show the image from {site}' },
     'image.blocked.hint': { fr: 'Image hébergée sur un site externe ({site}), pas encore chargée. Afficher la télécharge depuis ce site, qui apprend que le document est ouvert ; les autres images de ce site s’affichent aussi.', en: 'Image hosted on an external site ({site}), not loaded yet. Showing it downloads it from that site, which learns that the document is open; the other images from that site are shown too.' },
     'status.exportCancelled': { fr: 'Export annulé.', en: 'Export cancelled.' },
+    // Après un export PDF réussi dont la date n'a pas pu s'écrire (js/export-date.js:stamp, js/main.js:stampExportDate) : en tête du coin d'état, avant « 12 PDF générés. ».
+    'status.exportDate.missing': { fr: 'Date non écrite : la colonne « {column} » n’existe plus.', en: 'Date not written: the column “{column}” no longer exists.' },
+    'status.exportDate.unusable': { fr: 'Date non écrite : « {column} » doit être de type Date, Date et heure ou Texte, sans formule.', en: 'Date not written: “{column}” must be a Date, Date and time or Text column, with no formula.' },
+    'status.exportDate.failed': { fr: 'Date non écrite dans « {column} » : Grist a refusé l’écriture.', en: 'Date not written to “{column}”: Grist refused the write.' },
     'prompt.newTemplateName': { fr: 'Nom du nouveau modèle :', en: 'Name of the new template:' },
     'prompt.newTableName': { fr: 'Nom de la nouvelle table Grist :', en: 'Name of the new Grist table:' },
 

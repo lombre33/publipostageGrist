@@ -24,6 +24,9 @@ const GristAPI = (function () {
   let _displayColByTable = {};
   // { tableId: { colId: libellé } } - le nom que Grist montre dans l'en-tête de la colonne, seulement quand il diffère de l'identifiant, cf. getColumnLabel.
   let _columnLabelsByTable = {};
+  // { tableId: { colId: true } } - les colonnes à formule (isFormula vrai et formule non vide), que Grist refuse d'écrire, cf. isFormulaColumn. Une colonne « vide »
+  // (isFormula vrai, formule vide : celle que l'on vient d'ajouter dans Grist) n'en est pas une : la première écriture en fait une colonne de données.
+  let _formulaColumnsByTable = {};
   // { tableId: { colId: { table, column } } } - pour une colonne Référence / liste de références, la colonne de la table liée que Grist affiche à la
   // place de l'id (visibleCol, « Colonne à afficher » du panneau de droite), cf. getReferenceColumn. Seules celles dont le type se lit comme du texte
   // ou un nombre.
@@ -571,6 +574,11 @@ const GristAPI = (function () {
     const label = colsMeta.label && colsMeta.label[i];
     return typeof label === 'string' && label !== colsMeta.colId[i] ? label : '';
   }
+  // La colonne `i` est-elle une colonne à formule (isFormula vrai, formule non vide) ? Les métadonnées qui ne portent pas ces deux champs (accès restreint) la disent
+  // de données : une écriture que Grist refuserait échoue alors à l'écriture, pas avant.
+  function hasFormulaOf(colsMeta, i) {
+    return !!(colsMeta.isFormula && colsMeta.isFormula[i] && String((colsMeta.formula && colsMeta.formula[i]) || '').trim());
+  }
   // displayCol (schema.ts : Ref:_grist_Tables_column) : la colonne dont Grist affiche la valeur, la colonne elle-même si 0
   // (ColumnRec.displayColModel, grist-core). L'identifiant de colonne de l'aide d'affichage de la colonne `i`, null si elle s'affiche elle-même.
   function displayColIdOf(colsMeta, i, colIdByRowId) {
@@ -598,6 +606,7 @@ const GristAPI = (function () {
     const displayCols = {};
     const referenceCols = {};
     const labels = {};
+    const formulaColumns = {};
     try {
       const [tablesMeta, colsMeta] = await (metaRead || readColumnMeta());
       const tableIdByRowId = tableIdsByRowId(tablesMeta);
@@ -617,12 +626,14 @@ const GristAPI = (function () {
         if (columnChoices) rowOf(choices, tableId)[colId] = columnChoices;
         const label = labelOf(colsMeta, i);
         if (label) rowOf(labels, tableId)[colId] = label;
+        if (hasFormulaOf(colsMeta, i)) rowOf(formulaColumns, tableId)[colId] = true;
       }
       _columnTypesByTable = types;
       _columnChoicesByTable = choices;
       _displayColByTable = displayCols;
       _referenceColumnByTable = referenceCols;
       _columnLabelsByTable = labels;
+      _formulaColumnsByTable = formulaColumns;
     } catch (e) {
       console.warn('[GristAPI] refreshColumnTypes: échec', e);
     }
@@ -717,6 +728,10 @@ const GristAPI = (function () {
   // changés l'un sans l'autre : la recherche par nom (js/variables.js:columnSearchText) cherche dans les deux.
   function getColumnLabel(tableId, colId) {
     return (_columnLabelsByTable[tableId] && _columnLabelsByTable[tableId][colId]) || '';
+  }
+  // Vrai pour une colonne à formule : Grist n'y accepte aucune écriture (le lot entier est refusé), la date du dernier export (js/export-date.js) ne la propose pas.
+  function isFormulaColumn(tableId, colId) {
+    return !!(_formulaColumnsByTable[tableId] && _formulaColumnsByTable[tableId][colId]);
   }
 
   function getTables() { return _tables; }
@@ -1078,5 +1093,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnChoices, getColumnLabel, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, getCurrentUserName, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
+  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnChoices, getColumnLabel, isFormulaColumn, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, getCurrentUserName, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
 })();

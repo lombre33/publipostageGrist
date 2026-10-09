@@ -9,6 +9,16 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Date du dernier export PDF** : Réglages > Vue propose une liste « Colonne » (avec « — Aucune — ») pour
+  choisir la colonne de la table qui gardera le moment du dernier export PDF de chaque ligne. Elle accepte
+  une colonne Date (le jour), Date et heure (l'instant) ou Texte (« 2026-10-09 14:32 »), et pas une colonne
+  à formule, que Grist refuse d'écrire. La date est écrite une fois le PDF produit (« Exporter en PDF » d'une
+  ligne, lot en ZIP, PDF unique, assemblage avant impression), pour les lignes qui sont dans le fichier : une
+  ligne dont le PDF a échoué n'est pas datée. Une seule écriture par export ; ni Word, ni Excel, ni e-mail, ni « Impression navigateur »
+  (le navigateur ne dit pas si la personne a imprimé). Si la colonne a disparu ou n'est plus utilisable, le PDF est produit quand même et le coin d'état commence,
+  en rouge, par « Date non écrite : … » ; l'avertissement à l'ouverture signale aussi une colonne disparue.
+  Un compte Lecteur de Grist n'écrit rien. Le choix est une option du widget : Grist ne le partage qu'une
+  fois la vue enregistrée.
 - **Exports en lot sur les lignes que le widget affiche** : « Exporter les lignes (ZIP) », « Exporter les
   lignes en un seul PDF », « Exporter les lignes en DOCX (ZIP) », les deux lignes Excel d'une grille et
   « Assemblage avant impression » partent des lignes que le widget affiche dans Grist (ses filtres, son tri,
@@ -371,6 +381,16 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Added
 
+- **Date of the last PDF export**: Settings > View offers a "Column" list (with "— None —") to choose the
+  column of the table that will keep the moment of each row's last PDF export. It accepts a Date column
+  (the day), a Date and time column (the instant) or a Text column ("2026-10-09 14:32"), and no formula
+  column, which Grist refuses to write. The date is written once the PDF is made ("Export as PDF" of one
+  row, ZIP batch, single PDF, sheet assembly), for the rows that are in the file: a row whose PDF failed
+  is not dated. One write per export; no Word, no Excel, no e-mail, no "Browser print"
+  (the browser does not say whether the person printed). If the column has gone or can no
+  longer take the date, the PDF is made all the same and the status corner starts, in red, with "Date not
+  written: …"; the warning shown when opening also reports a column that has gone. A Grist Viewer account
+  writes nothing. The choice is a widget option: Grist only shares it once the view is saved.
 - **Batch exports on the rows the widget shows**: "Export rows (ZIP)", "Export rows as a single PDF",
   "Export rows to DOCX (ZIP)", the two Excel lines of a grid and "Assemble before printing" start from
   the rows the widget shows in Grist (its filters, its sort, the "Select by" link of another widget), in
