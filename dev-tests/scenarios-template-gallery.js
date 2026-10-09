@@ -105,9 +105,11 @@
         // Une vraie carte s'ouvre toujours en aperçu.
         const firstCard = document.querySelector('#tpl-gallery-grid .tpl-gallery-card');
         if (firstCard) firstCard.click();
+        // Une carte de modèle à pack s'ouvre sur ses captures, une carte sans pack sur l'aperçu en lecture seule du modèle.
         const preview = await waitFor(() => {
           const p = document.getElementById('template-preview-modal');
-          return p && p.style.display !== 'none' && document.getElementById('tpl-preview-tiptap').innerHTML.length > 20;
+          const captures = document.getElementById('tpl-preview-captures');
+          return p && p.style.display !== 'none' && (document.getElementById('tpl-preview-tiptap').innerHTML.length > 20 || (!captures.hidden && captures.querySelectorAll('img').length > 0));
         }, 5000);
         const pass = shown && names.length >= 4 && leaked.length === 0 && testTag.length === 0 && preview;
         return { pass, notes: JSON.stringify({ shown, names, leaked, tags, preview }) };
@@ -137,10 +139,14 @@
         document.getElementById('v2-btn-new-from-template').click();
         await waitFor(() => document.querySelectorAll('#tpl-gallery-grid .tpl-gallery-card').length > 0, 5000);
         // Le tableau du manifeste est celui de la fenêtre (gardé en cache par TemplateGallery) : la première entrée prend un nom et un mot-clé piégés, la grille est redessinée.
+        // Elle devient, le temps du scénario, un modèle sans pack ni captures : c'est l'aperçu en lecture seule de son HTML qui passe par le filtre.
         entry = (await TemplateGallery.loadManifest())[0];
-        kept = { name: entry.name, tags: entry.tags };
+        kept = { name: entry.name, tags: entry.tags, pack: entry.pack, preview: entry.preview, shows: entry.shows };
         entry.name = NAME;
         entry.tags = [TAG];
+        delete entry.pack;
+        delete entry.preview;
+        delete entry.shows;
         const search = document.getElementById('tpl-gallery-search');
         search.value = '';
         search.dispatchEvent(new Event('input', { bubbles: true }));
@@ -162,7 +168,7 @@
         return { pass, notes: JSON.stringify({ cardResult, preview }) };
       } finally {
         TemplateGallery.fetchHtml = realFetchHtml;
-        if (entry && kept) { entry.name = kept.name; entry.tags = kept.tags; }
+        if (entry && kept) { entry.name = kept.name; entry.tags = kept.tags; ['pack', 'preview', 'shows'].forEach(key => { if (kept[key] !== undefined) entry[key] = kept[key]; }); }
         const closePreview = document.getElementById('tpl-preview-close');
         if (closePreview) closePreview.click();
         if (modal) modal.style.display = 'none';
@@ -186,8 +192,11 @@
       try {
         document.getElementById('v2-btn-new-from-template').click();
         await waitFor(() => document.querySelectorAll('#tpl-gallery-grid .tpl-gallery-card').length > 0, 5000);
-        // Les deux premières entrées du manifeste (celui de la fenêtre, gardé en cache par TemplateGallery) prennent un nom d'essai ; leurs mots-clés restent ceux de ces modèles.
-        entries = (await TemplateGallery.loadManifest()).slice(0, 2);
+        // La première entrée du manifeste (celui de la fenêtre, gardé en cache par TemplateGallery) et la première qui ne partage aucun de ses mots-clés prennent un nom d'essai ;
+        // leurs mots-clés restent ceux de ces modèles.
+        const manifest = await TemplateGallery.loadManifest();
+        const other = manifest.find((e, i) => i > 0 && !(e.tags || []).some(tag => (manifest[0].tags || []).indexOf(tag) !== -1));
+        entries = other ? [manifest[0], other] : manifest.slice(0, 2);
         kept = entries.map(e => e.name);
         entries[0].name = BUDGET;
         entries[1].name = INVOICE;

@@ -441,6 +441,29 @@
     },
   });
 
+  cases.push({
+    id: 'pack_page_format_takes_a_free_format_short_side_first_and_refuses_any_other_writing',
+    description: 'Le format de la page : A3 à A6 ou « LARGEURxHAUTEUR » en mm, côté court d’abord (« 55x85 » + paysage = une carte de visite 85 x 55) ; B7, côté long d’abord, trop petit, trop grand ou une autre écriture sont refusés (ils seraient lus comme A4 en silence)',
+    run: async () => {
+      const make = (format, orientation) => { const raw = rawPack('Zz'); raw.template.page = { format, orientation: orientation || 'portrait', margins: [4, 5, 4, 5] }; return raw; };
+      const accepted = (format, orientation) => { try { return TemplatePack.normalize(make(format, orientation), null); } catch (e) { return null; } };
+      const refused = (format) => { try { TemplatePack.normalize(make(format), null); return 'accepté'; } catch (e) { return /format inconnu/.test(e.message) ? true : e.message; } };
+      const card = accepted('55x85', 'landscape');
+      const label = accepted('37.5x70', 'landscape');
+      const checks = {
+        standard: !!accepted('A3') && !!accepted('A4') && !!accepted('A5') && !!accepted('A6'),
+        businessCard: !!card && same(TemplatePack.marginsOf(card), { top: 4, right: 5, bottom: 4, left: 5, orientation: 'landscape', format: '55x85' }),
+        decimal: !!label && TemplatePack.marginsOf(label).format === '37.5x70',
+        longSideFirst: refused('85x55') === true,
+        otherSeries: refused('B7') === true && refused('A7') === true,
+        tooSmall: refused('10x20') === true,
+        tooBig: refused('300x600') === true,
+        otherSpelling: refused('55X85') === true && refused('55×85') === true && refused('55 x 85') === true,
+      };
+      return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify(checks) };
+    },
+  });
+
   // ---- la galerie ----
 
   const FIXTURE_ID = 'test-tables';
@@ -808,21 +831,68 @@
     },
   });
 
-  // Ce que les fichiers d'un pack disent, recoupé : les variables du texte visent des tables et des colonnes du pack, les formules ne nomment que des tables et des colonnes du pack.
+  // Ce que les fichiers d'un pack disent, recoupé : les variables du texte (et de son en-tête et pied), les zones répétées (table, colonne de la liste, tri, filtre), les conditions,
+  // les calculs, le nom du PDF et les champs de l'e-mail visent des tables et des colonnes du pack ; les formules ne nomment que des tables et des colonnes du pack.
   // (Un pack sans cette fermeture se paie en cellules d'erreur dans Grist : les formules d'une table inconnue échouent en silence, essai du 09/10.)
-  function closureProblems(entry, pack, html) {
+  // Une colonne SANS table dans une règle de condition est une colonne de la table de la page (`pack.main`), jamais celle d'une zone répétée qui la contient : pour lire la ligne
+  // du tour il faut écrire « Table.Colonne » (essai du 09/10 : « SousSeuil » nu, dans l'astérisque d'une fiche d'inventaire, n'était jamais vrai). Les règles du FILTRE d'une zone,
+  // elles, lisent les colonnes de la table de la zone.
+  function closureProblems(entry, pack, html, headerFooter) {
     const problems = [];
     const tableById = {};
     pack.tables.forEach(table => { tableById[table.id] = table; });
     const hasColumn = (table, id) => id === 'id' || table.columns.some(column => column.id === id);
-    const root = document.createElement('template');
-    root.innerHTML = html;
-    root.content.querySelectorAll('[data-table][data-column], [data-var-table][data-var-column]').forEach(node => {
-      const tableId = node.getAttribute('data-table') || node.getAttribute('data-var-table');
-      const columnId = node.getAttribute('data-column') || node.getAttribute('data-var-column');
+    const mention = (ref, defaultTable, where) => {
+      const dot = String(ref).indexOf('.');
+      const tableId = dot === -1 ? defaultTable : ref.slice(0, dot);
+      const columnId = dot === -1 ? ref : ref.slice(dot + 1);
       const table = tableById[tableId];
-      if (!table) problems.push(entry.id + ' : le texte nomme la table « ' + tableId + ' », absente du pack');
-      else if (!hasColumn(table, columnId)) problems.push(entry.id + ' : le texte nomme « ' + tableId + '.' + columnId + ' », absente du pack');
+      if (!table) problems.push(entry.id + ' : ' + where + ' nomme la table « ' + tableId + ' », absente du pack');
+      else if (!hasColumn(table, columnId)) problems.push(entry.id + ' : ' + where + ' nomme « ' + tableId + '.' + columnId + ' », absente du pack');
+    };
+    const json = (node, name) => { try { return JSON.parse(node.getAttribute(name)); } catch (e) { problems.push(entry.id + ' : ' + name + ' illisible'); return null; } };
+    const inspect = (source, label) => {
+      const root = document.createElement('template');
+      root.innerHTML = source;
+      root.content.querySelectorAll('[data-table][data-column], [data-var-table][data-var-column]').forEach(node => {
+        const tableId = node.getAttribute('data-table') || node.getAttribute('data-var-table');
+        const columnId = node.getAttribute('data-column') || node.getAttribute('data-var-column');
+        mention(tableId + '.' + columnId, null, label + 'le texte');
+      });
+      root.content.querySelectorAll('[data-otherwise-table][data-otherwise-column]').forEach(node => mention(node.getAttribute('data-otherwise-table') + '.' + node.getAttribute('data-otherwise-column'), null, label + 'un « sinon afficher »'));
+      root.content.querySelectorAll('[data-loop]').forEach(node => {
+        const loop = json(node, 'data-loop');
+        if (!loop) return;
+        if (!tableById[loop.table]) { problems.push(entry.id + ' : ' + label + 'une zone répétée nomme la table « ' + loop.table + ' », absente du pack'); return; }
+        if (loop.via) {
+          mention(loop.via.table + '.' + loop.via.column, null, label + 'la colonne d’une zone répétée');
+          const viaTable = tableById[loop.via.table];
+          const viaColumn = viaTable && viaTable.columns.find(column => column.id === loop.via.column);
+          if (viaColumn && !new RegExp(':' + loop.table + '$').test(String(viaColumn.type))) problems.push(entry.id + ' : ' + label + loop.via.table + '.' + loop.via.column + ' ne liste pas des lignes de « ' + loop.table + ' »');
+        }
+        if (loop.sort && loop.sort.column) mention(loop.table + '.' + loop.sort.column, null, label + 'le tri d’une zone répétée');
+        ((loop.filter && loop.filter.rules) || []).forEach(rule => mention(rule.column, loop.table, label + 'le filtre d’une zone répétée'));
+      });
+      root.content.querySelectorAll('[data-condition]').forEach(node => {
+        const condition = json(node, 'data-condition');
+        ((condition && condition.rules) || []).forEach(rule => {
+          mention(rule.column, pack.main, label + 'une condition');
+          if (rule.valueColumn) mention(rule.valueColumn, pack.main, label + 'une condition');
+        });
+      });
+      root.content.querySelectorAll('[data-formula]').forEach(node => {
+        (node.getAttribute('data-formula').match(/\{[^}]+\}/g) || []).forEach(ref => mention(ref.slice(1, -1), null, label + 'un calcul'));
+      });
+      root.content.querySelectorAll('[data-qr-text]').forEach(node => {
+        (node.getAttribute('data-qr-text').match(/#[A-Z][A-Za-z0-9_]*\.[A-Za-z][A-Za-z0-9_]*/g) || []).forEach(ref => mention(ref.slice(1), null, label + 'un code QR'));
+      });
+    };
+    inspect(html, '');
+    if (headerFooter) ['header', 'footer'].forEach(zone => ['default', 'first'].forEach(which => { if (headerFooter[zone] && headerFooter[zone][which]) inspect(headerFooter[zone][which], 'l’en-tête et le pied : '); }));
+    const template = pack.template || {};
+    const email = template.email || {};
+    [template.pdfName, email.destinataires, email.cc, email.cci, email.objet].forEach(field => {
+      (String(field || '').match(/#[A-Z][A-Za-z0-9_]*\.[A-Za-z][A-Za-z0-9_]*/g) || []).forEach(ref => mention(ref.slice(1), null, 'le nom du PDF ou l’e-mail'));
     });
     pack.tables.forEach(table => table.columns.forEach(column => {
       if (!column.formula) return;
@@ -850,8 +920,8 @@
         for (const entry of entries) {
           count++;
           try {
-            const [pack, html] = await Promise.all([TemplateGallery.fetchPack(entry), TemplateGallery.fetchHtml(entry)]);
-            closureProblems(entry, pack, html).forEach(p => problems.push(p));
+            const [pack, html, headerFooter] = await Promise.all([TemplateGallery.fetchPack(entry), TemplateGallery.fetchHtml(entry), TemplateGallery.fetchHeaderFooter(entry)]);
+            closureProblems(entry, pack, html, headerFooter).forEach(p => problems.push(p));
             const pages = entry.preview || [];
             if (!Array.isArray(pages)) problems.push(entry.id + ' : preview n’est pas une liste');
             for (const shot of Array.isArray(pages) ? pages : []) {
@@ -865,6 +935,39 @@
         }
         return { pass: problems.length === 0 && count >= 1, notes: problems.length ? problems.join(' | ') : count + ' modèle(s) à pack vérifiés' };
       } finally { restore(); }
+    },
+  });
+
+  cases.push({
+    id: 'gallery_closure_check_sees_a_bare_condition_column_that_is_not_on_the_page_table_and_a_loop_that_lists_other_rows',
+    description: 'Le contrôle des catalogues attrape ce qui échoue en silence : une condition dont la colonne nue n’est pas celle de la table de la page (astérisque d’une zone répétée), une colonne de liste qui ne liste pas la table de la zone, un calcul, un tri ou un champ d’e-mail qui nomment une colonne absente',
+    run: async () => {
+      const p = 'Zy';
+      const raw = rawPack(p);
+      raw.main = p + 'Evenements';
+      raw.links = [];
+      const pack = TemplatePack.normalize(raw, null);
+      const entry = { id: 'controle' };
+      const esc = value => JSON.stringify(value).replace(/"/g, '&quot;');
+      // Une zone répétée sur les invités de l'événement (colonne de liste « Invites »), un astérisque conditionnel et un calcul ; chaque argument fait la variante fautive.
+      const page = (o = {}) => '<p><span class="var-badge" data-table="' + p + 'Evenements" data-column="Invites" data-loop="'
+        + esc({ repeat: 'row', table: p + 'Invites', via: { table: p + 'Evenements', column: o.via || 'Invites' }, sort: { column: o.sort || 'Nom', direction: 'asc' }, filter: { mode: 'all', rules: [{ column: 'Nom', operator: 'non vide', value: '' }] } }) + '"></span>'
+        + '<span class="conditional-value" data-condition="' + esc({ mode: 'all', rules: [{ column: o.condition || p + 'Invites.Nom', operator: 'non vide', value: '' }, { column: 'Statut', operator: '=', value: 'Publié' }] }) + '"> *</span>'
+        + '<span class="calc-badge" data-formula="{' + (o.calc || p + 'Invites.Nom') + '}"></span></p>';
+      const emailRaw = rawPack(p);
+      emailRaw.main = p + 'Evenements';
+      emailRaw.links = [];
+      emailRaw.template = { type: 'email', email: { to: '#' + p + 'Evenements.Absent', cc: '', bcc: '', subject: 'Essai' } };
+      const problems = (source, thePack) => closureProblems(entry, thePack || pack, source);
+      const checks = {
+        good: problems(page()).length === 0,
+        bareColumn: problems(page({ condition: 'Evenement' })).some(m => /Evenement/.test(m)), // « Evenement » est une colonne des invités, pas de la table de la page
+        viaColumn: problems(page({ via: 'NbInvites' })).some(m => /ne liste pas/.test(m)),
+        sortColumn: problems(page({ sort: 'Absent' })).some(m => /Absent/.test(m)),
+        calcColumn: problems(page({ calc: p + 'Invites.Absent' })).some(m => /Absent/.test(m)),
+        emailField: problems(page(), TemplatePack.normalize(emailRaw, null)).some(m => /Absent/.test(m)),
+      };
+      return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify(checks) };
     },
   });
 

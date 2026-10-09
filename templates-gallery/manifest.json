@@ -6,17 +6,6 @@
       "vente"
     ],
     "screenshot": "facture/thumb.png",
-    "html": "facture/template.html",
-    "pack": "facture/pack.json",
-    "headerFooter": "facture/header-footer.json",
-    "shows": [
-      "loop",
-      "calc",
-      "condition",
-      "amountWords",
-      "pageNumbers",
-      "linked"
-    ],
     "preview": [
       {
         "src": "facture/capture-1.png",
@@ -33,6 +22,17 @@
         "w": 563,
         "h": 796
       }
+    ],
+    "html": "facture/template.html",
+    "pack": "facture/pack.json",
+    "headerFooter": "facture/header-footer.json",
+    "shows": [
+      "loop",
+      "calc",
+      "condition",
+      "amountWords",
+      "pageNumbers",
+      "linked"
     ]
   },
   {
@@ -76,17 +76,6 @@
       "administratif"
     ],
     "screenshot": "contrat-prestation-services/thumb.png",
-    "html": "contrat-prestation-services/template.html",
-    "pack": "contrat-prestation-services/pack.json",
-    "headerFooter": "contrat-prestation-services/header-footer.json",
-    "shows": [
-      "headings",
-      "footnote",
-      "checkbox",
-      "amountWords",
-      "headerFooter",
-      "linked"
-    ],
     "preview": [
       {
         "src": "contrat-prestation-services/capture-1.png",
@@ -103,6 +92,17 @@
         "w": 563,
         "h": 796
       }
+    ],
+    "html": "contrat-prestation-services/template.html",
+    "pack": "contrat-prestation-services/pack.json",
+    "headerFooter": "contrat-prestation-services/header-footer.json",
+    "shows": [
+      "headings",
+      "footnote",
+      "checkbox",
+      "amountWords",
+      "headerFooter",
+      "linked"
     ]
   },
   {
