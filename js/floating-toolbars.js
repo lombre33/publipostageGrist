@@ -267,7 +267,7 @@ const FloatingToolbars = (function () {
         'valign-top': () => GridEditor.setVerticalAlign(editor, 'top'),
         'valign-middle': () => GridEditor.setVerticalAlign(editor, 'middle'),
         'valign-bottom': () => GridEditor.setVerticalAlign(editor, 'bottom'),
-        'borders-open': () => { if (GridEditor.tableSettingsAvailable(editor)) openBordersMenu(menus); },
+        'borders-open': () => { if (!GridEditor.tableSettingsBlocked()) openBordersMenu(menus); },
         caption: () => Caption.run(editor, 'table'),
         'fill-open': () => openFillMenu(menus),
       };
@@ -306,10 +306,10 @@ const FloatingToolbars = (function () {
         });
       };
       // L'alignement vertical des cases visées, enfoncé (aucun quand la sélection en mêle plusieurs), et ses boutons, avec celui des bordures, grisés
-      // quand ces réglages n'ont pas de tableau à régler : sous le suivi des modifications dans un document (js/grid-editor.js:tableSettingsAvailable).
+      // quand ces réglages sont refusés : sous le suivi des modifications dans un document (js/grid-editor.js:tableSettingsBlocked).
       // Le grisé d'un document porte sa raison en info-bulle, comme « Supprimer la colonne » ; la barre passe d'une grille à un document sans se redessiner.
       const syncSettingButtons = () => {
-        const blocked = !GridEditor.tableSettingsAvailable(editor);
+        const blocked = GridEditor.tableSettingsBlocked();
         const align = GridEditor.selectedVerticalAlign(editor);
         valign.forEach(([action, , value, title]) => {
           const btn = button(action);
@@ -373,6 +373,10 @@ const FloatingToolbars = (function () {
       return dom.tagName === 'TABLE' ? dom : (dom.querySelector && dom.querySelector('table')) || dom;
     }
 
+    // L'écart entre la barre et son tableau : 8 px, plus la hauteur des lettres des bandeaux quand elles se montrent (js/grid-editor.js:documentStripsOffset),
+    // pour que la barre ne les recouvre pas. Relu à chaque calcul de position.
+    const tableBarOptions = () => ({ offset: 8 + GridEditor.documentStripsOffset() });
+
     function tableToolbarCheck(panel, sync) {
       return () => {
         if (dockInGridBar(panel, sync)) return;
@@ -381,7 +385,7 @@ const FloatingToolbars = (function () {
         if (!editor.view.hasFocus() || !editor.isActive('table')) { panel.hide(); return; }
         const anchor = tableUnderCursor();
         if (!anchor) { panel.hide(); return; }
-        panel.show(anchor);
+        panel.show(anchor, tableBarOptions);
         sync.syncDocumentButtons();
       };
     }

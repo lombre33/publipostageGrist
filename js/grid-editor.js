@@ -21,8 +21,9 @@
 // Tout est inerte tant que setActive(true) n'a pas été appelé (js/main.js:loadTemplateIntoEditor), sauf ce que le tableau d'un document partage avec
 // la grille - « tout tableau est un tableau de grille à l'usage » : les réglages de la barre du tableau (alignement vertical, bordures, quadrillage)
 // visent le tableau qui porte la sélection (`tableInfo`, `scopedTable`), la grille étant le cas où le modèle n'a qu'un tableau ; « Ligne / Colonne avant /
-// après » (`insertLines`), la fusion et la scission (`mergeSelected`, `splitSelected`, appelées par js/table-merge.js) valent pour les deux ; et un
-// tableau de document qui porte des traits ou des hauteurs les garde quand on y ajoute ou retire une ligne (`repairDocumentTables`). Un email, un
+// après » (`insertLines`), la fusion et la scission (`mergeSelected`, `splitSelected`, appelées par js/table-merge.js) et Entrée qui descend d'une case
+// (`enterGoesDown`) valent pour les deux ; et un tableau de document qui porte des traits ou des hauteurs les garde quand on y ajoute ou retire une ligne
+// (`repairDocumentTables`). Un email, un
 // macro-modèle ou un tableau sans trait ni hauteur n'y voient rien. Les classes TipTap/ProseMirror arrivent par configure() (editor.js).
 const GridEditor = (function () {
   const el = Dom.el;
@@ -75,10 +76,8 @@ const GridEditor = (function () {
   let libs = null;
   let editor = null;
   let active = false;
-  let strips = null;
-  let resizeObserver = null;
-  let syncFrame = 0;
-  let lastKey = '';
+  let strips = null;         // les bandeaux de la grille
+  let docStrips = null;      // ceux du tableau de document où se trouve le curseur, posés par-dessus la page (documentStrips)
   let tip = null;
   let lastCellDom = null;    // la case du curseur après la transaction d'avant : sert à voir si celle-ci a changé de case
 
@@ -200,17 +199,17 @@ const GridEditor = (function () {
     return { withTableAttributes, withRowAttributes, withCellAttributes, serialize, tableInfo };
   })();
 
-  // Le tableau que visent les réglages de la barre du tableau (alignement vertical, bordures, quadrillage) : celui de la grille, ou celui du document qui
-  // porte la sélection. Aucun dans un document dont le suivi des modifications est allumé : ces réglages sont des changements d'attributs, que le suivi ne
-  // voit pas (comme la fusion de cases, js/table-merge.js) ; ils s'écriraient sans laisser de suggestion.
-  function scopedTable(ed) {
-    if (!active && Editor.isTrackChangesOn()) return null;
-    return tableInfo(ed.state.doc, ed.state.selection);
-  }
+  // Les réglages de la barre du tableau (alignement vertical, bordures, quadrillage) sont-ils refusés ? Oui dans un document dont le suivi des modifications
+  // est allumé : ce sont des changements d'attributs, que le suivi ne voit pas (comme la fusion de cases, js/table-merge.js) ; ils s'écriraient sans laisser
+  // de suggestion. La barre du tableau s'en sert pour griser leurs boutons et pour ne pas ouvrir le menu « Bordures » (la règle de `scopedTable`, écrite
+  // une seule fois). Ne dépend pas de la sélection : un bouton à menu s'ouvre et annonce son état (aria-expanded) tant que rien ne le refuse, tableau sous
+  // le curseur ou non (le balayage de `toolbarChrome` le déclenche sur une page sans tableau).
+  function tableSettingsBlocked() { return !active && Editor.isTrackChangesOn(); }
 
-  // Ces réglages ont-ils un tableau à régler ? La barre du tableau s'en sert pour griser leurs boutons sous le suivi des modifications (même règle que
-  // `scopedTable`, écrite une seule fois).
-  function tableSettingsAvailable(ed) { return !!scopedTable(ed); }
+  // Le tableau que visent ces réglages : celui de la grille, ou celui du document qui porte la sélection ; aucun quand ils sont refusés.
+  function scopedTable(ed) {
+    return tableSettingsBlocked() ? null : tableInfo(ed.state.doc, ed.state.selection);
+  }
 
   const { rowPos, isEmptyParagraph, isValidGridDoc, buildDefaultTable, cellOrigins, columnWidths, knownColumnWidths, hasCellAttr, isFreshCell } = (function () {
     // Le document d'une grille : rang d'une ligne, ce qui est valable, la grille de départ, l'emplacement et la largeur des colonnes.
@@ -487,8 +486,8 @@ const GridEditor = (function () {
       return sel.$from.node(1).type.name === 'table' && sel.$to.node(1).type.name === 'table';
     }
 
-    function firstAndLastCell(doc) {
-      const info = tableInfo(doc);
+    function firstAndLastCell(doc, table) {
+      const info = table || tableInfo(doc);
       if (!info) return null;
       const map = libs.TableMap.get(info.node);
       return { first: info.pos + 1 + map.map[0], last: info.pos + 1 + map.map[map.map.length - 1], info, map };
@@ -628,8 +627,8 @@ const GridEditor = (function () {
       view.dispatch(state.tr.setSelection(libs.TextSelection.near(state.doc.resolve(info.pos + 1), 1)).setMeta('addToHistory', false));
     }
 
-    function selectAllCells(ed) {
-      const ends = firstAndLastCell(ed.state.doc);
+    function selectAllCells(ed, table) {
+      const ends = firstAndLastCell(ed.state.doc, table);
       return !!ends && ed.commands.setCellSelection({ anchorCell: ends.first, headCell: ends.last });
     }
 
@@ -1037,11 +1036,18 @@ const GridEditor = (function () {
 
     // Comme dans Excel et Google Sheets : Entrée descend d'une case et la sélectionne (on tape par-dessus, comme avec Tab) ; Maj+Entrée et Ctrl+Entrée
     // ajoutent une ligne dans la case (le retour à la ligne forcé de TipTap, que ces deux touches faisaient déjà). Sur la dernière ligne la touche est
-    // prise sans rien faire : pas de ligne de tableau ajoutée en passant, pas de paragraphe vide. Dans une liste (puces, numéros, tâches) Entrée garde
-    // son sens de liste, sinon on n'y ajouterait jamais un point.
-    const LIST_ITEMS = new Set(['listItem', 'taskItem']);
+    // prise sans rien faire : pas de ligne de tableau ajoutée en passant, pas de paragraphe vide. Dans toute case de tableau, d'une grille comme d'un
+    // document ; le tableau est celui de la case, le tableau intérieur d'un tableau dans une case compris.
 
-    function inListItem(sel) { return !isCellSelection(sel) && ancestorDepth(sel.$head, LIST_ITEMS) > 0; }
+    // La case d'où Entrée part, null quand la touche garde son sens. Le texte doit être un paragraphe ou un titre posé directement dans la case : dans
+    // une liste (puces, numéros, tâches) Entrée ajoute un point, dans un bloc de code, une citation, un encadré ou une colonne elle coupe le bloc, sinon
+    // on n'y en ajouterait jamais. Des cases choisies : celle d'où la sélection est partie (comme Excel, Entrée se range sous elle).
+    function enterCellPos(sel) {
+      if (isCellSelection(sel)) return sel.$anchorCell.pos;
+      const $head = sel.$head;
+      const depth = ancestorDepth($head, CELL_NODES);
+      return depth && $head.depth === depth + 1 && $head.parent.type.name !== 'codeBlock' ? $head.before(depth) : null;
+    }
 
     // La case sous la case active, dans sa colonne de gauche ; sous une case fusionnée sur plusieurs lignes, la case qui suit sa dernière ligne. Null
     // sur la dernière ligne.
@@ -1052,13 +1058,12 @@ const GridEditor = (function () {
     }
 
     function enterGoesDown(ed) {
-      if (!active || !ed.isEditable || ed.view.composing) return false;
+      if (!ed.isEditable || ed.view.composing) return false;
       const { state, view } = ed;
-      const sel = state.selection;
-      const info = tableInfo(state.doc);
-      if (!info || !selectionInsideTable(sel) || inListItem(sel)) return false;
-      const here = cellPosOf(sel, '$anchorCell'); // des cases choisies : celle d'où la sélection est partie (comme Excel, Entrée se range sous elle)
+      const here = enterCellPos(state.selection);
       if (here == null) return false;
+      const $here = state.doc.resolve(here); // devant la case, dans sa ligne : la ligne est à `depth`, le tableau juste au-dessus
+      const info = { node: $here.node($here.depth - 1), pos: $here.before($here.depth - 1) };
       const below = cellBelowPos(info, here);
       if (below == null) return true;
       const $below = state.doc.resolve(below);
@@ -1075,7 +1080,7 @@ const GridEditor = (function () {
     // Une extension à part, de priorité normale, rangée dans js/editor.js après StarterKit (sa liste à puces, ses touches de base) et avant Variables
     // et TextExpansion : TipTap essaie les extensions de la dernière rangée à la première, donc la liste `#` (ou celle des expansions) ouverte garde
     // son Entrée (choisir une ligne) et ne cède la touche à la case du dessous que quand elle n'en veut pas, alors que celle d'un calcul (priorité
-    // 1000) passe toujours devant. Hors grille la fonction rend faux : Entrée coupe le paragraphe.
+    // 1000) passe toujours devant. Hors d'une case de tableau la fonction rend faux : Entrée coupe le paragraphe.
     function createEnterExtension(Extension) {
       return Extension.create({
         name: 'gridEnter',
@@ -1139,16 +1144,15 @@ const GridEditor = (function () {
     return { createEnterExtension, createExtension };
   })();
 
-  const { setColumnWidth, setRowHeight, colName, tableDom, measure } = (function () {
+  const { setColumnWidth, setRowHeight, colName, tableElement, measure } = (function () {
     // La largeur d'une colonne, la hauteur d'une ligne, le nom d'une colonne et la taille mesurée sur le rendu.
 
     // Même parcours que `updateColumnWidth` de prosemirror-tables (poignée du bord d'une case) : toutes les cases de chaque colonne reçoivent la largeur,
     // une case fusionnée sur plusieurs colonnes ne change que sa part de `colwidth`. Une seule transaction, quel que soit le nombre de colonnes tirées
-    // ensemble ; la case est relue sur la transaction, pour qu'une case fusionnée sur deux colonnes tirées ensemble reçoive ses deux parts.
-    function setColumnWidth(colIndexes, width) {
+    // ensemble ; la case est relue sur la transaction, pour qu'une case fusionnée sur deux colonnes tirées ensemble reçoive ses deux parts. `info` : le
+    // tableau réglé (celui des bandeaux).
+    function setColumnWidth(info, colIndexes, width) {
       const { state, view } = editor;
-      const info = tableInfo(state.doc);
-      if (!info) return;
       const map = libs.TableMap.get(info.node);
       const tr = state.tr;
       colIndexes.forEach(colIndex => {
@@ -1168,10 +1172,8 @@ const GridEditor = (function () {
     }
 
     // La même hauteur pour chaque ligne de `rowIndexes`, en une seule transaction.
-    function setRowHeight(rowIndexes, height) {
+    function setRowHeight(info, rowIndexes, height) {
       const { state, view } = editor;
-      const info = tableInfo(state.doc);
-      if (!info) return;
       const tr = state.tr;
       rowIndexes.forEach(rowIndex => {
         if (rowIndex >= info.node.childCount) return;
@@ -1188,70 +1190,100 @@ const GridEditor = (function () {
       return name;
     }
 
-    function tableDom() { return editor && editor.view.dom.querySelector(':scope > .tableWrapper > table'); }
+    // Le <table> du rendu pour le tableau `info` : nodeDOM d'un tableau est son enveloppe (.tableWrapper), on redescend sur le <table>.
+    function tableElement(info) {
+      const dom = editor.view.nodeDOM(info.pos);
+      if (!dom) return null;
+      return dom.tagName === 'TABLE' ? dom : (dom.querySelector && dom.querySelector('table')) || null;
+    }
 
-    // Taille réelle de chaque colonne et de chaque ligne, lue sur le rendu (une ligne que son texte agrandit n'a pas la hauteur de son attribut). null
-    // quand l'éditeur est masqué (Lecture, macro-modèle) : rien à mesurer, les bandeaux gardent leur dernier état.
-    function measure() {
-      const table = tableDom();
+    // Taille réelle de chaque colonne et de chaque ligne du tableau d'un jeu de bandeaux, lue sur le rendu (une ligne que son texte agrandit n'a pas la
+    // hauteur de son attribut). null quand il n'y a rien à mesurer : pas de tableau, ou éditeur masqué (Lecture, macro-modèle) ; les bandeaux d'une
+    // grille gardent alors leur dernier état. Les lignes sont celles du document, retrouvées par leur position : une ligne que l'aperçu d'une page
+    // descend sous une couture n'est qu'un style de plus, jamais une ligne de plus.
+    function measure(set) {
+      const info = set.ctx.info();
+      const table = info && tableElement(info);
       if (!table) return null;
       const rect = table.getBoundingClientRect();
       if (!(rect.width > 0) || !(rect.height > 0)) return null;
       const cols = Array.from(table.querySelectorAll(':scope > colgroup > col'));
-      const rows = Array.from(table.querySelectorAll(':scope > tbody > tr'));
-      return { table, width: rect.width, height: rect.height, rows, widths: cols.map(c => c.getBoundingClientRect().width), heights: rows.map(r => r.getBoundingClientRect().height) };
+      const rows = [];
+      let pos = info.pos + 1;
+      info.node.forEach(row => { rows.push(editor.view.nodeDOM(pos)); pos += row.nodeSize; });
+      if (rows.some(row => !row)) return null;
+      return { info, table, rect, width: rect.width, height: rect.height, rows, widths: cols.map(c => c.getBoundingClientRect().width), heights: rows.map(r => r.getBoundingClientRect().height) };
     }
-    return { setColumnWidth, setRowHeight, colName, tableDom, measure };
+    return { setColumnWidth, setRowHeight, colName, tableElement, measure };
   })();
 
-  const { buildStrips, destroyStrips, refreshLabels, scheduleSync, fillHeads, buildHead, markPageBreak } = (function () {
-    // Les bandeaux : pose, retrait, étiquettes, programmation de leur rafraîchissement.
+  const { newStripSet, buildStrips, destroyStrips, refreshLabels, scheduleSync, watch, fillHeads, buildHead, markPageBreak } = (function () {
+    // Les bandeaux : un jeu (coin, lettres, numéros) par tableau montré ; pose, retrait, étiquettes, programmation de leur rafraîchissement.
 
-    function buildStrips() {
-      const sheet = editor.view.dom.parentElement;
-      if (!sheet || strips) return;
+    // Un jeu de bandeaux. `ctx` dit de quel tableau il parle (`info()`, `table(info)` n'est pas nécessaire : `measure`), si ses poignées règlent la
+    // taille (`resizable`), quel facteur sépare ses pixels de ceux de la mise en page (`zoom(table)`), quelles lignes portent un saut de page
+    // (`breaks()`), comment on le programme (`wanted()`) et comment on le rafraîchit (`sync(force)`). Celui de la grille vit dans la feuille ; celui d'un
+    // tableau de document est posé par-dessus la page (`documentStrips`).
+    function newStripSet(ctx) {
       const corner = el('div', 'v2-grid-corner');
       const cols = el('div', 'v2-grid-cols');
       const rows = el('div', 'v2-grid-rows');
       [corner, cols, rows].forEach(node => node.setAttribute('aria-hidden', 'true'));
-      sheet.insertBefore(rows, sheet.firstChild);
-      sheet.insertBefore(cols, sheet.firstChild);
-      sheet.insertBefore(corner, sheet.firstChild);
-      strips = { corner, cols, rows };
-      // mousedown et pointerdown : le focus reste dans la grille (ni sélection de texte, ni perte du curseur) pendant qu'on clique un bandeau.
+      const set = { corner, cols, rows, ctx, lastKey: '', syncFrame: 0, observer: null, watched: null };
+      // mousedown et pointerdown : le focus reste dans l'éditeur (ni sélection de texte, ni perte du curseur) pendant qu'on clique un bandeau.
       [corner, cols, rows].forEach(node => node.addEventListener('mousedown', event => event.preventDefault()));
-      corner.addEventListener('pointerdown', onCornerDown);
-      cols.addEventListener('pointerdown', event => onStripDown('col', event));
-      rows.addEventListener('pointerdown', event => onStripDown('row', event));
-      refreshLabels();
-      if (typeof ResizeObserver === 'function') {
-        resizeObserver = new ResizeObserver(() => scheduleSync());
-        const table = tableDom();
-        if (table) resizeObserver.observe(table);
-      }
+      corner.addEventListener('pointerdown', event => onCornerDown(set, event));
+      cols.addEventListener('pointerdown', event => onStripDown(set, 'col', event));
+      rows.addEventListener('pointerdown', event => onStripDown(set, 'row', event));
+      if (typeof ResizeObserver === 'function') set.observer = new ResizeObserver(() => scheduleSync(set));
+      return set;
+    }
+
+    // Les bandeaux de la grille : insérés dans la feuille, avant le tableau, où la grille CSS les range et où ils collent au défilement.
+    function buildStrips() {
+      const sheet = editor.view.dom.parentElement;
+      if (!sheet || strips) return;
+      strips = newStripSet(gridContext);
+      sheet.insertBefore(strips.rows, sheet.firstChild);
+      sheet.insertBefore(strips.cols, sheet.firstChild);
+      sheet.insertBefore(strips.corner, sheet.firstChild);
+      refreshLabels(strips);
+      const info = gridContext.info();
+      watch(strips, info ? tableElement(info) : null);
+    }
+
+    // Le jeu garde l'œil sur le tableau montré (sa taille change sans transaction : une image qui charge, une police, le panneau qu'on redimensionne).
+    function watch(set, table) {
+      if (!set.observer || set.watched === table) return;
+      set.observer.disconnect();
+      set.watched = table;
+      if (table) set.observer.observe(table);
+      if (table && set.ctx.watchEditor) set.observer.observe(editor.view.dom);
     }
 
     function destroyStrips() {
-      if (resizeObserver) { resizeObserver.disconnect(); resizeObserver = null; }
-      if (syncFrame) { cancelAnimationFrame(syncFrame); syncFrame = 0; }
-      if (strips) { [strips.corner, strips.cols, strips.rows].forEach(node => node.remove()); strips = null; }
+      if (strips) {
+        if (strips.observer) strips.observer.disconnect();
+        if (strips.syncFrame) cancelAnimationFrame(strips.syncFrame);
+        [strips.corner, strips.cols, strips.rows].forEach(node => node.remove());
+        strips = null;
+      }
       const preview = document.getElementById('pp-grid-resize-preview');
       if (preview) preview.remove();
-      lastKey = '';
       hideTip();
     }
 
-    function refreshLabels() {
-      if (!strips) return;
-      strips.corner.title = I18n.t('grid.selectAll');
-      strips.cols.querySelectorAll('.v2-grid-handle').forEach(h => { h.title = I18n.t('grid.resizeColumn'); });
-      strips.rows.querySelectorAll('.v2-grid-handle').forEach(h => { h.title = I18n.t('grid.resizeRow'); });
-      strips.rows.querySelectorAll('.v2-grid-rowhead.has-break').forEach(h => { h.title = I18n.t('grid.pageBreak'); });
+    function refreshLabels(set) {
+      if (!set) return;
+      set.corner.title = I18n.t('grid.selectAll');
+      set.cols.querySelectorAll('.v2-grid-handle').forEach(h => { h.title = I18n.t('grid.resizeColumn'); });
+      set.rows.querySelectorAll('.v2-grid-handle').forEach(h => { h.title = I18n.t('grid.resizeRow'); });
+      set.rows.querySelectorAll('.v2-grid-rowhead.has-break').forEach(h => { h.title = I18n.t('grid.pageBreak'); });
     }
 
-    function scheduleSync() {
-      if (!active || !strips || syncFrame) return;
-      syncFrame = requestAnimationFrame(() => { syncFrame = 0; syncStrips(); });
+    function scheduleSync(set) {
+      if (!set || set.syncFrame || !set.ctx.wanted()) return;
+      set.syncFrame = requestAnimationFrame(() => { set.syncFrame = 0; set.ctx.sync(); });
     }
 
     function fillHeads(container, count, className, build) {
@@ -1259,12 +1291,15 @@ const GridEditor = (function () {
       while (container.children.length < count) container.appendChild(build(className));
     }
 
-    function buildHead(className) {
+    // Une lettre ou un numéro : l'étiquette, et la poignée qui règle la taille quand le jeu le permet (`resizable`).
+    function buildHead(className, resizable) {
       const head = el('div', className);
       head.appendChild(el('span', 'v2-grid-label'));
-      const handle = el('span', 'v2-grid-handle');
-      handle.title = I18n.t(className === 'v2-grid-colhead' ? 'grid.resizeColumn' : 'grid.resizeRow');
-      head.appendChild(handle);
+      if (resizable) {
+        const handle = el('span', 'v2-grid-handle');
+        handle.title = I18n.t(className === 'v2-grid-colhead' ? 'grid.resizeColumn' : 'grid.resizeRow');
+        head.appendChild(handle);
+      }
       return head;
     }
 
@@ -1277,47 +1312,46 @@ const GridEditor = (function () {
       if (!badge) { badge = el('span', 'v2-grid-break'); badge.innerHTML = Icons.svg('gridBreak'); head.appendChild(badge); }
       head.title = I18n.t('grid.pageBreak');
     }
-    return { buildStrips, destroyStrips, refreshLabels, scheduleSync, fillHeads, buildHead, markPageBreak };
+    return { newStripSet, buildStrips, destroyStrips, refreshLabels, scheduleSync, watch, fillHeads, buildHead, markPageBreak };
   })();
 
   const { syncStrips, onCornerDown } = (function () {
-    // Le rafraîchissement des bandeaux et ce que la sélection y allume.
+    // Le rafraîchissement d'un jeu de bandeaux et ce que la sélection y allume.
 
-    function syncStrips(force) {
-      if (!active || !strips || !editor) return;
-      const m = measure();
-      if (!m) return;
-      const table = m.table;
-      if (resizeObserver && !table.__gridObserved) { resizeObserver.disconnect(); resizeObserver.observe(table); table.__gridObserved = true; }
-      const breaks = pageBreakRows();
+    // Remet les lettres et les numéros à la taille du rendu ; rend la mesure (celle de `measure`), null quand il n'y a rien à mesurer.
+    function syncStrips(set, force) {
+      const m = measure(set);
+      if (!m) return null;
+      watch(set, m.table);
+      const breaks = set.ctx.breaks();
       const key = m.widths.map(w => w.toFixed(2)).join(',') + '|' + m.heights.map(h => h.toFixed(2)).join(',') + '|' + breaks.map(on => (on ? 1 : 0)).join('');
-      if (force || key !== lastKey) {
-        lastKey = key;
-        fillHeads(strips.cols, m.widths.length, 'v2-grid-colhead', buildHead);
-        fillHeads(strips.rows, m.heights.length, 'v2-grid-rowhead', buildHead);
+      if (force || key !== set.lastKey) {
+        set.lastKey = key;
+        const build = className => buildHead(className, set.ctx.resizable);
+        fillHeads(set.cols, m.widths.length, 'v2-grid-colhead', build);
+        fillHeads(set.rows, m.heights.length, 'v2-grid-rowhead', build);
         m.widths.forEach((w, i) => {
-          const head = strips.cols.children[i];
+          const head = set.cols.children[i];
           head.style.width = w + 'px';
           head.firstChild.textContent = colName(i);
           head.dataset.index = String(i);
         });
         m.heights.forEach((h, i) => {
-          const head = strips.rows.children[i];
+          const head = set.rows.children[i];
           head.style.height = h + 'px';
           head.firstChild.textContent = String(i + 1);
           head.dataset.index = String(i);
           markPageBreak(head, !!breaks[i]);
         });
-        refreshLabels();
+        refreshLabels(set);
       }
-      highlightSelection();
+      highlightSelection(set, m.info);
+      return m;
     }
 
     // Les bandeaux des colonnes et des lignes touchées par la sélection s'allument (comme dans un tableur).
-    function highlightSelection() {
-      if (!strips || !editor) return;
+    function highlightSelection(set, info) {
       const sel = editor.state.selection;
-      const info = tableInfo(editor.state.doc);
       let colFrom = -1; let colTo = -2; let rowFrom = -1; let rowTo = -2;
       if (info) {
         const map = libs.TableMap.get(info.node);
@@ -1333,14 +1367,15 @@ const GridEditor = (function () {
         }
         if (rect) { colFrom = rect.left; colTo = rect.right - 1; rowFrom = rect.top; rowTo = rect.bottom - 1; }
       }
-      Array.prototype.forEach.call(strips.cols.children, (head, i) => head.classList.toggle('sel', i >= colFrom && i <= colTo));
-      Array.prototype.forEach.call(strips.rows.children, (head, i) => head.classList.toggle('sel', i >= rowFrom && i <= rowTo));
+      Array.prototype.forEach.call(set.cols.children, (head, i) => head.classList.toggle('sel', i >= colFrom && i <= colTo));
+      Array.prototype.forEach.call(set.rows.children, (head, i) => head.classList.toggle('sel', i >= rowFrom && i <= rowTo));
     }
 
-    function onCornerDown(event) {
+    function onCornerDown(set, event) {
       if (event.button !== 0 || !editor) return;
       event.preventDefault();
-      selectAllCells(editor);
+      const info = set.ctx.info();
+      if (info) selectAllCells(editor, info);
       editor.view.focus();
     }
     return { syncStrips, onCornerDown };
@@ -1349,8 +1384,8 @@ const GridEditor = (function () {
   const { onStripDown, showTip, hideTip, naturalRowHeight } = (function () {
     // Les gestes sur les bandeaux : choisir une ligne ou une colonne, l'info-bulle, la hauteur naturelle d'une ligne.
 
-    function selectLine(kind, index, extend) {
-      const info = tableInfo(editor.state.doc);
+    function selectLine(set, kind, index, extend) {
+      const info = set.ctx.info();
       if (!info) return;
       const map = libs.TableMap.get(info.node);
       const start = info.pos + 1;
@@ -1367,14 +1402,14 @@ const GridEditor = (function () {
       editor.view.focus();
     }
 
-    function onStripDown(kind, event) {
+    function onStripDown(set, kind, event) {
       if (event.button !== 0 || !editor) return;
       const head = event.target.closest(kind === 'col' ? '.v2-grid-colhead' : '.v2-grid-rowhead');
       if (!head) return;
       event.preventDefault();
       const index = parseInt(head.dataset.index, 10);
-      if (event.target.closest('.v2-grid-handle')) startResize(kind, index, event);
-      else selectLine(kind, index, event.shiftKey);
+      if (event.target.closest('.v2-grid-handle')) startResize(set, kind, index, event);
+      else selectLine(set, kind, index, event.shiftKey);
     }
 
     function showTip(text, event) {
@@ -1406,8 +1441,7 @@ const GridEditor = (function () {
     // lignes choisies par leurs numéros, tirer le trait de l'une les règle toutes à la même hauteur, comme dans un tableur), sinon `index` seule. Une
     // sélection qui ne couvre pas toute la largeur (toute la hauteur pour des colonnes) du tableau, un simple curseur, une poignée hors de la
     // sélection, ou UNE seule case choisie (des colonnes entières fusionnées en une case, que la fusion laisse choisie) : le trait ne règle que sa ligne.
-    function chosenLines(kind, index) {
-      const info = tableInfo(editor.state.doc);
+    function chosenLines(info, kind, index) {
       const selection = editor.state.selection;
       const rect = info && isCellSelection(selection) && selection.ranges.length > 1 && selectionRect(editor.state, info);
       if (!rect) return [index];
@@ -1420,18 +1454,21 @@ const GridEditor = (function () {
       return Array.from({ length: to - from + 1 }, (_, i) => from + i);
     }
 
-    function startResize(kind, index, event) {
-      const m = measure();
+    // Les tailles du rendu sont des pixels écran, celles du document des pixels de mise en page : l'écart est le facteur de réduction de la feuille
+    // (`zoom`, 1 dans une grille). La poignée, l'info-bulle et l'enregistrement parlent en pixels de mise en page ; les bandeaux, en pixels écran.
+    function startResize(set, kind, index, event) {
+      const m = measure(set);
       if (!m) return;
+      const zoom = set.ctx.zoom(m.table);
       const isCol = kind === 'col';
       const target = event.target;
-      const lines = chosenLines(kind, index);
-      const heads = lines.map(i => (isCol ? strips.cols : strips.rows).children[i]);
-      const sizes = lines.map(i => (isCol ? m.widths[i] : m.heights[i]));
+      const lines = chosenLines(m.info, kind, index);
+      const heads = lines.map(i => (isCol ? set.cols : set.rows).children[i]);
+      const sizes = lines.map(i => (isCol ? m.widths[i] : m.heights[i]) / zoom);
       const start = isCol ? event.clientX : event.clientY;
       const startSize = sizes[lines.indexOf(index)];
-      const startTableSize = isCol ? m.width : m.height;
-      const min = isCol ? MIN_COL_WIDTH_PX : naturalRowHeight(m.rows, lines);
+      const startTableSize = (isCol ? m.width : m.height) / zoom;
+      const min = isCol ? MIN_COL_WIDTH_PX : naturalRowHeight(m.rows, lines) / zoom;
       const max = isCol ? MAX_COL_WIDTH_PX : MAX_ROW_HEIGHT_PX;
       let size = Math.max(min, Math.round(startSize));
       // Plusieurs lignes tirées ensemble : rien ne change avant le premier déplacement de la poignée (leur plancher commun peut dépasser la taille de départ de celle qu'on
@@ -1452,14 +1489,14 @@ const GridEditor = (function () {
         preview.textContent = isCol
           ? `${lines.map(i => `.tiptap table > colgroup > col:nth-child(${i + 1}) { width: ${value}px !important; }`).join(' ')} .tiptap table { width: ${startTableSize + sizes.reduce((sum, one) => sum + value - one, 0)}px !important; }`
           : lines.map(i => `.tiptap table > tbody > tr:nth-child(${i + 1}) { height: ${value}px !important; }`).join(' ');
-        heads.forEach(head => { head.style[isCol ? 'width' : 'height'] = value + 'px'; });
+        heads.forEach(head => { head.style[isCol ? 'width' : 'height'] = value * zoom + 'px'; });
       };
       if (moved) apply(size);
       const onMove = e => {
         at = isCol ? e.clientX : e.clientY;
         if (!moved && at === start) return;
         moved = true;
-        size = Math.min(max, Math.max(min, Math.round(startSize + at - start)));
+        size = Math.min(max, Math.max(min, Math.round(startSize + (at - start) / zoom)));
         apply(size);
         showTip(size + ' px', e);
       };
@@ -1472,11 +1509,11 @@ const GridEditor = (function () {
         document.body.classList.remove('pp-grid-resizing-col', 'pp-grid-resizing-row');
         hideTip();
         // L'enregistrement redessine le tableau à sa nouvelle taille (synchrone) avant que l'aperçu ne soit retiré : pas de saut.
-        if (commit && moved && (lines.length === 1 || at !== start) && sizes.some(one => Math.round(one) !== size)) { if (isCol) setColumnWidth(lines, size); else setRowHeight(lines, size); }
-        else heads.forEach((head, k) => { head.style[isCol ? 'width' : 'height'] = sizes[k] + 'px'; });
+        if (commit && moved && (lines.length === 1 || at !== start) && sizes.some(one => Math.round(one) !== size)) { if (isCol) setColumnWidth(m.info, lines, size); else setRowHeight(m.info, lines, size); }
+        else heads.forEach((head, k) => { head.style[isCol ? 'width' : 'height'] = sizes[k] * zoom + 'px'; });
         preview.remove();
-        lastKey = '';
-        scheduleSync();
+        set.lastKey = '';
+        scheduleSync(set);
       };
       const onUp = () => finish(true);
       const onCancel = () => finish(false);
@@ -1487,6 +1524,127 @@ const GridEditor = (function () {
       document.addEventListener('keydown', onKey, true);
     }
     return { startResize };
+  })();
+
+  // Les bandeaux de la grille : son seul tableau, sans réduction de la feuille, avec les sauts de page de ses lignes. Se rafraîchissent tant que le mode
+  // grille est actif.
+  const gridContext = {
+    resizable: true,
+    watchEditor: false,
+    info: () => (editor ? tableInfo(editor.state.doc) : null),
+    zoom: () => 1,
+    breaks: () => pageBreakRows(),
+    wanted: () => active && !!strips,
+    sync: () => { if (active && strips && editor) syncStrips(strips); },
+  };
+
+  // Les bandeaux d'un tableau de document : celui où se trouve le curseur, pas de saut de page par ligne, la feuille réduite à ~0,85 dans un panneau
+  // de 700 px. Ils n'existent que hors d'une grille (qui a les siens).
+  const documentContext = {
+    resizable: false,
+    watchEditor: true,
+    info: () => documentStripsTable(),
+    zoom: table => EditorCore.layoutZoom(table),
+    breaks: () => [],
+    wanted: () => !active && !!docStrips,
+    sync: () => syncDocumentStrips(),
+  };
+
+  const { documentStripsTable, documentStrips, syncDocumentStrips, removeDocumentStrips, documentStripsOffset } = (function () {
+    // Les bandeaux A, B, C / 1, 2, 3 d'un tableau de document (le choix « Tableau actif ») : posés par-dessus la page, sans rien décaler,
+    // tant que le curseur est dans un tableau du premier niveau du document. Hors de la feuille et de son défilement : une enveloppe fixe, qui a la taille
+    // du plan de travail (elle les rogne à ses bords) et qui suit le tableau à chaque défilement. Les lettres et les numéros sont à la taille de l'écran
+    // (la feuille est réduite, eux restent lisibles et se cliquent), calés sur les rectangles mesurés du tableau.
+
+    // Le tableau dont la page montre les bandeaux : celui qui porte la sélection, quand il est au premier niveau du document (la place manque pour un
+    // tableau dans une colonne, un encadré, une case ou une liste) et que l'éditeur peut le modifier. La condition de la barre du tableau : sans le
+    // curseur dans l'éditeur, ni l'une ni les autres. Rien dans une grille.
+    function documentStripsTable() {
+      if (active || !editor || !editor.isEditable || !editor.view.hasFocus()) return null;
+      const info = tableInfo(editor.state.doc, editor.state.selection);
+      return info && editor.state.doc.resolve(info.pos).depth === 0 ? info : null;
+    }
+
+    // Créés au premier besoin et retirés dès qu'ils n'ont plus à se montrer (le curseur sort du tableau, une grille s'ouvre, l'éditeur perd le focus ou
+    // se cache) : hors d'un tableau, la page ne garde aucun bandeau, ni caché ni vide. Ceux d'une grille se cherchent dans la feuille de l'éditeur.
+    let wired = false;
+    function documentStrips() {
+      if (docStrips) return docStrips;
+      docStrips = newStripSet(documentContext);
+      const root = el('div', 'pp-doc-strips');
+      root.hidden = true;
+      [docStrips.corner, docStrips.cols, docStrips.rows].forEach(node => root.appendChild(node));
+      document.body.appendChild(root);
+      docStrips.root = root;
+      docStrips.table = null;
+      refreshLabels(docStrips);
+      if (!wired) {
+        wired = true;
+        const box = document.getElementById('editor-container');
+        if (box) box.addEventListener('scroll', placeOnScroll, { passive: true });
+        window.addEventListener('resize', () => scheduleSync(docStrips));
+      }
+      return docStrips;
+    }
+
+    // Les trois bandeaux calés sur le rectangle du tableau (pixels écran) : les lettres juste au-dessus, les numéros juste à gauche, le coin entre les deux.
+    // Les numéros ne sortent jamais par la gauche du plan de travail : sans marge à gauche du tableau (une page sans Aperçu A4 n'en a que 14 px), ils
+    // recouvrent le bord du tableau - la bordure et le remplissage de ses cases, pas leur texte (la largeur des numéros en tient compte, css/grid.css).
+    function placeDocumentStrips(set, tableRect) {
+      const box = document.getElementById('editor-container');
+      const outer = box.getBoundingClientRect();
+      const left = outer.left + box.clientLeft;
+      const top = outer.top + box.clientTop;
+      const style = set.root.style;
+      style.left = left + 'px';
+      style.top = top + 'px';
+      style.width = box.clientWidth + 'px';
+      style.height = box.clientHeight + 'px';
+      const w = set.corner.offsetWidth;
+      const h = set.corner.offsetHeight;
+      const x = tableRect.left - left;
+      const y = tableRect.top - top;
+      const side = Math.max(0, x - w);
+      set.corner.style.left = side + 'px';
+      set.corner.style.top = (y - h) + 'px';
+      set.cols.style.left = x + 'px';
+      set.cols.style.top = (y - h) + 'px';
+      set.rows.style.left = side + 'px';
+      set.rows.style.top = y + 'px';
+    }
+
+    function placeOnScroll() {
+      const set = docStrips;
+      if (!set || set.root.hidden || !set.table || !set.table.isConnected) return;
+      placeDocumentStrips(set, set.table.getBoundingClientRect());
+    }
+
+    function removeDocumentStrips() {
+      const set = docStrips;
+      if (!set) return;
+      docStrips = null;
+      if (set.observer) set.observer.disconnect();
+      if (set.syncFrame) cancelAnimationFrame(set.syncFrame);
+      set.root.remove();
+    }
+
+    function syncDocumentStrips() {
+      const set = docStrips;
+      if (!set || !editor) return;
+      if (!documentStripsTable()) { removeDocumentStrips(); return; }
+      set.root.hidden = false;
+      const m = syncStrips(set);
+      if (!m) { removeDocumentStrips(); return; }
+      set.table = m.table;
+      placeDocumentStrips(set, m.rect);
+    }
+
+    // Ce que la barre du tableau laisse libre au-dessus du tableau pour ne pas recouvrir les lettres : leur hauteur, quand elles vont se montrer.
+    function documentStripsOffset() {
+      if (!documentStripsTable()) return 0;
+      return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--grid-strip-h')) || 22;
+    }
+    return { documentStripsTable, documentStrips, syncDocumentStrips, removeDocumentStrips, documentStripsOffset };
   })();
 
   // La bande où la barre de la case est fixée (index.html : #v2-cell-bar-dock, css/grid.css), entre la barre d'outils et le plan de travail : dans
@@ -1522,15 +1680,21 @@ const GridEditor = (function () {
   function attach(ed) {
     editor = ed;
     ed.on('transaction', ({ transaction }) => {
-      if (!active) { lastCellDom = null; return; }
+      if (!active) {
+        lastCellDom = null;
+        // Les bandeaux d'un tableau de document suivent chaque transaction (le curseur entre dans un tableau, en sort, le document change, l'éditeur
+        // prend ou perd le focus) ; ils ne sont créés qu'à la première fois que le curseur est dans un tableau.
+        if (docStrips || documentStripsTable()) scheduleSync(documentStrips());
+        return;
+      }
       const cell = currentCellDom();
       const moved = cell !== lastCellDom;
       lastCellDom = cell;
-      if (transaction.docChanged || transaction.selectionSet) scheduleSync();
+      if (transaction.docChanged || transaction.selectionSet) scheduleSync(strips);
       if (transaction.scrolledIntoView) revealSelection(ed.view, moved);
     });
     wireLockedClickGuard();
-    I18n.onChange(refreshLabels);
+    I18n.onChange(() => { refreshLabels(strips); refreshLabels(docStrips); });
     if (active) setActive(true, true);
   }
 
@@ -1538,7 +1702,7 @@ const GridEditor = (function () {
   // refuser le contenu qu'on charge), puis vrai pour une grille (le document est alors ramené à une grille valable, les bandeaux se posent).
   function setActive(on, force) {
     on = !!on;
-    if (on === active && !force) { if (on) scheduleSync(); return; }
+    if (on === active && !force) { if (on) scheduleSync(strips); return; }
     active = on;
     lastCellDom = null;
     const container = document.getElementById('editor-container');
@@ -1556,20 +1720,23 @@ const GridEditor = (function () {
       if (Editor.isTrackChangesOn()) Editor.setTrackChanges(false);
       normalizeDocument();
       buildStrips();
-      scheduleSync();
+      scheduleSync(strips);
+      removeDocumentStrips();
     } else {
       destroyStrips();
     }
   }
 
   // Rafraîchit les bandeaux quand l'éditeur redevient visible (Lecture -> Édition) : js/editor.js:refreshLayout.
-  function refresh() { if (active) { lastKey = ''; scheduleSync(); } }
+  function refresh() {
+    if (active) { if (strips) strips.lastKey = ''; scheduleSync(strips); } else if (docStrips) scheduleSync(docStrips);
+  }
 
   return {
     TYPE, DEFAULT_VALIGN,
     configure, attach, createExtension, createEnterExtension, withTableAttributes, withRowAttributes, withCellAttributes, serialize, setActive, isActive, isGridType,
     refresh, currentCellDom, colName, floatingOptions, barSlot,
-    canMerge, canSplit, mergeCells, splitCell, mergeSelected, splitSelected, tableSettingsAvailable, setVerticalAlign, selectedVerticalAlign, applyBorders, canApplyBorders, gridLinesShown, setGridLinesShown,
-    canTogglePageBreak, hasPageBreak, togglePageBreak, insertLines,
+    canMerge, canSplit, mergeCells, splitCell, mergeSelected, splitSelected, tableSettingsBlocked, setVerticalAlign, selectedVerticalAlign, applyBorders, canApplyBorders, gridLinesShown, setGridLinesShown,
+    canTogglePageBreak, hasPageBreak, togglePageBreak, insertLines, documentStripsOffset,
   };
 })();

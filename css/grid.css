@@ -1,9 +1,10 @@
 /* Mode grille (js/grid-editor.js) : un modèle de type « grille » s'affiche sans feuille A4. Le tableau part du coin haut gauche, s'arrête à sa
    dernière ligne et sa dernière colonne et défile dans le panneau, entouré de ses bandeaux A, B, C / 1, 2, 3 collants au défilement. Tout est
    scopé à `.v2-grid-mode` (posé sur #editor-container par GridEditor.setActive) ou à `body.pp-grid-mode` : un document, un email ou un
-   macro-modèle n'en voient aucune règle, sauf la dernière (le quadrillage masqué en Lecture, que porte aussi un tableau de document réglé). */
+   macro-modèle n'en voient aucune règle, sauf la dernière (le quadrillage masqué en Lecture, que porte aussi un tableau de document réglé) et les
+   bandeaux d'un tableau de document (`.pp-doc-strips`, en fin de feuille), qui reprennent l'allure de ceux de la grille. */
 
-:root { --grid-strip-w: 44px; --grid-strip-h: 22px; --grid-row-default: 28px; }
+:root { --grid-strip-w: 44px; --grid-strip-h: 22px; --grid-row-default: 28px; --doc-strip-w: 20px; }
 
 #editor-container.v2-grid-mode { padding: 0; background: var(--pp-page-gutter, #e4e8ef); }
 
@@ -126,3 +127,20 @@ body.pp-grid-mode:not(.pp-editor-hidden) .v2-cell-bar-dock { display: flex; }
    Bordures l'écrit, un tableau collé du web ou d'un tableur ne l'a jamais. */
 #reader-container table[data-grid-lines="off"] td,
 #reader-container table[data-grid-lines="off"] th { border-style: none; }
+
+/* Bandeaux d'un tableau de document (js/grid-editor.js:documentStrips) : les lettres, les numéros et le coin de la grille, posés par-dessus la page
+   quand le curseur est dans un tableau du premier niveau, sans décaler le texte (les lettres recouvrent la ligne juste au-dessus du tableau tant qu'on y
+   est). Hors de la feuille, qui est réduite à l'écran : une enveloppe fixe de la taille du plan de travail les rogne à ses bords, et chaque bandeau y est
+   posé en pixels écran (js/grid-editor.js:placeDocumentStrips), lisible et cliquable à toute échelle. Les numéros sont plus étroits que ceux d'une
+   grille (`--doc-strip-w`, trois chiffres tiennent) : une page sans Aperçu A4 n'a que 14 px de marge à gauche du tableau, et un numéro qui le déborde
+   ne doit pas recouvrir le texte de la première colonne (1 px de bordure et 6 px de remplissage avant lui). Sous les barres flottantes (`--z-table-strips`). */
+.pp-doc-strips { position: fixed; z-index: var(--z-table-strips); overflow: hidden; pointer-events: none; }
+.pp-doc-strips[hidden] { display: none; }
+.pp-doc-strips .v2-grid-corner, .pp-doc-strips .v2-grid-cols, .pp-doc-strips .v2-grid-rows {
+  position: absolute; z-index: auto; pointer-events: auto; grid-area: auto; justify-self: auto; align-self: auto;
+}
+.pp-doc-strips .v2-grid-corner { top: 0; left: 0; width: var(--doc-strip-w); height: var(--grid-strip-h); }
+.pp-doc-strips .v2-grid-rows { width: var(--doc-strip-w); }
+/* Pas en Lecture ni sur le résumé d'un macro-modèle (`pp-editor-hidden` : js/main.js:syncEditorVisibilityForMode), ni à l'impression. */
+body.pp-editor-hidden .pp-doc-strips { display: none; }
+@media print { .pp-doc-strips { display: none; } }

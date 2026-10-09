@@ -10,6 +10,8 @@
 //     dessiné une fois), en un seul Ctrl+Z ; « Aucune bordure » masque le trait ; « Quadrillage » se coche sans refermer le menu ;
 //   - avec le suivi des modifications, les quatre boutons sont grisés (jamais retirés, survol gardé pour l'info-bulle, raison : le suivi) et un clic dessus ne fait rien, puis ils se dégrisent ;
 //   - dans un panneau plus étroit que la barre (420 px), elle passe à la ligne : aucun de ses boutons n'est hors du panneau et le dernier se clique.
+//   - Entrée dans une case (lot 3 (c)) : elle descend d'une case et en choisit le texte, Maj+Entrée et Ctrl+Entrée font un retour à la ligne, une puce ou une citation garde son Entrée, sur la dernière
+//     ligne elle ne fait rien, la flèche du bas sort du tableau.
 //   Un glissé qui part d'une case déjà choisie déplace le texte choisi (c'est le navigateur) : le script repart toujours d'un simple curseur dans une case à l'écart.
 // Les fonctions, leurs gardes, le tableau dans une case, le Word, la structure (lignes en nombre, fusion) sont dans dev-tests/scenarios-grid-in-document.js (groupe gridInDocument) ; les
 // boutons un à un dans dev-tests/scenarios-floating-toolbars.js (groupe floatingToolbars).
@@ -491,9 +493,116 @@ async function runNarrow() {
   await context.close();
 }
 
+// Entrée dans une case d'un tableau de document (lot 3 (c)), au vrai clavier : comme dans une grille, Entrée descend d'une case et en choisit le texte, Maj+Entrée et Ctrl+Entrée font un retour
+// à la ligne, une liste, une citation ou un bloc de code gardent leur Entrée, sur la dernière ligne la touche ne fait rien, et la flèche du bas sort du tableau.
+const KEYDOC = '<p>Avant le tableau</p><table><tbody>'
+  + '<tr><td colwidth="160"><p>A1</p></td><td colwidth="160"><p>B1</p></td><td colwidth="160"><p>C1</p></td></tr>'
+  + '<tr><td colwidth="160"><p>A2</p><p>deuxième paragraphe</p></td><td colwidth="160"><p>B2</p></td><td colwidth="160"><ul><li><p>Puce 1</p></li></ul></td></tr>'
+  + '<tr><td colwidth="160"><p>A3</p></td><td colwidth="160"><p>B3</p></td><td colwidth="160"><blockquote><p>Citation</p></blockquote></td></tr>'
+  + '</tbody></table><p>Après le tableau</p>';
+// Le curseur (ou le texte choisi) et le document : la case du curseur (son premier bloc), le texte choisi, la forme du tableau, le HTML.
+const keyState = page => page.evaluate(() => {
+  const ed = EditorCore.getEditor();
+  const { selection, doc } = ed.state;
+  let cellText = null;
+  for (let d = selection.$from.depth; d > 0; d--) {
+    const node = selection.$from.node(d);
+    if (node.type.name === 'tableCell' || node.type.name === 'tableHeader') { cellText = node.firstChild ? node.firstChild.textContent : ''; break; }
+  }
+  const rows = [];
+  doc.descendants((node) => { if (node.type.name === 'tableRow') rows.push(node.childCount); });
+  return { cellText, parent: selection.$from.parent.textContent, selected: doc.textBetween(selection.from, selection.to, ' '), rows: rows.length, cols: rows[0], html: ed.getHTML() };
+});
+// Un vrai clic dans le paragraphe qui porte exactement `text` (près de son début), puis Fin : le curseur est au bout de la ligne.
+async function clickEndOf(page, text) {
+  const p = await page.evaluate((wanted) => {
+    const el = Array.from(document.querySelectorAll('.tiptap p')).find(e => e.textContent === wanted);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.left + Math.min(r.width / 2, 12), y: r.top + r.height / 2 };
+  }, text);
+  await page.mouse.move(p.x, p.y, { steps: 2 });
+  await page.mouse.click(p.x, p.y);
+  await page.waitForTimeout(120);
+  await page.keyboard.press('End');
+  await page.waitForTimeout(80);
+}
+async function runKeyboard() {
+  console.log(`\n=== Entrée dans un tableau de document, au vrai clavier, ${WIDTH}x${HEIGHT} ===`);
+  const { context, page } = await openWidget('light');
+  const load = async () => {
+    await page.evaluate(html => { GridEditor.setActive(false); Editor.setHTML(html); document.getElementById('editor-container').scrollTop = 0; }, KEYDOC);
+    await page.waitForTimeout(400);
+  };
+  const gap = async () => { await page.waitForTimeout(700); };
+
+  // ---------- 1) Entrée descend d'une case et en choisit le texte ----------
+  await load();
+  await clickEndOf(page, 'B1');
+  const before = await keyState(page);
+  await page.keyboard.press('Enter');
+  const down = await keyState(page);
+  check('clavier - Entrée dans B1 descend dans B2 et en choisit le texte : aucun paragraphe de plus, le document ne change pas', before.cellText === 'B1' && down.cellText === 'B2' && down.selected === 'B2' && down.html === before.html, { before: before.cellText, down: { cellText: down.cellText, selected: down.selected, same: down.html === before.html } });
+  await page.keyboard.type('Z');
+  const typed = await keyState(page);
+  check('clavier - taper remplace le texte choisi de B2 et lui seul : B1 est intact, le tableau a toujours 3 lignes de 3 cases', typed.cellText === 'Z' && /<p>B1<\/p>/.test(typed.html) && typed.rows === 3 && typed.cols === 3, { cell: typed.cellText, rows: typed.rows, cols: typed.cols });
+  await gap();
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(200);
+  check('clavier - un seul Ctrl+Z rend le texte de B2 (Entrée n\'est pas une étape d\'annulation)', (await keyState(page)).html === before.html);
+
+  // ---------- 2) Une case à deux paragraphes : Entrée part vers la case du dessous ----------
+  await load();
+  await clickEndOf(page, 'A2');
+  const a2 = await keyState(page);
+  await page.keyboard.press('Enter');
+  const fromA2 = await keyState(page);
+  check('clavier - Entrée dans le premier paragraphe de A2 (qui en a deux) descend dans A3, au lieu d\'ajouter un paragraphe', a2.cellText === 'A2' && fromA2.cellText === 'A3' && fromA2.selected === 'A3' && fromA2.html === a2.html, { from: a2.cellText, to: fromA2.cellText, selected: fromA2.selected });
+
+  // ---------- 3) Maj+Entrée et Ctrl+Entrée : un retour à la ligne dans la case ----------
+  await load();
+  await clickEndOf(page, 'B1');
+  await page.keyboard.press('Shift+Enter');
+  await page.keyboard.type('x');
+  let state = await keyState(page);
+  check('clavier - Maj+Entrée fait un retour à la ligne dans B1 : le curseur y reste, la frappe suit le retour, B2 n\'a pas bougé', /^B1/.test(state.cellText) && /<td[^>]*><p>B1<br[^>]*>x<\/p>/.test(state.html) && /<p>B2<\/p>/.test(state.html), { cell: state.cellText, html: (state.html.match(/<td[^>]*><p>B1[^]*?<\/p>/) || [''])[0] });
+  await load();
+  await clickEndOf(page, 'B1');
+  await page.keyboard.press('Control+Enter');
+  await page.keyboard.type('y');
+  state = await keyState(page);
+  check('clavier - Ctrl+Entrée fait aussi un retour à la ligne dans B1', /^B1/.test(state.cellText) && /<td[^>]*><p>B1<br[^>]*>y<\/p>/.test(state.html), { cell: state.cellText });
+
+  // ---------- 4) Une liste, une citation : Entrée garde son sens ----------
+  await load();
+  await clickEndOf(page, 'Puce 1');
+  await page.keyboard.press('Enter');
+  state = await keyState(page);
+  check('clavier - Entrée au bout d\'une puce d\'une case de tableau ajoute une puce (deux puces), le curseur reste dans C2', (state.html.match(/<li>/g) || []).length === 2 && state.cellText === 'Puce 1' && state.rows === 3, { items: (state.html.match(/<li>/g) || []).length, cell: state.cellText });
+  await load();
+  await clickEndOf(page, 'Citation');
+  await page.keyboard.press('Enter');
+  state = await keyState(page);
+  check('clavier - Entrée dans une citation d\'une case la coupe en deux paragraphes de citation, le curseur reste dans C3', /<blockquote><p>Citation<\/p><p><\/p><\/blockquote>/.test(state.html) && state.cellText === 'Citation', { cell: state.cellText, quote: (state.html.match(/<blockquote>[^]*?<\/blockquote>/) || [''])[0] });
+
+  // ---------- 5) Dernière ligne : rien ; la flèche du bas sort du tableau ----------
+  await load();
+  await clickEndOf(page, 'B3');
+  const last = await keyState(page);
+  await page.keyboard.press('Enter');
+  const stay = await keyState(page);
+  check('clavier - Entrée dans la dernière ligne ne fait rien : ni paragraphe, ni ligne de tableau de plus, le curseur reste dans B3', last.cellText === 'B3' && stay.cellText === 'B3' && stay.html === last.html && stay.rows === 3, { cell: stay.cellText, rows: stay.rows, same: stay.html === last.html });
+  await page.keyboard.press('ArrowDown');
+  const out = await keyState(page);
+  check('clavier - la flèche du bas, depuis la dernière ligne, sort du tableau : le curseur passe dans le paragraphe qui le suit', out.cellText === null && out.parent === 'Après le tableau', { cell: out.cellText, parent: out.parent });
+
+  await context.close();
+}
+
 await runTheme('light');
 await runTheme('dark');
 await runNarrow();
+await runKeyboard();
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 
 await browser.close();

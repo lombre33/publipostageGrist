@@ -157,6 +157,15 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   le PDF et le Word les reprennent. Avec le suivi des modifications allumé, ces quatre boutons sont grisés :
   ces réglages ne seraient pas suivis. Dans un panneau étroit, la barre passe sur deux lignes au lieu de
   déborder. Un tableau que vous n'avez pas réglé ne change pas.
+- **Lettres et numéros d'un tableau de document** : quand le curseur est dans un tableau du document, les
+  lettres A, B, C… se posent au-dessus de ses colonnes et les numéros 1, 2, 3… à gauche de ses lignes, comme
+  dans une grille, par-dessus la page : le texte ne bouge pas (les lettres recouvrent la ligne juste au-dessus
+  du tableau tant que vous y êtes). Un clic sur une lettre choisit la colonne, sur un numéro la ligne, sur le
+  coin tout le tableau ; Maj + clic étend. Les lettres et les numéros des cases choisies s'allument, et la barre
+  du tableau reste ouverte, posée au-dessus des lettres. Ils suivent le défilement et disparaissent quand le
+  curseur sort du tableau. Ils ne se montrent ni dans un tableau posé dans une case ou dans une colonne, ni en
+  Lecture, et une grille garde les siens. Avec le suivi des modifications allumé ils sont là aussi : choisir des
+  cases ne modifie rien.
 - **Marge autour de chaque page dans l'assemblage avant impression** : la fenêtre « Assemblage avant
   impression » a un champ « Marge » (en millimètres, 0 au départ, les flèches avancent de 0,5) qui laisse de la
   place autour de chaque page posée sur la feuille : la marge compte de chaque côté d'une page, donc deux
@@ -230,6 +239,11 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Modifié
 
+- **Entrée dans un tableau de document** : comme dans une grille (et dans Excel ou Google Sheets), Entrée descend
+  d'une case et en sélectionne le texte, on tape par-dessus ; Maj+Entrée (ou Ctrl+Entrée) ajoute une ligne dans la
+  case ; sur la dernière ligne, Entrée ne fait rien. Une liste, une citation, un bloc de code ou la liste « # »
+  ouverte gardent leur Entrée. Avant, Entrée coupait le paragraphe de la case : pour écrire une seconde ligne dans
+  une case, utilisez maintenant Maj+Entrée.
 - **Modèle de la vue** : Réglages > Vue > « Utiliser … pour cette vue » accepte aussi un e-mail ou un
   macro-modèle, qui s'ouvre au démarrage de la vue (un macro-modèle sur son résumé, un e-mail sur son
   bandeau Objet / À / Cc) ; l'étoile du document reste réservée aux modèles ordinaires.
@@ -558,6 +572,14 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   single Undo reverts a setting, and Reading, the PDF and the Word export carry them over. With track changes
   on, these four buttons are greyed: these settings would not be tracked. In a narrow panel the bar wraps onto
   two lines instead of overflowing. A table you have not set does not change.
+- **Letters and numbers on a document table**: when the cursor is in a table of the document, the letters A, B,
+  C… sit above its columns and the numbers 1, 2, 3… to the left of its rows, as in a grid, over the page: the
+  text does not move (the letters cover the line just above the table while you are in it). A click on a
+  letter picks the column, on a number the row, on the corner the whole table; Shift + click extends. The
+  letters and numbers of the picked cells light up, and the table bar stays open, sitting above the letters.
+  They follow the scrolling and go away when the cursor leaves the table. They do not show for a table inside
+  a cell or a column, nor in Reading, and a grid keeps its own. With track changes on they are there too:
+  picking cells changes nothing.
 - **Margin around each page in sheet assembly**: the "Assemble before printing" window has a "Margin" field (in
   millimetres, 0 to start with, the arrows step by 0.5) that leaves room around each page laid on the
   sheet: the margin sits on every side of a page, so it counts twice between two pages and once at the edge
@@ -625,6 +647,10 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Changed
 
+- **Enter in a document table**: as in a grid (and in Excel or Google Sheets), Enter moves down one cell and selects
+  its text, so you type over it; Shift+Enter (or Ctrl+Enter) adds a line inside the cell; on the last row, Enter does
+  nothing. A list, a quote, a code block or an open "#" list keep their Enter. Enter used to split the cell's
+  paragraph: to write a second line in a cell, use Shift+Enter now.
 - **A view's template**: Settings > View > "Use … for this view" now also accepts an e-mail or a macro
   template, which opens when the view starts (a macro template on its summary, an e-mail on its
   Subject / To / Cc banner); the document's ★ stays reserved for ordinary templates.

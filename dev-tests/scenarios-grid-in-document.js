@@ -4,8 +4,11 @@
 // `scopedTable` de js/grid-editor.js), les autres restent comme ils étaient. Ici, sans bouton (ceux de la barre du tableau sont au groupe floatingToolbars et au script à la
 // souris verify-doc-table-tools-mouse.mjs) : les fonctions de `GridEditor` appelées sur l'éditeur d'un document à deux tableaux, un tableau dans une case, un curseur hors des tableaux, le suivi des modifications
 // allumé, puis le tableau réglé dans le Word (OOXML dézippé) : « ce que je règle sort pareil ». La grille elle-même (un seul tableau) garde sa suite "grid".
-// Lot 3 (b) : `tableSettingsAvailable`, ce qui grise les boutons sous le suivi. Lot 3 (a) : la structure - « Ligne / Colonne avant / après » sur toute la sélection, la ligne ou la colonne ajoutée qui reprend le cadre et la hauteur de sa
-// voisine, la fusion et la scission qui gardent le pourtour (`insertLines`, `repairDocumentTables`, `mergeSelected`, `splitSelected`).
+// Lot 3 (b) : `tableSettingsBlocked`, ce qui grise les boutons sous le suivi. Lot 3 (a) : la structure - « Ligne / Colonne avant / après » sur toute la sélection, la ligne ou la colonne ajoutée qui reprend le cadre et la hauteur de sa
+// voisine, la fusion et la scission qui gardent le pourtour (`insertLines`, `repairDocumentTables`, `mergeSelected`, `splitSelected`). Lot 3 (c) : Entrée qui descend d'une
+// case, comme dans la grille (`enterGoesDown`, `enterCellPos`). Lot 4 (a) : les bandeaux A, B, C / 1, 2, 3 posés par-dessus la page quand le curseur est dans un tableau du premier niveau
+// (`documentStrips` : étiquettes, sélection d'une colonne, d'une ligne ou du tableau par un appui, allumage, rien laissé dans la page hors d'un tableau) ; leur place à l'écran est mesurée par
+// dev-tests/verify-doc-strips-mouse.mjs (groupe docStripsMouse).
 (function () {
   const cases = [];
   const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -203,10 +206,9 @@
         lines: GridEditor.setGridLinesShown(ed(), false),
         read: GridEditor.selectedVerticalAlign(ed()),
         shown: GridEditor.gridLinesShown(ed()),
-        available: GridEditor.tableSettingsAvailable(ed()),
       };
       const pass = got.valign === false && got.borders === false && got.canBorders === false && got.lines === false && got.read === null && got.shown === true
-        && got.available === false && JSON.stringify(ed().state.doc.toJSON()) === before;
+        && JSON.stringify(ed().state.doc.toJSON()) === before;
       return { pass, notes: JSON.stringify(got) };
     }),
   });
@@ -224,17 +226,17 @@
         borders: GridEditor.applyBorders(ed(), 'all', null),
         lines: GridEditor.setGridLinesShown(ed(), false),
         read: GridEditor.selectedVerticalAlign(ed()),
-        available: GridEditor.tableSettingsAvailable(ed()),
+        blocked: GridEditor.tableSettingsBlocked(),
       };
       const unchanged = JSON.stringify(ed().state.doc.toJSON()) === before;
       Editor.setTrackChanges(false);
       await sleep(100);
-      const availableAgain = GridEditor.tableSettingsAvailable(ed());
+      const blockedAgain = GridEditor.tableSettingsBlocked();
       const free = GridEditor.setVerticalAlign(ed(), 'bottom');
       await sleep(60);
-      const pass = tracked.valign === false && tracked.borders === false && tracked.lines === false && tracked.read === null && tracked.available === false && unchanged
-        && availableAgain === true && free === true && cellAttrs(1, 1, 0).verticalAlign === 'bottom';
-      return { pass, notes: JSON.stringify({ tracked, unchanged, availableAgain, free }) };
+      const pass = tracked.valign === false && tracked.borders === false && tracked.lines === false && tracked.read === null && tracked.blocked === true && unchanged
+        && blockedAgain === false && free === true && cellAttrs(1, 1, 0).verticalAlign === 'bottom';
+      return { pass, notes: JSON.stringify({ tracked, unchanged, blockedAgain, free }) };
     }),
   });
 
@@ -485,6 +487,313 @@
       if (!done || rowCount(1) !== 5) bad.push('lignes sous le suivi : ' + JSON.stringify({ done, rows: rowCount(1) }));
       if (tracked.some(row => row.line !== '-,-,-,- -,-,-,-' || row.height)) bad.push('rien ne devait être repris sous le suivi : ' + JSON.stringify(tracked));
       return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : JSON.stringify(tracked) };
+    }),
+  });
+
+  // === Lot 3 (c) : Entrée descend d'une case (choix « Comme la grille » d'Antoine, 09/10) ===
+  const key = (name, options) => {
+    const ev = new KeyboardEvent('keydown', Object.assign({ key: name, bubbles: true, cancelable: true }, options || {}));
+    ed().view.dom.dispatchEvent(ev);
+    return ev.defaultPrevented;
+  };
+  const selectedText = () => { const sel = ed().state.selection; return ed().state.doc.textBetween(sel.from, sel.to, ' '); };
+  const docJson = () => JSON.stringify(ed().state.doc.toJSON());
+  // Le curseur à la fin du texte `text` (le premier trouvé).
+  function cursorAtEndOf(text) {
+    let at = -1;
+    ed().state.doc.descendants((node, pos) => { if (at < 0 && node.isText && node.text === text) at = pos + node.nodeSize; return at < 0; });
+    ed().commands.setTextSelection(at);
+    return at;
+  }
+
+  cases.push({
+    id: 'gridscope_enter_goes_down_one_cell_in_a_document_table',
+    description: 'Dans une case d\'un tableau de document, Entrée descend d\'une case (même colonne) comme dans la grille : le document ne change pas (aucun paragraphe ajouté), la case d\'en dessous est sélectionnée, la touche est prise ; des cases choisies : sous la case d\'où la sélection est partie ; sous une case fusionnée sur plusieurs lignes : la case qui suit sa dernière ligne',
+    run: async (h) => withDoc(h, TWO_TABLES, async () => {
+      const bad = [];
+      await cursorIn(1, 0, 1);
+      const before = docJson();
+      const handled = key('Enter');
+      if (!handled || selectedText() !== 'B2B' || docJson() !== before) bad.push('Entrée depuis B1B : ' + JSON.stringify({ handled, selected: selectedText(), unchanged: docJson() === before }));
+      key('Enter');
+      if (selectedText() !== 'B3B') bad.push('seconde Entrée : ' + selectedText());
+      // Des cases choisies : Entrée repart de la case où la sélection a commencé.
+      await selectCells(1, 0, 0, 2, 1);
+      const range = !!ed().state.selection.$anchorCell;
+      key('Enter');
+      if (!range || selectedText() !== 'B2A' || ed().state.selection.$anchorCell) bad.push('cases choisies : ' + JSON.stringify({ range, selected: selectedText() }));
+      // Une case fusionnée sur deux lignes : on se range sous sa dernière ligne.
+      Editor.setHTML('<table><tbody><tr><td rowspan="2"><p>fus</p></td><td><p>x1</p></td></tr><tr><td><p>x2</p></td></tr><tr><td><p>y1</p></td><td><p>y2</p></td></tr></tbody></table><p>fin</p>');
+      await sleep(150);
+      ed().commands.focus();
+      cursorAtEndOf('fus');
+      key('Enter');
+      if (selectedText() !== 'y1') bad.push('sous la case fusionnée : ' + selectedText());
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'gridscope_enter_on_the_last_row_of_a_document_table_does_nothing',
+    description: 'Sur la dernière ligne d\'un tableau de document, Entrée est prise sans rien faire : ni ligne de tableau ni paragraphe ajoutés, le curseur ne bouge pas ; Maj+Entrée ajoute un retour à la ligne dans la case et ne descend pas',
+    run: async (h) => withDoc(h, TWO_TABLES, async () => {
+      const bad = [];
+      await cursorIn(1, 2, 0);
+      const at = ed().state.selection.from;
+      const before = docJson();
+      const handled = key('Enter');
+      if (!handled || ed().state.selection.from !== at || docJson() !== before) bad.push('Entrée sur la dernière ligne : ' + JSON.stringify({ handled, moved: ed().state.selection.from !== at, unchanged: docJson() === before }));
+      // Maj+Entrée : un retour à la ligne dans la même case.
+      await cursorIn(1, 0, 0);
+      const handledShift = key('Enter', { shiftKey: true });
+      const cell = ed().state.doc.nodeAt(cellPos(1, 0, 0));
+      let breaks = 0;
+      cell.descendants((node) => { if (node.type.name === 'hardBreak') breaks++; });
+      if (!handledShift || breaks !== 1 || rowCount(1) !== 3) bad.push('Maj+Entrée : ' + JSON.stringify({ handledShift, breaks, rows: rowCount(1) }));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'gridscope_enter_keeps_its_meaning_in_a_list_a_code_block_a_quote_and_outside_a_table',
+    description: 'Entrée garde son sens quand le texte n\'est pas un paragraphe ou un titre posé directement dans la case : dans une liste elle ajoute un point, dans un bloc de code un retour à la ligne, dans une citation elle coupe son paragraphe ; hors d\'un tableau elle coupe le paragraphe',
+    run: async (h) => {
+      const bad = [];
+      const cellWith = inner => '<p>avant</p><table><tbody><tr><td>' + inner + '</td><td><p>côté</p></td></tr><tr><td><p>bas</p></td><td><p>bas côté</p></td></tr></tbody></table><p>après</p>';
+      const count = name => { let n = 0; ed().state.doc.descendants((node) => { if (node.type.name === name) n++; }); return n; };
+      await withDoc(h, cellWith('<ul><li><p>un</p></li></ul>'), async () => {
+        cursorAtEndOf('un');
+        key('Enter');
+        if (count('listItem') !== 2 || selectedText() === 'bas') bad.push('liste : ' + JSON.stringify({ items: count('listItem'), selected: selectedText() }));
+      });
+      await withDoc(h, cellWith('<pre><code>ab</code></pre>'), async () => {
+        cursorAtEndOf('ab');
+        key('Enter');
+        let code = '';
+        ed().state.doc.descendants((node) => { if (node.type.name === 'codeBlock') code = node.textContent; });
+        if (!/\n/.test(code) || selectedText() === 'bas') bad.push('bloc de code : ' + JSON.stringify(code));
+      });
+      await withDoc(h, cellWith('<blockquote><p>cite</p></blockquote>'), async () => {
+        cursorAtEndOf('cite');
+        key('Enter');
+        let quoted = 0;
+        ed().state.doc.descendants((node) => { if (node.type.name === 'blockquote') quoted = node.childCount; });
+        if (quoted !== 2) bad.push('citation : ' + quoted + ' paragraphe(s)');
+      });
+      await withDoc(h, cellWith('<p>texte</p>'), async () => {
+        const paragraphs = () => count('paragraph');
+        const n = paragraphs();
+        cursorAtEndOf('avant');
+        key('Enter');
+        if (paragraphs() !== n + 1) bad.push('hors d\'un tableau : ' + (paragraphs() - n) + ' paragraphe(s) de plus');
+      });
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'gridscope_enter_in_an_inner_table_stays_in_the_inner_table',
+    description: 'Un tableau dans une case : Entrée descend dans le tableau intérieur, et sur sa dernière ligne elle ne fait rien (elle ne saute pas dans la ligne du tableau extérieur)',
+    run: async (h) => withDoc(h, '<p>avant</p><table><tbody><tr><td><p>dehors</p>' + tableHtml('N', 2, 1) + '</td></tr><tr><td><p>dessous</p></td></tr></tbody></table><p>après</p>', async () => {
+      const bad = [];
+      await cursorIn(1, 0, 0);
+      key('Enter');
+      if (selectedText() !== 'N2A') bad.push('depuis N1A : ' + selectedText());
+      const before = docJson();
+      const handled = key('Enter');
+      if (!handled || selectedText() !== 'N2A' || docJson() !== before) bad.push('dernière ligne du tableau intérieur : ' + JSON.stringify({ handled, selected: selectedText() }));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'gridscope_enter_goes_down_under_track_changes_without_a_suggestion',
+    description: 'Suivi des modifications allumé : Entrée descend d\'une case sans rien proposer (la sélection seule bouge)',
+    run: async (h) => withDoc(h, TWO_TABLES, async () => {
+      const bad = [];
+      await cursorIn(1, 0, 0);
+      Editor.setTrackChanges(true);
+      await sleep(100);
+      const before = docJson();
+      const handled = key('Enter');
+      await sleep(60);
+      if (!handled || selectedText() !== 'B2A' || docJson() !== before || Editor.hasPendingTrackedChanges()) bad.push(JSON.stringify({ handled, selected: selectedText(), unchanged: docJson() === before, pending: Editor.hasPendingTrackedChanges() }));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  // ---------- Lot 4 (a) : les bandeaux d'un tableau de document ----------
+  const STRIPS = '.pp-doc-strips';
+  const stripCount = () => document.querySelectorAll(STRIPS).length;
+  const stripsShown = () => { const root = document.querySelector(STRIPS); return !!root && !root.hidden && getComputedStyle(root).display !== 'none'; };
+  const stripLabels = kind => Array.from(document.querySelectorAll(STRIPS + ' .v2-grid-' + kind + 'head')).map(head => head.textContent).join('');
+  const litHeads = kind => Array.from(document.querySelectorAll(STRIPS + ' .v2-grid-' + kind + 'head')).map((head, i) => (head.classList.contains('sel') ? i : -1)).filter(i => i >= 0).join(',');
+  const stripsNow = () => JSON.stringify([stripCount(), stripsShown(), stripLabels('col'), stripLabels('row')]);
+  // Un appui sur un bandeau, comme le pointeur le ferait (au centre de la lettre, du numéro ou du coin).
+  function pressStrip(selector, extra) {
+    const node = document.querySelector(selector);
+    if (!node) throw new Error('bandeau introuvable : ' + selector);
+    const r = node.getBoundingClientRect();
+    node.dispatchEvent(new PointerEvent('pointerdown', Object.assign({ bubbles: true, cancelable: true, button: 0, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, pointerId: 1, isPrimary: true }, extra || {})));
+  }
+  const selectedCellTexts = () => { const out = []; const sel = ed().state.selection; if (sel.forEachCell) sel.forEachCell(node => out.push(node.textContent)); return out.join(','); };
+  async function cursorInParagraph(text) {
+    let found = null;
+    ed().state.doc.descendants((node, pos) => { if (found == null && node.type.name === 'paragraph' && node.textContent === text) found = pos + 1; return found == null; });
+    ed().commands.setTextSelection(found);
+    await sleep(150);
+  }
+  const colHead = n => STRIPS + ' .v2-grid-colhead:nth-child(' + n + ')';
+  const rowHead = n => STRIPS + ' .v2-grid-rowhead:nth-child(' + n + ')';
+
+  cases.push({
+    id: 'docstrips_follow_the_cursor_in_a_top_level_table_and_leave_nothing_behind',
+    description: 'Le curseur dans un tableau du premier niveau : les lettres et les numéros de CE tableau, en un seul jeu ; dans l\'autre tableau, ils le suivent ; hors des tableaux, la page n\'en garde aucun (ni caché ni vide)',
+    run: async (h) => withDoc(h, TWO_TABLES, async () => {
+      const bad = [];
+      await cursorInParagraph('avant');
+      if (stripCount()) bad.push('curseur hors tableau : ' + stripsNow());
+      await cursorIn(0, 0, 0);
+      if (stripCount() !== 1 || !stripsShown() || stripLabels('col') !== 'AB' || stripLabels('row') !== '12') bad.push('tableau A : ' + stripsNow());
+      await cursorIn(1, 2, 1);
+      if (stripCount() !== 1 || !stripsShown() || stripLabels('col') !== 'AB' || stripLabels('row') !== '123') bad.push('tableau B : ' + stripsNow());
+      await cursorInParagraph('entre');
+      if (stripCount()) bad.push('entre les tableaux : ' + stripsNow());
+      await cursorIn(0, 1, 1);
+      await cursorInParagraph('après');
+      if (stripCount()) bad.push('sous les tableaux : ' + stripsNow());
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'docstrips_none_for_a_table_in_a_cell_or_in_a_column',
+    description: 'Pas de bandeaux pour un tableau posé dans une case ni dans une colonne (la place manque) ; le tableau extérieur, lui, garde les siens depuis sa case voisine',
+    run: async (h) => {
+      const bad = [];
+      await withDoc(h, '<p>avant</p><table><tbody><tr><td><p>dehors</p>' + tableHtml('N', 2, 2) + '</td><td><p>voisine</p></td></tr></tbody></table><p>après</p>', async () => {
+        await cursorIn(1, 0, 0);
+        if (stripCount()) bad.push('tableau dans une case : ' + stripsNow());
+        await cursorIn(0, 0, 1);
+        if (!stripsShown() || stripLabels('col') !== 'AB' || stripLabels('row') !== '1') bad.push('tableau extérieur : ' + stripsNow());
+      });
+      await h.resetEditor();
+      await h.focusAtEnd();
+      await h.clickButton('v2-btn-two-columns');
+      await sleep(60);
+      const column = h.tiptap().querySelector('.two-columns-column');
+      await h.focusInElement(column.querySelector('p') || column);
+      await h.clickButton('v2-btn-table');
+      await sleep(250);
+      if (!h.tiptap().querySelector('.two-columns-column table')) bad.push('le tableau n\'est pas dans la colonne');
+      else if (stripCount()) bad.push('tableau dans une colonne : ' + stripsNow());
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'docstrips_click_a_letter_a_number_or_the_corner_to_choose_cells',
+    description: 'Un appui sur une lettre choisit la colonne, sur un numéro la ligne, sur le coin tout le tableau ; Maj étend ; l\'éditeur garde le focus et les bandeaux restent',
+    run: async (h) => withDoc(h, TWO_TABLES, async () => {
+      const bad = [];
+      await cursorIn(1, 0, 0);
+      pressStrip(colHead(2));
+      await sleep(150);
+      if (selectedCellTexts() !== 'B1B,B2B,B3B' || !ed().view.hasFocus() || !stripsShown()) bad.push('lettre B : ' + JSON.stringify([selectedCellTexts(), ed().view.hasFocus(), stripsShown()]));
+      pressStrip(rowHead(2));
+      await sleep(150);
+      if (selectedCellTexts() !== 'B2A,B2B') bad.push('numéro 2 : ' + selectedCellTexts());
+      pressStrip(rowHead(3), { shiftKey: true });
+      await sleep(150);
+      if (selectedCellTexts() !== 'B2A,B2B,B3A,B3B') bad.push('Maj + numéro 3 : ' + selectedCellTexts());
+      pressStrip(colHead(1));
+      await sleep(150);
+      pressStrip(colHead(2), { shiftKey: true });
+      await sleep(150);
+      if (selectedCellTexts().split(',').length !== 6) bad.push('lettre A puis Maj + lettre B : ' + selectedCellTexts());
+      pressStrip(STRIPS + ' .v2-grid-corner');
+      await sleep(150);
+      if (selectedCellTexts().split(',').length !== 6 || litHeads('col') !== '0,1' || litHeads('row') !== '0,1,2') bad.push('coin : ' + JSON.stringify([selectedCellTexts(), litHeads('col'), litHeads('row')]));
+      // Les cases choisies sont celles du tableau B : le tableau A n'a pas bougé.
+      const otherCells = tablesOf()[0].node.textContent;
+      if (otherCells !== 'A1AA1BA2AA2B') bad.push('tableau A : ' + otherCells);
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'docstrips_light_up_the_columns_and_rows_the_selection_covers',
+    description: 'Les lettres et les numéros des cases touchées par le curseur ou par la sélection s\'allument, comme dans la grille',
+    run: async (h) => withDoc(h, TWO_TABLES, async () => {
+      const bad = [];
+      await cursorIn(1, 1, 1);
+      if (litHeads('col') !== '1' || litHeads('row') !== '1') bad.push('curseur : ' + JSON.stringify([litHeads('col'), litHeads('row')]));
+      await selectCells(1, 0, 0, 1, 1);
+      if (litHeads('col') !== '0,1' || litHeads('row') !== '0,1') bad.push('quatre cases : ' + JSON.stringify([litHeads('col'), litHeads('row')]));
+      await selectCells(1, 2, 0, 2, 1);
+      if (litHeads('col') !== '0,1' || litHeads('row') !== '2') bad.push('dernière ligne : ' + JSON.stringify([litHeads('col'), litHeads('row')]));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'docstrips_follow_a_structure_change_and_hide_when_the_editor_loses_focus',
+    description: 'Une ligne ajoutée ou retirée : un numéro de plus ou de moins ; l\'éditeur sans focus : plus aucun bandeau, et ils reviennent avec lui',
+    run: async (h) => withDoc(h, TWO_TABLES, async () => {
+      const bad = [];
+      await cursorIn(0, 1, 0);
+      ed().chain().focus().addRowAfter().run();
+      await sleep(200);
+      if (stripLabels('row') !== '123' || stripLabels('col') !== 'AB') bad.push('ligne de plus : ' + stripsNow());
+      await undo();
+      await sleep(150);
+      if (stripLabels('row') !== '12') bad.push('annulé : ' + stripsNow());
+      ed().chain().focus().addColumnAfter().run();
+      await sleep(200);
+      if (stripLabels('col') !== 'ABC') bad.push('colonne de plus : ' + stripsNow());
+      ed().commands.blur();
+      await sleep(200);
+      if (stripCount()) bad.push('sans focus : ' + stripsNow());
+      ed().commands.focus();
+      await sleep(200);
+      if (!stripsShown() || stripLabels('col') !== 'ABC') bad.push('focus rendu : ' + stripsNow());
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'docstrips_stay_with_track_changes_and_choosing_changes_nothing',
+    description: 'Suivi des modifications allumé : les bandeaux sont là, une lettre choisit sa colonne et le document ne change pas (aucune suggestion)',
+    run: async (h) => withDoc(h, TWO_TABLES, async () => {
+      const bad = [];
+      await cursorIn(1, 0, 0);
+      Editor.setTrackChanges(true);
+      await sleep(100);
+      const before = docJson();
+      pressStrip(colHead(2));
+      await sleep(150);
+      if (!stripsShown() || selectedCellTexts() !== 'B1B,B2B,B3B' || docJson() !== before || Editor.hasPendingTrackedChanges()) bad.push(JSON.stringify({ shown: stripsShown(), selected: selectedCellTexts(), unchanged: docJson() === before, pending: Editor.hasPendingTrackedChanges() }));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'docstrips_offset_keeps_the_table_bar_off_the_letters',
+    description: 'La barre du tableau laisse la hauteur des lettres libre au-dessus du tableau quand elles se montrent, et 0 sinon (hors d\'un tableau, tableau dans une case, éditeur sans focus)',
+    run: async (h) => withDoc(h, '<p>avant</p>' + tableHtml('A', 2, 2) + '<p>entre</p><table><tbody><tr><td><p>dehors</p>' + tableHtml('N', 2, 2) + '</td></tr></tbody></table><p>après</p>', async () => {
+      const bad = [];
+      const strip = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--grid-strip-h')) || 22;
+      await cursorInParagraph('avant');
+      if (GridEditor.documentStripsOffset() !== 0) bad.push('hors tableau : ' + GridEditor.documentStripsOffset());
+      await cursorIn(0, 0, 0);
+      if (GridEditor.documentStripsOffset() !== strip) bad.push('dans le tableau : ' + GridEditor.documentStripsOffset() + ' pour ' + strip);
+      await cursorIn(2, 0, 0);
+      if (GridEditor.documentStripsOffset() !== 0) bad.push('tableau dans une case : ' + GridEditor.documentStripsOffset());
+      await cursorIn(0, 0, 0);
+      ed().commands.blur();
+      await sleep(100);
+      if (GridEditor.documentStripsOffset() !== 0) bad.push('sans focus : ' + GridEditor.documentStripsOffset());
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
     }),
   });
 

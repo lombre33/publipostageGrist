@@ -691,7 +691,8 @@
       await h.clickButton('v2-btn-table');
       await sleep(80);
       const tables = h.tiptap().querySelectorAll('table').length;
-      const pass = !GridEditor.isActive() && !document.querySelector('.v2-grid-corner, .v2-grid-cols, .v2-grid-rows') && tables === 1 && !document.getElementById('v2-toggle-a4-preview').disabled
+      // Les bandeaux d'une grille sont dans la feuille de l'éditeur ; le tableau qu'on vient d'insérer porte ceux d'un tableau de document (`.pp-doc-strips`, dans le body).
+      const pass = !GridEditor.isActive() && !document.querySelector('#editor-container .v2-grid-corner, #editor-container .v2-grid-cols, #editor-container .v2-grid-rows') && tables === 1 && !document.getElementById('v2-toggle-a4-preview').disabled
         && !isLocked('v2-btn-table') && !isLocked('v2-btn-citation') && !isLocked('v2-btn-track-changes') && !document.body.classList.contains('pp-grid-mode');
       return { pass, notes: JSON.stringify({ tables, locks: GREYED_IN_GRID.filter(id => isLocked(id)) }) };
     },
@@ -2221,8 +2222,8 @@
   });
 
   cases.push({
-    id: 'grid_enter_in_a_document_still_splits_the_paragraph',
-    description: 'Hors grille, dans un document, Entrée coupe le paragraphe comme avant (et dans un tableau de document, elle ajoute un paragraphe dans la case).',
+    id: 'grid_enter_outside_a_table_still_splits_the_paragraph',
+    description: 'Hors d\'un tableau, dans un document, Entrée coupe le paragraphe comme avant (dans la case d\'un tableau de document elle descend maintenant d\'une case, comme dans la grille : groupe gridInDocument).',
     run: async (h) => {
       await h.resetEditor();
       Editor.setHTML('<p>ab</p><table><tbody><tr><td><p>cd</p></td><td><p>ef</p></td></tr><tr><td><p>gh</p></td><td><p>ij</p></td></tr></tbody></table>');
@@ -2232,12 +2233,8 @@
       ed().chain().focus().setTextSelection(2).run(); // au milieu de « ab »
       const outside = key('Enter');
       const outsideParagraphs = paragraphs() - before;
-      let cellPara = 0;
-      doc().descendants((node, pos) => { if (node.type.name === 'tableCell' && node.textContent === 'cd') { ed().chain().focus().setTextSelection(pos + 3).run(); } return true; });
-      const inside = key('Enter');
-      doc().descendants(node => { if (node.type.name === 'tableCell' && node.textContent === 'cd') cellPara = node.childCount; return true; });
-      const ok = outside && outsideParagraphs === 1 && inside && cellPara === 2;
-      return { pass: ok, notes: JSON.stringify({ outside, outsideParagraphs, inside, cellPara }) };
+      const ok = outside && outsideParagraphs === 1;
+      return { pass: ok, notes: JSON.stringify({ outside, outsideParagraphs }) };
     },
   });
 
