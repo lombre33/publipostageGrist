@@ -1827,11 +1827,14 @@
     }
 
     const sink = await openBatchSink(cfg, tableId, sheetSetup);
-    const { ok, failed, cancelled } = await runBatchJobs(cfg, sink, jobs, { tableId, openSource, templatesCache });
+    const { ok, failed, cancelled, failures } = await runBatchJobs(cfg, sink, jobs, { tableId, openSource, templatesCache });
     if (cancelled) { setStatus(I18n.t('status.exportCancelled')); return; }
-    if (!ok) { setStatus(I18n.t(cfg.noFile), true); return; }
+    // Les lignes en échec, listées avec leur raison une fois le fichier téléchargé (ou, quand aucune n'a pu l'être, tout de suite) : la fenêtre se
+    // referme avant que l'export libère ses contrôles.
+    if (!ok) { setStatus(I18n.t(cfg.noFile), true); await BatchFailures.show(failures, { ok, format: cfg.label }); return; }
 
     await finishBatchExport(cfg, sink, { only, tableId, rows, openSource, splitting, ok, failed });
+    await BatchFailures.show(failures, { ok, format: cfg.label });
   }
 
   // Les documents à générer : un par ligne, ou un par valeur quand « Un document par valeur » découpe. Rend aussi ce que leur génération relit
@@ -1852,38 +1855,55 @@
   }
 
   // Génère les documents un par un dans `sink`. cancelled : « Annuler » sur la fenêtre des images d'un site externe a arrêté tout le lot ;
-  // failed : les lignes que leur modèle ou une erreur a empêché de générer.
+  // failed : le nombre de lignes que leur modèle ou une erreur a empêché de générer, et failures : ces lignes mêmes, de quoi les reconnaître et la
+  // raison, pour la fenêtre de fin de lot (js/batch-failures.js).
   async function runBatchJobs(cfg, sink, jobs, { tableId, openSource, templatesCache }) {
     let ok = 0;
-    let failed = 0;
     let cancelled = false;
+    const failedJobs = [];
     for (let i = 0; i < jobs.length; i++) {
       const { row, variant, source } = jobs[i];
       setStatus(I18n.t(cfg.progress, { current: i + 1, total: jobs.length }));
+      const valueName = variant && variant.label ? sanitizeFilenamePart(variant.label) : '';
       // Le modèle d'une ligne (« Modèle selon la ligne ») peut ne pas être du genre de cet export - une grille en Word, un document en Excel : la
       // ligne n'est pas générée, comme celle qui échoue.
       if (source !== openSource && cfg.grid != null && cfg.grid !== GridEditor.isGridType(source.typeModele)) {
         console.error('[main] export ' + cfg.label + ' en lot : le modèle de la ligne ' + row.id + ' (' + source.typeModele + ') ne se génère pas dans ce format');
-        failed++;
+        failedJobs.push({ row, source, valueName, wrongKind: cfg.grid ? 'document' : 'grid' });
         continue;
       }
       try {
         // Le document de cette valeur : les bulles réglées « Un document par valeur » y écrivent leur k-ième valeur (js/list-split.js) ; sans
         // découpage, le HTML et les en-têtes sont ceux de la ligne, tels quels.
         const html = ListSplit.pin(jobs[i].rowHtml !== undefined ? jobs[i].rowHtml : await sourceRowHtml(source, tableId, row, templatesCache), variant);
-        await sink.add({
-          row, source, html, headerFooterData: ListSplit.pinHeaderFooter(source.headerFooterData, variant),
-          valueName: variant && variant.label ? sanitizeFilenamePart(variant.label) : '',
-        });
+        await sink.add({ row, source, html, headerFooterData: ListSplit.pinHeaderFooter(source.headerFooterData, variant), valueName });
         ok++;
       } catch (e) {
         // « Annuler » sur la fenêtre des images d'un site externe arrête tout le lot, pas seulement cette ligne : rien n'est téléchargé.
         if (ExternalImages.isCancel(e)) { cancelled = true; break; }
         console.error('[main] export ' + cfg.label + ' en lot : échec pour la ligne', row.id, e);
-        failed++;
+        failedJobs.push({ row, source, valueName, message: e && e.message });
       }
     }
-    return { ok, failed, cancelled };
+    return { ok, failed: failedJobs.length, cancelled, failures: cancelled ? [] : await describeBatchFailures(failedJobs, tableId) };
+  }
+
+  // Les lignes en échec telles que la fenêtre de fin de lot les liste (js/batch-failures.js) : leur n°, le nom que leur fichier aurait porté - celui du
+  // modèle de la ligne, suivi de la valeur d'un « Un document par valeur » -, la raison. Une seule passe de lecture pour toutes (GristAPI.withReadPass),
+  // avant le téléchargement : la fenêtre s'ouvre aussitôt après. Le nom n'est qu'un repère : illisible, la ligne se reconnaît à son n°.
+  function describeBatchFailures(failedJobs, tableId) {
+    if (!failedJobs.length) return [];
+    return GristAPI.withReadPass(async () => {
+      const failures = [];
+      for (const { row, source, valueName, wrongKind, message } of failedJobs) {
+        let name = '';
+        try {
+          if (source && source.filenameTemplate) name = sanitizeFilenamePart(await ReaderMode.resolveFilename(source.filenameTemplate, tableId, row));
+        } catch (e) { name = ''; }
+        failures.push({ id: row.id, name: valueName ? (name ? name + ' - ' : '') + valueName : name, wrongKind, message });
+      }
+      return failures;
+    });
   }
 
   // La fin d'un export en lot : le fichier assemblé est téléchargé, le coin d'état dit combien de documents (et de planches) il contient.

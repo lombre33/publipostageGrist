@@ -118,6 +118,12 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   document sont écrites dans une ligne réservée de la table `Publipostage_Modeles` (« Réglages du
   document »), créée à la première couleur gardée pour le document : aucune table de plus, et aucune liste
   de modèles ne la montre.
+- **Lignes qu'un export en lot n'a pas pu générer** : à la fin d'un export de toutes les lignes (PDF, Word ou
+  Excel, en archive ZIP, en fichier unique ou en planches), quand des lignes échouent, une fenêtre les liste :
+  le nom que leur fichier aurait porté (ou « Ligne n° 12 »), puis la raison - un modèle d'un genre que
+  l'export ne fait pas (une grille en Word) ou l'erreur rencontrée -, avec le nombre de documents que le
+  fichier contient. Le coin d'état ne renvoie plus à la console du navigateur. Les autres lignes sont
+  téléchargées comme avant ; quand toutes échouent, rien n'est téléchargé et la fenêtre le dit.
 
 ### Corrigé
 
@@ -351,6 +357,12 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   cross, or Delete on the keyboard, removes one. The document colors are written to a reserved row of the
   `Publipostage_Modeles` table ("Réglages du document"), created when the first color is kept for the
   document: no extra table, and no template list shows it.
+- **Rows a batch export could not generate**: at the end of an export of all the rows (PDF, Word or Excel,
+  as a ZIP archive, a single file or sheets), when some rows fail, a window lists them: the name their file
+  would have had (or "Row #12"), then the reason - a template of a kind the export does not make (a grid
+  in Word) or the error met -, with the number of documents the file contains. The status corner no longer
+  points to the browser console. The other rows are downloaded as before; when all of them fail, nothing is
+  downloaded and the window says so.
 
 ### Fixed
 

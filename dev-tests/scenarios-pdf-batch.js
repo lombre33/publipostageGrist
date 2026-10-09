@@ -28,8 +28,10 @@
 
   // Clique la ligne du menu et attend le téléchargement : la confirmation acceptée et notée (options reçues), le <a download> intercepté au lieu d'un vrai téléchargement.
   // `downloadsSink` (facultatif) : la liste où un autre chemin de téléchargement note aussi ses fichiers (un PDF seul, pdfmake.download : voir clickSinglePdf).
-  async function clickExportRow(h, rowId, downloadsSink) {
+  // `until` (facultatif) : ce qui met fin à l'attente quand aucun fichier ne doit sortir (un lot dont toutes les lignes échouent) ; par défaut, un fichier téléchargé.
+  async function clickExportRow(h, rowId, downloadsSink, until) {
     const downloads = downloadsSink || [];
+    const finished = until || (() => downloads.length > 0);
     const confirms = [];
     const blobsByUrl = new Map();
     const origCreate = URL.createObjectURL;
@@ -48,7 +50,7 @@
     try {
       document.getElementById(rowId).dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
       const startedAt = Date.now();
-      while (!downloads.length && Date.now() - startedAt < 60000) await h.sleep(100);
+      while (!finished() && Date.now() - startedAt < 60000) await h.sleep(100);
       await h.sleep(50); // le statut final est posé juste après le clic du <a>
     } finally {
       statusObserver.disconnect();
@@ -182,6 +184,7 @@
     description: '« Exporter toutes les lignes en DOCX (ZIP)… » télécharge une archive ZIP contenant un .docx par ligne, chacun avec le texte de sa ligne',
     run: async (h) => {
       await seed(h, `<p>Bonjour ${badge('Nom')}, voici votre courrier.</p>`);
+      const asked = h.choosePrompts.length;
       const res = await clickExportRow(h, 'v2-btn-export-docx-batch');
       const dl = res.downloads[0];
       const zip = dl && dl.blob ? await JSZip.loadAsync(await dl.blob.arrayBuffer()) : null;
@@ -192,8 +195,9 @@
       const pass = res.downloads.length === 1 && dl.name === TABLE + '-export-docx.zip'
         && JSON.stringify(files) === JSON.stringify(Object.keys(expectedByFile).sort())
         && files.every(f => squash(textsByFile[f]).includes(squash(expectedByFile[f])))
-        && res.confirms.length === 1;
-      return { pass, notes: JSON.stringify({ downloads: res.downloads.map(d => d.name), confirms: res.confirms, status: res.status, textsByFile }) };
+        && res.confirms.length === 1
+        && h.choosePrompts.length === asked; // aucune ligne en échec : la fenêtre de fin de lot ne s'ouvre pas
+      return { pass, notes: JSON.stringify({ downloads: res.downloads.map(d => d.name), confirms: res.confirms, status: res.status, textsByFile, windows: h.choosePrompts.length - asked }) };
     },
   });
 
@@ -460,6 +464,19 @@
     }
     return pages;
   }
+  // La fenêtre de fin de lot (js/batch-failures.js), telle que le harnais l'a reçue (Dialogs.choose, h.choosePrompts) : une seule, son titre, son texte (l'introduction
+  // - `ok` : combien de documents le fichier contient, 0 : rien n'a été téléchargé -, puis une ligne par document en échec) et « Fermer » pour seul bouton.
+  const failureLine = (name, id, reason) => I18n.t('batchFailures.line', { row: name ? I18n.t('batchFailures.row.named', { name, id }) : I18n.t('batchFailures.row.unnamed', { id }), reason });
+  function failureWindowProblems(windows, lines, ok) {
+    if (windows.length !== 1) return ['fenêtres de fin de lot : ' + windows.length];
+    const [win] = windows;
+    const problems = [];
+    const wantedText = I18n.t(ok ? 'batchFailures.intro' : 'batchFailures.introNone', { ok, n: lines.length }) + '\n\n' + lines.join('\n');
+    if (win.title !== I18n.t('batchFailures.title', { n: lines.length })) problems.push('titre=' + win.title);
+    if (win.message !== wantedText) problems.push('texte=' + JSON.stringify(win.message) + ' au lieu de ' + JSON.stringify(wantedText));
+    if (!Array.isArray(win.choices) || win.choices.length || win.cancelLabel !== I18n.t('common.close')) problems.push('boutons=' + JSON.stringify(win.choices) + ' / ' + win.cancelLabel);
+    return problems;
+  }
   // Ce qui manque ou déborde dans un document : `has` doit y être (corps ou en-tête), `hasNot` ne doit pas y être, et sa page est dans le sens attendu.
   function documentProblems(label, fact, expect) {
     const all = (fact && (fact.body + (fact.headers || ''))) || '';
@@ -669,6 +686,7 @@
         rules: ids => [rtRule('Grille', ids.grille)],
       });
       try {
+        const asked = h.choosePrompts.length;
         const res = await clickExportRow(h, 'v2-btn-export-docx-batch');
         const dl = res.downloads[0];
         const zip = dl && dl.blob ? await JSZip.loadAsync(await dl.blob.arrayBuffer()) : null;
@@ -678,6 +696,9 @@
         problems.push(...documentProblems('Facture_Alpha Durand.docx', zip && zip.file('Facture_Alpha Durand.docx') ? await docxFacts(await zip.file('Facture_Alpha Durand.docx').async('blob')) : null, FACTURE_OF('Alpha Durand')));
         const status = I18n.t('status.batchExportDoneWithFailuresDocx', { ok: 2, failed: 1 });
         if (res.status !== status) problems.push('fin=' + res.status);
+        if (/console/i.test(res.status)) problems.push('la fin renvoie à la console : ' + res.status);
+        // La fenêtre de fin de lot nomme la ligne qui manque (le nom que son fichier aurait porté, son n°) et dit pourquoi.
+        problems.push(...failureWindowProblems(h.choosePrompts.slice(asked), [failureLine('Grille_Bravo Martin', 2, I18n.t('batchFailures.wrongKind.grid', { format: 'DOCX' }))], 2));
         return { pass: res.downloads.length === 1 && JSON.stringify(files) === JSON.stringify(expected) && !problems.length, notes: JSON.stringify({ files, problems, status: res.status }) };
       } finally { await releaseRowTemplates(h, saved); }
     },
@@ -729,6 +750,86 @@
           && document_.table.headerRows === 1 && document_.table.dontBreakRows === true && (document_.table.heights || []).length === 3;
         return { pass, notes: JSON.stringify({ grid: facts(grid), document: facts(document_), downloads: res.downloads.length, status: res.status }) };
       } finally { await releaseRowTemplates(h, saved); }
+    },
+  });
+
+  // Une ligne dont la génération échoue (ici le rendu du .docx lève une erreur) : le lot garde les autres lignes et la fenêtre de fin de lot liste les
+  // lignes absentes, avec le nom de leur fichier ou à défaut leur n°, et la raison (le texte de l'erreur, ou « erreur pendant la génération » sans texte).
+  async function withDocxRenderFailing(rowIds, errorFor, fn) {
+    await ExportEngines.ensure('docx'); // le moteur Word ne se charge qu'au premier export : sans lui, DocxExport n'existe pas encore
+    const original = DocxExport.getDocxBlobForRecord;
+    DocxExport.getDocxBlobForRecord = (html, tableId, row, ...rest) => {
+      if (rowIds.includes(row.id)) throw new Error(errorFor(row.id));
+      return original.call(DocxExport, html, tableId, row, ...rest);
+    };
+    try { return await fn(); } finally { DocxExport.getDocxBlobForRecord = original; }
+  }
+  const THREE_ROWS = [{ id: 1, Nom: 'Alpha Durand', Genre: 'Facture' }, { id: 2, Nom: 'Bravo Martin', Genre: 'Devis' }, { id: 3, Nom: 'Charlie Petit', Genre: 'Autre' }];
+
+  cases.push({
+    id: 'pdfbatch_docx_zip_lists_the_rows_that_failed_with_the_reason',
+    description: 'Lot DOCX : deux lignes dont le rendu échoue ne sont pas dans l’archive ; la fenêtre de fin de lot les liste (nom du fichier ou n° de la ligne, raison), dit combien de documents l’archive contient, et le coin d’état ne renvoie plus à la console',
+    run: async (h) => {
+      const saved = await seedRowTemplates(h, { rows: THREE_ROWS });
+      try {
+        const asked = h.choosePrompts.length;
+        const res = await withDocxRenderFailing([2, 3], id => (id === 2 ? 'Police introuvable' : ''), () => clickExportRow(h, 'v2-btn-export-docx-batch'));
+        const dl = res.downloads[0];
+        const zip = dl && dl.blob ? await JSZip.loadAsync(await dl.blob.arrayBuffer()) : null;
+        const files = zip ? Object.keys(zip.files).filter(n => !zip.files[n].dir).sort() : [];
+        const problems = [];
+        if (JSON.stringify(files) !== JSON.stringify(['Facture_Alpha Durand.docx'])) problems.push('fichiers=' + JSON.stringify(files));
+        if (res.status !== I18n.t('status.batchExportDoneWithFailuresDocx', { ok: 1, failed: 2 })) problems.push('fin=' + res.status);
+        if (/console/i.test(res.status)) problems.push('la fin renvoie à la console : ' + res.status);
+        problems.push(...failureWindowProblems(h.choosePrompts.slice(asked), [
+          failureLine('Devis_Bravo Martin', 2, I18n.t('batchFailures.error', { message: 'Police introuvable' })),
+          failureLine('', 3, I18n.t('batchFailures.errorNoDetail')),
+        ], 1));
+        return { pass: res.downloads.length === 1 && !problems.length, notes: JSON.stringify({ files, problems, status: res.status }) };
+      } finally { await releaseRowTemplates(h, saved); }
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_docx_zip_every_row_failing_downloads_nothing_and_the_window_says_so',
+    description: 'Lot DOCX dont toutes les lignes échouent : rien n’est téléchargé, le coin d’état dit l’échec en rouge, et la fenêtre de fin de lot liste les trois lignes en précisant qu’aucun document n’a été produit',
+    run: async (h) => {
+      const saved = await seedRowTemplates(h, { rows: THREE_ROWS });
+      try {
+        const asked = h.choosePrompts.length;
+        const res = await withDocxRenderFailing([1, 2, 3], () => 'Police introuvable', () => clickExportRow(h, 'v2-btn-export-docx-batch', undefined, () => h.choosePrompts.length > asked));
+        const problems = [];
+        if (res.downloads.length) problems.push('téléchargements=' + res.downloads.length);
+        if (res.status !== I18n.t('status.exportErrorDocx')) problems.push('fin=' + res.status);
+        const reason = I18n.t('batchFailures.error', { message: 'Police introuvable' });
+        problems.push(...failureWindowProblems(h.choosePrompts.slice(asked), [
+          failureLine('Facture_Alpha Durand', 1, reason), failureLine('Devis_Bravo Martin', 2, reason), failureLine('', 3, reason),
+        ], 0));
+        return { pass: !problems.length, notes: JSON.stringify({ problems, status: res.status }) };
+      } finally { await releaseRowTemplates(h, saved); }
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_failure_window_lists_a_hundred_documents_at_most_and_cuts_long_error_texts',
+    description: 'La fenêtre de fin de lot liste cent documents au plus puis dit combien d’autres suivent, ramène un texte d’erreur sur plusieurs lignes à une seule et coupe un texte trop long ; sans échec à lister, elle ne s’ouvre pas',
+    run: async (h) => {
+      const asked = h.choosePrompts.length;
+      await BatchFailures.show(Array.from({ length: 105 }, (_, i) => ({ id: i + 1, name: 'Facture ' + (i + 1), message: 'Police introuvable' })), { ok: 3, format: 'DOCX' });
+      await BatchFailures.show([], { ok: 3, format: 'DOCX' });
+      await BatchFailures.show([{ id: 7, name: '', message: 'Première ligne\n   seconde ligne' }, { id: 8, name: '', message: 'x'.repeat(500) }], { ok: 0, format: 'DOCX' });
+      const windows = h.choosePrompts.slice(asked);
+      const lines = windows[0] ? windows[0].message.split('\n') : [];
+      const problems = [];
+      if (windows.length !== 2) problems.push('fenêtres=' + windows.length);
+      if (lines.filter(l => l.startsWith('• ')).length !== 100) problems.push('lignes listées=' + lines.filter(l => l.startsWith('• ')).length);
+      if (lines[lines.length - 1] !== I18n.t('batchFailures.more', { n: 5 })) problems.push('dernière ligne=' + lines[lines.length - 1]);
+      if (windows[0] && windows[0].title !== I18n.t('batchFailures.title', { n: 105 })) problems.push('titre=' + windows[0].title);
+      const second = windows[1] ? windows[1].message.split('\n').filter(l => l.startsWith('• ')) : [];
+      if (second[0] !== failureLine('', 7, I18n.t('batchFailures.error', { message: 'Première ligne seconde ligne' }))) problems.push('texte sur deux lignes=' + second[0]);
+      if (second[1] !== failureLine('', 8, I18n.t('batchFailures.error', { message: 'x'.repeat(159) + '…' }))) problems.push('texte trop long=' + (second[1] || '').length + ' signes');
+      if (windows[1] && !windows[1].message.startsWith(I18n.t('batchFailures.introNone', { ok: 0, n: 2 }))) problems.push('introduction=' + windows[1].message.slice(0, 80));
+      return { pass: !problems.length, notes: JSON.stringify({ problems }) };
     },
   });
 

@@ -703,6 +703,62 @@ async function runSites(theme) {
   }
   await page.evaluate(() => { PdfExport.ensurePdfLibsLoaded = window.__realEnsure; ExportCommon.ensureJsZipLoaded = window.__realJsZip; });
 
+  // 5 bis) Un lot dont une ligne échoue (le rendu Word de la ligne 2 lève une erreur) : une fois l'archive téléchargée, la fenêtre de fin de lot (js/batch-failures.js,
+  // sur Dialogs.choose) liste la ligne absente et sa raison, au-dessus de tout, sans autre bouton que « Fermer » ; le verrou d'export n'est rendu qu'à sa fermeture. Puis une
+  // longue liste dans le panneau de 700x400 : titre et « Fermer » restent en place, seule la liste défile.
+  await page.evaluate(async () => {
+    await ExportEngines.ensure('docx');
+    window.__realDocxBlob = DocxExport.getDocxBlobForRecord;
+    DocxExport.getDocxBlobForRecord = (html, tableId, row, ...rest) => {
+      if (row.id === 2) throw new Error('Police introuvable');
+      return window.__realDocxBlob.call(DocxExport, html, tableId, row, ...rest);
+    };
+    document.getElementById('status-msg').textContent = '';
+  });
+  await realHover('#v2-btn-quality');
+  await realClick('#v2-btn-export-docx-batch', 500);
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => { const ov = document.getElementById('pp-dialog-modal'); return !!ov && ov.style.display !== 'none' && /généré/.test(ov.querySelector('h3').textContent); }, null, { timeout: 90000 });
+  await page.waitForTimeout(200);
+  s = await state();
+  expectDialog(`${T}, lot en échec : la fenêtre de fin de lot dit combien de documents l’archive contient et liste la ligne absente avec sa raison, « Fermer » pour seul bouton`, s,
+    { title: 'Un document n’a pas été généré', message: /^Le fichier téléchargé contient 1 autre document, mais pas celui-ci :\n\n• [^\n]*n° 2[^\n]* : erreur pendant la génération \(Police introuvable\)$/, buttons: ['Fermer'], focus: 'Fermer' });
+  check(`${T}, lot en échec : le coin d’état garde le compte sans renvoyer à la console, et la fenêtre est au-dessus de tout (z-index ${s.z})`,
+    (await statusText()) === await tr('status.batchExportDoneWithFailuresDocx', { ok: 1, failed: 1 }) && !/console/i.test(await statusText()) && (await hitTest('#pp-dialog-modal .modal-content')).onTop && s.z === '2100', { status: await statusText(), z: s.z });
+  check(`${T}, lot en échec : les contrôles d’export restent grisés tant que la fenêtre est ouverte`, await page.evaluate(() => document.getElementById('v2-btn-export-docx-batch').style.pointerEvents === 'none'));
+  await snap(`${T}-s5b-lot-en-echec`);
+  await click(CANCEL);
+  check(`${T}, lot en échec : « Fermer » (clic réel) ferme la fenêtre et rend les contrôles d’export`, !(await isOpen()) && await page.evaluate(() => document.getElementById('v2-btn-export-docx-batch').style.pointerEvents === ''));
+  await page.evaluate(() => { DocxExport.getDocxBlobForRecord = window.__realDocxBlob; });
+
+  // Quarante documents en échec, aux noms longs, dans 700x400.
+  await page.evaluate(() => {
+    const failures = Array.from({ length: 40 }, (_, i) => ({ id: i + 1, name: 'Facture_2026-' + String(i + 1).padStart(3, '0') + ' - Société Dupont et Fils', message: i % 2 ? 'Police introuvable' : '' }));
+    window.__dlg = { done: false };
+    BatchFailures.show(failures, { ok: 12, format: 'DOCX' }).then(() => { window.__dlg.done = true; });
+  });
+  await page.waitForTimeout(300);
+  s = await state();
+  const listGeometry = await page.evaluate(() => {
+    const ov = document.getElementById('pp-dialog-modal');
+    const body = ov.querySelector('.pp-modal-body');
+    const title = ov.querySelector('h3').getBoundingClientRect();
+    const message = ov.querySelector('.pp-dialog-message');
+    return { bodyScrolls: body.scrollHeight > body.clientHeight + 1, lines: message.textContent.split('\n').filter(l => l.startsWith('• ')).length, titleTop: title.top };
+  });
+  check(`${T}, lot en échec, 40 documents : la fenêtre tient dans le panneau de 700x400, seule la liste défile, titre et « Fermer » restent visibles`,
+    s.open && inPanel(s.box) && s.title === '40 documents n’ont pas été générés' && listGeometry.bodyScrolls && listGeometry.lines === 40 && seen(await hitTest('#pp-dialog-modal h3')) && seen(await hitTest(CANCEL)), { box: s.box, title: s.title, listGeometry });
+  await snap(`${T}-s5b-quarante`);
+  const wheelAt = await hitTest('#pp-dialog-modal .pp-modal-body');
+  await page.mouse.move(wheelAt.x, wheelAt.y);
+  await page.mouse.wheel(0, 3000);
+  await page.waitForTimeout(250);
+  check(`${T}, lot en échec, 40 documents : la molette fait défiler la liste jusqu’à la dernière ligne, le titre et « Fermer » ne bougent pas`,
+    await page.evaluate(() => { const body = document.querySelector('#pp-dialog-modal .pp-modal-body'); return body.scrollTop + body.clientHeight >= body.scrollHeight - 1; }) && seen(await hitTest('#pp-dialog-modal h3')) && seen(await hitTest(CANCEL)));
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(250);
+  check(`${T}, lot en échec, 40 documents : Échap ferme la fenêtre`, !(await isOpen()) && (await result()).done === true);
+
   // 6) Galerie : « Utiliser avec une nouvelle table de données » demande le nom de la table, par-dessus l'aperçu (fenêtre de 2000).
   await realHover('#v2-new-template-group #btn-new');
   await realClick('#v2-btn-new-from-template', 1200);
