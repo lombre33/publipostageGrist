@@ -136,6 +136,35 @@
     ]
   },
   {
+    "id": "quittance-loyer",
+    "name": "Quittance de loyer",
+    "tags": [
+      "administratif"
+    ],
+    "screenshot": "quittance-loyer/thumb.png",
+    "preview": [
+      {
+        "src": "quittance-loyer/capture-1.png",
+        "w": 563,
+        "h": 796
+      },
+      {
+        "src": "quittance-loyer/capture-2.png",
+        "w": 563,
+        "h": 796
+      }
+    ],
+    "html": "quittance-loyer/template.html",
+    "pack": "quittance-loyer/pack.json",
+    "shows": [
+      "calc",
+      "amountWords",
+      "dateFormat",
+      "images",
+      "fileName"
+    ]
+  },
+  {
     "id": "flyer-a6",
     "name": "Flyer A6",
     "tags": [
@@ -329,6 +358,134 @@
       "pageFormat",
       "condition",
       "sheets"
+    ]
+  },
+  {
+    "id": "bulletin",
+    "name": "Bulletin scolaire",
+    "tags": [
+      "métier"
+    ],
+    "screenshot": "bulletin/thumb.png",
+    "preview": [
+      {
+        "src": "bulletin/capture-1.png",
+        "w": 563,
+        "h": 796
+      },
+      {
+        "src": "bulletin/capture-2.png",
+        "w": 563,
+        "h": 796
+      },
+      {
+        "src": "bulletin/capture-3.png",
+        "w": 563,
+        "h": 796
+      }
+    ],
+    "html": "bulletin/template.html",
+    "pack": "bulletin/pack.json",
+    "shows": [
+      "loop",
+      "linked",
+      "condition",
+      "images",
+      "fileName"
+    ]
+  },
+  {
+    "id": "fiche-recette",
+    "name": "Fiche recette",
+    "tags": [
+      "métier"
+    ],
+    "screenshot": "fiche-recette/thumb.png",
+    "preview": [
+      {
+        "src": "fiche-recette/capture-1.png",
+        "w": 563,
+        "h": 796
+      },
+      {
+        "src": "fiche-recette/capture-2.png",
+        "w": 563,
+        "h": 796
+      },
+      {
+        "src": "fiche-recette/capture-3.png",
+        "w": 563,
+        "h": 796
+      }
+    ],
+    "html": "fiche-recette/template.html",
+    "pack": "fiche-recette/pack.json",
+    "shows": [
+      "loop",
+      "calc",
+      "linked",
+      "condition",
+      "images",
+      "fileName"
+    ]
+  },
+  {
+    "id": "emargement",
+    "name": "Feuille d’émargement",
+    "tags": [
+      "métier"
+    ],
+    "screenshot": "emargement/thumb.png",
+    "preview": [
+      {
+        "src": "emargement/capture-1.png",
+        "w": 644,
+        "h": 455
+      },
+      {
+        "src": "emargement/capture-2.png",
+        "w": 644,
+        "h": 455
+      },
+      {
+        "src": "emargement/capture-3.png",
+        "w": 644,
+        "h": 455
+      }
+    ],
+    "html": "emargement/template.html",
+    "pack": "emargement/pack.json",
+    "headerFooter": "emargement/header-footer.json",
+    "shows": [
+      "pageFormat",
+      "loop",
+      "linked",
+      "headerFooter",
+      "pageNumbers",
+      "calc"
+    ]
+  },
+  {
+    "id": "emargement-grille",
+    "name": "Émargement en grille (Excel)",
+    "tags": [
+      "métier"
+    ],
+    "screenshot": "emargement-grille/thumb.png",
+    "preview": [
+      {
+        "src": "emargement-grille/capture-1.png",
+        "w": 1056,
+        "h": 686
+      }
+    ],
+    "html": "emargement-grille/template.html",
+    "pack": "emargement-grille/pack.json",
+    "shows": [
+      "grid",
+      "rowHeight",
+      "loop",
+      "linked"
     ]
   }
 ]

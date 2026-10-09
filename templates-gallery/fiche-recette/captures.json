@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hash": "1744fda13b938b52",
+  "preview": [
+    {
+      "src": "fiche-recette/capture-1.png",
+      "w": 563,
+      "h": 796
+    },
+    {
+      "src": "fiche-recette/capture-2.png",
+      "w": 563,
+      "h": 796
+    },
+    {
+      "src": "fiche-recette/capture-3.png",
+      "w": 563,
+      "h": 796
+    }
+  ],
+  "thumb": {
+    "src": "fiche-recette/thumb.png",
+    "w": 240,
+    "h": 320
+  }
+}

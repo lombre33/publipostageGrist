@@ -1,0 +1,28 @@
+{
+  "tables": [
+    {
+      "id": "Eleves",
+      "columns": [
+        {"id": "Nom", "type": "Text", "label": "Nom"},
+        {"id": "Prenom", "type": "Text", "label": "Prénom"},
+        {"id": "Classe", "type": "Text", "label": "Classe"},
+        {"id": "Naissance", "type": "Date", "label": "Date de naissance"},
+        {"id": "Periode", "type": "Text", "label": "Période"},
+        {"id": "Appreciation", "type": "Text", "label": "Appréciation générale"},
+        {"id": "Photo", "type": "Attachments", "label": "Photo"},
+        {"id": "MoyenneGenerale", "type": "Numeric", "label": "Moyenne générale", "formula": "notes = [n for n in Notes.lookupRecords(Eleve=$id) if n.Note is not None]\ntotal = SUM(n.Coef for n in notes)\nreturn round(SUM(n.Note * n.Coef for n in notes) / total, 2) if total else 0"}
+      ]
+    },
+    {
+      "id": "Notes",
+      "columns": [
+        {"id": "Eleve", "type": "Ref:Eleves", "label": "Élève", "show": "Nom"},
+        {"id": "Matiere", "type": "Text", "label": "Matière"},
+        {"id": "Coef", "type": "Numeric", "label": "Coefficient"},
+        {"id": "Note", "type": "Numeric", "label": "Note /20"},
+        {"id": "MoyenneClasse", "type": "Numeric", "label": "Moyenne de la classe"},
+        {"id": "Appreciation", "type": "Text", "label": "Appréciation"}
+      ]
+    }
+  ]
+}

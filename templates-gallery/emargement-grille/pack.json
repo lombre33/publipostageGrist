@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "family": "formation",
+  "main": "Sessions",
+  "tables": ["Sessions", "Participants"],
+  "links": [
+    {"table": "Participants", "mode": "match", "target": "Session", "source": "id"}
+  ],
+  "template": {
+    "type": "grille",
+    "pdfName": "Emargement #Sessions.Numero",
+    "page": {
+      "format": "A4",
+      "orientation": "landscape",
+      "margins": [15, 12, 15, 12]
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "tables": [
+    {
+      "id": "Quittances",
+      "columns": [
+        {"id": "Bailleur", "type": "Text", "label": "Bailleur"},
+        {"id": "AdresseBailleur", "type": "Text", "label": "Adresse du bailleur"},
+        {"id": "Locataire", "type": "Text", "label": "Locataire"},
+        {"id": "AdresseBien", "type": "Text", "label": "Adresse du bien"},
+        {"id": "Debut", "type": "Date", "label": "Début de période"},
+        {"id": "Fin", "type": "Date", "label": "Fin de période"},
+        {"id": "Loyer", "type": "Numeric", "label": "Loyer (€)"},
+        {"id": "Charges", "type": "Numeric", "label": "Charges (€)"},
+        {"id": "DatePaiement", "type": "Date", "label": "Date de paiement"},
+        {"id": "Mode", "type": "Choice", "label": "Mode de paiement", "choices": ["Virement", "Chèque", "Prélèvement", "Espèces"]},
+        {"id": "Lieu", "type": "Text", "label": "Lieu"},
+        {"id": "Signature", "type": "Attachments", "label": "Signature du bailleur"}
+      ]
+    }
+  ]
+}

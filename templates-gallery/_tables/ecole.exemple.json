@@ -1,0 +1,59 @@
+{
+  "rows": {
+    "Eleves": [
+      {"id": 1, "Nom": "Lefèvre", "Prenom": "Zoé", "Classe": "3e B", "Naissance": "2011-04-17", "Periode": "Trimestre 1 — 2026/2027", "Appreciation": "Élève sérieuse et investie. Poursuivre les efforts à l’oral en langues.", "Photo": [1], "MoyenneGenerale": 13.68},
+      {"id": 2, "Nom": "Ben Saïd", "Prenom": "Yanis", "Classe": "3e B", "Naissance": "2011-01-05", "Periode": "Trimestre 1 — 2026/2027", "Appreciation": "Début d’année difficile : absences répétées en sciences.", "Photo": null, "MoyenneGenerale": 8.57},
+      {"id": 3, "Nom": "de la Fontaine-Beauregard", "Prenom": "Marie-Hélène", "Classe": "3e B", "Naissance": "2010-12-28", "Periode": "Trimestre 1 — 2026/2027", "Appreciation": "Excellent trimestre. Félicitations.", "Photo": [2], "MoyenneGenerale": 17.63}
+    ],
+    "Notes": [
+      {"id": 1, "Eleve": 1, "Matiere": "Mathématiques", "Coef": 4, "Note": 14.5, "MoyenneClasse": 10.2, "Appreciation": "Résultats satisfaisants"},
+      {"id": 2, "Eleve": 1, "Matiere": "Français", "Coef": 4.5, "Note": 12, "MoyenneClasse": 13.5, "Appreciation": "À consolider"},
+      {"id": 3, "Eleve": 1, "Matiere": "Histoire-Géographie", "Coef": 3, "Note": 15, "MoyenneClasse": 10.5, "Appreciation": "Résultats satisfaisants"},
+      {"id": 4, "Eleve": 1, "Matiere": "Anglais LV1", "Coef": 3, "Note": 13.5, "MoyenneClasse": 9.9, "Appreciation": "Peut mieux faire"},
+      {"id": 5, "Eleve": 1, "Matiere": "Espagnol LV2", "Coef": 2, "Note": 11, "MoyenneClasse": 12.4, "Appreciation": "À consolider"},
+      {"id": 6, "Eleve": 1, "Matiere": "Physique-Chimie", "Coef": 3, "Note": 13, "MoyenneClasse": 13.3, "Appreciation": "Très bien"},
+      {"id": 7, "Eleve": 1, "Matiere": "SVT", "Coef": 2, "Note": 16, "MoyenneClasse": 13.8, "Appreciation": "Bon travail"},
+      {"id": 8, "Eleve": 1, "Matiere": "EPS", "Coef": 2, "Note": 15, "MoyenneClasse": 12.4, "Appreciation": "Très bien"},
+      {"id": 9, "Eleve": 1, "Matiere": "Arts plastiques", "Coef": 1, "Note": 17, "MoyenneClasse": 10.8, "Appreciation": "Peut mieux faire"},
+      {"id": 10, "Eleve": 1, "Matiere": "Technologie", "Coef": 2, "Note": 12.5, "MoyenneClasse": 12.7, "Appreciation": "À consolider"},
+      {"id": 11, "Eleve": 2, "Matiere": "Mathématiques", "Coef": 4, "Note": 8, "MoyenneClasse": 9.9, "Appreciation": "Résultats satisfaisants"},
+      {"id": 12, "Eleve": 2, "Matiere": "Français", "Coef": 4.5, "Note": 9.5, "MoyenneClasse": 10.2, "Appreciation": "Résultats satisfaisants"},
+      {"id": 13, "Eleve": 2, "Matiere": "Histoire-Géographie", "Coef": 3, "Note": 11, "MoyenneClasse": 9.2, "Appreciation": "Peut mieux faire"},
+      {"id": 14, "Eleve": 2, "Matiere": "Anglais LV1", "Coef": 3, "Note": 10, "MoyenneClasse": 10.3, "Appreciation": "À consolider"},
+      {"id": 15, "Eleve": 2, "Matiere": "Espagnol LV2", "Coef": 2, "Note": null, "MoyenneClasse": 9.1, "Appreciation": "Absent aux évaluations"},
+      {"id": 16, "Eleve": 2, "Matiere": "Physique-Chimie", "Coef": 3, "Note": 0, "MoyenneClasse": 10.5, "Appreciation": "Copie non rendue"},
+      {"id": 17, "Eleve": 2, "Matiere": "SVT", "Coef": 2, "Note": null, "MoyenneClasse": 12.9, "Appreciation": "Absent aux évaluations"},
+      {"id": 18, "Eleve": 2, "Matiere": "EPS", "Coef": 2, "Note": 14, "MoyenneClasse": 11.4, "Appreciation": "Peut mieux faire"},
+      {"id": 19, "Eleve": 2, "Matiere": "Arts plastiques", "Coef": 1, "Note": 12, "MoyenneClasse": 12, "Appreciation": "Très bien"},
+      {"id": 20, "Eleve": 2, "Matiere": "Technologie", "Coef": 2, "Note": 7.5, "MoyenneClasse": 9.9, "Appreciation": "Très bien"},
+      {"id": 21, "Eleve": 3, "Matiere": "Mathématiques", "Coef": 4, "Note": 18, "MoyenneClasse": 12.6, "Appreciation": "Résultats satisfaisants"},
+      {"id": 22, "Eleve": 3, "Matiere": "Français", "Coef": 4.5, "Note": 17.5, "MoyenneClasse": 9.2, "Appreciation": "Bon travail"},
+      {"id": 23, "Eleve": 3, "Matiere": "Histoire-Géographie", "Coef": 3, "Note": 16, "MoyenneClasse": 13.7, "Appreciation": "Très bien"},
+      {"id": 24, "Eleve": 3, "Matiere": "Anglais LV1", "Coef": 3, "Note": 19, "MoyenneClasse": 9.7, "Appreciation": "Résultats satisfaisants"},
+      {"id": 25, "Eleve": 3, "Matiere": "Espagnol LV2", "Coef": 2, "Note": 18.5, "MoyenneClasse": 10.4, "Appreciation": "À consolider"},
+      {"id": 26, "Eleve": 3, "Matiere": "Physique-Chimie", "Coef": 3, "Note": 17, "MoyenneClasse": 13.2, "Appreciation": "Bon travail"},
+      {"id": 27, "Eleve": 3, "Matiere": "SVT", "Coef": 2, "Note": 18, "MoyenneClasse": 10.3, "Appreciation": "Peut mieux faire"},
+      {"id": 28, "Eleve": 3, "Matiere": "EPS", "Coef": 2, "Note": 16, "MoyenneClasse": 13.7, "Appreciation": "Peut mieux faire"},
+      {"id": 29, "Eleve": 3, "Matiere": "Arts plastiques", "Coef": 1, "Note": 19.5, "MoyenneClasse": 10.6, "Appreciation": "Peut mieux faire"},
+      {"id": 30, "Eleve": 3, "Matiere": "Technologie", "Coef": 2, "Note": 18, "MoyenneClasse": 9.2, "Appreciation": "Très bien"}
+    ]
+  },
+  "images": {
+    "1": {
+      "label": "Photo",
+      "from": "#64748b",
+      "to": "#cbd5e1",
+      "width": 210,
+      "height": 280,
+      "pointsize": 40
+    },
+    "2": {
+      "label": "Photo",
+      "from": "#7c3aed",
+      "to": "#ddd6fe",
+      "width": 210,
+      "height": 280,
+      "pointsize": 40
+    }
+  }
+}

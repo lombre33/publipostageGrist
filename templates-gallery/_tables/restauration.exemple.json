@@ -1,0 +1,45 @@
+{
+  "rows": {
+    "Recettes": [
+      {"id": 1, "Nom": "Risotto aux cèpes et parmesan", "Categorie": "Plat", "Portions": 4, "Couverts": 40, "Preparation": 20, "Cuisson": 25, "Allergenes": ["Lait", "Céleri", "Sulfites"], "Etapes": "1. Faire revenir l’échalote ciselée dans le beurre.\n2. Nacrer le riz 2 minutes, déglacer au vin blanc.\n3. Mouiller louche par louche avec le bouillon chaud, 18 minutes.\n4. Poêler les cèpes à part, assaisonner.\n5. Lier au parmesan et au beurre froid, dresser aussitôt.", "Photo": [1]},
+      {"id": 2, "Nom": "Tarte Tatin", "Categorie": "Dessert", "Portions": 8, "Couverts": 24, "Preparation": 30, "Cuisson": 40, "Allergenes": ["Gluten", "Lait", "Œufs"], "Etapes": "1. Caraméliser le sucre à sec.\n2. Disposer les demi-pommes serrées, couvrir de pâte.\n3. Cuire 40 minutes à 180 °C, retourner à chaud.", "Photo": [2]},
+      {"id": 3, "Nom": "Velouté de potimarron aux noisettes", "Categorie": "Entrée", "Portions": 6, "Couverts": 100, "Preparation": 15, "Cuisson": 30, "Allergenes": ["Lait", "Fruits à coque"], "Etapes": "", "Photo": null}
+    ],
+    "Ingredients": [
+      {"id": 1, "Recette": 1, "Nom": "Riz arborio", "Quantite": 320, "Unite": "g", "CoutUnitaire": 0.0042},
+      {"id": 2, "Recette": 1, "Nom": "Cèpes (frais)", "Quantite": 400, "Unite": "g", "CoutUnitaire": 0.021},
+      {"id": 3, "Recette": 1, "Nom": "Échalotes", "Quantite": 80, "Unite": "g", "CoutUnitaire": 0.004},
+      {"id": 4, "Recette": 1, "Nom": "Vin blanc sec", "Quantite": 12, "Unite": "cl", "CoutUnitaire": 0.05},
+      {"id": 5, "Recette": 1, "Nom": "Bouillon de volaille", "Quantite": 1.2, "Unite": "L", "CoutUnitaire": 0.9},
+      {"id": 6, "Recette": 1, "Nom": "Parmesan râpé", "Quantite": 90, "Unite": "g", "CoutUnitaire": 0.026},
+      {"id": 7, "Recette": 1, "Nom": "Beurre", "Quantite": 60, "Unite": "g", "CoutUnitaire": 0.011},
+      {"id": 8, "Recette": 1, "Nom": "Sel fin, poivre du moulin", "Quantite": 1, "Unite": "pincée", "CoutUnitaire": 0.002},
+      {"id": 9, "Recette": 2, "Nom": "Pommes Golden", "Quantite": 1.4, "Unite": "kg", "CoutUnitaire": 2.1},
+      {"id": 10, "Recette": 2, "Nom": "Sucre en poudre", "Quantite": 160, "Unite": "g", "CoutUnitaire": 0.0018},
+      {"id": 11, "Recette": 2, "Nom": "Beurre doux", "Quantite": 90, "Unite": "g", "CoutUnitaire": 0.011},
+      {"id": 12, "Recette": 2, "Nom": "Pâte feuilletée pur beurre", "Quantite": 1, "Unite": "pièce", "CoutUnitaire": 2.4},
+      {"id": 13, "Recette": 3, "Nom": "Potimarron", "Quantite": 1.5, "Unite": "kg", "CoutUnitaire": 1.8},
+      {"id": 14, "Recette": 3, "Nom": "Oignon jaune", "Quantite": 150, "Unite": "g", "CoutUnitaire": 0.0025},
+      {"id": 15, "Recette": 3, "Nom": "Crème liquide 30 %", "Quantite": 20, "Unite": "cl", "CoutUnitaire": 0.032},
+      {"id": 16, "Recette": 3, "Nom": "Noisettes", "Quantite": 40, "Unite": "g", "CoutUnitaire": 0.02}
+    ]
+  },
+  "images": {
+    "1": {
+      "label": "Photo du plat",
+      "from": "#b45309",
+      "to": "#fde68a",
+      "width": 480,
+      "height": 320,
+      "pointsize": 44
+    },
+    "2": {
+      "label": "Photo du plat",
+      "from": "#9a3412",
+      "to": "#fdba74",
+      "width": 480,
+      "height": 320,
+      "pointsize": 44
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "family": "restauration",
+  "main": "Recettes",
+  "tables": ["Recettes", "Ingredients"],
+  "links": [
+    {"table": "Ingredients", "mode": "match", "target": "Recette", "source": "id"}
+  ],
+  "template": {
+    "type": "document",
+    "pdfName": "Recette #Recettes.Nom",
+    "page": {
+      "format": "A4",
+      "orientation": "portrait",
+      "margins": [18, 18, 18, 18]
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "hash": "d7b3e64810d40a20",
+  "preview": [
+    {
+      "src": "emargement-grille/capture-1.png",
+      "w": 1056,
+      "h": 686
+    }
+  ],
+  "thumb": {
+    "src": "emargement-grille/thumb.png",
+    "w": 240,
+    "h": 320
+  }
+}

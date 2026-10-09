@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "family": "immobilier",
+  "main": "Quittances",
+  "tables": ["Quittances"],
+  "links": [],
+  "template": {
+    "type": "document",
+    "pdfName": "Quittance #Quittances.Locataire #Quittances.Debut",
+    "page": {
+      "format": "A4",
+      "orientation": "portrait",
+      "margins": [25, 22, 25, 22]
+    }
+  }
+}

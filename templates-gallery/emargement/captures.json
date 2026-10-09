@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hash": "1a3bda544102e31d",
+  "preview": [
+    {
+      "src": "emargement/capture-1.png",
+      "w": 644,
+      "h": 455
+    },
+    {
+      "src": "emargement/capture-2.png",
+      "w": 644,
+      "h": 455
+    },
+    {
+      "src": "emargement/capture-3.png",
+      "w": 644,
+      "h": 455
+    }
+  ],
+  "thumb": {
+    "src": "emargement/thumb.png",
+    "w": 240,
+    "h": 320
+  }
+}
