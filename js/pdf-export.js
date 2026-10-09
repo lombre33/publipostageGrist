@@ -2612,8 +2612,12 @@ const PdfExport = (function () {
     st.pendingPageBreak = false;
   }
 
+  // La page blanche que laisse un second saut de page de suite (comme dans l'éditeur et la Lecture) : une ligne vide qui ouvre la page, le second saut restant au bloc suivant.
+  const blankPageBlock = () => ({ text: ' ', margin: [0, 2, 0, 4], lineHeight: LINE_HEIGHT_RATIO, pageBreak: 'before' });
+
   function visitPageBreak(st, node, run) {
     closeKeepRun(st, run);
+    if (st.isTopLevel && st.pendingPageBreak) pushBlock(st, blankPageBlock(), node);
     st.pendingPageBreak = true;
     st.floatCarry = null;
     if (st.isTopLevel && node.hasAttribute('data-macro-slot')) { st.currentSlot = st.pendingSlotStart = node.getAttribute('data-macro-slot'); }

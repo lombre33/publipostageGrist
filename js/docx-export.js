@@ -782,8 +782,8 @@ const DocxExport = (function () {
     }));
   }
 
-  function buildTocParagraphs(headingBlocks) {
-    const title = new docx.Paragraph({ children: [new docx.TextRun({ text: I18n.t('pdf.tocTitle'), bold: true, size: 32 })], spacing: { after: 160 } });
+  function buildTocParagraphs(headingBlocks, pageBreakBefore) {
+    const title = new docx.Paragraph({ children: [new docx.TextRun({ text: I18n.t('pdf.tocTitle'), bold: true, size: 32 })], spacing: { after: 160 }, pageBreakBefore: !!pageBreakBefore });
     if (!headingBlocks.length) return [title, new docx.Paragraph({ children: [new docx.TextRun({ text: I18n.t('docx.tocEmpty'), italics: true })] })];
     const lines = headingBlocks.map(hb => new docx.Paragraph({
       children: [new docx.TextRun({ text: hb.text, bold: hb.level === 1 })],
@@ -813,7 +813,7 @@ const DocxExport = (function () {
       for (const block of await blocksFromNode(node, flow)) blocks.push(block);
     }
     // Un sommaire n'a de sens qu'à la racine du document : il y prend la place de son repère.
-    return isTopLevel ? blocks.flatMap(b => (b && b.__tocPlaceholder ? buildTocParagraphs(ctx.headingBlocks) : [b])) : blocks;
+    return isTopLevel ? blocks.flatMap(b => (b && b.__tocPlaceholder ? buildTocParagraphs(ctx.headingBlocks, b.pageBreakBefore) : [b])) : blocks;
   }
 
   function headingMarkersOf(container) {
@@ -843,6 +843,27 @@ const DocxExport = (function () {
     };
   }
 
+  // Seul un paragraphe ouvre une page dans Word : un tableau (une zone à deux colonnes en est un) n'a pas de « saut de page avant ». Le saut qui le précède est donc porté par un
+  // paragraphe d'un point de haut posé devant lui ; il porte aussi, seul, la page blanche que laisse un second saut de suite.
+  const PAGE_BREAK_CARRIER_TWIP = 20;
+  const pageBreakCarrier = () => new docx.Paragraph({ children: [], spacing: { before: 0, after: 0, line: PAGE_BREAK_CARRIER_TWIP, lineRule: 'exact' }, pageBreakBefore: true });
+
+  // Comme consumingBreak, pour un bloc qui ne sait pas ouvrir une page lui-même : le saut est écrit devant lui (le bloc absent, rien n'est écrit, comme avant ; dans une cellule ou une colonne, un saut ne
+  // peut pas ouvrir de page : il reste sans effet, comme avant).
+  function carryingBreak(blocksOf) {
+    return consumingBreak(async (node, flow) => {
+      const blocks = await blocksOf(node, flow);
+      return flow.isTopLevel && flow.pendingPageBreak && blocks.length ? [pageBreakCarrier(), ...blocks] : blocks;
+    });
+  }
+
+  // Un saut de page de plus derrière un saut en attente : le premier ouvre une page que le second referme aussitôt, une page blanche, comme dans l'éditeur et la Lecture.
+  function markBreak(node, flow) {
+    const blank = flow.isTopLevel && flow.pendingPageBreak ? [pageBreakCarrier()] : [];
+    flow.pendingPageBreak = true;
+    return blank;
+  }
+
   function textBlocks(node, flow) {
     if (!node.nodeValue || !node.nodeValue.trim()) return [];
     return [new docx.Paragraph({ children: [new docx.TextRun(node.nodeValue)], pageBreakBefore: flow.pendingPageBreak, keepNext: flow.keepNext ? true : undefined })];
@@ -867,16 +888,16 @@ const DocxExport = (function () {
   // numérotation des titres) n'écrivent rien ; un sommaire est ignoré sans bruit hors de la racine, plutôt que de laisser fuiter un objet de réserve non
   // résolu dans un Table ou un TableCell (plantage à la sérialisation).
   const CONTAINER_NODE_BLOCKS = [
-    [node => node.classList.contains('page-break-marker'), (node, flow) => { flow.pendingPageBreak = true; return []; }],
+    [node => node.classList.contains('page-break-marker'), markBreak],
     [node => node.classList.contains('heading-numbering-config'), () => []],
-    [node => node.classList.contains('toc-marker'), (node, flow) => (flow.isTopLevel ? [{ __tocPlaceholder: true }] : [])],
-    [node => node.classList.contains('two-columns-zone'), consumingBreak(async (node, flow) => optionalBlock(await twoColumnsBlockFrom(node, flow.ctx)))],
+    [node => node.classList.contains('toc-marker'), consumingBreak((node, flow) => (flow.isTopLevel ? [{ __tocPlaceholder: true, pageBreakBefore: flow.pendingPageBreak }] : []))],
+    [node => node.classList.contains('two-columns-zone'), carryingBreak(async (node, flow) => optionalBlock(await twoColumnsBlockFrom(node, flow.ctx)))],
     [node => node.classList.contains('callout'), consumingBreak((node, flow) => calloutBlocksFrom(node, flow.ctx, flow.widthTwip, flow.pendingPageBreak))],
-    [node => node.tagName === 'TABLE', consumingBreak(async (node, flow) => optionalBlock(await tableBlockFrom(node, flow.ctx, flow.isTopLevel && Caption.captionsAfter(node).length > 0)))],
+    [node => node.tagName === 'TABLE', carryingBreak(async (node, flow) => optionalBlock(await tableBlockFrom(node, flow.ctx, flow.isTopLevel && Caption.captionsAfter(node).length > 0)))],
     [node => /^(UL|OL)$/.test(node.tagName), consumingBreak((node, flow) => listBlocksFrom(node, 0, flow.ctx, flow.pendingPageBreak))],
     [node => node.tagName === 'PRE', consumingBreak((node, flow) => codeBlockFrom(node, flow.pendingPageBreak))],
     [node => /^(P|DIV|H[1-6]|BLOCKQUOTE)$/.test(node.tagName), consumingBreak((node, flow) => paragraphBlockFrom(node, flow.ctx, flow.headingMarkers, flow.pendingPageBreak, flow.keepNext || (flow.isTopLevel && (keepsWithCaption(node) || KeepWithNext.isKeptElement(node)))))],
-    [node => node.tagName === 'HR', consumingBreak(() => [new docx.Paragraph({ border: { bottom: { style: 'single', size: 6, color: 'CBD5E1' } }, spacing: { after: 120 } })])],
+    [node => node.tagName === 'HR', consumingBreak((node, flow) => [new docx.Paragraph({ border: { bottom: { style: 'single', size: 6, color: 'CBD5E1' } }, spacing: { after: 120 }, pageBreakBefore: !!flow.pendingPageBreak })])],
     [node => node.tagName === 'IMG', consumingBreak(bareImageBlocks)],
   ];
 

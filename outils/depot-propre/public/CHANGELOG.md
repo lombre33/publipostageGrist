@@ -329,6 +329,11 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   l'éditeur le liseré de la zone et les bordures des colonnes s'arrêtent à la couture. Les lignes vides tout en bas des
   colonnes de la dernière zone d'un modèle n'ouvrent pas de page de plus, comme les lignes vides à la fin d'un
   modèle ; dès que du contenu suit la zone, elles comptent.
+- **Les sauts de page du Word et du PDF suivent l'éditeur** : un saut de page posé devant un tableau, des
+  colonnes, un trait horizontal ou un sommaire est gardé par le Word (il était perdu, ou écrit après le
+  sommaire), et deux sauts de page de suite laissent une page blanche dans le PDF et dans le Word, comme dans
+  l'éditeur, la Lecture et l'impression navigateur. Un modèle de macro-modèle qui commence par un tableau ou
+  des colonnes commence donc bien sa page dans le Word.
 - **Un lot d'une seule ligne parle au singulier** : « Générer un PDF pour la ligne de … », « 1 PDF généré »,
   « 1 DOCX généré » et « 1 ligne réunie dans un seul PDF » au lieu de « 1 lignes » et « 1 PDF générés ».
 - **« Autres attributs » avec deux colonnes Référence vers une même table** (Demandeur et Valideur vers un
@@ -786,6 +791,10 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   there. In the editor the zone's outline and the column borders stop at the page seam. Blank lines at the very
   bottom of the columns of a template's last zone do not open one more page, like blank lines at the end of a
   template; as soon as content follows the zone, they count.
+- **Page breaks in Word and in the PDF follow the editor**: a page break placed before a table, columns, a
+  horizontal rule or a table of contents is kept by Word (it was lost, or written after the table of
+  contents), and two page breaks in a row leave a blank page in the PDF and in Word, like the editor, Reading
+  and browser print. A macro-model template that begins with a table or columns now starts its page in Word.
 - **A batch of one row speaks in the singular**: "Generate a PDF for the row in …", "1 PDF generated",
   "1 DOCX file generated" and "1 row combined into a single PDF" instead of "1 PDFs generated".
 - **"Other attributes" with two Reference columns to the same table** (Requester and Approver pointing to

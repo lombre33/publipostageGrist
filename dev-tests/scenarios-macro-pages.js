@@ -8,13 +8,17 @@
 // bout à bout. L'identité se juge donc ainsi, page par page, sur le texte réellement posé :
 //   1. chaque modèle SEUL : l'éditeur (Aperçu A4), la Lecture et le PDF (relu par pdf.js) ont le même nombre de pages, les mêmes mots sur chaque page, et le même « n/total » dans le pied ;
 //   2. le macro-modèle : la Lecture et le PDF ont exactement les pages de ses modèles mis bout à bout (ni page blanche, ni page de moins, ni mot qui change de page), le même « n/total » ;
-//   3. le Word : un saut de page par modèle suivant, et jamais un paragraphe vide devant lui.
+//   3. le Word : un saut de page par modèle suivant (même devant un tableau ou une zone à deux colonnes), et jamais un paragraphe vide devant lui.
 // La page est remplie « ras la marge » PAR LES TROIS MOTEURS : leur capacité est MESURÉE (jamais écrite en dur, elle dépend des polices de la machine), et la batterie vérifie d'abord que les trois
 // moteurs la trouvent égale. Chaque modèle de la matrice est une page pleine à sa façon (texte, fin vide, lettre en deux colonnes, tableau, image en calque, saut de page de fin, deux pages) ;
 // chaque configuration de page (A4, en-tête et pied avec « n/total », paysage, A5, petit format libre) rejoue toute la matrice.
 //
-// Limites connues, non couvertes ici (voir dev-tests/README.md) : une zone à deux colonnes PLUS HAUTE qu'une page est coupée par le PDF mais pas par l'éditeur ni la Lecture (la matrice reste sous la
-// hauteur d'une page) ; le saut de page posé à la main EN FIN de modèle garde son repère dans l'éditeur (choix d'Antoine, carte du 01/10) alors que la Lecture et les exports l'ignorent.
+// Deux scénarios à part, voulus par Antoine (carte du 09/10, « Les deux », « Aligner les sauts de page du Word et du PDF sur l'éditeur ») : deux sauts de page de suite laissent une page blanche dans
+// l'éditeur, la Lecture, le PDF, l'impression navigateur et le Word (seuls ou à l'entrée d'un modèle de macro-modèle), et un saut posé à la main devant un paragraphe, un titre, une liste, un bloc de
+// code, un tableau, des colonnes, un encadré, un trait ou un sommaire ouvre la page suivante dans les cinq (le Word perdait le saut devant un tableau, des colonnes et un trait).
+//
+// Limites connues, non couvertes ici (voir dev-tests/README.md) : une zone à deux colonnes PLUS HAUTE qu'une page est coupée comme le PDF par l'éditeur et la Lecture depuis le 09/10 (js/zone-page-cut.js, groupe
+// zonePageCut), la matrice, elle, reste sous la hauteur d'une page ; le saut de page posé à la main EN FIN de modèle garde son repère dans l'éditeur (choix d'Antoine, carte du 01/10) alors que la Lecture et les exports l'ignorent.
 window.EditorTestSuites = window.EditorTestSuites || {};
 window.EditorTestSuites.macroPages = (function () {
   const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
@@ -121,6 +125,28 @@ window.EditorTestSuites.macroPages = (function () {
     Editor.refreshPaginationPreview();
     await h.sleep(60);
     return domView('#editor-container', '.tiptap');
+  }
+
+  // Les feuilles que l'impression navigateur enverrait au navigateur (js/print-export.js : la Lecture découpée en pages) : les mots posés sur chacune.
+  async function printView(h, html, hf) {
+    const job = await PrintExport.prepare(html, null, { id: 1 }, JSON.parse(JSON.stringify(hf || NO_HF)), 'essai');
+    try {
+      const doc = job.frame.contentDocument;
+      const range = doc.createRange();
+      const pages = Array.from(doc.querySelectorAll('.pp-print-sheet')).map(sheet => {
+        const box = sheet.getBoundingClientRect();
+        const found = [];
+        const walker = doc.createTreeWalker(sheet, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          if (!node.textContent.trim() || node.parentElement.closest('.v2-pagination-overlay, .page-break-marker, style, script, button')) continue;
+          range.selectNodeContents(node);
+          const rect = range.getClientRects()[0];
+          if (rect && rect.top >= box.top - 1 && rect.bottom <= box.bottom + 1 && rect.left >= box.left - 1 && rect.right <= box.right + 1) found.push(...words(node.textContent).filter(isBody));
+        }
+        return found;
+      });
+      return { count: pages.length, words: pages };
+    } finally { job.dispose(); }
   }
 
   // --- Comparer ---
@@ -292,6 +318,18 @@ window.EditorTestSuites.macroPages = (function () {
   const wordBodyOf = parts => Array.from(parts.doc.getElementsByTagName('w:body')[0].children).filter(node => node.nodeName !== 'w:sectPr');
   const wordTextOf = node => Array.from(node.getElementsByTagName('w:t')).map(run => run.textContent).join('');
   const wordHasContent = node => node.nodeName === 'w:tbl' || wordTextOf(node).trim() !== '' || node.getElementsByTagName('w:drawing').length > 0 || node.getElementsByTagName('w:pict').length > 0;
+  // Les pages que les sauts écrits dans le Word ouvrent : le corps coupé à chaque bloc qui porte `pageBreakBefore` (Word ajoute ses coupes de remplissage à l'ouverture, les documents d'ici tiennent
+  // sur une page chacun). Même forme que les autres vues : le nombre de pages et les mots de chacune.
+  async function wordView(h, html) {
+    const body = wordBodyOf(await h.exportDocxParts(html, null, PageLayout.getMarginsTwip()));
+    const pages = [[]];
+    body.forEach(node => { if (node.getElementsByTagName('w:pageBreakBefore').length) pages.push([]); pages[pages.length - 1].push(node); });
+    return {
+      count: pages.length,
+      words: pages.map(nodes => nodes.flatMap(node => words(wordTextOf(node))).filter(isBody)),
+      images: pages.map(nodes => (nodes.some(node => node.getElementsByTagName('w:drawing').length) ? 1 : 0)),
+    };
+  }
 
   return [
     ...matrixCases,
@@ -347,13 +385,8 @@ window.EditorTestSuites.macroPages = (function () {
             body.forEach((node, i) => { if (node.getElementsByTagName('w:pageBreakBefore').length) breaks.push(i); });
             // Un saut posé à la main au milieu d'un modèle s'ajoute à celui du modèle suivant : deux modèles, deux sauts de plus.
             const expected = id === 'manualMiddle' ? 4 : 2;
-            // Écart connu du Word, d'avant cette batterie : un saut de page placé devant un tableau ou une zone à deux colonnes n'est pas écrit (js/docx-export.js : `consumingBreak`
-            // consomme le saut sans le donner à ces deux blocs), donc un modèle qui COMMENCE par l'un d'eux ne commence pas sa page dans Word. Seul le saut devant le modèle court (un
-            // paragraphe) est exigé ici ; le jour où le Word écrit les deux, ce scénario passe toujours.
-            const startsWithBlock = /^<(table|div class="two-columns-zone)/.test(build(c, 'Alpha'));
-            const required = startsWithBlock ? 1 : expected;
-            summary[id] = breaks.length + ' saut(s) de page' + (startsWithBlock ? ' (le modèle commence par un tableau ou une zone)' : '');
-            if (startsWithBlock ? breaks.length < required : breaks.length !== required) problems.push(id + ' (' + label + ') : ' + breaks.length + ' saut(s) de page dans le Word (' + (startsWithBlock ? 'au moins ' : '') + required + ' attendu(s))');
+            summary[id] = breaks.length + ' saut(s) de page';
+            if (breaks.length !== expected) problems.push(id + ' (' + label + ') : ' + breaks.length + ' saut(s) de page dans le Word (' + expected + ' attendu(s))');
             for (const i of breaks) {
               const before = body[i - 1];
               if (before && !wordHasContent(before)) problems.push(id + ' (' + label + ') : un paragraphe vide précède le saut de page du bloc ' + i);
@@ -402,6 +435,85 @@ window.EditorTestSuites.macroPages = (function () {
               if (diff) problems.push(name + ', macro-modèle, ' + engine + ' ≠ ses modèles bout à bout : ' + diff);
               const blank = blankPages(view);
               if (blank.length) problems.push(name + ', macro-modèle, ' + engine + ' : page(s) blanche(s) ' + blank.join(', '));
+            }
+          }
+        } finally {
+          restorePage();
+        }
+        return { pass: problems.length === 0, notes: JSON.stringify({ summary, problems }) };
+      },
+    },
+    {
+      id: 'macro_pages_page_breaks_in_a_row_leave_the_same_blank_pages_in_every_engine',
+      description: 'Deux (ou trois) sauts de page de suite laissent une (ou deux) page(s) blanche(s), la même dans l\'éditeur, la Lecture, le PDF, l\'impression navigateur et le Word, seuls ou à l\'entrée d\'un modèle de macro-modèle (choix d\'Antoine du 09/10, « Les deux »)',
+      async run(h) {
+        const problems = [];
+        const summary = {};
+        try {
+          await CONFIGS[0].apply(h);
+          // [libellé, HTML, pages attendues, pages blanches attendues, l\'éditeur la montre-t-il (un macro-modèle ne s\'y ouvre pas d\'un bloc)]
+          const RUNS = [
+            ['deux sauts de suite', lines(3, 'Alpha') + MANUAL_BREAK + MANUAL_BREAK + lines(3, 'Charlie'), 3, [2], true],
+            ['trois sauts de suite', lines(3, 'Alpha') + MANUAL_BREAK + MANUAL_BREAK + MANUAL_BREAK + lines(3, 'Charlie'), 4, [2, 3], true],
+            ['deux sauts de suite devant un tableau', lines(3, 'Alpha') + MANUAL_BREAK + MANUAL_BREAK + tableOfRows(2, 'Charlie'), 3, [2], true],
+            ['deux sauts de suite devant une zone à deux colonnes', lines(3, 'Alpha') + MANUAL_BREAK + MANUAL_BREAK + zoneOfLines(2, 'Charlie'), 3, [2], true],
+            // Témoin, déjà d\'accord partout : un saut, une ligne vide, un saut.
+            ['un saut, une ligne vide, un saut', lines(3, 'Alpha') + MANUAL_BREAK + '<p></p>' + MANUAL_BREAK + lines(3, 'Charlie'), 3, [2], true],
+            // Un modèle qui COMMENCE par un saut de page posé à la main, derrière le saut du macro-modèle : deux sauts de suite.
+            ['macro-modèle : un modèle qui commence par un saut de page', await macroDocument([lines(3, 'Alpha'), MANUAL_BREAK + lines(3, 'Charlie')]), 3, [2], false],
+            ['macro-modèle : un modèle qui commence par un saut puis un tableau', await macroDocument([lines(3, 'Alpha'), MANUAL_BREAK + tableOfRows(2, 'Charlie')]), 3, [2], false],
+          ];
+          for (const [label, html, count, blanks, withEditor] of RUNS) {
+            const views = [];
+            if (withEditor) views.push(['éditeur', await editorView(h, html, null)]);
+            views.push(['Lecture', await readerView(h, html)], ['PDF', await pdfView(h, html)], ['impression navigateur', await printView(h, html)], ['Word', await wordView(h, html)]);
+            summary[label] = views.map(([engine, view]) => engine + ' ' + view.count + ' [' + sigs(view) + ']').join(' ; ');
+            for (const [engine, view] of views) {
+              if (view.count !== count || blankPages(view).join() !== blanks.join()) {
+                problems.push(label + ', ' + engine + ' : ' + view.count + ' page(s) [' + sigs(view) + '], page(s) blanche(s) ' + (blankPages(view).join(', ') || 'aucune') + ' (' + count + ' pages dont ' + blanks.join(', ') + ' vide attendues)');
+                continue;
+              }
+              const first = view.words[0].join(' ');
+              const last = view.words[view.words.length - 1].join(' ');
+              if (!/Alpha/.test(first) || /Charlie/.test(first) || !/Charlie/.test(last) || /Alpha/.test(last)) problems.push(label + ', ' + engine + ' : les mots ne sont pas sur les bonnes pages (première : ' + sig(view.words[0]) + ', dernière : ' + sig(view.words[view.words.length - 1]) + ')');
+            }
+          }
+        } finally {
+          restorePage();
+        }
+        return { pass: problems.length === 0, notes: JSON.stringify({ summary, problems }) };
+      },
+    },
+    {
+      id: 'macro_pages_page_break_opens_a_page_before_any_kind_of_block_in_every_engine',
+      description: 'Un saut de page posé à la main devant un paragraphe, un titre, une liste, un bloc de code, un tableau, une zone à deux colonnes, un encadré, un trait ou un sommaire ouvre la page suivante dans l\'éditeur, la Lecture, le PDF, l\'impression navigateur ET le Word (avant, le Word perdait le saut devant un tableau, des colonnes ou un trait, et posait celui d\'un sommaire après lui)',
+      async run(h) {
+        const problems = [];
+        const summary = {};
+        try {
+          await CONFIGS[0].apply(h);
+          const text = tag => tag + ' 0 du modèle de test.';
+          const BLOCKS = [
+            ['paragraphe', tag => '<p>' + text(tag) + '</p>'],
+            ['titre', tag => '<h2>' + text(tag) + '</h2>'],
+            ['liste à puces', tag => '<ul><li><p>' + text(tag) + '</p></li></ul>'],
+            ['bloc de code', tag => '<pre><code>' + text(tag) + '</code></pre>'],
+            ['tableau', tag => tableOfRows(2, tag)],
+            ['zone à deux colonnes', tag => zoneOfLines(2, tag)],
+            ['encadré', tag => '<div class="callout" data-color="green" data-icon="check"><p>' + text(tag) + '</p></div>'],
+            ['trait horizontal', tag => '<hr><p>' + text(tag) + '</p>'],
+            ['sommaire', tag => '<div class="toc-marker">Sommaire</div><h2>' + text(tag) + '</h2>'],
+          ];
+          for (const [label, block] of BLOCKS) {
+            const html = lines(2, 'Alpha') + MANUAL_BREAK + block('Charlie');
+            const views = [['éditeur', await editorView(h, html, null)], ['Lecture', await readerView(h, html)], ['PDF', await pdfView(h, html)], ['impression navigateur', await printView(h, html)], ['Word', await wordView(h, html)]];
+            summary[label] = views.map(([engine, view]) => engine + ' ' + view.count).join(', ');
+            for (const [engine, view] of views) {
+              const first = (view.words[0] || []).join(' ');
+              const last = (view.words[view.words.length - 1] || []).join(' ');
+              if (view.count !== 2 || !/Alpha/.test(first) || /Charlie/.test(first) || !/Charlie/.test(last) || /Alpha/.test(last)) {
+                problems.push(label + ', ' + engine + ' : ' + view.count + ' page(s) [' + sigs(view) + '] (2 pages attendues : « Alpha » sur la première, « Charlie » sur la seconde)');
+              }
             }
           }
         } finally {
