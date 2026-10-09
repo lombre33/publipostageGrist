@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "family": "gestion",
+  "main": "Factures",
+  "tables": ["Entreprise", "Clients", "Factures", "LignesFacture"],
+  "links": [
+    {"table": "LignesFacture", "mode": "match", "target": "Facture", "source": "id"},
+    {"table": "Clients", "mode": "match", "target": "id", "source": "Client"},
+    {"table": "Entreprise", "mode": "singleton"}
+  ],
+  "template": {
+    "type": "document",
+    "pdfName": "#Factures.Numero",
+    "page": {
+      "format": "A4",
+      "orientation": "portrait",
+      "margins": [20, 18, 20, 18]
+    }
+  }
+}

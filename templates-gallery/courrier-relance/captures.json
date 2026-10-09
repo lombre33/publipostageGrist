@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hash": "427df50aeb01c689",
+  "preview": [
+    {
+      "src": "courrier-relance/capture-1.png",
+      "w": 563,
+      "h": 796
+    },
+    {
+      "src": "courrier-relance/capture-2.png",
+      "w": 563,
+      "h": 796
+    },
+    {
+      "src": "courrier-relance/capture-3.png",
+      "w": 563,
+      "h": 796
+    }
+  ],
+  "thumb": {
+    "src": "courrier-relance/thumb.png",
+    "w": 240,
+    "h": 320
+  }
+}

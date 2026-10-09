@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hash": "74f52393df0c44a8",
+  "preview": [
+    {
+      "src": "facture/capture-1.png",
+      "w": 563,
+      "h": 796
+    },
+    {
+      "src": "facture/capture-2.png",
+      "w": 563,
+      "h": 796
+    },
+    {
+      "src": "facture/capture-3.png",
+      "w": 563,
+      "h": 796
+    }
+  ],
+  "thumb": {
+    "src": "facture/thumb.png",
+    "w": 240,
+    "h": 320
+  }
+}

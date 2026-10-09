@@ -1,0 +1,12 @@
+{
+  "enabled": true,
+  "differentFirstPage": true,
+  "header": {
+    "default": "<p><span style=\"font-size: 8pt\"><span class=\"var-badge\" data-table=\"Entreprise\" data-column=\"Nom\" data-key=\"Entreprise.Nom\"></span> — <span class=\"var-badge\" data-table=\"Factures\" data-column=\"Numero\" data-key=\"Factures.Numero\"></span></span></p>",
+    "first": ""
+  },
+  "footer": {
+    "default": "<p style=\"text-align: center\"><span style=\"font-size: 8pt\">Page <span class=\"page-number-badge\" data-format=\"n-slash-total\">#/#</span></span></p>",
+    "first": "<p style=\"text-align: center\"><span style=\"font-size: 8pt\">Page <span class=\"page-number-badge\" data-format=\"n-slash-total\">#/#</span></span></p>"
+  }
+}

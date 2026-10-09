@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "family": "gestion",
+  "main": "Contrats",
+  "tables": ["Entreprise", "Clients", "Contrats"],
+  "links": [
+    {"table": "Clients", "mode": "match", "target": "id", "source": "Client"},
+    {"table": "Entreprise", "mode": "singleton"}
+  ],
+  "template": {
+    "type": "document",
+    "pdfName": "Contrat #Contrats.Numero",
+    "page": {
+      "format": "A4",
+      "orientation": "portrait",
+      "margins": [22, 22, 22, 22]
+    }
+  }
+}

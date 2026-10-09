@@ -1,0 +1,73 @@
+{
+  "rows": {
+    "Entreprise": [
+      {"id": 1, "Nom": "Atelier Lumière", "Forme": "SARL au capital de 25 000 €", "Adresse": "12 rue des Tisserands\n69001 Lyon", "SIRET": "123 456 789 00012", "RCS": "RCS Lyon B 123 456 789", "TVAIntra": "FR 12 123456789", "IBAN": "FR76 1234 5678 9012 3456 7890 123", "BIC": "EXEMFRPPXXX", "Email": "compta@atelier-lumiere.example", "Telephone": "04 72 00 45 67", "Logo": [1], "Signataire": "Camille Martin", "Qualite": "gérante", "Signature": [2], "Cachet": [3]}
+    ],
+    "Clients": [
+      {"id": 1, "Nom": "Maison Berthier & Associés (SAS)", "Adresse": "8 place Bellecour\n69002 Lyon", "SIRET": "441 902 118 00019", "TVAIntra": "FR 83 441902118", "Email": "compta@berthier.example", "DelaiPaiement": 30},
+      {"id": 2, "Nom": "Association « Les Amis du Rhône »", "Adresse": "3 quai Claude-Bernard\n69007 Lyon", "SIRET": "", "TVAIntra": "", "Email": "tresorerie@amis-du-rhone.example", "DelaiPaiement": 30},
+      {"id": 3, "Nom": "Müller & Söhne GmbH", "Adresse": "Königsallee 27\n40212 Düsseldorf, Allemagne", "SIRET": "", "TVAIntra": "DE 123456789", "Email": "einkauf@mueller-soehne.example", "DelaiPaiement": 45},
+      {"id": 4, "Nom": "Boulangerie du Marché", "Adresse": "5 rue Garibaldi\n69003 Lyon", "SIRET": "388 205 417 00026", "TVAIntra": "", "Email": "contact@boulangerie-marche.example", "DelaiPaiement": 30}
+    ],
+    "Factures": [
+      {"id": 1, "Numero": "F-2026-0187", "Type": "Facture", "DateEmission": "2026-09-30", "DateEcheance": "2026-10-30", "Client": 1, "Statut": "Envoyée", "Relance": "Aucune", "Objet": "Refonte de l’éclairage de la boutique, phase 1", "RemisePct": 0, "Acompte": 500, "Autoliquidation": false, "Commentaire": "Merci de rappeler le numéro de facture dans le libellé du virement.", "Base20": 2105.7, "TVA20": 421.14, "Base10": 660, "TVA10": 66, "Base55": 170, "TVA55": 9.35, "Base0": 0, "TotalTTC": 3432.19, "NetAPayer": 2932.19},
+      {"id": 2, "Numero": "D-2026-0042", "Type": "Devis", "DateEmission": "2026-10-01", "DateEcheance": "2026-10-31", "Client": 2, "Statut": "Brouillon", "Relance": "Aucune", "Objet": "Éclairage de la salle des fêtes", "RemisePct": 3, "Acompte": 0, "Autoliquidation": false, "Commentaire": "", "Base20": 2657.22, "TVA20": 531.44, "Base10": 960.3, "TVA10": 96.03, "Base55": 0, "TVA55": 0, "Base0": 0, "TotalTTC": 4244.99, "NetAPayer": 4244.99},
+      {"id": 3, "Numero": "F-2026-0189", "Type": "Facture", "DateEmission": "2026-10-02", "DateEcheance": "2026-11-16", "Client": 3, "Statut": "Envoyée", "Relance": "Aucune", "Objet": "Commande n° 4470021 du 12/09/2026", "RemisePct": 0, "Acompte": 0, "Autoliquidation": true, "Commentaire": "", "Base20": 0, "TVA20": 0, "Base10": 0, "TVA10": 0, "Base55": 0, "TVA55": 0, "Base0": 6240, "TotalTTC": 6240, "NetAPayer": 6240},
+      {"id": 4, "Numero": "F-2026-0151", "Type": "Facture", "DateEmission": "2026-07-15", "DateEcheance": "2026-08-14", "Client": 4, "Statut": "En retard", "Relance": "Deuxième", "Objet": "Enseigne lumineuse et pose", "RemisePct": 0, "Acompte": 0, "Autoliquidation": false, "Commentaire": "", "Base20": 1280, "TVA20": 256, "Base10": 330, "TVA10": 33, "Base55": 0, "TVA55": 0, "Base0": 0, "TotalTTC": 1899, "NetAPayer": 1899},
+      {"id": 5, "Numero": "F-2026-0163", "Type": "Facture", "DateEmission": "2026-08-28", "DateEcheance": "2026-09-27", "Client": 1, "Statut": "En retard", "Relance": "Première", "Objet": "Panneaux d’affichage lumineux", "RemisePct": 0, "Acompte": 0, "Autoliquidation": false, "Commentaire": "", "Base20": 1280, "TVA20": 256, "Base10": 0, "TVA10": 0, "Base55": 0, "TVA55": 0, "Base0": 0, "TotalTTC": 1536, "NetAPayer": 1536},
+      {"id": 6, "Numero": "F-2026-0098", "Type": "Facture", "DateEmission": "2026-04-20", "DateEcheance": "2026-05-20", "Client": 2, "Statut": "En retard", "Relance": "Mise en demeure", "Objet": "Guirlandes pour la fête du village", "RemisePct": 0, "Acompte": 200, "Autoliquidation": false, "Commentaire": "", "Base20": 888, "TVA20": 177.6, "Base10": 275, "TVA10": 27.5, "Base55": 0, "TVA55": 0, "Base0": 0, "TotalTTC": 1368.1, "NetAPayer": 1168.1}
+    ],
+    "LignesFacture": [
+      {"id": 1, "Facture": 1, "Designation": "Applique murale laiton brossé", "Description": "Réf. AL-204, livrée montée\nFinition au choix du client", "Quantite": 6, "Unite": "pièce", "PrixUnitaire": 148, "RemisePct": 0, "TauxTVA": 20},
+      {"id": 2, "Facture": 1, "Designation": "Suspension verre soufflé Ø 40 cm", "Description": "", "Quantite": 4, "Unite": "pièce", "PrixUnitaire": 289.5, "RemisePct": 5, "TauxTVA": 20},
+      {"id": 3, "Facture": 1, "Designation": "Ampoule LED filament E27, 2700 K", "Description": "", "Quantite": 24, "Unite": "pièce", "PrixUnitaire": 4.9, "RemisePct": 0, "TauxTVA": 20},
+      {"id": 4, "Facture": 1, "Designation": "Pose et raccordement", "Description": "Main-d’œuvre, déplacement inclus", "Quantite": 12, "Unite": "h", "PrixUnitaire": 55, "RemisePct": 0, "TauxTVA": 10},
+      {"id": 5, "Facture": 1, "Designation": "Catalogue « Lumières d’automne »", "Description": "", "Quantite": 20, "Unite": "pièce", "PrixUnitaire": 8.5, "RemisePct": 0, "TauxTVA": 5.5},
+      {"id": 6, "Facture": 2, "Designation": "Plafonnier opale, salle principale", "Description": "", "Quantite": 8, "Unite": "pièce", "PrixUnitaire": 212, "RemisePct": 0, "TauxTVA": 20},
+      {"id": 7, "Facture": 2, "Designation": "Projecteur LED extérieur", "Description": "IP65, 30 W", "Quantite": 6, "Unite": "pièce", "PrixUnitaire": 98.9, "RemisePct": 0, "TauxTVA": 20},
+      {"id": 8, "Facture": 2, "Designation": "Étude d’éclairage", "Description": "Plan et note de calcul", "Quantite": 1, "Unite": "forfait", "PrixUnitaire": 450, "RemisePct": 0, "TauxTVA": 20},
+      {"id": 9, "Facture": 2, "Designation": "Installation", "Description": "", "Quantite": 18, "Unite": "h", "PrixUnitaire": 55, "RemisePct": 0, "TauxTVA": 10},
+      {"id": 10, "Facture": 3, "Designation": "Applique murale laiton brossé", "Description": "Réf. AL-204", "Quantite": 40, "Unite": "pièce", "PrixUnitaire": 148, "RemisePct": 0, "TauxTVA": 0},
+      {"id": 11, "Facture": 3, "Designation": "Transport et assurance", "Description": "Livraison Düsseldorf", "Quantite": 1, "Unite": "forfait", "PrixUnitaire": 320, "RemisePct": 0, "TauxTVA": 0},
+      {"id": 12, "Facture": 4, "Designation": "Enseigne lumineuse LED, 2 m", "Description": "", "Quantite": 1, "Unite": "pièce", "PrixUnitaire": 1280, "RemisePct": 0, "TauxTVA": 20},
+      {"id": 13, "Facture": 4, "Designation": "Pose et raccordement", "Description": "", "Quantite": 6, "Unite": "h", "PrixUnitaire": 55, "RemisePct": 0, "TauxTVA": 10},
+      {"id": 14, "Facture": 5, "Designation": "Panneau d’affichage lumineux, 60 × 80 cm", "Description": "", "Quantite": 2, "Unite": "pièce", "PrixUnitaire": 640, "RemisePct": 0, "TauxTVA": 20},
+      {"id": 15, "Facture": 6, "Designation": "Guirlande LED extérieure, 20 m", "Description": "Étanche IP65", "Quantite": 12, "Unite": "pièce", "PrixUnitaire": 74, "RemisePct": 0, "TauxTVA": 20},
+      {"id": 16, "Facture": 6, "Designation": "Installation", "Description": "", "Quantite": 5, "Unite": "h", "PrixUnitaire": 55, "RemisePct": 0, "TauxTVA": 10}
+    ],
+    "Contrats": [
+      {"id": 1, "Numero": "CTR-2026-014", "Client": 1, "Objet": "Conception et installation de l’éclairage de la boutique : relevé des lieux, plans, fourniture des luminaires et mise en service.", "DateDebut": "2026-11-02", "DateFin": "2027-02-26", "Reconduction": false, "Montant": 8400, "Modalites": "30 % à la commande, le solde à la mise en service", "Lieu": "Lyon", "DateSignature": "2026-10-12", "Tribunal": "Tribunal de commerce de Lyon"},
+      {"id": 2, "Numero": "CTR-2026-021", "Client": 2, "Objet": "Maintenance annuelle de l’éclairage de la salle des fêtes : deux visites par an et remplacement des lampes défectueuses.", "DateDebut": "2027-01-01", "DateFin": "2027-12-31", "Reconduction": true, "Montant": 2400, "Modalites": "Par trimestre, à terme échu", "Lieu": "Lyon", "DateSignature": "2026-10-12", "Tribunal": "Tribunal judiciaire de Lyon"}
+    ],
+    "Attestations": [
+      {"id": 1, "Numero": "ATT-2026-031", "Type": "Emploi", "Civilite": "Madame", "Prenom": "Léa", "Nom": "Dubois", "Naissance": "1994-03-17", "Intitule": "responsable de boutique", "DateDebut": "2021-09-01", "DateFin": null, "Lieu": "Lyon", "DateEtablissement": "2026-10-12"},
+      {"id": 2, "Numero": "ATT-2026-032", "Type": "Stage", "Civilite": "Monsieur", "Prenom": "Nathan", "Nom": "Thomas", "Naissance": "2003-11-05", "Intitule": "assistant en conception lumière", "DateDebut": "2026-03-02", "DateFin": "2026-06-26", "Lieu": "Lyon", "DateEtablissement": "2026-10-12"}
+    ]
+  },
+  "images": {
+    "1": {
+      "label": "Atelier Lumière",
+      "from": "#b45309",
+      "to": "#fbbf24",
+      "width": 360,
+      "height": 160
+    },
+    "2": {
+      "label": "Votre signature",
+      "from": "#ffffff",
+      "to": "#e2e8f0",
+      "color": "#1e3a8a",
+      "width": 360,
+      "height": 140
+    },
+    "3": {
+      "label": "Votre cachet",
+      "from": "#fef3c7",
+      "to": "#fde68a",
+      "color": "#92400e",
+      "width": 240,
+      "height": 240,
+      "pointsize": 34
+    }
+  }
+}

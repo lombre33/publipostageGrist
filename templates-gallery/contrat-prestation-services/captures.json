@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hash": "8c59e923975f0d16",
+  "preview": [
+    {
+      "src": "contrat-prestation-services/capture-1.png",
+      "w": 563,
+      "h": 796
+    },
+    {
+      "src": "contrat-prestation-services/capture-2.png",
+      "w": 563,
+      "h": 796
+    },
+    {
+      "src": "contrat-prestation-services/capture-3.png",
+      "w": 563,
+      "h": 796
+    }
+  ],
+  "thumb": {
+    "src": "contrat-prestation-services/thumb.png",
+    "w": 240,
+    "h": 320
+  }
+}

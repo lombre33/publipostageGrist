@@ -42,6 +42,8 @@ const only = String(option('only', '')).split(',').map(s => s.trim()).filter(Boo
 const FORCE = flag('force');
 const WITH_DEV = flag('dev');
 const VIEW_W = 1100;
+// Le jour où les captures sont censées être prises : les lignes d'exemple (échéances, dates d'événements) sont écrites pour lui.
+const CAPTURE_NOW = new Date('2026-10-12T09:00:00+02:00');
 const VIEW_H = 1100;
 
 // Largeur d'une capture à l'écran de l'aperçu : 3,3 px par mm de page (700 px pour une A4), au moins 440 px (une étiquette reste lisible), au plus 700.
@@ -160,6 +162,8 @@ async function openWidget(browser, images) {
     route.fulfill({ status: 200, contentType: 'image/png', headers: { 'Access-Control-Allow-Origin': '*' }, body });
   });
   await page.addInitScript(() => { try { localStorage.setItem('pp_theme', 'light'); localStorage.setItem('pp_lang', 'fr'); } catch (e) { /* stockage refusé */ } });
+  // « Aujourd'hui » des captures est toujours le même jour : la date du jour d'un modèle (bulle prête à poser) ne change pas d'une régénération à l'autre.
+  await page.clock.setFixedTime(CAPTURE_NOW);
   await page.goto(`${BASE}/_captures.html?dev`, { waitUntil: 'load' });
   await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
   await page.waitForFunction(() => { const el = document.getElementById('status-msg'); return !!el && /prêt|ready/i.test(el.textContent || ''); }, null, { timeout: 90000 });
@@ -229,7 +233,7 @@ async function fillRows(page, tables, rows) {
       const list = (rows[t.id] || []).map((r) => {
         const out = { id: r.id };
         t.columns.forEach((c) => {
-          let v = r[c.id]; if (v === undefined) v = null;
+          let v = r[c.id]; if (v === undefined || (v === '' && c.type !== 'Text' && c.type !== 'Choice')) v = null; // une date, un nombre ou une liste vides sont `null` dans Grist
           const ref = /^Ref:(.+)$/.exec(c.type);
           const refl = /^RefList:(.+)$/.exec(c.type);
           if (v !== null) {

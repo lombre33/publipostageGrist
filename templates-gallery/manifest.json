@@ -1,47 +1,139 @@
 [
   {
     "id": "facture",
-    "name": "Facture",
+    "name": "Facture, devis ou avoir",
     "tags": [
-      "facture",
       "vente"
     ],
-    "screenshot": "facture/screenshot.svg",
+    "screenshot": "facture/thumb.png",
+    "preview": [
+      {
+        "src": "facture/capture-1.png",
+        "w": 563,
+        "h": 796
+      },
+      {
+        "src": "facture/capture-2.png",
+        "w": 563,
+        "h": 796
+      },
+      {
+        "src": "facture/capture-3.png",
+        "w": 563,
+        "h": 796
+      }
+    ],
     "html": "facture/template.html",
-    "schema": "facture/schema.py"
+    "pack": "facture/pack.json",
+    "headerFooter": "facture/header-footer.json",
+    "shows": [
+      "loop",
+      "calc",
+      "condition",
+      "amountWords",
+      "pageNumbers",
+      "linked"
+    ]
   },
   {
     "id": "contrat-prestation-services",
     "name": "Contrat de prestation de services",
     "tags": [
-      "contrat",
-      "juridique"
+      "administratif"
     ],
-    "screenshot": "contrat-prestation-services/screenshot.svg",
+    "screenshot": "contrat-prestation-services/thumb.png",
+    "preview": [
+      {
+        "src": "contrat-prestation-services/capture-1.png",
+        "w": 563,
+        "h": 796
+      },
+      {
+        "src": "contrat-prestation-services/capture-2.png",
+        "w": 563,
+        "h": 796
+      },
+      {
+        "src": "contrat-prestation-services/capture-3.png",
+        "w": 563,
+        "h": 796
+      }
+    ],
     "html": "contrat-prestation-services/template.html",
-    "schema": "contrat-prestation-services/schema.py"
+    "pack": "contrat-prestation-services/pack.json",
+    "headerFooter": "contrat-prestation-services/header-footer.json",
+    "shows": [
+      "headings",
+      "footnote",
+      "checkbox",
+      "amountWords",
+      "headerFooter",
+      "linked"
+    ]
   },
   {
     "id": "attestation",
-    "name": "Attestation",
+    "name": "Attestation d’emploi ou de stage",
     "tags": [
-      "attestation",
       "administratif"
     ],
-    "screenshot": "attestation/screenshot.svg",
+    "screenshot": "attestation/thumb.png",
+    "preview": [
+      {
+        "src": "attestation/capture-1.png",
+        "w": 563,
+        "h": 796
+      },
+      {
+        "src": "attestation/capture-2.png",
+        "w": 563,
+        "h": 796
+      }
+    ],
     "html": "attestation/template.html",
-    "schema": "attestation/schema.py"
+    "pack": "attestation/pack.json",
+    "shows": [
+      "linked",
+      "condition",
+      "conditionValue",
+      "dateWords",
+      "images",
+      "qr"
+    ]
   },
   {
     "id": "courrier-relance",
     "name": "Courrier de relance",
     "tags": [
-      "relance",
-      "facture"
+      "vente"
     ],
-    "screenshot": "courrier-relance/screenshot.svg",
+    "screenshot": "courrier-relance/thumb.png",
+    "preview": [
+      {
+        "src": "courrier-relance/capture-1.png",
+        "w": 563,
+        "h": 796
+      },
+      {
+        "src": "courrier-relance/capture-2.png",
+        "w": 563,
+        "h": 796
+      },
+      {
+        "src": "courrier-relance/capture-3.png",
+        "w": 563,
+        "h": 796
+      }
+    ],
     "html": "courrier-relance/template.html",
-    "schema": "courrier-relance/schema.py"
+    "pack": "courrier-relance/pack.json",
+    "shows": [
+      "linked",
+      "condition",
+      "today",
+      "amountWords",
+      "dateFormat"
+    ]
   },
   {
     "id": "flyer-a6",
@@ -51,6 +143,16 @@
       "impression"
     ],
     "screenshot": "flyer-a6/thumb.png",
+    "html": "flyer-a6/template.html",
+    "pack": "flyer-a6/pack.json",
+    "shows": [
+      "pageFormat",
+      "images",
+      "dateFormat",
+      "condition",
+      "qr",
+      "sheets"
+    ],
     "preview": [
       {
         "src": "flyer-a6/capture-1.png",
@@ -67,16 +169,6 @@
         "w": 637,
         "h": 901
       }
-    ],
-    "html": "flyer-a6/template.html",
-    "pack": "flyer-a6/pack.json",
-    "shows": [
-      "pageFormat",
-      "images",
-      "dateFormat",
-      "condition",
-      "qr",
-      "sheets"
     ]
   },
   {
@@ -87,6 +179,16 @@
       "contact"
     ],
     "screenshot": "carte-de-visite/thumb.png",
+    "html": "carte-de-visite/template.html",
+    "pack": "carte-de-visite/pack.json",
+    "shows": [
+      "pageFormat",
+      "images",
+      "qr",
+      "otherwise",
+      "condition",
+      "sheets"
+    ],
     "preview": [
       {
         "src": "carte-de-visite/capture-1.png",
@@ -103,16 +205,6 @@
         "w": 637,
         "h": 901
       }
-    ],
-    "html": "carte-de-visite/template.html",
-    "pack": "carte-de-visite/pack.json",
-    "shows": [
-      "pageFormat",
-      "images",
-      "qr",
-      "otherwise",
-      "condition",
-      "sheets"
     ]
   },
   {
@@ -151,6 +243,16 @@
       "impression"
     ],
     "screenshot": "invitation-a6/thumb.png",
+    "html": "invitation-a6/template.html",
+    "pack": "invitation-a6/pack.json",
+    "shows": [
+      "pageFormat",
+      "dateWords",
+      "condition",
+      "otherwise",
+      "qr",
+      "sheets"
+    ],
     "preview": [
       {
         "src": "invitation-a6/capture-1.png",
@@ -167,16 +269,6 @@
         "w": 644,
         "h": 455
       }
-    ],
-    "html": "invitation-a6/template.html",
-    "pack": "invitation-a6/pack.json",
-    "shows": [
-      "pageFormat",
-      "dateWords",
-      "condition",
-      "otherwise",
-      "qr",
-      "sheets"
     ]
   },
   {

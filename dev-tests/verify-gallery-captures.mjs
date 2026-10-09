@@ -49,6 +49,17 @@ const PROOFS = {
   twoColumns: ({ html }) => /class="two-columns-zone"/.test(html),
   otherwise: ({ html }) => /<span[^>]*data-otherwise-key=/.test(html),
   dateWords: ({ html }) => formatJson(html).some((f) => /"type":"date"/.test(f) && /"words":true/.test(f)),
+  loop: ({ html }) => /data-loop=/.test(html),
+  calc: ({ html }) => /class="calc-badge"/.test(html),
+  amountWords: ({ html }) => formatJson(html).some((f) => /"type":"number"/.test(f) && /"words":true/.test(f) && /"currency":"[^"]+"/.test(f)),
+  pageNumbers: ({ headerFooter }) => /page-number-badge/.test(headerFooter), // le fichier est du JSON : les guillemets du HTML y sont échappés
+  linked: ({ pack }) => (pack.links || []).length > 0,
+  today: ({ html }) => /data-chip-kind="date"/.test(html),
+  headings: ({ html }) => /class="heading-numbering-config" data-style="(numeric|alpha|roman)"/.test(html) && /<h[1-6][ >]/.test(html),
+  footnote: ({ html }) => /class="footnote-ref-marker"/.test(html),
+  checkbox: ({ html }) => formatJson(html).some((f) => /"type":"bool"/.test(f) && /"style":"(accentStrike|classic|accentPlain)"/.test(f)),
+  headerFooter: ({ headerFooter }) => headerFooter !== '' && JSON.parse(headerFooter).enabled === true,
+  conditionValue: ({ html }) => /class="conditional-value"/.test(html),
 };
 
 const galleries = [{ dir: 'templates-gallery', dev: false }, { dir: 'templates-gallery-dev', dev: true }];

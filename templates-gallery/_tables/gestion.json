@@ -1,0 +1,106 @@
+{
+  "tables": [
+    {
+      "id": "Entreprise",
+      "columns": [
+        {"id": "Nom", "type": "Text", "label": "Nom"},
+        {"id": "Forme", "type": "Text", "label": "Forme juridique"},
+        {"id": "Adresse", "type": "Text", "label": "Adresse"},
+        {"id": "SIRET", "type": "Text", "label": "SIRET"},
+        {"id": "RCS", "type": "Text", "label": "RCS"},
+        {"id": "TVAIntra", "type": "Text", "label": "N° de TVA"},
+        {"id": "IBAN", "type": "Text", "label": "IBAN"},
+        {"id": "BIC", "type": "Text", "label": "BIC"},
+        {"id": "Email", "type": "Text", "label": "E-mail"},
+        {"id": "Telephone", "type": "Text", "label": "Téléphone"},
+        {"id": "Logo", "type": "Attachments", "label": "Logo"},
+        {"id": "Signataire", "type": "Text", "label": "Signataire"},
+        {"id": "Qualite", "type": "Text", "label": "Qualité du signataire"},
+        {"id": "Signature", "type": "Attachments", "label": "Signature"},
+        {"id": "Cachet", "type": "Attachments", "label": "Cachet"}
+      ]
+    },
+    {
+      "id": "Clients",
+      "columns": [
+        {"id": "Nom", "type": "Text", "label": "Nom"},
+        {"id": "Adresse", "type": "Text", "label": "Adresse"},
+        {"id": "SIRET", "type": "Text", "label": "SIRET"},
+        {"id": "TVAIntra", "type": "Text", "label": "N° de TVA"},
+        {"id": "Email", "type": "Text", "label": "E-mail"},
+        {"id": "DelaiPaiement", "type": "Int", "label": "Délai de paiement (jours)"}
+      ]
+    },
+    {
+      "id": "Factures",
+      "columns": [
+        {"id": "Numero", "type": "Text", "label": "Numéro"},
+        {"id": "Type", "type": "Choice", "label": "Type", "choices": ["Facture", "Devis", "Avoir"]},
+        {"id": "DateEmission", "type": "Date", "label": "Date d’émission"},
+        {"id": "DateEcheance", "type": "Date", "label": "Date d’échéance"},
+        {"id": "Client", "type": "Ref:Clients", "label": "Client", "show": "Nom"},
+        {"id": "Statut", "type": "Choice", "label": "Statut", "choices": ["Brouillon", "Envoyée", "Payée", "En retard"]},
+        {"id": "Relance", "type": "Choice", "label": "Relance", "choices": ["Aucune", "Première", "Deuxième", "Mise en demeure"]},
+        {"id": "Objet", "type": "Text", "label": "Objet"},
+        {"id": "RemisePct", "type": "Numeric", "label": "Remise (%)"},
+        {"id": "Acompte", "type": "Numeric", "label": "Acompte (€)"},
+        {"id": "Autoliquidation", "type": "Bool", "label": "Autoliquidation"},
+        {"id": "Commentaire", "type": "Text", "label": "Commentaire"},
+        {"id": "Base20", "type": "Numeric", "label": "Base TVA 20 %", "formula": "lignes = LignesFacture.lookupRecords(Facture=$id)\nreturn round(SUM(l.PrixUnitaire * l.Quantite * (1 - (l.RemisePct or 0) / 100.0) for l in lignes if l.TauxTVA == 20) * (1 - ($RemisePct or 0) / 100.0), 2)"},
+        {"id": "TVA20", "type": "Numeric", "label": "TVA 20 %", "formula": "round($Base20 * 0.2, 2)"},
+        {"id": "Base10", "type": "Numeric", "label": "Base TVA 10 %", "formula": "lignes = LignesFacture.lookupRecords(Facture=$id)\nreturn round(SUM(l.PrixUnitaire * l.Quantite * (1 - (l.RemisePct or 0) / 100.0) for l in lignes if l.TauxTVA == 10) * (1 - ($RemisePct or 0) / 100.0), 2)"},
+        {"id": "TVA10", "type": "Numeric", "label": "TVA 10 %", "formula": "round($Base10 * 0.1, 2)"},
+        {"id": "Base55", "type": "Numeric", "label": "Base TVA 5,5 %", "formula": "lignes = LignesFacture.lookupRecords(Facture=$id)\nreturn round(SUM(l.PrixUnitaire * l.Quantite * (1 - (l.RemisePct or 0) / 100.0) for l in lignes if l.TauxTVA == 5.5) * (1 - ($RemisePct or 0) / 100.0), 2)"},
+        {"id": "TVA55", "type": "Numeric", "label": "TVA 5,5 %", "formula": "round($Base55 * 0.055, 2)"},
+        {"id": "Base0", "type": "Numeric", "label": "Base sans TVA", "formula": "lignes = LignesFacture.lookupRecords(Facture=$id)\nreturn round(SUM(l.PrixUnitaire * l.Quantite * (1 - (l.RemisePct or 0) / 100.0) for l in lignes if l.TauxTVA == 0) * (1 - ($RemisePct or 0) / 100.0), 2)"},
+        {"id": "TotalTTC", "type": "Numeric", "label": "Total TTC", "formula": "round($Base20 + $TVA20 + $Base10 + $TVA10 + $Base55 + $TVA55 + $Base0, 2)"},
+        {"id": "NetAPayer", "type": "Numeric", "label": "Net à payer", "formula": "round($TotalTTC - ($Acompte or 0), 2)"}
+      ]
+    },
+    {
+      "id": "LignesFacture",
+      "columns": [
+        {"id": "Facture", "type": "Ref:Factures", "label": "Facture", "show": "Numero"},
+        {"id": "Designation", "type": "Text", "label": "Désignation"},
+        {"id": "Description", "type": "Text", "label": "Description"},
+        {"id": "Quantite", "type": "Numeric", "label": "Quantité"},
+        {"id": "Unite", "type": "Text", "label": "Unité"},
+        {"id": "PrixUnitaire", "type": "Numeric", "label": "Prix unitaire HT"},
+        {"id": "RemisePct", "type": "Numeric", "label": "Remise (%)"},
+        {"id": "TauxTVA", "type": "Numeric", "label": "Taux de TVA (%)"}
+      ]
+    },
+    {
+      "id": "Contrats",
+      "columns": [
+        {"id": "Numero", "type": "Text", "label": "Référence"},
+        {"id": "Client", "type": "Ref:Clients", "label": "Client", "show": "Nom"},
+        {"id": "Objet", "type": "Text", "label": "Objet de la prestation"},
+        {"id": "DateDebut", "type": "Date", "label": "Début"},
+        {"id": "DateFin", "type": "Date", "label": "Fin"},
+        {"id": "Reconduction", "type": "Bool", "label": "Reconduction tacite"},
+        {"id": "Montant", "type": "Numeric", "label": "Montant HT (€)"},
+        {"id": "Modalites", "type": "Text", "label": "Modalités de paiement"},
+        {"id": "Lieu", "type": "Text", "label": "Lieu de signature"},
+        {"id": "DateSignature", "type": "Date", "label": "Date de signature"},
+        {"id": "Tribunal", "type": "Text", "label": "Tribunal compétent"}
+      ]
+    },
+    {
+      "id": "Attestations",
+      "columns": [
+        {"id": "Numero", "type": "Text", "label": "Numéro"},
+        {"id": "Type", "type": "Choice", "label": "Type", "choices": ["Emploi", "Stage"]},
+        {"id": "Civilite", "type": "Choice", "label": "Civilité", "choices": ["Madame", "Monsieur"]},
+        {"id": "Prenom", "type": "Text", "label": "Prénom"},
+        {"id": "Nom", "type": "Text", "label": "Nom"},
+        {"id": "Naissance", "type": "Date", "label": "Date de naissance"},
+        {"id": "Intitule", "type": "Text", "label": "Poste ou sujet du stage"},
+        {"id": "DateDebut", "type": "Date", "label": "Début"},
+        {"id": "DateFin", "type": "Date", "label": "Fin"},
+        {"id": "Lieu", "type": "Text", "label": "Lieu d’établissement"},
+        {"id": "DateEtablissement", "type": "Date", "label": "Date d’établissement"}
+      ]
+    }
+  ]
+}

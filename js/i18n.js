@@ -471,6 +471,17 @@ const I18n = (function () {
     'gallery.shows.sheets': { fr: 'Assemblage avant impression', en: 'Assemble before printing' },
     'gallery.shows.otherwise': { fr: 'Sinon afficher', en: 'Otherwise show' },
     'gallery.shows.dateWords': { fr: 'Date en toutes lettres', en: 'Date spelled out' },
+    'gallery.shows.loop': { fr: 'Boucle sur des lignes liées', en: 'Loop over linked rows' },
+    'gallery.shows.calc': { fr: 'Calcul dans le document', en: 'Calculation in the document' },
+    'gallery.shows.amountWords': { fr: 'Montant en toutes lettres', en: 'Amount spelled out' },
+    'gallery.shows.pageNumbers': { fr: 'Numéros de page', en: 'Page numbers' },
+    'gallery.shows.linked': { fr: 'Tables liées', en: 'Linked tables' },
+    'gallery.shows.today': { fr: 'Date du jour', en: 'Today’s date' },
+    'gallery.shows.headings': { fr: 'Titres numérotés', en: 'Numbered headings' },
+    'gallery.shows.footnote': { fr: 'Notes de bas de page', en: 'Footnotes' },
+    'gallery.shows.checkbox': { fr: 'Case à cocher', en: 'Checkbox' },
+    'gallery.shows.headerFooter': { fr: 'En-tête et pied de page', en: 'Header and footer' },
+    'gallery.shows.conditionValue': { fr: 'Valeur conditionnelle', en: 'Conditional value' },
 
     // --- Macro modèles (page de garde + annexes conditionnelles, planning/feature-macro-modeles.md) ---
     'macro.editButton': { fr: 'Modifier la composition', en: 'Edit composition' },
