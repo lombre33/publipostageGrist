@@ -120,6 +120,14 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   sont choisies, « Ligne avant », « Ligne après », « Colonne avant » et « Colonne après », dans la barre du
   tableau, ajoutent autant de lignes ou de colonnes que les cases choisies en couvrent, en un seul Annuler,
   comme dans une grille. Un simple curseur en ajoute toujours une.
+- **Bordures, alignement vertical et quadrillage dans un tableau de document** : la barre du tableau d'un
+  document porte, après le fond de case, le bouton « Bordures » (tous les traits, le pourtour, l'intérieur,
+  un côté ou aucun, dans la couleur choisie, et la ligne à cocher « Quadrillage » pour la Lecture et les
+  exports) puis « Aligner en haut », « au milieu » et « en bas », comme la barre d'une grille. Ils visent le
+  tableau du curseur, ou les cases que vous avez glissées, un seul Annuler défait un réglage, et la Lecture,
+  le PDF et le Word les reprennent. Avec le suivi des modifications allumé, ces quatre boutons sont grisés :
+  ces réglages ne seraient pas suivis. Dans un panneau étroit, la barre passe sur deux lignes au lieu de
+  déborder. Un tableau que vous n'avez pas réglé ne change pas.
 - **Marge autour de chaque page dans l'assemblage avant impression** : la fenêtre « Assemblage avant
   impression » a un champ « Marge » (en millimètres, 0 au départ, les flèches avancent de 0,5) qui laisse de la
   place autour de chaque page posée sur la feuille : la marge compte de chaque côté d'une page, donc deux
@@ -413,6 +421,13 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 - **Several rows or columns at once in a document table**: when several cells of a table are picked, "Row
   before", "Row after", "Column before" and "Column after" in the table bar add as many rows or columns as the
   picked cells cover, in a single Undo, as in a grid. A plain cursor still adds one.
+- **Borders, vertical alignment and gridlines in a document table**: the table bar of a document now carries,
+  after the cell background, a "Borders" button (all lines, the outline, the inside, one side or none, in the
+  chosen color, and the "Gridlines" tick for Reading and the exports) then "Align to top", "to middle" and "to
+  bottom", like a grid's bar. They act on the table under the cursor, or on the cells you dragged across, a
+  single Undo reverts a setting, and Reading, the PDF and the Word export carry them over. With track changes
+  on, these four buttons are greyed: these settings would not be tracked. In a narrow panel the bar wraps onto
+  two lines instead of overflowing. A table you have not set does not change.
 - **Margin around each page in sheet assembly**: the "Assemble before printing" window has a "Margin" field (in
   millimetres, 0 to start with, the arrows step by 0.5) that leaves room around each page laid on the
   sheet: the margin sits on every side of a page, so it counts twice between two pages and once at the edge

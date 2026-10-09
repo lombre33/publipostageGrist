@@ -208,7 +208,7 @@
 
   cases.push({
     id: 'ft_table_bar_in_a_grid_docks_in_the_grid_band_greys_what_has_no_sense_and_sets_the_vertical_alignment',
-    description: 'Dans une grille, la barre du tableau est fixée dans la bande de la grille : « Supprimer le tableau » grisé, « Fusionner » et « Scinder » grisés tant qu\'ils n\'ont pas de sens, « Légende » grisé ; l\'alignement vertical posé (haut, milieu, bas) allume son seul bouton ; la barre d\'un tableau du document, ensuite, n\'a plus aucun grisé de grille',
+    description: 'Dans une grille, la barre du tableau est fixée dans la bande de la grille : « Supprimer le tableau » grisé, « Fusionner » et « Scinder » grisés tant qu\'ils n\'ont pas de sens, « Légende » grisé ; l\'alignement vertical posé (haut, milieu, bas) allume son seul bouton ; la barre d\'un tableau du document, ensuite, n\'a aucun grisé de grille et montre aussi « Bordures » et l\'alignement vertical',
     run: async (h) => {
       const out = {};
       const notes = {};
@@ -227,8 +227,8 @@
         const bar = barWith('row-before');
         const slot = GridEditor.barSlot();
         out.docked = !!slot && slot.contains(bar) && shown(bar);
-        const gridOnly = target => ['valign-top', 'valign-middle', 'valign-bottom'].map(a => getComputedStyle(buttonOf(target, a)).display);
-        out.gridButtonsShown = gridOnly(bar).every(d => d !== 'none');
+        const settingDisplays = target => ['borders-open', 'valign-top', 'valign-middle', 'valign-bottom'].map(a => getComputedStyle(buttonOf(target, a)).display);
+        out.gridButtonsShown = settingDisplays(bar).every(d => d !== 'none');
         out.tableDel = locked(bar, 'table-del');
         out.oneCell = locked(bar, 'cell-merge') && locked(bar, 'cell-split');
         const caption = buttonOf(bar, 'caption');
@@ -256,13 +256,145 @@
         GridEditor.setActive(false);
         await h.sleep(300);
         const docBar = await tableWithCursor(h);
-        out.documentBarHidesGridButtons = gridOnly(docBar).every(d => d === 'none');
+        out.documentBarShowsSettings = settingDisplays(docBar).every(d => d !== 'none');
         out.documentBar = shown(docBar) && !GridEditor.isActive() && !(slot && slot.contains(docBar)) && free(docBar, 'table-del') && !buttonOf(docBar, 'cell-merge').classList.contains('v2-hf-locked') && !buttonOf(docBar, 'cell-split').classList.contains('v2-hf-locked');
       } finally {
         GridEditor.setActive(false);
         await h.sleep(250);
       }
       return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) + ' ' + JSON.stringify(notes) };
+    },
+  });
+
+  // === La barre du tableau d'un document : alignement vertical et bordures (lot 3 sur 6 de « le tableau d'un document est un tableau de grille ») ===
+  // Les attributs de la case dont le texte est `text` ; la case est choisie ou le curseur y est posé par `cursorInCell`.
+  const cellNodeOf = (text) => {
+    let found = null;
+    ed().state.doc.descendants((node, pos) => { if (!found && (node.type.name === 'tableCell' || node.type.name === 'tableHeader') && node.textContent === text) found = { node, pos }; });
+    return found;
+  };
+  const cellAttr = (text, name) => { const cell = cellNodeOf(text); return cell ? cell.node.attrs[name] : undefined; };
+  async function cursorInCell(h, text) {
+    ed().view.focus();
+    ed().commands.setTextSelection(cellNodeOf(text).pos + 2);
+    await h.sleep(150);
+    return barWith('row-before');
+  }
+  async function selectCellsFrom(h, from, to) {
+    ed().view.focus();
+    ed().commands.setCellSelection({ anchorCell: cellNodeOf(from).pos, headCell: cellNodeOf(to).pos });
+    await h.sleep(150);
+    return barWith('row-before');
+  }
+  const pressedAlign = bar => ['top', 'middle', 'bottom'].filter((v) => { const b = buttonOf(bar, 'valign-' + v); return b.classList.contains('is-active') && b.getAttribute('aria-pressed') === 'true'; }).join();
+  const settingButtons = ['borders-open', 'valign-top', 'valign-middle', 'valign-bottom'];
+
+  cases.push({
+    id: 'ft_table_bar_in_a_document_shows_the_vertical_alignment_of_the_cells_and_sets_it',
+    description: 'La barre d\'un tableau de document porte « Bordures » et les trois boutons d\'alignement vertical, visibles ; l\'alignement des cases visées est enfoncé (« en haut » pour une case que personne n\'a réglée, aucun quand la sélection en mêle plusieurs) ; un appui règle les cases visées seulement, et « en haut » efface la marque',
+    run: async (h) => {
+      const bar = await tableWithCursor(h);
+      if (!shown(bar)) return { pass: false, notes: 'barre du tableau fermée, curseur dans une case' };
+      const out = {};
+      out.visible = settingButtons.every(a => buttonOf(bar, a).offsetWidth > 0 && buttonOf(bar, a).offsetHeight > 0);
+      out.start = pressedAlign(bar) === 'top';
+      await press_(h, bar, 'valign-bottom');
+      out.bottom = cellAttr('Alpha', 'verticalAlign') === 'bottom' && !cellAttr('Beta', 'verticalAlign') && pressedAlign(bar) === 'bottom';
+      await press_(h, bar, 'valign-middle');
+      out.middle = cellAttr('Alpha', 'verticalAlign') === 'middle' && pressedAlign(bar) === 'middle';
+      await press_(h, bar, 'valign-top');
+      out.topErases = !cellAttr('Alpha', 'verticalAlign') && pressedAlign(bar) === 'top' && !/data-valign|vertical-align/.test(Editor.getHTML());
+      // Deux cases en colonne : le réglage vise les deux, pas les voisines.
+      const two = await selectCellsFrom(h, 'Alpha', 'Gamma');
+      await press_(h, two, 'valign-middle');
+      out.twoCells = cellAttr('Alpha', 'verticalAlign') === 'middle' && cellAttr('Gamma', 'verticalAlign') === 'middle' && !cellAttr('Beta', 'verticalAlign') && !cellAttr('Delta', 'verticalAlign') && pressedAlign(two) === 'middle';
+      // Une case « au milieu » et sa voisine « en haut » : aucun bouton enfoncé.
+      const mixed = await selectCellsFrom(h, 'Alpha', 'Beta');
+      out.mixed = pressedAlign(mixed) === '';
+      // Le curseur revient dans une case : la barre relit son alignement.
+      const back = await cursorInCell(h, 'Delta');
+      out.readsAgain = pressedAlign(back) === 'top';
+      return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
+    id: 'ft_table_bar_in_a_document_opens_the_borders_menu_sets_the_borders_and_toggles_the_gridlines',
+    description: 'Le bouton « Bordures » de la barre d\'un tableau de document ouvre le menu (huit réglages, couleur du trait, « Quadrillage ») ; un réglage pose les traits sur la case visée et sur les cases voisines qui les partagent, en un seul Annuler, et referme le menu ; « Quadrillage » se coche et se décoche sans le refermer et ne touche que le tableau du curseur ; la barre reste affichée pendant que le menu est ouvert (choisir une couleur n\'est pas un appui hors de la barre)',
+    run: async (h) => {
+      const bar = await tableWithCursor(h);
+      if (!shown(bar)) return { pass: false, notes: 'barre du tableau fermée, curseur dans une case' };
+      const out = {};
+      const chip = buttonOf(bar, 'borders-open');
+      const menu = () => openMenus().find(m => m.querySelector('button[data-action="borders:all"]')) || null;
+      const edges = text => ['borderTop', 'borderRight', 'borderBottom', 'borderLeft'].map(n => cellAttr(text, n) || '-').join(',');
+      out.chipShown = chip.offsetWidth > 0 && chip.offsetHeight > 0;
+      await press_(h, bar, 'borders-open');
+      out.opened = !!menu() && chip.getAttribute('aria-expanded') === 'true' && menu().querySelectorAll('.v2-borders-presets button').length === 8
+        && menu().querySelector('button[data-action="gridlines"]').getAttribute('aria-checked') === 'true';
+      // Le stylo : un rouge de la palette, puis « Toutes les bordures » sur la case Alpha seule.
+      const pen = menu().querySelector('button[data-action^="pen:"]');
+      const penColor = pen && pen.dataset.action.slice('pen:'.length).toLowerCase();
+      if (pen) press(pen);
+      await h.sleep(120);
+      // Un appui dans le menu n'est pas un appui hors de la barre : elle reste affichée, sinon le bouton du menu disparaît et le menu perd son ancre.
+      out.penKeepsMenu = !!menu();
+      out.penKeepsBar = shown(bar);
+      press(menu().querySelector('button[data-action="borders:all"]'));
+      await h.sleep(150);
+      out.closed = !menu() && chip.getAttribute('aria-expanded') === 'false';
+      out.alpha = !!penColor && edges('Alpha') === [penColor, penColor, penColor, penColor].join(',');
+      out.sharedEdges = cellAttr('Beta', 'borderLeft') === penColor && cellAttr('Gamma', 'borderTop') === penColor && edges('Delta') === '-,-,-,-';
+      out.html = /data-border-top/.test(Editor.getHTML()) && /border-top: 1px solid/.test(Editor.getHTML());
+      // Un seul Annuler défait tout le réglage.
+      await h.sleep(700);
+      ed().commands.undo();
+      await h.sleep(150);
+      out.oneUndo = edges('Alpha') === '-,-,-,-' && edges('Beta') === '-,-,-,-' && edges('Gamma') === '-,-,-,-';
+      // Le quadrillage : la coche, sans refermer le menu.
+      await cursorInCell(h, 'Alpha');
+      await press_(h, bar, 'borders-open');
+      const row = () => menu().querySelector('button[data-action="gridlines"]');
+      press(row());
+      await h.sleep(150);
+      out.linesOff = !!menu() && row().getAttribute('aria-checked') === 'false' && /<table[^>]*data-grid-lines="off"/.test(Editor.getHTML()) && shown(bar);
+      press(row());
+      await h.sleep(150);
+      out.linesOn = row().getAttribute('aria-checked') === 'true' && !/data-grid-lines/.test(Editor.getHTML());
+      press(buttonOf(bar, 'borders-open'));
+      await h.sleep(120);
+      out.closesOnSecondPress = !menu();
+      return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) + ' pen=' + penColor };
+    },
+  });
+
+  cases.push({
+    id: 'ft_table_bar_in_a_document_greys_the_alignment_and_the_borders_while_tracking',
+    description: 'Avec le suivi des modifications, « Bordures » et les trois alignements verticaux de la barre d\'un tableau de document sont grisés (jamais retirés) avec leur raison pour info-bulle, aucun n\'est enfoncé, un appui ne fait rien et n\'ouvre pas le menu ; le suivi éteint, ils reprennent leur libellé',
+    run: async (h) => {
+      const out = {};
+      const names = { 'borders-open': 'table.bordersOpen', 'valign-top': 'table.valignTop', 'valign-middle': 'table.valignMiddle', 'valign-bottom': 'table.valignBottom' };
+      const state = bar => settingButtons.map((a) => { const b = buttonOf(bar, a); return b.classList.contains('is-disabled') + ':' + b.getAttribute('aria-disabled') + ':' + (b.title === I18n.t(b.classList.contains('is-disabled') ? 'table.settingTracked' : names[a])); });
+      try {
+        let bar = await tableWithCursor(h);
+        out.free = state(bar).every(s => s === 'false:false:true');
+        Editor.setTrackChanges(true);
+        await h.sleep(200);
+        bar = await cursorInCell(h, 'Alpha');
+        out.greyed = state(bar).every(s => s === 'true:true:true') && settingButtons.every(a => buttonOf(bar, a).offsetWidth > 0);
+        out.noneEnabled = pressedAlign(bar) === '';
+        const before = Editor.getHTML();
+        for (const a of ['valign-bottom', 'valign-middle', 'borders-open']) await press_(h, bar, a);
+        out.pressNothing = Editor.getHTML() === before && openMenus().length === 0 && buttonOf(bar, 'borders-open').getAttribute('aria-expanded') !== 'true';
+        out.noSuggestion = !Editor.hasPendingTrackedChanges();
+        Editor.setTrackChanges(false);
+        await h.sleep(200);
+        bar = await cursorInCell(h, 'Alpha');
+        out.freeAgain = state(bar).every(s => s === 'false:false:true');
+        await press_(h, bar, 'valign-bottom');
+        out.works = cellAttr('Alpha', 'verticalAlign') === 'bottom' && pressedAlign(bar) === 'bottom';
+      } finally { Editor.setTrackChanges(false); await h.sleep(150); }
+      return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
     },
   });
 

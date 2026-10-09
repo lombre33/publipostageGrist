@@ -154,7 +154,8 @@ const EditorCore = (function () {
   // Filet de sécurité : les barres contextuelles (tableau, image, variable) ne se ferment normalement que sur un vrai changement de sélection
   // ProseMirror ; un clic hors de `.tiptap` et hors de `.v2-floating-toolbar` les referme toutes, pour les cas sans évènement ProseMirror (ex. clic
   // sur "Mode lecture"). La pastille du zoom de la page (js/page-zoom.js) n'en fait pas partie : un appui dessus ne prend pas le focus et ne change ni la
-  // sélection ni le contexte, la barre de l'image ou du tableau reste ouverte et suit la feuille qui change d'échelle.
+  // sélection ni le contexte, la barre de l'image ou du tableau reste ouverte et suit la feuille qui change d'échelle. Le menu qu'une de ces barres a
+  // ouvert (les bordures du tableau, setOpenDropdownPanel avec son bouton) n'en fait pas partie non plus.
   // `ownerEl` (facultatif) : le champ texte à bulles (js/field-editor.js) dont `panel` est la barre ; sans lui, c'est une barre de l'éditeur du
   // document. Un clic dans l'un laisse ouvertes les barres de CET éditeur et referme celles des autres : le curseur d'un champ ne bouge pas quand on
   // clique dans le document, et inversement.
@@ -164,6 +165,9 @@ const EditorCore = (function () {
   document.addEventListener('mousedown', (event) => {
     const target = event.target;
     if (target.closest('.v2-floating-toolbar') || target.closest('.pp-page-zoom')) return;
+    // Le menu qu'une barre flottante a ouvert (les bordures d'un tableau de document) fait partie de cette barre : choisir la couleur d'un trait ou
+    // cocher le quadrillage ne la referme pas, sinon son bouton disparaît et le menu, resté ouvert, perd son ancre et saute dans un coin.
+    if (openDropdownPanel && openDropdownButton && openDropdownButton.closest('.v2-floating-toolbar') && openDropdownPanel.el.contains(target)) return;
     const inDocument = !!target.closest('.tiptap');
     floatingContextPanels.forEach(({ panel, ownerEl }) => {
       if (!(ownerEl ? ownerEl.contains(target) : inDocument)) panel.hide();

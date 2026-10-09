@@ -67,11 +67,11 @@ const FloatingToolbars = (function () {
     });
   }
 
-  // Menu « Bordures » d'une grille (css/grid.css) : une rangée de réglages en icônes, puis la couleur du stylo - le menu de couleur ci-dessus, réduit à
-  // deux rangées de la palette (les gris et les tons foncés, ceux d'un trait) pour tenir sous la bande de la barre dans un petit panneau, sans refermer
-  // le menu au choix d'une couleur (la fenêtre « Personnalisé… » le rouvre en se fermant) - et, tout en bas, la ligne à cocher « Quadrillage » (montré ou
-  // masqué en Lecture et dans les exports, sans refermer le menu non plus : la coche répond). `onPreset(preset)`, `onPen(color | null)` et `onGridLines()`
-  // ne touchent pas à l'éditeur eux-mêmes.
+  // Menu « Bordures » d'une grille ou d'un tableau de document (css/grid.css) : une rangée de réglages en icônes, puis la couleur du stylo - le menu de
+  // couleur ci-dessus, réduit à deux rangées de la palette (les gris et les tons foncés, ceux d'un trait) pour tenir sous la bande de la barre dans un
+  // petit panneau, sans refermer le menu au choix d'une couleur (la fenêtre « Personnalisé… » le rouvre en se fermant) - et, tout en bas, la ligne à
+  // cocher « Quadrillage » (montré ou masqué en Lecture et dans les exports, sans refermer le menu non plus : la coche répond). `onPreset(preset)`,
+  // `onPen(color | null)` et `onGridLines()` ne touchent pas à l'éditeur eux-mêmes.
   function createBordersDropdown(presets, { onPreset, onPen, onGridLines, current, afterRender }) {
     const buttons = presets.map(([preset, icon, title]) => `<button data-action="borders:${preset}" title="${title}" aria-label="${title}">${Icons.svg(icon)}</button>`).join('');
     const gridLines = '<div class="v2-borders-gridlines">'
@@ -156,11 +156,10 @@ const FloatingToolbars = (function () {
           ['col-del', 'colDel', I18n.t('table.colDel')],
           ['table-del', 'trash', I18n.t('table.tableDel')],
         ],
-        // Ce que seule une grille a (js/grid-editor.js) : bordures, alignement vertical. Posé dans la barre pour tous les tableaux, montré par
-        // css/grid.css sous `body.pp-grid-mode` seulement. La fusion et la scission de cases sont à tous les tableaux (js/table-merge.js pour un
-        // document, js/grid-editor.js pour une grille).
+        // Alignement vertical des cases : le même dans la barre d'une grille et dans celle d'un tableau de document (js/grid-editor.js). La fusion et
+        // la scission de cases aussi (js/table-merge.js pour un document, js/grid-editor.js pour une grille).
         valign: [['valign-top', 'valignTop', 'top', I18n.t('table.valignTop')], ['valign-middle', 'valignMiddle', 'middle', I18n.t('table.valignMiddle')], ['valign-bottom', 'valignBottom', 'bottom', I18n.t('table.valignBottom')]],
-        // Menu « Bordures » d'une grille : les huit réglages (icône, info-bulle).
+        // Menu « Bordures » d'une grille et d'un tableau de document : les huit réglages (icône, info-bulle).
         borders: [['all', 'bordersAll', I18n.t('table.bordersAll')], ['outer', 'bordersOuter', I18n.t('table.bordersOuter')], ['inner', 'bordersInner', I18n.t('table.bordersInner')],
           ['top', 'bordersTop', I18n.t('table.bordersTop')], ['bottom', 'bordersBottom', I18n.t('table.bordersBottom')], ['left', 'bordersLeft', I18n.t('table.bordersLeft')],
           ['right', 'bordersRight', I18n.t('table.bordersRight')], ['none', 'bordersNone', I18n.t('table.bordersNone')]],
@@ -168,28 +167,27 @@ const FloatingToolbars = (function () {
     }
 
     function tableToolbarHtml(spec) {
-      const gridButton = (action, icon, title) => `<button data-action="${action}" class="v2-grid-only" title="${title}">${Icons.svg(icon)}</button>`;
-      return spec.buttons.map(([action, icon, title]) =>
-        `<button data-action="${action}" title="${title}">${Icons.svg(icon)}</button>`).join('')
+      const barButton = (action, icon, title) => `<button data-action="${action}" title="${title}">${Icons.svg(icon)}</button>`;
+      return spec.buttons.map(([action, icon, title]) => barButton(action, icon, title)).join('')
         + '<span class="v2-floating-sep"></span>'
-        + `<button data-action="cell-merge" title="${I18n.t('table.cellMerge')}">${Icons.svg('cellMerge')}</button>`
-        + `<button data-action="cell-split" title="${I18n.t('table.cellSplit')}">${Icons.svg('cellSplit')}</button>`
+        + barButton('cell-merge', 'cellMerge', I18n.t('table.cellMerge'))
+        + barButton('cell-split', 'cellSplit', I18n.t('table.cellSplit'))
         + '<span class="v2-floating-sep"></span>'
         + `<button data-action="caption" title="${I18n.t('caption.addTable')}" aria-label="${I18n.t('caption.addTable')}">${Icons.svg('caption')}</button>`
         + `<button data-action="fill-open" class="v2-fill-chip" id="v2-table-fill-btn" title="${I18n.t('table.fillOpen')}">`
         + Icons.svg('fill') + '<span class="v2-fill-bar" id="v2-table-fill-bar"></span>' + Icons.svg('caretDown')
         + '</button>'
-        + `<button data-action="borders-open" class="v2-fill-chip v2-borders-chip v2-grid-only" id="v2-table-borders-btn" title="${I18n.t('table.bordersOpen')}" aria-haspopup="true" aria-expanded="false">`
+        + `<button data-action="borders-open" class="v2-fill-chip v2-borders-chip" id="v2-table-borders-btn" title="${I18n.t('table.bordersOpen')}" aria-haspopup="true" aria-expanded="false">`
         + Icons.svg('borders') + Icons.svg('caretDown') + '</button>'
-        + '<span class="v2-floating-sep v2-grid-only"></span>'
-        + spec.valign.map(([action, icon, , title]) => gridButton(action, icon, title)).join('');
+        + '<span class="v2-floating-sep"></span>'
+        + spec.valign.map(([action, icon, , title]) => barButton(action, icon, title)).join('');
     }
 
     return { tableToolbarSpec, tableToolbarHtml };
   })();
 
   const { tableFillMenu, tableBordersMenu, openFillMenu, openBordersMenu } = (function () {
-    // Les deux menus de la barre d'un tableau : le fond des cases et, pour une grille, les bordures
+    // Les deux menus de la barre d'un tableau : le fond des cases et les bordures
 
     function tableFillMenu() {
       // Pas de sélection à restaurer ici : setCellsBackground lit editor.state.selection directement (persiste indépendamment du focus DOM).
@@ -228,7 +226,8 @@ const FloatingToolbars = (function () {
 
     function tableMenuPlacement() {
       // Les menus de la barre d'une grille (fond, bordures) s'ouvrent sous la bande où elle est fixée : au-dessus, ils recouvriraient la barre
-      // d'outils.
+      // d'outils. Ceux de la barre d'un tableau de document, ancrée sur le tableau, s'ouvrent au-dessus de la barre (dessous si la place manque) et,
+      // dans un panneau de 400 px, glissent le long de leur bouton pour tenir tout entiers (js/color-palette.js:fitInWindow).
       return GridEditor.isActive() ? { placement: 'bottom-start' } : undefined;
     }
     function openBordersMenu(menus) {
@@ -268,7 +267,7 @@ const FloatingToolbars = (function () {
         'valign-top': () => GridEditor.setVerticalAlign(editor, 'top'),
         'valign-middle': () => GridEditor.setVerticalAlign(editor, 'middle'),
         'valign-bottom': () => GridEditor.setVerticalAlign(editor, 'bottom'),
-        'borders-open': () => openBordersMenu(menus),
+        'borders-open': () => { if (GridEditor.tableSettingsAvailable(editor)) openBordersMenu(menus); },
         caption: () => Caption.run(editor, 'table'),
         'fill-open': () => openFillMenu(menus),
       };
@@ -306,6 +305,21 @@ const FloatingToolbars = (function () {
           setDisabled(action, !!reason, I18n.t(reason || labelKey));
         });
       };
+      // L'alignement vertical des cases visées, enfoncé (aucun quand la sélection en mêle plusieurs), et ses boutons, avec celui des bordures, grisés
+      // quand ces réglages n'ont pas de tableau à régler : sous le suivi des modifications dans un document (js/grid-editor.js:tableSettingsAvailable).
+      // Le grisé d'un document porte sa raison en info-bulle, comme « Supprimer la colonne » ; la barre passe d'une grille à un document sans se redessiner.
+      const syncSettingButtons = () => {
+        const blocked = !GridEditor.tableSettingsAvailable(editor);
+        const align = GridEditor.selectedVerticalAlign(editor);
+        valign.forEach(([action, , value, title]) => {
+          const btn = button(action);
+          if (!btn) return;
+          btn.classList.toggle('is-active', align === value);
+          btn.setAttribute('aria-pressed', align === value ? 'true' : 'false');
+          setDisabled(action, blocked, blocked ? I18n.t('table.settingTracked') : title);
+        });
+        setDisabled('borders-open', blocked, I18n.t(blocked ? 'table.settingTracked' : 'table.bordersOpen'));
+      };
       const syncGridButtons = () => {
         setLocked('table-del', true);
         // Pas de légende dans une grille : le bouton reste dans la barre, grisé, avec sa raison pour info-bulle (js/caption.js).
@@ -313,13 +327,7 @@ const FloatingToolbars = (function () {
         MERGE_BUTTONS.forEach(([action, labelKey]) => setDisabled(action, false, I18n.t(labelKey)));
         setLocked('cell-merge', !GridEditor.canMerge(editor));
         setLocked('cell-split', !GridEditor.canSplit(editor));
-        const align = GridEditor.selectedVerticalAlign(editor);
-        valign.forEach(([action, , value]) => {
-          const btn = button(action);
-          if (!btn) return;
-          btn.classList.toggle('is-active', align === value);
-          btn.setAttribute('aria-pressed', align === value ? 'true' : 'false');
-        });
+        syncSettingButtons();
       };
       const syncDocumentButtons = () => {
         setLocked('table-del', false);
@@ -328,6 +336,7 @@ const FloatingToolbars = (function () {
         const rowBlocked = rowDeleteBlocked();
         setDisabled('row-del', rowBlocked, I18n.t(rowBlocked ? 'table.rowDelMerged' : 'table.rowDel'));
         syncDocumentMergeButtons();
+        syncSettingButtons();
         Caption.syncButton(button('caption'), editor, 'table');
         syncFillBar();
       };
@@ -382,7 +391,7 @@ const FloatingToolbars = (function () {
       const spec = tableToolbarSpec();
       // Les deux menus (fond, bordures) viennent après la barre qui les ouvre : ses commandes les retrouvent ici.
       const menus = {};
-      const panel = EditorCore.createFloatingPanel('v2-floating-toolbar', tableToolbarHtml(spec), (action) => {
+      const panel = EditorCore.createFloatingPanel('v2-floating-toolbar v2-table-toolbar', tableToolbarHtml(spec), (action) => {
         (tableCommands(menus)[action] || (() => {}))();
       });
       menus.fill = tableFillMenu();

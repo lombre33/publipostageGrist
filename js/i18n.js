@@ -1062,8 +1062,9 @@ const I18n = (function () {
     'table.colDelMerged': { fr: 'Indisponible avec le suivi des modifications : une cellule fusionnée traverse cette colonne', en: 'Unavailable with track changes on: a merged cell runs across this column' },
     'table.tableDel': { fr: 'Supprimer le tableau', en: 'Delete table' },
     'table.fillOpen': { fr: 'Fond de cellule (remplir)', en: 'Cell background (fill)' },
-    // Fusion et scission de cases (js/floating-toolbars.js : grille et tableau de document), puis l'alignement vertical de la barre d'une grille. Les
-    // cinq phrases d'après sont les raisons du grisé, en info-bulle (js/table-merge.js).
+    // Fusion et scission de cases (js/floating-toolbars.js : grille et tableau de document), puis l'alignement vertical, de la barre d'une grille comme de
+    // celle d'un tableau de document. Les six phrases d'après sont les raisons du grisé, en info-bulle (js/table-merge.js ; `table.settingTracked` :
+    // js/floating-toolbars.js, pour l'alignement vertical et les bordures).
     'table.cellMerge': { fr: 'Fusionner les cases', en: 'Merge cells' },
     'table.cellSplit': { fr: 'Scinder la case', en: 'Split cell' },
     'table.cellMergeNeedsCells': { fr: 'Fusionner les cases : sélectionnez-en au moins deux, en glissant sur le tableau', en: 'Merge cells: select at least two, by dragging across the table' },
@@ -1071,6 +1072,7 @@ const I18n = (function () {
     'table.cellMergeLoop': { fr: 'Fusionner les cases : une ligne de la sélection est répétée par une boucle', en: 'Merge cells: a row of the selection is repeated by a loop' },
     'table.cellSplitNeedsMerged': { fr: 'Scinder la case : placez le curseur dans une case fusionnée', en: 'Split cell: place the cursor in a merged cell' },
     'table.cellTracked': { fr: 'Indisponible avec le suivi des modifications : la forme du tableau changerait', en: 'Unavailable with track changes on: the shape of the table would change' },
+    'table.settingTracked': { fr: 'Indisponible avec le suivi des modifications : ce réglage ne serait pas suivi', en: 'Unavailable with track changes on: this setting would not be tracked' },
     'table.valignTop': { fr: 'Aligner en haut', en: 'Align to top' },
     'table.valignMiddle': { fr: 'Aligner au milieu', en: 'Align to middle' },
     'table.valignBottom': { fr: 'Aligner en bas', en: 'Align to bottom' },
@@ -1085,13 +1087,13 @@ const I18n = (function () {
     'table.bordersRight': { fr: 'Bordure de droite', en: 'Right border' },
     'table.bordersNone': { fr: 'Aucune bordure', en: 'No border' },
     'table.bordersPen': { fr: 'Couleur du trait', en: 'Line color' },
-    // Ligne à cocher au pied du menu « Bordures » d'une grille (js/floating-toolbars.js:createBordersDropdown) : le quadrillage de départ, montré ou
-    // masqué en Lecture et dans les exports ; les bordures posées restent, l'éditeur garde le sien.
+    // Ligne à cocher au pied du menu « Bordures » d'une grille ou d'un tableau de document (js/floating-toolbars.js:createBordersDropdown) : le quadrillage
+    // de départ, montré ou masqué en Lecture et dans les exports ; les bordures posées restent, l'éditeur garde le sien.
     'table.gridLines': { fr: 'Quadrillage', en: 'Gridlines' },
     'table.gridLinesHint': { fr: 'Lecture et exports', en: 'Reading and exports' },
     'table.gridLinesTip': {
-      fr: 'Montrer le quadrillage dans la Lecture et dans les exports PDF et Excel. Les bordures que vous posez restent ; l’éditeur garde son quadrillage.',
-      en: 'Show the gridlines in Reading and in the PDF and Excel exports. Borders you set stay; the editor keeps its gridlines.',
+      fr: 'Montrer le quadrillage dans la Lecture et dans les exports. Les bordures que vous posez restent ; l’éditeur garde son quadrillage.',
+      en: 'Show the gridlines in Reading and in the exports. Borders you set stay; the editor keeps its gridlines.',
     },
     'twoColumns.resizeGrip': { fr: 'Redimensionner les colonnes', en: 'Resize columns' },
     'twoColumns.widthMmButton': { fr: 'Régler les largeurs en mm', en: 'Set widths in mm' },
