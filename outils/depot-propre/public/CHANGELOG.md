@@ -233,16 +233,17 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   vides ; des paragraphes qui se suivent restent collés. Le texte laissait tomber les paragraphes vides et
   ajoutait une ligne vide entre deux blocs, d'où un écart entre l'éditeur et le message ouvert dans le
   logiciel de messagerie.
-- **Un modèle e-mail n'écrit que du texte brut** : Ctrl+B, Ctrl+I, Ctrl+U, Ctrl+E, Ctrl+Maj+S et les
-  alignements (Ctrl+Maj+L, E, R, J) ne font plus rien dans un modèle e-mail, dont les boutons étaient déjà
-  grisés, et les signes de Markdown tapés (`**gras**`, `*italique*`, `~~barré~~`, `code`) y restent du texte,
-  tels que le lien les écrit, au lieu d'être mangés pour une mise en forme que le lien ne porte pas.
+- **Un modèle e-mail n'écrit que du texte brut** : Ctrl+B, Ctrl+I, Ctrl+U, Ctrl+E, Ctrl+Maj+S, les
+  alignements (Ctrl+Maj+L, E, R, J) et les niveaux de titre (Ctrl+Alt+1 à 6) ne font plus rien dans un
+  modèle e-mail, dont les boutons étaient déjà grisés (le menu des titres l'est aussi maintenant), et les
+  signes de Markdown tapés (`**gras**`, `*italique*`, `~~barré~~`, `code`, `# ` en début de ligne) y restent
+  du texte, tels que le lien les écrit, au lieu d'être mangés pour une mise en forme que le lien ne porte pas.
   Un texte copié ailleurs perd à l'arrivée son gras, son italique, son souligné, sa couleur, sa taille,
-  sa police, son alignement et ses images, et garde son texte, ses liens, ses listes, ses citations et ses
-  lignes vides ; un texte brut collé garde lui aussi ses lignes vides. Une mise en forme restée dans un
-  modèle plus ancien (le gras des bulles d'une notification, par exemple) ne s'affiche plus dans l'éditeur ni
-  à la Lecture, sans rien changer au modèle enregistré. Les documents, les grilles et les macro-modèles ne
-  changent pas.
+  sa police, son alignement et ses images, ses titres deviennent des lignes simples, et il garde son texte,
+  ses liens, ses listes, ses citations et ses lignes vides ; un texte brut collé garde lui aussi ses lignes
+  vides. Une mise en forme restée dans un modèle plus ancien (le gras des bulles d'une notification, un
+  titre, par exemple) ne s'affiche plus dans l'éditeur ni à la Lecture, sans rien changer au modèle
+  enregistré. Les documents, les grilles et les macro-modèles ne changent pas.
 
 ## [1.0.0-beta.1] - 2026-10-05
 
@@ -550,15 +551,16 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   lines, one for one. An empty paragraph, two in a row or a typed line break (Shift+Enter) give blank
   lines; paragraphs that follow each other stay together. The text used to drop empty paragraphs and add a
   blank line between two blocks, so the message opened in the mail client differed from the editor.
-- **An e-mail template only writes plain text**: Ctrl+B, Ctrl+I, Ctrl+U, Ctrl+E, Ctrl+Shift+S and the
-  alignments (Ctrl+Shift+L, E, R, J) no longer do anything in an e-mail template, whose buttons were already
-  greyed out, and typed Markdown signs (`**bold**`, `*italic*`, `~~strike~~`, `code`) stay text there, as
-  the link writes them, instead of being eaten for formatting the link does not carry.
+- **An e-mail template only writes plain text**: Ctrl+B, Ctrl+I, Ctrl+U, Ctrl+E, Ctrl+Shift+S, the
+  alignments (Ctrl+Shift+L, E, R, J) and the heading levels (Ctrl+Alt+1 to 6) no longer do anything in an
+  e-mail template, whose buttons were already greyed out (the heading menu is now too), and typed Markdown
+  signs (`**bold**`, `*italic*`, `~~strike~~`, `code`, `# ` at the start of a line) stay text there, as the
+  link writes them, instead of being eaten for formatting the link does not carry.
   Text copied from elsewhere loses its bold, italic, underline, colour, size, font, alignment
-  and images on arrival, and keeps its text, links, lists, quotes and blank lines; pasted plain text keeps
-  its blank lines too. Formatting left over in an older template (the bold on the bubbles of a notification,
-  for example) is no longer shown in the editor or in Reading mode, without changing the saved template.
-  Documents, grids and macro-templates do not change.
+  and images on arrival, its headings become plain lines, and it keeps its text, links, lists, quotes and
+  blank lines; pasted plain text keeps its blank lines too. Formatting left over in an older template (the
+  bold on the bubbles of a notification, a heading, for example) is no longer shown in the editor or in
+  Reading mode, without changing the saved template. Documents, grids and macro-templates do not change.
 
 ## [1.0.0-beta.1] - 2026-10-05 (English)
 

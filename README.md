@@ -30,7 +30,7 @@ Moteur d'édition : [TipTap](https://tiptap.dev/)/ProseMirror. Le widget est une
 ### Quatre types de modèles
 
 - **Document** : texte riche sur une page A3, A4, A5 ou A6, en portrait ou en paysage, avec des marges réglables par modèle.
-- **E-mail** : objet, À, Cc, Cci et corps, avec les mêmes variables. « Créer l'email » ouvre un brouillon dans la messagerie par un lien `mailto:` : le corps est du texte brut (l'éditeur d'un modèle e-mail n'écrit ni gras, ni couleur, ni image : le texte du lien a les lignes de l'éditeur), sans pièce jointe, et une jauge prévient quand le lien dépasse environ 2 000 caractères.
+- **E-mail** : objet, À, Cc, Cci et corps, avec les mêmes variables. « Créer l'email » ouvre un brouillon dans la messagerie par un lien `mailto:` : le corps est du texte brut (l'éditeur d'un modèle e-mail n'écrit ni gras, ni couleur, ni niveau de titre, ni image : le texte du lien a les lignes de l'éditeur), sans pièce jointe, et une jauge prévient quand le lien dépasse environ 2 000 caractères.
 - **Grille** : un tableau de type tableur à la place de la page, aux colonnes et aux lignes redimensionnables. On peut y coller un tableau d'Excel, de Google Sheets ou de LibreOffice Calc, ou y importer un classeur `.xlsx`, puis l'exporter en Excel.
 - **Macro-modèle** : une page de garde toujours incluse, suivie d'annexes (d'autres modèles) choisies selon des règles évaluées sur la même ligne. Un œil à côté de chaque modèle du résumé le masque de la Lecture et des exports, sans le retirer de la composition.
 

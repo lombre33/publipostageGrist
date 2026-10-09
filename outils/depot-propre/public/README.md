@@ -262,8 +262,8 @@ bibliothèques et polices sont dans [NOTICE](NOTICE).
 - **Word** (bêta) : les images devant ou derrière le texte et celles alignées à gauche ou à droite y
   gardent leur place, le sommaire est une liste fixe et les polices ne sont pas embarquées.
 - **E-mail** : le corps est du texte brut (l'éditeur d'un modèle e-mail n'écrit ni gras, ni couleur, ni
-  image : le texte du lien a les lignes de l'éditeur), sans pièce jointe ; le lien `mailto:` est limité à
-  environ 2 000 caractères, une jauge prévient quand il les dépasse.
+  niveau de titre, ni image : le texte du lien a les lignes de l'éditeur), sans pièce jointe ; le lien
+  `mailto:` est limité à environ 2 000 caractères, une jauge prévient quand il les dépasse.
 - **Excel** : le fichier contient des valeurs, jamais de formule.
 - **Accessibilité** : pas d'audit RGAA complet à ce jour ; les contrastes, le focus et les fenêtres
   (Tab, Échap) ont été travaillés.
@@ -583,8 +583,8 @@ libraries and fonts are in [NOTICE](NOTICE).
   "Ultra HD" are greyed out ("soon").
 - **Word** (beta): images in front of or behind the text, and images aligned left or right, keep their
   place; the table of contents is a fixed list and fonts are not embedded.
-- **E-mail**: the body is plain text (the editor of an e-mail template writes no bold, colour or image:
-  the text of the link has the editor's lines), with no attachment; the `mailto:` link is limited to about
+- **E-mail**: the body is plain text (the editor of an e-mail template writes no bold, colour, heading level or
+  image: the text of the link has the editor's lines), with no attachment; the `mailto:` link is limited to about
   2,000 characters, and a gauge warns when it goes over.
 - **Excel**: the file holds values, never formulas.
 - **Accessibility**: no full RGAA audit to date; contrasts, focus and windows (Tab, Esc) have been worked

@@ -8,6 +8,8 @@
 // (paragraphes vides, Entrée trois fois, Maj+Entrée dans une ligne et en fin de ligne tapés au vrai clavier) ; dans un email, Ctrl+B, I, U, E, Ctrl+Maj+S, L, E, R, J (Verr. Maj. comprise)
 // ne mettent rien en forme alors qu'ils le font dans un document, un collage du VRAI presse-papiers de Chromium (HTML de Google Docs ou de Word, texte brut avec lignes vides) perd la mise
 // en forme dans un email et la garde dans un document, et la mise en forme restée d'un ancien modèle email n'est plus montrée.
+// Même jour, les niveaux de titre (choix « Griser » d'Antoine) : dans un email, Ctrl+Alt+1 à 6 et Alt+Maj+1 à 3 au vrai clavier ne posent aucun titre, « # Titre » tapé reste la ligne tapée, le menu
+// des titres est grisé (la souris ne l'ouvre pas, il reste à sa place), un titre d'un ancien modèle s'affiche comme une ligne simple ; un document garde le tout (touches, « # », menu à la souris).
 // Lancé par run-headless.mjs (groupe Node "emailMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-email-mouse.mjs
 // EMAIL_SHOTS=<dossier> : enregistre aussi une capture (à relire à l'œil) ; sans elle, rien n'est écrit.
 import { createServer } from 'node:http';
@@ -289,6 +291,9 @@ const SHORTCUTS = [
   ['Control+E', /<code>/, 'code en ligne'], ['Control+Shift+S', /<s>/, 'barré'], ['Control+Shift+L', /text-align/, 'à gauche'], ['Control+Shift+E', /text-align: center/, 'centré'],
   ['Control+Shift+R', /text-align: right/, 'à droite'], ['Control+Shift+J', /text-align: justify/, 'justifié'],
 ];
+// Les niveaux de titre : Ctrl+Alt+1 à 6 (touches de TipTap, 4 à 6 seulement par elles) et Alt+Maj+1 à 3 (actions « Titre 1 à 3 » de js/shortcuts.js).
+const HEADING_COMBOS = [1, 2, 3, 4, 5, 6].map(n => [`Control+Alt+${n}`, new RegExp(`<h${n}[ >]`), `titre ${n} (Ctrl+Alt+${n})`])
+  .concat([1, 2, 3].map(n => [`Alt+Shift+${n}`, new RegExp(`<h${n}[ >]`), `titre ${n} (Alt+Maj+${n})`]));
 const GOOGLE_DOCS_HTML = '<meta charset="utf-8"><b style="font-weight:normal;" id="docs-internal-guid-1"><p dir="ltr" style="line-height:1.38;"><span style="font-weight:700;">Gras</span><span> </span>'
   + '<span style="font-style:italic;">ital</span><span> </span><span style="color:#ff0000;font-size:20pt;font-family:Georgia;">rouge</span></p>'
   + '<p dir="ltr" style="text-align:center;"><span>Centré</span></p><ul><li dir="ltr"><p dir="ltr"><span>Puce</span></p></li></ul></b>';
@@ -316,6 +321,30 @@ async function pressAllShortcuts(startHtml) {
   return seen;
 }
 
+async function pressAllHeadingKeys(startHtml) {
+  const seen = {};
+  for (const [combo, pattern, name] of HEADING_COMBOS) {
+    await editorWithCursor(startHtml);
+    await page.keyboard.press('Control+A');
+    await page.waitForTimeout(60);
+    await page.keyboard.press(combo);
+    await page.waitForTimeout(80);
+    seen[name] = pattern.test(await editorHtml());
+  }
+  return seen;
+}
+// Le menu des titres à la souris : survol du bouton (le volet s'ouvre quand le groupe est actif), puis vrai clic sur « Titre 2 » (le curseur est dans le texte).
+async function headingMenuState() {
+  await realHover('#v2-heading-chip');
+  return page.evaluate(() => {
+    const group = document.getElementById('v2-heading-group');
+    return {
+      locked: group.classList.contains('v2-hf-locked'), shown: group.getClientRects().length > 0, opacity: Number(getComputedStyle(group).opacity),
+      flyout: getComputedStyle(document.getElementById('v2-heading-flyout')).display,
+    };
+  });
+}
+
 async function formattingKeysAndPaste() {
   // Quitter un modèle modifié pose la question « Enregistrer / Abandonner / Annuler » (js/main.js:askBeforeLeaving, verify-leave-unsaved-mouse.mjs) : ici le passage au document n'est pas son
   // sujet, la réponse est « Abandonner ».
@@ -337,6 +366,22 @@ async function formattingKeysAndPaste() {
   const markdownBody = await createEmailBody();
   check('et le lien porte ces signes tels qu’ils ont été tapés', markdownBody === MARKDOWN, JSON.stringify(markdownBody));
 
+  // Les niveaux de titre : le texte brut n'écrit que la ligne, pas son niveau.
+  const mailHeadingKeys = await pressAllHeadingKeys('<p>Bonjour Marie</p>');
+  check('dans un email, Ctrl+Alt+1 à 6 et Alt+Maj+1 à 3 au vrai clavier ne posent aucun titre', Object.values(mailHeadingKeys).every(v => v === false), mailHeadingKeys);
+  await emptyEditorWithCursor();
+  await page.keyboard.type('# Titre');
+  await page.waitForTimeout(120);
+  const typedHeading = await editorHtml();
+  check('dans un email, « # Titre » tapé au vrai clavier reste la ligne tapée (aucun titre), et le lien porte « # Titre »', typedHeading === '<p># Titre</p>' && (await createEmailBody()) === '# Titre', typedHeading);
+  await editorWithCursor('<p>Bonjour Marie</p>');
+  const mailMenu = await headingMenuState();
+  check('dans un email, le menu des titres est grisé sans disparaître et le survol ne l’ouvre pas', mailMenu.locked && mailMenu.shown && mailMenu.opacity < 0.6 && mailMenu.flyout === 'none', mailMenu);
+  await realClick('#v2-heading-chip', 250);
+  await page.mouse.move(WIDTH - 20, HEIGHT - 20, { steps: 4 });
+  check('et un vrai clic sur son bouton n’ouvre rien et ne pose aucun titre', (await headingMenuState()).flyout === 'none' && !/<h[1-6][ >]/.test(await editorHtml()), await editorHtml());
+  await page.mouse.move(WIDTH - 20, HEIGHT - 20, { steps: 4 });
+
   await emptyEditorWithCursor();
   await setClipboard({ html: GOOGLE_DOCS_HTML, text: GOOGLE_DOCS_TEXT });
   await page.keyboard.press('Control+V');
@@ -354,13 +399,17 @@ async function formattingKeysAndPaste() {
   check('un texte brut collé garde ses lignes vides (une, puis deux) et son retrait, dans l’éditeur comme dans le lien', plainBody === 'A\n\nB\n\n\n  C' && (await editorHtml()) === '<p>A</p><p></p><p>B</p><p></p><p></p><p>  C</p>', { plainBody, html: await editorHtml() });
 
   // Une mise en forme restée d'un ancien modèle ne s'affiche plus ; le modèle l'a toujours.
-  await page.evaluate(() => Editor.setHTML('<p>Texte <strong>gras</strong> <span style="color: rgb(255, 0, 0); font-size: 24px">rouge</span></p><p style="text-align: center">Centré</p>'));
+  await page.evaluate(() => Editor.setHTML('<h2>Titre ancien</h2><p>Texte <strong>gras</strong> <span style="color: rgb(255, 0, 0); font-size: 24px">rouge</span></p><p style="text-align: center">Centré</p>'));
   await page.waitForTimeout(250);
   const old = await page.evaluate(() => {
     const css = (selector, prop) => getComputedStyle(document.querySelector(selector))[prop];
-    return { bold: css('.tiptap strong', 'fontWeight'), color: css('.tiptap span[style]', 'color'), size: css('.tiptap span[style]', 'fontSize'), align: css('.tiptap p[style]', 'textAlign'), stored: /<strong>/.test(Editor.getHTML()) };
+    return {
+      bold: css('.tiptap strong', 'fontWeight'), color: css('.tiptap span[style]', 'color'), size: css('.tiptap span[style]', 'fontSize'), align: css('.tiptap p[style]', 'textAlign'),
+      heading: css('.tiptap h2', 'fontSize'), headingWeight: css('.tiptap h2', 'fontWeight'), stored: /<strong>/.test(Editor.getHTML()) && /<h2>Titre ancien<\/h2>/.test(Editor.getHTML()),
+    };
   });
-  check('la mise en forme restée d’un ancien modèle email (gras, couleur, taille, centré) n’est plus montrée, et le modèle enregistré la garde', old.bold === '400' && old.color === 'rgb(27, 36, 48)' && old.size === '14px' && old.align === 'start' && old.stored, old);
+  check('la mise en forme restée d’un ancien modèle email (gras, couleur, taille, centré, niveau de titre) n’est plus montrée, et le modèle enregistré la garde', old.bold === '400' && old.color === 'rgb(27, 36, 48)' && old.size === '14px' && old.align === 'start'
+    && old.heading === '14px' && old.headingWeight === '400' && old.stored, old);
   if (SHOTS) await page.screenshot({ path: join(SHOTS, 'email-ancienne-mise-en-forme-700x400.png') });
 
   // --- dans un document : la contre-épreuve, tout fonctionne comme avant ---
@@ -382,6 +431,19 @@ async function formattingKeysAndPaste() {
   await page.waitForTimeout(250);
   const docBold = await page.evaluate(() => getComputedStyle(document.querySelector('.tiptap strong')).fontWeight);
   check('et un document montre toujours son gras', Number(docBold) >= 700, docBold);
+  const docHeadingKeys = await pressAllHeadingKeys('<p>Bonjour Marie</p>');
+  check('dans un document, Ctrl+Alt+1 à 6 et Alt+Maj+1 à 3 posent toujours le titre voulu', Object.values(docHeadingKeys).every(v => v === true), docHeadingKeys);
+  await emptyEditorWithCursor();
+  await page.keyboard.type('# Titre');
+  await page.waitForTimeout(120);
+  const docTypedHeading = await editorHtml();
+  check('dans un document, « # Titre » tapé au vrai clavier fait toujours un titre 1', /^<h1[ >]/.test(docTypedHeading) && /Titre/.test(docTypedHeading), docTypedHeading);
+  await editorWithCursor('<p>Bonjour Marie</p>');
+  const docMenu = await headingMenuState();
+  check('dans un document, le menu des titres reste actif : le survol l’ouvre', !docMenu.locked && docMenu.shown && docMenu.opacity === 1 && docMenu.flyout !== 'none', docMenu);
+  await realClick('#v2-heading-flyout .v2-hover-row[data-level="2"]', 300);
+  const docMenuHtml = await editorHtml();
+  check('et un vrai clic sur « Titre 2 » pose le titre', /^<h2[ >]/.test(docMenuHtml) && /Bonjour Marie/.test(docMenuHtml), docMenuHtml);
 }
 
 await run();

@@ -106,7 +106,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/comments.js` | Commentaires en fils de discussion (`Publipostage_Commentaires`). |
 | `js/table-select.js`, `js/table-merge.js` | Sélection de cases à la souris ; fusion et scission de cases d'un tableau de document. |
 | `js/heading-numbering.js` | Numérotation des titres, la même pour l'éditeur, la Lecture, le PDF et le Word. |
-| `js/email-plain-text.js` | Le modèle e-mail n'écrit que ce que le lien `mailto:` porte : les touches de gras, d'italique, de souligné et d'alignement ne font rien, les signes de Markdown tapés restent du texte, un collage perd sa mise en forme (un texte brut garde ses lignes vides), une ancienne mise en forme ne s'affiche plus. |
+| `js/email-plain-text.js` | Le modèle e-mail n'écrit que ce que le lien `mailto:` porte : les touches de gras, d'italique, de souligné, d'alignement et de niveau de titre ne font rien, les signes de Markdown tapés (« # » compris) restent du texte, un collage perd sa mise en forme (un titre devient une ligne simple, un texte brut garde ses lignes vides), une ancienne mise en forme ne s'affiche plus. |
 
 ### Variables et conditions (20 fichiers, 6 600 lignes)
 
@@ -361,7 +361,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/comments.js` | Threaded comments (`Publipostage_Commentaires`). |
 | `js/table-select.js`, `js/table-merge.js` | Mouse selection of cells; merging and splitting cells of a document table. |
 | `js/heading-numbering.js` | Heading numbering, the same for the editor, Reading mode, the PDF and the Word file. |
-| `js/email-plain-text.js` | The e-mail template only writes what the `mailto:` link carries: the bold, italic, underline and alignment keys do nothing, typed Markdown signs stay text, pasting drops the formatting (pasted plain text keeps its blank lines), formatting left over from an older template is no longer shown. |
+| `js/email-plain-text.js` | The e-mail template only writes what the `mailto:` link carries: the bold, italic, underline, alignment and heading-level keys do nothing, typed Markdown signs (« # » included) stay text, pasting drops the formatting (a heading becomes a plain line, pasted plain text keeps its blank lines), formatting left over from an older template is no longer shown. |
 
 ### Variables and conditions (20 files, 6,600 lines)
 

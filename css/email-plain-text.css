@@ -1,9 +1,9 @@
 /* Modèle email (js/email-plain-text.js pose `pp-email-model` sur <body>) : le lien mailto: ne porte que du texte brut (js/mailto-export.js). Ce que
    l'éditeur et la Lecture montrent d'un modèle email est ce que le destinataire lira : une mise en forme restée d'un modèle plus ancien (gras,
-   italique, souligné, barré, code en ligne, couleur, taille, police, surlignage, alignement) s'affiche comme le texte qui l'entoure. Seul
-   l'affichage est neutre, le modèle enregistré n'est pas touché. Les titres, listes, citations, blocs de code, liens et le suivi des modifications
-   (<ins>, <del>) s'affichent comme partout. Les styles en ligne de la couleur, de la taille, de la police et du surlignage ne se battent qu'avec
-   `!important`. */
+   italique, souligné, barré, code en ligne, couleur, taille, police, surlignage, alignement, niveau de titre) s'affiche comme le texte qui
+   l'entoure. Seul l'affichage est neutre, le modèle enregistré n'est pas touché. Les listes, citations, blocs de code, liens et le suivi des
+   modifications (<ins>, <del>) s'affichent comme partout. Les styles en ligne de la couleur, de la taille, de la police et du surlignage ne se battent
+   qu'avec `!important`. */
 body.pp-email-model :is(#editor-container .tiptap, #reader-container) :is(strong, b) { font-weight: inherit; }
 body.pp-email-model :is(#editor-container .tiptap, #reader-container) :is(em, i) { font-style: inherit; }
 body.pp-email-model :is(#editor-container .tiptap, #reader-container) :is(u, s, strike) { text-decoration: none; }
@@ -14,3 +14,7 @@ body.pp-email-model :is(#editor-container .tiptap, #reader-container) span[style
   color: inherit !important; font-size: inherit !important; font-family: inherit !important; background-color: transparent !important;
 }
 body.pp-email-model :is(#editor-container .tiptap, #reader-container) :is(p, h1, h2, h3, h4, h5, h6)[style*="text-align"] { text-align: start !important; }
+/* Un titre est une ligne du lien comme une autre : sa taille, son poids, sa couleur et la numérotation des titres (le compteur de css/editor-v2.css et
+   de css/style.css) ne passent pas en texte brut. Le sélecteur l'emporte sur `#reader-container .reader-content h1` et sur `#reader-container h1`. */
+body.pp-email-model :is(#editor-container .tiptap, #reader-container) :is(h1, h2, h3, h4, h5, h6) { font-size: inherit; font-weight: inherit; color: inherit; }
+body.pp-email-model :is(#editor-container .tiptap, #reader-container) :is(h1, h2, h3, h4, h5, h6)::before { content: none; }

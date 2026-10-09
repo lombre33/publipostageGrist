@@ -293,15 +293,15 @@ const MainToolbar = (function () {
     const inHfMode = !!HeaderFooterPreview.getHfMode();
     const groups = [
       // E-mail ou macro-modèle : on grise la mise en forme qui n'a aucun sens dans un mailto: (texte brut, js/mailto-export.js) ou sans corps de
-      // document. Les groupes à survol (alignement, image) le sont en entier : pointer-events s'hérite (.v2-hf-locked, css/toolbar-v2.css), ce qui
-      // bloque aussi leur volet déroulant.
-      [mailOrMacro, ['v2-btn-bold', 'v2-btn-italic', 'v2-btn-underline', 'v2-btn-strike', 'v2-align-group', 'v2-size-stepper', 'v2-font-chip', 'v2-text-color-split',
-        'v2-highlight-split', 'v2-btn-format-painter', 'v2-btn-table', 'v2-btn-two-columns', 'v2-image-group', 'v2-btn-toc']],
+      // document. Les groupes à survol (titres, alignement, image) le sont en entier : pointer-events s'hérite (.v2-hf-locked, css/toolbar-v2.css),
+      // ce qui bloque aussi leur volet déroulant. Un niveau de titre n'est qu'une taille et un poids, que le texte brut ne porte pas.
+      [mailOrMacro, ['v2-btn-bold', 'v2-btn-italic', 'v2-btn-underline', 'v2-btn-strike', 'v2-heading-group', 'v2-align-group', 'v2-size-stepper', 'v2-font-chip',
+        'v2-text-color-split', 'v2-highlight-split', 'v2-btn-format-painter', 'v2-btn-table', 'v2-btn-two-columns', 'v2-image-group', 'v2-btn-toc']],
       // Dans une grille, le bouton pose ou retire le saut avant la ligne sélectionnée : grisé sur la première ligne et au milieu d'une case fusionnée
       // sur plusieurs lignes.
       [mailOrMacro || (inGridMode && !GridEditor.canTogglePageBreak(editor)), ['v2-btn-page-break']],
       // Un macro-modèle grise aussi ce que l'e-mail laisse actif, et le menu « Lien et blocs de contenu » en entier.
-      [inMacroMode, ['v2-heading-group', 'v2-btn-comment', 'v2-btn-insert-variable', 'v2-btn-undo', 'v2-btn-redo', 'v2-btn-find', 'v2-btn-track-changes',
+      [inMacroMode, ['v2-btn-comment', 'v2-btn-insert-variable', 'v2-btn-undo', 'v2-btn-redo', 'v2-btn-find', 'v2-btn-track-changes',
         'v2-blocks-group', 'v2-btn-accept-all', 'v2-btn-reject-all']],
       // En-tête ou pied de page : un niveau de titre a un sens, pas la numérotation (titres du flux principal seul).
       [inHfMode, ['v2-numbering-seg']],
