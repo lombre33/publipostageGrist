@@ -863,10 +863,10 @@
 
   cases.push({
     id: 'co_mailto_text_writes_the_callout_blocks_and_lists_like_the_body',
-    description: 'E-mail (texte brut) : un encadré n\'a ni fond ni barre, ses blocs s\'écrivent comme ceux du corps - un paragraphe par bloc, une ligne vide entre deux, listes à puces comprises (avec la puce de l\'éditeur) - sans titre ni mot ajouté',
+    description: 'E-mail (texte brut) : un encadré n\'a ni fond ni barre, ses blocs s\'écrivent comme ceux du corps - une ligne par paragraphe comme dans l\'éditeur (une ligne vide seulement là où l\'éditeur en montre une), listes à puces comprises (avec la puce de l\'éditeur) - sans titre ni mot ajouté',
     run: async (h) => {
       const text = MailtoExport.plainTextFromHtml('<p>Avant</p><div class="callout" data-color="amber" data-icon="warning"><p>Première ligne</p><p>Seconde ligne</p><ul><li><p>Un</p></li><li><p>Deux</p></li></ul></div><p>Après</p>');
-      return { pass: text === 'Avant\n\nPremière ligne\n\nSeconde ligne\n\n• Un\n• Deux\n\nAprès', notes: JSON.stringify({ text }) };
+      return { pass: text === 'Avant\nPremière ligne\nSeconde ligne\n• Un\n• Deux\nAprès', notes: JSON.stringify({ text }) };
     },
   });
 

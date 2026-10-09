@@ -196,6 +196,21 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   mille neuf cent quatre-vingt-dix » en toutes lettres) au lieu de « 1 janvier 1990 » (« un janvier … »),
   dans la Lecture, le PDF, le Word et l'e-mail. Les autres jours, un mois en chiffres (« 01/01/1990 »), un
   mois masqué et l'interface anglaise ne changent pas.
+- **Texte du lien « Créer l'email » fidèle à l'éditeur** : le texte du message a les lignes de l'éditeur, une
+  pour une. Un paragraphe vide, deux de suite ou un retour à la ligne tapé (Maj+Entrée) donnent des lignes
+  vides ; des paragraphes qui se suivent restent collés. Le texte laissait tomber les paragraphes vides et
+  ajoutait une ligne vide entre deux blocs, d'où un écart entre l'éditeur et le message ouvert dans le
+  logiciel de messagerie.
+- **Un modèle e-mail n'écrit que du texte brut** : Ctrl+B, Ctrl+I, Ctrl+U, Ctrl+E, Ctrl+Maj+S et les
+  alignements (Ctrl+Maj+L, E, R, J) ne font plus rien dans un modèle e-mail, dont les boutons étaient déjà
+  grisés, et les signes de Markdown tapés (`**gras**`, `*italique*`, `~~barré~~`, `code`) y restent du texte,
+  tels que le lien les écrit, au lieu d'être mangés pour une mise en forme que le lien ne porte pas.
+  Un texte copié ailleurs perd à l'arrivée son gras, son italique, son souligné, sa couleur, sa taille,
+  sa police, son alignement et ses images, et garde son texte, ses liens, ses listes, ses citations et ses
+  lignes vides ; un texte brut collé garde lui aussi ses lignes vides. Une mise en forme restée dans un
+  modèle plus ancien (le gras des bulles d'une notification, par exemple) ne s'affiche plus dans l'éditeur ni
+  à la Lecture, sans rien changer au modèle enregistré. Les documents, les grilles et les macro-modèles ne
+  changent pas.
 
 ## [1.0.0-beta.1] - 2026-10-05
 
@@ -470,6 +485,19 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   janvier mille neuf cent quatre-vingt-dix" in full words) instead of "1 janvier 1990" ("un janvier …"), in
   the Reading mode, the PDF, the Word file and the e-mail. Other days, a month in digits ("01/01/1990"), a
   hidden month and the English interface do not change.
+- **The text of the "Create the email" link matches the editor**: the text of the message has the editor's
+  lines, one for one. An empty paragraph, two in a row or a typed line break (Shift+Enter) give blank
+  lines; paragraphs that follow each other stay together. The text used to drop empty paragraphs and add a
+  blank line between two blocks, so the message opened in the mail client differed from the editor.
+- **An e-mail template only writes plain text**: Ctrl+B, Ctrl+I, Ctrl+U, Ctrl+E, Ctrl+Shift+S and the
+  alignments (Ctrl+Shift+L, E, R, J) no longer do anything in an e-mail template, whose buttons were already
+  greyed out, and typed Markdown signs (`**bold**`, `*italic*`, `~~strike~~`, `code`) stay text there, as
+  the link writes them, instead of being eaten for formatting the link does not carry.
+  Text copied from elsewhere loses its bold, italic, underline, colour, size, font, alignment
+  and images on arrival, and keeps its text, links, lists, quotes and blank lines; pasted plain text keeps
+  its blank lines too. Formatting left over in an older template (the bold on the bubbles of a notification,
+  for example) is no longer shown in the editor or in Reading mode, without changing the saved template.
+  Documents, grids and macro-templates do not change.
 
 ## [1.0.0-beta.1] - 2026-10-05 (English)
 

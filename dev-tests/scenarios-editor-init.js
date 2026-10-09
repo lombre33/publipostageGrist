@@ -7,9 +7,9 @@
   const editor = () => EditorCore.getEditor();
 
   // Type (m = marque, n = nœud, e = extension) et nom, dans l'ordre que TipTap leur donne (priorité, puis rang). Une liste ouverte doit voir ↑, ↓ et Tab avant
-  // prosemirror-tables : varBadgeSuggestion (« # »), textExpansion (« § ») et gridEditor sont de priorité 1000 (« # » dans une case : verify-grid-hash-mouse.mjs).
+  // prosemirror-tables : varBadgeSuggestion (« # »), textExpansion (« § »), emailPlainText (js/email-plain-text.js) et gridEditor sont de priorité 1000 (« # » dans une case : verify-grid-hash-mouse.mjs).
   const EXTENSIONS = words(`
-    m:link n:paragraph e:calcBadgeKeys e:varBadgeSuggestion e:textExpansion e:gridEditor m:insertion m:deletion e:listItemBranchingDeleteKeymap m:textStyle e:editable
+    m:link n:paragraph e:calcBadgeKeys e:varBadgeSuggestion e:textExpansion e:emailPlainText e:gridEditor m:insertion m:deletion e:listItemBranchingDeleteKeymap m:textStyle e:editable
     e:clipboardTextSerializer e:commands e:focusEvents e:keymap e:tabindex e:drop e:paste e:delete e:textDirection e:starterKit m:bold n:blockquote
     n:bulletList m:code n:codeBlock e:dropCursor e:gapCursor n:hardBreak n:heading e:undoRedo n:horizontalRule m:italic n:listItem e:listKeymap
     n:orderedList m:strike n:text m:underline e:trailingNode n:doc e:textAlign e:fontFamily e:fontSize e:textColor e:highlightColor e:bulletStyle
@@ -27,12 +27,12 @@
   const MARKS = words('link insertion deletion textStyle bold code italic strike underline commentMark modification');
   // Les plugins qui portent un nom, dans l'ordre de l'état de l'éditeur (les autres s'appellent `plugin$`, `plugin$1`...).
   const NAMED_PLUGINS = words(`
-    gridEditor$ textExpansionSuggestion$ suggestion$ autolink$ handleClickLink$ handlePasteLink$ captionPlaceholder$ tableColumnResizing$ selectingCells$
+    gridEditor$ emailPlainText$ textExpansionSuggestion$ suggestion$ autolink$ handleClickLink$ handlePasteLink$ captionPlaceholder$ tableColumnResizing$ selectingCells$
     ppFindReplace$ behindImageClickThrough$ floatingImageKeep$ conditionalValueInput$ @handlewithcare/prosemirror-suggest-changes$
     tiptap__placeholder$ trailingNode$ history$ codeBlockVSCodeHandler$ textDirection$ tiptapPaste$ tiptapDrop$ tabindex$ clearDocument$ focusEvents$
     clipboardTextSerializer$ editable$
   `);
-  const PLUGIN_COUNT = 132;
+  const PLUGIN_COUNT = 134;
 
   // Premier écart entre deux listes, pour un message qui dit où chercher.
   function firstDifference(actual, expected) {

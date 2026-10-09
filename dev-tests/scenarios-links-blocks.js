@@ -806,7 +806,7 @@
         + '<blockquote><p>Citation un</p><p>Citation deux</p></blockquote>'
         + '<ul><li><p>Item</p><pre><code>dans_liste()</code></pre></li></ul>');
       const want = 'Voir le site (https://www.exemple.fr/page?x=1), https://exemple.fr, www.exemple.fr, contact@exemple.fr, écrire (contact@exemple.fr), 01 23 45 67 89 (+33123456789), piège, https://exemple.fr/vide.'
-        + '\n\ndef f(x):\n    return x\n\n\tfin\n\n> Citation un\n> Citation deux\n\n• Item\n  dans_liste()';
+        + '\ndef f(x):\n    return x\n\n\tfin\n> Citation un\n> Citation deux\n• Item\n  dans_liste()';
       return { pass: text === want, notes: JSON.stringify({ text, want }) };
     },
   });

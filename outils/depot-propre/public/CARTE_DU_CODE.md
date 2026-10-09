@@ -23,8 +23,8 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
   vérifie.
 - **Les données** : les modèles et les réglages vivent dans des tables `Publipostage_*` du document Grist ;
   les préférences d'affichage (langue, thème, raccourcis…) dans le navigateur.
-- **Le volume** : 117 fichiers dans `js/` (43 300 lignes : 32 100 de code, 8 600 de commentaires, 2 600 de
-  blanc), 37 feuilles de style (3 300 lignes), une page de 770 lignes. Quatre fichiers de polices du PDF
+- **Le volume** : 118 fichiers dans `js/` (43 300 lignes : 32 100 de code, 8 600 de commentaires, 2 600 de
+  blanc), 38 feuilles de style (3 300 lignes), une page de 770 lignes. Quatre fichiers de polices du PDF
   pèsent 2,5 Mo en quelques lignes (des données) ; `js/i18n.js` est du texte à traduire, pas de la logique.
 
 ## Par où commencer
@@ -88,7 +88,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/html-sanitize.js` | Filtre à liste blanche, lu dans un document inerte, pour le HTML des colonnes Grist, des modèles importés et de la galerie. |
 | `js/external-images.js` | Images d'un autre site : un cadre « Afficher » à leur place jusqu'au clic (rien n'est retenu), signalées ensuite en permanence, et une fenêtre avant tout export qui les lirait. |
 
-### L'éditeur (28 fichiers, 10 600 lignes)
+### L'éditeur (29 fichiers, 10 600 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -105,6 +105,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/comments.js` | Commentaires en fils de discussion (`Publipostage_Commentaires`). |
 | `js/table-select.js`, `js/table-merge.js` | Sélection de cases à la souris ; fusion et scission de cases d'un tableau de document. |
 | `js/heading-numbering.js` | Numérotation des titres, la même pour l'éditeur, la Lecture, le PDF et le Word. |
+| `js/email-plain-text.js` | Le modèle e-mail n'écrit que ce que le lien `mailto:` porte : les touches de gras, d'italique, de souligné et d'alignement ne font rien, les signes de Markdown tapés restent du texte, un collage perd sa mise en forme (un texte brut garde ses lignes vides), une ancienne mise en forme ne s'affiche plus. |
 
 ### Variables et conditions (20 fichiers, 6 600 lignes)
 
@@ -199,7 +200,7 @@ fichier, un lot), câblage de la galerie et de Grist. C'est le fichier qui conna
 ### Les feuilles de style
 
 `css/style.css` (jetons de couleur, thème clair et sombre, `--font-ui`), `css/toolbar-v2.css` (la barre du
-haut), `css/editor-v2.css` (le texte de l'éditeur) ; les 34 autres vont chacune avec un module ou une
+haut), `css/editor-v2.css` (le texte de l'éditeur) ; les 35 autres vont chacune avec un module ou une
 fenêtre de `js/` (`css/callout.css` pour `js/callout.js`) et le disent dans leur premier commentaire ;
 `css/roboto-fonts.css` embarque la police des documents.
 
@@ -248,6 +249,7 @@ notes de conception, qui ne sont pas publiés ici.
 | Un nouvel élément de document (nœud, mise en forme) | `js/editor-nodes.js` (l'éditeur), sa feuille de `css/` (l'écran et la Lecture), puis `js/pdf-export.js` et `js/docx-export.js` : chaque export le convertit à part. |
 | Changer la palette de couleurs, ou ajouter un menu de couleur | `js/color-palette.js` (la palette et ses rangées ; un menu s'y branche par `createMenu`), `js/color-dialog.js` (la fenêtre « Couleur personnalisée »), `js/color-store.js` (les couleurs gardées : `PageLayout.getCustomColors` pour le modèle, `Templates.getDocumentSettings` pour le document), `css/color-palette.css`. |
 | Mettre des bulles de variable ou des puces (date, heure, email, nom de l'utilisateur) dans un champ texte (Objet, À, Cc, Cci, nom du PDF) | `js/field-editor.js` (un éditeur d'une ligne qui se comporte comme l'`<input>` qu'il remplace), `js/field-codec.js` (la valeur enregistrée : texte brut ou HTML), `ReaderMode.fieldText` et `ReaderMode.smartChipValue` dans `js/reader-mode.js` (la valeur résolue, celle des puces), `css/field-editor.css`. |
+| Changer ce qu'un modèle e-mail accepte d'écrire (une touche, un collage, une ancienne mise en forme) ou les lignes du texte du lien | `js/email-plain-text.js` et `css/email-plain-text.css` pour ce que l'éditeur accepte ; `js/mailto-export.js` pour le texte du lien, dont les lignes sont celles de l'éditeur, une pour une. |
 | Modifier un fichier de `css/` ou de `js/` | Monter son numéro `?v=` dans `index.html`, sinon le navigateur garde l'ancien. |
 
 ---
@@ -276,7 +278,7 @@ For anyone reading the code: what is where, and where to start. Line counts are 
   **Each export** loads its library on first use, with an integrity hash (SRI) that the browser checks.
 - **The data**: templates and settings live in `Publipostage_*` tables of the Grist document; display
   preferences (language, theme, shortcuts…) in the browser.
-- **The size**: 117 files in `js/` (43,300 lines: 32,100 of code, 8,600 of comments, 2,600 blank), 37
+- **The size**: 118 files in `js/` (43,300 lines: 32,100 of code, 8,600 of comments, 2,600 blank), 38
   stylesheets (3,300 lines), a 770-line page. Four PDF font files weigh 2.5 MB in a few lines (data);
   `js/i18n.js` is text to translate, not logic.
 
@@ -340,7 +342,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/html-sanitize.js` | Allow-list filter, parsed in an inert document, for the HTML of Grist columns, imported templates and the gallery. |
 | `js/external-images.js` | Images from another site: a "Show" frame in their place until the click (nothing is remembered), flagged at all times afterwards, and a window before any export that would read them. |
 
-### The editor (28 files, 10,600 lines)
+### The editor (29 files, 10,600 lines)
 
 | File | Role |
 |---|---|
@@ -357,6 +359,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/comments.js` | Threaded comments (`Publipostage_Commentaires`). |
 | `js/table-select.js`, `js/table-merge.js` | Mouse selection of cells; merging and splitting cells of a document table. |
 | `js/heading-numbering.js` | Heading numbering, the same for the editor, Reading mode, the PDF and the Word file. |
+| `js/email-plain-text.js` | The e-mail template only writes what the `mailto:` link carries: the bold, italic, underline and alignment keys do nothing, typed Markdown signs stay text, pasting drops the formatting (pasted plain text keeps its blank lines), formatting left over from an older template is no longer shown. |
 
 ### Variables and conditions (20 files, 6,600 lines)
 
@@ -451,7 +454,7 @@ wiring of the gallery and of Grist. It is the file that knows all the others.
 ### Stylesheets
 
 `css/style.css` (color tokens, light and dark theme, `--font-ui`), `css/toolbar-v2.css` (the top bar),
-`css/editor-v2.css` (the editor's text); the other 34 each go with a module or a window of `js/`
+`css/editor-v2.css` (the editor's text); the other 35 each go with a module or a window of `js/`
 (`css/callout.css` for `js/callout.js`) and say so in their first comment; `css/roboto-fonts.css` embeds
 the documents' font.
 
@@ -498,4 +501,5 @@ notes, which are not published here.
 | A new document element (node, formatting) | `js/editor-nodes.js` (the editor), its sheet in `css/` (screen and Reading mode), then `js/pdf-export.js` and `js/docx-export.js`: each export converts it separately. |
 | Change the color palette, or add a color menu | `js/color-palette.js` (the palette and its rows; a menu plugs in through `createMenu`), `js/color-dialog.js` (the "Custom color" window), `js/color-store.js` (the kept colors: `PageLayout.getCustomColors` for the template, `Templates.getDocumentSettings` for the document), `css/color-palette.css`. |
 | Put variable bubbles or chips (date, time, user's email and name) in a text field (Subject, To, Cc, Bcc, PDF name) | `js/field-editor.js` (a one-line editor that behaves like the `<input>` it replaces), `js/field-codec.js` (the saved value: plain text or HTML), `ReaderMode.fieldText` and `ReaderMode.smartChipValue` in `js/reader-mode.js` (the resolved value, and the chips' value), `css/field-editor.css`. |
+| Change what an e-mail template accepts (a key, a paste, formatting left over from an older template) or the lines of the link's text | `js/email-plain-text.js` and `css/email-plain-text.css` for what the editor accepts; `js/mailto-export.js` for the link's text, whose lines are the editor's lines, one for one. |
 | Modify a file in `css/` or `js/` | Bump its `?v=` number in `index.html`, otherwise the browser keeps the old one. |

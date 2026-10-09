@@ -166,6 +166,7 @@
     emailFieldsRawCache = null;
     eachEmailInput(input => { input.value = ''; input.readOnly = false; });
     MainToolbar.setEmailMode(false);
+    EmailPlainText.setActive(false);
     MainToolbar.setMacroMode(true);
     MainToolbar.setGridMode(false);
     syncExportRowsForModelType();
@@ -249,6 +250,7 @@
     currentTypeModele = typeModele;
     loadEmailFields(tpl);
     MainToolbar.setEmailMode(currentTypeModele === 'email');
+    EmailPlainText.setActive(currentTypeModele === 'email');
     MainToolbar.setMacroMode(false);
     MainToolbar.setGridMode(GridEditor.isGridType(currentTypeModele));
     syncExportRowsForModelType();

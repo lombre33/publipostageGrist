@@ -452,7 +452,7 @@
     description: 'E-mail (texte brut) : la légende est une ligne comme un paragraphe ordinaire, sans mot ni signe ajouté',
     run: async (h) => {
       const text = MailtoExport.plainTextFromHtml('<p>Avant</p><p data-caption="true">Figure un : le schéma</p><p>Après</p>');
-      return { pass: text === 'Avant\n\nFigure un : le schéma\n\nAprès', notes: JSON.stringify({ text }) };
+      return { pass: text === 'Avant\nFigure un : le schéma\nAprès', notes: JSON.stringify({ text }) };
     },
   });
 

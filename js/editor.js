@@ -297,6 +297,8 @@ const Editor = (function () {
       transformPastedHTML: html => (GridEditor.isActive() ? html : GridTable.cleanPastedDocumentHtml(html)),
       // Ne consomme que si le presse-papiers contient réellement une image ; un collage de texte normal suit le traitement natif de ProseMirror.
       handlePaste(view, event) {
+        // Un email est du texte brut : pas d'image, le collage suit alors le traitement natif (le texte du presse-papiers, s'il y en a un).
+        if (EmailPlainText.isActive()) return false;
         const items = Array.from((event.clipboardData && event.clipboardData.items) || []);
         const imageItem = items.find(item => item.kind === 'file' && item.type && item.type.startsWith('image/'));
         if (!imageItem) return false;
@@ -406,6 +408,8 @@ const Editor = (function () {
       EditorNodes.createTocNode(Node),
       EditorNodes.createTabNavigationExtension(Extension),
       EditorNodes.createClearHistoryExtension(Extension, EditorState),
+      // Modèle email (js/email-plain-text.js) : ni raccourci de mise en forme, ni mise en forme collée, que le texte brut du lien ne porte pas.
+      EmailPlainText.createExtension(Extension, { Plugin, PluginKey }),
       GridEditor.createExtension(Extension),
     ];
   }

@@ -4,6 +4,10 @@
 // destinataire tapés au vrai clavier, un corps avec une bulle #Prenom, puces, sous-liste, numéros, citation et lien : le lien que le bouton ouvre est capté au moment du clic (un écouteur sur le clic de
 // l'ancre que le bouton crée, sans rien ouvrir) puis décodé comme le fait un logiciel de messagerie. On y lit les puces de l'éditeur, les retraits sous le texte, « > » devant la citation,
 // les retours à la ligne en CRLF, l'objet et le destinataire à l'identique, et la jauge de la barre (« n / 2000 caractères ») égale à la longueur du lien envoyé.
+// Retour d'Antoine du 09/10 (« il y a un gros écart entre la vue éditeur et le mailto », « on peut encore mettre en gras avec le raccourci ») : le texte du lien a les lignes de l'éditeur
+// (paragraphes vides, Entrée trois fois, Maj+Entrée dans une ligne et en fin de ligne tapés au vrai clavier) ; dans un email, Ctrl+B, I, U, E, Ctrl+Maj+S, L, E, R, J (Verr. Maj. comprise)
+// ne mettent rien en forme alors qu'ils le font dans un document, un collage du VRAI presse-papiers de Chromium (HTML de Google Docs ou de Word, texte brut avec lignes vides) perd la mise
+// en forme dans un email et la garde dans un document, et la mise en forme restée d'un ancien modèle email n'est plus montrée.
 // Lancé par run-headless.mjs (groupe Node "emailMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-email-mouse.mjs
 // EMAIL_SHOTS=<dossier> : enregistre aussi une capture (à relire à l'œil) ; sans elle, rien n'est écrit.
 import { createServer } from 'node:http';
@@ -81,6 +85,7 @@ function check(name, pass, notes) {
 
 const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hinting=none'] });
 const context = await browser.newContext({ bypassCSP: true, viewport: { width: WIDTH, height: HEIGHT } });
+await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: BASE });
 const page = await context.newPage();
 const pageErrors = [];
 page.on('pageerror', e => { pageErrors.push(e.message); console.log('[pageerror]', e.message); });
@@ -165,12 +170,13 @@ function readMailto(url) {
 }
 
 const badge = (table, column) => `<span class="var-badge" data-table="${table}" data-column="${column}" data-key="${table}.${column}"></span>`;
-const BODY_HTML = `<h1>Relance</h1><p>Bonjour ${badge('Contacts', 'Prenom')},</p><p>Voici la liste :</p>`
-  + '<ul><li><p>Premier point</p></li><li><p>Deuxième point</p><ul data-bullet-style="circle"><li><p>Sous-point A</p></li><li><p>Sous-point B</p></li></ul></li><li><p>Troisième</p></li></ul>'
-  + '<ol><li><p>Un</p></li><li><p>Deux</p><p>suite du deux</p></li></ol>'
-  + '<blockquote><p>Citation ligne un</p><p>Citation ligne deux</p></blockquote>'
+// Les lignes vides sont celles que la personne tape (un paragraphe vide, deux de suite pour une ligne vide double) : le texte du lien porte les lignes de l'éditeur, une pour une.
+const BODY_HTML = `<h1>Relance</h1><p></p><p>Bonjour ${badge('Contacts', 'Prenom')},</p><p></p><p></p><p>Voici la liste :</p>`
+  + '<ul><li><p>Premier point</p></li><li><p>Deuxième point</p><ul data-bullet-style="circle"><li><p>Sous-point A</p></li><li><p>Sous-point B</p></li></ul></li><li><p>Troisième</p></li></ul><p></p>'
+  + '<ol><li><p>Un</p></li><li><p>Deux</p><p>suite du deux</p></li></ol><p></p>'
+  + '<blockquote><p>Citation ligne un</p><p>Citation ligne deux</p></blockquote><p></p>'
   + '<p>Voir <a href="https://exemple.fr/page">le site</a>.</p><p>Cordialement</p>';
-const WANT_BODY = 'Relance\n\nBonjour Marie,\n\nVoici la liste :\n\n• Premier point\n• Deuxième point\n  ° Sous-point A\n  ° Sous-point B\n• Troisième\n\n1. Un\n2. Deux\n   suite du deux\n\n> Citation ligne un\n> Citation ligne deux\n\nVoir le site (https://exemple.fr/page).\n\nCordialement';
+const WANT_BODY = 'Relance\n\nBonjour Marie,\n\n\nVoici la liste :\n• Premier point\n• Deuxième point\n  ° Sous-point A\n  ° Sous-point B\n• Troisième\n\n1. Un\n2. Deux\n   suite du deux\n\n> Citation ligne un\n> Citation ligne deux\n\nVoir le site (https://exemple.fr/page).\nCordialement';
 const SUBJECT = 'Relance n°7 - 100 % payé';
 const TO = 'marie.dupont@exemple.fr';
 
@@ -207,12 +213,175 @@ async function run() {
   check('le lien n’a que l’objet et le corps comme paramètres (ni cc ni cci vides)', JSON.stringify(mail.keys) === '["subject","body"]', mail.keys);
   const crlf = (mail.body || '').indexOf('\r\n') !== -1 && (mail.body || '').replace(/\r\n/g, '').indexOf('\n') === -1;
   check('les retours à la ligne du corps sont des CRLF, tous', crlf, JSON.stringify(mail.body));
-  check('le corps garde les puces de l’éditeur (• ° ), la numérotation, le retrait sous le texte de l’item, « > » devant chaque ligne de la citation et le lien écrit « texte (adresse) »',
+  check('le corps a les lignes de l’éditeur (une ligne vide pour chaque paragraphe vide, deux de suite restent deux, des paragraphes collés restent collés), les puces de l’éditeur (• ° ), la numérotation, le retrait sous le texte de l’item, « > » devant chaque ligne de la citation et le lien écrit « texte (adresse) »',
     (mail.body || '').replace(/\r\n/g, '\n') === WANT_BODY, { got: (mail.body || '').replace(/\r\n/g, '\n'), want: WANT_BODY });
   const gaugeAfter = await page.evaluate(() => document.getElementById('v2-email-char-counter').textContent.trim());
   check('la jauge affiche la longueur exacte du lien ouvert', gaugeAfter === `${urls[0].length} / 2000 caractères`, { gaugeAfter, length: urls[0].length });
   check('le texte d’état annonce l’email créé et le bouton est de nouveau actif', (await statusText()) === 'Email créé, ouverture de votre logiciel de messagerie.' && await page.evaluate(() => !document.getElementById('btn-create-email').disabled), await statusText());
   if (SHOTS) await page.screenshot({ path: join(SHOTS, 'email-700x400.png') });
+
+  await linesTypedOnTheKeyboard();
+  await formattingKeysAndPaste();
+}
+
+// Le corps du dernier lien ouvert par « Créer l'email », CRLF ramenés à « \n ».
+async function createEmailBody() {
+  await realClick('#btn-create-email', 700);
+  const urls = await page.evaluate(() => window.__mailtos.slice());
+  return (readMailto(urls[urls.length - 1] || 'mailto:').body || '').replace(/\r\n/g, '\n');
+}
+const editorHtml = () => page.evaluate(() => Editor.getHTML());
+// Le texte `html` dans l'éditeur, le curseur posé par un vrai clic sur sa première ligne (jamais sur le centre de la zone, qui peut être sous la barre ou hors du panneau) ; un clic qui
+// n'atteint pas l'éditeur est un échec, sinon rien n'est dit.
+async function editorWithCursor(html) {
+  await page.evaluate(h => Editor.setHTML(h), html);
+  await page.waitForTimeout(250);
+  const c = await realClick('.tiptap > p', 150);
+  const focused = await page.evaluate(() => !!document.activeElement && document.activeElement.closest('.tiptap') !== null);
+  if (!c.onTop || !focused) check('le clic sur la première ligne met le curseur dans l’éditeur', false, { onTop: c.onTop, focused });
+}
+const emptyEditorWithCursor = () => editorWithCursor('<p></p>');
+// Ce que fait une application qui copie : le HTML tel quel (`unsanitized`, sans quoi Chromium en retire les styles) et le texte brut dans le VRAI presse-papiers.
+async function setClipboard(parts) {
+  await page.evaluate(async (p) => {
+    const items = {};
+    if (p.html) items['text/html'] = new Blob([p.html], { type: 'text/html' });
+    if (p.text) items['text/plain'] = new Blob([p.text], { type: 'text/plain' });
+    await navigator.clipboard.write([new ClipboardItem(items, { unsanitized: ['text/html'] })]);
+  }, parts);
+}
+// Un nouveau modèle par le menu « + » ; la souris le quitte ensuite : le menu à survol resterait ouvert sur le document (« Importer un Excel… » sous le premier clic).
+async function newModel(rowId) {
+  await realHover('#v2-new-template-group #btn-new');
+  await realClick(rowId, 900);
+  await page.mouse.move(WIDTH - 20, HEIGHT - 20, { steps: 4 });
+  await page.waitForTimeout(500);
+}
+
+// 4) Les lignes tapées au vrai clavier : Entrée trois fois (deux lignes vides), Maj+Entrée dans une ligne, Maj+Entrée en fin de ligne - ce que l'éditeur montre est ce que le lien porte.
+async function linesTypedOnTheKeyboard() {
+  await emptyEditorWithCursor();
+  const kb = page.keyboard;
+  await kb.type('Bonjour Marie,');
+  for (let i = 0; i < 3; i++) await kb.press('Enter');
+  await kb.type('Voici :');
+  await kb.press('Shift+Enter');
+  await kb.type('la suite');
+  await kb.press('Enter');
+  await kb.type('Fin');
+  await kb.press('Shift+Enter');
+  await kb.press('Enter');
+  await kb.type('Après');
+  await page.waitForTimeout(300);
+  const shown = await page.evaluate(() => {
+    // Les lignes que l'éditeur montre : la hauteur de chaque bloc rapportée à celle d'une ligne.
+    const line = parseFloat(getComputedStyle(document.querySelector('.tiptap p')).lineHeight);
+    return Array.from(document.querySelectorAll('.tiptap > p')).reduce((sum, p) => sum + Math.round(p.getBoundingClientRect().height / line), 0);
+  });
+  const body = await createEmailBody();
+  check('lignes tapées au vrai clavier (Entrée ×3, Maj+Entrée dans une ligne et en fin de ligne) : le lien porte les mêmes lignes vides que l’éditeur', body === 'Bonjour Marie,\n\n\nVoici :\nla suite\nFin\n\nAprès', JSON.stringify(body));
+  check('le nombre de lignes du texte est celui des lignes que l’éditeur montre', body.split('\n').length === shown, { shown, written: body.split('\n').length });
+}
+
+// 5) Mise en forme : les touches et le collage, dans un email puis dans un document (la contre-épreuve).
+const SHORTCUTS = [
+  ['Control+B', /<strong>/, 'gras'], ['Control+Shift+I', /<em>/, 'italique (Ctrl+Maj+I)'], ['Control+I', /<em>/, 'italique'], ['Control+U', /<u>/, 'souligné'],
+  ['Control+E', /<code>/, 'code en ligne'], ['Control+Shift+S', /<s>/, 'barré'], ['Control+Shift+L', /text-align/, 'à gauche'], ['Control+Shift+E', /text-align: center/, 'centré'],
+  ['Control+Shift+R', /text-align: right/, 'à droite'], ['Control+Shift+J', /text-align: justify/, 'justifié'],
+];
+const GOOGLE_DOCS_HTML = '<meta charset="utf-8"><b style="font-weight:normal;" id="docs-internal-guid-1"><p dir="ltr" style="line-height:1.38;"><span style="font-weight:700;">Gras</span><span> </span>'
+  + '<span style="font-style:italic;">ital</span><span> </span><span style="color:#ff0000;font-size:20pt;font-family:Georgia;">rouge</span></p>'
+  + '<p dir="ltr" style="text-align:center;"><span>Centré</span></p><ul><li dir="ltr"><p dir="ltr"><span>Puce</span></p></li></ul></b>';
+const GOOGLE_DOCS_TEXT = 'Gras ital rouge\nCentré\nPuce';
+// Des signes de Markdown tapés : dans un email ils restent du texte, que le lien écrit tel quel ; un document en fait de la mise en forme.
+const MARKDOWN = 'Voici **gras**, *ital*, ~~barré~~, `code`, __gras2__ et _ital2_ fin, snake_case_nom';
+
+async function pressAllShortcuts(startHtml) {
+  const seen = {};
+  // Le texte entier choisi comme le fait une personne : un clic sur la ligne, puis Ctrl+A.
+  const selectAllOf = async () => { await editorWithCursor(startHtml); await page.keyboard.press('Control+A'); await page.waitForTimeout(60); };
+  for (const [combo, pattern, name] of SHORTCUTS) {
+    await selectAllOf();
+    await page.keyboard.press(combo);
+    await page.waitForTimeout(60);
+    seen[name] = pattern.test(await editorHtml());
+  }
+  // Ctrl+B avec Verr. Maj. : la capitale, sans Maj.
+  await selectAllOf();
+  await page.keyboard.down('Control');
+  await page.keyboard.press('B');
+  await page.keyboard.up('Control');
+  await page.waitForTimeout(60);
+  seen['gras avec Verr. Maj.'] = /<strong>/.test(await editorHtml());
+  return seen;
+}
+
+async function formattingKeysAndPaste() {
+  // Quitter un modèle modifié pose la question « Enregistrer / Abandonner / Annuler » (js/main.js:askBeforeLeaving, verify-leave-unsaved-mouse.mjs) : ici le passage au document n'est pas son
+  // sujet, la réponse est « Abandonner ».
+  await page.evaluate(() => { Dialogs.choose = async () => 'discard'; });
+  // --- dans l'email ---
+  // Avant tout Ctrl+A : un bloc posé (citation, titre, puces) juste après un Ctrl+A suivi d'un changement de modèle et d'un clic perd son bloc à la première lettre, avec ou sans ce module.
+  await emptyEditorWithCursor();
+  await page.keyboard.press('Control+Shift+B');
+  await page.keyboard.type('Cité');
+  await page.waitForTimeout(100);
+  check('dans un email, la citation (Ctrl+Maj+B) reste possible : le texte du lien l’écrit', /<blockquote>/.test(await editorHtml()), await editorHtml());
+  const mailKeys = await pressAllShortcuts('<p>Bonjour Marie</p>');
+  check('dans un email, Ctrl+B, I, U, E, Ctrl+Maj+S, I, L, E, R, J (et Ctrl+B avec Verr. Maj.) au vrai clavier ne mettent rien en forme', Object.values(mailKeys).every(v => v === false), mailKeys);
+  await emptyEditorWithCursor();
+  await page.keyboard.type(MARKDOWN);
+  await page.waitForTimeout(150);
+  const typedMarkdown = await editorHtml();
+  check('dans un email, des signes de Markdown tapés au vrai clavier (**gras**, *ital*, ~~barré~~, `code`, __gras__, _ital_) restent du texte : aucune mise en forme, aucun signe mangé', typedMarkdown === `<p>${MARKDOWN}</p>`, typedMarkdown);
+  const markdownBody = await createEmailBody();
+  check('et le lien porte ces signes tels qu’ils ont été tapés', markdownBody === MARKDOWN, JSON.stringify(markdownBody));
+
+  await emptyEditorWithCursor();
+  await setClipboard({ html: GOOGLE_DOCS_HTML, text: GOOGLE_DOCS_TEXT });
+  await page.keyboard.press('Control+V');
+  await page.waitForTimeout(400);
+  const pasted = await editorHtml();
+  check('un collage de Google Docs (gras, italique, couleur, taille, police, centré) perd cette mise en forme dans un email et garde la liste', !/<(strong|em|u|s)[ >]/.test(pasted) && !/style=/.test(pasted) && /<ul><li><p>Puce<\/p><\/li><\/ul>/.test(pasted) && /Gras ital rouge/.test(pasted), pasted);
+  const pastedBody = await createEmailBody();
+  check('et le lien porte ce texte : trois lignes, la puce de l’éditeur', pastedBody === 'Gras ital rouge\nCentré\n• Puce', JSON.stringify(pastedBody));
+
+  await emptyEditorWithCursor();
+  await setClipboard({ text: 'A\n\nB\n\n\n  C' });
+  await page.keyboard.press('Control+V');
+  await page.waitForTimeout(300);
+  const plainBody = await createEmailBody();
+  check('un texte brut collé garde ses lignes vides (une, puis deux) et son retrait, dans l’éditeur comme dans le lien', plainBody === 'A\n\nB\n\n\n  C' && (await editorHtml()) === '<p>A</p><p></p><p>B</p><p></p><p></p><p>  C</p>', { plainBody, html: await editorHtml() });
+
+  // Une mise en forme restée d'un ancien modèle ne s'affiche plus ; le modèle l'a toujours.
+  await page.evaluate(() => Editor.setHTML('<p>Texte <strong>gras</strong> <span style="color: rgb(255, 0, 0); font-size: 24px">rouge</span></p><p style="text-align: center">Centré</p>'));
+  await page.waitForTimeout(250);
+  const old = await page.evaluate(() => {
+    const css = (selector, prop) => getComputedStyle(document.querySelector(selector))[prop];
+    return { bold: css('.tiptap strong', 'fontWeight'), color: css('.tiptap span[style]', 'color'), size: css('.tiptap span[style]', 'fontSize'), align: css('.tiptap p[style]', 'textAlign'), stored: /<strong>/.test(Editor.getHTML()) };
+  });
+  check('la mise en forme restée d’un ancien modèle email (gras, couleur, taille, centré) n’est plus montrée, et le modèle enregistré la garde', old.bold === '400' && old.color === 'rgb(27, 36, 48)' && old.size === '14px' && old.align === 'start' && old.stored, old);
+  if (SHOTS) await page.screenshot({ path: join(SHOTS, 'email-ancienne-mise-en-forme-700x400.png') });
+
+  // --- dans un document : la contre-épreuve, tout fonctionne comme avant ---
+  await newModel('#v2-btn-new-document');
+  const docKeys = await pressAllShortcuts('<p>Bonjour Marie</p>');
+  check('dans un document, les mêmes touches mettent en forme comme avant', Object.values(docKeys).every(v => v === true), docKeys);
+  await emptyEditorWithCursor();
+  await setClipboard({ html: GOOGLE_DOCS_HTML, text: GOOGLE_DOCS_TEXT });
+  await page.keyboard.press('Control+V');
+  await page.waitForTimeout(400);
+  const docPasted = await editorHtml();
+  check('dans un document, le collage de Google Docs garde le gras, l’italique, la couleur, la taille et le centré', /<strong>Gras<\/strong>/.test(docPasted) && /<em>ital<\/em>/.test(docPasted) && /color: rgb\(255, 0, 0\)/.test(docPasted) && /font-size: 20pt/.test(docPasted) && /text-align: center/.test(docPasted), docPasted);
+  await emptyEditorWithCursor();
+  await page.keyboard.type(MARKDOWN);
+  await page.waitForTimeout(150);
+  const docTyped = await editorHtml();
+  check('dans un document, les mêmes signes tapés posent toujours la mise en forme (gras, italique, barré, code)', /<strong>gras<\/strong>/.test(docTyped) && /<em>ital<\/em>/.test(docTyped) && /<s>barré<\/s>/.test(docTyped) && /<code>code<\/code>/.test(docTyped) && /<strong>gras2<\/strong>/.test(docTyped) && /<em>ital2<\/em>/.test(docTyped), docTyped);
+  await page.evaluate(() => Editor.setHTML('<p>Texte <strong>gras</strong></p>'));
+  await page.waitForTimeout(250);
+  const docBold = await page.evaluate(() => getComputedStyle(document.querySelector('.tiptap strong')).fontWeight);
+  check('et un document montre toujours son gras', Number(docBold) >= 700, docBold);
 }
 
 await run();
