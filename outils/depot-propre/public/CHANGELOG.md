@@ -109,6 +109,18 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   sont choisies, « Ligne avant », « Ligne après », « Colonne avant » et « Colonne après », dans la barre du
   tableau, ajoutent autant de lignes ou de colonnes que les cases choisies en couvrent, en un seul Annuler,
   comme dans une grille. Un simple curseur en ajoute toujours une.
+- **Marge autour de chaque page dans l'assemblage avant impression** : la fenêtre « Assemblage avant
+  impression » a un champ « Marge » (en millimètres, 0 au départ, les flèches avancent de 0,5) qui laisse de la
+  place autour de chaque page posée sur la feuille : la marge compte de chaque côté d'une page, donc deux
+  fois entre deux pages et une fois au bord de la grille. Les traits de coupe passent au milieu de l'espace
+  entre deux pages, si bien que chaque morceau découpé garde sa marge. Quand la feuille ne laisse pas la
+  place (quatre A6 sur une A4 avec 5 mm), toutes les pages sont réduites du même facteur, et la fenêtre le
+  dit (« Pages réduites à 90 % pour laisser la place à la marge. », ou « … aux traits de coupe et à la
+  marge. ») ; l'aperçu montre la feuille comme le fichier la portera. La marge est plafonnée à ce que la
+  feuille accepte (les pages ne descendent jamais sous la moitié de leur taille) et le champ dit toujours la
+  valeur appliquée. Avec 0, la planche est celle d'avant ; le dernier choix est gardé par navigateur avec la
+  feuille et les traits de coupe. La fenêtre est un peu plus large pour tout garder lisible dans un panneau
+  de 700 × 400.
 
 ### Modifié
 
@@ -363,6 +375,17 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 - **Several rows or columns at once in a document table**: when several cells of a table are picked, "Row
   before", "Row after", "Column before" and "Column after" in the table bar add as many rows or columns as the
   picked cells cover, in a single Undo, as in a grid. A plain cursor still adds one.
+- **Margin around each page in sheet assembly**: the "Assemble before printing" window has a "Margin" field (in
+  millimetres, 0 to start with, the arrows step by 0.5) that leaves room around each page laid on the
+  sheet: the margin sits on every side of a page, so it counts twice between two pages and once at the edge
+  of the grid. Crop marks run through the middle of the gap between two pages, so every piece you cut out
+  keeps its margin. When the sheet has no room for it (four A6 on one A4 with 5 mm), all the pages are
+  scaled down by the same factor, and the window says so ("Pages reduced to 90% to leave room for the
+  margin.", or "… for the crop marks and the margin."); the preview shows the sheet as the file will carry
+  it. The margin is capped at what the sheet accepts (pages never go below half their size) and the field
+  always shows the value that is applied. With 0, the sheet is the one you had before; the last choice is
+  kept per browser along with the sheet and the crop marks. The window is a little wider so that
+  everything stays readable in a 700 × 400 panel.
 
 ### Changed
 

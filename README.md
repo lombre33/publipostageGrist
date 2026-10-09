@@ -71,7 +71,7 @@ La galerie **Créer à partir d'un modèle…** propose des modèles prêts à l
 
 - **PDF vectoriel** : texte sélectionnable, polices embarquées, mise en page de l'éditeur reprise ligne à ligne (en-têtes, pieds de page, numéros de page, notes, sommaire, images en calque, filigrane). Le nom du fichier se compose avec des variables.
 - **En lot** : un PDF par ligne dans une archive ZIP, ou toutes les lignes dans un seul PDF.
-- **Assemblage avant impression** : pose les pages de chaque ligne sur des feuilles A4 ou A3, avec ou sans traits de coupe (quatre A6 sur une A4, par exemple).
+- **Assemblage avant impression** : pose les pages de chaque ligne sur des feuilles A4 ou A3, avec ou sans traits de coupe, et une marge réglable autour de chaque page (quatre A6 sur une A4, par exemple).
 - **Word** (`.docx`, bêta) : listes et notes de bas de page natives, un fichier par ligne en lot.
 - **Excel** (`.xlsx`) pour les grilles : une archive ZIP d'un classeur par ligne de la table, ou un seul classeur d'une feuille par ligne.
 - Avant un export, une fenêtre liste les sites externes dont des images seraient téléchargées.

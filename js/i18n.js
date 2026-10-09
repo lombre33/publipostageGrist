@@ -133,7 +133,7 @@ const I18n = (function () {
     'pageSize.saved.error.write': { fr: 'Le format n’a pas pu être enregistré dans le document.', en: 'The format could not be saved to the document.' },
     'pageSize.saved.error.delete': { fr: 'Le format n’a pas pu être supprimé du document.', en: 'The format could not be deleted from the document.' },
     // Fenêtre « Assemblage avant impression… » du menu Exporter en PDF (js/sheet-assembly-dialog.js) : les pages de chaque ligne posées sur des
-    // feuilles A4 ou A3, une par emplacement, avec ou sans traits de coupe.
+    // feuilles A4 ou A3, une par emplacement, avec ou sans traits de coupe, avec une marge autour de chaque page.
     'sheetAssembly.title': { fr: 'Assemblage avant impression', en: 'Assemble before printing' },
     'sheetAssembly.sheet.label': { fr: 'Feuille', en: 'Sheet' },
     'sheetAssembly.sheet.tooSmall': { fr: 'Trop petite pour une page {format}.', en: 'Too small for a {format} page.' },
@@ -148,10 +148,14 @@ const I18n = (function () {
     'sheetAssembly.marks.label': { fr: 'Traits de coupe', en: 'Crop marks' },
     'sheetAssembly.marks.off': { fr: 'Sans', en: 'Without' },
     'sheetAssembly.marks.on': { fr: 'Avec', en: 'With' },
+    'sheetAssembly.margin.label': { fr: 'Marge', en: 'Margin' },
+    'sheetAssembly.margin.around': { fr: 'mm autour de chaque page', en: 'mm around each page' },
     'sheetAssembly.summary': { fr: '{slots} {slots|emplacement|emplacements} par feuille ({cols} × {rows}) : {count} {count|ligne|lignes}, au moins {sheets} {sheets|feuille|feuilles} {sheet}.', en: '{slots} {slots|slot|slots} per sheet ({cols} × {rows}): {count} {count|row|rows}, at least {sheets} {sheet} {sheets|sheet|sheets}.' },
     'sheetAssembly.summaryGrid': { fr: '{slots} {slots|emplacement|emplacements} par feuille ({cols} × {rows}) : {count} {count|valeur|valeurs} de la table, au moins {sheets} {sheets|feuille|feuilles} {sheet}.', en: '{slots} {slots|slot|slots} per sheet ({cols} × {rows}): {count} table {count|value|values}, at least {sheets} {sheet} {sheets|sheet|sheets}.' },
     'sheetAssembly.hint': { fr: 'Un emplacement par page, dans l’ordre de la table.', en: 'One slot per page, in table order.' },
     'sheetAssembly.scaled': { fr: 'Pages réduites à {n} % pour laisser la place aux traits de coupe.', en: 'Pages reduced to {n}% to leave room for the crop marks.' },
+    'sheetAssembly.scaledMargin': { fr: 'Pages réduites à {n} % pour laisser la place à la marge.', en: 'Pages reduced to {n}% to leave room for the margin.' },
+    'sheetAssembly.scaledBoth': { fr: 'Pages réduites à {n} % pour laisser la place aux traits de coupe et à la marge.', en: 'Pages reduced to {n}% to leave room for the crop marks and the margin.' },
     'toolbar.autosave.row': { fr: 'Enregistrement automatique', en: 'Auto-save' },
     // Mode grille (js/grid-editor.js) : infobulles des bandeaux A, B, C / 1, 2, 3.
     'grid.selectAll': { fr: 'Tout sélectionner', en: 'Select all' },

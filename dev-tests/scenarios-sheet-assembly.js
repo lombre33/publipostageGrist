@@ -54,10 +54,18 @@
     // Chaque indication sous son champ : l'échelle sous les traits de coupe (vide tant que les pages ne sont pas réduites), la règle de l'ordre sous les emplacements.
     scaled: document.getElementById('pp-sheets-scaled').hidden ? '' : document.getElementById('pp-sheets-scaled').textContent,
     hint: document.getElementById('pp-sheets-hint').textContent,
+    // La marge laissée autour de chaque page : ce que dit le champ (la valeur appliquée), son plafond (mm) et s'il est grisé.
+    margin: document.getElementById('pp-sheets-margin').value, marginMax: document.getElementById('pp-sheets-margin').max, marginDisabled: document.getElementById('pp-sheets-margin').disabled,
     okDisabled: okButton().disabled,
     svgSlots: modal().querySelectorAll('.pp-sheets-slot').length, svgMarks: modal().querySelectorAll('.pp-sheets-mark').length,
     viewBox: modal().querySelector('.pp-sheets-svg').getAttribute('viewBox'),
   });
+  // Les emplacements de la feuille d'aperçu tels que la fenêtre les dessine (points : l'unité du viewBox).
+  const previewSlots = () => Array.from(modal().querySelectorAll('.pp-sheets-slot')).map(r => ({ x: Number(r.getAttribute('x')), y: Number(r.getAttribute('y')), width: Number(r.getAttribute('width')), height: Number(r.getAttribute('height')) }));
+  // Le champ de la marge : le texte change puis `input` part, comme à chaque touche (la fin de la saisie - Entrée, un autre champ - est `change`).
+  const marginInput = () => document.getElementById('pp-sheets-margin');
+  function typeMargin(value) { const f = marginInput(); f.value = String(value); f.dispatchEvent(new Event('input', { bubbles: true })); }
+  function commitMargin() { marginInput().dispatchEvent(new Event('change', { bubbles: true })); }
   // La fenêtre est dessinée et affichée dès le retour de `open` ; la promesse rendue (le réglage, ou null) ne se résout qu'à « Générer », « Annuler » ou Échap : on ne l'attend donc jamais ici.
   function openDialog(opts) {
     return SheetAssemblyDialog.open(Object.assign({ count: 6, table: TABLE }, opts));
@@ -491,7 +499,7 @@
           okButton().click();
           await promise;
           const stored = JSON.parse(localStorage.getItem(SheetAssemblyDialog.STORAGE) || 'null');
-          if (!stored || Object.keys(stored).sort().join() !== 'marks,orientation,sheet' || stored.sheet !== 'A3' || stored.orientation !== 'landscape' || stored.marks !== true) bad.push('choix gardé : ' + JSON.stringify(stored));
+          if (!stored || Object.keys(stored).sort().join() !== 'margin,marks,orientation,sheet' || stored.sheet !== 'A3' || stored.orientation !== 'landscape' || stored.marks !== true || stored.margin !== 0) bad.push('choix gardé : ' + JSON.stringify(stored));
           promise = openDialog({ count: 6 });
           const again = state();
           if (again.sheet !== 'A3' || again.orientation !== 'landscape' || again.marks !== 'on' || again.cols !== 4 || again.rows !== 2) bad.push('rouverte : ' + JSON.stringify(again));
@@ -581,7 +589,7 @@
   // --- 9) Les textes, en français et en anglais, les mots de la grille --------------------------------------------------------------------------------------------------------
   cases.push({
     id: 'sheetassembly_dialog_texts_in_french_and_english_and_grid_wording',
-    description: 'Titre, libellés, choix, boutons, résumé et note d’échelle en français puis en anglais (accords « 1 ligne » / « 6 lignes », « 1 row » / « 6 rows ») ; dans une grille, les lignes deviennent des « valeurs de la table », jamais des lignes',
+    description: 'Titre, libellés, choix, champ de la marge, boutons, résumé et note d’échelle en français puis en anglais (accords « 1 ligne » / « 6 lignes », « 1 row » / « 6 rows ») ; dans une grille, les lignes deviennent des « valeurs de la table », jamais des lignes',
     run: async (h) => {
       const bad = [];
       forgetChoice();
@@ -593,6 +601,9 @@
         slots: Array.from(modal().querySelectorAll('.pp-sheets-slot-field span')).map(l => l.textContent).join(),
         buttons: Array.from(modal().querySelectorAll('.var-modal-actions button')).map(b => b.textContent).join(),
         names: ['pp-sheets-cols', 'pp-sheets-rows'].map(id => document.getElementById(id).getAttribute('aria-labelledby')).join(),
+        // La marge : la fin de sa phrase, à droite du champ, et le nom du champ (son libellé de ligne puis ce texte).
+        margin: document.getElementById('pp-sheets-margin-text').textContent,
+        marginName: document.getElementById('pp-sheets-margin').getAttribute('aria-labelledby'),
       });
       try {
         await withPage('A6', 'portrait', async () => {
@@ -600,7 +611,7 @@
           let promise = openDialog({ count: 6 });
           pickRadio('pp-sheets-marks', 'on');
           const fr = Object.assign(labels(), { notes: [state().hint, state().scaled].filter(Boolean).join(' / ') });
-          const wantFr = { title: 'Assemblage avant impression', labels: 'Feuille,Orientation,Traits de coupe,Emplacements', options: 'A4,A3,Portrait,Paysage,Sans,Avec', slots: 'en largeur,en hauteur', buttons: 'Annuler,Générer', notes: 'Un emplacement par page, dans l’ordre de la table. / Pages réduites à 93 % pour laisser la place aux traits de coupe.' };
+          const wantFr = { title: 'Assemblage avant impression', labels: 'Feuille,Orientation,Traits de coupe,Marge,Emplacements', options: 'A4,A3,Portrait,Paysage,Sans,Avec', slots: 'en largeur,en hauteur', buttons: 'Annuler,Générer', margin: 'mm autour de chaque page', marginName: 'pp-sheets-margin-label pp-sheets-margin-text', notes: 'Un emplacement par page, dans l’ordre de la table. / Pages réduites à 93 % pour laisser la place aux traits de coupe.' };
           Object.keys(wantFr).forEach(k => { if (fr[k] !== wantFr[k]) bad.push(`français, ${k} : ${fr[k]}`); });
           if (!/^pp-sheets-slots-label pp-sheets-(cols|rows)-text$/.test(fr.names.split(',')[0]) || !/^pp-sheets-slots-label pp-sheets-(cols|rows)-text$/.test(fr.names.split(',')[1])) bad.push('noms accessibles des deux listes : ' + fr.names);
           cancelButton().click();
@@ -620,7 +631,7 @@
           promise = openDialog({ count: 6 });
           pickRadio('pp-sheets-marks', 'on');
           const en = Object.assign(labels(), { summary: state().summary, notes: [state().hint, state().scaled].filter(Boolean).join(' / ') });
-          const wantEn = { title: 'Assemble before printing', labels: 'Sheet,Orientation,Crop marks,Slots', options: 'A4,A3,Portrait,Landscape,Without,With', slots: 'across,down', buttons: 'Cancel,Generate', summary: '4 slots per sheet (2 × 2): 6 rows, at least 2 A4 sheets.', notes: 'One slot per page, in table order. / Pages reduced to 93% to leave room for the crop marks.' };
+          const wantEn = { title: 'Assemble before printing', labels: 'Sheet,Orientation,Crop marks,Margin,Slots', options: 'A4,A3,Portrait,Landscape,Without,With', slots: 'across,down', buttons: 'Cancel,Generate', margin: 'mm around each page', marginName: 'pp-sheets-margin-label pp-sheets-margin-text', summary: '4 slots per sheet (2 × 2): 6 rows, at least 2 A4 sheets.', notes: 'One slot per page, in table order. / Pages reduced to 93% to leave room for the crop marks.' };
           Object.keys(wantEn).forEach(k => { if (en[k] !== wantEn[k]) bad.push(`anglais, ${k} : ${en[k]}`); });
           cancelButton().click();
           await promise;
@@ -1210,6 +1221,365 @@
               if (squash(text) !== want) bad.push(`cartes, feuille ${s + 1}, emplacement ${k + 1} : « ${text} » au lieu de « ${want} »`);
             });
           });
+        });
+      } finally { closeIfOpen(); forgetChoice(); }
+      return result(bad);
+    },
+  });
+
+  // --- 19) La marge autour de chaque page : la géométrie ------------------------------------------------------------------------------------------------------------------
+  // Les nombres attendus sont écrits ICI à partir de la définition, pas relus de SheetLayout : la case d'une page est la page réduite plus la marge de chaque côté ; l'échelle est le plus petit
+  // rapport entre la place de la feuille (moins les 7 mm des repères de chaque côté) et ce que les cases demandent ; la marge compte deux fois entre deux pages et une fois au bord de la grille.
+  cases.push({
+    id: 'sheetassembly_geometry_margin_surrounds_each_page_and_shrinks_pages_only_when_needed',
+    description: 'SheetLayout.compute avec une marge : 4 A6 sur une A4 avec 5 mm donnent des pages à 90 % (la case - page et marge - remplit la largeur de la feuille), 2 x 5 mm entre deux pages et 5 mm au bord, chaque page au centre de sa case ; une A4 sur A3 garde sa taille ; avec traits de coupe (3 mm) les repères passent au bord des cases, au milieu de l’espace entre deux pages ; une marge absente, nulle, négative ou illisible donne exactement la planche d’avant ; une marge trop grande est ramenée à maxMargin (les pages ne descendent pas sous la moitié de leur taille, tout reste sur la feuille)',
+    run: async () => {
+      const bad = [];
+      const sheet = SheetLayout.sheetSize('A4', 'portrait');
+      const a6 = PageLayout.pageSizePtFor('portrait', 'A6');
+      const a4 = PageLayout.pageSizePtFor('portrait', 'A4');
+      const zone = 7 * MM;
+      const M = 5 * MM;
+      // L'échelle d'après la définition : cols x rows pages de `page`, une marge de chaque côté de chacune, 7 mm autour de la grille avec les repères.
+      const scaleFor = (page, cols, rows, margin, marks, onto) => Math.min(1, (onto.width - 2 * (marks ? zone : 0) - 2 * cols * margin) / (cols * page.width), (onto.height - 2 * (marks ? zone : 0) - 2 * rows * margin) / (rows * page.height));
+      const inside = (s, on) => s.x >= -1e-6 && s.y >= -1e-6 && s.x + s.width <= on.width + 1e-6 && s.y + s.height <= on.height + 1e-6;
+
+      // 4 A6 sur une A4, 5 mm, sans traits : 90 %, la case remplit la largeur, 5 mm au bord, 10 mm entre deux pages.
+      const plain = SheetLayout.compute({ sheet, page: a6, cols: 2, rows: 2, marks: false, margin: M });
+      const k = scaleFor(a6, 2, 2, M, false, sheet);
+      if (!near(plain.scale, k, 1e-9) || Math.round(plain.scale * 100) !== 90) bad.push(`échelle : ${plain.scale} au lieu de ${k}`);
+      if (!near(plain.margin, M, 1e-9)) bad.push('marge rendue : ' + plain.margin);
+      const cellW = a6.width * k + 2 * M;
+      const cellH = a6.height * k + 2 * M;
+      const x0 = (sheet.width - 2 * cellW) / 2;
+      const y0 = (sheet.height - 2 * cellH) / 2;
+      if (!near(plain.cellWidth, cellW, 1e-6) || !near(plain.cellHeight, cellH, 1e-6) || !near(plain.x0, x0, 1e-6) || !near(plain.y0, y0, 1e-6)) bad.push(`cases : ${plain.cellWidth} x ${plain.cellHeight} depuis ${plain.x0}, ${plain.y0} au lieu de ${cellW} x ${cellH} depuis ${x0}, ${y0}`);
+      plain.slots.forEach((s, i) => {
+        const col = i % 2;
+        const row = Math.floor(i / 2);
+        if (!near(s.x, x0 + col * cellW + M, 1e-6) || !near(s.y, y0 + row * cellH + M, 1e-6) || !near(s.width, a6.width * k, 1e-6) || !near(s.height, a6.height * k, 1e-6)) bad.push(`emplacement ${i} : ${JSON.stringify(s)}`);
+        if (!inside(s, sheet)) bad.push(`emplacement ${i} hors de la feuille`);
+      });
+      const [s0, s1, s2, s3] = plain.slots;
+      if (!near(s1.x - (s0.x + s0.width), 2 * M, 1e-6) || !near(s3.x - (s2.x + s2.width), 2 * M, 1e-6)) bad.push('l’espace entre deux colonnes n’est pas le double de la marge');
+      if (!near(s2.y - (s0.y + s0.height), 2 * M, 1e-6) || !near(s3.y - (s1.y + s1.height), 2 * M, 1e-6)) bad.push('l’espace entre deux lignes n’est pas le double de la marge');
+      if (!near(s0.x, M, 1e-6) || !near(sheet.width - (s1.x + s1.width), M, 1e-6)) bad.push(`marge au bord gauche et droit : ${s0.x}, ${sheet.width - (s1.x + s1.width)}`);
+      if (!near(s0.y, sheet.height - (s3.y + s3.height), 1e-6) || s0.y < M - 1e-6) bad.push(`marge en haut et en bas : ${s0.y}, ${sheet.height - (s3.y + s3.height)}`);
+      if (!near(s0.width / s0.height, a6.width / a6.height, 1e-9)) bad.push('la page n’a plus ses proportions');
+
+      // La place est là (4 A6 sur une A3 portrait) : aucune réduction, la marge de chaque côté, la grille centrée.
+      const a3 = SheetLayout.sheetSize('A3', 'portrait');
+      const roomy = SheetLayout.compute({ sheet: a3, page: a6, cols: 2, rows: 2, marks: false, margin: M });
+      if (roomy.scale !== 1 || !near(roomy.slots[0].width, a6.width, 1e-9) || !near(roomy.slots[1].x - (roomy.slots[0].x + a6.width), 2 * M, 1e-6)) bad.push('4 A6 sur A3 avec marge : ' + JSON.stringify({ scale: roomy.scale, s0: roomy.slots[0], s1: roomy.slots[1] }));
+      if (!near(roomy.slots[0].x - 0, a3.width - (roomy.slots[1].x + a6.width), 1e-6)) bad.push('4 A6 sur A3 avec marge : grille non centrée');
+
+      // Une seule page A4 sur une feuille A4 avec 5 mm (le cas de l'imprimante qui ne va pas jusqu'au bord) : réduite à 95 %, au moins 5 mm de chaque côté, exactement 5 mm là où la page remplit la feuille.
+      const solo = SheetLayout.compute({ sheet, page: a4, cols: 1, rows: 1, marks: false, margin: M });
+      const ks = scaleFor(a4, 1, 1, M, false, sheet);
+      const o = solo.slots[0];
+      if (!near(solo.scale, ks, 1e-9) || !near(o.x, M, 1e-6) || !near(sheet.width - (o.x + o.width), M, 1e-6) || o.y < M - 1e-6 || !near(o.y, sheet.height - (o.y + o.height), 1e-6)) bad.push('une A4 sur A4 avec 5 mm : ' + JSON.stringify({ scale: solo.scale, want: ks, slot: o }));
+
+      // Avec traits de coupe et 3 mm : les repères passent au bord des cases - au milieu de l'espace entre deux pages -, chaque morceau découpé garde sa marge.
+      const m3 = 3 * MM;
+      const marked = SheetLayout.compute({ sheet, page: a6, cols: 2, rows: 2, marks: true, margin: m3 });
+      const km = scaleFor(a6, 2, 2, m3, true, sheet);
+      if (!near(marked.scale, km, 1e-9) || Math.round(marked.scale * 100) !== 88) bad.push(`échelle avec traits et marge : ${marked.scale} au lieu de ${km}`);
+      const cw = a6.width * km + 2 * m3;
+      const ch = a6.height * km + 2 * m3;
+      const gx0 = (sheet.width - 2 * cw) / 2;
+      const gy0 = (sheet.height - 2 * ch) / 2;
+      const xs = [0, 1, 2].map(c => gx0 + c * cw);
+      const ys = [0, 1, 2].map(r => gy0 + r * ch);
+      let vertical = 0;
+      let horizontal = 0;
+      marked.cutMarks.forEach((m, i) => {
+        if (![m.x1, m.x2].every(x => x >= -1e-6 && x <= sheet.width + 1e-6) || ![m.y1, m.y2].every(y => y >= -1e-6 && y <= sheet.height + 1e-6)) bad.push(`repère ${i} hors de la feuille : ${JSON.stringify(m)}`);
+        if (m.x1 === m.x2) {
+          vertical++;
+          const c = xs.findIndex(x => near(x, m.x1, 1e-6));
+          if (c < 0) return bad.push(`repère vertical ${i} hors des lignes de coupe : ${m.x1}`);
+          // La distance de la ligne de coupe à la page voisine est la marge, des deux côtés quand il y en a deux.
+          if (c > 0 && !near(m.x1 - (marked.slots[c - 1].x + marked.slots[c - 1].width), m3, 1e-6)) bad.push(`ligne de coupe ${c} : ${m.x1 - (marked.slots[c - 1].x + marked.slots[c - 1].width)} de la page de gauche`);
+          if (c < 2 && !near(marked.slots[c].x - m.x1, m3, 1e-6)) bad.push(`ligne de coupe ${c} : ${marked.slots[c].x - m.x1} de la page de droite`);
+        } else if (m.y1 === m.y2) {
+          horizontal++;
+          const r = ys.findIndex(y => near(y, m.y1, 1e-6));
+          if (r < 0) return bad.push(`repère horizontal ${i} hors des lignes de coupe : ${m.y1}`);
+          if (r > 0 && !near(m.y1 - (marked.slots[(r - 1) * 2].y + marked.slots[(r - 1) * 2].height), m3, 1e-6)) bad.push(`ligne de coupe horizontale ${r} : trop loin de la page du dessus`);
+          if (r < 2 && !near(marked.slots[r * 2].y - m.y1, m3, 1e-6)) bad.push(`ligne de coupe horizontale ${r} : trop loin de la page du dessous`);
+        } else bad.push(`repère ${i} en biais`);
+      });
+      if (marked.cutMarks.length !== 12 || vertical !== 6 || horizontal !== 6) bad.push(`repères : ${marked.cutMarks.length} (${vertical} verticaux, ${horizontal} horizontaux)`);
+      marked.slots.forEach((s, i) => { if (!inside(s, sheet)) bad.push(`avec traits, emplacement ${i} hors de la feuille`); });
+
+      // Une marge absente, nulle, négative ou illisible : exactement la planche d'avant (aucun cas déjà vert ne bouge).
+      ['sans traits', 'avec traits'].forEach((name, i) => {
+        const base = { sheet, page: a6, cols: 2, rows: 2, marks: i === 1 };
+        const want = JSON.stringify(SheetLayout.compute(base));
+        [0, undefined, NaN, -4, 'x', null].forEach(v => {
+          const got = JSON.stringify(SheetLayout.compute(Object.assign({}, base, { margin: v })));
+          if (got !== want) bad.push(`marge ${String(v)} (${name}) : la planche change`);
+        });
+        if (SheetLayout.compute(base).margin !== 0) bad.push('marge d’une planche sans marge : ' + SheetLayout.compute(base).margin);
+      });
+
+      // Le plafond : celui qui ramène les pages à la moitié de leur taille ; au-delà, compute s'arrête là et tout reste sur la feuille.
+      if (SheetLayout.MIN_SCALE !== 0.5) bad.push('MIN_SCALE : ' + SheetLayout.MIN_SCALE);
+      const maxPlain = (sheet.width - 0.5 * 2 * a6.width) / (2 * 2);
+      const maxMarked = (sheet.width - 2 * zone - 0.5 * 2 * a6.width) / (2 * 2);
+      const gotMax = SheetLayout.maxMargin({ sheet, page: a6, cols: 2, rows: 2, marks: false });
+      const gotMaxMarked = SheetLayout.maxMargin({ sheet, page: a6, cols: 2, rows: 2, marks: true });
+      if (!near(gotMax, maxPlain, 1e-6) || !near(gotMaxMarked, maxMarked, 1e-6)) bad.push(`plafond : ${gotMax} / ${gotMaxMarked} au lieu de ${maxPlain} / ${maxMarked}`);
+      const huge = SheetLayout.compute({ sheet, page: a6, cols: 2, rows: 2, marks: false, margin: 1000 * MM });
+      if (!near(huge.margin, maxPlain, 1e-6) || !near(huge.scale, 0.5, 1e-9) || !huge.slots.every(s => inside(s, sheet))) bad.push('marge démesurée : ' + JSON.stringify({ margin: huge.margin, scale: huge.scale }));
+      // Des étiquettes de 7 x 3,7 cm (3 x 8 sur une A4) : la hauteur est ce qui limite, le plafond le suit.
+      const label = { width: 70 * MM, height: 37 * MM };
+      const maxLabel = Math.min((sheet.width - 0.5 * 3 * label.width) / (2 * 3), (sheet.height - 0.5 * 8 * label.height) / (2 * 8));
+      const labels = SheetLayout.compute({ sheet, page: label, cols: 3, rows: 8, marks: false, margin: 1000 * MM });
+      if (!near(SheetLayout.maxMargin({ sheet, page: label, cols: 3, rows: 8, marks: false }), maxLabel, 1e-6) || !near(labels.scale, 0.5, 1e-9) || labels.slots.length !== 24 || !labels.slots.every(s => inside(s, sheet))) bad.push('étiquettes avec une marge démesurée : ' + JSON.stringify({ margin: labels.margin, want: maxLabel, scale: labels.scale }));
+      // Rien n'est écrit à la place du plafond quand la marge tient : la valeur choisie est rendue telle quelle.
+      if (!near(SheetLayout.compute({ sheet, page: a6, cols: 2, rows: 2, marks: false, margin: 2 * MM }).margin, 2 * MM, 1e-9)) bad.push('une marge qui tient est modifiée');
+      return result(bad);
+    },
+  });
+
+  // --- 20) La marge autour de chaque page : le champ de la fenêtre -------------------------------------------------------------------------------------------------------------
+  cases.push({
+    id: 'sheetassembly_dialog_margin_field_applies_the_margin_and_stays_within_what_fits',
+    description: 'Le champ « Marge » (mm) de la fenêtre : 0 au départ, nommé « Marge mm autour de chaque page », plafonné à ce que la feuille accepte (26,2 mm pour 4 A6 sur une A4) ; saisir 5 réduit les pages à 90 % avec la note « … pour laisser la place à la marge. » (traits de coupe : « … aux traits de coupe et à la marge. »), l’aperçu pose les pages à 5 mm du bord ; une valeur trop grande est ramenée au plafond DANS le champ, un changement d’emplacements qui réduit le plafond ramène la marge au nouveau ; le texte en cours de saisie n’est pas réécrit avant la fin ; la marge est gardée avec « Générer » (jamais avec Annuler), rendue dans le réglage, et un stockage sans marge, illisible, négatif ou démesuré ne casse rien ; grisé quand aucune page ne tient ; Entrée valide ; anglais',
+    run: async (h) => {
+      const bad = [];
+      forgetChoice();
+      const previous = I18n.getLang();
+      const noteOf = () => document.getElementById('pp-sheets-scaled');
+      const Mmm = mm => mm * MM;
+      try {
+        await withPage('A6', 'portrait', async () => {
+          const sheet = SheetLayout.sheetSize('A4', 'portrait');
+          const a6 = PageLayout.pageSizePtFor('portrait', 'A6');
+          // L'échelle d'après la définition (2 x 2 pages A6, 7 mm de repères de chaque côté avec les traits de coupe), et son pourcentage tel que la fenêtre le dit.
+          const kOf = (marks, mm) => Math.min(1, (sheet.width - 2 * (marks ? 7 * MM : 0) - 4 * Mmm(mm)) / (2 * a6.width), (sheet.height - 2 * (marks ? 7 * MM : 0) - 4 * Mmm(mm)) / (2 * a6.height));
+          const percentOf = (marks, mm) => Math.round(100 * kOf(marks, mm));
+          let promise = openDialog({ count: 6 });
+          // Le départ : un champ nombre à 0, ses deux textes, son nom accessible, son plafond.
+          const s0 = state();
+          const field = marginInput();
+          if (!field || field.type !== 'number' || field.min !== '0' || field.step !== '0.5' || s0.margin !== '0' || s0.marginMax !== '26.2' || s0.marginDisabled) bad.push('départ : ' + JSON.stringify({ type: field && field.type, min: field && field.min, step: field && field.step, margin: s0.margin, max: s0.marginMax, disabled: s0.marginDisabled }));
+          if (document.getElementById('pp-sheets-margin-label').textContent !== 'Marge' || document.getElementById('pp-sheets-margin-text').textContent !== 'mm autour de chaque page') bad.push('textes : ' + document.getElementById('pp-sheets-margin-label').textContent + ' / ' + document.getElementById('pp-sheets-margin-text').textContent);
+          if (field.getAttribute('aria-labelledby') !== 'pp-sheets-margin-label pp-sheets-margin-text' || field.getAttribute('aria-describedby') !== 'pp-sheets-scaled') bad.push('noms accessibles : ' + field.getAttribute('aria-labelledby') + ' / ' + field.getAttribute('aria-describedby'));
+          if (s0.scaled !== '') bad.push('une note sans marge ni traits : ' + s0.scaled);
+          // 5 mm : 90 %, la note de la marge, l'aperçu pose les pages à 5 mm du bord et à 10 mm l'une de l'autre.
+          typeMargin(5);
+          const s1 = state();
+          const rects = previewSlots();
+          if (s1.margin !== '5' || s1.scaled !== `Pages réduites à ${percentOf(false, 5)} % pour laisser la place à la marge.` || percentOf(false, 5) !== 90) bad.push('5 mm : ' + JSON.stringify([s1.margin, s1.scaled]));
+          if (s1.svgSlots !== 4 || s1.svgMarks !== 0 || s1.summary !== '4 emplacements par feuille (2 × 2) : 6 lignes, au moins 2 feuilles A4.') bad.push('5 mm : aperçu ou résumé : ' + JSON.stringify([s1.svgSlots, s1.svgMarks, s1.summary]));
+          if (rects.length !== 4 || !near(rects[0].x, Mmm(5), 0.01) || !near(rects[1].x - (rects[0].x + rects[0].width), 2 * Mmm(5), 0.01) || !near(rects[0].width, a6.width * kOf(false, 5), 0.01)) bad.push('aperçu à 5 mm : ' + JSON.stringify(rects));
+          // Avec les traits de coupe : la note des deux ; sans marge, celle des traits seuls ; sans rien, aucune.
+          pickRadio('pp-sheets-marks', 'on');
+          const both = state();
+          if (both.scaled !== `Pages réduites à ${percentOf(true, 5)} % pour laisser la place aux traits de coupe et à la marge.` || both.svgMarks !== 12) bad.push('traits et marge : ' + JSON.stringify([both.scaled, both.svgMarks]));
+          typeMargin(0);
+          const marksOnly = state();
+          if (marksOnly.margin !== '0' || marksOnly.scaled !== 'Pages réduites à 93 % pour laisser la place aux traits de coupe.') bad.push('traits seuls : ' + JSON.stringify([marksOnly.margin, marksOnly.scaled]));
+          if (marksOnly.marginMax !== '22.7') bad.push('plafond avec traits : ' + marksOnly.marginMax);
+          pickRadio('pp-sheets-marks', 'off');
+          if (state().scaled !== '' || noteOf().hidden !== true) bad.push('une note sans marge ni traits');
+          // Une saisie illisible ou négative : marge 0, le champ le dit (programmatique : il n'a pas le focus).
+          typeMargin('-3');
+          if (state().margin !== '0' || state().scaled !== '') bad.push('marge négative : ' + state().margin);
+          typeMargin('abc');
+          if (state().margin !== '0') bad.push('texte : ' + state().margin);
+          // Trop grande : ramenée au plafond DANS le champ (26,2 mm, la valeur appliquée), pages à 50 %.
+          typeMargin(99);
+          const capped = state();
+          if (capped.margin !== '26.2' || capped.scaled !== 'Pages réduites à 50 % pour laisser la place à la marge.') bad.push('99 mm : ' + JSON.stringify([capped.margin, capped.scaled]));
+          // Le plafond suit les emplacements : 1 x 1 l'élargit (78,7 mm), 2 x 1 le ramène à 26,2 et la marge de 50 mm choisie entre-temps avec lui.
+          pickSelect('pp-sheets-cols', 1);
+          pickSelect('pp-sheets-rows', 1);
+          const single = state();
+          if (single.marginMax !== '78.7' || single.margin !== '26.2') bad.push('1 x 1 : ' + JSON.stringify([single.marginMax, single.margin]));
+          typeMargin(50);
+          if (state().margin !== '50') bad.push('50 mm sur 1 x 1 : ' + state().margin);
+          pickSelect('pp-sheets-cols', 2);
+          const narrowed = state();
+          if (narrowed.marginMax !== '26.2' || narrowed.margin !== '26.2' || marginInput().value !== '26.2') bad.push('2 x 1 : ' + JSON.stringify([narrowed.marginMax, narrowed.margin, marginInput().value]));
+          // Changer de feuille : l'A3 (paysage, 4 x 2) repart de tous ses emplacements, le plafond suit et une marge qui tient encore n'est pas touchée.
+          typeMargin(10);
+          pickRadio('pp-sheets-sheet', 'A3');
+          const onA3 = state();
+          if (onA3.margin !== '10' || onA3.marginMax !== '26.2' || onA3.cols !== 4 || onA3.rows !== 2) bad.push('A3 : ' + JSON.stringify([onA3.margin, onA3.marginMax, onA3.cols, onA3.rows]));
+          pickRadio('pp-sheets-sheet', 'A4');
+          // Le texte en cours de saisie n'est pas réécrit : « 3.25 » reste tel quel tant que le champ a le focus, la marge appliquée est 3,3 ; la fin de la saisie le dit.
+          field.focus();
+          typeMargin('3.25');
+          const typingNote = state().scaled;
+          if (field.value !== '3.25' || document.activeElement !== field) bad.push('le texte saisi a été réécrit : ' + field.value);
+          commitMargin();
+          if (field.value !== '3.3') bad.push('fin de saisie : ' + field.value);
+          field.blur();
+          if (typingNote !== `Pages réduites à ${Math.round(kOf(false, 3.3) * 100)} % pour laisser la place à la marge.`) bad.push('3,3 mm, note d’échelle : ' + typingNote);
+          cancelButton().click();
+          await promise;
+          if (localStorage.getItem(SheetAssemblyDialog.STORAGE) !== null) bad.push('« Annuler » a gardé une marge');
+
+          // « Générer » garde la marge et la rend dans le réglage, avec la planche calculée ; la fenêtre rouverte la reprend.
+          promise = openDialog({ count: 6 });
+          typeMargin(4.5);
+          okButton().click();
+          const got = await promise;
+          const stored = JSON.parse(localStorage.getItem(SheetAssemblyDialog.STORAGE) || 'null');
+          if (!stored || stored.margin !== 4.5) bad.push('marge gardée : ' + JSON.stringify(stored));
+          if (!got || got.margin !== 4.5 || !got.layout || !near(got.layout.margin, Mmm(4.5), 1e-9) || !near(got.layout.slots[0].x, Mmm(4.5), 0.01)) bad.push('réglage rendu : ' + JSON.stringify(got && { margin: got.margin, layout: got.layout && got.layout.margin }));
+          promise = openDialog({ count: 6 });
+          if (state().margin !== '4.5') bad.push('rouverte : ' + state().margin);
+          cancelButton().click();
+          await promise;
+          // Un stockage d'avant la marge (sans la clé), négatif, illisible, nul ou démesuré : 0, 0, 0, 0 et le plafond.
+          for (const [margin, want] of [[undefined, '0'], [-3, '0'], ['x', '0'], [null, '0'], [0, '0'], [1e9, '26.2'], [7.25, '7.3']]) {
+            localStorage.setItem(SheetAssemblyDialog.STORAGE, JSON.stringify(margin === undefined ? { sheet: 'A4', orientation: 'portrait', marks: false } : { sheet: 'A4', orientation: 'portrait', marks: false, margin }));
+            promise = openDialog({ count: 6 });
+            const s = state();
+            if (s.margin !== want) bad.push(`stockage avec la marge ${margin === undefined ? '(absente)' : JSON.stringify(margin)} : ${s.margin} au lieu de ${want}`);
+            cancelButton().click();
+            await promise;
+          }
+          forgetChoice();
+          // Entrée dans le champ valide la fenêtre, avec la marge saisie.
+          promise = openDialog({ count: 6 });
+          typeMargin(2);
+          marginInput().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+          const entered = await promise;
+          if (!entered || entered.margin !== 2 || isOpen()) bad.push('Entrée : ' + JSON.stringify(entered && entered.margin) + ' / fenêtre ouverte ' + isOpen());
+          forgetChoice();
+          // L'anglais : le libellé, la phrase et les deux notes.
+          I18n.setLang('en');
+          promise = openDialog({ count: 6 });
+          typeMargin(5);
+          const en1 = state();
+          pickRadio('pp-sheets-marks', 'on');
+          const en2 = state();
+          if (document.getElementById('pp-sheets-margin-label').textContent !== 'Margin' || document.getElementById('pp-sheets-margin-text').textContent !== 'mm around each page') bad.push('anglais, textes : ' + document.getElementById('pp-sheets-margin-label').textContent + ' / ' + document.getElementById('pp-sheets-margin-text').textContent);
+          if (en1.scaled !== 'Pages reduced to 90% to leave room for the margin.' || en2.scaled !== `Pages reduced to ${percentOf(true, 5)}% to leave room for the crop marks and the margin.`) bad.push('anglais, notes : ' + JSON.stringify([en1.scaled, en2.scaled]));
+          cancelButton().click();
+          await promise;
+          I18n.setLang('fr');
+        });
+        // Aucune page ne tient (un format libre de 40 x 50 cm) : le champ reste affiché, grisé, à 0 ; « Générer » aussi.
+        await withFreePage(400, 500, async () => {
+          const promise = openDialog({ count: 6 });
+          const s = state();
+          if (!s.marginDisabled || s.margin !== '0' || !s.okDisabled) bad.push('aucune page ne tient : ' + JSON.stringify({ disabled: s.marginDisabled, margin: s.margin, ok: s.okDisabled }));
+          cancelButton().click();
+          await promise;
+        });
+      } finally { I18n.setLang(previous); closeIfOpen(); forgetChoice(); }
+      return result(bad);
+    },
+  });
+
+  // --- 21) La marge autour de chaque page : le fichier ----------------------------------------------------------------------------------------------------------------------
+  // Le fichier est lu par pdf.js. Une sortie sans marge sert de référence : la position d'un texte dans sa page (à la taille d'origine). Avec une marge, ce même texte doit tomber à la case + marge + (position de
+  // référence x échelle) - les formules sont écrites ICI, pas relues de SheetLayout.
+  cases.push({
+    id: 'sheetassembly_pdf_margin_leaves_the_space_around_every_page_and_cuts_through_the_middle',
+    description: 'A6 sur A4, six lignes, 5 mm : chaque nom tombe dans son quart de feuille, à la position de la page réduite (case + marge + position d’origine x échelle) - 10 mm entre deux pages, 5 mm au bord -, la marge de 28 pt devient 25 pt, aucun trait ; avec traits de coupe et 3 mm : les 12 repères de chaque feuille passent au bord des cases (aux positions de l’aperçu), le texte à l’échelle de la planche ; le message final et le nom du fichier sont ceux de toujours',
+    run: async (h) => {
+      const bad = [];
+      forgetChoice();
+      try {
+        await withPage('A6', 'portrait', async () => {
+          await seed(h, `<p>${badge('Nom')}</p>`);
+          const sheet = SheetLayout.sheetSize('A4', 'portrait');
+          const a6 = PageLayout.pageSizePtFor('portrait', 'A6');
+          // La référence : sans marge, quatre A6 à leur taille. La position du premier texte (« Alpha ») dans sa page.
+          const ref = await exportSheets(h);
+          if (!ref.opened || ref.downloads.length !== 1) return bad.push('référence : opened=' + ref.opened + ' téléchargements=' + ref.downloads.length);
+          const refSheets = await readSheets(h, ref.downloads[0].blob);
+          const refTop = (sheet.height - 2 * a6.height) / 2;
+          const quadrant = (item, on) => (item.x < on.width / 2 ? 0 : 1) + (item.y < on.height / 2 ? 0 : 2);
+          const firstOf = (page, q) => page.items.filter(it => nameIndex(it.str) >= 0 && quadrant(it, page) === q).sort((a, b) => a.y - b.y || a.x - b.x)[0] || null;
+          const inPage = [];
+          for (let q = 0; q < 4; q++) {
+            const it = firstOf(refSheets[0], q);
+            if (!it) return bad.push('référence : aucun texte dans le quart ' + (q + 1));
+            inPage.push({ x: it.x - (q % 2) * a6.width, y: it.y - (refTop + Math.floor(q / 2) * a6.height) });
+          }
+          if (inPage.some(p => !near(p.x, inPage[0].x, 0.3) || !near(p.y, inPage[0].y, 0.3))) bad.push('référence : le texte n’est pas au même endroit dans les quatre pages : ' + JSON.stringify(inPage));
+          const T = inPage[0];
+
+          // 5 mm, sans traits de coupe.
+          const M = 5 * MM;
+          const k = Math.min(1, (sheet.width - 4 * M) / (2 * a6.width), (sheet.height - 4 * M) / (2 * a6.height));
+          const cellW = a6.width * k + 2 * M;
+          const cellH = a6.height * k + 2 * M;
+          const gx = (sheet.width - 2 * cellW) / 2;
+          const gy = (sheet.height - 2 * cellH) / 2;
+          const res = await exportSheets(h, async () => { typeMargin(5); okButton().click(); });
+          const dl = res.downloads[0];
+          if (!res.opened || res.downloads.length !== 1 || !dl || !dl.blob) return bad.push('5 mm : opened=' + res.opened + ' téléchargements=' + res.downloads.length + ' états=' + JSON.stringify(res.statuses));
+          if (dl.name !== TABLE + '-assemblage.pdf' || res.status !== '6 lignes placées sur 2 feuilles — fichier téléchargé.') bad.push('5 mm : ' + dl.name + ' / ' + res.status);
+          const sheets = await readSheets(h, dl.blob);
+          if (sheets.length !== 2) return bad.push('5 mm : feuilles ' + sheets.length);
+          const offsets = [];
+          sheets.forEach((page, s) => {
+            if (!near(page.width, sheet.width) || !near(page.height, sheet.height)) bad.push(`5 mm, feuille ${s + 1} : ${page.width} x ${page.height}`);
+            if (page.lines.length) bad.push(`5 mm, feuille ${s + 1} : ${page.lines.length} trait(s) sans traits de coupe demandés`);
+            for (let q = 0; q < 4; q++) {
+              const index = s * 4 + q;
+              const it = firstOf(page, q);
+              if (index >= NAMES.length) { if (it) bad.push(`5 mm, feuille ${s + 1} : un texte dans le quart ${q + 1} qui devrait rester vide`); continue; }
+              if (!it) { bad.push(`5 mm, feuille ${s + 1} : rien dans le quart ${q + 1}`); continue; }
+              if (nameIndex(it.str) !== index) bad.push(`5 mm, feuille ${s + 1}, quart ${q + 1} : « ${it.str} » au lieu de ${NAMES[index]}`);
+              const wantX = gx + (q % 2) * cellW + M + k * T.x;
+              const wantY = gy + Math.floor(q / 2) * cellH + M + k * T.y;
+              if (!near(it.x, wantX, 0.7) || !near(it.y, wantY, 0.7)) bad.push(`5 mm, feuille ${s + 1}, quart ${q + 1} : texte en (${Math.round(it.x * 100) / 100}, ${Math.round(it.y * 100) / 100}) au lieu de (${Math.round(wantX * 100) / 100}, ${Math.round(wantY * 100) / 100})`);
+              offsets.push(it.x - (gx + (q % 2) * cellW + M));
+            }
+          });
+          quarterProblems(sheets, nameIndex, NAMES.length).forEach(p => bad.push(p));
+          // La marge de 28 pt de la page est réduite comme elle : 90 % -> 25 pt (la page est réduite, pas rognée).
+          if (offsets.length !== 6 || offsets.some(o => !near(o, 28 * k, 0.5))) bad.push(`marge de la page réduite : ${offsets.map(o => Math.round(o * 100) / 100).join()} au lieu de ${Math.round(28 * k * 100) / 100}`);
+
+          // 3 mm avec traits de coupe : les 12 repères au bord des cases, le texte à l'échelle de la planche.
+          const m3 = 3 * MM;
+          const zone = 7 * MM;
+          const k3 = Math.min(1, (sheet.width - 2 * zone - 4 * m3) / (2 * a6.width), (sheet.height - 2 * zone - 4 * m3) / (2 * a6.height));
+          const cw = a6.width * k3 + 2 * m3;
+          const ch = a6.height * k3 + 2 * m3;
+          const hx = (sheet.width - 2 * cw) / 2;
+          const hy = (sheet.height - 2 * ch) / 2;
+          const layout = SheetLayout.compute({ sheet, page: a6, cols: 2, rows: 2, marks: true, margin: m3 });
+          let preview = null;
+          const resMarked = await exportSheets(h, async () => { pickRadio('pp-sheets-marks', 'on'); typeMargin(3); preview = state(); okButton().click(); });
+          const dlMarked = resMarked.downloads[0];
+          if (!resMarked.opened || resMarked.downloads.length !== 1 || !dlMarked || !dlMarked.blob) return bad.push('3 mm avec traits : opened=' + resMarked.opened + ' téléchargements=' + resMarked.downloads.length);
+          const markedSheets = await readSheets(h, dlMarked.blob);
+          if (markedSheets.length !== 2) return bad.push('3 mm avec traits : feuilles ' + markedSheets.length);
+          if (!preview || preview.svgMarks !== 12 || preview.svgSlots !== 4 || preview.scaled !== `Pages réduites à ${Math.round(k3 * 100)} % pour laisser la place aux traits de coupe et à la marge.`) bad.push('3 mm avec traits, aperçu : ' + JSON.stringify(preview && [preview.svgMarks, preview.svgSlots, preview.scaled]));
+          const xsCut = [0, 1, 2].map(c => hx + c * cw);
+          markedSheets.forEach((page, s) => {
+            const used = new Set();
+            let missing = 0;
+            layout.cutMarks.forEach(m => {
+              const at = page.lines.findIndex((l, i) => !used.has(i) && near(l.x1, m.x1, 0.02) && near(l.y1, m.y1, 0.02) && near(l.x2, m.x2, 0.02) && near(l.y2, m.y2, 0.02));
+              if (at < 0) missing++; else used.add(at);
+            });
+            if (page.lines.length !== 12 || missing) bad.push(`3 mm avec traits, feuille ${s + 1} : ${page.lines.length} traits tracés, ${missing} repère(s) absents sur 12`);
+            // Chaque trait vertical est sur une ligne de coupe d'après la définition (bord de case), jamais au bord d'une page.
+            const vertical = page.lines.filter(l => near(l.x1, l.x2, 0.001));
+            if (vertical.length !== 6 || vertical.some(l => !xsCut.some(x => near(x, l.x1, 0.05)))) bad.push(`3 mm avec traits, feuille ${s + 1} : repères verticaux hors des lignes de coupe : ${vertical.map(l => Math.round(l.x1 * 100) / 100).join()} (lignes : ${xsCut.map(x => Math.round(x * 100) / 100).join()})`);
+            for (let q = 0; q < 4; q++) {
+              const index = s * 4 + q;
+              const it = firstOf(page, q);
+              if (index >= NAMES.length) continue;
+              if (!it) { bad.push(`3 mm avec traits, feuille ${s + 1} : rien dans le quart ${q + 1}`); continue; }
+              const wantX = hx + (q % 2) * cw + m3 + k3 * T.x;
+              const wantY = hy + Math.floor(q / 2) * ch + m3 + k3 * T.y;
+              if (!near(it.x, wantX, 0.7) || !near(it.y, wantY, 0.7)) bad.push(`3 mm avec traits, feuille ${s + 1}, quart ${q + 1} : texte en (${Math.round(it.x * 100) / 100}, ${Math.round(it.y * 100) / 100}) au lieu de (${Math.round(wantX * 100) / 100}, ${Math.round(wantY * 100) / 100})`);
+            }
+          });
+          quarterProblems(markedSheets, nameIndex, NAMES.length).forEach(p => bad.push(p));
         });
       } finally { closeIfOpen(); forgetChoice(); }
       return result(bad);

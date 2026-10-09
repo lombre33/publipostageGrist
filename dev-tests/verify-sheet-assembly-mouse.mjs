@@ -6,6 +6,8 @@
 //  - un vrai clic sur A3, Paysage, Avec... change l'aperçu (autant d'emplacements numérotés et de repères que le fichier en portera, papier blanc dans les deux thèmes) ; les flèches du clavier
 //    changent la feuille et les nombres ; Tab tourne dans la fenêtre sans en sortir ;
 //  - un choix qui ne tient pas est grisé (texte à 4,5:1, info-bulle), un clic dessus ne change rien ;
+//  - la marge laissée autour de chaque page : un clic dans le champ, la saisie au clavier, les flèches (pas de 0,5 mm), une valeur trop grande ramenée au plafond DANS le champ ; l'aperçu, la note d'échelle
+//    et la fenêtre suivent, sans jamais défiler, y compris dans l'état le plus haut (A3 paysage, traits de coupe, marge) en français comme en anglais ; Entrée dans le champ valide, la marge est gardée ;
 //  - « Générer » à la souris télécharge « <table>-assemblage.pdf », relu par pdf.js (feuilles A4, nombre de feuilles) ; Annuler et Échap ne lancent rien ; Entrée valide ;
 //  - l'interface en anglais.
 // Lancé par run-headless.mjs (groupe Node "sheetAssemblyMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-sheet-assembly-mouse.mjs
@@ -158,7 +160,7 @@ const winOpen = () => page.evaluate(() => { const m = document.getElementById('p
 const fits = () => page.evaluate(() => {
   const b = document.querySelector('#pp-sheets-modal .pp-modal-body');
   const box = document.querySelector('#pp-sheets-modal .modal-content').getBoundingClientRect();
-  const overflowing = Array.from(document.querySelectorAll('#pp-sheets-modal .pp-sheets-note, #pp-sheets-modal .pp-sheets-summary, #pp-sheets-modal .pp-sheets-option, #pp-sheets-modal .pp-sheets-slots')).filter(e => !e.hidden && e.scrollWidth > e.clientWidth + 1).map(e => e.className);
+  const overflowing = Array.from(document.querySelectorAll('#pp-sheets-modal .pp-sheets-note, #pp-sheets-modal .pp-sheets-summary, #pp-sheets-modal .pp-sheets-option, #pp-sheets-modal .pp-sheets-slots, #pp-sheets-modal .pp-sheets-margin')).filter(e => !e.hidden && e.scrollWidth > e.clientWidth + 1).map(e => e.className);
   return { scrollH: b.scrollHeight, clientH: b.clientHeight, ok: b.scrollHeight <= b.clientHeight + 1 && box.top >= 0 && box.bottom <= innerHeight && overflowing.length === 0, top: Math.round(box.top), bottom: Math.round(box.bottom), overflowing };
 });
 const focusIn = () => page.evaluate(() => {
@@ -175,6 +177,7 @@ const dialogState = () => page.evaluate(() => {
   return {
     sheet: checked('pp-sheets-sheet'), orientation: checked('pp-sheets-orientation'), marks: checked('pp-sheets-marks'),
     cols: Number(q('#pp-sheets-cols').value), rows: Number(q('#pp-sheets-rows').value),
+    margin: q('#pp-sheets-margin').value, marginMax: q('#pp-sheets-margin').max, marginText: q('#pp-sheets-margin-text').textContent, marginDisabled: q('#pp-sheets-margin').disabled,
     summary: q('.pp-sheets-summary').textContent,
     scaled: document.getElementById('pp-sheets-scaled').hidden ? '' : document.getElementById('pp-sheets-scaled').textContent,
     hint: document.getElementById('pp-sheets-hint').textContent,
@@ -260,14 +263,18 @@ async function readDownload(download) {
     const doc = await window.pdfjsLib.getDocument({ data }).promise;
     const sizes = [];
     const texts = [];
+    const firstX = [];
     for (let n = 1; n <= doc.numPages; n++) {
       const p = await doc.getPage(n);
       const v = p.getViewport({ scale: 1 });
       sizes.push([Math.round(v.width * 100) / 100, Math.round(v.height * 100) / 100]);
       const content = await p.getTextContent();
       texts.push(content.items.map(it => it.str).join(' ').replace(/\s+/g, ' ').trim());
+      // Où commence le premier prénom de la feuille (points, depuis le bord gauche) : de quoi voir qu'une marge a bougé les pages.
+      const first = content.items.find(it => /Alpha/.test(it.str));
+      firstX.push(first ? Math.round(first.transform[4] * 100) / 100 : null);
     }
-    return { pages: doc.numPages, sizes, texts };
+    return { pages: doc.numPages, sizes, texts, firstX };
   }, bytes.toString('base64'));
   return { header: bytes.subarray(0, 5).toString('latin1'), name: download.suggestedFilename(), ...info };
 }
@@ -301,23 +308,25 @@ async function run(theme, full) {
   check(`${T}, fenêtre : le focus est sur la feuille cochée (A4)`, (await focusIn()) === 'sheet=A4', await focusIn());
   const s0 = await dialogState();
   check(`${T}, fenêtre : au départ A4, portrait, sans traits de coupe, 2 x 2, quatre emplacements numérotés 1 à 4, résumé « 4 emplacements par feuille (2 × 2) : 6 lignes, au moins 2 feuilles A4. »`, s0.sheet === 'A4' && s0.orientation === 'portrait' && s0.marks === 'off' && s0.cols === 2 && s0.rows === 2 && s0.slots === 4 && s0.marksDrawn === 0 && s0.numbers === '1,2,3,4' && s0.summary === '4 emplacements par feuille (2 × 2) : 6 lignes, au moins 2 feuilles A4.', s0);
-  check(`${T}, fenêtre : titre, libellés, choix et boutons en français`, s0.title === 'Assemblage avant impression' && s0.labels === 'Feuille,Orientation,Traits de coupe,Emplacements' && s0.options === 'A4,A3,Portrait,Paysage,Sans,Avec' && s0.buttons === 'Annuler,Générer', s0);
+  check(`${T}, fenêtre : titre, libellés, choix, champ de la marge (0, plafond 26,2 mm) et boutons en français`, s0.title === 'Assemblage avant impression' && s0.labels === 'Feuille,Orientation,Traits de coupe,Marge,Emplacements' && s0.options === 'A4,A3,Portrait,Paysage,Sans,Avec' && s0.buttons === 'Annuler,Générer' && s0.margin === '0' && s0.marginText === 'mm autour de chaque page' && s0.marginMax === '26.2' && !s0.marginDisabled, s0);
   const cs = [];
-  for (const sel of [`${WIN} .pp-sheets-summary`, `${WIN} #pp-sheets-hint`, `${WIN} #pp-sheets-scaled`, `${WIN} .pp-sheets-label`, `${WIN} .pp-sheets-option`, `${WIN} .pp-sheets-select`, `${WIN} .pp-sheets-slot-field span`, `${WIN} .pp-modal-header h3`]) cs.push([sel.replace(WIN + ' ', ''), await contrastOf(sel)]);
-  check(`${T}, fenêtre : le résumé, les deux notes, les libellés, les choix, les listes et le titre font au moins 4,5:1 (${cs.map(c => c[1]).join(', ')})`, cs.every(c => c[1] >= 4.5), cs);
-  // Chaque indication commence sous son champ, pas sous son libellé (règle d'Antoine) : l'échelle sous les traits de coupe, la règle de l'ordre sous les emplacements ; le résumé ferme la fenêtre.
+  for (const sel of [`${WIN} .pp-sheets-summary`, `${WIN} #pp-sheets-hint`, `${WIN} #pp-sheets-scaled`, `${WIN} .pp-sheets-label`, `${WIN} .pp-sheets-option`, `${WIN} .pp-sheets-select`, `${WIN} .pp-sheets-slot-field span`, `${WIN} .pp-sheets-margin`, `${WIN} .pp-sheets-margin-input`, `${WIN} .pp-modal-header h3`]) cs.push([sel.replace(WIN + ' ', ''), await contrastOf(sel)]);
+  check(`${T}, fenêtre : le résumé, les deux notes, les libellés, les choix, les listes, le champ de la marge et le titre font au moins 4,5:1 (${cs.map(c => c[1]).join(', ')})`, cs.every(c => c[1] >= 4.5), cs);
+  // Chaque indication commence sous son champ, pas sous son libellé (règle d'Antoine) : l'échelle sous la marge (le dernier des deux réglages qui la demandent), la règle de l'ordre sous les emplacements ; le résumé ferme la fenêtre.
   await clickCenter(radio('pp-sheets-marks', 'on'));
   const align = await page.evaluate(() => {
     const r = sel => document.querySelector('#pp-sheets-modal ' + sel).getBoundingClientRect();
     const labelLeft = r('.pp-sheets-label').left;
     return {
       labelLeft, marksLeft: r('.pp-sheets-options:has(input[name="pp-sheets-marks"])').left, marksBottom: r('.pp-sheets-options:has(input[name="pp-sheets-marks"])').bottom,
+      marginLeft: r('.pp-sheets-margin').left, marginTop: r('.pp-sheets-margin').top, marginBottom: r('.pp-sheets-margin').bottom, marginInputLeft: r('#pp-sheets-margin').left,
       scaledLeft: r('#pp-sheets-scaled').left, scaledTop: r('#pp-sheets-scaled').top, slotsLeft: r('.pp-sheets-slots').left, slotsBottom: r('.pp-sheets-slots').bottom,
       hintLeft: r('#pp-sheets-hint').left, hintTop: r('#pp-sheets-hint').top, summaryLeft: r('.pp-sheets-summary').left, summaryTop: r('.pp-sheets-summary').top, hintBottom: r('#pp-sheets-hint').bottom,
     };
   });
-  check(`${T}, fenêtre : l'échelle commence sous le champ des traits de coupe et la règle de l'ordre sous celui des emplacements (au bord gauche des réglages, pas sous leur libellé), le résumé ferme la fenêtre`,
-    Math.abs(align.scaledLeft - align.marksLeft) <= 0.5 && align.scaledLeft > align.labelLeft + 50 && align.scaledTop >= align.marksBottom - 1 && align.scaledTop - align.marksBottom < 14
+  check(`${T}, fenêtre : la marge est sous les traits de coupe, dans la colonne des réglages ; l'échelle commence sous le champ de la marge et la règle de l'ordre sous celui des emplacements (au bord gauche des réglages, pas sous leur libellé), le résumé ferme la fenêtre`,
+    Math.abs(align.marginLeft - align.marksLeft) <= 0.5 && Math.abs(align.marginInputLeft - align.marginLeft) <= 0.5 && align.marginTop >= align.marksBottom - 1 && align.marginTop - align.marksBottom < 14
+    && Math.abs(align.scaledLeft - align.marginLeft) <= 0.5 && align.scaledLeft > align.labelLeft + 50 && align.scaledTop >= align.marginBottom - 1 && align.scaledTop - align.marginBottom < 14
     && Math.abs(align.hintLeft - align.slotsLeft) <= 0.5 && align.hintTop >= align.slotsBottom - 1 && align.hintTop - align.slotsBottom < 14
     && Math.abs(align.summaryLeft - align.labelLeft) <= 0.5 && align.summaryTop >= align.hintBottom, align);
   // La feuille d'aperçu : le papier reste blanc, les cases claires, les repères sombres dans les deux thèmes.
@@ -338,6 +347,29 @@ async function run(theme, full) {
   const a3m = await dialogState(), a3mFit = await fits();
   check(`${T}, clic sur Avec : seize repères dessinés, la note « Pages réduites à 96 % pour laisser la place aux traits de coupe. » apparaît, la fenêtre tient toujours (${a3mFit.scrollH}/${a3mFit.clientH})`, a3m.marks === 'on' && a3m.marksDrawn === 16 && a3m.scaled === 'Pages réduites à 96 % pour laisser la place aux traits de coupe.' && a3mFit.ok, { a3m, a3mFit });
   await snap(`${T}-3-a3-traits`);
+  // 3 bis) La marge, au vrai clavier, dans l'état le plus haut (A3 en paysage, traits de coupe, note d'échelle) : un clic dans le champ, la saisie, les flèches, un plafond ; l'aperçu, la note et la fenêtre suivent.
+  await clickCenter('#pp-sheets-margin');
+  const inField = await focusIn(), fieldBox = await hit('#pp-sheets-margin');
+  await page.keyboard.press('Control+A');
+  await page.keyboard.type('5');
+  const m5 = await dialogState(), m5Fit = await fits();
+  check(`${T}, marge : un clic dans le champ lui donne le focus (au premier plan) et la saisie de 5 réduit les pages à 87 % - note « … aux traits de coupe et à la marge. », seize repères, huit emplacements - sans défiler (${m5Fit.scrollH}/${m5Fit.clientH})`,
+    inField === 'pp-sheets-margin' && seen(fieldBox) && m5.margin === '5' && m5.scaled === 'Pages réduites à 87 % pour laisser la place aux traits de coupe et à la marge.' && m5.marksDrawn === 16 && m5.slots === 8 && m5Fit.ok, { inField, fieldBox, m5, m5Fit });
+  await snap(`${T}-3b-a3-traits-marge`);
+  await page.keyboard.press('ArrowUp');
+  const m55 = await dialogState();
+  check(`${T}, marge : la flèche haut ajoute 0,5 mm (5,5) et l'échelle suit (86 %)`, m55.margin === '5.5' && m55.scaled === 'Pages réduites à 86 % pour laisser la place aux traits de coupe et à la marge.', m55);
+  for (let i = 0; i < 12; i++) await page.keyboard.press('ArrowDown');
+  const m0 = await dialogState();
+  check(`${T}, marge : douze flèches bas ramènent à 0 sans passer sous 0 ; la note ne parle plus que des traits de coupe (96 %)`, m0.margin === '0' && m0.scaled === 'Pages réduites à 96 % pour laisser la place aux traits de coupe.', m0);
+  await page.keyboard.press('Control+A');
+  await page.keyboard.type('99');
+  const mMax = await dialogState(), mMaxFit = await fits();
+  check(`${T}, marge : 99 mm est ramené au plafond DANS le champ (${mMax.margin}, le maximum de cette feuille) - pages à 50 % - et la fenêtre tient (${mMaxFit.scrollH}/${mMaxFit.clientH})`,
+    mMax.margin === mMax.marginMax && Number(mMax.margin) > 20 && Number(mMax.margin) < 99 && mMax.scaled === 'Pages réduites à 50 % pour laisser la place aux traits de coupe et à la marge.' && mMaxFit.ok, { mMax, mMaxFit });
+  await page.keyboard.press('Control+A');
+  await page.keyboard.type('0');
+  check(`${T}, marge : revenue à 0 pour la suite (plus de note d'échelle de la marge)`, (await dialogState()).margin === '0', await dialogState());
   await clickCenter(optionLabel('pp-sheets-orientation', 'portrait'));
   const a3p = await dialogState(), a3pFit = await fits();
   check(`${T}, clic sur Portrait : 2 x 2, douze repères, plus de note d'échelle (la place est là), sans défiler`, a3p.orientation === 'portrait' && a3p.cols === 2 && a3p.rows === 2 && a3p.marksDrawn === 12 && a3p.scaled === '' && a3pFit.ok, { a3p, a3pFit });
@@ -354,7 +386,7 @@ async function run(theme, full) {
   check(`${T}, clavier : flèche droite sur « A4 » coche A3 (paysage, 4 x 2), flèche gauche revient à A4 (portrait, 2 x 2)`, arrowRight.sheet === 'A3' && arrowRight.orientation === 'landscape' && arrowRight.cols === 4 && arrowLeft.sheet === 'A4' && arrowLeft.orientation === 'portrait' && arrowLeft.cols === 2, { arrowRight, arrowLeft });
   const tabs = [];
   for (let i = 0; i < 8; i++) { await page.keyboard.press('Tab'); tabs.push(await focusIn()); }
-  check(`${T}, clavier : Tab tourne dans la fenêtre sans en sortir (${tabs.join(' > ')})`, tabs.every(t => t !== 'editor' && t !== 'body') && ['orientation=portrait', 'marks=on', 'pp-sheets-cols', 'pp-sheets-rows', 'Annuler', 'Générer'].every(t => tabs.includes(t)), tabs);
+  check(`${T}, clavier : Tab tourne dans la fenêtre sans en sortir, la marge entre les traits de coupe et les listes (${tabs.join(' > ')})`, tabs.every(t => t !== 'editor' && t !== 'body') && ['orientation=portrait', 'marks=on', 'pp-sheets-margin', 'pp-sheets-cols', 'pp-sheets-rows', 'Annuler', 'Générer'].every(t => tabs.includes(t)) && tabs.indexOf('marks=on') < tabs.indexOf('pp-sheets-margin') && tabs.indexOf('pp-sheets-margin') < tabs.indexOf('pp-sheets-cols'), tabs);
   await page.focus('#pp-sheets-cols');
   await page.keyboard.press('ArrowUp');
   const oneCol = await dialogState();
@@ -382,7 +414,19 @@ async function run(theme, full) {
   await snap(`${T}-5-grise`);
   await page.keyboard.press('Escape');
   await page.waitForTimeout(200);
-  await page.evaluate(() => PageLayout.setFormat('A6'));
+  // Une page de 40 x 50 cm ne tient sur aucune feuille : le champ de la marge reste affiché, grisé, à 0, et son texte se lit.
+  await page.evaluate(() => PageLayout.setPageSize(400, 500));
+  await page.waitForTimeout(300);
+  await clickSheetsRow();
+  const none = await dialogState(), noneFit = await fits();
+  const cNone = [await contrastOf('#pp-sheets-margin'), await contrastOf(`${WIN} .pp-sheets-margin`)];
+  await clickCenter('#pp-sheets-margin');
+  const noneAfter = await dialogState();
+  check(`${T}, grisé : si aucune page ne tient, le champ de la marge reste affiché, grisé, à 0 (un clic dedans ne change rien), son texte fait ${cNone.join(' et ')}:1 (au moins 4,5:1), la fenêtre tient`, none.marginDisabled && none.margin === '0' && noneAfter.margin === '0' && cNone.every(c => c >= 4.5) && noneFit.ok, { none, noneAfter, cNone, noneFit });
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  // setMarginsMm(null) remet les marges par défaut ET l'A4 portrait : il passe avant le retour à l'A6.
+  await page.evaluate(() => { PageLayout.setMarginsMm(null); PageLayout.setFormat('A6'); });
   await page.waitForTimeout(300);
 
   if (!full) { await closeWindowWithEscape(); return; }
@@ -421,6 +465,30 @@ async function run(theme, full) {
   const fileB = await readDownload(await downloadB);
   await page.waitForTimeout(300);
   check(`${T}, Entrée : valide la fenêtre et télécharge le même fichier (2 feuilles)`, !(await winOpen()) && fileB.name === `${TABLE}-assemblage.pdf` && fileB.pages === 2, { open: await winOpen(), fileB });
+
+  // 7) La marge de bout en bout : saisie au clavier, Entrée DANS le champ valide, le fichier a les mêmes feuilles avec les pages décalées de la marge, la marge est gardée à la réouverture.
+  await clickSheetsRow();
+  await clickCenter('#pp-sheets-margin');
+  await page.keyboard.press('Control+A');
+  await page.keyboard.type('5');
+  const withMargin = await dialogState();
+  const downloadC = page.waitForEvent('download', { timeout: 60000 });
+  await page.keyboard.press('Enter');
+  const fileC = await readDownload(await downloadC);
+  await page.waitForTimeout(300);
+  // Les traits de coupe sont gardés du choix précédent. Sans marge, la grille remplit la largeur entre les 7 mm de repères (échelle kB) et le premier prénom est à 7 mm + kB x (sa place dans la page) ; avec
+  // 5 mm, la grille est large de la même place (échelle kC, plus petite : la marge compte deux fois par page) et le même prénom est à 7 mm + 5 mm + kC x (sa place dans la page, relue du fichier d'avant).
+  const zone = 7 * 72 / 25.4, margin = 5 * 72 / 25.4, pageWidth = 297.64, sheetWidth = 595.28;
+  const kB = (sheetWidth - 2 * zone) / (2 * pageWidth), kC = (sheetWidth - 2 * zone - 4 * margin) / (2 * pageWidth);
+  const inPage = (fileB.firstX[0] - zone) / kB;
+  const wantX = zone + margin + kC * inPage;
+  check(`${T}, marge : saisir 5 puis Entrée dans le champ télécharge un fichier de 2 feuilles A4 (note « 84 % »), le premier prénom commence à ${fileC.firstX[0]} pt (attendu ${Math.round(wantX * 100) / 100} : 7 mm de repères + 5 mm de marge + sa place dans la page réduite à 84 %)`,
+    withMargin.margin === '5' && withMargin.scaled === 'Pages réduites à 84 % pour laisser la place aux traits de coupe et à la marge.' && !(await winOpen()) && fileC.name === `${TABLE}-assemblage.pdf` && fileC.pages === 2 && fileC.sizes.every(([w, h]) => Math.abs(w - 595.28) < 0.1 && Math.abs(h - 841.89) < 0.1)
+    && NAMES.slice(0, 4).every(n => fileC.texts[0].includes(n.split(' ')[0])) && NAMES.slice(4).every(n => fileC.texts[1].includes(n.split(' ')[0])) && Math.abs(fileC.firstX[0] - wantX) < 0.8 && Math.abs(fileC.firstX[0] - fileB.firstX[0]) > 3, { withMargin, fileC, fileB, wantX });
+  await clickSheetsRow();
+  const kept = await dialogState();
+  check(`${T}, marge : à la réouverture, la marge est gardée (5), avec le reste du choix`, kept.margin === '5' && kept.sheet === 'A4' && kept.marks === 'on', kept);
+  await closeWindowWithEscape();
 }
 
 async function runEnglish() {
@@ -434,12 +502,19 @@ async function runEnglish() {
   await clickSheetsRow();
   await clickCenter(optionLabel('pp-sheets-marks', 'on'));
   const en = await dialogState(), enFit = await fits(), ok = await hit(OK), box = await hit(BOX);
-  check('anglais, fenêtre : titre, libellés, choix, boutons, résumé et note en anglais', en.title === 'Assemble before printing' && en.labels === 'Sheet,Orientation,Crop marks,Slots' && en.options === 'A4,A3,Portrait,Landscape,Without,With' && en.buttons === 'Cancel,Generate' && en.summary === '4 slots per sheet (2 × 2): 6 rows, at least 2 A4 sheets.' && en.hint === 'One slot per page, in table order.' && en.scaled === 'Pages reduced to 93% to leave room for the crop marks.', en);
+  check('anglais, fenêtre : titre, libellés, choix, boutons, résumé et note en anglais', en.title === 'Assemble before printing' && en.labels === 'Sheet,Orientation,Crop marks,Margin,Slots' && en.marginText === 'mm around each page' && en.options === 'A4,A3,Portrait,Landscape,Without,With' && en.buttons === 'Cancel,Generate' && en.summary === '4 slots per sheet (2 × 2): 6 rows, at least 2 A4 sheets.' && en.hint === 'One slot per page, in table order.' && en.scaled === 'Pages reduced to 93% to leave room for the crop marks.', en);
   check(`anglais, fenêtre : elle tient dans le panneau, sans défiler (${enFit.scrollH}/${enFit.clientH}), « Generate » au premier plan`, box.inPanel && seen(ok) && enFit.ok, { box, ok, enFit });
   await snap('en-1-fenetre');
   await clickCenter(optionLabel('pp-sheets-sheet', 'A3'));
   const enA3 = await dialogState(), enA3Fit = await fits();
   check('anglais, A3 avec traits de coupe : huit emplacements, seize repères, la fenêtre tient toujours', enA3.slots === 8 && enA3.marksDrawn === 16 && enA3.summary === '8 slots per sheet (4 × 2): 6 rows, at least 1 A3 sheet.' && enA3Fit.ok, { enA3, enA3Fit });
+  // L'état le plus haut en anglais : A3 paysage, traits de coupe, marge de 5 mm saisie au clavier et sa note, la plus longue des trois.
+  await clickCenter('#pp-sheets-margin');
+  await page.keyboard.press('Control+A');
+  await page.keyboard.type('5');
+  const enM = await dialogState(), enMFit = await fits(), enMOk = await hit(OK);
+  check(`anglais, marge de 5 mm : la note « Pages reduced to 87% to leave room for the crop marks and the margin. » tient sur sa ligne, la fenêtre tient dans le panneau sans défiler (${enMFit.scrollH}/${enMFit.clientH}), « Generate » au premier plan`, enM.margin === '5' && enM.scaled === 'Pages reduced to 87% to leave room for the crop marks and the margin.' && enMFit.ok && seen(enMOk), { enM, enMFit, enMOk });
+  await snap('en-2-marge');
   await page.keyboard.press('Escape');
   await page.waitForTimeout(200);
   await page.evaluate(() => { localStorage.removeItem(SheetAssemblyDialog.STORAGE); I18n.setLang('fr'); });

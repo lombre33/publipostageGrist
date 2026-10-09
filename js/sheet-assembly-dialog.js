@@ -1,11 +1,13 @@
 // Fenêtre « Assemblage avant impression… » du menu Exporter en PDF (js/main.js:onExportBatch, export 'pdfSheets') : pose les pages de chaque ligne
 // sur des feuilles A4 ou A3, une page par emplacement et dans l'ordre de la table, avec ou sans traits de coupe, pour sortir des planches prêtes à
 // imprimer (4 A6 sur une A4, 2 A5 sur une A4 en paysage...). Elle ne fait que choisir (la feuille, son sens, le nombre d'emplacements en largeur et
-// en hauteur, les traits de coupe) et tient lieu de confirmation du lot. La géométrie est à SheetLayout, la même pour l'aperçu de la fenêtre et pour
-// le PDF que js/pdf-merge.js (createSheets) écrit : l'aperçu montre ce que le fichier porte.
-// `open` rend une promesse : le réglage { sheet, orientation, cols, rows, marks, layout } ou null (Annuler, Échap). Le dernier choix (feuille, sens,
-// traits) est gardé par navigateur (localStorage, comme la langue et le thème) ; les emplacements repartent du maximum que la feuille reçoit, la page
-// du modèle pouvant avoir changé entre-temps. Une feuille où la page ne tient pas reste affichée, grisée, avec la raison en info-bulle.
+// en hauteur, les traits de coupe, la marge autour de chaque page) et tient lieu de confirmation du lot. La géométrie est à SheetLayout, la même pour
+// l'aperçu de la fenêtre et pour le PDF que js/pdf-merge.js (createSheets) écrit : l'aperçu montre ce que le fichier porte.
+// `open` rend une promesse : le réglage { sheet, orientation, cols, rows, marks, margin (mm), layout } ou null (Annuler, Échap). Le dernier choix
+// (feuille, sens, traits, marge) est gardé par navigateur (localStorage, comme la langue et le thème) ; les emplacements repartent du maximum que la
+// feuille reçoit, la page du modèle pouvant avoir changé entre-temps. Une feuille où la page ne tient pas reste affichée, grisée, avec la raison en
+// info-bulle. La marge est celle de SheetLayout (laissée autour de chaque page), plafonnée à ce que la feuille accepte avec ces emplacements
+// (SheetLayout.maxMargin) : le champ montre toujours la valeur appliquée, une marge devenue trop grande y est ramenée au plafond.
 const SheetAssemblyDialog = (function () {
   const STORAGE = 'pp_sheet_assembly';
   const PREVIEW_PX = 108; // côté du carré où la feuille d'aperçu tient, quel que soit son sens
@@ -13,7 +15,7 @@ const SheetAssemblyDialog = (function () {
 
   let win = null;
   let refs = null;
-  let state = null;   // { sheet, orientation, cols, rows, marks }
+  let state = null;   // { sheet, orientation, cols, rows, marks, margin (mm, au dixième) }
   let ctx = null;     // la demande en cours : { count (lignes de la table), grid (modèle de grille : « valeurs » plutôt que « lignes ») }
   let current = null; // { finish(valeur) } : de quoi refermer la fenêtre en rendant sa réponse
 
@@ -34,7 +36,7 @@ const SheetAssemblyDialog = (function () {
   }
   function writeSaved() {
     try {
-      localStorage.setItem(STORAGE, JSON.stringify({ sheet: state.sheet, orientation: state.orientation, marks: state.marks }));
+      localStorage.setItem(STORAGE, JSON.stringify({ sheet: state.sheet, orientation: state.orientation, marks: state.marks, margin: state.margin }));
     } catch (e) { /* stockage indisponible : le choix ne survivra pas au rechargement */ }
   }
 
@@ -77,6 +79,30 @@ const SheetAssemblyDialog = (function () {
     return { field, select, text };
   }
 
+  // La marge est saisie au dixième de millimètre près : c'est la précision du champ, de l'état et du fichier.
+  const roundMm = n => Math.round(n * 10) / 10;
+
+  // La marge laissée autour de chaque page (mm) : un champ nombre au pas de 0,5 et, à sa droite, la fin de la phrase (« mm autour de chaque page »).
+  // Il est nommé par son libellé de ligne puis par ce texte. `onType` reçoit le nombre saisi (NaN tant que le champ est vide ou incomplet).
+  function marginField(id, rowLabelId, onType) {
+    const field = el('div', 'pp-sheets-margin');
+    const input = el('input', 'pp-sheets-margin-input');
+    input.id = id;
+    input.type = 'number';
+    input.min = '0';
+    input.step = '0.5';
+    input.inputMode = 'decimal';
+    input.autocomplete = 'off';
+    const text = el('span');
+    text.id = id + '-text';
+    input.setAttribute('aria-labelledby', rowLabelId + ' ' + text.id);
+    input.addEventListener('input', () => onType(input.valueAsNumber));
+    // La saisie est finie (Entrée, un autre champ) : le champ dit la valeur réellement appliquée (au dixième, ramenée au plafond de la feuille).
+    input.addEventListener('change', () => { input.value = String(state.margin); });
+    field.append(input, text);
+    return { field, input, text };
+  }
+
   function ensure() {
     if (win) return;
     win = ModalBase.create({
@@ -105,25 +131,29 @@ const SheetAssemblyDialog = (function () {
     const marksLabel = el('span', 'pp-sheets-label'); marksLabel.id = 'pp-sheets-marks-label';
     const marks = radioGroup('pp-sheets-marks', 'pp-sheets-marks-label', ['off', 'on'], value => pick({ marks: value === 'on' }));
 
-    // La feuille d'aperçu occupe la dernière colonne des trois premières lignes de réglage (la 4e, les emplacements, a besoin de toute la largeur) ;
-    // le papier est blanc dans les deux thèmes, comme celui du document.
+    const marginLabel = el('span', 'pp-sheets-label'); marginLabel.id = 'pp-sheets-margin-label';
+    const margin = marginField('pp-sheets-margin', 'pp-sheets-margin-label', n => pick({ margin: Number.isFinite(n) && n > 0 ? roundMm(n) : 0 }));
+
+    // La feuille d'aperçu occupe la dernière colonne des trois premières lignes de réglage (la marge et les emplacements, dessous, ont besoin de toute
+    // la largeur) ; le papier est blanc dans les deux thèmes, comme celui du document.
     const preview = el('div', 'pp-sheets-preview');
     preview.setAttribute('aria-hidden', 'true');
     const svg = svgEl('svg', { class: 'pp-sheets-svg' });
     preview.appendChild(svg);
 
-    // Chaque indication commence sous le champ qu'elle concerne, jamais sous son libellé : l'échelle (seulement si les pages sont réduites) sous les
-    // traits de coupe, la règle de l'ordre sous les emplacements. Le résumé de ce que le choix donne ferme la fenêtre (aria-live : il suit chaque
-    // changement).
+    // Chaque indication commence sous le champ qu'elle concerne, jamais sous son libellé : l'échelle (seulement si les pages sont réduites) sous la
+    // marge, le dernier des deux réglages (traits de coupe, marge) qui la demandent, la règle de l'ordre sous les emplacements. Le résumé de ce que le
+    // choix donne ferme la fenêtre (aria-live : il suit chaque changement).
     const scaled = el('p', 'pp-sheets-note'); scaled.id = 'pp-sheets-scaled';
     scaled.setAttribute('aria-live', 'polite');
     marks.group.setAttribute('aria-describedby', scaled.id);
+    margin.input.setAttribute('aria-describedby', scaled.id);
     const hint = el('p', 'pp-sheets-note'); hint.id = 'pp-sheets-hint';
     slots.setAttribute('aria-describedby', hint.id);
     const summary = el('p', 'pp-sheets-summary');
     summary.setAttribute('aria-live', 'polite');
 
-    grid.append(sheetLabel, sheets.group, orientationLabel, orientations.group, marksLabel, marks.group, scaled, slotsLabel, slots, hint, preview, summary);
+    grid.append(sheetLabel, sheets.group, orientationLabel, orientations.group, marksLabel, marks.group, marginLabel, margin.field, scaled, slotsLabel, slots, hint, preview, summary);
     win.body.appendChild(grid);
 
     const spacer = el('span', 'var-modal-spacer');
@@ -132,7 +162,7 @@ const SheetAssemblyDialog = (function () {
     const ok = el('button', 'var-modal-primary');
     ok.type = 'button';
     win.actions.append(spacer, cancel, ok);
-    refs = { sheetLabel, sheets, orientationLabel, orientations, slotsLabel, across, down, marksLabel, marks, svg, summary, hint, scaled, cancel, ok };
+    refs = { sheetLabel, sheets, orientationLabel, orientations, slotsLabel, across, down, marksLabel, marks, marginLabel, margin, svg, summary, hint, scaled, cancel, ok };
 
     // Entrée valide depuis n'importe quel réglage (une case d'option, la liste d'un nombre), sauf pendant une composition de texte.
     win.body.addEventListener('keydown', event => {
@@ -156,7 +186,8 @@ const SheetAssemblyDialog = (function () {
       orientation = saved.orientation;
     }
     const grid = gridFor(sheet, orientation);
-    return { sheet, orientation, cols: Math.max(1, grid.cols), rows: Math.max(1, grid.rows), marks: !!(saved && saved.marks === true) };
+    const margin = saved && Number.isFinite(saved.margin) && saved.margin > 0 ? roundMm(saved.margin) : 0;
+    return { sheet, orientation, cols: Math.max(1, grid.cols), rows: Math.max(1, grid.rows), marks: !!(saved && saved.marks === true), margin };
   }
 
   // Changer de feuille repart du meilleur sens pour elle et de tous ses emplacements ; changer de sens, de tous les emplacements de ce sens.
@@ -177,14 +208,18 @@ const SheetAssemblyDialog = (function () {
     render();
   }
 
-  // La planche que la fenêtre décrit en ce moment (emplacements bornés au maximum de la feuille dans ce sens).
-  function described() {
+  // Les réglages de la planche que la fenêtre décrit en ce moment, en points (emplacements bornés au maximum de la feuille dans ce sens) : ceux de
+  // `SheetLayout.maxMargin` et de `SheetLayout.compute`, sans la marge.
+  function layoutOptions() {
     const grid = gridFor(state.sheet, state.orientation);
-    return SheetLayout.compute({
+    return {
       sheet: SheetLayout.sheetSize(state.sheet, state.orientation), page: pageSize(),
       cols: Math.min(state.cols, Math.max(1, grid.cols)), rows: Math.min(state.rows, Math.max(1, grid.rows)), marks: state.marks,
-    });
+    };
   }
+  // La plus grande marge (mm, au dixième en dessous) que cette feuille accepte avec ces emplacements et ces traits de coupe.
+  function maxMarginMm() { return Math.floor(SheetLayout.maxMargin(layoutOptions()) / SheetLayout.MM_TO_PT * 10) / 10; }
+  function described() { return SheetLayout.compute(Object.assign(layoutOptions(), { margin: state.margin * SheetLayout.MM_TO_PT })); }
 
   // La feuille d'aperçu : la feuille entière à l'échelle du carré de PREVIEW_PX, ses emplacements numérotés dans l'ordre de lecture et ses traits de
   // coupe, d'après les mêmes mesures que le PDF. L'épaisseur des traits est fixe à l'écran (vector-effect, css/sheet-assembly.css) : à cette échelle,
@@ -198,7 +233,7 @@ const SheetAssemblyDialog = (function () {
     svg.setAttribute('height', String(Math.round(sheet.height * k)));
     svg.textContent = '';
     svg.appendChild(svgEl('rect', { class: 'pp-sheets-paper', x: 0, y: 0, width: sheet.width, height: sheet.height }));
-    const fontSize = Math.max(Math.min(layout.cellWidth, layout.cellHeight) * 0.28, 8 / k);
+    const fontSize = Math.max(Math.min(layout.slotWidth, layout.slotHeight) * 0.28, 8 / k);
     layout.slots.forEach(slot => {
       svg.appendChild(svgEl('rect', { class: 'pp-sheets-slot', x: slot.x, y: slot.y, width: slot.width, height: slot.height }));
       const number = svgEl('text', { class: 'pp-sheets-slot-number', x: slot.x + slot.width / 2, y: slot.y + slot.height / 2, 'font-size': fontSize });
@@ -218,7 +253,7 @@ const SheetAssemblyDialog = (function () {
   }
 
   function render() {
-    const { sheets, orientations, across, down, marks, summary, scaled, ok } = refs;
+    const { sheets, orientations, across, down, marks, margin, summary, scaled, ok } = refs;
     const page = pageSize();
     const format = PageLayout.getFormatLabel();
     sheets.items.forEach(item => {
@@ -236,20 +271,31 @@ const SheetAssemblyDialog = (function () {
       item.label.title = fits ? '' : I18n.t('sheetAssembly.orientation.tooSmall', { format });
     });
     const grid = gridFor(state.sheet, state.orientation);
-    fillSelect(across.select, grid.cols, state.cols);
-    fillSelect(down.select, grid.rows, state.rows);
-    marks.items.forEach(item => { item.input.checked = (item.value === 'on') === state.marks; });
-    const layout = described();
     // Aucune page ne tient (un format libre plus grand que les deux feuilles) : ni « 1 emplacement par feuille » ni « Pages réduites à 59 % » ne
     // seraient vrais, rien n'est posé - la feuille d'aperçu reste vide -, la fenêtre le dit, et « Générer » reste grisé.
     const fits = SheetLayout.slotCount(grid) > 0;
+    fillSelect(across.select, grid.cols, state.cols);
+    fillSelect(down.select, grid.rows, state.rows);
+    marks.items.forEach(item => { item.input.checked = (item.value === 'on') === state.marks; });
+    // La marge est plafonnée à ce que la feuille accepte avec ces emplacements et ces traits de coupe ; le champ dit la valeur appliquée. Un texte en
+    // cours de saisie qui lui est égal reste tel quel (« 3. » ne devient pas « 3 » sous les doigts) ; grisé quand aucune page ne tient.
+    const maxMm = maxMarginMm();
+    state.margin = Math.min(state.margin, maxMm);
+    margin.input.max = String(maxMm);
+    margin.input.disabled = !fits;
+    const typed = margin.input.valueAsNumber;
+    if (document.activeElement !== margin.input || (Number.isFinite(typed) && typed > 0 ? roundMm(typed) : 0) !== state.margin) margin.input.value = String(state.margin);
+    const layout = described();
     renderPreview(fits ? layout : Object.assign({}, layout, { slots: [], cutMarks: [] }));
     const sheetCount = SheetLayout.sheetCount(ctx.count, layout.count);
     summary.textContent = fits ? I18n.t(ctx.grid ? 'sheetAssembly.summaryGrid' : 'sheetAssembly.summary', {
       slots: layout.count, cols: layout.cols, rows: layout.rows, count: ctx.count, sheets: sheetCount, sheet: state.sheet,
     }) : I18n.t('sheetAssembly.noFit', { format });
+    // Ce qui réduit les pages : la marge seule, les traits de coupe seuls ou les deux (chaque cas a son texte, aucun n'est construit à la volée).
     const percent = Math.round(layout.scale * 100);
-    scaled.textContent = fits && layout.scale < 1 && percent < 100 ? I18n.t('sheetAssembly.scaled', { n: percent }) : '';
+    let scaledKey = 'sheetAssembly.scaledMargin';
+    if (state.marks) scaledKey = layout.margin > 0 ? 'sheetAssembly.scaledBoth' : 'sheetAssembly.scaled';
+    scaled.textContent = fits && layout.scale < 1 && percent < 100 ? I18n.t(scaledKey, { n: percent }) : '';
     scaled.hidden = !scaled.textContent;
     ok.disabled = !fits;
   }
@@ -258,7 +304,7 @@ const SheetAssemblyDialog = (function () {
     if (!current || refs.ok.disabled) return;
     const layout = described();
     writeSaved();
-    current.finish({ sheet: state.sheet, orientation: state.orientation, cols: layout.cols, rows: layout.rows, marks: state.marks, layout });
+    current.finish({ sheet: state.sheet, orientation: state.orientation, cols: layout.cols, rows: layout.rows, marks: state.marks, margin: state.margin, layout });
   }
 
   // Ouvre la fenêtre pour `count` lignes de la table (`grid` : un modèle de grille, dont les lignes sont des « valeurs »). La page est celle du
@@ -279,7 +325,7 @@ const SheetAssemblyDialog = (function () {
       current = { finish };
       ctx = { count: Math.max(0, Number(opts && opts.count) || 0), grid: !!(opts && opts.grid) };
       state = initialState();
-      const { sheetLabel, sheets, orientationLabel, orientations, slotsLabel, across, down, marksLabel, marks, hint, cancel, ok } = refs;
+      const { sheetLabel, sheets, orientationLabel, orientations, slotsLabel, across, down, marksLabel, marks, marginLabel, margin, hint, cancel, ok } = refs;
       win.title.textContent = I18n.t('sheetAssembly.title');
       sheetLabel.textContent = I18n.t('sheetAssembly.sheet.label');
       orientationLabel.textContent = I18n.t('sheetAssembly.orientation.label');
@@ -289,6 +335,8 @@ const SheetAssemblyDialog = (function () {
       down.text.textContent = I18n.t('sheetAssembly.slots.down');
       marksLabel.textContent = I18n.t('sheetAssembly.marks.label');
       marks.items.forEach(item => { item.text.textContent = I18n.t('sheetAssembly.marks.' + item.value); });
+      marginLabel.textContent = I18n.t('sheetAssembly.margin.label');
+      margin.text.textContent = I18n.t('sheetAssembly.margin.around');
       hint.textContent = I18n.t('sheetAssembly.hint');
       cancel.textContent = I18n.t('common.cancel');
       ok.textContent = I18n.t('common.generate');

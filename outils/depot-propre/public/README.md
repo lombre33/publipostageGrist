@@ -95,7 +95,7 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 - Export en lot sur toutes les lignes d'une table, en un clic : un PDF par ligne dans une archive ZIP,
   ou toutes les lignes dans un seul PDF
 - Assemblage avant impression : les pages de chaque ligne posées sur des feuilles A4 ou A3, avec ou
-  sans traits de coupe (quatre A6 sur une A4, par exemple)
+  sans traits de coupe, et une marge réglable autour de chaque page (quatre A6 sur une A4, par exemple)
 - Word (`.docx`, bêta) et Excel (`.xlsx`, pour les grilles)
 - Avant un export, une fenêtre liste les sites externes dont des images seraient téléchargées
 
@@ -420,7 +420,7 @@ GitHub Pages, with no backend and no build step.
 - Batch export on every row of a table, in one click: one PDF per row in a ZIP archive, or all rows in
   a single PDF
 - Sheet assembly before printing: each row's pages laid out on A4 or A3 sheets, with or without crop
-  marks (four A6 on one A4, for example)
+  marks, and an adjustable margin around each page (four A6 on one A4, for example)
 - Word (`.docx`, beta) and Excel (`.xlsx`, for grids)
 - Before an export, a window lists the external sites that images would be downloaded from
 

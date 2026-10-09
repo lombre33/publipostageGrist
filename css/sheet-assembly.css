@@ -1,8 +1,13 @@
 /* La fenêtre « Assemblage avant impression » (js/sheet-assembly-dialog.js) : libellé à gauche, réglage à droite, la feuille d'aperçu dans la dernière
-   colonne des trois premières lignes (feuille, sens, traits de coupe) ; la 4e ligne, les emplacements (deux listes et leur texte), passe sous
-   l'aperçu pour tenir sur une ligne. Chaque indication commence sous le champ qu'elle concerne, dans la colonne des réglages ; le résumé de ce que le
-   choix donne ferme la fenêtre. Elle tient dans les 376 px du panneau de 700x400 sans défiler, en français comme en anglais. Chargé après
+   colonne des trois premières lignes (feuille, sens, traits de coupe) ; la 4e ligne, la marge (un champ nombre et la fin de sa phrase), et la 5e, les
+   emplacements (deux listes et leur texte), passent sous l'aperçu pour tenir sur une ligne. Chaque indication commence sous le champ qu'elle
+   concerne, dans la colonne des réglages ; le résumé de ce que le choix donne ferme la fenêtre. Elle tient dans les 376 px du panneau de 700x400
+   sans défiler, en français comme en anglais, dans l'état le plus haut (A3 paysage, traits de coupe, marge, note d'échelle). Chargé après
    css/modal-base.css et css/variable-actions.css (le cadre et les boutons de la fenêtre en viennent). */
+/* Plus large que la fenêtre moyenne (480 px) : la note d'échelle la plus longue (« … aux traits de coupe et à la marge. ») tient sur une seule ligne,
+   ce qui garde la fenêtre sous les 376 px de hauteur du panneau de 700x400 avec la ligne de la marge. Dans un panneau plus étroit, la fenêtre se
+   réduit à sa largeur (max-width de .pp-modal-box) et le contenu défile. */
+.pp-sheets-box { --pp-modal-w: 620px; }
 .pp-sheets-grid { display: grid; grid-template-columns: 104px minmax(0, 1fr) 112px; column-gap: 12px; row-gap: 10px; align-items: center; padding-bottom: 2px; }
 .pp-sheets-label { font-size: 12px; font-weight: 700; color: var(--text); }
 .pp-sheets-options { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; min-width: 0; min-height: 30px; }
@@ -17,6 +22,11 @@
 .pp-sheets-select { box-sizing: border-box; height: 30px; min-width: 48px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-family: var(--font-ui); font-size: 12.5px; padding: 0 6px; background: var(--surface); color: var(--text); }
 .pp-sheets-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .pp-sheets-times { color: var(--text-muted); }
+/* La marge : le champ nombre (pas de 0,5 mm) et, à sa droite, « mm autour de chaque page ». Grisé quand aucune page ne tient sur la feuille. */
+.pp-sheets-margin { grid-column: 2 / -1; display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12.5px; color: var(--text); }
+.pp-sheets-margin-input { box-sizing: border-box; flex: none; width: 68px; height: 30px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-family: var(--font-ui); font-size: 12.5px; padding: 0 6px; background: var(--surface); color: var(--text); }
+.pp-sheets-margin-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pp-sheets-margin-input:disabled { color: var(--text-muted); cursor: not-allowed; }
 /* La feuille d'aperçu : un carré qui reçoit la feuille entière (portrait ou paysage). Le papier est blanc dans les deux thèmes, comme celui du
    document : ses couleurs sont fixes. L'épaisseur des traits ne suit pas l'échelle du dessin (vector-effect) : un trait de coupe de 0,5 pt ne se
    verrait pas à 112 px. */
