@@ -959,6 +959,8 @@ const I18n = (function () {
     'searchSelect.rootCrumb': { fr: 'Colonnes', en: 'Columns' },
     'searchSelect.upTo': { fr: 'Remonter à « {table} »', en: 'Go back up to “{table}”' },
     'searchSelect.upToRoot': { fr: 'Revenir à toutes les colonnes', en: 'Back to all columns' },
+    // Le bouton à droite de la zone de recherche d'une liste de colonnes qui peut s'ouvrir en grand (option `browse`, js/search-select.js).
+    'searchSelect.browse': { fr: 'Choisir dans la fenêtre des attributs (Ctrl+Entrée)', en: 'Choose in the attributes window (Ctrl+Enter)' },
     // Même liste avec recherche pour une table (Réglages > Accès), un modèle (macro-modèle), une valeur possible d'une colonne (champ Valeur d'une
     // règle) et une feuille d'un classeur Excel (import d'une grille) : SearchSelect.attachTables / attachTemplates / attachValues / attachSheets.
     'searchSelect.searchTables': { fr: 'Rechercher une table…', en: 'Search for a table…' },
@@ -1322,6 +1324,12 @@ const I18n = (function () {
     'varLinked.upTo': { fr: 'Remonter à « {table} »', en: 'Go back up to “{table}”' },
     'varLinked.inherit': { fr: 'Reprendre la condition d’affichage', en: 'Reuse the display condition' },
     'varLinked.inheritTitle': { fr: 'Chaque variable insérée, ou mise à la place de {badge}, reçoit la même condition d’affichage que {badge} : {summary}. Décochez pour les poser sans condition.', en: 'Each variable inserted, or put in place of {badge}, gets the same display condition as {badge}: {summary}. Untick to place them without a condition.' },
+    // La même fenêtre pour choisir UNE colonne, depuis la liste de colonnes d'une règle de condition (js/variable-linked-attrs.js:pickColumn).
+    'varLinked.pickTitle': { fr: 'Choisir une colonne de « {table} »', en: 'Choose a column of “{table}”' },
+    'varLinked.pick': { fr: 'Choisir', en: 'Choose' },
+    'varLinked.pickHint': { fr: '« Choisir » prend la colonne sélectionnée ; la flèche › ouvre les colonnes d’une Référence.', en: '“Choose” takes the selected column; the › arrow opens the columns of a Reference.' },
+    'varLinked.pickChosen': { fr: 'Colonne choisie : {column}.', en: 'Chosen column: {column}.' },
+    'varLinked.pickEmpty': { fr: 'Aucune colonne dans « {table} ».', en: 'No column in “{table}”.' },
     'varBadge.brokenTable': { fr: 'La table « {table} » n’existe plus dans ce document.', en: 'Table “{table}” no longer exists in this document.' },
     'varBadge.brokenColumn': { fr: 'La colonne « {column} » n’existe plus dans la table « {table} ».', en: 'Column “{column}” no longer exists in table “{table}”.' },
     'varBadge.brokenPath': { fr: 'La colonne « {column} » n’est plus atteignable depuis la table « {table} » : un maillon du chemin a disparu ou n’est plus une référence.', en: 'Column “{column}” can no longer be reached from table “{table}”: a link in the path was removed or is no longer a reference.' },

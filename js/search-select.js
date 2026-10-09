@@ -28,6 +28,14 @@
 // choisit, un clic sur sa flèche (ou → quand la saisie est vide ou que le curseur est à sa fin) ouvre ses lignes sous un fil d'Ariane ; ← (saisie vide),
 // Retour arrière (saisie vide) et un clic sur un niveau du fil remontent. Le choix d'une ligne de ces niveaux n'a pas d'<option> dans le <select> : la liste
 // lui en pose une (`data-dynamic`, addDynamicOption), qui ne reste dans la liste que tant qu'elle est choisie.
+// Choisir dans une fenêtre plutôt que dans la liste : `browse(context)` ajoute à droite de la zone de recherche un bouton (ou Ctrl+Entrée) qui ferme le
+// panneau sans rien choisir et appelle `browse` avec où l'on en était, `{ query (la saisie), from (la valeur de la ligne Référence d'où l'on est descendu,
+// null au premier niveau), value (le choix du <select>) }`. C'est à `browse` de poser le choix, comme le fait la liste : `select.value`, puis `change`
+// (js/condition-fields.js : la grande fenêtre des attributs, js/variable-linked-attrs.js:pickColumn).
+// Le choix dessiné comme une bulle de variable : `pill(value, name)` rend `{ prefix, head, tail }` (le caractère de la bulle, puis le nom coupé en un début et une
+// fin, comme celui d'une bulle de tableau) ou null quand ce choix n'est pas une variable ; le champ fermé le montre alors comme une bulle #Variable du document
+// (css/style.css:.var-badge), son texte reste le nom du choix. Avec `browse`, un clic sur la bulle (Ctrl+Entrée sur le champ) passe à la fenêtre, le reste du
+// champ ouvre la liste.
 const SearchSelect = (function () {
   const el = Dom.el;
 
@@ -161,6 +169,7 @@ const SearchSelect = (function () {
     trigger.type = 'button';
     trigger.setAttribute('aria-haspopup', 'listbox');
     trigger.setAttribute('aria-expanded', 'false');
+    if (opts.browse) trigger.setAttribute('aria-keyshortcuts', 'Control+Enter Meta+Enter');
     const valueEl = el('span', 'ss-value');
     valueEl.id = id + '-value';
     s.nameEl = el('span', 'ss-name');
@@ -195,6 +204,15 @@ const SearchSelect = (function () {
     input.autocomplete = 'off';
     input.spellcheck = false;
     searchRow.appendChild(input);
+    // Le bouton qui ouvre la fenêtre des attributs (option `browse`) : hors du clavier comme la flèche des lignes, la saisie garde le focus ; Ctrl+Entrée y mène.
+    if (s.opts.browse) {
+      const browse = s.browse = el('button', 'ss-browse');
+      browse.type = 'button';
+      browse.tabIndex = -1;
+      browse.innerHTML = Icons.svg('varLinked');
+      searchRow.classList.add('has-browse');
+      searchRow.appendChild(browse);
+    }
     // Le fil d'Ariane des niveaux ouverts (renderPath), caché tant qu'on n'est pas descendu.
     const path = s.path = el('nav', 'ss-path');
     path.hidden = true;
@@ -210,21 +228,47 @@ const SearchSelect = (function () {
     panel.append(searchRow, path, list, status);
   }
 
+  // Le nom du champ fermé : du texte, ou - quand l'option `pill` y voit une variable - une bulle comme celle du document (la classe `var-badge`, son début et sa
+  // fin comme dans une case de tableau : css/variable-actions.css). Le caractère de la bulle est dessiné par le CSS (data-trigger), donc absent de
+  // textContent, qui garde le nom du choix pour les lecteurs d'écran et les tests. `title` : le libellé complet, et ce que fait un clic sur la bulle.
+  function drawName(s, name, pill, title) {
+    const { nameEl, trigger } = s;
+    trigger.classList.toggle('is-pill', !!pill);
+    nameEl.classList.toggle('ss-pill', !!pill);
+    nameEl.classList.toggle('var-badge', !!pill);
+    if (!pill) {
+      nameEl.removeAttribute('data-trigger');
+      nameEl.removeAttribute('title');
+      nameEl.textContent = name;
+      return;
+    }
+    nameEl.dataset.trigger = pill.prefix || '';
+    nameEl.title = s.opts.browse ? title + ' · ' + I18n.t('searchSelect.browse') : title;
+    nameEl.replaceChildren(el('span', 'var-badge-head', pill.head));
+    if (pill.tail) {
+      const tail = el('span', 'var-badge-tail');
+      tail.appendChild(el('span', null, pill.tail));
+      nameEl.appendChild(tail);
+    }
+  }
+
   // Champ fermé : le choix courant (nom + indice discret), sinon le texte de l'<option> désactivée de départ ; le choix « rien » est grisé comme un
   // texte de départ. Reprend aussi l'état grisé du <select>.
   function syncTrigger(s) {
-    const { select, trigger, nameEl, hintEl, opts } = s;
+    const { select, trigger, hintEl, opts } = s;
     const opt = select.options[select.selectedIndex];
     const chosen = opt && !opt.disabled ? opt : null;
     trigger.classList.toggle('is-placeholder', !chosen || isNoChoice(chosen));
     trigger.disabled = select.disabled;
     if (chosen) {
-      nameEl.textContent = chosen.dataset.name || chosen.textContent;
+      const name = chosen.dataset.name || chosen.textContent;
+      const pill = opts.pill && !isNoChoice(chosen) ? opts.pill(chosen.value, name) : null;
+      drawName(s, name, pill, chosen.textContent);
       hintEl.textContent = chosen.dataset.hint && opts.hintInTrigger !== false ? '(' + chosen.dataset.hint + ')' : '';
       trigger.title = chosen.textContent;
     } else {
       const placeholder = Array.prototype.find.call(select.options, o => o.disabled);
-      nameEl.textContent = opts.placeholder || (placeholder ? placeholder.textContent : '');
+      drawName(s, opts.placeholder || (placeholder ? placeholder.textContent : ''), null);
       hintEl.textContent = '';
       trigger.removeAttribute('title');
     }
@@ -349,6 +393,11 @@ const SearchSelect = (function () {
     input.placeholder = s.searchPlaceholder;
     input.setAttribute('aria-label', s.searchPlaceholder);
     s.empty.textContent = s.emptyText;
+    if (s.browse) {
+      const label = I18n.t('searchSelect.browse');
+      s.browse.title = label;
+      s.browse.setAttribute('aria-label', label);
+    }
   }
 
   function openPanel(s, seed) {
@@ -508,8 +557,15 @@ const SearchSelect = (function () {
       // aussitôt dans les navigateurs qui ne donnent pas le focus aux boutons).
       if (s.open) event.preventDefault();
     });
-    trigger.addEventListener('click', () => { if (s.open) closePanel(s, true); else openPanel(s); });
+    trigger.addEventListener('click', (event) => {
+      // Un clic sur la bulle du choix (option `pill`) ouvre la fenêtre (option `browse`), un clic ailleurs dans le champ la liste. Entrée et Espace, qui
+      // déclenchent aussi ce clic, visent le bouton lui-même : la liste.
+      if (!s.open && s.opts.browse && event.target.closest && event.target.closest('.ss-pill')) { browseFromField(s); return; }
+      if (s.open) closePanel(s, true); else openPanel(s);
+    });
     trigger.addEventListener('keydown', (event) => {
+      // Ctrl+Entrée : la fenêtre, comme depuis la liste ouverte.
+      if (!event.isComposing && event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !event.altKey && s.opts.browse) { event.preventDefault(); browseFromField(s); return; }
       if (event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); openPanel(s); }
       else if (event.key.length === 1 && event.key !== ' ') { event.preventDefault(); openPanel(s, event.key); }
@@ -539,7 +595,11 @@ const SearchSelect = (function () {
         case 'Backspace':
           if (plainKey(event) && input.value === '' && ascend(s, s.levels.length - 2)) event.preventDefault();
           break;
-        case 'Enter': event.preventDefault(); if (s.visible[s.active]) choose(s, s.visible[s.active]); break;
+        case 'Enter':
+          event.preventDefault();
+          if ((event.ctrlKey || event.metaKey) && s.opts.browse) browseOut(s);
+          else if (s.visible[s.active]) choose(s, s.visible[s.active]);
+          break;
         // Échap ferme le panneau seul : la fenêtre qui le contient (js/modal-base.js) se fermerait sinon avec lui.
         case 'Escape': event.preventDefault(); event.stopPropagation(); closePanel(s, true); break;
         // Le focus revient au champ avant l'action par défaut de Tab, qui part donc de lui : champ suivant (Maj+Tab : précédent).
@@ -583,6 +643,24 @@ const SearchSelect = (function () {
     });
   }
 
+  // Passe à la fenêtre (option `browse`) : le panneau se ferme sans rien choisir, la saisie et le niveau où l'on est descendu sont donnés à `browse`, qui reprend
+  // le choix ; le focus n'est pas rendu au champ, la fenêtre prend le sien.
+  function browseOut(s) {
+    if (!s.open || !s.opts.browse) return;
+    const level = s.levels[s.levels.length - 1];
+    const context = { query: s.query, from: level && level.from ? level.from.value : null, value: s.select.value };
+    closePanel(s, false);
+    s.opts.browse(context);
+  }
+  // Le même passage depuis le champ fermé (clic sur la bulle, Ctrl+Entrée) : rien n'est ouvert, il n'y a ni saisie ni niveau où l'on est descendu.
+  function browseFromField(s) {
+    if (s.open || !s.opts.browse || s.select.disabled) return;
+    s.opts.browse({ query: '', from: null, value: s.select.value });
+  }
+  function wireBrowse(s) {
+    if (s.browse) s.browse.addEventListener('click', () => browseOut(s));
+  }
+
   // Ce que la liste rend à l'appelant : le champ fermé, ouvrir / fermer, le focus, la mise à jour par programme, et destroy() qui rend le <select>.
   function controllerOf(s) {
     const { select, trigger } = s;
@@ -614,6 +692,7 @@ const SearchSelect = (function () {
     wireInput(s);
     wireList(s);
     wirePath(s);
+    wireBrowse(s);
     syncTrigger(s);
     // D'abord l'insertion, seule étape qui peut lever (<select> hors de la page) : si elle échoue, le <select> n'a encore rien reçu.
     select.parentNode.insertBefore(s.wrap, select.nextSibling);

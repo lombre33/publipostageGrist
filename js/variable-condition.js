@@ -2,7 +2,9 @@
 // (js/reader-mode.js, ConditionRules.conditionHolds). La condition vit dans l'attribut `condition` du nœud : { mode: 'all'|'any', rules: [{ column,
 // operator, value }] }. Mêmes lignes Colonne / Opérateur / Valeur que les macro-modèles (js/condition-fields.js), avec les colonnes de toutes les
 // tables dans une seule liste avec recherche ; une colonne d'une table pas encore liée ouvre le choix de la clé
-// (js/variables.js:ensureLinkConfigured). Le champ Valeur a un bouton « autre colonne » : la règle compare alors la colonne à une autre colonne de la
+// (js/variables.js:ensureLinkConfigured). La colonne choisie s'affiche dans le champ comme une variable du document ; un clic sur elle, un bouton à droite de
+// la zone de recherche de la liste ou Ctrl+Entrée ouvrent la fenêtre « Autres attributs » pour y choisir la colonne en voyant sa valeur sur la ligne
+// sélectionnée, de Référence en Référence (options.attributesWindow, js/variable-linked-attrs.js:pickColumn). Le champ Valeur a un bouton « autre colonne » : la règle compare alors la colonne à une autre colonne de la
 // même ligne, { column, operator, valueColumn } (options.compareColumn, js/condition-rules.js:compareOperands), au lieu d'une valeur saisie.
 // Aperçu en direct : la ligne sélectionnée, puis combien de lignes de la table remplissent la condition et la
 // première d'entre elles. « Copier » / « Coller » recolle la condition d'une fenêtre dans une autre, comme un brouillon : « Enregistrer » l'applique.
@@ -237,6 +239,7 @@ const VariableCondition = (function () {
         options: {
           allTables: true,
           compareColumn: true,
+          attributesWindow: true,
           onColumnChosen: ref => ConditionFields.ensureTableLinked(ref, redraw),
           onColumnResolved: table => updateLinkHint(linkHint, table),
           onValueColumnResolved: table => updateLinkHint(valueLinkHint, table),

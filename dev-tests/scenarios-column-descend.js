@@ -6,6 +6,8 @@
 // « Colonne… » d'une bulle (js/variable-column.js). Ce qui se choisit est la clé d'un chemin « Table.Référence.Colonne » (js/condition-rules.js:parseColumnRef puis
 // Variables.resolveRawValue, GristAPI.resolveColumnPath), jamais une règle de liaison de plus. Les gestes à la vraie souris et au vrai clavier à 700x400 sont dans la
 // section descend de verify-column-search-mouse.mjs (groupe columnSearchMouse).
+// Plus bas : le bouton de la liste (et Ctrl+Entrée) qui ouvre la fenêtre « Autres attributs » pour y choisir la colonne d'une règle (demande d'Antoine du 2026-10-09,
+// js/variable-linked-attrs.js:pickColumn, js/condition-fields.js:browseColumn) ; section attributesWindow du même script pour la souris.
 (function () {
   const cases = [];
 
@@ -48,6 +50,8 @@
     await seed(h);
     try { return await run(); } finally {
       I18n.setLang(lang);
+      // La fenêtre des attributs qu'un scénario a laissée ouverte (js/variable-linked-attrs.js) gênerait le suivant.
+      if (typeof VariableLinkedAttrs !== 'undefined' && VariableLinkedAttrs.isOpen()) VariableLinkedAttrs.close({ keepFocus: true });
       document.querySelectorAll('.cd-host').forEach(node => node.remove());
       const stub = window.__gristStub;
       for (const t of TABLES) { await GristAPI.deleteLinkRule(t); stub.dropTable(t); }
@@ -74,6 +78,7 @@
       options: Object.assign({
         allTables: true,
         compareColumn: true,
+        attributesWindow: true,
         onColumnChosen: ref => { calls.chosen.push(ref.table + '|' + ref.column); return true; },
         onColumnResolved: table => calls.resolved.push(table),
         onValueColumnResolved: table => calls.valueResolved.push(table),
@@ -764,6 +769,457 @@
       const pass = arrowTitle === 'Show the columns of “CdAnnuaire” (via Accompagnateur)' && same(result.crumbs, ['Columns', 'Accompagnateur'])
         && result.status === 'Columns of “CdAnnuaire”' && result.root === 'Back to all columns' && result.path === 'Reference path' && result.up === 'Go back up to “CdAnnuaire”';
       return { pass, notes: JSON.stringify(result) };
+    }),
+  });
+
+  // === Choisir la colonne dans la fenêtre « Autres attributs » === (demande d'Antoine du 2026-10-09 : « dans la modale de choix des conditions, en cliquant sur une
+  // colonne, pouvoir ouvrir la super modale de choix des attributs »). Le bouton à droite de la zone de recherche de la liste (option `browse` de js/search-select.js) et
+  // Ctrl+Entrée ouvrent js/variable-linked-attrs.js:pickColumn, que js/condition-fields.js:browseColumn branche sur la règle (option `attributesWindow` de la fenêtre de
+  // condition). Les gestes à la vraie souris et au vrai clavier à 700x400, avec le z-index de la fenêtre, sont dans la section attributesWindow de
+  // verify-column-search-mouse.mjs.
+  const pickModal = () => document.getElementById('var-linked-modal');
+  const pickShown = () => !!pickModal() && pickModal().style.display !== 'none';
+  const pickRow = col => pickModal().querySelector(`.var-linked-row[data-col="${col}"]`);
+  const pickCols = () => Array.from(pickModal().querySelectorAll('.var-linked-row')).filter(row => !row.hidden).map(row => row.dataset.col);
+  const pickChecked = () => Array.from(pickModal().querySelectorAll('.var-linked-row input:checked')).map(input => input.value);
+  const pickInputs = () => Array.from(new Set(Array.from(pickModal().querySelectorAll('.var-linked-row input')).map(input => input.type)));
+  const pickCrumbs = () => { const path = pickModal().querySelector('.var-linked-path'); return path.hidden ? null : Array.from(path.querySelectorAll('.var-linked-crumb')).map(c => c.textContent); };
+  const pickTitle = () => pickModal().querySelector('h3').textContent;
+  const pickNote = () => pickModal().querySelector('.var-linked-note').textContent;
+  const pickPrimary = () => pickModal().querySelector('.var-modal-primary');
+  const pickCancel = () => pickModal().querySelector('.var-modal-actions button:not(.var-modal-primary):not(.var-linked-replace)');
+  const pickTick = col => { const box = pickRow(col).querySelector('input'); box.checked = true; box.dispatchEvent(new Event('change', { bubbles: true })); };
+  const pickDescend = async (h, col) => { pickRow(col).querySelector('.var-linked-descend').click(); await h.sleep(100); };
+  const browseOf = wrap => panelOf(wrap).querySelector('.ss-browse');
+  const ctrlEnter = el => {
+    const event = new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true, cancelable: true });
+    el.dispatchEvent(event);
+    return event;
+  };
+  // Ouvre la liste de la colonne et clique sur le bouton de la fenêtre des attributs ; `typed` : ce qui est déjà tapé dans la zone de recherche.
+  async function browse(h, wrap, typed) {
+    await open(h, wrap);
+    if (typed) setInput(inputOf(wrap), typed);
+    browseOf(wrap).click();
+    await h.sleep(150);
+  }
+
+  cases.push({
+    id: 'coldesc_window_button_is_only_on_the_condition_lists_that_ask_for_it',
+    description: 'La liste de la colonne d’une règle de la fenêtre de condition (option attributesWindow) a, à droite de sa zone de recherche, le bouton « Choisir dans la fenêtre des attributs (Ctrl+Entrée) », nommé pour les lecteurs d’écran ; la liste de l’autre colonne (« Comparer à une autre colonne ») aussi ; une règle construite sans l’option (macro-modèles) et le filtre d’une boucle ({ table }) n’en ont pas',
+    run: (h) => withSeed(h, async () => {
+      const rule = () => ({ column: '', operator: '=', value: '' });
+      const asked = buildRow(rule());
+      const notAsked = buildRow(rule(), { attributesWindow: false });
+      const loop = buildRow(rule(), { table: 'CdAnnuaire' });
+      const found = {};
+      for (const [name, built] of [['asked', asked], ['notAsked', notAsked], ['loop', loop]]) {
+        const wrap = columnWrap(built.row);
+        await open(h, wrap);
+        const button = browseOf(wrap);
+        found[name] = button && { title: button.title, label: button.getAttribute('aria-label'), inSearchRow: button.parentNode.classList.contains('ss-search') && button.parentNode.classList.contains('has-browse'), tabIndex: button.tabIndex, type: button.type };
+        press(inputOf(wrap), 'Escape');
+        await h.sleep(20);
+      }
+      asked.row.querySelector('.macro-rule-compare').click();
+      await h.sleep(40);
+      const other = otherWrap(asked.row);
+      await open(h, other);
+      found.other = !!other && !!browseOf(other);
+      press(inputOf(other), 'Escape');
+      const words = 'Choisir dans la fenêtre des attributs (Ctrl+Entrée)';
+      const pass = !!found.asked && found.asked.title === words && found.asked.label === words && found.asked.inSearchRow && found.asked.tabIndex === -1 && found.asked.type === 'button'
+        && found.notAsked === null && found.loop === null && found.other === true;
+      return { pass, notes: JSON.stringify(found) };
+    }),
+  });
+
+  cases.push({
+    id: 'coldesc_window_picks_a_column_of_the_page_and_the_rule_takes_it_like_the_list_does',
+    description: 'Le bouton de la liste ferme la liste et ouvre la fenêtre des attributs « Choisir une colonne de « CdProjets » » (cases rondes, « Choisir » grisé, aucune colonne choisie d’avance) ; sélectionner Statut allume « Choisir » et la ligne sous la liste dit « Colonne choisie : Statut. » ; « Choisir » ferme la fenêtre et pose Statut dans la règle comme la liste l’aurait fait (select, champ, onColumnChosen, focus rendu au champ)',
+    run: (h) => withSeed(h, async () => {
+      const rule = { column: '', operator: '=', value: '' };
+      const { row, calls } = buildRow(rule);
+      const wrap = columnWrap(row);
+      await browse(h, wrap);
+      const opened = {
+        shown: pickShown(), listClosed: panelOf(wrap).hidden, title: pickTitle(), cols: pickCols(), inputs: pickInputs(), checked: pickChecked(), crumbs: pickCrumbs(),
+        primary: pickPrimary().textContent, primaryDisabled: pickPrimary().disabled, replaceHidden: pickModal().querySelector('.var-linked-replace').hidden,
+        introHidden: pickModal().querySelector('.var-modal-intro').textContent === '' || pickModal().querySelector('.var-modal-intro').hidden, ruleBefore: rule.column,
+      };
+      pickTick('Statut');
+      const selected = { checked: pickChecked(), primaryDisabled: pickPrimary().disabled, note: pickNote() };
+      pickPrimary().click();
+      await h.sleep(80);
+      const result = { shown: pickShown(), column: rule.column, value: selectOf(wrap).value, text: shown(wrap), chosen: calls.chosen.slice(), resolved: calls.resolved.slice(), focus: document.activeElement === triggerOf(wrap) };
+      const pass = opened.shown && opened.listClosed && opened.title === 'Choisir une colonne de « CdProjets »' && same(opened.cols, ['Titre', 'Statut', 'Accompagnateur', 'Porteur', 'Etiquettes'])
+        && same(opened.inputs, ['radio']) && opened.checked.length === 0 && opened.crumbs === null && opened.primary === 'Choisir' && opened.primaryDisabled && opened.replaceHidden && opened.introHidden && opened.ruleBefore === ''
+        && same(selected.checked, ['Statut']) && !selected.primaryDisabled && selected.note.indexOf('Colonne choisie : Statut.') !== -1
+        && !result.shown && result.column === 'Statut' && result.value === 'Statut' && result.text === 'Statut' && same(result.chosen, ['CdProjets|Statut']) && result.resolved.indexOf('CdProjets') !== -1 && result.focus;
+      return { pass, notes: JSON.stringify({ opened, selected, result }) };
+    }),
+  });
+
+  cases.push({
+    id: 'coldesc_window_follows_references_and_the_rule_reads_the_path_without_a_link',
+    description: 'Avec « accomp » déjà tapé dans la liste : la fenêtre s’ouvre avec cette saisie dans son filtre (une seule ligne, Accompagnateur, avec sa flèche) ; la flèche ouvre les colonnes de CdAnnuaire sous « CdProjets › Accompagnateur » avec leur valeur sur la ligne sélectionnée ; Email choisi, la règle porte « CdProjets.Accompagnateur.Email », sa ligne de liste suit Accompagnateur, la règle lit l’e-mail de la personne désignée par CETTE colonne (vraie sur le projet A, fausse sur le B) et aucun lien de CdAnnuaire n’est créé',
+    run: (h) => withSeed(h, async () => {
+      const rule = { column: '', operator: '=', value: '' };
+      const { row, calls } = buildRow(rule);
+      const wrap = columnWrap(row);
+      await browse(h, wrap, 'accomp');
+      const root = { filter: pickModal().querySelector('.var-linked-filter').value, cols: pickCols(), arrow: !!pickRow('Accompagnateur').querySelector('.var-linked-descend') };
+      await pickDescend(h, 'Accompagnateur');
+      const below = { crumbs: pickCrumbs(), title: pickTitle(), cols: pickCols(), filter: pickModal().querySelector('.var-linked-filter').value, email: pickRow('Email').querySelector('.var-linked-value').textContent };
+      pickTick('Email');
+      const note = pickNote();
+      pickPrimary().click();
+      await h.sleep(80);
+      const result = {
+        shown: pickShown(), column: rule.column, value: selectOf(wrap).value, text: shown(wrap), chosen: calls.chosen.slice(),
+        order: Array.from(selectOf(wrap).options).map(o => o.value).filter(v => v === 'Accompagnateur' || v === 'Porteur' || v === 'CdProjets.Accompagnateur.Email'),
+        dynamic: Array.from(selectOf(wrap).options).filter(o => o.dataset.dynamic === 'true').map(o => o.value),
+      };
+      const valueInput = row.querySelector('.macro-rule-value');
+      if (valueInput) setInput(valueInput, 'dupont@exemple.fr');
+      const onA = await evaluate(rule, RECORD_1);
+      const onB = await evaluate(rule, RECORD_2);
+      const noLink = GristAPI.getLinkRule('CdAnnuaire') == null;
+      const pass = root.filter === 'accomp' && same(root.cols, ['Accompagnateur']) && root.arrow
+        && same(below.crumbs, ['CdProjets', 'Accompagnateur']) && below.title === 'Choisir une colonne de « CdAnnuaire »' && same(below.cols, ['Nom', 'Email', 'Fonction', 'Service', 'Competences', 'Photo'])
+        && below.filter === '' && below.email === 'dupont@exemple.fr' && note.indexOf('Colonne choisie : Accompagnateur › Email.') !== -1
+        && !result.shown && result.column === 'CdProjets.Accompagnateur.Email' && result.value === 'CdProjets.Accompagnateur.Email' && result.text === 'CdProjets.Accompagnateur.Email'
+        && same(result.chosen, ['CdProjets|Accompagnateur.Email']) && same(result.order, ['Accompagnateur', 'CdProjets.Accompagnateur.Email', 'Porteur']) && same(result.dynamic, ['CdProjets.Accompagnateur.Email'])
+        && !!valueInput && onA === true && onB === false && noLink;
+      return { pass, notes: JSON.stringify({ root, below, note, result, hasValueInput: !!valueInput, onA, onB, noLink }) };
+    }),
+  });
+
+  cases.push({
+    id: 'coldesc_window_opens_where_the_list_was_and_keeps_the_rule_when_cancelled',
+    description: 'La fenêtre s’ouvre au niveau où la liste en était : sur une règle enregistrée « CdProjets.Accompagnateur.Email », Ctrl+Entrée l’ouvre sur CdAnnuaire (fil « CdProjets › Accompagnateur ») avec Email sélectionnée d’avance ; descendu dans Porteur dans la liste, le bouton l’ouvre sur « CdProjets › Porteur », rien de sélectionné ; une colonne d’une autre table (CdAnnuaire.Email, hors de la page, sans lien) l’ouvre sur les colonnes de CdAnnuaire avec Email sélectionnée d’avance ; Statut enregistrée est sélectionnée d’avance au premier niveau ; Échap et « Annuler » ferment la fenêtre sans toucher à la règle, le focus revient au champ',
+    run: (h) => withSeed(h, async () => {
+      const rule = { column: 'CdProjets.Accompagnateur.Email', operator: '=', value: '' };
+      const { row } = buildRow(rule);
+      const wrap = columnWrap(row);
+      // Ctrl+Entrée, saisie vide : le niveau de la colonne enregistrée.
+      await open(h, wrap);
+      const event = ctrlEnter(inputOf(wrap));
+      await h.sleep(150);
+      const saved = { prevented: event.defaultPrevented, listClosed: panelOf(wrap).hidden, shown: pickShown(), crumbs: pickCrumbs(), checked: pickChecked(), primaryDisabled: pickPrimary().disabled, filter: pickModal().querySelector('.var-linked-filter').value };
+      press(document.activeElement, 'Escape');
+      await h.sleep(60);
+      const escaped = { shown: pickShown(), column: rule.column, value: selectOf(wrap).value, focus: document.activeElement === triggerOf(wrap) };
+      // Descendu dans Porteur dans la liste : le niveau où l'on est, rien de sélectionné (la colonne enregistrée est ailleurs) ; « Annuler » ne touche à rien.
+      await open(h, wrap);
+      await descend(h, wrap, 'Porteur');
+      browseOf(wrap).click();
+      await h.sleep(150);
+      const porteur = { shown: pickShown(), crumbs: pickCrumbs(), checked: pickChecked(), cols: pickCols() };
+      pickCancel().click();
+      await h.sleep(60);
+      const cancelled = { shown: pickShown(), column: rule.column, value: selectOf(wrap).value, focus: document.activeElement === triggerOf(wrap) };
+      // Une colonne d'une autre table : la fenêtre part de cette table, comme pour la bulle d'une variable de cette table, la colonne sélectionnée d'avance.
+      const other = buildRow({ column: 'CdAnnuaire.Email', operator: '=', value: '' });
+      await browse(h, columnWrap(other.row));
+      const otherTable = { shown: pickShown(), title: pickTitle(), crumbs: pickCrumbs(), checked: pickChecked(), cols: pickCols() };
+      pickCancel().click();
+      await h.sleep(60);
+      // Une colonne de la page : sélectionnée d'avance au premier niveau.
+      const bare = buildRow({ column: 'Statut', operator: '=', value: '' });
+      await browse(h, columnWrap(bare.row));
+      const page = { shown: pickShown(), crumbs: pickCrumbs(), checked: pickChecked(), primaryDisabled: pickPrimary().disabled };
+      pickCancel().click();
+      await h.sleep(60);
+      const pass = saved.prevented && saved.listClosed && saved.shown && same(saved.crumbs, ['CdProjets', 'Accompagnateur']) && same(saved.checked, ['Email']) && !saved.primaryDisabled && saved.filter === ''
+        && !escaped.shown && escaped.column === 'CdProjets.Accompagnateur.Email' && escaped.value === 'CdProjets.Accompagnateur.Email' && escaped.focus
+        && porteur.shown && same(porteur.crumbs, ['CdProjets', 'Porteur']) && porteur.checked.length === 0 && same(porteur.cols, ['Nom', 'Email', 'Fonction', 'Service', 'Competences', 'Photo'])
+        && !cancelled.shown && cancelled.column === 'CdProjets.Accompagnateur.Email' && cancelled.value === 'CdProjets.Accompagnateur.Email' && cancelled.focus
+        && otherTable.shown && otherTable.title === 'Choisir une colonne de « CdAnnuaire »' && otherTable.crumbs === null && same(otherTable.checked, ['Email']) && same(otherTable.cols, ['Nom', 'Email', 'Fonction', 'Service', 'Competences', 'Photo'])
+        && page.shown && page.crumbs === null && same(page.checked, ['Statut']) && !page.primaryDisabled;
+      return { pass, notes: JSON.stringify({ saved, escaped, porteur, cancelled, otherTable, page }) };
+    }),
+  });
+
+  cases.push({
+    id: 'coldesc_window_compare_to_another_column_picks_into_the_other_column',
+    description: '« Comparer à une autre colonne » : le bouton de la liste de l’autre colonne ouvre la même fenêtre, et un double-clic sur Titre la choisit d’un coup comme autre colonne (rule.valueColumn), sans toucher à la colonne de la règle',
+    run: (h) => withSeed(h, async () => {
+      const rule = { column: 'Statut', operator: '=', value: '' };
+      const { row } = buildRow(rule);
+      row.querySelector('.macro-rule-compare').click();
+      await h.sleep(40);
+      const other = otherWrap(row);
+      await browse(h, other);
+      const opened = { shown: pickShown(), checked: pickChecked(), crumbs: pickCrumbs() };
+      pickRow('Titre').querySelector('.var-linked-col').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+      await h.sleep(80);
+      const result = { shown: pickShown(), valueColumn: rule.valueColumn, column: rule.column, value: selectOf(other).value, text: shown(other), focus: document.activeElement === triggerOf(other) };
+      const pass = opened.shown && opened.checked.length === 0 && opened.crumbs === null && !result.shown && result.valueColumn === 'Titre' && result.column === 'Statut' && result.value === 'Titre' && result.text === 'Titre' && result.focus;
+      return { pass, notes: JSON.stringify({ opened, result }) };
+    }),
+  });
+
+  cases.push({
+    id: 'coldesc_window_left_alone_when_the_rule_is_gone_and_one_window_at_a_time',
+    description: 'La règle retirée de la page pendant que la fenêtre est ouverte : « Choisir » ferme la fenêtre sans erreur et ne touche à aucune règle ; la fenêtre déjà ouverte ne se rouvre pas par-dessus elle-même (un second appel rend « aucun choix » tout de suite, la première attend toujours)',
+    run: (h) => withSeed(h, async () => {
+      const rule = { column: '', operator: '=', value: '' };
+      const { row } = buildRow(rule);
+      const wrap = columnWrap(row);
+      await browse(h, wrap);
+      const again = await Promise.race([VariableLinkedAttrs.pickColumn({}), new Promise(resolve => setTimeout(() => resolve('attend'), 400))]);
+      const stillOpen = pickShown() && pickCols().length > 0;
+      pickTick('Titre');
+      document.querySelectorAll('.cd-host').forEach(node => node.remove());
+      let error = null;
+      try { pickPrimary().click(); await h.sleep(80); } catch (e) { error = String(e); }
+      const pass = again === null && stillOpen && error === null && !pickShown() && rule.column === '';
+      return { pass, notes: JSON.stringify({ again, stillOpen, error, shown: pickShown(), column: rule.column }) };
+    }),
+  });
+
+  cases.push({
+    id: 'coldesc_window_leaves_other_attributes_of_a_bubble_as_it_was',
+    description: 'Après un choix de colonne (annulé), « Autres attributs » d’une bulle #CdProjets.Accompagnateur retrouve tout ce que le choix de colonne cache ou change : sous-titre, cases à cocher, « Remplacer », « Insérer 0 attribut » ; cocher Email puis « Insérer » pose toujours #CdProjets.Accompagnateur.Email juste après la bulle',
+    run: (h) => withSeed(h, async () => {
+      Editor.setHTML('<p>' + badgeHtml('CdProjets', 'Accompagnateur') + '</p>');
+      await h.sleep(150);
+      const ed = EditorCore.getEditor();
+      let pos = -1;
+      ed.state.doc.descendants((node, at) => { if (node.type.name === 'varBadge' && pos < 0) pos = at; });
+      // Un choix de colonne, annulé : le résultat est « aucun choix ».
+      const asking = VariableLinkedAttrs.pickColumn({});
+      await h.sleep(120);
+      const during = { shown: pickShown(), inputs: pickInputs(), replaceHidden: pickModal().querySelector('.var-linked-replace').hidden, primary: pickPrimary().textContent };
+      pickCancel().click();
+      const answer = await asking;
+      // La fenêtre d'une bulle, comme avant.
+      await VariableLinkedAttrs.open(ed, pos);
+      await h.sleep(300);
+      const bubble = {
+        shown: pickShown(), title: pickTitle(), intro: pickModal().querySelector('.var-modal-intro').textContent, introHidden: pickModal().querySelector('.var-modal-intro').hidden, inputs: pickInputs(),
+        replaceHidden: pickModal().querySelector('.var-linked-replace').hidden, replace: pickModal().querySelector('.var-linked-replace').textContent, primary: pickPrimary().textContent,
+        note: pickNote(), crumbs: pickCrumbs(),
+      };
+      const box = pickRow('Email').querySelector('input');
+      box.checked = true;
+      box.dispatchEvent(new Event('change', { bubbles: true }));
+      const ticked = pickPrimary().textContent;
+      pickPrimary().click();
+      await h.sleep(150);
+      const keys = [];
+      ed.state.doc.firstChild.forEach(n => { if (n.type.name === 'varBadge') keys.push(n.attrs.key); });
+      const pass = during.shown && same(during.inputs, ['radio']) && during.replaceHidden && during.primary === 'Choisir' && answer === null
+        && bubble.shown && bubble.title === 'Autres attributs de « CdAnnuaire »' && bubble.intro.length > 0 && !bubble.introHidden && same(bubble.inputs, ['checkbox']) && !bubble.replaceHidden
+        && bubble.replace === 'Remplacer' && bubble.primary === 'Insérer 0 attribut' && bubble.note.indexOf('« Insérer » ajoute les attributs cochés') !== -1 && same(bubble.crumbs, ['CdProjets', 'Accompagnateur'])
+        && ticked === 'Insérer 1 attribut' && same(keys, ['CdProjets.Accompagnateur', 'CdProjets.Accompagnateur.Email']) && !pickShown();
+      return { pass, notes: JSON.stringify({ during, answer, bubble, ticked, keys }) };
+    }),
+  });
+
+  cases.push({
+    id: 'coldesc_window_speaks_english',
+    description: 'En anglais : « Choose in the attributes window (Ctrl+Enter) » sur le bouton, « Choose a column of “CdProjets” », « Choose », « Chosen column: Statut. » et la phrase d’aide dans la fenêtre',
+    run: (h) => withSeed(h, async () => {
+      I18n.setLang('en');
+      const { row } = buildRow({ column: '', operator: '=', value: '' });
+      const wrap = columnWrap(row);
+      await open(h, wrap);
+      const button = { title: browseOf(wrap).title, label: browseOf(wrap).getAttribute('aria-label') };
+      browseOf(wrap).click();
+      await h.sleep(150);
+      const first = { title: pickTitle(), primary: pickPrimary().textContent, note: pickNote() };
+      pickTick('Statut');
+      const chosen = pickNote();
+      pickCancel().click();
+      await h.sleep(60);
+      const pass = button.title === 'Choose in the attributes window (Ctrl+Enter)' && button.label === button.title
+        && first.title === 'Choose a column of “CdProjets”' && first.primary === 'Choose' && first.note.indexOf('“Choose” takes the selected column; the › arrow opens the columns of a Reference.') !== -1
+        && chosen.indexOf('Chosen column: Statut.') !== -1;
+      return { pass, notes: JSON.stringify({ button, first, chosen }) };
+    }),
+  });
+
+  // === La colonne choisie, dessinée comme une variable du document === (précision d'Antoine du 2026-10-09 : « lorsque l'on a sélectionné une colonne, [qu']elle apparaisse
+  // comme une variable [...] et qu'en cliquant dessus ça ouvre cette fenêtre »). Option `pill` de js/search-select.js (js/condition-fields.js:columnPill) : le champ fermé montre
+  // la colonne comme une bulle #Variable ; un clic sur elle, ou Ctrl+Entrée sur le champ, ouvre la fenêtre des attributs sur son niveau, un clic ailleurs dans le champ la liste.
+  const pillOf = wrap => triggerOf(wrap).querySelector('.ss-pill');
+  const pillInfo = wrap => {
+    const trigger = triggerOf(wrap), pill = pillOf(wrap);
+    if (!pill) return { pill: false, trigger: trigger.classList.contains('is-pill'), text: trigger.textContent };
+    const style = getComputedStyle(pill), head = pill.querySelector('.var-badge-head'), tail = pill.querySelector('.var-badge-tail');
+    return {
+      pill: true, trigger: trigger.classList.contains('is-pill'), text: trigger.textContent, pillText: pill.textContent, badge: pill.classList.contains('var-badge'), prefix: pill.dataset.trigger,
+      before: getComputedStyle(pill, '::before').content, background: style.backgroundColor, color: style.color, head: head ? head.textContent : null, tail: tail ? tail.textContent : null, title: pill.title,
+    };
+  };
+  const docBubbleColors = () => {
+    const reference = document.createElement('span');
+    reference.className = 'var-badge';
+    document.body.appendChild(reference);
+    const style = getComputedStyle(reference);
+    const colors = { background: style.backgroundColor, color: style.color };
+    reference.remove();
+    return colors;
+  };
+
+  cases.push({
+    id: 'coldesc_pill_shows_the_chosen_column_like_a_variable_of_the_document',
+    description: 'Dans la fenêtre de condition (option attributesWindow), la colonne choisie s’affiche dans le champ fermé comme une bulle de variable du document : classe var-badge, mêmes couleurs que la bulle, « # » devant (dessiné par le CSS : le texte reste le nom de la colonne), un chemin garde sa fin (« Email ») dans sa propre boîte ; rien de tel tant qu’aucune colonne n’est choisie, pour une colonne inconnue (saisie avancée), dans un macro-modèle (sans l’option) ni dans le filtre d’une boucle',
+    run: (h) => withSeed(h, async () => {
+      const rule = { column: '', operator: '=', value: '' };
+      const { row } = buildRow(rule);
+      const wrap = columnWrap(row);
+      const empty = pillInfo(wrap);
+      await pickRoot(h, wrap, 'Statut');
+      const short = pillInfo(wrap);
+      await open(h, wrap);
+      await descend(h, wrap, 'Accompagnateur');
+      await pickHere(h, wrap, 'Email');
+      const path = pillInfo(wrap);
+      const reopened = pillInfo(columnWrap(buildRow({ column: 'CdProjets.Accompagnateur.Email', operator: '=', value: '' }).row));
+      const advanced = pillInfo(columnWrap(buildRow({ column: 'Disparue', operator: '=', value: '' }).row));
+      const withoutOption = pillInfo(columnWrap(buildRow({ column: 'Statut', operator: '=', value: '' }, { attributesWindow: false }).row));
+      const loopField = pillInfo(columnWrap(buildRow({ column: 'Nom', operator: '=', value: '' }, { table: 'CdAnnuaire' }).row));
+      const doc = docBubbleColors();
+      const trigger = Variables.triggerChar();
+      const pass = !empty.pill && !empty.trigger
+        && short.pill && short.trigger && short.text === 'Statut' && short.pillText === 'Statut' && short.badge && short.prefix === trigger && short.before === '"' + trigger + '"'
+        && short.background === doc.background && short.color === doc.color && short.head === 'Statut' && short.tail === null
+        && path.pill && path.text === 'CdProjets.Accompagnateur.Email' && path.head === 'CdProjets.Accompagnateur.' && path.tail === 'Email'
+        && reopened.pill && reopened.text === 'CdProjets.Accompagnateur.Email' && reopened.tail === 'Email'
+        && !advanced.pill && !advanced.trigger && !withoutOption.pill && !loopField.pill;
+      return { pass, notes: JSON.stringify({ empty, short, path, reopened, advanced, withoutOption, loopField, doc }) };
+    }),
+  });
+
+  cases.push({
+    id: 'coldesc_pill_click_opens_the_window_on_the_level_of_the_chosen_column',
+    description: 'Un clic sur la bulle de la colonne choisie (« CdProjets.Accompagnateur.Email ») ouvre la fenêtre des attributs sans ouvrir la liste, au niveau de la colonne (fil « CdProjets › Accompagnateur »), Email sélectionnée d’avance, « Choisir » allumé ; Échap la ferme sans toucher à la règle, le focus revient au champ. Un clic sur la flèche du champ, ou sur le bouton lui-même (Entrée, Espace), ouvre la liste et non la fenêtre ; un clic sur la bulle quand la liste est ouverte la referme. Ctrl+Entrée sur le champ ouvre la fenêtre comme la bulle, et la colonne d’une règle de la page (Statut) l’ouvre au premier niveau, sélectionnée d’avance',
+    run: (h) => withSeed(h, async () => {
+      const rule = { column: 'CdProjets.Accompagnateur.Email', operator: '=', value: '' };
+      const { row } = buildRow(rule);
+      const wrap = columnWrap(row);
+      pillOf(wrap).click();
+      await h.sleep(150);
+      const onPill = { shown: pickShown(), listOpen: !panelOf(wrap).hidden, expanded: triggerOf(wrap).getAttribute('aria-expanded'), crumbs: pickCrumbs(), checked: pickChecked(), primaryDisabled: pickPrimary().disabled, filter: pickModal().querySelector('.var-linked-filter').value };
+      press(document.activeElement, 'Escape');
+      await h.sleep(60);
+      const escaped = { shown: pickShown(), column: rule.column, value: selectOf(wrap).value, focus: document.activeElement === triggerOf(wrap) };
+      triggerOf(wrap).querySelector('.ss-chevron').click();
+      await h.sleep(40);
+      const onChevron = { shown: pickShown(), listOpen: !panelOf(wrap).hidden };
+      pillOf(wrap).click();
+      await h.sleep(40);
+      const whileOpen = { shown: pickShown(), listOpen: !panelOf(wrap).hidden };
+      triggerOf(wrap).click();
+      await h.sleep(40);
+      const onButton = { shown: pickShown(), listOpen: !panelOf(wrap).hidden };
+      press(inputOf(wrap), 'Escape');
+      await h.sleep(40);
+      const keyboard = triggerOf(wrap).dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true, cancelable: true }));
+      await h.sleep(150);
+      const onKey = { prevented: !keyboard, shown: pickShown(), listOpen: !panelOf(wrap).hidden, crumbs: pickCrumbs(), checked: pickChecked() };
+      pickCancel().click();
+      await h.sleep(60);
+      const bare = buildRow({ column: 'Statut', operator: '=', value: '' });
+      pillOf(columnWrap(bare.row)).click();
+      await h.sleep(150);
+      const page = { shown: pickShown(), crumbs: pickCrumbs(), checked: pickChecked(), cols: pickCols() };
+      pickCancel().click();
+      await h.sleep(60);
+      const pass = onPill.shown && !onPill.listOpen && onPill.expanded === 'false' && same(onPill.crumbs, ['CdProjets', 'Accompagnateur']) && same(onPill.checked, ['Email']) && !onPill.primaryDisabled && onPill.filter === ''
+        && !escaped.shown && escaped.column === 'CdProjets.Accompagnateur.Email' && escaped.value === 'CdProjets.Accompagnateur.Email' && escaped.focus
+        && !onChevron.shown && onChevron.listOpen && !whileOpen.shown && !whileOpen.listOpen && !onButton.shown && onButton.listOpen
+        && onKey.prevented && onKey.shown && !onKey.listOpen && same(onKey.crumbs, ['CdProjets', 'Accompagnateur']) && same(onKey.checked, ['Email'])
+        && page.shown && page.crumbs === null && same(page.checked, ['Statut']) && same(page.cols, ['Titre', 'Statut', 'Accompagnateur', 'Porteur', 'Etiquettes']);
+      return { pass, notes: JSON.stringify({ onPill, escaped, onChevron, whileOpen, onButton, onKey, page }) };
+    }),
+  });
+
+  cases.push({
+    id: 'coldesc_pill_choice_in_the_window_replaces_the_column_and_the_bubble_follows',
+    description: 'Depuis la bulle de « Statut », la fenêtre des attributs : descendre dans Accompagnateur et choisir Nom d’un double-clic remplace la colonne de la règle par « CdProjets.Accompagnateur.Nom » (la bulle du champ suit, onColumnChosen est prévenu, aucun lien de CdAnnuaire créé) ; la règle lit alors le nom de la personne désignée',
+    run: (h) => withSeed(h, async () => {
+      const rule = { column: 'Statut', operator: '=', value: '' };
+      const { row, calls } = buildRow(rule);
+      const wrap = columnWrap(row);
+      pillOf(wrap).click();
+      await h.sleep(150);
+      await pickDescend(h, 'Accompagnateur');
+      pickRow('Nom').querySelector('.var-linked-col').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+      await h.sleep(80);
+      const info = pillInfo(wrap);
+      const valueInput = row.querySelector('.macro-rule-value');
+      if (valueInput) setInput(valueInput, 'Dupont Jean');
+      const onA = await evaluate(rule, RECORD_1);
+      const onB = await evaluate(rule, RECORD_2);
+      const result = { shown: pickShown(), column: rule.column, value: selectOf(wrap).value, chosen: calls.chosen.slice(), noLink: GristAPI.getLinkRule('CdAnnuaire') == null, focus: document.activeElement === triggerOf(wrap) };
+      const pass = !result.shown && result.column === 'CdProjets.Accompagnateur.Nom' && result.value === 'CdProjets.Accompagnateur.Nom' && same(result.chosen, ['CdProjets|Accompagnateur.Nom'])
+        && result.noLink && result.focus && info.pill && info.text === 'CdProjets.Accompagnateur.Nom' && info.tail === 'Nom' && !!valueInput && onA === true && onB === false;
+      return { pass, notes: JSON.stringify({ result, info, hasValueInput: !!valueInput, onA, onB }) };
+    }),
+  });
+
+  cases.push({
+    id: 'coldesc_window_starts_from_the_table_of_the_chosen_column',
+    description: 'Une colonne d’une autre table (« CdAnnuaire.Email », sans lien) : la bulle ouvre la fenêtre sur « Choisir une colonne de « CdAnnuaire » », Email sélectionnée d’avance ; un double-clic sur Nom la choisit (« CdAnnuaire.Nom », onColumnChosen prévenu : la clé du lien se demandera comme pour la liste). Un chemin « CdAnnuaire.Service.Libelle » l’ouvre sur CdServices (fil « CdAnnuaire › Service »), Libelle sélectionnée ; descendu dans « CdAnnuaire.Service » dans la liste, le bouton l’ouvre sur ce même niveau ; une table disparue (« Fantome.Colonne », saisie avancée) l’ouvre sur la page, rien de sélectionné',
+    run: (h) => withSeed(h, async () => {
+      const rule = { column: 'CdAnnuaire.Email', operator: '=', value: '' };
+      const { row, calls } = buildRow(rule);
+      const wrap = columnWrap(row);
+      pillOf(wrap).click();
+      await h.sleep(150);
+      const first = { shown: pickShown(), title: pickTitle(), crumbs: pickCrumbs(), checked: pickChecked(), cols: pickCols() };
+      pickRow('Nom').querySelector('.var-linked-col').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+      await h.sleep(80);
+      const chosen = { shown: pickShown(), column: rule.column, value: selectOf(wrap).value, calls: calls.chosen.slice() };
+      const deep = buildRow({ column: 'CdAnnuaire.Service.Libelle', operator: '=', value: '' });
+      pillOf(columnWrap(deep.row)).click();
+      await h.sleep(150);
+      const path = { shown: pickShown(), title: pickTitle(), crumbs: pickCrumbs(), checked: pickChecked(), cols: pickCols() };
+      pickCancel().click();
+      await h.sleep(60);
+      const listed = buildRow({ column: '', operator: '=', value: '' });
+      const listedWrap = columnWrap(listed.row);
+      setInput(inputOf(listedWrap), '');
+      await open(h, listedWrap);
+      setInput(inputOf(listedWrap), 'CdAnnuaire.Service');
+      await h.sleep(20);
+      await descend(h, listedWrap, 'CdAnnuaire.Service');
+      browseOf(listedWrap).click();
+      await h.sleep(150);
+      const fromList = { shown: pickShown(), crumbs: pickCrumbs(), checked: pickChecked(), cols: pickCols() };
+      pickCancel().click();
+      await h.sleep(60);
+      const ghost = buildRow({ column: 'Fantome.Colonne', operator: '=', value: '' });
+      const ghostWrap = columnWrap(ghost.row);
+      triggerOf(ghostWrap).dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true, cancelable: true }));
+      await h.sleep(150);
+      const gone = { pill: pillInfo(ghostWrap).pill, shown: pickShown(), title: pickTitle(), crumbs: pickCrumbs(), checked: pickChecked() };
+      pickCancel().click();
+      await h.sleep(60);
+      const annuaire = ['Nom', 'Email', 'Fonction', 'Service', 'Competences', 'Photo'];
+      const pass = first.shown && first.title === 'Choisir une colonne de « CdAnnuaire »' && first.crumbs === null && same(first.checked, ['Email']) && same(first.cols, annuaire)
+        && !chosen.shown && chosen.column === 'CdAnnuaire.Nom' && chosen.value === 'CdAnnuaire.Nom' && same(chosen.calls, ['CdAnnuaire|Nom'])
+        && path.shown && path.title === 'Choisir une colonne de « CdServices »' && same(path.crumbs, ['CdAnnuaire', 'Service']) && same(path.checked, ['Libelle']) && same(path.cols, ['Libelle', 'Chef', 'Budget'])
+        && fromList.shown && same(fromList.crumbs, ['CdAnnuaire', 'Service']) && fromList.checked.length === 0 && same(fromList.cols, ['Libelle', 'Chef', 'Budget'])
+        && !gone.pill && gone.shown && gone.title === 'Choisir une colonne de « CdProjets »' && gone.crumbs === null && gone.checked.length === 0;
+      return { pass, notes: JSON.stringify({ first, chosen, path, fromList, gone }) };
+    }),
+  });
+
+  cases.push({
+    id: 'coldesc_pill_speaks_english',
+    description: 'En anglais, l’info-bulle de la bulle dit le libellé de la colonne puis « Choose in the attributes window (Ctrl+Enter) » ; en français, « Choisir dans la fenêtre des attributs (Ctrl+Entrée) »',
+    run: (h) => withSeed(h, async () => {
+      const rule = { column: 'Statut', operator: '=', value: '' };
+      const fr = pillInfo(columnWrap(buildRow(rule).row));
+      I18n.setLang('en');
+      const en = pillInfo(columnWrap(buildRow(rule).row));
+      const pass = fr.title === 'Statut · Choisir dans la fenêtre des attributs (Ctrl+Entrée)' && en.title === 'Statut · Choose in the attributes window (Ctrl+Enter)';
+      return { pass, notes: JSON.stringify({ fr: fr.title, en: en.title }) };
     }),
   });
 

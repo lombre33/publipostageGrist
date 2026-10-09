@@ -54,6 +54,17 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   choix de la liste, le champ Valeur suit la dernière colonne du chemin et la recherche d'un niveau ne
   cherche que ce niveau. Le filtre et le tri d'une boucle, Réglages > Accès et les clés de correspondance
   gardent leur liste à plat ; une liste de références ne se descend pas.
+- **Choisir la colonne d'une règle dans la fenêtre « Autres attributs »** : dans la fenêtre de condition d'une
+  bulle (la colonne de la règle et « Comparer à une autre colonne »), la colonne choisie s'affiche dans le
+  champ comme une variable du document (la même bulle bleue, avec son « # »). Un clic sur elle - ou
+  Ctrl+Entrée sur le champ, ou le bouton à droite de la zone de recherche de la liste - ouvre par-dessus la
+  fenêtre « Autres attributs », pour choisir la colonne en voyant sa valeur sur la ligne sélectionnée. Elle
+  s'ouvre sur la table de la colonne (celle de la page, ou une autre table liée), au niveau de la colonne déjà
+  choisie, qui est sélectionnée ; depuis la liste, au niveau où elle en était, avec la recherche dans son
+  filtre. La flèche « › » et le fil d'Ariane descendent de Référence en Référence. « Choisir » (ou un
+  double-clic sur une ligne) pose la colonne comme la liste l'aurait fait ; « Annuler » et Échap ne changent
+  rien. Un clic ailleurs dans le champ (sa flèche) ouvre la liste comme avant ; les macro-modèles et le filtre
+  d'une boucle gardent leur champ et n'ont ni la bulle ni le bouton.
 - **Taille commune des lignes et des colonnes choisies d'une grille** : quand plusieurs lignes (ou colonnes)
   sont choisies par leurs numéros (leurs lettres), tirer le trait de l'une d'elles les règle toutes à la
   même hauteur (largeur), en direct puis en un seul Annuler, comme dans un tableur ; une ligne ne descend
@@ -302,6 +313,16 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   between the tables; the reopened window shows it as a choice of the list, the Value field follows the
   path's last column, and the search of a level only searches that level. A loop's filter and sorting,
   Settings > Access and the matching keys keep their flat list; a list of references cannot be walked down.
+- **Choosing a rule's column in the "Other attributes" window**: in a bubble's condition window (the rule's
+  column and "Compare with another column"), the chosen column is shown in the field as a variable of the
+  document (the same blue bubble, with its "#"). Clicking it - or Ctrl+Enter on the field, or the button to the
+  right of the list's search box - opens the "Other attributes" window on top, to choose the column while
+  seeing its value on the selected row. It opens on the column's table (the page's, or another linked table),
+  at the level of the column already chosen, which is selected; from the list, at the level the list was at,
+  with the search carried into its filter. The "›" arrow and the breadcrumb go down from Reference to
+  Reference. "Choose" (or a double-click on a row) sets the column the way the list would have; "Cancel" and
+  Esc change nothing. Clicking elsewhere in the field (its arrow) opens the list as before; macro templates
+  and a loop's filter keep their field and have neither the bubble nor the button.
 - **Common size for the chosen rows and columns of a grid**: when several rows (or columns) are chosen by
   their numbers (letters), dragging the edge of one of them sets them all to the same height (width), live
   and then in a single Undo, as in a spreadsheet; a row never goes below the height of its text, the

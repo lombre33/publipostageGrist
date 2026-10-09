@@ -43,10 +43,11 @@
    addNodeView) et en info-bulle. `overflow` seulement sur le début et la fin, jamais sur la bulle : il rognerait le point bleu du format
    (`::after`, hors de la boîte). Le début rétrécit d'abord (poids de rétrécissement énorme) mais garde la place de « #… » : sans ce plancher, une
    case un peu trop étroite laissait une tranche de « # » sans « … », et le nom passait pour entier. Au-delà, la fin rétrécit en se coupant par la
-   gauche (boîte en flex, contenu calé à droite) : le bout du nom, qui distingue une variable d'une autre, reste visible. */
-.tiptap :where(td, th, .two-columns-column) .var-badge { display: inline-flex; max-width: 100%; box-sizing: border-box; }
-.tiptap :where(td, th, .two-columns-column) .var-badge-head { flex: 0 1000000 auto; min-width: min(1.3em, 40%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tiptap :where(td, th, .two-columns-column) .var-badge-tail { flex: 0 1 auto; min-width: 0; display: flex; justify-content: flex-end; overflow: hidden; white-space: nowrap; }
+   gauche (boîte en flex, contenu calé à droite) : le bout du nom, qui distingue une variable d'une autre, reste visible. Mêmes règles pour la colonne choisie
+   d'une règle de condition, dessinée comme une bulle dans son champ fermé (`.ss-pill`, js/search-select.js, css/search-select.css). */
+.tiptap :where(td, th, .two-columns-column) .var-badge, .ss-pill { display: inline-flex; max-width: 100%; box-sizing: border-box; }
+.tiptap :where(td, th, .two-columns-column) .var-badge-head, .ss-pill .var-badge-head { flex: 0 1000000 auto; min-width: min(1.3em, 40%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tiptap :where(td, th, .two-columns-column) .var-badge-tail, .ss-pill .var-badge-tail { flex: 0 1 auto; min-width: 0; display: flex; justify-content: flex-end; overflow: hidden; white-space: nowrap; }
 
 /* Barre flottante : actions à gauche, séparateur avant les réglages nombre/date (masqué pour une colonne sans réglage). */
 .v2-varfmt-toolbar .v2-varbadge-actions { display: flex; align-items: center; gap: 2px; }
