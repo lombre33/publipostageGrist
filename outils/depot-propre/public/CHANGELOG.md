@@ -146,6 +146,10 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 - **Largeur d'un tableau étroit dans le Word** : un tableau dont les colonnes, réglées à la main, tiennent en
   moins de la largeur de la page garde cette largeur dans le Word, comme dans l'éditeur et le PDF ; il était
   étiré à toute la page. Un tableau de la largeur de la page ne change pas.
+- **« 1er » dans les dates en lettres** : le premier du mois s'écrit « 1er janvier 1990 » (« premier janvier
+  mille neuf cent quatre-vingt-dix » en toutes lettres) au lieu de « 1 janvier 1990 » (« un janvier … »),
+  dans la Lecture, le PDF, le Word et l'e-mail. Les autres jours, un mois en chiffres (« 01/01/1990 »), un
+  mois masqué et l'interface anglaise ne changent pas.
 
 ## [1.0.0-beta.1] - 2026-10-05
 
@@ -374,6 +378,10 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 - **Width of a narrow table in Word**: a table whose hand-set columns add up to less than the page width
   keeps that width in Word, as in the editor and the PDF; it used to be stretched to the full page. A table
   as wide as the page does not change.
+- **"1er" in dates written in letters**: the first of the month is written "1er janvier 1990" ("premier
+  janvier mille neuf cent quatre-vingt-dix" in full words) instead of "1 janvier 1990" ("un janvier …"), in
+  the Reading mode, the PDF, the Word file and the e-mail. Other days, a month in digits ("01/01/1990"), a
+  hidden month and the English interface do not change.
 
 ## [1.0.0-beta.1] - 2026-10-05 (English)
 

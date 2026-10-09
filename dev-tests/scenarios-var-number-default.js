@@ -268,10 +268,50 @@
         negative: 'moins deux virgule cinq', whole: 'vingt et un', rounded: 'mille deux cent trente-cinq', eighty: 'zéro virgule quatre-vingts',
         unknownCurrency: 'mille deux cent trente-quatre virgule cinquante-six CHF', threeDecimals: 'un virgule huit cent cinquante-neuf euros',
         usZeroFirst: 'one point zero five', usPlain: 'one point twenty-five', usWhole: 'twenty-one',
-        dateWords: 'un janvier mille neuf cent quatre-vingt-dix',
+        dateWords: 'premier janvier mille neuf cent quatre-vingt-dix',
       };
       const wrong = Object.keys(expected).filter(k => got[k] !== expected[k]);
       return { pass: wrong.length === 0, notes: JSON.stringify({ wrong: wrong.map(k => [k, got[k], expected[k]]) }) };
+    },
+  });
+
+  cases.push({
+    id: 'varnumber_french_first_of_the_month_is_written_1er_and_premier_before_a_month_name',
+    description: 'Une date au 1er du mois s’écrit « 1er janvier 1990 » (aussi avec le jour de la semaine et en mois abrégé) et « premier janvier mille neuf cent quatre-vingt-dix » en toutes lettres, dans la Lecture comme en texte ; le 2 garde « 2 », et un mois en chiffres, un mois masqué et l’interface anglaise gardent « 1 »',
+    run: async (h) => {
+      await seed(h);
+      const JAN_1 = 631152000;
+      const JAN_2 = 631238400;
+      const date = (value, format) => VariableFormat.formatDate(value, Object.assign({ type: 'date' }, format));
+      const got = {
+        long: date(JAN_1, { preset: 'd_mmmm_yyyy' }), weekday: date(JAN_1, { preset: 'dddd_d_mmmm_yyyy' }),
+        short: date(JAN_1, { preset: 'd_mmm_yyyy' }), weekdayShort: date(JAN_1, { preset: 'ddd_d_mmm_yyyy' }),
+        words: date(JAN_1, { preset: 'd_mmmm_yyyy', words: true }),
+        second: date(JAN_2, { preset: 'd_mmmm_yyyy' }), secondWords: date(JAN_2, { preset: 'd_mmmm_yyyy', words: true }),
+        numeric: date(JAN_1, { preset: 'dmy_slash_full' }), iso: date(JAN_1, { preset: 'iso' }), numericShort: date(JAN_1, { preset: 'dmy_slash_short' }),
+        monthHidden: date(JAN_1, { preset: 'd_mmmm_yyyy', month: false }), dayHidden: date(JAN_1, { preset: 'd_mmmm_yyyy', day: false }),
+      };
+      const expected = {
+        long: '1er janvier 1990', weekday: 'lundi 1er janvier 1990', short: '1er janv. 1990', weekdayShort: 'lun. 1er janv. 1990',
+        words: 'premier janvier mille neuf cent quatre-vingt-dix',
+        second: '2 janvier 1990', secondWords: 'deux janvier mille neuf cent quatre-vingt-dix',
+        numeric: '01/01/1990', iso: '1990-01-01', numericShort: '1/1/90', monthHidden: '1 1990', dayHidden: 'janvier 1990',
+      };
+      const wrong = Object.keys(expected).filter(k => got[k] !== expected[k]);
+      let english;
+      const before = I18n.getLang();
+      I18n.setLang('en');
+      try { english = date(JAN_1, { preset: 'd_mmmm_yyyy' }); } finally { I18n.setLang(before); }
+      // La Lecture, comme le document l'écrit : une bulle sur la colonne Date de la ligne (RECORD.Naissance = 1er janvier 1990).
+      const html = `<p>${badge('Naissance', { type: 'date', preset: 'd_mmmm_yyyy' })}|${badge('Naissance', { type: 'date', preset: 'd_mmmm_yyyy', words: true })}</p>`;
+      const read = resolvedTexts(await renderReader(html, RECORD));
+      const checks = {
+        values: wrong.length === 0,
+        englishKeepsItsOwnWriting: english === 'January 1, 1990',
+        reader: JSON.stringify(read) === JSON.stringify(['1er janvier 1990', 'premier janvier mille neuf cent quatre-vingt-dix']),
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: JSON.stringify({ failed, wrong: wrong.map(k => [k, got[k], expected[k]]), english, read }) };
     },
   });
 

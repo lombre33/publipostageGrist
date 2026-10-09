@@ -56,6 +56,16 @@ const VariableFormat = (function () {
     const lang = numberLang();
     return parts.map(part => (/^\d+$/.test(part.value) ? Object.assign({}, part, { value: numberToWords(parseInt(part.value, 10), 0, lang) }) : part));
   }
+  function isFirstDayBeforeMonthName(date, parts, keep) {
+    // En français le premier du mois s'écrit « 1er » (« 1er décembre 2026 ») et, en toutes lettres, « premier » ; les autres jours gardent leur nombre.
+    // Seul un jour suivi de son mois écrit en lettres est concerné : « 01/12/2026 » (mois en chiffres) et un jour gardé seul (bouton M relâché) restent
+    // « 1 ». L'anglais n'est pas touché.
+    return dateLocale() === 'fr-FR' && date.getUTCDate() === 1 && keep.day && keep.month
+      && parts.some(part => part.type === 'month' && !/^\d+$/.test(part.value));
+  }
+  function withDayText(parts, text) {
+    return parts.map(part => (part.type === 'day' ? Object.assign({}, part, { value: text }) : part));
+  }
 
   function formatDate(val, format) {
     const date = gristDateToJsDate(val);
@@ -85,7 +95,9 @@ const VariableFormat = (function () {
     } else {
       parts = new Intl.DateTimeFormat(dateLocale(), Object.assign({ timeZone: 'UTC' }, preset.options)).formatToParts(date);
     }
-    if (format.words) parts = wordifyDateParts(parts);
+    const firstOfMonth = isFirstDayBeforeMonthName(date, parts, keep);
+    if (format.words) parts = wordifyDateParts(firstOfMonth ? withDayText(parts, 'premier') : parts);
+    else if (firstOfMonth) parts = withDayText(parts, '1er');
     return buildDateStringFromParts(parts, keep);
   }
 
