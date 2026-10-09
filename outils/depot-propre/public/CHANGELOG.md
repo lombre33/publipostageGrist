@@ -213,6 +213,14 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   sont grisés, avec leur raison en info-bulle, tant que moins de deux lignes (colonnes) sont choisies. Avec le
   suivi des modifications allumé, les nouvelles tailles sont proposées comme modifications, que vous pouvez
   refuser.
+- **Un tableau copié dans Excel garde ses traits, son alignement vertical et la hauteur de ses lignes** : collé
+  dans un document, un tableau copié dans Excel, Google Sheets ou LibreOffice Calc arrive avec les traits de ses
+  cases (le trait du bas d'un titre est aussi le haut de la ligne dessous), l'alignement vertical de ses cases et
+  la hauteur de ses lignes, en plus de ses fusions, fonds, polices et largeurs de colonnes. Une ligne haute dans
+  Excel reste haute dans le document (c'est un minimum : un texte plus haut agrandit la ligne), et l'aperçu A4,
+  la Lecture, le PDF et le Word reprennent le tout. C'est toujours un tableau du document : la barre du tableau
+  et les bandeaux y règlent les traits, l'alignement et les hauteurs comme dans une grille. Dans une grille, le
+  collage ne change pas.
 - **Marge autour de chaque page dans l'assemblage avant impression** : la fenêtre « Assemblage avant
   impression » a un champ « Marge » (en millimètres, 0 au départ, les flèches avancent de 0,5) qui laisse de la
   place autour de chaque page posée sur la feuille : la marge compte de chaque côté d'une page, donc deux
@@ -680,8 +688,14 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   live (the others keep theirs, the text after moves down), and a single Undo gives it back. A row does not go
   below the height of its text; Esc cancels the drag; rows picked by their numbers all get the same height. The
   height is a minimum: a row that its text makes taller grows, and the PDF and the Word export carry it over.
-  With track changes on, the height is suggested as a change, which you can reject. The letters have no handle
-  yet: a column's width is still set by the edge of its cells.
+  With track changes on, the height is suggested as a change, which you can reject.
+- **Width of a column in a document table**: dragging the right edge of a letter (A, B, C…) sets the width of
+  that column, as in a grid. The drag tip gives the width in centimetres, the column follows live (the others keep
+  their own) and a single Undo gives it back. In the A4 preview the table never goes past the page: when the
+  dragged column has no room left, the columns after it give up the missing space, in proportion to what they can
+  give (never below 25 px), and the column stops where the page ends. Columns without a set width keep theirs: the
+  drag freezes them at their current width. Esc cancels the drag; columns picked by their letters all take the
+  width of the dragged handle. With track changes on, the width is suggested as a change, which you can reject.
 - **Make rows the same height and columns the same width**: when several rows (or several columns) are picked,
   by their numbers (their letters) or by dragging across the table, the "Make rows the same height" and "Make
   columns the same width" buttons of the table bar give them all the average of their sizes, in one move (a
@@ -689,6 +703,13 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   does not go below the height of its text (if one is taller than the average because of its text, they all
   take its height). The buttons are greyed, with their reason as a tooltip, until at least two rows (columns)
   are picked. With track changes on, the new sizes are suggested as changes, which you can reject.
+- **A table copied from Excel keeps its lines, vertical alignment and row heights**: pasted into a document, a
+  table copied from Excel, Google Sheets or LibreOffice Calc arrives with the lines of its cells (the bottom line
+  of a title is also the top line of the row below), the vertical alignment of its cells and the height of its
+  rows, on top of its merged cells, fills, fonts and column widths. A tall row in Excel stays tall in the document
+  (it is a minimum: taller text makes the row grow), and the A4 preview, Reading, the PDF and the Word export carry
+  it all over. It is still a table of the document: the table bar and the letters and numbers set the lines,
+  alignment and heights there as in a grid. Pasting into a grid does not change.
 - **Margin around each page in sheet assembly**: the "Assemble before printing" window has a "Margin" field (in
   millimetres, 0 to start with, the arrows step by 0.5) that leaves room around each page laid on the
   sheet: the margin sits on every side of a page, so it counts twice between two pages and once at the edge

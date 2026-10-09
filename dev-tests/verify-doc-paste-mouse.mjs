@@ -5,6 +5,8 @@
 // pose) et le collage est un VRAI Ctrl+V (Ctrl+Maj+V pour le texte seul, Ctrl+Z pour annuler), à la taille du panneau Grist d'Antoine (~700x400), en thème clair puis sombre :
 //   - le curseur posé à la vraie souris au bout d'une ligne de texte, Ctrl+V colle un TABLEAU du document - aucune image - entièrement visible dans le panneau, sans défilement
 //     horizontal ; le titre fusionné sur trois colonnes garde son fond, son gras et son centrage, lisible sur son fond (WCAG, F5) ; ce n'est pas une grille (aucun bandeau A, B, C) ;
+//   - il garde aussi les traits de la plage (le trait du bas du titre est aussi celui du haut de la ligne dessous), l'alignement vertical des cases et la hauteur des lignes : une ligne
+//     de 120 px dans Excel mesure 120 px dans le document ;
 //   - Ctrl+Z défait le collage d'un coup, Ctrl+Maj+Z le rend ;
 //   - Ctrl+Maj+V (coller sans mise en forme) colle le TEXTE de la plage, ni tableau ni image ;
 //   - Google Sheets et LibreOffice Calc donnent eux aussi un tableau, sans image ;
@@ -209,6 +211,34 @@ const documentState = page => page.evaluate((contrastSrc) => {
   return out;
 }, CONTRAST_FN);
 
+// Ce que le tableau collé montre de la mise en forme de la plage : le trait de chaque côté d'une case (épaisseur, style et couleur calculés : le haut de « Réf » doit dire ce que le
+// bas du titre dit), l'alignement vertical des cases, la hauteur de chaque ligne (réglée et mesurée, en pixels de mise en page).
+const sheetLook = page => page.evaluate(() => {
+  const table = document.querySelector('.tiptap table');
+  const zoom = EditorCore.layoutZoom(EditorCore.getEditor().view.dom);
+  const cell = (r, c) => table.rows[r].cells[c];
+  // Un trait est reconnu à son style et à sa couleur, d'au moins un pixel d'écran (le zoom de mise en page l'agrandit : 1,18 px ici) ; sinon « none ».
+  const line = (el, side) => { const s = getComputedStyle(el); const name = side[0].toUpperCase() + side.slice(1); return parseFloat(s['border' + name + 'Width']) >= 1 && s['border' + name + 'Style'] === 'solid' ? 'solid ' + s['border' + name + 'Color'] : 'none'; };
+  return {
+    titleSides: ['top', 'right', 'bottom', 'left'].map(side => line(cell(0, 0), side)),
+    refTop: line(cell(1, 0), 'top'), refBottom: line(cell(1, 0), 'bottom'), codeTop: line(cell(2, 0), 'top'), totalBottom: line(cell(4, 0), 'bottom'),
+    titleAlign: getComputedStyle(cell(0, 0)).verticalAlign, mergedAlign: getComputedStyle(cell(2, 1)).verticalAlign,
+    marks: Array.from(table.rows).map(tr => tr.getAttribute('data-row-height')),
+    heights: Array.from(table.rows).map(tr => Math.round(tr.getBoundingClientRect().height / zoom)),
+  };
+});
+// Une plage de deux lignes écrite comme Excel l'écrit (hauteur en attribut et en points) : 20 px, puis 120 px (90 pt), un trait sous la première, une case centrée.
+const tallRowSheet = '<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta name=ProgId content=Excel.Sheet></head><body><table><tr height=20 style=\'height:15.0pt\'><td style=\'border-bottom:.5pt solid black\'>Haut</td><td>b</td></tr>'
+  + '<tr height=120 style=\'height:90.0pt\'><td style=\'vertical-align:middle\'>Milieu</td><td>d</td></tr></table></body></html>';
+const tallRowState = page => page.evaluate(() => {
+  const table = document.querySelector('.tiptap table');
+  const zoom = EditorCore.layoutZoom(EditorCore.getEditor().view.dom);
+  return { tables: document.querySelectorAll('.tiptap table').length, rows: table ? table.rows.length : 0, marks: table ? Array.from(table.rows).map(tr => tr.getAttribute('data-row-height')) : [],
+    heights: table ? Array.from(table.rows).map(tr => Math.round(tr.getBoundingClientRect().height / zoom)) : [],
+    firstBottom: table ? getComputedStyle(table.rows[0].cells[0]).borderBottomColor : '', secondTop: table ? getComputedStyle(table.rows[1].cells[0]).borderTopColor : '',
+    align: table ? getComputedStyle(table.rows[1].cells[0]).verticalAlign : '' };
+});
+
 // Un tableau de tableur d'UNE ligne et `cols` colonnes, avec la signature d'Excel (une table de plus de 3 000 lignes figerait la page : sa pagination est en n², hors de ce test).
 const wideSheet = cols => '<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta name=ProgId content=Excel.Sheet></head><body><table><tr>' + '<td>c</td>'.repeat(cols) + '</tr></table></body></html>';
 // La fenêtre d'information (js/dialogs.js, `choose` sans choix) : ouverte ou non, ses textes, ses boutons visibles, son focus, sa place dans le panneau.
@@ -305,6 +335,12 @@ async function flow(colorScheme, label) {
   check(`${label} - le titre est fusionné sur trois colonnes, en gras, centré, sur le fond orange d'Excel`, !!excel.title && excel.title.text === 'Facture Alpha' && excel.title.colSpan === 3 && excel.title.bold && excel.title.centered && excel.title.background === 'rgb(255, 192, 0)', excel.title);
   check(`${label} - le texte du titre se lit sur son fond (≥ 4,5:1)`, !!excel.title && excel.title.contrast >= 4.5, excel.title);
 
+  const look = await sheetLook(page);
+  const BLACK = 'solid rgb(0, 0, 0)';
+  check(`${label} - le titre garde ses quatre traits noirs, et « Réf » reçoit en haut le trait que le titre a en bas (un trait entre deux cases n'a qu'une valeur)`, look.titleSides.every(side => side === BLACK) && look.refTop === BLACK && look.refBottom === BLACK && look.codeTop === BLACK && look.totalBottom === BLACK, look);
+  check(`${label} - l'alignement vertical de la plage est gardé : titre au milieu, case fusionnée en haut, ce n'est pas le même`, look.titleAlign === 'middle' && look.mergedAlign === 'top' && look.titleAlign !== look.mergedAlign, look);
+  check(`${label} - les lignes de la plage portent leur hauteur (28, 20, 40, 20, 20 px) et aucune n'est plus petite que celle d'Excel`, JSON.stringify(look.marks) === '["28","20","40","20","20"]' && look.heights.every((h, i) => h >= Number(look.marks[i]) - 1), look);
+
   await page.keyboard.press('Control+Z');
   await page.waitForTimeout(300);
   const undone = await page.evaluate(() => JSON.stringify(EditorCore.getEditor().state.doc.toJSON()));
@@ -336,6 +372,15 @@ async function flow(colorScheme, label) {
   await settle(page);
   const calc = await documentState(page);
   check(`${label} - LibreOffice Calc : un tableau de trois lignes, sans image, fond et fusion gardés`, calc.tables === 1 && calc.images === 0 && calc.rows === 3 && !!calc.title && calc.title.colSpan === 3 && calc.title.background === 'rgb(255, 255, 0)', calc);
+
+  // --- Une ligne haute d'Excel reste haute dans le document ---
+  await startDocument(page);
+  await setClipboard(page, { rawHtml: tallRowSheet, text: 'Haut\tb\nMilieu\td\n' });
+  await page.keyboard.press('Control+V');
+  await settle(page);
+  const tall = await tallRowState(page);
+  check(`${label} - une ligne de 120 px dans Excel mesure 120 px dans le document, la ligne de 20 px garde la hauteur de son texte`, tall.tables === 1 && tall.rows === 2 && JSON.stringify(tall.marks) === '["20","120"]' && tall.heights[1] >= 119 && tall.heights[1] <= 121 && tall.heights[0] < 60, tall);
+  check(`${label} - le trait du bas de la première case est aussi le haut de la case dessous, et sa case reste centrée dans sa ligne haute`, tall.firstBottom === 'rgb(0, 0, 0)' && tall.secondTop === 'rgb(0, 0, 0)' && tall.align === 'middle', tall);
 
   // --- Une image seule se colle toujours comme image ---
   await startDocument(page);

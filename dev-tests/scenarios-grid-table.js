@@ -597,8 +597,8 @@ td
   });
 
   // --- 5) Hors grille : un document reçoit le tableau, case par case -----------------------------------------------------------------------------------------------------------------
-  // Un tableau du DOCUMENT : fusions, fond, texte, alignement horizontal et largeur des colonnes ; ni traits case par case, ni alignement vertical, ni hauteur de ligne (le PDF et le Word ne les
-  // lisent que pour une grille : l'éditeur les montrerait, l'export non). Une ligne qui porte `data-row-height` ferait traiter le tableau en grille.
+  // Un tableau du DOCUMENT garde tout ce que le tableur donne : fusions, fond, texte, alignement horizontal, largeur des colonnes, mais aussi les traits case par case, l'alignement vertical et la
+  // hauteur des lignes (l'éditeur, la Lecture et les exports les lisent sur tout tableau). Ce n'est pas une grille pour autant : le modèle reste le document.
 
   const tableCount = () => { let n = 0; doc().descendants((node) => { if (node.type.name === 'table') n++; return true; }); return n; };
   // Colle `parts` dans un document ordinaire (un paragraphe « début », le curseur après « dé ») ; rend ce que la personne voit.
@@ -620,7 +620,7 @@ td
 
   cases.push({
     id: 'gridTable_in_a_document_an_excel_clipboard_pastes_the_cells_not_the_image',
-    description: 'Le cas d\'Antoine hors grille : le presse-papiers d\'Excel (tableau HTML, texte tabulé ET image de la plage) collé dans un document donne un tableau du document - aucune image - posé au curseur (le paragraphe se coupe autour) ; fusions, fond, gras, souligné, couleur et taille du texte, alignement horizontal, retour à la ligne et largeurs des colonnes d\'Excel sont repris ; ni trait case par case, ni alignement vertical, ni hauteur de ligne (rien qui fasse prendre le tableau pour une grille) ; un seul Annuler.',
+    description: 'Le cas d\'Antoine hors grille : le presse-papiers d\'Excel (tableau HTML, texte tabulé ET image de la plage) collé dans un document donne un tableau du document - aucune image - posé au curseur (le paragraphe se coupe autour) ; fusions, fond, gras, souligné, couleur et taille du texte, alignement horizontal, retour à la ligne et largeurs des colonnes d\'Excel sont repris ; les traits case par case (un trait entre deux cases est un seul trait), l\'alignement vertical et la hauteur des lignes (28 et 40 px) aussi, sans que le tableau devienne une grille ; un seul Annuler.',
     run: async (h) => {
       const out = await pasteInDocument(h, { html: EXCEL_HTML, text: EXCEL_TEXT, png: true });
       const title = cellAt(0, 0), ref = cellAt(1, 0), amountTitle = cellAt(1, 2), code = cellAt(2, 0), merged = cellAt(2, 1), price = cellAt(2, 2), second = cellAt(3, 0), total = cellAt(4, 0), totalPrice = cellAt(4, 2);
@@ -638,21 +638,22 @@ td
         price: price.text === '12,50 €' && price.align === 'right' && second.text === 'A-2',
         total: total.text === 'Total' && total.colspan === 2 && total.align === 'right' && totalPrice.text === '20,50 €',
         widths: widths === '64,190,149',
-        // Ce qu'un document ne sait pas rendre à l'export : ni trait case par case, ni alignement vertical, ni hauteur de ligne.
-        noBorders: [title, ref, code, merged, total].every(c => c.borders === '.,.,.,.'),
-        noVerticalAlign: [title, merged].every(c => c.valign === null),
-        notAGrid: !/data-row-height|data-border-|data-valign/.test(out.html),
+        // Ce que la grille garde aussi : les traits (le bas du titre est AUSSI le haut de « Réf »), l'alignement vertical, la hauteur des lignes.
+        borders: title.borders === '#000000,#000000,#000000,#000000' && ref.borders === '#000000,.,#000000,.' && amountTitle.borders === '#000000,.,#000000,.' && code.borders === '#000000,.,.,.' && total.borders === '.,.,#000000,.',
+        verticalAlign: title.valign === 'middle' && merged.valign === 'top' && code.valign === null,
+        rowHeights: tableNode().childCount === 5 && tableNode().child(0).attrs.rowHeight === 28 && tableNode().child(2).attrs.rowHeight === 40,
+        stillADocument: !out.grid && /data-border-top="#000000"/.test(out.html) && /data-valign="middle"/.test(out.html) && /data-row-height="28"/.test(out.html),
       };
       ed().commands.undo();
       await sleep(120);
       checks.undoOnce = docJson() === out.before && tableCount() === 0;
-      return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, title, merged, widths }) };
+      return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, title, merged, widths, borders: [ref, amountTitle, code, total].map(c => c.borders) }) };
     },
   });
 
   cases.push({
     id: 'gridTable_in_a_document_google_sheets_and_libreoffice_ranges_paste_the_cells',
-    description: 'Les presse-papiers de Google Sheets et de LibreOffice Calc donnent eux aussi un tableau du document (fond, gras, couleur, fusions, texte barré, alignement), sans image, sans trait ni alignement vertical par case ; le gris du quadrillage de Sheets ne devient rien.',
+    description: 'Les presse-papiers de Google Sheets et de LibreOffice Calc donnent eux aussi un tableau du document (fond, gras, couleur, fusions, texte barré, alignement), sans image, avec leurs traits et leur alignement vertical par case ; le gris du quadrillage de Sheets ne devient rien.',
     run: async (h) => {
       const sheets = await pasteInDocument(h, { html: SHEETS_HTML, text: 'Facture Beta\t\t\nB-1\tÉcrou M8\t3,20 €\n' });
       const sheetTitle = cellAt(0, 0), sheetRed = cellAt(1, 0), sheetPart = cellAt(1, 1), sheetNumber = cellAt(1, 2);
@@ -663,12 +664,12 @@ td
         sheetsNoImage: sheets.images === 0 && sheets.domImages === 0 && sheets.tables === 1,
         sheetTitle: sheetTitle.colspan === 3 && sheetTitle.fill === '#ffd966' && sheetTitle.align === 'center' && sheetTitle.marks === 'bold textStyle:14pt',
         sheetRed: sheetRed.marks === 'italic textStyle:#ff0000', sheetPart: sheetPart.text === 'Écrou M8' && sheetPart.marks === 'bold', sheetNumber: sheetNumber.text === '3,20 €' && sheetNumber.align === 'right',
-        sheetsPlain: !/data-row-height|data-border-|data-valign|#cccccc/i.test(sheetsHtml) && [sheetTitle, sheetRed].every(c => c.borders === '.,.,.,.' && c.valign === null),
+        sheetsKept: !/#cccccc/i.test(sheetsHtml) && sheetTitle.borders === '.,.,.,.' && sheetRed.borders === '.,.,#000000,.',
         calcNoImage: calc.images === 0 && calc.domImages === 0 && calc.tables === 1,
         calcTitle: calcTitle.colspan === 3 && calcTitle.fill === '#ffff00' && calcTitle.marks === 'bold textStyle:#ff0000',
         calcMerged: calcMerged.rowspan === 2 && calcMerged.lineBreaks === 1 && calcMerged.marks === 'underline',
         calcStruck: calcStruck.marks === 'strike' && calcNumber.align === 'right',
-        calcPlain: !/data-row-height|data-border-|data-valign/.test(calc.html) && [calcTitle, calcMerged].every(c => c.borders === '.,.,.,.' && c.valign === null),
+        calcKept: calcTitle.borders === '#000000,#000000,#000000,#000000' && calcTitle.valign === 'middle' && calcMerged.valign === 'top' && /data-border-top="#000000"/.test(calc.html) && /data-valign="top"/.test(calc.html),
       };
       return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, sheetTitle, calcTitle }) };
     },
@@ -738,19 +739,24 @@ td
   });
 
   cases.push({
-    id: 'gridTable_toDocumentHtml_keeps_widths_fills_and_merges_but_no_row_heights_borders_or_vertical_alignment',
-    description: 'GridTable.toDocumentHtml (le tableau d\'un document) : largeurs des colonnes (`colwidth`, colgroup), fond, fusions, alignement horizontal gardés ; aucune `data-row-height`, aucun `data-border-*`, aucun `data-valign`, même quand le modèle les porte ; cleanPastedHtml (la grille) reste sans largeurs ni hauteurs.',
+    id: 'gridTable_toDocumentHtml_keeps_what_the_grid_keeps_widths_row_heights_borders_and_vertical_alignment',
+    description: 'GridTable.toDocumentHtml (le tableau d\'un document) écrit tout ce que le tableur donne : largeurs des colonnes (`colwidth`, colgroup), hauteurs de ligne (`data-row-height`, 28 et 40 px), traits case par case (`data-border-*`, d\'accord sur un trait que deux cases se partagent), alignement vertical (`data-valign`), fond, fusions, alignement horizontal ; cleanPastedHtml (la grille) reste sans largeurs ni hauteurs.',
     run: async () => {
       const model = GridTable.fromClipboardHtml(EXCEL_HTML);
       const document = GridTable.toDocumentHtml(model);
       const gridHtml = GridTable.cleanPastedHtml(EXCEL_HTML);
       const modelKeepsThem = model.rows.some(r => r.height > 0) && model.rows.some(r => r.cells.some(c => c.valign)) && model.rows.some(r => r.cells.some(c => c.borders && Object.values(c.borders).some(Boolean)));
+      const edge = (html, row, col, side) => new DOMParser().parseFromString(html, 'text/html').querySelectorAll('tr')[row].cells[col].getAttribute('data-border-' + side);
       const checks = {
         modelKeepsThem,
         widths: /colwidth="64"/.test(document) && /colwidth="190"/.test(document) && /colwidth="149"/.test(document) && /colwidth="64,190,149"/.test(document) && /<col style="width: 190px;">/.test(document),
         fillAndMerges: /colspan="3"[^>]*style="background-color: #ffc000"/i.test(document) && /rowspan="2"/.test(document) && /text-align: center/.test(document),
-        noRowHeight: !/data-row-height|style="height/.test(document),
-        noBorders: !/data-border-/.test(document), noValign: !/data-valign/.test(document),
+        rowHeights: /<tr data-row-height="28" style="height: 28px">/.test(document) && /<tr data-row-height="40" style="height: 40px">/.test(document),
+        borders: /data-border-top="#000000"/.test(document) && /data-border-bottom="#000000"/.test(document),
+        valign: /data-valign="middle"/.test(document) && /data-valign="top"/.test(document),
+        // Excel n'écrit que le trait du bas de « Réf » : le document l'écrit aussi en haut de « A-1 » (un trait n'a qu'une valeur, `toHtml` seul laisse la case d'en dessous sans).
+        sharedEdges: edge(document, 1, 0, 'bottom') === '#000000' && edge(document, 2, 0, 'top') === '#000000' && edge(document, 4, 0, 'bottom') === '#000000' && edge(document, 4, 0, 'top') === null
+          && edge(GridTable.toHtml(model, { sizes: true }), 2, 0, 'top') === null,
         gridUntouched: !/colwidth|<colgroup|data-row-height/.test(gridHtml) && /data-border-/.test(gridHtml) && /data-valign/.test(gridHtml),
       };
       return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, head: document.slice(0, 300) }) };
