@@ -109,8 +109,11 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 
 **Modèles**
 - Gestion multi-modèles, sauvegardés directement dans le document Grist
-- Galerie de modèles prêts à l'emploi : facture, contrat de prestation de services, attestation,
-  courrier de relance (voir l'[avertissement](#limites-connues) à leur sujet)
+- Galerie de 21 modèles prêts à l'emploi : facture, contrat de prestation de services, attestation,
+  courrier de relance, quittance de loyer, bulletin scolaire, fiche recette, émargement, bon de commande,
+  fiche d'inventaire, et des modèles à imprimer (flyer A6, invitation, affiche A3, carte de visite, badge,
+  étiquettes). Un modèle peut créer ses tables, vides, avec leurs colonnes de calcul et leurs liens, et son
+  aperçu montre le document rempli en images (voir l'[avertissement](#limites-connues) à leur sujet)
 
 **Autres**
 - Interface bilingue français/anglais, thème clair, sombre ou celui du système
@@ -286,8 +289,9 @@ bibliothèques et polices sont dans [NOTICE](NOTICE).
 - **Modèles de la galerie** : ce sont des exemples de mise en page, écrits pour le droit français. Ils
   ne constituent ni un avis ni un conseil juridique et ne sont pas garantis conformes à la loi en
   vigueur (mentions obligatoires, pénalités de retard, clauses…) : faites-les relire avant tout usage.
-- **Pas encore faits** : remplissage d'un modèle avec des données d'exemple, variantes multilingues
-  d'un modèle, codes-barres (le QR code est livré), export et import Markdown.
+- **Pas encore faits** : remplissage des tables d'un modèle avec des lignes d'exemple (l'aperçu de la
+  galerie en montre en images, mais les tables créées restent vides), variantes multilingues d'un
+  modèle, codes-barres (le QR code est livré), export et import Markdown.
 
 ## Note sur l'IA
 
@@ -451,8 +455,11 @@ GitHub Pages, with no backend and no build step.
 
 **Templates**
 - Multi-template management, saved directly in the Grist document
-- Gallery of ready-to-use templates: invoice, service agreement, certificate, payment reminder letter
-  (see the [warning](#known-limitations) about them)
+- Gallery of 21 ready-to-use templates: invoice, service agreement, certificate, payment reminder letter,
+  rent receipt, school report, recipe sheet, attendance sheet, purchase order, inventory sheet, and
+  templates to print (A6 flyer, invitation, A3 poster, business card, badge, labels). A template can create
+  its tables, empty, with their calculated columns and links, and its preview shows the filled document as
+  images (see the [warning](#known-limitations) about them)
 
 **Other**
 - Bilingual French/English interface, light, dark or system theme
@@ -620,7 +627,8 @@ libraries and fonts are in [NOTICE](NOTICE).
 - **Gallery templates**: these are layout examples, written for French law. They are neither legal
   advice nor guaranteed to comply with current law (mandatory mentions, late-payment penalties,
   clauses…): have them reviewed before any real use.
-- **Not done yet**: filling a template with sample data, multilingual variants of a template,
+- **Not done yet**: filling a template's tables with sample rows (the gallery preview shows some as
+  images, but the tables created stay empty), multilingual variants of a template,
   barcodes (the QR code is delivered), Markdown export and import.
 
 ## A note on AI

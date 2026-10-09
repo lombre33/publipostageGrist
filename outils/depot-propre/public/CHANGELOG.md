@@ -217,6 +217,25 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   reste écrit comme on l'a tapé, sans exposant. Un texte collé de Word ou de Google Docs garde ses exposants
   et ses indices, et le pinceau de mise en forme les copie. Les icônes sont grisées pour un macro-modèle ; la
   note de bas de page garde son rendu.
+- **Galerie de 21 modèles, dont des modèles livrés avec leurs tables** : la galerie « Créer à partir d'un modèle »
+  passe de quatre modèles à vingt et un. Les quatre d'avant (facture, contrat de prestation de services,
+  attestation, courrier de relance) sont refaits avec les fonctions récentes ; s'y ajoutent des modèles à
+  imprimer (flyer A6, invitation A6 en paysage, affiche A3, badge d'événement A6, carte de visite 85 × 55,
+  étiquette d'adresse 70 × 37, étiquette de produit A6), un modèle d'e-mail (réapprovisionnement), deux
+  grilles pour Excel (valorisation du stock, émargement) et des documents de métier : quittance de loyer,
+  bulletin scolaire, fiche recette, feuille d'émargement, bon de commande, fiche d'inventaire, bon de
+  mouvement de stock. Un modèle livré avec ses tables a un bouton « Créer avec ses tables » (« Créer avec sa
+  table » s'il n'en a qu'une) : une question liste les tables (« Créer les tables du modèle ? »), puis le
+  widget crée les tables du modèle SANS AUCUNE LIGNE, avec leurs colonnes, leurs colonnes de calcul, la colonne
+  qui affiche une Référence et les règles des Tables liées dont le modèle a besoin, et enregistre le modèle
+  avec sa page (format, sens, marges), son type (document, e-mail ou grille), le nom de son PDF et les
+  champs de son e-mail. Une table du document qui porte déjà le nom d'une table du modèle est gardée telle
+  quelle si ses colonnes conviennent ; sinon une fenêtre dit ce qui manque et rien n'est créé ni modifié.
+  « Utiliser ce modèle » garde le texte seul. L'aperçu d'un modèle montre le document rempli de lignes
+  d'exemple, en images faites avec le vrai widget (une par page, avec « Aperçu avec des lignes d'exemple :
+  les tables créées restent vides. »), la page du modèle, les tables qu'il crée et ses « Fonctions
+  montrées » (Code QR, Format de page, Boucle sur des lignes liées, Montant en toutes lettres…) : aucune
+  ligne d'exemple n'est jamais écrite dans le document.
 
 ### Modifié
 
@@ -314,6 +333,10 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 - **Infobulles des boutons en thème sombre** : le texte des infobulles de la barre était écrit en blanc sur une
   bulle claire (1,19:1, à peine lisible). Il suit maintenant la surface du thème : foncé sur la bulle claire en
   thème sombre, toujours blanc sur la bulle sombre en thème clair.
+- **Lignes SIRET et TVA du client dans la facture et le contrat de la galerie** : ces deux lignes ne
+  s'affichaient jamais, même pour un client dont les champs étaient remplis, parce que leur condition lisait
+  la table de la page au lieu de celle du client. Les modèles de la galerie les affichent ; ceux qui ont déjà
+  été créés ne changent pas.
 
 ## [1.0.0-beta.1] - 2026-10-05
 
@@ -607,6 +630,23 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   as it was typed, without superscript. Text pasted from Word or Google Docs keeps its superscripts and
   subscripts, and the format painter copies them. The icons are greyed for a macro template; the footnote
   keeps its look.
+- **A gallery of 21 templates, some delivered with their tables**: the "Create from a template" gallery grows
+  from four templates to twenty-one. The previous four (invoice, service agreement, certificate, payment
+  reminder letter) are redone with the recent features; new ones are templates to print (A6 flyer, A6
+  landscape invitation, A3 poster, A6 event badge, 85 × 55 business card, 70 × 37 address label, A6 product
+  label), an e-mail template (restocking), two grids for Excel (stock valuation, attendance) and business
+  documents: rent receipt, school report, recipe sheet, attendance sheet, purchase order, inventory sheet,
+  stock movement slip. A template delivered with its tables has a "Create with its tables" button ("Create
+  with its table" when it has just one): a question lists the tables ("Create the template's tables?"), then
+  the widget creates the template's tables WITH NO ROWS, with their columns, calculated columns, the column
+  that displays a Reference and the Linked tables rules the template needs, and saves the template with its
+  page (size, orientation, margins), its type (document, e-mail or grid), its PDF name and its e-mail fields.
+  A document table that already has the name of one of the template's tables is kept as it is when its
+  columns fit; otherwise a window says what is missing and nothing is created or changed. "Use this
+  template" keeps the text alone. The preview of a template shows the document filled with sample rows, as
+  images made with the real widget (one per page, with "Preview with sample rows: the tables created stay
+  empty."), the template's page, the tables it creates and its "Features shown" (QR code, Page size, Loop
+  over linked rows, Amount spelled out…): no sample row is ever written into the document.
 
 ### Changed
 
@@ -699,6 +739,9 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 - **Button tooltips in the dark theme**: the text of the toolbar tooltips was written in white on a light
   bubble (1.19:1, barely readable). It now follows the theme's surface colour: dark on the light bubble in
   the dark theme, still white on the dark bubble in the light theme.
+- **Client SIRET and VAT lines in the gallery's invoice and agreement**: these two lines never showed, even
+  for a client whose fields were filled in, because their condition read the page's table instead of the
+  client's. The gallery templates now show them; templates already created do not change.
 
 ## [1.0.0-beta.1] - 2026-10-05 (English)
 
