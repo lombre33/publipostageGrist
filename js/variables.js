@@ -110,7 +110,7 @@ const Variables = (function () {
     return { SMART_CHIP_ITEMS, displayKey, ensureBox };
   })();
 
-  const { currentTables, prioritizeTables, matchingVariables, columnSearchText, referencedTable, columnsBelow, refreshSchemaOnce, computeItems, fieldItems } = (function () {
+  const { currentTables, prioritizeTables, matchingVariables, columnSearchText, referencedTable, crossedListTable, writesList, columnsBelow, refreshSchemaOnce, computeItems, fieldItems } = (function () {
     // Les entrées de la liste : tables en cours, variables qui correspondent, onglet actif
 
     // Tables « en cours », la plus proche d'abord : celle que parcourt la zone répétée où est le curseur (js/variable-loop.js:loopTableAt ; `editor`
@@ -154,6 +154,27 @@ const Variables = (function () {
     function referencedTable(table, column) {
       const target = GristAPI.tableAtEndOf(table, String(column).split('.'), true);
       return target && GristAPI.getTables().indexOf(target) !== -1 ? target : null;
+    }
+    // La table dont une liste de références désigne les lignes quand la suite de colonnes Référence `hops`, partie de `table`, en traverse une, null
+    // sinon : ce qu'on lit au bout du chemin est alors une valeur par ligne de la liste (resolveRows, `multi`), pas une seule. La fenêtre « Liste »
+    // d'une bulle (js/variable-list.js) et celle d'« Autres attributs » (js/variable-linked-attrs.js) lisent la même règle.
+    function crossedListTable(table, hops) {
+      let at = table;
+      for (const hop of hops) {
+        const ref = GristAPI.referenceOf(GristAPI.getColumnType(at, hop));
+        if (!ref) return null;
+        if (ref.list) return ref.table;
+        at = ref.table;
+      }
+      return null;
+    }
+    // Vrai quand la colonne `column` de `table`, ou le chemin « Equipe.Email » qui y mène, s'écrit en liste : une colonne Liste de choix ou Liste de
+    // références, ou un chemin qui traverse une liste de références. C'est ce que règle la fenêtre « Liste » (js/variable-list.js) ; « Remplacer »
+    // d'Autres attributs en garde le réglage d'une bulle à l'autre.
+    function writesList(table, column) {
+      const hops = String(column).split('.');
+      hops.pop();
+      return VariableFormat.isListType(GristAPI.getColumnType(table, column)) || !!crossedListTable(table, hops);
     }
 
     // Les lignes où mène la flèche de la colonne `key` (« Table.Colonne » ou le chemin « Table.Référence.Colonne » qui y mène) dans une liste de colonnes
@@ -227,7 +248,7 @@ const Variables = (function () {
       if (!items.length || (items.length === 1 && SearchSelect.normalize(items[0].key) === typed)) return [];
       return items;
     }
-    return { currentTables, prioritizeTables, matchingVariables, columnSearchText, referencedTable, columnsBelow, refreshSchemaOnce, computeItems, fieldItems };
+    return { currentTables, prioritizeTables, matchingVariables, columnSearchText, referencedTable, crossedListTable, writesList, columnsBelow, refreshSchemaOnce, computeItems, fieldItems };
   })();
 
   const { setTabsVisible, render, select, moveSelection, position, preferChipsTab } = (function () {
@@ -1332,10 +1353,11 @@ const Variables = (function () {
   // condition et d'autres attributs, js/variable-condition.js et js/variable-linked-attrs.js) ; listItems (les éléments d'une cellule liste brute, que
   // la boucle sur une liste de références, js/loop-rules.js, lit aussi) ; zeroHidden (la barre flottante d'une bulle nombre,
   // js/floating-toolbars.js, lit la même règle que le rendu) ; currentTables et prioritizeTables (le menu Image de la barre, js/main-toolbar.js,
-  // classe ses colonnes comme la liste « # »).
+  // classe ses colonnes comme la liste « # ») ; crossedListTable et writesList (la fenêtre « Liste » d'une bulle, js/variable-list.js, et
+  // « Remplacer » d'Autres attributs, js/variable-linked-attrs.js : un chemin qui traverse une liste de références s'écrit en liste).
   return {
     createExtension, createFieldExtension, resolveVariable, resolveVariableResult, resolveRawValue, resolveTextVariables, replaceTextVariables, findTextVariables, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar,
-    preferChipsTab, ensureLinkConfigured, editLinkRule, describeLinkVia, resolveLinkedRows, resolveRows, formatValue, listTexts, resolveListTexts, zeroHidden, listItems, cellValue, currentTables, prioritizeTables, columnSearchText, referencedTable, columnsBelow,
+    preferChipsTab, ensureLinkConfigured, editLinkRule, describeLinkVia, resolveLinkedRows, resolveRows, formatValue, listTexts, resolveListTexts, zeroHidden, listItems, cellValue, currentTables, prioritizeTables, columnSearchText, referencedTable, crossedListTable, writesList, columnsBelow,
     resolveCalcResult, resolveCalc, badgeProblem, calcProblem, formulaErrorText,
   };
 })();

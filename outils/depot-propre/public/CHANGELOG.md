@@ -81,7 +81,10 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   l'icône « Autres attributs » grisée. La fenêtre montre les colonnes des fiches de la liste, avec la valeur de
   chacune à la suite (séparées par une virgule), et « Insérer » ou « Remplacer » pose le chemin
   (`#Dossiers.Equipe.Email`) qui écrit cette colonne pour toutes les fiches de la liste, dans l'ordre de la
-  liste : dans « À », « Créer l'email » reprend alors toutes les adresses. Une liste vide n'écrit rien, une fiche
+  liste : dans « À », « Créer l'email » reprend alors toutes les adresses. Le bouton « Liste » de la bulle en chemin
+  est actif aussi (le séparateur, la première, la dernière), et « Remplacer » garde le réglage de la colonne :
+  un point-virgule réglé entre les valeurs reste entre les adresses, que le lien de « Créer l'email » sépare
+  toujours par une virgule, comme tous les clients de messagerie la lisent. Une liste vide n'écrit rien, une fiche
   disparue est ignorée, aucun lien entre tables n'est créé, et la flèche « › » d'une colonne Référence des fiches
   continue le chemin. Le même chemin se lit dans la Lecture, le PDF, le Word, l'e-mail et l'export en lot, et
   se tape dans les champs de l'e-mail (`#Dossiers.Equipe.Em` propose « Email »). Les flèches des listes de
@@ -411,8 +414,11 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   attributes" icon greyed out. The window shows the columns of the rows in the list, with each one's value one
   after the other (comma-separated), and "Insert" or "Replace" sets the path (`#Files.Team.Email`) that writes
   that column for every row of the list, in the list's order: in "To", "Create the email" then takes all the
-  addresses. An empty list writes nothing, a row that has gone is skipped, no link between tables is created,
-  and the "›" arrow of a Reference column of the rows carries the path on. The same path reads in Reading mode,
+  addresses. The "List" button of the path bubble is active too (separator, first, last), and "Replace" keeps the
+  column's setting: a semicolon set between the values stays between the addresses, which the link of "Create the
+  email" always separates with a comma, the way every mail client reads it. An empty list writes nothing, a row
+  that has gone is skipped, no link between tables is created, and the "›" arrow of a Reference column of the
+  rows carries the path on. The same path reads in Reading mode,
   the PDF, the Word, the e-mail and the batch export, and can be typed in the e-mail fields (`#Files.Team.Em`
   suggests "Email"). The arrows of the column lists and a loop on a path keep their rule: a list of references
   is not walked down there.

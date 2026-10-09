@@ -204,10 +204,12 @@ const MailtoExport = (function () {
   }
 
   // Chaque adresse d'une liste séparée par des virgules est encodée à part, jamais la virgule : elle doit rester le séparateur littéral que les
-  // clients de messagerie attendent (Outlook bureau compris), ce qu'un encodeURIComponent sur toute la chaîne ne ferait pas.
+  // clients de messagerie attendent (Outlook bureau compris), ce qu'un encodeURIComponent sur toute la chaîne ne ferait pas. Un point-virgule entre
+  // deux adresses (celui qu'on tape, ou le séparateur réglé dans la fenêtre « Liste » d'une colonne de références, js/variable-list.js) en fait deux
+  // aussi : le lien les sépare par la virgule que tous les clients lisent, au lieu d'une seule adresse illisible (« a@b.fr%3Bc@d.fr »).
   function encodeAddressList(value) {
     if (!value) return '';
-    return value.split(',').map(a => a.trim()).filter(Boolean).map(a => encodeURIComponent(a)).join(',');
+    return value.split(/[,;]/).map(a => a.trim()).filter(Boolean).map(a => encodeURIComponent(a)).join(',');
   }
 
   // L'URL mailto: complète. to, cc, bcc, subject et bodyText arrivent déjà résolus (les #Variable sont substituées en amont, comme côté PDF par

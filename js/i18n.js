@@ -1543,6 +1543,7 @@ const I18n = (function () {
     'varList.title': { fr: 'Liste', en: 'List' },
     'varList.intro.choice': { fr: 'contient plusieurs choix. Réglez ce que le document en écrit.', en: 'holds several choices. Set what the document writes from it.' },
     'varList.intro.ref': { fr: 'contient plusieurs lignes de « {table} ». Réglez ce que le document en écrit.', en: 'holds several rows of “{table}”. Set what the document writes from it.' },
+    'varList.intro.path': { fr: 'donne une valeur pour chaque ligne de la liste (« {table} »). Réglez ce que le document en écrit.', en: 'gives one value for each row of the list (“{table}”). Set what the document writes from it.' },
     'varList.section.pick': { fr: 'Afficher', en: 'Show' },
     'varList.pick.all': { fr: 'Toutes les valeurs', en: 'All values' },
     'varList.pick.first': { fr: 'La première', en: 'The first' },

@@ -148,6 +148,25 @@
   });
 
   cases.push({
+    id: 'email_link_splits_addresses_on_semicolons_like_on_commas',
+    description: 'E-mail, le lien mailto: : des adresses séparées par des points-virgules (celui qu’on tape, ou le séparateur réglé dans « Liste » sur une colonne de références) sortent séparées par la virgule que les clients de messagerie lisent, chacune encodée à part, pour les destinataires, le cc et le cci ; aucun « %3B » dans le lien, les espaces et séparateurs vides autour sont ignorés',
+    run: async () => {
+      const url = MailtoExport.buildMailtoUrl({ to: 'a@b.fr; c@d.fr;e@f.fr, g@h.fr', cc: 'i@j.fr;k@l.fr', bcc: ' ; m@n.fr ;', subject: 'Sujet', bodyText: 'Corps' });
+      const [head, query] = url.split('?');
+      const params = Object.fromEntries(query.split('&').map(pair => { const i = pair.indexOf('='); return [pair.slice(0, i), pair.slice(i + 1)]; }));
+      const decoded = { to: decodeURIComponent(head.replace(/^mailto:/, '')), cc: decodeURIComponent(params.cc), bcc: decodeURIComponent(params.bcc) };
+      const checks = {
+        to: decoded.to === 'a@b.fr,c@d.fr,e@f.fr,g@h.fr',
+        cc: decoded.cc === 'i@j.fr,k@l.fr',
+        bcc: decoded.bcc === 'm@n.fr',
+        nothingRaw: !/%3B|;/i.test(url) && !/[ #]/.test(url),
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: JSON.stringify({ failed, url, decoded }) };
+    },
+  });
+
+  cases.push({
     id: 'email_length_gauge_stops_at_the_safe_length',
     description: 'E-mail, jauge de longueur : un lien de 2000 caractères reste sûr, 2001 ne l\'est plus (avertissement seul, jamais un blocage)',
     run: async () => {

@@ -8,7 +8,8 @@
 //    même ligne), la fenêtre suit la colonne cliquée et pose des bulles en chemin (#Dossiers.Valideur.Email) : aucun lien n'est créé ni changé ;
 //  - une colonne Liste de références de la table de la page (ex. #Dossiers.Destinataires, des fiches de l'annuaire) : la fenêtre montre les colonnes
 //    de la table de la liste, avec leur valeur sur chacune de ses lignes à la suite, et pose des bulles en chemin (#Dossiers.Destinataires.Email) qui
-//    écrivent cette colonne pour toutes les lignes de la liste, séparées par une virgule. Aucun lien n'est créé : un lien ne suit qu'une ligne.
+//    écrivent cette colonne pour toutes les lignes de la liste, séparées par une virgule. Aucun lien n'est créé : un lien ne suit qu'une ligne. Le réglage
+//    « Liste » de la bulle (js/variable-list.js : séparateur, première, dernière) passe de la colonne au chemin par « Remplacer ».
 // Grisée dans la barre flottante ailleurs (js/floating-toolbars.js:linkedAttrsAvailable, même règle que targetFor ci-dessous).
 //
 // Descente de référence en référence : une colonne Référence de la liste a une flèche qui ouvre les colonnes de la table qu'elle désigne, et sur une
@@ -218,14 +219,7 @@ const VariableLinkedAttrs = (function () {
   const levelTable = () => GristAPI.tableAtEndOf(state.base, state.hops) || state.base;
   const pathText = () => Variables.triggerChar() + [state.base].concat(state.hops).join('.');
   // Le chemin affiché traverse-t-il une liste de références ? Alors il désigne plusieurs lignes, et les valeurs de la fenêtre sont celles de toutes.
-  function crossesList() {
-    let table = state.base;
-    return state.hops.some(hop => {
-      const ref = GristAPI.referenceOf(GristAPI.getColumnType(table, hop));
-      if (ref) table = ref.table;
-      return !!ref && ref.list;
-    });
-  }
+  const crossesList = () => !!Variables.crossedListTable(state.base, state.hops);
 
   // Une colonne du niveau affiché : sa case, son nom, sa valeur (posée par loadValues) et, pour une Référence, la flèche qui descend dans sa table.
   // `isCurrent` : la colonne de la bulle d'origine, montrée mais pas cochable.
@@ -440,8 +434,9 @@ const VariableLinkedAttrs = (function () {
   // « Remplacer » : la bulle d'origine prend la colonne du premier attribut coché, les autres cochés suivent, séparés par une espace, comme à
   // l'insertion. Elle reste la même bulle : ses autres réglages restent (mise en forme du texte, boucle, condition, format), sauf ce qui ne vaut que
   // pour l'ancienne colonne - le format d'un autre genre (une date sur un texte donnerait n'importe quoi), la boucle d'une autre table, la condition
-  // si « Reprendre la condition d'affichage » est décochée. Une seule transaction : un seul Annuler rend l'ancienne bulle. La bulle reste
-  // sélectionnée, sa barre revient avec les réglages de sa nouvelle colonne.
+  // si « Reprendre la condition d'affichage » est décochée. Le réglage « Liste » (js/variable-list.js : le séparateur, la première, la dernière) reste
+  // tant que la bulle écrit une liste : l'email de chaque ligne d'une équipe garde le point-virgule réglé sur la colonne Liste de références. Une
+  // seule transaction : un seul Annuler rend l'ancienne bulle. La bulle reste sélectionnée, sa barre revient avec les réglages de sa nouvelle colonne.
   function replace() {
     if (!state || !state.picks.length) return;
     const { editor, pos } = state;
@@ -452,7 +447,10 @@ const VariableLinkedAttrs = (function () {
     // Sans condition, le sinon (js/variable-otherwise.js) n'a plus rien à remplacer.
     if (!refs.inheritRow.hidden && !refs.inheritBox.checked) { attrs.condition = null; attrs.otherwise = null; }
     const oldKind = VariableFormat.columnKind(GristAPI.getColumnType(node.attrs.table, node.attrs.column));
-    if (!oldKind || oldKind !== VariableFormat.columnKind(GristAPI.getColumnType(attrs.table, attrs.column))) attrs.format = null;
+    if (!oldKind || oldKind !== VariableFormat.columnKind(GristAPI.getColumnType(attrs.table, attrs.column))) {
+      const list = node.attrs.format && node.attrs.format.list;
+      attrs.format = list && Variables.writesList(attrs.table, attrs.column) ? { list } : null;
+    }
     if (attrs.table !== node.attrs.table) attrs.loop = null;
     const after = pos + node.nodeSize;
     const content = badgesContent(others, node);
