@@ -311,6 +311,9 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   vides, la ligne qui ne porte qu'une image en calque de la première page (l'image reste à sa place, ancrée au
   paragraphe qui la précède) et les lignes vides au bas des colonnes d'une dernière zone. Les lignes vides du
   milieu d'un modèle, le saut de page qui ouvre le modèle suivant et un modèle entièrement vide ne changent pas.
+- **Infobulles des boutons en thème sombre** : le texte des infobulles de la barre était écrit en blanc sur une
+  bulle claire (1,19:1, à peine lisible). Il suit maintenant la surface du thème : foncé sur la bulle claire en
+  thème sombre, toujours blanc sur la bulle sombre en thème clair.
 
 ## [1.0.0-beta.1] - 2026-10-05
 
@@ -693,6 +696,9 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   the paragraph before it) and the blank lines at the bottom of the columns of a last zone. Blank lines in the
   middle of a template, the page break that opens the next template and a template that is entirely empty do not
   change.
+- **Button tooltips in the dark theme**: the text of the toolbar tooltips was written in white on a light
+  bubble (1.19:1, barely readable). It now follows the theme's surface colour: dark on the light bubble in
+  the dark theme, still white on the dark bubble in the light theme.
 
 ## [1.0.0-beta.1] - 2026-10-05 (English)
 

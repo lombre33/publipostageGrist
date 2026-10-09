@@ -88,6 +88,9 @@ boutons pleins à 3,08:1 en sombre). Règles à suivre :
   jamais `--text-faint`, qui s'éclaircit en sombre (2,46:1 sur blanc). Une zone qui prend le fond teinté du thème au
   survol (en-tête et pied de page remplis) y reprend le gris du thème. Dans le PDF et le Word, le texte barré d'un item
   coché d'une liste à cases prend ce même gris (`#667085`, 4,97:1) comme en Lecture, et non `#98a2b3` (2,6:1) (Antoine, 01/10).
+- Une **bulle qui prend `--text` pour fond** (info-bulle des boutons de la barre, bulle de la grille, info-bulle d'un lien) écrit en **`--surface`**,
+  jamais en blanc : `--text` s'éclaircit en sombre, et un blanc dessus n'y fait que 1,19:1 (le défaut des info-bulles de la barre, corrigé le 09/10 sur
+  le choix d'Antoine : « Corriger »). Le groupe `contrast` lit le texte et le fond calculés de chaque bouton qui porte une info-bulle.
 
 ### Deux polices, jamais mélangées : chrome vs contenu produit
 Un principe distinctif, présent dès l'origine sur Publipostage+ et à reproduire sur tout widget qui génère un

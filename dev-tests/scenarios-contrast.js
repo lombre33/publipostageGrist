@@ -873,6 +873,23 @@
     },
   });
 
+  cases.push({
+    id: 'contrast_toolbar_tooltips_write_in_the_surface_colour_on_their_bubble_and_reach_4_5_in_light_and_dark',
+    description: 'Info-bulles des boutons de la barre (`[data-tip]::after`) : le texte reprend la couleur de la surface sur la bulle `--text`, qui s’éclaircit en sombre (un blanc écrit en dur y tombait à 1,19:1, une bulle claire à texte blanc) ; 4,5:1 au moins sur la bulle, en clair et en sombre, pour chaque bouton qui en porte une',
+    run: async () => {
+      // La bulle est le pseudo-élément ::after du bouton : sa couleur et son fond se lisent sur lui (`opacity: 0` jusqu'au survol, sans effet sur les couleurs calculées).
+      const hosts = Array.from(document.querySelectorAll('#v2-toolbar [data-tip], .bar-row [data-tip]'));
+      const bubbleRatio = host => {
+        const style = getComputedStyle(host, '::after');
+        const bubble = over(parseColor(style.backgroundColor), backgroundOf(host));
+        return ratio(over(parseColor(style.color), bubble), bubble);
+      };
+      const byTheme = inBothThemes(() => ({ 'plus faible des infobulles de la barre': round2(Math.min(...hosts.map(bubbleRatio))) }));
+      const bad = failing(byTheme, 4.5);
+      return { pass: hosts.length >= 10 && bad.length === 0, notes: JSON.stringify({ bad, hosts: hosts.length, byTheme }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.contrast = cases;
 })();
