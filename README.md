@@ -169,7 +169,7 @@ Règle de modification : un fichier `css/` ou `js/` modifié monte son numéro `
 
 ## Tests
 
-La suite de `dev-tests/` compte 111 groupes de scénarios, joués dans un Chromium sans écran (un navigateur neuf par groupe), et 120 scripts Node (parcours rejoués à la vraie souris dans un panneau de 700×400, tests unitaires, contrôle d'hygiène du code). Elle couvre l'éditeur, les modes Lecture, Grille et E-mail, et les exports PDF, Word et Excel. Le dernier contrôle complet (3 octobre 2026) a passé plus de 6 500 vérifications.
+La suite de `dev-tests/` compte 111 groupes de scénarios, joués dans un Chromium sans écran (un navigateur neuf par groupe), et 121 scripts Node (parcours rejoués à la vraie souris dans un panneau de 700×400, tests unitaires, contrôle d'hygiène du code). Elle couvre l'éditeur, les modes Lecture, Grille et E-mail, et les exports PDF, Word et Excel. Le dernier contrôle complet (3 octobre 2026) a passé plus de 6 500 vérifications.
 
 ```bash
 bash dev-tests/generate-harness.sh           # régénère _test-harness.html depuis index.html
