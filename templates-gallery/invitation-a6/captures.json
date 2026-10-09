@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hash": "0b86b4b828aea2b4",
+  "preview": [
+    {
+      "src": "invitation-a6/capture-1.png",
+      "w": 443,
+      "h": 315
+    },
+    {
+      "src": "invitation-a6/capture-2.png",
+      "w": 443,
+      "h": 315
+    },
+    {
+      "src": "invitation-a6/capture-3.png",
+      "w": 644,
+      "h": 455
+    }
+  ],
+  "thumb": {
+    "src": "invitation-a6/thumb.png",
+    "w": 240,
+    "h": 320
+  }
+}

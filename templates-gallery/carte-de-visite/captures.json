@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hash": "1575d55e4fe226c3",
+  "preview": [
+    {
+      "src": "carte-de-visite/capture-1.png",
+      "w": 439,
+      "h": 284
+    },
+    {
+      "src": "carte-de-visite/capture-2.png",
+      "w": 439,
+      "h": 284
+    },
+    {
+      "src": "carte-de-visite/capture-3.png",
+      "w": 637,
+      "h": 901
+    }
+  ],
+  "thumb": {
+    "src": "carte-de-visite/thumb.png",
+    "w": 240,
+    "h": 320
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "hash": "caf7a90fed50e0e6",
+  "preview": [
+    {
+      "src": "affiche-a3/capture-1.png",
+      "w": 644,
+      "h": 910
+    }
+  ],
+  "thumb": {
+    "src": "affiche-a3/thumb.png",
+    "w": 240,
+    "h": 320
+  }
+}

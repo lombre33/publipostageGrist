@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "family": "evenementiel",
+  "main": "Invites",
+  "tables": ["Evenements", "Invites"],
+  "links": [
+    {"table": "Evenements", "mode": "match", "target": "id", "source": "Evenement"}
+  ],
+  "template": {
+    "type": "document",
+    "pdfName": "Invitation #Invites.Nom",
+    "page": {
+      "format": "A6",
+      "orientation": "landscape",
+      "margins": [8, 10, 8, 10]
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "captures": [
+    {"kind": "pdf", "row": 4, "pages": [1], "expectPages": 1, "width": 290},
+    {"kind": "pdf", "row": 3, "pages": [1], "expectPages": 1, "width": 290},
+    {"kind": "sheets", "marks": true, "pages": [1], "width": 640}
+  ],
+  "thumb": {
+    "capture": 1
+  }
+}

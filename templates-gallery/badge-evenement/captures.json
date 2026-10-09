@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hash": "a78f7f074dfff196",
+  "preview": [
+    {
+      "src": "badge-evenement/capture-1.png",
+      "w": 290,
+      "h": 408
+    },
+    {
+      "src": "badge-evenement/capture-2.png",
+      "w": 290,
+      "h": 408
+    },
+    {
+      "src": "badge-evenement/capture-3.png",
+      "w": 637,
+      "h": 901
+    }
+  ],
+  "thumb": {
+    "src": "badge-evenement/thumb.png",
+    "w": 240,
+    "h": 320
+  }
+}

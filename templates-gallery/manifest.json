@@ -134,5 +134,201 @@
       "images",
       "qr"
     ]
+  },
+  {
+    "id": "flyer-a6",
+    "name": "Flyer A6",
+    "tags": [
+      "événement",
+      "impression"
+    ],
+    "screenshot": "flyer-a6/thumb.png",
+    "preview": [
+      {
+        "src": "flyer-a6/capture-1.png",
+        "w": 290,
+        "h": 408
+      },
+      {
+        "src": "flyer-a6/capture-2.png",
+        "w": 290,
+        "h": 408
+      },
+      {
+        "src": "flyer-a6/capture-3.png",
+        "w": 637,
+        "h": 901
+      }
+    ],
+    "html": "flyer-a6/template.html",
+    "pack": "flyer-a6/pack.json",
+    "shows": [
+      "pageFormat",
+      "images",
+      "dateFormat",
+      "condition",
+      "qr",
+      "sheets"
+    ]
+  },
+  {
+    "id": "invitation-a6",
+    "name": "Invitation A6 paysage",
+    "tags": [
+      "événement",
+      "impression"
+    ],
+    "screenshot": "invitation-a6/thumb.png",
+    "preview": [
+      {
+        "src": "invitation-a6/capture-1.png",
+        "w": 443,
+        "h": 315
+      },
+      {
+        "src": "invitation-a6/capture-2.png",
+        "w": 443,
+        "h": 315
+      },
+      {
+        "src": "invitation-a6/capture-3.png",
+        "w": 644,
+        "h": 455
+      }
+    ],
+    "html": "invitation-a6/template.html",
+    "pack": "invitation-a6/pack.json",
+    "shows": [
+      "pageFormat",
+      "dateWords",
+      "condition",
+      "otherwise",
+      "qr",
+      "sheets"
+    ]
+  },
+  {
+    "id": "affiche-a3",
+    "name": "Affiche A3",
+    "tags": [
+      "événement",
+      "impression"
+    ],
+    "screenshot": "affiche-a3/thumb.png",
+    "preview": [
+      {
+        "src": "affiche-a3/capture-1.png",
+        "w": 644,
+        "h": 910
+      }
+    ],
+    "html": "affiche-a3/template.html",
+    "pack": "affiche-a3/pack.json",
+    "shows": [
+      "pageFormat",
+      "images",
+      "dateFormat",
+      "condition",
+      "qr",
+      "twoColumns"
+    ]
+  },
+  {
+    "id": "badge-evenement",
+    "name": "Badge d’événement A6",
+    "tags": [
+      "événement",
+      "impression"
+    ],
+    "screenshot": "badge-evenement/thumb.png",
+    "preview": [
+      {
+        "src": "badge-evenement/capture-1.png",
+        "w": 290,
+        "h": 408
+      },
+      {
+        "src": "badge-evenement/capture-2.png",
+        "w": 290,
+        "h": 408
+      },
+      {
+        "src": "badge-evenement/capture-3.png",
+        "w": 637,
+        "h": 901
+      }
+    ],
+    "html": "badge-evenement/template.html",
+    "pack": "badge-evenement/pack.json",
+    "shows": [
+      "pageFormat",
+      "otherwise",
+      "condition",
+      "images",
+      "qr",
+      "sheets"
+    ]
+  },
+  {
+    "id": "carte-de-visite",
+    "name": "Carte de visite 85 × 55",
+    "tags": [
+      "impression"
+    ],
+    "screenshot": "carte-de-visite/thumb.png",
+    "preview": [
+      {
+        "src": "carte-de-visite/capture-1.png",
+        "w": 439,
+        "h": 284
+      },
+      {
+        "src": "carte-de-visite/capture-2.png",
+        "w": 439,
+        "h": 284
+      },
+      {
+        "src": "carte-de-visite/capture-3.png",
+        "w": 637,
+        "h": 901
+      }
+    ],
+    "html": "carte-de-visite/template.html",
+    "pack": "carte-de-visite/pack.json",
+    "shows": [
+      "pageFormat",
+      "images",
+      "qr",
+      "otherwise",
+      "condition",
+      "sheets"
+    ]
+  },
+  {
+    "id": "etiquette-adresse",
+    "name": "Étiquette d’adresse 70 × 37",
+    "tags": [
+      "impression"
+    ],
+    "screenshot": "etiquette-adresse/thumb.png",
+    "preview": [
+      {
+        "src": "etiquette-adresse/capture-1.png",
+        "w": 441,
+        "h": 234
+      },
+      {
+        "src": "etiquette-adresse/capture-2.png",
+        "w": 637,
+        "h": 901
+      }
+    ],
+    "html": "etiquette-adresse/template.html",
+    "pack": "etiquette-adresse/pack.json",
+    "shows": [
+      "pageFormat",
+      "condition",
+      "sheets"
+    ]
   }
 ]

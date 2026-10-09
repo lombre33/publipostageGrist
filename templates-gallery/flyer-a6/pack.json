@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "family": "evenementiel",
+  "main": "Evenements",
+  "tables": ["Evenements"],
+  "links": [],
+  "template": {
+    "type": "document",
+    "pdfName": "Flyer #Evenements.Nom",
+    "page": {
+      "format": "A6",
+      "orientation": "portrait",
+      "margins": [8, 8, 8, 8]
+    }
+  }
+}
