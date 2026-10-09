@@ -1187,7 +1187,7 @@ const I18n = (function () {
     // --- Barre flottante d'une bulle #Variable : actions (js/floating-toolbars.js:wireVariableFloatingToolbar) ---
     'varToolbar.condition': { fr: 'Condition d’affichage', en: 'Display condition' },
     'varToolbar.linked': { fr: 'Autres attributs de la même ligne', en: 'Other attributes of the same row' },
-    'varToolbar.linkedDisabled': { fr: 'Disponible pour une variable d’une autre table ou une colonne Référence', en: 'Available for a variable from another table or a Reference column' },
+    'varToolbar.linkedDisabled': { fr: 'Disponible pour une variable d’une autre table, une colonne Référence ou une colonne Liste de références', en: 'Available for a variable from another table, a Reference column or a Reference List column' },
     'varToolbar.loop': { fr: 'Boucle : répéter pour chaque ligne liée', en: 'Loop: repeat for each linked row' },
     'varToolbar.loopDisabled': { fr: 'Disponible pour une variable liée à plusieurs lignes', en: 'Available for a variable linked to several rows' },
     'varToolbar.loopNested': { fr: 'Déjà dans une zone répétée pour « {table} »', en: 'Already inside a zone repeated for “{table}”' },
@@ -1324,6 +1324,7 @@ const I18n = (function () {
     'varLinked.noFilterMatch': { fr: 'Aucune colonne ne correspond au filtre.', en: 'No column matches the filter.' },
     'varLinked.attachmentValue': { fr: '(pièce jointe)', en: '(attachment)' },
     'varLinked.subtitlePath': { fr: 'Ligne de « {table} » désignée par {path}. Les attributs insérés suivent ce chemin : aucun lien supplémentaire n’est créé.', en: 'Row of “{table}” pointed to by {path}. Inserted attributes follow this path: no extra link is created.' },
+    'varLinked.subtitleList': { fr: 'Lignes de « {table} » désignées par {path}. Un attribut s’écrit pour toutes, séparé par une virgule ; aucun lien n’est créé.', en: 'Rows of “{table}” pointed to by {path}. An attribute is written for all of them, comma-separated; no link is created.' },
     'varLinked.noteNoPathRow': { fr: '{path} est vide pour la ligne sélectionnée (n° {id}) : aucune valeur à afficher.', en: '{path} is empty for the selected row (#{id}): no values to show.' },
     'varLinked.descend': { fr: 'Voir les colonnes de « {table} » (via {column})', en: 'Show the columns of “{table}” (via {column})' },
     'varLinked.path': { fr: 'Chemin des références', en: 'Reference path' },

@@ -148,10 +148,11 @@ const Variables = (function () {
     }
 
     // La table que désigne la colonne Référence `column` de `table` (ou le chemin « Ref.Ref » qui y mène), null pour toute autre colonne : une liste de
-    // références désigne plusieurs lignes, on ne descend pas dedans. La destination de la flèche des listes de colonnes (js/search-select.js, `expand`)
-    // et d'« Autres attributs » (js/variable-linked-attrs.js).
+    // références désigne plusieurs lignes, la flèche n'en ouvre qu'une (`singleOnly`). La destination de la flèche des listes de colonnes
+    // (js/search-select.js, `expand`) et de celle d'« Autres attributs » (js/variable-linked-attrs.js) ; on arrive dans une liste de références par sa
+    // bulle, pas par une flèche.
     function referencedTable(table, column) {
-      const target = GristAPI.tableAtEndOf(table, String(column).split('.'));
+      const target = GristAPI.tableAtEndOf(table, String(column).split('.'), true);
       return target && GristAPI.getTables().indexOf(target) !== -1 ? target : null;
     }
 
@@ -610,10 +611,16 @@ const Variables = (function () {
     }
     return { zeroHidden, formatValue, listTexts };
   })();
-  const { unwrapRefValue, cellValue, rawRowOf, referencedRowId } = (function () {
+  const { unwrapRefValue, listItems, cellValue, rawRowOf, referencedRowId } = (function () {
     // La valeur d'une cellule et la ligne brute de la ligne courante
 
     const unwrapRefValue = v => (Array.isArray(v) ? v[1] : v);
+    // Les éléments d'une cellule liste en forme brute (['L', id, id…] ; vide : null ou rien) ; une valeur seule est une liste d'un élément.
+    function listItems(value) {
+      if (value === null || value === undefined || value === '') return [];
+      if (!Array.isArray(value)) return [value];
+      return value[0] === 'L' ? value.slice(1) : value.slice();
+    }
 
     // Valeur d'une cellule telle que Grist l'affiche, pour une ligne lue par fetchTable (autre table, export en lot, aperçu de la fenêtre de
     // condition) : la forme brute donne l'id de la ligne référencée pour une Référence (0 si vide) et ["L", …] pour une liste, là où grist.onRecord
@@ -654,7 +661,7 @@ const Variables = (function () {
       }
       return unwrapRefValue(record[column]);
     }
-    return { unwrapRefValue, cellValue, rawRowOf, referencedRowId };
+    return { unwrapRefValue, listItems, cellValue, rawRowOf, referencedRowId };
   })();
 
   const { ruleSourceValue, lowestRow, matchingRows, resolveLinkedRows } = (function () {
@@ -716,7 +723,8 @@ const Variables = (function () {
   // bulle, suit la colonne Référence Accompagnateur jusqu'à la ligne de l'annuaire qu'elle désigne, et lit Email sur cette ligne, comme
   // $Projet.Accompagnateur.Email dans une formule Grist. Aucune règle de liaison n'est ajoutée pour les tables traversées : le chemin lui-même dit
   // quelle ligne, et deux références vers la même table (Accompagnateur et Porteur vers l'annuaire) donnent chacune la leur. Une colonne ordinaire
-  // est un chemin sans maillon à suivre.
+  // est un chemin sans maillon à suivre. Une liste de références (« Membres.Email ») se suit aussi : elle désigne plusieurs lignes, et l'on lit
+  // Email sur chacune, dans l'ordre de la liste - une valeur par ligne, comme pour une table liée par une règle « match » (`multi`).
 
   const { resolveRows } = (function () {
     // Descendre de référence en référence
@@ -745,39 +753,48 @@ const Variables = (function () {
       return { rows: [linkedRow] };
     }
     // Un pas de plus : la ligne que désigne la colonne Référence `column` sur chacune des `rows` (null quand la cellule est vide ou que la ligne
-    // référencée n'existe plus). Rend { table, rows } : la table atteinte et une ligne (ou null) par ligne de départ, ou { error } quand `column` n'est
-    // pas une Référence.
+    // référencée n'existe plus). Rend { table, rows, many } : la table atteinte et une ligne (ou null) par ligne de départ, ou { error } quand `column` n'est
+    // pas une Référence. Pour une liste de références, `rows` regroupe les lignes que désignent toutes les lignes de départ, dans l'ordre de leurs listes (celles
+    // qui n'existent plus sont ignorées, une liste vide ne donne rien) et `many` est vrai : il n'y a plus une ligne par ligne de départ.
     async function followReference(table, column, rows, opts) {
       const reference = GristAPI.referenceOf(GristAPI.getColumnType(table, column));
-      if (!reference || reference.list) return { error: I18n.t('variables.error.notReference', { table, column }) };
-      if (!rows.some(Boolean)) return { table: reference.table, rows: rows.map(() => null) };
+      if (!reference) return { error: I18n.t('variables.error.notReference', { table, column }) };
+      if (!rows.some(Boolean)) return { table: reference.table, rows: reference.list ? [] : rows.map(() => null), many: reference.list };
       const fetchRows = (opts && opts.fetchRows) || GristAPI.fetchTableRows;
       const byId = new Map((await fetchRows(reference.table)).map(r => [r.id, r]));
-      return { table: reference.table, rows: rows.map(r => (r && byId.get(unwrapRefValue(r[column]))) || null) };
+      if (reference.list) {
+        const listed = [];
+        rows.forEach(r => { if (r) listItems(r[column]).forEach(id => { if (byId.has(id)) listed.push(byId.get(id)); }); });
+        return { table: reference.table, rows: listed, many: true };
+      }
+      return { table: reference.table, rows: rows.map(r => (r && byId.get(unwrapRefValue(r[column]))) || null), many: false };
     }
-    // Les lignes de la table où mène le chemin `hops` (suite de colonnes Référence) à partir de la ligne courante de `varTable` : { table, rows,
-    // multi } (une ligne, ou null si le chemin s'arrête sur une référence vide, par ligne de départ) ou { error }. Sans `hops`, les lignes de départ
-    // elles-mêmes. Partagé avec la fenêtre « Autres attributs » (js/variable-linked-attrs.js), qui montre les valeurs de chaque niveau du chemin.
+    // Les lignes de la table où mène le chemin `hops` (suite de colonnes Référence ou liste de références) à partir de la ligne courante de `varTable` :
+    // { table, rows, multi } (une ligne, ou null si le chemin s'arrête sur une référence vide, par ligne de départ ; toutes celles des listes quand le chemin en
+    // traverse une, `multi` vrai) ou { error }. Sans `hops`, les lignes de départ elles-mêmes. Partagé avec la fenêtre « Autres attributs »
+    // (js/variable-linked-attrs.js), qui montre les valeurs de chaque niveau du chemin.
     async function resolveRows(varTable, hops, currentTableId, record, opts) {
       if (!record) return { table: varTable, rows: [], multi: false };
       const base = await baseRows(varTable, currentTableId || GristAPI.getCurrentTableId(), record, opts);
       if (base.error) return { error: base.error };
       let table = varTable;
       let rows = base.rows;
+      let multi = !!base.multi;
       for (const hop of hops) {
         const step = await followReference(table, hop, rows, opts);
         if (step.error) return { error: step.error };
         ({ table, rows } = step);
+        multi = multi || step.many;
       }
-      return { table, rows, multi: !!base.multi };
+      return { table, rows, multi };
     }
     return { resolveRows };
   })();
   const { resolveRawValue, resolveVariableResult, resolveVariable, resolveListTexts } = (function () {
     // La valeur brute d'une variable, son texte et ses valeurs de liste
 
-    // La valeur de `column` lue au bout du chemin `hops` : { value }, { value: [...], multi: true } quand la règle de la table trouve plusieurs lignes,
-    // ou { error }.
+    // La valeur de `column` lue au bout du chemin `hops` : { value }, { value: [...], multi: true } quand la règle de la table trouve plusieurs lignes ou
+    // que le chemin traverse une liste de références (une valeur par ligne), ou { error }.
     async function resolvePathValue(varTable, hops, column, currentTableId, record, opts) {
       const found = await resolveRows(varTable, hops, currentTableId, record, opts);
       if (found.error) return { error: found.error };
@@ -805,8 +822,8 @@ const Variables = (function () {
     }
     // La valeur brute d'une #Variable, avant tout formatage (resolveAttachmentIds ne doit jamais passer par formatValue ni String) : { value }, ou
     // { error } (message déjà rédigé dans la langue de l'interface, clés 'variables.error.*' de js/i18n.js). Pour une table liée par une règle
-    // « match », `value` est un tableau (une valeur par ligne liée) et `multi` le signale : js/condition-rules.js:matches teste alors chaque ligne
-    // liée, sans confondre avec une ChoiceList, elle aussi un tableau.
+    // « match », ou un chemin qui traverse une liste de références, `value` est un tableau (une valeur par ligne liée) et `multi` le signale :
+    // js/condition-rules.js:matches teste alors chaque ligne liée, sans confondre avec une ChoiceList, elle aussi un tableau.
     async function resolveRawValue(varTable, varColumn, currentTableId, record, opts) {
       if (!record) return { value: null };
       const hops = String(varColumn).split('.');
@@ -1312,12 +1329,13 @@ const Variables = (function () {
 
   // Exporté pour d'autres modules : resolveRawValue (js/condition-rules.js évalue une condition sur la valeur brute, par le même chemin qu'une
   // #Variable) ; ensureLinkConfigured, editLinkRule, describeLinkVia, resolveLinkedRows, resolveRows, formatValue, cellValue (les fenêtres de
-  // condition et d'autres attributs, js/variable-condition.js et js/variable-linked-attrs.js) ; zeroHidden (la barre flottante d'une bulle nombre,
+  // condition et d'autres attributs, js/variable-condition.js et js/variable-linked-attrs.js) ; listItems (les éléments d'une cellule liste brute, que
+  // la boucle sur une liste de références, js/loop-rules.js, lit aussi) ; zeroHidden (la barre flottante d'une bulle nombre,
   // js/floating-toolbars.js, lit la même règle que le rendu) ; currentTables et prioritizeTables (le menu Image de la barre, js/main-toolbar.js,
   // classe ses colonnes comme la liste « # »).
   return {
     createExtension, createFieldExtension, resolveVariable, resolveVariableResult, resolveRawValue, resolveTextVariables, replaceTextVariables, findTextVariables, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar,
-    preferChipsTab, ensureLinkConfigured, editLinkRule, describeLinkVia, resolveLinkedRows, resolveRows, formatValue, listTexts, resolveListTexts, zeroHidden, cellValue, currentTables, prioritizeTables, columnSearchText, referencedTable, columnsBelow,
+    preferChipsTab, ensureLinkConfigured, editLinkRule, describeLinkVia, resolveLinkedRows, resolveRows, formatValue, listTexts, resolveListTexts, zeroHidden, listItems, cellValue, currentTables, prioritizeTables, columnSearchText, referencedTable, columnsBelow,
     resolveCalcResult, resolveCalc, badgeProblem, calcProblem, formulaErrorText,
   };
 })();

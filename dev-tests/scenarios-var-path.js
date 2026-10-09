@@ -250,13 +250,13 @@
 
   cases.push({
     id: 'varpath_last_column_gives_type_format_and_displayed_reference',
-    description: 'Le type de la dernière colonne du chemin décide du format (date) et une Référence au bout du chemin montre sa valeur affichée, jamais son id ; deux références de suite se suivent',
+    description: 'Le type de la dernière colonne du chemin décide du format (date) et une Référence au bout du chemin montre sa valeur affichée, jamais son id ; deux références de suite se suivent, et une liste de références se suit aussi (Membres.Email est du texte)',
     run: async (h) => {
       await seed(h);
       const types = ['Accompagnateur.Naissance', 'Accompagnateur.Service', 'Accompagnateur.Service.Nom', 'Membres.Email', 'Nom.Email', 'Accompagnateur.Inconnue']
         .map(c => GristAPI.getColumnType('VpProjet', c));
       const text = await readerText(`<p>${badgeHtml('VpProjet', 'Accompagnateur.Naissance')}|${badgeHtml('VpProjet', 'Accompagnateur.Service')}|${badgeHtml('VpProjet', 'Accompagnateur.Service.Nom')}</p>`);
-      const pass = JSON.stringify(types) === JSON.stringify(['Date', 'Ref:VpServices', 'Text', null, null, null]) && text === `${DATE_1990()}|Juridique|Juridique`;
+      const pass = JSON.stringify(types) === JSON.stringify(['Date', 'Ref:VpServices', 'Text', 'Text', null, null]) && text === `${DATE_1990()}|Juridique|Juridique`;
       return { pass, notes: JSON.stringify({ types, text, expectedDate: DATE_1990() }) };
     },
   });
@@ -576,7 +576,7 @@
 
   cases.push({
     id: 'varpath_availability_and_loop_source_of_paths',
-    description: 'Autres attributs reste grisé pour une colonne ordinaire de la page ou un chemin dont un maillon n’est pas une Référence ; la boucle sur une liste de références refuse un chemin de la table de la page',
+    description: 'Autres attributs reste grisé pour une colonne ordinaire de la page ou un chemin dont un maillon n’est pas une Référence, et n’est plus grisé pour une liste de références (seule, au bout d’un chemin ou au milieu) ; la boucle sur une liste de références refuse un chemin de la table de la page',
     run: async (h) => {
       await seed(h);
       const avail = attrs => VariableLinkedAttrs.isAvailable(attrs);
@@ -589,12 +589,183 @@
         pagePath: avail({ table: 'VpNotifications', column: 'Projet.Accompagnateur.Email' }),
         notAReferenceHop: avail({ table: 'VpProjet', column: 'Nom.Email' }),
         missingHop: avail({ table: 'VpProjet', column: 'Inconnue.Email' }),
+        otherList: avail({ table: 'VpProjet', column: 'Membres' }),
+        otherListHop: avail({ table: 'VpProjet', column: 'Membres.Email' }),
+        pageListPath: avail({ table: 'VpNotifications', column: 'Projet.Membres' }),
       };
       const loopOfPagePath = LoopRules.sourceFor({ table: 'VpNotifications', column: 'Projet.Membres' }, 'VpNotifications');
       const loopOfPageList = LoopRules.sourceFor({ table: 'VpProjet', column: 'Membres' }, 'VpProjet');
       const pass = JSON.stringify(got) === JSON.stringify({ pageColumn: false, pageReference: true, otherPlain: true, otherReference: true, otherPath: true, pagePath: true,
-        notAReferenceHop: false, missingHop: false }) && loopOfPagePath === null && !!loopOfPageList && loopOfPageList.table === 'VpAnnuaire';
+        notAReferenceHop: false, missingHop: false, otherList: true, otherListHop: true, pageListPath: true }) && loopOfPagePath === null && !!loopOfPageList && loopOfPageList.table === 'VpAnnuaire';
       return { pass, notes: JSON.stringify({ got, loopOfPagePath, loopOfPageList }) };
+    },
+  });
+
+  // --- Colonne Liste de références (retour d'Antoine du 09/10) : une liste de fiches de l'annuaire, posée dans le champ « À » d'un email ; au clic sur sa
+  // bulle l'icône « Autres attributs » était grisée, faute de pouvoir suivre plusieurs lignes à la fois. Le chemin #VpBinomes.Equipe.Email lit désormais la
+  // colonne sur chaque fiche de la liste, dans l'ordre de la liste : une valeur par fiche, jointes par une virgule (comme une table liée par une règle
+  // « plusieurs lignes »), et aucun lien n'est créé. VpBinomes.Equipe : ['L', 1, 3] pour le binôme 1 (Dupont Jean, Durand Paul), vide pour le binôme 2. ---
+  const THE_TEAM = 'jean.dupont@ex.fr, paul.durand@ex.fr';
+
+  cases.push({
+    id: 'varpath_list_of_references_gives_one_value_per_row_of_the_list',
+    description: '#VpBinomes.Equipe.Email (Equipe : liste de fiches de l’annuaire, colonne de la page) écrit l’email de chaque fiche, dans l’ordre de la liste, jointes par une virgule ; une liste vide n’écrit rien ; même lecture à l’export en lot ; la valeur brute est une valeur par fiche, sans règle de liaison',
+    run: async (h) => {
+      await seedPersons(h, 'VpBinomes', null);
+      const html = `<p>${badgeHtml('VpBinomes', 'Equipe.Email')}|${badgeHtml('VpBinomes', 'Equipe.Nom')}</p>`;
+      const reading = await readerText(html, 'VpBinomes');
+      const rows = await GristAPI.fetchTableRows('VpBinomes');
+      const batch = [];
+      for (const row of rows) batch.push(await previewText(html, row, 'VpBinomes'));
+      const raw = await Variables.resolveRawValue('VpBinomes', 'Equipe.Email', 'VpBinomes', GristAPI.getCurrentRecord());
+      const type = GristAPI.getColumnType('VpBinomes', 'Equipe.Email');
+      const rule = GristAPI.getLinkRule('VpRepertoire');
+      const both = `${THE_TEAM}|Dupont Jean, Durand Paul`;
+      const pass = reading === both && JSON.stringify(batch) === JSON.stringify([both, '|']) && raw.multi === true
+        && JSON.stringify(raw.value) === JSON.stringify(['jean.dupont@ex.fr', 'paul.durand@ex.fr']) && type === 'Text' && !rule;
+      return { pass, notes: JSON.stringify({ reading, batch, raw, type, rule }) };
+    },
+  });
+
+  cases.push({
+    id: 'varpath_list_of_a_linked_table_and_from_the_page_read_the_same_rows',
+    description: 'Une liste de références d’une table liée (#VpProjet.Membres.Email, liée par sa règle) et le même chemin depuis la table de la page (#VpNotifications.Projet.Membres.Email, sans règle) écrivent les mêmes adresses, à la lecture comme à l’export en lot ; un projet sans membre n’en écrit aucune ; une fiche disparue de l’annuaire est ignorée, sans message ni virgule en trop',
+    run: async (h) => {
+      await seed(h);
+      const linked = `<p>${badgeHtml('VpProjet', 'Membres.Email')}</p>`;
+      const fromPage = `<p>${badgeHtml('VpNotifications', 'Projet.Membres.Email')}</p>`;
+      const rows = await GristAPI.fetchTableRows('VpNotifications');
+      const readAll = async () => {
+        const out = { reading: [await readerText(linked), await readerText(fromPage)], linked: [], fromPage: [] };
+        for (const row of rows) { out.linked.push(await previewText(linked, row)); out.fromPage.push(await previewText(fromPage, row)); }
+        return out;
+      };
+      const before = await readAll();
+      // L'annuaire perd la fiche 8 : la liste de Projet Alpha ne désigne plus que la fiche 7.
+      window.__gristStub.setRows('VpAnnuaire', [
+        { id: 7, NomPrenom: 'Dupont Jean', Email: 'jean.dupont@ex.fr', Naissance: 631152000, Service: 3, gristHelper_Display: 'Juridique' },
+        { id: 9, NomPrenom: 'Durand Paul', Email: 'paul.durand@ex.fr', Naissance: 694224000, Service: 4, gristHelper_Display: 'Fiscal' },
+      ]);
+      const after = await readAll();
+      const both = 'jean.dupont@ex.fr, anne.martin@ex.fr';
+      const pass = JSON.stringify(before) === JSON.stringify({ reading: [both, both], linked: [both, '', 'paul.durand@ex.fr'], fromPage: [both, '', 'paul.durand@ex.fr'] })
+        && JSON.stringify(after) === JSON.stringify({ reading: ['jean.dupont@ex.fr', 'jean.dupont@ex.fr'], linked: ['jean.dupont@ex.fr', '', 'paul.durand@ex.fr'], fromPage: ['jean.dupont@ex.fr', '', 'paul.durand@ex.fr'] });
+      return { pass, notes: JSON.stringify({ before, after }) };
+    },
+  });
+
+  cases.push({
+    id: 'varpath_list_of_references_window_lists_the_rows_of_the_list',
+    description: 'La bulle #VpBinomes.Equipe n’est plus grisée pour « Autres attributs » : la fenêtre montre les colonnes de l’annuaire avec la valeur de toutes les fiches de la liste, à la suite ; « Insérer » pose #VpBinomes.Equipe.Email après la bulle, sans règle de liaison pour l’annuaire ; la phrase sous le titre dit « Lignes … désignées par » (et existe en anglais)',
+    run: async (h) => {
+      await seedPersons(h, 'VpBinomes', null);
+      Editor.setHTML(`<p>${badgeHtml('VpBinomes', 'Equipe')}</p>`);
+      const available = VariableLinkedAttrs.isAvailable({ table: 'VpBinomes', column: 'Equipe' });
+      const ed = await openWindow(h, 'VpBinomes', 'Equipe');
+      if (!modal()) return { pass: false, notes: `la fenêtre ne s’est pas ouverte (disponible : ${available})` };
+      const path = Variables.triggerChar() + 'VpBinomes.Equipe';
+      const opened = { title: title(), subtitle: subtitle(), columns: columns(), nom: valueOf('Nom'), email: valueOf('Email'), arrows: columns().filter(hasDescend) };
+      tick('Email');
+      insertButton().click();
+      await h.sleep(100);
+      const seq = keysAfter(ed);
+      const text = await readerText(Editor.getHTML(), 'VpBinomes');
+      const rule = GristAPI.getLinkRule('VpRepertoire');
+      const subtitleOf = lang => {
+        const previous = I18n.getLang();
+        try { I18n.setLang(lang); return I18n.t('varLinked.subtitleList', { table: 'VpRepertoire', path }); } finally { I18n.setLang(previous); }
+      };
+      const french = subtitleOf('fr');
+      const english = subtitleOf('en');
+      const pass = available && opened.title === I18n.t('varLinked.title', { table: 'VpRepertoire' }) && opened.subtitle === subtitleOf(I18n.getLang())
+        && french.startsWith('Lignes de « VpRepertoire » désignées par #VpBinomes.Equipe.') && english.startsWith('Rows of “VpRepertoire” pointed to by #VpBinomes.Equipe.')
+        && JSON.stringify(opened.columns) === JSON.stringify(['Nom', 'Email']) && opened.nom === 'Dupont Jean, Durand Paul' && opened.email === THE_TEAM && opened.arrows.length === 0
+        && JSON.stringify(seq) === JSON.stringify(['#VpBinomes.Equipe', ' ', '#VpBinomes.Equipe.Email']) && text === `Dupont Jean, Durand Paul ${THE_TEAM}` && !rule;
+      return { pass, notes: JSON.stringify({ available, opened, french, english, seq, text, rule }) };
+    },
+  });
+
+  cases.push({
+    id: 'varpath_list_of_references_replace_puts_the_path_in_the_bubble',
+    description: '« Remplacer » sur #VpBinomes.Equipe met #VpBinomes.Equipe.Email à la place de la bulle (une seule bulle, qui écrit l’email de toutes les fiches de la liste) et un seul Annuler rend la colonne ; sur un binôme dont la liste est vide la bulle n’écrit rien',
+    run: async (h) => {
+      await seedPersons(h, 'VpBinomes', null);
+      Editor.setHTML(`<p>${badgeHtml('VpBinomes', 'Equipe')}</p>`);
+      const ed = await openWindow(h, 'VpBinomes', 'Equipe');
+      tick('Email');
+      modal().querySelector('button.var-linked-replace').click();
+      await h.sleep(150);
+      const replaced = keysAfter(ed);
+      const text = await readerText(Editor.getHTML(), 'VpBinomes');
+      const empty = await previewText(Editor.getHTML(), (await GristAPI.fetchTableRows('VpBinomes'))[1], 'VpBinomes');
+      ed.commands.undo();
+      await h.sleep(100);
+      const undone = keysAfter(ed);
+      const rule = GristAPI.getLinkRule('VpRepertoire');
+      const pass = JSON.stringify(replaced) === JSON.stringify(['#VpBinomes.Equipe.Email']) && text === THE_TEAM && empty === '' && JSON.stringify(undone) === JSON.stringify(['#VpBinomes.Equipe']) && !rule;
+      return { pass, notes: JSON.stringify({ replaced, text, empty, undone, rule }) };
+    },
+  });
+
+  cases.push({
+    id: 'varpath_list_of_references_empty_list_says_so_in_the_window',
+    description: 'Sur une ligne dont la liste de références est vide, la fenêtre « Autres attributs » s’ouvre quand même et dit que la liste est vide pour la ligne sélectionnée, sans valeur ni message d’erreur',
+    run: async (h) => {
+      await seedPersons(h, 'VpBinomes', null);
+      window.__gristStub.fireRecord({ id: 2, Titre: 'Binôme 2', Demandeur: 'Durand Paul', Valideur: '', Lieu: 'Lyon' }, 'VpBinomes');
+      await h.sleep(50);
+      Editor.setHTML(`<p>${badgeHtml('VpBinomes', 'Equipe')}</p>`);
+      await openWindow(h, 'VpBinomes', 'Equipe');
+      if (!modal()) return { pass: false, notes: 'la fenêtre ne s’est pas ouverte' };
+      const note = modal().querySelector('.var-linked-note').textContent;
+      const wanted = I18n.t('varLinked.noteNoPathRow', { path: Variables.triggerChar() + 'VpBinomes.Equipe', id: 2 });
+      const values = columns().map(valueOf);
+      const pass = note.includes(wanted) && values.every(v => v === '') && !/ERREUR|ERROR/.test(modal().textContent);
+      return { pass, notes: JSON.stringify({ note, wanted, values }) };
+    },
+  });
+
+  cases.push({
+    id: 'varpath_list_of_references_keeps_following_references_after_the_list',
+    description: 'Dans la fenêtre d’une liste de références, une colonne Référence des fiches garde sa flèche (Service) et mène à la table suivante ; #VpNotifications.Projet.Membres.Service.Nom lit alors le service de chaque fiche qui en a un, sans erreur pour celles qui n’en ont pas',
+    run: async (h) => {
+      await seed(h, { noProjetRule: true });
+      Editor.setHTML(`<p>${badgeHtml('VpNotifications', 'Projet.Membres')}</p>`);
+      const ed = await openWindow(h, 'VpNotifications', 'Projet.Membres');
+      if (!modal()) return { pass: false, notes: 'la fenêtre ne s’est pas ouverte' };
+      const start = { title: title(), arrows: columns().filter(hasDescend), nomPrenom: valueOf('NomPrenom') };
+      await descend(h, 'Service');
+      const next = { title: title(), columns: columns(), nom: valueOf('Nom'), buttons: crumbs().buttons.length };
+      tick('Nom');
+      insertButton().click();
+      await h.sleep(100);
+      const seq = keysAfter(ed);
+      const rows = await GristAPI.fetchTableRows('VpNotifications');
+      const texts = [];
+      for (const row of rows) texts.push(await previewText(Editor.getHTML(), row));
+      const pass = start.title === I18n.t('varLinked.title', { table: 'VpAnnuaire' }) && JSON.stringify(start.arrows) === JSON.stringify(['Service']) && start.nomPrenom === 'Dupont Jean, Martin Anne'
+        && next.title === I18n.t('varLinked.title', { table: 'VpServices' }) && JSON.stringify(next.columns) === JSON.stringify(['Nom']) && next.nom === 'Juridique' && next.buttons >= 1
+        && JSON.stringify(seq) === JSON.stringify(['#VpNotifications.Projet.Membres', ' ', '#VpNotifications.Projet.Membres.Service.Nom'])
+        && texts[0].startsWith('Dupont Jean, Martin Anne Juridique') && texts[1] === ' ' && texts[2] === 'Durand Paul Fiscal' && texts.every(t => !/ERREUR|ERROR/.test(t));
+      return { pass, notes: JSON.stringify({ start, next, seq, texts }) };
+    },
+  });
+
+  cases.push({
+    id: 'varpath_list_of_references_in_a_text_field_gives_the_addresses_of_the_mailto',
+    description: 'Dans un champ texte de l’email (À), #VpBinomes.Equipe.Email se reconnaît comme une seule variable (une liste de références se suit comme une Référence, un point final reste du texte), se remplace par les adresses de la liste séparées par une virgule, et le lien mailto: les garde une à une ; une liste vide ne laisse rien',
+    run: async (h) => {
+      await seedPersons(h, 'VpBinomes', null);
+      const trigger = Variables.triggerChar();
+      const variable = `${trigger}VpBinomes.Equipe.Email`;
+      const found = Variables.findTextVariables(`Pour ${variable}.`);
+      const record = GristAPI.getCurrentRecord();
+      const resolved = await Variables.resolveTextVariables(variable, 'VpBinomes', record);
+      const emptyList = await Variables.resolveTextVariables(variable, 'VpBinomes', Object.assign({}, record, { id: 2 }));
+      const url = MailtoExport.buildMailtoUrl({ to: resolved, cc: '', bcc: '', subject: 'Sujet', bodyText: 'Corps' });
+      const pass = JSON.stringify(found) === JSON.stringify([{ start: 5, end: 5 + variable.length, table: 'VpBinomes', column: 'Equipe.Email' }])
+        && resolved === THE_TEAM && emptyList === '' && url === 'mailto:jean.dupont%40ex.fr,paul.durand%40ex.fr?subject=Sujet&body=Corps';
+      return { pass, notes: JSON.stringify({ found, resolved, emptyList, url }) };
     },
   });
 

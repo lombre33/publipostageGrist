@@ -76,6 +76,16 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   double-clic sur une ligne) pose la colonne comme la liste l'aurait fait ; « Annuler » et Échap ne changent
   rien. Un clic ailleurs dans le champ (sa flèche) ouvre la liste comme avant ; les macro-modèles et le filtre
   d'une boucle gardent leur champ et n'ont ni la bulle ni le bouton.
+- **« Autres attributs » d'une colonne Liste de références** : une colonne qui désigne plusieurs fiches (l'équipe
+  d'un dossier, des destinataires) posée dans le document, dans l'Objet ou dans « À » d'un e-mail n'a plus
+  l'icône « Autres attributs » grisée. La fenêtre montre les colonnes des fiches de la liste, avec la valeur de
+  chacune à la suite (séparées par une virgule), et « Insérer » ou « Remplacer » pose le chemin
+  (`#Dossiers.Equipe.Email`) qui écrit cette colonne pour toutes les fiches de la liste, dans l'ordre de la
+  liste : dans « À », « Créer l'email » reprend alors toutes les adresses. Une liste vide n'écrit rien, une fiche
+  disparue est ignorée, aucun lien entre tables n'est créé, et la flèche « › » d'une colonne Référence des fiches
+  continue le chemin. Le même chemin se lit dans la Lecture, le PDF, le Word, l'e-mail et l'export en lot, et
+  se tape dans les champs de l'e-mail (`#Dossiers.Equipe.Em` propose « Email »). Les flèches des listes de
+  colonnes et la boucle sur un chemin gardent leur règle : une liste de références ne s'y descend pas.
 - **Taille commune des lignes et des colonnes choisies d'une grille** : quand plusieurs lignes (ou colonnes)
   sont choisies par leurs numéros (leurs lettres), tirer le trait de l'une d'elles les règle toutes à la
   même hauteur (largeur), en direct puis en un seul Annuler, comme dans un tableur ; une ligne ne descend
@@ -381,6 +391,16 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   Reference. "Choose" (or a double-click on a row) sets the column the way the list would have; "Cancel" and
   Esc change nothing. Clicking elsewhere in the field (its arrow) opens the list as before; macro templates
   and a loop's filter keep their field and have neither the bubble nor the button.
+- **"Other attributes" of a Reference List column**: a column that points to several rows (a file's team, some
+  recipients) placed in the document, in the Subject or in an e-mail's "To" no longer has its "Other
+  attributes" icon greyed out. The window shows the columns of the rows in the list, with each one's value one
+  after the other (comma-separated), and "Insert" or "Replace" sets the path (`#Files.Team.Email`) that writes
+  that column for every row of the list, in the list's order: in "To", "Create the email" then takes all the
+  addresses. An empty list writes nothing, a row that has gone is skipped, no link between tables is created,
+  and the "›" arrow of a Reference column of the rows carries the path on. The same path reads in Reading mode,
+  the PDF, the Word, the e-mail and the batch export, and can be typed in the e-mail fields (`#Files.Team.Em`
+  suggests "Email"). The arrows of the column lists and a loop on a path keep their rule: a list of references
+  is not walked down there.
 - **Common size for the chosen rows and columns of a grid**: when several rows (or columns) are chosen by
   their numbers (letters), dragging the edge of one of them sets them all to the same height (width), live
   and then in a single Undo, as in a spreadsheet; a row never goes below the height of its text, the

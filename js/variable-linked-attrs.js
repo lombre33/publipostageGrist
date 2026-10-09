@@ -5,7 +5,10 @@
 //  - une variable d'une autre table (liée à son insertion ; sinon la fenêtre de choix de la clé s'ouvre d'abord, comme à l'insertion) ;
 //  - une colonne Référence de la table de la page (ex. #Dossiers.Responsable) : la table référencée est liée par cette colonne si elle ne l'est pas
 //    encore. Quand la page a plusieurs colonnes Référence vers cette même table (ex. Demandeur et Valideur vers l'Annuaire, deux personnes dans la
-//    même ligne), la fenêtre suit la colonne cliquée et pose des bulles en chemin (#Dossiers.Valideur.Email) : aucun lien n'est créé ni changé.
+//    même ligne), la fenêtre suit la colonne cliquée et pose des bulles en chemin (#Dossiers.Valideur.Email) : aucun lien n'est créé ni changé ;
+//  - une colonne Liste de références de la table de la page (ex. #Dossiers.Destinataires, des fiches de l'annuaire) : la fenêtre montre les colonnes
+//    de la table de la liste, avec leur valeur sur chacune de ses lignes à la suite, et pose des bulles en chemin (#Dossiers.Destinataires.Email) qui
+//    écrivent cette colonne pour toutes les lignes de la liste, séparées par une virgule. Aucun lien n'est créé : un lien ne suit qu'une ligne.
 // Grisée dans la barre flottante ailleurs (js/floating-toolbars.js:linkedAttrsAvailable, même règle que targetFor ci-dessous).
 //
 // Descente de référence en référence : une colonne Référence de la liste a une flèche qui ouvre les colonnes de la table qu'elle désigne, et sur une
@@ -56,20 +59,24 @@ const VariableLinkedAttrs = (function () {
   //    par table, n'en suivrait qu'une. La fenêtre part alors de la colonne cliquée, comme pour une bulle déjà en chemin (ci-dessous), sans créer de
   //    lien : #Dossiers.Valideur.Email lit la personne de Valideur, #Dossiers.Demandeur.Email celle de Demandeur ;
   //  - bulle de la table de la page déjà en chemin (ex. #Projet.Accompagnateur.Email dans un widget sur Projet) : ses niveaux, sans remonter aux
-  //    colonnes ordinaires de la page (`minHops` 1), qui ne sont pas des attributs d'une autre ligne.
-  // Null pour une colonne ordinaire de la page, une liste de références (plusieurs lignes) ou une référence vers la page elle-même.
+  //    colonnes ordinaires de la page (`minHops` 1), qui ne sont pas des attributs d'une autre ligne ;
+  //  - colonne Liste de références de la page (ex. #Dossiers.Destinataires) : la fenêtre part de la colonne cliquée, comme avec plusieurs Références vers
+  //    une même table, sans lien (un lien ne suit qu'une ligne) ; ses colonnes se lisent sur toutes les lignes de la liste. Une liste de références vers
+  //    la page elle-même se lit de la même façon.
+  // Null pour une colonne ordinaire de la page ou une référence simple vers la page elle-même.
   function targetFor(attrs) {
     if (!attrs.table || !attrs.column) return null;
     const currentTableId = GristAPI.getCurrentTableId();
     const parts = String(attrs.column).split('.');
     const end = GristAPI.resolveColumnPath(attrs.table, attrs.column);
     const ref = end && GristAPI.referenceOf(end.type);
-    const endIsRef = !!ref && !ref.list;
     const onPage = attrs.table === currentTableId;
     let found = null;
     if (!onPage || parts.length > 1) {
-      found = { base: attrs.table, hops: endIsRef ? parts : parts.slice(0, -1), refColumn: null, minHops: onPage ? 1 : 0 };
-    } else if (endIsRef && ref.table !== currentTableId) {
+      found = { base: attrs.table, hops: ref ? parts : parts.slice(0, -1), refColumn: null, minHops: onPage ? 1 : 0 };
+    } else if (ref && ref.list) {
+      found = { base: currentTableId, hops: [attrs.column], refColumn: null, minHops: 1 };
+    } else if (ref && ref.table !== currentTableId) {
       found = pageReferencesTo(ref.table) > 1
         ? { base: currentTableId, hops: [attrs.column], refColumn: null, minHops: 1 }
         : { base: ref.table, hops: [], refColumn: attrs.column, minHops: 0 };
@@ -210,6 +217,15 @@ const VariableLinkedAttrs = (function () {
   // bulles).
   const levelTable = () => GristAPI.tableAtEndOf(state.base, state.hops) || state.base;
   const pathText = () => Variables.triggerChar() + [state.base].concat(state.hops).join('.');
+  // Le chemin affiché traverse-t-il une liste de références ? Alors il désigne plusieurs lignes, et les valeurs de la fenêtre sont celles de toutes.
+  function crossesList() {
+    let table = state.base;
+    return state.hops.some(hop => {
+      const ref = GristAPI.referenceOf(GristAPI.getColumnType(table, hop));
+      if (ref) table = ref.table;
+      return !!ref && ref.list;
+    });
+  }
 
   // Une colonne du niveau affiché : sa case, son nom, sa valeur (posée par loadValues) et, pour une Référence, la flèche qui descend dans sa table.
   // `isCurrent` : la colonne de la bulle d'origine, montrée mais pas cochable.
@@ -330,7 +346,7 @@ const VariableLinkedAttrs = (function () {
 
   function subtitleText() {
     const { node, base, hops, refColumn } = state;
-    if (hops.length) return I18n.t('varLinked.subtitlePath', { table: levelTable(), path: pathText() });
+    if (hops.length) return I18n.t(crossesList() ? 'varLinked.subtitleList' : 'varLinked.subtitlePath', { table: levelTable(), path: pathText() });
     const currentTableId = GristAPI.getCurrentTableId();
     const badge = VariableModal.badgeText(node);
     const rule = GristAPI.getLinkRule(base);
