@@ -7,9 +7,9 @@
 // où `html` est le contenu en ligne déjà écrit (marques comprises) : le presse-papiers (`fromClipboardHtml`) et un classeur .xlsx
 // (js/grid-xlsx-import.js) y arrivent chacun de leur côté et sortent par le même `toHtml`, si bien qu'un tableau collé et un tableau importé ne
 // peuvent pas diverger.
-// Un document (hors grille) reçoit le même tableau, en cases : `toDocumentHtml` n'écrit que ce que le PDF et le Word d'un tableau de document lisent
-// (fusions, fond, texte, alignement horizontal, liens, largeur des colonnes) et ni traits case par case, ni alignement vertical, ni hauteur de ligne
-// : l'éditeur les montrerait, mais l'export ne les lit que pour une grille (une ligne qui porte `data-row-height` en fait une).
+// Un document (hors grille) reçoit le même tableau, en cases : `toDocumentHtml` n'écrit que fusions, fond, texte, alignement horizontal, liens et
+// largeur des colonnes, et ni traits case par case, ni alignement vertical, ni hauteur de ligne : un tableau de document porte ces réglages et ses
+// sorties les lisent, mais le collage ne les pose pas.
 // Pur : DOMParser seulement, ni éditeur ni ProseMirror. Script classique, portée globale comme TableBorders.
 const GridTable = (function () {
   const MAX_ROWS = 3000;

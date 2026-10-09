@@ -269,7 +269,7 @@ const HeaderFooterPreview = (function () {
   // Un tableau de premier niveau se coupe entre deux lignes (js/table-page-cut.js), comme le PDF (dontBreakRows) et le Word (cantSplit) : la coupure
   // porte `rowIndex` (rang de la première ligne de la nouvelle page) et `afterEl` est l'enveloppe du tableau. Les lignes qu'une case fusionnée sur
   // plusieurs lignes lie ne se séparent pas : elles passent ensemble à la page suivante, comme une seule ligne. Un tableau qu'on ne sait pas couper
-  // ainsi (ligne ou groupe de lignes plus haut que la page, grille...) suit la règle des blocs que l'export coupe. Une légende d'image ou de tableau
+  // ainsi (ligne ou groupe de lignes plus haut que la page...) suit la règle des blocs que l'export coupe. Une légende d'image ou de tableau
   // (js/caption.js) reste avec son bloc, jamais seule en haut de la page suivante : le bloc et ses légendes comptent pour un seul bloc. Pour un
   // tableau coupé entre deux lignes, la dernière ligne et la légende font ce bloc. Un bloc et sa légende qui ne tiennent pas ensemble dans une page
   // (Caption.fitsWithCaption) ne sont pas gardés ensemble. « Garder avec le suivant » (js/keep-with-next.js) : une suite de paragraphes gardés et le
@@ -904,7 +904,7 @@ const HeaderFooterPreview = (function () {
       // cette hauteur (clipRule, plus bas) pour que la réserve et les marges de la couture, transparentes, restent blanches. Le trait du haut de la
       // ligne, rogné avec le reste, est redessiné au bord bas de la couture (addTableSeamCaps).
       const restingPad = TablePageCut.restingPadTop(rowOpening);
-      marginRules.push(TablePageCut.padRule('#editor-container .tiptap > *:nth-child(' + nthChild + ') > table', brk.rowIndex, restingPad + seamHeight + remaining));
+      marginRules.push(TablePageCut.padRule('#editor-container .tiptap > *:nth-child(' + nthChild + ') > table', brk.rowIndex, restingPad + seamHeight + remaining, TablePageCut.fixedHeightPx(rowOpening), seamHeight + remaining));
       appliedRowPad.set(rowOpening, seamHeight + remaining);
       const stripTop = (afterBottomScreen - brk.afterEl.getBoundingClientRect().top) / zoom;
       if (!tableStrips.has(nthChild)) tableStrips.set(nthChild, []);

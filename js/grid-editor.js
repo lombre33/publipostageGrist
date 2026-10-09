@@ -138,8 +138,8 @@ const GridEditor = (function () {
     }
     // `verticalAlign` et les bords (`borderTop`...) : null pour toute case d'un tableau de document, donc aucun changement de rendu ni de HTML hors
     // grille ; dans une grille, 'top', 'middle' ou 'bottom' pour l'alignement. Lus dans `data-valign` et `data-border-*` seulement, la marque de
-    // l'enregistrement : le `vertical-align` ou le `border` d'un tableau collé d'Excel ou du web ne doit rien changer à un tableau de document (le PDF
-    // ne les applique que dans une grille, l'éditeur et la Lecture les montreraient seuls).
+    // l'enregistrement : le `vertical-align` ou le `border` d'un tableau collé d'Excel ou du web ne doit rien changer à un tableau de document (les
+    // sorties lisent ces marques sur tout tableau, grille ou document, et seule la marque dit ce que la personne a réglé).
     function withCellAttributes(CellExtension) {
       return CellExtension.extend({
         addAttributes() {

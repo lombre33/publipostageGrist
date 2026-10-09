@@ -143,6 +143,9 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   que Grist rend (la case « Choisir le modèle selon la ligne », les listes et la case de l'onglet Accès) au lieu
   de garder le réglage annulé, et fermer les Réglages ne le réécrit plus : Grist ne remontre plus
   « Enregistrer » pour un changement qu'on vient d'annuler.
+- **Largeur d'un tableau étroit dans le Word** : un tableau dont les colonnes, réglées à la main, tiennent en
+  moins de la largeur de la page garde cette largeur dans le Word, comme dans l'éditeur et le PDF ; il était
+  étiré à toute la page. Un tableau de la largeur de la page ne change pas.
 
 ## [1.0.0-beta.1] - 2026-10-05
 
@@ -368,6 +371,9 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   hands back (the "Pick the template from the row" box, the lists and the box of the Access tab) instead of
   keeping the cancelled one, and closing Settings no longer writes it again: Grist no longer shows "Save"
   again for a change that was just cancelled.
+- **Width of a narrow table in Word**: a table whose hand-set columns add up to less than the page width
+  keeps that width in Word, as in the editor and the PDF; it used to be stretched to the full page. A table
+  as wide as the page does not change.
 
 ## [1.0.0-beta.1] - 2026-10-05 (English)
 

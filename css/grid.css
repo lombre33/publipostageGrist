@@ -1,7 +1,7 @@
 /* Mode grille (js/grid-editor.js) : un modèle de type « grille » s'affiche sans feuille A4. Le tableau part du coin haut gauche, s'arrête à sa
    dernière ligne et sa dernière colonne et défile dans le panneau, entouré de ses bandeaux A, B, C / 1, 2, 3 collants au défilement. Tout est
    scopé à `.v2-grid-mode` (posé sur #editor-container par GridEditor.setActive) ou à `body.pp-grid-mode` : un document, un email ou un
-   macro-modèle n'en voient aucune règle. */
+   macro-modèle n'en voient aucune règle, sauf la dernière (le quadrillage masqué en Lecture, que porte aussi un tableau de document réglé). */
 
 :root { --grid-strip-w: 44px; --grid-strip-h: 22px; --grid-row-default: 28px; }
 
@@ -123,7 +123,8 @@ body.pp-grid-mode .v2-floating-toolbar .v2-floating-sep.v2-grid-only { display: 
 
 /* Lecture : le quadrillage de départ masqué (`data-grid-lines="off"` sur le tableau, GridEditor.setGridLinesShown) ne se dessine pas. Un trait posé
    par la personne (`border-*` en ligne, « auto » compris) reste : un style en ligne l'emporte sur cette règle, et `none` perd, en bordures
-   fusionnées, contre tout autre style. L'éditeur garde son quadrillage ; le PDF et l'Excel suivent la même marque (ExportCommon.cellBorderSides).
-   Réservé à une grille (`pp-grid-mode`) : la marque, venue d'un collage, ne change rien au tableau d'un document. */
-body.pp-grid-mode #reader-container table[data-grid-lines="off"] td,
-body.pp-grid-mode #reader-container table[data-grid-lines="off"] th { border-style: none; }
+   fusionnées, contre tout autre style. L'éditeur garde son quadrillage ; le PDF, le Word et l'Excel suivent la même marque
+   (ExportCommon.cellBorderSides). Valable pour tout tableau qui la porte, grille ou tableau d'un document : seul le réglage « Quadrillage » du menu
+   Bordures l'écrit, un tableau collé du web ou d'un tableur ne l'a jamais. */
+#reader-container table[data-grid-lines="off"] td,
+#reader-container table[data-grid-lines="off"] th { border-style: none; }

@@ -71,6 +71,10 @@ const PdfExport = (function () {
   // resolveNativePdfContent, lue par tableFrom pour savoir si les lignes d'un tableau tiennent dans une page. 0 tant qu'elle n'est pas posée : aucun
   // tableau n'est alors gardé en lignes entières.
   let tablePageHeightPt = 0;
+  // Le modèle que l'export en cours rend est une grille (js/grid-editor.js : son tableau est toute la feuille, sans page ni suite de texte) et non
+  // un document. Posé par prepareRecord à chaque export ; les tableaux d'un document (macro-modèle compris) ne sont jamais ceux d'une grille, même
+  // quand ils portent les mêmes réglages.
+  let exportsGridModel = false;
   // `left` et `top` d'une image en calque sont relatifs au padding de `.tiptap` (la marge de page de l'Aperçu A4), alors que l'hôte de mesure PDF
   // n'en a pas : soustrait une seule fois avant toute comparaison ou interpolation. Deux valeurs, les marges pouvant être asymétriques.
   let A4_PREVIEW_PADDING_TOP_PX = marginTopPt / PX_TO_PT;
@@ -787,18 +791,31 @@ const PdfExport = (function () {
     const columnCount = tableColumnCount(rawRows);
     const pads = cellPaddingsPt(rawRows);
     const widths = columnWidthsPt(node, columnCount, pads.left + pads.right);
-    const isGrid = rawRows.some(row => row.hasAttribute('data-row-height'));
+    // Les réglages de la grille (hauteur d'une ligne, alignement vertical, bords, quadrillage, saut de page avant une ligne) se lisent sur la marque
+    // de l'enregistrement de tout tableau, grille ou tableau de document : un tableau que personne n'a réglé n'en porte aucune et sort comme avant.
+    const hasRowHeights = rawRows.some(row => row.hasAttribute('data-row-height'));
+    const hasRowBreaks = rawRows.some(row => row.hasAttribute('data-page-break-before'));
+    const hasValign = rawRows.some(row => ExportCommon.cellsOf(row).some(cell => ExportCommon.cellVerticalAlign(cell)));
+    const rowAreasPt = hasRowHeights || hasValign ? gridRowAreasPt(rawRows, pads) : null;
     const t = {
-      node, rawRows, rootRect, inMainFlow, columnCount, pads, widths, isGrid,
+      node, rawRows, rootRect, inMainFlow, columnCount, pads, widths,
+      // La grille ouverte : pas de suite de texte ni de page, donc ni lignes de titres reprises, ni lignes gardées entières. Un tableau à sauts de page
+      // avant une ligne est coupé en morceaux (tableBlocksFrom) et n'est pas non plus rangé par groupes de lignes.
+      isGrid: hasRowHeights && exportsGridModel,
+      hasRowBreaks,
       layout: tableLayoutFor(pads),
-      // Bords réglés d'une grille (barre de la case, js/table-borders.js) : le trait de départ est celui du layout ; pdfmake dessine un trait dès que
-      // l'une des deux cases voisines le veut, et lit les bords d'une case fusionnée sur sa case de départ seule (les `{}` qui la prolongent n'y
-      // changent rien : vérifié en lisant les traits du PDF) - chaque case porte donc ses quatre côtés, et les cases voisines, d'accord avec elle sur
-      // le trait qu'elles se partagent, disent la même chose.
-      borderSides: isGrid ? ExportCommon.cellBorderSides(node) : null,
+      // Bords réglés (barre de la case, js/table-borders.js) : le trait de départ est celui du layout ; pdfmake dessine un trait dès que l'une des deux
+      // cases voisines le veut, et lit les bords d'une case fusionnée sur sa case de départ seule (les `{}` qui la prolongent n'y changent rien :
+      // vérifié en lisant les traits du PDF) - chaque case porte donc ses quatre côtés, et les cases voisines, d'accord avec elle sur le trait qu'elles
+      // se partagent, disent la même chose.
+      borderSides: ExportCommon.cellBorderSides(node),
       // Quadrillage de départ masqué : aucun trait pour une case que le HTML ne donne pas (ligne trop courte), les cases du HTML ont déjà leurs bords.
-      gridLinesHidden: isGrid && ExportCommon.gridLinesHidden(node),
-      rowAreasPt: isGrid ? gridRowAreasPt(rawRows, pads) : null,
+      gridLinesHidden: ExportCommon.gridLinesHidden(node),
+      // L'espace de contenu de chaque ligne, hauteur réglée ou mesurée : de quoi centrer ou descendre une case selon son alignement vertical.
+      rowAreasPt,
+      // `heights` de pdfmake : la hauteur de chaque ligne réglée, 'auto' (celle de son contenu) pour une ligne que personne n'a réglée. Une grille a
+      // toutes les siennes.
+      rowHeightsPt: hasRowHeights ? rowAreasPt.map((areaPt, i) => (rawRows[i].hasAttribute('data-row-height') ? areaPt : 'auto')) : null,
       // Images en calque imbriquées dans une case, portées sur `table._nestedPending`, remontées jusqu'à buildPdfContentFromRoot (même résolution que le
       // top-level).
       nestedPending: [],
@@ -858,12 +875,12 @@ const PdfExport = (function () {
     };
   }
 
-  // Grille (js/grid-editor.js) : chaque ligne porte sa hauteur en px (`data-row-height`, un minimum : un texte plus haut agrandit la ligne).
-  // `heights` de pdfmake est la hauteur du contenu de la ligne, sans les marges intérieures ni le trait, et un minimum lui aussi ; la hauteur mesurée
-  // dans l'hôte (qui compte la croissance due au texte) la complète.
+  // Grille (js/grid-editor.js) ou tableau de document réglé : une ligne peut porter sa hauteur en px (`data-row-height`, un minimum : un texte plus
+  // haut agrandit la ligne). `heights` de pdfmake est la hauteur du contenu de la ligne, sans les marges intérieures ni le trait, et un minimum lui
+  // aussi ; la hauteur mesurée dans l'hôte (qui compte la croissance due au texte, et celle d'une ligne sans réglage) la complète.
   function gridRowAreasPt(rawRows, pads) {
     return rawRows.map(row => {
-      const px = Math.max(parseFloat(row.getAttribute('data-row-height')) || 0, row.getBoundingClientRect().height);
+      const px = Math.max(ExportCommon.rowHeightPx(row) || 0, row.getBoundingClientRect().height);
       return Math.max(0, px * PX_TO_PT - pads.top - pads.bottom - TABLE_LINE_PT);
     });
   }
@@ -872,7 +889,7 @@ const PdfExport = (function () {
   // calculée sur la hauteur du texte mesurée dans l'hôte. Une case fusionnée sur plusieurs lignes se centre (ou se pose en bas) sur la hauteur de toutes
   // les lignes qu'elle couvre, traits et marges intérieures des lignes du milieu compris.
   function gridCellOffsetPt(t, cell, rowIndex, rowSpan) {
-    const valign = cell.style.verticalAlign;
+    const valign = ExportCommon.cellVerticalAlign(cell);
     if (valign !== 'middle' && valign !== 'bottom') return 0;
     let areaPt = (rowSpan - 1) * (t.pads.top + t.pads.bottom + TABLE_LINE_PT);
     for (let i = rowIndex; i < rowIndex + rowSpan; i += 1) areaPt += t.rowAreasPt[i];
@@ -933,8 +950,8 @@ const PdfExport = (function () {
     }
   }
 
-  // Une case pdfmake : son contenu, son alignement, son fond, ses bords (grille) et son décalage vertical (grille). Pas de margin propre à la case : le
-  // seul inset est layout.padding*, déjà compté dans la largeur utilisable.
+  // Une case pdfmake : son contenu, son alignement, son fond, ses bords et son décalage vertical (réglés avec la barre de la case : grille ou tableau de
+  // document). Pas de margin propre à la case : le seul inset est layout.padding*, déjà compté dans la largeur utilisable.
   function pdfTableCell(t, cell, cellWidthPt, rowIndex, rowSpan) {
     const content = safeCellContent(cell, cellWidthPt, t.rootRect);
     if (content._nestedPending) { t.nestedPending.push(...content._nestedPending); delete content._nestedPending; }
@@ -947,7 +964,7 @@ const PdfExport = (function () {
       pdfCell.border = edges.map(edge => edge !== TableBorders.NONE);
       pdfCell.borderColor = edges.map(edge => (edge && edge !== TableBorders.NONE ? edge : TABLE_BORDER_COLOR));
     }
-    if (t.isGrid) {
+    if (t.rowAreasPt) {
       const offsetPt = gridCellOffsetPt(t, cell, rowIndex, rowSpan);
       if (offsetPt > 0.25) pdfCell.margin = [0, (pdfCell.margin ? pdfCell.margin[1] : 0) + offsetPt, 0, 0];
     }
@@ -964,21 +981,26 @@ const PdfExport = (function () {
   //
   // Les lignes de titres (cases <th> en tête) reviennent en haut de chaque page où le tableau se poursuit, comme dans le Word (`tblHeader`). Pour un
   // tableau du texte courant seulement : celui d'une case, d'une liste, d'une citation, d'un encadré ou d'une colonne ne passe pas d'une page à l'autre,
-  // et une grille (js/grid-editor.js) n'a pas de feuille.
+  // et la grille ouverte (js/grid-editor.js) n'a pas de feuille. Un tableau réglé (hauteurs de lignes, bords, alignement) se range comme un autre ;
+  // un tableau à sauts de page avant une ligne est coupé en morceaux, pas rangé par groupes (tableBlocksFrom).
+  //
+  // `heights` : les hauteurs réglées, une par ligne du plan (null : aucune). Un groupe de lignes liées devient une seule ligne ('auto' : c'est le tableau
+  // qu'il contient qui porte les hauteurs de ses lignes).
   function pageBreakPlan(t, body) {
     const { node, rawRows } = t;
-    const inPageFlow = !t.isGrid && !!t.inMainFlow && !(node.parentElement && node.parentElement.closest(PAGE_FLOW_BREAKERS));
+    const inPageFlow = !t.isGrid && !t.hasRowBreaks && !!t.inMainFlow && !(node.parentElement && node.parentElement.closest(PAGE_FLOW_BREAKERS));
     const headerRows = inPageFlow ? ExportCommon.headerRowCount(rawRows) : 0;
     const cutRows = TablePageCut.rowsOf(node);
     const cutUnits = cutRows && cutRows.length === rawRows.length ? TablePageCut.unitsOf(cutRows) : null;
     const dontBreakRows = !!cutUnits && inPageFlow && rowsFitInPage(node, cutRows, cutUnits);
-    if (!dontBreakRows || !cutUnits.some(unit => unit.to - unit.from > 1)) return { rows: body, headerRows, dontBreakRows };
+    if (!dontBreakRows || !cutUnits.some(unit => unit.to - unit.from > 1)) return { rows: body, headerRows, dontBreakRows, heights: t.rowHeightsPt };
     return {
-      rows: cutUnits.map(unit => (unit.to - unit.from > 1 ? unitRowFrom(t, body.slice(unit.from, unit.to)) : body[unit.from])),
+      rows: cutUnits.map(unit => (unit.to - unit.from > 1 ? unitRowFrom(t, body.slice(unit.from, unit.to), unit) : body[unit.from])),
       // Les lignes de titres finissent toujours entre deux groupes (headerRowCount s'arrête avant une case fusionnée qui déborde) : leur nombre, en
       // groupes.
       headerRows: cutUnits.filter(unit => unit.to <= headerRows).length,
       dontBreakRows,
+      heights: t.rowHeightsPt ? cutUnits.map(unit => (unit.to - unit.from > 1 ? 'auto' : t.rowHeightsPt[unit.from])) : null,
     };
   }
 
@@ -998,30 +1020,34 @@ const PdfExport = (function () {
   }
 
   // Le tableau d'un groupe de lignes, à la place de ses lignes : le trait de son contour est celui de la ligne qui le porte (hLineWidth et vLineWidth
-  // à 0 aux bords), et ses marges négatives reprennent le rembourrage de cette ligne, que le tableau imbriqué n'a pas à compter.
-  function unitRowFrom(t, unitBody) {
+  // à 0 aux bords), et ses marges négatives reprennent le rembourrage de cette ligne, que le tableau imbriqué n'a pas à compter. Les hauteurs réglées
+  // des lignes du groupe (`unit` : { from, to } sur les lignes du tableau) passent au tableau qu'il contient.
+  function unitRowFrom(t, unitBody, unit) {
     const { layout, widths, pads, columnCount } = t;
     const inner = Object.assign({}, layout, {
       hLineWidth: (i, tableNode) => (i === 0 || i === tableNode.table.body.length ? 0 : layout.hLineWidth(i, tableNode)),
       vLineWidth: (i, tableNode) => (i === 0 || i === tableNode.table.widths.length ? 0 : layout.vLineWidth(i, tableNode)),
     });
-    const unitTable = { table: { widths: widths.slice(), body: unitBody }, layout: inner, margin: [-pads.left, -pads.top, -pads.right, -pads.bottom], colSpan: columnCount, border: [true, true, true, true], _unitTable: true };
+    const unitTable = {
+      table: Object.assign({ widths: widths.slice(), body: unitBody }, t.rowHeightsPt ? { heights: t.rowHeightsPt.slice(unit.from, unit.to) } : {}),
+      layout: inner, margin: [-pads.left, -pads.top, -pads.right, -pads.bottom], colSpan: columnCount, border: [true, true, true, true], _unitTable: true,
+    };
     return [unitTable].concat(Array.from({ length: columnCount - 1 }, () => ({})));
   }
 
   // Le tableau pdfmake : ses lignes (celles du corps, ou leurs groupes), sa mise en page, et ce qui remonte au contenu : les images en calque de ses
-  // cases, et, pour une grille, ses tranches de sauts de page (`data-page-break-before` sur une ligne : celles que tableBlocksFrom en fera).
+  // cases, et, pour un tableau à sauts de page avant une ligne (`data-page-break-before`), ses tranches (celles que tableBlocksFrom en fera).
   function pdfTableFrom(t, body, plan, pageBreakBefore) {
-    const { columnCount, widths, isGrid } = t;
+    const { columnCount, widths } = t;
     const emptyRow = [[{ text: ' ' }].concat(Array(Math.max(0, columnCount - 1)).fill({}))];
     const table = {
-      table: Object.assign({ headerRows: plan.headerRows, widths, body: plan.rows.length ? plan.rows : emptyRow }, isGrid && body.length ? { heights: t.rowAreasPt } : {}, plan.dontBreakRows ? { dontBreakRows: true } : {}),
+      table: Object.assign({ headerRows: plan.headerRows, widths, body: plan.rows.length ? plan.rows : emptyRow }, plan.heights && body.length ? { heights: plan.heights } : {}, plan.dontBreakRows ? { dontBreakRows: true } : {}),
       layout: t.layout,
       margin: [0, 5, 0, 5],
     };
     if (pageBreakBefore) table.pageBreak = 'before';
     if (t.nestedPending.length) table._nestedPending = t.nestedPending;
-    if (isGrid && body.length) {
+    if (t.hasRowBreaks && body.length) {
       const segments = ExportCommon.gridRowSegments(t.rawRows);
       if (segments.length > 1) table._rowSegments = segments;
     }
@@ -1049,10 +1075,11 @@ const PdfExport = (function () {
     if (!Caption.fitsWithCaption(tailPt, tablePageHeightPt)) return null;
     // Les lignes de titres restent au premier morceau (jamais toutes les lignes de lui : pdfmake ne reprend rien au-dessus de rien) ; la dernière
     // ligne, seule, n'en reprend pas.
-    const head = Object.assign({}, table, { table: Object.assign({}, table.table, { body: body.slice(0, -1), headerRows: Math.min(table.table.headerRows || 0, body.length - 2) }), margin: [0, 5, 0, 0] });
+    const heights = table.table.heights;
+    const head = Object.assign({}, table, { table: Object.assign({}, table.table, { body: body.slice(0, -1), headerRows: Math.min(table.table.headerRows || 0, body.length - 2) }, heights ? { heights: heights.slice(0, -1) } : {}), margin: [0, 5, 0, 0] });
     const baseLayout = table.layout;
     const tail = Object.assign({}, table, {
-      table: Object.assign({}, table.table, { body: body.slice(-1), headerRows: 0 }),
+      table: Object.assign({}, table.table, { body: body.slice(-1), headerRows: 0 }, heights ? { heights: heights.slice(-1) } : {}),
       margin: [0, 0, 0, 5],
       layout: Object.assign({}, baseLayout, { hLineWidth: (i, tableNode) => (i === 0 && tableNode.pageBreak !== 'before' ? 0 : baseLayout.hLineWidth(i, tableNode)) }),
       _keepTail: true,
@@ -1068,7 +1095,7 @@ const PdfExport = (function () {
     delete table._rowSegments;
     if (!segments) return (captionPt > 0 && splitTailRow(table, node, captionPt)) || [table];
     return segments.map(([from, to], i) => {
-      const piece = Object.assign({}, table, { table: Object.assign({}, table.table, { body: table.table.body.slice(from, to), heights: table.table.heights.slice(from, to) }) });
+      const piece = Object.assign({}, table, { table: Object.assign({}, table.table, { body: table.table.body.slice(from, to) }, table.table.heights ? { heights: table.table.heights.slice(from, to) } : {}) });
       if (i > 0) { piece.pageBreak = 'before'; delete piece._nestedPending; }
       return piece;
     });
@@ -3518,24 +3545,26 @@ const PdfExport = (function () {
   // Ce que l'export d'une ligne lit avant d'écrire : la fenêtre des images externes (js/external-images.js : une image d'un autre site est
   // téléchargée pour ce PDF, la fenêtre la liste et peut tout arrêter ; dans un lot, un site déjà accepté n'est pas redemandé et un refus arrête tout
   // le lot, cf. ExternalImages.beginRun), les marges et les bibliothèques, puis le HTML, le nom du fichier et l'en-tête et le pied résolus pour la
-  // ligne.
-  async function prepareRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt) {
+  // ligne. `gridModel` : le modèle de la ligne est une grille ; absent, c'est le modèle ouvert (un lot « Modèle selon la ligne » peut mêler les deux
+  // genres, js/main.js).
+  async function prepareRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel) {
     await ExternalImages.confirmExport(htmlContent, headerFooterData);
     setPageMarginsPt(marginsPt);
+    exportsGridModel = gridModel === undefined ? (typeof GridEditor !== 'undefined' && GridEditor.isActive()) : !!gridModel;
     await ensurePdfLibsLoaded();
     const { resolvedHtml, filename, resolvedHeaderFooterData } = await ExportCommon.resolveRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData);
     return { docDefinition: await buildNativePdfDocDefinition(resolvedHtml, filename, resolvedHeaderFooterData), filename };
   }
 
-  async function exportCurrentRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt) {
+  async function exportCurrentRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel) {
     if (!record) { alert(I18n.t('alert.noRecordForExport')); return; }
-    const { docDefinition, filename } = await prepareRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt);
+    const { docDefinition, filename } = await prepareRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel);
     window.pdfMake.createPdf(docDefinition).download((filename || 'publipostage') + '.pdf');
   }
 
   // Export PDF en lot (une ligne Grist -> un blob PDF, cf. js/main.js onExportBatch).
-  async function getNativePdfBlobForRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt) {
-    const { docDefinition, filename } = await prepareRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt);
+  async function getNativePdfBlobForRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel) {
+    const { docDefinition, filename } = await prepareRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel);
     const blob = await new Promise((resolve, reject) => {
       try { window.pdfMake.createPdf(docDefinition).getBlob(resolve); } catch (e) { reject(e); }
     });

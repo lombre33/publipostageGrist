@@ -342,6 +342,119 @@
       return { pass: fills.length === 9 && !bad.length, notes: bad.length ? bad.join(' | ') : JSON.stringify(fills.map(f => f.text + '=' + f.fill)) };
     });
 
+  // --- Réglages de la grille sur un tableau de document (tableau réglé : bords, alignement vertical, hauteurs de lignes, quadrillage masqué, largeur) ---
+  // Le Word lisait la couleur de fond et rien d'autre : un tableau de document réglé avec la barre de la case (js/grid-editor.js, marques `data-border-*`, `data-valign`,
+  // `data-row-height`, `data-grid-lines`) sortait avec les traits de départ de Word, tous les contenus en haut des cases et des lignes à la hauteur de leur texte.
+  const tableCellsOf = doc => Array.from(doc.getElementsByTagName('w:tc')).map(tc => ({
+    text: tc.textContent,
+    borders: (() => {
+      const el = tc.getElementsByTagName('w:tcBorders')[0];
+      if (!el) return null;
+      const out = {};
+      Array.from(el.children).forEach((b) => { out[b.nodeName.slice(2)] = b.getAttribute('w:val') + (b.getAttribute('w:val') === 'single' ? ':' + b.getAttribute('w:color') : ''); });
+      return out;
+    })(),
+    vAlign: (() => { const el = tc.getElementsByTagName('w:vAlign')[0]; return el ? el.getAttribute('w:val') : null; })(),
+  }));
+  // Les quatre bords d'une case sur une ligne, dans un ordre fixe (docx.js écrit haut, gauche, bas, droite).
+  const bordersLine = sides => ['top', 'right', 'bottom', 'left'].map(side => side + '=' + (sides ? sides[side] : null)).join(' ');
+  const tableLevelBorders = doc => {
+    const el = doc.getElementsByTagName('w:tblBorders')[0];
+    return el ? Array.from(el.children).map(b => b.nodeName.slice(2) + '=' + b.getAttribute('w:val')).join(',') : null;
+  };
+  const tableWidthTwip = doc => { const el = doc.getElementsByTagName('w:tblW')[0]; return el ? Number(el.getAttribute('w:w')) : null; };
+
+  add('docx_table_borders_set_with_the_cell_bar_come_out_in_word',
+    'Les bords réglés d\'un tableau (aucun trait, une couleur) sortent dans le <w:tcBorders> de chaque case, accordés d\'une case à sa voisine, et les traits du tableau sont coupés en dessous ; un tableau sans réglage garde les traits de départ de Word',
+    async (h) => {
+      const cell = (label, attrs) => '<td' + (attrs || '') + '><p>' + label + '</p></td>';
+      const set = '<table><tbody>'
+        + '<tr>' + cell('A', ' data-border-right="none"') + cell('B', ' data-border-bottom="#ff0000"') + '</tr>'
+        + '<tr>' + cell('C') + cell('D') + '</tr>'
+        + '</tbody></table>';
+      const plain = '<table><tbody><tr>' + cell('A') + cell('B') + '</tr><tr>' + cell('C') + cell('D') + '</tr></tbody></table>';
+      const withMarks = await h.exportDocxParts(set);
+      const without = await h.exportDocxParts(plain);
+      const cells = tableCellsOf(withMarks.doc);
+      const byText = Object.fromEntries(cells.map(c => [c.text, c.borders]));
+      const bad = [];
+      const expect = (label, got, wanted) => { if (bordersLine(got) !== bordersLine(wanted)) bad.push(label + ' : ' + bordersLine(got) + ' (attendu ' + bordersLine(wanted) + ')'); };
+      // A : trait de droite coupé, et B (sa voisine) dit la même chose pour son trait de gauche ; B : trait du bas rouge, D (en dessous) dit la même chose pour son trait du haut.
+      expect('A', byText.A, { top: 'single:auto', right: 'none', bottom: 'single:auto', left: 'single:auto' });
+      expect('B', byText.B, { top: 'single:auto', right: 'single:auto', bottom: 'single:FF0000', left: 'none' });
+      expect('C', byText.C, { top: 'single:auto', right: 'single:auto', bottom: 'single:auto', left: 'single:auto' });
+      expect('D', byText.D, { top: 'single:FF0000', right: 'single:auto', bottom: 'single:auto', left: 'single:auto' });
+      if (tableLevelBorders(withMarks.doc) !== 'top=none,left=none,bottom=none,right=none,insideH=none,insideV=none') bad.push('traits du tableau : ' + tableLevelBorders(withMarks.doc));
+      if (tableCellsOf(without.doc).some(c => c.borders)) bad.push('un tableau sans réglage ne doit porter aucun <w:tcBorders>');
+      if (tableLevelBorders(without.doc) !== 'top=single,left=single,bottom=single,right=single,insideH=single,insideV=single') bad.push('traits de départ : ' + tableLevelBorders(without.doc));
+      return { pass: cells.length === 4 && !bad.length, notes: bad.length ? bad.join(' | ') : JSON.stringify(byText) };
+    });
+
+  add('docx_table_grid_lines_off_hides_the_start_lines_in_word',
+    'Le quadrillage masqué d\'un tableau (`data-grid-lines="off"`) retire les traits de départ dans le Word, mais pas un trait posé exprès (« Par défaut » : auto, ou une couleur)',
+    async (h) => {
+      const html = '<table data-grid-lines="off"><tbody>'
+        + '<tr><td data-border-bottom="auto"><p>A</p></td><td><p>B</p></td></tr>'
+        + '<tr><td><p>C</p></td><td data-border-left="#00aa00"><p>D</p></td></tr>'
+        + '</tbody></table>';
+      const parts = await h.exportDocxParts(html);
+      const byText = Object.fromEntries(tableCellsOf(parts.doc).map(c => [c.text, c.borders]));
+      const none = 'none';
+      const bad = [];
+      const expect = (label, got, wanted) => { if (bordersLine(got) !== bordersLine(wanted)) bad.push(label + ' : ' + bordersLine(got) + ' (attendu ' + bordersLine(wanted) + ')'); };
+      // A garde son trait du bas (posé exprès), que C partage pour son trait du haut ; B et D n'ont que le trait de gauche de D (vert), que C partage pour son trait de droite.
+      expect('A', byText.A, { top: none, right: none, bottom: 'single:auto', left: none });
+      expect('B', byText.B, { top: none, right: none, bottom: none, left: none });
+      expect('C', byText.C, { top: 'single:auto', right: 'single:00AA00', bottom: none, left: none });
+      expect('D', byText.D, { top: none, right: none, bottom: none, left: 'single:00AA00' });
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : JSON.stringify(byText) };
+    });
+
+  add('docx_table_vertical_align_set_with_the_cell_bar_comes_out_in_word',
+    'L\'alignement vertical d\'une case (en haut, au milieu, en bas) devient le <w:vAlign> de sa cellule ; une case sans réglage n\'en a pas',
+    async (h) => {
+      const html = '<table><tbody><tr>'
+        + '<td data-valign="top"><p>H</p></td><td data-valign="middle"><p>M</p></td><td data-valign="bottom"><p>B</p></td><td><p>N</p></td><td data-valign="diagonal"><p>X</p></td>'
+        + '</tr></tbody></table>';
+      const parts = await h.exportDocxParts(html);
+      const got = Object.fromEntries(tableCellsOf(parts.doc).map(c => [c.text, c.vAlign]));
+      const pass = got.H === 'top' && got.M === 'center' && got.B === 'bottom' && got.N === null && got.X === null;
+      return { pass, notes: JSON.stringify(got) };
+    });
+
+  add('docx_table_row_height_set_with_the_grid_comes_out_as_a_minimum_in_word',
+    'La hauteur d\'une ligne (`data-row-height`, en px) devient un <w:trHeight> « au moins » en twips (15 par px) : une ligne que son texte agrandit grandit ; une ligne sans réglage n\'en a pas',
+    async (h) => {
+      const html = '<table><tbody>'
+        + '<tr data-row-height="40" style="height: 40px"><td><p>A</p></td></tr>'
+        + '<tr><td><p>B</p></td></tr>'
+        + '<tr data-row-height="100" style="height: 100px"><td><p>C</p></td></tr>'
+        + '</tbody></table>';
+      const parts = await h.exportDocxParts(html);
+      const heights = Array.from(parts.doc.getElementsByTagName('w:tr')).map((tr) => {
+        const el = tr.getElementsByTagName('w:trHeight')[0];
+        return el ? el.getAttribute('w:val') + ':' + el.getAttribute('w:hRule') : null;
+      });
+      const pass = JSON.stringify(heights) === JSON.stringify(['600:atLeast', null, '1500:atLeast']);
+      return { pass, notes: JSON.stringify(heights) };
+    });
+
+  add('docx_table_narrower_than_the_page_keeps_its_width_in_word',
+    'Un tableau dont les colonnes sont plus étroites que la page garde sa largeur dans le Word (Word l\'étirait à toute la page) ; un tableau de la largeur du texte reste à la largeur de la page',
+    async (h) => {
+      const narrow = '<table style="width: 240px;"><colgroup><col style="width: 120px;"><col style="width: 120px;"></colgroup><tbody><tr><td><p>A</p></td><td><p>B</p></td></tr></tbody></table>';
+      const full = '<table><tbody><tr><td><p>A</p></td><td><p>B</p></td></tr></tbody></table>';
+      const narrowParts = await h.exportDocxParts(narrow);
+      const fullParts = await h.exportDocxParts(full);
+      const section = h.docxSectionProps(fullParts.doc);
+      const pageText = section.widthTwip - section.margins.left - section.margins.right;
+      const narrowTable = h.docxTables(narrowParts.doc)[0];
+      const widthNarrow = tableWidthTwip(narrowParts.doc);
+      const sum = narrowTable.gridCols.reduce((a, b) => a + b, 0);
+      const pass = widthNarrow === sum && widthNarrow < pageText / 2 && tableWidthTwip(fullParts.doc) === pageText;
+      return { pass, notes: JSON.stringify({ narrow: widthNarrow, sumOfColumns: sum, full: tableWidthTwip(fullParts.doc), pageText }) };
+    });
+
   // --- Module 2 colonnes ---
   add('docx_two_columns_borderless_table',
     'Le module 2 colonnes est émulé par un tableau SANS bordures, avec une cellule vide au milieu qui reproduit la gouttière CSS',

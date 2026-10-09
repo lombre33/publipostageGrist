@@ -683,6 +683,55 @@
     },
   });
 
+  // Un lot PDF peut mêler grilles et documents (« Modèle selon la ligne ») : le tableau d'une ligne suit les règles du genre du modèle de SA ligne - la grille n'a ni titres repris ni lignes gardées
+  // entières -, pas celles du modèle ouvert à l'écran. On lit ce que le lot confie à pdfmake (le docDefinition de chaque ligne).
+  cases.push({
+    id: 'pdfbatch_row_template_pdf_table_follows_the_kind_of_the_row_model',
+    description: 'Lot PDF avec « Modèle selon la ligne » (modèle ouvert : un document) : le tableau du modèle Grille d\'une ligne garde les règles de la grille (ni titres repris, ni lignes gardées entières) et le même tableau dans le modèle Document d\'une autre ligne se range comme un document (titres repris, lignes gardées entières)',
+    run: async (h) => {
+      const rows = [{ id: 1, Nom: 'Alpha Durand', Genre: 'Grille' }, { id: 2, Nom: 'Bravo Martin', Genre: 'Tableau' }, { id: 3, Nom: 'Charlie Petit', Genre: 'Autre' }];
+      const rowAttrs = ' data-row-height="28" style="height: 28px"';
+      const tableOf = marker => '<table><tbody><tr' + rowAttrs + '><th><p>' + marker + '</p></th><th><p>Autre</p></th></tr><tr' + rowAttrs + '><td><p>un</p></td><td><p>deux</p></td></tr><tr' + rowAttrs + '><td><p>trois</p></td><td><p>quatre</p></td></tr></tbody></table>';
+      const saved = await seedRowTemplates(h, {
+        rows,
+        extra: () => [
+          { key: 'grille', nom: 'RT Grille', html: tableOf('MARQUEGRILLE'), filename: 'Grille_#' + TABLE + '.Nom', page: rtPage('portrait'), type: GridEditor.TYPE },
+          { key: 'tableau', nom: 'RT Tableau', html: tableOf('MARQUETABLEAU'), filename: 'Tableau_#' + TABLE + '.Nom', page: rtPage('portrait'), type: 'document' },
+        ],
+        rules: ids => [rtRule('Grille', ids.grille), rtRule('Tableau', ids.tableau)],
+      });
+      try {
+        await PdfExport.ensurePdfLibsLoaded();
+        const docs = [];
+        const original = window.pdfMake.createPdf;
+        window.pdfMake.createPdf = function (docDefinition) { docs.push(docDefinition); return original.apply(window.pdfMake, arguments); };
+        let res;
+        try { res = await clickExportRow(h, 'v2-btn-export-pdf-batch'); } finally { window.pdfMake.createPdf = original; }
+        const everyNode = (root, visit) => {
+          const seen = new Set();
+          const walk = (node) => { if (!node || typeof node !== 'object' || seen.has(node)) return; seen.add(node); visit(node); (Array.isArray(node) ? node : Object.values(node)).forEach(walk); };
+          walk(root);
+        };
+        const textOf = (root) => { let text = ''; everyNode(root, (node) => { if (typeof node.text === 'string') text += node.text; }); return text; };
+        const tableWith = (marker) => {
+          for (let i = docs.length - 1; i >= 0; i--) {
+            let found = null;
+            everyNode(docs[i].content, (node) => { if (!found && node.table && Array.isArray(node.table.body) && textOf(node.table.body).includes(marker)) found = node; });
+            if (found) return found;
+          }
+          return null;
+        };
+        const grid = tableWith('MARQUEGRILLE');
+        const document_ = tableWith('MARQUETABLEAU');
+        const facts = t => (t ? { headerRows: t.table.headerRows, dontBreakRows: !!t.table.dontBreakRows, heights: (t.table.heights || []).length } : null);
+        const pass = res.downloads.length === 1 && !!grid && !!document_
+          && grid.table.headerRows === 0 && !grid.table.dontBreakRows && (grid.table.heights || []).length === 3
+          && document_.table.headerRows === 1 && document_.table.dontBreakRows === true && (document_.table.heights || []).length === 3;
+        return { pass, notes: JSON.stringify({ grid: facts(grid), document: facts(document_), downloads: res.downloads.length, status: res.status }) };
+      } finally { await releaseRowTemplates(h, saved); }
+    },
+  });
+
   // --- Macro-modèle : les annexes se choisissent ligne par ligne (js/main.js:onExportBatch appelle MacroTemplates.buildConcatenatedHtml pour CHAQUE ligne, pas une
   // fois pour le lot). Un macro-modèle réel, chargé par le vrai <select> de modèles, sur trois lignes dont deux ont le même type. Placé en dernier : le macro
   // chargé laisse l'application en mode macro, restauré à la fin par le vrai bouton « Nouveau document » (resetEditor() ne touche pas à ce mode). ---

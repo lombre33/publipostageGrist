@@ -48,6 +48,11 @@
     }).join('');
   }
   const mergedTableHtml = (total, every, span, lines) => '<table><tbody>' + mergedRowsHtml(total, every, span, lines) + '</tbody></table>';
+  // Des lignes à hauteur réglée (`data-row-height`, la barre de la case ou la grille) : un minimum, plus haut que le texte (deux lignes de texte font ~50 px, la ligne en prend 70 : le reste de la
+  // ligne est de la place libre sous son texte).
+  const SET_ROW_PX = 70;
+  const setRowHtml = (i, lines) => '<tr data-row-height="' + SET_ROW_PX + '" style="height: ' + SET_ROW_PX + 'px">' + rowHtml(i, lines).replace(/^<tr>/, '').replace(/<\/tr>$/, '') + '</tr>';
+  const setHeightTableHtml = (rows, lines) => '<table><tbody>' + Array.from({ length: rows }, (_, i) => setRowHtml(i, lines)).join('') + '</tbody></table>';
   const HEADER_FOOTER = { enabled: true, differentFirstPage: false, header: { default: '<p>EN-TETE</p>', first: '' }, footer: { default: '<p>PIED DE PAGE</p>', first: '' } };
   const NO_HEADER_FOOTER = { enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } };
 
@@ -197,7 +202,7 @@
 
   cases.push({
     id: 'table_page_cut_rows_of_only_tables_that_can_be_cut',
-    description: 'rowsOf() : un tableau simple, ou dont des cases occupent plusieurs lignes, donne ses lignes ; une ligne seule, un en-tête, une ligne de grille ou une ligne en suggestion donnent null',
+    description: 'rowsOf() : un tableau simple, ou dont des cases occupent plusieurs lignes, ou dont des lignes ont une hauteur réglée (grille), donne ses lignes ; une ligne seule, un en-tête ou aucun tableau donnent null',
     run: async () => {
       const make = html => { const host = document.createElement('div'); host.innerHTML = html; return host.querySelector('table'); };
       const cells = n => '<td>a</td>'.repeat(n);
@@ -208,8 +213,9 @@
       const grid = make('<table><tbody><tr data-row-height="30">' + cells(2) + '</tr><tr data-row-height="30">' + cells(2) + '</tr></tbody></table>');
       const suggested = make('<table><tbody><tr>' + cells(2) + '</tr><ins><tr>' + cells(2) + '</tr></ins><tr>' + cells(2) + '</tr></tbody></table>');
       const got = { plain: (TablePageCut.rowsOf(plain) || []).length, oneRow: TablePageCut.rowsOf(oneRow), withHead: TablePageCut.rowsOf(withHead), merged: TablePageCut.rowsOf(merged), grid: TablePageCut.rowsOf(grid), none: TablePageCut.rowsOf(null) };
-      const pass = got.plain === 3 && got.oneRow === null && got.withHead === null && got.merged.length === 3 && got.grid === null && got.none === null;
-      return { pass, notes: JSON.stringify(Object.assign(got, { merged: (got.merged || []).length, suggestedRows: (TablePageCut.rowsOf(suggested) || []).length })) };
+      // Les lignes à hauteur réglée se coupent comme les autres (leur hauteur est gardée par padRule) : elles ne sortent plus de la règle.
+      const pass = got.plain === 3 && got.oneRow === null && got.withHead === null && got.merged.length === 3 && got.grid.length === 2 && got.none === null;
+      return { pass, notes: JSON.stringify(Object.assign(got, { merged: (got.merged || []).length, grid: (got.grid || []).length, suggestedRows: (TablePageCut.rowsOf(suggested) || []).length })) };
     },
   });
 
@@ -281,6 +287,40 @@
   });
 
   cases.push({
+    id: 'table_page_cut_pad_rule_grows_a_row_of_a_set_height_by_the_same_amount',
+    description: 'padRule() avec la hauteur réglée de la ligne : la ligne grandit de la descente (sa hauteur réglée en plus du rembourrage), sinon le reste de sa hauteur absorbe le rembourrage et ce qui la suit ne descend pas ; sans hauteur réglée la règle ne touche pas à la hauteur ; fixedHeightPx() lit `data-row-height` (rien si la marque manque, vaut 0 ou n\'est pas un nombre)',
+    run: async () => {
+      const host = document.createElement('div');
+      host.id = 'pcut-height-host';
+      host.innerHTML = '<table><tbody><tr><td>a</td></tr><tr data-row-height="80" style="height: 80px"><td>b</td></tr><tr><td>c</td></tr></tbody></table>';
+      const style = document.createElement('style');
+      document.body.append(host, style);
+      try {
+        const rows = Array.from(host.querySelectorAll('tr'));
+        // La place que prennent les deux premières lignes : le bas de la page, où le champ de test est posé, ne tient pas le haut du tableau en place.
+        const nextTop = () => rows[2].getBoundingClientRect().top - rows[0].getBoundingClientRect().top;
+        const rest = { height: rows[1].getBoundingClientRect().height, nextTop: nextTop() };
+        const fixed = TablePageCut.fixedHeightPx(rows[1]);
+        // Avant : le rembourrage de 60 px tient dans les 80 px de la ligne, qui ne grandit pas (c'est la défaillance que la hauteur réglée corrige).
+        style.textContent = TablePageCut.padRule('#pcut-height-host table', 1, 60);
+        const padded = { height: rows[1].getBoundingClientRect().height, nextTop: nextTop() };
+        style.textContent = TablePageCut.padRule('#pcut-height-host table', 1, 60, fixed, 40);
+        const grown = { height: rows[1].getBoundingClientRect().height, nextTop: nextTop() };
+        const marks = [null, '0', 'abc', '45'].map((value) => {
+          const tr = document.createElement('tr');
+          if (value !== null) tr.setAttribute('data-row-height', value);
+          return TablePageCut.fixedHeightPx(tr);
+        });
+        const pass = fixed === 80 && Math.abs(rest.height - 80) <= 1.5
+          && Math.abs(padded.nextTop - rest.nextTop) <= 1.5
+          && Math.abs(grown.height - (rest.height + 40)) <= 1.5 && Math.abs(grown.nextTop - (rest.nextTop + 40)) <= 1.5
+          && JSON.stringify(marks) === '[null,null,null,45]' && TablePageCut.fixedHeightPx(null) === null;
+        return { pass, notes: JSON.stringify({ fixed, rest, padded, grown, marks }) };
+      } finally { host.remove(); style.remove(); }
+    },
+  });
+
+  cases.push({
     id: 'table_page_cut_clip_rule_leaves_a_hole_per_strip',
     description: 'clipRule() : un grand rectangle moins une bande par coupure (path evenodd), la règle vise le bloc donné',
     run: async () => {
@@ -343,6 +383,34 @@
         const secondPage = rects.length > 1 ? (rects[1].top - rects[0].bottom) / z : NaN;
         const pass = rects.length === 2 && Math.abs(firstPage - bodyPx) <= 1.5 && Math.abs(secondPage - bodyPx) <= 1.5 && rep.reserve.every(r => r != null && r >= 0) && rep.textBelow && rep.overlaps === 0;
         return { pass, notes: JSON.stringify({ bodyPx: Math.round(bodyPx * 10) / 10, firstPage: Math.round(firstPage * 10) / 10, secondPage: Math.round(secondPage * 10) / 10, reserve: rep.reserve }) };
+      } finally { restoreEditor(); }
+    },
+  });
+
+  // Une ligne à hauteur réglée (barre de la case, grille) a de la place libre sous son texte : le rembourrage de la couture y tiendrait sans descendre la ligne suivante, et la page d'après
+  // commencerait trop haut. La ligne grandit donc de la descente (padRule, `fixedHeightPx`), et le tableau se coupe comme un autre.
+  cases.push({
+    id: 'table_page_cut_editor_rows_of_a_set_height_are_cut_between_rows_and_each_page_is_a_whole_sheet',
+    description: 'Éditeur : un tableau dont les lignes ont une hauteur réglée se coupe entre deux lignes comme un autre - la bande est sur le haut de la ligne qui ouvre la page, le texte juste dessous, rien de recouvert - et chaque page vaut la hauteur utile (la ligne descendue grandit de la descente, sa hauteur réglée comprise) ; document enregistré inchangé',
+    run: async (h) => {
+      try {
+        const k = 12;
+        const cut = await editorCutBefore(h, intro(1) + setHeightTableHtml(30, 2), k);
+        const tip = h.tiptap();
+        const z = zoomOf(tip);
+        const padTop = parseFloat(getComputedStyle(tip).paddingTop) || 0;
+        const margins = PageLayout.getMarginsPx();
+        const bodyPx = PageLayout.getPageSizePx().height - margins.top - margins.bottom;
+        const rects = Array.from(document.querySelectorAll('#editor-container .v2-page-band')).map(b => b.getBoundingClientRect());
+        const rep = editorReport();
+        const firstPage = rects.length ? (rects[0].top - tip.getBoundingClientRect().top) / z - padTop : NaN;
+        const secondPage = rects.length > 1 ? (rects[1].top - rects[0].bottom) / z : NaN;
+        const html = Editor.getHTML();
+        const heightRule = /tr:nth-child\(\d+\) \{ height: [\d.]+px !important; \}/.test(paginationStyle());
+        const pass = rects.length === 2 && rep.aligned[0] === k && rep.aligned[1] > k && rep.overlaps === 0 && rep.textBelow && rep.caps.every(n => n === 1) && hasRowRule() && heightRule
+          && Math.abs(firstPage - bodyPx) <= 1.5 && Math.abs(secondPage - bodyPx) <= 1.5 && rep.reserve.every(r => r != null && r >= 0)
+          && html === cut.savedHtml && !/padding-top/.test(html);
+        return { pass, notes: JSON.stringify({ bodyPx: Math.round(bodyPx * 10) / 10, firstPage: Math.round(firstPage * 10) / 10, secondPage: Math.round(secondPage * 10) / 10, heightRule, htmlUnchanged: html === cut.savedHtml, rep }) };
       } finally { restoreEditor(); }
     },
   });
@@ -684,6 +752,30 @@
   });
 
   cases.push({
+    id: 'table_page_cut_reader_rows_of_a_set_height_are_cut_between_rows_and_each_page_is_a_whole_sheet',
+    description: 'Lecture : même règle que l\'éditeur pour un tableau dont les lignes ont une hauteur réglée - coupé entre deux lignes, le texte juste sous la bande, rien de recouvert, chaque page vaut la hauteur utile (la ligne descendue grandit de la descente, sa hauteur réglée comprise)',
+    run: async (h) => {
+      try {
+        const k = 12;
+        await readerCutBefore(h, intro(1) + setHeightTableHtml(30, 2), k);
+        const content = document.querySelector('#reader-container .reader-content');
+        const z = zoomOf(content);
+        const padTop = parseFloat(getComputedStyle(content).paddingTop) || 0;
+        const margins = PageLayout.getMarginsPx();
+        const bodyPx = PageLayout.getPageSizePx().height - margins.top - margins.bottom;
+        const rects = Array.from(document.querySelectorAll('#reader-container .v2-page-band')).map(b => b.getBoundingClientRect());
+        const rep = readerReport();
+        const firstPage = rects.length ? (rects[0].top - content.getBoundingClientRect().top) / z - padTop : NaN;
+        const secondPage = rects.length > 1 ? (rects[1].top - rects[0].bottom) / z : NaN;
+        const heightRule = /tr:nth-child\(\d+\) \{ height: [\d.]+px !important; \}/.test(paginationReaderStyle());
+        const pass = rects.length === 2 && rep.aligned[0] === k && rep.aligned[1] > k && rep.overlaps === 0 && rep.textBelow && rep.caps.every(n => n === 1) && heightRule
+          && Math.abs(firstPage - bodyPx) <= 1.5 && Math.abs(secondPage - bodyPx) <= 1.5 && rep.reserve.every(r => r != null && r >= 0);
+        return { pass, notes: JSON.stringify({ bodyPx: Math.round(bodyPx * 10) / 10, firstPage: Math.round(firstPage * 10) / 10, secondPage: Math.round(secondPage * 10) / 10, heightRule, rep }) };
+      } finally { restoreEditor(); }
+    },
+  });
+
+  cases.push({
     id: 'table_page_cut_reader_with_header_and_footer',
     description: 'Lecture : avec un en-tête et un pied de page, chaque coupure de tableau tombe entre deux lignes, sans texte recouvert',
     run: async (h) => {
@@ -857,6 +949,27 @@
         }
         const pass = runs.every(r => r.split.length === 0 && r.pages >= 2 && r.tokens === 40 * 3) && somePageHasRoomLeft;
         return { pass, notes: JSON.stringify({ somePageHasRoomLeft, runs }) };
+      } finally { restoreEditor(); }
+    },
+  });
+
+  cases.push({
+    id: 'table_page_cut_pdf_rows_of_a_set_height_are_kept_whole_and_keep_their_height',
+    description: 'PDF (relu par pdf.js) : un tableau de document dont les lignes ont une hauteur réglée se range comme un autre - dontBreakRows posé, aucune ligne n\'a son texte sur deux pages quel que soit l\'endroit du saut (le texte d\'introduction est allongé d\'une ligne à la fois), tout le texte est là - et chaque ligne garde sa hauteur réglée (`heights`)',
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        PageLayout.setMarginsMm(null);
+        const total = 30;
+        const runs = [];
+        for (let introLines = 0; introLines <= 4; introLines++) {
+          const { result, gt, tokens } = await pdfOf(h, intro(introLines) + setHeightTableHtml(total, 2));
+          const outer = outerTablesOf(result.content)[0];
+          const heights = outer.table.heights || [];
+          runs.push({ introLines, pages: gt.pages.length, seen: new Set(tokens.map(t => t.row + ':' + t.line)).size, split: splitRows(tokens), dontBreakRows: !!outer.table.dontBreakRows, heights: heights.length, numeric: heights.every(v => typeof v === 'number') });
+        }
+        const pass = runs.every(r => r.pages >= 2 && r.seen === total * 2 && r.split.length === 0 && r.dontBreakRows && r.heights === total && r.numeric);
+        return { pass, notes: JSON.stringify({ runs }) };
       } finally { restoreEditor(); }
     },
   });
@@ -1191,8 +1304,9 @@
 
   cases.push({
     id: 'table_page_cut_pdf_title_rows_flag_follows_the_cells',
-    description: 'PDF : headerRows vaut le nombre de lignes du début dont TOUTES les cases sont des cases de titre (un titre fusionné sur deux lignes de titres : un seul groupe, donc une ligne du tableau) ; zéro sans cases de titre, avec une ligne mêlant titres et données, quand une case de titre fusionnée déborde sur une ligne de données, quand tout le tableau est fait de titres, dans une colonne et dans une grille',
+    description: 'PDF : headerRows vaut le nombre de lignes du début dont TOUTES les cases sont des cases de titre (un titre fusionné sur deux lignes de titres : un seul groupe, donc une ligne du tableau) ; zéro sans cases de titre, avec une ligne mêlant titres et données, quand une case de titre fusionnée déborde sur une ligne de données, quand tout le tableau est fait de titres, dans une colonne, dans un tableau de document dont les lignes ont une hauteur réglée (même règle que les autres) et dans le modèle Grille (aucune ligne de titres)',
     run: async (h) => {
+      const realActive = GridEditor.isActive;
       try {
         await h.resetEditor();
         PageLayout.setMarginsMm(null);
@@ -1209,13 +1323,18 @@
         const grid = '<table><tbody><tr data-row-height="30"><th><p>T</p></th><th><p>U</p></th></tr><tr data-row-height="30"><td><p>1</p></td><td><p>2</p></td></tr><tr data-row-height="30"><td><p>3</p></td><td><p>4</p></td></tr></tbody></table>';
         const got = {
           plain: await flagOf(tableHtml(8, 1)), one: await flagOf(titledTableHtml(8, 1, 1)), two: await flagOf(titledTableHtml(8, 1, 2)),
-          mixed: await flagOf(mixed), spanning: await flagOf(spanning), spanningTitles: await flagOf(spanningTitles), allTitles: await flagOf(allTitles), inColumn: await flagOf(inColumn), grid: await flagOf(grid),
+          mixed: await flagOf(mixed), spanning: await flagOf(spanning), spanningTitles: await flagOf(spanningTitles), allTitles: await flagOf(allTitles), inColumn: await flagOf(inColumn),
+          heights: await flagOf(grid),
         };
+        // Le même HTML dans le modèle Grille : la grille n'a pas de ligne de titres (ses lignes ne se répètent pas), la discipline est celle du modèle ouvert.
+        GridEditor.isActive = () => true;
+        try { got.grid = await flagOf(grid); } finally { GridEditor.isActive = realActive; }
         // Un titre fusionné sur les deux lignes de titres : les deux lignes sont un seul groupe, donc UNE ligne du tableau.
         const pass = JSON.stringify(got.plain) === '[0]' && JSON.stringify(got.one) === '[1]' && JSON.stringify(got.two) === '[2]' && JSON.stringify(got.mixed) === '[0]'
-          && JSON.stringify(got.spanning) === '[0]' && JSON.stringify(got.spanningTitles) === '[1]' && JSON.stringify(got.allTitles) === '[0]' && !!got.inColumn && got.inColumn.every(n => n === 0) && JSON.stringify(got.grid) === '[0]';
+          && JSON.stringify(got.spanning) === '[0]' && JSON.stringify(got.spanningTitles) === '[1]' && JSON.stringify(got.allTitles) === '[0]' && !!got.inColumn && got.inColumn.every(n => n === 0)
+          && JSON.stringify(got.heights) === '[1]' && JSON.stringify(got.grid) === '[0]';
         return { pass, notes: JSON.stringify(got) };
-      } finally { restoreEditor(); }
+      } finally { GridEditor.isActive = realActive; restoreEditor(); }
     },
   });
 

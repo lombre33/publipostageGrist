@@ -18,14 +18,15 @@ const TablePageCut = (function () {
   // alors un bloc d'une pièce) :
   //  - un seul <tbody>, sans <thead> ni <tfoot> : ce que l'éditeur et getHTML() produisent ;
   //  - toutes ses lignes sont des <tr> (une ligne proposée en suivi des modifications est enveloppée dans un <ins> ou un <del>) ;
-  //  - pas une grille (js/grid-editor.js) : ses lignes portent leur hauteur et la grille n'a pas de feuille A4 ;
   //  - au moins deux lignes : un tableau d'une ligne n'a aucun endroit où se couper.
+  // Une ligne à hauteur réglée (`data-row-height`, js/grid-editor.js) se coupe comme une autre : sa hauteur est un minimum que `measure` lit sur le
+  // rendu. La grille ouverte n'a pas de feuille A4 : ni l'aperçu ni la Lecture ne la découpent, et le PDF la range lui-même (js/pdf-export.js).
   function rowsOf(table) {
     if (!table || table.tagName !== 'TABLE') return null;
     const sections = Array.from(table.children).filter(child => /^(THEAD|TBODY|TFOOT)$/.test(child.tagName));
     if (sections.length !== 1 || sections[0].tagName !== 'TBODY') return null;
     const rows = Array.from(sections[0].children);
-    if (rows.length < 2 || rows.some(row => row.tagName !== 'TR' || row.hasAttribute('data-row-height'))) return null;
+    if (rows.length < 2 || rows.some(row => row.tagName !== 'TR')) return null;
     return rows;
   }
 
@@ -110,9 +111,20 @@ const TablePageCut = (function () {
   // haut de la ligne, recouvre exactement ce rembourrage. `tableSelector` désigne le <table> (il est à une profondeur connue de chaque aperçu). Les
   // cases d'une colonne proposée en suivi sont enveloppées dans un <ins>/<del>/<span> (css/track-changes.css) : elles sont visées aussi.
   // `!important` : un style en ligne sur une case ne doit pas l'annuler.
-  function padRule(tableSelector, rowIndex, padPx) {
+  //
+  // Une ligne à hauteur réglée (`fixedHeightPx`, cf. fixedHeightPx : un minimum que son <tr> porte en ligne) ne grandit du rembourrage que s'il dépasse
+  // la place que sa hauteur lui laisse : elle ne descendrait pas ce qui la suit de toute la descente. Sa hauteur réglée grandit donc elle aussi de
+  // `extraPx`, la descente (le rembourrage moins celui de la ligne au repos).
+  function padRule(tableSelector, rowIndex, padPx, fixedHeightPx, extraPx) {
     const row = tableSelector + ' > tbody > tr:nth-child(' + (rowIndex + 1) + ')';
-    return row + ' > :is(td, th), ' + row + ' > :is(ins, del, span) > :is(td, th) { padding-top: ' + padPx + 'px !important; }';
+    const cells = row + ' > :is(td, th), ' + row + ' > :is(ins, del, span) > :is(td, th) { padding-top: ' + padPx + 'px !important; }';
+    return fixedHeightPx > 0 ? cells + ' ' + row + ' { height: ' + (fixedHeightPx + (extraPx || 0)) + 'px !important; }' : cells;
+  }
+
+  // La hauteur réglée d'une ligne (`data-row-height`, en px), null quand personne n'en a réglé : elle a la hauteur de son texte.
+  function fixedHeightPx(row) {
+    const px = row ? parseFloat(row.getAttribute('data-row-height')) : NaN;
+    return px > 0 ? px : null;
   }
 
   // Règle CSS qui rogne un tableau sur les bandes `strips` ([{ top, bottom }], pixels de mise en page depuis le haut du bloc que vise
@@ -134,5 +146,5 @@ const TablePageCut = (function () {
     return isFinite(pad) ? pad : 4;
   }
 
-  return { MAX_ROW_RATIO, rowsOf, unitsOf, rowsFit, measure, plan, padRule, clipRule, restingPadTop };
+  return { MAX_ROW_RATIO, rowsOf, unitsOf, rowsFit, measure, plan, padRule, fixedHeightPx, clipRule, restingPadTop };
 })();

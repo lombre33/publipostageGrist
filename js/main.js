@@ -1586,7 +1586,8 @@
   const PDF_BATCH = {
     label: 'PDF', loading: 'status.loadingPdfLibs', loadError: 'status.pdfLibsLoadError', progress: 'status.batchExportProgress', noFile: 'status.exportError',
     engines: ['pdf'], margins: () => PageLayout.getMarginsPt(),
-    renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins) => PdfExport.getNativePdfBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, margins),
+    // Le PDF d'une ligne sait si son modèle est une grille (un lot « Modèle selon la ligne » peut mêler grilles et documents).
+    renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins, _pageOptions, typeModele) => PdfExport.getNativePdfBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, margins, GridEditor.isGridType(typeModele)),
   };
   const BATCH_EXPORTS = {
     pdfZip: Object.assign({}, PDF_BATCH, {
@@ -1769,7 +1770,7 @@
         finishing: 'status.xlsxAssembling',
       };
     }
-    const render = doc => cfg.renderRow(doc.html, tableId, doc.row, doc.source.filenameTemplate, doc.headerFooterData, doc.source.margins, doc.source.pageOptions);
+    const render = doc => cfg.renderRow(doc.html, tableId, doc.row, doc.source.filenameTemplate, doc.headerFooterData, doc.source.margins, doc.source.pageOptions, doc.source.typeModele);
     if (cfg.merged) {
       const pdf = await (cfg.sheets ? PdfMerge.createSheets(tableId, sheetSetup.layout) : PdfMerge.create(tableId));
       return {

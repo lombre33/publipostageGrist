@@ -337,7 +337,8 @@ window.TestHelpers = (function () {
   // `marginsPt` (optionnel) : les marges du modèle courant, telles que js/main.js les passe en usage réel (PageLayout.getMarginsPt()). Omis, l'export
   // retombe sur 28pt partout - c'est ce que font tous les scénarios qui ne testent pas les marges, et ça doit le rester.
   // `source` (optionnel) : { tableId, record } pour résoudre les #Variable avec un vrai enregistrement ; omis, l'enregistrement est vide et les bulles restent telles quelles.
-  async function exportPdfContent(html, headerFooterData, marginsPt, source) {
+  // `gridModel` (optionnel) : le genre du modèle de la ligne, comme un lot « Modèle selon la ligne » le dit à l'export (vrai : une grille, faux : un document) ; omis, c'est le modèle ouvert.
+  async function exportPdfContent(html, headerFooterData, marginsPt, source, gridModel) {
     await PdfExport.ensurePdfLibsLoaded();
     let lastContent = null;
     const gens = [];
@@ -352,7 +353,7 @@ window.TestHelpers = (function () {
     let error = null;
     let blob = null;
     try {
-      const result = await PdfExport.getNativePdfBlobForRecord(html, source ? source.tableId : null, source ? source.record : {}, '', headerFooterData || null, marginsPt || undefined);
+      const result = await PdfExport.getNativePdfBlobForRecord(html, source ? source.tableId : null, source ? source.record : {}, '', headerFooterData || null, marginsPt || undefined, gridModel);
       blob = result.blob;
     } catch (e) {
       error = e;

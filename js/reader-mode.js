@@ -393,7 +393,7 @@ const ReaderMode = (function () {
       // ni les traits verticaux des cases. Le trait du haut de la ligne, rogné avec le reste, est redessiné au bord bas de la bande
       // (css/editor-v2.css).
       const restingPad = TablePageCut.restingPadTop(rowOpening);
-      marginRules.push(TablePageCut.padRule('#reader-container .reader-content > *:nth-child(' + (offset.afterIndex + 1) + ')', offset.rowIndex, restingPad + seamHeight + remaining));
+      marginRules.push(TablePageCut.padRule('#reader-container .reader-content > *:nth-child(' + (offset.afterIndex + 1) + ')', offset.rowIndex, restingPad + seamHeight + remaining, TablePageCut.fixedHeightPx(rowOpening), seamHeight + remaining));
       const stripTop = (afterBottomScreen - el.getBoundingClientRect().top) / zoom;
       if (!tableStrips.has(offset.afterIndex)) tableStrips.set(offset.afterIndex, []);
       tableStrips.get(offset.afterIndex).push({ top: stripTop + 1, bottom: stripTop + remaining + seamHeight });

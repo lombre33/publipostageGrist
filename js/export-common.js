@@ -224,15 +224,33 @@ const ExportCommon = (function () {
     };
   }
 
-  // Le quadrillage de départ d'une grille est-il masqué ? (`data-grid-lines="off"` sur le tableau, js/grid-editor.js : la Lecture, le PDF et l'Excel
-  // le lisent au même endroit.)
+  // Le quadrillage de départ d'une grille est-il masqué ? (`data-grid-lines="off"` sur le tableau, js/grid-editor.js : la Lecture, le PDF, le Word et
+  // l'Excel le lisent au même endroit.)
   function gridLinesHidden(table) { return table.getAttribute('data-grid-lines') === 'off'; }
 
-  // Les bords de chaque case d'un tableau de grille, tels que l'éditeur les montre (js/table-borders.js : un trait que deux cases se partagent n'a
-  // qu'une valeur, quoi que dise le HTML) : une Map case -> { top, right, bottom, left } (null = trait fin gris de départ, 'none' = pas de trait,
-  // '#rrggbb'), ce qu'il faut dessiner : quand le quadrillage est masqué, le trait de départ que la personne n'a pas posé devient « pas de trait »
-  // (TableBorders.drawn). Lue sur les `data-border-*`, jamais sur le style calculé, qui suit le thème sombre. null quand aucune case ne porte de bord
-  // et que le quadrillage est montré (tout tableau de document, la plupart des grilles) : le PDF et l'Excel gardent alors leur trait de départ.
+  // La hauteur minimale d'une ligne en px (`data-row-height`, js/grid-editor.js) ; null pour une ligne que personne n'a réglée : elle a la hauteur de
+  // son texte. Lue sur la marque de l'enregistrement, comme l'alignement vertical d'une case : le PDF et le Word s'accordent sur ce qu'ils lisent.
+  function rowHeightPx(tr) {
+    const px = parseFloat(tr.getAttribute('data-row-height'));
+    return px > 0 ? px : null;
+  }
+
+  // L'alignement vertical d'une case : 'top', 'middle' ou 'bottom' (`data-valign`, js/grid-editor.js, ou son `vertical-align` en ligne), null quand
+  // personne n'en a posé : la case reste en haut, comme dans l'éditeur.
+  const VALIGNS = ['top', 'middle', 'bottom'];
+  function cellVerticalAlign(cell) {
+    const mark = String(cell.getAttribute('data-valign') || '').toLowerCase();
+    if (VALIGNS.includes(mark)) return mark;
+    const inline = String(cell.style.verticalAlign || '').toLowerCase();
+    return VALIGNS.includes(inline) ? inline : null;
+  }
+
+  // Les bords de chaque case d'un tableau réglé (grille ou tableau de document), tels que l'éditeur les montre (js/table-borders.js : un trait que deux
+  // cases se partagent n'a qu'une valeur, quoi que dise le HTML) : une Map case -> { top, right, bottom, left } (null = trait fin gris de départ,
+  // 'none' = pas de trait, '#rrggbb'), ce qu'il faut dessiner : quand le quadrillage est masqué, le trait de départ que la personne n'a pas posé devient
+  // « pas de trait » (TableBorders.drawn). Lue sur les `data-border-*`, jamais sur le style calculé, qui suit le thème sombre. null quand aucune case
+  // ne porte de bord et que le quadrillage est montré (tout tableau que personne n'a réglé, la plupart des grilles) : le PDF, le Word et l'Excel
+  // gardent alors leur trait de départ.
   function cellBorderSides(table) {
     const rows = tableRows(table);
     const { placed, width } = placeCells(rows);
@@ -295,6 +313,6 @@ const ExportCommon = (function () {
   function unreadImageCount() { return unreadImages.size; }
   function resetUnreadImages() { unreadImages.clear(); }
 
-  return { EDITOR_STYLE, hexOf, cssColorHex, scriptRefusal, loadScriptOnce, ensureJsZipLoaded, downloadBlob, attachMeasureHost, tableRows, cellsOf, spanOf, placeCells, measuredColumnWidthsPx, shownImageWidthPx, gridLinesHidden, cellBorderSides, gridRowSegments, resolveHeaderFooterVariables,
+  return { EDITOR_STYLE, hexOf, cssColorHex, scriptRefusal, loadScriptOnce, ensureJsZipLoaded, downloadBlob, attachMeasureHost, tableRows, cellsOf, spanOf, placeCells, measuredColumnWidthsPx, shownImageWidthPx, gridLinesHidden, rowHeightPx, cellVerticalAlign, cellBorderSides, gridRowSegments, resolveHeaderFooterVariables,
     resolveRecord, codeLinesOf, calloutMetricsPx, headerRowCount, noteUnreadImage, noteImageWithoutSource, unreadImageCount, resetUnreadImages };
 })();

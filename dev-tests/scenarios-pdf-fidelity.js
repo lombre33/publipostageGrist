@@ -929,6 +929,156 @@
     },
   });
 
+  // === Un tableau de DOCUMENT réglé avec la barre de la case : bords, alignement vertical, hauteurs de lignes, quadrillage masqué ===
+  // Le PDF ne lisait ces réglages (`data-border-*`, `data-valign`, `data-row-height`, `data-grid-lines`) que sur un tableau dont une ligne portait une hauteur, donc sur la grille : le tableau d'un
+  // document réglé sortait avec les traits gris de départ, ses textes en haut des cases et le quadrillage que la personne avait masqué. Ces cas lisent ce que le PDF peint (pdf.js), la grille
+  // n'étant PAS ouverte (c'est un document) ; la grille ouverte garde ses règles (scenarios-grid.js, `grid_pdf_*`).
+  const SET_RED = '#c0392b';
+  const SET_GREY = '#777777';
+  const distinctRounded = values => Array.from(new Set(values.map(v => Math.round(v * 10) / 10))).sort((a, b) => a - b);
+
+  // Les traits fins que le PDF peint sur sa première page : { lines, byColor, xs (les x des traits verticaux), ys (les y des traits horizontaux) }.
+  async function paintedStrokes(h, html, gridModel) {
+    const result = await h.exportPdfContent(html, null, undefined, undefined, gridModel);
+    const lines = (await h.extractPdfLines(result.base64)).pages[0].lines.filter(l => l.width < 1);
+    const horizontal = l => Math.abs(l.y1 - l.y2) < 0.01;
+    return { result, lines, horizontal, byColor: color => lines.filter(l => l.color === color), xs: distinctRounded(lines.filter(l => !horizontal(l)).map(l => l.x1)), ys: distinctRounded(lines.filter(horizontal).map(l => l.y1)) };
+  }
+  // Un tableau n × n dont chaque case porte ses quatre bords : le cadre extérieur de la couleur donnée, « pas de trait » à l'intérieur (un trait partagé dit la même chose aux deux cases).
+  function framedTableHtml(n, color) {
+    const side = (name, framed) => ' data-border-' + name + '="' + (framed ? color : 'none') + '"';
+    const cell = (r, c) => '<td' + side('top', r === 0) + side('right', c === n - 1) + side('bottom', r === n - 1) + side('left', c === 0) + '><p>r' + r + 'c' + c + '</p></td>';
+    return '<table><tbody>' + Array.from({ length: n }, (_, r) => '<tr>' + Array.from({ length: n }, (_, c) => cell(r, c)).join('') + '</tr>').join('') + '</tbody></table>';
+  }
+  const plainTableHtml = n => '<table><tbody>' + Array.from({ length: n }, (_, r) => '<tr>' + Array.from({ length: n }, (_, c) => '<td><p>r' + r + 'c' + c + '</p></td>').join('') + '</tr>').join('') + '</tbody></table>';
+
+  cases.push({
+    id: 'pdffid_document_table_borders_set_with_the_cell_bar_are_painted',
+    description: 'PDF d\'un tableau de document dont les cases portent des bords réglés : un cadre rouge sans trait à l\'intérieur ne peint que les quatre côtés du cadre, en rouge ; le même tableau sans réglage garde tout son quadrillage gris de départ',
+    run: async (h) => {
+      await h.resetEditor();
+      const plain = await paintedStrokes(h, plainTableHtml(3));
+      const frame = await paintedStrokes(h, framedTableHtml(3, SET_RED));
+      const framed = frame.lines.length > 0 && frame.lines.every(l => l.color === SET_RED) && frame.xs.length === 2 && frame.ys.length === 2;
+      const greyGrid = plain.lines.length > 0 && plain.lines.every(l => l.color === SET_GREY) && plain.xs.length === 4 && plain.ys.length === 4;
+      return { pass: framed && greyGrid, notes: JSON.stringify({ plain: { lines: plain.lines.length, xs: plain.xs.length, ys: plain.ys.length, colors: Array.from(new Set(plain.lines.map(l => l.color))) }, frame: { lines: frame.lines.length, xs: frame.xs, ys: frame.ys, colors: Array.from(new Set(frame.lines.map(l => l.color))) } }) };
+    },
+  });
+
+  cases.push({
+    id: 'pdffid_document_table_hidden_grid_lines_paint_only_the_placed_lines',
+    description: 'PDF d\'un tableau de document au quadrillage masqué (`data-grid-lines="off"`) : sans rien de posé aucun trait n\'est peint ; seuls les traits que la personne a posés (ici le bas de la première ligne, en rouge) sont peints, et le quadrillage de départ des autres cases reste caché',
+    run: async (h) => {
+      await h.resetEditor();
+      const cell = (extra, text) => '<td' + (extra || '') + '><p>' + text + '</p></td>';
+      const bare = '<table data-grid-lines="off"><tbody><tr>' + cell('', 'a') + cell('', 'b') + '</tr><tr>' + cell('', 'c') + cell('', 'd') + '</tr></tbody></table>';
+      const placed = '<table data-grid-lines="off"><tbody><tr>' + cell(' data-border-bottom="' + SET_RED + '"', 'a') + cell(' data-border-bottom="' + SET_RED + '"', 'b') + '</tr><tr>' + cell('', 'c') + cell('', 'd') + '</tr></tbody></table>';
+      const shown = await paintedStrokes(h, bare.replace(' data-grid-lines="off"', ''));
+      const hidden = await paintedStrokes(h, bare);
+      const line = await paintedStrokes(h, placed);
+      const lineOk = line.lines.length > 0 && line.lines.every(l => l.color === SET_RED && line.horizontal(l)) && line.ys.length === 1 && line.xs.length === 0;
+      return { pass: shown.lines.length > 4 && hidden.lines.length === 0 && lineOk, notes: JSON.stringify({ shown: shown.lines.length, hidden: hidden.lines.length, line: { lines: line.lines.length, ys: line.ys, xs: line.xs, colors: Array.from(new Set(line.lines.map(l => l.color))) } }) };
+    },
+  });
+
+  // Une ligne de trois cases : un grand texte à gauche (cinq paragraphes) qui donne sa hauteur à la ligne, puis trois cases d'une ligne de texte posées en haut, au milieu, en bas.
+  const alignedRowHtml = '<table><tbody><tr>'
+    + '<td data-valign="top"><p>a1</p><p>a2</p><p>a3</p><p>a4</p><p>a5</p></td>'
+    + '<td data-valign="top" style="vertical-align: top"><p>haut</p></td><td data-valign="middle" style="vertical-align: middle"><p>centre</p></td><td data-valign="bottom" style="vertical-align: bottom"><p>bas</p></td>'
+    + '</tr></tbody></table>';
+
+  cases.push({
+    id: 'pdffid_document_table_vertical_align_set_with_the_cell_bar_places_the_text_like_the_editor',
+    description: 'PDF d\'un tableau de document dont des cases ont un alignement vertical réglé (en haut, au milieu, en bas) : le texte de chaque case est à la même hauteur que dans l\'éditeur (au point près), sans hauteur de ligne réglée',
+    run: async (h) => {
+      await h.resetEditor();
+      Editor.setHTML(alignedRowHtml);
+      await h.sleep(250);
+      const topOf = td => { const range = document.createRange(); range.selectNodeContents(td.querySelector('p')); return range.getBoundingClientRect().top; };
+      const cells = Array.from(h.tiptap().querySelectorAll('td'));
+      const wanted = cells.map(td => (topOf(td) - topOf(cells[0])) * 0.75);
+      const result = await h.exportPdfContent(alignedRowHtml, null);
+      const ground = (await h.extractPdfGroundTruth(result.base64)).pages[0];
+      const yOf = str => { const item = ground.textItems.find(i => i.str === str); return item ? item.y : null; };
+      const ys = ['a1', 'haut', 'centre', 'bas'].map(yOf);
+      const gaps = ys.map((y, i) => (y === null || ys[0] === null ? null : Math.round(((y - ys[0]) - wanted[i]) * 100) / 100));
+      const pass = ys.every(y => y !== null) && gaps.every(g => Math.abs(g) <= 1) && wanted[3] > wanted[2] && wanted[2] > wanted[1] && Math.abs(wanted[1]) < 0.5;
+      return { pass, notes: JSON.stringify({ wanted, ys, gaps }) };
+    },
+  });
+
+  cases.push({
+    id: 'pdffid_document_table_row_heights_set_with_the_grid_are_a_minimum_and_rows_stay_whole',
+    description: 'PDF d\'un tableau de document dont des lignes ont une hauteur réglée : la hauteur réglée est un minimum (comme à l\'écran, au point près), une ligne sans réglage garde la hauteur de son texte (`heights` : \'auto\'), et le tableau se range comme un autre (lignes gardées entières, titres repris)',
+    run: async (h) => {
+      await h.resetEditor();
+      const tall = ' data-row-height="60" style="height: 60px"';
+      const html = '<table><tbody><tr' + tall + '><th><p>Titre</p></th><th><p>Autre</p></th></tr><tr><td><p>un</p></td><td><p>deux</p></td></tr><tr' + tall + '><td><p>trois</p></td><td><p>quatre</p></td></tr></tbody></table>';
+      Editor.setHTML(html);
+      await h.sleep(250);
+      const editorRows = Array.from(h.tiptap().querySelectorAll('tr')).map(tr => tr.getBoundingClientRect().height * 0.75);
+      const painted = await paintedStrokes(h, html);
+      const table = painted.result.content.find(b => b.table);
+      const gaps = painted.ys.slice(1).map((y, i) => y - painted.ys[i]);
+      const heights = table ? table.table.heights : null;
+      const pass = !!table && Array.isArray(heights) && heights.length === 3 && typeof heights[0] === 'number' && heights[1] === 'auto' && typeof heights[2] === 'number'
+        && table.table.dontBreakRows === true && table.table.headerRows === 1
+        && gaps.length === 3 && gaps.every((gap, i) => Math.abs(gap - editorRows[i]) <= 1.5) && editorRows[0] > 40 && editorRows[1] < editorRows[0];
+      return { pass, notes: JSON.stringify({ heights, dontBreakRows: table && table.table.dontBreakRows, headerRows: table && table.table.headerRows, gaps, editorRows }) };
+    },
+  });
+
+  cases.push({
+    id: 'pdffid_document_table_merged_rows_keep_their_set_heights_inside_the_group',
+    description: 'PDF d\'un tableau de document dont les lignes liées par une case fusionnée ont une hauteur réglée : le groupe est rangé comme une seule ligne (tableau imbriqué) et porte les hauteurs de ses lignes - le tableau peint a la hauteur de celui de l\'éditeur (au point près)',
+    run: async (h) => {
+      await h.resetEditor();
+      const rowAttrs = px => ' data-row-height="' + px + '" style="height: ' + px + 'px"';
+      const html = '<table><tbody><tr' + rowAttrs(60) + '><td rowspan="2"><p>fusion</p></td><td><p>un</p></td></tr><tr' + rowAttrs(60) + '><td><p>deux</p></td></tr><tr' + rowAttrs(40) + '><td><p>trois</p></td><td><p>quatre</p></td></tr></tbody></table>';
+      Editor.setHTML(html);
+      await h.sleep(250);
+      const editorHeight = h.tiptap().querySelector('table').getBoundingClientRect().height * 0.75;
+      const painted = await paintedStrokes(h, html);
+      const outer = painted.result.content.find(b => b.table);
+      const group = outer && outer.table.body[0] && outer.table.body[0][0] && outer.table.body[0][0].table;
+      const paintedHeight = painted.ys.length ? painted.ys[painted.ys.length - 1] - painted.ys[0] : 0;
+      const pass = !!outer && !!group && outer.table.dontBreakRows === true && outer.table.body.length === 2 && group.body.length === 2
+        && Array.isArray(group.heights) && group.heights.length === 2 && group.heights.every(v => typeof v === 'number' && v > 30)
+        && Math.abs(paintedHeight - editorHeight) <= 2;
+      return { pass, notes: JSON.stringify({ outerRows: outer && outer.table.body.length, groupRows: group && group.body.length, groupHeights: group && group.heights, outerHeights: outer && outer.table.heights, paintedHeight, editorHeight }) };
+    },
+  });
+
+  // La grille ouverte n'a ni feuille ni suite de texte : son tableau garde l'ancien rangement (aucune ligne de titres reprise, lignes non gardées entières, toutes les hauteurs réglées), que le modèle
+  // soit celui de l'écran ou, dans un lot « Modèle selon la ligne », celui de la ligne (`gridModel`) ; un tableau de document aux mêmes réglages se range comme un document.
+  cases.push({
+    id: 'pdffid_open_grid_keeps_its_table_rules_and_a_document_table_with_the_same_settings_does_not',
+    description: 'PDF du même tableau (une ligne de titres <th>, des hauteurs réglées) : pour une grille (modèle ouvert ou modèle de la ligne d\'un lot) ni titres repris, ni lignes gardées entières, toutes les hauteurs réglées ; pour un document (même quand la grille de l\'écran est ouverte mais que le modèle de la ligne est un document) les titres reviennent et les lignes sont gardées entières',
+    run: async (h) => {
+      const realActive = GridEditor.isActive;
+      try {
+        await h.resetEditor();
+        const heightAttrs = ' data-row-height="28" style="height: 28px"';
+        const html = '<table><tbody><tr' + heightAttrs + '><th><p>Titre</p></th><th><p>Autre</p></th></tr><tr' + heightAttrs + '><td><p>un</p></td><td><p>deux</p></td></tr><tr' + heightAttrs + '><td><p>trois</p></td><td><p>quatre</p></td></tr></tbody></table>';
+        const rulesOf = async (gridModel) => {
+          const table = (await h.exportPdfContent(html, null, undefined, undefined, gridModel)).content.find(b => b.table);
+          return table ? { headerRows: table.table.headerRows, dontBreakRows: !!table.table.dontBreakRows, heights: (table.table.heights || []).every(v => typeof v === 'number') && (table.table.heights || []).length } : null;
+        };
+        const got = { openDocument: await rulesOf(undefined) };
+        GridEditor.isActive = () => true;
+        got.openGrid = await rulesOf(undefined);
+        got.rowIsDocumentInOpenGrid = await rulesOf(false);
+        GridEditor.isActive = realActive;
+        got.rowIsGridInOpenDocument = await rulesOf(true);
+        got.rowIsDocument = await rulesOf(false);
+        const doc = r => !!r && r.headerRows === 1 && r.dontBreakRows === true;
+        const grid = r => !!r && r.headerRows === 0 && r.dontBreakRows === false && r.heights === 3;
+        const pass = doc(got.openDocument) && grid(got.openGrid) && doc(got.rowIsDocumentInOpenGrid) && grid(got.rowIsGridInOpenDocument) && doc(got.rowIsDocument);
+        return { pass, notes: JSON.stringify(got) };
+      } finally { GridEditor.isActive = realActive; }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.pdfFidelity = cases;
 })();

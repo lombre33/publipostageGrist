@@ -500,15 +500,22 @@ const DocxExport = (function () {
     // Où chaque case commence dans la grille du tableau : une case fusionnée sur plusieurs lignes tient sa place dans les lignes d'après, dont les
     // cases se décalent d'autant (Word n'écrit que les cases de continuation). Sans cela, la case suivante prenait la largeur d'une autre colonne.
     const placement = new Map(ExportCommon.placeCells(rows).placed.map(placed => [placed.el, placed]));
+    // Les bords réglés avec la barre de la case (js/table-borders.js) et le quadrillage masqué : null pour un tableau que personne n'a réglé, qui garde
+    // les traits de départ de Word.
+    const borderSides = ExportCommon.cellBorderSides(tableEl);
     const tableRows = [];
     for (const tr of rows) {
       const keepNext = keptRows.has(tr) || joinedRows.has(tr);
-      tableRows.push(await wordRowFrom(tr, { ctx, placement, colWidthsTwip, columnCount, keepNext, isHeader: tableRows.length < headerRowCount }));
+      tableRows.push(await wordRowFrom(tr, { ctx, placement, colWidthsTwip, columnCount, keepNext, borderSides, isHeader: tableRows.length < headerRowCount }));
     }
     // columnWidths pilote le <w:tblGrid>, la déclaration des colonnes : sans lui docx.js retombe sur son défaut (100 twips par colonne), incohérent
     // avec les largeurs posées sur chaque TableCell.width. Un <w:tblGrid> qui ne correspond pas aux tcW est un tableau non conforme, que Word peut
-    // signaler comme contenu à réparer.
-    const wordTable = new docx.Table({ rows: tableRows, width: { size: CONTENT_WIDTH_TWIP, type: docx.WidthType.DXA }, columnWidths: colWidthsTwip });
+    // signaler comme contenu à réparer. Avec des bords réglés, chaque case porte ses quatre traits : ceux du tableau, en dessous, sont coupés pour
+    // qu'aucun trait de départ ne reste là où la personne n'en veut pas.
+    const wordTable = new docx.Table(Object.assign(
+      { rows: tableRows, width: { size: tableWidthTwip(colWidthsTwip), type: docx.WidthType.DXA }, columnWidths: colWidthsTwip },
+      borderSides ? { borders: NO_BORDERS } : {},
+    ));
     keepContinuationCellsWithNext(tableRows, rows, joinedRows, keptRows);
     return wordTable;
   }
@@ -533,24 +540,56 @@ const DocxExport = (function () {
       : equalColumnWidthsTwip(columnCount);
   }
 
+  // Un tableau plus étroit que la page (colonnes réglées en les tirant) garde sa largeur : Word étire sinon les colonnes jusqu'à la largeur demandée
+  // au tableau, alors que l'éditeur, la Lecture et le PDF le gardent étroit. En dessous de 2 % d'écart, la page entière : la mesure des colonnes n'est
+  // pas exacte à ce point près, et un tableau de la largeur du texte doit rester celui de la page.
+  const NARROW_TABLE_RATIO = 0.98;
+  function tableWidthTwip(colWidthsTwip) {
+    const columnsTwip = colWidthsTwip.reduce((sum, w) => sum + w, 0);
+    return columnsTwip < CONTENT_WIDTH_TWIP * NARROW_TABLE_RATIO ? columnsTwip : CONTENT_WIDTH_TWIP;
+  }
+
   async function wordRowFrom(tr, t) {
     const cells = [];
     for (const cell of ExportCommon.cellsOf(tr)) cells.push(await wordCellFrom(cell, t));
     // cantSplit : une ligne ne se coupe pas entre deux pages, elle passe en entier à la suivante (comme dans l'éditeur, la Lecture et le PDF :
     // js/table-page-cut.js). Word la coupe quand même si elle est plus haute que la page.
-    return new docx.TableRow(Object.assign({ children: cells, cantSplit: true }, t.isHeader ? { tableHeader: true } : {}));
+    // Hauteur réglée (`data-row-height`, en px) : un minimum (`atLeast`), comme l'éditeur et le PDF, où une ligne que son texte agrandit grandit.
+    const heightPx = ExportCommon.rowHeightPx(tr);
+    return new docx.TableRow(Object.assign(
+      { children: cells, cantSplit: true },
+      t.isHeader ? { tableHeader: true } : {},
+      heightPx ? { height: { value: Math.round(heightPx * PX_TO_TWIP), rule: docx.HeightRule.ATLEAST } } : {},
+    ));
+  }
+
+  // Le trait de départ de Word, celui d'un tableau que personne n'a réglé (docx.js : simple, 0,5 pt, couleur automatique).
+  const DEFAULT_WORD_BORDER = { style: 'single', size: 4, color: 'auto' };
+  // Un bord tel que `ExportCommon.cellBorderSides` le rend : null = le trait de départ, 'none' = rien, '#rrggbb' = un trait fin de cette couleur.
+  function wordBorderFrom(value) {
+    if (value === TableBorders.NONE) return NO_BORDER;
+    if (!value) return DEFAULT_WORD_BORDER;
+    return { style: 'single', size: 4, color: value.slice(1).toUpperCase() };
   }
 
   async function wordCellFrom(cell, t) {
     const { col, colspan: span, rowspan: rowSpan } = t.placement.get(cell);
     const width = t.colWidthsTwip.slice(col, col + span).reduce((a, b) => a + b, 0) || Math.floor(CONTENT_WIDTH_TWIP / t.columnCount);
     const children = await blocksFromContainer(cell, t.ctx, false, Math.max(200, width - WORD_DEFAULT_CELL_MARGIN_TWIP), t.keepNext);
+    // Bords et alignement vertical réglés : seulement quand la case en porte (une case sans réglage garde ce que Word fait d'un tableau ordinaire).
+    // Les deux cases d'un trait qu'elles se partagent disent la même chose (js/table-borders.js), donc Word n'a aucun conflit de bords à trancher ;
+    // docx.js reporte les bords d'une case fusionnée sur ses cases de continuation.
+    const sides = t.borderSides && t.borderSides.get(cell);
+    const valign = ExportCommon.cellVerticalAlign(cell);
+    const wordValign = { top: docx.VerticalAlign.TOP, middle: docx.VerticalAlign.CENTER, bottom: docx.VerticalAlign.BOTTOM };
     return new docx.TableCell({
       children: children.length ? children : [new docx.Paragraph('')],
       width: { size: width, type: docx.WidthType.DXA },
       columnSpan: span > 1 ? span : undefined,
       rowSpan: rowSpan > 1 ? rowSpan : undefined,
       shading: cellShadingFrom(cell),
+      borders: sides ? { top: wordBorderFrom(sides.top), right: wordBorderFrom(sides.right), bottom: wordBorderFrom(sides.bottom), left: wordBorderFrom(sides.left) } : undefined,
+      verticalAlign: valign ? wordValign[valign] : undefined,
     });
   }
 

@@ -551,6 +551,33 @@
     },
   });
 
+  // Le quadrillage masqué avec le menu « Bordures » de la barre de la case (`data-grid-lines="off"` sur le tableau) vaut pour tout tableau, pas seulement pour la grille : la règle de la Lecture
+  // (css/grid.css) n'était valable que sous `body.pp-grid-mode`, un tableau de document réglé gardait donc son quadrillage en Lecture alors que le PDF, le Word et l'Excel le masquaient.
+  cases.push({
+    id: 'readmode_document_table_with_hidden_grid_lines_draws_only_the_placed_borders',
+    description: 'Lecture d\'un tableau de DOCUMENT au quadrillage masqué (`data-grid-lines="off"`) : les cases que personne n\'a bordées n\'ont plus aucun trait, le trait posé (ici le bas de la première case, en rouge) reste ; le même tableau sans la marque garde son quadrillage',
+    run: async (h) => {
+      await h.resetEditor();
+      GridEditor.setActive(false);
+      const placed = ' data-border-bottom="#c0392b" style="border-bottom: 1px solid #c0392b"';
+      const tableHtml = hidden => '<table' + (hidden ? ' data-grid-lines="off"' : '') + '><tbody><tr><td' + placed + '><p>A</p></td><td><p>B</p></td></tr><tr><td><p>C</p></td><td><p>D</p></td></tr></tbody></table>';
+      const sidesOf = (root, row, col) => {
+        const style = getComputedStyle(root.querySelectorAll('tr')[row].cells[col]);
+        return { top: style.borderTopStyle, right: style.borderRightStyle, bottom: style.borderBottomStyle + ' ' + style.borderBottomColor, left: style.borderLeftStyle };
+      };
+      const shown = await h.renderReaderMode(tableHtml(false));
+      const shownD = sidesOf(shown, 1, 1);
+      const hidden = await h.renderReaderMode(tableHtml(true));
+      const hiddenA = sidesOf(hidden, 0, 0);
+      const hiddenD = sidesOf(hidden, 1, 1);
+      const bare = side => side === 'none';
+      const pass = Object.values(shownD).every(v => v.startsWith('solid'))
+        && bare(hiddenD.top) && bare(hiddenD.right) && bare(hiddenD.left) && bare(hiddenD.bottom.split(' ')[0])
+        && hiddenA.bottom === 'solid rgb(192, 57, 43)' && bare(hiddenA.top) && bare(hiddenA.left) && bare(hiddenA.right);
+      return { pass, notes: JSON.stringify({ shownD, hiddenA, hiddenD }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.readModeFidelity = cases;
 })();
