@@ -394,6 +394,10 @@ const Variables = (function () {
     function createExtension(Extension, Suggestion) {
       return Extension.create({
         name: 'varBadgeSuggestion',
+        // Avant les autres extensions : dans une case de grille ou de tableau, les flèches (et Tab) de prosemirror-tables passeraient sinon avant la liste
+        // ouverte, qui ne verrait jamais la touche - le curseur changerait de case au lieu de parcourir les colonnes. Hors liste ouverte (ou liste sans
+        // ligne), elle rend la main sans rien consommer.
+        priority: 1000,
         addProseMirrorPlugins() {
           return [
             Suggestion(Object.assign(suggestionBase(this.editor), {

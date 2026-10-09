@@ -124,6 +124,10 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 - **Réglages ouverts puis fermés sans rien changer** : l'onglet Vue (« Modèle selon la ligne ») n'écrit plus
   un réglage vide à la fermeture des Réglages. Grist y voyait un brouillon de la vue et montrait
   « Enregistrer » et « Retour » alors que rien n'avait été touché.
+- **Liste « # » ouverte dans une case de la grille ou d'un tableau** : ↑ et ↓ parcourent la liste des colonnes
+  tant qu'elle est affichée, au lieu de déplacer le curseur dans la case voisine (ce qui la refermait) ;
+  Tab choisit la colonne en surbrillance, comme Entrée, au lieu de passer à la case suivante. Liste
+  fermée (ou sans ligne), les flèches et Tab font comme avant.
 
 ## [1.0.0-beta.1] - 2026-10-05
 
@@ -331,6 +335,10 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 - **Settings opened then closed without changing anything**: the View tab ("Template by row") no longer
   writes an empty setting when Settings close. Grist saw it as a draft of the view and showed "Save" and
   "Revert" although nothing had been touched.
+- **"#" list open in a cell of a grid or a table**: ↑ and ↓ now walk the list of columns while it is
+  displayed, instead of moving the cursor to the neighbouring cell (which closed it); Tab picks the
+  highlighted column, like Enter, instead of going to the next cell. With the list closed (or empty),
+  the arrows and Tab work as before.
 
 ## [1.0.0-beta.1] - 2026-10-05 (English)
 

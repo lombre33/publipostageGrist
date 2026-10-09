@@ -6,15 +6,16 @@
   const words = text => text.split(/\s+/).filter(Boolean);
   const editor = () => EditorCore.getEditor();
 
-  // Type (m = marque, n = nœud, e = extension) et nom, dans l'ordre que TipTap leur donne (priorité, puis rang).
+  // Type (m = marque, n = nœud, e = extension) et nom, dans l'ordre que TipTap leur donne (priorité, puis rang). Une liste ouverte doit voir ↑, ↓ et Tab avant
+  // prosemirror-tables : varBadgeSuggestion (« # »), textExpansion (« § ») et gridEditor sont de priorité 1000 (« # » dans une case : verify-grid-hash-mouse.mjs).
   const EXTENSIONS = words(`
-    m:link n:paragraph e:calcBadgeKeys e:textExpansion e:gridEditor m:insertion m:deletion e:listItemBranchingDeleteKeymap m:textStyle e:editable
+    m:link n:paragraph e:calcBadgeKeys e:varBadgeSuggestion e:textExpansion e:gridEditor m:insertion m:deletion e:listItemBranchingDeleteKeymap m:textStyle e:editable
     e:clipboardTextSerializer e:commands e:focusEvents e:keymap e:tabindex e:drop e:paste e:delete e:textDirection e:starterKit m:bold n:blockquote
     n:bulletList m:code n:codeBlock e:dropCursor e:gapCursor n:hardBreak n:heading e:undoRedo n:horizontalRule m:italic n:listItem e:listKeymap
     n:orderedList m:strike n:text m:underline e:trailingNode n:doc e:textAlign e:fontFamily e:fontSize e:textColor e:highlightColor e:bulletStyle
     e:orderedListStyle n:taskList n:taskItem e:taskListStyle e:placeholder n:varBadge n:calcBadge n:pageNumberBadge n:smartChip n:footnoteRef
     m:commentMark m:modification e:suggestChangesBridge e:gridEnter e:conditionalValueKeys e:floatingImageKeys e:behindImageClickThrough
-    e:varBadgeSuggestion e:linkShortcut e:findReplace n:table n:tableRow n:tableHeader n:tableCell n:twoColumnsColumn n:twoColumnsZone n:callout
+    e:linkShortcut e:findReplace n:table n:tableRow n:tableHeader n:tableCell n:twoColumnsColumn n:twoColumnsZone n:callout
     n:conditionalText n:conditionalCheckbox n:conditionalValue e:caption e:keepNext n:editorImage n:pageBreak n:headingNumberingConfig n:toc
     e:tabNavigation e:clearHistory
   `);
@@ -26,8 +27,8 @@
   const MARKS = words('link insertion deletion textStyle bold code italic strike underline commentMark modification');
   // Les plugins qui portent un nom, dans l'ordre de l'état de l'éditeur (les autres s'appellent `plugin$`, `plugin$1`...).
   const NAMED_PLUGINS = words(`
-    gridEditor$ textExpansionSuggestion$ autolink$ handleClickLink$ handlePasteLink$ captionPlaceholder$ tableColumnResizing$ selectingCells$
-    ppFindReplace$ suggestion$ behindImageClickThrough$ floatingImageKeep$ conditionalValueInput$ @handlewithcare/prosemirror-suggest-changes$
+    gridEditor$ textExpansionSuggestion$ suggestion$ autolink$ handleClickLink$ handlePasteLink$ captionPlaceholder$ tableColumnResizing$ selectingCells$
+    ppFindReplace$ behindImageClickThrough$ floatingImageKeep$ conditionalValueInput$ @handlewithcare/prosemirror-suggest-changes$
     tiptap__placeholder$ trailingNode$ history$ codeBlockVSCodeHandler$ textDirection$ tiptapPaste$ tiptapDrop$ tabindex$ clearDocument$ focusEvents$
     clipboardTextSerializer$ editable$
   `);
