@@ -63,7 +63,10 @@ const ReaderMode = (function () {
   // tombe). Le grain est le bloc, jamais coupé en deux (le PDF coupe au pixel). Un bloc qui ne tient pas passe entier à la page suivante, sauf s'il
   // est de ceux que l'export coupe (isSplittableByExport) et que sa plus grande partie tient dans la place restante : il reste alors sur sa page et
   // le repère tombe derrière lui. Le déplacer en entier reviendrait à se tromper de tout ce qui tenait dans la page (un tableau ou une zone à deux
-  // colonnes qui déborde de ~30 px, envoyé en page 2, page 1 presque vide) au lieu de se tromper de ce qui déborde.
+  // colonnes qui déborde de ~30 px, envoyé en page 2, page 1 presque vide) au lieu de se tromper de ce qui déborde. Une zone à deux colonnes fait
+  // exception, comme le tableau : elle se coupe où la page finit, chaque colonne à son bloc (js/zone-page-cut.js, comme l'éditeur et le PDF) ; le décalage
+  // porte alors `zone` (pour chaque colonne le rang du bloc qui ouvre la page suivante et celui du dernier qu'elle garde sur la page qui finit) et
+  // `afterIndex` est celui de la zone.
   function computePageBreakOffsets(rootEl, pageContentHeightPx) {
     const rootRect = rootEl.getBoundingClientRect();
     const zoom = EditorCore.layoutZoom(rootEl);
@@ -73,6 +76,7 @@ const ReaderMode = (function () {
     const offsets = [];
     let consumed = 0;
     let counted = 0;
+    let placedAny = false;
     const cutBefore = (top, index) => offsets.push({ top, afterIndex: index - 1, remainingPx: 0 });
     // La légende d'une image ou d'un tableau reste avec son bloc (js/caption.js, « Rester ensemble », comme dans
     // js/header-footer-preview.js:computePageBreaks) : le bloc et ses légendes comptent pour un seul bloc ; pour un tableau coupé entre deux lignes,
@@ -103,13 +107,39 @@ const ReaderMode = (function () {
     const placeCutTable = (block, cuttable) => {
       const { index, top } = block;
       const tablePlan = TablePageCut.plan(consumed, cuttable.segs, pageContentHeightPx, cuttable.starts);
+      placedAny = true;
       if (tablePlan.blockBreakBefore) cutBefore(top, index);
       tablePlan.cuts.forEach((rowIndex, k) => offsets.push({ top: top + cuttable.segs.slice(0, tablePlan.ranks[k]).reduce((sum, seg) => sum + seg, 0), afterIndex: index, rowIndex, remainingPx: 0 }));
       consumed = tablePlan.consumedAfter;
       if (cuttable.keepsTail) counted = index + 1 + block.captions.length;
     };
+    // Une zone à deux colonnes se coupe entre deux blocs de chaque colonne (js/zone-page-cut.js), comme dans l'éditeur : l'écart avec ce qui la précède (sa
+    // marge) compte dans la place prise, sauf en haut d'une page ouverte par une coupure, dont la réserve absorbe cette marge. Le HTML de la Lecture a
+    // déjà perdu les lignes vides au bas des colonnes de sa dernière zone (trimTrailingBlankBlocks).
+    const renderedSibling = (el, step) => {
+      for (let sibling = el[step]; sibling; sibling = sibling[step]) if (sibling.getBoundingClientRect().height > 0 || sibling.tagName !== 'STYLE') return sibling;
+      return null;
+    };
+    const cuttableZone = el => (el.classList.contains('two-columns-zone') ? ZonePageCut.measure(el, zoom, false) : null);
+    const placeCutZone = (block, cuttable) => {
+      const { child, index, top } = block;
+      const previous = renderedSibling(child, 'previousElementSibling');
+      const edge = previous ? previous.getBoundingClientRect().bottom : rootRect.top + (parseFloat(getComputedStyle(rootEl).paddingTop) || 0) * zoom;
+      const naturalGapAbove = Math.max(0, (child.getBoundingClientRect().top - edge) / zoom);
+      const next = renderedSibling(child, 'nextElementSibling');
+      const gapBelow = next ? Math.max(0, (next.getBoundingClientRect().top - child.getBoundingClientRect().bottom) / zoom) : 0;
+      let zonePlan = ZonePageCut.plan(consumed, consumed > 0 || !placedAny ? naturalGapAbove : 0, cuttable, pageContentHeightPx, gapBelow);
+      if (zonePlan.blockBreakBefore) {
+        cutBefore(top, index);
+        zonePlan = ZonePageCut.plan(0, 0, cuttable, pageContentHeightPx, gapBelow);
+      }
+      zonePlan.cuts.forEach(cut => offsets.push({ top, afterIndex: index, zone: Object.assign({ blocks: cuttable.columns.map(column => column.blocks) }, cut), remainingPx: 0 }));
+      consumed = zonePlan.consumedAfter;
+      placedAny = true;
+    };
     const placeBlock = block => {
       const { child, index, top, height, captions, captionPx } = block;
+      placedAny = true;
       const keeps = captions.length > 0 && Caption.fitsWithCaption(height + captionPx, pageContentHeightPx);
       const unitHeight = keeps ? height + captionPx : height;
       const staysOnPage = !keeps && isSplittableByExport(child) && pageContentHeightPx - consumed > height / 2;
@@ -125,6 +155,7 @@ const ReaderMode = (function () {
       if (child.classList.contains('page-break-marker')) {
         offsets.push({ top: top + height, afterIndex: index, remainingPx: Math.max(0, pageContentHeightPx - consumed) });
         consumed = 0;
+        placedAny = true;
         return;
       }
       keepRunTogether(index, top);
@@ -132,7 +163,9 @@ const ReaderMode = (function () {
       const captionPx = totalHeight(captions);
       const block = { child, index, top, height, captions, captionPx };
       const cuttable = child.tagName === 'TABLE' ? TablePageCut.measure(child, child, zoom, pageContentHeightPx, null, captionPx) : null;
+      const cuttableZ = cuttable ? null : cuttableZone(child);
       if (cuttable) placeCutTable(block, cuttable);
+      else if (cuttableZ) placeCutZone(block, cuttableZ);
       else placeBlock(block);
     });
     return offsets;
@@ -401,10 +434,17 @@ const ReaderMode = (function () {
     const tableRows = offset.rowIndex != null ? (TablePageCut.rowsOf(el) || []) : [];
     const rowAbove = tableRows[offset.rowIndex - 1] || null;
     const rowOpening = rowAbove ? tableRows[offset.rowIndex] : null;
-    const afterBottomScreen = rowAbove ? rowAbove.getBoundingClientRect().bottom : (el ? el.getBoundingClientRect().bottom : wrapperRect.top + offset.top * zoom);
+    // Coupure dans une zone à deux colonnes (offset.zone, js/zone-page-cut.js) : le bas de la page qui finit est le plus bas des derniers blocs que les
+    // deux colonnes y gardent, et c'est le bloc qui ouvre la page suivante, dans chaque colonne qui continue, qui descend sous la couture.
+    const zoneCut = offset.zone && el ? ZonePageCut.place(offset.zone, el, offset.zone.blocks, {
+      rootTop: wrapperRect.top, zoom, bodyTopRel: pass.bodyTopRel, pageContentHeightPx: geometry.pageContentHeightPx, seamHeight, selector: '#reader-container .reader-content > *:nth-child(' + (offset.afterIndex + 1) + ')',
+    }) : null;
+    const afterBottomScreen = zoneCut ? zoneCut.afterBottomScreen : (rowAbove ? rowAbove.getBoundingClientRect().bottom : (el ? el.getBoundingClientRect().bottom : wrapperRect.top + offset.top * zoom));
     const afterBottomRel = (afterBottomScreen - wrapperRect.top) / zoom;
     const remaining = Math.max(0, geometry.pageContentHeightPx - (afterBottomRel - pass.bodyTopRel));
-    if (rowOpening) {
+    if (zoneCut) {
+      zoneCut.rules.forEach(rule => { marginRules.push(rule); steps.add(rule); });
+    } else if (rowOpening) {
       // La ligne qui ouvre la page descend de la réserve de la page qui finit, puis de la couture (rembourrage haut de ses cases) ; le tableau est
       // rogné sur cette hauteur (TablePageCut.clipRule, plus bas) : la réserve et les marges de la couture, transparentes, ne montrent ni le fond
       // ni les traits verticaux des cases. Le trait du haut de la ligne, rogné avec le reste, est redessiné au bord bas de la bande
@@ -428,7 +468,7 @@ const ReaderMode = (function () {
       marginRules.push('#reader-container .reader-content > *:nth-child(' + (offset.afterIndex + 1) + ') { margin-bottom: ' + (seamHeight + remaining) + 'px; }');
     }
     // Posée tout de suite : la frontière suivante doit voir l'effet des marges déjà posées avant de mesurer sa propre position.
-    steps.add(marginRules[marginRules.length - 1]);
+    if (!zoneCut) steps.add(marginRules[marginRules.length - 1]);
     const seamTop = toLayoutY(afterBottomScreen) + remaining;
     seam.style.top = seamTop + 'px';
     pass.bodyTopRel = afterBottomRel + remaining + seamHeight;

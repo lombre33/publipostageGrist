@@ -272,7 +272,9 @@ const HeaderFooterPreview = (function () {
   // ainsi (ligne ou groupe de lignes plus haut que la page...) suit la règle des blocs que l'export coupe. Une légende d'image ou de tableau
   // (js/caption.js) reste avec son bloc, jamais seule en haut de la page suivante : le bloc et ses légendes comptent pour un seul bloc. Pour un
   // tableau coupé entre deux lignes, la dernière ligne et la légende font ce bloc. Un bloc et sa légende qui ne tiennent pas ensemble dans une page
-  // (Caption.fitsWithCaption) ne sont pas gardés ensemble. « Garder avec le suivant » (js/keep-with-next.js) : une suite de paragraphes gardés et le
+  // (Caption.fitsWithCaption) ne sont pas gardés ensemble. Une zone à deux colonnes se coupe où la page finit, chaque colonne à son bloc (js/zone-page-cut.js),
+  // comme le PDF : la coupure porte `zone` (pour chaque colonne le rang du bloc qui ouvre la page suivante et celui du dernier qu'elle garde sur la page qui
+  // finit) et `afterEl` est l'enveloppe de la zone. « Garder avec le suivant » (js/keep-with-next.js) : une suite de paragraphes gardés et le
   // bloc qui la suit passent à la page suivante d'un seul tenant quand ils ne tiennent pas dans la place restante (le bloc qui la suit compte par sa
   // tête : la première ligne d'un tableau qu'on coupe entre deux lignes), sauf au-delà de 90 % d'une page.
   function computePageBreaks(tiptapEl, pageContentHeightPx) {
@@ -317,6 +319,32 @@ const HeaderFooterPreview = (function () {
       lastBlock = child;
       if (cuttable.keepsTail) { counted = index + 1 + captions.length; lastBlock = captions[captions.length - 1]; }
     };
+    // Une zone à deux colonnes se coupe entre deux blocs de chaque colonne (js/zone-page-cut.js), comme le PDF : sa colonne la plus longue continue sur
+    // la page suivante, l'autre finit sur la première si elle y tient. L'écart avec le bloc d'avant (la marge de la zone) compte dans la place prise, sauf
+    // en haut d'une page ouverte par une coupure : la réserve de la page qui finit absorbe cette marge. Les lignes vides au bas des colonnes de la
+    // dernière zone du document ne comptent pas (trimTail : comme la Lecture et les exports).
+    const zoneOf = el => (el.classList.contains('two-columns-zone-outer') ? el.querySelector(':scope > .two-columns-zone') : null);
+    const cuttableZone = (el, index) => {
+      const zoneEl = zoneOf(el);
+      return zoneEl ? ZonePageCut.measure(zoneEl, zoom, index === blankTailStart - 1) : null;
+    };
+    const placeCutZone = (block, cuttable) => {
+      const { child } = block;
+      const zoneEl = cuttable.zone;
+      const previous = child.previousElementSibling;
+      const edge = previous ? previous.getBoundingClientRect().bottom : tiptapEl.getBoundingClientRect().top + (parseFloat(getComputedStyle(tiptapEl).paddingTop) || 0) * zoom;
+      const naturalGapAbove = Math.max(0, (zoneEl.getBoundingClientRect().top - edge) / zoom);
+      const next = child.nextElementSibling;
+      const gapBelow = next ? Math.max(0, (next.getBoundingClientRect().top - zoneEl.getBoundingClientRect().bottom) / zoom) : 0;
+      let zonePlan = ZonePageCut.plan(consumed, consumed > 0 || lastBlock === null ? naturalGapAbove : 0, cuttable, pageContentHeightPx, gapBelow);
+      if (zonePlan.blockBreakBefore) {
+        cutAfterLast();
+        zonePlan = ZonePageCut.plan(0, 0, cuttable, pageContentHeightPx, gapBelow);
+      }
+      zonePlan.cuts.forEach(cut => breaks.push({ afterEl: child, zone: Object.assign({ blocks: cuttable.columns.map(column => column.blocks) }, cut), forced: false, remainingPx: 0 }));
+      consumed = zonePlan.consumedAfter;
+      lastBlock = child;
+    };
     const placeBlock = block => {
       const { child, index, height, captions, captionPx } = block;
       const keeps = captions.length > 0 && Caption.fitsWithCaption(height + captionPx, pageContentHeightPx);
@@ -343,7 +371,9 @@ const HeaderFooterPreview = (function () {
       const captionPx = totalHeight(captions);
       const block = { child, index, height, captions, captionPx };
       const cuttable = cuttableTable(child, pageContentHeightPx, zoom, captionPx);
+      const cuttableZ = cuttable ? null : cuttableZone(child, index);
       if (cuttable) placeCutTable(block, cuttable);
+      else if (cuttableZ) placeCutZone(block, cuttableZ);
       else placeBlock(block);
     });
     return breaks;
@@ -892,13 +922,22 @@ const HeaderFooterPreview = (function () {
     const tableRows = tableEl ? (TablePageCut.rowsOf(tableEl) || []) : [];
     const rowAbove = tableRows[brk.rowIndex - 1] || null;
     const rowOpening = rowAbove ? tableRows[brk.rowIndex] : null;
+    const nthChild = tiptapChildren.indexOf(brk.afterEl) + 1;
+    // Coupure dans une zone à deux colonnes (brk.zone, js/zone-page-cut.js) : le bas de la page qui finit est le plus bas des derniers blocs que les deux
+    // colonnes y gardent, et c'est le bloc qui ouvre la page suivante, dans chaque colonne qui continue, qui descend sous la couture.
+    const zoneCut = brk.zone ? ZonePageCut.place(brk.zone, brk.afterEl.querySelector(':scope > .two-columns-zone'), brk.zone.blocks, {
+      rootTop: tiptapRect.top, zoom, bodyTopRel: pass.bodyTopRel, pageContentHeightPx, seamHeight, selector: '#editor-container .tiptap > *:nth-child(' + nthChild + ') > .two-columns-zone',
+    }) : null;
     // Bas du contenu de la page qui finit, lu après les réserves déjà posées : la coupure suivante doit voir leur effet avant de mesurer sa propre
     // position.
-    const afterBottomScreen = (rowAbove || brk.afterEl).getBoundingClientRect().bottom;
+    const afterBottomScreen = zoneCut ? zoneCut.afterBottomScreen : (rowAbove || brk.afterEl).getBoundingClientRect().bottom;
     const afterBottomRel = (afterBottomScreen - tiptapRect.top) / zoom;
     const remaining = Math.max(0, pageContentHeightPx - (afterBottomRel - pass.bodyTopRel));
-    const nthChild = tiptapChildren.indexOf(brk.afterEl) + 1;
-    if (rowOpening) {
+    if (zoneCut) {
+      zoneCut.rules.forEach(rule => { marginRules.push(rule); paginationSteps.add(rule); });
+      if (!pass.zoneStrips.has(nthChild)) pass.zoneStrips.set(nthChild, []);
+      pass.zoneStrips.get(nthChild).push(zoneCut.strip);
+    } else if (rowOpening) {
       // La ligne qui ouvre la page descend de la réserve de la page qui finit, puis de la couture (rembourrage haut de ses cases, jamais un style
       // sur le nœud) ; le reste du tableau la suit. Ce rembourrage est peint par les cases (fond, traits verticaux) : le tableau est rogné sur
       // cette hauteur (clipRule, plus bas) pour que la réserve et les marges de la couture, transparentes, restent blanches. Le trait du haut de la
@@ -913,7 +952,7 @@ const HeaderFooterPreview = (function () {
     } else {
       marginRules.push('#editor-container .tiptap > *:nth-child(' + nthChild + ') { margin-bottom: ' + (seamHeight + remaining) + 'px; }');
     }
-    paginationSteps.add(marginRules[marginRules.length - 1]);
+    if (!zoneCut) paginationSteps.add(marginRules[marginRules.length - 1]);
     const seamTop = toLayoutY(afterBottomScreen) + remaining;
     seam.style.top = seamTop + 'px';
     pass.bodyTopRel = afterBottomRel + remaining + seamHeight;
@@ -957,13 +996,16 @@ const HeaderFooterPreview = (function () {
     // style inline sur `afterEl` (même piège que paginationMarginStyleEl).
     const pass = {
       geometry, totalPages, mPx, footAreaPx, headAreaPx, sheetLeft, sheetWidth, zoom, tiptapRect, toLayoutY, tiptapChildren: Array.from(tiptapEl.children),
-      tableStrips: new Map(), marginRules, pages, pageSheet, bodyTopRel: tiptapPaddingTop,
+      tableStrips: new Map(), zoneStrips: new Map(), marginRules, pages, pageSheet, bodyTopRel: tiptapPaddingTop,
     };
     breaks.forEach((brk, i) => placePaginationSeam(pass, brk, i));
     // La dernière page, jusqu'à sa hauteur réelle : `.tiptap` ne descend jamais sous le haut du corps de cette page + B + sa marge du bas (le
     // plancher ne gêne pas un contenu plus long). Ajouté à la même feuille de style que les réserves : effacé avec elles.
     marginRules[0] = '#editor-container .tiptap { min-height: ' + (pass.bodyTopRel + pageContentHeightPx + mPx.bottom) + 'px; }';
     pass.tableStrips.forEach((strips, nth) => marginRules.push(TablePageCut.clipRule('#editor-container .tiptap > *:nth-child(' + nth + ')', strips)));
+    // Une zone coupée par une couture est rognée sur la bande que la couture recouvre : son liseré et les bordures de ses colonnes (au survol) s'arrêtent sous
+    // le dernier bloc de la page qui finit et reprennent en haut de la page suivante, au lieu de traverser les marges blanches de la couture.
+    pass.zoneStrips.forEach((strips, nth) => marginRules.push(TablePageCut.clipRule('#editor-container .tiptap > *:nth-child(' + nth + ') > .two-columns-zone', strips)));
     ensurePaginationMarginStyle().textContent = marginRules.join('\n');
     paginationSteps.clear();
     // Les pages sont posées : les copies de « Sur toutes les pages » se peignent dessus (la dernière réserve vient de changer la hauteur de la

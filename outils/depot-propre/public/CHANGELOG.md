@@ -298,6 +298,15 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Une zone à deux colonnes passe à la page suivante dans l'éditeur et dans la Lecture** : une zone plus
+  haute que ce qui reste de la page dépassait le bas de la feuille sans jamais ouvrir de deuxième page
+  (Entrée dans une colonne n'en ouvrait donc jamais), alors que le PDF la coupait là où la page finit. L'éditeur,
+  la Lecture et l'impression par le navigateur la coupent maintenant comme le PDF, colonne par colonne : chaque
+  colonne continue sur la page suivante à partir du premier paragraphe (ou de la première liste, du premier
+  tableau) qui ne tient plus, et les deux colonnes y reprennent à la même hauteur, en haut de la page. Dans
+  l'éditeur le liseré de la zone et les bordures des colonnes s'arrêtent à la couture. Les lignes vides tout en bas des
+  colonnes de la dernière zone d'un modèle n'ouvrent pas de page de plus, comme les lignes vides à la fin d'un
+  modèle ; dès que du contenu suit la zone, elles comptent.
 - **Un lot d'une seule ligne parle au singulier** : « Générer un PDF pour la ligne de … », « 1 PDF généré »,
   « 1 DOCX généré » et « 1 ligne réunie dans un seul PDF » au lieu de « 1 lignes » et « 1 PDF générés ».
 - **« Autres attributs » avec deux colonnes Référence vers une même table** (Demandeur et Valideur vers un
@@ -728,6 +737,14 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Fixed
 
+- **A two-column zone moves on to the next page in the editor and in Reading mode**: a zone taller than what
+  is left of the page ran past the bottom of the sheet without ever opening a second page (so pressing Enter
+  in a column never opened one), while the PDF cut it where the page ends. The editor, Reading mode and browser
+  printing now cut it like the PDF, column by column: each column carries on at the top of the next page from
+  the first paragraph (or list, or table) that no longer fits, and the two columns resume at the same height
+  there. In the editor the zone's outline and the column borders stop at the page seam. Blank lines at the very
+  bottom of the columns of a template's last zone do not open one more page, like blank lines at the end of a
+  template; as soon as content follows the zone, they count.
 - **A batch of one row speaks in the singular**: "Generate a PDF for the row in …", "1 PDF generated",
   "1 DOCX file generated" and "1 row combined into a single PDF" instead of "1 PDFs generated".
 - **"Other attributes" with two Reference columns to the same table** (Requester and Approver pointing to

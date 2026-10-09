@@ -122,6 +122,7 @@
   });
 
   // --- Pagination de l'aperçu : un bloc que l'export coupe reste sur sa page quand sa plus grande partie y tient ---
+  // (09/10 : cela vaut encore pour une liste ; une zone à deux colonnes, elle, se coupe maintenant où la page finit - js/zone-page-cut.js, suite zonePageCut.)
   // Antoine (29/09) : deux images en haut de page, sans en-tête, puis une zone 2 colonnes d'à peu près une page. computePageBreaks traite chaque bloc de premier
   // niveau comme insécable ; la zone, une trentaine de pixels trop haute parce que l'éditeur affiche des NOMS de variables (longs, à la ligne dans la colonne
   // étroite) là où Lecture et l'export mettent des valeurs, sautait en entier en page 2 et laissait la page 1 aux seules images. Le paragraphe vide que l'éditeur
@@ -202,15 +203,17 @@
     },
   });
 
+  // Une zone dont moins de la moitié tient sur la page : avant le 09/10 elle passait en entier à la page suivante (la règle ne gardait que le bloc surtout là) ; elle se coupe
+  // maintenant où la page finit, colonne par colonne, comme le PDF (js/zone-page-cut.js, demande d'Antoine du 09/10 : une zone n'ouvrait jamais de deuxième page dans l'éditeur).
   cases.push({
-    id: 'pagebreak_editor_block_mostly_beyond_page_still_moves_whole',
-    description: 'Un gros bloc dont moins de la moitié tient sur la page passe toujours en entier à la page suivante (la règle ne garde que le bloc qui est surtout là)',
+    id: 'pagebreak_editor_zone_mostly_beyond_page_is_cut_where_the_page_ends',
+    description: 'Une zone dont moins de la moitié tient sur la page est coupée là où la page finit, comme le PDF : ses premières lignes restent sur la page, aucune « Page 2 » ne tombe au-dessus d\'elle',
     run: async (h) => {
       try {
         const zoneProbe = await paginateBigBlock(h, 'zone', lettreImages(), 30);
         // Place restante : 30 % de la hauteur de la zone, donc moins de la moitié.
         const r = await paginateBigBlock(h, 'zone', lettreImages(), zoneProbe.blockPx * 0.7);
-        return { pass: r.bandsAbove === 1, notes: JSON.stringify(r) };
+        return { pass: r.bandsAbove === 0 && r.bands >= 1, notes: JSON.stringify(r) };
       } finally { restoreMargins(); }
     },
   });
@@ -309,13 +312,13 @@
   });
 
   cases.push({
-    id: 'pagebreak_readmode_block_mostly_beyond_page_still_moves_whole',
-    description: 'En mode Lecture, un gros bloc dont moins de la moitié tient sur la page passe toujours en entier à la page suivante',
+    id: 'pagebreak_readmode_zone_mostly_beyond_page_is_cut_where_the_page_ends',
+    description: 'En mode Lecture, une zone dont moins de la moitié tient sur la page est coupée là où la page finit, comme le PDF : aucune « Page 2 » ne tombe au-dessus d\'elle',
     run: async (h) => {
       try {
         const zoneProbe = await paginateBigBlockInReader(h, 'zone', lettreImages(), 30);
         const r = await paginateBigBlockInReader(h, 'zone', lettreImages(), zoneProbe.blockPx * 0.7);
-        return { pass: r.bandsAbove === 1, notes: JSON.stringify(r) };
+        return { pass: r.bandsAbove === 0 && r.bands >= 1, notes: JSON.stringify(r) };
       } finally { restoreReader(); }
     },
   });

@@ -23,7 +23,7 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
   vérifie.
 - **Les données** : les modèles et les réglages vivent dans des tables `Publipostage_*` du document Grist ;
   les préférences d'affichage (langue, thème, raccourcis…) dans le navigateur.
-- **Le volume** : 125 fichiers dans `js/` (47 000 lignes : 34 800 de code, 9 400 de commentaires, 2 800 de
+- **Le volume** : 126 fichiers dans `js/` (47 400 lignes : 35 000 de code, 9 500 de commentaires, 2 800 de
   blanc), 42 feuilles de style (3 500 lignes), une page de 810 lignes. Quatre fichiers de polices du PDF
   pèsent 2,5 Mo en quelques lignes (des données) ; `js/i18n.js` est du texte à traduire, pas de la logique.
 
@@ -133,7 +133,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/macro-templates.js` | Choisir et assembler les annexes d'un macro-modèle (aucun DOM). |
 | `js/macro-editor.js` | L'écran de création d'un macro-modèle et son résumé. |
 
-### Page et mise en page (10 fichiers, 3 400 lignes)
+### Page et mise en page (11 fichiers, 3 600 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -143,6 +143,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/page-zoom.js` | Le zoom de la page à l'écran, en Édition et en Lecture (pastille du coin, Ajuster, Ctrl + molette) ; affichage seulement, les exports gardent les dimensions réelles. |
 | `js/header-footer-preview.js` | Édition de l'en-tête et du pied, aperçu paginé. |
 | `js/table-page-cut.js` | Où un tableau se coupe entre deux pages. |
+| `js/zone-page-cut.js` | Où une zone à deux colonnes se coupe entre deux pages, colonne par colonne comme le PDF (l'éditeur et la Lecture). |
 | `js/sheet-layout.js`, `js/sheet-assembly-dialog.js` | « Assemblage avant impression » : la géométrie d'une planche et sa fenêtre. |
 
 ### Lecture (2 fichiers, 1 400 lignes)
@@ -287,7 +288,7 @@ For anyone reading the code: what is where, and where to start. Line counts are 
   **Each export** loads its library on first use, with an integrity hash (SRI) that the browser checks.
 - **The data**: templates and settings live in `Publipostage_*` tables of the Grist document; display
   preferences (language, theme, shortcuts…) in the browser.
-- **The size**: 125 files in `js/` (47,000 lines: 34,800 of code, 9,400 of comments, 2,800 blank), 42
+- **The size**: 126 files in `js/` (47,400 lines: 35,000 of code, 9,500 of comments, 2,800 blank), 42
   stylesheets (3,500 lines), an 810-line page. Four PDF font files weigh 2.5 MB in a few lines (data);
   `js/i18n.js` is text to translate, not logic.
 
@@ -396,7 +397,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/macro-templates.js` | Choosing and assembling a macro-template's appendices (no DOM). |
 | `js/macro-editor.js` | The screen for creating a macro-template, and its summary. |
 
-### Page and layout (10 files, 3,400 lines)
+### Page and layout (11 files, 3,600 lines)
 
 | File | Role |
 |---|---|
@@ -406,6 +407,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/page-zoom.js` | On-screen page zoom, in Edit and Reading modes (corner pill, Fit, Ctrl + wheel); display only, the exports keep the real dimensions. |
 | `js/header-footer-preview.js` | Header and footer editing, paginated preview. |
 | `js/table-page-cut.js` | Where a table is cut between two pages. |
+| `js/zone-page-cut.js` | Where a two-column zone is cut between two pages, column by column like the PDF (the editor and Reading mode). |
 | `js/sheet-layout.js`, `js/sheet-assembly-dialog.js` | "Assemble before printing": the geometry of a sheet and its window. |
 
 ### Reading (2 files, 1,400 lines)
