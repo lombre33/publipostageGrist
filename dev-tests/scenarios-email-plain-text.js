@@ -3,7 +3,7 @@
 // vue de l'éditeur et le mail. Les cas ouvrent un VRAI nouvel email (survol de « + », clic sur « Nouvel email ») puis un nouveau document pour la contre-épreuve :
 //  1) les touches de mise en forme de TipTap (gras, italique, souligné, code, barré, alignements, niveaux de titre Ctrl+Alt+1 à 6) ne font rien dans un email et font toujours leur
 //     effet dans un document ; la citation, les listes et le bloc de code, que le texte brut écrit, restent possibles dans l'email ;
-//  2) les signes de Markdown tapés (**gras**, *italique*, ~~barré~~, `code`, « # ») restent du texte au lieu d'être mangés par les règles de saisie ; un document en fait de la mise en forme ;
+//  2) les signes de Markdown tapés (**gras**, *italique*, ~~barré~~, `code`, « # » suivi d'une espace ou d'Entrée) restent du texte au lieu d'être mangés par les règles de saisie ; un document en fait de la mise en forme ;
 //  3) un collage perd les marques, la couleur, la taille, la police, l'alignement et les images, et ses titres deviennent des lignes simples, mais garde les liens, listes, citations,
 //     blocs de code et bulles ; le même collage dans un document garde tout ;
 //  4) un texte brut collé garde ses lignes vides (ProseMirror compte plusieurs retours à la ligne de suite pour un seul), son retrait, et se glisse dans la ligne du curseur ;
@@ -149,6 +149,38 @@
       const headingsAsText = r => r['titre 1'] === '<p># Un</p>' && r['titre 2'] === '<p>## Un</p>' && r['titre 6'] === '<p>###### Un</p>' && r['sept signes'] === '<p>####### Un</p>';
       const headingsRule = r => /<h1[ >][^]*Un/.test(r['titre 1'] || '') && /<h2[ >][^]*Un/.test(r['titre 2'] || '') && /<h6[ >][^]*Un/.test(r['titre 6'] || '') && r['sept signes'] === '<p>####### Un</p>';
       return { pass: emailText && docMarks && blocks(email) && blocks(doc) && headingsAsText(email) && headingsRule(doc), notes: JSON.stringify(result) };
+    },
+  });
+
+  // Entrée comme la traite ProseMirror : sur la zone d'édition, le curseur à la position donnée (la fin du texte par défaut).
+  async function pressEnter(markup, { pos = null, shift = false } = {}) {
+    await startWith(markup);
+    if (pos !== null) { ed().commands.setTextSelection(pos); await sleep(30); }
+    const event = new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, shiftKey: shift, bubbles: true, cancelable: true });
+    view().dom.dispatchEvent(event);
+    await sleep(60);
+    return html();
+  }
+
+  cases.push({
+    id: 'epl_enter_after_heading_signs_keeps_them_in_an_email',
+    description: 'Entrée après un à six « # » seuls sur la ligne coupe la ligne et garde les signes dans un email (la règle de saisie des titres de TipTap, lancée aussi par Entrée, les mangerait pour un titre vide), qu\'un document change en titre ; Maj+Entrée, un « # » au milieu d\'une ligne coupée, un item de liste et la règle des puces (« - » puis Entrée) gardent leur geste',
+    run: async (h) => {
+      const result = await inBoth(h, async () => ({
+        one: await pressEnter('<p>#</p>'),
+        six: await pressEnter('<p>######</p>'),
+        seven: await pressEnter('<p>#######</p>'),
+        middle: await pressEnter('<p>#abc</p>', { pos: 2 }),
+        shift: await pressEnter('<p>#</p>', { shift: true }),
+        item: await pressEnter('<ul><li><p>#</p></li></ul>', { pos: 4 }),
+        dash: await pressEnter('<p>-</p>'),
+      }));
+      const email = result.email || {}, doc = result.document || {};
+      const emailKeeps = email.one === '<p>#</p><p></p>' && email.six === '<p>######</p><p></p>' && email.seven === '<p>#######</p><p></p>' && email.middle === '<p>#</p><p>abc</p>'
+        && email.shift === '<p>#<br></p>';
+      const docHeadings = /^<h1><\/h1>/.test(doc.one || '') && /^<h6><\/h6>/.test(doc.six || '') && doc.seven === '<p>#######</p><p></p>' && /^<h1>abc<\/h1>/.test(doc.middle || '') && /^<h1><\/h1>/.test(doc.shift || '');
+      const sameInBoth = r => r.item === '<ul><li><p>#</p></li><li><p></p></li></ul><p></p>' && /^<ul><li><p><\/p><\/li><\/ul>/.test(r.dash || '');
+      return { pass: emailKeeps && docHeadings && sameInBoth(email) && sameInBoth(doc), notes: JSON.stringify(result) };
     },
   });
 

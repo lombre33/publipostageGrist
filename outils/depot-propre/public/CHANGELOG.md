@@ -236,8 +236,8 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 - **Un modèle e-mail n'écrit que du texte brut** : Ctrl+B, Ctrl+I, Ctrl+U, Ctrl+E, Ctrl+Maj+S, les
   alignements (Ctrl+Maj+L, E, R, J) et les niveaux de titre (Ctrl+Alt+1 à 6) ne font plus rien dans un
   modèle e-mail, dont les boutons étaient déjà grisés (le menu des titres l'est aussi maintenant), et les
-  signes de Markdown tapés (`**gras**`, `*italique*`, `~~barré~~`, `code`, `# ` en début de ligne) y restent
-  du texte, tels que le lien les écrit, au lieu d'être mangés pour une mise en forme que le lien ne porte pas.
+  signes de Markdown tapés (`**gras**`, `*italique*`, `~~barré~~`, `code`, `#` en début de ligne suivi d'une espace ou
+  d'Entrée) y restent du texte, tels que le lien les écrit, au lieu d'être mangés pour une mise en forme que le lien ne porte pas.
   Un texte copié ailleurs perd à l'arrivée son gras, son italique, son souligné, sa couleur, sa taille,
   sa police, son alignement et ses images, ses titres deviennent des lignes simples, et il garde son texte,
   ses liens, ses listes, ses citations et ses lignes vides ; un texte brut collé garde lui aussi ses lignes
@@ -554,7 +554,7 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 - **An e-mail template only writes plain text**: Ctrl+B, Ctrl+I, Ctrl+U, Ctrl+E, Ctrl+Shift+S, the
   alignments (Ctrl+Shift+L, E, R, J) and the heading levels (Ctrl+Alt+1 to 6) no longer do anything in an
   e-mail template, whose buttons were already greyed out (the heading menu is now too), and typed Markdown
-  signs (`**bold**`, `*italic*`, `~~strike~~`, `code`, `# ` at the start of a line) stay text there, as the
+  signs (`**bold**`, `*italic*`, `~~strike~~`, `code`, `#` at the start of a line followed by a space or Enter) stay text there, as the
   link writes them, instead of being eaten for formatting the link does not carry.
   Text copied from elsewhere loses its bold, italic, underline, colour, size, font, alignment
   and images on arrival, its headings become plain lines, and it keeps its text, links, lists, quotes and

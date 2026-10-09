@@ -47,10 +47,27 @@ const EmailPlainText = (function () {
   // début de ligne), mais le texte brut n'écrit pas un niveau de titre : la touche espace est alors insérée telle quelle, et « # Titre » reste ce qu'on a tapé.
   const MARK_RULE_ENDINGS = /[*_~`]$/;
   const HEADING_SIGNS = /^#{1,6}$/;
+  // Ce que `textBetween` écrit pour un nœud sans texte (une bulle) : jamais un « # ».
+  const LEAF_TEXT = String.fromCharCode(0xFFFC);
+  const textBefore = $pos => $pos.parent.textBetween(0, $pos.parentOffset, null, LEAF_TEXT);
   function isHeadingRuleSpace(view, from, text) {
-    if (!/^\s$/.test(text)) return false;
-    const $from = view.state.doc.resolve(from);
-    return HEADING_SIGNS.test($from.parent.textBetween(0, $from.parentOffset, null, '\ufffc'));
+    return /^\s$/.test(text) && HEADING_SIGNS.test(textBefore(view.state.doc.resolve(from)));
+  }
+  // Entrée lance aussi les règles de saisie de TipTap (avec « \n » comme texte, pour le bloc de code) : un à six « # » seuls devant le curseur deviendraient
+  // un titre vide, le signe mangé et la ligne jamais coupée. Entrée fait alors ce que font les plugins placés après la règle de saisie (couper la ligne,
+  // ouvrir un item de liste, une suggestion ouverte), comme si cette règle n'existait pas. Les règles des listes (« - ») et de la citation (« > ») gardent
+  // leur geste sur Entrée.
+  function isHeadingSignsEnter(view, event) {
+    const $cursor = view.state.selection.$cursor;
+    return event.key === 'Enter' && !!$cursor && HEADING_SIGNS.test(textBefore($cursor));
+  }
+  function enterWithoutInputRules(view, event, self) {
+    const plugins = view.state.plugins;
+    for (let i = plugins.indexOf(self) + 1; i < plugins.length; i++) {
+      const handler = plugins[i].spec.isInputRules ? null : plugins[i].props.handleKeyDown;
+      if (handler && handler(view, event)) return true;
+    }
+    return false;
   }
   // Le signe est inséré comme le fait ProseMirror (`deflt` est sa transaction par défaut) sans passer par les règles de saisie, placées après ce plugin
   // (priorité 1000).
@@ -123,15 +140,16 @@ const EmailPlainText = (function () {
         return keys;
       },
       addProseMirrorPlugins() {
-        return [new Plugin({
+        const plugin = new Plugin({
           key: new PluginKey('emailPlainText'),
           props: {
-            handleKeyDown: (view, event) => active && isCapsBold(event),
+            handleKeyDown: (view, event) => active && (isCapsBold(event) || (isHeadingSignsEnter(view, event) && enterWithoutInputRules(view, event, plugin))),
             handleTextInput,
             transformPasted: slice => (active ? cleanSlice(slice) : slice),
             clipboardTextParser: (text, $context, plain, view) => (active ? textToSlice(text, $context, view) : null),
           },
-        })];
+        });
+        return [plugin];
       },
     });
   }

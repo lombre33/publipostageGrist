@@ -374,6 +374,16 @@ async function formattingKeysAndPaste() {
   await page.waitForTimeout(120);
   const typedHeading = await editorHtml();
   check('dans un email, « # Titre » tapé au vrai clavier reste la ligne tapée (aucun titre), et le lien porte « # Titre »', typedHeading === '<p># Titre</p>' && (await createEmailBody()) === '# Titre', typedHeading);
+  // Entrée derrière un « # » seul : la règle de saisie des titres de TipTap la prenait pour « # » + espace et mangeait le signe sans couper la ligne. Échap ferme d'abord le panneau
+  // #Variable que « # » ouvre (sinon Entrée choisit une variable).
+  await emptyEditorWithCursor();
+  await page.keyboard.type('#');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('Suite');
+  await page.waitForTimeout(120);
+  const hashEnter = await editorHtml();
+  check('dans un email, « # » seul puis Entrée au vrai clavier coupe la ligne et garde le signe, et le lien porte « # » puis « Suite »', hashEnter === '<p>#</p><p>Suite</p>' && (await createEmailBody()) === '#\nSuite', hashEnter);
   await editorWithCursor('<p>Bonjour Marie</p>');
   const mailMenu = await headingMenuState();
   check('dans un email, le menu des titres est grisé sans disparaître et le survol ne l’ouvre pas', mailMenu.locked && mailMenu.shown && mailMenu.opacity < 0.6 && mailMenu.flyout === 'none', mailMenu);
@@ -438,6 +448,14 @@ async function formattingKeysAndPaste() {
   await page.waitForTimeout(120);
   const docTypedHeading = await editorHtml();
   check('dans un document, « # Titre » tapé au vrai clavier fait toujours un titre 1', /^<h1[ >]/.test(docTypedHeading) && /Titre/.test(docTypedHeading), docTypedHeading);
+  await emptyEditorWithCursor();
+  await page.keyboard.type('#');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('Suite');
+  await page.waitForTimeout(120);
+  const docHashEnter = await editorHtml();
+  check('dans un document, « # » seul puis Entrée fait toujours un titre 1 (la règle de TipTap n’est touchée que dans un email)', /^<h1[ >]/.test(docHashEnter) && /Suite/.test(docHashEnter), docHashEnter);
   await editorWithCursor('<p>Bonjour Marie</p>');
   const docMenu = await headingMenuState();
   check('dans un document, le menu des titres reste actif : le survol l’ouvre', !docMenu.locked && docMenu.shown && docMenu.opacity === 1 && docMenu.flyout !== 'none', docMenu);
