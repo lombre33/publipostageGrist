@@ -724,7 +724,7 @@ Deux options utiles :
   Annuler et Échap n'exportent rien, un widget sans ligne ne propose que « Toute la table » et Entrée y annule, un widget qui affiche tout ne pose pas la question.
   Seconde partie (`runSites`) : les endroits qui l'appellent, chacun par le vrai clic sur le vrai bouton - image par adresse, enregistrer sous, supprimer un
   modèle (focus d'emblée sur Annuler), email trop long, les trois exports en lot (message propre à chacun ; Annuler ne lance rien, Générer lance le chargement),
-  table de la galerie (au-dessus de l'aperçu, nom proposé sélectionné), supprimer un fil de commentaires (la confirmation s'ouvre à l'appui du bouton, sous le
+  table de la galerie (au-dessus de l'aperçu, nom proposé sélectionné ; sur le modèle d'essai à `schema.py` du catalogue de dev, posé en tête de la liste le temps de cette partie : plus aucun modèle du catalogue public n'en a, ils s'installent avec leur pack), supprimer un fil de commentaires (la confirmation s'ouvre à l'appui du bouton, sous le
   pointeur, et y reste), nouveau dossier / sous-dossier / déplacer vers un dossier au-dessus d'Organiser (vider le champ sort le modèle de tout dossier),
   supprimer une correspondance de tables (le titre est la question, le message nomme les modèles touchés). Chaque cas dit ce qui se passe à l'Échap, à
   l'Annuler et à la validation. L'ancien code (boîtes du navigateur) échoue partout : la fenêtre ne s'ouvre pas et les boîtes natives sont comptées.
@@ -826,7 +826,7 @@ Deux options utiles :
   ignoré). Contre l'ancien code (`1827169`) 5 des 6 échouent - deux lignes du même nom, quatre avec Ctrl+S et les clics, deux macro-modèles, deux écritures à la fois - et le script échoue sur 6 constats de 36 ; celui qui
   passe est le garde-fou de la nouvelle attente (le bouton ne reste pas bloqué par une écriture sans réponse). Trois cas pour la galerie (même carte, « Utiliser ce modèle ») : le double clic sur « Utiliser ce modèle »
   (un modèle, nommé comme la galerie ; avant : « Facture » puis « Facture (2) »), le double clic sur « Utiliser avec une nouvelle table de données » (la fenêtre du nom de table s'ouvre une fois, une table, un modèle ;
-  avant : deux fenêtres, deux tables, deux modèles) et une création dont Grist ne répond jamais (une minute plus tard, simulée par `Date.now`, le bouton repart). Contre `edaa749`, 2 des 3 échouent et le script échoue sur
+  avant : deux fenêtres, deux tables, deux modèles ; sur le modèle d'essai à `schema.py` du catalogue de dev, posé en tête de la liste, car ce bouton n'existe plus pour un modèle à pack) et une création dont Grist ne répond jamais (une minute plus tard, simulée par `Date.now`, le bouton repart). Contre `edaa749`, 2 des 3 échouent et le script échoue sur
   3 constats de 42 ; le troisième est le garde-fou de la minute.
 - `autosaveIdle` (`dev-tests/scenarios-autosave-idle.js`, 3 cas, ~80 s : de VRAIS minuteurs, l'enregistrement automatique est un `setInterval` que rien ne déclenche à la demande) -
   carte « Ralentir au repos » d'Antoine, 02/10 : la table des modèles se relisait en entier (816 Ko pour 14 modèles avec images) toutes les 2,5 s, même sans modification. Au repos elle

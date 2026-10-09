@@ -497,8 +497,7 @@
     "id": "reappro-email",
     "name": "E-mail de réapprovisionnement",
     "tags": [
-      "stock",
-      "e-mail"
+      "stock"
     ],
     "screenshot": "reappro-email/thumb.png",
     "preview": [
@@ -528,8 +527,7 @@
     "id": "valorisation-grille",
     "name": "Valorisation du stock (Excel)",
     "tags": [
-      "stock",
-      "grille"
+      "stock"
     ],
     "screenshot": "valorisation-grille/thumb.png",
     "preview": [
@@ -554,7 +552,7 @@
     "id": "bulletin",
     "name": "Bulletin scolaire",
     "tags": [
-      "école"
+      "métier"
     ],
     "screenshot": "bulletin/thumb.png",
     "preview": [
@@ -588,7 +586,7 @@
     "id": "fiche-recette",
     "name": "Fiche recette",
     "tags": [
-      "cuisine"
+      "métier"
     ],
     "screenshot": "fiche-recette/thumb.png",
     "preview": [
@@ -623,7 +621,7 @@
     "id": "emargement",
     "name": "Feuille d’émargement",
     "tags": [
-      "formation"
+      "métier"
     ],
     "screenshot": "emargement/thumb.png",
     "preview": [
@@ -659,8 +657,7 @@
     "id": "emargement-grille",
     "name": "Émargement en grille (Excel)",
     "tags": [
-      "formation",
-      "grille"
+      "métier"
     ],
     "screenshot": "emargement-grille/thumb.png",
     "preview": [

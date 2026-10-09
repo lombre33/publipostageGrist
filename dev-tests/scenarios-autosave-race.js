@@ -656,16 +656,33 @@
   // --- Un deuxième clic sur « Utiliser… » dans l'aperçu de la galerie pendant la création (carte « Corriger » d'Antoine, 02/10) -------------------------------------------------------
   // Même geste que le double clic sur Enregistrer : Grist lent, rien ne bouge à l'écran, la personne clique une deuxième fois. « Utiliser ce modèle » créait alors un deuxième modèle
   // (« Facture » puis « Facture (2) ») ; « Utiliser avec une nouvelle table de données » rouvrait la fenêtre du nom de la table. Le clic en trop est ignoré (js/main.js, `once`).
-  // La première carte de la galerie est « Facture », qui a un schéma : les deux boutons sont là. Les noms créés se lisent par différence (un nom pris devient « (2) » d'un cas à l'autre).
+  // La première carte de la galerie est « Facture », un modèle à pack : « Utiliser ce modèle » est là, « Utiliser avec une nouvelle table de données » non (le pack le remplace). Ce second bouton
+  // n'existe plus que pour un modèle à schema.py sans pack, et aucun modèle du catalogue public n'en est un : le modèle d'essai du catalogue de dev (templates-gallery-dev), posé en tête de la
+  // liste le temps d'un cas. Les noms créés se lisent par différence (un nom pris devient « (2) » d'un cas à l'autre).
   const namesNow = () => stub().state.rows[TABLE].Nom.slice();
   const createdSince = (before) => namesNow().slice(before.length);
-  async function openGalleryPreview(h) {
+  async function addSchemaEntry() {
+    const list = await TemplateGallery.loadManifest();
+    const dev = await (await fetch('templates-gallery-dev/manifest.json', { cache: 'no-store' })).json();
+    const entry = Object.assign({}, dev.find(e => e.schema && !e.pack), { __base: 'templates-gallery-dev/' });
+    list.unshift(entry);
+    return entry;
+  }
+  async function removeSchemaEntry(entry) {
+    const list = await TemplateGallery.loadManifest();
+    if (list.indexOf(entry) !== -1) list.splice(list.indexOf(entry), 1);
+  }
+  // Un aperçu lu : le modèle d'un pack s'y montre par ses captures (la feuille de l'éditeur reste vide), les autres en lecture seule.
+  async function openGalleryPreview(h, name) {
     document.getElementById('v2-btn-new-from-template').click();
     if (!await waitUntil(h, () => !!document.querySelector('#tpl-gallery-grid .tpl-gallery-card'), 8000, 50)) return null;
-    document.querySelector('#tpl-gallery-grid .tpl-gallery-card').click();
+    const cards = Array.from(document.querySelectorAll('#tpl-gallery-grid .tpl-gallery-card'));
+    const card = name ? cards.find(c => c.querySelector('.tpl-gallery-card-name').textContent === name) : cards[0];
+    if (!card) return null;
+    card.click();
     const shown = await waitUntil(h, () => {
       const preview = document.getElementById('template-preview-modal');
-      return !!preview && preview.style.display !== 'none' && document.getElementById('tpl-preview-tiptap').innerHTML.length > 20;
+      return !!preview && preview.style.display !== 'none' && (document.getElementById('tpl-preview-tiptap').innerHTML.length > 20 || !document.getElementById('tpl-preview-captures').hidden);
     }, 8000, 50);
     return shown ? document.getElementById('tpl-preview-name').textContent.trim() : null;
   }
@@ -720,8 +737,9 @@
       const watch = watchBanner();
       let prompts = 0;
       const dialogs = h.stubDialogs({ prompt: async () => { prompts++; await h.sleep(300); return 'Facture_sonde_double_clic'; } });
+      const schemaEntry = await addSchemaEntry();
       try {
-        const entryName = await openGalleryPreview(h);
+        const entryName = await openGalleryPreview(h, schemaEntry.name);
         if (!entryName) return { pass: false, notes: "l'aperçu de la galerie ne s'ouvre pas, rien à vérifier" };
         const before = namesNow();
         stub().clearActionLog();
@@ -738,7 +756,7 @@
         const tables = stub().getActionLog().filter(a => a[0] === 'AddTable' && a[1] === 'Facture_sonde_double_clic').length; // les autres tables du widget ne comptent pas
         const pass = prompts === 1 && tables === 1 && created.length === 1 && !galleryOpen();
         return { pass, notes: 'fenêtres du nom de table=' + prompts + ', tables créées=' + tables + ', modèles créés=' + JSON.stringify(created) + ', galerie ouverte=' + galleryOpen() };
-      } finally { dialogs.restore(); closeGallery(); autosaveSwitch(true); await leaveClean(h, watch); }
+      } finally { dialogs.restore(); closeGallery(); await removeSchemaEntry(schemaEntry); autosaveSwitch(true); await leaveClean(h, watch); }
     },
   });
 
