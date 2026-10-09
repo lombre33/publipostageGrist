@@ -371,9 +371,9 @@ const Editor = (function () {
     const withCellStyle = Cell => EditorNodes.withCellBackground(GridEditor.withCellAttributes(EditorNodes.withFastColwidth(Cell)));
     const { TwoColumnsColumn, TwoColumnsZone } = EditorNodes.createTwoColumnsNodes(Node, mergeAttributes);
     return [
-      // Entrée d'une grille (descend d'une case), rangée à cet endroit : après StarterKit et avant Variables et TextExpansion. TipTap essaie la
-      // dernière extension rangée en premier : leurs listes ouvertes gardent donc Entrée, et la liste à puces aussi (cf.
-      // GridEditor.createEnterExtension). Hors grille, elle ne fait rien.
+      // Entrée d'une case de tableau, de grille ou de document (descend d'une case), rangée à cet endroit : après StarterKit et avant Variables et
+      // TextExpansion. TipTap essaie la dernière extension rangée en premier : leurs listes ouvertes gardent donc Entrée, et la liste à puces aussi (cf.
+      // GridEditor.createEnterExtension). Hors d'une case de tableau, elle ne fait rien.
       GridEditor.createEnterExtension(Extension),
       // Les touches d'une valeur conditionnelle (Entrée = retour à la ligne dans la valeur, Retour arrière la retire vide) : même rang que l'Entrée
       // d'une grille, pour la même raison.

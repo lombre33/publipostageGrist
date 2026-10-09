@@ -2221,8 +2221,8 @@
   });
 
   cases.push({
-    id: 'grid_enter_in_a_document_still_splits_the_paragraph',
-    description: 'Hors grille, dans un document, Entrée coupe le paragraphe comme avant (et dans un tableau de document, elle ajoute un paragraphe dans la case).',
+    id: 'grid_enter_outside_a_table_still_splits_the_paragraph',
+    description: 'Hors d\'un tableau, dans un document, Entrée coupe le paragraphe comme avant (dans la case d\'un tableau de document elle descend maintenant d\'une case, comme dans la grille : groupe gridInDocument).',
     run: async (h) => {
       await h.resetEditor();
       Editor.setHTML('<p>ab</p><table><tbody><tr><td><p>cd</p></td><td><p>ef</p></td></tr><tr><td><p>gh</p></td><td><p>ij</p></td></tr></tbody></table>');
@@ -2232,12 +2232,8 @@
       ed().chain().focus().setTextSelection(2).run(); // au milieu de « ab »
       const outside = key('Enter');
       const outsideParagraphs = paragraphs() - before;
-      let cellPara = 0;
-      doc().descendants((node, pos) => { if (node.type.name === 'tableCell' && node.textContent === 'cd') { ed().chain().focus().setTextSelection(pos + 3).run(); } return true; });
-      const inside = key('Enter');
-      doc().descendants(node => { if (node.type.name === 'tableCell' && node.textContent === 'cd') cellPara = node.childCount; return true; });
-      const ok = outside && outsideParagraphs === 1 && inside && cellPara === 2;
-      return { pass: ok, notes: JSON.stringify({ outside, outsideParagraphs, inside, cellPara }) };
+      const ok = outside && outsideParagraphs === 1;
+      return { pass: ok, notes: JSON.stringify({ outside, outsideParagraphs }) };
     },
   });
 

@@ -211,6 +211,11 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Modifié
 
+- **Entrée dans un tableau de document** : comme dans une grille (et dans Excel ou Google Sheets), Entrée descend
+  d'une case et en sélectionne le texte, on tape par-dessus ; Maj+Entrée (ou Ctrl+Entrée) ajoute une ligne dans la
+  case ; sur la dernière ligne, Entrée ne fait rien. Une liste, une citation, un bloc de code ou la liste « # »
+  ouverte gardent leur Entrée. Avant, Entrée coupait le paragraphe de la case : pour écrire une seconde ligne dans
+  une case, utilisez maintenant Maj+Entrée.
 - **Modèle de la vue** : Réglages > Vue > « Utiliser … pour cette vue » accepte aussi un e-mail ou un
   macro-modèle, qui s'ouvre au démarrage de la vue (un macro-modèle sur son résumé, un e-mail sur son
   bandeau Objet / À / Cc) ; l'étoile du document reste réservée aux modèles ordinaires.
@@ -585,6 +590,10 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Changed
 
+- **Enter in a document table**: as in a grid (and in Excel or Google Sheets), Enter moves down one cell and selects
+  its text, so you type over it; Shift+Enter (or Ctrl+Enter) adds a line inside the cell; on the last row, Enter does
+  nothing. A list, a quote, a code block or an open "#" list keep their Enter. Enter used to split the cell's
+  paragraph: to write a second line in a cell, use Shift+Enter now.
 - **A view's template**: Settings > View > "Use … for this view" now also accepts an e-mail or a macro
   template, which opens when the view starts (a macro template on its summary, an e-mail on its
   Subject / To / Cc banner); the document's ★ stays reserved for ordinary templates.

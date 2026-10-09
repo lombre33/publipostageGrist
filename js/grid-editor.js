@@ -21,8 +21,9 @@
 // Tout est inerte tant que setActive(true) n'a pas été appelé (js/main.js:loadTemplateIntoEditor), sauf ce que le tableau d'un document partage avec
 // la grille - « tout tableau est un tableau de grille à l'usage » : les réglages de la barre du tableau (alignement vertical, bordures, quadrillage)
 // visent le tableau qui porte la sélection (`tableInfo`, `scopedTable`), la grille étant le cas où le modèle n'a qu'un tableau ; « Ligne / Colonne avant /
-// après » (`insertLines`), la fusion et la scission (`mergeSelected`, `splitSelected`, appelées par js/table-merge.js) valent pour les deux ; et un
-// tableau de document qui porte des traits ou des hauteurs les garde quand on y ajoute ou retire une ligne (`repairDocumentTables`). Un email, un
+// après » (`insertLines`), la fusion et la scission (`mergeSelected`, `splitSelected`, appelées par js/table-merge.js) et Entrée qui descend d'une case
+// (`enterGoesDown`) valent pour les deux ; et un tableau de document qui porte des traits ou des hauteurs les garde quand on y ajoute ou retire une ligne
+// (`repairDocumentTables`). Un email, un
 // macro-modèle ou un tableau sans trait ni hauteur n'y voient rien. Les classes TipTap/ProseMirror arrivent par configure() (editor.js).
 const GridEditor = (function () {
   const el = Dom.el;
@@ -200,17 +201,17 @@ const GridEditor = (function () {
     return { withTableAttributes, withRowAttributes, withCellAttributes, serialize, tableInfo };
   })();
 
-  // Le tableau que visent les réglages de la barre du tableau (alignement vertical, bordures, quadrillage) : celui de la grille, ou celui du document qui
-  // porte la sélection. Aucun dans un document dont le suivi des modifications est allumé : ces réglages sont des changements d'attributs, que le suivi ne
-  // voit pas (comme la fusion de cases, js/table-merge.js) ; ils s'écriraient sans laisser de suggestion.
-  function scopedTable(ed) {
-    if (!active && Editor.isTrackChangesOn()) return null;
-    return tableInfo(ed.state.doc, ed.state.selection);
-  }
+  // Les réglages de la barre du tableau (alignement vertical, bordures, quadrillage) sont-ils refusés ? Oui dans un document dont le suivi des modifications
+  // est allumé : ce sont des changements d'attributs, que le suivi ne voit pas (comme la fusion de cases, js/table-merge.js) ; ils s'écriraient sans laisser
+  // de suggestion. La barre du tableau s'en sert pour griser leurs boutons et pour ne pas ouvrir le menu « Bordures » (la règle de `scopedTable`, écrite
+  // une seule fois). Ne dépend pas de la sélection : un bouton à menu s'ouvre et annonce son état (aria-expanded) tant que rien ne le refuse, tableau sous
+  // le curseur ou non (le balayage de `toolbarChrome` le déclenche sur une page sans tableau).
+  function tableSettingsBlocked() { return !active && Editor.isTrackChangesOn(); }
 
-  // Ces réglages ont-ils un tableau à régler ? La barre du tableau s'en sert pour griser leurs boutons sous le suivi des modifications (même règle que
-  // `scopedTable`, écrite une seule fois).
-  function tableSettingsAvailable(ed) { return !!scopedTable(ed); }
+  // Le tableau que visent ces réglages : celui de la grille, ou celui du document qui porte la sélection ; aucun quand ils sont refusés.
+  function scopedTable(ed) {
+    return tableSettingsBlocked() ? null : tableInfo(ed.state.doc, ed.state.selection);
+  }
 
   const { rowPos, isEmptyParagraph, isValidGridDoc, buildDefaultTable, cellOrigins, columnWidths, knownColumnWidths, hasCellAttr, isFreshCell } = (function () {
     // Le document d'une grille : rang d'une ligne, ce qui est valable, la grille de départ, l'emplacement et la largeur des colonnes.
@@ -1037,11 +1038,18 @@ const GridEditor = (function () {
 
     // Comme dans Excel et Google Sheets : Entrée descend d'une case et la sélectionne (on tape par-dessus, comme avec Tab) ; Maj+Entrée et Ctrl+Entrée
     // ajoutent une ligne dans la case (le retour à la ligne forcé de TipTap, que ces deux touches faisaient déjà). Sur la dernière ligne la touche est
-    // prise sans rien faire : pas de ligne de tableau ajoutée en passant, pas de paragraphe vide. Dans une liste (puces, numéros, tâches) Entrée garde
-    // son sens de liste, sinon on n'y ajouterait jamais un point.
-    const LIST_ITEMS = new Set(['listItem', 'taskItem']);
+    // prise sans rien faire : pas de ligne de tableau ajoutée en passant, pas de paragraphe vide. Dans toute case de tableau, d'une grille comme d'un
+    // document ; le tableau est celui de la case, le tableau intérieur d'un tableau dans une case compris.
 
-    function inListItem(sel) { return !isCellSelection(sel) && ancestorDepth(sel.$head, LIST_ITEMS) > 0; }
+    // La case d'où Entrée part, null quand la touche garde son sens. Le texte doit être un paragraphe ou un titre posé directement dans la case : dans
+    // une liste (puces, numéros, tâches) Entrée ajoute un point, dans un bloc de code, une citation, un encadré ou une colonne elle coupe le bloc, sinon
+    // on n'y en ajouterait jamais. Des cases choisies : celle d'où la sélection est partie (comme Excel, Entrée se range sous elle).
+    function enterCellPos(sel) {
+      if (isCellSelection(sel)) return sel.$anchorCell.pos;
+      const $head = sel.$head;
+      const depth = ancestorDepth($head, CELL_NODES);
+      return depth && $head.depth === depth + 1 && $head.parent.type.name !== 'codeBlock' ? $head.before(depth) : null;
+    }
 
     // La case sous la case active, dans sa colonne de gauche ; sous une case fusionnée sur plusieurs lignes, la case qui suit sa dernière ligne. Null
     // sur la dernière ligne.
@@ -1052,13 +1060,12 @@ const GridEditor = (function () {
     }
 
     function enterGoesDown(ed) {
-      if (!active || !ed.isEditable || ed.view.composing) return false;
+      if (!ed.isEditable || ed.view.composing) return false;
       const { state, view } = ed;
-      const sel = state.selection;
-      const info = tableInfo(state.doc);
-      if (!info || !selectionInsideTable(sel) || inListItem(sel)) return false;
-      const here = cellPosOf(sel, '$anchorCell'); // des cases choisies : celle d'où la sélection est partie (comme Excel, Entrée se range sous elle)
+      const here = enterCellPos(state.selection);
       if (here == null) return false;
+      const $here = state.doc.resolve(here); // devant la case, dans sa ligne : la ligne est à `depth`, le tableau juste au-dessus
+      const info = { node: $here.node($here.depth - 1), pos: $here.before($here.depth - 1) };
       const below = cellBelowPos(info, here);
       if (below == null) return true;
       const $below = state.doc.resolve(below);
@@ -1075,7 +1082,7 @@ const GridEditor = (function () {
     // Une extension à part, de priorité normale, rangée dans js/editor.js après StarterKit (sa liste à puces, ses touches de base) et avant Variables
     // et TextExpansion : TipTap essaie les extensions de la dernière rangée à la première, donc la liste `#` (ou celle des expansions) ouverte garde
     // son Entrée (choisir une ligne) et ne cède la touche à la case du dessous que quand elle n'en veut pas, alors que celle d'un calcul (priorité
-    // 1000) passe toujours devant. Hors grille la fonction rend faux : Entrée coupe le paragraphe.
+    // 1000) passe toujours devant. Hors d'une case de tableau la fonction rend faux : Entrée coupe le paragraphe.
     function createEnterExtension(Extension) {
       return Extension.create({
         name: 'gridEnter',
@@ -1569,7 +1576,7 @@ const GridEditor = (function () {
     TYPE, DEFAULT_VALIGN,
     configure, attach, createExtension, createEnterExtension, withTableAttributes, withRowAttributes, withCellAttributes, serialize, setActive, isActive, isGridType,
     refresh, currentCellDom, colName, floatingOptions, barSlot,
-    canMerge, canSplit, mergeCells, splitCell, mergeSelected, splitSelected, tableSettingsAvailable, setVerticalAlign, selectedVerticalAlign, applyBorders, canApplyBorders, gridLinesShown, setGridLinesShown,
+    canMerge, canSplit, mergeCells, splitCell, mergeSelected, splitSelected, tableSettingsBlocked, setVerticalAlign, selectedVerticalAlign, applyBorders, canApplyBorders, gridLinesShown, setGridLinesShown,
     canTogglePageBreak, hasPageBreak, togglePageBreak, insertLines,
   };
 })();

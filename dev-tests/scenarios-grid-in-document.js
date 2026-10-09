@@ -4,8 +4,9 @@
 // `scopedTable` de js/grid-editor.js), les autres restent comme ils étaient. Ici, sans bouton (ceux de la barre du tableau sont au groupe floatingToolbars et au script à la
 // souris verify-doc-table-tools-mouse.mjs) : les fonctions de `GridEditor` appelées sur l'éditeur d'un document à deux tableaux, un tableau dans une case, un curseur hors des tableaux, le suivi des modifications
 // allumé, puis le tableau réglé dans le Word (OOXML dézippé) : « ce que je règle sort pareil ». La grille elle-même (un seul tableau) garde sa suite "grid".
-// Lot 3 (b) : `tableSettingsAvailable`, ce qui grise les boutons sous le suivi. Lot 3 (a) : la structure - « Ligne / Colonne avant / après » sur toute la sélection, la ligne ou la colonne ajoutée qui reprend le cadre et la hauteur de sa
-// voisine, la fusion et la scission qui gardent le pourtour (`insertLines`, `repairDocumentTables`, `mergeSelected`, `splitSelected`).
+// Lot 3 (b) : `tableSettingsBlocked`, ce qui grise les boutons sous le suivi. Lot 3 (a) : la structure - « Ligne / Colonne avant / après » sur toute la sélection, la ligne ou la colonne ajoutée qui reprend le cadre et la hauteur de sa
+// voisine, la fusion et la scission qui gardent le pourtour (`insertLines`, `repairDocumentTables`, `mergeSelected`, `splitSelected`). Lot 3 (c) : Entrée qui descend d'une
+// case, comme dans la grille (`enterGoesDown`, `enterCellPos`).
 (function () {
   const cases = [];
   const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -203,10 +204,9 @@
         lines: GridEditor.setGridLinesShown(ed(), false),
         read: GridEditor.selectedVerticalAlign(ed()),
         shown: GridEditor.gridLinesShown(ed()),
-        available: GridEditor.tableSettingsAvailable(ed()),
       };
       const pass = got.valign === false && got.borders === false && got.canBorders === false && got.lines === false && got.read === null && got.shown === true
-        && got.available === false && JSON.stringify(ed().state.doc.toJSON()) === before;
+        && JSON.stringify(ed().state.doc.toJSON()) === before;
       return { pass, notes: JSON.stringify(got) };
     }),
   });
@@ -224,17 +224,17 @@
         borders: GridEditor.applyBorders(ed(), 'all', null),
         lines: GridEditor.setGridLinesShown(ed(), false),
         read: GridEditor.selectedVerticalAlign(ed()),
-        available: GridEditor.tableSettingsAvailable(ed()),
+        blocked: GridEditor.tableSettingsBlocked(),
       };
       const unchanged = JSON.stringify(ed().state.doc.toJSON()) === before;
       Editor.setTrackChanges(false);
       await sleep(100);
-      const availableAgain = GridEditor.tableSettingsAvailable(ed());
+      const blockedAgain = GridEditor.tableSettingsBlocked();
       const free = GridEditor.setVerticalAlign(ed(), 'bottom');
       await sleep(60);
-      const pass = tracked.valign === false && tracked.borders === false && tracked.lines === false && tracked.read === null && tracked.available === false && unchanged
-        && availableAgain === true && free === true && cellAttrs(1, 1, 0).verticalAlign === 'bottom';
-      return { pass, notes: JSON.stringify({ tracked, unchanged, availableAgain, free }) };
+      const pass = tracked.valign === false && tracked.borders === false && tracked.lines === false && tracked.read === null && tracked.blocked === true && unchanged
+        && blockedAgain === false && free === true && cellAttrs(1, 1, 0).verticalAlign === 'bottom';
+      return { pass, notes: JSON.stringify({ tracked, unchanged, blockedAgain, free }) };
     }),
   });
 
@@ -485,6 +485,138 @@
       if (!done || rowCount(1) !== 5) bad.push('lignes sous le suivi : ' + JSON.stringify({ done, rows: rowCount(1) }));
       if (tracked.some(row => row.line !== '-,-,-,- -,-,-,-' || row.height)) bad.push('rien ne devait être repris sous le suivi : ' + JSON.stringify(tracked));
       return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : JSON.stringify(tracked) };
+    }),
+  });
+
+  // === Lot 3 (c) : Entrée descend d'une case (choix « Comme la grille » d'Antoine, 09/10) ===
+  const key = (name, options) => {
+    const ev = new KeyboardEvent('keydown', Object.assign({ key: name, bubbles: true, cancelable: true }, options || {}));
+    ed().view.dom.dispatchEvent(ev);
+    return ev.defaultPrevented;
+  };
+  const selectedText = () => { const sel = ed().state.selection; return ed().state.doc.textBetween(sel.from, sel.to, ' '); };
+  const docJson = () => JSON.stringify(ed().state.doc.toJSON());
+  // Le curseur à la fin du texte `text` (le premier trouvé).
+  function cursorAtEndOf(text) {
+    let at = -1;
+    ed().state.doc.descendants((node, pos) => { if (at < 0 && node.isText && node.text === text) at = pos + node.nodeSize; return at < 0; });
+    ed().commands.setTextSelection(at);
+    return at;
+  }
+
+  cases.push({
+    id: 'gridscope_enter_goes_down_one_cell_in_a_document_table',
+    description: 'Dans une case d\'un tableau de document, Entrée descend d\'une case (même colonne) comme dans la grille : le document ne change pas (aucun paragraphe ajouté), la case d\'en dessous est sélectionnée, la touche est prise ; des cases choisies : sous la case d\'où la sélection est partie ; sous une case fusionnée sur plusieurs lignes : la case qui suit sa dernière ligne',
+    run: async (h) => withDoc(h, TWO_TABLES, async () => {
+      const bad = [];
+      await cursorIn(1, 0, 1);
+      const before = docJson();
+      const handled = key('Enter');
+      if (!handled || selectedText() !== 'B2B' || docJson() !== before) bad.push('Entrée depuis B1B : ' + JSON.stringify({ handled, selected: selectedText(), unchanged: docJson() === before }));
+      key('Enter');
+      if (selectedText() !== 'B3B') bad.push('seconde Entrée : ' + selectedText());
+      // Des cases choisies : Entrée repart de la case où la sélection a commencé.
+      await selectCells(1, 0, 0, 2, 1);
+      const range = !!ed().state.selection.$anchorCell;
+      key('Enter');
+      if (!range || selectedText() !== 'B2A' || ed().state.selection.$anchorCell) bad.push('cases choisies : ' + JSON.stringify({ range, selected: selectedText() }));
+      // Une case fusionnée sur deux lignes : on se range sous sa dernière ligne.
+      Editor.setHTML('<table><tbody><tr><td rowspan="2"><p>fus</p></td><td><p>x1</p></td></tr><tr><td><p>x2</p></td></tr><tr><td><p>y1</p></td><td><p>y2</p></td></tr></tbody></table><p>fin</p>');
+      await sleep(150);
+      ed().commands.focus();
+      cursorAtEndOf('fus');
+      key('Enter');
+      if (selectedText() !== 'y1') bad.push('sous la case fusionnée : ' + selectedText());
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'gridscope_enter_on_the_last_row_of_a_document_table_does_nothing',
+    description: 'Sur la dernière ligne d\'un tableau de document, Entrée est prise sans rien faire : ni ligne de tableau ni paragraphe ajoutés, le curseur ne bouge pas ; Maj+Entrée ajoute un retour à la ligne dans la case et ne descend pas',
+    run: async (h) => withDoc(h, TWO_TABLES, async () => {
+      const bad = [];
+      await cursorIn(1, 2, 0);
+      const at = ed().state.selection.from;
+      const before = docJson();
+      const handled = key('Enter');
+      if (!handled || ed().state.selection.from !== at || docJson() !== before) bad.push('Entrée sur la dernière ligne : ' + JSON.stringify({ handled, moved: ed().state.selection.from !== at, unchanged: docJson() === before }));
+      // Maj+Entrée : un retour à la ligne dans la même case.
+      await cursorIn(1, 0, 0);
+      const handledShift = key('Enter', { shiftKey: true });
+      const cell = ed().state.doc.nodeAt(cellPos(1, 0, 0));
+      let breaks = 0;
+      cell.descendants((node) => { if (node.type.name === 'hardBreak') breaks++; });
+      if (!handledShift || breaks !== 1 || rowCount(1) !== 3) bad.push('Maj+Entrée : ' + JSON.stringify({ handledShift, breaks, rows: rowCount(1) }));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'gridscope_enter_keeps_its_meaning_in_a_list_a_code_block_a_quote_and_outside_a_table',
+    description: 'Entrée garde son sens quand le texte n\'est pas un paragraphe ou un titre posé directement dans la case : dans une liste elle ajoute un point, dans un bloc de code un retour à la ligne, dans une citation elle coupe son paragraphe ; hors d\'un tableau elle coupe le paragraphe',
+    run: async (h) => {
+      const bad = [];
+      const cellWith = inner => '<p>avant</p><table><tbody><tr><td>' + inner + '</td><td><p>côté</p></td></tr><tr><td><p>bas</p></td><td><p>bas côté</p></td></tr></tbody></table><p>après</p>';
+      const count = name => { let n = 0; ed().state.doc.descendants((node) => { if (node.type.name === name) n++; }); return n; };
+      await withDoc(h, cellWith('<ul><li><p>un</p></li></ul>'), async () => {
+        cursorAtEndOf('un');
+        key('Enter');
+        if (count('listItem') !== 2 || selectedText() === 'bas') bad.push('liste : ' + JSON.stringify({ items: count('listItem'), selected: selectedText() }));
+      });
+      await withDoc(h, cellWith('<pre><code>ab</code></pre>'), async () => {
+        cursorAtEndOf('ab');
+        key('Enter');
+        let code = '';
+        ed().state.doc.descendants((node) => { if (node.type.name === 'codeBlock') code = node.textContent; });
+        if (!/\n/.test(code) || selectedText() === 'bas') bad.push('bloc de code : ' + JSON.stringify(code));
+      });
+      await withDoc(h, cellWith('<blockquote><p>cite</p></blockquote>'), async () => {
+        cursorAtEndOf('cite');
+        key('Enter');
+        let quoted = 0;
+        ed().state.doc.descendants((node) => { if (node.type.name === 'blockquote') quoted = node.childCount; });
+        if (quoted !== 2) bad.push('citation : ' + quoted + ' paragraphe(s)');
+      });
+      await withDoc(h, cellWith('<p>texte</p>'), async () => {
+        const paragraphs = () => count('paragraph');
+        const n = paragraphs();
+        cursorAtEndOf('avant');
+        key('Enter');
+        if (paragraphs() !== n + 1) bad.push('hors d\'un tableau : ' + (paragraphs() - n) + ' paragraphe(s) de plus');
+      });
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'gridscope_enter_in_an_inner_table_stays_in_the_inner_table',
+    description: 'Un tableau dans une case : Entrée descend dans le tableau intérieur, et sur sa dernière ligne elle ne fait rien (elle ne saute pas dans la ligne du tableau extérieur)',
+    run: async (h) => withDoc(h, '<p>avant</p><table><tbody><tr><td><p>dehors</p>' + tableHtml('N', 2, 1) + '</td></tr><tr><td><p>dessous</p></td></tr></tbody></table><p>après</p>', async () => {
+      const bad = [];
+      await cursorIn(1, 0, 0);
+      key('Enter');
+      if (selectedText() !== 'N2A') bad.push('depuis N1A : ' + selectedText());
+      const before = docJson();
+      const handled = key('Enter');
+      if (!handled || selectedText() !== 'N2A' || docJson() !== before) bad.push('dernière ligne du tableau intérieur : ' + JSON.stringify({ handled, selected: selectedText() }));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'gridscope_enter_goes_down_under_track_changes_without_a_suggestion',
+    description: 'Suivi des modifications allumé : Entrée descend d\'une case sans rien proposer (la sélection seule bouge)',
+    run: async (h) => withDoc(h, TWO_TABLES, async () => {
+      const bad = [];
+      await cursorIn(1, 0, 0);
+      Editor.setTrackChanges(true);
+      await sleep(100);
+      const before = docJson();
+      const handled = key('Enter');
+      await sleep(60);
+      if (!handled || selectedText() !== 'B2A' || docJson() !== before || Editor.hasPendingTrackedChanges()) bad.push(JSON.stringify({ handled, selected: selectedText(), unchanged: docJson() === before, pending: Editor.hasPendingTrackedChanges() }));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
     }),
   });
 
