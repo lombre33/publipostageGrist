@@ -308,8 +308,8 @@ async function runTheme(theme, size, tag) {
     // ---------- 2) Dans une case : les bandeaux se posent ----------
     await clickCell(page, 'B2');
     s = await stripsState(page);
-    check(`${label}, ${mode} - curseur dans B2 : trois lettres A B C et trois numéros 1 2 3, un coin, posés par-dessus la page (dans le body, hors du plan de travail qui défile), chaque numéro avec sa poignée de réglage de la hauteur (lot 4 (b), script docStripsResizeMouse), les lettres sans`,
-      s.shown && s.parent === 'BODY' && !s.inScrollBox && labelsOf(s.colHeads) === 'ABC' && labelsOf(s.rowHeads) === '123' && !!s.corner && s.rowHeads.every(h => h.handles === 1) && s.colHeads.every(h => h.handles === 0), { shown: s.shown, parent: s.parent, cols: labelsOf(s.colHeads), rows: labelsOf(s.rowHeads) });
+    check(`${label}, ${mode} - curseur dans B2 : trois lettres A B C et trois numéros 1 2 3, un coin, posés par-dessus la page (dans le body, hors du plan de travail qui défile), chaque numéro avec sa poignée de réglage de la hauteur (lot 4 (b), script docStripsResizeMouse), chaque lettre avec sa poignée de réglage de la largeur (lot 4 (c), script docStripsWidthMouse)`,
+      s.shown && s.parent === 'BODY' && !s.inScrollBox && labelsOf(s.colHeads) === 'ABC' && labelsOf(s.rowHeads) === '123' && !!s.corner && s.rowHeads.every(h => h.handles === 1) && s.colHeads.every(h => h.handles === 1), { shown: s.shown, parent: s.parent, cols: labelsOf(s.colHeads), rows: labelsOf(s.rowHeads) });
     const bad = alignment(s);
     check(`${label}, ${mode} (feuille à l'échelle ${s.zoom.toFixed(2)}) - les lettres sont sur leurs colonnes, les numéros sur leurs lignes, le coin entre les deux (bords à 1,5 px près)`, bad.length === 0, bad);
     check(`${label}, ${mode} - la lettre fait ${Math.round(s.cols.height)} px de haut, le numéro ${Math.round(s.rowsStrip.width)} px de large : lisibles à l'échelle de l'écran quelle que soit celle de la feuille`,

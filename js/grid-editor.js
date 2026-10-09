@@ -1144,18 +1144,19 @@ const GridEditor = (function () {
     return { createEnterExtension, createExtension };
   })();
 
-  const { setColumnWidth, setRowHeight, colName, tableElement, measure, measureTable } = (function () {
+  const { setColumnWidths, setColumnWidth, setRowHeight, colName, tableElement, measure, measureTable } = (function () {
     // La largeur d'une colonne, la hauteur d'une ligne, le nom d'une colonne et la taille mesurée sur le rendu.
 
     // Même parcours que `updateColumnWidth` de prosemirror-tables (poignée du bord d'une case) : toutes les cases de chaque colonne reçoivent la largeur,
-    // une case fusionnée sur plusieurs colonnes ne change que sa part de `colwidth`. Une seule transaction, quel que soit le nombre de colonnes tirées
-    // ensemble ; la case est relue sur la transaction, pour qu'une case fusionnée sur deux colonnes tirées ensemble reçoive ses deux parts. `info` : le
-    // tableau réglé (celui des bandeaux).
-    function setColumnWidth(info, colIndexes, width) {
+    // une case fusionnée sur plusieurs colonnes ne change que sa part de `colwidth`. `entries` : des couples [rang de colonne, largeur]. Une seule
+    // transaction, quel que soit le nombre de colonnes réglées ensemble ; la case est relue sur la transaction, pour qu'une case fusionnée sur deux
+    // colonnes réglées ensemble reçoive ses deux parts. `info` : le tableau réglé (celui des bandeaux). `frozen` : la largeur n'est pas un choix de la personne
+    // mais celle que le rendu a déjà (une colonne automatique que le glissé d'une autre fige) : ni suivie, ni dans l'historique.
+    function setColumnWidths(info, entries, frozen) {
       const { state, view } = editor;
       const map = libs.TableMap.get(info.node);
       const tr = state.tr;
-      colIndexes.forEach(colIndex => {
+      entries.forEach(([colIndex, width]) => {
         for (let row = 0; row < map.height; row++) {
           const index = row * map.width + colIndex;
           if (row && map.map[index] === map.map[index - map.width]) continue;
@@ -1168,8 +1169,13 @@ const GridEditor = (function () {
           tr.setNodeMarkup(info.pos + 1 + pos, undefined, Object.assign({}, attrs, { colwidth }));
         }
       });
-      if (tr.docChanged) view.dispatch(tr);
+      if (!tr.docChanged) return;
+      if (frozen) TrackChanges.skipTracking(tr.setMeta('addToHistory', false));
+      view.dispatch(tr);
     }
+
+    // La même largeur pour chaque colonne de `colIndexes`.
+    function setColumnWidth(info, colIndexes, width) { setColumnWidths(info, colIndexes.map(colIndex => [colIndex, width])); }
 
     // La même hauteur pour chaque ligne de `rowIndexes`, en une seule transaction.
     function setRowHeight(info, rowIndexes, height) {
@@ -1216,16 +1222,17 @@ const GridEditor = (function () {
       if (rows.some(row => !row)) return null;
       return { info, table, rect, width: rect.width, height: rect.height, rows, widths: cols.map(c => c.getBoundingClientRect().width), heights: rows.map(r => r.getBoundingClientRect().height) };
     }
-    return { setColumnWidth, setRowHeight, colName, tableElement, measure, measureTable };
+    return { setColumnWidths, setColumnWidth, setRowHeight, colName, tableElement, measure, measureTable };
   })();
 
   const { newStripSet, buildStrips, destroyStrips, refreshLabels, scheduleSync, watch, fillHeads, buildHead, markPageBreak } = (function () {
     // Les bandeaux : un jeu (coin, lettres, numéros) par tableau montré ; pose, retrait, étiquettes, programmation de leur rafraîchissement.
 
-    // Un jeu de bandeaux. `ctx` dit de quel tableau il parle (`info()`, `table(info)` n'est pas nécessaire : `measure`), si ses poignées règlent la
-    // taille (`resizable(kind)`, 'col' ou 'row') et dans quelle unité la bulle du glissé la dit (`format(px)`), quel facteur sépare ses pixels de ceux de
-    // la mise en page (`zoom(table)`), quelles lignes portent un saut de page (`breaks()`), comment on le programme (`wanted()`) et comment on le
-    // rafraîchit (`sync(force)`). Celui de la grille vit dans la feuille ; celui d'un tableau de document est posé par-dessus la page (`documentStrips`).
+    // Un jeu de bandeaux. `ctx` dit de quel tableau il parle (`info()`, `table(info)` n'est pas nécessaire : `measure`), dans quelle unité la bulle du
+    // glissé d'une poignée dit la taille (`format(px)`), quel facteur sépare ses pixels de ceux de la mise en page (`zoom(table)`), quelle largeur de page
+    // le tableau ne dépasse pas (`pageWidth()`, null : aucune), quelles lignes portent un saut de page (`breaks()`), comment on le programme (`wanted()`)
+    // et comment on le rafraîchit (`sync(force)`). Celui de la grille vit dans la feuille ; celui d'un tableau de document est posé par-dessus la page
+    // (`documentStrips`).
     function newStripSet(ctx) {
       const corner = el('div', 'v2-grid-corner');
       const cols = el('div', 'v2-grid-cols');
@@ -1293,15 +1300,13 @@ const GridEditor = (function () {
       while (container.children.length < count) container.appendChild(build(className));
     }
 
-    // Une lettre ou un numéro : l'étiquette, et la poignée qui règle la taille quand le jeu le permet (`resizable(kind)`, `kind` : 'col' ou 'row').
-    function buildHead(className, resizable) {
+    // Une lettre ou un numéro : l'étiquette, et la poignée qui règle la taille de sa colonne ou de sa ligne.
+    function buildHead(className) {
       const head = el('div', className);
       head.appendChild(el('span', 'v2-grid-label'));
-      if (resizable) {
-        const handle = el('span', 'v2-grid-handle');
-        handle.title = I18n.t(className === 'v2-grid-colhead' ? 'grid.resizeColumn' : 'grid.resizeRow');
-        head.appendChild(handle);
-      }
+      const handle = el('span', 'v2-grid-handle');
+      handle.title = I18n.t(className === 'v2-grid-colhead' ? 'grid.resizeColumn' : 'grid.resizeRow');
+      head.appendChild(handle);
       return head;
     }
 
@@ -1329,9 +1334,8 @@ const GridEditor = (function () {
       const key = m.widths.map(w => w.toFixed(2)).join(',') + '|' + m.heights.map(h => h.toFixed(2)).join(',') + '|' + breaks.map(on => (on ? 1 : 0)).join('');
       if (force || key !== set.lastKey) {
         set.lastKey = key;
-        const build = className => buildHead(className, set.ctx.resizable(className === 'v2-grid-colhead' ? 'col' : 'row'));
-        fillHeads(set.cols, m.widths.length, 'v2-grid-colhead', build);
-        fillHeads(set.rows, m.heights.length, 'v2-grid-rowhead', build);
+        fillHeads(set.cols, m.widths.length, 'v2-grid-colhead', buildHead);
+        fillHeads(set.rows, m.heights.length, 'v2-grid-rowhead', buildHead);
         m.widths.forEach((w, i) => {
           const head = set.cols.children[i];
           head.style.width = w + 'px';
@@ -1450,7 +1454,7 @@ const GridEditor = (function () {
     return { onStripDown, showTip, hideTip, naturalRowHeight };
   })();
 
-  const { startResize } = (function () {
+  const { startResize, planColumnWidths } = (function () {
     // Le glissé d'une poignée : la largeur d'une colonne ou la hauteur d'une ligne, celle de toutes les lignes (colonnes) choisies quand elle en est une.
 
     // Les lignes (ou colonnes) que la poignée `index` règle : toutes celles que la sélection couvre en entier quand `index` en fait partie (plusieurs
@@ -1470,6 +1474,49 @@ const GridEditor = (function () {
       return Array.from({ length: to - from + 1 }, (_, i) => from + i);
     }
 
+    // Partage entier de `amount` entre des parts de poids `weights`, au prorata : la somme des parts est exactement `amount`, aucune ne dépasse son poids
+    // (quand `amount` ne dépasse pas la somme des poids). Chaque part est arrondie vers le bas, les plus grands restes reçoivent le pixel qui manque.
+    function shareOut(amount, weights) {
+      const sum = weights.reduce((a, b) => a + b, 0);
+      if (!(sum > 0) || !(amount > 0)) return weights.map(() => 0);
+      const exact = weights.map(w => amount * w / sum);
+      const parts = exact.map(Math.floor);
+      let rest = amount - parts.reduce((a, b) => a + b, 0);
+      exact.map((x, i) => [x - parts[i], i]).sort((a, b) => b[0] - a[0] || a[1] - b[1]).forEach(([, i]) => { if (rest > 0 && parts[i] < weights[i]) { parts[i] += 1; rest -= 1; } });
+      return parts;
+    }
+
+    // TipTap ne dessine pas une colonne sous 25 px (`cellMinWidth` de son tableau, js/editor.js:DEFAULT_COL_PX) : une colonne qui cède sa place s'arrête là, sinon le
+    // rendu serait plus large que la somme des largeurs posées et le tableau dépasserait la page d'autant.
+    const RENDERED_MIN_COL_PX = 25;
+
+    // Ce que le glissé d'une largeur laisse à chaque colonne, en pixels de mise en page entiers. `base` : la largeur de départ de chaque colonne du tableau ;
+    // `lines` : les colonnes tirées (rangs contigus), qui reçoivent toutes `size` ; `pageWidth` : la largeur de la page que le tableau ne dépasse pas, ou null
+    // quand rien ne la limite (une grille, une page sans Aperçu A4). Rend { widths, size } : la largeur de chaque colonne et celle que les colonnes tirées ont
+    // obtenue. Réduire une colonne ne rend rien aux autres (le tableau se rétrécit). L'agrandir au-delà de la page, c'est prendre la place aux colonnes qui la
+    // suivent, chacune au prorata de ce qu'elle peut céder (sa largeur moins 25 px, le plus étroit qu'une colonne se dessine) ; quand elles ne suffisent pas, ou quand il n'y en a
+    // plus (la dernière colonne), la colonne tirée s'arrête où la page finit : le tableau ne sort pas de la page, comme le rognage de js/editor.js
+    // (clampOverflowingTables) qui, lui, rétrécirait toutes les colonnes d'un coup. Un tableau déjà plus large que la page n'est ni rogné ni élargi.
+    function planColumnWidths(base, lines, size, pageWidth) {
+      const widths = base.slice();
+      const count = lines.length;
+      const last = Math.max(...lines);
+      const total = base.reduce((a, b) => a + b, 0);
+      const chosen = lines.reduce((sum, i) => sum + base[i], 0);
+      let given = Math.max(MIN_COL_WIDTH_PX, size);
+      let excess = 0;
+      let slack = base.map(() => 0);
+      if (pageWidth != null) {
+        const limit = Math.max(pageWidth, total);
+        slack = base.map((w, i) => (i > last ? Math.max(0, w - RENDERED_MIN_COL_PX) : 0));
+        given = Math.max(MIN_COL_WIDTH_PX, Math.min(given, Math.floor((limit - total + slack.reduce((a, b) => a + b, 0) + chosen) / count)));
+        excess = total + count * given - chosen - limit;
+      }
+      lines.forEach(i => { widths[i] = given; });
+      if (excess > 0) shareOut(excess, slack).forEach((part, i) => { widths[i] -= part; });
+      return { widths, size: given };
+    }
+
     // Les tailles du rendu sont des pixels écran, celles du document des pixels de mise en page : l'écart est le facteur de réduction de la feuille
     // (`zoom`, 1 dans une grille). La poignée, l'info-bulle et l'enregistrement parlent en pixels de mise en page ; les bandeaux, en pixels écran.
     function startResize(set, kind, index, event) {
@@ -1479,37 +1526,51 @@ const GridEditor = (function () {
       const isCol = kind === 'col';
       const target = event.target;
       const lines = chosenLines(m.info, kind, index);
-      const heads = lines.map(i => (isCol ? set.cols : set.rows).children[i]);
+      const strip = isCol ? set.cols : set.rows;
+      const heads = lines.map(i => strip.children[i]);
       const sizes = lines.map(i => (isCol ? m.widths[i] : m.heights[i]) / zoom);
+      // Colonnes : la largeur de départ de CHAQUE colonne, car la page les lie (celles à droite cèdent la place qui manque). Celle que le document pose ;
+      // une colonne automatique (sans largeur posée) a celle du rendu, arrondie vers le bas : la somme ne dépasse pas ce que la page montre.
+      const known = isCol ? knownColumnWidths(m.info.node) : [];
+      const base = isCol ? m.widths.map((w, i) => known[i] || Math.floor(w / zoom + 1e-6)) : [];
+      const pageWidth = isCol ? set.ctx.pageWidth() : null;
       const start = isCol ? event.clientX : event.clientY;
-      const startSize = sizes[lines.indexOf(index)];
-      const startTableSize = (isCol ? m.width : m.height) / zoom;
+      const startSize = isCol ? base[index] : sizes[lines.indexOf(index)];
       // La marque est posée avant la mesure de la hauteur naturelle : elle et l'aperçu ne visent que ce tableau.
       m.table.setAttribute(SIZING_MARK, '');
       const min = isCol ? MIN_COL_WIDTH_PX : Math.ceil(naturalRowHeight(m.rows, lines) / zoom);
       const max = isCol ? MAX_COL_WIDTH_PX : MAX_ROW_HEIGHT_PX;
       let size = Math.max(min, Math.round(startSize));
+      let plan = null;
       // Plusieurs lignes tirées ensemble : rien ne change avant le premier déplacement de la poignée (leur plancher commun peut dépasser la taille de départ de celle qu'on
       // tire), et un appui sans déplacement net, ou un retour au point de départ, n'enregistre rien.
       let moved = lines.length === 1;
       let at = start;
       try { target.setPointerCapture(event.pointerId); } catch (e) { /* capture indisponible : les écouteurs du document suffisent */ }
       document.body.classList.add(isCol ? 'pp-grid-resizing-col' : 'pp-grid-resizing-row');
-      showTip(set.ctx.format(size), event);
 
       // Aperçu par une feuille de style posée dans <head>, jamais par un style en ligne sur le tableau : ProseMirror lit un attribut modifié sur une
       // ligne (<tr>) comme un changement du document à relire et redessine la ligne (l'aperçu d'une hauteur s'effacerait aussitôt). Il
-      // ne voit rien d'une feuille de style, et le rendu d'avant n'est jamais touché : annuler = retirer la feuille.
+      // ne voit rien d'une feuille de style, et le rendu d'avant n'est jamais touché : annuler = retirer la feuille. Une colonne : toutes celles que le glissé
+      // touche (les tirées, celles qui cèdent la place, les automatiques que l'enregistrement figera) prennent leur largeur du plan, le tableau la somme.
       const preview = document.createElement('style');
       preview.id = 'pp-grid-resize-preview';
       document.head.appendChild(preview);
       const apply = value => {
-        preview.textContent = isCol
-          ? `${lines.map(i => `${SIZING_TABLE} > colgroup > col:nth-child(${i + 1}) { width: ${value}px !important; }`).join(' ')} ${SIZING_TABLE} { width: ${startTableSize + sizes.reduce((sum, one) => sum + value - one, 0)}px !important; }`
-          : lines.map(i => `${sizingRow(i)} { height: ${value}px !important; }`).join(' ');
-        heads.forEach(head => { head.style[isCol ? 'width' : 'height'] = value * zoom + 'px'; });
+        if (isCol) {
+          plan = planColumnWidths(base, lines, value, pageWidth);
+          size = plan.size;
+          const touched = plan.widths.map((w, i) => known[i] === 0 || w !== base[i]);
+          preview.textContent = plan.widths.map((w, i) => (touched[i] ? `${SIZING_TABLE} > colgroup > col:nth-child(${i + 1}) { width: ${w}px !important; }` : '')).join(' ')
+            + ` ${SIZING_TABLE} { width: ${plan.widths.reduce((a, b) => a + b, 0)}px !important; }`;
+          Array.prototype.forEach.call(strip.children, (head, i) => { head.style.width = (touched[i] ? plan.widths[i] * zoom : m.widths[i]) + 'px'; });
+          return;
+        }
+        preview.textContent = lines.map(i => `${sizingRow(i)} { height: ${value}px !important; }`).join(' ');
+        heads.forEach(head => { head.style.height = value * zoom + 'px'; });
       };
-      if (moved) apply(size);
+      if (moved && !isCol) apply(size);
+      showTip(set.ctx.format(size), event);
       const onMove = e => {
         at = isCol ? e.clientX : e.clientY;
         if (!moved && at === start) return;
@@ -1526,9 +1587,21 @@ const GridEditor = (function () {
         try { target.releasePointerCapture(event.pointerId); } catch (e) { /* déjà relâché */ }
         document.body.classList.remove('pp-grid-resizing-col', 'pp-grid-resizing-row');
         hideTip();
+        const done = commit && moved && (lines.length === 1 || at !== start);
         // L'enregistrement redessine le tableau à sa nouvelle taille (synchrone) avant que l'aperçu ne soit retiré : pas de saut.
-        if (commit && moved && (lines.length === 1 || at !== start) && sizes.some(one => Math.round(one) !== size)) { if (isCol) setColumnWidth(m.info, lines, size); else setRowHeight(m.info, lines, size); }
-        else heads.forEach((head, k) => { head.style[isCol ? 'width' : 'height'] = sizes[k] * zoom + 'px'; });
+        if (isCol) {
+          const changes = done && plan ? plan.widths.map((w, i) => [i, w]).filter(([i, w]) => w !== base[i]) : [];
+          if (changes.length) {
+            // Les colonnes automatiques prennent d'abord la largeur qu'elles ont (elles gardent leur place quand une autre change), sans que cela soit un choix de
+            // la personne : ni suivi, ni dans l'historique, un Annuler rend les colonnes tirées à cette largeur.
+            const autos = known.map((w, i) => [i, base[i]]).filter(([i]) => known[i] === 0);
+            if (autos.length) setColumnWidths(m.info, autos, true);
+            setColumnWidths(m.info, changes);
+          } else {
+            Array.prototype.forEach.call(strip.children, (head, i) => { head.style.width = m.widths[i] + 'px'; });
+          }
+        } else if (done && sizes.some(one => Math.round(one) !== size)) setRowHeight(m.info, lines, size);
+        else heads.forEach((head, k) => { head.style.height = sizes[k] * zoom + 'px'; });
         preview.remove();
         m.table.removeAttribute(SIZING_MARK);
         set.lastKey = '';
@@ -1542,7 +1615,7 @@ const GridEditor = (function () {
       document.addEventListener('pointercancel', onCancel);
       document.addEventListener('keydown', onKey, true);
     }
-    return { startResize };
+    return { startResize, planColumnWidths };
   })();
 
   const { canEqualize, equalizeLines } = (function () {
@@ -1596,26 +1669,34 @@ const GridEditor = (function () {
   // Les bandeaux de la grille : son seul tableau, sans réduction de la feuille, avec les sauts de page de ses lignes. Se rafraîchissent tant que le mode
   // grille est actif. Les tailles s'y disent en pixels, comme dans un tableur.
   const gridContext = {
-    resizable: () => true,
     format: px => px + ' px',
     watchEditor: false,
     info: () => (editor ? tableInfo(editor.state.doc) : null),
     zoom: () => 1,
+    pageWidth: () => null,
     breaks: () => pageBreakRows(),
     wanted: () => active && !!strips,
     sync: () => { if (active && strips && editor) syncStrips(strips); },
   };
 
   // Les bandeaux d'un tableau de document : celui où se trouve le curseur, pas de saut de page par ligne, la feuille réduite à ~0,85 dans un panneau
-  // de 700 px. Ils n'existent que hors d'une grille (qui a les siens). Les numéros ont leur poignée : tirer le bas d'une ligne en règle la hauteur, comme dans
-  // une grille, mais la page est en centimètres et la bulle du glissé le dit en cm. Les lettres n'en ont pas encore : la largeur d'une colonne se règle par le
-  // bord de ses cases (prosemirror-tables), dont le résultat dépend de la page (js/editor.js:backfillAutoColumnWidths, clampOverflowingTables).
+  // de 700 px. Ils n'existent que hors d'une grille (qui a les siens). Les numéros et les lettres ont leur poignée : tirer le bas d'une ligne en règle la
+  // hauteur, tirer le bord droit d'une lettre la largeur de sa colonne, comme dans une grille, mais la page est en centimètres et la bulle du glissé le dit
+  // en cm. En Aperçu A4 la page limite le tableau : une colonne qu'on agrandit prend la place aux colonnes qui la suivent plutôt que de sortir de la page
+  // (`planColumnWidths` ; le bord des cases, lui, règle une colonne sans cette limite et js/editor.js:clampOverflowingTables rogne ensuite toutes les colonnes).
   const documentContext = {
-    resizable: kind => kind === 'row',
     format: px => PageLayout.cmText(px * 25.4 / 96) + ' cm',
     watchEditor: true,
     info: () => documentStripsTable(),
     zoom: table => EditorCore.layoutZoom(table),
+    // La largeur que le tableau ne dépasse pas : le corps de la page, marges déduites (en pixels de mise en page, entière : la somme des colonnes l'est
+    // aussi). null hors de l'Aperçu A4, qui ne montre pas de page, et quand l'éditeur est masqué (largeur nulle) : rien ne limite alors le tableau.
+    pageWidth: () => {
+      const box = document.getElementById('editor-container');
+      if (!editor || !box || !box.classList.contains('a4-preview')) return null;
+      const width = EditorCore.editorContentWidthPx(editor);
+      return width > 0 ? Math.floor(width) : null;
+    },
     breaks: () => [],
     wanted: () => !active && !!docStrips,
     sync: () => syncDocumentStrips(),
@@ -1808,6 +1889,6 @@ const GridEditor = (function () {
     configure, attach, createExtension, createEnterExtension, withTableAttributes, withRowAttributes, withCellAttributes, serialize, setActive, isActive, isGridType,
     refresh, currentCellDom, colName, floatingOptions, barSlot,
     canMerge, canSplit, mergeCells, splitCell, mergeSelected, splitSelected, tableSettingsBlocked, setVerticalAlign, selectedVerticalAlign, applyBorders, canApplyBorders, gridLinesShown, setGridLinesShown,
-    canTogglePageBreak, hasPageBreak, togglePageBreak, insertLines, canEqualize, equalizeLines, documentStripsOffset,
+    canTogglePageBreak, hasPageBreak, togglePageBreak, insertLines, canEqualize, equalizeLines, documentStripsOffset, planColumnWidths,
   };
 })();

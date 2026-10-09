@@ -817,26 +817,31 @@
   const rowRects = table => Array.from(table.querySelectorAll(':scope > tbody > tr')).map(tr => tr.getBoundingClientRect().height);
   const tipNow = () => { const t = document.querySelector('.v2-grid-tip'); return t ? t.textContent : null; };
   // Rien ne reste d'un glissé : la marque du tableau, la feuille d'aperçu, la bulle, le curseur de glissé.
-  const dragLeftovers = () => ({ marked: document.querySelectorAll('[data-pp-sizing]').length, preview: !!document.getElementById('pp-grid-resize-preview'), tip: !!document.querySelector('.v2-grid-tip'), cursor: document.body.classList.contains('pp-grid-resizing-row') });
+  const dragLeftovers = () => ({ marked: document.querySelectorAll('[data-pp-sizing]').length, preview: !!document.getElementById('pp-grid-resize-preview'), tip: !!document.querySelector('.v2-grid-tip'), cursor: document.body.classList.contains('pp-grid-resizing-row') || document.body.classList.contains('pp-grid-resizing-col') });
   const clean = left => !left.marked && !left.preview && !left.tip && !left.cursor;
   const rowHeights = t => Array.from({ length: rowCount(t) }, (_, r) => rowAttrs(t, r).rowHeight || null);
 
   cases.push({
-    id: 'docstrips_numbers_carry_a_height_handle_and_letters_none_yet',
-    description: 'Chaque numéro des bandeaux d\'un tableau de document porte sa poignée de hauteur (une ligne de plus : une poignée de plus), les lettres n\'en ont pas encore (la largeur d\'une colonne se règle par le bord de ses cases) ; le survol de la poignée dit « Régler la hauteur de la ligne »',
+    id: 'docstrips_numbers_and_letters_carry_a_resize_handle',
+    description: 'Chaque numéro des bandeaux d\'un tableau de document porte sa poignée de hauteur et chaque lettre sa poignée de largeur (une ligne ou une colonne de plus : une poignée de plus) ; le survol dit « Tirer pour régler la hauteur de la ligne » ou « … la largeur de la colonne »',
     run: async (h) => withDoc(h, TWO_TABLES, async () => {
       const bad = [];
       const handles = kind => Array.from(document.querySelectorAll(STRIPS + ' .v2-grid-' + kind + 'head')).map(head => head.querySelectorAll('.v2-grid-handle').length).join(',');
       await cursorIn(1, 0, 0);
-      if (handles('row') !== '1,1,1' || handles('col') !== '0,0') bad.push('tableau B : numéros ' + handles('row') + ', lettres ' + handles('col'));
+      if (handles('row') !== '1,1,1' || handles('col') !== '1,1') bad.push('tableau B : numéros ' + handles('row') + ', lettres ' + handles('col'));
       await cursorIn(0, 0, 0);
-      if (handles('row') !== '1,1' || handles('col') !== '0,0') bad.push('tableau A : numéros ' + handles('row') + ', lettres ' + handles('col'));
+      if (handles('row') !== '1,1' || handles('col') !== '1,1') bad.push('tableau A : numéros ' + handles('row') + ', lettres ' + handles('col'));
       ed().chain().focus().addRowAfter().run();
       await sleep(200);
       if (handles('row') !== '1,1,1') bad.push('ligne de plus : numéros ' + handles('row'));
       await undo();
-      const title = (document.querySelector(rowHead(1) + ' .v2-grid-handle') || {}).title;
-      if (title !== I18n.t('grid.resizeRow')) bad.push('info-bulle de la poignée : ' + title);
+      ed().chain().focus().addColumnAfter().run();
+      await sleep(200);
+      if (handles('col') !== '1,1,1') bad.push('colonne de plus : lettres ' + handles('col'));
+      await undo();
+      const rowTitle = (document.querySelector(rowHead(1) + ' .v2-grid-handle') || {}).title;
+      const colTitle = (document.querySelector(colHead(1) + ' .v2-grid-handle') || {}).title;
+      if (rowTitle !== I18n.t('grid.resizeRow') || colTitle !== I18n.t('grid.resizeColumn')) bad.push('info-bulles des poignées : ' + rowTitle + ' / ' + colTitle);
       return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
     }),
   });
@@ -1148,6 +1153,350 @@
       if (JSON.stringify(rowHeights(0)) !== '[40,80,160]' || JSON.stringify(colWidths(0)) !== '[140,190,120]') bad.push('Tout refuser : ' + JSON.stringify(rowHeights(0)) + ' ' + JSON.stringify(colWidths(0)));
       return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
     }),
+  });
+
+  // ---------- Lot 4 (c) : la largeur d'une colonne, réglée par la poignée de sa lettre ----------
+  // Le glissé d'une poignée de lettre avec des évènements de pointeur simulés (le vrai pointeur, la capture et le curseur sont au script docStripsWidthMouse) : l'appui sur la poignée,
+  // un déplacement de `dx` px, `during` regarde la page en plein glissé, puis le relâcher.
+  async function dragColHandle(n, dx, during, release = true) {
+    const selector = colHead(n) + ' .v2-grid-handle';
+    const handle = document.querySelector(selector);
+    if (!handle) throw new Error('poignée introuvable : lettre ' + n + ' parmi ' + stripLabels('col'));
+    const r = handle.getBoundingClientRect();
+    const point = { bubbles: true, clientX: r.left + r.width / 2 + dx, clientY: r.top + r.height / 2, pointerId: 1, isPrimary: true };
+    pressStrip(selector);
+    document.dispatchEvent(new PointerEvent('pointermove', point));
+    await sleep(60);
+    const mid = during ? await during() : null;
+    if (release) { document.dispatchEvent(new PointerEvent('pointerup', point)); await sleep(200); }
+    return mid;
+  }
+  // Les largeurs posées sur les cases du tableau de rang `t`, ligne par ligne (la première part de chaque case), et celles des lettres à l'écran (pixels écran).
+  const widthRows = t => tablesOf()[t].node.content.content.map(row => row.content.content.map(cell => (cell.attrs.colwidth || [null])[0]));
+  const headWidths = () => Array.from(document.querySelectorAll(STRIPS + ' .v2-grid-colhead')).map(head => Math.round(head.getBoundingClientRect().width * 10) / 10);
+  const pageLimit = () => Math.floor(EditorCore.editorContentWidthPx(ed()));
+  const cmOf = px => PageLayout.cmText(px * 25.4 / 96) + ' cm';
+  const sum = list => list.reduce((a, b) => a + b, 0);
+  // Un tableau de document aux largeurs posées : `widths` par colonne, `rows` lignes ; le texte de la case est `<prefixe><ligne><lettre>`.
+  const sizedTable = (prefix, widths, rows) => '<table><tbody>' + Array.from({ length: rows }, (_, r) => '<tr>' + widths.map((w, c) => `<td colwidth="${w}"><p>${prefix}${r + 1}${'ABCDEF'[c]}</p></td>`).join('') + '</tr>').join('') + '</tbody></table>';
+  // Un tableau étroit puis un tableau de trois colonnes (140, 190 et 120 px) de trois lignes.
+  const TWO_SIZED = '<p>avant</p>' + sizedTable('A', [100, 100], 2) + '<p>entre</p>' + sizedTable('B', [140, 190, 120], 3) + '<p>après</p>';
+  const gridCols = async (h, html) => {
+    const parts = await h.exportDocxParts(html);
+    return Array.from(parts.doc.getElementsByTagName('w:tbl')).map(tbl => Array.from(tbl.getElementsByTagName('w:gridCol')).map(col => Number(col.getAttribute('w:w'))));
+  };
+
+  cases.push({
+    id: 'column_plan_gives_the_page_to_the_columns_on_the_right_and_stops_at_its_edge',
+    description: 'Le plan d\'un glissé de largeur (GridEditor.planColumnWidths, pur) : sans page la colonne prend la largeur demandée ; dans la page (719 px) tant que la somme tient rien ne cède, au-delà les colonnes de droite cèdent la place au prorata de ce qu\'elles peuvent céder (jamais sous 25 px, au pixel près), la colonne tirée s\'arrête où la page finit, la dernière colonne ne dépasse pas ; des colonnes choisies prennent la même largeur ; un tableau déjà plus large que la page n\'est ni rogné ni élargi ; 400 tirages au hasard : entiers, somme sous la page, rien ne cède sans besoin',
+    run: async () => {
+      const bad = [];
+      const plan = (base, lines, size, page) => GridEditor.planColumnWidths(base, lines, size, page);
+      const same = (got, widths, size, label) => { if (JSON.stringify(got.widths) !== JSON.stringify(widths) || got.size !== size) bad.push(label + ' : ' + JSON.stringify(got) + ' (attendu ' + JSON.stringify({ widths, size }) + ')'); };
+      same(plan([140, 190, 120], [0], 400, null), [400, 190, 120], 400, 'sans page');
+      same(plan([140, 190, 120], [0], 50, 719), [50, 190, 120], 50, 'réduire dans la page : rien ne bouge d\'autre');
+      same(plan([140, 190, 120], [0], 409, 719), [409, 190, 120], 409, 'la somme tient pile (719)');
+      same(plan([140, 190, 120], [0], 410, 719), [410, 189, 120], 410, 'un pixel de trop : B le cède (le plus grand reste)');
+      same(plan([140, 190, 120], [0], 600, 719), [600, 69, 50], 600, '191 px de trop : B 121 et C 70 (au prorata de 165 et 95)');
+      same(plan([140, 190, 120], [0], 700, 719), [669, 25, 25], 669, 'la colonne tirée s\'arrête où la page finit, B et C au plancher de 25 px');
+      same(plan([140, 190, 120], [2], 500, 719), [140, 190, 389], 389, 'la dernière colonne ne peut pas céder à personne : elle s\'arrête à la page');
+      same(plan([140, 190, 120], [0, 1], 300, 719), [300, 300, 119], 300, 'deux colonnes choisies : la même largeur, C cède le pixel de trop');
+      same(plan([400, 300, 200], [0], 450, 719), [450, 269, 181], 450, 'un tableau déjà plus large que la page (900) : il garde 900, B et C cèdent les 50 px');
+      same(plan([400, 300, 200], [2], 260, 719), [400, 300, 200], 200, 'un tableau déjà plus large que la page : sa dernière colonne ne grandit pas');
+      same(plan([140, 190, 120], [0], 10, 719), [24, 190, 120], 24, 'jamais sous 24 px');
+      same(plan([140, 190, 120], [0], 10, null), [24, 190, 120], 24, 'jamais sous 24 px (sans page non plus)');
+      let seed = 12345;
+      const rnd = n => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % n; };
+      for (let i = 0; i < 400 && bad.length < 6; i++) {
+        const n = 1 + rnd(7);
+        const base = Array.from({ length: n }, () => 25 + rnd(376));
+        const from = rnd(n);
+        const to = from + rnd(n - from);
+        const lines = Array.from({ length: to - from + 1 }, (_, k) => from + k);
+        const page = rnd(4) === 0 ? null : 200 + rnd(800);
+        const size = 24 + rnd(1177);
+        const got = plan(base, lines, size, page);
+        const label = JSON.stringify({ base, lines, size, page, got });
+        const total = sum(base);
+        const limit = page == null ? Infinity : Math.max(page, total);
+        const growth = lines.length * got.size - sum(lines.map(c => base[c]));
+        if (got.widths.length !== n || got.widths.some(w => !Number.isInteger(w))) { bad.push('entiers : ' + label); continue; }
+        if (lines.some(c => got.widths[c] !== got.size) || got.size < 24 || got.size > size) bad.push('colonnes tirées : ' + label);
+        if (got.widths.slice(0, from).some((w, c) => w !== base[c])) bad.push('colonnes à gauche : ' + label);
+        for (let c = to + 1; c < n; c++) if (got.widths[c] > base[c] || got.widths[c] < Math.min(base[c], 25) || (page == null && got.widths[c] !== base[c])) bad.push('colonnes à droite : ' + label);
+        if (page == null && got.size !== size) bad.push('sans page, la largeur demandée : ' + label);
+        if (sum(got.widths) > Math.max(limit, total)) bad.push('la somme dépasse la page : ' + label);
+        if (page != null && total + growth <= limit && got.widths.some((w, c) => c > to && w !== base[c])) bad.push('une colonne cède sans besoin : ' + label);
+        if (page != null && growth > 0 && total + growth > limit && sum(got.widths) !== limit) bad.push('la place qui manque n\'est pas toute prise : ' + label);
+        if (page != null && lines.length === 1 && got.size < size && got.size > 24 && got.widths.some((w, c) => c > to && w > 25)) bad.push('arrêtée avant que les colonnes de droite soient au plancher : ' + label);
+      }
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'docstrips_dragging_a_letter_sets_that_column_width_in_layout_pixels_and_word_follows',
+    description: 'Tirer la poignée de la lettre B du tableau B (deux tableaux, page sans Aperçu A4) : la bulle dit la largeur en centimètres, la colonne suit en direct (les autres colonnes et l\'autre tableau gardent les leurs), le document ne bouge qu\'au relâcher, puis UNE transaction pose la largeur en pixels de mise en page sur toutes les cases de la colonne (un seul Annuler) ; le Word suit (<w:gridCol> de cette colonne seule) ; la feuille réduite à 0,8 : 80 px d\'écran font 100 px de page',
+    run: async (h) => {
+      const bad = [];
+      const wasA4 = document.getElementById('editor-container').classList.contains('a4-preview');
+      try {
+        await withDoc(h, TWO_SIZED, async () => {
+          h.setA4Preview(false);
+          await sleep(250);
+          await cursorIn(1, 0, 1);
+          const html0 = Editor.getHTML();
+          const wordBefore = await gridCols(h, html0);
+          const before = layoutSizes(1).cols;
+          const aBefore = layoutSizes(0).cols;
+          const docBefore = docJson();
+          const expected = Math.round(before[1] + 60);
+          const mid = await dragColHandle(2, 60, async () => ({
+            tip: tipNow(), cols: layoutSizes(1).cols, a: layoutSizes(0).cols, json: docJson(), marked: docTables().map(t => t.hasAttribute('data-pp-sizing')).join(), heads: headWidths(),
+            preview: (document.getElementById('pp-grid-resize-preview') || {}).textContent || '', cursor: document.body.classList.contains('pp-grid-resizing-col'),
+          }));
+          if (mid.tip !== cmOf(expected)) bad.push('bulle : ' + mid.tip + ' pour ' + cmOf(expected));
+          if (Math.abs(mid.cols[1] - expected) > 0.8 || Math.abs(mid.cols[0] - before[0]) > 0.3 || Math.abs(mid.cols[2] - before[2]) > 0.3) bad.push('colonnes de B en plein glissé : ' + JSON.stringify({ avant: before, pendant: mid.cols, expected }));
+          if (mid.a.some((w, i) => Math.abs(w - aBefore[i]) > 0.3)) bad.push('le tableau A a bougé en plein glissé : ' + JSON.stringify({ avant: aBefore, pendant: mid.a }));
+          if (mid.heads.some((w, i) => Math.abs(w - mid.cols[i]) > 0.8)) bad.push('les lettres ne suivent pas les colonnes : ' + JSON.stringify({ lettres: mid.heads, colonnes: mid.cols }));
+          if (mid.json !== docBefore || mid.marked !== 'false,true' || !mid.cursor || !/table\[data-pp-sizing\] > colgroup > col:nth-child\(2\)/.test(mid.preview)) bad.push('en plein glissé : ' + JSON.stringify({ documentInchange: mid.json === docBefore, marked: mid.marked, cursor: mid.cursor, preview: mid.preview }));
+          const left = dragLeftovers();
+          if (!clean(left)) bad.push('rien ne devait rester du glissé : ' + JSON.stringify(left));
+          if (JSON.stringify(widthRows(1)) !== JSON.stringify([0, 1, 2].map(() => [140, expected, 120])) || widthRows(0).some(line => line.join() !== '100,100')) bad.push('largeurs posées : B ' + JSON.stringify(widthRows(1)) + ', A ' + JSON.stringify(widthRows(0)));
+          const html = Editor.getHTML();
+          if ((html.match(new RegExp(' colwidth="' + expected + '"', 'g')) || []).length !== 3 || !html.includes('<col style="width: ' + expected + 'px;">') || !html.includes('<table style="width: ' + (140 + expected + 120) + 'px;">')) bad.push('HTML : ' + (html.match(/ colwidth="[\d,]+"/g) || []).join(' ') + ' / ' + (html.match(/<table style="[^"]*">/g) || []).join(' '));
+          const after = layoutSizes(1).cols;
+          if (Math.abs(after[1] - expected) > 0.8 || Math.abs(after[0] - before[0]) > 0.3 || Math.abs(after[2] - before[2]) > 0.3) bad.push('colonnes après le relâcher : ' + JSON.stringify(after));
+          // Le Word : la colonne B s'élargit de 60 px (900 twips), les autres colonnes et l'autre tableau gardent leur largeur.
+          const wordAfter = await gridCols(h, html);
+          const delta = wordAfter[1].map((w, i) => w - wordBefore[1][i]);
+          if (Math.abs(delta[1] - 60 * 15) > 40 || Math.abs(delta[0]) > 40 || Math.abs(delta[2]) > 40 || JSON.stringify(wordAfter[0]) !== JSON.stringify(wordBefore[0])) bad.push('Word : ' + JSON.stringify({ avant: wordBefore, apres: wordAfter }));
+          await undo();
+          if (JSON.stringify(widthRows(1)) !== JSON.stringify([0, 1, 2].map(() => [140, 190, 120]))) bad.push('un Annuler devait rendre [140,190,120] : ' + JSON.stringify(widthRows(1)));
+          // La feuille réduite à 0,8 : un déplacement de 80 px d'écran fait 100 px de page.
+          h.setA4Preview(true);
+          ed().view.dom.closest('.v2-page-sheet').style.setProperty('--pp-fit-zoom', '0.8');
+          await sleep(300);
+          await cursorIn(1, 0, 1);
+          const zoom = EditorCore.layoutZoom(docTables()[1]);
+          if (Math.abs(zoom - 0.8) > 0.01) { bad.push('la feuille devait être réduite à 0,8 : ' + zoom); return; }
+          await sleep(GROUP_GAP_MS);
+          const midZoom = await dragColHandle(2, 80, async () => ({ tip: tipNow(), cols: layoutSizes(1).cols }));
+          if (JSON.stringify(widthRows(1)[0]) !== '[140,290,120]' || midZoom.tip !== cmOf(290)) bad.push('feuille réduite : posé ' + JSON.stringify(widthRows(1)[0]) + ' (attendu 290 = 190 + 80 / 0,8), bulle ' + midZoom.tip);
+          const onScreen = Array.from(docTables()[1].querySelectorAll(':scope > colgroup > col')).map(col => col.getBoundingClientRect().width);
+          if (Math.abs(onScreen[1] - 290 * 0.8) > 0.8) bad.push('rendu à l\'écran : ' + JSON.stringify(onScreen) + ' (attendu ' + 290 * 0.8 + ')');
+        });
+      } finally {
+        const sheet = ed().view.dom.closest('.v2-page-sheet');
+        if (sheet) sheet.style.removeProperty('--pp-fit-zoom');
+        h.setA4Preview(wasA4);
+      }
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'docstrips_a_column_drag_in_the_a4_page_takes_the_room_from_the_columns_on_the_right',
+    description: 'Aperçu A4, trois colonnes de 140, 190 et 120 px : tirer la lettre A au-delà de la page fait céder B et C au prorata de ce qu\'elles peuvent céder (jamais sous 25 px) - la somme est celle de la page, le tableau n\'en sort pas, le rendu en plein glissé est celui du relâcher ; plus loin la colonne tirée s\'arrête où la page finit (la bulle dit la largeur obtenue) ; la dernière colonne s\'arrête à la page ; un tableau qui remplit la page ne laisse pas sa dernière colonne grandir (le document ne change pas) ; sans Aperçu A4 rien ne limite ; un Annuler rend les trois largeurs',
+    run: async (h) => {
+      const bad = [];
+      const wasA4 = document.getElementById('editor-container').classList.contains('a4-preview');
+      try {
+        await withDoc(h, '<p>avant</p>' + sizedTable('S', [140, 190, 120], 3) + '<p>après</p>', async () => {
+          h.setA4Preview(true);
+          await sleep(300);
+          await cursorIn(0, 0, 1);
+          const P = pageLimit();
+          if (!(P > 600 && P < 800) || Math.abs(EditorCore.layoutZoom(docTables()[0]) - 1) > 0.01) { bad.push('la page devait faire ~719 px sans réduction : ' + P); return; }
+          const widthsNow = () => widthRows(0)[0];
+          const pageRect = () => docTables()[0].getBoundingClientRect().width;
+          // a) Ça tient (+100 px) : personne ne cède.
+          await dragColHandle(1, 100);
+          if (JSON.stringify(widthsNow()) !== '[240,190,120]') bad.push('+100 px : ' + JSON.stringify(widthsNow()));
+          await sleep(GROUP_GAP_MS);
+          await undo();
+          // b) 50 px de trop : B et C cèdent au prorata de 165 et 95, la somme est la page, et le rendu en plein glissé est celui du relâcher.
+          await sleep(GROUP_GAP_MS);
+          const wanted = 140 + (P - 450) + 50;
+          const mid = await dragColHandle(1, wanted - 140, async () => ({ tip: tipNow(), cols: layoutSizes(0).cols, heads: headWidths() }));
+          const w = widthsNow();
+          const gaveB = 190 - w[1], gaveC = 120 - w[2];
+          if (w[0] !== wanted || sum(w) !== P || gaveB + gaveC !== 50 || w[1] < 25 || w[2] < 25 || Math.abs(gaveB * 95 - gaveC * 165) > 260) bad.push('50 px de trop : ' + JSON.stringify(w) + ' pour une page de ' + P + ' (A ' + wanted + ', B et C cèdent 50 px au prorata de 165 et 95)');
+          if (widthRows(0).some(line => line.join() !== w.join()) || mid.tip !== cmOf(wanted)) bad.push('toutes les lignes, bulle : ' + JSON.stringify({ lignes: widthRows(0), tip: mid.tip }));
+          if (mid.cols.some((width, i) => Math.abs(width - w[i]) > 0.8) || mid.heads.some((width, i) => Math.abs(width - w[i]) > 0.8)) bad.push('le plein glissé n\'est pas le relâcher : ' + JSON.stringify({ pendant: mid.cols, lettres: mid.heads, pose: w }));
+          if (pageRect() > P + 2) bad.push('le tableau sort de la page : ' + pageRect() + ' pour ' + P);
+          await sleep(GROUP_GAP_MS);
+          await undo();
+          if (JSON.stringify(widthsNow()) !== '[140,190,120]') bad.push('un Annuler devait rendre [140,190,120] : ' + JSON.stringify(widthsNow()));
+          // c) Beaucoup plus loin : la colonne A s'arrête où la page finit (P - 50), B et C au plancher.
+          await sleep(GROUP_GAP_MS);
+          const far = await dragColHandle(1, 900, async () => ({ tip: tipNow(), cols: layoutSizes(0).cols }));
+          if (JSON.stringify(widthsNow()) !== JSON.stringify([P - 50, 25, 25]) || far.tip !== cmOf(P - 50) || pageRect() > P + 2) bad.push('tirée très loin : ' + JSON.stringify(widthsNow()) + ' (attendu ' + JSON.stringify([P - 50, 25, 25]) + '), bulle ' + far.tip + ', tableau ' + pageRect());
+          await sleep(GROUP_GAP_MS);
+          await undo();
+          // d) La dernière colonne : elle prend ce qui reste de la page, pas plus.
+          await sleep(GROUP_GAP_MS);
+          await dragColHandle(3, 700);
+          if (JSON.stringify(widthsNow()) !== JSON.stringify([140, 190, P - 330]) || pageRect() > P + 2) bad.push('dernière colonne : ' + JSON.stringify(widthsNow()) + ' (attendu ' + JSON.stringify([140, 190, P - 330]) + ')');
+          // e) Le tableau remplit la page : sa dernière colonne ne grandit plus, rien n'est écrit.
+          const full = docJson();
+          await sleep(GROUP_GAP_MS);
+          await dragColHandle(3, 200);
+          if (docJson() !== full) bad.push('un tableau qui remplit la page ne doit pas changer : ' + JSON.stringify(widthsNow()));
+          await sleep(GROUP_GAP_MS);
+          await undo();
+          // f) Sans Aperçu A4, rien ne limite la largeur.
+          h.setA4Preview(false);
+          await sleep(300);
+          await cursorIn(0, 0, 1);
+          await sleep(GROUP_GAP_MS);
+          await dragColHandle(1, 900);
+          if (JSON.stringify(widthsNow()) !== '[1040,190,120]') bad.push('sans Aperçu A4 : ' + JSON.stringify(widthsNow()) + ' (attendu [1040,190,120])');
+        });
+      } finally {
+        h.setA4Preview(wasA4);
+      }
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'docstrips_a_column_drag_freezes_the_automatic_columns_where_they_are',
+    description: 'Un tableau aux colonnes automatiques (sans largeur posée), Aperçu A4 : tirer la lettre A pose la largeur de A et FIGE les autres colonnes à leur largeur du moment (B garde la sienne au pixel près, moins ce que A lui prend si la page l\'exige) sans que cela compte comme un choix : un seul Annuler rend les colonnes à leur largeur d\'avant ; l\'autre tableau ne change pas ; un appui sans déplacement n\'écrit rien',
+    run: async (h) => {
+      const bad = [];
+      const wasA4 = document.getElementById('editor-container').classList.contains('a4-preview');
+      try {
+        await withDoc(h, TWO_TABLES, async () => {
+          h.setA4Preview(true);
+          await sleep(300);
+          await cursorIn(0, 0, 0);
+          const P = pageLimit();
+          const before = layoutSizes(0).cols;
+          const base = before.map(w => Math.floor(w + 0.001));
+          const bBefore = widthRows(1);
+          // Un appui sans déplacement n'écrit rien.
+          const still = docJson();
+          await dragColHandle(1, 0);
+          if (docJson() !== still || !clean(dragLeftovers())) bad.push('un appui sans déplacement ne doit rien écrire : ' + JSON.stringify(dragLeftovers()));
+          await sleep(GROUP_GAP_MS);
+          await dragColHandle(1, 40);
+          const widths = widthRows(0);
+          const rowsAgree = widths.every(line => line.join() === widths[0].join());
+          const excess = Math.max(0, sum(base) + 40 - Math.max(P, sum(base)));
+          if (!rowsAgree || widths[0].some(w => !Number.isInteger(w)) || widths[0][0] !== base[0] + 40 || widths[0][1] !== base[1] - excess || sum(widths[0]) > P) bad.push('largeurs posées : ' + JSON.stringify(widths) + ' (avant ' + JSON.stringify(before) + ', A attendue ' + (base[0] + 40) + ', B ' + (base[1] - excess) + ', page ' + P + ')');
+          if (JSON.stringify(widthRows(1)) !== JSON.stringify(bBefore)) bad.push('l\'autre tableau a bougé : ' + JSON.stringify(widthRows(1)));
+          await sleep(GROUP_GAP_MS);
+          await undo();
+          const undone = widthRows(0);
+          const rendered = layoutSizes(0).cols;
+          if (undone.some(line => line.join() !== base.join()) || rendered.some((w, i) => Math.abs(w - before[i]) > 1.5)) bad.push('un Annuler devait rendre les colonnes d\'avant : ' + JSON.stringify(undone) + ' / rendu ' + JSON.stringify(rendered) + ' pour ' + JSON.stringify(before));
+        });
+      } finally {
+        h.setA4Preview(wasA4);
+      }
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'docstrips_column_drag_escape_and_chosen_columns_and_merged_cells',
+    description: 'Échap en plein glissé de largeur rend les lettres à leurs colonnes sans rien écrire ni laisser (marque, feuille d\'aperçu, bulle, curseur) ; des colonnes choisies par leurs lettres prennent toutes la largeur de la poignée tirée (un seul Annuler) ; une case fusionnée sur deux colonnes reçoit la part de la colonne tirée et garde l\'autre ; un tableau dans une case garde ses largeurs',
+    run: async (h) => {
+      const bad = [];
+      const wasA4 = document.getElementById('editor-container').classList.contains('a4-preview');
+      try {
+        await withDoc(h, '<p>avant</p>' + sizedTable('S', [140, 190, 120], 3) + '<p>après</p>', async () => {
+          h.setA4Preview(false);
+          await sleep(250);
+          await cursorIn(0, 0, 1);
+          // Échap en plein glissé.
+          const docBefore = docJson();
+          const colsBefore = layoutSizes(0).cols;
+          const midEscape = await dragColHandle(2, 50, async () => ({ cols: layoutSizes(0).cols, heads: headWidths() }), false);
+          document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+          document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: 0, clientY: 0, pointerId: 1, isPrimary: true }));
+          await sleep(250);
+          const left = dragLeftovers();
+          const headsAfter = headWidths();
+          if (!(midEscape.cols[1] > colsBefore[1] + 40) || docJson() !== docBefore || !clean(left) || layoutSizes(0).cols.some((w, i) => Math.abs(w - colsBefore[i]) > 0.5) || headsAfter.some((w, i) => Math.abs(w - colsBefore[i]) > 0.8)) bad.push('Échap : ' + JSON.stringify({ avant: colsBefore, pendant: midEscape.cols, apres: layoutSizes(0).cols, lettres: headsAfter, documentInchange: docJson() === docBefore, left }));
+          // Les colonnes A et B choisies par leurs lettres : tirer le bord de B les règle toutes les deux à la même largeur ; C ne bouge pas.
+          await sleep(GROUP_GAP_MS);
+          await selectCells(0, 0, 0, 2, 1);
+          await dragColHandle(2, 30);
+          if (JSON.stringify(widthRows(0)[0]) !== '[220,220,120]' || widthRows(0).some(line => line.join() !== '220,220,120')) bad.push('deux colonnes choisies : ' + JSON.stringify(widthRows(0)) + ' (attendu 220,220,120 partout : 190 + 30)');
+          await sleep(GROUP_GAP_MS);
+          await undo();
+          if (widthRows(0).some(line => line.join() !== '140,190,120')) bad.push('un Annuler devait rendre les deux colonnes : ' + JSON.stringify(widthRows(0)));
+        });
+        // Une case fusionnée sur deux colonnes (A et B de la première ligne) : tirer B ne change que sa part.
+        await withDoc(h, '<p>avant</p><table><tbody><tr><td colspan="2" colwidth="100,200"><p>Fusion</p></td><td colwidth="90"><p>C1</p></td></tr><tr><td colwidth="100"><p>A2</p></td><td colwidth="200"><p>B2</p></td><td colwidth="90"><p>C2</p></td></tr></tbody></table>', async () => {
+          h.setA4Preview(false);
+          await sleep(250);
+          await cursorIn(0, 1, 1);
+          await dragColHandle(2, 50);
+          const merged = JSON.stringify(cellAttrs(0, 0, 0).colwidth), second = JSON.stringify([cellAttrs(0, 1, 0).colwidth, cellAttrs(0, 1, 1).colwidth, cellAttrs(0, 1, 2).colwidth]);
+          if (merged !== '[100,250]' || second !== '[[100],[250],[90]]') bad.push('case fusionnée : ' + merged + ', seconde ligne ' + second);
+        });
+        // Un tableau dans une case : seul le tableau extérieur est réglé.
+        await withDoc(h, '<p>avant</p><table><tbody><tr><td colwidth="300"><p>dehors</p><table><tbody><tr><td colwidth="60"><p>N1</p></td><td colwidth="140"><p>N2</p></td></tr></tbody></table></td><td colwidth="200"><p>voisine</p></td></tr><tr><td colwidth="300"><p>bas</p></td><td colwidth="200"><p>bas droite</p></td></tr></tbody></table><p>après</p>', async () => {
+          h.setA4Preview(false);
+          await sleep(250);
+          await cursorIn(0, 0, 1);
+          await dragColHandle(1, 40);
+          const inner = [];
+          tablesOf()[1].node.descendants(node => { if (node.type.name === 'tableCell') inner.push((node.attrs.colwidth || [null])[0]); return true; });
+          if (JSON.stringify(widthRows(0)) !== '[[340,200],[340,200]]' || inner.join() !== '60,140') bad.push('tableau dans une case : extérieur ' + JSON.stringify(widthRows(0)) + ', intérieur ' + inner.join());
+        });
+      } finally {
+        h.setA4Preview(wasA4);
+      }
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'docstrips_column_drag_with_track_changes_is_suggested_and_the_frozen_columns_are_not',
+    description: 'Suivi des modifications allumé : la largeur posée par la poignée d\'une lettre est proposée comme modification sur les cases de la colonne tirée (et de celles qui cèdent la place) - les colonnes automatiques que le glissé fige n\'en portent aucune - et « Tout refuser » rend les largeurs d\'avant',
+    run: async (h) => {
+      const bad = [];
+      const wasA4 = document.getElementById('editor-container').classList.contains('a4-preview');
+      const markOf = (t, col) => tablesOf()[t].node.content.content.map(row => row.content.content[col].marks.map(mark => mark.type.name + ':' + mark.attrs.attrName).join()).join('|');
+      try {
+        await withDoc(h, '<p>avant</p>' + sizedTable('S', [140, 190, 120], 2) + '<p>après</p>', async () => {
+          h.setA4Preview(false);
+          await sleep(250);
+          await cursorIn(0, 0, 1);
+          Editor.setTrackChanges(true);
+          await sleep(100);
+          await dragColHandle(2, 60);
+          await sleep(150);
+          if (JSON.stringify(widthRows(0)[0]) !== '[140,250,120]' || markOf(0, 1) !== 'modification:colwidth|modification:colwidth' || markOf(0, 0) !== '|' || markOf(0, 2) !== '|' || !Editor.hasPendingTrackedChanges()) bad.push('largeurs proposées : ' + JSON.stringify(widthRows(0)) + ', marques B ' + markOf(0, 1) + ', A ' + markOf(0, 0) + ', C ' + markOf(0, 2));
+          ed().chain().focus().rejectAllSuggestionsChunked().run();
+          await sleep(600);
+          if (widthRows(0).some(line => line.join() !== '140,190,120') || Editor.hasPendingTrackedChanges()) bad.push('Tout refuser : ' + JSON.stringify(widthRows(0)));
+        });
+        // Colonnes automatiques : A (tirée) est proposée, B (figée) ne l'est pas, et refuser rend à A la largeur qu'elle avait.
+        await withDoc(h, TWO_TABLES, async () => {
+          h.setA4Preview(false);
+          await sleep(250);
+          await cursorIn(0, 0, 0);
+          const before = layoutSizes(0).cols.map(w => Math.floor(w + 0.001));
+          Editor.setTrackChanges(true);
+          await sleep(100);
+          await dragColHandle(1, 40);
+          await sleep(150);
+          const widths = widthRows(0);
+          if (widths.some(line => line.join() !== [before[0] + 40, before[1]].join()) || markOf(0, 0) !== 'modification:colwidth|modification:colwidth' || markOf(0, 1) !== '|') bad.push('colonnes automatiques : ' + JSON.stringify(widths) + ' (avant ' + JSON.stringify(before) + '), marques A ' + markOf(0, 0) + ', B ' + markOf(0, 1));
+          ed().chain().focus().rejectAllSuggestionsChunked().run();
+          await sleep(600);
+          if (widthRows(0).some(line => line.join() !== before.join()) || Editor.hasPendingTrackedChanges()) bad.push('Tout refuser (automatiques) : ' + JSON.stringify(widthRows(0)) + ' pour ' + JSON.stringify(before));
+        });
+      } finally {
+        h.setA4Preview(wasA4);
+      }
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
   });
 
   window.EditorTestSuites = window.EditorTestSuites || {};

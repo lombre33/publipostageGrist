@@ -3,8 +3,8 @@
 // tableau du mode grille » et point 5.4 des fonctions manquantes : « une case de signature : on choisit la hauteur, 3 cm ») à la VRAIE souris (page.mouse, page.keyboard ; Node/Playwright),
 // à la taille du panneau Grist (~700x400), en thème clair puis sombre, puis dans un panneau étroit (420 px), en Aperçu A4 (feuille réduite à ~0,85) et sans. Un appui simulé ne
 // donne ni capture du pointeur, ni survol, ni curseur « row-resize » : c'est ici qu'on s'assure que
-//   - chaque numéro porte sa poignée (un vrai pointeur la touche, le curseur y devient « row-resize ») et les lettres n'en ont pas encore (la largeur d'une colonne se règle par le bord de
-//     ses cases) ;
+//   - chaque numéro porte sa poignée (un vrai pointeur la touche, le curseur y devient « row-resize ») ; les lettres ont la leur depuis le lot 4 (c), mesurée par verify-doc-strips-width-mouse.mjs
+//     (groupe docStripsWidthMouse) ;
 //   - tirer un numéro règle la hauteur de SA ligne en direct (les autres lignes gardent la leur, celles du dessous descendent, le texte d'après aussi, le texte d'avant ne bouge pas) et la
 //     bulle la dit en centimètres (la page est en centimètres, la grille en pixels) ; rien n'est écrit dans le document avant le relâcher, puis UNE transaction pose la hauteur en pixels de
 //     mise en page (pas ceux de l'écran, que la feuille réduite ou agrandie déforme) : le HTML garde « data-row-height », un seul Ctrl+Z rend la ligne, Rétablir la repose ;
@@ -322,15 +322,15 @@ async function runTheme(theme, size, tag) {
     const tag2 = `${label}, ${mode}`;
     await setA4(page, a4);
 
-    // ---------- 1) Les poignées : une par numéro, qui répondent au pointeur ; les lettres n'en ont pas ----------
+    // ---------- 1) Les poignées : une par numéro, qui répondent au pointeur (celles des lettres : docStripsWidthMouse) ----------
     await load(page, DOC);
     await clickCell(page, 'B2');
     let s = await stripsState(page);
     const zoom = await sheetZoom(page);
     const hits = [];
     for (let n = 1; n <= 3; n++) hits.push(await hitsIt(page, ROWHANDLE(n)));
-    check(`${tag2} (feuille à l'échelle ${zoom.toFixed(2)}) - trois poignées de ligne (une par numéro), un vrai pointeur au centre de chacune tombe sur elle ; les lettres n'en ont pas`,
-      s.shown && hits.every(Boolean) && s.rowHeads.every(h => h.handles === 1) && s.colHeads.every(h => h.handles === 0), { hits, rows: s.rowHeads.map(h => h.handles), cols: s.colHeads.map(h => h.handles) });
+    check(`${tag2} (feuille à l'échelle ${zoom.toFixed(2)}) - trois poignées de ligne (une par numéro), un vrai pointeur au centre de chacune tombe sur elle ; chaque lettre porte aussi la sienne`,
+      s.shown && hits.every(Boolean) && s.rowHeads.every(h => h.handles === 1) && s.colHeads.every(h => h.handles === 1), { hits, rows: s.rowHeads.map(h => h.handles), cols: s.colHeads.map(h => h.handles) });
     const hb = await boxOf(page, ROWHANDLE(2));
     await page.mouse.move(hb.x - 4, hb.y - 4, { steps: 2 });
     await page.mouse.move(hb.x, hb.y, { steps: 3 });

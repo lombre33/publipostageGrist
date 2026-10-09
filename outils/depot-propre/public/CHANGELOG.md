@@ -194,8 +194,16 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   un seul Annuler la rend. Une ligne ne descend pas sous la hauteur de son texte ; Échap annule le glissé ; des
   lignes choisies par leurs numéros prennent toutes la même hauteur. La hauteur est un minimum : une ligne que
   son texte agrandit grandit, et le PDF et le Word la reprennent. Avec le suivi des modifications allumé, la
-  hauteur est proposée comme une modification, que vous pouvez refuser. Les lettres n'ont pas encore de
-  poignée : la largeur d'une colonne se règle toujours par le bord de ses cases.
+  hauteur est proposée comme une modification, que vous pouvez refuser.
+- **Largeur d'une colonne d'un tableau de document** : tirer le bord droit d'une lettre (A, B, C…) règle la
+  largeur de cette colonne, comme dans une grille. La bulle du glissé dit la largeur en centimètres, la colonne
+  suit en direct (les autres gardent la leur) et un seul Annuler la rend. Dans l'Aperçu A4, le tableau ne
+  dépasse jamais la page : quand la colonne tirée n'a plus de place, les colonnes qui la suivent cèdent celle
+  qui manque, au prorata de ce qu'elles peuvent céder (jamais sous 25 px), et la colonne s'arrête là où la page
+  finit. Des colonnes sans largeur posée gardent la leur : le glissé les fige à leur largeur du moment. Échap
+  annule le glissé ; des colonnes choisies par leurs lettres prennent toutes la largeur de la poignée tirée.
+  Avec le suivi des modifications allumé, la largeur est proposée comme une modification, que vous pouvez
+  refuser.
 - **Égaliser la hauteur des lignes et la largeur des colonnes** : quand plusieurs lignes (ou plusieurs colonnes)
   sont choisies, par leurs numéros (leurs lettres) ou en glissant sur le tableau, les boutons « Égaliser la
   hauteur des lignes » et « Égaliser la largeur des colonnes » de la barre du tableau leur donnent à toutes la
