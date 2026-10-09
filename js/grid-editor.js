@@ -211,7 +211,7 @@ const GridEditor = (function () {
     return tableSettingsBlocked() ? null : tableInfo(ed.state.doc, ed.state.selection);
   }
 
-  const { rowPos, isEmptyParagraph, isValidGridDoc, buildDefaultTable, cellOrigins, columnWidths, knownColumnWidths, hasCellAttr, isFreshCell } = (function () {
+  const { rowPos, isEmptyParagraph, isForbiddenNode, isValidGridDoc, buildDefaultTable, cellOrigins, columnWidths, knownColumnWidths, hasCellAttr, isFreshCell } = (function () {
     // Le document d'une grille : rang d'une ligne, ce qui est valable, la grille de départ, l'emplacement et la largeur des colonnes.
 
     // La position, dans le document, de la ligne de rang `index` du tableau.
@@ -223,6 +223,14 @@ const GridEditor = (function () {
 
     function isEmptyParagraph(node) { return node.type.name === 'paragraph' && node.content.size === 0; }
 
+    // Ce qu'une case de grille refuse : un nœud de FORBIDDEN_NODES, ou une image en calque (devant ou derrière le texte), qui n'a pas de sens sur une
+    // case où une image se pose à sa taille. La règle est écrite ici une fois : la grille la fait tenir (isValidGridDoc), le tableau lié à un modèle
+    // Grille aussi (js/linked-table.js), puisque ses cases s'écrivent dans une grille.
+    function isForbiddenNode(node) {
+      const name = node.type.name;
+      return FORBIDDEN_NODES.has(name) || (name === 'editorImage' && !!node.attrs.layer && node.attrs.layer !== 'normal');
+    }
+
     // Un seul tableau en tête du document, éventuellement suivi du paragraphe vide que TipTap range sous un tableau final (TrailingNode de StarterKit :
     // impossible à empêcher, on le cache - css/grid.css - et la sélection n'y entre jamais), sans rien d'interdit dans les cases.
     function isValidGridDoc(doc) {
@@ -233,9 +241,7 @@ const GridEditor = (function () {
       let ok = true;
       doc.child(0).descendants(node => {
         if (!ok) return false;
-        const name = node.type.name;
-        // Une image en calque (devant ou derrière le texte) n'a pas de sens sur une case, où une image se pose à sa taille.
-        if (FORBIDDEN_NODES.has(name) || (name === 'editorImage' && node.attrs.layer && node.attrs.layer !== 'normal')) { ok = false; return false; }
+        if (isForbiddenNode(node)) { ok = false; return false; }
         return true;
       });
       return ok;
@@ -286,7 +292,7 @@ const GridEditor = (function () {
     function hasCellAttr(cell, name) { return !!cell.type.spec.attrs && name in cell.type.spec.attrs; }
     // Une case neuve (ligne ou colonne ajoutée, collage) : aucun alignement vertical encore posé.
     function isFreshCell(cell) { return hasCellAttr(cell, 'verticalAlign') && !VALIGNS.has(cell.attrs.verticalAlign); }
-    return { rowPos, isEmptyParagraph, isValidGridDoc, buildDefaultTable, cellOrigins, columnWidths, knownColumnWidths, hasCellAttr, isFreshCell };
+    return { rowPos, isEmptyParagraph, isForbiddenNode, isValidGridDoc, buildDefaultTable, cellOrigins, columnWidths, knownColumnWidths, hasCellAttr, isFreshCell };
   })();
 
   const { fixCellDimensions, borderSeeds } = (function () {
@@ -1923,7 +1929,7 @@ const GridEditor = (function () {
   }
 
   return {
-    TYPE, DEFAULT_VALIGN,
+    TYPE, DEFAULT_VALIGN, isForbiddenNode,
     configure, attach, createExtension, createEnterExtension, withTableAttributes, withRowAttributes, withCellAttributes, serialize, setActive, isActive, isGridType,
     refresh, currentCellDom, colName, floatingOptions, barSlot,
     canMerge, canSplit, mergeCells, splitCell, mergeSelected, splitSelected, tableSettingsBlocked, setVerticalAlign, selectedVerticalAlign, applyBorders, canApplyBorders, gridLinesShown, setGridLinesShown,

@@ -1,0 +1,35 @@
+/* Tableau lié à un modèle Grille (js/linked-table.js) : le repère dans la page, la ligne du menu du bouton Tableau, le bouton de la barre du tableau et son menu. */
+
+/* Le repère : un filet d'accent le long du bord gauche du tableau, dans la marge. Une ombre pleine et sans flou, qui ne prend aucune place (la page garde sa
+   mise en page : ce que l'éditeur montre est ce que la Lecture, le PDF et le Word sortent) et qu'aucun overflow du .tableWrapper ne rogne (une ombre se dessine
+   hors de la boîte de l'élément). Une décoration de l'éditeur seulement. */
+.tiptap .tableWrapper.pp-linked-table { box-shadow: -4px 0 0 0 var(--accent, #2f6fed); }
+/* Verrouillé (suivi des modifications allumé) : le même filet, sans la couleur d'accent. */
+.tiptap .tableWrapper.pp-linked-table.pp-linked-locked { box-shadow: -4px 0 0 0 var(--text-faint, #98a2b3); }
+
+/* La ligne « Tableau d'un modèle Grille… » grisée avec sa raison (.v2-hover-row-disabled) : le survol ne la teinte pas, elle ne se lit pas comme un choix
+   possible. */
+#v2-toolbar .v2-hover-flyout .v2-menu-row.v2-hover-row-disabled:hover { background: transparent; }
+/* Un bouton Tableau grisé (grille, e-mail, macro-modèle, curseur dans un tableau lié) n'ouvre pas son menu : il n'aurait que cette ligne, elle aussi sans objet. */
+#v2-toolbar #v2-btn-table.v2-hf-locked + #v2-table-flyout { display: none !important; }
+
+/* Le bouton de la barre du tableau, propre au tableau lié : `.v2-floating-sep` et `.v2-floating-toolbar button` posent un `display` qui l'emporterait sur l'attribut
+   `hidden`. L'icône du lien, puis un chevron plus petit comme au bouton « Bordures » ; verrouillé (suivi des modifications allumé), plus discret. */
+.v2-table-toolbar [data-linked-only][hidden] { display: none; }
+.v2-linked-btn svg:last-child { width: 10px; height: 10px; }
+.v2-floating-toolbar .v2-linked-btn.is-locked { color: var(--text-muted, #6b7482); }
+
+/* Son menu (`.v2-color-dropdown` pose la boîte : fond, filet, ombre, empilement) : le nom du modèle coupé par « … » (l'info-bulle le dit en entier), ce que le lien
+   veut dire pour les cases, puis les actions sur le lien. */
+.v2-linked-menu { box-sizing: border-box; width: 232px; padding: 6px; }
+.v2-linked-menu-head { display: flex; align-items: center; gap: 6px; padding: 3px 6px 0; font: 600 12.5px/1.3 var(--font-ui); color: var(--text, #3a4452); }
+.v2-linked-menu-head svg { flex: none; width: 15px; height: 15px; }
+.v2-linked-menu-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.v2-linked-menu-hint { padding: 3px 6px 7px; font: 11px/1.35 var(--font-ui); color: var(--text-muted, #6b7482); }
+.v2-linked-menu-rows { padding-top: 5px; border-top: 1px solid var(--border, #d7dde3); }
+.v2-linked-menu-row { display: flex; align-items: center; gap: 8px; width: 100%; box-sizing: border-box; padding: 5px 6px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--text, #3a4452); font: 12.5px/1.3 var(--font-ui); text-align: left; cursor: pointer; }
+.v2-linked-menu-row svg { flex: none; width: 15px; height: 15px; }
+.v2-linked-menu-row:hover, .v2-linked-menu-row:focus-visible { background: var(--surface-sunken, #f2f4f7); }
+/* Grisée (verrouillé) : elle garde sa place, la raison est dite au-dessus et en info-bulle ; un clic dessus ne fait rien. */
+.v2-linked-menu-row[aria-disabled="true"] { opacity: .35; cursor: default; }
+.v2-linked-menu-row[aria-disabled="true"]:hover { background: transparent; }

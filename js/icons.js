@@ -180,6 +180,11 @@ const Icons = (function () {
       qr: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20v.01M17 20h4v-3"/>',
       // Graphique de la page (js/chart-block.js) : deux axes et trois barres, la même figure que le cadre d'un graphique dans l'éditeur (css/chart-block.css).
       chart: '<path d="M3 3v18h18"/><path d="M8 17v-5M13 17V8M18 17v-3"/>',
+      // Tableau lié à un modèle Grille (js/linked-table.js) : la ligne du volet du bouton Tableau, le bouton du lien dans la barre du tableau et l'en-tête de son menu -
+      // un tableau et, à son coin bas droit, un maillon de chaîne. « Détacher » en est le défaire : une chaîne dont les deux maillons s'écartent.
+      linkedTable: '<rect x="2.5" y="3.5" width="13" height="11" rx="1.5"/><path d="M2.5 8h13M8.5 8v6.5"/>'
+        + '<g transform="translate(11.2 11.2) scale(.5)" stroke-width="3.4"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></g>',
+      unlink: '<path d="m18.84 12.25 1.72-1.71a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="m5.17 11.75-1.71 1.71a5 5 0 0 0 7.07 7.07l1.71-1.71"/><path d="M8 2v3M2 8h3M16 19v3M19 16h3"/>',
     };
   }
   const PATHS = Object.assign({}, textAndBlockPaths(), tableAndImagePaths(), toolbarPaths(), findAndQrPaths());

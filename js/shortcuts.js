@@ -308,7 +308,7 @@ const Shortcuts = (function () {
       { id: 'heading2', group: 'format', label: 'heading.level2', key: 'Alt+Shift+2', aliases: ['Mod+Alt+2'], scope: 'editor', hint: '#v2-heading-flyout .v2-hover-row[data-level="2"]', run: headingRow(2) },
       { id: 'heading3', group: 'format', label: 'heading.level3', key: 'Alt+Shift+3', aliases: ['Mod+Alt+3'], scope: 'editor', hint: '#v2-heading-flyout .v2-hover-row[data-level="3"]', run: headingRow(3) },
       // Insertion
-      { id: 'table', group: 'insert', label: 'insert.table', key: '', scope: 'editor', hint: tip('v2-btn-table'), run: click('v2-btn-table') },
+      { id: 'table', group: 'insert', label: 'insert.table', key: '', scope: 'editor', hint: '#v2-table-flyout .v2-hover-flyout-label', aria: tip('v2-btn-table'), run: click('v2-btn-table') },
       { id: 'twoColumns', group: 'insert', label: 'insert.twoColumns', key: '', scope: 'editor', hint: tip('v2-btn-two-columns'), run: click('v2-btn-two-columns') },
       { id: 'image', group: 'insert', label: 'shortcuts.action.image', key: '', scope: 'editor', hint: '#v2-image-flyout .v2-hover-flyout-label', aria: tip('v2-btn-image'), run: click('v2-btn-image') },
       { id: 'pageBreak', group: 'insert', label: 'insert.pageBreak.tip', key: 'Alt+Enter', scope: 'editor', hint: tip('v2-btn-page-break'), run: click('v2-btn-page-break') },

@@ -231,6 +231,20 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   case, une colonne, un encadré ou une liste, et quand le suivi des modifications est allumé ; « Fusionner » est
   grisé quand la sélection enjambe un saut. Hors d'un tableau, le bouton garde son rôle d'avant (il insère un
   repère de saut de page).
+- **Un tableau lié à un modèle Grille** : dans un document, le volet du bouton « Tableau » (au survol) a une ligne
+  « Tableau d'un modèle Grille… » : une liste avec recherche des modèles Grille, dont le choix pose dans le
+  document une copie du tableau du modèle, le curseur dans sa première case. Ce tableau reste LIÉ au modèle : un
+  filet de couleur dans la marge, à gauche, le montre (il ne s'imprime pas et n'entre pas dans le document), et
+  ses cases suivent les règles d'une grille. Ni second tableau, ni colonnes, ni sommaire, ni citation, encadré,
+  bloc de code ou trait horizontal dedans, au clavier comme au collage, et les boutons concernés sont grisés tant
+  que le curseur y est ; le texte, la mise en forme, les lignes, les colonnes, la fusion, l'alignement vertical,
+  les bordures et le saut de page avant une ligne s'y règlent comme dans une grille. Un modèle n'est lié qu'une
+  fois par document, la copie collée d'un tableau lié perd son lien, et une grille ou un en-tête et un pied de
+  page n'en ont jamais. Avec le suivi des modifications allumé, le tableau lié est verrouillé. Dans la barre du
+  tableau, un bouton du lien ouvre un menu qui donne le nom du modèle et propose « Détacher du modèle » (le
+  tableau reste, sans lien ; un seul Annuler). La ligne du volet « Tableau » est grisée, avec sa raison en
+  info-bulle, là où un tableau lié ne se pose pas. Pour l'instant le lien se pose et se défait ; la mise à jour
+  des cases entre le document et le modèle vient dans les versions suivantes.
 - **Marge autour de chaque page dans l'assemblage avant impression** : la fenêtre « Assemblage avant
   impression » a un champ « Marge » (en millimètres, 0 au départ, les flèches avancent de 0,5) qui laisse de la
   place autour de chaque page posée sur la feuille : la marge compte de chaque côté d'une page, donc deux
@@ -733,6 +747,19 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   The button is greyed, with its reason as a tooltip, on the first row, on a row that a merged cell runs through,
   in a table inside a cell, a column, a box or a list, and while track changes is on; "Merge" is greyed when the
   selection straddles a break. Outside a table the button keeps its former role (it inserts a page break marker).
+- **A table linked to a Grid template**: in a document, the "Table" button's flyout (on hover) has a "Table from a
+  Grid template…" row: a searchable list of Grid templates, whose choice places in the document a copy of the
+  template's table, the cursor in its first cell. That table stays LINKED to the template: a coloured line in
+  the left margin shows it (it is not printed and does not go into the document), and its cells follow the
+  rules of a grid. No second table, columns, table of contents, quote, callout, code block or horizontal rule
+  inside it, from the keyboard or by pasting, and the buttons concerned are greyed while the cursor is in it;
+  text, formatting, rows, columns, merging, vertical alignment, borders and the page break before a row are set
+  as in a grid. A template is linked only once per document, a pasted copy of a linked table loses its link, and
+  a grid or a header and footer never have one. With track changes on, the linked table is locked. In the table
+  bar, a link button opens a menu that gives the template's name and offers "Detach from the template" (the
+  table stays, without the link; one Undo). The "Table" flyout row is greyed, with its reason as a tooltip,
+  where a linked table cannot be placed. For now the link is placed and removed; updating the cells between the
+  document and the template comes in later versions.
 - **Margin around each page in sheet assembly**: the "Assemble before printing" window has a "Margin" field (in
   millimetres, 0 to start with, the arrows step by 0.5) that leaves room around each page laid on the
   sheet: the margin sits on every side of a page, so it counts twice between two pages and once at the edge

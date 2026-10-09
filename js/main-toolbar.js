@@ -19,10 +19,15 @@ const MainToolbar = (function () {
   function setGridMode(active) { inGridMode = !!active; }
   const GRID_LOCKED_IDS = [
     'v2-btn-table', 'v2-btn-two-columns', 'v2-btn-toc',
-    'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature',
+    'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-linked-table',
     'v2-btn-track-changes', 'v2-btn-accept-all', 'v2-btn-reject-all',
   ];
   const gridLockedIds = new Set();
+  // Les cases d'un tableau lié à un modèle Grille suivent les règles d'une grille (js/linked-table.js) : le curseur dans l'un d'eux, ce qui poserait un tableau, des
+  // colonnes, un sommaire, une citation, un bloc de code ou un encadré dans la case se grise, comme dans une grille. Pas le bloc de signature : il se pose SOUS le
+  // tableau (Callout.insertSignature, au premier niveau du document), hors de la case, comme sous n'importe quel tableau.
+  const LINKED_LOCKED_IDS = ['v2-btn-table', 'v2-btn-two-columns', 'v2-btn-toc', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout'];
+  const linkedLockedIds = new Set();
 
   // Liste simple des colonnes Attachments (message « aucune colonne » et repli de la liste avec recherche) : un choix insère une image liée à la
   // #Variable, résolue en vraie image en Lecture et à l'export.
@@ -195,6 +200,7 @@ const MainToolbar = (function () {
     const setRowIcon = (id, icon) => { const slot = document.querySelector('#' + id + ' .v2-menu-row-icon'); if (slot) slot.innerHTML = Icons.svg(icon); };
     setRowIcon('v2-row-link', 'link'); setRowIcon('v2-btn-citation', 'blockquote'); setRowIcon('v2-btn-code-block', 'codeBlock');
     setRowIcon('v2-btn-callout', 'callout'); setRowIcon('v2-btn-signature', 'signature'); setRowIcon('v2-btn-qr', 'qr'); setRowIcon('v2-btn-chart', 'chart');
+    setRowIcon('v2-btn-linked-table', 'linkedTable');
     // Exposant et indice (js/script-marks.js) : deux icônes à droite du titre du même menu (css/script-marks.css).
     set('v2-btn-superscript', 'superscript'); set('v2-btn-subscript', 'subscript');
     set('v2-btn-insert-variable', 'variable');
@@ -238,7 +244,9 @@ const MainToolbar = (function () {
     syncTextButtons();
     syncBlockButtons();
     syncPageBreakButton();
-    syncGridLocks(syncLocks());
+    const lockedNow = syncLocks();
+    syncGridLocks(lockedNow);
+    syncLinkedLocks(lockedNow);
     syncHeadingChip();
     syncTextStyleChips();
   }
@@ -296,6 +304,9 @@ const MainToolbar = (function () {
     setDisabled('v2-btn-reject-all', !hasPending);
     // « Garder avec le suivant » (menu Alignement) : cochée quand les paragraphes visés le portent, grisée avec sa raison hors du texte courant.
     KeepWithNext.syncRow(byId('v2-btn-keep-next'), editor);
+    // « Tableau d'un modèle Grille… » (menu du bouton Tableau) : grisée avec sa raison quand le suivi est allumé, dans un en-tête ou un pied de page, ou que le curseur est
+    // dans un tableau.
+    LinkedTable.syncRow(byId('v2-btn-linked-table'), editor);
   }
 
   // Boutons grisés (classe v2-hf-locked, jamais retirés) selon le mode et la sélection, une seule condition par bouton. Renvoie les ids grisés.
@@ -368,6 +379,18 @@ const MainToolbar = (function () {
       if (!el) return;
       if (inGridMode) { el.classList.add('v2-hf-locked'); gridLockedIds.add(id); }
       else if (gridLockedIds.delete(id) && !lockedNow.has(id)) el.classList.remove('v2-hf-locked');
+    });
+  }
+
+  // Le curseur dans un tableau lié (js/linked-table.js), appliqué après syncLocks comme le mode grille : ce que syncLocks gère vient d'être recalculé par elle, seul
+  // un bouton qu'elle ne gère pas (la citation) est dégrisé ici, et jamais un que la grille ou un mode garde grisé.
+  function syncLinkedLocks(lockedNow) {
+    const inLinked = LinkedTable.cursorIn(editor.state);
+    LINKED_LOCKED_IDS.forEach(id => {
+      const el = byId(id);
+      if (!el) return;
+      if (inLinked) { el.classList.add('v2-hf-locked'); linkedLockedIds.add(id); }
+      else if (linkedLockedIds.delete(id) && !lockedNow.has(id) && !gridLockedIds.has(id)) el.classList.remove('v2-hf-locked');
     });
   }
 
@@ -575,6 +598,8 @@ const MainToolbar = (function () {
     bind('v2-btn-qr', () => QrCode.open());
     // Graphique de la page : une fenêtre (quel graphique de Grist, quelles lignes) pour l'insérer ou, quand il est sélectionné, le changer.
     bind('v2-btn-chart', () => ChartBlock.open());
+    // Tableau d'un modèle Grille : une liste avec recherche des modèles Grille ; le choix pose la copie de leur tableau, liée au modèle (js/linked-table.js).
+    bind('v2-btn-linked-table', () => LinkedTable.openPicker(editor, byId('v2-btn-linked-table')));
     decorateLinkShortcut();
     I18n.onChange(decorateLinkShortcut);
     Shortcuts.onChange(decorateLinkShortcut);

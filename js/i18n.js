@@ -272,6 +272,9 @@ const I18n = (function () {
     'insert.chart.rowEdit': { fr: 'Modifier le graphique…', en: 'Edit chart…' },
     'insert.chart.aria': { fr: 'Insérer un graphique de la page', en: 'Insert a chart from the page' },
     'insert.chart.ariaEdit': { fr: 'Modifier le graphique', en: 'Edit the chart' },
+    // Tableau lié à un modèle Grille (js/linked-table.js) : la ligne du menu du bouton Tableau (au survol).
+    'insert.linkedTable.row': { fr: 'Tableau d’un modèle Grille…', en: 'Table from a Grid template…' },
+    'insert.linkedTable.aria': { fr: 'Insérer un tableau lié à un modèle Grille', en: 'Insert a table linked to a Grid template' },
     'insert.pageBreak.tip': { fr: 'Saut de page', en: 'Page break' },
     'insert.pageBreak.aria': { fr: 'Insérer un saut de page (forcé à l’export PDF)', en: 'Insert a page break (forced on PDF export)' },
     // Le même bouton dans une grille : le saut se pose avant la ligne sélectionnée, et un second clic le retire.
@@ -1248,6 +1251,23 @@ const I18n = (function () {
     'table.pageBreakMerged': { fr: 'Saut de page : une case fusionnée sur plusieurs lignes passe sur la limite au-dessus de cette ligne', en: 'Page break: a cell merged across several rows runs over the edge above this row' },
     'table.pageBreakNested': { fr: 'Saut de page : un tableau dans une case, une colonne, un encadré ou une liste ne change pas de page', en: 'Page break: a table inside a cell, a column, a callout or a list does not move to a new page' },
     'table.cellMergePageBreak': { fr: 'Fusionner les cases : un saut de page passe entre deux lignes de la sélection', en: 'Merge cells: a page break falls between two rows of the selection' },
+    // Tableau lié à un modèle Grille (js/linked-table.js) : la liste des modèles (zone de recherche, vide, choix grisés avec leur raison), les raisons du grisé de la
+    // ligne du menu, la barre du tableau (le nom du modèle et la règle de ses cases, « Détacher ») et le repère dans la page (lu à voix haute).
+    'linkedTable.search': { fr: 'Rechercher un modèle Grille…', en: 'Search for a Grid template…' },
+    'linkedTable.none': { fr: 'Aucun modèle Grille. Crée-en un avec « Nouveau modèle », puis « Nouvelle grille ».', en: 'No Grid template yet. Create one with “New template”, then “New grid”.' },
+    'linkedTable.noMatch': { fr: 'Aucun modèle Grille ne correspond.', en: 'No Grid template matches.' },
+    'linkedTable.pickUsed': { fr: 'Déjà lié dans ce document', en: 'Already linked in this document' },
+    'linkedTable.pickEmpty': { fr: 'Ce modèle n’a pas de tableau', en: 'This template has no table' },
+    'linkedTable.rowTracked': { fr: 'Indisponible avec le suivi des modifications : ce lien ne serait pas suivi', en: 'Unavailable with track changes on: this link would not be tracked' },
+    'linkedTable.rowZone': { fr: 'Un tableau lié ne se pose pas dans un en-tête ou un pied de page', en: 'A linked table does not go in a header or footer' },
+    'linkedTable.rowInTable': { fr: 'Un tableau lié se pose hors d’un tableau : place le curseur ailleurs', en: 'A linked table goes outside any table: move the cursor elsewhere' },
+    'linkedTable.barTip': { fr: 'Tableau lié au modèle Grille « {name} » : menu du lien', en: 'Table linked to the Grid template “{name}”: link menu' },
+    'linkedTable.menuHint': { fr: 'Ses cases suivent les règles d’une grille : ni tableau, ni colonnes, ni encadré, ni citation, ni bloc de code.', en: 'Its cells follow the rules of a grid: no table, columns, callout, quote or code block.' },
+    'linkedTable.menuLocked': { fr: 'Verrouillé tant que le suivi des modifications est allumé.', en: 'Locked while track changes is on.' },
+    'linkedTable.detachRow': { fr: 'Détacher du modèle', en: 'Detach from the template' },
+    'linkedTable.lockedTracked': { fr: 'Tableau lié au modèle Grille « {name} » : verrouillé tant que le suivi des modifications est allumé', en: 'Table linked to the Grid template “{name}”: locked while track changes is on' },
+    'linkedTable.detach': { fr: 'Détacher du modèle Grille : le tableau reste, sans lien', en: 'Detach from the Grid template: the table stays, without the link' },
+    'linkedTable.aria': { fr: 'Tableau lié au modèle Grille « {name} »', en: 'Table linked to the Grid template “{name}”' },
     'table.valignTop': { fr: 'Aligner en haut', en: 'Align to top' },
     'table.valignMiddle': { fr: 'Aligner au milieu', en: 'Align to middle' },
     'table.valignBottom': { fr: 'Aligner en bas', en: 'Align to bottom' },

@@ -236,6 +236,7 @@ const Editor = (function () {
       { NodeSelection, TextSelection, EditorState, Plugin, PluginKey },
       { Decoration, DecorationSet },
       { TableMap, CellSelection, selectedRect, isInTable, addRow, addColumn, __pastedCells: pastedCells },
+      { DOMParser: PMDOMParser },
     ] = await Promise.all([
       import('@tiptap/core'),
       import('@tiptap/starter-kit'),
@@ -255,22 +256,24 @@ const Editor = (function () {
       import('prosemirror-state'),
       import('prosemirror-view'),
       import('prosemirror-tables'),
+      import('prosemirror-model'),
     ]);
     return {
       TiptapEditor, Extension, Node, Mark, mergeAttributes, InputRule, StarterKit, TextAlign, TextStyle, FontFamily, Suggestion, Document,
       Table, TableView, TableRow, TableCell, TableHeader, TaskList, TaskItem, Placeholder, computePosition, offset, flip, shift, autoUpdate,
       NodeSelection, TextSelection, EditorState, Plugin, PluginKey, Decoration, DecorationSet, TableMap, CellSelection, selectedRect, isInTable,
-      addRow, addColumn, pastedCells,
+      addRow, addColumn, pastedCells, PMDOMParser,
     };
   }
 
   function configureModules({
     computePosition, offset, flip, shift, autoUpdate, NodeSelection, TextSelection, EditorState, Plugin, PluginKey, Decoration, DecorationSet,
-    TableMap, CellSelection, selectedRect, isInTable, addRow, addColumn, pastedCells,
+    TableMap, CellSelection, selectedRect, isInTable, addRow, addColumn, pastedCells, PMDOMParser,
   }) {
     // Remet aux modules du widget les classes de TipTap et de ProseMirror dont ils ont besoin : bulles flottantes, sélections, tableaux, grille.
     EditorCore.setFloatingUi({ computePosition, offset, flip, shift, autoUpdate });
     GridEditor.configure({ Plugin, PluginKey, TextSelection, EditorState, Decoration, DecorationSet, TableMap, CellSelection, addRow, addColumn, pastedCells });
+    LinkedTable.configure({ Plugin, PluginKey, TextSelection, Decoration, DecorationSet, PMDOMParser });
     tableTools = { selectedRect, isInTable };
     TableMerge.configure({ TableMap, selectedRect, isInTable });
     EditorCore.setNodeSelectionClass(NodeSelection);
@@ -393,7 +396,8 @@ const Editor = (function () {
       // Rechercher / Remplacer (js/find-replace.js) : surlignage des résultats par décorations (Ctrl+F et Ctrl+H sont écoutés sur le document, cf.
       // wireEditor).
       FindReplace.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
-      tracked(GridEditor.withTableAttributes(Table)).configure({ resizable: true, View: EditorNodes.createTableView(TableView) }),
+      // Le tableau porte les attributs de la grille (quadrillage) et le numéro du modèle Grille dont il est la copie (js/linked-table.js).
+      tracked(LinkedTable.withAttributes(GridEditor.withTableAttributes(Table))).configure({ resizable: true, View: EditorNodes.createTableView(TableView) }),
       // La ligne aussi : « Colonne avant / après » et « Supprimer la colonne » posent une marque sur chaque case de la colonne, des enfants directs
       // d'une ligne.
       tracked(GridEditor.withRowAttributes(TableRow)),
@@ -419,6 +423,8 @@ const Editor = (function () {
       EditorNodes.createClearHistoryExtension(Extension, EditorState),
       // Modèle email (js/email-plain-text.js) : ni raccourci de mise en forme, ni mise en forme collée, que le texte brut du lien ne porte pas.
       EmailPlainText.createExtension(Extension, { Plugin, PluginKey }),
+      // Tableau lié à un modèle Grille : ses cases suivent les règles d'une grille, un modèle n'y est lié qu'une fois par document, un repère le montre.
+      LinkedTable.createExtension(Extension),
       GridEditor.createExtension(Extension),
     ];
   }

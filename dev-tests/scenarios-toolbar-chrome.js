@@ -274,7 +274,7 @@
 
   cases.push({
     id: 'toolbar_every_menu_trigger_toggles_aria_expanded_while_open',
-    description: 'Pour CHAQUE bouton à menu réellement présent sur la page (découverte structurelle - tout .v2-hover-group, y compris un créé dynamiquement comme #v2-hf-pagenum-group, + tout [aria-haspopup] posé par wireDropdownButton/TemplateTreeSelect), aria-expanded bascule bien via son VRAI geste d\'ouverture/fermeture ; quand le bouton porte lui-même son data-tip, l\'info-bulle est en plus vérifiée en RENDU (avec un vrai :focus-visible établi au préalable, seule façon de rendre l\'assertion falsifiable)',
+    description: 'Pour CHAQUE bouton à menu réellement présent sur la page (découverte structurelle - tout .v2-hover-group, y compris un créé dynamiquement comme #v2-hf-pagenum-group, + tout [aria-haspopup] posé par wireDropdownButton/TemplateTreeSelect), aria-expanded bascule bien via son VRAI geste d\'ouverture/fermeture ; quand le bouton porte lui-même son data-tip, l\'info-bulle est en plus vérifiée en RENDU (avec un vrai :focus-visible établi au préalable, seule façon de rendre l\'assertion falsifiable) ; un bouton posé `hidden` n\'est offert à personne et passe son tour (celui du lien du tableau lié, #v2-table-linked-btn, n\'existe que sous le curseur dans un tableau lié : son aria-expanded se mesure là, suite linkedTable)',
     run: async (h) => {
       await goToNewDocument(h);
       await h.sleep(30);
@@ -299,6 +299,10 @@
       // être détectés - un compte trop bas signalerait que ce test tourne avant que le DOM/le câblage ne soit prêt, pas un vrai succès.
       let pass = hfPagenumPresent && pagenumTriggerIncluded && triggers.length >= 6;
       for (const trigger of triggers) {
+        // Un bouton posé `hidden` n'est offert à personne à cet instant : le bouton du lien d'un tableau lié (js/floating-toolbars.js) n'apparaît que sous le curseur dans un tableau lié et son
+        // menu ne s'ouvre que là (LinkedTable.status) ; ce geste-ci, fait dans un document vide, ne peut donc rien y ouvrir. Son aria-expanded (ouvert, refermé par un second appui, par la
+        // sortie du tableau, par « Détacher ») se mesure dans ce contexte, dans le cas de la barre de dev-tests/scenarios-linked-table.js.
+        if (trigger.hidden) { details.push({ id: trigger.id || trigger.className, skipped: 'hidden' }); continue; }
         const group = trigger.closest('.v2-hover-group');
         // `:hover` ne s'active jamais via dispatchEvent dans ce harnais (cf. openFlyout plus haut/dev-tests/helpers.js) - mouseover/mouseout sont les
         // VRAIS évènements DOM que la délégation de js/editor-core.js écoute pour ce même mécanisme. Les boutons à menu au clic (panneaux flottants,

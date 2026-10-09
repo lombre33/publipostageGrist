@@ -182,14 +182,20 @@ const FloatingToolbars = (function () {
         + `<button data-action="borders-open" class="v2-fill-chip v2-borders-chip" id="v2-table-borders-btn" title="${I18n.t('table.bordersOpen')}" aria-haspopup="true" aria-expanded="false">`
         + Icons.svg('borders') + Icons.svg('caretDown') + '</button>'
         + '<span class="v2-floating-sep"></span>'
-        + spec.valign.map(([action, icon, , title]) => barButton(action, icon, title)).join('');
+        + spec.valign.map(([action, icon, , title]) => barButton(action, icon, title)).join('')
+        // Tableau lié à un modèle Grille (js/linked-table.js) : un seul bouton à menu (icône du lien et chevron, comme « Bordures »), caché (jamais grisé : il n'a de sens que pour
+        // un tableau lié) tant que le tableau du curseur n'est pas lié. Le nom du modèle et les actions sur le lien sont dans son menu : dans 700 px la barre n'a pas la place
+        // d'un nom, et les lots suivants y ajoutent des actions.
+        + '<span class="v2-floating-sep" data-linked-only hidden></span>'
+        + `<button data-action="linked-open" class="v2-fill-chip v2-linked-btn" id="v2-table-linked-btn" data-linked-only hidden aria-haspopup="true" aria-expanded="false">`
+        + Icons.svg('linkedTable') + Icons.svg('caretDown') + '</button>';
     }
 
     return { tableToolbarSpec, tableToolbarHtml };
   })();
 
-  const { tableFillMenu, tableBordersMenu, openFillMenu, openBordersMenu } = (function () {
-    // Les deux menus de la barre d'un tableau : le fond des cases et les bordures
+  const { tableFillMenu, tableBordersMenu, tableLinkedMenu, openFillMenu, openBordersMenu, openLinkedMenu } = (function () {
+    // Les trois menus de la barre d'un tableau : le fond des cases, les bordures et, pour un tableau lié à un modèle Grille, le lien
 
     function tableFillMenu() {
       // Pas de sélection à restaurer ici : setCellsBackground lit editor.state.selection directement (persiste indépendamment du focus DOM).
@@ -226,6 +232,32 @@ const FloatingToolbars = (function () {
       return panel;
     }
 
+    function tableLinkedMenu() {
+      // Le menu du tableau lié à un modèle Grille (js/linked-table.js) : le nom du modèle, ce que le lien veut dire pour les cases, puis les actions sur le lien (« Détacher » ;
+      // les lots suivants y ajoutent les leurs). `refresh(link)` le redessine d'après l'état du tableau sous le curseur (LinkedTable.status) à l'ouverture et à chaque
+      // changement du document : verrouillé (suivi des modifications allumé), son action est grisée avec la raison en info-bulle, un clic dessus ne fait rien (comme
+      // « Intérieures » du menu Bordures). Le nom d'un modèle est écrit comme texte, jamais comme HTML.
+      const panel = EditorCore.createFloatingPanel('v2-color-dropdown v2-linked-menu',
+        `<div class="v2-linked-menu-head">${Icons.svg('linkedTable')}<span class="v2-linked-menu-name"></span></div>`
+        + '<div class="v2-linked-menu-hint"></div>'
+        + `<div class="v2-linked-menu-rows"><button type="button" class="v2-linked-menu-row" data-action="linked-detach">${Icons.svg('unlink')}<span></span></button></div>`,
+        (action) => {
+          if (action !== 'linked-detach' || !LinkedTable.detach(editor)) return;
+          EditorCore.closeDropdownPanel();
+        });
+      panel.refresh = (link) => {
+        const at = selector => panel.el.querySelector(selector);
+        at('.v2-linked-menu-name').textContent = link.name;
+        at('.v2-linked-menu-head').title = link.name;
+        at('.v2-linked-menu-hint').textContent = I18n.t(link.locked ? 'linkedTable.menuLocked' : 'linkedTable.menuHint');
+        const detach = at('[data-action="linked-detach"]');
+        detach.querySelector('span').textContent = I18n.t('linkedTable.detachRow');
+        detach.title = I18n.t(link.locked || 'linkedTable.detach', { name: link.name });
+        detach.setAttribute('aria-disabled', link.locked ? 'true' : 'false');
+      };
+      return panel;
+    }
+
     function tableMenuPlacement() {
       // Les menus de la barre d'une grille (fond, bordures) s'ouvrent sous la bande où elle est fixée : au-dessus, ils recouvriraient la barre
       // d'outils. Ceux de la barre d'un tableau de document, ancrée sur le tableau, s'ouvrent au-dessus de la barre (dessous si la place manque) et,
@@ -247,7 +279,18 @@ const FloatingToolbars = (function () {
       EditorCore.setOpenDropdownPanel(menus.fill);
     }
 
-    return { tableFillMenu, tableBordersMenu, openFillMenu, openBordersMenu };
+    function openLinkedMenu(menus) {
+      const btn = document.getElementById('v2-table-linked-btn');
+      if (EditorCore.getOpenDropdownPanel() === menus.linked) { EditorCore.closeDropdownPanel(); return; }
+      const link = LinkedTable.status(editor.state);
+      if (!btn || !link) return;
+      EditorCore.closeDropdownPanel();
+      menus.linked.refresh(link);
+      menus.linked.show(btn, tableMenuPlacement());
+      EditorCore.setOpenDropdownPanel(menus.linked, btn);
+    }
+
+    return { tableFillMenu, tableBordersMenu, tableLinkedMenu, openFillMenu, openBordersMenu, openLinkedMenu };
   })();
 
   const { tableCommands } = (function () {
@@ -275,6 +318,7 @@ const FloatingToolbars = (function () {
         'borders-open': () => { if (!GridEditor.tableSettingsBlocked()) openBordersMenu(menus); },
         caption: () => Caption.run(editor, 'table'),
         'fill-open': () => openFillMenu(menus),
+        'linked-open': () => openLinkedMenu(menus),
       };
     }
 
@@ -284,7 +328,8 @@ const FloatingToolbars = (function () {
   const { tableButtonSync } = (function () {
     // L'état des boutons de la barre d'un tableau selon la sélection : une grille, un tableau de document
 
-    function tableButtonSync(panel, valign) {
+    function tableButtonSync(panel, spec, menus) {
+      const valign = spec.valign;
       // Boutons d'une grille selon la sélection : « Fusionner » et « Scinder » grisés quand ils n'ont pas de sens (jamais retirés), l'alignement
       // vertical des cases visées enfoncé (aucun quand la sélection mêle plusieurs alignements).
       const { button, setDisabled } = controlsOf(panel);
@@ -334,7 +379,38 @@ const FloatingToolbars = (function () {
           setDisabled(action, !can, I18n.t(can ? labelKey : needKey));
         });
       };
+      // Tableau lié à un modèle Grille : son bouton se montre pour lui seul, jamais dans une grille. Verrouillé (suivi des modifications allumé), tout ce qui changerait ses
+      // cases se grise avec la raison - le garde-fou (js/linked-table.js) refuserait de toute façon ; les boutons que les autres synchronisations ne regrisent pas (ligne,
+      // colonne, supprimer, fond) retrouvent leur titre au dégrisage. Le bouton du lien reste ouvert : son menu dit pourquoi le tableau est verrouillé. Le menu, s'il est
+      // ouvert, suit le tableau sous le curseur et se referme quand il n'est plus lié.
+      const LINK_LOCKED = ['row-before', 'row-after', 'row-del', 'rows-equalize', 'col-before', 'col-after', 'col-del', 'cols-equalize', 'table-del', 'cell-merge', 'cell-split', 'fill-open'];
+      const LINK_UNMANAGED = ['row-before', 'row-after', 'col-before', 'col-after', 'table-del', 'fill-open'];
+      const plainTitles = { 'fill-open': I18n.t('table.fillOpen') };
+      spec.buttons.forEach(([action, , title]) => { plainTitles[action] = title; });
+      let greyedByLink = false;
+      const syncLinkedGroup = () => {
+        const link = LinkedTable.status(editor.state);
+        panel.el.querySelectorAll('[data-linked-only]').forEach((part) => { part.hidden = !link; });
+        const menuOpen = EditorCore.getOpenDropdownPanel() === menus.linked;
+        if (!link && menuOpen) EditorCore.closeDropdownPanel();
+        if (link) {
+          const open = button('linked-open');
+          open.title = I18n.t(link.locked || 'linkedTable.barTip', { name: link.name });
+          open.classList.toggle('is-locked', !!link.locked);
+          if (menuOpen) menus.linked.refresh(link);
+          if (link.locked) {
+            LINK_LOCKED.forEach(action => setDisabled(action, true, I18n.t(link.locked, { name: link.name })));
+            greyedByLink = true;
+            return;
+          }
+        }
+        if (greyedByLink) {
+          LINK_UNMANAGED.forEach(action => setDisabled(action, false, plainTitles[action]));
+          greyedByLink = false;
+        }
+      };
       const syncGridButtons = () => {
+        panel.el.querySelectorAll('[data-linked-only]').forEach((part) => { part.hidden = true; });
         setLocked('table-del', true);
         syncEqualizeButtons();
         // Pas de légende dans une grille : le bouton reste dans la barre, grisé, avec sa raison pour info-bulle (js/caption.js).
@@ -355,6 +431,7 @@ const FloatingToolbars = (function () {
         syncSettingButtons();
         Caption.syncButton(button('caption'), editor, 'table');
         syncFillBar();
+        syncLinkedGroup();
       };
       return { syncGridButtons, syncDocumentButtons, syncFillBar };
     }
@@ -393,14 +470,19 @@ const FloatingToolbars = (function () {
     // pour que la barre ne les recouvre pas. Relu à chaque calcul de position.
     const tableBarOptions = () => ({ offset: 8 + GridEditor.documentStripsOffset() });
 
-    function tableToolbarCheck(panel, sync) {
+    function tableToolbarCheck(panel, sync, menus) {
+      // La barre qui se cache emporte le menu du lien (il n'a plus de bouton où s'ancrer) ; les menus de fond et de bordures, eux, se ferment au prochain clic.
+      const hideBar = () => {
+        panel.hide();
+        if (EditorCore.getOpenDropdownPanel() === menus.linked) EditorCore.closeDropdownPanel();
+      };
       return () => {
         if (dockInGridBar(panel, sync)) return;
         if (panel.isDocked()) panel.undock();
         // editor.isActive(...) ne change pas seul quand le focus quitte l'éditeur : hasFocus() ferme le panneau au clic hors de l'éditeur.
-        if (!editor.view.hasFocus() || !editor.isActive('table')) { panel.hide(); return; }
+        if (!editor.view.hasFocus() || !editor.isActive('table')) { hideBar(); return; }
         const anchor = tableUnderCursor();
-        if (!anchor) { panel.hide(); return; }
+        if (!anchor) { hideBar(); return; }
         panel.show(anchor, tableBarOptions);
         sync.syncDocumentButtons();
       };
@@ -409,15 +491,16 @@ const FloatingToolbars = (function () {
     // Toolbar de gestion de tableau : panneau flottant, visible seulement curseur dans une cellule, ancré sur le <table> réel.
     function wireTableFloatingToolbar() {
       const spec = tableToolbarSpec();
-      // Les deux menus (fond, bordures) viennent après la barre qui les ouvre : ses commandes les retrouvent ici.
+      // Les menus (fond, bordures, lien) viennent après la barre qui les ouvre : ses commandes les retrouvent ici.
       const menus = {};
       const panel = EditorCore.createFloatingPanel('v2-floating-toolbar v2-table-toolbar', tableToolbarHtml(spec), (action) => {
         (tableCommands(menus)[action] || (() => {}))();
       });
       menus.fill = tableFillMenu();
       menus.borders = tableBordersMenu(spec.borders);
+      menus.linked = tableLinkedMenu();
       EditorCore.registerFloatingPanel(panel);
-      const check = tableToolbarCheck(panel, tableButtonSync(panel, spec.valign));
+      const check = tableToolbarCheck(panel, tableButtonSync(panel, spec, menus), menus);
       editor.on('selectionUpdate', check);
       editor.on('transaction', check);
     }
