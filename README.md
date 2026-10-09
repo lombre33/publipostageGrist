@@ -75,7 +75,8 @@ La galerie **Créer à partir d'un modèle…** propose des modèles prêts à l
 - **Word** (`.docx`, bêta) : listes et notes de bas de page natives, un fichier par ligne en lot.
 - **Excel** (`.xlsx`) pour les grilles : une archive ZIP d'un classeur par ligne de la table, ou un seul classeur d'une feuille par ligne.
 - Avant un export, une fenêtre liste les sites externes dont des images seraient téléchargées.
-- Les qualités de PDF « impression navigateur » et « raster » ne sont pas livrées : l'interface les montre grisées (« bientôt »), leur code (html2pdf.js) a été retiré le 4 octobre 2026 et reste dans l'historique git.
+- **PDF par impression navigateur** (ligne « Impression navigateur » du menu Qualité du bouton PDF) : la Lecture, page pour page, passe par la fenêtre d'impression du navigateur (« Enregistrer au format PDF » ou une imprimante), avec la même mise en page que la Lecture. Une ligne à la fois, 60 pages au plus ; le PDF vectoriel n'a pas cette limite.
+- Les qualités de PDF « raster » ne sont pas livrées : l'interface les montre grisées (« bientôt »), leur code (html2pdf.js) a été retiré le 4 octobre 2026 et reste dans l'historique git.
 
 ### Interface
 

@@ -23,8 +23,8 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
   vérifie.
 - **Les données** : les modèles et les réglages vivent dans des tables `Publipostage_*` du document Grist ;
   les préférences d'affichage (langue, thème, raccourcis…) dans le navigateur.
-- **Le volume** : 121 fichiers dans `js/` (43 300 lignes : 32 100 de code, 8 600 de commentaires, 2 600 de
-  blanc), 39 feuilles de style (3 300 lignes), une page de 770 lignes. Quatre fichiers de polices du PDF
+- **Le volume** : 122 fichiers dans `js/` (45 800 lignes : 33 900 de code, 9 100 de commentaires, 2 800 de
+  blanc), 40 feuilles de style (3 500 lignes), une page de 780 lignes. Quatre fichiers de polices du PDF
   pèsent 2,5 Mo en quelques lignes (des données) ; `js/i18n.js` est du texte à traduire, pas de la logique.
 
 ## Par où commencer
@@ -159,7 +159,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/table-borders.js` | La règle des bordures, écrite une fois pour l'éditeur, la Lecture, le PDF et l'Excel. |
 | `js/xlsx-number-format.js` | Le texte qu'Excel montrerait pour un format de nombre ou de date. |
 
-### Exports (15 fichiers, 6 300 lignes)
+### Exports (16 fichiers, 6 800 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -167,6 +167,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/export-engines.js` | Charge au premier export, et non à l'ouverture, les six moteurs d'export du widget (PDF, fusion des PDF, feuilles d'assemblage, Word, Excel, format des nombres d'Excel), déclarés dans `index.html` par des balises inertes. |
 | `js/image-io.js` | La lecture des images, pour l'insertion (collage, adresse) comme pour les exports PDF, Word et Excel : un fichier, un Blob ou une adresse devient un Blob, une adresse `data:` ou un PNG (`fetch`, `new Image()`). |
 | `js/pdf-export.js` | Le PDF vectoriel (pdfmake) : le plus gros fichier du widget. |
+| `js/print-export.js` | L'impression par le navigateur (qualité « Impression navigateur » du bouton PDF) : la Lecture rendue dans un cadre caché à bac à sable (`ReaderMode.renderInto`), découpée en feuilles de la taille exacte du modèle (`css/print.css`), puis confiée à `window.print()`. Aucune bibliothèque à charger ; une ligne à la fois, 60 pages au plus. |
 | `js/pdf-fonts.js`, `js/pdf-fonts-extra.js`, `js/pdf-fonts-boxes.js`, `js/pdf-fonts-symbols.js` | Les polices du PDF, des données chargées au premier PDF (`pdf-fonts.js`, `pdf-fonts-boxes.js` et `pdf-fonts-symbols.js` sont générées par des scripts du dépôt de développement, qui ne sont pas publiés ici). |
 | `js/pdf-glyph-fallback.js` | Repli de police caractère par caractère. |
 | `js/pdf-merge.js` | Un seul PDF pour toutes les lignes (pdf-lib). |
@@ -201,7 +202,7 @@ fichier, un lot), câblage de la galerie et de Grist. C'est le fichier qui conna
 ### Les feuilles de style
 
 `css/style.css` (jetons de couleur, thème clair et sombre, `--font-ui`), `css/toolbar-v2.css` (la barre du
-haut), `css/editor-v2.css` (le texte de l'éditeur) ; les 36 autres vont chacune avec un module ou une
+haut), `css/editor-v2.css` (le texte de l'éditeur) ; les 37 autres vont chacune avec un module ou une
 fenêtre de `js/` (`css/callout.css` pour `js/callout.js`) et le disent dans leur premier commentaire ;
 `css/roboto-fonts.css` embarque la police des documents.
 
@@ -246,6 +247,7 @@ notes de conception, qui ne sont pas publiés ici.
 | Ajouter un menu ou une fenêtre flottante | `js/layers.js` (l'ordre d'empilement). |
 | Ajouter un raccourci clavier | `js/shortcuts.js`. |
 | Ajouter une bibliothèque d'export | `js/export-common.js` (chargeur, empreinte) et la politique de sécurité de `index.html`. |
+| Changer ce que l'impression par le navigateur imprime (feuilles, page plus haute qu'une feuille, taille de la page) | `js/print-export.js` et `css/print.css` ; le rendu lui-même est celui de la Lecture (`ReaderMode.renderInto` de `js/reader-mode.js`) : le changer change aussi l'impression. |
 | Ajouter un moteur d'export du widget (un script que seul un export utilise) | Une balise inerte `<script type="text/x-lazy-engine" data-engine="…">` dans `index.html`, puis son nom dans la liste `engines` de l'export qui s'en sert (`js/main.js`) : `js/export-engines.js` le charge au premier besoin. |
 | Un nouvel élément de document (nœud, mise en forme) | `js/editor-nodes.js` (l'éditeur), sa feuille de `css/` (l'écran et la Lecture), puis `js/pdf-export.js` et `js/docx-export.js` : chaque export le convertit à part. |
 | Changer la palette de couleurs, ou ajouter un menu de couleur | `js/color-palette.js` (la palette et ses rangées ; un menu s'y branche par `createMenu`), `js/color-dialog.js` (la fenêtre « Couleur personnalisée »), `js/color-store.js` (les couleurs gardées : `PageLayout.getCustomColors` pour le modèle, `Templates.getDocumentSettings` pour le document), `css/color-palette.css`. |
@@ -279,8 +281,8 @@ For anyone reading the code: what is where, and where to start. Line counts are 
   **Each export** loads its library on first use, with an integrity hash (SRI) that the browser checks.
 - **The data**: templates and settings live in `Publipostage_*` tables of the Grist document; display
   preferences (language, theme, shortcuts…) in the browser.
-- **The size**: 121 files in `js/` (43,300 lines: 32,100 of code, 8,600 of comments, 2,600 blank), 39
-  stylesheets (3,300 lines), a 770-line page. Four PDF font files weigh 2.5 MB in a few lines (data);
+- **The size**: 122 files in `js/` (45,800 lines: 33,900 of code, 9,100 of comments, 2,800 blank), 40
+  stylesheets (3,500 lines), a 780-line page. Four PDF font files weigh 2.5 MB in a few lines (data);
   `js/i18n.js` is text to translate, not logic.
 
 ## Where to start
@@ -414,7 +416,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/table-borders.js` | The border rule, written once for the editor, Reading mode, the PDF and the Excel file. |
 | `js/xlsx-number-format.js` | The text Excel would show for a number or date format. |
 
-### Exports (15 files, 6,300 lines)
+### Exports (16 files, 6,800 lines)
 
 | File | Role |
 |---|---|
@@ -422,6 +424,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/export-engines.js` | Loads, on the first export rather than at startup, the widget's six export engines (PDF, PDF merging, sheet assembly, Word, Excel, Excel number formats), declared in `index.html` by inert tags. |
 | `js/image-io.js` | Reading images, for insertion (paste, address) as well as for the PDF, Word and Excel exports: a file, a Blob or an address becomes a Blob, a `data:` URI or a PNG (`fetch`, `new Image()`). |
 | `js/pdf-export.js` | The vector PDF (pdfmake): the biggest file of the widget. |
+| `js/print-export.js` | Browser print (the "Browser print" quality of the PDF button): the Reading view rendered in a hidden sandboxed frame (`ReaderMode.renderInto`), cut into sheets of the template's exact page size (`css/print.css`), then handed to `window.print()`. No library to load; one row at a time, 60 pages at most. |
 | `js/pdf-fonts.js`, `js/pdf-fonts-extra.js`, `js/pdf-fonts-boxes.js`, `js/pdf-fonts-symbols.js` | The PDF fonts, data loaded on the first PDF (`pdf-fonts.js`, `pdf-fonts-boxes.js` and `pdf-fonts-symbols.js` are generated by scripts of the development repository, which are not published here). |
 | `js/pdf-glyph-fallback.js` | Character-by-character font fallback. |
 | `js/pdf-merge.js` | A single PDF for all rows (pdf-lib). |
@@ -456,7 +459,7 @@ wiring of the gallery and of Grist. It is the file that knows all the others.
 ### Stylesheets
 
 `css/style.css` (color tokens, light and dark theme, `--font-ui`), `css/toolbar-v2.css` (the top bar),
-`css/editor-v2.css` (the editor's text); the other 36 each go with a module or a window of `js/`
+`css/editor-v2.css` (the editor's text); the other 37 each go with a module or a window of `js/`
 (`css/callout.css` for `js/callout.js`) and say so in their first comment; `css/roboto-fonts.css` embeds
 the documents' font.
 
@@ -499,6 +502,7 @@ notes, which are not published here.
 | Add a menu or a floating window | `js/layers.js` (the stacking order). |
 | Add a keyboard shortcut | `js/shortcuts.js`. |
 | Add an export library | `js/export-common.js` (loader, integrity hash) and the security policy of `index.html`. |
+| Change what browser print prints (sheets, a page taller than a sheet, the page size) | `js/print-export.js` and `css/print.css`; the rendering itself is the Reading view's (`ReaderMode.renderInto` in `js/reader-mode.js`): changing it changes the print too. |
 | Add an export engine of the widget (a script that only an export uses) | An inert `<script type="text/x-lazy-engine" data-engine="…">` tag in `index.html`, then its name in the `engines` list of the export that uses it (`js/main.js`): `js/export-engines.js` loads it when needed. |
 | A new document element (node, formatting) | `js/editor-nodes.js` (the editor), its sheet in `css/` (screen and Reading mode), then `js/pdf-export.js` and `js/docx-export.js`: each export converts it separately. |
 | Change the color palette, or add a color menu | `js/color-palette.js` (the palette and its rows; a menu plugs in through `createMenu`), `js/color-dialog.js` (the "Custom color" window), `js/color-store.js` (the kept colors: `PageLayout.getCustomColors` for the template, `Templates.getDocumentSettings` for the document), `css/color-palette.css`. |

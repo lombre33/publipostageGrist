@@ -66,7 +66,7 @@ Moteur d'édition : TipTap/ProseMirror.
 
 ### 2.6 Export PDF
 
-- Disponible en 4 qualités : **vectoriel** (moteur principal, texte réellement sélectionnable, fidèle à la mise en page de l'éditeur — tableaux, zones 2 colonnes, images en calque, en-têtes/pieds de page, notes de bas de page, sommaire avec numéros de page réels), impression navigateur, raster basse/ultra qualité.
+- Disponible en 4 qualités : **vectoriel** (moteur principal, texte réellement sélectionnable, fidèle à la mise en page de l'éditeur — tableaux, zones 2 colonnes, images en calque, en-têtes/pieds de page, notes de bas de page, sommaire avec numéros de page réels), impression navigateur (livrée le 9 octobre 2026 : la Lecture imprimée par le navigateur, page pour page, une ligne à la fois et 60 pages au plus), raster basse/ultra qualité (pas encore livrées).
 - Format A4 portrait.
 - Nom de fichier configurable via un gabarit pouvant lui-même contenir des variables, résolu avec la ligne courante à l'export ; repli sur un nom générique si non renseigné.
 - **Export en lot** : génère un PDF par ligne de la table courante, regroupés dans une archive ZIP téléchargée en une fois.
@@ -126,7 +126,7 @@ publipostageGrist/
 | Représentation des variables | Badge non éditable dans l'éditeur |
 | Liaison widget ↔ table | Table liée par la page Grist ; variables cross-table via règles de correspondance dédiées |
 | Stockage des modèles | Table Grist interne dédiée, créée automatiquement |
-| Export PDF | 4 qualités (vectoriel/impression navigateur/raster bas/haut), unitaire ou en lot (ZIP) |
+| Export PDF | 4 qualités (vectoriel/impression navigateur/raster bas/haut ; les deux premières livrées), unitaire ou en lot (ZIP) |
 | Déploiement | Push direct sur `main`, GitHub Pages racine `/` |
 
 ## 6. Suites possibles

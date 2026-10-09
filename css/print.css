@@ -1,0 +1,28 @@
+/* Impression par le navigateur (js/print-export.js). Tout ce fichier est sous `html.pp-print-frame`, la classe du seul document du cadre caché où le
+   widget rend la Lecture avant de l'imprimer : la page du widget ne change pas. Le cadre charge les mêmes feuilles de style que la page (la Lecture s'y
+   dessine donc avec ses règles, `#reader-container`), ce fichier n'en défait que ce qui est propre à l'écran. `@page` n'est pas ici : sa taille est celle
+   du modèle, posée par js/print-export.js dans le cadre (une règle `@page` de la page du widget changerait aussi son impression). */
+
+/* Le document du cadre : une page blanche sans marge, en thème clair (la feuille est blanche dans les deux thèmes), qui n'est plus la colonne à hauteur
+   fixe du widget (css/style.css) mais un empilement de feuilles. */
+html.pp-print-frame, html.pp-print-frame body { display: block; height: auto; margin: 0; padding: 0; overflow: visible; background: #fff; color-scheme: light; }
+/* Les couleurs de fond (cases de tableau, encadrés, surlignage, images en calque) s'impriment : sans cela le navigateur les retire quand la case
+   « Graphiques d'arrière-plan » de sa fenêtre d'impression n'est pas cochée, et la page ne ressemblerait plus à la Lecture. */
+html.pp-print-frame, html.pp-print-frame * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+/* La Lecture mesurée (avant d'être découpée en feuilles) : la largeur de la feuille de papier, sans la gouttière ni le défilement de l'écran. */
+html.pp-print-frame #reader-container { position: relative; flex: none; width: var(--pp-page-width, 793.71px); min-height: 0; margin: 0; padding: 0; overflow: visible; background: transparent; }
+html.pp-print-frame #reader-container.a4-preview { background: transparent; }
+/* La feuille de papier n'a ni liseré ni ombre : le papier de l'imprimante la remplace, et la fenêtre de la page ne montre que le papier. */
+html.pp-print-frame #reader-container.a4-preview .v2-reader-paper { box-shadow: none; }
+
+/* Une feuille = une page imprimée, de la taille exacte de la page. Elle porte une fenêtre qui rogne le reste du document : la page entière de la Lecture,
+   ou, quand la Lecture montre une page plus haute qu'une feuille, la part qui tient sur cette feuille (js/print-export.js : hauteur et place posées en
+   ligne). La copie du document que la fenêtre contient est décalée (en ligne) de la place de la page. Un saut de page après chaque feuille, aucun après
+   la dernière (une page blanche de trop sinon). `contain: size` fait de la feuille un bloc que le navigateur ne coupe pas : sans lui les copies du document,
+   rognées mais bien plus hautes que la feuille, comptent encore dans la pagination et ajoutent des pages blanches à la fin (sur un petit format, 100 x 70 mm :
+   une de plus à 20 feuilles, deux à 31). */
+html.pp-print-frame .pp-print-sheet { position: relative; overflow: hidden; contain: size; box-sizing: border-box; break-after: page; break-inside: avoid; }
+html.pp-print-frame .pp-print-sheet:last-child { break-after: auto; }
+html.pp-print-frame .pp-print-window { position: absolute; left: 0; width: 100%; overflow: hidden; }
+html.pp-print-frame .pp-print-window > #reader-container { position: absolute; }

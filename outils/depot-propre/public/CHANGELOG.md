@@ -167,6 +167,19 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   encore reste dans la liste, grisé, avec sa raison : widgets personnalisés, Kaplan-Meier, « Split series »,
   « Error bars », filtres sur des dates relatives. Le total d'un anneau s'écrit sans le format de la
   colonne.
+- **Impression par le navigateur** : la ligne « Impression navigateur » du menu Qualité du bouton PDF, jusque-là
+  grisée, imprime la Lecture par la fenêtre d'impression du navigateur (« Enregistrer au format PDF » ou une
+  imprimante). La mise en page est celle de la Lecture : mêmes coupures de page, mêmes en-têtes, pieds et numéros
+  de page, mêmes polices, tableaux, images et filigrane, en thème clair quel que soit le thème du widget. Le
+  document est mesuré par la Lecture elle-même, puis découpé en feuilles de la taille exacte du modèle (A4, A5
+  en paysage, A6, format libre) : une feuille par page de la Lecture, sans marge ajoutée par le navigateur. Une
+  page de la Lecture plus haute qu'une feuille (une longue liste) continue sur la feuille suivante, coupée entre
+  deux lignes, sans rien perdre. Les images d'un autre site s'impriment après la fenêtre qui les annonce, sans
+  être affichées dans la Lecture pour autant. L'impression se fait une ligne à la fois et sur 60 pages au plus
+  (un message dit alors de choisir le PDF vectoriel) ; les lots, le PDF fusionné, l'assemblage et « Un document
+  par valeur » restent des PDF vectoriels. À savoir : le navigateur arrondit lui-même la page (l'A4 devient
+  594,96 × 841,92 pt) ; choisissez « Enregistrer au format PDF », le format de papier par défaut, une échelle de
+  100 % et les marges par défaut.
 
 ### Modifié
 
@@ -492,6 +505,18 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   first chart only (jsDelivr, version and hash pinned). What the widget does not redraw yet stays in the list,
   greyed, with its reason: custom widgets, Kaplan-Meier, "Split series", "Error bars", filters on relative
   dates. A donut's total is written without the column's format.
+- **Browser print**: the "Browser print" line of the PDF button's Quality menu, greyed out until now, prints the
+  Reading view through the browser's print window ("Save as PDF" or a printer). The layout is the Reading
+  view's: same page breaks, same headers, footers and page numbers, same fonts, tables, images and watermark,
+  in the light theme whatever the widget's theme. The document is measured by the Reading view itself, then cut
+  into sheets of the template's exact page size (A4, A5 landscape, A6, free format): one sheet per page of the
+  Reading view, with no margin added by the browser. A Reading-view page taller than a sheet (a long list)
+  continues on the next sheet, cut between two lines, losing nothing. Images from another site are printed
+  after the window that announces them, without being shown in the Reading view for that matter. Printing is
+  one row at a time and up to 60 pages (a message then says to choose the vector PDF); batches, the merged PDF,
+  sheet assembly and "One document per value" remain vector PDFs. Worth knowing: the browser rounds the page
+  itself (A4 becomes 594.96 × 841.92 pt); choose "Save as PDF", the default paper size, a 100% scale and the
+  default margins.
 
 ### Changed
 

@@ -1,5 +1,5 @@
-// Export PDF vectoriel (pdfmake). L'impression navigateur et les qualités raster (html2pdf.js) sont retirées (jsPDF et DOMPurify périmés) ; leur code
-// reste dans l'historique git (js/pdf-export-alt.js) et l'interface les montre grisées (« bientôt »).
+// Export PDF vectoriel (pdfmake). Les qualités raster (html2pdf.js) sont retirées (jsPDF et DOMPurify périmés) ; leur code reste dans l'historique git
+// (js/pdf-export-alt.js) et l'interface les montre grisées (« bientôt »). L'impression navigateur est revenue autrement : js/print-export.js.
 const PdfExport = (function () {
   // Chargés au premier export (1-2 s d'ouverture gagnées). `integrity` (SRI sha384) à recalculer si la version change : `curl -s <url> | openssl dgst
   // -sha384 -binary | openssl base64 -A`.
