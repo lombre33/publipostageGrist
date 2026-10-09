@@ -270,6 +270,11 @@ check('retour au Mode édition : l\'auto-save ne réécrit pas le modèle (ses l
 check('éditeur visible : le tableau mixte se charge, ses colonnes automatiques reçoivent leur largeur affichée', await pickTemplate('Tableau mixte', idMixed) && hasWidth(await docWidths()), await docWidths());
 const mixedVisible = await docWidths();
 check('éditeur visible : la première colonne garde 200, les autres dépassent le plancher de 25 px', mixedVisible[0] === '200' && mixedVisible.slice(1).every(w => Number(w) > 40), mixedVisible);
+// La feuille est réduite (~0,85 à 700 px) : une mesure à l'écran n'est pas une largeur de mise en page. Figées sur la mesure brute, les deux colonnes perdaient 15 % et le tableau
+// rétrécissait d'autant dès la première largeur posée.
+const sheetZoom = await page.evaluate(() => EditorCore.layoutZoom(EditorCore.getEditor().view.dom));
+check(`éditeur visible, feuille réduite à ${sheetZoom.toFixed(2)} : les colonnes automatiques sont figées à leur largeur de mise en page, le tableau garde la largeur de la page`,
+  sheetZoom < 0.95 && mixedVisible.slice(1).every(w => Math.abs(Number(w) - (pageWidth - 200) / 2) <= 2), { mixedVisible, pageWidth, sheetZoom });
 await pickTemplate('Trois colonnes', idT2);
 await page.click('#btn-mode-read');
 await sleep(600);

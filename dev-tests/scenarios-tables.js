@@ -221,6 +221,33 @@
   });
 
   cases.push({
+    id: 'table_auto_columns_frozen_at_layout_width_on_reduced_sheet',
+    description: "Feuille A4 réduite (panneau étroit : ~0,85 à 700 px) : le widget fige les colonnes automatiques à leur largeur de mise en page, pas à celle de l'écran - le tableau garde la largeur de la page au lieu de rétrécir de la réduction de la feuille dès la première largeur posée (15 % de moins à 0,85)",
+    run: async (h) => {
+      await h.resetEditor();
+      h.setA4Preview(true);
+      const box = document.getElementById('editor-container');
+      const before = box.style.getPropertyValue('--pp-fit-zoom');
+      try {
+        box.style.setProperty('--pp-fit-zoom', '0.8');
+        Editor.setHTML(tableSeed([200, 0, 0]));
+        await h.sleep(250);
+        const zoom = EditorCore.layoutZoom(h.tiptap());
+        const page = Math.floor(EditorCore.editorContentWidthPx(EditorCore.getEditor()));
+        const shown = firstRowWidths().map(Number);
+        const each = (page - 200) / 2;
+        return {
+          pass: Math.abs(zoom - 0.8) < 0.001 && shown[0] === 200 && shown.slice(1).every(w => Math.abs(w - each) <= 2),
+          notes: 'réduction=' + zoom + ' page=' + page + ' largeurs=' + shown + ' attendu=' + each,
+        };
+      } finally {
+        if (before) box.style.setProperty('--pp-fit-zoom', before); else box.style.removeProperty('--pp-fit-zoom');
+        h.setA4Preview(false);
+      }
+    },
+  });
+
+  cases.push({
     id: 'table_wide_table_clamped_once_editor_is_shown',
     description: 'Tableau plus large que la page chargé éditeur masqué : largeurs du modèle gardées tant qu\'il est masqué, ramené dans la page (jamais à 25 px) dès que l\'éditeur redevient visible - comme un chargement éditeur visible',
     run: async (h) => {

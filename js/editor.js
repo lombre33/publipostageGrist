@@ -165,13 +165,16 @@ const Editor = (function () {
       let hasExplicit = false; let hasAuto = false;
       table.firstChild.forEach(cell => { if (cell.attrs.colwidth) hasExplicit = true; else hasAuto = true; });
       if (!hasExplicit || !hasAuto) return null;
+      // Une mesure est en pixels écran, un `colwidth` en pixels de mise en page : la feuille réduite (~0,85 dans un panneau de 700 px, EditorCore.layoutZoom)
+      // sépare les deux. Gelée sur la mesure brute, une colonne perdait 15 % de sa largeur et le tableau rétrécissait d'autant dès la première largeur posée.
+      const zoom = EditorCore.layoutZoom(currentEditor.view.dom);
       return (cell, cellPos) => {
         if (cell.attrs.colwidth) return undefined;
         const dom = currentEditor.view.nodeDOM(cellPos);
         if (!dom || !dom.getBoundingClientRect) return undefined;
         // Éditeur masqué (Lecture, macro-modèle) : la largeur mesurée vaut 0 et geler la colonne dessus la ramènerait au plancher de 25 px
         // ci-dessous. Rejoué quand l'éditeur redevient visible (refreshLayout).
-        const renderedWidth = dom.getBoundingClientRect().width;
+        const renderedWidth = dom.getBoundingClientRect().width / zoom;
         if (!(renderedWidth > 0)) return undefined;
         const span = cell.attrs.colspan || 1;
         return Array(span).fill(Math.max(DEFAULT_COL_PX, Math.round(renderedWidth / span)));
