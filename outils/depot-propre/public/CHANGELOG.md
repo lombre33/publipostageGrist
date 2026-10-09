@@ -288,6 +288,15 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   vides. Une mise en forme restée dans un modèle plus ancien (le gras des bulles d'une notification, un
   titre, par exemple) ne s'affiche plus dans l'éditeur ni à la Lecture, sans rien changer au modèle
   enregistré. Les documents, les grilles et les macro-modèles ne changent pas.
+- **Page vide entre deux modèles d'un macro-modèle à l'export PDF** : quand la lettre d'un modèle arrive à la
+  marge du bas, la ligne vide qui la termine (celle que l'éditeur laisse derrière une dernière zone à deux
+  colonnes ou un dernier tableau, ou une Entrée de trop) n'y tenait plus et ouvrait une page blanche avant le
+  modèle suivant : dans le PDF, et dans la Lecture quand le texte arrivait pile à la marge (elle y a un peu plus
+  de place que le PDF pour une lettre en colonnes ou un tableau, d'où une page vide au PDF seul). La fin de
+  chaque modèle est maintenant rognée comme la fin du document, dans la Lecture, le PDF et le Word : ses lignes
+  vides, la ligne qui ne porte qu'une image en calque de la première page (l'image reste à sa place, ancrée au
+  paragraphe qui la précède) et les lignes vides au bas des colonnes d'une dernière zone. Les lignes vides du
+  milieu d'un modèle, le saut de page qui ouvre le modèle suivant et un modèle entièrement vide ne changent pas.
 
 ## [1.0.0-beta.1] - 2026-10-05
 
@@ -648,6 +657,16 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   blank lines; pasted plain text keeps its blank lines too. Formatting left over in an older template (the
   bold on the bubbles of a notification, a heading, for example) is no longer shown in the editor or in
   Reading mode, without changing the saved template. Documents, grids and macro-templates do not change.
+- **An empty page between two templates of a macro-template in the PDF export**: when the letter of a template
+  reaches the bottom margin, the blank line that ends it (the one the editor leaves behind a last two-column
+  zone or a last table, or one Enter too many) no longer fitted and opened a blank page before the next
+  template: in the PDF, and in Reading mode when the text came right up to the margin (it has a little more room
+  than the PDF for a letter in columns or a table, hence a blank page in the PDF alone). The end of each
+  template is now trimmed like the end of the document, in Reading, the PDF and the Word export: its blank
+  lines, the line that only carries a layer image of the first page (the image stays where it is, anchored to
+  the paragraph before it) and the blank lines at the bottom of the columns of a last zone. Blank lines in the
+  middle of a template, the page break that opens the next template and a template that is entirely empty do not
+  change.
 
 ## [1.0.0-beta.1] - 2026-10-05 (English)
 

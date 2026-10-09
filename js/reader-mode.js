@@ -215,8 +215,9 @@ const ReaderMode = (function () {
     });
     blocks.length = from;
   }
-  function trimTrailingBlankBlocks(root) {
-    const blocks = Array.from(root.childNodes).filter(node => !isDocumentFurniture(node));
+  // La fin d'une suite de blocs de `root` (`blocks`, du premier au dernier) : ses lignes vides, ses lignes de calque et les lignes vides au bas des colonnes
+  // de sa dernière zone.
+  function trimTail(root, blocks) {
     while (blocks.length > 1 && blocks[blocks.length - 1].nodeType === Node.ELEMENT_NODE && hasNothingToShow(blocks[blocks.length - 1])) root.removeChild(blocks.pop());
     carryTailAnchors(root, blocks);
     const last = blocks[blocks.length - 1];
@@ -224,6 +225,22 @@ const ReaderMode = (function () {
     last.querySelectorAll(':scope > .two-columns-column').forEach(column => {
       while (column.children.length > 1 && column.lastElementChild.tagName === 'P' && hasNothingToShow(column.lastElementChild)) column.removeChild(column.lastElementChild);
     });
+  }
+  // Un macro-modèle met ses modèles bout à bout, chacun derrière un saut de page `data-macro-slot` (js/macro-templates.js) : la fin de chaque modèle est une
+  // fin de document pour sa dernière page. La ligne vide que l'éditeur laisse derrière sa dernière zone ou son dernier tableau, ou une Entrée de trop,
+  // n'imprime rien ; quand le texte arrive à la marge du bas elle n'y tient plus et ouvre, entre deux modèles, une page blanche que la Lecture, elle, peut
+  // ne pas montrer (elle ignore les marges de certains blocs et tient plus de lignes que le PDF). Le saut de page du modèle suivant reste : il sépare les modèles.
+  function trimSlotTails(root, blocks) {
+    let start = 0;
+    blocks.forEach((block, index) => {
+      if (block.nodeType !== Node.ELEMENT_NODE || !block.classList.contains('page-break-marker') || !block.hasAttribute('data-macro-slot')) return;
+      trimTail(root, blocks.slice(start, index));
+      start = index + 1;
+    });
+  }
+  function trimTrailingBlankBlocks(root) {
+    trimSlotTails(root, Array.from(root.childNodes).filter(node => !isDocumentFurniture(node)));
+    trimTail(root, Array.from(root.childNodes).filter(node => !isDocumentFurniture(node)));
   }
   function applyAcceptedView(wrapper, source, options) {
     // Les suggestions du suivi des modifications encore en attente (js/track-changes.js) : le document s'écrit comme si elles étaient toutes
