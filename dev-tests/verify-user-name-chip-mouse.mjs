@@ -2,8 +2,8 @@
 // Puce « Nom de l’utilisateur » (demande d'Antoine du 2026-10-04 : « une puce intelligente [...] pour récupérer son nom », sur le modèle de celle de l'email) à la VRAIE souris
 // (page.mouse / page.keyboard, Node/Playwright) et à la taille du panneau Grist d'Antoine (~700x400), en français puis en anglais. dev-tests/scenarios-chips.js vérifie la
 // résolution DANS la page (Lecture, aperçu des exports, PDF, Word) et dev-tests/unit-user-identity.mjs la lecture du nom dans Grist ; ici, ce que seule une vraie souris prouve :
-//  - la liste « # », son onglet Chips : neuf lignes, « Nom de l’utilisateur » JUSTE après « Email de l’utilisateur », entière dans le panneau et au premier plan ; « Calcul », en
-//    dernier, reste atteignable ;
+//  - la liste « # », son onglet Chips : dix lignes, « Nom de l’utilisateur » JUSTE après « Email de l’utilisateur » (puis « N° de ligne »), entière dans le panneau et au premier plan ;
+//    « Calcul », en dernier, reste atteignable ;
 //  - UN clic sur la ligne pose la puce à la place du « # », la liste se ferme, la puce tient sur une ligne et la frappe suivante s'écrit après elle ;
 //  - en Lecture, le nom de la personne remplace la puce (« Bonjour Ada Lovelace. »), à côté de la puce Email lue dans la même passe : une seule table-sonde, une seule colonne ajoutée ;
 //  - un compte sans nom : « [Nom indisponible] » à la place du nom, comme l'email sans adresse (« [Name unavailable] » en anglais) ;
@@ -170,13 +170,13 @@ async function realClick(page, box) {
 const park = (page, y) => page.mouse.move(WIDTH - 4, y);
 
 const ROWS = {
-  fr: { footnote: 'Note de bas de page', date: 'Date du jour', time: 'Heure actuelle', email: 'Email de l’utilisateur', name: 'Nom de l’utilisateur', calc: 'Calcul' },
-  en: { footnote: 'Footnote', date: 'Today’s date', time: 'Current time', email: 'User’s email', name: 'User’s name', calc: 'Calculation' },
+  fr: { footnote: 'Note de bas de page', date: 'Date du jour', time: 'Heure actuelle', email: 'Email de l’utilisateur', name: 'Nom de l’utilisateur', rowNumber: 'N° de ligne', calc: 'Calcul' },
+  en: { footnote: 'Footnote', date: 'Today’s date', time: 'Current time', email: 'User’s email', name: 'User’s name', rowNumber: 'Row number', calc: 'Calculation' },
 };
 const UNAVAILABLE = { fr: '[Nom indisponible]', en: '[Name unavailable]' };
 
 // Pose une puce comme une personne : un vrai clic dans le paragraphe (par son propre rectangle, jamais à un décalage fixe du haut de la page), la frappe du texte qui la précède,
-// le bouton « Insérer une variable », l'onglet Chips, puis un clic sur la ligne. `measure` : mesure la liste (neuf lignes, ordre, lignes atteignables) avant de choisir.
+// le bouton « Insérer une variable », l'onglet Chips, puis un clic sur la ligne. `measure` : mesure la liste (dix lignes, ordre, lignes atteignables) avant de choisir.
 async function placeChip(page, label, { lang, paragraph, before, entry, measure }) {
   const target = await page.evaluate(i => {
     const p = document.querySelectorAll('.tiptap > p')[i];
@@ -208,8 +208,8 @@ async function placeChip(page, label, { lang, paragraph, before, entry, measure 
   if (measure) {
     const items = await page.evaluate(() => Array.from(document.querySelectorAll('#autocomplete-box .ac-item')).map(i => i.textContent.trim()));
     const R = ROWS[lang];
-    check(`${label} - neuf lignes, « ${R.name} » juste après « ${R.email} », « ${R.calc} » en dernier`,
-      items.length === 9 && items.indexOf(R.name) === items.indexOf(R.email) + 1 && items.indexOf(R.email) === 3 && items[8] === R.calc && items[0] === R.footnote, items);
+    check(`${label} - dix lignes, « ${R.name} » juste après « ${R.email} » (« ${R.rowNumber} » ensuite), « ${R.calc} » en dernier`,
+      items.length === 10 && items.indexOf(R.name) === items.indexOf(R.email) + 1 && items.indexOf(R.email) === 3 && items[5] === R.rowNumber && items[9] === R.calc && items[0] === R.footnote, items);
     await shot(page, `${lang}-liste-chips`);
     // La liste a son propre défilement (hauteur limitée à la place libre autour du curseur) : « Calcul », la dernière ligne, doit rester atteignable à la molette posée sur elle.
     const reach = async name => {

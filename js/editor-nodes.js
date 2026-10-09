@@ -314,7 +314,7 @@ const EditorNodes = (function () {
 
     // Chip intelligent (date, heure, email, nom), même schéma que varBadge. Jamais de vraie valeur dans l'éditeur (résolu en Lecture et à l'export, cf.
     // js/reader-mode.js:resolveSmartChips) ; vert plutôt que bleu pour signaler « valeur calculée, pas une colonne Grist ».
-    const KIND_I18N_KEYS = { date: 'chips.date', time: 'chips.time', email: 'chips.email', name: 'chips.name' };
+    const KIND_I18N_KEYS = { date: 'chips.date', time: 'chips.time', email: 'chips.email', name: 'chips.name', rowNumber: 'chips.rowNumber' };
     // Le libellé d'une puce, dans la langue de l'interface (« Date du jour »).
     function smartChipLabel(kind) {
       const key = KIND_I18N_KEYS[kind];

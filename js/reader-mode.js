@@ -918,10 +918,17 @@ const ReaderMode = (function () {
     if (kind === 'name') return userChipText(() => GristAPI.getCurrentUserName(), 'reader.nameUnavailable');
     return { text: '', isError: false };
   }
+  // Le rang du tour que la zone répétée a donné à la puce « N° de ligne » (js/loop-rules.js:itemBinding) ; hors de toute zone, ou dans une zone dont la
+  // boucle ne trouve plus sa source et qui reste affichée une fois : 1.
+  function rowNumberValue(chip) {
+    const binding = LoopRules.bindingOf(chip);
+    return { text: String(binding && binding.turn ? binding.turn : 1), isError: false };
+  }
   async function resolveSmartChips(wrapper) {
     const chips = Array.from(wrapper.querySelectorAll('.smart-chip'));
     await Promise.all(chips.map(async chip => {
-      const { text, isError } = await smartChipValue(chip.getAttribute('data-chip-kind'));
+      const kind = chip.getAttribute('data-chip-kind');
+      const { text, isError } = kind === 'rowNumber' ? rowNumberValue(chip) : await smartChipValue(kind);
       const span = document.createElement('span');
       span.textContent = text;
       span.className = 'resolved-var' + (isError ? ' error-msg' : '');

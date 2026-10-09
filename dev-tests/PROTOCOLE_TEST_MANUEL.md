@@ -613,6 +613,24 @@ lue dans Grist, un lot de plusieurs milliers de lignes.
 
 ---
 
+## 21. Numéro de ligne dans une boucle (puce « N° de ligne »)
+
+**Couverture automatisée** : groupe `varLoop` (trois cas `loop_row_number_chip_*` : lignes d'un tableau dans l'ordre affiché, éléments de liste et paragraphes après filtre et tri, lot où chaque ligne de la page repart de 1,
+hors de toute zone et zone sans source = 1) et groupe `chips` (cas `chip_row_number_*` : onglet Puces, insertion, libellé français et anglais, aller-retour HTML) ; l'absence de la puce dans les champs texte est tenue par le cas
+existant de `fieldEditor` (quatre puces seulement).
+**Non couvert** : un vrai Word ou un PDF ouverts hors du navigateur, un document Grist réel.
+
+### Protocole
+1. Dans un modèle sur une table de factures avec une table de lignes liée : un tableau avec la ligne d'en-tête « N° | Désignation » et une ligne « puce | #Lignes.Désignation ». Poser la Boucle sur la bulle Désignation
+   (« La ligne du tableau »). Pour la puce : taper `#`, onglet Puces, ligne « N° de ligne » (verte, comme la date).
+2. Lecture, PDF, Word et e-mail : les lignes sont numérotées 1, 2, 3… dans l'ordre affiché ; l'en-tête reste « N° ».
+3. Dans la fenêtre Boucle, choisir un tri (Désignation A → Z) et un filtre : les numéros suivent l'ordre trié et restent sans trou après le filtre.
+4. Export en lot (ZIP des lignes) : chaque facture repart de 1 ; une facture sans ligne ne garde que l'en-tête.
+5. Poser la puce hors de toute ligne répétée : elle écrit 1.
+6. Dans l'Objet de l'e-mail (`#`, onglet Puces) : « N° de ligne » n'est pas proposée.
+
+---
+
 ## Prochaines étapes (pistes d'amélioration de la suite automatisée)
 
 **Fait le 2026-09-14** : étage 2 (mode Lecture) comblé pour un premier socle de cas

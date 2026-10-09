@@ -309,11 +309,19 @@ async function placeChip(page, label, entryName) {
   check(`${label} - l'onglet Chips est atteignable à la vraie souris`, chipsTab.found && chipsTab.inViewport && chipsTab.onTop, chipsTab);
   await realClick(page, chipsTab);
   await page.waitForTimeout(150);
-  const entry = await hitByText(page, '#autocomplete-box .ac-item', entryName);
-  check(`${label} - la ligne « ${entryName} » est dans l'onglet Chips, visible et au premier plan`, entry.found && entry.inViewport && entry.onTop, entry);
+  let entry = await hitByText(page, '#autocomplete-box .ac-item', entryName);
+  // La liste a son propre défilement (hauteur limitée à la place libre autour du curseur) : à dix lignes, celle-ci peut être sous le bord visible, la molette posée sur la liste l'amène.
+  for (let wheels = 0; entry.found && !(entry.inViewport && entry.onTop) && wheels < 6; wheels++) {
+    const list = await hitTest(page, '#autocomplete-box .ac-items');
+    await page.mouse.move(list.x, list.y);
+    await page.mouse.wheel(0, 60);
+    await page.waitForTimeout(120);
+    entry = await hitByText(page, '#autocomplete-box .ac-item', entryName);
+  }
+  check(`${label} - la ligne « ${entryName} » est dans l'onglet Chips, visible et au premier plan (la molette sur la liste l'amène au besoin)`, entry.found && entry.inViewport && entry.onTop, entry);
   const items = await page.evaluate(() => Array.from(document.querySelectorAll('#autocomplete-box .ac-item')).map(i => i.textContent.trim()));
-  // Neuf lignes depuis « Nom de l'utilisateur » (juste après l'email), « Valeur conditionnelle » (js/conditional-value.js) et « Calcul » (js/variable-calc.js) : la case conditionnelle est la huitième, juste avant « Calcul ».
-  check(`${label} - elle vient après « Texte conditionnel » et « Valeur conditionnelle » : neuf lignes, « Calcul » en dernier`, items.length === 9 && items[7] === entryName && /^(Valeur conditionnelle|Conditional value)$/.test(items[6]) && /^(Calcul|Calculation)$/.test(items[8]), items);
+  // Dix lignes depuis « Nom de l'utilisateur » (juste après l'email), « N° de ligne » (juste après lui), « Valeur conditionnelle » (js/conditional-value.js) et « Calcul » (js/variable-calc.js) : la case conditionnelle est la neuvième, juste avant « Calcul ».
+  check(`${label} - elle vient après « Texte conditionnel » et « Valeur conditionnelle » : dix lignes, « Calcul » en dernier`, items.length === 10 && items[8] === entryName && /^(Valeur conditionnelle|Conditional value)$/.test(items[7]) && /^(Calcul|Calculation)$/.test(items[9]), items);
   if (entry.found) await realClick(page, entry);
   await page.waitForTimeout(350);
   return entry;

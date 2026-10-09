@@ -1042,6 +1042,7 @@ const I18n = (function () {
     'chips.time': { fr: 'Heure actuelle', en: 'Current time' },
     'chips.email': { fr: 'Email de l’utilisateur', en: 'User’s email' },
     'chips.name': { fr: 'Nom de l’utilisateur', en: 'User’s name' },
+    'chips.rowNumber': { fr: 'N° de ligne', en: 'Row number' },
 
     // --- Modale de configuration de correspondance (js/variables.js:showLinkConfigModal) ---
     'linkConfig.columnPlaceholder': { fr: '— Choisir une colonne —', en: '— Choose a column —' },

@@ -9,6 +9,12 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Numéro de ligne dans une boucle** : la liste « # » (onglet « Puces ») propose « N° de ligne ». Posée dans
+  une ligne de tableau, un élément de liste ou un paragraphe qu'une Boucle répète, la puce s'écrit 1, 2, 3…
+  dans la Lecture et dans les exports (PDF, Word, lots, e-mail) : elle compte les lignes que la boucle retient,
+  après son filtre et son tri, et repart de 1 pour chaque ligne de la page (chaque facture d'un lot). Hors d'une
+  zone répétée, elle vaut 1. Plus besoin d'une colonne « Ordre » dans Grist pour numéroter. Elle n'est pas
+  proposée dans les champs de l'e-mail ni dans le nom du PDF.
 - **Date du dernier export PDF** : Réglages > Vue propose une liste « Colonne » (avec « — Aucune — ») pour
   choisir la colonne de la table qui gardera le moment du dernier export PDF de chaque ligne. Elle accepte
   une colonne Date (le jour), Date et heure (l'instant) ou Texte (« 2026-10-09 14:32 »), et pas une colonne
@@ -381,6 +387,12 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Added
 
+- **Row number in a loop**: the "#" list ("Chips" tab) offers "Row number". Placed in a table row, a list
+  item or a paragraph that a Loop repeats, the chip is written as 1, 2, 3… in Reading and in the exports
+  (PDF, Word, batches, e-mail): it counts the rows the loop keeps, after its filter and sort, and starts
+  again at 1 for each page row (each invoice of a batch). Outside a repeated zone it is 1. No "Order"
+  column is needed in Grist to number rows any more. It is not offered in the e-mail fields or in the PDF
+  name.
 - **Date of the last PDF export**: Settings > View offers a "Column" list (with "— None —") to choose the
   column of the table that will keep the moment of each row's last PDF export. It accepts a Date column
   (the day), a Date and time column (the instant) or a Text column ("2026-10-09 14:32"), and no formula

@@ -216,6 +216,48 @@
     },
   });
 
+  // La puce « N° de ligne » (point 5.1 d'Antoine, 09/10) : proposée par l'onglet Puces de la liste « # » du document, posée comme les autres puces, libellée dans
+  // les deux langues, et relue telle quelle depuis le HTML enregistré. Son rang vient d'une zone répétée (suite varLoop) ; elle n'entre pas dans un champ texte (suite
+  // fieldEditor, dont l'onglet Puces d'un champ n'a que les quatre puces qui s'écrivent en texte).
+  cases.push({
+    id: 'chip_row_number_is_offered_by_the_puces_tab_and_comes_back_from_the_html',
+    description: 'La puce « N° de ligne » (« Row number » en anglais) est proposée par l’onglet Puces de la liste « # » du document, s’insère comme une puce (data-chip-kind="rowNumber") avec son libellé, et survit à un aller-retour HTML',
+    run: async (h) => {
+      const previousLang = I18n.getLang();
+      try {
+        I18n.setLang('fr');
+        await h.resetEditor();
+        await openHashPanel(h);
+        document.querySelectorAll('.ac-tab').forEach(t => { if (t.dataset.tab === 'chips') t.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); });
+        await h.sleep(40);
+        const rows = Array.from(document.querySelectorAll('#autocomplete-box .ac-item')).map(i => i.textContent.trim());
+        const item = Array.from(document.querySelectorAll('#autocomplete-box .ac-item')).find(i => i.textContent.trim() === 'N° de ligne');
+        if (!item) return { pass: false, notes: 'item introuvable, lignes=' + rows.join(' | ') };
+        item.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+        await h.sleep(60);
+        const html = Editor.getHTML();
+        const read = markup => {
+          const box = document.createElement('div');
+          box.innerHTML = markup;
+          return Array.from(box.querySelectorAll('.smart-chip[data-chip-kind="rowNumber"]')).map(c => c.textContent);
+        };
+        const inserted = read(html);
+        Editor.setHTML(html);
+        const again = read(Editor.getHTML());
+        const labels = { fr: EditorNodes.smartChipLabel('rowNumber') };
+        I18n.setLang('en');
+        labels.en = EditorNodes.smartChipLabel('rowNumber');
+        const pass = rows.includes('Date du jour') && rows.indexOf('N° de ligne') === rows.indexOf('Nom de l’utilisateur') + 1 && rows.indexOf('N° de ligne') > 0
+          && JSON.stringify(inserted) === JSON.stringify(['N° de ligne']) && JSON.stringify(again) === JSON.stringify(['N° de ligne'])
+          && labels.fr === 'N° de ligne' && labels.en === 'Row number';
+        return { pass, notes: JSON.stringify({ rows, inserted, again, labels }) };
+      } finally {
+        I18n.setLang(previousLang);
+        await h.resetEditor();
+      }
+    },
+  });
+
   // Le chip « Email de l'utilisateur » écrit « [Email indisponible] » quand l'adresse ne peut pas être lue (réseau, portée du jeton insuffisante) : en Lecture et dans
   // les exports (ReaderMode.preview). Le texte suit la langue de l'interface (carte d'Antoine du 30/09, « Traduire ») ; l'échec est fabriqué ici (GristAPI.getCurrentUserEmail
   // rejette, ou rend vide) parce que le cache d'adresse de GristAPI peut avoir été rempli par une autre suite.

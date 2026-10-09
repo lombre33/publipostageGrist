@@ -17,7 +17,8 @@
 //   lecture.
 // Dans chaque copie de la zone, chaque bulle (et chaque image liée à une variable) est associée à la ligne du tour (bindingOf) :
 // js/variables.js:resolveRawValue lit alors la valeur dans cette ligne (opts.loop) au lieu de chercher les lignes liées - valeur, format, condition
-// et images compris.
+// et images compris. Elle porte aussi le rang du tour (`turn`, 1 pour la première ligne retenue : après le filtre et le tri) que la puce « N° de
+// ligne » écrit (js/reader-mode.js:resolveSmartChips) ; dans une zone répétée dans une autre, celui de la zone la plus proche.
 const LoopRules = (function () {
   const REPEATS = ['inline', 'row', 'item', 'paragraph'];
   // Choix « Si aucune ligne » proposés pour chaque zone, le premier étant celui par défaut (sauf 'inline' dans une cellule de tableau, cf.
@@ -176,20 +177,21 @@ const LoopRules = (function () {
   const bindings = new WeakMap();
   // Tout ce qui lit la ligne du tour dans une zone copiée : les bulles #Variable, les images liées à une variable, les bulles « Calcul » (« Prix ×
   // Quantité » dans une ligne répétée donne le total de cette ligne), les QR codes (le texte de leurs colonnes) et les blocs, valeurs et cases
-  // conditionnels (leur condition).
-  const BOUND_SELECTOR = '.var-badge, .calc-badge, img.editor-image[data-var-table], img.editor-image[data-qr-text], .conditional-text, .conditional-value, .conditional-checkbox';
+  // conditionnels (leur condition), et la puce « N° de ligne » (le rang du tour).
+  const BOUND_SELECTOR = '.var-badge, .calc-badge, img.editor-image[data-var-table], img.editor-image[data-qr-text], .conditional-text, .conditional-value, .conditional-checkbox, .smart-chip[data-chip-kind="rowNumber"]';
   function bindingOf(el) { return (el && bindings.get(el)) || null; }
   // Ligne du tour ajoutée à ce qu'un élément tient déjà d'une zone englobante (une zone répétée dans une autre, copiée-collée : chacune garde sa
-  // table).
-  function itemBinding(loop, item, inherited) {
+  // table). `turn` : le rang du tour dans sa zone (1, 2, 3...) ; sans lui (bulle en boucle dans la phrase, aperçu), la liaison n'en porte pas.
+  function itemBinding(loop, item, inherited, turn) {
     const next = { rows: Object.assign({}, inherited && inherited.rows), anchors: Object.assign({}, inherited && inherited.anchors) };
     next.rows[loop.table] = item.row;
     if (loop.via) next.anchors[loop.via.table + '.' + loop.via.column] = item.anchor;
+    if (turn) next.turn = turn;
     return next;
   }
-  function bindClone(source, clone, loop, item) {
+  function bindClone(source, clone, loop, item, turn) {
     const src = source.querySelectorAll(BOUND_SELECTOR);
-    clone.querySelectorAll(BOUND_SELECTOR).forEach((el, i) => bindings.set(el, itemBinding(loop, item, src[i] ? bindings.get(src[i]) : null)));
+    clone.querySelectorAll(BOUND_SELECTOR).forEach((el, i) => bindings.set(el, itemBinding(loop, item, src[i] ? bindings.get(src[i]) : null, turn)));
   }
 
   function zoneOf(badge, repeat, root) {
@@ -277,9 +279,9 @@ const LoopRules = (function () {
       if (result.error) { console.warn('[LoopRules] boucle sur « ' + loop.table + ' » sans source (' + result.error + ') : zone affichée une fois.'); continue; }
       if (!result.items.length) { applyEmptyZone(zone, loop); continue; }
       const copies = document.createDocumentFragment();
-      result.items.forEach(item => {
+      result.items.forEach((item, index) => {
         const clone = zone.cloneNode(true);
-        bindClone(zone, clone, loop, item);
+        bindClone(zone, clone, loop, item, index + 1);
         copies.appendChild(clone);
       });
       zone.replaceWith(copies);

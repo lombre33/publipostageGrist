@@ -23,7 +23,7 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
   vérifie.
 - **Les données** : les modèles et les réglages vivent dans des tables `Publipostage_*` du document Grist ;
   les préférences d'affichage (langue, thème, raccourcis…) dans le navigateur.
-- **Le volume** : 124 fichiers dans `js/` (46 200 lignes : 34 200 de code, 9 300 de commentaires, 2 800 de
+- **Le volume** : 124 fichiers dans `js/` (46 300 lignes : 34 200 de code, 9 300 de commentaires, 2 800 de
   blanc), 41 feuilles de style (3 500 lignes), une page de 800 lignes. Quatre fichiers de polices du PDF
   pèsent 2,5 Mo en quelques lignes (des données) ; `js/i18n.js` est du texte à traduire, pas de la logique.
 
@@ -122,7 +122,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/field-editor.js`, `js/field-codec.js` | Les champs texte du mode E-mail (Objet, À, Cc, Cci) et du nom du PDF : un éditeur d'une ligne qui pose les mêmes bulles que le document, avec leur barre et leurs fenêtres, et les puces date, heure, email et nom de l'utilisateur ; la valeur enregistrée reste du texte brut tant qu'aucune bulle n'a de réglage et qu'aucune puce n'est posée. |
 | `js/formula.js` | Le moteur de calcul d'une bulle « Calcul » (module pur : ni DOM, ni Grist). |
 | `js/condition-rules.js`, `js/condition-fields.js` | L'évaluation des règles « colonne, opérateur, valeur ou autre colonne » (module pur) et leurs champs partagés par toutes les fenêtres. |
-| `js/loop-rules.js`, `js/list-split.js` | Le moteur de boucle sur les lignes liées ; « Un document par valeur ». |
+| `js/loop-rules.js`, `js/list-split.js` | Le moteur de boucle sur les lignes liées (il donne aussi à chaque copie de zone le rang de son tour, que la puce « N° de ligne » écrit) ; « Un document par valeur ». |
 | `js/conditional-text.js`, `js/conditional-checkbox.js`, `js/conditional-value.js` | Bloc, case et valeur conditionnels. |
 
 ### Macro-modèles (2 fichiers, 520 lignes)
@@ -285,7 +285,7 @@ For anyone reading the code: what is where, and where to start. Line counts are 
   **Each export** loads its library on first use, with an integrity hash (SRI) that the browser checks.
 - **The data**: templates and settings live in `Publipostage_*` tables of the Grist document; display
   preferences (language, theme, shortcuts…) in the browser.
-- **The size**: 124 files in `js/` (46,200 lines: 34,200 of code, 9,300 of comments, 2,800 blank), 41
+- **The size**: 124 files in `js/` (46,300 lines: 34,200 of code, 9,300 of comments, 2,800 blank), 41
   stylesheets (3,500 lines), an 800-line page. Four PDF font files weigh 2.5 MB in a few lines (data);
   `js/i18n.js` is text to translate, not logic.
 
@@ -383,7 +383,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/field-editor.js`, `js/field-codec.js` | The text fields of E-mail mode (Subject, To, Cc, Bcc) and of the PDF file name: a one-line editor that places the same bubbles as the document, with their toolbar and windows, and the user's date, time, email and name chips; the stored value stays plain text as long as no bubble has a setting and no chip is placed. |
 | `js/formula.js` | The calculation engine of a "Calculation" bubble (a pure module: no DOM, no Grist). |
 | `js/condition-rules.js`, `js/condition-fields.js` | Evaluation of "column, operator, value or other column" rules (a pure module) and their fields shared by all the windows. |
-| `js/loop-rules.js`, `js/list-split.js` | The loop engine over linked rows; "One document per value". |
+| `js/loop-rules.js`, `js/list-split.js` | The loop engine over linked rows (it also gives each zone copy the rank of its turn, which the "Row number" chip writes); "One document per value". |
 | `js/conditional-text.js`, `js/conditional-checkbox.js`, `js/conditional-value.js` | Conditional block, checkbox and value. |
 
 ### Macro-templates (2 files, 520 lines)
