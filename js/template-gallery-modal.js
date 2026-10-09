@@ -135,6 +135,7 @@ const TemplateGalleryModal = (function () {
     }
     previewShows.hidden = !shows.length;
     previewUsePack.hidden = !pack;
+    previewModal.classList.toggle('has-pack', !!pack);
     if (pack) previewUsePack.textContent = I18n.t('gallery.useWithTables', { n: pack.tables.length });
   }
 

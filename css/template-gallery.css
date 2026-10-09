@@ -10,6 +10,13 @@
 .tpl-preview-actions #tpl-preview-use-pack { background: var(--accent-solid); border-color: var(--accent-solid); color: #fff; }
 .tpl-preview-actions #tpl-preview-use-pack:hover { background: var(--accent-solid-hover); }
 .tpl-preview-actions #tpl-preview-use-pack[hidden] { display: none; }
+/* Cadre étroit : le titre garde sa largeur (il ne se réduit jamais à une lettre par ligne), les boutons descendent dessous et passent à la ligne à leur tour. */
+.template-preview-modal-content .tpl-preview-header { flex-wrap: wrap; }
+.template-preview-modal-content .tpl-preview-heading { flex: 1 1 220px; }
+.template-preview-modal-content .tpl-preview-actions { flex: 0 1 auto; flex-wrap: wrap; }
+/* Un modèle qui s'installe avec ses tables a UNE action principale (« Créer avec ses tables ») : « Utiliser ce modèle » (le texte seul) devient l'autre choix. */
+#template-preview-modal.has-pack .tpl-preview-actions #tpl-preview-use-empty { background: var(--surface); border-color: var(--border-strong); color: var(--text); }
+#template-preview-modal.has-pack .tpl-preview-actions #tpl-preview-use-empty:hover { background: var(--surface-sunken); }
 
 /* Fonctions que le modèle montre : une rangée de pastilles au-dessus du document. */
 .tpl-preview-shows { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 14px; }
@@ -27,3 +34,5 @@
 
 /* Carte de la grille : la capture du document tient en entier (une carte de visite ou une invitation en paysage n'est pas rognée en 3 / 4). */
 .tpl-gallery-card img.is-capture { object-fit: contain; background: #fff; }
+/* Le nom d'une carte passe à la ligne, deux lignes au plus, au lieu d'être coupé par des points de suspension : « Étiquette d'adresse 70 × 37 » se lit en entier. */
+.tpl-gallery-card-name { white-space: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }

@@ -81,6 +81,7 @@ const GROUPS = {
   templateTree: 'scenarios-template-tree',
   templateOrganize: 'scenarios-template-organize',
   templateGallery: 'scenarios-template-gallery',
+  templatePack: 'scenarios-template-pack', // modèles de la galerie qui s'installent avec leurs tables (js/template-pack.js : lecture et contrôle du pack, plan, actions envoyées à Grist, installation et retour arrière, js/template-gallery-modal.js : aperçu par captures, question, conflits, modèle créé avec sa page) et fichiers des packs des catalogues
   pageTree: 'scenarios-page-tree', // rangement des pages que Grist crée avec les tables du widget (js/page-tree.js) : sous celle des modèles, repliées par défaut
   rowTemplate: 'scenarios-row-template', // modèle selon la ligne (js/row-template.js, Réglages > Selon la ligne) : règles, repli, Lecture et édition, question avant de quitter des modifications, onglet, et l'onglet qui suit les droits changés Réglages ouverts sans redessiner la saisie
   viewTemplate: 'scenarios-view-template', // modèle par défaut de la vue (js/view-template.js, Réglages > Vue) : bouton « Utiliser … pour cette vue » (un email et un macro-modèle se choisissent comme un autre), « Retirer », grisés, choix venu d'ailleurs, repli des règles de ligne, lecture seule, et les boutons qui suivent les droits changés Réglages ouverts
@@ -221,6 +222,7 @@ const NODE_SCRIPTS = {
   autosaveRaceMouse: 'verify-autosave-race-mouse.mjs', // enregistrement automatique face à un Grist lent, à la vraie souris et au vrai clavier : frappe continue, clic sur Enregistrer, autre modèle choisi pendant une lecture, vrai conflit toujours signalé ; 700x400
   menuClickMouse: 'verify-menu-click-mouse.mjs', // un clic de souris sur « + », Enregistrer, Qualité PDF ou Titre ne les laisse plus ouverts ni ne prend le curseur du texte, 700x400
   leaveUnsavedMouse: 'verify-leave-unsaved-mouse.mjs', // quitter un modèle dont une modification attend : la question Enregistrer / Abandonner / Annuler (liste, « + », galerie), 700x400 clair, sombre et anglais
+  templatePackMouse: 'verify-template-pack-mouse.mjs', // galerie, modèle livré avec ses tables (?dev) à la vraie souris : carte, aperçu en captures (nom, tables, pastilles, boutons principal / second), question « Créer les tables du modèle ? » (Annuler, Créer), refus d'une table qui gêne, 700x400 clair, sombre et anglais, 360x400
   layersMouse: 'verify-layers-mouse.mjs', // ordre d'empilement des couches flottantes à la vraie souris et au vrai clavier : la liste # et les menus de la barre du haut au-dessus des barres du tableau, d'une image et d'une bulle, 700x400
   tableUndoKeyboard: 'verify-table-undo-keyboard.mjs',
   trackColumnsMouse: 'verify-track-columns-mouse.mjs', // « Colonne avant / après / Supprimer la colonne » avec le suivi des modifications : colonne alignée, teintée, barrée, Ctrl+Z, enregistrement puis réouverture, cellule fusionnée (suppression grisée), fond de cellule et largeur de colonne suivis (barre « Accepter / Refuser » un par un, toute la colonne, valeur d'origine, tableau automatique), colonne ajoutée ou supprimée puis colorée ou tirée, alignement changé deux fois, 700x400 clair et sombre

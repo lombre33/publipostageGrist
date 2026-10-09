@@ -461,6 +461,10 @@ const I18n = (function () {
     'gallery.showsLabel': { fr: 'Fonctions montrées', en: 'Features shown' },
     'gallery.captureNote': { fr: 'Aperçu avec des lignes d’exemple : les tables créées restent vides.', en: 'Preview with sample rows: the tables created stay empty.' },
     'gallery.captureAlt': { fr: '{name}, page {page}', en: '{name}, page {page}' },
+    // Les fonctions que montre un modèle de la galerie (champ `shows` de son entrée du catalogue) : une pastille par clé, dans l'aperçu.
+    'gallery.shows.qr': { fr: 'Code QR', en: 'QR code' },
+    'gallery.shows.condition': { fr: 'Texte conditionnel', en: 'Conditional text' },
+    'gallery.shows.pageFormat': { fr: 'Format de page', en: 'Page size' },
 
     // --- Macro modèles (page de garde + annexes conditionnelles, planning/feature-macro-modeles.md) ---
     'macro.editButton': { fr: 'Modifier la composition', en: 'Edit composition' },

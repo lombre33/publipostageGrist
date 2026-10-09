@@ -6,10 +6,11 @@
 // Trois temps, chacun lisible seul :
 //  - normalize(raw, family) : le pack tel que le fichier le donne -> un pack complet et validé (jamais d'objet à moitié valide plus loin) ;
 //  - plan(pack, schema) : ce que l'installation ferait dans CE document (tables à créer, déjà là et compatibles, en conflit) ; pur, sans lecture de Grist ;
-//  - apply(pack) : l'installation elle-même. Tout ce qui doit réussir ensemble part dans UN lot (AddTable puis AddColumn des formules) : Grist le
-//    rejoue en entier ou pas du tout (essai du 09/10 dans un vrai Grist : une action invalide du lot n'en laisse aucune). Les « Colonnes à afficher »
-//    suivent dans un second appel (les identifiants de colonnes n'existent qu'après le premier), et une table créée est retirée si ce second appel
-//    échoue : le document ne garde pas des tables à moitié réglées.
+//  - apply(pack) : l'installation elle-même, en trois appels. Les tables partent seules dans un premier lot (Grist le rejoue en entier ou pas du tout :
+//    essai du 09/10 dans un vrai Grist, une action invalide du lot n'en laisse aucune). Le nom que Grist leur a donné est vérifié avant d'écrire quoi que
+//    ce soit d'autre : un nom pris entre-temps est renommé en silence (« Clients2 »), et les colonnes de calcul, qui visent leur table par son nom,
+//    se seraient posées sur une table qui n'est pas la nôtre. Puis les colonnes de calcul, puis les « Colonnes à afficher » (les identifiants de colonnes
+//    n'existent qu'après coup). Si l'un des deux derniers appels échoue, les tables créées sont retirées : le document ne garde pas des tables à moitié réglées.
 // Rien ici ne touche js/grist-api.js (tenu par un autre chantier) : les règles de liaison passent par ses fonctions publiques.
 const TemplatePack = (function () {
   const VERSION = 1;
@@ -208,12 +209,18 @@ const TemplatePack = (function () {
     return spec;
   }
 
-  // Le lot de création : toutes les tables d'abord (une Référence peut viser une table créée plus loin dans le lot : essayé dans un vrai Grist), puis les
-  // colonnes à formule (qui nomment d'autres tables et colonnes : leur ordre ne compte pas, Grist recalcule ce qui attendait une colonne). Aucune ligne.
-  function createActions(pack, tableIds) {
-    const wanted = pack.tables.filter(table => tableIds.indexOf(table.id) !== -1);
-    const actions = wanted.map(table => ['AddTable', table.id, table.columns.filter(column => !column.formula).map(dataColumnSpec)]);
-    wanted.forEach(table => table.columns.filter(column => column.formula).forEach(column => {
+  // Le premier lot : toutes les tables ensemble (une Référence peut viser une table créée plus loin dans le lot : essayé dans un vrai Grist), avec leurs seules
+  // colonnes de donnée. Aucune ligne.
+  function tableActions(pack, tableIds) {
+    return pack.tables.filter(table => tableIds.indexOf(table.id) !== -1)
+      .map(table => ['AddTable', table.id, table.columns.filter(column => !column.formula).map(dataColumnSpec)]);
+  }
+
+  // Le second lot : les colonnes à formule, une fois les tables là sous le nom voulu (elles nomment d'autres tables et colonnes : leur ordre ne compte pas,
+  // Grist recalcule ce qui attendait une colonne).
+  function formulaActions(pack, tableIds) {
+    const actions = [];
+    pack.tables.filter(table => tableIds.indexOf(table.id) !== -1).forEach(table => table.columns.filter(column => column.formula).forEach(column => {
       const spec = { type: column.type, isFormula: true, formula: column.formula };
       if (column.label) spec.label = column.label;
       const options = widgetOptionsOf(column);
@@ -263,18 +270,19 @@ const TemplatePack = (function () {
     if (found.conflicts.length) throw packError('conflict', { conflicts: found.conflicts });
     const created = found.create;
     if (created.length) {
-      const actions = createActions(pack, created);
-      const result = await grist.docApi.applyUserActions(actions);
+      const result = await grist.docApi.applyUserActions(tableActions(pack, created));
       const given = givenTableIds(result, created.length);
       // Un nom pris entre la lecture du document et le lot (une autre fenêtre) : Grist renomme en silence (« Clients2 »), et les variables du modèle
-      // viseraient une autre table. Tout ce que le lot vient de créer est retiré.
+      // viseraient une autre table. Tout ce que le lot vient de créer est retiré, avant qu'une colonne de calcul ne soit posée.
       if (given.some((id, i) => id && id !== created[i])) {
         await removeTables(given.map((id, i) => id || created[i]));
         throw packError('renamed', { wanted: created, given });
       }
       try {
-        const actionsDisplay = displayActions(pack, created, await readDocumentSchema());
-        if (actionsDisplay.length) await grist.docApi.applyUserActions(actionsDisplay);
+        const calculated = formulaActions(pack, created);
+        if (calculated.length) await grist.docApi.applyUserActions(calculated);
+        const shown = displayActions(pack, created, await readDocumentSchema());
+        if (shown.length) await grist.docApi.applyUserActions(shown);
       } catch (e) {
         await removeTables(created);
         throw e;
@@ -304,5 +312,5 @@ const TemplatePack = (function () {
     return Object.assign({}, page.margins || {}, { orientation: page.orientation, format: page.format });
   }
 
-  return { VERSION, normalize, readDocumentSchema, plan, createActions, displayActions, apply, marginsOf, isPackError, parseType, isReference, sameKind };
+  return { VERSION, normalize, readDocumentSchema, plan, tableActions, formulaActions, displayActions, apply, marginsOf, isPackError, parseType, isReference, sameKind };
 })();

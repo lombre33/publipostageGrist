@@ -41,6 +41,7 @@ try {
     displayCols: {}, // { tableId: { colId: colonne d'affichage } } - Références affichées par une colonne d'aide gristHelper_Display* (cf. setVariables)
     visibleCols: {}, // { tableId: { colId: colonne de la table liée } } - « Colonne à afficher » d'une Référence (visibleCol, cf. setVariables)
     labels: {}, // { tableId: { colId: libellé } } - le nom de l'en-tête quand il diffère de l'identifiant (label de _grist_Tables_column, cf. setColumnLabels) ; absent = le libellé est l'identifiant
+    formulas: {}, // { tableId: { colId: formule } } - les colonnes à formule ajoutées par AddColumn et les formules des colonnes d'aide de SetDisplayFormula : le stub ne les calcule pas, il les garde pour qu'un test lise ce que le widget a demandé
     rows: {}, // { tableId: { id: [...], col: [...] } } forme columnaire Grist
     // Un widget réel ne peut jamais désinscrire un onRecord (pas d'"offRecord" dans l'API publique) et PLUSIEURS souscriptions coexistent, chacune
     // recevant CHAQUE événement indépendamment (grist-plugin-api.ts : chaque appel à onRecord() ajoute son propre écouteur 'message' interne) - donc
@@ -265,7 +266,7 @@ try {
     const at = state.tables.indexOf(tableId);
     if (at === -1) return false;
     state.tables.splice(at, 1);
-    ['columns', 'choices', 'displayCols', 'visibleCols', 'labels', 'rows', 'nextRowId', 'primaryViewOf'].forEach(bag => { if (state[bag]) delete state[bag][tableId]; });
+    ['columns', 'choices', 'displayCols', 'visibleCols', 'labels', 'formulas', 'rows', 'nextRowId', 'primaryViewOf'].forEach(bag => { if (state[bag]) delete state[bag][tableId]; });
     rebuildColumnMeta();
     return true;
   }
@@ -434,6 +435,104 @@ try {
   function countActions(type, tableId) {
     return state.actionLog.filter(a => a[0] === type && (!tableId || a[1] === tableId)).length;
   }
+  // ---- Tables et colonnes créées par le widget pour le compte d'un modèle de la galerie (js/template-pack.js) ----
+  // Ce que Grist fait de ces actions a été essayé dans un vrai Grist le 09/10 (grist-static 0.1.6, labo : probe-pack.mjs, probe-names.mjs) : le stub n'invente rien.
+  // Les tables du widget (Publipostage_…) gardent leur ancien traitement : leurs colonnes n'ont jamais été déclarées ici et aucun scénario ne les lit par les métadonnées.
+  const isWidgetTable = tableId => INTERNAL_TABLES.indexOf(tableId) !== -1 || /^Publipostage_/.test(tableId);
+
+  // Le nom que Grist donne à une table ajoutée : sans accents, tout ce qui n'est ni lettre ni chiffre devient « _ », la première lettre passe en capitale, et un nom déjà
+  // pris - SANS tenir compte de la casse - reçoit un numéro (« Fournisseurs » prise : « fournisseurs » devient « Fournisseurs2 », « FOURNISSEURS » devient « FOURNISSEURS3 »).
+  function pickTableId(wanted) {
+    const clean = String(wanted).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9_]+/g, '_');
+    const base = clean.charAt(0).toUpperCase() + clean.slice(1);
+    const taken = {};
+    state.tables.concat(Object.keys(state.primaryViewOf), INTERNAL_TABLES).forEach(t => { taken[t.toLowerCase()] = true; });
+    let id = base;
+    for (let n = 2; taken[id.toLowerCase()]; n++) id = base + n;
+    return id;
+  }
+  // Même règle pour une colonne (la première lettre reste telle quelle) : « Nom » puis « nom » donne « Nom » et « nom2 ».
+  function pickColumnId(wanted, existing) {
+    const base = String(wanted).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9_]+/g, '_');
+    const taken = {};
+    Object.keys(existing).forEach(c => { taken[c.toLowerCase()] = true; });
+    let id = base;
+    for (let n = 2; taken[id.toLowerCase()]; n++) id = base + n;
+    return id;
+  }
+  function parseWidgetOptions(text) {
+    if (!text) return null;
+    try { const options = JSON.parse(text); return options && typeof options === 'object' ? options : null; } catch (e) { return null; }
+  }
+  // La colonne (table, identifiant) d'une ligne de _grist_Tables_column, ou null.
+  function columnByRowId(rowId) {
+    const key = Object.keys(metaIds.columns).find(k => metaIds.columns[k] === rowId);
+    if (!key) return null;
+    const at = key.indexOf('\n');
+    const tableRow = Number(key.slice(0, at));
+    const tableId = Object.keys(metaIds.tables).find(t => metaIds.tables[t] === tableRow);
+    return tableId ? { tableId, colId: key.slice(at + 1) } : null;
+  }
+  // Une colonne ajoutée à une table connue des métadonnées : son type, son libellé, ses choix et sa formule rejoignent le schéma que le widget relit.
+  function registerColumn(tableId, colId, info) {
+    state.columns[tableId][colId] = info.type || 'Any';
+    if (info.label && info.label !== colId) (state.labels[tableId] = state.labels[tableId] || {})[colId] = info.label;
+    const options = parseWidgetOptions(info.widgetOptions);
+    if (options && Array.isArray(options.choices)) (state.choices[tableId] = state.choices[tableId] || {})[colId] = options.choices.slice();
+    if (info.isFormula && info.formula) (state.formulas[tableId] = state.formulas[tableId] || {})[colId] = info.formula;
+  }
+  // Une table créée par AddTable pour un modèle : métadonnées, données vides, vue et page. Rend ce que Grist rend : { id, table_id, columns, views }.
+  function addUserTable(wanted, cols) {
+    const given = pickTableId(wanted);
+    state.tables.push(given);
+    state.columns[given] = {}; state.labels[given] = {}; state.choices[given] = {}; state.displayCols[given] = {}; state.visibleCols[given] = {}; state.formulas[given] = {};
+    cols.forEach(c => registerColumn(given, pickColumnId(c.id, state.columns[given]), c));
+    state.rows[given] = columnarEmpty(Object.keys(state.columns[given]));
+    const viewId = addPage(given, 0);
+    rebuildColumnMeta();
+    return { id: tableRowId(given), table_id: given, columns: Object.keys(state.columns[given]), views: [{ id: viewId, sections: [] }] };
+  }
+  // « Colonne à afficher » d'une Référence (UpdateRecord de _grist_Tables_column, visibleCol : l'identifiant de ligne de la colonne montrée, 0 pour aucune).
+  function setVisibleCol(rowId, shownRowId) {
+    const own = columnByRowId(rowId);
+    if (!own) throw new Error('KeyError : colonne ' + rowId + ' inconnue');
+    const bag = state.visibleCols[own.tableId] = state.visibleCols[own.tableId] || {};
+    const shown = shownRowId ? columnByRowId(shownRowId) : null;
+    if (shown) bag[own.colId] = shown.colId; else delete bag[own.colId];
+    rebuildColumnMeta();
+  }
+  // SetDisplayFormula : Grist range la formule dans une colonne d'aide « gristHelper_Display » de la même table et la déclare displayCol de la colonne.
+  function setDisplayFormula(tableId, colRef, formula) {
+    const own = columnByRowId(colRef);
+    if (!own || own.tableId !== tableId) throw new Error('KeyError : colonne ' + colRef + ' inconnue dans ' + tableId);
+    const columns = state.columns[tableId];
+    const bag = state.displayCols[tableId] = state.displayCols[tableId] || {};
+    let helper = bag[own.colId];
+    if (!helper) {
+      helper = 'gristHelper_Display';
+      for (let n = 2; helper in columns; n++) helper = 'gristHelper_Display' + n;
+      columns[helper] = 'Any';
+      if (state.rows[tableId]) state.rows[tableId][helper] = state.rows[tableId].id.map(() => null);
+      bag[own.colId] = helper;
+    }
+    (state.formulas[tableId] = state.formulas[tableId] || {})[helper] = formula;
+    rebuildColumnMeta();
+  }
+  // RemoveTable : la table, ses colonnes, ses données, sa vue et sa page s'en vont.
+  function removeTable(tableId) {
+    if (state.tables.indexOf(tableId) === -1) throw new Error('KeyError : table ' + tableId + ' inconnue');
+    const viewId = state.primaryViewOf[tableId];
+    [['_grist_Pages', 'viewRef'], ['_grist_Views', 'id']].forEach(([name, key]) => {
+      const rows = state.rows[name];
+      if (!rows || viewId == null) return;
+      for (let i = rows[key].length - 1; i >= 0; i--) {
+        if (rows[key][i] !== viewId) continue;
+        Object.keys(rows).forEach(k => rows[k].splice(i, 1));
+      }
+    });
+    dropTable(tableId);
+  }
+
   async function applyUserActions(actions) {
     if (state.viewer) {
       actions.forEach(a => state.deniedWrites.push(a));
@@ -447,10 +546,16 @@ try {
       const [type, tableId] = action;
       if (type === 'AddTable') {
         const cols = action[2] || [];
-        if (state.tables.indexOf(tableId) === -1 && INTERNAL_TABLES.indexOf(tableId) === -1) state.tables.push(tableId);
-        if (!state.rows[tableId]) state.rows[tableId] = columnarEmpty(cols.map(c => c.id));
-        if (!state.primaryViewOf[tableId]) addPage(tableId, 0);
-        retValues.push({ tableId });
+        if (isWidgetTable(tableId)) {
+          if (state.tables.indexOf(tableId) === -1 && INTERNAL_TABLES.indexOf(tableId) === -1) state.tables.push(tableId);
+          if (!state.rows[tableId]) state.rows[tableId] = columnarEmpty(cols.map(c => c.id));
+          if (!state.primaryViewOf[tableId]) addPage(tableId, 0);
+          retValues.push({ table_id: tableId, columns: cols.map(c => c.id), views: [] });
+        } else {
+          // Une autre table (celle d'un modèle de la galerie) : nommée comme Grist la nomme, avec ses colonnes typées dans les métadonnées. Rend { id, table_id, columns, views } :
+          // le nom réellement donné est `table_id`, jamais `tableId`.
+          retValues.push(addUserTable(tableId, cols));
+        }
       } else if (type === 'AddRecord' || type === 'BulkAddRecord') {
         const fields = action[3] || {};
         // Lève sur une colonne inconnue si la table EXISTE déjà (schéma déjà fixé) - comme le vrai Grist
@@ -483,6 +588,11 @@ try {
       } else if (type === 'UpdateRecord') {
         const rowId = action[2];
         let fields = action[3] || {};
+        // La « colonne à afficher » d'une Référence vit dans le schéma (state.visibleCols), que rebuildColumnMeta recopie dans _grist_Tables_column : une écriture directe dans la copie serait perdue.
+        if (tableId === '_grist_Tables_column' && 'visibleCol' in fields) {
+          setVisibleCol(rowId, fields.visibleCol);
+          fields = Object.keys(fields).filter(k => k !== 'visibleCol').reduce((rest, k) => { rest[k] = fields[k]; return rest; }, {});
+        }
         const table = state.rows[tableId];
         if (tableId === '_grist_Pages' && table && 'pagePos' in fields) fields = Object.assign({}, fields, { pagePos: resolvePagePos(table, rowId, fields.pagePos) });
         if (table) {
@@ -527,7 +637,15 @@ try {
           while (colId in table) { colId = requestedColId + suffix; suffix++; }
           table[colId] = table.id.map(() => null);
         }
+        // Une table dont le schéma est connu (setVariables, ou AddTable d'un modèle de la galerie) garde la colonne dans ses métadonnées. Les tables du widget, non : voir isWidgetTable.
+        if (!isWidgetTable(tableId) && state.columns[tableId]) { registerColumn(tableId, colId, action[3] || {}); rebuildColumnMeta(); }
         retValues.push({ colId });
+      } else if (type === 'SetDisplayFormula') {
+        setDisplayFormula(tableId, action[3], action[4]);
+        retValues.push(null);
+      } else if (type === 'RemoveTable') {
+        removeTable(tableId);
+        retValues.push(null);
       } else {
         retValues.push(null);
       }
