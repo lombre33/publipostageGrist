@@ -154,7 +154,7 @@ L'interface prend la police du système (`--font-ui` de `css/style.css`) : aucun
 | `js/` | Le code du widget, un fichier par fonction (éditeur, barre d'outils, variables, exports, réglages…). |
 | `css/` | Les feuilles de style. |
 | `img/` | Le logo. |
-| `templates-gallery/` | Les modèles de la galerie : `manifest.json`, un dossier par modèle (texte, `pack.json` des tables et de la page, captures) et `_tables/` (les tables de chaque famille de modèles, avec leurs lignes d'exemple, qui ne servent qu'aux captures). |
+| `templates-gallery/` | Les modèles de la galerie : `manifest.json`, un dossier par modèle (texte, `pack.json` des tables et de la page, captures) et `families/` (les tables de chaque famille de modèles, avec leurs lignes d'exemple, qui ne servent qu'aux captures). |
 | `templates-gallery-dev/` | Des modèles de test, chargés seulement quand l'adresse du widget contient `?dev`. |
 | `dev-tests/` | La suite de tests, le harnais et le simulateur de Grist. |
 | `planning/` | Les notes de conception par chantier, la feuille de route et la charte UI/UX. |

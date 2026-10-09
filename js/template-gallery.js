@@ -101,7 +101,7 @@ const TemplateGallery = (function () {
   }
 
   // Le pack d'un modèle qui s'installe avec ses tables (js/template-pack.js) : son pack.json, avec le fichier de la famille de tables qu'il nomme
-  // (`family` : _tables/<famille>.json, dans le dossier du catalogue), validé par TemplatePack.normalize. Null pour un modèle sans pack (les anciens :
+  // (`family` : families/<famille>.json, dans le dossier du catalogue), validé par TemplatePack.normalize. Null pour un modèle sans pack (les anciens :
   // une seule table de colonnes simples, cf. fetchSchema). Une erreur de lecture ou de validation est levée : l'appelant le dit à la personne.
   async function fetchJson(url) {
     const res = await fetchNoStore(url);
@@ -114,7 +114,7 @@ const TemplateGallery = (function () {
     let family = null;
     if (raw && raw.family != null) {
       if (!/^[a-z0-9][a-z0-9-]*$/.test(String(raw.family))) throw new Error('pack : famille de tables illisible');
-      family = await fetchJson(resolveUrl('_tables/' + raw.family + '.json', entry));
+      family = await fetchJson(resolveUrl('families/' + raw.family + '.json', entry));
     }
     return TemplatePack.normalize(raw, family);
   }

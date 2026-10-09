@@ -147,6 +147,12 @@ if (has('index.html')) {
   report('error', 'l\'adresse du dépôt de développement (publipostageGrist)', grep(/publipostageGrist/i));
 }
 
+// GitHub Pages (Jekyll) ne sert aucun fichier ni dossier dont le nom commence par « _ » ou « . » : ce que le widget charge n'en porte pas (templates-gallery/_tables/ répondait 404 en ligne le 09/10 ; il s'appelle families/).
+{
+  const hidden = files.filter(file => /^(css|js|img|templates-gallery)\//.test(file.rel) && file.rel.split('/').some(part => /^[_.]/.test(part)));
+  if (hidden.length) fail(`un fichier ou un dossier que le widget charge porte un nom qui commence par « _ » ou « . » (GitHub Pages ne le sert pas, il répond 404 en ligne) : ${hidden.slice(0, 4).map(file => file.rel).join(', ')}`);
+}
+
 if (has('templates-gallery/manifest.json')) {
   try {
     const entries = JSON.parse(read('templates-gallery/manifest.json'));
@@ -161,7 +167,7 @@ if (has('templates-gallery/manifest.json')) {
       if (entry.pack && has(`templates-gallery/${entry.pack}`)) {
         let pack = null;
         try { pack = JSON.parse(read(`templates-gallery/${entry.pack}`)); } catch (error) { fail(`templates-gallery/${entry.pack} illisible : ${error.message}`); }
-        if (pack && pack.family && !has(`templates-gallery/_tables/${pack.family}.json`)) fail(`templates-gallery/${entry.pack} : la famille ${pack.family} n'a pas de fichier templates-gallery/_tables/${pack.family}.json`);
+        if (pack && pack.family && !has(`templates-gallery/families/${pack.family}.json`)) fail(`templates-gallery/${entry.pack} : la famille ${pack.family} n'a pas de fichier templates-gallery/families/${pack.family}.json`);
       }
     }
   } catch (error) {

@@ -8,8 +8,8 @@
 //   capture-N.png  ce que le vrai widget en tire (PDF exporté par le vrai bouton, page par page, ou Lecture pour un e-mail ou une grille) ;
 //   thumb.png      la vignette de la carte ;
 //   captures.json  l'empreinte des fichiers ci-dessus au moment des captures, et la taille de chaque image.
-// Les tables partagées d'une famille sont dans <galerie>/_tables/<famille>.json (lues par le widget) et leurs lignes d'exemple dans
-// <galerie>/_tables/<famille>.exemple.json (jamais lues par le widget) : les lignes du modèle (`rows` de exemple.json) remplacent, table par table, celles de la famille.
+// Les tables partagées d'une famille sont dans <galerie>/families/<famille>.json (lues par le widget) et leurs lignes d'exemple dans
+// <galerie>/families/<famille>.exemple.json (jamais lues par le widget) : les lignes du modèle (`rows` de exemple.json) remplacent, table par table, celles de la famille.
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -27,8 +27,8 @@ export function entryFiles(galleryRoot, entry) {
   const dir = dirname(packPath);
   const pack = readJson(packPath);
   const family = pack.family || '';
-  const familyTablesPath = family ? join(galleryRoot, '_tables', family + '.json') : '';
-  const familyExemplePath = family ? join(galleryRoot, '_tables', family + '.exemple.json') : '';
+  const familyTablesPath = family ? join(galleryRoot, 'families', family + '.json') : '';
+  const familyExemplePath = family ? join(galleryRoot, 'families', family + '.exemple.json') : '';
   return {
     dir, packPath, pack,
     html: readFileSync(join(galleryRoot, entry.html), 'utf8'),
