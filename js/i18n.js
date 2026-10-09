@@ -465,6 +465,12 @@ const I18n = (function () {
     'gallery.shows.qr': { fr: 'Code QR', en: 'QR code' },
     'gallery.shows.condition': { fr: 'Texte conditionnel', en: 'Conditional text' },
     'gallery.shows.pageFormat': { fr: 'Format de page', en: 'Page size' },
+    'gallery.shows.images': { fr: 'Image d’une colonne', en: 'Image from a column' },
+    'gallery.shows.dateFormat': { fr: 'Date mise en forme', en: 'Formatted date' },
+    'gallery.shows.twoColumns': { fr: 'Deux colonnes', en: 'Two columns' },
+    'gallery.shows.sheets': { fr: 'Assemblage avant impression', en: 'Assemble before printing' },
+    'gallery.shows.otherwise': { fr: 'Sinon afficher', en: 'Otherwise show' },
+    'gallery.shows.dateWords': { fr: 'Date en toutes lettres', en: 'Date spelled out' },
 
     // --- Macro modèles (page de garde + annexes conditionnelles, planning/feature-macro-modeles.md) ---
     'macro.editButton': { fr: 'Modifier la composition', en: 'Edit composition' },

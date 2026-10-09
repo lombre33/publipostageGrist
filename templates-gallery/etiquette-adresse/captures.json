@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "hash": "282c783335cb479f",
+  "preview": [
+    {
+      "src": "etiquette-adresse/capture-1.png",
+      "w": 441,
+      "h": 234
+    },
+    {
+      "src": "etiquette-adresse/capture-2.png",
+      "w": 637,
+      "h": 901
+    }
+  ],
+  "thumb": {
+    "src": "etiquette-adresse/thumb.png",
+    "w": 240,
+    "h": 320
+  }
+}

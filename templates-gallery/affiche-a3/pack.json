@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "family": "evenementiel",
+  "main": "Evenements",
+  "tables": ["Evenements"],
+  "links": [],
+  "template": {
+    "type": "document",
+    "pdfName": "Affiche #Evenements.Nom",
+    "page": {
+      "format": "A3",
+      "orientation": "portrait",
+      "margins": [15, 15, 15, 15]
+    }
+  }
+}

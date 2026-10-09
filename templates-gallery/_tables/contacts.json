@@ -1,0 +1,22 @@
+{
+  "tables": [
+    {
+      "id": "Contacts",
+      "columns": [
+        {"id": "Civilite", "type": "Choice", "label": "Civilité", "choices": ["Madame", "Monsieur"]},
+        {"id": "Prenom", "type": "Text", "label": "Prénom"},
+        {"id": "Nom", "type": "Text", "label": "Nom"},
+        {"id": "Societe", "type": "Text", "label": "Société"},
+        {"id": "Fonction", "type": "Text", "label": "Fonction"},
+        {"id": "Email", "type": "Text", "label": "E-mail"},
+        {"id": "Telephone", "type": "Text", "label": "Téléphone"},
+        {"id": "Mobile", "type": "Text", "label": "Mobile"},
+        {"id": "Site", "type": "Text", "label": "Site web"},
+        {"id": "Adresse", "type": "Text", "label": "Adresse"},
+        {"id": "CodePostal", "type": "Text", "label": "Code postal"},
+        {"id": "Ville", "type": "Text", "label": "Ville"},
+        {"id": "Logo", "type": "Attachments", "label": "Logo"}
+      ]
+    }
+  ]
+}

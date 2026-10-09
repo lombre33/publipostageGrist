@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "family": "contacts",
+  "main": "Contacts",
+  "tables": ["Contacts"],
+  "links": [],
+  "template": {
+    "type": "document",
+    "pdfName": "Étiquette #Contacts.Nom",
+    "page": {
+      "format": "37x70",
+      "orientation": "landscape",
+      "margins": [3, 3, 3, 3]
+    }
+  }
+}

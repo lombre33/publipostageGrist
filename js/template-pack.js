@@ -20,6 +20,14 @@ const TemplatePack = (function () {
   const LINK_MODES = ['match', 'singleton'];
   const MODEL_TYPES = ['document', 'email', 'grille'];
   const ORIENTATIONS = ['portrait', 'landscape'];
+  // Le format d'une page : A3 à A6, ou « LARGEURxHAUTEUR » en millimètres, côté court d'abord (le format libre de js/page-layout.js : « 55x85 » est une carte de
+  // visite, que `orientation: landscape` met en 85 x 55). Une autre écriture serait lue comme A4 en silence : le fichier est refusé.
+  const FREE_FORMAT_RE = /^(\d+(?:\.\d)?)x(\d+(?:\.\d)?)$/;
+  function isPageFormat(format) {
+    if (/^A[3-6]$/.test(format)) return true;
+    const free = FREE_FORMAT_RE.exec(format);
+    return !!free && Number(free[1]) <= Number(free[2]) && Number(free[1]) >= 20 && Number(free[2]) <= 558.8; // les bornes de PageLayout (CUSTOM_MIN_MM, CUSTOM_MAX_MM)
+  }
   const lower = text => String(text).toLowerCase();
 
   // Erreur d'installation : `code` dit laquelle (conflict, renamed, display), `details` ce qu'il faut pour l'écrire à la personne.
@@ -93,11 +101,13 @@ const TemplatePack = (function () {
     if (ORIENTATIONS.indexOf(orientation) === -1) fail('la page', 'a un sens inconnu : ' + orientation);
     const margins = page.margins == null ? null : page.margins;
     if (margins && (!Array.isArray(margins) || margins.length !== 4 || margins.some(m => typeof m !== 'number' || !isFinite(m) || m < 0 || m > 100))) fail('la page', 'a des marges illisibles (quatre nombres, en mm)');
+    const format = text(page.format, 'la page (format)') || 'A4';
+    if (!isPageFormat(format)) fail('la page', 'a un format inconnu : ' + format);
     const email = raw.email || {};
     return {
       type,
       pdfName: text(raw.pdfName, 'le modèle (nom du fichier PDF)'),
-      page: { format: text(page.format, 'la page (format)') || 'A4', orientation, margins: margins ? { top: margins[0], right: margins[1], bottom: margins[2], left: margins[3] } : null },
+      page: { format, orientation, margins: margins ? { top: margins[0], right: margins[1], bottom: margins[2], left: margins[3] } : null },
       email: { destinataires: text(email.to, 'l’e-mail (à)'), cc: text(email.cc, 'l’e-mail (cc)'), cci: text(email.bcc, 'l’e-mail (cci)'), objet: text(email.subject, 'l’e-mail (objet)') },
     };
   }

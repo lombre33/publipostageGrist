@@ -1,0 +1,37 @@
+{
+  "tables": [
+    {
+      "id": "Evenements",
+      "columns": [
+        {"id": "Nom", "type": "Text", "label": "Nom"},
+        {"id": "Accroche", "type": "Text", "label": "Accroche"},
+        {"id": "Date", "type": "Date", "label": "Date"},
+        {"id": "DateLimite", "type": "Date", "label": "Réponse avant le"},
+        {"id": "Heure", "type": "Text", "label": "Heure"},
+        {"id": "Lieu", "type": "Text", "label": "Lieu"},
+        {"id": "Adresse", "type": "Text", "label": "Adresse"},
+        {"id": "Tarif", "type": "Numeric", "label": "Tarif (€)"},
+        {"id": "Lien", "type": "Text", "label": "Lien d’inscription"},
+        {"id": "Contact", "type": "Text", "label": "Contact"},
+        {"id": "Organisateur", "type": "Text", "label": "Organisateur"},
+        {"id": "Logo", "type": "Attachments", "label": "Logo"},
+        {"id": "Visuel", "type": "Attachments", "label": "Visuel"}
+      ]
+    },
+    {
+      "id": "Invites",
+      "columns": [
+        {"id": "Code", "type": "Text", "label": "Code"},
+        {"id": "Civilite", "type": "Choice", "label": "Civilité", "choices": ["Madame", "Monsieur"]},
+        {"id": "Prenom", "type": "Text", "label": "Prénom"},
+        {"id": "Nom", "type": "Text", "label": "Nom"},
+        {"id": "Societe", "type": "Text", "label": "Société"},
+        {"id": "Fonction", "type": "Text", "label": "Fonction"},
+        {"id": "Categorie", "type": "Choice", "label": "Catégorie", "choices": ["Participant", "Intervenant", "VIP", "Presse", "Staff"]},
+        {"id": "NumTable", "type": "Int", "label": "Table n°"},
+        {"id": "Photo", "type": "Attachments", "label": "Photo"},
+        {"id": "Evenement", "type": "Ref:Evenements", "label": "Événement", "show": "Nom"}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "family": "contacts",
+  "main": "Contacts",
+  "tables": ["Contacts"],
+  "links": [],
+  "template": {
+    "type": "document",
+    "pdfName": "Carte #Contacts.Prenom #Contacts.Nom",
+    "page": {
+      "format": "55x85",
+      "orientation": "landscape",
+      "margins": [4, 5, 4, 5]
+    }
+  }
+}
