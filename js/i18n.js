@@ -183,7 +183,7 @@ const I18n = (function () {
 
     // --- Qualité d'export PDF (options + rangées du menu) ---
     'quality.native': { fr: 'Vectoriel (par défaut)', en: 'Vector (default)' },
-    'quality.browserPrint': { fr: 'Impr. navigateur (bientôt)', en: 'Browser print (soon)' },
+    'quality.browserPrint': { fr: 'Impression navigateur', en: 'Browser print' },
     'quality.low': { fr: 'Basse qualité (bientôt)', en: 'Low quality (soon)' },
     'quality.ultra': { fr: 'Ultra HD (bientôt)', en: 'Ultra HD (soon)' },
 
@@ -487,6 +487,7 @@ const I18n = (function () {
     'common.delete': { fr: 'Supprimer', en: 'Delete' },
     'common.insert': { fr: 'Insérer', en: 'Insert' },
     'common.continue': { fr: 'Continuer', en: 'Continue' },
+    'common.print': { fr: 'Imprimer', en: 'Print' },
     'common.generate': { fr: 'Générer', en: 'Generate' },
     'common.move': { fr: 'Déplacer', en: 'Move' },
 
@@ -902,6 +903,12 @@ const I18n = (function () {
     'status.pdfGenerating': { fr: 'Génération du PDF en cours...', en: 'Generating PDF...' },
     'status.pdfGenerated': { fr: 'PDF généré.', en: 'PDF generated.' },
     'status.pdfGenerationError': { fr: 'Erreur génération PDF.', en: 'PDF generation error.' },
+    'status.printPreparing': { fr: 'Préparation de l’impression...', en: 'Preparing the print...' },
+    'status.printStarted': { fr: 'Impression lancée.', en: 'Print started.' },
+    'status.printFailed': { fr: 'Impossible de préparer l’impression.', en: 'Could not prepare the print.' },
+    'status.printTooLong': { fr: 'Ce document compte {n} pages : l’impression navigateur est limitée à {max} pages. Choisissez le PDF vectoriel.', en: 'This document has {n} pages: browser print is limited to {max} pages. Choose the vector PDF.' },
+    'dialog.printReady.title': { fr: 'Impression prête', en: 'Ready to print' },
+    'confirm.printReady': { fr: 'Le document est prêt. Ouvrir la fenêtre d’impression de votre navigateur ?', en: 'The document is ready. Open your browser’s print window?' },
     'status.emailGenerating': { fr: 'Préparation de l’email...', en: 'Preparing the email...' },
     'status.emailCreated': { fr: 'Email créé, ouverture de votre logiciel de messagerie.', en: 'Email created, opening your mail client.' },
     'status.emailCreationError': { fr: 'Erreur lors de la création de l’email.', en: 'Error while creating the email.' },

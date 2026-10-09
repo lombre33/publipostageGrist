@@ -93,6 +93,8 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 
 **Export PDF, Word, Excel**
 - Export en PDF vectorisé, nom de fichier composé avec des variables
+- Impression par le navigateur : la Lecture imprimée page pour page par la fenêtre d'impression (« Enregistrer
+  au format PDF » ou une imprimante), avec la mise en page de la Lecture
 - Export en lot en un clic : un PDF par ligne dans une archive ZIP, ou toutes les lignes dans un seul
   PDF. Il suit les lignes que le widget affiche dans Grist (ses filtres, son tri, le lien « Sélectionner
   par ») : quand il n'en affiche qu'une partie, il demande s'il faut exporter celles-ci ou toute la table
@@ -260,8 +262,10 @@ bibliothèques et polices sont dans [NOTICE](NOTICE).
 - **Suivi des modifications** (bêta) : la version complète est prévue en V1.
 - **PDF** : les caractères chinois, arabes, hébreux, thaï et la plupart des émojis ne sont pas pris en
   charge (une case vide les remplace) ; le grec, le cyrillique, le vietnamien, les flèches, coches,
-  étoiles et monnaies le sont. Dans le menu « Qualité d'export PDF », seule l'option « Vectoriel » est
-  disponible : « Impr. navigateur », « Basse qualité » et « Ultra HD » sont grisées (« bientôt »).
+  étoiles et monnaies le sont. Dans le menu « Qualité d'export PDF », « Vectoriel » et « Impression navigateur » sont
+  disponibles ; « Basse qualité » et « Ultra HD » sont grisées (« bientôt »). L'impression navigateur imprime une
+  ligne à la fois, sur 60 pages au plus, et suppose que le navigateur ouvre sa fenêtre d'impression depuis le
+  cadre du widget : si rien ne s'ouvre, choisissez « Vectoriel ».
 - **Word** (bêta) : les images devant ou derrière le texte et celles alignées à gauche ou à droite y
   gardent leur place, le sommaire est une liste fixe et les polices ne sont pas embarquées.
 - **E-mail** : le corps est du texte brut (l'éditeur d'un modèle e-mail n'écrit ni gras, ni couleur, ni
@@ -304,7 +308,7 @@ prioriser.
 **Import / Export**
 - Export Markdown (V1)
 - Import Markdown, avec une fiabilité totale sur les imports depuis Docs de La Suite (V1)
-- Export PDF : impression navigateur, impression full HD, PDF compressé (V1)
+- Export PDF : impression full HD, PDF compressé (V1)
 
 **Confort d'utilisation**
 - Optimisation du chargement (V1)
@@ -426,6 +430,8 @@ GitHub Pages, with no backend and no build step.
 
 **PDF, Word, Excel export**
 - Vector PDF export, file name built with variables
+- Browser print: the Reading view printed page by page through the print window ("Save as PDF" or a printer),
+  with the layout of the Reading view
 - Batch export in one click: one PDF per row in a ZIP archive, or all rows in a single PDF. It follows
   the rows the widget shows in Grist (its filters, its sort, the "Select by" link): when it only shows
   part of the table, it asks whether to export those or the whole table
@@ -586,8 +592,9 @@ libraries and fonts are in [NOTICE](NOTICE).
 - **Track changes** (beta): the complete version is planned for V1.
 - **PDF**: Chinese, Arabic, Hebrew and Thai characters and most emoji are not supported (an empty box
   replaces them); Greek, Cyrillic, Vietnamese, arrows, check marks, stars and currencies are. In the
-  "PDF export quality" menu, only the "Vector" option is available: "Browser print", "Low quality" and
-  "Ultra HD" are greyed out ("soon").
+  "PDF export quality" menu, "Vector" and "Browser print" are available; "Low quality" and "Ultra HD" are
+  greyed out ("soon"). Browser print prints one row at a time, up to 60 pages, and assumes the browser opens its
+  print window from the widget's frame: if nothing opens, choose "Vector".
 - **Word** (beta): images in front of or behind the text, and images aligned left or right, keep their
   place; the table of contents is a fixed list and fonts are not embedded.
 - **E-mail**: the body is plain text (the editor of an e-mail template writes no bold, colour, heading level or
@@ -629,7 +636,7 @@ react to this repository's issues, or write to me on Tchap, to help me prioritiz
 **Import / export**
 - Markdown export (V1)
 - Markdown import, with full reliability on imports from La Suite Docs (V1)
-- PDF export: browser print, full HD print, compressed PDF (V1)
+- PDF export: full HD print, compressed PDF (V1)
 
 **Quality of life**
 - Loading time optimization (V1)

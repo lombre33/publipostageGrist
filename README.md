@@ -75,7 +75,8 @@ La galerie **Créer à partir d'un modèle…** propose 21 modèles prêts à l'
 - **Word** (`.docx`, bêta) : listes et notes de bas de page natives, un fichier par ligne en lot.
 - **Excel** (`.xlsx`) pour les grilles : une archive ZIP d'un classeur par ligne de la table, ou un seul classeur d'une feuille par ligne.
 - Avant un export, une fenêtre liste les sites externes dont des images seraient téléchargées.
-- Les qualités de PDF « impression navigateur » et « raster » ne sont pas livrées : l'interface les montre grisées (« bientôt »), leur code (html2pdf.js) a été retiré le 4 octobre 2026 et reste dans l'historique git.
+- **PDF par impression navigateur** (ligne « Impression navigateur » du menu Qualité du bouton PDF) : la Lecture, page pour page, passe par la fenêtre d'impression du navigateur (« Enregistrer au format PDF » ou une imprimante), avec la même mise en page que la Lecture. Une ligne à la fois, 60 pages au plus ; le PDF vectoriel n'a pas cette limite.
+- Les qualités de PDF « raster » ne sont pas livrées : l'interface les montre grisées (« bientôt »), leur code (html2pdf.js) a été retiré le 4 octobre 2026 et reste dans l'historique git.
 
 ### Interface
 
@@ -165,7 +166,7 @@ Règle de modification : un fichier `css/` ou `js/` modifié monte son numéro `
 
 ## Tests
 
-La suite de `dev-tests/` compte 107 groupes de scénarios, joués dans un Chromium sans écran (un navigateur neuf par groupe), et 116 scripts Node (parcours rejoués à la vraie souris dans un panneau de 700×400, tests unitaires, contrôle d'hygiène du code). Elle couvre l'éditeur, les modes Lecture, Grille et E-mail, et les exports PDF, Word et Excel. Le dernier contrôle complet (3 octobre 2026) a passé plus de 6 500 vérifications.
+La suite de `dev-tests/` compte 108 groupes de scénarios, joués dans un Chromium sans écran (un navigateur neuf par groupe), et 117 scripts Node (parcours rejoués à la vraie souris dans un panneau de 700×400, tests unitaires, contrôle d'hygiène du code). Elle couvre l'éditeur, les modes Lecture, Grille et E-mail, et les exports PDF, Word et Excel. Le dernier contrôle complet (3 octobre 2026) a passé plus de 6 500 vérifications.
 
 ```bash
 bash dev-tests/generate-harness.sh           # régénère _test-harness.html depuis index.html

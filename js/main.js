@@ -1447,6 +1447,13 @@
       batch: 'pdfZip', noRecord: 'alert.noRecordForExport', generating: 'status.pdfGenerating', generated: 'status.pdfGenerated', failed: 'status.pdfGenerationError',
       run: (doc, tableId, record) => PdfExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsPt()),
     },
+    // « Impression navigateur » (qualité du bouton PDF) : la Lecture, imprimée par le navigateur (js/print-export.js), sans moteur à charger. Un document
+    // découpé « Un document par valeur » reste un lot : le lot PDF (archive ZIP), une impression ne faisant qu'un document.
+    print: {
+      engines: [],
+      batch: 'pdfZip', noRecord: 'alert.noRecordForExport', generating: 'status.printPreparing', generated: 'status.printStarted', failed: 'status.printFailed',
+      run: (doc, tableId, record) => PrintExport.printRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData),
+    },
     docx: {
       engines: ['docx'],
       batch: 'docxZip', noRecord: 'alert.noRecordForExportDocx', generating: 'status.docxGenerating', generated: 'status.docxGenerated', failed: 'status.docxGenerationError',
@@ -1475,11 +1482,20 @@
     } catch (e) {
       // « Annuler » sur la fenêtre des images d'un site externe (js/external-images.js) : un choix, pas une erreur.
       if (ExternalImages.isCancel(e)) { setStatus(I18n.t('status.exportCancelled')); return; }
+      // Un document de plus de PrintExport.MAX_PAGES pages : l'impression navigateur le refuse (son coût croît avec le carré du nombre de pages) ; ce n'est
+      // pas une panne, la phrase dit quoi choisir à la place.
+      if (PrintExport.isTooLong(e)) { setStatus(I18n.t('status.printTooLong', { n: e.pages, max: PrintExport.MAX_PAGES }), true); return; }
       console.error(e);
       setStatus(I18n.t(spec.failed), true);
     }
   }
-  const onExportPdf = () => exportRecordAs('pdf');
+  // Le bouton PDF suit la qualité choisie dans son menu : « Impression navigateur » imprime la Lecture par le navigateur, toute autre ligne garde le PDF
+  // vectoriel. Les lots (toutes les lignes, PDF fusionné, planches) restent vectoriels.
+  function selectedPdfQuality() {
+    const select = document.getElementById('v2-pdf-quality');
+    return select ? select.value : 'native';
+  }
+  const onExportPdf = () => exportRecordAs(selectedPdfQuality() === 'browser-print' ? 'print' : 'pdf');
   const onExportDocx = () => exportRecordAs('docx');
   const onExportXlsx = () => exportRecordAs('xlsx');
 
@@ -1990,8 +2006,8 @@
     pdfFilenameInput.addEventListener('fieldenter', () => pdfFilenameInput.blur());
   }
 
-  // Qualité PDF : bouton + panneau au survol plutôt qu'un <select> toujours affiché. Seul le vectoriel existe : l'export ne lit plus la valeur
-  // choisie, les autres lignes sont grisées (« bientôt »).
+  // Qualité PDF : bouton + panneau au survol plutôt qu'un <select> toujours affiché. Le vectoriel (par défaut) et l'impression par le navigateur existent :
+  // onExportPdf lit la valeur choisie, les autres lignes sont grisées (« bientôt »).
   function wireQualityDropdown() {
     const select = document.getElementById('v2-pdf-quality');
     const flyout = document.getElementById('v2-quality-flyout');

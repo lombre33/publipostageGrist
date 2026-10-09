@@ -234,15 +234,15 @@ const ReaderMode = (function () {
       wrapper.innerHTML = source;
     }
   }
-  async function resolveHeaderFooterZone(html, tableId, record) {
+  async function resolveHeaderFooterZone(html, tableId, record, acceptedOptions) {
     // Les #Variable d'un fragment d'en-tête ou de pied, résolues comme celles du corps (bulles remplacées par leur valeur) avec l'enregistrement
-    // Grist affiché en Lecture.
+    // Grist affiché en Lecture. `acceptedOptions` : celles de la vue « comme acceptée » (applyAcceptedView).
     if (!html) return html;
     // Cette zone s'affiche (aperçu paginé de la Lecture) : ses images d'un autre site pas encore affichées prennent leur cadre avant l'innerHTML.
     html = ExternalImages.block(html);
     const wrapper = document.createElement('div'); wrapper.innerHTML = html;
     // Comme le corps : les suggestions du suivi acceptées, avec la teinte légère.
-    applyAcceptedView(wrapper, html);
+    applyAcceptedView(wrapper, html, acceptedOptions);
     const loopCtx = LoopRules.createContext();
     await LoopRules.expandZones(wrapper, tableId, record, loopCtx);
     // Blocs de texte, valeurs et cases conditionnels, sinon des bulles : défaits ou retirés ici, avant les bulles - celles d'un bloc retiré n'ont rien à
@@ -307,7 +307,7 @@ const ReaderMode = (function () {
     seam.appendChild(foot); seam.appendChild(divider); seam.appendChild(head);
     return { seam, divider };
   }
-  async function resolvePaginationZones(headerFooterData, tableId, record) {
+  async function resolvePaginationZones(headerFooterData, tableId, record, acceptedOptions) {
     // Les quatre fragments d'en-tête et de pied, résolus : leurs #Variable relisent des tables, d'où une résolution par rendu et non à chaque mise en
     // page (renderPaginationPreview se refait quand une image finit de charger, cf. watchGeometry).
     //
@@ -316,10 +316,10 @@ const ReaderMode = (function () {
     // au-dessus et en dessous de la feuille).
     const hfEnabled = !!(headerFooterData && headerFooterData.enabled);
     const differentFirstPage = hfEnabled && !!headerFooterData.differentFirstPage;
-    const headerDefault = hfEnabled ? await resolveHeaderFooterZone(headerFooterData.header && headerFooterData.header.default, tableId, record) : null;
-    const headerFirst = differentFirstPage ? await resolveHeaderFooterZone(headerFooterData.header && headerFooterData.header.first, tableId, record) : null;
-    const footerDefault = hfEnabled ? await resolveHeaderFooterZone(headerFooterData.footer && headerFooterData.footer.default, tableId, record) : null;
-    const footerFirst = differentFirstPage ? await resolveHeaderFooterZone(headerFooterData.footer && headerFooterData.footer.first, tableId, record) : null;
+    const headerDefault = hfEnabled ? await resolveHeaderFooterZone(headerFooterData.header && headerFooterData.header.default, tableId, record, acceptedOptions) : null;
+    const headerFirst = differentFirstPage ? await resolveHeaderFooterZone(headerFooterData.header && headerFooterData.header.first, tableId, record, acceptedOptions) : null;
+    const footerDefault = hfEnabled ? await resolveHeaderFooterZone(headerFooterData.footer && headerFooterData.footer.default, tableId, record, acceptedOptions) : null;
+    const footerFirst = differentFirstPage ? await resolveHeaderFooterZone(headerFooterData.footer && headerFooterData.footer.first, tableId, record, acceptedOptions) : null;
     return { differentFirstPage, headerDefault, headerFirst, footerDefault, footerFirst };
   }
   function zoneForPage(zones, kind, n) {
@@ -415,6 +415,8 @@ const ReaderMode = (function () {
     const seamTop = toLayoutY(afterBottomScreen) + remaining;
     seam.style.top = seamTop + 'px';
     pass.bodyTopRel = afterBottomRel + remaining + seamHeight;
+    // `bottom` : où finit la page qui s'arrête à cette couture (le bas de son pied), avant la gouttière.
+    pages[pages.length - 1].bottom = seamTop + footAreaPx;
     pages.push({ top: seamTop + footAreaPx + divider.getBoundingClientRect().height / zoom, bodyTop: seamTop + seamHeight });
   }
   function layoutSeams(ctx) {
@@ -508,6 +510,8 @@ const ReaderMode = (function () {
     const edges = addEdgeSpacers(container, wrapper, zones, geometry, totalPages);
     const sheet = layoutSeams({ container, wrapper, zones, geometry, offsets, totalPages, wrapperChildren, edges });
     const layer = addBackdrop(container, wrapper, edges, sheet);
+    // Le bas de la dernière page : le bas de la feuille, bande du pied comprise (celui des autres pages vient de leur couture, cf. placeSeam).
+    sheet.pages[sheet.pages.length - 1].bottom = sheet.toLayoutY((edges.edgeBottomEl || wrapper).getBoundingClientRect().bottom);
     return { offsets, pages: sheet.pages, layer, zoom: sheet.zoom, toLayoutY: sheet.toLayoutY, sheetLeft: sheet.wrapperLeft, sheetWidth: sheet.wrapperWidth, contentLeftPx: geometry.mPx.left };
   }
 
@@ -720,7 +724,7 @@ const ReaderMode = (function () {
     }
     return GristAPI.withReadPass(() => renderRecord(renderId, container, htmlContent, tableId, record, headerFooterData));
   }
-  function readerWrapperFrom(htmlContent) {
+  function readerWrapperFrom(htmlContent, acceptedOptions) {
     // Le <div class="reader-content"> du document, pas encore résolu : HTML nettoyé, suggestions du suivi acceptées, liens ouverts dans un nouvel
     // onglet, style de numérotation des titres.
     // .reader-content : le parent direct des titres de premier niveau, celui qui porte data-heading-style (#reader-container ne peut pas jouer ce
@@ -732,7 +736,7 @@ const ReaderMode = (function () {
     wrapper.innerHTML = cleanHtml;
     // La Lecture montre le document comme si les suggestions du suivi en attente étaient toutes acceptées, avec une légère teinte là où quelque
     // chose a changé. Avant tout le reste : les boucles, les blocs conditionnels et les bulles ne voient plus ni <ins> ni <del>.
-    applyAcceptedView(wrapper, cleanHtml);
+    applyAcceptedView(wrapper, cleanHtml, acceptedOptions);
     // Un lien de la Lecture s'ouvre dans un nouvel onglet : le suivre dans le cadre du widget le remplacerait (et la plupart des sites refusent d'y
     // être affichés).
     wrapper.querySelectorAll('a[href^="http"]').forEach(a => { a.target = '_blank'; a.rel = 'noopener noreferrer'; });
@@ -797,6 +801,44 @@ const ReaderMode = (function () {
     if (!wrapper.isConnected) return;
     paginate(container, wrapper, zones);
     if (!stale()) watchGeometry(container, wrapper, zones);
+  }
+  // === Le même rendu, dans un autre document : l'impression par le navigateur (js/print-export.js) ===
+  // `container` est le #reader-container d'un cadre caché. Le document y est résolu, mis en page et paginé comme render() le fait pour la Lecture (mêmes
+  // fonctions, mêmes mesures, mêmes coutures), sans rien suivre ensuite - le cadre est jetable, rien n'est à rafraîchir - et sans ce que la Lecture ne
+  // montre que pour la personne qui lit : ni teinte du suivi des modifications, ni cadre « Afficher » sur une image d'un autre site (la fenêtre de
+  // ExternalImages.confirmExport a précédé : ces sites sont acceptés pour cette impression), ni phrase d'avertissement sur les variables non résolues.
+  // Rend `{ paged, hasError }` : `paged` est ce que renderPaginationPreview mesure (les pages, la place de la feuille), `null` sans pagination.
+  const PRINT_VIEW = { tint: false };
+  const PRINT_SETTLE_MS = 8000;
+  const PRINT_RELAYOUTS_MAX = 3;
+  async function renderInto(container, htmlContent, tableId, record, headerFooterData) {
+    return GristAPI.withReadPass(async () => {
+      if (typeof htmlContent === 'function') htmlContent = await htmlContent();
+      const wrapper = readerWrapperFrom(htmlContent, PRINT_VIEW);
+      const resolved = await resolveReaderBody(wrapper, tableId, record, () => false);
+      container.innerHTML = '';
+      container.appendChild(wrapper);
+      ExternalImages.unblockIn(container);
+      const zones = await resolvePaginationZones(headerFooterData, tableId, record, PRINT_VIEW);
+      const fonts = container.ownerDocument.fonts;
+      const settle = async () => { await settleImages(container, PRINT_SETTLE_MS); if (fonts) await fonts.ready; };
+      await settle();
+      // Les tailles qui décident des coupures : la feuille et chaque image. Une image ou une police qui arrive après la première mesure les change ; la mise
+      // en page se refait alors (comme watchGeometry à l'écran) jusqu'à ce qu'elles ne bougent plus.
+      const sizes = () => [wrapper].concat(Array.from(container.querySelectorAll('img'))).map(el => { const r = el.getBoundingClientRect(); return Math.round(r.width) + 'x' + Math.round(r.height); }).join('|');
+      let paged = paginate(container, wrapper, zones);
+      // Les en-têtes et pieds des coutures sont écrits par la pagination : leurs images d'un autre site reprennent leur adresse, puis chargent.
+      ExternalImages.unblockIn(container);
+      for (let round = 0; round < PRINT_RELAYOUTS_MAX; round++) {
+        const before = sizes();
+        await settle();
+        if (sizes() === before) break;
+        clearPagination(container, wrapper);
+        paged = paginate(container, wrapper, zones);
+        ExternalImages.unblockIn(container);
+      }
+      return { paged, hasError: resolved.hasError };
+    });
   }
   function resolveTocMarkers(wrapper) {
     // Remplace .toc-marker par la vraie liste de titres, sans numéro de page (non paginé ici). Numérotation de HeadingNumbering, jamais lue par
@@ -1111,5 +1153,5 @@ const ReaderMode = (function () {
       catch (e) { return ''; }
     });
   }
-  return { render, preview, resolveFilename, fieldText, splitBadges, trimTrailingBlankBlocks, checkboxNode };
+  return { render, renderInto, preview, resolveFilename, fieldText, splitBadges, trimTrailingBlankBlocks, checkboxNode };
 })();

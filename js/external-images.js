@@ -24,6 +24,7 @@
 //   ExternalImages.blockedSiteOf(src) -> le même hôte tant que la personne n'a pas affiché ce site, sinon '' (l'image peut charger)
 //   ExternalImages.block(html, { zoom }) / blockIn(élément inerte, { zoom }) -> le HTML à afficher : les images des sites pas encore affichés y sont remplacées par leur cadre, celles dont le site
 //   vient d'être affiché y retrouvent leur adresse ; la chaîne telle quelle quand il n'y a rien à changer
+//   ExternalImages.unblockIn(élément) -> rend leur adresse aux images encore bloquées de cet élément, sans afficher leur site (l'impression par le navigateur)
 //   ExternalImages.allow(site) -> affiche les images de ce site (la page, puis les abonnés) ; ExternalImages.onReveal(rappel(site))
 //   ExternalImages.isAllowed(site)
 // Le HTML est lu dans un document inerte (DOMParser) : un innerHTML sur un nœud de la page, même détaché, fait déjà charger ses images au navigateur.
@@ -236,6 +237,15 @@ const ExternalImages = (function () {
     return changed;
   }
 
+  // Rend leur adresse aux images encore bloquées d'un élément, sans afficher leur site pour la session : l'impression par le navigateur (js/print-export.js)
+  // dessine le document dans un cadre caché, derrière la fenêtre de confirmExport (la personne a accepté ces sites pour cette impression), et ce cadre
+  // n'a pas de bouton « Afficher ». La Lecture et l'éditeur gardent leurs cadres. Vrai si une image a changé.
+  function unblockIn(root) {
+    let changed = false;
+    root.querySelectorAll('img[' + BLOCKED_SRC + ']').forEach(img => { unblockImage(img); changed = true; });
+    return changed;
+  }
+
   function onReveal(listener) { revealListeners.push(listener); }
 
   // Affiche les images de ce site : celles de la page d'abord (un cadre redevient l'image), puis les surfaces qui se redessinent d'après le HTML ou d'après
@@ -297,5 +307,5 @@ const ExternalImages = (function () {
   }
   watchDisplay();
 
-  return { beginRun, endRun, confirmExport, isCancel, siteOf, blockedSiteOf, block, blockIn, allow, isAllowed, onReveal, hintOf };
+  return { beginRun, endRun, confirmExport, isCancel, siteOf, blockedSiteOf, block, blockIn, unblockIn, allow, isAllowed, onReveal, hintOf };
 })();

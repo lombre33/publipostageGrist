@@ -2,9 +2,10 @@
 // Politique de sécurité du contenu de index.html (contrôle de sécurité du 04/10, correction 6), dans un vrai Chromium SANS contournement de la politique : tous les autres scripts de
 // dev-tests/ tournent avec `bypassCSP` (leurs aides injectent du code en ligne et chargent pdf.js), celui-ci est le seul qui la subit. C'est la vraie page index.html, la seule ligne
 // remplacée est l'adresse de l'API Grist, servie par le faux Grist du dépôt (le vrai fichier est vérifié à part, en 3).
-//   1) le widget démarre, s'édite, se lit et exporte (PDF, lot en un seul PDF, Word, Excel, QR code, graphique de la page, archive ZIP) sans que le navigateur refuse quoi que ce soit ;
+//   1) le widget démarre, s'édite, se lit et exporte (PDF, lot en un seul PDF, Word, Excel, QR code, graphique de la page, archive ZIP, impression par le navigateur : son cadre caché) sans que le
+//      navigateur refuse quoi que ce soit ;
 //   2) ce que du HTML piégé, posé tel quel dans la page (comme si le filtre avait laissé passer), n'arrive plus à faire : gestionnaire en ligne, script en ligne, script d'une autre
-//      adresse ou d'une bibliothèque non figée, balise de base, cadre, objet, formulaire, adresse javascript: ;
+//      adresse ou d'une bibliothèque non figée, balise de base, cadre, objet, formulaire, adresse javascript: ; et dans le cadre de l'impression par le navigateur (srcdoc à bac à sable) ;
 //   3) le VRAI fichier d'API de Grist (docs.getgrist.com/grist-plugin-api.js) s'évalue sous la politique : c'est un bundle de développement dont chaque module passe par eval(), le faux
 //      Grist des autres tests n'en a pas besoin, et une politique sans 'unsafe-eval' laisserait le widget sans objet grist, donc mort, chez Antoine ; ce contrôle demande le réseau ;
 //   4) le widget démarre dans un cadre à bac à sable comme celui d'un document Grist, avec et sans allow-same-origin ;
@@ -171,9 +172,18 @@ const exportsRun = await page.evaluate(async () => {
     const fig = ChartPlot.figure('bar', [{ label: 'Mois', values: ['Janvier', 'Février'], pureType: 'Text' }, { label: 'Montant', values: [3, 5], pureType: 'Numeric' }], {});
     return /^data:image\/png/.test(await ChartPlot.toImage(fig, 480, 300));
   });
+  // L'impression par le navigateur (js/print-export.js) : le cadre srcdoc caché se charge sous la politique, y rend la Lecture et la découpe en feuilles.
+  await step('print', async () => {
+    const hf = { enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } };
+    const job = await PrintExport.prepare('<p>Texte de l’impression</p>', null, { id: 1 }, hf, 'csp');
+    try {
+      const doc = job.frame.contentDocument;
+      return job.pageCount === 1 && doc.querySelectorAll('.pp-print-sheet').length === 1 && /Texte de l’impression/.test(doc.body.textContent) && !!doc.getElementById('pp-print-page');
+    } finally { job.dispose(); }
+  });
   return out;
 });
-for (const [name, label] of [['moteurs', 'les six moteurs du widget (PDF, fusion, feuilles, Word, Excel, format des nombres : js/export-engines.js, au premier export)'], ['pdf', 'PDF (pdfmake, polices du dépôt)'], ['zip', 'archive ZIP (JSZip)'], ['pdfMerge', 'PDF unique (pdf-lib)'], ['docx', 'Word (docx)'], ['xlsx', 'Excel (ExcelJS)'], ['qr', 'QR code (qrcode-generator)'], ['chart', 'graphique de la page (Plotly)']]) {
+for (const [name, label] of [['moteurs', 'les six moteurs du widget (PDF, fusion, feuilles, Word, Excel, format des nombres : js/export-engines.js, au premier export)'], ['pdf', 'PDF (pdfmake, polices du dépôt)'], ['zip', 'archive ZIP (JSZip)'], ['pdfMerge', 'PDF unique (pdf-lib)'], ['docx', 'Word (docx)'], ['xlsx', 'Excel (ExcelJS)'], ['qr', 'QR code (qrcode-generator)'], ['chart', 'graphique de la page (Plotly)'], ['print', 'impression par le navigateur (cadre caché et feuilles prêts, sans fichier : la fenêtre du navigateur s\'ouvre ensuite)']]) {
   check('export : ' + label + ' se charge et produit son fichier sous la politique', exportsRun[name] === true, exportsRun[name]);
 }
 check('rien n\'a été refusé pendant tout ce parcours (aucune violation, aucun message du navigateur)', (await violations()).length === 0 && consoleRefusals.length === 0, { violations: await violations(), consoleRefusals });
@@ -218,6 +228,27 @@ const srcdoc = await page.evaluate(async () => {
   return result;
 });
 check('un cadre à contenu intégré (srcdoc) hérite de la politique : son script ne court pas', srcdoc.alive && srcdoc.ran.length === 0, srcdoc);
+
+// Le cadre de l'impression par le navigateur : du HTML piégé qui échapperait au filtre n'y court pas (la politique de la page et le bac à sable sans allow-scripts le lui interdisent), et
+// le cadre reste vide de la page du widget.
+const printFrame = await page.evaluate(async () => {
+  window.__csp = {};
+  const hf = { enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } };
+  const job = await PrintExport.prepare('<p>Cadre d’impression</p>', null, { id: 1 }, hf, 'csp');
+  const doc = job.frame.contentDocument;
+  const host = doc.createElement('div');
+  host.innerHTML = '<img src="x" onerror="parent.__csp.handler=1"><a href="javascript:parent.__csp.href=1">lien</a>';
+  doc.body.appendChild(host);
+  const script = doc.createElement('script');
+  script.textContent = 'parent.__csp.script=1';
+  doc.body.appendChild(script);
+  host.querySelector('a').click();
+  await new Promise(r => setTimeout(r, 500));
+  const result = { ran: Object.keys(window.__csp), sandbox: job.frame.getAttribute('sandbox'), alive: !!doc.querySelector('.pp-print-sheet') };
+  job.dispose();
+  return result;
+});
+check('le cadre de l\'impression par le navigateur : du HTML piégé n\'y court pas (gestionnaire, script, javascript:), le cadre est à bac à sable sans allow-scripts', printFrame.alive && printFrame.ran.length === 0 && !/allow-scripts/.test(printFrame.sandbox), printFrame);
 
 const alive = await page.evaluate(() => Editor.getHTML());
 check('le widget fonctionne encore après ces essais', /Bonjour la politique/.test(alive), alive.slice(0, 80));
