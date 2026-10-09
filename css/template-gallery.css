@@ -1,0 +1,29 @@
+/* Galerie de modèles : l'aperçu d'un modèle qui s'installe avec ses tables (js/template-gallery-modal.js, js/template-pack.js). Le gabarit des deux fenêtres
+   (grille, aperçu) reste dans css/toolbar-v2.css ; ce fichier n'ajoute que ce que les modèles à captures demandent : la ligne qui dit les tables et la
+   page, les fonctions montrées, et le document rempli en images. Couleurs et traits : uniquement les jetons de css/style.css (clair et sombre). */
+
+/* En-tête de l'aperçu : le nom, puis une ligne sur ce que « Créer avec ses tables » ajoutera ; les boutons restent à droite. */
+.tpl-preview-heading { flex: 1; min-width: 0; }
+.template-preview-modal-content .tpl-preview-heading h3 { margin-bottom: 4px; }
+.tpl-preview-note { margin: 0 0 12px; font-size: 12px; line-height: 1.4; color: var(--text-muted); overflow-wrap: anywhere; }
+.tpl-preview-note[hidden] { display: none; }
+.tpl-preview-actions #tpl-preview-use-pack { background: var(--accent-solid); border-color: var(--accent-solid); color: #fff; }
+.tpl-preview-actions #tpl-preview-use-pack:hover { background: var(--accent-solid-hover); }
+.tpl-preview-actions #tpl-preview-use-pack[hidden] { display: none; }
+
+/* Fonctions que le modèle montre : une rangée de pastilles au-dessus du document. */
+.tpl-preview-shows { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 14px; }
+.tpl-preview-shows[hidden] { display: none; }
+.tpl-preview-shows-label { font-size: 11.5px; font-weight: 700; color: var(--text-muted); margin-right: 2px; }
+.tpl-preview-chip { font-size: 11.5px; font-weight: 600; line-height: 1.3; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: 12px; padding: 2px 9px; }
+
+/* Le document rempli : une image par page, à sa taille d'écran (le HTML donne `width`/`height`), réduite à la largeur de la fenêtre. */
+.tpl-preview-captures { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.tpl-preview-captures[hidden] { display: none; }
+.tpl-preview-captures img { display: block; max-width: 100%; height: auto; background: #fff; box-shadow: 0 0 0 1px var(--border-strong), 0 4px 16px rgba(20, 28, 46, .1); }
+.tpl-preview-capture-note { margin: 12px 0 0; text-align: center; font-size: 11.5px; line-height: 1.4; color: var(--text-muted); }
+.tpl-preview-capture-note[hidden] { display: none; }
+.tpl-preview-sheet[hidden], #tpl-preview-sheet[hidden] { display: none; }
+
+/* Carte de la grille : la capture du document tient en entier (une carte de visite ou une invitation en paysage n'est pas rognée en 3 / 4). */
+.tpl-gallery-card img.is-capture { object-fit: contain; background: #fff; }

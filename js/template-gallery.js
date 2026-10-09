@@ -100,6 +100,25 @@ const TemplateGallery = (function () {
     return parseGristSchema(text);
   }
 
+  // Le pack d'un modèle qui s'installe avec ses tables (js/template-pack.js) : son pack.json, avec le fichier de la famille de tables qu'il nomme
+  // (`family` : _tables/<famille>.json, dans le dossier du catalogue), validé par TemplatePack.normalize. Null pour un modèle sans pack (les anciens :
+  // une seule table de colonnes simples, cf. fetchSchema). Une erreur de lecture ou de validation est levée : l'appelant le dit à la personne.
+  async function fetchJson(url) {
+    const res = await fetchNoStore(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + url);
+    return res.json();
+  }
+  async function fetchPack(entry) {
+    if (!entry.pack) return null;
+    const raw = await fetchJson(resolveUrl(entry.pack, entry));
+    let family = null;
+    if (raw && raw.family != null) {
+      if (!/^[a-z0-9][a-z0-9-]*$/.test(String(raw.family))) throw new Error('pack : famille de tables illisible');
+      family = await fetchJson(resolveUrl('_tables/' + raw.family + '.json', entry));
+    }
+    return TemplatePack.normalize(raw, family);
+  }
+
   // Les badges #Variable d'un modèle « avec données » portent le nom de table du schema.py d'écriture. La table créée par useWithData() (js/main.js)
   // peut en porter un autre (modifié dans le prompt, ou renommé par Grist en cas de collision) : sans ce réalignement, elles pointeraient vers une
   // table inexistante.
@@ -119,5 +138,5 @@ const TemplateGallery = (function () {
     return root.innerHTML;
   }
 
-  return { loadManifest, fetchHtml, fetchHeaderFooter, fetchSchema, stripVariableBadges, rebindVariableTable, resolveUrl };
+  return { loadManifest, fetchHtml, fetchHeaderFooter, fetchSchema, fetchPack, stripVariableBadges, rebindVariableTable, resolveUrl };
 })();

@@ -136,6 +136,7 @@
 <link rel="stylesheet" href="css/first-contact.css?v=0.1">
 <link rel="stylesheet" href="css/page-zoom.css?v=0.2">
 <link rel="stylesheet" href="css/field-editor.css?v=0.1">
+<link rel="stylesheet" href="css/template-gallery.css?v=0.1">
 </head>
 <body>
 <div id="app">
@@ -483,13 +484,22 @@
   </div></div>
   <div id="template-preview-modal" class="pp-modal pp-modal-page" style="display:none;" tabindex="-1"><div class="pp-modal-box modal-content template-preview-modal-content" data-size="lg" role="dialog" aria-modal="true" aria-labelledby="tpl-preview-name" tabindex="-1">
     <div class="pp-modal-header tpl-preview-header">
-      <h3 id="tpl-preview-name"></h3>
+      <div class="tpl-preview-heading">
+        <h3 id="tpl-preview-name"></h3>
+        <p class="tpl-preview-note" id="tpl-preview-note" hidden></p>
+      </div>
       <div class="tpl-preview-actions">
         <button type="button" id="tpl-preview-use-empty" data-i18n="gallery.useTemplate">Utiliser ce modèle</button>
         <button type="button" id="tpl-preview-use-data" data-i18n="gallery.useWithNewTable" hidden>Utiliser avec une nouvelle table de données</button>
+        <button type="button" id="tpl-preview-use-pack" hidden></button>
       </div>
     </div>
-    <div class="pp-modal-body tpl-preview-body" id="tpl-preview-body"><div class="v2-page-sheet a4-preview"><div class="tiptap" id="tpl-preview-tiptap"></div></div></div>
+    <div class="pp-modal-body tpl-preview-body" id="tpl-preview-body">
+      <div class="tpl-preview-shows" id="tpl-preview-shows" hidden></div>
+      <div class="tpl-preview-captures" id="tpl-preview-captures" hidden></div>
+      <p class="tpl-preview-capture-note" id="tpl-preview-capture-note" data-i18n="gallery.captureNote" hidden>Aperçu avec des lignes d’exemple : les tables créées restent vides.</p>
+      <div class="v2-page-sheet a4-preview" id="tpl-preview-sheet"><div class="tiptap" id="tpl-preview-tiptap"></div></div>
+    </div>
     <div class="pp-modal-actions modal-actions"><button id="tpl-preview-back" data-i18n="gallery.backToGallery">Retour à la galerie</button><button id="tpl-preview-close" data-i18n="common.close">Fermer</button></div>
   </div></div>
   <div id="settings-modal" class="pp-modal pp-modal-page" style="display:none;" tabindex="-1"><div class="pp-modal-box modal-content settings-modal-content" data-size="md" role="dialog" aria-modal="true" aria-labelledby="settings-title" tabindex="-1">
@@ -666,7 +676,7 @@
 </script>
 <script src="js/reader-mode.js?v=0.136"></script>
 <script src="js/reader-guide.js?v=0.6"></script>
-<script src="js/i18n.js?v=0.136"></script>
+<script src="js/i18n.js?v=0.137"></script>
 <script src="js/shortcuts.js?v=0.11"></script>
 <script src="js/page-layout.js?v=0.14"></script>
 <script src="js/color-math.js?v=0.1"></script>
@@ -714,8 +724,9 @@
 <script type="text/x-lazy-engine" data-engine="xlsxFormat" src="js/xlsx-number-format.js?v=0.3"></script>
 <script src="js/grid-xlsx-import.js?v=0.7"></script>
 <script src="js/mailto-export.js?v=0.11"></script>
-<script src="js/template-gallery.js?v=0.12"></script>
-<script src="js/template-gallery-modal.js?v=0.3"></script>
+<script src="js/template-gallery.js?v=0.13"></script>
+<script src="js/template-pack.js?v=0.1"></script>
+<script src="js/template-gallery-modal.js?v=0.4"></script>
 <script src="js/settings.js?v=0.12"></script>
 <script src="js/condition-rules.js?v=0.11"></script>
 <script src="js/condition-fields.js?v=0.20"></script>

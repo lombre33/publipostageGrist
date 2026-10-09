@@ -454,6 +454,13 @@ const I18n = (function () {
     'gallery.backToGallery': { fr: 'Retour à la galerie', en: 'Back to gallery' },
     'gallery.noMatch': { fr: 'Aucun modèle ne correspond à ce filtre.', en: 'No template matches this filter.' },
     'gallery.allTag': { fr: 'Tous', en: 'All' },
+    // Modèles qui s'installent avec leurs tables (js/template-pack.js) : bouton, ligne d'aperçu, fonctions montrées par le modèle.
+    'gallery.useWithTables': { fr: 'Créer avec {n|sa table|ses tables}', en: 'Create with {n|its table|its tables}' },
+    'gallery.packTables': { fr: 'Tables : {tables}, créées vides si elles n’existent pas encore.', en: 'Tables: {tables}, created empty if they don’t exist yet.' },
+    'gallery.packPage': { fr: 'Page {format} {orientation}.', en: '{format} page, {orientation}.' },
+    'gallery.showsLabel': { fr: 'Fonctions montrées', en: 'Features shown' },
+    'gallery.captureNote': { fr: 'Aperçu avec des lignes d’exemple : les tables créées restent vides.', en: 'Preview with sample rows: the tables created stay empty.' },
+    'gallery.captureAlt': { fr: '{name}, page {page}', en: '{name}, page {page}' },
 
     // --- Macro modèles (page de garde + annexes conditionnelles, planning/feature-macro-modeles.md) ---
     'macro.editButton': { fr: 'Modifier la composition', en: 'Edit composition' },
@@ -868,6 +875,13 @@ const I18n = (function () {
     'status.templateSavedAsNew': { fr: 'Modèle « {name} » enregistré comme nouveau modèle.', en: 'Template “{name}” saved as a new template.' },
     'status.schemaLoadError': { fr: 'Impossible de charger le schéma de colonnes de ce modèle.', en: 'Unable to load this template’s column schema.' },
     'status.noColumnsDefined': { fr: 'Ce modèle ne définit aucune colonne.', en: 'This template defines no columns.' },
+    'status.packLoadError': { fr: 'Impossible de lire ce modèle et ses tables.', en: 'Unable to read this template and its tables.' },
+    'status.packReadError': { fr: 'Impossible de lire les tables du document.', en: 'Unable to read the document’s tables.' },
+    'status.packCreated': { fr: 'Modèle « {name} » créé avec {n|sa table vide|ses tables vides} ({tables}). Ajoute des lignes dans Grist pour le voir rempli.', en: 'Template “{name}” created with {n|its empty table|its empty tables} ({tables}). Add rows in Grist to see it filled in.' },
+    'status.packReused': { fr: 'Modèle « {name} » créé avec {n|la table|les tables} du document ({tables}).', en: 'Template “{name}” created with the document’s {n|table|tables} ({tables}).' },
+    'status.packLinksKept': { fr: 'Règle de liaison déjà posée pour {tables} : {n|elle reste telle quelle|elles restent telles quelles}.', en: 'Linking {n|rule|rules} already set for {tables}: left as {n|it is|they are}.' },
+    'status.packRenamed': { fr: 'Un nom de table a été pris pendant la création : rien n’a été créé, recommence.', en: 'A table name was taken during the creation: nothing was created, please try again.' },
+    'status.packError': { fr: 'Les tables du modèle n’ont pas pu être créées.', en: 'The template’s tables could not be created.' },
     'status.tableCreationError': { fr: 'Échec de la création de la table « {table} ».', en: 'Failed to create table “{table}”.' },
     'status.tableCreatedSummary': { fr: 'Table « {table} » créée avec {count} {count|colonne|colonnes}, modèle « {name} » enregistré. Liez ce widget à cette table depuis le menu du widget dans Grist (⋮ → Sélectionner la source de données) pour l’utiliser.', en: 'Table “{table}” created with {count} {count|column|columns}, template “{name}” saved. Link this widget to that table from the widget menu in Grist (⋮ → Select Widget Data) to use it.' },
 
@@ -879,6 +893,20 @@ const I18n = (function () {
     // clés voisines ---
     'dialog.imageUrl.title': { fr: 'Insérer une image', en: 'Insert an image' },
     'dialog.newTable.title': { fr: 'Nouvelle table Grist', en: 'New Grist table' },
+    // « Créer avec ses tables » (js/template-gallery-modal.js) : la question avant de créer, et le refus quand une table du document porte déjà le nom d'une
+    // table du modèle avec d'autres colonnes.
+    'dialog.pack.title': { fr: 'Créer les tables du modèle ?', en: 'Create the template’s tables?' },
+    'dialog.pack.intro': { fr: 'Le modèle « {name} » va créer {n} {n|table vide|tables vides} dans ce document, sans aucune ligne :', en: 'The “{name}” template will create {n} empty {n|table|tables} in this document, with no rows:' },
+    'dialog.pack.tableLine': { fr: '• {table} ({columns} {columns|colonne|colonnes})', en: '• {table} ({columns} {columns|column|columns})' },
+    'dialog.pack.tableLineCalc': { fr: '• {table} ({columns} {columns|colonne|colonnes}, dont {calc} de calcul)', en: '• {table} ({columns} {columns|column|columns}, {calc} calculated)' },
+    'dialog.pack.reused': { fr: 'Déjà dans le document et gardées telles quelles : {tables}.', en: 'Already in the document and left as they are: {tables}.' },
+    'dialog.pack.links': { fr: 'Les règles de liaison dont le modèle a besoin sont ajoutées.', en: 'The linking rules the template needs are added.' },
+    'dialog.pack.conflictTitle': { fr: 'Ce modèle ne peut pas être créé ici', en: 'This template can’t be created here' },
+    'dialog.pack.conflictIntro': { fr: 'Le document a déjà des tables qui portent le nom de celles du modèle « {name} », avec d’autres colonnes. Rien n’a été créé ni modifié.', en: 'The document already has tables named like those of the “{name}” template, with other columns. Nothing was created or changed.' },
+    'dialog.pack.conflictMissing': { fr: '• « {table} » existe déjà, mais il lui manque : {columns}.', en: '• “{table}” already exists, but it lacks: {columns}.' },
+    'dialog.pack.conflictType': { fr: '• « {table} » existe déjà, mais « {column} » est de type {found} (attendu : {wanted}).', en: '• “{table}” already exists, but “{column}” is of type {found} (expected: {wanted}).' },
+    'dialog.pack.conflictName': { fr: '• Une table nommée « {found} » existe déjà : le nom « {table} » est pris (Grist ne distingue pas les majuscules).', en: '• A table named “{found}” already exists: the name “{table}” is taken (Grist ignores letter case).' },
+    'dialog.pack.conflictAdvice': { fr: 'Renomme ou complète ces tables dans Grist, puis recommence.', en: 'Rename or complete these tables in Grist, then try again.' },
     'dialog.newFolder.title': { fr: 'Nouveau dossier', en: 'New folder' },
     'dialog.moveFolder.title': { fr: 'Déplacer vers un dossier', en: 'Move to a folder' },
     'dialog.emailTooLong.title': { fr: 'Email trop long', en: 'Email too long' },
