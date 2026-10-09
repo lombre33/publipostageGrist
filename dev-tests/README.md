@@ -1923,7 +1923,7 @@ l'aperçu, et `families/<famille>.json` (les tables que plusieurs modèles parta
 Il ne lit JAMAIS `exemple.json` ni `families/<famille>.exemple.json` (les lignes d'exemple et ce qu'on photographie) : les tables d'un utilisateur se créent vides, et
 `galleryCaptures` échoue si un fichier de `js/` cite ces noms.
 Le dossier des familles s'appelle `families/`, jamais `_tables/` : GitHub Pages (Jekyll) ne sert aucun fichier ni dossier dont le nom commence par `_` ou `.`, si bien que `templates-gallery/_tables/gestion.json`
-se lisait en local (où tous les essais le lisent) et répondait 404 en ligne, et que 17 modèles ne s'ouvraient pas sur le site publié (09/10). `codeHygiene` (section 21) refuse un tel nom dans ce que le widget charge.
+se lisait en local (où tous les essais le lisent) et répondait 404 en ligne, et que les 21 modèles (tous nomment une famille) ne créaient pas leurs tables sur le site publié (09/10). `codeHygiene` (section 21) refuse un tel nom dans ce que le widget charge.
 
 **Les captures sont celles du vrai widget.** `node dev-tests/gallery-captures.mjs` ouvre `index.html` dans Chromium sur le faux Grist, installe chaque modèle par le
 vrai parcours (« Créer à partir d'un modèle… », la carte, « Créer avec ses tables », « Créer » : un pack mal écrit échoue ici), pose les lignes d'exemple, fige

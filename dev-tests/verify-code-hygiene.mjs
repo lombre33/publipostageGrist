@@ -41,7 +41,7 @@
 //      ExternalImages (block, blockIn, blockedSiteOf), ou la Lecture avec commentaires qui sérialise le document dans celui de la page (une <img> créée là charge son adresse même détachée)
 //      (choix d'Antoine du 05/10 : « Bloquer jusqu'à un clic »).
 //  21. un fichier ou un dossier de ce que le widget charge (css, js, img, templates-gallery, templates-gallery-dev) dont le nom commence par « _ » ou « . » : GitHub Pages (Jekyll) ne le sert pas, il se lit en
-//      local et répond 404 en ligne (le dossier des tables de famille, templates-gallery/_tables, a fait ouvrir 17 modèles de la galerie sur une erreur le 09/10 ; il s'appelle `families/`).
+//      local et répond 404 en ligne (le dossier des tables de famille, templates-gallery/_tables, a empêché les 21 modèles de la galerie de créer leurs tables sur le site publié le 09/10 ; il s'appelle `families/`).
 //
 // Volontairement PERMISSIF : un nom cité seulement dans un commentaire compte comme utilisé, un préfixe construit (`'toc-level-' + n`) couvre toute la
 // famille. Le but est de ne jamais faire échouer un changement légitime, seulement d'attraper ce qui n'a plus AUCUN point d'entrée. Une classe posée
@@ -774,7 +774,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 // 21. Rien de ce que le widget charge ne porte un nom qui commence par « _ » ou « . » (GitHub Pages ne le sert pas)
 // ============================================================================
 // GitHub Pages construit le site avec Jekyll, qui laisse de côté tout fichier ou dossier dont le nom commence par « _ » ou « . » : templates-gallery/_tables/gestion.json se lisait très bien en local (c'est
-// là que tous les essais le lisent) et répondait 404 en ligne, si bien que 17 modèles de la galerie ne s'ouvraient pas sur le site publié (09/10). Seul ce garde-fou peut le voir avant la mise en ligne.
+// là que tous les essais le lisent) et répondait 404 en ligne, si bien que les 21 modèles de la galerie, qui nomment tous une famille, affichaient « Impossible de lire ce modèle et ses tables » et ne créaient pas leurs tables sur le site publié (09/10). Seul ce garde-fou peut le voir avant la mise en ligne.
 {
   const served = ['css', 'js', 'img', 'templates-gallery', 'templates-gallery-dev'].flatMap(dir => listFiles(dir, /./));
   const hidden = served.filter(rel => rel.split('/').some(part => /^[_.]/.test(part)));
