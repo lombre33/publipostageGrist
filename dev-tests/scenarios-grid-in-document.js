@@ -797,6 +797,155 @@
     }),
   });
 
+  // ---------- Lot 4 (b) : la hauteur d'une ligne, réglée par la poignée de son numéro ----------
+  // Le glissé d'une poignée de numéro avec des évènements de pointeur simulés (le vrai pointeur, la capture et le curseur sont au script docStripsResizeMouse) : l'appui sur la poignée,
+  // un déplacement de `dy` px, `during` regarde la page en plein glissé, puis le relâcher.
+  async function dragRowHandle(n, dy, during, release = true) {
+    const selector = rowHead(n) + ' .v2-grid-handle';
+    const handle = document.querySelector(selector);
+    if (!handle) throw new Error('poignée introuvable : numéro ' + n + ' parmi ' + stripLabels('row'));
+    const r = handle.getBoundingClientRect();
+    const point = { bubbles: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 + dy, pointerId: 1, isPrimary: true };
+    pressStrip(selector);
+    document.dispatchEvent(new PointerEvent('pointermove', point));
+    await sleep(60);
+    const mid = during ? await during() : null;
+    if (release) { document.dispatchEvent(new PointerEvent('pointerup', point)); await sleep(200); }
+    return mid;
+  }
+  const docTables = () => Array.from(document.querySelectorAll('.tiptap table')).filter(t => !t.parentElement.closest('table'));
+  const rowRects = table => Array.from(table.querySelectorAll(':scope > tbody > tr')).map(tr => tr.getBoundingClientRect().height);
+  const tipNow = () => { const t = document.querySelector('.v2-grid-tip'); return t ? t.textContent : null; };
+  // Rien ne reste d'un glissé : la marque du tableau, la feuille d'aperçu, la bulle, le curseur de glissé.
+  const dragLeftovers = () => ({ marked: document.querySelectorAll('[data-pp-sizing]').length, preview: !!document.getElementById('pp-grid-resize-preview'), tip: !!document.querySelector('.v2-grid-tip'), cursor: document.body.classList.contains('pp-grid-resizing-row') });
+  const clean = left => !left.marked && !left.preview && !left.tip && !left.cursor;
+  const rowHeights = t => Array.from({ length: rowCount(t) }, (_, r) => rowAttrs(t, r).rowHeight || null);
+
+  cases.push({
+    id: 'docstrips_numbers_carry_a_height_handle_and_letters_none_yet',
+    description: 'Chaque numéro des bandeaux d\'un tableau de document porte sa poignée de hauteur (une ligne de plus : une poignée de plus), les lettres n\'en ont pas encore (la largeur d\'une colonne se règle par le bord de ses cases) ; le survol de la poignée dit « Régler la hauteur de la ligne »',
+    run: async (h) => withDoc(h, TWO_TABLES, async () => {
+      const bad = [];
+      const handles = kind => Array.from(document.querySelectorAll(STRIPS + ' .v2-grid-' + kind + 'head')).map(head => head.querySelectorAll('.v2-grid-handle').length).join(',');
+      await cursorIn(1, 0, 0);
+      if (handles('row') !== '1,1,1' || handles('col') !== '0,0') bad.push('tableau B : numéros ' + handles('row') + ', lettres ' + handles('col'));
+      await cursorIn(0, 0, 0);
+      if (handles('row') !== '1,1' || handles('col') !== '0,0') bad.push('tableau A : numéros ' + handles('row') + ', lettres ' + handles('col'));
+      ed().chain().focus().addRowAfter().run();
+      await sleep(200);
+      if (handles('row') !== '1,1,1') bad.push('ligne de plus : numéros ' + handles('row'));
+      await undo();
+      const title = (document.querySelector(rowHead(1) + ' .v2-grid-handle') || {}).title;
+      if (title !== I18n.t('grid.resizeRow')) bad.push('info-bulle de la poignée : ' + title);
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'docstrips_dragging_a_number_sets_that_row_height_in_layout_pixels_and_word_follows',
+    description: 'Tirer la poignée du numéro 2 du tableau B (deux tableaux) : la bulle dit la hauteur en centimètres, la ligne suit en direct (le tableau A garde ses lignes), le document ne bouge qu\'au relâcher, puis UNE transaction pose la hauteur en pixels de mise en page sur cette ligne seule (un seul Annuler) ; le Word écrit un <w:trHeight> « au moins » pour cette ligne et pour elle seule',
+    run: async (h) => withDoc(h, TWO_TABLES, async () => {
+      const bad = [];
+      await cursorIn(1, 1, 0);
+      const [tableA, tableB] = docTables();
+      const zoom = EditorCore.layoutZoom(tableB);
+      const aBefore = rowRects(tableA);
+      const bBefore = rowRects(tableB);
+      const before = docJson();
+      const DY = 60;
+      const expected = Math.round(bBefore[1] / zoom + DY / zoom);
+      const expectedTip = PageLayout.cmText(expected * 25.4 / 96) + ' cm';
+      const mid = await dragRowHandle(2, DY, async () => ({
+        tip: tipNow(), rows: rowRects(tableB), a: rowRects(tableA), json: docJson(), marked: docTables().map(t => t.hasAttribute('data-pp-sizing')).join(),
+        preview: (document.getElementById('pp-grid-resize-preview') || {}).textContent || '', cursor: document.body.classList.contains('pp-grid-resizing-row'),
+      }));
+      if (mid.tip !== expectedTip) bad.push('bulle : ' + mid.tip + ' pour ' + expectedTip);
+      if (Math.abs(mid.rows[1] - expected * zoom) > 0.8 || Math.abs(mid.rows[0] - bBefore[0]) > 0.3 || Math.abs(mid.rows[2] - bBefore[2]) > 0.3) bad.push('lignes de B en plein glissé : ' + JSON.stringify({ avant: bBefore, pendant: mid.rows, expected }));
+      if (mid.a.some((height, i) => Math.abs(height - aBefore[i]) > 0.3)) bad.push('le tableau A a bougé en plein glissé : ' + JSON.stringify({ avant: aBefore, pendant: mid.a }));
+      if (mid.json !== before || mid.marked !== 'false,true' || !mid.cursor || !/table\[data-pp-sizing\] > tbody > tr:nth-child\(2\)/.test(mid.preview)) bad.push('en plein glissé : ' + JSON.stringify({ documentInchange: mid.json === before, marked: mid.marked, cursor: mid.cursor, preview: mid.preview }));
+      const left = dragLeftovers();
+      if (!clean(left)) bad.push('rien ne devait rester du glissé : ' + JSON.stringify(left));
+      const heightsB = rowHeights(1);
+      const heightsA = rowHeights(0);
+      if (JSON.stringify(heightsB) !== JSON.stringify([null, expected, null]) || heightsA.some(v => v !== null)) bad.push('hauteurs posées : B ' + JSON.stringify(heightsB) + ', A ' + JSON.stringify(heightsA) + ' (attendu B ' + expected + ' sur la ligne 2)');
+      const html = Editor.getHTML();
+      if (!html.includes('data-row-height="' + expected + '"') || (html.match(/data-row-height/g) || []).length !== 1) bad.push('HTML : ' + (html.match(/data-row-height="\d+"/g) || []).join());
+      const afterB = rowRects(docTables()[1]);
+      if (Math.abs(afterB[1] - expected * zoom) > 0.8) bad.push('ligne 2 après le relâcher : ' + afterB[1] + ' pour ' + expected * zoom);
+      // Le Word : un <w:trHeight> « au moins » (15 twips par pixel) sur la ligne 2 du second tableau, aucun ailleurs.
+      const parts = await h.exportDocxParts(html);
+      const word = Array.from(parts.doc.getElementsByTagName('w:tbl')).map(tbl => Array.from(tbl.getElementsByTagName('w:tr')).map((tr) => {
+        const node = tr.getElementsByTagName('w:trHeight')[0];
+        return node ? node.getAttribute('w:val') + ':' + node.getAttribute('w:hRule') : '-';
+      }).join());
+      const wantedWord = ['-,-', '-,' + expected * 15 + ':atLeast,-'];
+      if (JSON.stringify(word) !== JSON.stringify(wantedWord)) bad.push('Word : ' + JSON.stringify(word) + ' (attendu ' + JSON.stringify(wantedWord) + ')');
+      await undo();
+      if (rowHeights(1).some(v => v !== null)) bad.push('un Annuler doit rendre la ligne : ' + JSON.stringify(rowHeights(1)));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : JSON.stringify({ expected, tip: mid.tip, word }) };
+    }),
+  });
+
+  cases.push({
+    id: 'docstrips_row_drag_stops_at_the_text_height_escape_cancels_and_chosen_rows_share_one_height',
+    description: 'Une ligne ne descend pas sous la hauteur de son texte (tirée jusqu\'en haut, elle s\'arrête là) ; Échap annule le glissé sans rien laisser ; des lignes choisies par leurs numéros prennent toutes la hauteur de la poignée tirée (un seul Annuler)',
+    run: async (h) => withDoc(h, TWO_TABLES, async () => {
+      const bad = [];
+      await cursorIn(1, 1, 0);
+      const zoom = EditorCore.layoutZoom(docTables()[1]);
+      const natural = rowRects(docTables()[1])[1] / zoom;
+      await dragRowHandle(2, 80);
+      const tall = rowHeights(1)[1];
+      await sleep(GROUP_GAP_MS);
+      await dragRowHandle(2, -500);
+      const floor = rowHeights(1)[1];
+      if (!(tall > natural + 30) || floor == null || floor < Math.floor(natural) || floor > Math.ceil(natural) + 1) bad.push('plancher : haute ' + tall + ', tirée en haut ' + floor + ', texte ' + Math.round(natural * 10) / 10);
+      await sleep(GROUP_GAP_MS);
+      await undo();
+      await undo();
+      if (rowHeights(1).some(v => v !== null)) bad.push('deux Annuler devaient tout rendre : ' + JSON.stringify(rowHeights(1)));
+      // Échap en plein glissé.
+      const docBefore = docJson();
+      const rowsBefore = rowRects(docTables()[1]);
+      const midEscape = await dragRowHandle(2, 50, async () => rowRects(docTables()[1]), false);
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: 0, clientY: 0, pointerId: 1, isPrimary: true }));
+      await sleep(250);
+      const left = dragLeftovers();
+      if (!(midEscape[1] > rowsBefore[1] + 20) || docJson() !== docBefore || !clean(left) || Math.abs(rowRects(docTables()[1])[1] - rowsBefore[1]) > 0.5) bad.push('Échap : ' + JSON.stringify({ avant: rowsBefore, pendant: midEscape, apres: rowRects(docTables()[1]), documentInchange: docJson() === docBefore, left }));
+      // Les trois lignes de B choisies par leurs numéros : tirer le bas de la troisième les règle toutes à la même hauteur.
+      await sleep(GROUP_GAP_MS);
+      await selectCells(1, 0, 0, 2, 1);
+      const rows3 = rowRects(docTables()[1]);
+      const expected = Math.round(rows3[2] / zoom + 30 / zoom);
+      await dragRowHandle(3, 30);
+      if (rowHeights(1).some(v => v !== expected)) bad.push('trois lignes choisies : ' + JSON.stringify(rowHeights(1)) + ' (attendu ' + expected + ' partout)');
+      await sleep(GROUP_GAP_MS);
+      await undo();
+      if (rowHeights(1).some(v => v !== null)) bad.push('un Annuler devait rendre les trois lignes : ' + JSON.stringify(rowHeights(1)));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : JSON.stringify({ tall, floor, natural: Math.round(natural * 10) / 10, expected }) };
+    }),
+  });
+
+  cases.push({
+    id: 'docstrips_row_drag_in_a_table_with_a_nested_table_sets_the_outer_row_only',
+    description: 'Tableau posé dans une case : tirer le numéro de la ligne 1 du tableau extérieur règle cette ligne et pas celle du tableau intérieur, ni pendant le glissé ni après (le glissé ne vise que le tableau des bandeaux)',
+    run: async (h) => withDoc(h, '<p>avant</p><table><tbody><tr><td><p>dehors</p>' + tableHtml('N', 2, 2) + '</td><td><p>voisine</p></td></tr><tr><td><p>bas</p></td><td><p>bas droite</p></td></tr></tbody></table><p>après</p>', async () => {
+      const bad = [];
+      await cursorIn(0, 0, 1);
+      const innerHeights = () => Array.from(document.querySelectorAll('.tiptap table table tr')).map(tr => tr.getBoundingClientRect().height);
+      const inner0 = innerHeights();
+      const outerNames = stripLabels('row');
+      const mid = await dragRowHandle(1, 40, async () => ({ inner: innerHeights(), outer: rowRects(docTables()[0]) }));
+      if (outerNames !== '12') bad.push('numéros du tableau extérieur : ' + outerNames);
+      if (mid.inner.some((height, i) => Math.abs(height - inner0[i]) > 0.3)) bad.push('tableau intérieur en plein glissé : ' + JSON.stringify({ avant: inner0, pendant: mid.inner }));
+      if (JSON.stringify(rowHeights(0)).replace(/[0-9]+/, 'N') !== '[N,null]' || rowHeights(1).some(v => v !== null)) bad.push('hauteurs posées : extérieur ' + JSON.stringify(rowHeights(0)) + ', intérieur ' + JSON.stringify(rowHeights(1)));
+      if (innerHeights().some((height, i) => Math.abs(height - inner0[i]) > 0.3)) bad.push('tableau intérieur après le relâcher : ' + JSON.stringify({ avant: inner0, apres: innerHeights() }));
+      if (!clean(dragLeftovers())) bad.push('restes : ' + JSON.stringify(dragLeftovers()));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.gridInDocument = cases;
 })();

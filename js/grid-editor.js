@@ -6,7 +6,7 @@
 //   - la sélection toujours dans une case (jamais le paragraphe vide que TipTap range sous un tableau final, jamais le curseur « gap » après lui) ;
 //   - les bandeaux A, B, C / 1, 2, 3, collants au défilement, dont les poignées règlent la largeur d'une colonne et la hauteur d'une ligne (aperçu en
 //     direct, une seule transaction au relâcher : un seul Annuler) ; tirer la poignée d'une ligne (d'une colonne) parmi plusieurs choisies par leurs
-//     bandeaux les règle toutes à la même taille (`chosenLines`) ;
+//     bandeaux les règle toutes à la même taille (`chosenLines`) ; ceux d'un tableau de document (`documentStrips`) règlent la hauteur d'une ligne de même, la bulle en cm ;
 //   - la hauteur de ligne (`rowHeight` sur tableRow, plancher = la hauteur de son texte) et la largeur de colonne (`colwidth` de chaque case),
 //     toujours posées ;
 //   - le saut de page porté par une ligne (`pageBreakBefore`) : le PDF y commence une page, l'Excel une feuille ;
@@ -1221,9 +1221,9 @@ const GridEditor = (function () {
     // Les bandeaux : un jeu (coin, lettres, numéros) par tableau montré ; pose, retrait, étiquettes, programmation de leur rafraîchissement.
 
     // Un jeu de bandeaux. `ctx` dit de quel tableau il parle (`info()`, `table(info)` n'est pas nécessaire : `measure`), si ses poignées règlent la
-    // taille (`resizable`), quel facteur sépare ses pixels de ceux de la mise en page (`zoom(table)`), quelles lignes portent un saut de page
-    // (`breaks()`), comment on le programme (`wanted()`) et comment on le rafraîchit (`sync(force)`). Celui de la grille vit dans la feuille ; celui d'un
-    // tableau de document est posé par-dessus la page (`documentStrips`).
+    // taille (`resizable(kind)`, 'col' ou 'row') et dans quelle unité la bulle du glissé la dit (`format(px)`), quel facteur sépare ses pixels de ceux de
+    // la mise en page (`zoom(table)`), quelles lignes portent un saut de page (`breaks()`), comment on le programme (`wanted()`) et comment on le
+    // rafraîchit (`sync(force)`). Celui de la grille vit dans la feuille ; celui d'un tableau de document est posé par-dessus la page (`documentStrips`).
     function newStripSet(ctx) {
       const corner = el('div', 'v2-grid-corner');
       const cols = el('div', 'v2-grid-cols');
@@ -1291,7 +1291,7 @@ const GridEditor = (function () {
       while (container.children.length < count) container.appendChild(build(className));
     }
 
-    // Une lettre ou un numéro : l'étiquette, et la poignée qui règle la taille quand le jeu le permet (`resizable`).
+    // Une lettre ou un numéro : l'étiquette, et la poignée qui règle la taille quand le jeu le permet (`resizable(kind)`, `kind` : 'col' ou 'row').
     function buildHead(className, resizable) {
       const head = el('div', className);
       head.appendChild(el('span', 'v2-grid-label'));
@@ -1327,7 +1327,7 @@ const GridEditor = (function () {
       const key = m.widths.map(w => w.toFixed(2)).join(',') + '|' + m.heights.map(h => h.toFixed(2)).join(',') + '|' + breaks.map(on => (on ? 1 : 0)).join('');
       if (force || key !== set.lastKey) {
         set.lastKey = key;
-        const build = className => buildHead(className, set.ctx.resizable);
+        const build = className => buildHead(className, set.ctx.resizable(className === 'v2-grid-colhead' ? 'col' : 'row'));
         fillHeads(set.cols, m.widths.length, 'v2-grid-colhead', build);
         fillHeads(set.rows, m.heights.length, 'v2-grid-rowhead', build);
         m.widths.forEach((w, i) => {
@@ -1381,6 +1381,19 @@ const GridEditor = (function () {
     return { syncStrips, onCornerDown };
   })();
 
+  // Le tableau que le glissé d'une poignée règle porte cette marque le temps du glissé : l'aperçu et la mesure de la hauteur naturelle (des feuilles de style)
+  // ne visent que lui. Une grille n'a qu'un tableau, un document peut en porter plusieurs (un tableau dans une case compris) : sans elle, tirer la ligne 2 du
+  // premier réglerait aussi la ligne 2 de tous les autres. Un attribut du <table> : la vue de Tiptap en ignore les changements, ProseMirror ne relit rien.
+  const SIZING_MARK = 'data-pp-sizing';
+  const SIZING_TABLE = `.tiptap table[${SIZING_MARK}]`;
+  // La ligne de rang `index` de ce tableau. Avec le suivi des modifications, Tiptap enveloppe une ligne dont la hauteur est proposée dans un <span> (deux quand elle
+  // porte plusieurs marques) : l'enfant de rang `index` du <tbody> est alors ce <span>, la ligne est dedans. Sans cela, une ligne déjà proposée n'avait plus d'aperçu
+  // et sa hauteur naturelle (le plancher) se mesurait sans rien retirer : elle ne pouvait plus descendre sous sa hauteur du moment.
+  const sizingRow = index => {
+    const nth = `${SIZING_TABLE} > tbody > `;
+    return `${nth}tr:nth-child(${index + 1}), ${nth}span:nth-child(${index + 1}) > tr, ${nth}span:nth-child(${index + 1}) > span > tr`;
+  };
+
   const { onStripDown, showTip, hideTip, naturalRowHeight } = (function () {
     // Les gestes sur les bandeaux : choisir une ligne ou une colonne, l'info-bulle, la hauteur naturelle d'une ligne.
 
@@ -1422,10 +1435,11 @@ const GridEditor = (function () {
 
     // Hauteur d'une ligne réduite à son contenu : le plancher du glissé (« une ligne ne descend pas sous la hauteur de son texte »). Pour des lignes
     // tirées ensemble, la plus haute de leurs hauteurs : elles reçoivent toutes la même. Mesurée par une feuille de style d'un instant, pas en
-    // changeant le style d'une ligne : ProseMirror verrait la ligne modifiée et la redessinerait. Une seule feuille pour toutes les lignes.
+    // changeant le style d'une ligne : ProseMirror verrait la ligne modifiée et la redessinerait. Une seule feuille pour toutes les lignes, celles du
+    // seul tableau que le glissé règle (`SIZING_MARK` : un document peut en porter plusieurs, un tableau dans une case compris).
     function naturalRowHeight(rows, indexes) {
       const probe = document.createElement('style');
-      probe.textContent = `${indexes.map(index => `.tiptap table > tbody > tr:nth-child(${index + 1})`).join(', ')} { height: 0 !important; }`;
+      probe.textContent = `${indexes.map(sizingRow).join(', ')} { height: 0 !important; }`;
       document.head.appendChild(probe);
       const height = Math.max(...indexes.map(index => rows[index].getBoundingClientRect().height));
       probe.remove();
@@ -1468,7 +1482,9 @@ const GridEditor = (function () {
       const start = isCol ? event.clientX : event.clientY;
       const startSize = sizes[lines.indexOf(index)];
       const startTableSize = (isCol ? m.width : m.height) / zoom;
-      const min = isCol ? MIN_COL_WIDTH_PX : naturalRowHeight(m.rows, lines) / zoom;
+      // La marque est posée avant la mesure de la hauteur naturelle : elle et l'aperçu ne visent que ce tableau.
+      m.table.setAttribute(SIZING_MARK, '');
+      const min = isCol ? MIN_COL_WIDTH_PX : Math.ceil(naturalRowHeight(m.rows, lines) / zoom);
       const max = isCol ? MAX_COL_WIDTH_PX : MAX_ROW_HEIGHT_PX;
       let size = Math.max(min, Math.round(startSize));
       // Plusieurs lignes tirées ensemble : rien ne change avant le premier déplacement de la poignée (leur plancher commun peut dépasser la taille de départ de celle qu'on
@@ -1477,7 +1493,7 @@ const GridEditor = (function () {
       let at = start;
       try { target.setPointerCapture(event.pointerId); } catch (e) { /* capture indisponible : les écouteurs du document suffisent */ }
       document.body.classList.add(isCol ? 'pp-grid-resizing-col' : 'pp-grid-resizing-row');
-      showTip(size + ' px', event);
+      showTip(set.ctx.format(size), event);
 
       // Aperçu par une feuille de style posée dans <head>, jamais par un style en ligne sur le tableau : ProseMirror lit un attribut modifié sur une
       // ligne (<tr>) comme un changement du document à relire et redessine la ligne (l'aperçu d'une hauteur s'effacerait aussitôt). Il
@@ -1487,8 +1503,8 @@ const GridEditor = (function () {
       document.head.appendChild(preview);
       const apply = value => {
         preview.textContent = isCol
-          ? `${lines.map(i => `.tiptap table > colgroup > col:nth-child(${i + 1}) { width: ${value}px !important; }`).join(' ')} .tiptap table { width: ${startTableSize + sizes.reduce((sum, one) => sum + value - one, 0)}px !important; }`
-          : lines.map(i => `.tiptap table > tbody > tr:nth-child(${i + 1}) { height: ${value}px !important; }`).join(' ');
+          ? `${lines.map(i => `${SIZING_TABLE} > colgroup > col:nth-child(${i + 1}) { width: ${value}px !important; }`).join(' ')} ${SIZING_TABLE} { width: ${startTableSize + sizes.reduce((sum, one) => sum + value - one, 0)}px !important; }`
+          : lines.map(i => `${sizingRow(i)} { height: ${value}px !important; }`).join(' ');
         heads.forEach(head => { head.style[isCol ? 'width' : 'height'] = value * zoom + 'px'; });
       };
       if (moved) apply(size);
@@ -1498,7 +1514,7 @@ const GridEditor = (function () {
         moved = true;
         size = Math.min(max, Math.max(min, Math.round(startSize + (at - start) / zoom)));
         apply(size);
-        showTip(size + ' px', e);
+        showTip(set.ctx.format(size), e);
       };
       const finish = commit => {
         document.removeEventListener('pointermove', onMove);
@@ -1512,6 +1528,7 @@ const GridEditor = (function () {
         if (commit && moved && (lines.length === 1 || at !== start) && sizes.some(one => Math.round(one) !== size)) { if (isCol) setColumnWidth(m.info, lines, size); else setRowHeight(m.info, lines, size); }
         else heads.forEach((head, k) => { head.style[isCol ? 'width' : 'height'] = sizes[k] * zoom + 'px'; });
         preview.remove();
+        m.table.removeAttribute(SIZING_MARK);
         set.lastKey = '';
         scheduleSync(set);
       };
@@ -1527,9 +1544,10 @@ const GridEditor = (function () {
   })();
 
   // Les bandeaux de la grille : son seul tableau, sans réduction de la feuille, avec les sauts de page de ses lignes. Se rafraîchissent tant que le mode
-  // grille est actif.
+  // grille est actif. Les tailles s'y disent en pixels, comme dans un tableur.
   const gridContext = {
-    resizable: true,
+    resizable: () => true,
+    format: px => px + ' px',
     watchEditor: false,
     info: () => (editor ? tableInfo(editor.state.doc) : null),
     zoom: () => 1,
@@ -1539,9 +1557,12 @@ const GridEditor = (function () {
   };
 
   // Les bandeaux d'un tableau de document : celui où se trouve le curseur, pas de saut de page par ligne, la feuille réduite à ~0,85 dans un panneau
-  // de 700 px. Ils n'existent que hors d'une grille (qui a les siens).
+  // de 700 px. Ils n'existent que hors d'une grille (qui a les siens). Les numéros ont leur poignée : tirer le bas d'une ligne en règle la hauteur, comme dans
+  // une grille, mais la page est en centimètres et la bulle du glissé le dit en cm. Les lettres n'en ont pas encore : la largeur d'une colonne se règle par le
+  // bord de ses cases (prosemirror-tables), dont le résultat dépend de la page (js/editor.js:backfillAutoColumnWidths, clampOverflowingTables).
   const documentContext = {
-    resizable: false,
+    resizable: kind => kind === 'row',
+    format: px => PageLayout.cmText(px * 25.4 / 96) + ' cm',
     watchEditor: true,
     info: () => documentStripsTable(),
     zoom: table => EditorCore.layoutZoom(table),

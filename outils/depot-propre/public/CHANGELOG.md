@@ -166,6 +166,14 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   curseur sort du tableau. Ils ne se montrent ni dans un tableau posé dans une case ou dans une colonne, ni en
   Lecture, et une grille garde les siens. Avec le suivi des modifications allumé ils sont là aussi : choisir des
   cases ne modifie rien.
+- **Hauteur d'une ligne d'un tableau de document** : tirer le bas d'un numéro (1, 2, 3…) règle la hauteur de
+  cette ligne, comme dans une grille : par exemple une case de signature haute. La bulle du glissé dit la
+  hauteur en centimètres, la ligne suit en direct (les autres gardent la leur, le texte d'après descend), et
+  un seul Annuler la rend. Une ligne ne descend pas sous la hauteur de son texte ; Échap annule le glissé ; des
+  lignes choisies par leurs numéros prennent toutes la même hauteur. La hauteur est un minimum : une ligne que
+  son texte agrandit grandit, et le PDF et le Word la reprennent. Avec le suivi des modifications allumé, la
+  hauteur est proposée comme une modification, que vous pouvez refuser. Les lettres n'ont pas encore de
+  poignée : la largeur d'une colonne se règle toujours par le bord de ses cases.
 - **Marge autour de chaque page dans l'assemblage avant impression** : la fenêtre « Assemblage avant
   impression » a un champ « Marge » (en millimètres, 0 au départ, les flèches avancent de 0,5) qui laisse de la
   place autour de chaque page posée sur la feuille : la marge compte de chaque côté d'une page, donc deux
@@ -583,6 +591,13 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   They follow the scrolling and go away when the cursor leaves the table. They do not show for a table inside
   a cell or a column, nor in Reading, and a grid keeps its own. With track changes on they are there too:
   picking cells changes nothing.
+- **Row height in a document table**: dragging the bottom of a number (1, 2, 3…) sets the height of that row,
+  as in a grid: for example a tall signature cell. The drag tip gives the height in centimetres, the row follows
+  live (the others keep theirs, the text after moves down), and a single Undo gives it back. A row does not go
+  below the height of its text; Esc cancels the drag; rows picked by their numbers all get the same height. The
+  height is a minimum: a row that its text makes taller grows, and the PDF and the Word export carry it over.
+  With track changes on, the height is suggested as a change, which you can reject. The letters have no handle
+  yet: a column's width is still set by the edge of its cells.
 - **Margin around each page in sheet assembly**: the "Assemble before printing" window has a "Margin" field (in
   millimetres, 0 to start with, the arrows step by 0.5) that leaves room around each page laid on the
   sheet: the margin sits on every side of a page, so it counts twice between two pages and once at the edge
