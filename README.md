@@ -41,7 +41,7 @@ La galerie **Créer à partir d'un modèle…** propose des modèles prêts à l
 - Gras, italique, souligné, barré ; six polices (Roboto par défaut, Arial, Times New Roman, Georgia, Courier New, Calibri) en tailles réelles de 8 à 72 pt ; couleur du texte et surlignage ; pinceau de mise en forme ; alignement et retraits.
 - Titres de 1 à 6 avec numérotation, sommaire généré à partir des titres, sauts de page, notes de bas de page, en-têtes et pieds de page (première page différente, numéro de page), filigrane.
 - Listes à puces (disque, cercle, carré), listes numérotées (1., a., I.) et listes de tâches à cocher en trois styles.
-- Tableaux (lignes et colonnes, fond de case, légende) et zones à deux colonnes. Dans une grille s'y ajoutent la fusion et la scission des cases, les bordures et l'alignement vertical.
+- Tableaux (lignes et colonnes, fusion et scission des cases, fond de case, légende) et zones à deux colonnes. Dans une grille s'y ajoutent les bordures et l'alignement vertical.
 - Images ajoutées par adresse, collées ou prises dans une colonne Pièces jointes de Grist, avec taille, alignement, habillage du texte, calque devant ou derrière le texte, opacité et légende.
 - Menu « Lien et blocs de contenu » : lien (Ctrl+K), citation, bloc de code, encadré (Note, Attention, Important), bloc de signature, QR code.
 - Rechercher et remplacer, annuler et rétablir, aperçu A4, abréviations qui se développent à la frappe.
@@ -185,10 +185,10 @@ Un audit de code complet (qualité, sécurité, conformité aux exigences de pub
 Limites connues :
 
 - Le widget demande l'accès complet au document, faute de niveau intermédiaire dans Grist.
-- L'export Word est en bêta : les images y sont en ligne (pas de position libre), le sommaire est une liste fixe et les polices ne sont pas embarquées.
+- L'export Word est en bêta : les images devant ou derrière le texte et celles alignées à gauche ou à droite y gardent leur place, le sommaire est une liste fixe et les polices ne sont pas embarquées.
 - L'e-mail ne garde que le texte brut, sans pièce jointe.
 - L'export Excel écrit des valeurs, jamais de formule.
-- Pas encore faits : le remplissage d'un modèle avec des données d'exemple, les variantes multilingues d'un modèle et la fusion de cellules dans un tableau de document (elle n'existe que dans les grilles).
+- Pas encore faits : le remplissage d'un modèle avec des données d'exemple et les variantes multilingues d'un modèle.
 
 ## Licence
 

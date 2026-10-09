@@ -256,8 +256,8 @@ bibliothèques et polices sont dans [NOTICE](NOTICE).
   charge (une case vide les remplace) ; le grec, le cyrillique, le vietnamien, les flèches, coches,
   étoiles et monnaies le sont. Dans le menu « Qualité d'export PDF », seule l'option « Vectoriel » est
   disponible : « Impr. navigateur », « Basse qualité » et « Ultra HD » sont grisées (« bientôt »).
-- **Word** (bêta) : les images y sont en ligne (pas de position libre), le sommaire est une liste fixe et
-  les polices ne sont pas embarquées.
+- **Word** (bêta) : les images devant ou derrière le texte et celles alignées à gauche ou à droite y
+  gardent leur place, le sommaire est une liste fixe et les polices ne sont pas embarquées.
 - **E-mail** : le corps est du texte brut, sans pièce jointe ; le lien `mailto:` est limité à environ
   2 000 caractères, une jauge prévient quand il les dépasse.
 - **Excel** : le fichier contient des valeurs, jamais de formule.
@@ -574,8 +574,8 @@ libraries and fonts are in [NOTICE](NOTICE).
   replaces them); Greek, Cyrillic, Vietnamese, arrows, check marks, stars and currencies are. In the
   "PDF export quality" menu, only the "Vector" option is available: "Browser print", "Low quality" and
   "Ultra HD" are greyed out ("soon").
-- **Word** (beta): images are inline (no free positioning), the table of contents is a fixed list and
-  fonts are not embedded.
+- **Word** (beta): images in front of or behind the text, and images aligned left or right, keep their
+  place; the table of contents is a fixed list and fonts are not embedded.
 - **E-mail**: the body is plain text, with no attachment; the `mailto:` link is limited to about 2,000
   characters, and a gauge warns when it goes over.
 - **Excel**: the file holds values, never formulas.
