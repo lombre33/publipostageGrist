@@ -234,6 +234,89 @@
     },
   });
 
+  // La puce « N° de ligne » (demande d'Antoine du 2026-10-09, point 5.1) : le rang du tour de la zone répétée qui la contient. Elle est posée comme les
+  // autres puces (EditorNodes.smartChipHtml) et résolue par ReaderMode.resolveSmartChips avec la liaison du tour (LoopRules.bindingOf).
+  const rowNumberChip = () => EditorNodes.smartChipHtml({ kind: 'rowNumber' });
+
+  cases.push({
+    id: 'loop_row_number_chip_numbers_the_rows_of_a_table_in_the_order_shown',
+    description: 'Puce « N° de ligne » dans la ligne d’un tableau répétée par une Boucle : 1, 2, 3 dans l’ordre où les lignes s’affichent (celui de la table, ou le tri de la boucle), en Lecture et dans l’aperçu des exports ; l’en-tête n’est pas numéroté et la puce ne reste pas dans le rendu',
+    run: async (h) => {
+      await seed(h);
+      const sorted = { repeat: 'row', table: 'LpLignes', sort: { column: 'Designation', direction: 'asc' }, empty: 'header' };
+      const html = '<table><tbody>'
+        + `<tr>${cell('N°', 'th')}${cell('Désignation', 'th')}</tr>`
+        + `<tr>${cell(rowNumberChip())}${cell(badgeHtml('LpLignes', 'Designation', ROW_LOOP))}</tr>`
+        + '</tbody></table><table><tbody>'
+        + `<tr>${cell('N°', 'th')}${cell('Désignation', 'th')}</tr>`
+        + `<tr>${cell(rowNumberChip())}${cell(badgeHtml('LpLignes', 'Designation', sorted))}</tr>`
+        + '</tbody></table>';
+      const content = await renderReader(html);
+      const reading = Array.from(content.querySelectorAll('table')).map(rowTexts);
+      const box = await preview(html, GristAPI.getCurrentRecord());
+      const exported = Array.from(box.querySelectorAll('table')).map(rowTexts);
+      const chipsLeft = content.querySelectorAll('.smart-chip').length + box.querySelectorAll('.smart-chip').length;
+      const expected = [
+        ['N° | Désignation', '1 | Livret stagiaire imprimé', '2 | Journée de formation intra', '3 | Déplacement du formateur'],
+        ['N° | Désignation', '1 | Déplacement du formateur', '2 | Journée de formation intra', '3 | Livret stagiaire imprimé'],
+      ];
+      const pass = JSON.stringify(reading) === JSON.stringify(expected) && JSON.stringify(exported) === JSON.stringify(expected) && chipsLeft === 0;
+      return { pass, notes: JSON.stringify({ reading, exported, chipsLeft }) };
+    },
+  });
+
+  cases.push({
+    id: 'loop_row_number_chip_counts_after_the_filter_in_list_items_and_paragraphs',
+    description: 'Puce « N° de ligne » dans un élément de liste et dans un paragraphe répétés : le rang compte les lignes retenues, après le filtre et le tri de la boucle (1, 2, 3 sans trou), pas les identifiants des lignes de la table',
+    run: async (h) => {
+      await seed(h);
+      const present = { repeat: 'item', table: 'LpParticipants', filter: { mode: 'all', rules: [{ column: 'Presence', operator: '=', value: 'Présent' }] }, sort: { column: 'Nom', direction: 'asc' }, empty: 'none' };
+      const absent = { repeat: 'paragraph', table: 'LpParticipants', filter: { mode: 'all', rules: [{ column: 'Presence', operator: '=', value: 'Absent' }] }, sort: { column: 'Nom', direction: 'asc' }, empty: 'hide' };
+      const html = `<ul><li><p>${rowNumberChip()} - ${badgeHtml('LpParticipants', 'NomComplet', present)}</p></li></ul>`
+        + `<p>${rowNumberChip()}. ${badgeHtml('LpParticipants', 'NomComplet', absent)}</p>`;
+      const box = await preview(html, GristAPI.getCurrentRecord());
+      const items = Array.from(box.querySelectorAll('li')).map(li => li.textContent.trim());
+      const paragraphs = Array.from(box.querySelectorAll(':scope > p')).map(p => p.textContent.trim());
+      const chipsLeft = box.querySelectorAll('.smart-chip').length;
+      const pass = JSON.stringify(items) === JSON.stringify(['1 - Karim Benali', '2 - Léa Fontaine', '3 - Sophie Laurent'])
+        && JSON.stringify(paragraphs) === JSON.stringify(['1. Paul Morel', '2. Marc Petit']) && chipsLeft === 0;
+      return { pass, notes: JSON.stringify({ items, paragraphs, chipsLeft }) };
+    },
+  });
+
+  cases.push({
+    id: 'loop_row_number_chip_restarts_at_one_for_each_page_row_and_is_one_outside_a_zone',
+    description: 'Puce « N° de ligne » en lot : chaque ligne de la page repart de 1 (3 lignes pour la facture 1, 1 pour la 2, aucune pour la 3 : en-tête seul) ; hors de toute zone répétée, et dans une zone dont la boucle ne trouve plus sa source, elle vaut 1',
+    run: async (h) => {
+      await seed(h);
+      // Table sans règle de liaison : la boucle n'a plus de source, la zone reste affichée une fois (js/loop-rules.js:expandZones).
+      const unlinked = { repeat: 'row', table: 'LpFormateurs', empty: 'header' };
+      const html = '<table><tbody>'
+        + `<tr>${cell('N°', 'th')}${cell('Désignation', 'th')}</tr>`
+        + `<tr>${cell(rowNumberChip())}${cell(badgeHtml('LpLignes', 'Designation', ROW_LOOP))}</tr>`
+        + '</tbody></table>'
+        + `<p>Hors zone : ${rowNumberChip()}</p>`
+        + `<table><tbody><tr>${cell(rowNumberChip())}${cell(badgeHtml('LpFormateurs', 'Nom', unlinked))}</tr></tbody></table>`;
+      const rows = await GristAPI.fetchTableRows('LpFactures');
+      const results = [];
+      for (const row of rows) {
+        const box = await preview(html, row);
+        const tables = box.querySelectorAll('table');
+        results.push({
+          id: row.id,
+          lines: rowTexts(tables[0]).map(t => t.split(' | ')[0]),
+          outside: box.querySelector(':scope > p').textContent,
+          unlinked: rowTexts(tables[1])[0].split(' | ')[0],
+          chipsLeft: box.querySelectorAll('.smart-chip').length,
+        });
+      }
+      const [first, second, third] = results;
+      const pass = JSON.stringify(first.lines) === JSON.stringify(['N°', '1', '2', '3']) && JSON.stringify(second.lines) === JSON.stringify(['N°', '1'])
+        && JSON.stringify(third.lines) === JSON.stringify(['N°']) && results.every(r => r.outside === 'Hors zone : 1' && r.unlinked === '1' && r.chipsLeft === 0);
+      return { pass, notes: JSON.stringify(results) };
+    },
+  });
+
   cases.push({
     id: 'loop_toolbar_icon_states',
     description: 'Icône Boucle : active pour une variable liée à plusieurs lignes ou une liste de références, grisée avec son explication pour une colonne de la page, bleue quand la boucle est posée, grisée dans une zone déjà répétée',

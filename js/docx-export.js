@@ -96,7 +96,7 @@ const DocxExport = (function () {
     return Math.round(Math.max(6, Math.min(72, pt)) * 2);
   }
 
-  // Le style des balises qui en posent un : titre, gras, italique, soulignement, lien, code, légende et barré.
+  // Le style des balises qui en posent un : titre, gras, italique, soulignement, lien, code, légende, barré, exposant et indice.
   function applyTagRunStyle(out, node, tag) {
     // 'auto' (pas de couleur explicite dans le HTML) plutôt que de laisser le style Word « Titre N » imposer sa couleur par défaut (accent du thème,
     // souvent bleu) : un titre de l'éditeur n'a pas de couleur particulière, il hérite du noir du corps du texte (`.tiptap { color }`).
@@ -112,6 +112,10 @@ const DocxExport = (function () {
     // posé dedans l'emportent ensuite, comme dans l'éditeur.
     if (tag === 'P' && node.hasAttribute('data-caption')) { out.italics = true; out.size = Math.round(Caption.SIZE_PT * 2); out.color = Caption.COLOR.replace('#', '').toUpperCase(); }
     if (tag === 'S' || tag === 'STRIKE' || tag === 'DEL') out.strike = true;
+    // Exposant et indice (js/script-marks.js) : le vrai exposant ou indice de Word (`w:vertAlign`), dont Word règle lui-même la taille et le décalage ;
+    // la personne qui ouvre le fichier le retrouve comme mise en forme du texte, qu'elle peut retirer.
+    const script = ScriptMarks.kindOf(node);
+    if (script) { out.superScript = script === ScriptMarks.SUPERSCRIPT; out.subScript = script === ScriptMarks.SUBSCRIPT; }
   }
 
   // Le style en ligne (`style="…"`), lu par `css(nom)` : gras, italique, soulignement, barré, taille, police, couleur et fond.
@@ -132,7 +136,8 @@ const DocxExport = (function () {
   }
 
   // Même point de passage que inheritedStyle (js/pdf-export.js), adapté à la forme attendue par docx.TextRun. Le sous-ensemble de formats reconnus
-  // est volontairement identique (pas de sup/sub générique : l'éditeur n'a pas de bouton pour ça hors note de bas de page, gérée à part).
+  // est volontairement identique (l'exposant et l'indice du texte sont la marque de js/script-marks.js ; la note de bas de page, gérée à part, ne l'est
+  // pas).
   function inheritedRunStyle(node, parent) {
     const isElement = node.nodeType === 1;
     const style = isElement ? (node.getAttribute('style') || '') : '';
@@ -148,6 +153,8 @@ const DocxExport = (function () {
     if (style.italics) opts.italics = true;
     if (style.underline) opts.underline = style.underline;
     if (style.strike) opts.strike = true;
+    if (style.superScript) opts.superScript = true;
+    if (style.subScript) opts.subScript = true;
     if (style.font) opts.font = style.font;
     if (style.color) opts.color = style.color;
     if (style.shading) opts.shading = style.shading;

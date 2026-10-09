@@ -1,12 +1,13 @@
-// Avertissement d'ouverture : Réglages > Accès (js/access-rights.js) et Réglages > Selon la ligne (js/row-template.js) sont des options du widget qui
-// citent des colonnes (et, pour l'Accès, la table des droits) par leur nom. Un renommage ou une suppression dans Grist ne les atteint pas :
+// Avertissement d'ouverture : Réglages > Accès (js/access-rights.js), Réglages > Selon la ligne (js/row-template.js) et Réglages > Date du dernier export PDF
+// (js/export-date.js) sont des options du widget qui citent des colonnes (et, pour l'Accès, la table des droits) par leur nom. Un renommage ou une suppression dans Grist ne les atteint pas :
 // js/schema-renames.js réécrit les modèles et les clés de correspondance, mais les options ne se partagent qu'une fois la vue enregistrée
 // (grist.setOption ne pose qu'un brouillon). La colonne citée compte alors pour « Aucune », sans rien dire : une colonne de droit renommée lève le
 // verrou d'interface, une règle « Selon la ligne » ne correspond plus à rien.
 // À l'ouverture et une fois le modèle affiché, le coin d'état dit donc quel réglage cite quoi qui n'existe plus ; rien n'est réécrit, la personne
 // re-choisit dans les Réglages. Sans réglage activé, ce n'est qu'un test : aucun appel à Grist.
-// - SettingsColumns.problems() -> Promise<{ access, rowTemplate }> : access = { table } (la table des droits a disparu) ou { columns: [noms] } ;
-//   rowTemplate = { columns: [noms tels que la règle les cite] } ; null pour un réglage sain, coupé ou incomplet.
+// - SettingsColumns.problems() -> Promise<{ access, rowTemplate, exportDate }> : access = { table } (la table des droits a disparu) ou { columns: [noms] } ;
+//   rowTemplate = { columns: [noms tels que la règle les cite] } ; exportDate = { columns: [le nom de la colonne choisie] } ; null pour un réglage sain, coupé ou
+//   incomplet.
 // - SettingsColumns.message(found) -> le texte du coin d'état, dans la langue de l'interface ('' sans problème).
 // - SettingsColumns.checkAfterOpen(hooks) -> Promise<{ message, skipped? }> ; hooks = { notify(texte, estUneErreur), isUntouched() } (js/main.js).
 // - SettingsColumns.tableGone(table) -> Promise<boolean> : la table est supprimée ou renommée (pas seulement cachée à cette personne par une règle
@@ -85,8 +86,18 @@ const SettingsColumns = (function () {
     return missing.length ? { columns: unique(missing) } : null;
   }
 
+  // Réglage Date du dernier export PDF : { columns: [nom] } quand la colonne choisie n'existe plus dans la table de la page. Une colonne qui existe mais ne peut plus
+  // recevoir la date (autre type, formule) est dite à l'export (js/export-date.js:stamp). Sans colonne choisie, aucun appel à Grist.
+  async function exportDateProblem() {
+    const column = ExportDate.getColumn();
+    if (!column || !schemaKnown()) return null;
+    const table = GristAPI.getCurrentTableId() || await GristAPI.detectTableId(null, 'settingsColumns').catch(() => null);
+    if (!table || !tableExists(table) || !columnsKnown(table)) return null;
+    return GristAPI.getColumnType(table, column) ? null : { columns: [column] };
+  }
+
   async function problems() {
-    return { access: await accessProblem(), rowTemplate: await rowTemplateProblem() };
+    return { access: await accessProblem(), rowTemplate: await rowTemplateProblem(), exportDate: await exportDateProblem() };
   }
 
   const quoted = list => list.map(name => I18n.t('settingsColumns.quoted', { name })).join(', ');
@@ -99,6 +110,7 @@ const SettingsColumns = (function () {
     const parts = [];
     if (found && found.access) parts.push(part('settings.tab.access', found.access));
     if (found && found.rowTemplate) parts.push(part('settings.rowTemplate.title', found.rowTemplate));
+    if (found && found.exportDate) parts.push(part('settings.exportDate.title', found.exportDate));
     return parts.length ? I18n.t('settingsColumns.status', { parts: parts.join(' ') }) : '';
   }
 

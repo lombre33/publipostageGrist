@@ -38,7 +38,7 @@ La galerie **Créer à partir d'un modèle…** propose 21 modèles prêts à l'
 
 ### Éditeur
 
-- Gras, italique, souligné, barré ; six polices (Roboto par défaut, Arial, Times New Roman, Georgia, Courier New, Calibri) en tailles réelles de 8 à 72 pt ; couleur du texte et surlignage ; pinceau de mise en forme ; alignement et retraits.
+- Gras, italique, souligné, barré, exposant, indice ; six polices (Roboto par défaut, Arial, Times New Roman, Georgia, Courier New, Calibri) en tailles réelles de 8 à 72 pt ; couleur du texte et surlignage ; pinceau de mise en forme ; alignement et retraits.
 - Titres de 1 à 6 avec numérotation, sommaire généré à partir des titres, sauts de page, notes de bas de page, en-têtes et pieds de page (première page différente, numéro de page), filigrane.
 - Listes à puces (disque, cercle, carré), listes numérotées (1., a., I.) et listes de tâches à cocher en trois styles.
 - Tableaux (lignes et colonnes, fusion et scission des cases, fond de case, légende) et zones à deux colonnes. Dans une grille s'y ajoutent les bordures et l'alignement vertical.
@@ -51,7 +51,7 @@ La galerie **Créer à partir d'un modèle…** propose 21 modèles prêts à l'
 - **Variables** `#Table.Colonne` avec autocomplétion et recherche, les colonnes de la table du widget en tête. Une colonne d'une autre table s'utilise après le choix d'une clé de correspondance (bouton « Tables liées ») : une règle par table liée, valable pour tous les modèles du document.
 - **Mise en forme d'une variable** : nombres (écriture française ou américaine, 0 à 3 décimales, devise, en toutes lettres), dates (formats prédéfinis, en toutes lettres), Oui/Non (texte ou case cochée en trois styles). Le zéro d'une colonne Numérique ou Entier est masqué par défaut, un bouton le rend visible.
 - **Condition d'affichage** : une variable, un bloc de texte (« Texte conditionnel »), une valeur dans la phrase (« Valeur conditionnelle ») ou une case cochée (« Case conditionnelle ») ne s'affichent que si une ou plusieurs règles sont remplies sur la ligne (`=`, `≠`, `>`, `<`, `≥`, `≤`, contient, vide, non vide). Le champ Valeur garde la liste des valeurs possibles de la colonne ; un bouton « Comparer à une autre colonne » le remplace par la liste des colonnes (« colonne 1 = colonne 2 » : `Montant = {Paye}`).
-- **Boucle** : répète une ligne de tableau, un élément de liste, un paragraphe ou la variable seule pour chaque ligne liée à la ligne de la page, avec filtre, tri, texte de repli et séparateurs.
+- **Boucle** : répète une ligne de tableau, un élément de liste, un paragraphe ou la variable seule pour chaque ligne liée à la ligne de la page, avec filtre, tri, texte de repli et séparateurs. La puce « N° de ligne » (liste `#`, onglet Puces) y écrit 1, 2, 3… : le rang de la ligne retenue, après le filtre et le tri.
 - **Autres attributs** : insère d'autres colonnes de la même ligne d'une table liée, à la suite d'une variable.
 - **Calcul** : une formule avec des colonnes et les fonctions SOMME, MOYENNE, MIN, MAX, NB et ARRONDI, évaluée par un petit analyseur intégré (jamais par `eval`).
 - **Bulles prêtes à poser** : date du jour, heure actuelle, e-mail de la personne connectée.
@@ -71,6 +71,7 @@ La galerie **Créer à partir d'un modèle…** propose 21 modèles prêts à l'
 
 - **PDF vectoriel** : texte sélectionnable, polices embarquées, mise en page de l'éditeur reprise ligne à ligne (en-têtes, pieds de page, numéros de page, notes, sommaire, images en calque, filigrane). Le nom du fichier se compose avec des variables.
 - **En lot** : un PDF par ligne dans une archive ZIP, ou toutes les lignes dans un seul PDF. Un lot suit les lignes que le widget affiche dans Grist (ses filtres, son tri, le lien « Sélectionner par ») : quand il n'en affiche qu'une partie, il demande s'il faut exporter celles-ci ou toute la table.
+- **Date du dernier export PDF** : dans Réglages > Vue, une colonne de la table (Date, Date et heure ou Texte, sans formule) garde le moment du dernier export PDF de chaque ligne. Elle est écrite une fois le PDF produit, pour les lignes qui sont dans le fichier : le PDF d'une ligne, le lot en ZIP, le PDF unique, l'assemblage avant impression. Ni Word, ni Excel, ni e-mail ; une ligne dont le PDF a échoué n'est pas datée. Sans colonne choisie, rien n'est écrit.
 - **Assemblage avant impression** : pose les pages de chaque ligne sur des feuilles A4 ou A3, avec ou sans traits de coupe, et une marge réglable autour de chaque page (quatre A6 sur une A4, par exemple).
 - **Word** (`.docx`, bêta) : listes et notes de bas de page natives, un fichier par ligne en lot.
 - **Excel** (`.xlsx`) pour les grilles : une archive ZIP d'un classeur par ligne de la table, ou un seul classeur d'une feuille par ligne.
@@ -81,7 +82,7 @@ La galerie **Créer à partir d'un modèle…** propose 21 modèles prêts à l'
 ### Interface
 
 - Français et anglais, thème clair, sombre ou celui du système, barre d'outils pensée pour un petit panneau (testée à 700×400).
-- 54 raccourcis clavier personnalisables.
+- 57 raccourcis clavier personnalisables.
 
 ## Installation dans Grist
 
@@ -102,7 +103,7 @@ Le bouton **Réglages** de la barre du haut ouvre huit onglets :
 | Déclencheur | Le caractère qui ouvre la liste des variables (`#` par défaut). |
 | Raccourcis | Les touches du clavier, une par action, modifiables ; les abréviations et leur caractère déclencheur (`§` par défaut). |
 | Marges | Marges haut, droite, bas et gauche du modèle ouvert. |
-| Vue | Le modèle par défaut de cette vue, et le choix du modèle selon la ligne. |
+| Vue | Le modèle par défaut de cette vue, le choix du modèle selon la ligne, et la colonne qui garde la date du dernier export PDF. |
 | Accès | La table qui donne à chaque personne ses droits (lecture seule, export, commentaires). |
 | Crédits | Auteur, site, licence. |
 
@@ -115,6 +116,8 @@ Les réglages « Vue » et « Accès » sont des options du widget : Grist ne le
 **Ce que cela implique pour un déploiement en administration** : ce niveau d'accès s'applique au *widget*, pas directement à chaque personne. Une personne qui n'a, par les **Règles d'accès** natives de Grist (configurées sur le document par son propriétaire), qu'un accès restreint à certaines tables ou colonnes conserve cette restriction quand elle utilise le widget. **La restriction fine du périmètre de données se fait donc dans le document Grist lui-même (Règles d'accès), pas dans la configuration du widget.** Les « droits par personne » du widget (Réglages > Accès) ne sont qu'un verrou d'interface : ils grisent des commandes, ils ne protègent aucune donnée.
 
 **Tables internes** : le widget écrit dans sept tables du document, toutes préfixées `Publipostage_` et masquées de ses propres listes de tables : `Publipostage_Modeles` (les modèles, et une ligne « Réglages du document » qui garde les couleurs partagées par tous les modèles), `Publipostage_Commentaires`, `Publipostage_PreferencesModeles` (épingles et dossiers de chaque personne), `Publipostage_Abreviations`, `Publipostage_FormatsPage` (les formats de page enregistrés, partagés par tout le document), `Publipostage_LiensTables` (les clés de correspondance entre tables) et `Publipostage_UserProbe` (qui sert à lire l'e-mail de la personne connectée).
+
+**Ce que le widget écrit dans vos données** : aucune colonne existante de vos tables, sauf celle que vous choisissez dans Réglages > Vue > « Date du dernier export PDF ». Il y écrit alors, après chaque PDF réussi, le moment de l'export pour les lignes dont le PDF vient d'être produit (une seule écriture par export) ; sans colonne choisie, il n'y écrit rien. Un compte Lecteur de Grist n'écrit rien.
 
 **Dépendances externes** : le widget charge des bibliothèques depuis des serveurs tiers (`esm.sh` pour le moteur d'édition, `cdnjs.cloudflare.com` et `cdn.jsdelivr.net` pour les exports et le graphique de la page, `docs.getgrist.com` pour l'API de Grist), en version figée sauf le script de l'API de Grist ; aucune police ni feuille de style ne vient d'un autre site (l'interface prend la police du système) ; voir [Dépendances](#dépendances). Les fichiers de `cdnjs` et de `jsDelivr` sont protégés par une intégrité SRI : le navigateur refuse d'exécuter un fichier altéré. Ce n'est techniquement pas possible pour l'import map `esm.sh` (limite des imports ES). Le détail de cette analyse et la piste restante (auto-hébergement) sont dans [`AUDIT_CODE.md`](AUDIT_CODE.md#2-enjeu-majeur-rssi--périmètre-daccès-et-surface-dattaque).
 
@@ -166,7 +169,7 @@ Règle de modification : un fichier `css/` ou `js/` modifié monte son numéro `
 
 ## Tests
 
-La suite de `dev-tests/` compte 108 groupes de scénarios, joués dans un Chromium sans écran (un navigateur neuf par groupe), et 117 scripts Node (parcours rejoués à la vraie souris dans un panneau de 700×400, tests unitaires, contrôle d'hygiène du code). Elle couvre l'éditeur, les modes Lecture, Grille et E-mail, et les exports PDF, Word et Excel. Le dernier contrôle complet (3 octobre 2026) a passé plus de 6 500 vérifications.
+La suite de `dev-tests/` compte 111 groupes de scénarios, joués dans un Chromium sans écran (un navigateur neuf par groupe), et 120 scripts Node (parcours rejoués à la vraie souris dans un panneau de 700×400, tests unitaires, contrôle d'hygiène du code). Elle couvre l'éditeur, les modes Lecture, Grille et E-mail, et les exports PDF, Word et Excel. Le dernier contrôle complet (3 octobre 2026) a passé plus de 6 500 vérifications.
 
 ```bash
 bash dev-tests/generate-harness.sh           # régénère _test-harness.html depuis index.html

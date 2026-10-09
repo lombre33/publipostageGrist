@@ -442,6 +442,7 @@ jamais vus sur un vrai Zimbra : un « + » devient une espace dans l'objet et le
 | Citation | « > » devant chaque ligne, « >> » dans une citation, « > » seul pour une ligne vide |
 | Lien | « texte (adresse) » (inchangé) |
 | Paragraphes, titres | une ligne par paragraphe ou titre, rien entre deux blocs : les paragraphes de l'éditeur sont collés (`.tiptap p { margin: 0 }`). Un paragraphe vide, deux de suite, ou un retour à la ligne tapé (Maj+Entrée, y compris en fin de ligne) donne une ligne vide : le texte a les lignes de l'éditeur, une pour une (09/10) |
+| Exposant, indice (`<sup>`, `<sub>`) | les caractères Unicode qui en tiennent lieu : « m³ », « H₂O », « 1ᵉʳ », « 10⁻³ » (`ScriptMarks.toUnicode`, js/script-marks.js) ; un groupe dont un caractère n'a pas d'équivalent (« ème », une virgule, un q) est écrit tel qu'il a été tapé, jamais à moitié. Les deux icônes restent actives dans un email, le module email n'avale ni Ctrl+. ni Ctrl+, et garde ces marques à un collage |
 | Gras, couleur, image | ignorés (inchangé : boutons grisés en mode email) |
 | Tableau (venu d'un collage, le bouton est grisé) | une ligne par ligne du tableau, cellules séparées par « \| » (inchangé) |
 

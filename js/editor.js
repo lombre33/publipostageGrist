@@ -293,8 +293,12 @@ const Editor = (function () {
       // reste garde le texte par défaut.
       clipboardTextSerializer: slice => TableSelect.clipboardText(slice),
       // Un tableau de tableur (Excel, Sheets, LibreOffice) collé dans un document devient un tableau du document, case par case
-      // (js/grid-table.js) ; dans une grille, c'est le plugin de la grille (GridEditor.createExtension) qui le réécrit pour elle.
-      transformPastedHTML: html => (GridEditor.isActive() ? html : GridTable.cleanPastedDocumentHtml(html)),
+      // (js/grid-table.js) ; dans une grille, c'est le plugin de la grille (GridEditor.createExtension) qui le réécrit pour elle. Un exposant collé de
+      // Google Docs perd d'abord la taille réduite de son <span> (js/script-marks.js : la marque réduit déjà le texte).
+      transformPastedHTML: html => {
+        const pasted = ScriptMarks.cleanPastedHtml(html);
+        return GridEditor.isActive() ? pasted : GridTable.cleanPastedDocumentHtml(pasted);
+      },
       // Ne consomme que si le presse-papiers contient réellement une image ; un collage de texte normal suit le traitement natif de ProseMirror.
       handlePaste(view, event) {
         // Un email est du texte brut : pas d'image, le collage suit alors le traitement natif (le texte du presse-papiers, s'il y en a un).
@@ -330,6 +334,8 @@ const Editor = (function () {
       EditorNodes.createFontSizeExtension(Extension),
       EditorNodes.createTextColorExtension(Extension),
       EditorNodes.createHighlightExtension(Extension),
+      // Exposant et indice (js/script-marks.js) : deux marques de caractère, qui s'excluent l'une l'autre.
+      ...ScriptMarks.createMarks(Mark),
       EditorNodes.createBulletStyleExtension(Extension),
       EditorNodes.createOrderedListStyleExtension(Extension),
       TaskList,

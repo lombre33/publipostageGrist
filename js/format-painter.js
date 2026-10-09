@@ -4,7 +4,7 @@
 // (Alt+Maj+V) sur la sélection voulue, faite au clavier ou à la souris.
 //
 // Copié depuis la source (le premier caractère de la sélection, ou le curseur) :
-//  - la mise en forme du caractère : gras, italique, souligné, barré, police, taille, couleur, surlignage. Elle remplace celle du texte peint
+//  - la mise en forme du caractère : gras, italique, souligné, barré, exposant, indice, police, taille, couleur, surlignage. Elle remplace celle du texte peint
 //    (peindre un texte ordinaire efface celle de la cible, comme dans Word). Un lien, un commentaire, une marque du suivi des modifications sont du
 //    contenu, pas de la mise en forme : jamais touchés ;
 //  - celle du paragraphe (alignement, niveau de titre) quand la source est un curseur ou un paragraphe entier, comme le « ¶ » de Word : une sélection
@@ -16,7 +16,7 @@ const FormatPainter = (function () {
   const BUTTON_ID = 'v2-btn-format-painter';
   const ARMED_CLASS = 'pp-format-painting'; // posée sur <html> tant que le pinceau attend : css/format-painter.css y met le curseur
   // Les marques de la mise en forme d'un caractère : `textStyle` porte la police, la taille, la couleur et le surlignage (js/editor-nodes.js).
-  const FORMAT_MARKS = ['bold', 'italic', 'underline', 'strike', 'textStyle'];
+  const FORMAT_MARKS = ['bold', 'italic', 'underline', 'strike', 'superscript', 'subscript', 'textStyle'];
   const PARAGRAPH_TYPES = ['paragraph', 'heading'];
   const MULTI_CLICK_MS = 700; // un clic qui suit de moins que cela le double-clic qui vient de peindre un mot en est le troisième : le triple-clic
 

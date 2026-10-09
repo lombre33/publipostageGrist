@@ -54,6 +54,9 @@ const Variables = (function () {
       { key: 'Heure actuelle', i18nKey: 'chips.time', kind: 'chip', chipKind: 'time', inField: true },
       { key: 'Email de l’utilisateur', i18nKey: 'chips.email', kind: 'chip', chipKind: 'email', inField: true },
       { key: 'Nom de l’utilisateur', i18nKey: 'chips.name', kind: 'chip', chipKind: 'name', inField: true },
+      // Le rang de la ligne dans une zone répétée par une Boucle (1, 2, 3...), écrit à la Lecture et à l'export (js/loop-rules.js, itemBinding) ; une
+      // puce comme la date, mais qui n'a de sens que dans un document : elle n'entre pas dans un champ texte.
+      { key: 'N° de ligne', i18nKey: 'chips.rowNumber', kind: 'chip', chipKind: 'rowNumber' },
       // Un bloc (js/conditional-text.js), pas une puce en ligne : il entoure le texte sélectionné quand le bouton « Insérer une variable » a ouvert la
       // liste dessus, sinon il se pose vide, curseur dedans.
       { key: 'Texte conditionnel', i18nKey: 'chips.conditionalText', kind: 'chip', chipKind: 'conditionalText' },

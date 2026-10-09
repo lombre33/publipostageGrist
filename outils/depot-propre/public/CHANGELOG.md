@@ -9,6 +9,22 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Numéro de ligne dans une boucle** : la liste « # » (onglet « Puces ») propose « N° de ligne ». Posée dans
+  une ligne de tableau, un élément de liste ou un paragraphe qu'une Boucle répète, la puce s'écrit 1, 2, 3…
+  dans la Lecture et dans les exports (PDF, Word, lots, e-mail) : elle compte les lignes que la boucle retient,
+  après son filtre et son tri, et repart de 1 pour chaque ligne de la page (chaque facture d'un lot). Hors d'une
+  zone répétée, elle vaut 1. Plus besoin d'une colonne « Ordre » dans Grist pour numéroter. Elle n'est pas
+  proposée dans les champs de l'e-mail ni dans le nom du PDF.
+- **Date du dernier export PDF** : Réglages > Vue propose une liste « Colonne » (avec « — Aucune — ») pour
+  choisir la colonne de la table qui gardera le moment du dernier export PDF de chaque ligne. Elle accepte
+  une colonne Date (le jour), Date et heure (l'instant) ou Texte (« 2026-10-09 14:32 »), et pas une colonne
+  à formule, que Grist refuse d'écrire. La date est écrite une fois le PDF produit (« Exporter en PDF » d'une
+  ligne, lot en ZIP, PDF unique, assemblage avant impression), pour les lignes qui sont dans le fichier : une
+  ligne dont le PDF a échoué n'est pas datée. Une seule écriture par export ; ni Word, ni Excel, ni e-mail, ni « Impression navigateur »
+  (le navigateur ne dit pas si la personne a imprimé). Si la colonne a disparu ou n'est plus utilisable, le PDF est produit quand même et le coin d'état commence,
+  en rouge, par « Date non écrite : … » ; l'avertissement à l'ouverture signale aussi une colonne disparue.
+  Un compte Lecteur de Grist n'écrit rien. Le choix est une option du widget : Grist ne le partage qu'une
+  fois la vue enregistrée.
 - **Exports en lot sur les lignes que le widget affiche** : « Exporter les lignes (ZIP) », « Exporter les
   lignes en un seul PDF », « Exporter les lignes en DOCX (ZIP) », les deux lignes Excel d'une grille et
   « Assemblage avant impression » partent des lignes que le widget affiche dans Grist (ses filtres, son tri,
@@ -180,6 +196,18 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   par valeur » restent des PDF vectoriels. À savoir : le navigateur arrondit lui-même la page (l'A4 devient
   594,96 × 841,92 pt) ; choisissez « Enregistrer au format PDF », le format de papier par défaut, une échelle de
   100 % et les marges par défaut.
+- **Exposant et indice** : deux icônes, Exposant (x²) et Indice (x₂), à droite du titre du menu « Lien et blocs de
+  contenu » (la barre ne change pas), et les touches Ctrl+. et Ctrl+, (⌘ sous macOS), qu'on règle dans
+  Réglages > Raccourcis. Elles mettent le texte choisi, ou ce qu'on tape à la suite, en exposant (m³, 1ᵉʳ) ou
+  en indice (H₂O) ; poser l'une retire l'autre. Le texte est réduit à 6/10 de sa taille (celle qu'on a
+  choisie, le cas échéant) sans changer la hauteur de la ligne, et le rendu est le même partout : l'éditeur,
+  la Lecture, les en-têtes et pieds de page, le PDF (levé ou baissé de la même hauteur que sur l'écran), le
+  Word et l'Excel (le vrai exposant ou indice du fichier, que la personne qui l'ouvre peut retirer). Dans un
+  email, le lien est du texte brut : l'exposant et l'indice y sont écrits avec les caractères Unicode qui en
+  tiennent lieu (m³, H₂O, 1ᵉʳ, 10⁻³) ; un groupe dont un caractère n'en a pas (« ème », une virgule, un q)
+  reste écrit comme on l'a tapé, sans exposant. Un texte collé de Word ou de Google Docs garde ses exposants
+  et ses indices, et le pinceau de mise en forme les copie. Les icônes sont grisées pour un macro-modèle ; la
+  note de bas de page garde son rendu.
 - **Galerie de 21 modèles, dont des modèles livrés avec leurs tables** : la galerie « Créer à partir d'un modèle »
   passe de quatre modèles à vingt et un. Les quatre d'avant (facture, contrat de prestation de services,
   attestation, courrier de relance) sont refaits avec les fonctions récentes ; s'y ajoutent des modèles à
@@ -279,6 +307,15 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   vides. Une mise en forme restée dans un modèle plus ancien (le gras des bulles d'une notification, un
   titre, par exemple) ne s'affiche plus dans l'éditeur ni à la Lecture, sans rien changer au modèle
   enregistré. Les documents, les grilles et les macro-modèles ne changent pas.
+- **Page vide entre deux modèles d'un macro-modèle à l'export PDF** : quand la lettre d'un modèle arrive à la
+  marge du bas, la ligne vide qui la termine (celle que l'éditeur laisse derrière une dernière zone à deux
+  colonnes ou un dernier tableau, ou une Entrée de trop) n'y tenait plus et ouvrait une page blanche avant le
+  modèle suivant : dans le PDF, et dans la Lecture quand le texte arrivait pile à la marge (elle y a un peu plus
+  de place que le PDF pour une lettre en colonnes ou un tableau, d'où une page vide au PDF seul). La fin de
+  chaque modèle est maintenant rognée comme la fin du document, dans la Lecture, le PDF et le Word : ses lignes
+  vides, la ligne qui ne porte qu'une image en calque de la première page (l'image reste à sa place, ancrée au
+  paragraphe qui la précède) et les lignes vides au bas des colonnes d'une dernière zone. Les lignes vides du
+  milieu d'un modèle, le saut de page qui ouvre le modèle suivant et un modèle entièrement vide ne changent pas.
 - **Lignes SIRET et TVA du client dans la facture et le contrat de la galerie** : ces deux lignes ne
   s'affichaient jamais, même pour un client dont les champs étaient remplis, parce que leur condition lisait
   la table de la page au lieu de celle du client. Les modèles de la galerie les affichent ; ceux qui ont déjà
@@ -382,6 +419,22 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Added
 
+- **Row number in a loop**: the "#" list ("Chips" tab) offers "Row number". Placed in a table row, a list
+  item or a paragraph that a Loop repeats, the chip is written as 1, 2, 3… in Reading and in the exports
+  (PDF, Word, batches, e-mail): it counts the rows the loop keeps, after its filter and sort, and starts
+  again at 1 for each page row (each invoice of a batch). Outside a repeated zone it is 1. No "Order"
+  column is needed in Grist to number rows any more. It is not offered in the e-mail fields or in the PDF
+  name.
+- **Date of the last PDF export**: Settings > View offers a "Column" list (with "— None —") to choose the
+  column of the table that will keep the moment of each row's last PDF export. It accepts a Date column
+  (the day), a Date and time column (the instant) or a Text column ("2026-10-09 14:32"), and no formula
+  column, which Grist refuses to write. The date is written once the PDF is made ("Export as PDF" of one
+  row, ZIP batch, single PDF, sheet assembly), for the rows that are in the file: a row whose PDF failed
+  is not dated. One write per export; no Word, no Excel, no e-mail, no "Browser print"
+  (the browser does not say whether the person printed). If the column has gone or can no
+  longer take the date, the PDF is made all the same and the status corner starts, in red, with "Date not
+  written: …"; the warning shown when opening also reports a column that has gone. A Grist Viewer account
+  writes nothing. The choice is a widget option: Grist only shares it once the view is saved.
 - **Batch exports on the rows the widget shows**: "Export rows (ZIP)", "Export rows as a single PDF",
   "Export rows to DOCX (ZIP)", the two Excel lines of a grid and "Assemble before printing" start from
   the rows the widget shows in Grist (its filters, its sort, the "Select by" link of another widget), in
@@ -540,6 +593,18 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   sheet assembly and "One document per value" remain vector PDFs. Worth knowing: the browser rounds the page
   itself (A4 becomes 594.96 × 841.92 pt); choose "Save as PDF", the default paper size, a 100% scale and the
   default margins.
+- **Superscript and subscript**: two icons, Superscript (x²) and Subscript (x₂), on the right of the title of the
+  "Link and content blocks" menu (the toolbar does not change), and the keys Ctrl+. and Ctrl+, (⌘ on macOS),
+  which you set in Settings > Shortcuts. They put the chosen text, or what you type next, in superscript (m³,
+  1st) or subscript (H₂O); setting one removes the other. The text is reduced to 6/10 of its size (the one you
+  chose, if any) without changing the height of the line, and the rendering is the same everywhere: the
+  editor, Reading mode, headers and footers, the PDF (raised or lowered by the same height as on screen),
+  Word and Excel (the file's real superscript or subscript, which the person who opens it can remove). In an
+  e-mail, the link is plain text: superscript and subscript are written with the Unicode characters that
+  stand in for them (m³, H₂O, 1ˢᵗ, 10⁻³); a group with a character that has none ("ème", a comma, a q) stays
+  as it was typed, without superscript. Text pasted from Word or Google Docs keeps its superscripts and
+  subscripts, and the format painter copies them. The icons are greyed for a macro template; the footnote
+  keeps its look.
 - **A gallery of 21 templates, some delivered with their tables**: the "Create from a template" gallery grows
   from four templates to twenty-one. The previous four (invoice, service agreement, certificate, payment
   reminder letter) are redone with the recent features; new ones are templates to print (A6 flyer, A6
@@ -632,6 +697,16 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   blank lines; pasted plain text keeps its blank lines too. Formatting left over in an older template (the
   bold on the bubbles of a notification, a heading, for example) is no longer shown in the editor or in
   Reading mode, without changing the saved template. Documents, grids and macro-templates do not change.
+- **An empty page between two templates of a macro-template in the PDF export**: when the letter of a template
+  reaches the bottom margin, the blank line that ends it (the one the editor leaves behind a last two-column
+  zone or a last table, or one Enter too many) no longer fitted and opened a blank page before the next
+  template: in the PDF, and in Reading mode when the text came right up to the margin (it has a little more room
+  than the PDF for a letter in columns or a table, hence a blank page in the PDF alone). The end of each
+  template is now trimmed like the end of the document, in Reading, the PDF and the Word export: its blank
+  lines, the line that only carries a layer image of the first page (the image stays where it is, anchored to
+  the paragraph before it) and the blank lines at the bottom of the columns of a last zone. Blank lines in the
+  middle of a template, the page break that opens the next template and a template that is entirely empty do not
+  change.
 - **Client SIRET and VAT lines in the gallery's invoice and agreement**: these two lines never showed, even
   for a client whose fields were filled in, because their condition read the page's table instead of the
   client's. The gallery templates now show them; templates already created do not change.

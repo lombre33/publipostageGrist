@@ -160,13 +160,21 @@ const PdfExport = (function () {
     return '#' + hex(m[1]) + hex(m[2]) + hex(m[3]);
   }
 
-  // Le style des balises qui en posent un : titre, gras, italique, soulignement, barré, lien, code et légende.
+  // Le style des balises qui en posent un : titre, gras, italique, soulignement, barré, exposant, indice, lien, code et légende.
   function applyTagStyle(out, node, tag) {
     if (/^H[1-6]$/.test(tag)) { out.bold = true; out.fontSize = HEADING_SIZES[tag]; }
     if (tag === 'STRONG' || tag === 'B') out.bold = true;
     if (tag === 'EM' || tag === 'I') out.italics = true;
     if (tag === 'U') addDecoration(out, 'underline');
     if (tag === 'S' || tag === 'STRIKE' || tag === 'DEL') addDecoration(out, 'lineThrough');
+    // Exposant et indice (js/script-marks.js) : pdfmake lève (`sup`) ou baisse (`sub`) le texte sans le réduire, la taille se règle ici - 6/10 de celle
+    // du texte qui porte la marque, comme le CSS de l'éditeur.
+    const script = ScriptMarks.kindOf(node);
+    if (script) {
+      out.fontSize = (out.fontSize || DEFAULT_FONT_SIZE) * ScriptMarks.SIZE_RATIO;
+      delete out.sup; delete out.sub;
+      out[script === ScriptMarks.SUPERSCRIPT ? 'sup' : 'sub'] = true;
+    }
     if (tag === 'PRE') { out.font = CODE_FONT; out.fontSize = CODE_FONT_SIZE; out.color = CODE_TEXT_COLOR; out.preserveLeadingSpaces = true; }
     // Légende (js/caption.js) : un paragraphe `data-caption` est en petit, italique, gris - la base de ses runs ; la taille ou la couleur d'un <span>
     // posé dedans l'emportent ensuite, comme dans l'éditeur.

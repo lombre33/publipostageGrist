@@ -12,8 +12,8 @@
     m:link n:paragraph e:calcBadgeKeys e:varBadgeSuggestion e:textExpansion e:emailPlainText e:gridEditor m:insertion m:deletion e:listItemBranchingDeleteKeymap m:textStyle e:editable
     e:clipboardTextSerializer e:commands e:focusEvents e:keymap e:tabindex e:drop e:paste e:delete e:textDirection e:starterKit m:bold n:blockquote
     n:bulletList m:code n:codeBlock e:dropCursor e:gapCursor n:hardBreak n:heading e:undoRedo n:horizontalRule m:italic n:listItem e:listKeymap
-    n:orderedList m:strike n:text m:underline e:trailingNode n:doc e:textAlign e:fontFamily e:fontSize e:textColor e:highlightColor e:bulletStyle
-    e:orderedListStyle n:taskList n:taskItem e:taskListStyle e:placeholder n:varBadge n:calcBadge n:pageNumberBadge n:smartChip n:footnoteRef
+    n:orderedList m:strike n:text m:underline e:trailingNode n:doc e:textAlign e:fontFamily e:fontSize e:textColor e:highlightColor m:superscript m:subscript
+    e:bulletStyle e:orderedListStyle n:taskList n:taskItem e:taskListStyle e:placeholder n:varBadge n:calcBadge n:pageNumberBadge n:smartChip n:footnoteRef
     m:commentMark m:modification e:suggestChangesBridge e:gridEnter e:conditionalValueKeys e:floatingImageKeys e:behindImageClickThrough
     e:linkShortcut e:findReplace n:table n:tableRow n:tableHeader n:tableCell n:twoColumnsColumn n:twoColumnsZone n:callout
     n:conditionalText n:conditionalCheckbox n:conditionalValue e:caption e:keepNext n:editorImage n:pageBreak n:headingNumberingConfig n:toc
@@ -24,7 +24,7 @@
     calcBadge pageNumberBadge smartChip footnoteRef table tableRow tableHeader tableCell twoColumnsColumn twoColumnsZone callout
     conditionalText conditionalCheckbox conditionalValue editorImage pageBreak headingNumberingConfig toc
   `);
-  const MARKS = words('link insertion deletion textStyle bold code italic strike underline commentMark modification');
+  const MARKS = words('link insertion deletion textStyle bold code italic strike underline superscript subscript commentMark modification');
   // Les plugins qui portent un nom, dans l'ordre de l'état de l'éditeur (les autres s'appellent `plugin$`, `plugin$1`...).
   const NAMED_PLUGINS = words(`
     gridEditor$ emailPlainText$ textExpansionSuggestion$ suggestion$ autolink$ handleClickLink$ handlePasteLink$ captionPlaceholder$ tableColumnResizing$ selectingCells$
@@ -32,7 +32,7 @@
     tiptap__placeholder$ trailingNode$ history$ codeBlockVSCodeHandler$ textDirection$ tiptapPaste$ tiptapDrop$ tabindex$ clearDocument$ focusEvents$
     clipboardTextSerializer$ editable$
   `);
-  const PLUGIN_COUNT = 134;
+  const PLUGIN_COUNT = 136; // dont deux d'emailPlainText (js/email-plain-text.js) et un plugin de clavier par marque d'exposant et d'indice (js/script-marks.js)
 
   // Premier écart entre deux listes, pour un message qui dit où chercher.
   function firstDifference(actual, expected) {

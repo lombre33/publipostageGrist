@@ -23,8 +23,8 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
   vérifie.
 - **Les données** : les modèles et les réglages vivent dans des tables `Publipostage_*` du document Grist ;
   les préférences d'affichage (langue, thème, raccourcis…) dans le navigateur.
-- **Le volume** : 123 fichiers dans `js/` (46 400 lignes : 34 400 de code, 9 200 de commentaires, 2 800 de
-  blanc), 41 feuilles de style (3 500 lignes), une page de 800 lignes. Quatre fichiers de polices du PDF
+- **Le volume** : 125 fichiers dans `js/` (46 900 lignes : 34 700 de code, 9 400 de commentaires, 2 800 de
+  blanc), 42 feuilles de style (3 500 lignes), une page de 810 lignes. Quatre fichiers de polices du PDF
   pèsent 2,5 Mo en quelques lignes (des données) ; `js/i18n.js` est du texte à traduire, pas de la logique.
 
 ## Par où commencer
@@ -63,7 +63,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 
 ## La carte, famille par famille
 
-### Grist et les données du document (18 fichiers, 5 400 lignes)
+### Grist et les données du document (20 fichiers, 8 100 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -75,6 +75,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/template-gallery.js`, `js/template-gallery-modal.js` | Le catalogue de modèles prêts à l'emploi (dossier `templates-gallery/`, même site que le widget) et la fenêtre de la galerie : grille, recherche, aperçu en captures du document rempli, « Utiliser ce modèle » et « Créer avec ses tables ». |
 | `js/template-pack.js` | Un modèle de la galerie livré avec ses tables : lecture et contrôle de son `pack.json`, plan de ce qu'il faut créer dans le document (tables à créer, déjà là, en conflit), puis création des tables vides (colonnes, colonnes de calcul, colonne affichée d'une Référence, règles des Tables liées), retirées si une écriture échoue. |
 | `js/view-template.js` | Le modèle par défaut d'une vue (option du widget). |
+| `js/export-date.js` | La colonne qui garde la date du dernier export PDF de chaque ligne (option du widget) : la section de Réglages > Vue et l'écriture, une fois le PDF produit (`js/main.js` l'appelle après chaque export PDF). |
 | `js/row-template.js`, `js/row-template-panel.js` | « Selon la ligne » : un modèle relié à une condition sur la ligne ; le moteur et l'écran. |
 | `js/schema-renames.js` | Suivi des renommages de tables et de colonnes faits dans Grist (instantané des noms dans le navigateur). |
 | `js/settings-columns.js` | Avertit quand une colonne citée dans les réglages a disparu. |
@@ -89,7 +90,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/html-sanitize.js` | Filtre à liste blanche, lu dans un document inerte, pour le HTML des colonnes Grist, des modèles importés et de la galerie. |
 | `js/external-images.js` | Images d'un autre site : un cadre « Afficher » à leur place jusqu'au clic (rien n'est retenu), signalées ensuite en permanence, et une fenêtre avant tout export qui les lirait. |
 
-### L'éditeur (32 fichiers, 11 700 lignes)
+### L'éditeur (33 fichiers, 11 800 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -100,6 +101,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/color-palette.js`, `js/color-dialog.js`, `js/color-store.js`, `js/color-math.js` | Le menu de couleur (texte, surlignage, fond de case, trait des bordures) : la palette ; la fenêtre « Couleur personnalisée » ; les couleurs gardées par modèle et par document ; les calculs de couleur (module pur). |
 | `js/main-toolbar.js` | La barre d'outils : état des boutons, câblage des clics, insertion d'une image. |
 | `js/format-painter.js`, `js/find-replace.js`, `js/link-dialog.js` | Pinceau de mise en forme, Rechercher / Remplacer, liens. |
+| `js/script-marks.js` | Exposant et indice : les deux marques de texte, leur lecture dans le HTML (Word, Google Docs), la taille que les exports en tirent et les caractères Unicode que le lien d'un email écrit à leur place. |
 | `js/callout.js`, `js/caption.js`, `js/keep-with-next.js`, `js/qr-code.js` | Encadrés et signature, légendes, « Garder avec le suivant », QR code. |
 | `js/chart-block.js`, `js/chart-source.js`, `js/chart-plot.js` | Graphique de la page : la fenêtre et le cadre du document ; la lecture des réglages d'un graphique de Grist (type, colonnes, tri, filtres, lignes) ; le tracé avec Plotly, rendu en image PNG (bibliothèque chargée au premier graphique). |
 | `js/text-expansion.js`, `js/text-expansion-settings.js` | Expansion de texte (`Publipostage_Abreviations`) et son onglet dans Réglages. |
@@ -121,7 +123,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/field-editor.js`, `js/field-codec.js` | Les champs texte du mode E-mail (Objet, À, Cc, Cci) et du nom du PDF : un éditeur d'une ligne qui pose les mêmes bulles que le document, avec leur barre et leurs fenêtres, et les puces date, heure, email et nom de l'utilisateur ; la valeur enregistrée reste du texte brut tant qu'aucune bulle n'a de réglage et qu'aucune puce n'est posée. |
 | `js/formula.js` | Le moteur de calcul d'une bulle « Calcul » (module pur : ni DOM, ni Grist). |
 | `js/condition-rules.js`, `js/condition-fields.js` | L'évaluation des règles « colonne, opérateur, valeur ou autre colonne » (module pur) et leurs champs partagés par toutes les fenêtres. |
-| `js/loop-rules.js`, `js/list-split.js` | Le moteur de boucle sur les lignes liées ; « Un document par valeur ». |
+| `js/loop-rules.js`, `js/list-split.js` | Le moteur de boucle sur les lignes liées (il donne aussi à chaque copie de zone le rang de son tour, que la puce « N° de ligne » écrit) ; « Un document par valeur ». |
 | `js/conditional-text.js`, `js/conditional-checkbox.js`, `js/conditional-value.js` | Bloc, case et valeur conditionnels. |
 
 ### Macro-modèles (2 fichiers, 520 lignes)
@@ -143,7 +145,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/table-page-cut.js` | Où un tableau se coupe entre deux pages. |
 | `js/sheet-layout.js`, `js/sheet-assembly-dialog.js` | « Assemblage avant impression » : la géométrie d'une planche et sa fenêtre. |
 
-### Lecture (2 fichiers, 1 300 lignes)
+### Lecture (2 fichiers, 1 400 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -178,7 +180,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/batch-failures.js` | La fenêtre qui s'ouvre à la fin d'un export en lot et liste les lignes qui n'ont pas pu être générées, avec leur raison (sur la fenêtre commune des saisies et des confirmations). |
 | `js/batch-scope.js` | Les lignes d'un export en lot : celles que le widget affiche dans Grist (ses filtres, son tri, le lien « Sélectionner par »), ou toute la table ; un widget qui n'en affiche qu'une partie fait poser la question. |
 
-### Socle de l'interface et réglages (15 fichiers, 4 500 lignes)
+### Socle de l'interface et réglages (15 fichiers, 4 600 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -203,7 +205,7 @@ fichier, un lot), câblage de la galerie et de Grist. C'est le fichier qui conna
 ### Les feuilles de style
 
 `css/style.css` (jetons de couleur, thème clair et sombre, `--font-ui`), `css/toolbar-v2.css` (la barre du
-haut), `css/editor-v2.css` (le texte de l'éditeur) ; les 38 autres vont chacune avec un module ou une
+haut), `css/editor-v2.css` (le texte de l'éditeur) ; les 39 autres vont chacune avec un module ou une
 fenêtre de `js/` (`css/callout.css` pour `js/callout.js`) et le disent dans leur premier commentaire ;
 `css/roboto-fonts.css` embarque la police des documents.
 
@@ -213,7 +215,8 @@ fenêtre de `js/` (`css/callout.css` pour `js/callout.js`) et le disent dans leu
   l'écrivent eux-mêmes (`js/templates.js`, `js/template-preferences.js`, `js/comments.js`,
   `js/text-expansion.js`, `js/saved-page-formats.js`). Sept tables `Publipostage_*`, créées seulement avec
   l'accord de la personne (`js/table-consent.js`) ; le widget ne supprime ni ne renomme aucune table ni
-  colonne.
+  colonne. Dans les tables qui portent les données, une seule écriture : la date du dernier export PDF,
+  dans la colonne que la personne a choisie (`js/export-date.js`, appelé par `js/main.js` après un export).
 - **Le réseau** : le script de l'API de Grist (`docs.getgrist.com`), l'éditeur (`esm.sh`), les
   bibliothèques d'export au premier usage (`cdnjs.cloudflare.com`, `cdn.jsdelivr.net`) et les moteurs
   d'export du widget (même site), tous chargés par `ExportCommon.loadScriptOnce`, le catalogue de la galerie (même site, `fetch` dans
@@ -247,6 +250,7 @@ notes de conception, qui ne sont pas publiés ici.
 | Ajouter un texte à l'interface | `js/i18n.js`, en français et en anglais dans le même lot. |
 | Ajouter un menu ou une fenêtre flottante | `js/layers.js` (l'ordre d'empilement). |
 | Ajouter un raccourci clavier | `js/shortcuts.js`. |
+| Ajouter un chemin d'export PDF | `js/main.js` : l'appeler `stampExportDate` après le téléchargement (la colonne de Réglages > Vue qui garde la date du dernier export), avec les lignes dont le PDF est dans le fichier. |
 | Ajouter une bibliothèque d'export | `js/export-common.js` (chargeur, empreinte) et la politique de sécurité de `index.html`. |
 | Changer ce que l'impression par le navigateur imprime (feuilles, page plus haute qu'une feuille, taille de la page) | `js/print-export.js` et `css/print.css` ; le rendu lui-même est celui de la Lecture (`ReaderMode.renderInto` de `js/reader-mode.js`) : le changer change aussi l'impression. |
 | Ajouter un moteur d'export du widget (un script que seul un export utilise) | Une balise inerte `<script type="text/x-lazy-engine" data-engine="…">` dans `index.html`, puis son nom dans la liste `engines` de l'export qui s'en sert (`js/main.js`) : `js/export-engines.js` le charge au premier besoin. |
@@ -283,8 +287,8 @@ For anyone reading the code: what is where, and where to start. Line counts are 
   **Each export** loads its library on first use, with an integrity hash (SRI) that the browser checks.
 - **The data**: templates and settings live in `Publipostage_*` tables of the Grist document; display
   preferences (language, theme, shortcuts…) in the browser.
-- **The size**: 123 files in `js/` (46,400 lines: 34,400 of code, 9,200 of comments, 2,800 blank), 41
-  stylesheets (3,500 lines), a 800-line page. Four PDF font files weigh 2.5 MB in a few lines (data);
+- **The size**: 125 files in `js/` (46,900 lines: 34,700 of code, 9,400 of comments, 2,800 blank), 42
+  stylesheets (3,500 lines), an 810-line page. Four PDF font files weigh 2.5 MB in a few lines (data);
   `js/i18n.js` is text to translate, not logic.
 
 ## Where to start
@@ -322,7 +326,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 
 ## The map, family by family
 
-### Grist and the document's data (18 files, 5,400 lines)
+### Grist and the document's data (20 files, 8,100 lines)
 
 | File | Role |
 |---|---|
@@ -334,6 +338,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/template-gallery.js`, `js/template-gallery-modal.js` | The catalog of ready-to-use templates (the `templates-gallery/` folder, same site as the widget) and the gallery window: grid, search, preview as screenshots of the filled document, "Use this template" and "Create with its tables". |
 | `js/template-pack.js` | A gallery template delivered with its tables: reading and checking its `pack.json`, the plan of what to create in the document (tables to create, already there, in conflict), then the creation of the empty tables (columns, calculated columns, a Reference's displayed column, Linked tables rules), removed if a write fails. |
 | `js/view-template.js` | A view's default template (a widget option). |
+| `js/export-date.js` | The column that keeps each row's last PDF export date (a widget option): the Settings > View section and the write, once the PDF is made (`js/main.js` calls it after every PDF export). |
 | `js/row-template.js`, `js/row-template-panel.js` | "According to the row": a template tied to a condition on the row; the engine and the screen. |
 | `js/schema-renames.js` | Tracking of table and column renames made in Grist (a snapshot of the names in the browser). |
 | `js/settings-columns.js` | Warns when a column named in the settings has disappeared. |
@@ -348,7 +353,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/html-sanitize.js` | Allow-list filter, parsed in an inert document, for the HTML of Grist columns, imported templates and the gallery. |
 | `js/external-images.js` | Images from another site: a "Show" frame in their place until the click (nothing is remembered), flagged at all times afterwards, and a window before any export that would read them. |
 
-### The editor (32 files, 11,700 lines)
+### The editor (33 files, 11,800 lines)
 
 | File | Role |
 |---|---|
@@ -359,6 +364,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/color-palette.js`, `js/color-dialog.js`, `js/color-store.js`, `js/color-math.js` | The color menu (text, highlight, cell background, border line): the palette; the "Custom color" window; the colors kept per template and per document; the color calculations (a pure module). |
 | `js/main-toolbar.js` | The toolbar: button state, click wiring, image insertion. |
 | `js/format-painter.js`, `js/find-replace.js`, `js/link-dialog.js` | Format painter, Find / Replace, links. |
+| `js/script-marks.js` | Superscript and subscript: the two text marks, how they are read in HTML (Word, Google Docs), the size the exports take from them and the Unicode characters an e-mail link writes in their place. |
 | `js/callout.js`, `js/caption.js`, `js/keep-with-next.js`, `js/qr-code.js` | Callouts and signature, captions, "Keep with next", QR code. |
 | `js/chart-block.js`, `js/chart-source.js`, `js/chart-plot.js` | Chart from the page: the window and the document frame; reading a Grist chart's settings (type, columns, sort, filters, rows); drawing it with Plotly, rendered as a PNG image (library loaded for the first chart). |
 | `js/text-expansion.js`, `js/text-expansion-settings.js` | Text expansion (`Publipostage_Abreviations`) and its tab in Settings. |
@@ -380,7 +386,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/field-editor.js`, `js/field-codec.js` | The text fields of E-mail mode (Subject, To, Cc, Bcc) and of the PDF file name: a one-line editor that places the same bubbles as the document, with their toolbar and windows, and the user's date, time, email and name chips; the stored value stays plain text as long as no bubble has a setting and no chip is placed. |
 | `js/formula.js` | The calculation engine of a "Calculation" bubble (a pure module: no DOM, no Grist). |
 | `js/condition-rules.js`, `js/condition-fields.js` | Evaluation of "column, operator, value or other column" rules (a pure module) and their fields shared by all the windows. |
-| `js/loop-rules.js`, `js/list-split.js` | The loop engine over linked rows; "One document per value". |
+| `js/loop-rules.js`, `js/list-split.js` | The loop engine over linked rows (it also gives each zone copy the rank of its turn, which the "Row number" chip writes); "One document per value". |
 | `js/conditional-text.js`, `js/conditional-checkbox.js`, `js/conditional-value.js` | Conditional block, checkbox and value. |
 
 ### Macro-templates (2 files, 520 lines)
@@ -402,7 +408,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/table-page-cut.js` | Where a table is cut between two pages. |
 | `js/sheet-layout.js`, `js/sheet-assembly-dialog.js` | "Assemble before printing": the geometry of a sheet and its window. |
 
-### Reading (2 files, 1,300 lines)
+### Reading (2 files, 1,400 lines)
 
 | File | Role |
 |---|---|
@@ -437,7 +443,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/batch-failures.js` | The window that opens at the end of a batch export and lists the rows that could not be generated, with their reason (on top of the shared input and confirmation window). |
 | `js/batch-scope.js` | The rows of a batch export: the ones the widget shows in Grist (its filters, its sort, the "Select by" link), or the whole table; a widget that only shows part of the table triggers the question. |
 
-### Interface foundations and settings (15 files, 4,500 lines)
+### Interface foundations and settings (15 files, 4,600 lines)
 
 | File | Role |
 |---|---|
@@ -462,7 +468,7 @@ wiring of the gallery and of Grist. It is the file that knows all the others.
 ### Stylesheets
 
 `css/style.css` (color tokens, light and dark theme, `--font-ui`), `css/toolbar-v2.css` (the top bar),
-`css/editor-v2.css` (the editor's text); the other 38 each go with a module or a window of `js/`
+`css/editor-v2.css` (the editor's text); the other 39 each go with a module or a window of `js/`
 (`css/callout.css` for `js/callout.js`) and say so in their first comment; `css/roboto-fonts.css` embeds
 the documents' font.
 
@@ -471,7 +477,9 @@ the documents' font.
 - **Grist**: `js/grist-api.js` for the most part; the modules that own a table read and write it
   themselves (`js/templates.js`, `js/template-preferences.js`, `js/comments.js`, `js/text-expansion.js`,
   `js/saved-page-formats.js`). Seven `Publipostage_*` tables, created only with the person's consent
-  (`js/table-consent.js`); the widget neither deletes nor renames any table or column.
+  (`js/table-consent.js`); the widget neither deletes nor renames any table or column. In the tables that
+  hold the data, a single write: the date of the last PDF export, in the column the person chose
+  (`js/export-date.js`, called by `js/main.js` after an export).
 - **The network**: the Grist API script (`docs.getgrist.com`), the editor (`esm.sh`), the export libraries
   on first use (`cdnjs.cloudflare.com`, `cdn.jsdelivr.net`) and the widget's own export engines (same
   site), all loaded by `ExportCommon.loadScriptOnce`, the gallery catalog (same site, `fetch` in `js/template-gallery.js`), and the reading of an image (`fetch` or
@@ -504,6 +512,7 @@ notes, which are not published here.
 | Add a text to the interface | `js/i18n.js`, in French and English in the same batch. |
 | Add a menu or a floating window | `js/layers.js` (the stacking order). |
 | Add a keyboard shortcut | `js/shortcuts.js`. |
+| Add a PDF export path | `js/main.js`: call `stampExportDate` after the download (the Settings > View column that keeps the last export date), with the rows whose PDF is in the file. |
 | Add an export library | `js/export-common.js` (loader, integrity hash) and the security policy of `index.html`. |
 | Change what browser print prints (sheets, a page taller than a sheet, the page size) | `js/print-export.js` and `css/print.css`; the rendering itself is the Reading view's (`ReaderMode.renderInto` in `js/reader-mode.js`): changing it changes the print too. |
 | Add an export engine of the widget (a script that only an export uses) | An inert `<script type="text/x-lazy-engine" data-engine="…">` tag in `index.html`, then its name in the `engines` list of the export that uses it (`js/main.js`): `js/export-engines.js` loads it when needed. |

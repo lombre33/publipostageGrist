@@ -214,13 +214,16 @@ const XlsxExport = (function () {
     ['S', { strike: true }], ['STRIKE', { strike: true }], ['DEL', { strike: true }], ['CODE', { name: CODE_FONT }], ['PRE', { name: CODE_FONT }],
   ]);
   function applyTagRun(node, css, out) {
-    // Ce que la balise de `node` change au texte : gras et taille des titres, lien, surlignage de <mark>, puis la table ci-dessus.
+    // Ce que la balise de `node` change au texte : gras et taille des titres, lien, surlignage de <mark>, exposant et indice, puis la table ci-dessus.
     // Les réglages de texte qu'une balise pose à elle seule.
     const tag = node.tagName;
     Object.assign(out, TAG_RUNS.get(tag));
     if (/^H[1-6]$/.test(tag)) { out.bold = true; out.size = HEADING_PT[tag]; }
     if (tag === 'A' && HtmlSanitize.safeLinkHref(node.getAttribute('href'))) { out.color = LINK_COLOR; out.underline = true; }
     if (tag === 'MARK') out.background = cssColorArgb(css('background-color')) || 'FFFFFF00';
+    // Exposant et indice (js/script-marks.js) : le vrai exposant ou indice d'Excel (`vertAlign` de la police), dont Excel règle taille et décalage.
+    const script = ScriptMarks.kindOf(node);
+    if (script) out.vertAlign = script;
   }
   function applyEmphasisCss(css, out) {
     // Gras, italique, souligné et barré posés par le style en ligne.
@@ -239,7 +242,7 @@ const XlsxExport = (function () {
     if (css('color')) out.color = cssColorArgb(css('color')) || out.color;
     if (css('background-color')) out.background = cssColorArgb(css('background-color')) || out.background;
   }
-  const sameRunStyle = (a, b) => ['bold', 'italic', 'underline', 'strike', 'name', 'size', 'color', 'background'].every(k => a[k] === b[k]);
+  const sameRunStyle = (a, b) => ['bold', 'italic', 'underline', 'strike', 'vertAlign', 'name', 'size', 'color', 'background'].every(k => a[k] === b[k]);
 
   const BLOCK_TAGS = /^(P|H[1-6]|DIV|BLOCKQUOTE|PRE|LI|UL|OL|TABLE)$/;
   function createLineBuilder() {
@@ -358,6 +361,7 @@ const XlsxExport = (function () {
     if (style.italic) font.italic = true;
     if (style.underline) font.underline = true;
     if (style.strike) font.strike = true;
+    if (style.vertAlign) font.vertAlign = style.vertAlign;
     if (style.color) font.color = { argb: style.color };
     return font;
   }

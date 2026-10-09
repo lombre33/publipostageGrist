@@ -119,11 +119,12 @@
 <link rel="stylesheet" href="css/variable-calc.css?v=0.4">
 <link rel="stylesheet" href="css/callout.css?v=0.2">
 <link rel="stylesheet" href="css/caption.css?v=0.3">
+<link rel="stylesheet" href="css/script-marks.css?v=0.1">
 <link rel="stylesheet" href="css/qr-code.css?v=0.3">
 <link rel="stylesheet" href="css/chart-block.css?v=0.1">
 <link rel="stylesheet" href="css/search-select.css?v=0.10">
 <link rel="stylesheet" href="css/access-rights.css?v=0.8">
-<link rel="stylesheet" href="css/row-template.css?v=0.3">
+<link rel="stylesheet" href="css/row-template.css?v=0.4">
 <link rel="stylesheet" href="css/save-reminder.css?v=0.1">
 <link rel="stylesheet" href="css/text-expansion.css?v=0.3">
 <link rel="stylesheet" href="css/shortcuts.css?v=0.2">
@@ -380,6 +381,10 @@
         <button type="button" id="v2-btn-link" aria-label="Insérer un lien (Ctrl+K)"></button>
         <span class="v2-hover-flyout v2-hover-flyout-v" id="v2-blocks-flyout">
           <span class="v2-hover-flyout-label" data-i18n="insert.blocks.tip">Lien et blocs de contenu</span>
+          <span class="v2-hover-icon-row">
+            <button type="button" id="v2-btn-superscript" data-tip="Exposant" aria-label="Exposant" aria-pressed="false" data-i18n-tip="fmt.superscript" data-i18n-aria="fmt.superscript"></button>
+            <button type="button" id="v2-btn-subscript" data-tip="Indice" aria-label="Indice" aria-pressed="false" data-i18n-tip="fmt.subscript" data-i18n-aria="fmt.subscript"></button>
+          </span>
           <button type="button" class="v2-menu-row" id="v2-row-link"><span class="v2-menu-row-icon"></span><span data-i18n="insert.link.row">Lien…</span><span class="v2-menu-row-kbd" id="v2-row-link-kbd"></span></button>
           <button type="button" class="v2-menu-row" id="v2-btn-citation" aria-label="Insérer une citation" data-i18n-aria="insert.citation.aria"><span class="v2-menu-row-icon"></span><span data-i18n="insert.citation.tip">Citation</span></button>
           <button type="button" class="v2-menu-row" id="v2-btn-code-block" aria-label="Insérer un bloc de code" data-i18n-aria="insert.codeBlock.aria"><span class="v2-menu-row-icon"></span><span data-i18n="insert.codeBlock.tip">Bloc de code</span></button>
@@ -627,6 +632,17 @@
           </div>
           <p class="settings-access-locked" id="settings-viewtemplate-locked" data-i18n="settings.viewTemplate.locked" hidden>Vous êtes en lecture seule : ce réglage est verrouillé.</p>
         </section>
+        <!-- Date du dernier export PDF (js/export-date.js) : une colonne de la table du widget qui garde la date du dernier export PDF de chaque ligne. -->
+        <section class="settings-section settings-view-section" id="settings-exportdate-section">
+          <h4 class="settings-section-title" data-i18n="settings.exportDate.title">Date du dernier export PDF</h4>
+          <p class="settings-panel-intro" data-i18n="settings.exportDate.intro">Après chaque export PDF, la date de l’export s’écrit dans la colonne choisie, pour chaque ligne exportée. La colonne doit être de type Date, Date et heure ou Texte, et ne pas porter de formule.</p>
+          <div class="settings-access-grid">
+            <label for="settings-exportdate-column" data-i18n="settings.exportDate.column">Colonne</label><select id="settings-exportdate-column"></select>
+          </div>
+          <p class="settings-exportdate-status" id="settings-exportdate-status" role="status" hidden></p>
+          <p class="settings-access-locked" id="settings-exportdate-locked" data-i18n="settings.exportDate.locked" hidden>Vous êtes en lecture seule : ce réglage est verrouillé.</p>
+          <p class="settings-access-hint" data-i18n="settings.exportDate.hint">La date s’écrit pour chaque ligne dont le PDF est dans le fichier téléchargé : « Exporter en PDF », « Exporter les lignes (ZIP) », « Exporter les lignes en un seul PDF » et « Assemblage avant impression ». Une ligne en échec n’est pas datée ; Word, Excel et « Impression navigateur » n’écrivent rien (le navigateur ne dit pas si la personne a imprimé). Un compte en lecture seule dans Grist ne peut rien écrire.</p>
+        </section>
       </div>
       <div class="settings-panel" data-settings-panel="access" hidden>
         <p class="settings-panel-intro" data-i18n="settings.access.intro">Droits par personne, lus dans une table du document : une ligne par personne, repérée par son email Grist, et une case à cocher par droit.</p>
@@ -664,7 +680,7 @@
 <script src="js/version.js?v=0.1"></script>
 <script src="js/html-sanitize.js?v=0.6"></script>
 <script src="js/page-tree.js?v=0.5"></script>
-<script src="js/grist-api.js?v=0.105"></script>
+<script src="js/grist-api.js?v=0.106"></script>
 <script src="js/templates.js?v=0.94"></script>
 <script src="js/table-consent.js?v=0.1"></script>
 <script>
@@ -678,10 +694,10 @@
     window.__earlyStart = { grist: gristInit, templates: templatesLoaded };
   } catch (e) { console.error('[boot] démarrage anticipé impossible', e); }
 </script>
-<script src="js/reader-mode.js?v=0.138"></script>
+<script src="js/reader-mode.js?v=0.140"></script>
 <script src="js/reader-guide.js?v=0.6"></script>
-<script src="js/i18n.js?v=0.145"></script>
-<script src="js/shortcuts.js?v=0.12"></script>
+<script src="js/i18n.js?v=0.148"></script>
+<script src="js/shortcuts.js?v=0.13"></script>
 <script src="js/page-layout.js?v=0.14"></script>
 <script src="js/color-math.js?v=0.1"></script>
 <script src="js/color-store.js?v=0.1"></script>
@@ -693,15 +709,16 @@
 <script src="js/layers.js?v=0.4"></script>
 <script src="js/viewport-fit.js?v=0.6"></script>
 <script src="js/search-select.js?v=0.17"></script>
-<script src="js/variables.js?v=0.69"></script>
-<script src="js/icons.js?v=0.43"></script>
+<script src="js/variables.js?v=0.70"></script>
+<script src="js/icons.js?v=0.44"></script>
 <script src="js/editor-core.js?v=0.22"></script>
 <script src="js/color-palette.js?v=0.1"></script>
 <script src="js/header-footer-preview.js?v=1.27"></script>
-<script src="js/editor-nodes.js?v=1.31"></script>
+<script src="js/editor-nodes.js?v=1.32"></script>
 <script src="js/floating-toolbars.js?v=0.51"></script>
-<script src="js/main-toolbar.js?v=1.17"></script>
-<script src="js/format-painter.js?v=0.3"></script>
+<script src="js/main-toolbar.js?v=1.18"></script>
+<script src="js/format-painter.js?v=0.4"></script>
+<script src="js/script-marks.js?v=0.1"></script>
 <script src="js/comments.js?v=0.16"></script>
 <script src="js/track-changes-core.js?v=0.1"></script>
 <script src="js/track-changes-selection.js?v=0.1"></script>
@@ -715,20 +732,20 @@
 <script src="js/table-select.js?v=0.3"></script>
 <script src="js/table-merge.js?v=0.3"></script>
 <script src="js/email-plain-text.js?v=0.3"></script>
-<script src="js/editor.js?v=2.36"></script>
+<script src="js/editor.js?v=2.37"></script>
 <script src="js/export-common.js?v=0.15"></script>
 <script src="js/pdf-glyph-fallback.js?v=0.2"></script>
 <!-- Moteurs d'export : js/export-engines.js les charge au premier export (ExportEngines.ensure), pas à l'ouverture. Ces balises ne s'exécutent pas (le
      navigateur ne connaît pas leur type) ; leur version de cache se monte comme celle de tout script. -->
 <script src="js/export-engines.js?v=0.1"></script>
-<script type="text/x-lazy-engine" data-engine="pdf" src="js/pdf-export.js?v=1.39"></script>
+<script type="text/x-lazy-engine" data-engine="pdf" src="js/pdf-export.js?v=1.40"></script>
 <script type="text/x-lazy-engine" data-engine="sheets" src="js/sheet-layout.js?v=0.3"></script>
 <script type="text/x-lazy-engine" data-engine="merge" src="js/pdf-merge.js?v=0.5"></script>
-<script type="text/x-lazy-engine" data-engine="docx" src="js/docx-export.js?v=0.45"></script>
-<script type="text/x-lazy-engine" data-engine="xlsx" src="js/xlsx-export.js?v=0.17"></script>
+<script type="text/x-lazy-engine" data-engine="docx" src="js/docx-export.js?v=0.46"></script>
+<script type="text/x-lazy-engine" data-engine="xlsx" src="js/xlsx-export.js?v=0.18"></script>
 <script type="text/x-lazy-engine" data-engine="xlsxFormat" src="js/xlsx-number-format.js?v=0.3"></script>
 <script src="js/grid-xlsx-import.js?v=0.7"></script>
-<script src="js/mailto-export.js?v=0.13"></script>
+<script src="js/mailto-export.js?v=0.14"></script>
 <script src="js/template-gallery.js?v=0.13"></script>
 <script src="js/template-pack.js?v=0.1"></script>
 <script src="js/template-gallery-modal.js?v=0.4"></script>
@@ -758,7 +775,7 @@
 <script src="js/variable-condition.js?v=0.17"></script>
 <script src="js/variable-otherwise.js?v=0.1"></script>
 <script src="js/variable-linked-attrs.js?v=0.19"></script>
-<script src="js/loop-rules.js?v=0.12"></script>
+<script src="js/loop-rules.js?v=0.13"></script>
 <script src="js/variable-loop.js?v=0.10"></script>
 <script src="js/variable-list.js?v=0.6"></script>
 <script src="js/list-split.js?v=0.2"></script>
@@ -770,6 +787,7 @@
 <script src="js/macro-templates.js?v=0.9"></script>
 <script src="js/macro-editor.js?v=0.47"></script>
 <script src="js/view-template.js?v=0.7"></script>
+<script src="js/export-date.js?v=0.1"></script>
 <script src="js/row-template.js?v=0.6"></script>
 <script src="js/row-template-panel.js?v=0.4"></script>
 <script src="js/template-organizer.js?v=0.4"></script>
@@ -779,7 +797,7 @@
 <script src="js/access-rights.js?v=0.10"></script>
 <script src="js/save-reminder.js?v=0.2"></script>
 <script src="js/schema-renames.js?v=0.7"></script>
-<script src="js/settings-columns.js?v=0.5"></script>
+<script src="js/settings-columns.js?v=0.6"></script>
 <script src="js/watermark-dialog.js?v=0.5"></script>
 <script src="js/color-dialog.js?v=0.1"></script>
 <script src="js/saved-page-formats.js?v=0.4"></script>
@@ -790,6 +808,6 @@
 <script src="js/page-zoom.js?v=0.5"></script>
 <script src="js/field-codec.js?v=0.4"></script>
 <script src="js/field-editor.js?v=0.3"></script>
-<script src="js/main.js?v=0.132"></script>
+<script src="js/main.js?v=0.133"></script>
 </body>
 </html>

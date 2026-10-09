@@ -1420,9 +1420,18 @@
   // L'état de fin d'un export réussi : son texte, précédé - quand des images n'ont pas pu être lues et manquent dans le fichier
   // (ExportCommon.noteUnreadImage) - de leur nombre, en tête : le coin d'état coupe ce qui dépasse, à droite. Le fichier est bien produit : ce n'est
   // pas une erreur (pas de rouge), mais la personne n'a plus à ouvrir le fichier pour s'en apercevoir.
-  function setExportDoneStatus(text) {
+  function setExportDoneStatus(text, note) {
     const unread = ExportCommon.unreadImageCount();
-    setStatus(unread ? I18n.t('status.imagesUnread', { n: unread }) + ' ' + text : text);
+    const done = unread ? I18n.t('status.imagesUnread', { n: unread }) + ' ' + text : text;
+    // `note` : ce qui n'a pas pu se faire après l'export (stampExportDate), en tête et en rouge - le coin d'état coupe à droite, et le fichier, lui, est bien produit.
+    setStatus(note ? note + ' ' + done : done, !!note);
+  }
+
+  // La date du dernier export PDF (js/export-date.js), écrite une fois le fichier produit pour ces lignes. Rend ce qu'il faut dire quand elle n'a pas pu l'être,
+  // '' sinon (rien à écrire, écrite, ou compte Lecteur). Tout nouveau chemin d'export PDF l'appelle après son téléchargement.
+  async function stampExportDate(tableId, rowIds) {
+    const problem = await ExportDate.stamp(tableId, rowIds);
+    return problem ? I18n.t('status.exportDate.' + problem.reason, { column: problem.column }) : '';
   }
 
   // Le document de la ligne courante pour un export seul : { html, headerFooterData } - ceux du modèle, avec la valeur de chaque liste réglée « Un
@@ -1438,13 +1447,15 @@
   }
 
   // Les exports d'une seule ligne : le lot que prend son document quand « Un document par valeur » le découpe, l'alerte sans ligne, les textes du
-  // coin d'état et l'export lui-même (`doc` : { html, headerFooterData }, cf. currentRecordDocument). Word n'a ni sélecteur de qualité ni autre mode
+  // coin d'état et l'export lui-même (`doc` : { html, headerFooterData }, cf. currentRecordDocument), et `stampsExportDate` pour le PDF seul : la date de son dernier
+  // export s'écrit dans la colonne choisie (js/export-date.js). Word n'a ni sélecteur de qualité ni autre mode
   // (cf. en-tête de js/docx-export.js). Excel exporte le tableau d'une grille, sans en-tête ni pied de page ni marges du document : la feuille
   // reprend l'orientation et les marges de PageLayout. `engines` : les moteurs de js/export-engines.js que `run` appelle, chargés au premier export.
   const SINGLE_EXPORTS = {
     pdf: {
       engines: ['pdf'],
       batch: 'pdfZip', noRecord: 'alert.noRecordForExport', generating: 'status.pdfGenerating', generated: 'status.pdfGenerated', failed: 'status.pdfGenerationError',
+      stampsExportDate: true,
       run: (doc, tableId, record) => PdfExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsPt()),
     },
     // « Impression navigateur » (qualité du bouton PDF) : la Lecture, imprimée par le navigateur (js/print-export.js), sans moteur à charger. Un document
@@ -1478,7 +1489,7 @@
       if (doc.split) { await onExportBatch(spec.batch, doc.split); return; }
       await ExportEngines.ensure(spec.engines);
       await spec.run(doc, tableId, record);
-      setExportDoneStatus(I18n.t(spec.generated));
+      setExportDoneStatus(I18n.t(spec.generated), spec.stampsExportDate ? await stampExportDate(tableId, [record.id]) : '');
     } catch (e) {
       // « Annuler » sur la fenêtre des images d'un site externe (js/external-images.js) : un choix, pas une erreur.
       if (ExternalImages.isCancel(e)) { setStatus(I18n.t('status.exportCancelled')); return; }
@@ -1604,6 +1615,8 @@
   const PDF_BATCH = {
     label: 'PDF', loading: 'status.loadingPdfLibs', loadError: 'status.pdfLibsLoadError', progress: 'status.batchExportProgress', noFile: 'status.exportError',
     engines: ['pdf'], margins: () => PageLayout.getMarginsPt(),
+    // La date du dernier export PDF s'écrit pour les lignes du fichier (js/export-date.js) : les trois lots PDF, ZIP, PDF unique et planche.
+    stampsExportDate: true,
     // Le PDF d'une ligne sait si son modèle est une grille (un lot « Modèle selon la ligne » peut mêler grilles et documents).
     renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins, _pageOptions, typeModele) => PdfExport.getNativePdfBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, margins, GridEditor.isGridType(typeModele)),
   };
@@ -1847,13 +1860,13 @@
     }
 
     const sink = await openBatchSink(cfg, tableId, sheetSetup);
-    const { ok, failed, cancelled, failures } = await runBatchJobs(cfg, sink, jobs, { tableId, openSource, templatesCache });
+    const { ok, failed, cancelled, failures, exportedIds } = await runBatchJobs(cfg, sink, jobs, { tableId, openSource, templatesCache });
     if (cancelled) { setStatus(I18n.t('status.exportCancelled')); return; }
     // Les lignes en échec, listées avec leur raison une fois le fichier téléchargé (ou, quand aucune n'a pu l'être, tout de suite) : la fenêtre se
     // referme avant que l'export libère ses contrôles.
     if (!ok) { setStatus(I18n.t(cfg.noFile), true); await BatchFailures.show(failures, { ok, format: cfg.label }); return; }
 
-    await finishBatchExport(cfg, sink, { only, tableId, rows, openSource, splitting, ok, failed });
+    await finishBatchExport(cfg, sink, { only, tableId, rows, openSource, splitting, ok, failed, exportedIds });
     await BatchFailures.show(failures, { ok, format: cfg.label });
   }
 
@@ -1876,11 +1889,14 @@
 
   // Génère les documents un par un dans `sink`. cancelled : « Annuler » sur la fenêtre des images d'un site externe a arrêté tout le lot ;
   // failed : le nombre de lignes que leur modèle ou une erreur a empêché de générer, et failures : ces lignes mêmes, de quoi les reconnaître et la
-  // raison, pour la fenêtre de fin de lot (js/batch-failures.js).
+  // raison, pour la fenêtre de fin de lot (js/batch-failures.js) ; exportedIds : les identifiants des lignes dont tous les documents sont dans le fichier, celles dont la
+  // date du dernier export s'écrit (vide quand le lot est annulé).
   async function runBatchJobs(cfg, sink, jobs, { tableId, openSource, templatesCache }) {
     let ok = 0;
     let cancelled = false;
     const failedJobs = [];
+    const doneRows = new Set();
+    const failedRows = new Set();
     for (let i = 0; i < jobs.length; i++) {
       const { row, variant, source } = jobs[i];
       setStatus(I18n.t(cfg.progress, { current: i + 1, total: jobs.length }));
@@ -1890,6 +1906,7 @@
       if (source !== openSource && cfg.grid != null && cfg.grid !== GridEditor.isGridType(source.typeModele)) {
         console.error('[main] export ' + cfg.label + ' en lot : le modèle de la ligne ' + row.id + ' (' + source.typeModele + ') ne se génère pas dans ce format');
         failedJobs.push({ row, source, valueName, wrongKind: cfg.grid ? 'document' : 'grid' });
+        failedRows.add(row.id);
         continue;
       }
       try {
@@ -1898,14 +1915,19 @@
         const html = ListSplit.pin(jobs[i].rowHtml !== undefined ? jobs[i].rowHtml : await sourceRowHtml(source, tableId, row, templatesCache), variant);
         await sink.add({ row, source, html, headerFooterData: ListSplit.pinHeaderFooter(source.headerFooterData, variant), valueName });
         ok++;
+        doneRows.add(row.id);
       } catch (e) {
         // « Annuler » sur la fenêtre des images d'un site externe arrête tout le lot, pas seulement cette ligne : rien n'est téléchargé.
         if (ExternalImages.isCancel(e)) { cancelled = true; break; }
         console.error('[main] export ' + cfg.label + ' en lot : échec pour la ligne', row.id, e);
         failedJobs.push({ row, source, valueName, message: e && e.message });
+        failedRows.add(row.id);
       }
     }
-    return { ok, failed: failedJobs.length, cancelled, failures: cancelled ? [] : await describeBatchFailures(failedJobs, tableId) };
+    // Une ligne dont un document a échoué n'est pas datée, même si les autres sont dans le fichier (« Un document par valeur ») : la date dirait « exporté » d'une ligne
+    // dont le PDF manque.
+    const exportedIds = cancelled ? [] : Array.from(doneRows).filter(id => !failedRows.has(id));
+    return { ok, failed: failedJobs.length, cancelled, failures: cancelled ? [] : await describeBatchFailures(failedJobs, tableId), exportedIds };
   }
 
   // Les lignes en échec telles que la fenêtre de fin de lot les liste (js/batch-failures.js) : leur n°, le nom que leur fichier aurait porté - celui du
@@ -1927,16 +1949,17 @@
   }
 
   // La fin d'un export en lot : le fichier assemblé est téléchargé, le coin d'état dit combien de documents (et de planches) il contient.
-  async function finishBatchExport(cfg, sink, { only, tableId, rows, openSource, splitting, ok, failed }) {
+  async function finishBatchExport(cfg, sink, { only, tableId, rows, openSource, splitting, ok, failed, exportedIds }) {
     setStatus(I18n.t(sink.finishing));
     const outBlob = await sink.finish();
     // Archive d'un export seul : nommée comme la ligne ; sinon comme la table.
     const outBase = only ? (sanitizeFilenamePart(await ReaderMode.resolveFilename(openSource.filenameTemplate, tableId, rows[0])) || sanitizeFilenamePart(tableId)) : sanitizeFilenamePart(tableId);
     ExportCommon.downloadBlob(outBlob, outBase + cfg.fileSuffix);
+    const note = cfg.stampsExportDate ? await stampExportDate(tableId, exportedIds) : '';
     const sheets = sink.sheetCount ? sink.sheetCount() : 0;
     const useSplitTexts = splitting && cfg.splitDone;
     const doneKey = failed ? (useSplitTexts ? cfg.splitDoneWithFailures : cfg.doneWithFailures) : (useSplitTexts ? cfg.splitDone : cfg.done);
-    setExportDoneStatus(exportText(doneKey, { ok, failed, sheets }));
+    setExportDoneStatus(exportText(doneKey, { ok, failed, sheets }), note);
   }
 
   async function switchMode(mode) {
@@ -2272,6 +2295,7 @@
     Settings.wireSettingsModal();
     RowTemplatePanel.wire();
     ViewTemplate.wirePanel();
+    ExportDate.wirePanel();
     wirePageModals();
     wireSaveShortcut();
     wirePageFitZoom();
@@ -2320,6 +2344,7 @@
     // Lancé dès que les options du widget sont connues (GristAPI.init), attendu seulement avant le premier affichage, en fin d'init().
     const accessReady = AccessRights.init();
     ViewTemplate.init();
+    ExportDate.init();
     SaveReminder.init();
     RowTemplate.init({
       openTemplate: openTemplateForRow,

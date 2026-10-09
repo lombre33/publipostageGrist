@@ -52,8 +52,9 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
   des règles évaluées sur la même ligne
 
 **Mise en page**
-- Mise en forme complète : gras, italique, souligné, barré, couleurs et surlignage, six polices en
-  tailles réelles de 8 à 72 points, alignement et retraits, titres numérotés, pinceau de mise en forme
+- Mise en forme complète : gras, italique, souligné, barré, exposant et indice, couleurs et surlignage, six
+  polices en tailles réelles de 8 à 72 points, alignement et retraits, titres numérotés, pinceau de mise en
+  forme
 - Listes à puces, numérotées et de tâches à cocher
 - Tableaux (fusion et scission de cases, fond de case, légende), zones 2 colonnes
 - Images, y compris flottantes (habillage de texte, calque devant ou derrière, opacité, légende),
@@ -73,8 +74,8 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
   configurer une fois pour les tables liées
 - Mise en forme sur mesure des nombres (écriture française ou américaine, décimales, devise, en toutes
   lettres), des dates (formats prédéfinis, en toutes lettres) et des Oui/Non (texte ou case cochée)
-- Puces intelligentes (date du jour, heure, e-mail de la personne connectée) et calculs (SOMME,
-  MOYENNE, MIN, MAX, NB, ARRONDI)
+- Puces intelligentes (date du jour, heure, e-mail de la personne connectée, numéro de ligne d'une
+  boucle) et calculs (SOMME, MOYENNE, MIN, MAX, NB, ARRONDI)
 - Conditions d'affichage (variable, bloc de texte, valeur dans la phrase, case cochée) et boucles sur
   les lignes liées (ligne de tableau, élément de liste, paragraphe), avec filtre, tri et séparateurs
 - Renommages suivis : quand une table ou une colonne est renommée dans Grist, les modèles suivent
@@ -100,6 +101,9 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
   par ») : quand il n'en affiche qu'une partie, il demande s'il faut exporter celles-ci ou toute la table
 - Assemblage avant impression : les pages de chaque ligne posées sur des feuilles A4 ou A3, avec ou
   sans traits de coupe, et une marge réglable autour de chaque page (quatre A6 sur une A4, par exemple)
+- Date du dernier export PDF : une colonne de la table, choisie dans Réglages > Vue (Date, Date et heure
+  ou Texte, sans formule), garde le moment du dernier export PDF de chaque ligne ; elle est écrite une
+  fois le PDF produit, pour les lignes qui sont dans le fichier
 - Word (`.docx`, bêta) et Excel (`.xlsx`, pour les grilles)
 - Avant un export, une fenêtre liste les sites externes dont des images seraient téléchargées
 
@@ -113,7 +117,7 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 
 **Autres**
 - Interface bilingue français/anglais, thème clair, sombre ou celui du système
-- 54 raccourcis clavier personnalisables
+- 57 raccourcis clavier personnalisables
 - Choix de la touche utilisée pour déclencher les variables (`#` par défaut)
 - Barre d'outils pensée pour un petit panneau (testée à 700×400)
 
@@ -152,7 +156,8 @@ Passez en mode lecture pour voir le document rempli avec la ligne sélectionnée
 - **En-tête et pied de page** : cliquez sur une marge en haut ou en bas de la page pour entrer dans
   l'édition dédiée.
 - **Réglages** (bouton de la barre du haut) : langue (celle du navigateur au premier lancement), thème, touche déclenchant le panneau `#`,
-  raccourcis clavier, marges du modèle, modèle par défaut de la vue, droits par personne, crédits.
+  raccourcis clavier, marges du modèle, modèle par défaut de la vue, colonne de la date du dernier export PDF,
+  droits par personne, crédits.
   Les réglages « Vue » et « Accès » sont des options du widget : Grist ne les partage avec les autres
   personnes qu'une fois la vue enregistrée.
 - **Nom du fichier PDF** : champ dédié, qui accepte lui aussi des variables.
@@ -183,6 +188,11 @@ fenêtre demande « Créer les tables du widget dans ce document ? » (« Créer
 créer »). Un oui vaut jusqu'à la fermeture de la page ; un refus n'écrit rien, n'est jamais gardé, et la
 question revient à l'action suivante de la personne. Un document qui porte déjà une table du widget ne
 pose aucune question.
+
+Dans les tables qui portent vos données, le widget n'écrit dans aucune colonne existante, sauf celle que
+vous choisissez dans Réglages > Vue > « Date du dernier export PDF ». Il y écrit alors, après chaque PDF
+réussi, le moment de l'export pour les lignes dont le PDF vient d'être produit (une seule écriture par
+export) ; sans colonne choisie, il n'y écrit rien. Un compte Lecteur de Grist n'écrit rien.
 
 Le widget charge des bibliothèques tierces à l'exécution, depuis `esm.sh` (moteur d'édition
 TipTap/ProseMirror), `cdnjs.cloudflare.com` et `cdn.jsdelivr.net` (exports PDF, Word, Excel, QR
@@ -390,8 +400,8 @@ GitHub Pages, with no backend and no build step.
   by rules evaluated on the same row
 
 **Layout**
-- Full formatting: bold, italic, underline, strikethrough, colors and highlighting, six fonts in real
-  point sizes from 8 to 72, alignment and indents, numbered headings, format painter
+- Full formatting: bold, italic, underline, strikethrough, superscript and subscript, colors and highlighting,
+  six fonts in real point sizes from 8 to 72, alignment and indents, numbered headings, format painter
 - Bullet lists, numbered lists and checkable task lists
 - Tables (merging and splitting cells, cell background, caption), two-column zones
 - Images, including floating ones (text wrap, layered in front of/behind, opacity, caption), pasted,
@@ -437,6 +447,9 @@ GitHub Pages, with no backend and no build step.
   part of the table, it asks whether to export those or the whole table
 - Sheet assembly before printing: each row's pages laid out on A4 or A3 sheets, with or without crop
   marks, and an adjustable margin around each page (four A6 on one A4, for example)
+- Date of the last PDF export: a column of the table, chosen in Settings > View (Date, Date and time or
+  Text, no formula), keeps the moment of each row's last PDF export; it is written once the PDF is made,
+  for the rows that are in the file
 - Word (`.docx`, beta) and Excel (`.xlsx`, for grids)
 - Before an export, a window lists the external sites that images would be downloaded from
 
@@ -450,7 +463,7 @@ GitHub Pages, with no backend and no build step.
 
 **Other**
 - Bilingual French/English interface, light, dark or system theme
-- 54 customizable keyboard shortcuts
+- 57 customizable keyboard shortcuts
 - Choice of key used to trigger variables (`#` by default)
 - Toolbar designed for a small panel (tested at 700×400)
 
@@ -488,7 +501,8 @@ see the document filled with the selected row, then export it.
   document.
 - **Header and footer**: click a margin at the top or bottom of the page to enter dedicated editing.
 - **Settings** (button in the top bar): language (the browser's at first launch), theme, the key that triggers the `#` panel, keyboard
-  shortcuts, the template's margins, the view's default template, per-person rights, credits. The
+  shortcuts, the template's margins, the view's default template, the column that keeps the date of the
+  last PDF export, per-person rights, credits. The
   "View" and "Access" settings are widget options: Grist only shares them with other people once the
   view is saved.
 - **PDF file name**: its own field, which also accepts variables.
@@ -516,6 +530,11 @@ only creates them with the person's consent: before the first creation, a window
 widget’s tables in this document?" ("Create the tables" or "Don’t create"). A yes holds until the page
 is closed; a refusal writes nothing, is never remembered, and the question comes back at the person's
 next action. A document that already has one of the widget's tables is never asked.
+
+In the tables that hold your data, the widget writes to no existing column, except the one you choose in
+Settings > View > "Date of the last PDF export". It then writes there, after each successful PDF, the
+moment of the export for the rows whose PDF has just been made (a single write per export); with no
+column chosen, it writes nothing there. A Grist Viewer account writes nothing.
 
 The widget loads third-party libraries at runtime, from `esm.sh` (the TipTap/ProseMirror editing
 engine), `cdnjs.cloudflare.com` and `cdn.jsdelivr.net` (PDF, Word, Excel, QR code and chart from the page, loaded on first

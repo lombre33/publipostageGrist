@@ -1192,6 +1192,192 @@
     },
   });
 
+  // === Date du dernier export PDF (js/export-date.js) ===
+  // La colonne « Dernier » (Date et heure) de la table, choisie dans Réglages > Vue (option `dateDernierExport`) : après un export PDF réussi, elle porte l'instant de l'export pour chaque
+  // ligne qui est dans le fichier téléchargé. Le réglage est posé comme Grist le ferait (stub.setWidgetOptions) et retiré en sortant : les autres cas du groupe n'en veulent pas.
+  // Le réglage lui-même, les types de colonne et les refus de Grist sont dans la suite exportDate.
+  const DATE_KEY = 'dateDernierExport';
+  // `options` : `body` (le modèle), `columns` (des colonnes de plus) et `rows` (les lignes) pour un cas qui veut autre chose que trois lignes de texte.
+  async function dated(h, fn, options) {
+    const o = options || {};
+    await seed(h, o.body || `<p>Bonjour ${badge('Nom')}, voici votre courrier.</p>`);
+    const stub = window.__gristStub;
+    stub.setVariables(TABLE, Object.assign({ Nom: 'Text', Dernier: 'DateTime:Europe/Paris' }, o.columns || {}));
+    stub.setRows(TABLE, o.rows || NAMES.map((Nom, i) => ({ id: i + 1, Nom })));
+    await GristAPI.refreshSchema();
+    stub.fireRecord({ id: 1, Nom: NAMES[0] }, TABLE);
+    stub.setWidgetOptions({ [DATE_KEY]: 'Dernier' });
+    await h.sleep(120);
+    stub.clearActionLog();
+    try { return await fn(stub); } finally { stub.setViewer(false); stub.setWidgetOptions(null); await h.sleep(60); }
+  }
+  const datedValues = () => NAMES.map((_, i) => window.__gristStub.getRow(TABLE, i + 1).Dernier);
+  const dateWrites = () => window.__gristStub.getActionLog().filter(a => a[0] === 'BulkUpdateRecord' && a[1] === TABLE);
+  // Une valeur d'horodatage écrite depuis `from` (secondes) : un nombre, ni avant l'export ni dans le futur.
+  const isDatedSince = (value, from) => typeof value === 'number' && value >= from && value <= Math.floor(Date.now() / 1000);
+
+  cases.push({
+    id: 'pdfbatch_export_date_single_pdf_dates_the_exported_row_only',
+    description: '« Exporter en PDF » d’une ligne, une colonne choisie pour la date du dernier export : le PDF est produit, l’état reste « PDF généré. » et cette ligne seule reçoit l’instant de l’export, en une écriture ; sans réglage rien n’est écrit',
+    run: async (h) => dated(h, async stub => {
+      const from = Math.floor(Date.now() / 1000);
+      const res = await clickSinglePdf(h);
+      const values = datedValues();
+      const writes = dateWrites().map(a => a[2]);
+      stub.setWidgetOptions(null);
+      await h.sleep(80);
+      stub.clearActionLog();
+      await clickSinglePdf(h);
+      const withoutSetting = dateWrites().length;
+      const problems = [];
+      if (res.downloads.length !== 1 || res.status !== I18n.t('status.pdfGenerated')) problems.push('export=' + res.downloads.length + ' état=' + res.status);
+      if (!isDatedSince(values[0], from) || values[1] != null || values[2] != null) problems.push('valeurs=' + JSON.stringify(values));
+      if (JSON.stringify(writes) !== '[[1]]') problems.push('écritures=' + JSON.stringify(writes));
+      if (withoutSetting !== 0) problems.push('sans réglage, écritures=' + withoutSetting);
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+    }),
+  });
+
+  cases.push({
+    id: 'pdfbatch_export_date_browser_print_writes_nothing',
+    description: '« Impression navigateur » (qualité du bouton PDF) n’écrit pas la date du dernier export : le navigateur ne dit pas si la personne a imprimé ou renoncé ; le PDF vectoriel du même bouton date toujours la ligne',
+    run: async (h) => dated(h, async stub => {
+      const select = document.getElementById('v2-pdf-quality');
+      const quality = select.value;
+      const printed = [];
+      const original = PrintExport.printRecord;
+      // La fenêtre d'impression du navigateur n'a rien à faire ici (js/print-export.js a ses propres cas) : l'appel est noté, rien ne s'ouvre.
+      PrintExport.printRecord = async (html, tableId, record) => { printed.push(record && record.id); };
+      const problems = [];
+      try {
+        select.value = 'browser-print';
+        const res = await clickExportRow(h, 'btn-export-pdf', null, () => printed.length > 0);
+        await h.sleep(150);
+        if (JSON.stringify(printed) !== '[1]') problems.push('impression=' + JSON.stringify(printed));
+        if (dateWrites().length || !datedValues().every(v => v == null)) problems.push('écritures=' + dateWrites().length + ' valeurs=' + JSON.stringify(datedValues()));
+        if (document.getElementById('status-msg').textContent !== I18n.t('status.printStarted')) problems.push('état=' + document.getElementById('status-msg').textContent + ' téléchargements=' + res.downloads.length);
+        // Même bouton, qualité vectorielle : la ligne est datée (le réglage et le faux Grist écrivent bien).
+        select.value = 'native';
+        const from = Math.floor(Date.now() / 1000);
+        await clickSinglePdf(h);
+        if (dateWrites().length !== 1 || !isDatedSince(datedValues()[0], from)) problems.push('PDF vectoriel : écritures=' + dateWrites().length + ' valeurs=' + JSON.stringify(datedValues()));
+      } finally { PrintExport.printRecord = original; select.value = quality; }
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+    }),
+  });
+
+  cases.push({
+    id: 'pdfbatch_export_date_zip_and_single_pdf_date_every_exported_row_in_one_write',
+    description: 'Le lot en ZIP et le PDF unique datent chacun toutes les lignes du fichier, au même instant et en une seule écriture, sans changer l’état de fin ; l’export en lot Word n’écrit rien',
+    run: async (h) => dated(h, async stub => {
+      const problems = [];
+      for (const [rowId, status] of [['v2-btn-export-pdf-batch', I18n.t('status.batchExportDone', { ok: NAMES.length })], ['v2-btn-export-pdf-merged', I18n.t('status.mergedExportDone', { ok: NAMES.length })]]) {
+        stub.setRows(TABLE, NAMES.map((Nom, i) => ({ id: i + 1, Nom })));
+        stub.clearActionLog();
+        const from = Math.floor(Date.now() / 1000);
+        const res = await clickExportRow(h, rowId);
+        const values = datedValues();
+        if (res.downloads.length !== 1 || res.status !== status) problems.push(rowId + ' : fichiers=' + res.downloads.length + ' état=' + res.status);
+        if (!values.every(v => isDatedSince(v, from)) || new Set(values).size !== 1) problems.push(rowId + ' : valeurs=' + JSON.stringify(values));
+        if (JSON.stringify(dateWrites().map(a => a[2])) !== '[[1,2,3]]') problems.push(rowId + ' : écritures=' + JSON.stringify(dateWrites().map(a => a[2])));
+      }
+      stub.setRows(TABLE, NAMES.map((Nom, i) => ({ id: i + 1, Nom })));
+      stub.clearActionLog();
+      const word = await clickExportRow(h, 'v2-btn-export-docx-batch');
+      if (word.downloads.length !== 1 || dateWrites().length || !datedValues().every(v => v == null)) problems.push('Word : fichiers=' + word.downloads.length + ' écritures=' + dateWrites().length + ' valeurs=' + JSON.stringify(datedValues()));
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+    }),
+  });
+
+  cases.push({
+    id: 'pdfbatch_export_date_skips_a_row_whose_pdf_failed',
+    description: 'Dans un lot dont une ligne échoue, la date du dernier export n’est écrite que pour les lignes dont le PDF est dans le fichier : la ligne en échec garde sa valeur',
+    run: async (h) => dated(h, async stub => {
+      const real = PdfExport.getNativePdfBlobForRecord;
+      PdfExport.getNativePdfBlobForRecord = function (html, tableId, row) {
+        if (row && row.id === 2) return Promise.reject(new Error('PDF impossible (simulé)'));
+        return real.apply(this, arguments);
+      };
+      const asked = h.choosePrompts.length;
+      let res;
+      try { res = await clickExportRow(h, 'v2-btn-export-pdf-batch'); } finally { PdfExport.getNativePdfBlobForRecord = real; }
+      const values = datedValues();
+      const problems = [];
+      if (res.downloads.length !== 1 || res.status !== I18n.t('status.batchExportDoneWithFailures', { ok: 2, failed: 1 })) problems.push('fichiers=' + res.downloads.length + ' état=' + res.status);
+      if (typeof values[0] !== 'number' || values[1] != null || values[2] !== values[0]) problems.push('valeurs=' + JSON.stringify(values));
+      if (JSON.stringify(dateWrites().map(a => a[2])) !== '[[1,3]]') problems.push('écritures=' + JSON.stringify(dateWrites().map(a => a[2])));
+      if (h.choosePrompts.length - asked !== 1) problems.push('fenêtre de fin de lot=' + (h.choosePrompts.length - asked));
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+    }),
+  });
+
+  cases.push({
+    id: 'pdfbatch_export_date_skips_a_row_with_one_failed_document_among_its_values',
+    description: 'Une ligne qui sort en plusieurs documents (« Un document par valeur ») dont l’un échoue n’est pas datée, même si ses autres documents sont dans le fichier : la date dirait « exporté » d’une ligne dont le PDF manque',
+    run: async (h) => dated(h, async stub => {
+      const real = PdfExport.getNativePdfBlobForRecord;
+      const calls = {};
+      PdfExport.getNativePdfBlobForRecord = function (html, tableId, row) {
+        const id = row && row.id;
+        calls[id] = (calls[id] || 0) + 1;
+        if (id === 1 && calls[id] === 2) return Promise.reject(new Error('PDF impossible (simulé)'));
+        return real.apply(this, arguments);
+      };
+      const asked = h.choosePrompts.length;
+      let res;
+      try { res = await clickExportRow(h, 'v2-btn-export-pdf-batch'); } finally { PdfExport.getNativePdfBlobForRecord = real; }
+      const values = datedValues();
+      const writes = dateWrites().map(a => a[2]);
+      const problems = [];
+      if (res.downloads.length !== 1) problems.push('fichiers=' + res.downloads.length);
+      if (calls[1] !== 2 || calls[2] !== 2 || calls[3] !== 1) problems.push('documents=' + JSON.stringify(calls));
+      if (values[0] != null || typeof values[1] !== 'number' || values[2] !== values[1]) problems.push('valeurs=' + JSON.stringify(values));
+      if (JSON.stringify(writes) !== '[[2,3]]') problems.push('écritures=' + JSON.stringify(writes));
+      if (h.choosePrompts.length - asked !== 1) problems.push('fenêtre de fin de lot=' + (h.choosePrompts.length - asked));
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+    }, {
+      body: `<p>Bonjour ${badge('Nom')} ${listBadge('Themes')}</p>`,
+      columns: { Themes: 'ChoiceList' },
+      rows: [{ id: 1, Nom: NAMES[0], Themes: ['L', 'Santé', 'Social'] }, { id: 2, Nom: NAMES[1], Themes: ['L', 'Santé', 'Social'] }, { id: 3, Nom: NAMES[2], Themes: ['L', 'Santé'] }],
+    }),
+  });
+
+  cases.push({
+    id: 'pdfbatch_export_date_failure_is_said_first_in_red_and_the_file_is_still_made',
+    description: 'Quand la date ne peut pas s’écrire (colonne supprimée dans Grist), le PDF est produit et le coin d’état commence, en rouge, par « Date non écrite : la colonne « Dernier » n’existe plus. » suivi de l’état de fin ; en français et en anglais',
+    run: async (h) => dated(h, async stub => {
+      stub.deleteColumn(TABLE, 'Dernier');
+      const problems = [];
+      for (const lang of ['fr', 'en']) {
+        await withLang(lang, async () => {
+          const statusEl = document.getElementById('status-msg');
+          const zip = await clickExportRow(h, 'v2-btn-export-pdf-batch');
+          const zipWanted = I18n.t('status.exportDate.missing', { column: 'Dernier' }) + ' ' + I18n.t('status.batchExportDone', { ok: NAMES.length });
+          if (zip.downloads.length !== 1 || zip.status !== zipWanted || statusEl.className !== 'error-msg') problems.push(lang + ' ZIP : fichiers=' + zip.downloads.length + ' état=' + zip.status + ' classe=' + statusEl.className);
+          const single = await clickSinglePdf(h);
+          const singleWanted = I18n.t('status.exportDate.missing', { column: 'Dernier' }) + ' ' + I18n.t('status.pdfGenerated');
+          if (single.downloads.length !== 1 || single.status !== singleWanted || statusEl.className !== 'error-msg') problems.push(lang + ' seul : fichiers=' + single.downloads.length + ' état=' + single.status);
+        });
+      }
+      if (dateWrites().length) problems.push('une écriture a été tentée : ' + dateWrites().length);
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+    }),
+  });
+
+  cases.push({
+    id: 'pdfbatch_export_date_says_nothing_and_writes_nothing_for_a_read_only_grist_account',
+    description: 'Un compte Lecteur de Grist exporte son PDF sans erreur : aucune écriture n’est tentée (aucune refusée) et l’état reste « PDF généré. »',
+    run: async (h) => dated(h, async stub => {
+      stub.setViewer(true);
+      const res = await clickSinglePdf(h);
+      const statusEl = document.getElementById('status-msg');
+      const problems = [];
+      if (res.downloads.length !== 1 || res.status !== I18n.t('status.pdfGenerated') || statusEl.className !== '') problems.push('fichiers=' + res.downloads.length + ' état=' + res.status + ' classe=' + statusEl.className);
+      if (dateWrites().length || stub.state.deniedWrites.length) problems.push('écritures=' + dateWrites().length + ' refusées=' + stub.state.deniedWrites.length);
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+    }),
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.pdfBatch = cases;
 })();

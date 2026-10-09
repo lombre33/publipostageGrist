@@ -1,0 +1,21 @@
+/* Exposant et indice (js/script-marks.js) : les <sup> et <sub> du texte, partout où le HTML d'un modèle s'affiche - l'éditeur (`.tiptap`, que porte aussi l'hôte
+   de mesure du PDF), la Lecture (`.reader-content`) et, dans l'un et l'autre, les en-têtes et pieds de page : leurs zones (`.v2-hf-zone-body`), les bandes de
+   couture (`.v2-page-band-header`, `.v2-page-band-footer`) et les espaceurs de bord de la Lecture (`.v2-page-edge-spacer`).
+   Taille : 6/10 du texte qui les porte (ScriptMarks.SIZE_RATIO, la même que celle du PDF). Décalage : levé de 0,75 fois sa propre taille pour l'exposant,
+   baissé de 0,35 fois pour l'indice, ce que pdfmake écrit pour `sup` et `sub` : le même dessin dans le PDF.
+   `line-height: 0`, `position: relative` et `vertical-align: baseline` : le décalage ne touche pas à la hauteur de la ligne. Le défaut du navigateur
+   (`vertical-align: super`) écarte les lignes d'un paragraphe qui porte un exposant, ce que ni le PDF ni le Word ne font - les coupures de page de
+   l'éditeur ne seraient plus les leurs.
+   La note de bas de page est un <sup class="footnote-ref-marker"> à elle (css/editor-v2.css) : jamais touchée ici.
+   Deux règles de même poids : la seconde ne change que le décalage de l'exposant, la première donne celui de l'indice à tous les deux. */
+:is(.tiptap, .reader-content, .v2-hf-zone-body, .v2-page-band-header, .v2-page-band-footer, .v2-page-edge-spacer) :is(sup:not(.footnote-ref-marker), sub) {
+  font-size: 0.6em; line-height: 0; position: relative; vertical-align: baseline; top: 0.35em;
+}
+:is(.tiptap, .reader-content, .v2-hf-zone-body, .v2-page-band-header, .v2-page-band-footer, .v2-page-edge-spacer) sup:not(.footnote-ref-marker) { top: -0.75em; }
+
+/* Les deux icônes du menu « Lien et blocs de contenu » (index.html, #v2-blocks-flyout) : à droite du titre du volet, hors du flux. Une rangée de plus ajouterait sa
+   hauteur au volet, qui touche déjà le bas d'un panneau de 700 × 400 avec ses lignes ; sur la ligne du titre elles n'en ajoutent aucune. Plus spécifique que
+   `#v2-toolbar button` (30 × 28), qui vise tout bouton de la barre. La largeur minimale laisse au titre, en français comme en anglais, de la place avant elles. */
+#v2-blocks-flyout { min-width: 208px; }
+#v2-blocks-flyout > .v2-hover-icon-row { position: absolute; top: 4px; right: 4px; gap: 2px; }
+#v2-toolbar #v2-blocks-flyout > .v2-hover-icon-row button { width: 28px; height: 24px; }

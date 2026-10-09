@@ -22,6 +22,12 @@
 // PAGE 1 (grille complète) n'ouvre pas de page, et les exports donnent ses images au paragraphe de texte qui la précède. Les images d'une page 2 ou plus, les lignes suivies de
 // texte, les images sans grille et les lignes sans paragraphe de texte avant elles gardent leur ligne. Une image importée via une colonne PJ (même jour, « important ! l'image est une image
 // importée via une colonne PJ ») suit la même règle : le cadre « #Table.Colonne » qu'en montre l'éditeur porte un libellé, qui ne compte pas comme du texte de la ligne.
+//
+// UN MACRO-MODÈLE (Antoine, 2026-10-09 : « mode macro modèle, en mode lecture et éditeur je n'ai pas de page vide, à l'export pdf j'ai une page vide qui vient se glisser ») : ses modèles sont
+// mis bout à bout, chacun derrière un saut de page `data-macro-slot` (js/macro-templates.js:buildConcatenatedHtml), et la fin de CHAQUE modèle est la fin d'une page. Seule la fin du DOCUMENT était
+// rognée : la ligne vide que l'éditeur laisse derrière la dernière zone ou le dernier tableau d'un modèle, ou une Entrée de trop, restait au milieu du document, et quand la lettre arrive à la marge du
+// bas (le PDF compte les marges de blocs que la Lecture ignore, donc la Lecture tient plus de lignes) elle ouvre une page blanche entre deux modèles, avant le saut de page du suivant.
+// ReaderMode.trimTrailingBlankBlocks rogne maintenant la fin de chaque modèle comme celle du document (lignes vides, lignes de calque de la page 1, lignes vides au bas des colonnes d'une dernière zone).
 window.EditorTestSuites = window.EditorTestSuites || {};
 window.EditorTestSuites.blankLastPage = (function () {
   const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
@@ -165,6 +171,25 @@ window.EditorTestSuites.blankLastPage = (function () {
   function paintedFloating(page) {
     const found = page && page.images.find(image => Math.abs(image.width - FLOAT_PX * 0.75) < 1);
     return found ? { x: Math.round(found.x * 100) / 100, y: Math.round(found.y * 100) / 100 } : null;
+  }
+
+  // --- Un macro-modèle : les modèles bout à bout ---
+  // Le document tel que l'application l'assemble (js/macro-templates.js:buildConcatenatedHtml) : le HTML de chaque modèle, un saut de page `data-macro-slot` devant chacun sauf le premier.
+  async function macroDocument(fragments) {
+    const templates = fragments.map((contenu, index) => ({ id: index + 1, contenu }));
+    return MacroTemplates.buildConcatenatedHtml({ slots: templates.map(template => ({ type: 'fixed', modeleId: template.id })) }, 'Clients', { id: 1 }, templates);
+  }
+  const NEXT_TEMPLATE = '<p>Le modèle suivant.</p>';
+  // Ce qui peut terminer un modèle sans rien montrer : une Entrée de trop, trois, un espace insécable, un saut de ligne seul.
+  const BLANK_TAILS = [['une ligne vide', '<p></p>'], ['trois lignes vides', '<p></p><p></p><p></p>'], ['espace insécable', '<p>&nbsp;</p>'], ['saut de ligne seul', '<p><br></p>']];
+  // Une zone à deux colonnes de `k` lignes dans chacune : la forme d'une lettre (colonne de gauche, texte à droite) qui remplit la page jusqu'à la marge du bas.
+  function zoneOfLines(k) {
+    const column = tag => Array.from({ length: k }, (_, i) => '<p>' + tag + ' ' + i + '</p>').join('');
+    return zone(column('Gauche'), column('Droite'));
+  }
+  // Les deux moteurs qui mettent un macro-modèle en pages : la Lecture et le PDF (le Word n'a pas de pagination à lui, il se lit dans son XML).
+  function macroEngines(h) {
+    return { pdf: async html => (await pdfPages(h, html)).count, reader: html => readerPages(h, html) };
   }
 
   return [
@@ -727,6 +752,149 @@ window.EditorTestSuites.blankLastPage = (function () {
         summary.word = anchors.length + ' ancre(s)';
         if (anchors.length !== 1) problems.push('Word : ' + anchors.length + ' ancre(s) (1 attendue)');
         return { pass: problems.length === 0, notes: JSON.stringify({ summary, problems }) };
+      },
+    },
+    {
+      id: 'blank_page_macro_slot_tail_opens_no_page_before_the_next_template',
+      description: 'Macro-modèle : la fin d\'un modèle (une ligne vide, trois, un espace insécable, un saut de ligne seul) n\'ouvre pas de page blanche avant le modèle suivant quand son texte arrive à la marge du bas, en PDF et en Lecture',
+      async run(h) {
+        await setup(h);
+        const problems = [];
+        const summary = {};
+        for (const [engine, measure] of Object.entries(macroEngines(h))) {
+          const n = await fullPage(measure);
+          const rows = [];
+          for (let k = n - 3; k <= n + 1; k++) {
+            const reference = await measure(await macroDocument([lines(k), NEXT_TEMPLATE]));
+            for (const [name, tail] of BLANK_TAILS) {
+              const pages = await measure(await macroDocument([lines(k) + tail, NEXT_TEMPLATE]));
+              rows.push(k + ' ' + name + ' : ' + pages + '/' + reference);
+              if (pages !== reference) problems.push(engine + ', ' + k + ' lignes + ' + name + ' : ' + pages + ' pages, ' + reference + ' sans elle');
+            }
+          }
+          summary[engine] = { lignesParPage: n, 'lignes + queue : pages/référence': rows };
+        }
+        const n = await fullPage(async html => (await pdfPages(h, html)).count);
+        const flush = await pdfPages(h, await macroDocument([lines(n) + '<p></p>', NEXT_TEMPLATE]));
+        summary.pdfBlancs = flush.blank;
+        if (flush.count !== 2 || flush.blank) problems.push('PDF, texte ras la marge + une ligne vide : ' + flush.count + ' pages dont ' + flush.blank + ' blanche(s) (2 et 0 attendues)');
+        return { pass: problems.length === 0, notes: JSON.stringify({ summary, problems }) };
+      },
+    },
+    {
+      id: 'blank_page_macro_slot_ending_with_a_zone_opens_no_page_before_the_next_template',
+      description: 'Macro-modèle : une lettre en zone à deux colonnes qui arrive à la marge du bas, suivie du paragraphe vide que l\'éditeur laisse derrière une dernière zone, n\'ouvre pas de page blanche avant le modèle suivant (PDF et Lecture)',
+      async run(h) {
+        await setup(h);
+        const problems = [];
+        const summary = {};
+        for (const [engine, measure] of Object.entries(macroEngines(h))) {
+          const n = await fullPage(measure);
+          const rows = [];
+          for (let k = n - 4; k <= n + 2; k++) {
+            const reference = await measure(await macroDocument([zoneOfLines(k), NEXT_TEMPLATE]));
+            const html = await macroDocument([zoneOfLines(k) + '<p></p>', NEXT_TEMPLATE]);
+            const pages = await measure(html);
+            rows.push(k + ' : ' + pages + '/' + reference);
+            if (pages !== reference) problems.push(engine + ', zone de ' + k + ' lignes + paragraphe vide : ' + pages + ' pages, ' + reference + ' sans lui');
+            if (engine === 'pdf') {
+              const blank = (await pdfPages(h, html)).blank;
+              if (blank) problems.push('PDF, zone de ' + k + ' lignes + paragraphe vide : ' + blank + ' page(s) blanche(s)');
+            }
+          }
+          summary[engine] = { 'lignes de zone : pages/référence': rows };
+        }
+        return { pass: problems.length === 0, notes: JSON.stringify({ summary, problems }) };
+      },
+    },
+    {
+      id: 'blank_page_macro_slot_ending_with_a_layer_image_line_keeps_its_image_and_opens_no_page',
+      description: 'Macro-modèle : la ligne de fin d\'un modèle qui ne porte qu\'une image en calque de la page 1 n\'ouvre pas de page blanche, et l\'image reste peinte à sa place (PDF) et dans la Lecture, sur la ligne de texte qui la précède',
+      async run(h) {
+        await setup(h);
+        const problems = [];
+        const summary = {};
+        const m = PageLayout.getMarginsPt();
+        for (const [engine, measure] of Object.entries(macroEngines(h))) {
+          const n = await fullPage(measure);
+          const rows = [];
+          for (let k = n - 2; k <= n + 1; k++) {
+            const reference = await measure(await macroDocument([lines(k), NEXT_TEMPLATE]));
+            const pages = await measure(await macroDocument([lines(k) + anchorLine(), NEXT_TEMPLATE]));
+            rows.push(k + ' : ' + pages + '/' + reference);
+            if (pages !== reference) problems.push(engine + ', ' + k + ' lignes + ligne de l\'image : ' + pages + ' pages, ' + reference + ' sans elle');
+          }
+          summary[engine] = rows;
+        }
+        const n = await fullPage(async html => (await pdfPages(h, html)).count);
+        const pdf = await pdfPages(h, await macroDocument([lines(n) + anchorLine(), NEXT_TEMPLATE]));
+        const at = paintedFloating(pdf.gt.pages[0]);
+        summary.pdfImage = at;
+        if (!at || Math.abs(at.x - (m.left + GRID_LEFT_PT)) > 0.6 || Math.abs(at.y - (m.top + GRID_TOP_PT)) > 0.6) problems.push('PDF : image peinte en ' + JSON.stringify(at) + ' sur la page 1, attendue en (' + (m.left + GRID_LEFT_PT) + ', ' + (m.top + GRID_TOP_PT) + ')');
+        if (pdf.blank) problems.push('PDF : ' + pdf.blank + ' page(s) blanche(s)');
+        await h.renderReaderMode(await macroDocument([lines(n) + anchorLine(), NEXT_TEMPLATE]), null);
+        await h.sleep(250);
+        const content = document.querySelector('#reader-container .reader-content');
+        const children = Array.from(content.children);
+        const slotAt = children.findIndex(el => el.matches('.page-break-marker[data-macro-slot]'));
+        const hostIndex = children.findIndex(el => el.querySelector('img.editor-image'));
+        summary.lecture = { blocs: children.length, saut: slotAt, hoteDeLImage: hostIndex };
+        if (hostIndex < 0 || hostIndex > slotAt - 1 || children[hostIndex].textContent.indexOf('Ligne') !== 0) problems.push('Lecture : l\'image est dans le bloc ' + hostIndex + ' (le dernier paragraphe de texte du modèle, avant le saut de page ' + slotAt + ', attendu)');
+        return { pass: problems.length === 0, notes: JSON.stringify({ summary, problems }) };
+      },
+    },
+    {
+      id: 'blank_page_macro_trim_removes_the_tail_of_every_template_and_keeps_the_rest',
+      description: 'ReaderMode.trimTrailingBlankBlocks sur un macro-modèle : ce qui ne montre rien à la fin de chaque modèle disparaît (le saut de page du suivant reste) ; les lignes vides du milieu, le premier bloc d\'un modèle vide, un titre, un tableau, une image et un document sans macro-modèle gardent leur comportement',
+      async run() {
+        const problems = [];
+        const MARK = rank => MacroTemplates.slotBreakHtml(rank);
+        const MANUAL = '<div class="page-break-marker" contenteditable="false">Saut de page</div>';
+        const normalize = html => { const root = document.createElement('div'); root.innerHTML = html; return root.innerHTML; };
+        const trim = html => { const root = document.createElement('div'); root.innerHTML = html; ReaderMode.trimTrailingBlankBlocks(root); return root.innerHTML; };
+        const IMAGE_LINE = '<p><img class="editor-image" src="' + TINY_PNG + '" alt="" data-layer="normal" data-wrap="inline"></p>';
+        const cases = [
+          ['deux lignes vides en fin de modèle', '<p>A</p><p></p><p></p>' + MARK(1) + '<p>B</p><p></p>', '<p>A</p>' + MARK(1) + '<p>B</p>'],
+          ['trois modèles, une queue à chacun', '<p>A</p><p></p>' + MARK(1) + '<p>B</p><p>&nbsp;</p><p><br></p>' + MARK(2) + '<p>C</p><p></p>', '<p>A</p>' + MARK(1) + '<p>B</p>' + MARK(2) + '<p>C</p>'],
+          ['une ligne vide du milieu reste', '<p>A</p><p></p><p>B</p><p></p>' + MARK(1) + '<p>C</p>', '<p>A</p><p></p><p>B</p>' + MARK(1) + '<p>C</p>'],
+          ['un modèle vide garde son premier bloc', '<p>A</p>' + MARK(1) + '<p></p><p></p>' + MARK(2) + '<p>C</p>', '<p>A</p>' + MARK(1) + '<p></p>' + MARK(2) + '<p>C</p>'],
+          ['un saut de page posé à la main en fin de modèle', '<p>A</p>' + MANUAL + MARK(1) + '<p>B</p>', '<p>A</p>' + MARK(1) + '<p>B</p>'],
+          ['une ligne vide derrière un tableau', TABLE_HTML + '<p></p>' + MARK(1) + '<p>B</p>', TABLE_HTML + MARK(1) + '<p>B</p>'],
+          ['une ligne vide derrière une image', IMAGE_LINE + '<p></p>' + MARK(1) + '<p>B</p>', IMAGE_LINE + MARK(1) + '<p>B</p>'],
+          ['un titre vide reste', '<p>A</p><h2></h2>' + MARK(1) + '<p>B</p>', '<p>A</p><h2></h2>' + MARK(1) + '<p>B</p>'],
+          ['les lignes vides au bas des colonnes d\'une dernière zone', zone('<p>X</p><p></p><p></p>', '<p>Y</p><p></p>') + '<p></p>' + MARK(1) + '<p>B</p>', zone('<p>X</p>', '<p>Y</p>') + MARK(1) + '<p>B</p>'],
+          ['la fin du document garde sa règle', '<p>A</p>' + MARK(1) + '<p>B</p><p></p><p></p>', '<p>A</p>' + MARK(1) + '<p>B</p>'],
+          ['sans macro-modèle, rien ne change', '<p>A</p><p></p><p>B</p><p></p>', '<p>A</p><p></p><p>B</p>'],
+        ];
+        for (const [name, html, expected] of cases) {
+          const got = trim(html);
+          if (got !== normalize(expected)) problems.push(name + ' : ' + got + ' (attendu ' + normalize(expected) + ')');
+          if (trim(got) !== got) problems.push(name + ' : un second rognage change encore le document');
+        }
+        const markers = html => (html.match(/data-macro-slot/g) || []).length;
+        const three = '<p>A</p><p></p>' + MARK(1) + '<p></p>' + MARK(2) + '<p>C</p>';
+        if (markers(trim(three)) !== 2) problems.push('un saut de page de macro-modèle a disparu : ' + trim(three));
+        return { pass: problems.length === 0, notes: JSON.stringify({ cas: cases.length, problems }) };
+      },
+    },
+    {
+      id: 'blank_page_macro_word_has_no_empty_paragraph_before_the_next_template',
+      description: 'Macro-modèle, Word : les lignes vides qui terminent un modèle ne laissent pas de paragraphe vide avant celui du modèle suivant, qui garde son saut de page ; celles du milieu d\'un modèle restent',
+      async run(h) {
+        await setup(h);
+        const problems = [];
+        const bodyOf = parts => Array.from(parts.doc.getElementsByTagName('w:body')[0].children).filter(n => n.nodeName !== 'w:sectPr');
+        const textOf = el => Array.from(el.getElementsByTagName('w:t')).map(t => t.textContent).join('');
+        const parts = await h.exportDocxParts(await macroDocument(['<p>Premier</p><p></p><p></p>', NEXT_TEMPLATE]), null, PageLayout.getMarginsTwip());
+        const body = bodyOf(parts);
+        const texts = body.map(textOf);
+        if (texts.join('|') !== 'Premier|Le modèle suivant.') problems.push('paragraphes : [' + texts.join('|') + '] (Premier|Le modèle suivant. attendu)');
+        const next = body[body.length - 1];
+        if (!next || !next.getElementsByTagName('w:pageBreakBefore').length) problems.push('le premier paragraphe du modèle suivant n\'a plus son saut de page');
+        const middle = await h.exportDocxParts(await macroDocument(['<p>A</p><p></p><p>B</p><p></p>', NEXT_TEMPLATE]), null, PageLayout.getMarginsTwip());
+        const middleTexts = bodyOf(middle).map(textOf);
+        if (middleTexts.join('|') !== 'A||B|Le modèle suivant.') problems.push('ligne vide du milieu : [' + middleTexts.join('|') + '] (A||B|Le modèle suivant. attendu)');
+        return { pass: problems.length === 0, notes: JSON.stringify({ texts, middleTexts, problems }) };
       },
     },
   ];

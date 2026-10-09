@@ -41,7 +41,7 @@ try {
     displayCols: {}, // { tableId: { colId: colonne d'affichage } } - Références affichées par une colonne d'aide gristHelper_Display* (cf. setVariables)
     visibleCols: {}, // { tableId: { colId: colonne de la table liée } } - « Colonne à afficher » d'une Référence (visibleCol, cf. setVariables)
     labels: {}, // { tableId: { colId: libellé } } - le nom de l'en-tête quand il diffère de l'identifiant (label de _grist_Tables_column, cf. setColumnLabels) ; absent = le libellé est l'identifiant
-    formulas: {}, // { tableId: { colId: formule } } - les colonnes à formule ajoutées par AddColumn et les formules des colonnes d'aide de SetDisplayFormula : le stub ne les calcule pas, il les garde pour qu'un test lise ce que le widget a demandé
+    formulas: {}, // { tableId: { colId: texte de la formule } } - colonnes dont isFormula est vrai (setFormulaColumn, AddColumn d'un modèle de la galerie) et formules des colonnes d'aide de SetDisplayFormula : le stub ne les calcule pas, il les garde pour qu'un test lise ce que le widget a demandé ; absent = colonne de données
     rows: {}, // { tableId: { id: [...], col: [...] } } forme columnaire Grist
     // Un widget réel ne peut jamais désinscrire un onRecord (pas d'"offRecord" dans l'API publique) et PLUSIEURS souscriptions coexistent, chacune
     // recevant CHAQUE événement indépendamment (grist-plugin-api.ts : chaque appel à onRecord() ajoute son propre écouteur 'message' interne) - donc
@@ -164,6 +164,16 @@ try {
     rebuildColumnMeta();
   }
 
+  // Le texte de la formule d'une colonne (`isFormula` vrai dans _grist_Tables_column), undefined pour une colonne de données. '' : une colonne « vide » (isFormula vrai, formule
+  // vide), l'état d'une colonne que l'on vient d'ajouter dans Grist ; un texte : une vraie colonne à formule, que Grist refuse d'écrire (mesuré dans un vrai Grist le 09/10).
+  function formulaOf(tableId, colId) { return state.formulas[tableId] ? state.formulas[tableId][colId] : undefined; }
+  // Pose (formula: texte, '' pour une colonne vide) ou retire (null) la formule d'une colonne de `tableId`.
+  function setFormulaColumn(tableId, colId, formula) {
+    state.formulas[tableId] = Object.assign({}, state.formulas[tableId]);
+    if (formula == null) delete state.formulas[tableId][colId]; else state.formulas[tableId][colId] = String(formula);
+    rebuildColumnMeta();
+  }
+
   // Identifiants de ligne de _grist_Tables et de _grist_Tables_column, comme Grist les donne : attribués à la création d'une table ou d'une colonne, jamais décalés ni réutilisés
   // (un renommage garde le sien - renameColumn / renameTable ci-dessous ; supprimer une colonne ou une table ne change pas ceux des autres ; une colonne recréée sous le même nom en reçoit un neuf).
   // Les colonnes sont rangées par identifiant de leur table + nom : renommer une table ne les déplace pas.
@@ -175,7 +185,7 @@ try {
   // (refreshColumnTypes, cf. js/grist-api.js) - un seul appel idempotent suffit,
   // reconstruit tout à chaque fois à partir de state.tables/columns/choices, avec les identifiants de ligne de metaIds ci-dessus.
   function rebuildColumnMeta() {
-    const gtc = columnarEmpty(['parentId', 'colId', 'type', 'widgetOptions', 'displayCol', 'visibleCol', 'label']);
+    const gtc = columnarEmpty(['parentId', 'colId', 'type', 'widgetOptions', 'displayCol', 'visibleCol', 'label', 'isFormula', 'formula']);
     const rowIdOf = {}; // "table.colonne" -> id de ligne dans _grist_Tables_column, pour displayCol
     state.tables.forEach(t => Object.keys(state.columns[t] || {}).forEach(colId => { rowIdOf[t + '.' + colId] = columnRowId(t, colId); }));
     state.tables.forEach(t => {
@@ -189,6 +199,9 @@ try {
         const linked = /^Ref(?:List)?:(.+)$/.exec(state.columns[t][colId]);
         gtc.visibleCol.push((shown && linked && rowIdOf[linked[1] + '.' + shown]) || 0);
         gtc.label.push((state.labels[t] && state.labels[t][colId]) || colId);
+        const formula = formulaOf(t, colId);
+        gtc.isFormula.push(formula !== undefined);
+        gtc.formula.push(formula === undefined ? '' : formula);
       });
     });
     // Ce qui a disparu du schéma perd son identifiant (jamais redonné : les compteurs ne reculent pas).
@@ -227,7 +240,7 @@ try {
     delete metaIds.columns[prefix + oldId];
     state.columns[tableId] = renameKey(columns, oldId, newId);
     if (state.rows[tableId] && oldId in state.rows[tableId]) state.rows[tableId] = renameKey(state.rows[tableId], oldId, newId);
-    ['choices', 'displayCols', 'visibleCols', 'labels'].forEach(bag => { if (state[bag][tableId]) state[bag][tableId] = renameKey(state[bag][tableId], oldId, newId); });
+    ['choices', 'displayCols', 'visibleCols', 'labels', 'formulas'].forEach(bag => { if (state[bag][tableId]) state[bag][tableId] = renameKey(state[bag][tableId], oldId, newId); });
     Object.keys(state.displayCols[tableId] || {}).forEach(k => { if (state.displayCols[tableId][k] === oldId) state.displayCols[tableId][k] = newId; });
     state.tables.forEach(t => Object.keys(state.visibleCols[t] || {}).forEach(k => {
       const linked = /^Ref(?:List)?:(.+)$/.exec((state.columns[t] || {})[k] || '');
@@ -244,7 +257,7 @@ try {
     metaIds.tables[newId] = tableRowId(oldId);
     delete metaIds.tables[oldId];
     state.tables[at] = newId;
-    ['columns', 'choices', 'displayCols', 'visibleCols', 'labels', 'rows', 'nextRowId', 'primaryViewOf'].forEach(bag => {
+    ['columns', 'choices', 'displayCols', 'visibleCols', 'labels', 'formulas', 'rows', 'nextRowId', 'primaryViewOf'].forEach(bag => {
       if (state[bag] && oldId in state[bag]) { state[bag][newId] = state[bag][oldId]; delete state[bag][oldId]; }
     });
     state.tables.forEach(t => Object.keys(state.columns[t] || {}).forEach(k => {
@@ -261,7 +274,7 @@ try {
     if (!state.columns[tableId] || !(colId in state.columns[tableId])) return false;
     delete state.columns[tableId][colId];
     if (state.rows[tableId]) delete state.rows[tableId][colId];
-    ['choices', 'displayCols', 'visibleCols', 'labels'].forEach(bag => { if (state[bag][tableId]) delete state[bag][tableId][colId]; });
+    ['choices', 'displayCols', 'visibleCols', 'labels', 'formulas'].forEach(bag => { if (state[bag][tableId]) delete state[bag][tableId][colId]; });
     rebuildColumnMeta();
     return true;
   }
@@ -538,6 +551,17 @@ try {
     dropTable(tableId);
   }
 
+  // Une écriture dans une vraie colonne à formule est refusée par Grist (le lot entier) ; une colonne « vide » (formule vide) devient une colonne de données à la première écriture.
+  function refuseFormulaColumns(tableId, colIds) {
+    const formula = colIds.find(k => formulaOf(tableId, k));
+    if (formula !== undefined) throw new Error('Error : la colonne ' + tableId + '.' + formula + ' est une colonne à formule');
+  }
+  function convertEmptyColumns(tableId, colIds) {
+    const empty = colIds.filter(k => formulaOf(tableId, k) === '');
+    if (!empty.length) return;
+    empty.forEach(k => { delete state.formulas[tableId][k]; });
+    rebuildColumnMeta();
+  }
   async function applyUserActions(actions) {
     if (state.viewer) {
       actions.forEach(a => state.deniedWrites.push(a));
@@ -603,10 +627,30 @@ try {
         if (table) {
           const unknown = Object.keys(fields).find(k => !(k in table));
           if (unknown) throw new Error('KeyError : colonne inconnue ' + tableId + '.' + unknown);
+          refuseFormulaColumns(tableId, Object.keys(fields));
           const idx = table.id.indexOf(rowId);
           if (idx !== -1) Object.keys(fields).forEach(k => {
             table[k][idx] = (tableId === 'Publipostage_Modeles' && k === 'DateModif') ? coerceDateModif(fields[k]) : fields[k];
           });
+          convertEmptyColumns(tableId, Object.keys(fields));
+        }
+        retValues.push(null);
+      } else if (type === 'BulkUpdateRecord') {
+        // Comme Grist (mesuré dans un vrai Grist le 09/10) : une colonne inconnue, une colonne à formule ou une ligne qui n'existe plus font refuser TOUT le lot, rien n'est écrit.
+        const rowIds = action[2] || [];
+        const columns = action[3] || {};
+        const table = state.rows[tableId];
+        if (table) {
+          const unknown = Object.keys(columns).find(k => !(k in table));
+          if (unknown) throw new Error('KeyError : colonne inconnue ' + tableId + '.' + unknown);
+          refuseFormulaColumns(tableId, Object.keys(columns));
+          const missing = rowIds.find(id => table.id.indexOf(id) === -1);
+          if (missing !== undefined) throw new Error('Error : la ligne ' + missing + ' de ' + tableId + ' n\u2019existe pas');
+          rowIds.forEach((rowId, at) => {
+            const idx = table.id.indexOf(rowId);
+            Object.keys(columns).forEach(k => { table[k][idx] = columns[k][at]; });
+          });
+          convertEmptyColumns(tableId, Object.keys(columns));
         }
         retValues.push(null);
       } else if (type === 'RemoveRecord' || type === 'BulkRemoveRecord') {
@@ -816,7 +860,7 @@ try {
     },
   };
 
-  window.__gristStub = { state, setViewer, setVariables, setColumnLabels, setRows, setHiddenColumns, setAccessLevel, setWidgetOptions, saveOptions, revertOptions, setUserEmail, setUserName, setDocId, renameColumn, renameTable, deleteColumn, dropTable, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, remoteWrite, getRow, dropColumn, resetPages, readPages, setLatency, resetInFlightStats, failReadBackOnce, setViewRows, setViewFailure };
+  window.__gristStub = { state, setViewer, setVariables, setColumnLabels, setFormulaColumn, setRows, setHiddenColumns, setAccessLevel, setWidgetOptions, saveOptions, revertOptions, setUserEmail, setUserName, setDocId, renameColumn, renameTable, deleteColumn, dropTable, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, remoteWrite, getRow, dropColumn, resetPages, readPages, setLatency, resetInFlightStats, failReadBackOnce, setViewRows, setViewFailure };
   // Point d'ancrage pour seeder AVANT que main.js:init() ne tourne (donc avant le tout premier
   // fetchTable de GristAPI.init()) - contrairement à un appel de setVariables/setRows APRÈS "Widget
   // prêt.", qui ne peut jamais tester "le widget démarre avec tel modèle déjà marqué par défaut" (cf.
