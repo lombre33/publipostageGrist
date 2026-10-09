@@ -17,13 +17,20 @@
 // Quand la variable d'origine a une condition d'affichage, chaque bulle insérée la reprend par défaut, en copie : « Reprendre la condition
 // d'affichage », décochée, les insère sans. « Remplacer », à côté d'« Insérer », met les attributs cochés à la place de la bulle au lieu de les
 // ajouter après elle : c'est la même bulle dont la colonne change, ses réglages restent (EditorCore.patchNodeAndReselect, setNodeMarkup).
+//
+// Choisir UNE colonne (`pickColumn`) : la même fenêtre, ouverte depuis le champ d'une colonne de règle de condition (js/condition-fields.js : le bouton à droite de
+// la zone de recherche de la liste, Ctrl+Entrée, ou un clic sur la colonne choisie, qui s'y montre comme une variable du document), pour choisir la colonne de la
+// règle en voyant leur valeur sur la ligne sélectionnée et en descendant de Référence en Référence comme ici. Elle part de la table de la colonne - celle de la page,
+// ou une autre table liée, comme pour la bulle d'une variable de cette table -, sans bulle d'origine : une seule colonne se sélectionne (une case ronde), « Choisir »
+// la rend à celui qui a ouvert la fenêtre, qui la pose comme la liste l'aurait posée ; ni insertion, ni « Remplacer », ni condition reprise, ni lien créé.
 const VariableLinkedAttrs = (function () {
   const { el, button } = Dom;
   let win = null; // la fenêtre de js/modal-base.js, créée à la première ouverture
   let refs = null;
-  // { editor, pos, node, base, refColumn, minHops, hops, picks } pendant que la fenêtre est ouverte. `base` : table dont partent les chemins ;
+  // { editor, pos, node, base, refColumn, minHops, hops, picks, pick } pendant que la fenêtre est ouverte. `base` : table dont partent les chemins ;
   // `hops` : colonnes Référence suivies depuis elle jusqu'au niveau affiché (vide : les colonnes de `base` elle-même) ; `picks` : cases cochées,
-  // { hops, col }, dans l'ordre du choix.
+  // { hops, col }, dans l'ordre du choix. `pick` : { resolve, result } quand la fenêtre sert à choisir une colonne (pickColumn) - `editor`, `pos` et
+  // `node` sont alors null et `picks` ne garde qu'une colonne -, null pour « Autres attributs » d'une bulle. `noteText` : ce que disent les valeurs, sous la liste.
   let state = null;
   let opening = false; // vrai pendant la fenêtre de choix de la clé qui peut précéder celle-ci
   let valuesGeneration = 0;
@@ -126,27 +133,65 @@ const VariableLinkedAttrs = (function () {
       event.preventDefault();
       goTo(state.hops.concat(descend.closest('.var-linked-row').dataset.col));
     });
+    // Choisir une colonne : un double-clic sur sa ligne la choisit d'un coup, comme un clic dans une liste (le premier clic l'a sélectionnée).
+    list.addEventListener('dblclick', event => {
+      if (!state || !state.pick || (event.target.closest && event.target.closest('.var-linked-descend'))) return;
+      const row = event.target.closest && event.target.closest('.var-linked-row');
+      const box = row && row.querySelector('input');
+      if (!box || box.disabled) return;
+      box.checked = true;
+      onPickChange({ target: box });
+      confirmPick();
+    });
     cancelBtn.addEventListener('click', close);
     replaceBtn.addEventListener('click', replace);
-    insertBtn.addEventListener('click', insert);
+    insertBtn.addEventListener('click', () => (state && state.pick ? confirmPick() : insert()));
   }
 
-  // Cases cochées : gardées dans `state.picks` (et non lues dans la liste) pour survivre à un changement de niveau.
+  // Cases cochées : gardées dans `state.picks` (et non lues dans la liste) pour survivre à un changement de niveau. Pour le choix d'une colonne, une seule
+  // reste : celle qu'on vient de sélectionner (la case ronde décoche l'autre dans la liste affichée, `picks` doit suivre aussi celle d'un autre niveau).
   const pickIndex = (hops, col) => state.picks.findIndex(p => p.col === col && sameHops(p.hops, hops));
   function onPickChange(event) {
     const box = event.target;
-    if (!state || !box || box.type !== 'checkbox') return;
+    if (!state || !box || (box.type !== 'checkbox' && box.type !== 'radio')) return;
+    if (state.pick) {
+      if (box.checked) state.picks = [{ hops: state.hops.slice(), col: box.value }];
+      syncActionButtons();
+      return;
+    }
     const index = pickIndex(state.hops, box.value);
     if (box.checked && index === -1) state.picks.push({ hops: state.hops.slice(), col: box.value });
     else if (!box.checked && index !== -1) state.picks.splice(index, 1);
     syncActionButtons();
   }
-  // « Insérer » dit combien d'attributs il pose ; lui et « Remplacer » restent grisés tant que rien n'est coché.
+  // « Insérer » dit combien d'attributs il pose ; lui et « Remplacer » restent grisés tant que rien n'est coché. Pour le choix d'une colonne, « Choisir » reste
+  // grisé tant qu'aucune n'est sélectionnée, et la ligne sous la liste dit laquelle l'est.
   function syncActionButtons() {
     const count = state ? state.picks.length : 0;
+    if (state && state.pick) {
+      refs.insertBtn.textContent = I18n.t('varLinked.pick');
+      refs.insertBtn.disabled = count === 0;
+      renderNote();
+      return;
+    }
     refs.insertBtn.textContent = I18n.t('varLinked.insert', { count });
     refs.insertBtn.disabled = count === 0;
     refs.replaceBtn.disabled = count === 0;
+  }
+  // La colonne choisie, dite comme le fil d'Ariane : « Accompagnateur › Email » (espaces insécables : la ligne ne se coupe pas au milieu du chemin).
+  const pickedText = pick => pick.hops.concat(pick.col).join('\u00a0›\u00a0');
+  // La ligne sous la liste : ce que disent les valeurs (`state.noteText`), puis ce que fait le bouton - « Insérer » ajoute les attributs cochés... ; pour le choix
+  // d'une colonne, la colonne choisie ou comment la choisir. `state.noteBare` : sans cette seconde phrase (le calcul des valeurs est en cours).
+  function renderNote() {
+    if (!state) return;
+    const [picked] = state.picks;
+    const tail = state.noteBare ? '' : state.pick ? I18n.t(picked ? 'varLinked.pickChosen' : 'varLinked.pickHint', picked ? { column: pickedText(picked) } : undefined) : I18n.t('varLinked.noteInsert');
+    refs.note.textContent = (state.noteText + ' ' + tail).trim();
+  }
+  function setNote(text, bare) {
+    state.noteText = text;
+    state.noteBare = !!bare;
+    renderNote();
   }
   // Le filtre cherche comme toutes les listes de colonnes (js/search-select.js:nameMatcher) : des mots dans n'importe quel ordre, dans les noms de la
   // colonne (table, identifiant, libellé Grist) et dans la valeur affichée en face.
@@ -173,7 +218,8 @@ const VariableLinkedAttrs = (function () {
     row.dataset.col = col;
     row.dataset.search = Variables.columnSearchText(table, col);
     const box = el('input');
-    box.type = 'checkbox';
+    box.type = state.pick ? 'radio' : 'checkbox';
+    if (state.pick) box.name = 'var-linked-pick';
     box.value = col;
     box.disabled = isCurrent;
     box.checked = !isCurrent && pickIndex(state.hops, col) !== -1;
@@ -198,10 +244,11 @@ const VariableLinkedAttrs = (function () {
     const { node, base, hops } = state;
     const table = levelTable();
     const cols = GristAPI.getVisibleColumns(table);
-    const own = String(node.attrs.column).split('.');
-    const currentCol = node.attrs.table === base && sameHops(own.slice(0, -1), hops) ? own[own.length - 1] : null;
+    // La colonne de la bulle d'origine, montrée mais pas cochable ; le choix d'une colonne n'a pas de bulle d'origine : toutes se sélectionnent.
+    const own = node ? String(node.attrs.column).split('.') : [];
+    const currentCol = node && node.attrs.table === base && sameHops(own.slice(0, -1), hops) ? own[own.length - 1] : null;
     list.replaceChildren();
-    if (!cols.some(c => c !== currentCol)) list.appendChild(el('div', 'var-linked-empty', I18n.t('varLinked.empty', { table })));
+    if (!cols.some(c => c !== currentCol)) list.appendChild(el('div', 'var-linked-empty', I18n.t(state.pick ? 'varLinked.pickEmpty' : 'varLinked.empty', { table })));
     cols.forEach(col => list.appendChild(columnRow(table, col, col === currentCol)));
     const noMatch = el('div', 'var-linked-empty', I18n.t('varLinked.noFilterMatch'));
     noMatch.dataset.role = 'no-match';
@@ -253,14 +300,13 @@ const VariableLinkedAttrs = (function () {
   // (Variables.resolveRows : règle de liaison puis références du chemin), donc ce que les attributs afficheront en lecture.
   async function loadValues() {
     const gen = ++valuesGeneration;
-    const { note, list } = refs;
+    const { list } = refs;
     const { base, hops } = state;
     const table = levelTable();
     const currentTableId = GristAPI.getCurrentTableId();
     const record = GristAPI.getCurrentRecord();
-    const insertHint = I18n.t('varLinked.noteInsert');
-    if (!record || !currentTableId) { note.textContent = I18n.t('varLinked.noteNoRecord') + ' ' + insertHint; return; }
-    note.textContent = I18n.t('varCond.debug.computing');
+    if (!record || !currentTableId) { setNote(I18n.t('varLinked.noteNoRecord')); return; }
+    setNote(I18n.t('varCond.debug.computing'), true);
     let rows = [];
     try {
       const found = await Variables.resolveRows(base, hops, currentTableId, record);
@@ -269,7 +315,7 @@ const VariableLinkedAttrs = (function () {
     if (gen !== valuesGeneration || !state) return;
     if (!rows.length) {
       const missing = hops.length ? I18n.t('varLinked.noteNoPathRow', { path: pathText(), id: record.id }) : I18n.t('varLinked.noteNoLinkedRow', { table, id: record.id });
-      note.textContent = missing + ' ' + insertHint;
+      setNote(missing);
       return;
     }
     list.querySelectorAll('.var-linked-row').forEach(row => {
@@ -279,7 +325,7 @@ const VariableLinkedAttrs = (function () {
       row.dataset.value = text;
     });
     applyFilter();
-    note.textContent = I18n.t('varLinked.noteRow', { id: record.id }) + ' ' + insertHint;
+    setNote(I18n.t('varLinked.noteRow', { id: record.id }));
   }
 
   function subtitleText() {
@@ -297,11 +343,12 @@ const VariableLinkedAttrs = (function () {
     return I18n.t('varLinked.subtitleVia', { badge, via });
   }
 
-  // Affiche le niveau `state.hops` : titre, fil d'Ariane, colonnes puis valeurs.
+  // Affiche le niveau `state.hops` : titre, fil d'Ariane, colonnes puis valeurs. Le choix d'une colonne n'a pas de sous-titre (il dirait comment les attributs
+  // s'insèrent) : le fil d'Ariane dit où l'on est, la ligne sous la liste ce qu'on a choisi.
   function renderLevel() {
     const { title, subtitle, filter } = refs;
-    title.textContent = I18n.t('varLinked.title', { table: levelTable() });
-    subtitle.textContent = subtitleText();
+    title.textContent = I18n.t(state.pick ? 'varLinked.pickTitle' : 'varLinked.title', { table: levelTable() });
+    subtitle.textContent = state.pick ? '' : subtitleText();
     filter.value = '';
     renderPath();
     renderList();
@@ -403,10 +450,21 @@ const VariableLinkedAttrs = (function () {
   function close(opts) {
     if (!win) return;
     const editor = state && state.editor;
+    const choosing = state && state.pick;
     win.hide();
     state = null;
     valuesGeneration += 1;
     if (editor && !(opts && opts.keepFocus)) editor.view.focus();
+    // Le choix d'une colonne : celui qui attend la reçoit une fois la fenêtre fermée, ou null (Annuler, Échap) ; le focus lui revient, pas à l'éditeur.
+    if (choosing) choosing.resolve(choosing.result);
+  }
+
+  // « Choisir » : la colonne sélectionnée part à celui qui a ouvert la fenêtre pour choisir une colonne, avec les Références suivies pour l'atteindre.
+  function confirmPick() {
+    if (!state || !state.pick || !state.picks.length) return;
+    const [picked] = state.picks;
+    state.pick.result = { base: state.base, hops: picked.hops.slice(), column: picked.col };
+    close();
   }
 
   // `pos` : position de la bulle, capturée au clic sur l'icône de la barre flottante.
@@ -423,11 +481,14 @@ const VariableLinkedAttrs = (function () {
     finally { opening = false; }
     if (!linked) { editor.view.focus(); return; }
     ensureModal();
-    state = { editor, pos, node, base: t.base, refColumn: t.refColumn, minHops: t.minHops, hops: t.hops.slice(), picks: [] };
-    const { filter, cancelBtn, replaceBtn } = refs;
+    state = { editor, pos, node, base: t.base, refColumn: t.refColumn, minHops: t.minHops, hops: t.hops.slice(), picks: [], pick: null, noteText: '', noteBare: false };
+    const { filter, cancelBtn, replaceBtn, subtitle } = refs;
     filter.placeholder = I18n.t('varLinked.filter');
     filter.setAttribute('aria-label', I18n.t('varLinked.filter'));
     cancelBtn.textContent = I18n.t('common.cancel');
+    // Les éléments que le choix d'une colonne (pickColumn) cache ou change : remis comme pour une bulle.
+    subtitle.hidden = false;
+    replaceBtn.hidden = false;
     replaceBtn.textContent = I18n.t('varLinked.replace');
     replaceBtn.title = I18n.t('varLinked.replaceTitle', { badge: VariableModal.badgeText(node) });
     renderInheritOption();
@@ -435,5 +496,50 @@ const VariableLinkedAttrs = (function () {
     win.show(filter);
   }
 
-  return { open, close, isOpen, isAvailable };
+  // Le niveau de la liste où est la colonne déjà choisie : elle est sélectionnée d'avance, et amenée dans la partie visible de la liste.
+  function revealPick() {
+    const { list } = refs;
+    const box = list.querySelector('.var-linked-row input:checked');
+    const line = box && box.closest('.var-linked-row');
+    if (!line || line.hidden) return;
+    const shift = line.getBoundingClientRect().top - list.getBoundingClientRect().top;
+    list.scrollTop = Math.max(0, list.scrollTop + shift - Math.round((list.clientHeight - line.offsetHeight) / 2));
+  }
+
+  // Choisir UNE colonne d'une table ou, de Référence en Référence, d'une table qu'elle désigne : ce que fait le champ d'une colonne de règle de condition
+  // (js/condition-fields.js) quand on y ouvre la fenêtre des attributs. `request` : { base (la table d'où partent les chemins : celle de la page par défaut, ou la
+  // table liée de la colonne déjà choisie), hops (les colonnes Référence déjà suivies depuis elle : le niveau où la fenêtre s'ouvre), column (la colonne déjà
+  // choisie à ce niveau, sélectionnée d'avance), query (ce qui était tapé dans la liste, repris dans le filtre) }. Rend { base, hops, column } - la table de départ,
+  // les Références suivies puis la colonne choisie - ou null quand la fenêtre se ferme sans choix. Une table inconnue (colonne disparue) ne dit rien : la fenêtre
+  // s'ouvre sur la table de la page. Rien n'est posé ici : ni bulle, ni lien de table ; celui qui a demandé pose le choix.
+  function pickColumn(request) {
+    const page = GristAPI.getCurrentTableId();
+    if (!page || opening || state) return Promise.resolve(null);
+    const known = !(request && request.base) || GristAPI.getTables().indexOf(request.base) !== -1;
+    const asked = known ? (request || {}) : { query: request.query };
+    const base = asked.base || page;
+    const hops = GristAPI.tableAtEndOf(base, asked.hops || []) ? (asked.hops || []).slice() : [];
+    const column = asked.column && GristAPI.getVisibleColumns(GristAPI.tableAtEndOf(base, hops)).indexOf(asked.column) !== -1 ? asked.column : '';
+    return new Promise(resolve => {
+      ensureModal();
+      state = {
+        editor: null, pos: null, node: null, base, refColumn: null, minHops: 0, hops, picks: column ? [{ hops: hops.slice(), col: column }] : [],
+        pick: { resolve, result: null }, noteText: '', noteBare: false,
+      };
+      const { filter, cancelBtn, replaceBtn, subtitle, inheritRow } = refs;
+      filter.placeholder = I18n.t('varLinked.filter');
+      filter.setAttribute('aria-label', I18n.t('varLinked.filter'));
+      cancelBtn.textContent = I18n.t('common.cancel');
+      subtitle.hidden = true;
+      inheritRow.hidden = true;
+      replaceBtn.hidden = true;
+      renderLevel();
+      filter.value = asked.query || '';
+      applyFilter();
+      win.show(filter);
+      revealPick();
+    });
+  }
+
+  return { open, pickColumn, close, isOpen, isAvailable };
 })();

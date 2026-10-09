@@ -21,6 +21,16 @@
 .ss-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ss-hint { margin-left: .35em; font-size: 11.5px; color: var(--text-faint); }
 .ss-chevron { flex: none; width: 6px; height: 6px; margin: -3px 2px 0 0; border: solid var(--text-muted); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
+/* Le choix dessiné comme une bulle de variable (option `pill`, js/search-select.js) : la colonne d'une règle de condition est une #Variable comme celles du
+   document. La classe `var-badge` lui donne ses couleurs (css/style.css, les mêmes dans les deux thèmes comme dans la fenêtre qui montre la bulle d'origine),
+   son début et sa fin ceux d'une bulle de tableau (css/variable-actions.css) : trop longue pour le champ, c'est son milieu que « … » coupe, jamais le bout du
+   nom. Le caractère de la bulle est dessiné ici (data-trigger). Un clic sur elle ouvre la fenêtre des attributs, un clic ailleurs dans le champ la liste : un trait
+   la cerne au survol. */
+.ss-trigger.is-pill .ss-value { display: flex; align-items: center; }
+.ss-trigger.is-pill .ss-hint:empty { display: none; }
+.ss-pill { min-width: 0; }
+.ss-pill::before { content: attr(data-trigger); flex: none; }
+.ss-pill:hover { outline: 1px solid currentColor; }
 
 /* Fenêtre du macro-modèle (js/macro-editor.js) : la liste « Si aucune règle ne correspond » a la hauteur et le corps du <select> qu'elle remplace
    (28 px, 12 px) ; la page de garde prend ceux des champs de la fenêtre (30 px, 12,5 px : le défaut) ; les listes des règles sont `inline`. */
@@ -39,6 +49,13 @@
 .ss-input { display: block; width: 100%; height: 28px; box-sizing: border-box; padding: 0 8px 0 26px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23667085' stroke-width='2.4' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E") no-repeat 8px 50% / 13px 13px; color: var(--text); font-family: var(--font-ui); font-size: 12.5px; }
 .ss-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 .ss-input::placeholder { color: var(--text-faint); }
+/* Choisir dans la fenêtre des attributs (option `browse`, js/search-select.js) : à droite de la zone de recherche, un bouton carré de sa hauteur, avec l'icône d'« Autres
+   attributs » de la barre d'une bulle (une icône, une fonction : c'est la même fenêtre). Les listes sans cette option gardent la zone de recherche pleine largeur. */
+.ss-search.has-browse { display: flex; align-items: center; gap: 6px; }
+.ss-search.has-browse .ss-input { flex: 1 1 auto; width: auto; min-width: 0; }
+.ss-browse { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text-muted); cursor: pointer; }
+.ss-browse svg { width: 15px; height: 15px; }
+.ss-browse:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); }
 .ss-list { position: relative; flex: 1 1 auto; min-height: 0; margin: 0; padding: 4px; list-style: none; overflow-y: auto; overscroll-behavior: contain; }
 /* Une ligne : nom puis indice, à la suite (retour à la ligne aux espaces, jamais au milieu d'un nom), coche du choix courant calée à droite. */
 .ss-option { position: relative; padding: 5px 24px 5px 8px; border-radius: 5px; font-size: 12.5px; line-height: 1.35; color: var(--text); cursor: pointer; overflow-wrap: anywhere; }

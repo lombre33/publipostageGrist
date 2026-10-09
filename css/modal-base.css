@@ -12,12 +12,14 @@
   --pp-modal-gap: 12px;
 }
 
-/* Le voile suit le thème (--pp-scrim, plus foncé en sombre). Quatre étages de z-index, tous au-dessus des couches flottantes de la page (barres
-   flottantes 1500, menus 1600, info-bulles 1800 : jetons --z-*, css/style.css, js/layers.js) : 1990 pour les fenêtres de variable ; 2000 pour celles
-   d'index.html (`.pp-modal-page`) ; 2050 pour la clé de correspondance, qui s'ouvre par-dessus la fenêtre de condition (1990) comme celle d'un
-   macro-modèle (2000, écrite après elle dans index.html : à z-index égal, la clé passerait dessous) ; 2100 pour les saisies et confirmations,
-   par-dessus toutes les autres. */
+/* Le voile suit le thème (--pp-scrim, plus foncé en sombre). Cinq étages de z-index, tous au-dessus des couches flottantes de la page (barres
+   flottantes 1500, menus 1600, info-bulles 1800 : jetons --z-*, css/style.css, js/layers.js) : 1990 pour les fenêtres de variable ; 1995 pour « Autres
+   attributs », qui s'ouvre aussi par-dessus la fenêtre de condition (choisir la colonne d'une règle) : toutes deux sont créées à leur première ouverture, dans
+   l'ordre où on les ouvre, et à z-index égal celle qui est venue après passerait dessus ; 2000 pour celles d'index.html (`.pp-modal-page`) ; 2050 pour la clé
+   de correspondance, qui s'ouvre par-dessus la fenêtre de condition (1990) comme celle d'un macro-modèle (2000, écrite après elle dans index.html : à
+   z-index égal, la clé passerait dessous) ; 2100 pour les saisies et confirmations, par-dessus toutes les autres. */
 .pp-modal { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--pp-scrim); z-index: 1990; }
+#var-linked-modal { z-index: 1995; }
 .pp-modal-page { z-index: 2000; }
 #link-config-modal { z-index: 2050; }
 

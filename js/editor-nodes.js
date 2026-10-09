@@ -2062,6 +2062,6 @@ const EditorNodes = (function () {
     createBulletStyleExtension, createOrderedListStyleExtension, createTaskListStyleExtension,
     withCellBackground, withFastColwidth, parseColwidthOnce, createTableView, createTabNavigationExtension, createClearHistoryExtension,
     createTwoColumnsNodes, createConditionalTextNode, createConditionalCheckboxNode, createConditionalValueNode, createConditionalValueKeysExtension, createFloatingImageKeysExtension, createBehindImageClickThroughExtension, createEditorImageNode, moveImageNode, createPageBreakNode,
-    createHeadingNumberingConfigNode, createTocNode,
+    createHeadingNumberingConfigNode, createTocNode, splitBadgeLabel,
   };
 })();

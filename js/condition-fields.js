@@ -75,6 +75,63 @@ const ConditionFields = (function () {
     SearchSelect.addDynamicOption(select, { value: saved, hint: friendlyTypeLabel(end.type), search: Variables.columnSearchText(parts[0], path) }, root);
   }
 
+  // === Choisir la colonne dans la fenêtre « Autres attributs » === (option `attributesWindow` de buildColumnField)
+  const sameList = (a, b) => a.length === b.length && a.every((item, i) => item === b[i]);
+
+  function windowStart(context, pageTable) {
+    // Où s'ouvre la fenêtre (js/variable-linked-attrs.js:pickColumn) : { base, hops, column } - la table d'où partent les chemins, les colonnes Référence à suivre
+    // depuis elle jusqu'au niveau montré, et la colonne à y sélectionner d'avance. C'est le niveau où l'on est dans la liste (`context.from` : la colonne Référence
+    // d'où l'on est descendu) ; à défaut, celui de la colonne déjà choisie (un clic sur sa bulle) ; sinon le premier niveau de la table de la page. La colonne
+    // déjà choisie y est sélectionnée si elle est à ce niveau. La fenêtre part de la table de la colonne : celle de la page (« Colonne », « Page.Réf.Colonne »)
+    // ou une autre (« Annuaire.Colonne », « Annuaire.Réf.Colonne »), qu'elle suit de Référence en Référence comme pour la bulle d'une variable de cette table.
+    const path = value => (value && value !== ADVANCED_COLUMN_VALUE ? fullKey(String(value), pageTable).split('.') : []);
+    const parts = path(context.value);
+    const chosen = parts.length >= 2 ? { base: parts[0], hops: parts.slice(1, -1), column: parts[parts.length - 1] } : null;
+    const from = path(context.from);
+    if (from.length) {
+      const start = { base: from[0], hops: from.slice(1), column: '' };
+      return chosen && chosen.base === start.base && sameList(chosen.hops, start.hops) ? Object.assign(start, { column: chosen.column }) : start;
+    }
+    return chosen || { base: pageTable, hops: [], column: '' };
+  }
+
+  async function browseColumn(select, search, context) {
+    // Ce que fait le bouton (ou Ctrl+Entrée, ou un clic sur la bulle du choix) d'une liste de colonnes qui a `attributesWindow` : la fenêtre « Autres attributs »
+    // s'ouvre pour choisir UNE colonne de la page ou, de Référence en Référence, d'une table qu'elle désigne, avec la valeur de chacune sur la ligne sélectionnée.
+    // La colonne choisie est posée comme la liste l'aurait posée : sa ligne si la liste n'en a pas (un chemin, addSavedPathOption), `select.value`, puis le
+    // `change` d'un choix (la règle l'adopte, la fenêtre de condition relance son aperçu). Annuler ou Échap ne change rien. Dans les deux cas le focus revient
+    // au champ.
+    const pageTable = GristAPI.getCurrentTableId();
+    if (!pageTable) return;
+    const start = windowStart(context, pageTable);
+    let picked = null;
+    try { picked = await VariableLinkedAttrs.pickColumn({ base: start.base, hops: start.hops, column: start.column, query: context.query }); }
+    catch (e) { console.error('[ConditionFields] fenêtre des attributs indisponible', e); }
+    if (!select.isConnected) return; // la règle a été redessinée ou retirée pendant le choix
+    const key = picked ? [picked.base].concat(picked.hops, picked.column).join('.') : '';
+    const listed = () => Array.prototype.some.call(select.options, option => option.value === key);
+    if (key && !listed()) addSavedPathOption(select, key, pageTable);
+    // Une colonne de la page est « Colonne » dans la liste, pas « Table.Colonne » : sa ligne est cherchée sous les deux formes.
+    const value = listed() ? key : (picked && picked.base === pageTable && !picked.hops.length ? picked.column : '');
+    if (value && Array.prototype.some.call(select.options, option => option.value === value) && select.value !== value) {
+      select.value = value;
+      search.sync();
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    } else {
+      search.sync();
+    }
+    search.focus({ preventScroll: true });
+  }
+
+  function columnPill(value, name) {
+    // Le choix d'une règle dessiné comme une variable du document (option `pill` de SearchSelect) : son nom (« Colonne », « Table.Colonne », « Table.Réf.Colonne »)
+    // coupé en un début et une fin comme celui d'une bulle (EditorNodes.splitBadgeLabel), sous le caractère de déclenchement des variables. Pas la saisie avancée :
+    // ce n'est pas une colonne.
+    if (!value || value === ADVANCED_COLUMN_VALUE) return null;
+    const { head, tail } = EditorNodes.splitBadgeLabel(name);
+    return { prefix: Variables.triggerChar(), head, tail };
+  }
+
   function appendAllTablesOptions(select, currentTableId) {
     // Une seule liste à plat, sans groupes : les colonnes de la table de la page en tête et en valeur nue, celles des autres tables en
     // « Table.Colonne » (parseColumnRef), si bien que la table se cherche avec le nom de la colonne. Une colonne d'une table pas encore liée se choisit
@@ -145,7 +202,10 @@ const ConditionFields = (function () {
   // { typeHint } est la ligne d'indication que l'appelant garde (cachée tant qu'elle est vide) et { warningOnly: true } n'y écrit que l'avertissement
   // « absente de la ligne affichée », pas le type de la colonne. Une colonne Référence de la liste montre une flèche qui ouvre les colonnes de sa table (les
   // lignes de la liste sont alors des chemins « Table.Référence.Colonne », columnsBelow) ; pas avec { table }, où le filtre d'une boucle lit la ligne
-  // parcourue seule.
+  // parcourue seule. { attributesWindow: true } (la fenêtre de condition) ajoute à la liste un bouton, et Ctrl+Entrée, qui ouvrent la fenêtre « Autres attributs »
+  // pour y choisir la colonne en voyant leur valeur (browseColumn) ; la colonne choisie, elle, s'affiche dans le champ comme une variable du document
+  // (columnPill) et un clic sur elle - ou Ctrl+Entrée sur le champ - ouvre la même fenêtre, sur son niveau ; aussi pour l'autre colonne d'une règle qui en
+  // compare deux.
   function buildColumnField(rule, onTypeChange, options) {
     const opts = options || {};
     const prop = opts.property || 'column';
@@ -220,8 +280,13 @@ const ConditionFields = (function () {
     // L'indice de type est dit dans la liste ouverte, pas dans le champ fermé : il reste sous le champ (typeHint). Si le composant échoue, le
     // <select> natif reste affiché.
     try {
+      // La fenêtre des attributs : seulement pour les listes qui descendent dans les Références (comme la fenêtre), pas celle d'une boucle. Elle s'ouvre par le
+      // bouton de la liste, Ctrl+Entrée et un clic sur la colonne choisie, qui s'y montre comme une variable du document.
+      const windowed = !!opts.attributesWindow && !opts.table && typeof VariableLinkedAttrs !== 'undefined';
       search = SearchSelect.attachColumns(select, {
         inline: true, hintInTrigger: false, expand: opts.table ? undefined : item => columnsBelow(item, GristAPI.getCurrentTableId()),
+        browse: windowed ? context => browseColumn(select, search, context) : undefined,
+        pill: windowed ? columnPill : undefined,
       });
     } catch (e) { console.warn('[ConditionFields] recherche de colonne indisponible, liste native conservée', e); }
     // typeHint reste hors de `wrap` (largeur flex:1, un tiers de la ligne) : l'avertissement « colonne absente », long, écraserait le reste de la

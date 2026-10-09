@@ -6,7 +6,8 @@
 // Écrans : fenêtre de condition, filtre et « Trier par » de la boucle, règles et listes de modèles des macro-modèles (et la règle sur deux lignes, section ruleRows, en
 // clair et en sombre), Réglages > Accès (la table et les colonnes), menu « Image depuis une variable » de la barre, champ Valeur d'une règle (section values : colonne
 // à choix, Référence, très longue liste plafonnée à 500 lignes, en clair et en sombre ; section boolValues : la liste Oui / Non d'une colonne Oui / Non ; section hashList et fin de
-// imagePicker : la table de la page en tête de la liste « # » et du menu Image ; section nameSearch : « porteur 3 », « Porteur3 » et le libellé Grist dans la liste « # », la fenêtre de condition et le champ Nom du PDF).
+// imagePicker : la table de la page en tête de la liste « # » et du menu Image ; section nameSearch : « porteur 3 », « Porteur3 » et le libellé Grist dans la liste « # », la fenêtre de condition et le champ Nom du PDF ;
+// section descend : la flèche d'une colonne Référence, le fil d'Ariane et le clavier ; section attributesWindow : le bouton (et Ctrl+Entrée) qui ouvre la fenêtre « Autres attributs » pour choisir la colonne d'une règle de condition).
 // Lancé par run-headless.mjs (groupe Node "columnSearchMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-column-search-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -145,6 +146,21 @@ await page.waitForTimeout(300);
 }
 await seedData();
 
+// CsAnnuaire a de plus une Référence vers CsServices (Service) : de quoi descendre sur deux niveaux (sections descend et attributesWindow). La page est rendue sur CsDossiers, ligne 1.
+async function seedReferences() {
+  await seedData();
+  await page.evaluate(async () => {
+    const stub = window.__gristStub;
+    stub.setVariables('CsServices', { Libelle: 'Text', Budget: 'Numeric' });
+    stub.setVariables('CsAnnuaire', { NomPrenom: 'Text', Telephone: 'Text', Naissance: 'Date', Service: 'Ref:CsServices' });
+    stub.setRows('CsServices', [{ id: 3, Libelle: 'Juridique', Budget: 500 }]);
+    stub.setRows('CsAnnuaire', [{ id: 7, NomPrenom: 'Dupont Jean', Telephone: '06 11 22 33 44', Naissance: 631152000, Service: 3 }]);
+    await GristAPI.refreshSchema();
+    stub.fireRecord({ id: 1, Titre: 'Dossier A', Statut: 'Urgent', Responsable: 'Dupont Jean', Montant: 1200, Echeance: 631152000, Actif: true }, 'CsDossiers');
+  });
+  await page.waitForTimeout(250);
+}
+
 // Centre d'un élément et ce qui s'y trouve réellement au premier plan (un champ recouvert par autre chose ne recevrait pas le clic).
 async function hitTest(selector) {
   return page.evaluate(sel => {
@@ -178,6 +194,15 @@ async function clickCenter(selector) {
   const box = await hitTest(selector);
   if (box.found) await page.mouse.click(box.x, box.y);
   await page.waitForTimeout(150);
+  return box;
+}
+// Ouvre la liste d'un champ de colonne de la fenêtre de condition. Un champ qui montre déjà une colonne la dessine comme une bulle de variable : son centre ouvre la fenêtre des
+// attributs, la liste s'ouvre par le bord droit du champ (sa flèche) ; un champ vide s'ouvre par son centre.
+async function clickListOpener(selector, scrollOver) {
+  const box = await reveal(selector, scrollOver || '#var-condition-modal .modal-content');
+  const pilled = await page.evaluate(sel => { const trigger = document.querySelector(sel); return !!trigger && trigger.classList.contains('is-pill'); }, selector);
+  if (box.found) await page.mouse.click(pilled ? box.right - 9 : box.x, box.y);
+  await page.waitForTimeout(200);
   return box;
 }
 async function clickBadge(column) {
@@ -292,6 +317,71 @@ const hashExpectedKeys = query => page.evaluate(q => {
   const keys = GristAPI.getAllVariables().filter(v => v.column.indexOf('gristHelper_') !== 0 && v.key.toLowerCase().includes(q));
   return keys.filter(v => v.table === current).concat(keys.filter(v => v.table !== current)).map(v => v.key);
 }, query);
+
+// Aides de la fenêtre de condition à la vraie souris, partagées par les sections descend et attributesWindow : le champ de la colonne de la première règle, la flèche d'une ligne de la
+// liste ouverte, le niveau qu'elle montre, le fil d'Ariane, l'état de la règle et le contraste d'une couleur de texte (WCAG).
+const fieldSel = cond + ' .macro-rule-column-wrap .ss-trigger';
+const cancelOf = cond + ' .var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)';
+const conditionOn = column => page.evaluate(col => {
+  let found;
+  EditorCore.getEditor().state.doc.descendants(n => { if (n.type.name === 'varBadge' && n.attrs.column === col) found = n.attrs.condition; });
+  return found;
+}, column);
+// La flèche d'une ligne de la liste ouverte et ce qu'un vrai clic y trouve.
+const arrowBox = name => page.evaluate(({ scope, name }) => {
+  const row = Array.from(document.querySelectorAll(scope + ' .ss-panel:not([hidden]) .ss-option')).find(r => r.querySelector('.ss-name').textContent === name);
+  const arrow = row && row.querySelector('.ss-descend');
+  if (!arrow) return null;
+  const r = arrow.getBoundingClientRect(), rr = row.getBoundingClientRect();
+  const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+  return {
+    x: r.left + r.width / 2, y: r.top + r.height / 2, width: r.width, height: r.height, title: arrow.title, label: arrow.getAttribute('aria-label'),
+    onTop: !!top && arrow.contains(top), inViewport: r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth,
+    insideRow: r.left >= rr.left - 0.5 && r.right <= rr.right + 0.5 && r.top >= rr.top - 0.5 && r.bottom <= rr.bottom + 0.5,
+  };
+}, { scope: cond, name });
+// Le niveau affiché du panneau ouvert : fil d'Ariane, lignes, lignes à flèche, saisie, place dans le panneau Grist.
+const levelInfo = () => page.evaluate(scope => {
+  const panel = document.querySelector(scope + ' .ss-panel:not([hidden])');
+  if (!panel) return null;
+  const path = panel.querySelector('.ss-path'), r = panel.getBoundingClientRect(), pr = path.getBoundingClientRect(), list = panel.querySelector('.ss-list');
+  return {
+    crumbs: path.hidden ? null : Array.from(path.querySelectorAll('.ss-crumb')).map(c => c.textContent),
+    pathFits: path.hidden || (pr.left >= r.left - 0.5 && pr.right <= r.right + 0.5 && path.scrollWidth <= path.clientWidth + 1),
+    rows: Array.from(panel.querySelectorAll('.ss-option')).map(li => li.querySelector('.ss-name').textContent),
+    arrows: Array.from(panel.querySelectorAll('.ss-option.has-children')).map(li => li.querySelector('.ss-name').textContent),
+    input: panel.querySelector('.ss-input').value, searchFocused: document.activeElement === panel.querySelector('.ss-input'),
+    inside: r.left >= 0 && r.top >= 0 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5, height: r.height, listRows: list.querySelectorAll('.ss-option').length,
+    active: (panel.querySelector('.ss-option.is-active .ss-name') || {}).textContent || null,
+  };
+}, cond);
+const crumbBox = depth => page.evaluate(({ scope, depth }) => {
+  const crumb = document.querySelector(scope + ' .ss-panel:not([hidden]) .ss-crumb[data-depth="' + depth + '"]');
+  if (!crumb) return null;
+  const r = crumb.getBoundingClientRect(), top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2, width: r.width, height: r.height, onTop: !!top && crumb.contains(top), text: crumb.textContent, title: crumb.title };
+}, { scope: cond, depth });
+const windowOpen = () => page.evaluate(scope => document.querySelector(scope).style.display !== 'none', cond);
+const listOpen = () => page.evaluate(scope => !!document.querySelector(scope + ' .ss-panel:not([hidden])'), cond);
+const ruleField = () => page.evaluate(scope => {
+  const row = document.querySelector(scope + ' .macro-rule-row');
+  const advanced = row.querySelector('.macro-rule-column-advanced');
+  return { shown: row.querySelector('.macro-rule-column-wrap .ss-trigger').textContent, value: row.querySelector('select.macro-rule-column').value, advancedHidden: advanced.hidden };
+}, cond);
+const previewLines = () => page.evaluate(() => Array.from(document.querySelectorAll('#var-condition-modal .var-condition-debug-line')).map(l => l.textContent));
+// Le contraste (WCAG) d'une couleur de texte sur son fond, lu sur les styles calculés : la flèche et le fil d'Ariane suivent les jetons de F5 (>= 4,5:1).
+const contrastOf = (selector, surface) => page.evaluate(({ selector, surface }) => {
+  const parse = css => { const m = /rgba?\(([^)]+)\)/.exec(css); const [r, g, b, a] = m[1].split(',').map(Number); return { r, g, b, a: a === undefined ? 1 : a }; };
+  const lum = c => { const f = v => { const x = v / 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b); };
+  const el = document.querySelector(selector);
+  if (!el) return null;
+  const under = document.querySelector(surface);
+  const fg = parse(getComputedStyle(el).color);
+  let bg = parse(getComputedStyle(under).backgroundColor);
+  if (bg.a < 1) bg = parse(getComputedStyle(document.querySelector(surface).closest('.ss-panel')).backgroundColor);
+  const [a, b] = [lum(fg), lum(bg)].sort((x, y) => y - x);
+  return Math.round(((a + 0.05) / (b + 0.05)) * 100) / 100;
+}, { selector, surface });
 
 const SECTIONS = {
   // Fenêtre « Condition d'affichage » : la capture d'Antoine du 2026-09-29, avec les colonnes de toutes les tables en UNE seule liste à plat, sans intitulé de groupe
@@ -1001,79 +1091,7 @@ const SECTIONS = {
   async descend() {
     const previousTheme = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
     const previousLang = await page.evaluate(() => I18n.getLang());
-    await seedData();
-    await page.evaluate(async () => {
-      const stub = window.__gristStub;
-      stub.setVariables('CsServices', { Libelle: 'Text', Budget: 'Numeric' });
-      stub.setVariables('CsAnnuaire', { NomPrenom: 'Text', Telephone: 'Text', Naissance: 'Date', Service: 'Ref:CsServices' });
-      stub.setRows('CsServices', [{ id: 3, Libelle: 'Juridique', Budget: 500 }]);
-      stub.setRows('CsAnnuaire', [{ id: 7, NomPrenom: 'Dupont Jean', Telephone: '06 11 22 33 44', Naissance: 631152000, Service: 3 }]);
-      await GristAPI.refreshSchema();
-      stub.fireRecord({ id: 1, Titre: 'Dossier A', Statut: 'Urgent', Responsable: 'Dupont Jean', Montant: 1200, Echeance: 631152000, Actif: true }, 'CsDossiers');
-    });
-    await page.waitForTimeout(250);
-    const fieldSel = cond + ' .macro-rule-column-wrap .ss-trigger';
-    const cancelOf = cond + ' .var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)';
-    const conditionOn = column => page.evaluate(col => {
-      let found;
-      EditorCore.getEditor().state.doc.descendants(n => { if (n.type.name === 'varBadge' && n.attrs.column === col) found = n.attrs.condition; });
-      return found;
-    }, column);
-    // La flèche d'une ligne de la liste ouverte et ce qu'un vrai clic y trouve.
-    const arrowBox = name => page.evaluate(({ scope, name }) => {
-      const row = Array.from(document.querySelectorAll(scope + ' .ss-panel:not([hidden]) .ss-option')).find(r => r.querySelector('.ss-name').textContent === name);
-      const arrow = row && row.querySelector('.ss-descend');
-      if (!arrow) return null;
-      const r = arrow.getBoundingClientRect(), rr = row.getBoundingClientRect();
-      const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-      return {
-        x: r.left + r.width / 2, y: r.top + r.height / 2, width: r.width, height: r.height, title: arrow.title, label: arrow.getAttribute('aria-label'),
-        onTop: !!top && arrow.contains(top), inViewport: r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth,
-        insideRow: r.left >= rr.left - 0.5 && r.right <= rr.right + 0.5 && r.top >= rr.top - 0.5 && r.bottom <= rr.bottom + 0.5,
-      };
-    }, { scope: cond, name });
-    // Le niveau affiché du panneau ouvert : fil d'Ariane, lignes, lignes à flèche, saisie, place dans le panneau Grist.
-    const levelInfo = () => page.evaluate(scope => {
-      const panel = document.querySelector(scope + ' .ss-panel:not([hidden])');
-      if (!panel) return null;
-      const path = panel.querySelector('.ss-path'), r = panel.getBoundingClientRect(), pr = path.getBoundingClientRect(), list = panel.querySelector('.ss-list');
-      return {
-        crumbs: path.hidden ? null : Array.from(path.querySelectorAll('.ss-crumb')).map(c => c.textContent),
-        pathFits: path.hidden || (pr.left >= r.left - 0.5 && pr.right <= r.right + 0.5 && path.scrollWidth <= path.clientWidth + 1),
-        rows: Array.from(panel.querySelectorAll('.ss-option')).map(li => li.querySelector('.ss-name').textContent),
-        arrows: Array.from(panel.querySelectorAll('.ss-option.has-children')).map(li => li.querySelector('.ss-name').textContent),
-        input: panel.querySelector('.ss-input').value, searchFocused: document.activeElement === panel.querySelector('.ss-input'),
-        inside: r.left >= 0 && r.top >= 0 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5, height: r.height, listRows: list.querySelectorAll('.ss-option').length,
-        active: (panel.querySelector('.ss-option.is-active .ss-name') || {}).textContent || null,
-      };
-    }, cond);
-    const crumbBox = depth => page.evaluate(({ scope, depth }) => {
-      const crumb = document.querySelector(scope + ' .ss-panel:not([hidden]) .ss-crumb[data-depth="' + depth + '"]');
-      if (!crumb) return null;
-      const r = crumb.getBoundingClientRect(), top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-      return { x: r.left + r.width / 2, y: r.top + r.height / 2, width: r.width, height: r.height, onTop: !!top && crumb.contains(top), text: crumb.textContent, title: crumb.title };
-    }, { scope: cond, depth });
-    const windowOpen = () => page.evaluate(scope => document.querySelector(scope).style.display !== 'none', cond);
-    const listOpen = () => page.evaluate(scope => !!document.querySelector(scope + ' .ss-panel:not([hidden])'), cond);
-    const ruleField = () => page.evaluate(scope => {
-      const row = document.querySelector(scope + ' .macro-rule-row');
-      const advanced = row.querySelector('.macro-rule-column-advanced');
-      return { shown: row.querySelector('.macro-rule-column-wrap .ss-trigger').textContent, value: row.querySelector('select.macro-rule-column').value, advancedHidden: advanced.hidden };
-    }, cond);
-    const previewLines = () => page.evaluate(() => Array.from(document.querySelectorAll('#var-condition-modal .var-condition-debug-line')).map(l => l.textContent));
-    // Le contraste (WCAG) d'une couleur de texte sur son fond, lu sur les styles calculés : la flèche et le fil d'Ariane suivent les jetons de F5 (>= 4,5:1).
-    const contrastOf = (selector, surface) => page.evaluate(({ selector, surface }) => {
-      const parse = css => { const m = /rgba?\(([^)]+)\)/.exec(css); const [r, g, b, a] = m[1].split(',').map(Number); return { r, g, b, a: a === undefined ? 1 : a }; };
-      const lum = c => { const f = v => { const x = v / 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b); };
-      const el = document.querySelector(selector);
-      if (!el) return null;
-      const under = document.querySelector(surface);
-      const fg = parse(getComputedStyle(el).color);
-      let bg = parse(getComputedStyle(under).backgroundColor);
-      if (bg.a < 1) bg = parse(getComputedStyle(document.querySelector(surface).closest('.ss-panel')).backgroundColor);
-      const [a, b] = [lum(fg), lum(bg)].sort((x, y) => y - x);
-      return Math.round(((a + 0.05) / (b + 0.05)) * 100) / 100;
-    }, { selector, surface });
+    await seedReferences();
 
     for (const [theme, lang] of [['light', 'fr'], ['dark', 'fr'], ['light', 'en']]) {
       const full = theme === 'light' && lang === 'fr';
@@ -1146,9 +1164,7 @@ const SECTIONS = {
       // La fenêtre rouverte : le chemin est un choix de la liste (pas la saisie avancée), sa ligne suit Responsable et porte la coche.
       await openWindowFor('Titre', 'var-condition', cond);
       const reopened = await ruleField();
-      const field2 = await reveal(fieldSel, cond + ' .modal-content');
-      if (field2.found) await page.mouse.click(field2.x, field2.y);
-      await page.waitForTimeout(200);
+      await clickListOpener(fieldSel);
       const reopenedList = await page.evaluate(scope => {
         const rows = Array.from(document.querySelectorAll(scope + ' .ss-panel:not([hidden]) .ss-option'));
         const names = rows.map(li => li.querySelector('.ss-name').textContent);
@@ -1163,9 +1179,7 @@ const SECTIONS = {
       await page.keyboard.press('Escape');
       await page.waitForTimeout(150);
       check('descendre (clair, français) : Échap ferme la liste sans fermer la fenêtre', !(await listOpen()) && (await windowOpen()), { list: await listOpen(), win: await windowOpen() });
-      const field3 = await reveal(fieldSel, cond + ' .modal-content');
-      if (field3.found) await page.mouse.click(field3.x, field3.y);
-      await page.waitForTimeout(200);
+      await clickListOpener(fieldSel);
       await page.keyboard.type('respons');
       await page.waitForTimeout(120);
       await page.keyboard.press('ArrowRight');
@@ -1201,6 +1215,274 @@ const SECTIONS = {
         !!home && home.crumbs === null && home.rows.length > 5 && home.searchFocused && (await listOpen()) && (await windowOpen()), home);
       await page.keyboard.press('Escape');
       await page.waitForTimeout(100);
+      // Retirer la condition (vrai clic) pour la section suivante.
+      const remove = await reveal(cond + ' .var-modal-danger', cond + ' .modal-content');
+      if (remove.found) await page.mouse.click(remove.x, remove.y);
+      await page.waitForTimeout(300);
+    }
+    await page.evaluate(({ theme, lang }) => {
+      if (theme) document.documentElement.setAttribute('data-theme', theme); else document.documentElement.removeAttribute('data-theme');
+      I18n.setLang(lang);
+    }, { theme: previousTheme, lang: previousLang });
+    await seedData();
+  },
+
+  // Choisir la colonne d'une règle dans la fenêtre « Autres attributs » (demande d'Antoine du 2026-10-09 : « dans la modale de choix des conditions, en cliquant sur une colonne,
+  // pouvoir ouvrir la super modale de choix des attributs »). Un bouton à droite de la zone de recherche de la liste (option `browse` de js/search-select.js) et Ctrl+Entrée ouvrent
+  // js/variable-linked-attrs.js:pickColumn, qui part de la table de la page, au niveau où la liste en était, avec la saisie dans son filtre et la colonne déjà choisie sélectionnée ;
+  // « Choisir » pose la colonne dans la règle (js/condition-fields.js:browseColumn), comme la liste. Les gestes à la vraie souris et au vrai clavier, à 700x400, en clair, en sombre et en anglais.
+  async attributesWindow() {
+    const previousTheme = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
+    const previousLang = await page.evaluate(() => I18n.getLang());
+    await seedReferences();
+    const otherSel = cond + ' .macro-rule-value-slot .macro-rule-column-wrap .ss-trigger';
+    const browseOf = scope => scope + ' .ss-panel:not([hidden]) .ss-browse';
+    const pick = '#var-linked-modal';
+    // La fenêtre des attributs : où elle en est, ce qu'elle montre, et si elle est bien AU-DESSUS de celle de la condition (le haut et le bas de son cadre sont à elle).
+    const pickInfo = () => page.evaluate(sel => {
+      const modal = document.querySelector(sel);
+      if (!modal || modal.style.display === 'none') return null;
+      const box = modal.querySelector('.modal-content'), r = box.getBoundingClientRect(), list = modal.querySelector('.var-linked-list');
+      const onTop = [[r.left + r.width / 2, r.top + 8], [r.left + r.width / 2, r.bottom - 8]].every(([x, y]) => { const hit = document.elementFromPoint(x, y); return !!hit && modal.contains(hit); });
+      const rows = Array.from(modal.querySelectorAll('.var-linked-row')).filter(row => !row.hidden);
+      const checkedBox = modal.querySelector('.var-linked-row input:checked');
+      const checkedRow = checkedBox && checkedBox.closest('.var-linked-row'), lr = list.getBoundingClientRect(), cr = checkedRow && checkedRow.getBoundingClientRect();
+      const primary = modal.querySelector('.var-modal-primary'), replace = modal.querySelector('.var-linked-replace'), intro = modal.querySelector('.var-modal-intro'), inherit = modal.querySelector('.var-linked-inherit');
+      return {
+        title: modal.querySelector('#var-linked-title').textContent, introShown: !intro.hidden && intro.textContent !== '',
+        crumbs: modal.querySelector('.var-linked-path').hidden ? null : Array.from(modal.querySelectorAll('.var-linked-crumb')).map(c => c.textContent),
+        rows: rows.map(row => row.dataset.col), values: Object.fromEntries(rows.map(row => [row.dataset.col, row.querySelector('.var-linked-value').textContent])),
+        inputs: Array.from(new Set(rows.map(row => row.querySelector('input').type))), checked: Array.from(modal.querySelectorAll('.var-linked-row input:checked')).map(input => input.value),
+        arrows: rows.filter(row => row.querySelector('.var-linked-descend')).map(row => row.dataset.col), filter: modal.querySelector('.var-linked-filter').value,
+        filterFocused: document.activeElement === modal.querySelector('.var-linked-filter'), note: modal.querySelector('.var-linked-note').textContent,
+        primary: primary.textContent, primaryDisabled: primary.disabled, replaceShown: getComputedStyle(replace).display !== 'none', inheritShown: !inherit.hidden && getComputedStyle(inherit).display !== 'none',
+        checkedVisible: !!cr && cr.top >= lr.top - 0.5 && cr.bottom <= lr.bottom + 0.5, listScroll: list.scrollTop, zIndex: getComputedStyle(modal).zIndex,
+        onTop, inside: r.left >= 0 && r.top >= 0 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5,
+      };
+    }, pick);
+    const pickOpen = () => page.evaluate(sel => { const modal = document.querySelector(sel); return !!modal && modal.style.display !== 'none'; }, pick);
+    const fieldFocused = selector => page.evaluate(sel => document.activeElement === document.querySelector(sel), selector);
+    // Ouvre la liste de la colonne de la règle (un vrai clic sur le champ) et rend le bouton de la fenêtre des attributs tel que la souris le trouve.
+    const openList = async selector => { await clickListOpener(selector); };
+    const labelsOf = selector => page.evaluate(sel => { const el = document.querySelector(sel); return el ? { title: el.title, label: el.getAttribute('aria-label') } : null; }, selector);
+    // Un clic sur le bouton « Choisir » de la fenêtre des attributs (il peut être sous la partie visible : la molette le ramène).
+    const choose = async () => {
+      const button = await reveal(pick + ' .var-modal-primary', pick + ' .pp-modal-body');
+      if (button.found) await page.mouse.click(button.x, button.y);
+      await page.waitForTimeout(300);
+    };
+    // La colonne choisie d'un champ, dessinée comme une bulle de variable (option `pill` de js/search-select.js) : sa place dans le champ, ce qui s'y trouve au premier plan, son texte,
+    // son « # » (dessiné par le CSS), si sa fin est lisible, le contraste de son texte sur son fond (WCAG) et son info-bulle.
+    const pillMeasure = selector => page.evaluate(sel => {
+      const trigger = document.querySelector(sel), pill = trigger && trigger.querySelector('.ss-pill');
+      if (!pill) return null;
+      const t = trigger.getBoundingClientRect(), p = pill.getBoundingClientRect(), c = trigger.querySelector('.ss-chevron').getBoundingClientRect();
+      const tail = pill.querySelector('.var-badge-tail'), tailText = tail && tail.firstElementChild, style = getComputedStyle(pill);
+      const parse = css => { const m = /rgba?\(([^)]+)\)/.exec(css); const [r, g, b] = m[1].split(',').map(Number); return { r, g, b }; };
+      const lum = col => { const f = v => { const x = v / 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); }; return 0.2126 * f(col.r) + 0.7152 * f(col.g) + 0.0722 * f(col.b); };
+      const [hi, lo] = [lum(parse(style.color)), lum(parse(style.backgroundColor))].sort((x, y) => y - x);
+      const hit = document.elementFromPoint(p.left + p.width / 2, p.top + p.height / 2);
+      return {
+        text: pill.textContent, prefix: getComputedStyle(pill, '::before').content, title: pill.title, badge: pill.classList.contains('var-badge'),
+        pill: { l: p.left, r: p.right, t: p.top, b: p.bottom, w: p.width, h: p.height }, field: { l: t.left, r: t.right, t: t.top, b: t.bottom, w: t.width }, chevron: { l: c.left, r: c.right },
+        inside: p.left >= t.left - 0.5 && p.right <= c.left + 0.5 && p.top >= t.top - 0.5 && p.bottom <= t.bottom + 0.5, onTop: !!hit && pill.contains(hit),
+        tailVisible: !tailText || tailText.getBoundingClientRect().left >= tail.getBoundingClientRect().left - 0.5, tailText: tailText ? tailText.textContent : null,
+        contrast: Math.round(((hi + 0.05) / (lo + 0.05)) * 100) / 100, background: style.backgroundColor,
+      };
+    }, selector);
+
+    for (const [theme, lang] of [['light', 'fr'], ['dark', 'fr'], ['light', 'en']]) {
+      const full = theme === 'light' && lang === 'fr';
+      const label = `${theme === 'dark' ? 'sombre' : 'clair'}, ${lang === 'en' ? 'anglais' : 'français'}`;
+      await page.evaluate(({ theme, lang }) => { document.documentElement.setAttribute('data-theme', theme); I18n.setLang(lang); }, { theme, lang });
+      await page.waitForTimeout(150);
+      const words = await page.evaluate(() => ({
+        browse: I18n.t('searchSelect.browse'), title: I18n.t('varLinked.pickTitle', { table: 'CsDossiers' }), titleBelow: I18n.t('varLinked.pickTitle', { table: 'CsAnnuaire' }),
+        choose: I18n.t('varLinked.pick'), chosen: I18n.t('varLinked.pickChosen', { column: 'Responsable\u00a0›\u00a0Telephone' }), hint: I18n.t('varLinked.pickHint'),
+        met: I18n.t('varCond.debug.currentMet', { id: 1, value: 'Dossier A' }), root: I18n.t('searchSelect.rootCrumb'),
+      }));
+      const win = await openWindowFor('Titre', 'var-condition', cond);
+      check(`fenêtre des attributs (${label}) : la fenêtre de condition s’ouvre, entière dans le panneau`, win.found && win.inViewport, win);
+      await openList(fieldSel);
+      const open = await panelInfo(cond);
+      const browse = await hitTest(browseOf(cond));
+      const search = await hitTest(cond + ' .ss-panel:not([hidden]) .ss-input');
+      const names = await labelsOf(browseOf(cond));
+      check(`fenêtre des attributs (${label}) : la liste ouverte a, à droite de sa zone de recherche, un bouton entier dans la fenêtre, au premier plan, d’au moins 24 x 24 px, qui dit « ${words.browse} »`,
+        !!open && open.inside && browse.found && browse.onTop && browse.inViewport && browse.width >= 24 && browse.bottom - browse.top >= 24 && search.found && search.right <= browse.left + 0.5 && search.width >= 100
+          && !!names && names.title === words.browse && names.label === words.browse, { open, browse, search, names, expected: words.browse });
+      const ink = await contrastOf(browseOf(cond), browseOf(cond));
+      check(`fenêtre des attributs (${label}) : l’icône du bouton a un contraste d’au moins 4,5:1 sur son fond`, ink !== null && ink >= 4.5, ink);
+
+      // Un vrai clic sur le bouton, la saisie « respons » dans la zone de recherche : la liste se referme, la fenêtre des attributs s'ouvre PAR-DESSUS celle de la condition.
+      await page.keyboard.type('respons');
+      await page.waitForTimeout(120);
+      const typedBrowse = await hitTest(browseOf(cond));
+      if (typedBrowse.found) await page.mouse.click(typedBrowse.x, typedBrowse.y);
+      await page.waitForTimeout(400);
+      const root = await pickInfo();
+      const untouched = await ruleField();
+      check(`fenêtre des attributs (${label}) : un vrai clic sur le bouton ferme la liste et ouvre la fenêtre des attributs par-dessus celle de la condition, entière dans le panneau (z-index 1995), sans rien changer à la règle`,
+        !(await listOpen()) && !!root && root.onTop && root.inside && root.zIndex === '1995' && untouched.value === '' && (await windowOpen()), { root, untouched });
+      check(`fenêtre des attributs (${label}) : elle s’ouvre sur les colonnes de CsDossiers sous « ${words.title} », la saisie « respons » dans son filtre (qui a le focus) ne laisse que Responsable avec sa flèche ; des cases rondes, ni sous-titre, ni « Remplacer », ni condition reprise, « ${words.choose} » grisé`,
+        !!root && root.title === words.title && root.filter === 'respons' && root.filterFocused && JSON.stringify(root.rows) === JSON.stringify(['Responsable']) && JSON.stringify(root.arrows) === JSON.stringify(['Responsable'])
+          && JSON.stringify(root.inputs) === JSON.stringify(['radio']) && !root.introShown && !root.replaceShown && !root.inheritShown && root.primary === words.choose && root.primaryDisabled && root.crumbs === null, root);
+
+      // Descendre par la flèche de la ligne, comme dans « Autres attributs » : le fil d'Ariane, les colonnes de CsAnnuaire avec leur valeur sur la ligne sélectionnée.
+      const arrow = await hitTest(pick + ' .var-linked-row[data-col="Responsable"] .var-linked-descend');
+      if (arrow.found) await page.mouse.click(arrow.x, arrow.y);
+      await page.waitForTimeout(450);
+      const below = await pickInfo();
+      check(`fenêtre des attributs (${label}) : un vrai clic sur la flèche de Responsable ouvre les colonnes de CsAnnuaire sous « ${words.root} »… (fil d’Ariane CsDossiers › Responsable), la valeur de chacune sur la ligne sélectionnée, le filtre repart vide`,
+        !!below && JSON.stringify(below.crumbs) === JSON.stringify(['CsDossiers', 'Responsable']) && below.title === words.titleBelow && JSON.stringify(below.rows) === JSON.stringify(['NomPrenom', 'Telephone', 'Naissance', 'Service'])
+          && JSON.stringify(below.arrows) === JSON.stringify(['Service']) && below.filter === '' && below.values.NomPrenom === 'Dupont Jean' && below.values.Telephone === '06 11 22 33 44' && below.onTop && below.inside, below);
+
+      // Un vrai clic sur le nom de la colonne la sélectionne : « Choisir » s'allume et la ligne sous la liste dit laquelle.
+      const telephone = await hitTest(pick + ' .var-linked-row[data-col="Telephone"] .var-linked-col');
+      if (telephone.found) await page.mouse.click(telephone.x, telephone.y);
+      await page.waitForTimeout(150);
+      const selected = await pickInfo();
+      check(`fenêtre des attributs (${label}) : un vrai clic sur Telephone la sélectionne seule, « ${words.choose} » s’allume et la ligne sous la liste dit « ${words.chosen} »`,
+        !!selected && JSON.stringify(selected.checked) === JSON.stringify(['Telephone']) && !selected.primaryDisabled && selected.note.indexOf(words.chosen) !== -1, selected);
+      await choose();
+      const chosen = await ruleField();
+      check(`fenêtre des attributs (${label}) : « ${words.choose} » ferme la fenêtre des attributs, celle de la condition reste ouverte avec « CsDossiers.Responsable.Telephone » dans la règle, le focus est revenu au champ`,
+        !(await pickOpen()) && (await windowOpen()) && chosen.value === 'CsDossiers.Responsable.Telephone' && chosen.shown === 'CsDossiers.Responsable.Telephone' && chosen.advancedHidden && (await fieldFocused(fieldSel)), chosen);
+
+      // La colonne choisie est dessinée comme une variable du document (demande d'Antoine, 09/10 : « lorsque l'on a sélectionné une colonne, [qu']elle apparaisse comme une variable [...] et
+      // qu'en cliquant dessus ça ouvre cette fenêtre ») : la bulle est entière dans le champ sans recouvrir sa flèche, au premier plan, d'au moins 16 px de haut, sa fin (Telephone) lisible, son
+      // texte a un contraste d'au moins 4,5:1, son info-bulle dit la colonne et « ${words.browse} ».
+      const bubble = await pillMeasure(fieldSel);
+      check(`fenêtre des attributs (${label}) : la colonne choisie est une bulle de variable entière dans le champ, sans recouvrir sa flèche, au premier plan (« # » devant, texte = le nom), sa fin « Telephone » lisible, contraste ≥ 4,5:1, info-bulle « … · ${words.browse} »`,
+        !!bubble && bubble.badge && bubble.text === 'CsDossiers.Responsable.Telephone' && bubble.prefix === '"#"' && bubble.inside && bubble.onTop && bubble.pill.h >= 16 && bubble.tailVisible && bubble.tailText === 'Telephone'
+          && bubble.contrast >= 4.5 && bubble.title === 'CsDossiers.Responsable.Telephone · ' + words.browse, bubble);
+      // Un vrai clic sur la flèche du champ (hors de la bulle) ouvre la liste, pas la fenêtre.
+      const fieldBox = await hitTest(fieldSel);
+      if (fieldBox.found) await page.mouse.click(fieldBox.right - 9, fieldBox.y);
+      await page.waitForTimeout(250);
+      const viaArrow = { list: await listOpen(), picker: await pickOpen() };
+      check(`fenêtre des attributs (${label}) : un vrai clic sur la flèche du champ ouvre la liste et non la fenêtre des attributs`, viaArrow.list && !viaArrow.picker, viaArrow);
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(150);
+      // Un vrai clic sur la bulle ouvre la fenêtre des attributs, sans ouvrir la liste, sur le niveau de la colonne (CsDossiers › Responsable), Telephone sélectionnée d'avance.
+      const bubbleHit = await hitTest(fieldSel + ' .ss-pill');
+      if (bubbleHit.found) await page.mouse.click(bubbleHit.x, bubbleHit.y);
+      await page.waitForTimeout(450);
+      const viaBubble = await pickInfo();
+      check(`fenêtre des attributs (${label}) : un vrai clic sur la bulle ouvre la fenêtre des attributs (liste fermée) sur CsDossiers › Responsable, Telephone sélectionnée d’avance, « ${words.choose} » allumé, au-dessus de la fenêtre de condition`,
+        !(await listOpen()) && !!viaBubble && JSON.stringify(viaBubble.crumbs) === JSON.stringify(['CsDossiers', 'Responsable']) && JSON.stringify(viaBubble.checked) === JSON.stringify(['Telephone'])
+          && !viaBubble.primaryDisabled && viaBubble.primary === words.choose && viaBubble.onTop && viaBubble.inside && viaBubble.checkedVisible, { viaBubble });
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(250);
+      const afterBubble = await ruleField();
+      check(`fenêtre des attributs (${label}) : Échap ferme la fenêtre ouverte par la bulle sans toucher à la règle, la bulle est toujours là, le focus revient au champ`,
+        !(await pickOpen()) && (await windowOpen()) && afterBubble.value === 'CsDossiers.Responsable.Telephone' && (await pillMeasure(fieldSel)) !== null && (await fieldFocused(fieldSel)), afterBubble);
+      if (!full) {
+        await clickCenter(cancelOf);
+        continue;
+      }
+
+      // L'aperçu de la fenêtre suit le choix (le `change` d'un choix a été envoyé) : la valeur se tape, la ligne courante remplit la condition.
+      const valueBox = await reveal(cond + ' .macro-rule-value', cond + ' .modal-content');
+      if (valueBox.found) await page.mouse.click(valueBox.x, valueBox.y);
+      await page.keyboard.type('06 11 22 33 44');
+      await page.waitForTimeout(900);
+      const lines = await previewLines();
+      check('fenêtre des attributs (clair, français) : l’aperçu dit que la ligne courante remplit « CsDossiers.Responsable.Telephone = 06 11 22 33 44 »', lines.length > 0 && lines[0].includes(words.met), lines);
+      const save = await reveal(cond + ' .var-modal-primary', cond + ' .modal-content');
+      if (save.found) await page.mouse.click(save.x, save.y);
+      await page.waitForTimeout(350);
+      const saved = await conditionOn('Titre');
+      check('fenêtre des attributs (clair, français) : Enregistrer pose la règle { column: chemin, operator: =, value } sur la bulle, aucune règle de liaison de plus',
+        !!saved && saved.rules.length === 1 && saved.rules[0].column === 'CsDossiers.Responsable.Telephone' && saved.rules[0].operator === '=' && saved.rules[0].value === '06 11 22 33 44'
+          && (await page.evaluate(() => GristAPI.getLinkRule('CsServices') == null)), saved);
+
+      // Ctrl+Entrée, au vrai clavier : la fenêtre s'ouvre au niveau de la colonne déjà choisie, qu'elle sélectionne d'avance ; Échap la ferme sans toucher à la règle ni à la fenêtre de condition.
+      await openWindowFor('Titre', 'var-condition', cond);
+      await openList(fieldSel);
+      await page.keyboard.press('Control+Enter');
+      await page.waitForTimeout(450);
+      const preselected = await pickInfo();
+      check('fenêtre des attributs (clair, français) : Ctrl+Entrée ouvre la fenêtre au niveau de la colonne enregistrée (CsDossiers › Responsable), Telephone sélectionnée d’avance, « Choisir » allumé, le filtre vide',
+        !(await listOpen()) && !!preselected && JSON.stringify(preselected.crumbs) === JSON.stringify(['CsDossiers', 'Responsable']) && JSON.stringify(preselected.checked) === JSON.stringify(['Telephone'])
+          && !preselected.primaryDisabled && preselected.filter === '' && preselected.onTop && preselected.checkedVisible, preselected);
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(250);
+      const escaped = await ruleField();
+      check('fenêtre des attributs (clair, français) : Échap ferme la fenêtre des attributs seule, la fenêtre de condition reste ouverte, la règle ne change pas, le focus revient au champ',
+        !(await pickOpen()) && (await windowOpen()) && escaped.value === 'CsDossiers.Responsable.Telephone' && (await fieldFocused(fieldSel)), escaped);
+
+      // « Annuler » ne change rien non plus.
+      await openList(fieldSel);
+      await page.keyboard.press('Control+Enter');
+      await page.waitForTimeout(450);
+      const cancelButton = await reveal(pick + ' .var-modal-actions button:not(.var-modal-primary):not(.var-linked-replace)', pick + ' .pp-modal-body');
+      if (cancelButton.found) await page.mouse.click(cancelButton.x, cancelButton.y);
+      await page.waitForTimeout(250);
+      const cancelled = await ruleField();
+      check('fenêtre des attributs (clair, français) : « Annuler » ferme la fenêtre des attributs sans toucher à la règle, la fenêtre de condition reste ouverte, le focus revient au champ',
+        !(await pickOpen()) && (await windowOpen()) && cancelled.value === 'CsDossiers.Responsable.Telephone' && (await fieldFocused(fieldSel)), cancelled);
+
+      // Remonter par le fil d'Ariane puis un double-clic sur Echeance (la dernière colonnes de la liste, en bas) la choisit d'un coup.
+      await openList(fieldSel);
+      await page.keyboard.press('Control+Enter');
+      await page.waitForTimeout(450);
+      const crumb = await hitTest(pick + ' .var-linked-path button.var-linked-crumb');
+      if (crumb.found) await page.mouse.click(crumb.x, crumb.y);
+      await page.waitForTimeout(450);
+      const atRoot = await pickInfo();
+      check('fenêtre des attributs (clair, français) : un vrai clic sur « CsDossiers » du fil d’Ariane remonte aux colonnes de la page (Titre, Statut, Responsable, Montant, Echeance, Actif), valeurs de la ligne comprises',
+        !!atRoot && atRoot.crumbs === null && JSON.stringify(atRoot.rows) === JSON.stringify(['Titre', 'Statut', 'Responsable', 'Montant', 'Echeance', 'Actif']) && atRoot.values.Titre === 'Dossier A' && atRoot.values.Montant.replace(/\s/g, '') === '1200', atRoot);
+      await page.evaluate(() => { const list = document.querySelector('#var-linked-modal .var-linked-list'); list.scrollTop = list.scrollHeight; });
+      await page.waitForTimeout(80);
+      const echeance = await reveal(pick + ' .var-linked-row[data-col="Echeance"] .var-linked-col', pick + ' .var-linked-list');
+      if (echeance.found) await page.mouse.dblclick(echeance.x, echeance.y);
+      await page.waitForTimeout(350);
+      const doubled = await ruleField();
+      check('fenêtre des attributs (clair, français) : un double-clic sur Echeance la choisit d’un coup (la fenêtre se ferme, la règle porte « Echeance », liste de colonnes de la page)',
+        !(await pickOpen()) && (await windowOpen()) && doubled.value === 'Echeance' && doubled.shown === 'Echeance' && doubled.advancedHidden, doubled);
+
+      // La colonne choisie est sélectionnée d'avance et AMENÉE dans la partie visible de la liste, même tout en bas.
+      await openList(fieldSel);
+      await page.keyboard.press('Control+Enter');
+      await page.waitForTimeout(450);
+      const bottom = await pickInfo();
+      check('fenêtre des attributs (clair, français) : Echeance, tout en bas de la liste, est sélectionnée d’avance et visible en entier dans la partie visible de la liste (qui a défilé)',
+        !!bottom && JSON.stringify(bottom.checked) === JSON.stringify(['Echeance']) && bottom.checkedVisible && bottom.crumbs === null, bottom);
+
+      // Dans l'ordre inverse de création des deux fenêtres, celle des attributs reste au-dessus : l'étage 1995 de css/modal-base.css, pas l'ordre dans la page.
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(250);
+      await page.evaluate(() => document.body.insertBefore(document.getElementById('var-linked-modal'), document.getElementById('var-condition-modal')));
+      await openList(fieldSel);
+      await page.keyboard.press('Control+Enter');
+      await page.waitForTimeout(450);
+      const reordered = await pickInfo();
+      check('fenêtre des attributs (clair, français) : créée AVANT la fenêtre de condition dans la page, elle reste au-dessus d’elle (le haut et le bas de son cadre lui appartiennent)', !!reordered && reordered.onTop && reordered.inside, reordered);
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(250);
+      await page.evaluate(() => document.body.appendChild(document.getElementById('var-linked-modal')));
+
+      // « Comparer à une autre colonne » : la liste de l'autre colonne a le même bouton, et le choix va dans `valueColumn`.
+      await clickCenter(cond + ' .macro-rule-compare');
+      await openList(otherSel);
+      const otherBrowse = await hitTest(browseOf(cond));
+      const otherSearch = await hitTest(cond + ' .ss-panel:not([hidden]) .ss-input');
+      check('fenêtre des attributs (clair, français) : la liste de l’autre colonne a le même bouton, entier dans la fenêtre, au premier plan, d’au moins 24 x 24 px, et une zone de recherche d’au moins 80 px à sa gauche',
+        otherBrowse.found && otherBrowse.onTop && otherBrowse.inViewport && otherBrowse.width >= 24 && otherBrowse.bottom - otherBrowse.top >= 24 && otherSearch.found && otherSearch.right <= otherBrowse.left + 0.5 && otherSearch.width >= 80, { otherBrowse, otherSearch });
+      if (otherBrowse.found) await page.mouse.click(otherBrowse.x, otherBrowse.y);
+      await page.waitForTimeout(450);
+      const otherOpen = await pickInfo();
+      const titreRow = await reveal(pick + ' .var-linked-row[data-col="Titre"] .var-linked-col', pick + ' .var-linked-list');
+      if (titreRow.found) await page.mouse.dblclick(titreRow.x, titreRow.y);
+      await page.waitForTimeout(350);
+      const otherChosen = await page.evaluate(scope => {
+        const row = document.querySelector(scope + ' .macro-rule-row');
+        return { valueColumn: row.querySelector('select.macro-rule-value-column').value, shown: row.querySelector('.macro-rule-value-slot .ss-trigger').textContent, column: row.querySelector('select.macro-rule-column:not(.macro-rule-value-column)').value };
+      }, cond);
+      check('fenêtre des attributs (clair, français) : depuis la liste de l’autre colonne, la fenêtre part des colonnes de la page, un double-clic sur Titre la choisit : « Titre » devient l’autre colonne, la colonne de la règle reste « Echeance »',
+        !!otherOpen && otherOpen.crumbs === null && otherOpen.checked.length === 0 && otherOpen.onTop && !(await pickOpen()) && otherChosen.valueColumn === 'Titre' && otherChosen.shown === 'Titre' && otherChosen.column === 'Echeance', { otherOpen, otherChosen });
+
       // Retirer la condition (vrai clic) pour la section suivante.
       const remove = await reveal(cond + ' .var-modal-danger', cond + ' .modal-content');
       if (remove.found) await page.mouse.click(remove.x, remove.y);
