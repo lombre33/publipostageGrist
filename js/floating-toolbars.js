@@ -233,27 +233,40 @@ const FloatingToolbars = (function () {
     }
 
     function tableLinkedMenu() {
-      // Le menu du tableau lié à un modèle Grille (js/linked-table.js) : le nom du modèle, ce que le lien veut dire pour les cases, puis les actions sur le lien (« Détacher » ;
-      // les lots suivants y ajoutent les leurs). `refresh(link)` le redessine d'après l'état du tableau sous le curseur (LinkedTable.status) à l'ouverture et à chaque
-      // changement du document : verrouillé (suivi des modifications allumé), son action est grisée avec la raison en info-bulle, un clic dessus ne fait rien (comme
+      // Le menu du tableau lié à un modèle Grille (js/linked-table.js) : le nom du modèle, ce que le lien veut dire pour les cases, puis les actions sur le lien (mettre à jour depuis
+      // le modèle, envoyer au modèle, détacher). `refresh(link)` le redessine d'après l'état du tableau sous le curseur (LinkedTable.status) à l'ouverture et à chaque
+      // changement du document : verrouillé (suivi des modifications allumé), ses actions sont grisées avec la raison en info-bulle, un clic dessus ne fait rien (comme
       // « Intérieures » du menu Bordures). Le nom d'un modèle est écrit comme texte, jamais comme HTML.
+      const ACTIONS = [
+        ['linked-pull', 'linkedPull', 'linkedTable.pullRow', 'linkedTable.pull'],
+        ['linked-push', 'linkedPush', 'linkedTable.pushRow', 'linkedTable.push'],
+        ['linked-detach', 'unlink', 'linkedTable.detachRow', 'linkedTable.detach'],
+      ];
+      const rows = ACTIONS.map(([action, icon]) => `<button type="button" class="v2-linked-menu-row" data-action="${action}">${Icons.svg(icon)}<span></span></button>`).join('');
       const panel = EditorCore.createFloatingPanel('v2-color-dropdown v2-linked-menu',
         `<div class="v2-linked-menu-head">${Icons.svg('linkedTable')}<span class="v2-linked-menu-name"></span></div>`
         + '<div class="v2-linked-menu-hint"></div>'
-        + `<div class="v2-linked-menu-rows"><button type="button" class="v2-linked-menu-row" data-action="linked-detach">${Icons.svg('unlink')}<span></span></button></div>`,
+        + `<div class="v2-linked-menu-rows">${rows}</div>`,
         (action) => {
-          if (action !== 'linked-detach' || !LinkedTable.detach(editor)) return;
+          // Verrouillé, une action ne fait rien et le menu reste ouvert, avec sa raison. Les deux sens sont asynchrones (le modèle se relit, « Envoyer » demande confirmation) :
+          // le menu se referme tout de suite, ce qu'elles disent passe par la ligne d'état.
+          if (action === 'linked-detach') { if (LinkedTable.detach(editor)) EditorCore.closeDropdownPanel(); return; }
+          const run = action === 'linked-pull' ? LinkedTable.pull : action === 'linked-push' ? LinkedTable.push : null;
+          if (!run || LinkedTable.lockReason()) return;
           EditorCore.closeDropdownPanel();
+          run(editor);
         });
       panel.refresh = (link) => {
         const at = selector => panel.el.querySelector(selector);
         at('.v2-linked-menu-name').textContent = link.name;
         at('.v2-linked-menu-head').title = link.name;
         at('.v2-linked-menu-hint').textContent = I18n.t(link.locked ? 'linkedTable.menuLocked' : 'linkedTable.menuHint');
-        const detach = at('[data-action="linked-detach"]');
-        detach.querySelector('span').textContent = I18n.t('linkedTable.detachRow');
-        detach.title = I18n.t(link.locked || 'linkedTable.detach', { name: link.name });
-        detach.setAttribute('aria-disabled', link.locked ? 'true' : 'false');
+        ACTIONS.forEach(([action, , labelKey, titleKey]) => {
+          const row = at(`[data-action="${action}"]`);
+          row.querySelector('span').textContent = I18n.t(labelKey);
+          row.title = I18n.t(link.locked || titleKey, { name: link.name });
+          row.setAttribute('aria-disabled', link.locked ? 'true' : 'false');
+        });
       };
       return panel;
     }

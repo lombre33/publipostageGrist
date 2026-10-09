@@ -1,6 +1,6 @@
 // Suite "linkedTable" - un tableau de document LIÉ à un modèle Grille (09/10, lot 6a sur 6 du tableau de document, « En direct » ; Antoine : « comme sur un Gdocs, intégrer un tableau qui
-// soit en fait un modèle grille »). Le tableau porte le numéro du modèle (`data-linked-template`) et ses cases sont celles du modèle au moment de la pose (js/linked-table.js). Cette
-// étape pose le lien ; la mise à jour (lots 6b et 6c) vient après. Ici, sans la souris (la ligne du menu du bouton Tableau, la liste, le repère et la barre à 700x400, clair et sombre,
+// soit en fait un modèle grille »). Le tableau porte le numéro du modèle (`data-linked-template`) et ses cases sont celles du modèle au moment de la pose (js/linked-table.js). Le lot 6a
+// pose le lien, le 6b y met les deux sens à la main (« Mettre à jour depuis le modèle », « Envoyer au modèle ») ; l'automatique (6c) vient après. Ici, sans la souris (la ligne du menu du bouton Tableau, la liste, le repère et la barre à 700x400, clair et sombre,
 // sont à dev-tests/verify-linked-table-mouse.mjs, groupe linkedTableMouse) :
 //  1) l'attribut : l'aller-retour du HTML, un numéro qui n'en est pas un, un modèle qui n'existe plus ;
 //  2) la pose : la copie des cases, le curseur dans la première, un seul Annuler, ce qui la refuse, la liste avec recherche (ordre, lignes grisées avec leur raison, deux langues) ;
@@ -9,7 +9,10 @@
 //  4) un seul lien par modèle et par document : une copie du tableau perd son lien, l'original garde le sien ; un lien mort est sans effet ; une grille n'a jamais de lien ;
 //  5) le suivi des modifications verrouille le tableau lié ;
 //  6) le repère (une décoration de l'éditeur, rien dans le HTML ni dans les sorties), le groupe de la barre du tableau, « Détacher », les boutons et la ligne du menu qui se grisent ;
-//  7) les sorties : la Lecture, le PDF et le Word ne savent rien du lien.
+//  7) les sorties : la Lecture, le PDF et le Word ne savent rien du lien ;
+//  8) les deux sens (lot 6b) : mettre à jour depuis le modèle (cases, curseur, un Annuler, modèle relu, tableau déjà identique, modèle introuvable), envoyer au modèle (seules les
+//     deux colonnes écrites, ni lien ni commentaires, la confirmation et son compte, annulée = rien d'écrit, déjà identique = rien à écrire, tableau riche stable à l'aller-retour,
+//     échec d'écriture), ce qui les refuse (suivi, une action en cours, éditeur en lecture) et les lignes du menu du lien.
 (function () {
   const cases = [];
   const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -22,6 +25,8 @@
   const linkedHtml = (id, label, rows, cols) => gridHtml(label, rows, cols).replace('<table>', `<table ${ATTR}="${id}">`);
   const DOC = '<p>avant</p><p>après</p>';
 
+  // La confirmation de l'envoi est une vraie fenêtre : les cas la remplacent le temps d'une réponse (withDoc la rend).
+  const realConfirm = Dialogs.confirm;
   // Les modèles que le cas crée sont retirés à sa fin : la liste des modèles est celle des autres suites.
   const made = [];
   let counter = 0;
@@ -41,6 +46,8 @@
     await sleep(200);
     ed().commands.focus();
     try { return await body(); } finally {
+      Dialogs.confirm = realConfirm;
+      say('');
       Editor.setTrackChanges(false);
       closePicker();
       if (GridEditor.isActive()) GridEditor.setActive(false);
@@ -83,6 +90,8 @@
   const isLocked = id => document.getElementById(id).classList.contains('v2-hf-locked');
   const markClass = () => Array.from(document.querySelectorAll('.tiptap .tableWrapper')).map(w => w.className.split(/\s+/).filter(c => /^pp-linked/.test(c)).join('+') || '-').join(',');
   const panel = () => document.querySelector('.v2-table-toolbar');
+  // La barre du tableau est affichée (le curseur est dans un tableau, l'éditeur a le focus) : sa classe `visible`.
+  const barShown = () => !!panel() && panel().classList.contains('visible');
   const linkedParts = () => Array.from(document.querySelectorAll('.v2-table-toolbar [data-linked-only]'));
   const barButton = () => document.getElementById('v2-table-linked-btn');
   const menu = () => document.querySelector('.v2-linked-menu');
@@ -801,7 +810,7 @@
 
   cases.push({
     id: 'linked_detach_keeps_the_cells_removes_the_link_and_is_one_undo',
-    description: '« Détacher » (la ligne du menu de la barre, la fonction) : le tableau garde ses cases, perd son numéro (le HTML n\'en écrit plus, le repère, le bouton et le menu disparaissent, les boutons se dégrisent) ; un seul Annuler rend le lien ; le modèle peut ensuite se lier de nouveau',
+    description: '« Détacher » (la ligne du menu de la barre, la fonction) : le tableau garde ses cases, perd son numéro (le HTML n\'en écrit plus, le repère, le bouton et le menu disparaissent, les boutons se dégrisent) ; un seul Annuler rend le lien ; la barre du tableau reste affichée (le curseur est toujours dans le tableau) ; le modèle peut ensuite se lier de nouveau',
     run: async (h) => withDoc(h, DOC, async () => {
       const bad = [];
       const m = await model('Détacher', gridHtml('D', 2, 2));
@@ -820,6 +829,8 @@
       if (textsOf(tablesOf()[0].node) !== cells) bad.push('les cases ont changé');
       if (markClass() !== '-' || linkedParts().some(visible)) bad.push('repère ' + markClass() + ' ou bouton encore là');
       if (menuOpen() || barButton().getAttribute('aria-expanded') !== 'false') bad.push('le menu reste ouvert après Détacher');
+      // Un appui dans le menu d'une barre n'est pas un appui hors de la barre, même quand son action referme le menu : le curseur est toujours dans le tableau, la barre reste.
+      if (!barShown()) bad.push('la barre du tableau se referme après Détacher alors que le curseur est toujours dans le tableau');
       if (isLocked('v2-btn-table') || isLocked('v2-btn-code-block')) bad.push('un bouton reste grisé après Détacher');
       await sleep(GROUP_GAP_MS);
       await undo();
@@ -977,6 +988,480 @@
       const wordLinked = (await h.exportDocxParts(linked)).parts['word/document.xml'];
       const wordFree = (await h.exportDocxParts(free)).parts['word/document.xml'];
       if (!wordLinked || wordLinked !== wordFree) bad.push('le Word diffère');
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  // === 8) Les deux sens du lien (lot 6b) ===============================================================================================================================
+
+  const stub = () => window.__gristStub;
+  const rowOf = id => stub().getRow(Templates.TABLE_NAME, id);
+  // Les écritures de ce cas dans la table des modèles : une action par ligne, avec les colonnes qu'elle touche.
+  const modelWrites = () => stub().getActionLog().filter(a => (a[0] === 'UpdateRecord' || a[0] === 'AddRecord') && a[1] === Templates.TABLE_NAME);
+  const statusLine = () => { const el = document.getElementById('status-msg'); return { text: el.textContent, error: el.classList.contains('error-msg') }; };
+  function say(text) { const el = document.getElementById('status-msg'); if (el) { el.textContent = text; el.className = ''; } }
+  const pullRow = () => menu() && menu().querySelector('[data-action="linked-pull"]');
+  const pushRow = () => menu() && menu().querySelector('[data-action="linked-push"]');
+  // Le texte des cases d'une grille de `rows` x `cols` faite par gridHtml, dans l'ordre de lecture.
+  const labels = (label, rows, cols) => Array.from({ length: rows * cols }, (_, i) => label + 'ABC'[i % cols] + (Math.floor(i / cols) + 1)).join('|');
+  // Remplace la confirmation de l'envoi : répond `answer` (une valeur, ou une fonction du rang de la demande) et garde ce qu'on lui a demandé.
+  function answerWith(answer) {
+    const asked = [];
+    Dialogs.confirm = async (options) => { asked.push(options); return typeof answer === 'function' ? answer(asked.length) : answer; };
+    return asked;
+  }
+  // La case du curseur : [ligne, colonne] dans son tableau, ou null.
+  function cursorCell() {
+    const $head = ed().state.selection.$head;
+    for (let depth = 1; depth < $head.depth; depth++) if ($head.node(depth).type.name === 'table') return [$head.index(depth), $head.index(depth + 1)];
+    return null;
+  }
+  // Le document d'un cas : « avant », un tableau lié au modèle `id` (de `rows` x `cols` cases étiquetées `label`), « après ».
+  const linkedDoc = (id, label, rows, cols) => '<p>avant</p>' + linkedHtml(id, label, rows, cols) + '<p>après</p>';
+  // Un modèle Grille avec les colonnes que « Envoyer » ne doit pas toucher (nom du fichier PDF) ; rend sa ligne du cache.
+  async function modelWithFile(name, html, file) {
+    const saved = await Templates.save(null, name + ' ' + (++counter), html, file, null, null, 'grille', null);
+    made.push(saved.id);
+    await Templates.loadAll();
+    return Templates.byId(saved.id);
+  }
+  // Un modèle de document (ou d'e-mail) qui pose le tableau lié au modèle `id`.
+  async function placing(id, type) {
+    const saved = await Templates.save(null, 'Pose ' + (++counter), '<p>x</p>' + linkedHtml(id, 'P', 1, 1), '', null, null, type || 'document', null);
+    made.push(saved.id);
+    return saved.id;
+  }
+
+  cases.push({
+    id: 'linked_pull_replaces_the_cells_with_the_models_keeps_the_cursor_cell_and_is_one_undo',
+    description: '« Mettre à jour depuis le modèle » : les cases du tableau lié deviennent celles du modèle (ce qui y avait été écrit s\'en va), le lien reste, le texte autour ne bouge pas, le curseur reste dans la même case (ligne 2, colonne 3), la ligne d\'état le dit, rien n\'est écrit dans Grist, et un seul Annuler rend le tableau d\'avant',
+    run: async (h) => withDoc(h, DOC, async () => {
+      const bad = [];
+      const m = await model('Mise à jour', gridHtml('M', 3, 3));
+      Editor.setHTML(WITH_TABLE(m.id));
+      await sleep(200);
+      await cursorIn(0, 1, 2);
+      await sleep(GROUP_GAP_MS);
+      ed().chain().focus().insertContent('local').run();
+      await sleep(GROUP_GAP_MS);
+      const edited = docJson();
+      stub().clearActionLog();
+      say('');
+      const done = await LinkedTable.pull(ed());
+      await sleep(80);
+      if (done !== true) bad.push('pull() a répondu ' + done);
+      if (textsOf(tablesOf()[0].node) !== labels('M', 3, 3)) bad.push('les cases ne sont pas celles du modèle : ' + textsOf(tablesOf()[0].node));
+      if (linkedIds().join() !== String(m.id)) bad.push('le lien est parti : ' + linkedIds().join());
+      const html = Editor.getHTML();
+      if (!html.startsWith('<p>avant</p><table') || html.indexOf('</table><p>après</p>') === -1) bad.push('le texte autour a bougé');
+      if (JSON.stringify(cursorCell()) !== '[1,2]') bad.push('le curseur n\'est plus dans la case (ligne 2, colonne 3) : ' + JSON.stringify(cursorCell()));
+      if (!LinkedTable.status(ed().state)) bad.push('la barre du tableau ne voit plus de lien sous le curseur');
+      const line = statusLine();
+      if (line.text !== I18n.t('linkedTable.pulled', { name: m.nom }) || line.error) bad.push('ligne d\'état : ' + JSON.stringify(line));
+      if (modelWrites().length) bad.push('mettre à jour a écrit dans Grist : ' + JSON.stringify(modelWrites()));
+      await undo();
+      if (docJson() !== edited) bad.push('un Annuler ne rend pas le tableau d\'avant');
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_pull_reads_the_model_again_so_a_change_made_elsewhere_arrives',
+    description: 'Le modèle est relu dans Grist avant de remplacer les cases : ce qu\'une autre personne (ou un autre document) y a écrit depuis la pose arrive, alors que le cache du widget a l\'ancien contenu',
+    run: async (h) => withDoc(h, DOC, async () => {
+      const bad = [];
+      const m = await model('Ailleurs', gridHtml('A', 2, 2));
+      Editor.setHTML(linkedDoc(m.id, 'A', 2, 2));
+      await sleep(200);
+      await cursorIn(0, 0, 0);
+      stub().remoteWrite(Templates.TABLE_NAME, m.id, { Contenu: gridHtml('N', 2, 2), DateModif: new Date().toISOString() });
+      if (Templates.byId(m.id).contenu.indexOf('NA1') !== -1) bad.push('le cache aurait déjà dû être périmé');
+      await sleep(GROUP_GAP_MS);
+      const done = await LinkedTable.pull(ed());
+      await sleep(80);
+      if (done !== true || textsOf(tablesOf()[0].node) !== labels('N', 2, 2)) bad.push('le changement fait ailleurs n\'est pas arrivé : ' + done + ' ' + textsOf(tablesOf()[0].node));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_pull_of_an_identical_table_changes_nothing_and_keeps_its_comments',
+    description: 'Un tableau déjà identique à celui du modèle n\'est pas touché : aucune transaction (le document est le même objet), la marque de commentaire d\'une case reste, la ligne d\'état dit qu\'il est identique ; remplacer les cases la ferait disparaître',
+    run: async (h) => withDoc(h, DOC, async () => {
+      const bad = [];
+      const m = await model('Identique', gridHtml('I', 2, 2));
+      Editor.setHTML(linkedDoc(m.id, 'I', 2, 2));
+      await sleep(200);
+      const at = cellText(0, 1, 1);
+      ed().chain().focus().setTextSelection({ from: at, to: at + 2 }).setMark('commentMark', { id: 'pull-test', resolved: false }).run();
+      await sleep(100);
+      const before = doc();
+      say('');
+      const done = await LinkedTable.pull(ed());
+      await sleep(80);
+      if (done !== true) bad.push('pull() a répondu ' + done);
+      if (doc() !== before && !doc().eq(before)) bad.push('le document a changé alors que le tableau est identique');
+      if (Editor.getHTML().indexOf('comment-mark') === -1) bad.push('la marque de commentaire a disparu');
+      const line = statusLine();
+      if (line.text !== I18n.t('linkedTable.upToDate', { name: m.nom }) || line.error) bad.push('ligne d\'état : ' + JSON.stringify(line));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_pull_says_when_the_model_is_gone_or_has_no_table_and_touches_nothing',
+    description: 'Un modèle supprimé ou devenu sans tableau : « Mettre à jour » ne change ni le document ni Grist, rend faux et le dit dans la ligne d\'état (en erreur) ; le tableau reste lié ou non selon que le modèle existe encore (le lien d\'un modèle supprimé est sans effet)',
+    run: async (h) => withDoc(h, DOC, async () => {
+      const bad = [];
+      const m = await model('Sans tableau', gridHtml('E', 2, 2));
+      Editor.setHTML(WITH_TABLE(m.id));
+      await sleep(200);
+      await cursorIn(0, 0, 0);
+      stub().remoteWrite(Templates.TABLE_NAME, m.id, { Contenu: '<p>plus de tableau</p>' });
+      const reference = docJson();
+      stub().clearActionLog();
+      say('');
+      const first = await LinkedTable.pull(ed());
+      const lineA = statusLine();
+      if (first !== false || docJson() !== reference) bad.push('modèle sans tableau : ' + first + ' ' + (docJson() === reference));
+      if (lineA.text !== I18n.t('linkedTable.noTable', { name: m.nom }) || !lineA.error) bad.push('ligne d\'état (sans tableau) : ' + JSON.stringify(lineA));
+      // Le modèle supprimé : le lien n'a plus d'effet, le curseur n'est plus dans un tableau lié, rien ne part.
+      await Templates.remove(m.id);
+      made.splice(made.indexOf(m.id), 1);
+      await Templates.loadAll();
+      say('');
+      const second = await LinkedTable.pull(ed());
+      if (second !== false || docJson() !== reference) bad.push('modèle supprimé : ' + second + ' ' + (docJson() === reference));
+      if (modelWrites().length) bad.push('une écriture est partie : ' + JSON.stringify(modelWrites()));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_push_writes_the_table_into_the_model_alone_without_link_or_comments_after_asking',
+    description: '« Envoyer au modèle » : après une confirmation (le titre dit le nom du modèle, le bouton « Envoyer »), le tableau du document est écrit dans le modèle par UNE écriture qui ne touche que Contenu et DateModif (le nom, le nom du fichier PDF, le type, l\'en-tête, les marges restent) ; le HTML écrit n\'a ni le numéro du lien ni les marques de commentaire ; le cache du widget a le nouveau contenu ; le document ne bouge pas ; la ligne d\'état le dit',
+    run: async (h) => withDoc(h, DOC, async () => {
+      const bad = [];
+      const m = await modelWithFile('Envoi', gridHtml('G', 2, 2), 'mon-fichier');
+      Editor.setHTML(linkedDoc(m.id, 'G', 2, 2));
+      await sleep(200);
+      await cursorIn(0, 0, 0);
+      await sleep(GROUP_GAP_MS);
+      ed().chain().focus().insertContent('X').run();
+      const at = cellText(0, 1, 1);
+      ed().chain().focus().setTextSelection({ from: at, to: at + 2 }).setMark('commentMark', { id: 'push-test', resolved: false }).run();
+      await sleep(100);
+      const reference = docJson();
+      const before = rowOf(m.id);
+      await sleep(1100);
+      const asked = answerWith(true);
+      stub().clearActionLog();
+      say('');
+      const done = await LinkedTable.push(ed());
+      await sleep(80);
+      if (done !== true) bad.push('push() a répondu ' + done);
+      if (asked.length !== 1 || asked[0].title !== I18n.t('linkedTable.pushTitle') || asked[0].confirmLabel !== I18n.t('linkedTable.pushConfirm') || asked[0].message !== I18n.t('linkedTable.pushMessage', { name: m.nom })) {
+        bad.push('la confirmation : ' + JSON.stringify(asked));
+      }
+      const writes = modelWrites();
+      if (writes.length !== 1 || writes[0][0] !== 'UpdateRecord' || writes[0][2] !== m.id || Object.keys(writes[0][3]).sort().join() !== 'Contenu,DateModif') bad.push('les écritures : ' + JSON.stringify(writes.map(a => [a[0], a[2], Object.keys(a[3] || {})])));
+      const after = rowOf(m.id);
+      const changed = Object.keys(after).filter(k => JSON.stringify(after[k]) !== JSON.stringify(before[k])).sort().join();
+      if (changed !== 'Contenu,DateModif') bad.push('colonnes changées : ' + changed);
+      if (/data-linked-template/.test(after.Contenu) || /comment-mark|data-comment-id/.test(after.Contenu)) bad.push('le lien ou les commentaires sont partis dans le modèle');
+      if (after.Contenu.indexOf('XGA1') === -1 || after.Contenu.indexOf('GB2') === -1 || !/^<table[ >]/.test(after.Contenu) || /<\/table><p>/.test(after.Contenu)) bad.push('contenu écrit : ' + after.Contenu.slice(0, 200));
+      if (Templates.byId(m.id).contenu !== after.Contenu) bad.push('le cache n\'a pas le nouveau contenu');
+      if (docJson() !== reference) bad.push('le document a bougé');
+      const line = statusLine();
+      if (line.text !== I18n.t('linkedTable.pushed', { name: m.nom }) || line.error) bad.push('ligne d\'état : ' + JSON.stringify(line));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_push_refused_writes_nothing_and_the_confirmation_counts_the_other_models',
+    description: 'Une confirmation refusée n\'écrit rien (document et modèle inchangés). Le message dit dans combien d\'AUTRES modèles le tableau est posé : aucun (rien de plus), un (singulier), deux (pluriel) - ni le modèle ouvert, ni une grille, ni un autre numéro qui commence par le même chiffre ; en anglais aussi',
+    run: async (h) => withDoc(h, DOC, async () => {
+      const bad = [];
+      const m = await model('Compte', gridHtml('C', 2, 2));
+      // Le tableau du document diffère de celui du modèle (« D » au lieu de « C ») : l'envoi demande.
+      Editor.setHTML(linkedDoc(m.id, 'D', 2, 2));
+      await sleep(200);
+      await cursorIn(0, 0, 0);
+      const reference = docJson();
+      const asked = answerWith(false);
+      const messageFor = n => [I18n.t('linkedTable.pushMessage', { name: m.nom }), n ? I18n.t('linkedTable.pushOthers', { n }) : ''].filter(Boolean).join(' ');
+      const lang = I18n.getLang();
+      const ask = async (n, label) => {
+        stub().clearActionLog();
+        const before = asked.length;
+        const done = await LinkedTable.push(ed());
+        if (done !== false || asked.length !== before + 1) bad.push(label + ' : push() ' + done + ', demandes ' + (asked.length - before));
+        else if (asked[asked.length - 1].message !== messageFor(n)) bad.push(label + ' : message « ' + asked[asked.length - 1].message + ' » au lieu de « ' + messageFor(n) + ' »');
+        if (modelWrites().length || docJson() !== reference) bad.push(label + ' : une confirmation refusée a écrit ou changé le document');
+      };
+      try {
+        await ask(0, 'aucun autre modèle');
+        // Ne comptent pas : une grille, le modèle ouvert, un autre numéro (« 10 » n'est pas « 1 »), un modèle qui ne pose rien.
+        const cnt = await Templates.save(null, 'Grille avec marque ' + (++counter), linkedHtml(m.id, 'Q', 1, 1), '', null, null, 'grille', null);
+        made.push(cnt.id);
+        const open = await placing(m.id);
+        const other = await Templates.save(null, 'Autre numéro ' + (++counter), '<p>x</p>' + linkedHtml(m.id + '0', 'Q', 1, 1), '', null, null, 'document', null);
+        made.push(other.id);
+        // Enregistrer un modèle neuf le rend courant : le modèle ouvert se désigne après.
+        Templates.setCurrentId(open);
+        await ask(0, 'un modèle ouvert, une grille, un autre numéro');
+        Templates.setCurrentId(null);
+        const one = await placing(m.id);
+        await ask(1, 'un autre modèle');
+        const two = await placing(m.id, 'email');
+        await ask(2, 'deux autres modèles');
+        if (one === two) bad.push('les deux modèles sont le même');
+        I18n.setLang('en'); await sleep(60);
+        await ask(2, 'deux autres modèles, en anglais');
+        if (!/2 other templates/.test(asked[asked.length - 1].message)) bad.push('anglais : ' + asked[asked.length - 1].message);
+        I18n.setLang('fr'); await sleep(60);
+        if (!/2 autres modèles/.test(messageFor(2))) bad.push('français : ' + messageFor(2));
+        if (!/ 1 autre modèle,/.test(' ' + I18n.t('linkedTable.pushOthers', { n: 1 }))) bad.push('singulier : ' + I18n.t('linkedTable.pushOthers', { n: 1 }));
+      } finally { Templates.setCurrentId(null); I18n.setLang(lang); await sleep(60); }
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_push_of_an_identical_table_asks_nothing_and_writes_nothing',
+    description: 'Un tableau déjà identique à celui du modèle (posé, jamais touché) : « Envoyer au modèle » ne demande rien, n\'écrit rien et le dit ; dès qu\'une case change, il demande',
+    run: async (h) => withDoc(h, DOC, async () => {
+      const bad = [];
+      const m = await model('Déjà pareil', gridHtml('P', 2, 2));
+      await cursorAt('après');
+      if (!LinkedTable.insert(ed(), m)) bad.push('la pose a échoué');
+      await sleep(150);
+      const asked = answerWith(true);
+      stub().clearActionLog();
+      say('');
+      const first = await LinkedTable.push(ed());
+      if (first !== true || asked.length || modelWrites().length) bad.push('tableau identique : ' + JSON.stringify([first, asked.length, modelWrites().length]));
+      const line = statusLine();
+      if (line.text !== I18n.t('linkedTable.upToDate', { name: m.nom }) || line.error) bad.push('ligne d\'état : ' + JSON.stringify(line));
+      await cursorIn(0, 0, 0);
+      await sleep(GROUP_GAP_MS);
+      ed().chain().focus().insertContent('!').run();
+      await sleep(100);
+      const second = await LinkedTable.push(ed());
+      if (second !== true || asked.length !== 1 || modelWrites().length !== 1) bad.push('tableau modifié : ' + JSON.stringify([second, asked.length, modelWrites().length]));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_push_then_pull_leaves_a_rich_table_as_it_is',
+    description: 'Un tableau riche (cases fusionnées, fond, bordures, gras, alignement, hauteur et largeur) envoyé au modèle puis relu par « Mettre à jour » est reconnu identique : le HTML que le modèle garde se relit en ce même tableau (ni transaction, ni perte), condition de la mise à jour automatique',
+    run: async (h) => withDoc(h, DOC, async () => {
+      const bad = [];
+      const m = await model('Riche', gridHtml('R', 3, 3));
+      await cursorAt('après');
+      LinkedTable.insert(ed(), m);
+      await sleep(150);
+      await cursorIn(0, 0, 0);
+      await sleep(GROUP_GAP_MS);
+      ed().chain().focus().insertContent('Titre').run();
+      ed().commands.setTextSelection({ from: cellText(0, 0, 0), to: cellText(0, 0, 0) + 5 });
+      ed().chain().focus().toggleBold().run();
+      await cursorIn(0, 1, 1);
+      const first = tablesOf()[0];
+      const cellPos = cellText(0, 1, 1) - 2;
+      ed().chain().focus().setCellSelection({ anchorCell: cellPos, headCell: cellPos + first.node.child(1).child(1).nodeSize }).run();
+      ed().chain().focus().mergeCells().run();
+      await cursorIn(0, 1, 1);
+      ed().chain().focus().updateAttributes('tableCell', { backgroundColor: '#ffe599' }).run();
+      GridEditor.applyBorders(ed(), TableBorders.PRESETS[0], '#cc0000');
+      await sleep(150);
+      const rich = docJson();
+      // Le navigateur écrit le fond en rgb() dans le HTML : c'est ce texte-là que le modèle garde, et que sa relecture redonne.
+      const markers = [/colspan="2"/, /background-color: *(rgb\(255, 229, 153\)|#ffe599)/, /<strong>Titr/, /data-border-/];
+      const html = Editor.getHTML();
+      const missing = markers.filter(re => !re.test(html)).map(String);
+      if (missing.length) bad.push('le tableau de départ n\'est pas assez riche : ' + missing.join(' '));
+      answerWith(true);
+      const pushed = await LinkedTable.push(ed());
+      if (pushed !== true || !/data-border-/.test(rowOf(m.id).Contenu) || !/colspan="2"/.test(rowOf(m.id).Contenu)) bad.push('l\'envoi : ' + pushed);
+      const before = doc();
+      stub().clearActionLog();
+      say('');
+      const pulled = await LinkedTable.pull(ed());
+      if (pulled !== true || (doc() !== before && !doc().eq(before)) || docJson() !== rich) bad.push('le tableau n\'est pas relu à l\'identique : ' + pulled);
+      const line = statusLine();
+      if (line.text !== I18n.t('linkedTable.upToDate', { name: m.nom })) bad.push('ligne d\'état : ' + JSON.stringify(line));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_push_that_fails_says_so_releases_the_action_and_leaves_the_model',
+    description: 'Une écriture refusée par Grist : le modèle et le document sont inchangés, la ligne d\'état le dit en erreur, rien ne reste bloqué (l\'envoi suivant, une fois Grist revenu, passe)',
+    run: async (h) => withDoc(h, DOC, async () => {
+      const bad = [];
+      const m = await model('Échec', gridHtml('F', 2, 2));
+      Editor.setHTML(linkedDoc(m.id, 'F', 2, 2));
+      await sleep(200);
+      await cursorIn(0, 0, 0);
+      await sleep(GROUP_GAP_MS);
+      ed().chain().focus().insertContent('X').run();
+      await sleep(100);
+      const reference = docJson();
+      const cached = Templates.byId(m.id).contenu;
+      answerWith(true);
+      const real = grist.docApi.applyUserActions;
+      grist.docApi.applyUserActions = async (actions) => {
+        if (actions.some(a => a[0] === 'UpdateRecord' && a[1] === Templates.TABLE_NAME)) throw new Error('refusé par les règles d\'accès');
+        return real.call(grist.docApi, actions);
+      };
+      let failed;
+      try {
+        say('');
+        failed = await LinkedTable.push(ed());
+      } finally { grist.docApi.applyUserActions = real; }
+      const line = statusLine();
+      if (failed !== false || line.text !== I18n.t('linkedTable.pushFailed', { name: m.nom }) || !line.error) bad.push('échec : ' + JSON.stringify([failed, line]));
+      if (/XFA1/.test(rowOf(m.id).Contenu) || Templates.byId(m.id).contenu !== cached || docJson() !== reference) bad.push('le modèle, son cache ou le document ont changé malgré l\'échec');
+      const retry = await LinkedTable.push(ed());
+      if (retry !== true || !/XFA1/.test(rowOf(m.id).Contenu)) bad.push('l\'envoi suivant ne passe pas : ' + retry);
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_actions_are_refused_under_track_changes_while_busy_and_for_a_read_only_editor',
+    description: 'Les deux sens ne font rien (rendent faux, ne lisent même pas les modèles, ne demandent rien, n\'écrivent rien, laissent le document) sous le suivi des modifications et dans un éditeur en lecture ; un suivi allumé PENDANT la lecture des modèles ou pendant la fenêtre de confirmation les arrête aussi ; une seconde action lancée pendant la première est ignorée (une seule mise à jour), puis l\'action suivante passe',
+    run: async (h) => withDoc(h, DOC, async () => {
+      const bad = [];
+      const m = await model('Refus', gridHtml('Z', 2, 2));
+      Editor.setHTML(WITH_TABLE(m.id));
+      await sleep(200);
+      await cursorIn(0, 0, 0);
+      const reference = docJson();
+      const asked = answerWith(true);
+      // Les lectures des modèles que le lien demande : une action refusée d'emblée n'en fait aucune. La sauvegarde automatique relit la table toutes les ~2,5 s, à un instant que le cas
+      // ne maîtrise pas : seules comptent les lectures dont la pile d'appels passe par js/linked-table.js.
+      const realLoad = Templates.loadAll;
+      let reads = 0;
+      Templates.loadAll = function () { if (/\/linked-table\.js/.test(new Error().stack || '')) reads++; return realLoad.apply(this, arguments); };
+      try {
+        stub().clearActionLog();
+        Editor.setTrackChanges(true);
+        await sleep(150);
+        const tracked = [await LinkedTable.pull(ed()), await LinkedTable.push(ed())];
+        Editor.setTrackChanges(false);
+        await sleep(150);
+        if (tracked.some(v => v !== false) || docJson() !== reference || asked.length || modelWrites().length) bad.push('suivi allumé : ' + JSON.stringify([tracked, docJson() === reference, asked.length, modelWrites().length]));
+        await cursorIn(0, 0, 0);
+        ed().setEditable(false);
+        let locked;
+        try { locked = [await LinkedTable.pull(ed()), await LinkedTable.push(ed())]; } finally { ed().setEditable(true); }
+        await sleep(100);
+        if (locked.some(v => v !== false) || docJson() !== reference || asked.length || modelWrites().length) bad.push('éditeur en lecture : ' + JSON.stringify([locked, docJson() === reference, asked.length, modelWrites().length]));
+        if (reads) bad.push('une action refusée d\'emblée a quand même relu les modèles (' + reads + ' lectures)');
+      } finally { Templates.loadAll = realLoad; }
+      // Le suivi allumé pendant que les modèles se relisent (la lecture est retenue le temps du geste), puis pendant que la fenêtre de confirmation est ouverte.
+      await cursorIn(0, 0, 0);
+      let release;
+      const gate = new Promise((resolve) => { release = resolve; });
+      Templates.loadAll = async function () { await gate; return realLoad.apply(this, arguments); };
+      try {
+        const waiting = [LinkedTable.pull(ed())];
+        await sleep(50);
+        Editor.setTrackChanges(true);
+        await sleep(150);
+        release();
+        const results = [await waiting[0]];
+        if (results[0] !== false || docJson() !== reference) bad.push('suivi allumé pendant la lecture des modèles : le tableau a bougé ou l\'action a répondu ' + results[0]);
+      } finally { Templates.loadAll = realLoad; Editor.setTrackChanges(false); await sleep(150); }
+      await cursorIn(0, 0, 0);
+      await sleep(GROUP_GAP_MS);
+      const during = answerWith(() => { Editor.setTrackChanges(true); return true; });
+      stub().clearActionLog();
+      const sentUnderTrack = await LinkedTable.push(ed());
+      Editor.setTrackChanges(false);
+      await sleep(150);
+      if (sentUnderTrack !== false || during.length !== 1 || modelWrites().length) bad.push('suivi allumé pendant la fenêtre : ' + JSON.stringify([sentUnderTrack, during.length, modelWrites().length]));
+      await cursorIn(0, 0, 0);
+      const both = await Promise.all([LinkedTable.pull(ed()), LinkedTable.pull(ed())]);
+      if (both.join() !== 'true,false') bad.push('deux actions à la fois : ' + both.join());
+      const next = await LinkedTable.pull(ed());
+      if (next !== true) bad.push('l\'action suivante ne passe pas : ' + next);
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_menu_has_the_two_way_rows_that_start_the_actions_and_grey_under_track_changes',
+    description: 'Le menu du lien a, dans l\'ordre, « Mettre à jour depuis le modèle », « Envoyer au modèle » et « Détacher », chacune avec son icône (trois différentes), son libellé et son info-bulle en deux langues ; un appui sur la première referme le menu et met à jour le tableau, un appui sur la seconde referme le menu et demande confirmation, la barre du tableau reste affichée dans les deux cas ; sous le suivi des modifications, elles sont grisées avec la raison et un appui ne fait rien (le menu reste ouvert)',
+    run: async (h) => withDoc(h, DOC, async () => {
+      const bad = [];
+      const m = await model('Menu', gridHtml('U', 2, 2));
+      Editor.setHTML(WITH_TABLE(m.id));
+      await sleep(200);
+      await cursorIn(0, 0, 0);
+      await sleep(100);
+      press(barButton());
+      await sleep(150);
+      if (!menuOpen()) { return { pass: false, notes: 'le menu ne s\'ouvre pas' }; }
+      const order = Array.from(menu().querySelectorAll('.v2-linked-menu-row')).map(el => el.getAttribute('data-action')).join();
+      if (order !== 'linked-pull,linked-push,linked-detach') bad.push('lignes : ' + order);
+      const icons = Array.from(menu().querySelectorAll('.v2-linked-menu-row svg')).map(el => el.innerHTML);
+      if (icons.length !== 3 || new Set(icons).size !== 3 || icons.some(markup => !markup)) bad.push('icônes : ' + icons.length + ' dont ' + new Set(icons).size + ' différentes');
+      const lang = I18n.getLang();
+      try {
+        const texts = {};
+        for (const code of ['fr', 'en']) {
+          I18n.setLang(code); await sleep(60);
+          press(barButton()); await sleep(60); press(barButton()); await sleep(120);
+          texts[code] = [pullRow(), pushRow(), detachRow()].map(row => row.textContent.trim() + ' / ' + row.title).join(' | ');
+        }
+        if (texts.fr === texts.en || !/Update from the template/.test(texts.en) || !/Send to the template/.test(texts.en) || !/Mettre à jour depuis le modèle/.test(texts.fr) || !/Envoyer au modèle/.test(texts.fr)) bad.push('deux langues : ' + JSON.stringify(texts));
+        if (pullRow().title !== I18n.t('linkedTable.pull', { name: m.nom }) || pushRow().title !== I18n.t('linkedTable.push', { name: m.nom })) bad.push('info-bulles : ' + pullRow().title + ' | ' + pushRow().title);
+      } finally { I18n.setLang(lang); await sleep(60); }
+      if ([pullRow(), pushRow(), detachRow()].some(row => row.getAttribute('aria-disabled') !== 'false')) bad.push('une ligne est grisée sans raison');
+      // « Mettre à jour » : le menu se referme, le tableau devient celui du modèle.
+      if (!menuOpen()) { press(barButton()); await sleep(120); }
+      await sleep(GROUP_GAP_MS);
+      stub().clearActionLog();
+      press(pullRow());
+      await sleep(250);
+      if (menuOpen()) bad.push('le menu reste ouvert après « Mettre à jour »');
+      if (!barShown()) bad.push('la barre du tableau se referme après « Mettre à jour »');
+      if (textsOf(tablesOf()[0].node) !== labels('U', 2, 2)) bad.push('« Mettre à jour » n\'a rien fait : ' + textsOf(tablesOf()[0].node));
+      // « Envoyer » : le menu se referme, la confirmation est demandée (le tableau est maintenant identique : on le change d'abord).
+      await cursorIn(0, 0, 0);
+      await sleep(GROUP_GAP_MS);
+      ed().chain().focus().insertContent('+').run();
+      await sleep(100);
+      const asked = answerWith(true);
+      press(barButton());
+      await sleep(150);
+      press(pushRow());
+      await sleep(300);
+      if (menuOpen()) bad.push('le menu reste ouvert après « Envoyer »');
+      if (!barShown()) bad.push('la barre du tableau se referme après « Envoyer »');
+      if (asked.length !== 1 || modelWrites().length !== 1) bad.push('« Envoyer » : ' + JSON.stringify([asked.length, modelWrites().length]));
+      // Sous le suivi : grisées avec la raison, un appui ne fait rien et le menu reste ouvert.
+      Editor.setTrackChanges(true);
+      await sleep(150);
+      await cursorIn(0, 0, 0);
+      press(barButton());
+      await sleep(150);
+      const why = I18n.t('linkedTable.lockedTracked', { name: m.nom });
+      const rows = [pullRow(), pushRow(), detachRow()];
+      if (!menuOpen() || rows.some(row => !row || row.getAttribute('aria-disabled') !== 'true' || row.title !== why)) bad.push('sous le suivi : ' + JSON.stringify(rows.map(row => row && [row.getAttribute('aria-disabled'), row.title])));
+      else {
+        stub().clearActionLog();
+        const was = docJson();
+        const askedBefore = asked.length;
+        press(pullRow()); press(pushRow());
+        await sleep(250);
+        if (!menuOpen() || docJson() !== was || asked.length !== askedBefore || modelWrites().length) bad.push('un appui sous le suivi a agi : ' + JSON.stringify([menuOpen(), docJson() === was, asked.length - askedBefore, modelWrites().length]));
+      }
       return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
     }),
   });

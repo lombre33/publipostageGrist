@@ -23,7 +23,7 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
   vérifie.
 - **Les données** : les modèles et les réglages vivent dans des tables `Publipostage_*` du document Grist ;
   les préférences d'affichage (langue, thème, raccourcis…) dans le navigateur.
-- **Le volume** : 127 fichiers dans `js/` (48 500 lignes : 35 800 de code, 9 800 de commentaires, 2 900 de
+- **Le volume** : 127 fichiers dans `js/` (48 600 lignes : 35 900 de code, 9 800 de commentaires, 2 900 de
   blanc), 43 feuilles de style (3 600 lignes), une page de 820 lignes. Quatre fichiers de polices du PDF
   pèsent 2,5 Mo en quelques lignes (des données) ; `js/i18n.js` est du texte à traduire, pas de la logique.
 
@@ -162,7 +162,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/grid-xlsx-import.js` | Importer un classeur `.xlsx` dans une grille. |
 | `js/table-borders.js` | La règle des bordures, écrite une fois pour l'éditeur, la Lecture, le PDF et l'Excel. |
 | `js/xlsx-number-format.js` | Le texte qu'Excel montrerait pour un format de nombre ou de date. |
-| `js/linked-table.js` | Le tableau d'un document lié à un modèle Grille : l'attribut du lien, le choix du modèle dans la liste, le repère dans la page, les règles du contenu des cases et les verrous (suivi des modifications, lecture seule). |
+| `js/linked-table.js` | Le tableau d'un document lié à un modèle Grille : l'attribut du lien, le choix du modèle dans la liste, le repère dans la page, les règles du contenu des cases et les verrous (suivi des modifications, lecture seule), la mise à jour du tableau depuis le modèle et son envoi au modèle. |
 
 ### Exports (16 fichiers, 6 800 lignes)
 
@@ -289,7 +289,7 @@ For anyone reading the code: what is where, and where to start. Line counts are 
   **Each export** loads its library on first use, with an integrity hash (SRI) that the browser checks.
 - **The data**: templates and settings live in `Publipostage_*` tables of the Grist document; display
   preferences (language, theme, shortcuts…) in the browser.
-- **The size**: 127 files in `js/` (48,500 lines: 35,800 of code, 9,800 of comments, 2,900 blank), 43
+- **The size**: 127 files in `js/` (48,600 lines: 35,900 of code, 9,800 of comments, 2,900 blank), 43
   stylesheets (3,600 lines), an 820-line page. Four PDF font files weigh 2.5 MB in a few lines (data);
   `js/i18n.js` is text to translate, not logic.
 
@@ -427,7 +427,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/grid-xlsx-import.js` | Importing an `.xlsx` workbook into a grid. |
 | `js/table-borders.js` | The border rule, written once for the editor, Reading mode, the PDF and the Excel file. |
 | `js/xlsx-number-format.js` | The text Excel would show for a number or date format. |
-| `js/linked-table.js` | A document's table linked to a Grid template: the link attribute, picking the template in the list, the marker in the page, the content rules for the cells and the locks (track changes, read-only). |
+| `js/linked-table.js` | A document's table linked to a Grid template: the link attribute, picking the template in the list, the marker in the page, the content rules for the cells and the locks (track changes, read-only), updating the table from the template and sending it to the template. |
 
 ### Exports (16 files, 6,800 lines)
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Tableau de document lié à un modèle Grille (js/linked-table.js, css/linked-table.css, js/floating-toolbars.js, js/main-toolbar.js ; lot 6a) : le panneau de 700x400 d'Antoine, à la VRAIE
+// Tableau de document lié à un modèle Grille (js/linked-table.js, css/linked-table.css, js/floating-toolbars.js, js/main-toolbar.js ; lots 6a et 6b) : le panneau de 700x400 d'Antoine, à la VRAIE
 // souris (page.mouse) et au VRAI clavier (frappe, Tab, Entrée, Échap, Ctrl+Z), en clair et en sombre, puis en anglais. Ce que scenarios-linked-table.js ne peut pas voir depuis la page :
 //  - le survol du bouton Tableau ouvre un volet dont la ligne « Tableau d'un modèle Grille… » tient dans le panneau et est au premier plan (la ligne ne tenait pas dans le menu « Lien et blocs de
 //    contenu », déjà plein) ; l'info-bulle du bouton ne se superpose pas au volet ; un clic sur le bouton pose toujours un tableau ordinaire ;
@@ -9,7 +9,9 @@
 //  - le repère (filet d'accent du bord gauche) dans la marge, à 3:1 au moins du fond de la page, nom du modèle pour les lecteurs d'écran ;
 //  - les boutons grisés par le tableau lié ne reçoivent pas la souris et un clic dessus ne change rien ; « Détacher » à la souris, un seul Ctrl+Z ;
 //  - le suivi des modifications (vrai bouton) : la frappe dans le tableau lié est refusée, dans un tableau ordinaire elle se suit ; le bouton du lien, son menu (« Détacher » grisé avec la raison) et le repère le disent ;
-//  - le clavier seul : le focus sur le bouton Tableau ouvre le volet, Tab atteint la ligne, Entrée ouvre la liste, la frappe filtre, Entrée pose.
+//  - le clavier seul : le focus sur le bouton Tableau ouvre le volet, Tab atteint la ligne, Entrée ouvre la liste, la frappe filtre, Entrée pose ;
+//  - les deux sens (lot 6b) : le menu du lien tient dans le panneau avec ses trois lignes (contrastes ≥ 4,5:1), « Mettre à jour depuis le modèle » ramène les cases du modèle (curseur dans la
+//    même case, ligne d'état), « Envoyer au modèle » ouvre une confirmation dans le panneau, « Annuler » n'écrit rien, « Envoyer » écrit le modèle et lui seul.
 // Lancé par run-headless.mjs (groupe Node "linkedTableMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-linked-table-mouse.mjs
 // LINKED_TABLE_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans elle, rien n'est écrit.
 import { createServer } from 'node:http';
@@ -131,6 +133,11 @@ const BAR = '.v2-table-toolbar';
 const LBTN = '#v2-table-linked-btn';
 const MENU = '.v2-linked-menu';
 const MENU_ROW = MENU + ' [data-action="linked-detach"]';
+const ROW_PULL = MENU + ' [data-action="linked-pull"]';
+const ROW_PUSH = MENU + ' [data-action="linked-push"]';
+const DIALOG = '#pp-dialog-modal';
+const DIALOG_CANCEL = DIALOG + ' .pp-modal-actions button:first-of-type';
+const DIALOG_OK = DIALOG + ' .var-modal-primary';
 const GRID = '<table><tbody>' + [1, 2, 3].map(r => '<tr>' + ['A', 'B', 'C'].map(c => `<td><p>${c}${r}</p></td>`).join('') + '</tr>').join('') + '</tbody></table>';
 const LONG_NAME = 'Un nom de modèle Grille vraiment très long pour la barre du tableau';
 const DOC = '<p>Bonjour le monde entier</p><p>Deuxième ligne</p>';
@@ -539,6 +546,101 @@ async function run(theme) {
   });
   check(`${T}, barre : un nom très long ne change pas la barre (une ligne, dans le panneau) ; le menu le coupe par « … » (l'info-bulle le dit en entier) et tient dans le panneau`, longMenu.barH <= 44 && longMenu.barInPanel && longMenu.clipped && longMenu.full && longMenu.menuW <= 240 && longMenu.menuInPanel, longMenu);
   await snap(`${T}-7-nom-long`);
+
+  // 9) Les deux sens, à la vraie souris. Le menu du lien : trois lignes dans le panneau, au premier plan, lisibles ; « Mettre à jour depuis le modèle » ramène les cases du modèle (le curseur reste
+  // dans la même case) ; « Envoyer au modèle » demande confirmation dans une fenêtre qui tient dans le panneau ; « Annuler » n'écrit rien ; « Envoyer » écrit le modèle et lui seul.
+  await setDoc(DOC);
+  await clickInText('entier', 0.98);
+  await openPickerByMouse();
+  await clickOption('Grille des tarifs');
+  const modelId = await page.evaluate(() => Templates.getCached().find(t => t.nom === 'Grille des tarifs').id);
+  const modelRow = () => page.evaluate(id => __gristStub.getRow(Templates.TABLE_NAME, id), modelId);
+  const statusNow = () => page.evaluate(() => ({ text: document.getElementById('status-msg').textContent, error: document.getElementById('status-msg').classList.contains('error-msg') }));
+  const dialogState = () => page.evaluate(() => {
+    const ov = document.getElementById('pp-dialog-modal');
+    const open = !!ov && ov.style.display !== 'none';
+    return { open, title: open ? ov.querySelector('h3').textContent : '', message: open ? ov.querySelector('.pp-dialog-message').textContent : '',
+      buttons: open ? Array.from(ov.querySelectorAll('.pp-modal-actions button')).filter(b => !b.hidden).map(b => b.textContent) : [] };
+  });
+  const openLinkMenu = async () => {
+    const lb9 = await centerOf(LBTN);
+    await page.mouse.move(lb9.x, lb9.y, { steps: 5 });
+    await page.mouse.click(lb9.x, lb9.y);
+    await page.waitForTimeout(300);
+  };
+  const clickAt = async (selector) => {
+    const at = await centerOf(selector);
+    await page.mouse.move(at.x, at.y, { steps: 6 });
+    await page.waitForTimeout(100);
+    await page.mouse.click(at.x, at.y);
+  };
+  await clickInText('B2');
+  await page.keyboard.type('zz');
+  await page.waitForTimeout(250);
+  const typed = await html();
+  check(`${T}, deux sens : la frappe réelle dans le tableau lié s'écrit`, /zz/.test(typed), typed.slice(0, 200));
+  await openLinkMenu();
+  const m9 = await hit(MENU);
+  const boxes9 = [await hit(ROW_PULL), await hit(ROW_PUSH), await hit(MENU_ROW)];
+  check(`${T}, deux sens : le menu du lien tient dans le panneau ${WIDTH}x${HEIGHT}, ses trois lignes au premier plan`, m9.found && m9.inPanel && boxes9.every(seen), { m9, boxes9 });
+  const rows9 = await page.evaluate(() => Array.from(document.querySelectorAll('.v2-linked-menu-row')).map(r => ({ text: r.textContent.trim(), icon: !!r.querySelector('svg'), disabled: r.getAttribute('aria-disabled'), color: getComputedStyle(r).color })));
+  check(`${T}, deux sens : « Mettre à jour depuis le modèle », « Envoyer au modèle » et « Détacher du modèle », chacune avec son icône, actives`,
+    rows9.map(r => r.text).join('|') === 'Mettre à jour depuis le modèle|Envoyer au modèle|Détacher du modèle' && rows9.every(r => r.icon && r.disabled === 'false'), rows9);
+  const bg9 = await backgroundOf(MENU);
+  const contrasts9 = [];
+  for (const r of rows9) contrasts9.push(await contrastOf(r.color, bg9));
+  check(`${T}, deux sens : les trois lignes ont un contraste d'au moins 4,5:1 sur le fond du menu (${bg9})`, contrasts9.every(c => c >= 4.5), contrasts9);
+  await snap(`${T}-8-deux-sens-menu`);
+  // Mettre à jour : un clic réel sur la ligne referme le menu et ramène les cases du modèle ; le curseur reste dans la case.
+  await clickAt(ROW_PULL);
+  await page.waitForTimeout(600);
+  const pulled = await html();
+  const afterPull = await page.evaluate(() => ({ menuShown: getComputedStyle(document.querySelector('.v2-linked-menu')).display !== 'none', expanded: document.getElementById('v2-table-linked-btn').getAttribute('aria-expanded') }));
+  check(`${T}, deux sens : « Mettre à jour depuis le modèle » ramène les cases du modèle (plus de « zz »), referme le menu, le lien reste`,
+    !/zz/.test(pulled) && /<p>B2<\/p>/.test(pulled) && !afterPull.menuShown && afterPull.expanded === 'false' && (await linkedIds()).length === 1, { pulled: pulled.slice(0, 260), afterPull });
+  const stPull = await statusNow();
+  check(`${T}, deux sens : la ligne d'état dit « Tableau mis à jour depuis le modèle « Grille des tarifs ». »`, stPull.text === 'Tableau mis à jour depuis le modèle « Grille des tarifs ».' && !stPull.error, stPull);
+  check(`${T}, deux sens : après la mise à jour le curseur est toujours dans la case B2 de l'éditeur, la barre du tableau et le bouton du lien aussi`,
+    (await focusIn()) === 'editor' && (await cellOfCursor()) === 'B2' && seen(await hit(LBTN)), { focus: await focusIn(), cell: await cellOfCursor() });
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(300);
+  check(`${T}, deux sens : un seul Ctrl+Z rend les cases d'avant la mise à jour`, /zz/.test(await html()), (await html()).slice(0, 200));
+  // Envoyer : le menu se referme, la confirmation s'ouvre dans le panneau ; Annuler n'écrit rien.
+  await openLinkMenu();
+  const contentBefore = (await modelRow()).Contenu;
+  await clickAt(ROW_PUSH);
+  await page.waitForSelector(DIALOG_OK, { state: 'visible', timeout: 5000 }).catch(() => {});
+  await page.waitForTimeout(250);
+  const dlg = await dialogState();
+  const dlgBox = await hit(DIALOG + ' .modal-content');
+  const dlgTitle = await hit(DIALOG + ' h3');
+  const dlgOk = await hit(DIALOG_OK);
+  const dlgCancel = await hit(DIALOG_CANCEL);
+  check(`${T}, deux sens : « Envoyer au modèle » referme le menu et ouvre la confirmation dans le panneau (titre, message, « Annuler » et « Envoyer » au premier plan)`,
+    dlg.open && dlg.title === 'Envoyer ce tableau au modèle ?' && dlg.message === 'Le tableau du modèle « Grille des tarifs » sera remplacé par celui-ci.' && dlg.buttons.join('|') === 'Annuler|Envoyer'
+      && dlgBox.inPanel && seen(dlgTitle) && seen(dlgOk) && seen(dlgCancel) && !(await page.evaluate(() => getComputedStyle(document.querySelector('.v2-linked-menu')).display !== 'none')), { dlg, dlgBox, dlgTitle, dlgOk, dlgCancel });
+  await snap(`${T}-9-deux-sens-confirmation`);
+  await clickAt(DIALOG_CANCEL);
+  await page.waitForTimeout(400);
+  check(`${T}, deux sens : « Annuler » ferme la fenêtre, n'écrit rien dans le modèle, le clavier revient dans l'éditeur`,
+    !(await dialogState()).open && (await modelRow()).Contenu === contentBefore && (await focusIn()) === 'editor', { dialog: await dialogState(), focus: await focusIn() });
+  // « Envoyer » : le modèle reçoit le tableau, sans le lien, et lui seul change.
+  const rowBefore = await modelRow();
+  await page.waitForTimeout(1100);
+  await openLinkMenu();
+  await clickAt(ROW_PUSH);
+  await page.waitForSelector(DIALOG_OK, { state: 'visible', timeout: 5000 }).catch(() => {});
+  await page.waitForTimeout(200);
+  await clickAt(DIALOG_OK);
+  await page.waitForTimeout(700);
+  const rowAfter = await modelRow();
+  const changed = Object.keys(rowAfter).filter(k => JSON.stringify(rowAfter[k]) !== JSON.stringify(rowBefore[k])).sort().join();
+  const stPush = await statusNow();
+  check(`${T}, deux sens : « Envoyer » écrit le tableau dans le modèle (sans le lien), seules les colonnes Contenu et DateModif changent, la ligne d'état le dit, la fenêtre se ferme`,
+    changed === 'Contenu,DateModif' && /zz/.test(rowAfter.Contenu) && !/data-linked-template/.test(rowAfter.Contenu) && stPush.text === 'Modèle « Grille des tarifs » mis à jour avec ce tableau.' && !stPush.error && !(await dialogState()).open && (await focusIn()) === 'editor',
+    { changed, status: stPush, dialog: await dialogState(), focus: await focusIn() });
+  // Le modèle est remis tel qu'il était pour les passes suivantes.
+  await page.evaluate(async ({ id, grid }) => { __gristStub.remoteWrite(Templates.TABLE_NAME, id, { Contenu: grid }); await Templates.loadAll(); }, { id: modelId, grid: GRID });
 }
 
 async function runEnglish() {
@@ -574,6 +676,42 @@ async function runEnglish() {
   check('anglais, barre et menu : info-bulle du bouton, texte du menu, « Detach from the template », étiquette du repère', /^Table linked to the Grid template “Grille des tarifs”: link menu/.test(barEn.btn) && barEn.shown && menuEnBox.inPanel && /^Its cells follow the rules of a grid/.test(barEn.hint)
     && barEn.row === 'Detach from the template' && /^Detach from the Grid template/.test(barEn.rowTitle) && barEn.aria === 'Table linked to the Grid template “Grille des tarifs”', barEn);
   await snap('en-2-barre');
+  // Les deux sens, en anglais : trois lignes (libellés, info-bulles) puis la confirmation de l'envoi, qui tient dans le panneau ; « Cancel » n'écrit rien.
+  await clickInText('B2');
+  await page.keyboard.type('zz');
+  await page.waitForTimeout(250);
+  const enLink = await centerOf(LBTN);
+  await page.mouse.move(enLink.x, enLink.y, { steps: 4 });
+  await page.mouse.click(enLink.x, enLink.y);
+  await page.waitForTimeout(300);
+  const enRows = await page.evaluate(() => Array.from(document.querySelectorAll('.v2-linked-menu-row')).map(r => ({ text: r.textContent.trim(), title: r.title })));
+  const enBoxes = [await hit(ROW_PULL), await hit(ROW_PUSH), await hit(MENU_ROW)];
+  check('anglais, deux sens : « Update from the template », « Send to the template » et « Detach from the template » avec leurs info-bulles, dans le panneau',
+    enRows.map(r => r.text).join('|') === 'Update from the template|Send to the template|Detach from the template' && /^Replace this table’s cells with those of the Grid template “Grille des tarifs”/.test(enRows[0].title)
+      && /^Replace the table of the Grid template “Grille des tarifs” with this one/.test(enRows[1].title) && enBoxes.every(seen), { enRows, enBoxes });
+  await snap('en-3-deux-sens-menu');
+  const enBefore = (await page.evaluate(id => __gristStub.getRow(Templates.TABLE_NAME, id), await page.evaluate(() => Templates.getCached().find(t => t.nom === 'Grille des tarifs').id))).Contenu;
+  const pushAt = await centerOf(ROW_PUSH);
+  await page.mouse.move(pushAt.x, pushAt.y, { steps: 6 });
+  await page.waitForTimeout(100);
+  await page.mouse.click(pushAt.x, pushAt.y);
+  await page.waitForSelector(DIALOG_OK, { state: 'visible', timeout: 5000 }).catch(() => {});
+  await page.waitForTimeout(250);
+  const enDlg = await page.evaluate(() => {
+    const ov = document.getElementById('pp-dialog-modal');
+    const open = !!ov && ov.style.display !== 'none';
+    return { open, title: open ? ov.querySelector('h3').textContent : '', message: open ? ov.querySelector('.pp-dialog-message').textContent : '', buttons: open ? Array.from(ov.querySelectorAll('.pp-modal-actions button')).filter(b => !b.hidden).map(b => b.textContent) : [] };
+  });
+  const enBox = await hit(DIALOG + ' .modal-content');
+  check('anglais, deux sens : la confirmation « Send this table to the template? » (le modèle est nommé dans le message), « Cancel » et « Send », dans le panneau',
+    enDlg.open && enDlg.title === 'Send this table to the template?' && enDlg.message === 'The table of the template “Grille des tarifs” will be replaced by this one.' && enDlg.buttons.join('|') === 'Cancel|Send' && enBox.inPanel && seen(await hit(DIALOG_OK)) && seen(await hit(DIALOG_CANCEL)), { enDlg, enBox });
+  await snap('en-4-deux-sens-confirmation');
+  const cancelAt = await centerOf(DIALOG_CANCEL);
+  await page.mouse.move(cancelAt.x, cancelAt.y, { steps: 4 });
+  await page.mouse.click(cancelAt.x, cancelAt.y);
+  await page.waitForTimeout(400);
+  const enAfter = (await page.evaluate(id => __gristStub.getRow(Templates.TABLE_NAME, id), await page.evaluate(() => Templates.getCached().find(t => t.nom === 'Grille des tarifs').id))).Contenu;
+  check('anglais, deux sens : « Cancel » ferme la fenêtre et n\'écrit rien dans le modèle', enAfter === enBefore && !(await page.evaluate(() => { const ov = document.getElementById('pp-dialog-modal'); return ov && ov.style.display !== 'none'; })), { same: enAfter === enBefore });
   await page.evaluate(() => I18n.setLang('fr'));
   await page.waitForTimeout(250);
 }

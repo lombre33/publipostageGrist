@@ -4,9 +4,10 @@
 // les cases : la Lecture, le PDF, le Word et les lots de macro-modèles les lisent comme celles de n'importe quel tableau, sans rien savoir du lien (un attribut qu'ils
 // ne connaissent pas est ignoré).
 //
-// Cette étape pose le lien : la ligne « Tableau d'un modèle Grille… » du menu du bouton « Tableau » (au survol, comme « Image depuis une variable » sous le bouton
+// La pose du lien : la ligne « Tableau d'un modèle Grille… » du menu du bouton « Tableau » (au survol, comme « Image depuis une variable » sous le bouton
 // Image ; le menu « Lien et blocs de contenu » n'a plus de place dans 700x400), qui ouvre une liste avec recherche des modèles Grille (ceux déjà liés dans le
-// document grisés avec leur raison), le repère dans la page, le bouton du lien de la barre du tableau (son menu : le nom du modèle, « Détacher ») et les règles qui font tenir le lien :
+// document grisés avec leur raison), le repère dans la page, le bouton du lien de la barre du tableau (son menu : le nom du modèle, « Mettre à jour depuis le
+// modèle », « Envoyer au modèle », « Détacher ») et les règles qui font tenir le lien :
 //  - ses cases suivent celles d'une grille (GridEditor.isForbiddenNode : ni second tableau, ni colonnes, ni sommaire, ni citation, encadré, bloc de code...), pour
 //    que ce qu'on y écrit puisse s'écrire dans le modèle ; le garde-fou refuse la transaction qui en ajouterait (collage et clavier compris), les boutons concernés
 //    se grisent ;
@@ -15,6 +16,9 @@
 //  - suivi des modifications allumé : le tableau est verrouillé (une suggestion ne s'écrirait pas dans un modèle partagé), le lien ne se pose ni ne se défait ;
 //  - un lien dont le modèle n'existe plus (supprimé, ou devenu d'un autre type) est sans effet : ni repère ni groupe, le tableau est un tableau comme un autre.
 // Une grille n'a jamais de lien, ni une zone d'en-tête ou de pied de page : un tableau lié qui y est collé le perd.
+// Les deux sens du lien se font à la main, depuis ce menu : « Mettre à jour depuis le modèle » remplace les cases du tableau par celles du modèle (un seul Annuler
+// les rend), « Envoyer au modèle » écrit le tableau du document dans le modèle (après confirmation : il est partagé), sans toucher à ses autres colonnes. Les
+// marques de commentaire ne passent jamais d'un côté à l'autre : leur fil est celui du document où elles sont posées.
 const LinkedTable = (function () {
   const ATTR = 'linkedTemplate';
   const DOM_ATTR = 'data-linked-template';
@@ -25,6 +29,11 @@ const LinkedTable = (function () {
 
   let libs = null;
   function configure(deps) { libs = deps; }
+  // Ce que la page prête au module (js/main.js) : écrire dans la ligne d'état. Sans elle (ce module seul, en test), les messages ne vont nulle part.
+  let host = { setStatus() {} };
+  function wire(callbacks) { host = Object.assign({}, host, callbacks); }
+  const say = (key, vars, isError) => host.setStatus(I18n.t(key, vars), !!isError);
+  const fail = (key, vars) => { say(key, vars, true); return false; };
 
   // Le numéro d'un modèle tel que le HTML l'écrit : un entier positif, sinon rien.
   function idOf(value) {
@@ -49,6 +58,12 @@ const LinkedTable = (function () {
         });
       },
     });
+  }
+
+  // Les modèles relus dans Grist avant d'en lire un contenu : celui du moment, pas celui d'il y a quelques minutes (un modèle changé dans un autre document ou par une autre
+  // personne). Hors ligne, le cache d'avant sert.
+  async function refreshModels() {
+    try { await Templates.loadAll(); } catch (e) { /* hors ligne : le cache d'avant sert */ }
   }
 
   // Le modèle Grille que ce numéro désigne, ou null (supprimé, devenu d'un autre type, liste pas encore lue).
@@ -290,10 +305,17 @@ const LinkedTable = (function () {
 
   // ---- La pose ---------------------------------------------------------------------------------------------------------------------------------------
 
+  // Les marques de commentaire d'un morceau de HTML, retirées en gardant leur texte : le fil d'un commentaire est celui du modèle ou du document où il est posé, jamais
+  // d'un autre.
+  function unwrapComments(root) {
+    root.querySelectorAll('span.comment-mark').forEach(span => span.replaceWith(...span.childNodes));
+  }
+
   // Le tableau du modèle, lu comme au chargement d'un modèle (HTML assaini, schéma de l'éditeur) et marqué de son lien ; null quand le modèle n'a pas de tableau.
   function tableNodeOf(editor, model) {
     const body = HtmlSanitize.parseInert(model.contenu || '');
     if (!body.querySelector('table')) return null;
+    unwrapComments(body);
     const first = libs.PMDOMParser.fromSchema(editor.schema).parse(body).firstChild;
     if (!first || first.type.name !== 'table') return null;
     return first.type.create(Object.assign({}, first.attrs, { [ATTR]: model.id }), first.content, first.marks);
@@ -345,7 +367,7 @@ const LinkedTable = (function () {
     async function openPicker(editor, anchorEl) {
       if (!editor || GridEditor.isActive() || placeBlock(editor)) return false;
       // Les modèles et leur contenu sont relus : la liste du moment, pas celle d'il y a quelques minutes (une grille faite ou changée ailleurs).
-      try { await Templates.loadAll(); } catch (e) { /* hors ligne : le cache d'avant sert */ }
+      await refreshModels();
       if (placeBlock(editor)) return false;
       const models = Templates.getCached().filter(t => t.typeModele === GridEditor.TYPE).sort((a, b) => collator.compare(a.nom, b.nom));
       const linked = new Set(linkedTables(editor.state.doc).map(({ node }) => node.attrs[ATTR]));
@@ -392,6 +414,126 @@ const LinkedTable = (function () {
     return { openPicker };
   })();
 
+  const { pull, push, usedBy } = (function () {
+    // Les deux sens du lien, à la main : mettre à jour le tableau du document depuis son modèle, envoyer le tableau du document à son modèle
+
+    // Une action à la fois : un double clic, ou une seconde action pendant la lecture des modèles, ne part pas deux fois.
+    let busy = false;
+
+    // Le HTML d'un tableau tel que le modèle le garde : celui de editor.getHTML() pour ce nœud (le sérialiseur du schéma), sans le lien (un modèle n'est lié à rien) et sans
+    // les marques de commentaire. Écrit dans un document inerte : une <img> créée dans la page charge son adresse même détachée.
+    function htmlOf(editor, node) {
+      const inert = document.implementation.createHTMLDocument('');
+      const bare = node.type.create(Object.assign({}, node.attrs, { [ATTR]: null }), node.content, node.marks);
+      const dom = libs.PMDOMSerializer.fromSchema(editor.schema).serializeNode(bare, { document: inert });
+      unwrapComments(dom);
+      return dom.outerHTML;
+    }
+
+    // Les modèles, hors celui qui est ouvert, qui posent un tableau lié à ce modèle : lus dans les contenus du cache (une grille n'en pose jamais, un macro-modèle n'a pas de
+    // HTML). Le numéro est cherché avec ses guillemets : « 1 » n'est pas « 12 ».
+    function usedBy(id) {
+      const marker = DOM_ATTR + '="' + id + '"';
+      return Templates.getCached().filter(t => t.typeModele !== 'macro' && t.typeModele !== GridEditor.TYPE && !Templates.isCurrent(t.id) && String(t.contenu || '').includes(marker));
+    }
+
+    // Le lien du tableau sous le curseur quand une action peut partir : éditeur qui écrit, aucune autre action en cours, suivi des modifications éteint ; sinon null.
+    function ready(editor) {
+      if (!editor || !editor.isEditable || busy || lockReason()) return null;
+      return status(editor.state);
+    }
+
+    // Le tableau lié à ce modèle dans le document d'à présent : le curseur, le texte, le document entier ont pu changer pendant que les modèles se relisaient.
+    const tableOf = (editor, id) => linkedTables(editor.state.doc).find(({ node }) => node.attrs[ATTR] === id);
+
+    // La case du curseur dans ce tableau : { row, col } (rang de la ligne, rang de la case dans sa ligne), ou null quand la sélection est ailleurs ou sur le tableau entier.
+    function cellPlace(state, at) {
+      const { selection } = state;
+      const $pos = selection.$anchorCell ? selection.$headCell : selection.$head;
+      for (let depth = 1; depth < $pos.depth; depth++) {
+        if ($pos.node(depth).type.name === 'table' && $pos.before(depth) === at.pos) return { row: $pos.index(depth), col: $pos.index(depth + 1) };
+      }
+      return null;
+    }
+
+    // Une sélection de texte au début de la case (row, col) du tableau en `pos` dans `tr.doc` (rangs bornés aux dimensions du tableau d'après).
+    function cursorTo(tr, pos, place) {
+      const table = tr.doc.nodeAt(pos);
+      if (!table || table.type.name !== 'table' || !table.childCount) return;
+      const row = Math.min(place.row, table.childCount - 1);
+      let at = pos + 1;
+      for (let r = 0; r < row; r++) at += table.child(r).nodeSize;
+      const cells = table.child(row);
+      const col = Math.min(place.col, cells.childCount - 1);
+      at += 1;
+      for (let c = 0; c < col; c++) at += cells.child(c).nodeSize;
+      tr.setSelection(libs.TextSelection.near(tr.doc.resolve(at + 1), 1));
+    }
+
+    // « Mettre à jour depuis le modèle » : les cases du tableau deviennent celles du modèle (relu dans Grist), le curseur reste dans la même case, un seul Annuler les rend.
+    // Un tableau déjà identique n'est pas touché (ses commentaires restent). Vrai si le tableau est (devenu) celui du modèle ; faux, sans rien changer, quand l'action est
+    // refusée (suivi allumé, une autre en cours) ou impossible (modèle ou tableau introuvable).
+    async function pull(editor) {
+      const link = ready(editor);
+      if (!link) return false;
+      busy = true;
+      const id = link.model.id;
+      try {
+        await refreshModels();
+        const model = modelOf(id);
+        if (!model) return fail('linkedTable.gone', { name: link.name });
+        const found = tableOf(editor, id);
+        if (!found || lockReason()) return false;
+        const node = tableNodeOf(editor, model);
+        if (!node) return fail('linkedTable.noTable', { name: model.nom });
+        if (htmlOf(editor, found.node) === htmlOf(editor, node)) { say('linkedTable.upToDate', { name: model.nom }); return true; }
+        const place = cellPlace(editor.state, found);
+        const tr = editor.state.tr.replaceWith(found.pos, found.pos + found.node.nodeSize, node).setMeta(OWN_META, 'pull');
+        if (place) cursorTo(tr, found.pos, place);
+        editor.view.dispatch(tr);
+        say('linkedTable.pulled', { name: model.nom });
+        return true;
+      } catch (e) {
+        console.warn('[LinkedTable] mise à jour depuis le modèle impossible', e);
+        return fail('linkedTable.pullFailed');
+      } finally { busy = false; }
+    }
+
+    // « Envoyer au modèle » : le tableau du document devient celui du modèle, que d'autres documents posent aussi : une confirmation, qui dit dans combien d'autres modèles il est
+    // posé. Seuls le contenu et la date du modèle sont écrits (Templates.saveContent). Vrai si le modèle a (déjà) ce tableau ; faux, sans rien écrire, quand l'action est
+    // refusée, impossible ou annulée.
+    async function push(editor) {
+      const link = ready(editor);
+      if (!link) return false;
+      busy = true;
+      const id = link.model.id;
+      try {
+        await refreshModels();
+        const model = modelOf(id);
+        if (!model) return fail('linkedTable.gone', { name: link.name });
+        const found = tableOf(editor, id);
+        if (!found || lockReason()) return false;
+        const current = tableNodeOf(editor, model);
+        if (current && htmlOf(editor, current) === htmlOf(editor, found.node)) { say('linkedTable.upToDate', { name: model.nom }); return true; }
+        const others = usedBy(id).length;
+        const message = [I18n.t('linkedTable.pushMessage', { name: model.nom }), others ? I18n.t('linkedTable.pushOthers', { n: others }) : ''].filter(Boolean).join(' ');
+        const confirmed = await Dialogs.confirm({ title: I18n.t('linkedTable.pushTitle'), message, confirmLabel: I18n.t('linkedTable.pushConfirm') });
+        if (!confirmed) return false;
+        // La fenêtre est restée ouverte : le document a pu être rechargé, le suivi allumé. Ce qui part est le tableau d'après la réponse.
+        const sent = tableOf(editor, id);
+        if (!sent || lockReason()) return false;
+        await Templates.saveContent(id, htmlOf(editor, sent.node));
+        say('linkedTable.pushed', { name: model.nom });
+        return true;
+      } catch (e) {
+        console.warn('[LinkedTable] envoi au modèle impossible', e);
+        return fail('linkedTable.pushFailed', { name: link.name });
+      } finally { busy = false; }
+    }
+
+    return { pull, push, usedBy };
+  })();
+
   // La ligne « Tableau d'un modèle Grille… » du menu du bouton Tableau : grisée avec sa raison en info-bulle (suivi des modifications, curseur dans un tableau),
   // comme la ligne « Garder avec le suivant » ; le grisé du mode (grille, e-mail, macro-modèle) est celui du bouton Tableau, dont le menu ne s'ouvre plus
   // (css/linked-table.css).
@@ -403,5 +545,5 @@ const LinkedTable = (function () {
     if (reason) row.title = I18n.t(reason); else row.removeAttribute('title');
   }
 
-  return { ATTR, configure, withAttributes, createExtension, modelOf, linkedTables, tableAt, status, cursorIn, lockReason, placeBlock, detach, insert, openPicker, syncRow };
+  return { ATTR, configure, wire, withAttributes, createExtension, modelOf, linkedTables, tableAt, status, cursorIn, lockReason, placeBlock, detach, insert, openPicker, pull, push, usedBy, syncRow };
 })();

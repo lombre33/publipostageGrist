@@ -236,7 +236,7 @@ const Editor = (function () {
       { NodeSelection, TextSelection, EditorState, Plugin, PluginKey },
       { Decoration, DecorationSet },
       { TableMap, CellSelection, selectedRect, isInTable, addRow, addColumn, __pastedCells: pastedCells },
-      { DOMParser: PMDOMParser },
+      { DOMParser: PMDOMParser, DOMSerializer: PMDOMSerializer },
     ] = await Promise.all([
       import('@tiptap/core'),
       import('@tiptap/starter-kit'),
@@ -262,18 +262,18 @@ const Editor = (function () {
       TiptapEditor, Extension, Node, Mark, mergeAttributes, InputRule, StarterKit, TextAlign, TextStyle, FontFamily, Suggestion, Document,
       Table, TableView, TableRow, TableCell, TableHeader, TaskList, TaskItem, Placeholder, computePosition, offset, flip, shift, autoUpdate,
       NodeSelection, TextSelection, EditorState, Plugin, PluginKey, Decoration, DecorationSet, TableMap, CellSelection, selectedRect, isInTable,
-      addRow, addColumn, pastedCells, PMDOMParser,
+      addRow, addColumn, pastedCells, PMDOMParser, PMDOMSerializer,
     };
   }
 
   function configureModules({
     computePosition, offset, flip, shift, autoUpdate, NodeSelection, TextSelection, EditorState, Plugin, PluginKey, Decoration, DecorationSet,
-    TableMap, CellSelection, selectedRect, isInTable, addRow, addColumn, pastedCells, PMDOMParser,
+    TableMap, CellSelection, selectedRect, isInTable, addRow, addColumn, pastedCells, PMDOMParser, PMDOMSerializer,
   }) {
     // Remet aux modules du widget les classes de TipTap et de ProseMirror dont ils ont besoin : bulles flottantes, sélections, tableaux, grille.
     EditorCore.setFloatingUi({ computePosition, offset, flip, shift, autoUpdate });
     GridEditor.configure({ Plugin, PluginKey, TextSelection, EditorState, Decoration, DecorationSet, TableMap, CellSelection, addRow, addColumn, pastedCells });
-    LinkedTable.configure({ Plugin, PluginKey, TextSelection, Decoration, DecorationSet, PMDOMParser });
+    LinkedTable.configure({ Plugin, PluginKey, TextSelection, Decoration, DecorationSet, PMDOMParser, PMDOMSerializer });
     tableTools = { selectedRect, isInTable };
     TableMerge.configure({ TableMap, selectedRect, isInTable });
     EditorCore.setNodeSelectionClass(NodeSelection);

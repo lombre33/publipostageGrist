@@ -185,6 +185,10 @@ const Icons = (function () {
       linkedTable: '<rect x="2.5" y="3.5" width="13" height="11" rx="1.5"/><path d="M2.5 8h13M8.5 8v6.5"/>'
         + '<g transform="translate(11.2 11.2) scale(.5)" stroke-width="3.4"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></g>',
       unlink: '<path d="m18.84 12.25 1.72-1.71a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="m5.17 11.75-1.71 1.71a5 5 0 0 0 7.07 7.07l1.71-1.71"/><path d="M8 2v3M2 8h3M16 19v3M19 16h3"/>',
+      // Les deux sens d'un tableau lié (menu du lien) : une flèche qui descend dans un bac (« Mettre à jour depuis le modèle » : les cases du modèle arrivent) et la même qui
+      // en sort (« Envoyer au modèle »).
+      linkedPull: '<path d="M12 3v11"/><path d="m8 10 4 4 4-4"/><path d="M4 18v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2"/>',
+      linkedPush: '<path d="M12 14V3"/><path d="m8 7 4-4 4 4"/><path d="M4 18v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2"/>',
     };
   }
   const PATHS = Object.assign({}, textAndBlockPaths(), tableAndImagePaths(), toolbarPaths(), findAndQrPaths());

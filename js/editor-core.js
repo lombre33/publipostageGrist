@@ -165,12 +165,18 @@ const EditorCore = (function () {
   const floatingContextPanels = [];
   function registerFloatingPanel(panel, ownerEl) { floatingContextPanels.push({ panel, ownerEl: ownerEl || null }); }
   function hideFloatingContextToolbars() { floatingContextPanels.forEach(entry => entry.panel.hide()); }
+  // Un appui dans le menu qu'une barre flottante a ouvert fait partie de cette barre : choisir la couleur d'un trait ou cocher le quadrillage ne la referme pas, sinon son bouton
+  // disparaît et le menu, resté ouvert, perd son ancre et saute dans un coin. Il est jugé à la phase de capture, avant l'action de la ligne : quand elle referme le menu (un
+  // réglage de bordures, « Mettre à jour depuis le modèle », « Détacher »), le menu n'est plus ouvert pour la suite de l'évènement et l'appui passerait pour un appui hors de la
+  // barre, qui disparaîtrait alors que le curseur est toujours dans le tableau.
+  let pressInBarMenu = false;
+  document.addEventListener('mousedown', (event) => {
+    pressInBarMenu = !!(openDropdownPanel && openDropdownButton && openDropdownButton.closest('.v2-floating-toolbar') && openDropdownPanel.el.contains(event.target));
+  }, true);
   document.addEventListener('mousedown', (event) => {
     const target = event.target;
     if (target.closest('.v2-floating-toolbar') || target.closest('.pp-page-zoom') || target.closest('.pp-doc-strips')) return;
-    // Le menu qu'une barre flottante a ouvert (les bordures d'un tableau de document) fait partie de cette barre : choisir la couleur d'un trait ou
-    // cocher le quadrillage ne la referme pas, sinon son bouton disparaît et le menu, resté ouvert, perd son ancre et saute dans un coin.
-    if (openDropdownPanel && openDropdownButton && openDropdownButton.closest('.v2-floating-toolbar') && openDropdownPanel.el.contains(target)) return;
+    if (pressInBarMenu) return;
     const inDocument = !!target.closest('.tiptap');
     floatingContextPanels.forEach(({ panel, ownerEl }) => {
       if (!(ownerEl ? ownerEl.contains(target) : inDocument)) panel.hide();

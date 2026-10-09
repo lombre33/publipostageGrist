@@ -466,6 +466,23 @@ const Templates = (function () {
     }
   }
 
+  // Écrit le seul contenu d'un modèle (et sa date de modification), jamais ses autres colonnes : son nom, son nom de fichier PDF, son en-tête, ses marges, son type
+  // gardent ce qu'ils ont. C'est le tableau qu'un tableau lié d'un document envoie à son modèle Grille (js/linked-table.js). Même relecture du DateModif que saveRow
+  // (js/main.js compare les deux). Pas pour un macro-modèle, dont le contenu est la liste de ses emplacements. Rend { id, dateModif }.
+  async function saveContent(id, contenuHtml) {
+    await ensureTableExists();
+    await ensureDateModifColumn();
+    const now = new Date().toISOString();
+    await grist.docApi.applyUserActions([
+      ['UpdateRecord', TABLE_NAME, id, { Contenu: contenuHtml, DateModif: now }]
+    ]);
+    const dateModif = await readBackDateModif(id, now);
+    writes.remember(id, dateModif);
+    const cached = byId(id);
+    if (cached) { cached.contenu = contenuHtml; cached.dateModif = dateModif; }
+    return { id, dateModif };
+  }
+
   function createWriteTracker() {
     // Les écritures en cours de ce widget et ce qu'elles laissent dans Grist. js/main.js (auto-save, commentaires de la Lecture) compare le DateModif
     // relu dans Grist à celui que ce widget a écrit en dernier pour dire « modifié ailleurs ». Or une écriture n'est pas un instant : Grist
@@ -511,6 +528,7 @@ const Templates = (function () {
   const writes = createWriteTracker();
 
   function save(...args) { return writes.track(() => saveRow(...args)); }
+  function saveContentTracked(...args) { return writes.track(() => saveContent(...args)); }
 
   function dateModifSeconds(value) {
     if (typeof value === 'number') return Number.isFinite(value) ? value : null;
@@ -537,7 +555,7 @@ const Templates = (function () {
   }
 
   return {
-    loadAll, getCached, byId, getCurrentId, setCurrentId, isCurrent, getDefaultId, isDefault, canBeDocumentDefault, setDefault, save, remove, sameName, uniqueName,
+    loadAll, getCached, byId, getCurrentId, setCurrentId, isCurrent, getDefaultId, isDefault, canBeDocumentDefault, setDefault, save, saveContent: saveContentTracked, remove, sameName, uniqueName,
     getWriteSeq: writes.seq, isWriting: writes.isWriting, whenIdle: writes.whenIdle, lastWritten: writes.lastWritten,
     sameDateModif, getLoadedChars, TABLE_NAME, getDocumentSettings, updateDocumentSettings,
   };

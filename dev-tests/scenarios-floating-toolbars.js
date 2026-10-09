@@ -370,7 +370,7 @@
 
   cases.push({
     id: 'ft_table_bar_in_a_document_opens_the_borders_menu_sets_the_borders_and_toggles_the_gridlines',
-    description: 'Le bouton « Bordures » de la barre d\'un tableau de document ouvre le menu (huit réglages, couleur du trait, « Quadrillage ») ; un réglage pose les traits sur la case visée et sur les cases voisines qui les partagent, en un seul Annuler, et referme le menu ; « Quadrillage » se coche et se décoche sans le refermer et ne touche que le tableau du curseur ; la barre reste affichée pendant que le menu est ouvert (choisir une couleur n\'est pas un appui hors de la barre)',
+    description: 'Le bouton « Bordures » de la barre d\'un tableau de document ouvre le menu (huit réglages, couleur du trait, « Quadrillage ») ; un réglage pose les traits sur la case visée et sur les cases voisines qui les partagent, en un seul Annuler, et referme le menu ; « Quadrillage » se coche et se décoche sans le refermer et ne touche que le tableau du curseur ; la barre reste affichée pendant que le menu est ouvert (choisir une couleur n\'est pas un appui hors de la barre) et après un réglage qui le referme',
     run: async (h) => {
       const bar = await tableWithCursor(h);
       if (!shown(bar)) return { pass: false, notes: 'barre du tableau fermée, curseur dans une case' };
@@ -393,6 +393,8 @@
       press(menu().querySelector('button[data-action="borders:all"]'));
       await h.sleep(150);
       out.closed = !menu() && chip.getAttribute('aria-expanded') === 'false';
+      // Le réglage referme le menu à l'appui même : l'appui n'en reste pas moins un appui dans la barre, qui reste affichée (le curseur est toujours dans la case).
+      out.presetKeepsBar = shown(bar);
       out.alpha = !!penColor && edges('Alpha') === [penColor, penColor, penColor, penColor].join(',');
       out.sharedEdges = cellAttr('Beta', 'borderLeft') === penColor && cellAttr('Gamma', 'borderTop') === penColor && edges('Delta') === '-,-,-,-';
       out.html = /data-border-top/.test(Editor.getHTML()) && /border-top: 1px solid/.test(Editor.getHTML());

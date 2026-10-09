@@ -2293,6 +2293,7 @@
     });
     wireA4PreviewToggle();
     OrientationToggle.wire({ isReadOnly });
+    LinkedTable.wire({ setStatus });
     wireLinkRulesModal();
     wireTemplateGalleryModal();
     wireTemplateRename();
