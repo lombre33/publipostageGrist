@@ -153,6 +153,10 @@ const Icons = (function () {
       // du même menu.
       callout: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7.5 5v14"/><path d="M11.5 10h5M11.5 14h3"/>',
       signature: '<path d="M3 20h18"/><path d="M5 15.5c1.5-3.8 2.8-8 4-8 1.3 0-.5 6.4.9 6.4 1.4 0 2.2-3.8 3.4-3.8 1 0 .9 2.4 2 2.4.6 0 1.2-.7 1.7-1.5"/>',
+      // Exposant et indice (js/script-marks.js), les deux icônes en tête du même menu : un « x » et le petit « 2 » levé à sa droite (exposant) ou baissé
+      // (indice).
+      superscript: '<path d="m4 19 8-8"/><path d="m12 19-8-8"/><path d="M20 11h-4c0-1.5.44-2 1.5-2.5S20 7.3 20 6c0-1.2-.9-2-2-2-.8 0-1.5.5-1.5 1.5"/>',
+      subscript: '<path d="m4 5 8 8"/><path d="m12 5-8 8"/><path d="M20 20h-4c0-1.5.44-2 1.5-2.5S20 16.3 20 15c0-1.2-.9-2-2-2-.8 0-1.5.5-1.5 1.5"/>',
     };
   }
   function findAndQrPaths() {

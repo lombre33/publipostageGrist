@@ -282,6 +282,10 @@ const Shortcuts = (function () {
       { id: 'italic', group: 'format', label: 'fmt.italic', key: 'Mod+i', native: true, scope: 'editor', hint: tip('v2-btn-italic'), run: click('v2-btn-italic') },
       { id: 'underline', group: 'format', label: 'fmt.underline', key: 'Mod+u', native: true, scope: 'editor', hint: tip('v2-btn-underline'), run: click('v2-btn-underline') },
       { id: 'strike', group: 'format', label: 'fmt.strike', key: 'Mod+Shift+s', native: true, scope: 'editor', hint: tip('v2-btn-strike'), run: click('v2-btn-strike') },
+      // Exposant et indice (js/script-marks.js) : les touches de Google Docs, traitées par l'éditeur. Les deux icônes du menu « Lien et blocs de contenu »
+      // les montrent dans leur infobulle.
+      { id: 'superscript', group: 'format', label: 'fmt.superscript', key: 'Mod+.', native: true, scope: 'editor', hint: tip('v2-btn-superscript'), run: click('v2-btn-superscript') },
+      { id: 'subscript', group: 'format', label: 'fmt.subscript', key: 'Mod+,', native: true, scope: 'editor', hint: tip('v2-btn-subscript'), run: click('v2-btn-subscript') },
       { id: 'alignLeft', group: 'format', label: 'align.left', key: 'Mod+Shift+l', native: true, scope: 'editor', hint: tip('v2-btn-align-left'), run: click('v2-btn-align-left') },
       { id: 'alignCenter', group: 'format', label: 'align.center', key: 'Mod+Shift+e', native: true, scope: 'editor', hint: tip('v2-btn-align-center'), run: click('v2-btn-align-center') },
       { id: 'alignRight', group: 'format', label: 'align.right', key: 'Mod+Shift+r', native: true, scope: 'editor', hint: tip('v2-btn-align-right'), run: click('v2-btn-align-right') },

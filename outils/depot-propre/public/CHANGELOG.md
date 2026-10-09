@@ -180,6 +180,18 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   par valeur » restent des PDF vectoriels. À savoir : le navigateur arrondit lui-même la page (l'A4 devient
   594,96 × 841,92 pt) ; choisissez « Enregistrer au format PDF », le format de papier par défaut, une échelle de
   100 % et les marges par défaut.
+- **Exposant et indice** : deux icônes, Exposant (x²) et Indice (x₂), à droite du titre du menu « Lien et blocs de
+  contenu » (la barre ne change pas), et les touches Ctrl+. et Ctrl+, (⌘ sous macOS), qu'on règle dans
+  Réglages > Raccourcis. Elles mettent le texte choisi, ou ce qu'on tape à la suite, en exposant (m³, 1ᵉʳ) ou
+  en indice (H₂O) ; poser l'une retire l'autre. Le texte est réduit à 6/10 de sa taille (celle qu'on a
+  choisie, le cas échéant) sans changer la hauteur de la ligne, et le rendu est le même partout : l'éditeur,
+  la Lecture, les en-têtes et pieds de page, le PDF (levé ou baissé de la même hauteur que sur l'écran), le
+  Word et l'Excel (le vrai exposant ou indice du fichier, que la personne qui l'ouvre peut retirer). Dans un
+  email, le lien est du texte brut : l'exposant et l'indice y sont écrits avec les caractères Unicode qui en
+  tiennent lieu (m³, H₂O, 1ᵉʳ, 10⁻³) ; un groupe dont un caractère n'en a pas (« ème », une virgule, un q)
+  reste écrit comme on l'a tapé, sans exposant. Un texte collé de Word ou de Google Docs garde ses exposants
+  et ses indices, et le pinceau de mise en forme les copie. Les icônes sont grisées pour un macro-modèle ; la
+  note de bas de page garde son rendu.
 
 ### Modifié
 
@@ -517,6 +529,18 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   sheet assembly and "One document per value" remain vector PDFs. Worth knowing: the browser rounds the page
   itself (A4 becomes 594.96 × 841.92 pt); choose "Save as PDF", the default paper size, a 100% scale and the
   default margins.
+- **Superscript and subscript**: two icons, Superscript (x²) and Subscript (x₂), on the right of the title of the
+  "Link and content blocks" menu (the toolbar does not change), and the keys Ctrl+. and Ctrl+, (⌘ on macOS),
+  which you set in Settings > Shortcuts. They put the chosen text, or what you type next, in superscript (m³,
+  1st) or subscript (H₂O); setting one removes the other. The text is reduced to 6/10 of its size (the one you
+  chose, if any) without changing the height of the line, and the rendering is the same everywhere: the
+  editor, Reading mode, headers and footers, the PDF (raised or lowered by the same height as on screen),
+  Word and Excel (the file's real superscript or subscript, which the person who opens it can remove). In an
+  e-mail, the link is plain text: superscript and subscript are written with the Unicode characters that
+  stand in for them (m³, H₂O, 1ˢᵗ, 10⁻³); a group with a character that has none ("ème", a comma, a q) stays
+  as it was typed, without superscript. Text pasted from Word or Google Docs keeps its superscripts and
+  subscripts, and the format painter copies them. The icons are greyed for a macro template; the footnote
+  keeps its look.
 
 ### Changed
 

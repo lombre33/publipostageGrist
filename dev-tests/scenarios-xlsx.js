@@ -420,6 +420,32 @@
   });
 
   cases.push({
+    id: 'xlsx_superscript_and_subscript_are_the_real_excel_vertical_alignment',
+    description: 'Un exposant et un indice du texte (js/script-marks.js) deviennent le vrai exposant / indice d\'Excel (`vertAlign` de la police) : un passage de texte riche dans une case mêlée, la police de la case quand tout son texte en est un ; le texte autour n\'en a pas',
+    run: async (h) => {
+      await seed(h);
+      const x = await exportGrid([220, 140], [40, 30], [
+        [td('m<sup>3</sup> et H<sub>2</sub>O fin'), td('<sup>tout en exposant</sup>')],
+        [td('<sub>tout en indice</sub>'), td('ordinaire')],
+      ]);
+      const s = x.sheet; const c = ref => s.cell(ref);
+      const bad = [];
+      const runs = c('A1').rich || [];
+      const run = t => runs.find(r => r.text === t) || { font: {} };
+      if (!runs.length) bad.push('A1 sans texte riche');
+      if (run('3').font.vertAlign !== 'superscript') bad.push('« 3 » : vertAlign=' + run('3').font.vertAlign);
+      if (run('2').font.vertAlign !== 'subscript') bad.push('« 2 » : vertAlign=' + run('2').font.vertAlign);
+      runs.filter(r => r.text !== '3' && r.text !== '2').forEach(r => { if (r.font.vertAlign) bad.push('« ' + r.text + ' » ne devrait avoir aucun exposant : ' + r.font.vertAlign); });
+      if (c('A1').value !== 'm3 et H2O fin') bad.push('A1 texte=' + c('A1').value);
+      // Tout le texte de la case dans la marque : la police de la case, pas du texte riche.
+      if (c('B1').rich || c('B1').style.font.vertAlign !== 'superscript' || c('B1').value !== 'tout en exposant') bad.push('B1 : ' + JSON.stringify({ rich: !!c('B1').rich, vertAlign: c('B1').style.font.vertAlign, value: c('B1').value }));
+      if (c('A2').rich || c('A2').style.font.vertAlign !== 'subscript' || c('A2').value !== 'tout en indice') bad.push('A2 : ' + JSON.stringify({ rich: !!c('A2').rich, vertAlign: c('A2').style.font.vertAlign, value: c('A2').value }));
+      if (c('B2').style.font.vertAlign) bad.push('B2 ordinaire : vertAlign=' + c('B2').style.font.vertAlign);
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  cases.push({
     id: 'xlsx_pending_suggestions_come_out_as_accepted_without_strike_or_tint',
     description: "Une grille dont le texte porte des suggestions du suivi en attente (<ins>, <del>) sort comme si elles étaient acceptées (choix d'Antoine, 04/10) : le texte supprimé n'est plus dans la case (il y sortait barré), le texte ajouté s'écrit comme le reste, aucune police n'est barrée, aucun fond de teinte (E5F6EE) n'est posé, et la case dont tout le texte est supprimé est vide.",
     run: async (h) => {

@@ -38,7 +38,7 @@ La galerie **Créer à partir d'un modèle…** propose des modèles prêts à l
 
 ### Éditeur
 
-- Gras, italique, souligné, barré ; six polices (Roboto par défaut, Arial, Times New Roman, Georgia, Courier New, Calibri) en tailles réelles de 8 à 72 pt ; couleur du texte et surlignage ; pinceau de mise en forme ; alignement et retraits.
+- Gras, italique, souligné, barré, exposant, indice ; six polices (Roboto par défaut, Arial, Times New Roman, Georgia, Courier New, Calibri) en tailles réelles de 8 à 72 pt ; couleur du texte et surlignage ; pinceau de mise en forme ; alignement et retraits.
 - Titres de 1 à 6 avec numérotation, sommaire généré à partir des titres, sauts de page, notes de bas de page, en-têtes et pieds de page (première page différente, numéro de page), filigrane.
 - Listes à puces (disque, cercle, carré), listes numérotées (1., a., I.) et listes de tâches à cocher en trois styles.
 - Tableaux (lignes et colonnes, fusion et scission des cases, fond de case, légende) et zones à deux colonnes. Dans une grille s'y ajoutent les bordures et l'alignement vertical.
@@ -81,7 +81,7 @@ La galerie **Créer à partir d'un modèle…** propose des modèles prêts à l
 ### Interface
 
 - Français et anglais, thème clair, sombre ou celui du système, barre d'outils pensée pour un petit panneau (testée à 700×400).
-- 54 raccourcis clavier personnalisables.
+- 57 raccourcis clavier personnalisables.
 
 ## Installation dans Grist
 

@@ -23,8 +23,8 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
   vérifie.
 - **Les données** : les modèles et les réglages vivent dans des tables `Publipostage_*` du document Grist ;
   les préférences d'affichage (langue, thème, raccourcis…) dans le navigateur.
-- **Le volume** : 122 fichiers dans `js/` (45 800 lignes : 33 900 de code, 9 100 de commentaires, 2 800 de
-  blanc), 40 feuilles de style (3 500 lignes), une page de 780 lignes. Quatre fichiers de polices du PDF
+- **Le volume** : 123 fichiers dans `js/` (46 000 lignes : 34 000 de code, 9 200 de commentaires, 2 800 de
+  blanc), 41 feuilles de style (3 500 lignes), une page de 790 lignes. Quatre fichiers de polices du PDF
   pèsent 2,5 Mo en quelques lignes (des données) ; `js/i18n.js` est du texte à traduire, pas de la logique.
 
 ## Par où commencer
@@ -88,7 +88,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/html-sanitize.js` | Filtre à liste blanche, lu dans un document inerte, pour le HTML des colonnes Grist, des modèles importés et de la galerie. |
 | `js/external-images.js` | Images d'un autre site : un cadre « Afficher » à leur place jusqu'au clic (rien n'est retenu), signalées ensuite en permanence, et une fenêtre avant tout export qui les lirait. |
 
-### L'éditeur (32 fichiers, 11 500 lignes)
+### L'éditeur (33 fichiers, 11 800 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -99,6 +99,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/color-palette.js`, `js/color-dialog.js`, `js/color-store.js`, `js/color-math.js` | Le menu de couleur (texte, surlignage, fond de case, trait des bordures) : la palette ; la fenêtre « Couleur personnalisée » ; les couleurs gardées par modèle et par document ; les calculs de couleur (module pur). |
 | `js/main-toolbar.js` | La barre d'outils : état des boutons, câblage des clics, insertion d'une image. |
 | `js/format-painter.js`, `js/find-replace.js`, `js/link-dialog.js` | Pinceau de mise en forme, Rechercher / Remplacer, liens. |
+| `js/script-marks.js` | Exposant et indice : les deux marques de texte, leur lecture dans le HTML (Word, Google Docs), la taille que les exports en tirent et les caractères Unicode que le lien d'un email écrit à leur place. |
 | `js/callout.js`, `js/caption.js`, `js/keep-with-next.js`, `js/qr-code.js` | Encadrés et signature, légendes, « Garder avec le suivant », QR code. |
 | `js/chart-block.js`, `js/chart-source.js`, `js/chart-plot.js` | Graphique de la page : la fenêtre et le cadre du document ; la lecture des réglages d'un graphique de Grist (type, colonnes, tri, filtres, lignes) ; le tracé avec Plotly, rendu en image PNG (bibliothèque chargée au premier graphique). |
 | `js/text-expansion.js`, `js/text-expansion-settings.js` | Expansion de texte (`Publipostage_Abreviations`) et son onglet dans Réglages. |
@@ -202,7 +203,7 @@ fichier, un lot), câblage de la galerie et de Grist. C'est le fichier qui conna
 ### Les feuilles de style
 
 `css/style.css` (jetons de couleur, thème clair et sombre, `--font-ui`), `css/toolbar-v2.css` (la barre du
-haut), `css/editor-v2.css` (le texte de l'éditeur) ; les 37 autres vont chacune avec un module ou une
+haut), `css/editor-v2.css` (le texte de l'éditeur) ; les 38 autres vont chacune avec un module ou une
 fenêtre de `js/` (`css/callout.css` pour `js/callout.js`) et le disent dans leur premier commentaire ;
 `css/roboto-fonts.css` embarque la police des documents.
 
@@ -281,8 +282,8 @@ For anyone reading the code: what is where, and where to start. Line counts are 
   **Each export** loads its library on first use, with an integrity hash (SRI) that the browser checks.
 - **The data**: templates and settings live in `Publipostage_*` tables of the Grist document; display
   preferences (language, theme, shortcuts…) in the browser.
-- **The size**: 122 files in `js/` (45,800 lines: 33,900 of code, 9,100 of comments, 2,800 blank), 40
-  stylesheets (3,500 lines), a 780-line page. Four PDF font files weigh 2.5 MB in a few lines (data);
+- **The size**: 123 files in `js/` (46,000 lines: 34,000 of code, 9,200 of comments, 2,800 blank), 41
+  stylesheets (3,500 lines), a 790-line page. Four PDF font files weigh 2.5 MB in a few lines (data);
   `js/i18n.js` is text to translate, not logic.
 
 ## Where to start
@@ -345,7 +346,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/html-sanitize.js` | Allow-list filter, parsed in an inert document, for the HTML of Grist columns, imported templates and the gallery. |
 | `js/external-images.js` | Images from another site: a "Show" frame in their place until the click (nothing is remembered), flagged at all times afterwards, and a window before any export that would read them. |
 
-### The editor (32 files, 11,500 lines)
+### The editor (33 files, 11,800 lines)
 
 | File | Role |
 |---|---|
@@ -356,6 +357,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/color-palette.js`, `js/color-dialog.js`, `js/color-store.js`, `js/color-math.js` | The color menu (text, highlight, cell background, border line): the palette; the "Custom color" window; the colors kept per template and per document; the color calculations (a pure module). |
 | `js/main-toolbar.js` | The toolbar: button state, click wiring, image insertion. |
 | `js/format-painter.js`, `js/find-replace.js`, `js/link-dialog.js` | Format painter, Find / Replace, links. |
+| `js/script-marks.js` | Superscript and subscript: the two text marks, how they are read in HTML (Word, Google Docs), the size the exports take from them and the Unicode characters an e-mail link writes in their place. |
 | `js/callout.js`, `js/caption.js`, `js/keep-with-next.js`, `js/qr-code.js` | Callouts and signature, captions, "Keep with next", QR code. |
 | `js/chart-block.js`, `js/chart-source.js`, `js/chart-plot.js` | Chart from the page: the window and the document frame; reading a Grist chart's settings (type, columns, sort, filters, rows); drawing it with Plotly, rendered as a PNG image (library loaded for the first chart). |
 | `js/text-expansion.js`, `js/text-expansion-settings.js` | Text expansion (`Publipostage_Abreviations`) and its tab in Settings. |
@@ -459,7 +461,7 @@ wiring of the gallery and of Grist. It is the file that knows all the others.
 ### Stylesheets
 
 `css/style.css` (color tokens, light and dark theme, `--font-ui`), `css/toolbar-v2.css` (the top bar),
-`css/editor-v2.css` (the editor's text); the other 37 each go with a module or a window of `js/`
+`css/editor-v2.css` (the editor's text); the other 38 each go with a module or a window of `js/`
 (`css/callout.css` for `js/callout.js`) and say so in their first comment; `css/roboto-fonts.css` embeds
 the documents' font.
 

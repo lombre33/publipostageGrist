@@ -52,8 +52,9 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
   des règles évaluées sur la même ligne
 
 **Mise en page**
-- Mise en forme complète : gras, italique, souligné, barré, couleurs et surlignage, six polices en
-  tailles réelles de 8 à 72 points, alignement et retraits, titres numérotés, pinceau de mise en forme
+- Mise en forme complète : gras, italique, souligné, barré, exposant et indice, couleurs et surlignage, six
+  polices en tailles réelles de 8 à 72 points, alignement et retraits, titres numérotés, pinceau de mise en
+  forme
 - Listes à puces, numérotées et de tâches à cocher
 - Tableaux (fusion et scission de cases, fond de case, légende), zones 2 colonnes
 - Images, y compris flottantes (habillage de texte, calque devant ou derrière, opacité, légende),
@@ -110,7 +111,7 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 
 **Autres**
 - Interface bilingue français/anglais, thème clair, sombre ou celui du système
-- 54 raccourcis clavier personnalisables
+- 57 raccourcis clavier personnalisables
 - Choix de la touche utilisée pour déclencher les variables (`#` par défaut)
 - Barre d'outils pensée pour un petit panneau (testée à 700×400)
 
@@ -386,8 +387,8 @@ GitHub Pages, with no backend and no build step.
   by rules evaluated on the same row
 
 **Layout**
-- Full formatting: bold, italic, underline, strikethrough, colors and highlighting, six fonts in real
-  point sizes from 8 to 72, alignment and indents, numbered headings, format painter
+- Full formatting: bold, italic, underline, strikethrough, superscript and subscript, colors and highlighting,
+  six fonts in real point sizes from 8 to 72, alignment and indents, numbered headings, format painter
 - Bullet lists, numbered lists and checkable task lists
 - Tables (merging and splitting cells, cell background, caption), two-column zones
 - Images, including floating ones (text wrap, layered in front of/behind, opacity, caption), pasted,
@@ -443,7 +444,7 @@ GitHub Pages, with no backend and no build step.
 
 **Other**
 - Bilingual French/English interface, light, dark or system theme
-- 54 customizable keyboard shortcuts
+- 57 customizable keyboard shortcuts
 - Choice of key used to trigger variables (`#` by default)
 - Toolbar designed for a small panel (tested at 700×400)
 

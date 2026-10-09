@@ -4,7 +4,8 @@
 // Contraintes du protocole `mailto:` (des limites du protocole, pas de l'implémentation) :
 //   1) Le corps (`body=`) est toujours lu en texte brut par le client de messagerie (Outlook, Gmail, Apple Mail, Thunderbird...) : rien ne dit « ceci
 //      est du HTML », des balises littérales (« <b>gras</b> ») s'afficheraient telles quelles. Aucune mise en forme (gras, italique, souligné, barré,
-//      couleur, surlignage, police, taille, alignement) ne survit donc dans le corps.
+//      couleur, surlignage, police, taille, alignement) ne survit donc dans le corps. Seuls l'exposant et l'indice passent, en caractères Unicode
+//      (« m³ », « H₂O », js/script-marks.js:toUnicode) : ce sont des caractères du texte, pas une mise en forme du client.
 //   2) La longueur de l'URL est limitée (~2000 caractères, tous champs encodés compris, selon le navigateur et le client ; Outlook bureau est le plus
 //      strict), d'où SAFE_URL_LENGTH. Le dépassement est un avertissement (jauge rouge, confirmation avant d'ouvrir le lien), jamais un blocage.
 //   3) Aucune pièce jointe via un lien `mailto:` : le besoin est de préremplir un brouillon (destinataires, objet, corps texte).
@@ -75,8 +76,8 @@ const MailtoExport = (function () {
   // Les lignes d'une liste ou d'une citation (null pour tout autre élément).
   const listOrQuoteText = el => (el.tagName === 'UL' || el.tagName === 'OL' ? listLines(el).join('\n') : el.tagName === 'BLOCKQUOTE' ? quoteText(el) : null);
 
-  // Le texte d'un élément en ligne qui s'écrit autrement que son contenu : un lien (son adresse à la suite du texte), une note de bas de page, la
-  // case d'une variable Oui / Non ; null pour tout autre élément.
+  // Le texte d'un élément en ligne qui s'écrit autrement que son contenu : un lien (son adresse à la suite du texte), une note de bas de page, un
+  // exposant ou un indice, la case d'une variable Oui / Non ; null pour tout autre élément.
   function specialInlineText(child) {
     if (child.tagName === 'A') {
       const href = HtmlSanitize.safeLinkHref(child.getAttribute('href'));
@@ -86,6 +87,13 @@ const MailtoExport = (function () {
     if (child.classList && child.classList.contains('footnote-ref-marker')) {
       const text = (child.getAttribute('data-note-text') || '').trim();
       return text ? ` (${text})` : '';
+    }
+    // Exposant et indice : les caractères Unicode qui en tiennent lieu (« m³ », « H₂O »). Un groupe dont un caractère n'en a pas (« è », « q », une
+    // virgule) s'écrit tel qu'il a été tapé, jamais à moitié.
+    const script = ScriptMarks.kindOf(child);
+    if (script) {
+      const converted = ScriptMarks.toUnicode(script, inlineText(child));
+      if (converted !== null) return converted;
     }
     // Case à cocher d'une variable Oui / Non (js/reader-mode.js:checkboxNode) : « [x] » / « [ ] », comme celle d'un item de liste à cases
     // (listMarker).

@@ -590,6 +590,7 @@ window.TestHelpers = (function () {
           text: t ? t.textContent : '',
           bold: has('w:b'), italics: has('w:i'), strike: has('w:strike'),
           underline: has('w:u'),
+          vertAlign: val(rPr, 'w:vertAlign'),
           sizeHalfPt: val(rPr, 'w:sz') ? Number(val(rPr, 'w:sz')) : null,
           color: val(rPr, 'w:color'),
           highlight: (rPr && rPr.getElementsByTagName('w:shd')[0]) ? rPr.getElementsByTagName('w:shd')[0].getAttribute('w:fill') : null,

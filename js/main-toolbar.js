@@ -195,6 +195,8 @@ const MainToolbar = (function () {
     const setRowIcon = (id, icon) => { const slot = document.querySelector('#' + id + ' .v2-menu-row-icon'); if (slot) slot.innerHTML = Icons.svg(icon); };
     setRowIcon('v2-row-link', 'link'); setRowIcon('v2-btn-citation', 'blockquote'); setRowIcon('v2-btn-code-block', 'codeBlock');
     setRowIcon('v2-btn-callout', 'callout'); setRowIcon('v2-btn-signature', 'signature'); setRowIcon('v2-btn-qr', 'qr'); setRowIcon('v2-btn-chart', 'chart');
+    // Exposant et indice (js/script-marks.js) : deux icônes à droite du titre du même menu (css/script-marks.css).
+    set('v2-btn-superscript', 'superscript'); set('v2-btn-subscript', 'subscript');
     set('v2-btn-insert-variable', 'variable');
     set('v2-btn-undo', 'undo'); set('v2-btn-redo', 'redo');
     set('v2-btn-find', 'search');
@@ -209,6 +211,9 @@ const MainToolbar = (function () {
   const setActive = (id, on) => { const el = byId(id); if (el) el.classList.toggle('is-active', !!on); };
   const setDisabled = (id, off) => { const el = byId(id); if (el) el.disabled = !!off; };
   const MARK_BUTTONS = { 'v2-btn-bold': 'bold', 'v2-btn-italic': 'italic', 'v2-btn-underline': 'underline', 'v2-btn-strike': 'strike' };
+  // « Exposant » et « Indice » (js/script-marks.js) : les deux icônes en tête du menu « Lien et blocs de contenu », enfoncées comme Gras quand le
+  // texte du curseur porte la marque, et dites aussi aux lecteurs d'écran (`aria-pressed`) : le menu est fermé tant qu'on ne le survole pas.
+  const SCRIPT_BUTTONS = { 'v2-btn-superscript': 'superscript', 'v2-btn-subscript': 'subscript' };
   const ALIGNMENTS = ['left', 'center', 'right', 'justify'];
   // Pour chaque liste : l'attribut qui porte son style, le style par défaut (sans attribut), la commande qui la pose et le bouton de chaque style.
   // Dans la liste du curseur, le bouton de son style est enfoncé.
@@ -240,6 +245,12 @@ const MainToolbar = (function () {
 
   function syncTextButtons() {
     Object.entries(MARK_BUTTONS).forEach(([id, mark]) => setActive(id, editor.isActive(mark)));
+    Object.entries(SCRIPT_BUTTONS).forEach(([id, mark]) => {
+      const on = editor.isActive(mark);
+      setActive(id, on);
+      const button = byId(id);
+      if (button) button.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
     const aligned = ALIGNMENTS.filter(a => editor.isActive({ textAlign: a }));
     ALIGNMENTS.forEach(a => setActive('v2-btn-align-' + a, aligned.includes(a)));
     // Le bouton principal du groupe « Alignement » montre l'alignement du curseur ; son clic le réapplique (currentAlign).
@@ -300,8 +311,9 @@ const MainToolbar = (function () {
       // Dans une grille, le bouton pose ou retire le saut avant la ligne sélectionnée : grisé sur la première ligne et au milieu d'une case fusionnée
       // sur plusieurs lignes.
       [mailOrMacro || (inGridMode && !GridEditor.canTogglePageBreak(editor)), ['v2-btn-page-break']],
-      // Un macro-modèle grise aussi ce que l'e-mail laisse actif, et le menu « Lien et blocs de contenu » en entier.
-      [inMacroMode, ['v2-btn-comment', 'v2-btn-insert-variable', 'v2-btn-undo', 'v2-btn-redo', 'v2-btn-find', 'v2-btn-track-changes',
+      // Un macro-modèle grise aussi ce que l'e-mail laisse actif - dont l'exposant et l'indice, que le lien écrit en caractères Unicode
+      // (js/script-marks.js:toUnicode) -, et le menu « Lien et blocs de contenu » en entier.
+      [inMacroMode, ['v2-btn-superscript', 'v2-btn-subscript', 'v2-btn-comment', 'v2-btn-insert-variable', 'v2-btn-undo', 'v2-btn-redo', 'v2-btn-find', 'v2-btn-track-changes',
         'v2-blocks-group', 'v2-btn-accept-all', 'v2-btn-reject-all']],
       // En-tête ou pied de page : un niveau de titre a un sens, pas la numérotation (titres du flux principal seul).
       [inHfMode, ['v2-numbering-seg']],
@@ -478,6 +490,10 @@ const MainToolbar = (function () {
     bind('v2-btn-italic', () => editor.chain().focus().toggleItalic().run());
     bind('v2-btn-underline', () => editor.chain().focus().toggleUnderline().run());
     bind('v2-btn-strike', () => editor.chain().focus().toggleStrike().run());
+    // Exposant et indice : une marque de caractère comme les quatre ci-dessus, posée par les deux icônes du menu « Lien et blocs de contenu » (et par
+    // Ctrl+. et Ctrl+, au clavier, js/script-marks.js). Poser l'une retire l'autre.
+    bind('v2-btn-superscript', () => editor.chain().focus().toggleSuperscript().run());
+    bind('v2-btn-subscript', () => editor.chain().focus().toggleSubscript().run());
     ALIGNMENTS.forEach(align => bind('v2-btn-align-' + align, () => editor.chain().focus().setTextAlign(align).run()));
     // Le bouton principal réapplique l'alignement qu'il montre (currentAlign, tenu à jour par syncToolbarState) ; les quatre boutons ci-dessus sont
     // dans le panneau révélé au survol (.v2-hover-flyout, index.html).
