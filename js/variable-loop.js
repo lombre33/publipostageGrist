@@ -42,7 +42,7 @@ const VariableLoop = (function () {
     });
     return owner;
   }
-  // Zones répétées qui contiennent `pos`, de la plus proche à la plus large : [{ repeat, owner }].
+  // Zones répétées qui contiennent `pos`, de la plus proche à la plus large : [{ repeat, start (position du nœud de la zone), owner }].
   function zonesAt(editorState, pos) {
     const $pos = editorState.doc.resolve(pos);
     const zones = [];
@@ -51,35 +51,62 @@ const VariableLoop = (function () {
       const repeat = Object.keys(ZONE_NODES).find(r => ZONE_NODES[r].indexOf(node.type.name) !== -1);
       if (!repeat) continue;
       const owner = zoneOwner(editorState.doc, $pos.before(d), node, repeat);
-      if (owner) zones.push({ repeat, owner });
+      if (owner) zones.push({ repeat, start: $pos.before(d), owner });
     }
     return zones;
   }
-  // Table parcourue par la zone répétée qui contient `pos` (la plus proche) : l'autocomplétion # propose ses colonnes en premier, sans demander de
-  // lien (js/variables.js). Null hors d'une zone répétée.
-  function loopTableAt(editorState, pos) {
+  // Tables que parcourent les zones répétées qui contiennent `pos`, de la plus proche à la plus large, chacune une fois : l'autocomplétion # propose
+  // leurs colonnes en premier, sans demander de lien (js/variables.js) - dans une zone répétée pour une table, ses variables lisent la ligne du tour.
+  // Vide hors d'une zone répétée.
+  function loopTablesAt(editorState, pos) {
     try {
-      const zones = zonesAt(editorState, pos);
-      return zones.length ? zones[0].owner.loop.table : null;
+      return zonesAt(editorState, pos).map(z => z.owner.loop.table).filter((table, index, all) => all.indexOf(table) === index);
     } catch (e) {
-      return null;
+      return [];
+    }
+  }
+  // La zone répétée la plus proche de `pos` dont la boucle n'est pas celle de la bulle à `bubblePos` (aucune bulle : l'insertion d'une variable) : la
+  // zone dans laquelle une boucle de cette bulle serait imbriquée. Null hors d'une telle zone.
+  function enclosingAt(editorState, pos, bubblePos) {
+    return zonesAt(editorState, pos).find(z => z.owner.pos !== bubblePos) || null;
+  }
+  // Vrai quand la variable `item` ({ table, column }) placée à `pos` se parcourt dans la zone répétée qui l'entoure sans lien avec la page : ses lignes
+  // se rattachent à celles de la zone (js/loop-rules.js:sourceFor). L'insertion ne demande alors pas de lien ; la boucle se pose ensuite sur la bulle.
+  function nestableAt(editorState, pos, item, bubblePos) {
+    try {
+      const zone = enclosingAt(editorState, pos, bubblePos);
+      return !!zone && !!LoopRules.sourceFor(item, GristAPI.getCurrentTableId(), zone.owner.loop.table);
+    } catch (e) {
+      return false;
     }
   }
   // Icône Boucle de la barre flottante pour la bulle à `pos` : active quand une boucle est posée ; grisée, avec l'info-bulle qui dit pourquoi, quand
-  // la variable n'a qu'une ligne à montrer ou qu'elle est déjà dans une zone répétée par une autre bulle (pas de boucle dans une boucle).
+  // la variable n'a qu'une ligne à montrer, ou quand - dans une zone répétée par une autre bulle - ses lignes ne se rattachent pas à celles de la zone.
   function status(editor, pos, node) {
     if (LoopRules.normalizeLoop(node.attrs.loop)) return { active: true, enabled: true, title: I18n.t('varToolbar.loop') };
-    const outer = zonesAt(editor.state, pos).find(z => z.owner.pos !== pos);
-    if (outer) return { active: false, enabled: false, title: I18n.t('varToolbar.loopNested', { table: outer.owner.loop.table }) };
-    const source = LoopRules.sourceFor(node.attrs, GristAPI.getCurrentTableId());
-    return { active: false, enabled: !!source, title: I18n.t(source ? 'varToolbar.loop' : 'varToolbar.loopDisabled') };
+    const zone = enclosingAt(editor.state, pos, pos);
+    const source = LoopRules.sourceFor(node.attrs, GristAPI.getCurrentTableId(), zone && zone.owner.loop.table);
+    if (source) return { active: false, enabled: true, title: I18n.t('varToolbar.loop') };
+    if (!zone) return { active: false, enabled: false, title: I18n.t('varToolbar.loopDisabled') };
+    const within = zone.owner.loop.table;
+    return { active: false, enabled: false, title: I18n.t(node.attrs.table === within ? 'varToolbar.loopNested' : 'varToolbar.loopNestedNone', { table: node.attrs.table, within }) };
   }
   // Où est la bulle : décide des choix « Ce qui se répète » (le plus proche l'emporte : une liste dans une cellule propose l'élément de liste).
   // `rowMerged` : une case fusionnée sur plusieurs lignes traverse la ligne de la bulle (js/table-merge.js) ; la copier pour chaque ligne liée
   // casserait le tableau, « La ligne du tableau » est alors grisée. `inlineOnly` : la bulle d'un champ texte (Objet, À, Cc, Cci, nom du PDF), une seule
-  // ligne de texte sans tableau ni liste ni paragraphes à répéter : la boucle n'y est que « dans la phrase ».
+  // ligne de texte sans tableau ni liste ni paragraphes à répéter : la boucle n'y est que « dans la phrase ». Une zone n'a qu'une boucle : celle que
+  // porte déjà une autre bulle ne se propose plus (la bulle d'une case d'un tableau répété ne répète pas la ligne de sa case, mais sa case, ou une liste
+  // ou un tableau qu'elle contient).
   function placeOf(editorState, pos, inlineOnly) {
     if (inlineOnly) return { kind: 'paragraph', repeats: ['inline'], inCell: false };
+    const place = placeIn(editorState, pos);
+    const $pos = editorState.doc.resolve(pos);
+    const others = zonesAt(editorState, pos).filter(z => z.owner.pos !== pos);
+    const taken = repeat => others.some(z => z.repeat === repeat && z.start === $pos.before(nearestDepth($pos, ZONE_NODES[repeat])));
+    place.repeats = place.repeats.filter(repeat => repeat === 'inline' || !taken(repeat));
+    return place;
+  }
+  function placeIn(editorState, pos) {
     const $pos = editorState.doc.resolve(pos);
     const rowDepth = nearestDepth($pos, ZONE_NODES.row);
     const itemDepth = nearestDepth($pos, ZONE_NODES.item);
@@ -131,8 +158,13 @@ const VariableLoop = (function () {
     const sourceText = el('span');
     const sourceEdit = el('button', 'var-loop-link');
     sourceEdit.type = 'button';
+    // La colonne qui rattache les lignes à celles de la zone englobante, quand plusieurs y mènent (renderWithin).
+    const sourceBy = el('select');
+    sourceBy.id = 'var-loop-by';
+    const sourceByBox = el('span', 'var-loop-by');
+    sourceByBox.appendChild(sourceBy);
     const sourceBox = el('div', 'var-loop-source');
-    sourceBox.append(sourceText, sourceEdit);
+    sourceBox.append(sourceText, sourceByBox, sourceEdit);
 
     const repeatLabelEl = el('div', 'var-loop-label');
     repeatLabelEl.id = 'var-loop-repeat-label';
@@ -170,7 +202,7 @@ const VariableLoop = (function () {
 
     win.body.append(intro, sourceLabel, sourceBox, repeatLabelEl, repeatSeg, separators.row, filterLabel, filterBox, two, emptyTextRow, previewArea);
     refs = {
-      title: win.title, intro, sourceLabel, sourceText, sourceEdit, repeatLabelEl, repeatSeg, separators, filterLabel, filterBox, sortLabel, sortColumn, sortDirection,
+      title: win.title, intro, sourceLabel, sourceText, sourceEdit, sourceBy, sourceByBox, repeatLabelEl, repeatSeg, separators, filterLabel, filterBox, sortLabel, sortColumn, sortDirection,
       emptyLabelEl, emptySelect, emptyTextRow, emptyText, currentLine, statsLine, removeBtn, cancelBtn, saveBtn,
     };
 
@@ -179,12 +211,13 @@ const VariableLoop = (function () {
 
   // Les réactions de la fenêtre.
   function wireModal() {
-    const { sourceEdit, sortColumn, sortDirection, emptySelect, emptyText, removeBtn, cancelBtn, saveBtn } = refs;
+    const { sourceEdit, sourceBy, sortColumn, sortDirection, emptySelect, emptyText, removeBtn, cancelBtn, saveBtn } = refs;
     sourceEdit.addEventListener('click', async () => {
       if (!state) return;
       const changed = await Variables.editLinkRule(state.source.table);
       if (changed && state) { renderSource(); previewRun.schedule(); }
     });
+    sourceBy.addEventListener('change', () => { if (state) state.working.by = sourceBy.value; });
     sortColumn.addEventListener('change', () => {
       if (!state) return;
       state.working.sortColumn = sortColumn.value;
@@ -212,16 +245,35 @@ const VariableLoop = (function () {
     refs.intro.replaceChildren(badge, document.createTextNode(' ' + I18n.t(inline ? 'varLoop.intro.inline' : 'varLoop.intro.zone', { table: state.source.table })));
   }
   // « Lignes de « Lignes » trouvées via Lignes.Facture · Modifier le lien » : le lien de la table (un par table et par document, js/variables.js), ou
-  // la colonne Liste de références qui fournit les lignes (rien à modifier : c'est la cellule de la page).
+  // la colonne Liste de références qui fournit les lignes (rien à modifier : c'est la cellule de la page, ou celle de la ligne de la zone englobante),
+  // ou - dans une zone répétée - la colonne Référence qui rattache chaque ligne à celle de la zone.
   function renderSource() {
-    const { sourceText, sourceEdit } = refs;
-    const { table, via } = state.source;
-    sourceEdit.hidden = !!via;
+    const { sourceText, sourceEdit, sourceByBox } = refs;
+    const { table, via, within } = state.source;
+    sourceEdit.hidden = !!(via || within);
+    sourceByBox.hidden = true;
+    if (within) { renderWithin(); return; }
     if (via) { sourceText.textContent = I18n.t('varLoop.source.refList', { table, via: via.table + '.' + via.column }); return; }
     const rule = GristAPI.getLinkRule(table);
     if (!rule) sourceText.textContent = I18n.t('varLoop.source.noLink', { table });
     else if (rule.mode === 'singleton') sourceText.textContent = I18n.t('varLoop.source.singleton', { table });
     else sourceText.textContent = I18n.t('varLoop.source.link', { table, via: Variables.describeLinkVia(table, rule, GristAPI.getCurrentTableId()) });
+  }
+  // Une boucle dans une zone répétée pour `within` : aucun lien à régler, la colonne Référence de la table qui désigne `within` suffit ; une liste avec
+  // recherche pour choisir quand plusieurs y mènent.
+  function renderWithin() {
+    const { sourceText, sourceBy, sourceByBox } = refs;
+    const { table, within } = state.source;
+    const columns = LoopRules.referenceColumnsTo(table, within);
+    if (!columns.length) { sourceText.textContent = I18n.t('varLoop.source.withinLost', { table, within }); return; }
+    if (columns.length === 1) { sourceText.textContent = I18n.t('varLoop.source.within', { table, within, via: table + '.' + columns[0] }); return; }
+    sourceText.textContent = I18n.t('varLoop.source.withinPick', { table, within });
+    sourceBy.replaceChildren();
+    columns.forEach(c => ConditionFields.appendColumnOption(sourceBy, c, table, c));
+    sourceBy.value = state.working.by;
+    sourceBy.setAttribute('aria-label', I18n.t('varLoop.source.byAria'));
+    try { SearchSelect.attachColumns(sourceBy, { inline: true, hintInTrigger: false }).sync(); } catch (e) { console.warn('[VariableLoop] recherche de colonne indisponible, liste native conservée', e); }
+    sourceByBox.hidden = false;
   }
   // « La ligne du tableau » grisée (aria-disabled : le survol, qui dit pourquoi, reste) quand une case fusionnée traverse la ligne ; une boucle déjà
   // posée sur une telle ligne reste lisible.
@@ -330,6 +382,7 @@ const VariableLoop = (function () {
     const w = state.working;
     const loop = { repeat: w.repeat, table: state.source.table };
     if (state.source.via) loop.via = { table: state.source.via.table, column: state.source.via.column };
+    else if (state.source.within) { loop.within = state.source.within; if (w.by) loop.by = w.by; }
     const filter = ConditionRules.plainCondition({ mode: w.filterMode, rules: w.rules });
     if (filter) loop.filter = filter;
     if (w.sortColumn || w.sortDirection === 'desc') loop.sort = { column: w.sortColumn, direction: w.sortDirection };
@@ -347,14 +400,18 @@ const VariableLoop = (function () {
     if (GristAPI.getColumnType(table, column) === 'Attachments') return I18n.t('varCond.debug.imageValue');
     return Variables.resolveVariable(table, column, tableId, record, format, { loop: LoopRules.itemBinding(loop, item, null) });
   }
+  // La table de la zone répétée qui entoure la boucle (la ligne d'exemple de l'aperçu est alors une ligne de cette table), null pour une boucle de la page.
+  const outerOf = loop => LoopRules.enclosingOf(loop, GristAPI.getCurrentTableId());
   // Le début de la ligne d'aperçu : combien de lignes liées, combien le filtre en garde.
   function summaryHead(loop, record, result) {
     const count = result.items.length;
     const total = result.total;
-    if (!total) return I18n.t('varLoop.preview.noneLinked', { id: record.id });
-    if (!count) return I18n.t('varLoop.preview.noneKept', { id: record.id, total });
-    if (loop.filter) return I18n.t('varLoop.preview.kept', { id: record.id, count, total });
-    return I18n.t('varLoop.preview.linked', { id: record.id, count });
+    const within = outerOf(loop);
+    const key = name => 'varLoop.preview.' + (within ? 'nested.' : '') + name;
+    if (!total) return I18n.t(key('noneLinked'), { id: record.id, within });
+    if (!count) return I18n.t(key('noneKept'), { id: record.id, within, total });
+    if (loop.filter) return I18n.t(key('kept'), { id: record.id, within, count, total });
+    return I18n.t(key('linked'), { id: record.id, within, count });
   }
   async function currentSummary(loop, tableId, record, result) {
     const count = result.items.length;
@@ -410,16 +467,28 @@ const VariableLoop = (function () {
     const stale = () => outdated() || !state;
     const { currentLine, statsLine } = refs;
     const loop = LoopRules.normalizeLoop(workingLoop());
-    const tableId = GristAPI.getCurrentTableId();
-    const record = GristAPI.getCurrentRecord();
+    const outer = outerOf(loop);
+    const tableId = outer || GristAPI.getCurrentTableId();
+    let record = outer ? null : GristAPI.getCurrentRecord();
     setLine(statsLine, '', false);
-    if (!record || !tableId) { setLine(currentLine, I18n.t('varCond.debug.noRecord'), false); return; }
+    if (!tableId || (!record && !outer)) { setLine(currentLine, I18n.t('varCond.debug.noRecord'), false); return; }
     setLine(currentLine, I18n.t('varCond.debug.computing'), false);
     try {
       const ctx = LoopRules.createContext();
+      if (outer) {
+        // Dans une zone répétée, la ligne d'exemple est une ligne de la table de la zone : la première qui a des lignes rattachées, à défaut la première.
+        const rows = await ctx.fetchRows(outer);
+        if (stale()) return;
+        if (!rows.length) { setLine(currentLine, I18n.t('linkConfig.previewTableEmpty', { table: outer }), false); return; }
+        record = rows[0];
+        for (const row of rows) {
+          const found = await LoopRules.iterate(loop, outer, row, ctx);
+          if (found.error || found.total) { record = row; break; }
+        }
+      }
       const result = await LoopRules.iterate(loop, tableId, record, ctx);
       if (stale()) return;
-      if (result.error) { setLine(currentLine, I18n.t('varLoop.preview.noSource', { id: record.id }), false); return; }
+      if (result.error) { setLine(currentLine, I18n.t(outer ? 'varLoop.preview.nested.noSource' : 'varLoop.preview.noSource', { id: record.id, within: outer }), false); return; }
       const current = await currentSummary(loop, tableId, record, result);
       if (stale()) return;
       setLine(currentLine, current.text, current.good);
@@ -452,12 +521,18 @@ const VariableLoop = (function () {
   function repeatFor(existing, place) {
     return existing && place.repeats.indexOf(existing.repeat) !== -1 ? existing.repeat : place.repeats.find(r => !(r === 'row' && place.rowMerged));
   }
+  // La colonne qui rattache les lignes d'une boucle imbriquée à celles de la zone englobante : celle déjà choisie tant qu'elle y mène, sinon la première.
+  function byColumn(source) {
+    const columns = source.within ? LoopRules.referenceColumnsTo(source.table, source.within) : [];
+    return columns.indexOf(source.by) !== -1 ? source.by : columns[0] || '';
+  }
   // La copie de travail de la fenêtre : la boucle déjà posée (`existing`, normalisée), ou les choix par défaut de l'endroit.
-  function workingCopy(existing, repeat, place) {
+  function workingCopy(existing, repeat, place, source) {
     const keepEmpty = existing && LoopRules.EMPTY_MODES[repeat].indexOf(existing.empty) !== -1;
     const filter = existing && existing.filter;
     return {
       repeat,
+      by: byColumn(source),
       filterMode: filter ? filter.mode : 'all',
       rules: filter ? JSON.parse(JSON.stringify(filter.rules)) : [],
       sortColumn: existing ? existing.sort.column : '',
@@ -475,11 +550,14 @@ const VariableLoop = (function () {
     const node = editor && editor.state.doc.nodeAt(pos);
     if (!node || node.type.name !== 'varBadge') return;
     const existing = LoopRules.normalizeLoop(node.attrs.loop);
-    const source = existing ? { table: existing.table, via: existing.via } : LoopRules.sourceFor(node.attrs, GristAPI.getCurrentTableId());
+    // Une boucle déjà posée garde sa source ; une nouvelle, dans une zone répétée par une autre bulle, se rattache à la ligne de cette zone.
+    const zone = existing ? null : enclosingAt(editor.state, pos, pos);
+    const source = existing ? { table: existing.table, via: existing.via, within: existing.within, by: existing.by }
+      : LoopRules.sourceFor(node.attrs, GristAPI.getCurrentTableId(), zone && zone.owner.loop.table);
     if (!source) return;
     ensureModal();
     const place = placeOf(editor.state, pos, !!(options && options.inlineOnly));
-    state = { editor, pos, node, place, source, had: !!existing, working: workingCopy(existing, repeatFor(existing, place), place) };
+    state = { editor, pos, node, place, source, had: !!existing, working: workingCopy(existing, repeatFor(existing, place), place, source) };
     const r = refs;
     r.title.textContent = I18n.t('varLoop.title', { table: source.table });
     r.sourceLabel.textContent = I18n.t('varLoop.section.source');
@@ -513,5 +591,5 @@ const VariableLoop = (function () {
     updatePreview();
   }
 
-  return { open, isOpen, status, loopTableAt };
+  return { open, isOpen, status, loopTablesAt, nestableAt };
 })();

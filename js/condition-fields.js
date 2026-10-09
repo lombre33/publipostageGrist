@@ -141,15 +141,16 @@ const ConditionFields = (function () {
     ordered.forEach(table => GristAPI.getVisibleColumns(table).forEach(c => appendColumnOption(select, table === currentTableId ? c : table + '.' + c, table, c, true)));
   }
 
-  function ensureTableLinked(ref, onLinked) {
+  function ensureTableLinked(ref, onLinked, zoneTables) {
     // Avant d'adopter une colonne d'une table pas encore liée à celle de la page, la fenêtre de choix de la clé s'ouvre
     // (js/variables.js:ensureLinkConfigured). Rend `true` tout de suite quand il n'y a rien à demander (colonne de la page ou table déjà liée), sinon
     // une promesse : vraie si le lien est enregistré, fausse si le choix est annulé (options.onColumnChosen remet alors la colonne précédente).
     // `onLinked`, facultatif : appelé une fois le lien enregistré et la colonne adoptée (le setTimeout laisse passer l'adoption, qui suit la résolution
-    // de la promesse).
+    // de la promesse). `zoneTables`, facultatif : les tables des zones répétées qui entourent la variable (js/variable-loop.js:loopTablesAt) ; leurs
+    // colonnes se lisent dans la ligne du tour, sans lien avec la page.
     const currentTableId = GristAPI.getCurrentTableId();
     if (!ref || !ref.table || !currentTableId || ref.table === currentTableId) return true;
-    if (GristAPI.getLinkRule(ref.table)) return true;
+    if (GristAPI.getLinkRule(ref.table) || (zoneTables && zoneTables.indexOf(ref.table) !== -1)) return true;
     const linking = Variables.ensureLinkConfigured({ table: ref.table });
     return onLinked ? linking.then(ok => { if (ok) setTimeout(() => onLinked(), 0); return ok; }) : linking;
   }

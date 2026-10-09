@@ -3,11 +3,15 @@
 // en lot). Aucune dépendance à l'éditeur.
 //
 // La boucle vit dans l'attribut `loop` du nœud varBadge (js/editor-nodes.js, sérialisé en data-loop), comme la condition d'affichage :
-//   { repeat: 'inline'|'row'|'item'|'paragraph', table, via: null|{ table, column }, filter: null|{ mode, rules }, sort: { column, direction },
-//     empty, emptyText, separator, lastSeparator }
+//   { repeat: 'inline'|'row'|'item'|'paragraph', table, via: null|{ table, column }, within: null|'Table', by: null|'Colonne',
+//     filter: null|{ mode, rules }, sort: { column, direction }, empty, emptyText, separator, lastSeparator }
 // - `table` : la table dont les lignes sont parcourues. `via` : une colonne Liste de références de la table de la page (les fiches qu'elle référence,
 //   dans l'ordre de la cellule) ; sans `via`, les lignes de `table` trouvées par la règle de liaison du document (Variables.resolveLinkedRows, la
 //   même que celle qui affiche aujourd'hui toutes les valeurs jointes par des virgules).
+// - Une boucle dans une zone répétée par une autre boucle (les lignes de chaque facture dans les factures d'un client) lit ses lignes dans la ligne du
+//   tour de la zone qui l'entoure, pas dans celle de la page (scopeFor) : `via.table` est alors la table de la zone englobante (sa colonne Liste de
+//   références), ou `within` est cette table et `by` la colonne Référence de `table` qui désigne sa ligne (Lignes.Facture). Aucun lien de plus que pour
+//   une boucle de la page : la colonne Référence suffit, sans règle de liaison pour `table`.
 // - `repeat` : ce qui se répète autour de la bulle - la ligne du tableau (<tr>), l'élément de liste (<li>), le paragraphe ou le titre qui la
 //   contient, ou la bulle seule, dans la phrase ('inline' : ses valeurs jointes par `separator`, et `lastSeparator` avant la dernière). Une zone n'a
 //   qu'une boucle, celle de sa première bulle qui en porte une ; les autres bulles de `table` placées dans la zone suivent la même ligne à chaque
@@ -36,13 +40,15 @@ const LoopRules = (function () {
     if (!raw || typeof raw !== 'object' || !raw.table) return null;
     const repeat = REPEATS.indexOf(raw.repeat) !== -1 ? raw.repeat : 'inline';
     const via = raw.via && raw.via.table && raw.via.column ? { table: String(raw.via.table), column: String(raw.via.column) } : null;
+    // `within` ne vaut que sans `via`, qui nomme déjà la table englobante ; `by` ne vaut qu'avec `within`.
+    const within = !via && raw.within ? String(raw.within) : null;
     const sortRaw = raw.sort || {};
     const sort = { column: sortRaw.column ? String(sortRaw.column) : '', direction: sortRaw.direction === 'desc' ? 'desc' : 'asc' };
     // Choix absent ou inconnu (document modifié à la main) : 'blank' pour une bulle seule, le choix par défaut de la zone sinon - jamais un
     // paragraphe masqué que personne n'a demandé.
     const empty = EMPTY_MODES[repeat].indexOf(raw.empty) !== -1 ? raw.empty : defaultEmpty(repeat, repeat === 'inline');
     return {
-      repeat, table: String(raw.table), via, filter: ConditionRules.normalizeCondition(raw.filter), sort, empty,
+      repeat, table: String(raw.table), via, within, by: within && raw.by ? String(raw.by) : null, filter: ConditionRules.normalizeCondition(raw.filter), sort, empty,
       emptyText: raw.emptyText == null ? '' : String(raw.emptyText),
       separator: typeof raw.separator === 'string' ? raw.separator : ', ',
       lastSeparator: typeof raw.lastSeparator === 'string' ? raw.lastSeparator : null,
@@ -53,11 +59,35 @@ const LoopRules = (function () {
     try { return normalizeLoop(JSON.parse(json)); } catch (e) { return null; }
   }
 
+  // Les colonnes Référence (une seule fiche par ligne) de `table` qui désignent une ligne de `target` : ce par quoi ses lignes se rattachent à celles de
+  // `target` (Lignes.Facture pour la table Factures). Une liste de références ne compte pas : elle désigne plusieurs fiches, c'est l'inverse d'un
+  // rattachement.
+  function referenceColumnsTo(table, target) {
+    return GristAPI.getVisibleColumns(table).filter(column => {
+      const ref = GristAPI.referenceOf(GristAPI.getColumnType(table, column));
+      return !!ref && !ref.list && ref.table === target;
+    });
+  }
+  // Ce que parcourt une bulle placée dans une zone répétée pour la table `enclosing` : les fiches de sa colonne Liste de références (si elle est de
+  // `enclosing`), ou les lignes de sa table qui se rattachent à la ligne de `enclosing` par une colonne Référence. { table, via, within, by, columns }
+  // - `columns` : toutes les colonnes qui rattachent, `by` la première. Null sinon.
+  function nestedSourceFor(attrs, enclosing) {
+    if (attrs.table === enclosing) {
+      if (String(attrs.column).indexOf('.') !== -1) return null;
+      const ref = GristAPI.referenceOf(GristAPI.getColumnType(attrs.table, attrs.column));
+      return ref && ref.list && ref.table !== enclosing ? { table: ref.table, via: { table: enclosing, column: attrs.column } } : null;
+    }
+    const columns = referenceColumnsTo(attrs.table, enclosing);
+    return columns.length ? { table: attrs.table, via: null, within: enclosing, by: columns[0], columns } : null;
+  }
+
   // Ce qu'une bulle peut parcourir : une variable d'une autre table liée par une règle « match » qui peut trouver plusieurs lignes (la colonne
   // comparée côté table liée n'est pas son identifiant de ligne, ex. Lignes.Facture = identifiant de la facture), ou une colonne Liste de références
   // de la table de la page (ex. Factures.Formateurs). Null sinon - colonne ordinaire de la page, ligne unique, table pas liée : la Boucle est grisée.
-  function sourceFor(attrs, currentTableId) {
+  // `enclosingTableId` : la table que parcourt la zone répétée qui entoure la bulle ; elle remplace alors la page (nestedSourceFor).
+  function sourceFor(attrs, currentTableId, enclosingTableId) {
     if (!attrs || !attrs.table || !currentTableId) return null;
+    if (enclosingTableId) return nestedSourceFor(attrs, enclosingTableId);
     if (attrs.table === currentTableId) {
       // Colonne en chemin (#Projet.Accompagnateur.Membres, GristAPI.resolveColumnPath) : la boucle lit sa liste dans la ligne courante sous le nom
       // d'une seule colonne, pas d'un chemin - grisée.
@@ -87,9 +117,44 @@ const LoopRules = (function () {
     return rows.slice().sort((a, b) => (rank(a) - rank(b)) || (a.id - b.id));
   }
 
+  // La table dont une ligne porte les lignes de cette boucle : celle de la zone englobante pour une boucle imbriquée (`within`, ou la table de la colonne
+  // Liste de références `via`), la table de la page pour une boucle ordinaire (qui peut avoir un `via`, de la page) ; null pour une boucle sans `via`.
+  function parentTable(loop) { return loop.within || (loop.via ? loop.via.table : null); }
+  // La table de la zone englobante d'une boucle imbriquée, null pour une boucle de la page (`currentTableId`) : une `via` de la page n'est pas imbriquée.
+  function enclosingOf(loop, currentTableId) {
+    return loop.within || (loop.via && loop.via.table !== currentTableId ? loop.via.table : null);
+  }
+  // Où une boucle lit ses lignes liées : la ligne de la page, ou - pour une boucle imbriquée dans une zone répétée - la ligne que cette zone porte à ce
+  // tour. `rows` : la ligne de chaque zone englobante par table (celles d'une liaison, bindingOf). Sans la ligne de sa table englobante (zone qui ne se
+  // déroule pas : source perdue), la boucle retombe sur la page, où elle ne trouve rien : sa zone reste telle quelle.
+  function scopeFor(loop, rows, tableId, record) {
+    const parent = parentTable(loop);
+    const row = parent && rows ? rows[parent] : null;
+    return row ? { tableId: parent, record: row } : { tableId, record };
+  }
+  function scopeOf(loop, badge, tableId, record) {
+    const binding = bindingOf(badge);
+    return scopeFor(loop, binding && binding.rows, tableId, record);
+  }
+  // Colonne par laquelle les lignes de `loop.table` se rattachent à la ligne de `loop.within` : celle que la boucle a enregistrée (`by`) tant qu'elle
+  // désigne encore cette table, à défaut la seule colonne Référence qui y mène. Null s'il n'y en a aucune, ou plusieurs sans choix enregistré.
+  function nestedColumn(loop) {
+    const columns = referenceColumnsTo(loop.table, loop.within);
+    if (loop.by) return columns.indexOf(loop.by) !== -1 ? loop.by : null;
+    return columns.length === 1 ? columns[0] : null;
+  }
+
   // Lignes parcourues pour la ligne courante, avant filtre et tri : [{ row, anchor }] - `anchor` est la valeur affichée de la fiche dans la colonne
-  // Liste de références (`via`), celle que la bulle de cette colonne montre à chaque tour.
+  // Liste de références (`via`), celle que la bulle de cette colonne montre à chaque tour. `tableId` et `record` : la portée de la boucle (scopeFor).
   async function linkedItems(loop, tableId, record, fetchRows) {
+    if (loop.within) {
+      // Boucle imbriquée : les lignes dont la colonne Référence désigne la ligne de la zone englobante (`record`, de la table `within`).
+      if (loop.within !== tableId) return { error: 'within' };
+      const column = nestedColumn(loop);
+      if (!column) return { error: 'within' };
+      const rows = await Variables.resolveLinkedRows(loop.table, { mode: 'match', colonneSource: 'id', colonneCible: column }, record, tableId, { fetchRows });
+      return { items: tableOrder(rows).map(row => ({ row, anchor: undefined })) };
+    }
     if (loop.via) {
       if (loop.via.table !== tableId) return { error: 'via' };
       // La ligne de grist.onRecord livre les valeurs affichées de la liste, pas les identifiants : relue sous sa forme brute, comme l'export en lot
@@ -162,9 +227,10 @@ const LoopRules = (function () {
     return keyed.map(k => k.item);
   }
 
-  // Lignes retenues pour une ligne de la table de la page : { items, total } (total = lignes liées avant le filtre), ou { error } - 'noLink' (table
-  // plus liée) ou 'via' (modèle utilisé sur une autre table que celle de sa colonne Liste de références). `record` : ligne de grist.onRecord ou de
-  // fetchTable.
+  // Lignes retenues pour une ligne de la table de la page (ou, pour une boucle imbriquée, de la table englobante : scopeFor) : { items, total } (total =
+  // lignes liées avant le filtre), ou { error } - 'noLink' (table plus liée), 'via' (modèle utilisé sur une autre table que celle de sa colonne Liste de
+  // références) ou 'within' (boucle imbriquée sans ligne englobante, ou dont la colonne de rattachement a disparu). `record` : ligne de grist.onRecord
+  // ou de fetchTable.
   async function iterate(loop, tableId, record, ctx) {
     if (!loop || !record || !tableId) return { items: [], total: 0 };
     const fetchRows = (ctx && ctx.fetchRows) || memoFetchRows();
@@ -201,14 +267,28 @@ const LoopRules = (function () {
     else if (repeat === 'paragraph') zone = badge.closest(TEXT_BLOCK_SELECTOR);
     return zone && zone !== root && root.contains(zone) ? zone : null;
   }
-  // Première bulle (ordre du document) qui porte encore une boucle de zone ; une boucle illisible est retirée (la bulle redevient ordinaire).
-  function nextZoneOwner(root) {
+  // Les bulles qui portent encore la boucle d'une zone, avec leur zone, dans l'ordre du document ; une boucle illisible ou sans zone est retirée (la
+  // bulle redevient ordinaire).
+  function zoneOwners(root) {
+    const owners = [];
     for (const badge of root.querySelectorAll('.var-badge[data-loop]')) {
       const loop = parseLoop(badge.getAttribute('data-loop'));
       if (!loop) { badge.removeAttribute('data-loop'); continue; }
-      if (loop.repeat !== 'inline') return { badge, loop };
+      if (loop.repeat === 'inline') continue;
+      const zone = zoneOf(badge, loop.repeat, root);
+      if (!zone) { badge.removeAttribute('data-loop'); continue; }
+      owners.push({ badge, loop, zone });
     }
-    return null;
+    return owners;
+  }
+  // Celles dont la zone n'est dans la zone d'aucune autre : la boucle d'une zone répétée dans une autre attend les copies de la zone qui l'entoure, qui lui
+  // donnent sa ligne (scopeFor).
+  function outermost(owners) {
+    const zones = new Set(owners.map(o => o.zone));
+    return owners.filter(o => {
+      for (let el = o.zone.parentElement; el; el = el.parentElement) if (zones.has(el)) return false;
+      return true;
+    });
   }
   // Ce que chaque conteneur doit encore avoir pour rester : un <ul> ou un <table> sans ligne ne s'affiche pas et n'a rien à exporter ; un encadré
   // (js/callout.js) sans contenu se verrait encore : sa barre et son fond.
@@ -254,37 +334,44 @@ const LoopRules = (function () {
     zone.textContent = loop.empty === 'text' ? loop.emptyText : '';
   }
 
-  // Déroule chaque zone répétée de `root` (HTML déjà assaini, pas encore résolu) : une copie par ligne retenue, associée à cette ligne ; « si aucune
-  // ligne » sinon. Une boucle qui ne trouve plus sa source (table plus liée) laisse la zone telle quelle : ses bulles affichent alors toutes les
-  // valeurs, jointes par des virgules, comme avant la boucle. Les boucles « dans la phrase » restent sur leur bulle (resolveInline, appelée par
-  // js/reader-mode.js).
+  // Une zone : sa copie pour chaque ligne retenue, associée à cette ligne ; « si aucune ligne » sinon. Une boucle qui ne trouve plus sa source laisse la
+  // zone telle quelle.
+  async function expandZone({ badge, loop, zone }, tableId, record, root, context) {
+    // Une seule boucle par zone : celle-ci. Une autre bulle de la même zone qui en porte une (copiée-collée) redevient une bulle ordinaire.
+    zone.querySelectorAll('.var-badge[data-loop]').forEach(b => {
+      const other = parseLoop(b.getAttribute('data-loop'));
+      if (other && other.repeat === loop.repeat && zoneOf(b, other.repeat, root) === zone) b.removeAttribute('data-loop');
+    });
+    const scope = scopeOf(loop, badge, tableId, record);
+    let result;
+    try { result = await iterate(loop, scope.tableId, scope.record, context); }
+    catch (e) { console.error('[LoopRules] échec du calcul des lignes de la boucle', loop, e); return; }
+    if (result.error) { console.warn('[LoopRules] boucle sur « ' + loop.table + ' » sans source (' + result.error + ') : zone affichée une fois.'); return; }
+    if (!result.items.length) { applyEmptyZone(zone, loop); return; }
+    const copies = document.createDocumentFragment();
+    result.items.forEach((item, index) => {
+      const clone = zone.cloneNode(true);
+      bindClone(zone, clone, loop, item, index + 1);
+      copies.appendChild(clone);
+    });
+    zone.replaceWith(copies);
+  }
+  // Niveaux de zones dans des zones que l'on déroule au plus (le HTML d'un modèle peut venir de n'importe où : la boucle doit finir).
+  const MAX_NESTING = 12;
+  // Déroule chaque zone répétée de `root` (HTML déjà assaini, pas encore résolu), du dehors vers le dedans : les zones qui n'en entourent aucune autre,
+  // puis - dans leurs copies, qui leur ont donné leur ligne - celles qu'elles contenaient. Une boucle qui ne trouve plus sa source (table plus liée)
+  // laisse la zone telle quelle : ses bulles affichent alors toutes les valeurs, jointes par des virgules, comme avant la boucle. Les boucles « dans la
+  // phrase » restent sur leur bulle (resolveInline, appelée par js/reader-mode.js).
   async function expandZones(root, tableId, record, ctx) {
     if (!root || !record || !tableId) return;
     const context = ctx || createContext();
-    let owner;
-    let guard = 0;
-    while ((owner = nextZoneOwner(root)) && guard < 1000) {
-      guard += 1;
-      const { badge, loop } = owner;
-      const zone = zoneOf(badge, loop.repeat, root);
-      if (!zone) { badge.removeAttribute('data-loop'); continue; }
-      // Une seule boucle par zone : celle-ci. Une autre bulle de la même zone qui en porte une (copiée-collée) redevient une bulle ordinaire.
-      zone.querySelectorAll('.var-badge[data-loop]').forEach(b => {
-        const other = parseLoop(b.getAttribute('data-loop'));
-        if (other && other.repeat === loop.repeat && zoneOf(b, other.repeat, root) === zone) b.removeAttribute('data-loop');
-      });
-      let result;
-      try { result = await iterate(loop, tableId, record, context); }
-      catch (e) { console.error('[LoopRules] échec du calcul des lignes de la boucle', loop, e); continue; }
-      if (result.error) { console.warn('[LoopRules] boucle sur « ' + loop.table + ' » sans source (' + result.error + ') : zone affichée une fois.'); continue; }
-      if (!result.items.length) { applyEmptyZone(zone, loop); continue; }
-      const copies = document.createDocumentFragment();
-      result.items.forEach((item, index) => {
-        const clone = zone.cloneNode(true);
-        bindClone(zone, clone, loop, item, index + 1);
-        copies.appendChild(clone);
-      });
-      zone.replaceWith(copies);
+    for (let level = 0; level < MAX_NESTING; level++) {
+      const owners = outermost(zoneOwners(root));
+      if (!owners.length) return;
+      for (const owner of owners) {
+        // Une bulle de la même zone a pu déjà la dérouler (une seule boucle par zone) : sa boucle n'est plus là.
+        if (owner.badge.hasAttribute('data-loop') && root.contains(owner.zone)) await expandZone(owner, tableId, record, root, context);
+      }
     }
   }
 
@@ -326,7 +413,8 @@ const LoopRules = (function () {
   // vides sont sautées. Renvoie { text } ou { node } (aucune ligne retenue), ou null si la boucle ne trouve plus sa source - la bulle se résout alors
   // comme avant la boucle.
   async function resolveInline(badge, loop, tableId, record, ctx, valueFor) {
-    const result = await iterate(loop, tableId, record, ctx);
+    const scope = scopeOf(loop, badge, tableId, record);
+    const result = await iterate(loop, scope.tableId, scope.record, ctx);
     if (result.error) return null;
     const inherited = bindingOf(badge);
     const values = [];
@@ -339,7 +427,7 @@ const LoopRules = (function () {
   }
 
   return {
-    EMPTY_MODES, defaultEmpty, normalizeLoop, sourceFor, createContext, iterate, itemBinding, bindingOf,
-    expandZones, inlineLoopOf, resolveInline, removeHiddenBlocks, removeAndPrune, joinValues,
+    EMPTY_MODES, defaultEmpty, normalizeLoop, sourceFor, referenceColumnsTo, nestedColumn, parentTable, enclosingOf, scopeFor, createContext, iterate, itemBinding,
+    bindingOf, expandZones, inlineLoopOf, resolveInline, removeHiddenBlocks, removeAndPrune, joinValues,
   };
 })();

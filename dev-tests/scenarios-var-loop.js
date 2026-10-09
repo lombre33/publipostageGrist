@@ -317,6 +317,537 @@
     },
   });
 
+  // === Une boucle dans une boucle (demande d'Antoine du 2026-10-09, point 5.2) ===
+  // Les lignes de chaque facture (zone répétée sur LpLignes, liée à la page par une règle) et, dans chaque ligne, ses détails (LpDetails, rattachés à
+  // la ligne par la colonne Référence Ligne : aucune règle de liaison à configurer) ; les formateurs de la facture (liste de références de la page) avec
+  // leurs compétences (liste de références du formateur) et leurs séances (Référence vers le formateur). Pas de colonne Ordre : le rang vient de la puce.
+  async function seedNested(h) {
+    await seed(h);
+    const stub = window.__gristStub;
+    stub.setVariables('LpCompetences', { Nom: 'Text' });
+    stub.setVariables('LpFormateurs', { Nom: 'Text', Email: 'Text', Competences: 'RefList:LpCompetences', gristHelper_DisplayC: 'Any' }, null, { Competences: 'gristHelper_DisplayC' });
+    stub.setVariables('LpSeances', { Formateur: 'Ref:LpFormateurs', Theme: 'Text', Duree: 'Numeric' });
+    stub.setVariables('LpDetails', { Ligne: 'Ref:LpLignes', Libelle: 'Text', Heures: 'Numeric', Statut: 'Choice' }, { Statut: ['Fait', 'À faire'] });
+    stub.setVariables('LpEtapes', { Detail: 'Ref:LpDetails', Nom: 'Text' });
+    stub.setRows('LpCompetences', [{ id: 1, Nom: 'Excel' }, { id: 2, Nom: 'Pédagogie' }, { id: 3, Nom: 'Qualiopi' }]);
+    stub.setRows('LpFormateurs', [
+      { id: 1, Nom: 'Karim Benali', Email: 'karim@exemple.fr', Competences: ['L', 1, 2], gristHelper_DisplayC: ['L', 'Excel', 'Pédagogie'] },
+      { id: 2, Nom: 'Léa Fontaine', Email: 'lea@exemple.fr', Competences: ['L', 3], gristHelper_DisplayC: ['L', 'Qualiopi'] },
+      { id: 3, Nom: 'Sophie Laurent', Email: 'sophie@exemple.fr', Competences: null, gristHelper_DisplayC: null },
+    ]);
+    stub.setRows('LpSeances', [
+      { id: 1, Formateur: 1, Theme: 'Tableaux croisés', Duree: 3 },
+      { id: 2, Formateur: 1, Theme: 'Formules', Duree: 4 },
+      { id: 3, Formateur: 2, Theme: 'Audit blanc', Duree: 2 },
+    ]);
+    // Lignes de la facture 1 dans l'ordre de la table : Livret (2), Journée (1), Déplacement (3, sans détail) ; la facture 2 a Audit (4).
+    stub.setRows('LpDetails', [
+      { id: 1, Ligne: 1, Libelle: 'Préparation', Heures: 2, Statut: 'Fait' },
+      { id: 2, Ligne: 1, Libelle: 'Animation', Heures: 7, Statut: 'Fait' },
+      { id: 3, Ligne: 2, Libelle: 'Impression', Heures: 1, Statut: 'Fait' },
+      { id: 4, Ligne: 2, Libelle: 'Reliure', Heures: 1, Statut: 'À faire' },
+      { id: 5, Ligne: 2, Libelle: 'Livraison', Heures: 2, Statut: 'À faire' },
+      { id: 6, Ligne: 4, Libelle: 'Analyse', Heures: 3, Statut: 'Fait' },
+    ]);
+    stub.setRows('LpEtapes', [
+      { id: 1, Detail: 3, Nom: 'Maquette' }, { id: 2, Detail: 3, Nom: 'Tirage' }, { id: 3, Detail: 4, Nom: 'Colle' }, { id: 4, Detail: 2, Nom: 'Exercices' },
+    ]);
+    await GristAPI.refreshSchema();
+    stub.fireRecord(Object.assign({}, RECORD_1), 'LpFactures');
+    await h.sleep(50);
+  }
+  const IN_LINE = { table: 'LpDetails', within: 'LpLignes', by: 'Ligne' };
+  const DETAIL_ITEMS = Object.assign({ repeat: 'item', empty: 'none' }, IN_LINE);
+  function rawCell(html, tag) { return `<${tag || 'td'}>${html}</${tag || 'td'}>`; }
+  // Une ligne de la facture dans un tableau : sa désignation (qui porte la boucle de la ligne) puis une cellule de contenu libre.
+  function linesWith(inner, header) {
+    return '<table><tbody>'
+      + `<tr>${cell('Désignation', 'th')}${rawCell(header || '<p>Détail</p>', 'th')}</tr>`
+      + `<tr>${cell(badgeHtml('LpLignes', 'Designation', ROW_LOOP))}${rawCell(inner)}</tr>`
+      + '</tbody></table>';
+  }
+  // Pour chaque ligne du tableau (l'en-tête compris) : le texte de sa première cellule, puis les éléments de la seconde.
+  function rowsAndParts(table, selector) {
+    return Array.from(table.querySelectorAll('tr')).map(tr => {
+      const cells = Array.from(tr.children);
+      const parts = Array.from(cells[1] ? cells[1].querySelectorAll(selector || 'li') : []).map(el => el.textContent.trim());
+      return [cells[0].textContent.trim(), parts];
+    });
+  }
+  const noLoopLeft = box => !box.querySelector('[data-loop]') && !box.querySelector('.error-msg');
+  async function eachInvoice(html) {
+    const out = [];
+    for (const row of await GristAPI.fetchTableRows('LpFactures')) out.push(await preview(html, row));
+    return out;
+  }
+
+  cases.push({
+    id: 'loop_nested_list_in_each_row_reads_the_details_of_that_row_only',
+    description: 'Boucle dans une boucle : une liste dans la case de chaque ligne de facture répète les détails de CETTE ligne seulement (rattachés par la colonne Référence, sans règle de liaison), en Lecture et pour chaque facture d’un lot ; une ligne sans détail n’a pas de liste ; une facture sans ligne ne garde que l’en-tête',
+    run: async (h) => {
+      await seedNested(h);
+      if (GristAPI.getLinkRule('LpDetails')) return { pass: false, notes: 'LpDetails ne doit avoir aucune règle de liaison pour cet essai' };
+      const html = linesWith(`<ul><li><p>${badgeHtml('LpDetails', 'Libelle', DETAIL_ITEMS)}</p></li></ul>`);
+      const reading = rowsAndParts((await renderReader(html)).querySelector('table'));
+      const boxes = await eachInvoice(html);
+      const batch = boxes.map(b => rowsAndParts(b.querySelector('table')));
+      const expected1 = [['Désignation', []], ['Livret stagiaire imprimé', ['Impression', 'Reliure', 'Livraison']], ['Journée de formation intra', ['Préparation', 'Animation']], ['Déplacement du formateur', []]];
+      const pass = JSON.stringify(reading) === JSON.stringify(expected1) && JSON.stringify(batch[0]) === JSON.stringify(expected1)
+        && JSON.stringify(batch[1]) === JSON.stringify([['Désignation', []], ['Audit', ['Analyse']]])
+        && JSON.stringify(batch[2]) === JSON.stringify([['Désignation', []]]) && boxes.every(noLoopLeft);
+      return { pass, notes: JSON.stringify({ reading, batch }) };
+    },
+  });
+
+  cases.push({
+    id: 'loop_nested_inner_zone_before_the_outer_owner_in_the_document_still_waits_for_its_row',
+    description: 'Boucle dans une boucle : la liste de la première case est déroulée APRÈS la ligne qui l’entoure, même quand la bulle qui répète la ligne est dans une case plus loin (ordre du document) ; chaque liste est celle de sa ligne',
+    run: async (h) => {
+      await seedNested(h);
+      // Première case : la liste des détails ; seconde case : la bulle qui répète la ligne du tableau.
+      const html = '<table><tbody>'
+        + `<tr>${cell('Détail', 'th')}${cell('Désignation', 'th')}</tr>`
+        + `<tr>${rawCell(`<ul><li><p>${badgeHtml('LpDetails', 'Libelle', DETAIL_ITEMS)}</p></li></ul>`)}${cell(badgeHtml('LpLignes', 'Designation', ROW_LOOP))}</tr>`
+        + '</tbody></table>';
+      const content = await renderReader(html);
+      const rows = Array.from(content.querySelectorAll('tr')).map(tr => [tr.children[1].textContent.trim(), Array.from(tr.children[0].querySelectorAll('li')).map(li => li.textContent.trim())]);
+      const pass = JSON.stringify(rows) === JSON.stringify([['Désignation', []], ['Livret stagiaire imprimé', ['Impression', 'Reliure', 'Livraison']],
+        ['Journée de formation intra', ['Préparation', 'Animation']], ['Déplacement du formateur', []]]) && noLoopLeft(content);
+      return { pass, notes: JSON.stringify(rows) };
+    },
+  });
+
+  cases.push({
+    id: 'loop_nested_inline_paragraph_and_sub_table_repeat_inside_the_cell_of_each_row',
+    description: 'Boucle dans une boucle : dans la case de chaque ligne, une bulle « dans la phrase » joint les détails de la ligne, un paragraphe se répète par détail et un tableau dans la case répète sa ligne par détail',
+    run: async (h) => {
+      await seedNested(h);
+      const inline = Object.assign({ repeat: 'inline', empty: 'text', emptyText: 'aucun', separator: ', ', lastSeparator: ' et ' }, IN_LINE);
+      const paragraph = Object.assign({ repeat: 'paragraph', empty: 'hide' }, IN_LINE);
+      const subRow = Object.assign({ repeat: 'row', empty: 'header' }, IN_LINE);
+      const html = linesWith(`<p>Étapes : ${badgeHtml('LpDetails', 'Libelle', inline)}.</p>`
+        + `<p>${badgeHtml('LpDetails', 'Libelle', paragraph)} (${badgeHtml('LpDetails', 'Heures')} h)</p>`
+        + `<table><tbody><tr>${cell('Détail', 'th')}</tr><tr>${cell(badgeHtml('LpDetails', 'Libelle', subRow))}</tr></tbody></table>`);
+      const content = await renderReader(html);
+      const rows = Array.from(content.querySelector('table').querySelectorAll(':scope > tbody > tr')).slice(1).map(tr => {
+        const cellBox = tr.children[1];
+        return {
+          line: tr.children[0].textContent.trim(),
+          inline: cellBox.querySelector('p').textContent.trim(),
+          paragraphs: Array.from(cellBox.querySelectorAll(':scope > p')).slice(1).map(p => p.textContent.trim()),
+          sub: Array.from(cellBox.querySelectorAll('table tr')).map(r => r.textContent.trim()),
+        };
+      });
+      const pass = JSON.stringify(rows) === JSON.stringify([
+        { line: 'Livret stagiaire imprimé', inline: 'Étapes : Impression, Reliure et Livraison.', paragraphs: ['Impression (1 h)', 'Reliure (1 h)', 'Livraison (2 h)'], sub: ['Détail', 'Impression', 'Reliure', 'Livraison'] },
+        { line: 'Journée de formation intra', inline: 'Étapes : Préparation et Animation.', paragraphs: ['Préparation (2 h)', 'Animation (7 h)'], sub: ['Détail', 'Préparation', 'Animation'] },
+        { line: 'Déplacement du formateur', inline: 'Étapes : aucun.', paragraphs: [], sub: ['Détail'] },
+      ]) && noLoopLeft(content);
+      return { pass, notes: JSON.stringify(rows) };
+    },
+  });
+
+  cases.push({
+    id: 'loop_nested_filter_sort_empty_text_and_row_numbers_restart_in_each_row',
+    description: 'Boucle dans une boucle : le filtre, le tri et « Si aucune ligne » de la boucle intérieure valent pour chaque ligne ; la puce « N° de ligne » compte les lignes de la facture dans la case de la ligne et repart de 1 dans la liste de ses détails',
+    run: async (h) => {
+      await seedNested(h);
+      const todo = Object.assign({ repeat: 'item', empty: 'text', emptyText: 'Rien à faire', filter: { mode: 'all', rules: [{ column: 'Statut', operator: '=', value: 'À faire' }] }, sort: { column: 'Libelle', direction: 'desc' } }, IN_LINE);
+      const html = '<table><tbody>'
+        + `<tr>${cell('N°', 'th')}${cell('Désignation', 'th')}${cell('À faire', 'th')}</tr>`
+        + `<tr>${cell(rowNumberChip())}${cell(badgeHtml('LpLignes', 'Designation', ROW_LOOP))}`
+        + `${rawCell(`<ul><li><p>${rowNumberChip()}/ ${badgeHtml('LpDetails', 'Libelle', todo)}</p></li></ul>`)}</tr>`
+        + '</tbody></table>';
+      const content = await renderReader(html);
+      const rows = Array.from(content.querySelectorAll('tr')).slice(1).map(tr => [tr.children[0].textContent.trim(), tr.children[1].textContent.trim(), Array.from(tr.children[2].querySelectorAll('li')).map(li => li.textContent.trim())]);
+      const pass = JSON.stringify(rows) === JSON.stringify([
+        ['1', 'Livret stagiaire imprimé', ['1/ Reliure', '2/ Livraison']],
+        ['2', 'Journée de formation intra', ['Rien à faire']],
+        ['3', 'Déplacement du formateur', ['Rien à faire']],
+      ]) && content.querySelectorAll('.smart-chip').length === 0 && noLoopLeft(content);
+      return { pass, notes: JSON.stringify(rows) };
+    },
+  });
+
+  cases.push({
+    id: 'loop_nested_three_levels_each_level_reads_the_row_of_the_zone_just_around_it',
+    description: 'Boucle dans une boucle dans une boucle : facture → lignes → détails → étapes ; chaque niveau lit la ligne de la zone qui l’entoure, les variables des niveaux du dessus restent lisibles dans la zone du dessous, et la puce « N° de ligne » compte dans la zone la plus proche',
+    run: async (h) => {
+      await seedNested(h);
+      const steps = { repeat: 'item', table: 'LpEtapes', within: 'LpDetails', by: 'Detail', empty: 'none' };
+      const html = '<table><tbody>'
+        + `<tr>${cell('Ligne', 'th')}${cell('Détails', 'th')}</tr>`
+        + `<tr>${cell(badgeHtml('LpLignes', 'Designation', ROW_LOOP))}`
+        + `${rawCell(`<ul><li><p>${rowNumberChip()}. ${badgeHtml('LpDetails', 'Libelle', DETAIL_ITEMS)} (de ${badgeHtml('LpLignes', 'Designation')}, ${badgeHtml('LpFactures', 'Numero')})</p>`
+          + `<ul><li><p>${rowNumberChip()}) ${badgeHtml('LpEtapes', 'Nom', steps)} de ${badgeHtml('LpDetails', 'Libelle')}</p></li></ul></li></ul>`)}</tr>`
+        + '</tbody></table>';
+      const content = await renderReader(html);
+      const rows = Array.from(content.querySelectorAll('table > tbody > tr')).slice(1).map(tr => ({
+        line: tr.children[0].textContent.trim(),
+        details: Array.from(tr.children[1].querySelectorAll(':scope > ul > li')).map(li => ({
+          head: li.querySelector(':scope > p').textContent.trim(),
+          steps: Array.from(li.querySelectorAll(':scope > ul > li')).map(s => s.textContent.trim()),
+        })),
+      }));
+      const pass = JSON.stringify(rows) === JSON.stringify([
+        { line: 'Livret stagiaire imprimé', details: [
+          { head: '1. Impression (de Livret stagiaire imprimé, F-2026-041)', steps: ['1) Maquette de Impression', '2) Tirage de Impression'] },
+          { head: '2. Reliure (de Livret stagiaire imprimé, F-2026-041)', steps: ['1) Colle de Reliure'] },
+          { head: '3. Livraison (de Livret stagiaire imprimé, F-2026-041)', steps: [] },
+        ] },
+        { line: 'Journée de formation intra', details: [
+          { head: '1. Préparation (de Journée de formation intra, F-2026-041)', steps: [] },
+          { head: '2. Animation (de Journée de formation intra, F-2026-041)', steps: ['1) Exercices de Animation'] },
+        ] },
+        { line: 'Déplacement du formateur', details: [] },
+      ]) && noLoopLeft(content);
+      return { pass, notes: JSON.stringify(rows) };
+    },
+  });
+
+  cases.push({
+    id: 'loop_nested_reflist_competences_and_seances_of_each_trainer',
+    description: 'Boucle dans une boucle sur une liste de références : dans la zone répétée pour chaque formateur de la facture (liste de références de la page), ses compétences (liste de références du formateur, dans l’ordre de sa cellule) et ses séances (Référence vers le formateur) ; la bulle de la colonne montre la fiche du tour',
+    run: async (h) => {
+      await seedNested(h);
+      const trainers = { repeat: 'item', table: 'LpFormateurs', via: VIA, empty: 'none' };
+      const skills = { repeat: 'inline', table: 'LpCompetences', via: { table: 'LpFormateurs', column: 'Competences' }, empty: 'text', emptyText: 'à définir', separator: ', ', lastSeparator: ' et ' };
+      const sessions = { repeat: 'item', table: 'LpSeances', within: 'LpFormateurs', by: 'Formateur', empty: 'none' };
+      const html = `<ul><li><p>${badgeHtml('LpFactures', 'Formateurs', trainers)} : ${badgeHtml('LpFormateurs', 'Competences', skills)}</p>`
+        + `<ul><li><p>${badgeHtml('LpSeances', 'Theme', sessions)} (${badgeHtml('LpSeances', 'Duree')} h)</p></li></ul></li></ul>`;
+      const content = await renderReader(html);
+      const rows = Array.from(content.querySelectorAll('li')).filter(li => !li.parentElement.closest('li')).map(li => ({
+        head: li.querySelector(':scope > p').textContent.trim(),
+        sessions: Array.from(li.querySelectorAll(':scope > ul > li')).map(s => s.textContent.trim()),
+      }));
+      const pass = JSON.stringify(rows) === JSON.stringify([
+        { head: 'Léa Fontaine : Qualiopi', sessions: ['Audit blanc (2 h)'] },
+        { head: 'Karim Benali : Excel et Pédagogie', sessions: ['Tableaux croisés (3 h)', 'Formules (4 h)'] },
+      ]) && noLoopLeft(content);
+      return { pass, notes: JSON.stringify(rows) };
+    },
+  });
+
+  cases.push({
+    id: 'loop_nested_a_loop_of_the_page_inside_a_zone_keeps_reading_the_page_row',
+    description: 'Une boucle posée sur la page (table liée par une règle, sans rattachement) collée dans une zone répétée garde la ligne de la page : chaque ligne de facture affiche les mêmes participants, comme avant ; même quand elle précède, dans le document, la bulle qui répète la ligne',
+    run: async (h) => {
+      await seedNested(h);
+      const participants = { repeat: 'item', table: 'LpParticipants', sort: { column: 'Nom', direction: 'asc' }, filter: { mode: 'all', rules: [{ column: 'Presence', operator: '=', value: 'Présent' }] }, empty: 'none' };
+      const html = '<table><tbody>'
+        + `<tr>${cell('Présents', 'th')}${cell('Désignation', 'th')}</tr>`
+        + `<tr>${rawCell(`<ul><li><p>${badgeHtml('LpParticipants', 'NomComplet', participants)}</p></li></ul>`)}${cell(badgeHtml('LpLignes', 'Designation', ROW_LOOP))}</tr>`
+        + '</tbody></table>';
+      const content = await renderReader(html);
+      const rows = Array.from(content.querySelectorAll('tr')).slice(1).map(tr => [tr.children[1].textContent.trim(), Array.from(tr.children[0].querySelectorAll('li')).map(li => li.textContent.trim())]);
+      const everyone = ['Karim Benali', 'Léa Fontaine', 'Sophie Laurent'];
+      const pass = JSON.stringify(rows) === JSON.stringify([['Livret stagiaire imprimé', everyone], ['Journée de formation intra', everyone], ['Déplacement du formateur', everyone]]) && noLoopLeft(content);
+      return { pass, notes: JSON.stringify(rows) };
+    },
+  });
+
+  cases.push({
+    id: 'loop_nested_a_loop_that_finds_no_source_leaves_its_zone_once_and_the_other_zones_still_render',
+    description: 'Boucle dans une boucle sans source (table englobante qui n’est pas celle de la zone, colonne de rattachement disparue, zone englobante qui ne se déroule pas) : sa zone reste affichée une fois, sans boucle sans fin, et la boucle suivante de la même ligne se déroule',
+    run: async (h) => {
+      await seedNested(h);
+      const wrongTable = { repeat: 'item', table: 'LpDetails', within: 'LpFormateurs', by: 'Ligne', empty: 'none' };
+      const goneColumn = { repeat: 'item', table: 'LpDetails', within: 'LpLignes', by: 'Colonne_disparue', empty: 'none' };
+      const html = linesWith(`<ul><li><p>${badgeHtml('LpDetails', 'Libelle', wrongTable)}</p></li></ul>`
+        + `<ul><li><p>${badgeHtml('LpDetails', 'Libelle', goneColumn)}</p></li></ul>`
+        + `<ul><li><p>${badgeHtml('LpDetails', 'Libelle', DETAIL_ITEMS)}</p></li></ul>`);
+      const content = await renderReader(html);
+      const firstRow = content.querySelectorAll('tr')[1];
+      const lists = Array.from(firstRow.children[1].querySelectorAll(':scope > ul')).map(ul => ul.querySelectorAll('li').length);
+      // Une zone englobante sans source (LpFormateurs n'a pas de règle de liaison) : l'intérieur reste aussi tel quel.
+      const lost = '<table><tbody>'
+        + `<tr>${cell('Formateur', 'th')}${cell('Séances', 'th')}</tr>`
+        + `<tr>${cell(badgeHtml('LpFormateurs', 'Nom', { repeat: 'row', table: 'LpFormateurs', empty: 'header' }))}`
+        + `${rawCell(`<ul><li><p>${badgeHtml('LpSeances', 'Theme', Object.assign({}, { repeat: 'item', table: 'LpSeances', within: 'LpFormateurs', by: 'Formateur', empty: 'none' }))}</p></li></ul>`)}</tr>`
+        + '</tbody></table>';
+      const lostContent = await renderReader(lost);
+      const lostRows = lostContent.querySelectorAll('tr').length;
+      const lostItems = lostContent.querySelectorAll('li').length;
+      // Les deux premières listes restent affichées une fois (leur bulle montre une erreur de lecture, pas des détails), la troisième est celle des détails.
+      const pass = lists.length === 3 && lists[0] === 1 && lists[1] === 1 && lists[2] === 3 && lostRows === 2 && lostItems === 1;
+      return { pass, notes: JSON.stringify({ lists, lostRows, lostItems }) };
+    },
+  });
+
+
+  // === L'éditeur d'une boucle dans une boucle : l'icône, la fenêtre, la colonne de rattachement, les zones encore libres, l'insertion ===
+  const lowerFirst = text => text.charAt(0).toLowerCase() + text.slice(1);
+  const detailsOfInvoice1 = [['Désignation', []], ['Livret stagiaire imprimé', ['Impression', 'Reliure', 'Livraison']], ['Journée de formation intra', ['Préparation', 'Animation']], ['Déplacement du formateur', []]];
+  const repeatChoices = () => Array.from(modal().querySelectorAll('.var-loop-seg button')).map(b => b.dataset.repeat + (b.getAttribute('aria-pressed') === 'true' ? '*' : ''));
+  const sourceLine = () => modal().querySelector('.var-loop-source').children[0].textContent;
+
+  cases.push({
+    id: 'loop_nested_toolbar_icon_follows_the_zone_around_the_bubble',
+    description: 'Icône Boucle d’une bulle placée dans une zone répétée : active quand une colonne Référence de sa table désigne la table de la zone (ou que sa colonne est une liste de références d’une autre table), grisée avec son explication sinon - même table : déjà dans la zone ; autre table sans colonne qui y mène : la colonne qui manque - ; hors de toute zone rien ne change',
+    run: async (h) => {
+      await seedNested(h);
+      const trainers = { repeat: 'item', table: 'LpFormateurs', via: VIA, empty: 'none' };
+      Editor.setHTML('<table><tbody>'
+        + `<tr>${cell('Désignation', 'th')}${cell('Détail', 'th')}</tr>`
+        + `<tr>${cell(badgeHtml('LpLignes', 'Designation', ROW_LOOP))}${rawCell(`<p>${badgeHtml('LpDetails', 'Libelle')} ${badgeHtml('LpLignes', 'Qte')} ${badgeHtml('LpFormateurs', 'Nom')} ${badgeHtml('LpFactures', 'Numero')}</p>`)}</tr>`
+        + '</tbody></table>'
+        + `<ul><li><p>${badgeHtml('LpFactures', 'Formateurs', trainers)} ${badgeHtml('LpFormateurs', 'Competences')} ${badgeHtml('LpSeances', 'Theme')} ${badgeHtml('LpDetails', 'Heures')}</p></li></ul>`
+        + `<p>${badgeHtml('LpDetails', 'Statut')} ${badgeHtml('LpParticipants', 'NomComplet')}</p>`);
+      const states = {};
+      for (const key of ['LpDetails.Libelle', 'LpLignes.Qte', 'LpFormateurs.Nom', 'LpFactures.Numero', 'LpFactures.Formateurs', 'LpFormateurs.Competences', 'LpSeances.Theme', 'LpDetails.Heures', 'LpDetails.Statut', 'LpParticipants.NomComplet']) {
+        await selectBadge(h, key);
+        const btn = toolbarButton('var-loop');
+        states[key] = btn ? { disabled: btn.getAttribute('aria-disabled'), active: btn.classList.contains('is-active'), title: btn.title } : null;
+      }
+      const on = key => !!states[key] && states[key].disabled === 'false' && !states[key].active && states[key].title === I18n.t('varToolbar.loop');
+      const off = (key, title) => !!states[key] && states[key].disabled === 'true' && !states[key].active && states[key].title === title;
+      const checks = {
+        detailsOfTheRowOfTheZone: on('LpDetails.Libelle'),
+        sameTableIsAlreadyInTheZone: off('LpLignes.Qte', I18n.t('varToolbar.loopNested', { table: 'LpLignes' })),
+        trainerHasNoColumnToTheLines: off('LpFormateurs.Nom', I18n.t('varToolbar.loopNestedNone', { table: 'LpFormateurs', within: 'LpLignes' })),
+        pageTableHasNoColumnToTheLines: off('LpFactures.Numero', I18n.t('varToolbar.loopNestedNone', { table: 'LpFactures', within: 'LpLignes' })),
+        ownerKeepsItsLoop: !!states['LpFactures.Formateurs'] && states['LpFactures.Formateurs'].disabled === 'false' && states['LpFactures.Formateurs'].active,
+        listOfReferencesOfTheZoneTable: on('LpFormateurs.Competences'),
+        sessionsOfTheTrainer: on('LpSeances.Theme'),
+        detailsHaveNoColumnToTheTrainers: off('LpDetails.Heures', I18n.t('varToolbar.loopNestedNone', { table: 'LpDetails', within: 'LpFormateurs' })),
+        outsideAnyZoneNothingChanged: off('LpDetails.Statut', I18n.t('varToolbar.loopDisabled')) && on('LpParticipants.NomComplet'),
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: failed.length ? JSON.stringify({ failed, states }) : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'loop_nested_window_names_the_rows_of_the_zone_previews_on_one_of_them_saves_and_reads',
+    description: 'Fenêtre Boucle d’une bulle dans une zone répétée : « Lignes de … rattachées à chaque ligne de … par … » sans « Modifier le lien », aperçu sur la première ligne de la zone qui a des lignes rattachées puis sur toutes ses lignes, « Enregistrer » écrit la table englobante et la colonne de rattachement, la fenêtre rouverte les montre (Retirer compris) et la Lecture répète les détails de chaque ligne',
+    run: async (h) => {
+      await seedNested(h);
+      Editor.setHTML(linesWith(`<ul><li><p>${badgeHtml('LpDetails', 'Libelle')}</p></li></ul>`));
+      let ed = await selectBadge(h, 'LpDetails.Libelle');
+      pressToolbarButton('var-loop');
+      await h.sleep(700);
+      const m = modal();
+      const opened = visible(m) && !toolbar().classList.contains('visible');
+      const title = m.querySelector('h3').textContent;
+      const source = { text: sourceLine(), linkShown: visible(m.querySelector('.var-loop-link')), pickShown: visible(m.querySelector('.var-loop-by')) };
+      const segs = repeatChoices();
+      const lines = previewLines();
+      actionButton(I18n.t('common.save')).click();
+      await h.sleep(100);
+      const saved = badgeNodes(ed).find(b => b.node.attrs.key === 'LpDetails.Libelle').node.attrs.loop;
+      const reading = rowsAndParts((await renderReader(Editor.getHTML())).querySelector('table'));
+      ed = await selectBadge(h, 'LpDetails.Libelle');
+      const active = toolbarButton('var-loop').classList.contains('is-active');
+      pressToolbarButton('var-loop');
+      await h.sleep(500);
+      const again = { text: sourceLine(), removeShown: !m.querySelector('.var-modal-danger').hidden, lines: previewLines() };
+      actionButton(I18n.t('common.cancel')).click();
+      await h.sleep(60);
+      const checks = {
+        windowOpened: opened,
+        title: title === I18n.t('varLoop.title', { table: 'LpDetails' }),
+        sourceNamesTheRows: source.text === I18n.t('varLoop.source.within', { table: 'LpDetails', within: 'LpLignes', via: 'LpDetails.Ligne' }) && !source.linkShown && !source.pickShown,
+        listItemIsChosenFirst: JSON.stringify(segs) === JSON.stringify(['item*', 'inline']),
+        previewOnTheFirstRowWithDetails: lines[0] === I18n.t('varLoop.preview.nested.linked', { id: 1, within: 'LpLignes', count: 2 }) + ' ' + I18n.t('varLoop.preview.item', { count: 2, values: 'Préparation, Animation' }),
+        previewOverEveryRowOfTheZone: lines[1] === I18n.t('varLoop.stats.some', { table: 'LpLignes', count: 3, total: 4, id: 3, effect: lowerFirst(I18n.t('varLoop.effect.none')) }),
+        savedWithinAndBy: JSON.stringify(saved) === JSON.stringify({ repeat: 'item', table: 'LpDetails', within: 'LpLignes', by: 'Ligne', empty: 'none' }),
+        readingRepeatsTheDetailsOfEachLine: JSON.stringify(reading) === JSON.stringify(detailsOfInvoice1),
+        iconIsActive: active,
+        reopenedWithItsSource: again.text === source.text && again.removeShown && JSON.stringify(again.lines) === JSON.stringify(lines),
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: failed.length ? JSON.stringify({ failed, title, source, segs, lines, saved, reading, again }) : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'loop_nested_window_asks_which_column_attaches_the_rows_when_several_lead_to_the_zone',
+    description: 'Deux colonnes Référence de la table mènent à la table de la zone : la fenêtre Boucle montre une liste avec recherche des deux (la première choisie), l’aperçu suit le choix, « Enregistrer » écrit la colonne choisie et la Lecture rattache les lignes par elle ; rouverte, la liste montre ce choix',
+    run: async (h) => {
+      await seedNested(h);
+      const stub = window.__gristStub;
+      stub.setVariables('LpLiens', { Ligne: 'Ref:LpLignes', Origine: 'Ref:LpLignes', Nom: 'Text' });
+      stub.setRows('LpLiens', [{ id: 1, Ligne: 1, Origine: 2, Nom: 'A' }, { id: 2, Ligne: 1, Origine: 1, Nom: 'B' }, { id: 3, Ligne: 2, Origine: 1, Nom: 'C' }]);
+      await GristAPI.refreshSchema();
+      stub.fireRecord(Object.assign({}, RECORD_1), 'LpFactures');
+      await h.sleep(50);
+      Editor.setHTML(linesWith(`<ul><li><p>${badgeHtml('LpLiens', 'Nom')}</p></li></ul>`));
+      let ed = await selectBadge(h, 'LpLiens.Nom');
+      pressToolbarButton('var-loop');
+      await h.sleep(700);
+      const m = modal();
+      const pick = () => m.querySelector('#var-loop-by');
+      const picker = () => ({ shown: visible(m.querySelector('.var-loop-by')), trigger: visible(m.querySelector('.var-loop-by .ss-trigger')), value: pick().value, label: (m.querySelector('.var-loop-by .ss-trigger') || { textContent: '' }).textContent });
+      const first = { text: sourceLine(), values: Array.from(pick().options).map(o => o.value), picker: picker(), lines: previewLines() };
+      setSelect(pick(), 'Origine');
+      await h.sleep(700);
+      const second = { picker: picker(), lines: previewLines() };
+      actionButton(I18n.t('common.save')).click();
+      await h.sleep(100);
+      const saved = badgeNodes(ed).find(b => b.node.attrs.key === 'LpLiens.Nom').node.attrs.loop;
+      const reading = rowsAndParts((await renderReader(Editor.getHTML())).querySelector('table'));
+      ed = await selectBadge(h, 'LpLiens.Nom');
+      pressToolbarButton('var-loop');
+      await h.sleep(500);
+      const reopened = picker();
+      actionButton(I18n.t('common.cancel')).click();
+      await h.sleep(60);
+      const list = (count, values) => I18n.t('varLoop.preview.item', { count, values });
+      const head = count => I18n.t('varLoop.preview.nested.linked', { id: 1, within: 'LpLignes', count });
+      const checks = {
+        pickerListsBothColumns: first.picker.shown && first.picker.trigger && JSON.stringify(first.values) === JSON.stringify(['Ligne', 'Origine']) && first.picker.value === 'Ligne' && first.picker.label.indexOf('Ligne') !== -1,
+        sourceSentenceEndsOnTheList: first.text === I18n.t('varLoop.source.withinPick', { table: 'LpLiens', within: 'LpLignes' }),
+        previewFollowsTheFirstColumn: first.lines[0] === head(2) + ' ' + list(2, 'A, B'),
+        previewFollowsTheChosenColumn: second.picker.value === 'Origine' && second.lines[0] === head(2) + ' ' + list(2, 'B, C'),
+        savedWithTheChosenColumn: JSON.stringify(saved) === JSON.stringify({ repeat: 'item', table: 'LpLiens', within: 'LpLignes', by: 'Origine', empty: 'none' }),
+        readingFollowsTheChosenColumn: JSON.stringify(reading) === JSON.stringify([['Désignation', []], ['Livret stagiaire imprimé', ['A']], ['Journée de formation intra', ['B', 'C']], ['Déplacement du formateur', []]]),
+        reopenedOnTheChosenColumn: reopened.shown && reopened.value === 'Origine' && reopened.label.indexOf('Origine') !== -1,
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: failed.length ? JSON.stringify({ failed, first, second, saved, reading, reopened }) : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'loop_nested_window_offers_only_the_zones_that_nobody_repeats_yet',
+    description: 'Une zone n’a qu’une boucle : la bulle d’une case du tableau répété ne propose pas la ligne de sa case (déjà répétée par une autre bulle) mais « la variable, dans sa cellule » ; dans une liste de la case : l’élément de liste ; dans un tableau de la case : la ligne de ce tableau, qui répète alors les détails de chaque ligne en Lecture ; la bulle qui répète la ligne garde tous ses choix',
+    run: async (h) => {
+      await seedNested(h);
+      const para = linesWith(`<p>${badgeHtml('LpDetails', 'Libelle')}</p>`);
+      const list = linesWith(`<ul><li><p>${badgeHtml('LpDetails', 'Heures')}</p></li></ul>`);
+      const sub = linesWith(`<table><tbody><tr><td><p>${badgeHtml('LpDetails', 'Statut')}</p></td></tr></tbody></table>`);
+      Editor.setHTML(para + '<p>entre</p>' + list + '<p>entre</p>' + sub);
+      const choicesOf = async key => {
+        await selectBadge(h, key);
+        pressToolbarButton('var-loop');
+        await h.sleep(400);
+        const out = { segs: repeatChoices(), labels: Array.from(modal().querySelectorAll('.var-loop-seg button')).map(b => b.textContent) };
+        actionButton(I18n.t('common.cancel')).click();
+        await h.sleep(60);
+        return out;
+      };
+      const inParagraph = await choicesOf('LpDetails.Libelle');
+      const inList = await choicesOf('LpDetails.Heures');
+      const inSubTable = await choicesOf('LpDetails.Statut');
+      const owner = await choicesOf('LpLignes.Designation');
+      // Le tableau de la case répète ses lignes : les détails de chaque ligne de la facture, en tableau.
+      Editor.setHTML(sub);
+      const ed = await selectBadge(h, 'LpDetails.Statut');
+      pressToolbarButton('var-loop');
+      await h.sleep(400);
+      actionButton(I18n.t('common.save')).click();
+      await h.sleep(100);
+      const saved = badgeNodes(ed).find(b => b.node.attrs.key === 'LpDetails.Statut').node.attrs.loop;
+      const inner = Array.from((await renderReader(Editor.getHTML())).querySelectorAll('table > tbody > tr, table > tr')).filter(tr => tr.closest('td')).map(tr => tr.textContent.trim());
+      const checks = {
+        paragraphOfTheCell: JSON.stringify(inParagraph.segs) === JSON.stringify(['inline*']) && inParagraph.labels[0] === I18n.t('varLoop.repeat.cell'),
+        listOfTheCell: JSON.stringify(inList.segs) === JSON.stringify(['item*', 'inline']),
+        tableOfTheCell: JSON.stringify(inSubTable.segs) === JSON.stringify(['row*', 'inline']),
+        ownerKeepsEveryChoice: JSON.stringify(owner.segs) === JSON.stringify(['row*', 'inline']),
+        subTableSaved: !!saved && saved.repeat === 'row' && saved.table === 'LpDetails' && saved.within === 'LpLignes' && saved.by === 'Ligne',
+        subTableReadsTheDetailsOfEachLine: JSON.stringify(inner) === JSON.stringify(['Fait', 'À faire', 'À faire', 'Fait', 'Fait']),
+      };
+      const failed = Object.keys(checks).filter(k => checks[k] !== true);
+      return { pass: failed.length === 0, notes: failed.length ? JSON.stringify({ failed, inParagraph, inList, inSubTable, owner, saved, inner }) : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'loop_nested_autocomplete_and_insertion_need_no_link_inside_a_zone',
+    description: 'Autocomplétion # dans une boucle dans une boucle : les colonnes de la zone la plus proche en tête, puis celles de la zone qui l’entoure, puis la page ; une variable dont la table se rattache à la zone (colonne Référence) s’insère sans demander de lien, une autre table pas encore liée le demande toujours',
+    run: async (h) => {
+      await seedNested(h);
+      const detailItems = { repeat: 'item', table: 'LpDetails', within: 'LpLignes', by: 'Ligne', empty: 'none' };
+      Editor.setHTML(linesWith(`<ul><li><p>${badgeHtml('LpDetails', 'Libelle', detailItems)} : </p></li></ul>`) + '<p>Fin</p>');
+      const escape = async () => {
+        document.querySelector('.tiptap').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+        await h.sleep(40);
+      };
+      const tablesOfTheList = () => Array.from(document.querySelectorAll('.ac-item')).map(i => (i.textContent.match(/\bLp[A-Za-z]+(?=\.)/) || [''])[0]).filter((t, i, all) => t && all.indexOf(t) === i).slice(0, 3);
+      // Dans l'élément de liste de la zone des détails, dans celle des lignes, dans la page.
+      await h.focusInElement(document.querySelector('.tiptap li p'));
+      await h.typeText(' #');
+      await h.sleep(80);
+      const inDetails = tablesOfTheList();
+      await escape();
+      await h.focusInElement(document.querySelectorAll('.tiptap tr')[1].children[0].querySelector('p'));
+      await h.typeText(' #');
+      await h.sleep(80);
+      const inLines = tablesOfTheList();
+      await escape();
+      await h.focusInElement(document.querySelector('.tiptap > p:last-child'));
+      await h.typeText(' #');
+      await h.sleep(80);
+      const outside = tablesOfTheList();
+      await escape();
+      // Une variable de LpEtapes (Référence vers LpDetails, pas vers LpLignes) dans la zone des détails : la zone des détails est la plus proche, elle s'y rattache.
+      await h.focusInElement(document.querySelector('.tiptap li p'));
+      await h.typeText(' #LpEtapes.No');
+      await h.sleep(80);
+      const pick = Array.from(document.querySelectorAll('.ac-item')).find(i => i.textContent.indexOf('LpEtapes.Nom') !== -1);
+      if (pick) pick.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+      await h.sleep(150);
+      const askedForEtapes = visible(document.getElementById('link-config-modal'));
+      if (askedForEtapes) { document.getElementById('link-config-cancel').click(); await h.sleep(80); }
+      // Une variable de LpFormateurs (aucune colonne vers la zone des détails) : la clé de correspondance est demandée comme avant.
+      await h.focusInElement(document.querySelector('.tiptap li p'));
+      await h.typeText(' #LpFormateurs.Em');
+      await h.sleep(80);
+      const other = Array.from(document.querySelectorAll('.ac-item')).find(i => i.textContent.indexOf('LpFormateurs.Email') !== -1);
+      if (other) other.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+      await h.sleep(150);
+      const askedForTrainers = visible(document.getElementById('link-config-modal'));
+      if (askedForTrainers) { document.getElementById('link-config-cancel').click(); await h.sleep(80); }
+      const keys = badgeNodes(EditorCore.getEditor()).map(b => b.node.attrs.key);
+      const checks = {
+        detailsThenLinesThenPage: JSON.stringify(inDetails) === JSON.stringify(['LpDetails', 'LpLignes', 'LpFactures']),
+        linesThenPageInTheLines: JSON.stringify(inLines.slice(0, 2)) === JSON.stringify(['LpLignes', 'LpFactures']),
+        pageFirstOutside: outside[0] === 'LpFactures',
+        etapesFound: !!pick && !askedForEtapes && keys.indexOf('LpEtapes.Nom') !== -1 && !GristAPI.getLinkRule('LpEtapes'),
+        otherTableStillAsksForTheKey: !!other && askedForTrainers && keys.indexOf('LpFormateurs.Email') === -1,
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: failed.length ? JSON.stringify({ failed, inDetails, inLines, outside, askedForEtapes, askedForTrainers, keys }) : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'loop_nested_condition_on_a_column_of_a_zone_table_asks_for_no_key',
+    description: 'Fenêtre de condition d’une bulle dans une zone répétée dans une autre : une colonne de la table de la zone, ou de la zone qui l’entoure, se choisit sans clé de correspondance (elle se lit dans la ligne du tour) ; hors de toute zone, la même colonne demande toujours la clé',
+    run: async (h) => {
+      await seedNested(h);
+      await GristAPI.deleteLinkRule('LpLignes');
+      const detailItems = { repeat: 'item', table: 'LpDetails', within: 'LpLignes', by: 'Ligne', empty: 'none' };
+      Editor.setHTML(linesWith(`<ul><li><p>${badgeHtml('LpDetails', 'Libelle', detailItems)} ${badgeHtml('LpDetails', 'Statut')}</p></li></ul>`) + `<p>${badgeHtml('LpFactures', 'Numero')}</p>`);
+      const conditionModal = () => document.getElementById('var-condition-modal');
+      const linkModal = () => document.getElementById('link-config-modal');
+      const chooseColumn = async (key, column) => {
+        await selectBadge(h, key);
+        pressToolbarButton('var-condition');
+        await h.sleep(150);
+        setSelect(conditionModal().querySelector('select.macro-rule-column'), column);
+        await h.sleep(200);
+        const asked = visible(linkModal());
+        if (asked) { document.getElementById('link-config-cancel').click(); await h.sleep(80); }
+        const kept = conditionModal().querySelector('select.macro-rule-column').value;
+        conditionModal().querySelector('.var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)').click();
+        await h.sleep(80);
+        return { asked, kept };
+      };
+      const ownTable = await chooseColumn('LpDetails.Statut', 'LpDetails.Heures');
+      const tableAround = await chooseColumn('LpDetails.Statut', 'LpLignes.Qte');
+      const outside = await chooseColumn('LpFactures.Numero', 'LpDetails.Heures');
+      const checks = {
+        zoneTableNeedsNoKey: !ownTable.asked && ownTable.kept === 'LpDetails.Heures',
+        tableAroundNeedsNoKey: !tableAround.asked && tableAround.kept === 'LpLignes.Qte',
+        outsideAnyZoneAsksForTheKey: outside.asked && outside.kept !== 'LpDetails.Heures',
+        noRuleWritten: !GristAPI.getLinkRule('LpDetails') && !GristAPI.getLinkRule('LpLignes'),
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: failed.length ? JSON.stringify({ failed, ownTable, tableAround, outside }) : 'ok' };
+    },
+  });
+
   cases.push({
     id: 'loop_toolbar_icon_states',
     description: 'Icône Boucle : active pour une variable liée à plusieurs lignes ou une liste de références, grisée avec son explication pour une colonne de la page, bleue quand la boucle est posée, grisée dans une zone déjà répétée',

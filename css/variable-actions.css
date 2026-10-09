@@ -201,6 +201,8 @@ button.var-linked-crumb:focus-visible { outline: 2px solid var(--accent); outlin
 .var-loop-source { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 8px 10px; background: var(--surface-sunken); border: 1px solid var(--border); border-radius: 8px; font-size: 12px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
 .var-loop-link { padding: 0; border: none; background: transparent; font-family: var(--font-ui); font-size: 12px; font-weight: 700; color: var(--accent-ink); text-decoration: underline; cursor: pointer; }
 .var-loop-link[hidden] { display: none; }
+.var-loop-by { display: flex; flex: 1 1 180px; min-width: 140px; max-width: 320px; }
+.var-loop-by[hidden] { display: none; }
 .var-loop-seg { display: inline-flex; flex-wrap: wrap; max-width: 100%; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
 .var-loop-seg button { height: 28px; padding: 0 11px; border: none; background: var(--surface); font-family: var(--font-ui); font-size: 12px; font-weight: 700; color: var(--text); cursor: pointer; white-space: nowrap; }
 .var-loop-seg button + button { border-left: 1px solid var(--border); }

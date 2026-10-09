@@ -291,6 +291,59 @@
   });
 
   cases.push({
+    id: 'varcolumn_nested_loop_stays_for_a_column_of_the_same_rows_and_no_key_is_asked_inside_the_zone',
+    description: 'Une boucle dans une boucle (rattachée à la ligne de la zone par une colonne Référence) reste quand la nouvelle colonne est de la même table et tombe pour une autre table, même rattachée à la zone ; dans la zone, une variable dont la table se rattache à la zone (ou la table de la zone elle-même) ne demande pas de clé, hors de la zone elle la demande',
+    run: async (h) => {
+      await seed(h);
+      const stub = window.__gristStub;
+      stub.setVariables('VcoDetails', { Ligne: 'Ref:VcoLignes', Libelle: 'Text', Heures: 'Numeric' });
+      stub.setVariables('VcoNotes', { Ligne: 'Ref:VcoLignes', Texte: 'Text' });
+      stub.setRows('VcoDetails', [{ id: 1, Ligne: 1, Libelle: 'x', Heures: 2 }]);
+      stub.setRows('VcoNotes', [{ id: 1, Ligne: 1, Texte: 'n' }]);
+      await GristAPI.refreshSchema();
+      // La zone ne tient pas à la règle de liaison de sa table : sans règle, ses variables n'ont pas à en demander une.
+      await GristAPI.deleteLinkRule('VcoLignes');
+      const item = (table, column) => ({ table, column, key: table + '.' + column });
+      const rowLoop = { repeat: 'row', table: 'VcoLignes', via: null, filter: null, sort: { column: '', direction: 'asc' }, empty: 'header', emptyText: '', separator: ', ', lastSeparator: null };
+      const nested = { repeat: 'item', table: 'VcoDetails', via: null, within: 'VcoLignes', by: 'Ligne', filter: null, sort: { column: '', direction: 'asc' }, empty: 'none', emptyText: '', separator: ', ', lastSeparator: null };
+      const nestedNode = { attrs: { table: 'VcoDetails', column: 'Libelle', key: 'VcoDetails.Libelle', format: null, condition: COND, loop: nested } };
+      const nestedKept = (table, column) => same(VariableColumn.replacementAttrs(nestedNode, item(table, column)).loop, nested);
+      // La zone répétée par les lignes de la notification, une bulle de détail dans sa seconde case, une autre hors de la zone.
+      Editor.setHTML(`<table><tbody><tr><td><p>${badge('VcoLignes', 'Designation', attr('data-loop', rowLoop) + ' data-loop-repeat="row"')}</p></td><td><p>${badge('VcoDetails', 'Libelle')}</p></td></tr></tbody></table><p>${badge('VcoDetails', 'Heures')}</p>`);
+      await h.sleep(120);
+      const bubbles = badgeNodes();
+      const inZone = bubbles[1].pos;
+      const outside = bubbles[2].pos;
+      const asked = async (pos, table, column) => {
+        const pending = VariableColumn.ensureLinked(ed(), pos, item(table, column));
+        await h.sleep(150);
+        const opened = keyWindowOpen();
+        await closeKeyWindow(h);
+        const result = await pending;
+        return { opened, result };
+      };
+      const inZoneDetails = await asked(inZone, 'VcoDetails', 'Heures');
+      const inZoneLines = await asked(inZone, 'VcoLignes', 'Prix');
+      const inZoneOther = await asked(inZone, 'VcoAnnuaire', 'Email');
+      const outsideDetails = await asked(outside, 'VcoDetails', 'Heures');
+      const checks = {
+        keptForAnotherColumnOfItsTable: nestedKept('VcoDetails', 'Heures'),
+        droppedForAnotherTableOfTheZone: !nestedKept('VcoNotes', 'Texte'),
+        droppedForTheTableOfTheZone: !nestedKept('VcoLignes', 'Prix'),
+        droppedForTheTableOfThePage: !nestedKept(PAGE, 'Titre'),
+        droppedForAnUnrelatedTable: !nestedKept('VcoAnnuaire', 'Email'),
+        detailsNeedNoKeyInTheZone: !inZoneDetails.opened && inZoneDetails.result === true,
+        theTableOfTheZoneNeedsNoKey: !inZoneLines.opened && inZoneLines.result === true,
+        anotherTableStillAsksInTheZone: inZoneOther.opened && inZoneOther.result === false,
+        detailsAskOutsideTheZone: outsideDetails.opened && outsideDetails.result === false,
+        noRuleWasWritten: !GristAPI.getLinkRule('VcoDetails') && !GristAPI.getLinkRule('VcoAnnuaire'),
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: failed.length ? JSON.stringify({ failed, inZoneDetails, inZoneLines, inZoneOther, outsideDetails }) : 'ok' };
+    },
+  });
+
+  cases.push({
     id: 'varcolumn_variable_of_another_table_asks_for_the_key_first_and_refusal_changes_nothing',
     description: 'Choisir une colonne d’une table pas encore liée ouvre la fenêtre de choix de la clé avant tout : refusée, la bulle et les règles ne changent pas ; confirmée, la règle est enregistrée et la bulle prend la colonne ; une table déjà liée n’ouvre rien',
     run: async (h) => {

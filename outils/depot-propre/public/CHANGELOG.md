@@ -9,6 +9,19 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Boucle dans une boucle** : une Boucle se pose aussi sur une variable placée dans une zone qu'une autre
+  Boucle répète déjà : pour chaque facture ses lignes, puis pour chaque ligne ses étapes (en tableau, en
+  liste ou en paragraphes). La zone intérieure lit les lignes de la ligne en cours de la zone qui l'entoure.
+  La structure des données ne change pas : la table intérieure a une colonne Référence vers la table de la
+  zone extérieure (comme « Facture » dans « Lignes »), ou la table extérieure a une colonne Liste de
+  références vers elle ; aucune règle de liaison de plus n'est à poser. S'il y a plusieurs colonnes Référence
+  vers la table extérieure, la fenêtre « Boucle » demande laquelle rattache les lignes. Elle nomme la zone qui
+  entoure la bulle, et son aperçu montre une ligne de la zone extérieure avec ses lignes. Dans une zone
+  répétée, les variables de la table de cette zone, de celles qui l'entourent et des tables dont les lignes
+  s'y rattachent se posent, se changent par « Colonne… » et servent dans une condition sans clé de
+  correspondance à choisir. Une zone n'a qu'une Boucle, et ne répète pas la table de la zone qui l'entoure
+  (l'icône est alors grisée et dit pourquoi). Les renommages de tables et de colonnes dans Grist suivent
+  aussi ces boucles ; la puce « N° de ligne » donne le rang de la zone la plus proche.
 - **PDF « Léger »** : le menu Qualité du bouton PDF propose « Léger (images réduites) ». C'est le même PDF
   vectoriel, texte et mise en page intacts, dont les images sont ramenées à 150 points par pouce (la netteté
   d'un courrier ou de l'écran) : une photo de 4 Mo posée sur 10 cm n'en pèse plus que quelques dizaines de Ko.
@@ -469,6 +482,18 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Added
 
+- **Loop in a loop**: a Loop can also be placed on a variable inside a zone that another Loop already
+  repeats: for each invoice its lines, then for each line its steps (in a table, a list or paragraphs). The
+  inner zone reads the rows of the current row of the zone around it. The data structure does not change:
+  the inner table has a Reference column to the table of the outer zone (like "Invoice" in "Lines"), or the
+  outer table has a Reference list column to it; no extra linking rule is needed. When several Reference
+  columns lead to the outer table, the "Loop" window asks which one attaches the rows. It names the zone
+  around the bubble, and its preview shows a row of the outer zone with its rows. Inside a repeated zone,
+  the variables of that zone's table, of the tables around it and of the tables whose rows attach to it can
+  be placed, changed with "Column…" and used in a condition without choosing a matching key. A zone has one
+  Loop only, and does not repeat the table of the zone around it (the icon is then greyed out and says why).
+  Renames of tables and columns in Grist follow these loops too; the "Row number" chip gives the rank in the
+  nearest zone.
 - **"Light" PDF**: the PDF button's Quality menu offers "Light (smaller images)". It is the same vector PDF,
   text and layout untouched, with its images brought down to 150 points per inch (the sharpness of a letter
   or a screen): a 4 MB photo placed over 10 cm weighs only a few dozen KB. A photo (JPEG or opaque PNG) is

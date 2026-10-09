@@ -631,6 +631,33 @@ existant de `fieldEditor` (quatre puces seulement).
 
 ---
 
+## 22. Boucle dans une boucle (une Boucle posée dans une zone déjà répétée)
+
+**Couverture automatisée** : groupe `varLoop` (quatorze cas `loop_nested_*` : huit du moteur - la liste des détails de chaque ligne et d'elle seule, une zone intérieure placée avant sa zone extérieure, ligne en ligne / paragraphe /
+sous-tableau dans la case de chaque ligne, filtre, tri, texte de repli et numéros qui repartent à chaque ligne, trois niveaux, colonne Liste de références, boucle de la page posée dans une zone, source perdue - et six de l'éditeur : icône de
+la barre, fenêtre qui nomme les lignes de la zone et son aperçu, choix de la colonne quand plusieurs mènent à la zone, zones que personne ne répète encore, liste « # » et insertion sans clé, condition sans clé), groupes `varColumn`, `varCalc` et
+`schemaRenames` (un cas chacun pour les deux premiers, six variantes d'un cas pour le troisième), `loopRulesUnit` (44 vérifications du moteur pur) et le script Node `varToolbarMouse` (section « 4 bis » : vraie souris, 700×400, français et anglais).
+**Non couvert** : un vrai Word ou un PDF ouverts hors du navigateur, un document Grist réel (le laboratoire grist-static n'a pas été rejoué pour ce point), plus de douze niveaux de zones.
+
+### Protocole
+1. Dans un document Grist : une table Factures (celle du widget), une table Lignes (colonnes Facture - Référence vers Factures -, Désignation) liée à la page par « Tables liées » (clé Facture), et une table Détails (colonnes
+   Ligne - Référence vers Lignes -, Libellé). Détails n'a AUCUNE règle de liaison à poser.
+2. Dans un modèle : un tableau « Désignation | Détails » dont la deuxième ligne contient `#Lignes.Désignation` dans la première case et, dans la seconde, un élément de liste `#Détails.Libellé`. Poser la Boucle sur Désignation
+   (« La ligne du tableau »). Cliquer la bulle Libellé : l'icône Boucle est active (elle ne l'est pas sur une variable qui n'a aucune colonne Référence vers Lignes ; son infobulle dit alors pourquoi).
+3. Boucle de Libellé : la fenêtre dit « Lignes de « Détails » rattachées à chaque ligne de « Lignes » par Ligne », sans « Modifier le lien », propose « L'élément de liste » (choisi d'office) et montre un exemple pris sur
+   la première ligne qui a des détails. Enregistrer.
+4. Lecture, PDF, Word et e-mail : chaque ligne du tableau montre ses propres détails dans sa seconde case, jamais ceux d'une autre ligne ; une ligne sans détails n'affiche aucun élément (ou le texte de repli réglé dans la fenêtre).
+5. Poser aussi la puce « N° de ligne » (`#`, onglet Puces) dans la liste des détails : elle repart de 1 à chaque ligne du tableau. Régler un tri et un filtre sur la boucle intérieure : les numéros suivent.
+6. Ajouter dans Détails une seconde colonne Référence vers Lignes (« Remplaçant ») : la fenêtre de Libellé propose alors la liste avec recherche des deux colonnes ; choisir l'autre change l'exemple, et le choix est gardé au réaffichage.
+7. Poser une autre variable de Lignes (`#Lignes.Prix`) dans la même zone : sa Boucle est grisée, l'infobulle dit « Déjà dans une zone répétée pour « Lignes » » ; une zone n'a qu'une Boucle : dans la fenêtre de Libellé, « La ligne du tableau »
+   n'est pas proposée (la ligne est déjà répétée par la bulle Désignation), « L'élément de liste » et « La variable, dans la phrase » le sont.
+8. Dans la zone, taper `#` : les colonnes de Lignes et de Détails s'insèrent sans fenêtre de clé de correspondance ; « Colonne… » sur une bulle cassée de la zone accepte une colonne de Détails sans la demander non plus ; la condition d'une
+   bulle de la liste des détails qui compare une colonne de Lignes (la zone qui l'entoure) n'en demande pas non plus.
+9. Renommer la colonne « Ligne » de Détails dans Grist, rouvrir le widget : le modèle suit (la boucle intérieure garde sa colonne), de même pour le renommage de la table Lignes.
+10. Panneau de 700 × 400 : la fenêtre, la liste des colonnes et l'infobulle de l'icône grisée tiennent dans le panneau, en clair, en sombre et en anglais.
+
+---
+
 ## Prochaines étapes (pistes d'amélioration de la suite automatisée)
 
 **Fait le 2026-09-14** : étage 2 (mode Lecture) comblé pour un premier socle de cas

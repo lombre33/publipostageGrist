@@ -116,11 +116,12 @@ const Variables = (function () {
   const { currentTables, prioritizeTables, matchingVariables, columnSearchText, referencedTable, crossedListTable, writesList, columnsBelow, refreshSchemaOnce, computeItems, fieldItems } = (function () {
     // Les entrées de la liste : tables en cours, variables qui correspondent, onglet actif
 
-    // Tables « en cours », la plus proche d'abord : celle que parcourt la zone répétée où est le curseur (js/variable-loop.js:loopTableAt ; `editor`
-    // absent hors de l'éditeur, nom du fichier PDF), puis celle de la page. Vide tant que la page n'a pas de table.
+    // Tables « en cours », la plus proche d'abord : celles que parcourent les zones répétées où est le curseur, de la plus proche à la plus large
+    // (js/variable-loop.js:loopTablesAt ; `editor` absent hors de l'éditeur, nom du fichier PDF), puis celle de la page. Vide tant que la page n'a pas de
+    // table.
     function currentTables(editor) {
-      const loopTable = editor ? VariableLoop.loopTableAt(editor.state, editor.state.selection.from) : null;
-      return [loopTable, GristAPI.getCurrentTableId()].filter((table, index, all) => table && all.indexOf(table) === index);
+      const loopTables = editor ? VariableLoop.loopTablesAt(editor.state, editor.state.selection.from) : [];
+      return loopTables.concat(GristAPI.getCurrentTableId()).filter((table, index, all) => table && all.indexOf(table) === index);
     }
     // `items` ({ table, … }) avec les colonnes des tables « en cours » en tête : chaque table de `tables` dans cet ordre, puis les autres, l'ordre
     // d'origine gardé dans chaque groupe. À appliquer avant toute limite de longueur, sans quoi une table qui vient tard dans le schéma voit ses
@@ -398,8 +399,10 @@ const Variables = (function () {
     }
     // `range` reste valide pendant l'attente de la fenêtre de liaison (position ProseMirror, pas liée au focus DOM).
     async function insertVariable(editor, range, item) {
-      // Dans une zone répétée pour cette table, la variable lit la ligne du tour : aucun lien à configurer (js/loop-rules.js).
-      const inLoop = VariableLoop.loopTableAt(editor.state, range.from) === item.table;
+      // Dans une zone répétée pour cette table (ou pour une table qui entoure cette zone), la variable lit la ligne du tour : aucun lien à configurer
+      // (js/loop-rules.js). Aucun non plus pour une table dont les lignes se rattachent à celles de la zone : sa boucle se pose ensuite sur la bulle
+      // (js/variable-loop.js:nestableAt).
+      const inLoop = VariableLoop.loopTablesAt(editor.state, range.from).indexOf(item.table) !== -1 || VariableLoop.nestableAt(editor.state, range.from, item);
       if (!inLoop && !(await ensureLinkConfigured(item))) return;
       editor.chain().focus().insertContentAt(range, { type: 'varBadge', attrs: { table: item.table, column: item.column, key: item.key } }).run();
     }

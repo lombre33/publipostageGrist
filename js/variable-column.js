@@ -30,8 +30,9 @@ const VariableColumn = (function () {
     if (kind && kind !== VariableFormat.columnKind(GristAPI.getColumnType(item.table, item.column))) attrs.format = null;
     if (node.attrs.loop) {
       const loop = LoopRules.normalizeLoop(node.attrs.loop);
-      const source = LoopRules.sourceFor(attrs, GristAPI.getCurrentTableId());
-      if (!loop || !source || source.table !== loop.table || !sameVia(source.via, loop.via)) attrs.loop = null;
+      const page = GristAPI.getCurrentTableId();
+      const source = loop && LoopRules.sourceFor(attrs, page, LoopRules.enclosingOf(loop, page));
+      if (!source || source.table !== loop.table || !sameVia(source.via, loop.via)) attrs.loop = null;
     }
     return attrs;
   }
@@ -71,10 +72,12 @@ const VariableColumn = (function () {
     return cut === -1 ? null : { table: key.slice(0, cut), column: key.slice(cut + 1), key };
   }
   // Vrai quand la variable `item` ({ table, … }) se lira à cet endroit : sa table est celle de la page, déjà liée, ou - dans une zone répétée pour cette
-  // table, où la variable lit la ligne du tour - n'a aucun lien à configurer (même règle qu'à l'insertion, js/variables.js) ; sinon la fenêtre de la
-  // clé s'ouvre, et le résultat est faux quand elle est refusée.
+  // table (ou pour une table qui entoure cette zone), où la variable lit la ligne du tour, ou dont les lignes se rattachent à celles de la zone - n'a
+  // aucun lien à configurer (même règle qu'à l'insertion, js/variables.js) ; sinon la fenêtre de la clé s'ouvre, et le résultat est faux quand elle est
+  // refusée.
   async function ensureLinked(editor, pos, item) {
-    return VariableLoop.loopTableAt(editor.state, pos) === item.table || Variables.ensureLinkConfigured(item);
+    return VariableLoop.loopTablesAt(editor.state, pos).indexOf(item.table) !== -1 || VariableLoop.nestableAt(editor.state, pos, item, pos)
+      || Variables.ensureLinkConfigured(item);
   }
 
   async function pick(editor, pos, node, item) {

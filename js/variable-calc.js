@@ -15,7 +15,7 @@ const VariableCalc = (function () {
   const { el, button } = Dom;
   let win = null;
   let refs = null;
-  let ctx = null; // { editor, pos, isNew, format, loopTable, attempted }
+  let ctx = null; // { editor, pos, isNew, format, loopTables, attempted }
   const previewRun = VariableModal.previewRunner(refreshPreview);
   const escapeRegExp = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const lang = () => I18n.getLang();
@@ -66,8 +66,8 @@ const VariableCalc = (function () {
     const tableId = GristAPI.getCurrentTableId();
     const unlinked = otherTables(compiled.ast).filter(table => !GristAPI.getLinkRule(table));
     if (unlinked.length) {
-      const inLoop = unlinked.indexOf(ctx.loopTable) !== -1;
-      showStatus(inLoop ? I18n.t('calc.status.inLoop', { table: ctx.loopTable }) : I18n.t('calc.status.notLinked', { table: unlinked[0], current: tableId }), 'hint');
+      const inLoop = unlinked.find(table => ctx.loopTables.indexOf(table) !== -1);
+      showStatus(inLoop ? I18n.t('calc.status.inLoop', { table: inLoop }) : I18n.t('calc.status.notLinked', { table: unlinked[0], current: tableId }), 'hint');
       return;
     }
     const record = GristAPI.getCurrentRecord();
@@ -149,7 +149,7 @@ const VariableCalc = (function () {
 
   function openWindow(editor, opts) {
     ensure();
-    ctx = { editor, pos: opts.pos, isNew: opts.isNew, format: opts.format || null, loopTable: VariableLoop.loopTableAt(editor.state, opts.pos), attempted: false };
+    ctx = { editor, pos: opts.pos, isNew: opts.isNew, format: opts.format || null, loopTables: VariableLoop.loopTablesAt(editor.state, opts.pos), attempted: false };
     // La barre flottante de la bulle reste masquée tant que la fenêtre est ouverte ; elle revient avec la sélection à la fermeture.
     EditorCore.hideFloatingContextToolbars();
     const { label, input, hint, functionsLabel, functionButtons, functionsHint, cancel, ok } = refs;
@@ -189,7 +189,7 @@ const VariableCalc = (function () {
     const compiled = compile(input.value);
     if (compiled.error) { refuse(compiled.error); return; }
     for (const table of otherTables(compiled.ast)) {
-      if (table === here.loopTable) continue;
+      if (here.loopTables.indexOf(table) !== -1) continue;
       // Annulée, la fenêtre de la clé laisse celle-ci ouverte : la personne peut corriger la formule ou réessayer.
       if (!(await Variables.ensureLinkConfigured({ table }))) { input.focus(); return; }
     }

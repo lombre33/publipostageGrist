@@ -23,7 +23,7 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
   vérifie.
 - **Les données** : les modèles et les réglages vivent dans des tables `Publipostage_*` du document Grist ;
   les préférences d'affichage (langue, thème, raccourcis…) dans le navigateur.
-- **Le volume** : 126 fichiers dans `js/` (47 400 lignes : 35 000 de code, 9 500 de commentaires, 2 800 de
+- **Le volume** : 126 fichiers dans `js/` (47 600 lignes : 35 200 de code, 9 600 de commentaires, 2 800 de
   blanc), 42 feuilles de style (3 500 lignes), une page de 810 lignes. Quatre fichiers de polices du PDF
   pèsent 2,5 Mo en quelques lignes (des données) ; `js/i18n.js` est du texte à traduire, pas de la logique.
 
@@ -118,12 +118,12 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/variables.js` | La liste `#`, la valeur d'une bulle (autre table, chemin de références, calcul), la fenêtre des clés de correspondance entre tables. |
 | `js/variable-format.js` | Format d'une bulle : nombre, date, Oui / Non, liste, nombre en toutes lettres. |
 | `js/variable-modal.js` | Ce que partagent les fenêtres d'une bulle. |
-| `js/variable-condition.js`, `js/variable-loop.js`, `js/variable-list.js`, `js/variable-linked-attrs.js`, `js/variable-calc.js`, `js/variable-column.js` | Les fenêtres d'une bulle : Condition, Boucle, Liste, Autres attributs, Calcul, Colonne. |
+| `js/variable-condition.js`, `js/variable-loop.js`, `js/variable-list.js`, `js/variable-linked-attrs.js`, `js/variable-calc.js`, `js/variable-column.js` | Les fenêtres d'une bulle : Condition, Boucle (dont la zone qui entoure la bulle, pour une boucle dans une boucle), Liste, Autres attributs, Calcul, Colonne. |
 | `js/variable-otherwise.js` | Le « sinon » d'une bulle (ligne « Sinon afficher » de la fenêtre Condition) : sa forme enregistrée, la bulle qu'il écrit quand la condition n'est pas remplie, et sa résolution avant les bulles en Lecture et dans les exports. |
 | `js/field-editor.js`, `js/field-codec.js` | Les champs texte du mode E-mail (Objet, À, Cc, Cci) et du nom du PDF : un éditeur d'une ligne qui pose les mêmes bulles que le document, avec leur barre et leurs fenêtres, et les puces date, heure, email et nom de l'utilisateur ; la valeur enregistrée reste du texte brut tant qu'aucune bulle n'a de réglage et qu'aucune puce n'est posée. |
 | `js/formula.js` | Le moteur de calcul d'une bulle « Calcul » (module pur : ni DOM, ni Grist). |
 | `js/condition-rules.js`, `js/condition-fields.js` | L'évaluation des règles « colonne, opérateur, valeur ou autre colonne » (module pur) et leurs champs partagés par toutes les fenêtres. |
-| `js/loop-rules.js`, `js/list-split.js` | Le moteur de boucle sur les lignes liées (il donne aussi à chaque copie de zone le rang de son tour, que la puce « N° de ligne » écrit) ; « Un document par valeur ». |
+| `js/loop-rules.js`, `js/list-split.js` | Le moteur de boucle sur les lignes liées (il donne aussi à chaque copie de zone le rang de son tour, que la puce « N° de ligne » écrit, et il développe d'abord les zones extérieures : une zone dans une zone lit les lignes de la ligne en cours de la zone qui l'entoure) ; « Un document par valeur ». |
 | `js/conditional-text.js`, `js/conditional-checkbox.js`, `js/conditional-value.js` | Bloc, case et valeur conditionnels. |
 
 ### Macro-modèles (2 fichiers, 520 lignes)
@@ -288,7 +288,7 @@ For anyone reading the code: what is where, and where to start. Line counts are 
   **Each export** loads its library on first use, with an integrity hash (SRI) that the browser checks.
 - **The data**: templates and settings live in `Publipostage_*` tables of the Grist document; display
   preferences (language, theme, shortcuts…) in the browser.
-- **The size**: 126 files in `js/` (47,400 lines: 35,000 of code, 9,500 of comments, 2,800 blank), 42
+- **The size**: 126 files in `js/` (47,600 lines: 35,200 of code, 9,600 of comments, 2,800 blank), 42
   stylesheets (3,500 lines), an 810-line page. Four PDF font files weigh 2.5 MB in a few lines (data);
   `js/i18n.js` is text to translate, not logic.
 
@@ -382,12 +382,12 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/variables.js` | The `#` list, the value of a bubble (another table, a path of references, a calculation), the window for matching keys between tables. |
 | `js/variable-format.js` | A bubble's format: number, date, Yes / No, list, number in words. |
 | `js/variable-modal.js` | What a bubble's windows have in common. |
-| `js/variable-condition.js`, `js/variable-loop.js`, `js/variable-list.js`, `js/variable-linked-attrs.js`, `js/variable-calc.js`, `js/variable-column.js` | A bubble's windows: Condition, Loop, List, Other attributes, Calculation, Column. |
+| `js/variable-condition.js`, `js/variable-loop.js`, `js/variable-list.js`, `js/variable-linked-attrs.js`, `js/variable-calc.js`, `js/variable-column.js` | A bubble's windows: Condition, Loop (including the zone around the bubble, for a loop in a loop), List, Other attributes, Calculation, Column. |
 | `js/variable-otherwise.js` | A bubble's "otherwise" (the "Otherwise show" row of the Condition window): its saved form, the bubble it writes when the condition is not met, and its resolution before the bubbles in Reading mode and in the exports. |
 | `js/field-editor.js`, `js/field-codec.js` | The text fields of E-mail mode (Subject, To, Cc, Bcc) and of the PDF file name: a one-line editor that places the same bubbles as the document, with their toolbar and windows, and the user's date, time, email and name chips; the stored value stays plain text as long as no bubble has a setting and no chip is placed. |
 | `js/formula.js` | The calculation engine of a "Calculation" bubble (a pure module: no DOM, no Grist). |
 | `js/condition-rules.js`, `js/condition-fields.js` | Evaluation of "column, operator, value or other column" rules (a pure module) and their fields shared by all the windows. |
-| `js/loop-rules.js`, `js/list-split.js` | The loop engine over linked rows (it also gives each zone copy the rank of its turn, which the "Row number" chip writes); "One document per value". |
+| `js/loop-rules.js`, `js/list-split.js` | The loop engine over linked rows (it also gives each zone copy the rank of its turn, which the "Row number" chip writes, and it expands the outer zones first: a zone inside a zone reads the rows of the current row of the zone around it); "One document per value". |
 | `js/conditional-text.js`, `js/conditional-checkbox.js`, `js/conditional-value.js` | Conditional block, checkbox and value. |
 
 ### Macro-templates (2 files, 520 lines)

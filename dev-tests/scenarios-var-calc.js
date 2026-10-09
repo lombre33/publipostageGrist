@@ -600,6 +600,48 @@
   });
 
   cases.push({
+    id: 'varcalc_a_formula_in_a_nested_zone_cites_the_tables_around_it_without_asking_for_a_key',
+    description: 'Dans une zone répétée dans une autre (les détails de chaque ligne), une formule peut citer la table de la zone et celle de la zone qui l’entoure sans clé de correspondance - toutes deux lisent la ligne du tour - ; une autre table pas encore liée la demande toujours',
+    run: async (h) => {
+      await seed(h);
+      const stub = window.__gristStub;
+      stub.setVariables('VcDetails', { Ligne: 'Ref:' + LINES, Heures: 'Numeric' });
+      stub.setVariables('VcAutre', { Prix: 'Numeric' });
+      stub.setRows('VcDetails', [{ id: 1, Ligne: 1, Heures: 3 }]);
+      stub.setRows('VcAutre', [{ id: 1, Prix: 5 }]);
+      await GristAPI.refreshSchema();
+      const detailLoop = { repeat: 'item', table: 'VcDetails', within: LINES, by: 'Ligne', empty: 'none' };
+      Editor.setHTML(`<table><tbody><tr><td><p>${badge('Libelle', LINES, ROW_LOOP)}</p></td><td><ul><li><p>${badge('Heures', 'VcDetails', detailLoop)}</p></li></ul></td></tr></tbody></table>`);
+      await h.sleep(120);
+      const original = Variables.ensureLinkConfigured;
+      const asked = [];
+      Variables.ensureLinkConfigured = async item => { asked.push(item.table); return true; };
+      // Dans l'élément de liste de la zone des détails, après une espace (la liste « # » ne s'ouvre pas à la suite d'une bulle).
+      const formulaInTheZone = async formula => {
+        await h.focusInElement(document.querySelector('.tiptap li p'));
+        await h.typeText(' ');
+        const opened = await openViaPanel(h);
+        if (!opened) return { opened };
+        setInput(field(), formula);
+        okButton().click();
+        await h.sleep(150);
+        return { opened, asked: asked.slice(), closed: !modalShown(), nodes: calcNodes().length };
+      };
+      try {
+        const around = await formulaInTheZone('#VcLignes.Prix * #VcDetails.Heures');
+        asked.length = 0;
+        const other = await formulaInTheZone('#VcAutre.Prix + #VcDetails.Heures');
+        const checks = {
+          tablesAroundNeedNoKey: around.opened && same(around.asked, []) && around.closed && around.nodes === 1,
+          anotherTableAsksForItsKey: other.opened && same(other.asked, ['VcAutre']) && other.closed && other.nodes === 2,
+        };
+        const failed = Object.keys(checks).filter(k => !checks[k]);
+        return { pass: failed.length === 0, notes: failed.length ? JSON.stringify({ failed, around, other }) : 'ok' };
+      } finally { Variables.ensureLinkConfigured = original; }
+    },
+  });
+
+  cases.push({
     id: 'varcalc_preview_says_why_there_is_no_result_yet',
     description: 'Sous le champ : « table pas encore liée » (la clé sera demandée à l’enregistrement) tant que la table citée n’a pas de règle, « aucune ligne sélectionnée » sans ligne courante, le zéro que le document n’écrit pas, une cellule vide ; une erreur de lecture (colonne texte) est dite en clair, sans « [ERREUR: … ] »',
     run: async (h) => {

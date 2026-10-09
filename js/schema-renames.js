@@ -301,8 +301,8 @@ const SchemaRenames = (function () {
     return count ? { condition: Object.assign({}, condition, { rules }), count } : { condition, count: 0 };
   }
 
-  // { repeat, table, via: { table, column }, filter, sort: { column, direction }, … } (js/loop-rules.js). Le filtre et le tri parlent de la table
-  // parcourue.
+  // { repeat, table, via: { table, column }, within, by, filter, sort: { column, direction }, … } (js/loop-rules.js). Le filtre, le tri et `by` (la
+  // colonne qui rattache à `within`) parlent de la table parcourue.
   function rewriteLoop(loop, m) {
     if (!loop || typeof loop !== 'object' || !loop.table) return { loop, count: 0 };
     const next = Object.assign({}, loop);
@@ -316,6 +316,18 @@ const SchemaRenames = (function () {
       next.via = Object.assign({}, loop.via, { table: via.table, column: via.column });
       return 1;
     };
+    const rewriteWithin = () => {
+      const within = typeof loop.within === 'string' && loop.within ? m.mapTable(loop.within) : null;
+      if (!within) return 0;
+      next.within = within;
+      return 1;
+    };
+    const rewriteBy = () => {
+      const by = typeof loop.by === 'string' && loop.by ? mapRuleColumn(loop.by, m, ctx, false) : null;
+      if (by === null) return 0;
+      next.by = by;
+      return 1;
+    };
     const rewriteFilter = () => {
       const filter = loop.filter ? rewriteCondition(loop.filter, m, ctx, false) : { count: 0 };
       if (filter.count) next.filter = filter.condition;
@@ -327,7 +339,7 @@ const SchemaRenames = (function () {
       next.sort = Object.assign({}, loop.sort, { column });
       return 1;
     };
-    const count = (table ? 1 : 0) + rewriteVia() + rewriteFilter() + rewriteSort();
+    const count = (table ? 1 : 0) + rewriteVia() + rewriteWithin() + rewriteBy() + rewriteFilter() + rewriteSort();
     return count ? { loop: next, count } : { loop, count: 0 };
   }
 
@@ -394,6 +406,7 @@ const SchemaRenames = (function () {
       if (loop && loop.table) {
         tables.add(loop.table);
         if (loop.via && loop.via.table) tables.add(loop.via.table);
+        if (loop.within) tables.add(loop.within);
         addRules(loop.filter);
       }
     });

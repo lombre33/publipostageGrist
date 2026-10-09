@@ -508,6 +508,139 @@ const nestedState = await page.evaluate(() => ({
 }));
 check('dans la ligne répétée, la Boucle d’une autre variable est grisée et un vrai clic n’ouvre rien', nestedBtn.found && nestedState.disabled === 'true' && !nestedState.modalOpen, { nestedBtn, nestedState });
 
+// 4 bis) Boucle dans une boucle (demande d'Antoine du 2026-10-09, point 5.2) : dans la ligne répétée des tâches, les notes de chaque tâche - rattachées à la
+// tâche par une colonne Référence (aucune règle de liaison) - se répètent en liste dans la seconde case. Deux colonnes de VcNotes mènent à VcTaches (Tache,
+// Auteur) : la fenêtre en montre la liste avec recherche. À la vraie souris et à 700x400 : l'icône de la bulle de la case est atteignable, la fenêtre et sa
+// liste tiennent dans le panneau, le choix de la colonne change l'aperçu, « Enregistrer » écrit table englobante et colonne ; l'icône d'une variable sans
+// colonne vers la tâche reste grisée avec sa raison.
+await page.evaluate(async () => {
+  const stub = window.__gristStub;
+  stub.setVariables('VcNotes', { Tache: 'Ref:VcTaches', Auteur: 'Ref:VcTaches', Texte: 'Text' });
+  stub.setRows('VcNotes', [
+    { id: 1, Tache: 1, Auteur: 2, Texte: 'Appeler le greffe' },
+    { id: 2, Tache: 1, Auteur: 1, Texte: 'Relire les pièces' },
+    { id: 3, Tache: 2, Auteur: 1, Texte: 'Signer' },
+  ]);
+  await GristAPI.refreshSchema();
+  const attr = (name, value) => ` ${name}="${JSON.stringify(value).replace(/"/g, '&quot;')}"`;
+  const badge = (table, col, loop) => `<span class="var-badge" data-table="${table}" data-column="${col}" data-key="${table}.${col}"${loop ? attr('data-loop', loop) + ` data-loop-repeat="${loop.repeat}"` : ''}></span>`;
+  document.getElementById('editor-container').classList.add('a4-preview');
+  Editor.setHTML('<p>Tâches du dossier :</p><table><tbody><tr><th><p>Tâche</p></th><th><p>Notes</p></th></tr>'
+    + `<tr><td><p>${badge('VcTaches', 'Libelle', { repeat: 'row', table: 'VcTaches', empty: 'header' })}</p></td>`
+    + `<td><ul><li><p>${badge('VcNotes', 'Texte')}</p></li></ul><p>${badge('VcDossiers', 'Titre')}</p></td></tr></tbody></table>`);
+});
+await page.waitForTimeout(300);
+const noteBadge = await hitTest('.tiptap td .var-badge[data-column="Texte"]');
+check('bulle de la liste, dans la case de la ligne répétée, visible dans le panneau', noteBadge.found && noteBadge.inViewport && noteBadge.onTop, noteBadge);
+if (noteBadge.found) await page.mouse.click(noteBadge.x, noteBadge.y);
+await page.waitForTimeout(250);
+const nestedIcon = await hitTest('.v2-varfmt-toolbar.visible button[data-action="var-loop"]');
+const nestedIconState = await page.evaluate(() => {
+  const b = document.querySelector('.v2-varfmt-toolbar button[data-action="var-loop"]');
+  return { disabled: b.getAttribute('aria-disabled'), title: b.title, expected: I18n.t('varToolbar.loop') };
+});
+check('dans la ligne répétée, la Boucle d’une variable rattachée à la tâche est active et atteignable à la souris',
+  nestedIcon.found && nestedIcon.inViewport && nestedIcon.onTop && nestedIconState.disabled === 'false' && nestedIconState.title === nestedIconState.expected, { nestedIcon, nestedIconState });
+if (nestedIcon.found) await page.mouse.click(nestedIcon.x, nestedIcon.y);
+await page.waitForTimeout(700);
+const nestedBox = await hitTest('#var-loop-modal .var-modal-content');
+check('fenêtre Boucle d’une boucle dans une boucle ouverte et entièrement dans le panneau', nestedBox.found && nestedBox.inViewport, nestedBox);
+const nestedInfo = () => page.evaluate(() => {
+  const m = document.getElementById('var-loop-modal');
+  const src = m.querySelector('.var-loop-source');
+  const by = m.querySelector('.var-loop-by');
+  const trigger = by && by.querySelector('.ss-trigger');
+  const link = m.querySelector('.var-loop-link');
+  const r = src.getBoundingClientRect();
+  return {
+    text: src.children[0].textContent,
+    expected: I18n.t('varLoop.source.withinPick', { table: 'VcNotes', within: 'VcTaches' }),
+    pickShown: !!by && by.getClientRects().length > 0, triggerText: trigger ? trigger.textContent : null,
+    linkShown: link.getClientRects().length > 0,
+    sourceInside: r.left >= 0 && r.right <= innerWidth + 0.5, triggerInside: !!trigger && trigger.getBoundingClientRect().right <= innerWidth + 0.5 && trigger.getBoundingClientRect().left >= 0,
+    lines: Array.from(m.querySelectorAll('.var-condition-debug-line')).filter(l => !l.hidden).map(l => l.textContent),
+    segs: Array.from(m.querySelectorAll('.var-loop-seg button')).map(b => b.dataset.repeat + (b.getAttribute('aria-pressed') === 'true' ? '*' : '')),
+  };
+});
+const nestedFirst = await nestedInfo();
+check('la fenêtre dit « lignes rattachées à chaque ligne de VcTaches par », sans « Modifier le lien », et montre la liste des deux colonnes',
+  nestedFirst.text === nestedFirst.expected && nestedFirst.pickShown && !nestedFirst.linkShown && /Tache/.test(nestedFirst.triggerText || '') && nestedFirst.sourceInside && nestedFirst.triggerInside, nestedFirst);
+check('« L’élément de liste » est choisi d’office, la ligne répétée de la case n’est pas proposée', JSON.stringify(nestedFirst.segs) === JSON.stringify(['item*', 'inline']), nestedFirst.segs);
+check('aperçu sur la première tâche qui a des notes (colonne Tache) : deux notes', nestedFirst.lines.length > 0 && /Appeler le greffe, Relire les pièces/.test(nestedFirst.lines[0]) && /n° 1/.test(nestedFirst.lines[0]), nestedFirst.lines);
+// La liste avec recherche à la vraie souris : clic sur le champ, clic sur la ligne « Auteur ».
+const byTrigger = await hitTest('#var-loop-modal .var-loop-by .ss-trigger');
+check('le champ « par » est atteignable à la souris', byTrigger.found && byTrigger.inViewport && byTrigger.onTop, byTrigger);
+if (byTrigger.found) await page.mouse.click(byTrigger.x, byTrigger.y);
+await page.waitForTimeout(250);
+const authorRow = await page.evaluate(() => {
+  const panel = Array.from(document.querySelectorAll('.ss-panel')).find(p => !p.hidden);
+  const rows = panel ? Array.from(panel.querySelectorAll('.ss-option')) : [];
+  const found = rows.find(r => r.querySelector('.ss-name').textContent === 'Auteur');
+  if (!found) return { names: rows.map(r => r.querySelector('.ss-name').textContent) };
+  const r = found.getBoundingClientRect();
+  const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2, onTop: !!top && found.contains(top), inViewport: r.top >= 0 && r.bottom <= innerHeight + 0.5, names: rows.map(x => x.querySelector('.ss-name').textContent) };
+});
+check('la liste montre les deux colonnes qui mènent à la tâche, « Auteur » atteignable', !!authorRow.x && authorRow.onTop && authorRow.inViewport && JSON.stringify(authorRow.names) === JSON.stringify(['Tache', 'Auteur']), authorRow);
+if (authorRow.x) await page.mouse.click(authorRow.x, authorRow.y);
+await page.waitForTimeout(800);
+const nestedSecond = await nestedInfo();
+check('choisir « Auteur » change l’aperçu : les notes de la tâche 1 écrites par l’auteur 1', /Relire les pièces/.test(nestedSecond.lines[0] || '') && !/Appeler le greffe/.test(nestedSecond.lines[0] || '') && /Auteur/.test(nestedSecond.triggerText || ''), nestedSecond);
+const nestedSave = await hitTest('#var-loop-modal .var-modal-primary');
+check('Enregistrer de la fenêtre visible et non recouvert à 700x400', nestedSave.found && nestedSave.inViewport && nestedSave.onTop, nestedSave);
+if (nestedSave.found) await page.mouse.click(nestedSave.x, nestedSave.y);
+await page.waitForTimeout(300);
+const nestedSaved = await page.evaluate(() => {
+  let loop = null;
+  EditorCore.getEditor().state.doc.descendants(n => { if (n.type.name === 'varBadge' && n.attrs.column === 'Texte') loop = n.attrs.loop; });
+  const li = document.querySelector('.tiptap td li');
+  return { loop, modalOpen: document.getElementById('var-loop-modal').style.display !== 'none', liMarked: !!li && !!document.querySelector('.tiptap td li .var-badge[data-loop-repeat="item"]') };
+});
+check('Enregistrer (vrai clic) écrit la boucle avec la table de la zone et la colonne choisie, et ferme la fenêtre',
+  !nestedSaved.modalOpen && !!nestedSaved.loop && nestedSaved.loop.repeat === 'item' && nestedSaved.loop.table === 'VcNotes' && nestedSaved.loop.within === 'VcTaches' && nestedSaved.loop.by === 'Auteur', nestedSaved);
+// Une variable de la même case dont la table n'a aucune colonne vers la tâche : la Boucle reste grisée, avec sa raison.
+const titleBadge = await hitTest('.tiptap td .var-badge[data-column="Titre"]');
+if (titleBadge.found) await page.mouse.click(titleBadge.x, titleBadge.y);
+await page.waitForTimeout(250);
+const noWayIcon = await hitTest('.v2-varfmt-toolbar.visible button[data-action="var-loop"]');
+if (noWayIcon.found) await page.mouse.click(noWayIcon.x, noWayIcon.y);
+await page.waitForTimeout(200);
+const noWayState = await page.evaluate(() => {
+  const b = document.querySelector('.v2-varfmt-toolbar button[data-action="var-loop"]');
+  return { disabled: b.getAttribute('aria-disabled'), title: b.title, expected: I18n.t('varToolbar.loopNestedNone', { table: 'VcDossiers', within: 'VcTaches' }), modalOpen: document.getElementById('var-loop-modal').style.display !== 'none' };
+});
+check('une variable sans colonne qui mène à la tâche : Boucle grisée avec sa raison, un vrai clic n’ouvre rien', noWayIcon.found && noWayState.disabled === 'true' && noWayState.title === noWayState.expected && !noWayState.modalOpen, noWayState);
+// En anglais : mêmes phrases, dans la langue de l'interface.
+await page.evaluate(() => I18n.setLang('en'));
+await page.waitForTimeout(200);
+// La barre de « Titre » (ouverte plus haut) recouvre le bas de la bulle de la liste : un clic dans le texte au-dessus la ferme, comme pour une personne.
+const introText = await hitTest('.tiptap > p:first-child');
+if (introText.found) await page.mouse.click(introText.left + 10, introText.y);
+await page.waitForTimeout(250);
+const noteBadgeEn = await hitTest('.tiptap td .var-badge[data-column="Texte"]');
+if (noteBadgeEn.found) await page.mouse.click(noteBadgeEn.x, noteBadgeEn.y);
+await page.waitForTimeout(250);
+const iconEn = await hitTest('.v2-varfmt-toolbar.visible button[data-action="var-loop"]');
+if (iconEn.found) await page.mouse.click(iconEn.x, iconEn.y);
+await page.waitForTimeout(700);
+const english = await page.evaluate(() => {
+  const m = document.getElementById('var-loop-modal');
+  const src = m.querySelector('.var-loop-source');
+  return {
+    text: src.children[0].textContent, lines: Array.from(m.querySelectorAll('.var-condition-debug-line')).filter(l => !l.hidden).map(l => l.textContent),
+    inside: m.querySelector('.var-modal-content').getBoundingClientRect().right <= innerWidth + 0.5, open: m.style.display !== 'none', lang: I18n.getLang(),
+  };
+});
+english.badge = noteBadgeEn;
+english.icon = iconEn;
+check('en anglais : la phrase de la source et l’aperçu sont traduits et tiennent dans le panneau',
+  english.text === 'Rows of “VcNotes” attached to each row of “VcTaches” by' && /^Example, row #1 of “VcTaches”: /.test(english.lines[0] || '') && english.inside, english);
+const cancelEn = await hitTest('#var-loop-modal .var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)');
+if (cancelEn.found) await page.mouse.click(cancelEn.x, cancelEn.y);
+await page.waitForTimeout(200);
+await page.evaluate(() => I18n.setLang('fr'));
+await page.waitForTimeout(200);
+
 // 5) Copier / Coller la condition d'une variable sur une autre (demande d'Antoine, 2026-09-29), à la vraie souris à 700x400 : deux règles saisies dans la
 // fenêtre de « Titre » (« au moins une »), Copier au clic, puis Coller dans la fenêtre de « Montant » - au clavier, le focus doit rester sur le bouton -, et
 // Enregistrer pose la même condition sur la seconde bulle. Les deux boutons partagent la ligne de « + Ajouter une condition » : sans chevauchement, dans la

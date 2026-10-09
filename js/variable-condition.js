@@ -240,7 +240,7 @@ const VariableCondition = (function () {
           allTables: true,
           compareColumn: true,
           attributesWindow: true,
-          onColumnChosen: ref => ConditionFields.ensureTableLinked(ref, redraw),
+          onColumnChosen: ref => ConditionFields.ensureTableLinked(ref, redraw, state ? VariableLoop.loopTablesAt(state.editor.state, state.pos) : null),
           onColumnResolved: table => updateLinkHint(linkHint, table),
           onValueColumnResolved: table => updateLinkHint(valueLinkHint, table),
         },

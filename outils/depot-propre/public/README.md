@@ -77,7 +77,8 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 - Puces intelligentes (date du jour, heure, e-mail de la personne connectée, numéro de ligne d'une
   boucle) et calculs (SOMME, MOYENNE, MIN, MAX, NB, ARRONDI)
 - Conditions d'affichage (variable, bloc de texte, valeur dans la phrase, case cochée) et boucles sur
-  les lignes liées (ligne de tableau, élément de liste, paragraphe), avec filtre, tri et séparateurs
+  les lignes liées (ligne de tableau, élément de liste, paragraphe), avec filtre, tri et séparateurs, y
+  compris une boucle dans une boucle (les lignes de chaque facture, puis les étapes de chaque ligne)
 - Renommages suivis : quand une table ou une colonne est renommée dans Grist, les modèles suivent
 
 **Lecture, enregistrement et collaboration**

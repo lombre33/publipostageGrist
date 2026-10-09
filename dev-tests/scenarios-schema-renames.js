@@ -333,7 +333,7 @@
 
   cases.push({
     id: 'schemarenames_each_part_of_a_loop_follows_on_its_own_and_an_unchanged_loop_comes_back_as_it_was',
-    description: 'Dans une boucle, la table, le chemin « via », le filtre et le tri suivent chacun de leur côté (le filtre et le tri se lisent dans la table parcourue, renommée ou non) ; une boucle sans table, sans rien à changer ou à moitié écrite est rendue telle quelle, et l’original n’est jamais modifié',
+    description: 'Dans une boucle, la table, le chemin « via », la table englobante et la colonne de rattachement d’une boucle imbriquée, le filtre et le tri suivent chacun de leur côté (le filtre et le tri se lisent dans la table parcourue, renommée ou non) ; une boucle sans table, sans rien à changer ou à moitié écrite est rendue telle quelle, et l’original n’est jamais modifié',
     run: async () => {
       const m = mapper();
       const via = (table, column, extra) => Object.assign({ table, column }, extra || {});
@@ -346,6 +346,12 @@
         ['tri nu seul', { table: 'Dossiers', sort: sort('Montant', 'desc') }, { table: 'Dossiers', sort: sort('Total', 'desc') }, 1],
         ['tri avec nom de table', { table: 'Dossiers', sort: sort('Projets.Nom') }, { table: 'Dossiers', sort: sort('Portefeuille.Intitule') }, 1],
         ['table renommée, filtre et tri lus dans la nouvelle', { table: 'Projets', filter: cond([['Nom', '=', 'A']]), sort: sort('Chef') }, { table: 'Portefeuille', filter: cond([['Intitule', '=', 'A']]), sort: sort('Responsable') }, 3],
+        ['table englobante d’une boucle imbriquée seule', { table: 'Dossiers', within: 'Projets' }, { table: 'Dossiers', within: 'Portefeuille' }, 1],
+        ['colonne de rattachement seule', { table: 'Dossiers', within: 'Autre', by: 'Projet' }, { table: 'Dossiers', within: 'Autre', by: 'Programme' }, 1],
+        ['table englobante et colonne de rattachement', { table: 'Dossiers', within: 'Projets', by: 'Projet' }, { table: 'Dossiers', within: 'Portefeuille', by: 'Programme' }, 2],
+        ['table renommée, colonne de rattachement lue dans la nouvelle', { table: 'Projets', within: 'Dossiers', by: 'Chef' }, { table: 'Portefeuille', within: 'Dossiers', by: 'Responsable' }, 2],
+        ['rattachement déjà lisible', { table: 'Dossiers', within: 'Portefeuille', by: 'Titre' }, null, 0],
+        ['rattachement sans nom', { table: 'Dossiers', within: '', by: '' }, null, 0],
         ['via sans colonne', { table: 'Dossiers', via: { table: 'Dossiers' } }, null, 0],
         ['via vide', { table: 'Dossiers', via: null }, null, 0],
         ['via déjà lisible', { table: 'Dossiers', via: via('Dossiers', 'Titre') }, null, 0],
