@@ -189,6 +189,8 @@ const Icons = (function () {
       // en sort (« Envoyer au modèle »).
       linkedPull: '<path d="M12 3v11"/><path d="m8 10 4 4 4-4"/><path d="M4 18v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2"/>',
       linkedPush: '<path d="M12 14V3"/><path d="m8 7 4-4 4 4"/><path d="M4 18v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2"/>',
+      // « Ouvrir le modèle » (menu du lien) : une fenêtre dont une flèche sort vers le coin haut droit, le geste d'aller voir ailleurs.
+      linkedOpen: '<path d="M14 4h6v6"/><path d="M20 4 11 13"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
     };
   }
   const PATHS = Object.assign({}, textAndBlockPaths(), tableAndImagePaths(), toolbarPaths(), findAndQrPaths());

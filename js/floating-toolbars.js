@@ -234,13 +234,15 @@ const FloatingToolbars = (function () {
 
     function tableLinkedMenu() {
       // Le menu du tableau lié à un modèle Grille (js/linked-table.js) : le nom du modèle, ce que le lien veut dire pour les cases, puis les actions sur le lien (mettre à jour depuis
-      // le modèle, envoyer au modèle, détacher). `refresh(link)` le redessine d'après l'état du tableau sous le curseur (LinkedTable.status) à l'ouverture et à chaque
-      // changement du document : verrouillé (suivi des modifications allumé), ses actions sont grisées avec la raison en info-bulle, un clic dessus ne fait rien (comme
-      // « Intérieures » du menu Bordures). Le nom d'un modèle est écrit comme texte, jamais comme HTML.
+      // le modèle, envoyer au modèle, ouvrir le modèle, détacher). `refresh(link)` le redessine d'après l'état du tableau sous le curseur (LinkedTable.status) à l'ouverture et à
+      // chaque changement du document : verrouillé (suivi des modifications allumé), les actions qui écrivent dans le document sont grisées avec la raison en info-bulle, un clic dessus
+      // ne fait rien (comme « Intérieures » du menu Bordures) ; « Ouvrir le modèle » n'écrit rien dans le document, il reste libre. Le nom d'un modèle est écrit comme texte, jamais
+      // comme HTML.
       const ACTIONS = [
-        ['linked-pull', 'linkedPull', 'linkedTable.pullRow', 'linkedTable.pull'],
-        ['linked-push', 'linkedPush', 'linkedTable.pushRow', 'linkedTable.push'],
-        ['linked-detach', 'unlink', 'linkedTable.detachRow', 'linkedTable.detach'],
+        ['linked-pull', 'linkedPull', 'linkedTable.pullRow', 'linkedTable.pull', true],
+        ['linked-push', 'linkedPush', 'linkedTable.pushRow', 'linkedTable.push', true],
+        ['linked-open', 'linkedOpen', 'linkedTable.openRow', 'linkedTable.open', false],
+        ['linked-detach', 'unlink', 'linkedTable.detachRow', 'linkedTable.detach', true],
       ];
       const rows = ACTIONS.map(([action, icon]) => `<button type="button" class="v2-linked-menu-row" data-action="${action}">${Icons.svg(icon)}<span></span></button>`).join('');
       const panel = EditorCore.createFloatingPanel('v2-color-dropdown v2-linked-menu',
@@ -249,7 +251,8 @@ const FloatingToolbars = (function () {
         + `<div class="v2-linked-menu-rows">${rows}</div>`,
         (action) => {
           // Verrouillé, une action ne fait rien et le menu reste ouvert, avec sa raison. Les deux sens sont asynchrones (le modèle se relit, « Envoyer » demande confirmation) :
-          // le menu se referme tout de suite, ce qu'elles disent passe par la ligne d'état.
+          // le menu se referme tout de suite, ce qu'elles disent passe par la ligne d'état. « Ouvrir le modèle » referme le menu avant que le modèle prenne la place du document.
+          if (action === 'linked-open') { EditorCore.closeDropdownPanel(); LinkedTable.open(editor); return; }
           if (action === 'linked-detach') { if (LinkedTable.detach(editor)) EditorCore.closeDropdownPanel(); return; }
           const run = action === 'linked-pull' ? LinkedTable.pull : action === 'linked-push' ? LinkedTable.push : null;
           if (!run || LinkedTable.lockReason()) return;
@@ -261,11 +264,12 @@ const FloatingToolbars = (function () {
         at('.v2-linked-menu-name').textContent = link.name;
         at('.v2-linked-menu-head').title = link.name;
         at('.v2-linked-menu-hint').textContent = I18n.t(link.locked ? 'linkedTable.menuLocked' : 'linkedTable.menuHint');
-        ACTIONS.forEach(([action, , labelKey, titleKey]) => {
+        ACTIONS.forEach(([action, , labelKey, titleKey, writes]) => {
           const row = at(`[data-action="${action}"]`);
+          const locked = !!link.locked && writes;
           row.querySelector('span').textContent = I18n.t(labelKey);
-          row.title = I18n.t(link.locked || titleKey, { name: link.name });
-          row.setAttribute('aria-disabled', link.locked ? 'true' : 'false');
+          row.title = I18n.t(locked ? link.locked : titleKey, { name: link.name });
+          row.setAttribute('aria-disabled', locked ? 'true' : 'false');
         });
       };
       return panel;

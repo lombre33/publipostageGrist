@@ -6,8 +6,8 @@
 body.pp-clean-reading #toolbar-top { display: none; }
 /* Le bandeau « Revenir au macro-modèle » (#macro-return-bar, css/toolbar-v2.css) n'est pas dans #toolbar-top : c'est une ligne de navigation posée
    au-dessus du texte tant que le modèle à l'écran a été ouvert par le stylo d'un macro-modèle. Elle n'a pas sa place dans le document seul ; elle
-   revient avec la barre à la sortie. */
-body.pp-clean-reading #macro-return-bar { display: none; }
+   revient avec la barre à la sortie. Même chose pour le bandeau « Revenir au document » (#linked-return-bar : un modèle Grille ouvert depuis un tableau lié). */
+body.pp-clean-reading #macro-return-bar, body.pp-clean-reading #linked-return-bar { display: none; }
 
 /* Bouton de sortie : seul à l'écran avec le document, dans le coin haut droit (là où se trouve le logo de la barre le reste du temps), à gauche de la
    barre de défilement de la Lecture (22px : le défilement garde sa piste). Même icône qu'un plein écran qu'on quitte, deux coins vers l'intérieur.

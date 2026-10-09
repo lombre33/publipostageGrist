@@ -306,7 +306,8 @@
 .macro-summary-model.is-hidden-model .macro-summary-model-name { color: var(--text-muted); }
 /* Bandeau « Revenir au macro-modèle » (#macro-return-bar, index.html ; js/main.js:syncMacroReturnBar) : une ligne fine entre la barre d'outils et
    le texte, tant que le modèle à l'écran a été ouvert par le stylo du résumé d'un macro-modèle (une icône de plus dans la barre d'outils gelée
-   n'est pas une option). Jetons de css/style.css seulement : clair et sombre. */
+   n'est pas une option). Jetons de css/style.css seulement : clair et sombre. Le bandeau « Revenir au document » (#linked-return-bar : un modèle Grille ouvert depuis un tableau lié,
+   js/main.js:syncLinkedReturnBar) a les mêmes classes : une seule apparence pour les deux retours. */
 .macro-return-bar { flex: none; display: flex; align-items: center; gap: 10px; padding: 4px 10px; box-sizing: border-box; border-bottom: 1px solid var(--border); background: var(--surface); color: var(--text-muted); font-family: var(--font-ui); font-size: 12px; }
 .macro-return-bar[hidden] { display: none; }
 .macro-return-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

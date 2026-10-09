@@ -261,6 +261,28 @@
     },
   });
 
+  cases.push({
+    id: 'clean_reading_hides_the_linked_return_bar_and_gives_it_back_on_exit',
+    description: 'Le bandeau « Revenir au document » (#linked-return-bar, hors de la barre du haut : un modèle Grille ouvert depuis un tableau lié) se cache avec la barre dans la Lecture épurée et revient à la sortie, comme celui du macro-modèle',
+    run: async (h) => {
+      await setup(h);
+      const banner = el('linked-return-bar');
+      const shown = () => getComputedStyle(banner).display !== 'none' && banner.getClientRects().length > 0;
+      banner.hidden = false; // ce que js/main.js:syncLinkedReturnBar fait quand le modèle à l'écran a été ouvert par « Ouvrir le modèle » du menu du lien d'un tableau lié
+      await sleep(80);
+      const before = shown();
+      await clickRow();
+      const during = { shown: shown(), active: CleanReading.isActive() };
+      await CleanReading.exit();
+      await sleep(300);
+      const after = shown();
+      banner.hidden = true;
+      await finish();
+      const pass = before && during.active && !during.shown && after;
+      return { pass, notes: JSON.stringify({ before, during, after }) };
+    },
+  });
+
   // Réglages > Accès : la case « Ouvrir les personnes en lecture seule sur la Lecture épurée » (choix d'Antoine du 2026-10-02, carte « Un réglage »).
   cases.push({
     id: 'clean_reading_access_checkbox_is_off_greyed_then_follows_the_read_only_column',

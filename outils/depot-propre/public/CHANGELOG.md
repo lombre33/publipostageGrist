@@ -241,16 +241,22 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   les bordures et le saut de page avant une ligne s'y règlent comme dans une grille. Un modèle n'est lié qu'une
   fois par document, la copie collée d'un tableau lié perd son lien, et une grille ou un en-tête et un pied de
   page n'en ont jamais. Avec le suivi des modifications allumé, le tableau lié est verrouillé. Dans la barre du
-  tableau, un bouton du lien ouvre un menu qui donne le nom du modèle et propose trois actions. « Mettre à jour
+  tableau, un bouton du lien ouvre un menu qui donne le nom du modèle et propose quatre actions. « Mettre à jour
   depuis le modèle » : les cases du tableau deviennent celles du modèle, relu à ce moment-là (le curseur reste
   dans sa case, un seul Annuler rend l'état d'avant ; un tableau déjà identique n'est pas touché et garde ses
   commentaires). « Envoyer au modèle » : le tableau du document est écrit dans le modèle, après une confirmation
   qui dit dans combien d'autres modèles ce tableau est posé ; seuls le contenu et la date du modèle changent
-  (son nom, son en-tête, ses marges restent), et ni le lien ni les commentaires du document n'y vont. « Détacher
-  du modèle » : le tableau reste, sans lien (un seul Annuler). Ces actions sont grisées, avec leur raison en
-  info-bulle, tant que le suivi des modifications est allumé. La ligne du volet « Tableau » est grisée, avec sa
-  raison en info-bulle, là où un tableau lié ne se pose pas. Pour l'instant la mise à jour et l'envoi se font à
-  la main ; la mise à jour automatique dans les deux sens vient dans les versions suivantes.
+  (son nom, son en-tête, ses marges restent), et ni le lien ni les commentaires du document n'y vont. « Ouvrir le
+  modèle » : le modèle Grille s'ouvre dans l'éditeur, comme un choix de la liste (la question « Modifications
+  non enregistrées » est posée au document qui en a), et une ligne sous la barre d'outils, « Revenir au
+  document », ramène au document, le curseur dans la même case du tableau ; si le tableau diffère alors du
+  modèle, la ligne d'état le dit sans rien remplacer. « Détacher du modèle » : le tableau reste, sans lien (un
+  seul Annuler). Les actions qui écrivent dans le document sont grisées, avec leur raison en info-bulle, tant que
+  le suivi des modifications est allumé ; « Ouvrir le modèle » reste disponible. Supprimer un modèle Grille posé
+  comme tableau lié dans d'autres modèles le dit dans la fenêtre de confirmation ; ces tableaux gardent leurs
+  cases et perdent leur lien. La ligne du volet « Tableau » est grisée, avec sa raison en info-bulle, là où un
+  tableau lié ne se pose pas. Pour l'instant la mise à jour et l'envoi se font à la main ; la mise à jour
+  automatique dans les deux sens vient dans les versions suivantes.
 - **Marge autour de chaque page dans l'assemblage avant impression** : la fenêtre « Assemblage avant
   impression » a un champ « Marge » (en millimètres, 0 au départ, les flèches avancent de 0,5) qui laisse de la
   place autour de chaque page posée sur la feuille : la marge compte de chaque côté d'une page, donc deux
@@ -765,16 +771,21 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   text, formatting, rows, columns, merging, vertical alignment, borders and the page break before a row are set
   as in a grid. A template is linked only once per document, a pasted copy of a linked table loses its link, and
   a grid or a header and footer never have one. With track changes on, the linked table is locked. In the table
-  bar, a link button opens a menu that gives the template's name and offers three actions. "Update from the
+  bar, a link button opens a menu that gives the template's name and offers four actions. "Update from the
   template": the table's cells become the template's, read again at that moment (the cursor stays in its cell,
   one Undo brings the previous state back; a table that is already identical is left alone and keeps its
   comments). "Send to the template": the document's table is written into the template, after a confirmation
   that says in how many other templates this table is placed; only the template's content and date change (its
-  name, header and footer, margins stay), and neither the link nor the document's comments go into it. "Detach
-  from the template": the table stays, without the link (one Undo). These actions are greyed, with their reason
-  as a tooltip, while track changes is on. The "Table" flyout row is greyed, with its reason as a tooltip, where
-  a linked table cannot be placed. For now updating and sending are done by hand; automatic updating in both
-  directions comes in later versions.
+  name, header and footer, margins stay), and neither the link nor the document's comments go into it. "Open the
+  template": the Grid template opens in the editor, like a choice in the list (the "Unsaved changes" question is
+  asked of a document that has some), and a line under the toolbar, "Back to the document", brings you back to
+  the document, the cursor in the same cell of the table; if the table then differs from the template, the
+  status line says so without replacing anything. "Detach from the template": the table stays, without the link
+  (one Undo). The actions that write into the document are greyed, with their reason as a tooltip, while track
+  changes is on; "Open the template" stays available. Deleting a Grid template that is placed as a linked table
+  in other templates says so in the confirmation window; those tables keep their cells and lose their link. The
+  "Table" flyout row is greyed, with its reason as a tooltip, where a linked table cannot be placed. For now
+  updating and sending are done by hand; automatic updating in both directions comes in later versions.
 - **Margin around each page in sheet assembly**: the "Assemble before printing" window has a "Margin" field (in
   millimetres, 0 to start with, the arrows step by 0.5) that leaves room around each page laid on the
   sheet: the margin sits on every side of a page, so it counts twice between two pages and once at the edge

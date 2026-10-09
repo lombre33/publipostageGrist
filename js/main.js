@@ -11,6 +11,9 @@
   // Le macro-modèle d'où le modèle à l'écran a été ouvert par le stylo de son résumé, et ce modèle : { macroId, templateId }, null sinon (cf.
   // openTemplateFromMacro).
   let macroOrigin = null;
+  // Le document d'où le modèle Grille à l'écran a été ouvert par « Ouvrir le modèle » (menu du lien d'un tableau lié, js/linked-table.js), et ce qu'il faut pour y revenir : { templateId,
+  // modelId, place (la case du curseur dans le tableau), macroOrigin (celui du document, rendu au retour) }, null sinon (cf. openLinkedModel).
+  let linkedOrigin = null;
   // Valeurs brutes (gabarits #Variable) des quatre champs, capturées juste avant de passer en Lecture : la Lecture affiche les valeurs résolues dans
   // les mêmes champs, sans zone en double. Non nul seulement pendant la Lecture (cf. updateEmailFieldsDisplay).
   let emailFieldsRawCache = null;
@@ -28,6 +31,7 @@
   const conflictBanner = document.getElementById('autosave-conflict-banner');
   const conflictReloadBtn = document.getElementById('autosave-conflict-reload');
   const macroReturnBar = document.getElementById('macro-return-bar');
+  const linkedReturnBar = document.getElementById('linked-return-bar');
   const emailFieldsRow = document.getElementById('v2-email-fields-row');
   const emailSubjectInput = document.getElementById('v2-email-subject');
   const emailToInput = document.getElementById('v2-email-to');
@@ -235,6 +239,7 @@
   // réécrit ici.
   function loadTemplateIntoEditor(tpl, forcedTypeModele) {
     forgetMacroOriginUnless(tpl);
+    forgetLinkedOriginUnless(tpl);
     // Le niveau de zoom gardé pour ce modèle (macro-modèle compris), avant tout calcul du facteur d'ajustement de la page (js/page-zoom.js).
     PageZoom.useTemplate(tpl);
     if (tpl && tpl.typeModele === 'macro') { loadMacroIntoEditor(tpl); return; }
@@ -644,6 +649,70 @@
     I18n.onChange(syncMacroReturnBar); // le nom du macro-modèle est dans la phrase du bandeau
   }
 
+  // Ouvrir le modèle d'un tableau lié, et revenir au document
+  // « Ouvrir le modèle » du menu du lien d'un tableau lié (js/linked-table.js:open) ouvre ce modèle Grille dans l'éditeur comme un choix de la liste ; tant qu'il est à l'écran, le bandeau
+  // « Revenir au document » (#linked-return-bar) ramène au document d'origine, le curseur dans la même case du tableau. linkedOrigin est remis à null dès qu'un autre modèle se charge
+  // (liste, « + », galerie, suppression, copie : forgetLinkedOriginUnless), jamais quand le même est rechargé (conflit d'enregistrement automatique).
+
+  function syncLinkedReturnBar() {
+    if (!linkedReturnBar) return;
+    const origin = linkedOrigin && Templates.byId(linkedOrigin.templateId);
+    linkedReturnBar.hidden = !origin;
+    const text = document.getElementById('linked-return-text');
+    if (!text) return;
+    text.textContent = origin ? I18n.t('linkedTable.return.text', { name: origin.nom }) : '';
+    text.title = text.textContent; // le nom d'un document long est coupé par « … » : la phrase se lit en entier au survol
+  }
+
+  function forgetLinkedOriginUnless(tpl) {
+    if (!linkedOrigin || (tpl && Templates.isCurrent(tpl.id))) return;
+    linkedOrigin = null;
+    syncLinkedReturnBar();
+  }
+
+  // Le même chemin qu'un choix du modèle dans la liste : la question « Modifications non enregistrées » est posée au document qui en a (« Annuler » le garde à l'écran, tel quel). La
+  // liste et le cache des modèles sont relus d'abord, comme pour un modèle d'un macro-modèle : un modèle créé ailleurs depuis le dernier passage n'a pas encore sa ligne dans le <select>.
+  // Un document jamais enregistré, abandonné à la question, n'a plus où revenir : pas de bandeau.
+  async function openLinkedModel({ id, name, place }) {
+    if (hasEditsToConfirmBeforeLeaving() && !(await askBeforeLeaving())) return;
+    const templateId = Templates.getCurrentId();
+    const macro = macroOrigin;
+    const epoch = autosaveEpoch;
+    try { await refreshTemplateList(); } catch (e) { console.warn('[main] relecture des modèles impossible', e); }
+    // Un autre modèle s'est chargé pendant la relecture (un choix dans la liste) : celui-là gagne.
+    if (epoch !== autosaveEpoch) return;
+    const model = Templates.byId(id);
+    if (!model || model.typeModele !== GridEditor.TYPE) { setStatus(I18n.t('linkedTable.gone', { name }), true); return; }
+    templateSelect.value = model.id;
+    loadTemplateIntoEditor(model);
+    linkedOrigin = templateId == null ? null : { templateId, modelId: model.id, place, macroOrigin: macro };
+    syncLinkedReturnBar();
+  }
+
+  // Même chemin que la liste aussi pour le retour : la question « Modifications non enregistrées » est posée si le modèle en a (« Annuler » le garde, et le bandeau aussi). Le cache des
+  // modèles est relu d'abord : ce que le modèle vient de recevoir est ce que le document lit. Le document revient avec son bandeau de macro-modèle s'il en avait un, le curseur dans la
+  // case du tableau qu'on avait quittée ; un tableau qui diffère du modèle le dit sur la ligne d'état (rien ne se remplace tout seul tant que « En direct » n'est pas là).
+  async function returnFromLinkedModel() {
+    const origin = linkedOrigin;
+    if (!origin) return;
+    try { await Templates.loadAll(); } catch (e) { console.error('[main] relecture des modèles impossible', e); }
+    // Document supprimé depuis (par quelqu'un d'autre) : le modèle reste à l'écran, le bandeau s'efface.
+    if (!Templates.byId(origin.templateId)) { syncLinkedReturnBar(); return; }
+    templateSelect.value = origin.templateId;
+    await onTemplateSelectChange();
+    if (!Templates.isCurrent(origin.templateId)) return;
+    if (origin.macroOrigin && Templates.byId(origin.macroOrigin.macroId)) { macroOrigin = origin.macroOrigin; syncMacroReturnBar(); }
+    if (currentMode !== 'edit') return;
+    const shown = LinkedTable.reveal(EditorCore.getEditor(), origin.modelId, origin.place);
+    if (shown && shown.differs) setStatus(I18n.t('linkedTable.return.differs', { name: shown.name }));
+  }
+
+  function wireLinkedReturn() {
+    const button = document.getElementById('btn-linked-return');
+    if (button) button.addEventListener('click', returnFromLinkedModel);
+    I18n.onChange(syncLinkedReturnBar); // le nom du document est dans la phrase du bandeau
+  }
+
   // Un seul enregistrement manuel à la fois. Avec Grist lent, un deuxième clic sur Enregistrer (ou Ctrl+S) pendant la première écriture partait
   // aussitôt : l'identifiant d'un modèle tout neuf n'arrive qu'à la fin de l'écriture, et les deux gestes créaient chacun une ligne sous le même nom.
   // Le deuxième attend la fin du premier (liste relue comprise), puis enregistre ce que l'écran montre alors, dans la même ligne ; plusieurs gestes
@@ -736,6 +805,7 @@
     if (sameTemplate && String(id) !== String(savedId)) {
       Comments.loadForTemplate(savedId).catch(e => console.error('[main] chargement des commentaires impossible après création du modèle', e));
       forgetMacroOriginUnless(null); // une copie n'est pas un modèle du macro-modèle d'où l'on venait : le bandeau n'a plus de sens
+      forgetLinkedOriginUnless(null); // ni le modèle que le tableau du document désigne : le retour n'a plus de sens non plus
     }
     updateSaveStatus();
     // à la place de « Enregistré à… » : le nom a changé, c'est ce qu'il faut lire
@@ -781,7 +851,10 @@
     if (isReadOnly()) return;
     const id = Templates.getCurrentId();
     if (!id) { setStatus(I18n.t('status.noTemplateSelected'), true); return; }
-    if (!(await Dialogs.confirm({ title: I18n.t('confirm.deleteTemplate'), confirmLabel: I18n.t('common.delete'), danger: true }))) return;
+    // Un modèle Grille posé comme tableau lié dans d'autres modèles : la question le dit, ces tableaux gardent leurs cases et perdent leur lien (js/linked-table.js:usedBy).
+    const used = LinkedTable.usedBy(id).length;
+    const message = used ? I18n.t('linkedTable.deleteUsed', { n: used }) : '';
+    if (!(await Dialogs.confirm({ title: I18n.t('confirm.deleteTemplate'), message, confirmLabel: I18n.t('common.delete'), danger: true }))) return;
     await Templates.remove(id);
     await refreshTemplateList();
     startBlankDocument();
@@ -2293,7 +2366,7 @@
     });
     wireA4PreviewToggle();
     OrientationToggle.wire({ isReadOnly });
-    LinkedTable.wire({ setStatus });
+    LinkedTable.wire({ setStatus, openModel: openLinkedModel });
     wireLinkRulesModal();
     wireTemplateGalleryModal();
     wireTemplateRename();
@@ -2316,6 +2389,7 @@
     wireAutosaveConflictBanner();
     wirePasteTooBigNotice();
     wireMacroReturn();
+    wireLinkedReturn();
     wireSaveMenu();
   }
 

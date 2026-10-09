@@ -7,7 +7,7 @@
 // La pose du lien : la ligne « Tableau d'un modèle Grille… » du menu du bouton « Tableau » (au survol, comme « Image depuis une variable » sous le bouton
 // Image ; le menu « Lien et blocs de contenu » n'a plus de place dans 700x400), qui ouvre une liste avec recherche des modèles Grille (ceux déjà liés dans le
 // document grisés avec leur raison), le repère dans la page, le bouton du lien de la barre du tableau (son menu : le nom du modèle, « Mettre à jour depuis le
-// modèle », « Envoyer au modèle », « Détacher ») et les règles qui font tenir le lien :
+// modèle », « Envoyer au modèle », « Ouvrir le modèle », « Détacher ») et les règles qui font tenir le lien :
 //  - ses cases suivent celles d'une grille (GridEditor.isForbiddenNode : ni second tableau, ni colonnes, ni sommaire, ni citation, encadré, bloc de code...), pour
 //    que ce qu'on y écrit puisse s'écrire dans le modèle ; le garde-fou refuse la transaction qui en ajouterait (collage et clavier compris), les boutons concernés
 //    se grisent ;
@@ -18,7 +18,8 @@
 // Une grille n'a jamais de lien, ni une zone d'en-tête ou de pied de page : un tableau lié qui y est collé le perd.
 // Les deux sens du lien se font à la main, depuis ce menu : « Mettre à jour depuis le modèle » remplace les cases du tableau par celles du modèle (un seul Annuler
 // les rend), « Envoyer au modèle » écrit le tableau du document dans le modèle (après confirmation : il est partagé), sans toucher à ses autres colonnes. Les
-// marques de commentaire ne passent jamais d'un côté à l'autre : leur fil est celui du document où elles sont posées.
+// marques de commentaire ne passent jamais d'un côté à l'autre : leur fil est celui du document où elles sont posées. « Ouvrir le modèle » ouvre le modèle Grille dans
+// l'éditeur (js/main.js:openLinkedModel) et un bandeau ramène au document, le curseur dans la même case du tableau (reveal).
 const LinkedTable = (function () {
   const ATTR = 'linkedTemplate';
   const DOM_ATTR = 'data-linked-template';
@@ -29,8 +30,9 @@ const LinkedTable = (function () {
 
   let libs = null;
   function configure(deps) { libs = deps; }
-  // Ce que la page prête au module (js/main.js) : écrire dans la ligne d'état. Sans elle (ce module seul, en test), les messages ne vont nulle part.
-  let host = { setStatus() {} };
+  // Ce que la page prête au module (js/main.js) : écrire dans la ligne d'état (`setStatus`) et ouvrir un modèle à l'écran (`openModel`). Sans elle (ce module seul, en test), les
+  // messages ne vont nulle part.
+  let host = { setStatus() {}, openModel() {} };
   function wire(callbacks) { host = Object.assign({}, host, callbacks); }
   const say = (key, vars, isError) => host.setStatus(I18n.t(key, vars), !!isError);
   const fail = (key, vars) => { say(key, vars, true); return false; };
@@ -414,7 +416,7 @@ const LinkedTable = (function () {
     return { openPicker };
   })();
 
-  const { pull, push, usedBy } = (function () {
+  const { pull, push, usedBy, open, reveal } = (function () {
     // Les deux sens du lien, à la main : mettre à jour le tableau du document depuis son modèle, envoyer le tableau du document à son modèle
 
     // Une action à la fois : un double clic, ou une seconde action pendant la lecture des modèles, ne part pas deux fois.
@@ -431,8 +433,10 @@ const LinkedTable = (function () {
     }
 
     // Les modèles, hors celui qui est ouvert, qui posent un tableau lié à ce modèle : lus dans les contenus du cache (une grille n'en pose jamais, un macro-modèle n'a pas de
-    // HTML). Le numéro est cherché avec ses guillemets : « 1 » n'est pas « 12 ».
+    // HTML). Le numéro est cherché avec ses guillemets : « 1 » n'est pas « 12 ». Rien pour un numéro qui n'est pas celui d'un modèle Grille (le numéro d'un modèle supprimé peut
+    // se retrouver à un autre type de modèle : ce n'est pas lui que ces tableaux désignaient).
     function usedBy(id) {
+      if (!modelOf(id)) return [];
       const marker = DOM_ATTR + '="' + id + '"';
       return Templates.getCached().filter(t => t.typeModele !== 'macro' && t.typeModele !== GridEditor.TYPE && !Templates.isCurrent(t.id) && String(t.contenu || '').includes(marker));
     }
@@ -531,7 +535,31 @@ const LinkedTable = (function () {
       } finally { busy = false; }
     }
 
-    return { pull, push, usedBy };
+    // « Ouvrir le modèle » : donne à la page (js/main.js:openLinkedModel) le modèle du tableau sous le curseur et la case où est le curseur, pour y revenir. N'écrit rien dans le
+    // document : le suivi des modifications allumé ne l'empêche pas, et les modifications en attente se demandent dans la page (Enregistrer / Abandonner / Annuler). Faux, sans rien
+    // faire, quand une autre action tourne ou que le tableau n'est pas lié à un modèle qui existe.
+    function open(editor) {
+      const link = editor && !busy ? status(editor.state) : null;
+      if (!link) return false;
+      host.openModel({ id: link.model.id, name: link.name, place: cellPlace(editor.state, link.at) });
+      return true;
+    }
+
+    // Au retour du modèle (js/main.js:returnFromLinkedModel) : le curseur revient dans le tableau lié à ce modèle, dans la case où il était, et le tableau se montre. Rend { name,
+    // differs } (`differs` : ce tableau n'est plus celui du modèle, que la page dit sur la ligne d'état), ou null quand le document n'a plus ce tableau ou que le modèle n'existe plus.
+    function reveal(editor, id, place) {
+      const found = editor ? tableOf(editor, id) : null;
+      const model = modelOf(id);
+      if (!found || !model) return null;
+      const tr = editor.state.tr;
+      cursorTo(tr, found.pos, place || { row: 0, col: 0 });
+      editor.view.dispatch(tr.scrollIntoView());
+      editor.view.focus();
+      const node = tableNodeOf(editor, model);
+      return { name: model.nom, differs: !node || htmlOf(editor, node) !== htmlOf(editor, found.node) };
+    }
+
+    return { pull, push, usedBy, open, reveal };
   })();
 
   // La ligne « Tableau d'un modèle Grille… » du menu du bouton Tableau : grisée avec sa raison en info-bulle (suivi des modifications, curseur dans un tableau),
@@ -545,5 +573,5 @@ const LinkedTable = (function () {
     if (reason) row.title = I18n.t(reason); else row.removeAttribute('title');
   }
 
-  return { ATTR, configure, wire, withAttributes, createExtension, modelOf, linkedTables, tableAt, status, cursorIn, lockReason, placeBlock, detach, insert, openPicker, pull, push, usedBy, syncRow };
+  return { ATTR, configure, wire, withAttributes, createExtension, modelOf, linkedTables, tableAt, status, cursorIn, lockReason, placeBlock, detach, insert, openPicker, pull, push, usedBy, open, reveal, syncRow };
 })();

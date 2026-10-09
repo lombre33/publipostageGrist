@@ -1002,6 +1002,7 @@
   function say(text) { const el = document.getElementById('status-msg'); if (el) { el.textContent = text; el.className = ''; } }
   const pullRow = () => menu() && menu().querySelector('[data-action="linked-pull"]');
   const pushRow = () => menu() && menu().querySelector('[data-action="linked-push"]');
+  const openRow = () => menu() && menu().querySelector('[data-action="linked-open"]');
   // Le texte des cases d'une grille de `rows` x `cols` faite par gridHtml, dans l'ordre de lecture.
   const labels = (label, rows, cols) => Array.from({ length: rows * cols }, (_, i) => label + 'ABC'[i % cols] + (Math.floor(i / cols) + 1)).join('|');
   // Remplace la confirmation de l'envoi : répond `answer` (une valeur, ou une fonction du rang de la demande) et garde ce qu'on lui a demandé.
@@ -1396,7 +1397,7 @@
 
   cases.push({
     id: 'linked_menu_has_the_two_way_rows_that_start_the_actions_and_grey_under_track_changes',
-    description: 'Le menu du lien a, dans l\'ordre, « Mettre à jour depuis le modèle », « Envoyer au modèle » et « Détacher », chacune avec son icône (trois différentes), son libellé et son info-bulle en deux langues ; un appui sur la première referme le menu et met à jour le tableau, un appui sur la seconde referme le menu et demande confirmation, la barre du tableau reste affichée dans les deux cas ; sous le suivi des modifications, elles sont grisées avec la raison et un appui ne fait rien (le menu reste ouvert)',
+    description: 'Le menu du lien a, dans l\'ordre, « Mettre à jour depuis le modèle », « Envoyer au modèle », « Ouvrir le modèle » et « Détacher », chacune avec son icône (quatre différentes), son libellé et son info-bulle en deux langues ; un appui sur la première referme le menu et met à jour le tableau, un appui sur la seconde referme le menu et demande confirmation, la barre du tableau reste affichée dans les deux cas ; sous le suivi des modifications, celles qui écrivent dans le document sont grisées avec la raison et un appui ne fait rien (le menu reste ouvert), « Ouvrir le modèle » reste libre',
     run: async (h) => withDoc(h, DOC, async () => {
       const bad = [];
       const m = await model('Menu', gridHtml('U', 2, 2));
@@ -1408,21 +1409,22 @@
       await sleep(150);
       if (!menuOpen()) { return { pass: false, notes: 'le menu ne s\'ouvre pas' }; }
       const order = Array.from(menu().querySelectorAll('.v2-linked-menu-row')).map(el => el.getAttribute('data-action')).join();
-      if (order !== 'linked-pull,linked-push,linked-detach') bad.push('lignes : ' + order);
+      if (order !== 'linked-pull,linked-push,linked-open,linked-detach') bad.push('lignes : ' + order);
       const icons = Array.from(menu().querySelectorAll('.v2-linked-menu-row svg')).map(el => el.innerHTML);
-      if (icons.length !== 3 || new Set(icons).size !== 3 || icons.some(markup => !markup)) bad.push('icônes : ' + icons.length + ' dont ' + new Set(icons).size + ' différentes');
+      if (icons.length !== 4 || new Set(icons).size !== 4 || icons.some(markup => !markup)) bad.push('icônes : ' + icons.length + ' dont ' + new Set(icons).size + ' différentes');
       const lang = I18n.getLang();
       try {
         const texts = {};
         for (const code of ['fr', 'en']) {
           I18n.setLang(code); await sleep(60);
           press(barButton()); await sleep(60); press(barButton()); await sleep(120);
-          texts[code] = [pullRow(), pushRow(), detachRow()].map(row => row.textContent.trim() + ' / ' + row.title).join(' | ');
+          texts[code] = [pullRow(), pushRow(), openRow(), detachRow()].map(row => row.textContent.trim() + ' / ' + row.title).join(' | ');
         }
-        if (texts.fr === texts.en || !/Update from the template/.test(texts.en) || !/Send to the template/.test(texts.en) || !/Mettre à jour depuis le modèle/.test(texts.fr) || !/Envoyer au modèle/.test(texts.fr)) bad.push('deux langues : ' + JSON.stringify(texts));
-        if (pullRow().title !== I18n.t('linkedTable.pull', { name: m.nom }) || pushRow().title !== I18n.t('linkedTable.push', { name: m.nom })) bad.push('info-bulles : ' + pullRow().title + ' | ' + pushRow().title);
+        if (texts.fr === texts.en || !/Update from the template/.test(texts.en) || !/Send to the template/.test(texts.en) || !/Mettre à jour depuis le modèle/.test(texts.fr) || !/Envoyer au modèle/.test(texts.fr)
+          || !/Open the template \/ Open the Grid template/.test(texts.en) || !/Ouvrir le modèle \/ Ouvre le modèle Grille/.test(texts.fr)) bad.push('deux langues : ' + JSON.stringify(texts));
+        if (pullRow().title !== I18n.t('linkedTable.pull', { name: m.nom }) || pushRow().title !== I18n.t('linkedTable.push', { name: m.nom }) || openRow().title !== I18n.t('linkedTable.open', { name: m.nom })) bad.push('info-bulles : ' + pullRow().title + ' | ' + pushRow().title + ' | ' + openRow().title);
       } finally { I18n.setLang(lang); await sleep(60); }
-      if ([pullRow(), pushRow(), detachRow()].some(row => row.getAttribute('aria-disabled') !== 'false')) bad.push('une ligne est grisée sans raison');
+      if ([pullRow(), pushRow(), openRow(), detachRow()].some(row => row.getAttribute('aria-disabled') !== 'false')) bad.push('une ligne est grisée sans raison');
       // « Mettre à jour » : le menu se referme, le tableau devient celui du modèle.
       if (!menuOpen()) { press(barButton()); await sleep(120); }
       await sleep(GROUP_GAP_MS);
@@ -1453,8 +1455,11 @@
       await sleep(150);
       const why = I18n.t('linkedTable.lockedTracked', { name: m.nom });
       const rows = [pullRow(), pushRow(), detachRow()];
-      if (!menuOpen() || rows.some(row => !row || row.getAttribute('aria-disabled') !== 'true' || row.title !== why)) bad.push('sous le suivi : ' + JSON.stringify(rows.map(row => row && [row.getAttribute('aria-disabled'), row.title])));
-      else {
+      const greyed = menuOpen() && rows.every(row => row && row.getAttribute('aria-disabled') === 'true' && row.title === why);
+      if (!greyed) bad.push('sous le suivi : ' + JSON.stringify(rows.map(row => row && [row.getAttribute('aria-disabled'), row.title])));
+      // « Ouvrir le modèle » n'écrit rien dans le document : ni grisée ni sans son info-bulle sous le suivi.
+      if (!openRow() || openRow().getAttribute('aria-disabled') !== 'false' || openRow().title !== I18n.t('linkedTable.open', { name: m.nom })) bad.push('« Ouvrir le modèle » sous le suivi : ' + (openRow() && [openRow().getAttribute('aria-disabled'), openRow().title]));
+      if (greyed) {
         stub().clearActionLog();
         const was = docJson();
         const askedBefore = asked.length;
@@ -1462,6 +1467,506 @@
         await sleep(250);
         if (!menuOpen() || docJson() !== was || asked.length !== askedBefore || modelWrites().length) bad.push('un appui sous le suivi a agi : ' + JSON.stringify([menuOpen(), docJson() === was, asked.length - askedBefore, modelWrites().length]));
       }
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  // === 9) Ouvrir le modèle, revenir au document (lot 6b, suite) ========================================================================================================
+  // « Ouvrir le modèle » (menu du lien) met le modèle Grille à l'écran par le chemin de la liste (js/main.js:openLinkedModel) ; le bandeau « Revenir au document » (#linked-return-bar) ramène au
+  // document, le curseur dans la même case (LinkedTable.reveal). Ces cas passent par les vrais gestes : des documents ENREGISTRÉS ouverts par la liste, la ligne du menu, le vrai bouton du bandeau, les
+  // vraies fenêtres « Modifications non enregistrées ». La mesure à la souris à 700x400 est dans le script Node linkedTableMouse.
+  const AUTOSAVE_KEY = 'pp_autosave_enabled';
+  function setAutosave(enabled) { try { if (enabled) localStorage.removeItem(AUTOSAVE_KEY); else localStorage.setItem(AUTOSAVE_KEY, 'false'); } catch (e) { /* stockage indisponible */ } }
+  const barVisible = id => { const el = document.getElementById(id); return !!el && !el.hidden && getComputedStyle(el).display !== 'none' && el.getClientRects().length > 0; };
+  const dialogButtons = () => Array.from(document.querySelectorAll('#pp-dialog-modal .pp-modal-actions button')).filter(b => !b.hidden);
+  const dialogOpen = () => !!document.getElementById('pp-dialog-modal') && getComputedStyle(document.getElementById('pp-dialog-modal')).display !== 'none';
+  async function answerDialog(label) {
+    const button = dialogButtons().find(b => b.textContent === label);
+    if (!button) throw new Error('bouton « ' + label + ' » absent de la fenêtre : ' + JSON.stringify(dialogButtons().map(b => b.textContent)));
+    button.click();
+    await sleep(600);
+  }
+  const screenOf = () => ({
+    current: String(Templates.getCurrentId()), list: String(document.getElementById('template-select').value), name: document.getElementById('template-name').value,
+    grid: GridEditor.isActive(), bar: barVisible('linked-return-bar'), macroBar: barVisible('macro-return-bar'),
+    barText: document.getElementById('linked-return-text').textContent, barButton: document.getElementById('btn-linked-return').textContent,
+  });
+  // Ouvre un modèle par la liste des modèles, comme la personne (l'option est posée à la main quand la liste ne l'a pas encore relue), puis attend qu'il soit chargé.
+  async function openByList(id, nom) {
+    const select = document.getElementById('template-select');
+    if (!Array.from(select.options).some(o => o.value === String(id))) { const option = document.createElement('option'); option.value = String(id); option.textContent = nom; select.appendChild(option); }
+    select.value = String(id);
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    await sleep(800);
+  }
+  // Un document ENREGISTRÉ qui pose le tableau lié au modèle `m` (`rows` x `cols` cases étiquetées `label`), ouvert par la liste : modèle courant, nom, liste et éditeur le montrent. Rend { id, nom }.
+  async function openedDoc(m, label, rows, cols, type) {
+    const nom = 'Doc ' + (++counter);
+    const saved = await Templates.save(null, nom, linkedDoc(m.id, label, rows, cols), '', null, null, type || 'document', null);
+    made.push(saved.id);
+    await Templates.loadAll();
+    await openByList(saved.id, nom);
+    ed().commands.focus();
+    return { id: saved.id, nom };
+  }
+  // Les gestes de la personne jusqu'au modèle : le curseur dans la case (row, col) du tableau lié, le bouton du lien, la ligne « Ouvrir le modèle ».
+  async function openFromMenu(row, col) {
+    await cursorIn(0, row, col);
+    await sleep(100);
+    press(barButton());
+    await sleep(150);
+    if (!menuOpen() || !openRow()) return false;
+    press(openRow());
+    await sleep(900);
+    return true;
+  }
+  // Repart d'un document vierge (le vrai bouton « + » ; la réponse toute faite à la question d'avant de quitter est « Abandonner »), enregistrement automatique allumé, et remet tout en place à la fin.
+  async function withApp(h, body) {
+    setAutosave(true);
+    await h.clickButton('btn-new');
+    await sleep(300);
+    try { return await body(); } finally {
+      Dialogs.confirm = realConfirm;
+      for (const label of ['Abandonner', 'Annuler']) if (dialogOpen() && dialogButtons().some(b => b.textContent === label)) await answerDialog(label).catch(() => {});
+      Editor.setTrackChanges(false);
+      setAutosave(true);
+      say('');
+      await h.clickButton('btn-new');
+      await sleep(300);
+      await dropModels();
+    }
+  }
+
+  cases.push({
+    id: 'linked_open_puts_the_model_on_screen_with_a_return_bar_and_the_bar_brings_back_to_the_same_cell',
+    description: '« Ouvrir le modèle » (ligne du menu du lien) referme le menu et met le modèle Grille à l\'écran par le chemin de la liste (modèle courant, nom, liste, grille active) avec le bandeau « Revenir au document » (texte et bouton dans la langue de l\'interface, rien d\'écrit dans Grist) ; « Revenir au document » remet le document, sans bandeau, le curseur dans la case où il était, la barre du tableau affichée et le tableau intact, sans message d\'écart quand il est celui du modèle',
+    run: async (h) => withApp(h, async () => {
+      const bad = [];
+      const m = await model('Ouvrir', gridHtml('O', 3, 2));
+      const d = await openedDoc(m, 'O', 3, 2);
+      stub().clearActionLog();
+      const was = textsOf(tablesOf()[0].node);
+      if (!(await openFromMenu(1, 1))) return { pass: false, notes: 'la ligne « Ouvrir le modèle » est introuvable' };
+      const on = screenOf();
+      if (on.current !== String(m.id) || on.list !== String(m.id) || on.name !== m.nom || !on.grid) bad.push('le modèle n\'est pas à l\'écran : ' + JSON.stringify(on));
+      if (!on.bar || on.barText !== 'Modèle Grille ouvert depuis le document « ' + d.nom + ' ».' || on.barButton !== 'Revenir au document' || on.macroBar) bad.push('bandeau : ' + JSON.stringify(on));
+      if (menuOpen()) bad.push('le menu reste ouvert');
+      if (modelWrites().length) bad.push('ouvrir a écrit dans Grist : ' + JSON.stringify(modelWrites()));
+      if (textsOf(tablesOf()[0].node) !== labels('O', 3, 2)) bad.push('la grille ne montre pas les cases du modèle : ' + textsOf(tablesOf()[0].node));
+      // Le texte du bandeau suit la langue de l'interface.
+      const lang = I18n.getLang();
+      try {
+        I18n.setLang('en'); await sleep(80);
+        const en = screenOf();
+        if (en.barText !== 'Grid template opened from the document “' + d.nom + '”.' || en.barButton !== 'Back to the document' || document.getElementById('linked-return-bar').getAttribute('aria-label') !== 'Back to the document') bad.push('anglais : ' + JSON.stringify(en));
+      } finally { I18n.setLang(lang); await sleep(80); }
+      say('');
+      // Un clic de souris donne d'abord le focus au bouton : le clavier doit revenir dans le document.
+      document.getElementById('btn-linked-return').focus();
+      document.getElementById('btn-linked-return').click();
+      await sleep(900);
+      const back = screenOf();
+      if (back.current !== String(d.id) || back.list !== String(d.id) || back.name !== d.nom || back.grid || back.bar) bad.push('le document n\'est pas revenu : ' + JSON.stringify(back));
+      if (textsOf(tablesOf()[0].node) !== was) bad.push('le tableau du document a changé : ' + textsOf(tablesOf()[0].node));
+      if (JSON.stringify(cursorCell()) !== '[1,1]' || ed().state.selection.$head.parent.textContent !== 'OB2') bad.push('le curseur n\'est pas dans la même case : ' + JSON.stringify(cursorCell()));
+      if (!ed().view.hasFocus() || !barShown()) bad.push('focus ou barre du tableau : ' + JSON.stringify([ed().view.hasFocus(), barShown()]));
+      if (/diffère|differs/.test(statusLine().text)) bad.push('message d\'écart alors que le tableau est celui du modèle : ' + statusLine().text);
+      if (modelWrites().length) bad.push('revenir a écrit dans Grist : ' + JSON.stringify(modelWrites()));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_open_and_return_ask_about_pending_edits_and_cancel_keeps_the_screen_and_the_bar',
+    description: 'Avec des modifications en attente, « Ouvrir le modèle » pose la question « Modifications non enregistrées » (rien d\'écrit tant qu\'on n\'a pas répondu) : Annuler garde le document, son texte, le menu fermé et pas de bandeau ; Enregistrer écrit le document puis ouvre le modèle. De même « Revenir au document » depuis une grille modifiée : Annuler garde le modèle et le bandeau, Abandonner rend le document sans rien écrire dans le modèle',
+    run: async (h) => withApp(h, async () => h.withRealChoose(async () => {
+      setAutosave(false); // aucun passage du minuteur : seul un enregistrement de ce geste pourrait écrire
+      const bad = [];
+      const m = await model('Question', gridHtml('Q', 2, 2));
+      const d = await openedDoc(m, 'Q', 2, 2);
+      const modelBefore = String(rowOf(m.id).Contenu);
+      await cursorIn(0, 0, 0);
+      await sleep(GROUP_GAP_MS);
+      ed().chain().focus().insertContent('+').run();
+      await sleep(150);
+      stub().clearActionLog();
+      // Aller vers le modèle : la question, rien d'écrit, « Annuler » garde tout.
+      await cursorIn(0, 1, 1);
+      press(barButton()); await sleep(150);
+      press(openRow()); await sleep(500);
+      const asked = { open: dialogOpen(), labels: dialogButtons().map(b => b.textContent), message: dialogOpen() ? document.getElementById('pp-dialog-message').textContent : '', writes: modelWrites().length };
+      if (!asked.open || JSON.stringify(asked.labels) !== JSON.stringify(['Annuler', 'Abandonner', 'Enregistrer']) || !asked.message.includes(d.nom) || asked.writes !== 0) bad.push('question : ' + JSON.stringify(asked));
+      if (dialogOpen()) await answerDialog('Annuler');
+      const kept = screenOf();
+      if (dialogOpen() || menuOpen() || kept.current !== String(d.id) || kept.grid || kept.bar || !docJson().includes('+') || modelWrites().length) bad.push('après Annuler : ' + JSON.stringify({ kept, menu: menuOpen(), typed: docJson().includes('+'), writes: modelWrites().length }));
+      // « Enregistrer » : le document est écrit avec la frappe, puis le modèle s'ouvre avec son bandeau.
+      await cursorIn(0, 1, 1);
+      press(barButton()); await sleep(150);
+      press(openRow()); await sleep(500);
+      if (dialogOpen()) await answerDialog('Enregistrer');
+      await sleep(600);
+      const stored = String(rowOf(d.id).Contenu);
+      const opened = screenOf();
+      if (dialogOpen() || opened.current !== String(m.id) || !opened.grid || !opened.bar || !stored.includes('+')) bad.push('après Enregistrer : ' + JSON.stringify({ opened, stored: stored.includes('+') }));
+      // Dans la grille : une modification en attente, puis « Revenir au document ».
+      await sleep(GROUP_GAP_MS);
+      ed().chain().focus().insertContent('!').run();
+      await sleep(150);
+      stub().clearActionLog();
+      document.getElementById('btn-linked-return').click();
+      await sleep(500);
+      const back = { open: dialogOpen(), labels: dialogButtons().map(b => b.textContent), message: dialogOpen() ? document.getElementById('pp-dialog-message').textContent : '', writes: modelWrites().length };
+      if (!back.open || JSON.stringify(back.labels) !== JSON.stringify(['Annuler', 'Abandonner', 'Enregistrer']) || !back.message.includes(m.nom) || back.writes !== 0) bad.push('question au retour : ' + JSON.stringify(back));
+      if (dialogOpen()) await answerDialog('Annuler');
+      const stay = screenOf();
+      if (dialogOpen() || stay.current !== String(m.id) || !stay.grid || !stay.bar || modelWrites().length) bad.push('après Annuler au retour : ' + JSON.stringify({ stay, writes: modelWrites().length }));
+      document.getElementById('btn-linked-return').click();
+      await sleep(500);
+      if (dialogOpen()) await answerDialog('Abandonner');
+      const home = screenOf();
+      if (dialogOpen() || home.current !== String(d.id) || home.grid || home.bar || String(rowOf(m.id).Contenu) !== modelBefore) bad.push('après Abandonner : ' + JSON.stringify({ home, modelKept: String(rowOf(m.id).Contenu) === modelBefore }));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    })),
+  });
+
+  cases.push({
+    id: 'linked_return_says_when_the_table_differs_from_the_model_and_replaces_nothing',
+    description: 'Une grille modifiée puis enregistrée au retour (« Enregistrer ») : le document revient avec son tableau tel qu\'il était (rien ne se remplace tout seul), le curseur dans la même case, et la ligne d\'état dit que le tableau diffère du modèle, avec le nom du modèle, dans la langue de l\'interface',
+    run: async (h) => withApp(h, async () => h.withRealChoose(async () => {
+      setAutosave(false);
+      const bad = [];
+      const m = await model('Ecart', gridHtml('E', 2, 2));
+      const d = await openedDoc(m, 'E', 2, 2);
+      const was = textsOf(tablesOf()[0].node);
+      if (!(await openFromMenu(0, 1))) return { pass: false, notes: 'la ligne « Ouvrir le modèle » est introuvable' };
+      ed().chain().focus().insertContent('!').run();
+      await sleep(150);
+      document.getElementById('btn-linked-return').click();
+      await sleep(500);
+      if (dialogOpen()) await answerDialog('Enregistrer');
+      await sleep(700);
+      const home = screenOf();
+      if (home.current !== String(d.id) || home.grid || home.bar) bad.push('le document n\'est pas revenu : ' + JSON.stringify(home));
+      if (!String(rowOf(m.id).Contenu).includes('!')) bad.push('le modèle n\'a pas reçu la frappe');
+      if (textsOf(tablesOf()[0].node) !== was) bad.push('le tableau du document a été remplacé : ' + textsOf(tablesOf()[0].node));
+      const line = statusLine();
+      if (line.text !== 'Ce tableau diffère du modèle « ' + m.nom + ' » : « Mettre à jour depuis le modèle » (menu du lien).' || line.error) bad.push('ligne d\'état : ' + JSON.stringify(line));
+      if (JSON.stringify(cursorCell()) !== '[0,1]') bad.push('curseur : ' + JSON.stringify(cursorCell()));
+      // Le même retour en anglais.
+      const lang = I18n.getLang();
+      try {
+        I18n.setLang('en'); await sleep(80);
+        if (!(await openFromMenu(0, 1))) bad.push('« Open the template » introuvable');
+        else {
+          document.getElementById('btn-linked-return').click();
+          await sleep(900);
+          if (statusLine().text !== 'This table differs from the template “' + m.nom + '”: “Update from the template” (link menu).') bad.push('anglais : ' + statusLine().text);
+        }
+      } finally { I18n.setLang(lang); await sleep(80); }
+      // Le tableau remis d'accord (« Mettre à jour ») : plus d'écart au prochain retour.
+      press(barButton()); await sleep(150);
+      press(pullRow()); await sleep(500);
+      say('');
+      if (!(await openFromMenu(0, 1))) bad.push('ligne introuvable (3)');
+      else {
+        document.getElementById('btn-linked-return').click();
+        await sleep(900);
+        if (/diffère|differs/.test(statusLine().text)) bad.push('écart annoncé alors que le tableau est celui du modèle : ' + statusLine().text);
+      }
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    })),
+  });
+
+  cases.push({
+    id: 'linked_return_bar_goes_away_with_any_other_template_but_stays_when_the_same_one_is_chosen_again',
+    description: 'Le bandeau « Revenir au document » disparaît dès qu\'un autre modèle se charge (la liste, « + ») et reste quand le même modèle est choisi de nouveau (comme le rechargement d\'un conflit d\'enregistrement automatique)',
+    run: async (h) => withApp(h, async () => {
+      const bad = [];
+      const m = await model('Bandeau', gridHtml('B', 2, 2));
+      const d = await openedDoc(m, 'B', 2, 2);
+      if (!(await openFromMenu(0, 0))) return { pass: false, notes: 'la ligne « Ouvrir le modèle » est introuvable' };
+      if (!screenOf().bar) bad.push('bandeau absent après « Ouvrir le modèle »');
+      await openByList(m.id, m.nom);
+      if (!screenOf().bar || screenOf().current !== String(m.id)) bad.push('le même modèle rechargé doit garder le bandeau : ' + JSON.stringify(screenOf()));
+      await openByList(d.id, d.nom);
+      if (screenOf().bar || screenOf().current !== String(d.id)) bad.push('un autre modèle choisi dans la liste doit effacer le bandeau : ' + JSON.stringify(screenOf()));
+      // Retour par « + » : un document vierge n'a pas de bandeau non plus.
+      if (!(await openFromMenu(0, 0))) bad.push('la ligne « Ouvrir le modèle » est introuvable (2)');
+      else {
+        if (!screenOf().bar) bad.push('bandeau absent (2)');
+        await h.clickButton('btn-new');
+        await sleep(400);
+        if (screenOf().bar) bad.push('« + » doit effacer le bandeau : ' + JSON.stringify(screenOf()));
+      }
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_return_bar_goes_away_when_save_as_puts_a_copy_on_screen',
+    description: '« Enregistrer sous… » depuis le modèle ouvert par « Ouvrir le modèle » met une copie à l\'écran : ce n\'est pas le modèle que le tableau du document désigne, le bandeau « Revenir au document » s\'efface',
+    run: async (h) => withApp(h, async () => {
+      const dialogs = h.stubDialogs({ prompt: 'Copie de la grille' });
+      try {
+        const bad = [];
+        const m = await model('Copie', gridHtml('C', 2, 2));
+        await openedDoc(m, 'C', 2, 2);
+        if (!(await openFromMenu(0, 0))) return { pass: false, notes: 'la ligne « Ouvrir le modèle » est introuvable' };
+        if (!screenOf().bar) bad.push('bandeau absent après « Ouvrir le modèle »');
+        document.getElementById('v2-btn-save-as').click();
+        await sleep(900);
+        const after = screenOf();
+        if (after.current === String(m.id) || after.name !== 'Copie de la grille') bad.push('la copie n\'est pas à l\'écran : ' + JSON.stringify(after));
+        if (after.bar) bad.push('bandeau resté sur une copie : ' + JSON.stringify(after));
+        if (after.current && after.current !== 'null' && after.current !== String(m.id)) made.push(Number(after.current));
+        return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+      } finally { dialogs.restore(); }
+    }),
+  });
+
+  cases.push({
+    id: 'linked_return_gives_the_document_back_its_macro_return_bar',
+    description: 'Un document ouvert par le stylo d\'un macro-modèle, puis son modèle Grille par « Ouvrir le modèle » (seul le bandeau « Revenir au document » est à l\'écran) : « Revenir au document » rend le document avec son bandeau « Revenir au macro-modèle », qui ramène au macro-modèle ; un retour annulé (modifications en attente dans la grille) laisse le modèle et son seul bandeau',
+    run: async (h) => withApp(h, async () => h.withRealChoose(async () => {
+      setAutosave(false);
+      const bad = [];
+      const m = await model('Macro', gridHtml('M', 2, 2));
+      const d = await openedDoc(m, 'M', 2, 2);
+      const macroName = 'Macro ' + (++counter);
+      const macro = await Templates.save(null, macroName, JSON.stringify({ slots: [{ type: 'fixed', modeleId: d.id }] }), '', null, null, 'macro', null);
+      made.push(macro.id);
+      await Templates.loadAll();
+      await openByList(macro.id, macroName);
+      const pencil = document.querySelector('.macro-summary-edit[data-template-id="' + d.id + '"]');
+      if (!pencil) return { pass: false, notes: 'le stylo du document est introuvable dans le résumé du macro-modèle' };
+      pencil.click();
+      await sleep(900);
+      if (screenOf().current !== String(d.id) || !screenOf().macroBar) bad.push('le document n\'est pas ouvert par le stylo : ' + JSON.stringify(screenOf()));
+      ed().commands.focus();
+      if (!(await openFromMenu(1, 0))) return { pass: false, notes: 'la ligne « Ouvrir le modèle » est introuvable : ' + bad.join(' | ') };
+      const on = screenOf();
+      if (on.current !== String(m.id) || !on.bar || on.macroBar) bad.push('sur le modèle, seul le bandeau du modèle doit s\'afficher : ' + JSON.stringify(on));
+      // Un retour annulé : le modèle reste, avec son seul bandeau (celui du macro-modèle ne revient pas tant que le document n'est pas là).
+      ed().chain().focus().insertContent('!').run();
+      await sleep(150);
+      document.getElementById('btn-linked-return').click();
+      await sleep(500);
+      if (!dialogOpen()) bad.push('la question « Modifications non enregistrées » n\'est pas posée au retour');
+      else await answerDialog('Annuler');
+      const stay = screenOf();
+      if (stay.current !== String(m.id) || !stay.grid || !stay.bar || stay.macroBar) bad.push('après Annuler : ' + JSON.stringify(stay));
+      document.getElementById('btn-linked-return').click();
+      await sleep(500);
+      if (dialogOpen()) await answerDialog('Abandonner');
+      await sleep(400);
+      const back = screenOf();
+      if (back.current !== String(d.id) || back.bar || !back.macroBar) bad.push('de retour, le bandeau du macro-modèle doit revenir : ' + JSON.stringify(back));
+      if (document.getElementById('macro-return-text').textContent !== 'Modèle ouvert depuis le macro-modèle « ' + macroName + ' ».') bad.push('texte du bandeau du macro-modèle : ' + document.getElementById('macro-return-text').textContent);
+      document.getElementById('btn-macro-return').click();
+      await sleep(900);
+      const home = screenOf();
+      if (home.current !== String(macro.id) || home.bar || home.macroBar) bad.push('« Revenir au macro-modèle » : ' + JSON.stringify(home));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    })),
+  });
+
+  cases.push({
+    id: 'linked_open_of_a_model_that_is_gone_says_so_and_keeps_the_document',
+    description: 'Le modèle a été supprimé par quelqu\'un d\'autre juste avant « Ouvrir le modèle » (ou son numéro repris par un modèle qui n\'est pas une grille) : la ligne d\'état dit qu\'il est introuvable, le document reste à l\'écran (pas de grille vide, pas de bandeau) ; sans lien vivant (tableau ordinaire, curseur hors d\'un tableau), « Ouvrir » ne fait rien',
+    run: async (h) => withApp(h, async () => {
+      const bad = [];
+      const m = await model('Perdu', gridHtml('L', 2, 2));
+      const d = await openedDoc(m, 'L', 2, 2);
+      await cursorIn(0, 0, 0);
+      await sleep(100);
+      press(barButton()); await sleep(150);
+      if (!menuOpen() || !openRow()) return { pass: false, notes: 'la ligne « Ouvrir le modèle » est introuvable' };
+      // Le modèle disparaît de Grist ; le cache ne le sait pas encore (l'appui relit la liste avant d'ouvrir).
+      await stub().applyUserActions([['RemoveRecord', Templates.TABLE_NAME, m.id]]);
+      press(openRow());
+      await sleep(900);
+      const line = statusLine();
+      const after = screenOf();
+      if (!line.error || line.text !== 'Le modèle « ' + m.nom + ' » est introuvable.') bad.push('ligne d\'état : ' + JSON.stringify(line));
+      if (after.current !== String(d.id) || after.grid || after.bar) bad.push('le document doit rester à l\'écran : ' + JSON.stringify(after));
+      if (menuOpen()) bad.push('le menu reste ouvert alors que le modèle n\'a pas pu s\'ouvrir');
+      // Le numéro est repris par un modèle qui n'est pas une grille (Grist peut réutiliser le dernier numéro supprimé) : même réponse, le document reste, rien d'un autre type ne s'ouvre.
+      say('');
+      const m2 = await model('Repris', gridHtml('R', 2, 2));
+      const d2 = await openedDoc(m2, 'R', 2, 2);
+      await cursorIn(0, 0, 0);
+      await sleep(100);
+      press(barButton()); await sleep(150);
+      if (!menuOpen() || !openRow()) { bad.push('la ligne « Ouvrir le modèle » est introuvable (numéro repris)'); return { pass: false, notes: bad.join(' | ') }; }
+      await stub().applyUserActions([['UpdateRecord', Templates.TABLE_NAME, m2.id, { TypeModele: 'document' }]]);
+      press(openRow());
+      await sleep(900);
+      const line2 = statusLine();
+      const after2 = screenOf();
+      if (!line2.error || line2.text !== 'Le modèle « ' + m2.nom + ' » est introuvable.') bad.push('numéro repris par un document, ligne d\'état : ' + JSON.stringify(line2));
+      if (after2.current !== String(d2.id) || after2.grid || after2.bar) bad.push('numéro repris par un document, le document doit rester à l\'écran : ' + JSON.stringify(after2));
+      // Sans lien vivant : rien ne se passe, ni changement d'écran ni message.
+      say('');
+      const was = screenOf();
+      const opened = LinkedTable.open(ed());
+      await sleep(300);
+      if (opened || JSON.stringify(screenOf()) !== JSON.stringify(was) || statusLine().text !== '') bad.push('« Ouvrir » sans lien vivant a agi : ' + JSON.stringify([opened, statusLine().text]));
+      Editor.setHTML('<p>avant</p>' + gridHtml('P', 2, 2) + '<p>après</p>');
+      await sleep(200);
+      await cursorIn(0, 0, 0);
+      if (LinkedTable.open(ed())) bad.push('un tableau ordinaire ne s\'ouvre pas comme un modèle');
+      await cursorAt('avant');
+      if (LinkedTable.open(ed())) bad.push('le curseur hors d\'un tableau n\'ouvre rien');
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_open_is_free_under_track_changes_and_refused_while_another_action_runs',
+    description: '« Ouvrir le modèle » n\'écrit rien dans le document : le suivi des modifications allumé ne l\'empêche pas (le modèle s\'ouvre, avec son bandeau) ; pendant qu\'une autre action du lien tourne (relecture des modèles), « Ouvrir » ne fait rien et l\'action en cours va à son terme',
+    run: async (h) => withApp(h, async () => {
+      const bad = [];
+      const m = await model('Libre', gridHtml('F', 2, 2));
+      const d = await openedDoc(m, 'F', 2, 2);
+      // Une action en cours : « Ouvrir » ne part pas, la mise à jour se termine.
+      const realLoad = Templates.loadAll;
+      const held = []; // toutes les relectures retenues (le passage de l'enregistrement automatique en fait aussi) : elles partent ensemble
+      Templates.loadAll = () => new Promise(resolve => { held.push(() => resolve(realLoad.call(Templates))); });
+      try {
+        await cursorIn(0, 0, 0);
+        const pulling = LinkedTable.pull(ed());
+        await sleep(80);
+        if (LinkedTable.open(ed())) bad.push('« Ouvrir » part pendant une autre action');
+        if (!held.length) bad.push('la relecture des modèles n\'a pas commencé');
+        Templates.loadAll = realLoad;
+        held.splice(0).forEach(release => release());
+        await pulling;
+      } finally { Templates.loadAll = realLoad; held.splice(0).forEach(release => release()); }
+      await sleep(200);
+      if (screenOf().current !== String(d.id) || screenOf().bar) bad.push('l\'écran a changé pendant l\'action : ' + JSON.stringify(screenOf()));
+      // Sous le suivi des modifications, le modèle s'ouvre.
+      Editor.setTrackChanges(true);
+      await sleep(150);
+      if (!(await openFromMenu(0, 0))) return { pass: false, notes: 'la ligne « Ouvrir le modèle » est introuvable sous le suivi : ' + bad.join(' | ') };
+      const on = screenOf();
+      if (on.current !== String(m.id) || !on.grid || !on.bar) bad.push('sous le suivi, le modèle ne s\'ouvre pas : ' + JSON.stringify(on));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_return_with_the_document_deleted_elsewhere_keeps_the_model_and_drops_the_bar',
+    description: 'Le document a été supprimé par quelqu\'un d\'autre pendant qu\'on modifie le modèle : « Revenir au document » laisse le modèle à l\'écran (pas de document vierge à sa place) et le bandeau s\'efface',
+    run: async (h) => withApp(h, async () => {
+      const bad = [];
+      const m = await model('Doc perdu', gridHtml('G', 2, 2));
+      const d = await openedDoc(m, 'G', 2, 2);
+      if (!(await openFromMenu(0, 0))) return { pass: false, notes: 'la ligne « Ouvrir le modèle » est introuvable' };
+      await stub().applyUserActions([['RemoveRecord', Templates.TABLE_NAME, d.id]]);
+      const before = screenOf();
+      document.getElementById('btn-linked-return').click();
+      await sleep(900);
+      const after = screenOf();
+      if (after.current !== String(m.id) || !after.grid || after.name !== before.name) bad.push('le modèle doit rester à l\'écran : ' + JSON.stringify({ before, after }));
+      if (after.bar) bad.push('bandeau resté alors que le document n\'existe plus : ' + JSON.stringify(after));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_open_gives_way_to_a_template_chosen_while_the_models_are_read',
+    description: 'Pendant la relecture des modèles qui précède l\'ouverture (Grist lent), la personne choisit un autre modèle dans la liste : celui-là gagne, le modèle du lien ne se met pas à l\'écran par-dessus et il n\'y a pas de bandeau',
+    run: async (h) => withApp(h, async () => {
+      const bad = [];
+      const m = await model('Course', gridHtml('K', 2, 2));
+      const d = await openedDoc(m, 'K', 2, 2);
+      const other = await Templates.save(null, 'Autre ' + (++counter), '<p>autre texte</p>', '', null, null, 'document', null);
+      made.push(other.id);
+      await Templates.loadAll();
+      await cursorIn(0, 0, 0);
+      await sleep(100);
+      press(barButton()); await sleep(150);
+      const realLoad = Templates.loadAll;
+      const held = [];
+      Templates.loadAll = () => new Promise(resolve => { held.push(() => resolve(realLoad.call(Templates))); });
+      try {
+        press(openRow());
+        await sleep(100);
+        if (!held.length) bad.push('la relecture des modèles n\'a pas commencé');
+        await openByList(other.id, 'Autre');
+        Templates.loadAll = realLoad;
+        held.splice(0).forEach(release => release());
+        await sleep(900);
+      } finally { Templates.loadAll = realLoad; held.splice(0).forEach(release => release()); }
+      const after = screenOf();
+      if (after.current !== String(other.id) || after.grid || after.bar) bad.push('l\'autre modèle doit rester à l\'écran : ' + JSON.stringify(after));
+      if (!ed().state.doc.textContent.includes('autre texte')) bad.push('le texte de l\'autre modèle n\'est plus là');
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_delete_confirmation_counts_the_templates_that_place_the_model_and_leaves_their_tables',
+    description: 'Supprimer un modèle Grille posé comme tableau lié dans d\'autres modèles : la fenêtre le dit (« … posé comme tableau lié dans 2 modèles : ces tableaux resteront, détachés », singulier pour un seul, deux langues) ; sans autre modèle qui le pose, ou pour un modèle qui n\'est pas une grille (un numéro réutilisé), la fenêtre ne dit rien de plus ; confirmée, seule la ligne du modèle est supprimée, les documents gardent leurs cases sans lien',
+    run: async (h) => withApp(h, async () => {
+      const bad = [];
+      const m = await model('Supprime', gridHtml('S', 2, 2));
+      const asked = answerWith(false);
+      // Personne ne le pose : la fenêtre habituelle, sans message.
+      await openByList(m.id, m.nom);
+      await h.clickButton('btn-delete'); await sleep(200);
+      if (asked.length !== 1 || asked[0].message || asked[0].title !== I18n.t('confirm.deleteTemplate')) bad.push('sans autre modèle : ' + JSON.stringify(asked.map(a => [a.title, a.message])));
+      // Deux documents le posent : chacun compte une fois.
+      const first = await placing(m.id, 'document');
+      const second = await placing(m.id, 'document');
+      await Templates.loadAll();
+      await openByList(m.id, m.nom);
+      await h.clickButton('btn-delete'); await sleep(200);
+      const two = asked[asked.length - 1];
+      if (asked.length !== 2 || two.message !== 'Ce modèle Grille est posé comme tableau lié dans 2 modèles : ces tableaux resteront, détachés.' || two.danger !== true) bad.push('deux modèles : ' + JSON.stringify(asked.slice(1).map(a => [a.title, a.message, a.danger])));
+      const lang = I18n.getLang();
+      try {
+        I18n.setLang('en'); await sleep(80);
+        await h.clickButton('btn-delete'); await sleep(200);
+        const en = asked[asked.length - 1];
+        if (en.message !== 'This Grid template is placed as a linked table in 2 templates: those tables will stay, detached.') bad.push('anglais : ' + en.message);
+      } finally { I18n.setLang(lang); await sleep(80); }
+      // Le singulier : un seul modèle le pose.
+      await Templates.remove(second); made.splice(made.indexOf(second), 1);
+      await Templates.loadAll();
+      await openByList(m.id, m.nom);
+      await h.clickButton('btn-delete'); await sleep(200);
+      const one = asked[asked.length - 1];
+      if (one.message !== 'Ce modèle Grille est posé comme tableau lié dans 1 modèle : ces tableaux resteront, détachés.') bad.push('singulier : ' + one.message);
+      // Un modèle qui n'est pas une grille n'a pas de tableaux liés : un numéro réutilisé ne doit rien annoncer.
+      const plain = await Templates.save(null, 'Simple ' + (++counter), '<p>texte</p>', '', null, null, 'document', null);
+      made.push(plain.id);
+      await Templates.loadAll();
+      const reused = await Templates.save(null, 'Marque ' + (++counter), '<p>x</p>' + linkedHtml(plain.id, 'R', 1, 1), '', null, null, 'document', null);
+      made.push(reused.id);
+      await Templates.loadAll();
+      await openByList(plain.id, plain.nom);
+      const before = asked.length;
+      await h.clickButton('btn-delete'); await sleep(200);
+      if (asked.length !== before + 1 || asked[asked.length - 1].message) bad.push('un modèle qui n\'est pas une grille : ' + JSON.stringify(asked[asked.length - 1]));
+      // Confirmée : seule la ligne du modèle part ; les documents gardent leurs cases et n'ont plus de lien.
+      const docHtml = String(rowOf(first).Contenu);
+      asked.length = 0;
+      Dialogs.confirm = async (options) => { asked.push(options); return true; };
+      await openByList(m.id, m.nom);
+      stub().clearActionLog();
+      await h.clickButton('btn-delete');
+      await sleep(900);
+      const writes = stub().getActionLog().filter(a => a[1] === Templates.TABLE_NAME).map(a => a[0] + ':' + (a[0] === 'RemoveRecord' ? a[2] : ''));
+      if (stub().getRow(Templates.TABLE_NAME, m.id)) bad.push('le modèle n\'est pas supprimé');
+      if (writes.some(w => !/^RemoveRecord:/.test(w))) bad.push('autre chose que la suppression a été écrit : ' + JSON.stringify(writes));
+      if (String(rowOf(first).Contenu) !== docHtml) bad.push('le contenu d\'un document a été touché');
+      made.splice(made.indexOf(m.id), 1);
+      await Templates.loadAll();
+      await openByList(first, 'Pose');
+      await cursorIn(0, 0, 0);
+      await sleep(150);
+      if (!tablesOf().length || LinkedTable.status(ed().state) || markClass() !== '-') bad.push('le tableau du document garde un lien vivant : ' + JSON.stringify([tablesOf().length, markClass()]));
       return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
     }),
   });

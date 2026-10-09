@@ -135,6 +135,9 @@ const MENU = '.v2-linked-menu';
 const MENU_ROW = MENU + ' [data-action="linked-detach"]';
 const ROW_PULL = MENU + ' [data-action="linked-pull"]';
 const ROW_PUSH = MENU + ' [data-action="linked-push"]';
+const ROW_OPEN = MENU + ' [data-action="linked-open"]';
+const RETURN_BAR = '#linked-return-bar';
+const RETURN_BTN = '#btn-linked-return';
 const DIALOG = '#pp-dialog-modal';
 const DIALOG_CANCEL = DIALOG + ' .pp-modal-actions button:first-of-type';
 const DIALOG_OK = DIALOG + ' .var-modal-primary';
@@ -160,6 +163,22 @@ const hit = selector => page.evaluate(sel => {
     onTop: !!top && (top === el || el.contains(top)), l: Math.round(r.left), t: Math.round(r.top), r: Math.round(r.right), b: Math.round(r.bottom) };
 }, selector);
 const seen = box => box.found && box.inPanel && box.onTop;
+// Un bouton visible de la fenêtre (#pp-dialog-modal) par son libellé : « Enregistrer » et les autres choix de la question « Modifications non enregistrées » partagent des classes avec des boutons cachés de la fenêtre.
+const dialogButton = label => page.evaluate(t => {
+  const b = Array.from(document.querySelectorAll('#pp-dialog-modal .pp-modal-actions button')).find(e => !e.hidden && e.textContent === t);
+  if (!b) return { found: false };
+  const r = b.getBoundingClientRect();
+  const x = r.left + r.width / 2, y = r.top + r.height / 2, top = document.elementFromPoint(x, y);
+  return { found: true, x, y, w: Math.round(r.width), h: Math.round(r.height), inPanel: r.width > 0 && r.left >= -0.5 && r.top >= -0.5 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5, onTop: !!top && (top === b || b.contains(top)) };
+}, label);
+const clickDialogButton = async label => {
+  const at = await dialogButton(label);
+  if (!at.found) return false;
+  await page.mouse.move(at.x, at.y, { steps: 6 });
+  await page.waitForTimeout(100);
+  await page.mouse.click(at.x, at.y);
+  return true;
+};
 const html = () => page.evaluate(() => Editor.getHTML());
 const linkedIds = () => page.evaluate(() => LinkedTable.linkedTables(EditorCore.getEditor().state.doc).map(({ node }) => node.attrs.linkedTemplate));
 const focusIn = () => page.evaluate(() => { const a = document.activeElement; return a ? (a.closest('.tiptap') ? 'editor' : (a.id || a.className || a.tagName)) : 'rien'; });
@@ -581,15 +600,15 @@ async function run(theme) {
   check(`${T}, deux sens : la frappe réelle dans le tableau lié s'écrit`, /zz/.test(typed), typed.slice(0, 200));
   await openLinkMenu();
   const m9 = await hit(MENU);
-  const boxes9 = [await hit(ROW_PULL), await hit(ROW_PUSH), await hit(MENU_ROW)];
-  check(`${T}, deux sens : le menu du lien tient dans le panneau ${WIDTH}x${HEIGHT}, ses trois lignes au premier plan`, m9.found && m9.inPanel && boxes9.every(seen), { m9, boxes9 });
+  const boxes9 = [await hit(ROW_PULL), await hit(ROW_PUSH), await hit(ROW_OPEN), await hit(MENU_ROW)];
+  check(`${T}, deux sens : le menu du lien tient dans le panneau ${WIDTH}x${HEIGHT}, ses quatre lignes au premier plan`, m9.found && m9.inPanel && boxes9.every(seen), { m9, boxes9 });
   const rows9 = await page.evaluate(() => Array.from(document.querySelectorAll('.v2-linked-menu-row')).map(r => ({ text: r.textContent.trim(), icon: !!r.querySelector('svg'), disabled: r.getAttribute('aria-disabled'), color: getComputedStyle(r).color })));
-  check(`${T}, deux sens : « Mettre à jour depuis le modèle », « Envoyer au modèle » et « Détacher du modèle », chacune avec son icône, actives`,
-    rows9.map(r => r.text).join('|') === 'Mettre à jour depuis le modèle|Envoyer au modèle|Détacher du modèle' && rows9.every(r => r.icon && r.disabled === 'false'), rows9);
+  check(`${T}, deux sens : « Mettre à jour depuis le modèle », « Envoyer au modèle », « Ouvrir le modèle » et « Détacher du modèle », chacune avec son icône, actives`,
+    rows9.map(r => r.text).join('|') === 'Mettre à jour depuis le modèle|Envoyer au modèle|Ouvrir le modèle|Détacher du modèle' && rows9.every(r => r.icon && r.disabled === 'false'), rows9);
   const bg9 = await backgroundOf(MENU);
   const contrasts9 = [];
   for (const r of rows9) contrasts9.push(await contrastOf(r.color, bg9));
-  check(`${T}, deux sens : les trois lignes ont un contraste d'au moins 4,5:1 sur le fond du menu (${bg9})`, contrasts9.every(c => c >= 4.5), contrasts9);
+  check(`${T}, deux sens : les quatre lignes ont un contraste d'au moins 4,5:1 sur le fond du menu (${bg9})`, contrasts9.every(c => c >= 4.5), contrasts9);
   await snap(`${T}-8-deux-sens-menu`);
   // Mettre à jour : un clic réel sur la ligne referme le menu et ramène les cases du modèle ; le curseur reste dans la case.
   await clickAt(ROW_PULL);
@@ -641,6 +660,120 @@ async function run(theme) {
     { changed, status: stPush, dialog: await dialogState(), focus: await focusIn() });
   // Le modèle est remis tel qu'il était pour les passes suivantes.
   await page.evaluate(async ({ id, grid }) => { __gristStub.remoteWrite(Templates.TABLE_NAME, id, { Contenu: grid }); await Templates.loadAll(); }, { id: modelId, grid: GRID });
+
+  // 10) Ouvrir le modèle et revenir au document, à la vraie souris. Un document ENREGISTRÉ qui pose le tableau lié à « Grille des tarifs » (ouvert par la liste : la fenêtre « Modifications non enregistrées » du
+  // texte de départ reçoit « Abandonner », ce n'est que la mise en place). Puis tout est réel : la case du tableau, le bouton du lien, la ligne « Ouvrir le modèle » (dans le panneau, au premier plan, lisible), le modèle
+  // et son bandeau « Revenir au document » (une ligne, dans le panneau, contrastes ≥ 4,5:1), le clic sur « Revenir au document » (le curseur dans la même case, la barre du tableau), la fenêtre « Modifications non
+  // enregistrées » devant un document modifié (« Annuler » ne change rien, « Enregistrer » écrit puis ouvre), et la confirmation de suppression du modèle, qui dit où il est posé.
+  const docName = 'Contrat ' + T;
+  await page.evaluate(() => { try { localStorage.setItem('pp_autosave_enabled', 'false'); } catch (e) { /* stockage indisponible */ } });
+  const savedDoc = await page.evaluate(async ({ grid, nom }) => {
+    const model = Templates.getCached().find(t => t.nom === 'Grille des tarifs');
+    const saved = await Templates.save(null, nom, '<p>Bonjour</p>' + grid.replace('<table>', `<table data-linked-template="${model.id}">`) + '<p>Au revoir</p>', '', null, null, 'document', null);
+    await Templates.loadAll();
+    const select = document.getElementById('template-select');
+    if (!Array.from(select.options).some(o => o.value === String(saved.id))) { const o = document.createElement('option'); o.value = String(saved.id); o.textContent = nom; select.appendChild(o); }
+    const realChoose = Dialogs.choose;
+    Dialogs.choose = async () => 'discard';
+    select.value = String(saved.id);
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    await new Promise(r => setTimeout(r, 900));
+    Dialogs.choose = realChoose;
+    return { id: saved.id, modelId: model.id, linked: LinkedTable.linkedTables(EditorCore.getEditor().state.doc).length };
+  }, { grid: GRID, nom: docName });
+  check(`${T}, ouvrir le modèle : le document enregistré est à l'écran avec son tableau lié`, savedDoc.linked === 1 && (await page.evaluate(() => document.getElementById('template-name').value)) === docName, savedDoc);
+  const onScreen = () => page.evaluate(() => {
+    const bar = document.getElementById('linked-return-bar');
+    return { name: document.getElementById('template-name').value, grid: GridEditor.isActive(), bar: !bar.hidden && getComputedStyle(bar).display !== 'none', linked: LinkedTable.linkedTables(EditorCore.getEditor().state.doc).length };
+  });
+  await clickInText('B2');
+  await openLinkMenu();
+  const rowOpen = await hit(ROW_OPEN);
+  const openInfo = await page.evaluate(() => { const r = document.querySelector('.v2-linked-menu [data-action="linked-open"]'); return { text: r.textContent.trim(), icon: !!r.querySelector('svg'), title: r.title, color: getComputedStyle(r).color }; });
+  check(`${T}, ouvrir le modèle : la ligne « Ouvrir le modèle » est dans le panneau, au premier plan, avec son icône et son info-bulle, lisible (≥ 4,5:1)`,
+    seen(rowOpen) && openInfo.text === 'Ouvrir le modèle' && openInfo.icon && /^Ouvre le modèle Grille « Grille des tarifs » dans l’éditeur/.test(openInfo.title) && (await contrastOf(openInfo.color, await backgroundOf(MENU))) >= 4.5, { rowOpen, openInfo });
+  await clickAt(ROW_OPEN);
+  await page.waitForTimeout(1100);
+  const bar10 = await page.evaluate(() => {
+    const bar = document.getElementById('linked-return-bar'), text = document.getElementById('linked-return-text'), btn = document.getElementById('btn-linked-return');
+    const r = bar.getBoundingClientRect(), b = btn.getBoundingClientRect();
+    const cell = document.querySelector('.tiptap td, .tiptap th');
+    const c = cell && cell.getBoundingClientRect();
+    return { name: document.getElementById('template-name').value, grid: GridEditor.isActive(), shown: !bar.hidden && getComputedStyle(bar).display !== 'none', text: text.textContent, btn: btn.textContent, barH: Math.round(r.height),
+      inPanel: r.left >= 0 && r.right <= innerWidth && r.bottom <= innerHeight, btnInside: b.left >= r.left && b.right <= r.right && b.height >= 24, gridVisible: !!c && c.top >= r.bottom - 1 && c.bottom <= innerHeight && c.height > 0,
+      menuShown: getComputedStyle(document.querySelector('.v2-linked-menu')).display !== 'none', macroBar: !document.getElementById('macro-return-bar').hidden };
+  });
+  check(`${T}, ouvrir le modèle : le modèle « Grille des tarifs » est à l'écran en grille, le bandeau « Modèle Grille ouvert depuis le document « ${docName} ». » et « Revenir au document » tient sur une ligne dans le panneau, la grille reste visible dessous, le menu est refermé`,
+    bar10.name === 'Grille des tarifs' && bar10.grid && bar10.shown && bar10.text === `Modèle Grille ouvert depuis le document « ${docName} ».` && bar10.btn === 'Revenir au document' && bar10.barH <= 44 && bar10.inPanel && bar10.btnInside && bar10.gridVisible && !bar10.menuShown && !bar10.macroBar, bar10);
+  const fgText = await page.evaluate(() => getComputedStyle(document.getElementById('linked-return-text')).color);
+  const fgBtn = await page.evaluate(() => getComputedStyle(document.getElementById('btn-linked-return')).color);
+  const cText = await contrastOf(fgText, await backgroundOf(RETURN_BAR));
+  const cBtn = await contrastOf(fgBtn, await backgroundOf(RETURN_BTN));
+  check(`${T}, ouvrir le modèle : le texte du bandeau (${cText.toFixed(1)}:1) et le bouton « Revenir au document » (${cBtn.toFixed(1)}:1) ont un contraste d'au moins 4,5:1`, cText >= 4.5 && cBtn >= 4.5, { cText, cBtn });
+  await snap(`${T}-10-modele-ouvert`);
+  await clickAt(RETURN_BTN);
+  await page.waitForTimeout(1100);
+  const home10 = await onScreen();
+  const hintNow = await statusNow();
+  check(`${T}, revenir au document : le document est de retour (liste, nom, tableau lié), la grille et le bandeau ont disparu`, home10.name === docName && !home10.grid && !home10.bar && home10.linked === 1, home10);
+  check(`${T}, revenir au document : le curseur est dans la case B2 où il était, le clavier dans l'éditeur, la barre du tableau et le bouton du lien sont là, aucun message d'écart`,
+    (await cellOfCursor()) === 'B2' && (await focusIn()) === 'editor' && seen(await hit(BAR)) && seen(await hit(LBTN)) && !/diffère/.test(hintNow.text), { cell: await cellOfCursor(), focus: await focusIn(), status: hintNow });
+  await snap(`${T}-11-document-revenu`);
+  // Un document modifié : la vraie question, « Annuler » ne change rien, « Enregistrer » écrit puis ouvre le modèle.
+  await clickInText('B2');
+  await page.keyboard.type('zz');
+  await page.waitForTimeout(250);
+  await openLinkMenu();
+  await clickAt(ROW_OPEN);
+  await page.waitForSelector(DIALOG_OK, { state: 'visible', timeout: 5000 }).catch(() => {});
+  await page.waitForTimeout(300);
+  const ask10 = await dialogState();
+  const askBox = await hit(DIALOG + ' .modal-content');
+  const askButtons = [await dialogButton('Annuler'), await dialogButton('Abandonner'), await dialogButton('Enregistrer')];
+  check(`${T}, ouvrir le modèle : un document modifié pose « Modifications non enregistrées » (nom du document, « Annuler », « Abandonner », « Enregistrer ») dans le panneau, avant tout changement d'écran`,
+    ask10.open && ask10.title === 'Modifications non enregistrées' && ask10.message.includes(docName) && ask10.buttons.join('|') === 'Annuler|Abandonner|Enregistrer' && askBox.inPanel && askButtons.every(seen) && (await onScreen()).name === docName, { ask10, askBox, askButtons });
+  await snap(`${T}-12-question`);
+  await clickDialogButton('Annuler');
+  await page.waitForTimeout(400);
+  const kept10 = await onScreen();
+  check(`${T}, ouvrir le modèle : « Annuler » ferme la fenêtre, le document reste (avec sa frappe), pas de bandeau, le clavier revient dans l'éditeur`,
+    !(await dialogState()).open && kept10.name === docName && !kept10.grid && !kept10.bar && /zz/.test(await html()) && (await focusIn()) === 'editor', { kept10, focus: await focusIn() });
+  await openLinkMenu();
+  await clickAt(ROW_OPEN);
+  await page.waitForSelector(DIALOG + ' .pp-modal-actions button', { state: 'visible', timeout: 5000 }).catch(() => {});
+  await page.waitForTimeout(300);
+  await clickDialogButton('Enregistrer');
+  await page.waitForTimeout(1300);
+  const saved10 = await onScreen();
+  const storedDoc = await page.evaluate(id => __gristStub.getRow(Templates.TABLE_NAME, id).Contenu, savedDoc.id);
+  check(`${T}, ouvrir le modèle : « Enregistrer » écrit le document avec la frappe puis ouvre le modèle avec son bandeau`, /zz/.test(storedDoc) && saved10.name === 'Grille des tarifs' && saved10.grid && saved10.bar, { saved10, stored: storedDoc.slice(0, 160) });
+  // La suppression du modèle, pendant qu'il est à l'écran : la confirmation dit dans combien de modèles il est posé.
+  await clickAt('#btn-delete');
+  await page.waitForSelector(DIALOG_OK, { state: 'visible', timeout: 5000 }).catch(() => {});
+  await page.waitForTimeout(300);
+  const del10 = await dialogState();
+  const delBox = await hit(DIALOG + ' .modal-content');
+  const delButtons = [await hit(DIALOG_CANCEL), await hit(DIALOG_OK)];
+  const wantedMessage = 'Ce modèle Grille est posé comme tableau lié dans 1 modèle : ces tableaux resteront, détachés.';
+  check(`${T}, supprimer le modèle : la confirmation dit « ${wantedMessage} » dans le panneau, boutons au premier plan`,
+    del10.open && del10.title === 'Supprimer ce modèle ?' && del10.message === wantedMessage && delBox.inPanel && delButtons.every(seen), { del10, delBox, delButtons });
+  await snap(`${T}-13-suppression`);
+  await clickAt(DIALOG_CANCEL);
+  await page.waitForTimeout(400);
+  const stay10 = await onScreen();
+  check(`${T}, supprimer le modèle : « Annuler » ne supprime rien, le modèle et son bandeau restent`, !(await dialogState()).open && stay10.name === 'Grille des tarifs' && stay10.grid && stay10.bar
+    && !!(await page.evaluate(id => __gristStub.getRow(Templates.TABLE_NAME, id), savedDoc.modelId)), { stay10 });
+  // Remise en place pour la suite : le document vierge, l'enregistrement automatique rallumé.
+  await page.evaluate(async () => {
+    const realChoose = Dialogs.choose;
+    Dialogs.choose = async () => 'discard';
+    document.getElementById('btn-new').click();
+    await new Promise(r => setTimeout(r, 500));
+    Dialogs.choose = realChoose;
+    try { localStorage.removeItem('pp_autosave_enabled'); } catch (e) { /* stockage indisponible */ }
+  });
+  // Le document de ce passage est retiré : les passages suivants (la confirmation d'« Envoyer » compte les modèles qui posent le tableau) repartent du même état.
+  await page.evaluate(async id => { await Templates.remove(id); await Templates.loadAll(); }, savedDoc.id);
 }
 
 async function runEnglish() {
@@ -685,10 +818,10 @@ async function runEnglish() {
   await page.mouse.click(enLink.x, enLink.y);
   await page.waitForTimeout(300);
   const enRows = await page.evaluate(() => Array.from(document.querySelectorAll('.v2-linked-menu-row')).map(r => ({ text: r.textContent.trim(), title: r.title })));
-  const enBoxes = [await hit(ROW_PULL), await hit(ROW_PUSH), await hit(MENU_ROW)];
-  check('anglais, deux sens : « Update from the template », « Send to the template » et « Detach from the template » avec leurs info-bulles, dans le panneau',
-    enRows.map(r => r.text).join('|') === 'Update from the template|Send to the template|Detach from the template' && /^Replace this table’s cells with those of the Grid template “Grille des tarifs”/.test(enRows[0].title)
-      && /^Replace the table of the Grid template “Grille des tarifs” with this one/.test(enRows[1].title) && enBoxes.every(seen), { enRows, enBoxes });
+  const enBoxes = [await hit(ROW_PULL), await hit(ROW_PUSH), await hit(ROW_OPEN), await hit(MENU_ROW)];
+  check('anglais, deux sens : « Update from the template », « Send to the template », « Open the template » et « Detach from the template » avec leurs info-bulles, dans le panneau',
+    enRows.map(r => r.text).join('|') === 'Update from the template|Send to the template|Open the template|Detach from the template' && /^Replace this table’s cells with those of the Grid template “Grille des tarifs”/.test(enRows[0].title)
+      && /^Replace the table of the Grid template “Grille des tarifs” with this one/.test(enRows[1].title) && /^Open the Grid template “Grille des tarifs” in the editor/.test(enRows[2].title) && enBoxes.every(seen), { enRows, enBoxes });
   await snap('en-3-deux-sens-menu');
   const enBefore = (await page.evaluate(id => __gristStub.getRow(Templates.TABLE_NAME, id), await page.evaluate(() => Templates.getCached().find(t => t.nom === 'Grille des tarifs').id))).Contenu;
   const pushAt = await centerOf(ROW_PUSH);
@@ -712,6 +845,71 @@ async function runEnglish() {
   await page.waitForTimeout(400);
   const enAfter = (await page.evaluate(id => __gristStub.getRow(Templates.TABLE_NAME, id), await page.evaluate(() => Templates.getCached().find(t => t.nom === 'Grille des tarifs').id))).Contenu;
   check('anglais, deux sens : « Cancel » ferme la fenêtre et n\'écrit rien dans le modèle', enAfter === enBefore && !(await page.evaluate(() => { const ov = document.getElementById('pp-dialog-modal'); return ov && ov.style.display !== 'none'; })), { same: enAfter === enBefore });
+  // Ouvrir le modèle, revenir au document et supprimer le modèle, en anglais : la ligne du menu, le bandeau (texte, bouton, étiquette), la confirmation de suppression qui dit où le modèle est posé.
+  const enDocName = 'Contract en';
+  await page.evaluate(() => { try { localStorage.setItem('pp_autosave_enabled', 'false'); } catch (e) { /* stockage indisponible */ } });
+  const enDoc = await page.evaluate(async ({ grid, nom }) => {
+    const model = Templates.getCached().find(t => t.nom === 'Grille des tarifs');
+    const saved = await Templates.save(null, nom, '<p>Hello</p>' + grid.replace('<table>', `<table data-linked-template="${model.id}">`) + '<p>Bye</p>', '', null, null, 'document', null);
+    await Templates.loadAll();
+    const select = document.getElementById('template-select');
+    if (!Array.from(select.options).some(o => o.value === String(saved.id))) { const o = document.createElement('option'); o.value = String(saved.id); o.textContent = nom; select.appendChild(o); }
+    const realChoose = Dialogs.choose;
+    Dialogs.choose = async () => 'discard';
+    select.value = String(saved.id);
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    await new Promise(r => setTimeout(r, 900));
+    Dialogs.choose = realChoose;
+    return { id: saved.id, linked: LinkedTable.linkedTables(EditorCore.getEditor().state.doc).length };
+  }, { grid: GRID, nom: enDocName });
+  const clickSel = async (selector) => {
+    const at = await centerOf(selector);
+    await page.mouse.move(at.x, at.y, { steps: 6 });
+    await page.waitForTimeout(100);
+    await page.mouse.click(at.x, at.y);
+  };
+  await clickInText('B2');
+  await clickSel(LBTN);
+  await page.waitForTimeout(300);
+  const enOpenRow = await page.evaluate(() => { const r = document.querySelector('.v2-linked-menu [data-action="linked-open"]'); return { text: r.textContent.trim(), title: r.title }; });
+  check('anglais, ouvrir le modèle : la ligne « Open the template » et son info-bulle, dans le panneau', enDoc.linked === 1 && enOpenRow.text === 'Open the template' && /^Open the Grid template “Grille des tarifs” in the editor; a banner brings you back to this document$/.test(enOpenRow.title) && seen(await hit(ROW_OPEN)), { enDoc, enOpenRow });
+  await clickSel(ROW_OPEN);
+  await page.waitForTimeout(1100);
+  const enBar = await page.evaluate(() => {
+    const bar = document.getElementById('linked-return-bar'), text = document.getElementById('linked-return-text'), btn = document.getElementById('btn-linked-return');
+    const r = bar.getBoundingClientRect(), b = btn.getBoundingClientRect();
+    return { shown: !bar.hidden && getComputedStyle(bar).display !== 'none', text: text.textContent, btn: btn.textContent, aria: bar.getAttribute('aria-label'), barH: Math.round(r.height), inPanel: r.left >= 0 && r.right <= innerWidth, btnInside: b.left >= r.left && b.right <= r.right, grid: GridEditor.isActive() };
+  });
+  check('anglais, ouvrir le modèle : le bandeau « Grid template opened from the document “Contract en”. » et « Back to the document », sur une ligne dans le panneau',
+    enBar.shown && enBar.grid && enBar.text === `Grid template opened from the document “${enDocName}”.` && enBar.btn === 'Back to the document' && enBar.aria === 'Back to the document' && enBar.barH <= 44 && enBar.inPanel && enBar.btnInside, enBar);
+  await snap('en-5-modele-ouvert');
+  await clickSel('#btn-delete');
+  await page.waitForSelector(DIALOG_OK, { state: 'visible', timeout: 5000 }).catch(() => {});
+  await page.waitForTimeout(300);
+  const enDel = await page.evaluate(() => {
+    const ov = document.getElementById('pp-dialog-modal');
+    const open = !!ov && ov.style.display !== 'none';
+    return { open, title: open ? ov.querySelector('h3').textContent : '', message: open ? ov.querySelector('.pp-dialog-message').textContent : '', buttons: open ? Array.from(ov.querySelectorAll('.pp-modal-actions button')).filter(b => !b.hidden).map(b => b.textContent) : [] };
+  });
+  const enDelBox = await hit(DIALOG + ' .modal-content');
+  check('anglais, supprimer le modèle : « Delete this template? » dit « This Grid template is placed as a linked table in 1 template: those tables will stay, detached. », dans le panneau',
+    enDel.open && enDel.title === 'Delete this template?' && enDel.message === 'This Grid template is placed as a linked table in 1 template: those tables will stay, detached.' && enDelBox.inPanel && seen(await hit(DIALOG_CANCEL)) && seen(await hit(DIALOG_OK)), { enDel, enDelBox });
+  await snap('en-6-suppression');
+  await clickSel(DIALOG_CANCEL);
+  await page.waitForTimeout(400);
+  await clickSel(RETURN_BTN);
+  await page.waitForTimeout(1100);
+  const enHome = await page.evaluate(() => ({ name: document.getElementById('template-name').value, grid: GridEditor.isActive(), bar: !document.getElementById('linked-return-bar').hidden }));
+  check('anglais, revenir au document : « Back to the document » ramène le document, sans bandeau', enHome.name === enDocName && !enHome.grid && !enHome.bar && (await cellOfCursor()) === 'B2', { enHome, cell: await cellOfCursor() });
+  await page.evaluate(async () => {
+    const realChoose = Dialogs.choose;
+    Dialogs.choose = async () => 'discard';
+    document.getElementById('btn-new').click();
+    await new Promise(r => setTimeout(r, 500));
+    Dialogs.choose = realChoose;
+    try { localStorage.removeItem('pp_autosave_enabled'); } catch (e) { /* stockage indisponible */ }
+  });
+  await page.evaluate(async id => { await Templates.remove(id); await Templates.loadAll(); }, enDoc.id);
   await page.evaluate(() => I18n.setLang('fr'));
   await page.waitForTimeout(250);
 }
