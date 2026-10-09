@@ -53,6 +53,11 @@
   const SET_ROW_PX = 70;
   const setRowHtml = (i, lines) => '<tr data-row-height="' + SET_ROW_PX + '" style="height: ' + SET_ROW_PX + 'px">' + rowHtml(i, lines).replace(/^<tr>/, '').replace(/<\/tr>$/, '') + '</tr>';
   const setHeightTableHtml = (rows, lines) => '<table><tbody>' + Array.from({ length: rows }, (_, i) => setRowHtml(i, lines)).join('') + '</tbody></table>';
+  // Des lignes dont certaines portent un saut de page avant elles (`data-page-break-before`, posé par « Saut de page » dans la ligne : js/grid-editor.js) : la page change là, que la
+  // place restante suffise ou non.
+  const MARK = ' data-page-break-before="true"';
+  const markedRowHtml = (i, lines, marked) => (marked ? rowHtml(i, lines).replace(/^<tr>/, '<tr' + MARK + '>') : rowHtml(i, lines));
+  const markedTableHtml = (rows, marks, lines) => '<table><tbody>' + Array.from({ length: rows }, (_, i) => markedRowHtml(i, lines || 1, marks.includes(i))).join('') + '</tbody></table>';
   const HEADER_FOOTER = { enabled: true, differentFirstPage: false, header: { default: '<p>EN-TETE</p>', first: '' }, footer: { default: '<p>PIED DE PAGE</p>', first: '' } };
   const NO_HEADER_FOOTER = { enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } };
 
@@ -262,6 +267,67 @@
       const pass = JSON.stringify(withGroup.cuts) === '[2,5]' && JSON.stringify(withGroup.ranks) === '[2,3]' && withGroup.consumedAfter === 50 && !withGroup.blockBreakBefore
         && JSON.stringify(alone.cuts) === '[2,3]' && JSON.stringify(alone.ranks) === '[2,3]';
       return { pass, notes: JSON.stringify({ withGroup, alone }) };
+    },
+  });
+
+  cases.push({
+    id: 'table_page_cut_plan_a_marked_slice_opens_a_page_even_when_the_room_is_enough',
+    description: 'plan() avec `forced` : une tranche marquée ouvre la page suivante même quand elle tient dans la place restante, la page recommence à elle, et la coupure est notée voulue (forcedCuts) ; sans `forced`, rien ne change',
+    run: async () => {
+      const marked = TablePageCut.plan(0, [20, 20, 20, 20], 100, undefined, [false, false, true, false]);
+      const without = TablePageCut.plan(0, [20, 20, 20, 20], 100);
+      const pass = JSON.stringify(marked.cuts) === '[2]' && JSON.stringify(marked.forcedCuts) === '[true]' && marked.consumedAfter === 40 && !marked.blockBreakBefore
+        && without.cuts.length === 0 && without.forcedCuts.length === 0 && without.consumedAfter === 80;
+      return { pass, notes: JSON.stringify({ marked, without }) };
+    },
+  });
+
+  cases.push({
+    id: 'table_page_cut_plan_marked_slices_and_full_pages_both_cut',
+    description: 'plan() : une coupure voulue et une coupure faute de place se suivent chacune à leur tranche (forcedCuts dit laquelle) ; une tranche marquée qui est aussi celle où la place manque ne fait qu\'une coupure, voulue ; avec `starts`, la coupure est le rang de la ligne qui ouvre le groupe',
+    run: async () => {
+      // 5 tranches de 40 : la 3e ne tient plus (80 + 40 > 100), la 4e est marquée.
+      const both = TablePageCut.plan(0, [40, 40, 40, 40, 40], 100, undefined, [false, false, false, true, false]);
+      // La tranche marquée est aussi celle où la place manque : une seule coupure.
+      const same = TablePageCut.plan(0, [40, 40, 60], 100, undefined, [false, false, true]);
+      // Des groupes de lignes : la coupure voulue donne le rang de la première ligne du groupe marqué.
+      const grouped = TablePageCut.plan(0, [40, 40, 60, 50], 100, [0, 1, 2, 5], [false, false, true, false]);
+      const pass = JSON.stringify(both.cuts) === '[2,3]' && JSON.stringify(both.forcedCuts) === '[false,true]' && both.consumedAfter === 80
+        && JSON.stringify(same.cuts) === '[2]' && JSON.stringify(same.forcedCuts) === '[true]' && same.consumedAfter === 60
+        && JSON.stringify(grouped.cuts) === '[2,5]' && JSON.stringify(grouped.ranks) === '[2,3]' && JSON.stringify(grouped.forcedCuts) === '[true,false]';
+      return { pass, notes: JSON.stringify({ both, same, grouped }) };
+    },
+  });
+
+  cases.push({
+    id: 'table_page_cut_plan_a_mark_on_the_first_slice_opens_no_empty_page',
+    description: 'plan() : un saut voulu sur la première tranche n\'ouvre aucune page vide (il n\'y a rien à quitter), ni en haut de page ni après du contenu ; et il ne remplace pas le renvoi du tableau entier quand sa première ligne ne tient pas',
+    run: async () => {
+      const top = TablePageCut.plan(0, [20, 20], 100, undefined, [true, false]);
+      const after = TablePageCut.plan(30, [20, 20], 100, undefined, [true, false]);
+      const moved = TablePageCut.plan(90, [40, 40], 100, undefined, [true, false]);
+      const pass = top.cuts.length === 0 && !top.blockBreakBefore && top.consumedAfter === 40
+        && after.cuts.length === 0 && !after.blockBreakBefore && after.consumedAfter === 70
+        && moved.cuts.length === 0 && moved.blockBreakBefore && moved.consumedAfter === 80;
+      return { pass, notes: JSON.stringify({ top, after, moved }) };
+    },
+  });
+
+  cases.push({
+    id: 'table_page_cut_forced_of_reads_the_marked_rows_that_open_a_group',
+    description: 'forcedOf() : une ligne marquée ouvre une page quand elle ouvre un groupe ; jamais la première ligne, ni une ligne qu\'une case fusionnée sur plusieurs lignes recouvre ; la valeur de l\'attribut ne compte pas (comme ExportCommon.gridRowSegments)',
+    run: async () => {
+      const make = html => { const host = document.createElement('div'); host.innerHTML = html; return host.querySelector('table'); };
+      const row = (marked, ...cells) => '<tr' + (marked ? MARK : '') + '>' + cells.join('') + '</tr>';
+      const td = (extra) => '<td' + (extra || '') + '>a</td>';
+      // Rangs : 0 marquée (la première), 1 simple, 2 marquée et ouvre un groupe de deux lignes, 3 marquée mais recouverte, 4 simple, 5 marquée.
+      const table = make('<table><tbody>' + row(true, td(), td()) + row(false, td(), td()) + row(true, td(' rowspan="2"'), td()) + row(true, td()) + row(false, td(), td()) + row(true, td(), td()) + '</tbody></table>');
+      const rows = TablePageCut.rowsOf(table);
+      const units = TablePageCut.unitsOf(rows);
+      const got = TablePageCut.forcedOf(rows, units);
+      const none = TablePageCut.forcedOf(TablePageCut.rowsOf(make('<table><tbody>' + row(false, td()) + row(false, td()) + '</tbody></table>')), [{ from: 0, to: 1 }, { from: 1, to: 2 }]);
+      const pass = units.length === 5 && JSON.stringify(got) === '[false,false,true,false,true]' && JSON.stringify(none) === '[false,false]';
+      return { pass, notes: JSON.stringify({ units: units.map(u => u.from + '-' + u.to).join(' '), got, none }) };
     },
   });
 
@@ -696,6 +762,98 @@
     },
   });
 
+  // --- Éditeur : un saut de page avant une ligne (`data-page-break-before`) ---
+  // Un tableau de 12 lignes tient dans la page : sans marque il n'a aucune bande. `markedTableHtml(rows, marks, lines)` marque les lignes données.
+  async function editorFits(h, html) {
+    await loadEditor(h, html);
+    Editor.refreshPaginationPreview();
+    await h.sleep(400);
+  }
+  // Un tableau dont les lignes 1 et 2 sont liées par une case fusionnée (rowspan 2) ; `marks` : les lignes qui portent la marque.
+  const mergedPairHtml = marks => '<table><tbody>' + [0, 1, 2, 3, 4, 5].map((i) => {
+    const open = i === 1 ? ' rowspan="2"' : '';
+    const cells = i === 2 ? '<td><p>' + token(2, 0) + '</p></td>' : '<td' + open + '><p>' + token(i, 0) + '</p></td><td><p>Valeur ' + i + '</p></td>';
+    return '<tr' + (marks.includes(i) ? MARK : '') + '>' + cells + '</tr>';
+  }).join('') + '</tbody></table>';
+
+  cases.push({
+    id: 'table_page_cut_editor_a_marked_row_opens_the_page_even_when_everything_fits',
+    description: 'Éditeur : une ligne qui porte un saut de page avant elle ouvre la page 2 alors que tout le tableau tient dans la première - la bande est posée sur le haut de cette ligne, aucun texte recouvert, deux liserés de tableau, document enregistré inchangé ; le même tableau sans la marque n\'a aucune bande',
+    run: async (h) => {
+      try {
+        const k = 5;
+        await editorFits(h, intro(2) + markedTableHtml(12, [], 1));
+        const plain = editorReport();
+        await loadEditor(h, intro(2) + markedTableHtml(12, [k], 1));
+        const saved = Editor.getHTML();
+        Editor.refreshPaginationPreview();
+        await h.sleep(400);
+        const rep = editorReport();
+        const html = Editor.getHTML();
+        const pass = plain.bands === 0 && rep.bands === 1 && rep.aligned[0] === k && rep.overlaps === 0 && rep.textBelow && rep.caps[0] === 1 && hasRowRule()
+          && html === saved && !/padding-top/.test(html) && (html.match(/data-page-break-before="true"/g) || []).length === 1;
+        return { pass, notes: JSON.stringify(Object.assign({ plainBands: plain.bands, htmlUnchanged: html === saved }, rep)) };
+      } finally { restoreEditor(); }
+    },
+  });
+
+  cases.push({
+    id: 'table_page_cut_editor_two_marked_rows_make_three_pages',
+    description: 'Éditeur : deux lignes marquées font trois pages, chaque bande sur sa ligne, aucun texte recouvert ; une page peut ne porter qu\'une ligne',
+    run: async (h) => {
+      try {
+        await editorFits(h, intro(1) + markedTableHtml(12, [4, 5], 1));
+        const rep = editorReport();
+        const pass = rep.bands === 2 && rep.aligned[0] === 4 && rep.aligned[1] === 5 && rep.overlaps === 0 && rep.textBelow && rep.caps.every(n => n === 1);
+        return { pass, notes: JSON.stringify(rep) };
+      } finally { restoreEditor(); }
+    },
+  });
+
+  cases.push({
+    id: 'table_page_cut_editor_a_marked_row_and_the_end_of_the_page_both_cut',
+    description: 'Éditeur : un saut voulu et le bas de la page coupent chacun là où ils tombent - la page qui suit le saut recommence à la ligne marquée (non plus à la ligne où la page se serait remplie) et se coupe à son tour quand elle est pleine, chaque bande sur une ligne, aucun texte recouvert',
+    run: async (h) => {
+      try {
+        const marked = 6;
+        // La page est réglée pour que, sans marque, la coupure tombe devant la ligne 18.
+        await editorCutBefore(h, intro(2) + markedTableHtml(34, [marked], 2), 18);
+        const rep = editorReport();
+        const pass = rep.bands === 2 && rep.aligned[0] === marked && rep.aligned[1] > marked + 12 && rep.aligned[1] < 34 && rep.overlaps === 0 && rep.textBelow;
+        return { pass, notes: JSON.stringify(rep) };
+      } finally { restoreEditor(); }
+    },
+  });
+
+  cases.push({
+    id: 'table_page_cut_editor_a_marked_row_where_the_page_is_full_makes_one_cut',
+    description: 'Éditeur : une ligne marquée qui est aussi celle où la page serait pleine ne fait qu\'une coupure (pas de page vide entre les deux)',
+    run: async (h) => {
+      try {
+        const k = 12;
+        await editorCutBefore(h, intro(2) + markedTableHtml(24, [k], 2), k);
+        const rep = editorReport();
+        const pass = rep.bands === 1 && rep.aligned[0] === k && rep.overlaps === 0 && rep.textBelow;
+        return { pass, notes: JSON.stringify(rep) };
+      } finally { restoreEditor(); }
+    },
+  });
+
+  cases.push({
+    id: 'table_page_cut_editor_a_mark_on_the_first_row_or_inside_a_merged_group_is_ignored',
+    description: 'Éditeur : une marque sur la première ligne n\'ouvre pas de page vide ni une marque sur une ligne qu\'une case fusionnée recouvre (la case ne se coupe pas en deux) ; posée sur la ligne qui suit le groupe, elle coupe',
+    run: async (h) => {
+      try {
+        await editorFits(h, intro(2) + mergedPairHtml([0, 2]));
+        const ignored = editorReport();
+        await editorFits(h, intro(2) + mergedPairHtml([0, 2, 3]));
+        const after = editorReport();
+        const pass = ignored.bands === 0 && after.bands === 1 && after.aligned[0] === 3 && after.overlaps === 0 && after.textBelow;
+        return { pass, notes: JSON.stringify({ ignored: ignored.bands, after }) };
+      } finally { restoreEditor(); }
+    },
+  });
+
   // --- Lecture ---
   cases.push({
     id: 'table_page_cut_reader_seam_falls_between_two_rows',
@@ -887,6 +1045,77 @@
         const style = wrapper.querySelector(':scope > style');
         const pass = group.to - group.from === 4 && groupPx > 0.9 * 300 && !(style && /> tbody > tr:nth-child/.test(style.textContent));
         return { pass, notes: JSON.stringify({ groupPx: Math.round(groupPx), styleHasRowRule: !!(style && /> tbody > tr:nth-child/.test(style.textContent)) }) };
+      } finally { restoreEditor(); }
+    },
+  });
+
+  // --- Lecture : un saut de page avant une ligne ---
+  async function readerFits(h, html) {
+    await h.resetEditor();
+    h.setA4Preview(true);
+    PageLayout.setMarginsMm(null);
+    await h.renderReaderMode(html);
+    await h.sleep(400);
+  }
+
+  cases.push({
+    id: 'table_page_cut_reader_a_marked_row_opens_the_page_even_when_everything_fits',
+    description: 'Lecture : même règle que l\'éditeur - une ligne qui porte un saut de page avant elle ouvre la page 2 alors que tout le tableau tient dans la première ; sans la marque, aucune bande',
+    run: async (h) => {
+      try {
+        const k = 5;
+        await readerFits(h, intro(2) + markedTableHtml(12, [], 1));
+        const plain = readerReport();
+        await readerFits(h, intro(2) + markedTableHtml(12, [k], 1));
+        const rep = readerReport();
+        const pass = plain.bands === 0 && rep.bands === 1 && rep.aligned[0] === k && rep.overlaps === 0 && rep.textBelow && rep.caps[0] === 1;
+        return { pass, notes: JSON.stringify(Object.assign({ plainBands: plain.bands }, rep)) };
+      } finally { restoreEditor(); }
+    },
+  });
+
+  cases.push({
+    id: 'table_page_cut_reader_a_marked_row_and_the_end_of_the_page_both_cut',
+    description: 'Lecture : un saut voulu et le bas de la page coupent chacun là où ils tombent, la page qui suit le saut recommence à la ligne marquée',
+    run: async (h) => {
+      try {
+        const marked = 6;
+        await readerCutBefore(h, intro(2) + markedTableHtml(34, [marked], 2), 18);
+        const rep = readerReport();
+        const pass = rep.bands === 2 && rep.aligned[0] === marked && rep.aligned[1] > marked + 12 && rep.aligned[1] < 34 && rep.overlaps === 0 && rep.textBelow;
+        return { pass, notes: JSON.stringify(rep) };
+      } finally { restoreEditor(); }
+    },
+  });
+
+  cases.push({
+    id: 'table_page_cut_reader_a_mark_on_the_first_row_or_inside_a_merged_group_is_ignored',
+    description: 'Lecture : une marque sur la première ligne ou sur une ligne qu\'une case fusionnée recouvre ne coupe pas ; posée sur la ligne qui suit le groupe, elle coupe',
+    run: async (h) => {
+      try {
+        await readerFits(h, intro(2) + mergedPairHtml([0, 2]));
+        const ignored = readerReport();
+        await readerFits(h, intro(2) + mergedPairHtml([0, 2, 3]));
+        const after = readerReport();
+        const pass = ignored.bands === 0 && after.bands === 1 && after.aligned[0] === 3 && after.overlaps === 0 && after.textBelow;
+        return { pass, notes: JSON.stringify({ ignored: ignored.bands, after }) };
+      } finally { restoreEditor(); }
+    },
+  });
+
+  cases.push({
+    id: 'table_page_cut_editor_and_reader_cut_at_the_same_marked_rows',
+    description: 'L\'éditeur et la Lecture ouvrent leurs pages sur les mêmes lignes quand le tableau porte des sauts voulus et des coupures de place',
+    run: async (h) => {
+      try {
+        const html = intro(2) + markedTableHtml(34, [6], 2);
+        await editorCutBefore(h, html, 18);
+        const editor = editorReport();
+        await h.renderReaderMode(html);
+        await h.sleep(500);
+        const reader = readerReport();
+        const pass = editor.bands === 2 && JSON.stringify(editor.aligned) === JSON.stringify(reader.aligned) && editor.firstOfPage2 === reader.firstOfPage2;
+        return { pass, notes: JSON.stringify({ editor, reader }) };
       } finally { restoreEditor(); }
     },
   });
@@ -1207,6 +1436,107 @@
     },
   });
 
+  // --- PDF : un saut de page avant une ligne (`data-page-break-before`) ---
+  // La page (à partir de 0) où chaque ligne a son premier jeton.
+  const pageOfRows = tokens => { const pages = {}; tokens.forEach((t) => { if (!(t.row in pages)) pages[t.row] = t.page; }); return pages; };
+
+  cases.push({
+    id: 'table_page_cut_pdf_a_marked_row_opens_a_page',
+    description: 'PDF (relu par pdf.js) : une ligne qui porte un saut de page avant elle ouvre une page, que la place restante suffise ou non - deux lignes marquées d\'un tableau qui tiendrait sur une page font trois pages de dix lignes, chaque ligne une fois, entière',
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        PageLayout.setMarginsMm(null);
+        const { gt, tokens } = await pdfOf(h, markedTableHtml(30, [10, 20], 1));
+        const pages = pageOfRows(tokens);
+        const perPage = [0, 1, 2].map(p => Object.keys(pages).filter(r => pages[r] === p).map(Number));
+        const ok = gt.pages.length === 3 && perPage.every((rows, p) => rows.length === 10 && rows.every(r => r >= p * 10 && r < p * 10 + 10)) && tokens.length === 30 && splitRows(tokens).length === 0;
+        return { pass: ok, notes: JSON.stringify({ pages: gt.pages.length, perPage: perPage.map(rows => rows.length), tokens: tokens.length }) };
+      } finally { restoreEditor(); }
+    },
+  });
+
+  cases.push({
+    id: 'table_page_cut_pdf_the_pieces_of_a_marked_table_keep_every_row_whole',
+    description: 'PDF (relu par pdf.js) : chaque morceau d\'un tableau à ligne marquée se range comme un tableau (dontBreakRows) - quel que soit l\'endroit où tombe le bas de la page dans un morceau (le texte d\'introduction est allongé d\'une ligne à la fois), aucune ligne n\'a son texte sur deux pages, tout le texte est là, et la ligne marquée est toujours sur une page plus tard que la ligne qui la précède',
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        PageLayout.setMarginsMm(null);
+        const runs = [];
+        for (let lines = 0; lines <= 4; lines++) {
+          const { result, tokens } = await pdfOf(h, intro(lines) + markedTableHtml(40, [14], 3));
+          const pages = pageOfRows(tokens);
+          const tables = outerTablesOf(result.content);
+          runs.push({ introLines: lines, split: splitRows(tokens), tokens: tokens.length, opens: pages[14] > pages[13], pieces: tables.length, whole: tables.every(t => t.table.dontBreakRows === true), breaks: tables.map(t => t.pageBreak || '') });
+        }
+        const pass = runs.every(r => r.split.length === 0 && r.tokens === 40 * 3 && r.opens && r.pieces === 2 && r.whole && r.breaks.join('|') === '|before');
+        return { pass, notes: JSON.stringify(runs) };
+      } finally { restoreEditor(); }
+    },
+  });
+
+  cases.push({
+    id: 'table_page_cut_pdf_title_rows_come_back_at_the_top_of_every_piece',
+    description: 'PDF (relu par pdf.js) : les lignes de titres reviennent en haut de la page que le saut ouvre, comme sur celles où le tableau se poursuit - une fois par page, tout en haut ; chaque ligne de données reste une fois',
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        PageLayout.setMarginsMm(null);
+        const html = '<table><tbody>' + titleRowsHtml(1) + Array.from({ length: 40 }, (_, i) => markedRowHtml(i, 1, i === 10 || i === 25)).join('') + '</tbody></table>';
+        const { gt, tokens, result } = await pdfOf(h, html);
+        const perPage = gt.pages.map((page) => {
+          const titles = page.textItems.filter(it => it.str.includes('TITREA0'));
+          const topY = Math.min(...page.textItems.map(it => it.y));
+          return { titles: titles.length, atTop: titles.length === 1 && Math.abs(titles[0].y - topY) < 1 };
+        });
+        const pages = pageOfRows(tokens);
+        const flags = outerTablesOf(result.content).map(t => t.table.headerRows);
+        const pass = gt.pages.length === 3 && perPage.every(p => p.titles === 1 && p.atTop) && pages[10] === 1 && pages[25] === 2 && tokens.length === 40 && flags.join(',') === '1,1,1';
+        return { pass, notes: JSON.stringify({ pages: gt.pages.length, perPage, pageOf10: pages[10], pageOf25: pages[25], flags }) };
+      } finally { restoreEditor(); }
+    },
+  });
+
+  cases.push({
+    id: 'table_page_cut_pdf_a_mark_inside_a_merged_group_is_not_followed',
+    description: 'PDF : une marque sur une ligne qu\'une case fusionnée recouvre n\'est pas suivie ; celle de la ligne qui suit le groupe l\'est - deux morceaux, le groupe d\'une seule ligne du plan (ses trois lignes de texte ensemble) sur la première page, la ligne marquée en tête de la seconde',
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        PageLayout.setMarginsMm(null);
+        const { gt, tokens, result } = await pdfOf(h, mergedPairHtml([0, 2, 3]));
+        const tables = outerTablesOf(result.content);
+        const pages = pageOfRows(tokens);
+        const lengths = tables.map(t => t.table.body.length);
+        const pass = tables.length === 2 && lengths.join(',') === '2,3' && gt.pages.length === 2 && [0, 1, 2].every(r => pages[r] === 0) && [3, 4, 5].every(r => pages[r] === 1);
+        return { pass, notes: JSON.stringify({ lengths, pages: gt.pages.length, rowPages: pages }) };
+      } finally { restoreEditor(); }
+    },
+  });
+
+  cases.push({
+    id: 'table_page_cut_pdf_marks_are_ignored_where_a_page_cannot_open',
+    description: 'PDF : un tableau dans une case de tableau, ou dans une colonne, reste d\'une pièce - la marque n\'y ouvre pas de page ; le tableau du premier niveau qui le porte est inchangé',
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        PageLayout.setMarginsMm(null);
+        const inner = markedTableHtml(6, [3], 1);
+        const inCell = '<table><tbody><tr><td>' + inner + '</td><td><p>Valeur</p></td></tr><tr><td><p>suite</p></td><td><p>x</p></td></tr></tbody></table>';
+        const inColumn = '<div class="two-columns-zone" style="--layout-left: 50%"><div class="two-columns-column">' + inner + '</div><div class="two-columns-column"><p>Texte à côté</p></div></div>';
+        const got = {};
+        for (const [name, html] of [['cell', inCell], ['column', inColumn]]) {
+          const { gt, result } = await pdfOf(h, html);
+          const tables = findTables(result.content);
+          got[name] = { pages: gt.pages.length, tables: tables.length, breaks: tables.filter(t => t.pageBreak).length, bodies: tables.map(t => t.table.body.length) };
+        }
+        const pass = got.cell.pages === 1 && got.cell.breaks === 0 && got.column.pages === 1 && got.column.breaks === 0 && got.column.bodies.join(',') === '6';
+        return { pass, notes: JSON.stringify(got) };
+      } finally { restoreEditor(); }
+    },
+  });
+
   // --- Word ---
   cases.push({
     id: 'table_page_cut_docx_every_row_cannot_split',
@@ -1258,6 +1588,132 @@
         const plain = await h.exportDocxParts('<table><tbody>' + rowsHtml(0, 6, 1) + '</tbody></table><p data-caption="true">Tableau un</p>', null, null);
         const plainKept = Array.from(plain.doc.getElementsByTagName('w:tr')).map(tr => (keepsWithNext(tr) ? 'K' : keepsNothing(tr) ? '-' : '?')).join('');
         return { pass: rows.length === 6 && kept === '----KK' && plainKept === '-----K', notes: JSON.stringify({ kept, plainKept }) };
+      } finally { restoreEditor(); }
+    },
+  });
+
+  // --- Word : un saut de page avant une ligne coupe le tableau en morceaux ---
+  // La forme du corps du document : « p » un paragraphe, « B » un paragraphe qui ouvre une page (pageBreakBefore), « T3 » une table de 3 lignes.
+  // Le paragraphe vide que Word veut après un tableau final n'est pas compté.
+  function bodyShape(doc) {
+    const body = doc.getElementsByTagName('w:body')[0];
+    const blocks = Array.from(body.children).filter(el => el.tagName === 'w:p' || el.tagName === 'w:tbl');
+    const last = blocks[blocks.length - 1];
+    if (last && last.tagName === 'w:p' && !last.getElementsByTagName('w:t').length && !last.getElementsByTagName('w:pageBreakBefore').length) blocks.pop();
+    return blocks.map((el) => {
+      if (el.tagName === 'w:tbl') return 'T' + Array.from(el.children).filter(k => k.tagName === 'w:tr').length;
+      return el.getElementsByTagName('w:pageBreakBefore').length ? 'B' : 'p';
+    }).join(' ');
+  }
+  const rowTexts = tbl => Array.from(tbl.getElementsByTagName('w:tr')).map(tr => Array.from(tr.getElementsByTagName('w:t')).map(t => t.textContent).join(''));
+  const tablesOf = doc => Array.from(doc.getElementsByTagName('w:tbl'));
+
+  cases.push({
+    id: 'table_page_cut_docx_a_marked_row_opens_a_new_table_on_a_new_page',
+    description: 'Word : une ligne qui porte un saut de page avant elle ouvre une nouvelle table que précède un paragraphe de saut de page (Word n\'a pas de saut avant une ligne) - deux tables de 3 et 5 lignes, chaque ligne garde cantSplit, et les lignes sont celles du tableau, dans l\'ordre, une fois chacune',
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        const parts = await h.exportDocxParts(intro(1) + markedTableHtml(8, [3], 1), null, null);
+        const shape = bodyShape(parts.doc);
+        const tables = tablesOf(parts.doc);
+        const texts = tables.map(rowTexts);
+        const all = texts.flat().map(t => (t.match(/R(\d+)L0/) || [])[1]).join(',');
+        const cantSplit = Array.from(parts.doc.getElementsByTagName('w:tr')).every(tr => tr.getElementsByTagName('w:cantSplit').length === 1);
+        const pass = shape === 'p T3 B T5' && all === '00,01,02,03,04,05,06,07' && cantSplit;
+        return { pass, notes: JSON.stringify({ shape, all, cantSplit }) };
+      } finally { restoreEditor(); }
+    },
+  });
+
+  cases.push({
+    id: 'table_page_cut_docx_two_marked_rows_make_three_tables',
+    description: 'Word : deux lignes marquées font trois tables séparées chacune par un paragraphe de saut de page ; un tableau sans marque reste une seule table, sans paragraphe de saut',
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        const marked = await h.exportDocxParts(markedTableHtml(9, [2, 6], 1), null, null);
+        const plain = await h.exportDocxParts(tableHtml(9, 1), null, null);
+        const pass = bodyShape(marked.doc) === 'T2 B T4 B T3' && bodyShape(plain.doc) === 'T9';
+        return { pass, notes: JSON.stringify({ marked: bodyShape(marked.doc), plain: bodyShape(plain.doc) }) };
+      } finally { restoreEditor(); }
+    },
+  });
+
+  cases.push({
+    id: 'table_page_cut_docx_title_rows_come_back_on_every_piece',
+    description: 'Word : les lignes de titres reviennent en haut de chaque morceau, marquées comme lignes de titres (tblHeader), une fois de plus par morceau ; une ligne marquée qui suit tout juste les titres laisse les titres seuls sur le premier morceau',
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        const html = '<table><tbody>' + titleRowsHtml(1) + markedRowHtml(0, 1, false) + markedRowHtml(1, 1, false) + markedRowHtml(2, 1, true) + markedRowHtml(3, 1, false) + markedRowHtml(4, 1, true) + markedRowHtml(5, 1, false) + '</tbody></table>';
+        const parts = await h.exportDocxParts(html, null, null);
+        const tables = tablesOf(parts.doc);
+        const firsts = tables.map(tbl => rowTexts(tbl)[0]);
+        const flags = tables.map(tbl => Array.from(tbl.getElementsByTagName('w:tr')).map(tr => (isTitleRow(tr) ? 'H' : '-')).join(''));
+        const pass = bodyShape(parts.doc) === 'T3 B T3 B T3' && firsts.every(t => t.startsWith('TITREA0')) && flags.join('|') === 'H--|H--|H--';
+        // Un saut juste après le titre : le premier morceau ne garde que le titre.
+        const early = await h.exportDocxParts('<table><tbody>' + titleRowsHtml(1) + markedRowHtml(0, 1, true) + markedRowHtml(1, 1, false) + '</tbody></table>', null, null);
+        return { pass: pass && bodyShape(early.doc) === 'T1 B T3', notes: JSON.stringify({ shape: bodyShape(parts.doc), firsts, flags, early: bodyShape(early.doc) }) };
+      } finally { restoreEditor(); }
+    },
+  });
+
+  cases.push({
+    id: 'table_page_cut_docx_a_mark_inside_a_merged_group_does_not_cut_it',
+    description: 'Word : une marque sur une ligne qu\'une case fusionnée recouvre n\'est pas suivie (la case ne se coupe pas en deux), celle de la ligne qui suit le groupe l\'est ; la table du morceau garde sa fusion (vMerge restart puis continue)',
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        const parts = await h.exportDocxParts(mergedPairHtml([0, 2, 3]), null, null);
+        const tables = tablesOf(parts.doc);
+        const merges = tables.map(tbl => Array.from(tbl.getElementsByTagName('w:tr')).map(mergeOf).join('|'));
+        const pass = bodyShape(parts.doc) === 'T3 B T3' && merges[0] === '|restart|continue' && merges[1] === '||';
+        return { pass, notes: JSON.stringify({ shape: bodyShape(parts.doc), merges }) };
+      } finally { restoreEditor(); }
+    },
+  });
+
+  cases.push({
+    id: 'table_page_cut_docx_marks_are_ignored_where_a_page_cannot_open',
+    description: 'Word : un tableau dans une case de tableau, ou dans une colonne, reste d\'une pièce - la marque n\'y ouvre pas de page (aucun paragraphe de saut) ; le tableau du premier niveau qui le porte est inchangé',
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        const inner = markedTableHtml(6, [3], 1);
+        const inCell = '<table><tbody><tr><td>' + inner + '</td><td><p>Valeur</p></td></tr><tr><td><p>suite</p></td><td><p>x</p></td></tr></tbody></table>';
+        const parts = await h.exportDocxParts(inCell, null, null);
+        const breakParagraphs = Array.from(parts.doc.getElementsByTagName('w:pageBreakBefore')).length;
+        const pass = bodyShape(parts.doc) === 'T2' && tablesOf(parts.doc).length === 2 && breakParagraphs === 0;
+        return { pass, notes: JSON.stringify({ shape: bodyShape(parts.doc), tables: tablesOf(parts.doc).length, breakParagraphs }) };
+      } finally { restoreEditor(); }
+    },
+  });
+
+  cases.push({
+    id: 'table_page_cut_docx_a_page_break_before_a_marked_table_still_opens_the_page',
+    description: 'Word : un saut de page posé avant un tableau à lignes marquées ouvre bien la page du premier morceau (un seul paragraphe de saut devant, puis un par marque)',
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        const parts = await h.exportDocxParts('<p>Avant</p><div class="page-break-marker"></div>' + markedTableHtml(6, [3], 1), null, null);
+        const shape = bodyShape(parts.doc);
+        return { pass: shape === 'p B T3 B T3', notes: JSON.stringify({ shape }) };
+      } finally { restoreEditor(); }
+    },
+  });
+
+  cases.push({
+    id: 'table_page_cut_docx_a_caption_keeps_with_the_last_row_of_the_last_piece',
+    description: 'Word : la légende qui suit un tableau coupé en morceaux reste avec la dernière ligne du dernier morceau (keepNext), et seulement elle',
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        const parts = await h.exportDocxParts(markedTableHtml(6, [3], 1) + '<p data-caption="true">Tableau un</p>', null, null);
+        const tables = tablesOf(parts.doc);
+        const kept = tables.map(tbl => Array.from(tbl.getElementsByTagName('w:tr')).map(tr => (keepsWithNext(tr) ? 'K' : keepsNothing(tr) ? '-' : '?')).join(''));
+        const pass = bodyShape(parts.doc) === 'T3 B T3 p' && kept.join('|') === '---|--K';
+        return { pass, notes: JSON.stringify({ shape: bodyShape(parts.doc), kept }) };
       } finally { restoreEditor(); }
     },
   });

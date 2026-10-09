@@ -496,9 +496,16 @@ const DocxExport = (function () {
   // Les lignes qu'une case fusionnée sur plusieurs lignes lie (TablePageCut.unitsOf) ne se séparent pas non plus : toutes sauf la dernière de chaque
   // groupe gardent leurs paragraphes avec le suivant, y compris la case de continuation que docx.js écrit dans les lignes recouvertes. Word laisse
   // tomber le lien d'un groupe plus haut que la page.
-  async function tableBlockFrom(tableEl, ctx, keepWithCaption) {
+  //
+  // Un saut de page avant une ligne (`data-page-break-before`, js/grid-editor.js) : Word n'en a pas pour une ligne, seul un paragraphe ouvre une page.
+  // Un tableau du premier niveau est donc rendu en morceaux, un par tranche (ExportCommon.gridRowSegments : jamais au milieu d'une case fusionnée),
+  // chacun une table à part que sépare le paragraphe d'un point qui ouvre la page (`pageBreakCarrier`, qui empêche aussi Word de recoller deux tables
+  // qui se touchent). Les lignes de titres reviennent en haut de chaque morceau, comme sur les pages où une table se poursuit (`tblHeader`). Dans une
+  // case, une colonne ou une zone d'en-tête, une page ne peut pas s'ouvrir : le tableau reste d'une pièce, la marque sans effet. Rend la liste des blocs
+  // (une table, ou des tables et leurs paragraphes de saut) ; vide si le tableau n'a aucune ligne.
+  async function tableBlocksFrom(tableEl, ctx, keepWithCaption, atTopLevel) {
     const rows = ExportCommon.tableRows(tableEl);
-    if (!rows.length) return null;
+    if (!rows.length) return [];
     const { keptRows, joinedRows } = rowsKeptWithNext(tableEl, rows, keepWithCaption);
     const columnCount = ExportCommon.cellsOf(rows[0]).reduce((sum, c) => sum + ExportCommon.spanOf(c, 'colspan'), 0) || 1;
     const colWidthsTwip = tableColumnWidthsTwip(tableEl, columnCount);
@@ -510,21 +517,34 @@ const DocxExport = (function () {
     // Les bords réglés avec la barre de la case (js/table-borders.js) et le quadrillage masqué : null pour un tableau que personne n'a réglé, qui garde
     // les traits de départ de Word.
     const borderSides = ExportCommon.cellBorderSides(tableEl);
+    const rowFrom = (tr, isHeader) => wordRowFrom(tr, { ctx, placement, colWidthsTwip, columnCount, keepNext: keptRows.has(tr) || joinedRows.has(tr), borderSides, isHeader });
     const tableRows = [];
-    for (const tr of rows) {
-      const keepNext = keptRows.has(tr) || joinedRows.has(tr);
-      tableRows.push(await wordRowFrom(tr, { ctx, placement, colWidthsTwip, columnCount, keepNext, borderSides, isHeader: tableRows.length < headerRowCount }));
-    }
+    for (const tr of rows) tableRows.push(await rowFrom(tr, tableRows.length < headerRowCount));
     // columnWidths pilote le <w:tblGrid>, la déclaration des colonnes : sans lui docx.js retombe sur son défaut (100 twips par colonne), incohérent
     // avec les largeurs posées sur chaque TableCell.width. Un <w:tblGrid> qui ne correspond pas aux tcW est un tableau non conforme, que Word peut
     // signaler comme contenu à réparer. Avec des bords réglés, chaque case porte ses quatre traits : ceux du tableau, en dessous, sont coupés pour
     // qu'aucun trait de départ ne reste là où la personne n'en veut pas.
-    const wordTable = new docx.Table(Object.assign(
-      { rows: tableRows, width: { size: tableWidthTwip(colWidthsTwip), type: docx.WidthType.DXA }, columnWidths: colWidthsTwip },
-      borderSides ? { borders: NO_BORDERS } : {},
-    ));
-    keepContinuationCellsWithNext(tableRows, rows, joinedRows, keptRows);
-    return wordTable;
+    const tableOf = (pieceRows, pieceSources) => {
+      const wordTable = new docx.Table(Object.assign(
+        { rows: pieceRows, width: { size: tableWidthTwip(colWidthsTwip), type: docx.WidthType.DXA }, columnWidths: colWidthsTwip },
+        borderSides ? { borders: NO_BORDERS } : {},
+      ));
+      keepContinuationCellsWithNext(pieceRows, pieceSources, joinedRows, keptRows);
+      return wordTable;
+    };
+    const segments = atTopLevel ? ExportCommon.gridRowSegments(rows) : [[0, rows.length]];
+    if (segments.length < 2) return [tableOf(tableRows, rows)];
+    const blocks = [];
+    for (const [index, [from, to]] of segments.entries()) {
+      if (index === 0) { blocks.push(tableOf(tableRows.slice(0, to), rows.slice(0, to))); continue; }
+      // Les lignes de titres du tableau, écrites de nouveau pour ce morceau (une ligne de Word ne se pose pas dans deux tables) ; jamais celles que
+      // le saut ne laisse pas derrière lui (un saut posé entre deux lignes de titres).
+      const titleSources = rows.slice(0, Math.min(headerRowCount, from));
+      const titles = [];
+      for (const tr of titleSources) titles.push(await rowFrom(tr, true));
+      blocks.push(pageBreakCarrier(), tableOf(titles.concat(tableRows.slice(from, to)), titleSources.concat(rows.slice(from, to))));
+    }
+    return blocks;
   }
 
   // Les lignes gardées avec la suivante : `keptRows` (la dernière ligne ou le dernier groupe de lignes quand une légende suit le tableau),
@@ -650,7 +670,7 @@ const DocxExport = (function () {
       cells.push(cell);
       if (i === 0) cells.push(new docx.TableCell({ children: [new docx.Paragraph('')], width: { size: gapTwip, type: docx.WidthType.DXA }, borders: NO_BORDERS, margins: { top: 0, bottom: 0, left: 0, right: 0 } }));
     }
-    // Comme tableBlockFrom : un columnWidths explicite pour que <w:tblGrid> corresponde aux largeurs des cellules.
+    // Comme tableBlocksFrom : un columnWidths explicite pour que <w:tblGrid> corresponde aux largeurs des cellules.
     return new docx.Table({ rows: [new docx.TableRow({ children: cells })], width: { size: CONTENT_WIDTH_TWIP, type: docx.WidthType.DXA }, borders: NO_BORDERS, columnWidths: widths });
   }
 
@@ -794,7 +814,7 @@ const DocxExport = (function () {
   }
 
   // Le paragraphe est-il à garder avec le suivant ? L'image que suit une légende, et chaque légende qu'une autre légende suit (« Rester ensemble »,
-  // js/caption.js). Un tableau passe par tableBlockFrom (`keepWithCaption`).
+  // js/caption.js). Un tableau passe par tableBlocksFrom (`keepWithCaption`).
   function keepsWithCaption(node) {
     if (Caption.captionsAfter(node).length) return true;
     if (!Caption.isCaptionElement(node) || !Caption.isCaptionElement(node.nextElementSibling)) return false;
@@ -805,7 +825,7 @@ const DocxExport = (function () {
   // Cœur du module : parcourt les enfants directs d'un conteneur (corps du document, cellule de tableau, colonne à deux colonnes, zone d'en-tête ou
   // de pied : les quatre partagent la même logique ici, alors que le PDF doit distinguer le flux pdfmake de la cellule) et renvoie un tableau de
   // Paragraph et de Table, prêt à poser dans `children` (Document, TableCell, Header et Footer acceptent la même forme). `keepNext` : tous les
-  // paragraphes construits ici gardent le suivant (la dernière ligne d'un tableau que suit une légende, voir tableBlockFrom).
+  // paragraphes construits ici gardent le suivant (la dernière ligne d'un tableau que suit une légende, voir tableBlocksFrom).
   async function blocksFromContainer(container, ctx, isTopLevel, widthTwip, keepNext) {
     const flow = { ctx, isTopLevel, widthTwip, keepNext, headingMarkers: isTopLevel ? headingMarkersOf(container) : null, pendingPageBreak: false };
     const blocks = [];
@@ -893,7 +913,7 @@ const DocxExport = (function () {
     [node => node.classList.contains('toc-marker'), consumingBreak((node, flow) => (flow.isTopLevel ? [{ __tocPlaceholder: true, pageBreakBefore: flow.pendingPageBreak }] : []))],
     [node => node.classList.contains('two-columns-zone'), carryingBreak(async (node, flow) => optionalBlock(await twoColumnsBlockFrom(node, flow.ctx)))],
     [node => node.classList.contains('callout'), consumingBreak((node, flow) => calloutBlocksFrom(node, flow.ctx, flow.widthTwip, flow.pendingPageBreak))],
-    [node => node.tagName === 'TABLE', carryingBreak(async (node, flow) => optionalBlock(await tableBlockFrom(node, flow.ctx, flow.isTopLevel && Caption.captionsAfter(node).length > 0)))],
+    [node => node.tagName === 'TABLE', carryingBreak((node, flow) => tableBlocksFrom(node, flow.ctx, flow.isTopLevel && Caption.captionsAfter(node).length > 0, flow.isTopLevel))],
     [node => /^(UL|OL)$/.test(node.tagName), consumingBreak((node, flow) => listBlocksFrom(node, 0, flow.ctx, flow.pendingPageBreak))],
     [node => node.tagName === 'PRE', consumingBreak((node, flow) => codeBlockFrom(node, flow.pendingPageBreak))],
     [node => /^(P|DIV|H[1-6]|BLOCKQUOTE)$/.test(node.tagName), consumingBreak((node, flow) => paragraphBlockFrom(node, flow.ctx, flow.headingMarkers, flow.pendingPageBreak, flow.keepNext || (flow.isTopLevel && (keepsWithCaption(node) || KeepWithNext.isKeptElement(node)))))],

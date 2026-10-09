@@ -68,9 +68,13 @@ body.pp-grid-resizing-col .v2-grid-handle::after, body.pp-grid-resizing-row .v2-
    trait en tirets sur son bord haut, tracé dans le fond de ses cases (`background-image` : il reste sous le texte et la sélection, et ne touche
    pas au fond choisi), et une pastille à cheval sur le bord haut de son numéro, qui ne répond pas au pointeur (la poignée de la ligne du dessus,
    juste dessous, reste atteignable). Rien en Lecture : le saut ne se voit que là où on le pose. La pastille a le bleu des boutons pleins, le même
-   dans les deux thèmes. */
+   dans les deux thèmes. Dans un document (le PDF et le Word y commencent une page, l'aperçu A4 et la Lecture aussi), le trait ne se montre que sur une
+   ligne d'un tableau du premier niveau, jamais la première (une page vide), jamais dans un tableau de case ou de colonne ; en
+   Aperçu A4 la bande de la couture recouvre la place du trait (le tableau y est rogné), la page montre le saut elle-même. */
 #editor-container.v2-grid-mode .tiptap table tr[data-page-break-before] > td,
-#editor-container.v2-grid-mode .tiptap table tr[data-page-break-before] > th {
+#editor-container.v2-grid-mode .tiptap table tr[data-page-break-before] > th,
+#editor-container .tiptap > .tableWrapper > table > tbody > tr[data-page-break-before]:not(:first-child) > td,
+#editor-container .tiptap > .tableWrapper > table > tbody > tr[data-page-break-before]:not(:first-child) > th {
   background-image: repeating-linear-gradient(90deg, var(--accent-solid) 0 6px, transparent 6px 10px); background-size: 100% 2px; background-repeat: no-repeat; background-position: top left;
 }
 .v2-grid-break {
@@ -78,6 +82,15 @@ body.pp-grid-resizing-col .v2-grid-handle::after, body.pp-grid-resizing-row .v2-
   border-radius: 5px; background: var(--accent-solid); color: #fff; pointer-events: none;
 }
 .v2-grid-break svg { width: 14px; height: 14px; }
+/* Les numéros d'un tableau de document n'ont que 20 px de large et reposent sur la marge de la page : la pastille tient dans leur largeur (elle ne passe pas sur
+   le texte de la première colonne). */
+.pp-doc-strips .v2-grid-break { left: 0; width: 20px; }
+/* Le bouton « Saut de page » de la barre du haut, grisé dans un tableau de document (première ligne, case fusionnée, tableau de case ou de colonne, suivi des
+   modifications), reste sensible au survol pour dire pourquoi en info-bulle : `.v2-hf-locked` lui retire le pointeur (css/toolbar-v2.css). Son clic ne fait rien tant
+   que la raison tient (js/main-toolbar.js, GridEditor.togglePageBreak). Grisé, il dit sa raison seule : la touche que js/shortcuts.js ajoute à
+   son info-bulle (`data-keytip`, « (Alt+Entrée) ») ne ferait rien. */
+#v2-toolbar #v2-btn-page-break.v2-hf-locked.pp-row-break { pointer-events: auto; cursor: default; }
+#v2-toolbar #v2-btn-page-break.pp-row-break[data-keytip]::after { content: attr(data-tip); }
 
 /* Taille affichée près du pointeur pendant le glissé. */
 .v2-grid-tip { position: fixed; z-index: 4000; padding: 2px 7px; border-radius: 4px; background: var(--text); color: var(--surface); font: 600 12px/1.4 var(--font-ui); pointer-events: none; white-space: nowrap; }

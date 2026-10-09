@@ -852,30 +852,52 @@ const GridEditor = (function () {
       return false;
     }
 
-    // La ligne que le bouton vise : la première de la sélection (le saut se pose avant elle).
+    // La ligne que le bouton vise : la première de la sélection (le saut se pose avant elle), dans le tableau de la grille ou, dans un document, dans celui
+    // qui porte la sélection.
     function pageBreakRow(state) {
-      const info = tableInfo(state.doc);
+      const info = tableInfo(state.doc, state.selection);
       const rect = info && selectionRect(state, info);
       return rect ? { info, map: libs.TableMap.get(info.node), row: rect.top } : null;
     }
     return { splitSelected, splitCell, applyBorders, canApplyBorders, gridLinesShown, setGridLinesShown, boundaryCrossed, pageBreakRow };
   })();
 
-  const { canTogglePageBreak, hasPageBreak, togglePageBreak, pageBreakRows, trimPastedSlice } = (function () {
+  const { canTogglePageBreak, hasPageBreak, togglePageBreak, pageBreakInTable, pageBreakBlock, pageBreakRows, trimPastedSlice } = (function () {
     // Le saut de page d'une ligne et le collage dans une case sans les lignes vides de fin.
 
-    // Pas avant la première ligne (une page vide), pas au milieu d'une case fusionnée sur plusieurs lignes (aucune case n'est coupée en deux) : le
-    // bouton se grise.
-    function canTogglePageBreak(ed) {
-      if (!active) return false;
+    // Le bouton « Saut de page » de la barre du haut a le sens d'une ligne dès que le curseur est dans un tableau, d'une grille comme d'un document : il
+    // pose un saut avant la ligne (le PDF et le Word y ouvrent une page, l'aperçu A4 et la Lecture aussi). Hors d'un tableau il garde son sens de
+    // document (js/main-toolbar.js). Vrai aussi pour un tableau choisi en entier, sans case visée : le bouton est alors grisé, il ne remplace pas le
+    // tableau par un repère de saut.
+    function pageBreakInTable(ed) {
+      return !!ed && !!tableInfo(ed.state.doc, ed.state.selection);
+    }
+
+    // Pourquoi le saut ne se pose pas ici : la clé de la raison (info-bulle du bouton grisé), ou null quand il se pose. Un saut déjà posé se retire
+    // toujours (il peut ne plus tenir : première ligne devenue celle du dessus supprimée, tableau d'ailleurs), sauf sous le suivi des modifications.
+    //  - Pas avant la première ligne (une page vide), pas au milieu d'une case fusionnée sur plusieurs lignes (aucune case n'est coupée en deux).
+    //  - Dans un document, seulement dans un tableau du premier niveau : une page ne s'ouvre pas dans une case, une colonne, un encadré ni une liste, et
+    //    le PDF et le Word n'y suivent pas le saut.
+    //  - Dans un document, jamais sous le suivi des modifications : un saut est un changement d'attribut, que le suivi ne voit pas.
+    function pageBreakBlock(ed) {
+      if (!pageBreakInTable(ed)) return null;
+      if (tableSettingsBlocked()) return 'table.settingTracked';
       const target = pageBreakRow(ed.state);
-      return !!target && target.row > 0 && !boundaryCrossed(target.map, target.row);
+      if (!target) return 'table.pageBreakNoRow';
+      if (target.info.node.child(target.row).attrs.pageBreakBefore) return null;
+      if (!active && ed.state.doc.resolve(target.info.pos).depth > 0) return 'table.pageBreakNested';
+      if (target.row === 0) return 'table.pageBreakFirstRow';
+      if (boundaryCrossed(target.map, target.row)) return 'table.pageBreakMerged';
+      return null;
+    }
+
+    function canTogglePageBreak(ed) {
+      return pageBreakInTable(ed) && pageBreakBlock(ed) === null;
     }
 
     // La ligne visée porte-t-elle un saut ? (le bouton est alors enfoncé : un second clic le retire)
     function hasPageBreak(ed) {
-      if (!active) return false;
-      const target = pageBreakRow(ed.state);
+      const target = pageBreakInTable(ed) && pageBreakRow(ed.state);
       return !!target && !!target.info.node.child(target.row).attrs.pageBreakBefore;
     }
 
@@ -888,11 +910,15 @@ const GridEditor = (function () {
       return true;
     }
 
-    // Les lignes qui portent un saut, par rang : ce que montrent les bandeaux.
-    function pageBreakRows() {
-      const info = editor && tableInfo(editor.state.doc);
+    // Les lignes qui portent un saut, par rang : ce que montrent les bandeaux (`info` : le tableau qu'ils montrent, celui de la grille sans lui). Dans
+    // un document, seuls les sauts que le PDF et le Word suivent comptent : pas sur la première ligne ni au milieu d'une case fusionnée sur plusieurs
+    // lignes (un saut qui ne tient pas n'a pas de pastille ; le trait en tirets de css/grid.css n'est jamais sur la première ligne).
+    function pageBreakRows(info) {
+      const table = info || (editor && tableInfo(editor.state.doc));
       const rows = [];
-      if (info) info.node.forEach(row => rows.push(!!row.attrs.pageBreakBefore));
+      if (!table) return rows;
+      const map = active ? null : libs.TableMap.get(table.node);
+      table.node.forEach((row, _offset, index) => rows.push(!!row.attrs.pageBreakBefore && (active || (index > 0 && !boundaryCrossed(map, index)))));
       return rows;
     }
 
@@ -936,7 +962,7 @@ const GridEditor = (function () {
       const fragment = content.constructor.fromArray(blocks.slice(0, end - 1).concat(last));
       return new slice.constructor(fragment, slice.openStart, Math.min(slice.openEnd, openDepthAtEnd(fragment)));
     }
-    return { canTogglePageBreak, hasPageBreak, togglePageBreak, pageBreakRows, trimPastedSlice };
+    return { canTogglePageBreak, hasPageBreak, togglePageBreak, pageBreakInTable, pageBreakBlock, pageBreakRows, trimPastedSlice };
   })();
 
   const { insertLines, pasteFromTopLeft } = (function () {
@@ -1220,7 +1246,12 @@ const GridEditor = (function () {
       let pos = info.pos + 1;
       info.node.forEach(row => { rows.push(editor.view.nodeDOM(pos)); pos += row.nodeSize; });
       if (rows.some(row => !row)) return null;
-      return { info, table, rect, width: rect.width, height: rect.height, rows, widths: cols.map(c => c.getBoundingClientRect().width), heights: rows.map(r => r.getBoundingClientRect().height) };
+      // L'Aperçu A4 rembourre le haut de la ligne qui ouvre une page (la place laissée en bas de la page d'avant et la bande de saut : js/header-footer-preview.js) :
+      // ce vide compte dans la hauteur rendue de la ligne, pas dans la sienne. `pads` (pixels écran) : à retirer pour lire la hauteur d'une ligne, et à laisser vide
+      // devant son numéro.
+      const zoom = active ? 1 : EditorCore.layoutZoom(table);
+      const pads = rows.map(row => HeaderFooterPreview.rowPadOf(row) * zoom);
+      return { info, table, rect, width: rect.width, height: rect.height, rows, widths: cols.map(c => c.getBoundingClientRect().width), heights: rows.map(r => r.getBoundingClientRect().height), pads };
     }
     return { setColumnWidths, setColumnWidth, setRowHeight, colName, tableElement, measure, measureTable };
   })();
@@ -1287,7 +1318,7 @@ const GridEditor = (function () {
       set.corner.title = I18n.t('grid.selectAll');
       set.cols.querySelectorAll('.v2-grid-handle').forEach(h => { h.title = I18n.t('grid.resizeColumn'); });
       set.rows.querySelectorAll('.v2-grid-handle').forEach(h => { h.title = I18n.t('grid.resizeRow'); });
-      set.rows.querySelectorAll('.v2-grid-rowhead.has-break').forEach(h => { h.title = I18n.t('grid.pageBreak'); });
+      set.rows.querySelectorAll('.v2-grid-rowhead.has-break').forEach(h => { h.title = I18n.t(set.ctx.breakTitle || 'grid.pageBreak'); });
     }
 
     function scheduleSync(set) {
@@ -1311,13 +1342,14 @@ const GridEditor = (function () {
     }
 
     // Le numéro d'une ligne qui porte un saut de page : une pastille à cheval sur son bord haut (le trait en tirets sur la ligne, c'est css/grid.css),
-    // et l'info-bulle du saut. La pastille ne répond pas au pointeur : la poignée qui règle la ligne du dessus, juste dessous, reste atteignable.
-    function markPageBreak(head, on) {
+    // et l'info-bulle du saut (`titleKey` : celle d'une grille parle de l'Excel, celle d'un document du Word). La pastille ne répond pas au pointeur : la
+    // poignée qui règle la ligne du dessus, juste dessous, reste atteignable.
+    function markPageBreak(head, on, titleKey) {
       head.classList.toggle('has-break', on);
       let badge = head.querySelector(':scope > .v2-grid-break');
       if (!on) { if (badge) badge.remove(); head.removeAttribute('title'); return; }
       if (!badge) { badge = el('span', 'v2-grid-break'); badge.innerHTML = Icons.svg('gridBreak'); head.appendChild(badge); }
-      head.title = I18n.t('grid.pageBreak');
+      head.title = I18n.t(titleKey || 'grid.pageBreak');
     }
     return { newStripSet, buildStrips, destroyStrips, refreshLabels, scheduleSync, watch, fillHeads, buildHead, markPageBreak };
   })();
@@ -1330,8 +1362,8 @@ const GridEditor = (function () {
       const m = measure(set);
       if (!m) return null;
       watch(set, m.table);
-      const breaks = set.ctx.breaks();
-      const key = m.widths.map(w => w.toFixed(2)).join(',') + '|' + m.heights.map(h => h.toFixed(2)).join(',') + '|' + breaks.map(on => (on ? 1 : 0)).join('');
+      const breaks = set.ctx.breaks(m.info);
+      const key = m.widths.map(w => w.toFixed(2)).join(',') + '|' + m.heights.map(h => h.toFixed(2)).join(',') + '|' + m.pads.map(p => p.toFixed(2)).join(',') + '|' + breaks.map(on => (on ? 1 : 0)).join('');
       if (force || key !== set.lastKey) {
         set.lastKey = key;
         fillHeads(set.cols, m.widths.length, 'v2-grid-colhead', buildHead);
@@ -1344,10 +1376,12 @@ const GridEditor = (function () {
         });
         m.heights.forEach((h, i) => {
           const head = set.rows.children[i];
-          head.style.height = h + 'px';
+          // Le numéro d'une ligne qui ouvre une page se pose sur la ligne elle-même, le vide d'au-dessus reste vide (comme la page).
+          head.style.height = (h - m.pads[i]) + 'px';
+          head.style.marginTop = m.pads[i] ? m.pads[i] + 'px' : '';
           head.firstChild.textContent = String(i + 1);
           head.dataset.index = String(i);
-          markPageBreak(head, !!breaks[i]);
+          markPageBreak(head, !!breaks[i], set.ctx.breakTitle);
         });
         refreshLabels(set);
       }
@@ -1442,12 +1476,13 @@ const GridEditor = (function () {
     // Hauteur d'une ligne réduite à son contenu : le plancher du glissé (« une ligne ne descend pas sous la hauteur de son texte »). Pour des lignes
     // tirées ensemble, la plus haute de leurs hauteurs : elles reçoivent toutes la même. Mesurée par une feuille de style d'un instant, pas en
     // changeant le style d'une ligne : ProseMirror verrait la ligne modifiée et la redessinerait. Une seule feuille pour toutes les lignes, celles du
-    // seul tableau que le glissé règle (`SIZING_MARK` : un document peut en porter plusieurs, un tableau dans une case compris).
-    function naturalRowHeight(rows, indexes) {
+    // seul tableau que le glissé règle (`SIZING_MARK` : un document peut en porter plusieurs, un tableau dans une case compris). `pads` : le rembourrage de
+    // l'Aperçu A4 en haut de la ligne qui ouvre une page (`measureTable`), retiré : il ne fait pas partie de la hauteur de la ligne.
+    function naturalRowHeight(rows, indexes, pads) {
       const probe = document.createElement('style');
       probe.textContent = `${indexes.map(sizingRow).join(', ')} { height: 0 !important; }`;
       document.head.appendChild(probe);
-      const height = Math.max(...indexes.map(index => rows[index].getBoundingClientRect().height));
+      const height = Math.max(...indexes.map(index => rows[index].getBoundingClientRect().height - ((pads && pads[index]) || 0)));
       probe.remove();
       return Math.ceil(height);
     }
@@ -1528,7 +1563,7 @@ const GridEditor = (function () {
       const lines = chosenLines(m.info, kind, index);
       const strip = isCol ? set.cols : set.rows;
       const heads = lines.map(i => strip.children[i]);
-      const sizes = lines.map(i => (isCol ? m.widths[i] : m.heights[i]) / zoom);
+      const sizes = lines.map(i => (isCol ? m.widths[i] : m.heights[i] - m.pads[i]) / zoom);
       // Colonnes : la largeur de départ de CHAQUE colonne, car la page les lie (celles à droite cèdent la place qui manque). Celle que le document pose ;
       // une colonne automatique (sans largeur posée) a celle du rendu, arrondie vers le bas : la somme ne dépasse pas ce que la page montre.
       const known = isCol ? knownColumnWidths(m.info.node) : [];
@@ -1538,7 +1573,7 @@ const GridEditor = (function () {
       const startSize = isCol ? base[index] : sizes[lines.indexOf(index)];
       // La marque est posée avant la mesure de la hauteur naturelle : elle et l'aperçu ne visent que ce tableau.
       m.table.setAttribute(SIZING_MARK, '');
-      const min = isCol ? MIN_COL_WIDTH_PX : Math.ceil(naturalRowHeight(m.rows, lines) / zoom);
+      const min = isCol ? MIN_COL_WIDTH_PX : Math.ceil(naturalRowHeight(m.rows, lines, m.pads) / zoom);
       const max = isCol ? MAX_COL_WIDTH_PX : MAX_ROW_HEIGHT_PX;
       let size = Math.max(min, Math.round(startSize));
       let plan = null;
@@ -1566,7 +1601,8 @@ const GridEditor = (function () {
           Array.prototype.forEach.call(strip.children, (head, i) => { head.style.width = (touched[i] ? plan.widths[i] * zoom : m.widths[i]) + 'px'; });
           return;
         }
-        preview.textContent = lines.map(i => `${sizingRow(i)} { height: ${value}px !important; }`).join(' ');
+        // La ligne qui ouvre une page garde son vide d'au-dessus : sa hauteur rendue est celle de la ligne plus ce vide.
+        preview.textContent = lines.map(i => `${sizingRow(i)} { height: ${value + m.pads[i] / zoom}px !important; }`).join(' ');
         heads.forEach(head => { head.style.height = value * zoom + 'px'; });
       };
       if (moved && !isCol) apply(size);
@@ -1651,14 +1687,14 @@ const GridEditor = (function () {
       if (!m) return false;
       const zoom = active ? 1 : EditorCore.layoutZoom(m.table);
       const isCol = kind === 'col';
-      const mean = Math.round(lines.reduce((sum, i) => sum + (isCol ? m.widths[i] : m.heights[i]), 0) / lines.length / zoom);
+      const mean = Math.round(lines.reduce((sum, i) => sum + (isCol ? m.widths[i] : m.heights[i] - m.pads[i]), 0) / lines.length / zoom);
       if (isCol) {
         setColumnWidth(info, lines, Math.min(MAX_COL_WIDTH_PX, Math.max(MIN_COL_WIDTH_PX, mean)));
         return true;
       }
       // Le plancher se mesure sur ce tableau seul (`SIZING_MARK`), comme pendant le glissé d'une poignée.
       m.table.setAttribute(SIZING_MARK, '');
-      const floor = Math.ceil(naturalRowHeight(m.rows, lines) / zoom);
+      const floor = Math.ceil(naturalRowHeight(m.rows, lines, m.pads) / zoom);
       m.table.removeAttribute(SIZING_MARK);
       setRowHeight(info, lines, Math.min(MAX_ROW_HEIGHT_PX, Math.max(floor, mean)));
       return true;
@@ -1674,12 +1710,13 @@ const GridEditor = (function () {
     info: () => (editor ? tableInfo(editor.state.doc) : null),
     zoom: () => 1,
     pageWidth: () => null,
-    breaks: () => pageBreakRows(),
+    breaks: info => pageBreakRows(info),
+    breakTitle: 'grid.pageBreak',
     wanted: () => active && !!strips,
     sync: () => { if (active && strips && editor) syncStrips(strips); },
   };
 
-  // Les bandeaux d'un tableau de document : celui où se trouve le curseur, pas de saut de page par ligne, la feuille réduite à ~0,85 dans un panneau
+  // Les bandeaux d'un tableau de document : celui où se trouve le curseur, avec les sauts de page de ses lignes, la feuille réduite à ~0,85 dans un panneau
   // de 700 px. Ils n'existent que hors d'une grille (qui a les siens). Les numéros et les lettres ont leur poignée : tirer le bas d'une ligne en règle la
   // hauteur, tirer le bord droit d'une lettre la largeur de sa colonne, comme dans une grille, mais la page est en centimètres et la bulle du glissé le dit
   // en cm. En Aperçu A4 la page limite le tableau : une colonne qu'on agrandit prend la place aux colonnes qui la suivent plutôt que de sortir de la page
@@ -1697,7 +1734,8 @@ const GridEditor = (function () {
       const width = EditorCore.editorContentWidthPx(editor);
       return width > 0 ? Math.floor(width) : null;
     },
-    breaks: () => [],
+    breaks: info => pageBreakRows(info),
+    breakTitle: 'grid.pageBreakDocument',
     wanted: () => !active && !!docStrips,
     sync: () => syncDocumentStrips(),
   };
@@ -1889,6 +1927,6 @@ const GridEditor = (function () {
     configure, attach, createExtension, createEnterExtension, withTableAttributes, withRowAttributes, withCellAttributes, serialize, setActive, isActive, isGridType,
     refresh, currentCellDom, colName, floatingOptions, barSlot,
     canMerge, canSplit, mergeCells, splitCell, mergeSelected, splitSelected, tableSettingsBlocked, setVerticalAlign, selectedVerticalAlign, applyBorders, canApplyBorders, gridLinesShown, setGridLinesShown,
-    canTogglePageBreak, hasPageBreak, togglePageBreak, insertLines, canEqualize, equalizeLines, documentStripsOffset, planColumnWidths,
+    canTogglePageBreak, hasPageBreak, togglePageBreak, pageBreakInTable, pageBreakBlock, insertLines, canEqualize, equalizeLines, documentStripsOffset, planColumnWidths,
   };
 })();

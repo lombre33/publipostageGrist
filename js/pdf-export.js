@@ -810,14 +810,18 @@ const PdfExport = (function () {
     // Les réglages de la grille (hauteur d'une ligne, alignement vertical, bords, quadrillage, saut de page avant une ligne) se lisent sur la marque
     // de l'enregistrement de tout tableau, grille ou tableau de document : un tableau que personne n'a réglé n'en porte aucune et sort comme avant.
     const hasRowHeights = rawRows.some(row => row.hasAttribute('data-row-height'));
-    const hasRowBreaks = rawRows.some(row => row.hasAttribute('data-page-break-before'));
+    // Une page ne s'ouvre que dans le texte courant : celui d'une case, d'une liste, d'une citation, d'un encadré ou d'une colonne ne passe pas d'une
+    // page à l'autre, une marque y reste sans effet (comme dans le Word).
+    const atPageLevel = !!inMainFlow && !(node.parentElement && node.parentElement.closest(PAGE_FLOW_BREAKERS));
+    const hasRowBreaks = atPageLevel && rawRows.some(row => row.hasAttribute('data-page-break-before'));
     const hasValign = rawRows.some(row => ExportCommon.cellsOf(row).some(cell => ExportCommon.cellVerticalAlign(cell)));
     const rowAreasPt = hasRowHeights || hasValign ? gridRowAreasPt(rawRows, pads) : null;
     const t = {
       node, rawRows, rootRect, inMainFlow, columnCount, pads, widths,
       // La grille ouverte : pas de suite de texte ni de page, donc ni lignes de titres reprises, ni lignes gardées entières. Un tableau à sauts de page
-      // avant une ligne est coupé en morceaux (tableBlocksFrom) et n'est pas non plus rangé par groupes de lignes.
+      // avant une ligne est coupé en morceaux (tableBlocksFrom), grille ou tableau de document.
       isGrid: hasRowHeights && exportsGridModel,
+      atPageLevel,
       hasRowBreaks,
       layout: tableLayoutFor(pads),
       // Bords réglés (barre de la case, js/table-borders.js) : le trait de départ est celui du layout ; pdfmake dessine un trait dès que l'une des deux
@@ -998,18 +1002,19 @@ const PdfExport = (function () {
   // Les lignes de titres (cases <th> en tête) reviennent en haut de chaque page où le tableau se poursuit, comme dans le Word (`tblHeader`). Pour un
   // tableau du texte courant seulement : celui d'une case, d'une liste, d'une citation, d'un encadré ou d'une colonne ne passe pas d'une page à l'autre,
   // et la grille ouverte (js/grid-editor.js) n'a pas de feuille. Un tableau réglé (hauteurs de lignes, bords, alignement) se range comme un autre ;
-  // un tableau à sauts de page avant une ligne est coupé en morceaux, pas rangé par groupes (tableBlocksFrom).
+  // un tableau à sauts de page avant une ligne aussi, chaque morceau (tableBlocksFrom) se range à son tour.
   //
   // `heights` : les hauteurs réglées, une par ligne du plan (null : aucune). Un groupe de lignes liées devient une seule ligne ('auto' : c'est le tableau
-  // qu'il contient qui porte les hauteurs de ses lignes).
+  // qu'il contient qui porte les hauteurs de ses lignes). `starts` : pour chaque ligne du plan, le rang de sa première ligne dans le tableau (null : une
+  // ligne du plan par ligne du tableau), pour retrouver où tombe un saut de page avant une ligne.
   function pageBreakPlan(t, body) {
     const { node, rawRows } = t;
-    const inPageFlow = !t.isGrid && !t.hasRowBreaks && !!t.inMainFlow && !(node.parentElement && node.parentElement.closest(PAGE_FLOW_BREAKERS));
+    const inPageFlow = !t.isGrid && t.atPageLevel;
     const headerRows = inPageFlow ? ExportCommon.headerRowCount(rawRows) : 0;
     const cutRows = TablePageCut.rowsOf(node);
     const cutUnits = cutRows && cutRows.length === rawRows.length ? TablePageCut.unitsOf(cutRows) : null;
     const dontBreakRows = !!cutUnits && inPageFlow && rowsFitInPage(node, cutRows, cutUnits);
-    if (!dontBreakRows || !cutUnits.some(unit => unit.to - unit.from > 1)) return { rows: body, headerRows, dontBreakRows, heights: t.rowHeightsPt };
+    if (!dontBreakRows || !cutUnits.some(unit => unit.to - unit.from > 1)) return { rows: body, headerRows, dontBreakRows, heights: t.rowHeightsPt, starts: null };
     return {
       rows: cutUnits.map(unit => (unit.to - unit.from > 1 ? unitRowFrom(t, body.slice(unit.from, unit.to), unit) : body[unit.from])),
       // Les lignes de titres finissent toujours entre deux groupes (headerRowCount s'arrête avant une case fusionnée qui déborde) : leur nombre, en
@@ -1017,6 +1022,7 @@ const PdfExport = (function () {
       headerRows: cutUnits.filter(unit => unit.to <= headerRows).length,
       dontBreakRows,
       heights: t.rowHeightsPt ? cutUnits.map(unit => (unit.to - unit.from > 1 ? 'auto' : t.rowHeightsPt[unit.from])) : null,
+      starts: cutUnits.map(unit => unit.from),
     };
   }
 
@@ -1064,8 +1070,10 @@ const PdfExport = (function () {
     if (pageBreakBefore) table.pageBreak = 'before';
     if (t.nestedPending.length) table._nestedPending = t.nestedPending;
     if (t.hasRowBreaks && body.length) {
-      const segments = ExportCommon.gridRowSegments(t.rawRows);
-      if (segments.length > 1) table._rowSegments = segments;
+      // Les tranches, en lignes du plan (un groupe de lignes liées en est une) : gridRowSegments ne coupe jamais au milieu d'un groupe.
+      const planRow = rawIndex => (rawIndex >= t.rawRows.length ? plan.rows.length : (plan.starts ? plan.starts.indexOf(rawIndex) : rawIndex));
+      const segments = ExportCommon.gridRowSegments(t.rawRows).map(([from, to]) => [planRow(from), planRow(to)]);
+      if (segments.length > 1 && segments.every(([from, to]) => from >= 0 && to > from)) table._rowSegments = segments;
     }
     return table;
   }
@@ -1110,11 +1118,29 @@ const PdfExport = (function () {
     const segments = table._rowSegments;
     delete table._rowSegments;
     if (!segments) return (captionPt > 0 && splitTailRow(table, node, captionPt)) || [table];
+    const { body, heights, headerRows } = table.table;
     return segments.map(([from, to], i) => {
-      const piece = Object.assign({}, table, { table: Object.assign({}, table.table, { body: table.table.body.slice(from, to) }, table.table.heights ? { heights: table.table.heights.slice(from, to) } : {}) });
+      // Les lignes de titres reviennent en haut de chaque morceau (comme sur les pages où le tableau se poursuit), sauf celles que le saut laisse
+      // derrière lui ; pdfmake n'en reprend jamais toutes les lignes d'un morceau, il en garde une au moins sous elles.
+      const titles = i > 0 ? Math.min(headerRows || 0, from) : 0;
+      const pieceBody = (titles ? copiedTitleRows(body.slice(0, titles)) : []).concat(body.slice(from, to));
+      const pieceHeights = heights ? heights.slice(0, titles).concat(heights.slice(from, to)) : null;
+      const piece = Object.assign({}, table, { table: Object.assign({}, table.table, { body: pieceBody, headerRows: Math.min(headerRows || 0, pieceBody.length - 1) }, pieceHeights ? { heights: pieceHeights } : {}) });
       if (i > 0) { piece.pageBreak = 'before'; delete piece._nestedPending; }
       return piece;
     });
+  }
+
+  // Une copie des lignes de titres d'un tableau pour un morceau de plus : pdfmake pose son état sur les objets qu'il range (largeurs, positions), deux
+  // tableaux ne partagent donc pas une case. Les objets simples et les listes sont copiés, le reste (fonctions, nœuds) est gardé tel quel ; une image
+  // en calque d'une case (ancrée sur la page par son nœud, une fois : `_pendingImgNode`) n'est pas reprise.
+  function copiedTitleRows(rows) {
+    const copy = (value) => {
+      if (Array.isArray(value)) return value.filter(item => !(item && item._pendingImgNode)).map(copy);
+      if (value && Object.getPrototypeOf(value) === Object.prototype) return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, copy(item)]));
+      return value;
+    };
+    return rows.map(copy);
   }
 
   // Le chrome CSS (padding et bordure) d'un élément d'un côté ('Left', 'Right', 'Top' ou 'Bottom'), en points.

@@ -106,7 +106,7 @@ const ReaderMode = (function () {
     // couper ainsi (ligne ou groupe de lignes plus haut que la page...) suit la règle des autres blocs.
     const placeCutTable = (block, cuttable) => {
       const { index, top } = block;
-      const tablePlan = TablePageCut.plan(consumed, cuttable.segs, pageContentHeightPx, cuttable.starts);
+      const tablePlan = TablePageCut.plan(consumed, cuttable.segs, pageContentHeightPx, cuttable.starts, cuttable.forced);
       placedAny = true;
       if (tablePlan.blockBreakBefore) cutBefore(top, index);
       tablePlan.cuts.forEach((rowIndex, k) => offsets.push({ top: top + cuttable.segs.slice(0, tablePlan.ranks[k]).reduce((sum, seg) => sum + seg, 0), afterIndex: index, rowIndex, remainingPx: 0 }));

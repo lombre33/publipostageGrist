@@ -46,8 +46,9 @@ const TableMerge = (function () {
   }
 
   // Pourquoi « Fusionner les cases » ne sert pas maintenant : la clé du texte d'info-bulle (js/i18n.js), ou null quand il sert. Dans l'ordre : il faut un rectangle d'au moins deux cases
-  // (sans case fusionnée qui dépasse), le suivi des modifications éteint (la forme du tableau changerait entre une proposition et son acceptation), et aucune ligne répétée par une
-  // boucle dans une fusion sur plusieurs lignes (une fusion dans une seule ligne reste possible : la copie de la ligne garde ses cases fusionnées).
+  // (sans case fusionnée qui dépasse), le suivi des modifications éteint (la forme du tableau changerait entre une proposition et son acceptation), aucune ligne répétée par une
+  // boucle dans une fusion sur plusieurs lignes (une fusion dans une seule ligne reste possible : la copie de la ligne garde ses cases fusionnées) et aucun saut de page avant une
+  // ligne de la fusion, hors la première (une case ne s'étend pas de part et d'autre d'un saut : le PDF et le Word la couperaient en deux, la grille refuse de même).
   function mergeBlock(ed) {
     if (!libs || !ed || !libs.isInTable(ed.state)) return 'table.cellMergeNeedsCells';
     const sel = cellSelectionOf(ed.state);
@@ -58,6 +59,7 @@ const TableMerge = (function () {
     if (bottom - top > 1) {
       const looped = loopRows(table);
       for (let row = top; row < bottom; row++) if (looped.has(row)) return 'table.cellMergeLoop';
+      for (let row = top + 1; row < bottom; row++) if (table.child(row).attrs.pageBreakBefore) return 'table.cellMergePageBreak';
     }
     return null;
   }

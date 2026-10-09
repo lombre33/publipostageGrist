@@ -1499,6 +1499,251 @@
     },
   });
 
+  // ---------- Lot 5 (B, C) : le saut de page avant une ligne d'un tableau de document ----------
+  // Le bouton « Saut de page » de la barre du haut : hors d'un tableau il insère un repère de saut (comme avant) ; dans un tableau du premier niveau il pose (ou retire) le saut
+  // AVANT la ligne du curseur - la page change là dans l'aperçu A4, la Lecture, le PDF et le Word (dev-tests/scenarios-table-page-cut.js) -, grisé avec sa raison sur la première
+  // ligne, au milieu d'une case fusionnée sur plusieurs lignes, dans un tableau de case ou de colonne et sous le suivi des modifications. Ses gestes à la vraie souris : dev-tests/verify-doc-page-break-mouse.mjs.
+  const breakBtn = () => document.getElementById('v2-btn-page-break');
+  const breakState = () => {
+    const b = breakBtn();
+    return { locked: b.classList.contains('v2-hf-locked'), pressed: b.getAttribute('aria-pressed'), tip: b.getAttribute('data-tip'), active: b.classList.contains('is-active') };
+  };
+  const markedRows = t => { const out = []; tablesOf()[t].node.forEach((row, _o, r) => { if (row.attrs.pageBreakBefore) out.push(r); }); return out.join(','); };
+  const markersInDoc = () => { let n = 0; ed().state.doc.descendants((node) => { if (node.type.name === 'pageBreak') n += 1; return true; }); return n; };
+  const savedMarks = () => (Editor.getHTML().match(/<tr[^>]*data-page-break-before="true"/g) || []).length;
+  const FIVE_ROWS = '<p>avant</p>' + tableHtml('A', 5, 2) + '<p>après</p>';
+
+  cases.push({
+    id: 'docbreak_button_sets_and_removes_the_break_before_the_row_of_the_cursor',
+    description: 'Dans un tableau de document, le bouton Saut de page pose un saut AVANT la ligne du curseur (la marque est sur cette ligne, enregistrée dans le HTML, aucun repère de saut inséré), le bouton s\'enfonce et dit « avant la ligne », un second clic le retire, un seul Annuler défait chaque geste ; hors d\'un tableau il insère toujours le repère de saut, et son libellé revient',
+    run: async (h) => withDoc(h, FIVE_ROWS, async () => {
+      const bad = [];
+      await cursorInParagraph('avant');
+      const outside = breakState();
+      await h.clickButton('v2-btn-page-break');
+      await sleep(60);
+      const inserted = markersInDoc();
+      await undo();
+      if (outside.locked || outside.tip !== I18n.t('insert.pageBreak.tip') || outside.pressed !== null || inserted !== 1 || markersInDoc() !== 0) bad.push('hors tableau : ' + JSON.stringify({ outside, inserted, after: markersInDoc() }));
+      await sleep(GROUP_GAP_MS);
+      await cursorIn(0, 3, 1);
+      const idle = breakState();
+      await h.clickButton('v2-btn-page-break');
+      await sleep(100);
+      const set = { rows: markedRows(0), saved: savedMarks(), markers: markersInDoc(), state: breakState() };
+      if (idle.locked || idle.pressed !== 'false' || idle.tip !== I18n.t('insert.pageBreak.gridTip')) bad.push('avant : ' + JSON.stringify(idle));
+      if (set.rows !== '3' || set.saved !== 1 || set.markers !== 0 || set.state.pressed !== 'true' || !set.state.active || set.state.locked) bad.push('posé : ' + JSON.stringify(set));
+      await sleep(GROUP_GAP_MS);
+      await h.clickButton('v2-btn-page-break');
+      await sleep(100);
+      const removed = { rows: markedRows(0), saved: savedMarks(), state: breakState() };
+      if (removed.rows !== '' || removed.saved !== 0 || removed.state.pressed !== 'false' || removed.state.active) bad.push('retiré : ' + JSON.stringify(removed));
+      await undo();
+      const undone = markedRows(0);
+      ed().commands.redo();
+      await sleep(100);
+      const redone = markedRows(0);
+      if (undone !== '3' || redone !== '') bad.push('annuler / rétablir : ' + JSON.stringify({ undone, redone }));
+      await cursorInParagraph('après');
+      if (breakState().tip !== I18n.t('insert.pageBreak.tip') || breakState().pressed !== null) bad.push('libellé non rendu hors tableau : ' + JSON.stringify(breakState()));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'docbreak_button_is_greyed_with_its_reason_where_a_break_cannot_stand',
+    description: 'Le bouton Saut de page est grisé (jamais retiré, un clic dessus ne fait rien, aucun repère inséré) avec sa raison pour info-bulle : sur la première ligne, au milieu d\'une case fusionnée sur plusieurs lignes (libre à son bord haut et dessous), dans un tableau posé dans une case, sous le suivi des modifications ; chaque raison a son texte, et le grisé disparaît dès que la cause s\'en va',
+    run: async (h) => {
+      const bad = [];
+      const noClick = async (what) => {
+        const before = JSON.stringify(ed().state.doc.toJSON());
+        await h.clickButton('v2-btn-page-break');
+        await sleep(80);
+        if (JSON.stringify(ed().state.doc.toJSON()) !== before) bad.push(what + ' : un clic a modifié le document');
+      };
+      const expectLocked = (what, key) => {
+        const st = breakState();
+        if (!st.locked || st.tip !== I18n.t(key) || !breakBtn().classList.contains('pp-row-break')) bad.push(what + ' : ' + JSON.stringify(st) + ' pour ' + key);
+      };
+      await withDoc(h, FIVE_ROWS, async () => {
+        await cursorIn(0, 0, 1);
+        expectLocked('première ligne', 'table.pageBreakFirstRow');
+        await noClick('première ligne');
+        await selectCells(0, 1, 0, 2, 0);
+        const merged = TableMerge.mergeCells(ed());
+        await sleep(100);
+        for (const [name, row, locked, key] of [['au-dessus', 0, true, 'table.pageBreakFirstRow'], ['bord haut du groupe', 1, false, null], ['dans le groupe', 2, true, 'table.pageBreakMerged'], ['sous le groupe', 3, false, null]]) {
+          await cursorIn(0, row, 0);
+          const st = breakState();
+          if (st.locked !== locked || (key && st.tip !== I18n.t(key)) || (!locked && breakBtn().classList.contains('pp-row-break'))) bad.push(name + ' : ' + JSON.stringify({ merged, st }));
+          if (name === 'dans le groupe') await noClick(name);
+        }
+        await cursorIn(0, 3, 0);
+        Editor.setTrackChanges(true);
+        await sleep(100);
+        expectLocked('suivi allumé', 'table.settingTracked');
+        await noClick('suivi allumé');
+        Editor.setTrackChanges(false);
+        await sleep(100);
+        if (breakState().locked) bad.push('le grisé reste après le suivi : ' + JSON.stringify(breakState()));
+      });
+      await withDoc(h, '<p>avant</p><table><tbody><tr><td><p>dehors</p>' + tableHtml('N', 3, 2) + '</td><td><p>voisine</p></td></tr><tr><td><p>x</p></td><td><p>y</p></td></tr></tbody></table><p>après</p>', async () => {
+        await cursorIn(1, 2, 1);
+        expectLocked('tableau dans une case', 'table.pageBreakNested');
+        await noClick('tableau dans une case');
+        if (markersInDoc() !== 0) bad.push('un repère de saut est entré dans la case');
+        await cursorIn(0, 1, 0);
+        if (breakState().locked) bad.push('le tableau extérieur doit rester libre : ' + JSON.stringify(breakState()));
+      });
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'docbreak_a_break_that_cannot_stand_can_still_be_removed_and_never_shows',
+    description: 'Une marque que rien ne suit (première ligne du tableau, tableau dans une case) reste dans le HTML mais ne se montre pas (ni pastille ni trait) ; le bouton, enfoncé, la retire : un saut qui ne tient plus se défait toujours (sauf sous le suivi) ',
+    run: async (h) => {
+      const bad = [];
+      const marked = (rows, marks) => '<table><tbody>' + Array.from({ length: rows }, (_, r) => '<tr' + (marks.includes(r) ? ' data-page-break-before="true"' : '') + '><td><p>M' + (r + 1) + '</p></td><td><p>x</p></td></tr>').join('') + '</tbody></table>';
+      await withDoc(h, '<p>avant</p>' + marked(4, [0, 2]), async () => {
+        await cursorIn(0, 0, 0);
+        const pills = () => Array.from(document.querySelectorAll(STRIPS + ' .v2-grid-rowhead')).map((head, i) => (head.classList.contains('has-break') ? i : -1)).filter(i => i >= 0).join(',');
+        const st = breakState();
+        if (st.locked || st.pressed !== 'true' || pills() !== '2') bad.push('première ligne marquée : ' + JSON.stringify({ st, pills: pills() }));
+        await h.clickButton('v2-btn-page-break');
+        await sleep(100);
+        if (markedRows(0) !== '2' || breakState().pressed !== 'false' || !breakState().locked) bad.push('retirée : ' + JSON.stringify({ rows: markedRows(0), st: breakState() }));
+      });
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'docbreak_strips_show_the_break_on_the_row_number',
+    description: 'Les bandeaux du tableau de document montrent le saut : une pastille à cheval sur le numéro de la ligne marquée, une seule, avec l\'info-bulle du document (PDF et Word, pas d\'Excel) ; elle suit la pose et le retrait du saut ; une grille garde la sienne',
+    run: async (h) => withDoc(h, FIVE_ROWS, async () => {
+      const bad = [];
+      const pills = () => Array.from(document.querySelectorAll(STRIPS + ' .v2-grid-rowhead')).map((head, i) => (head.classList.contains('has-break') ? i : -1)).filter(i => i >= 0).join(',');
+      const badges = () => document.querySelectorAll(STRIPS + ' .v2-grid-break').length;
+      await cursorIn(0, 2, 0);
+      if (pills() !== '' || badges() !== 0) bad.push('avant le saut : ' + pills() + '/' + badges());
+      await h.clickButton('v2-btn-page-break');
+      await sleep(300);
+      const titled = document.querySelector(STRIPS + ' .v2-grid-rowhead.has-break');
+      if (pills() !== '2' || badges() !== 1 || !titled || titled.title !== I18n.t('grid.pageBreakDocument') || /Excel/.test(titled.title)) bad.push('saut posé : ' + JSON.stringify({ pills: pills(), badges: badges(), title: titled && titled.title }));
+      await sleep(GROUP_GAP_MS);
+      await h.clickButton('v2-btn-page-break');
+      await sleep(300);
+      if (pills() !== '' || badges() !== 0) bad.push('saut retiré : ' + pills() + '/' + badges());
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'docbreak_the_row_with_a_break_has_a_dashed_line_on_its_top_edge',
+    description: 'Dans l\'éditeur, la ligne marquée d\'un tableau du premier niveau a un trait en tirets sur son bord haut (fond de ses cases) ; rien sur les autres lignes, sur la première ligne marquée, dans un tableau de case ni en Lecture',
+    run: async (h) => {
+      const bad = [];
+      const dashed = tr => Array.from(tr.cells).every(cell => /repeating-linear-gradient/.test(getComputedStyle(cell).backgroundImage));
+      const bare = tr => Array.from(tr.cells).every(cell => getComputedStyle(cell).backgroundImage === 'none');
+      const rows = html => {
+        const host = document.createElement('div');
+        host.innerHTML = html;
+        return host;
+      };
+      const mark = ' data-page-break-before="true"';
+      const outer = '<table><tbody><tr' + mark + '><td><p>H1</p></td><td><p>x</p></td></tr><tr><td><p>H2</p>'
+        + '<table><tbody><tr><td><p>N1</p></td></tr><tr' + mark + '><td><p>N2</p></td></tr></tbody></table></td><td><p>y</p></td></tr><tr' + mark + '><td><p>H3</p></td><td><p>z</p></td></tr><tr><td><p>H4</p></td><td><p>w</p></td></tr></tbody></table>';
+      await withDoc(h, '<p>avant</p>' + outer, async () => {
+        const trs = Array.from(h.tiptap().querySelectorAll(':scope > .tableWrapper > table > tbody > tr'));
+        const nested = Array.from(h.tiptap().querySelectorAll('table table > tbody > tr'));
+        if (trs.length !== 4 || nested.length !== 2) { bad.push('fixture : ' + trs.length + '/' + nested.length); return; }
+        if (!bare(trs[0]) || !bare(trs[1]) || !dashed(trs[2]) || !bare(trs[3]) || !bare(nested[0]) || !bare(nested[1])) bad.push('éditeur : ' + JSON.stringify(trs.map(tr => (dashed(tr) ? 'tirets' : bare(tr) ? 'rien' : '?')).concat(nested.map(tr => (dashed(tr) ? 'tirets' : bare(tr) ? 'rien' : '?')))));
+      });
+      const wrapper = await h.renderReaderMode('<table><tbody><tr><td><p>a</p></td></tr><tr' + mark + '><td><p>b</p></td></tr></tbody></table>');
+      await sleep(200);
+      const readerRow = wrapper.querySelector('tr[data-page-break-before]');
+      if (!readerRow || !bare(readerRow)) bad.push('Lecture : ' + (readerRow ? getComputedStyle(readerRow.cells[0]).backgroundImage : 'ligne absente'));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'docbreak_merge_is_refused_across_a_break_like_in_a_grid',
+    description: '« Fusionner les cases » est grisé avec sa raison quand un saut de page passe entre deux lignes de la sélection (une case ne s\'étend pas de part et d\'autre d\'un saut) ; libre quand le saut est sur le bord haut de la sélection ; refusé aussi par la fonction, document inchangé',
+    run: async (h) => withDoc(h, FIVE_ROWS, async () => {
+      const bad = [];
+      await cursorIn(0, 2, 0);
+      await h.clickButton('v2-btn-page-break');
+      await sleep(GROUP_GAP_MS);
+      await selectCells(0, 1, 0, 2, 0);
+      const across = TableMerge.mergeBlock(ed());
+      const before = JSON.stringify(ed().state.doc.toJSON());
+      const refused = TableMerge.mergeCells(ed()) === false && JSON.stringify(ed().state.doc.toJSON()) === before;
+      await selectCells(0, 2, 0, 3, 0);
+      const atTop = TableMerge.mergeBlock(ed());
+      if (across !== 'table.cellMergePageBreak' || !refused || atTop !== null) bad.push(JSON.stringify({ across, refused, atTop }));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  // En Aperçu A4 la ligne qui ouvre une page est rembourrée du reste de la page d'avant et de la bande (js/header-footer-preview.js:placePaginationSeam) : ce vide compte dans la
+  // hauteur RENDUE de la ligne, pas dans la sienne. Sans cette différence, tirer le bas de son numéro ou l'égaliser avec sa voisine écrivait la hauteur de toute la page (jusqu'à
+  // 1000 px) dans la ligne, et le numéro occupait tout le vide d'au-dessus.
+  const MARKED_AT_THREE = '<p>avant</p><table><tbody>' + [1, 2, 3, 4, 5].map(r => '<tr' + (r === 3 ? ' data-page-break-before="true"' : '') + '><td><p>L' + r + 'A</p></td><td><p>L' + r + 'B</p></td></tr>').join('') + '</tbody></table><p>après</p>';
+  cases.push({
+    id: 'docbreak_a_row_that_opens_a_page_is_measured_by_its_own_height',
+    description: 'Aperçu A4, saut avant la ligne 3 : la ligne 3 est rendue haute de tout le bas de la page (rembourrage de la couture) mais son numéro mesure sa seule hauteur et finit avec elle ; tirer le bas du numéro 3 de 20 px pose sa hauteur de texte plus 20 (pas celle de la page) ; égaliser les lignes 3 et 4 leur donne leur hauteur de texte ; la couture et ses bandes ne bougent pas ; sans Aperçu A4 rien ne change',
+    run: async (h) => withDoc(h, MARKED_AT_THREE, async () => {
+      const bad = [];
+      const wasA4 = !!document.getElementById('editor-container').classList.contains('a4-preview');
+      try {
+        h.setA4Preview(true);
+        await sleep(400);
+        Editor.refreshPaginationPreview();
+        await sleep(400);
+        await cursorIn(0, 2, 0);
+        await sleep(200);
+        const geo = () => ({
+          heads: Array.from(document.querySelectorAll(STRIPS + ' .v2-grid-rowhead')).map(head => head.getBoundingClientRect()),
+          rows: Array.from(docTables()[0].querySelectorAll(':scope > tbody > tr')).map(tr => tr.getBoundingClientRect()),
+        });
+        const g0 = geo();
+        const rendered = g0.rows.map(r => Math.round(r.height));
+        if (g0.heads.length !== 5 || !(g0.rows[2].height > 3 * g0.rows[3].height)) bad.push('le scénario n\'a pas de ligne rembourrée : ' + JSON.stringify({ heads: g0.heads.length, rendered }));
+        const owns = g0.heads.map(r => Math.round(r.height));
+        if (owns.some(v => Math.abs(v - owns[3]) > 1.5) || g0.heads.some((r, i) => Math.abs(r.bottom - g0.rows[i].bottom) > 1.5)) bad.push('numéros : ' + JSON.stringify({ owns, rendered }));
+        const bands = document.querySelectorAll('#editor-container .v2-page-band').length;
+        // Tirer le bas du numéro 3 de 20 px.
+        await dragRowHandle(3, 20);
+        const dragged = rowHeights(0);
+        if (!(dragged[2] >= 40 && dragged[2] <= 100) || dragged.some((v, i) => i !== 2 && v !== null)) bad.push('glissé : ' + JSON.stringify(dragged));
+        const g1 = geo();
+        if (Math.abs(g1.rows[2].height - g0.rows[2].height - 20) > 3) bad.push('la ligne 3 est rendue ' + Math.round(g1.rows[2].height) + ' px après le glissé (avant ' + Math.round(g0.rows[2].height) + ')');
+        await sleep(GROUP_GAP_MS);
+        await undo();
+        if (rowHeights(0).some(v => v !== null)) bad.push('Annuler : ' + JSON.stringify(rowHeights(0)));
+        // Égaliser les lignes 3 et 4 : leur hauteur de texte, pas celle de la page.
+        await sleep(GROUP_GAP_MS);
+        await selectCells(0, 2, 0, 3, 1);
+        const done = GridEditor.equalizeLines(ed(), 'row');
+        await sleep(150);
+        const equal = rowHeights(0);
+        if (!done || !(equal[2] >= 20 && equal[2] <= 60) || equal[2] !== equal[3] || equal[0] !== null || equal[1] !== null || equal[4] !== null) bad.push('égaliser : ' + JSON.stringify({ done, equal }));
+        if (document.querySelectorAll('#editor-container .v2-page-band').length !== bands) bad.push('le nombre de bandes de saut a changé : ' + bands + ' puis ' + document.querySelectorAll('#editor-container .v2-page-band').length);
+      } finally {
+        h.setA4Preview(wasA4);
+        await sleep(300);
+      }
+      // Sans Aperçu A4 aucun rembourrage : les numéros et les lignes ont les mêmes hauteurs, et un glissé règle la hauteur rendue (comme avant).
+      await cursorIn(0, 2, 0);
+      await sleep(200);
+      const flatHeads = Array.from(document.querySelectorAll(STRIPS + ' .v2-grid-rowhead')).map(head => head.style.marginTop || '');
+      if (flatHeads.some(v => v !== '')) bad.push('sans Aperçu A4 un numéro est décalé : ' + JSON.stringify(flatHeads));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.gridInDocument = cases;
 })();

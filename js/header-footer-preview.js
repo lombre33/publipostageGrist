@@ -312,9 +312,9 @@ const HeaderFooterPreview = (function () {
     };
     const placeCutTable = (block, cuttable) => {
       const { child, index, captions } = block;
-      const tablePlan = TablePageCut.plan(consumed, cuttable.segs, pageContentHeightPx, cuttable.starts);
+      const tablePlan = TablePageCut.plan(consumed, cuttable.segs, pageContentHeightPx, cuttable.starts, cuttable.forced);
       if (tablePlan.blockBreakBefore) cutAfterLast();
-      tablePlan.cuts.forEach(rowIndex => breaks.push({ afterEl: child, rowIndex, forced: false, remainingPx: 0 }));
+      tablePlan.cuts.forEach((rowIndex, k) => breaks.push({ afterEl: child, rowIndex, forced: tablePlan.forcedCuts[k], remainingPx: 0 }));
       consumed = tablePlan.consumedAfter;
       lastBlock = child;
       if (cuttable.keepsTail) { counted = index + 1 + captions.length; lastBlock = captions[captions.length - 1]; }
@@ -405,6 +405,9 @@ const HeaderFooterPreview = (function () {
   // Ligne de tableau -> hauteur ajoutée à son rembourrage haut pour la descendre sous une couture (règle de la feuille ci-dessus). Remise à zéro avec
   // la feuille : une mesure faite règle posée retranche ce que la règle a ajouté, une mesure faite feuille vide n'a rien à retrancher.
   let appliedRowPad = new WeakMap();
+  // Ce rembourrage (pixels de mise en page) fait partie de la hauteur rendue d'une ligne, pas de la sienne : les bandeaux d'un tableau de document le retirent
+  // (js/grid-editor.js:measureTable) pour lire la hauteur qu'une poignée règle, et pour laisser un vide devant le numéro de la ligne qui ouvre une page.
+  function rowPadOf(row) { return appliedRowPad.get(row) || 0; }
   function clearPageBreakMargins() {
     if (paginationMarginStyleEl) paginationMarginStyleEl.textContent = '';
     if (paginationSteps) paginationSteps.clear();
@@ -1056,5 +1059,6 @@ const HeaderFooterPreview = (function () {
     enterHeaderFooterMode, exitHeaderFooterModeIfActive, isEditingHeaderFooter,
     getHeaderFooterData, setHeaderFooterData,
     schedulePaginationRecompute, renderPaginationOverlay, computePageGridPosition, migrateLegacyImagePositions, reconcileLayerImagesWithGrid, recaptureLayeredImageGrids,
+    rowPadOf,
   };
 })();

@@ -163,6 +163,7 @@ const I18n = (function () {
     'grid.resizeRow': { fr: 'Tirer pour régler la hauteur de la ligne', en: 'Drag to set the row height' },
     'grid.cellBar': { fr: 'Barre de la case', en: 'Cell toolbar' },
     'grid.pageBreak': { fr: 'Saut de page · nouvelle page du PDF, nouvelle feuille de l’Excel', en: 'Page break · new page in the PDF, new sheet in the Excel file' },
+    'grid.pageBreakDocument': { fr: 'Saut de page · nouvelle page du PDF et du Word', en: 'Page break · new page in the PDF and Word files' },
     'toolbar.autosave.aria': { fr: 'Enregistrement automatique — enregistre le modèle toutes les ~2,5 secondes pendant que vous éditez. Désactiver si vous préférez enregistrer vous-même.', en: 'Auto-save — saves the template roughly every 2.5 seconds while you edit. Turn off if you prefer to save manually.' },
     'toolbar.quality.tip': { fr: 'Qualité PDF', en: 'PDF quality' },
     'toolbar.quality.aria': { fr: 'Qualité d’export PDF', en: 'PDF export quality' },
@@ -276,6 +277,8 @@ const I18n = (function () {
     // Le même bouton dans une grille : le saut se pose avant la ligne sélectionnée, et un second clic le retire.
     'insert.pageBreak.gridTip': { fr: 'Saut de page avant la ligne', en: 'Page break before the row' },
     'insert.pageBreak.gridAria': { fr: 'Saut de page avant la ligne sélectionnée : nouvelle page du PDF, nouvelle feuille de l’Excel (un second clic le retire)', en: 'Page break before the selected row: new page in the PDF, new sheet in the Excel file (click again to remove it)' },
+    // Dans un tableau de document le geste est le même (l'infobulle est celle de la grille) : la page s'ouvre dans le PDF et le Word, pas dans un Excel.
+    'insert.pageBreak.rowAria': { fr: 'Saut de page avant la ligne sélectionnée : nouvelle page du PDF et du Word (un second clic le retire)', en: 'Page break before the selected row: new page in the PDF and Word files (click again to remove it)' },
     'insert.toc.tip': { fr: 'Insérer un sommaire', en: 'Insert a table of contents' },
     'insert.toc.aria': { fr: 'Insérer un sommaire (généré à partir des titres)', en: 'Insert a table of contents (generated from headings)' },
     'insert.comment.tip': { fr: 'Commenter la sélection', en: 'Comment on selection' },
@@ -1239,6 +1242,12 @@ const I18n = (function () {
     'table.cellSplitNeedsMerged': { fr: 'Scinder la case : placez le curseur dans une case fusionnée', en: 'Split cell: place the cursor in a merged cell' },
     'table.cellTracked': { fr: 'Indisponible avec le suivi des modifications : la forme du tableau changerait', en: 'Unavailable with track changes on: the shape of the table would change' },
     'table.settingTracked': { fr: 'Indisponible avec le suivi des modifications : ce réglage ne serait pas suivi', en: 'Unavailable with track changes on: this setting would not be tracked' },
+    // Les raisons du grisé du « Saut de page » de la barre du haut dans un tableau (il pose un saut avant la ligne du curseur) et de « Fusionner » devant un saut.
+    'table.pageBreakNoRow': { fr: 'Saut de page : placez le curseur dans une case du tableau', en: 'Page break: place the cursor in a cell of the table' },
+    'table.pageBreakFirstRow': { fr: 'Saut de page : pas avant la première ligne du tableau (la page serait vide)', en: 'Page break: not before the first row of the table (the page would be empty)' },
+    'table.pageBreakMerged': { fr: 'Saut de page : une case fusionnée sur plusieurs lignes passe sur la limite au-dessus de cette ligne', en: 'Page break: a cell merged across several rows runs over the edge above this row' },
+    'table.pageBreakNested': { fr: 'Saut de page : un tableau dans une case, une colonne, un encadré ou une liste ne change pas de page', en: 'Page break: a table inside a cell, a column, a callout or a list does not move to a new page' },
+    'table.cellMergePageBreak': { fr: 'Fusionner les cases : un saut de page passe entre deux lignes de la sélection', en: 'Merge cells: a page break falls between two rows of the selection' },
     'table.valignTop': { fr: 'Aligner en haut', en: 'Align to top' },
     'table.valignMiddle': { fr: 'Aligner au milieu', en: 'Align to middle' },
     'table.valignBottom': { fr: 'Aligner en bas', en: 'Align to bottom' },

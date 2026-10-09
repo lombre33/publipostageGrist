@@ -14,7 +14,7 @@ const MainToolbar = (function () {
   // Une grille est un tableau unique, sans feuille. GRID_LOCKED_IDS liste ce qui n'y a aucun sens : grisé, jamais retiré. « Lien » reste actif (un
   // lien dans une case a un sens), le QR code aussi : il se pose sur sa case et l'Excel le dessine. Un bouton qui ouvre un autre type de bloc dans le
   // menu « Lien et blocs de contenu » s'ajoute à cette liste, sauf une image. Le saut de page n'en fait pas partie : il se pose avant la ligne
-  // sélectionnée (GridEditor.togglePageBreak) et ne se grise que là où il n'a pas de sens (syncLocks).
+  // sélectionnée (GridEditor.togglePageBreak) et ne se grise que là où il n'a pas de sens (syncLocks). Il fait de même dans un tableau de document.
   let inGridMode = false;
   function setGridMode(active) { inGridMode = !!active; }
   const GRID_LOCKED_IDS = [
@@ -308,9 +308,9 @@ const MainToolbar = (function () {
       // ce qui bloque aussi leur volet déroulant. Un niveau de titre n'est qu'une taille et un poids, que le texte brut ne porte pas.
       [mailOrMacro, ['v2-btn-bold', 'v2-btn-italic', 'v2-btn-underline', 'v2-btn-strike', 'v2-heading-group', 'v2-align-group', 'v2-size-stepper', 'v2-font-chip',
         'v2-text-color-split', 'v2-highlight-split', 'v2-btn-format-painter', 'v2-btn-table', 'v2-btn-two-columns', 'v2-image-group', 'v2-btn-toc']],
-      // Dans une grille, le bouton pose ou retire le saut avant la ligne sélectionnée : grisé sur la première ligne et au milieu d'une case fusionnée
-      // sur plusieurs lignes.
-      [mailOrMacro || (inGridMode && !GridEditor.canTogglePageBreak(editor)), ['v2-btn-page-break']],
+      // Dans une grille ou dans un tableau de document, le bouton pose ou retire le saut avant la ligne sélectionnée : grisé sur la première ligne, au
+      // milieu d'une case fusionnée sur plusieurs lignes, dans un tableau qui n'est pas du premier niveau du document et sous le suivi des modifications.
+      [mailOrMacro || (GridEditor.pageBreakInTable(editor) && !GridEditor.canTogglePageBreak(editor)), ['v2-btn-page-break']],
       // Un macro-modèle grise aussi ce que l'e-mail laisse actif - dont l'exposant et l'indice, que le lien écrit en caractères Unicode
       // (js/script-marks.js:toUnicode) -, et le menu « Lien et blocs de contenu » en entier.
       [inMacroMode, ['v2-btn-superscript', 'v2-btn-subscript', 'v2-btn-comment', 'v2-btn-insert-variable', 'v2-btn-undo', 'v2-btn-redo', 'v2-btn-find', 'v2-btn-track-changes',
@@ -337,19 +337,26 @@ const MainToolbar = (function () {
     return lockedNow;
   }
 
-  // Dans une grille, le bouton « Saut de page » est enfoncé sur une ligne qui porte un saut et son libellé le dit (autre texte, même icône). Les clés
-  // i18n suivent le mode : I18n.applyTranslations les relit au changement de langue.
+  // Dans une grille et dans un tableau de document (le curseur dans une case), le bouton « Saut de page » a le sens d'une ligne : il est enfoncé sur une
+  // ligne qui porte un saut et son libellé le dit (autre texte, même icône). Grisé dans un tableau de document, il dit pourquoi en info-bulle
+  // (`pp-row-break` lui rend le pointeur, que le grisé lui prend : css/grid.css ; le clic, lui, ne fait rien : GridEditor.togglePageBreak) ; celui d'une
+  // grille garde l'info-bulle d'avant. Les clés i18n suivent le mode : I18n.applyTranslations les relit au changement de langue.
   function syncPageBreakButton() {
     const button = byId('v2-btn-page-break');
     if (!button) return;
-    const keys = inGridMode ? ['insert.pageBreak.gridTip', 'insert.pageBreak.gridAria'] : ['insert.pageBreak.tip', 'insert.pageBreak.aria'];
-    if (button.getAttribute('data-i18n-tip') !== keys[0]) {
+    const rowMode = GridEditor.pageBreakInTable(editor);
+    const keys = rowMode ? ['insert.pageBreak.gridTip', inGridMode ? 'insert.pageBreak.gridAria' : 'insert.pageBreak.rowAria'] : ['insert.pageBreak.tip', 'insert.pageBreak.aria'];
+    if (button.getAttribute('data-i18n-tip') !== keys[0] || button.getAttribute('data-i18n-aria') !== keys[1]) {
       button.setAttribute('data-i18n-tip', keys[0]); button.setAttribute('data-i18n-aria', keys[1]);
-      button.setAttribute('data-tip', I18n.t(keys[0])); button.setAttribute('aria-label', I18n.t(keys[1]));
+      button.setAttribute('aria-label', I18n.t(keys[1]));
     }
-    const onBreak = inGridMode && GridEditor.hasPageBreak(editor);
+    const reason = rowMode && !inGridMode && !(inEmailMode || inMacroMode) ? GridEditor.pageBreakBlock(editor) : null;
+    const tip = I18n.t(reason || keys[0]);
+    if (button.getAttribute('data-tip') !== tip) button.setAttribute('data-tip', tip);
+    button.classList.toggle('pp-row-break', !!reason);
+    const onBreak = rowMode && GridEditor.hasPageBreak(editor);
     setActive('v2-btn-page-break', onBreak);
-    if (inGridMode) button.setAttribute('aria-pressed', onBreak ? 'true' : 'false'); else button.removeAttribute('aria-pressed');
+    if (rowMode) button.setAttribute('aria-pressed', onBreak ? 'true' : 'false'); else button.removeAttribute('aria-pressed');
   }
 
   // Mode grille, appliqué après syncLocks : le dernier appel gagne. En quittant la grille, un bouton que syncLocks gère vient d'être recalculé par
@@ -547,7 +554,7 @@ const MainToolbar = (function () {
     bind('v2-btn-image-from-variable', () => openImageVariablePicker(byId('v2-btn-image-from-variable')));
     // Une grille n'a pas de page : le bouton y pose le saut de la ligne (le PDF y commence une page, l'Excel une feuille) ; un second clic le retire.
     bind('v2-btn-page-break', () => {
-      if (GridEditor.isActive()) { GridEditor.togglePageBreak(editor); editor.chain().focus().run(); return; }
+      if (GridEditor.pageBreakInTable(editor)) { GridEditor.togglePageBreak(editor); editor.chain().focus().run(); return; }
       editor.chain().focus().insertPageBreak().run();
     });
     bind('v2-btn-toc', () => editor.chain().focus().insertToc().run());

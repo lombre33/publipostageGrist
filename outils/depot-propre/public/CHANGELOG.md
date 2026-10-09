@@ -221,6 +221,16 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   la Lecture, le PDF et le Word reprennent le tout. C'est toujours un tableau du document : la barre du tableau
   et les bandeaux y règlent les traits, l'alignement et les hauteurs comme dans une grille. Dans une grille, le
   collage ne change pas.
+- **Saut de page avant une ligne d'un tableau de document** : dans un tableau de document, le bouton « Saut de page »
+  de la barre d'outils pose un saut AVANT la ligne où se trouve le curseur, comme dans une grille ; un second clic
+  le retire (un seul Annuler par geste) et Alt+Entrée fait de même au clavier. La page change là dans l'aperçu A4
+  et dans la Lecture, et le PDF comme le Word y ouvrent une nouvelle page ; les lignes de titres du tableau
+  reviennent en haut de cette page, comme quand un tableau se coupe de lui-même. Le saut se voit : un trait en
+  tirets sur le bord haut de la ligne et une pastille sur son numéro. Le bouton est grisé, avec sa raison en
+  info-bulle, sur la première ligne, sur une ligne qu'une case fusionnée traverse, dans un tableau posé dans une
+  case, une colonne, un encadré ou une liste, et quand le suivi des modifications est allumé ; « Fusionner » est
+  grisé quand la sélection enjambe un saut. Hors d'un tableau, le bouton garde son rôle d'avant (il insère un
+  repère de saut de page).
 - **Marge autour de chaque page dans l'assemblage avant impression** : la fenêtre « Assemblage avant
   impression » a un champ « Marge » (en millimètres, 0 au départ, les flèches avancent de 0,5) qui laisse de la
   place autour de chaque page posée sur la feuille : la marge compte de chaque côté d'une page, donc deux
@@ -340,6 +350,11 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Tableau de document en aperçu A4 : la ligne qui ouvre une page garde sa hauteur** : quand un tableau se poursuit
+  sur une deuxième page, la ligne qui ouvre cette page est descendue sous la couture ; son numéro (les bandeaux
+  A, B, C / 1, 2, 3) et sa poignée comptaient ce vide comme de la hauteur de la ligne, si bien que le numéro
+  devenait immense, que tirer sa poignée posait une hauteur démesurée et que « Égaliser » prenait cette hauteur
+  pour la moyenne. Le numéro, la poignée et « Égaliser » ne mesurent plus que la ligne.
 - **Une zone à deux colonnes passe à la page suivante dans l'éditeur et dans la Lecture** : une zone plus
   haute que ce qui reste de la page dépassait le bas de la feuille sans jamais ouvrir de deuxième page
   (Entrée dans une colonne n'en ouvrait donc jamais), alors que le PDF la coupait là où la page finit. L'éditeur,
@@ -710,6 +725,14 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   (it is a minimum: taller text makes the row grow), and the A4 preview, Reading, the PDF and the Word export carry
   it all over. It is still a table of the document: the table bar and the letters and numbers set the lines,
   alignment and heights there as in a grid. Pasting into a grid does not change.
+- **Page break before a row of a document table**: in a document table, the toolbar's "Page break" button sets a
+  break BEFORE the row the cursor is in, as in a grid; a second click removes it (one Undo per gesture) and
+  Alt+Enter does the same from the keyboard. The page changes there in the A4 preview and in Reading, and the PDF
+  and the Word export both open a new page; the table's title rows come back at the top of that page, as when a
+  table splits by itself. The break shows: a dashed line along the top edge of the row and a badge on its number.
+  The button is greyed, with its reason as a tooltip, on the first row, on a row that a merged cell runs through,
+  in a table inside a cell, a column, a box or a list, and while track changes is on; "Merge" is greyed when the
+  selection straddles a break. Outside a table the button keeps its former role (it inserts a page break marker).
 - **Margin around each page in sheet assembly**: the "Assemble before printing" window has a "Margin" field (in
   millimetres, 0 to start with, the arrows step by 0.5) that leaves room around each page laid on the
   sheet: the margin sits on every side of a page, so it counts twice between two pages and once at the edge
@@ -820,6 +843,11 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Fixed
 
+- **Document table in the A4 preview: the row that opens a page keeps its height**: when a table carries on to a
+  second page, the row that opens that page is pushed down under the seam; its number (the A, B, C / 1, 2, 3 strips)
+  and its handle counted that gap as part of the row's height, so the number grew huge, dragging its handle set an
+  oversized height and "Make rows the same height" took that height for the average. The number, the handle and
+  "Make rows the same height" now measure the row alone.
 - **A two-column zone moves on to the next page in the editor and in Reading mode**: a zone taller than what
   is left of the page ran past the bottom of the sheet without ever opening a second page (so pressing Enter
   in a column never opened one), while the PDF cut it where the page ends. The editor, Reading mode and browser
