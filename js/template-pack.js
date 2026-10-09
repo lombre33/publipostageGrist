@@ -1,6 +1,6 @@
 // Modèles de la galerie qui s'installent AVEC leurs tables (« Créer avec ses tables », js/template-gallery-modal.js). Le pack.json d'un modèle de
 // templates-gallery/ dit les tables et leurs colonnes (types, choix, colonnes à formule, « Colonne à afficher » des Références), les règles de liaison
-// et la page du modèle ; une famille de tables partagée par plusieurs modèles (templates-gallery/_tables/<famille>.json) évite de redire les mêmes
+// et la page du modèle ; une famille de tables partagée par plusieurs modèles (templates-gallery/families/<famille>.json) évite de redire les mêmes
 // colonnes dans chacun. Les tables sont créées VIDES : les lignes d'exemple n'existent que dans les captures de l'aperçu, jamais dans le document.
 //
 // Trois temps, chacun lisible seul :
