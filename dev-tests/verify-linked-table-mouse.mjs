@@ -285,14 +285,17 @@ async function makeModels() {
 
 // 11) Le document suit le modèle (lot 6c-2a), à l'écran. Un document ENREGISTRÉ dont le tableau a été posé par la liste (vraie souris : numéro, jeton et base écrits) ; le modèle change ailleurs ; le document ouvert par la liste
 // montre le tableau du modèle (la ligne d'état le dit dans le coin d'état du panneau, lisible, message entier en info-bulle quand il est coupé) sans rien écrire et sans devenir « à enregistrer » (quitter ne pose aucune question) ; un
-// tableau modifié ici ET dans le modèle ne bouge pas, et la ligne d'état dit qu'il diffère.
+// tableau modifié ici ET dans le modèle ne bouge pas, et la ligne d'état dit qu'il diffère. Le modèle suit aussi le document (lot 6c-2b) : le vrai bouton Enregistrer écrit le tableau changé dans la ligne du modèle avec celle du
+// document et la ligne d'état le dit ; un modèle changé ailleurs avant l'enregistrement n'est pas écrasé.
 const FOLLOW_TEXTS = {
   fr: {
     pulled: name => `Tableau mis à jour depuis le modèle « ${name} ».`,
+    pushed: name => `Modèle « ${name} » mis à jour avec ce tableau.`,
     differs: name => `Ce tableau diffère du modèle « ${name} » : « Mettre à jour depuis le modèle » ou « Envoyer au modèle » (menu du lien).`,
   },
   en: {
     pulled: name => `Table updated from the template “${name}”.`,
+    pushed: name => `Template “${name}” updated with this table.`,
     differs: name => `This table differs from the template “${name}”: “Update from the template” or “Send to the template” (link menu).`,
   },
 };
@@ -368,15 +371,43 @@ async function followScenario(label, lang) {
   const asked = await leave();
   check(`${label}, suivre le modèle : ouvrir n'a rien écrit (la ligne du document est la même) et quitter ne pose aucune question « Modifications non enregistrées »`, written === rowBefore && asked === 0, { same: written === rowBefore, asked });
 
-  // Le tableau est modifié ici (frappe réelle, vrai bouton Enregistrer) puis le modèle change encore : les deux ont changé, rien n'est remplacé et la ligne d'état le dit.
+  // Le modèle suit le document (lot 6c-2b) : une frappe réelle dans le tableau lié, le vrai bouton Enregistrer. La ligne du modèle reçoit le tableau avec celle du document, et la ligne d'état le dit dans le coin du panneau,
+  // lisible, sans que « Enregistré à… » l'efface.
+  const modelRow = () => page.evaluate(id => __gristStub.getRow(Templates.TABLE_NAME, id), placed.modelId);
   await openSaved(placed.id);
+  await clickInText('A2');
+  await page.keyboard.type('qk');
+  await page.waitForTimeout(250);
+  const modelBeforeSend = await modelRow();
+  await clickAt('#btn-save');
+  await page.waitForTimeout(900);
+  // La souris quitte le bouton : son volet (« Enregistrer sous… ») resterait ouvert par-dessus la ligne d'état.
+  await page.mouse.move(WIDTH - 30, HEIGHT - 20, { steps: 3 });
+  await page.waitForTimeout(300);
+  const sent = await statusNow();
+  const sentCorner = await corner();
+  const modelAfterSend = await modelRow();
+  const docAfterSend = await page.evaluate(id => __gristStub.getRow(Templates.TABLE_NAME, id), placed.id);
+  const changedColumns = Object.keys(modelAfterSend).filter(k => JSON.stringify(modelAfterSend[k]) !== JSON.stringify(modelBeforeSend[k])).sort().join(',');
+  check(`${label}, le modèle suit le document : le vrai bouton Enregistrer écrit la frappe dans la ligne du document ET dans celle du modèle (seules les colonnes Contenu et DateModif du modèle changent, ni lien ni base dans le modèle) et la ligne d'état dit « ${texts.pushed(model)} »`,
+    /qk/.test(docAfterSend.Contenu) && /qk/.test(modelAfterSend.Contenu) && !/data-linked-/.test(modelAfterSend.Contenu) && changedColumns === 'Contenu,DateModif' && sent.text === texts.pushed(model) && !sent.error, { changedColumns, sent });
+  check(`${label}, le modèle suit le document : cette ligne d'état (${sentCorner.contrast.toFixed(1)}:1) est dans le coin du panneau, au premier plan, lisible, et son message entier est en info-bulle quand il est coupé`,
+    seen(sentCorner.box) && sentCorner.contrast >= 4.5 && (!sentCorner.info.cut || sentCorner.info.title === texts.pushed(model)), sentCorner);
+  await snap(`${label}-15-modele-suit`);
+
+  // Le tableau est modifié ici (frappe réelle) et le modèle change encore ailleurs AVANT l'enregistrement : les deux ont changé. Le vrai bouton Enregistrer relit les modèles, n'écrase pas celui d'ailleurs et n'envoie rien ; la ligne
+  // d'état dit l'écart. Rien n'est remplacé non plus à la réouverture.
   await clickInText('B2');
   await page.keyboard.type('zz');
   await page.waitForTimeout(250);
+  await page.evaluate(({ id, html }) => { __gristStub.remoteWrite(Templates.TABLE_NAME, id, { Contenu: html }); }, { id: placed.modelId, html: grid3 });
   await clickAt('#btn-save');
   await page.waitForTimeout(900);
-  await writeModel(grid3);
+  const refused = await statusNow();
+  const modelKept = (await modelRow()).Contenu;
   const savedCells = await cells();
+  check(`${label}, le modèle suit le document : un modèle changé ailleurs avant l'enregistrement n'est pas écrasé (sa ligne garde le tableau d'ailleurs) et la ligne d'état dit « ${texts.differs(model)} »`,
+    modelKept === grid3 && refused.text === texts.differs(model) && !refused.error && /zz/.test(savedCells), { refused, modelIsKept: modelKept === grid3, savedCells });
   await leave();
   await openSaved(placed.id);
   const apart = await statusNow();
@@ -386,7 +417,7 @@ async function followScenario(label, lang) {
     /zz/.test(savedCells) && apartCells === savedCells && apartCells.split('|')[8] === 'C3' && apart.text === texts.differs(model) && !apart.error, { savedCells, apartCells, apart });
   check(`${label}, suivre le modèle : cette ligne d'état (${apartCorner.contrast.toFixed(1)}:1) est lisible dans le coin du panneau, coupée avec son message entier en info-bulle`,
     seen(apartCorner.box) && apartCorner.contrast >= 4.5 && apartCorner.info.cut && apartCorner.info.title === texts.differs(model), apartCorner);
-  await snap(`${label}-15-ecart-dit`);
+  await snap(`${label}-16-ecart-dit`);
 
   // Remise en place pour la suite : le document vierge, le modèle tel qu'il était, l'enregistrement automatique rallumé.
   await leave();

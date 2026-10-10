@@ -1276,6 +1276,7 @@ const I18n = (function () {
     'linkedTable.pulled': { fr: 'Tableau mis à jour depuis le modèle « {name} ».', en: 'Table updated from the template “{name}”.' },
     'linkedTable.pulledMany': { fr: '{n} {n|tableau mis à jour|tableaux mis à jour} depuis {n|son modèle|leur modèle}.', en: '{n} {n|table|tables} updated from {n|its template|their templates}.' },
     'linkedTable.pushed': { fr: 'Modèle « {name} » mis à jour avec ce tableau.', en: 'Template “{name}” updated with this table.' },
+    'linkedTable.pushedMany': { fr: '{n} {n|modèle mis à jour|modèles mis à jour} avec {n|ce tableau|ces tableaux}.', en: '{n} {n|template|templates} updated with {n|this table|these tables}.' },
     'linkedTable.upToDate': { fr: 'Ce tableau est déjà identique à celui du modèle « {name} ».', en: 'This table already matches the one in the template “{name}”.' },
     'linkedTable.gone': { fr: 'Le modèle « {name} » est introuvable.', en: 'The template “{name}” cannot be found.' },
     'linkedTable.noTable': { fr: 'Le modèle « {name} » n’a plus de tableau.', en: 'The template “{name}” no longer has a table.' },

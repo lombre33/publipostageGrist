@@ -268,8 +268,21 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   changé (tableau posé avant cette version) et qu'ils diffèrent, rien n'est remplacé : la ligne d'état dit que le
   tableau diffère du modèle, et « Mettre à jour depuis le modèle » ou « Envoyer au modèle » tranchent. Rien ne bouge
   tant que le suivi des modifications est allumé, qu'un en-tête ou un pied de page est ouvert ou qu'une saisie est en
-  cours ; si l'enregistrement automatique est coupé, le document ne suit son modèle qu'à son ouverture. L'envoi
-  automatique du document vers son modèle vient dans les versions suivantes.
+  cours ; si l'enregistrement automatique est coupé, le document ne suit son modèle qu'à son ouverture.
+  Le modèle suit aussi le document : quand le document s'enregistre (enregistrement automatique, bouton Enregistrer,
+  premier enregistrement, « Enregistrer sous… »), un tableau lié que ce document a changé, et que le modèle n'a pas
+  changé depuis la dernière fois, est écrit dans son modèle, sans question, dans le même lot d'écriture dans Grist
+  que le document : Grist écrit les deux ou aucun (un modèle supprimé entre-temps fait refuser le lot, rien n'est
+  écrit et le tableau reste à envoyer au passage suivant). Seuls le contenu et la date du modèle changent (son nom,
+  son en-tête et ses marges restent), ni le lien ni les commentaires du document n'y vont, et la ligne d'état dit «
+  Modèle « X » mis à jour avec ce tableau. » (ou « 2 modèles mis à jour avec ces tableaux. »), phrase qui reste
+  lisible après « Enregistré à… ». Le bouton Enregistrer relit d'abord les modèles quand un tableau est à envoyer :
+  un modèle changé ailleurs entre-temps n'est jamais écrasé (la ligne d'état dit que le tableau diffère du modèle)
+  et, si la lecture échoue, le document s'enregistre seul. Rien ne part tant que le suivi des modifications est
+  allumé, qu'un en-tête ou un pied de page est ouvert, qu'une saisie est en cours ou que la grille est à l'écran, ni
+  à l'ouverture d'un document, ni pour un macro-modèle ; une largeur de colonne changée dans le document ne compte
+  pas comme une modification à envoyer. « Enregistrer sous… » est un enregistrement comme un autre : la copie envoie
+  ses tableaux liés au modèle, et « Détacher du modèle » avant l'évite.
 - **Marge autour de chaque page dans l'assemblage avant impression** : la fenêtre « Assemblage avant
   impression » a un champ « Marge » (en millimètres, 0 au départ, les flèches avancent de 0,5) qui laisse de la
   place autour de chaque page posée sur la feuille : la marge compte de chaque côté d'une page, donc deux
@@ -811,8 +824,20 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   version) and they differ, nothing is replaced: the status line says the table differs from the template, and
   "Update from the template" or "Send to the template" settle it. Nothing moves while track changes is on, while
   a header or footer is open or while text is being composed; if the automatic save is switched off, the
-  document follows its template only when it opens. The automatic sending from the document to its template
-  comes in later versions.
+  document follows its template only when it opens.
+  The template follows the document too: when the document is saved (automatic save, the Save button, the first
+  save, "Save as…"), a linked table that this document has changed, and that the template has not changed since the
+  last time, is written into its template, without a question, in the same Grist write as the document: Grist writes
+  both or neither (a template deleted in the meantime makes it refuse the whole write, nothing is written and the
+  table stays to be sent at the next pass). Only the template's content and date change (its name, header and
+  margins stay), neither the link nor the document's comments go with it, and the status line says "Template “X”
+  updated with this table." (or "2 templates updated with these tables."), a sentence that stays legible after
+  "Saved at…". The Save button first reads the templates again when a table is to be sent: a template changed
+  elsewhere in the meantime is never overwritten (the status line says the table differs from the template) and, if
+  the read fails, the document is saved alone. Nothing is sent while track changes is on, while a header or footer
+  is open, while text is being composed or while the grid is on screen, nor when a document opens, nor for a macro
+  template; a column width changed in the document is not a change to send. "Save as…" is a save like any other: the
+  copy sends its linked tables to the template, and "Detach from the template" beforehand avoids it.
 - **Margin around each page in sheet assembly**: the "Assemble before printing" window has a "Margin" field (in
   millimetres, 0 to start with, the arrows step by 0.5) that leaves room around each page laid on the
   sheet: the margin sits on every side of a page, so it counts twice between two pages and once at the edge

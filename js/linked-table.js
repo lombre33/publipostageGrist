@@ -26,9 +26,12 @@
 // Le document suit le modèle (lot 6c-2a) : un tableau à jeton porte aussi sa base (`linkedBase`, `data-linked-base`) : deux empreintes prises à la dernière synchro, celle du tableau du
 // document sans ses largeurs de colonnes (la page les rogne : ce n'est pas une modification de la personne) et celle du tableau du modèle avec ses largeurs (une largeur changée dans
 // le modèle doit arriver). Au chargement du document et à chaque lecture de l'enregistrement automatique, chaque tableau à jeton est comparé à sa base et à son modèle (planOf) : le modèle
-// a changé et pas ce document, le tableau prend celui du modèle ; le document a changé et pas le modèle, rien ne part (le lot 6c-2b l'enverra) ; les deux ont changé, ou la base manque
-// et ils diffèrent, rien ne s'écrit et la ligne d'état le dit. La relève n'entre pas dans l'historique et ne rend pas le document « à enregistrer » (ouvrir un document n'écrit rien) ; elle garde les fils de commentaires des cases dont le texte n'a pas changé (keepComments).
+// a changé et pas ce document, le tableau prend celui du modèle ; le document a changé et pas le modèle, il part avec l'enregistrement du document (lot 6c-2b, prepareSend) ; les deux ont changé,
+// ou la base manque et ils diffèrent, rien ne s'écrit et la ligne d'état le dit. La relève n'entre pas dans l'historique et ne rend pas le document « à enregistrer » (ouvrir un document n'écrit rien) ; elle garde les fils de commentaires des cases dont le texte n'a pas changé (keepComments).
 // Un lien ancien (sans jeton) reste à la main. Les sorties hors de l'éditeur (macro-modèle, export en lot d'un autre modèle) lisent le modèle pour un tableau resté en arrière (resolveHtml).
+// Le modèle suit le document (lot 6c-2b) : le document qui s'enregistre (enregistrement automatique ou Enregistrer) écrit dans le MÊME lot, avec sa ligne, le contenu des modèles que ses tableaux ont changé
+// (Templates.save, `alsoWrite`), jamais l'un sans l'autre. Le HTML du document part avec la base d'après l'envoi, mais la base de l'éditeur n'avance qu'une fois Grist d'accord (commit) : un lot refusé
+// ne laisse rien de changé, le tableau reste à envoyer au passage suivant.
 const LinkedTable = (function () {
   const ATTR = 'linkedTemplate';
   const DOM_ATTR = 'data-linked-template';
@@ -123,8 +126,9 @@ const LinkedTable = (function () {
 
   // Les modèles relus dans Grist avant d'en lire un contenu : celui du moment, pas celui d'il y a quelques minutes (un modèle changé dans un autre document ou par une autre
   // personne). Hors ligne, le cache d'avant sert.
+  // Rend vrai quand la lecture a réussi, faux quand c'est le cache d'avant qui sert (un envoi au modèle n'a pas lieu sur un cache dont on n'est pas sûr).
   async function refreshModels() {
-    try { await Templates.loadAll(); } catch (e) { /* hors ligne : le cache d'avant sert */ }
+    try { await Templates.loadAll(); return true; } catch (e) { return false; /* hors ligne : le cache d'avant sert */ }
   }
 
   // Le modèle Grille que ce numéro désigne, ou null (supprimé, devenu d'un autre type, liste pas encore lue).
@@ -427,17 +431,18 @@ const LinkedTable = (function () {
   // Le premier tableau du modèle, lu comme au chargement d'un modèle (HTML assaini, schéma de l'éditeur, sans les marques de commentaire) ; null quand le modèle n'a pas de tableau. Lu
   // une fois tant que son contenu ne change pas : la synchro automatique le relit à chaque passage.
   const parsedTables = new Map();
+  function parseFirstTable(editor, contenu) {
+    const body = HtmlSanitize.parseInert(contenu);
+    if (!body.querySelector('table')) return null;
+    unwrapComments(body);
+    const parsed = libs.PMDOMParser.fromSchema(editor.schema).parse(body).firstChild;
+    return parsed && parsed.type.name === 'table' ? parsed : null;
+  }
   function firstTableOf(editor, model) {
     const contenu = model.contenu || '';
     const kept = parsedTables.get(model.id);
     if (kept && kept.contenu === contenu && kept.schema === editor.schema) return kept.first;
-    let first = null;
-    const body = HtmlSanitize.parseInert(contenu);
-    if (body.querySelector('table')) {
-      unwrapComments(body);
-      const parsed = libs.PMDOMParser.fromSchema(editor.schema).parse(body).firstChild;
-      if (parsed && parsed.type.name === 'table') first = parsed;
-    }
+    const first = parseFirstTable(editor, contenu);
     parsedTables.set(model.id, { contenu, schema: editor.schema, first });
     return first;
   }
@@ -598,6 +603,13 @@ const LinkedTable = (function () {
 
   // Une action à la fois : un double clic, ou une seconde action pendant la lecture des modèles, ne part pas deux fois ; la synchro automatique attend qu'elle ait fini.
   let busy = false;
+
+  // Les cas où le document n'est ni suivi ni envoyé : une action à la main attend sa fin, le suivi des modifications est allumé (une suggestion ne se remplace pas et ne s'écrit pas dans un
+  // modèle partagé), l'éditeur montre une grille, un en-tête ou un pied de page, ou une composition de texte (accent mort, clavier japonais) est en cours.
+  function paused(editor) {
+    if (!editor || editor.isDestroyed || busy || lockReason() || inZone() || GridEditor.isActive()) return true;
+    return !!(editor.view && editor.view.composing);
+  }
 
   // Le tableau lié à ce modèle dans le document d'à présent : le curseur, le texte, le document entier ont pu changer pendant que les modèles se relisaient. Celui dont le lien compte
   // d'abord : un tableau resté d'un modèle qui portait ce numéro avant n'est pas celui-là.
@@ -819,19 +831,22 @@ const LinkedTable = (function () {
     return plan(docMoved ? 'push' : 'pull');
   }
 
+  // Ce que la synchro et l'envoi disent sur la ligne d'état, dans l'ordre où la dernière phrase est celle qu'il faut lire : les tableaux mis à jour depuis leur modèle, les modèles mis à jour avec le
+  // document, puis l'écart (il demande un geste). `done` : ce que rend syncOpen (ou rien) ; `sent` : ce que rend prepareSend (ou rien). Un passage qui enregistre le document le redit APRÈS
+  // l'écriture (js/main.js:writeAutosave) : « Enregistré à… » ne doit pas effacer ce que la synchro vient d'apprendre à la personne.
+  function tell(done, sent) {
+    if (done && done.pulled.length === 1) say('linkedTable.pulled', { name: done.pulled[0] });
+    else if (done && done.pulled.length > 1) say('linkedTable.pulledMany', { n: done.pulled.length });
+    if (sent) sent.announce();
+    if (done && done.differs.length) say('linkedTable.differs', { name: done.differs[0] });
+  }
+
   const { syncOpen, syncOnLoad, isSyncTransaction } = (function () {
     // La synchro du document ouvert : chaque tableau à jeton suit son modèle (planOf), à l'ouverture et à chaque lecture de l'enregistrement automatique
 
     // Les désaccords déjà dits sur la ligne d'état (un modèle dans l'état où il est) : un passage toutes les quelques secondes ne répète pas la même phrase, et la frappe qui continue dans
     // le tableau en désaccord non plus. Remis à zéro à l'ouverture d'un document.
     const noted = new Set();
-
-    // Les cas où la synchro laisse le document tranquille : une action à la main attend sa fin, le suivi des modifications est allumé (une suggestion ne se remplace pas), l'éditeur
-    // montre une grille, un en-tête ou un pied de page, ou une composition de texte (accent mort, clavier japonais) est en cours.
-    function paused(editor) {
-      if (!editor || editor.isDestroyed || busy || lockReason() || inZone() || GridEditor.isActive()) return true;
-      return !!(editor.view && editor.view.composing);
-    }
 
     // Les tableaux à jeton du document suivent leur modèle, d'après les modèles du cache (relus par le passage de l'enregistrement automatique, ou à l'instant par la page) : le
     // modèle a changé et pas ce tableau, il prend celui du modèle, le curseur reste dans sa case ; les deux disent la même chose, la base se met à jour ; les deux ont changé, rien ne
@@ -869,9 +884,7 @@ const LinkedTable = (function () {
         if (cursor) cursorTo(tr, tr.mapping.map(cursor.pos, -1), cursor.place);
         editor.view.dispatch(tr.setMeta(OWN_META, 'sync').setMeta('addToHistory', false));
       }
-      if (done.pulled.length === 1) say('linkedTable.pulled', { name: done.pulled[0] });
-      else if (done.pulled.length > 1) say('linkedTable.pulledMany', { n: done.pulled.length });
-      if (done.differs.length) say('linkedTable.differs', { name: done.differs[0] });
+      tell(done);
       return done;
     }
 
@@ -881,16 +894,76 @@ const LinkedTable = (function () {
       return syncOpen(editor);
     }
 
-    // La transaction de la synchro, ou celle que la page pose derrière elle (js/editor.js:dispatchColumnWidthFix : largeurs de colonnes d'un tableau qui vient d'arriver), ne rend pas le
-    // document « à enregistrer ».
+    // La transaction de la synchro ou de l'envoi aux modèles (la base qui avance une fois Grist d'accord), ou celle que la page pose derrière elle (js/editor.js:dispatchColumnWidthFix :
+    // largeurs de colonnes d'un tableau qui vient d'arriver), ne rend pas le document « à enregistrer ».
+    const quiet = tr => tr.getMeta(OWN_META) === 'sync' || tr.getMeta(OWN_META) === 'send';
     function isSyncTransaction(tr) {
       if (!tr || !tr.getMeta) return false;
-      if (tr.getMeta(OWN_META) === 'sync') return true;
+      if (quiet(tr)) return true;
       const root = tr.getMeta('appendedTransaction');
-      return !!root && root !== tr && !!root.getMeta && root.getMeta(OWN_META) === 'sync';
+      return !!root && root !== tr && !!root.getMeta && quiet(root);
     }
 
     return { syncOpen, syncOnLoad, isSyncTransaction };
+  })();
+
+  const { hasPending, prepareSend } = (function () {
+    // Le modèle suit le document (lot 6c-2b) : les tableaux que le document a changé et pas leur modèle partent avec l'enregistrement du document
+
+    // Y a-t-il un tableau à envoyer, d'après les modèles du cache ? js/main.js relit les modèles avant un Enregistrer à la main quand c'est le cas : un envoi sur un cache dont on n'est pas
+    // sûr écraserait un modèle changé ailleurs entre-temps.
+    function hasPending(editor) {
+      if (paused(editor)) return false;
+      return liveTables(editor.state.doc).some(({ node }) => {
+        const model = modelFor(node);
+        return !!model && planOf(editor, node, model).action === 'push';
+      });
+    }
+
+    // Le document va s'enregistrer : chaque tableau à jeton que le document a changé et pas son modèle (planOf : 'push') part avec lui. Rend null quand rien ne part (rien à envoyer, ou l'envoi n'a pas
+    // lieu ici : voir `paused` - suivi des modifications, en-tête ou pied, saisie en cours, action à la main), sinon { html, writes, commit, announce } :
+    //  - `html` : le document tel qu'il s'écrira, AVEC la base d'après l'envoi sur chaque tableau qui part. Elle n'est pas posée dans l'éditeur : un lot refusé par Grist ne doit rien laisser de changé,
+    //    sinon le tableau, pris pour envoyé, serait remplacé par l'ancien contenu du modèle au passage suivant et la frappe serait perdue ;
+    //  - `writes` : [{ id, contenu }], ce que Templates.save écrit dans les modèles, dans le même lot que la ligne du document (le tableau tel que le modèle le garde, htmlOf) ;
+    //  - `commit()` : Grist est d'accord, la base de l'éditeur avance sur le tableau PARTI (pas sur ce que la frappe en a fait pendant l'écriture : le texte tapé depuis reste à envoyer) ; sans effet sur
+    //    un tableau dont la base n'est plus celle d'avant (une relève, une action à la main, un détachement) ;
+    //  - `announce()` : la ligne d'état dit quels modèles viennent d'être mis à jour.
+    // La moitié « modèle » de la base est prise sur le tableau tel que le modèle le rendra à la lecture (le HTML écrit, relu comme le fait firstTableOf), pas sur le tableau du document : la
+    // base doit dire ce que le modèle contiendra une fois relu.
+    function prepareSend(editor) {
+      if (paused(editor)) return null;
+      const sends = [];
+      liveTables(editor.state.doc).forEach(({ node, pos }) => {
+        const model = modelFor(node);
+        if (!model || planOf(editor, node, model).action !== 'push') return;
+        const contenu = htmlOf(editor, node);
+        const stored = parseFirstTable(editor, contenu);
+        if (!stored) return;
+        sends.push({ id: model.id, name: model.nom, key: node.attrs[KEY], pos, contenu, from: node.attrs[BASE], to: makeBase(contentHash(editor, node), fullHash(editor, stored)) });
+      });
+      if (!sends.length) return null;
+      const tr = editor.state.tr;
+      sends.forEach(({ pos, to }) => tr.setNodeAttribute(pos, BASE, to));
+      return {
+        html: Editor.getHTML(tr.doc),
+        writes: sends.map(({ id, contenu }) => ({ id, contenu })),
+        commit() {
+          if (editor.isDestroyed) return;
+          const settled = editor.state.tr;
+          sends.forEach(({ id, key, from, to }) => {
+            const found = tableOf(editor, id);
+            if (found && found.node.attrs[KEY] === key && found.node.attrs[BASE] === from) settled.setNodeAttribute(found.pos, BASE, to);
+          });
+          if (settled.steps.length) editor.view.dispatch(settled.setMeta(OWN_META, 'send').setMeta('addToHistory', false));
+        },
+        announce() {
+          if (sends.length === 1) say('linkedTable.pushed', { name: sends[0].name });
+          else say('linkedTable.pushedMany', { n: sends.length });
+        },
+      };
+    }
+
+    return { hasPending, prepareSend };
   })();
 
   const { resolveHtml, resolveTemplates } = (function () {
@@ -956,6 +1029,6 @@ const LinkedTable = (function () {
 
   return {
     ATTR, KEY, BASE, configure, wire, withAttributes, createExtension, modelOf, modelFor, linkedTables, liveTables, tableAt, status, cursorIn, lockReason, placeBlock, detach, insert, openPicker, pull, push, usedBy, open, reveal,
-    planOf, syncOpen, syncOnLoad, isSyncTransaction, resolveHtml, resolveTemplates, syncRow,
+    planOf, syncOpen, syncOnLoad, isSyncTransaction, hasPending, prepareSend, refreshModels, tell, resolveHtml, resolveTemplates, syncRow,
   };
 })();

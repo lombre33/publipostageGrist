@@ -218,7 +218,7 @@ const Editor = (function () {
     // n'alimente que sa propre variable) : ils partent en parallèle plutôt qu'en `await` séquentiels, car un import() est une requête réseau vers
     // esm.sh et la cascade ajoutait jusqu'à 1 à 2 s au démarrage sur une connexion lente ou à cache froid.
     const [
-      { Editor: TiptapEditor, Extension, Node, Mark, mergeAttributes, InputRule },
+      { Editor: TiptapEditor, Extension, Node, Mark, mergeAttributes, InputRule, getHTMLFromFragment },
       { StarterKit },
       { TextAlign },
       { TextStyle },
@@ -259,7 +259,7 @@ const Editor = (function () {
       import('prosemirror-model'),
     ]);
     return {
-      TiptapEditor, Extension, Node, Mark, mergeAttributes, InputRule, StarterKit, TextAlign, TextStyle, FontFamily, Suggestion, Document,
+      TiptapEditor, Extension, Node, Mark, mergeAttributes, InputRule, getHTMLFromFragment, StarterKit, TextAlign, TextStyle, FontFamily, Suggestion, Document,
       Table, TableView, TableRow, TableCell, TableHeader, TaskList, TaskItem, Placeholder, computePosition, offset, flip, shift, autoUpdate,
       NodeSelection, TextSelection, EditorState, Plugin, PluginKey, Decoration, DecorationSet, TableMap, CellSelection, selectedRect, isInTable,
       addRow, addColumn, pastedCells, PMDOMParser, PMDOMSerializer,
@@ -431,6 +431,7 @@ const Editor = (function () {
 
   async function init() {
     const libs = await loadLibraries();
+    htmlOfFragment = libs.getHTMLFromFragment;
     configureModules(libs);
     // Les marques de suivi et le pont ProseMirror se construisent une fois, avant les extensions qui s'en servent.
     trackChangesApi = await TrackChanges.createExtensions(libs.Node, libs.Mark, libs.Extension, libs.mergeAttributes);
@@ -484,8 +485,14 @@ const Editor = (function () {
     window.addEventListener('resize', HeaderFooterPreview.schedulePaginationRecompute);
   }
 
-  // Une grille s'enregistre et s'exporte sans le paragraphe vide caché sous son tableau (GridEditor.serialize).
-  function getHTML() { return editor ? GridEditor.serialize(editor.getHTML()) : ''; }
+  // Une grille s'enregistre et s'exporte sans le paragraphe vide caché sous son tableau (GridEditor.serialize). `doc` : le HTML d'un état à venir du document, jamais posé dans l'éditeur,
+  // écrit par le même sérialiseur que celui de l'éditeur (js/linked-table.js:prepareSend écrit le document avec les bases d'après un envoi aux modèles, que l'éditeur ne prend qu'une fois
+  // Grist d'accord).
+  let htmlOfFragment = null;
+  function getHTML(doc) {
+    if (!editor) return '';
+    return GridEditor.serialize(doc && doc.content ? htmlOfFragment(doc.content, editor.schema) : editor.getHTML());
+  }
 
   function getHeadingNumberingStyle() {
     if (!editor) return 'none';

@@ -402,28 +402,34 @@ const Templates = (function () {
     templatesCache.forEach(t => { t.estParDefaut = (id != null && sameId(t.id, id)); });
   }
 
-  async function readBackDateModif(rowId, fallback) {
-    // Relit le DateModif réellement stocké par Grist pour cette ligne plutôt que de se fier à la chaîne ISO qu'on vient d'envoyer : rien ne garantit
+  async function readBackDateModifs(rowIds, fallback) {
+    // Relit le DateModif réellement stocké par Grist pour ces lignes plutôt que de se fier à la chaîne ISO qu'on vient d'envoyer : rien ne garantit
     // que Grist la redonne telle quelle (une colonne DateTime peut être représentée autrement en interne, en nombre par exemple). js/main.js
     // (autosaveTick) compare la valeur renvoyée par save() à une valeur lue plus tard par loadAll() ou fetchTable() : dans deux représentations
     // différentes, la comparaison stricte voit un faux conflit dès le tick suivant, même seul sur le document. Passer par la même lecture des deux
     // côtés l'évite, quelle que soit la représentation. Défensif : un échec ici (colonne absente, ligne introuvable, requête en échec) ne doit pas
-    // faire échouer un enregistrement réussi par ailleurs ; on retombe sur la chaîne ISO d'origine.
+    // faire échouer un enregistrement réussi par ailleurs ; on retombe sur la chaîne ISO d'origine. Une seule lecture de la table pour toutes les lignes
+    // (un enregistrement qui écrit aussi des modèles Grille, cf. saveRow) ; rend une Map identifiant -> DateModif.
+    const dates = new Map();
+    const keep = rowId => dates.set(rowId, fallback);
     try {
       const data = await grist.docApi.fetchTable(TABLE_NAME);
-      const idx = data.id.indexOf(rowId);
-      if (idx === -1 || !data.DateModif) {
-        console.error('Relecture DateModif après enregistrement : ligne ou colonne introuvable, valeur locale conservée');
-        return fallback;
-      }
-      return data.DateModif[idx];
+      rowIds.forEach((rowId) => {
+        const idx = data.id.indexOf(rowId);
+        if (idx === -1 || !data.DateModif) {
+          console.error('Relecture DateModif après enregistrement : ligne ou colonne introuvable, valeur locale conservée');
+          keep(rowId);
+        } else dates.set(rowId, data.DateModif[idx]);
+      });
     } catch (e) {
       console.error('Erreur relecture DateModif après enregistrement', e);
-      return fallback;
+      rowIds.forEach(keep);
     }
+    return dates;
   }
+  async function readBackDateModif(rowId, fallback) { return (await readBackDateModifs([rowId], fallback)).get(rowId); }
 
-  async function saveRow(id, nom, contenuHtml, nomFichierPDF, headerFooterData, marginsData, typeModele = 'document', emailFields = null, suiviModifications = null) {
+  async function saveRow(id, nom, contenuHtml, nomFichierPDF, headerFooterData, marginsData, typeModele = 'document', emailFields = null, suiviModifications = null, alsoWrite = null) {
     // Rend { id, dateModif } (pas seulement l'id) : js/main.js (auto-save) doit connaître le DateModif qu'il vient d'écrire pour le distinguer d'un
     // DateModif constaté plus tard, preuve qu'une autre personne a enregistré ce modèle entre-temps. dateModif vient d'une relecture de Grist
     // (readBackDateModif), pas de la chaîne ISO envoyée. `typeModele` et `emailFields` (mode email, cf. ensureEmailColumns) sont facultatifs : les
@@ -431,6 +437,9 @@ const Templates = (function () {
     // document. `suiviModifications` : { [id]: { author, createdAt } } (TrackChanges.computeMetadata, js/track-changes.js), écrite dans le même
     // UpdateRecord/AddRecord que Contenu, jamais dans un appel séparé (planning/feature-track-changes.md : la fenêtre de risque en cas de conflit
     // d'auto-save). null pour un macro-modèle (Editor.getSuiviModificationsForSave n'est jamais appelée sur ce chemin, cf. onSave dans js/main.js).
+    // `alsoWrite` : [{ id, contenu }], les modèles Grille que les tableaux liés du document ont changé (js/linked-table.js:prepareSend). Leur Contenu et leur DateModif s'écrivent
+    // dans le MÊME applyUserActions que la ligne du document : Grist applique le lot en entier ou pas du tout, jamais le document sans le modèle ni l'inverse (un modèle supprimé
+    // entre-temps refuse le lot, et rien n'est écrit). Leur DateModif est noté et leur contenu mis dans le cache comme le fait saveContent.
     await ensureTableExists();
     await ensureHeaderFooterColumn();
     await ensureMarginsColumn();
@@ -447,28 +456,45 @@ const Templates = (function () {
       Destinataires: email.destinataires || '', Cc: email.cc || '', Cci: email.cci || '', Objet: email.objet || '',
       SuiviModifications: JSON.stringify(suiviModifications || {}),
     };
+    const others = alsoWrite || [];
+    const otherActions = others.map(({ id: modelId, contenu }) => ['UpdateRecord', TABLE_NAME, modelId, { Contenu: contenu, DateModif: now }]);
+    // Ce que les modèles écrits avec le document gardent après coup : leur DateModif relu, noté, et leur contenu dans le cache.
+    function settleOthers(dates) {
+      others.forEach(({ id: modelId, contenu }) => {
+        const dateModif = dates.get(modelId);
+        writes.remember(modelId, dateModif);
+        const cachedModel = byId(modelId);
+        if (cachedModel) { cachedModel.contenu = contenu; cachedModel.dateModif = dateModif; }
+      });
+    }
     if (id) {
       await grist.docApi.applyUserActions([
-        ['UpdateRecord', TABLE_NAME, id, columns]
+        ['UpdateRecord', TABLE_NAME, id, columns],
+        ...otherActions
       ]);
       // Le cache garde le nom que la ligne vient de recevoir : js/main.js (settleTemplateName) y compare le nom tapé, et uniqueName y cherche les
       // noms pris.
       const cached = byId(id);
       if (cached) cached.nom = nom;
-      const dateModif = await readBackDateModif(id, now);
+      const dates = await readBackDateModifs([id, ...others.map(({ id: modelId }) => modelId)], now);
+      const dateModif = dates.get(id);
       writes.remember(id, dateModif);
+      settleOthers(dates);
       return { id, dateModif };
     } else {
       const seqAtStart = currentIdSeq;
       const result = await grist.docApi.applyUserActions([
-        ['AddRecord', TABLE_NAME, null, columns]
+        ['AddRecord', TABLE_NAME, null, columns],
+        ...otherActions
       ]);
       const newId = result.retValues[0];
       // Le modèle neuf devient le modèle courant, sauf si un autre a été chargé pendant l'écriture (Grist lent : des secondes) : c'est celui-là qui
       // est à l'écran, et l'enregistrement automatique y écrirait ensuite, sous l'identifiant du modèle neuf, ce que l'écran montre.
       if (currentIdSeq === seqAtStart) currentTemplateId = newId;
-      const dateModif = await readBackDateModif(newId, now);
+      const dates = await readBackDateModifs([newId, ...others.map(({ id: modelId }) => modelId)], now);
+      const dateModif = dates.get(newId);
       writes.remember(newId, dateModif);
+      settleOthers(dates);
       return { id: newId, dateModif };
     }
   }

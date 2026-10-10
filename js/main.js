@@ -299,6 +299,7 @@
     const editor = EditorCore.getEditor();
     const synced = loading ? LinkedTable.syncOnLoad(editor) : LinkedTable.syncOpen(editor);
     if (synced && synced.pulled.length && currentMode === 'read') renderReader();
+    return synced;
   }
 
   function typeModeleOf(tpl, forcedTypeModele) {
@@ -752,10 +753,14 @@
   }
 
   // Écrit dans Grist le modèle tel que l'écran le montre : `html` (celui de l'éditeur par défaut), ses en-têtes, sa page, son type et ses champs
-  // email.
-  function saveScreenAs(id, nom, suiviModifications, html = Editor.getHTML()) {
-    return Templates.save(id, nom, html, getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsMm(), currentTypeModele, getEmailFieldsFromInputs(), suiviModifications);
+  // email. `alsoWrite` : les modèles Grille que les tableaux liés du document ont changé, écrits dans le même lot (js/linked-table.js:prepareSend).
+  function saveScreenAs(id, nom, suiviModifications, html = Editor.getHTML(), alsoWrite = null) {
+    return Templates.save(id, nom, html, getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsMm(), currentTypeModele, getEmailFieldsFromInputs(), suiviModifications, alsoWrite);
   }
+
+  // Les tableaux liés que le document a changé et pas leur modèle partent avec son enregistrement (js/linked-table.js:prepareSend, lot 6c-2b) : null quand rien ne part (un macro-modèle n'a rien
+  // dans l'éditeur), sinon le HTML à écrire avec la base d'après et ce qui s'écrit dans les modèles. À prendre dans le même bloc synchrone que la lecture du document, après le dernier `await`.
+  function linkedSendFor(isMacro) { return isMacro ? null : LinkedTable.prepareSend(EditorCore.getEditor()); }
 
   // Un macro-modèle s'édite uniquement dans sa fenêtre (MacroEditor) : Editor.getHTML() est toujours vide pour ce type et, par le chemin normal,
   // écraserait sa composition par un contenu vide. « Enregistrer » rouvre donc la fenêtre au lieu d'enregistrer.
@@ -770,7 +775,7 @@
     const typedName = templateNameInput ? templateNameInput.value.trim() : '';
     const nom = settleTemplateName(); // nom déjà pris : « nom (2) »... (la saisie du crayon, une copie, un modèle de la galerie passent tous par ici)
     if (!nom) { setStatus(I18n.t('status.templateNameRequired'), true); return; }
-    let savedId, dateModif;
+    let savedId, dateModif, send = null, synced = null;
     const epoch = autosaveEpoch;
     try {
       const suiviModifications = await Editor.getSuiviModificationsForSave();
@@ -778,8 +783,18 @@
       // Grist est lent) a pu laisser choisir un autre modèle : l'éditeur montre alors celui-là, et l'écrire sous l'identifiant de ce modèle-ci le
       // remplacerait. Le choisir en répondant « Abandonner » renonce à cet enregistrement.
       if (epoch !== autosaveEpoch) return;
+      // Un tableau lié est à envoyer à son modèle : les modèles sont relus d'abord (un passage de l'enregistrement automatique vient de le faire, pas un Enregistrer à la main, surtout quand le passage est coupé),
+      // sans quoi un modèle changé ailleurs depuis serait écrasé sans que personne ne le voie. Une relecture qui échoue renonce à l'envoi, pas à l'enregistrement du document.
+      let modelsFresh = true;
+      if (LinkedTable.hasPending(EditorCore.getEditor())) {
+        modelsFresh = await LinkedTable.refreshModels();
+        if (epoch !== autosaveEpoch) return;
+        // Les modèles sont frais : les tableaux suivent les leurs comme à un passage de l'enregistrement automatique (un modèle changé ailleurs en même temps que le tableau : l'écart se dit, rien ne part).
+        if (modelsFresh) synced = followLinkedModels();
+      }
       const editVersion = autosaveEditVersion;
-      ({ id: savedId, dateModif } = await saveScreenAs(id, nom, suiviModifications));
+      send = modelsFresh ? linkedSendFor(false) : null;
+      ({ id: savedId, dateModif } = await saveScreenAs(id, nom, suiviModifications, send ? send.html : undefined, send ? send.writes : null));
       // La date écrite est notée tout de suite, avant la relecture de la liste plus bas (une lecture de Grist de plus, des secondes quand il est
       // lent) : un passage de l'enregistrement automatique entre les deux verrait cette date sans la connaître et conclurait « modifié ailleurs »
       // (cf. autosaveTick). Un modèle chargé pendant l'écriture (autosaveEpoch) garde son propre état. Un enregistrement manuel tranche tout conflit
@@ -788,6 +803,7 @@
         autosaveLastKnownDateModif = dateModif;
         noteSaved(editVersion);
         hideConflictBanner();
+        if (send) send.commit(); // Grist a écrit le document et les modèles ensemble : les tableaux partis prennent leur base
       }
     } catch (e) {
       // La personne a refusé de créer les tables du widget : rien n'est enregistré, et le coin d'état le dit (ni échec ni journal d'erreur : elle a
@@ -818,6 +834,7 @@
       forgetLinkedOriginUnless(null); // ni le modèle que le tableau du document désigne : le retour n'a plus de sens non plus
     }
     updateSaveStatus();
+    if (sameTemplate) LinkedTable.tell(synced, send);
     // à la place de « Enregistré à… » : le nom a changé, c'est ce qu'il faut lire
     if (sameTemplate && nom !== typedName) setStatus(I18n.t('status.nameExists', { name: nom }));
   }
@@ -1167,18 +1184,22 @@
 
   // L'écriture d'un passage. `epoch` : le modèle choisi quand le passage a commencé ; `editVersion` : l'état de l'édition lu avant de lire quoi que ce
   // soit.
-  async function writeAutosave(id, { nom, isMacro }, remoteTpl, epoch, editVersion) {
+  async function writeAutosave(id, { nom, isMacro }, remoteTpl, epoch, editVersion, synced) {
     try {
       const suiviModifications = isMacro ? null : await Editor.getSuiviModificationsForSave();
       // un autre modèle a été choisi pendant l'attente de l'identification : l'éditeur n'est plus celui dont `id` est la ligne (cf. onSave)
       if (epoch !== autosaveEpoch) return;
-      const contenu = isMacro ? remoteTpl.contenu : Editor.getHTML();
-      const { dateModif } = await saveScreenAs(id, nom, suiviModifications, contenu);
+      // Les modèles viennent d'être relus par ce passage : les tableaux liés que le document a changé et pas leur modèle partent dans le même lot que sa ligne.
+      const send = linkedSendFor(isMacro);
+      const contenu = isMacro ? remoteTpl.contenu : (send ? send.html : Editor.getHTML());
+      const { dateModif } = await saveScreenAs(id, nom, suiviModifications, contenu, send ? send.writes : null);
       // Un autre modèle chargé pendant l'écriture (autosaveEpoch) a son propre état : rien de ceci ne lui appartient.
       if (epoch === autosaveEpoch) {
         autosaveLastKnownDateModif = dateModif;
         noteSaved(editVersion);
+        if (send) send.commit();
         updateSaveStatus();
+        LinkedTable.tell(synced, send); // « Enregistré à… » ne doit pas effacer ce que la synchro et l'envoi viennent de dire
       }
     } catch (e) {
       console.error('[main] auto-save : échec d’enregistrement', e);
@@ -1208,7 +1229,7 @@
       return;
     }
     // Les modèles viennent d'être relus : les tableaux liés du document suivent les leurs, document modifié ou non, en lecture seule aussi (rien n'est écrit).
-    followLinkedModels();
+    const synced = followLinkedModels();
     if (!autosaveDirty) return;
     // Lecture seule : la vérification de conflit ci-dessus garde son bandeau (le modèle a changé ailleurs), mais rien n'est écrit. Un commentaire
     // posé en Lecture passe par saveReaderCommentAnchors, jamais par ici.
@@ -1218,7 +1239,7 @@
     if (Editor.isEditingHeaderFooter()) return;
     const editVersion = autosaveEditVersion; // Avant de lire quoi que ce soit : ce qui est modifié après reste « à enregistrer » (cf. noteSaved)
     const target = autosaveWriteTarget(remoteTpl);
-    if (target) await writeAutosave(id, target, remoteTpl, epoch, editVersion);
+    if (target) await writeAutosave(id, target, remoteTpl, epoch, editVersion, synced);
   }
 
   function startAutosaveLoop() {
