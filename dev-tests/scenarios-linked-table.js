@@ -1,6 +1,6 @@
 // Suite "linkedTable" - un tableau de document LIÉ à un modèle Grille (09/10, lot 6a sur 6 du tableau de document, « En direct » ; Antoine : « comme sur un Gdocs, intégrer un tableau qui
 // soit en fait un modèle grille »). Le tableau porte le numéro du modèle (`data-linked-template`) et ses cases sont celles du modèle au moment de la pose (js/linked-table.js). Le lot 6a
-// pose le lien, le 6b y met les deux sens à la main (« Mettre à jour depuis le modèle », « Envoyer au modèle ») ; l'automatique (6c) vient après. Ici, sans la souris (la ligne du menu du bouton Tableau, la liste, le repère et la barre à 700x400, clair et sombre,
+// pose le lien, le 6b y met les deux sens à la main (« Mettre à jour depuis le modèle », « Envoyer au modèle ») et l'ouverture du modèle, le 6c-1 l'identité du lien (le jeton du modèle) ; l'automatique (6c-2) vient après. Ici, sans la souris (la ligne du menu du bouton Tableau, la liste, le repère et la barre à 700x400, clair et sombre,
 // sont à dev-tests/verify-linked-table-mouse.mjs, groupe linkedTableMouse) :
 //  1) l'attribut : l'aller-retour du HTML, un numéro qui n'en est pas un, un modèle qui n'existe plus ;
 //  2) la pose : la copie des cases, le curseur dans la première, un seul Annuler, ce qui la refuse, la liste avec recherche (ordre, lignes grisées avec leur raison, deux langues) ;
@@ -12,7 +12,10 @@
 //  7) les sorties : la Lecture, le PDF et le Word ne savent rien du lien ;
 //  8) les deux sens (lot 6b) : mettre à jour depuis le modèle (cases, curseur, un Annuler, modèle relu, tableau déjà identique, modèle introuvable), envoyer au modèle (seules les
 //     deux colonnes écrites, ni lien ni commentaires, la confirmation et son compte, annulée = rien d'écrit, déjà identique = rien à écrire, tableau riche stable à l'aller-retour,
-//     échec d'écriture), ce qui les refuse (suivi, une action en cours, éditeur en lecture) et les lignes du menu du lien.
+//     échec d'écriture), ce qui les refuse (suivi, une action en cours, éditeur en lecture) et les lignes du menu du lien ;
+//  9) « Ouvrir le modèle » (lot 6b-2) : le modèle à l'écran, le bandeau de retour, le retour dans la même case, la confirmation à la suppression d'un modèle posé ailleurs ;
+// 10) l'identité du lien (lot 6c-1) : le jeton du modèle (créé une fois, dans sa colonne, jamais par un enregistrement), l'attribut `data-linked-key`, un numéro repris par un autre
+//     modèle ou un tableau d'un autre document qui n'est pas un lien, les actions à la main arrêtées quand l'identité change, un lien ancien (sans jeton) qui reçoit le sien, le décompte.
 (function () {
   const cases = [];
   const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -20,9 +23,16 @@
   // Plus de 500 ms entre deux gestes : prosemirror-history groupe sinon les transactions rapprochées en UN seul évènement (un Annuler défait alors les deux).
   const GROUP_GAP_MS = 700;
   const ATTR = 'data-linked-template';
+  const KEY_ATTR = 'data-linked-key';
 
   const gridHtml = (label, rows, cols) => '<table><tbody>' + Array.from({ length: rows }, (_, r) => '<tr>' + Array.from({ length: cols }, (_, c) => `<td><p>${label}${'ABC'[c]}${r + 1}</p></td>`).join('') + '</tr>').join('') + '</tbody></table>';
-  const linkedHtml = (id, label, rows, cols) => gridHtml(label, rows, cols).replace('<table>', `<table ${ATTR}="${id}">`);
+  // Le jeton de chaque modèle que `model()` crée (Templates.ensureToken, que la liste avec recherche appelle à la pose) : un tableau lié que les cas écrivent à la main le porte, comme tout lien
+  // posé depuis le lot 6c-1. `legacyHtml` : un lien d'avant ce lot, le numéro seul.
+  const tokens = new Map();
+  const keyAttr = id => (tokens.has(id) ? ` ${KEY_ATTR}="${tokens.get(id)}"` : '');
+  const linkedHtml = (id, label, rows, cols) => gridHtml(label, rows, cols).replace('<table>', `<table ${ATTR}="${id}"${keyAttr(id)}>`);
+  const legacyHtml = (id, label, rows, cols) => gridHtml(label, rows, cols).replace('<table>', `<table ${ATTR}="${id}">`);
+  const unlinked = html => html.replace(/ data-linked-(?:template|key)="[^"]*"/g, '');
   const DOC = '<p>avant</p><p>après</p>';
 
   // La confirmation de l'envoi est une vraie fenêtre : les cas la remplacent le temps d'une réponse (withDoc la rend).
@@ -30,13 +40,16 @@
   // Les modèles que le cas crée sont retirés à sa fin : la liste des modèles est celle des autres suites.
   const made = [];
   let counter = 0;
-  async function model(name, html, type) {
+  // `bare` : un modèle Grille que personne n'a encore lié, sans jeton.
+  async function model(name, html, type, bare) {
     const saved = await Templates.save(null, name + ' ' + (++counter), html, '', null, null, type || 'grille', null);
     made.push(saved.id);
+    if ((!type || type === 'grille') && !bare) tokens.set(saved.id, await Templates.ensureToken(saved.id));
     await Templates.loadAll();
     return Templates.byId(saved.id);
   }
   async function dropModels() {
+    tokens.clear();
     for (const id of made.splice(0)) { try { await Templates.remove(id); } catch (e) { /* déjà retiré */ } }
     try { await Templates.loadAll(); } catch (e) { /* le cache d'avant sert */ }
   }
@@ -355,7 +368,7 @@
       const bad = [];
       const m = await model('Garde', gridHtml('G', 3, 3));
       const html = WITH_TABLE(m.id);
-      const freeHtml = html.replace(` ${ATTR}="${m.id}"`, '');
+      const freeHtml = unlinked(html);
       const load = async source => { Editor.setHTML(source); await sleep(120); await cursorIn(0, 1, 1); };
       for (const name of Object.keys(FORBIDDEN_COMMANDS)) {
         await load(freeHtml);
@@ -395,7 +408,7 @@
       const bad = [];
       const m = await model('Collage', gridHtml('P', 3, 3));
       const html = WITH_TABLE(m.id);
-      const freeHtml = html.replace(` ${ATTR}="${m.id}"`, '');
+      const freeHtml = unlinked(html);
       const refused = {
         citation: '<blockquote><p>citation</p></blockquote>',
         code: '<pre><code>let a = 1;</code></pre>',
@@ -976,8 +989,8 @@
       const bad = [];
       const m = await model('Sorties', gridHtml('X', 3, 3));
       const linked = WITH_TABLE(m.id);
-      const free = linked.replace(` ${ATTR}="${m.id}"`, '');
-      const strip = html => html.replace(/ data-linked-template="[^"]*"/g, '');
+      const free = unlinked(linked);
+      const strip = unlinked;
       const readerLinked = await h.renderReaderMode(linked);
       const linkedReader = readerLinked.innerHTML;
       const readerFree = await h.renderReaderMode(free);
@@ -1023,6 +1036,7 @@
   async function modelWithFile(name, html, file) {
     const saved = await Templates.save(null, name + ' ' + (++counter), html, file, null, null, 'grille', null);
     made.push(saved.id);
+    tokens.set(saved.id, await Templates.ensureToken(saved.id));
     await Templates.loadAll();
     return Templates.byId(saved.id);
   }
@@ -1967,6 +1981,483 @@
       await cursorIn(0, 0, 0);
       await sleep(150);
       if (!tablesOf().length || LinkedTable.status(ed().state) || markClass() !== '-') bad.push('le tableau du document garde un lien vivant : ' + JSON.stringify([tablesOf().length, markClass()]));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  // === 10) L'identité du lien (lot 6c-1) ===============================================================================================================================
+  //
+  // Le numéro d'un modèle ne dit pas de quel modèle il s'agit : Grist peut le redonner à un autre une fois la ligne supprimée, et un tableau copié d'un autre document en porte un qui
+  // désigne ici un modèle sans rapport. Le tableau porte donc aussi le jeton du modèle (`data-linked-key`, colonne `Jeton` de la table des modèles) et le lien ne compte que si les deux
+  // sont égaux. Dans ces cas, « le numéro repris par un autre modèle » s'écrit en donnant à la ligne du modèle un autre jeton (le stub ne reprend jamais un numéro).
+
+  // Un modèle Grille que personne n'a encore lié (sans jeton) ; le document de ces cas le pose avec `legacyHtml`, comme avant le lot 6c-1.
+  const bareModel = (name, html) => model(name, html, 'grille', true);
+  const columnsWritten = write => Object.keys(write[3] || {}).sort().join();
+  const NEW_TOKEN = 'abcdefgh12345678';
+  const TOKEN_FORM = /^[a-z0-9]{24}$/;
+  // La fin du texte `text` : le curseur y pose un bloc sans couper le paragraphe.
+  async function cursorEnd(text) {
+    let found = null;
+    doc().descendants((node, pos) => { if (found == null && node.isText && node.text.indexOf(text) !== -1) found = pos + node.nodeSize; });
+    ed().commands.setTextSelection(found);
+    await sleep(120);
+  }
+  // Le nœud du tableau `t` du document, ses deux attributs de lien.
+  const linkAttrs = t => { const attrs = tablesOf()[t].node.attrs; return { id: attrs.linkedTemplate, key: attrs.linkedKey }; };
+
+  cases.push({
+    id: 'linked_token_is_made_once_in_its_own_column_and_a_saved_model_keeps_it',
+    description: 'Templates.ensureToken : le premier appel crée la colonne « Jeton » au besoin et écrit un jeton de 24 lettres et chiffres dans cette seule colonne (ni Contenu ni DateModif) ; les suivants rendent le même sans rien écrire ; la liste des modèles le connaît tout de suite et après une relecture ; enregistrer le modèle ne le change pas ; deux modèles ont deux jetons, une copie « Enregistrer sous » n\'en a pas ; un modèle qui n\'existe plus rend vide, sans rien écrire',
+    run: async (h) => withDoc(h, DOC, async () => {
+      const bad = [];
+      const a = await bareModel('Jeton a', gridHtml('A', 2, 2));
+      const b = await bareModel('Jeton b', gridHtml('B', 2, 2));
+      if (a.jeton !== '' || rowOf(a.id).Jeton) bad.push('un modèle neuf a déjà un jeton : ' + JSON.stringify([a.jeton, rowOf(a.id).Jeton]));
+      stub().clearActionLog();
+      const first = await Templates.ensureToken(a.id);
+      if (!TOKEN_FORM.test(first)) bad.push('forme du jeton : ' + first);
+      const writes = modelWrites();
+      if (writes.length !== 1 || writes[0][0] !== 'UpdateRecord' || writes[0][2] !== a.id || columnsWritten(writes[0]) !== 'Jeton') bad.push('les écritures : ' + JSON.stringify(writes.map(w => [w[0], w[2], columnsWritten(w)])));
+      if (rowOf(a.id).Jeton !== first || Templates.byId(a.id).jeton !== first) bad.push('le jeton n\'est pas dans la ligne ou dans la liste des modèles');
+      if (stub().getActionLog().filter(w => w[0] === 'AddVisibleColumn' && w[2] === 'Jeton').length > 1) bad.push('la colonne est créée plusieurs fois');
+      stub().clearActionLog();
+      const again = await Templates.ensureToken(a.id);
+      if (again !== first || stub().getActionLog().length) bad.push('un second appel écrit ou change le jeton : ' + again + ' ' + JSON.stringify(stub().getActionLog()));
+      await Templates.loadAll();
+      if (Templates.byId(a.id).jeton !== first) bad.push('la relecture perd le jeton');
+      // Enregistrer le modèle (toutes ses colonnes) ne touche pas au jeton.
+      stub().clearActionLog();
+      await Templates.save(a.id, a.nom, gridHtml('Z', 2, 2), '', null, null, 'grille', null);
+      await Templates.loadAll();
+      const saved = modelWrites();
+      if (!saved.length || saved.some(w => 'Jeton' in (w[3] || {})) || Templates.byId(a.id).jeton !== first || rowOf(a.id).Jeton !== first) bad.push('Enregistrer touche au jeton : ' + JSON.stringify(saved.map(columnsWritten)));
+      const second = await Templates.ensureToken(b.id);
+      if (!TOKEN_FORM.test(second) || second === first) bad.push('deux modèles, un même jeton : ' + first + ' / ' + second);
+      const copy = await Templates.save(null, 'Copie ' + (++counter), gridHtml('A', 2, 2), '', null, null, 'grille', null);
+      made.push(copy.id);
+      await Templates.loadAll();
+      if (Templates.byId(copy.id).jeton !== '') bad.push('une copie reprend le jeton : ' + Templates.byId(copy.id).jeton);
+      stub().clearActionLog();
+      const gone = await Templates.ensureToken(987654);
+      if (gone !== '' || modelWrites().length) bad.push('modèle qui n\'existe pas : ' + JSON.stringify([gone, modelWrites().length]));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_key_attribute_survives_the_html_round_trip_and_never_stands_alone',
+    description: 'Le tableau lié porte `data-linked-key` à côté de `data-linked-template` : relu depuis le HTML enregistré, réécrit tel quel (relu une seconde fois, le même HTML) ; un jeton qui n\'en est pas un (trop court ou trop long, espace, tiret, balise, vide) est perdu au chargement et le lien reste (un lien ancien) ; un jeton sans numéro de modèle valable ne reste pas seul ; un tableau sans lien n\'en écrit pas',
+    run: async (h) => withDoc(h, DOC, async () => {
+      const bad = [];
+      const m = await model('Jeton html', gridHtml('A', 2, 2));
+      const key = m.jeton;
+      if (!TOKEN_FORM.test(key)) bad.push('le modèle du cas n\'a pas de jeton : ' + key);
+      Editor.setHTML('<p>x</p>' + linkedHtml(m.id, 'A', 2, 2) + '<p>y</p>' + gridHtml('B', 1, 1));
+      await sleep(150);
+      const html = Editor.getHTML();
+      const tag = (html.match(/<table[^>]*>/) || [''])[0];
+      if (!new RegExp(`${ATTR}="${m.id}"`).test(tag) || !new RegExp(`${KEY_ATTR}="${key}"`).test(tag)) bad.push('aller-retour : ' + tag);
+      if (linkAttrs(0).key !== key || linkAttrs(1).key || (html.match(/data-linked-key/g) || []).length !== 1) bad.push('le jeton ne suit pas le seul tableau lié : ' + JSON.stringify([linkAttrs(0), linkAttrs(1)]));
+      Editor.setHTML(html);
+      await sleep(120);
+      if (Editor.getHTML() !== html) bad.push('une seconde lecture change le HTML');
+      for (const value of ['', 'abc', 'x'.repeat(65), 'a b c d e f g h', 'abcdefgh-ijkl', '<b>abcdefgh</b>']) {
+        Editor.setHTML('<p>x</p>' + gridHtml('A', 1, 1).replace('<table>', `<table ${ATTR}="${m.id}" ${KEY_ATTR}="${value.replace(/"/g, '')}">`));
+        await sleep(80);
+        const attrs = tablesOf()[0] && tablesOf()[0].node.attrs;
+        if (!attrs || attrs.linkedTemplate !== m.id || attrs.linkedKey !== null || /data-linked-key/.test(Editor.getHTML())) bad.push('« ' + value + ' » : ' + JSON.stringify(attrs) + ' ' + Editor.getHTML().slice(0, 120));
+      }
+      for (const lone of ['', ` ${ATTR}="0"`, ` ${ATTR}="abc"`]) {
+        Editor.setHTML('<p>x</p>' + gridHtml('A', 1, 1).replace('<table>', `<table${lone} ${KEY_ATTR}="${key}">`));
+        await sleep(80);
+        if (linkedList().length || /data-linked-/.test(Editor.getHTML()) || tablesOf()[0].node.attrs.linkedKey) bad.push('jeton seul (« ' + lone.trim() + ' ») : ' + Editor.getHTML().slice(0, 120));
+      }
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_picker_makes_the_token_before_placing_and_without_one_places_an_old_style_link',
+    description: 'Choisir un modèle dans la liste : le jeton du modèle est créé avant la pose (une écriture de la seule colonne Jeton, aucune pour un modèle qui en a déjà un) et le tableau posé le porte, dans l\'éditeur et dans le HTML ; si Grist ne l\'écrit pas, le tableau se pose quand même, sans jeton (un lien ancien, à la main) ; la pose directe (insert) prend le jeton que la liste des modèles connaît',
+    run: async (h) => withDoc(h, '<p>un</p><p>deux</p><p>trois</p><p>quatre</p><p>cinq</p>', async () => {
+      const bad = [];
+      const a = await bareModel('Liste jeton a', gridHtml('A', 2, 2));
+      const b = await model('Liste jeton b', gridHtml('B', 2, 2));
+      const c = await bareModel('Liste jeton c', gridHtml('C', 2, 2));
+      const d = await model('Liste jeton d', gridHtml('D', 2, 2));
+      const e = await model('Liste jeton e', gridHtml('E', 2, 2));
+      await cursorEnd('un');
+      await openPicker();
+      stub().clearActionLog();
+      pick(a.id);
+      await sleep(500);
+      const key = Templates.byId(a.id).jeton;
+      const placedA = linkedList().find(({ node }) => node.attrs.linkedTemplate === a.id);
+      if (!TOKEN_FORM.test(key) || !placedA || placedA.node.attrs.linkedKey !== key) bad.push('le tableau ne porte pas le jeton créé : ' + JSON.stringify([key, placedA && placedA.node.attrs.linkedKey]));
+      const writes = modelWrites();
+      if (writes.length !== 1 || columnsWritten(writes[0]) !== 'Jeton' || writes[0][2] !== a.id) bad.push('écritures à la pose : ' + JSON.stringify(writes.map(columnsWritten)));
+      if (!new RegExp(`${KEY_ATTR}="${key}"`).test(Editor.getHTML())) bad.push('le HTML n\'a pas le jeton');
+      if (!LinkedTable.status(ed().state)) bad.push('le tableau posé n\'est pas un lien vivant');
+      closePicker();
+      // Un modèle qui a déjà son jeton : rien à écrire.
+      await cursorEnd('deux');
+      await openPicker();
+      stub().clearActionLog();
+      pick(b.id);
+      await sleep(500);
+      const placedB = linkedList().find(({ node }) => node.attrs.linkedTemplate === b.id);
+      if (!placedB || placedB.node.attrs.linkedKey !== b.jeton || modelWrites().length) bad.push('modèle qui a déjà son jeton : ' + JSON.stringify([placedB && placedB.node.attrs.linkedKey, modelWrites().length]));
+      closePicker();
+      // Grist n'écrit pas le jeton : le tableau se pose quand même, sans jeton.
+      const realEnsure = Templates.ensureToken;
+      Templates.ensureToken = async () => { throw new Error('écriture refusée'); };
+      try {
+        await cursorEnd('trois');
+        await openPicker();
+        stub().clearActionLog();
+        pick(c.id);
+        await sleep(400);
+      } finally { Templates.ensureToken = realEnsure; }
+      const placedC = linkedList().find(({ node }) => node.attrs.linkedTemplate === c.id);
+      if (!placedC || placedC.node.attrs.linkedKey !== null || !LinkedTable.modelFor(placedC.node) || modelWrites().length) bad.push('jeton impossible : ' + JSON.stringify([placedC && placedC.node.attrs.linkedKey, modelWrites().length]));
+      closePicker();
+      // La pose directe prend le jeton de la liste des modèles.
+      await cursorEnd('quatre');
+      if (!LinkedTable.insert(ed(), d)) bad.push('la pose directe a échoué');
+      await sleep(120);
+      const placedD = linkedList().find(({ node }) => node.attrs.linkedTemplate === d.id);
+      if (!placedD || placedD.node.attrs.linkedKey !== d.jeton) bad.push('pose directe : ' + JSON.stringify(placedD && placedD.node.attrs.linkedKey));
+      closePicker();
+      // La liste des modèles est relue entre la création du jeton et la pose (elle n'a pas encore le jeton) : le tableau porte celui que la création a rendu, et redevient un lien dès que la liste le connaît.
+      const realEnsureAgain = Templates.ensureToken;
+      const eKey = e.jeton;
+      Templates.ensureToken = async (id) => { const token = await realEnsureAgain(id); Templates.byId(id).jeton = ''; return token; };
+      try {
+        await cursorEnd('cinq');
+        await openPicker();
+        pick(e.id);
+        await sleep(400);
+      } finally { Templates.ensureToken = realEnsureAgain; }
+      const placedE = linkedList().find(({ node }) => node.attrs.linkedTemplate === e.id);
+      if (!placedE || placedE.node.attrs.linkedKey !== eKey) bad.push('liste périmée : ' + JSON.stringify(placedE && placedE.node.attrs.linkedKey));
+      await Templates.loadAll();
+      if (!placedE || !LinkedTable.modelFor(placedE.node)) bad.push('liste relue : le tableau posé n\'est pas un lien vivant');
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_a_number_taken_over_by_another_model_is_not_a_link',
+    description: 'Un tableau dont le numéro désigne un modèle Grille qui n\'a pas son jeton (le numéro repris par un autre modèle) n\'est pas un lien : ni repère, ni groupe dans la barre du tableau, ni règles de la grille (le garde-fou n\'y refuse rien, les boutons ne se grisent pas), ses cases et son HTML restent ; il ne compte pas dans la liste (le modèle n\'est pas « déjà lié ») ; poser le modèle ajoute un tableau lié bien à lui, et seul celui-là compte',
+    run: async (h) => withDoc(h, DOC, async () => {
+      const bad = [];
+      const m = await model('Repris', gridHtml('R', 2, 2));
+      const oldKey = m.jeton;
+      Editor.setHTML(WITH_TABLE(m.id));
+      await sleep(200);
+      await cursorIn(0, 1, 1);
+      // Vivant d'abord : le cas prouve ce qu'il retire.
+      if (!LinkedTable.status(ed().state) || markClass() === '-' || !linkedParts().some(visible)) bad.push('le lien vivant manque au départ : ' + JSON.stringify([!!LinkedTable.status(ed().state), markClass()]));
+      // Le numéro désigne maintenant un autre modèle : sa ligne porte un autre jeton.
+      stub().remoteWrite(Templates.TABLE_NAME, m.id, { Jeton: NEW_TOKEN });
+      await Templates.loadAll();
+      ed().commands.setTextSelection(cellText(0, 0, 1));
+      await sleep(150);
+      if (LinkedTable.status(ed().state) || LinkedTable.cursorIn(ed().state) || LinkedTable.modelFor(tablesOf()[0].node)) bad.push('le numéro repris compte encore : ' + JSON.stringify(LinkedTable.status(ed().state) && LinkedTable.status(ed().state).name));
+      if (markClass() !== '-') bad.push('repère : ' + markClass());
+      if (linkedParts().some(visible)) bad.push('le groupe de la barre est visible');
+      if (isLocked('v2-btn-table') || isLocked('v2-btn-callout')) bad.push('un bouton est grisé');
+      const html = Editor.getHTML();
+      if (!new RegExp(`${ATTR}="${m.id}"`).test(html) || !new RegExp(`${KEY_ATTR}="${oldKey}"`).test(html)) bad.push('le HTML a perdu un attribut : ' + html.slice(0, 160));
+      const was = docJson();
+      FORBIDDEN_COMMANDS.toggleBlockquote();
+      await sleep(80);
+      if (docJson() === was) bad.push('le garde-fou refuse encore une citation dans ses cases');
+      // Poser le modèle : il n'est pas « déjà lié » et le nouveau tableau porte son vrai jeton.
+      await cursorEnd('après');
+      await openPicker();
+      const row = pickerRows().find(r => r.name.indexOf('Repris') === 0);
+      if (!row || row.disabled) bad.push('le modèle est grisé : ' + JSON.stringify(row));
+      pick(m.id);
+      await sleep(500);
+      const sameNumber = tablesOf().filter(t => t.node.attrs.linkedTemplate === m.id);
+      const live = LinkedTable.liveTables(doc());
+      if (sameNumber.length !== 2 || live.length !== 1 || live[0].node.attrs.linkedKey !== NEW_TOKEN || sameNumber.filter(t => t.node.attrs.linkedKey === oldKey).length !== 1) bad.push('les deux tableaux : ' + JSON.stringify(sameNumber.map(t => t.node.attrs.linkedKey)));
+      if (markClass().split(',').filter(c => /pp-linked-table/.test(c)).length !== 1) bad.push('repères : ' + markClass());
+      const here = LinkedTable.status(ed().state);
+      if (!here || here.at.node.attrs.linkedKey !== NEW_TOKEN) bad.push('le curseur n\'est pas dans le tableau posé : ' + JSON.stringify(here && here.at.node.attrs.linkedKey));
+      closePicker();
+      // « Mettre à jour » agit sur le tableau lié bien à ce modèle, pas sur celui qui est resté : le modèle a changé, seul le premier tableau est remplacé.
+      stub().remoteWrite(Templates.TABLE_NAME, m.id, { Contenu: gridHtml('N', 2, 2), DateModif: new Date().toISOString() });
+      const liveIndex = tablesOf().findIndex(t => t.node.attrs.linkedKey === NEW_TOKEN);
+      await cursorIn(liveIndex, 0, 0);
+      const pulled = await LinkedTable.pull(ed());
+      await sleep(80);
+      if (pulled !== true || textsOf(tablesOf()[liveIndex].node) !== labels('N', 2, 2) || textsOf(tablesOf()[1 - liveIndex].node) !== labels('T', 3, 3)) bad.push('mettre à jour : ' + JSON.stringify([pulled, tablesOf().map(t => textsOf(t.node).slice(0, 12))]));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_a_table_pasted_from_another_document_loses_a_link_that_is_not_its_models',
+    description: 'Un tableau collé qui porte un numéro et un jeton qui ne sont pas ceux d\'un modèle d\'ici (un tableau venu d\'un autre document Grist) perd le lien ET le jeton, ses cases restent ; avec le bon jeton (un modèle de ce document, pas encore lié ici) il garde son lien ; la seconde copie du même lien perd les deux, l\'original garde les siens',
+    run: async (h) => withDoc(h, DOC, async () => {
+      const bad = [];
+      const m = await model('Venu d\'ailleurs', gridHtml('V', 2, 2));
+      const foreign = gridHtml('F', 2, 2).replace('<table>', `<table ${ATTR}="${m.id}" ${KEY_ATTR}="${NEW_TOKEN}">`);
+      await cursorEnd('avant');
+      pasteHtml(foreign);
+      await sleep(250);
+      if (tablesOf().length !== 1 || linkedList().length || linkAttrs(0).key !== null || linkAttrs(0).id !== null || !/^FA1/.test(textsOf(tablesOf()[0].node))) bad.push('jeton d\'un autre document : ' + JSON.stringify([tablesOf().length, linkedList().length, tablesOf().length && linkAttrs(0)]));
+      // Le bon jeton : un lien de ce document, pas encore posé ici.
+      Editor.setHTML(DOC);
+      await sleep(120);
+      await cursorEnd('avant');
+      pasteHtml(linkedHtml(m.id, 'V', 2, 2));
+      await sleep(250);
+      if (linkedList().length !== 1 || linkAttrs(0).key !== m.jeton) bad.push('le bon jeton perd son lien : ' + JSON.stringify(tablesOf().length && linkAttrs(0)));
+      // Une seconde copie du même lien : elle perd le numéro et le jeton, l'original garde les siens.
+      await cursorEnd('après');
+      pasteHtml(linkedHtml(m.id, 'V', 2, 2));
+      await sleep(250);
+      if (tablesOf().length !== 2 || linkedList().length !== 1 || linkAttrs(0).key !== m.jeton || linkAttrs(1).key !== null || linkAttrs(1).id !== null) bad.push('seconde copie : ' + JSON.stringify(tablesOf().map((t, i) => linkAttrs(i))));
+      // Un tableau resté d'un autre modèle (même numéro, autre jeton) ne change pas lequel garde le lien : l'original, ici après la copie collée.
+      const stale = gridHtml('S', 1, 1).replace('<table>', `<table ${ATTR}="${m.id}" ${KEY_ATTR}="${NEW_TOKEN}">`);
+      Editor.setHTML('<p>avant</p>' + linkedHtml(m.id, 'V', 2, 2) + stale + '<p>après</p>');
+      await sleep(150);
+      await cursorEnd('avant');
+      pasteHtml(linkedHtml(m.id, 'V', 2, 2));
+      await sleep(250);
+      const lives = LinkedTable.liveTables(doc());
+      if (tablesOf().length !== 3 || lives.length !== 1 || lives[0].pos !== tablesOf()[1].pos || linkAttrs(0).id !== null) bad.push('l\'original perd son lien : ' + JSON.stringify(tablesOf().map((t, i) => linkAttrs(i))));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_hand_actions_stop_when_the_model_changes_identity_while_they_run',
+    description: 'Pendant « Mettre à jour » (lecture des modèles) ou « Envoyer » (fenêtre de confirmation), le numéro passe à un autre modèle (son jeton change) : l\'action s\'arrête avec « modèle introuvable » en erreur, sans toucher au document ni écrire dans Grist (envoyer écraserait un modèle sans rapport) ; un jeton qui disparaît pendant la lecture n\'est pas remplacé par un neuf, et « Envoyer » ne pose même pas sa question quand le jeton change pendant la lecture',
+    run: async (h) => withDoc(h, DOC, async () => {
+      const bad = [];
+      const m = await model('Change', gridHtml('M', 2, 2));
+      const realToken = m.jeton;
+      Editor.setHTML(linkedDoc(m.id, 'D', 2, 2));
+      await sleep(200);
+      await cursorIn(0, 0, 0);
+      const reference = docJson();
+      // Mettre à jour : le jeton change pendant la lecture des modèles.
+      const realLoadAll = Templates.loadAll;
+      Templates.loadAll = function () { stub().remoteWrite(Templates.TABLE_NAME, m.id, { Jeton: NEW_TOKEN }); return realLoadAll.apply(this, arguments); };
+      stub().clearActionLog();
+      say('');
+      let pulled;
+      try { pulled = await LinkedTable.pull(ed()); } finally { Templates.loadAll = realLoadAll; }
+      const lineA = statusLine();
+      if (pulled !== false || docJson() !== reference || modelWrites().length) bad.push('mise à jour : ' + JSON.stringify([pulled, docJson() === reference, modelWrites().length]));
+      if (lineA.text !== I18n.t('linkedTable.gone', { name: m.nom }) || !lineA.error) bad.push('mise à jour, ligne d\'état : ' + JSON.stringify(lineA));
+      // Envoyer : le jeton change pendant la fenêtre de confirmation.
+      stub().remoteWrite(Templates.TABLE_NAME, m.id, { Jeton: realToken });
+      await Templates.loadAll();
+      ed().commands.setTextSelection(cellText(0, 1, 1));
+      await sleep(150);
+      const asked = [];
+      Dialogs.confirm = async (options) => { asked.push(options); stub().remoteWrite(Templates.TABLE_NAME, m.id, { Jeton: NEW_TOKEN }); await Templates.loadAll(); return true; };
+      stub().clearActionLog();
+      say('');
+      const sent = await LinkedTable.push(ed());
+      const lineB = statusLine();
+      if (sent !== false || asked.length !== 1 || modelWrites().length || docJson() !== reference) bad.push('envoi : ' + JSON.stringify([sent, asked.length, modelWrites().length, docJson() === reference]));
+      if (lineB.text !== I18n.t('linkedTable.gone', { name: m.nom }) || !lineB.error) bad.push('envoi, ligne d\'état : ' + JSON.stringify(lineB));
+      if (rowOf(m.id).Contenu.indexOf('MA1') === -1) bad.push('le modèle a été écrasé : ' + rowOf(m.id).Contenu.slice(0, 80));
+      // Le jeton qui disparaît pendant la lecture des modèles (« Mettre à jour ») : l'action s'arrête sur le jeton qu'elle a lu, elle n'en écrit pas un neuf à la place.
+      stub().remoteWrite(Templates.TABLE_NAME, m.id, { Jeton: realToken });
+      await Templates.loadAll();
+      await cursorIn(0, 0, 0);
+      Templates.loadAll = function () { stub().remoteWrite(Templates.TABLE_NAME, m.id, { Jeton: '' }); return realLoadAll.apply(this, arguments); };
+      stub().clearActionLog();
+      say('');
+      let pulledBare;
+      try { pulledBare = await LinkedTable.pull(ed()); } finally { Templates.loadAll = realLoadAll; }
+      if (pulledBare !== false || modelWrites().length || docJson() !== reference || Templates.byId(m.id).jeton !== '') bad.push('mise à jour, jeton disparu : ' + JSON.stringify([pulledBare, modelWrites().map(columnsWritten), docJson() === reference, Templates.byId(m.id).jeton]));
+      // Le jeton qui change pendant la lecture des modèles (« Envoyer ») : la fenêtre de confirmation ne s'ouvre même pas.
+      stub().remoteWrite(Templates.TABLE_NAME, m.id, { Jeton: realToken });
+      await Templates.loadAll();
+      await cursorIn(0, 1, 1);
+      const askedEarly = [];
+      Dialogs.confirm = async (options) => { askedEarly.push(options); return true; };
+      Templates.loadAll = function () { stub().remoteWrite(Templates.TABLE_NAME, m.id, { Jeton: NEW_TOKEN }); return realLoadAll.apply(this, arguments); };
+      stub().clearActionLog();
+      say('');
+      let sentEarly;
+      try { sentEarly = await LinkedTable.push(ed()); } finally { Templates.loadAll = realLoadAll; }
+      if (sentEarly !== false || askedEarly.length || modelWrites().length || docJson() !== reference) bad.push('envoi, jeton changé pendant la lecture : ' + JSON.stringify([sentEarly, askedEarly.length, modelWrites().length, docJson() === reference]));
+      if (statusLine().text !== I18n.t('linkedTable.gone', { name: m.nom }) || !statusLine().error) bad.push('envoi, jeton changé pendant la lecture, ligne d\'état : ' + JSON.stringify(statusLine()));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_pull_gives_a_link_without_token_its_models_token_with_the_cells_in_one_undo',
+    description: 'Un lien d\'avant le lot 6c-1 (le numéro seul) compte, à la main : « Mettre à jour » remplace les cases, crée le jeton du modèle (une écriture de la seule colonne Jeton) et le tableau le porte ; un seul Annuler rend les cases et le tableau sans jeton ; refaire la mise à jour n\'écrit plus rien',
+    run: async (h) => withDoc(h, DOC, async () => {
+      const bad = [];
+      const m = await bareModel('Ancien', gridHtml('M', 3, 3));
+      Editor.setHTML('<p>avant</p>' + legacyHtml(m.id, 'T', 3, 3) + '<p>après</p>');
+      await sleep(200);
+      await cursorIn(0, 1, 2);
+      if (!LinkedTable.status(ed().state) || markClass() === '-') bad.push('un lien ancien doit compter, à la main');
+      await sleep(GROUP_GAP_MS);
+      ed().chain().focus().insertContent('local').run();
+      await sleep(GROUP_GAP_MS);
+      const edited = docJson();
+      stub().clearActionLog();
+      say('');
+      const done = await LinkedTable.pull(ed());
+      await sleep(80);
+      const key = Templates.byId(m.id).jeton;
+      const writes = modelWrites();
+      if (done !== true || !TOKEN_FORM.test(key) || linkAttrs(0).key !== key || linkAttrs(0).id !== m.id) bad.push('le tableau n\'a pas reçu le jeton : ' + JSON.stringify([done, key, linkAttrs(0)]));
+      if (writes.length !== 1 || columnsWritten(writes[0]) !== 'Jeton' || writes[0][2] !== m.id) bad.push('écritures : ' + JSON.stringify(writes.map(columnsWritten)));
+      if (textsOf(tablesOf()[0].node) !== labels('M', 3, 3)) bad.push('les cases ne sont pas celles du modèle');
+      await undo();
+      if (docJson() !== edited || linkAttrs(0).key !== null) bad.push('un Annuler ne rend pas le tableau d\'avant : ' + JSON.stringify(linkAttrs(0)));
+      // De nouveau : le jeton est connu, rien de plus à écrire.
+      await cursorIn(0, 0, 0);
+      stub().clearActionLog();
+      await sleep(GROUP_GAP_MS);
+      const again = await LinkedTable.pull(ed());
+      await sleep(80);
+      if (again !== true || modelWrites().length || linkAttrs(0).key !== key) bad.push('seconde mise à jour : ' + JSON.stringify([again, modelWrites().length, linkAttrs(0)]));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_identical_pull_and_push_give_a_link_without_token_its_models_token_and_a_failure_changes_nothing',
+    description: 'Un lien ancien reçoit aussi son jeton quand la mise à jour trouve le tableau identique (cases et commentaires intacts, une écriture de la seule colonne Jeton) et quand « Envoyer » trouve le tableau identique ; « Envoyer » avec une confirmation refusée n\'écrit rien, pas même le jeton, et laisse le tableau tel quel ; confirmé, il écrit le jeton puis le contenu et le tableau porte le jeton ; si Grist n\'écrit pas le jeton, la mise à jour réussit quand même (sans jeton, sans erreur)',
+    run: async (h) => withDoc(h, DOC, async () => {
+      const bad = [];
+      // 1) mise à jour d'un tableau identique
+      const a = await bareModel('Ancien identique', gridHtml('I', 2, 2));
+      Editor.setHTML('<p>avant</p>' + legacyHtml(a.id, 'I', 2, 2) + '<p>après</p>');
+      await sleep(200);
+      const at = cellText(0, 1, 1);
+      ed().chain().focus().setTextSelection({ from: at, to: at + 2 }).setMark('commentMark', { id: 'adopt-test', resolved: false }).run();
+      await sleep(100);
+      await cursorIn(0, 0, 0);
+      const cells = textsOf(tablesOf()[0].node);
+      stub().clearActionLog();
+      say('');
+      const done = await LinkedTable.pull(ed());
+      await sleep(80);
+      const keyA = Templates.byId(a.id).jeton;
+      if (done !== true || !TOKEN_FORM.test(keyA) || linkAttrs(0).key !== keyA) bad.push('identique : le tableau n\'a pas reçu le jeton ' + JSON.stringify([done, keyA, linkAttrs(0)]));
+      if (modelWrites().length !== 1 || columnsWritten(modelWrites()[0]) !== 'Jeton') bad.push('identique : écritures ' + JSON.stringify(modelWrites().map(columnsWritten)));
+      if (textsOf(tablesOf()[0].node) !== cells || Editor.getHTML().indexOf('comment-mark') === -1) bad.push('identique : les cases ou le commentaire ont changé');
+      const line = statusLine();
+      if (line.text !== I18n.t('linkedTable.upToDate', { name: a.nom }) || line.error) bad.push('identique, ligne d\'état : ' + JSON.stringify(line));
+      // 2) envoi refusé : rien n'est écrit, pas même le jeton
+      const b = await bareModel('Ancien envoi', gridHtml('E', 2, 2));
+      Editor.setHTML('<p>avant</p>' + legacyHtml(b.id, 'D', 2, 2) + '<p>après</p>');
+      await sleep(200);
+      await cursorIn(0, 0, 0);
+      const reference = docJson();
+      const asked = answerWith(false);
+      stub().clearActionLog();
+      const refused = await LinkedTable.push(ed());
+      if (refused !== false || asked.length !== 1 || modelWrites().length || docJson() !== reference || rowOf(b.id).Jeton) bad.push('envoi refusé : ' + JSON.stringify([refused, asked.length, modelWrites().length, docJson() === reference, rowOf(b.id).Jeton]));
+      // 3) envoi confirmé : le jeton, puis le contenu
+      asked.length = 0;
+      Dialogs.confirm = async (options) => { asked.push(options); return true; };
+      stub().clearActionLog();
+      const sent = await LinkedTable.push(ed());
+      await sleep(80);
+      const keyB = Templates.byId(b.id).jeton;
+      const writes = modelWrites().map(w => [w[2], columnsWritten(w)]);
+      if (sent !== true || JSON.stringify(writes) !== JSON.stringify([[b.id, 'Jeton'], [b.id, 'Contenu,DateModif']]) || !TOKEN_FORM.test(keyB) || linkAttrs(0).key !== keyB) bad.push('envoi confirmé : ' + JSON.stringify([sent, writes, keyB, linkAttrs(0)]));
+      if (!/DA1/.test(rowOf(b.id).Contenu) || /data-linked-/.test(rowOf(b.id).Contenu)) bad.push('envoi confirmé : contenu du modèle ' + rowOf(b.id).Contenu.slice(0, 100));
+      // 4) envoi d'un tableau identique : seul le jeton est écrit, rien n'est demandé
+      const c = await bareModel('Ancien envoi identique', gridHtml('S', 2, 2));
+      Editor.setHTML('<p>avant</p>' + legacyHtml(c.id, 'S', 2, 2) + '<p>après</p>');
+      await sleep(200);
+      await cursorIn(0, 0, 0);
+      asked.length = 0;
+      stub().clearActionLog();
+      const same = await LinkedTable.push(ed());
+      await sleep(80);
+      if (same !== true || asked.length || modelWrites().length !== 1 || columnsWritten(modelWrites()[0]) !== 'Jeton' || linkAttrs(0).key !== Templates.byId(c.id).jeton || !linkAttrs(0).key) bad.push('envoi identique : ' + JSON.stringify([same, asked.length, modelWrites().map(columnsWritten), linkAttrs(0)]));
+      // 5) Grist n'écrit pas le jeton : la mise à jour réussit, le tableau reste sans jeton, aucune erreur
+      const d = await bareModel('Ancien sans jeton', gridHtml('N', 2, 2));
+      Editor.setHTML('<p>avant</p>' + legacyHtml(d.id, 'Z', 2, 2) + '<p>après</p>');
+      await sleep(200);
+      await cursorIn(0, 0, 0);
+      const realEnsure = Templates.ensureToken;
+      Templates.ensureToken = async () => { throw new Error('écriture refusée'); };
+      stub().clearActionLog();
+      say('');
+      let failed;
+      try { failed = await LinkedTable.pull(ed()); } finally { Templates.ensureToken = realEnsure; }
+      await sleep(80);
+      const lineD = statusLine();
+      if (failed !== true || textsOf(tablesOf()[0].node) !== labels('N', 2, 2) || linkAttrs(0).key !== null || modelWrites().length || lineD.error || lineD.text !== I18n.t('linkedTable.pulled', { name: d.nom })) bad.push('sans jeton : ' + JSON.stringify([failed, linkAttrs(0), modelWrites().length, lineD]));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_detach_takes_the_token_with_the_link_and_one_undo_gives_both_back',
+    description: 'Détacher retire le numéro et le jeton du tableau (le HTML n\'a plus ni l\'un ni l\'autre), les cases restent ; un seul Annuler rend les deux',
+    run: async (h) => withDoc(h, DOC, async () => {
+      const bad = [];
+      const m = await model('Détache jeton', gridHtml('D', 2, 2));
+      Editor.setHTML(WITH_TABLE(m.id));
+      await sleep(200);
+      await cursorIn(0, 0, 0);
+      if (linkAttrs(0).key !== m.jeton || !m.jeton) bad.push('le tableau n\'a pas son jeton au départ : ' + JSON.stringify(linkAttrs(0)));
+      const reference = docJson();
+      await sleep(GROUP_GAP_MS);
+      if (!LinkedTable.detach(ed())) bad.push('detach() a refusé');
+      await sleep(100);
+      if (linkAttrs(0).id !== null || linkAttrs(0).key !== null || /data-linked-/.test(Editor.getHTML())) bad.push('après Détacher : ' + JSON.stringify(linkAttrs(0)) + ' ' + Editor.getHTML().slice(0, 120));
+      await sleep(GROUP_GAP_MS);
+      await undo();
+      if (docJson() !== reference || linkAttrs(0).key !== m.jeton) bad.push('un Annuler ne rend pas le numéro et le jeton : ' + JSON.stringify(linkAttrs(0)));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_used_by_counts_only_the_tables_that_are_this_models',
+    description: 'Les modèles « qui posent ce tableau » (la confirmation d\'envoi, celle de la suppression) sont ceux dont une balise <table> porte le numéro ET le jeton du modèle, ou le numéro seul (un lien ancien) ; un tableau qui porte le numéro avec un autre jeton, ou le jeton d\'un autre modèle, ou un autre numéro, ne compte pas',
+    run: async (h) => withDoc(h, DOC, async () => {
+      const bad = [];
+      const m = await model('Compté', gridHtml('C', 2, 2));
+      const o = await model('Autre compté', gridHtml('O', 2, 2));
+      const post = async (html) => {
+        const saved = await Templates.save(null, 'Pose ' + (++counter), '<p>x</p>' + html, '', null, null, 'document', null);
+        made.push(saved.id);
+        return saved.id;
+      };
+      const mine = await post(linkedHtml(m.id, 'P', 1, 1));
+      const old = await post(legacyHtml(m.id, 'P', 1, 1));
+      await post(gridHtml('P', 1, 1).replace('<table>', `<table ${ATTR}="${m.id}" ${KEY_ATTR}="${NEW_TOKEN}">`));
+      await post(gridHtml('P', 1, 1).replace('<table>', `<table ${ATTR}="${m.id}" ${KEY_ATTR}="${o.jeton}">`));
+      await post(linkedHtml(o.id, 'P', 1, 1));
+      const alsoMine = await post(linkedHtml(o.id, 'P', 1, 1) + linkedHtml(m.id, 'Q', 1, 1));
+      // Enregistrer un modèle neuf le rend courant, et le modèle ouvert ne compte pas : aucun ne l'est ici.
+      Templates.setCurrentId(null);
+      await Templates.loadAll();
+      const counted = LinkedTable.usedBy(m.id).map(t => t.id).sort((x, y) => x - y).join();
+      const expected = [mine, old, alsoMine].sort((x, y) => x - y).join();
+      if (counted !== expected) bad.push('compte : ' + counted + ' au lieu de ' + expected);
+      // La confirmation d'envoi le dit.
+      Editor.setHTML(linkedDoc(m.id, 'D', 2, 2));
+      await sleep(200);
+      await cursorIn(0, 0, 0);
+      const asked = answerWith(false);
+      await LinkedTable.push(ed());
+      if (asked.length !== 1 || !/3 autres modèles/.test(asked[0].message)) bad.push('confirmation : ' + JSON.stringify(asked.map(a => a.message)));
       return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
     }),
   });

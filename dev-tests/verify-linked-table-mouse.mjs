@@ -352,6 +352,8 @@ async function run(theme) {
   const doc1 = await html();
   check(`${T}, pose : un clic sur « Grille des tarifs » pose son tableau (3 lignes, 3 colonnes, mêmes cases), lié au modèle, la liste se ferme`,
     chosen && ids.length === 1 && (doc1.match(/<tr/g) || []).length === 3 && /A1/.test(doc1) && /C3/.test(doc1) && !(await pickerOpen()), { chosen, ids, doc1: doc1.slice(0, 200) });
+  check(`${T}, pose : le tableau porte le jeton du modèle (créé par le choix dans la liste), le même que la liste des modèles`,
+    /data-linked-key="[a-z0-9]{24}"/.test(doc1) && await page.evaluate(() => { const t = LinkedTable.linkedTables(EditorCore.getEditor().state.doc)[0].node.attrs; const m = Templates.byId(t.linkedTemplate); return !!m.jeton && m.jeton === t.linkedKey; }), doc1.slice(0, 200));
   check(`${T}, pose : le curseur est dans la première case`, (await cellOfCursor()) === 'A1', await cellOfCursor());
   const bar = await hit(BAR);
   const linkBtn = await hit(LBTN);
@@ -441,7 +443,7 @@ async function run(theme) {
 
   // 6) « Détacher » à la souris, par le menu du lien : le tableau reste, le lien part, le menu se referme, les boutons se dégrisent ; Ctrl+Z rend le lien.
   await clickInText('B2');
-  const casesBefore = (await html()).replace(/ data-linked-template="\d+"/, '');
+  const casesBefore = (await html()).replace(/ data-linked-template="\d+"/, '').replace(/ data-linked-key="[a-z0-9]+"/, '');
   const linkBtnBox = await hit(LBTN);
   check(`${T}, Détacher : le curseur dans le tableau, le bouton du lien est dans la barre, visible et au premier plan`, seen(linkBtnBox), linkBtnBox);
   const d = await centerOf(LBTN);
@@ -454,7 +456,7 @@ async function run(theme) {
   await page.mouse.click(detachAt.x, detachAt.y);
   await page.waitForTimeout(300);
   const detachedHtml = await html();
-  check(`${T}, Détacher : la ligne « Détacher du modèle » du menu : le lien part, les cases restent`, !/data-linked-template/.test(detachedHtml) && detachedHtml === casesBefore && (await linkedIds()).length === 0, detachedHtml.slice(0, 160));
+  check(`${T}, Détacher : la ligne « Détacher du modèle » du menu : le lien part, les cases restent`, !/data-linked-/.test(detachedHtml) && detachedHtml === casesBefore && (await linkedIds()).length === 0, detachedHtml.slice(0, 160));
   const afterDetach = await page.evaluate(() => ({ group: Array.from(document.querySelectorAll('.v2-table-toolbar [data-linked-only]')).some(e => !e.hidden && getComputedStyle(e).display !== 'none'), tableLocked: document.getElementById('v2-btn-table').classList.contains('v2-hf-locked'),
     mark: Array.from(document.querySelectorAll('.tiptap .tableWrapper')).some(w => /pp-linked/.test(w.className)), menuShown: getComputedStyle(document.querySelector('.v2-linked-menu')).display !== 'none', expanded: document.getElementById('v2-table-linked-btn').getAttribute('aria-expanded') }));
   check(`${T}, Détacher : le menu se referme, le bouton du lien, le repère et le grisé des boutons disparaissent`, !afterDetach.group && !afterDetach.tableLocked && !afterDetach.mark && !afterDetach.menuShown && afterDetach.expanded === 'false', afterDetach);
@@ -656,7 +658,7 @@ async function run(theme) {
   const changed = Object.keys(rowAfter).filter(k => JSON.stringify(rowAfter[k]) !== JSON.stringify(rowBefore[k])).sort().join();
   const stPush = await statusNow();
   check(`${T}, deux sens : « Envoyer » écrit le tableau dans le modèle (sans le lien), seules les colonnes Contenu et DateModif changent, la ligne d'état le dit, la fenêtre se ferme`,
-    changed === 'Contenu,DateModif' && /zz/.test(rowAfter.Contenu) && !/data-linked-template/.test(rowAfter.Contenu) && stPush.text === 'Modèle « Grille des tarifs » mis à jour avec ce tableau.' && !stPush.error && !(await dialogState()).open && (await focusIn()) === 'editor',
+    changed === 'Contenu,DateModif' && /zz/.test(rowAfter.Contenu) && !/data-linked-/.test(rowAfter.Contenu) && stPush.text === 'Modèle « Grille des tarifs » mis à jour avec ce tableau.' && !stPush.error && !(await dialogState()).open && (await focusIn()) === 'editor',
     { changed, status: stPush, dialog: await dialogState(), focus: await focusIn() });
   // Le modèle est remis tel qu'il était pour les passes suivantes.
   await page.evaluate(async ({ id, grid }) => { __gristStub.remoteWrite(Templates.TABLE_NAME, id, { Contenu: grid }); await Templates.loadAll(); }, { id: modelId, grid: GRID });

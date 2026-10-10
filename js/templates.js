@@ -98,12 +98,17 @@ const Templates = (function () {
     // Suivi des modifications (planning/feature-track-changes.md) : auteur et horodatage de chaque suggestion en attente, écrits dans le même
     // UpdateRecord/AddRecord que Contenu et DateModif, jamais dans un appel séparé.
     const ensureTrackChangesColumn = ensureColumns([['SuiviModifications', 'Text', 'Suivi des modifications']]);
+
+    // Identité d'un modèle Grille que des tableaux de document lient (js/linked-table.js, ensureToken ci-dessous). Seule migration de cette liste que loadAll et saveRow ne lancent
+    // pas : un document qui ne lie aucun tableau n'a pas de colonne de plus ; elle se crée à la première pose d'un lien. Un enregistrement (saveRow) n'écrit jamais cette colonne :
+    // un modèle enregistré garde son jeton.
+    const ensureTokenColumn = ensureColumns([['Jeton', 'Text', 'Identité du modèle']]);
     return {
-      ensureHeaderFooterColumn, ensureMarginsColumn, ensureDateModifColumn, ensureDefaultColumn, ensureEmailColumns, ensureTrackChangesColumn,
+      ensureHeaderFooterColumn, ensureMarginsColumn, ensureDateModifColumn, ensureDefaultColumn, ensureEmailColumns, ensureTrackChangesColumn, ensureTokenColumn,
     };
   }
   const {
-    ensureHeaderFooterColumn, ensureMarginsColumn, ensureDateModifColumn, ensureDefaultColumn, ensureEmailColumns, ensureTrackChangesColumn,
+    ensureHeaderFooterColumn, ensureMarginsColumn, ensureDateModifColumn, ensureDefaultColumn, ensureEmailColumns, ensureTrackChangesColumn, ensureTokenColumn,
   } = defineColumnMigrations();
 
   function safeParseHeaderFooter(json) {
@@ -225,6 +230,8 @@ const Templates = (function () {
       // Utilisé par js/main.js (auto-save) pour détecter qu'une autre personne a enregistré ce même modèle entre deux vérifications - jamais
       // affiché tel quel à l'utilisateur.
       dateModif: cell('DateModif', null),
+      // L'identité du modèle (cf. ensureToken) : '' tant qu'aucun tableau de document ne l'a lié. Le numéro de la ligne ne la donne pas.
+      jeton: String(cell('Jeton', '') || ''),
     };
   }
 
@@ -483,6 +490,33 @@ const Templates = (function () {
     return { id, dateModif };
   }
 
+  // Le jeton qui dit de quel modèle il s'agit : un tableau de document lié à un modèle Grille le recopie (js/linked-table.js) et le lien ne compte que si les deux sont égaux. Le
+  // numéro de la ligne ne suffit pas : Grist peut le redonner à un autre modèle une fois la ligne supprimée, et un tableau copié depuis un autre document en porte un qui désigne
+  // ici un modèle sans rapport. Crée la colonne `Jeton` au premier besoin, relit la ligne dans Grist et n'écrit un jeton que si elle n'en a pas (un jeton existant ne change jamais) ;
+  // rend celui que Grist garde, ou '' quand le modèle n'existe plus. Écrit la colonne `Jeton` seule : ni Contenu ni DateModif, aucun conflit d'enregistrement automatique.
+  function newToken() {
+    return Array.from(crypto.getRandomValues(new Uint32Array(4)), word => word.toString(36).padStart(7, '0')).join('').slice(0, 24);
+  }
+  async function ensureToken(id) {
+    await ensureTableExists();
+    await ensureTokenColumn();
+    async function read() {
+      const data = await grist.docApi.fetchTable(TABLE_NAME);
+      const at = data.id.findIndex(rowId => sameId(rowId, id));
+      return { rowId: at === -1 ? null : data.id[at], token: at === -1 || !data.Jeton ? '' : String(data.Jeton[at] || '') };
+    }
+    let { rowId, token } = await read();
+    if (rowId == null) return '';
+    if (!token) {
+      await grist.docApi.applyUserActions([['UpdateRecord', TABLE_NAME, rowId, { Jeton: newToken() }]]);
+      // Celui que Grist garde : deux personnes qui posent le premier lien du même modèle au même instant partagent le dernier jeton écrit.
+      ({ token } = await read());
+    }
+    const cached = byId(id);
+    if (cached && token) cached.jeton = token;
+    return token;
+  }
+
   function createWriteTracker() {
     // Les écritures en cours de ce widget et ce qu'elles laissent dans Grist. js/main.js (auto-save, commentaires de la Lecture) compare le DateModif
     // relu dans Grist à celui que ce widget a écrit en dernier pour dire « modifié ailleurs ». Or une écriture n'est pas un instant : Grist
@@ -555,7 +589,7 @@ const Templates = (function () {
   }
 
   return {
-    loadAll, getCached, byId, getCurrentId, setCurrentId, isCurrent, getDefaultId, isDefault, canBeDocumentDefault, setDefault, save, saveContent: saveContentTracked, remove, sameName, uniqueName,
+    loadAll, getCached, byId, getCurrentId, setCurrentId, isCurrent, getDefaultId, isDefault, canBeDocumentDefault, setDefault, save, saveContent: saveContentTracked, ensureToken, remove, sameName, uniqueName,
     getWriteSeq: writes.seq, isWriting: writes.isWriting, whenIdle: writes.whenIdle, lastWritten: writes.lastWritten,
     sameDateModif, getLoadedChars, TABLE_NAME, getDocumentSettings, updateDocumentSettings,
   };

@@ -69,7 +69,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 |---|---|
 | `js/grist-api.js` | L'enveloppe de l'API Grist : démarrage et accès, lectures, écritures, création des tables internes (après l'accord de la personne), clés de correspondance, sonde de l'e-mail ; reconnaît un compte Lecteur à l'adresse `readonly=true` (pour lui, ni sonde ni table créée). |
 | `js/table-consent.js` | La fenêtre « Créer les tables du widget dans ce document ? » et le compteur de gestes qui la repose après un refus ; `js/grist-api.js` décide quand la poser. |
-| `js/templates.js` | Les modèles : la table `Publipostage_Modeles`, lecture, enregistrement, en-tête et pied (JSON), et sa ligne réservée aux réglages du document (`TypeModele` = `reglages`). |
+| `js/templates.js` | Les modèles : la table `Publipostage_Modeles`, lecture, enregistrement, en-tête et pied (JSON), sa ligne réservée aux réglages du document (`TypeModele` = `reglages`) et l'identité d'un modèle Grille que des tableaux de document lient (`ensureToken`, colonne `Jeton`). |
 | `js/template-preferences.js` | Épingles et dossiers de chaque personne (`Publipostage_PreferencesModeles`). |
 | `js/template-organizer.js`, `js/template-tree-select.js`, `js/template-organize-modal.js` | La liste des modèles en arbre « épinglés + dossiers » et la fenêtre « Organiser mes modèles ». |
 | `js/template-gallery.js`, `js/template-gallery-modal.js` | Le catalogue de modèles prêts à l'emploi (dossier `templates-gallery/`, même site que le widget) et la fenêtre de la galerie : grille, recherche, aperçu en captures du document rempli, « Utiliser ce modèle » et « Créer avec ses tables ». |
@@ -162,7 +162,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/grid-xlsx-import.js` | Importer un classeur `.xlsx` dans une grille. |
 | `js/table-borders.js` | La règle des bordures, écrite une fois pour l'éditeur, la Lecture, le PDF et l'Excel. |
 | `js/xlsx-number-format.js` | Le texte qu'Excel montrerait pour un format de nombre ou de date. |
-| `js/linked-table.js` | Le tableau d'un document lié à un modèle Grille : l'attribut du lien, le choix du modèle dans la liste, le repère dans la page, les règles du contenu des cases et les verrous (suivi des modifications, lecture seule), la mise à jour du tableau depuis le modèle, son envoi au modèle et l'ouverture du modèle (avec le retour au document, que `js/main.js` porte). |
+| `js/linked-table.js` | Le tableau d'un document lié à un modèle Grille : l'attribut du lien et le jeton du modèle qui le fait compter, le choix du modèle dans la liste, le repère dans la page, les règles du contenu des cases et les verrous (suivi des modifications, lecture seule), la mise à jour du tableau depuis le modèle, son envoi au modèle et l'ouverture du modèle (avec le retour au document, que `js/main.js` porte). |
 
 ### Exports (16 fichiers, 6 800 lignes)
 
@@ -246,7 +246,7 @@ notes de conception, qui ne sont pas publiés ici.
 
 | Pour… | Voir |
 |---|---|
-| Ajouter une colonne à la table des modèles | `js/templates.js` (création, `ensureColumns`, lecture, enregistrement) ; la colonne doit exister avant la première écriture, sinon Grist refuse tout le lot. |
+| Ajouter une colonne à la table des modèles | `js/templates.js` (création, `ensureColumns`, lecture, enregistrement) ; la colonne doit exister avant la première écriture, sinon Grist refuse tout le lot. `Jeton` fait exception : créée à la demande par `ensureToken`, jamais écrite par l'enregistrement. |
 | Ajouter une fenêtre | `js/modal-base.js` et `js/dialogs.js`, `css/modal-base.css`. |
 | Ajouter un choix de colonne, de table ou de modèle | `js/search-select.js`. |
 | Ajouter un texte à l'interface | `js/i18n.js`, en français et en anglais dans le même lot. |
@@ -334,7 +334,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 |---|---|
 | `js/grist-api.js` | The wrapper around the Grist API: startup and access, reads, writes, creation of the internal tables (after the person's consent), matching keys, the e-mail probe; recognises a Viewer account by the `readonly=true` address (for them, no probe and no table created). |
 | `js/table-consent.js` | The "Create the widget’s tables in this document?" window and the gesture counter that asks again after a refusal; `js/grist-api.js` decides when to ask. |
-| `js/templates.js` | Templates: the `Publipostage_Modeles` table, reading, saving, header and footer (JSON), and its row reserved for the document's settings (`TypeModele` = `reglages`). |
+| `js/templates.js` | Templates: the `Publipostage_Modeles` table, reading, saving, header and footer (JSON), its row reserved for the document's settings (`TypeModele` = `reglages`) and the identity of a Grid template that document tables link to (`ensureToken`, `Jeton` column). |
 | `js/template-preferences.js` | Each person's pins and folders (`Publipostage_PreferencesModeles`). |
 | `js/template-organizer.js`, `js/template-tree-select.js`, `js/template-organize-modal.js` | The template list as a "pinned + folders" tree and the "Organize my templates" window. |
 | `js/template-gallery.js`, `js/template-gallery-modal.js` | The catalog of ready-to-use templates (the `templates-gallery/` folder, same site as the widget) and the gallery window: grid, search, preview as screenshots of the filled document, "Use this template" and "Create with its tables". |
@@ -427,7 +427,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/grid-xlsx-import.js` | Importing an `.xlsx` workbook into a grid. |
 | `js/table-borders.js` | The border rule, written once for the editor, Reading mode, the PDF and the Excel file. |
 | `js/xlsx-number-format.js` | The text Excel would show for a number or date format. |
-| `js/linked-table.js` | A document's table linked to a Grid template: the link attribute, picking the template in the list, the marker in the page, the content rules for the cells and the locks (track changes, read-only), updating the table from the template, sending it to the template and opening the template (with the way back to the document, which `js/main.js` carries). |
+| `js/linked-table.js` | A document's table linked to a Grid template: the link attribute and the template's token that makes it count, picking the template in the list, the marker in the page, the content rules for the cells and the locks (track changes, read-only), updating the table from the template, sending it to the template and opening the template (with the way back to the document, which `js/main.js` carries). |
 
 ### Exports (16 files, 6,800 lines)
 
@@ -510,7 +510,7 @@ notes, which are not published here.
 
 | To… | See |
 |---|---|
-| Add a column to the templates table | `js/templates.js` (creation, `ensureColumns`, reading, saving); the column must exist before the first write, otherwise Grist refuses the whole batch. |
+| Add a column to the templates table | `js/templates.js` (creation, `ensureColumns`, reading, saving); the column must exist before the first write, otherwise Grist refuses the whole batch. `Jeton` is the exception: created on demand by `ensureToken`, never written by saving. |
 | Add a window | `js/modal-base.js` and `js/dialogs.js`, `css/modal-base.css`. |
 | Add a choice of column, table or template | `js/search-select.js`. |
 | Add a text to the interface | `js/i18n.js`, in French and English in the same batch. |

@@ -240,7 +240,10 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   que le curseur y est ; le texte, la mise en forme, les lignes, les colonnes, la fusion, l'alignement vertical,
   les bordures et le saut de page avant une ligne s'y règlent comme dans une grille. Un modèle n'est lié qu'une
   fois par document, la copie collée d'un tableau lié perd son lien, et une grille ou un en-tête et un pied de
-  page n'en ont jamais. Avec le suivi des modifications allumé, le tableau lié est verrouillé. Dans la barre du
+  page n'en ont jamais. Le lien reconnaît son modèle même si Grist redonne le même numéro à un autre : un
+  tableau copié depuis un autre document, ou dont le modèle a été remplacé, n'est pas un lien (il garde ses
+  cases, sans repère ni menu) ; un tableau lié avant cette version reçoit cette identité à sa première mise à
+  jour ou à son premier envoi. Avec le suivi des modifications allumé, le tableau lié est verrouillé. Dans la barre du
   tableau, un bouton du lien ouvre un menu qui donne le nom du modèle et propose quatre actions. « Mettre à jour
   depuis le modèle » : les cases du tableau deviennent celles du modèle, relu à ce moment-là (le curseur reste
   dans sa case, un seul Annuler rend l'état d'avant ; un tableau déjà identique n'est pas touché et garde ses
@@ -770,7 +773,10 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   inside it, from the keyboard or by pasting, and the buttons concerned are greyed while the cursor is in it;
   text, formatting, rows, columns, merging, vertical alignment, borders and the page break before a row are set
   as in a grid. A template is linked only once per document, a pasted copy of a linked table loses its link, and
-  a grid or a header and footer never have one. With track changes on, the linked table is locked. In the table
+  a grid or a header and footer never have one. The link recognises its template even if Grist hands the same
+  number to another one: a table copied from another document, or whose template was replaced, is not a link
+  (it keeps its cells, with no marker or menu); a table linked before this version gets that identity at its
+  first update or send. With track changes on, the linked table is locked. In the table
   bar, a link button opens a menu that gives the template's name and offers four actions. "Update from the
   template": the table's cells become the template's, read again at that moment (the cursor stays in its cell,
   one Undo brings the previous state back; a table that is already identical is left alone and keeps its
