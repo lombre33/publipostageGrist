@@ -289,6 +289,16 @@
     // En dernier, pas avant : setHTML et setHeaderFooterData déclenchent leurs propres transactions, donc `editor.on('update')` ; sans cette remise à
     // zéro, charger un modèle le marquerait « modifié » pour l'enregistrement automatique.
     resetAutosaveState(tpl);
+    // Après la remise à zéro : ce que la synchro dit sur la ligne d'état n'est pas effacé par elle, et son tableau remplacé ne rend pas le document « à enregistrer ».
+    followLinkedModels(true);
+  }
+
+  // Les tableaux liés du document ouvert suivent leur modèle (js/linked-table.js:syncOpen), d'après les modèles du cache : à l'ouverture (`loading` : les désaccords déjà dits se redisent) et
+  // à chaque lecture de l'enregistrement automatique. En Lecture, la feuille se redessine quand un tableau a changé.
+  function followLinkedModels(loading) {
+    const editor = EditorCore.getEditor();
+    const synced = loading ? LinkedTable.syncOnLoad(editor) : LinkedTable.syncOpen(editor);
+    if (synced && synced.pulled.length && currentMode === 'read') renderReader();
   }
 
   function typeModeleOf(tpl, forcedTypeModele) {
@@ -691,7 +701,7 @@
 
   // Même chemin que la liste aussi pour le retour : la question « Modifications non enregistrées » est posée si le modèle en a (« Annuler » le garde, et le bandeau aussi). Le cache des
   // modèles est relu d'abord : ce que le modèle vient de recevoir est ce que le document lit. Le document revient avec son bandeau de macro-modèle s'il en avait un, le curseur dans la
-  // case du tableau qu'on avait quittée ; un tableau qui diffère du modèle le dit sur la ligne d'état (rien ne se remplace tout seul tant que « En direct » n'est pas là).
+  // case du tableau qu'on avait quittée. Le document suit son modèle à son ouverture (followLinkedModels) : un tableau qui diffère encore du modèle - modifié ici, ou des deux côtés - le dit sur la ligne d'état.
   async function returnFromLinkedModel() {
     const origin = linkedOrigin;
     if (!origin) return;
@@ -704,7 +714,7 @@
     if (origin.macroOrigin && Templates.byId(origin.macroOrigin.macroId)) { macroOrigin = origin.macroOrigin; syncMacroReturnBar(); }
     if (currentMode !== 'edit') return;
     const shown = LinkedTable.reveal(EditorCore.getEditor(), origin.modelId, origin.place);
-    if (shown && shown.differs) setStatus(I18n.t('linkedTable.return.differs', { name: shown.name }));
+    if (shown && shown.differs) setStatus(I18n.t('linkedTable.differs', { name: shown.name }));
   }
 
   function wireLinkedReturn() {
@@ -1197,6 +1207,8 @@
       showConflictBanner(remoteTpl);
       return;
     }
+    // Les modèles viennent d'être relus : les tableaux liés du document suivent les leurs, document modifié ou non, en lecture seule aussi (rien n'est écrit).
+    followLinkedModels();
     if (!autosaveDirty) return;
     // Lecture seule : la vérification de conflit ci-dessus garde son bandeau (le modèle a changé ailleurs), mais rien n'est écrit. Un commentaire
     // posé en Lecture passe par saveReaderCommentAnchors, jamais par ici.
@@ -1311,7 +1323,7 @@
   async function currentDocumentHtml(tableId, record) {
     if (currentTypeModele !== 'macro') return Editor.getHTML();
     if (!record || !tableId) return '';
-    return MacroTemplates.buildConcatenatedHtml(getCurrentMacroSlots(), tableId, record, Templates.getCached());
+    return MacroTemplates.buildConcatenatedHtml(getCurrentMacroSlots(), tableId, record, LinkedTable.resolveTemplates(EditorCore.getEditor(), Templates.getCached()));
   }
 
   async function renderReader(record, recordTableId) {
@@ -1795,7 +1807,7 @@
       pageOptions = cfg.pageOptions ? cfg.pageOptions() : null;
     } finally { PageLayout.setMarginsMm(onScreen); }
     return {
-      typeModele: tpl.typeModele || 'document', isMacro, html: isMacro ? null : (tpl.contenu || ''), macroSlots: isMacro ? (tpl.macroSlots || { slots: [] }) : null,
+      typeModele: tpl.typeModele || 'document', isMacro, html: isMacro ? null : LinkedTable.resolveHtml(EditorCore.getEditor(), tpl.contenu || ''), macroSlots: isMacro ? (tpl.macroSlots || { slots: [] }) : null,
       headerFooterData: tpl.headerFooter, filenameTemplate: String(tpl.nomFichierPDF || '').trim(), margins, pageOptions,
     };
   }
@@ -1960,7 +1972,7 @@
     // la concaténation est refaite ligne par ligne dans la boucle de runBatchJobs ; un modèle normal garde le même gabarit pour toutes les lignes,
     // seule la résolution des #Variable change. Pas de modèle unique non plus quand « Modèle selon la ligne » est réglé : chaque ligne a la source
     // du modèle que ses règles lui donnent (rowSourceResolver), comme à l'écran.
-    const templatesCache = Templates.getCached();
+    const templatesCache = LinkedTable.resolveTemplates(EditorCore.getEditor(), Templates.getCached());
     const openSource = openTemplateSource(cfg);
     const sourceOf = only ? async () => openSource : rowSourceResolver(tableId, cfg, openSource);
     // Compté avant la confirmation : « Un document par valeur » fait plus de documents que de lignes.
@@ -2287,7 +2299,8 @@
     // 'update' et non 'transaction' : ne part que si le document a réellement changé (docChanged), jamais pour un simple déplacement du curseur ou de
     // la sélection (cf. la section Enregistrement automatique plus haut). Couvre aussi l'édition de l'en-tête et du pied (même instance d'éditeur,
     // contenu échangé par setContent).
-    EditorCore.getEditor().on('update', markAutosaveDirty);
+    // Hors la synchro des tableaux liés (js/linked-table.js:syncOpen) : un tableau qui suit son modèle n'est pas une modification de la personne, et ouvrir un document n'écrit rien.
+    EditorCore.getEditor().on('update', ({ transaction }) => { if (!LinkedTable.isSyncTransaction(transaction)) markAutosaveDirty(); });
     EditorCore.getEditor().on('update', scheduleEmailLengthGauge);
     if (templateNameInput) templateNameInput.addEventListener('input', markAutosaveDirty);
     if (pdfFilenameInput) pdfFilenameInput.addEventListener('input', markAutosaveDirty);

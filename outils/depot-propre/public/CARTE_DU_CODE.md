@@ -162,7 +162,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/grid-xlsx-import.js` | Importer un classeur `.xlsx` dans une grille. |
 | `js/table-borders.js` | La règle des bordures, écrite une fois pour l'éditeur, la Lecture, le PDF et l'Excel. |
 | `js/xlsx-number-format.js` | Le texte qu'Excel montrerait pour un format de nombre ou de date. |
-| `js/linked-table.js` | Le tableau d'un document lié à un modèle Grille : l'attribut du lien et le jeton du modèle qui le fait compter, le choix du modèle dans la liste, le repère dans la page, les règles du contenu des cases et les verrous (suivi des modifications, lecture seule), la mise à jour du tableau depuis le modèle, son envoi au modèle et l'ouverture du modèle (avec le retour au document, que `js/main.js` porte). |
+| `js/linked-table.js` | Le tableau d'un document lié à un modèle Grille : l'attribut du lien et le jeton du modèle qui le fait compter, le choix du modèle dans la liste, le repère dans la page, les règles du contenu des cases et les verrous (suivi des modifications, lecture seule), la mise à jour du tableau depuis le modèle, son envoi au modèle et l'ouverture du modèle (avec le retour au document, que `js/main.js` porte), puis le suivi du modèle par le document : la base du tableau (ce que le document et le modèle disaient à la dernière synchro), le plan qui en tire la mise à jour, l'envoi à venir ou le désaccord, la synchro à l'ouverture et à chaque relecture de l'enregistrement automatique (`followLinkedModels` de `js/main.js`) et la lecture du modèle par les sorties qui lisent les documents enregistrés. |
 
 ### Exports (16 fichiers, 6 800 lignes)
 
@@ -427,7 +427,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/grid-xlsx-import.js` | Importing an `.xlsx` workbook into a grid. |
 | `js/table-borders.js` | The border rule, written once for the editor, Reading mode, the PDF and the Excel file. |
 | `js/xlsx-number-format.js` | The text Excel would show for a number or date format. |
-| `js/linked-table.js` | A document's table linked to a Grid template: the link attribute and the template's token that makes it count, picking the template in the list, the marker in the page, the content rules for the cells and the locks (track changes, read-only), updating the table from the template, sending it to the template and opening the template (with the way back to the document, which `js/main.js` carries). |
+| `js/linked-table.js` | A document's table linked to a Grid template: the link attribute and the template's token that makes it count, picking the template in the list, the marker in the page, the content rules for the cells and the locks (track changes, read-only), updating the table from the template, sending it to the template and opening the template (with the way back to the document, which `js/main.js` carries), then the document following its template: the table's base (what the document and the template said at the last sync), the plan drawn from it (update, the coming send, or a disagreement), the sync on opening and at every read of the automatic save (`followLinkedModels` in `js/main.js`), and the reading of the template by the outputs that read saved documents. |
 
 ### Exports (16 files, 6,800 lines)
 

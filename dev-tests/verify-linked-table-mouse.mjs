@@ -283,6 +283,117 @@ async function makeModels() {
   modelsMade = true;
 }
 
+// 11) Le document suit le modèle (lot 6c-2a), à l'écran. Un document ENREGISTRÉ dont le tableau a été posé par la liste (vraie souris : numéro, jeton et base écrits) ; le modèle change ailleurs ; le document ouvert par la liste
+// montre le tableau du modèle (la ligne d'état le dit dans le coin d'état du panneau, lisible, message entier en info-bulle quand il est coupé) sans rien écrire et sans devenir « à enregistrer » (quitter ne pose aucune question) ; un
+// tableau modifié ici ET dans le modèle ne bouge pas, et la ligne d'état dit qu'il diffère.
+const FOLLOW_TEXTS = {
+  fr: {
+    pulled: name => `Tableau mis à jour depuis le modèle « ${name} ».`,
+    differs: name => `Ce tableau diffère du modèle « ${name} » : « Mettre à jour depuis le modèle » ou « Envoyer au modèle » (menu du lien).`,
+  },
+  en: {
+    pulled: name => `Table updated from the template “${name}”.`,
+    differs: name => `This table differs from the template “${name}”: “Update from the template” or “Send to the template” (link menu).`,
+  },
+};
+async function followScenario(label, lang) {
+  const texts = FOLLOW_TEXTS[lang];
+  const model = 'Grille des tarifs';
+  const nom = 'Suivi ' + label;
+  const grid2 = GRID.replace('<td><p>A1</p></td>', '<td><p>Z1</p></td>');
+  const grid3 = grid2.replace('<td><p>C3</p></td>', '<td><p>Y3</p></td>');
+  const statusNow = () => page.evaluate(() => ({ text: document.getElementById('status-msg').textContent, error: document.getElementById('status-msg').classList.contains('error-msg'), unsaved: document.getElementById('status-msg').classList.contains('is-unsaved') }));
+  const clickAt = async (selector) => {
+    const at = await centerOf(selector);
+    await page.mouse.move(at.x, at.y, { steps: 6 });
+    await page.waitForTimeout(100);
+    await page.mouse.click(at.x, at.y);
+  };
+  const cells = () => page.evaluate(() => Array.from(document.querySelectorAll('.tiptap td, .tiptap th')).map(c => c.textContent.trim()).join('|'));
+  const openSaved = (id) => page.evaluate(async ({ id, nom }) => {
+    const select = document.getElementById('template-select');
+    if (!Array.from(select.options).some(o => o.value === String(id))) { const o = document.createElement('option'); o.value = String(id); o.textContent = nom; select.appendChild(o); }
+    const realChoose = Dialogs.choose;
+    Dialogs.choose = async () => 'discard';
+    select.value = String(id);
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    await new Promise(r => setTimeout(r, 900));
+    Dialogs.choose = realChoose;
+  }, { id, nom });
+  // Quitter le document avec la vraie souris (« Nouveau ») : combien de fois l'application pose-t-elle la question « Modifications non enregistrées » ?
+  const leave = async () => {
+    await page.evaluate(() => { window.__asked = 0; window.__realChoose = Dialogs.choose; Dialogs.choose = async () => { window.__asked++; return 'discard'; }; });
+    await clickAt('#btn-new');
+    await page.waitForTimeout(600);
+    // La souris quitte le bouton : son volet (« Nouveau à partir de… ») resterait ouvert par-dessus le texte.
+    await page.mouse.move(WIDTH - 30, HEIGHT - 20, { steps: 3 });
+    await page.waitForTimeout(300);
+    return page.evaluate(() => { Dialogs.choose = window.__realChoose; return window.__asked; });
+  };
+  const corner = async () => {
+    const box = await hit('#status-msg');
+    const c = await centerOf('#status-msg');
+    await page.mouse.move(c.x, c.y, { steps: 3 });
+    await page.waitForTimeout(150);
+    const info = await page.evaluate(() => { const el = document.getElementById('status-msg'); return { cut: el.scrollWidth > el.clientWidth, title: el.title, color: getComputedStyle(el).color }; });
+    return { box, info, contrast: await contrastOf(info.color, await backgroundOf('#status-msg')) };
+  };
+
+  await page.evaluate(() => { try { localStorage.setItem('pp_autosave_enabled', 'false'); } catch (e) { /* stockage indisponible */ } });
+  await setDoc(DOC);
+  await clickInText('entier', 0.98);
+  await openPickerByMouse();
+  await clickOption(model);
+  const placed = await page.evaluate(async ({ nom }) => {
+    const attrs = LinkedTable.linkedTables(EditorCore.getEditor().state.doc).map(({ node }) => node.attrs)[0] || {};
+    const saved = await Templates.save(null, nom, Editor.getHTML(), '', null, null, 'document', null);
+    await Templates.loadAll();
+    return { id: saved.id, modelId: Number(attrs.linkedTemplate), key: !!attrs.linkedKey, base: !!attrs.linkedBase };
+  }, { nom });
+  check(`${label}, suivre le modèle : le tableau posé par la liste porte son numéro, son jeton et sa base, et le document est enregistré`, !!placed.id && placed.key && placed.base, placed);
+  const writeModel = html => page.evaluate(async ({ id, html }) => { __gristStub.remoteWrite(Templates.TABLE_NAME, id, { Contenu: html }); await Templates.loadAll(); }, { id: placed.modelId, html });
+
+  // Le modèle change pendant que le document est fermé ; la liste l'ouvre.
+  await writeModel(grid2);
+  const rowBefore = await page.evaluate(id => __gristStub.getRow(Templates.TABLE_NAME, id).Contenu, placed.id);
+  await openSaved(placed.id);
+  const followed = await statusNow();
+  const shown = await corner();
+  check(`${label}, suivre le modèle : le document ouvert montre le tableau du modèle (A1 est devenu Z1) et la ligne d'état dit « ${texts.pulled(model)} »`,
+    (await cells()).split('|')[0] === 'Z1' && followed.text === texts.pulled(model) && !followed.error && !followed.unsaved, { cells: await cells(), followed });
+  check(`${label}, suivre le modèle : la ligne d'état est dans le coin du panneau ${WIDTH}x${HEIGHT}, au premier plan, lisible (${shown.contrast.toFixed(1)}:1, au moins 4,5:1), et son message entier est en info-bulle quand il est coupé`,
+    seen(shown.box) && shown.contrast >= 4.5 && (!shown.info.cut || shown.info.title === texts.pulled(model)), shown);
+  await snap(`${label}-14-suit-le-modele`);
+  const written = await page.evaluate(id => __gristStub.getRow(Templates.TABLE_NAME, id).Contenu, placed.id);
+  const asked = await leave();
+  check(`${label}, suivre le modèle : ouvrir n'a rien écrit (la ligne du document est la même) et quitter ne pose aucune question « Modifications non enregistrées »`, written === rowBefore && asked === 0, { same: written === rowBefore, asked });
+
+  // Le tableau est modifié ici (frappe réelle, vrai bouton Enregistrer) puis le modèle change encore : les deux ont changé, rien n'est remplacé et la ligne d'état le dit.
+  await openSaved(placed.id);
+  await clickInText('B2');
+  await page.keyboard.type('zz');
+  await page.waitForTimeout(250);
+  await clickAt('#btn-save');
+  await page.waitForTimeout(900);
+  await writeModel(grid3);
+  const savedCells = await cells();
+  await leave();
+  await openSaved(placed.id);
+  const apart = await statusNow();
+  const apartCells = await cells();
+  const apartCorner = await corner();
+  check(`${label}, suivre le modèle : un tableau changé ici et dans le modèle n'est pas remplacé (la frappe reste, C3 n'est pas devenu Y3) et la ligne d'état dit « ${texts.differs(model)} »`,
+    /zz/.test(savedCells) && apartCells === savedCells && apartCells.split('|')[8] === 'C3' && apart.text === texts.differs(model) && !apart.error, { savedCells, apartCells, apart });
+  check(`${label}, suivre le modèle : cette ligne d'état (${apartCorner.contrast.toFixed(1)}:1) est lisible dans le coin du panneau, coupée avec son message entier en info-bulle`,
+    seen(apartCorner.box) && apartCorner.contrast >= 4.5 && apartCorner.info.cut && apartCorner.info.title === texts.differs(model), apartCorner);
+  await snap(`${label}-15-ecart-dit`);
+
+  // Remise en place pour la suite : le document vierge, le modèle tel qu'il était, l'enregistrement automatique rallumé.
+  await leave();
+  await writeModel(GRID);
+  await page.evaluate(async id => { await Templates.remove(id); await Templates.loadAll(); try { localStorage.removeItem('pp_autosave_enabled'); } catch (e) { /* stockage indisponible */ } }, placed.id);
+}
+
 async function run(theme) {
   const T = theme;
   await makeModels();
@@ -443,7 +554,7 @@ async function run(theme) {
 
   // 6) « Détacher » à la souris, par le menu du lien : le tableau reste, le lien part, le menu se referme, les boutons se dégrisent ; Ctrl+Z rend le lien.
   await clickInText('B2');
-  const casesBefore = (await html()).replace(/ data-linked-template="\d+"/, '').replace(/ data-linked-key="[a-z0-9]+"/, '');
+  const casesBefore = (await html()).replace(/ data-linked-template="\d+"/, '').replace(/ data-linked-key="[a-z0-9]+"/, '').replace(/ data-linked-base="[a-z0-9.]+"/, '');
   const linkBtnBox = await hit(LBTN);
   check(`${T}, Détacher : le curseur dans le tableau, le bouton du lien est dans la barre, visible et au premier plan`, seen(linkBtnBox), linkBtnBox);
   const d = await centerOf(LBTN);
@@ -776,6 +887,8 @@ async function run(theme) {
   });
   // Le document de ce passage est retiré : les passages suivants (la confirmation d'« Envoyer » compte les modèles qui posent le tableau) repartent du même état.
   await page.evaluate(async id => { await Templates.remove(id); await Templates.loadAll(); }, savedDoc.id);
+
+  await followScenario(T, 'fr');
 }
 
 async function runEnglish() {
@@ -912,6 +1025,7 @@ async function runEnglish() {
     try { localStorage.removeItem('pp_autosave_enabled'); } catch (e) { /* stockage indisponible */ }
   });
   await page.evaluate(async id => { await Templates.remove(id); await Templates.loadAll(); }, enDoc.id);
+  await followScenario('anglais', 'en');
   await page.evaluate(() => I18n.setLang('fr'));
   await page.waitForTimeout(250);
 }

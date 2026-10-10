@@ -258,8 +258,18 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   le suivi des modifications est allumé ; « Ouvrir le modèle » reste disponible. Supprimer un modèle Grille posé
   comme tableau lié dans d'autres modèles le dit dans la fenêtre de confirmation ; ces tableaux gardent leurs
   cases et perdent leur lien. La ligne du volet « Tableau » est grisée, avec sa raison en info-bulle, là où un
-  tableau lié ne se pose pas. Pour l'instant la mise à jour et l'envoi se font à la main ; la mise à jour
-  automatique dans les deux sens vient dans les versions suivantes.
+  tableau lié ne se pose pas. Le document suit son modèle : à l'ouverture d'un document, et à chaque relecture de
+  l'enregistrement automatique, un tableau lié que le modèle a changé (et que ce document n'a pas modifié depuis la
+  dernière fois) prend le tableau du modèle, cases et largeurs de colonnes, le curseur reste dans sa case, les
+  commentaires des cases dont le texte n'a pas changé restent, et la ligne d'état le dit. Rien n'est écrit dans
+  Grist, le document n'est pas marqué « à enregistrer » (le quitter ne pose aucune question) et Annuler ne rend pas
+  ce que personne n'a fait ; la Lecture d'un macro-modèle et les exports en lot montrent aussi le tableau actuel du
+  modèle. Si le tableau a été modifié dans le document ET dans le modèle, ou si l'on ne sait pas lequel des deux a
+  changé (tableau posé avant cette version) et qu'ils diffèrent, rien n'est remplacé : la ligne d'état dit que le
+  tableau diffère du modèle, et « Mettre à jour depuis le modèle » ou « Envoyer au modèle » tranchent. Rien ne bouge
+  tant que le suivi des modifications est allumé, qu'un en-tête ou un pied de page est ouvert ou qu'une saisie est en
+  cours ; si l'enregistrement automatique est coupé, le document ne suit son modèle qu'à son ouverture. L'envoi
+  automatique du document vers son modèle vient dans les versions suivantes.
 - **Marge autour de chaque page dans l'assemblage avant impression** : la fenêtre « Assemblage avant
   impression » a un champ « Marge » (en millimètres, 0 au départ, les flèches avancent de 0,5) qui laisse de la
   place autour de chaque page posée sur la feuille : la marge compte de chaque côté d'une page, donc deux
@@ -790,8 +800,19 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   (one Undo). The actions that write into the document are greyed, with their reason as a tooltip, while track
   changes is on; "Open the template" stays available. Deleting a Grid template that is placed as a linked table
   in other templates says so in the confirmation window; those tables keep their cells and lose their link. The
-  "Table" flyout row is greyed, with its reason as a tooltip, where a linked table cannot be placed. For now
-  updating and sending are done by hand; automatic updating in both directions comes in later versions.
+  "Table" flyout row is greyed, with its reason as a tooltip, where a linked table cannot be placed. The
+  document follows its template: when a document opens, and at every read of the automatic save, a linked table
+  that the template has changed (and that this document has not changed since the last time) takes the
+  template's table, cells and column widths, the cursor stays in its cell, the comments of the cells whose text
+  has not changed stay, and the status line says so. Nothing is written to Grist, the document is not marked
+  "unsaved" (leaving it asks no question) and Undo does not give back what nobody did; a macro template's
+  reading and the batch exports also show the template's current table. If the table was changed in the
+  document AND in the template, or if it is not known which of the two changed (a table placed before this
+  version) and they differ, nothing is replaced: the status line says the table differs from the template, and
+  "Update from the template" or "Send to the template" settle it. Nothing moves while track changes is on, while
+  a header or footer is open or while text is being composed; if the automatic save is switched off, the
+  document follows its template only when it opens. The automatic sending from the document to its template
+  comes in later versions.
 - **Margin around each page in sheet assembly**: the "Assemble before printing" window has a "Margin" field (in
   millimetres, 0 to start with, the arrows step by 0.5) that leaves room around each page laid on the
   sheet: the margin sits on every side of a page, so it counts twice between two pages and once at the edge

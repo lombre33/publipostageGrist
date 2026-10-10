@@ -54,6 +54,9 @@
     try { await Templates.loadAll(); } catch (e) { /* le cache d'avant sert */ }
   }
   async function withDoc(h, html, body) {
+    // Aucun passage de l'enregistrement automatique pendant le cas : depuis le lot 6c-2a il relit les modèles et fait suivre les tableaux liés du document, ce qui changerait le document sous
+    // les pieds d'un cas qui le prépare (ceux de withApp, eux, le veulent).
+    setAutosave(false);
     await h.resetEditor();
     Editor.setHTML(html);
     await sleep(200);
@@ -65,6 +68,7 @@
       closePicker();
       if (GridEditor.isActive()) GridEditor.setActive(false);
       await dropModels();
+      setAutosave(true);
       await sleep(30);
     }
   }
@@ -1101,7 +1105,7 @@
 
   cases.push({
     id: 'linked_pull_of_an_identical_table_changes_nothing_and_keeps_its_comments',
-    description: 'Un tableau déjà identique à celui du modèle n\'est pas touché : aucune transaction (le document est le même objet), la marque de commentaire d\'une case reste, la ligne d\'état dit qu\'il est identique ; remplacer les cases la ferait disparaître',
+    description: 'Un tableau déjà identique à celui du modèle n\'est pas touché : ses cases ne changent pas (seule sa base s\'écrit : il est à jour), la marque de commentaire d\'une case reste, la ligne d\'état dit qu\'il est identique ; remplacer les cases la ferait disparaître',
     run: async (h) => withDoc(h, DOC, async () => {
       const bad = [];
       const m = await model('Identique', gridHtml('I', 2, 2));
@@ -1115,7 +1119,8 @@
       const done = await LinkedTable.pull(ed());
       await sleep(80);
       if (done !== true) bad.push('pull() a répondu ' + done);
-      if (doc() !== before && !doc().eq(before)) bad.push('le document a changé alors que le tableau est identique');
+      if (stripBase(JSON.stringify(doc().toJSON())) !== stripBase(JSON.stringify(before.toJSON()))) bad.push('le document a changé alors que le tableau est identique');
+      if (!BASE_FORM.test(String(tableAttrs().linkedBase)) || planNow() !== 'none') bad.push('la base n\'est pas posée : ' + tableAttrs().linkedBase + ' ' + planNow());
       if (Editor.getHTML().indexOf('comment-mark') === -1) bad.push('la marque de commentaire a disparu');
       const line = statusLine();
       if (line.text !== I18n.t('linkedTable.upToDate', { name: m.nom }) || line.error) bad.push('ligne d\'état : ' + JSON.stringify(line));
@@ -1154,7 +1159,7 @@
 
   cases.push({
     id: 'linked_push_writes_the_table_into_the_model_alone_without_link_or_comments_after_asking',
-    description: '« Envoyer au modèle » : après une confirmation (le titre dit le nom du modèle, le bouton « Envoyer »), le tableau du document est écrit dans le modèle par UNE écriture qui ne touche que Contenu et DateModif (le nom, le nom du fichier PDF, le type, l\'en-tête, les marges restent) ; le HTML écrit n\'a ni le numéro du lien ni les marques de commentaire ; le cache du widget a le nouveau contenu ; le document ne bouge pas ; la ligne d\'état le dit',
+    description: '« Envoyer au modèle » : après une confirmation (le titre dit le nom du modèle, le bouton « Envoyer »), le tableau du document est écrit dans le modèle par UNE écriture qui ne touche que Contenu et DateModif (le nom, le nom du fichier PDF, le type, l\'en-tête, les marges restent) ; le HTML écrit n\'a ni le numéro du lien ni les marques de commentaire ; le cache du widget a le nouveau contenu ; les cases du document ne bougent pas (sa base suit l\'envoi : plus rien à envoyer) ; la ligne d\'état le dit',
     run: async (h) => withDoc(h, DOC, async () => {
       const bad = [];
       const m = await modelWithFile('Envoi', gridHtml('G', 2, 2), 'mon-fichier');
@@ -1186,7 +1191,8 @@
       if (/data-linked-template/.test(after.Contenu) || /comment-mark|data-comment-id/.test(after.Contenu)) bad.push('le lien ou les commentaires sont partis dans le modèle');
       if (after.Contenu.indexOf('XGA1') === -1 || after.Contenu.indexOf('GB2') === -1 || !/^<table[ >]/.test(after.Contenu) || /<\/table><p>/.test(after.Contenu)) bad.push('contenu écrit : ' + after.Contenu.slice(0, 200));
       if (Templates.byId(m.id).contenu !== after.Contenu) bad.push('le cache n\'a pas le nouveau contenu');
-      if (docJson() !== reference) bad.push('le document a bougé');
+      if (stripBase(docJson()) !== stripBase(reference)) bad.push('le document a bougé');
+      if (!BASE_FORM.test(String(tableAttrs().linkedBase)) || planNow() !== 'none') bad.push('la base ne suit pas l\'envoi : ' + tableAttrs().linkedBase + ' ' + planNow());
       const line = statusLine();
       if (line.text !== I18n.t('linkedTable.pushed', { name: m.nom }) || line.error) bad.push('ligne d\'état : ' + JSON.stringify(line));
       return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
@@ -1235,7 +1241,9 @@
         I18n.setLang('en'); await sleep(60);
         await ask(2, 'deux autres modèles, en anglais');
         if (!/2 other templates/.test(asked[asked.length - 1].message)) bad.push('anglais : ' + asked[asked.length - 1].message);
+        if (I18n.t('linkedTable.pushOthers', { n: 2 }) !== 'It is also placed in 2 other templates, which will get it when opened or with “Update from the template”.') bad.push('phrase anglaise : ' + I18n.t('linkedTable.pushOthers', { n: 2 }));
         I18n.setLang('fr'); await sleep(60);
+        if (I18n.t('linkedTable.pushOthers', { n: 2 }) !== 'Il est aussi posé dans 2 autres modèles, qui le recevront à leur ouverture ou avec « Mettre à jour depuis le modèle ».') bad.push('phrase française : ' + I18n.t('linkedTable.pushOthers', { n: 2 }));
         if (!/2 autres modèles/.test(messageFor(2))) bad.push('français : ' + messageFor(2));
         if (!/ 1 autre modèle,/.test(' ' + I18n.t('linkedTable.pushOthers', { n: 1 }))) bad.push('singulier : ' + I18n.t('linkedTable.pushOthers', { n: 1 }));
       } finally { Templates.setCurrentId(null); I18n.setLang(lang); await sleep(60); }
@@ -1305,7 +1313,8 @@
       stub().clearActionLog();
       say('');
       const pulled = await LinkedTable.pull(ed());
-      if (pulled !== true || (doc() !== before && !doc().eq(before)) || docJson() !== rich) bad.push('le tableau n\'est pas relu à l\'identique : ' + pulled);
+      if (pulled !== true || (doc() !== before && !doc().eq(before)) || stripBase(docJson()) !== stripBase(rich)) bad.push('le tableau n\'est pas relu à l\'identique : ' + pulled);
+      if (planNow() !== 'none') bad.push('plan après l\'envoi puis la mise à jour : ' + planNow());
       const line = statusLine();
       if (line.text !== I18n.t('linkedTable.upToDate', { name: m.nom })) bad.push('ligne d\'état : ' + JSON.stringify(line));
       return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
@@ -1645,7 +1654,7 @@
 
   cases.push({
     id: 'linked_return_says_when_the_table_differs_from_the_model_and_replaces_nothing',
-    description: 'Une grille modifiée puis enregistrée au retour (« Enregistrer ») : le document revient avec son tableau tel qu\'il était (rien ne se remplace tout seul), le curseur dans la même case, et la ligne d\'état dit que le tableau diffère du modèle, avec le nom du modèle, dans la langue de l\'interface',
+    description: 'Une grille modifiée puis enregistrée au retour (« Enregistrer ») : le document, dont le tableau a été posé sans base (avant le lot 6c-2a), revient avec son tableau tel qu\'il était (rien ne se remplace faute de savoir lequel des deux a changé), le curseur dans la même case, et la ligne d\'état dit que le tableau diffère du modèle, avec le nom du modèle et les deux actions du menu du lien, dans la langue de l\'interface',
     run: async (h) => withApp(h, async () => h.withRealChoose(async () => {
       setAutosave(false);
       const bad = [];
@@ -1664,7 +1673,7 @@
       if (!String(rowOf(m.id).Contenu).includes('!')) bad.push('le modèle n\'a pas reçu la frappe');
       if (textsOf(tablesOf()[0].node) !== was) bad.push('le tableau du document a été remplacé : ' + textsOf(tablesOf()[0].node));
       const line = statusLine();
-      if (line.text !== 'Ce tableau diffère du modèle « ' + m.nom + ' » : « Mettre à jour depuis le modèle » (menu du lien).' || line.error) bad.push('ligne d\'état : ' + JSON.stringify(line));
+      if (line.text !== 'Ce tableau diffère du modèle « ' + m.nom + ' » : « Mettre à jour depuis le modèle » ou « Envoyer au modèle » (menu du lien).' || line.error) bad.push('ligne d\'état : ' + JSON.stringify(line));
       if (JSON.stringify(cursorCell()) !== '[0,1]') bad.push('curseur : ' + JSON.stringify(cursorCell()));
       // Le même retour en anglais.
       const lang = I18n.getLang();
@@ -1674,7 +1683,7 @@
         else {
           document.getElementById('btn-linked-return').click();
           await sleep(900);
-          if (statusLine().text !== 'This table differs from the template “' + m.nom + '”: “Update from the template” (link menu).') bad.push('anglais : ' + statusLine().text);
+          if (statusLine().text !== 'This table differs from the template “' + m.nom + '”: “Update from the template” or “Send to the template” (link menu).') bad.push('anglais : ' + statusLine().text);
         }
       } finally { I18n.setLang(lang); await sleep(80); }
       // Le tableau remis d'accord (« Mettre à jour ») : plus d'écart au prochain retour.
@@ -2458,6 +2467,898 @@
       const asked = answerWith(false);
       await LinkedTable.push(ed());
       if (asked.length !== 1 || !/3 autres modèles/.test(asked[0].message)) bad.push('confirmation : ' + JSON.stringify(asked.map(a => a.message)));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  // === 11) Le document suit le modèle (lot 6c-2a) ======================================================================================================================
+  // Un tableau posé par la liste porte sa base (`data-linked-base`) : deux empreintes prises à la dernière synchro. À l'ouverture du document et à chaque lecture de l'enregistrement automatique,
+  // chaque tableau à jeton est comparé à sa base et à son modèle (LinkedTable.planOf, syncOpen) : le modèle a changé et pas le tableau, il prend celui du modèle ; le tableau a changé et pas le
+  // modèle, rien ne part (le lot 6c-2b l'enverra) ; les deux ont changé, ou la base manque et ils diffèrent, rien ne bouge et la ligne d'état le dit. Les premiers cas appellent la synchro à la main
+  // (syncOpen, syncOnLoad) ; les suivants passent par l'application : un document enregistré ouvert par la liste, les vrais minuteurs de l'enregistrement automatique, la Lecture d'un macro-modèle,
+  // l'export en lot.
+  const BASE_ATTR = 'data-linked-base';
+  const BASE_FORM = /^[a-z0-9]{11}\.[a-z0-9]{11}$/;
+  const stripBase = text => text.replace(/"linkedBase":"[^"]*"/g, '"linkedBase":null').replace(/ data-linked-base="[^"]*"/g, '');
+  const tableAttrs = (t = 0) => tablesOf()[t].node.attrs;
+  // Ce que la synchro ferait du tableau de rang `t`, d'après son modèle.
+  const planNow = (t = 0) => {
+    const node = tablesOf()[t].node;
+    const owner = LinkedTable.modelFor(node);
+    return owner ? LinkedTable.planOf(ed(), node, owner).action : 'mort';
+  };
+  // Un tableau posé comme la personne le pose (LinkedTable.insert : numéro, jeton et base écrits), à la fin de « avant ».
+  async function placed(m) {
+    await cursorAt('avant');
+    ed().commands.setTextSelection(ed().state.selection.from + 4);
+    LinkedTable.insert(ed(), m);
+    await sleep(150);
+  }
+  // Le modèle change ailleurs (une autre personne l'enregistre) et le cache des modèles le relit, comme un passage de l'enregistrement automatique.
+  async function modelBecomes(m, html) {
+    stub().remoteWrite(Templates.TABLE_NAME, m.id, { Contenu: html });
+    await Templates.loadAll();
+  }
+  // Les largeurs de colonnes que la page pose d'elle-même (js/editor.js:clampOverflowingTables) : toutes les cases du tableau de rang `t` à `px`, hors de l'historique.
+  function setWidths(t, px) {
+    const { node, pos } = tablesOf()[t];
+    const tr = ed().state.tr;
+    node.forEach((row, rowOffset) => row.forEach((cell, cellOffset) => { tr.setNodeMarkup(pos + 2 + rowOffset + cellOffset, undefined, Object.assign({}, cell.attrs, { colwidth: px == null ? null : [px] })); }));
+    ed().view.dispatch(tr.setMeta('addToHistory', false));
+  }
+  const widthsOf = (t = 0) => { const out = []; tablesOf()[t].node.descendants(n => { if (n.type.name === 'tableCell' || n.type.name === 'tableHeader') out.push(n.attrs.colwidth ? n.attrs.colwidth.join('+') : '-'); return true; }); return out.join(','); };
+  const withWidths = (html, px) => html.replace(/<td>/g, `<td colwidth="${px}">`);
+  const NAMES_OF = done => (done ? done.pulled.join() : 'null');
+
+  cases.push({
+    id: 'linked_base_is_stamped_with_the_table_round_trips_and_never_stands_alone',
+    description: 'Le tableau posé par la liste porte sa base (`data-linked-base` : deux empreintes de 11 lettres et chiffres séparées par un point) à côté de son numéro et de son jeton ; relue depuis le HTML enregistré, réécrite telle quelle ; une base mal formée, ou sans numéro de modèle ni jeton, ne reste pas (le lien, lui, reste) ; un tableau sans lien n\'en écrit pas ; un nœud qui perd son numéro, son jeton ou dont la base n\'est plus bien formée ne l\'écrit plus non plus',
+    run: async (h) => withDoc(h, DOC, async () => {
+      const bad = [];
+      const m = await model('Base', gridHtml('B', 2, 2));
+      await placed(m);
+      const base = tableAttrs().linkedBase;
+      if (!BASE_FORM.test(String(base))) bad.push('base posée : ' + base);
+      const html = Editor.getHTML();
+      const written = html.match(/data-linked-base="[^"]*"/g) || [];
+      if (written.length !== 1 || written[0] !== `${BASE_ATTR}="${base}"`) bad.push('HTML : ' + JSON.stringify(written));
+      Editor.setHTML(html);
+      await sleep(150);
+      if (tableAttrs().linkedBase !== base || Editor.getHTML() !== html) bad.push('aller-retour : ' + tableAttrs().linkedBase);
+      for (const value of ['', 'abc', 'ABCDEFGHIJK.ABCDEFGHIJK', 'abcdefg.abcdefgh', 'abcdefgh.abcdefghijklm', 'abcdefgh.abcdefgh.abcdefgh', 'abcdefgh abcdefgh', 'abcdefgh-abcdefgh', '<b>x</b>.abcdefgh']) {
+        Editor.setHTML('<p>x</p>' + linkedHtml(m.id, 'A', 1, 1).replace('<table ', `<table ${BASE_ATTR}="${value}" `));
+        await sleep(80);
+        const attrs = tableAttrs();
+        if (attrs.linkedBase || attrs.linkedTemplate !== m.id || attrs.linkedKey !== tokens.get(m.id) || /data-linked-base/.test(Editor.getHTML())) bad.push('« ' + value + ' » : ' + JSON.stringify(attrs));
+      }
+      Editor.setHTML('<p>x</p>' + gridHtml('A', 1, 1).replace('<table>', `<table ${BASE_ATTR}="${base}">`));
+      await sleep(80);
+      if (tableAttrs().linkedBase || /data-linked-base/.test(Editor.getHTML())) bad.push('une base sans lien est gardée');
+      Editor.setHTML('<p>x</p>' + legacyHtml(m.id, 'A', 1, 1).replace('<table ', `<table ${BASE_ATTR}="${base}" `));
+      await sleep(80);
+      if (tableAttrs().linkedBase || tableAttrs().linkedTemplate !== m.id || /data-linked-base/.test(Editor.getHTML())) bad.push('une base sans jeton est gardée : ' + JSON.stringify(tableAttrs()));
+      // Le rendu a sa propre garde : un nœud qui a perdu son numéro, son jeton ou dont la base n'est plus bien formée n'écrit pas la base.
+      for (const [label, patch] of [['sans numéro', { linkedTemplate: null }], ['sans jeton', { linkedKey: null }], ['mal formée', { linkedBase: 'zz' }]]) {
+        Editor.setHTML(html);
+        await sleep(80);
+        const { node, pos } = tablesOf()[0];
+        ed().view.dispatch(ed().state.tr.setNodeMarkup(pos, undefined, Object.assign({}, node.attrs, patch)).setMeta('addToHistory', false));
+        if (/data-linked-base/.test(Editor.getHTML())) bad.push('rendu d\'une base ' + label + ' : ' + Editor.getHTML().slice(0, 140));
+      }
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_sync_takes_a_changed_model_into_an_untouched_table_cursor_kept_nothing_written_out_of_history',
+    description: 'Le modèle a changé ailleurs et pas le tableau du document : la synchro le remplace par celui du modèle (ses cases, son numéro, son jeton, sa base refaite), le curseur reste dans la même case, la ligne d\'état dit « Tableau mis à jour depuis le modèle… », rien n\'est écrit dans Grist, et la mise à jour n\'entre pas dans l\'historique (un seul Annuler retire le tableau posé, il ne rend pas l\'ancien contenu)',
+    run: async (h) => withDoc(h, DOC, async () => {
+      const bad = [];
+      const before = docJson();
+      const m = await model('Suit', gridHtml('S', 3, 2));
+      await placed(m);
+      const baseBefore = tableAttrs().linkedBase;
+      await cursorIn(0, 1, 1);
+      await sleep(GROUP_GAP_MS);
+      await modelBecomes(m, gridHtml('N', 3, 2));
+      if (planNow() !== 'pull') bad.push('plan avant : ' + planNow());
+      stub().clearActionLog();
+      say('');
+      const done = LinkedTable.syncOpen(ed());
+      await sleep(150);
+      if (NAMES_OF(done) !== m.nom || done.differs.length || done.rebased) bad.push('synchro : ' + JSON.stringify(done));
+      if (textsOf(tablesOf()[0].node) !== labels('N', 3, 2)) bad.push('cases : ' + textsOf(tablesOf()[0].node));
+      if (JSON.stringify(cursorCell()) !== '[1,1]') bad.push('curseur : ' + JSON.stringify(cursorCell()));
+      const attrs = tableAttrs();
+      if (attrs.linkedTemplate !== m.id || attrs.linkedKey !== tokens.get(m.id) || !BASE_FORM.test(String(attrs.linkedBase)) || attrs.linkedBase === baseBefore) bad.push('attributs : ' + JSON.stringify(attrs));
+      if (planNow() !== 'none') bad.push('plan après : ' + planNow());
+      const line = statusLine();
+      if (line.text !== I18n.t('linkedTable.pulled', { name: m.nom }) || line.error) bad.push('ligne d\'état : ' + JSON.stringify(line));
+      if (stub().getActionLog().length) bad.push('une écriture est partie : ' + JSON.stringify(stub().getActionLog()));
+      const again = LinkedTable.syncOpen(ed());
+      if (!again || again.pulled.length || again.rebased || again.differs.length) bad.push('seconde synchro : ' + JSON.stringify(again));
+      await undo();
+      if (docJson() !== before) bad.push('un Annuler ne retire pas le tableau posé : ' + linkedIds().join() + ' ' + textsOf(tablesOf()[0] ? tablesOf()[0].node : doc()));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_sync_never_overwrites_a_table_the_document_changed_says_so_once_and_follows_again_when_it_is_back',
+    description: 'Le tableau du document a changé et pas le modèle : rien ne bouge, rien n\'est dit (le lot suivant l\'enverra). Les deux ont changé : rien n\'est remplacé et la ligne d\'état dit « diffère du modèle » une fois par désaccord (pas à chaque passage, pas à chaque frappe qui continue dans le tableau, de nouveau à l\'ouverture d\'un document). La frappe annulée, le tableau est redevenu celui de sa base : il suit le modèle',
+    run: async (h) => withDoc(h, DOC, async () => {
+      const bad = [];
+      const m = await model('Garde', gridHtml('P', 2, 2));
+      await placed(m);
+      await cursorIn(0, 0, 0);
+      await sleep(GROUP_GAP_MS);
+      ed().chain().focus().insertContent('X').run();
+      await sleep(100);
+      const typed = textsOf(tablesOf()[0].node);
+      if (typed !== 'XPA1|PB1|PA2|PB2') bad.push('frappe : ' + typed);
+      say('');
+      if (planNow() !== 'push') bad.push('plan (document changé) : ' + planNow());
+      const quiet = LinkedTable.syncOpen(ed());
+      await sleep(100);
+      if (!quiet || quiet.pulled.length || quiet.differs.length || quiet.rebased || textsOf(tablesOf()[0].node) !== typed || statusLine().text !== '') bad.push('document changé seul : ' + JSON.stringify(quiet) + ' ' + JSON.stringify(statusLine()));
+      await modelBecomes(m, gridHtml('N', 2, 2));
+      if (planNow() !== 'differs') bad.push('plan (les deux ont changé) : ' + planNow());
+      say('');
+      const first = LinkedTable.syncOpen(ed());
+      await sleep(100);
+      const said = statusLine();
+      if (!first || first.differs.join() !== m.nom || first.pulled.length || textsOf(tablesOf()[0].node) !== typed) bad.push('désaccord : ' + JSON.stringify(first) + ' ' + textsOf(tablesOf()[0].node));
+      if (said.text !== I18n.t('linkedTable.differs', { name: m.nom }) || said.error) bad.push('ligne d\'état : ' + JSON.stringify(said));
+      say('');
+      const second = LinkedTable.syncOpen(ed());
+      if (!second || second.differs.length || statusLine().text !== '') bad.push('le désaccord est redit à chaque passage : ' + JSON.stringify(second) + ' ' + statusLine().text);
+      const reopened = LinkedTable.syncOnLoad(ed());
+      if (!reopened || reopened.differs.join() !== m.nom || statusLine().text !== I18n.t('linkedTable.differs', { name: m.nom })) bad.push('à l\'ouverture : ' + JSON.stringify(reopened) + ' ' + statusLine().text);
+      await sleep(GROUP_GAP_MS);
+      await undo();
+      if (textsOf(tablesOf()[0].node) !== labels('P', 2, 2)) bad.push('Annuler : ' + textsOf(tablesOf()[0].node));
+      if (planNow() !== 'pull') bad.push('plan (frappe annulée) : ' + planNow());
+      const back = LinkedTable.syncOpen(ed());
+      await sleep(100);
+      if (NAMES_OF(back) !== m.nom || textsOf(tablesOf()[0].node) !== labels('N', 2, 2)) bad.push('le tableau ne suit pas le modèle : ' + JSON.stringify(back) + ' ' + textsOf(tablesOf()[0].node));
+      // Un nouveau désaccord (une frappe, puis le modèle change encore) est dit une fois ; la frappe qui continue dans le tableau ne le redit pas.
+      await cursorIn(0, 0, 0);
+      await sleep(GROUP_GAP_MS);
+      ed().chain().focus().insertContent('Z').run();
+      await sleep(100);
+      await modelBecomes(m, gridHtml('M', 2, 2));
+      say('');
+      const again = LinkedTable.syncOpen(ed());
+      if (!again || again.differs.join() !== m.nom || statusLine().text !== I18n.t('linkedTable.differs', { name: m.nom })) bad.push('le nouveau désaccord n\'est pas dit : ' + JSON.stringify(again) + ' ' + statusLine().text);
+      ed().chain().focus().insertContent('W').run();
+      await sleep(100);
+      say('');
+      const typing = LinkedTable.syncOpen(ed());
+      if (!typing || typing.differs.length || statusLine().text !== '') bad.push('le désaccord est redit à chaque frappe : ' + JSON.stringify(typing) + ' ' + statusLine().text);
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_sync_adopts_a_table_without_base_when_it_says_the_same_and_leaves_it_alone_when_it_differs',
+    description: 'Un tableau à jeton sans base (posé au lot 6c-1, ou collé) : identique au modèle, seule sa base s\'écrit (ses cases ne bougent pas, rien n\'est dit) puis il suit le modèle ; différent, il n\'est jamais remplacé (« diffère du modèle » sur la ligne d\'état). Un lien d\'avant le jeton, un lien mort et un tableau dont le jeton n\'est pas celui du modèle sont laissés tels quels, sans rien dire',
+    run: async (h) => withDoc(h, DOC, async () => {
+      const bad = [];
+      const m = await model('Adopte', gridHtml('L', 2, 2));
+      Editor.setHTML(linkedDoc(m.id, 'L', 2, 2));
+      await sleep(200);
+      if (planNow() !== 'rebase') bad.push('plan (identique, sans base) : ' + planNow());
+      const was = docJson();
+      say('');
+      const adopted = LinkedTable.syncOpen(ed());
+      await sleep(100);
+      if (!adopted || adopted.rebased !== 1 || adopted.pulled.length || adopted.differs.length) bad.push('adoption : ' + JSON.stringify(adopted));
+      if (stripBase(docJson()) !== stripBase(was) || !BASE_FORM.test(String(tableAttrs().linkedBase)) || statusLine().text !== '') bad.push('adoption : ' + JSON.stringify({ cells: stripBase(docJson()) === stripBase(was), base: tableAttrs().linkedBase, status: statusLine().text }));
+      if (planNow() !== 'none') bad.push('plan (adopté) : ' + planNow());
+      await modelBecomes(m, gridHtml('M', 2, 2));
+      const followed = LinkedTable.syncOpen(ed());
+      await sleep(100);
+      if (NAMES_OF(followed) !== m.nom || textsOf(tablesOf()[0].node) !== labels('M', 2, 2)) bad.push('suivi après adoption : ' + JSON.stringify(followed));
+      // Différent et sans base : jamais remplacé.
+      Editor.setHTML(linkedDoc(m.id, 'D', 2, 2));
+      await sleep(200);
+      const keep = docJson();
+      say('');
+      const apart = LinkedTable.syncOpen(ed());
+      await sleep(100);
+      if (planNow() !== 'differs' || !apart || apart.differs.join() !== m.nom || docJson() !== keep || statusLine().text !== I18n.t('linkedTable.differs', { name: m.nom })) bad.push('différent sans base : ' + planNow() + ' ' + JSON.stringify(apart) + ' ' + statusLine().text);
+      // Lien d'avant le jeton : à la main seulement.
+      Editor.setHTML('<p>avant</p>' + legacyHtml(m.id, 'D', 2, 2));
+      await sleep(200);
+      const legacyDoc = docJson();
+      say('');
+      const legacy = LinkedTable.syncOpen(ed());
+      if (legacy !== null || docJson() !== legacyDoc || statusLine().text !== '' || planNow() !== 'manual') bad.push('lien d\'avant le jeton : ' + JSON.stringify(legacy) + ' ' + planNow());
+      // Lien mort, jeton d'un autre modèle.
+      const o = await model('Autre', gridHtml('O', 2, 2));
+      Editor.setHTML('<p>avant</p>' + linkedHtml(98765, 'D', 2, 2) + gridHtml('Z', 1, 1).replace('<table>', `<table ${ATTR}="${m.id}" ${KEY_ATTR}="${tokens.get(o.id)}">`));
+      await sleep(200);
+      const deadDoc = docJson();
+      const dead = LinkedTable.syncOpen(ed());
+      if (dead !== null || docJson() !== deadDoc || statusLine().text !== '') bad.push('lien mort ou jeton étranger : ' + JSON.stringify(dead));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_sync_ignores_the_column_widths_the_page_sets_and_brings_the_ones_the_model_changes',
+    description: 'La page fige et rogne les largeurs de colonnes d\'un tableau (ce n\'est pas la personne) : ces largeurs ne comptent pas comme un changement du document (le tableau suit le modèle et n\'est pas « à envoyer »), et un modèle qui ne change que de largeurs les fait arriver. Un tableau dont le seul écart avec le modèle est une largeur ne diffère de rien (rien n\'est remplacé, rien n\'est dit, et au retour du modèle il n\'est pas dit « diffère »)',
+    run: async (h) => withDoc(h, DOC, async () => {
+      const bad = [];
+      const m = await model('Largeurs', gridHtml('W', 2, 2));
+      await placed(m);
+      setWidths(0, 120);
+      await sleep(100);
+      if (widthsOf() !== '120,120,120,120') bad.push('largeurs posées : ' + widthsOf());
+      if (planNow() !== 'none') bad.push('plan (largeurs de la page) : ' + planNow());
+      // Au retour du modèle, un tableau dont le seul écart est une largeur de la page ne « diffère » pas du modèle.
+      const shown = LinkedTable.reveal(ed(), m.id, { row: 0, col: 0 });
+      if (!shown || shown.differs !== false) bad.push('retour du modèle, largeurs de la page : ' + JSON.stringify(shown));
+      say('');
+      const quiet = LinkedTable.syncOpen(ed());
+      if (!quiet || quiet.pulled.length || quiet.rebased || quiet.differs.length || widthsOf() !== '120,120,120,120' || statusLine().text !== '') bad.push('largeurs seules : ' + JSON.stringify(quiet) + ' ' + widthsOf());
+      // Le contenu du modèle change : le tableau le suit malgré ses largeurs (qui sont celles du modèle ensuite).
+      await modelBecomes(m, gridHtml('V', 2, 2));
+      if (planNow() !== 'pull') bad.push('plan (modèle changé, largeurs de la page) : ' + planNow());
+      const followed = LinkedTable.syncOpen(ed());
+      await sleep(100);
+      if (NAMES_OF(followed) !== m.nom || textsOf(tablesOf()[0].node) !== labels('V', 2, 2)) bad.push('suivi : ' + JSON.stringify(followed));
+      // Le modèle ne change que de largeurs : elles arrivent.
+      await modelBecomes(m, withWidths(gridHtml('V', 2, 2), 150));
+      say('');
+      const widened = LinkedTable.syncOpen(ed());
+      await sleep(100);
+      if (NAMES_OF(widened) !== m.nom || widthsOf() !== '150,150,150,150' || textsOf(tablesOf()[0].node) !== labels('V', 2, 2)) bad.push('largeurs du modèle : ' + JSON.stringify(widened) + ' ' + widthsOf());
+      if (planNow() !== 'none') bad.push('plan (après) : ' + planNow());
+      // Les largeurs du document changent encore (la page) : rien ne part, rien ne se remplace.
+      setWidths(0, 90);
+      await sleep(100);
+      say('');
+      const again = LinkedTable.syncOpen(ed());
+      if (!again || again.pulled.length || again.rebased || widthsOf() !== '90,90,90,90' || planNow() !== 'none') bad.push('largeurs de la page après coup : ' + JSON.stringify(again) + ' ' + widthsOf() + ' ' + planNow());
+      // Un tableau sans base dont le seul écart est une largeur : identique, sa base s'écrit.
+      Editor.setHTML(linkedDoc(m.id, 'V', 2, 2));
+      await sleep(200);
+      if (planNow() !== 'rebase') bad.push('plan (écart de largeur, sans base) : ' + planNow());
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_sync_only_rewrites_the_base_when_the_table_already_says_what_the_model_says_or_the_model_has_no_table',
+    description: 'Le modèle a changé mais le tableau dit déjà la même chose : seule la base s\'écrit, aucun remplacement, aucun message « mis à jour ». (a) Le document n\'a pas bougé et le modèle ne change que des largeurs que le tableau a déjà ; (b) la personne a tapé exactement ce que le modèle dit ensuite, avec d\'autres largeurs : ses largeurs restent ; (c) un modèle qui n\'a plus de tableau ne fait rien dire (rien à suivre, pas de désaccord)',
+    run: async (h) => withDoc(h, DOC, async () => {
+      const bad = [];
+      const m = await model('Déjà dit', gridHtml('W', 2, 2));
+      await placed(m);
+      // (a) Les largeurs que la page a posées sont aussi celles que le modèle reçoit.
+      setWidths(0, 100);
+      await sleep(100);
+      await modelBecomes(m, withWidths(gridHtml('W', 2, 2), 100));
+      if (planNow() !== 'rebase') bad.push('plan (a) : ' + planNow());
+      say('');
+      const a = LinkedTable.syncOpen(ed());
+      await sleep(100);
+      if (!a || a.pulled.length || a.rebased !== 1 || a.differs.length || statusLine().text !== '' || textsOf(tablesOf()[0].node) !== labels('W', 2, 2) || widthsOf() !== '100,100,100,100' || planNow() !== 'none') bad.push('(a) : ' + JSON.stringify(a) + ' « ' + statusLine().text + ' » ' + widthsOf() + ' ' + planNow());
+      // (b) La personne tape ce que le modèle va dire, le modèle le dit (avec des largeurs de lui) : le tableau garde ses largeurs.
+      await cursorIn(0, 0, 0);
+      await sleep(GROUP_GAP_MS);
+      ed().chain().focus().insertContent('X').run();
+      await sleep(100);
+      await modelBecomes(m, withWidths(gridHtml('W', 2, 2).replace('WA1', 'XWA1'), 120));
+      if (planNow() !== 'rebase') bad.push('plan (b) : ' + planNow());
+      say('');
+      const b = LinkedTable.syncOpen(ed());
+      await sleep(100);
+      if (!b || b.pulled.length || b.rebased !== 1 || b.differs.length || statusLine().text !== '' || textsOf(tablesOf()[0].node).split('|')[0] !== 'XWA1' || widthsOf() !== '100,100,100,100' || planNow() !== 'none') bad.push('(b) : ' + JSON.stringify(b) + ' « ' + statusLine().text + ' » ' + widthsOf() + ' ' + planNow());
+      // (c) Le modèle n'a plus de tableau : rien à suivre, rien n'est dit.
+      await modelBecomes(m, '<p>plus de tableau</p>');
+      if (planNow() !== 'none') bad.push('plan (c) : ' + planNow());
+      say('');
+      const c = LinkedTable.syncOpen(ed());
+      await sleep(100);
+      if (!c || c.pulled.length || c.rebased || c.differs.length || statusLine().text !== '' || textsOf(tablesOf()[0].node).split('|')[0] !== 'XWA1') bad.push('(c) : ' + JSON.stringify(c) + ' « ' + statusLine().text + ' »');
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_sync_follows_several_tables_in_one_pass_and_says_how_many',
+    description: 'Deux tableaux liés à deux modèles qui ont changé (le premier a grandi) : une seule passe les remplace tous les deux, chacun par le sien, sans que le premier déplace le second ; la ligne d\'état dit leur nombre (« 2 tableaux mis à jour depuis leur modèle. », en anglais « 2 tables updated from their templates. ») ; le curseur reste dans la case du second',
+    run: async (h) => withDoc(h, DOC, async () => {
+      const bad = [];
+      const a = await model('Premier', gridHtml('P', 2, 2));
+      const b = await model('Second', gridHtml('S', 2, 2));
+      Editor.setHTML('<p>avant</p>' + linkedHtml(a.id, 'P', 2, 2) + '<p>entre</p>' + linkedHtml(b.id, 'S', 2, 2) + '<p>après</p>');
+      await sleep(200);
+      const first = LinkedTable.syncOpen(ed());
+      await sleep(80);
+      if (!first || first.rebased !== 2 || planNow(0) !== 'none' || planNow(1) !== 'none') bad.push('bases posées : ' + JSON.stringify(first) + ' ' + planNow(0) + ' ' + planNow(1));
+      await modelBecomes(a, gridHtml('P', 3, 3).replace(/P/g, 'Q'));
+      await modelBecomes(b, gridHtml('T', 2, 2));
+      await cursorIn(1, 0, 1);
+      say('');
+      const done = LinkedTable.syncOpen(ed());
+      await sleep(100);
+      const texts = tablesOf().map(t => textsOf(t.node));
+      if (!done || done.pulled.join() !== a.nom + ',' + b.nom || texts.length !== 2 || texts[0] !== labels('Q', 3, 3) || texts[1] !== labels('T', 2, 2)) bad.push('deux tableaux : ' + JSON.stringify(done) + ' ' + texts.join(' // '));
+      if (JSON.stringify(cursorCell()) !== '[0,1]' || ed().state.selection.$head.node(1).type.name !== 'table') bad.push('curseur : ' + JSON.stringify(cursorCell()));
+      if (planNow(0) !== 'none' || planNow(1) !== 'none') bad.push('plans après : ' + planNow(0) + ' ' + planNow(1));
+      if (statusLine().text !== '2 tableaux mis à jour depuis leur modèle.' || statusLine().error) bad.push('ligne d\'état : ' + JSON.stringify(statusLine()));
+      // La phrase de plusieurs tableaux sait aussi le singulier (la page ne l'appelle qu'à partir de deux).
+      if (I18n.t('linkedTable.pulledMany', { n: 1 }) !== '1 tableau mis à jour depuis son modèle.') bad.push('singulier français : ' + I18n.t('linkedTable.pulledMany', { n: 1 }));
+      I18n.setLang('en');
+      try {
+        if (I18n.t('linkedTable.pulledMany', { n: 1 }) !== '1 table updated from its template.') bad.push('singulier anglais : ' + I18n.t('linkedTable.pulledMany', { n: 1 }));
+        await modelBecomes(a, gridHtml('P', 2, 2));
+        await modelBecomes(b, gridHtml('S', 2, 2));
+        say('');
+        const again = LinkedTable.syncOpen(ed());
+        await sleep(100);
+        if (!again || again.pulled.length !== 2 || statusLine().text !== '2 tables updated from their templates.') bad.push('anglais : ' + JSON.stringify(again) + ' ' + statusLine().text);
+        // Un seul : la phrase du singulier.
+        await modelBecomes(a, gridHtml('R', 2, 2));
+        say('');
+        LinkedTable.syncOpen(ed());
+        await sleep(100);
+        if (statusLine().text !== 'Table updated from the template “' + a.nom + '”.') bad.push('un seul tableau : ' + statusLine().text);
+      } finally { I18n.setLang('fr'); }
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_sync_waits_while_tracking_a_zone_a_composition_or_a_hand_action_is_on',
+    description: 'La synchro laisse le document tranquille (rien ne change, rien n\'est rendu) tant que le suivi des modifications est allumé, qu\'un en-tête ou un pied de page est ouvert, que l\'éditeur montre une grille, qu\'une composition de texte est en cours, que l\'éditeur est détruit ou qu\'« Envoyer » / « Mettre à jour » à la main attend sa fin ; levé, le tableau suit le modèle',
+    run: async (h) => withDoc(h, DOC, async () => {
+      const bad = [];
+      const m = await model('Pause', gridHtml('Q', 2, 2));
+      await placed(m);
+      await modelBecomes(m, gridHtml('N', 2, 2));
+      let reference = docJson();
+      const attempt = (label) => {
+        const done = LinkedTable.syncOpen(ed());
+        if (done !== null || docJson() !== reference) bad.push(label + ' : ' + JSON.stringify(done));
+      };
+      Editor.setTrackChanges(true);
+      attempt('suivi des modifications');
+      Editor.setTrackChanges(false);
+      const realMode = HeaderFooterPreview.getHfMode;
+      HeaderFooterPreview.getHfMode = () => 'header';
+      try { attempt('en-tête ouvert'); } finally { HeaderFooterPreview.getHfMode = realMode; }
+      const view = ed().view;
+      const own = Object.getOwnPropertyDescriptor(view, 'composing');
+      Object.defineProperty(view, 'composing', { configurable: true, get: () => true });
+      try { attempt('composition en cours'); } finally { if (own) Object.defineProperty(view, 'composing', own); else delete view.composing; }
+      const realActive = GridEditor.isActive;
+      GridEditor.isActive = () => true;
+      try { attempt('éditeur de grille à l\'écran'); } finally { GridEditor.isActive = realActive; }
+      // Un éditeur déjà détruit (la page change de modèle pendant la lecture des modèles) : rien n'est dispatché.
+      const gone = LinkedTable.syncOpen(Object.create(ed(), { isDestroyed: { value: true } }));
+      if (gone !== null || docJson() !== reference) bad.push('éditeur détruit : ' + JSON.stringify(gone));
+      const lifted = LinkedTable.syncOpen(ed());
+      await sleep(100);
+      if (NAMES_OF(lifted) !== m.nom || textsOf(tablesOf()[0].node) !== labels('N', 2, 2)) bad.push('une fois levé : ' + JSON.stringify(lifted) + ' ' + textsOf(tablesOf()[0].node));
+      // Une action à la main qui attend la relecture des modèles.
+      await modelBecomes(m, gridHtml('R', 2, 2));
+      reference = docJson();
+      await cursorIn(0, 0, 0);
+      const holding = LinkedTable.pull(ed());
+      attempt('action à la main en cours');
+      await holding;
+      const after = LinkedTable.syncOpen(ed());
+      if (!after || after.pulled.length || textsOf(tablesOf()[0].node) !== labels('R', 2, 2)) bad.push('après l\'action à la main : ' + JSON.stringify(after) + ' ' + textsOf(tablesOf()[0].node));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_base_goes_with_the_link_on_detach_and_on_a_second_copy_and_one_undo_gives_it_back',
+    description: '« Détacher » retire le numéro, le jeton ET la base (le HTML n\'a plus aucun des trois, les cases restent) et un seul Annuler rend les trois ; la copie collée d\'un tableau lié perd les trois, l\'original garde les siens ; un tableau collé d\'un autre document (numéro, jeton étranger et base) les perd aussi',
+    run: async (h) => withDoc(h, DOC, async () => {
+      const bad = [];
+      const m = await model('Retire', gridHtml('D', 2, 2));
+      await placed(m);
+      const trio = a => JSON.stringify([a.linkedTemplate, a.linkedKey, a.linkedBase]);
+      const all = tableAttrs();
+      const was = trio(all);
+      if (!BASE_FORM.test(String(all.linkedBase))) bad.push('base posée : ' + all.linkedBase);
+      await cursorIn(0, 0, 0);
+      await sleep(GROUP_GAP_MS);
+      LinkedTable.detach(ed());
+      await sleep(100);
+      if (trio(tableAttrs()) !== '[null,null,null]' || /data-linked-/.test(Editor.getHTML()) || textsOf(tablesOf()[0].node) !== labels('D', 2, 2)) bad.push('Détacher : ' + trio(tableAttrs()));
+      await undo();
+      if (trio(tableAttrs()) !== was) bad.push('Annuler : ' + trio(tableAttrs()));
+      const copy = Editor.getHTML().match(/<table[\s\S]*<\/table>/)[0];
+      await cursorAt('après');
+      pasteHtml(copy);
+      await sleep(200);
+      const tables = tablesOf();
+      if (tables.length !== 2 || trio(tables[0].node.attrs) !== was || trio(tables[1].node.attrs) !== '[null,null,null]') bad.push('copie : ' + tables.map(t => trio(t.node.attrs)).join(' '));
+      Editor.setHTML('<p>avant</p><p>après</p>');
+      await sleep(120);
+      await cursorAt('avant');
+      pasteHtml(gridHtml('F', 1, 1).replace('<table>', `<table ${ATTR}="${m.id}" ${KEY_ATTR}="${NEW_TOKEN}" ${BASE_ATTR}="${all.linkedBase}">`));
+      await sleep(200);
+      if (tablesOf().length !== 1 || trio(tableAttrs()) !== '[null,null,null]') bad.push('jeton étranger : ' + trio(tableAttrs()));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_hand_actions_stamp_the_base_and_the_automatic_sync_agrees_with_them',
+    description: '« Mettre à jour depuis le modèle » (cases remplacées) et « Envoyer au modèle » posent la base du tableau, y compris sur un lien d\'avant le jeton (le jeton avec elle) : juste après, le plan est « rien à faire » dans les deux sens, un tableau identique reçoit sa base sans changer de cases, et envoyer puis changer le modèle ailleurs fait suivre le tableau',
+    run: async (h) => withDoc(h, DOC, async () => {
+      const bad = [];
+      const m = await model('Gestes', gridHtml('G', 2, 2));
+      // Un lien d'avant le jeton, identique : « Mettre à jour » lui donne jeton et base.
+      Editor.setHTML('<p>avant</p>' + legacyHtml(m.id, 'G', 2, 2));
+      await sleep(200);
+      await cursorIn(0, 0, 0);
+      const pulledSame = await LinkedTable.pull(ed());
+      await sleep(100);
+      if (pulledSame !== true || tableAttrs().linkedKey !== tokens.get(m.id) || !BASE_FORM.test(String(tableAttrs().linkedBase)) || planNow() !== 'none') bad.push('identique : ' + pulledSame + ' ' + JSON.stringify(tableAttrs()) + ' ' + planNow());
+      // Le modèle change : « Mettre à jour » remplace les cases et refait la base.
+      await modelBecomes(m, gridHtml('H', 2, 2));
+      const baseOld = tableAttrs().linkedBase;
+      await cursorIn(0, 0, 0);
+      const pulled = await LinkedTable.pull(ed());
+      await sleep(100);
+      if (pulled !== true || textsOf(tablesOf()[0].node) !== labels('H', 2, 2) || tableAttrs().linkedBase === baseOld || planNow() !== 'none') bad.push('remplacé : ' + pulled + ' ' + JSON.stringify(tableAttrs()) + ' ' + planNow());
+      // « Envoyer » : le tableau modifié part, la base le suit, rien n'est « à envoyer » ensuite.
+      await cursorIn(0, 0, 0);
+      await sleep(GROUP_GAP_MS);
+      ed().chain().focus().insertContent('X').run();
+      await sleep(100);
+      if (planNow() !== 'push') bad.push('plan (modifié ici) : ' + planNow());
+      answerWith(true);
+      const pushed = await LinkedTable.push(ed());
+      await sleep(100);
+      if (pushed !== true || planNow() !== 'none' || !/XHA1/.test(Templates.byId(m.id).contenu)) bad.push('envoyé : ' + pushed + ' ' + planNow());
+      // Le modèle change ailleurs ensuite : le tableau suit.
+      await modelBecomes(m, gridHtml('K', 2, 2));
+      say('');
+      const followed = LinkedTable.syncOpen(ed());
+      await sleep(100);
+      if (NAMES_OF(followed) !== m.nom || textsOf(tablesOf()[0].node) !== labels('K', 2, 2)) bad.push('suivi : ' + JSON.stringify(followed));
+      // « Envoyer » trouve un tableau identique (un lien d'avant le jeton) : jeton et base sans changer les cases.
+      Editor.setHTML('<p>avant</p>' + legacyHtml(m.id, 'K', 2, 2));
+      await sleep(200);
+      await cursorIn(0, 0, 0);
+      const cells = textsOf(tablesOf()[0].node);
+      const same = await LinkedTable.push(ed());
+      await sleep(100);
+      if (same !== true || textsOf(tablesOf()[0].node) !== cells || tableAttrs().linkedKey !== tokens.get(m.id) || !BASE_FORM.test(String(tableAttrs().linkedBase)) || planNow() !== 'none') bad.push('envoi identique : ' + same + ' ' + JSON.stringify(tableAttrs()));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_push_base_is_the_table_that_left_so_text_typed_while_it_writes_stays_to_send',
+    description: '« Envoyer au modèle » pose pour base le tableau qui est PARTI, pas celui du moment où l\'écriture se termine : un texte tapé pendant l\'écriture dans le modèle reste « à envoyer » (le plan est « envoyer », pas « rien à faire »), et quand le modèle change ensuite la synchro ne l\'écrase pas, elle dit que le tableau diffère',
+    run: async (h) => withDoc(h, DOC, async () => {
+      const bad = [];
+      const m = await model('Frappe en vol', gridHtml('V', 2, 2));
+      await placed(m);
+      await cursorIn(0, 0, 0);
+      await sleep(GROUP_GAP_MS);
+      ed().chain().focus().insertContent('X').run();
+      await sleep(100);
+      if (planNow() !== 'push') bad.push('plan (modifié ici) : ' + planNow());
+      // Pendant l'écriture dans le modèle, la personne tape encore.
+      const realSave = Templates.saveContent;
+      Templates.saveContent = async (...args) => {
+        const out = await realSave.apply(Templates, args);
+        ed().chain().focus().insertContent('Y').run();
+        return out;
+      };
+      try {
+        answerWith(true);
+        const pushed = await LinkedTable.push(ed());
+        await sleep(100);
+        if (pushed !== true) bad.push('envoi : ' + pushed);
+      } finally { Templates.saveContent = realSave; }
+      const sent = Templates.byId(m.id).contenu;
+      if (!/XVA1/.test(sent) || /XYVA1/.test(sent)) bad.push('le modèle n\'a pas reçu le tableau qui est parti : ' + sent.slice(0, 160));
+      if (textsOf(tablesOf()[0].node).split('|')[0] !== 'XYVA1') bad.push('la frappe en vol n\'est pas dans le document : ' + textsOf(tablesOf()[0].node));
+      if (planNow() !== 'push') bad.push('plan (frappe en vol) : ' + planNow());
+      // Le modèle change ailleurs : le tableau a changé des deux côtés, il n'est pas remplacé.
+      await modelBecomes(m, gridHtml('K', 2, 2));
+      say('');
+      const followed = LinkedTable.syncOpen(ed());
+      await sleep(100);
+      if (NAMES_OF(followed) !== '' || textsOf(tablesOf()[0].node).split('|')[0] !== 'XYVA1' || !/diffère/.test(statusLine().text)) bad.push('écrasé ou muet : ' + JSON.stringify(followed) + ' ' + textsOf(tablesOf()[0].node) + ' ' + statusLine().text);
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_sync_and_pull_keep_the_comments_of_the_cells_the_model_did_not_change',
+    description: 'Le tableau qui prend celui du modèle - à l\'ouverture ou au passage de l\'enregistrement automatique (rien ne la rend ensuite : elle n\'est pas dans l\'historique) comme par « Mettre à jour depuis le modèle » - garde les fils de commentaires des cases dont le texte n\'a pas changé, même quand le modèle change leurs largeurs ; une case dont le texte change perd le sien (le fil n\'a plus de texte où se poser)',
+    run: async (h) => withDoc(h, DOC, async () => {
+      const bad = [];
+      const m = await model('Fils', gridHtml('K', 2, 2));
+      await placed(m);
+      const mark = (row, col, id) => { const at = cellText(0, row, col); ed().chain().focus().setTextSelection({ from: at, to: at + 2 }).setMark('commentMark', { id, resolved: false }).run(); };
+      const ids = () => (Editor.getHTML().match(/data-comment-id="[^"]*"/g) || []).map(s => s.slice(17, -1)).sort().join(',');
+      mark(0, 1, 'keep-me');
+      mark(1, 0, 'lose-me');
+      await sleep(100);
+      if (ids() !== 'keep-me,lose-me') bad.push('marques posées : ' + ids());
+      if (planNow() !== 'none') bad.push('plan avant (une marque de commentaire n\'est pas une modification du tableau) : ' + planNow());
+      // Le modèle change le texte de la case (1, 0) et rien d'autre : la relève automatique.
+      await modelBecomes(m, gridHtml('K', 2, 2).replace('<p>KA2</p>', '<p>Autre</p>'));
+      const followed = LinkedTable.syncOpen(ed());
+      await sleep(100);
+      if (NAMES_OF(followed) !== m.nom || textsOf(tablesOf()[0].node) !== 'KA1|KB1|Autre|KB2') bad.push('suivi : ' + JSON.stringify(followed) + ' ' + textsOf(tablesOf()[0].node));
+      if (ids() !== 'keep-me') bad.push('fils après la relève : ' + ids());
+      if (planNow() !== 'none') bad.push('plan après la relève : ' + planNow());
+      // « Mettre à jour » à la main : même règle.
+      mark(1, 1, 'again-keep');
+      mark(0, 0, 'again-lose');
+      await sleep(100);
+      await modelBecomes(m, gridHtml('K', 2, 2).replace('<p>KA2</p>', '<p>Autre</p>').replace('<p>KA1</p>', '<p>Premier</p>'));
+      await cursorIn(0, 1, 1);
+      const pulled = await LinkedTable.pull(ed());
+      await sleep(100);
+      if (pulled !== true || textsOf(tablesOf()[0].node) !== 'Premier|KB1|Autre|KB2') bad.push('mise à jour à la main : ' + pulled + ' ' + textsOf(tablesOf()[0].node));
+      if (ids() !== 'again-keep,keep-me') bad.push('fils après la mise à jour à la main : ' + ids());
+      // Le modèle ne change que des largeurs : elles arrivent, les fils restent sur leurs cases.
+      await modelBecomes(m, withWidths(gridHtml('K', 2, 2).replace('<p>KA2</p>', '<p>Autre</p>').replace('<p>KA1</p>', '<p>Premier</p>'), 150));
+      const widened = LinkedTable.syncOpen(ed());
+      await sleep(100);
+      if (NAMES_OF(widened) !== m.nom || widthsOf() !== '150,150,150,150') bad.push('largeurs : ' + JSON.stringify(widened) + ' ' + widthsOf());
+      if (ids() !== 'again-keep,keep-me') bad.push('fils après les largeurs : ' + ids());
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_resolve_html_gives_the_models_table_to_a_saved_document_that_has_not_moved_and_leaves_the_rest_alone',
+    description: 'Les sorties hors de l\'éditeur (macro-modèle, export en lot) lisent le document tel qu\'il est enregistré : LinkedTable.resolveHtml y remplace le tableau à base que le document n\'a pas modifié et que le modèle a changé par celui du modèle (sans lien ni base, le reste du HTML intact) ; tableau modifié dans le document, modifié des deux côtés, sans base ou à base mal formée, lien ancien, modèle supprimé ou jeton étranger : le HTML est rendu tel quel (la même chaîne) ; sans tableau à base, il n\'est même pas relu. resolveTemplates ne copie que les modèles qui changent',
+    run: async (h) => withDoc(h, DOC, async () => {
+      const bad = [];
+      const m = await model('Sortie', gridHtml('S', 2, 2));
+      await placed(m);
+      const saved = Editor.getHTML();
+      if (!new RegExp(BASE_ATTR).test(saved)) return { pass: false, notes: 'le document enregistré n\'a pas de base : ' + saved.slice(0, 160) };
+      const same = LinkedTable.resolveHtml(ed(), saved);
+      if (same !== saved) bad.push('modèle inchangé : le HTML est relu');
+      // Le modèle n'a pas bougé et la page a posé ses largeurs dans le tableau enregistré : le HTML est rendu tel quel (ses largeurs ne sont pas remplacées par celles du modèle).
+      setWidths(0, 120);
+      await sleep(100);
+      const widened = Editor.getHTML();
+      if (!/colwidth/.test(widened) || LinkedTable.resolveHtml(ed(), widened) !== widened) bad.push('modèle inchangé, largeurs de la page : le HTML est relu ' + /colwidth/.test(widened));
+      // Le modèle ne change que de largeurs, les mêmes que celles que la page a posées dans le tableau enregistré : il est déjà à jour, le HTML est rendu tel quel (avec son lien).
+      await modelBecomes(m, withWidths(gridHtml('S', 2, 2), 120));
+      if (LinkedTable.resolveHtml(ed(), widened) !== widened) bad.push('modèle aux mêmes largeurs : le HTML est relu');
+      Editor.setHTML(saved);
+      await sleep(150);
+      await modelBecomes(m, gridHtml('N', 2, 2));
+      const out = LinkedTable.resolveHtml(ed(), saved);
+      const cellsOut = (out.match(/[A-Z]{1}[A-C][1-9]/g) || []).join('|');
+      if (!/NA1/.test(out) || /SA1/.test(out) || cellsOut !== 'NA1|NB1|NA2|NB2' || /data-linked-/.test(out) || !/<p>avant<\/p>/.test(out) || !/après/.test(out)) bad.push('tableau du modèle : ' + out.slice(0, 260));
+      // Le tableau n'est pas devenu celui de l'éditeur : le texte lu est celui du modèle, sans le lien.
+      if (saved.indexOf('SA1') === -1) bad.push('le HTML de départ n\'est pas celui d\'un tableau « S »');
+      // Un tableau lié rangé dans la case d'un autre tableau n'est pas un tableau lié du document (le schéma ne le permet pas) : le HTML est rendu tel quel.
+      const inner = (saved.match(/<table[\s\S]*<\/table>/) || [''])[0];
+      const nested = '<table><tbody><tr><td>' + inner + '</td></tr></tbody></table>';
+      if (!inner || LinkedTable.resolveHtml(ed(), nested) !== nested) bad.push('tableau lié dans la case d\'un autre : le HTML a changé');
+      if (LinkedTable.resolveHtml(ed(), '<p>sans tableau lié</p>') !== '<p>sans tableau lié</p>' || LinkedTable.resolveHtml(ed(), '') !== '' || LinkedTable.resolveHtml(ed(), null) !== '') bad.push('HTML sans tableau lié');
+      // Le tableau du document a été modifié depuis sa base : rendu tel quel.
+      await cursorIn(0, 0, 0);
+      await sleep(GROUP_GAP_MS);
+      ed().chain().focus().insertContent('X').run();
+      await sleep(100);
+      const edited = Editor.getHTML();
+      if (LinkedTable.resolveHtml(ed(), edited) !== edited) bad.push('tableau modifié dans le document');
+      // Sans base, lien ancien, modèle supprimé, jeton étranger.
+      const unbased = linkedDoc(m.id, 'S', 2, 2);
+      const legacy = '<p>x</p>' + legacyHtml(m.id, 'S', 2, 2);
+      const foreign = '<p>x</p>' + gridHtml('S', 2, 2).replace('<table>', `<table ${ATTR}="${m.id}" ${KEY_ATTR}="${NEW_TOKEN}" ${BASE_ATTR}="${tableAttrs().linkedBase}">`);
+      const gone = '<p>x</p>' + gridHtml('S', 2, 2).replace('<table>', `<table ${ATTR}="98765" ${KEY_ATTR}="${tokens.get(m.id)}" ${BASE_ATTR}="${tableAttrs().linkedBase}">`);
+      const malformed = '<p>x</p>' + gridHtml('S', 2, 2).replace('<table>', `<table ${ATTR}="${m.id}" ${KEY_ATTR}="${tokens.get(m.id)}" ${BASE_ATTR}="abc">`);
+      for (const [label, html] of [['sans base', unbased], ['base mal formée', malformed], ['lien ancien', legacy], ['jeton étranger', foreign], ['modèle supprimé', gone]]) {
+        if (LinkedTable.resolveHtml(ed(), html) !== html) bad.push(label + ' : le HTML a changé');
+      }
+      // resolveTemplates : seules les lignes qui changent sont copiées ; le cache n'est pas touché.
+      const rows = [
+        { id: 1, typeModele: 'document', contenu: saved },
+        { id: 2, typeModele: 'macro', contenu: '{"slots":[]}' },
+        { id: 3, typeModele: 'grille', contenu: gridHtml('Z', 1, 1) },
+        { id: 4, typeModele: 'document', contenu: '<p>autre</p>' },
+        { id: 5, typeModele: 'document', contenu: edited },
+      ];
+      const resolved = LinkedTable.resolveTemplates(ed(), rows);
+      if (resolved === rows || resolved.length !== 5 || resolved[0] === rows[0] || !/NA1/.test(resolved[0].contenu) || resolved[0].id !== 1 || [1, 2, 3, 4].some(i => resolved[i] !== rows[i])) bad.push('resolveTemplates : ' + JSON.stringify(resolved.map((r, i) => r === rows[i])));
+      if (rows[0].contenu !== saved) bad.push('la ligne d\'origine a été modifiée');
+      const untouched = rows.filter((r, i) => i !== 0);
+      if (LinkedTable.resolveTemplates(ed(), untouched) !== untouched) bad.push('resolveTemplates ne rend pas la même liste quand rien ne change');
+      if (LinkedTable.resolveTemplates(ed(), null).length !== 0) bad.push('resolveTemplates(null)');
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  // Un document ENREGISTRÉ dont le tableau lié a sa base : le document de `openedDoc` (jeton, sans base, identique au modèle) reçoit sa base de la synchro de l'ouverture ; elle est enregistrée avec
+  // lui, comme l'enregistrement automatique le fait, et le document reste ouvert. Rend { id, nom }.
+  async function savedSyncedDoc(m, label, rows, cols) {
+    const d = await openedDoc(m, label, rows, cols);
+    const html = Editor.getHTML();
+    if (!/data-linked-base=/.test(html)) throw new Error('la synchro de l\'ouverture n\'a pas posé la base : ' + html.slice(0, 200));
+    await Templates.save(d.id, d.nom, html, '', null, null, 'document', null);
+    await Templates.loadAll();
+    return d;
+  }
+  // Ce que la ligne enregistrée du document dit de son tableau : ses cases (étiquettes) et sa base.
+  const savedCells = id => (String(rowOf(id).Contenu).match(/>[A-Z]{1}[A-C][1-9][^<]*</g) || []).map(s => s.slice(1, -1)).join('|');
+  const savedBase = id => (String(rowOf(id).Contenu).match(/data-linked-base="([^"]*)"/) || [])[1] || null;
+  const waitFor = async (condition, ms) => { const started = Date.now(); while (Date.now() - started < ms) { if (condition()) return true; await sleep(150); } return condition(); };
+
+  cases.push({
+    id: 'linked_open_follows_the_model_without_writing_and_without_marking_the_document_changed',
+    description: 'Un document enregistré dont le modèle a changé depuis, ouvert par la liste : son tableau est celui du modèle (cases, base refaite, ligne d\'état « mis à jour depuis le modèle »), mais ouvrir n\'écrit rien dans Grist (même après deux passages de l\'enregistrement automatique : la ligne du document garde l\'ancien tableau, pas de faux « modifié ailleurs » chez un autre) et ne rend pas le document « modifié » (en partir ne pose aucune question)',
+    run: async (h) => withApp(h, async () => {
+      const bad = [];
+      const m = await model('Ouverture', gridHtml('O', 2, 2));
+      const d = await savedSyncedDoc(m, 'O', 2, 2);
+      const baseSaved = savedBase(d.id);
+      await modelBecomes(m, gridHtml('N', 2, 2));
+      stub().clearActionLog();
+      say('');
+      await openByList(d.id, d.nom);
+      if (textsOf(tablesOf()[0].node) !== labels('N', 2, 2)) bad.push('cases à l\'ouverture : ' + textsOf(tablesOf()[0].node));
+      if (planNow() !== 'none' || tableAttrs().linkedBase === baseSaved) bad.push('base : ' + planNow() + ' ' + tableAttrs().linkedBase + ' (enregistrée ' + baseSaved + ')');
+      const line = statusLine();
+      if (line.text !== I18n.t('linkedTable.pulled', { name: m.nom }) || line.error) bad.push('ligne d\'état : ' + JSON.stringify(line));
+      await sleep(6500);
+      if (modelWrites().length) bad.push('une écriture est partie : ' + JSON.stringify(modelWrites().map(a => [a[0], a[2], Object.keys(a[3] || {})])));
+      if (savedCells(d.id) !== 'OA1|OB1|OA2|OB2' || savedBase(d.id) !== baseSaved) bad.push('la ligne enregistrée a changé : ' + savedCells(d.id));
+      await h.clickButton('btn-new');
+      await sleep(500);
+      if (dialogOpen()) { bad.push('le document est « modifié » : la question avant de partir est posée'); await answerDialog('Abandonner'); }
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_open_follows_a_model_the_page_then_gives_column_widths_without_marking_the_document_changed',
+    description: 'Le tableau du modèle n\'a de largeur que sur sa première colonne : la page gèle les autres juste après la synchro de l\'ouverture (transaction qu\'elle pose derrière la nôtre, js/editor.js:dispatchColumnWidthFix). Ces largeurs ne sont pas une modification de la personne : le document ouvert n\'est pas « modifié » (le passage de l\'enregistrement automatique n\'écrit rien, en partir ne pose aucune question) et ses largeurs sont bien posées',
+    run: async (h) => withApp(h, async () => {
+      const bad = [];
+      const m = await model('Largeurs en vol', gridHtml('O', 2, 2));
+      const d = await savedSyncedDoc(m, 'O', 2, 2);
+      await modelBecomes(m, gridHtml('N', 2, 2).replace(/<td><p>(NA)/g, '<td colwidth="150"><p>$1'));
+      stub().clearActionLog();
+      say('');
+      await openByList(d.id, d.nom);
+      await sleep(800);
+      if (textsOf(tablesOf()[0].node) !== labels('N', 2, 2)) bad.push('cases à l\'ouverture : ' + textsOf(tablesOf()[0].node));
+      if (/-/.test(widthsOf()) || !/^150,/.test(widthsOf())) bad.push('la page n\'a pas gelé les largeurs : ' + widthsOf());
+      if (planNow() !== 'none') bad.push('plan : ' + planNow());
+      // Un passage de l\'enregistrement automatique (2,5 s) écrirait le document s\'il était « modifié ».
+      await sleep(3300);
+      if (modelWrites().length) bad.push('les largeurs de la page rendent le document « modifié » : une écriture est partie ' + JSON.stringify(modelWrites().map(a => [a[0], a[2], Object.keys(a[3] || {})])));
+      await h.clickButton('btn-new');
+      await sleep(500);
+      if (dialogOpen()) { bad.push('les largeurs de la page rendent le document « modifié » : la question avant de partir est posée'); await answerDialog('Abandonner'); }
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_open_says_a_disagreement_again_each_time_the_document_is_opened',
+    description: 'Un tableau changé dans le document ET dans le modèle n\'est pas remplacé, et la ligne d\'état dit « diffère du modèle » à chaque ouverture du document (pas seulement à la première)',
+    run: async (h) => withApp(h, async () => {
+      const bad = [];
+      const m = await model('Deux ouvertures', gridHtml('O', 2, 2));
+      const d = await savedSyncedDoc(m, 'O', 2, 2);
+      await Templates.save(d.id, d.nom, Editor.getHTML().replace('OA1', 'XOA1'), '', null, null, 'document', null);
+      await Templates.loadAll();
+      await modelBecomes(m, gridHtml('N', 2, 2));
+      for (const round of ['première', 'seconde']) {
+        say('');
+        await openByList(d.id, d.nom);
+        const line = statusLine();
+        if (line.text !== I18n.t('linkedTable.differs', { name: m.nom }) || line.error) bad.push(round + ' ouverture : « ' + line.text + ' »');
+        if (textsOf(tablesOf()[0].node).split('|')[0] !== 'XOA1') bad.push(round + ' ouverture, cases : ' + textsOf(tablesOf()[0].node));
+      }
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_tick_follows_the_model_of_a_document_being_edited_and_saves_the_followed_table',
+    description: 'Le document est ouvert et modifié (passages de 2,5 s) pendant que le modèle change ailleurs : le passage suivant relit les modèles et le tableau prend celui du modèle sous les yeux (curseur dans le texte d\'à côté inchangé), puis l\'enregistrement du document l\'écrit avec sa nouvelle base',
+    run: async (h) => withApp(h, async () => {
+      const bad = [];
+      const m = await model('Passage', gridHtml('O', 2, 2));
+      const d = await savedSyncedDoc(m, 'O', 2, 2);
+      await openByList(d.id, d.nom);
+      await cursorAt('avant');
+      await sleep(GROUP_GAP_MS);
+      // Le modèle change AVANT la frappe : un passage qui a déjà lu l'ancien modèle et enregistré le document ne relit qu'au repos (15 s), après le délai du cas ; ici tout passage qui suit la frappe lit le nouveau.
+      stub().remoteWrite(Templates.TABLE_NAME, m.id, { Contenu: gridHtml('N', 2, 2) });
+      ed().chain().focus().insertContent('x').run();
+      await sleep(200);
+      const cursorBefore = ed().state.selection.from;
+      const followed = await waitFor(() => textsOf(tablesOf()[0].node) === labels('N', 2, 2), 9000);
+      if (!followed) bad.push('le tableau ne suit pas le modèle : ' + textsOf(tablesOf()[0].node));
+      if (ed().state.selection.from !== cursorBefore) bad.push('le curseur a bougé : ' + cursorBefore + ' -> ' + ed().state.selection.from);
+      const saved = await waitFor(() => savedCells(d.id) === 'NA1|NB1|NA2|NB2', 9000);
+      if (!saved || String(rowOf(d.id).Contenu).indexOf('axvant') === -1) bad.push('la ligne enregistrée : ' + savedCells(d.id) + ' ' + String(rowOf(d.id).Contenu).slice(0, 120));
+      if (saved && savedBase(d.id) !== tableAttrs().linkedBase) bad.push('base enregistrée ' + savedBase(d.id) + ' au lieu de ' + tableAttrs().linkedBase);
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_idle_tick_follows_the_model_of_an_untouched_document_without_writing',
+    description: 'Le document est ouvert et n\'est pas modifié (lecture de fond toutes les 15 s) : le modèle change ailleurs, la lecture suivante donne son tableau au document, et rien n\'est écrit (la ligne du document garde ses cases, aucune écriture dans Grist)',
+    run: async (h) => withApp(h, async () => {
+      const bad = [];
+      const m = await model('Repos', gridHtml('O', 2, 2));
+      const d = await savedSyncedDoc(m, 'O', 2, 2);
+      await openByList(d.id, d.nom);
+      stub().clearActionLog();
+      stub().remoteWrite(Templates.TABLE_NAME, m.id, { Contenu: gridHtml('N', 2, 2) });
+      const followed = await waitFor(() => textsOf(tablesOf()[0].node) === labels('N', 2, 2), 24000);
+      if (!followed) bad.push('le tableau ne suit pas le modèle au repos : ' + textsOf(tablesOf()[0].node));
+      await sleep(3000);
+      if (modelWrites().length) bad.push('une écriture est partie : ' + JSON.stringify(modelWrites().map(a => [a[0], a[2], Object.keys(a[3] || {})])));
+      if (savedCells(d.id) !== 'OA1|OB1|OA2|OB2') bad.push('la ligne enregistrée a changé : ' + savedCells(d.id));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_open_in_reading_mode_shows_the_followed_table_and_a_changed_model_redraws_it',
+    description: 'En Lecture, ouvrir un document dont le modèle a changé montre le tableau du modèle dans la feuille de lecture (la Lecture est redessinée après la synchro), pas l\'ancien',
+    run: async (h) => withApp(h, async () => {
+      const bad = [];
+      const m = await model('Lecture', gridHtml('O', 2, 2));
+      const d = await savedSyncedDoc(m, 'O', 2, 2);
+      await feedRows([{ id: 1, Nom: 'Alpha', Genre: 'Lie' }]);
+      await modelBecomes(m, gridHtml('N', 2, 2));
+      await h.clickButton('btn-mode-read');
+      await sleep(600);
+      await openByList(d.id, d.nom);
+      await sleep(900);
+      const reading = (document.getElementById('reader-container').textContent || '').replace(/\s+/g, '');
+      if (reading.indexOf('NA1') === -1 || reading.indexOf('OA1') !== -1) bad.push('Lecture : ' + reading.slice(0, 160));
+      await h.clickButton('btn-mode-edit');
+      await sleep(400);
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_return_from_the_model_brings_the_followed_table_in_the_same_cell',
+    description: 'Un tableau posé par la liste (avec sa base), « Ouvrir le modèle », une modification enregistrée dans la grille, « Revenir au document » : le tableau du document est celui du modèle modifié (la synchro à l\'ouverture), le curseur est dans la même case, la ligne d\'état dit « mis à jour depuis le modèle » (pas « diffère ») ; sans base, il reste comme il était et la ligne d\'état dit qu\'il diffère',
+    run: async (h) => withApp(h, async () => h.withRealChoose(async () => {
+      setAutosave(false);
+      const bad = [];
+      const m = await model('Retour', gridHtml('E', 2, 2));
+      const d = await savedSyncedDoc(m, 'E', 2, 2);
+      if (!(await openFromMenu(0, 1))) return { pass: false, notes: 'la ligne « Ouvrir le modèle » est introuvable' };
+      ed().chain().focus().insertContent('!').run();
+      await sleep(150);
+      document.getElementById('btn-linked-return').click();
+      await sleep(500);
+      if (dialogOpen()) await answerDialog('Enregistrer');
+      await sleep(900);
+      const home = screenOf();
+      if (home.current !== String(d.id) || home.grid || home.bar) bad.push('le document n\'est pas revenu : ' + JSON.stringify(home));
+      if (!String(rowOf(m.id).Contenu).includes('!')) bad.push('le modèle n\'a pas reçu la frappe');
+      const cells = textsOf(tablesOf()[0].node);
+      if (cells.indexOf('!') === -1) bad.push('le tableau du document ne suit pas le modèle : ' + cells);
+      if (planNow() !== 'none') bad.push('plan : ' + planNow());
+      const line = statusLine();
+      if (line.text !== I18n.t('linkedTable.pulled', { name: m.nom }) || line.error) bad.push('ligne d\'état : ' + JSON.stringify(line));
+      if (JSON.stringify(cursorCell()) !== '[0,1]') bad.push('curseur : ' + JSON.stringify(cursorCell()));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    })),
+  });
+
+  // Les sorties qui lisent les documents tels qu'ils sont enregistrés (js/main.js : la Lecture d'un macro-modèle, le lot, « Modèle selon la ligne ») : une ligne de la table de la page, le lot « Exporter les
+  // lignes en DOCX (ZIP) » par sa vraie ligne de menu, le texte de chaque .docx de l'archive.
+  const FEED_TABLE = 'LinkedSortiesTable';
+  async function feedRows(rows, current) {
+    const s = stub();
+    s.setVariables(FEED_TABLE, { Nom: 'Text', Genre: 'Text' });
+    s.setRows(FEED_TABLE, rows);
+    await GristAPI.refreshSchema();
+    s.fireRecord(current || rows[0], FEED_TABLE);
+    await sleep(100);
+  }
+  async function docxBatchTexts(h) {
+    const downloads = [];
+    const blobsByUrl = new Map();
+    const origCreate = URL.createObjectURL;
+    const origClick = HTMLAnchorElement.prototype.click;
+    const dialogs = h.stubDialogs({ confirm: () => true });
+    URL.createObjectURL = obj => { const url = origCreate.call(URL, obj); blobsByUrl.set(url, obj); return url; };
+    HTMLAnchorElement.prototype.click = function () {
+      if (this.download) { downloads.push({ name: this.download, blob: blobsByUrl.get(this.href) }); return; }
+      return origClick.call(this);
+    };
+    try {
+      document.getElementById('v2-btn-export-docx-batch').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      const startedAt = Date.now();
+      while (!downloads.length && Date.now() - startedAt < 60000) await sleep(100);
+      await sleep(50);
+    } finally {
+      dialogs.restore();
+      URL.createObjectURL = origCreate;
+      HTMLAnchorElement.prototype.click = origClick;
+    }
+    if (!downloads.length || !downloads[0].blob) return null;
+    await ExportCommon.ensureJsZipLoaded();
+    const zip = await JSZip.loadAsync(await downloads[0].blob.arrayBuffer());
+    const texts = [];
+    for (const name of Object.keys(zip.files).sort()) {
+      const docx = await JSZip.loadAsync(await zip.file(name).async('arraybuffer'));
+      texts.push((await docx.file('word/document.xml').async('string')).replace(/<[^>]+>/g, '').replace(/\s+/g, ''));
+    }
+    return texts;
+  }
+
+  cases.push({
+    id: 'linked_macro_reading_and_batch_export_use_the_models_table_of_a_document_not_opened_since',
+    description: 'Un macro-modèle assemble les documents tels qu\'ils sont enregistrés, et l\'enregistré n\'a pas suivi son modèle tant que personne n\'a ouvert le document : la Lecture du macro-modèle et son export en lot (DOCX, ZIP) montrent pourtant le tableau actuel du modèle Grille (celui de la base du tableau enregistré, que le document n\'a pas modifié), pas l\'ancien ; la ligne enregistrée du document n\'est pas réécrite',
+    run: async (h) => withApp(h, async () => {
+      const bad = [];
+      const m = await model('Sorties', gridHtml('O', 2, 2));
+      const d = await savedSyncedDoc(m, 'O', 2, 2);
+      await feedRows([{ id: 1, Nom: 'Alpha', Genre: 'Lie' }]);
+      const nom = 'Macro ' + (++counter);
+      const macro = await Templates.save(null, nom, JSON.stringify({ slots: [{ type: 'fixed', modeleId: d.id }] }), '', null, null, 'macro', null);
+      made.push(macro.id);
+      await Templates.loadAll();
+      await modelBecomes(m, gridHtml('N', 2, 2));
+      if (savedCells(d.id) !== 'OA1|OB1|OA2|OB2') bad.push('le document enregistré a déjà changé : ' + savedCells(d.id));
+      await openByList(macro.id, nom);
+      await h.clickButton('btn-mode-read');
+      await sleep(1500);
+      const reading = (document.getElementById('reader-container').textContent || '').replace(/\s+/g, '');
+      if (reading.indexOf('NA1') === -1 || reading.indexOf('OA1') !== -1) bad.push('Lecture du macro-modèle : ' + reading.slice(0, 160));
+      await h.clickButton('btn-mode-edit');
+      await sleep(400);
+      stub().clearActionLog();
+      const texts = await docxBatchTexts(h);
+      if (!texts || texts.length !== 1 || texts[0].indexOf('NA1') === -1 || texts[0].indexOf('OA1') !== -1) bad.push('lot en DOCX : ' + JSON.stringify(texts && texts.map(t => t.slice(0, 120))));
+      if (savedCells(d.id) !== 'OA1|OB1|OA2|OB2' || modelWrites().length) bad.push('une écriture est partie : ' + savedCells(d.id) + ' ' + JSON.stringify(modelWrites().length));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_row_template_batch_export_uses_the_models_table_of_a_document_not_opened_since',
+    description: '« Modèle selon la ligne » : le lot en DOCX d\'une ligne que ses règles envoient vers un document lit ce document tel qu\'il est enregistré, et son tableau lié prend pourtant celui du modèle Grille qui a changé depuis (le document n\'a pas été modifié depuis sa base) ; la ligne qui reste au modèle de l\'écran n\'en a pas',
+    run: async (h) => withApp(h, async () => {
+      const bad = [];
+      const m = await model('Sortie ligne', gridHtml('O', 2, 2));
+      const d = await savedSyncedDoc(m, 'O', 2, 2);
+      await h.clickButton('btn-new');
+      await sleep(400);
+      const rows = [{ id: 1, Nom: 'Alpha', Genre: 'Autre' }, { id: 2, Nom: 'Bravo', Genre: 'Lie' }];
+      await feedRows(rows, rows[0]);
+      await modelBecomes(m, gridHtml('N', 2, 2));
+      stub().setWidgetOptions({ modeleSelonLigne: { enabled: true, rules: [{ column: 'Genre', operator: '=', value: 'Lie', modeleId: String(d.id) }], otherwise: 'keep' } });
+      await sleep(250);
+      try {
+        const texts = await docxBatchTexts(h);
+        if (!texts || texts.length !== 2) bad.push('lot : ' + JSON.stringify(texts && texts.map(t => t.slice(0, 80))));
+        else {
+          const withTable = texts.filter(t => t.indexOf('NA1') !== -1);
+          if (withTable.length !== 1 || texts.some(t => t.indexOf('OA1') !== -1)) bad.push('tableaux du lot : ' + JSON.stringify(texts.map(t => t.slice(0, 120))));
+        }
+      } finally { stub().setWidgetOptions(null); await sleep(150); }
       return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
     }),
   });
