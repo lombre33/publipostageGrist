@@ -442,9 +442,12 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   légende « Pour la ligne en cours. ». Un graphique que le widget ne sait pas redessiner (widget personnalisé, Kaplan-Meier, « Split series », « Error bars », filtre sur des dates relatives) reste
   dans la liste, **grisé avec sa raison sous son nom** (`aria-disabled`, jamais retiré) et ne se choisit ni au clic ni à Entrée ; la recherche met d'abord en avant le premier résultat qui se
   choisit. « Insérer » est grisé tant qu'aucun graphique n'est choisi ; pour des lignes liées sans liaison réglée, la fenêtre de liaison s'ouvre à la validation et un refus laisse la fenêtre ouverte.
-  Dans l'éditeur, le graphique est un cadre pointillé comme celui d'une image de variable, de 480 × 300 px au départ, avec l'icône d'un graphique et son nom en `--text` (4,5:1 au moins) ; ses
-  poignées changent la largeur ET la hauteur. Le vrai graphique est dessiné à la Lecture et à l'export, le même PNG dans le PDF, le Word et l'Excel. Sans ligne à tracer il disparaît ; supprimé dans
-  Grist ou avec une bibliothèque qui ne charge pas, il laisse « [Graphique indisponible] » dans la langue de l'interface, jamais une image cassée. Elle a son action dans Réglages > Raccourcis
+  Dans l'éditeur, le graphique est dessiné dans un cadre de 480 × 300 px au départ (ses poignées changent la largeur ET la hauteur ; dans une case plus étroite il garde les proportions du
+  réglage) : toute la table, ou la ligne que Grist affiche pour les lignes liées, le même PNG que la Lecture, le PDF, le Word et l'Excel, sans trait ni libellé ; il se redessine au changement de
+  ligne, de taille et de valeurs, au clic et au retour en édition, et son dessin n'entre jamais dans le modèle. Quand rien ne peut se dessiner (aucune ligne sélectionnée pour « liées », rien à
+  tracer, graphique supprimé, bibliothèque absente), le cadre reste pointillé comme celui d'une image de variable, avec l'icône d'un graphique et son nom en `--text` (4,5:1 au moins). À la Lecture
+  et à l'export, sans ligne à tracer il disparaît ; supprimé dans Grist ou avec une bibliothèque qui ne charge pas, il laisse « [Graphique indisponible] » dans la langue de l'interface, jamais
+  une image cassée. Elle a son action dans Réglages > Raccourcis
   (« Graphique de la page… », sans touche d'origine), comme les autres lignes du menu.
 - Modes et droits : Édition, Lecture et Email partagent la même barre. En Lecture la barre de mise en forme est grisée
   (`applyFormattingBarLock`) ; les droits par personne (Réglages > Accès : lecture seule, export, commentaires) grisent

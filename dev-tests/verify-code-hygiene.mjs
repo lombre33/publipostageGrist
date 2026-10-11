@@ -754,7 +754,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const nodes = noCommentsJs(read('js/editor-nodes.js'));
   const apply = bodyOf(nodes, 'function applyImageAttrs');
   check('images externes : la vue d\'image de l\'éditeur (applyImageAttrs) ne donne pas d\'adresse à son <img> tant que le site n\'est pas affiché (ExternalImages.blockedSiteOf)',
-    /ExternalImages\.blockedSiteOf\(/.test(apply) && /img\.src\s*=\s*\(isVarBox \|\| blockedSite\)\s*\?\s*''/.test(apply), apply.length + ' caractères');
+    /ExternalImages\.blockedSiteOf\(/.test(apply) && /const shownSrc\s*=\s*\(isVarBox \|\| blockedSite\)\s*\?\s*''/.test(apply) && /img\.src\s*=\s*shownSrc/.test(apply), apply.length + ' caractères');
   const comments = noCommentsJs(read('js/comments.js'));
   const readerHtml = bodyOf(comments, 'async function buildReaderHtml');
   check('images externes : la Lecture avec commentaires (buildReaderHtml) sérialise le document dans un document inerte (createHTMLDocument), jamais dans celui de la page : une <img> créée là charge son adresse même détachée',

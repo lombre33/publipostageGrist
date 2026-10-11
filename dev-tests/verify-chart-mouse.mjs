@@ -364,12 +364,12 @@ async function run(theme) {
   await page.waitForTimeout(400);
   const nodes = await chartNodes();
   const zoom = await sheetZoom();
-  const frame = await page.evaluate(sel => { const f = document.querySelector(sel); if (!f) return null; const r = f.getBoundingClientRect(); const label = f.querySelector('.editor-image-var-label'); return { w: r.width, h: r.height, l: r.left, r: r.right, label: label ? label.textContent : null }; }, FRAME);
+  // Le dessin prend la place du cadre dès qu'il est prêt : l'image que montrait l'aperçu (même graphique, même ligne, même taille), sans libellé ni trait.
+  await page.waitForFunction(sel => { const f = document.querySelector(sel); return !!f && f.classList.contains('editor-image-chart-drawn') && !!f.querySelector('img.editor-image').getAttribute('src'); }, FRAME, { timeout: 15000 });
+  const drawn = await page.evaluate(sel => { const f = document.querySelector(sel); const img = f.querySelector('img.editor-image'); const r = f.getBoundingClientRect(); const label = f.querySelector('.editor-image-var-label'); return { w: r.width, h: r.height, l: r.left, r: r.right, natural: [img.naturalWidth, img.naturalHeight], src: img.getAttribute('src'), label: getComputedStyle(label).display, border: getComputedStyle(f).borderTopWidth, shown: getComputedStyle(img).visibility }; }, FRAME);
   check(`${T}, insertion : « Insérer » pose le graphique (références gardées, aucune image dans le modèle, 480 x 300 px), la fenêtre se ferme, le clavier est dans l'éditeur`, !(await winOpen()) && nodes.length === 1 && nodes[0].section === '101' && nodes[0].scope === 'linked' && nodes[0].name === 'Ventes par mois' && !nodes[0].hasSrc && nodes[0].width === '480px' && nodes[0].height === '300px' && (await focusIn()) === 'editor', { nodes, focus: await focusIn() });
-  check(`${T}, insertion : le cadre montre le nom du graphique, à 480 x 300 px à l'échelle de la feuille, dans le panneau`, !!frame && frame.label === 'Ventes par mois' && Math.abs(frame.w / zoom - 482) < 4 && Math.abs(frame.h / zoom - 302) < 4 && frame.l >= 0 && frame.r <= WIDTH + 0.5, { frame, zoom });
-  const frameContrast = await contrastOf(`${FRAME} .editor-image-var-label`);
-  check(`${T}, insertion : le nom dans le cadre a un contraste d'au moins 4,5:1`, frameContrast >= 4.5, frameContrast);
-  await snap(`${T}-5-cadre`);
+  check(`${T}, insertion : le dessin prend la place du cadre : l'image de l'aperçu (1 440 x 900, même ligne), sans libellé ni trait, à 480 x 300 px à l'échelle de la feuille, dans le panneau`, drawn.natural[0] === 1440 && drawn.natural[1] === 900 && drawn.src === srcLinked && drawn.label === 'none' && drawn.border === '0px' && drawn.shown === 'visible' && Math.abs(drawn.w / zoom - 480) < 3 && Math.abs(drawn.h / zoom - 300) < 3 && drawn.l >= 0 && drawn.r <= WIDTH + 0.5, { drawn, zoom });
+  await snap(`${T}-5-dessin`);
 
   // 7) Un clic réel sur le cadre le sélectionne : la ligne devient « Modifier le graphique… » ; la poignée d'angle le redimensionne.
   // À 700x400 la zone d'écriture ne fait que ~250 px de haut : le cadre posé (480 x 300, soit ~256 px à l'écran) la dépasse. Un clic réel dans son centre le sélectionne, puis la personne fait
@@ -377,6 +377,8 @@ async function run(theme) {
   await page.evaluate(sel => document.querySelector(sel).scrollIntoView({ block: 'center' }), FRAME);
   await page.waitForTimeout(150);
   const frameCenter = await centerOf(FRAME);
+  const underMouse = await page.evaluate(({ x, y }) => { const e = document.elementFromPoint(x, y); return e ? e.tagName + '.' + (e.className || '') : null; }, frameCenter);
+  check(`${T}, cadre : le dessin est au premier plan sous la souris (c'est lui qu'un clic touche)`, /^IMG\.editor-image/.test(underMouse || ''), underMouse);
   await page.mouse.click(frameCenter.x, frameCenter.y);
   await page.waitForTimeout(250);
   await page.evaluate(sel => { const box = document.getElementById('editor-container'); const f = document.querySelector(sel).getBoundingClientRect(); box.scrollTop += f.bottom - (box.getBoundingClientRect().bottom - 30); }, FRAME);
@@ -394,6 +396,9 @@ async function run(theme) {
   const after = await sizeOf();
   const resized = (await chartNodes())[0];
   check(`${T}, cadre : tirer la poignée d'angle de 60 px à la souris le réduit de 60 px à l'écran, largeur ET hauteur réglées dans le modèle`, !!grip && Math.abs(before.w - after.w - 60) < 3 && !!resized && /px$/.test(resized.width) && /px$/.test(resized.height), { before, after, resized, grip });
+  await page.waitForFunction(sel => { const i = document.querySelector(sel + ' img.editor-image'); return !!i && i.naturalWidth > 0 && i.naturalWidth !== 1440; }, FRAME, { timeout: 15000 });
+  const redrawn = await page.evaluate(sel => { const i = document.querySelector(sel + ' img.editor-image'); return [i.naturalWidth, i.naturalHeight]; }, FRAME);
+  check(`${T}, cadre : après la poignée, le graphique est redessiné à la nouvelle taille (image trois fois plus grande que la taille réglée)`, !!resized && redrawn[0] === 3 * parseInt(resized.width, 10) && redrawn[1] === 3 * parseInt(resized.height, 10), { redrawn, resized });
   await openMenu();
   const editLabel = (await rowLabels())[ROW_INDEX];
   const editActive = await page.evaluate(() => document.getElementById('v2-btn-chart').classList.contains('is-active'));
@@ -477,6 +482,15 @@ async function run(theme) {
   await snap(`${T}-9-lecture`);
   await clickCenter('#btn-mode-edit');
   await page.waitForTimeout(400);
+
+  // 11) Quand rien ne peut se dessiner (ici un graphique supprimé dans Grist), le cadre pointillé reste avec le nom du graphique, lisible.
+  await setDoc('<p>Bonjour le monde entier</p><p><img class="editor-image" alt="Graphique" style="width: 480px; height: 300px" data-layer="normal" data-wrap="inline" data-chart-section="999" data-chart-scope="all" data-chart-name="Graphique supprimé"></p>');
+  await page.waitForTimeout(700);
+  const gone = await page.evaluate(sel => { const f = document.querySelector(sel); if (!f) return null; const r = f.getBoundingClientRect(); const label = f.querySelector('.editor-image-var-label'); return { w: r.width, h: r.height, l: r.left, r: r.right, label: label.textContent, shown: getComputedStyle(label).display, dashed: getComputedStyle(f).borderTopStyle, drawn: f.classList.contains('editor-image-chart-drawn') }; }, FRAME);
+  check(`${T}, cadre : sans dessin possible (graphique supprimé dans Grist), le cadre pointillé reste avec le nom du graphique, à 480 x 300 px à l'échelle de la feuille, dans le panneau`, !!gone && !gone.drawn && gone.label === 'Graphique supprimé' && gone.shown !== 'none' && gone.dashed === 'dashed' && Math.abs(gone.w / zoom - 482) < 4 && Math.abs(gone.h / zoom - 302) < 4 && gone.l >= 0 && gone.r <= WIDTH + 0.5, { gone, zoom });
+  const goneContrast = await contrastOf(`${FRAME} .editor-image-var-label`);
+  check(`${T}, cadre : le nom dans le cadre a un contraste d'au moins 4,5:1`, goneContrast >= 4.5, goneContrast);
+  await snap(`${T}-10-cadre`);
 }
 
 async function runEnglish() {

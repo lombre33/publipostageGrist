@@ -1698,8 +1698,11 @@ const EditorNodes = (function () {
     function imageInnerStyle(attrs, isVarBox, isQrBox, isChartBox) {
       const imgStyle = [];
       if (attrs.width) imgStyle.push(`width: ${attrs.width}`);
-      if ((isVarBox || isChartBox) && attrs.height) imgStyle.push(`height: ${attrs.height}`);
+      if (isVarBox && attrs.height) imgStyle.push(`height: ${attrs.height}`);
       if (isQrBox) imgStyle.push('aspect-ratio: 1 / 1');
+      // Un graphique : la largeur réglée et les proportions réglées (la hauteur sur la largeur), comme la Lecture et les exports (js/chart-block.js, resolveImage) :
+      // dans une case plus étroite que lui, le cadre rétrécit sans se déformer.
+      if (isChartBox) { const size = ChartBlock.sizeOfAttrs(attrs); imgStyle.push(`aspect-ratio: ${size.width} / ${size.height}`); }
       if (attrs.opacity !== 1 && attrs.opacity != null) imgStyle.push(`opacity: ${attrs.opacity}`);
       if (attrs.layer !== 'normal') imgStyle.push('position: relative', `z-index: ${attrs.layer === 'front' ? 5 : -1}`);
       return imgStyle.join('; ');
@@ -1731,9 +1734,13 @@ const EditorNodes = (function () {
       const isQrBox = !!attrs.qrText && !attrs.src && !isVarBox;
       // Un graphique de la page (js/chart-block.js) : le même cadre, de la largeur et de la hauteur réglées, avec son nom pour libellé.
       const isChartBox = !!attrs.chartSection && !attrs.src && !isVarBox && !isQrBox;
+      // Le dessin du graphique, quand il est prêt (js/chart-block.js, paintFrame) : l'adresse de l'image du cadre à l'écran, jamais un attribut du nœud.
+      const drawn = isChartBox ? ChartBlock.paintFrame(view, attrs, () => applyImageAttrs(view, attrs)) : '';
+      if (!isChartBox && view.chart) ChartBlock.releaseFrame(view);
       // Une image d'un autre site que la personne n'a pas affiché : pas d'adresse donnée au navigateur (le modèle, lui, la garde), un cadre à la place.
       const blockedSite = isVarBox ? '' : ExternalImages.blockedSiteOf(attrs.src);
-      img.src = (isVarBox || blockedSite) ? '' : (attrs.src || '');
+      const shownSrc = (isVarBox || blockedSite) ? '' : (attrs.src || drawn);
+      if (img.getAttribute('src') !== shownSrc) img.src = shownSrc;
       wrap.classList.toggle('editor-image-blocked', !!blockedSite);
       if (blockedSite) {
         wrap.dataset.blockedSite = blockedSite;
@@ -1747,6 +1754,8 @@ const EditorNodes = (function () {
       wrap.classList.toggle('editor-image-var-placeholder', isVarBox || isQrBox || isChartBox);
       wrap.classList.toggle('editor-image-qr-placeholder', isQrBox);
       wrap.classList.toggle('editor-image-chart-placeholder', isChartBox);
+      // Le dessin est prêt : il prend la place du cadre pointillé et de son libellé (css/chart-block.css).
+      wrap.classList.toggle('editor-image-chart-drawn', !!drawn);
       varLabel.textContent = isVarBox ? ('#' + (attrs.varKey || '')) : (isQrBox ? attrs.qrText : (isChartBox ? (attrs.chartName || I18n.t('chart.frame')) : ''));
       const layered = attrs.layer !== 'normal';
       wrap.classList.toggle('editor-image-layered', layered);
@@ -1906,13 +1915,15 @@ const EditorNodes = (function () {
           applyAttrs(updatedNode.attrs);
           return true;
         },
-        selectNode: () => wrap.classList.add('editor-image-selected'),
+        // Le clic sur un graphique refait son dessin d'après les données d'aujourd'hui (js/chart-block.js).
+        selectNode: () => { wrap.classList.add('editor-image-selected'); if (view.chart) ChartBlock.refreshFrame(view); },
         deselectNode: () => wrap.classList.remove('editor-image-selected'),
         // Le bouton « Afficher » d'une image bloquée est à lui : ni sélection de l'image, ni glissé, ni autre geste de l'éditeur sur son clic.
         stopEvent: event => !!event.target.closest && !!event.target.closest('.editor-image-blocked-box'),
         destroy: () => {
           revealHooks.delete(redraw);
           behindImageViews.delete(wrap);
+          if (view.chart) ChartBlock.releaseFrame(view);
           resize.release();
           move.release();
         },

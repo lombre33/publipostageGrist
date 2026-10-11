@@ -303,12 +303,22 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   entre dans la Lecture, le PDF, le Word et l'Excel comme une image. Deux choix de lignes : « Toute la
   table » (le même graphique partout, comme dans Grist) ou « Les lignes liées à la ligne du document » (un
   graphique propre à chaque élève, chaque facture… ; la liaison entre les deux tables se règle à la
-  validation). Dans l'éditeur, le cadre garde le nom du graphique ; ses poignées changent sa largeur et sa
-  hauteur et un clic le sélectionne : la ligne du menu devient « Modifier le graphique… ». Plotly se charge
+  validation). Dans l'éditeur, ses poignées changent sa largeur et sa hauteur et un clic le sélectionne :
+  la ligne du menu devient « Modifier le graphique… ». Plotly se charge
   au premier graphique seulement (jsDelivr, version et empreinte figées). Ce que le widget ne redessine pas
   encore reste dans la liste, grisé, avec sa raison : widgets personnalisés, Kaplan-Meier, « Split series »,
   « Error bars », filtres sur des dates relatives. Le total d'un anneau s'écrit sans le format de la
   colonne.
+- **Graphique de la page dessiné dans l'éditeur** : le cadre pointillé d'un graphique cède la place à son
+  dessin, le même que celui de la Lecture et des exports, à la taille réglée. « Toute la table » ne dépend
+  d'aucune ligne : il se dessine à l'ouverture du modèle. « Les lignes liées » est tracé pour la ligne que
+  Grist affiche et se redessine quand elle change. Le dessin n'est jamais enregistré dans le modèle : le
+  document suit toujours le graphique de Grist. Rien ne prévient le widget quand les données d'une autre
+  table changent : le dessin est refait à l'ouverture, au changement de taille, de ligne ou de valeurs de la
+  ligne, au clic sur le graphique et au retour dans le mode Édition ; la Lecture redessine toujours. Quand
+  rien ne peut se dessiner (aucune ligne sélectionnée pour « liées », rien à tracer, graphique supprimé dans
+  Grist, bibliothèque injoignable), le cadre pointillé et le nom du graphique restent. Dans une case plus
+  étroite que lui, le graphique rétrécit sans se déformer, comme dans la Lecture.
 - **Impression par le navigateur** : la ligne « Impression navigateur » du menu Qualité du bouton PDF, jusque-là
   grisée, imprime la Lecture par la fenêtre d'impression du navigateur (« Enregistrer au format PDF » ou une
   imprimante). La mise en page est celle de la Lecture : mêmes coupures de page, mêmes en-têtes, pieds et numéros
@@ -864,11 +874,20 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   uses, as bars, line, area, scatter, pie and donut, and goes into Reading, the PDF, the Word and the Excel
   as an image. Two choices of rows: "The whole table" (the same chart everywhere, as in Grist) or "The rows
   linked to the document's row" (a chart of its own for each student, each invoice…; the link between the two
-  tables is set when you confirm). In the editor, the frame keeps the chart's name; its handles change its width
-  and height and a click selects it: the menu row becomes "Edit chart…". Plotly loads for the
+  tables is set when you confirm). In the editor, its handles change its width and height and a click
+  selects it: the menu row becomes "Edit chart…". Plotly loads for the
   first chart only (jsDelivr, version and hash pinned). What the widget does not redraw yet stays in the list,
   greyed, with its reason: custom widgets, Kaplan-Meier, "Split series", "Error bars", filters on relative
   dates. A donut's total is written without the column's format.
+- **Chart from the page drawn in the editor**: a chart's dotted frame gives way to its drawing, the same as
+  Reading and the exports show, at the size set. "The whole table" depends on no row: it is drawn when the
+  template opens. "The linked rows" is drawn for the row Grist shows and redrawn when it changes. The
+  drawing is never saved in the template: the document always follows the chart in Grist. Nothing tells the
+  widget when another table's data changes: the drawing is redone when the template opens, when the size,
+  the row or the row's values change, on a click on the chart and on return to Edit mode; Reading always
+  redraws. When nothing can be drawn (no row selected for "linked", nothing to plot, chart deleted in Grist,
+  library unreachable), the dotted frame and the chart's name stay. In a space narrower than the chart, it
+  shrinks without distortion, as in Reading.
 - **Browser print**: the "Browser print" line of the PDF button's Quality menu, greyed out until now, prints the
   Reading view through the browser's print window ("Save as PDF" or a printer). The layout is the Reading
   view's: same page breaks, same headers, footers and page numbers, same fonts, tables, images and watermark,

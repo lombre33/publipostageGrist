@@ -29,8 +29,8 @@
 .pp-chart-message { margin: 0; font-size: 11.5px; line-height: 1.4; text-align: center; color: #4b5563; overflow-wrap: anywhere; }
 .pp-chart-caption { margin-top: 4px; text-align: center; }
 
-/* Dans l'éditeur : un graphique n'a pas d'image avant la Lecture, seulement le cadre d'une image de variable, de la largeur et de la hauteur réglées, avec l'icône
-   d'un graphique et son nom. */
+/* Dans l'éditeur : un graphique n'a pas d'image dans le modèle, seulement le cadre d'une image de variable, de la largeur et de la hauteur réglées, avec l'icône
+   d'un graphique et son nom, le temps que son dessin soit prêt (ou quand il n'y a rien à dessiner). */
 /* Le nom du cadre est en --text, comme celui d'une image de variable (css/editor-v2.css : le gris n'y faisait que 4,39:1 sur le fond du cadre en clair) ;
    l'icône, un tracé et non du texte, garde le gris (≥ 3:1). */
 .editor-image-chart-placeholder .editor-image-var-label { font-size: 11px; overflow-wrap: anywhere; line-height: 1.25; color: var(--text); }
@@ -39,3 +39,9 @@
   -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M3 3v18h18'/%3E%3Cpath d='M8 17v-5M13 17V8M18 17v-3'/%3E%3C/svg%3E");
   mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M3 3v18h18'/%3E%3Cpath d='M8 17v-5M13 17V8M18 17v-3'/%3E%3C/svg%3E");
 }
+
+/* Le dessin du graphique est prêt (js/chart-block.js, paintFrame) : l'image prend la place du cadre pointillé et de son libellé, à la taille de la Lecture et des
+   exports (ni trait ni marge autour). Sans dessin (aucune ligne pour « liées », rien à tracer, graphique supprimé), le cadre ci-dessus reste. */
+.tiptap .editor-image-view.editor-image-chart-drawn { background: none; border: 0; }
+.tiptap .editor-image-view.editor-image-chart-drawn .editor-image { visibility: visible; }
+.tiptap .editor-image-view.editor-image-chart-drawn .editor-image-var-label { display: none; }

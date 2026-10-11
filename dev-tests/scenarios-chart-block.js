@@ -934,19 +934,304 @@
   });
 
   cases.push({
-    id: 'chart_frame_in_the_editor_shows_the_chart_name_with_a_chart_icon_at_the_size_set_and_never_an_image',
-    description: 'Dans l\'éditeur le graphique est un cadre pointillé (comme une image de variable) à la taille réglée, avec l\'icône d\'un graphique et son nom ; il n\'a aucune image ; la taille réglée (largeur ET hauteur) est celle du cadre',
+    id: 'chart_frame_in_the_editor_shows_the_chart_name_with_a_chart_icon_at_the_size_set_while_nothing_is_drawn',
+    description: 'Tant que le dessin n\'est pas là (ici : il échoue), le graphique est un cadre pointillé (comme une image de variable) à la taille réglée, avec l\'icône d\'un graphique et son nom ; il n\'a aucune image ; la taille réglée (largeur ET hauteur) est celle du cadre',
     run: async (h) => {
-      await setDoc(h, '<p>Avant</p><p>' + chartHtml(101, 'linked', 'Ventes par mois', 'width: 300px; height: 180px') + '</p>');
-      const view = tiptap().querySelector('.editor-image-view.editor-image-chart-placeholder');
-      const label = view && view.querySelector('.editor-image-var-label');
-      const rect = view && view.getBoundingClientRect();
-      const labelBefore = label && getComputedStyle(label, '::before');
+      const failing = spyDrawing(true);
+      try {
+        await setDoc(h, '<p>Avant</p><p>' + chartHtml(101, 'linked', 'Ventes par mois', 'width: 300px; height: 180px') + '</p>');
+        await sleep(300);
+        const view = tiptap().querySelector('.editor-image-view.editor-image-chart-placeholder');
+        const label = view && view.querySelector('.editor-image-var-label');
+        const rect = view && view.getBoundingClientRect();
+        const labelBefore = label && getComputedStyle(label, '::before');
+        const attrs = chartAttrs();
+        return {
+          pass: !!view && view.classList.contains('editor-image-var-placeholder') && !view.classList.contains('editor-image-chart-drawn') && label.textContent === 'Ventes par mois' && rect.width >= 300 && rect.width <= 303 && rect.height >= 180 && rect.height <= 183 && attrs.src === null
+            && labelBefore.maskImage !== 'none' && labelBefore.width === '28px' && Array.from(view.querySelectorAll('img')).every(i => !i.getAttribute('src')),
+          notes: JSON.stringify({ rect: rect && [rect.width, rect.height], label: label && label.textContent, mask: labelBefore && labelBefore.maskImage.slice(0, 24), attrs: attrs && [attrs.width, attrs.height] }),
+        };
+      } finally { failing.restore(); }
+    },
+  });
+
+  // === 3 bis) Le dessin dans le cadre de l'éditeur ===========================================================================================================
+  // Le nœud reste sans image (le modèle ne garde que ses références) ; le cadre montre le dessin dès qu'il est prêt, comme `src` de son <img> à l'écran. « Toute la table » ne dépend
+  // d'aucune ligne ; « liées » est tracé pour la ligne que Grist affiche et la suit. Rien ne prévient le widget quand les données d'une autre table changent : le dessin est refait à
+  // l'ouverture, au changement de taille, de ligne, aux valeurs de la ligne, au clic et au retour en édition.
+  const frameView = () => tiptap().querySelector('.editor-image-view.editor-image-chart-placeholder');
+  const frameImg = () => { const view = frameView(); return view ? view.querySelector('img.editor-image') : null; };
+  const drawnSrc = () => { const view = frameView(); const img = frameImg(); return view && img && view.classList.contains('editor-image-chart-drawn') ? (img.getAttribute('src') || '') : ''; };
+  const isDrawn = () => drawnSrc() !== '';
+  const labelDisplay = view => getComputedStyle(view.querySelector('.editor-image-var-label')).display;
+  // Espionne ce que le dessin reçoit : les figures (abscisses ou secteurs de la première série) et les tailles demandées à Plotly ; `fail` fait échouer le dessin.
+  function spyDrawing(fail) {
+    const figures = [];
+    const sizes = [];
+    const realFigure = ChartPlot.figure;
+    const realImage = ChartPlot.toImage;
+    ChartPlot.figure = function () {
+      const figure = realFigure.apply(this, arguments);
+      const first = figure.data[0] || {};
+      figures.push(first.x ? Array.from(first.x) : (first.labels ? Array.from(first.labels) : null));
+      return figure;
+    };
+    ChartPlot.toImage = function (figure, width, height) {
+      sizes.push(width + 'x' + height);
+      return fail ? Promise.reject(new Error('essai')) : realImage.apply(this, arguments);
+    };
+    return { figures, sizes, last: () => JSON.stringify(figures[figures.length - 1]), restore() { ChartPlot.figure = realFigure; ChartPlot.toImage = realImage; } };
+  }
+  // Attend que le cadre montre un autre dessin que `from` ; `blank` : le cadre a-t-il été vide un instant (il doit garder l'ancien dessin jusqu'au nouveau).
+  async function nextDrawing(from, timeout) {
+    const end = Date.now() + (timeout || 8000);
+    let blank = false;
+    while (Date.now() < end) {
+      const now = drawnSrc();
+      if (!now) blank = true; else if (now !== from) return { src: now, blank };
+      await sleep(15);
+    }
+    return { src: '', blank };
+  }
+
+  cases.push({
+    id: 'chart_editor_draws_the_chart_in_its_frame_at_the_size_set_and_the_model_stays_without_image',
+    description: 'Dans l\'éditeur, le dessin du graphique prend la place du cadre pointillé dès qu\'il est prêt : l\'image PNG que trace Plotly pour la ligne affichée (300 x 180 px, image de 900 x 540), sans trait ni libellé, aux proportions réglées, identique à celle de la Lecture ; le modèle ne gagne ni `src` ni image',
+    run: async (h) => {
+      await seed(h);
+      const style = 'width: 300px; height: 180px';
+      await setDoc(h, '<p>Avant</p><p>' + chartHtml(101, 'linked', 'Ventes par mois', style) + '</p>');
+      const ready = await waitFor(isDrawn, 8000);
+      const view = frameView();
+      const img = frameImg();
+      const rect = view.getBoundingClientRect();
+      const src = drawnSrc();
+      const picture = ready ? await pixelsOf(src) : { width: 0, height: 0, data: [] };
+      const look = { label: labelDisplay(view), shown: getComputedStyle(img).visibility, border: getComputedStyle(view).borderTopWidth, ratio: img.style.aspectRatio, alt: img.alt };
       const attrs = chartAttrs();
+      const html = Editor.getHTML();
+      const reader = await renderReader(docOf(chartHtml(101, 'linked', 'Ventes par mois', style)), recordOf(1));
+      const readerImg = reader.querySelector('img');
+      const readerSrc = readerImg ? readerImg.getAttribute('src') : '';
+      document.getElementById('reader-container').style.display = 'none';
       return {
-        pass: !!view && view.classList.contains('editor-image-var-placeholder') && label.textContent === 'Ventes par mois' && rect.width >= 300 && rect.width <= 303 && rect.height >= 180 && rect.height <= 183 && attrs.src === null
-          && labelBefore.maskImage !== 'none' && labelBefore.width === '28px' && Array.from(view.querySelectorAll('img')).every(i => !i.getAttribute('src')),
-        notes: JSON.stringify({ rect: rect && [rect.width, rect.height], label: label && label.textContent, mask: labelBefore && labelBefore.maskImage.slice(0, 24), attrs: attrs && [attrs.width, attrs.height] }),
+        pass: ready && src.startsWith('data:image/png;base64,') && picture.width === 900 && picture.height === 540 && inkOf(picture) > 3000
+          && rect.width >= 299.5 && rect.width <= 300.5 && rect.height >= 179.5 && rect.height <= 180.5
+          && look.label === 'none' && look.shown === 'visible' && look.border === '0px' && look.ratio === '300 / 180' && look.alt === 'Graphique'
+          && attrs.src === null && chartNodes().every(n => !n.hasAttribute('src')) && !html.includes('data:image/png') && src === readerSrc,
+        notes: JSON.stringify({ ready, rect: [rect.width, rect.height], picture: [picture.width, picture.height, inkOf(picture)], look, sameAsReader: src === readerSrc, imageInModel: html.includes('data:image/png') }),
+      };
+    },
+  });
+
+  cases.push({
+    id: 'chart_editor_draws_a_linked_chart_for_the_row_grist_shows_and_follows_the_row_without_a_blank_frame',
+    description: 'Les lignes liées sont tracées pour la ligne que Grist affiche (client 1, puis 2, puis 3 : trois dessins, les ventes de chaque client) et le cadre suit le changement de ligne en gardant l\'ancien dessin jusqu\'au nouveau (jamais vide) ; le dessin de l\'éditeur est celui de la Lecture pour cette ligne',
+    run: async (h) => {
+      await seed(h);
+      const spy = spyDrawing(false);
+      try {
+        await setDoc(h, '<p>Avant</p><p>' + chartHtml(101, 'linked') + '</p>');
+        const first = await waitFor(isDrawn, 8000);
+        const srcOne = drawnSrc();
+        const seen = [spy.last()];
+        window.__gristStub.fireRecord(recordOf(2), PAGE_TABLE);
+        const two = await nextDrawing(srcOne);
+        seen.push(spy.last());
+        window.__gristStub.fireRecord(recordOf(3), PAGE_TABLE);
+        const three = await nextDrawing(two.src);
+        seen.push(spy.last());
+        const reader = await renderReader(docOf(chartHtml(101, 'linked')), recordOf(3));
+        const readerImg = reader.querySelector('img');
+        const readerSrc = readerImg ? readerImg.getAttribute('src') : '';
+        document.getElementById('reader-container').style.display = 'none';
+        return {
+          pass: first && !!two.src && !!three.src && new Set([srcOne, two.src, three.src]).size === 3 && !two.blank && !three.blank
+            && same(seen, ['["Mars","Janvier"]', '["Février","Avril"]', '["Mai"]']) && three.src === readerSrc && !Editor.getHTML().includes('data:image/png'),
+          notes: JSON.stringify({ seen, blank: [two.blank, three.blank], sameAsReader: three.src === readerSrc }),
+        };
+      } finally { spy.restore(); }
+    },
+  });
+
+  cases.push({
+    id: 'chart_editor_keeps_the_frame_of_a_linked_chart_while_no_row_is_selected_and_draws_when_one_arrives',
+    description: 'Sans ligne sélectionnée dans Grist, un graphique « lignes liées » garde son cadre pointillé (rien n\'est demandé à Plotly) ; dès qu\'une ligne arrive, il se dessine',
+    run: async (h) => {
+      await seed(h);
+      window.__gristStub.fireRecord(null, PAGE_TABLE);
+      await sleep(60);
+      const spy = spyDrawing(false);
+      try {
+        await setDoc(h, '<p>Avant</p><p>' + chartHtml(101, 'linked') + '</p>');
+        await sleep(700);
+        const view = frameView();
+        const kept = { frame: !!view, drawn: isDrawn(), label: view ? labelDisplay(view) : '', border: view ? getComputedStyle(view).borderTopStyle : '', asked: spy.sizes.length };
+        window.__gristStub.fireRecord(recordOf(1), PAGE_TABLE);
+        const drawn = await waitFor(isDrawn, 8000);
+        return { pass: kept.frame && !kept.drawn && kept.label !== 'none' && kept.border === 'dashed' && kept.asked === 0 && drawn && same(spy.sizes, ['480x300']), notes: JSON.stringify({ kept, drawn, sizes: spy.sizes }) };
+      } finally { spy.restore(); }
+    },
+  });
+
+  cases.push({
+    id: 'chart_editor_draws_a_whole_table_chart_once_for_every_row_and_again_when_the_values_of_the_row_change',
+    description: '« Toute la table » ne dépend d\'aucune ligne : changer de ligne ne le redessine pas ; les valeurs de la ligne qui changent dans Grist (le même numéro de ligne arrive de nouveau) le redessinent avec les données d\'aujourd\'hui',
+    run: async (h) => {
+      await seed(h);
+      const spy = spyDrawing(false);
+      try {
+        await setDoc(h, '<p>Avant</p><p>' + chartHtml(113, 'all', 'Clients par ville') + '</p>');
+        const first = await waitFor(isDrawn, 8000);
+        const srcOne = drawnSrc();
+        const callsOne = spy.sizes.length;
+        const countLyon = () => (JSON.parse(spy.last()) || []).filter(v => v === 'Lyon').length;
+        const lyonBefore = countLyon();
+        window.__gristStub.fireRecord(recordOf(2), PAGE_TABLE);
+        await sleep(700);
+        const moved = { same: drawnSrc() === srcOne, calls: spy.sizes.length - callsOne };
+        const edited = clients.map(c => Object.assign({}, c, c.id === 2 ? { Ville: 'Lyon' } : {}));
+        window.__gristStub.setRows(PAGE_TABLE, edited);
+        window.__gristStub.fireRecord(Object.assign({}, edited[1]), PAGE_TABLE);
+        const changed = await nextDrawing(srcOne);
+        return {
+          pass: first && lyonBefore === 2 && moved.same && moved.calls === 0 && !!changed.src && countLyon() === 3 && spy.sizes.length === callsOne + 1,
+          notes: JSON.stringify({ lyonBefore, moved, lyonAfter: countLyon(), calls: spy.sizes.length - callsOne }),
+        };
+      } finally { spy.restore(); }
+    },
+  });
+
+  cases.push({
+    id: 'chart_editor_redraws_at_the_new_size_and_keeps_the_proportions_set',
+    description: 'Changer la taille du cadre redessine le graphique à cette taille (240 x 120 px : image de 720 x 360) ; le cadre garde les proportions réglées (aspect-ratio) et le modèle garde la largeur et la hauteur',
+    run: async (h) => {
+      await seed(h);
+      const spy = spyDrawing(false);
+      try {
+        await setDoc(h, '<p>Avant</p><p>' + chartHtml(102, 'all', 'Courbe', 'width: 300px; height: 180px') + '</p>');
+        await waitFor(isDrawn, 8000);
+        const natural = () => { const i = frameImg(); return i ? [i.naturalWidth, i.naturalHeight] : [0, 0]; };
+        const before = natural();
+        EditorCore.patchNodeAndReselect(EditorCore.getEditor(), chartPos(), Object.assign({}, chartAttrs(), { width: '240px', height: '120px' }));
+        const redrawn = await waitFor(() => { const n = natural(); return n[0] === 720 && n[1] === 360; }, 8000);
+        await sleep(200);
+        const rect = frameView().getBoundingClientRect();
+        const attrs = chartAttrs();
+        return {
+          pass: same(before, [900, 540]) && redrawn && rect.width >= 239.5 && rect.width <= 240.5 && rect.height >= 119.5 && rect.height <= 120.5 && frameImg().style.aspectRatio === '240 / 120'
+            && attrs.width === '240px' && attrs.height === '120px' && spy.sizes[0] === '300x180' && spy.sizes[spy.sizes.length - 1] === '240x120' && !Editor.getHTML().includes('data:image/png'),
+          notes: JSON.stringify({ before, redrawn, rect: [rect.width, rect.height], sizes: spy.sizes }),
+        };
+      } finally { spy.restore(); }
+    },
+  });
+
+  cases.push({
+    id: 'chart_editor_keeps_the_frame_when_there_is_nothing_to_draw_or_the_chart_is_gone',
+    description: 'Un graphique sans aucune ligne à tracer (un filtre les écarte toutes) et un graphique supprimé dans Grist gardent leur cadre pointillé et leur nom dans l\'éditeur (sans note « indisponible » : elle est pour la Lecture) ; un autre graphique du même document se dessine',
+    run: async (h) => {
+      const charts = baseCharts().filter(c => c.id === 101 || c.id === 102);
+      charts[0].filters = [{ col: 'Montant', filter: { min: 1000 } }];
+      await seed(h, charts);
+      await setDoc(h, '<p>' + chartHtml(101, 'all', 'Rien à tracer') + '</p><p>' + chartHtml(999, 'all', 'Supprimé') + '</p><p>' + chartHtml(102, 'all', 'Courbe') + '</p>');
+      await waitFor(() => tiptap().querySelectorAll('.editor-image-chart-drawn').length === 1, 8000);
+      await sleep(500);
+      const views = Array.from(tiptap().querySelectorAll('.editor-image-view.editor-image-chart-placeholder'));
+      const states = views.map(v => [v.querySelector('.editor-image-var-label').textContent, v.classList.contains('editor-image-chart-drawn')]);
+      return {
+        pass: same(states, [['Rien à tracer', false], ['Supprimé', false], ['Courbe', true]]) && views.slice(0, 2).every(v => labelDisplay(v) !== 'none' && getComputedStyle(v).borderTopStyle === 'dashed')
+          && !/indisponible/i.test(tiptap().textContent) && chartNodes().length === 3 && chartNodes().every(n => !n.hasAttribute('src')),
+        notes: JSON.stringify({ states }),
+      };
+    },
+  });
+
+  cases.push({
+    id: 'chart_editor_redraws_a_chart_on_click_with_the_data_of_the_moment',
+    description: 'Rien ne prévient le widget quand les données d\'une autre table changent : le dessin de l\'éditeur reste celui d\'avant jusqu\'à un clic sur le cadre, qui le refait avec les données d\'aujourd\'hui',
+    run: async (h) => {
+      await seed(h);
+      const spy = spyDrawing(false);
+      try {
+        await setDoc(h, '<p>Avant</p><p>' + chartHtml(101, 'all', 'Ventes par mois') + '</p>');
+        await waitFor(isDrawn, 8000);
+        const srcOne = drawnSrc();
+        window.__gristStub.setRows(SALES, sales.concat([{ id: 6, manualSort: 6, Client: 3, gristHelper_Display: 'Cabinet Morel', Mois: 'Juin', Montant: 500, Cout: 10, Jour: utc(2026, 6, 1), Heure: 0, Famille: 'Pain', Tags: ['L'], Libelle: 'Item 4', Note: '' }]));
+        await sleep(600);
+        const stale = drawnSrc() === srcOne;
+        await selectChart();
+        const fresh = await nextDrawing(srcOne);
+        return { pass: stale && !!fresh.src && !fresh.blank && JSON.parse(spy.last()).includes('Juin'), notes: JSON.stringify({ stale, fresh: !!fresh.src, last: spy.last() }) };
+      } finally { spy.restore(); }
+    },
+  });
+
+  cases.push({
+    id: 'chart_editor_draws_nothing_while_the_reading_mode_hides_it_and_catches_up_when_editing_returns',
+    description: 'Dans le mode Lecture l\'éditeur est caché : le changement de ligne ne redessine pas ses cadres ; au retour dans le mode Édition ils se redessinent pour la ligne d\'aujourd\'hui, avec le dessin que la Lecture donne pour elle',
+    run: async (h) => {
+      await seed(h);
+      await setDoc(h, '<p>Avant</p><p>' + chartHtml(101, 'linked') + '</p>');
+      await waitFor(isDrawn, 8000);
+      const srcOne = drawnSrc();
+      document.getElementById('btn-mode-read').click();
+      await sleep(600);
+      window.__gristStub.fireRecord(recordOf(2), PAGE_TABLE);
+      await sleep(900);
+      const whileReading = drawnSrc() === srcOne;
+      const readerImg = document.querySelector('#reader-container .reader-content img');
+      const readerSrc = readerImg ? readerImg.getAttribute('src') : '';
+      document.getElementById('btn-mode-edit').click();
+      const back = await nextDrawing(srcOne);
+      return { pass: whileReading && !!back.src && back.src === readerSrc && !!readerSrc, notes: JSON.stringify({ whileReading, back: !!back.src, sameAsReader: back.src === readerSrc }) };
+    },
+  });
+
+  cases.push({
+    id: 'chart_editor_keeps_the_frame_when_the_drawing_fails_and_a_click_draws_it_once_it_works_again',
+    description: 'Si le dessin échoue (bibliothèque absente, erreur de Plotly), le cadre pointillé reste sans casser l\'éditeur ni écrire dans le modèle ; un clic sur le cadre retente et le dessine',
+    run: async (h) => {
+      await seed(h);
+      const failing = spyDrawing(true);
+      let kept;
+      try {
+        await setDoc(h, '<p>Avant</p><p>' + chartHtml(101, 'linked') + '</p>');
+        await sleep(800);
+        const view = frameView();
+        kept = { frame: !!view, drawn: isDrawn(), label: view ? labelDisplay(view) : '', asked: failing.sizes.length, src: view ? (frameImg().getAttribute('src') || '') : null };
+      } finally { failing.restore(); }
+      await selectChart();
+      const recovered = await waitFor(isDrawn, 8000);
+      return { pass: kept.frame && !kept.drawn && kept.label !== 'none' && kept.asked >= 1 && kept.src === '' && recovered && !Editor.getHTML().includes('data:image/png'), notes: JSON.stringify({ kept, recovered }) };
+    },
+  });
+
+  cases.push({
+    id: 'chart_editor_frame_keeps_the_proportions_set_in_a_space_narrower_than_the_chart',
+    description: 'Dans un espace plus étroit que le graphique (480 x 300 px), le cadre rétrécit sans se déformer, comme l\'image de la Lecture : avant et après le dessin, la largeur sur la hauteur reste celle du réglage',
+    run: async (h) => {
+      await seed(h);
+      const box = tiptap();
+      const failing = spyDrawing(true);
+      let frame;
+      try {
+        await setDoc(h, '<p>Avant</p><p>' + chartHtml(101, 'all', 'Ventes par mois') + '</p>');
+        box.style.width = '260px';
+        await sleep(300);
+        const rect = frameView().getBoundingClientRect();
+        frame = { w: rect.width, h: rect.height };
+      } finally { failing.restore(); }
+      await selectChart();
+      await waitFor(isDrawn, 8000);
+      await sleep(200);
+      const rect = frameView().getBoundingClientRect();
+      const drawn = { w: rect.width, h: rect.height };
+      box.style.width = '';
+      const ratio = size => size.w / size.h;
+      return {
+        pass: frame.w < 400 && Math.abs(ratio(frame) - 1.6) < 0.03 && drawn.w < 400 && Math.abs(ratio(drawn) - 1.6) < 0.03,
+        notes: JSON.stringify({ frame, drawn }),
       };
     },
   });

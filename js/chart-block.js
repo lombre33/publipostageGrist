@@ -4,10 +4,11 @@
 // `img.editor-image` comme les autres (taille, alignement, calque, opacité, exports PDF et Word : rien de nouveau), qui porte en plus ses références :
 // `data-chart-section` (le numéro de la section de Grist), `data-chart-scope` (« linked » : les lignes liées à la ligne du document, par la règle de liaison
 // des tables ; « all » : toute la table) et `data-chart-name` (le nom montré dans le cadre) - attributs `chartSection`, `chartScope` et `chartName` du nœud,
-// js/editor-nodes.js. Comme le QR code d'une colonne, l'éditeur montre un cadre sans image ; le graphique est dessiné à la Lecture et à l'export pour la
-// ligne affichée (resolveImage, appelé par js/reader-mode.js), jamais enregistré dans le modèle. Le document suit donc le graphique de Grist : changer son
-// type ou ses colonnes là-bas change le document ; un graphique supprimé laisse « [Graphique indisponible] ». Sans ligne à tracer, il disparaît comme une
-// image sans pièce jointe.
+// js/editor-nodes.js. Le nœud n'a pas d'image : le graphique est dessiné à la Lecture et à l'export pour la ligne affichée (resolveImage, appelé par
+// js/reader-mode.js), jamais enregistré dans le modèle. Le document suit donc le graphique de Grist : changer son type ou ses colonnes là-bas change le
+// document ; un graphique supprimé laisse « [Graphique indisponible] ». Sans ligne à tracer, il disparaît comme une image sans pièce jointe.
+// Dans l'éditeur, le cadre pointillé (comme celui d'une image de variable) est remplacé par le même dessin dès qu'il est prêt (paintFrame), à l'écran
+// seulement : « toute la table » ne dépend d'aucune ligne, « lignes liées » est tracé pour la ligne que Grist affiche et redessiné quand elle change.
 // La fenêtre « Graphique de la page… » s'ouvre depuis le menu « Lien et blocs de contenu » (index.html, js/main-toolbar.js) ; styles dans
 // css/chart-block.css.
 const ChartBlock = (function () {
@@ -29,15 +30,18 @@ const ChartBlock = (function () {
   }
   // `needsImage` : un graphique n'a jamais d'image dans le modèle ; une image qui a déjà la sienne (redessinée plus tôt dans le même rendu) est laissée.
   const needsImage = img => !!img.getAttribute('data-chart-section') && !img.getAttribute('src');
-  // La taille de l'image, en pixels de mise en page : sa largeur et sa hauteur réglées dans l'éditeur, sinon celles d'un graphique posé.
-  function sizeOf(img) {
+  // La taille de l'image, en pixels de mise en page : sa largeur et sa hauteur réglées dans l'éditeur (`widthText` et `heightText`, « 480px »), sinon celles
+  // d'un graphique posé.
+  function sizeFrom(widthText, heightText) {
     const px = value => (/px\s*$/.test(value || '') ? parseFloat(value) : NaN);
     const clamp = value => Math.max(MIN_SIDE_PX, Math.min(MAX_SIDE_PX, Math.round(value)));
-    const width = px(img.style.width);
-    const height = px(img.style.height);
+    const width = px(widthText);
+    const height = px(heightText);
     const wide = width > 0 ? width : DEFAULT_WIDTH_PX;
     return { width: clamp(wide), height: clamp(height > 0 ? height : wide * DEFAULT_HEIGHT_PX / DEFAULT_WIDTH_PX) };
   }
+  const sizeOf = img => sizeFrom(img.style.width, img.style.height);
+  const sizeOfAttrs = attrs => sizeFrom(attrs && attrs.width, attrs && attrs.height);
   function problem(kind, message) {
     const error = new Error(message);
     error.kind = kind;
@@ -89,6 +93,122 @@ const ChartBlock = (function () {
     return node && node.type && node.type.name === 'editorImage' && node.attrs.chartSection && !node.attrs.src ? { node, pos: ed.state.selection.from } : null;
   }
   const isSelected = ed => !!selectedNode(ed);
+
+  // Le cadre : son dessin
+  // Le cadre d'un graphique (js/editor-nodes.js, applyImageAttrs) montre le dessin dès qu'il est prêt : « toute la table » ne dépend d'aucune ligne, « liées » est
+  // tracé pour la ligne que Grist affiche. Le dessin n'est que l'`src` de l'<img> du cadre à l'écran, jamais un attribut du nœud : le modèle reste sans image et le
+  // document suit toujours le graphique de Grist. Quand il n'y a rien à dessiner (aucune ligne sélectionnée pour « liées », rien à tracer, graphique supprimé ou
+  // illisible, bibliothèque absente), le cadre pointillé reste. Rien ne prévient le widget quand les données d'une autre table changent : le dessin est refait à
+  // l'ouverture du modèle, au changement de taille, au changement de ligne (« liées »), aux valeurs de la ligne qui changent (tous), au clic sur le cadre et au
+  // retour en édition ; la Lecture, elle, redessine toujours.
+  const FRAME_DELAY_MS = 120;
+  const FRAME_DRAW_LIMIT_MS = 20000;
+  const frames = new Set();   // les cadres vivants (l'objet `view` de js/editor-nodes.js : wrap, img, chart)
+  let frameTimer = 0;
+  let frameRunning = false;
+  let frameAgain = false;
+  let frameForce = false;
+  let framesListen = false;
+  let lastRowId;
+
+  // Ce que le nœud demande : { id, scope, width, height }, ou null quand ce n'est pas un graphique sans image.
+  function wantedOf(attrs) {
+    const id = Number(attrs && attrs.chartSection);
+    if (!id || attrs.src) return null;
+    const size = sizeOfAttrs(attrs);
+    return { id, scope: attrs.chartScope === 'all' ? 'all' : 'linked', width: size.width, height: size.height };
+  }
+  // Le dessin dépend de la section, des lignes, de la taille et, pour « liées », de la ligne affichée.
+  const keyOf = (want, record) => [want.id, want.scope, want.width, want.height, want.scope === 'linked' && record ? record.id : ''].join('|');
+  const isShown = view => view.wrap.isConnected && view.wrap.getClientRects().length > 0;
+
+  function withLimit(work, ms) {
+    let timer;
+    const limit = new Promise((resolve, reject) => { timer = setTimeout(() => reject(new Error('Dessin trop long')), ms); });
+    return Promise.race([work, limit]).finally(() => clearTimeout(timer));
+  }
+
+  function scheduleFrames(force, delay) {
+    frameForce = frameForce || !!force;
+    clearTimeout(frameTimer);
+    frameTimer = setTimeout(runFrames, delay === undefined ? FRAME_DELAY_MS : delay);
+  }
+
+  // Une ligne arrive de Grist : une autre ligne change les graphiques « liées » (la clé du dessin), la même ligne a de nouvelles valeurs.
+  function onRow(record) {
+    const id = record ? record.id : undefined;
+    const moved = id !== lastRowId;
+    lastRowId = id;
+    if (frames.size) scheduleFrames(!moved);
+  }
+
+  async function runFrames() {
+    if (frameRunning) { frameAgain = true; return; }
+    frameRunning = true;
+    try {
+      do {
+        frameAgain = false;
+        const force = frameForce;
+        frameForce = false;
+        // Un éditeur caché (la Lecture) ne dessine rien ; le retour en édition (refreshEditor) rattrape.
+        const shown = Array.from(frames).filter(isShown);
+        if (shown.length) await GristAPI.withReadPass(async () => { for (const view of shown) await paintOne(view, force); });
+      } while (frameAgain);
+    } finally { frameRunning = false; }
+  }
+
+  async function paintOne(view, force) {
+    const state = view.chart;
+    const want = state && wantedOf(state.attrs);
+    if (!want) return;
+    const record = want.scope === 'linked' ? GristAPI.getCurrentRecord() : null;
+    const key = keyOf(want, record);
+    if (!force && state.key === key) return;
+    const token = ++state.token;
+    let uri = '';
+    // « Liées » sans ligne sélectionnée : rien à tracer, le cadre reste jusqu'à la prochaine ligne.
+    if (want.scope === 'all' || record) {
+      try {
+        const drawn = await withLimit(draw(want.id, want.scope, GristAPI.getCurrentTableId(), record, want.width, want.height), FRAME_DRAW_LIMIT_MS);
+        uri = drawn.uri || '';
+      } catch (e) {
+        // Un graphique supprimé ou que le widget ne redessine pas garde son cadre sans bruit ; le reste (lignes illisibles, bibliothèque, dessin) se signale.
+        if (!e || e.kind !== 'chart') console.warn('[ChartBlock] cadre sans dessin', e);
+      }
+    }
+    // Le cadre a changé ou disparu pendant le dessin : le résultat n'est plus le sien.
+    if (token !== state.token || !frames.has(view)) return;
+    Object.assign(state, { key, uri, id: want.id, scope: want.scope });
+    if (state.repaint) state.repaint();
+  }
+
+  // Appelée par applyImageAttrs à chaque mise à jour du cadre `view` d'un graphique : retient le cadre, demande son dessin quand il n'est pas à jour et rend
+  // l'adresse du dessin actuel ('' tant qu'il n'y en a pas, ou quand c'est celui d'un autre graphique) ; `repaint` remet le cadre à jour quand le dessin arrive.
+  function paintFrame(view, attrs, repaint) {
+    const want = wantedOf(attrs);
+    if (!want) { releaseFrame(view); return ''; }
+    const state = view.chart || (view.chart = { key: '', uri: '', id: 0, scope: '', token: 0, attrs: null, repaint: null });
+    state.attrs = attrs;
+    state.repaint = repaint;
+    if (!frames.has(view)) {
+      frames.add(view);
+      if (!framesListen) { framesListen = true; GristAPI.onRecord(onRow); }
+    }
+    if (state.key !== keyOf(want, want.scope === 'linked' ? GristAPI.getCurrentRecord() : null)) scheduleFrames(false, 0);
+    return state.id === want.id && state.scope === want.scope ? state.uri : '';
+  }
+  function releaseFrame(view) {
+    frames.delete(view);
+    if (view.chart) { view.chart.token += 1; view.chart.repaint = null; delete view.chart; }
+  }
+  // Le clic sur un cadre : son dessin est refait d'après les données d'aujourd'hui.
+  function refreshFrame(view) {
+    if (!view.chart || !frames.has(view)) return;
+    view.chart.key = '';
+    scheduleFrames(false, 0);
+  }
+  // Le retour en édition (js/main.js, switchMode) : la Lecture a pu changer de ligne ou de données pendant que les cadres étaient cachés.
+  const refreshEditor = () => { if (frames.size) scheduleFrames(true, 0); };
 
   // La fenêtre
   let win = null;
@@ -371,5 +491,5 @@ const ChartBlock = (function () {
     closeWindow();
   }
 
-  return { DEFAULT_WIDTH_PX, DEFAULT_HEIGHT_PX, needsImage, resolveImage, isSelected, open };
+  return { DEFAULT_WIDTH_PX, DEFAULT_HEIGHT_PX, needsImage, resolveImage, sizeOfAttrs, isSelected, paintFrame, releaseFrame, refreshFrame, refreshEditor, open };
 })();
