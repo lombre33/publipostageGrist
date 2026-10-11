@@ -402,6 +402,14 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Le PDF passe un paragraphe à cheval sur le bas d'une page en entier sur la page suivante, comme l'éditeur** : un
+  paragraphe (ou une citation) de plusieurs lignes qui ne tenait plus dans la place restante d'une page était
+  coupé entre deux lignes par le PDF, alors que l'éditeur, la Lecture et l'impression par le navigateur le
+  passaient en entier sur la page suivante : un même courrier n'avait pas les mêmes pages selon qu'on le
+  regardait ou qu'on l'exportait. Le PDF fait maintenant comme eux, au premier niveau comme dans une colonne de
+  zone ; il reste parfois un peu de blanc en bas de page, comme dans l'éditeur. Un paragraphe de plus de 90 %
+  d'une page, un titre, une liste, un bloc de code, un encadré, un paragraphe à côté d'une image flottante, une
+  légende et un texte relié par « Garder avec le suivant » gardent leur coupe d'avant.
 - **La barre du tableau reste affichée après un réglage de « Bordures »** : choisir un réglage referme le menu, mais
   la barre du tableau se refermait avec lui alors que le curseur était toujours dans la case ; il fallait cliquer
   ailleurs pour la retrouver. Elle reste affichée.
@@ -948,6 +956,13 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Fixed
 
+- **The PDF moves a paragraph that straddles the bottom of a page to the next page whole, like the editor**: a
+  paragraph (or quote) of several lines that no longer fitted in what was left of a page was cut between two
+  lines by the PDF, while the editor, Reading mode and browser printing moved it whole to the next page: the
+  same letter did not have the same pages whether you looked at it or exported it. The PDF now does the same,
+  at the top level and inside a zone column; a little white space sometimes remains at the bottom of the page,
+  as in the editor. A paragraph taller than 90% of a page, a heading, a list, a code block, a callout, a
+  paragraph beside a floating image, a caption and text tied by "Keep with next" keep their previous cut.
 - **The table bar stays open after a "Borders" setting**: choosing a setting closes the menu, but the table bar
   closed with it although the cursor was still in the cell; you had to click elsewhere to get it back. It now
   stays open.

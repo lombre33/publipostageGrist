@@ -63,6 +63,9 @@ const PdfExport = (function () {
   // leur trouve vraiment (learnStretchedLines, appelée par resolveNativePdfContent). `stretchedBlocks` : les blocs de la passe en cours ;
   // `stretchExtra` : l'écart par intervalle appris, par ligne, pour la passe suivante.
   let stretchedBlocks = [];
+  // Les paragraphes que le PDF garde d'une pièce (markWhole) : ceux de la construction en cours, colonnes de zone comprises, retenus en fin de construction
+  // (settleWholeBlocks). Remis à zéro avec les notes, à l'appel de premier niveau.
+  let wholeCandidates = [];
   let stretchExtra = new Map();
   let stretching = false; // vrai le temps de resolveNativePdfContent, la seule à mesurer puis corriger les lignes étirées
   // Bande fixe réservée en pied de page pour ~4 lignes de note à 8 pt plus le filet séparateur (pdfmake ne permet pas de bande dynamique par page) ;
@@ -1203,7 +1206,7 @@ const PdfExport = (function () {
       let blocks;
       // La largeur réelle de cette colonne, pour que l'hôte de mesure interne de htmlToPdfContent habille une image flottante à la bonne largeur
       // plutôt qu'à la pleine largeur de page.
-      try { blocks = await htmlToPdfContent(col.innerHTML, false, widthPt[colIdx]); }
+      try { blocks = await htmlToPdfContent(col.innerHTML, false, widthPt[colIdx], { keepWhole: true }); }
       catch (e) { console.warn('[PdfExport] contenu de colonne ignoré (structure inattendue), repli en texte brut :', e); blocks = [fallbackTextBlock(col, false)]; }
       // Pas de ré-application de l'alignement ici : blockFrom (via htmlToPdfContent) lit déjà `text-align` de chaque paragraphe, colonne ou non. Le
       // réaffecter par index au « bloc qui s'y trouve » appliquerait `alignment` par-dessus l'`absolutePosition` d'une image en calque seule dans un
@@ -2515,8 +2518,9 @@ const PdfExport = (function () {
       footnoteCounter = 0;
       footnoteEntries = [];
       stretchedBlocks = [];
+      wholeCandidates = [];
     }
-    const st = contentStateFor(root, headingMarkers, availableWidthPt, isTopLevel);
+    const st = contentStateFor(root, headingMarkers, availableWidthPt, isTopLevel, opts);
     for (const child of Array.from(root.childNodes)) { await visitNode(st, child); }
     closeKeepRun(st, st.keepRun);
     st.keepRun = null;
@@ -2526,9 +2530,11 @@ const PdfExport = (function () {
   }
 
   // L'état d'une construction de contenu : ce que visitNode lit et remplit en parcourant le HTML.
-  function contentStateFor(root, headingMarkers, availableWidthPt, isTopLevel) {
+  function contentStateFor(root, headingMarkers, availableWidthPt, isTopLevel, opts) {
     return {
       isTopLevel, headingMarkers, availableWidthPt,
+      // Les paragraphes de plusieurs lignes se gardent d'une pièce (markWhole) : au premier niveau et dans une colonne de zone (`opts.keepWhole`).
+      keepWhole: isTopLevel || !!(opts && opts.keepWhole),
       rootRect: root.getBoundingClientRect(),
       // Les blocs, et en parallèle le nœud DOM de premier niveau source de chaque entrée (il ne sert qu'à mesurer la position rendue des blocs voisins
       // d'une image en calque : résolution d'ancrage) et son slot (null hors macro-modèle : une image sans position de page n'est encadrée que par les
@@ -2712,6 +2718,54 @@ const PdfExport = (function () {
     const nodePt = nodeRect.height * PX_TO_PT;
     updateKeepRun(st, node, produced, run, { keepable, captions, captionPt, nodePt });
     if (keepable) trackCaption(st, node, produced, owner, captions, captionPt);
+    markWhole(st, node, produced, { alone: !run && !captions.length && !carriedFloat, nodePt });
+  }
+
+  // Un paragraphe de plusieurs lignes que l'éditeur, la Lecture et l'impression passent en entier sur la page suivante quand il ne tient pas dans ce
+  // qui reste de la page (un bloc de texte n'y est jamais coupé entre deux lignes), alors que pdfmake le coupe là où la page finit. Le candidat : un
+  // paragraphe ou une citation qui donne UN bloc de texte, plus haut qu'une ligne et demie et qui tient dans une page (TablePageCut.MAX_ROW_RATIO, le
+  // plafond des lignes de tableau et des suites gardées : au-delà, rien ne garde le bloc, il se coupe comme avant). Pas un bloc qui a un rôle de plus : un
+  // habillage d'image, une légende, une suite « Garder avec le suivant » ou ce qui la ferme (captionKeepRule lit leurs positions). Une note, elle, suit
+  // son paragraphe sur la page où il est posé. Les candidats ne sont retenus qu'en fin de construction (settleWholeBlocks), quand on sait lesquels
+  // servent d'ancre à une image.
+  const WHOLE_TAGS = /^(P|BLOCKQUOTE)$/;
+  function markWhole(st, node, produced, { alone, nodePt }) {
+    if (!st.keepWhole || !(tablePageHeightPt > 0) || !alone || !WHOLE_TAGS.test(node.tagName) || produced.length !== 1 || produced._floatCarry || produced._carried) return;
+    const block = produced[0];
+    if (!block || block.text === undefined || block._pendingImgNode || block.absolutePosition || block._floatOverlay || block._stretch) return;
+    if (KeepWithNext.isKeptElement(node) || Caption.isCaptionElement(node)) return;
+    if (nodePt < 1.5 * DEFAULT_FONT_SIZE * EDITOR_LINE_HEIGHT_RATIO || nodePt > TablePageCut.MAX_ROW_RATIO * tablePageHeightPt) return;
+    wholeCandidates.push(block);
+  }
+
+  // Les candidats que le PDF garde d'une pièce, rendus par `content._wholeBlocks` : tous sauf ceux qu'une image en calque prend pour ancre (le haut de
+  // l'ancre, mesuré par pdfmake, doit être celui où elle se pose vraiment), eux et ce qu'ils contiennent. `unbreakable` : pdfmake met le bloc en page
+  // à part et ne le range que s'il tient dans ce qui reste de la page, sinon sur la suivante, sans remettre le document en page (un rappel
+  // `pageBreakBefore` par paragraphe à cheval le ferait, une fois chacun). Il garde alors les positions notées au moment où il ne tenait pas : sa page
+  // n'est lue que par la mesure (giveWholeIds la lui fait corriger), son haut par personne.
+  function settleWholeBlocks(content) {
+    const anchors = new Set();
+    const collect = node => {
+      if (!node || typeof node !== 'object' || anchors.has(node)) return;
+      anchors.add(node);
+      if (Array.isArray(node)) { node.forEach(collect); return; }
+      ['stack', 'columns', 'ul', 'ol'].forEach(key => collect(node[key]));
+      if (node.table && Array.isArray(node.table.body)) node.table.body.forEach(collect);
+    };
+    (content._pendingImages || []).forEach(p => { collect(p.above); collect(p.below); collect(p.container); });
+    const kept = wholeCandidates.filter(block => !anchors.has(block));
+    kept.forEach(block => { block.unbreakable = true; });
+    wholeCandidates = [];
+    return kept;
+  }
+
+  // Avant une mesure : un `id` sur chaque bloc gardé d'une pièce. pdfmake corrige alors la page notée du bloc quand il le passe à la page suivante
+  // (elementWriter.addFragment, pour un texte qui a un `id`) ; sans lui, `blockPageNumbers` (measuredLayoutOf) garderait la page où il ne tenait pas, et
+  // une image à position de page se poserait à côté de lui sur la mauvaise. Pas dans le PDF rendu, que le contenu reconstruit après la mesure
+  // n'a plus : un `id` y ferait inscrire une destination de plus par paragraphe, soit près de 10 % de poids.
+  const WHOLE_ID = 'pp-whole-';
+  function giveWholeIds(content) {
+    (content._wholeBlocks || []).forEach((block, i) => { if (!block.id) block.id = WHOLE_ID + i; });
   }
 
   // Une image habillée qui dépasse encore le bloc d'avant : un paragraphe se range à côté d'elle (carriedFloatBlocksFrom), mais tout autre bloc
@@ -2818,6 +2872,7 @@ const PdfExport = (function () {
     // Repli : images en calque laissées à leur placeholder plutôt que de faire échouer tout l'export si l'ancrage échoue.
     try { content._pendingImages = resolvePendingImageAnchors(st.rootRect, blocks, st.sourceNodes, st.blockSlots).concat(st.nestedPendingAll); }
     catch (e) { console.warn('[PdfExport] ancrage des images en calque ignoré :', e); content._pendingImages = st.nestedPendingAll; }
+    if (st.isTopLevel) content._wholeBlocks = settleWholeBlocks(content);
     return content;
   }
 
@@ -3006,8 +3061,8 @@ const PdfExport = (function () {
   // buildPdfContentFromRoot) : il demande de le passer à la page suivante quand lui et sa légende ne sont plus sur la même page (pdfmake remet alors
   // tout en page, la légende suit). Un bloc déjà en haut de sa page ne bouge pas : le passer à la suivante n'ajouterait qu'une page blanche. Pas
   // d'`unbreakable` : pdfmake note les positions d'un bloc insécable à l'endroit où il ne tient pas, avant de le déplacer, et la page d'une note ou
-  // d'une image en calque ancrée sur lui serait fausse. Un seul paramètre : pdfmake ne dresse les listes des nœuds voisins (en O(n²)) que pour un
-  // rappel qui en déclare davantage.
+  // d'une image en calque ancrée sur lui serait fausse (les paragraphes gardés d'une pièce, markWhole, n'en font jamais partie). Un seul
+  // paramètre : pdfmake ne dresse les listes des nœuds voisins (en O(n²)) que pour un rappel qui en déclare davantage.
   //
   // « Garder avec le suivant » (js/keep-with-next.js) passe par la même règle : la paire d'une suite de paragraphes gardés a pour `last` le bloc qui
   // la suit (`headOnly`) et se sépare quand la tête de ce bloc n'est pas sur la page du début de la suite (pour un tableau dont les lignes ne se
@@ -3188,7 +3243,7 @@ const PdfExport = (function () {
     stretching = true;
     let content = await buildContent();
     // Mise en page par pdfmake du contenu courant, sans rien en garder que ce qu'il pose sur les blocs (positions, largeurs mesurées).
-    const measure = toMeasure => new Promise(resolve => { window.pdfMake.createPdf(buildNativeDocDefinition(toMeasure, filename, headerFooterChunks)).getBuffer(() => resolve()); });
+    const measure = toMeasure => new Promise(resolve => { giveWholeIds(toMeasure); window.pdfMake.createPdf(buildNativeDocDefinition(toMeasure, filename, headerFooterChunks)).getBuffer(() => resolve()); });
     // Les lignes justifiées posées à la main sont étirées sur une largeur estimée dans le navigateur : une première mise en page en mesure l'écart,
     // la seconde l'annule (learnStretchedLines).
     if ((content._stretchedBlocks || []).length) {
