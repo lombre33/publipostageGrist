@@ -7,7 +7,7 @@
 //  - une touche changée dans Réglages > Raccourcis marche tout de suite, l'ancienne ne fait plus rien (Ctrl+B ne met plus en gras), « Par défaut » les rend ;
 //  - l'écoute d'une combinaison : un doublon, une touche seule, Ctrl+Alt (AltGr) sont refusés sous la touche concernée, Échap abandonne sans fermer la fenêtre ;
 //  - au clavier seul : Ctrl+/ ouvre la liste, Tab passe de touche en touche, Entrée écoute, la touche tapée est prise ;
-//  - la liste des touches (une ligne par action, 53) tient dans 700x400 : seul le contenu défile, le titre, les onglets et « Fermer » ne bougent pas, rien ne déborde ni ne se coupe ;
+//  - la liste des touches (une ligne par action, 57) tient dans 700x400 : seul le contenu défile, le titre, les onglets et « Fermer » ne bougent pas, rien ne déborde ni ne se coupe ;
 //  - les infobulles montrent la touche (« Gras (Alt+B) ») sans sortir de la fenêtre, les lignes de menu aussi ; mode Mac : ⌥L, ⌘ ; anglais : « Shift ».
 // Lancé par run-headless.mjs (groupe Node "shortcutsKeyboard", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-shortcuts-keyboard.mjs
 // SHORTCUTS_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans elle, rien n'est écrit.
@@ -24,6 +24,10 @@ const PORT = Number(process.env.SHORTCUTS_PORT || 8922);
 const SHOTS = process.env.SHORTCUTS_SHOTS || '';
 const WIDTH = 700;
 const HEIGHT = 400;
+// Le nombre d'actions de js/shortcuts.js, une ligne chacune dans la liste. Une action ajoutée ou retirée le change : le dire ici et, pour une action
+// ajoutée, la nommer dans ADDED_ACTIONS (remapPart) pour qu'elle soit lue une à une et pas seulement comptée. 54 jusqu'au 09/10, 57 depuis « Graphique
+// de la page… » (chartBlock), l'exposant et l'indice, ajoutés ce jour-là sans que ce compte suive.
+const ACTION_COUNT = 57;
 if (SHOTS) await mkdir(SHOTS, { recursive: true });
 
 // Même régénération du harnais et même miroir hors-ligne que dev-tests/verify-text-expansion-keyboard.mjs.
@@ -355,7 +359,19 @@ async function remapPart(T, fr) {
     : { listening: 'Press a key…', none: 'None', dupe: 'Alt+B is already the key for “Bold”.', alone: 'Add Ctrl (⌘ on Mac) or Alt: a key on its own would be typed into the text.', bold: 'Bold', reset: 'Default' };
   const rowCount = await page.evaluate(() => document.querySelectorAll('#settings-keys-list .settings-key-row').length);
   const actionCount = await page.evaluate(() => Shortcuts.ACTIONS.length);
-  check(`${T} : la liste montre une ligne par action (${rowCount} sur ${actionCount})`, rowCount === actionCount && actionCount === 54, { rowCount, actionCount });
+  check(`${T} : la liste montre une ligne par action (${rowCount} sur ${actionCount})`, rowCount === actionCount && actionCount === ACTION_COUNT, { rowCount, actionCount, ACTION_COUNT });
+  // Les actions ajoutées depuis le compte de 54, lues une à une : leur ligne, son nom, son groupe et la touche d'origine (« Graphique de la page… » n'en a aucune,
+  // l'exposant et l'indice ont celles de Google Docs, traitées par l'éditeur). Si l'une disparaît ou change de touche, le compte seul ne le dirait pas.
+  const ADDED_ACTIONS = [
+    { id: 'chartBlock', group: 'insert', name: fr ? 'Graphique de la page…' : 'Chart from the page…', key: L.none },
+    { id: 'superscript', group: 'format', name: fr ? 'Exposant' : 'Superscript', key: 'Ctrl+.' },
+    { id: 'subscript', group: 'format', name: fr ? 'Indice' : 'Subscript', key: 'Ctrl+,' },
+  ];
+  const added = await page.evaluate(ids => ids.map(id => {
+    const row = document.querySelector(`#settings-keys-list .settings-key-row[data-action="${id}"]`);
+    return { id, group: row ? row.parentElement.getAttribute('aria-labelledby').replace('settings-keys-group-', '') : null, name: row ? row.querySelector('.settings-key-name').textContent : null, key: row ? row.querySelector('.settings-key-btn').textContent : null };
+  }), ADDED_ACTIONS.map(a => a.id));
+  check(`${T} : « ${ADDED_ACTIONS.map(a => a.name).join(' », « ')} » ont chacune leur ligne, leur groupe et leur touche d'origine`, JSON.stringify(added) === JSON.stringify(ADDED_ACTIONS), { added, expected: ADDED_ACTIONS });
   check(`${T} : au départ rien n'est changé : « ${L.reset} » et « Tout remettre » grisés`, await page.evaluate(() => Array.from(document.querySelectorAll('.settings-key-reset')).every(b => b.disabled) && document.getElementById('settings-keys-reset-all').disabled));
 
   // Gras : Alt+B à la place de Ctrl+B.
@@ -533,7 +549,7 @@ async function layoutPart(T) {
   });
   const before = await geometry();
   check(`${T} : la fenêtre tient dans le panneau`, before.boxInPanel, before);
-  check(`${T} : quarante-huit lignes dépassent le cadre : le contenu de l'onglet défile (${before.scrollHeight}px pour ${before.clientHeight}px)`, before.scrollHeight > before.clientHeight + 200 && !before.lastVisible, before);
+  check(`${T} : les lignes de la liste dépassent le cadre : le contenu de l'onglet défile (${before.scrollHeight}px pour ${before.clientHeight}px)`, before.scrollHeight > before.clientHeight + 200 && !before.lastVisible, before);
   check(`${T} : aucune ligne ne revient à la ligne (hauteurs ${before.minRow} à ${before.maxRow}px) et aucun nom n'est coupé`, before.maxRow - before.minRow <= 2 && before.maxRow <= 40 && before.cut.length === 0, { minRow: before.minRow, maxRow: before.maxRow, cut: before.cut });
   check(`${T} : rien ne déborde à droite : ni défilement latéral, touches et « Par défaut » dans le cadre`, before.scrollWidth <= before.clientWidth + 1 && before.outside === 0, { scrollWidth: before.scrollWidth, clientWidth: before.clientWidth, outside: before.outside });
   await snap(`${T}-4-liste-haut`);
