@@ -130,7 +130,14 @@
    comme à l'export. 9,5 pt, un peu sous le texte courant (10,5 pt). Le schéma TipTap n'y permet aucune marque : ni gras, ni couleur, ni lien. */
 .tiptap pre { margin: 4px 0; padding: 8px 10px; background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 4px; color: #1b2430; font-family: 'Cousine', 'Courier New', Courier, monospace; font-size: 9.5pt; line-height: 1.42; white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 4; }
 .tiptap pre code { font: inherit; color: inherit; background: none; padding: 0; white-space: inherit; }
-.tiptap hr { border: none; border-top: 1px solid #d0d7de; margin: 10px 0; }
+/* Le trait : 21 px de haut en tout (10 px d'air, 1 px de trait, 10 px d'air), la même place dans l'éditeur, la Lecture, l'impression et le PDF (15,75 pt). L'air est
+   en REMPLISSAGE, pas en marge : la pagination (js/header-footer-preview.js, js/reader-mode.js) additionne les hauteurs de blocs sans leurs marges, et une
+   marge ne s'additionne pas à celle du bloc voisin, ni à la couture en haut d'une page. En remplissage, le trait pèse ses 21 px dans le compte des pages,
+   comme dans le PDF. En contraste renforcé le navigateur ôte les fonds : le trait prend alors la couleur du texte. */
+.tiptap hr, #reader-container .reader-content hr { box-sizing: content-box; height: 1px; margin: 0; padding: 10px 0; border: none; background-color: #d0d7de; background-clip: content-box; }
+/* Sélectionné, le trait garde sa bande bleue d'avant : 1 px de trait entouré de 2 px de contour (le contour de ProseMirror suit le bord de la boîte, qui compte maintenant l'air). */
+.tiptap hr.ProseMirror-selectednode { outline-offset: -10px; }
+@media (forced-colors: active) { .tiptap hr, #reader-container .reader-content hr { background-color: CanvasText; } }
 .tiptap table { border-collapse: collapse; table-layout: fixed; width: 100%; margin: 6px 0; }
 /* Pas de style propre à `<th>` (gras, fond) : les tableaux insérés par la barre n'ont pas de ligne d'en-tête (withHeaderRow: false,
    js/editor.js:insertTable), une cellule reste identique à une autre quel que soit son tag. */

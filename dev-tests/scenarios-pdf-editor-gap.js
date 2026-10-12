@@ -1,13 +1,15 @@
-// Suite "pdfEditorGap" - deux écarts de pagination entre le PDF et l'éditeur, relevés par la batterie `macroPages` (09/10) et tranchés par Antoine le 2026-10-11 (carte « Corriger quels écarts entre le PDF et
-// l'éditeur ? », réponse « Les deux »).
+// Suite "pdfEditorGap" - les écarts de pagination entre le PDF et l'éditeur, relevés par la batterie `macroPages` (09/10) et tranchés par Antoine : le 2026-10-11 (carte « Corriger quels écarts entre le PDF et
+// l'éditeur ? », réponse « Les deux »), puis le 2026-10-12 pour la hauteur du trait (carte « Donner la même hauteur au trait dans l'éditeur, la Lecture et le PDF ? », réponse « Aligner »).
 //
 // 1. Le paragraphe à cheval sur le bas d'une page. L'éditeur, la Lecture et l'impression le passent en entier sur la page suivante (un bloc de texte qui ne tient pas dans la place qui reste ouvre la page : il n'est
 //    jamais coupé entre deux lignes) ; le PDF (pdfmake) le coupait là où la page finit. Il garde maintenant d'une pièce un paragraphe de plusieurs lignes qui tient dans une page (moins de 90 %, le plafond des lignes
 //    de tableau), au premier niveau comme dans une colonne de zone : parfois un peu de blanc en bas de page, comme dans l'éditeur. Au-delà de 90 % d'une page, ou pour un paragraphe qui porte une image en calque comme
 //    ancre, une légende, une suite « Garder avec le suivant » : comme avant, rien n'est perdu.
-// 2. Le trait (`<hr>`). La batterie voyait « un trait juste après une zone de deux pages » donner 3 pages au PDF au lieu de 2. Cette page de plus n'existe pas dans le PDF que l'on télécharge : la sonde de test
-//    (helpers.js:exportPdfContent) met le même document en page DEUX fois, et pdfmake allonge alors le trait à chaque mise en page. Le PDF réel est la première, `result.blob` : toute la suite lit celle-là, jamais
-//    `result.base64`. Le cas ci-dessous garde cette vérité (le trait n'ajoute aucune page).
+// 2. Le trait (`<hr>`), en deux temps. (a) La batterie voyait « un trait juste après une zone de deux pages » donner 3 pages au PDF au lieu de 2. Cette page de plus n'existe pas dans le PDF que l'on télécharge : la
+//    sonde de test (helpers.js:exportPdfContent) met le même document en page DEUX fois, et pdfmake allonge alors le trait à chaque mise en page. Le PDF réel est la première, `result.blob` : toute la suite lit
+//    celle-là, jamais `result.base64`. Un cas garde cette vérité (le trait n'ajoute aucune page). (b) Le trait prenait 21 px dans l'éditeur, 16 px en Lecture, 13,3 px au PDF, et la pagination de l'éditeur et de la
+//    Lecture, qui additionne des hauteurs de blocs SANS leurs marges, ne comptait pas les 20 px d'air du trait : avec plusieurs traits les pages ne tombaient plus aux mêmes lignes (l'éditeur en mettait huit de
+//    trop sur la première). Il pèse maintenant 21 px partout (l'air est en remplissage dans l'éditeur et la Lecture, un bloc de 15,75 pt d'un seul tenant au PDF) : deux cas le mesurent, puis comparent les pages.
 //
 // Comment la suite juge. Les capacités de page sont MESURÉES (jamais écrites en dur : elles dépendent des polices de la machine) sur le PDF, la référence de ce qui tient dans une page ; chaque moteur rend ensuite le
 // même document (éditeur en Aperçu A4, Lecture, impression navigateur, PDF relu par pdf.js) : mêmes pages, mêmes mots sur chacune.
@@ -344,6 +346,95 @@
         const withRule = await compareEngines(h, 'zone de ' + k + ' lignes, un trait, une ligne', zoneOfRows(k, 'Zed') + '<hr>' + FIN, problems, summary);
         const without = await pdfView(h, zoneOfRows(k, 'Zed') + FIN);
         if (withRule.pdf.count !== without.count) problems.push('zone de ' + k + ' lignes : ' + withRule.pdf.count + ' pages avec le trait, ' + without.count + ' sans');
+      }
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems: compact(problems), summary }) };
+    }),
+  });
+
+  // La place d'un ou de plusieurs traits entre deux paragraphes, en pixels de mise en page : l'écart entre le haut du premier et du dernier paragraphe, avec les traits moins sans eux. L'éditeur et la Lecture
+  // se mesurent sur le DOM (divisé par le zoom de la feuille), le PDF sur les lignes de texte relues par pdf.js (1 pt = 4/3 px) ; `boxes` donne la boîte du premier trait de chacun.
+  async function roomOfRules(h, count) {
+    const pair = '<p>Avant</p><p>Apres</p>';
+    const withRules = '<p>Avant</p>' + '<hr>'.repeat(count) + '<p>Apres</p>';
+    const gapIn = (scope, content) => {
+      const root = document.querySelector(scope + ' ' + content);
+      const zoom = EditorCore.layoutZoom(root);
+      const paragraphs = Array.from(root.querySelectorAll(':scope > p'));
+      const rule = root.querySelector(':scope > hr');
+      const style = rule ? getComputedStyle(rule) : null;
+      return {
+        gap: (paragraphs[paragraphs.length - 1].getBoundingClientRect().top - paragraphs[0].getBoundingClientRect().top) / zoom,
+        box: rule ? { height: rule.getBoundingClientRect().height / zoom, margins: parseFloat(style.marginTop) + parseFloat(style.marginBottom) } : null,
+      };
+    };
+    const inEditor = async html => {
+      Editor.setHeaderFooterData(NO_HF);
+      Editor.setHTML(html);
+      await h.sleep(250);
+      Editor.refreshPaginationPreview();
+      await h.sleep(60);
+      return gapIn('#editor-container', '.tiptap');
+    };
+    const inReader = async html => {
+      await h.renderReaderMode(html, null);
+      await h.sleep(250);
+      return gapIn('#reader-container', '.reader-content');
+    };
+    const inPdf = async html => {
+      const view = await pdfView(h, html);
+      const items = view.truth.pages[0].textItems;
+      const before = items.find(item => item.str.indexOf('Avant') !== -1);
+      const after = items.find(item => item.str.indexOf('Apres') !== -1);
+      const lines = (await h.extractPdfLines(await blobBase64(view.result.blob))).pages[0].lines;
+      return { gap: Math.abs(after.y - before.y) / 0.75, lines };
+    };
+    const [editorWith, editorWithout, readerWith, readerWithout, pdfWith, pdfWithout] =
+      [await inEditor(withRules), await inEditor(pair), await inReader(withRules), await inReader(pair), await inPdf(withRules), await inPdf(pair)];
+    const round = n => Math.round(n * 100) / 100;
+    return {
+      room: { editor: round(editorWith.gap - editorWithout.gap), reader: round(readerWith.gap - readerWithout.gap), pdf: round(pdfWith.gap - pdfWithout.gap) },
+      boxes: { editor: editorWith.box, reader: readerWith.box },
+      pdfLines: pdfWith.lines,
+    };
+  }
+
+  cases.push({
+    id: 'pdf_gap_rule_takes_the_same_room_in_every_engine',
+    description: 'Un trait entre deux paragraphes prend 21 px (10 d\'air, 1 de trait, 10 d\'air) dans l\'éditeur, la Lecture et le PDF, deux traits de suite 42 px (leur air ne s\'additionne pas à celui du voisin) ; dans l\'éditeur et la Lecture cet air est dans la boîte du trait, pas en marge, parce que la pagination additionne des hauteurs de blocs sans leurs marges ; le PDF peint un seul trait par trait',
+    run: h => inPage(h, async c => {
+      const problems = []; const summary = {};
+      for (const count of [1, 2]) {
+        const measured = await roomOfRules(h, count);
+        summary[count + ' trait(s)'] = measured.room;
+        const expected = 21 * count;
+        Object.keys(measured.room).forEach(engine => {
+          if (Math.abs(measured.room[engine] - expected) > 0.5) problems.push(count + ' trait(s) : ' + engine + ' prend ' + measured.room[engine] + ' px au lieu de ' + expected);
+        });
+        if (count === 1) {
+          Object.keys(measured.boxes).forEach(engine => {
+            const box = measured.boxes[engine];
+            if (!box || Math.abs(box.height - 21) > 0.5 || box.margins !== 0) problems.push('le trait de ' + (engine === 'editor' ? 'l\'éditeur' : 'la Lecture') + ' doit être une boîte de 21 px sans marge (la pagination ne compte pas les marges) : ' + JSON.stringify(box));
+          });
+        }
+        if (measured.pdfLines.length !== count) problems.push(count + ' trait(s) : le PDF peint ' + measured.pdfLines.length + ' trait(s) : ' + JSON.stringify(measured.pdfLines.map(line => [line.x1, line.y1, line.x2, line.y2])));
+      }
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems, summary }) };
+    }),
+  });
+
+  cases.push({
+    id: 'pdf_gap_rules_give_the_same_pages_in_every_engine',
+    description: 'Des traits dans un courrier de plusieurs pages (un tous les trois paragraphes ; un seul de plus en plus près du bas de la page, jusqu\'à celui qui ne tient plus et ouvre la page suivante ; deux de suite ; un en haut de page) : mêmes pages et mêmes mots sur chacune dans l\'éditeur, la Lecture, l\'impression et le PDF',
+    run: h => inPage(h, async c => {
+      const problems = []; const summary = { capacites: c };
+      const many = Array.from({ length: 22 }, (_, i) => rows(3, 'R' + i + 'x') + '<hr>').join('') + FIN;
+      await compareEngines(h, 'un trait tous les trois paragraphes', many, problems, summary);
+      // Le trait pèse un peu plus qu\'une ligne : de n = c.text - 4 lignes devant lui, il tient avec de la place de reste, puis de moins en moins, jusqu\'à n = c.text - 1 où il ne tient plus et passe en haut de la page suivante.
+      for (const n of [c.text - 4, c.text - 3, c.text - 2, c.text - 1, c.text]) {
+        await compareEngines(h, 'un trait après ' + n + ' lignes', rows(n, 'Alpha') + '<hr>' + rows(8, 'Beta') + FIN, problems, summary);
+      }
+      for (const n of [c.text - 4, c.text - 3, c.text - 2]) {
+        await compareEngines(h, 'deux traits de suite après ' + n + ' lignes', rows(n, 'Alpha') + '<hr><hr>' + rows(8, 'Beta') + FIN, problems, summary);
       }
       return { pass: problems.length === 0, notes: JSON.stringify({ problems: compact(problems), summary }) };
     }),

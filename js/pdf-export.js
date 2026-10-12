@@ -2306,8 +2306,19 @@ const PdfExport = (function () {
     return isFlowText(node, tag, headingMarkers) ? flowTextBlocks(ctx) : ordinaryBlocks(ctx, blockRunsOf(node, tag));
   }
 
+  // Le trait (<hr>) : 15,75 pt de haut (21 px, comme dans l'éditeur, la Lecture et l'impression : 10 px d'air, 1 px de trait, 10 px d'air), le trait au milieu. Un canvas
+  // prend la hauteur de son vecteur le plus bas : le polyligne d'un seul point, au bas du bloc, ne peint rien (un tracé sans segment) mais donne au bloc sa
+  // hauteur entière, si bien que pdfmake le passe à la page suivante quand il ne tient pas en entier, comme la pagination de l'éditeur qui additionne des
+  // blocs entiers. Avec des marges, le trait resterait sur la page dès que sa marge haute y tient.
+  const RULE_HEIGHT_PT = 15.75;
   function ruleBlock(pageBreakBefore) {
-    return { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1 }], margin: [0, 5, 0, 5], ...(pageBreakBefore ? { pageBreak: 'before' } : {}) };
+    return {
+      canvas: [
+        { type: 'line', x1: 0, y1: RULE_HEIGHT_PT / 2, x2: 515, y2: RULE_HEIGHT_PT / 2, lineWidth: 1 },
+        { type: 'polyline', points: [{ x: 0, y: RULE_HEIGHT_PT }] },
+      ],
+      ...(pageBreakBefore ? { pageBreak: 'before' } : {}),
+    };
   }
 
   const headingMarkerOf = (headingMarkers, node) => (headingMarkers && headingMarkers.get(node)) || '';

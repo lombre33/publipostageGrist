@@ -412,6 +412,12 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Le trait a la même hauteur dans l'éditeur, la Lecture et le PDF** : un trait prenait 21 px dans l'éditeur, 16 px
+  en Lecture et 13 px dans le PDF, et l'éditeur ne comptait pas sa place en coupant les pages : un courrier à
+  plusieurs traits n'avait pas les mêmes pages selon qu'on le regardait ou qu'on l'exportait (sur un courrier à
+  22 traits, la première page de l'éditeur portait huit lignes de plus que celle du PDF). Le trait prend
+  maintenant la même place partout, 21 px, deux traits de suite 42 px, et les pages tombent aux mêmes lignes ;
+  le PDF d'un courrier à traits peut bouger de quelques lignes.
 - **Le PDF passe un paragraphe à cheval sur le bas d'une page en entier sur la page suivante, comme l'éditeur** : un
   paragraphe (ou une citation) de plusieurs lignes qui ne tenait plus dans la place restante d'une page était
   coupé entre deux lignes par le PDF, alors que l'éditeur, la Lecture et l'impression par le navigateur le
@@ -975,6 +981,12 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Fixed
 
+- **The horizontal rule is the same height in the editor, Reading mode and the PDF**: a rule took 21 px in the
+  editor, 16 px in Reading mode and 13 px in the PDF, and the editor did not count its room when cutting pages:
+  a letter with several rules did not have the same pages whether you looked at it or exported it (in a letter
+  with 22 rules, the editor's first page carried eight more lines than the PDF's). The rule now takes the same
+  room everywhere, 21 px, two rules in a row 42 px, and pages break at the same lines; the PDF of a letter with
+  rules may move by a few lines.
 - **The PDF moves a paragraph that straddles the bottom of a page to the next page whole, like the editor**: a
   paragraph (or quote) of several lines that no longer fitted in what was left of a page was cut between two
   lines by the PDF, while the editor, Reading mode and browser printing moved it whole to the next page: the
