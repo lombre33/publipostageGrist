@@ -192,7 +192,7 @@ Un audit de code complet (qualité, sécurité, conformité aux exigences de pub
 Limites connues :
 
 - Le widget demande l'accès complet au document, faute de niveau intermédiaire dans Grist.
-- L'export Word est en bêta : les images devant ou derrière le texte et celles alignées à gauche ou à droite y gardent leur place, le sommaire est une liste fixe et les polices ne sont pas embarquées.
+- L'export Word est en bêta : les images devant ou derrière le texte et celles alignées à gauche ou à droite y gardent leur place, le sommaire est un vrai sommaire Word dont les numéros de page ne s'écrivent que quand Word le met à jour, et les polices ne sont pas embarquées.
 - L'e-mail ne garde que le texte brut, sans pièce jointe.
 - L'export Excel écrit des valeurs, jamais de formule.
 - Pas encore faits : le remplissage d'un modèle avec des données d'exemple et les variantes multilingues d'un modèle.

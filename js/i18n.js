@@ -1409,11 +1409,11 @@ const I18n = (function () {
     'hf.pagenumSlash': { fr: '3 / 12', en: '3 / 12' },
     'hf.done': { fr: 'Terminer', en: 'Done' },
 
-    // --- Titre du sommaire, exporté en PDF (js/pdf-export.js:buildTocStack et son repli), en DOCX (js/docx-export.js:buildTocParagraphs) et affiché
+    // --- Titre du sommaire, exporté en PDF (js/pdf-export.js:buildTocStack et son repli), en DOCX (js/docx-export.js:buildTocBlocks) et affiché
     // en mode Lecture (js/reader-mode.js:resolveTocMarkers) : tous disent la même chose, le mode Lecture étant l'aperçu de l'export ---
     'pdf.tocTitle': { fr: 'Sommaire', en: 'Table of Contents' },
     'pdf.tocEmpty': { fr: 'Aucun titre trouvé.', en: 'No heading found.' },
-    // Sommaire d'un export DOCX sans aucun titre (js/docx-export.js:buildTocParagraphs) : sa phrase à lui, en italique entre parenthèses.
+    // Sommaire d'un export DOCX sans aucun titre (js/docx-export.js:buildTocBlocks) : sa phrase à lui, en italique entre parenthèses.
     'docx.tocEmpty': { fr: '(aucun titre dans ce document)', en: '(no heading in this document)' },
 
     // --- Mode Email (planning/feature-email-mode.md) : bandeau Objet/À/Cc/Cci + action de création du mailto: ---

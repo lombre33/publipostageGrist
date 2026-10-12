@@ -429,6 +429,14 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   l'export ne fait pas (une grille en Word) ou l'erreur rencontrée -, avec le nombre de documents que le
   fichier contient. Le coin d'état ne renvoie plus à la console du navigateur. Les autres lignes sont
   téléchargées comme avant ; quand toutes échouent, rien n'est téléchargé et la fenêtre le dit.
+- **Le sommaire de l'export Word est un vrai sommaire Word** : un modèle qui porte un sommaire sort en Word avec la
+  « Table des matières » de Word (un champ qui se met à jour) au lieu d'une liste fixe. Elle reprend les titres de 1 à 6,
+  et chaque ligne mène à son titre. Le champ est marqué « à mettre à jour » : à l'ouverture, Word peut demander s'il
+  doit mettre à jour les champs, et Oui écrit les numéros de page ; plus tard, un clic droit sur le sommaire,
+  « Mettre à jour les champs », le refait après une modification du document. Sans cette mise à jour (aperçu, Google
+  Docs, LibreOffice, Word en mode protégé), le sommaire montre la liste des titres sans numéro de page, comme avant ;
+  sans aucun titre, il garde sa phrase « aucun titre » et Word ne pose aucune question. Chaque titre porte aussi son
+  niveau de plan, que LibreOffice lit pour refaire le sommaire. Les polices ne sont toujours pas embarquées dans le fichier.
 
 ### Retiré
 
@@ -1049,6 +1057,14 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   in Word) or the error met -, with the number of documents the file contains. The status corner no longer
   points to the browser console. The other rows are downloaded as before; when all of them fail, nothing is
   downloaded and the window says so.
+- **The Word export's table of contents is a real Word table of contents**: a template that has a table of contents
+  now comes out in Word with Word's own "Table of Contents" (a field that can be updated) instead of a fixed list. It
+  picks up the headings of levels 1 to 6, and each line leads to its heading. The field is flagged "to update": when
+  the file opens, Word may ask whether to update the fields, and Yes writes the page numbers; later, a right click on
+  the table, "Update field", rebuilds it after the document is edited. Without that update (a preview, Google Docs,
+  LibreOffice, Word in protected view) the table shows the list of headings without page numbers, as before; with no
+  heading at all it keeps its "no heading" sentence and Word asks nothing. Each heading also carries its outline level,
+  which LibreOffice reads to rebuild the table. Fonts are still not embedded in the file.
 
 ### Removed
 

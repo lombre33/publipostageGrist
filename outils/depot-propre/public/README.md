@@ -281,7 +281,8 @@ bibliothèques et polices sont dans [NOTICE](NOTICE).
   ligne à la fois, sur 60 pages au plus, et suppose que le navigateur ouvre sa fenêtre d'impression depuis le
   cadre du widget : si rien ne s'ouvre, choisissez « Vectoriel ».
 - **Word** (bêta) : les images devant ou derrière le texte et celles alignées à gauche ou à droite y
-  gardent leur place, le sommaire est une liste fixe et les polices ne sont pas embarquées.
+  gardent leur place, le sommaire est un vrai sommaire Word dont les numéros de page ne s'écrivent que
+  quand Word le met à jour, et les polices ne sont pas embarquées.
 - **E-mail** : le corps est du texte brut (l'éditeur d'un modèle e-mail n'écrit ni gras, ni couleur, ni
   niveau de titre, ni image : le texte du lien a les lignes de l'éditeur), sans pièce jointe ; le lien
   `mailto:` est limité à environ 2 000 caractères, une jauge prévient quand il les dépasse.
@@ -621,7 +622,8 @@ libraries and fonts are in [NOTICE](NOTICE).
   down to 150 points per inch). Browser print prints one row at a time, up to 60 pages, and assumes the browser opens its
   print window from the widget's frame: if nothing opens, choose "Vector".
 - **Word** (beta): images in front of or behind the text, and images aligned left or right, keep their
-  place; the table of contents is a fixed list and fonts are not embedded.
+  place; the table of contents is a real Word table of contents whose page numbers are written only
+  when Word updates it, and fonts are not embedded.
 - **E-mail**: the body is plain text (the editor of an e-mail template writes no bold, colour, heading level or
   image: the text of the link has the editor's lines), with no attachment; the `mailto:` link is limited to about
   2,000 characters, and a gauge warns when it goes over.

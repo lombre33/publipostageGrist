@@ -37,6 +37,16 @@
       return { pass: ps.length === 6 && !bad.length, notes: bad.length ? bad.join(' | ') : JSON.stringify(ps.map(p => ({ style: p.style, size: p.runs[0] && p.runs[0].sizeHalfPt }))) };
     });
 
+  add('docx_headings_carry_outline_level',
+    'Chaque titre porte son niveau de plan (w:outlineLvl : 0 pour H1 à 5 pour H6) en plus du style Word « Titre N » : LibreOffice, sinon, ne retrouve aucun titre quand on met le sommaire à jour et le vide ; un paragraphe ordinaire n\'en porte pas',
+    async (h) => {
+      const html = [1, 2, 3, 4, 5, 6].map(n => '<h' + n + '>Titre ' + n + '</h' + n + '>').join('') + '<p>texte</p>';
+      const parts = await h.exportDocxParts(html);
+      const levels = Array.from(parts.doc.getElementsByTagName('w:p')).map(p => { const el = p.getElementsByTagName('w:outlineLvl')[0]; return el ? el.getAttribute('w:val') : null; });
+      const wanted = ['0', '1', '2', '3', '4', '5', null];
+      return { pass: JSON.stringify(levels) === JSON.stringify(wanted), notes: JSON.stringify(levels) };
+    });
+
   add('docx_heading_numbering_marker',
     'La numérotation de titres choisie dans l\'éditeur produit le MÊME marqueur littéral que le PDF et le mode Lecture',
     async (h) => {
@@ -618,21 +628,126 @@
     });
 
   // --- Sommaire ---
-  add('docx_toc_static_list',
-    'Le sommaire est une liste STATIQUE des titres (choix assumé : un vrai champ TOC Word obligerait le lecteur à "mettre à jour les champs")',
+  // Le sommaire du .docx, lu dans le fichier : le contrôle de contenu `w:sdt` qui porte le champ (instruction, drapeau « à mettre à jour », entrées avec
+  // leur style et leur lien) et, pour chaque lien, le paragraphe dont le signet porte ce nom (son style et son texte). null sans sommaire.
+  const textOfNode = node => Array.from(node.getElementsByTagName('w:t')).map(t => t.textContent).join('');
+  const styleOfParagraph = p => { const el = p.getElementsByTagName('w:pStyle')[0]; return el ? el.getAttribute('w:val') : null; };
+  function tocOf(parts, sdtIndex) {
+    const sdt = parts.doc.getElementsByTagName('w:sdt')[sdtIndex || 0];
+    if (!sdt) return null;
+    const chars = Array.from(sdt.getElementsByTagName('w:fldChar'));
+    const bookmarks = Array.from(parts.doc.getElementsByTagName('w:bookmarkStart')).map(b => ({ id: b.getAttribute('w:id'), name: b.getAttribute('w:name'), paragraph: b.parentNode }));
+    const alias = sdt.getElementsByTagName('w:alias')[0];
+    return {
+      sdt,
+      alias: alias ? alias.getAttribute('w:val') : null,
+      instructions: Array.from(sdt.getElementsByTagName('w:instrText')).map(el => el.textContent.trim()),
+      fieldChars: chars.map(c => c.getAttribute('w:fldCharType')),
+      dirty: chars.length ? chars[0].getAttribute('w:dirty') : null,
+      entries: Array.from(sdt.getElementsByTagName('w:hyperlink')).map(link => {
+        const target = bookmarks.find(b => b.name === link.getAttribute('w:anchor'));
+        return { style: styleOfParagraph(link.parentNode), text: textOfNode(link), anchor: link.getAttribute('w:anchor'), targetStyle: target ? styleOfParagraph(target.paragraph) : null, targetText: target ? textOfNode(target.paragraph) : null };
+      }),
+    };
+  }
+
+  add('docx_toc_is_a_real_word_field',
+    'Le sommaire est un VRAI champ TOC de Word (Word le refait, numéros de page compris, à « Mettre à jour les champs »), pas une liste fixe : instruction « TOC \\o "1-6" \\h », champ à mettre à jour à l\'ouverture, une entrée par titre qui mène à lui',
     async (h) => {
-      const parts = await h.exportDocxParts('<div class="toc-marker"></div><h1>Alpha</h1><h2>Beta</h2>');
-      const textes = meaningful(h.docxParagraphs(parts.doc)).map(p => p.text);
-      const pass = textes[0] === 'Sommaire' && textes.includes('Alpha') && textes.includes('Beta') && textes.filter(t => t === 'Alpha').length === 2;
-      return { pass, notes: JSON.stringify(textes) };
+      const parts = await h.exportDocxParts('<div class="toc-marker"></div><h1>Alpha</h1><h2>Beta</h2><h1>Gamma</h1>');
+      const toc = tocOf(parts);
+      if (!toc) return { pass: false, notes: 'aucun contrôle de contenu (w:sdt) : le sommaire n\'est pas un champ' };
+      const bad = [];
+      if (toc.instructions.length !== 1 || !/^TOC\b/.test(toc.instructions[0]) || !toc.instructions[0].includes('\\o "1-6"') || !/\\h\b/.test(toc.instructions[0])) bad.push('instruction ' + JSON.stringify(toc.instructions));
+      if (toc.fieldChars.join() !== 'begin,separate,end') bad.push('champ ' + toc.fieldChars.join());
+      if (toc.dirty !== 'true') bad.push('w:dirty=' + toc.dirty);
+      const wanted = [['TOC1', 'Alpha', 'Heading1'], ['TOC2', 'Beta', 'Heading2'], ['TOC1', 'Gamma', 'Heading1']];
+      const got = toc.entries.map(e => [e.style, e.text, e.targetStyle]);
+      if (JSON.stringify(got) !== JSON.stringify(wanted)) bad.push('entrées ' + JSON.stringify(got) + ' (attendu ' + JSON.stringify(wanted) + ')');
+      toc.entries.forEach(e => { if (e.targetText !== e.text) bad.push('le lien « ' + e.text + ' » mène à « ' + e.targetText + ' »'); });
+      // Le titre « Sommaire » est un paragraphe à part : hors du champ (une mise à jour ne l'efface pas) et sans style de titre (il ne se liste pas lui-même).
+      const title = meaningful(h.docxParagraphs(parts.doc)).find(p => p.text === 'Sommaire');
+      if (!title || title.style) bad.push('titre ' + JSON.stringify(title && title.style));
+      if (toc.sdt.textContent.includes('Sommaire')) bad.push('le titre est dans le champ');
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : JSON.stringify({ instruction: toc.instructions[0], entrees: got }) };
+    });
+
+  add('docx_toc_bookmarks_unique_and_paired',
+    'Chaque titre du corps porte son signet (nom « _Toc… » et w:id propres, début et fin appariés) : Word apparie un signet par son w:id, et docx.js 9.7.1 donne sinon le même id à tous ; deux sommaires visent les mêmes signets',
+    async (h) => {
+      const html = '<div class="toc-marker"></div><h1>Un</h1><h2>Deux</h2><h2>Trois</h2><h1>Quatre</h1><div class="toc-marker"></div>';
+      const parts = await h.exportDocxParts(html);
+      const starts = Array.from(parts.doc.getElementsByTagName('w:bookmarkStart')).map(b => ({ id: b.getAttribute('w:id'), name: b.getAttribute('w:name') }));
+      const ends = Array.from(parts.doc.getElementsByTagName('w:bookmarkEnd')).map(b => b.getAttribute('w:id'));
+      const bad = [];
+      if (starts.length !== 4) bad.push(starts.length + ' signets (4 titres)');
+      if (new Set(starts.map(b => b.id)).size !== starts.length) bad.push('w:id en double : ' + starts.map(b => b.id).join());
+      if (new Set(starts.map(b => b.name)).size !== starts.length) bad.push('noms en double : ' + starts.map(b => b.name).join());
+      if (starts.some(b => !/^_Toc\d+$/.test(b.name))) bad.push('noms hors « _Toc… » : ' + starts.map(b => b.name).join());
+      if (ends.slice().sort().join() !== starts.map(b => b.id).sort().join()) bad.push('fins ' + ends.join() + ' / débuts ' + starts.map(b => b.id).join());
+      [0, 1].forEach(i => {
+        const toc = tocOf(parts, i);
+        if (!toc) bad.push('sommaire ' + (i + 1) + ' absent');
+        else if (toc.entries.map(e => e.targetText).join('|') !== 'Un|Deux|Trois|Quatre') bad.push('sommaire ' + (i + 1) + ' : ' + JSON.stringify(toc.entries.map(e => e.targetText)));
+      });
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : JSON.stringify(starts) };
+    });
+
+  add('docx_toc_lists_body_headings_in_cells_and_boxes_not_in_headers',
+    'Les titres du corps rangés dans une case de tableau ou un encadré sont au sommaire, avec leur signet ; un titre posé dans l\'en-tête n\'y est pas (ni signet)',
+    async (h) => {
+      const html = '<div class="toc-marker"></div><h1>Haut</h1><table><tbody><tr><td><h2>Dans la case</h2></td><td><p>x</p></td></tr></tbody></table>'
+        + '<div class="callout" data-color="green" data-icon="check"><h3>Dans l\'encadré</h3></div>';
+      const parts = await h.exportDocxParts(html, { enabled: true, differentFirstPage: false, header: { default: '<h1>Titre d\'en-tête</h1>' }, footer: { default: '<p>Pied</p>' } });
+      const toc = tocOf(parts);
+      const header = parts.parts['word/header1.xml'] || '';
+      const bad = [];
+      if (!toc) return { pass: false, notes: 'aucun sommaire' };
+      const got = toc.entries.map(e => e.text + ' > ' + e.targetText);
+      const wanted = ['Haut > Haut', 'Dans la case > Dans la case', 'Dans l\'encadré > Dans l\'encadré'];
+      if (JSON.stringify(got) !== JSON.stringify(wanted)) bad.push('entrées ' + JSON.stringify(got));
+      if (/_Toc/.test(header)) bad.push('un signet dans l\'en-tête');
+      if (!header.includes('Titre d\'en-tête') && !header.includes('Titre d&apos;en-tête')) bad.push('le titre d\'en-tête a disparu de l\'en-tête');
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : JSON.stringify(got) };
+    });
+
+  add('docx_toc_styles_are_defined_with_the_toc',
+    'Un document qui a un sommaire définit les styles « toc 1 » à « toc 6 » (indentation par niveau, gras du premier niveau) que Word reprend en mettant le sommaire à jour ; un document sans sommaire ne les porte pas',
+    async (h) => {
+      const withToc = await h.exportDocxParts('<div class="toc-marker"></div><h1>Alpha</h1><h2>Beta</h2>');
+      const without = await h.exportDocxParts('<h1>Alpha</h1><h2>Beta</h2>');
+      const styleOf = (parts, id) => Array.from(parts.part('word/styles.xml').getElementsByTagName('w:style')).find(st => st.getAttribute('w:styleId') === id);
+      const bad = [];
+      [1, 2, 3, 4, 5, 6].forEach(n => {
+        const st = styleOf(withToc, 'TOC' + n);
+        if (!st) return bad.push('TOC' + n + ' absent');
+        const name = st.getElementsByTagName('w:name')[0].getAttribute('w:val');
+        const left = st.getElementsByTagName('w:ind')[0] ? st.getElementsByTagName('w:ind')[0].getAttribute('w:left') : null;
+        const bold = !!st.getElementsByTagName('w:b')[0];
+        if (name !== 'toc ' + n) bad.push('TOC' + n + ' nom ' + name);
+        if (left !== String((n - 1) * 360)) bad.push('TOC' + n + ' retrait ' + left);
+        if (bold !== (n === 1)) bad.push('TOC' + n + ' gras ' + bold);
+      });
+      if (styleOf(without, 'TOC1')) bad.push('TOC1 présent sans sommaire');
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'six styles, aucun sans sommaire' };
     });
 
   add('docx_toc_without_headings',
-    'Un sommaire sans aucun titre dans le document ne casse pas l\'export',
+    'Un sommaire sans aucun titre dans le document ne casse pas l\'export : le champ garde la phrase « aucun titre » et n\'est pas marqué à mettre à jour (rien à mettre à jour, Word ne demande rien)',
     async (h) => {
       const parts = await h.exportDocxParts('<div class="toc-marker"></div><p>juste du texte</p>');
       const textes = meaningful(h.docxParagraphs(parts.doc)).map(p => p.text);
-      return { pass: textes[0] === 'Sommaire' && textes.length >= 2, notes: JSON.stringify(textes) };
+      const toc = tocOf(parts);
+      const bad = [];
+      if (!(textes[0] === 'Sommaire' && textes.length >= 2)) bad.push('textes ' + JSON.stringify(textes));
+      if (!toc) bad.push('aucun champ');
+      else {
+        if (toc.fieldChars.join() !== 'begin,separate,end') bad.push('champ ' + toc.fieldChars.join());
+        if (toc.dirty === 'true') bad.push('w:dirty=true sans titre');
+        if (toc.entries.length) bad.push('des entrées sans titre');
+        if (!toc.sdt.textContent.includes('aucun titre')) bad.push('la phrase « aucun titre » n\'est pas dans le champ');
+      }
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : JSON.stringify(textes) };
     });
 
   // Le titre suit la langue de l'interface (mêmes clés que le PDF et le mode Lecture), jamais « Sommaire » écrit en dur (carte d'Antoine du 29/09, « Oui, les deux »).
@@ -645,7 +760,9 @@
         const parts = await h.exportDocxParts('<div class="toc-marker"></div><h1>Alpha</h1><h2>Beta</h2>');
         const textes = meaningful(h.docxParagraphs(parts.doc)).map(p => p.text);
         const wanted = lang === 'en' ? 'Table of Contents' : 'Sommaire';
-        return { pass: textes[0] === wanted && textes.includes('Alpha') && textes.includes('Beta') && !textes.includes(lang === 'en' ? 'Sommaire' : 'Table of Contents'), notes: JSON.stringify(textes) };
+        // Le contrôle de contenu du champ porte le même titre : c'est le nom que Word montre quand on le sélectionne.
+        const alias = tocOf(parts) && tocOf(parts).alias;
+        return { pass: textes[0] === wanted && textes.includes('Alpha') && textes.includes('Beta') && !textes.includes(lang === 'en' ? 'Sommaire' : 'Table of Contents') && alias === wanted, notes: JSON.stringify({ textes, alias }) };
       } finally { I18n.setLang(previousLang); }
     }));
 

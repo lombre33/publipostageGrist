@@ -3,14 +3,13 @@
 //
 // Ce que l'export reprend du modèle : listes en numérotation Word native (numbering.xml : une <ul> ou <ol> se renumérote après l'ajout ou le retrait
 // d'un item, ce que ne fait pas un marqueur texte), colonnes de tableau mesurées sur le rendu réel (comme le PDF), notes de bas de page, numéro de
-// page et nombre de pages en vrais champs, titres en styles « Titre 1 » à « Titre 6 » (que reprend le volet de navigation de Word), images en calque
-// (devant ou derrière le texte) et images habillées à gauche ou à droite en ancres flottantes natives, export en lot (un ZIP, une ligne = un .docx :
-// js/main.js:onExportBatch).
+// page et nombre de pages en vrais champs, titres en styles « Titre 1 » à « Titre 6 » (que reprend le volet de navigation de Word), sommaire en vrai
+// champ TOC de Word (buildTocBlocks), images en calque (devant ou derrière le texte) et images habillées à gauche ou à droite en ancres flottantes
+// natives, export en lot (un ZIP, une ligne = un .docx : js/main.js:onExportBatch).
 //
 // Ce qu'il ne fait pas, volontairement :
 // - Case à cocher : le caractère ☑ ou ☐ tel quel, pas une case à cocher Word native (un contrôle de contenu `w:sdt`, bien plus lourd que la
 //   numérotation des autres listes).
-// - Sommaire : une liste statique (marqueur et texte), jamais un champ TOC de Word, qui demanderait « Mettre à jour les champs » à la personne.
 // - Polices : jamais embarquées (le PDF les embarque) ; Word résout « Roboto », « Arial »... sur les polices installées chez le lecteur, avec un
 //   repli silencieux si elles manquent, comme pour tout document éditable.
 const DocxExport = (function () {
@@ -799,11 +798,31 @@ const DocxExport = (function () {
   }
   // Le retrait du texte d'une citation (et du tableau qu'elle porte).
   const QUOTE_INDENT_TWIP = 400;
+  // Un titre du corps vu du sommaire : son niveau, son texte (marqueur compris, celui que le PDF et la Lecture écrivent aussi) et l'ancre du signet caché
+  // « _Toc… » posé autour de lui, que visent les liens des entrées du sommaire (Word garde ces signets-là quand il met le sommaire à jour). Seul le corps
+  // compte : après lui ctx.headingBlocks est nul (buildDocxDocument), un titre posé dans un en-tête ou un pied n'est pas au sommaire.
+  const TOC_ANCHOR_BASE = 100000000;
+  function tocEntryFor(node, marker, ctx) {
+    if (!ctx.headingBlocks) return null;
+    const bookmarkId = ctx.headingBlocks.length + 1;
+    const entry = {
+      level: parseInt(node.tagName.slice(1), 10),
+      text: ((marker || '') + (node.textContent || '')).replace(/\s+/g, ' ').trim(),
+      anchor: '_Toc' + (TOC_ANCHOR_BASE + bookmarkId),
+      bookmarkId,
+    };
+    ctx.headingBlocks.push(entry);
+    return entry;
+  }
+  // BookmarkStart et BookmarkEnd posés à la main, jamais `new docx.Bookmark` : docx.js 9.7.1 y crée un compteur par instance, donc le même w:id (1) pour
+  // tous les signets du fichier, alors que Word apparie le début et la fin d'un signet par cet id.
+  const bookmarkedRuns = (entry, runs) => [new docx.BookmarkStart(entry.anchor, entry.bookmarkId)].concat(runs, [new docx.BookmarkEnd(entry.bookmarkId)]);
   // <p>, <div> et <h1-6> donnent un ou plusieurs Paragraph (splitRunsAtFloatedImages). Titre : le marqueur littéral (« 1) »...), identique à celui du
-  // PDF et de la Lecture, posé en texte en plus du style Word « Titre N » (que reprennent le volet de navigation et un futur sommaire réel construit
-  // dans Word). `pageBreakBefore` doit passer par le constructeur (option native, IParagraphPropertiesOptionsBase) : un Paragraph construit n'est pas
-  // modifiable de l'extérieur. `keepNext` : « Conserver avec le suivant » (w:keepNext), pour le bloc que sa légende doit suivre sur la même page
-  // (keepsWithCaption) et pour un paragraphe que le réglage « Garder avec le suivant » (js/keep-with-next.js) garde avec le bloc qui le suit.
+  // PDF et de la Lecture, posé en texte en plus du style Word « Titre N » (que reprennent le volet de navigation et le sommaire), et un signet caché
+  // autour de son texte (tocEntryFor) que visent les liens du sommaire. `pageBreakBefore` doit passer par le constructeur (option native,
+  // IParagraphPropertiesOptionsBase) : un Paragraph construit n'est pas modifiable de l'extérieur. `keepNext` : « Conserver avec le suivant »
+  // (w:keepNext), pour le bloc que sa légende doit suivre sur la même page (keepsWithCaption) et pour un paragraphe que le réglage « Garder avec le
+  // suivant » (js/keep-with-next.js) garde avec le bloc qui le suit.
   async function paragraphBlockFrom(node, ctx, headingMarkers, pageBreakBefore, keepNext, only) {
     const runs = await inlineNodesExcludingNestedLists(node, { size: DEFAULT_HALF_PT }, ctx, only);
     const align = paragraphAlignment(node);
@@ -812,12 +831,14 @@ const DocxExport = (function () {
     // color:'auto', pour la même raison que dans inheritedRunStyle : ce marqueur (« 1) », « 2) »...) est un TextRun à part, qui ne passe pas par
     // inheritedRunStyle ni par son défaut de couleur ; sans cela il hériterait du bleu du style Word « Titre N ».
     const children = marker ? [new docx.TextRun(Object.assign({ text: marker }, isHeading ? { bold: true, size: HEADING_HALF_PT[node.tagName], color: 'auto' } : {}))].concat(runs) : runs;
-    if (isHeading) ctx.headingBlocks.push({ level: parseInt(node.tagName.slice(1), 10), text: ((marker || '') + (node.textContent || '')).replace(/\s+/g, ' ').trim() });
+    const tocEntry = isHeading ? tocEntryFor(node, marker, ctx) : null;
     const groups = splitRunsAtFloatedImages(children);
     return groups.map((group, i) => {
       const groupChildren = group.runs;
+      const content = groupChildren.length ? groupChildren : [new docx.TextRun('')];
       const opts = {
-        children: groupChildren.length ? groupChildren : [new docx.TextRun('')],
+        // Le signet n'entoure que le premier paragraphe d'un titre que des images coupent en plusieurs : une ancre = un endroit.
+        children: tocEntry && i === 0 ? bookmarkedRuns(tocEntry, content) : content,
         alignment: group.alignment !== undefined ? group.alignment : align,
         // after:0 : `.tiptap p` et `h1-6` n'ont aucune marge propre (css/editor-v2.css) ; l'espacement vient des paragraphes vides que la personne
         // insère elle-même, jamais d'une marge automatique. line et lineRule : voir LINE_SPACING_240THS.
@@ -825,7 +846,9 @@ const DocxExport = (function () {
         pageBreakBefore: !!(i === 0 && pageBreakBefore),
       };
       if (keepNext) opts.keepNext = true;
-      if (isHeading) opts.heading = docx.HeadingLevel[HEADING_LEVEL[node.tagName]];
+      // outlineLevel : le niveau de plan que le style Word « Titre N » porte déjà pour Word, mais pas pour LibreOffice, dont la mise à jour du
+      // sommaire (menu Outils > Mettre à jour) ne retrouve sinon aucun titre et vide le sommaire.
+      if (isHeading) { opts.heading = docx.HeadingLevel[HEADING_LEVEL[node.tagName]]; opts.outlineLevel = parseInt(node.tagName.slice(1), 10) - 1; }
       if (node.tagName === 'BLOCKQUOTE') { opts.indent = { left: QUOTE_INDENT_TWIP }; opts.border = { left: { style: 'single', size: 16, color: 'CBD5E1', space: 8 } }; }
       return new docx.Paragraph(opts);
     });
@@ -849,15 +872,35 @@ const DocxExport = (function () {
     }));
   }
 
-  function buildTocParagraphs(headingBlocks, pageBreakBefore) {
-    const title = new docx.Paragraph({ children: [new docx.TextRun({ text: I18n.t('pdf.tocTitle'), bold: true, size: 32 })], spacing: { after: 160 }, pageBreakBefore: !!pageBreakBefore });
-    if (!headingBlocks.length) return [title, new docx.Paragraph({ children: [new docx.TextRun({ text: I18n.t('docx.tocEmpty'), italics: true })] })];
-    const lines = headingBlocks.map(hb => new docx.Paragraph({
-      children: [new docx.TextRun({ text: hb.text, bold: hb.level === 1 })],
-      indent: { left: Math.max(0, hb.level - 1) * INDENT_STEP_TWIP },
-      spacing: { after: 60 },
+  // Le sommaire : un vrai champ TOC de Word (`TOC \o "1-6" \h \z \u`, dans le contrôle de contenu que docx.js lui donne), que Word met à jour (clic droit,
+  // « Mettre à jour les champs ») en écrivant lui-même les numéros de page. Les entrées posées ici, une par titre avec un lien vers son signet
+  // (tocEntryFor), sont le résultat que montre un lecteur qui ne met pas les champs à jour (aperçu, Google Docs, LibreOffice, Word en mode protégé) : le
+  // texte et l'indentation de la liste fixe d'avant, sans numéro de page (seul Word sait le calculer ; un nombre deviné serait faux). Avec des titres le
+  // champ est marqué à mettre à jour (`w:dirty`) : Word peut proposer de le faire à l'ouverture (pas essayé dans Word lui-même), et Oui donne les numéros
+  // de page. Sans titre il n'y a rien à mettre à jour : la phrase « aucun titre » reste et Word ne demande rien. Le titre est un paragraphe à part, hors
+  // du champ (une mise à jour ne l'efface pas) et sans style de titre (il ne se liste pas lui-même).
+  function buildTocBlocks(ctx, pageBreakBefore) {
+    const titleText = I18n.t('pdf.tocTitle');
+    const title = new docx.Paragraph({ children: [new docx.TextRun({ text: titleText, bold: true, size: 32 })], spacing: { after: 160 }, pageBreakBefore: !!pageBreakBefore });
+    const entries = ctx.headingBlocks.filter(hb => hb.text);
+    const result = entries.length
+      ? entries.map(hb => new docx.Paragraph({ style: 'TOC' + hb.level, children: [new docx.InternalHyperlink({ anchor: hb.anchor, children: [new docx.TextRun(hb.text)] })] }))
+      : [new docx.Paragraph({ children: [new docx.TextRun({ text: I18n.t('docx.tocEmpty'), italics: true })] })];
+    ctx.hasToc = true;
+    const field = new docx.TableOfContents(titleText, {
+      hyperlink: true, headingStyleRange: '1-6', useAppliedParagraphOutlineLevel: true, hideTabAndPageNumbersInWebView: true,
+      beginDirty: entries.length > 0, contentChildren: result,
+    });
+    return [title, field];
+  }
+  // Les styles de sommaire des niveaux 1 à 6 (nom interne « toc N » : Word le reconnaît et l'affiche sous son propre nom) : l'indentation par niveau
+  // et le gras du premier niveau de la liste d'avant. Word les applique aussi aux lignes qu'il réécrit en mettant le sommaire à jour.
+  function tocParagraphStyles() {
+    return [1, 2, 3, 4, 5, 6].map(level => ({
+      id: 'TOC' + level, name: 'toc ' + level, uiPriority: 39, unhideWhenUsed: true,
+      paragraph: { spacing: { after: 60 }, indent: { left: (level - 1) * INDENT_STEP_TWIP } },
+      run: Object.assign({ size: DEFAULT_HALF_PT }, level === 1 ? { bold: true } : {}),
     }));
-    return [title].concat(lines);
   }
 
   // Le paragraphe est-il à garder avec le suivant ? L'image que suit une légende, et chaque légende qu'une autre légende suit (« Rester ensemble »,
@@ -880,7 +923,7 @@ const DocxExport = (function () {
       for (const block of await blocksFromNode(node, flow)) blocks.push(block);
     }
     // Un sommaire n'a de sens qu'à la racine du document : il y prend la place de son repère.
-    return isTopLevel ? blocks.flatMap(b => (b && b.__tocPlaceholder ? buildTocParagraphs(ctx.headingBlocks, b.pageBreakBefore) : [b])) : blocks;
+    return isTopLevel ? blocks.flatMap(b => (b && b.__tocPlaceholder ? buildTocBlocks(ctx, b.pageBreakBefore) : [b])) : blocks;
   }
 
   function headingMarkersOf(container) {
@@ -1179,6 +1222,8 @@ const DocxExport = (function () {
     topBandTwip = zones.bandTwip('header');
     const bottomBandTwip = zones.bandTwip('footer');
     const bodyBlocks = await bodyBlocksFrom(root, ctx);
+    // Le corps est construit : un titre posé après lui (en-tête, pied) n'a ni entrée au sommaire ni signet (tocEntryFor).
+    ctx.headingBlocks = null;
     const footer = await footerLayoutFrom(zones, ctx, bottomBandTwip);
     const section = {
       properties: sectionPropertiesFrom(zones, bottomBandTwip, footer.distanceTwip),
@@ -1188,6 +1233,7 @@ const DocxExport = (function () {
     await addHeaders(section, zones.variants, headerBlocks, layerImages, ctx);
     const doc = { sections: [section], footnotes: ctx.footnotes };
     if (ctx.numberingConfigs.length) doc.numbering = { config: ctx.numberingConfigs };
+    if (ctx.hasToc) doc.styles = { paragraphStyles: tocParagraphStyles() };
     return new docx.Document(doc);
   }
 
