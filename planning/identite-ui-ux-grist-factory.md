@@ -113,10 +113,18 @@ contenu exportable :
   auto-hébergée (`css/roboto-fonts.css`) en regular/italique/gras/gras-italique — délibérément les MÊMES fichiers
   que ceux embarqués dans le PDF par `pdfmake`, pour que la pagination affichée à l'écran soit identique à celle
   du PDF. Ne jamais laisser la police du contenu dériver de celle réellement exportée. Dans le PDF, un caractère que la police du texte n'a pas (du grec, du cyrillique ou du vietnamien dans Arial ou en gras, un ✓ → ★ ① ₿ ✅) s'écrit dans une police de repli, Roboto de la même graisse puis PPSymbols (`js/pdf-glyph-fallback.js`), jamais en case vide ; le chinois, le japonais, l'arabe, l'hébreu et le thaï restent des cases vides (aucune police assez légère, et pdfmake ne dessine pas de droite à gauche).
-- Base non stylée (avant les tokens) : `Arial, sans-serif`. Elle reste en vigueur, au 12/10, sur des champs de saisie qui n'ont pas pris
-  `--font-ui` : nom du modèle, champs de l'e-mail (Objet, À, Cc, Cci) et nom du PDF dans la barre du haut ; recherche de la galerie, nom du
-  macro-modèle, marges et caractère déclencheur dans les fenêtres (mesuré dans Chromium sur la page ouverte seule : les fenêtres créées par
-  le script n'ont pas été mesurées). Rien n'est téléchargé, mais ce n'est pas la police du système : écart proposé à Antoine, voir §5.
+- **Les champs prennent la police des boutons** (choix d'Antoine du 12/10, « Oui, tous », à la carte sur les champs restés en Arial) :
+  `input`, `select`, `textarea` et les champs à bulles (Objet, À, Cc, Cci, nom du PDF) ont `--font-ui`, à la taille qu'ils avaient. Un champ ne
+  reprend pas la police de son parent : sans la règle de base de `css/style.css` (`input, select, textarea { font-family: var(--font-ui) }`)
+  il garde celle du navigateur, Arial, à côté de boutons dans la police du système. Tout champ nouveau la reçoit donc sans rien ajouter, et
+  aucune règle ne remet « Arial » sur un champ. Gardé par `codeHygiene` (section 12 : la règle de base existe, seule la base de la page écrit
+  « Arial ») et par le script Node `fieldFontsMouse` (chaque champ a exactement la police du bouton voisin, mesuré à 700×400 à la vraie
+  souris, fenêtres ouvertes comprises).
+- Base de la page (avant les tokens) : `html, body { font-family: Arial, sans-serif }`. Ce qui n'a pas de police à lui la reprend par héritage :
+  au 12/10, restent en Arial les lignes du menu des polices et des tailles (`.v2-format-panel button`, `font: inherit`), les boutons « FR »,
+  « US », « J », « M », « A »… de la barre d'une variable et les libellés « + Ajouter un en-tête » et « + Ajouter un pied de page » (relevé dans
+  Chromium ; les autres boutons restés sans règle sont des icônes sans texte, où la police ne se voit pas). Proposé à Antoine le 12/10, voir §5 ;
+  le contenu produit, en Roboto, n'en dépend pas.
 
 ### Thème sombre : uniquement le chrome, jamais le contenu produit
 Règle stricte, documentée en commentaire dans le CSS de Publipostage+ : le thème sombre change la couleur de la
@@ -1242,9 +1250,10 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   attendant).
 - Relevés par l'audit du 29/09 sans avoir fait l'objet d'une carte : deux sortes d'info-bulles, quatre crayons pour quatre
   fonctions, des tailles et couleurs écrites en dur dans le CSS, une lecture seule qui grise sans expliquer pourquoi (non revérifiés au 12/10).
-- Police du système, champs restés en Arial (relevé du 12/10, §1 « Deux polices ») : nom du modèle, champs de l'e-mail et nom du PDF dans la
-  barre du haut ; recherche de la galerie, nom du macro-modèle, marges et caractère déclencheur dans les fenêtres. Question posée à Antoine le
-  12/10 sur une carte : rien n'est codé avant son choix.
+- Police du système, boutons et libellés restés en Arial (relevé du 12/10, §1 « Deux polices ») : les lignes du menu des polices et des
+  tailles, les boutons « FR », « US », « J », « M », « A »… de la barre d'une variable et les libellés « + Ajouter un en-tête » et « + Ajouter
+  un pied de page ». Les champs, eux, sont passés à la police du système le 12/10 (choix d'Antoine, « Oui, tous »). Question posée à Antoine
+  sur une carte : rien n'est codé avant son choix.
 
 ---
 
@@ -1273,3 +1282,7 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
   « Module partagé » (§2), la liste « Ce qui reste ouvert » (§5) et l'en-tête. Entre le 29/09 et le 12/10, les règles livrées par les fils (barre,
   export, tableaux, couleurs, contrastes…) se sont ajoutées à §1 et §3 sans ligne ici : l'historique complet est dans git
   (`planning/identite-ui-ux-grist-factory.md`).
+- 2026-10-12 (suite) : les champs de saisie passent à la police du système (« Oui, tous » d'Antoine, à la carte posée pendant la relecture) :
+  règle de base `input, select, textarea` et fin du « Arial » écrit en dur dans la barre du haut (§1, « Les champs prennent la police des
+  boutons »), gardé par `codeHygiene` et `fieldFontsMouse`. Des boutons et des libellés restent en Arial par héritage de la base de la page
+  (§1, §5) : question posée à Antoine.
