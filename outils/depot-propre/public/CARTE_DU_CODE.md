@@ -138,6 +138,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | Fichier | Rôle |
 |---|---|
 | `js/page-layout.js` | Marges, orientation, format, filigrane et couleurs gardées de chaque modèle : la source unique de la largeur de contenu. |
+| `js/page-sections.js` | Lit les repères de sens d'un macro-modèle (portrait, paysage) pour que chaque modèle garde son sens de page dans le PDF, le Word, la Lecture et l'impression. |
 | `js/page-layer.js` | Les images « sur toutes les pages » et le filigrane. |
 | `js/orientation-toggle.js`, `js/page-size-dialog.js`, `js/watermark-dialog.js` | Le menu Page et ses fenêtres : sens et format, « Format libre… », « Filigrane… ». |
 | `js/page-zoom.js` | Le zoom de la page à l'écran, en Édition et en Lecture (pastille du coin, Ajuster, Ctrl + molette) ; affichage seulement, les exports gardent les dimensions réelles. |
@@ -404,6 +405,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | File | Role |
 |---|---|
 | `js/page-layout.js` | Margins, orientation, size, watermark and kept colors of each template: the single source of the content width. |
+| `js/page-sections.js` | Reads the page-orientation markers of a macro template (portrait, landscape) so that each template keeps its own page orientation in the PDF, Word, reading mode and print output. |
 | `js/page-layer.js` | "On every page" images and the watermark. |
 | `js/orientation-toggle.js`, `js/page-size-dialog.js`, `js/watermark-dialog.js` | The Page menu and its windows: orientation and size, "Custom size…", "Watermark…". |
 | `js/page-zoom.js` | On-screen page zoom, in Edit and Reading modes (corner pill, Fit, Ctrl + wheel); display only, the exports keep the real dimensions. |

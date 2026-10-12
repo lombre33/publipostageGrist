@@ -107,6 +107,11 @@ const PdfExport = (function () {
   }
   let CONTENT_WIDTH_PT = pageWidthPt - marginLeftPt - marginRightPt;
   let CONTENT_WIDTH_PX = CONTENT_WIDTH_PT / PX_TO_PT;
+  // Ce que l'en-tête, le pied et les marges prennent en plus de la hauteur d'une page (pt), posé par resolveNativePdfContent ; null tant qu'il ne l'est pas.
+  // Une section de sens différent (applyPageOrientation) en tire sa propre hauteur utile de page de tableau.
+  let tableExtrasPt = null;
+  // Le sens du document tel que ses marges le disent (setPageMarginsPt) : celui de la page quand aucun repère de départ ne dit mieux (js/page-sections.js).
+  let documentOrientation = 'portrait';
 
   // Réglé une fois par export (exportCurrentRecord, getNativePdfBlobForRecord) à partir des marges du modèle courant (js/page-layout.js) : recalcule
   // toutes les valeurs dérivées. Une marge absente prend le défaut de PageLayout. Les dimensions de page viennent de PageLayout.pageSizePtFor (pure,
@@ -120,15 +125,26 @@ const PdfExport = (function () {
     marginLeftPt = marginOf(m.left);
     // Sens et format de la page, joints aux marges (PageLayout.getMarginsPt) ; absents, A4 portrait. Les dimensions viennent de
     // PageLayout.pageSizePtFor : un seul endroit les écrit.
-    pageOrientation = m.orientation === 'landscape' ? 'landscape' : 'portrait';
     pageFormat = PageLayout.normalizeFormat(m.format);
-    const page = PageLayout.pageSizePtFor(pageOrientation, pageFormat);
-    pageWidthPt = page.width; pageHeightPt = page.height;
     pageWatermark = PageLayout.normalizeWatermark(m.watermark);
     A4_PREVIEW_PADDING_TOP_PX = marginTopPt / PX_TO_PT;
     A4_PREVIEW_PADDING_LEFT_PX = marginLeftPt / PX_TO_PT;
+    tableExtrasPt = null;
+    documentOrientation = m.orientation === 'landscape' ? 'landscape' : 'portrait';
+    applyPageOrientation(documentOrientation);
+  }
+
+  // Le sens de la page et tout ce qui en dérive : ses dimensions, la largeur utile du texte (pt et px) et la hauteur utile d'une page de tableau. Réglé pour
+  // le document par setPageMarginsPt, puis par chaque section d'un macro-modèle dont les modèles n'ont pas tous le même sens (js/page-sections.js,
+  // visitSection) : le format et les marges ne changent jamais, seul le sens tourne. Tout ce que le PDF mesure ensuite lit ces variables de module, dans la
+  // largeur de la page où le bloc tombe.
+  function applyPageOrientation(orientation) {
+    pageOrientation = orientation === 'landscape' ? 'landscape' : 'portrait';
+    const page = PageLayout.pageSizePtFor(pageOrientation, pageFormat);
+    pageWidthPt = page.width; pageHeightPt = page.height;
     CONTENT_WIDTH_PT = pageWidthPt - marginLeftPt - marginRightPt;
     CONTENT_WIDTH_PX = CONTENT_WIDTH_PT / PX_TO_PT;
+    if (tableExtrasPt != null) tablePageHeightPt = pageHeightPt - marginTopPt - marginBottomPt - tableExtrasPt - FOOTNOTE_BAND_PT;
   }
 
   function cssSize(value, fallback) {
@@ -2650,6 +2666,9 @@ const PdfExport = (function () {
       // Macro-modèle : rang du slot que le dernier saut de page ouvre tant que son premier bloc n'est pas posé, puis rang -> indice de ce bloc dans
       // `blocks`.
       pendingSlotStart: null, currentSlot: null, slotStarts: {},
+      // Macro-modèle dont les modèles n'ont pas tous le même sens de page (js/page-sections.js) : le sens de la page où le dernier bloc est tombé, et celui que
+      // le saut de page en attente demande à la page suivante (null : elle garde le sien). Le premier bloc de la section qui tourne la porte (pushBlock).
+      pageSense: pageOrientation, pendingSense: null,
       // « Rester ensemble » (js/caption.js) : les images et les tableaux du texte courant que suit une légende, avec leur légende - { start, last }, le
       // premier bloc de l'image ou du tableau (la dernière ligne seule, pour un tableau qui se coupe entre deux lignes) et le dernier bloc de la
       // légende. captionKeepRule les garde sur une même page. `captionOwner` : le bloc qui vient d'être posé et peut encore recevoir sa légende (le
@@ -2669,7 +2688,18 @@ const PdfExport = (function () {
 
   function pushBlock(st, block, node) {
     if (st.pendingSlotStart != null) { st.slotStarts[st.pendingSlotStart] = st.blocks.length; st.pendingSlotStart = null; }
+    if (st.pendingSense && turnPage(block, st.pendingSense)) { st.pageSense = st.pendingSense; st.pendingSense = null; }
     st.blocks.push(block); st.sourceNodes.push(node); st.blockSlots.push(st.currentSlot);
+  }
+
+  // Le sens de la page que ce bloc ouvre : pdfmake lit `pageOrientation` sur le nœud qui porte le `pageBreak: 'before'`, le bloc lui-même ou, quand le
+  // saut est posé sur son premier enfant (une pile, des colonnes, une liste, un tableau), celui-là. Rend vrai quand un nœud l'a reçu ; un bloc sans saut
+  // (une image en calque, qui laisse le saut au bloc suivant) ne le reçoit pas.
+  function turnPage(node, sense) {
+    if (!node || typeof node !== 'object') return false;
+    if (Array.isArray(node)) return node.some(child => turnPage(child, sense));
+    if (node.pageBreak === 'before') { node.pageOrientation = sense; return true; }
+    return ['stack', 'columns', 'ul', 'ol'].some(key => node[key] && turnPage(node[key], sense)) || !!(node.table && Array.isArray(node.table.body) && turnPage(node.table.body, sense));
   }
 
   // Un bloc ne porte qu'un `id` : une seconde paire qui part du même bloc (un paragraphe gardé qui porte une image et sa légende) se range sous la
@@ -2719,6 +2749,7 @@ const PdfExport = (function () {
     const run = st.keepRun;
     st.keepRun = null;
     const classes = node.classList;
+    if (classes.contains(SECTION_CLASS)) { await visitSection(st, node, run); return; }
     if (classes.contains('page-break-marker')) { visitPageBreak(st, node, run); return; }
     if (classes.contains('heading-numbering-config')) { st.keepRun = run; return; }
     if (classes.contains('toc-marker')) { visitToc(st, node, run); return; }
@@ -2742,6 +2773,9 @@ const PdfExport = (function () {
     st.pendingPageBreak = false;
   }
 
+  // L'enveloppe d'une section dans l'hôte de mesure (htmlToPdfContent, visitSection).
+  const SECTION_CLASS = 'pdf-section';
+
   // La page blanche que laisse un second saut de page de suite (comme dans l'éditeur et la Lecture) : une ligne vide qui ouvre la page, le second saut restant au bloc suivant.
   const blankPageBlock = () => ({ text: ' ', margin: [0, 2, 0, 4], lineHeight: LINE_HEIGHT_RATIO, pageBreak: 'before' });
 
@@ -2751,6 +2785,18 @@ const PdfExport = (function () {
     st.pendingPageBreak = true;
     st.floatCarry = null;
     if (st.isTopLevel && node.hasAttribute('data-macro-slot')) { st.currentSlot = st.pendingSlotStart = node.getAttribute('data-macro-slot'); }
+    // Le sens de la page qui s'ouvre (macro-modèle aux modèles de sens mêlés) : posé sur le premier bloc de cette page seulement s'il tourne.
+    const sense = st.isTopLevel ? PageSections.senseOf(node) : null;
+    if (sense) st.pendingSense = sense !== st.pageSense ? sense : null;
+  }
+
+  // Une section d'un document dont les modèles n'ont pas tous le même sens de page (js/page-sections.js) : ses nœuds, mesurés dans la largeur de SA page
+  // (htmlToPdfContent a posé une enveloppe de cette largeur autour d'eux). Le sens de la section règle les variables de page du module le temps de la
+  // parcourir ; la page de pdfmake tourne avec le saut de page qui l'ouvre (visitPageBreak, pushBlock).
+  async function visitSection(st, node, run) {
+    closeKeepRun(st, run);
+    applyPageOrientation(node.getAttribute(PageSections.ATTR));
+    for (const child of Array.from(node.childNodes)) { await visitNode(st, child); }
   }
 
   function visitToc(st, node, run) {
@@ -3065,10 +3111,11 @@ const PdfExport = (function () {
   // position de page, qui ajoute la page où le slot commence (resolveNativePdfContent). Appelée sur l'hôte attaché, avant la conversion : les copies
   // imbriquées (cellule, colonne) héritent de l'attribut.
   function rebaseMacroSlotImages(root) {
-    if (!root.querySelector(':scope > .page-break-marker[data-macro-slot]')) return;
+    const children = topLevelElements(root);
+    if (!children.some(child => child.matches('.page-break-marker[data-macro-slot]'))) return;
     let slot = null;
     let shiftPx = 0;
-    Array.from(root.children).forEach(child => {
+    children.forEach(child => {
       if (child.matches('.page-break-marker[data-macro-slot]')) {
         slot = child.getAttribute('data-macro-slot');
         shiftPx = child.offsetTop + child.offsetHeight + (parseFloat(getComputedStyle(child).marginBottom) || 0);
@@ -3090,16 +3137,18 @@ const PdfExport = (function () {
     // Ni ligne vide ni saut de page orphelin en fin de document : quand le texte arrive à la marge du bas, ils ouvriraient une page blanche.
     if (isTopLevel) ReaderMode.trimTrailingBlankBlocks(root);
     insertTrailingBreaksForEmptyBlocks(root);
+    // Macro-modèle dont les modèles n'ont pas tous le même sens de page : les sections, dans la largeur de leur page (null : une seule page pour tout, comme avant).
+    const sections = isTopLevel ? prepareSections(root) : null;
     let headingMarkers = null;
     if (isTopLevel) {
-      const config = root.querySelector(':scope > .heading-numbering-config');
+      const config = topLevelElements(root).find(el => el.classList.contains('heading-numbering-config'));
       const style = (config && config.dataset.style) || 'none';
       root.dataset.headingStyle = style;
-      const headingEls = Array.from(root.querySelectorAll(':scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6'));
+      const headingEls = topLevelElements(root).filter(el => /^H[1-6]$/.test(el.tagName));
       const markers = HeadingNumbering.markersFor(headingEls, style);
       headingMarkers = new Map(headingEls.map((el, i) => [el, markers[i]]));
     }
-    const widthPx = availableWidthPt != null ? availableWidthPt / PX_TO_PT : null;
+    const widthPx = availableWidthPt != null ? availableWidthPt / PX_TO_PT : (sections ? sections.widestPx : null);
     const detachMeasureHost = attachPdfMeasureHost(root, widthPx);
     try {
       // Attend le décodage de chaque <img> de ce root avant toute mesure : getBoundingClientRect() sur une image en hauteur auto a besoin du ratio
@@ -3109,7 +3158,46 @@ const PdfExport = (function () {
       return await buildPdfContentFromRoot(root, headingMarkers, availableWidthPt, isTopLevel, opts);
     } finally {
       detachMeasureHost();
+      // Les sections ont tourné la page le temps de la construction : le document reprend le sens de sa première page, celui que lisent la mise en page et la
+      // définition du document.
+      if (sections) applyPageOrientation(sections.firstOrientation);
     }
+  }
+
+  // Les éléments de premier niveau du document, à travers les enveloppes de section : ce que les titres numérotés, le réglage de leur numérotation et le rebasage
+  // des images par modèle lisaient sur les enfants directs de la racine.
+  function topLevelElements(root) {
+    const found = [];
+    Array.from(root.children).forEach(child => {
+      if (child.classList.contains(SECTION_CLASS)) found.push(...Array.from(child.children)); else found.push(child);
+    });
+    return found;
+  }
+
+  // Un document dont les modèles n'ont pas tous le même sens de page (js/page-sections.js) : la racine se range en une enveloppe par section, chacune de la
+  // largeur utile de SA page, pour que tout ce que le PDF mesure dans le navigateur (retours à la ligne, colonnes de tableau, images, traits) le soit dans la
+  // bonne largeur. Les enveloppes s'empilent dans le même hôte : les positions restent celles d'un flux continu. La première page prend le sens de la première
+  // section. Rend null sans repère de sens (le document est tel qu'avant), sinon { firstOrientation, widestPx }.
+  function prepareSections(root) {
+    if (!PageSections.hasSenses(root)) return null;
+    const parts = PageSections.split(root.childNodes, documentOrientation);
+    PageSections.stripStart(root);
+    if (!parts.length) return null;
+    const firstOrientation = parts[0].orientation;
+    applyPageOrientation(firstOrientation);
+    const widthOf = orientation => (PageLayout.pageSizePtFor(orientation, pageFormat).width - marginLeftPt - marginRightPt) / PX_TO_PT;
+    const widestPx = Math.max(...parts.map(part => widthOf(part.orientation)));
+    // Une seule section : le sens de la page change, rien d'autre (pas d'enveloppe).
+    if (parts.length === 1) return { firstOrientation, widestPx };
+    parts.forEach(part => {
+      const wrapper = document.createElement('div');
+      wrapper.className = SECTION_CLASS;
+      wrapper.setAttribute(PageSections.ATTR, part.orientation);
+      wrapper.style.width = widthOf(part.orientation) + 'px';
+      part.nodes.forEach(node => wrapper.appendChild(node));
+      root.appendChild(wrapper);
+    });
+    return { firstOrientation, widestPx };
   }
 
   // pdfmake exige une image en data URI base64 : un simple src http(s)://... (upload Grist ou URL externe) n'est jamais rendu, silencieusement. Il ne
@@ -3145,11 +3233,11 @@ const PdfExport = (function () {
   // vrai texte que le PDF garde), tourné autour du centre de la page. `y` est la ligne de base, à 0,342 em sous le centre
   // (PageLayer.WATERMARK_BASELINE_EM) comme à l'écran. Le texte est échappé : une esperluette ou un chevron dans « R&D < 5 » ne doit pas casser le
   // SVG, et avec lui tout l'export.
-  function watermarkSvgFrom(layout) {
-    const cx = pageWidthPt / 2, cy = pageHeightPt / 2;
+  function watermarkSvgFrom(layout, widthPt, heightPt) {
+    const cx = widthPt / 2, cy = heightPt / 2;
     const escaped = layout.text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     const num = n => Math.round(n * 100) / 100;
-    return '<svg xmlns="http://www.w3.org/2000/svg" width="' + num(pageWidthPt) + '" height="' + num(pageHeightPt) + '" viewBox="0 0 ' + num(pageWidthPt) + ' ' + num(pageHeightPt) + '">'
+    return '<svg xmlns="http://www.w3.org/2000/svg" width="' + num(widthPt) + '" height="' + num(heightPt) + '" viewBox="0 0 ' + num(widthPt) + ' ' + num(heightPt) + '">'
       + '<text x="' + num(cx) + '" y="' + num(cy + PageLayer.WATERMARK_BASELINE_EM * layout.fontSizePt) + '" font-family="Roboto" font-weight="bold" font-size="' + layout.fontSizePt + '" text-anchor="middle"'
       + ' fill="' + layout.color + '" fill-opacity="' + layout.opacity + '" transform="rotate(' + layout.angleDeg + ' ' + num(cx) + ' ' + num(cy) + ')">' + escaped + '</text></svg>';
   }
@@ -3231,12 +3319,24 @@ const PdfExport = (function () {
   // les pages ») sur chaque page de leur courrier, puis les images « derrière » à position de page, au-delà de la 1re page (resolveNativePdfContent) :
   // pdfmake appelle `background` page par page, 1-based, et range ses mesures sur le nœud qu'il traite, d'où une copie par appel.
   function pageBackgroundFor(content) {
-    const layout = PageLayer.watermarkLayout(pageWatermark, pageWidthPt, pageHeightPt);
-    const watermarkNode = layout ? { svg: watermarkSvgFrom(layout), absolutePosition: { x: 0, y: 0 } } : null;
+    // Le filigrane est une image de la taille de la page : une par sens de page du document (pdfmake donne à chaque page sa taille), la même pour toutes les pages
+    // de même sens.
+    const watermarkBySize = new Map();
+    const watermarkFor = (widthPt, heightPt) => {
+      const key = widthPt + 'x' + heightPt;
+      if (!watermarkBySize.has(key)) {
+        const layout = PageLayer.watermarkLayout(pageWatermark, widthPt, heightPt);
+        watermarkBySize.set(key, layout ? { svg: watermarkSvgFrom(layout, widthPt, heightPt), absolutePosition: { x: 0, y: 0 } } : null);
+      }
+      return watermarkBySize.get(key);
+    };
     const behindByPage = content._backgroundByPage || {};
     const repeatedLayer = content._repeatedLayer || [];
-    if (!watermarkNode && !repeatedLayer.length && !Object.keys(behindByPage).length) return null;
-    return currentPage => {
+    if (!watermarkFor(pageWidthPt, pageHeightPt) && !repeatedLayer.length && !Object.keys(behindByPage).length) return null;
+    return (currentPage, pageSize) => {
+      // La page du sens du document garde ses dimensions exactes ; une page qui tourne prend celles que pdfmake lui donne.
+      const turned = pageSize && Math.abs(pageSize.width - pageWidthPt) > 0.5 && pageSize.width > 0 && pageSize.height > 0;
+      const watermarkNode = turned ? watermarkFor(pageSize.width, pageSize.height) : watermarkFor(pageWidthPt, pageHeightPt);
       const nodes = (watermarkNode ? [Object.assign({}, watermarkNode)] : [])
         .concat(repeatedLayer.filter(r => currentPage >= r.fromPage && currentPage <= r.toPage).map(r => Object.assign({}, r.image)), behindByPage[currentPage] || []);
       return nodes.length ? nodes : null;
@@ -3247,9 +3347,15 @@ const PdfExport = (function () {
   // de préparer les 2 variantes.
   const chunkForPage = (hf, variants, currentPage) => ((currentPage === 1 && hf.differentFirstPage) ? variants.first : variants.default);
 
+  // Les zones de la page que pdfmake peint : celles du sens où le document commence, ou la variante du sens de cette page (macro-modèle aux modèles mêlés).
+  function zonesFor(hf, pageSize) {
+    const sense = pageSize && (pageSize.orientation || (pageSize.width > pageSize.height ? 'landscape' : 'portrait'));
+    return (sense && hf.variants && hf.variants[sense]) || hf;
+  }
+
   function pageHeaderFor(hf) {
-    return (currentPage, pageCount) => {
-      const chunk = chunkForPage(hf, hf.header, currentPage);
+    return (currentPage, pageCount, pageSize) => {
+      const chunk = chunkForPage(hf, zonesFor(hf, pageSize).header, currentPage);
       if (!chunk) return null;
       return { margin: [marginLeftPt, marginTopPt * 0.5, marginRightPt, 0], stack: resolvePageNumberPlaceholders(chunk, currentPage, pageCount) };
     };
@@ -3257,8 +3363,8 @@ const PdfExport = (function () {
 
   function pageFooterFor(hf, content) {
     const footnoteByPage = content._footnoteByPage || {};
-    return (currentPage, pageCount) => {
-      const chunk = hf.enabled ? chunkForPage(hf, hf.footer, currentPage) : null;
+    return (currentPage, pageCount, pageSize) => {
+      const chunk = hf.enabled ? chunkForPage(hf, zonesFor(hf, pageSize).footer, currentPage) : null;
       const stackParts = (chunk ? resolvePageNumberPlaceholders(chunk, currentPage, pageCount) : []).concat(footnoteBandFor(footnoteByPage[currentPage]));
       if (!stackParts.length) return null;
       return { margin: [marginLeftPt, 0, marginRightPt, marginBottomPt * 0.5], stack: stackParts };
@@ -3284,7 +3390,7 @@ const PdfExport = (function () {
     // resolvePendingImageAnchors : plus proche dans l'aperçu continu hors écran, mais paginée sur une autre page que l'image), peut faire dépasser
     // `yPt` de la page : image invisible.
     const imgHeightPt = Number.isFinite(a.imgHeightPx) ? Math.max(0, a.imgHeightPx) * PX_TO_PT : 0;
-    const maxYPt = pageHeightPt - effectiveBottomMarginPt - imgHeightPt;
+    const maxYPt = (a.pageOrientation ? PageLayout.pageSizePtFor(a.pageOrientation, pageFormat).height : pageHeightPt) - effectiveBottomMarginPt - imgHeightPt;
     yPt = Math.min(Math.max(yPt, effectiveTopMarginPt), Math.max(effectiveTopMarginPt, maxYPt));
     return { x: xPt, y: yPt };
   }
@@ -3328,7 +3434,8 @@ const PdfExport = (function () {
   async function resolveNativePdfContent(inlinedHtml, filename, headerFooterChunks) {
     // Hauteur utile d'une page pour tableFrom (lignes de tableau gardées entières) : la bande des notes est déduite par prudence, qu'il y ait des
     // notes ou non.
-    tablePageHeightPt = pageHeightPt - marginTopPt - marginBottomPt - ((headerFooterChunks && headerFooterChunks.topExtraPt) || 0) - ((headerFooterChunks && headerFooterChunks.bottomExtraPt) || 0) - FOOTNOTE_BAND_PT;
+    tableExtrasPt = ((headerFooterChunks && headerFooterChunks.topExtraPt) || 0) + ((headerFooterChunks && headerFooterChunks.bottomExtraPt) || 0);
+    tablePageHeightPt = pageHeightPt - marginTopPt - marginBottomPt - tableExtrasPt - FOOTNOTE_BAND_PT;
     // Images habillées qui ne tiennent pas dans ce qui reste de leur page : leur ancre (et son image) passe en haut de la page suivante (rang parmi
     // les ancres, dans l'ordre du document), cf. settleFloatBreaks.
     const floatBreaks = new Set();
@@ -3395,10 +3502,10 @@ const PdfExport = (function () {
 
   // Le rang des ancres d'images habillées que leur image fait déborder de la page, et qui n'ont pas déjà été remontées.
   function floatAnchorsPastPageBottom(content, floatBreaks, topMarginPt, bottomMarginPt) {
-    const pageBottomPt = pageHeightPt - bottomMarginPt;
     const moving = [];
     floatAnchorsOf(content).forEach((anchor, i) => {
       const pos = firstPosition(anchor);
+      const pageBottomPt = pageHeightAt(pos) - bottomMarginPt;
       // Dans une case ou une colonne, l'image suit son conteneur (qui ne se coupe pas d'une page à l'autre pour elle) ; un encadré, lui, passe à la page
       // suivante avec elle.
       const target = floatMovesWith(anchor);
@@ -3457,6 +3564,8 @@ const PdfExport = (function () {
       // relatif à la cellule dans resolveImageAbsolutePosition.
       containerLeft: containerResolved ? containerResolved.left : null, containerLeftPx: p.containerLeftPx,
       hadAbove: !!p.above, hadBelow: !!p.below,
+      // Le sens de la page où l'image se pose (celle de son paragraphe hôte, sinon d'un voisin) : sa hauteur borne la position (resolveImageAbsolutePosition).
+      pageOrientation: (containerResolved || aboveResolved || belowResolved || {}).pageOrientation || null,
       imgTopPx: p.imgTopPx, imgLeftPx: p.imgLeftPx, imgHeightPx: p.imgHeightPx,
       aboveTopPx: p.aboveTopPx, belowTopPx: p.belowTopPx, aboveLeftPx: p.aboveLeftPx, belowLeftPx: p.belowLeftPx,
     };
@@ -3514,6 +3623,14 @@ const PdfExport = (function () {
     return byPage;
   }
 
+  // Les dimensions de la page où pdfmake a posé un bloc : `positions` en porte le sens (macro-modèle aux modèles de sens mêlés : toutes les pages n'ont pas
+  // celles du document). Sans sens connu, celles de la page du document.
+  function pageSizeAt(pos) {
+    return pos && (pos.pageOrientation === 'landscape' || pos.pageOrientation === 'portrait') ? PageLayout.pageSizePtFor(pos.pageOrientation, pageFormat) : { width: pageWidthPt, height: pageHeightPt };
+  }
+  const pageWidthAt = pos => pageSizeAt(pos).width;
+  const pageHeightAt = pos => pageSizeAt(pos).height;
+
   // Images habillées : peintes en fond de la page de leur ancre, à la hauteur de sa première ligne (le texte, lui, est déjà décalé à côté, cf.
   // floatParagraphBlocksFrom) ; elles ne sont pas dans le flux, la pagination de cette passe est celle de la passe de mesure. Une ancre que pdfmake n'a
   // pas posée garde son image dans le flux plutôt que de la perdre.
@@ -3529,7 +3646,7 @@ const PdfExport = (function () {
       // Dans un conteneur, le bord gauche de l'image est celui de son texte (la position de l'ancre, marge comprise) moins sa marge, plus l'écart que le
       // navigateur a mesuré.
       const x = nested ? pos.left - ((anchor.margin && anchor.margin[0]) || 0) + offsetPt
-        : (align === 'right' ? pageWidthPt - marginRightPt - image.width : marginLeftPt);
+        : (align === 'right' ? pageWidthAt(pos) - marginRightPt - image.width : marginLeftPt);
       image.absolutePosition = { x, y: pos.top + dyPt };
       pushByPage(behindByPage, pos.pageNumber, image);
     });
@@ -3676,7 +3793,7 @@ const PdfExport = (function () {
   // buildNativeDocDefinition (mesure jetable + réelle) pour une pagination identique. Marge fixe (PageLayout.HEADER_FOOTER_ZONE_PX, le plafond de
   // l'éditeur), pas la hauteur rendue.
   const HF_MAX_ZONE_HEIGHT_PT = PageLayout.HEADER_FOOTER_ZONE_PX * PX_TO_PT;
-  async function buildHeaderFooterPdfChunks(headerFooterData) {
+  async function buildHeaderFooterPdfChunks(headerFooterData, orientations) {
     const empty = { enabled: false, differentFirstPage: false, header: { default: null, first: null }, footer: { default: null, first: null }, topExtraPt: 0, bottomExtraPt: 0 };
     if (!headerFooterData || !headerFooterData.enabled) return empty;
     async function resolveZone(html) {
@@ -3704,12 +3821,25 @@ const PdfExport = (function () {
     const emptyZone = { content: null, heightPt: 0 };
     // Les quatre zones sont indépendantes (chacune a son hôte de mesure hors écran, cf. resolveZone) : contrairement à twoColumnsFrom, aucun état de
     // module partagé comme footnoteCounter (les notes de bas de page ne sont jamais résolues en en-tête ou pied), donc rien n'impose le séquentiel.
-    const [headerDefault, headerFirst, footerDefault, footerFirst] = await Promise.all([
+    // Dans la largeur de la page du sens courant (applyPageOrientation).
+    const resolveZones = () => Promise.all([
       resolveZone(headerFooterData.header && headerFooterData.header.default),
       differentFirstPage ? resolveZone(headerFooterData.header && headerFooterData.header.first) : Promise.resolve(emptyZone),
       resolveZone(headerFooterData.footer && headerFooterData.footer.default),
       differentFirstPage ? resolveZone(headerFooterData.footer && headerFooterData.footer.first) : Promise.resolve(emptyZone),
     ]);
+    const [headerDefault, headerFirst, footerDefault, footerFirst] = await resolveZones();
+    // Les autres sens de page du document (macro-modèle aux modèles mêlés) : les quatre zones refaites dans la largeur de LEUR page, une fois par sens. Celles
+    // qui sont déjà prêtes sont celles du sens où le document commence.
+    const baseSense = pageOrientation;
+    const variants = {};
+    try {
+      for (const sense of (orientations || []).filter(o => o !== baseSense)) {
+        applyPageOrientation(sense);
+        const [hd, hf, fd, ff] = await resolveZones();
+        variants[sense] = { header: { default: hd.content, first: hf.content }, footer: { default: fd.content, first: ff.content } };
+      }
+    } finally { applyPageOrientation(baseSense); }
     // Une seule hauteur de marge par zone : la marge de page ne peut pas varier d'une page à l'autre chez pdfmake, donc "page 1 différente" ne change
     // que le contenu - le plus grand des deux fragments dimensionne la marge des deux variantes.
     const headerHeightPt = (headerDefault.content || headerFirst.content) ? HF_MAX_ZONE_HEIGHT_PT : 0;
@@ -3719,6 +3849,7 @@ const PdfExport = (function () {
       differentFirstPage,
       header: { default: headerDefault.content, first: headerFirst.content },
       footer: { default: footerDefault.content, first: footerFirst.content },
+      variants,
       topExtraPt: headerHeightPt ? headerHeightPt + PageLayout.HEADER_FOOTER_GAP_PT : 0,
       bottomExtraPt: footerHeightPt ? footerHeightPt + PageLayout.HEADER_FOOTER_GAP_PT : 0,
     };
@@ -3732,8 +3863,12 @@ const PdfExport = (function () {
     const inlinedHtml = await inlineEditorImagesAsDataUri(resolvedHtml);
     // Repli : export sans en-tête/pied plutôt que d'échouer entièrement si leur contenu (potentiellement modifié en dehors de l'éditeur) est dans un
     // état inattendu.
+    // Un macro-modèle aux modèles de sens différents (js/page-sections.js) : le document commence dans le sens de son premier modèle, et l'en-tête et le pied se
+    // préparent aussi dans la largeur de chacun des autres sens.
+    const senses = PageSections.hasSenses(inlinedHtml) ? PageSections.sensesIn(inlinedHtml) : [];
+    if (senses.length) applyPageOrientation(PageSections.firstSenseOf(inlinedHtml) || documentOrientation);
     let headerFooterChunks;
-    try { headerFooterChunks = await buildHeaderFooterPdfChunks(headerFooterData); }
+    try { headerFooterChunks = await buildHeaderFooterPdfChunks(headerFooterData, senses); }
     catch (e) {
       console.warn('[PdfExport] en-tête/pied de page ignorés (structure inattendue) :', e);
       headerFooterChunks = { enabled: false, differentFirstPage: false, header: { default: null, first: null }, footer: { default: null, first: null }, topExtraPt: 0, bottomExtraPt: 0 };
