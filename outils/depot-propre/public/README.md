@@ -14,7 +14,7 @@ nécessaire !
 
 C'est un widget personnalisé pour [Grist](https://www.getgrist.com/), conçu par
 [Grist Factory](https://grist-factory.fr). Un document se lit rempli avec les données d'une ligne,
-puis se télécharge en PDF vectoriel (texte sélectionnable), en Word ou en Excel, ou s'envoie dans un
+puis se télécharge en PDF vectoriel (texte sélectionnable), en Word, en Excel ou en Markdown, ou s'envoie dans un
 e-mail prérempli, ligne par ligne ou en lot.
 
 ## Aperçu
@@ -93,7 +93,7 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 - Droits par personne (lecture seule, export, commentaires), lus dans une table du document
 - Rangement personnel des modèles : épingles et dossiers que les autres personnes ne voient pas
 
-**Export PDF, Word, Excel**
+**Export PDF, Word, Excel, Markdown**
 - Export en PDF vectorisé, nom de fichier composé avec des variables
 - Impression par le navigateur : la Lecture imprimée page pour page par la fenêtre d'impression (« Enregistrer
   au format PDF » ou une imprimante), avec la mise en page de la Lecture
@@ -112,6 +112,11 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
   ou Texte, sans formule), garde le moment du dernier export PDF de chaque ligne ; elle est écrite une
   fois le PDF produit, pour les lignes qui sont dans le fichier
 - Word (`.docx`, bêta) et Excel (`.xlsx`, pour les grilles)
+- Markdown (`.md`, CommonMark et GFM) : le document de la ligne avec les valeurs de ses variables ; ce que le Markdown écrit
+  s'écrit en Markdown (titres, gras, italique, barré, liens, listes imbriquées, numérotées et à cases, citations, code,
+  tableaux, notes de bas de page, sommaire en liens, encadrés en alertes GitHub), le reste (souligné, couleur, taille,
+  police, alignement, saut de page, largeur d'une image) reste en HTML dans le fichier ; un fichier, ou un par ligne dans
+  une archive ZIP
 - Avant un export, une fenêtre liste les sites externes dont des images seraient téléchargées
 
 **Modèles**
@@ -280,7 +285,7 @@ bibliothèques et polices sont dans [NOTICE](NOTICE).
 - **Suivi des modifications** (bêta) : la version complète est prévue en V1.
 - **PDF** : les caractères chinois, arabes, hébreux, thaï et la plupart des émojis ne sont pas pris en
   charge (une case vide les remplace) ; le grec, le cyrillique, le vietnamien, les flèches, coches,
-  étoiles et monnaies le sont. Le menu « Type d'export » propose PDF, PDF protégé, Word et Excel, puis, pour le PDF, « Vectoriel », « Impression navigateur » et « Léger » (le PDF
+  étoiles et monnaies le sont. Le menu « Type d'export » propose PDF, PDF protégé, Word, Excel et Markdown, puis, pour le PDF, « Vectoriel », « Impression navigateur » et « Léger » (le PDF
   vectoriel aux images ramenées à 150 points par pouce). L'impression navigateur imprime une
   ligne à la fois, sur 60 pages au plus, et suppose que le navigateur ouvre sa fenêtre d'impression depuis le
   cadre du widget : si rien ne s'ouvre, choisissez « Vectoriel ». Un PDF protégé n'existe ni en un seul PDF pour
@@ -303,7 +308,7 @@ bibliothèques et polices sont dans [NOTICE](NOTICE).
   vigueur (mentions obligatoires, pénalités de retard, clauses…) : faites-les relire avant tout usage.
 - **Pas encore faits** : remplissage des tables d'un modèle avec des lignes d'exemple (l'aperçu de la
   galerie en montre en images, mais les tables créées restent vides), variantes multilingues d'un
-  modèle, codes-barres (le QR code est livré), export et import Markdown.
+  modèle, codes-barres (le QR code est livré), import Markdown.
 
 ## Note sur l'IA
 
@@ -328,7 +333,6 @@ prioriser.
 - Modèles multilingues : variantes d'un même modèle (V1)
 
 **Import / Export**
-- Export Markdown (V1)
 - Import Markdown, avec une fiabilité totale sur les imports depuis Docs de La Suite (V1)
 
 **Confort d'utilisation**
@@ -373,7 +377,7 @@ in the document and reformat it on display if needed!
 
 It is a custom widget for [Grist](https://www.getgrist.com/), made by
 [Grist Factory](https://grist-factory.fr). A document is read filled with the data of one row, then
-downloaded as a vector PDF (selectable text), as Word or Excel, or sent in a pre-filled e-mail, row by
+downloaded as a vector PDF (selectable text), as Word, Excel or Markdown, or sent in a pre-filled e-mail, row by
 row or in batch.
 
 ## Preview
@@ -449,7 +453,7 @@ GitHub Pages, with no backend and no build step.
 - Per-person rights (read-only, export, comments), read from a table of the document
 - Personal organization of templates: pins and folders that other people don't see
 
-**PDF, Word, Excel export**
+**PDF, Word, Excel, Markdown export**
 - Vector PDF export, file name built with variables
 - Browser print: the Reading view printed page by page through the print window ("Save as PDF" or a printer),
   with the layout of the Reading view
@@ -467,6 +471,10 @@ GitHub Pages, with no backend and no build step.
   Text, no formula), keeps the moment of each row's last PDF export; it is written once the PDF is made,
   for the rows that are in the file
 - Word (`.docx`, beta) and Excel (`.xlsx`, for grids)
+- Markdown (`.md`, CommonMark and GFM): the row's document with the values of its variables; what Markdown can write
+  is written in Markdown (headings, bold, italic, strikethrough, links, nested, numbered and task lists, quotes, code,
+  tables, footnotes, a linked table of contents, callouts as GitHub alerts), the rest (underline, colour, size, font,
+  alignment, page break, image width) stays as HTML in the file; one file, or one per row in a ZIP archive
 - Before an export, a window lists the external sites that images would be downloaded from
 
 **Templates**
@@ -628,7 +636,7 @@ libraries and fonts are in [NOTICE](NOTICE).
 - **Track changes** (beta): the complete version is planned for V1.
 - **PDF**: Chinese, Arabic, Hebrew and Thai characters and most emoji are not supported (an empty box
   replaces them); Greek, Cyrillic, Vietnamese, arrows, check marks, stars and currencies are. The
-  "Export type" menu offers PDF, Protected PDF, Word and Excel and, for the PDF, "Vector", "Browser print" and "Light" (the vector PDF with its images brought
+  "Export type" menu offers PDF, Protected PDF, Word, Excel and Markdown and, for the PDF, "Vector", "Browser print" and "Light" (the vector PDF with its images brought
   down to 150 points per inch). Browser print prints one row at a time, up to 60 pages, and assumes the browser opens its
   print window from the widget's frame: if nothing opens, choose "Vector". A protected PDF does not exist as a
   single PDF for all rows, as a sheet assembly or through browser print (those outputs cannot be encrypted); with
@@ -649,7 +657,7 @@ libraries and fonts are in [NOTICE](NOTICE).
   clauses…): have them reviewed before any real use.
 - **Not done yet**: filling a template's tables with sample rows (the gallery preview shows some as
   images, but the tables created stay empty), multilingual variants of a template,
-  barcodes (the QR code is delivered), Markdown export and import.
+  barcodes (the QR code is delivered), Markdown import.
 
 ## A note on AI
 
@@ -673,7 +681,6 @@ react to this repository's issues, or write to me on Tchap, to help me prioritiz
 - Multilingual templates: variants of the same template (V1)
 
 **Import / export**
-- Markdown export (V1)
 - Markdown import, with full reliability on imports from La Suite Docs (V1)
 
 **Quality of life**

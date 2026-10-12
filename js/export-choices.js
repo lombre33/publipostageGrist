@@ -1,4 +1,4 @@
-// Les réglages d'export de la personne, gardés par modèle : le type d'export (PDF, PDF protégé, Word, Excel), la qualité du PDF et « une seule ligne / toutes les lignes »
+// Les réglages d'export de la personne, gardés par modèle : le type d'export (PDF, PDF protégé, Word, Excel, Markdown), la qualité du PDF et « une seule ligne / toutes les lignes »
 // (demande du 12/10 : « sauvegardés par personne et par modèle »). Les trois listes cachées de la barre (#v2-export-type, #v2-pdf-quality, #v2-export-lines)
 // restent ce que js/main.js lit pour exporter ; ce module les remet à ce que la personne avait choisi pour le modèle qui s'ouvre, et garde ce qu'elle choisit ensuite.
 //  - Un modèle sans choix repart de l'origine (la première option de chaque liste : PDF, vectoriel, une seule ligne) : les réglages d'un modèle ne passent pas

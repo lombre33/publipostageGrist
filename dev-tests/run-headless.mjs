@@ -72,6 +72,7 @@ const GROUPS = {
   watermark: 'scenarios-watermark', // filigrane de la page (roadmap n° 14) : réglage borné, géométrie commune, éditeur, Lecture, PDF (texte derrière le contenu), Word (image de l'en-tête), enregistrement, fenêtre, ligne du menu Page
   docx: 'scenarios-docx',
   docxImages: 'scenarios-docx-images',
+  markdown: 'scenarios-markdown', // export Markdown (js/markdown-export.js) : le .md généré lu tel qu'il est écrit - marques et protection du texte, liens, listes, citations et alertes, tableaux GFM ou HTML, code, titres et sommaire, notes, en-têtes et pieds entre commentaires, images (adresse, largeur, pièce jointe), un vrai document passé par l'éditeur
   comments: 'scenarios-comments',
   autosave: 'scenarios-autosave',
   autosaveRace: 'scenarios-autosave-race', // enregistrement automatique face à un Grist lent : passages qui se chevauchent, Enregistrer pendant un passage, changement de modèle pendant une lecture, relecture échouée

@@ -322,6 +322,46 @@
   });
 
   cases.push({
+    id: 'listsplit_markdown_zip_and_single_export_one_md_per_value',
+    description: 'Type Markdown : « Toutes les lignes (ZIP) » rend un .md par valeur, nommé d’après la ligne puis la valeur, chacun écrivant sa valeur et la liste non réglée en entier ; « Une seule ligne » d’une ligne à deux valeurs rend une archive d’un .md par valeur, d’une ligne à une seule valeur le .md ordinaire',
+    run: async (h) => {
+      await seed(h, BODY);
+      const choose = (type, lines) => {
+        document.querySelector(`#v2-quality-flyout .v2-hover-row[data-export-type="${type}"]`).click();
+        document.querySelector(`#v2-export-pdf-flyout .v2-hover-row[data-export-lines="${lines}"]`).click();
+      };
+      const textsOf = async (blob) => {
+        const { zip, names } = await zipEntries(blob);
+        const texts = {};
+        for (const n of names) texts[n] = squash(await zip.file(n).async('string'));
+        return { names, texts };
+      };
+      let all;
+      let single;
+      let plain;
+      try {
+        choose('md', 'zip');
+        all = await withFilenameTemplate(NAME, () => clickExportRow(h, 'btn-export-pdf'));
+        choose('md', 'one');
+        single = await withFilenameTemplate(NAME, () => clickExportRow(h, 'btn-export-pdf'));
+        window.__gristStub.fireRecord(Object.assign({}, RECORD_2), TABLE);
+        await h.sleep(60);
+        plain = await withFilenameTemplate(NAME, () => clickExportRow(h, 'btn-export-pdf'));
+      } finally { choose('pdf', 'one'); }
+      const allEntries = all.downloads[0] && all.downloads[0].blob ? await textsOf(all.downloads[0].blob) : { names: [], texts: {} };
+      const singleEntries = single.downloads[0] && single.downloads[0].blob ? await textsOf(single.downloads[0].blob) : { names: [], texts: {} };
+      const expected = { 'Alpha - Santé.md': 'DossierAlpha:Santé/fr,en', 'Alpha - Social.md': 'DossierAlpha:Social/fr,en', 'Beta - Sport.md': 'DossierBeta:Sport/fr', 'Gamma.md': 'DossierGamma:/' };
+      const plainText = plain.downloads[0] && plain.downloads[0].blob ? squash(await plain.downloads[0].blob.text()) : '';
+      const pass = all.downloads.length === 1 && all.downloads[0].name === TABLE + '-export-md.zip' && JSON.stringify(allEntries.names) === JSON.stringify(Object.keys(expected).sort())
+        && allEntries.names.every(n => allEntries.texts[n] === squash(expected[n])) && all.status === I18n.t('status.batchExportDoneMd', { ok: 4 })
+        && single.downloads.length === 1 && JSON.stringify(singleEntries.names) === JSON.stringify(['Alpha - Santé.md', 'Alpha - Social.md'])
+        && singleEntries.names.every(n => singleEntries.texts[n] === squash(expected[n]))
+        && plain.downloads.length === 1 && plain.downloads[0].name === 'Beta.md' && plainText === squash('DossierBeta:Sport/fr');
+      return { pass, notes: JSON.stringify({ allDownloads: all.downloads.map(d => d.name), allEntries, singleDownloads: single.downloads.map(d => d.name), singleEntries, plainDownloads: plain.downloads.map(d => d.name), plainText, status: all.status }) };
+    },
+  });
+
+  cases.push({
     id: 'listsplit_header_footer_follow_the_same_value_as_the_body',
     description: 'Une bulle réglée dans le pied de page écrit la même valeur que celle du corps dans chaque document du PDF unique',
     run: async (h) => {

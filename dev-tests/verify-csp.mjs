@@ -183,7 +183,7 @@ const exportsRun = await page.evaluate(async () => {
   });
   return out;
 });
-for (const [name, label] of [['moteurs', 'les six moteurs du widget (PDF, fusion, feuilles, Word, Excel, format des nombres : js/export-engines.js, au premier export)'], ['pdf', 'PDF (pdfmake, polices du dépôt)'], ['zip', 'archive ZIP (JSZip)'], ['pdfMerge', 'PDF unique (pdf-lib)'], ['docx', 'Word (docx)'], ['xlsx', 'Excel (ExcelJS)'], ['qr', 'QR code (qrcode-generator)'], ['chart', 'graphique de la page (Plotly)'], ['print', 'impression par le navigateur (cadre caché et feuilles prêts, sans fichier : la fenêtre du navigateur s\'ouvre ensuite)']]) {
+for (const [name, label] of [['moteurs', 'les moteurs du widget (PDF, fusion, feuilles, Word, Excel, format des nombres, Markdown : js/export-engines.js, au premier export)'], ['pdf', 'PDF (pdfmake, polices du dépôt)'], ['zip', 'archive ZIP (JSZip)'], ['pdfMerge', 'PDF unique (pdf-lib)'], ['docx', 'Word (docx)'], ['xlsx', 'Excel (ExcelJS)'], ['qr', 'QR code (qrcode-generator)'], ['chart', 'graphique de la page (Plotly)'], ['print', 'impression par le navigateur (cadre caché et feuilles prêts, sans fichier : la fenêtre du navigateur s\'ouvre ensuite)']]) {
   check('export : ' + label + ' se charge et produit son fichier sous la politique', exportsRun[name] === true, exportsRun[name]);
 }
 check('rien n\'a été refusé pendant tout ce parcours (aucune violation, aucun message du navigateur)', (await violations()).length === 0 && consoleRefusals.length === 0, { violations: await violations(), consoleRefusals });

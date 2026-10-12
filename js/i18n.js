@@ -181,6 +181,7 @@ const I18n = (function () {
     'exportType.pdfProtected': { fr: 'PDF protégé', en: 'Protected PDF' },
     'exportType.docx': { fr: 'Word (bêta)', en: 'Word (beta)' },
     'exportType.xlsx': { fr: 'Excel', en: 'Excel' },
+    'exportType.md': { fr: 'Markdown', en: 'Markdown' },
     'toolbar.export': { fr: 'Exporter', en: 'Export' },
     'toolbar.exportLines': { fr: 'Lignes exportées', en: 'Exported rows' },
     'exportLines.one': { fr: 'Une seule ligne', en: 'A single row' },
@@ -761,8 +762,8 @@ const I18n = (function () {
     },
     'settings.exportDate.locked': { fr: 'Vous êtes en lecture seule : ce réglage est verrouillé.', en: 'You are read-only: this setting is locked.' },
     'settings.exportDate.hint': {
-      fr: 'La date s’écrit pour chaque ligne dont le PDF est dans le fichier téléchargé : « Exporter en PDF », « Exporter les lignes (ZIP) », « Exporter les lignes en un seul PDF » et « Assemblage avant impression ». Une ligne en échec n’est pas datée ; Word, Excel et « Impression navigateur » n’écrivent rien (le navigateur ne dit pas si la personne a imprimé). Un compte en lecture seule dans Grist ne peut rien écrire.',
-      en: 'The date is written for each row whose PDF is in the downloaded file: “Export to PDF”, “Export rows (ZIP)”, “Export rows as a single PDF” and “Assemble before printing”. A failed row is not dated; Word, Excel and “Browser print” write nothing (the browser does not say whether the person printed). A read-only Grist account cannot write anything.',
+      fr: 'La date s’écrit pour chaque ligne dont le PDF est dans le fichier téléchargé : « Exporter en PDF », « Exporter les lignes (ZIP) », « Exporter les lignes en un seul PDF » et « Assemblage avant impression ». Une ligne en échec n’est pas datée ; Word, Excel, Markdown et « Impression navigateur » n’écrivent rien (le navigateur ne dit pas si la personne a imprimé). Un compte en lecture seule dans Grist ne peut rien écrire.',
+      en: 'The date is written for each row whose PDF is in the downloaded file: “Export to PDF”, “Export rows (ZIP)”, “Export rows as a single PDF” and “Assemble before printing”. A failed row is not dated; Word, Excel, Markdown and “Browser print” write nothing (the browser does not say whether the person printed). A read-only Grist account cannot write anything.',
     },
     'settings.rowTemplate.exportHint': {
       fr: 'Quand ce réglage est coché, un export en lot rend chaque ligne avec le modèle que les règles lui désignent.',
@@ -1008,6 +1009,9 @@ const I18n = (function () {
     'status.docxGenerating': { fr: 'Génération du DOCX en cours...', en: 'Generating DOCX...' },
     'status.docxGenerated': { fr: 'DOCX généré.', en: 'DOCX generated.' },
     'status.docxGenerationError': { fr: 'Erreur génération DOCX.', en: 'DOCX generation error.' },
+    'status.mdGenerating': { fr: 'Génération du Markdown en cours...', en: 'Generating Markdown...' },
+    'status.mdGenerated': { fr: 'Markdown généré.', en: 'Markdown generated.' },
+    'status.mdGenerationError': { fr: 'Erreur génération Markdown.', en: 'Markdown generation error.' },
     'status.xlsxGenerating': { fr: 'Génération du fichier Excel en cours...', en: 'Generating the Excel file...' },
     'status.xlsxGenerated': { fr: 'Fichier Excel généré.', en: 'Excel file generated.' },
     'status.xlsxGenerationError': { fr: 'Erreur de génération du fichier Excel.', en: 'Excel file generation error.' },
@@ -1047,6 +1051,11 @@ const I18n = (function () {
     'status.exportErrorDocx': { fr: 'Échec de l’export : aucun DOCX généré.', en: 'Export failed: no DOCX generated.' },
     'status.batchExportDoneWithFailuresDocx': { fr: '{ok} {ok|DOCX généré|DOCX générés}, {failed} {failed|échec|échecs} — archive ZIP téléchargée.', en: '{ok} {ok|DOCX file|DOCX files} generated, {failed} {failed|failure|failures} — ZIP archive downloaded.' },
     'status.batchExportDoneDocx': { fr: '{ok} {ok|DOCX généré|DOCX générés} — archive ZIP téléchargée.', en: '{ok} {ok|DOCX file|DOCX files} generated — ZIP archive downloaded.' },
+    // Export Markdown de toutes les lignes (ZIP) : les mêmes messages, avec le bon format.
+    'status.batchExportProgressMd': { fr: 'Export Markdown en lot : {current}/{total}...', en: 'Batch Markdown export: {current}/{total}...' },
+    'status.exportErrorMd': { fr: 'Échec de l’export : aucun Markdown généré.', en: 'Export failed: no Markdown generated.' },
+    'status.batchExportDoneWithFailuresMd': { fr: '{ok} {ok|fichier Markdown généré|fichiers Markdown générés}, {failed} {failed|échec|échecs} — archive ZIP téléchargée.', en: '{ok} Markdown {ok|file|files} generated, {failed} {failed|failure|failures} — ZIP archive downloaded.' },
+    'status.batchExportDoneMd': { fr: '{ok} {ok|fichier Markdown généré|fichiers Markdown générés} — archive ZIP téléchargée.', en: '{ok} Markdown {ok|file|files} generated — ZIP archive downloaded.' },
     'status.pdfMerging': { fr: 'Assemblage du PDF unique...', en: 'Assembling the single PDF...' },
     'status.mergedExportDoneWithFailures': { fr: '{ok} {ok|ligne réunie|lignes réunies} dans un seul PDF, {failed} {failed|échec|échecs} — fichier téléchargé.', en: '{ok} {ok|row|rows} combined into a single PDF, {failed} {failed|failure|failures} — file downloaded.' },
     'status.mergedExportDone': { fr: '{ok} {ok|ligne réunie|lignes réunies} dans un seul PDF — fichier téléchargé.', en: '{ok} {ok|row|rows} combined into a single PDF — file downloaded.' },
@@ -1112,11 +1121,13 @@ const I18n = (function () {
     'dialog.unsaved.discard': { fr: 'Abandonner', en: 'Discard' },
     'alert.noRecordForExport': { fr: 'Aucune ligne sélectionnée : impossible d’exporter en PDF.', en: 'No row selected: cannot export to PDF.' },
     'alert.noRecordForExportDocx': { fr: 'Aucune ligne sélectionnée : impossible d’exporter en Word.', en: 'No row selected: cannot export to Word.' },
+    'alert.noRecordForExportMd': { fr: 'Aucune ligne sélectionnée : impossible d’exporter en Markdown.', en: 'No row selected: cannot export to Markdown.' },
     'alert.noRecordForExportXlsx': { fr: 'Aucune valeur de la table sélectionnée : impossible d’exporter en Excel.', en: 'No table value selected: cannot export to Excel.' },
     'alert.noRecordForExportGrid': { fr: 'Aucune valeur de la table sélectionnée : impossible d’exporter en PDF.', en: 'No table value selected: cannot export to PDF.' },
     'confirm.deleteTemplate': { fr: 'Supprimer ce modèle ?', en: 'Delete this template?' },
     'confirm.batchExport': { fr: 'Générer un PDF pour {count|la ligne|chacune des {count} lignes} de « {table} » et {count|le placer|les regrouper} dans une archive ZIP ?', en: 'Generate a PDF for {count|the row|each of the {count} rows} in “{table}” and {count|put it|bundle them} into a ZIP archive?' },
     'confirm.batchExportDocx': { fr: 'Générer un DOCX pour {count|la ligne|chacune des {count} lignes} de « {table} » et {count|le placer|les regrouper} dans une archive ZIP ?', en: 'Generate a DOCX for {count|the row|each of the {count} rows} in “{table}” and {count|put it|bundle them} into a ZIP archive?' },
+    'confirm.batchExportMd': { fr: 'Générer un fichier Markdown pour {count|la ligne|chacune des {count} lignes} de « {table} » et {count|le placer|les regrouper} dans une archive ZIP ?', en: 'Generate a Markdown file for {count|the row|each of the {count} rows} in “{table}” and {count|put it|bundle them} into a ZIP archive?' },
     'confirm.mergedExport': { fr: '{count|Générer un PDF pour la ligne de « {table} » ?|Générer un PDF pour chacune des {count} lignes de « {table} » et les réunir dans un seul fichier PDF, chaque ligne commençant sur une nouvelle page ?}', en: '{count|Generate a PDF for the row in “{table}”?|Generate a PDF for each of the {count} rows in “{table}” and combine them into a single PDF file, each row starting on a new page?}' },
     'confirm.batchExportGrid': { fr: 'Générer un PDF par valeur de « {table} » ({count} {count|valeur|valeurs}) et les regrouper dans une archive ZIP ?', en: 'Generate one PDF per value of “{table}” ({count} {count|value|values}) and bundle them into a ZIP archive?' },
     'confirm.mergedExportGrid': { fr: 'Générer un PDF par valeur de « {table} » ({count} {count|valeur|valeurs}) et les réunir dans un seul fichier PDF, chaque valeur commençant sur une nouvelle page ?', en: 'Generate one PDF per value of “{table}” ({count} {count|value|values}) and combine them into a single PDF file, each value starting on a new page?' },
@@ -1446,6 +1457,8 @@ const I18n = (function () {
     'pdf.tocEmpty': { fr: 'Aucun titre trouvé.', en: 'No heading found.' },
     // Sommaire d'un export DOCX sans aucun titre (js/docx-export.js:buildTocBlocks) : sa phrase à lui, en italique entre parenthèses.
     'docx.tocEmpty': { fr: '(aucun titre dans ce document)', en: '(no heading in this document)' },
+    // Sommaire d'un export Markdown sans aucun titre (js/markdown-export.js:tocBlocks) : la même phrase, en italique.
+    'markdown.tocEmpty': { fr: '(aucun titre dans ce document)', en: '(no heading in this document)' },
 
     // --- Mode Email (planning/feature-email-mode.md) : bandeau Objet/À/Cc/Cci + action de création du mailto: ---
     'email.to.label': { fr: 'À', en: 'To' },
@@ -1789,7 +1802,7 @@ const I18n = (function () {
     'varList.reset': { fr: 'Remettre par défaut', en: 'Reset to default' },
     'varList.saveLost': { fr: 'La variable a été déplacée ou supprimée pendant l’édition : le réglage de la liste n’a pas été enregistré.', en: 'The variable was moved or deleted while editing: the list setting was not saved.' },
     'varList.split.label': { fr: 'Un document par valeur', en: 'One document per value' },
-    'varList.split.hint': { fr: 'Exports PDF, Word et Excel seulement.', en: 'PDF, Word and Excel exports only.' },
+    'varList.split.hint': { fr: 'Exports PDF, Word, Excel et Markdown seulement.', en: 'PDF, Word, Excel and Markdown exports only.' },
     'varList.split.hintField': { fr: 'Indisponible ici : se règle sur une variable du corps du modèle.', en: 'Unavailable here: set it on a variable in the body of the template.' },
     'varList.split.preview': { fr: 'Export : {count} documents, un par valeur ({values}).', en: 'Export: {count} documents, one per value ({values}).' },
     'varList.split.previewSingle': { fr: 'Export : un seul document, cette ligne n’a qu’une valeur.', en: 'Export: a single document, this row has only one value.' },

@@ -1619,6 +1619,12 @@
       batch: 'xlsxZip', noRecord: 'alert.noRecordForExportXlsx', generating: 'status.xlsxGenerating', generated: 'status.xlsxGenerated', failed: 'status.xlsxGenerationError',
       run: (doc, tableId, record) => XlsxExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate()),
     },
+    // Markdown (js/markdown-export.js) : le texte du document, sans marges ni pages ; comme le Word, il est fait pour un document, pas pour une grille.
+    md: {
+      engines: ['md'],
+      batch: 'mdZip', noRecord: 'alert.noRecordForExportMd', generating: 'status.mdGenerating', generated: 'status.mdGenerated', failed: 'status.mdGenerationError',
+      run: (doc, tableId, record) => MarkdownExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData),
+    },
   };
 
   async function exportRecordAs(kind) {
@@ -1650,12 +1656,12 @@
       setStatus(I18n.t(spec.failed), true);
     }
   }
-  // Le type d'export (menu du bouton à gauche d'Exporter, ex-« Qualité PDF ») : PDF, PDF protégé, Word ou Excel, gardé dans la liste cachée #v2-export-type comme la
-  // qualité du PDF l'est dans #v2-pdf-quality. Word n'a de sens que pour un document (un macro-modèle compris) et Excel que pour une grille : un type que le
-  // modèle ouvert ne sait pas faire n'est pas proposé (ligne grisée) et le bouton Exporter retombe sur le PDF, jamais sur une erreur.
+  // Le type d'export (menu du bouton à gauche d'Exporter, ex-« Qualité PDF ») : PDF, PDF protégé, Word, Excel ou Markdown, gardé dans la liste cachée #v2-export-type comme la
+  // qualité du PDF l'est dans #v2-pdf-quality. Word et Markdown n'ont de sens que pour un document (un macro-modèle compris) et Excel que pour une grille : un type
+  // que le modèle ouvert ne sait pas faire n'est pas proposé (ligne grisée) et le bouton Exporter retombe sur le PDF, jamais sur une erreur.
   function exportTypeAvailable(type) {
     const grid = GridEditor.isGridType(currentTypeModele);
-    return type === 'pdf' || type === 'pdfProtected' || (type === 'docx' && !grid) || (type === 'xlsx' && grid);
+    return type === 'pdf' || type === 'pdfProtected' || ((type === 'docx' || type === 'md') && !grid) || (type === 'xlsx' && grid);
   }
   function selectedExportType() {
     const select = document.getElementById('v2-export-type');
@@ -1677,6 +1683,7 @@
   const onExportPdfProtected = () => exportRecordAs('pdfProtected');
   const onExportDocx = () => exportRecordAs('docx');
   const onExportXlsx = () => exportRecordAs('xlsx');
+  const onExportMd = () => exportRecordAs('md');
   // Les lignes que le bouton Exporter exporte (options du menu du bouton Exporter, demande du 12/10) : « une seule ligne » (la ligne affichée) ou
   // toutes les lignes de la table - un ZIP (un fichier par ligne), un seul PDF, l'assemblage avant impression, ou pour Excel un seul classeur. L'option cochée est
   // gardée dans la liste cachée #v2-export-lines. Chaque type n'a que ses lots (EXPORT_BATCH_OF) : une option que le type ne connaît pas (le PDF unique après un
@@ -1687,6 +1694,7 @@
     pdfProtected: { zip: 'pdfProtectedZip' },
     docx: { zip: 'docxZip' },
     xlsx: { zip: 'xlsxZip', workbook: 'xlsxSingle' },
+    md: { zip: 'mdZip' },
   };
   const EXPORT_LINES = ['one', 'zip', 'merged', 'sheets', 'workbook'];
   function selectedExportLines(type) {
@@ -1700,7 +1708,7 @@
     const type = selectedExportType();
     const lines = selectedExportLines(type);
     if (lines !== 'one') return onExportBatch(EXPORT_BATCH_OF[type][lines]);
-    return ({ pdf: onExportPdf, pdfProtected: onExportPdfProtected, docx: onExportDocx, xlsx: onExportXlsx })[type]();
+    return ({ pdf: onExportPdf, pdfProtected: onExportPdfProtected, docx: onExportDocx, xlsx: onExportXlsx, md: onExportMd })[type]();
   };
 
   // Mode email (planning/feature-email-mode.md) : construit l'URL mailto: de la ligne courante et l'ouvre par un <a> synthétique plutôt que
@@ -1912,6 +1920,14 @@
       entryExt: '.xlsx', fileSuffix: '-export-xlsx.zip', grid: true, engines: ['xlsx'], pageOptions: () => XlsxExport.pageOptionsFromLayout(),
       loadLibs: async () => { await ExportCommon.ensureJsZipLoaded(); await XlsxExport.ensureExcelLibLoaded(); },
       renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins, pageOptions) => XlsxExport.getXlsxBlobForRecord(html, tableId, row, filenameTemplate, pageOptions || undefined),
+    },
+    // Un fichier .md par ligne, dans une archive ZIP : ni marges ni page, le texte seul (js/markdown-export.js) ; comme le Word, il ne fait que des documents.
+    mdZip: {
+      label: 'Markdown', confirm: 'confirm.batchExportMd', loading: 'status.loadingExportLibs', loadError: 'status.exportLibsLoadError', progress: 'status.batchExportProgressMd',
+      noFile: 'status.exportErrorMd', done: 'status.batchExportDoneMd', doneWithFailures: 'status.batchExportDoneWithFailuresMd',
+      entryExt: '.md', fileSuffix: '-export-md.zip', grid: false, engines: ['md'],
+      loadLibs: () => ExportCommon.ensureJsZipLoaded(),
+      renderRow: (html, tableId, row, filenameTemplate, headerFooterData) => MarkdownExport.getMarkdownBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData),
     },
     xlsxSingle: {
       label: 'Excel', confirm: 'confirm.singleWorkbookExport', loading: 'status.loadingExportLibs', loadError: 'status.exportLibsLoadError', progress: 'status.batchExportProgressXlsx',

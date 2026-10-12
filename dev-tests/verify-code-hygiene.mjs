@@ -650,13 +650,13 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 // ============================================================================
 // 18. Les moteurs d'export ne se chargent qu'au premier export (choix d'Antoine du 05/10 : « Maintenant »)
 // ============================================================================
-// PDF, fusion des PDF, feuilles d'assemblage, Word, Excel et le format des nombres d'Excel font ~380 Ko (~118 Ko compressés) : index.html les déclare en balises inertes
+// PDF, fusion des PDF, feuilles d'assemblage, Word, Excel, le format des nombres d'Excel et le Markdown font ~400 Ko (~125 Ko compressés) : index.html les déclare en balises inertes
 // (`<script type="text/x-lazy-engine" data-engine="…" src="…">`, que le navigateur ne lit pas) et js/export-engines.js les charge au premier besoin (`ExportEngines.ensure`). Ce contrôle garde
-// ce que le banc dev-tests/verify-lazy-engines.mjs ne voit pas d'un coup d'œil : un des six fichiers qui redevient une balise ordinaire (chargé à l'ouverture, comme avant), un nom de moteur
+// ce que le banc dev-tests/verify-lazy-engines.mjs ne voit pas d'un coup d'œil : un des fichiers de moteur qui redevient une balise ordinaire (chargé à l'ouverture, comme avant), un nom de moteur
 // écrit de travers dans un export, et un script qui appelle un moteur sans le faire charger (une erreur « PdfExport n'est pas défini » au premier clic, que seul cet export-là montre).
 {
-  const ENGINE_FILES = { pdf: 'pdf-export', sheets: 'sheet-layout', merge: 'pdf-merge', docx: 'docx-export', xlsx: 'xlsx-export', xlsxFormat: 'xlsx-number-format' };
-  const ENGINE_GLOBALS = { PdfExport: 'pdf-export', SheetLayout: 'sheet-layout', PdfMerge: 'pdf-merge', DocxExport: 'docx-export', XlsxExport: 'xlsx-export', XlsxNumberFormat: 'xlsx-number-format' };
+  const ENGINE_FILES = { pdf: 'pdf-export', sheets: 'sheet-layout', merge: 'pdf-merge', docx: 'docx-export', xlsx: 'xlsx-export', xlsxFormat: 'xlsx-number-format', md: 'markdown-export' };
+  const ENGINE_GLOBALS = { PdfExport: 'pdf-export', SheetLayout: 'sheet-layout', PdfMerge: 'pdf-merge', DocxExport: 'docx-export', XlsxExport: 'xlsx-export', XlsxNumberFormat: 'xlsx-number-format', MarkdownExport: 'markdown-export' };
   // Les fichiers qui nomment un moteur sans nommer ExportEngines : la fenêtre des planches, que js/main.js (onExportBatch) n'ouvre qu'après avoir chargé « sheets ».
   const CALLED_AFTER_ENSURE = ['js/sheet-assembly-dialog.js'];
   const page = read('index.html').replace(/<!--[\s\S]*?-->/g, m => m.replace(/[^\n]/g, ' '));
@@ -665,9 +665,9 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const inert = tags.filter(attrs => attr(attrs, 'type') === 'text/x-lazy-engine').map(attrs => ({ engine: attr(attrs, 'data-engine'), src: attr(attrs, 'src') }));
   const ordinary = tags.filter(attrs => !attr(attrs, 'type')).map(attrs => attr(attrs, 'src')).filter(Boolean);
   const engineFileNames = Object.values(ENGINE_FILES);
-  check('moteurs d\'export : index.html déclare six balises inertes, une par moteur, chacune vers son fichier avec une version de cache (?v=)',
-    inert.length === 6 && Object.entries(ENGINE_FILES).every(([engine, file]) => inert.filter(t => t.engine === engine && new RegExp(`^js/${file}\\.js\\?v=\\d+(\\.\\d+)*$`).test(t.src || '')).length === 1), JSON.stringify(inert));
-  check('moteurs d\'export : aucun des six fichiers n\'est un <script src> ordinaire de index.html (le navigateur le chargerait à l\'ouverture) ; js/export-engines.js l\'est, une fois',
+  check('moteurs d\'export : index.html déclare une balise inerte par moteur (ENGINE_FILES), chacune vers son fichier avec une version de cache (?v=)',
+    inert.length === Object.keys(ENGINE_FILES).length && Object.entries(ENGINE_FILES).every(([engine, file]) => inert.filter(t => t.engine === engine && new RegExp(`^js/${file}\\.js\\?v=\\d+(\\.\\d+)*$`).test(t.src || '')).length === 1), JSON.stringify(inert));
+  check('moteurs d\'export : aucun des fichiers de moteur n\'est un <script src> ordinaire de index.html (le navigateur le chargerait à l\'ouverture) ; js/export-engines.js l\'est, une fois',
     ordinary.every(src => !engineFileNames.some(file => src.startsWith(`js/${file}.js`))) && ordinary.filter(src => /^js\/export-engines\.js\?v=/.test(src)).length === 1, ordinary.filter(src => engineFileNames.some(file => src.startsWith(`js/${file}.js`))).join(', '));
 
   // Les noms de moteurs que le code demande : `engines: ['pdf', 'merge']` (js/main.js) et `ExportEngines.ensure('xlsx', 'xlsxFormat')`.
@@ -686,9 +686,9 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('moteurs d\'export : l\'analyse lit bien le code (garde-fou de l\'analyse elle-même : au moins dix noms de moteur demandés, js/main.js et js/grid-xlsx-import.js parmi les fichiers qui en demandent)',
     asked.length >= 10 && ['js/main.js', 'js/grid-xlsx-import.js'].every(rel => asked.some(([file]) => file === rel)), `${asked.length} noms`);
   check('moteurs d\'export : chaque nom de moteur demandé (engines: [...], ExportEngines.ensure(...)) est un moteur déclaré dans index.html', unknown.length === 0, unknown.join(', '));
-  check('moteurs d\'export : chacun des six moteurs est demandé quelque part (un moteur que rien ne charge ne s\'exécuterait jamais)', Object.keys(ENGINE_FILES).every(name => asked.some(([, asking]) => asking === name)), Object.keys(ENGINE_FILES).filter(name => !asked.some(([, asking]) => asking === name)).join(', '));
+  check('moteurs d\'export : chacun des moteurs est demandé quelque part (un moteur que rien ne charge ne s\'exécuterait jamais)', Object.keys(ENGINE_FILES).every(name => asked.some(([, asking]) => asking === name)), Object.keys(ENGINE_FILES).filter(name => !asked.some(([, asking]) => asking === name)).join(', '));
   const unguarded = users.filter(u => !u.ensures && !CALLED_AFTER_ENSURE.includes(u.rel)).map(u => `${u.rel} (${u.named.join(', ')})`);
-  check('moteurs d\'export : un script qui appelle PdfExport, PdfMerge, SheetLayout, DocxExport, XlsxExport ou XlsxNumberFormat hors de son fichier nomme ExportEngines (il fait charger le moteur avant) - sinon le premier export, seul, échoue',
+  check('moteurs d\'export : un script qui appelle PdfExport, PdfMerge, SheetLayout, DocxExport, XlsxExport, XlsxNumberFormat ou MarkdownExport hors de son fichier nomme ExportEngines (il fait charger le moteur avant) - sinon le premier export, seul, échoue',
     users.length >= 2 && unguarded.length === 0, unguarded.length ? unguarded.join(', ') : `${users.length} fichiers`);
 }
 

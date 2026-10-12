@@ -2,12 +2,12 @@
 // Chargement paresseux des moteurs d'export (js/export-engines.js) dans un VRAI navigateur, à la taille du panneau d'Antoine (700x400), chaque scénario dans une page neuve (un moteur
 // chargé le reste : deux exports dans la même page ne prouveraient rien du second). Le widget est celui d'index.html, avec le faux Grist de dev-tests/grist-stub.js et le miroir hors ligne
 // des CDN (dev-tests/load-lib.mjs) ; les exports se lancent à la vraie souris et les fichiers téléchargés sont relus (en-tête PDF, entrées d'un ZIP, feuille d'un classeur).
-//   - à l'ouverture : aucune des six adresses des moteurs n'est demandée (PdfExport, PdfMerge, SheetLayout, DocxExport, XlsxExport et XlsxNumberFormat n'existent pas) et rien ne les
-//     charge ensuite tout seul ; les six balises inertes de index.html portent chacune leur version de cache ;
+//   - à l'ouverture : aucune des sept adresses des moteurs n'est demandée (PdfExport, PdfMerge, SheetLayout, DocxExport, XlsxExport, XlsxNumberFormat et MarkdownExport n'existent pas) et
+//     rien ne les charge ensuite tout seul ; les sept balises inertes de index.html portent chacune leur version de cache ;
 //   - ExportEngines : deux demandes d'un même moteur en même temps ne le chargent qu'une fois, une de plus ne fait aucune requête, un nom inconnu est refusé, une liste de noms marche,
-//     `loadAll` charge les six, chacun une fois ; un chargement qui échoue (réseau coupé) est repris à l'appel suivant ;
-//   - chaque export ne charge que ses moteurs, une fois, et produit son fichier : PDF, Word et Excel d'une ligne ; ZIP de PDF, PDF unique (+ fusion), assemblage (+ fusion et feuilles),
-//     ZIP de Word, ZIP d'Excel, classeur Excel unique ; l'import d'un classeur dans une grille (+ format des nombres) ;
+//     `loadAll` charge les sept, chacun une fois ; un chargement qui échoue (réseau coupé) est repris à l'appel suivant ;
+//   - chaque export ne charge que ses moteurs, une fois, et produit son fichier : PDF, Word, Excel et Markdown d'une ligne ; ZIP de PDF, PDF unique (+ fusion), assemblage (+ fusion et
+//     feuilles), ZIP de Word, ZIP d'Excel, classeur Excel unique, ZIP de Markdown ; l'import d'un classeur dans une grille (+ format des nombres) ;
 //   - un moteur qui ne se charge pas arrête l'export avec son message, sans fichier ni fenêtre de confirmation ; réseau revenu, le même geste aboutit : une ligne et un lot.
 // Lancé par run-headless.mjs (groupe Node « lazyEngines », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-lazy-engines.mjs
 import { readFile, unlink } from 'node:fs/promises';
@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 const JSZip = require(join(ROOT, 'dev-tests', '.offline-cache', 'umd', 'jszip.min.js'));
 const ExcelJS = require(join(ROOT, 'dev-tests', '.offline-cache', 'umd', 'exceljs.min.js'));
 
-// Les six moteurs : leur nom dans index.html (data-engine), leur fichier, leur variable globale.
+// Les sept moteurs : leur nom dans index.html (data-engine), leur fichier, leur variable globale.
 const ENGINES = {
   pdf: { file: 'pdf-export', global: 'PdfExport' },
   sheets: { file: 'sheet-layout', global: 'SheetLayout' },
@@ -28,6 +28,7 @@ const ENGINES = {
   docx: { file: 'docx-export', global: 'DocxExport' },
   xlsx: { file: 'xlsx-export', global: 'XlsxExport' },
   xlsxFormat: { file: 'xlsx-number-format', global: 'XlsxNumberFormat' },
+  md: { file: 'markdown-export', global: 'MarkdownExport' },
 };
 const NAMES = Object.keys(ENGINES);
 const ENGINE_OF_FILE = Object.fromEntries(NAMES.map(name => [ENGINES[name].file, name]));
@@ -66,7 +67,7 @@ async function scenario(title, fn) {
 // Les scripts de moteur demandés, exactement ceux que le scénario attend : ni plus (rien ne charge ce qu'il n'utilise pas), ni moins, chacun une fois.
 function expectEngines(label, requests, loadedNow, expected) {
   check(`${label} : le réseau ne reçoit que ${expected.map(name => ENGINES[name].file + '.js').join(' et ')}, une seule fois chacun`, same(requests, expected), requests);
-  check(`${label} : parmi les six moteurs, seuls existent ${expected.map(name => ENGINES[name].global).join(', ')}`, same(loadedNow, expected), loadedNow);
+  check(`${label} : parmi les sept moteurs, seuls existent ${expected.map(name => ENGINES[name].global).join(', ')}`, same(loadedNow, expected), loadedNow);
 }
 
 const bytesOf = file => readFile(file);
@@ -84,7 +85,7 @@ async function prepare(page, { grid = false } = {}) {
   else await page.evaluate(() => Editor.setHTML('<p>Bonjour</p>'));
   await fire(page, 'PbClients', 1);
 }
-// « Exporter » d'une ligne, comme la personne : le type au menu « Type d'export » (PDF, Word ou Excel), « Une seule ligne » cochée au menu « Exporter », puis le bouton Exporter.
+// « Exporter » d'une ligne, comme la personne : le type au menu « Type d'export » (PDF, Word, Excel ou Markdown), « Une seule ligne » cochée au menu « Exporter », puis le bouton Exporter.
 // Un export de trois lignes prend quelques secondes : au-delà de DELAY, c'est qu'il n'aboutit pas (le test échoue au lieu d'attendre dix minutes).
 const DELAY = 45000;
 const exportSingle = (page, kind, name, timeout = DELAY) => saved(downloadOf(page, `lazy-${process.pid}-${name}`, () => startExport(page, kind), timeout));
@@ -93,12 +94,12 @@ const exportBatch = (page, kind, name) => saved(exportBatchOf(page, kind, `lazy-
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 await scenario('Ouverture : aucun moteur n\'est chargé', async ({ w, page, requests, loaded }) => {
   await sleep(1500);
-  check('ouverture : aucun des six scripts de moteur n\'est demandé au réseau', requests.length === 0, requests);
-  check('ouverture : aucun des six moteurs n\'existe (PdfExport, PdfMerge, SheetLayout, DocxExport, XlsxExport, XlsxNumberFormat)', (await loaded()).length === 0, await loaded());
+  check('ouverture : aucun des sept scripts de moteur n\'est demandé au réseau', requests.length === 0, requests);
+  check('ouverture : aucun des sept moteurs n\'existe (PdfExport, PdfMerge, SheetLayout, DocxExport, XlsxExport, XlsxNumberFormat, MarkdownExport)', (await loaded()).length === 0, await loaded());
   check('ouverture : ExportEngines existe, avec ensure et loadAll', await page.evaluate(() => typeof ExportEngines === 'object' && typeof ExportEngines.ensure === 'function' && typeof ExportEngines.loadAll === 'function'));
   const tags = await page.evaluate(() => Array.from(document.querySelectorAll('script[type="text/x-lazy-engine"]'), tag => [tag.dataset.engine, tag.getAttribute('src')]));
-  check('index.html : six balises inertes, une par moteur, chacune vers son fichier et avec une version de cache (?v=)',
-    tags.length === 6 && NAMES.every(name => tags.filter(([engine, src]) => engine === name && new RegExp('^js/' + ENGINES[name].file + '\\.js\\?v=\\d+(\\.\\d+)*$').test(src)).length === 1), tags);
+  check('index.html : sept balises inertes, une par moteur, chacune vers son fichier et avec une version de cache (?v=)',
+    tags.length === NAMES.length && NAMES.every(name => tags.filter(([engine, src]) => engine === name && new RegExp('^js/' + ENGINES[name].file + '\\.js\\?v=\\d+(\\.\\d+)*$').test(src)).length === 1), tags);
   check('ouverture : les boutons d\'export existent et sont prêts (le clic ne dépend d\'aucun moteur chargé)', await page.evaluate(() => ['btn-export-pdf', 'v2-export-lines-one', 'v2-export-lines-zip', 'v2-export-lines-merged'].every(id => !!document.getElementById(id))));
   check('ouverture : aucune erreur de page', w.errors.length === 0, w.errors);
 
@@ -118,9 +119,9 @@ await scenario('ExportEngines : une demande, deux demandes, une liste, tout', as
   check('une liste de noms charge chacun d\'eux (fusion, feuilles)', same(await loaded(), ['pdf', 'merge', 'sheets']) && same(requests, ['pdf', 'merge', 'sheets']), { loaded: await loaded(), requests });
   check('ensure() sans nom se résout sans rien charger', (await page.evaluate(() => ExportEngines.ensure().then(() => 'ok', e => e.message))) === 'ok' && requests.length === 3, requests);
   await page.evaluate(() => ExportEngines.loadAll());
-  check('loadAll charge les trois qui manquaient (Word, Excel, format des nombres), les six ne sont demandés qu\'une fois chacun', same(await loaded(), NAMES) && same(requests, NAMES), { loaded: await loaded(), requests });
+  check('loadAll charge les quatre qui manquaient (Word, Excel, format des nombres, Markdown), les sept ne sont demandés qu\'une fois chacun', same(await loaded(), NAMES) && same(requests, NAMES), { loaded: await loaded(), requests });
   await page.evaluate(() => ExportEngines.loadAll());
-  check('un second loadAll ne fait aucune requête', requests.length === 6, requests);
+  check('un second loadAll ne fait aucune requête', requests.length === NAMES.length, requests);
   check('aucune erreur de page', w.errors.length === 0, w.errors);
 });
 
@@ -160,6 +161,15 @@ await scenario('Excel d\'une ligne : le moteur Excel seul', async ({ w, page, re
   check('Excel d\'une ligne : aucune erreur de page', w.errors.length === 0, w.errors);
 });
 
+await scenario('Markdown d\'une ligne : le moteur Markdown seul', async ({ w, page, requests, loaded }) => {
+  await prepare(page);
+  const out = await exportSingle(page, 'md', 'md');
+  const text = (await bytesOf(out.file)).toString('utf8');
+  check('Markdown d\'une ligne : le fichier est un .md qui porte le texte du document', /\.md$/.test(out.suggested) && /Bonjour/.test(text), { suggested: out.suggested, text: text.slice(0, 80) });
+  expectEngines('Markdown d\'une ligne', requests, await loaded(), ['md']);
+  check('Markdown d\'une ligne : aucune erreur de page', w.errors.length === 0, w.errors);
+});
+
 // ---- Un export en lot, ses moteurs ----
 const BATCHES = [
   { kind: 'pdfZip', label: 'ZIP de PDF', engines: ['pdf'], grid: false, verify: async (out, label) => { const entries = await zipEntries(out.file); check(`${label} : l'archive porte ${ROWS} PDF`, /\.zip$/.test(out.suggested) && entries.length === ROWS && entries.every(n => /\.pdf$/.test(n)), { suggested: out.suggested, entries }); } },
@@ -167,6 +177,7 @@ const BATCHES = [
   { kind: 'pdfSheets', label: 'Assemblage avant impression', engines: ['pdf', 'merge', 'sheets'], grid: false, verify: async (out, label) => { check(`${label} : un PDF d'assemblage, nommé -assemblage.pdf`, startsWith(await bytesOf(out.file), '%PDF-') && /-assemblage\.pdf$/.test(out.suggested) && out.size > 1000, out); } },
   { kind: 'docxZip', label: 'ZIP de Word', engines: ['docx'], grid: false, verify: async (out, label) => { const entries = await zipEntries(out.file); check(`${label} : l'archive porte ${ROWS} documents Word`, /\.zip$/.test(out.suggested) && entries.length === ROWS && entries.every(n => /\.docx$/.test(n)), { suggested: out.suggested, entries }); } },
   { kind: 'xlsxZip', label: 'ZIP d\'Excel', engines: ['xlsx'], grid: true, verify: async (out, label) => { const entries = await zipEntries(out.file); check(`${label} : l'archive porte ${ROWS} classeurs`, /\.zip$/.test(out.suggested) && entries.length === ROWS && entries.every(n => /\.xlsx$/.test(n)), { suggested: out.suggested, entries }); } },
+  { kind: 'mdZip', label: 'ZIP de Markdown', engines: ['md'], grid: false, verify: async (out, label) => { const entries = await zipEntries(out.file); check(`${label} : l'archive porte ${ROWS} fichiers Markdown`, /\.zip$/.test(out.suggested) && entries.length === ROWS && entries.every(n => /\.md$/.test(n)), { suggested: out.suggested, entries }); } },
   { kind: 'xlsxSingle', label: 'Classeur Excel unique', engines: ['xlsx'], grid: true, verify: async (out, label) => { const entries = await zipEntries(out.file); check(`${label} : un classeur, nommé -export.xlsx`, /-export\.xlsx$/.test(out.suggested) && entries.includes('xl/worksheets/sheet1.xml'), { suggested: out.suggested, entries: entries.slice(0, 8) }); } },
 ];
 for (const batch of BATCHES) {

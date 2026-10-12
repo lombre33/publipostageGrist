@@ -204,6 +204,30 @@
   });
 
   cases.push({
+    id: 'export_choices_markdown_is_kept_like_the_other_types',
+    description: 'Le type Markdown est un type comme les autres pour les réglages gardés : écrit sur la ligne du modèle (« md » avec « toutes les lignes (ZIP) »), retrouvé sur un autre ordinateur avec sa ligne active et le bouton du type allumé ; le modèle voisin repart de l\'origine',
+    run: async (h) => {
+      const a = await saved(h, 'Export Markdown - A');
+      const b = await saved(h, 'Export Markdown - B');
+      await open(a);
+      await pickType('md'); await pickLines('zip');
+      await sleep(400);
+      const written = prefRows(a).map(row => [row.type, row.quality, row.lines]);
+      await reload();
+      await pickType('pdf'); await pickQuality('native'); await pickLines('one');
+      await open(a);
+      const onA = { values: values(), menus: menus() };
+      await open(b);
+      const onB = { values: values(), menus: menus() };
+      await clean();
+      const pass = same(written, [['md', '', 'zip']])
+        && same(onA, { values: 'md|native|zip', menus: { type: 'md', ticked: 'zip', lit: true } })
+        && same(onB, { values: 'pdf|native|one', menus: { type: 'pdf', ticked: 'one', lit: false } });
+      return { pass, notes: JSON.stringify({ written, onA, onB }) };
+    },
+  });
+
+  cases.push({
     id: 'export_choices_read_after_the_first_model_opened_never_replace_a_choice_made_meanwhile',
     description: 'La lecture du démarrage finit après l\'ouverture du premier modèle : ce qu\'elle apporte est mis à l\'écran (menus redessinés) tant que la personne n\'a rien choisi pour ce modèle, et jamais à la place d\'un choix déjà fait',
     run: async (h) => {

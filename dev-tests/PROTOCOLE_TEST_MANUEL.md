@@ -17,7 +17,7 @@ de régression le jour même :
   de cohérence inter-étages (§7).
 
 **Mise à jour 2026-10-12 (menu d'export)** : le bouton « Qualité PDF » s'appelle « Type d'export » et choisit
-PDF, PDF protégé, Word ou Excel (la qualité du PDF n'est montrée que pour les deux PDF, et gardée) ; le bouton « Exporter » (Alt+P aussi)
+PDF, PDF protégé, Word, Excel ou Markdown (la qualité du PDF n'est montrée que pour les deux PDF, et gardée) ; le bouton « Exporter » (Alt+P aussi)
 exporte, dans le type choisi, l'option cochée de son menu. Ce menu, titré « Exporter », ne liste que des options de
 lignes et de classeur (une seule ligne, toutes les lignes en ZIP, en un seul PDF, assemblage avant impression, toutes
 les valeurs de la table dans un seul classeur), avec une petite coche devant l'option cochée ; un clic sur une option
@@ -33,6 +33,15 @@ repart de PDF, vectoriel, une seule ligne) et y choisir « Léger » ; recharger
 chaque modèle (chacun retrouve ses choix, le bouton du type est allumé pour Word) ; avec un compte Lecteur de Grist,
 choisir Word sur un modèle : le choix tient pendant la séance, et la table `Publipostage_PreferencesModeles` n'a pas
 bougé.
+
+**Mise à jour 2026-10-12 (export Markdown)** : le type « Markdown » du menu « Type d'export » écrit le document de la ligne en `.md` (CommonMark et GFM ;
+pas pour une grille). Les tests automatiques comparent le fichier, caractère pour caractère, à l'écriture attendue, et il a été relu avec un second lecteur
+Markdown pendant la mise au point ; ce qui reste à voir à la main, dans de vrais afficheurs : exporter un modèle qui a un titre numéroté, du gras, de
+l'italique, un lien, une liste imbriquée, une liste à cases, une citation, un tableau, une image, une note de bas de page, un encadré et un sommaire,
+puis ouvrir le `.md` dans GitHub (un dépôt d'essai ou un gist), dans l'aperçu Markdown de VS Code et dans Docs de La Suite (Importer) : le texte, les
+listes, le tableau et l'encadré (une alerte) doivent s'y lire comme dans la Lecture ; le souligné, la couleur et la taille ne s'y voient que si l'afficheur
+laisse passer le HTML en ligne (GitHub le fait, d'autres le retirent : le texte reste lisible) ; « Toutes les lignes (ZIP) » rend une archive de `.md` nommés
+comme les PDF ; avec une image d'un autre site, la fenêtre qui la nomme s'ouvre d'abord, comme pour le PDF.
 
 Dans ces menus, la **ligne choisie** (le type, la qualité du PDF, un niveau de titre) est bleue et en gras ; à vérifier à
 l'œil, en clair puis en sombre : la souris sur cette ligne la laisse bleue et en gras, d'un bleu un peu plus soutenu, bien

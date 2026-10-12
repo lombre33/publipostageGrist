@@ -252,8 +252,8 @@ export async function confirmDialog(page) {
   await sleep(250);
   await click(page, '#pp-dialog-modal .var-modal-primary');
 }
-// Le type d'export (survol du bouton à gauche d'« Exporter », menu « Type d'export ») : PDF, Word ou Excel, choisi à la vraie souris. Le menu « Exporter » (survol du bouton) ne liste que
-// des options de lignes et de classeur, celles du type choisi : une seule ligne, toutes les lignes (ZIP), un seul PDF, l'assemblage pour le PDF ; une seule ligne, ZIP pour Word ; une
+// Le type d'export (survol du bouton à gauche d'« Exporter », menu « Type d'export ») : PDF, Word, Excel ou Markdown, choisi à la vraie souris. Le menu « Exporter » (survol du bouton) ne liste que
+// des options de lignes et de classeur, celles du type choisi : une seule ligne, toutes les lignes (ZIP), un seul PDF, l'assemblage pour le PDF ; une seule ligne, ZIP pour Word et Markdown ; une
 // seule ligne, ZIP, un seul classeur pour Excel. Une option se coche à la vraie souris (rien ne s'exporte), et le bouton Exporter lance l'option cochée dans le type choisi.
 export const EXPORT_TYPE_ROW = type => `#v2-quality-flyout .v2-hover-row[data-export-type="${type}"]`;
 export async function chooseExportType(page, type) {
@@ -270,11 +270,12 @@ export async function chooseExportLines(page, lines) {
   const ticked = await page.evaluate(() => Array.from(document.querySelectorAll('#v2-export-pdf-flyout .v2-hover-row[aria-checked="true"]')).map(row => row.dataset.exportLines).join());
   if (ticked !== lines) throw new Error(`option de lignes « ${lines} » non cochée (${ticked})`);
 }
-// Les neuf exports d'avant, chacun = un type et une option de lignes (les lignes d'avant ne sont plus montrées, cf. #v2-export-legacy-rows).
+// Les neuf exports d'avant, chacun = un type et une option de lignes (les lignes d'avant ne sont plus montrées, cf. #v2-export-legacy-rows), et les deux du Markdown (md, mdZip).
 export const EXPORT_KINDS = {
   pdf: ['pdf', 'one'], pdfZip: ['pdf', 'zip'], pdfMerged: ['pdf', 'merged'], pdfSheets: ['pdf', 'sheets'],
   docx: ['docx', 'one'], docxZip: ['docx', 'zip'],
   xlsx: ['xlsx', 'one'], xlsxZip: ['xlsx', 'zip'], xlsxSingle: ['xlsx', 'workbook'],
+  md: ['md', 'one'], mdZip: ['md', 'zip'],
 };
 // Lance un de ces exports comme la personne : le type au menu « Type d'export », l'option au menu « Exporter », puis le bouton Exporter (vrai clic). Le choix de lignes est remis à
 // « une seule ligne » aussitôt après (la liste cachée seulement : la coche se met à jour au prochain survol), de sorte qu'un clic suivant sur le bouton exporte la ligne affichée comme avant.
@@ -291,7 +292,7 @@ export async function startExport(page, kind) {
 }
 export const EXPORT_ROWS = {
   pdfZip: 'pdfZip', pdfMerged: 'pdfMerged', pdfSheets: 'pdfSheets', // « Assemblage avant impression » : la fenêtre de réglage tient lieu de confirmation
-  docxZip: 'docxZip', xlsxZip: 'xlsxZip', xlsxSingle: 'xlsxSingle',
+  docxZip: 'docxZip', xlsxZip: 'xlsxZip', xlsxSingle: 'xlsxSingle', mdZip: 'mdZip',
 };
 export async function exportBatchOf(page, kind, name, { timeout = 900000 } = {}) {
   return downloadOf(page, name, async () => {

@@ -1,19 +1,20 @@
 #!/usr/bin/env node
 // Le menu « Type d'export » (ex-« Qualité PDF ») et le menu « Exporter » au VRAI clic, à 700x400 (le panneau de Grist) : ce qu'Antoine voit et fait, pas un état interne.
-//   1) le menu « Type d'export » : PDF, Word, Excel ; la qualité du PDF n'y est montrée que pour le PDF - entier dans le panneau, sans texte coupé, lisible (>= 4,5:1), en français
-//      clair puis en anglais sombre ; dans un document Excel est grisé (il reste là), dans une grille c'est Word ; la ligne choisie, sous la souris, garde un bleu lisible (>= 4,5:1) sur le gris du survol ;
-//   2) le menu « Exporter » : titre « Exporter », rien que des options de lignes et de classeur (PDF : une seule ligne, toutes les lignes en ZIP, en un seul PDF, assemblage ; Word : une
-//      seule ligne, ZIP ; Excel : une seule ligne, ZIP, un seul classeur), la coche DEVANT l'option cochée, entier dans le panneau, atteignable à la souris, aucune ligne « Exporter en… » ;
-//   3) un vrai clic sur un type grisé ne choisit rien, un vrai clic sur Word ou Excel le choisit (ligne active, bouton du type allumé, qualité du PDF cachée mais gardée) ;
+//   1) le menu « Type d'export » : PDF, Word, Excel, Markdown ; la qualité du PDF n'y est montrée que pour le PDF - entier dans le panneau, sans texte coupé, lisible (>= 4,5:1), en français
+//      clair puis en anglais sombre ; dans un document Excel est grisé (il reste là), dans une grille ce sont Word et Markdown ; la ligne choisie, sous la souris, garde un bleu lisible (>= 4,5:1) sur le gris du survol ;
+//   2) le menu « Exporter » : titre « Exporter », rien que des options de lignes et de classeur (PDF : une seule ligne, toutes les lignes en ZIP, en un seul PDF, assemblage ; Word et
+//      Markdown : une seule ligne, ZIP ; Excel : une seule ligne, ZIP, un seul classeur), la coche DEVANT l'option cochée, entier dans le panneau, atteignable à la souris, aucune ligne « Exporter en… » ;
+//   3) un vrai clic sur un type grisé ne choisit rien, un vrai clic sur Word, Markdown ou Excel le choisit (ligne active, bouton du type allumé, qualité du PDF cachée mais gardée) ;
 //   4) un vrai clic sur une option la coche et n'exporte rien ; le bouton Exporter - au clic et par Alt+P - lance l'option cochée dans le type choisi : la ligne affichée (.docx, .xlsx,
-//      .pdf) ou un lot (sa confirmation, « Annuler » n'exporte rien, « Générer » rend l'archive) ;
+//      .md, .pdf) ou un lot (sa confirmation, « Annuler » n'exporte rien, « Générer » rend l'archive) ;
 //   5) une option que le type n'a pas retombe sur « toutes les lignes (ZIP) » et revient avec son type ; un type que le modèle ne sait pas faire revient au PDF (Excel quand on repart
 //      dans un document) et la qualité du PDF choisie avant est gardée ; aucune erreur de page.
 //   6) les trois choix (type, qualité du PDF, une ligne / toutes) sont gardés PAR PERSONNE ET PAR MODÈLE dans la table des préférences : au vrai clic, une ligne par modèle choisi et rien
 //      pour un modèle dont rien n'a changé ; dans une page rechargée (anglais, sombre) la personne retrouve ses menus tels qu'elle les a laissés, modèle par modèle ; une autre personne
 //      repart de l'origine ; un compte Lecteur choisit sans rien écrire et garde son choix pour la session.
 // Lancé par run-headless.mjs (groupe Node « exportTypeMouse », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-export-type-mouse.mjs
-import { open, stopServer, sleep, click, clickHoverRow, hoverRow, fire, chooseExportLines, pickTemplate } from './load-lib.mjs';
+import { readFile } from 'node:fs/promises';
+import { open, stopServer, sleep, click, clickHoverRow, hoverRow, fire, chooseExportLines, pickTemplate, status } from './load-lib.mjs';
 
 const PORT = Number(process.env.EXPORT_TYPE_PORT || 9010);
 const SPEC = { tables: [{ id: 'PbClients', rows: 2, columns: [{ id: 'Nom', type: 'Text' }] }] };
@@ -24,6 +25,7 @@ const QUALITY_ROW = name => '#v2-quality-flyout .v2-hover-row[data-quality="' + 
 const LINES_ROW = name => '#v2-export-pdf-flyout .v2-hover-row[data-export-lines="' + name + '"]';
 const PDF_LINES = ['one', 'zip', 'merged', 'sheets'].map(LINES_ROW);
 const WORD_LINES = ['one', 'zip'].map(LINES_ROW);
+const MARKDOWN_LINES = WORD_LINES;
 const EXCEL_LINES = ['one', 'zip', 'workbook'].map(LINES_ROW);
 // Les neuf lignes d'export d'avant : masquées (#v2-export-legacy-rows), jamais montrées.
 const OLD_ROWS = ['#v2-btn-export-pdf', '#v2-btn-export-pdf-batch', '#v2-btn-export-pdf-merged', '#v2-btn-export-pdf-sheets', '#v2-btn-export-docx', '#v2-btn-export-docx-batch',
@@ -31,17 +33,17 @@ const OLD_ROWS = ['#v2-btn-export-pdf', '#v2-btn-export-pdf-batch', '#v2-btn-exp
 const CANCEL = '#pp-dialog-modal .pp-modal-actions button:first-of-type';
 const NO_HF = { enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } };
 
-// Les mots de chaque langue : le titre des deux menus, les trois types, les trois qualités et les options du menu « Exporter » selon le type et le modèle.
+// Les mots de chaque langue : le titre des deux menus, les quatre types, les trois qualités et les options du menu « Exporter » selon le type et le modèle.
 const WORDS = {
   fr: {
-    typeLabel: 'Type d’export', qualityLabel: 'Qualité PDF', exportLabel: 'Exporter', types: ['PDF', 'Word (bêta)', 'Excel'], qualities: ['Vectoriel (par défaut)', 'Impression navigateur', 'Léger (images réduites)'],
+    typeLabel: 'Type d’export', qualityLabel: 'Qualité PDF', exportLabel: 'Exporter', types: ['PDF', 'Word (bêta)', 'Excel', 'Markdown'], qualities: ['Vectoriel (par défaut)', 'Impression navigateur', 'Léger (images réduites)'],
     pdf: ['Une seule ligne', 'Toutes les lignes (ZIP)', 'Toutes les lignes en un seul PDF', 'Assemblage avant impression'],
     pdfGrid: ['Une seule ligne', 'Toutes les valeurs de la table (ZIP)', 'Toutes les valeurs de la table en un seul PDF', 'Assemblage avant impression'],
     word: ['Une seule ligne', 'Toutes les lignes (ZIP)'],
     excel: ['Une seule ligne', 'Toutes les valeurs de la table (ZIP)', 'Toutes les valeurs de la table dans un seul classeur'],
   },
   en: {
-    typeLabel: 'Export type', qualityLabel: 'PDF quality', exportLabel: 'Export', types: ['PDF', 'Word (beta)', 'Excel'], qualities: ['Vector (default)', 'Browser print', 'Light (smaller images)'],
+    typeLabel: 'Export type', qualityLabel: 'PDF quality', exportLabel: 'Export', types: ['PDF', 'Word (beta)', 'Excel', 'Markdown'], qualities: ['Vector (default)', 'Browser print', 'Light (smaller images)'],
     pdf: ['A single row', 'All rows (ZIP)', 'All rows as a single PDF', 'Assemble before printing'],
     pdfGrid: ['A single row', 'All table values (ZIP)', 'All table values as a single PDF', 'Assemble before printing'],
     word: ['A single row', 'All rows (ZIP)'],
@@ -156,14 +158,14 @@ async function menus(page, lang, tag) {
   console.log(`\n[${tag}] Le menu « ${W.typeLabel} » dans un document, type PDF`);
   await hoverRow(page, TYPE_MENU, TYPE_ROW('docx'));
   const typeLabels = await labelsOf(page, '#v2-quality-flyout');
-  const types = await stateOf(page, [TYPE_ROW('pdf'), TYPE_ROW('docx'), TYPE_ROW('xlsx')]);
+  const types = await stateOf(page, [TYPE_ROW('pdf'), TYPE_ROW('docx'), TYPE_ROW('xlsx'), TYPE_ROW('md')]);
   const qualities = await stateOf(page, [QUALITY_ROW('native'), QUALITY_ROW('browser-print'), QUALITY_ROW('light')]);
   check(`${tag} : titres « ${W.typeLabel} » et « ${W.qualityLabel} » (la qualité est montrée pour le PDF)`, JSON.stringify(typeLabels) === JSON.stringify([W.typeLabel, W.qualityLabel]), typeLabels);
-  check(`${tag} : trois types (${W.types.join(', ')}) puis trois qualités (${W.qualities.join(', ')})`, wanted(types, W.types) && wanted(qualities, W.qualities), { types: types.map(r => r.text), qualities: qualities.map(r => r.text) });
-  check(`${tag} : les six lignes sont entières dans le panneau 700x400, sans texte coupé, atteignables à la souris`, entire([...types, ...qualities]), [...types, ...qualities].filter(r => !(r.shown && r.inside && r.reachable && !r.cut)));
-  check(`${tag} : le texte des six lignes (Excel grisé compris) est lisible, >= 4,5:1`, readable([...types, ...qualities]), contrasts([...types, ...qualities]));
-  check(`${tag} : au départ « PDF » et la qualité par défaut sont les lignes actives, Excel est grisé (il reste dans le menu), PDF et Word sont actifs`,
-    types[0].active && !types[1].active && !types[2].active && types[0].live && types[1].live && types[2].greyed && qualities.filter(r => r.active).map(r => r.sel).join() === QUALITY_ROW('native') && qualities.every(r => r.live), { types, qualities });
+  check(`${tag} : quatre types (${W.types.join(', ')}) puis trois qualités (${W.qualities.join(', ')})`, wanted(types, W.types) && wanted(qualities, W.qualities), { types: types.map(r => r.text), qualities: qualities.map(r => r.text) });
+  check(`${tag} : les sept lignes sont entières dans le panneau 700x400, sans texte coupé, atteignables à la souris`, entire([...types, ...qualities]), [...types, ...qualities].filter(r => !(r.shown && r.inside && r.reachable && !r.cut)));
+  check(`${tag} : le texte des sept lignes (Excel grisé compris) est lisible, >= 4,5:1`, readable([...types, ...qualities]), contrasts([...types, ...qualities]));
+  check(`${tag} : au départ « PDF » et la qualité par défaut sont les lignes actives, Excel est grisé (il reste dans le menu), PDF, Word et Markdown sont actifs`,
+    types[0].active && !types[1].active && !types[2].active && !types[3].active && types[0].live && types[1].live && types[2].greyed && types[3].live && qualities.filter(r => r.active).map(r => r.sel).join() === QUALITY_ROW('native') && qualities.every(r => r.live), { types, qualities });
   check(`${tag} : le bouton du type n'est pas allumé pour le PDF`, !(await typeButtonLit(page)));
 
   // La ligne CHOISIE sous la souris (les mesures du menu ci-dessus le survolent sur une autre ligne) : son bleu passe sur le gris du survol. Avant : 4,02:1 en clair, 4,43:1 en sombre.
@@ -208,11 +210,11 @@ async function menus(page, lang, tag) {
   check(`${tag} : après un clic sur Word : le type vaut « docx » et le bouton du type est allumé`, (await typeValue(page)) === 'docx' && (await typeButtonLit(page)), { type: await typeValue(page), lit: await typeButtonLit(page) });
   // Le menu est survolé sur la ligne PDF : la ligne Word, active, se mesure au repos (survolée, son bleu passe sur le fond du survol).
   await hoverRow(page, TYPE_MENU, TYPE_ROW('pdf'));
-  const withWord = await stateOf(page, [TYPE_ROW('pdf'), TYPE_ROW('docx'), TYPE_ROW('xlsx'), QUALITY_ROW('native'), QUALITY_ROW('browser-print'), QUALITY_ROW('light')]);
+  const withWord = await stateOf(page, [TYPE_ROW('pdf'), TYPE_ROW('docx'), TYPE_ROW('xlsx'), TYPE_ROW('md'), QUALITY_ROW('native'), QUALITY_ROW('browser-print'), QUALITY_ROW('light')]);
   const wordLabels = await labelsOf(page, '#v2-quality-flyout');
-  check(`${tag} : avec Word, seule la ligne Word est active et les trois types sont entiers et lisibles`, withWord.filter(r => r.active).map(r => r.sel).join() === TYPE_ROW('docx') && entire(withWord.slice(0, 3)) && readable(withWord.slice(0, 3)), withWord.slice(0, 3));
+  check(`${tag} : avec Word, seule la ligne Word est active et les quatre types sont entiers et lisibles`, withWord.filter(r => r.active).map(r => r.sel).join() === TYPE_ROW('docx') && entire(withWord.slice(0, 4)) && readable(withWord.slice(0, 4)), withWord.slice(0, 4));
   check(`${tag} : la qualité du PDF n'est plus montrée avec Word (ni l'intitulé « ${W.qualityLabel} », ni ses trois lignes), mais reste dans la page`,
-    JSON.stringify(wordLabels) === JSON.stringify([W.typeLabel]) && withWord.slice(3).every(r => !r.missing && !r.shown), { labels: wordLabels, qualities: withWord.slice(3).map(r => r.shown) });
+    JSON.stringify(wordLabels) === JSON.stringify([W.typeLabel]) && withWord.slice(4).every(r => !r.missing && !r.shown), { labels: wordLabels, qualities: withWord.slice(4).map(r => r.shown) });
   check(`${tag} : la qualité choisie est gardée (« light ») en attendant le retour au PDF`, (await qualityValue(page)) === 'light', { quality: await qualityValue(page) });
 
   console.log(`\n[${tag}] Le menu « ${W.exportLabel} » dans un document, type Word`);
@@ -222,6 +224,21 @@ async function menus(page, lang, tag) {
   check(`${tag} : deux options pour Word (${W.word.join(' | ')}), entières dans le panneau, atteignables, lisibles et actives`, wanted(wordRows, W.word) && entire(wordRows) && readable(wordRows) && wordRows.every(r => r.live), wordRows);
   check(`${tag} : « un seul PDF » (cochée avant) n'existe pas pour Word : « ${W.word[1]} » est cochée à sa place, avec sa coche devant`, wordRows[1].ticked && wordRows[1].tick.visible && wordRows[1].tick.inFront && !wordRows[0].ticked && (await linesValue(page)) === 'merged', { ticked: wordRows.map(r => r.ticked), lines: await linesValue(page) });
   check(`${tag} : les options du PDF et du classeur ne sont pas montrées pour Word`, pdfOnly.every(r => !r.missing && !r.shown), pdfOnly.filter(r => r.shown || r.missing));
+
+  console.log(`\n[${tag}] Le menu « ${W.typeLabel} » : un vrai clic sur Markdown le choisit, avec les mêmes deux options que Word`);
+  await clickHoverRow(page, TYPE_MENU, TYPE_ROW('md'));
+  await sleep(300);
+  check(`${tag} : après un clic sur Markdown : le type vaut « md » et le bouton du type est allumé`, (await typeValue(page)) === 'md' && (await typeButtonLit(page)), { type: await typeValue(page), lit: await typeButtonLit(page) });
+  await hoverRow(page, TYPE_MENU, TYPE_ROW('pdf'));
+  const withMarkdown = await stateOf(page, [TYPE_ROW('pdf'), TYPE_ROW('docx'), TYPE_ROW('xlsx'), TYPE_ROW('md')]);
+  check(`${tag} : avec Markdown, seule la ligne Markdown est active, les quatre types sont entiers et lisibles, la qualité du PDF n'est pas montrée`,
+    withMarkdown.filter(r => r.active).map(r => r.sel).join() === TYPE_ROW('md') && entire(withMarkdown) && readable(withMarkdown) && JSON.stringify(await labelsOf(page, '#v2-quality-flyout')) === JSON.stringify([W.typeLabel]), withMarkdown);
+  await hoverRow(page, EXPORT_MENU, LINES_ROW('one'));
+  const markdownRows = await stateOf(page, MARKDOWN_LINES);
+  const notMarkdown = await stateOf(page, [LINES_ROW('merged'), LINES_ROW('sheets'), LINES_ROW('workbook')]);
+  check(`${tag} : deux options pour Markdown (${W.word.join(' | ')}), entières dans le panneau, atteignables, lisibles et actives, « ${W.word[1]} » cochée à la place de « un seul PDF »`,
+    wanted(markdownRows, W.word) && entire(markdownRows) && readable(markdownRows) && markdownRows.every(r => r.live) && markdownRows[1].ticked && markdownRows[1].tick.visible && markdownRows[1].tick.inFront, markdownRows);
+  check(`${tag} : les options du PDF et du classeur ne sont pas montrées pour Markdown`, notMarkdown.every(r => !r.missing && !r.shown), notMarkdown.filter(r => r.shown || r.missing));
   await clickHoverRow(page, TYPE_MENU, TYPE_ROW('pdf'));
   await sleep(300);
   check(`${tag} : un vrai clic sur PDF le rend (type « pdf », bouton non allumé)`, (await typeValue(page)) === 'pdf' && !(await typeButtonLit(page)), { type: await typeValue(page) });
@@ -237,15 +254,18 @@ async function menus(page, lang, tag) {
   await sleep(250);
   await chooseExportLines(page, 'one');
 
-  console.log(`\n[${tag}] Dans une grille : Word grisé, Excel choisi`);
+  console.log(`\n[${tag}] Dans une grille : Word et Markdown grisés, Excel choisi`);
   await newModel(page, 'grid');
   await hoverRow(page, TYPE_MENU, TYPE_ROW('xlsx'));
-  const gridTypes = await stateOf(page, [TYPE_ROW('pdf'), TYPE_ROW('docx'), TYPE_ROW('xlsx')]);
-  check(`${tag} : PDF et Excel sont actifs, Word est grisé (il reste dans le menu), les trois sont entiers dans le panneau et lisibles`,
-    gridTypes[0].live && gridTypes[1].greyed && gridTypes[2].live && entire(gridTypes) && readable(gridTypes), gridTypes);
+  const gridTypes = await stateOf(page, [TYPE_ROW('pdf'), TYPE_ROW('docx'), TYPE_ROW('xlsx'), TYPE_ROW('md')]);
+  check(`${tag} : PDF et Excel sont actifs, Word et Markdown sont grisés (ils restent dans le menu), les quatre sont entiers dans le panneau et lisibles`,
+    gridTypes[0].live && gridTypes[1].greyed && gridTypes[2].live && gridTypes[3].greyed && entire(gridTypes) && readable(gridTypes), gridTypes);
   await clickHoverRow(page, TYPE_MENU, TYPE_ROW('docx'));
   await sleep(300);
   check(`${tag} : un vrai clic sur Word grisé ne le choisit pas`, (await typeValue(page)) === 'pdf', { type: await typeValue(page) });
+  await clickHoverRow(page, TYPE_MENU, TYPE_ROW('md'));
+  await sleep(300);
+  check(`${tag} : un vrai clic sur Markdown grisé ne le choisit pas non plus`, (await typeValue(page)) === 'pdf', { type: await typeValue(page) });
   await hoverRow(page, EXPORT_MENU, LINES_ROW('one'));
   const gridPdf = await stateOf(page, PDF_LINES);
   check(`${tag} : type PDF dans une grille, les lots parlent de « valeurs de la table » (${W.pdfGrid.slice(1, 3).join(' | ')})`, wanted(gridPdf, W.pdfGrid) && entire(gridPdf) && readable(gridPdf), gridPdf.map(r => r.text));
@@ -287,8 +307,8 @@ async function menusShow(page, tag, want) {
   check(`${tag} : les listes cachées disent ${want.join(' | ')}`, got === want.join('|'), got);
   check(`${tag} : le bouton du type est ${type === 'pdf' ? 'éteint' : 'allumé'}`, (await typeButtonLit(page)) === (type !== 'pdf'), { lit: await typeButtonLit(page) });
   await hoverRow(page, TYPE_MENU, TYPE_ROW(type === 'pdf' ? 'docx' : 'pdf'));
-  const typeRows = await stateOf(page, [TYPE_ROW('pdf'), TYPE_ROW('docx'), TYPE_ROW('xlsx')]);
-  check(`${tag} : dans le menu du type, seule la ligne « ${type} » est active ; les trois sont entières et lisibles`,
+  const typeRows = await stateOf(page, [TYPE_ROW('pdf'), TYPE_ROW('docx'), TYPE_ROW('xlsx'), TYPE_ROW('md')]);
+  check(`${tag} : dans le menu du type, seule la ligne « ${type} » est active ; les quatre sont entières et lisibles`,
     typeRows.filter(r => r.active).map(r => r.sel).join() === TYPE_ROW(type) && typeRows.every(r => r.shown && r.inside && r.contrast >= 4.5), typeRows);
   if (type === 'pdf') {
     const qualities = await stateOf(page, ['native', 'browser-print', 'light'].map(QUALITY_ROW));
@@ -484,6 +504,29 @@ try {
   const wordAsked = await dialogState(page);
   check('« Toutes les lignes (ZIP) » cochée, Alt+P pose la confirmation du ZIP de Word, dans le panneau, sans rien télécharger', !!wordAsked && wordAsked.inside && /DOCX/.test(wordAsked.message) && shortcutZip === null, { wordAsked, file: nameOf(shortcutZip) });
   if (wordAsked) await cancelDialog(page);
+  await parkMouse(page);
+  await chooseExportLines(page, 'one');
+  await parkMouse(page);
+  await clickHoverRow(page, TYPE_MENU, TYPE_ROW('md'));
+  await sleep(300);
+  await parkMouse(page);
+  const markdownFile = await download(page, () => click(page, EXPORT_MENU));
+  const markdownText = markdownFile ? await readFile(await markdownFile.path(), 'utf8') : '';
+  check('le bouton Exporter, type Markdown, « une seule ligne » : un fichier .md est téléchargé, avec le texte du document', /\.md$/i.test(nameOf(markdownFile) || '') && markdownText === 'Bonjour, voici votre courrier.\n', { name: nameOf(markdownFile), text: markdownText });
+  check('l\'état dit « Markdown généré. » (sans image illisible)', (await status(page)) === 'Markdown généré.', await status(page));
+  await sleep(600);
+  await parkMouse(page);
+  await chooseExportLines(page, 'zip');
+  await parkMouse(page);
+  await click(page, '.tiptap p');
+  await sleep(200);
+  const markdownZip = await download(page, async () => {
+    await page.keyboard.press('Alt+p');
+    await sleep(700);
+  }, 2500);
+  const markdownAsked = await dialogState(page);
+  check('« Toutes les lignes (ZIP) » cochée, Alt+P pose la confirmation du ZIP de Markdown, dans le panneau, sans rien télécharger', !!markdownAsked && markdownAsked.inside && /Markdown/.test(markdownAsked.message) && markdownZip === null, { markdownAsked, file: nameOf(markdownZip) });
+  if (markdownAsked) await cancelDialog(page);
   await parkMouse(page);
   await chooseExportLines(page, 'one');
   await parkMouse(page);

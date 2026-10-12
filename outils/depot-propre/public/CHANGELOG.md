@@ -341,6 +341,26 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   rien ne peut se dessiner (aucune ligne sélectionnée pour « liées », rien à tracer, graphique supprimé dans
   Grist, bibliothèque injoignable), le cadre pointillé et le nom du graphique restent. Dans une case plus
   étroite que lui, le graphique rétrécit sans se déformer, comme dans la Lecture.
+- **Export Markdown** : le menu « Type d'export » propose « Markdown » (pour un document ; une grille ne l'a pas, comme pour
+  Word). « Exporter » écrit le document de la ligne en un fichier `.md` (CommonMark et GFM, ce que lisent GitHub, VS Code,
+  Obsidian et Docs de La Suite), ses variables remplacées par les valeurs de la ligne ; « Exporter les lignes (ZIP) » en
+  fait un par ligne dans une archive, nommé comme le PDF de la ligne. « Une ligne » ou « Toutes les lignes », « Un document
+  par valeur » et les lignes que le widget affiche se comportent comme pour les autres types, et le type choisi est gardé par
+  personne et par modèle comme eux. Tout ce que le Markdown sait écrire s'écrit en Markdown : titres (leur numérotation
+  « 1) » ou « a) » est écrite dans le texte, comme dans le PDF), gras, italique, barré, code en ligne et blocs de code (avec
+  leur langage), liens, listes à puces, numérotées (depuis leur premier numéro) et à cases, imbriquées, citations, filets,
+  tableaux, images, notes de bas de page (`[^1]`), encadrés (en alertes GitHub : NOTE, TIP, IMPORTANT, WARNING ou CAUTION
+  selon leur couleur) et sommaire (une liste de liens vers les titres). Ce que le Markdown ne sait pas écrire reste en HTML
+  dans le fichier plutôt que d'être perdu : souligné, exposant, indice, surlignage, couleur, taille et police du texte,
+  alignement centré ou à droite, saut de page, largeur d'une image qui n'est pas la largeur par défaut, tableau aux cases
+  fusionnées ou qui portent une liste, un code ou un autre tableau. L'en-tête et le pied de page (ceux de la première page
+  compris) sont écrits une fois, entre des commentaires HTML. Une image d'une autre adresse web garde son adresse ; une pièce
+  jointe de Grist, un graphique ou un code QR part dans le fichier (data URI), pour que le fichier se suffise. Ne sont pas
+  gardés : les marges, le format et le sens de la page, le filigrane, les images sur toutes les pages ou derrière le texte,
+  les numéros de page, les paragraphes vides, les colonnes (les deux colonnes se suivent), les styles de puces et de
+  numérotation (a, b, c), le justifié, l'interligne et les couleurs de fond des cases d'un tableau Markdown. Comme pour les
+  autres types, une fenêtre liste avant l'export les sites externes dont des images seraient téléchargées. Le moteur
+  (`js/markdown-export.js`) ne charge aucune bibliothèque et ne se charge qu'au premier export Markdown.
 - **Impression par le navigateur** : la ligne « Impression navigateur » du menu « Type d'export » (le menu Qualité
   du bouton PDF, avant son renommage), jusque-là grisée, imprime la Lecture par la fenêtre d'impression du navigateur (« Enregistrer au format PDF » ou une
   imprimante). La mise en page est celle de la Lecture : mêmes coupures de page, mêmes en-têtes, pieds et numéros
@@ -1020,6 +1040,24 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   redraws. When nothing can be drawn (no row selected for "linked", nothing to plot, chart deleted in Grist,
   library unreachable), the dotted frame and the chart's name stay. In a space narrower than the chart, it
   shrinks without distortion, as in Reading.
+- **Markdown export**: the "Export type" menu offers "Markdown" (for a document; a grid does not have it, as with Word).
+  "Export" writes the row's document as an `.md` file (CommonMark and GFM, what GitHub, VS Code, Obsidian and La Suite Docs
+  read), its variables replaced by the row's values; "Export rows (ZIP)" makes one per row in an archive, named like the row's
+  PDF. "One row" or "All rows", "One document per value" and the rows the widget displays behave as for the other types, and
+  the chosen type is kept per person and per template like them. Everything Markdown can write is written in Markdown:
+  headings (their "1)" or "a)" numbering is written in the text, as in the PDF), bold, italic, strikethrough, inline code and
+  code blocks (with their language), links, bullet, numbered (from their first number) and task lists, nested, quotes, rules,
+  tables, images, footnotes (`[^1]`), callouts (as GitHub alerts: NOTE, TIP, IMPORTANT, WARNING or CAUTION according to their
+  colour) and the table of contents (a list of links to the headings). What Markdown cannot write stays HTML in the file
+  rather than being lost: underline, superscript, subscript, highlight, text colour, size and font, centred or right
+  alignment, page break, the width of an image that is not the default width, a table with merged cells or cells holding a
+  list, a code block or another table. The header and footer (the first page's included) are written once, between HTML
+  comments. An image from another web address keeps its address; a Grist attachment, a chart or a QR code goes into the file
+  (data URI), so the file stands on its own. Not kept: margins, page size and orientation, the watermark, images on every
+  page or behind the text, page numbers, empty paragraphs, columns (the two columns follow each other), bullet and numbering
+  styles (a, b, c), justified text, line spacing and the background colours of a Markdown table's cells. As with the other
+  types, a window lists the external sites that images would be downloaded from before the export. The engine
+  (`js/markdown-export.js`) loads no library and loads only at the first Markdown export.
 - **Browser print**: the "Browser print" line of the "Export type" menu (the PDF button's Quality menu before it was renamed), greyed out until now, prints the
   Reading view through the browser's print window ("Save as PDF" or a printer). The layout is the Reading
   view's: same page breaks, same headers, footers and page numbers, same fonts, tables, images and watermark,

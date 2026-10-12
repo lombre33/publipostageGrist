@@ -202,7 +202,7 @@
         <span class="v2-hover-flyout v2-hover-flyout-v" id="v2-page-flyout" role="menu" aria-label="Page" data-i18n-aria="toolbar.page.label"></span>
       </span>
       <span class="bar-sep"></span>
-      <!-- Type d'export (ex-« Qualité PDF ») : PDF, PDF protégé, Word ou Excel, et la qualité du PDF, montrée pour les deux PDF seulement (`data-export-for`, js/main.js:syncExportMenus ; la qualité choisie est gardée et revient avec le PDF ; « Impression navigateur » reste grisée en PDF protégé). Le bouton Exporter juste après exporte dans ce type, selon l'option de lignes cochée dans son menu. Les listes cachées portent les choix (#v2-export-type, #v2-pdf-quality). -->
+      <!-- Type d'export (ex-« Qualité PDF ») : PDF, PDF protégé, Word, Excel ou Markdown, et la qualité du PDF, montrée pour les deux PDF seulement (`data-export-for`, js/main.js:syncExportMenus ; la qualité choisie est gardée et revient avec le PDF ; « Impression navigateur » reste grisée en PDF protégé). Le bouton Exporter juste après exporte dans ce type, selon l'option de lignes cochée dans son menu. Les listes cachées portent les choix (#v2-export-type, #v2-pdf-quality). -->
       <span class="v2-hover-group" id="v2-quality-group">
         <button type="button" id="v2-btn-quality" aria-label="Type d'export" data-i18n-aria="toolbar.exportType"></button>
         <select id="v2-export-type" aria-label="Type d'export" data-i18n-aria="toolbar.exportType" hidden>
@@ -210,6 +210,7 @@
           <option value="pdfProtected" data-i18n="exportType.pdfProtected">PDF protégé</option>
           <option value="docx" data-i18n="exportType.docx">Word (bêta)</option>
           <option value="xlsx" data-i18n="exportType.xlsx">Excel</option>
+          <option value="md" data-i18n="exportType.md">Markdown</option>
         </select>
         <select id="v2-pdf-quality" aria-label="Qualité d'export PDF" data-i18n-aria="toolbar.quality.aria" hidden>
           <option value="native" selected data-i18n="quality.native">Vectoriel (par défaut)</option>
@@ -222,6 +223,7 @@
           <span class="v2-hover-row" data-export-type="pdfProtected" data-i18n="exportType.pdfProtected">PDF protégé</span>
           <span class="v2-hover-row" data-export-type="docx" data-i18n="exportType.docx">Word (bêta)</span>
           <span class="v2-hover-row v2-hover-row-disabled" data-export-type="xlsx" aria-disabled="true" data-i18n="exportType.xlsx">Excel</span>
+          <span class="v2-hover-row" data-export-type="md" data-i18n="exportType.md">Markdown</span>
           <span class="v2-hover-hsep" data-export-for="pdf pdfProtected"></span>
           <span class="v2-hover-flyout-label" data-export-for="pdf pdfProtected" data-i18n="toolbar.quality.tip">Qualité PDF</span>
           <span class="v2-hover-row" data-quality="native" data-export-for="pdf pdfProtected" data-i18n="quality.native">Vectoriel (par défaut)</span>
@@ -241,9 +243,9 @@
         <!-- Menu Exporter : les options de lignes et de classeur du type choisi (`data-export-for` : les types qui les montrent ; `data-export-grey-for` : ceux pour qui la ligne est montrée mais grisée, js/main.js:syncExportMenus). Une option se coche (liste cachée #v2-export-lines) et le bouton Exporter lance l'option cochée ; aucune ligne ne porte le nom d'un format, le format est celui du menu Type d'export. -->
         <span class="v2-hover-flyout v2-hover-flyout-v" id="v2-export-pdf-flyout" role="menu" aria-label="Exporter" data-i18n-aria="toolbar.export">
           <span class="v2-hover-flyout-label" data-i18n="toolbar.export">Exporter</span>
-          <span class="v2-hover-row v2-hover-row-check-start" id="v2-export-lines-one" role="menuitemradio" aria-checked="true" tabindex="0" data-export-lines="one" data-export-for="pdf pdfProtected docx xlsx" data-i18n="exportLines.one">Une seule ligne</span>
+          <span class="v2-hover-row v2-hover-row-check-start" id="v2-export-lines-one" role="menuitemradio" aria-checked="true" tabindex="0" data-export-lines="one" data-export-for="pdf pdfProtected docx xlsx md" data-i18n="exportLines.one">Une seule ligne</span>
           <span class="v2-hover-hsep"></span>
-          <span class="v2-hover-row v2-hover-row-check-start" id="v2-export-lines-zip" role="menuitemradio" aria-checked="false" tabindex="0" data-export-lines="zip" data-export-for="pdf pdfProtected docx xlsx" data-i18n="exportLines.zip">Toutes les lignes (ZIP)</span>
+          <span class="v2-hover-row v2-hover-row-check-start" id="v2-export-lines-zip" role="menuitemradio" aria-checked="false" tabindex="0" data-export-lines="zip" data-export-for="pdf pdfProtected docx xlsx md" data-i18n="exportLines.zip">Toutes les lignes (ZIP)</span>
           <span class="v2-hover-row v2-hover-row-check-start" id="v2-export-lines-merged" role="menuitemradio" aria-checked="false" tabindex="0" data-export-lines="merged" data-export-for="pdf pdfProtected" data-export-grey-for="pdfProtected" data-i18n="exportLines.merged">Toutes les lignes en un seul PDF</span>
           <span class="v2-hover-row v2-hover-row-check-start" id="v2-export-lines-sheets" role="menuitemradio" aria-checked="false" tabindex="0" data-export-lines="sheets" data-export-for="pdf pdfProtected" data-export-grey-for="pdfProtected" data-i18n="exportLines.sheets">Assemblage avant impression</span>
           <span class="v2-hover-row v2-hover-row-check-start" id="v2-export-lines-workbook" role="menuitemradio" aria-checked="false" tabindex="0" data-export-lines="workbook" data-export-for="xlsx" hidden data-i18n="exportLines.workbook">Toutes les valeurs de la table dans un seul classeur</span>
@@ -685,7 +687,7 @@
           </div>
           <p class="settings-exportdate-status" id="settings-exportdate-status" role="status" hidden></p>
           <p class="settings-access-locked" id="settings-exportdate-locked" data-i18n="settings.exportDate.locked" hidden>Vous êtes en lecture seule : ce réglage est verrouillé.</p>
-          <p class="settings-access-hint" data-i18n="settings.exportDate.hint">La date s’écrit pour chaque ligne dont le PDF est dans le fichier téléchargé : « Exporter en PDF », « Exporter les lignes (ZIP) », « Exporter les lignes en un seul PDF » et « Assemblage avant impression ». Une ligne en échec n’est pas datée ; Word, Excel et « Impression navigateur » n’écrivent rien (le navigateur ne dit pas si la personne a imprimé). Un compte en lecture seule dans Grist ne peut rien écrire.</p>
+          <p class="settings-access-hint" data-i18n="settings.exportDate.hint">La date s’écrit pour chaque ligne dont le PDF est dans le fichier téléchargé : « Exporter en PDF », « Exporter les lignes (ZIP) », « Exporter les lignes en un seul PDF » et « Assemblage avant impression ». Une ligne en échec n’est pas datée ; Word, Excel, Markdown et « Impression navigateur » n’écrivent rien (le navigateur ne dit pas si la personne a imprimé). Un compte en lecture seule dans Grist ne peut rien écrire.</p>
         </section>
       </div>
       <div class="settings-panel" data-settings-panel="access" hidden>
@@ -740,7 +742,7 @@
 </script>
 <script src="js/reader-mode.js?v=0.144"></script>
 <script src="js/reader-guide.js?v=0.6"></script>
-<script src="js/i18n.js?v=0.165"></script>
+<script src="js/i18n.js?v=0.166"></script>
 <script src="js/shortcuts.js?v=0.15"></script>
 <script src="js/page-layout.js?v=0.15"></script>
 <script src="js/page-sections.js?v=0.1"></script>
@@ -784,13 +786,14 @@
 <script src="js/pdf-glyph-fallback.js?v=0.2"></script>
 <!-- Moteurs d'export : js/export-engines.js les charge au premier export (ExportEngines.ensure), pas à l'ouverture. Ces balises ne s'exécutent pas (le
      navigateur ne connaît pas leur type) ; leur version de cache se monte comme celle de tout script. -->
-<script src="js/export-engines.js?v=0.1"></script>
+<script src="js/export-engines.js?v=0.2"></script>
 <script type="text/x-lazy-engine" data-engine="pdf" src="js/pdf-export.js?v=1.50"></script>
 <script type="text/x-lazy-engine" data-engine="sheets" src="js/sheet-layout.js?v=0.3"></script>
 <script type="text/x-lazy-engine" data-engine="merge" src="js/pdf-merge.js?v=0.5"></script>
 <script type="text/x-lazy-engine" data-engine="docx" src="js/docx-export.js?v=0.51"></script>
 <script type="text/x-lazy-engine" data-engine="xlsx" src="js/xlsx-export.js?v=0.18"></script>
 <script type="text/x-lazy-engine" data-engine="xlsxFormat" src="js/xlsx-number-format.js?v=0.3"></script>
+<script type="text/x-lazy-engine" data-engine="md" src="js/markdown-export.js?v=0.1"></script>
 <script src="js/grid-xlsx-import.js?v=0.7"></script>
 <script src="js/mailto-export.js?v=0.14"></script>
 <script src="js/template-gallery.js?v=0.14"></script>
@@ -839,7 +842,7 @@
 <script src="js/row-template-panel.js?v=0.4"></script>
 <script src="js/template-organizer.js?v=0.4"></script>
 <script src="js/template-preferences.js?v=0.11"></script>
-<script src="js/export-choices.js?v=0.2"></script>
+<script src="js/export-choices.js?v=0.3"></script>
 <script src="js/template-organize-modal.js?v=0.13"></script>
 <script src="js/template-tree-select.js?v=0.20"></script>
 <script src="js/access-rights.js?v=0.10"></script>
@@ -858,6 +861,6 @@
 <script src="js/page-zoom.js?v=0.6"></script>
 <script src="js/field-codec.js?v=0.4"></script>
 <script src="js/field-editor.js?v=0.3"></script>
-<script src="js/main.js?v=0.146"></script>
+<script src="js/main.js?v=0.147"></script>
 </body>
 </html>

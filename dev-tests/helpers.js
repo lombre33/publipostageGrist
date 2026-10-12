@@ -550,6 +550,13 @@ window.TestHelpers = (function () {
     };
   }
 
+  // --- Export Markdown : le texte du .md GÉNÉRÉ, par le même chemin que le bouton Exporter (variables remplacées, blocs conditionnels tranchés : ExportCommon.resolveRecord) ---
+  // `record` et `tableId` valent {} et null quand le document n'a pas de variable. Rend le texte du fichier, son type MIME et son nom.
+  async function exportMarkdown(html, headerFooterData, record, tableId, filenameTemplate) {
+    const { blob, filename } = await MarkdownExport.getMarkdownBlobForRecord(html, tableId || null, record || {}, filenameTemplate || '', headerFooterData || null);
+    return { text: await blob.text(), type: blob.type, filename };
+  }
+
   // 1pt = 12700 EMU (unité native des positions/tailles de dessin OOXML, cf. EMU_PER_PT js/docx-export.js).
   const DOCX_EMU_PER_PT = 12700;
   // Décrit chaque <w:drawing> du XML donné dans l'ORDRE du document : `kind` 'inline' (image dans le
@@ -824,7 +831,7 @@ window.TestHelpers = (function () {
     dragFromTo, exportPdfContent, flattenPdfContent, findTextBlocks, findImages, blockPlainText,
     ensurePdfJsLoaded, extractPdfGroundTruth, extractPdfLines, makeImage,
     exportDocxParts, docxDrawings, docxParagraphs, docxTables, docxSectionProps,
-    docxFields, docxNumbering, docxFootnotes,
+    docxFields, docxNumbering, docxFootnotes, exportMarkdown,
     renderReaderMode, setA4Preview, findByText, compareEditorReaderPosition, compareEditorReaderImage,
   };
 })();

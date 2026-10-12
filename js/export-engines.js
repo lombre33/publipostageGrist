@@ -1,4 +1,4 @@
-// Les moteurs d'export (PDF, fusion des PDF, feuilles d'assemblage, Word, Excel et le format des nombres d'Excel : ~380 Ko de scripts) ne se chargent
+// Les moteurs d'export (PDF, fusion des PDF, feuilles d'assemblage, Word, Excel, le format des nombres d'Excel et Markdown : ~430 Ko de scripts) ne se chargent
 // qu'au premier besoin, pas à l'ouverture. index.html les déclare en `<script type="text/x-lazy-engine" data-engine="…" src="…">`, une balise par moteur :
 // le navigateur ne lit pas ce type, mais les adresses et leur version de cache (`?v=`) restent là où tout l'outillage les cherche. `ensure('pdf')` charge
 // le script par le chargeur des exports (ExportCommon.loadScriptOnce : un fichier du dépôt, ou un refus). Un moteur ne se charge qu'une fois, même pour deux
