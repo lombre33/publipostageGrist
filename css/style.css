@@ -249,6 +249,9 @@ input, select, textarea, button { font-family: var(--font-ui); }
 
 .page-break-marker { display:block; margin: 18px 0; padding: 6px 10px; border:1px dashed #d97706; color:#d97706; font-size:.85em; text-align:center; user-select:none; }
 #reader-container .page-break-marker { color: transparent; border-color: transparent; }
+/* Le repère de départ des sens de page d'un macro-modèle (js/page-sections.js) dit le sens de la première page et n'a rien à montrer : ni dans la Lecture sans
+   aperçu de la page, ni dans la source. */
+.page-section-start { display: none; }
 
 /* Sommaire et numérotation des titres. La configuration est invisible (persistée dans le contenu). Le marqueur de sommaire (`.toc-marker`) affiche
    en direct dans l'éditeur un aperçu de la vraie liste des titres, dans un encadré en pointillés (comme `.page-break-marker`). En Lecture et à

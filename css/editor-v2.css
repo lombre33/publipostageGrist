@@ -776,4 +776,5 @@
 #reader-container.a4-preview .reader-content,
 #reader-container.a4-preview .v2-page-edge-spacer,
 #reader-container.a4-preview .v2-reader-backdrop,
+#reader-container.a4-preview .v2-reader-gutter,
 #reader-container.a4-preview .v2-pagination-overlay { zoom: var(--pp-fit-zoom, 1); }

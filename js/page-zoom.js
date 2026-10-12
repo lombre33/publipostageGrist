@@ -110,8 +110,11 @@ const PageZoom = (function () {
     const available = container.clientWidth - padding;
     if (!(available > 0)) return null;
     // Largeur de la feuille = celle de .v2-page-sheet / .reader-content en Aperçu A4 (--pp-page-width, css/editor-v2.css) : 793.71px en A4 portrait,
-    // 1122.52px en A4 paysage, 559.37px en A5 portrait... Lue à chaque calcul, elle change avec le sens et le format du modèle.
-    const sheetWidth = PageLayout.getSheetWidthPx();
+    // 1122.52px en A4 paysage, 559.37px en A5 portrait... Lue à chaque calcul, elle change avec le sens et le format du modèle. Un macro-modèle aux sens
+    // mêlés (js/page-sections.js) a des feuilles de plusieurs largeurs : la Lecture dit la plus large sur son conteneur (js/reader-mode.js:syncWidestSheet),
+    // toutes doivent tenir.
+    const widest = parseFloat(container.getAttribute('data-pp-widest-sheet'));
+    const sheetWidth = widest > 0 ? widest : PageLayout.getSheetWidthPx();
     if (mode === 'fit') {
       // La barre de défilement verticale est comptée comme toujours présente : si la page agrandie dépasse en hauteur, elle apparaît, et la largeur utile
       // ne doit pas changer pour autant - sinon la page rétrécirait, la barre disparaîtrait, la page regrandirait, sans fin. Arrondi vers le bas : un

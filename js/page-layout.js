@@ -298,6 +298,16 @@ const PageLayout = (function () {
     announcePageLayoutChanged();
   }
 
+  function withOrientation(orientation, fn) {
+    // Le temps d'un calcul synchrone, la page a ce sens (mêmes marges, même format, même filigrane) : tout ce qui lit PageLayout - taille de la page, largeur
+    // de la feuille, marges en pixels - le voit, sans écrire dans le brouillon, sans toucher à l'aperçu ni annoncer de changement. C'est ce que fait la Lecture
+    // d'un macro-modèle aux sens mêlés (js/reader-mode.js) pour mesurer et mettre en page chaque section dans le sien. Rend ce que rend `fn`, et rend toujours
+    // le brouillon tel qu'il était, même si `fn` lève une exception.
+    const saved = marginsDraft;
+    marginsDraft = Object.assign({}, saved, { orientation: normalizeOrientation(orientation) });
+    try { return fn(); } finally { marginsDraft = saved; }
+  }
+
   function setFormat(format) {
     // Change le format en gardant le sens et les 4 marges en millimètres (re-bornées pour la nouvelle page, comme au changement de sens : une marge de
     // 100 mm à gauche ne tient plus dans une page A6 de 105 mm, et ne revient pas au retour en A4). Même contrat que setOrientation : ne rafraîchit
@@ -443,7 +453,7 @@ const PageLayout = (function () {
     A4_WIDTH_MM, A4_HEIGHT_MM, MM_TO_PT, MM_TO_TWIP, MM_TO_PX, COLUMN_GAP_PX, MIN_CONTENT_MM, DEFAULT_MARGIN_PT, DEFAULT_MARGIN_MM, PORTRAIT, LANDSCAPE, DEFAULT_FORMAT,
     HEADER_FOOTER_ZONE_PX, HEADER_FOOTER_GAP_PT, HEADER_FOOTER_GAP_PX, HEADER_FOOTER_BAND_PX, hasZoneContent,
     getMarginsMm, setMarginsMm, getContentWidthMm, getContentHeightMm, getColumnGapMm, getMarginsPt, getMarginsPx, getMarginsTwip, applyToPreviewCss,
-    getOrientation, isLandscape, setOrientation, getPageSizeMm, getPageSizePt, getPageSizePx, getPageSizeTwip, getSheetWidthPx, pageSizePtFor, pageSizeTwipFor,
+    getOrientation, isLandscape, setOrientation, withOrientation, getPageSizeMm, getPageSizePt, getPageSizePx, getPageSizeTwip, getSheetWidthPx, pageSizePtFor, pageSizeTwipFor,
     getFormats, getFormat, setFormat, normalizeFormat, pageSizeMmFor, pdfPageNameFor,
     CUSTOM_MIN_MM, CUSTOM_MAX_MM, isCustomFormat, cmText, formatLabel, getFormatLabel, setPageSize, fitsHeaderFooter,
     WATERMARK_MAX_CHARS, WATERMARK_DEFAULT, normalizeWatermark, getWatermark, setWatermark,

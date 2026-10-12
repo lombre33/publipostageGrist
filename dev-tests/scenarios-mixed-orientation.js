@@ -7,6 +7,10 @@
 // macro-modèle au sens imposé), rien ne change. Ce fichier écrit les repères À LA MAIN, à dessein : il épingle le contrat du HTML assemblé, du côté de la sortie ; l'assemblage lui-même (les
 // repères que `MacroTemplates` pose) a ses scénarios plus bas dans le groupe, une fois l'interrupteur en place.
 //
+// Lot 3 (Lecture) : `js/reader-mode.js` range le document résolu en une feuille de lecture par section (`splitIntoSections`, `paginateSections`) : un `.reader-content` à part pour chaque suite de
+// modèles de même sens, de la largeur de SA page et paginé dans SON sens (`PageLayout.withOrientation`), les pages numérotées de bout en bout, une gouttière entre deux sections, les titres et les
+// notes qui continuent, le facteur d'ajustement pris sur la feuille la plus large (`js/page-zoom.js`). Sans repère, la Lecture garde son unique `.reader-content` : rien ne change.
+//
 // Lot 2 (Word) : `js/docx-export.js` écrit une section Word par suite de modèles de même sens (`sectionPartsOf`, `buildDocxDocument`) : taille et sens de la page de chaque section, le saut de
 // section remplace le saut de page du modèle qui l'ouvre, tableaux, colonnes et en-têtes bâtis dans la largeur de SA page, « première page différente » seulement sur la première page du
 // document, le sommaire et la numérotation des titres sur tout le document. Le Word n'a pas de pagination à lui (Word pagine à l'ouverture) : l'identité se lit dans son XML.
@@ -119,6 +123,48 @@ window.EditorTestSuites.mixedOrientation = (function () {
     OrientationToggle.sync();
     document.dispatchEvent(new CustomEvent('pp:pageLayoutChanged'));
     await h.sleep(150);
+  }
+
+  // --- La Lecture, mesurée dans le DOM ---
+  const SHEET_PX = { P: 793.71, L: 1122.52 };
+  const SHEET_HEIGHT_PX = { P: 1122.52, L: 793.71 };
+  const readerBox = () => document.getElementById('reader-container');
+  const squash = el => el.textContent.replace(/\s+/g, ' ').trim();
+  // Les textes d'une famille de bandes (en-têtes, pieds, repères « Page N »), de haut en bas, sans les bandes vides.
+  const bandTexts = (box, selector) => Array.from(box.querySelectorAll(selector)).filter(el => squash(el)).sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top).map(squash);
+  const NUMBERED_HF = {
+    enabled: true, differentFirstPage: true,
+    header: { default: '<p>EN-TETE <span class="page-number-badge" data-format="n">#</span></p>', first: '<p>PREMIERE</p>' },
+    footer: { default: '<p>PIED <span class="page-number-badge" data-format="n-slash-total">#</span></p>', first: '<p>PREMIER-PIED <span class="page-number-badge" data-format="n-slash-total">#</span></p>' },
+  };
+  // Rend `html` dans la Lecture (aperçu A4 allumé) et mesure ses feuilles de lecture : pour chacune sa largeur et sa hauteur en pixels de mise en page, son sens (d'après sa largeur), son rang et
+  // le nombre de pages qu'elle compte (une couture par frontière de page, dans la surcouche qui lui correspond).
+  async function readSheets(h, html, hf) {
+    h.setA4Preview(true);
+    await h.renderReaderMode(html, hf);
+    await h.sleep(250);
+    const box = readerBox();
+    const overlays = Array.from(box.querySelectorAll(':scope > .v2-pagination-overlay'));
+    const sheets = Array.from(box.querySelectorAll(':scope > .reader-content')).map((el, index) => {
+      const zoom = EditorCore.layoutZoom(el);
+      const rect = el.getBoundingClientRect();
+      return {
+        el, rank: el.getAttribute('data-pp-sheet'), width: rect.width / zoom, height: rect.height / zoom, top: rect.top, bottom: rect.bottom,
+        sense: rect.width / zoom > 1000 ? 'L' : 'P', pages: overlays[index] ? overlays[index].querySelectorAll('.v2-page-band').length + 1 : 1,
+      };
+    });
+    return { box, sheets, senses: sheets.map(sheet => sheet.sense).join(''), pages: sheets.map(sheet => sheet.pages).join(',') };
+  }
+  // Une feuille mesurée contre la page de son sens (A4).
+  function sheetProblems(sheets, senses) {
+    const problems = [];
+    sheets.forEach((sheet, i) => {
+      const want = senses[i];
+      if (!want) return;
+      if (!near(sheet.width, SHEET_PX[want], 1.5)) problems.push('feuille ' + (i + 1) + ' : largeur ' + sheet.width.toFixed(1) + ' px au lieu de ' + SHEET_PX[want]);
+      if (sheet.pages === 1 && !near(sheet.height, SHEET_HEIGHT_PX[want], 2)) problems.push('feuille ' + (i + 1) + ' : hauteur ' + sheet.height.toFixed(1) + ' px au lieu de ' + SHEET_HEIGHT_PX[want]);
+    });
+    return problems;
   }
 
   return [
@@ -648,6 +694,209 @@ window.EditorTestSuites.mixedOrientation = (function () {
         if (afterPortrait.length !== 1 || wordSizeProblems(afterPortrait, 'P').length) problems.push('export portrait ordinaire après un export mêlé : ' + JSON.stringify(afterPortrait.map(section => [section.width, section.height, section.orient])));
         if (afterLandscape.length !== 1 || wordSizeProblems(afterLandscape, 'L').length) problems.push('export paysage ordinaire après un export mêlé : ' + JSON.stringify(afterLandscape.map(section => [section.width, section.height, section.orient])));
         return verdict(problems, summary);
+      },
+    },
+
+    // ---------- La Lecture ----------
+    {
+      id: 'mixed_reader_each_section_is_a_stack_of_sheets_of_its_own_sense',
+      description: 'Lecture : portrait, paysage, portrait, paysage dans un macro-modèle aux sens mêlés : quatre feuilles de lecture, chacune de la largeur de son sens (A4 : 793,71 et 1 122,52 px) et de la hauteur de sa page, le texte de chaque modèle sur la sienne, sans saut de page de modèle en haut d\'une section, séparées par une gouttière « Page N » qui continue ; la page du document n\'a pas bougé',
+      async run(h) {
+        const problems = [];
+        await plainPage(h);
+        const rootWidth = document.documentElement.style.getPropertyValue('--pp-page-width');
+        const html = assemble([slot('portrait', lines(3, 'Alpha')), slot('landscape', lines(3, 'Bravo')), slot('portrait', lines(3, 'Charlie')), slot('landscape', lines(3, 'Delta'))]);
+        const { box, sheets, senses, pages } = await readSheets(h, html);
+        if (senses !== 'PLPL') problems.push('sens des feuilles : ' + senses + ' au lieu de PLPL');
+        problems.push(...sheetProblems(sheets, 'PLPL'));
+        if (pages !== '1,1,1,1') problems.push('pages par feuille : ' + pages + ' au lieu de 1,1,1,1');
+        const tags = ['Alpha', 'Bravo', 'Charlie', 'Delta'];
+        sheets.forEach((sheet, i) => {
+          if (sheet.rank !== String(i)) problems.push('feuille ' + (i + 1) + ' : rang ' + sheet.rank);
+          const text = sheet.el.textContent;
+          tags.forEach((tag, t) => { if (text.includes(tag) !== (t === i)) problems.push('feuille ' + (i + 1) + ' : le texte « ' + tag + ' » ' + (t === i ? 'manque' : 'est de trop')); });
+          if (sheet.el.firstElementChild && sheet.el.firstElementChild.classList.contains('page-break-marker')) problems.push('feuille ' + (i + 1) + ' : elle commence par le saut de page du modèle');
+          if (i && sheet.top < sheets[i - 1].bottom - 0.5) problems.push('feuille ' + (i + 1) + ' : elle recouvre la précédente');
+        });
+        if (box.querySelectorAll(':scope > .v2-reader-gutter').length !== 3) problems.push('gouttières entre les sections : ' + box.querySelectorAll(':scope > .v2-reader-gutter').length + ' au lieu de 3');
+        const labels = bandTexts(box, '.v2-page-break-label');
+        if (labels.join('|') !== 'Page 2|Page 3|Page 4') problems.push('repères de page : ' + labels.join('|') + ' au lieu de Page 2|Page 3|Page 4');
+        if (box.querySelector('.page-section-start')) problems.push('le repère de départ reste dans la Lecture');
+        // Le sens passé à chaque section n'a servi que le temps de sa mise en page : la page du document est restée la sienne.
+        if (PageLayout.getMarginsMm().orientation !== 'portrait') problems.push('la page du document est restée en ' + PageLayout.getMarginsMm().orientation);
+        if (document.documentElement.style.getPropertyValue('--pp-page-width') !== rootWidth) problems.push('--pp-page-width de la racine : ' + document.documentElement.style.getPropertyValue('--pp-page-width') + ' au lieu de ' + rootWidth);
+        return verdict(problems, { sens: senses, pages, reperes: labels });
+      },
+    },
+    {
+      id: 'mixed_reader_pages_are_numbered_from_end_to_end_in_headers_and_footers',
+      description: 'Lecture : portrait (1 page), paysage (plusieurs pages), portrait, avec en-tête et pied : les numéros de page et le total continuent d\'une section à l\'autre (« n/total »), la première page différente reste celle du DOCUMENT (la première page de la deuxième section a l\'en-tête ordinaire), le pied de la dernière page de chaque section est dans sa feuille',
+      async run(h) {
+        const problems = [];
+        await plainPage(h);
+        const html = assemble([slot('portrait', lines(3, 'Alpha')), slot('landscape', lines(80, 'Bravo')), slot('portrait', lines(3, 'Charlie'))]);
+        const { box, sheets, senses, pages } = await readSheets(h, html, NUMBERED_HF);
+        if (senses !== 'PLP') problems.push('sens des feuilles : ' + senses + ' au lieu de PLP');
+        const counts = sheets.map(sheet => sheet.pages);
+        const total = counts.reduce((sum, n) => sum + n, 0);
+        if (counts.length !== 3 || counts[0] !== 1 || counts[1] < 2 || counts[2] !== 1) problems.push('pages par feuille : ' + pages + ' (1, 2 ou plus, 1 attendues)');
+        const headers = bandTexts(box, '.v2-page-edge-top, .v2-page-band-header');
+        const footers = bandTexts(box, '.v2-page-edge-bottom, .v2-page-band-footer');
+        const wantHeaders = ['PREMIERE'].concat(Array.from({ length: total - 1 }, (_, i) => 'EN-TETE ' + (i + 2)));
+        const wantFooters = ['PREMIER-PIED 1/' + total].concat(Array.from({ length: total - 1 }, (_, i) => 'PIED ' + (i + 2) + '/' + total));
+        if (headers.join('|') !== wantHeaders.join('|')) problems.push('en-têtes : ' + headers.join('|') + ' au lieu de ' + wantHeaders.join('|'));
+        if (footers.join('|') !== wantFooters.join('|')) problems.push('pieds : ' + footers.join('|') + ' au lieu de ' + wantFooters.join('|'));
+        return verdict(problems, { pages, total, entetes: headers, pieds: footers });
+      },
+    },
+    {
+      id: 'mixed_reader_a_section_is_laid_out_like_the_same_template_alone_in_its_sense',
+      description: 'Lecture : un modèle paysage de plusieurs pages entre deux portraits est coupé comme le même modèle dans un macro-modèle imposé en paysage : même nombre de pages, même hauteur de feuille (la hauteur utile d\'une page paysage, pas portrait)',
+      async run(h) {
+        const problems = [];
+        await plainPage(h);
+        const long = lines(80, 'Bravo');
+        const mixed = await readSheets(h, assemble([slot('portrait', lines(3, 'Alpha')), slot('landscape', long), slot('portrait', lines(3, 'Charlie'))]));
+        PageLayout.setMarginsMm(Object.assign({}, PageLayout.getMarginsMm(), { orientation: 'landscape' }));
+        const alone = await readSheets(h, long);
+        await plainPage(h);
+        const portraitAlone = await readSheets(h, long);
+        if (alone.sheets.length !== 1 || alone.senses !== 'L') problems.push('le modèle seul en paysage : ' + alone.senses + ' (' + alone.sheets.length + ' feuille(s))');
+        else if (mixed.sheets.length !== 3) problems.push('feuilles du macro-modèle : ' + mixed.sheets.length + ' au lieu de 3');
+        else {
+          const section = mixed.sheets[1];
+          if (section.pages !== alone.sheets[0].pages) problems.push('pages : ' + section.pages + ' dans le macro-modèle contre ' + alone.sheets[0].pages + ' pour le modèle seul en paysage');
+          if (!near(section.height, alone.sheets[0].height, 2)) problems.push('hauteur : ' + section.height.toFixed(1) + ' px contre ' + alone.sheets[0].height.toFixed(1));
+          if (!(section.pages > portraitAlone.sheets[0].pages)) problems.push('une page paysage (' + section.pages + ' pages) devrait en demander plus qu\'une page portrait (' + portraitAlone.sheets[0].pages + ' pages)');
+        }
+        return verdict(problems, { macro: mixed.pages, seulEnPaysage: alone.pages, seulEnPortrait: portraitAlone.pages });
+      },
+    },
+    {
+      id: 'mixed_reader_the_zoom_fits_the_widest_sheet',
+      description: 'Lecture : dans un panneau étroit (700 px), le facteur d\'ajustement est pris sur la feuille la plus large du document (le paysage, 1 122,52 px) : aucune feuille ne déborde du panneau ; un document sans section paysage retrouve le facteur du portrait',
+      async run(h) {
+        const problems = [];
+        await plainPage(h);
+        const box = readerBox();
+        const saved = { width: box.style.width, flex: box.style.flex, overflowY: box.style.overflowY };
+        box.style.width = '700px'; box.style.flex = 'none'; box.style.overflowY = 'scroll';
+        const summary = {};
+        try {
+          const cs = getComputedStyle(box);
+          const available = () => box.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
+          const factor = () => parseFloat(box.style.getPropertyValue('--pp-fit-zoom'));
+          const mixed = await readSheets(h, assemble([slot('portrait', lines(3, 'Alpha')), slot('landscape', lines(3, 'Bravo'))]));
+          const wantMixed = Math.max(0.5, Math.min(1, available() / SHEET_PX.L));
+          summary.mele = { facteur: factor(), attendu: wantMixed, plusLarge: box.getAttribute('data-pp-widest-sheet') };
+          if (mixed.senses !== 'PL') problems.push('sens des feuilles : ' + mixed.senses);
+          if (!near(factor(), wantMixed, 0.004)) problems.push('facteur aux sens mêlés : ' + factor() + ' au lieu de ' + wantMixed.toFixed(3) + ' (la feuille paysage tient dans ' + available() + ' px)');
+          const outside = mixed.sheets.filter(sheet => sheet.el.getBoundingClientRect().right > box.getBoundingClientRect().right + 1);
+          if (outside.length || box.scrollWidth > box.clientWidth + 1) problems.push('une feuille déborde du panneau (défilement horizontal de ' + (box.scrollWidth - box.clientWidth) + ' px)');
+          const portrait = await readSheets(h, lines(3, 'Alpha'));
+          const wantPortrait = Math.max(0.5, Math.min(1, available() / SHEET_PX.P));
+          summary.portrait = { facteur: factor(), attendu: wantPortrait, plusLarge: box.getAttribute('data-pp-widest-sheet') };
+          if (portrait.sheets.length !== 1) problems.push('document ordinaire : ' + portrait.sheets.length + ' feuilles');
+          if (!near(factor(), wantPortrait, 0.004)) problems.push('facteur d\'un document ordinaire après un document mêlé : ' + factor() + ' au lieu de ' + wantPortrait.toFixed(3));
+          if (box.hasAttribute('data-pp-widest-sheet')) problems.push('la feuille la plus large d\'un document mêlé reste posée sur un document ordinaire');
+        } finally {
+          box.style.width = saved.width; box.style.flex = saved.flex; box.style.overflowY = saved.overflowY;
+          box.removeAttribute('data-pp-widest-sheet');
+          box.style.removeProperty('--pp-fit-zoom');
+        }
+        return verdict(problems, summary);
+      },
+    },
+    {
+      id: 'mixed_reader_a_document_without_a_turning_section_keeps_its_single_sheet',
+      description: 'Lecture : un document ordinaire, un macro-modèle dont tous les modèles ont le sens des marges (repères de sens présents), et un macro-modèle imposé en paysage gardent leur unique feuille de lecture, sans rang, sans largeur en ligne, sans gouttière, sans repère de départ : exactement la Lecture d\'avant',
+      async run(h) {
+        const problems = [];
+        await plainPage(h);
+        const check = (label, read, senses, pages) => {
+          if (read.sheets.length !== 1) { problems.push(label + ' : ' + read.sheets.length + ' feuilles au lieu d\'une'); return; }
+          const sheet = read.sheets[0];
+          if (sheet.rank !== null) problems.push(label + ' : la feuille porte un rang (' + sheet.rank + ')');
+          if (sheet.el.style.getPropertyValue('--pp-page-width')) problems.push(label + ' : la feuille porte une largeur en ligne');
+          if (read.box.querySelector('.v2-reader-gutter')) problems.push(label + ' : une gouttière entre sections');
+          if (read.box.querySelector('.page-section-start')) problems.push(label + ' : le repère de départ reste');
+          if (read.box.hasAttribute('data-pp-widest-sheet')) problems.push(label + ' : feuille la plus large posée');
+          if (read.senses !== senses) problems.push(label + ' : sens ' + read.senses + ' au lieu de ' + senses);
+          if (read.pages !== pages) problems.push(label + ' : pages ' + read.pages + ' au lieu de ' + pages);
+        };
+        check('document ordinaire', await readSheets(h, lines(3, 'Alpha')), 'P', '1');
+        const allPortrait = await readSheets(h, assemble([slot('portrait', lines(3, 'Alpha')), slot('portrait', lines(3, 'Bravo'))]));
+        check('macro-modèle tout portrait', allPortrait, 'P', '2');
+        if (allPortrait.box.querySelectorAll('.page-break-marker[data-macro-slot]').length !== 1) problems.push('macro-modèle tout portrait : le saut de page du deuxième modèle manque');
+        PageLayout.setMarginsMm(Object.assign({}, PageLayout.getMarginsMm(), { orientation: 'landscape' }));
+        check('macro-modèle tout paysage', await readSheets(h, assemble([slot('landscape', lines(3, 'Alpha')), slot('landscape', lines(3, 'Bravo'))])), 'L', '2');
+        await plainPage(h);
+        return verdict(problems, {});
+      },
+    },
+    {
+      id: 'mixed_reader_titles_and_notes_keep_counting_across_sections',
+      description: 'Lecture : la numérotation des titres et des notes de bas de page continue d\'une section à l\'autre (un compteur CSS ne passe que d\'un frère à l\'autre, et les titres sont numérotés par `counter-reset`/`counter-increment` sur `.reader-content`) : chaque section repart des valeurs où la précédente s\'est arrêtée, la numérotation choisie reste celle de toutes',
+      async run(h) {
+        const problems = [];
+        await plainPage(h);
+        const config = '<div class="heading-numbering-config" data-style="numeric"></div>';
+        const note = '<p>Texte<sup class="footnote-ref-marker"></sup> et<sup class="footnote-ref-marker"></sup></p>';
+        const html = assemble([
+          slot('portrait', config + '<h1>Un</h1><h2>Un-a</h2><h2>Un-b</h2>' + note),
+          slot('landscape', '<h2>Deux-a</h2><h3>Deux-a-i</h3>' + note),
+          slot('portrait', '<h1>Trois</h1>'),
+        ]);
+        const { sheets } = await readSheets(h, html);
+        if (sheets.length !== 3) problems.push('feuilles : ' + sheets.length + ' au lieu de 3');
+        else {
+          const resets = sheets.map(sheet => sheet.el.style.counterReset);
+          if (resets[0]) problems.push('la première section pose ses compteurs en ligne : « ' + resets[0] + ' »');
+          if (resets[1] !== 'h1c 1 h2c 2 h3c 0 h4c 0 h5c 0 h6c 0 footnote-ref 2') problems.push('deuxième section : « ' + resets[1] + ' » au lieu de « h1c 1 h2c 2 h3c 0 h4c 0 h5c 0 h6c 0 footnote-ref 2 »');
+          if (resets[2] !== 'h1c 1 h2c 3 h3c 1 h4c 0 h5c 0 h6c 0 footnote-ref 4') problems.push('troisième section : « ' + resets[2] + ' » au lieu de « h1c 1 h2c 3 h3c 1 h4c 0 h5c 0 h6c 0 footnote-ref 4 »');
+          sheets.forEach((sheet, i) => { if (sheet.el.dataset.headingStyle !== 'numeric') problems.push('feuille ' + (i + 1) + ' : numérotation « ' + sheet.el.dataset.headingStyle + ' » au lieu de numeric'); });
+          const computed = sheets.map(sheet => getComputedStyle(sheet.el).counterReset);
+          if (!/h1c 1/.test(computed[1])) problems.push('le compteur posé en ligne n\'est pas celui de la feuille : « ' + computed[1] + ' »');
+        }
+        return verdict(problems, {});
+      },
+    },
+    {
+      id: 'mixed_reader_watermark_is_painted_at_the_size_of_each_sheet',
+      description: 'Lecture : le filigrane est peint sur chaque page à la taille de la page de sa section (portrait, paysage, portrait : 793,71 x 1 122,52, puis 1 122,52 x 793,71, puis la première)',
+      async run(h) {
+        const problems = [];
+        await plainPage(h);
+        PageLayout.setMarginsMm(Object.assign({}, PageLayout.getMarginsMm(), { watermark: { text: 'CONFIDENTIEL' } }));
+        const { box, sheets, senses } = await readSheets(h, assemble([slot('portrait', lines(3, 'Alpha')), slot('landscape', lines(3, 'Bravo')), slot('portrait', lines(3, 'Charlie'))]));
+        const boxes = Array.from(box.querySelectorAll('.v2-page-layer-page')).sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
+        const sizes = boxes.map(el => (parseFloat(el.style.width) > 1000 ? 'L' : 'P')).join('');
+        if (senses !== 'PLP') problems.push('sens des feuilles : ' + senses);
+        if (sizes !== 'PLP') problems.push('pages du filigrane : ' + sizes + ' au lieu de PLP');
+        boxes.forEach((el, i) => {
+          const sense = 'PLP'[i];
+          if (!sense) return;
+          if (!near(parseFloat(el.style.width), SHEET_PX[sense], 1.5) || !near(parseFloat(el.style.height), SHEET_HEIGHT_PX[sense], 2)) problems.push('page ' + (i + 1) + ' du filigrane : ' + el.style.width + ' x ' + el.style.height + ' au lieu de ' + SHEET_PX[sense] + ' x ' + SHEET_HEIGHT_PX[sense]);
+          if (!el.querySelector('.v2-page-watermark')) problems.push('page ' + (i + 1) + ' : pas de filigrane');
+        });
+        await plainPage(h);
+        return verdict(problems, { tailles: sizes, feuilles: sheets.length });
+      },
+    },
+    {
+      id: 'mixed_reader_an_empty_first_template_keeps_its_page_in_every_output',
+      description: 'Lecture et PDF : un premier modèle vide (portrait) devant un modèle paysage puis un portrait : la première page existe (blanche), comme pour un macro-modèle ordinaire (le repère de départ n\'est pas un bloc : la ligne vide du premier modèle reste)',
+      async run(h) {
+        const problems = [];
+        await plainPage(h);
+        const html = assemble([slot('portrait', '<p></p>'), slot('landscape', lines(3, 'Bravo')), slot('portrait', lines(3, 'Charlie'))]);
+        const { sheets, senses } = await readSheets(h, html);
+        if (senses !== 'PLP') problems.push('Lecture : sens des feuilles ' + senses + ' au lieu de PLP');
+        else if (!sheets[0].el.querySelector('p')) problems.push('Lecture : le premier modèle vide a perdu sa ligne');
+        const { pages, sizes } = await pdfPages(h, html, NO_HF);
+        if (sizes !== 'PLP') problems.push('PDF : sens des pages ' + sizes + ' au lieu de PLP');
+        else if (bodyWords(pages[0]).length) problems.push('PDF : la première page, vide, porte du texte : ' + bodyWords(pages[0]).join(' '));
+        return verdict(problems, { lecture: senses, pdf: sizes });
       },
     },
   ];

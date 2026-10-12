@@ -212,9 +212,9 @@ const ReaderMode = (function () {
     return !el.textContent.replace(/[\s\u00a0\u200b]/g, '') && !el.querySelector(VISIBLE_CONTENT);
   }
   function isDocumentFurniture(node) {
-    // Ce qui ne compte pas comme bloc en fin de document : espaces entre deux balises, commentaires, <style> et réglage de la numérotation des
-    // titres.
-    if (node.nodeType === Node.ELEMENT_NODE) return node.tagName === 'STYLE' || node.classList.contains('heading-numbering-config');
+    // Ce qui ne compte pas comme bloc en fin de document : espaces entre deux balises, commentaires, <style>, réglage de la numérotation des
+    // titres et repère de départ des sens de page d'un macro-modèle (js/page-sections.js : il dit le sens de la première page, il n'a rien à montrer).
+    if (node.nodeType === Node.ELEMENT_NODE) return node.tagName === 'STYLE' || node.classList.contains('heading-numbering-config') || PageSections.isStart(node);
     return node.nodeType === Node.COMMENT_NODE || (node.nodeType === Node.TEXT_NODE && !node.nodeValue.trim());
   }
   function isFirstPageLayerImage(el) {
@@ -372,6 +372,13 @@ const ReaderMode = (function () {
     const footerFirst = differentFirstPage ? await resolveHeaderFooterZone(headerFooterData.footer && headerFooterData.footer.first, tableId, record, acceptedOptions) : null;
     return { differentFirstPage, headerDefault, headerFirst, footerDefault, footerFirst };
   }
+  // Le sélecteur de la feuille de lecture dont `wrapper` est le contenu : `#reader-container .reader-content`, et pour une section d'un macro-modèle aux sens
+  // mêlés (plusieurs `.reader-content` frères, cf. splitIntoSections) celle de rang `data-pp-sheet`, que les règles de marge et de rognage posées par la
+  // pagination ne doivent pas étendre aux autres sections.
+  function sheetSelector(wrapper) {
+    const rank = wrapper.getAttribute('data-pp-sheet');
+    return '#reader-container .reader-content' + (rank === null ? '' : '[data-pp-sheet="' + rank + '"]');
+  }
   function zoneForPage(zones, kind, n) {
     // La variante d'en-tête ou de pied de la page `n` (`kind` : 'header' ou 'footer') : celle de la première page quand elle a la sienne.
     return (n === 1 && zones.differentFirstPage) ? zones[kind + 'First'] : zones[kind + 'Default'];
@@ -392,32 +399,38 @@ const ReaderMode = (function () {
     el.innerHTML = zoneHtml ? PageLayout.resolvePageNumberBadges(zoneHtml, page, totalPages) : '';
     return el;
   }
-  function addEdgeSpacers(container, wrapper, zones, geometry, totalPages) {
+  function addEdgeSpacers(container, wrapper, zones, geometry, pageNumbers) {
     // Les bandes du PDF, sur la première et la dernière page : un espaceur par bande réservée, vide quand la variante de cette page n'a rien (page 1
     // sans en-tête alors que les autres en ont un). Collés à la feuille, dont ils prolongent la page : le haut de la page est le haut de l'espaceur,
     // le contenu de l'en-tête à la moitié de la marge du haut comme dans le PDF ; le pied recouvre la marge du bas de la feuille et commence juste
-    // sous le texte, là où le PDF le peint.
+    // sous le texte, là où le PDF le peint. `pageNumbers` : le rang de la première et de la dernière page de cette feuille de lecture, et le total des
+    // pages du document (`{ first, last, total }` : 1 et le total pour un document ordinaire, ceux de la section dans un macro-modèle aux sens mêlés).
+    // Le pied suit son `wrapper` (il n'est plus forcément le dernier enfant du conteneur), et prend la largeur de feuille de sa section.
     const { topBandPx, bottomBandPx, mPx } = geometry;
+    const sectionWidth = wrapper.style.getPropertyValue('--pp-page-width');
     let edgeTopEl = null; let edgeBottomEl = null;
     if (topBandPx) {
-      edgeTopEl = edgeSpacer('top', zoneForPage(zones, 'header', 1), 1, totalPages);
+      edgeTopEl = edgeSpacer('top', zoneForPage(zones, 'header', pageNumbers.first), pageNumbers.first, pageNumbers.total);
       edgeTopEl.style.height = topBandPx + 'px';
       edgeTopEl.style.paddingTop = (mPx.top / 2) + 'px';
+      if (sectionWidth) edgeTopEl.style.setProperty('--pp-page-width', sectionWidth);
       container.insertBefore(edgeTopEl, wrapper);
     }
     if (bottomBandPx) {
-      edgeBottomEl = edgeSpacer('bottom', zoneForPage(zones, 'footer', totalPages), totalPages, totalPages);
+      edgeBottomEl = edgeSpacer('bottom', zoneForPage(zones, 'footer', pageNumbers.last), pageNumbers.last, pageNumbers.total);
       edgeBottomEl.style.height = (bottomBandPx + mPx.bottom) + 'px';
       edgeBottomEl.style.marginTop = (-mPx.bottom) + 'px';
-      container.appendChild(edgeBottomEl);
+      if (sectionWidth) edgeBottomEl.style.setProperty('--pp-page-width', sectionWidth);
+      container.insertBefore(edgeBottomEl, wrapper.nextSibling);
     }
     return { edgeTopEl, edgeBottomEl };
   }
   function placeSeam(pass, offset, i) {
     // Pose la couture qui sépare la page `i + 1` de la suivante : sa bande, la réserve sous le dernier bloc de la page qui finit, et la page qui
     // commence. `pass` porte les mesures de la pagination et son état courant (haut du corps de page, règles de marge, rognages, pages).
-    const { zones, geometry, totalPages, wrapperChildren, wrapperRect, wrapperLeft, wrapperWidth, zoom, toLayoutY, overlay, steps, marginRules, tableStrips, pages, footAreaPx, headAreaPx } = pass;
-    const pageEnding = i + 1; const pageStarting = i + 2;
+    const { zones, geometry, totalPages, wrapperChildren, wrapperRect, wrapperLeft, wrapperWidth, zoom, toLayoutY, overlay, steps, marginRules, tableStrips, pages, footAreaPx, headAreaPx, sheetSel } = pass;
+    // Les pages se numérotent de bout en bout : la première page de cette feuille de lecture est la `pageBase + 1`-ième du document.
+    const pageEnding = pass.pageBase + i + 1; const pageStarting = pass.pageBase + i + 2;
     const footerText = zoneForPage(zones, 'footer', pageEnding);
     const headerText = zoneForPage(zones, 'header', pageStarting);
     const { seam, divider } = buildSeam({ footerText, headerText, pageEnding, pageStarting, totalPages, footAreaPx, headAreaPx, topMarginPx: geometry.mPx.top });
@@ -437,7 +450,7 @@ const ReaderMode = (function () {
     // Coupure dans une zone à deux colonnes (offset.zone, js/zone-page-cut.js) : le bas de la page qui finit est le plus bas des derniers blocs que les
     // deux colonnes y gardent, et c'est le bloc qui ouvre la page suivante, dans chaque colonne qui continue, qui descend sous la couture.
     const zoneCut = offset.zone && el ? ZonePageCut.place(offset.zone, el, offset.zone.blocks, {
-      rootTop: wrapperRect.top, zoom, bodyTopRel: pass.bodyTopRel, pageContentHeightPx: geometry.pageContentHeightPx, seamHeight, selector: '#reader-container .reader-content > *:nth-child(' + (offset.afterIndex + 1) + ')',
+      rootTop: wrapperRect.top, zoom, bodyTopRel: pass.bodyTopRel, pageContentHeightPx: geometry.pageContentHeightPx, seamHeight, selector: sheetSel + ' > *:nth-child(' + (offset.afterIndex + 1) + ')',
     }) : null;
     const afterBottomScreen = zoneCut ? zoneCut.afterBottomScreen : (rowAbove ? rowAbove.getBoundingClientRect().bottom : (el ? el.getBoundingClientRect().bottom : wrapperRect.top + offset.top * zoom));
     const afterBottomRel = (afterBottomScreen - wrapperRect.top) / zoom;
@@ -450,7 +463,7 @@ const ReaderMode = (function () {
       // ni les traits verticaux des cases. Le trait du haut de la ligne, rogné avec le reste, est redessiné au bord bas de la bande
       // (css/editor-v2.css).
       const restingPad = TablePageCut.restingPadTop(rowOpening);
-      marginRules.push(TablePageCut.padRule('#reader-container .reader-content > *:nth-child(' + (offset.afterIndex + 1) + ')', offset.rowIndex, restingPad + seamHeight + remaining, TablePageCut.fixedHeightPx(rowOpening), seamHeight + remaining));
+      marginRules.push(TablePageCut.padRule(sheetSel + ' > *:nth-child(' + (offset.afterIndex + 1) + ')', offset.rowIndex, restingPad + seamHeight + remaining, TablePageCut.fixedHeightPx(rowOpening), seamHeight + remaining));
       const stripTop = (afterBottomScreen - el.getBoundingClientRect().top) / zoom;
       if (!tableStrips.has(offset.afterIndex)) tableStrips.set(offset.afterIndex, []);
       tableStrips.get(offset.afterIndex).push({ top: stripTop + 1, bottom: stripTop + remaining + seamHeight });
@@ -465,7 +478,7 @@ const ReaderMode = (function () {
       // `.reader-content > *:nth-child(N)` et écraserait la réserve dès que le dernier bloc d'une page est un paragraphe : la gouttière
       // recouvrirait alors une ligne de texte. Les sauts de page forcés, seuls à poser cette règle jusque-là, ont pour bloc un <div
       // class="page-break-marker">, jamais un <p>.
-      marginRules.push('#reader-container .reader-content > *:nth-child(' + (offset.afterIndex + 1) + ') { margin-bottom: ' + (seamHeight + remaining) + 'px; }');
+      marginRules.push(sheetSel + ' > *:nth-child(' + (offset.afterIndex + 1) + ') { margin-bottom: ' + (seamHeight + remaining) + 'px; }');
     }
     // Posée tout de suite : la frontière suivante doit voir l'effet des marges déjà posées avant de mesurer sa propre position.
     if (!zoneCut) steps.add(marginRules[marginRules.length - 1]);
@@ -513,14 +526,14 @@ const ReaderMode = (function () {
     // haut). `tableStrips` : pour chaque tableau coupé entre deux lignes (rang de son bloc), les bandes de sa hauteur à rogner (cf.
     // TablePageCut.clipRule).
     const pass = {
-      zones: ctx.zones, geometry, totalPages: ctx.totalPages, wrapperChildren: ctx.wrapperChildren, wrapperRect, wrapperLeft, wrapperWidth, zoom, toLayoutY, overlay, steps,
-      marginRules, tableStrips: new Map(), pages, footAreaPx, headAreaPx, bodyTopRel: wrapperPaddingTop,
+      zones: ctx.zones, geometry, totalPages: ctx.totalPages, pageBase: ctx.pageBase || 0, sheetSel: sheetSelector(wrapper), wrapperChildren: ctx.wrapperChildren, wrapperRect, wrapperLeft, wrapperWidth, zoom,
+      toLayoutY, overlay, steps, marginRules, tableStrips: new Map(), pages, footAreaPx, headAreaPx, bodyTopRel: wrapperPaddingTop,
     };
     offsets.forEach((offset, i) => placeSeam(pass, offset, i));
     // La dernière page, jusqu'à sa hauteur réelle : la feuille ne descend jamais sous le haut du corps de cette page, plus la hauteur utile d'une
     // page, plus sa marge du bas (le plancher ne gêne pas un contenu plus long).
-    marginRules.push('#reader-container .reader-content { min-height: ' + (pass.bodyTopRel + pageContentHeightPx + mPx.bottom) + 'px; }');
-    pass.tableStrips.forEach((strips, index) => marginRules.push(TablePageCut.clipRule('#reader-container .reader-content > *:nth-child(' + (index + 1) + ')', strips)));
+    marginRules.push(pass.sheetSel + ' { min-height: ' + (pass.bodyTopRel + pageContentHeightPx + mPx.bottom) + 'px; }');
+    pass.tableStrips.forEach((strips, index) => marginRules.push(TablePageCut.clipRule(pass.sheetSel + ' > *:nth-child(' + (index + 1) + ')', strips)));
     styleEl.textContent = marginRules.join('\n');
     steps.clear();
     return { pages, zoom, toLayoutY, wrapperLeft, wrapperWidth };
@@ -552,20 +565,22 @@ const ReaderMode = (function () {
     wrapper.classList.add('v2-paper-backed');
     return layer;
   }
-  function renderPaginationPreview(container, wrapper, zones) {
+  function renderPaginationPreview(container, wrapper, zones, plan) {
     // Insère les espaceurs de bord (vrais frères DOM de `wrapper`, en flux normal) et les bandes "couture" aux limites intermédiaires
     // (position:absolute, peuvent recouvrir un peu de texte pile à la limite - résidu assumé). Synchrone et refaisable : clearPagination retire tout
-    // ce qu'elle pose.
+    // ce qu'elle pose. `plan` (facultatif) : les coupures déjà mesurées de cette feuille de lecture, le nombre de pages qui la précèdent dans le document
+    // et son total (`{ offsets, pageBase, totalPages }`, cf. paginateSections) ; sans lui, la feuille est tout le document.
     const geometry = paginationGeometry(zones);
-    const offsets = computePageBreakOffsets(wrapper, geometry.pageContentHeightPx);
-    const totalPages = offsets.length + 1;
+    const offsets = plan ? plan.offsets : computePageBreakOffsets(wrapper, geometry.pageContentHeightPx);
+    const pageBase = plan ? plan.pageBase : 0;
+    const totalPages = plan ? plan.totalPages : offsets.length + 1;
     const wrapperChildren = Array.from(wrapper.children);
 
     // Un rendu plus récent peut avoir déjà repeint `container` : `wrapper` ne serait alors plus attaché et insertBefore lèverait une exception.
     if (!wrapper.isConnected) return null;
 
-    const edges = addEdgeSpacers(container, wrapper, zones, geometry, totalPages);
-    const sheet = layoutSeams({ container, wrapper, zones, geometry, offsets, totalPages, wrapperChildren, edges });
+    const edges = addEdgeSpacers(container, wrapper, zones, geometry, { first: pageBase + 1, last: pageBase + offsets.length + 1, total: totalPages });
+    const sheet = layoutSeams({ container, wrapper, zones, geometry, offsets, totalPages, pageBase, wrapperChildren, edges });
     const layer = addBackdrop(container, wrapper, edges, sheet);
     // Le bas de la dernière page : le bas de la feuille, bande du pied comprise (celui des autres pages vient de leur couture, cf. placeSeam).
     sheet.pages[sheet.pages.length - 1].bottom = sheet.toLayoutY((edges.edgeBottomEl || wrapper).getBoundingClientRect().bottom);
@@ -578,13 +593,16 @@ const ReaderMode = (function () {
     if (img.dataset.ppTop0 === undefined) img.dataset.ppTop0 = img.style.top;
     img.style.top = px + 'px';
   }
-  function clearPagination(container, wrapper) {
-    // Retire tout ce que renderPaginationPreview et les décalages d'images ont posé - espaceurs de bord, couture, fond de la feuille, réserves de bas
-    // de page, `top` des images en calque - : le contenu retrouve sa mise en page naturelle, mesurable de nouveau.
-    container.querySelectorAll(':scope > .v2-page-edge-spacer, :scope > .v2-pagination-overlay, :scope > .v2-reader-backdrop').forEach(el => el.remove());
-    wrapper.querySelectorAll(':scope > style.v2-pagination-style').forEach(el => el.remove());
-    wrapper.classList.remove('v2-paper-backed');
-    wrapper.querySelectorAll('img[data-pp-top0]').forEach(img => { img.style.top = img.dataset.ppTop0; delete img.dataset.ppTop0; });
+  function clearPagination(container, wrappers) {
+    // Retire tout ce que renderPaginationPreview et les décalages d'images ont posé - espaceurs de bord, couture, gouttière entre deux sections, fond de
+    // la feuille, réserves de bas de page, `top` des images en calque - : le contenu retrouve sa mise en page naturelle, mesurable de nouveau. `wrappers` :
+    // le `.reader-content` du document, ou ceux de toutes les sections d'un macro-modèle aux sens mêlés.
+    container.querySelectorAll(':scope > .v2-page-edge-spacer, :scope > .v2-pagination-overlay, :scope > .v2-reader-backdrop, :scope > .v2-reader-gutter').forEach(el => el.remove());
+    [].concat(wrappers).forEach(wrapper => {
+      wrapper.querySelectorAll(':scope > style.v2-pagination-style').forEach(el => el.remove());
+      wrapper.classList.remove('v2-paper-backed');
+      wrapper.querySelectorAll('img[data-pp-top0]').forEach(img => { img.style.top = img.dataset.ppTop0; delete img.dataset.ppTop0; });
+    });
   }
   // Plancher d'une colonne ramenée dans la page : celui de l'éditeur (DEFAULT_COL_PX de js/editor.js).
   const MIN_TABLE_COLUMN_PX = 25;
@@ -615,6 +633,101 @@ const ReaderMode = (function () {
     rebaseLayerImagesBySlot(wrapper);
     if (paged) { placeGridImagesOnPages(wrapper, paged); paintRepeatedCopies(wrapper, paged); }
     return paged;
+  }
+
+  // === Un macro-modèle aux sens mêlés ===
+  // Le HTML assemblé d'un macro-modèle « Selon chaque modèle » porte les repères de sens de js/page-sections.js. La Lecture range alors le document résolu en
+  // une feuille de lecture par SECTION (suite de modèles de même sens) : un `.reader-content` à part, frère des autres dans #reader-container, de la largeur de
+  // SA page et paginé dans SON sens (PageLayout.withOrientation). Les pages se numérotent de bout en bout (« Page N », « n/total », première page différente),
+  // une gouttière sépare deux sections, les titres et les notes de bas de page continuent leur numérotation (compteurs CSS posés en ligne : un compteur ne passe
+  // que d'un frère à l'autre, et une section n'est pas dans la portée du compteur des titres de la précédente). Sans repère, ou si toutes les sections ont le
+  // sens des marges, rien de tout cela : un seul `.reader-content`, exactement comme avant.
+  const WIDEST_SHEET_ATTR = 'data-pp-widest-sheet';
+  const HEADING_COUNTERS = ['h1c', 'h2c', 'h3c', 'h4c', 'h5c', 'h6c'];
+  function splitIntoSections(wrapper) {
+    // Les sections `[{ wrapper, orientation }]` du document résolu `wrapper`, qu'elles remplacent dans son conteneur, ou null quand rien ne tourne (le repère
+    // de départ, inutile alors, est retiré). Le saut de page qui ouvre une section est retiré : la section est une pile de feuilles, elle commence sur la sienne.
+    if (!PageSections.hasSenses(wrapper)) return null;
+    const base = PageLayout.getOrientation();
+    const parts = PageSections.split(wrapper.childNodes, base);
+    if (!parts.length || parts.every(part => part.orientation === base)) { PageSections.stripStart(wrapper); return null; }
+    const levels = HEADING_COUNTERS.map(() => 0);
+    let notes = 0;
+    const sections = parts.map((part, index) => {
+      const el = document.createElement('div');
+      el.className = 'reader-content';
+      el.setAttribute('data-pp-sheet', String(index));
+      el.dataset.headingStyle = wrapper.dataset.headingStyle;
+      if (index) el.style.counterReset = HEADING_COUNTERS.map((name, level) => name + ' ' + levels[level]).join(' ') + ' footnote-ref ' + notes;
+      (index && PageSections.isBreak(part.nodes[0]) ? part.nodes.slice(1) : part.nodes).forEach(node => el.appendChild(node));
+      Array.from(el.children).forEach(child => {
+        const heading = /^H([1-6])$/.exec(child.tagName);
+        if (!heading) return;
+        levels[heading[1] - 1]++;
+        for (let level = +heading[1]; level < levels.length; level++) levels[level] = 0;
+      });
+      notes += el.querySelectorAll('.footnote-ref-marker').length;
+      return { wrapper: el, orientation: part.orientation };
+    });
+    wrapper.replaceWith(...sections.map(section => section.wrapper));
+    return sections;
+  }
+  function syncWidestSheet(container, sections) {
+    // La feuille la plus large de ce rendu, que js/page-zoom.js:factorFor lit sur le conteneur pour que toutes les sections tiennent dans la largeur
+    // (une section paysage est plus large que le portrait des marges). Le facteur se recalcule tout de suite quand elle change : la pagination se mesure à
+    // ce facteur, et un facteur changé après elle la rendrait caduque.
+    const widest = sections ? Math.max.apply(null, sections.map(section => PageLayout.withOrientation(section.orientation, () => PageLayout.getSheetWidthPx()))) : 0;
+    const next = widest ? String(widest) : '';
+    if ((container.getAttribute(WIDEST_SHEET_ATTR) || '') === next) return;
+    if (next) container.setAttribute(WIDEST_SHEET_ATTR, next); else container.removeAttribute(WIDEST_SHEET_ATTR);
+    // Sans aperçu de la page, il n'y a pas de feuille à ajuster (js/main.js:applyPageFitZoom retire alors le facteur).
+    if (!container.classList.contains('a4-preview')) return;
+    const zoom = PageZoom.factorFor(container);
+    if (zoom != null) container.style.setProperty('--pp-fit-zoom', String(Math.round(zoom * 1000) / 1000));
+  }
+  function sectionGutter(zones, pageBase) {
+    // La gouttière entre la dernière page d'une section et la première de la suivante (la `pageBase + 1`-ième) : celle d'une couture (css/editor-v2.css), avec le
+    // repère « Page N » quand ni le pied de la page qui finit ni l'en-tête de celle qui commence n'ont de contenu - sinon ils sont dans les espaceurs de bord
+    // de chaque section.
+    const gutter = document.createElement('div');
+    gutter.className = 'v2-page-seam-divider v2-reader-gutter';
+    if (!zoneForPage(zones, 'footer', pageBase) && !zoneForPage(zones, 'header', pageBase + 1)) {
+      const label = document.createElement('span');
+      label.className = 'v2-page-break-label';
+      label.textContent = 'Page ' + (pageBase + 1);
+      gutter.appendChild(label);
+    }
+    return gutter;
+  }
+  function paginateSections(container, sections, zones) {
+    // La mise en page de toutes les sections, en deux temps : les coupures de chacune d'abord (le total des pages, que « n/total » et le pied de la dernière page
+    // lisent, n'est connu qu'ensuite), puis sa mise en page, section après section dans l'ordre du document (la position d'une section dépend de celles qui la
+    // précèdent). Chaque temps se passe dans le sens de la section. Rend ce que rend `paginate`, avec les pages de toutes les sections (chacune dit son sens, la
+    // place de sa feuille et sa largeur) et `sections` : le détail de chacune ; null si un rendu plus récent a repeint le conteneur entre-temps.
+    const plans = [];
+    let pageBase = 0;
+    sections.forEach(section => PageLayout.withOrientation(section.orientation, () => {
+      // La largeur de la feuille de cette section : css/editor-v2.css la lit sur --pp-page-width, ici posée sur le `.reader-content` (et, par
+      // addEdgeSpacers, sur ses espaceurs de bord) plutôt que sur la racine, qui garde celle des marges.
+      section.wrapper.style.setProperty('--pp-page-width', PageLayout.getSheetWidthPx() + 'px');
+      fitTablesToPage(section.wrapper);
+      const offsets = computePageBreakOffsets(section.wrapper, paginationGeometry(zones).pageContentHeightPx);
+      plans.push({ offsets, pageBase });
+      pageBase += offsets.length + 1;
+    }));
+    plans.forEach(plan => { plan.totalPages = pageBase; });
+    const pagedSections = sections.map((section, index) => PageLayout.withOrientation(section.orientation, () => {
+      if (index > 0 && section.wrapper.isConnected) container.insertBefore(sectionGutter(zones, plans[index].pageBase), section.wrapper);
+      const paged = renderPaginationPreview(container, section.wrapper, zones, plans[index]);
+      if (!paged) return null;
+      rebaseLayerImagesBySlot(section.wrapper);
+      placeGridImagesOnPages(section.wrapper, paged);
+      paintRepeatedCopies(section.wrapper, paged);
+      paged.pages.forEach(page => { page.orientation = section.orientation; page.sheetLeft = paged.sheetLeft; page.sheetWidth = paged.sheetWidth; });
+      return paged;
+    }));
+    if (pagedSections.some(paged => !paged)) return null;
+    return Object.assign({}, pagedSections[0], { pages: [].concat(...pagedSections.map(paged => paged.pages)), sections: pagedSections });
   }
 
   // Page d'un bloc de premier niveau : une frontière (`afterIndex`) renvoie à la page d'après tous les blocs qui la suivent.
@@ -734,27 +847,28 @@ const ReaderMode = (function () {
     if (w.observer) w.observer.disconnect();
     if (w.onFonts && document.fonts && document.fonts.removeEventListener) document.fonts.removeEventListener('loadingdone', w.onFonts);
   }
-  function watchGeometry(container, wrapper, zones) {
+  function watchGeometry(container, wrappers, layOut) {
+    // `wrappers` : le `.reader-content` du document, ou ceux de toutes ses sections ; `layOut` refait leur mise en page (paginate, ou paginateSections).
     stopGeometryWatch();
     if (typeof ResizeObserver !== 'function') return;
-    const targets = [wrapper].concat(Array.from(wrapper.querySelectorAll('img')));
+    const targets = wrappers.concat(...wrappers.map(wrapper => Array.from(wrapper.querySelectorAll('img'))));
     const sizeOf = el => { const r = el.getBoundingClientRect(); return Math.round(r.width) + 'x' + Math.round(r.height); };
     const w = { sizes: new Map(), timer: 0, windowTimer: 0, recomputes: 0, observer: null, onFonts: null };
     const remember = () => { w.sizes.clear(); targets.forEach(el => w.sizes.set(el, sizeOf(el))); };
     const changed = () => targets.some(el => w.sizes.get(el) !== sizeOf(el));
     const recompute = () => {
       if (geometryWatch !== w) return;
-      if (!wrapper.isConnected) { stopGeometryWatch(); return; }
+      if (!wrappers[0].isConnected) { stopGeometryWatch(); return; }
       // Masquée (autre mode) : rien à mesurer. Elle se mesure de nouveau à son retour, la taille de la feuille passant de zéro à sa vraie valeur.
-      if (!wrapper.getClientRects().length) return;
+      if (!wrappers[0].getClientRects().length) return;
       w.recomputes++;
       clearTimeout(w.windowTimer);
       w.windowTimer = setTimeout(() => { w.recomputes = 0; if (geometryWatch === w && changed()) schedule(); }, 3000);
       // Sans la mise en page, la feuille est plus courte : le navigateur ramènerait le défilement en arrière, et le lecteur ne retrouverait pas sa
       // page.
       const { scrollTop, scrollLeft } = container;
-      clearPagination(container, wrapper);
-      paginate(container, wrapper, zones);
+      clearPagination(container, wrappers);
+      layOut();
       container.scrollTop = scrollTop; container.scrollLeft = scrollLeft;
       remember();
     };
@@ -878,8 +992,13 @@ const ReaderMode = (function () {
     const zones = container.classList.contains('a4-preview') ? await resolvePaginationZones(headerFooterData, tableId, record) : null;
     // Les résolutions ci-dessus sont asynchrones : un rendu plus récent peut avoir déjà repeint `container`, `wrapper` ne serait alors plus attaché.
     if (!wrapper.isConnected) return;
-    paginate(container, wrapper, zones);
-    if (!stale()) watchGeometry(container, wrapper, zones);
+    // Un macro-modèle aux sens mêlés : une feuille de lecture par section (splitIntoSections), sinon l'unique `.reader-content` d'avant.
+    const sections = zones ? splitIntoSections(wrapper) : null;
+    syncWidestSheet(container, sections);
+    const wrappers = sections ? sections.map(section => section.wrapper) : [wrapper];
+    const layOut = () => (sections ? paginateSections(container, sections, zones) : paginate(container, wrapper, zones));
+    layOut();
+    if (!stale()) watchGeometry(container, wrappers, layOut);
   }
   // === Le même rendu, dans un autre document : l'impression par le navigateur (js/print-export.js) ===
   // `container` est le #reader-container d'un cadre caché. Le document y est résolu, mis en page et paginé comme render() le fait pour la Lecture (mêmes
@@ -899,21 +1018,25 @@ const ReaderMode = (function () {
       container.appendChild(wrapper);
       ExternalImages.unblockIn(container);
       const zones = await resolvePaginationZones(headerFooterData, tableId, record, PRINT_VIEW);
+      // Un macro-modèle aux sens mêlés : une feuille de lecture par section, comme à l'écran (splitIntoSections).
+      const sections = splitIntoSections(wrapper);
+      const wrappers = sections ? sections.map(section => section.wrapper) : [wrapper];
+      const layOut = () => (sections ? paginateSections(container, sections, zones) : paginate(container, wrapper, zones));
       const fonts = container.ownerDocument.fonts;
       const settle = async () => { await settleImages(container, PRINT_SETTLE_MS); if (fonts) await fonts.ready; };
       await settle();
       // Les tailles qui décident des coupures : la feuille et chaque image. Une image ou une police qui arrive après la première mesure les change ; la mise
       // en page se refait alors (comme watchGeometry à l'écran) jusqu'à ce qu'elles ne bougent plus.
-      const sizes = () => [wrapper].concat(Array.from(container.querySelectorAll('img'))).map(el => { const r = el.getBoundingClientRect(); return Math.round(r.width) + 'x' + Math.round(r.height); }).join('|');
-      let paged = paginate(container, wrapper, zones);
+      const sizes = () => wrappers.concat(Array.from(container.querySelectorAll('img'))).map(el => { const r = el.getBoundingClientRect(); return Math.round(r.width) + 'x' + Math.round(r.height); }).join('|');
+      let paged = layOut();
       // Les en-têtes et pieds des coutures sont écrits par la pagination : leurs images d'un autre site reprennent leur adresse, puis chargent.
       ExternalImages.unblockIn(container);
       for (let round = 0; round < PRINT_RELAYOUTS_MAX; round++) {
         const before = sizes();
         await settle();
         if (sizes() === before) break;
-        clearPagination(container, wrapper);
-        paged = paginate(container, wrapper, zones);
+        clearPagination(container, wrappers);
+        paged = layOut();
         ExternalImages.unblockIn(container);
       }
       return { paged, hasError: resolved.hasError };
