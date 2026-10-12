@@ -495,11 +495,16 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('polices : ni feuille de style, ni page, ni script ne charge de police ou de feuille d\'un autre site (@import, url(), <link>, service de polices) - une police du système, jamais Google Fonts', offenders.length === 0, '\n    ' + offenders.join('\n    '));
   const fontUi = ((stripComments(read('css/style.css')).match(/--font-ui\s*:\s*([^;]+);/) || [])[1] || '').trim();
   check('polices : --font-ui, la police de l\'interface, commence par system-ui (la police du système)', /^system-ui\b/.test(fontUi), fontUi);
-  // Un champ (<input>, <select>, <textarea>) ne reprend pas la police de son parent : sans règle de base il garde celle du navigateur (Arial), à côté de boutons dans la police du système (« Oui, tous » d'Antoine,
-  // 12/10). css/style.css la leur donne ; la seule règle qui écrit encore « Arial » en première police est la base de la page (html, body), qui ne touche pas un champ. dev-tests/verify-field-fonts-mouse.mjs
-  // (script Node `fieldFontsMouse`) le mesure dans un vrai navigateur, fenêtres ouvertes comprises ; ce contrôle-ci garde les sources.
+  // Un champ (<input>, <select>, <textarea>) ou un bouton ne reprend pas la police de son parent : sans règle de base il garde celle du navigateur (Arial), à côté du reste de l'interface en police du système
+  // (« Oui, tous » d'Antoine, 12/10, pour les champs puis pour les boutons et les libellés). css/style.css la leur donne ; un bouton en `font-family: inherit` prend celle de son conteneur, et un conteneur
+  // rattaché à document.body (le panneau des polices et des tailles, l'invitation des zones d'en-tête et de pied) sort de la cascade de la barre : il la porte lui-même. La seule règle qui écrit encore « Arial » en
+  // première police est la base de la page (html, body). dev-tests/verify-field-fonts-mouse.mjs (script Node `fieldFontsMouse`) et dev-tests/verify-button-fonts-mouse.mjs (`buttonFontsMouse`) le mesurent dans un
+  // vrai navigateur, menus et fenêtres ouverts ; ce contrôle-ci garde les sources.
   const baseCss = stripComments(read('css/style.css'));
-  check('polices : css/style.css donne la police de l\'interface aux champs (input, select, textarea) - sinon ils gardent Arial, celle du navigateur', /(?:^|\})\s*input\s*,\s*select\s*,\s*textarea\s*\{[^}]*\bfont-family\s*:\s*var\(--font-ui\)/.test(baseCss));
+  check('polices : css/style.css donne la police de l\'interface aux champs et aux boutons (input, select, textarea, button) - sinon ils gardent Arial, celle du navigateur', /(?:^|\})\s*input\s*,\s*select\s*,\s*textarea\s*,\s*button\s*\{[^}]*\bfont-family\s*:\s*var\(--font-ui\)/.test(baseCss));
+  const editorCss = stripComments(read('css/editor-v2.css'));
+  const ruleHasUiFont = (css, selector) => [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].some(m => m[1].split(',').map(part => part.trim()).includes(selector) && /\bfont-family\s*:\s*var\(--font-ui\)/.test(m[2]));
+  check('polices : le panneau des polices et des tailles (.v2-format-panel) et l\'invitation « + Ajouter un en-tête » (.v2-hf-zone-ghost) portent la police de l\'interface - rattachés hors de la barre, ils prendraient l\'Arial de body', ruleHasUiFont(editorCss, '.v2-format-panel') && ruleHasUiFont(editorCss, '.v2-hf-zone-ghost'));
   const arialFirst = cssFiles.flatMap(rel => [...stripComments(read(rel)).matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(m => /\bfont-family\s*:\s*Arial\b/i.test(m[2])).map(m => `${rel} : ${m[1].trim().replace(/\s+/g, ' ').slice(0, 70)}`));
   check('polices : seule la base de la page (html, body) écrit « Arial » en première police ; aucune règle ne la remet sur un champ ou un bouton', arialFirst.length === 1 && arialFirst[0] === 'css/style.css : html, body', arialFirst);
 }

@@ -42,6 +42,11 @@ d'un bleu un peu plus soutenu, lisible sur le gris du survol.
 
 Les **champs** de l'interface (le nom d'un modèle qu'on renomme ; l'Objet, À, Cc, Cci et le nom du PDF d'un email ; la recherche de la galerie ; le nom d'un macro-modèle ; les marges et le caractère déclencheur des Réglages ; les décimales, la devise et le format de date d'une variable) sont dans la même police que les boutons voisins, celle du système. À vérifier à l'œil, en tapant un mot dans chacun : la forme des lettres est celle du bouton à côté, le texte tapé aussi, et rien ne bouge (ni la taille des champs, ni celle des lettres). Le contenu du document, lui, reste en Roboto.
 
+Les **boutons et libellés à texte** sont dans la même police du système : les lignes du menu des polices et du menu des tailles (clic sur le nom de la police, puis sur la taille), les boutons FR, US, —, « Lettres »
+d'une variable nombre, J, M, A d'une variable date, « vrai / faux » d'une variable oui/non (cliquer la bulle), et « + Ajouter un en-tête » / « + Ajouter un pied de page » qui apparaissent quand on survole la marge du
+haut ou du bas de la feuille. À vérifier à l'œil : la forme des lettres est celle des boutons de la barre ; la taille des lettres et la hauteur des lignes du menu n'ont pas bougé (seule la largeur des boutons d'une
+variable suit la forme des lettres).
+
 ## Principe directeur — la chaîne à 3 étages
 
 Le contenu d'un modèle passe par **3 moteurs de rendu indépendants**, chacun avec son propre

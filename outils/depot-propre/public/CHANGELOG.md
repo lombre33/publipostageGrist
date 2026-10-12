@@ -610,6 +610,12 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   la devise et le format de date d'une variable restaient en Arial, la police par défaut du navigateur. Tous les champs
   de l'interface, et le texte qu'on y tape, ont maintenant la même police que les boutons voisins ; leur taille et leur
   place ne changent pas. Le contenu du document garde son Roboto.
+- **Les boutons et les libellés prennent aussi la police du système** : après les champs, il restait quelques boutons
+  et libellés en Arial, la police par défaut du navigateur : les lignes du menu des polices et du menu des tailles, les
+  boutons FR, US, J, M, A, « Lettres » et « vrai / faux » de la barre d'une variable, et « + Ajouter un en-tête » /
+  « + Ajouter un pied de page » quand on survole la marge de la feuille. Ils ont maintenant la même police que le reste
+  de l'interface ; la taille des lettres et la hauteur des lignes du menu ne changent pas (seule la largeur des boutons
+  d'une variable suit la forme des lettres de la police de l'ordinateur). Le contenu du document garde son Roboto.
 
 ## [1.0.0-beta.1] - 2026-10-05
 
@@ -1265,6 +1271,11 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   template's name, the margins and the trigger character in Settings, a variable's decimals, currency and date format
   stayed in Arial, the browser's default font. Every field of the interface, and the text typed in it, now uses the same
   font as the buttons next to it; their size and place do not change. The document's content keeps its Roboto.
+- **Buttons and labels use the system font too**: after the fields, a few buttons and labels were still in Arial, the
+  browser's default font: the lines of the font menu and the size menu, the FR, US, J, M, A, "Words" and "true / false"
+  buttons of a variable's bar, and "+ Add a header" / "+ Add a footer" when you hover the page margin. They now use the
+  same font as the rest of the interface; the letter size and the height of the menu lines do not change (only the width
+  of a variable's buttons follows the shape of the letters in the computer's font). The document's content keeps its Roboto.
 
 ## [1.0.0-beta.1] - 2026-10-05 (English)
 

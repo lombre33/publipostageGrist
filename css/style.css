@@ -152,9 +152,9 @@
 
 html, body { margin:0; padding:0; height:100%; font-family: Arial, sans-serif; background: var(--bg); }
 body { display:flex; flex-direction:column; }
-/* Un champ ne reprend pas la police de son parent : sans cette règle il garde celle du navigateur (Arial), à côté de boutons dans la police de l'interface (--font-ui, celle
-   du système). Une règle plus précise garde la main. */
-input, select, textarea { font-family: var(--font-ui); }
+/* Un champ ou un bouton ne reprend pas la police de son parent : sans cette règle il garde celle du navigateur (Arial), à côté du reste de l'interface (--font-ui,
+   celle du système). Une règle plus précise garde la main ; un bouton en `font: inherit` prend celle de son conteneur, qui doit donc porter --font-ui. */
+input, select, textarea, button { font-family: var(--font-ui); }
 /* #app reproduit le schéma flex en colonne contraint de `body` : un enfant flex sans `flex-basis` se dimensionne à son contenu, donc dès que
    l'éditeur dépasserait la hauteur de la fenêtre, toute la page aurait sa barre de défilement (barre d'outils comprise) au lieu du défilement
    interne de #editor-container. */
