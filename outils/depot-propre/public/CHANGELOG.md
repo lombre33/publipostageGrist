@@ -559,6 +559,10 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   survol et n'y atteignait que 4,0:1 en thème clair et 4,4:1 en thème sombre, un peu pâle. Elle garde son bleu et son
   gras, avec un bleu plus soutenu tant que la souris est dessus (5,7:1 en clair, 5,4:1 en sombre) ; au repos, rien ne
   change.
+- **Onglet choisi sous la souris** : dans les Réglages et dans la liste « # » (Variables / Puces), l'onglet choisi est
+  bleu et souligné, mais sous la souris ce bleu se posait sur le gris du survol et n'y atteignait que 4,0:1 en thème
+  clair et 4,4:1 en thème sombre. Il garde son bleu et son trait, avec un bleu plus soutenu tant que la souris est
+  dessus (5,7:1 en clair, 5,4:1 en sombre) ; au repos, rien ne change.
 
 ## [1.0.0-beta.1] - 2026-10-05
 
@@ -1167,6 +1171,10 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   levels), the chosen row is blue and bold, but under the mouse that blue sat on the hover grey and only reached
   4.0:1 in the light theme and 4.4:1 in the dark theme, a little pale. It keeps its blue and its bold, with a firmer
   blue while the mouse is over it (5.7:1 in light, 5.4:1 in dark); at rest, nothing changes.
+- **Chosen tab under the mouse**: in Settings and in the "#" list (Variables / Chips), the chosen tab is blue and
+  underlined, but under the mouse that blue sat on the hover grey and only reached 4.0:1 in the light theme and 4.4:1
+  in the dark theme. It keeps its blue and its line, with a firmer blue while the mouse is over it (5.7:1 in light,
+  5.4:1 in dark); at rest, nothing changes.
 
 ## [1.0.0-beta.1] - 2026-10-05 (English)
 

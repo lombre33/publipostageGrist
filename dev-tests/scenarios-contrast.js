@@ -673,24 +673,40 @@
   // Ligne choisie d'un menu sous la souris (demande d'Antoine du 12/10, carte « Rendre plus lisible la ligne choisie d'un menu sous la souris ? », réponse « Corriger ») : même technique,
   // le survol ne se joue pas depuis la page. La couleur d'une ligne choisie et survolée est celle que déclare sa règle `…is-active:hover` ; à défaut, celle de la ligne choisie au repos.
   // Avant : le bleu d'accent restait sur le gris du survol (4,02:1 en clair, 4,43:1 en sombre). Le vrai survol, à la souris, se mesure dans verify-export-type-mouse.mjs.
+  // `rows` : [nom, règle de survol (fond), règle de l'élément choisi et survolé, règle de l'élément choisi au repos].
+  const chosenUnderMouse = rows => inBothThemes(() => {
+    const out = {};
+    for (const [name, hoverRule, chosenHoverRule, chosenRule] of rows) {
+      const band = hoverBand(hoverRule);
+      const declared = declaredOnHover(chosenHoverRule, 'color') || declaredOnHover(chosenRule, 'color');
+      const color = declared && computedFromDeclaration('color', declared);
+      out[name] = band && color ? round2(ratio(over(color, band), band)) : 0;
+    }
+    return out;
+  });
   cases.push({
     id: 'contrast_chosen_menu_row_keeps_4_5_under_the_mouse_on_the_hover_grey_in_light_and_dark',
     description: 'Ligne choisie d’un menu (Type d’export, qualité du PDF, niveaux de titre, lignes du panneau de police et de taille) sous la souris : son bleu sur le gris du survol atteint 4,5:1 au moins, en clair et en sombre',
     run: async () => {
-      const menus = [
+      const byTheme = chosenUnderMouse([
         ['ligne choisie d’un menu', '.v2-hover-row:hover', '.v2-hover-row.is-active:hover', '.v2-hover-row.is-active'],
         ['ligne choisie du panneau de police et de taille', '.v2-format-panel button:hover', '.v2-format-panel button.is-active:hover', '.v2-format-panel button.is-active'],
-      ];
-      const byTheme = inBothThemes(() => {
-        const out = {};
-        for (const [name, hoverRule, chosenHoverRule, chosenRule] of menus) {
-          const band = hoverBand(hoverRule);
-          const declared = declaredOnHover(chosenHoverRule, 'color') || declaredOnHover(chosenRule, 'color');
-          const color = declared && computedFromDeclaration('color', declared);
-          out[name] = band && color ? round2(ratio(over(color, band), band)) : 0;
-        }
-        return out;
-      });
+      ]);
+      const bad = failing(byTheme, 4.5);
+      return { pass: bad.length === 0, notes: JSON.stringify({ bad, byTheme }) };
+    },
+  });
+
+  // Même défaut sur l'onglet choisi (carte « Rendre plus lisible l'onglet choisi quand la souris passe dessus ? », réponse « Corriger », 12/10) : les onglets des Réglages et de la liste « # » (Variables / Puces).
+  // Le vrai survol, à la souris, se mesure dans verify-active-tab-mouse.mjs.
+  cases.push({
+    id: 'contrast_chosen_tab_keeps_4_5_under_the_mouse_on_the_hover_grey_in_light_and_dark',
+    description: 'Onglet choisi des Réglages et de la liste « # » (Variables / Puces) sous la souris : son bleu sur le gris du survol atteint 4,5:1 au moins, en clair et en sombre',
+    run: async () => {
+      const byTheme = chosenUnderMouse([
+        ['onglet choisi des Réglages', '.settings-tab:hover', '.settings-tab.active:hover', '.settings-tab.active'],
+        ['onglet choisi de la liste « # »', '.ac-tab:hover', '.ac-tab.active:hover', '.ac-tab.active'],
+      ]);
       const bad = failing(byTheme, 4.5);
       return { pass: bad.length === 0, notes: JSON.stringify({ bad, byTheme }) };
     },

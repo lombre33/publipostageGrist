@@ -36,7 +36,9 @@ bougé.
 
 Dans ces menus, la **ligne choisie** (le type, la qualité du PDF, un niveau de titre) est bleue et en gras ; à vérifier à
 l'œil, en clair puis en sombre : la souris sur cette ligne la laisse bleue et en gras, d'un bleu un peu plus soutenu, bien
-lisible sur le gris du survol (4,5:1 au moins) ; la souris ailleurs, elle reprend son bleu d'avant.
+lisible sur le gris du survol (4,5:1 au moins) ; la souris ailleurs, elle reprend son bleu d'avant. Même vérification pour
+l'**onglet choisi** des Réglages et celui de la liste « # » (Variables / Puces) : la souris dessus le laisse bleu et souligné,
+d'un bleu un peu plus soutenu, lisible sur le gris du survol.
 
 ## Principe directeur — la chaîne à 3 étages
 

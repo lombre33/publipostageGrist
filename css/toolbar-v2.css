@@ -393,6 +393,8 @@
 .settings-modal-content .settings-body { overflow-x: hidden; margin: -3px 0; padding: 3px 20px; }
 .settings-tab:hover { background: var(--surface-sunken); }
 .settings-tab.active { color: var(--accent); box-shadow: inset 0 -2px 0 var(--accent); }
+/* L'onglet choisi sous la souris : `--accent` ne fait que 4,02:1 (clair) et 4,43:1 (sombre) sur le gris du survol, `--accent-ink` 5,67 et 5,41 (comme la ligne choisie d'un menu, css/editor-v2.css). */
+.settings-tab.active:hover { color: var(--accent-ink); }
 .settings-panel-intro { font-size: 12.5px; color: var(--text-muted); margin: 0 0 12px; }
 .settings-radio-row { display: flex; gap: 16px; }
 .settings-radio-row label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); cursor: pointer; }
