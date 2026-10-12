@@ -66,6 +66,9 @@ d'une variable nombre, J, M, A d'une variable date, « vrai / faux » d'une vari
 haut ou du bas de la feuille. À vérifier à l'œil : la forme des lettres est celle des boutons de la barre ; la taille des lettres et la hauteur des lignes du menu n'ont pas bougé (seule la largeur des boutons d'une
 variable suit la forme des lettres).
 
+Le **texte d'un en-tête ou d'un pied de page** de la feuille (celui du haut et celui du bas de la première page, et ceux qui se répètent entre deux pages) est dans la même police que le texte du modèle, Roboto,
+et non plus en Arial. À vérifier à l'œil : écrire le même mot dans l'en-tête et dans le corps du modèle, les lettres ont la même forme ; la taille du texte et la place des zones n'ont pas bougé.
+
 ## Principe directeur — la chaîne à 3 étages
 
 Le contenu d'un modèle passe par **3 moteurs de rendu indépendants**, chacun avec son propre

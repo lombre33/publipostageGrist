@@ -505,6 +505,10 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const editorCss = stripComments(read('css/editor-v2.css'));
   const ruleHasUiFont = (css, selector) => [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].some(m => m[1].split(',').map(part => part.trim()).includes(selector) && /\bfont-family\s*:\s*var\(--font-ui\)/.test(m[2]));
   check('polices : le panneau des polices et des tailles (.v2-format-panel) et l\'invitation « + Ajouter un en-tête » (.v2-hf-zone-ghost) portent la police de l\'interface - rattachés hors de la barre, ils prendraient l\'Arial de body', ruleHasUiFont(editorCss, '.v2-format-panel') && ruleHasUiFont(editorCss, '.v2-hf-zone-ghost'));
+  // Le texte d'un en-tête ou d'un pied de la feuille est du contenu du modèle : Roboto, comme `.tiptap`, la Lecture et le PDF (« Oui, Roboto » d'Antoine, 12/10). Le corps d'une zone de bord et les bandes de couture ne sont pas
+  // dans `.tiptap` : ils portent la police eux-mêmes, sinon ils prendraient l'Arial de body. dev-tests/verify-button-fonts-mouse.mjs (`buttonFontsMouse`) le mesure dans un vrai navigateur.
+  const ruleHasContentFont = (css, selector) => [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].some(m => m[1].split(',').map(part => part.trim()).includes(selector) && /\bfont-family\s*:\s*['"]?Roboto['"]?\s*,/.test(m[2]));
+  check('polices : le texte d\'un en-tête ou d\'un pied de la feuille (.v2-hf-zone-body, .v2-page-band-header, .v2-page-band-footer) est en Roboto comme le document - hors de `.tiptap`, il prendrait l\'Arial de body', ['.v2-hf-zone-body', '.v2-page-band-header', '.v2-page-band-footer'].every(selector => ruleHasContentFont(editorCss, selector)));
   const arialFirst = cssFiles.flatMap(rel => [...stripComments(read(rel)).matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(m => /\bfont-family\s*:\s*Arial\b/i.test(m[2])).map(m => `${rel} : ${m[1].trim().replace(/\s+/g, ' ').slice(0, 70)}`));
   check('polices : seule la base de la page (html, body) écrit « Arial » en première police ; aucune règle ne la remet sur un champ ou un bouton', arialFirst.length === 1 && arialFirst[0] === 'css/style.css : html, body', arialFirst);
 }

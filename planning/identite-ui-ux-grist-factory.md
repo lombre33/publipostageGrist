@@ -128,9 +128,11 @@ contenu exportable :
 - Base de la page (avant les tokens) : `html, body { font-family: Arial, sans-serif }`, la seule règle qui écrit encore « Arial » en première police
   (gardé par `codeHygiene`). Ce qui n'a pas de police à lui la reprend par héritage. Depuis le 12/10, plus aucun bouton, champ ni libellé de
   l'interface n'en dépend (relevé dans Chromium à la souris : au repos, menus, barres de variable, zones d'en-tête, fenêtres), et un nouvel élément
-  qui ferait exception est arrêté par `buttonFontsMouse`. Le contenu du document (`.tiptap`, la Lecture, les encadrés, le filigrane) a sa propre police,
-  Roboto, et n'en dépend pas ; le texte des en-têtes et pieds de page de la feuille (`.v2-hf-zone-body`, `.v2-page-band-header` et `-footer`), si : il s'y
-  écrit en Arial alors que le PDF l'écrit en Roboto, écart relevé le 12/10 et proposé à Antoine, voir §5.
+  qui ferait exception est arrêté par `buttonFontsMouse`. Le contenu du document n'en dépend pas non plus : `.tiptap`, la Lecture, les encadrés, le
+  filigrane et, depuis le 12/10 (« Oui, Roboto » d'Antoine), le texte des en-têtes et pieds de page de la feuille ont leur propre police, Roboto, celle du
+  PDF. Ce dernier (`.v2-hf-zone-body`, `.v2-page-band-header` et `-footer`) vit hors de `.tiptap` : une règle de `css/editor-v2.css` la lui donne, sans quoi
+  la feuille l'écrirait en Arial, avec d'autres lettres et d'autres coupures de ligne que le PDF. Gardé par `codeHygiene` (la règle existe) et par
+  `buttonFontsMouse` (zones de bord, bandes de couture, survol à la souris).
 
 ### Thème sombre : uniquement le chrome, jamais le contenu produit
 Règle stricte, documentée en commentaire dans le CSS de Publipostage+ : le thème sombre change la couleur de la
@@ -1285,10 +1287,6 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   attendant).
 - Relevés par l'audit du 29/09 sans avoir fait l'objet d'une carte : deux sortes d'info-bulles, quatre crayons pour quatre
   fonctions, des tailles et couleurs écrites en dur dans le CSS, une lecture seule qui grise sans expliquer pourquoi (non revérifiés au 12/10).
-- En-têtes et pieds de page de la feuille écrits en Arial (relevé du 12/10, §1 « Base de la page ») : le texte d'un en-tête ou d'un pied affiché dans
-  la feuille (`.v2-hf-zone-body`) et dans les bandes de couture (`.v2-page-band-header`, `.v2-page-band-footer`) n'a pas de police à lui et reprend l'Arial de
-  `body`, quand le PDF l'écrit en Roboto comme le reste du document (en Lecture, `#reader-container` est déjà en Roboto). Question posée à Antoine sur une
-  carte : rien n'est codé avant son choix.
 
 ---
 
@@ -1324,3 +1322,6 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
   de base couvre `button`, le panneau des polices et des tailles et l'invitation des zones d'en-tête et de pied portent la police eux-mêmes, et les
   lignes du menu des polices ont une hauteur de ligne fixée (§1, « Les champs, les boutons et les libellés prennent la police des boutons »),
   gardé par `codeHygiene` et `buttonFontsMouse` ; §5 ne garde plus cette question.
+- 2026-10-12 (suite 3) : le texte des en-têtes et des pieds de page de la feuille passe en Roboto, comme le PDF (« Oui, Roboto » d'Antoine, à la carte posée
+  après la relecture des polices) : une règle de `css/editor-v2.css` commune au corps des zones de bord et aux bandes de couture (§1, « Base de la page »),
+  gardée par `codeHygiene` et `buttonFontsMouse` ; aucune boîte ne bouge (relevé avant et après) ; §5 ne garde plus cette question.

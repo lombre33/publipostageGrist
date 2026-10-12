@@ -343,6 +343,11 @@
    `.v2-page-band-footer`) font de même plus bas. En édition de la zone le texte est dans `.tiptap`, déjà à 14 px : la taille ne saute pas à
    l'entrée. */
 .v2-hf-zone-body, #reader-container.a4-preview .v2-page-edge-spacer { font-size: 14px; }
+/* Le texte d'un en-tête ou d'un pied est du contenu du modèle : il s'écrit en Roboto, comme `.tiptap`, la Lecture et le PDF (js/pdf-fonts.js). Le corps d'une
+   zone (`.v2-hf-zone-body`, rattaché à la feuille et non à `.tiptap`) et les bandes de couture n'avaient pas de police à eux et reprenaient l'Arial de `body` :
+   la feuille montrait d'autres lettres et d'autres coupures de ligne que le PDF, et la hauteur de la zone, mesurée dans un `.tiptap`, n'était pas celle du
+   texte affiché. La Lecture est déjà en Roboto par `#reader-container`. */
+.v2-hf-zone-body, .v2-page-band-header, .v2-page-band-footer { font-family: 'Roboto', Helvetica, Arial, sans-serif; }
 /* Un espaceur ne prend jamais le clic : il recouvre la marge de `.tiptap` (celui du haut passe dessous), et une image en calque posée dans cette
    marge, comme le triangle d'un coin de feuille, doit rester atteignable. Le clic dans la marge (là où rien n'est posé : le padding de `.tiptap`,
    ou le fond de la feuille au-dessus) est repris par js/header-footer-preview.js:zoneUnderPointer, qui ouvre l'en-tête ou le pied ; le survol, par

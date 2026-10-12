@@ -683,6 +683,10 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   « + Ajouter un pied de page » quand on survole la marge de la feuille. Ils ont maintenant la même police que le reste
   de l'interface ; la taille des lettres et la hauteur des lignes du menu ne changent pas (seule la largeur des boutons
   d'une variable suit la forme des lettres de la police de l'ordinateur). Le contenu du document garde son Roboto.
+- **Le texte des en-têtes et des pieds de page s'écrit en Roboto dans la feuille** : il s'affichait en Arial, la police par
+  défaut du navigateur, alors que le PDF et le reste du document sont en Roboto. La feuille montre maintenant les mêmes
+  lettres que le PDF, pour l'en-tête et le pied de la première page comme pour ceux qui se répètent entre deux pages ; la
+  taille du texte et la place des zones ne changent pas.
 
 ## [1.0.0-beta.1] - 2026-10-05
 
@@ -1405,6 +1409,10 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   buttons of a variable's bar, and "+ Add a header" / "+ Add a footer" when you hover the page margin. They now use the
   same font as the rest of the interface; the letter size and the height of the menu lines do not change (only the width
   of a variable's buttons follows the shape of the letters in the computer's font). The document's content keeps its Roboto.
+- **The text of headers and footers is written in Roboto on the sheet**: it was shown in Arial, the browser's default
+  font, while the PDF and the rest of the document use Roboto. The sheet now shows the same letters as the PDF, for the
+  header and footer of the first page as well as for those repeated between two pages; the size of the text and the
+  place of the zones do not change.
 
 ## [1.0.0-beta.1] - 2026-10-05 (English)
 

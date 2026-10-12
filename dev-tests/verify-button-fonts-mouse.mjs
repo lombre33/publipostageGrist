@@ -7,6 +7,8 @@
 // (12,5 px les lignes des menus, 11,5 et 12 px les boutons d'une variable, 10,5 px le fantôme) et les lignes du menu des polices gardent leur hauteur (26 px). Parcours : au repos (le DOM entier, éléments cachés compris),
 // le menu des polices puis celui des tailles (un clic sur une ligne le ferme), la barre d'une variable de chaque type (texte, nombre, date, oui/non), les zones d'en-tête et de pied survolées, un nouvel email, les sept onglets des
 // Réglages, la galerie, le macro-modèle, « Organiser mes modèles », la liste des modèles, « Enregistrer sous… » ; un guetteur de DOM contrôle aussi tout élément apparu pendant le parcours (les fenêtres montées par script).
+// Une seconde page (un en-tête et un pied remplis, assez de lignes pour une deuxième page) vérifie aussi que le TEXTE des en-têtes et pieds de page de la feuille est en Roboto, comme le document - « Oui, Roboto » d'Antoine
+// du 12/10, à la carte « Passer le texte des en-têtes et pieds de page en Roboto ? » : zones de bord, survol à la souris, bandes de couture. Ce texte est du contenu du modèle, pas de l'interface.
 // Les champs ont aussi leur script, plus détaillé : verify-field-fonts-mouse.mjs (groupe fieldFontsMouse).
 // Lancé par run-headless.mjs (groupe Node "buttonFontsMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-button-fonts-mouse.mjs
 import { createServer } from 'node:http';
@@ -85,7 +87,7 @@ const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hi
 const pageErrors = [];
 
 
-async function openWidget(colorScheme) {
+async function openWidget(colorScheme, opts = {}) {
   const context = await browser.newContext({ bypassCSP: true, viewport: { width: WIDTH, height: HEIGHT }, colorScheme });
   const page = await context.newPage();
   page.on('pageerror', e => { pageErrors.push(e.message); console.log('[pageerror]', e.message); });
@@ -115,7 +117,7 @@ async function openWidget(colorScheme) {
   // Guetteur : tout bouton, champ ou texte qui entre dans la page (une fenêtre montée par script, une barre qui s'ouvre) est noté avec sa police au tour d'affichage suivant ; le contenu du document n'en fait pas partie.
   await page.addInitScript(() => {
     window.__uiFonts = [];
-    const CONTENT = '.tiptap, .ProseMirror, .reader-content, .pp-callout-paper, .v2-page-watermark, #tpl-preview-sheet, #tpl-preview-tiptap, .pp-sheet-page, svg';
+    const CONTENT = '.tiptap, .ProseMirror, .reader-content, .pp-callout-paper, .v2-page-watermark, .v2-hf-zone-body, .v2-page-band-header, .v2-page-band-footer, #tpl-preview-sheet, #tpl-preview-tiptap, .pp-sheet-page, svg';
     const SKIP = /^(SCRIPT|STYLE|OPTION|OPTGROUP|BR|HR|TEMPLATE|NOSCRIPT|TITLE)$/;
     const desc = el => el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + (typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '');
     const pending = new Set();
@@ -138,18 +140,22 @@ async function openWidget(colorScheme) {
     }).observe(document, { childList: true, subtree: true });
   });
   // Semé avant le démarrage : une table de données (nombre, date, oui/non) et un modèle ouvert par défaut avec une bulle de chaque type, pour ouvrir la barre de chacune. Aucun réglage de droits.
-  await page.addInitScript(() => {
+  await page.addInitScript(opts => {
+    if (opts.lang) { try { localStorage.setItem('pp_lang', opts.lang); } catch (e) { /* stockage indisponible : la langue reste celle du navigateur */ } }
     window.__preSeedGristStub = (stub) => {
       stub.setVariables('Clients', { Nom: 'Text', Montant: 'Numeric', Date: 'Date', Actif: 'Bool' });
       stub.setRows('Clients', [{ id: 1, Nom: 'Dupont', Montant: 12.5, Date: 1790000000, Actif: true }]);
       const badge = c => `<span class="var-badge" data-table="Clients" data-column="${c}" data-key="Clients.${c}"></span>`;
       const m = stub.state.rows.Publipostage_Modeles;
       m.id.push(1); m.Nom.push('Contrat');
-      m.Contenu.push(`<p>Bonjour ${badge('Nom')}, montant ${badge('Montant')}, le ${badge('Date')}, actif ${badge('Actif')}.</p>`);
-      m.NomFichierPDF.push(''); m.HeaderFooter.push(''); m.DateModif.push(1790000000); m.Margins.push(''); m.EstParDefaut.push(true);
+      // Avec `headerFooter` : un en-tête et un pied remplis et assez de lignes pour une deuxième page, donc une bande de couture (fin de la page 1, début de la page 2).
+      m.Contenu.push(`<p>Bonjour ${badge('Nom')}, montant ${badge('Montant')}, le ${badge('Date')}, actif ${badge('Actif')}.</p>` + (opts.headerFooter ? Array.from({ length: 80 }, (_, i) => `<p>Ligne ${i + 1} du contrat.</p>`).join('') : ''));
+      m.NomFichierPDF.push('');
+      m.HeaderFooter.push(opts.headerFooter ? JSON.stringify({ enabled: true, differentFirstPage: false, header: { default: '<p>En-tête du contrat</p>', first: '' }, footer: { default: '<p>Pied de page du contrat</p>', first: '' } }) : '');
+      m.DateModif.push(1790000000); m.Margins.push(''); m.EstParDefaut.push(true);
       stub.state.nextRowId.Publipostage_Modeles = 2;
     };
-  });
+  }, opts);
   await page.goto(`${BASE}/_test-harness.html`, { waitUntil: 'load' });
   await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
   await page.waitForFunction(() => {
@@ -163,7 +169,7 @@ async function openWidget(colorScheme) {
 // Tout bouton, champ ou texte de la page (éléments cachés compris : un menu fermé existe dans le DOM), hors contenu du document : l'éditeur, la Lecture, les aperçus de modèle et les dessins (svg) gardent
 // la police du contenu (Roboto) ou leur propre police, pas celle de l'interface. Renvoie le nombre d'éléments examinés et ceux qui n'ont pas la police de la référence.
 const sweepOutside = (page, ref) => page.evaluate(ref => {
-  const CONTENT = '.tiptap, .ProseMirror, .reader-content, .pp-callout-paper, .v2-page-watermark, #tpl-preview-sheet, #tpl-preview-tiptap, .pp-sheet-page, svg';
+  const CONTENT = '.tiptap, .ProseMirror, .reader-content, .pp-callout-paper, .v2-page-watermark, .v2-hf-zone-body, .v2-page-band-header, .v2-page-band-footer, #tpl-preview-sheet, #tpl-preview-tiptap, .pp-sheet-page, svg';
   const desc = el => el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + (typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '');
   let n = 0;
   const outside = [];
@@ -259,13 +265,14 @@ check('la police de référence (« Enregistrer ») est celle du système : --fo
 const sweeps = {};
 const sweepAs = async group => { const s = await sweepOutside(page, ref); (sweeps[group] ||= { states: 0, n: 0, outside: [] }); sweeps[group].states++; sweeps[group].n += s.n; sweeps[group].outside.push(...s.outside); return s; };
 // Referme un menu ou une barre : Échap, puis un clic dans le vide à droite de la ligne du document (le curseur y reste : un clic ailleurs ferait perdre le focus à l'éditeur, et la bulle suivante ne s'ouvrirait qu'au second clic).
-const closeMenus = async () => {
-  await page.keyboard.press('Escape');
-  const at = await page.evaluate(() => { const r = document.querySelector('.tiptap p').getBoundingClientRect(); return { x: r.right - 12, y: r.y + r.height / 2 }; });
-  await page.mouse.move(at.x - 20, at.y, { steps: 2 });
-  await page.mouse.click(at.x, at.y);
-  await page.waitForTimeout(200);
+const closeMenusOf = async pg => {
+  await pg.keyboard.press('Escape');
+  const at = await pg.evaluate(() => { const r = document.querySelector('.tiptap p').getBoundingClientRect(); return { x: r.right - 12, y: r.y + r.height / 2 }; });
+  await pg.mouse.move(at.x - 20, at.y, { steps: 2 });
+  await pg.mouse.click(at.x, at.y);
+  await pg.waitForTimeout(200);
 };
+const closeMenus = () => closeMenusOf(page);
 
 // ===== 1) Au repos : tout le DOM, éléments cachés compris =====
 const rest = await sweepAs('repos');
@@ -362,8 +369,47 @@ for (const [group, label] of [['menus', 'les menus des polices et des tailles'],
 const seen = await page.evaluate(() => window.__uiFonts);
 const seenOutside = seen.filter(f => f.ff !== ref).map(f => `${f.desc} : ${f.ff}`);
 check(`pendant tout le parcours, ${seen.length} boutons, champs et textes sont apparus dans la page : tous ont la police des boutons`, seen.length >= 200 && seenOutside.length === 0, { total: seenOutside.length, first: seenOutside.slice(0, 10) });
-check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 
+// ===== 7) Le texte des en-têtes et pieds de page de la feuille : Roboto, comme le document =====
+// « Oui, Roboto » d'Antoine du 12/10, à la carte « Passer le texte des en-têtes et pieds de page en Roboto ? ». Ce texte est du contenu du modèle : le PDF l'écrit en Roboto, la Lecture aussi ; la feuille le laissait
+// dans l'Arial de `body` (le corps d'une zone est rattaché à la feuille, pas à `.tiptap`). Seconde page de test : un en-tête et un pied remplis, assez de lignes pour une deuxième page (donc une bande de couture).
+const second = await openWidget('light', { headerFooter: true });
+const p2 = second.page;
+const docFont = await p2.evaluate(() => getComputedStyle(document.querySelector('.tiptap')).fontFamily);
+check('le document s\'écrit en Roboto : c\'est la référence du texte d\'un en-tête et d\'un pied', /^"?Roboto"?\s*,/.test(docFont), docFont);
+// Chaque conteneur du texte d'en-tête ou de pied (zones de bord, bandes de couture) : sa police, sa taille, sa hauteur de ligne, et la police de chaque élément qui porte du texte à lui.
+const hfTexts = (pg, selector) => pg.evaluate(sel => Array.from(document.querySelectorAll(sel)).map(el => {
+  const cs = getComputedStyle(el);
+  const r = el.getBoundingClientRect();
+  const own = [el, ...el.querySelectorAll('*')].filter(e => Array.from(e.childNodes).some(n => n.nodeType === 3 && n.textContent.trim())).map(e => getComputedStyle(e).fontFamily);
+  return { text: (el.textContent || '').trim().slice(0, 30), ff: cs.fontFamily, fs: cs.fontSize, lh: cs.lineHeight, shown: el.getClientRects().length > 0 && r.width > 0 && r.height > 0, top: Math.round(r.top), bottom: Math.round(r.bottom), own };
+}), selector);
+const edgeBodies = await hfTexts(p2, '.v2-hf-zone-body');
+check('en-tête et pied de la feuille (zones de bord) : le texte est en Roboto comme le document, à 14 px et 19,88 px de ligne', edgeBodies.length === 2 && edgeBodies.every(b => b.shown && b.own.length > 0 && b.ff === docFont && b.own.every(f => f === docFont) && b.fs === '14px' && b.lh === '19.88px'), edgeBodies);
+// Survol à la souris de l'en-tête rempli : il prend son fond teinté et son crayon, le texte garde sa police.
+{
+  const z = await p2.evaluate(() => { const el = document.querySelector('.v2-hf-zone-filled.v2-page-edge-top'); if (!el) return null; const r = el.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+  if (z) { await p2.mouse.move(z.x, z.y + 60, { steps: 3 }); await p2.mouse.move(z.x, z.y, { steps: 6 }); await p2.waitForTimeout(500); }
+  const hov = await p2.evaluate(() => { const zone = document.querySelector('.v2-hf-zone-filled.v2-page-edge-top'); const body = zone && zone.querySelector('.v2-hf-zone-body'); const pencil = zone && zone.querySelector('.v2-hf-zone-pencil'); return zone ? { hover: zone.classList.contains('v2-hf-zone-hover') || zone.matches(':hover'), pencil: !!pencil && getComputedStyle(pencil).display !== 'none', ff: body && getComputedStyle(body).fontFamily } : null; });
+  check('en-tête rempli : au survol à la souris (fond teinté, crayon), le texte garde la police du document', !!z && !!hov && hov.hover && hov.pencil && hov.ff === docFont, { z, hov });
+}
+// Bande de couture entre la page 1 et la page 2 : le pied de la page qui finit, puis l'en-tête de celle qui commence ; la molette l'amène dans le panneau.
+for (let i = 0; i < 12; i++) {
+  const gap = await p2.evaluate(() => { const d = document.querySelector('.v2-page-seam-divider'); return d ? d.getBoundingClientRect().top : null; });
+  if (gap === null || (gap > 100 && gap < 300)) break;
+  await p2.mouse.move(350, 250, { steps: 2 });
+  await p2.mouse.wheel(0, gap > 300 ? Math.min(gap - 200, 600) : gap - 200);
+  await p2.waitForTimeout(250);
+}
+await p2.waitForTimeout(300);
+const bandFoot = await hfTexts(p2, '.v2-page-band-footer');
+const bandHead = await hfTexts(p2, '.v2-page-band-header');
+check('bande de couture, pied de la page 1 (visible dans le panneau) : le texte est en Roboto comme le document, à 14 px et 19,88 px de ligne', bandFoot.length >= 1 && bandFoot[0].shown && bandFoot[0].bottom > 0 && bandFoot[0].top < HEIGHT && /Pied de page/.test(bandFoot[0].text) && bandFoot[0].ff === docFont && bandFoot[0].own.every(f => f === docFont) && bandFoot[0].fs === '14px' && bandFoot[0].lh === '19.88px', bandFoot);
+check('bande de couture, en-tête de la page 2 (visible dans le panneau) : le texte est en Roboto comme le document, à 14 px et 19,88 px de ligne', bandHead.length >= 1 && bandHead[0].shown && bandHead[0].bottom > 0 && bandHead[0].top < HEIGHT && /En-tête/.test(bandHead[0].text) && bandHead[0].ff === docFont && bandHead[0].own.every(f => f === docFont) && bandHead[0].fs === '14px' && bandHead[0].lh === '19.88px', bandHead);
+
+check('aucune erreur JavaScript pendant tout le parcours (les deux pages)', pageErrors.length === 0, pageErrors);
+
+await second.context.close();
 await context.close();
 await browser.close();
 server.close();
