@@ -22,7 +22,7 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   correspondance à choisir. Une zone n'a qu'une Boucle, et ne répète pas la table de la zone qui l'entoure
   (l'icône est alors grisée et dit pourquoi). Les renommages de tables et de colonnes dans Grist suivent
   aussi ces boucles ; la puce « N° de ligne » donne le rang de la zone la plus proche.
-- **PDF « Léger »** : le menu Qualité du bouton PDF propose « Léger (images réduites) ». C'est le même PDF
+- **PDF « Léger »** : le menu « Type d'export » (sous les trois types) propose « Léger (images réduites) ». C'est le même PDF
   vectoriel, texte et mise en page intacts, dont les images sont ramenées à 150 points par pouce (la netteté
   d'un courrier ou de l'écran) : une photo de 4 Mo posée sur 10 cm n'en pèse plus que quelques dizaines de Ko.
   Une photo (JPEG ou PNG opaque) est recompressée en JPEG ; un logo à fond transparent reste un PNG
@@ -319,8 +319,8 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   rien ne peut se dessiner (aucune ligne sélectionnée pour « liées », rien à tracer, graphique supprimé dans
   Grist, bibliothèque injoignable), le cadre pointillé et le nom du graphique restent. Dans une case plus
   étroite que lui, le graphique rétrécit sans se déformer, comme dans la Lecture.
-- **Impression par le navigateur** : la ligne « Impression navigateur » du menu Qualité du bouton PDF, jusque-là
-  grisée, imprime la Lecture par la fenêtre d'impression du navigateur (« Enregistrer au format PDF » ou une
+- **Impression par le navigateur** : la ligne « Impression navigateur » du menu « Type d'export » (le menu Qualité
+  du bouton PDF, avant son renommage), jusque-là grisée, imprime la Lecture par la fenêtre d'impression du navigateur (« Enregistrer au format PDF » ou une
   imprimante). La mise en page est celle de la Lecture : mêmes coupures de page, mêmes en-têtes, pieds et numéros
   de page, mêmes polices, tableaux, images et filigrane, en thème clair quel que soit le thème du widget. Le
   document est mesuré par la Lecture elle-même, puis découpé en feuilles de la taille exacte du modèle (A4, A5
@@ -374,6 +374,14 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   modèle qui s'ouvrira au démarrage. L'étoile de la barre d'outils reste. Un e-mail et un macro-modèle ne peuvent pas
   être le modèle par défaut du document : leur étoile est grisée, avec l'info-bulle qui dit pourquoi (pour une vue :
   Réglages > Vue), comme en lecture seule.
+- **Le bouton « Qualité PDF » devient « Type d'export »** : le bouton à gauche d'« Exporter » choisit le type
+  d'export (PDF, Word ou Excel) et, sous les trois types, la qualité du PDF (Vectoriel, Impression navigateur,
+  Léger). Le bouton **Exporter** (Alt+P aussi) exporte la ligne affichée dans le type choisi, et son menu, titré
+  « Exporter », liste les lignes de ce type : l'export de la ligne affichée, puis les lots - PDF (archive ZIP, un
+  seul PDF, assemblage avant impression), Word (archive ZIP), Excel (archive ZIP, classeur unique). Rien n'est
+  retiré : les neuf lignes d'export d'avant sont là, avec les mêmes noms et le même effet ; Word reste grisé dans
+  une grille et Excel dans un document, et le type revient alors au PDF. La qualité du PDF se grise quand le type
+  n'est pas le PDF, et se retrouve choisie en revenant au PDF.
 - **Marges d'un macro-modèle** : l'onglet Marges des Réglages dit, tant qu'un macro-modèle est chargé, que ses marges
   priment sur celles des modèles assemblés : elles valent pour toutes ses pages, dans la Lecture, le PDF, le Word et
   l'impression ; les marges propres à un modèle ne servent que lorsqu'on l'ouvre seul. Rien ne change dans le calcul des

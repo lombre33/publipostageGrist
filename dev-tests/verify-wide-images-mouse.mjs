@@ -222,8 +222,15 @@ if (pdfDownload) {
   }
 }
 
-// Word : le menu Exporter s'ouvre au survol de son bouton, puis la ligne « Exporter en DOCX » au vrai clic.
+// Word : le type se choisit d'abord dans le menu « Type d'export » (survol du bouton à gauche d'« Exporter »), puis le menu Exporter s'ouvre au survol de son bouton et la ligne « Exporter en DOCX » se clique.
 await realMove('#v2-btn-quality');
+await sleep(500);
+const wordType = await center('#v2-quality-flyout .v2-hover-row[data-export-type="docx"]');
+await page.mouse.move(wordType.x, wordType.y, { steps: 8 });
+await sleep(120);
+await page.mouse.click(wordType.x, wordType.y);
+await sleep(300);
+await realMove('#btn-export-pdf');
 await sleep(500);
 const docxRow = await center('#v2-btn-export-docx');
 await page.mouse.move(docxRow.x, docxRow.y, { steps: 8 });

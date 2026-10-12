@@ -645,6 +645,9 @@
 .v2-hover-row.is-active { color: var(--accent, #2f6fed); font-weight: 700; }
 .v2-hover-row-disabled { color: var(--text-muted, #9aa3b2); cursor: not-allowed; }
 .v2-hover-row-disabled:hover { background: none; }
+/* Une ligne qu'un menu ne montre que dans un certain état (lignes du menu Exporter selon le type d'export, `data-export-for`) : `hidden` suffit, sauf pour une
+   ligne que le CSS passe en `display: flex` (clé d'un raccourci, css/shortcuts.css). */
+.v2-hover-row[hidden] { display: none; }
 /* Lignes du menu « Lien, citation, bloc de code » (#v2-blocks-flyout) : de vrais boutons, atteignables au clavier (les `.v2-hover-row` sont des
    `<span>`), avec l'icône de la fonction devant et le raccourci à droite. Plus spécifique que `#v2-toolbar button` (30 × 28, centré), qui vise
    tout bouton de la barre. */

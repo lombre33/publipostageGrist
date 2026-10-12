@@ -23,7 +23,7 @@ Moteur d'édition : [TipTap](https://tiptap.dev/)/ProseMirror. Le widget est une
 2. Lier le widget à la table dont les lignes fournissent les données : il suit la ligne sélectionnée.
 3. Ouvrir le menu **Nouveau modèle** puis **Nouveau document**, ou **Créer à partir d'un modèle…** pour partir de la galerie.
 4. Écrire le texte et taper `#` pour insérer une variable (`#Table.Colonne`).
-5. Passer en **Mode lecture** pour voir le document rempli avec la ligne sélectionnée, puis **Exporter en PDF**.
+5. Passer en **Mode lecture** pour voir le document rempli avec la ligne sélectionnée, puis **Exporter** (en PDF, le type d'export de départ).
 
 ## Fonctionnalités
 
@@ -69,6 +69,7 @@ La galerie **Créer à partir d'un modèle…** propose 21 modèles prêts à l'
 
 ### Exports
 
+- **Type d'export** (le bouton à gauche d'« Exporter ») : PDF, Word ou Excel, puis, pour le PDF, sa qualité. Le bouton **Exporter** (et Alt+P) exporte la ligne affichée dans le type choisi ; son menu, titré « Exporter », liste les lignes de ce type : une seule ligne, toutes les lignes (ZIP, un seul PDF), l'assemblage avant impression, le classeur unique d'Excel. Word n'est pas proposé dans une grille ni Excel dans un document : la ligne est grisée, jamais retirée, et le type revient au PDF.
 - **PDF vectoriel** : texte sélectionnable, polices embarquées, mise en page de l'éditeur reprise ligne à ligne (en-têtes, pieds de page, numéros de page, notes, sommaire, images en calque, filigrane). Le nom du fichier se compose avec des variables.
 - **En lot** : un PDF par ligne dans une archive ZIP, ou toutes les lignes dans un seul PDF. Un lot suit les lignes que le widget affiche dans Grist (ses filtres, son tri, le lien « Sélectionner par ») : quand il n'en affiche qu'une partie, il demande s'il faut exporter celles-ci ou toute la table.
 - **Date du dernier export PDF** : dans Réglages > Vue, une colonne de la table (Date, Date et heure ou Texte, sans formule) garde le moment du dernier export PDF de chaque ligne. Elle est écrite une fois le PDF produit, pour les lignes qui sont dans le fichier : le PDF d'une ligne, le lot en ZIP, le PDF unique, l'assemblage avant impression. Ni Word, ni Excel, ni e-mail ; une ligne dont le PDF a échoué n'est pas datée. Sans colonne choisie, rien n'est écrit.
@@ -76,8 +77,8 @@ La galerie **Créer à partir d'un modèle…** propose 21 modèles prêts à l'
 - **Word** (`.docx`, bêta) : listes et notes de bas de page natives, un fichier par ligne en lot.
 - **Excel** (`.xlsx`) pour les grilles : une archive ZIP d'un classeur par ligne de la table, ou un seul classeur d'une feuille par ligne.
 - Avant un export, une fenêtre liste les sites externes dont des images seraient téléchargées.
-- **PDF par impression navigateur** (ligne « Impression navigateur » du menu Qualité du bouton PDF) : la Lecture, page pour page, passe par la fenêtre d'impression du navigateur (« Enregistrer au format PDF » ou une imprimante), avec la même mise en page que la Lecture. Une ligne à la fois, 60 pages au plus ; le PDF vectoriel n'a pas cette limite.
-- **PDF « Léger »** (ligne « Léger (images réduites) » du menu Qualité du bouton PDF) : le même PDF vectoriel, texte et page intacts, dont les images sont ramenées à 150 points par pouce (`ImageIo.lighten`, `js/image-io.js`) : une photo ou un PNG opaque devient un JPEG, un logo transparent reste un PNG, une petite image et un code QR ne sont pas touchés. Il vaut pour le PDF d'une ligne comme pour les lots ; « Vectoriel » reprend toujours les images telles quelles.
+- **PDF par impression navigateur** (ligne « Impression navigateur » du menu « Type d'export », sous les trois types) : la Lecture, page pour page, passe par la fenêtre d'impression du navigateur (« Enregistrer au format PDF » ou une imprimante), avec la même mise en page que la Lecture. Une ligne à la fois, 60 pages au plus ; le PDF vectoriel n'a pas cette limite.
+- **PDF « Léger »** (ligne « Léger (images réduites) » du menu « Type d'export », sous les trois types) : le même PDF vectoriel, texte et page intacts, dont les images sont ramenées à 150 points par pouce (`ImageIo.lighten`, `js/image-io.js`) : une photo ou un PNG opaque devient un JPEG, un logo transparent reste un PNG, une petite image et un code QR ne sont pas touchés. Il vaut pour le PDF d'une ligne comme pour les lots ; « Vectoriel » reprend toujours les images telles quelles.
 - Les qualités de PDF « raster » (« Basse qualité », « Ultra HD ») ne sont pas livrées : leur code (html2pdf.js) a été retiré le 4 octobre 2026 et reste dans l'historique git, et leurs lignes grisées ont quitté le menu le 9 octobre 2026 ; un PDF photographié n'aurait jamais été plus net que le PDF vectoriel.
 
 ### Interface
@@ -170,7 +171,7 @@ Règle de modification : un fichier `css/` ou `js/` modifié monte son numéro `
 
 ## Tests
 
-La suite de `dev-tests/` compte 115 groupes de scénarios, joués dans un Chromium sans écran (un navigateur neuf par groupe), et 129 scripts Node (parcours rejoués à la vraie souris dans un panneau de 700×400, tests unitaires, contrôle d'hygiène du code). Elle couvre l'éditeur, les modes Lecture, Grille et E-mail, et les exports PDF, Word et Excel. Le dernier contrôle complet (3 octobre 2026) a passé plus de 6 500 vérifications.
+La suite de `dev-tests/` compte 116 groupes de scénarios, joués dans un Chromium sans écran (un navigateur neuf par groupe), et 130 scripts Node (parcours rejoués à la vraie souris dans un panneau de 700×400, tests unitaires, contrôle d'hygiène du code). Elle couvre l'éditeur, les modes Lecture, Grille et E-mail, et les exports PDF, Word et Excel. Le dernier contrôle complet (3 octobre 2026) a passé plus de 6 500 vérifications.
 
 ```bash
 bash dev-tests/generate-harness.sh           # régénère _test-harness.html depuis index.html

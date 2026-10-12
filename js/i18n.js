@@ -139,7 +139,7 @@ const I18n = (function () {
     'pageSize.saved.deleted': { fr: 'Format « {name} » supprimé.', en: 'Format “{name}” deleted.' },
     'pageSize.saved.error.write': { fr: 'Le format n’a pas pu être enregistré dans le document.', en: 'The format could not be saved to the document.' },
     'pageSize.saved.error.delete': { fr: 'Le format n’a pas pu être supprimé du document.', en: 'The format could not be deleted from the document.' },
-    // Fenêtre « Assemblage avant impression… » du menu Exporter en PDF (js/sheet-assembly-dialog.js) : les pages de chaque ligne posées sur des
+    // Fenêtre « Assemblage avant impression… » du menu Exporter, type PDF (js/sheet-assembly-dialog.js) : les pages de chaque ligne posées sur des
     // feuilles A4 ou A3, une par emplacement, avec ou sans traits de coupe, avec une marge autour de chaque page.
     'sheetAssembly.title': { fr: 'Assemblage avant impression', en: 'Assemble before printing' },
     'sheetAssembly.sheet.label': { fr: 'Feuille', en: 'Sheet' },
@@ -172,6 +172,13 @@ const I18n = (function () {
     'grid.pageBreak': { fr: 'Saut de page · nouvelle page du PDF, nouvelle feuille de l’Excel', en: 'Page break · new page in the PDF, new sheet in the Excel file' },
     'grid.pageBreakDocument': { fr: 'Saut de page · nouvelle page du PDF et du Word', en: 'Page break · new page in the PDF and Word files' },
     'toolbar.autosave.aria': { fr: 'Enregistrement automatique — enregistre le modèle toutes les ~2,5 secondes pendant que vous éditez. Désactiver si vous préférez enregistrer vous-même.', en: 'Auto-save — saves the template roughly every 2.5 seconds while you edit. Turn off if you prefer to save manually.' },
+    // Type d'export (ex-« Qualité PDF ») : PDF, Word ou Excel ; la qualité du PDF reste un intitulé du même menu. « Exporter » nomme le bouton et son menu,
+    // quel que soit le type choisi ; « Exporter en PDF » est la ligne du menu qui exporte la ligne affichée en PDF.
+    'toolbar.exportType': { fr: 'Type d’export', en: 'Export type' },
+    'exportType.pdf': { fr: 'PDF', en: 'PDF' },
+    'exportType.docx': { fr: 'Word (bêta)', en: 'Word (beta)' },
+    'exportType.xlsx': { fr: 'Excel', en: 'Excel' },
+    'toolbar.export': { fr: 'Exporter', en: 'Export' },
     'toolbar.quality.tip': { fr: 'Qualité PDF', en: 'PDF quality' },
     'toolbar.quality.aria': { fr: 'Qualité d’export PDF', en: 'PDF export quality' },
     'toolbar.exportPdf': { fr: 'Exporter en PDF', en: 'Export to PDF' },

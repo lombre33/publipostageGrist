@@ -13,7 +13,7 @@
 //   values (listes de valeurs, un document par valeur), internal (droits d'accès, commentaires), suivi (suggestions de suivi), sommaire (titres et sommaire)
 import { spawnSync } from 'node:child_process';
 import { rm } from 'node:fs/promises';
-import { open, Report, tablesSpec, columnsMix, timed, timedPaint, sleep, click, clickHoverRow, pickTemplate, fire, mode, downloadOf, exportBatchOf, status, stopServer } from './load-lib.mjs';
+import { open, Report, tablesSpec, columnsMix, timed, timedPaint, sleep, click, clickHoverRow, chooseExportType, pickTemplate, fire, mode, downloadOf, exportBatchOf, status, stopServer } from './load-lib.mjs';
 
 const argv = process.argv.slice(2);
 const flags = { quick: false, strict: false, out: null };
@@ -147,7 +147,7 @@ async function reads(r) {
       await step('passer en Lecture', () => mode(page, 'read'));
       await step('autre ligne en Lecture', () => fire(page, 'Table01', 4));
       await step('PDF d’une ligne', async () => { await downloadOf(page, 'one', () => click(page, '#btn-export-pdf')); });
-      await step('Word d’une ligne', async () => { await downloadOf(page, 'one', () => clickHoverRow(page, '#v2-btn-quality', '#v2-btn-export-docx')); });
+      await step('Word d’une ligne', async () => { await chooseExportType(page, 'docx'); await downloadOf(page, 'one', () => clickHoverRow(page, '#btn-export-pdf', '#v2-btn-export-docx')); await chooseExportType(page, 'pdf'); });
       const t0 = Date.now();
       await w.resetStats();
       await exportBatchOf(page, 'pdfZip', 'lot');
@@ -398,7 +398,8 @@ async function content(r) {
         if (endMark) { const found = pdfText(pdf.file).includes(endMark); r.rec('content', `${sc.label} : PDF - la fin du document est écrite`, found ? 1 : 0, { unit: '', ok: found, note: '« ' + endMark + ' »' }); }
         await rm(pdf.file, { force: true });
         if (sc.arg.pages !== undefined && sc.arg.pages <= q(120, 10)) {
-          const docx = await downloadOf(page, 'content', () => clickHoverRow(page, '#v2-btn-quality', '#v2-btn-export-docx'), 900000);
+          const docx = await downloadOf(page, 'content', async () => { await chooseExportType(page, 'docx'); await clickHoverRow(page, '#btn-export-pdf', '#v2-btn-export-docx'); }, 900000);
+          await chooseExportType(page, 'pdf');
           r.rec('content', `${sc.label} : Word`, docx.ms, { budget: 30000, note: `${Math.round(docx.size / 1024)} Ko` });
           if (endMark) { const found = docxText(docx.file).includes(endMark); r.rec('content', `${sc.label} : Word - la fin du document est écrite`, found ? 1 : 0, { unit: '', ok: found, note: '« ' + endMark + ' »' }); }
           await rm(docx.file, { force: true });

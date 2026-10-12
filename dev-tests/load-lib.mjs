@@ -190,7 +190,7 @@ export async function hoverRow(page, parentSel, rowSel) {
   const p = await center(page, parentSel);
   await page.mouse.move(p.x - 25, p.y); await page.mouse.move(p.x, p.y, { steps: 4 }); await sleep(600);
   const r = await center(page, rowSel);
-  if (!r) throw new Error('ligne introuvable : ' + rowSel);
+  if (!r || !r.w) throw new Error('ligne introuvable ou masquée : ' + rowSel); // une ligne masquée (type d'export autre) a un cadre vide : jamais cliquer en (0, 0)
   const inRow = Math.min(Math.max(p.x, r.x - r.w / 2 + 6), r.x + r.w / 2 - 6);
   await page.mouse.move(inRow, p.y + 10, { steps: 2 });
   await page.mouse.move(inRow, r.y, { steps: 6 });
@@ -252,18 +252,28 @@ export async function confirmDialog(page) {
   await sleep(250);
   await click(page, '#pp-dialog-modal .var-modal-primary');
 }
-// Les lignes du menu « Exporter en PDF » (survol du bouton) : ZIP, un seul PDF ; « Qualité » : Word, Excel.
+// Le type d'export (survol du bouton à gauche d'« Exporter », menu « Type d'export ») : PDF, Word ou Excel, choisi à la vraie souris. Le menu « Exporter » (survol du bouton) ne
+// liste que les lignes du type choisi : ZIP, un seul PDF, assemblage pour le PDF ; Word, son ZIP ; Excel, son ZIP, son classeur unique.
+export const EXPORT_TYPE_ROW = type => `#v2-quality-flyout .v2-hover-row[data-export-type="${type}"]`;
+export async function chooseExportType(page, type) {
+  if (await page.evaluate(() => document.getElementById('v2-export-type').value) === type) return;
+  await clickHoverRow(page, '#v2-btn-quality', EXPORT_TYPE_ROW(type));
+  await sleep(150);
+  const now = await page.evaluate(() => document.getElementById('v2-export-type').value);
+  if (now !== type) throw new Error(`type d'export « ${type} » non choisi (${now})`);
+}
 export const EXPORT_ROWS = {
-  pdfZip: ['#btn-export-pdf', '#v2-btn-export-pdf-batch'],
-  pdfMerged: ['#btn-export-pdf', '#v2-btn-export-pdf-merged'],
-  pdfSheets: ['#btn-export-pdf', '#v2-btn-export-pdf-sheets'], // « Assemblage avant impression » : la fenêtre de réglage tient lieu de confirmation
-  docxZip: ['#v2-btn-quality', '#v2-btn-export-docx-batch'],
-  xlsxZip: ['#v2-btn-quality', '#v2-btn-export-xlsx-batch'],
-  xlsxSingle: ['#v2-btn-quality', '#v2-btn-export-xlsx-single'],
+  pdfZip: ['#btn-export-pdf', '#v2-btn-export-pdf-batch', 'pdf'],
+  pdfMerged: ['#btn-export-pdf', '#v2-btn-export-pdf-merged', 'pdf'],
+  pdfSheets: ['#btn-export-pdf', '#v2-btn-export-pdf-sheets', 'pdf'], // « Assemblage avant impression » : la fenêtre de réglage tient lieu de confirmation
+  docxZip: ['#btn-export-pdf', '#v2-btn-export-docx-batch', 'docx'],
+  xlsxZip: ['#btn-export-pdf', '#v2-btn-export-xlsx-batch', 'xlsx'],
+  xlsxSingle: ['#btn-export-pdf', '#v2-btn-export-xlsx-single', 'xlsx'],
 };
 export async function exportBatchOf(page, kind, name, { timeout = 900000 } = {}) {
-  const [parent, row] = EXPORT_ROWS[kind];
+  const [parent, row, type] = EXPORT_ROWS[kind];
   return downloadOf(page, name, async () => {
+    await chooseExportType(page, type);
     await clickHoverRow(page, parent, row);
     if (kind === 'pdfSheets') { await page.waitForSelector('#pp-sheets-modal .var-modal-primary', { state: 'visible', timeout: 30000 }); await sleep(250); await click(page, '#pp-sheets-modal .var-modal-primary'); }
     else await confirmDialog(page);

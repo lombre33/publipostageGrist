@@ -516,6 +516,11 @@ async function openSaveAs() {
   await realHover('#btn-save');
   await realClick('#v2-btn-save-as');
 }
+// Le type d'export se choisit dans le menu du bouton à gauche d'« Exporter » (« Type d'export ») ; le menu « Exporter » liste ensuite les lignes de ce type (Word : son ZIP).
+async function pickExportType(type) {
+  await realHover('#v2-btn-quality');
+  await realClick('#v2-quality-flyout .v2-hover-row[data-export-type="' + type + '"]', 250);
+}
 const focusKey = () => page.evaluate(() => { const a = document.activeElement; return a ? (a.id || a.tagName) : null; });
 const statusText = () => page.evaluate(() => document.getElementById('status-msg').textContent);
 // L'élément qui a le focus, et s'il porte le cadre de focus du clavier (:focus-visible) ; `outline` : ce que ce cadre dessine réellement.
@@ -704,9 +709,9 @@ async function runSites(theme) {
 
   // 5) Les trois exports en lot : même fenêtre, message propre à chacun, « Générer » ; Annuler n'exporte rien, « Générer » lance le chargement.
   const exportsCases = [
-    { name: 'PDF (ZIP)', hover: '#btn-export-pdf', row: '#v2-btn-export-pdf-batch', message: 'Générer un PDF pour chacune des 2 lignes de « SiDossiers » et les regrouper dans une archive ZIP ?' },
-    { name: 'PDF unique', hover: '#btn-export-pdf', row: '#v2-btn-export-pdf-merged', message: 'Générer un PDF pour chacune des 2 lignes de « SiDossiers » et les réunir dans un seul fichier PDF, chaque ligne commençant sur une nouvelle page ?' },
-    { name: 'DOCX (ZIP)', hover: '#v2-btn-quality', row: '#v2-btn-export-docx-batch', message: 'Générer un DOCX pour chacune des 2 lignes de « SiDossiers » et les regrouper dans une archive ZIP ?' },
+    { name: 'PDF (ZIP)', type: 'pdf', hover: '#btn-export-pdf', row: '#v2-btn-export-pdf-batch', message: 'Générer un PDF pour chacune des 2 lignes de « SiDossiers » et les regrouper dans une archive ZIP ?' },
+    { name: 'PDF unique', type: 'pdf', hover: '#btn-export-pdf', row: '#v2-btn-export-pdf-merged', message: 'Générer un PDF pour chacune des 2 lignes de « SiDossiers » et les réunir dans un seul fichier PDF, chaque ligne commençant sur une nouvelle page ?' },
+    { name: 'DOCX (ZIP)', type: 'docx', hover: '#btn-export-pdf', row: '#v2-btn-export-docx-batch', message: 'Générer un DOCX pour chacune des 2 lignes de « SiDossiers » et les regrouper dans une archive ZIP ?' },
   ];
   // Chaque export déclare ses bibliothèques (loadLibs, js/main.js) : le lot PDF pour les deux PDF, JSZip seul pour le DOCX en ZIP - les deux échouent ici.
   await page.evaluate(() => {
@@ -714,6 +719,7 @@ async function runSites(theme) {
     window.__realJsZip = ExportCommon.ensureJsZipLoaded; ExportCommon.ensureJsZipLoaded = async () => { throw new Error('JSZip non chargé par ce test'); };
   });
   for (const e of exportsCases) {
+    await pickExportType(e.type);
     await page.evaluate(() => { document.getElementById('status-msg').textContent = ''; });
     await realHover(e.hover);
     await realClick(e.row, 500);
@@ -730,6 +736,7 @@ async function runSites(theme) {
     check(`${T}, export en lot ${e.name} : Générer (Entrée) lance le chargement des bibliothèques (et son échec est annoncé)`, /Échec de chargement des bibliothèques/.test(await statusText()) && !(await isOpen()), await statusText());
   }
   await page.evaluate(() => { PdfExport.ensurePdfLibsLoaded = window.__realEnsure; ExportCommon.ensureJsZipLoaded = window.__realJsZip; });
+  await pickExportType('pdf');
 
   // 5 bis) Un lot dont une ligne échoue (le rendu Word de la ligne 2 lève une erreur) : une fois l'archive téléchargée, la fenêtre de fin de lot (js/batch-failures.js,
   // sur Dialogs.choose) liste la ligne absente et sa raison, au-dessus de tout, sans autre bouton que « Fermer » ; le verrou d'export n'est rendu qu'à sa fermeture. Puis une
@@ -743,7 +750,8 @@ async function runSites(theme) {
     };
     document.getElementById('status-msg').textContent = '';
   });
-  await realHover('#v2-btn-quality');
+  await pickExportType('docx');
+  await realHover('#btn-export-pdf');
   await realClick('#v2-btn-export-docx-batch', 500);
   await page.keyboard.press('Enter');
   await page.waitForFunction(() => { const ov = document.getElementById('pp-dialog-modal'); return !!ov && ov.style.display !== 'none' && /généré/.test(ov.querySelector('h3').textContent); }, null, { timeout: 90000 });
@@ -758,6 +766,7 @@ async function runSites(theme) {
   await click(CANCEL);
   check(`${T}, lot en échec : « Fermer » (clic réel) ferme la fenêtre et rend les contrôles d’export`, !(await isOpen()) && await page.evaluate(() => document.getElementById('v2-btn-export-docx-batch').style.pointerEvents === ''));
   await page.evaluate(() => { DocxExport.getDocxBlobForRecord = window.__realDocxBlob; });
+  await pickExportType('pdf');
 
   // Quarante documents en échec, aux noms longs, dans 700x400.
   await page.evaluate(() => {
@@ -1020,12 +1029,14 @@ async function runEnglish() {
   expectDialog(`${T}, supprimer un modèle : « Delete this template? », focus sur Cancel`, s, { title: 'Delete this template?', message: null, buttons: ['Cancel', 'Delete'], focus: 'Cancel' });
   await page.keyboard.press('Escape');
   await page.waitForTimeout(200);
-  await realHover('#v2-btn-quality');
+  await pickExportType('docx');
+  await realHover('#btn-export-pdf');
   await realClick('#v2-btn-export-docx-batch', 500);
   s = await state();
   expectDialog(`${T}, export DOCX en lot : le message garde ses nombres et le nom de la table`, s,
     { title: 'Export rows', message: 'Generate a DOCX for each of the 2 rows in “SiDossiers” and bundle them into a ZIP archive?', buttons: ['Cancel', 'Generate'], focus: 'Generate' });
   await click(CANCEL);
+  await pickExportType('pdf');
   // Les lignes d'un lot : la question de la vue Grist, dans la langue de l'interface (une ligne affichée sur deux).
   await page.evaluate(() => { window.__gristStub.setViewRows([2]); document.getElementById('status-msg').textContent = ''; });
   await realHover('#btn-export-pdf');

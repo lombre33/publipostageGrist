@@ -484,7 +484,7 @@
         if (before.disabled) problems.push('grisé alors que le type est accepté');
         if (before.page !== 'portrait' || before.data !== 'portrait' || before.pressed !== 'false' || before.active) problems.push('état de départ : ' + JSON.stringify(before));
         if (before.label !== I18n.t('toolbar.orientation.portrait', { format: 'A4' })) problems.push('libellé (aria-label) de départ : ' + before.label);
-        // Bouton d'un menu au survol : pas de data-tip (il se retirerait dès l'ouverture du menu, css/toolbar-v2.css), comme Qualité PDF et Exporter.
+        // Bouton d'un menu au survol : pas de data-tip (il se retirerait dès l'ouverture du menu, css/toolbar-v2.css), comme Type d’export et Exporter.
         if (before.tip) problems.push('le bouton d\'un menu au survol porte un data-tip');
         if (before.mask.indexOf("width='12' height='18'") === -1) problems.push('icône de départ : pas une page haute');
         await h.clickButton('btn-page-orientation');
@@ -661,13 +661,13 @@
     },
   });
 
-  // Un clic de souris sur le bouton d'un menu au survol ne lui donne pas le focus (retours d'Antoine du 01/10, carte « Les deux » : « + », « Qualité PDF » et « Titre »
+  // Un clic de souris sur le bouton d'un menu au survol ne lui donne pas le focus (retours d'Antoine du 01/10, carte « Les deux » : « + », « Qualité PDF » (devenu « Type d’export » le 12/10) et « Titre »
   // restaient ouverts une fois la souris partie, et le curseur quittait le texte). Mécanisme commun de js/editor-core.js, par délégation. Ce cas parcourt TOUS les groupes à menu
   // présents (découverte structurelle, y compris un groupe créé après coup) et vérifie l'appui retenu (mousedown annulé : seul geste que le harnais en page peut établir, un
   // évènement synthétique ne déplace jamais le focus), puis le champ de saisie rendu au clic. La vraie souris, à 700x400, est dans verify-menu-click-mouse.mjs (menuClickMouse).
   cases.push({
     id: 'toolbar_every_menu_button_refuses_the_focus_on_a_mouse_press_and_blurs_a_text_field_before_its_click',
-    description: "Le bouton principal de chaque groupe à menu (« + », Enregistrer, Qualité PDF, Exporter, Titre, ...) retient le focus à l'appui de la souris, pas une ligne de menu ordinaire ni un bouton ordinaire ; un champ de saisie qui avait le focus le perd au clic, avant le gestionnaire du bouton, mais l'éditeur garde le sien",
+    description: "Le bouton principal de chaque groupe à menu (« + », Enregistrer, Type d’export, Exporter, Titre, ...) retient le focus à l'appui de la souris, pas une ligne de menu ordinaire ni un bouton ordinaire ; un champ de saisie qui avait le focus le perd au clic, avant le gestionnaire du bouton, mais l'éditeur garde le sien",
     run: async (h) => {
       await goToNewDocument(h);
       const triggers = [...document.querySelectorAll('.v2-hover-group')].map(g => g.querySelector(':scope > button')).filter(Boolean);

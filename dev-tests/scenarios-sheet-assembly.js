@@ -102,7 +102,7 @@
       while (!isOpen() && Date.now() - startedAt < 5000) await h.sleep(40);
       opened = isOpen();
       if (opened) {
-        during = Object.fromEntries(['v2-btn-export-pdf-batch', 'v2-btn-export-pdf-merged', ROW_ID].map(id => [id, document.getElementById(id).style.pointerEvents]));
+        during = Object.fromEntries(['v2-btn-export-pdf', 'v2-btn-export-pdf-batch', 'v2-btn-export-pdf-merged', ROW_ID].map(id => [id, document.getElementById(id).style.pointerEvents]));
         if (drive) await drive(); else okButton().click();
         if (expectDownload === false) await h.sleep(500);
         else { while (!downloads.length && Date.now() - startedAt < 60000) await h.sleep(100); await h.sleep(60); }
@@ -896,7 +896,7 @@
   // --- 14) Annuler ne lance rien, la ligne et ses voisines sont grisées pendant la fenêtre ---------------------------------------------------------------------------------------
   cases.push({
     id: 'sheetassembly_menu_row_cancel_downloads_nothing_and_locks_the_exports_while_open',
-    description: 'Pendant que la fenêtre est ouverte, les trois lignes PDF du menu sont inactives (pas de second export par-dessus) ; « Annuler » et Échap ne téléchargent rien, ne chargent aucune bibliothèque (aucun message d’état), ne posent aucune seconde question, et rendent les lignes ; la ligne est dans le menu Exporter en PDF après « un seul PDF », en français et en anglais',
+    description: 'Pendant que la fenêtre est ouverte, les lignes PDF du menu Exporter (la ligne, le ZIP, le PDF unique, l’assemblage) sont inactives (pas de second export par-dessus) ; « Annuler » et Échap ne téléchargent rien, ne chargent aucune bibliothèque (aucun message d’état), ne posent aucune seconde question, et rendent les lignes ; la ligne est dans le menu Exporter après « un seul PDF », en français et en anglais',
     run: async (h) => {
       const bad = [];
       forgetChoice();
@@ -904,8 +904,9 @@
         await withPage('A6', 'portrait', async () => {
           await seed(h, `<p>${badge('Nom')}</p>`);
           const flyout = document.getElementById('v2-export-pdf-flyout');
-          const ids = Array.from(flyout.querySelectorAll('.v2-hover-row')).map(r => r.id);
-          if (ids.join() !== 'v2-btn-export-pdf-batch,v2-btn-export-pdf-merged,v2-btn-export-pdf-sheets') bad.push('lignes du menu : ' + ids.join());
+          // Le menu ne montre que les lignes du type choisi (PDF au départ) : la ligne affichée, puis les trois lots, l'assemblage en dernier.
+          const ids = Array.from(flyout.querySelectorAll('.v2-hover-row:not([hidden])')).map(r => r.id);
+          if (ids.join() !== 'v2-btn-export-pdf,v2-btn-export-pdf-batch,v2-btn-export-pdf-merged,v2-btn-export-pdf-sheets') bad.push('lignes du menu : ' + ids.join());
           const row = document.getElementById(ROW_ID);
           if (row.textContent.trim() !== 'Assemblage avant impression…') bad.push('texte de la ligne : ' + row.textContent);
           I18n.setLang('en');
@@ -915,7 +916,7 @@
           const viaButton = await exportSheets(h, async () => { cancelButton().click(); }, false);
           if (!viaButton.opened || viaButton.downloads.length || viaButton.statuses.length || viaButton.confirms.length) bad.push('Annuler : ' + JSON.stringify({ opened: viaButton.opened, downloads: viaButton.downloads.length, statuses: viaButton.statuses, confirms: viaButton.confirms.length }));
           if (!viaButton.during || Object.values(viaButton.during).some(v => v !== 'none')) bad.push('lignes non verrouillées pendant la fenêtre : ' + JSON.stringify(viaButton.during));
-          const after = ['v2-btn-export-pdf-batch', 'v2-btn-export-pdf-merged', ROW_ID].map(id => document.getElementById(id).style.pointerEvents);
+          const after = ['v2-btn-export-pdf', 'v2-btn-export-pdf-batch', 'v2-btn-export-pdf-merged', ROW_ID].map(id => document.getElementById(id).style.pointerEvents);
           if (after.some(v => v !== '')) bad.push('lignes restées verrouillées après Annuler : ' + after.join());
           const viaEscape = await exportSheets(h, async () => { document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); }, false);
           if (!viaEscape.opened || viaEscape.downloads.length || viaEscape.statuses.length) bad.push('Échap : ' + JSON.stringify({ opened: viaEscape.opened, downloads: viaEscape.downloads.length, statuses: viaEscape.statuses }));

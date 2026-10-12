@@ -909,7 +909,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   fond posé sur la case) ; une image ajoutée prend un contour de 2 px `#8fd3aa`. La couleur du texte ne change pas et rien n'est souligné (14:1 sur la teinte, un lien 5,3:1). Rien n'est accepté pour de bon :
   l'éditeur garde ses suggestions, et le corps de l'e-mail suit la Lecture, de même que ses en-têtes et ses pieds de page. Le PDF, le Word et l'Excel sortent aussi comme si tout était accepté, sans aucune
   teinte (choix d'Antoine du 04/10, « Acceptées, sans teinte ») : le texte supprimé n'y est plus, le texte ajouté s'y écrit comme le reste.
-- Export Excel d'une grille (demande d'Antoine du 01/10) : le menu « Qualité PDF » a trois lignes Excel, sous les deux lignes Word : « Exporter en Excel… », « Exporter les
+- Export Excel d'une grille (demande d'Antoine du 01/10) : le menu « Qualité PDF » (devenu « Type d'export » puis « Exporter » le 12/10, voir « Type d'export ») a trois lignes Excel, sous les deux lignes Word : « Exporter en Excel… », « Exporter les
   valeurs de la table en Excel (ZIP)… » et « Exporter les valeurs de la table dans un seul classeur… ». Elles sont actives dans une grille et grisées ailleurs ; à l'inverse
   les deux lignes Word sont grisées dans une grille — jamais retirées, `aria-disabled` posé, un clic dessus ne lance rien et n'ouvre aucune confirmation. « Exporter en Excel… »
   télécharge un classeur d'une feuille pour la ligne affichée, nommé comme le PDF avec l'extension .xlsx, et le coin d'état dit « Fichier Excel généré. ». La feuille reprend la
@@ -918,10 +918,23 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   ou une vraie date (au format de la bulle) que si elle ne contient que cette bulle, sinon c'est du texte ; un zéro masqué reste vide ; aucune couleur n'est inventée (une case
   sans format n'a ni couleur de texte ni fond, thème sombre compris).
 - Toutes les valeurs de la table, dans une grille (choix d'Antoine du 01/10) : « lignes » devient « valeurs de la table » partout où l'export en lot en parle — les deux lignes du
-  menu « Exporter en PDF » (« Exporter les valeurs de la table (ZIP)… », « … en un seul PDF… »), leur confirmation et le message d'une table vide ; dans un document, ces
+  menu « Exporter » (type PDF : « Exporter les valeurs de la table (ZIP)… », « … en un seul PDF… »), leur confirmation et le message d'une table vide ; dans un document, ces
   textes gardent « lignes ». L'export Excel en lot a deux formes, une ligne chacune : une archive « <table>-export-xlsx.zip » d'un classeur par valeur (nommé comme les PDF par le
   modèle de nom de fichier), ou un seul classeur « <table>-export.xlsx » d'une feuille par valeur, nommée comme son fichier (31 caractères au plus, « nom (2) » quand deux
   feuilles s'appellent pareil). Chacune demande confirmation, annonce sa progression (« Export Excel en lot : 2/10... ») et dit sa fin en mots d'Excel, jamais de PDF.
+- Type d'export (demande d'Antoine du 12/10, « le bouton qualité PDF doit devenir le choix pour le type d'export - les options pour le pdf, word et exel - un choix une seule ligne ou toutes les lignes +
+  l'option liées au classeur pour les exel et mode assemblage - le bouton d'export pdf, son nom en haut de la dropdown devient juste "exporter" - attention à ne pas perdre de features ») : le bouton
+  « Qualité PDF » (`#v2-btn-quality`) se nomme « Type d'export » (`aria-label`, titre de son menu). Le menu a deux titres : « Type d'export » avec trois types - « PDF », « Word (bêta) », « Excel » -, puis
+  « Qualité PDF » avec les trois qualités (« Vectoriel (par défaut) », « Impression navigateur », « Léger (images réduites) »). Le type est un choix durable (liste cachée `#v2-export-type`, comme
+  `#v2-pdf-quality`) : sa ligne est la ligne active (gras bleu, comme une qualité choisie), le bouton s'allume (`.active`, comme un style de puce choisi) tant que le type n'est pas le PDF, et les trois
+  qualités se grisent hors du PDF (jamais retirées, un clic dessus ne change rien ; la qualité choisie est gardée et revient avec le PDF). Word se grise dans une grille et Excel dans un document : jamais
+  retirés (`aria-disabled`), un clic dessus ne choisit rien, et un type choisi qu'un autre modèle ne sait pas faire revient au PDF, pour de bon. Le bouton « Exporter » (nom accessible et titre de son menu :
+  « Exporter », suivi de « (Alt+P) » ; plus « Exporter en PDF ») exporte la ligne affichée dans le type choisi ; son menu ne liste que les lignes du type choisi, la ligne affichée d'abord, puis les lots :
+  PDF (« Exporter en PDF », « Exporter les lignes (ZIP)… », « … en un seul PDF… », « Assemblage avant impression… »), Word (« Exporter en DOCX (bêta)… », « Exporter les lignes en DOCX (ZIP)… »), Excel
+  (« Exporter en Excel… », « … en Excel (ZIP)… », « … dans un seul classeur… »). « Une seule ligne » et « toutes les lignes », le classeur unique d'Excel et l'assemblage sont des gestes ponctuels : ils
+  restent des lignes de ce menu, pas un réglage durable. Les lignes des autres types restent dans la page, masquées (`hidden`), avec leur identifiant, leur gestionnaire et leur grisé selon le modèle : aucune
+  des neuf lignes d'export d'avant n'est perdue et aucun de leurs textes n'a changé. Tout nouveau type d'export entre par une ligne `data-export-type` du menu des types, toute nouvelle ligne d'export par
+  `data-export-for` (elle se grise selon le modèle comme les autres : `syncExportRowsForModelType`). Tenu par `exportType` et `exportTypeMouse`.
 - Feuille A4 : dans un panneau étroit, la page est réduite à la largeur disponible par un `zoom` CSS (`--pp-fit-zoom` : à
   700 px de panneau, 794 px de mise en page passent à 672 px) — à l'écran seulement. Les coupures de ligne de l'éditeur
   sont celles d'un grand panneau ; les PDF sont identiques quelle que soit la taille du panneau.
@@ -957,7 +970,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   700 px de panneau elle passe aussi à 672 px, facteur 0,60 au lieu de 0,85, donc un texte plus petit à l'écran qu'en
   portrait — rien de tel dans le PDF ni le Word. La pagination, la Lecture, le PDF, le Word et l'impression navigateur
   suivent la page dans son sens ; la galerie de modèles reste en portrait.
-- Format de la page (demande d'Antoine du 01/10, « un mode autre que A4 ? genre A3, A5, A6 » dans le fil de l'orientation) : le bouton Portrait / Paysage a un menu au survol, comme Qualité PDF
+- Format de la page (demande d'Antoine du 01/10, « un mode autre que A4 ? genre A3, A5, A6 » dans le fil de l'orientation) : le bouton Portrait / Paysage a un menu au survol, comme Type d'export (ex-Qualité PDF)
   ou Titre, et la barre ne gagne aucune icône. Le menu a un titre « Page », les lignes Portrait et Paysage, un filet, puis A3, A4, A5 et A6 avec leurs dimensions (« 148 × 210 mm », en
   gris discret, au moins 4,5:1) ; la coche dit le sens et le format courants. Le bouton garde son icône (la page telle qu'elle est) et son clic (tourner la page) ; il n'a pas
   d'info-bulle, que l'ouverture du menu retirerait : son nom accessible dit « Page A5 en portrait (passer en paysage) ». La case « Aperçu A4 » devient « Aperçu A5 » (« A5 preview »). Un modèle
@@ -1023,7 +1036,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   couche de page, le PDF en vrai texte vectoriel au fond de chaque page, le Word en image dans l'en-tête, derrière le texte (une image, pas du texte modifiable : c'est ce que Word et Google Docs ouvrent sans surprise). Une image
   « Sur toutes les pages » et un filigrane partagent la même couche.
 - Assemblage avant impression (demande d'Antoine du 02/10, point 13 : « 4 A6 sur une A4, chacun prend une ligne dans l'ordre, une planche prête à imprimer », avec ou sans trait de coupe, sur A3 et A4) : « Assemblage avant
-  impression… » est la troisième ligne du volet « Exporter en PDF », sous « Exporter les lignes (ZIP)… » et « … en un seul PDF… » : la barre ne gagne aucune icône. La ligne suit le reste du volet (grisée pendant un export
+  impression… » est la dernière ligne du menu « Exporter » (type PDF), sous « Exporter en PDF » (la ligne affichée), « Exporter les lignes (ZIP)… » et « … en un seul PDF… » : la barre ne gagne aucune icône. La ligne suit le reste du volet (grisée pendant un export
   et sans le droit d'exporter, jamais retirée) et ouvre une fenêtre qui tient lieu de confirmation du lot : la feuille (A4, A3), son orientation, les traits de coupe (Sans, Avec), la marge laissée autour de chaque page (un champ en millimètres) et les emplacements (en largeur × en hauteur).
   « Générer » écrit `<table>-assemblage.pdf` : chaque ligne du lot (celles que le widget affiche, ou toute la table : voir « Lignes d'un export en lot ») prend sa place, de gauche à droite puis de haut en bas, une ligne de plusieurs pages en prend autant ; la dernière feuille, à moitié pleine, garde ses
   repères de grille entière. La fenêtre tient dans 700×400 sans défiler, en français comme en anglais : libellé à gauche, réglage à droite, et une feuille d'aperçu dessinée par le même code que le PDF (ce qu'elle montre est ce
@@ -1114,7 +1127,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   part fenêtre ouverte ni pendant une saisie en cours (IME) ; une touche enfoncée ne bascule qu'une fois (la taille de police, les retraits, annuler et rétablir se répètent). Les choix
   sont par navigateur (`pp_shortcuts`), comme la langue et le thème ; les touches ne marchent que le curseur dans le widget. Sur Mac, ⌘ remplace Ctrl et les touches s'écrivent ⌃⌥⇧⌘. La
   touche se montre là où le bouton se nomme : dans son infobulle (« Gras (Ctrl+B) », la touche après le texte, entière dans la fenêtre), à droite de la ligne d'un menu (Citation, Titre
-  1…), après le titre d'un menu (« Exporter en PDF (Alt+P) ») et dans `aria-keyshortcuts` ; sans touche, rien n'est écrit (pas de parenthèses vides). Un nouveau bouton de la barre
+  1…), après le titre d'un menu (« Exporter (Alt+P) ») et dans `aria-keyshortcuts` ; sans touche, rien n'est écrit (pas de parenthèses vides). Un nouveau bouton de la barre
   s'ajoute à la liste (`ACTIONS` de `js/shortcuts.js`, avec son nom français et anglais) et au scénario « la touche fait ce que fait la souris ».
 - En-tête et pied de page (choix d'Antoine du 01/10, « Sur le PDF », modèle « Fiche mission ») : le PDF réserve toujours la même bande sous la marge du haut dès qu'un en-tête a du
   contenu, sur l'une de ses pages ou sur toutes (45 pt de zone + 10 pt d'écart = 55 pt, quelle que soit la hauteur du texte), autant au-dessus de la marge du bas pour le pied, et rien quand

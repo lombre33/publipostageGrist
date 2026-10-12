@@ -99,7 +99,7 @@
       let chosen = null;
       try {
         light.click();
-        chosen = { value: select.value, active: flyout.querySelector('.v2-hover-row.is-active').dataset.quality };
+        chosen = { value: select.value, active: flyout.querySelector('.v2-hover-row[data-quality].is-active').dataset.quality };
       } finally { rows.find(r => r.dataset.quality === before).click(); }
       const pass = JSON.stringify(values) === JSON.stringify(['native', 'browser-print', 'light']) && JSON.stringify(rowValues) === JSON.stringify(values)
         && JSON.stringify(labels.fr.options) === JSON.stringify(expected.fr) && JSON.stringify(labels.fr.rows) === JSON.stringify(expected.fr)

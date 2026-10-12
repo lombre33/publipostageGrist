@@ -914,7 +914,8 @@
   // droit).
   const READ_ONLY_LOCKED_IDS = ['v2-new-template-group', 'btn-organize-templates', 'v2-save-group', 'btn-delete', 'btn-link-rules',
     'btn-mode-edit', 'btn-rename-template', 'btn-set-default-template', 'v2-pdf-filename-cluster', 'v2-page-group'];
-  // Le droit d'export couvre PDF (une ligne, ZIP, PDF unique), Word et la création d'email : #v2-quality-group porte aussi les deux exports DOCX.
+  // Le droit d'export couvre PDF (une ligne, ZIP, PDF unique), Word, Excel et la création d'email : #v2-quality-group (le type d'export) et
+  // #v2-export-pdf-group (le bouton Exporter et ses lignes, Word et Excel compris) sont grisés ensemble.
   const EXPORT_LOCKED_IDS = ['v2-quality-group', 'v2-export-pdf-group', 'btn-create-email'];
   const READ_ONLY_DISABLED_INPUTS = ['settings-margin-top', 'settings-margin-right', 'settings-margin-bottom', 'settings-margin-left'];
   // Réglage présent au démarrage : les droits sont attendus avant le premier affichage, au plus ce délai (Grist qui tarde à répondre) - au-delà le
@@ -1516,7 +1517,7 @@
   }
   // Les contrôles qu'un export en cours grise : tous les exports et « Créer l'email », pour qu'on ne lance pas un second export par-dessus le
   // premier.
-  const EXPORT_CONTROL_IDS = ['btn-export-pdf', 'v2-btn-export-pdf-batch', 'v2-btn-export-pdf-merged', 'v2-btn-export-pdf-sheets', 'v2-btn-export-docx', 'v2-btn-export-docx-batch', 'v2-btn-export-xlsx',
+  const EXPORT_CONTROL_IDS = ['btn-export-pdf', 'v2-btn-export-pdf', 'v2-btn-export-pdf-batch', 'v2-btn-export-pdf-merged', 'v2-btn-export-pdf-sheets', 'v2-btn-export-docx', 'v2-btn-export-docx-batch', 'v2-btn-export-xlsx',
     'v2-btn-export-xlsx-batch', 'v2-btn-export-xlsx-single', 'btn-create-email'];
   function withExportLock(fn) {
     return async (...args) => {
@@ -1574,7 +1575,7 @@
   // Les exports d'une seule ligne : le lot que prend son document quand « Un document par valeur » le découpe, l'alerte sans ligne, les textes du
   // coin d'état et l'export lui-même (`doc` : { html, headerFooterData }, cf. currentRecordDocument), et `stampsExportDate` pour le PDF seul : la date de son dernier
   // export s'écrit dans la colonne choisie (js/export-date.js). Word n'a ni sélecteur de qualité ni autre mode
-  // (cf. en-tête de js/docx-export.js). Excel exporte le tableau d'une grille, sans en-tête ni pied de page ni marges du document : la feuille
+  // (cf. en-tête de js/docx-export.js). Le type choisi dans le menu « Type d'export » (selectedExportType) décide lequel part au bouton Exporter. Excel exporte le tableau d'une grille, sans en-tête ni pied de page ni marges du document : la feuille
   // reprend l'orientation et les marges de PageLayout. `engines` : les moteurs de js/export-engines.js que `run` appelle, chargés au premier export.
   const SINGLE_EXPORTS = {
     pdf: {
@@ -1625,9 +1626,21 @@
       setStatus(I18n.t(spec.failed), true);
     }
   }
-  // Le bouton PDF suit la qualité choisie dans son menu : « Impression navigateur » imprime la Lecture par le navigateur, toute autre ligne garde le PDF
-  // vectoriel. Les lots (toutes les lignes, PDF fusionné, planches) restent vectoriels et suivent « Léger » comme le PDF d'une ligne : il ne change que le
-  // poids des images (PdfExport, ImageIo.lighten), jamais la page.
+  // Le type d'export (menu du bouton à gauche d'Exporter, ex-« Qualité PDF ») : PDF, Word ou Excel, gardé dans la liste cachée #v2-export-type comme la
+  // qualité du PDF l'est dans #v2-pdf-quality. Word n'a de sens que pour un document (un macro-modèle compris) et Excel que pour une grille : un type que le
+  // modèle ouvert ne sait pas faire n'est pas proposé (ligne grisée) et le bouton Exporter retombe sur le PDF, jamais sur une erreur.
+  function exportTypeAvailable(type) {
+    const grid = GridEditor.isGridType(currentTypeModele);
+    return type === 'pdf' || (type === 'docx' && !grid) || (type === 'xlsx' && grid);
+  }
+  function selectedExportType() {
+    const select = document.getElementById('v2-export-type');
+    const type = select ? select.value : 'pdf';
+    return exportTypeAvailable(type) ? type : 'pdf';
+  }
+  // La qualité du PDF : « Impression navigateur » imprime la Lecture par le navigateur, toute autre ligne garde le PDF vectoriel. Les lots (toutes les
+  // lignes, PDF fusionné, planches) restent vectoriels et suivent « Léger » comme le PDF d'une ligne : il ne change que le poids des images (PdfExport,
+  // ImageIo.lighten), jamais la page.
   function selectedPdfQuality() {
     const select = document.getElementById('v2-pdf-quality');
     return select ? select.value : 'native';
@@ -1639,6 +1652,8 @@
   const onExportPdf = () => exportRecordAs(selectedPdfQuality() === 'browser-print' ? 'print' : 'pdf');
   const onExportDocx = () => exportRecordAs('docx');
   const onExportXlsx = () => exportRecordAs('xlsx');
+  // Le bouton Exporter (et Alt+P) : la ligne affichée, dans le type choisi. Les lignes du menu d'Exporter sont celles d'avant, chacune avec son export.
+  const onExport = () => ({ pdf: onExportPdf, docx: onExportDocx, xlsx: onExportXlsx })[selectedExportType()]();
 
   // Mode email (planning/feature-email-mode.md) : construit l'URL mailto: de la ligne courante et l'ouvre par un <a> synthétique plutôt que
   // window.location.href, dont le comportement dans l'iframe sandboxée d'un widget Grist est moins prévisible. Le corps réutilise la résolution du
@@ -1693,7 +1708,8 @@
 
   // Les exports qui n'ont de sens que pour un seul genre de modèle : Word pour un document, Excel pour une grille. La ligne de l'autre genre reste
   // dans le menu, grisée ; son clic ne fait rien (cf. onExportRow, au câblage des boutons). Les deux lignes PDF « toutes les lignes » prennent aussi
-  // les mots de la grille (`data-i18n` change, pour que le texte suive un changement de langue).
+  // les mots de la grille (`data-i18n` change, pour que le texte suive un changement de langue). Les menus d'export suivent ensuite (syncExportMenus) :
+  // le type Word ou Excel que le nouveau modèle ne sait pas faire revient au PDF.
   function syncExportRowsForModelType() {
     const grid = GridEditor.isGridType(currentTypeModele);
     const grey = (id, off) => {
@@ -1711,6 +1727,38 @@
       row.setAttribute('data-i18n', wanted);
       row.textContent = I18n.t(wanted);
     });
+    syncExportMenus();
+  }
+
+  // Les deux menus d'export d'accord avec le type choisi et le genre du modèle ouvert (rien n'est retiré, on grise ou on masque ce qui ne s'applique pas) :
+  // - menu « Type d'export » (#v2-quality-flyout) : la ligne du type choisi est active ; Word ou Excel, que le modèle ne sait pas faire, est grisé ;
+  //   la qualité du PDF n'est active et choisie que pour le PDF (grisée sinon, comme une ligne que le modèle ne permet pas) ;
+  // - menu « Exporter » (#v2-export-pdf-flyout) : seules les lignes du type choisi sont montrées (`data-export-for`), les autres restent dans la page ;
+  // - le bouton du type est allumé quand ce n'est pas le PDF, pour qu'on sache avant de cliquer sur Exporter que le fichier ne sera pas un PDF.
+  // Un type que le modèle ne sait pas faire revient au PDF pour de bon (la liste cachée est remise), de sorte que le modèle suivant ne le retrouve pas.
+  function syncExportMenus() {
+    const typeSelect = document.getElementById('v2-export-type');
+    const qualitySelect = document.getElementById('v2-pdf-quality');
+    const typeFlyout = document.getElementById('v2-quality-flyout');
+    const exportFlyout = document.getElementById('v2-export-pdf-flyout');
+    const typeButton = document.getElementById('v2-btn-quality');
+    if (!typeSelect || !qualitySelect || !typeFlyout || !exportFlyout || !typeButton) return;
+    if (!exportTypeAvailable(typeSelect.value)) typeSelect.value = 'pdf';
+    const type = typeSelect.value;
+    const grey = (row, off) => {
+      row.classList.toggle('v2-hover-row-disabled', off);
+      if (off) row.setAttribute('aria-disabled', 'true'); else row.removeAttribute('aria-disabled');
+    };
+    typeFlyout.querySelectorAll('.v2-hover-row[data-export-type]').forEach(row => {
+      row.classList.toggle('is-active', row.dataset.exportType === type);
+      grey(row, !exportTypeAvailable(row.dataset.exportType));
+    });
+    typeFlyout.querySelectorAll('.v2-hover-row[data-quality]').forEach(row => {
+      row.classList.toggle('is-active', type === 'pdf' && row.dataset.quality === qualitySelect.value);
+      grey(row, type !== 'pdf');
+    });
+    exportFlyout.querySelectorAll('[data-export-for]').forEach(row => { row.hidden = row.dataset.exportFor !== type; });
+    typeButton.classList.toggle('active', type !== 'pdf');
   }
 
   // Caractères invalides dans un nom de fichier ZIP ou Windows : une valeur de cellule comme « Dupont/Fils » casserait l'arborescence du ZIP si elle
@@ -1747,7 +1795,7 @@
     engines: ['pdf'], margins: () => PageLayout.getMarginsPt(),
     // La date du dernier export PDF s'écrit pour les lignes du fichier (js/export-date.js) : les trois lots PDF, ZIP, PDF unique et planche.
     stampsExportDate: true,
-    // Le PDF d'une ligne sait si son modèle est une grille (un lot « Modèle selon la ligne » peut mêler grilles et documents), et la qualité du menu Qualité
+    // Le PDF d'une ligne sait si son modèle est une grille (un lot « Modèle selon la ligne » peut mêler grilles et documents), et la qualité du menu Type d'export
     // choisie au départ du lot (`imageQuality`, cf. openBatchSink) : 'light' ramène les images à leur définition.
     renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins, _pageOptions, typeModele, imageQuality) => PdfExport.getNativePdfBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, margins, GridEditor.isGridType(typeModele), imageQuality),
   };
@@ -2164,19 +2212,23 @@
     pdfFilenameInput.addEventListener('fieldenter', () => pdfFilenameInput.blur());
   }
 
-  // Qualité PDF : bouton + panneau au survol plutôt qu'un <select> toujours affiché. Trois lignes, toutes actives : le vectoriel (par défaut), l'impression par
-  // le navigateur et « Léger » (le vectoriel aux images réduites) ; onExportPdf et les lots lisent la valeur choisie.
-  function wireQualityDropdown() {
-    const select = document.getElementById('v2-pdf-quality');
+  // Type d'export : bouton + panneau au survol plutôt qu'un <select> toujours affiché. Trois lignes de type (PDF, Word, Excel), puis la qualité du PDF
+  // (le vectoriel par défaut, l'impression par le navigateur, « Léger » : le vectoriel aux images réduites). Un clic sur une ligne grisée ne choisit rien.
+  // Le bouton Exporter, onExportPdf et les lots lisent les valeurs choisies ; syncExportMenus tient les deux menus d'accord, aussi à chaque survol (un
+  // appel direct a pu changer la liste cachée).
+  function wireExportMenus() {
+    const typeSelect = document.getElementById('v2-export-type');
+    const qualitySelect = document.getElementById('v2-pdf-quality');
     const flyout = document.getElementById('v2-quality-flyout');
     const trigger = document.getElementById('v2-btn-quality');
-    if (!select || !flyout || !trigger) return;
-    const rows = flyout.querySelectorAll('.v2-hover-row[data-quality]');
-    const syncActiveRow = () => rows.forEach(row => row.classList.toggle('is-active', row.dataset.quality === select.value));
-    rows.forEach(row => row.addEventListener('click', () => { select.value = row.dataset.quality; syncActiveRow(); }));
+    if (!typeSelect || !qualitySelect || !flyout || !trigger) return;
+    const choose = (select, value) => { select.value = value; syncExportMenus(); };
+    const onRow = (row, select, value) => row.addEventListener('click', () => { if (!row.classList.contains('v2-hover-row-disabled')) choose(select, value); });
+    flyout.querySelectorAll('.v2-hover-row[data-export-type]').forEach(row => onRow(row, typeSelect, row.dataset.exportType));
+    flyout.querySelectorAll('.v2-hover-row[data-quality]').forEach(row => onRow(row, qualitySelect, row.dataset.quality));
     const group = trigger.closest('.v2-hover-group');
-    if (group) group.addEventListener('mouseenter', syncActiveRow);
-    syncActiveRow();
+    if (group) group.addEventListener('mouseenter', syncExportMenus);
+    syncExportMenus();
   }
 
   // Ajustement de la page à la largeur disponible (cf. la règle `zoom` de css/editor-v2.css) : réduit la feuille juste ce qu'il faut pour
@@ -2391,7 +2443,10 @@
     MacroEditor.wire(onMacroSaved, macroSettingsOnScreen, openTemplateFromMacro, onMacroModelVisibility);
     TemplateOrganizeModal.wire();
     document.getElementById('btn-delete').addEventListener('click', onDelete);
-    document.getElementById('btn-export-pdf').addEventListener('click', withExportLock(onExportPdf));
+    // Le bouton Exporter exporte la ligne affichée dans le type choisi (menu à sa gauche) ; la ligne « Exporter en PDF » de son menu, montrée pour le type PDF,
+    // fait de même pour le PDF.
+    document.getElementById('btn-export-pdf').addEventListener('click', withExportLock(onExport));
+    document.getElementById('v2-btn-export-pdf').addEventListener('click', withExportLock(onExportPdf));
     // Fonctions fléchées : sans elles, l'événement click arriverait comme premier argument (`merged`) et serait lu comme vrai.
     document.getElementById('v2-btn-export-pdf-batch').addEventListener('click', withExportLock(() => onExportBatch('pdfZip')));
     document.getElementById('v2-btn-export-pdf-merged').addEventListener('click', withExportLock(() => onExportBatch('pdfMerged')));
@@ -2408,7 +2463,7 @@
     btnRead.addEventListener('click', () => switchMode('read'));
   }
 
-  // Le reste des branchements de l'interface : Lecture épurée, fenêtres, nom du fichier PDF, qualité, raccourcis, bandeau de conflit, menu
+  // Le reste des branchements de l'interface : Lecture épurée, fenêtres, nom du fichier PDF, type d'export, raccourcis, bandeau de conflit, menu
   // Enregistrer.
   function wireWidgetControls() {
     CleanReading.wire({
@@ -2425,7 +2480,7 @@
     wireTemplateRename();
     wireDefaultTemplateButton();
     wirePdfFilenameToggle();
-    wireQualityDropdown();
+    wireExportMenus();
     Settings.wireSettingsModal();
     RowTemplatePanel.wire();
     ViewTemplate.wirePanel();

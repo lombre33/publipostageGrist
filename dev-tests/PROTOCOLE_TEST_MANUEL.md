@@ -16,6 +16,12 @@ de régression le jour même :
 - Hauteur d'en-tête/pied non plafonnée (texte infini), désynchronisée entre éditeur et PDF - bug
   de cohérence inter-étages (§7).
 
+**Mise à jour 2026-10-12 (menu d'export)** : le bouton « Qualité PDF » s'appelle « Type d'export » et choisit
+PDF, Word ou Excel (la qualité du PDF est dessous, grisée hors du PDF) ; le bouton « Exporter » (Alt+P aussi)
+exporte dans le type choisi et son menu, titré « Exporter », ne liste que les lignes de ce type. Pour essayer
+« Exporter en DOCX (bêta)… », « Exporter les lignes en DOCX (ZIP)… », « Exporter en Excel… », « …en Excel (ZIP)… » ou
+« …dans un seul classeur… » dans ce protocole, choisir d'abord le type Word ou Excel ; les noms des lignes n'ont pas changé.
+
 ## Principe directeur — la chaîne à 3 étages
 
 Le contenu d'un modèle passe par **3 moteurs de rendu indépendants**, chacun avec son propre
@@ -294,7 +300,7 @@ survols/menus déroulants/comportement de fermeture).
 1. Défilement du document en mode Édition avec un contenu long (plusieurs pages) — vérifier
    l'absence de saut visuel, de recalcul de pagination qui clignote, ou de perte de position du
    curseur.
-2. Survoler chaque groupe `.v2-hover-group` (Titre, Alignement, Liste, Qualité PDF...) —
+2. Survoler chaque groupe `.v2-hover-group` (Titre, Alignement, Liste, Type d'export...) —
    vérifier que le menu déroulant s'ouvre sans clignoter, se referme proprement en sortant de la
    zone, et que la sélection au clic fonctionne à chaque fois (pas seulement au premier essai).
 3. **Fermeture au clic ailleurs** : ouvrir chaque modale et chaque menu déroulant, cliquer en
@@ -495,7 +501,7 @@ impression navigateur), script Node `pageFormatMouse` (survol et vrai clic sur l
    Enregistrement automatique coupé : la page n'est gardée que par « Enregistrer » dans la fenêtre du macro-modèle (et « Enregistrer sous… » en fait une copie qui la garde).
 7. À 700 px de panneau : A5 portrait tient sans réduction, A3 portrait est réduit (facteur 0,60), A3 paysage tombe au plancher de 0,5 et la zone d'édition défile horizontalement.
 8. Au clavier : Tab depuis Aperçu A4 arrive sur le bouton Page et ouvre son menu, passe par ses six lignes (trait de focus visible), Entrée ou Espace pose le format, Tab suivant
-   referme le menu et arrive sur Qualité PDF.
+   referme le menu et arrive sur Type d'export.
 9. Suivi des modifications activé, changer de format sur un modèle qui a une image en calque : aucune suggestion n'apparaît, l'image reste sur la page de son texte.
 
 ---

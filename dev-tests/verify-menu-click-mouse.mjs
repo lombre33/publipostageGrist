@@ -2,11 +2,11 @@
 // Retours d'Antoine du 2026-10-01 (carte « Les deux ») : un clic de souris sur le bouton d'un menu au survol ne le laisse plus ouvert une fois la souris partie, et ne prend plus le
 // curseur du texte. Les scénarios de dev-tests/scenarios-toolbar-chrome.js tournent DANS la page (dispatchEvent) : un évènement synthétique ne déplace jamais le focus, ils ne peuvent
 // donc pas prouver ce défaut (le bouton cliqué gardait le focus, son menu avec lui par :focus-within) - il ne se voit qu'à la vraie souris, à la taille du panneau Grist (~700x400).
-//   1) « + », Enregistrer, Qualité PDF et Titre : le survol ouvre le menu, un vrai clic puis la souris partie le referment (aria-expanded revenu à « false »), et le bouton n'a pas gardé
+//   1) « + », Enregistrer, Type d’export et Titre : le survol ouvre le menu, un vrai clic puis la souris partie le referment (aria-expanded revenu à « false »), et le bouton n'a pas gardé
 //      le focus ; Exporter n'est pas cliqué ici (il lance un export) ;
-//   2) le curseur reste dans le texte : taper, cliquer Qualité PDF ou Titre à la souris, taper encore, tout arrive dans l'éditeur ;
+//   2) le curseur reste dans le texte : taper, cliquer Type d’export ou Titre à la souris, taper encore, tout arrive dans l'éditeur ;
 //   3) un champ de saisie qui avait le focus (renommage du modèle) est validé et refermé au clic sur un de ces boutons, comme avant : le clic n'est pas perdu quand la barre se redessine ;
-//   4) le clavier est intact : Tab arrive sur Qualité PDF et ouvre son menu, Tab suivant le referme, Entrée sur Enregistrer enregistre ;
+//   4) le clavier est intact : Tab arrive sur Type d’export et ouvre son menu, Tab suivant le referme, Entrée sur Enregistrer enregistre ;
 //   5) une ligne de menu ordinaire (« Nouvel email ») se clique toujours et son menu se referme aussi.
 // Lancé par run-headless.mjs (groupe Node "menuClickMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-menu-click-mouse.mjs
 import { createServer } from 'node:http';
@@ -147,7 +147,7 @@ async function realClick(page, sel, wait = 250) {
   await page.waitForTimeout(wait);
   return c;
 }
-// Hors de tout menu : celui de « Qualité PDF » (neuf lignes dont les trois d'Excel, jusqu'à ~350 px de haut) recouvre le milieu du panneau, la souris part donc tout en bas.
+// Hors de tout menu : celui de « Type d’export » (deux titres, trois types et trois qualités) recouvre le milieu du panneau, la souris part donc tout en bas.
 const away = async (page) => { await page.mouse.move(350, 385, { steps: 6 }); await page.waitForTimeout(250); };
 const open = (page, fly) => page.evaluate((s) => getComputedStyle(document.querySelector(s)).display !== 'none', fly);
 const expanded = (page, sel) => page.evaluate((s) => document.querySelector(s).getAttribute('aria-expanded'), sel);
@@ -165,7 +165,7 @@ await page.waitForTimeout(300);
 const MENUS = [
   ['« + »', '#btn-new', '#v2-new-template-flyout'],
   ['Enregistrer', '#btn-save', '#v2-save-flyout'],
-  ['Qualité PDF', '#v2-btn-quality', '#v2-quality-flyout'],
+  ['Type d’export', '#v2-btn-quality', '#v2-quality-flyout'],
   ['Titre', '#v2-heading-chip', '#v2-heading-flyout'],
 ];
 for (const [label, btn, fly] of MENUS) {
@@ -191,7 +191,7 @@ await page.waitForTimeout(300);
 // 2) le curseur reste dans le texte
 const para = await rectOf(page, '.ProseMirror p');
 await page.mouse.click(para.r - 3, para.y); await page.keyboard.press('End'); await page.keyboard.type(' ab');
-for (const [label, btn] of [['Qualité PDF', '#v2-btn-quality'], ['Titre', '#v2-heading-chip']]) {
+for (const [label, btn] of [['Type d’export', '#v2-btn-quality'], ['Titre', '#v2-heading-chip']]) {
   await realClick(page, btn, 300);
   const stayed = await inEditor(page);
   await page.keyboard.type('x');
@@ -206,19 +206,19 @@ await realClick(page, '#btn-rename-template', 250);
 await page.keyboard.press('End'); await page.keyboard.type(' renommé en route');
 await realClick(page, '#v2-btn-quality', 500);
 const ren = await page.evaluate(() => ({ hidden: document.getElementById('template-name').hidden, label: document.querySelector('.tts-trigger-label').textContent, focus: document.activeElement && (document.activeElement.id || document.activeElement.tagName) }));
-check('renommer puis cliquer Qualité PDF : le champ se referme, le nom tapé est affiché dans la liste, le bouton n’a pas gardé le focus', ren.hidden && /renommé en route/.test(ren.label) && ren.focus !== 'v2-btn-quality', { ren });
+check('renommer puis cliquer Type d’export : le champ se referme, le nom tapé est affiché dans la liste, le bouton n’a pas gardé le focus', ren.hidden && /renommé en route/.test(ren.label) && ren.focus !== 'v2-btn-quality', { ren });
 await away(page);
 
-// 4) le clavier est intact (le bouton Portrait / Paysage, entre Aperçu A4 et Qualité PDF, a un menu de sept lignes atteignables au clavier : la dernière, « Filigrane… », est la dernière avant
-// Qualité PDF dans l'ordre de Tab ; le parcours de ce menu, ligne par ligne, est dans verify-page-format-mouse.mjs)
+// 4) le clavier est intact (le bouton Portrait / Paysage, entre Aperçu A4 et Type d’export, a un menu de sept lignes atteignables au clavier : la dernière, « Filigrane… », est la dernière avant
+// Type d’export dans l'ordre de Tab ; le parcours de ce menu, ligne par ligne, est dans verify-page-format-mouse.mjs)
 await page.focus('#btn-page-orientation');
 await page.focus('#v2-btn-watermark');
 await page.keyboard.press('Tab');
 const kq = await page.evaluate(() => ({ active: document.activeElement.id, open: getComputedStyle(document.getElementById('v2-quality-flyout')).display, expanded: document.getElementById('v2-btn-quality').getAttribute('aria-expanded'), pageMenu: getComputedStyle(document.getElementById('v2-page-flyout')).display }));
-check('Tab depuis la dernière ligne du menu Page : on arrive sur Qualité PDF, son menu s’ouvre (focus clavier) et celui de Page se referme', kq.active === 'v2-btn-quality' && kq.open === 'flex' && kq.expanded === 'true' && kq.pageMenu === 'none', kq);
+check('Tab depuis la dernière ligne du menu Page : on arrive sur Type d’export, son menu s’ouvre (focus clavier) et celui de Page se referme', kq.active === 'v2-btn-quality' && kq.open === 'flex' && kq.expanded === 'true' && kq.pageMenu === 'none', kq);
 await page.keyboard.press('Tab');
 const kq2 = await page.evaluate(() => ({ active: document.activeElement.id, open: getComputedStyle(document.getElementById('v2-quality-flyout')).display, expanded: document.getElementById('v2-btn-quality').getAttribute('aria-expanded') }));
-check('Tab suivant : le menu de Qualité PDF se referme', kq2.open === 'none' && kq2.expanded === 'false' && kq2.active !== 'v2-btn-quality', kq2);
+check('Tab suivant : le menu de Type d’export se referme', kq2.open === 'none' && kq2.expanded === 'false' && kq2.active !== 'v2-btn-quality', kq2);
 await page.focus('#btn-save');
 const u0 = await page.evaluate(() => window.__gristStub.countActions('UpdateRecord', 'Publipostage_Modeles'));
 await page.keyboard.press('Enter'); await page.waitForTimeout(600);

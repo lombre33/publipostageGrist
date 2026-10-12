@@ -276,7 +276,7 @@ bibliothèques et polices sont dans [NOTICE](NOTICE).
 - **Suivi des modifications** (bêta) : la version complète est prévue en V1.
 - **PDF** : les caractères chinois, arabes, hébreux, thaï et la plupart des émojis ne sont pas pris en
   charge (une case vide les remplace) ; le grec, le cyrillique, le vietnamien, les flèches, coches,
-  étoiles et monnaies le sont. Le menu « Qualité d'export PDF » propose « Vectoriel », « Impression navigateur » et « Léger » (le PDF
+  étoiles et monnaies le sont. Le menu « Type d'export » propose PDF, Word et Excel, puis, pour le PDF, « Vectoriel », « Impression navigateur » et « Léger » (le PDF
   vectoriel aux images ramenées à 150 points par pouce). L'impression navigateur imprime une
   ligne à la fois, sur 60 pages au plus, et suppose que le navigateur ouvre sa fenêtre d'impression depuis le
   cadre du widget : si rien ne s'ouvre, choisissez « Vectoriel ».

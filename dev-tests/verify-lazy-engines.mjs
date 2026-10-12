@@ -13,7 +13,7 @@
 import { readFile, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
-import { open, stopServer, sleep, click, clickHoverRow, fire, status, downloadOf, exportBatchOf, ROOT } from './load-lib.mjs';
+import { open, stopServer, sleep, click, clickHoverRow, chooseExportType, fire, status, downloadOf, exportBatchOf, ROOT } from './load-lib.mjs';
 
 const PORT = Number(process.env.LAZY_ENGINES_PORT || 8984);
 const require = createRequire(import.meta.url);
@@ -84,16 +84,17 @@ async function prepare(page, { grid = false } = {}) {
   else await page.evaluate(() => Editor.setHTML('<p>Bonjour</p>'));
   await fire(page, 'PbClients', 1);
 }
-// « Exporter » d'une ligne : le bouton PDF, ou la ligne Word ou Excel du menu « Qualité ».
+// « Exporter » d'une ligne : le bouton Exporter (type PDF), ou la ligne Word ou Excel de son menu, une fois le type choisi dans le menu « Type d'export ».
 const SINGLE = {
-  pdf: { rows: null, button: '#btn-export-pdf' },
-  docx: { rows: ['#v2-btn-quality', '#v2-btn-export-docx'] },
-  xlsx: { rows: ['#v2-btn-quality', '#v2-btn-export-xlsx'] },
+  pdf: { type: 'pdf', rows: null, button: '#btn-export-pdf' },
+  docx: { type: 'docx', rows: ['#btn-export-pdf', '#v2-btn-export-docx'] },
+  xlsx: { type: 'xlsx', rows: ['#btn-export-pdf', '#v2-btn-export-xlsx'] },
 };
 // Un export de trois lignes prend quelques secondes : au-delà de DELAY, c'est qu'il n'aboutit pas (le test échoue au lieu d'attendre dix minutes).
 const DELAY = 45000;
 const exportSingle = (page, kind, name, timeout = DELAY) => saved(downloadOf(page, `lazy-${process.pid}-${name}`, async () => {
-  const { rows, button } = SINGLE[kind];
+  const { rows, button, type } = SINGLE[kind];
+  await chooseExportType(page, type);
   if (rows) await clickHoverRow(page, rows[0], rows[1]); else await click(page, button);
 }, timeout));
 const exportBatch = (page, kind, name) => saved(exportBatchOf(page, kind, `lazy-${process.pid}-${name}`, { timeout: DELAY }));

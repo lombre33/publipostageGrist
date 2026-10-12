@@ -111,7 +111,7 @@ await scenario('1) Le vrai clic : menu Qualité, bouton PDF, fenêtre du navigat
   await setDocument(page, richHtml(null), HF);
   check('avant tout choix : le moteur PDF n\'est pas chargé et aucun cadre n\'existe', await page.evaluate(() => typeof PdfExport === 'undefined' && !document.getElementById('pp-print-frame')));
   await clickHoverRow(page, '#v2-btn-quality', QUALITY_ROW('browser-print'));
-  const picked = await page.evaluate(() => ({ value: document.getElementById('v2-pdf-quality').value, active: document.querySelector('#v2-quality-flyout .v2-hover-row.is-active').dataset.quality, text: document.querySelector('#v2-quality-flyout .v2-hover-row[data-quality="browser-print"]').textContent }));
+  const picked = await page.evaluate(() => ({ value: document.getElementById('v2-pdf-quality').value, active: document.querySelector('#v2-quality-flyout .v2-hover-row[data-quality].is-active').dataset.quality, text: document.querySelector('#v2-quality-flyout .v2-hover-row[data-quality="browser-print"]').textContent }));
   check('un vrai clic sur « Impression navigateur » la choisit (liste cachée, ligne active), sans grisé', picked.value === 'browser-print' && picked.active === 'browser-print' && picked.text === 'Impression navigateur', picked);
   await click(page, '#btn-export-pdf');
   await waitPrints(page, 1);

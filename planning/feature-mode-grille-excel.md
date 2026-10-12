@@ -6,6 +6,8 @@ de sens en mode tableau (module tableau, deux colonnes). »
 
 Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Les choix d'Antoine sont dans [[project-publipostage-mode-grille-excel]] (mémoire projet).
 
+**Statut au 12 octobre 2026** : les trois lignes Excel (« Exporter en Excel… », « … en Excel (ZIP)… », « … dans un seul classeur… ») ne sont plus dans le menu « Qualité PDF » : ce menu est devenu « Type d'export » (PDF, Word, Excel, puis la qualité du PDF) et les lignes d'un type se montrent dans le menu « Exporter » quand le type est choisi (Excel dans une grille). Mêmes identifiants, mêmes textes, même effet ; Word reste grisé dans une grille, Excel dans un document (le type revient au PDF).
+
 ## Ce qu'Antoine a choisi
 
 - Export Excel : **les deux** — un ZIP de classeurs (un par enregistrement) et un classeur unique. Le classeur unique coupe par défaut à chaque ligne de la table
