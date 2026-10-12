@@ -278,12 +278,16 @@ export const EXPORT_KINDS = {
 };
 // Lance un de ces exports comme la personne : le type au menu « Type d'export », l'option au menu « Exporter », puis le bouton Exporter (vrai clic). Le choix de lignes est remis à
 // « une seule ligne » aussitôt après (la liste cachée seulement : la coche se met à jour au prochain survol), de sorte qu'un clic suivant sur le bouton exporte la ligne affichée comme avant.
+// Le module des choix gardés par modèle (js/export-choices.js) suit cette liste : il en est averti, sans quoi il rendrait « toutes les lignes » à la prochaine ouverture du modèle.
 export async function startExport(page, kind) {
   const [type, lines] = EXPORT_KINDS[kind];
   await chooseExportType(page, type);
   await chooseExportLines(page, lines);
   await click(page, '#btn-export-pdf');
-  await page.evaluate(() => { document.getElementById('v2-export-lines').value = 'one'; });
+  await page.evaluate(() => {
+    document.getElementById('v2-export-lines').value = 'one';
+    if (typeof ExportChoices !== 'undefined') ExportChoices.remember('v2-export-lines', 'one');
+  });
 }
 export const EXPORT_ROWS = {
   pdfZip: 'pdfZip', pdfMerged: 'pdfMerged', pdfSheets: 'pdfSheets', // « Assemblage avant impression » : la fenêtre de réglage tient lieu de confirmation

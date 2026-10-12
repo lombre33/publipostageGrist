@@ -217,7 +217,7 @@ async function clickSheetsRow() {
   await clickCenter(ROW);
   await closeMenu();
   await clickCenter(EXPORT_BTN);
-  await page.evaluate(() => { document.getElementById('v2-export-lines').value = 'one'; });
+  await page.evaluate(() => { document.getElementById('v2-export-lines').value = 'one'; if (typeof ExportChoices !== 'undefined') ExportChoices.remember('v2-export-lines', 'one'); });
   await page.waitForFunction(() => { const m = document.getElementById('pp-sheets-modal'); return !!m && m.style.display !== 'none'; }, null, { timeout: 8000 }).catch(() => {});
   await page.waitForTimeout(200);
 }

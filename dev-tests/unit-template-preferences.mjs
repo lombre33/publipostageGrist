@@ -238,6 +238,144 @@ async function main() {
     check('lecture sans Dossier ni Epingle : la ligne de la personne est lue, non épinglée, sans dossier', errors.length === 0 && kept[3] && kept[3].rowId === 7 && kept[3].epingle === false && kept[3].dossier === null, kept);
   }
 
+  // 11. Réglages d'export (12/10, « par personne et modèle ») : type d'export, qualité du PDF et lignes exportées, trois colonnes Text de la ligne (personne × modèle),
+  // vides tant que la personne n'a rien changé. Écrits, relus par une autre session, isolés par personne, sur la MÊME ligne que l'épingle (jamais deux lignes).
+  {
+    const { docApi, run } = freshModule({ initialTables: [TABLE_NAME] });
+    docApi.seedRows(TABLE_NAME, [
+      { Utilisateur: 'b@exemple.fr', ModeleId: 7, Epingle: false, Dossier: '', TypeExport: 'xlsx', QualitePdf: 'light', LignesExport: 'workbook' },
+    ]);
+    await run('TemplatePreferences.loadForCurrentUser()');
+    check('réglages d’export : ceux d’une AUTRE personne ne fuient pas', await run('TemplatePreferences.getExportChoices(7)') === null);
+    await run('TemplatePreferences.setExportChoices(7, { type: "docx", quality: "", lines: "zip" })');
+    const rows = docApi.rows[TABLE_NAME].filter((r) => r.ModeleId === 7 && r.Utilisateur === 'a@exemple.fr');
+    check('réglages d’export : une ligne à la personne, avec ses trois colonnes (vide = réglage d’origine)', rows.length === 1 && rows[0].TypeExport === 'docx' && rows[0].QualitePdf === '' && rows[0].LignesExport === 'zip' && rows[0].Epingle === false && rows[0].Dossier === '', rows);
+    check('réglages d’export : relus tels quels', JSON.stringify(await run('TemplatePreferences.getExportChoices(7)')) === JSON.stringify({ type: 'docx', quality: '', lines: 'zip' }));
+    check('réglages d’export : la ligne ne change ni les épingles ni les dossiers proposés', await run('TemplatePreferences.isPinned(7)') === false && (await run('TemplatePreferences.listFolders()')).length === 0);
+    await run('TemplatePreferences.setPinned(7, true)');
+    await run('TemplatePreferences.setExportChoices(7, { type: "xlsx" })');
+    const same = docApi.rows[TABLE_NAME].filter((r) => r.ModeleId === 7 && r.Utilisateur === 'a@exemple.fr');
+    check('réglages d’export : l’épingle et les réglages partagent la ligne (pas de doublon), chacun garde sa valeur', same.length === 1 && same[0].Epingle === true && same[0].TypeExport === 'xlsx' && same[0].LignesExport === 'zip', same);
+    // une autre session (autre ordinateur) relit les mêmes lignes
+    const second = freshModule({ initialTables: [TABLE_NAME] });
+    second.docApi.rows[TABLE_NAME] = docApi.rows[TABLE_NAME];
+    await second.run('TemplatePreferences.loadForCurrentUser()');
+    check('réglages d’export : relus par une nouvelle session', JSON.stringify(await second.run('TemplatePreferences.getExportChoices(7)')) === JSON.stringify({ type: 'xlsx', quality: '', lines: 'zip' }) && await second.run('TemplatePreferences.isPinned(7)') === true);
+    // épingler d’abord, régler ensuite : la même ligne aussi
+    const { docApi: d2, run: r2 } = freshModule({ initialTables: [TABLE_NAME] });
+    await r2('TemplatePreferences.loadForCurrentUser()');
+    await r2('TemplatePreferences.setPinned(4, true)');
+    await r2('TemplatePreferences.setExportChoices(4, { quality: "light" })');
+    const pinFirst = d2.rows[TABLE_NAME].filter((r) => r.ModeleId === 4);
+    check('réglages d’export : épinglé d’abord, la ligne de l’épingle reçoit les réglages (une seule ligne)', pinFirst.length === 1 && pinFirst[0].Epingle === true && pinFirst[0].QualitePdf === 'light', pinFirst);
+  }
+
+  // 12. Le réglage d'origine n'écrit rien : ni ligne pour un modèle sans choix, ni écriture quand rien ne change ; revenir à l'origine efface la valeur (vide) sans supprimer la ligne.
+  {
+    const { docApi, run } = freshModule({ initialTables: [TABLE_NAME] });
+    await run('TemplatePreferences.loadForCurrentUser()');
+    await run('TemplatePreferences.setExportChoices(8, { type: "", quality: "", lines: "" })');
+    check('origine : aucune ligne écrite pour un modèle dont rien n’a changé', docApi.rows[TABLE_NAME].length === 0 && await run('TemplatePreferences.getExportChoices(8)') === null);
+    await run('TemplatePreferences.setExportChoices(8, { type: "docx" })');
+    const writes = docApi.journal.length;
+    await run('TemplatePreferences.setExportChoices(8, { type: "docx" })');
+    check('origine : redire le même réglage n’écrit rien', docApi.journal.length === writes);
+    await run('TemplatePreferences.setExportChoices(8, { type: "" })');
+    const rows = docApi.rows[TABLE_NAME].filter((r) => r.ModeleId === 8);
+    check('origine : revenir à l’origine met la MÊME ligne à jour (vide), sans doublon', rows.length === 1 && rows[0].TypeExport === '', rows);
+    check('origine : un modèle sans identifiant (nouveau, 0, texte) n’écrit rien', (await run('TemplatePreferences.setExportChoices(null, { type: "docx" })')) === null && (await run('TemplatePreferences.setExportChoices(0, { type: "docx" })')) === null && docApi.rows[TABLE_NAME].length === 1);
+  }
+
+  // 13. Seul ce qui change est écrit : une session qui a lu la table avant qu'un autre ordinateur règle le type ne le remet pas à l'origine en réglant autre chose.
+  {
+    const { docApi, run } = freshModule({ initialTables: [TABLE_NAME] });
+    docApi.seedRows(TABLE_NAME, [{ Utilisateur: 'a@exemple.fr', ModeleId: 6, Epingle: false, Dossier: '', TypeExport: '', QualitePdf: '', LignesExport: '' }]);
+    await run('TemplatePreferences.loadForCurrentUser()');
+    docApi.rows[TABLE_NAME][0].TypeExport = 'xlsx'; // l'autre ordinateur vient d'écrire
+    await run('TemplatePreferences.setExportChoices(6, { type: "", quality: "", lines: "zip" })');
+    const row = docApi.rows[TABLE_NAME][0];
+    check('diff : seule la colonne changée est écrite (le type réglé ailleurs reste)', row.LignesExport === 'zip' && row.TypeExport === 'xlsx', row);
+  }
+
+  // 14. Document créé avant la fonction (colonnes absentes) : lu sans erreur, les trois colonnes sont ajoutées UNE fois, en une action, AVANT la première écriture de ligne, même pour
+  // deux modèles réglés en même temps avec une vraie latence ; une épingle ne les ajoute pas.
+  {
+    const errors = [];
+    const spyConsole = { log() {}, warn() {}, error: (...a) => errors.push(a.join(' ')) };
+    const { docApi, run } = freshModule({ initialTables: [TABLE_NAME], docOptions: { withExportColumns: false, latencyMs: 8 }, console: spyConsole });
+    docApi.seedRows(TABLE_NAME, [{ Utilisateur: 'a@exemple.fr', ModeleId: 2, Epingle: true, Dossier: '' }]);
+    await run('TemplatePreferences.loadForCurrentUser()');
+    check('ancien document : lu sans erreur, les réglages se lisent vides', errors.length === 0 && JSON.stringify(await run('TemplatePreferences.getExportChoices(2)')) === JSON.stringify({ type: '', quality: '', lines: '' }), errors);
+    await run('TemplatePreferences.setPinned(3, true)');
+    check('ancien document : épingler n’ajoute aucune colonne', docApi.addedColumns.length === 0, docApi.addedColumns);
+    await run('Promise.all([TemplatePreferences.setExportChoices(2, { type: "docx" }), TemplatePreferences.setExportChoices(3, { lines: "zip" })])');
+    check('ancien document : chaque colonne ajoutée une seule fois, sans « 2 »', JSON.stringify(docApi.addedColumns) === JSON.stringify(['TypeExport', 'QualitePdf', 'LignesExport']), docApi.addedColumns);
+    const firstColumn = docApi.journal.indexOf('AddVisibleColumn');
+    const firstExportWrite = docApi.journal.lastIndexOf('AddVisibleColumn');
+    check('ancien document : les trois colonnes sont ajoutées dans une même action, avant toute écriture des réglages', firstColumn !== -1 && firstExportWrite === firstColumn + 2 && docApi.journal.slice(firstColumn, firstColumn + 3).every((t) => t === 'AddVisibleColumn'), docApi.journal);
+    const r2 = docApi.rows[TABLE_NAME].find((r) => r.ModeleId === 2), r3 = docApi.rows[TABLE_NAME].find((r) => r.ModeleId === 3);
+    check('ancien document : les deux modèles sont bien réglés', r2.TypeExport === 'docx' && r3.LignesExport === 'zip' && r3.Epingle === true, [r2, r3]);
+  }
+
+  // 15. Rafale : plusieurs choix de suite sur un modèle = une seule ligne, le dernier réglage de chaque champ gagne.
+  {
+    const { docApi, run } = freshModule({ initialTables: [TABLE_NAME], docOptions: { latencyMs: 8 } });
+    await run('TemplatePreferences.loadForCurrentUser()');
+    await run('Promise.all([TemplatePreferences.setExportChoices(9, { type: "docx" }), TemplatePreferences.setExportChoices(9, { type: "xlsx" }), TemplatePreferences.setExportChoices(9, { type: "docx", lines: "zip" })])');
+    const rows = docApi.rows[TABLE_NAME].filter((r) => r.ModeleId === 9);
+    check('rafale : une seule ligne, le dernier réglage de chaque champ gagne', rows.length === 1 && rows[0].TypeExport === 'docx' && rows[0].LignesExport === 'zip', rows);
+  }
+
+  // 16. Table refusée : la personne a répondu « Ne pas créer » au démarrage. Un choix de menu n'écrit rien et ne repose AUCUNE question (la question appartient aux gestes qui écrivent
+  // dans le document : Enregistrer...) ; le réglage reste à l'écran, côté js/export-choices.js.
+  {
+    const { docApi, run } = freshModule({ initialTables: [] });
+    await run('globalThis.asked = 0; globalThis.gestures = 0; GristAPI.setTableConsent({ ask: async () => { asked++; return false; }, gesture: () => gestures })');
+    await run('TemplatePreferences.loadForCurrentUser()');
+    const askedAtLoad = await run('asked');
+    await run('gestures = 3'); // la personne a fait un geste depuis son refus : un geste qui écrit dans le document reposerait la question
+    const result = await run('TemplatePreferences.setExportChoices(5, { type: "docx" })');
+    check('table refusée : le réglage n’écrit rien, ni table ni ligne', result === null && !docApi.tables.has(TABLE_NAME) && docApi.addTableCalls === 0 && docApi.journal.length === 0, docApi.journal);
+    check('table refusée : aucune question reposée pour un choix de menu', askedAtLoad === 1 && await run('asked') === 1, [askedAtLoad, await run('asked')]);
+    check('table refusée : rien à relire', await run('TemplatePreferences.getExportChoices(5)') === null);
+  }
+
+  // 17. Écriture refusée par Grist : l'erreur remonte, et l'écriture suivante reprend ce qui n'avait pas passé (le type voulu avant l'échec n'est pas perdu).
+  {
+    const { docApi, run } = freshModule({ initialTables: [TABLE_NAME] });
+    await run('TemplatePreferences.loadForCurrentUser()');
+    docApi.failNext = true;
+    let refused = null;
+    try { await run('TemplatePreferences.setExportChoices(5, { type: "docx" })'); } catch (e) { refused = e; }
+    check('écriture refusée : l’erreur remonte à l’appelant', !!refused);
+    check('écriture refusée : rien n’est dit gardé', await run('TemplatePreferences.getExportChoices(5)') === null);
+    await run('TemplatePreferences.setExportChoices(5, { lines: "zip" })');
+    const row = docApi.rows[TABLE_NAME].find((r) => r.ModeleId === 5);
+    check('écriture refusée : la suivante reprend le type voulu avant l’échec, avec le nouveau réglage', !!row && row.TypeExport === 'docx' && row.LignesExport === 'zip', row);
+  }
+
+  // 18. Identification impossible (repli anonyme) : comme les épingles, les réglages vont à la personne « vide » et se relisent dans la session anonyme suivante.
+  {
+    const { docApi, run } = freshModule({ initialTables: [TABLE_NAME], emailFails: true });
+    await run('TemplatePreferences.loadForCurrentUser()');
+    await run('TemplatePreferences.setExportChoices(1, { type: "xlsx" })');
+    const row = docApi.rows[TABLE_NAME].find((r) => r.ModeleId === 1);
+    check('repli anonyme : le réglage est écrit avec Utilisateur vide', !!row && row.Utilisateur === '' && row.TypeExport === 'xlsx', row);
+    const second = freshModule({ initialTables: [TABLE_NAME], emailFails: true });
+    second.docApi.rows[TABLE_NAME] = docApi.rows[TABLE_NAME];
+    await second.run('TemplatePreferences.loadForCurrentUser()');
+    check('repli anonyme : relu dans la session anonyme suivante', JSON.stringify(await second.run('TemplatePreferences.getExportChoices(1)')) === JSON.stringify({ type: 'xlsx', quality: '', lines: '' }));
+  }
+
+  // 19. Un choix fait avant la fin de la lecture du démarrage l'attend (c'est elle qui dit si la table est là et quelles lignes existent) : pas de doublon de ligne.
+  {
+    const { docApi, run } = freshModule({ initialTables: [TABLE_NAME], docOptions: { latencyMs: 8 } });
+    docApi.seedRows(TABLE_NAME, [{ Utilisateur: 'a@exemple.fr', ModeleId: 3, Epingle: true, Dossier: '', TypeExport: '', QualitePdf: '', LignesExport: '' }]);
+    await run('Promise.all([TemplatePreferences.loadForCurrentUser(), TemplatePreferences.setExportChoices(3, { type: "docx" })])');
+    const rows = docApi.rows[TABLE_NAME].filter((r) => r.ModeleId === 3);
+    check('lecture en cours : le choix attend la lecture, la ligne existante est mise à jour (pas de doublon)', rows.length === 1 && rows[0].TypeExport === 'docx' && rows[0].Epingle === true, rows);
+  }
+
   summarizeAndExit();
 }
 

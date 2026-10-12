@@ -27,6 +27,13 @@ lignes (ZIP) », « …en un seul PDF… », « Assemblage avant impression… �
 classeur… » : choisir le type, cocher l'option du même nom, cliquer Exporter (la confirmation ou la fenêtre de
 l'assemblage s'ouvre alors comme avant).
 
+Ces trois choix (type, qualité du PDF, option de lignes) sont gardés **par personne et par modèle**. À vérifier à la
+main sur un document Grist : sur un modèle, choisir Word et « Toutes les lignes (ZIP) » ; ouvrir un second modèle (il
+repart de PDF, vectoriel, une seule ligne) et y choisir « Léger » ; recharger la page du document Grist ; rouvrir
+chaque modèle (chacun retrouve ses choix, le bouton du type est allumé pour Word) ; avec un compte Lecteur de Grist,
+choisir Word sur un modèle : le choix tient pendant la séance, et la table `Publipostage_PreferencesModeles` n'a pas
+bougé.
+
 ## Principe directeur — la chaîne à 3 étages
 
 Le contenu d'un modèle passe par **3 moteurs de rendu indépendants**, chacun avec son propre

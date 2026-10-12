@@ -65,6 +65,8 @@ Une nouvelle table interne, **`Publipostage_PreferencesModeles`** — pas une co
 | `ModeleId` | Ref → `Publipostage_Modeles` (ou Int) | Le modèle concerné |
 | `Epingle` | Bool | Priorité pour CET utilisateur |
 | `Dossier` | Text | Nom du dossier pour CET utilisateur (vide = aucun) |
+| `Replie` | Bool | Seulement sur la ligne d'état d'un dossier (`ModeleId` = 0) : il s'ouvre replié |
+| `TypeExport`, `QualitePdf`, `LignesExport` | Text | Ajoutées le 12/10 : les choix d'export de CETTE personne pour ce modèle (type PDF / Word / Excel, qualité du PDF, une ligne / toutes les lignes), `js/export-choices.js` ; vides = réglage d'origine. Ajoutées à un document ancien au premier choix d'export, jamais au démarrage |
 
 Une ligne par (utilisateur, modèle) qui a une préférence non par défaut — pas de ligne pour le cas
 courant « rien de spécial ». Raison de ce choix plutôt qu'une colonne JSON sur `Publipostage_Modeles` :

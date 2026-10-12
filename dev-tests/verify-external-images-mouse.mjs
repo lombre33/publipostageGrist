@@ -313,7 +313,7 @@ async function startExport({ type = 'pdf', lines = 'one' }) {
     await realClick('#v2-export-pdf-flyout .v2-hover-row[data-export-lines="' + lines + '"]', 250);
   }
   await realClick('#btn-export-pdf', 500);
-  await page.evaluate(() => { document.getElementById('v2-export-lines').value = 'one'; });
+  await page.evaluate(() => { document.getElementById('v2-export-lines').value = 'one'; if (typeof ExportChoices !== 'undefined') ExportChoices.remember('v2-export-lines', 'one'); });
 }
 const EXPORTS = {
   pdf: { type: 'pdf', button: 'btn-export-pdf', done: 'status.pdfGenerated', file: /\.pdf$/i },

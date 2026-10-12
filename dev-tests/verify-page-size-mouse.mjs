@@ -387,7 +387,7 @@ async function openAssemblyByMouse(page) {
   await realClick(page, exportRow);
   await page.waitForTimeout(300);
   await realClick(page, '#btn-export-pdf');
-  await page.evaluate(() => { document.getElementById('v2-export-lines').value = 'one'; });
+  await page.evaluate(() => { document.getElementById('v2-export-lines').value = 'one'; if (typeof ExportChoices !== 'undefined') ExportChoices.remember('v2-export-lines', 'one'); });
   await page.waitForFunction(() => { const m = document.getElementById('pp-sheets-modal'); return !!m && m.style.display !== 'none'; }, null, { timeout: 8000 }).catch(() => {});
   await page.waitForTimeout(250);
 }

@@ -385,6 +385,14 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   avec la même confirmation et le même effet ; Word reste grisé dans une grille et Excel dans un document, et le
   type revient alors au PDF. Une option que le type n'a pas (« un seul PDF » après un passage à Word) se lit
   « Toutes les lignes (ZIP) » et revient avec son type.
+- **Vos choix d'export sont gardés par modèle** : le type d'export (PDF, Word, Excel), la qualité du PDF et le choix
+  « une seule ligne / toutes les lignes » sont retenus pour chaque personne et pour chaque modèle. On les retrouve à
+  l'ouverture du modèle, sur n'importe quel ordinateur (ils sont écrits dans la table des préférences de la personne,
+  comme ses épingles), et un modèle dont on n'a rien changé repart des réglages d'origine (PDF vectoriel, une seule
+  ligne) : les choix d'un modèle ne passent pas au suivant. Un compte en lecture seule choisit comme les autres, mais
+  ses choix ne durent que la séance : rien n'est écrit dans le document. Un nouveau modèle garde les siens dès son
+  premier enregistrement, et « Enregistrer sous » emporte ceux de l'écran. Un document créé avant cette fonction reçoit
+  trois colonnes de plus dans la table des préférences au premier choix d'export, jamais au démarrage.
 - **Marges d'un macro-modèle** : l'onglet Marges des Réglages dit, tant qu'un macro-modèle est chargé, que ses marges
   priment sur celles des modèles assemblés : elles valent pour toutes ses pages, dans la Lecture, le PDF, le Word et
   l'impression ; les marges propres à un modèle ne servent que lorsqu'on l'ouvre seul. Rien ne change dans le calcul des
@@ -991,6 +999,14 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   nine exports from before are done with these choices, with the same confirmation and the same effect; Word stays
   greyed out in a grid and Excel in a document, and the type then goes back to PDF. An option the type does not
   have ("a single PDF" after switching to Word) reads "All rows (ZIP)" and comes back with its type.
+- **Your export choices are kept per template**: the export type (PDF, Word, Excel), the PDF quality and the "a single
+  row / all rows" choice are remembered for each person and each template. You get them back when the template
+  opens, on any computer (they are written to the person's preferences table, like their pins), and a template you
+  changed nothing on starts from the original settings (vector PDF, a single row): one template's choices do not
+  carry over to the next. A read-only account chooses like everyone else, but its choices only last for the session:
+  nothing is written to the document. A new template keeps its own from its first save, and "Save as" takes along the
+  ones on screen. A document created before this feature gets three more columns in the preferences table at the
+  first export choice, never at startup.
 - **Margins of a macro template**: the Margins tab of Settings now says, while a macro template is loaded, that its margins
   take precedence over those of the assembled templates: they apply to every page of its Reading view, PDF, Word and
   print output, and a template's own margins only apply when it is opened on its own. The margins themselves are

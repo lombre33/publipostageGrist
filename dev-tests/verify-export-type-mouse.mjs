@@ -9,8 +9,11 @@
 //      .pdf) ou un lot (sa confirmation, « Annuler » n'exporte rien, « Générer » rend l'archive) ;
 //   5) une option que le type n'a pas retombe sur « toutes les lignes (ZIP) » et revient avec son type ; un type que le modèle ne sait pas faire revient au PDF (Excel quand on repart
 //      dans un document) et la qualité du PDF choisie avant est gardée ; aucune erreur de page.
+//   6) les trois choix (type, qualité du PDF, une ligne / toutes) sont gardés PAR PERSONNE ET PAR MODÈLE dans la table des préférences : au vrai clic, une ligne par modèle choisi et rien
+//      pour un modèle dont rien n'a changé ; dans une page rechargée (anglais, sombre) la personne retrouve ses menus tels qu'elle les a laissés, modèle par modèle ; une autre personne
+//      repart de l'origine ; un compte Lecteur choisit sans rien écrire et garde son choix pour la session.
 // Lancé par run-headless.mjs (groupe Node « exportTypeMouse », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-export-type-mouse.mjs
-import { open, stopServer, sleep, click, clickHoverRow, hoverRow, fire, chooseExportLines } from './load-lib.mjs';
+import { open, stopServer, sleep, click, clickHoverRow, hoverRow, fire, chooseExportLines, pickTemplate } from './load-lib.mjs';
 
 const PORT = Number(process.env.EXPORT_TYPE_PORT || 9010);
 const SPEC = { tables: [{ id: 'PbClients', rows: 2, columns: [{ id: 'Nom', type: 'Text' }] }] };
@@ -232,6 +235,148 @@ async function menus(page, lang, tag) {
 }
 
 let w = null;
+// ---- Les choix gardés par personne et par modèle (js/export-choices.js ; table Publipostage_PreferencesModeles de js/template-preferences.js) ----
+const PREFS = 'Publipostage_PreferencesModeles';
+const PREF_COLUMNS = ['Utilisateur', 'ModeleId', 'Epingle', 'Dossier', 'Replie', 'TypeExport', 'QualitePdf', 'LignesExport'];
+const PREF_WRITES = ['AddRecord', 'BulkAddRecord', 'UpdateRecord', 'BulkUpdateRecord', 'RemoveRecord', 'BulkRemoveRecord', 'AddVisibleColumn', 'AddColumn'];
+const MARIE = 'marie@exemple.fr';
+const PAUL = 'paul@exemple.fr';
+// Un document de deux modèles enregistrés (« Modèle 0001 », « Modèle 0002 »), la personne qui l'ouvre et, pour une page rechargée, les lignes de préférences que Grist gardait.
+const persistSpec = (email, rows) => ({ tables: SPEC.tables, models: { count: 2, paragraphs: 2, table: 'PbClients', columns: ['Nom'] }, userEmail: email, internal: rows ? [{ table: PREFS, columns: PREF_COLUMNS, rows }] : [] });
+const choicesOf = async page => [await typeValue(page), await qualityValue(page), await linesValue(page)].join('|');
+// Les lignes de la table des préférences telles que Grist les a : une par personne et par modèle.
+const prefRows = page => page.evaluate(table => {
+  const t = window.__gristStub.state.rows[table];
+  return t ? t.id.map((id, i) => Object.fromEntries(Object.keys(t).filter(k => k !== 'id').map(k => [k, t[k][i]]))) : [];
+}, PREFS);
+// Les écritures faites dans cette table depuis le dernier oubli du journal du faux Grist (forgetLog).
+const prefWrites = page => page.evaluate(({ table, writes }) => window.__gristStub.getActionLog().filter(a => a[1] === table && writes.includes(a[0])).map(a => a[0]), { table: PREFS, writes: PREF_WRITES });
+const forgetLog = page => page.evaluate(() => { window.__gristStub.clearActionLog(); window.__gristStub.state.deniedWrites = []; });
+const rowOf = (rows, model) => rows.find(r => r.ModeleId === model);
+
+// Ce que les deux menus montrent du modèle ouvert : `want` = [type, qualité, lignes]. Chaque menu est survolé sur une AUTRE ligne que la ligne choisie, qui se mesure ainsi au repos.
+async function menusShow(page, tag, want) {
+  const [type, quality, lines] = want;
+  const got = await choicesOf(page);
+  check(`${tag} : les listes cachées disent ${want.join(' | ')}`, got === want.join('|'), got);
+  check(`${tag} : le bouton du type est ${type === 'pdf' ? 'éteint' : 'allumé'}`, (await typeButtonLit(page)) === (type !== 'pdf'), { lit: await typeButtonLit(page) });
+  await hoverRow(page, TYPE_MENU, TYPE_ROW(type === 'pdf' ? 'docx' : 'pdf'));
+  const typeRows = await stateOf(page, [TYPE_ROW('pdf'), TYPE_ROW('docx'), TYPE_ROW('xlsx')]);
+  check(`${tag} : dans le menu du type, seule la ligne « ${type} » est active ; les trois sont entières et lisibles`,
+    typeRows.filter(r => r.active).map(r => r.sel).join() === TYPE_ROW(type) && typeRows.every(r => r.shown && r.inside && r.contrast >= 4.5), typeRows);
+  if (type === 'pdf') {
+    const qualities = await stateOf(page, ['native', 'browser-print', 'light'].map(QUALITY_ROW));
+    check(`${tag} : la qualité « ${quality} » est la ligne active ; les trois sont entières et lisibles`,
+      qualities.filter(r => r.active).map(r => r.sel).join() === QUALITY_ROW(quality) && qualities.every(r => r.shown && r.inside && r.contrast >= 4.5), qualities);
+  }
+  await hoverRow(page, EXPORT_MENU, LINES_ROW(lines === 'one' ? 'zip' : 'one'));
+  const ticked = (await stateOf(page, [LINES_ROW(lines)]))[0];
+  check(`${tag} : dans le menu « Exporter », seule l'option « ${lines} » est cochée, sa coche devant, entière et lisible`,
+    (await tickedLines(page)) === lines && ticked.shown && ticked.inside && !!ticked.tick && ticked.tick.visible && ticked.tick.inFront && ticked.contrast >= 4.5, ticked);
+  await parkMouse(page);
+}
+
+async function persistence() {
+  const errors = [];
+  console.log('\n[gardé par personne et par modèle] Marie choisit, modèle par modèle, à la vraie souris');
+  w = await open({ spec: persistSpec(MARIE), port: PORT, settleMs: 1500, theme: 'light', lang: 'fr' });
+  let page = w.page;
+  const first = await pickTemplate(page, 'Modèle 0001');
+  await forgetLog(page);
+  await menusShow(page, 'Modèle 0001, première ouverture', ['pdf', 'native', 'one']);
+  check('regarder les deux menus n\'écrit rien dans le document', (await prefWrites(page)).length === 0, await prefWrites(page));
+  await clickHoverRow(page, TYPE_MENU, QUALITY_ROW('light'));
+  await sleep(500);
+  await parkMouse(page);
+  let rows = await prefRows(page);
+  check('« Léger » choisi : une ligne pour Marie et ce modèle, la qualité seule est écrite', rows.length === 1 && rows[0].Utilisateur === MARIE && rows[0].ModeleId === first && rows[0].QualitePdf === 'light' && !rows[0].TypeExport && !rows[0].LignesExport, rows);
+  await clickHoverRow(page, TYPE_MENU, TYPE_ROW('docx'));
+  await sleep(500);
+  await parkMouse(page);
+  await chooseExportLines(page, 'zip');
+  await sleep(500);
+  await parkMouse(page);
+  rows = await prefRows(page);
+  check('Word puis « Toutes les lignes (ZIP) » : toujours UNE ligne, mise à jour sur place (Word, léger, ZIP)', rows.length === 1 && rows[0].TypeExport === 'docx' && rows[0].QualitePdf === 'light' && rows[0].LignesExport === 'zip', rows);
+
+  const second = await pickTemplate(page, 'Modèle 0002');
+  await menusShow(page, 'Modèle 0002, première ouverture', ['pdf', 'native', 'one']);
+  rows = await prefRows(page);
+  check('« Modèle 0002 » s\'ouvre à l\'origine (les réglages du premier n\'ont pas suivi) et rien ne s\'écrit pour lui', rows.length === 1 && rows[0].ModeleId === first, rows);
+  await clickHoverRow(page, TYPE_MENU, QUALITY_ROW('browser-print'));
+  await sleep(500);
+  await parkMouse(page);
+  await chooseExportLines(page, 'merged');
+  await sleep(500);
+  await parkMouse(page);
+  rows = await prefRows(page);
+  const own = rowOf(rows, second);
+  check('« Impression navigateur » et « un seul PDF » pour le second modèle : sa propre ligne, la première intacte',
+    rows.length === 2 && !!own && own.Utilisateur === MARIE && own.QualitePdf === 'browser-print' && own.LignesExport === 'merged' && !own.TypeExport
+      && rowOf(rows, first).TypeExport === 'docx' && rowOf(rows, first).QualitePdf === 'light' && rowOf(rows, first).LignesExport === 'zip', rows);
+  await pickTemplate(page, 'Modèle 0001');
+  await menusShow(page, 'retour au Modèle 0001 (même page)', ['docx', 'light', 'zip']);
+  const writes = await prefWrites(page);
+  check('les écritures sont celles des choix : deux lignes créées (une par modèle), les autres choix mis à jour sur place, aucune colonne ajoutée',
+    writes.filter(x => x === 'AddRecord').length === 2 && writes.filter(x => x === 'UpdateRecord').length === 3 && writes.length === 5, writes);
+  const kept = await prefRows(page);
+  errors.push(...realErrors(w));
+  await w.close();
+
+  console.log('\n[gardé par personne et par modèle] La page est rechargée (anglais, sombre) : Marie retrouve ses menus');
+  w = await open({ spec: persistSpec(MARIE, kept), port: PORT, settleMs: 1500, theme: 'dark', lang: 'en' });
+  page = w.page;
+  await forgetLog(page);
+  await pickTemplate(page, 'Modèle 0001');
+  await menusShow(page, 'rechargé, Modèle 0001', ['docx', 'light', 'zip']);
+  await pickTemplate(page, 'Modèle 0002');
+  await menusShow(page, 'rechargé, Modèle 0002', ['pdf', 'browser-print', 'merged']);
+  check('rechargé : relire ses choix n\'écrit rien dans le document', (await prefWrites(page)).length === 0, await prefWrites(page));
+  await pickTemplate(page, 'Modèle 0001');
+  await clickHoverRow(page, TYPE_MENU, TYPE_ROW('pdf'));
+  await sleep(500);
+  await parkMouse(page);
+  await menusShow(page, 'rechargé, Modèle 0001 repassé au PDF (la qualité gardée revient)', ['pdf', 'light', 'zip']);
+  rows = await prefRows(page);
+  const back = rowOf(rows, first);
+  check('repasser au PDF réécrit la même ligne : le type d\'origine est vide, la qualité et les lignes sont gardées', rows.length === 2 && !!back && back.TypeExport === '' && back.QualitePdf === 'light' && back.LignesExport === 'zip', rows);
+  errors.push(...realErrors(w));
+  await w.close();
+
+  console.log('\n[gardé par personne et par modèle] Une autre personne repart de l\'origine ; un compte Lecteur choisit sans rien écrire');
+  w = await open({ spec: persistSpec(PAUL, kept), port: PORT, settleMs: 1500, theme: 'light', lang: 'fr' });
+  page = w.page;
+  await forgetLog(page);
+  await pickTemplate(page, 'Modèle 0001');
+  await menusShow(page, 'autre personne, Modèle 0001', ['pdf', 'native', 'one']);
+  await pickTemplate(page, 'Modèle 0002');
+  await menusShow(page, 'autre personne, Modèle 0002', ['pdf', 'native', 'one']);
+  await page.evaluate(async () => { window.__gristStub.setViewer(true); await AccessRights.refresh(); });
+  await sleep(500);
+  check('le compte devient Lecteur (lecture seule)', await page.evaluate(() => AccessRights.get().readOnly), await page.evaluate(() => AccessRights.get()));
+  await forgetLog(page);
+  await pickTemplate(page, 'Modèle 0001');
+  await clickHoverRow(page, TYPE_MENU, TYPE_ROW('docx'));
+  await sleep(500);
+  await parkMouse(page);
+  await chooseExportLines(page, 'zip');
+  await sleep(500);
+  await parkMouse(page);
+  await menusShow(page, 'Lecteur, Modèle 0001', ['docx', 'native', 'zip']);
+  await pickTemplate(page, 'Modèle 0002');
+  await menusShow(page, 'Lecteur, Modèle 0002 (le choix du premier n\'a pas suivi)', ['pdf', 'native', 'one']);
+  await pickTemplate(page, 'Modèle 0001');
+  await menusShow(page, 'Lecteur, retour au Modèle 0001 (gardé pour la session)', ['docx', 'native', 'zip']);
+  const viewerWrites = await prefWrites(page);
+  const denied = await page.evaluate(() => window.__gristStub.state.deniedWrites.length);
+  check('Lecteur : aucune écriture dans la table des préférences et aucune écriture refusée par Grist', viewerWrites.length === 0 && denied === 0, { viewerWrites, denied });
+  check('Lecteur : les lignes de Marie sont intactes', JSON.stringify(await prefRows(page)) === JSON.stringify(kept), await prefRows(page));
+  errors.push(...realErrors(w));
+  await w.close();
+  w = null;
+  check('aucune erreur de page (choix gardés)', errors.length === 0, errors);
+}
+
 try {
   // ---- Passe 1 : français, thème clair, avec les vrais exports ----
   w = await open({ spec: SPEC, port: PORT, settleMs: 1500, theme: 'light', lang: 'fr' });
@@ -344,6 +489,11 @@ try {
   check('(anglais) les deux boutons se nomment « Export type » et « Export »', accessibleEn.type === 'Export type' && accessibleEn.exportButton === 'Export', accessibleEn);
   await menus(page, 'en', 'anglais, sombre');
   check('aucune erreur de page (passe anglaise)', realErrors(w).length === 0, realErrors(w));
+  await w.close();
+  w = null;
+
+  // ---- Passe 3 : les choix d'export gardés par personne et par modèle, puis relus dans une page rechargée ----
+  await persistence();
 } catch (e) {
   check('le script va jusqu\'au bout', false, String(e && e.stack || e).split('\n').slice(0, 4).join(' | '));
 } finally {

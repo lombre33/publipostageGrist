@@ -528,7 +528,7 @@ async function startBatch(type, lines, wait = 500) {
   await realHover('#btn-export-pdf');
   await realClick('#v2-export-pdf-flyout .v2-hover-row[data-export-lines="' + lines + '"]', 250);
   await realClick('#btn-export-pdf', wait);
-  await page.evaluate(() => { document.getElementById('v2-export-lines').value = 'one'; });
+  await page.evaluate(() => { document.getElementById('v2-export-lines').value = 'one'; if (typeof ExportChoices !== 'undefined') ExportChoices.remember('v2-export-lines', 'one'); });
 }
 const focusKey = () => page.evaluate(() => { const a = document.activeElement; return a ? (a.id || a.tagName) : null; });
 const statusText = () => page.evaluate(() => document.getElementById('status-msg').textContent);

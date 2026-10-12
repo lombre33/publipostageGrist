@@ -184,8 +184,8 @@ verrou d'interface : ils grisent des commandes, ils ne protègent aucune donnée
 
 Le widget écrit dans sept tables du document, toutes préfixées `Publipostage_` : `Publipostage_Modeles`
 (les modèles, et une ligne « Réglages du document » qui garde les couleurs partagées par tous les
-modèles), `Publipostage_Commentaires`, `Publipostage_PreferencesModeles` (épingles et dossiers de
-chaque personne), `Publipostage_Abreviations`, `Publipostage_FormatsPage`, `Publipostage_LiensTables`
+modèles), `Publipostage_Commentaires`, `Publipostage_PreferencesModeles` (épingles, dossiers et choix d'export
+de chaque personne), `Publipostage_Abreviations`, `Publipostage_FormatsPage`, `Publipostage_LiensTables`
 (les clés de correspondance entre tables) et `Publipostage_UserProbe` (qui sert à lire l'e-mail de la
 personne connectée). Il ne les crée qu'avec l'accord de la personne : avant la première création, une
 fenêtre demande « Créer les tables du widget dans ce document ? » (« Créer les tables » ou « Ne pas
@@ -529,8 +529,8 @@ the Grist document level, not in the widget's configuration. The widget's "per-p
 
 The widget writes to seven tables of the document, all prefixed `Publipostage_`: `Publipostage_Modeles`
 (the templates, and a "Réglages du document" row that keeps the colors shared by every template),
-`Publipostage_Commentaires`, `Publipostage_PreferencesModeles` (each person's pins and
-folders), `Publipostage_Abreviations`, `Publipostage_FormatsPage`, `Publipostage_LiensTables` (the
+`Publipostage_Commentaires`, `Publipostage_PreferencesModeles` (each person's pins, folders and
+export choices), `Publipostage_Abreviations`, `Publipostage_FormatsPage`, `Publipostage_LiensTables` (the
 matching keys between tables) and `Publipostage_UserProbe` (used to read the connected user's e-mail). It
 only creates them with the person's consent: before the first creation, a window asks "Create the
 widget’s tables in this document?" ("Create the tables" or "Don’t create"). A yes holds until the page

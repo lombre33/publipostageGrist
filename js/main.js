@@ -264,6 +264,9 @@
     forgetLinkedOriginUnless(tpl);
     // Le niveau de zoom gardé pour ce modèle (macro-modèle compris), avant tout calcul du facteur d'ajustement de la page (js/page-zoom.js).
     PageZoom.useTemplate(tpl);
+    // Les réglages d'export gardés pour ce modèle (type d'export, qualité du PDF, lignes exportées) : les menus se redessinent plus bas, avec son type
+    // (syncExportRowsForModelType).
+    ExportChoices.useTemplate(tpl);
     if (tpl && tpl.typeModele === 'macro') { loadMacroIntoEditor(tpl); return; }
     closeTemplateRenameEditor();
     // Sans cette sortie, changer de modèle pendant l'édition d'un en-tête ou d'un pied de page laisserait leur contenu à la place du document
@@ -837,7 +840,7 @@
       setStatus(I18n.t('status.saveError'), true);
       return;
     }
-    if (epoch === autosaveEpoch) Templates.setCurrentId(savedId);
+    if (epoch === autosaveEpoch) { Templates.setCurrentId(savedId); ExportChoices.adopt(savedId); }
     await refreshTemplateList();
     // L'écriture et la relecture de la liste durent des secondes quand Grist est lent : un autre modèle a pu être choisi entre-temps (autosaveEpoch).
     // L'écran, la liste et le modèle courant sont alors les siens : ce geste ne les remet pas sur le modèle qu'il vient d'écrire (l'enregistrement
@@ -893,6 +896,7 @@
     if (epoch !== autosaveEpoch) return; // un autre modèle a été choisi pendant l'attente : la copie n'a plus d'objet
     if (templateNameInput) templateNameInput.value = nom;
     Templates.setCurrentId(null);
+    ExportChoices.detach();
     await onSave();
   }
 
@@ -2267,7 +2271,7 @@
     const trigger = document.getElementById('v2-btn-quality');
     const exportTrigger = document.getElementById('btn-export-pdf');
     if (!typeSelect || !qualitySelect || !linesSelect || !flyout || !exportFlyout || !trigger || !exportTrigger) return;
-    const choose = (select, value) => { select.value = value; syncExportMenus(); };
+    const choose = (select, value) => { select.value = value; syncExportMenus(); ExportChoices.remember(select.id, value); };
     const onRow = (row, select, value) => row.addEventListener('click', () => { if (!row.classList.contains('v2-hover-row-disabled')) choose(select, value); });
     flyout.querySelectorAll('.v2-hover-row[data-export-type]').forEach(row => onRow(row, typeSelect, row.dataset.exportType));
     flyout.querySelectorAll('.v2-hover-row[data-quality]').forEach(row => onRow(row, qualitySelect, row.dataset.quality));
@@ -2620,8 +2624,9 @@
     } catch (e) { console.error('[main] TemplateTreeSelect.attach a échoué, arbre non disponible', e); }
     // Chargement non bloquant, comme Comments.loadForTemplate ci-dessous : l'identification de la personne (GristAPI.getCurrentUserEmail) est un
     // aller-retour réseau qui ne doit pas retarder le démarrage pour la section « Épinglés » de l'arbre.
+    ExportChoices.wire({ canSave: () => !isReadOnly(), onApplied: syncExportMenus });
     TemplatePreferences.loadForCurrentUser()
-      .then(() => TemplateTreeSelect.refresh())
+      .then(() => { TemplateTreeSelect.refresh(); ExportChoices.refresh(); })
       .catch(e => console.error('[main] chargement des préférences de rangement impossible', e));
     // Modèle par défaut (cf. btn-set-default-template) : sélectionné avant la lecture de templateSelect.value ci-dessous, pour que le widget s'ouvre
     // directement dessus plutôt que sur "-- Nouveau modèle --". Silencieux si l'id ne correspond à aucune option (modèle supprimé entre-temps).

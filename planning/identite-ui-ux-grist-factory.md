@@ -940,7 +940,11 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   (la fenêtre de réglage pour l'assemblage). L'option cochée est gardée dans la liste cachée `#v2-export-lines` ; une option que le type n'a pas (« un seul PDF » après un passage à Word) se lit « Toutes les lignes
   (ZIP) » et revient avec son type. Les neuf lignes d'export d'avant (et « Exporter en PDF ») restent dans la page, masquées (`#v2-export-legacy-rows`), avec leur identifiant, leur gestionnaire, leur verrou et leur
   grisé selon le modèle : aucune fonction n'est perdue et aucun de leurs textes n'a changé. Tout nouveau type d'export entre par une ligne `data-export-type` du menu des types, toute nouvelle option de lignes par
-  `data-export-for` et `data-export-lines` (`EXPORT_BATCH_OF`, `js/main.js`). Tenu par `exportType` et `exportTypeMouse`.
+  `data-export-for` et `data-export-lines` (`EXPORT_BATCH_OF`, `js/main.js`). Les trois choix - le type, la qualité du PDF et l'option de lignes - sont gardés PAR PERSONNE ET PAR MODÈLE (carte « Par personne et modèle », choisie le 12/10 : chacun les retrouve à l'ouverture
+  du modèle, sur n'importe quel ordinateur, comme ses épingles ; ligne de la table `Publipostage_PreferencesModeles`, colonnes `TypeExport`, `QualitePdf` et `LignesExport`, vides tant que la personne n'a rien
+  changé : le réglage d'origine - PDF, vectoriel, une seule ligne - n'écrit rien). Un modèle sans choix repart de l'origine et les choix d'un modèle ne passent jamais au suivant ; un compte en lecture seule
+  choisit comme les autres, mais ses choix ne durent que la séance (rien n'est écrit dans le document) ; un nouveau modèle voit les siens écrits à son premier enregistrement, et « Enregistrer sous » emporte
+  ceux de l'écran. Tenu par `exportType`, `exportChoices` et `exportTypeMouse`.
 - Feuille A4 : dans un panneau étroit, la page est réduite à la largeur disponible par un `zoom` CSS (`--pp-fit-zoom` : à
   700 px de panneau, 794 px de mise en page passent à 672 px) — à l'écran seulement. Les coupures de ligne de l'éditeur
   sont celles d'un grand panneau ; les PDF sont identiques quelle que soit la taille du panneau.
