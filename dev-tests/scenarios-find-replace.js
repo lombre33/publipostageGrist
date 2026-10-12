@@ -14,6 +14,9 @@
 //  6) LE TEXTE DES BULLES (demande d'Antoine du 12/10, « texte des bulles » : une bulle de variable ou de calcul est UN résultat quand son nom, son « Avant », son « Après »,
 //     son « sinon » ou sa formule contient la requête ; jamais à cheval sur du texte ; surlignée en entier, atteinte par Entrée) et ce que « Remplacer » en fait : il change
 //     l'« Avant » et l'« Après », jamais le nom (la bulle suit une colonne) ni une formule, laisse les bulles avec le suivi des modifications, et le dit au compteur.
+//  7) L'EN-TÊTE ET LE PIED DE PAGE (demande d'Antoine du 12/10, « en-tête et pied de page hors édition ») : la recherche traverse les textes du modèle dans l'ordre de la page (l'en-tête, le
+//     corps, le pied ; la première page quand « Première page différente » est cochée) ; le compteur les compte tous, Entrée, Maj+Entrée et « Remplacer » passent de l'un à l'autre (l'éditeur
+//     entre dans la zone), « Tout remplacer » agit sur le texte ouvert et dit combien en attendent ailleurs ; jamais de changement de texte à la frappe ; un modèle email n'en a pas.
 // La frappe réelle (vrai clavier, vraie souris, 700x400, clair et sombre, anglais) est dans dev-tests/verify-find-replace-mouse.mjs : un KeyboardEvent synthétique n'est pas un geste
 // « trusted ». Aucun caractère spécial n'est écrit en séquence d'échappement dans ce fichier (String.fromCharCode) : un outil d'édition les remplace par le caractère lui-même.
 (function () {
@@ -44,6 +47,7 @@
   }
   // Remet tout ce qu'un scénario a pu laisser (panneau, requête, options, suivi) : la recherche vit dans un module, elle survit d'un scénario à l'autre.
   async function cleanup() {
+    Editor.exitHeaderFooterModeIfActive();
     FindReplace.close({ focus: false });
     FindReplace.setReplacement('');
     FindReplace.setOptions({ matchCase: false, wholeWord: false, regex: false });
@@ -1426,6 +1430,298 @@
       const worst = theme => Math.min.apply(null, results[theme].map(r => r.ratio));
       return { pass, notes: JSON.stringify({ kinds: Array.from(new Set(results.light.map(r => r.kind))), worstLight: worst('light'), worstDark: worst('dark'), light: results.light.filter(r => !r.marked || r.ratio < 4.5) }) };
     });
+
+  // === 7) L'en-tête et le pied de page ======================================================================================================================================
+
+  const zoneMode = () => { const mode = HeaderFooterPreview.getHfMode(); return mode ? mode.zone + ':' + mode.variant : 'main'; };
+  const zonesData = (header, footer, extra) => Object.assign({ enabled: true, differentFirstPage: false, header: { default: header || '', first: '' }, footer: { default: footer || '', first: '' } }, extra);
+  async function beginWithZones(h, body, header, footer, extra) {
+    await begin(h, body);
+    Editor.setHeaderFooterData(zonesData(header, footer, extra));
+    await sleep(100);
+  }
+  // Où l'on en est : le compteur, le texte ouvert, ce que la sélection couvre.
+  const where = () => (countText() + ' ' + zoneMode() + ' ' + selectionText()).trim();
+  const zoneTexts = () => { const data = Editor.getHeaderFooterData(); return { header: data.header.default, first: data.header.first, footer: data.footer.default }; };
+  const pillShown = () => !!document.getElementById('v2-hf-pill');
+
+  scenario('fr_zones_counter_counts_header_body_and_footer',
+    'En-tête et pied : le compteur compte les résultats des trois textes dans l\'ordre de la page (« 2 sur 4 » sur le premier du corps, derrière celui de l\'en-tête), « Respecter la casse » s\'y applique (« abc » ne reste que dans le pied), et rien ne change dans le texte ouvert ni dans les deux autres',
+    async h => {
+      await beginWithZones(h, '<p>Corps ABC un</p><p>Deux ABC</p>', '<p>Tête ABC</p>', '<p>Pied abc</p>');
+      const body = Editor.getHTML();
+      FindReplace.open({ replace: false });
+      FindReplace.setQuery('abc');
+      await sleep(80);
+      const opened = where();
+      const untouched = Editor.getHTML() === body && JSON.stringify(zoneTexts()) === JSON.stringify({ header: '<p>Tête ABC</p>', first: '', footer: '<p>Pied abc</p>' });
+      const pill = pillShown();
+      FindReplace.setOptions({ matchCase: true });
+      await sleep(80);
+      const exact = where();
+      const pass = opened === '2 sur 4 main ABC' && untouched && !pill && exact === '1 résultat main ABC';
+      return { pass, notes: JSON.stringify({ opened, untouched, pill, exact }) };
+    });
+
+  scenario('fr_zones_next_and_previous_walk_header_body_footer_and_wrap',
+    'En-tête et pied : Entrée passe du dernier résultat du corps au premier du pied (l\'éditeur y entre), puis à celui de l\'en-tête, puis revient au corps ; Maj+Entrée fait le chemin inverse ; la pastille de la zone est là quand une zone est ouverte, et le corps retrouvé est intact',
+    async h => {
+      await beginWithZones(h, '<p>Corps ABC un</p><p>Deux ABC</p>', '<p>Tête ABC</p>', '<p>Pied abc</p>');
+      const body = Editor.getHTML();
+      FindReplace.open({ replace: false });
+      FindReplace.setQuery('abc');
+      await sleep(80);
+      const steps = [where()];
+      const pills = [pillShown() === (zoneMode() !== 'main')];
+      for (const move of ['next', 'next', 'next', 'next', 'next', 'prev', 'prev', 'prev', 'prev']) {
+        FindReplace[move]();
+        await sleep(80);
+        steps.push(where());
+        pills.push(pillShown() === (zoneMode() !== 'main'));
+      }
+      const expected = ['2 sur 4 main ABC', '3 sur 4 main ABC', '4 sur 4 footer:default abc', '1 sur 4 header:default ABC', '2 sur 4 main ABC', '3 sur 4 main ABC',
+        '2 sur 4 main ABC', '1 sur 4 header:default ABC', '4 sur 4 footer:default abc', '3 sur 4 main ABC'];
+      const intact = Editor.getHTML() === body && JSON.stringify(zoneTexts()) === JSON.stringify({ header: '<p>Tête ABC</p>', first: '', footer: '<p>Pied abc</p>' });
+      const pass = steps.join(' | ') === expected.join(' | ') && pills.every(Boolean) && intact;
+      return { pass, notes: JSON.stringify({ steps, pills, intact }) };
+    });
+
+  scenario('fr_zones_typing_a_query_never_changes_the_open_text',
+    'En-tête et pied : une requête qui n\'a de résultat que dans le pied compte (« 1 résultat ») sans quitter le corps ; « Remplacer » se place d\'abord sur ce résultat (l\'éditeur entre dans le pied) sans rien remplacer, puis le remplace',
+    async h => {
+      await beginWithZones(h, '<p>Corps seul</p>', '', '<p>Pied zzz</p>');
+      FindReplace.open({ replace: true });
+      FindReplace.setReplacement('ok');
+      FindReplace.setQuery('zzz');
+      await sleep(80);
+      const typed = where();
+      const bodyKept = Editor.getHTML() === '<p>Corps seul</p>';
+      FindReplace.replaceCurrent();
+      await sleep(80);
+      const placed = where();
+      const footerKept = zoneTexts().footer === '<p>Pied zzz</p>';
+      FindReplace.replaceCurrent();
+      await sleep(80);
+      const replaced = zoneTexts().footer;
+      const pass = typed === '1 résultat main' && bodyKept && placed === '1 sur 1 footer:default zzz' && footerKept && replaced === '<p>Pied ok</p>' && countText() === 'Aucun résultat';
+      return { pass, notes: JSON.stringify({ typed, bodyKept, placed, footerKept, replaced, count: countText() }) };
+    });
+
+  scenario('fr_zones_replace_crosses_from_one_text_to_the_next',
+    'En-tête et pied : « Remplacer » remplace dans le corps puis va au résultat du pied, remplace, puis revient à celui de l\'en-tête (en repartant du début de la page) ; chaque texte garde ses autres mots',
+    async h => {
+      await beginWithZones(h, '<p>Un ABC fin</p>', '<p>ABC en tête</p>', '<p>Pied ABC</p>');
+      FindReplace.open({ replace: true });
+      FindReplace.setReplacement('X');
+      FindReplace.setQuery('ABC');
+      await sleep(80);
+      const steps = [where()];
+      for (let i = 0; i < 3; i++) {
+        FindReplace.replaceCurrent();
+        await sleep(80);
+        steps.push(where());
+      }
+      Editor.exitHeaderFooterModeIfActive();
+      await sleep(80);
+      const body = Editor.getHTML();
+      const texts = zoneTexts();
+      const expected = ['2 sur 3 main ABC', '2 sur 2 footer:default ABC', '1 sur 1 header:default ABC', 'Aucun résultat header:default'];
+      const pass = steps.join(' | ') === expected.join(' | ') && body === '<p>Un X fin</p>' && texts.header === '<p>X en tête</p>' && texts.footer === '<p>Pied X</p>';
+      return { pass, notes: JSON.stringify({ steps, body, texts }) };
+    });
+
+  scenario('fr_zones_replace_all_acts_on_the_open_text_and_says_what_waits',
+    'En-tête et pied : « Tout remplacer » remplace dans le texte ouvert seulement, en UNE étape d\'annulation, et dit « 2 remplacements, 2 autres ailleurs » ; les autres textes attendent, on les traite en y allant ; Annuler défait le texte ouvert seul',
+    async h => {
+      await beginWithZones(h, '<p>Un ABC et ABC</p>', '<p>ABC en tête</p>', '<p>ABC en pied</p>');
+      FindReplace.open({ replace: true });
+      FindReplace.setReplacement('X');
+      FindReplace.setQuery('abc');
+      await sleep(80);
+      const start = Editor.getHTML();
+      const first = FindReplace.replaceAll();
+      await sleep(60);
+      const flashBody = countText();
+      const body = Editor.getHTML();
+      const waiting = zoneTexts();
+      undoOnce(); await sleep(60);
+      const undone = Editor.getHTML() === start;
+      redoOnce(); await sleep(60);
+      const redone = Editor.getHTML() === body;
+      FindReplace.next(); await sleep(80);
+      const inFooter = where();
+      const second = FindReplace.replaceAll();
+      await sleep(60);
+      const flashFooter = countText();
+      FindReplace.next(); await sleep(80);
+      const inHeader = where();
+      const third = FindReplace.replaceAll();
+      await sleep(60);
+      const flashHeader = countText();
+      undoOnce(); await sleep(60);
+      const headerUndone = Editor.getHTML();
+      const stillInHeader = zoneMode();
+      redoOnce(); await sleep(60);
+      Editor.exitHeaderFooterModeIfActive();
+      await sleep(80);
+      const final = { body: Editor.getHTML(), texts: zoneTexts() };
+      const pass = first === 2 && flashBody === '2 remplacements, 2 autres ailleurs' && body === '<p>Un X et X</p>' && waiting.header === '<p>ABC en tête</p>' && waiting.footer === '<p>ABC en pied</p>'
+        && undone && redone && inFooter === '2 sur 2 footer:default ABC' && second === 1 && flashFooter === '1 remplacement, 1 autre ailleurs'
+        && inHeader === '1 sur 1 header:default ABC' && third === 1 && flashHeader === '1 remplacement' && headerUndone === '<p>ABC en tête</p>' && stillInHeader === 'header:default'
+        && final.body === '<p>Un X et X</p>' && final.texts.header === '<p>X en tête</p>' && final.texts.footer === '<p>X en pied</p>';
+      return { pass, notes: JSON.stringify({ first, flashBody, body, waiting, undone, redone, inFooter, second, flashFooter, inHeader, third, flashHeader, headerUndone, stillInHeader, final }) };
+    });
+
+  scenario('fr_zones_replace_all_waits_while_the_open_text_has_no_result',
+    'En-tête et pied : quand le texte ouvert n\'a pas de résultat mais un autre texte en a, « Tout remplacer » est grisé et ne remplace rien, alors que « Remplacer », Entrée et les flèches sont actifs ; dans le pied, « Tout remplacer » l\'est aussi',
+    async h => {
+      await beginWithZones(h, '<p>Corps seul</p>', '', '<p>Pied zzz</p>');
+      FindReplace.open({ replace: true });
+      FindReplace.setReplacement('ok');
+      FindReplace.setQuery('zzz');
+      await sleep(80);
+      const body = Editor.getHTML();
+      const outside = { all: isDisabled('pp-find-replace-all'), one: isDisabled('pp-find-replace-one'), next: isDisabled('pp-find-next'), prev: isDisabled('pp-find-prev') };
+      const none = FindReplace.replaceAll();
+      await sleep(40);
+      const unchanged = Editor.getHTML() === body && zoneTexts().footer === '<p>Pied zzz</p>';
+      FindReplace.next();
+      await sleep(80);
+      const inside = { all: isDisabled('pp-find-replace-all'), mode: zoneMode() };
+      const pass = outside.all === true && outside.one === false && outside.next === false && outside.prev === false && none === 0 && unchanged && inside.all === false && inside.mode === 'footer:default';
+      return { pass, notes: JSON.stringify({ outside, none, unchanged, inside }) };
+    });
+
+  scenario('fr_zones_first_page_texts_count_only_when_the_option_is_ticked',
+    'En-tête et pied : les textes de la première page ne sont cherchés que si « Première page différente » est cochée (le compteur suit la case, par le modèle ou dans la pastille), dans l\'ordre en-tête, en-tête de la première page, corps, pied',
+    async h => {
+      const header = '<p>ABC normal</p>';
+      const first = '<p>ABC première</p>';
+      const footer = '<p>Pied ABC</p>';
+      await beginWithZones(h, '<p>Corps ABC</p>', header, footer, { header: { default: header, first } });
+      FindReplace.open({ replace: false });
+      FindReplace.setQuery('abc');
+      await sleep(80);
+      const ids = () => HeaderFooterPreview.listStories().map(story => story.id).join(',');
+      const unticked = { count: countText(), ids: ids() };
+      Editor.setHeaderFooterData(zonesData(header, footer, { differentFirstPage: true, header: { default: header, first } }));
+      await sleep(80);
+      const ticked = { count: countText(), ids: ids() };
+      const order = [];
+      for (let i = 0; i < 4; i++) { FindReplace.next(); await sleep(80); order.push(zoneMode()); }
+      FindReplace.prev();
+      await sleep(80);
+      const inFirst = where();
+      const box = document.getElementById('v2-hf-different-first');
+      box.checked = false;
+      box.dispatchEvent(new Event('change', { bubbles: true }));
+      await sleep(100);
+      const after = { count: countText(), mode: zoneMode(), ids: ids() };
+      const pass = unticked.count === '2 sur 3' && unticked.ids === 'header:default,main,footer:default' && ticked.count === '3 sur 4' && ticked.ids === 'header:default,header:first,main,footer:default'
+        && order.join(' ') === 'footer:default header:default header:first main' && inFirst === '2 sur 4 header:first ABC'
+        && /^3 /.test(after.count) && after.mode === 'header:default' && after.ids === 'header:default,main,footer:default';
+      return { pass, notes: JSON.stringify({ unticked, ticked, order, inFirst, after }) };
+    });
+
+  scenario('fr_zones_email_model_has_no_header_or_footer_to_search',
+    'En-tête et pied : un modèle email n\'a ni en-tête ni pied : leurs textes (gardés dans le modèle) ne comptent pas et Entrée reste dans le corps ; ils comptent de nouveau dans un autre type de modèle',
+    async h => {
+      await beginWithZones(h, '<p>Corps ABC</p>', '<p>Tête ABC</p>', '<p>Pied ABC</p>');
+      let email, stays;
+      HeaderFooterPreview.setEmailMode(true);
+      try {
+        FindReplace.open({ replace: false });
+        FindReplace.setQuery('abc');
+        await sleep(80);
+        email = where();
+        FindReplace.next();
+        await sleep(80);
+        stays = where();
+      } finally {
+        HeaderFooterPreview.setEmailMode(false);
+      }
+      FindReplace.setQuery('');
+      FindReplace.setQuery('abc');
+      await sleep(80);
+      const document_ = where();
+      const pass = email === '1 sur 1 main ABC' && stays === '1 sur 1 main ABC' && document_ === '2 sur 3 main ABC';
+      return { pass, notes: JSON.stringify({ email, stays, document: document_ }) };
+    });
+
+  scenario('fr_zones_bubbles_and_expressions_reach_the_zones',
+    'En-tête et pied : une bulle du pied est un résultat comme dans le corps (Entrée l\'atteint et la sélectionne) et l\'expression régulière cherche aussi dans l\'en-tête',
+    async h => {
+      await beginWithZones(h, '<p>Texte</p>', '<p>Réf 2024-0517</p>', '<p>Merci ' + bub('Client') + '</p>');
+      FindReplace.open({ replace: false });
+      FindReplace.setQuery('client');
+      await sleep(80);
+      const counted = countText();
+      FindReplace.next();
+      await sleep(80);
+      const selection = ed().state.selection;
+      const node = ed().state.doc.nodeAt(selection.from);
+      const onBubble = zoneMode() === 'footer:default' && !!node && node.type.name === 'varBadge' && selection.to - selection.from === 1;
+      const reached = countText();
+      FindReplace.setOptions({ regex: true });
+      FindReplace.setQuery('\\d{4}-\\d+');
+      await sleep(80);
+      const regexCount = countText();
+      FindReplace.next();
+      await sleep(80);
+      const found = where();
+      const pass = counted === '1 résultat' && onBubble && reached === '1 sur 1' && regexCount === '1 résultat' && found === '1 sur 1 header:default 2024-0517';
+      return { pass, notes: JSON.stringify({ counted, onBubble, reached, regexCount, found }) };
+    });
+
+  scenario('fr_zones_a_text_edited_then_left_is_searched_again',
+    'En-tête et pied : un mot tapé dans l\'en-tête ouvert compte aussitôt, et reste compté (Maj+Entrée le trouve, depuis la fin du corps) une fois revenu au corps',
+    async h => {
+      await beginWithZones(h, '<p>Corps ABC</p>', '<p>Tête ABC</p>', '');
+      FindReplace.open({ replace: false });
+      FindReplace.setQuery('abc');
+      await sleep(80);
+      const before = countText();
+      FindReplace.prev();
+      await sleep(80);
+      ed().chain().focus('end').insertContent(' abc encore').run();
+      await sleep(80);
+      const typing = countText();
+      HeaderFooterPreview.openStory('main');
+      await sleep(80);
+      const left = countText();
+      FindReplace.prev();
+      await sleep(80);
+      const inBody = where();
+      FindReplace.prev();
+      await sleep(80);
+      const found = where();
+      const pass = before === '2 sur 2' && typing === '3 résultats' && left === '3 résultats' && inBody === '3 sur 3 main ABC' && found === '2 sur 3 header:default abc';
+      return { pass, notes: JSON.stringify({ before, typing, left, inBody, found }) };
+    });
+
+  scenario('fr_zones_texts_in_english',
+    'En-tête et pied (anglais) : « 2 replacements, 1 other elsewhere » puis « 1 replacement » ; le compteur dit « 2 of 3 »',
+    async h => {
+      await beginWithZones(h, '<p>One ABC and ABC</p>', '<p>ABC header</p>', '');
+      I18n.setLang('en');
+      await sleep(60);
+      FindReplace.open({ replace: true });
+      FindReplace.setReplacement('X');
+      FindReplace.setQuery('abc');
+      await sleep(80);
+      const counter = countText();
+      const first = FindReplace.replaceAll();
+      await sleep(60);
+      const flashBody = countText();
+      FindReplace.next();
+      await sleep(80);
+      const second = FindReplace.replaceAll();
+      await sleep(60);
+      const flashHeader = countText();
+      const pass = counter === '2 of 3' && first === 2 && flashBody === '2 replacements, 1 other elsewhere' && second === 1 && flashHeader === '1 replacement';
+      return { pass, notes: JSON.stringify({ counter, first, flashBody, second, flashHeader }) };
+    });
+
 
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.findReplace = cases;

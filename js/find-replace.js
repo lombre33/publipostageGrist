@@ -265,7 +265,7 @@ const FindReplace = (function () {
   const editor = () => EditorCore.getEditor();
 
   // Surlignage et raccourcis (une extension TipTap)
-  const { currentMatches, indexOfSelection, refresh, scheduleWindow, placeWindow, createExtension } = (function () {
+  const { currentMatches, allStories, indexOfSelection, refresh, scheduleWindow, placeWindow, createExtension } = (function () {
     // Un surlignage par résultat, c'est un <span> par résultat à poser (et à recalculer) à chaque lettre tapée : 38 760 pour un « e » dans 120 pages,
     // plus d'une seconde et demie. Au-delà de ALL_BELOW résultats, seuls ceux de l'écran et de ses abords (`win`) sont surlignés ; le compteur, Entrée
     // et « Tout remplacer » comptent et parcourent tous les résultats, surlignés ou non.
@@ -274,7 +274,7 @@ const FindReplace = (function () {
     const MAX_SPAN = 1000;
     let cache = null; // { doc, query, matchCase, wholeWord, regex, matches } : les résultats d'un même document ne se recalculent pas à chaque transaction
     let windowPending = false;
-    let pm = null; // { Plugin, PluginKey, Decoration, DecorationSet } de ProseMirror, fournis par js/editor.js
+    let pm = null; // { Plugin, PluginKey, Decoration, DecorationSet, PMDOMParser } de ProseMirror, fournis par js/editor.js
 
     function currentMatches(pmState) {
       if (!state.query) return [];
@@ -282,6 +282,30 @@ const FindReplace = (function () {
         cache = { doc: pmState.doc, query: state.query, matchCase: state.matchCase, wholeWord: state.wholeWord, regex: state.regex, matches: findMatches(pmState.doc, state.query, state) };
       }
       return cache.matches;
+    }
+
+    // Les résultats des textes que l'éditeur ne contient pas : l'en-tête et le pied de page quand il contient le corps, le corps et l'autre zone quand il contient une zone. Leur
+    // HTML est lu avec le schéma de l'éditeur, comme à son chargement, puis cherché comme un document ; un texte qui n'a pas changé (même HTML, même requête) n'est pas relu.
+    const hidden = new Map(); // id d'un texte -> { html, query, matchCase, wholeWord, regex, matches }
+    function hiddenMatches(story) {
+      if (!state.query) return [];
+      const kept = hidden.get(story.id);
+      if (kept && kept.html === story.html && kept.query === state.query && kept.matchCase === state.matchCase && kept.wholeWord === state.wholeWord && kept.regex === state.regex) return kept.matches;
+      let matches = [];
+      try {
+        matches = findMatches(pm.PMDOMParser.fromSchema(editor().schema).parse(HtmlSanitize.parseInert(story.html || '')), state.query, state);
+      } catch (error) { /* un fragment illisible ne trouve rien */ }
+      hidden.set(story.id, { html: story.html, query: state.query, matchCase: state.matchCase, wholeWord: state.wholeWord, regex: state.regex, matches });
+      return matches;
+    }
+
+    // Les textes du modèle dans l'ordre de la page, chacun avec ses résultats : [{ id, live, matches }]. Ceux du texte que l'éditeur contient sont ceux du document
+    // (currentMatches) ; il n'y a qu'un texte tant que le modèle n'a ni en-tête ni pied.
+    function allStories(pmState) {
+      const live = currentMatches(pmState);
+      const listed = state.query ? HeaderFooterPreview.listStories() : [];
+      if (listed.length < 2) return [{ id: 'main', live: true, matches: live }];
+      return listed.map(story => ({ id: story.id, live: story.live, matches: story.live ? live : hiddenMatches(story) }));
     }
 
     // Premier indice de 0 à `length` pour lequel `test` est vrai (`test` est faux puis vrai : les résultats suivent l'ordre du document), `length` si
@@ -330,7 +354,7 @@ const FindReplace = (function () {
       return pm.DecorationSet.create(pmState.doc, shown);
     }
 
-    // pmClasses : { Plugin, PluginKey, Decoration, DecorationSet } (js/editor.js les importe déjà).
+    // pmClasses : { Plugin, PluginKey, Decoration, DecorationSet, PMDOMParser } (js/editor.js les importe déjà).
     function createExtension(Extension, pmClasses) {
       pm = pmClasses;
       return Extension.create({
@@ -386,7 +410,7 @@ const FindReplace = (function () {
       queueMicrotask(() => { windowPending = false; placeWindow(); });
     }
 
-    return { currentMatches, indexOfSelection, refresh, scheduleWindow, placeWindow, createExtension };
+    return { currentMatches, allStories, indexOfSelection, refresh, scheduleWindow, placeWindow, createExtension };
   })();
 
   // Les actions sur les résultats : aller de l'un à l'autre, remplacer (le message qui le dit vient du panneau, plus bas : `setFlash`).
@@ -414,22 +438,48 @@ const FindReplace = (function () {
       scroller.scrollTop += (rect.top + rect.bottom) / 2 - (box.top + box.bottom) / 2;
     }
 
-    // Suivant (ou précédent) à partir de la sélection, en repartant de l'autre bout du document quand il n'y en a plus.
+    // Passe à un autre texte du modèle (l'éditeur y entre, comme après un clic sur la marge d'en-tête) et s'y place sur son résultat `ordinal` (-1 : le dernier). Les résultats du
+    // texte qu'on quitte ne sont plus ceux de l'écran, ceux du nouveau se recalculent d'après son document.
+    function openAndSelect(id, ordinal) {
+      if (!HeaderFooterPreview.openStory(id)) return false;
+      win = null;
+      const matches = currentMatches(editor().state);
+      if (!matches.length) return false;
+      state.flash = '';
+      select(matches[ordinal < 0 ? matches.length - 1 : Math.min(ordinal, matches.length - 1)]);
+      return true;
+    }
+
+    // Le premier résultat d'un AUTRE texte, en allant vers la fin de la page (ou vers son début) et en repartant de l'autre bout : on y entre et on s'y place. Faux quand il
+    // n'y en a nulle part ailleurs.
+    function goElsewhere(backwards) {
+      const stories = allStories(editor().state);
+      const at = stories.findIndex(story => story.live);
+      for (let step = 1; step < stories.length; step++) {
+        const story = stories[(((backwards ? at - step : at + step) % stories.length) + stories.length) % stories.length];
+        if (story.matches.length && openAndSelect(story.id, backwards ? -1 : 0)) return true;
+      }
+      return false;
+    }
+
+    // Suivant (ou précédent) à partir de la sélection ; quand il n'y en a plus dans ce texte, dans le texte suivant du modèle (l'en-tête, le corps, le pied : on y entre), et
+    // en repartant de l'autre bout quand il n'y en a plus nulle part.
     function go(backwards) {
       const ed = editor();
       if (!ed || !state.query) return false;
       const matches = currentMatches(ed.state);
-      if (!matches.length) return false;
       const { from, to } = ed.state.selection;
       let target;
       if (backwards) {
         for (let i = matches.length - 1; i >= 0 && !target; i--) if (matches[i].to <= from) target = matches[i];
-        if (!target) target = matches[matches.length - 1];
       } else {
-        target = matches.find(m => m.from >= to) || matches[0];
+        target = matches.find(m => m.from >= to);
       }
+      if (target) { state.flash = ''; select(target); return true; }
+      if (goElsewhere(backwards)) return true;
+      if (!matches.length) return false;
       state.flash = '';
-      select(target);
+      select(backwards ? matches[matches.length - 1] : matches[0]);
       return true;
     }
 
@@ -508,22 +558,35 @@ const FindReplace = (function () {
       // suppression).
       const end = applied.mapping.map(match.to, 1);
       const rest = currentMatches(ed.state);
-      const next = rest.find(m => m.from >= end) || rest[0];
+      const next = rest.find(m => m.from >= end);
       state.flash = '';
       if (next) select(next);
-      else {
-        const TextSelection = EditorCore.getTextSelectionClass();
-        ed.view.dispatch(ed.state.tr.setSelection(TextSelection.near(ed.state.doc.resolve(Math.min(end, ed.state.doc.content.size)))).setMeta(META, true));
+      else if (!goElsewhere(false)) {
+        // Plus rien dans les autres textes : on repart du début de celui-ci.
+        if (rest.length) select(rest[0]);
+        else {
+          const TextSelection = EditorCore.getTextSelectionClass();
+          ed.view.dispatch(ed.state.tr.setSelection(TextSelection.near(ed.state.doc.resolve(Math.min(end, ed.state.doc.content.size)))).setMeta(META, true));
+        }
       }
       return true;
     }
 
-    // Tous les résultats en une transaction (donc une seule annulation), du dernier au premier : les positions des résultats d'avant ne bougent pas.
+    // Ce que dit le compteur après « Tout remplacer » : « 3 remplacements, 1 bulle laissée, 2 autres ailleurs » - ce qui a changé, ce qui est resté tel quel, ce qui attend dans
+    // un autre texte du modèle (l'en-tête, le corps, le pied).
+    function replacedFlash(count, kept, elsewhere) {
+      return [count ? I18n.t('find.replaced', { count }) : '', kept ? I18n.t('find.kept', { kept }) : '', elsewhere ? I18n.t('find.elsewhere', { rest: elsewhere }) : ''].filter(Boolean).join(', ');
+    }
+
+    // Tous les résultats DU TEXTE QUE L'ÉDITEUR CONTIENT (le corps, ou l'en-tête ou le pied ouvert) en une transaction (donc une seule annulation), du dernier au premier : les
+    // positions des résultats d'avant ne bougent pas. Ceux des autres textes attendent : l'annulation, elle, n'a qu'un historique par texte.
     function replaceAll() {
       const ed = editor();
       if (!ed || !ed.isEditable || !state.query) return 0;
-      const matches = currentMatches(ed.state);
+      const stories = allStories(ed.state);
+      const matches = stories.find(story => story.live).matches;
       if (!matches.length) return 0;
+      const elsewhere = stories.reduce((sum, story) => sum + (story.live ? 0 : story.matches.length), 0);
       const suggest = Editor.isTrackChangesOn();
       const doc = ed.state.doc;
       const tr = ed.state.tr;
@@ -531,10 +594,10 @@ const FindReplace = (function () {
       for (let i = matches.length - 1; i >= 0; i--) if (replaceMatch(tr, doc, matches[i], suggest)) kept++;
       const count = matches.length - kept;
       // Que des bulles qui ne changent pas : rien à envoyer, le document reste tel quel.
-      if (!count) { setFlash(I18n.t('find.kept', { kept })); return 0; }
+      if (!count) { setFlash(replacedFlash(0, kept, elsewhere)); return 0; }
       const applied = dispatchAndCapture(tr);
       if (!applied) { setFlash(I18n.t('find.replaceFailed')); return 0; }
-      setFlash(kept ? I18n.t('find.replacedKept', { count, kept }) : I18n.t('find.replaced', { count }));
+      setFlash(replacedFlash(count, kept, elsewhere));
       return count;
     }
 
@@ -678,28 +741,34 @@ const FindReplace = (function () {
 
     // « 3 sur 12 » quand la sélection est sur un résultat, « 12 résultats » sinon, « Aucun résultat » ; après « Tout remplacer », le nombre de
     // remplacements jusqu'à la prochaine action.
-    function countLabel(matches, index) {
+    // `total` : les résultats de tous les textes du modèle (le corps, l'en-tête, le pied) ; `index` : le rang du résultat courant parmi eux.
+    function countLabel(total, index) {
       if (queryError()) return { text: I18n.t('find.regexInvalid'), kind: 'error' };
       if (state.flash) return { text: state.flash, kind: 'flash' };
-      if (state.query && !matches.length) return { text: I18n.t('find.count.none'), kind: 'none' };
-      if (!matches.length) return { text: '', kind: 'idle' };
-      return { text: index >= 0 ? I18n.t('find.count.index', { index: index + 1, count: matches.length }) : I18n.t('find.count.total', { count: matches.length }), kind: 'some' };
+      if (state.query && !total) return { text: I18n.t('find.count.none'), kind: 'none' };
+      if (!total) return { text: '', kind: 'idle' };
+      return { text: index >= 0 ? I18n.t('find.count.index', { index: index + 1, count: total }) : I18n.t('find.count.total', { count: total }), kind: 'some' };
     }
     function updateCount() {
       if (!bar || !refs) return;
       const ed = editor();
       if (state.flash && ed && ed.state.doc !== state.flashDoc) state.flash = '';
-      const matches = ed ? currentMatches(ed.state) : [];
-      const label = countLabel(matches, ed ? indexOfSelection(matches, ed.state.selection) : -1);
+      const stories = ed ? allStories(ed.state) : [];
+      const at = stories.findIndex(story => story.live);
+      const total = stories.reduce((sum, story) => sum + story.matches.length, 0);
+      const own = at >= 0 ? indexOfSelection(stories[at].matches, ed.state.selection) : -1;
+      const before = stories.slice(0, Math.max(at, 0)).reduce((sum, story) => sum + story.matches.length, 0);
+      const label = countLabel(total, own >= 0 ? before + own : -1);
       if (refs.count.textContent !== label.text) refs.count.textContent = label.text;
       refs.count.dataset.kind = label.kind;
       syncRegexError();
-      const none = !matches.length;
+      const none = !total;
       setDisabled(refs.prev, none);
       setDisabled(refs.next, none);
+      // « Remplacer » va aussi au résultat d'un autre texte ; « Tout remplacer » agit sur le texte ouvert.
       const canReplace = !none && !!ed && ed.isEditable;
       setDisabled(refs.one, !canReplace);
-      setDisabled(refs.all, !canReplace);
+      setDisabled(refs.all, !canReplace || !stories[at].matches.length);
     }
 
     const isDisabled = button => button.getAttribute('aria-disabled') === 'true';
@@ -831,6 +900,8 @@ const FindReplace = (function () {
         if (!transaction || transaction.getMeta(META) !== 'window') scheduleWindow();
       });
       document.addEventListener('keydown', onDocumentKeydown);
+      // Le compteur compte aussi l'en-tête et le pied : il suit « Première page différente » et le chargement d'un modèle, qui ne passent par aucune transaction.
+      HeaderFooterPreview.onStoriesChange(() => { if (state.open) updateCount(); });
     }
 
     // La loupe de la barre : ouvre le panneau, ou le ferme quand il est déjà ouvert.

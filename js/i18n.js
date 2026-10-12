@@ -524,7 +524,8 @@ const I18n = (function () {
     'find.bubble.tooLong': { fr: 'Trop long pour une bulle ({max} signes au plus).', en: 'Too long for a bubble ({max} characters at most).' },
     'find.bubble.suggest': { fr: 'Avec le suivi, une bulle ne se remplace pas.', en: 'With track changes on, bubbles aren’t replaced.' },
     'find.kept': { fr: '{kept} {kept|bulle laissée|bulles laissées}', en: '{kept} {kept|bubble left as is|bubbles left as is}' },
-    'find.replacedKept': { fr: '{count} {count|remplacement|remplacements}, {kept} {kept|bulle laissée|bulles laissées}', en: '{count} {count|replacement|replacements}, {kept} {kept|bubble left as is|bubbles left as is}' },
+    // Après « Tout remplacer » : ce qui attend dans un autre texte du modèle (l'en-tête, le corps, le pied), à la suite de « 3 remplacements » et de « 1 bulle laissée ».
+    'find.elsewhere': { fr: '{rest} {rest|autre|autres} ailleurs', en: '{rest} {rest|other|others} elsewhere' },
 
     // --- Commentaires (js/comments.js) ---
     'comments.selectTextFirst': { fr: 'Sélectionnez du texte avant d’ajouter un commentaire.', en: 'Select some text before adding a comment.' },

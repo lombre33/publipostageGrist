@@ -1,7 +1,8 @@
 // Suite "headerFooter" - activation, saisie via setHeaderFooterData (chemin
 // direct) ET via le vrai clic sur une zone de marge (chemin UI complet),
 // première page différente, formats de numéro de page, persistance du
-// contenu par zone/variante.
+// contenu par zone/variante, passage du corps à l'en-tête et au pied (suivi
+// des modifications allumé, étapes d'annulation, historique de chaque texte).
 (function () {
   const cases = [];
 
@@ -521,6 +522,129 @@
       }
       const logged = warnings.filter(w => w.includes('[reader-mode]') && w.includes('lecture impossible'));
       return { pass: logged.length === 1 && kept && zoneText.includes('Rapport'), notes: JSON.stringify({ logged: logged.length, warnings: warnings.slice(0, 3), kept, zoneText }) };
+    },
+  });
+
+  // --- Le passage d'un texte à l'autre (le corps, l'en-tête, le pied) -----------------------------------------------------------------------------------------------------
+  // L'éditeur n'a qu'un document : en entrant dans une zone on y charge son fragment, en sortant on y remet le corps. Ce passage ne doit ni se proposer comme une modification
+  // (suivi allumé), ni entrer dans l'historique d'Annuler, et chaque texte garde le sien.
+  const ZONE_HTML = '<p>En-tête ABC</p>';
+  async function bodyAndHeader(h, body) {
+    await h.resetEditor();
+    Editor.setHTML(body);
+    Editor.setHeaderFooterData({ enabled: true, differentFirstPage: false, header: { default: ZONE_HTML, first: '' }, footer: { default: '', first: '' } });
+    await h.sleep(80);
+    return EditorCore.getEditor();
+  }
+
+  cases.push({
+    id: 'hf_swap_with_track_changes_on_leaves_the_texts_clean',
+    description: 'Suivi des modifications allumé : entrer dans l\'en-tête puis en sortir ne propose ni suppression ni insertion (ni dans le corps, ni dans l\'en-tête enregistré) et laisse le suivi allumé',
+    run: async (h) => {
+      await bodyAndHeader(h, '<p>Corps ABC</p>');
+      Editor.setTrackChanges(true);
+      let inside, back, saved, still;
+      try {
+        await h.sleep(60);
+        HeaderFooterPreview.enterHeaderFooterMode('header', 'default');
+        await h.sleep(100);
+        inside = Editor.getHTML();
+        HeaderFooterPreview.exitHeaderFooterModeIfActive();
+        await h.sleep(100);
+        back = Editor.getHTML();
+        saved = Editor.getHeaderFooterData().header.default;
+        still = Editor.isTrackChangesOn();
+      } finally {
+        Editor.setTrackChanges(false);
+      }
+      const clean = html => !/<(del|ins)\b/.test(html);
+      const pass = inside === ZONE_HTML && back === '<p>Corps ABC</p>' && saved === ZONE_HTML && clean(inside) && clean(back) && clean(saved) && still === true;
+      return { pass, notes: JSON.stringify({ inside, back, saved, still }) };
+    },
+  });
+
+  cases.push({
+    id: 'hf_swap_is_not_an_undo_step',
+    description: 'Annuler juste après être entré dans l\'en-tête ne remet pas le corps dans l\'en-tête, et juste après en être sorti ne remet pas l\'en-tête dans le corps',
+    run: async (h) => {
+      const ed = await bodyAndHeader(h, '<p>Corps</p>');
+      HeaderFooterPreview.enterHeaderFooterMode('header', 'default');
+      await h.sleep(100);
+      ed.commands.undo();
+      await h.sleep(60);
+      const insideAfterUndo = Editor.getHTML();
+      const stillInZone = Editor.isEditingHeaderFooter();
+      HeaderFooterPreview.exitHeaderFooterModeIfActive();
+      await h.sleep(100);
+      ed.commands.undo();
+      await h.sleep(60);
+      const bodyAfterUndo = Editor.getHTML();
+      const stillBody = !Editor.isEditingHeaderFooter();
+      return { pass: insideAfterUndo === ZONE_HTML && stillInZone && bodyAfterUndo === '<p>Corps</p>' && stillBody, notes: JSON.stringify({ insideAfterUndo, stillInZone, bodyAfterUndo, stillBody }) };
+    },
+  });
+
+  cases.push({
+    id: 'hf_each_text_keeps_its_own_undo_history',
+    description: 'Le corps et l\'en-tête ont chacun leur historique : après un passage par l\'en-tête, Annuler défait la dernière frappe du corps (pas celle de l\'en-tête), Rétablir la refait, et l\'en-tête retrouve la sienne',
+    run: async (h) => {
+      const ed = await bodyAndHeader(h, '<p>Corps</p>');
+      const header = () => Editor.getHeaderFooterData().header.default;
+      ed.chain().focus('end').insertContent(' un').run();
+      await h.sleep(60);
+      HeaderFooterPreview.enterHeaderFooterMode('header', 'default');
+      await h.sleep(100);
+      ed.chain().focus('end').insertContent(' deux').run();
+      await h.sleep(60);
+      HeaderFooterPreview.exitHeaderFooterModeIfActive();
+      await h.sleep(100);
+      const typed = Editor.getHTML();
+      ed.commands.undo();
+      await h.sleep(60);
+      const undone = Editor.getHTML();
+      const headerKept = header();
+      ed.commands.redo();
+      await h.sleep(60);
+      const redone = Editor.getHTML();
+      HeaderFooterPreview.enterHeaderFooterMode('header', 'default');
+      await h.sleep(100);
+      ed.commands.undo();
+      await h.sleep(60);
+      const headerUndone = Editor.getHTML();
+      const inZone = Editor.isEditingHeaderFooter();
+      HeaderFooterPreview.exitHeaderFooterModeIfActive();
+      await h.sleep(100);
+      const bodyAfter = Editor.getHTML();
+      const pass = typed === '<p>Corps un</p>' && undone === '<p>Corps</p>' && /En-tête ABC deux/.test(headerKept) && redone === '<p>Corps un</p>'
+        && /^<p>En-tête ABC<\/p>$/.test(headerUndone) && inZone && bodyAfter === '<p>Corps un</p>';
+      return { pass, notes: JSON.stringify({ typed, undone, headerKept, redone, headerUndone, inZone, bodyAfter }) };
+    },
+  });
+
+  cases.push({
+    id: 'hf_loading_another_template_drops_the_histories_of_the_texts',
+    description: 'Charger un autre modèle oublie l\'historique de l\'en-tête de l\'ancien : même si le nouvel en-tête est mot pour mot celui que l\'ancien avait après la frappe, Annuler n\'y défait rien',
+    run: async (h) => {
+      const ed = await bodyAndHeader(h, '<p>Corps</p>');
+      HeaderFooterPreview.enterHeaderFooterMode('header', 'default');
+      await h.sleep(100);
+      ed.chain().focus('end').insertContent(' deux').run();
+      await h.sleep(60);
+      HeaderFooterPreview.exitHeaderFooterModeIfActive();
+      await h.sleep(100);
+      // Ce que fait main.js pour un autre modèle : sortie de la zone, nouveau corps, nouvelles zones.
+      Editor.exitHeaderFooterModeIfActive();
+      Editor.setHTML('<p>Autre corps</p>');
+      Editor.setHeaderFooterData({ enabled: true, differentFirstPage: false, header: { default: '<p>En-tête ABC deux</p>', first: '' }, footer: { default: '', first: '' } });
+      await h.sleep(100);
+      HeaderFooterPreview.enterHeaderFooterMode('header', 'default');
+      await h.sleep(100);
+      ed.commands.undo();
+      await h.sleep(60);
+      const header = Editor.getHTML();
+      HeaderFooterPreview.exitHeaderFooterModeIfActive();
+      await h.sleep(100);
+      return { pass: header === '<p>En-tête ABC deux</p>', notes: JSON.stringify({ header }) };
     },
   });
 

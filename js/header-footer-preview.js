@@ -66,6 +66,30 @@ const HeaderFooterPreview = (function () {
     ed.view.dispatch(invertTr);
   }
 
+  // Met dans l'éditeur le fragment d'une zone, ou le document principal. Jamais par `setContent` : avec le suivi allumé, le pont le prend pour une frappe
+  // et empile le texte d'avant (barré) et celui d'après (souligné) dans des <del> et <ins> géants, qui se retrouvent ensuite dans le brouillon de la zone et
+  // dans le document ; et l'échange s'ajoute à l'historique, si bien qu'un Annuler après « Terminer » remettait le texte de l'en-tête dans le corps.
+  // `loadTrackedDocument` (js/track-changes.js) remplace tout sans suivi ni historique, comme le chargement d'un modèle.
+  function loadStory(html) { editor.commands.loadTrackedDocument(html || ''); }
+
+  // L'éditeur n'a qu'un historique d'Annuler, celui du texte qu'il contient. En changeant de texte (le corps, l'en-tête, le pied) on met de côté celui qu'on quitte et on rend
+  // celui du texte qu'on retrouve, à condition qu'il défasse toujours le même document : sans cela ses pas ne s'y appliqueraient pas, on repart d'un historique vide.
+  const storyHistory = new Map(); // « main » ou « zone:variante » -> { history, doc }
+  const storyKey = mode => (mode ? mode.zone + ':' + mode.variant : 'main');
+  const historyPlugin = () => (editor && editor.state.plugins.find(plugin => plugin.key === 'history$')) || null;
+  function stashHistory(key) {
+    const plugin = historyPlugin();
+    if (plugin) storyHistory.set(key, { history: plugin.getState(editor.state), doc: editor.state.doc });
+  }
+  function restoreHistory(key) {
+    const plugin = historyPlugin();
+    if (!plugin) return;
+    const kept = storyHistory.get(key);
+    const history = kept && kept.doc.eq(editor.state.doc) ? kept.history : plugin.spec.state.init();
+    // La même transaction que prosemirror-history envoie à la fin d'un Annuler : elle remplace l'état du plugin, sans toucher au document.
+    editor.view.dispatch(editor.state.tr.setMeta(plugin, { redo: false, historyState: history }).setMeta('addToHistory', false).setMeta('preventUpdate', true));
+  }
+
   // Charge le fragment voulu dans l'éditeur, après avoir gardé ce qu'on quitte : le brouillon de la zone ouverte, ou le document principal à la
   // première entrée.
   function enterHeaderFooterMode(zone, variant) {
@@ -74,12 +98,14 @@ const HeaderFooterPreview = (function () {
     // reçoit plus de nouveau, mais une zone qui a déjà un contenu s'ouvre, pour qu'on puisse le retirer. Depuis l'édition d'une zone, passer à
     // l'autre reste permis.
     if (!hfMode && !PageLayout.fitsHeaderFooter() && !hasZoneContent(headerFooterDraft[zone][variant])) return;
+    stashHistory(storyKey(hfMode));
     if (hfMode) headerFooterDraft[hfMode.zone][hfMode.variant] = editor.getHTML();
     else mainDocSnapshot = editor.getHTML();
     headerFooterDraft.enabled = true;
     hfMode = { zone, variant };
     suppressHeightGuardOnce = true;
-    editor.commands.setContent(headerFooterDraft[zone][variant] || '');
+    loadStory(headerFooterDraft[zone][variant]);
+    restoreHistory(storyKey(hfMode));
     syncHfMode();
   }
   // L'éditeur vient d'échanger son contenu : la classe d'édition, la barre d'outils, la pastille et la pagination suivent `hfMode`.
@@ -105,10 +131,12 @@ const HeaderFooterPreview = (function () {
 
   function exitHeaderFooterMode() {
     if (!hfMode || !editor) return;
+    stashHistory(storyKey(hfMode));
     headerFooterDraft[hfMode.zone][hfMode.variant] = editor.getHTML();
     dropEmptyZones(headerFooterDraft);
     hfMode = null;
-    editor.commands.setContent(mainDocSnapshot || '');
+    loadStory(mainDocSnapshot);
+    restoreHistory('main');
     mainDocSnapshot = null;
     syncHfMode();
   }
@@ -121,6 +149,36 @@ const HeaderFooterPreview = (function () {
   // résout que depuis le corps principal).
   function isEditingHeaderFooter() { return !!hfMode; }
 
+  // Les textes du modèle, dans l'ordre de la page : l'en-tête, le corps, le pied (et, quand « première page différente » est cochée, leurs variantes de première page), sans les
+  // zones vides. Rechercher / Remplacer (js/find-replace.js) les parcourt tous. `live` : celui que l'éditeur contient (il se lit dans l'éditeur) ; `html` : celui des autres.
+  // Un modèle email n'a ni en-tête ni pied.
+  function listStories() {
+    if (!editor) return [];
+    const stories = [];
+    const add = zone => VARIANTS.forEach(variant => {
+      const live = !!hfMode && hfMode.zone === zone && hfMode.variant === variant;
+      const html = live ? null : headerFooterDraft[zone][variant];
+      const shown = variant === 'default' || headerFooterDraft.differentFirstPage;
+      if (live || (!inEmailMode && shown && hasZoneContent(html))) stories.push({ id: zone + ':' + variant, zone, variant, live, html });
+    });
+    add('header');
+    stories.push({ id: 'main', zone: null, variant: null, live: !hfMode, html: hfMode ? mainDocSnapshot : null });
+    add('footer');
+    return stories;
+  }
+  // Ceux qui lisent cette liste sont prévenus quand elle change sans que l'éditeur ne bouge : « Première page différente » cochée ou décochée, un autre modèle chargé.
+  const storiesListeners = [];
+  function onStoriesChange(listener) { storiesListeners.push(listener); }
+  const storiesChanged = () => storiesListeners.forEach(listener => listener());
+  // L'éditeur passe à ce texte (« main », « header:default », « footer:first »…), comme après un clic sur la marge ou sur « Terminer ». Vrai quand il le contient ensuite (faux si
+  // l'entrée est refusée : modèle email, page trop basse pour une zone vide).
+  function openStory(id) {
+    if (id === 'main') { exitHeaderFooterModeIfActive(); return !hfMode; }
+    const [zone, variant] = id.split(':');
+    if (!hfMode || hfMode.zone !== zone || hfMode.variant !== variant) enterHeaderFooterMode(zone, variant);
+    return !!hfMode && hfMode.zone === zone && hfMode.variant === variant;
+  }
+
   // Le brouillon en cours, zone et variante affichées comprises, sans sortir du mode (les appelants réels appellent exitHeaderFooterModeIfActive
   // juste avant, mais un appel en plein mode reste cohérent).
   function getHeaderFooterData() {
@@ -130,6 +188,7 @@ const HeaderFooterPreview = (function () {
 
   // Appelé au chargement d'un modèle, hfMode déjà garanti inactif (main.js appelle exitHeaderFooterModeIfActive juste avant).
   function setHeaderFooterData(data) {
+    storyHistory.clear();
     const empty = emptyHeaderFooterData();
     headerFooterDraft = data && typeof data === 'object'
       ? Object.assign(empty, data, {
@@ -142,6 +201,7 @@ const HeaderFooterPreview = (function () {
     // Un modèle enregistré avec un en-tête « activé » mais vide est remis à plat à l'ouverture, et enregistré ainsi à la prochaine sauvegarde.
     dropEmptyZones(headerFooterDraft);
     renderPaginationOverlay();
+    storiesChanged();
   }
 
   // Pastille d'édition de l'en-tête et du pied, collée en haut de #editor-container pendant l'édition (hfMode actif). On y entre par un clic sur une
@@ -186,6 +246,7 @@ const HeaderFooterPreview = (function () {
         headerFooterDraft.differentFirstPage = event.target.checked;
         if (!event.target.checked && hfMode && hfMode.variant === 'first') enterHeaderFooterMode(hfMode.zone, 'default');
         else renderHfPill();
+        storiesChanged();
       });
       pill.querySelector('#v2-hf-btn-done').addEventListener('click', () => exitHeaderFooterMode());
       // mousedown+preventDefault (pas click) : un simple click perdrait la sélection ProseMirror avant l'exécution de la commande.
@@ -1096,7 +1157,7 @@ const HeaderFooterPreview = (function () {
 
   return {
     setEditor, setEmailMode, getHfMode, clampWidthForHfMaxSize, enforceZoneHeightLimit,
-    enterHeaderFooterMode, exitHeaderFooterModeIfActive, isEditingHeaderFooter,
+    enterHeaderFooterMode, exitHeaderFooterModeIfActive, isEditingHeaderFooter, listStories, openStory, onStoriesChange,
     getHeaderFooterData, setHeaderFooterData,
     schedulePaginationRecompute, renderPaginationOverlay, computePageGridPosition, migrateLegacyImagePositions, reconcileLayerImagesWithGrid, recaptureLayeredImageGrids,
     rowPadOf,
