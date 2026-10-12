@@ -4,12 +4,13 @@
 > d'interface déjà faits par Antoine sur les widgets Grist Factory — ce qui est commun à tous les widgets et ce
 > qui est propre à chacun — pour pouvoir être collé tel quel dans un autre chat/projet Claude et lui donner
 > immédiatement le bon cadre : quelle identité respecter, quoi ne pas réinventer, quoi rester au milieu de la
-> route en attendant un arbitrage d'Antoine. État au 2026-09-29 pour `publipostageGrist` (dépôt mature, revérifié dans le
-> code après l'audit UX/UI du 29/09 et l'harmonisation des fenêtres) ; `SlidesPlus` (fondation, pas encore un éditeur
-> utilisable) n'a pas été revu depuis le 2026-09-18.
+> route en attendant un arbitrage d'Antoine. État au 2026-10-12 : `publipostageGrist` (dépôt mature) est tenu à jour au fil des
+> lots (dernière règle ajoutée le 12/10) ; `SlidesPlus` (éditeur de base, voir §4) a été relu dans son code le 2026-10-12 (dernier
+> commit de sa branche `main` : 2026-09-19).
 >
-> Ce fichier existe en deux copies identiques : `identite-ui-ux-grist-factory.md` dans les fichiers du projet, et
-> `planning/identite-ui-ux-grist-factory.md` dans le dépôt `publipostageGrist` (branche `main`).
+> Ce fichier existe en deux copies de même contenu : `identite-ui-ux-grist-factory.md` dans les fichiers du projet, et
+> `planning/identite-ui-ux-grist-factory.md` dans le dépôt `publipostageGrist` (branche `main`). La mise en page de quelques
+> paragraphes peut différer de l'une à l'autre : toute règle nouvelle s'insère dans chacune, relue juste avant.
 
 ---
 
@@ -100,15 +101,22 @@ boutons pleins à 3,08:1 en sombre). Règles à suivre :
 Un principe distinctif, présent dès l'origine sur Publipostage+ et à reproduire sur tout widget qui génère un
 contenu exportable :
 - **Police de chrome** (barres d'outils, boutons, libellés, tout ce qui n'est pas le document produit) :
-  **celle du système** (`system-ui`, puis Segoe UI, Roboto, Helvetica Neue, Arial : `--font-ui` de `css/style.css`), poids
+  **celle du système** (`system-ui`, puis `-apple-system`, Segoe UI, Roboto, Helvetica Neue, Arial : `--font-ui` de `css/style.css`), poids
   400, 600 et 700 seulement (un 800 s'afficherait en « Black » avec Segoe UI). **Jamais une police chargée depuis un autre
   site** (Google Fonts ou autre) : elle dirait à ce site, à chaque ouverture du widget, l'adresse IP et l'heure de la
-  personne. Choix d'Antoine du 04/10 : « une police système similaire, pas de Google Fonts ou autre » (avant : Manrope).
+  personne. Choix d'Antoine du 04/10 : « une police système similaire, pas de Google Fonts ou autre » (avant : Manrope, abandonnée : ne
+  jamais la remettre ; en ligne `2c83bf3`). La politique de sécurité du contenu laisse les polices libres : seuls deux contrôles arrêtent une
+  police qui reviendrait, le groupe `codeHygiene` (section 12 : ni police, ni feuille de style, ni `@import`, ni `<link>` vers un autre site ;
+  `--font-ui` doit commencer par `system-ui`) et le script Node `cspLoad` (aucune feuille ni police demandée à un autre site pendant tout le
+  parcours du widget, mesuré dans un vrai navigateur).
 - **Police du contenu produit** : celle qui part réellement à l'export. Sur Publipostage+, c'est **Roboto**,
   auto-hébergée (`css/roboto-fonts.css`) en regular/italique/gras/gras-italique — délibérément les MÊMES fichiers
   que ceux embarqués dans le PDF par `pdfmake`, pour que la pagination affichée à l'écran soit identique à celle
   du PDF. Ne jamais laisser la police du contenu dériver de celle réellement exportée. Dans le PDF, un caractère que la police du texte n'a pas (du grec, du cyrillique ou du vietnamien dans Arial ou en gras, un ✓ → ★ ① ₿ ✅) s'écrit dans une police de repli, Roboto de la même graisse puis PPSymbols (`js/pdf-glyph-fallback.js`), jamais en case vide ; le chinois, le japonais, l'arabe, l'hébreu et le thaï restent des cases vides (aucune police assez légère, et pdfmake ne dessine pas de droite à gauche).
-- Base non stylée (avant les tokens) : `Arial, sans-serif` — n'apparaît jamais telle quelle une fois l'app chargée.
+- Base non stylée (avant les tokens) : `Arial, sans-serif`. Elle reste en vigueur, au 12/10, sur des champs de saisie qui n'ont pas pris
+  `--font-ui` : nom du modèle, champs de l'e-mail (Objet, À, Cc, Cci) et nom du PDF dans la barre du haut ; recherche de la galerie, nom du
+  macro-modèle, marges et caractère déclencheur dans les fenêtres (mesuré dans Chromium sur la page ouverte seule : les fenêtres créées par
+  le script n'ont pas été mesurées). Rien n'est téléchargé, mais ce n'est pas la police du système : écart proposé à Antoine, voir §5.
 
 ### Thème sombre : uniquement le chrome, jamais le contenu produit
 Règle stricte, documentée en commentaire dans le CSS de Publipostage+ : le thème sombre change la couleur de la
@@ -130,8 +138,8 @@ Ce qui se pose SUR la page prend donc des couleurs qui ne suivent pas le thème 
 Toutes les icônes de Publipostage+ sont des SVG en **contour** (`stroke`, pas de remplissage), intégrées en
 `mask-image` CSS plutôt qu'en `<img>` : l'icône hérite alors de la couleur du bouton (texte/accent selon l'état),
 donc elle s'adapte automatiquement au thème clair/sombre et à l'état survolé/actif sans doublon d'asset. Pas de
-police d'icônes (Font Awesome, etc.), pas d'emoji dans le chrome de l'app (SlidesPlus utilise encore un emoji
-`⛶` sur son unique bouton — état de fondation, cf. §4).
+police d'icônes (Font Awesome, etc.), pas d'emoji dans le chrome de l'app (SlidesPlus utilise encore des emoji
+ou des signes Unicode sur ses boutons d'outils — texte, formes, image, corbeille, plein écran —, à reprendre avec la charte, cf. §4).
 
 Deux règles d'Antoine s'y ajoutent :
 - **Une icône = une fonction.** La punaise veut dire « favori » (section « Épinglés » de la liste des modèles) et rien
@@ -165,6 +173,9 @@ n'est jamais de la retoucher quand même, c'est de proposer sans y toucher. Deux
   y disparaît tout entière, sur un geste, et revient à la sortie ; et le bouton « Changer la colonne de la variable… » de la barre d'une variable, demandé de même le 04/10 (§3) :
   il n'y est que sur une variable cassée (bulle rouge), absent - pas grisé - d'une variable saine, d'un calcul, d'un bloc de texte, d'une valeur et d'une case conditionnelle. Et le bloc « Qualité PDF » du menu « Type d'export » (intitulé, filet et trois lignes), demandé de même le 12/10 : il n'est montré que pour le type PDF
   (§3, « Type d'export ») ; ses lignes restent dans la page, grisées, et la qualité choisie est gardée.
+  Un retrait demandé n'est pas une régression : les qualités « Ultra HD » et « Basse qualité » du PDF ont été retirées du menu, des textes
+  français et anglais, du code et des documents sur la demande d'Antoine du 09/10 (« si pas de pdf en ultra hd, retirer les bouts de code en
+  lien avec ça et pareil sur l'UI ») ; il reste « Vectoriel », « Impression navigateur » et « Léger » : ne pas les remettre sans lui.
 - Un défaut qui revient se corrige **une fois pour toutes**, à sa cause commune, pas fenêtre par fenêtre ni menu par
   menu : c'est ce qui a donné la base commune des fenêtres et le pont de survol des menus (§3).
 
@@ -346,10 +357,10 @@ pour un nouveau widget, pas une règle unique.
 | | `publipostageGrist` | `SlidesPlus` |
 |---|---|---|
 | Rôle | Édition et publipostage de documents texte riches (contrats, factures, courriers) | Édition de présentations façon diaporama, avec publipostage par diapositive/table |
-| État | Mature, en développement actif de fonctionnalités | Fondation seulement — **pas encore un éditeur utilisable** |
+| État | Mature, en développement actif de fonctionnalités | Éditeur de base, mono-utilisateur (Phase 1 livrée : texte, formes, image, plusieurs diapositives, enregistrement dans Grist, mode présentation) — **pas encore d'export pptx/PDF ni de publipostage** |
 | Moteur d'édition | TipTap/ProseMirror, chargé depuis un CDN (esm.sh) via import map ESM | Fabric.js 7.4.0, **vendorisé** (fichier committé, servi same-origin) |
 | Dépendances tierces | Chargées depuis CDN — SRI structurellement impossible en ESM ; vendorisation écartée pour l'instant (décision d'Antoine, 2026-09-18) | Vendorisation systématique de toute dépendance tierce (sauf le SDK Grist lui-même) — voir `DEPENDENCIES.md` |
-| Module partagé | `shared/` (accès API Grist, résolution de variables cross-table) — en cours de factorisation avec SlidesPlus, dépôt séparé prévu mais pas encore créé | Consomme le même `shared/` |
+| Module partagé | Pas de dossier `shared/` : ses modules vivent dans `js/` (`grist-api.js`, `variables.js`, `variable-format.js`, `html-sanitize.js`) et ont servi de source à celui de SlidesPlus | `shared/` : version généralisée de ces modules (fabrique paramétrée par un `namespace`), pensée pour devenir un dépôt séparé, pas encore créé |
 | Accès Grist demandé | `full` | `full` (même raison : variables/tables croisées) |
 
 Les deux widgets partagent délibérément le même moteur de résolution de variables et les mêmes enseignements de
@@ -952,7 +963,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
 - Feuille A4 : dans un panneau étroit, la page est réduite à la largeur disponible par un `zoom` CSS (`--pp-fit-zoom` : à
   700 px de panneau, 794 px de mise en page passent à 672 px) — à l'écran seulement. Les coupures de ligne de l'éditeur
   sont celles d'un grand panneau ; les PDF sont identiques quelle que soit la taille du panneau.
-- Zoom de la page (« pouvoir zoomer dans l'éditeur à la fois en mode lecture et en mode édition » : un
+- Zoom de la page (demande d'Antoine du 04/10, « pouvoir zoomer dans l'éditeur à la fois en mode lecture et en mode édition » : un
   badge aux dimensions personnalisées apparaissait tout petit au milieu du gris) : la barre d'outils reste gelée, le zoom est une
   **pastille collée au coin bas droit du document** (choix d'Antoine du 05/10 : la première, large et à 24 px du bord, couvrait la fin des
   lignes ; « le coller au bas de la page, ne mettre que le pourcentage, le décaller au max à droite pour qu'il soit sur le fond autour
@@ -1143,6 +1154,12 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   touche se montre là où le bouton se nomme : dans son infobulle (« Gras (Ctrl+B) », la touche après le texte, entière dans la fenêtre), à droite de la ligne d'un menu (Citation, Titre
   1…), après le titre d'un menu (« Exporter (Alt+P) ») et dans `aria-keyshortcuts` ; sans touche, rien n'est écrit (pas de parenthèses vides). Un nouveau bouton de la barre
   s'ajoute à la liste (`ACTIONS` de `js/shortcuts.js`, avec son nom français et anglais) et au scénario « la touche fait ce que fait la souris ».
+- Zone d'en-tête ou de pied de page laissée vide (choix « Automatique » d'Antoine, 01/10 : un clic dans l'en-tête puis « Terminer » sans rien écrire
+  laissait un en-tête activé) : elle disparaît toute seule à « Terminer » et à l'ouverture d'un modèle (un modèle déjà enregistré avec une zone
+  activée mais vide est remis à plat, enregistré ainsi à la prochaine sauvegarde) ; un numéro de page, une variable ou une puce comptent comme du
+  contenu et ne sont jamais touchés. Il n'y a pas de bouton « Supprimer » pour une zone : ne pas en ajouter sans un nouveau choix de sa part
+  (`js/header-footer-preview.js` : `hasZoneContent`, `dropEmptyZones` ; en ligne `7d4b0d1` ; tenu par le groupe `headerFooter` et le script Node
+  `headerFooterMouse`).
 - En-tête et pied de page (choix d'Antoine du 01/10, « Sur le PDF », modèle « Fiche mission ») : le PDF réserve toujours la même bande sous la marge du haut dès qu'un en-tête a du
   contenu, sur l'une de ses pages ou sur toutes (45 pt de zone + 10 pt d'écart = 55 pt, quelle que soit la hauteur du texte), autant au-dessus de la marge du bas pour le pied, et rien quand
   la zone est vide. L'éditeur, la Lecture et le Word se calent dessus : le corps commence à la marge + 55 pt du bord de la feuille dans les quatre rendus, l'en-tête à la moitié de la marge du
@@ -1192,14 +1209,18 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
 
 ## 4. Spécifique à SlidesPlus
 
-- **État réel au premier commit : une fondation, pas un éditeur.** Connexion Grist + canevas Fabric.js vide +
-  mode présentation (plein écran natif avec repli CSS si l'iframe Grist ne l'autorise pas). Rien de plus n'est
-  implémenté.
-- L'UI actuelle (`css/style.css`, ~90 lignes) est un point de départ **générique, pas encore la charte Grist
-  Factory** : bleu d'accent différent (`#2563eb`, à comparer au `#2f6fed` de Publipostage+), pas de thème sombre,
-  pas de séparation police chrome/contenu, un seul bouton avec un emoji (`⛶ Plein écran`). À harmoniser avec la
-  charte du §1 au moment de construire le véritable éditeur (Phase 1 de `ROADMAP.md`), pas avant — inutile de
-  retoucher une UI qui n'a pas encore de vraie barre d'outils à aligner.
+- **État réel au 12/10 (relu dans le code ; dernier commit de `main` : 19/09) : un éditeur de base, mono-utilisateur.** Connexion Grist,
+  insertion de texte, de formes (rectangle, ellipse, ligne) et d'images, plusieurs diapositives avec miniatures (ajout, suppression,
+  réordonnancement), enregistrement et chargement dans une table Grist interne (`SlidesPlus_Presentations`), mode présentation (plein écran
+  natif avec repli CSS si l'iframe Grist ne l'autorise pas). Pas encore d'export pptx/PDF ni de publipostage, ni d'annuler/rétablir ni
+  d'alignement assisté (`ROADMAP.md`). Son avenir (deux widgets ou une suite) est à l'étude, rien n'est tranché (`SUITE.md` du dépôt SlidesPlus).
+- L'UI actuelle (`css/style.css`, ~200 lignes) est encore un point de départ **générique, pas la charte Grist Factory** : bleu d'accent différent
+  (`#2563eb`, à comparer au `#2f6fed` de Publipostage+), pas de thème sombre (`color-scheme: light`), ses propres jetons (`--spls-*`) et non
+  ceux de la charte, pas de séparation police chrome/contenu, des boutons d'outils en emoji ou en signes Unicode (texte, formes, image,
+  corbeille, plein écran) là où la charte veut des icônes SVG en trait. Un point déjà conforme : la police de l'interface est celle du système
+  (`-apple-system`, `BlinkMacSystemFont`, `"Segoe UI"`, Roboto, Arial), aucune police d'un autre site ; le texte d'une diapositive est en Arial
+  par défaut. À harmoniser avec la charte du §1 quand sa vraie barre d'outils sera construite, pas avant — inutile de retoucher une UI qui n'a
+  pas encore de vraie barre d'outils à aligner.
 - Diapositive : 960×540 pt (16:9, proportions PowerPoint), choisi dès l'éditeur pour que l'export `.pptx`/PDF
   n'ait pas de conversion surprise.
 - Aucun audit de sécurité encore réalisé (rien à auditer au-delà de la fondation actuelle) ; un audit dans
@@ -1213,15 +1234,17 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
 - Refonte éventuelle de la barre d'outils V2 de Publipostage+ (jugée dense) — gelée tant qu'Antoine ne l'a pas
   arbitrée.
 - Unification des teintes « ambre = attention » entre les deux widgets (proches mais pas identiques aujourd'hui).
-- Palette et typographie définitives de SlidesPlus une fois son éditeur réel construit — pour l'instant provisoires.
+- Palette définitive de SlidesPlus une fois son éditeur réel construit — pour l'instant provisoire (sa police d'interface est déjà celle du système).
 - Calendrier de rattachement à l'écosystème Grist.Gouv, qui pourrait renommer les dépôts publics.
-- Cartes posées à Antoine le 29/09, sans réponse à 21 h ce jour-là : « Commenter » en mode Lecture (recommandation : le
-  griser) ; « Par personne » ou « Par ligne » pour les droits de lecture seule (fait « Par personne » en attendant) ;
-  trois contrastes restants (message vert « lignes trouvées » à 3,65:1, bleu d'accent sur fond gris à 4,02:1 — onglet
-  actif des Réglages, « Modifier le lien » —, puces de la galerie à 4,39:1) ; « [Email indisponible] » et « (aucun titre dans ce document) », restés en français
-  (recommandation : traduire).
+- Cartes posées à Antoine le 29/09 : « Commenter » en mode Lecture - tranché le 30/09, « Commenter dans la Lecture » (`053e1b5`) ; les trois
+  contrastes restants - corrigés avec les jetons de §1 « Contrastes » ; « [Email indisponible] » et « (aucun titre dans ce document) » - traduits
+  le 30/09 (`6f93ae4`). Reste sans réponse notée : « Par personne » ou « Par ligne » pour les droits de lecture seule (fait « Par personne » en
+  attendant).
 - Relevés par l'audit du 29/09 sans avoir fait l'objet d'une carte : deux sortes d'info-bulles, quatre crayons pour quatre
-  fonctions, des tailles et couleurs écrites en dur dans le CSS, une lecture seule qui grise sans expliquer pourquoi.
+  fonctions, des tailles et couleurs écrites en dur dans le CSS, une lecture seule qui grise sans expliquer pourquoi (non revérifiés au 12/10).
+- Police du système, champs restés en Arial (relevé du 12/10, §1 « Deux polices ») : nom du modèle, champs de l'e-mail et nom du PDF dans la
+  barre du haut ; recherche de la galerie, nom du macro-modèle, marges et caractère déclencheur dans les fenêtres. Question posée à Antoine le
+  12/10 sur une carte : rien n'est codé avant son choix.
 
 ---
 
@@ -1230,7 +1253,7 @@ widgets Grist Factory. Source : exploration directe de `publipostageGrist` (`ind
 `js/settings.js`, `js/i18n.js`) et de `SlidesPlus` (`README.md`, `ROADMAP.md`, `css/style.css`, `index.html`) le
 2026-09-18, plus les décisions d'Antoine déjà actées en mémoire de projet. Mise à jour du 2026-09-29 : `publipostageGrist`
 revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/modal-base.js`, `js/dialogs.js`,
-`js/search-select.js`, `js/i18n.js`, `js/main.js`) et décisions d'Antoine du 18 au 29/09.*
+`js/search-select.js`, `js/i18n.js`, `js/main.js`) et décisions d'Antoine du 18 au 29/09. Relecture du 2026-10-12 : voir « Mises à jour ».*
 
 **Mises à jour**
 - 2026-09-18 : première version.
@@ -1244,3 +1267,9 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
   nettoyage du code (restent 7 px sur les contrôles et 8 px sur le cadre des fenêtres) ; le gris « très atténué »
   `#98a2b3` est devenu `#667085` avec les contrastes (un seul gris de texte) ; le renvoi « cf. §3 » du bouton de
   SlidesPlus pointe §4.
+- 2026-10-12 : relecture à la demande d'Antoine. Police du système : le lot `2c83bf3`, les contrôles `codeHygiene` (section 12) et `cspLoad`, la pile
+  exacte de `--font-ui` et l'écart des champs restés en Arial (§1, §5). Ajoutées : la zone d'en-tête ou de pied vide qui disparaît à « Terminer » (§3)
+  et le retrait d'« Ultra HD » et de « Basse qualité » (§1, « Non-régression »). Mises à jour : SlidesPlus (§2, §4, relu dans son code), la ligne
+  « Module partagé » (§2), la liste « Ce qui reste ouvert » (§5) et l'en-tête. Entre le 29/09 et le 12/10, les règles livrées par les fils (barre,
+  export, tableaux, couleurs, contrastes…) se sont ajoutées à §1 et §3 sans ligne ici : l'historique complet est dans git
+  (`planning/identite-ui-ux-grist-factory.md`).
