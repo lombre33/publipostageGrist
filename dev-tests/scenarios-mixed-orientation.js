@@ -167,6 +167,35 @@ window.EditorTestSuites.mixedOrientation = (function () {
     return problems;
   }
 
+  // --- L'impression par le navigateur, mesurée dans le cadre caché ---
+  const clone = value => JSON.parse(JSON.stringify(value));
+  const printSheets = job => Array.from(job.frame.contentDocument.querySelectorAll('.pp-print-sheet'));
+  const printSense = sheet => (parseFloat(sheet.style.width) > 1000 ? 'L' : 'P');
+  // Les boîtes de texte qu'une feuille montre : celles qui tiennent dans sa fenêtre (le reste du document, que la fenêtre rogne, n'est pas à elle), avec leur coin haut gauche en pixels depuis
+  // le coin de la feuille.
+  function sheetText(sheet) {
+    const view = sheet.querySelector('.pp-print-window').getBoundingClientRect();
+    const origin = sheet.getBoundingClientRect();
+    const doc = sheet.ownerDocument;
+    const range = doc.createRange();
+    const walker = doc.createTreeWalker(sheet, NodeFilter.SHOW_TEXT);
+    const boxes = [];
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (!/\S/.test(node.nodeValue) || node.parentElement.closest('style, script, template')) continue;
+      range.selectNodeContents(node);
+      const inside = Array.from(range.getClientRects()).filter(r => r.width > 0 && r.height > 0 && r.top >= view.top - 0.5 && r.bottom <= view.bottom + 0.5 && r.left >= view.left - 0.5 && r.right <= view.right + 0.5);
+      if (inside.length) boxes.push({ text: node.nodeValue.trim(), left: inside[0].left - origin.left, top: inside[0].top - origin.top });
+    }
+    return boxes;
+  }
+  const textOf = boxes => boxes.map(box => box.text).join(' ');
+  const PRINT_PAGE_RULES = {
+    default: '@page { size: 210mm 297mm; margin: 0; }',
+    portrait: '@page pp-portrait { size: 210mm 297mm; margin: 0; }',
+    landscape: '@page pp-landscape { size: 297mm 210mm; margin: 0; }',
+  };
+  async function printJob(html, hf) { return PrintExport.prepare(html, null, { id: 1 }, clone(hf || NO_HF), 'essai'); }
+
   return [
     // ---------- Le lecteur des repères ----------
     {
@@ -897,6 +926,173 @@ window.EditorTestSuites.mixedOrientation = (function () {
         if (sizes !== 'PLP') problems.push('PDF : sens des pages ' + sizes + ' au lieu de PLP');
         else if (bodyWords(pages[0]).length) problems.push('PDF : la première page, vide, porte du texte : ' + bodyWords(pages[0]).join(' '));
         return verdict(problems, { lecture: senses, pdf: sizes });
+      },
+    },
+
+    // ---------- L'impression par le navigateur ----------
+    {
+      id: 'mixed_print_each_sheet_has_the_size_and_the_name_of_its_page',
+      description: 'Impression navigateur : portrait, paysage, portrait : une feuille par page de la Lecture, de la taille exacte de SA page (793,71 x 1 122,52 puis 1 122,52 x 793,71 px), posée dans un bloc qui porte le nom de sa page (`page: pp-portrait` / `pp-landscape`), des règles `@page` nommées à la taille de chaque sens (en millimètres) et celle des marges par défaut ; le texte de chaque modèle sur la feuille de son sens, à la marge gauche de SA feuille (la feuille portrait, plus étroite que la pile, est centrée dans la largeur du paysage)',
+      async run(h) {
+        const problems = [];
+        await plainPage(h);
+        const summary = {};
+        const margin = PageLayout.getMarginsPx();
+        const job = await printJob(assemble([slot('portrait', lines(3, 'Alpha')), slot('landscape', lines(3, 'Bravo')), slot('portrait', lines(3, 'Charlie'))]), NO_HF);
+        try {
+          const doc = job.frame.contentDocument;
+          const sheets = printSheets(job);
+          const senses = sheets.map(printSense).join('');
+          summary.sens = senses; summary.feuilles = job.pageCount;
+          if (senses !== 'PLP') problems.push('sens des feuilles : ' + senses + ' au lieu de PLP');
+          if (job.pageCount !== sheets.length) problems.push('pageCount ' + job.pageCount + ' pour ' + sheets.length + ' feuilles');
+          sheets.forEach((sheet, i) => {
+            const want = 'PLP'[i];
+            if (!want) return;
+            const rect = sheet.getBoundingClientRect();
+            if (!near(rect.width, SHEET_PX[want], 0.05) || !near(rect.height, SHEET_HEIGHT_PX[want], 0.05)) problems.push('feuille ' + (i + 1) + ' : ' + rect.width.toFixed(2) + ' x ' + rect.height.toFixed(2) + ' px au lieu de ' + SHEET_PX[want] + ' x ' + SHEET_HEIGHT_PX[want]);
+            const holder = sheet.parentElement;
+            const name = want === 'L' ? 'pp-landscape' : 'pp-portrait';
+            if (!holder.classList.contains('pp-print-page') || !holder.classList.contains(want === 'L' ? 'pp-print-landscape' : 'pp-print-portrait')) problems.push('feuille ' + (i + 1) + ' : le bloc qui porte le nom de la page est « ' + holder.className + ' »');
+            else if (getComputedStyle(holder).getPropertyValue('page') !== name) problems.push('feuille ' + (i + 1) + ' : `page` vaut « ' + getComputedStyle(holder).getPropertyValue('page') + ' » au lieu de « ' + name + ' »');
+            const boxes = sheetText(sheet).filter(box => /^(Alpha|Bravo|Charlie) \d/.test(box.text));
+            const tags = ['Alpha', 'Bravo', 'Charlie'];
+            tags.forEach((tag, t) => { const count = boxes.filter(box => box.text.indexOf(tag) === 0).length; if (count !== (t === i ? 3 : 0)) problems.push('feuille ' + (i + 1) + ' : ' + count + ' ligne(s) « ' + tag + ' » au lieu de ' + (t === i ? 3 : 0)); });
+            const leftmost = boxes.reduce((min, box) => Math.min(min, box.left), Infinity);
+            if (!near(leftmost, margin.left, 0.6)) problems.push('feuille ' + (i + 1) + ' : le texte commence à ' + leftmost.toFixed(2) + ' px du bord au lieu de ' + margin.left.toFixed(2));
+            const win = job.windows[i];
+            if (!win || !win.sheet || win.sheet.orientation !== (want === 'L' ? 'landscape' : 'portrait')) problems.push('fenêtre ' + (i + 1) + ' : sens ' + (win && win.sheet ? win.sheet.orientation : 'absent'));
+          });
+          const rule = (doc.getElementById('pp-print-page') || { textContent: '' }).textContent;
+          summary.regle = rule;
+          Object.keys(PRINT_PAGE_RULES).forEach(key => { if (rule.indexOf(PRINT_PAGE_RULES[key]) === -1) problems.push('règle « ' + key + ' » absente : ' + rule); });
+          if (!near(job.frame.getBoundingClientRect().width, SHEET_PX.L, 1.1)) problems.push('le cadre est large de ' + job.frame.getBoundingClientRect().width + ' px : la feuille paysage n\'y tient pas');
+          if (job.pageMm.width !== 210 || job.pageMm.height !== 297) problems.push('pageMm : ' + job.pageMm.width + ' x ' + job.pageMm.height);
+        } finally { job.dispose(); }
+        // Un document qui commence en paysage : la règle `@page` du départ est la sienne.
+        const landscapeFirst = await printJob(assemble([slot('landscape', lines(3, 'Alpha')), slot('portrait', lines(3, 'Bravo'))]));
+        try {
+          const rule = landscapeFirst.frame.contentDocument.getElementById('pp-print-page').textContent;
+          summary.paysageDabord = printSheets(landscapeFirst).map(printSense).join('');
+          if (summary.paysageDabord !== 'LP') problems.push('document qui commence en paysage : ' + summary.paysageDabord);
+          if (rule.indexOf('@page { size: 297mm 210mm; margin: 0; }') !== 0) problems.push('la règle de départ d\'un document qui commence en paysage : ' + rule);
+          if (landscapeFirst.pageMm.width !== 297) problems.push('pageMm d\'un document qui commence en paysage : ' + landscapeFirst.pageMm.width + ' x ' + landscapeFirst.pageMm.height);
+        } finally { landscapeFirst.dispose(); }
+        return verdict(problems, summary);
+      },
+    },
+    {
+      id: 'mixed_print_pages_are_numbered_from_end_to_end_and_laid_out_like_the_reading',
+      description: 'Impression navigateur : portrait (1 page), paysage (plusieurs pages), portrait, avec en-tête et pied numérotés : autant de feuilles que de pages de la Lecture, les numéros de page et le total continuent d\'une section à l\'autre sur chaque feuille (« première page différente » : celle du DOCUMENT), chaque ligne de texte au même endroit de sa page (0,05 px) que dans la Lecture',
+      async run(h) {
+        const problems = [];
+        await plainPage(h);
+        const html = assemble([slot('portrait', lines(3, 'Alpha')), slot('landscape', lines(80, 'Bravo')), slot('portrait', lines(3, 'Charlie'))]);
+        const reading = await readSheets(h, html, NUMBERED_HF);
+        const readingPages = reading.sheets.reduce((sum, sheet) => sum + sheet.pages, 0);
+        // Les lignes de chaque page de la Lecture, depuis le coin de SA feuille : le haut de la page (une couture par frontière) et le bord gauche de la section.
+        const readerLines = [];
+        reading.sheets.forEach(sheet => {
+          const zoom = EditorCore.layoutZoom(sheet.el);
+          const content = sheet.el.getBoundingClientRect();
+          const range = document.createRange();
+          const walker = document.createTreeWalker(sheet.el, NodeFilter.SHOW_TEXT);
+          for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+            if (!/^(Alpha|Bravo|Charlie) \d/.test(node.nodeValue.trim())) continue;
+            range.selectNodeContents(node);
+            const r = range.getClientRects()[0];
+            readerLines.push({ text: node.nodeValue.trim(), left: (r.left - content.left) / zoom, width: r.width / zoom, height: r.height / zoom });
+          }
+        });
+        const job = await printJob(html, NUMBERED_HF);
+        const summary = { pagesLecture: readingPages };
+        try {
+          const sheets = printSheets(job);
+          summary.feuilles = sheets.length;
+          if (sheets.length !== readingPages) problems.push('feuilles : ' + sheets.length + ' pour ' + readingPages + ' pages de la Lecture');
+          const total = sheets.length;
+          const footers = []; const headers = [];
+          const printed = [];
+          sheets.forEach((sheet, i) => {
+            const boxes = sheetText(sheet);
+            const text = textOf(boxes);
+            const footer = /(PREMIER-PIED|PIED) (\d+)\/(\d+)/.exec(text);
+            const header = /(PREMIERE|EN-TETE (\d+))/.exec(text);
+            footers.push(footer ? footer[0] : 'aucun'); headers.push(header ? header[0] : 'aucun');
+            boxes.filter(box => /^(Alpha|Bravo|Charlie) \d/.test(box.text)).forEach(box => printed.push(box));
+          });
+          const wantFooters = ['PREMIER-PIED 1/' + total].concat(Array.from({ length: total - 1 }, (_, i) => 'PIED ' + (i + 2) + '/' + total));
+          const wantHeaders = ['PREMIERE'].concat(Array.from({ length: total - 1 }, (_, i) => 'EN-TETE ' + (i + 2)));
+          if (footers.join('|') !== wantFooters.join('|')) problems.push('pieds : ' + footers.join('|') + ' au lieu de ' + wantFooters.join('|'));
+          if (headers.join('|') !== wantHeaders.join('|')) problems.push('en-têtes : ' + headers.join('|') + ' au lieu de ' + wantHeaders.join('|'));
+          // Les lignes : la même ligne, dans le même ordre, avec la même largeur et la même hauteur ; le bord gauche à la marge de SA feuille (celui de la Lecture est depuis le bord de la section).
+          if (printed.length !== readerLines.length) problems.push('lignes de texte : ' + printed.length + ' imprimées pour ' + readerLines.length + ' en Lecture');
+          else {
+            let worst = 0;
+            printed.forEach((box, i) => { if (box.text !== readerLines[i].text) problems.push('ligne ' + (i + 1) + ' : « ' + box.text + ' » au lieu de « ' + readerLines[i].text + ' »'); else worst = Math.max(worst, Math.abs(box.left - readerLines[i].left)); });
+            summary.ecartGauche = Math.round(worst * 1000) / 1000;
+            if (worst > 0.05) problems.push('bord gauche des lignes : écart de ' + worst.toFixed(3) + ' px avec la Lecture');
+          }
+        } finally { job.dispose(); }
+        return verdict(problems, summary);
+      },
+    },
+    {
+      id: 'mixed_print_a_page_taller_than_its_sheet_continues_on_sheets_of_its_own_sense',
+      description: 'Impression navigateur : une liste de 80 éléments dans un modèle paysage (une page plus haute qu\'une feuille : la pagination ne coupe pas une liste) continue sur d\'autres feuilles PAYSAGE, coupée entre deux éléments, chaque élément une fois et une seule ; les feuilles portrait de part et d\'autre gardent leur page',
+      async run(h) {
+        const problems = [];
+        await plainPage(h);
+        const list = '<ul>' + Array.from({ length: 80 }, (_, i) => '<li><p>Élément ' + (i + 1) + ' de la liste du modèle paysage, avec un texte assez long pour passer sur deux lignes quand la page est étroite.</p></li>').join('') + '</ul>';
+        const job = await printJob(assemble([slot('portrait', lines(3, 'Alpha')), slot('landscape', list), slot('portrait', lines(3, 'Charlie'))]));
+        const summary = {};
+        try {
+          const sheets = printSheets(job);
+          const senses = sheets.map(printSense).join('');
+          summary.sens = senses;
+          if (!/^PL{2,}P$/.test(senses)) problems.push('sens des feuilles : ' + senses + ' (P, au moins deux L, P attendus)');
+          const found = new Map();
+          sheets.forEach((sheet, i) => sheetText(sheet).forEach(box => {
+            const match = /^Élément (\d+) de la liste/.exec(box.text);
+            if (!match) return;
+            found.set(Number(match[1]), (found.get(Number(match[1])) || 0) + 1);
+            if (printSense(sheet) !== 'L') problems.push('l\'élément ' + match[1] + ' est sur la feuille ' + (i + 1) + ', portrait');
+          }));
+          const lost = []; const doubled = [];
+          for (let i = 1; i <= 80; i++) { const n = found.get(i) || 0; if (n === 0) lost.push(i); if (n > 1) doubled.push(i); }
+          if (lost.length || doubled.length) problems.push('éléments perdus : ' + lost.join(',') + ' ; doublés : ' + doubled.join(','));
+          const first = textOf(sheetText(sheets[0])); const last = textOf(sheetText(sheets[sheets.length - 1]));
+          if (!/Alpha 0/.test(first) || /Élément/.test(first)) problems.push('la première feuille : ' + first.slice(0, 80));
+          if (!/Charlie 0/.test(last) || /Élément/.test(last)) problems.push('la dernière feuille : ' + last.slice(0, 80));
+        } finally { job.dispose(); }
+        return verdict(problems, summary);
+      },
+    },
+    {
+      id: 'mixed_print_nothing_changes_without_a_turning_section',
+      description: 'Impression navigateur : un document ordinaire, un macro-modèle dont tous les modèles ont le sens des marges (repères présents) et un macro-modèle imposé en paysage gardent leurs feuilles d\'avant : posées directement dans l\'hôte (aucun bloc nommé), une seule règle `@page`, sans nom, à la taille du modèle, aucune fenêtre qui porte un sens',
+      async run(h) {
+        const problems = [];
+        await plainPage(h);
+        const check = async (label, html, senses, rule) => {
+          const job = await printJob(html);
+          try {
+            const sheets = printSheets(job);
+            const got = sheets.map(printSense).join('');
+            if (got !== senses) problems.push(label + ' : feuilles ' + got + ' au lieu de ' + senses);
+            if (job.frame.contentDocument.querySelector('.pp-print-page')) problems.push(label + ' : un bloc nommé enveloppe une feuille');
+            if (sheets.some(sheet => sheet.parentElement.id !== 'pp-print-sheets')) problems.push(label + ' : une feuille n\'est pas posée directement dans l\'hôte');
+            const got1 = job.frame.contentDocument.getElementById('pp-print-page').textContent;
+            if (got1 !== rule) problems.push(label + ' : règle « ' + got1 + ' » au lieu de « ' + rule + ' »');
+            if (job.windows.some(win => win.sheet)) problems.push(label + ' : une fenêtre porte un sens');
+          } finally { job.dispose(); }
+        };
+        await check('document ordinaire', lines(3, 'Alpha'), 'P', PRINT_PAGE_RULES.default);
+        await check('macro-modèle tout portrait', assemble([slot('portrait', lines(3, 'Alpha')), slot('portrait', lines(3, 'Bravo'))]), 'PP', PRINT_PAGE_RULES.default);
+        PageLayout.setMarginsMm(Object.assign({}, PageLayout.getMarginsMm(), { orientation: 'landscape' }));
+        await check('macro-modèle tout paysage', assemble([slot('landscape', lines(3, 'Alpha')), slot('landscape', lines(3, 'Bravo'))]), 'LL', '@page { size: 297mm 210mm; margin: 0; }');
+        await plainPage(h);
+        return verdict(problems, {});
       },
     },
   ];

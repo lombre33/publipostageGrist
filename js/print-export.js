@@ -11,6 +11,11 @@
 // paragraphe plus hauts que la place qui reste) et ne compte pas les marges de certains blocs, la page descend alors sous le bas d'une feuille. Ce
 // qui dépasse n'est jamais perdu : il continue sur la ou les feuilles suivantes, coupé entre deux lignes (jamais au travers d'une ligne ou d'une image).
 //
+// Un macro-modèle aux sens mêlés (js/page-sections.js) a des pages de tailles différentes : la Lecture le range en une pile de feuilles par section, chacune dans SON
+// sens, et chaque page dit son sens, la place de sa feuille et sa largeur (`page.orientation`, `sheetLeft`, `sheetWidth`). Chaque feuille d'impression a alors la taille de
+// SA page, et le navigateur la sort sur du papier de cette taille : une règle `@page` NOMMÉE par sens (`pp-portrait`, `pp-landscape`), que la feuille appelle par son bloc
+// (css/print.css : `page`). Sans repère de sens, rien de tout cela : la page unique du modèle, comme avant.
+//
 // Le cadre est un srcdoc (un cadre `blob:` serait refusé par la politique de sécurité de index.html, `frame-src 'none'`, qui laisse passer srcdoc) :
 // il hérite de cette politique, aucun script n'y tourne, et `sandbox="allow-same-origin allow-modals"` l'empêche d'en lancer un même si du HTML
 // piégé échappait au filtre (js/html-sanitize.js). Le widget lit son document pour le mesurer et lance `print()` ; `allow-modals` est ce que le
@@ -23,7 +28,8 @@
 //     `options.print(fenêtreDuCadre)` remplace `window.print()` (les tests : un navigateur sans écran n'ouvre pas de fenêtre).
 //   PrintExport.prepare(htmlContent, tableId, record, headerFooterData, title) -> Promise<{ frame, pageCount, pageMm, windows, dispose }>
 //     Le cadre prêt à imprimer, sans l'imprimer : ses feuilles sont dans frame.contentDocument. `pageCount` : le nombre de feuilles ; `windows` : pour
-//     chacune, la part du document qu'elle montre `{ from, to, at }` (de `from` à `to`, dessinée à la hauteur `at` de la feuille).
+//     chacune, la part du document qu'elle montre `{ from, to, at }` (de `from` à `to`, dessinée à la hauteur `at` de la feuille), et, pour un document aux sens mêlés,
+//     `sheet` : la feuille de sa page `{ orientation, width, height, left, mm }`. `pageMm` : la taille de la première feuille.
 //   PrintExport.isTooLong(error), PrintExport.MAX_PAGES
 const PrintExport = (function () {
   const FRAME_ID = 'pp-print-frame';
@@ -67,6 +73,13 @@ const PrintExport = (function () {
     const links = Array.from(document.querySelectorAll('link[rel="stylesheet"]')).map(link => '<link rel="stylesheet" href="' + attr(link.href) + '">').join('');
     return '<!DOCTYPE html><html lang="' + attr(document.documentElement.lang || 'fr') + '" class="pp-print-frame" data-theme="light"><head><meta charset="utf-8">'
       + '<title>' + text(title) + '</title>' + links + '</head><body><div id="reader-container" class="a4-preview"></div></body></html>';
+  }
+
+  // La taille du cadre : celle de la plus grande feuille que le document emploie (un document aux sens mêlés a des feuilles de deux tailles).
+  function frameSizeFor(htmlContent, pagePx) {
+    if (typeof htmlContent !== 'string' || !PageSections.hasSenses(htmlContent)) return pagePx;
+    const sizes = PageSections.sensesIn(htmlContent).map(sense => PageLayout.withOrientation(sense, () => PageLayout.getPageSizePx())).concat([pagePx]);
+    return { width: Math.max.apply(null, sizes.map(size => size.width)), height: Math.max.apply(null, sizes.map(size => size.height)) };
   }
 
   function createFrame(title, pagePx) {
@@ -173,50 +186,76 @@ const PrintExport = (function () {
     }
   }
 
-  // Toutes les fenêtres, page après page.
+  // La feuille de papier d'une page de la Lecture : `{ orientation, width, height, left, mm }` (pixels de mise en page ; `left` : le bord gauche de la feuille dans la pile,
+  // `mm` : sa taille pour `@page`). Une page d'un document aux sens mêlés dit son sens (ReaderMode.renderInto) et sa feuille se lit à PageLayout pour CE sens ; une page
+  // d'un document ordinaire n'en dit pas : null, c'est la feuille du modèle.
+  function sheetOf(page) {
+    if (!page.orientation) return null;
+    return PageLayout.withOrientation(page.orientation, () => {
+      const px = PageLayout.getPageSizePx();
+      return { orientation: page.orientation, width: px.width, height: px.height, left: page.sheetLeft, mm: PageLayout.getPageSizeMm() };
+    });
+  }
+
+  // Toutes les fenêtres, page après page. Celles d'une page d'un document aux sens mêlés portent la feuille de leur page (`sheet`) : la hauteur où une page trop haute se
+  // coupe est celle de SA feuille.
   function planWindows(doc, stage, paged, pagePx) {
     const boxes = collectInk(doc, stage);
     const marginBottomPx = PageLayout.getMarginsPx().bottom;
     const windows = [];
     paged.pages.forEach((page, index) => {
       const next = paged.pages[index + 1];
-      pageWindows(page, next ? next.top : Infinity, boxes, pagePx.height, marginBottomPx).forEach(win => windows.push(win));
+      const sheet = sheetOf(page);
+      pageWindows(page, next ? next.top : Infinity, boxes, sheet ? sheet.height : pagePx.height, marginBottomPx).forEach(win => windows.push(sheet ? Object.assign(win, { sheet }) : win));
     });
     return windows;
   }
 
   // Les feuilles : une par fenêtre, la taille exacte d'une page, qui rogne une copie du document mesuré décalée de la place de la fenêtre. `sheetLeft` est
   // le bord gauche de la feuille de papier. La copie garde son identifiant (#reader-container) : les règles de la Lecture, de la pagination (marges de bas de
-  // page, rognage des tableaux) et de css/print.css en dépendent toutes.
+  // page, rognage des tableaux) et de css/print.css en dépendent toutes. Une fenêtre d'un document aux sens mêlés a sa propre feuille (`win.sheet` : taille et bord
+  // gauche de SA page) : la feuille est alors posée dans un bloc qui porte le NOM de sa page (`pp-print-page pp-print-<sens>`, css/print.css) - le nom ne se lit pas
+  // sur la feuille elle-même, que `contain: size` rend atomique pour le navigateur.
   function buildSheets(doc, stage, windows, sheetLeft, pagePx) {
     const host = doc.createElement('div');
     host.id = 'pp-print-sheets';
     windows.forEach(win => {
+      const paper = win.sheet || { width: pagePx.width, height: pagePx.height, left: sheetLeft };
       const sheet = doc.createElement('div');
       sheet.className = 'pp-print-sheet';
-      sheet.style.width = pagePx.width + 'px';
-      sheet.style.height = pagePx.height + 'px';
+      sheet.style.width = paper.width + 'px';
+      sheet.style.height = paper.height + 'px';
       const view = doc.createElement('div');
       view.className = 'pp-print-window';
       view.style.top = win.at + 'px';
       view.style.height = (win.to - win.from) + 'px';
       const copy = stage.cloneNode(true);
       copy.style.position = 'absolute';
-      copy.style.left = (-sheetLeft) + 'px';
+      copy.style.left = (-paper.left) + 'px';
       copy.style.top = (-win.from) + 'px';
       view.appendChild(copy);
       sheet.appendChild(view);
-      host.appendChild(sheet);
+      if (win.sheet) {
+        const named = doc.createElement('div');
+        named.className = 'pp-print-page pp-print-' + win.sheet.orientation;
+        named.appendChild(sheet);
+        host.appendChild(named);
+      } else host.appendChild(sheet);
     });
     stage.remove();
     doc.body.appendChild(host);
   }
 
-  // Le format de la page pour le navigateur : la taille du modèle, sans marge (les marges sont dans les feuilles), donc ni en-tête ni pied du navigateur.
-  function addPageRule(doc, pageMm) {
+  // Le format de la page pour le navigateur : la taille du modèle, sans marge (les marges sont dans les feuilles), donc ni en-tête ni pied du navigateur. Un document
+  // aux sens mêlés ajoute une règle NOMMÉE par sens employé (`@page pp-landscape { size }`), que les blocs de ses feuilles appellent (css/print.css : `page`) ; la règle
+  // sans nom, celle de la première feuille, reste la taille des pages que le navigateur ne sait pas nommer.
+  function addPageRule(doc, pageMm, windows) {
     const style = doc.createElement('style');
     style.id = 'pp-print-page';
-    style.textContent = '@page { size: ' + mm(pageMm.width) + ' ' + mm(pageMm.height) + '; margin: 0; }';
+    const named = [];
+    windows.forEach(win => { if (win.sheet && !named.some(item => item.orientation === win.sheet.orientation)) named.push(win.sheet); });
+    style.textContent = '@page { size: ' + mm(pageMm.width) + ' ' + mm(pageMm.height) + '; margin: 0; }'
+      + named.map(sheet => ' @page pp-' + sheet.orientation + ' { size: ' + mm(sheet.mm.width) + ' ' + mm(sheet.mm.height) + '; margin: 0; }').join('');
     doc.head.appendChild(style);
   }
 
@@ -235,7 +274,7 @@ const PrintExport = (function () {
     dispose();
     const pageMm = PageLayout.getPageSizeMm();
     const pagePx = PageLayout.getPageSizePx();
-    const frame = createFrame(title, pagePx);
+    const frame = createFrame(title, frameSizeFor(htmlContent, pagePx));
     document.body.appendChild(frame);
     live = frame;
     try {
@@ -249,9 +288,11 @@ const PrintExport = (function () {
       const windows = planWindows(doc, stage, paged, pagePx);
       if (windows.length > MAX_PAGES) throw tooLongError(windows.length);
       buildSheets(doc, stage, windows, paged.sheetLeft, pagePx);
-      addPageRule(doc, pageMm);
+      // La règle sans nom est celle de la première feuille (un document qui commence en paysage s'imprime d'abord en paysage).
+      const firstMm = windows[0].sheet ? windows[0].sheet.mm : pageMm;
+      addPageRule(doc, firstMm, windows);
       await settleSheets(doc, 8000);
-      return { frame, pageCount: windows.length, pageMm, windows, dispose: () => { if (live === frame) dispose(); else frame.remove(); } };
+      return { frame, pageCount: windows.length, pageMm: firstMm, windows, dispose: () => { if (live === frame) dispose(); else frame.remove(); } };
     } catch (e) {
       if (live === frame) dispose();
       throw e;

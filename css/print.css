@@ -26,3 +26,11 @@ html.pp-print-frame .pp-print-sheet { position: relative; overflow: hidden; cont
 html.pp-print-frame .pp-print-sheet:last-child { break-after: auto; }
 html.pp-print-frame .pp-print-window { position: absolute; left: 0; width: 100%; overflow: hidden; }
 html.pp-print-frame .pp-print-window > #reader-container { position: absolute; }
+
+/* Un document aux sens mêlés (js/print-export.js) : chaque feuille est posée dans un bloc qui porte le NOM de sa page, celui d'une règle `@page` nommée posée dans le
+   cadre (une taille de papier par sens). Le nom est sur le bloc, jamais sur la feuille : `contain: size` en ferait un bloc atomique dont Chromium ignore `page`.
+   Le saut de page est celui du bloc (la feuille, seule dans son bloc, est sa dernière : `break-after: auto`). */
+html.pp-print-frame .pp-print-page { break-after: page; }
+html.pp-print-frame .pp-print-page:last-child { break-after: auto; }
+html.pp-print-frame .pp-print-portrait { page: pp-portrait; }
+html.pp-print-frame .pp-print-landscape { page: pp-landscape; }

@@ -15,6 +15,8 @@
 //   6) un document de plus de 60 pages : le vrai clic ne prépare rien et le message dit quoi choisir, en français et en anglais ;
 //   7) le widget dans un cadre à bac à sable comme celui d'un document Grist : le VRAI print() (aucun remplaçant) est accepté par le navigateur, qui annonce beforeprint puis afterprint
 //      au cadre d'impression imbriqué, lequel est retiré.
+//   8) un macro-modèle aux sens mêlés (portrait, paysage, portrait : js/page-sections.js) : le PDF d'impression a les pages de la Lecture, chacune de la taille de SON sens (595 x 842 puis
+//      842 x 595 pt : règles `@page` nommées, une feuille posée dans un bloc qui porte le nom de sa page), les mêmes mots, chaque ligne à la hauteur de la Lecture, les pixels.
 // Lancé par run-headless.mjs (groupe Node « browserPrintPdf », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-browser-print.mjs
 // BROWSER_PRINT_SHOTS=<dossier> : enregistre aussi le PDF et les captures de la Lecture (à relire à l'œil) ; sans elle, rien n'est écrit.
 // BROWSER_PRINT_VERBOSE=1 : écrit aussi les mesures des contrôles réussis ; BROWSER_PRINT_ONLY=2,3 : ne lance que ces scénarios.
@@ -467,6 +469,103 @@ await scenario('7) Le widget dans un cadre à bac à sable comme celui d\'un doc
   check('le navigateur accepte l\'appel : il annonce beforeprint puis afterprint à la fenêtre du cadre d\'impression, imbriqué sous le bac à sable de Grist', seen.events.join(',') === 'beforeprint,afterprint', seen);
   check('afterprint retire le cadre d\'impression, et le message d\'état dit « Impression lancée. »', !seen.frame && seen.status === 'Impression lancée.', seen);
   check('aucun appel ignoré ni erreur de page (« Ignored call to \'print()\' » serait ici)', realErrors(w).length === 0, realErrors(w));
+});
+
+// Un macro-modèle aux sens mêlés : le HTML assemblé porte ses repères de sens (js/page-sections.js : un repère de départ, puis `data-page-orientation` sur le saut de page de chaque modèle). Les
+// sections sont ici écrites à la main, comme dans les scénarios du groupe mixedOrientation : ce qui se vérifie est l'impression, pas l'assemblage.
+const startMarker = sense => '<div class="page-section-start" contenteditable="false" data-page-orientation="' + sense + '"></div>';
+const slotBreak = (rank, sense) => '<div class="page-break-marker" contenteditable="false" data-macro-slot="' + rank + '" data-page-orientation="' + sense + '">Saut de page</div>';
+const wideTable = '<table><tr><th>Poste</th><th>T1</th><th>T2</th><th>T3</th><th>T4</th><th>Total</th></tr>'
+  + [1, 2, 3, 4].map(i => '<tr><td>Poste ' + i + '</td><td>1' + i + '</td><td>2' + i + '</td><td>3' + i + '</td><td>4' + i + '</td><td style="background-color: #fde9d9">10' + i + '</td></tr>').join('') + '</table>';
+const mixedHtml = startMarker('portrait') + '<h1>Courrier</h1>' + [1, 2, 3].map(para).join('')
+  + slotBreak(1, 'landscape') + '<h1>Annexe en paysage</h1>' + wideTable + Array.from({ length: 24 }, (_, i) => para(i + 4)).join('')
+  + slotBreak(2, 'portrait') + '<h1>Fin du courrier</h1>' + lines(20, 'Conclusion');
+
+// La Lecture à l'échelle 1, page par page : chaque section a sa feuille (sa largeur, son sens). Pour chaque page : son coin, sa taille, ses lignes (hauteur de la ligne de base en points depuis
+// son haut, comme readLecture) et ses mots ; les gouttières entre deux sections ne sont pas des pages.
+async function readLectureMixed(page, html, hf) {
+  await installLayouts(page);
+  return page.evaluate(async ({ html, hf }) => {
+    window.__setLayout('a4');
+    const rc = document.getElementById('reader-container'); const ec = document.getElementById('editor-container');
+    rc.style.display = 'block'; ec.style.display = 'none'; rc.classList.add('a4-preview'); rc.style.removeProperty('--pp-fit-zoom'); rc.removeAttribute('data-pp-widest-sheet');
+    rc.style.height = 'auto'; rc.style.overflow = 'visible'; rc.style.flex = 'none';
+    await ReaderMode.render(html, null, { id: 1 }, hf);
+    await new Promise(r => setTimeout(r, 800));
+    const sy = window.scrollY; const sx = window.scrollX;
+    const papers = Array.from(rc.querySelectorAll('.v2-reader-paper')).map(el => el.getBoundingClientRect()).sort((a, b) => a.top - b.top);
+    const seams = Array.from(rc.querySelectorAll('.v2-page-seam-divider')).filter(el => !el.classList.contains('v2-reader-gutter')).map(el => el.getBoundingClientRect().bottom + sy);
+    const pages = [];
+    papers.forEach(paper => {
+      const sense = paper.width > 1000 ? 'landscape' : 'portrait';
+      const size = PageLayout.withOrientation(sense, () => PageLayout.getPageSizePx());
+      [paper.top + sy].concat(seams.filter(bottom => bottom > paper.top + sy + 1 && bottom < paper.bottom + sy - 1)).forEach(top => pages.push({ top, left: paper.left + sx, width: size.width, height: size.height, sense }));
+    });
+    const skip = el => el.matches('.v2-reader-backdrop, .v2-page-seam-divider, style, script');
+    const shown = el => { const s = getComputedStyle(el); return !(s.visibility === 'hidden' || s.opacity === '0' || /^transparent$|^rgba\(.*,\s*0\)$/.test(s.color)); };
+    const range = document.createRange();
+    const walker = document.createTreeWalker(rc, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, node => (node.nodeType === 1 && skip(node) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT));
+    const perPage = pages.map(() => new Set());
+    let text = '';
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (node.nodeType !== 3 || !/\S/.test(node.nodeValue) || !shown(node.parentElement)) continue;
+      text += ' ' + node.nodeValue;
+      const fontPx = parseFloat(getComputedStyle(node.parentElement).fontSize);
+      range.selectNodeContents(node);
+      Array.from(range.getClientRects()).forEach(rect => {
+        if (rect.width <= 0 || rect.height <= 0) return;
+        const top = rect.top + sy;
+        let index = -1;
+        pages.forEach((p, i) => { if (top >= p.top - 0.5) index = i; });
+        if (index < 0) return;
+        perPage[index].add(Math.round((top - pages[index].top + Math.round(0.927734375 * fontPx)) * 0.75 * 4) / 4);
+      });
+    }
+    return { pages, baselines: perPage.map(set => Array.from(set).sort((a, b) => a - b)), text, zoom: rc.style.getPropertyValue('--pp-fit-zoom') };
+  }, { html, hf });
+}
+
+async function compareMixedWithLecture(w, label, html, hf) {
+  const { page } = w;
+  await page.setViewportSize({ width: 1400, height: 1400 });
+  const geo = await readLectureMixed(page, html, hf);
+  const shots = [];
+  for (let i = 0; i < geo.pages.length; i++) {
+    const p = geo.pages[i];
+    const png = await page.screenshot({ clip: { x: p.left, y: p.top, width: Math.round(p.width), height: Math.round(p.height) }, fullPage: true });
+    shots.push(png.toString('base64'));
+    if (SHOTS) await writeFile(`${SHOTS}/${label}-lecture-${i + 1}.png`, png);
+  }
+  const senses = geo.pages.map(p => (p.sense === 'landscape' ? 'L' : 'P')).join('');
+  check(`${label} : la Lecture montre les deux sens (${senses}) à l'échelle 1`, /P/.test(senses) && /L/.test(senses) && (geo.zoom === '' || geo.zoom === '1'), { sens: senses, zoom: geo.zoom });
+  const printed = await printedPdf(w, html, hf, 'a4');
+  if (SHOTS) await writeFile(`${SHOTS}/${label}-impression.pdf`, printed.pdf);
+  const result = await analysePdf(page, printed.pdf, shots);
+  const pdfSenses = result.pages.map(p => (p.width > p.height ? 'L' : 'P')).join('');
+  check(`${label} : autant de pages dans le PDF d'impression que dans la Lecture (${geo.pages.length}), chaque feuille une page, chacune dans le sens de la Lecture (${senses})`, result.pages.length === geo.pages.length && printed.sheets === geo.pages.length && pdfSenses === senses, { pdf: pdfSenses, lecture: senses, sheets: printed.sheets });
+  // Chromium arrondit le format (595 x 842 pt pour 595,28 x 841,89) : à 1 pt près, dans chaque sens.
+  const sized = result.pages.every(p => (p.width > p.height ? Math.abs(p.width - 841.9) < 1.1 && Math.abs(p.height - 595.3) < 1.1 : Math.abs(p.width - 595.3) < 1.1 && Math.abs(p.height - 841.9) < 1.1));
+  check(`${label} : chaque page du PDF a la taille de A4 dans SON sens (595 x 842 ou 842 x 595 pt)`, sized, result.pages.map(p => [p.width, p.height]));
+  const gap = diffWords(words(geo.text), words(result.text));
+  check(`${label} : les mêmes mots dans le PDF et dans la Lecture (rien de perdu, rien de doublé)`, gap.missing.length === 0 && gap.extra.length === 0, gap);
+  const worst = result.pages.map((p, i) => {
+    const mine = geo.baselines[i] || [];
+    if (mine.length !== p.baselines.length) return { page: i + 1, lines: [mine.length, p.baselines.length] };
+    return { page: i + 1, max: mine.reduce((m, y, k) => Math.max(m, Math.abs(y - p.baselines[k])), 0) };
+  });
+  check(`${label} : chaque ligne du PDF est à la hauteur de celle de la Lecture (0,6 pt), mêmes lignes page par page`, worst.every(r => r.max !== undefined && r.max <= 0.6), worst);
+  const rasterSized = result.pages.every(p => p.size && Math.abs(p.size[0] - p.size[2]) <= 2 && Math.abs(p.size[1] - p.size[3]) <= 2);
+  check(`${label} : les pixels : chaque page rastérisée contre la capture de la Lecture, floutées - écart moyen < 3 et moins de 40 pixels très éloignés`, rasterSized && result.pages.every(p => p.diffMean < 3 && p.diffBig < 40), result.pages.map(p => [p.diffMean, p.diffBig, p.size]));
+  return { geo, result, printed, senses };
+}
+
+await scenario('8) Un macro-modèle aux sens mêlés : le vrai PDF d\'impression tourne ses pages', async w => {
+  const run = await compareMixedWithLecture(w, 'portrait-paysage-portrait', mixedHtml, HF);
+  const last = run.result.pages[run.result.pages.length - 1];
+  check('pas de page blanche de trop à la fin : la dernière page porte du texte', last.baselines.length > 5, run.result.pages.map(p => p.baselines.length));
+  check('le fond coloré d\'une case du tableau paysage est imprimé sans « graphiques d\'arrière-plan »', run.result.pages.some((p, i) => run.senses[i] === 'L' && p.tintedPixels > 100), run.result.pages.map(p => p.tintedPixels));
+  await compareMixedWithLecture(w, 'sans-entete', mixedHtml, NO_HF);
+  check('aucune erreur de page', realErrors(w).length === 0, realErrors(w));
 });
 
 await stopServer();

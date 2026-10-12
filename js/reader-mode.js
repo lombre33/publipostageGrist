@@ -672,11 +672,15 @@ const ReaderMode = (function () {
     wrapper.replaceWith(...sections.map(section => section.wrapper));
     return sections;
   }
+  function widestSheetPx(sections) {
+    // La largeur de la feuille la plus large de ces sections (chacune dans son sens), 0 sans section.
+    return sections ? Math.max.apply(null, sections.map(section => PageLayout.withOrientation(section.orientation, () => PageLayout.getSheetWidthPx()))) : 0;
+  }
   function syncWidestSheet(container, sections) {
     // La feuille la plus large de ce rendu, que js/page-zoom.js:factorFor lit sur le conteneur pour que toutes les sections tiennent dans la largeur
     // (une section paysage est plus large que le portrait des marges). Le facteur se recalcule tout de suite quand elle change : la pagination se mesure à
     // ce facteur, et un facteur changé après elle la rendrait caduque.
-    const widest = sections ? Math.max.apply(null, sections.map(section => PageLayout.withOrientation(section.orientation, () => PageLayout.getSheetWidthPx()))) : 0;
+    const widest = widestSheetPx(sections);
     const next = widest ? String(widest) : '';
     if ((container.getAttribute(WIDEST_SHEET_ATTR) || '') === next) return;
     if (next) container.setAttribute(WIDEST_SHEET_ATTR, next); else container.removeAttribute(WIDEST_SHEET_ATTR);
@@ -1018,8 +1022,11 @@ const ReaderMode = (function () {
       container.appendChild(wrapper);
       ExternalImages.unblockIn(container);
       const zones = await resolvePaginationZones(headerFooterData, tableId, record, PRINT_VIEW);
-      // Un macro-modèle aux sens mêlés : une feuille de lecture par section, comme à l'écran (splitIntoSections).
+      // Un macro-modèle aux sens mêlés : une feuille de lecture par section, comme à l'écran (splitIntoSections). La pile est aussi large que sa feuille la plus large
+      // (css/print.css lit la largeur du conteneur sur --pp-page-width) : une section plus étroite s'y centre, et sa page dit où est son bord gauche (`sheetLeft`).
       const sections = splitIntoSections(wrapper);
+      const widest = widestSheetPx(sections);
+      if (widest) container.style.setProperty('--pp-page-width', widest + 'px');
       const wrappers = sections ? sections.map(section => section.wrapper) : [wrapper];
       const layOut = () => (sections ? paginateSections(container, sections, zones) : paginate(container, wrapper, zones));
       const fonts = container.ownerDocument.fonts;
