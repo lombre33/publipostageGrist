@@ -21,7 +21,7 @@ correctement sur un remplacement.
 et remettrait les plugins à zéro. Les résultats se calculent par bloc de texte (jamais à cheval sur deux paragraphes), à travers les changements de mise en forme ; une bulle, une image et le texte
 supprimé en suivi comptent pour des caractères qu'aucune requête ne trouve. Un remplacement est une vraie transaction (UNE étape d'annulation, « Tout remplacer » compris), garde la mise en forme
 du texte remplacé et passe par le pont du suivi des modifications quand il est allumé. Les règles d'interface sont dans la charte (`identite-ui-ux-grist-factory.md`, « Rechercher / Remplacer »),
-les tests dans les groupes `findReplace` et `findReplaceMouse`. Pas fait : chercher dans le texte des bulles (noms de variables), dans l'en-tête et le pied de page hors édition, ni par expression régulière.
+les tests dans les groupes `findReplace` et `findReplaceMouse`. Pas fait : chercher dans le texte des bulles (noms de variables) et dans l'en-tête et le pied de page hors édition. **Fait le 12/10 (demande d'Antoine : « à corriger ») : l'expression régulière** (bouton « .* », motif JavaScript qui ne traverse ni bulle ni suppression suivie, « $1 » et « $& » dans le remplacement, « Expression non valide » quand le motif est faux).
 
 ## Fusion de cellules de tableau
 

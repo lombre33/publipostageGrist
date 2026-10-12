@@ -434,7 +434,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   la barre est ouverte, grisée en Lecture et en macro-modèle, son infobulle dit « Rechercher / Remplacer (Ctrl+F) ». Ctrl+F / ⌘F ouvre la barre, Ctrl+H (⌘⇧H sur Mac, ⌘H est réservé à macOS)
   y ajoute la ligne « Remplacer par » : où que soit le clavier, même resté sur un bouton de la barre d'outils, sauf sous une fenêtre ouverte et quand l'éditeur n'est pas à l'écran (la
   recherche du navigateur reprend alors la main). Un mot sélectionné est repris dans le champ ; Entrée / Maj+Entrée passent au résultat suivant / précédent en repartant de l'autre bout ;
-  « 3 sur 12 » dit où l'on est, « Aucun résultat » grise les flèches (grisées, jamais retirées). « Respecter la casse » et « Mot entier » sont deux boutons à état, le chevron de gauche montre
+  « 3 sur 12 » dit où l'on est, « Aucun résultat » grise les flèches (grisées, jamais retirées). « Respecter la casse », « Mot entier » et « Expression régulière » (« .* ») sont trois boutons à état ; un motif faux le dit au compteur (« Expression non valide », en `--danger-ink`) et par le cadre du champ, sans passer la barre sur deux rangées ; le chevron de gauche montre
   ou cache « Remplacer par ». Tous les résultats sont surlignés en jaune pâle `#ffe58f`, le courant en orange `#ffb347` cerclé de `#8a4b00` (le cerclage le distingue sans la couleur) :
   couleurs fixes, la page reste blanche en sombre, le texte garde la sienne (8:1 au moins). Espaces insécables et apostrophes ou guillemets courbes valent leurs formes droites ; une
   correspondance ne traverse jamais deux paragraphes ni deux cases ; ne se trouvent pas : les bulles (variables, calculs, numéros de page), les images, le texte supprimé en suivi, et l'en-tête

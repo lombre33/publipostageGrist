@@ -8,6 +8,9 @@
 //     (suppression + insertion suggérées, Tout accepter / Tout refuser), cases de tableau et listes, aucune modification du modèle tant qu'on ne fait que chercher.
 //  4) BEAUCOUP DE RÉSULTATS : jusqu'à 500 tous sont surlignés ; au-delà, seuls ceux de l'écran et de ses abords le sont (le courant toujours), la fenêtre suit le défilement et les
 //     sauts d'un résultat à l'autre, et le compteur comme « Tout remplacer » gardent tous les résultats.
+//  5) L'EXPRESSION RÉGULIÈRE (option « Expression régulière », demande d'Antoine du 12/10) : le motif, la casse et le mot entier, jamais à travers une bulle, une suppression suivie ou un
+//     bloc, résultats vides ignorés, motif faux (dit, sans résultat), « \- » toléré hors d'une classe, « $1 », « $& », « $<nom> » et « $$ » dans le remplacement (et rien de tout cela
+//     sans l'option), le bouton, le compteur, les textes français et anglais, le mot repris de la sélection, les contrastes de l'erreur.
 // La frappe réelle (vrai clavier, vraie souris, 700x400, clair et sombre, anglais) est dans dev-tests/verify-find-replace-mouse.mjs : un KeyboardEvent synthétique n'est pas un geste
 // « trusted ». Aucun caractère spécial n'est écrit en séquence d'échappement dans ce fichier (String.fromCharCode) : un outil d'édition les remplace par le caractère lui-même.
 (function () {
@@ -40,7 +43,7 @@
   async function cleanup() {
     FindReplace.close({ focus: false });
     FindReplace.setReplacement('');
-    FindReplace.setOptions({ matchCase: false, wholeWord: false });
+    FindReplace.setOptions({ matchCase: false, wholeWord: false, regex: false });
     FindReplace.setQuery('');
     if (Editor.isTrackChangesOn()) Editor.setTrackChanges(false);
     I18n.setLang('fr');
@@ -840,6 +843,272 @@
       }
       const all = Object.values(results).flatMap(r => Object.values(r));
       return { pass: all.length === 14 && all.every(v => v >= 4.5), notes: JSON.stringify(results) };
+    });
+
+  // === 5) L'expression régulière ============================================================================================================================================
+
+  const OBJ = String.fromCharCode(0xFFFC);
+  const rx = (query, options) => FindReplace.findMatches(ed().state.doc, query, Object.assign({ regex: true }, options || {}));
+  const rxTexts = (query, options) => rx(query, options).map(textOf);
+  const badgeHtml = '<span class="var-badge" data-table="T" data-column="C" data-key="T.C"></span>';
+  const badgesIn = html => (html.match(/var-badge/g) || []).length;
+  const textNow = () => ed().state.doc.textContent;
+
+  scenario('fr_regex_engine_matches_a_pattern_and_keeps_case_and_whole_word',
+    'Moteur (expression régulière) : un motif (classes, alternance, « . »), la casse ignorée sauf « Respecter la casse », « Mot entier » écarte « 12 » collé à « A » ; sans l\'option le motif est le texte cherché',
+    async h => {
+      await begin(h, '<p>Réf A12 et b34, total 56 a.c abc</p>');
+      const digits = rxTexts('\\d+');
+      const loose = rxTexts('[a-z]\\d+');
+      const exact = rxTexts('[a-z]\\d+', { matchCase: true });
+      const whole = rxTexts('\\d+', { wholeWord: true });
+      const alternation = rxTexts('A12|56');
+      const dot = rxTexts('a.c');
+      const literalDot = texts('a.c');
+      const literalPattern = texts('\\d+').length;
+      const pass = digits.join('|') === '12|34|56' && loose.join('|') === 'A12|b34' && exact.join('|') === 'b34' && whole.join('|') === '56'
+        && alternation.join('|') === 'A12|56' && dot.join('|') === 'a.c|abc' && literalDot.join('|') === 'a.c' && literalPattern === 0;
+      return { pass, notes: JSON.stringify({ digits, loose, exact, whole, alternation, dot, literalDot, literalPattern }) };
+    });
+
+  scenario('fr_regex_engine_never_crosses_a_bubble_a_deleted_text_or_a_block',
+    'Moteur (expression régulière) : « \\S+ », « .+ » et « [^]+ » ne traversent ni une bulle, ni un texte supprimé en suivi, ni deux paragraphes : aucun résultat ne contient de bulle',
+    async h => {
+      await begin(h, '<p>abc' + badgeHtml + 'def ghi</p><p>x <del data-id="1">gone</del> y</p>');
+      const words = rxTexts('\\S+');
+      const lines = rxTexts('.+');
+      const everything = rx('[^]+');
+      const withObject = ['\\S+', '.+', '[^]+', '\\w+|\\W+'].some(q => rx(q).some(m => ed().state.doc.textBetween(m.from, m.to, '\n', OBJ).includes(OBJ)));
+      const pass = words.join('|') === 'abc|def|ghi|x|y' && lines.join('|') === 'abc|def ghi|x | y' && everything.length === 4 && !withObject;
+      return { pass, notes: JSON.stringify({ words, lines, everything: everything.length, withObject }) };
+    });
+
+  scenario('fr_regex_engine_ignores_empty_matches_and_always_ends',
+    'Moteur (expression régulière) : « ^ », « $ », « x* », « \\b » et « (?=a) » ne trouvent rien (un résultat vide n\'a rien à surligner) et se terminent ; « a* » ne garde que le texte non vide',
+    async h => {
+      await begin(h, '<p>abc</p><p></p><p>de</p>');
+      const empties = ['^', '$', 'x*', '\\b', '(?=a)'].map(q => rx(q).length);
+      const partial = rxTexts('a*').join('|') + '#' + rxTexts('b*').join('|');
+      return { pass: empties.every(n => n === 0) && partial === 'a#b', notes: JSON.stringify({ empties, partial }) };
+    });
+
+  scenario('fr_regex_engine_invalid_pattern_finds_nothing_and_says_so',
+    'Moteur (expression régulière) : un motif faux (« ( », « [ », « *a ») ne trouve rien et FindReplace.queryError le dit ; « \\- » hors d\'une classe est accepté, « \\p{Lu} » aussi, mais « \\p{Lu}\\- » est dit faux',
+    async h => {
+      await begin(h, '<p>N° 12-34 et A.B</p>');
+      const legacy = rxTexts('\\d+\\-\\d+');
+      const upper = rxTexts('\\p{Lu}', { matchCase: true });
+      const bad = ['(', '[', '*a', '(?<n>a)(?<n>b)'].map(q => rx(q).length);
+      FindReplace.setOptions({ regex: true });
+      FindReplace.setQuery('(');
+      const errors = { open: !!FindReplace.queryError() };
+      FindReplace.setQuery('\\p{Lu}\\-');
+      errors.mixed = !!FindReplace.queryError();
+      FindReplace.setQuery('\\d+\\-\\d+');
+      errors.legacy = !!FindReplace.queryError();
+      FindReplace.setOptions({ regex: false });
+      FindReplace.setQuery('(');
+      errors.literal = !!FindReplace.queryError(); // sans l'option, « ( » est un texte comme un autre
+      const pass = legacy.join('|') === '12-34' && upper.join('|') === 'N|A|B' && bad.every(n => n === 0)
+        && errors.open === true && errors.mixed === true && errors.legacy === false && errors.literal === false;
+      return { pass, notes: JSON.stringify({ legacy, upper, bad, errors }) };
+    });
+
+  scenario('fr_regex_replace_uses_groups_the_match_and_literal_dollars',
+    'Remplacement (expression régulière) : « $2 $1 » permute deux groupes, « $& » reprend le résultat, « $<prenom> » un groupe nommé, « $$ » un dollar ; « $9 » et « $0 » restent tels quels',
+    async h => {
+      const run = async (query, replacement) => {
+        await begin(h, '<p>Dupont Jean, Martin Anne</p>');
+        FindReplace.setOptions({ regex: true });
+        FindReplace.setReplacement(replacement);
+        FindReplace.setQuery(query);
+        await sleep(30);
+        const replaced = FindReplace.replaceAll();
+        await sleep(30);
+        return { replaced, text: textNow() };
+      };
+      const swapped = await run('(\\w+) (\\w+)', '$2 $1');
+      const whole = await run('(\\w+) (\\w+)', '[$&]');
+      const named = await run('(?<nom>[A-Z]\\w+) (?<prenom>\\w+)', '$<prenom> $<nom> ($$)');
+      const absent = await run('(\\w+) (\\w+)', '$9 $0');
+      const pass = swapped.text === 'Jean Dupont, Anne Martin' && swapped.replaced === 2 && whole.text === '[Dupont Jean], [Martin Anne]'
+        && named.text === 'Jean Dupont ($), Anne Martin ($)' && absent.text === '$9 $0, $9 $0';
+      return { pass, notes: JSON.stringify({ swapped, whole, named, absent }) };
+    });
+
+  scenario('fr_regex_replace_all_with_groups_is_one_undo_step',
+    'Remplacement (expression régulière) : « Tout remplacer » avec des groupes reste UNE étape d\'annulation, le rétablir la refait',
+    async h => {
+      await begin(h, '<p>Dupont Jean, Martin Anne</p><ul><li><p>Durand Paul</p></li></ul>');
+      FindReplace.open({ replace: true });
+      FindReplace.setOptions({ regex: true });
+      FindReplace.setReplacement('$2 $1');
+      FindReplace.setQuery('(\\w+) (\\w+)');
+      await sleep(50);
+      const start = Editor.getHTML();
+      const replaced = FindReplace.replaceAll();
+      await sleep(40);
+      const after = Editor.getHTML();
+      undoOnce(); await sleep(40);
+      const undone = Editor.getHTML();
+      redoOnce(); await sleep(40);
+      const redone = Editor.getHTML();
+      const pass = replaced === 3 && after.replace(/<p><\/p>$/, '') === '<p>Jean Dupont, Anne Martin</p><ul><li><p>Paul Durand</p></li></ul>' && undone === start && redone === after;
+      return { pass, notes: JSON.stringify({ replaced, after, undone: undone === start, redone: redone === after }) };
+    });
+
+  scenario('fr_regex_replace_never_deletes_a_bubble',
+    'Remplacement (expression régulière) : « \\S+ » → « X » remplace les mots autour d\'une bulle sans jamais l\'effacer',
+    async h => {
+      await begin(h, '<p>abc' + badgeHtml + 'def ' + badgeHtml + '</p>');
+      const before = badgesIn(Editor.getHTML());
+      FindReplace.setOptions({ regex: true });
+      FindReplace.setReplacement('X');
+      FindReplace.setQuery('\\S+');
+      await sleep(30);
+      const replaced = FindReplace.replaceAll();
+      await sleep(30);
+      const html = Editor.getHTML();
+      const pass = replaced === 2 && before === 2 && badgesIn(html) === 2 && /^<p>X<span[^>]*var-badge[^>]*>[^<]*<\/span>X <span[^>]*var-badge/.test(html);
+      return { pass, notes: JSON.stringify({ replaced, before, after: badgesIn(html), html }) };
+    });
+
+  scenario('fr_regex_literal_mode_keeps_dollars_in_the_replacement',
+    'Remplacement sans l\'option : « $1 $& » s\'écrit tel quel (seule l\'expression régulière substitue)',
+    async h => {
+      await begin(h, '<p>foo</p>');
+      FindReplace.setReplacement('$1 $&');
+      FindReplace.setQuery('foo');
+      await sleep(30);
+      FindReplace.replaceAll();
+      await sleep(30);
+      return { pass: textNow() === '$1 $&', notes: JSON.stringify({ text: textNow() }) };
+    });
+
+  scenario('fr_regex_replace_current_uses_its_own_groups',
+    'Remplacement (expression régulière) : « Remplacer » reprend les groupes du résultat courant puis passe au suivant, qui garde les siens',
+    async h => {
+      await begin(h, '<p>a1 b2 c3</p>');
+      FindReplace.open({ replace: true });
+      FindReplace.setOptions({ regex: true });
+      FindReplace.setReplacement('$1-');
+      FindReplace.setQuery('([a-z])\\d');
+      await sleep(50);
+      FindReplace.replaceCurrent();
+      await sleep(40);
+      const one = { text: textNow(), selection: selectionText() };
+      FindReplace.replaceCurrent();
+      await sleep(40);
+      const two = textNow();
+      const pass = one.text === 'a- b2 c3' && one.selection === 'b2' && two === 'a- b- c3';
+      return { pass, notes: JSON.stringify({ one, two }) };
+    });
+
+  scenario('fr_regex_panel_button_error_and_placeholder',
+    'Panneau : le bouton « Expression régulière » (aria-pressed) allume l\'option, un motif faux met « Expression non valide » au compteur (champ aria-invalid, raison en info-bulle, Suivant et Remplacer grisés), « Remplacer par ($1 = groupe) » ; puis en anglais',
+    async h => {
+      await begin(h, '<p>Réf 12 et 34</p>');
+      FindReplace.open({ replace: true });
+      const button = document.getElementById('pp-find-regex');
+      const counter = document.getElementById('pp-find-count');
+      const off = { pressed: button.getAttribute('aria-pressed'), label: button.getAttribute('aria-label'), title: button.title, placeholder: replacementInput().placeholder };
+      button.click(); await sleep(30);
+      FindReplace.setQuery('\\d+'); await sleep(40);
+      const good = { pressed: button.getAttribute('aria-pressed'), count: countText(), invalid: findInput().hasAttribute('aria-invalid'), placeholder: replacementInput().placeholder };
+      FindReplace.setQuery('(\\d+'); await sleep(40);
+      const bad = {
+        count: countText(), kind: counter.dataset.kind, invalid: findInput().getAttribute('aria-invalid'), reason: counter.title.length > 0,
+        replaceOff: isDisabled('pp-find-replace-one') && isDisabled('pp-find-replace-all'), navOff: isDisabled('pp-find-next') && isDisabled('pp-find-prev'),
+      };
+      FindReplace.setQuery('\\d+'); await sleep(40);
+      const fixed = { invalid: findInput().hasAttribute('aria-invalid'), reason: counter.hasAttribute('title'), count: countText() };
+      I18n.setLang('en'); await sleep(60);
+      const en = { label: button.getAttribute('aria-label'), placeholder: replacementInput().placeholder };
+      FindReplace.setQuery('(\\d+'); await sleep(40);
+      en.count = countText();
+      button.click(); await sleep(40);
+      const back = { pressed: button.getAttribute('aria-pressed'), count: countText(), placeholder: replacementInput().placeholder, invalid: findInput().hasAttribute('aria-invalid') };
+      const pass = off.pressed === 'false' && off.label === 'Expression régulière' && off.title === 'Expression régulière' && off.placeholder === 'Remplacer par'
+        && good.pressed === 'true' && good.count === '1 sur 2' && good.invalid === false && good.placeholder === 'Remplacer par ($1 = groupe)'
+        && bad.count === 'Expression non valide' && bad.kind === 'error' && bad.invalid === 'true' && bad.reason === true && bad.replaceOff === true && bad.navOff === true
+        && fixed.invalid === false && fixed.reason === false && fixed.count === '1 sur 2'
+        && en.label === 'Regular expression' && en.placeholder === 'Replace with ($1 = group)' && en.count === 'Invalid expression'
+        && back.pressed === 'false' && back.count === 'No results' && back.placeholder === 'Replace with' && back.invalid === false;
+      return { pass, notes: JSON.stringify({ off, good, bad, fixed, en, back }) };
+    });
+
+  scenario('fr_regex_panel_prefill_is_escaped_when_the_option_is_on',
+    'Panneau : en expression régulière, le mot repris de la sélection est échappé (« 3.14 » devient « 3\\.14 ») et ne trouve que « 3.14 », pas « 3x14 »',
+    async h => {
+      await begin(h, '<p>pi 3.14 et 3x14</p>');
+      selectRange(4, 8);
+      FindReplace.setOptions({ regex: true });
+      FindReplace.open({ replace: false });
+      await sleep(40);
+      const field = findInput().value;
+      const count = countText();
+      return { pass: selectionText() === '3.14' && field === '3\\.14' && count === '1 sur 1', notes: JSON.stringify({ field, count, selection: selectionText() }) };
+    });
+
+  scenario('fr_regex_panel_options_switch_recomputes_the_results',
+    'Panneau : allumer ou éteindre « Expression régulière » recalcule les résultats du même texte (« a.c » : un seul texte, deux motifs), et la casse s\'y applique comme au texte',
+    async h => {
+      await begin(h, '<p>a.c abc ABC</p>');
+      FindReplace.open({ replace: false });
+      FindReplace.setQuery('a.c');
+      await sleep(40);
+      const literal = countText();
+      document.getElementById('pp-find-regex').click(); await sleep(40);
+      const pattern = countText();
+      document.getElementById('pp-find-match-case').click(); await sleep(40);
+      const exact = countText();
+      document.getElementById('pp-find-regex').click(); await sleep(40);
+      const exactLiteral = countText();
+      return { pass: literal === '1 sur 1' && pattern === '1 sur 3' && exact === '1 sur 2' && exactLiteral === '1 sur 1', notes: JSON.stringify({ literal, pattern, exact, exactLiteral }) };
+    });
+
+  scenario('fr_contrast_regex_error_light_and_dark',
+    'Contrastes : le texte « Expression non valide » (jeton --danger-ink) atteint 4,5:1 sur la barre et le cadre rouge du champ (même jeton) 3:1, en thème clair comme en sombre',
+    async h => {
+      await begin(h, '<p>un foo deux foo</p>');
+      const html = document.documentElement;
+      const before = html.getAttribute('data-theme');
+      const noMotion = document.createElement('style');
+      noMotion.textContent = '*, *::before, *::after { transition: none !important; }';
+      document.head.appendChild(noMotion);
+      const results = {};
+      try {
+        FindReplace.open({ replace: false });
+        FindReplace.setOptions({ regex: true });
+        FindReplace.setQuery('(');
+        await sleep(60);
+        for (const theme of ['light', 'dark']) {
+          html.setAttribute('data-theme', theme);
+          await sleep(60);
+          const surface = parseColor(getComputedStyle(bar()).backgroundColor);
+          const counter = document.getElementById('pp-find-count');
+          const text = parseColor(getComputedStyle(counter).color);
+          const border = parseColor(getComputedStyle(findInput()).borderTopColor);
+          const probe = document.createElement('span');
+          probe.style.color = 'var(--danger-ink)';
+          document.body.appendChild(probe);
+          const ink = parseColor(getComputedStyle(probe).color);
+          probe.remove();
+          const same = (a, b) => !!a && !!b && a.r === b.r && a.g === b.g && a.b === b.b;
+          results[theme] = {
+            text: Math.round(ratio(text, surface) * 100) / 100, border: Math.round(ratio(border, surface) * 100) / 100,
+            kind: counter.dataset.kind, invalid: findInput().getAttribute('aria-invalid'), inkText: same(text, ink), inkBorder: same(border, ink),
+          };
+        }
+      } finally {
+        if (before === null) html.removeAttribute('data-theme'); else html.setAttribute('data-theme', before);
+        noMotion.remove();
+      }
+      const pass = ['light', 'dark'].every(theme => {
+        const r = results[theme];
+        return r.kind === 'error' && r.invalid === 'true' && r.text >= 4.5 && r.border >= 3 && r.inkText && r.inkBorder;
+      });
+      return { pass, notes: JSON.stringify(results) };
     });
 
   window.EditorTestSuites = window.EditorTestSuites || {};

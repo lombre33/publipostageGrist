@@ -6,6 +6,8 @@
 //    de la place au texte ;
 //  - la frappe, Entrée et Maj+Entrée font défiler les résultats, le courant est toujours visible dans la zone de texte (même tout en bas d'un long modèle) ;
 //  - « Mot entier » et « Respecter la casse » au clic ; le chevron montre la ligne de remplacement ;
+//  - « Expression régulière » au clic : le motif tapé au vrai clavier (« \d+ », « (\w+) (\w+) »), « Expression non valide » quand il est faux sans que la barre ne passe sur deux rangées,
+//    « Tout remplacer » avec « $2 $1 » (une étape d'annulation), l'option éteinte rend au motif son sens de texte ;
 //  - « Remplacer » puis Ctrl+Z (le clavier reste sur le bouton) : une seule étape d'annulation, Ctrl+Maj+Z ou Ctrl+Y la refait ; « Tout remplacer » : une seule étape pour tout ;
 //  - le suivi des modifications allumé : le remplacement devient une suppression et une insertion suggérées, une seule étape d'annulation ;
 //  - Échap ferme et rend le clavier au texte, Ctrl+F reprend le mot sélectionné, Ctrl+H ouvre sur le champ de remplacement ;
@@ -221,7 +223,7 @@ async function resetPanel() {
     const toggle = document.getElementById('pp-find-toggle-replace');
     if (toggle.getAttribute('aria-expanded') === 'true') toggle.click();
     FindReplace.setReplacement('');
-    FindReplace.setOptions({ matchCase: false, wholeWord: false });
+    FindReplace.setOptions({ matchCase: false, wholeWord: false, regex: false });
     FindReplace.setQuery('');
     FindReplace.close({ focus: false });
   });
@@ -257,7 +259,7 @@ async function run(theme) {
   check(`${T}, ouverture : un clic sur la loupe ouvre la barre (loupe allumée), le clavier est dans son champ`, opened.open && opened.pressed === 'true' && opened.focus === 'pp-find-input', opened);
   check(`${T}, ouverture : la barre tient dans 700 px (aucun débordement), sous la barre d'outils qui ne bouge pas, et laisse au moins 150 px au texte`,
     seen(bar1) && bar1.h <= 48 && overflow1.page && overflow1.bar && toolbarAfter === toolbarBefore && editorOpen.top >= toolbarAfter && editorOpen.h >= 150, { bar1, overflow1, toolbarBefore, toolbarAfter, editorBefore, editorOpen });
-  for (const [id, label] of [['#pp-find-input', 'champ'], ['#pp-find-prev', 'précédent'], ['#pp-find-next', 'suivant'], ['#pp-find-match-case', 'casse'], ['#pp-find-whole-word', 'mot entier'], ['#pp-find-close', 'fermer'], ['#pp-find-toggle-replace', 'chevron']]) {
+  for (const [id, label] of [['#pp-find-input', 'champ'], ['#pp-find-prev', 'précédent'], ['#pp-find-next', 'suivant'], ['#pp-find-match-case', 'casse'], ['#pp-find-whole-word', 'mot entier'], ['#pp-find-regex', 'expression régulière'], ['#pp-find-close', 'fermer'], ['#pp-find-toggle-replace', 'chevron']]) {
     const b = await boxOf(id);
     check(`${T}, ouverture : « ${label} » est visible et cliquable (au premier plan)`, seen(b), b);
   }
@@ -417,6 +419,76 @@ async function run(theme) {
   await closePanelIfOpen();
 }
 
+// L'expression régulière à la vraie souris et au vrai clavier : le bouton de la barre (dans 700 px, sans passer sur une deuxième rangée), le motif tapé, le motif faux, le remplacement avec ses groupes.
+async function runRegex(T) {
+  await resetPanel();
+  await setDoc('<p>Réf A12 et b34, total 56. Tel 01 23 45 67. a.c abc</p>');
+  const first = await pointOf('Réf', 0.05);
+  await page.mouse.click(first.x, first.y);
+  await page.waitForTimeout(150);
+  await caretAtStart();
+  await realClick(LOUPE);
+  const opened = await boxOf('#pp-find-regex');
+  check(`${T}, expression régulière : le bouton est dans la barre, visible et au premier plan, éteint au départ, avec son infobulle`,
+    seen(opened) && (await pressed('#pp-find-regex')) === 'false' && (await page.evaluate(() => document.getElementById('pp-find-regex').title)) === 'Expression régulière', opened);
+  await realClick('#pp-find-regex');
+  const on = { pressed: await pressed('#pp-find-regex'), overflow: await noHorizontalOverflow() };
+  await realClick(FIND);
+  await page.keyboard.type('\\d+');
+  await page.waitForTimeout(250);
+  const digits = { count: await countText(), marks: await marksCount(), current: await currentText(), focus: await focusId(), invalid: await page.evaluate(() => document.getElementById('pp-find-input').hasAttribute('aria-invalid')) };
+  check(`${T}, expression régulière : un clic allume l'option, « \\d+ » tapé au clavier trouve les 7 nombres (« 12 » le premier), le champ n'est pas en erreur`,
+    on.pressed === 'true' && on.overflow.page && on.overflow.bar && digits.count === '1 sur 7' && digits.marks === 7 && digits.current === '12' && digits.focus === 'pp-find-input' && digits.invalid === false, { on, digits });
+  await snap(`${T}-6-expression`);
+  await page.keyboard.press('Control+a');
+  await page.keyboard.type('(\\d+');
+  await page.waitForTimeout(250);
+  const bad = await page.evaluate(() => {
+    const bar = document.getElementById('pp-find-bar'), count = document.getElementById('pp-find-count'), input = document.getElementById('pp-find-input');
+    return {
+      count: count.textContent, kind: count.dataset.kind, invalid: input.getAttribute('aria-invalid'), marks: document.querySelectorAll('.tiptap .pp-find-match').length, barH: Math.round(bar.getBoundingClientRect().height),
+      next: document.getElementById('pp-find-next').getAttribute('aria-disabled'), color: getComputedStyle(count).color, border: getComputedStyle(input).borderTopColor,
+    };
+  });
+  const badBar = await boxOf(BAR);
+  const badOverflow = await noHorizontalOverflow();
+  check(`${T}, expression régulière : un motif faux (« (\\d+ ») dit « Expression non valide » en rouge, le champ prend le cadre rouge, rien n'est surligné, et la barre reste sur une seule rangée dans 700 px`,
+    bad.count === 'Expression non valide' && bad.kind === 'error' && bad.invalid === 'true' && bad.marks === 0 && bad.next === 'true' && bad.color === bad.border && seen(badBar) && bad.barH <= 48 && badOverflow.page && badOverflow.bar, { bad, badBar, badOverflow });
+  await snap(`${T}-7-expression-fausse`);
+  await page.keyboard.press('Control+a');
+  await page.keyboard.type('a.c');
+  await page.waitForTimeout(250);
+  const dot = { count: await countText(), marks: await marksCount() };
+  await realClick('#pp-find-regex');
+  await page.waitForTimeout(150);
+  const literal = { count: await countText(), marks: await marksCount(), pressed: await pressed('#pp-find-regex') };
+  check(`${T}, expression régulière : « a.c » en trouve 2 (a.c et abc), l'option éteinte rend au point son sens de texte : 1 seul résultat`,
+    dot.count === '1 sur 2' && dot.marks === 2 && literal.pressed === 'false' && literal.count === '1 sur 1' && literal.marks === 1, { dot, literal });
+
+  // Les groupes dans le remplacement
+  await setDoc('<p>Dupont Jean, Martin Anne</p>');
+  await caretAtStart();
+  await realClick('#pp-find-regex');
+  await realClick(FIND);
+  await page.keyboard.press('Control+a');
+  await page.keyboard.type('(\\w+) (\\w+)');
+  await realClick('#pp-find-toggle-replace');
+  const placeholder = await page.evaluate(() => document.getElementById('pp-find-replacement').placeholder);
+  await realClick(REPL);
+  await page.keyboard.type('$2 $1');
+  const start = await html();
+  const withReplace = { overflow: await noHorizontalOverflow(), editor: await editorBox(), box: await boxOf('#pp-find-replace-all') };
+  await realClick('#pp-find-replace-all');
+  const all = { html: await html(), count: await countText() };
+  await pressKey('Control+z');
+  const undone = await html();
+  check(`${T}, expression régulière : « Tout remplacer » avec « $2 $1 » permute les prénoms et les noms (2 remplacements), une seule étape d'annulation ; le champ dit « ($1 = groupe) » ; la barre à deux rangées tient dans 700 px`,
+    placeholder === 'Remplacer par ($1 = groupe)' && all.html.startsWith('<p>Jean Dupont, Anne Martin</p>') && all.count === '2 remplacements' && undone === start
+      && withReplace.overflow.page && withReplace.overflow.bar && seen(withReplace.box) && withReplace.editor.h >= 110, { placeholder, all, undone: undone === start, withReplace });
+  await snap(`${T}-8-groupes`);
+  await closePanelIfOpen();
+}
+
 // Beaucoup de résultats : 3 500 « foo » (2 000 en haut, un long passage sans rien, 1 500 en bas). Au-delà de 500 résultats, seuls l'écran et ses abords sont surlignés
 // (js/find-replace.js) : la fenêtre de surlignage doit suivre la vraie molette et les sauts du clavier.
 const bigLine = (i, per) => `<p>Ligne ${i}${per ? ' : ' + Array(per).fill('foo').join(' ') : ' sans rien à trouver'}.</p>`;
@@ -517,12 +589,13 @@ async function runEnglish() {
     count: document.getElementById('pp-find-count').textContent,
     next: document.getElementById('pp-find-next').title,
     caseTip: document.getElementById('pp-find-match-case').title,
+    regexTip: document.getElementById('pp-find-regex').title,
     one: document.getElementById('pp-find-replace-one').textContent,
     all: document.getElementById('pp-find-replace-all').textContent,
   }));
   const box = await boxOf(BAR), over = await noHorizontalOverflow();
   check('anglais, barre : libellés, infobulles et compteur en anglais, la barre tient dans 700 px', /^Find \/ Replace \(Ctrl\+F\)$/.test(tip) && en.placeholder === 'Find in the template' && en.replacement === 'Replace with' && en.count === '1 of 5'
-    && en.next === 'Next result (Enter)' && en.caseTip === 'Match case' && en.one === 'Replace' && en.all === 'Replace all' && seen(box) && over.page && over.bar, { tip, en, over });
+    && en.next === 'Next result (Enter)' && en.caseTip === 'Match case' && en.regexTip === 'Regular expression' && en.one === 'Replace' && en.all === 'Replace all' && seen(box) && over.page && over.bar, { tip, en, over });
   await snap('en-1-barre');
   await realClick('#pp-find-replace-all');
   const done = await countText();
@@ -542,10 +615,12 @@ async function runEnglish() {
 }
 
 await run('light');
+await runRegex('light');
 await runManyResults('light');
 await page.evaluate(() => Settings.setTheme('dark'));
 await page.waitForTimeout(250);
 await run('dark');
+await runRegex('dark');
 await runManyResults('dark');
 await runEnglish();
 

@@ -9,6 +9,15 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Rechercher / Remplacer par expression régulière** : le bouton « .* » de la barre de recherche lit ce qui est
+  tapé comme un motif JavaScript (`\d+` trouve les nombres, `[A-Z]{2,}` les sigles, `(\w+) (\w+)` deux mots de
+  suite) ; il s'ajoute à « Respecter la casse » et à « Mot entier ». Un motif ne traverse ni une bulle, ni un
+  texte supprimé en suivi, ni deux paragraphes : « Tout remplacer » n'efface donc jamais une bulle. Dans
+  « Remplacer par », `$1`, `$2`… reprennent les groupes du motif (`$2 $1` permute deux mots), `$&` le texte
+  trouvé, `$<nom>` un groupe nommé et `$$` un dollar ; sans l'option, le texte du remplacement s'écrit tel
+  quel. Un motif faux (une parenthèse oubliée) ne trouve rien et le compteur dit « Expression non valide »
+  (la raison du navigateur est dans son info-bulle). Un résultat vide (`^`, `x*`) n'est pas compté, et le mot
+  sélectionné repris dans le champ est échappé quand l'option est allumée.
 - **Boucle dans une boucle** : une Boucle se pose aussi sur une variable placée dans une zone qu'une autre
   Boucle répète déjà : pour chaque facture ses lignes, puis pour chaque ligne ses étapes (en tableau, en
   liste ou en paragraphes). La zone intérieure lit les lignes de la ligne en cours de la zone qui l'entoure.
@@ -700,6 +709,15 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Added
 
+- **Find / Replace with a regular expression**: the ".*" button of the search bar reads what is typed as a
+  JavaScript pattern (`\d+` finds numbers, `[A-Z]{2,}` acronyms, `(\w+) (\w+)` two words in a row); it
+  sits next to "Match case" and "Whole word". A pattern never crosses a bubble, a tracked deletion or two
+  paragraphs, so "Replace all" never erases a bubble. In "Replace with", `$1`, `$2`… take the groups of the
+  pattern (`$2 $1` swaps two words), `$&` the matched text, `$<name>` a named group and `$$` a dollar sign;
+  without the option, the replacement is written as is. A wrong pattern (a forgotten parenthesis) finds
+  nothing and the counter says "Invalid expression" (the browser's reason is in its tooltip). An empty
+  match (`^`, `x*`) is not counted, and the selected word carried into the field is escaped when the
+  option is on.
 - **Loop in a loop**: a Loop can also be placed on a variable inside a zone that another Loop already
   repeats: for each invoice its lines, then for each line its steps (in a table, a list or paragraphs). The
   inner zone reads the rows of the current row of the zone around it. The data structure does not change:

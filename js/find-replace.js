@@ -1,7 +1,8 @@
 // Rechercher / Remplacer dans l'éditeur : un panneau fin entre la barre d'outils et le texte, jamais une fenêtre, pour que le modèle reste visible et
 // modifiable pendant qu'on cherche.
 //  - Rechercher : tous les résultats surlignés (au-delà de 500, ceux de l'écran et de ses abords), le courant plus marqué, « 3 sur 12 », précédent
-//    / suivant (Entrée, Maj+Entrée), « Respecter la casse » et « Mot entier » ;
+//    / suivant (Entrée, Maj+Entrée), « Respecter la casse », « Mot entier » et « Expression régulière » (le motif est celui de JavaScript, il
+//    ne traverse ni une bulle ni une suppression suivie ; « $1 », « $& » et « $<nom> » reprennent un groupe dans le remplacement) ;
 //  - Remplacer : « Remplacer » remplace le résultat courant puis passe au suivant, « Tout remplacer » les remplace tous. Un remplacement est une
 //    transaction ProseMirror (une seule étape d'annulation, « Tout remplacer » compris) qui garde la mise en forme du texte remplacé et passe par le
 //    mode suivi quand il est actif : l'ancien texte devient une suppression suggérée, le nouveau une insertion suggérée (js/track-changes.js ;
@@ -16,7 +17,7 @@ const FindReplace = (function () {
   const el = Dom.el;
 
   // Le moteur : un document ProseMirror, une requête, des options
-  const { findMatches, OBJECT } = (function () {
+  const { findMatches, compile, expandReplacement, escapeRegex, OBJECT } = (function () {
     // Le texte d'un bloc est lu caractère pour caractère comme le document compte ses positions : un nœud qui n'est pas du texte (bulle, image,
     // pastille) vaut autant d'OBJECT que sa taille, qu'aucune requête ne trouve et qui coupe un mot ; un saut de ligne vaut « \n ». Le texte d'une
     // suppression suivie (marque `deletion`, encore dans le document tant qu'on ne l'a pas acceptée) vaut aussi des OBJECT : pour qui lit, il n'existe
@@ -31,6 +32,11 @@ const FindReplace = (function () {
     // texte d'origine.
     const normalize = text => text.replace(SPACES, ' ').replace(SINGLE_QUOTES, "'").replace(DOUBLE_QUOTES, '"');
     const isDeletion = mark => mark.type.name === 'deletion';
+    const escapeRegex = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Un résultat d'expression régulière garde de quoi refaire sa substitution (expandReplacement) : le texte d'où il vient, sa place et la
+    // copie « collante » du motif. Hors du résultat lui-même, pour que celui-ci reste un simple { from, to }.
+    const SOURCES = new WeakMap();
+    const SEGMENT = /[^\uFFFC]+/g;
 
     function textOfBlock(block, blockPos) {
       let text = '';
@@ -64,41 +70,91 @@ const FindReplace = (function () {
       return WORD_CHAR.test(String.fromCodePoint(codePoint));
     }
 
+    // Le motif de `query` : { regex } (drapeau « g », « i » sauf « Respecter la casse », toujours « u » pour une recherche simple), { error } quand
+    // l'expression régulière est fausse, {} sans requête. Une expression régulière se compile d'abord en mode Unicode (« u » : \p{L}, lettres hors du
+    // plan de base) ; si elle y échoue sans rien lui devoir, on la retente sans : « \- », « \@ » ou « \_ » hors d'une classe, écritures courantes,
+    // n'y sont des erreurs que dans ce mode. C'est l'erreur du mode Unicode que l'on rend, la plus fidèle à ce qui a été écrit.
+    function compile(query, opts) {
+      const options = opts || {};
+      const flags = options.matchCase ? 'g' : 'gi';
+      const text = String(query == null ? '' : query).split(OBJECT).join('');
+      if (!text) return {};
+      if (!options.regex) return { regex: new RegExp(escapeRegex(normalize(text)), flags + 'u') };
+      try { return { regex: new RegExp(text, flags + 'u'), pattern: true }; } catch (error) {
+        if (!/\\[pPu]\{/.test(text)) {
+          try { return { regex: new RegExp(text, flags), pattern: true }; } catch (ignored) { /* la première erreur est celle que l'on dit */ }
+        }
+        return { error };
+      }
+    }
+
+    // Indice qui suit `index` : deux unités quand une paire de substitution (lettre hors du plan de base) y commence.
+    function advance(text, index, unicode) {
+      const code = text.charCodeAt(index);
+      return unicode && code >= 0xD800 && code <= 0xDBFF && index + 1 < text.length ? index + 2 : index + 1;
+    }
+
+    // Les résultats du motif dans le texte d'un bloc, dans l'ordre. `normalized` : texte comparé (recherche simple : espaces et guillemets unifiés). Le
+    // texte d'une expression régulière est lu tel quel (on peut chercher une espace insécable précise) et se découpe aux « objets » (bulle, image,
+    // suppression suivie) : un motif comme « \S+ » ou « .* » ne les traverse pas, un « remplacer » ne peut donc pas en effacer un. Un résultat vide
+    // (« ^ », « x* ») n'est pas un résultat : il n'a ni texte à surligner ni de quoi avancer.
+    function collect(compiled, text, spans, opts, matches, sticky) {
+      const { regex, pattern } = compiled;
+      const parts = pattern ? Array.from(text.matchAll(SEGMENT), part => ({ at: part.index, input: part[0] })) : [{ at: 0, input: normalize(text) }];
+      for (const { at, input } of parts) {
+        regex.lastIndex = 0;
+        let found;
+        while ((found = regex.exec(input))) {
+          const start = found.index;
+          const length = found[0].length;
+          const end = start + length;
+          if (!length) { regex.lastIndex = advance(input, start, regex.unicode); continue; }
+          // « Mot entier » : un mot collé à la correspondance la disqualifie ; la recherche reprend à l'indice suivant (« ana » dans « banana ana »).
+          if (opts.wholeWord && (isWordCharAt(input, start - 1) || isWordCharAt(input, end))) { regex.lastIndex = start + 1; continue; }
+          const match = { from: positionAt(spans, at + start), to: positionAt(spans, at + end - 1) + 1 };
+          if (pattern) SOURCES.set(match, { input, index: start, length, sticky });
+          matches.push(match);
+        }
+      }
+    }
+
     // Les correspondances de `query` dans `doc`, dans l'ordre du document : [{ from, to }]. Chaque bloc de texte se cherche à part (une correspondance
     // ne traverse jamais deux paragraphes ni deux cases), à travers les changements de mise en forme dans le bloc (« bon<b>jour</b> » se trouve). Sans
-    // chevauchement : « aa » dans « aaaa » vaut deux. options : { matchCase, wholeWord }. Casse ignorée par défaut (`i` + `u` : « É » et « é » se
-    // valent, « e » et « é » non).
+    // chevauchement : « aa » dans « aaaa » vaut deux. options : { matchCase, wholeWord, regex }. Casse ignorée par défaut (`i` + `u` : « É » et « é » se
+    // valent, « e » et « é » non). Une expression régulière fausse ne trouve rien (`compile` dit pourquoi).
     function findMatches(doc, query, options) {
       const opts = options || {};
-      const needle = normalize(String(query == null ? '' : query).split(OBJECT).join(''));
-      if (!needle) return [];
-      const matcher = new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), opts.matchCase ? 'gu' : 'giu');
+      const compiled = compile(query, opts);
+      if (!compiled.regex) return [];
+      const sticky = compiled.pattern ? new RegExp(compiled.regex.source, compiled.regex.flags.replace('g', '') + 'y') : null;
       const matches = [];
       doc.descendants((node, pos) => {
         if (!node.isTextblock) return true;
         const { text, spans } = textOfBlock(node, pos);
-        if (!spans.length) return false;
-        const haystack = normalize(text);
-        matcher.lastIndex = 0;
-        let found;
-        while ((found = matcher.exec(haystack))) {
-          const start = found.index;
-          const end = start + found[0].length;
-          // « Mot entier » : un mot collé à la correspondance la disqualifie ; la recherche reprend à l'indice suivant (« ana » dans « banana ana »).
-          if (opts.wholeWord && (isWordCharAt(haystack, start - 1) || isWordCharAt(haystack, end))) { matcher.lastIndex = start + 1; continue; }
-          matches.push({ from: positionAt(spans, start), to: positionAt(spans, end - 1) + 1 });
-        }
+        if (spans.length) collect(compiled, text, spans, opts, matches, sticky);
         return false;
       });
       return matches;
     }
 
-    return { findMatches, OBJECT };
+    // Le texte qui remplace `match` : `replacement` tel quel, ou, pour le résultat d'une expression régulière, avec ses « $1 », « $& », « $<nom> » et
+    // « $$ ». La substitution est celle de String.replace : le motif est rejoué à l'endroit du résultat, sur le texte d'où il vient, pour que les
+    // assertions (« (?<=…) ») voient la même chose qu'à la recherche.
+    function expandReplacement(match, replacement) {
+      const source = SOURCES.get(match);
+      if (!source) return replacement;
+      const { input, index, length, sticky } = source;
+      sticky.lastIndex = index;
+      const replaced = input.replace(sticky, replacement);
+      return replaced.slice(index, replaced.length - (input.length - index - length));
+    }
+
+    return { findMatches, compile, expandReplacement, escapeRegex, OBJECT };
   })();
 
   // L'état de la recherche
   const META = 'ppFindReplace';
-  const state = { open: false, query: '', replacement: '', matchCase: false, wholeWord: false, replaceVisible: false, flash: '', flashDoc: null };
+  const state = { open: false, query: '', replacement: '', matchCase: false, wholeWord: false, regex: false, replaceVisible: false, flash: '', flashDoc: null };
   let win = null; // { from, to } : positions du document que couvre le surlignage quand il y a plus de ALL_BELOW résultats (placeWindow)
   let bar = null;
   let refs = null;
@@ -113,14 +169,14 @@ const FindReplace = (function () {
     const ALL_BELOW = 500;
     const MIN_SPAN = 100; // marge de part et d'autre de l'écran : autant de résultats que l'écran en montre, entre MIN_SPAN et MAX_SPAN
     const MAX_SPAN = 1000;
-    let cache = null; // { doc, query, matchCase, wholeWord, matches } : les résultats d'un même document ne se recalculent pas à chaque transaction
+    let cache = null; // { doc, query, matchCase, wholeWord, regex, matches } : les résultats d'un même document ne se recalculent pas à chaque transaction
     let windowPending = false;
     let pm = null; // { Plugin, PluginKey, Decoration, DecorationSet } de ProseMirror, fournis par js/editor.js
 
     function currentMatches(pmState) {
       if (!state.query) return [];
-      if (!cache || cache.doc !== pmState.doc || cache.query !== state.query || cache.matchCase !== state.matchCase || cache.wholeWord !== state.wholeWord) {
-        cache = { doc: pmState.doc, query: state.query, matchCase: state.matchCase, wholeWord: state.wholeWord, matches: findMatches(pmState.doc, state.query, state) };
+      if (!cache || cache.doc !== pmState.doc || cache.query !== state.query || cache.matchCase !== state.matchCase || cache.wholeWord !== state.wholeWord || cache.regex !== state.regex) {
+        cache = { doc: pmState.doc, query: state.query, matchCase: state.matchCase, wholeWord: state.wholeWord, regex: state.regex, matches: findMatches(pmState.doc, state.query, state) };
       }
       return cache.matches;
     }
@@ -326,7 +382,7 @@ const FindReplace = (function () {
       if (index < 0) return go(false);
       const match = matches[index];
       const tr = ed.state.tr;
-      replaceInTransaction(tr, ed.state.doc, match, state.replacement, Editor.isTrackChangesOn());
+      replaceInTransaction(tr, ed.state.doc, match, expandReplacement(match, state.replacement), Editor.isTrackChangesOn());
       const applied = dispatchAndCapture(tr);
       if (!applied) { setFlash(I18n.t('find.replaceFailed')); return false; }
       // Ce qui suit le texte qui vient d'être mis : la fin du remplacement dans le document final (en mode suivi, après l'insertion qui suit la
@@ -352,7 +408,7 @@ const FindReplace = (function () {
       const suggest = Editor.isTrackChangesOn();
       const doc = ed.state.doc;
       const tr = ed.state.tr;
-      for (let i = matches.length - 1; i >= 0; i--) replaceInTransaction(tr, doc, matches[i], state.replacement, suggest);
+      for (let i = matches.length - 1; i >= 0; i--) replaceInTransaction(tr, doc, matches[i], expandReplacement(matches[i], state.replacement), suggest);
       const applied = dispatchAndCapture(tr);
       if (!applied) { setFlash(I18n.t('find.replaceFailed')); return 0; }
       setFlash(I18n.t('find.replaced', { count: matches.length }));
@@ -363,7 +419,7 @@ const FindReplace = (function () {
   })();
 
   // Le panneau
-  const { setFlash, open, closePanel, toggleOpen, wireEditor } = (function () {
+  const { setFlash, open, closePanel, toggleOpen, wireEditor, syncOptions, queryError } = (function () {
     const MAX_PREFILL = 120; // une sélection plus longue n'est pas un mot à chercher
     const isMac = () => /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent || '');
 
@@ -417,9 +473,12 @@ const FindReplace = (function () {
       const wholeWord = iconButton('wholeWord', 'pp-find-option');
       wholeWord.id = 'pp-find-whole-word';
       wholeWord.setAttribute('aria-pressed', 'false');
+      const regex = iconButton('regex', 'pp-find-option');
+      regex.id = 'pp-find-regex';
+      regex.setAttribute('aria-pressed', 'false');
       const close = iconButton('closeFind', 'pp-find-close');
       close.id = 'pp-find-close';
-      findRow.append(toggle, find, count, prev, next, matchCase, wholeWord, close);
+      findRow.append(toggle, find, count, prev, next, matchCase, wholeWord, regex, close);
 
       const replaceRow = el('div', 'pp-find-row');
       replaceRow.id = 'pp-find-replace-row';
@@ -437,7 +496,7 @@ const FindReplace = (function () {
       bar.append(findRow, replaceRow);
       container.parentNode.insertBefore(bar, container);
       container.addEventListener('scroll', placeWindow, { passive: true });
-      refs = { toggle, find, count, prev, next, matchCase, wholeWord, close, replaceRow, replacement, one, all };
+      refs = { toggle, find, count, prev, next, matchCase, wholeWord, regex, close, replaceRow, replacement, one, all };
       wirePanel();
       applyTexts();
       I18n.onChange(() => { if (bar) { applyTexts(); updateCount(); } });
@@ -454,11 +513,12 @@ const FindReplace = (function () {
       label(refs.next, 'find.next');
       label(refs.matchCase, 'find.matchCase');
       label(refs.wholeWord, 'find.wholeWord');
+      label(refs.regex, 'find.regex');
       label(refs.close, 'find.close');
       refs.find.setAttribute('aria-label', t('find.find.label'));
       refs.find.placeholder = t('find.find.placeholder');
       refs.replacement.setAttribute('aria-label', t('find.replacement.label'));
-      refs.replacement.placeholder = t('find.replacement.placeholder');
+      refs.replacement.placeholder = t(state.regex ? 'find.replacement.placeholderRegex' : 'find.replacement.placeholder');
       refs.one.textContent = t('find.replaceOne');
       refs.all.textContent = t('find.replaceAll');
     }
@@ -475,9 +535,28 @@ const FindReplace = (function () {
       if (disabled) button.setAttribute('aria-disabled', 'true'); else button.removeAttribute('aria-disabled');
     }
 
+    // L'erreur de l'expression régulière en cours de frappe, null quand le motif est bon, vide, ou que l'option n'est pas allumée.
+    function queryError() {
+      return state.regex && state.query ? compile(state.query, state).error || null : null;
+    }
+    // Le champ dit que son motif est faux (lecteur d'écran : aria-invalid), et l'info-bulle du compteur donne la raison du navigateur, en anglais
+    // dans la plupart d'entre eux : « 3 sur 12 » ne dit pas où est la parenthèse oubliée.
+    function syncRegexError() {
+      const error = queryError();
+      if (error) { refs.find.setAttribute('aria-invalid', 'true'); refs.count.title = error.message; } else { refs.find.removeAttribute('aria-invalid'); refs.count.removeAttribute('title'); }
+    }
+    // Les trois options reflètent l'état de la recherche (il survit à la fermeture du panneau, et `setOptions` peut le changer avant que le panneau n'existe) ;
+    // le champ de remplacement dit ce qu'il comprend selon l'option « Expression régulière ».
+    function syncOptions() {
+      if (!refs) return;
+      for (const key of ['matchCase', 'wholeWord', 'regex']) refs[key].setAttribute('aria-pressed', state[key] ? 'true' : 'false');
+      refs.replacement.placeholder = I18n.t(state.regex ? 'find.replacement.placeholderRegex' : 'find.replacement.placeholder');
+    }
+
     // « 3 sur 12 » quand la sélection est sur un résultat, « 12 résultats » sinon, « Aucun résultat » ; après « Tout remplacer », le nombre de
     // remplacements jusqu'à la prochaine action.
     function countLabel(matches, index) {
+      if (queryError()) return { text: I18n.t('find.regexInvalid'), kind: 'error' };
       if (state.flash) return { text: state.flash, kind: 'flash' };
       if (state.query && !matches.length) return { text: I18n.t('find.count.none'), kind: 'none' };
       if (!matches.length) return { text: '', kind: 'idle' };
@@ -491,6 +570,7 @@ const FindReplace = (function () {
       const label = countLabel(matches, ed ? indexOfSelection(matches, ed.state.selection) : -1);
       if (refs.count.textContent !== label.text) refs.count.textContent = label.text;
       refs.count.dataset.kind = label.kind;
+      syncRegexError();
       const none = !matches.length;
       setDisabled(refs.prev, none);
       setDisabled(refs.next, none);
@@ -502,7 +582,7 @@ const FindReplace = (function () {
     const isDisabled = button => button.getAttribute('aria-disabled') === 'true';
 
     function wirePanel() {
-      const { toggle, find, prev, next, matchCase, wholeWord, close, replacement, one, all } = refs;
+      const { toggle, find, prev, next, matchCase, wholeWord, regex, close, replacement, one, all } = refs;
       find.addEventListener('input', () => { state.query = find.value; applyQuery(); });
       replacement.addEventListener('input', () => { state.replacement = replacement.value; });
       find.addEventListener('keydown', event => {
@@ -536,13 +616,14 @@ const FindReplace = (function () {
       toggle.addEventListener('click', () => setReplaceVisible(!state.replaceVisible));
       prev.addEventListener('click', () => { if (!isDisabled(prev)) go(true); });
       next.addEventListener('click', () => { if (!isDisabled(next)) go(false); });
-      const toggleOption = (button, key) => {
+      const toggleOption = key => {
         state[key] = !state[key];
-        button.setAttribute('aria-pressed', state[key] ? 'true' : 'false');
+        syncOptions();
         applyQuery();
       };
-      matchCase.addEventListener('click', () => toggleOption(matchCase, 'matchCase'));
-      wholeWord.addEventListener('click', () => toggleOption(wholeWord, 'wholeWord'));
+      matchCase.addEventListener('click', () => toggleOption('matchCase'));
+      wholeWord.addEventListener('click', () => toggleOption('wholeWord'));
+      regex.addEventListener('click', () => toggleOption('regex'));
       close.addEventListener('click', () => closePanel());
       one.addEventListener('click', () => { if (!isDisabled(one)) replaceCurrent(); });
       all.addEventListener('click', () => { if (!isDisabled(all)) replaceAll(); });
@@ -579,9 +660,10 @@ const FindReplace = (function () {
       ensure();
       const wantReplace = !!(options && options.replace) && ed.isEditable;
       const prefill = selectedQuery(ed);
-      if (prefill !== null) state.query = prefill;
+      if (prefill !== null) state.query = state.regex ? escapeRegex(prefill) : prefill; // en expression régulière, le mot repris se cherche tel quel
       refs.find.value = state.query;
       refs.replacement.value = state.replacement;
+      syncOptions();
       state.open = true;
       bar.hidden = false;
       setReplaceVisible(ed.isEditable && (wantReplace || state.replaceVisible));
@@ -633,18 +715,19 @@ const FindReplace = (function () {
       if (state.open) closePanel(); else open({ replace: false });
     }
 
-    return { setFlash, open, closePanel, toggleOpen, wireEditor };
+    return { setFlash, open, closePanel, toggleOpen, wireEditor, syncOptions, queryError };
   })();
 
   return {
     findMatches, createExtension, wireEditor, open, close: closePanel, toggle: toggleOpen,
-    isOpen: () => state.open,
+    isOpen: () => state.open, queryError,
     next: () => go(false), prev: () => go(true), replaceCurrent, replaceAll,
     setQuery(query) { state.query = String(query == null ? '' : query); if (refs) refs.find.value = state.query; applyQuery(); },
     setOptions(options) {
       if (options && options.matchCase !== undefined) state.matchCase = !!options.matchCase;
       if (options && options.wholeWord !== undefined) state.wholeWord = !!options.wholeWord;
-      if (refs) { refs.matchCase.setAttribute('aria-pressed', state.matchCase ? 'true' : 'false'); refs.wholeWord.setAttribute('aria-pressed', state.wholeWord ? 'true' : 'false'); }
+      if (options && options.regex !== undefined) state.regex = !!options.regex;
+      syncOptions();
       applyQuery();
     },
     setReplacement(text) { state.replacement = String(text == null ? '' : text); if (refs) refs.replacement.value = state.replacement; },

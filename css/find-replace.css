@@ -34,6 +34,9 @@
    la frappe. */
 .pp-find-count { flex: none; min-width: 5.5em; padding: 0 4px; text-align: right; white-space: nowrap; color: var(--text-muted); font-size: 12px; font-weight: 600; }
 .pp-find-count[data-kind="flash"] { color: var(--text); }
+/* Expression régulière fausse : le compteur le dit en rouge lisible (--danger-ink, jamais --danger pour du texte) et le champ prend le même cadre. */
+.pp-find-count[data-kind="error"] { color: var(--danger-ink); }
+.pp-find-input[aria-invalid="true"] { border-color: var(--danger-ink); }
 
 /* Surlignage dans le texte : toutes les correspondances en jaune pâle, la courante en orange cerclé (le cerclage la distingue sans la couleur
    seule). Le texte garde sa couleur : au moins 8:1 sur ces deux fonds avec le noir bleuté du texte de la page. */

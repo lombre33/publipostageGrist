@@ -166,14 +166,15 @@ const Icons = (function () {
     // Rechercher / Remplacer, le QR code et le graphique de la page.
     return {
       // Rechercher / Remplacer (js/find-replace.js) : la loupe de la barre, puis les contrôles du panneau - chevrons précédent / suivant / afficher le
-      // remplacement, « Aa » (respecter la casse), « ab » souligné d'un crochet (mot entier) et la croix de fermeture (distincte de rejectAll, qui est
-      // « tout refuser »).
+      // remplacement, « Aa » (respecter la casse), « ab » souligné d'un crochet (mot entier), « .* » (expression régulière) et la croix de fermeture
+      // (distincte de rejectAll, qui est « tout refuser »).
       search: '<circle cx="10.5" cy="10.5" r="6"/><path d="m20 20-5.2-5.2"/>',
       chevronUp: '<path d="m6 15 6-6 6 6"/>',
       chevronDown: '<path d="m6 9 6 6 6-6"/>',
       chevronRight: '<path d="m9 6 6 6-6 6"/>',
       matchCase: '<path d="M2.5 18 7 6l4.5 12M4.2 14h5.6"/><circle cx="17" cy="15" r="3"/><path d="M20 12v6"/>',
       wholeWord: '<circle cx="7.5" cy="10" r="2.8"/><path d="M10.3 7.2V13"/><path d="M13.7 4v9"/><circle cx="16.7" cy="10" r="2.8"/><path d="M3.5 17v3.5h17V17"/>',
+      regex: '<circle cx="6" cy="17.5" r=".6"/><path d="M15 5v10M10.7 7.5l8.6 5M19.3 7.5l-8.6 5"/>',
       closeFind: '<path d="M7 7l10 10M17 7 7 17"/>',
       // QR code (js/qr-code.js) : ligne du même menu - trois repères d'angle et quelques modules, la même figure que le cadre d'un QR code dont le
       // texte contient une colonne (css/qr-code.css).
