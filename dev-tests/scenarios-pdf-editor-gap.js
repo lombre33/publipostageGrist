@@ -11,6 +11,10 @@
 //    Lecture, qui additionne des hauteurs de blocs SANS leurs marges, ne comptait pas les 20 px d'air du trait : avec plusieurs traits les pages ne tombaient plus aux mêmes lignes (l'éditeur en mettait huit de
 //    trop sur la première). Il pèse maintenant 21 px partout (l'air est en remplissage dans l'éditeur et la Lecture, un bloc de 15,75 pt d'un seul tenant au PDF) : deux cas le mesurent, puis comparent les pages.
 //
+// 3. Le trait dans un conteneur (carte du 2026-10-12 « Corriger le trait du PDF dans les colonnes, cases et listes ? », réponse « Corriger »). Le PDF écrivait le trait sur 515 pt en dur (plus court que le texte, débordant sur la colonne voisine d'une zone) et ne le
+//    dessinait pas du tout dans une case de tableau, un élément de liste ni une citation. Il a maintenant la largeur de ce qui le contient et se voit dans chacun, à 21 px de haut comme dans l'éditeur et la Lecture ; deux cas le mesurent (largeur, présence, hauteur ;
+//    puis l'ordre et les distances de dix documents) et comparent le PDF à l'éditeur.
+//
 // Comment la suite juge. Les capacités de page sont MESURÉES (jamais écrites en dur : elles dépendent des polices de la machine) sur le PDF, la référence de ce qui tient dans une page ; chaque moteur rend ensuite le
 // même document (éditeur en Aperçu A4, Lecture, impression navigateur, PDF relu par pdf.js) : mêmes pages, mêmes mots sur chacune.
 (function () {
@@ -437,6 +441,135 @@
         await compareEngines(h, 'deux traits de suite après ' + n + ' lignes', rows(n, 'Alpha') + '<hr><hr>' + rows(8, 'Beta') + FIN, problems, summary);
       }
       return { pass: problems.length === 0, notes: JSON.stringify({ problems: compact(problems), summary }) };
+    }),
+  });
+
+  // --- Le trait dans un conteneur : sa largeur et sa présence (carte du 12/10 : « Corriger le trait du PDF dans les colonnes, cases et listes ? », réponse « Corriger ») ---
+  // Deux paragraphes « Avant » et « Apres », avec ou sans trait entre eux, rangés dans chaque sorte de conteneur que le PDF construit par un chemin à lui.
+  const RULE_CONTAINERS = [
+    ['la page', inner => inner],
+    ['une colonne de zone', inner => zone(inner, '<p>Droite</p>')],
+    ['une case de tableau', inner => '<table><tbody><tr><td>' + inner + '</td><td><p>Autre</p></td></tr></tbody></table>'],
+    ['un élément de liste', inner => '<ul><li>' + inner + '</li></ul>'],
+    ['une citation', inner => '<blockquote>' + inner + '</blockquote>'],
+  ];
+  const round1 = n => Math.round(n * 10) / 10;
+  const RULE_PAIR = withRule => '<p>Avant</p>' + (withRule ? '<hr>' : '') + '<p>Apres</p>';
+
+  // Ce que l'éditeur et la Lecture font du trait d'un conteneur : la place qu'il prend entre « Avant » et « Apres » (pixels de mise en page) et sa largeur en pt.
+  function ruleBoxIn(scope, content) {
+    const root = document.querySelector(scope + ' ' + content);
+    const zoom = EditorCore.layoutZoom(root);
+    const paragraph = word => Array.from(root.querySelectorAll('p')).find(p => p.textContent.trim() === word);
+    const hr = root.querySelector('hr');
+    return {
+      gap: (paragraph('Apres').getBoundingClientRect().top - paragraph('Avant').getBoundingClientRect().top) / zoom,
+      widthPt: hr ? hr.getBoundingClientRect().width / zoom * 0.75 : null,
+    };
+  }
+  async function ruleInContainer(h, wrap) {
+    const html = wrap(RULE_PAIR(true));
+    const plain = wrap(RULE_PAIR(false));
+    const editorOf = async source => { Editor.setHeaderFooterData(NO_HF); Editor.setHTML(source); await h.sleep(250); Editor.refreshPaginationPreview(); await h.sleep(60); return ruleBoxIn('#editor-container', '.tiptap'); };
+    const readerOf = async source => { await h.renderReaderMode(source, null); await h.sleep(250); return ruleBoxIn('#reader-container', '.reader-content'); };
+    const [editorWith, editorWithout, readerWith, readerWithout] = [await editorOf(html), await editorOf(plain), await readerOf(html), await readerOf(plain)];
+    const withRule = await pdfView(h, html);
+    const withoutRule = await pdfView(h, plain);
+    const row = (view, word) => view.truth.pages[0].textItems.find(item => item.str.indexOf(word) !== -1);
+    const pdfGap = view => row(view, 'Apres').y - row(view, 'Avant').y;
+    const before = row(withRule, 'Avant');
+    const page = withRule.truth.pages[0];
+    // Le début du texte sur la ligne d'« Avant » : la puce d'une liste, le texte d'une case, d'une colonne ou d'une citation, la marge de la page.
+    const startX = Math.min.apply(null, page.textItems.filter(item => Math.abs(item.y - before.y) < 1).map(item => item.x));
+    const painted = (await h.extractPdfLines(await blobBase64(withRule.result.blob))).pages[0].lines.filter(line => line.color === '#000000');
+    const margins = PageLayout.getMarginsPt();
+    const round = n => Math.round(n * 100) / 100;
+    return {
+      room: { editor: round(editorWith.gap - editorWithout.gap), reader: round(readerWith.gap - readerWithout.gap), pdf: round((pdfGap(withRule) - pdfGap(withoutRule)) / 0.75) },
+      editorWidthPt: editorWith.widthPt,
+      pageRightPt: page.width - margins.right,
+      startX,
+      lines: painted.map(line => ({ x1: round(line.x1), x2: round(line.x2) })),
+    };
+  }
+
+  cases.push({
+    id: 'pdf_gap_rule_fits_its_container_in_the_pdf',
+    description: 'Un trait entre deux paragraphes d\'une page, d\'une colonne de zone, d\'une case de tableau, d\'un élément de liste et d\'une citation : le PDF le peint (un seul trait), de la ligne de texte à la largeur de son conteneur (la colonne ne déborde pas sur sa voisine, la case garde le trait dans ses bords, la liste et la citation vont jusqu\'à la marge de droite), et il prend 21 px de haut comme dans l\'éditeur et la Lecture',
+    run: h => inPage(h, async c => {
+      const problems = []; const summary = {};
+      for (const [label, wrap] of RULE_CONTAINERS) {
+        const m = await ruleInContainer(h, wrap);
+        summary[label] = m;
+        Object.keys(m.room).forEach(engine => {
+          if (Math.abs(m.room[engine] - 21) > 0.6) problems.push(label + ' : ' + engine + ' donne ' + m.room[engine] + ' px au trait au lieu de 21');
+        });
+        if (m.lines.length !== 1) { problems.push(label + ' : le PDF peint ' + m.lines.length + ' trait(s) au lieu de 1 : ' + JSON.stringify(m.lines)); continue; }
+        const line = m.lines[0];
+        if (Math.abs(line.x1 - m.startX) > 1) problems.push(label + ' : le trait part de ' + line.x1 + ' pt, le texte de ' + m.startX + ' pt');
+        // La colonne et la case ont leur propre largeur, celle que l'éditeur donne à son trait ; le reste va jusqu'à la marge de droite de la page.
+        if (label === 'une colonne de zone' || label === 'une case de tableau') {
+          if (Math.abs((line.x2 - line.x1) - m.editorWidthPt) > 1.5) problems.push(label + ' : le trait fait ' + round1(line.x2 - line.x1) + ' pt de large, celui de l\'éditeur ' + round1(m.editorWidthPt) + ' pt');
+        } else if (Math.abs(line.x2 - m.pageRightPt) > 1) {
+          problems.push(label + ' : le trait finit à ' + line.x2 + ' pt, la marge de droite est à ' + round1(m.pageRightPt) + ' pt');
+        }
+      }
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems, summary }) };
+    }),
+  });
+
+  // Des mots repères, un par paragraphe : la distance de l'un à l'autre, dans l'éditeur (haut du paragraphe, px de mise en page) et dans le PDF (ligne de texte, pt / 0,75).
+  async function distancesBetween(h, html, markers) {
+    const view = await pdfView(h, html);
+    const items = view.truth.pages[0].textItems;
+    const pdfY = markers.map(word => { const item = items.find(it => it.str === word); return item ? item.y / 0.75 : null; });
+    Editor.setHeaderFooterData(NO_HF);
+    Editor.setHTML(html);
+    await h.sleep(250);
+    Editor.refreshPaginationPreview();
+    await h.sleep(60);
+    const root = document.querySelector('#editor-container .tiptap');
+    const zoom = EditorCore.layoutZoom(root);
+    const editorY = markers.map(word => { const p = Array.from(root.querySelectorAll('p')).find(el => el.textContent.trim() === word); return p ? p.getBoundingClientRect().top / zoom : null; });
+    const gaps = ys => ys.slice(1).map((y, i) => (y == null || ys[i] == null ? null : Math.round((y - ys[i]) * 10) / 10));
+    return { editor: gaps(editorY), pdf: gaps(pdfY), items, view };
+  }
+
+  cases.push({
+    id: 'pdf_gap_rule_inside_lists_quotes_and_cells_follows_the_editor',
+    description: 'Un trait dans un élément de liste (avec une sous-liste, numérotée, deux de suite, suivi d\'un paragraphe vide), une citation (au milieu, à la fin), une liste dans une case, une case qui commence ou ne contient que le trait, un encadré : le PDF pose le texte d\'avant, le trait et le texte d\'après dans le même ordre et aux mêmes distances que l\'éditeur, sans puce ni numéro de plus après le trait',
+    run: h => inPage(h, async c => {
+      const problems = []; const summary = {};
+      const cell = inner => '<table><tbody><tr><td>' + inner + '</td><td><p>Autre</p></td></tr></tbody></table>';
+      // [libellé, HTML, repères (un par paragraphe), repère qui suit un trait dans un élément de liste]
+      const fixtures = [
+        ['liste avec une sous-liste', '<ul><li><p>Alpha</p><hr><p>Beta</p><ul><li><p>Gamma</p></li></ul></li><li><p>Delta</p></li></ul>', ['Alpha', 'Beta', 'Gamma', 'Delta'], 'Beta'],
+        ['liste numérotée', '<ol><li><p>Alpha</p></li><li><p>Beta</p><hr><p>Gamma</p></li><li><p>Delta</p></li></ol>', ['Alpha', 'Beta', 'Gamma', 'Delta'], 'Gamma'],
+        ['liste, deux traits de suite', '<ul><li><p>Alpha</p><hr><hr><p>Beta</p></li></ul><p>Gamma</p>', ['Alpha', 'Beta', 'Gamma'], 'Beta'],
+        ['liste, paragraphe vide après le trait', '<ul><li><p>Alpha</p><hr><p></p></li></ul><p>Beta</p>', ['Alpha', 'Beta'], null],
+        ['citation', '<blockquote><p>Alpha</p><hr><p>Beta</p></blockquote><p>Gamma</p>', ['Alpha', 'Beta', 'Gamma'], null],
+        ['citation, trait en fin', '<blockquote><p>Alpha</p><hr></blockquote><p>Beta</p>', ['Alpha', 'Beta'], null],
+        ['liste dans une case', cell('<ul><li><p>Alpha</p><hr><p>Beta</p></li></ul>') + '<p>Gamma</p>', ['Alpha', 'Beta', 'Gamma'], 'Beta'],
+        ['case qui commence par le trait', '<p>Alpha</p>' + cell('<hr><p>Beta</p>') + '<p>Gamma</p>', ['Alpha', 'Beta', 'Gamma'], null],
+        ['case qui ne contient que le trait', '<p>Alpha</p><table><tbody><tr><td><hr></td><td><p>Beta</p></td></tr></tbody></table><p>Gamma</p>', ['Alpha', 'Beta', 'Gamma'], null],
+        ['encadré', '<div class="callout"><p>Alpha</p><hr><p>Beta</p></div><p>Gamma</p>', ['Alpha', 'Beta', 'Gamma'], null],
+      ];
+      for (const [label, html, markers, continued] of fixtures) {
+        const d = await distancesBetween(h, html, markers);
+        summary[label] = { editor: d.editor, pdf: d.pdf };
+        d.pdf.forEach((gap, i) => {
+          const want = d.editor[i];
+          if (gap == null || want == null) problems.push(label + ' : le repère ' + markers[i] + ' ou ' + markers[i + 1] + ' manque (PDF ' + gap + ', éditeur ' + want + ')');
+          else if (Math.abs(gap - want) > 1.5) problems.push(label + ' : de ' + markers[i] + ' à ' + markers[i + 1] + ', ' + gap + ' px dans le PDF contre ' + want + ' px dans l\'éditeur');
+        });
+        // Après le trait, la suite d'un élément de liste n'a ni puce ni numéro : à gauche de son repère, sur sa ligne, il n'y a rien.
+        if (continued) {
+          const at = d.items.find(it => it.str === continued);
+          const before = at ? d.items.filter(it => it !== at && Math.abs(it.y - at.y) < 1 && it.x < at.x).map(it => it.str) : ['(repère absent)'];
+          if (before.length) problems.push(label + ' : après le trait, la ligne de ' + continued + ' porte aussi ' + JSON.stringify(before) + ' (ni puce ni numéro attendus)');
+        }
+      }
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems, summary }) };
     }),
   });
 

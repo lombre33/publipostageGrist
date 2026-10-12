@@ -420,6 +420,13 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Le trait du PDF a la largeur de son bloc et se voit dans les cases, listes et citations** : dans le PDF, le trait
+  faisait toujours la même longueur (un peu moins que le texte, et assez pour déborder sur la colonne d'à côté dans
+  une zone à deux colonnes), et il n'était pas dessiné du tout dans une case de tableau, un élément de liste ou une
+  citation, alors que l'éditeur l'y montre. Il suit maintenant la largeur de sa page, de sa colonne, de sa case, de
+  son élément de liste ou de sa citation, et il est dessiné partout où l'éditeur le montre, à la même hauteur. Il
+  reste noir. Le PDF d'un courrier peut bouger de quelques lignes. Pas encore dessiné : un trait dans une liste de
+  tâches, ou dans une citation placée dans une case ou une liste.
 - **Le trait a la même hauteur dans l'éditeur, la Lecture et le PDF** : un trait prenait 21 px dans l'éditeur, 16 px
   en Lecture et 13 px dans le PDF, et l'éditeur ne comptait pas sa place en coupant les pages : un courrier à
   plusieurs traits n'avait pas les mêmes pages selon qu'on le regardait ou qu'on l'exportait (sur un courrier à
@@ -997,6 +1004,12 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Fixed
 
+- **The PDF rule takes the width of its block and shows in cells, lists and quotes**: in the PDF, the rule was
+  always the same length (a little shorter than the text, and long enough to overflow into the next column in a
+  two-column zone), and it was not drawn at all in a table cell, a list item or a quote, although the editor shows
+  it there. It now follows the width of its page, column, cell, list item or quote, and is drawn wherever the
+  editor shows it, at the same height. It stays black. The PDF of a letter may move by a few lines. Not yet
+  drawn: a rule in a task list, or in a quote placed inside a cell or a list.
 - **The horizontal rule is the same height in the editor, Reading mode and the PDF**: a rule took 21 px in the
   editor, 16 px in Reading mode and 13 px in the PDF, and the editor did not count its room when cutting pages:
   a letter with several rules did not have the same pages whether you looked at it or exported it (in a letter

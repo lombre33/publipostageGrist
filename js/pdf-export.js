@@ -443,10 +443,13 @@ const PdfExport = (function () {
   }
 
   // Les runs des enfants d'un nœud, avec un retour à la ligne entre deux blocs de ligne (paragraphe, titre, code) ; `skip` écarte des enfants.
-  function childRuns(node, style, images, skip) {
+  function childRuns(node, style, images, skip) { return runsOfNodes(node.childNodes, style, images, skip); }
+
+  // Les runs d'une suite de nœuds frères (les enfants d'un nœud, ou le morceau d'entre deux traits : ruleSegmentsOf).
+  function runsOfNodes(nodes, style, images, skip) {
     const runs = [];
     let sawLineBlock = false;
-    node.childNodes.forEach(child => {
+    nodes.forEach(child => {
       if (skip && skip(child)) return;
       const isLineBlock = child.nodeType === Node.ELEMENT_NODE && /^(P|DIV|H[1-6]|PRE)$/.test(child.tagName);
       if (isLineBlock && sawLineBlock) runs.push({ text: '\n', ...style });
@@ -563,15 +566,15 @@ const PdfExport = (function () {
     return runs;
   }
 
-  // Découpe les enfants directs d'une cellule/sous-liste en "lignes" pdfmake : <p>/<div>/<h1-6> direct = sa propre ligne ; <ul>/<ol> direct = une
-  // ligne par <li> (récursif) ; tout le reste s'accumule dans un groupe "inline".
+  // Découpe les enfants directs d'une cellule/sous-liste en "lignes" pdfmake : <p>/<div>/<h1-6> direct = sa propre ligne, comme un trait (<hr>) ; <ul>/<ol>
+  // direct = une ligne par <li> (récursif) ; tout le reste s'accumule dans un groupe "inline".
   function collectCellLines(container, lines) {
     let pending = [];
     function flushPending() { if (pending.length) { lines.push({ inline: pending }); pending = []; } }
     Array.from(container.childNodes).forEach(node => {
       if (node.nodeType === Node.TEXT_NODE) { if (node.nodeValue) pending.push(node); return; }
       if (node.nodeType !== Node.ELEMENT_NODE) return;
-      if (/^(P|DIV|H[1-6]|PRE)$/.test(node.tagName)) { flushPending(); lines.push(node); return; }
+      if (/^(P|DIV|H[1-6]|PRE|HR)$/.test(node.tagName)) { flushPending(); lines.push(node); return; }
       if (/^(UL|OL)$/.test(node.tagName)) {
         flushPending();
         Array.from(node.children).filter(c => c.tagName === 'LI').forEach(li => {
@@ -720,13 +723,13 @@ const PdfExport = (function () {
   }
 
   // Un élément de liste ou un paragraphe de la case, en un bloc de texte (une case à cocher et ses colonnes pour un élément de liste de tâches).
-  function cellTextObject(node, runs, cellAlign, cellWidthPt) {
+  function cellTextObject(node, runs, cellAlign, cellWidthPt, continued) {
     const isLi = node.tagName === 'LI';
     const align = alignment(node) || cellAlign;
     if (isLi && isTaskListItem(node)) {
       return { columns: taskListColumns(node, taskListRuns(node, runs), align), margin: [measureIndentPt(node, 'box'), 0, 0, 0] };
     }
-    const marker = isLi ? listMarkerFor(node) : '';
+    const marker = isLi && !continued ? listMarkerFor(node) : '';
     const text = marker ? [{ text: marker, fontSize: DEFAULT_FONT_SIZE }].concat(runs.length ? runs : [{ text: ' ' }]) : (runs.length ? runs : ' ');
     const wrapMarginPt = !runs.length ? 0 : (isLi ? spaceWidthPt() : cellWrapMarginPt(node, cellWidthPt));
     const obj = { text, margin: [isLi ? measureIndentPt(node, 'box') : 0, 0, wrapMarginPt, 0] };
@@ -740,6 +743,9 @@ const PdfExport = (function () {
     const node = line;
     // Bloc de code dans une cellule de tableau : le même cadre gris que dans le flux principal, en tableau imbriqué à la largeur de la cellule.
     if (node.tagName === 'PRE') return codeBlockFrom(node, false, true);
+    // Un trait : toute la largeur de la case, comme dans l'éditeur.
+    if (node.tagName === 'HR') return ruleBlock(false, cellWidthPt);
+    if (node.tagName === 'LI' && hasRuleChild(node)) return cellRuleSplitObjects(node, cellAlign, cellBaseStyle, images, cellWidthPt);
     const floatBlocks = cellFloatBlocksFrom(node, cellWidthPt);
     if (floatBlocks) return floatBlocks;
     const before = images.length;
@@ -755,6 +761,21 @@ const PdfExport = (function () {
     const obj = cellTextObject(node, trimEdgeWhitespace(stripImageMarkers(rawRuns)), cellAlign, cellWidthPt);
     attributeNestedPendingImages(images, before, obj, node, rootRect, nestedPending);
     return obj;
+  }
+  // Un <li> de case que traverse un trait (<hr>, enfant direct) : le texte d'avant avec la puce, le trait, le texte d'après sans puce, comme
+  // ruleSplitBlocks dans le flux. Les sous-listes sont des lignes de la case à part (collectCellLines), pas du texte du <li>.
+  function cellRuleSplitObjects(node, cellAlign, cellBaseStyle, images, cellWidthPt) {
+    const style = inheritedStyle(node, cellBaseStyle);
+    const indentPt = measureIndentPt(node, 'box');
+    const isList = child => child.nodeType === Node.ELEMENT_NODE && /^(UL|OL)$/.test(child.tagName);
+    const objects = [];
+    ruleSegmentsOf(node).forEach((children, i) => {
+      if (i > 0) objects.push(ruleBlock(false, cellWidthPt - indentPt, indentPt));
+      if (i > 0 && !segmentHasContent(children)) return;
+      const runs = trimEdgeWhitespace(stripImageMarkers(runsOfNodes(children, style, images, isList)));
+      objects.push(cellTextObject(node, runs, cellAlign, cellWidthPt, i > 0));
+    });
+    return objects;
   }
   // La case rendue en stack pdfmake : les images en attente d'une position retrouvent leur tableau parent, et la case garde la liste de ce qui reste à
   // placer.
@@ -2300,9 +2321,10 @@ const PdfExport = (function () {
   function blockFrom(node, pageBreakBefore, headingMarkers, availableWidthPt, rootRect, floatCarry, captionPt) {
     const tag = node.tagName.toUpperCase();
     if (tag === 'TABLE') return tableBlocksFrom(node, pageBreakBefore, rootRect, availableWidthPt == null, captionPt);
-    if (tag === 'HR') return [ruleBlock(pageBreakBefore)];
+    if (tag === 'HR') return [ruleBlock(pageBreakBefore, availableWidthPt)];
     if (tag === 'PRE') return [codeBlockFrom(node, pageBreakBefore)];
     const ctx = { node, tag, pageBreakBefore, headingMarkers, availableWidthPt, rootRect, floatCarry };
+    if (RULE_HOSTS.test(tag) && hasRuleChild(node)) return ruleSplitBlocks(ctx);
     return isFlowText(node, tag, headingMarkers) ? flowTextBlocks(ctx) : ordinaryBlocks(ctx, blockRunsOf(node, tag));
   }
 
@@ -2310,15 +2332,67 @@ const PdfExport = (function () {
   // prend la hauteur de son vecteur le plus bas : le polyligne d'un seul point, au bas du bloc, ne peint rien (un tracé sans segment) mais donne au bloc sa
   // hauteur entière, si bien que pdfmake le passe à la page suivante quand il ne tient pas en entier, comme la pagination de l'éditeur qui additionne des
   // blocs entiers. Avec des marges, le trait resterait sur la page dès que sa marge haute y tient.
+  // Sa longueur est la largeur de ce qui le contient, comme dans l'éditeur où le trait tient toute la largeur de sa page, de sa colonne, de sa case, de son
+  // élément de liste ou de sa citation : `widthPt` (la page entière quand on n'en donne pas), `leftPt` le retrait du bloc qui le contient.
   const RULE_HEIGHT_PT = 15.75;
-  function ruleBlock(pageBreakBefore) {
+  function ruleBlock(pageBreakBefore, widthPt, leftPt) {
+    const lengthPt = widthPt == null ? CONTENT_WIDTH_PT : Math.max(1, widthPt);
     return {
       canvas: [
-        { type: 'line', x1: 0, y1: RULE_HEIGHT_PT / 2, x2: 515, y2: RULE_HEIGHT_PT / 2, lineWidth: 1 },
+        { type: 'line', x1: 0, y1: RULE_HEIGHT_PT / 2, x2: lengthPt, y2: RULE_HEIGHT_PT / 2, lineWidth: 1 },
         { type: 'polyline', points: [{ x: 0, y: RULE_HEIGHT_PT }] },
       ],
+      ...(leftPt > 0.01 ? { margin: [leftPt, 0, 0, 0] } : {}),
       ...(pageBreakBefore ? { pageBreak: 'before' } : {}),
     };
+  }
+
+  // Un <li> ou une citation que traverse un trait (un <hr>, enfant direct) : le navigateur pose le trait entre ses paragraphes, le texte d'un côté et de
+  // l'autre. Le PDF lit le texte de tout le bloc d'un seul tenant : il le coupe donc au trait, en trois blocs (le texte d'avant avec la puce, le trait
+  // à la largeur qui reste, le texte d'après sans puce). Une citation garde ses marges de dessus et de dessous aux deux bouts seulement : à l'intérieur,
+  // le trait touche le texte, comme dans l'éditeur.
+  const RULE_HOSTS = /^(LI|BLOCKQUOTE)$/;
+  const hasRuleChild = node => Array.from(node.children).some(child => child.tagName === 'HR');
+
+  // Les enfants d'un nœud rangés par morceaux, un nouveau morceau après chaque trait.
+  function ruleSegmentsOf(node) {
+    const segments = [[]];
+    node.childNodes.forEach(child => {
+      if (child.nodeType === Node.ELEMENT_NODE && child.tagName === 'HR') segments.push([]);
+      else segments[segments.length - 1].push(child);
+    });
+    return segments;
+  }
+
+  // Un morceau où il y a quelque chose : un élément (même un paragraphe vide, qui garde sa ligne) ou du texte ; pas le vide d'un trait en fin de bloc.
+  const segmentHasContent = nodes => nodes.some(n => n.nodeType === Node.ELEMENT_NODE || (n.nodeType === Node.TEXT_NODE && n.nodeValue.trim()));
+
+  function ruleSplitBlocks(ctx) {
+    const { node, tag, availableWidthPt } = ctx;
+    const style = inheritedStyle(node, { fontSize: DEFAULT_FONT_SIZE });
+    const indentPt = measureIndentPt(node, tag === 'LI' ? 'box' : 'text');
+    const rulePt = (availableWidthPt != null ? availableWidthPt : CONTENT_WIDTH_PT) - indentPt;
+    const segments = ruleSegmentsOf(node);
+    const lastSegment = segments.length - 1;
+    const blocks = [];
+    segments.forEach((children, i) => {
+      if (i > 0) blocks.push(ruleBlock(false, rulePt, indentPt));
+      // Rien avant ou après un trait : pas de ligne vide. Un <li> garde son premier morceau, qui porte la puce.
+      if (!segmentHasContent(children) && (i > 0 || tag !== 'LI')) return;
+      const images = [];
+      const isList = child => child.nodeType === Node.ELEMENT_NODE && /^(UL|OL)$/.test(child.tagName);
+      const nestedLists = tag === 'LI' ? children.filter(isList) : [];
+      const rawRuns = runsOfNodes(children, style, images, nestedLists.length ? isList : null);
+      const part = { continued: i > 0, beforeRule: i < lastSegment };
+      ordinaryBlocks({ ...ctx, pageBreakBefore: i === 0 && ctx.pageBreakBefore, rulePart: part }, { rawRuns, images, nestedLists }).forEach(b => blocks.push(b));
+    });
+    // Les marges de dessus et de dessous de la citation, quand le trait est son premier ou son dernier bloc.
+    if (tag === 'BLOCKQUOTE' && blocks.length) {
+      if (blocks[0].canvas) addTopMargin(blocks[0], 4);
+      if (blocks[blocks.length - 1].canvas) addBottomMargin(blocks[blocks.length - 1], 4);
+    }
+    if (ctx.pageBreakBefore && blocks.length && !blocks[0].pageBreak) blocks[0].pageBreak = 'before';
+    return blocks;
   }
 
   const headingMarkerOf = (headingMarkers, node) => (headingMarkers && headingMarkers.get(node)) || '';
@@ -2461,7 +2535,7 @@ const PdfExport = (function () {
   function ordinaryBlocks(ctx, { rawRuns, images, nestedLists }) {
     const { node, tag, pageBreakBefore, headingMarkers, availableWidthPt, rootRect } = ctx;
     const runs = trimEdgeWhitespace(rawRuns.filter(r => !r._imageMarker));
-    const block = textBlockFrom(node, tag, runs, headingMarkers);
+    const block = textBlockFrom(node, tag, runs, headingMarkers, ctx.rulePart);
     const blocks = [];
     // Un bloc sans texte qui ne contient qu'une image dans le flux n'a pas besoin du bloc-texte de repli `text: ' '` : l'image fait sa hauteur, et le
     // pousser quand même décalerait tout le contenu suivant (et l'ancrage des images voisines, cf. resolvePendingImageAnchors). Celui qui ne porte
@@ -2485,8 +2559,9 @@ const PdfExport = (function () {
     return blocks;
   }
 
-  // Le bloc de texte d'un paragraphe, d'un titre, d'un élément de liste ou d'une citation.
-  function textBlockFrom(node, tag, runs, headingMarkers) {
+  // Le bloc de texte d'un paragraphe, d'un titre, d'un élément de liste ou d'une citation. `rulePart` : le morceau d'un <li> ou d'une citation que coupe un
+  // trait (ruleSplitBlocks) ; `continued` : celui d'après le trait, sans puce ni marge de dessus, `beforeRule` : celui d'avant, sans marge de dessous.
+  function textBlockFrom(node, tag, runs, headingMarkers, rulePart) {
     const isHeading = /^H[1-6]$/.test(tag);
     const indentPt = measureIndentPt(node, (tag === 'LI' || isHeading) ? 'box' : 'text');
     // Marge verticale nulle entre blocs (mesuré : .tiptap p/h1-6/li/ol/ul { margin: 0 }) - une marge fictive ici dériverait de la vraie mise en page.
@@ -2497,8 +2572,9 @@ const PdfExport = (function () {
     // Une légende vide garde sa hauteur de petite ligne, comme dans l'éditeur (le bloc de repli `text: ' '` n'a aucun run qui porte la taille).
     if (!runs.length && tag === 'P' && node.hasAttribute('data-caption')) block.fontSize = Caption.SIZE_PT;
     if (isHeading) headingFields(block, node, tag, runs, headingMarkerOf(headingMarkers, node));
-    if (tag === 'LI') listItemFields(block, node, runs, align);
-    if (tag === 'BLOCKQUOTE') { block.italics = true; block.margin = [indentPt, 4, spaceWidthPt(), 4]; }
+    const { continued, beforeRule } = rulePart || {};
+    if (tag === 'LI' && !continued) listItemFields(block, node, runs, align);
+    if (tag === 'BLOCKQUOTE') { block.italics = true; block.margin = [indentPt, continued ? 0 : 4, spaceWidthPt(), beforeRule ? 0 : 4]; }
     return block;
   }
 
