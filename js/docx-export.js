@@ -50,6 +50,16 @@ const DocxExport = (function () {
   // Filigrane du modèle (PageLayout.normalizeWatermark), absent = aucun : il voyage avec les marges comme le sens et le format, et buildDocxDocument
   // le pose dans l'en-tête.
   let pageWatermark = null;
+  // Le sens du document tel que ses marges le disent (setPageMarginsTwip) : celui de la page quand aucun repère de départ ne dit mieux (js/page-sections.js).
+  let documentOrientation = 'portrait';
+
+  // Le sens de la page et tout ce qui en dérive : sa largeur et la largeur utile du texte. Réglé pour le document par setPageMarginsTwip, puis par chaque
+  // section d'un macro-modèle dont les modèles n'ont pas tous le même sens (buildDocxDocument) : le format et les marges ne changent jamais, seul le sens tourne.
+  function applyPageOrientation(orientation) {
+    pageOrientation = orientation === 'landscape' ? 'landscape' : 'portrait';
+    pageWidthTwip = PageLayout.pageSizeTwipFor(pageOrientation, pageFormat).width;
+    CONTENT_WIDTH_TWIP = pageWidthTwip - marginLeftTwip - marginRightTwip;
+  }
 
   function setPageMarginsTwip(marginsTwip) {
     const m = marginsTwip || {};
@@ -58,10 +68,9 @@ const DocxExport = (function () {
     marginRightTwip = marginOf(m.right);
     marginBottomTwip = marginOf(m.bottom);
     marginLeftTwip = marginOf(m.left);
-    pageOrientation = m.orientation === 'landscape' ? 'landscape' : 'portrait';
     pageFormat = PageLayout.normalizeFormat(m.format);
-    pageWidthTwip = PageLayout.pageSizeTwipFor(pageOrientation, pageFormat).width;
-    CONTENT_WIDTH_TWIP = pageWidthTwip - marginLeftTwip - marginRightTwip;
+    documentOrientation = m.orientation === 'landscape' ? 'landscape' : 'portrait';
+    applyPageOrientation(documentOrientation);
     pageWatermark = PageLayout.normalizeWatermark(m.watermark);
   }
   const STYLE = ExportCommon.EDITOR_STYLE;
@@ -917,14 +926,18 @@ const DocxExport = (function () {
   // Paragraph et de Table, prêt à poser dans `children` (Document, TableCell, Header et Footer acceptent la même forme). `keepNext` : tous les
   // paragraphes construits ici gardent le suivant (la dernière ligne d'un tableau que suit une légende, voir tableBlocksFrom).
   async function blocksFromContainer(container, ctx, isTopLevel, widthTwip, keepNext) {
-    const flow = { ctx, isTopLevel, widthTwip, keepNext, headingMarkers: isTopLevel ? headingMarkersOf(container) : null, pendingPageBreak: false };
+    // Un document par sections (buildDocxDocument) numérote ses titres d'un seul tenant (`ctx.headingMarkers`) et ouvre ses sections par un saut de section
+    // (`ctx.sectionStart` : la première page de la section est déjà ouverte).
+    const flow = { ctx, isTopLevel, widthTwip, keepNext, headingMarkers: isTopLevel ? (ctx.headingMarkers || headingMarkersOf(container)) : null, pendingPageBreak: false, atSectionStart: isTopLevel && !!ctx.sectionStart };
     const blocks = [];
     for (const node of Array.from(container.childNodes)) {
       for (const block of await blocksFromNode(node, flow)) blocks.push(block);
     }
-    // Un sommaire n'a de sens qu'à la racine du document : il y prend la place de son repère.
-    return isTopLevel ? blocks.flatMap(b => (b && b.__tocPlaceholder ? buildTocBlocks(ctx, b.pageBreakBefore) : [b])) : blocks;
+    // Un sommaire n'a de sens qu'à la racine du document : il y prend la place de son repère (dans un document par sections, après la dernière : `ctx.deferToc`).
+    return isTopLevel && !ctx.deferToc ? withToc(blocks, ctx) : blocks;
   }
+
+  const withToc = (blocks, ctx) => blocks.flatMap(b => (b && b.__tocPlaceholder ? buildTocBlocks(ctx, b.pageBreakBefore) : [b]));
 
   function headingMarkersOf(container) {
     const config = container.querySelector(':scope > .heading-numbering-config');
@@ -949,6 +962,7 @@ const DocxExport = (function () {
     return async (node, flow) => {
       const blocks = await blocksOf(node, flow);
       flow.pendingPageBreak = false;
+      flow.atSectionStart = false;
       return blocks;
     };
   }
@@ -957,6 +971,9 @@ const DocxExport = (function () {
   // paragraphe d'un point de haut posé devant lui ; il porte aussi, seul, la page blanche que laisse un second saut de suite.
   const PAGE_BREAK_CARRIER_TWIP = 20;
   const pageBreakCarrier = () => new docx.Paragraph({ children: [], spacing: { before: 0, after: 0, line: PAGE_BREAK_CARRIER_TWIP, lineRule: 'exact' }, pageBreakBefore: true });
+  // La page blanche d'un modèle qui COMMENCE par un saut de page, au début d'une section : la section ouvre déjà sa page (le saut de section), un paragraphe d'un point de haut la
+  // remplit, sans saut devant lui (un saut de page tout en haut d'une page n'en ouvre pas une de plus dans Word), et le saut qu'on vient de lire ouvre la page d'après.
+  const sectionBlank = () => new docx.Paragraph({ children: [], spacing: { before: 0, after: 0, line: PAGE_BREAK_CARRIER_TWIP, lineRule: 'exact' } });
 
   // Comme consumingBreak, pour un bloc qui ne sait pas ouvrir une page lui-même : le saut est écrit devant lui (le bloc absent, rien n'est écrit, comme avant ; dans une cellule ou une colonne, un saut ne
   // peut pas ouvrir de page : il reste sans effet, comme avant).
@@ -969,8 +986,9 @@ const DocxExport = (function () {
 
   // Un saut de page de plus derrière un saut en attente : le premier ouvre une page que le second referme aussitôt, une page blanche, comme dans l'éditeur et la Lecture.
   function markBreak(node, flow) {
-    const blank = flow.isTopLevel && flow.pendingPageBreak ? [pageBreakCarrier()] : [];
+    const blank = flow.isTopLevel && flow.pendingPageBreak ? [pageBreakCarrier()] : (flow.atSectionStart ? [sectionBlank()] : []);
     flow.pendingPageBreak = true;
+    flow.atSectionStart = false;
     return blank;
   }
 
@@ -1172,7 +1190,8 @@ const DocxExport = (function () {
     return { distanceTwip, blocksFor };
   }
 
-  function sectionPropertiesFrom(zones, bottomBandTwip, footerDistanceTwip) {
+  // `firstSection` : « première page différente » ne vaut que pour la première page du document, donc pour sa première section.
+  function sectionPropertiesFrom(zones, bottomBandTwip, footerDistanceTwip, firstSection) {
     return {
       page: {
         // docx.js échange largeur et hauteur de lui-même quand l'orientation vaut LANDSCAPE : lui donner les dimensions déjà échangées les
@@ -1180,15 +1199,15 @@ const DocxExport = (function () {
         size: Object.assign(PageLayout.pageSizeTwipFor('portrait', pageFormat), pageOrientation === 'landscape' ? { orientation: docx.PageOrientation.LANDSCAPE } : {}),
         margin: { top: marginTopTwip + topBandTwip, bottom: marginBottomTwip + bottomBandTwip, left: marginLeftTwip, right: marginRightTwip, header: Math.round(marginTopTwip / 2), footer: footerDistanceTwip },
       },
-      titlePage: zones.differentFirstPage,
+      titlePage: zones.differentFirstPage && firstSection !== false,
     };
   }
 
   // Les pieds de la section, variante par variante ; rend les blocs d'en-tête de chaque variante, que addHeaders complète.
-  async function addHeaderFooterZones(section, zones, ctx, footer) {
+  async function addHeaderFooterZones(section, zones, ctx, footer, variants) {
     const headerBlocks = {};
     if (!zones.enabled) return headerBlocks;
-    for (const variant of zones.variants) {
+    for (const variant of (variants || zones.variants)) {
       headerBlocks[variant] = await headerFooterBlocksFrom(zones.html('header', variant), ctx);
       const footerBlocks = await footer.blocksFor(variant);
       if (footerBlocks.length) section.footers = Object.assign({}, section.footers, { [variant]: new docx.Footer({ children: footerBlocks }) });
@@ -1209,29 +1228,74 @@ const DocxExport = (function () {
     }
   }
 
+  // Un macro-modèle dont les modèles n'ont pas tous le même sens de page (js/page-sections.js) : une section Word par suite de modèles de même sens, chacune bâtie dans la
+  // largeur de SA page (le format et les marges ne changent jamais). Le saut de section ouvre la page : le saut de page du modèle qui ouvre la section est retiré. Les titres
+  // sont numérotés d'un seul tenant (`ctx.headingMarkers`), comme dans le PDF. Rend les parties { container, orientation }, ou null sans repère de sens : le document est
+  // alors tel qu'avant, une seule partie.
+  function sectionPartsOf(root, ctx) {
+    if (!PageSections.hasSenses(root)) return null;
+    const sections = PageSections.split(root.childNodes, documentOrientation);
+    if (!sections.length) { PageSections.stripStart(root); return null; }
+    ctx.headingMarkers = headingMarkersOf(root);
+    PageSections.stripStart(root);
+    return sections.map((section, index) => {
+      const container = document.createElement('div');
+      (index && PageSections.isBreak(section.nodes[0]) ? section.nodes.slice(1) : section.nodes).forEach(node => container.appendChild(node));
+      return { container, orientation: section.orientation };
+    });
+  }
+
   async function buildDocxDocument(resolvedHtml, headerFooterData) {
     const root = document.createElement('div'); root.innerHTML = resolvedHtml || '';
     // Ni ligne vide ni saut de page orphelin en fin de document : quand le texte arrive à la marge du bas, ils ouvrent une page blanche.
     ReaderMode.trimTrailingBlankBlocks(root);
     const ctx = { footnotes: {}, footnoteCounter: 0, headingBlocks: [], numberingConfigs: [], numberingCounter: 0, imageIdCounter: 0, measureRoot: root };
-    // « Sur toutes les pages » : les images répétées partent dans l'en-tête, le corps ne les compte plus (inlineNodesFrom).
-    const layerImages = PageLayer.collect(root);
+    // Une partie par section (sectionPartsOf) ; sans repère de sens, une seule : le document entier, dans le sens de ses marges.
+    const parts = sectionPartsOf(root, ctx) || [{ container: root, orientation: documentOrientation }];
+    ctx.deferToc = parts.length > 1;
     layerObjectId = 9000;
     // Les bandes d'en-tête et de pied sont posées avant les blocs : l'ancrage d'une image en calque compte la bande du haut.
     const zones = zonesFrom(headerFooterData);
     topBandTwip = zones.bandTwip('header');
     const bottomBandTwip = zones.bandTwip('footer');
-    const bodyBlocks = await bodyBlocksFrom(root, ctx);
-    // Le corps est construit : un titre posé après lui (en-tête, pied) n'a ni entrée au sommaire ni signet (tocEntryFor).
-    ctx.headingBlocks = null;
-    const footer = await footerLayoutFrom(zones, ctx, bottomBandTwip);
-    const section = {
-      properties: sectionPropertiesFrom(zones, bottomBandTwip, footer.distanceTwip),
-      children: bodyBlocks.length ? bodyBlocks : [new docx.Paragraph('')],
-    };
-    const headerBlocks = await addHeaderFooterZones(section, zones, ctx, footer);
-    await addHeaders(section, zones.variants, headerBlocks, layerImages, ctx);
-    const doc = { sections: [section], footnotes: ctx.footnotes };
+    const sections = [];
+    try {
+      for (const [index, part] of parts.entries()) {
+        applyPageOrientation(part.orientation);
+        ctx.measureRoot = part.container;
+        ctx.sectionStart = index > 0;
+        // « Sur toutes les pages » : les images répétées partent dans l'en-tête, le corps ne les compte plus (inlineNodesFrom).
+        part.layerImages = PageLayer.collect(part.container);
+        part.blocks = await bodyBlocksFrom(part.container, ctx);
+      }
+      ctx.sectionStart = false;
+      // Un sommaire liste les titres de TOUTES les sections : il se bâtit une fois la dernière construite.
+      if (ctx.deferToc) { ctx.deferToc = false; parts.forEach(part => { part.blocks = withToc(part.blocks, ctx); }); }
+      // Le corps est construit : un titre posé après lui (en-tête, pied) n'a ni entrée au sommaire ni signet (tocEntryFor).
+      ctx.headingBlocks = null;
+      const defined = { headers: false, footers: false };
+      for (const [index, part] of parts.entries()) {
+        applyPageOrientation(part.orientation);
+        const footer = await footerLayoutFrom(zones, ctx, bottomBandTwip);
+        const section = {
+          properties: sectionPropertiesFrom(zones, bottomBandTwip, footer.distanceTwip, index === 0),
+          children: part.blocks.length ? part.blocks : [new docx.Paragraph('')],
+        };
+        // « Première page différente » ne vaut que pour la première page du document : les sections suivantes n'ont que leur variante ordinaire.
+        const variants = index === 0 ? zones.variants : ['default'];
+        const headerBlocks = await addHeaderFooterZones(section, zones, ctx, footer, variants);
+        await addHeaders(section, variants, headerBlocks, part.layerImages, ctx);
+        // Sans en-tête (ou pied) à elle, une section reprendrait celui de la précédente, images répétées comprises, bâti pour une autre page : elle en reçoit un vide.
+        if (index > 0) {
+          if (defined.headers && !(section.headers && section.headers.default)) section.headers = Object.assign({}, section.headers, { default: new docx.Header({ children: [new docx.Paragraph('')] }) });
+          if (defined.footers && !(section.footers && section.footers.default)) section.footers = Object.assign({}, section.footers, { default: new docx.Footer({ children: [new docx.Paragraph('')] }) });
+        }
+        defined.headers = defined.headers || !!section.headers;
+        defined.footers = defined.footers || !!section.footers;
+        sections.push(section);
+      }
+    } finally { applyPageOrientation(documentOrientation); }
+    const doc = { sections, footnotes: ctx.footnotes };
     if (ctx.numberingConfigs.length) doc.numbering = { config: ctx.numberingConfigs };
     if (ctx.hasToc) doc.styles = { paragraphStyles: tocParagraphStyles() };
     return new docx.Document(doc);

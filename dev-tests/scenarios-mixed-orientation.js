@@ -7,6 +7,10 @@
 // macro-modèle au sens imposé), rien ne change. Ce fichier écrit les repères À LA MAIN, à dessein : il épingle le contrat du HTML assemblé, du côté de la sortie ; l'assemblage lui-même (les
 // repères que `MacroTemplates` pose) a ses scénarios plus bas dans le groupe, une fois l'interrupteur en place.
 //
+// Lot 2 (Word) : `js/docx-export.js` écrit une section Word par suite de modèles de même sens (`sectionPartsOf`, `buildDocxDocument`) : taille et sens de la page de chaque section, le saut de
+// section remplace le saut de page du modèle qui l'ouvre, tableaux, colonnes et en-têtes bâtis dans la largeur de SA page, « première page différente » seulement sur la première page du
+// document, le sommaire et la numérotation des titres sur tout le document. Le Word n'a pas de pagination à lui (Word pagine à l'ouverture) : l'identité se lit dans son XML.
+//
 // Lot 1 (PDF) : le sens de chaque section est lu par `js/pdf-export.js` (`prepareSections`, `visitSection`, `visitPageBreak`, `turnPage`) : la mise en page se fait dans la largeur de la page où le
 // bloc tombe, pdfmake tourne la page au saut (`pageOrientation` sur le premier bloc de la section), l'en-tête, le pied et le filigrane suivent la page qu'ils habillent, et rien ne reste de l'un
 // à l'autre des exports. Le format et les marges ne changent jamais d'une section à l'autre (ceux du macro-modèle pour tous ses modèles, choix du 09/10) : seul le sens tourne.
@@ -61,6 +65,52 @@ window.EditorTestSuites.mixedOrientation = (function () {
   // Le mot repère de chaque modèle dit sur quelle page il tombe : la liste, page par page, des repères présents.
   const tagsOn = (page, tags) => tags.filter(tag => page.words.indexOf(tag) !== -1);
   const verdict = (problems, summary) => ({ pass: problems.length === 0, notes: JSON.stringify({ summary, problems }) });
+
+  // --- Le Word, relu dans son XML ---
+  // Le texte d'un bloc, sans la fin commune des lignes de test (« Alpha 0 du modèle de test. » donne « Alpha 0 »).
+  const wordText = node => Array.from(node.getElementsByTagName('w:t')).map(t => t.textContent).join('').replace(/ du modèle de test\.$/, '');
+  const wordOpensPage = node => node.nodeName === 'w:p' && node.getElementsByTagName('w:pageBreakBefore').length > 0;
+  const numberOf = (el, name) => (el && el.getAttribute(name) !== null ? Number(el.getAttribute(name)) : null);
+  // Les sections du document.xml, dans l'ordre : la page (taille, sens, marges, « première page différente »), les en-têtes et pieds qu'elle déclare (type -> fichier) et ses blocs.
+  // Docx.js écrit le <w:sectPr> d'une section dans un paragraphe vide à sa fin (le dernier est au bout du corps) : ce paragraphe-là n'est pas du contenu, `blocks` ne le garde pas.
+  function wordSections(parts) {
+    const rels = {};
+    Array.from(parts.part('word/_rels/document.xml.rels').getElementsByTagName('Relationship')).forEach(rel => { rels[rel.getAttribute('Id')] = 'word/' + rel.getAttribute('Target'); });
+    const refs = (sect, tag) => { const out = {}; Array.from(sect.getElementsByTagName(tag)).forEach(ref => { out[ref.getAttribute('w:type')] = rels[ref.getAttribute('r:id')]; }); return out; };
+    const sections = [];
+    let blocks = [];
+    const close = sect => {
+      const pgSz = sect.getElementsByTagName('w:pgSz')[0];
+      const pgMar = sect.getElementsByTagName('w:pgMar')[0];
+      const titlePg = sect.getElementsByTagName('w:titlePg')[0];
+      sections.push({
+        width: numberOf(pgSz, 'w:w'), height: numberOf(pgSz, 'w:h'), orient: pgSz ? pgSz.getAttribute('w:orient') : null,
+        margins: ['top', 'right', 'bottom', 'left', 'header', 'footer'].map(name => numberOf(pgMar, 'w:' + name)).join(','),
+        titlePg: !!titlePg && titlePg.getAttribute('w:val') !== 'false' && titlePg.getAttribute('w:val') !== '0',
+        headers: refs(sect, 'w:headerReference'), footers: refs(sect, 'w:footerReference'), blocks,
+      });
+      blocks = [];
+    };
+    Array.from(parts.doc.getElementsByTagName('w:body')[0].children).forEach(node => {
+      if (node.nodeName === 'w:sectPr') { close(node); return; }
+      const pPr = node.nodeName === 'w:p' ? Array.from(node.children).find(child => child.nodeName === 'w:pPr') : null;
+      const sect = pPr && Array.from(pPr.children).find(child => child.nodeName === 'w:sectPr');
+      if (sect) close(sect); else blocks.push(node);
+    });
+    return sections;
+  }
+  // La largeur d'un tableau : la somme de sa grille (<w:tblGrid>).
+  const wordGridWidth = tbl => Array.from(tbl.getElementsByTagName('w:tblGrid')[0].getElementsByTagName('w:gridCol')).reduce((sum, col) => sum + Number(col.getAttribute('w:w')), 0);
+  const pageTwip = { portrait: [11906, 16838], landscape: [16838, 11906] };
+  function wordSizeProblems(sections, expected) {
+    const problems = [];
+    sections.forEach((section, i) => {
+      const [width, height] = pageTwip[expected[i] === 'L' ? 'landscape' : 'portrait'];
+      const orient = expected[i] === 'L' ? 'landscape' : 'portrait';
+      if (section.width !== width || section.height !== height || section.orient !== orient) problems.push('section ' + (i + 1) + ' : ' + section.width + ' x ' + section.height + ' ' + section.orient + ' au lieu de ' + width + ' x ' + height + ' ' + orient);
+    });
+    return problems;
+  }
 
   // La page du document d'avant les scénarios : A4 portrait, marges par défaut (les scénarios n'y touchent pas, mais un groupe d'avant a pu la laisser autrement).
   async function plainPage(h) {
@@ -418,6 +468,186 @@ window.EditorTestSuites.mixedOrientation = (function () {
         if (sizes !== 'PLP') problems.push('le PDF téléchargé (le premier calcul) : ' + sizes + ' au lieu de PLP');
         problems.push(...sizeProblems(gt.pages.map(page => ({ width: page.width, height: page.height })), 'PLP'));
         return verdict(problems, { sens: sizes });
+      },
+    },
+
+    // ---------- Le Word ----------
+    {
+      id: 'mixed_docx_one_section_per_run_of_equal_sense_each_with_its_own_page',
+      description: 'Word : portrait, portrait, paysage, paysage, portrait : trois sections (la taille et le sens de la page de chacune, les mêmes marges), le saut de page entre deux modèles de même sens reste un saut de page, le saut de section ouvre les autres et leur premier bloc ne porte pas de saut de plus',
+      async run(h) {
+        const problems = [];
+        await plainPage(h);
+        const html = assemble([slot('portrait', lines(2, 'Alpha')), slot('portrait', lines(2, 'Bravo')), slot('landscape', lines(2, 'Charlie')), slot('landscape', lines(2, 'Delta')), slot('portrait', lines(2, 'Echo'))]);
+        const sections = wordSections(await h.exportDocxParts(html, null, PageLayout.getMarginsTwip()));
+        if (sections.length !== 3) { problems.push(sections.length + ' section(s) au lieu de 3'); return verdict(problems, {}); }
+        problems.push(...wordSizeProblems(sections, 'PLP'));
+        const m = PageLayout.getMarginsTwip();
+        const wantMargins = [m.top, m.right, m.bottom, m.left].join(',');
+        sections.forEach((section, i) => { if (section.margins.split(',').slice(0, 4).join(',') !== wantMargins) problems.push('section ' + (i + 1) + ' : marges ' + section.margins + ' au lieu de ' + wantMargins); });
+        if (new Set(sections.map(section => section.margins)).size !== 1) problems.push('les marges changent d\'une section à l\'autre : ' + sections.map(section => section.margins).join(' | '));
+        const texts = sections.map(section => section.blocks.map(wordText).filter(Boolean));
+        const want = [['Alpha 0', 'Alpha 1', 'Bravo 0', 'Bravo 1'], ['Charlie 0', 'Charlie 1', 'Delta 0', 'Delta 1'], ['Echo 0', 'Echo 1']];
+        texts.forEach((list, i) => { if (list.join('|') !== want[i].join('|')) problems.push('section ' + (i + 1) + ' : « ' + list.join(' | ') + ' » au lieu de « ' + want[i].join(' | ') + ' »'); });
+        // Les sauts de page de la section : un seul, devant le deuxième modèle de la suite ; aucun devant le premier bloc d'une section (le saut de section a ouvert sa page).
+        const breaks = sections.map(section => section.blocks.filter(wordOpensPage).map(wordText));
+        if (JSON.stringify(breaks) !== JSON.stringify([['Bravo 0'], ['Delta 0'], []])) problems.push('sauts de page : ' + JSON.stringify(breaks) + ' au lieu de [["Bravo 0"],["Delta 0"],[]]');
+        sections.slice(1).forEach((section, i) => { if (section.blocks[0] && wordOpensPage(section.blocks[0])) problems.push('section ' + (i + 2) + ' : son premier bloc porte un saut de page de plus (une page blanche dans Word)'); });
+        return verdict(problems, { sections: sections.map(section => section.width + 'x' + section.height + ' ' + section.orient).join(' ; ') });
+      },
+    },
+    {
+      id: 'mixed_docx_tables_and_two_column_zones_take_the_width_of_their_section',
+      description: 'Word : un tableau et une zone à deux colonnes ont la largeur utile de LEUR page : 10 786 twips en portrait, 15 718 en paysage (A4, marges de 28 pt)',
+      async run(h) {
+        const problems = [];
+        await plainPage(h);
+        const html = assemble([slot('portrait', tableOf('TA') + zoneOf('ZA')), slot('landscape', tableOf('TB') + zoneOf('ZB')), slot('portrait', tableOf('TC') + zoneOf('ZC'))]);
+        const sections = wordSections(await h.exportDocxParts(html, null, PageLayout.getMarginsTwip()));
+        if (sections.length !== 3) return verdict([sections.length + ' section(s) au lieu de 3'], {});
+        const m = PageLayout.getMarginsTwip();
+        const summary = {};
+        sections.forEach((section, i) => {
+          const content = section.width - m.left - m.right;
+          const tables = section.blocks.filter(node => node.nodeName === 'w:tbl');
+          const widths = tables.map(wordGridWidth);
+          summary['section ' + (i + 1)] = widths.join(' / ') + ' (utile ' + content + ')';
+          if (tables.length !== 2) problems.push('section ' + (i + 1) + ' : ' + tables.length + ' tableau(x) (le tableau et la zone attendus)');
+          widths.forEach(width => { if (Math.abs(width - content) > 30) problems.push('section ' + (i + 1) + ' : un tableau de ' + width + ' twips dans une page utile de ' + content); });
+        });
+        return verdict(problems, summary);
+      },
+    },
+    {
+      id: 'mixed_docx_headers_and_footers_are_built_for_each_section_and_the_first_page_stays_the_documents',
+      description: 'Word : chaque section a son en-tête (un tableau de deux cases) et son pied bâtis dans la largeur de sa page ; « première page différente » ne vaut que pour la première section (les autres n\'ont que l\'en-tête ordinaire) ; le pied garde ses champs PAGE et NUMPAGES, qui continuent d\'une section à l\'autre',
+      async run(h) {
+        const problems = [];
+        await plainPage(h);
+        const hf = {
+          enabled: true, differentFirstPage: true,
+          header: { default: '<table><tbody><tr><td><p>GAUCHE</p></td><td><p>DROITE</p></td></tr></tbody></table>', first: '<p>PREMIERE</p>' },
+          footer: { default: '<p>PIED <span class="page-number-badge" data-format="n-slash-total">#</span></p>', first: '' },
+        };
+        const html = assemble([slot('portrait', lines(2, 'Alpha')), slot('landscape', lines(2, 'Bravo')), slot('portrait', lines(2, 'Charlie'))]);
+        const parts = await h.exportDocxParts(html, hf, PageLayout.getMarginsTwip());
+        const sections = wordSections(parts);
+        if (sections.length !== 3) return verdict([sections.length + ' section(s) au lieu de 3'], {});
+        const m = PageLayout.getMarginsTwip();
+        const titlePgs = sections.map(section => section.titlePg).join();
+        if (titlePgs !== 'true,false,false') problems.push('« première page différente » par section : ' + titlePgs + ' au lieu de true,false,false');
+        const headerTypes = sections.map(section => Object.keys(section.headers).sort().join('+'));
+        if (headerTypes.join(' ') !== 'default+first default default') problems.push('en-têtes déclarés par section : ' + headerTypes.join(' ') + ' au lieu de « default+first default default »');
+        const files = sections.map(section => section.headers.default);
+        if (new Set(files).size !== 3) problems.push('les sections se partagent un fichier d\'en-tête : ' + files.join(' '));
+        const summary = {};
+        sections.forEach((section, i) => {
+          const content = section.width - m.left - m.right;
+          const header = section.headers.default && parts.part(section.headers.default);
+          const table = header && header.getElementsByTagName('w:tbl')[0];
+          if (!table) { problems.push('section ' + (i + 1) + ' : pas de tableau dans son en-tête'); return; }
+          summary['en-tête ' + (i + 1)] = wordGridWidth(table) + ' (utile ' + content + ')';
+          if (Math.abs(wordGridWidth(table) - content) > 30) problems.push('section ' + (i + 1) + ' : l\'en-tête fait ' + wordGridWidth(table) + ' twips dans une page utile de ' + content);
+          const footer = section.footers.default && parts.part(section.footers.default);
+          const fields = footer ? h.docxFields(footer).join(' ') : '';
+          if (!/PAGE/.test(fields) || !/NUMPAGES/.test(fields)) problems.push('section ' + (i + 1) + ' : champs du pied « ' + fields + ' »');
+        });
+        return verdict(problems, summary);
+      },
+    },
+    {
+      id: 'mixed_docx_table_of_contents_and_numbered_headings_cover_every_section',
+      description: 'Word : le sommaire du premier modèle liste les titres des trois sections (une entrée par titre) et la numérotation des titres continue d\'une section à l\'autre (1), 2), 3))',
+      async run(h) {
+        const problems = [];
+        await plainPage(h);
+        const heading = tag => '<h1>' + tag + 'titre</h1><p>' + tag + ' texte.</p>';
+        const html = assemble([slot('portrait', '<div class="heading-numbering-config" data-style="numeric"></div><div class="toc-marker"></div>' + heading('Alpha')), slot('landscape', heading('Bravo')), slot('portrait', heading('Charlie'))]);
+        const parts = await h.exportDocxParts(html, null, PageLayout.getMarginsTwip());
+        const sections = wordSections(parts);
+        if (sections.length !== 3) problems.push(sections.length + ' section(s) au lieu de 3');
+        const paragraphs = h.docxParagraphs(parts.doc);
+        const headings = paragraphs.filter(p => /^Heading/i.test(p.style || '')).map(p => p.text);
+        if (headings.join('|') !== '1) Alphatitre|2) Bravotitre|3) Charlietitre') problems.push('titres : « ' + headings.join(' | ') + ' »');
+        const entries = paragraphs.filter(p => /^TOC\d$/.test(p.style || '')).map(p => p.text);
+        if (entries.join('|') !== '1) Alphatitre|2) Bravotitre|3) Charlietitre') problems.push('entrées du sommaire : « ' + entries.join(' | ') + ' »');
+        return verdict(problems, { titres: headings, sommaire: entries });
+      },
+    },
+    {
+      id: 'mixed_docx_a_template_that_starts_with_a_page_break_keeps_its_blank_page_and_an_empty_template_keeps_its_page',
+      description: 'Word : un modèle paysage qui COMMENCE par un saut de page garde sa page blanche (un paragraphe d\'un point sans saut, puis le texte avec son saut : « deux sauts de suite laissent une page blanche ») ; un modèle paysage vide au milieu garde une section de sa page ; un dernier modèle vide n\'ouvre aucune section',
+      async run(h) {
+        const problems = [];
+        await plainPage(h);
+        const manual = '<div class="page-break-marker" contenteditable="false">Saut de page</div>';
+        const started = wordSections(await h.exportDocxParts(assemble([slot('portrait', lines(2, 'Alpha')), slot('landscape', manual + lines(2, 'Bravo'))]), null, PageLayout.getMarginsTwip()));
+        if (started.length !== 2) problems.push('modèle qui commence par un saut : ' + started.length + ' section(s) au lieu de 2');
+        else {
+          const blocks = started[1].blocks;
+          if (!(blocks.length >= 2 && !wordText(blocks[0]) && !wordOpensPage(blocks[0]) && wordText(blocks[1]) === 'Bravo 0' && wordOpensPage(blocks[1]))) problems.push('section paysage : blocs ' + JSON.stringify(blocks.map(node => (wordOpensPage(node) ? '^' : '') + wordText(node))) + ' (un paragraphe vide sans saut, puis « Bravo 0 » avec son saut attendus)');
+        }
+        const middle = wordSections(await h.exportDocxParts(assemble([slot('portrait', lines(2, 'Alpha')), slot('landscape', ''), slot('portrait', lines(2, 'Charlie'))]), null, PageLayout.getMarginsTwip()));
+        if (middle.length !== 3) problems.push('modèle vide au milieu : ' + middle.length + ' section(s) au lieu de 3');
+        else {
+          problems.push(...wordSizeProblems(middle, 'PLP'));
+          if (middle[1].blocks.some(node => wordText(node))) problems.push('la section du modèle vide n\'est pas vide : ' + middle[1].blocks.map(wordText).join('|'));
+        }
+        const last = wordSections(await h.exportDocxParts(assemble([slot('portrait', lines(2, 'Alpha')), slot('landscape', '')]), null, PageLayout.getMarginsTwip()));
+        if (last.length !== 1) problems.push('dernier modèle vide : ' + last.length + ' section(s) au lieu de 1');
+        return verdict(problems, { commence: started.length, milieu: middle.length, fin: last.length });
+      },
+    },
+    {
+      id: 'mixed_docx_repeated_layer_images_stay_with_their_section',
+      description: 'Word : l\'image « Sur toutes les pages » d\'un modèle paysage est ancrée dans l\'en-tête de SA section seulement (ni dans celui des sections portrait, qui ne reprennent pas l\'en-tête de la précédente), et le filigrane est ancré dans l\'en-tête de chaque section',
+      async run(h) {
+        const problems = [];
+        await plainPage(h);
+        const repeated = '<p><img class="editor-image" src="' + PNG + '" alt="" style="width: 40px; height: 40px;" data-layer="behind" data-repeat="true" data-page-index="0" data-page-left-pt="50" data-page-top-pt="50"></p>';
+        const withWatermark = Object.assign({}, PageLayout.getMarginsTwip(), { watermark: { text: 'CONFIDENTIEL' } });
+        const html = assemble([slot('portrait', lines(2, 'Alpha')), slot('landscape', lines(2, 'Bravo') + repeated), slot('portrait', lines(2, 'Charlie'))]);
+        const anchors = (parts, section) => { const header = section.headers.default && parts.part(section.headers.default); return header ? h.docxDrawings(header).filter(d => d.kind === 'anchor').length : 0; };
+        const partsPlain = await h.exportDocxParts(html, null, PageLayout.getMarginsTwip());
+        const sectionsPlain = wordSections(partsPlain);
+        const counts = sectionsPlain.map(section => anchors(partsPlain, section));
+        if (counts.join() !== '0,1,0') problems.push('ancres de l\'en-tête par section : ' + counts.join() + ' au lieu de 0,1,0 (l\'image répétée est dans l\'en-tête de la section paysage seulement)');
+        const partsMark = await h.exportDocxParts(html, null, withWatermark);
+        const sectionsMark = wordSections(partsMark);
+        const marked = sectionsMark.map(section => anchors(partsMark, section));
+        if (marked.join() !== '1,2,1') problems.push('avec un filigrane : ' + marked.join() + ' au lieu de 1,2,1 (le filigrane dans chaque section, plus l\'image répétée dans la section paysage)');
+        return verdict(problems, { sansFiligrane: counts.join(), avecFiligrane: marked.join() });
+      },
+    },
+    {
+      id: 'mixed_docx_nothing_changes_without_markers_and_nothing_leaks_between_exports',
+      description: 'Word : un macro-modèle au sens imposé (des sauts de page de modèle SANS repère de sens) reste UNE section dans le sens des marges, portrait comme paysage, avec le saut de page de chaque modèle ; et après un export aux sens mêlés, un export ordinaire retrouve le sens de ses marges',
+      async run(h) {
+        const problems = [];
+        await plainPage(h);
+        const summary = {};
+        const imposed = n => '<div class="page-break-marker" contenteditable="false" data-macro-slot="' + n + '">Saut de page</div>';
+        const imposedDoc = lines(2, 'Alpha') + imposed(1) + lines(2, 'Bravo') + imposed(2) + lines(2, 'Charlie');
+        const portraitTwip = PageLayout.getMarginsTwip();
+        const landscapeTwip = Object.assign({}, portraitTwip, { orientation: 'landscape' });
+        for (const [label, margins, want] of [['imposé portrait', portraitTwip, 'P'], ['imposé paysage', landscapeTwip, 'L']]) {
+          const sections = wordSections(await h.exportDocxParts(imposedDoc, null, margins));
+          summary[label] = sections.length + ' section(s)';
+          if (sections.length !== 1) problems.push(label + ' : ' + sections.length + ' section(s) au lieu d\'une');
+          else {
+            problems.push(...wordSizeProblems(sections, want).map(p => label + ', ' + p));
+            const breaks = sections[0].blocks.filter(wordOpensPage).map(wordText);
+            if (breaks.join('|') !== 'Bravo 0|Charlie 0') problems.push(label + ' : sauts de page devant « ' + breaks.join(' | ') + ' » au lieu de « Bravo 0 | Charlie 0 »');
+          }
+        }
+        const mixed = wordSections(await h.exportDocxParts(assemble([slot('landscape', lines(2, 'Alpha')), slot('portrait', lines(2, 'Bravo'))]), null, portraitTwip));
+        summary.mele = mixed.map(section => section.orient).join(' ');
+        if (mixed.map(section => section.orient).join(' ') !== 'landscape portrait') problems.push('aux sens mêlés : ' + summary.mele);
+        const afterPortrait = wordSections(await h.exportDocxParts(lines(2, 'Alpha'), null, portraitTwip));
+        const afterLandscape = wordSections(await h.exportDocxParts(lines(2, 'Alpha'), null, landscapeTwip));
+        if (afterPortrait.length !== 1 || wordSizeProblems(afterPortrait, 'P').length) problems.push('export portrait ordinaire après un export mêlé : ' + JSON.stringify(afterPortrait.map(section => [section.width, section.height, section.orient])));
+        if (afterLandscape.length !== 1 || wordSizeProblems(afterLandscape, 'L').length) problems.push('export paysage ordinaire après un export mêlé : ' + JSON.stringify(afterLandscape.map(section => [section.width, section.height, section.orient])));
+        return verdict(problems, summary);
       },
     },
   ];
