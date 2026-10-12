@@ -323,7 +323,6 @@ prioriser.
 **Import / Export**
 - Export Markdown (V1)
 - Import Markdown, avec une fiabilité totale sur les imports depuis Docs de La Suite (V1)
-- Export PDF : impression full HD, PDF compressé (V1)
 
 **Confort d'utilisation**
 - Optimisation du chargement (V1)
@@ -663,7 +662,6 @@ react to this repository's issues, or write to me on Tchap, to help me prioritiz
 **Import / export**
 - Markdown export (V1)
 - Markdown import, with full reliability on imports from La Suite Docs (V1)
-- PDF export: full HD print, compressed PDF (V1)
 
 **Quality of life**
 - Loading time optimization (V1)

@@ -567,7 +567,7 @@ const PdfExport = (function () {
   }
 
   // Découpe les enfants directs d'une cellule/sous-liste en "lignes" pdfmake : <p>/<div>/<h1-6> direct = sa propre ligne, comme un trait (<hr>) ; <ul>/<ol>
-  // direct = une ligne par <li> (récursif) ; tout le reste s'accumule dans un groupe "inline".
+  // direct = une ligne par <li> (récursif) ; une citation qui porte un trait = sa propre ligne ; tout le reste s'accumule dans un groupe "inline".
   function collectCellLines(container, lines) {
     let pending = [];
     function flushPending() { if (pending.length) { lines.push({ inline: pending }); pending = []; } }
@@ -575,6 +575,8 @@ const PdfExport = (function () {
       if (node.nodeType === Node.TEXT_NODE) { if (node.nodeValue) pending.push(node); return; }
       if (node.nodeType !== Node.ELEMENT_NODE) return;
       if (/^(P|DIV|H[1-6]|PRE|HR)$/.test(node.tagName)) { flushPending(); lines.push(node); return; }
+      // Une citation que traverse un trait est une ligne à elle : cellRuleSplitObjects la coupe au trait (sans trait, elle reste du texte en ligne).
+      if (node.tagName === 'BLOCKQUOTE' && hasRuleChild(node)) { flushPending(); lines.push(node); return; }
       if (/^(UL|OL)$/.test(node.tagName)) {
         flushPending();
         Array.from(node.children).filter(c => c.tagName === 'LI').forEach(li => {
@@ -731,7 +733,7 @@ const PdfExport = (function () {
     }
     const marker = isLi && !continued ? listMarkerFor(node) : '';
     const text = marker ? [{ text: marker, fontSize: DEFAULT_FONT_SIZE }].concat(runs.length ? runs : [{ text: ' ' }]) : (runs.length ? runs : ' ');
-    const wrapMarginPt = !runs.length ? 0 : (isLi ? spaceWidthPt() : cellWrapMarginPt(node, cellWidthPt));
+    const wrapMarginPt = !runs.length ? 0 : (isLi || hasRuleChild(node) ? spaceWidthPt() : cellWrapMarginPt(node, cellWidthPt));
     const obj = { text, margin: [isLi ? measureIndentPt(node, 'box') : 0, 0, wrapMarginPt, 0] };
     if (align) obj.alignment = align;
     if (!runs.length && node.tagName === 'P' && node.hasAttribute('data-caption')) obj.fontSize = Caption.SIZE_PT;
@@ -745,7 +747,7 @@ const PdfExport = (function () {
     if (node.tagName === 'PRE') return codeBlockFrom(node, false, true);
     // Un trait : toute la largeur de la case, comme dans l'éditeur.
     if (node.tagName === 'HR') return ruleBlock(false, cellWidthPt);
-    if (node.tagName === 'LI' && hasRuleChild(node)) return cellRuleSplitObjects(node, cellAlign, cellBaseStyle, images, cellWidthPt);
+    if (/^(LI|BLOCKQUOTE)$/.test(node.tagName) && hasRuleChild(node)) return cellRuleSplitObjects(node, cellAlign, cellBaseStyle, images, cellWidthPt);
     const floatBlocks = cellFloatBlocksFrom(node, cellWidthPt);
     if (floatBlocks) return floatBlocks;
     const before = images.length;
@@ -762,11 +764,14 @@ const PdfExport = (function () {
     attributeNestedPendingImages(images, before, obj, node, rootRect, nestedPending);
     return obj;
   }
-  // Un <li> de case que traverse un trait (<hr>, enfant direct) : le texte d'avant avec la puce, le trait, le texte d'après sans puce, comme
-  // ruleSplitBlocks dans le flux. Les sous-listes sont des lignes de la case à part (collectCellLines), pas du texte du <li>.
+  // Un <li> ou une citation de case que traverse un trait (<hr>, enfant direct) : le texte d'avant avec la puce, le trait, le texte d'après sans puce, comme
+  // ruleSplitBlocks dans le flux. Les sous-listes sont des lignes de la case à part (collectCellLines), pas du texte du <li>. Une citation de case est du
+  // texte de la case, sans retrait ni puce (comme sans trait) : le trait va d'un bord de la case à l'autre, et la citation garde ses 4 pt de dessus et de
+  // dessous aux deux bouts seulement.
   function cellRuleSplitObjects(node, cellAlign, cellBaseStyle, images, cellWidthPt) {
     const style = inheritedStyle(node, cellBaseStyle);
-    const indentPt = measureIndentPt(node, 'box');
+    const isQuote = node.tagName === 'BLOCKQUOTE';
+    const indentPt = isQuote ? 0 : measureIndentPt(node, 'box');
     const isList = child => child.nodeType === Node.ELEMENT_NODE && /^(UL|OL)$/.test(child.tagName);
     const objects = [];
     ruleSegmentsOf(node).forEach((children, i) => {
@@ -775,6 +780,7 @@ const PdfExport = (function () {
       const runs = trimEdgeWhitespace(stripImageMarkers(runsOfNodes(children, style, images, isList)));
       objects.push(cellTextObject(node, runs, cellAlign, cellWidthPt, i > 0));
     });
+    if (isQuote && objects.length) { addTopMargin(objects[0], 4); addBottomMargin(objects[objects.length - 1], 4); }
     return objects;
   }
   // La case rendue en stack pdfmake : les images en attente d'une position retrouvent leur tableau parent, et la case garde la liste de ce qui reste à
@@ -2313,7 +2319,7 @@ const PdfExport = (function () {
     if (tag === 'HR') return [ruleBlock(pageBreakBefore, availableWidthPt)];
     if (tag === 'PRE') return [codeBlockFrom(node, pageBreakBefore)];
     const ctx = { node, tag, pageBreakBefore, headingMarkers, availableWidthPt, rootRect, floatCarry };
-    if (RULE_HOSTS.test(tag) && (hasRuleChild(node) || ExportCommon.hasTableChild(node))) return ruleSplitBlocks(ctx);
+    if (RULE_HOSTS.test(tag) && (hasRuleChild(node) || ExportCommon.hasTableChild(node) || hasQuoteChild(node))) return ruleSplitBlocks(ctx);
     return isFlowText(node, tag, headingMarkers) ? flowTextBlocks(ctx) : ordinaryBlocks(ctx, blockRunsOf(node, tag));
   }
 
@@ -2340,16 +2346,19 @@ const PdfExport = (function () {
   // l'autre. Le PDF lit le texte de tout le bloc d'un seul tenant : il le coupe donc au trait, en trois blocs (le texte d'avant avec la puce, le trait
   // à la largeur qui reste, le texte d'après sans puce). Une citation garde ses marges de dessus et de dessous aux deux bouts seulement : à l'intérieur,
   // le trait touche le texte, comme dans l'éditeur. Un tableau (le bouton Tableau le pose dans l'item ou la citation où se trouve le curseur) coupe de même :
-  // lu comme du texte, il perdait ses cases (« Un itemL1AL1BL2A »).
+  // lu comme du texte, il perdait ses cases (« Un itemL1AL1BL2A »). Une citation posée dans l'item ou dans une autre citation coupe encore : elle est
+  // ses propres blocs (italique, retrait et trait mesurés sur elle), jamais le texte de son hôte - lue d'un seul tenant avec lui, sa première ligne se
+  // collait à la dernière de l'item (« AlphaBeta ») et son trait ne se dessinait pas.
   const RULE_HOSTS = /^(LI|BLOCKQUOTE)$/;
   const hasRuleChild = node => Array.from(node.children).some(child => child.tagName === 'HR');
+  const hasQuoteChild = node => Array.from(node.children).some(child => child.tagName === 'BLOCKQUOTE');
 
-  // Les enfants d'un nœud rangés par morceaux, un nouveau morceau après chaque trait. Avec `breaks`, après chaque tableau aussi : ce qui a coupé (le trait
-  // ou le tableau) y est rangé, dans l'ordre, `breaks[i]` entre le morceau i et le suivant.
+  // Les enfants d'un nœud rangés par morceaux, un nouveau morceau après chaque trait. Avec `breaks`, après chaque tableau et chaque citation aussi : ce qui a
+  // coupé (le trait, le tableau ou la citation) y est rangé, dans l'ordre, `breaks[i]` entre le morceau i et le suivant.
   function ruleSegmentsOf(node, breaks) {
     const segments = [[]];
     node.childNodes.forEach(child => {
-      const isBreak = child.nodeType === Node.ELEMENT_NODE && (child.tagName === 'HR' || (breaks && child.tagName === 'TABLE'));
+      const isBreak = child.nodeType === Node.ELEMENT_NODE && (child.tagName === 'HR' || (breaks && /^(TABLE|BLOCKQUOTE)$/.test(child.tagName)));
       if (isBreak) { segments.push([]); if (breaks) breaks.push(child); }
       else segments[segments.length - 1].push(child);
     });
@@ -2369,9 +2378,12 @@ const PdfExport = (function () {
     const lastSegment = segments.length - 1;
     const blocks = [];
     // Le tableau prend le retrait de l'item ou de la citation, mesuré sur lui, sur la largeur de la page (une page ne s'ouvre pas dans un item : PAGE_FLOW_BREAKERS).
-    const breakBlocks = el => (el.tagName === 'TABLE'
-      ? tableBlocksFrom(el, false, ctx.rootRect, availableWidthPt == null, 0, measureIndentPt(el, 'box'))
-      : [ruleBlock(false, rulePt, indentPt)]);
+    // La citation fait ses blocs à elle, comme une sous-liste : son retrait est mesuré sur son texte, son trait coupe à son tour.
+    const breakBlocks = el => {
+      if (el.tagName === 'TABLE') return tableBlocksFrom(el, false, ctx.rootRect, availableWidthPt == null, 0, measureIndentPt(el, 'box'));
+      if (el.tagName === 'BLOCKQUOTE') return blockFrom(el, false, ctx.headingMarkers, availableWidthPt, ctx.rootRect);
+      return [ruleBlock(false, rulePt, indentPt)];
+    };
     segments.forEach((children, i) => {
       if (i > 0) breakBlocks(breaks[i - 1]).forEach(b => blocks.push(b));
       // Rien avant ou après un trait : pas de ligne vide. Un <li> garde son premier morceau, qui porte la puce.

@@ -157,6 +157,49 @@
     },
   });
 
+  // La zone où l'on écrit le document (l'élément `.ProseMirror`) est une zone de texte à plusieurs lignes qui porte un nom (RGAA : une zone de saisie se nomme ; relevé par axe-core sur la bêta). js/editor.js (editorAttributes) le pose
+  // sous forme d'une fonction, relue par ProseMirror à chaque état : le nom suit la langue de l'interface (I18n.onChange envoie une transaction vide) et dit « En-tête ou pied de page » quand ce même éditeur sert à les écrire.
+  cases.push({
+    id: 'landmarks_writing_area_is_a_named_textbox_in_french_in_english_and_in_a_header',
+    description: 'La zone d\'écriture du document est une zone de texte à plusieurs lignes (role « textbox », aria-multiline) nommée « Éditeur du modèle » en français et « Template editor » en anglais ; en édition d\'un en-tête ou d\'un pied, le nom devient « En-tête ou pied de page du modèle » / « Template header or footer » ; il revient avec le document',
+    run: async (h) => {
+      await h.resetEditor();
+      await backToEdit();
+      const read = () => {
+        const nodes = document.querySelectorAll('#editor-container .ProseMirror');
+        const node = nodes[0];
+        return node ? { count: nodes.length, role: node.getAttribute('role'), multiline: node.getAttribute('aria-multiline'), name: nameOf(node), editable: node.getAttribute('contenteditable') } : { count: 0 };
+      };
+      const got = {};
+      I18n.setLang('fr');
+      await sleep(150);
+      got.fr = read();
+      I18n.setLang('en');
+      await sleep(150);
+      got.en = read();
+      I18n.setLang('fr');
+      await sleep(150);
+      try {
+        HeaderFooterPreview.enterHeaderFooterMode('header', 'default');
+        await sleep(250);
+        got.headerFr = Object.assign({ editing: Editor.isEditingHeaderFooter() }, read());
+        I18n.setLang('en');
+        await sleep(150);
+        got.headerEn = read();
+      } finally {
+        HeaderFooterPreview.exitHeaderFooterModeIfActive();
+        await sleep(250);
+        I18n.setLang('fr');
+        await sleep(150);
+      }
+      got.back = Object.assign({ editing: Editor.isEditingHeaderFooter() }, read());
+      const ok = (x, name) => !!x && x.count === 1 && x.role === 'textbox' && x.multiline === 'true' && x.name === name && x.editable === 'true';
+      const pass = ok(got.fr, 'Éditeur du modèle') && ok(got.en, 'Template editor') && got.headerFr.editing === true && ok(got.headerFr, 'En-tête ou pied de page du modèle')
+        && ok(got.headerEn, 'Template header or footer') && got.back.editing === false && ok(got.back, 'Éditeur du modèle');
+      return { pass, notes: JSON.stringify(got) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.landmarks = cases;
 })();

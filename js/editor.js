@@ -450,9 +450,22 @@ const Editor = (function () {
     return editor;
   }
 
+  // Ce que lit un lecteur d'écran sur la zone où l'on écrit : une zone de texte à plusieurs lignes qui porte un nom (RGAA ; relevé par axe-core sur la bêta). Une fonction relue par ProseMirror
+  // à chaque état, jamais un objet figé : le nom suit la langue de l'interface (I18n.onChange, plus bas, envoie une transaction vide) et dit « En-tête ou pied de page » quand ce même
+  // éditeur sert à les écrire (header-footer-preview.js : `hfMode` posé avant l'échange du contenu, donc avant l'état qui relit ce nom). Elle est posée après la construction par
+  // `view.setProps`, pas par `editorProps.attributes` : TipTap n'y accepte qu'un objet (il le recopie dans un autre) et `role` y est déjà son seul attribut ; `role` est donc repris ici.
+  function editorAttributes() {
+    return {
+      role: 'textbox',
+      'aria-multiline': 'true',
+      'aria-label': I18n.t(HeaderFooterPreview.isEditingHeaderFooter() ? 'editor.ariaLabelHeaderFooter' : 'editor.ariaLabel'),
+    };
+  }
+
   function wireEditor() {
     // Branche l'éditeur construit sur les modules qui le pilotent (barres d'outils, boîtes, pagination).
     EditorCore.setEditor(editor);
+    editor.view.setProps({ attributes: editorAttributes });
     trackChangesApi.installSerializer(editor.schema);
     HeaderFooterPreview.setEditor(editor);
 

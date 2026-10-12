@@ -42,6 +42,8 @@
 //      (choix d'Antoine du 05/10 : « Bloquer jusqu'à un clic »).
 //  21. un fichier ou un dossier de ce que le widget charge (css, js, img, templates-gallery, templates-gallery-dev) dont le nom commence par « _ » ou « . » : GitHub Pages (Jekyll) ne le sert pas, il se lit en
 //      local et répond 404 en ligne (le dossier des tables de famille, templates-gallery/_tables, a fait ouvrir 17 modèles de la galerie sur une erreur le 09/10 ; il s'appelle `families/`).
+//  22. la feuille de route du README public qui promet encore ce que le widget livre (« Export PDF : impression full HD, PDF compressé (V1) » : l'impression par le navigateur et le PDF « Léger » sont livrés
+//      et décrits plus haut ; relevé du 12/10, retiré dans les deux langues).
 //
 // Volontairement PERMISSIF : un nom cité seulement dans un commentaire compte comme utilisé, un préfixe construit (`'toc-level-' + n`) couvre toute la
 // famille. Le but est de ne jamais faire échouer un changement légitime, seulement d'attraper ce qui n'a plus AUCUN point d'entrée. Une classe posée
@@ -782,6 +784,19 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('pages : aucun fichier ni dossier de css, js, img, templates-gallery ou templates-gallery-dev ne commence par « _ » ou « . » - GitHub Pages (Jekyll) ne le sert pas : il répond 404 en ligne alors qu\'il se lit en local', hidden.length === 0, hidden.slice(0, 5).join(', '));
   const files = served.filter(rel => rel.startsWith('templates-gallery/families/'));
   check('pages : les tables de famille des modèles de la galerie sont dans templates-gallery/families/ (le dossier se lit en ligne) et js/template-gallery.js les y cherche', files.length >= 16 && /resolveUrl\('families\/' \+ raw\.family/.test(read('js/template-gallery.js')), `${files.length} fichiers`);
+}
+
+// ============================================================================
+// 22. La feuille de route du README public ne promet pas ce que le widget livre déjà (relevé du 12/10)
+// ============================================================================
+// « Export PDF : impression full HD, PDF compressé (V1) » restait à venir dans la feuille de route, en français et en anglais, alors que l'impression par le navigateur et le PDF « Léger » sont livrés et
+// décrits plus haut : le public lisait une promesse déjà tenue. Aucun test fonctionnel ne lit le README ; ce contrôle garde les deux lignes retirées.
+{
+  const readme = read('outils/depot-propre/public/README.md');
+  const promised = readme.match(/full HD|PDF compressé|compressed PDF/gi) || [];
+  check('README public : la feuille de route ne promet plus un « PDF full HD » ni un « PDF compressé » (livrés : l\'impression par le navigateur et le PDF « Léger », décrits plus haut)', promised.length === 0, promised.join(', '));
+  check('README public : l\'impression par le navigateur et le PDF « Léger » sont décrits, en français et en anglais (ce que la feuille de route promettait)',
+    /Impression par le navigateur/.test(readme) && /PDF « Léger »/.test(readme) && /Browser print/.test(readme) && /Light PDF/.test(readme), 'README.md');
 }
 
 summarizeAndExit();

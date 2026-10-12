@@ -461,8 +461,19 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   une zone à deux colonnes), et il n'était pas dessiné du tout dans une case de tableau, un élément de liste ou une
   citation, alors que l'éditeur l'y montre. Il suit maintenant la largeur de sa page, de sa colonne, de sa case, de
   son élément de liste ou de sa citation, et il est dessiné partout où l'éditeur le montre, à la même hauteur. Il
-  reste noir. Le PDF d'un courrier peut bouger de quelques lignes. Pas encore dessiné : un trait dans une liste de
-  tâches, ou dans une citation placée dans une case ou une liste.
+  reste noir. Le PDF d'un courrier peut bouger de quelques lignes. Pas encore dessiné : un trait dans une liste
+  placée dans une citation.
+- **Le trait d'une citation posée dans un élément de liste, une case ou une autre citation se voit dans le PDF** : ces
+  citations étaient lues d'un seul tenant avec ce qui les entoure : leur trait n'était pas dessiné, et leur première
+  ligne se collait à la dernière de l'élément de liste (« AlphaBeta » sur une seule ligne). La citation d'un élément de
+  liste ou d'une autre citation fait maintenant ses propres blocs (en italique, à son retrait) et son trait est dessiné
+  à la même hauteur que dans l'éditeur ; celle d'une case garde son texte à plat, avec son trait d'un bord de la case
+  à l'autre. Un trait dans un élément de liste de tâches n'existe pas : l'éditeur le sort de la liste (deux listes, le
+  trait entre elles) et le PDF le dessine. Le PDF d'un courrier qui pose une citation dans une liste peut bouger de
+  quelques lignes.
+- **La zone où l'on écrit le document a un nom pour un lecteur d'écran** : elle est annoncée comme une zone de texte à
+  plusieurs lignes, « Éditeur du modèle » (« En-tête ou pied de page du modèle » quand on écrit un en-tête ou un
+  pied), en français comme en anglais.
 - **Le trait a la même hauteur dans l'éditeur, la Lecture et le PDF** : un trait prenait 21 px dans l'éditeur, 16 px
   en Lecture et 13 px dans le PDF, et l'éditeur ne comptait pas sa place en coupant les pages : un courrier à
   plusieurs traits n'avait pas les mêmes pages selon qu'on le regardait ou qu'on l'exportait (sur un courrier à
@@ -1089,7 +1100,16 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   two-column zone), and it was not drawn at all in a table cell, a list item or a quote, although the editor shows
   it there. It now follows the width of its page, column, cell, list item or quote, and is drawn wherever the
   editor shows it, at the same height. It stays black. The PDF of a letter may move by a few lines. Not yet
-  drawn: a rule in a task list, or in a quote placed inside a cell or a list.
+  drawn: a rule in a list placed inside a quote.
+- **The rule of a quote placed inside a list item, a cell or another quote now shows in the PDF**: these quotes were
+  read as one piece with what surrounds them, so their rule was not drawn and their first line ran into the last line
+  of the list item ("AlphaBeta" on one line). The quote of a list item or of another quote is now its own blocks (in
+  italics, at its indent) and its rule is drawn at the same height as in the editor; the quote of a cell keeps its flat
+  text, with its rule running from one edge of the cell to the other. A rule inside a task list item does not exist:
+  the editor moves it out of the list (two lists, the rule between them) and the PDF draws it. The PDF of a letter
+  that puts a quote in a list may move by a few lines.
+- **The area where you write the document has a name for a screen reader**: it is announced as a multi-line text
+  box, "Template editor" ("Template header or footer" while you write a header or a footer), in French and in English.
 - **The horizontal rule is the same height in the editor, Reading mode and the PDF**: a rule took 21 px in the
   editor, 16 px in Reading mode and 13 px in the PDF, and the editor did not count its room when cutting pages:
   a letter with several rules did not have the same pages whether you looked at it or exported it (in a letter

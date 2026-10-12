@@ -1365,6 +1365,10 @@ const I18n = (function () {
     // n'est pas affiché en mode édition d'en-tête/pied (cf. js/header-footer-preview.js), une zone vide n'y montre aucun texte.
     'editor.placeholder': { fr: 'Commencez à écrire votre modèle ici…', en: 'Start writing your template here…' },
 
+    // --- Nom de la zone où l'on écrit, lu par un lecteur d'écran (aria-label de `.ProseMirror`, cf. editorAttributes de js/editor.js) : le même éditeur sert à écrire le document, puis un en-tête ou un pied de page.
+    'editor.ariaLabel': { fr: 'Éditeur du modèle', en: 'Template editor' },
+    'editor.ariaLabelHeaderFooter': { fr: 'En-tête ou pied de page du modèle', en: 'Template header or footer' },
+
     // --- Barre flottante de formatage nombre/date d'une bulle #Variable ---
     'varFmt.styleFr': { fr: 'Français : 1 234,56', en: 'French: 1 234,56' },
     'varFmt.styleUs': { fr: 'Anglo-saxon : 1,234.56', en: 'Anglo-Saxon: 1,234.56' },

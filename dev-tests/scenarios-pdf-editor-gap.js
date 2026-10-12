@@ -15,6 +15,10 @@
 //    dessinait pas du tout dans une case de tableau, un élément de liste ni une citation. Il a maintenant la largeur de ce qui le contient et se voit dans chacun, à 21 px de haut comme dans l'éditeur et la Lecture ; deux cas le mesurent (largeur, présence, hauteur ;
 //    puis l'ordre et les distances de dix documents) et comparent le PDF à l'éditeur.
 //
+// 4. Le trait d'une citation posée dans un élément de liste, dans une case ou dans une autre citation (carte du 2026-10-12 « Corriger les trois petits défauts relevés avant la 1.0 ? », réponse « Les trois »). Ces citations étaient lues d'un seul tenant avec
+//    ce qui les entoure : le trait ne se dessinait pas et leur première ligne se collait à celle de l'élément de liste. Elles sont maintenant leurs propres blocs (ou une ligne de la case) ; un cas les mesure, un autre garde le fait qu'une liste de tâches ne peut pas contenir de
+//    trait (l'éditeur le sort de la liste), donc rien n'est à y dessiner.
+//
 // Comment la suite juge. Les capacités de page sont MESURÉES (jamais écrites en dur : elles dépendent des polices de la machine) sur le PDF, la référence de ce qui tient dans une page ; chaque moteur rend ensuite le
 // même document (éditeur en Aperçu A4, Lecture, impression navigateur, PDF relu par pdf.js) : mêmes pages, mêmes mots sur chacune.
 (function () {
@@ -571,6 +575,90 @@
       }
       return { pass: problems.length === 0, notes: JSON.stringify({ problems, summary }) };
     }),
+  });
+
+  // --- Le trait d'une citation posée dans un élément de liste, dans une case ou dans une autre citation (12/10, carte « Corriger les trois petits défauts » : « Les trois ») ---
+  // Le PDF lisait ces citations d'un seul tenant avec ce qui les entoure : le trait ne se dessinait pas, et la première ligne de la citation se collait à celle de l'élément de liste (« AlphaBeta » sur une ligne).
+  // Une liste de tâches ne figure pas ici : un élément de tâche n'accepte que des paragraphes (TaskItem `nested: false`), l'éditeur sort le trait de la liste en la coupant en deux (cas `task_list_cannot_hold_a_rule`).
+  const round2 = n => Math.round(n * 100) / 100;
+  // Les traits noirs RÉELLEMENT peints sur la première page du PDF : le trait du document (`#000000`), ni les bordures grises des tableaux ni les cases à cocher.
+  async function paintedRules(h, view) {
+    const lines = (await h.extractPdfLines(await blobBase64(view.result.blob))).pages[0].lines.filter(line => line.color === '#000000');
+    return lines.map(line => ({ x1: round2(line.x1), x2: round2(line.x2), y: round2(line.y1) }));
+  }
+
+  cases.push({
+    id: 'pdf_gap_rule_inside_a_quote_in_a_list_cell_or_quote_follows_the_editor',
+    description: 'Un trait dans une citation posée dans un élément de liste (au milieu, en fin, avec un paragraphe après la citation, numérotée), dans une case de tableau ou dans une autre citation : le PDF le peint (un seul trait, de la ligne de texte de la citation, sans déborder sur la case voisine), pose les paragraphes à la même distance que l\'éditeur, ne colle plus la première ligne de la citation à celle de l\'élément de liste, et la suite d\'un élément de liste n\'a ni puce ni numéro',
+    run: async h => {
+      const problems = []; const summary = {};
+      try {
+        await applyPage(h);
+        const margins = PageLayout.getMarginsPt();
+        const cell = inner => '<table><tbody><tr><td>' + inner + '</td><td><p>Autre</p></td></tr></tbody></table>';
+        // [libellé, HTML, repères (un par paragraphe), traits attendus, repère qui suit le trait dans un élément de liste (ni puce ni numéro à sa gauche) ou null, repère de la citation (où le trait commence)]
+        const fixtures = [
+          ['citation dans un élément de liste', '<ul><li><p>Alpha</p><blockquote><p>Beta</p><hr><p>Gamma</p></blockquote></li><li><p>Delta</p></li></ul>', ['Alpha', 'Beta', 'Gamma', 'Delta'], 1, null, 'Beta'],
+          ['citation dans une liste numérotée, trait en fin', '<ol><li><p>Alpha</p><blockquote><p>Beta</p><hr></blockquote></li></ol><p>Gamma</p>', ['Alpha', 'Beta', 'Gamma'], 1, null, 'Beta'],
+          ['citation suivie d\'un paragraphe dans l\'élément de liste', '<ul><li><p>Alpha</p><blockquote><p>Beta</p><hr><p>Gamma</p></blockquote><p>Zeta</p></li></ul>', ['Alpha', 'Beta', 'Gamma', 'Zeta'], 1, 'Zeta', 'Beta'],
+          ['citation sans trait dans un élément de liste', '<ul><li><p>Alpha</p><blockquote><p>Beta</p></blockquote></li></ul><p>Gamma</p>', ['Alpha', 'Beta', 'Gamma'], 0, null, 'Beta'],
+          ['citation dans une citation', '<blockquote><p>Alpha</p><blockquote><p>Beta</p><hr><p>Gamma</p></blockquote></blockquote><p>Delta</p>', ['Alpha', 'Beta', 'Gamma', 'Delta'], 1, null, 'Beta'],
+          ['citation dans une case', cell('<blockquote><p>Beta</p><hr><p>Gamma</p></blockquote>') + '<p>Fin</p>', ['Beta', 'Gamma'], 1, null, 'Beta'],
+        ];
+        for (const [label, html, markers, expectedRules, continued, quoteMarker] of fixtures) {
+          const d = await distancesBetween(h, html, markers);
+          const rules = await paintedRules(h, d.view);
+          summary[label] = { editor: d.editor, pdf: d.pdf, rules };
+          d.pdf.forEach((gap, i) => {
+            const want = d.editor[i];
+            if (gap == null || want == null) problems.push(label + ' : le repère ' + markers[i] + ' ou ' + markers[i + 1] + ' manque (PDF ' + gap + ', éditeur ' + want + ')');
+            else if (Math.abs(gap - want) > 1.5) problems.push(label + ' : de ' + markers[i] + ' à ' + markers[i + 1] + ', ' + gap + ' px dans le PDF contre ' + want + ' px dans l\'éditeur');
+          });
+          if (rules.length !== expectedRules) { problems.push(label + ' : le PDF peint ' + rules.length + ' trait(s) au lieu de ' + expectedRules + ' : ' + JSON.stringify(rules)); continue; }
+          const quoteAt = d.items.find(it => it.str === quoteMarker);
+          if (expectedRules && quoteAt) {
+            const rule = rules[0];
+            if (Math.abs(rule.x1 - quoteAt.x) > 1.5) problems.push(label + ' : le trait part de ' + rule.x1 + ' pt, le texte de la citation de ' + round2(quoteAt.x) + ' pt');
+            // Dans une case, le trait s'arrête avant le texte de la case voisine ; ailleurs il va jusqu'à la marge de droite de la page.
+            const neighbour = d.items.find(it => it.str === 'Autre');
+            if (neighbour) { if (rule.x2 > neighbour.x) problems.push(label + ' : le trait finit à ' + rule.x2 + ' pt, après le début de la case voisine (' + round2(neighbour.x) + ' pt)'); }
+            else if (Math.abs(rule.x2 - (d.view.truth.pages[0].width - margins.right)) > 1) problems.push(label + ' : le trait finit à ' + rule.x2 + ' pt, la marge de droite est à ' + round2(d.view.truth.pages[0].width - margins.right) + ' pt');
+            const above = d.items.find(it => it.str === markers[markers.indexOf(quoteMarker) + 1]);
+            if (above && !(rule.y > quoteAt.y && rule.y < above.y)) problems.push(label + ' : le trait (' + rule.y + ' pt) n\'est pas entre ' + quoteMarker + ' (' + round2(quoteAt.y) + ') et ' + above.str + ' (' + round2(above.y) + ')');
+          }
+          if (continued) {
+            const at = d.items.find(it => it.str === continued);
+            const before = at ? d.items.filter(it => it !== at && Math.abs(it.y - at.y) < 1 && it.x < at.x).map(it => it.str) : ['(repère absent)'];
+            if (before.length) problems.push(label + ' : après le trait, la ligne de ' + continued + ' porte aussi ' + JSON.stringify(before) + ' (ni puce ni numéro attendus)');
+          }
+        }
+      } finally { restorePage(); }
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems: compact(problems), summary }) };
+    },
+  });
+
+  // Une liste de tâches ne peut pas contenir de trait : l'élément n'accepte que des paragraphes, l'éditeur pose le trait ENTRE deux listes (c'est lui que le PDF reçoit), et le PDF le peint à la largeur de la page.
+  cases.push({
+    id: 'pdf_gap_task_list_cannot_hold_a_rule',
+    description: 'Un trait collé dans un élément d\'une liste de tâches sort de la liste dans l\'éditeur (deux listes, le trait entre elles) et le PDF de ce que l\'éditeur écrit peint ce trait une seule fois, à la largeur de la page : il n\'y a pas de « trait dans une liste de tâches » à dessiner',
+    run: async h => {
+      try {
+        await applyPage(h);
+        const html = '<ul data-type="taskList"><li data-checked="false" data-type="taskItem"><label><input type="checkbox"><span></span></label><div><p>Alpha</p><hr><p>Beta</p></div></li></ul><p>Gamma</p>';
+        Editor.setHeaderFooterData(NO_HF);
+        Editor.setHTML(html);
+        await h.sleep(250);
+        const written = Editor.getHTML();
+        const insideItem = /<li[^>]*data-type="taskItem"[^>]*>(?:(?!<\/li>)[\s\S])*<hr/.test(written);
+        const betweenLists = /<\/ul><hr><(?:p|ul)/.test(written);
+        const view = await pdfView(h, written);
+        const rules = await paintedRules(h, view);
+        const margins = PageLayout.getMarginsPt();
+        const pageRight = view.truth.pages[0].width - margins.right;
+        const pass = !insideItem && betweenLists && rules.length === 1 && Math.abs(rules[0].x2 - pageRight) <= 1;
+        return { pass, notes: JSON.stringify({ written, insideItem, betweenLists, rules, pageRight: round2(pageRight) }) };
+      } finally { restorePage(); }
+    },
   });
 
   window.EditorTestSuites = window.EditorTestSuites || {};
