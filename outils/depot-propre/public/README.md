@@ -65,7 +65,7 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
   généré, sauts de page, filigrane
 - Citation, bloc de code, encadré (Note, Attention, Important), bloc de signature, QR code, graphique de la
   page (un graphique réglé dans Grist, redessiné dans le document)
-- Rechercher / remplacer (casse, mot entier, expression régulière, texte des bulles), abréviations qui se développent à la frappe
+- Rechercher / remplacer (casse, mot entier, expression régulière, texte des bulles, en-tête et pied de page), abréviations qui se développent à la frappe
 - Aperçu « format A4 » fidèle, WYSIWYG (ce que vous voyez est ce que vous obtenez)
 - Zoom de la page à l'écran, en Édition comme en Lecture (pastille du coin, Ajuster, Ctrl + molette) : le
   PDF, le Word et l'impression gardent les dimensions réelles
@@ -445,7 +445,7 @@ GitHub Pages, with no backend and no build step.
   page breaks, watermark
 - Quote, code block, callout (Note, Warning, Important), signature block, QR code, chart from the page (a
   chart set up in Grist, redrawn in the document)
-- Find / replace (match case, whole word, regular expression, bubble text), abbreviations that expand as you type
+- Find / replace (match case, whole word, regular expression, bubble text, header and footer), abbreviations that expand as you type
 - Faithful "A4 format" preview, WYSIWYG (what you see is what you get)
 - On-screen page zoom, in Edit and Reading modes (corner pill, Fit, Ctrl + wheel): the PDF, the Word file
   and printing keep the real dimensions

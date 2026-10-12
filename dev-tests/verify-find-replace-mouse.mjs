@@ -11,6 +11,9 @@
 //  - les bulles (variables et calculs) : une bulle trouvée est surlignée comme un texte (la courante en orange, son texte lisible), Entrée et Maj+Entrée s'y placent, « Remplacer » change son
 //    « Avant » et son « Après » mais jamais son nom ni sa formule, et le plus long des messages (« Avec le suivi, une bulle ne se remplace pas. ») tient sur la rangée du champ, en français
 //    comme en anglais ;
+//  - l'en-tête et le pied de page : « foo » est compté dans les trois textes, Entrée et Maj+Entrée passent du corps au pied, à l'en-tête et reviennent (l'éditeur entre dans la zone, sa pastille
+//    est au premier plan, le résultat courant est orange et visible, le clavier reste dans le champ), « Remplacer » passe au résultat de l'autre texte, « Tout remplacer » agit sur le texte
+//    ouvert et dit « 3 remplacements, 2 autres ailleurs » sur une seule rangée, Ctrl+Z ne défait que le texte ouvert, « Terminer » ramène au corps ;
 //  - « Remplacer » puis Ctrl+Z (le clavier reste sur le bouton) : une seule étape d'annulation, Ctrl+Maj+Z ou Ctrl+Y la refait ; « Tout remplacer » : une seule étape pour tout ;
 //  - le suivi des modifications allumé : le remplacement devient une suppression et une insertion suggérées, une seule étape d'annulation ;
 //  - Échap ferme et rend le clavier au texte, Ctrl+F reprend le mot sélectionné, Ctrl+H ouvre sur le champ de remplacement ;
@@ -630,6 +633,110 @@ async function runBubbles(T) {
   await bubbleMessages(T, 'fr');
 }
 
+// L'en-tête et le pied de page : trois textes, « foo » dans chacun (1 dans l'en-tête, 3 dans le corps, 1 dans le pied).
+const ZONE_BODY = '<p>Premier foo du corps, puis Foo.</p><p>Un deuxième paragraphe sans rien à trouver.</p><p>Et un dernier foo.</p>';
+const ZONE_HEADER = '<p>Dossier foo - en-tête</p>';
+const ZONE_FOOTER = '<p>Pied de page : foo</p>';
+const hfMode = () => page.evaluate(() => { const m = HeaderFooterPreview.getHfMode(); return m ? m.zone + ':' + m.variant : 'main'; });
+const zoneTexts = () => page.evaluate(() => { const d = Editor.getHeaderFooterData(); return { header: d.header.default, footer: d.footer.default }; });
+const currentColor = () => page.evaluate(() => { const e = document.querySelector('.tiptap .pp-find-current'); return e ? getComputedStyle(e).backgroundColor : null; });
+async function setZones() {
+  await setDoc(ZONE_BODY);
+  await page.evaluate(({ header, footer }) => Editor.setHeaderFooterData({ enabled: true, differentFirstPage: false, header: { default: header, first: '' }, footer: { default: footer, first: '' } }), { header: ZONE_HEADER, footer: ZONE_FOOTER });
+  await page.waitForTimeout(250);
+}
+// Le modèle suivant ne doit pas hériter d'un en-tête ni d'un pied : sortie de la zone, zones vides.
+async function clearZones() {
+  await page.evaluate(() => { Editor.exitHeaderFooterModeIfActive(); Editor.setHeaderFooterData({ enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } }); });
+  await page.waitForTimeout(200);
+}
+async function runZones(T) {
+  await resetPanel();
+  await setZones();
+  const first = await pointOf('Premier', 0.05);
+  await page.mouse.click(first.x, first.y);
+  await page.waitForTimeout(150);
+  await caretAtStart();
+  await realClick(LOUPE);
+  await page.keyboard.type('foo');
+  await page.waitForTimeout(250);
+  const typed = { count: await countText(), mode: await hfMode(), focus: await focusId(), marks: await marksCount(), fits: await findRowFits() };
+  check(`${T}, en-tête et pied : « foo » est compté dans les trois textes (« 2 sur 5 » : un dans l'en-tête, trois dans le corps, un dans le pied), le corps reste ouvert et le clavier dans le champ`,
+    typed.count === '2 sur 5' && typed.mode === 'main' && typed.focus === 'pp-find-input' && typed.marks === 3 && typed.fits.single, typed);
+
+  // Entrée au vrai clavier : le corps, le pied, l'en-tête, le corps.
+  const walk = [];
+  for (let i = 0; i < 5; i++) {
+    await pressKey('Enter');
+    walk.push({ count: await countText(), mode: await hfMode(), focus: await focusId(), current: await currentText(), color: await currentColor(), visible: await currentVisible(), pill: await boxOf('#v2-hf-pill'), fits: await findRowFits() });
+    if (i === 2) await snap(`${T}-11-pied`);
+    if (i === 3) await snap(`${T}-11-en-tete`);
+  }
+  const expected = [['3 sur 5', 'main', 'Foo'], ['4 sur 5', 'main', 'foo'], ['5 sur 5', 'footer:default', 'foo'], ['1 sur 5', 'header:default', 'foo'], ['2 sur 5', 'main', 'foo']];
+  check(`${T}, en-tête et pied : Entrée passe du dernier « foo » du corps à celui du pied, puis à celui de l'en-tête, puis au corps ; le clavier reste dans le champ, le résultat courant est orange et visible, la pastille de la zone est au premier plan quand une zone est ouverte`,
+    walk.every((w, i) => w.count === expected[i][0] && w.mode === expected[i][1] && w.current === expected[i][2] && w.focus === 'pp-find-input' && w.color === 'rgb(255, 179, 71)' && w.visible.found && w.visible.inside && w.fits.single
+      && (w.mode === 'main' ? !w.pill : seen(w.pill))), { walk });
+
+  const back = [];
+  for (let i = 0; i < 3; i++) { await pressKey('Shift+Enter'); back.push({ count: await countText(), mode: await hfMode(), focus: await focusId() }); }
+  check(`${T}, en-tête et pied : Maj+Entrée fait le chemin inverse (corps, en-tête, pied, corps)`,
+    back.map(b => b.count + ' ' + b.mode).join(' | ') === '1 sur 5 header:default | 5 sur 5 footer:default | 4 sur 5 main' && back.every(b => b.focus === 'pp-find-input'), { back });
+
+  // « Remplacer » du dernier « foo » du corps : il est remplacé, la recherche passe au pied (l'éditeur y entre).
+  await realClick('#pp-find-toggle-replace');
+  await typeInto(REPL, 'bar');
+  await realClick('#pp-find-next');
+  await realClick('#pp-find-prev');
+  const lastBefore = await html();
+  await realClick('#pp-find-replace-one');
+  const crossed = { count: await countText(), mode: await hfMode(), body: await html(), current: await currentText(), pill: await boxOf('#v2-hf-pill'), fits: await findRowFits() };
+  check(`${T}, en-tête et pied : « Remplacer » sur le dernier « foo » du corps le remplace puis passe à celui du pied (l'éditeur y entre, « 4 sur 4 »), le corps garde ses autres « foo »`,
+    crossed.count === '4 sur 4' && crossed.mode === 'footer:default' && crossed.current === 'foo' && crossed.body !== lastBefore && seen(crossed.pill) && crossed.fits.single, { crossed, lastBefore });
+  await snap(`${T}-11-remplacer-vers-le-pied`);
+
+  // « Tout remplacer » dans le pied (le texte ouvert) : un remplacement, trois attendent ailleurs ; Ctrl+Z défait le pied seul.
+  const footerBefore = (await zoneTexts()).footer;
+  await realClick('#pp-find-replace-all');
+  const footerAll = { flash: await countText(), fits: await findRowFits(), overflow: await noHorizontalOverflow(), footer: (await zoneTexts()).footer };
+  await pressKey('Control+z');
+  const footerUndone = { footer: (await zoneTexts()).footer, mode: await hfMode() };
+  await pressKey('Control+Shift+z');
+  const footerRedone = (await zoneTexts()).footer;
+  check(`${T}, en-tête et pied : « Tout remplacer » dans le pied ouvert dit « 1 remplacement, 3 autres ailleurs » sur une seule rangée ; Ctrl+Z défait le pied (seul) et Ctrl+Maj+Z le refait`,
+    footerAll.flash === '1 remplacement, 3 autres ailleurs' && footerAll.fits.single && !footerAll.fits.clipped && footerAll.overflow.page && footerAll.overflow.bar && /bar/.test(footerAll.footer)
+      && footerUndone.footer === footerBefore && footerUndone.mode === 'footer:default' && footerRedone === footerAll.footer, { footerAll, footerUndone, footerRedone, footerBefore });
+  await snap(`${T}-11-tout-remplacer-pied`);
+
+  // « Terminer » (vrai clic) : retour au corps ; l'en-tête, lui, attend toujours son « foo ».
+  await realClick('#v2-hf-btn-done');
+  const finished = { mode: await hfMode(), count: await countText(), pill: await boxOf('#v2-hf-pill'), zones: await zoneTexts() };
+  check(`${T}, en-tête et pied : « Terminer » ramène au corps, le compteur compte encore le « foo » de l'en-tête et les deux du corps (« 3 résultats »)`,
+    finished.mode === 'main' && /^\d+ (sur 3|résultats)$/.test(finished.count) && !finished.pill && /foo/.test(finished.zones.header) && /bar/.test(finished.zones.footer), finished);
+  await closePanelIfOpen();
+  await clearZones();
+}
+async function zonesEnglish() {
+  await resetPanel();
+  await setZones();
+  await caretAtStart();
+  await realClick(LOUPE);
+  await realClick('#pp-find-toggle-replace');
+  await typeInto(FIND, 'foo');
+  await typeInto(REPL, 'bar');
+  const counter = await countText();
+  await realClick('#pp-find-replace-all');
+  const body = { flash: await countText(), fits: await findRowFits(), overflow: await noHorizontalOverflow() };
+  await realClick('#pp-find-next');
+  await realClick('#pp-find-replace-all');
+  const footer = { flash: await countText(), mode: await hfMode(), fits: await findRowFits() };
+  check('anglais, en-tête et pied : le compteur dit « 2 of 5 », « Replace all » dans le corps « 3 replacements, 2 others elsewhere » puis dans le pied « 1 replacement, 1 other elsewhere », chacun sur une seule rangée',
+    counter === '2 of 5' && body.flash === '3 replacements, 2 others elsewhere' && body.fits.single && !body.fits.clipped && body.overflow.page && body.overflow.bar
+      && footer.flash === '1 replacement, 1 other elsewhere' && footer.mode === 'footer:default' && footer.fits.single && !footer.fits.clipped, { counter, body, footer });
+  await snap('anglais-11-en-tete-et-pied');
+  await closePanelIfOpen();
+  await clearZones();
+}
+
 // Beaucoup de résultats : 3 500 « foo » (2 000 en haut, un long passage sans rien, 1 500 en bas). Au-delà de 500 résultats, seuls l'écran et ses abords sont surlignés
 // (js/find-replace.js) : la fenêtre de surlignage doit suivre la vraie molette et les sauts du clavier.
 const bigLine = (i, per) => `<p>Ligne ${i}${per ? ' : ' + Array(per).fill('foo').join(' ') : ' sans rien à trouver'}.</p>`;
@@ -752,6 +859,7 @@ async function runEnglish() {
   check('anglais, compteur : « 5 replacements » après « Replace all », « No results » pour un mot absent', done === '5 replacements' && none === 'No results', { done, none });
   await pressKey('Escape');
   await bubbleMessages('anglais', 'en');
+  await zonesEnglish();
   await page.evaluate(() => I18n.setLang('fr'));
   await page.waitForTimeout(250);
 }
@@ -759,12 +867,14 @@ async function runEnglish() {
 await run('light');
 await runRegex('light');
 await runBubbles('light');
+await runZones('light');
 await runManyResults('light');
 await page.evaluate(() => Settings.setTheme('dark'));
 await page.waitForTimeout(250);
 await run('dark');
 await runRegex('dark');
 await runBubbles('dark');
+await runZones('dark');
 await runManyResults('dark');
 await runEnglish();
 

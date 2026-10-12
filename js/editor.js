@@ -381,7 +381,7 @@ const Editor = (function () {
 
   function structureExtensions({
     Extension, Node, mergeAttributes, Plugin, PluginKey, Decoration, DecorationSet, EditorState, Suggestion, InputRule,
-    Table, TableView, TableRow, TableHeader, TableCell,
+    Table, TableView, TableRow, TableHeader, TableCell, PMDOMParser,
   }) {
     // Les touches, les variables, les liens, la recherche, les tableaux, les colonnes, les blocs conditionnels, la légende, les images et les pages,
     // puis la grille.
@@ -406,7 +406,7 @@ const Editor = (function () {
       LinkDialog.createExtension(Extension),
       // Rechercher / Remplacer (js/find-replace.js) : surlignage des résultats par décorations (Ctrl+F et Ctrl+H sont écoutés sur le document, cf.
       // wireEditor).
-      FindReplace.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
+      FindReplace.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet, PMDOMParser }),
       // Le tableau porte les attributs de la grille (quadrillage) et le numéro du modèle Grille dont il est la copie (js/linked-table.js).
       tracked(LinkedTable.withAttributes(GridEditor.withTableAttributes(Table))).configure({ resizable: true, View: EditorNodes.createTableView(TableView) }),
       // La ligne aussi : « Colonne avant / après » et « Supprimer la colonne » posent une marque sur chaque case de la colonne, des enfants directs

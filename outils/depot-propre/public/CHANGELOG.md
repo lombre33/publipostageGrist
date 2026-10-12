@@ -121,8 +121,18 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   d'annulation) ; le nom d'une bulle et la formule d'un calcul ne se remplacent jamais, et le compteur le dit
   (« 3 remplacements, 1 bulle laissée »). Un « Avant » ou un « Après » garde 40 signes au plus (au-delà la
   bulle reste telle quelle et le dit). Avec le suivi des modifications, les bulles restent telles quelles :
-  le texte, lui, devient une suppression et une insertion suggérées. Les numéros de page, les puces, les
-  images et l'en-tête et le pied de page hors édition ne sont pas cherchés.
+  le texte, lui, devient une suppression et une insertion suggérées. Les numéros de page, les puces et les
+  images ne sont pas cherchés.
+- **Rechercher / Remplacer cherche aussi l'en-tête et le pied de page** : la recherche parcourt tout le modèle dans
+  l'ordre de la page (l'en-tête, le corps, le pied, avec ceux de la première page quand « Première page
+  différente » est cochée), même quand on ne les modifie pas : le compteur les compte tous (« 2 sur 4 »), et
+  Entrée et Maj+Entrée passent du dernier résultat du corps à celui du pied, puis de l'en-tête, puis reviennent au
+  corps (la zone s'ouvre comme après un clic dans la marge, avec sa pastille « Terminer »). « Remplacer »
+  remplace puis va au résultat suivant, même dans un autre texte. « Tout remplacer » agit sur le texte ouvert et
+  dit ce qui attend ailleurs (« 2 remplacements, 1 autre ailleurs ») : un clic dans chaque texte suffit. Taper
+  dans le champ n'ouvre jamais une zone, seuls Entrée, les flèches et « Remplacer » y entrent. Annuler défait le
+  texte ouvert : après un « Remplacer » passé au pied, Ctrl+Z agit dans le pied. Les résultats d'un texte qui
+  n'est pas ouvert sont comptés mais pas surlignés ; un modèle email n'a ni en-tête ni pied.
 - **Boucle dans une boucle** : une Boucle se pose aussi sur une variable placée dans une zone qu'une autre
   Boucle répète déjà : pour chaque facture ses lignes, puis pour chaque ligne ses étapes (en tableau, en
   liste ou en paragraphes). La zone intérieure lit les lignes de la ligne en cours de la zone qui l'entoure.
@@ -635,6 +645,12 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Passer du corps à l'en-tête ou au pied ne propose plus rien en suivi des modifications et ne mélange plus
+  l'historique** : avec le suivi allumé, ouvrir l'en-tête (ou le pied) empilait le texte du corps (barré) et celui
+  de l'en-tête (souligné) en suggestions, qui se retrouvaient ensuite dans le modèle enregistré ; et Annuler juste
+  après avoir ouvert ou fermé une zone remettait le corps dans l'en-tête, ou l'en-tête dans le corps. Le passage ne
+  laisse plus de suggestion et n'entre plus dans l'historique : le corps, l'en-tête et le pied gardent chacun le
+  leur (Annuler défait la dernière frappe du texte ouvert).
 - **Un point de liste centré, à droite ou justifié l'est aussi dans le PDF** : le bouton d'alignement de l'éditeur centre, aligne
   à droite ou justifie le texte d'un point de liste, mais le PDF l'écrivait toujours à gauche. Il suit maintenant l'éditeur, au
   premier niveau, dans une sous-liste, dans une case de tableau et dans une liste de tâches : le texte s'aligne dans la boîte
@@ -1073,8 +1089,18 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   "Hello" in every bubble at once, in a single undo step); a bubble's name and a calculation's formula are
   never replaced, and the counter says so ("3 replacements, 1 bubble left as is"). A "Before" or an "After"
   keeps 40 characters at most (beyond that the bubble stays as it is and says so). With track changes on,
-  bubbles stay as they are: the text becomes a suggested deletion and insertion. Page numbers, chips,
-  images and the header and footer outside editing are not searched.
+  bubbles stay as they are: the text becomes a suggested deletion and insertion. Page numbers, chips and
+  images are not searched.
+- **Find / Replace also searches the header and the footer**: the search goes through the whole template in page
+  order (the header, the body, the footer, with those of the first page when "Different first page" is
+  ticked), even when they are not being edited: the counter counts them all ("2 of 4"), and Enter and
+  Shift+Enter go from the last result of the body to the one in the footer, then the header, then back to the
+  body (the zone opens as after a click in the margin, with its "Done" pill). "Replace" replaces and goes to
+  the next result, even in another text. "Replace all" acts on the open text and says what waits elsewhere
+  ("2 replacements, 1 other elsewhere"): one click in each text is enough. Typing in the field never opens a
+  zone, only Enter, the arrows and "Replace" go in. Undo undoes the open text: after a "Replace" that moved
+  to the footer, Ctrl+Z acts in the footer. The results of a text that is not open are counted but not
+  highlighted; an email template has no header or footer.
 - **Loop in a loop**: a Loop can also be placed on a variable inside a zone that another Loop already
   repeats: for each invoice its lines, then for each line its steps (in a table, a list or paragraphs). The
   inner zone reads the rows of the current row of the zone around it. The data structure does not change:
@@ -1549,6 +1575,12 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Fixed
 
+- **Going from the body to the header or the footer no longer suggests anything under track changes and no longer
+  mixes the undo history**: with track changes on, opening the header (or the footer) stacked the body text
+  (struck through) and the header text (underlined) as suggestions, which then ended up in the saved template;
+  and Undo right after opening or closing a zone put the body in the header, or the header in the body. The
+  switch no longer leaves any suggestion and no longer enters the history: the body, the header and the footer each
+  keep their own (Undo undoes the last typing of the open text).
 - **A centered, right-aligned or justified list item is now aligned the same way in the PDF**: the editor's alignment button
   centers, right-aligns or justifies a list item's text, but the PDF always wrote it on the left. It now follows the editor, at
   the first level, in a sub-list, in a table cell and in a task list: the text is aligned inside the item's box, its lines
