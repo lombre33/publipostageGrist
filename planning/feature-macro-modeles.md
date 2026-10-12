@@ -165,6 +165,15 @@ pour le mode email avec `TypeModele`) :
   Comme les marges, ils sont écrits dans la ligne du macro-modèle par l'enregistrement automatique (qui réécrit sa composition telle
   que Grist la rend, `Editor.getHTML()` étant vide pour ce type), par « Enregistrer » de sa fenêtre et par « Enregistrer sous… »
   (réglages de l'écran : `macroSettingsOnScreen` dans `js/main.js`).
+- **Le sens de chaque modèle (12/10, carte d'Antoine « Dans un macro-modèle, qui décide du sens des pages ? » : « Chaque modèle, ou imposé » ; sa demande : « il faudrait qu'un macro modèle
+  puisse contenir des modèles paysage, portrait et grille »)** : le menu du bouton Page d'un macro-modèle a une première ligne, « Selon chaque modèle » (clé `orientationAuto: true` de
+  `Margins`, posée seulement quand le réglage l'est ; c'est le réglage d'un macro-modèle NEUF). Chaque modèle assemblé garde alors le sens de SA page (`marginsMm.orientation`, portrait à
+  défaut ; un modèle Grille a le sien) ; le format et les marges restent ceux du macro-modèle pour tous (choix du 20/09 et du 09/10). « Portrait » et « Paysage » imposent un sens à tous les
+  modèles, comme avant, et un macro-modèle déjà enregistré garde son sens imposé. L'assemblage écrit le sens dans le HTML (`MacroTemplates.buildConcatenatedHtml(…, { perModel: true })` : un
+  repère de départ `page-section-start` et `data-page-orientation` sur chaque saut de page, lus par `js/page-sections.js`), d'où la Lecture (une feuille par suite de modèles de même sens),
+  l'impression du navigateur (règles `@page` nommées), le PDF (une taille par page) et le Word (une section par suite de modèles de même sens) tournent leurs pages ; l'en-tête, le pied, les numéros
+  et le filigrane se refont à la taille de chaque page. Les modèles Grille se choisissent dans la fenêtre de composition comme les documents (`ASSEMBLED_TYPES` de `js/macro-editor.js` : ni les
+  e-mails ni les macro-modèles) et entrent comme des tableaux de document. Non fait, en attente d'un choix d'Antoine : le sens de chaque modèle dans le résumé du macro-modèle.
 
 Questions plus mineures, tranchées ici par défaut raisonnable (à corriger si Antoine n'est pas
 d'accord) :
