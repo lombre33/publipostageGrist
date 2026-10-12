@@ -3883,25 +3883,37 @@ const PdfExport = (function () {
   // le lot, cf. ExternalImages.beginRun), les marges et les bibliothèques, puis le HTML, le nom du fichier et l'en-tête et le pied résolus pour la
   // ligne. `gridModel` : le modèle de la ligne est une grille ; absent, c'est le modèle ouvert (un lot « Modèle selon la ligne » peut mêler les deux
   // genres, js/main.js). `quality` : 'light' ramène les images à LIGHT_IMAGE_PPI points par pouce ; absent, le PDF reprend les images telles quelles.
-  async function prepareRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel, quality) {
+  // `docFields` : les champs de document à poser sur le document fini (mot de passe, droits et propriétés d'un « PDF protégé », js/pdf-protection.js:docFields) ;
+  // absent, le PDF est ordinaire.
+  async function prepareRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel, quality, docFields) {
     await ExternalImages.confirmExport(htmlContent, headerFooterData);
     setPageMarginsPt(marginsPt);
     exportsGridModel = gridModel === undefined ? (typeof GridEditor !== 'undefined' && GridEditor.isActive()) : !!gridModel;
     lightImagePpi = quality === 'light' ? LIGHT_IMAGE_PPI : 0;
     await ensurePdfLibsLoaded();
     const { resolvedHtml, filename, resolvedHeaderFooterData } = await ExportCommon.resolveRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData);
-    return { docDefinition: await buildNativePdfDocDefinition(resolvedHtml, filename, resolvedHeaderFooterData), filename };
+    return { docDefinition: withDocFields(await buildNativePdfDocDefinition(resolvedHtml, filename, resolvedHeaderFooterData), docFields), filename };
   }
 
-  async function exportCurrentRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel, quality) {
+  // Les champs de document de la protection, posés sur le document fini - jamais sur ceux des passes de mesure, qui n'écrivent aucun fichier. Seuls les champs
+  // de pdfmake que la protection porte sont repris ; les propriétés complètent le titre sans le remplacer.
+  const DOC_FIELDS = ['version', 'userPassword', 'ownerPassword', 'permissions'];
+  function withDocFields(docDefinition, docFields) {
+    if (!docFields) return docDefinition;
+    DOC_FIELDS.forEach(key => { if (docFields[key] !== undefined) docDefinition[key] = docFields[key]; });
+    if (docFields.info) docDefinition.info = Object.assign({}, docDefinition.info, docFields.info);
+    return docDefinition;
+  }
+
+  async function exportCurrentRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel, quality, docFields) {
     if (!record) { alert(I18n.t('alert.noRecordForExport')); return; }
-    const { docDefinition, filename } = await prepareRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel, quality);
+    const { docDefinition, filename } = await prepareRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel, quality, docFields);
     window.pdfMake.createPdf(docDefinition).download((filename || 'publipostage') + '.pdf');
   }
 
   // Export PDF en lot (une ligne Grist -> un blob PDF, cf. js/main.js onExportBatch).
-  async function getNativePdfBlobForRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel, quality) {
-    const { docDefinition, filename } = await prepareRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel, quality);
+  async function getNativePdfBlobForRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel, quality, docFields) {
+    const { docDefinition, filename } = await prepareRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel, quality, docFields);
     const blob = await new Promise((resolve, reject) => {
       try { window.pdfMake.createPdf(docDefinition).getBlob(resolve); } catch (e) { reject(e); }
     });

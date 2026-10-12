@@ -1593,6 +1593,15 @@
       stampsExportDate: true,
       run: (doc, tableId, record) => PdfExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsPt(), undefined, pdfImageQuality()),
     },
+    // « PDF protégé » (type du menu Type d'export) : le même PDF vectoriel, chiffré avec le mot de passe, les autorisations et les propriétés que la fenêtre
+    // (js/pdf-protection-dialog.js) vient de fixer, avant tout le reste (`protect`). « Impression navigateur » n'a pas de sens ici (le navigateur imprime, il ne chiffre pas) :
+    // la qualité « Léger » seule s'applique. Un document découpé « Un document par valeur » reste un lot protégé (une archive ZIP).
+    pdfProtected: {
+      engines: ['pdf'], protect: true,
+      batch: 'pdfProtectedZip', noRecord: 'alert.noRecordForExport', generating: 'status.pdfGenerating', generated: 'status.pdfProtectedGenerated', failed: 'status.pdfGenerationError',
+      stampsExportDate: true,
+      run: (doc, tableId, record, protection) => PdfExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsPt(), undefined, pdfImageQuality(), PdfProtection.docFields(protection)),
+    },
     // « Impression navigateur » (qualité du bouton PDF) : la Lecture, imprimée par le navigateur (js/print-export.js), sans moteur à charger. Un document
     // découpé « Un document par valeur » reste un lot : le lot PDF (archive ZIP), une impression ne faisant qu'un document.
     print: {
@@ -1617,13 +1626,19 @@
     Editor.exitHeaderFooterModeIfActive();
     const record = GristAPI.getCurrentRecord();
     if (!record) { alert(exportText(spec.noRecord)); return; }
+    // « PDF protégé » : la fenêtre du mot de passe d'abord, avant « Génération en cours… » - y renoncer ne lance rien. Elle vaut aussi pour le lot que découpe « Un document par valeur ».
+    let protection;
+    if (spec.protect) {
+      protection = await PdfProtectionDialog.open({});
+      if (!protection) { setStatus(I18n.t('status.exportCancelled')); return; }
+    }
     setStatus(I18n.t(spec.generating));
     try {
       const tableId = currentTableId || GristAPI.getCurrentTableId();
       const doc = await currentRecordDocument(tableId, record);
-      if (doc.split) { await onExportBatch(spec.batch, doc.split); return; }
+      if (doc.split) { await onExportBatch(spec.batch, doc.split, { protection }); return; }
       await ExportEngines.ensure(spec.engines);
-      await spec.run(doc, tableId, record);
+      await spec.run(doc, tableId, record, protection);
       setExportDoneStatus(I18n.t(spec.generated), spec.stampsExportDate ? await stampExportDate(tableId, [record.id]) : '');
     } catch (e) {
       // « Annuler » sur la fenêtre des images d'un site externe (js/external-images.js) : un choix, pas une erreur.
@@ -1635,12 +1650,12 @@
       setStatus(I18n.t(spec.failed), true);
     }
   }
-  // Le type d'export (menu du bouton à gauche d'Exporter, ex-« Qualité PDF ») : PDF, Word ou Excel, gardé dans la liste cachée #v2-export-type comme la
+  // Le type d'export (menu du bouton à gauche d'Exporter, ex-« Qualité PDF ») : PDF, PDF protégé, Word ou Excel, gardé dans la liste cachée #v2-export-type comme la
   // qualité du PDF l'est dans #v2-pdf-quality. Word n'a de sens que pour un document (un macro-modèle compris) et Excel que pour une grille : un type que le
   // modèle ouvert ne sait pas faire n'est pas proposé (ligne grisée) et le bouton Exporter retombe sur le PDF, jamais sur une erreur.
   function exportTypeAvailable(type) {
     const grid = GridEditor.isGridType(currentTypeModele);
-    return type === 'pdf' || (type === 'docx' && !grid) || (type === 'xlsx' && grid);
+    return type === 'pdf' || type === 'pdfProtected' || (type === 'docx' && !grid) || (type === 'xlsx' && grid);
   }
   function selectedExportType() {
     const select = document.getElementById('v2-export-type');
@@ -1659,6 +1674,7 @@
     return selectedPdfQuality() === 'light' ? 'light' : 'native';
   }
   const onExportPdf = () => exportRecordAs(selectedPdfQuality() === 'browser-print' ? 'print' : 'pdf');
+  const onExportPdfProtected = () => exportRecordAs('pdfProtected');
   const onExportDocx = () => exportRecordAs('docx');
   const onExportXlsx = () => exportRecordAs('xlsx');
   // Les lignes que le bouton Exporter exporte (options du menu du bouton Exporter, demande du 12/10) : « une seule ligne » (la ligne affichée) ou
@@ -1667,6 +1683,8 @@
   // passage à Word, le classeur unique après un retour au PDF) retombe sur « toutes les lignes (ZIP) » sans toucher au choix gardé, qui revient avec son type.
   const EXPORT_BATCH_OF = {
     pdf: { zip: 'pdfZip', merged: 'pdfMerged', sheets: 'pdfSheets' },
+    // Le PDF protégé n'a ni PDF unique ni planche : pdf-lib, qui assemble des PDF, ne sait pas les chiffrer (lignes grisées dans le menu Exporter).
+    pdfProtected: { zip: 'pdfProtectedZip' },
     docx: { zip: 'docxZip' },
     xlsx: { zip: 'xlsxZip', workbook: 'xlsxSingle' },
   };
@@ -1682,7 +1700,7 @@
     const type = selectedExportType();
     const lines = selectedExportLines(type);
     if (lines !== 'one') return onExportBatch(EXPORT_BATCH_OF[type][lines]);
-    return ({ pdf: onExportPdf, docx: onExportDocx, xlsx: onExportXlsx })[type]();
+    return ({ pdf: onExportPdf, pdfProtected: onExportPdfProtected, docx: onExportDocx, xlsx: onExportXlsx })[type]();
   };
 
   // Mode email (planning/feature-email-mode.md) : construit l'URL mailto: de la ligne courante et l'ouvre par un <a> synthétique plutôt que
@@ -1766,10 +1784,12 @@
   // Les deux menus d'export d'accord avec le type choisi, l'option de lignes cochée et le genre du modèle ouvert (on grise ou on masque ce qui ne s'applique
   // pas, les lignes restent dans la page) :
   // - menu « Type d'export » (#v2-quality-flyout) : la ligne du type choisi est active ; Word ou Excel, que le modèle ne sait pas faire, est grisé ; la qualité du
-  //   PDF (intitulé, filet et trois lignes : `data-export-for="pdf"`) n'est montrée que pour le PDF - demande du 12/10 -, la qualité choisie est gardée
-  //   et revient avec le PDF (hors du PDF ses lignes sont aussi grisées : un clic dessus ne choisit rien) ;
+  //   PDF (intitulé, filet et trois lignes : `data-export-for="pdf pdfProtected"`) n'est montrée que pour les deux PDF - demande du 12/10 -, la qualité choisie est gardée
+  //   et revient avec le PDF (hors des PDF ses lignes sont aussi grisées : un clic dessus ne choisit rien). En PDF protégé, « Impression navigateur » reste montrée mais grisée
+  //   (`data-export-grey-for` : le navigateur imprime, il ne chiffre pas) et la ligne active est celle qui s'applique, « Vectoriel » si c'était l'impression ;
   // - menu « Exporter » (#v2-export-pdf-flyout) : seules les options du type choisi sont montrées (`data-export-for`, une liste de types) et celle que le bouton
-  //   Exporter lance, selectedExportLines, est cochée (`aria-checked`) ;
+  //   Exporter lance, selectedExportLines, est cochée (`aria-checked`). Une option que le type montre sans pouvoir la faire est grisée, avec sa raison en info-bulle
+  //   (`data-export-grey-for` : le PDF unique et l'assemblage en PDF protégé, que pdf-lib assemble sans pouvoir les chiffrer) ;
   // - le bouton du type est allumé quand ce n'est pas le PDF, pour qu'on sache avant de cliquer sur Exporter que le fichier ne sera pas un PDF.
   // Un type que le modèle ne sait pas faire revient au PDF pour de bon (la liste cachée est remise), de sorte que le modèle suivant ne le retrouve pas.
   function syncExportMenus() {
@@ -1789,9 +1809,18 @@
       row.classList.toggle('is-active', row.dataset.exportType === type);
       grey(row, !exportTypeAvailable(row.dataset.exportType));
     });
+    // Une ligne grisée dit pourquoi en info-bulle ; une ligne qui ne l'est pas n'en porte pas.
+    const greyedFor = (row, key) => {
+      const off = (row.dataset.exportGreyFor || '').split(' ').indexOf(type) !== -1;
+      if (off) row.title = I18n.t(key); else row.removeAttribute('title');
+      return off;
+    };
+    const pdfType = type === 'pdf' || type === 'pdfProtected';
     typeFlyout.querySelectorAll('.v2-hover-row[data-quality]').forEach(row => {
-      row.classList.toggle('is-active', type === 'pdf' && row.dataset.quality === qualitySelect.value);
-      grey(row, type !== 'pdf');
+      const applied = type === 'pdfProtected' && qualitySelect.value === 'browser-print' ? 'native' : qualitySelect.value;
+      row.classList.toggle('is-active', pdfType && row.dataset.quality === applied);
+      const notForProtected = greyedFor(row, 'quality.protectedOff');
+      grey(row, !pdfType || notForProtected);
     });
     [typeFlyout, exportFlyout].forEach(flyout => flyout.querySelectorAll('[data-export-for]').forEach(el => {
       el.hidden = el.dataset.exportFor.split(' ').indexOf(type) === -1;
@@ -1799,6 +1828,7 @@
     const lines = selectedExportLines(type);
     exportFlyout.querySelectorAll('.v2-hover-row[data-export-lines]').forEach(row => {
       row.setAttribute('aria-checked', row.dataset.exportLines === lines ? 'true' : 'false');
+      grey(row, greyedFor(row, 'exportLines.protectedOff'));
     });
     typeButton.classList.toggle('active', type !== 'pdf');
   }
@@ -1839,12 +1869,19 @@
     stampsExportDate: true,
     // Le PDF d'une ligne sait si son modèle est une grille (un lot « Modèle selon la ligne » peut mêler grilles et documents), et la qualité du menu Type d'export
     // choisie au départ du lot (`imageQuality`, cf. openBatchSink) : 'light' ramène les images à leur définition.
-    renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins, _pageOptions, typeModele, imageQuality) => PdfExport.getNativePdfBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, margins, GridEditor.isGridType(typeModele), imageQuality),
+    // `docFields` : ceux d'un PDF protégé (js/pdf-protection.js), absents d'un PDF ordinaire.
+    renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins, _pageOptions, typeModele, imageQuality, docFields) => PdfExport.getNativePdfBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, margins, GridEditor.isGridType(typeModele), imageQuality, docFields),
   };
   const BATCH_EXPORTS = {
     pdfZip: Object.assign({}, PDF_BATCH, {
       confirm: 'confirm.batchExport', done: 'status.batchExportDone', doneWithFailures: 'status.batchExportDoneWithFailures',
       entryExt: '.pdf', fileSuffix: '-export-pdf.zip',
+      loadLibs: async () => { await PdfExport.ensurePdfLibsLoaded(); await ExportCommon.ensureJsZipLoaded(); },
+    }),
+    // « PDF protégé » en lot : les PDF d'une archive ZIP, chacun chiffré avec le même mot de passe (`protect` : la fenêtre js/pdf-protection-dialog.js tient lieu de confirmation).
+    pdfProtectedZip: Object.assign({}, PDF_BATCH, {
+      protect: true, confirm: 'confirm.batchExport', done: 'status.batchExportDoneProtected', doneWithFailures: 'status.batchExportDoneWithFailuresProtected',
+      entryExt: '.pdf', fileSuffix: '-export-pdf-protege.zip',
       loadLibs: async () => { await PdfExport.ensurePdfLibsLoaded(); await ExportCommon.ensureJsZipLoaded(); },
     }),
     pdfMerged: Object.assign({}, PDF_BATCH, {
@@ -1998,18 +2035,26 @@
   // L'accord avant un export en lot : `{}`, ou `{ layout }` pour les planches, qui se règlent dans leur propre fenêtre (feuille, emplacements, traits
   // de coupe) : elle tient lieu de confirmation. Un export seul n'en demande pas, son clic vaut accord, sauf quand sa ligne fait plus de
   // SPLIT_CONFIRM_FROM documents. null : la personne renonce.
-  async function confirmBatch(cfg, { only, tableId, rowCount, jobCount, splitting }) {
+  async function confirmBatch(cfg, { only, tableId, rowCount, jobCount, splitting, protection }) {
+    // Un lot « PDF protégé » : la fenêtre du mot de passe tient lieu de confirmation (elle dit combien de PDF partent). Un document que « Un document par valeur » découpe l'a
+    // déjà posée au départ de l'export (exportRecordAs, `protection`) : ici seule la question de ses nombreux documents peut encore se poser.
+    if (cfg.protect && !protection) {
+      const asked = await PdfProtectionDialog.open({ batch: true, count: jobCount, table: tableId, grid: GridEditor.isGridType(currentTypeModele) });
+      if (!asked) setStatus(I18n.t('status.exportCancelled'));
+      return asked ? { protection: asked } : null;
+    }
+    const setup = cfg.protect ? { protection } : {};
     if (only) {
-      if (jobCount <= SPLIT_CONFIRM_FROM) return {};
+      if (jobCount <= SPLIT_CONFIRM_FROM) return setup;
       const proceed = await Dialogs.confirm({ title: I18n.t('varList.split.label'), message: I18n.t('confirm.splitExport', { documents: jobCount }), confirmLabel: I18n.t('common.generate') });
       // « Génération en cours… » (exportRecordAs) ne doit pas rester affiché derrière un renoncement.
       if (!proceed) setStatus(I18n.t('status.exportCancelled'));
-      return proceed ? {} : null;
+      return proceed ? setup : null;
     }
     if (cfg.sheets) return (await SheetAssemblyDialog.open({ count: jobCount, table: tableId, grid: GridEditor.isGridType(currentTypeModele) })) || null;
     const note = splitting ? '\n\n' + I18n.t('confirm.splitNote', { documents: jobCount }) : '';
     const proceed = await Dialogs.confirm({ title: exportText('dialog.batchExport.title'), message: exportText(cfg.confirm, { count: rowCount, table: tableId }) + note, confirmLabel: I18n.t('common.generate') });
-    return proceed ? {} : null;
+    return proceed ? setup : null;
   }
 
   // Où un export en lot range ses documents : une archive ZIP (un fichier par document), un PDF unique (`merged`, ou `sheets` : posés sur des
@@ -2026,7 +2071,9 @@
     }
     // La qualité choisie au départ de l'export vaut pour tout le lot : un changement de ligne dans le menu pendant qu'il tourne n'y change rien.
     const imageQuality = pdfImageQuality();
-    const render = doc => cfg.renderRow(doc.html, tableId, doc.row, doc.source.filenameTemplate, doc.headerFooterData, doc.source.margins, doc.source.pageOptions, doc.source.typeModele, imageQuality);
+    // Un lot protégé : le mot de passe et les autorisations de la fenêtre pour chaque PDF, chacun avec son propre mot de passe « propriétaire » tiré au hasard.
+    const protection = sheetSetup && sheetSetup.protection;
+    const render = doc => cfg.renderRow(doc.html, tableId, doc.row, doc.source.filenameTemplate, doc.headerFooterData, doc.source.margins, doc.source.pageOptions, doc.source.typeModele, imageQuality, protection ? PdfProtection.docFields(protection) : undefined);
     if (cfg.merged) {
       const pdf = await (cfg.sheets ? PdfMerge.createSheets(tableId, sheetSetup.layout) : PdfMerge.create(tableId));
       return {
@@ -2052,7 +2099,8 @@
   // `only` (facultatif) : la ligne courante seule - { record, plan, html } -, quand son document se découpe en plusieurs (« Un document par valeur »,
   // js/list-split.js) : une archive de ses documents, sans lire la table ni demander confirmation (le clic d'un export seul vaut accord), nommée
   // comme la ligne.
-  async function onExportBatch(kind, only) {
+  // `preset` (facultatif) : ce que l'export seul a déjà demandé avant de partir en lot - { protection }, les réglages de la fenêtre « PDF protégé ».
+  async function onExportBatch(kind, only, preset) {
     const cfg = BATCH_EXPORTS[kind];
     Editor.exitHeaderFooterModeIfActive();
     const tableId = currentTableId || GristAPI.getCurrentTableId();
@@ -2068,7 +2116,7 @@
     if (!rows) return;
 
     const { openSource, templatesCache, jobs, splitting } = await planBatchJobs(cfg, tableId, only, rows);
-    const sheetSetup = await confirmBatch(cfg, { only, tableId, rowCount: rows.length, jobCount: jobs.length, splitting });
+    const sheetSetup = await confirmBatch(cfg, { only, tableId, rowCount: rows.length, jobCount: jobs.length, splitting, protection: preset && preset.protection });
     if (!sheetSetup) return;
 
     // Ni JSZip ni le lot PDF ne sont chargés d'office au démarrage du widget : `JSZip` n'existe pas tant que ceci n'a pas été attendu au moins une
@@ -2257,8 +2305,8 @@
     pdfFilenameInput.addEventListener('fieldenter', () => pdfFilenameInput.blur());
   }
 
-  // Type d'export : bouton + panneau au survol plutôt qu'un <select> toujours affiché. Trois lignes de type (PDF, Word, Excel), puis la qualité du PDF
-  // (le vectoriel par défaut, l'impression par le navigateur, « Léger » : le vectoriel aux images réduites), montrée pour le PDF seulement. Un clic sur une ligne
+  // Type d'export : bouton + panneau au survol plutôt qu'un <select> toujours affiché. Quatre lignes de type (PDF, PDF protégé, Word, Excel), puis la qualité du PDF
+  // (le vectoriel par défaut, l'impression par le navigateur, « Léger » : le vectoriel aux images réduites), montrée pour les deux PDF seulement. Un clic sur une ligne
   // grisée ne choisit rien. Le menu du bouton Exporter se câble de même : un clic (ou Entrée, Espace) sur une option de lignes la coche, rien ne s'exporte.
   // Le bouton Exporter, onExportPdf et les lots lisent les valeurs choisies ; syncExportMenus tient les deux menus d'accord, aussi à chaque survol (un
   // appel direct a pu changer la liste cachée).

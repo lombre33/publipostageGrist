@@ -8,7 +8,8 @@
 //  4) un compte en lecture seule les garde pour la session, sans écrire dans le document ;
 //  5) un nouveau modèle les voit écrits à son premier enregistrement ; « Enregistrer sous » emporte ceux de l'écran sans toucher au modèle d'origine ;
 //  6) une valeur que les listes ne connaissent pas, un type que le modèle ne sait pas faire et la ligne d'une autre personne ne changent rien ;
-//  7) un document d'avant (colonnes absentes) reçoit ses trois colonnes une fois, avant la première ligne.
+//  7) un document d'avant (colonnes absentes) reçoit ses trois colonnes une fois, avant la première ligne ;
+//  8) le type « PDF protégé » se garde comme les autres (une ligne « pdfProtected », rouverte avec ses menus sur un autre ordinateur).
 // Le stockage seul (sans page) est dans dev-tests/unit-template-preferences.mjs ; le vrai clic à 700 x 400 et le rechargement de la page dans dev-tests/verify-export-type-mouse.mjs.
 (function () {
   const cases = [];
@@ -171,6 +172,34 @@
       const pass = same(onA, { values: 'docx|browser-print|zip', menus: { type: 'docx', ticked: 'zip', lit: true } })
         && same(onB, { values: 'pdf|native|one', menus: { type: 'pdf', ticked: 'one', lit: false } });
       return { pass, notes: JSON.stringify({ onA, onB }) };
+    },
+  });
+
+  cases.push({
+    id: 'export_choices_keep_the_protected_pdf_type_per_model_and_bring_it_back_on_another_computer',
+    description: 'Le type « PDF protégé » se garde comme les autres types, par personne et par modèle : écrit « pdfProtected » sur la ligne du modèle dans la table des préférences (avec l\'option de lignes et la qualité choisies, même celle que ce type grise), rouvert avec ses menus (ligne de type active, option cochée, bouton du type allumé) sur un autre ordinateur ; le modèle voisin repart du PDF',
+    run: async (h) => {
+      const a = await saved(h, 'Export protégé - A');
+      const b = await saved(h, 'Export protégé - B');
+      await open(a);
+      await pickQuality('browser-print'); await pickType('pdfProtected'); await pickLines('zip');
+      await sleep(400);
+      const rowOfA = prefRows(a);
+      const onA = { values: values(), menus: menus() };
+      await open(b);
+      const onB = values();
+      await reload();
+      await pickType('pdf'); await pickQuality('native'); await pickLines('one'); // la page neuve montre l'origine avant tout modèle
+      await open(a);
+      const reloadedA = { values: values(), menus: menus() };
+      await open(b);
+      const reloadedB = values();
+      await clean();
+      const pass = rowOfA.length === 1 && rowOfA[0].type === 'pdfProtected' && rowOfA[0].quality === 'browser-print' && rowOfA[0].lines === 'zip'
+        && same(onA, { values: 'pdfProtected|browser-print|zip', menus: { type: 'pdfProtected', ticked: 'zip', lit: true } })
+        && onB === 'pdf|native|one'
+        && same(reloadedA, onA) && reloadedB === 'pdf|native|one';
+      return { pass, notes: JSON.stringify({ rowOfA, onA, onB, reloadedA, reloadedB }) };
     },
   });
 

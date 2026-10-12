@@ -23,8 +23,8 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
   vérifie.
 - **Les données** : les modèles et les réglages vivent dans des tables `Publipostage_*` du document Grist ;
   les préférences d'affichage (langue, thème, raccourcis…) dans le navigateur.
-- **Le volume** : 128 fichiers dans `js/` (48 800 lignes : 36 000 de code, 9 800 de commentaires, 2 900 de
-  blanc), 43 feuilles de style (3 600 lignes), une page de 830 lignes. Quatre fichiers de polices du PDF
+- **Le volume** : 131 fichiers dans `js/` (48 800 lignes : 36 000 de code, 9 800 de commentaires, 2 900 de
+  blanc), 44 feuilles de style (3 600 lignes), une page de 830 lignes. Quatre fichiers de polices du PDF
   pèsent 2,5 Mo en quelques lignes (des données) ; `js/i18n.js` est du texte à traduire, pas de la logique.
 
 ## Par où commencer
@@ -165,7 +165,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/xlsx-number-format.js` | Le texte qu'Excel montrerait pour un format de nombre ou de date. |
 | `js/linked-table.js` | Le tableau d'un document lié à un modèle Grille : l'attribut du lien et le jeton du modèle qui le fait compter, le choix du modèle dans la liste, le repère dans la page, les règles du contenu des cases et les verrous (suivi des modifications, lecture seule), la mise à jour du tableau depuis le modèle, son envoi au modèle et l'ouverture du modèle (avec le retour au document, que `js/main.js` porte), puis le suivi du modèle par le document : la base du tableau (ce que le document et le modèle disaient à la dernière synchro), le plan qui en tire la mise à jour, l'envoi ou le désaccord, la synchro à l'ouverture et à chaque relecture de l'enregistrement automatique (`followLinkedModels` de `js/main.js`), l'envoi des tableaux changés à leurs modèles avec l'enregistrement du document - dans le même lot d'écriture que sa ligne (`Templates.save`), la base de l'éditeur n'avançant qu'une fois Grist d'accord - et la lecture du modèle par les sorties qui lisent les documents enregistrés. |
 
-### Exports (17 fichiers, 6 900 lignes)
+### Exports (19 fichiers, 7 100 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -183,6 +183,8 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/batch-failures.js` | La fenêtre qui s'ouvre à la fin d'un export en lot et liste les lignes qui n'ont pas pu être générées, avec leur raison (sur la fenêtre commune des saisies et des confirmations). |
 | `js/batch-scope.js` | Les lignes d'un export en lot : celles que le widget affiche dans Grist (ses filtres, son tri, le lien « Sélectionner par »), ou toute la table ; un widget qui n'en affiche qu'une partie fait poser la question. |
 | `js/export-choices.js` | Les choix d'export de la personne, gardés par modèle : le type (PDF, Word, Excel), la qualité du PDF et « une seule ligne / toutes les lignes ». Les trois listes cachées de la barre restent ce que `js/main.js` lit pour exporter ; la table des préférences (`js/template-preferences.js`) les garde d'un ordinateur à l'autre, un compte en lecture seule ne les garde que pour la séance. |
+| `js/pdf-protection.js` | Le « PDF protégé » (type du menu « Type d'export ») sans interface : les réglages propres (mot de passe pour ouvrir, trois droits, propriétés du fichier), le mot de passe « propriétaire » tiré au hasard quand seuls des droits sont posés, et les champs de document que pdfmake lit (chiffrement AES-256). |
+| `js/pdf-protection-dialog.js` | La fenêtre « PDF protégé » (sur la fenêtre commune), ouverte avant l'export d'une ligne et d'une archive ZIP : elle rend les réglages ou rien. Le mot de passe n'est gardé nulle part ; seuls les droits et l'auteur le sont, par navigateur. |
 
 ### Socle de l'interface et réglages (15 fichiers, 4 600 lignes)
 
@@ -209,7 +211,7 @@ fichier, un lot), câblage de la galerie et de Grist. C'est le fichier qui conna
 ### Les feuilles de style
 
 `css/style.css` (jetons de couleur, thème clair et sombre, `--font-ui`), `css/toolbar-v2.css` (la barre du
-haut), `css/editor-v2.css` (le texte de l'éditeur) ; les 40 autres vont chacune avec un module ou une
+haut), `css/editor-v2.css` (le texte de l'éditeur) ; les 41 autres vont chacune avec un module ou une
 fenêtre de `js/` (`css/callout.css` pour `js/callout.js`) et le disent dans leur premier commentaire ;
 `css/roboto-fonts.css` embarque la police des documents.
 
@@ -254,6 +256,7 @@ notes de conception, qui ne sont pas publiés ici.
 | Ajouter un texte à l'interface | `js/i18n.js`, en français et en anglais dans le même lot. |
 | Ajouter un menu ou une fenêtre flottante | `js/layers.js` (l'ordre d'empilement). |
 | Ajouter un raccourci clavier | `js/shortcuts.js`. |
+| Changer ce que le « PDF protégé » protège (mot de passe, droits, propriétés) | `js/pdf-protection.js` (les réglages et les champs de pdfmake), `js/pdf-protection-dialog.js` et `css/pdf-protection.css` (la fenêtre), `js/pdf-export.js` (`withDocFields` : les champs ne se posent que sur le document fini), `js/main.js` (`SINGLE_EXPORTS.pdfProtected`, `BATCH_EXPORTS.pdfProtectedZip`). Un fichier qui réunit plusieurs PDF (un seul PDF, assemblage) ne se chiffre pas : ces sorties sont grisées pour ce type. |
 | Ajouter un chemin d'export PDF | `js/main.js` : l'appeler `stampExportDate` après le téléchargement (la colonne de Réglages > Vue qui garde la date du dernier export), avec les lignes dont le PDF est dans le fichier. |
 | Ajouter une bibliothèque d'export | `js/export-common.js` (chargeur, empreinte) et la politique de sécurité de `index.html`. |
 | Changer ce que l'impression par le navigateur imprime (feuilles, page plus haute qu'une feuille, taille de la page) | `js/print-export.js` et `css/print.css` ; le rendu lui-même est celui de la Lecture (`ReaderMode.renderInto` de `js/reader-mode.js`) : le changer change aussi l'impression. |
@@ -291,7 +294,7 @@ For anyone reading the code: what is where, and where to start. Line counts are 
   **Each export** loads its library on first use, with an integrity hash (SRI) that the browser checks.
 - **The data**: templates and settings live in `Publipostage_*` tables of the Grist document; display
   preferences (language, theme, shortcuts…) in the browser.
-- **The size**: 128 files in `js/` (48,800 lines: 36,000 of code, 9,800 of comments, 2,900 blank), 43
+- **The size**: 131 files in `js/` (48,800 lines: 36,000 of code, 9,800 of comments, 2,900 blank), 44
   stylesheets (3,600 lines), an 830-line page. Four PDF font files weigh 2.5 MB in a few lines (data);
   `js/i18n.js` is text to translate, not logic.
 
@@ -432,7 +435,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/xlsx-number-format.js` | The text Excel would show for a number or date format. |
 | `js/linked-table.js` | A document's table linked to a Grid template: the link attribute and the template's token that makes it count, picking the template in the list, the marker in the page, the content rules for the cells and the locks (track changes, read-only), updating the table from the template, sending it to the template and opening the template (with the way back to the document, which `js/main.js` carries), then the document following its template: the table's base (what the document and the template said at the last sync), the plan drawn from it (update, send, or a disagreement), the sync on opening and at every read of the automatic save (`followLinkedModels` in `js/main.js`), the sending of the changed tables to their templates with the document's save - in the same write as its row (`Templates.save`), the editor's base moving only once Grist agrees - and the reading of the template by the outputs that read saved documents. |
 
-### Exports (17 files, 6,900 lines)
+### Exports (19 files, 7,100 lines)
 
 | File | Role |
 |---|---|
@@ -450,6 +453,8 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/batch-failures.js` | The window that opens at the end of a batch export and lists the rows that could not be generated, with their reason (on top of the shared input and confirmation window). |
 | `js/batch-scope.js` | The rows of a batch export: the ones the widget shows in Grist (its filters, its sort, the "Select by" link), or the whole table; a widget that only shows part of the table triggers the question. |
 | `js/export-choices.js` | The person's export choices, kept per template: the type (PDF, Word, Excel), the PDF quality and "a single row / all rows". The toolbar's three hidden lists remain what `js/main.js` reads to export; the preferences table (`js/template-preferences.js`) keeps them from one computer to the next, a read-only account keeps them for the session only. |
+| `js/pdf-protection.js` | The "Protected PDF" (a type of the "Export type" menu) without any interface: the cleaned settings (password to open, three permissions, file properties), the random "owner" password drawn when only permissions are set, and the document fields pdfmake reads (AES-256 encryption). |
+| `js/pdf-protection-dialog.js` | The "Protected PDF" window (on top of the shared window), opened before the export of one row and of a ZIP archive: it returns the settings or nothing. The password is kept nowhere; only the permissions and the author are, per browser. |
 
 ### Interface foundations and settings (15 files, 4,600 lines)
 
@@ -476,7 +481,7 @@ wiring of the gallery and of Grist. It is the file that knows all the others.
 ### Stylesheets
 
 `css/style.css` (color tokens, light and dark theme, `--font-ui`), `css/toolbar-v2.css` (the top bar),
-`css/editor-v2.css` (the editor's text); the other 40 each go with a module or a window of `js/`
+`css/editor-v2.css` (the editor's text); the other 41 each go with a module or a window of `js/`
 (`css/callout.css` for `js/callout.js`) and say so in their first comment; `css/roboto-fonts.css` embeds
 the documents' font.
 
@@ -520,6 +525,7 @@ notes, which are not published here.
 | Add a text to the interface | `js/i18n.js`, in French and English in the same batch. |
 | Add a menu or a floating window | `js/layers.js` (the stacking order). |
 | Add a keyboard shortcut | `js/shortcuts.js`. |
+| Change what the "Protected PDF" protects (password, permissions, properties) | `js/pdf-protection.js` (the settings and pdfmake's fields), `js/pdf-protection-dialog.js` and `css/pdf-protection.css` (the window), `js/pdf-export.js` (`withDocFields`: the fields are only set on the finished document), `js/main.js` (`SINGLE_EXPORTS.pdfProtected`, `BATCH_EXPORTS.pdfProtectedZip`). A file combining several PDFs (a single PDF, sheet assembly) cannot be encrypted: those outputs are greyed out for this type. |
 | Add a PDF export path | `js/main.js`: call `stampExportDate` after the download (the Settings > View column that keeps the last export date), with the rows whose PDF is in the file. |
 | Add an export library | `js/export-common.js` (loader, integrity hash) and the security policy of `index.html`. |
 | Change what browser print prints (sheets, a page taller than a sheet, the page size) | `js/print-export.js` and `css/print.css`; the rendering itself is the Reading view's (`ReaderMode.renderInto` in `js/reader-mode.js`): changing it changes the print too. |

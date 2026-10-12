@@ -172,12 +172,13 @@ const I18n = (function () {
     'grid.pageBreak': { fr: 'Saut de page · nouvelle page du PDF, nouvelle feuille de l’Excel', en: 'Page break · new page in the PDF, new sheet in the Excel file' },
     'grid.pageBreakDocument': { fr: 'Saut de page · nouvelle page du PDF et du Word', en: 'Page break · new page in the PDF and Word files' },
     'toolbar.autosave.aria': { fr: 'Enregistrement automatique — enregistre le modèle toutes les ~2,5 secondes pendant que vous éditez. Désactiver si vous préférez enregistrer vous-même.', en: 'Auto-save — saves the template roughly every 2.5 seconds while you edit. Turn off if you prefer to save manually.' },
-    // Type d'export (ex-« Qualité PDF ») : PDF, Word ou Excel ; la qualité du PDF reste un intitulé du même menu, montré pour le PDF seulement. « Exporter »
+    // Type d'export (ex-« Qualité PDF ») : PDF, PDF protégé, Word ou Excel ; la qualité du PDF reste un intitulé du même menu, montré pour les deux PDF seulement. « Exporter »
     // nomme le bouton et son menu, quel que soit le type choisi ; ce menu liste les options de lignes et de classeur (`exportLines.*`, demande du
     // 12/10) : une seule ligne, ou toutes (un ZIP, un seul PDF, l'assemblage avant impression, un seul classeur). L'option cochée est celle que le bouton lance.
     // Les textes `toolbar.exportPdf` à `toolbar.exportXlsxSingle` plus bas sont ceux des neuf lignes d'export d'avant, qui ne sont plus montrées.
     'toolbar.exportType': { fr: 'Type d’export', en: 'Export type' },
     'exportType.pdf': { fr: 'PDF', en: 'PDF' },
+    'exportType.pdfProtected': { fr: 'PDF protégé', en: 'Protected PDF' },
     'exportType.docx': { fr: 'Word (bêta)', en: 'Word (beta)' },
     'exportType.xlsx': { fr: 'Excel', en: 'Excel' },
     'toolbar.export': { fr: 'Exporter', en: 'Export' },
@@ -210,6 +211,26 @@ const I18n = (function () {
     'quality.native': { fr: 'Vectoriel (par défaut)', en: 'Vector (default)' },
     'quality.browserPrint': { fr: 'Impression navigateur', en: 'Browser print' },
     'quality.light': { fr: 'Léger (images réduites)', en: 'Light (smaller images)' },
+
+    // --- PDF protégé (js/pdf-protection.js, js/pdf-protection-dialog.js) : l'explication des lignes grisées, puis la fenêtre du mot de passe ---
+    'exportLines.protectedOff': { fr: 'Pas disponible en PDF protégé : un fichier qui réunit plusieurs documents ne se protège pas.', en: 'Not available for a protected PDF: a file combining several documents cannot be protected.' },
+    'quality.protectedOff': { fr: 'Pas disponible en PDF protégé : l’impression par le navigateur ne chiffre pas le fichier.', en: 'Not available for a protected PDF: browser printing does not encrypt the file.' },
+    'pdfProtect.title': { fr: 'PDF protégé', en: 'Protected PDF' },
+    'pdfProtect.batch': { fr: '{count} {count|PDF protégé|PDF protégés} pour « {table} », {count|regroupé|regroupés} dans une archive ZIP avec le même mot de passe et les mêmes autorisations.', en: '{count} protected {count|PDF|PDFs} for “{table}”, bundled in a ZIP archive with the same password and the same permissions.' },
+    'pdfProtect.batchGrid': { fr: '{count} {count|PDF protégé|PDF protégés}, un par valeur de « {table} », {count|regroupé|regroupés} dans une archive ZIP avec le même mot de passe et les mêmes autorisations.', en: '{count} protected {count|PDF|PDFs}, one per value of “{table}”, bundled in a ZIP archive with the same password and the same permissions.' },
+    'pdfProtect.password.label': { fr: 'Mot de passe pour ouvrir le PDF', en: 'Password to open the PDF' },
+    'pdfProtect.show': { fr: 'Afficher le mot de passe', en: 'Show password' },
+    'pdfProtect.password.hint': { fr: 'Laisser vide pour que le PDF s’ouvre sans mot de passe ; les autorisations ci-dessous restent appliquées.', en: 'Leave empty for a PDF that opens without a password; the permissions below still apply.' },
+    'pdfProtect.rights.label': { fr: 'Autorisations pour la personne qui ouvre le PDF', en: 'Permissions for whoever opens the PDF' },
+    'pdfProtect.rights.print': { fr: 'Imprimer', en: 'Print' },
+    'pdfProtect.rights.copy': { fr: 'Copier le texte et les images', en: 'Copy text and images' },
+    'pdfProtect.rights.modify': { fr: 'Modifier ou annoter', en: 'Edit or annotate' },
+    'pdfProtect.rights.note': { fr: 'Les visionneuses courantes les respectent, mais seul le mot de passe empêche d’ouvrir le fichier.', en: 'Common viewers honour them, but only the password stops the file from being opened.' },
+    'pdfProtect.nothing': { fr: 'Rien n’est protégé : choisir un mot de passe ou retirer une autorisation.', en: 'Nothing is protected: set a password or remove a permission.' },
+    'pdfProtect.props.label': { fr: 'Propriétés du PDF (facultatif)', en: 'PDF properties (optional)' },
+    'pdfProtect.props.author': { fr: 'Auteur', en: 'Author' },
+    'pdfProtect.props.subject': { fr: 'Sujet', en: 'Subject' },
+    'pdfProtect.props.keywords': { fr: 'Mots-clés, séparés par des virgules', en: 'Keywords, separated by commas' },
 
     // --- Titre / numérotation des titres ---
     'heading.tip': { fr: 'Titre', en: 'Heading' },
@@ -968,6 +989,7 @@ const I18n = (function () {
     'status.templateDeleted': { fr: 'Modèle supprimé.', en: 'Template deleted.' },
     'status.pdfGenerating': { fr: 'Génération du PDF en cours...', en: 'Generating PDF...' },
     'status.pdfGenerated': { fr: 'PDF généré.', en: 'PDF generated.' },
+    'status.pdfProtectedGenerated': { fr: 'PDF protégé généré.', en: 'Protected PDF generated.' },
     'status.pdfGenerationError': { fr: 'Erreur génération PDF.', en: 'PDF generation error.' },
     'status.printPreparing': { fr: 'Préparation de l’impression...', en: 'Preparing the print...' },
     'status.printStarted': { fr: 'Impression lancée.', en: 'Print started.' },
@@ -1013,6 +1035,8 @@ const I18n = (function () {
     'status.zipCompressing': { fr: 'Compression de l’archive ZIP...', en: 'Compressing the ZIP archive...' },
     'status.batchExportDoneWithFailures': { fr: '{ok} {ok|PDF généré|PDF générés}, {failed} {failed|échec|échecs} — archive ZIP téléchargée.', en: '{ok} {ok|PDF|PDFs} generated, {failed} {failed|failure|failures} — ZIP archive downloaded.' },
     'status.batchExportDone': { fr: '{ok} {ok|PDF généré|PDF générés} — archive ZIP téléchargée.', en: '{ok} {ok|PDF|PDFs} generated — ZIP archive downloaded.' },
+    'status.batchExportDoneProtected': { fr: '{ok} {ok|PDF protégé généré|PDF protégés générés} — archive ZIP téléchargée.', en: '{ok} protected {ok|PDF|PDFs} generated — ZIP archive downloaded.' },
+    'status.batchExportDoneWithFailuresProtected': { fr: '{ok} {ok|PDF protégé généré|PDF protégés générés}, {failed} {failed|échec|échecs} — archive ZIP téléchargée.', en: '{ok} protected {ok|PDF|PDFs} generated, {failed} {failed|failure|failures} — ZIP archive downloaded.' },
     // Export DOCX de toutes les lignes (ZIP) : mêmes messages que le lot PDF, avec le bon format.
     'status.loadingExportLibs': { fr: 'Chargement des bibliothèques d’export...', en: 'Loading export libraries...' },
     'status.exportLibsLoadError': { fr: 'Échec de chargement des bibliothèques d’export.', en: 'Failed to load export libraries.' },

@@ -100,6 +100,9 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 - PDF « Léger » : le même PDF vectoriel dont les images sont ramenées à 150 points par pouce (une photo
   devient un JPEG, un logo transparent reste un PNG, une petite image et un code QR ne sont pas touchés), pour
   une ligne comme pour les lots
+- PDF protégé : le même PDF vectoriel chiffré en AES-256, avec un mot de passe pour l'ouvrir (facultatif),
+  des autorisations (imprimer, copier, modifier) et l'auteur, le sujet et les mots-clés du fichier, pour une
+  ligne comme pour l'archive ZIP ; le mot de passe n'est gardé nulle part
 - Export en lot en un clic : un PDF par ligne dans une archive ZIP, ou toutes les lignes dans un seul
   PDF. Il suit les lignes que le widget affiche dans Grist (ses filtres, son tri, le lien « Sélectionner
   par ») : quand il n'en affiche qu'une partie, il demande s'il faut exporter celles-ci ou toute la table
@@ -222,7 +225,8 @@ confirmation.
 
 Aucune donnée n'est stockée hors de Grist. Les seules informations conservées dans le navigateur
 (`localStorage`) sont des préférences d'interface (langue, thème, touches, raccourcis et vue de leur
-panneau, état de l'enregistrement automatique, dernier choix de l'assemblage avant impression), le niveau
+panneau, état de l'enregistrement automatique, dernier choix de l'assemblage avant impression, autorisations
+et auteur du PDF protégé - jamais son mot de passe), le niveau
 de zoom de la page des derniers modèles ouverts (avec leur numéro et leur nom) et, pour suivre les
 renommages, les noms des tables et des colonnes de chaque document ouvert, jamais de donnée de ligne.
 
@@ -276,10 +280,13 @@ bibliothèques et polices sont dans [NOTICE](NOTICE).
 - **Suivi des modifications** (bêta) : la version complète est prévue en V1.
 - **PDF** : les caractères chinois, arabes, hébreux, thaï et la plupart des émojis ne sont pas pris en
   charge (une case vide les remplace) ; le grec, le cyrillique, le vietnamien, les flèches, coches,
-  étoiles et monnaies le sont. Le menu « Type d'export » propose PDF, Word et Excel, puis, pour le PDF, « Vectoriel », « Impression navigateur » et « Léger » (le PDF
+  étoiles et monnaies le sont. Le menu « Type d'export » propose PDF, PDF protégé, Word et Excel, puis, pour le PDF, « Vectoriel », « Impression navigateur » et « Léger » (le PDF
   vectoriel aux images ramenées à 150 points par pouce). L'impression navigateur imprime une
   ligne à la fois, sur 60 pages au plus, et suppose que le navigateur ouvre sa fenêtre d'impression depuis le
-  cadre du widget : si rien ne s'ouvre, choisissez « Vectoriel ».
+  cadre du widget : si rien ne s'ouvre, choisissez « Vectoriel ». Un PDF protégé n'existe ni en un seul PDF pour
+  toutes les lignes, ni en assemblage avant impression, ni par l'impression navigateur (ces sorties ne se
+  chiffrent pas) ; sans mot de passe pour l'ouvrir, ses autorisations (imprimer, copier, modifier) ne tiennent que
+  chez les visionneuses qui les respectent.
 - **Word** (bêta) : les images devant ou derrière le texte et celles alignées à gauche ou à droite y
   gardent leur place, le sommaire est un vrai sommaire Word dont les numéros de page ne s'écrivent que
   quand Word le met à jour, et les polices ne sont pas embarquées.
@@ -448,6 +455,9 @@ GitHub Pages, with no backend and no build step.
   with the layout of the Reading view
 - Light PDF: the same vector PDF with its images brought down to 150 points per inch (a photo becomes a JPEG,
   a transparent logo stays a PNG, a small image and a QR code are left alone), for one row and for batches
+- Protected PDF: the same vector PDF encrypted with AES-256, with a password to open it (optional),
+  permissions (print, copy, edit) and the file's author, subject and keywords, for one row and for the ZIP
+  archive; the password is kept nowhere
 - Batch export in one click: one PDF per row in a ZIP archive, or all rows in a single PDF. It follows
   the rows the widget shows in Grist (its filters, its sort, the "Select by" link): when it only shows
   part of the table, it asks whether to export those or the whole table
@@ -564,7 +574,8 @@ sites and asks for confirmation.
 
 No data is ever stored outside of Grist. The only things kept in the browser (`localStorage`) are
 interface preferences (language, theme, keys, shortcuts and the view of their panel, autosave state, last
-choice in the sheet assembly before printing), the page zoom level of the last templates opened (with
+choice in the sheet assembly before printing, permissions and author of the protected PDF - never its
+password), the page zoom level of the last templates opened (with
 their number and name) and, to follow renames, the names of the tables and columns of each open
 document, never any row data.
 
@@ -617,9 +628,11 @@ libraries and fonts are in [NOTICE](NOTICE).
 - **Track changes** (beta): the complete version is planned for V1.
 - **PDF**: Chinese, Arabic, Hebrew and Thai characters and most emoji are not supported (an empty box
   replaces them); Greek, Cyrillic, Vietnamese, arrows, check marks, stars and currencies are. The
-  "PDF export quality" menu offers "Vector", "Browser print" and "Light" (the vector PDF with its images brought
+  "Export type" menu offers PDF, Protected PDF, Word and Excel and, for the PDF, "Vector", "Browser print" and "Light" (the vector PDF with its images brought
   down to 150 points per inch). Browser print prints one row at a time, up to 60 pages, and assumes the browser opens its
-  print window from the widget's frame: if nothing opens, choose "Vector".
+  print window from the widget's frame: if nothing opens, choose "Vector". A protected PDF does not exist as a
+  single PDF for all rows, as a sheet assembly or through browser print (those outputs cannot be encrypted); with
+  no password to open it, its permissions (print, copy, edit) only bind the viewers that honour them.
 - **Word** (beta): images in front of or behind the text, and images aligned left or right, keep their
   place; the table of contents is a real Word table of contents whose page numbers are written only
   when Word updates it, and fonts are not embedded.

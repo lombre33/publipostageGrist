@@ -179,7 +179,7 @@ n'est jamais de la retoucher quand même, c'est de proposer sans y toucher. Deux
 - Une fonction indisponible dans un contexte est **grisée, jamais masquée** : mode Lecture (la barre de mise en forme
   est grisée), mode Email, droits par personne (opacité .35, plus de clic), export en cours. Il n'y a que trois exceptions : la Lecture épurée, demandée par Antoine le 02/10 (§3) : la barre
   y disparaît tout entière, sur un geste, et revient à la sortie ; et le bouton « Changer la colonne de la variable… » de la barre d'une variable, demandé de même le 04/10 (§3) :
-  il n'y est que sur une variable cassée (bulle rouge), absent - pas grisé - d'une variable saine, d'un calcul, d'un bloc de texte, d'une valeur et d'une case conditionnelle. Et le bloc « Qualité PDF » du menu « Type d'export » (intitulé, filet et trois lignes), demandé de même le 12/10 : il n'est montré que pour le type PDF
+  il n'y est que sur une variable cassée (bulle rouge), absent - pas grisé - d'une variable saine, d'un calcul, d'un bloc de texte, d'une valeur et d'une case conditionnelle. Et le bloc « Qualité PDF » du menu « Type d'export » (intitulé, filet et trois lignes), demandé de même le 12/10 : il n'est montré que pour les types PDF et PDF protégé
   (§3, « Type d'export ») ; ses lignes restent dans la page, grisées, et la qualité choisie est gardée.
   Un retrait demandé n'est pas une régression : les qualités « Ultra HD » et « Basse qualité » du PDF ont été retirées du menu, des textes
   français et anglais, du code et des documents sur la demande d'Antoine du 09/10 (« si pas de pdf en ultra hd, retirer les bouts de code en
@@ -950,8 +950,8 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   l'option liées au classeur pour les exel et mode assemblage - le bouton d'export pdf, son nom en haut de la dropdown devient juste "exporter" - attention à ne pas perdre de features » ; puis, le même jour,
   « le sous menu "qualité pdf" ne pourrait apparaitre que quand on sélectionne pdf », « il ne doit y avoir que les options de lignes/classeur dans le menu du bouton exporter » et « le bouton exporter c'est
   toggle le choix, quand on met toutes les lignes le bouton par défaut devient toutes les lignes et une petite coche devant ») : le bouton « Qualité PDF » (`#v2-btn-quality`) se nomme « Type d'export »
-  (`aria-label`, titre de son menu). Le menu a trois lignes de type - « PDF », « Word (bêta) », « Excel » - sous le titre « Type d'export » ; pour le PDF seulement s'y ajoutent, sous un filet, l'intitulé
-  « Qualité PDF » et les trois qualités (« Vectoriel (par défaut) », « Impression navigateur », « Léger (images réduites) ») : avec Word ou Excel ce bloc n'est pas montré (`data-export-for="pdf"` + `hidden`, la
+  (`aria-label`, titre de son menu). Le menu a quatre lignes de type - « PDF », « PDF protégé », « Word (bêta) », « Excel » - sous le titre « Type d'export » ; pour les deux PDF seulement s'y ajoutent, sous un filet, l'intitulé
+  « Qualité PDF » et les trois qualités (« Vectoriel (par défaut) », « Impression navigateur », « Léger (images réduites) ») : avec Word ou Excel ce bloc n'est pas montré (`data-export-for="pdf pdfProtected"` + `hidden`, la
   troisième exception à « on grise, on ne masque pas », voulue par Antoine) ; ses lignes restent dans la page, grisées, et la qualité choisie est gardée et revient avec le PDF. Le type est un choix durable (liste
   cachée `#v2-export-type`, comme `#v2-pdf-quality`) : sa ligne est la ligne active (gras bleu, comme une qualité choisie) et le bouton s'allume (`.active`, comme un style de puce choisi) tant que le type n'est pas
   le PDF. Word se grise dans une grille et Excel dans un document : jamais retirés (`aria-disabled`), un clic dessus ne choisit rien, et un type choisi qu'un autre modèle ne sait pas faire revient au PDF, pour de bon.
@@ -968,6 +968,24 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   changé : le réglage d'origine - PDF, vectoriel, une seule ligne - n'écrit rien). Un modèle sans choix repart de l'origine et les choix d'un modèle ne passent jamais au suivant ; un compte en lecture seule
   choisit comme les autres, mais ses choix ne durent que la séance (rien n'est écrit dans le document) ; un nouveau modèle voit les siens écrits à son premier enregistrement, et « Enregistrer sous » emporte
   ceux de l'écran. Tenu par `exportType`, `exportChoices` et `exportTypeMouse`.
+- PDF protégé (demande d'Antoine du 12/10, « Protection du PDF Ok pour le dev, proposer ca dans le choix des type d'export genre "pdf protégé" » ; prévenu que « Les deux » veut dire les propriétés
+  du fichier ET le mot de passe) : quatrième ligne du menu « Type d'export », « PDF protégé » (« Protected PDF »), juste après « PDF » (`data-export-type="pdfProtected"`). Le bloc de qualité y est
+  montré (Vectoriel, Léger) ; ce que ce type ne sait pas faire est GRISÉ, jamais retiré (`data-export-grey-for`, `aria-disabled`, info-bulle qui dit pourquoi : `quality.protectedOff`,
+  `exportLines.protectedOff`) : « Impression navigateur » (le navigateur ne chiffre pas), « Toutes les lignes en un seul PDF » et « Assemblage avant impression » (un fichier qui réunit plusieurs
+  documents ne se protège pas) ; le choix gardé revient avec le PDF, et une option grisée cochée sort comme « Toutes les lignes (ZIP) ». Les sorties permises : le PDF d'une ligne et l'archive ZIP
+  (un PDF protégé par ligne, tous avec le même mot de passe et les mêmes droits). « Exporter » ouvre d'abord la fenêtre « PDF protégé » (fenêtre commune de 480 px, `js/pdf-protection-dialog.js`,
+  `css/pdf-protection.css`) : le champ « Mot de passe pour ouvrir le PDF » a le focus, masqué, avec la case « Afficher le mot de passe » et l'indication « Laisser vide pour que le PDF s'ouvre sans
+  mot de passe ; les autorisations ci-dessous restent appliquées. » ; le mot de passe ne se garde NULLE PART (ni navigateur, ni document, ni message d'état) et se retape à chaque export ; il tient
+  en 127 octets (UTF-8) et le champ refuse la frappe au-delà, jamais de mot de passe coupé en silence. « Autorisations pour la personne qui ouvre le PDF » : trois cases, « Imprimer » et « Copier
+  le texte et les images » cochées, « Modifier ou annoter » décochée au départ ; la phrase dessous reste honnête (« Les visionneuses courantes les respectent, mais seul le mot de passe empêche
+  d'ouvrir le fichier. ») ; les droits et l'auteur sont retenus par navigateur (`pp_pdf_protection`), le sujet et les mots-clés repartent vides. « Propriétés du PDF (facultatif) » est un groupe
+  replié (auteur, sujet, mots-clés) : le mot de passe et les droits tiennent dans les 376 px de hauteur utile du panneau 700×400 sans défiler, en français comme en anglais, titre et boutons fixes.
+  « Exporter » est GRISÉ tant que rien n'est protégé (aucun mot de passe et les trois droits permis) et la phrase « Rien n'est protégé : choisir un mot de passe ou retirer une autorisation. »
+  (`role="status"`) le dit : jamais un bouton qui ne fait rien sans le dire. Entrée valide depuis un champ ; Échap et « Annuler » n'exportent rien (« Export annulé. »). Pour « Toutes les lignes
+  (ZIP) » la fenêtre tient lieu de confirmation du lot : elle commence par « N PDF protégés pour « Table », regroupés dans une archive ZIP avec le même mot de passe et les mêmes autorisations »
+  (pluriel par `I18n.t`) et son bouton se nomme « Générer ». Le chiffrement est l'AES-256 de pdfmake ; sans mot de passe pour ouvrir, les droits tiennent par un mot de passe « propriétaire » tiré
+  au hasard à chaque export, que personne ne connaît (sans hasard sûr l'export échoue : jamais un PDF livré sans la protection demandée). Tenu par `pdfProtection` (8 cas), `pdfProtectionMouse`,
+  `exportType`, `exportChoices` et `exportTypeMouse`.
 - Feuille A4 : dans un panneau étroit, la page est réduite à la largeur disponible par un `zoom` CSS (`--pp-fit-zoom` : à
   700 px de panneau, 794 px de mise en page passent à 672 px) — à l'écran seulement. Les coupures de ligne de l'éditeur
   sont celles d'un grand panneau ; les PDF sont identiques quelle que soit la taille du panneau.

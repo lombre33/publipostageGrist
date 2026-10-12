@@ -30,6 +30,19 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   jamais agrandie. La page ne bouge pas (le ratio de l'image est gardé, l'en-tête et le pied sont allégés
   aussi). Le choix vaut pour le PDF d'une ligne et pour les lots (archive ZIP, PDF unique, assemblage avant
   impression). « Vectoriel (par défaut) » reprend toujours les images telles quelles.
+- **PDF protégé** : le menu « Type d'export » propose « PDF protégé ». Un clic sur « Exporter » ouvre d'abord une
+  fenêtre : un mot de passe pour ouvrir le fichier (accents permis, 127 octets au plus), ce que la personne qui
+  l'ouvre a le droit de faire (imprimer, copier le texte et les images, modifier ou annoter : imprimer et copier
+  sont permis, modifier est refusé au départ) et, dans un groupe replié, l'auteur, le sujet et les mots-clés du
+  fichier. C'est le même PDF vectoriel que d'habitude, mise en page intacte, chiffré en AES-256 : sans le mot de
+  passe, une visionneuse refuse de l'ouvrir. Sans mot de passe, le fichier s'ouvre tout seul et la visionneuse
+  applique les droits choisis (ils ne tiennent que chez les lecteurs qui les respectent) ; la lecture par un
+  lecteur d'écran reste toujours permise. Le mot de passe n'est gardé nulle part : il se tape à chaque export ;
+  les droits et l'auteur sont retenus par navigateur. Le choix vaut pour le PDF d'une ligne et pour « Toutes les
+  lignes (ZIP) », où la fenêtre tient lieu de confirmation et dit combien de PDF partent avec ce mot de passe.
+  « Impression navigateur », « Toutes les lignes en un seul PDF » et « Assemblage avant impression » sont grisés
+  pour ce type, avec leur raison en info-bulle (le navigateur ne chiffre pas, un fichier qui réunit plusieurs
+  documents ne se protège pas) : rien n'est retiré, et le choix revient avec le PDF.
 
 - **Numéro de ligne dans une boucle** : la liste « # » (onglet « Puces ») propose « N° de ligne ». Posée dans
   une ligne de tableau, un élément de liste ou un paragraphe qu'une Boucle répète, la puce s'écrit 1, 2, 3…
@@ -375,7 +388,7 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   être le modèle par défaut du document : leur étoile est grisée, avec l'info-bulle qui dit pourquoi (pour une vue :
   Réglages > Vue), comme en lecture seule.
 - **Le bouton « Qualité PDF » devient « Type d'export »** : le bouton à gauche d'« Exporter » choisit le type
-  d'export (PDF, Word ou Excel) et, pour le PDF seulement, sa qualité (Vectoriel, Impression navigateur, Léger) :
+  d'export (PDF, PDF protégé, Word ou Excel) et, pour les deux PDF seulement, leur qualité (Vectoriel, Impression navigateur, Léger) :
   la qualité choisie est gardée et revient avec le PDF. Le menu du bouton **Exporter**, titré « Exporter », ne
   liste plus que les options de lignes et de classeur du type choisi, avec une petite coche devant celle qui est
   cochée : une seule ligne, toutes les lignes (archive ZIP) et, pour le PDF, toutes les lignes en un seul PDF et
@@ -385,7 +398,7 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   avec la même confirmation et le même effet ; Word reste grisé dans une grille et Excel dans un document, et le
   type revient alors au PDF. Une option que le type n'a pas (« un seul PDF » après un passage à Word) se lit
   « Toutes les lignes (ZIP) » et revient avec son type.
-- **Vos choix d'export sont gardés par modèle** : le type d'export (PDF, Word, Excel), la qualité du PDF et le choix
+- **Vos choix d'export sont gardés par modèle** : le type d'export (PDF, PDF protégé, Word, Excel), la qualité du PDF et le choix
   « une seule ligne / toutes les lignes » sont retenus pour chaque personne et pour chaque modèle. On les retrouve à
   l'ouverture du modèle, sur n'importe quel ordinateur (ils sont écrits dans la table des préférences de la personne,
   comme ses épingles), et un modèle dont on n'a rien changé repart des réglages d'origine (PDF vectoriel, une seule
@@ -706,6 +719,18 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   and an image that is already light are left alone; an image is never enlarged. The page does not move (the
   image ratio is kept, the header and footer are lightened too). The choice applies to the PDF of one row and
   to batches (ZIP archive, single PDF, sheet assembly). "Vector (default)" still takes images as they are.
+- **Protected PDF**: the "Export type" menu offers "Protected PDF". Clicking "Export" first opens a window: a
+  password to open the file (accents allowed, 127 bytes at most), what the person who opens it may do (print,
+  copy the text and images, edit or annotate: printing and copying are allowed, editing is refused by default) and,
+  in a collapsed group, the file's author, subject and keywords. It is the same vector PDF as usual, layout
+  untouched, encrypted with AES-256: without the password, a viewer refuses to open it. With no password, the
+  file opens by itself and the viewer applies the chosen permissions (they only bind the viewers that honour
+  them); reading by a screen reader is always allowed. The password is kept nowhere: you type it at each export;
+  the permissions and the author are remembered per browser. The choice applies to the PDF of one row and to
+  "All rows (ZIP)", where the window replaces the confirmation and says how many PDFs leave with this password.
+  "Browser print", "All rows as a single PDF" and "Assemble before printing" are greyed out for this type, with
+  their reason in a tooltip (the browser does not encrypt, a file combining several documents cannot be
+  protected): nothing is removed, and the choice comes back with the PDF.
 
 - **Row number in a loop**: the "#" list ("Chips" tab) offers "Row number". Placed in a table row, a list
   item or a paragraph that a Loop repeats, the chip is written as 1, 2, 3… in Reading and in the exports
@@ -1024,7 +1049,7 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   template: their star is greyed out, with a tooltip saying why (for a view: Settings > View), as it is in read-only
   mode.
 - **The "PDF quality" button becomes "Export type"**: the button to the left of "Export" chooses the export type
-  (PDF, Word or Excel) and, for the PDF only, its quality (Vector, Browser print, Light): the quality you chose is
+  (PDF, Protected PDF, Word or Excel) and, for the two PDF types only, their quality (Vector, Browser print, Light): the quality you chose is
   kept and comes back with the PDF. The **Export** button's menu, titled "Export", now lists only the rows and
   workbook options of the chosen type, with a small check mark in front of the ticked one: a single row, all rows
   (ZIP archive) and, for the PDF, all rows as a single PDF and assembly before printing, for Excel all the table's
@@ -1033,7 +1058,7 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   nine exports from before are done with these choices, with the same confirmation and the same effect; Word stays
   greyed out in a grid and Excel in a document, and the type then goes back to PDF. An option the type does not
   have ("a single PDF" after switching to Word) reads "All rows (ZIP)" and comes back with its type.
-- **Your export choices are kept per template**: the export type (PDF, Word, Excel), the PDF quality and the "a single
+- **Your export choices are kept per template**: the export type (PDF, Protected PDF, Word, Excel), the PDF quality and the "a single
   row / all rows" choice are remembered for each person and each template. You get them back when the template
   opens, on any computer (they are written to the person's preferences table, like their pins), and a template you
   changed nothing on starts from the original settings (vector PDF, a single row): one template's choices do not
