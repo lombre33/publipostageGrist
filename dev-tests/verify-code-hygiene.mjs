@@ -495,6 +495,13 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('polices : ni feuille de style, ni page, ni script ne charge de police ou de feuille d\'un autre site (@import, url(), <link>, service de polices) - une police du système, jamais Google Fonts', offenders.length === 0, '\n    ' + offenders.join('\n    '));
   const fontUi = ((stripComments(read('css/style.css')).match(/--font-ui\s*:\s*([^;]+);/) || [])[1] || '').trim();
   check('polices : --font-ui, la police de l\'interface, commence par system-ui (la police du système)', /^system-ui\b/.test(fontUi), fontUi);
+  // Un champ (<input>, <select>, <textarea>) ne reprend pas la police de son parent : sans règle de base il garde celle du navigateur (Arial), à côté de boutons dans la police du système (« Oui, tous » d'Antoine,
+  // 12/10). css/style.css la leur donne ; la seule règle qui écrit encore « Arial » en première police est la base de la page (html, body), qui ne touche pas un champ. dev-tests/verify-field-fonts-mouse.mjs
+  // (script Node `fieldFontsMouse`) le mesure dans un vrai navigateur, fenêtres ouvertes comprises ; ce contrôle-ci garde les sources.
+  const baseCss = stripComments(read('css/style.css'));
+  check('polices : css/style.css donne la police de l\'interface aux champs (input, select, textarea) - sinon ils gardent Arial, celle du navigateur', /(?:^|\})\s*input\s*,\s*select\s*,\s*textarea\s*\{[^}]*\bfont-family\s*:\s*var\(--font-ui\)/.test(baseCss));
+  const arialFirst = cssFiles.flatMap(rel => [...stripComments(read(rel)).matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(m => /\bfont-family\s*:\s*Arial\b/i.test(m[2])).map(m => `${rel} : ${m[1].trim().replace(/\s+/g, ' ').slice(0, 70)}`));
+  check('polices : seule la base de la page (html, body) écrit « Arial » en première police ; aucune règle ne la remet sur un champ ou un bouton', arialFirst.length === 1 && arialFirst[0] === 'css/style.css : html, body', arialFirst);
 }
 
 // ============================================================================

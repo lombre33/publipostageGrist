@@ -152,6 +152,9 @@
 
 html, body { margin:0; padding:0; height:100%; font-family: Arial, sans-serif; background: var(--bg); }
 body { display:flex; flex-direction:column; }
+/* Un champ ne reprend pas la police de son parent : sans cette règle il garde celle du navigateur (Arial), à côté de boutons dans la police de l'interface (--font-ui, celle
+   du système). Une règle plus précise garde la main. */
+input, select, textarea { font-family: var(--font-ui); }
 /* #app reproduit le schéma flex en colonne contraint de `body` : un enfant flex sans `flex-basis` se dimensionne à son contenu, donc dès que
    l'éditeur dépasserait la hauteur de la fenêtre, toute la page aurait sa barre de défilement (barre d'outils comprise) au lieu du défilement
    interne de #editor-container. */
@@ -163,7 +166,7 @@ body { display:flex; flex-direction:column; }
 .bar-sep { width:1px; align-self:stretch; margin:2px 2px; background: var(--border); flex:none; }
 /* `.pp-field-editor` : les champs texte à bulles (js/field-editor.js : Objet, À, Cc, Cci, nom du PDF), qui ont le cadre des <input> qu'ils remplacent. */
 #toolbar-top select, #toolbar-top input[type="text"], #toolbar-top .pp-field-editor {
-  font-family: Arial, sans-serif; font-size: 13px; color: var(--text);
+  font-family: var(--font-ui); font-size: 13px; color: var(--text);
   background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
   padding: 4px 8px; height: 28px;
 }

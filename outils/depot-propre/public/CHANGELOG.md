@@ -582,6 +582,12 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   bleu et souligné, mais sous la souris ce bleu se posait sur le gris du survol et n'y atteignait que 4,0:1 en thème
   clair et 4,4:1 en thème sombre. Il garde son bleu et son trait, avec un bleu plus soutenu tant que la souris est
   dessus (5,7:1 en clair, 5,4:1 en sombre) ; au repos, rien ne change.
+- **Les champs prennent la police des boutons** : depuis le passage à la police du système, les boutons la prenaient
+  mais pas les champs. Le nom du modèle (quand on le renomme), l'Objet, À, Cc, Cci et le nom du PDF d'un email, la
+  recherche de la galerie, le nom du macro-modèle, les marges et le caractère déclencheur des Réglages, les décimales,
+  la devise et le format de date d'une variable restaient en Arial, la police par défaut du navigateur. Tous les champs
+  de l'interface, et le texte qu'on y tape, ont maintenant la même police que les boutons voisins ; leur taille et leur
+  place ne changent pas. Le contenu du document garde son Roboto.
 
 ## [1.0.0-beta.1] - 2026-10-05
 
@@ -1211,6 +1217,11 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   underlined, but under the mouse that blue sat on the hover grey and only reached 4.0:1 in the light theme and 4.4:1
   in the dark theme. It keeps its blue and its line, with a firmer blue while the mouse is over it (5.7:1 in light,
   5.4:1 in dark); at rest, nothing changes.
+- **Fields use the buttons' font**: since the switch to the system font, buttons used it but fields did not. The
+  template name (while renaming it), an email's Subject, To, Cc, Bcc and the PDF name, the gallery search, the macro
+  template's name, the margins and the trigger character in Settings, a variable's decimals, currency and date format
+  stayed in Arial, the browser's default font. Every field of the interface, and the text typed in it, now uses the same
+  font as the buttons next to it; their size and place do not change. The document's content keeps its Roboto.
 
 ## [1.0.0-beta.1] - 2026-10-05 (English)
 

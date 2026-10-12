@@ -40,6 +40,8 @@ lisible sur le gris du survol (4,5:1 au moins) ; la souris ailleurs, elle repren
 l'**onglet choisi** des Réglages et celui de la liste « # » (Variables / Puces) : la souris dessus le laisse bleu et souligné,
 d'un bleu un peu plus soutenu, lisible sur le gris du survol.
 
+Les **champs** de l'interface (le nom d'un modèle qu'on renomme ; l'Objet, À, Cc, Cci et le nom du PDF d'un email ; la recherche de la galerie ; le nom d'un macro-modèle ; les marges et le caractère déclencheur des Réglages ; les décimales, la devise et le format de date d'une variable) sont dans la même police que les boutons voisins, celle du système. À vérifier à l'œil, en tapant un mot dans chacun : la forme des lettres est celle du bouton à côté, le texte tapé aussi, et rien ne bouge (ni la taille des champs, ni celle des lettres). Le contenu du document, lui, reste en Roboto.
+
 ## Principe directeur — la chaîne à 3 étages
 
 Le contenu d'un modèle passe par **3 moteurs de rendu indépendants**, chacun avec son propre
