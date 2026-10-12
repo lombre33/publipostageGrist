@@ -222,6 +222,15 @@
     accessGuideContainer.style.display = shown ? 'block' : 'none';
   }
 
+  // Une remise en ordre de la mise en page (colonnes gelées, tableau ramené dans la page) n'est pas une modification de la personne : l'état « à
+  // enregistrer » reste celui d'avant, sinon un simple retour au Mode édition ou un Aperçu A4 rallumé réécrirait le modèle à la passe
+  // d'enregistrement suivante (loadTemplateIntoEditor remet cet état à zéro en dernier, pour la même raison).
+  function withoutMarkingDirty(action) {
+    const wasDirty = autosaveDirty;
+    action();
+    if (!wasDirty && autosaveDirty) { autosaveDirty = false; updateSaveStatus(); }
+  }
+
   // Affiche l'éditeur, le résumé du macro-modèle, la carte de l'accès ou la Lecture selon le mode, l'accès du widget et le type du modèle chargé.
   // Partagé par switchMode et les deux chargeurs : un changement de modèle en pleine édition ne repasse pas par switchMode.
   function syncEditorVisibilityForMode() {
@@ -239,13 +248,9 @@
     // Le panneau Rechercher / Remplacer (js/find-replace.js) cherche dans l'éditeur : masqué, il se ferme sans lui rendre le clavier.
     if (!showEditor) { EditorCore.hideFloatingContextToolbars(); FindReplace.close({ focus: false }); }
     // Un modèle chargé pendant que l'éditeur était masqué n'a pas pu être mesuré : ses colonnes sont ajustées maintenant qu'il a une mise en page,
-    // sinon un tableau trop large pour la page ne rentrerait qu'à la prochaine frappe. Ce n'est pas une modification de la personne : l'état « à
-    // enregistrer » reste celui d'avant, sinon un simple retour au Mode édition réécrirait le modèle à la passe d'enregistrement suivante
-    // (loadTemplateIntoEditor remet cet état à zéro en dernier, pour la même raison).
+    // sinon un tableau trop large pour la page ne rentrerait qu'à la prochaine frappe.
     if (showEditor) {
-      const wasDirty = autosaveDirty;
-      Editor.refreshLayout();
-      if (!wasDirty && autosaveDirty) { autosaveDirty = false; updateSaveStatus(); }
+      withoutMarkingDirty(Editor.refreshLayout);
       // Orientation changée pendant que l'éditeur était masqué : la grille page des images en calque est recapturée maintenant qu'il a une mise en
       // page.
       recaptureStaleLayerGrids();
@@ -2177,6 +2182,9 @@
     // Le facteur d'ajustement n'a de sens qu'en Aperçu A4 : applyPageFitZoom le retire de lui-même quand la classe disparaît. Avant la pagination,
     // qui mesure le rendu réel et serait sinon calculée avec l'ancien facteur.
     refreshPageFitZoom();
+    // Un tableau posé quand la page n'existait pas (ou chargé Aperçu A4 éteint) peut la dépasser : il y rentre dès qu'elle apparaît, sans attendre la
+    // prochaine frappe. Éditeur masqué (Lecture, macro-modèle) : rien à mesurer, syncEditorVisibilityForMode le fera à son retour.
+    if (on) withoutMarkingDirty(Editor.fitTablesToPage);
     Editor.refreshPaginationPreview();
     recaptureStaleLayerGrids();
   }

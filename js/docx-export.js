@@ -396,11 +396,13 @@ const DocxExport = (function () {
   }
   // Comme inlineNodesFrom, mais sans les <ul> ni <ol> directs : une sous-liste produit ses propres paragraphes (listBlocksFrom) au lieu d'être
   // aplatie dans le texte de son <li> parent. Même rôle que inlineRunsExcludingNestedLists, js/pdf-export.js.
-  async function inlineNodesExcludingNestedLists(node, parentStyle, ctx) {
+  // `only` : les seuls enfants lus (un morceau d'un item ou d'une citation qu'un tableau coupe, voir ExportCommon.segmentsAroundTables).
+  async function inlineNodesExcludingNestedLists(node, parentStyle, ctx, only) {
     const style = inheritedRunStyle(node, parentStyle);
     const out = [];
     let sawLineBlock = false;
     for (const child of Array.from(node.childNodes)) {
+      if (only && !only.has(child)) continue;
       if (child.nodeType === Node.ELEMENT_NODE && /^(UL|OL)$/.test(child.tagName)) continue;
       const isLineBlock = child.nodeType === Node.ELEMENT_NODE && /^(P|DIV|H[1-6]|PRE)$/.test(child.tagName);
       if (isLineBlock && sawLineBlock) out.push(new docx.TextRun({ break: 1 }));
@@ -447,28 +449,50 @@ const DocxExport = (function () {
     const items = Array.from(listEl.children).filter(c => c.tagName === 'LI');
     const isTask = listEl.getAttribute('data-type') === 'taskList';
     const numberingRef = isTask ? null : registerListNumbering(listEl, depth, ctx);
+    const textIndentTwip = INDENT_STEP_TWIP * (depth + 1);
     const blocks = [];
     for (const [i, li] of items.entries()) {
       const baseStyle = isTask ? taskItemBaseStyle(li) : { size: DEFAULT_HALF_PT };
-      const runs = await inlineNodesExcludingNestedLists(li, baseStyle, ctx);
       const align = paragraphAlignment(li);
-      const opts = {
-        alignment: align,
-        // after:0 : `.tiptap li` n'a aucune marge propre (seuls ul et ol sont remis à 0, css/editor-v2.css ; li hérite de ce 0). line et lineRule :
-        // même interligne que l'éditeur dans un item qui revient à la ligne (LINE_SPACING_240THS).
-        spacing: { after: 0, line: LINE_SPACING_240THS, lineRule: 'auto' },
-        pageBreakBefore: !!(pageBreakBefore && depth === 0 && i === 0),
-      };
-      if (isTask) {
-        opts.children = [new docx.TextRun({ text: taskMarkerText(li) })].concat(runs.length ? runs : [new docx.TextRun('')]);
-        opts.indent = { left: INDENT_STEP_TWIP * (depth + 1) };
-      } else {
-        opts.children = runs.length ? runs : [new docx.TextRun('')];
-        opts.numbering = { reference: numberingRef, level: 0 };
+      // Un item qui porte un tableau (le bouton Tableau le pose dans l'item où se trouve le curseur) : le texte d'avant (qui porte la puce), le
+      // tableau, le texte d'après qui continue l'item, dans l'ordre ; un item sans tableau est un seul morceau, lu en entier comme avant.
+      const segments = ExportCommon.hasTableChild(li) ? ExportCommon.segmentsAroundTables(li) : [{ nodes: Array.from(li.childNodes) }];
+      const cut = segments.length > 1;
+      let markerDone = false;
+      for (const segment of segments) {
+        if (segment.table) {
+          for (const block of await tableBlocksFrom(segment.table, ctx, false, false, { indentTwip: textIndentTwip })) blocks.push(block);
+          continue;
+        }
+        if (cut && ExportCommon.isBlankSegment(segment)) continue;
+        const only = cut ? new Set(segment.nodes) : null;
+        const runs = await inlineNodesExcludingNestedLists(li, baseStyle, ctx, only);
+        const nested = segment.nodes.filter(c => c.nodeType === Node.ELEMENT_NODE && /^(UL|OL)$/.test(c.tagName));
+        // Après un tableau, un morceau qui ne porte que des sous-listes : pas de ligne vide avant elles (le PDF ne l'écrit pas non plus).
+        if (!(markerDone && !runs.length && nested.length)) {
+          const opts = {
+            alignment: align,
+            // after:0 : `.tiptap li` n'a aucune marge propre (seuls ul et ol sont remis à 0, css/editor-v2.css ; li hérite de ce 0). line et lineRule :
+            // même interligne que l'éditeur dans un item qui revient à la ligne (LINE_SPACING_240THS).
+            spacing: { after: 0, line: LINE_SPACING_240THS, lineRule: 'auto' },
+            pageBreakBefore: !!(pageBreakBefore && depth === 0 && i === 0 && !markerDone),
+          };
+          if (markerDone) {
+            // Le texte d'après un tableau : la suite de l'item, au retrait de son texte, sans puce ni numéro.
+            opts.children = runs.length ? runs : [new docx.TextRun('')];
+            opts.indent = { left: textIndentTwip };
+          } else if (isTask) {
+            opts.children = [new docx.TextRun({ text: taskMarkerText(li) })].concat(runs.length ? runs : [new docx.TextRun('')]);
+            opts.indent = { left: textIndentTwip };
+          } else {
+            opts.children = runs.length ? runs : [new docx.TextRun('')];
+            opts.numbering = { reference: numberingRef, level: 0 };
+          }
+          markerDone = true;
+          blocks.push(new docx.Paragraph(opts));
+        }
+        for (const sub of nested) for (const block of await listBlocksFrom(sub, depth + 1, ctx)) blocks.push(block);
       }
-      blocks.push(new docx.Paragraph(opts));
-      const nested = Array.from(li.children).filter(c => /^(UL|OL)$/.test(c.tagName));
-      for (const sub of nested) for (const block of await listBlocksFrom(sub, depth + 1, ctx)) blocks.push(block);
     }
     return blocks;
   }
@@ -477,7 +501,7 @@ const DocxExport = (function () {
   // css/editor-v2.css.
   const MIN_ZONE_COLUMN_TWIP = Math.round(10 * PageLayout.MM_TO_TWIP);
   // Largeurs à parts égales, le repli quand rien ne se mesure.
-  function equalColumnWidthsTwip(columnCount) { return new Array(columnCount).fill(Math.floor(CONTENT_WIDTH_TWIP / columnCount)); }
+  function equalColumnWidthsTwip(columnCount, availableTwip) { return new Array(columnCount).fill(Math.floor((availableTwip || CONTENT_WIDTH_TWIP) / columnCount)); }
   // Table réelle du document (pas l'émulation à deux colonnes, twoColumnsBlockFrom). Largeurs mesurées sur le rendu réel (comme le PDF), plus la
   // marge de cellule par défaut de Word (2 × 108 twips, jamais comprise dans une mesure de contenu) pour que la largeur totale demandée à Word colle
   // à la mesure.
@@ -503,12 +527,16 @@ const DocxExport = (function () {
   // qui se touchent). Les lignes de titres reviennent en haut de chaque morceau, comme sur les pages où une table se poursuit (`tblHeader`). Dans une
   // case, une colonne ou une zone d'en-tête, une page ne peut pas s'ouvrir : le tableau reste d'une pièce, la marque sans effet. Rend la liste des blocs
   // (une table, ou des tables et leurs paragraphes de saut) ; vide si le tableau n'a aucune ligne.
-  async function tableBlocksFrom(tableEl, ctx, keepWithCaption, atTopLevel) {
+  //
+  // `indentTwip` : le retrait d'un tableau posé dans un item de liste ou une citation (au retrait du texte de l'item ou de la citation), pris sur la
+  // largeur de la page.
+  async function tableBlocksFrom(tableEl, ctx, keepWithCaption, atTopLevel, { indentTwip = 0 } = {}) {
     const rows = ExportCommon.tableRows(tableEl);
     if (!rows.length) return [];
     const { keptRows, joinedRows } = rowsKeptWithNext(tableEl, rows, keepWithCaption);
     const columnCount = ExportCommon.cellsOf(rows[0]).reduce((sum, c) => sum + ExportCommon.spanOf(c, 'colspan'), 0) || 1;
-    const colWidthsTwip = tableColumnWidthsTwip(tableEl, columnCount);
+    const availableTwip = CONTENT_WIDTH_TWIP - indentTwip;
+    const colWidthsTwip = tableColumnWidthsTwip(tableEl, columnCount, availableTwip);
     // Les lignes de titres (cases <th> en tête) : Word les reprend en haut de chaque page où le tableau se poursuit (`tblHeader`), comme le PDF.
     const headerRowCount = ExportCommon.headerRowCount(rows);
     // Où chaque case commence dans la grille du tableau : une case fusionnée sur plusieurs lignes tient sa place dans les lignes d'après, dont les
@@ -526,7 +554,8 @@ const DocxExport = (function () {
     // qu'aucun trait de départ ne reste là où la personne n'en veut pas.
     const tableOf = (pieceRows, pieceSources) => {
       const wordTable = new docx.Table(Object.assign(
-        { rows: pieceRows, width: { size: tableWidthTwip(colWidthsTwip), type: docx.WidthType.DXA }, columnWidths: colWidthsTwip },
+        { rows: pieceRows, width: { size: tableWidthTwip(colWidthsTwip, availableTwip), type: docx.WidthType.DXA }, columnWidths: colWidthsTwip },
+        indentTwip ? { indent: { size: indentTwip, type: docx.WidthType.DXA } } : {},
         borderSides ? { borders: NO_BORDERS } : {},
       ));
       keepContinuationCellsWithNext(pieceRows, pieceSources, joinedRows, keptRows);
@@ -559,21 +588,37 @@ const DocxExport = (function () {
   }
 
   // Largeurs à parts égales quand le tableau n'est pas attaché au document (zone d'en-tête ou de pied, hors du périmètre de la mesure :
-  // buildDocxDocument) : aucun rendu à mesurer.
-  function tableColumnWidthsTwip(tableEl, columnCount) {
+  // buildDocxDocument) : aucun rendu à mesurer. Un tableau plus large que la page (`availableTwip`) y est ramené, comme dans le PDF : sans cela la
+  // grille et les cases gardaient les largeurs de l'éditeur (1 200 px sur une page de 719) alors que le tableau ne se déclare que de la largeur de la page.
+  function tableColumnWidthsTwip(tableEl, columnCount, availableTwip) {
     const measuredPx = tableEl.isConnected ? ExportCommon.measuredColumnWidthsPx(tableEl, columnCount) : null;
-    return (measuredPx && measuredPx.every(w => w > 0))
-      ? measuredPx.map(px => Math.max(200, Math.round(px * PX_TO_TWIP) + WORD_DEFAULT_CELL_MARGIN_TWIP))
-      : equalColumnWidthsTwip(columnCount);
+    if (!(measuredPx && measuredPx.every(w => w > 0))) return equalColumnWidthsTwip(columnCount, availableTwip);
+    return fitColumnsTwip(measuredPx.map(px => Math.max(200, Math.round(px * PX_TO_TWIP) + WORD_DEFAULT_CELL_MARGIN_TWIP)), availableTwip);
+  }
+
+  // Le plancher du contenu d'une colonne, celui du PDF (12 pt).
+  const MIN_COLUMN_CONTENT_TWIP = 240;
+  // Les colonnes (marge de cellule de Word comprise) sur la largeur disponible : telles quelles si elles y tiennent, sinon le contenu de chacune est
+  // ramené au prorata (la marge de cellule de Word est fixe) par le calcul du PDF. Le reste de l'arrondi va à la colonne la plus large : la grille
+  // retombe exactement sur la largeur annoncée au tableau.
+  function fitColumnsTwip(colWidthsTwip, availableTwip) {
+    const total = colWidthsTwip.reduce((sum, w) => sum + w, 0);
+    if (total <= availableTwip) return colWidthsTwip;
+    const margins = colWidthsTwip.length * WORD_DEFAULT_CELL_MARGIN_TWIP;
+    const usable = Math.max(MIN_COLUMN_CONTENT_TWIP * colWidthsTwip.length, availableTwip - margins);
+    const fitted = ExportCommon.fitColumnWidths(colWidthsTwip.map(w => w - WORD_DEFAULT_CELL_MARGIN_TWIP), usable, MIN_COLUMN_CONTENT_TWIP).map(w => Math.round(w) + WORD_DEFAULT_CELL_MARGIN_TWIP);
+    const drift = Math.min(total, availableTwip) - fitted.reduce((sum, w) => sum + w, 0);
+    if (usable === availableTwip - margins && drift) fitted[fitted.indexOf(Math.max(...fitted))] += drift;
+    return fitted;
   }
 
   // Un tableau plus étroit que la page (colonnes réglées en les tirant) garde sa largeur : Word étire sinon les colonnes jusqu'à la largeur demandée
   // au tableau, alors que l'éditeur, la Lecture et le PDF le gardent étroit. En dessous de 2 % d'écart, la page entière : la mesure des colonnes n'est
   // pas exacte à ce point près, et un tableau de la largeur du texte doit rester celui de la page.
   const NARROW_TABLE_RATIO = 0.98;
-  function tableWidthTwip(colWidthsTwip) {
+  function tableWidthTwip(colWidthsTwip, availableTwip) {
     const columnsTwip = colWidthsTwip.reduce((sum, w) => sum + w, 0);
-    return columnsTwip < CONTENT_WIDTH_TWIP * NARROW_TABLE_RATIO ? columnsTwip : CONTENT_WIDTH_TWIP;
+    return columnsTwip < availableTwip * NARROW_TABLE_RATIO ? columnsTwip : availableTwip;
   }
 
   async function wordRowFrom(tr, t) {
@@ -752,13 +797,15 @@ const DocxExport = (function () {
     if (current.runs.length || !groups.length) groups.push(current);
     return groups;
   }
+  // Le retrait du texte d'une citation (et du tableau qu'elle porte).
+  const QUOTE_INDENT_TWIP = 400;
   // <p>, <div> et <h1-6> donnent un ou plusieurs Paragraph (splitRunsAtFloatedImages). Titre : le marqueur littéral (« 1) »...), identique à celui du
   // PDF et de la Lecture, posé en texte en plus du style Word « Titre N » (que reprennent le volet de navigation et un futur sommaire réel construit
   // dans Word). `pageBreakBefore` doit passer par le constructeur (option native, IParagraphPropertiesOptionsBase) : un Paragraph construit n'est pas
   // modifiable de l'extérieur. `keepNext` : « Conserver avec le suivant » (w:keepNext), pour le bloc que sa légende doit suivre sur la même page
   // (keepsWithCaption) et pour un paragraphe que le réglage « Garder avec le suivant » (js/keep-with-next.js) garde avec le bloc qui le suit.
-  async function paragraphBlockFrom(node, ctx, headingMarkers, pageBreakBefore, keepNext) {
-    const runs = await inlineNodesExcludingNestedLists(node, { size: DEFAULT_HALF_PT }, ctx);
+  async function paragraphBlockFrom(node, ctx, headingMarkers, pageBreakBefore, keepNext, only) {
+    const runs = await inlineNodesExcludingNestedLists(node, { size: DEFAULT_HALF_PT }, ctx, only);
     const align = paragraphAlignment(node);
     const isHeading = isHeadingTag(node.tagName);
     const marker = isHeading && headingMarkers && headingMarkers.get(node);
@@ -779,7 +826,7 @@ const DocxExport = (function () {
       };
       if (keepNext) opts.keepNext = true;
       if (isHeading) opts.heading = docx.HeadingLevel[HEADING_LEVEL[node.tagName]];
-      if (node.tagName === 'BLOCKQUOTE') { opts.indent = { left: 400 }; opts.border = { left: { style: 'single', size: 16, color: 'CBD5E1', space: 8 } }; }
+      if (node.tagName === 'BLOCKQUOTE') { opts.indent = { left: QUOTE_INDENT_TWIP }; opts.border = { left: { style: 'single', size: 16, color: 'CBD5E1', space: 8 } }; }
       return new docx.Paragraph(opts);
     });
   }
@@ -904,6 +951,24 @@ const DocxExport = (function () {
     return [new docx.Paragraph({ children: runs, alignment: centered ? docx.AlignmentType.CENTER : undefined, spacing: { after: 0, line: LINE_SPACING_240THS, lineRule: 'auto' }, pageBreakBefore: !!flow.pendingPageBreak })];
   }
 
+  // Le paragraphe garde-t-il le suivant ? Celui d'une suite gardée, ou que sa légende doit suivre.
+  const keepsNext = (node, flow) => flow.keepNext || (flow.isTopLevel && (keepsWithCaption(node) || KeepWithNext.isKeptElement(node)));
+
+  // Une citation qui porte un tableau (le bouton Tableau le pose dans la citation où se trouve le curseur) : le texte, le tableau, le texte d'après, dans
+  // l'ordre, chacun à sa place. Lu comme du texte, le tableau perdait ses cases. Le tableau prend le retrait de la citation.
+  async function quoteBlocksAroundTables(node, flow) {
+    const blocks = [];
+    for (const segment of ExportCommon.segmentsAroundTables(node)) {
+      if (segment.table) {
+        for (const block of await tableBlocksFrom(segment.table, flow.ctx, false, false, { indentTwip: QUOTE_INDENT_TWIP })) blocks.push(block);
+      } else if (!ExportCommon.isBlankSegment(segment)) {
+        const opensPage = !!flow.pendingPageBreak && !blocks.length;
+        for (const block of await paragraphBlockFrom(node, flow.ctx, flow.headingMarkers, opensPage, keepsNext(node, flow), new Set(segment.nodes))) blocks.push(block);
+      }
+    }
+    return blocks;
+  }
+
   // Les blocs des enfants d'un conteneur, par classe ou par balise : [test, blocs(node, flow)], le premier qui convient. Les repères (saut de page,
   // numérotation des titres) n'écrivent rien ; un sommaire est ignoré sans bruit hors de la racine, plutôt que de laisser fuiter un objet de réserve non
   // résolu dans un Table ou un TableCell (plantage à la sérialisation).
@@ -916,7 +981,8 @@ const DocxExport = (function () {
     [node => node.tagName === 'TABLE', carryingBreak((node, flow) => tableBlocksFrom(node, flow.ctx, flow.isTopLevel && Caption.captionsAfter(node).length > 0, flow.isTopLevel))],
     [node => /^(UL|OL)$/.test(node.tagName), consumingBreak((node, flow) => listBlocksFrom(node, 0, flow.ctx, flow.pendingPageBreak))],
     [node => node.tagName === 'PRE', consumingBreak((node, flow) => codeBlockFrom(node, flow.pendingPageBreak))],
-    [node => /^(P|DIV|H[1-6]|BLOCKQUOTE)$/.test(node.tagName), consumingBreak((node, flow) => paragraphBlockFrom(node, flow.ctx, flow.headingMarkers, flow.pendingPageBreak, flow.keepNext || (flow.isTopLevel && (keepsWithCaption(node) || KeepWithNext.isKeptElement(node)))))],
+    [node => node.tagName === 'BLOCKQUOTE' && ExportCommon.hasTableChild(node), consumingBreak(quoteBlocksAroundTables)],
+    [node => /^(P|DIV|H[1-6]|BLOCKQUOTE)$/.test(node.tagName), consumingBreak((node, flow) => paragraphBlockFrom(node, flow.ctx, flow.headingMarkers, flow.pendingPageBreak, keepsNext(node, flow)))],
     [node => node.tagName === 'HR', consumingBreak((node, flow) => [new docx.Paragraph({ border: { bottom: { style: 'single', size: 6, color: 'CBD5E1' } }, spacing: { after: 120 }, pageBreakBefore: !!flow.pendingPageBreak })])],
     [node => node.tagName === 'IMG', consumingBreak(bareImageBlocks)],
   ];

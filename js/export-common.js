@@ -161,6 +161,42 @@ const ExportCommon = (function () {
     return widths;
   }
 
+  // Les largeurs mesurées (`measured`, dans l'unité de l'appelant : points pour le PDF, twips pour le Word) sur le total visé `usable` : celles du tableau
+  // tel quel s'il y tient (un tableau rétréci reste rétréci à l'export), ramenées au prorata au-delà. Aucune colonne sous `floor` : ce que le plancher
+  // ajoute est retiré aux colonnes plus larges, au prorata. Un seul calcul pour le PDF et le Word, pour qu'un tableau plus large que la page y prenne
+  // les mêmes proportions.
+  function fitColumnWidths(measured, usable, floor) {
+    const sum = measured.reduce((total, w) => total + w, 0);
+    const widths = measured.map(w => (w / sum) * Math.min(sum, usable));
+    const flooredTotal = widths.reduce((total, w) => total + Math.max(floor, w), 0);
+    if (flooredTotal > usable) {
+      const deficit = flooredTotal - usable;
+      const aboveFloorTotal = widths.reduce((total, w) => total + (w > floor ? w : 0), 0) || 1;
+      return widths.map(w => (w > floor ? Math.max(floor, w - deficit * (w / aboveFloorTotal)) : floor));
+    }
+    return widths.map(w => Math.max(floor, w));
+  }
+
+  // Un item de liste ou une citation qui porte un tableau (le bouton Tableau le pose dans l'item ou la citation où se trouve le curseur) : un tableau
+  // n'est pas du texte, lu comme tel il perd ses cases (« Un itemL1AL1BL2A »).
+  const hasTableChild = node => Array.from(node.children).some(child => child.tagName === 'TABLE');
+
+  // Les enfants d'un item de liste ou d'une citation, coupés à chaque tableau et dans l'ordre : des suites de nœuds (le texte, les sous-listes) et les
+  // tableaux eux-mêmes ({ nodes } ou { table }). Le texte d'avant un tableau porte la puce ou le numéro de l'item, celui d'après le continue.
+  function segmentsAroundTables(node) {
+    const segments = [];
+    let run = null;
+    Array.from(node.childNodes).forEach(child => {
+      if (child.nodeType === Node.ELEMENT_NODE && child.tagName === 'TABLE') { run = null; segments.push({ table: child }); return; }
+      if (!run) { run = { nodes: [] }; segments.push(run); }
+      run.nodes.push(child);
+    });
+    return segments;
+  }
+
+  // Un morceau de texte qui ne montre rien : des espaces entre deux blocs, pas un paragraphe vide (une ligne que la personne a laissée).
+  const isBlankSegment = segment => !!segment.nodes && segment.nodes.every(node => node.nodeType !== Node.ELEMENT_NODE && !(node.nodeValue || '').trim());
+
   // Résout les #Variable et les chips des quatre fragments d'en-tête et de pied (ReaderMode.preview) au même niveau que le corps : les exporteurs
   // restent appelables avec du HTML déjà résolu, sans enregistrement Grist en dessous. Les quatre zones sont des lectures indépendantes (aucune
   // n'écrit d'état partagé) : lancées ensemble.
@@ -313,6 +349,6 @@ const ExportCommon = (function () {
   function unreadImageCount() { return unreadImages.size; }
   function resetUnreadImages() { unreadImages.clear(); }
 
-  return { EDITOR_STYLE, hexOf, cssColorHex, scriptRefusal, loadScriptOnce, ensureJsZipLoaded, downloadBlob, attachMeasureHost, tableRows, cellsOf, spanOf, placeCells, measuredColumnWidthsPx, shownImageWidthPx, gridLinesHidden, rowHeightPx, cellVerticalAlign, cellBorderSides, gridRowSegments, resolveHeaderFooterVariables,
+  return { EDITOR_STYLE, hexOf, cssColorHex, scriptRefusal, loadScriptOnce, ensureJsZipLoaded, downloadBlob, attachMeasureHost, tableRows, cellsOf, spanOf, placeCells, measuredColumnWidthsPx, shownImageWidthPx, gridLinesHidden, rowHeightPx, cellVerticalAlign, cellBorderSides, gridRowSegments, fitColumnWidths, hasTableChild, segmentsAroundTables, isBlankSegment, resolveHeaderFooterVariables,
     resolveRecord, codeLinesOf, calloutMetricsPx, headerRowCount, noteUnreadImage, noteImageWithoutSource, unreadImageCount, resetUnreadImages };
 })();

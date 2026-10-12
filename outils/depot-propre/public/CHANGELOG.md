@@ -428,6 +428,15 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Un tableau de document sort proprement dans tous les affichages et tous les exports** : les colonnes et les lignes
+  d'un même tableau ont été comparées dans l'éditeur, la Lecture, l'impression du navigateur, le PDF et le Word (page A4,
+  A5, A3, en paysage, marges changées ; tableaux étroits, larges, à cases fusionnées, colorées, à hauteurs réglées), et
+  quatre défauts sont corrigés. Un tableau enregistré sans l'Aperçu A4, plus large que la page, y rentre maintenant dans
+  le Word (la grille et chaque case, au prorata des colonnes) comme dans le PDF, la Lecture et l'impression. Cocher
+  « Aperçu A4 » le ramène aussitôt dans la page, sans attendre une frappe et sans marquer le document comme modifié. Un
+  tableau posé dans un élément de liste (à puces, numérotée, imbriquée) ou dans une citation n'est plus écrit à plat
+  (« Un élémentL1AL1B… ») dans le PDF et le Word : c'est un tableau, au retrait de l'élément, et le texte qui le suit
+  continue l'élément sans nouvelle puce.
 - **Le trait du PDF a la largeur de son bloc et se voit dans les cases, listes et citations** : dans le PDF, le trait
   faisait toujours la même longueur (un peu moins que le texte, et assez pour déborder sur la colonne d'à côté dans
   une zone à deux colonnes), et il n'était pas dessiné du tout dans une case de tableau, un élément de liste ou une
@@ -1012,6 +1021,15 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Fixed
 
+- **A document table comes out cleanly in every view and every export**: the columns and rows of the same table were
+  compared in the editor, Reading mode, browser printing, the PDF and the Word file (A4, A5, A3 pages, landscape,
+  changed margins; narrow, wide, merged, colored and set-height tables), and four defects are fixed. A table saved
+  without the A4 preview and wider than the page now fits the page in the Word file (the grid and every cell, in
+  proportion to the columns) as it already did in the PDF, Reading mode and printing. Ticking "A4 preview" brings it
+  back into the page at once, without waiting for a keystroke and without marking the document as modified. A table
+  placed in a list item (bulleted, numbered, nested) or in a quote is no longer written flat ("An itemL1AL1B…") in the
+  PDF and the Word file: it is a table, indented like the item, and the text after it continues the item without a new
+  bullet.
 - **The PDF rule takes the width of its block and shows in cells, lists and quotes**: in the PDF, the rule was
   always the same length (a little shorter than the text, and long enough to overflow into the next column in a
   two-column zone), and it was not drawn at all in a table cell, a list item or a quote, although the editor shows

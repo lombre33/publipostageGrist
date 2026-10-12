@@ -586,9 +586,31 @@ const ReaderMode = (function () {
     wrapper.classList.remove('v2-paper-backed');
     wrapper.querySelectorAll('img[data-pp-top0]').forEach(img => { img.style.top = img.dataset.ppTop0; delete img.dataset.ppTop0; });
   }
+  // Plancher d'une colonne ramenée dans la page : celui de l'éditeur (DEFAULT_COL_PX de js/editor.js).
+  const MIN_TABLE_COLUMN_PX = 25;
+  function fitTablesToPage(wrapper) {
+    // Un tableau dont les colonnes dépassent la page (posé sans Aperçu A4, repris d'un modèle Grille, assemblé dans un macro-modèle aux marges plus
+    // larges) y est ramené comme l'éditeur le fait en Aperçu A4 (js/editor.js:clampOverflowingTables) : colonne par colonne au prorata, avec le calcul du
+    // PDF et du Word (ExportCommon.fitColumnWidths). Avant la pagination, qui mesure le rendu. Le modèle n'est pas touché, seul l'affichage l'est. Un
+    // tableau qui garde une colonne sans largeur la reçoit de la page : il n'a rien à ramener. Les tableaux d'une case se règlent sur leur case.
+    const margins = PageLayout.getMarginsPx();
+    const usablePx = PageLayout.getPageSizePx().width - margins.left - margins.right;
+    if (!(usablePx > 0)) return;
+    wrapper.querySelectorAll('table').forEach(table => {
+      if (table.parentElement.closest('table')) return;
+      const cols = Array.from(table.querySelectorAll(':scope > colgroup > col'));
+      const widths = cols.map(col => parseFloat(col.style.width));
+      if (!widths.length || widths.some(w => !(w > 0)) || widths.reduce((sum, w) => sum + w, 0) <= usablePx) return;
+      const fitted = ExportCommon.fitColumnWidths(widths, usablePx, MIN_TABLE_COLUMN_PX);
+      cols.forEach((col, index) => { col.style.width = fitted[index] + 'px'; });
+      table.style.width = fitted.reduce((sum, w) => sum + w, 0) + 'px';
+    });
+  }
   function paginate(container, wrapper, zones) {
-    // Mise en page complète de la Lecture, dans l'ordre : feuilles et coutures, images en calque décalées par slot puis posées sur leur page
-    // (grille), copies de « Sur toutes les pages ». `zones` nul : pas d'Aperçu A4, donc pas de pagination, seuls les `top` par slot s'appliquent.
+    // Mise en page complète de la Lecture, dans l'ordre : tableaux ramenés dans la page, feuilles et coutures, images en calque décalées par slot
+    // puis posées sur leur page (grille), copies de « Sur toutes les pages ». `zones` nul : pas d'Aperçu A4, donc ni page ni pagination, seuls les
+    // `top` par slot s'appliquent.
+    if (zones) fitTablesToPage(wrapper);
     const paged = zones ? renderPaginationPreview(container, wrapper, zones) : null;
     rebaseLayerImagesBySlot(wrapper);
     if (paged) { placeGridImagesOnPages(wrapper, paged); paintRepeatedCopies(wrapper, paged); }

@@ -581,6 +581,15 @@ const Editor = (function () {
       .catch(e => console.warn('[Editor] refreshSchema pour la validation des #Variable a échoué', e));
   }
 
+  function fitTablesToPage() {
+    // Colonnes automatiques gelées, puis tableau trop large ramené dans la page (Aperçu A4 seulement : sans page il n'y a pas de limite). Partagé par
+    // refreshLayout et par l'Aperçu A4 qu'on rallume (js/main.js:applyA4Preview) : un tableau posé quand la page n'existait pas y rentre aussitôt,
+    // sans attendre la frappe suivante.
+    if (!editor) return;
+    backfillAutoColumnWidths(editor);
+    clampOverflowingTables(editor);
+  }
+
   function refreshLayout() {
     // Appelé après un changement de marges de page (js/page-layout.js) et chaque fois que l'éditeur redevient visible
     // (js/main.js:syncEditorVisibilityForMode). Les zones à deux colonnes n'ont rien à recalculer ici : `--layout-left` porte une longueur en mm (cf.
@@ -589,8 +598,7 @@ const Editor = (function () {
     // sur la géométrie des marges précédentes. Un modèle chargé pendant que l'éditeur était masqué (Lecture, macro-modèle) n'a pu ni geler ses
     // colonnes automatiques ni ramener un tableau trop large dans la page : ces deux mesures exigent une mise en page réelle.
     if (!editor) return;
-    backfillAutoColumnWidths(editor);
-    clampOverflowingTables(editor);
+    fitTablesToPage();
     // Les images en calque d'un ancien modèle chargé masqué n'ont pas pu recevoir leur position de page (cf.
     // HeaderFooterPreview.migrateLegacyImagePositions) : mesurées ici, une fois les largeurs de colonnes réglées, avec la mise en page que l'éditeur
     // vient de retrouver.
@@ -713,7 +721,7 @@ const Editor = (function () {
     // Aperçu A4 rallumé, facteur d'ajustement changé... : la pagination est refaite, et la position des images d'un modèle chargé sans mise en page
     // se relit sur leur grille.
     refreshPaginationPreview: () => { HeaderFooterPreview.renderPaginationOverlay(); HeaderFooterPreview.reconcileLayerImagesWithGrid({ onlyIfPending: true }); },
-    refreshLayout, openFootnoteEditorAt, isEditingHeaderFooter: HeaderFooterPreview.isEditingHeaderFooter, isTrackChangesOn, setTrackChanges,
+    refreshLayout, fitTablesToPage, openFootnoteEditorAt, isEditingHeaderFooter: HeaderFooterPreview.isEditingHeaderFooter, isTrackChangesOn, setTrackChanges,
     hasPendingTrackedChanges, selectedColumnsCrossMergedCell, selectedRowsCrossMergedCell, getSuiviModificationsForSave, getSuggestionAuthors,
     onSuggestionAuthorsChange,
   };

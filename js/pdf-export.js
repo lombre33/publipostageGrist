@@ -825,12 +825,12 @@ const PdfExport = (function () {
   // Ce qui contient un tableau sans que celui-ci passe d'une page à l'autre : une case, une liste, une citation, un encadré, une colonne.
   const PAGE_FLOW_BREAKERS = 'td, th, li, blockquote, .callout, .two-columns-column';
 
-  function tableFrom(node, pageBreakBefore, rootRect, inMainFlow) {
+  function tableFrom(node, pageBreakBefore, rootRect, inMainFlow, indentPt) {
     const rows = ExportCommon.tableRows(node);
     const rawRows = rows.length ? rows : Array.from(node.querySelectorAll('tr'));
     const columnCount = tableColumnCount(rawRows);
     const pads = cellPaddingsPt(rawRows);
-    const widths = columnWidthsPt(node, columnCount, pads.left + pads.right);
+    const widths = columnWidthsPt(node, columnCount, pads.left + pads.right, indentPt);
     // Les réglages de la grille (hauteur d'une ligne, alignement vertical, bords, quadrillage, saut de page avant une ligne) se lisent sur la marque
     // de l'enregistrement de tout tableau, grille ou tableau de document : un tableau que personne n'a réglé n'en porte aucune et sort comme avant.
     const hasRowHeights = rawRows.some(row => row.hasAttribute('data-row-height'));
@@ -841,7 +841,7 @@ const PdfExport = (function () {
     const hasValign = rawRows.some(row => ExportCommon.cellsOf(row).some(cell => ExportCommon.cellVerticalAlign(cell)));
     const rowAreasPt = hasRowHeights || hasValign ? gridRowAreasPt(rawRows, pads) : null;
     const t = {
-      node, rawRows, rootRect, inMainFlow, columnCount, pads, widths,
+      node, rawRows, rootRect, inMainFlow, columnCount, pads, widths, indentPt: indentPt || 0,
       // La grille ouverte : pas de suite de texte ni de page, donc ni lignes de titres reprises, ni lignes gardées entières. Un tableau à sauts de page
       // avant une ligne est coupé en morceaux (tableBlocksFrom), grille ou tableau de document.
       isGrid: hasRowHeights && exportsGridModel,
@@ -888,28 +888,17 @@ const PdfExport = (function () {
   // retirés avant de répartir, pour que le total rendu retombe sur la largeur de page. La coupure des lignes de chaque case se règle dans la case
   // (cellWrapMarginPt), pas ici : une largeur retranchée à chaque colonne rétrécissait le tableau (près de 5 % pour sept colonnes) et les en-têtes
   // étroits se coupaient sur une ligne de plus que dans l'éditeur.
-  function columnWidthsPt(node, columnCount, cellPaddingPt) {
-    const usablePt = Math.max(MIN_COLUMN_WIDTH_PT * columnCount, CONTENT_WIDTH_PT - columnCount * (cellPaddingPt + TABLE_LINE_PT) - TABLE_LINE_PT);
+  function columnWidthsPt(node, columnCount, cellPaddingPt, indentPt) {
+    // `indentPt` : le retrait d'un tableau posé dans un item de liste ou une citation, pris sur la largeur de la page.
+    const usablePt = Math.max(MIN_COLUMN_WIDTH_PT * columnCount, CONTENT_WIDTH_PT - (indentPt || 0) - columnCount * (cellPaddingPt + TABLE_LINE_PT) - TABLE_LINE_PT);
     const measuredPx = ExportCommon.measuredColumnWidthsPx(node, columnCount);
     const measuredPt = measuredPx ? measuredPx.map(px => px * PX_TO_PT) : null;
     const measuredSum = measuredPt ? measuredPt.reduce((sum, w) => sum + w, 0) : 0;
+    // Les largeurs mesurées sur le total visé : la largeur réelle du tableau si elle tient dans la page (un tableau rétréci reste rétréci à l'export),
+    // `usablePt` au-delà ; aucune colonne sous le minimum (calcul commun avec le Word : ExportCommon.fitColumnWidths).
     return measuredSum > 0
-      ? fitColumnWidths(measuredPt, measuredSum, usablePt)
+      ? ExportCommon.fitColumnWidths(measuredPt, usablePt, MIN_COLUMN_WIDTH_PT)
       : Array(columnCount).fill(Math.max(MIN_COLUMN_WIDTH_PT, usablePt / columnCount));
-  }
-
-  // Les largeurs mesurées (`measuredPt`, de somme `sum`) sur le total visé : la largeur réelle du tableau si elle tient dans la page (un tableau
-  // rétréci reste rétréci à l'export), `usablePt` au-delà. Aucune colonne sous le minimum : ce que le plancher ajoute est retiré aux colonnes plus
-  // larges, au prorata.
-  function fitColumnWidths(measuredPt, sum, usablePt) {
-    const widths = measuredPt.map(w => (w / sum) * Math.min(sum, usablePt));
-    const flooredTotal = widths.reduce((total, w) => total + Math.max(MIN_COLUMN_WIDTH_PT, w), 0);
-    if (flooredTotal > usablePt) {
-      const deficit = flooredTotal - usablePt;
-      const aboveFloorTotal = widths.reduce((total, w) => total + (w > MIN_COLUMN_WIDTH_PT ? w : 0), 0) || 1;
-      return widths.map(w => (w > MIN_COLUMN_WIDTH_PT ? Math.max(MIN_COLUMN_WIDTH_PT, w - deficit * (w / aboveFloorTotal)) : MIN_COLUMN_WIDTH_PT));
-    }
-    return widths.map(w => Math.max(MIN_COLUMN_WIDTH_PT, w));
   }
 
   function tableLayoutFor(pads) {
@@ -1089,7 +1078,7 @@ const PdfExport = (function () {
     const table = {
       table: Object.assign({ headerRows: plan.headerRows, widths, body: plan.rows.length ? plan.rows : emptyRow }, plan.heights && body.length ? { heights: plan.heights } : {}, plan.dontBreakRows ? { dontBreakRows: true } : {}),
       layout: t.layout,
-      margin: [0, 5, 0, 5],
+      margin: [t.indentPt, 5, 0, 5],
     };
     if (pageBreakBefore) table.pageBreak = 'before';
     if (t.nestedPending.length) table._nestedPending = t.nestedPending;
@@ -1137,8 +1126,8 @@ const PdfExport = (function () {
     delete tail._nestedPending;
     return [head, tail];
   }
-  function tableBlocksFrom(node, pageBreakBefore, rootRect, inMainFlow, captionPt) {
-    const table = tableFrom(node, pageBreakBefore, rootRect, inMainFlow);
+  function tableBlocksFrom(node, pageBreakBefore, rootRect, inMainFlow, captionPt, indentPt) {
+    const table = tableFrom(node, pageBreakBefore, rootRect, inMainFlow, indentPt);
     const segments = table._rowSegments;
     delete table._rowSegments;
     if (!segments) return (captionPt > 0 && splitTailRow(table, node, captionPt)) || [table];
@@ -2324,7 +2313,7 @@ const PdfExport = (function () {
     if (tag === 'HR') return [ruleBlock(pageBreakBefore, availableWidthPt)];
     if (tag === 'PRE') return [codeBlockFrom(node, pageBreakBefore)];
     const ctx = { node, tag, pageBreakBefore, headingMarkers, availableWidthPt, rootRect, floatCarry };
-    if (RULE_HOSTS.test(tag) && hasRuleChild(node)) return ruleSplitBlocks(ctx);
+    if (RULE_HOSTS.test(tag) && (hasRuleChild(node) || ExportCommon.hasTableChild(node))) return ruleSplitBlocks(ctx);
     return isFlowText(node, tag, headingMarkers) ? flowTextBlocks(ctx) : ordinaryBlocks(ctx, blockRunsOf(node, tag));
   }
 
@@ -2350,15 +2339,18 @@ const PdfExport = (function () {
   // Un <li> ou une citation que traverse un trait (un <hr>, enfant direct) : le navigateur pose le trait entre ses paragraphes, le texte d'un côté et de
   // l'autre. Le PDF lit le texte de tout le bloc d'un seul tenant : il le coupe donc au trait, en trois blocs (le texte d'avant avec la puce, le trait
   // à la largeur qui reste, le texte d'après sans puce). Une citation garde ses marges de dessus et de dessous aux deux bouts seulement : à l'intérieur,
-  // le trait touche le texte, comme dans l'éditeur.
+  // le trait touche le texte, comme dans l'éditeur. Un tableau (le bouton Tableau le pose dans l'item ou la citation où se trouve le curseur) coupe de même :
+  // lu comme du texte, il perdait ses cases (« Un itemL1AL1BL2A »).
   const RULE_HOSTS = /^(LI|BLOCKQUOTE)$/;
   const hasRuleChild = node => Array.from(node.children).some(child => child.tagName === 'HR');
 
-  // Les enfants d'un nœud rangés par morceaux, un nouveau morceau après chaque trait.
-  function ruleSegmentsOf(node) {
+  // Les enfants d'un nœud rangés par morceaux, un nouveau morceau après chaque trait. Avec `breaks`, après chaque tableau aussi : ce qui a coupé (le trait
+  // ou le tableau) y est rangé, dans l'ordre, `breaks[i]` entre le morceau i et le suivant.
+  function ruleSegmentsOf(node, breaks) {
     const segments = [[]];
     node.childNodes.forEach(child => {
-      if (child.nodeType === Node.ELEMENT_NODE && child.tagName === 'HR') segments.push([]);
+      const isBreak = child.nodeType === Node.ELEMENT_NODE && (child.tagName === 'HR' || (breaks && child.tagName === 'TABLE'));
+      if (isBreak) { segments.push([]); if (breaks) breaks.push(child); }
       else segments[segments.length - 1].push(child);
     });
     return segments;
@@ -2372,11 +2364,16 @@ const PdfExport = (function () {
     const style = inheritedStyle(node, { fontSize: DEFAULT_FONT_SIZE });
     const indentPt = measureIndentPt(node, tag === 'LI' ? 'box' : 'text');
     const rulePt = (availableWidthPt != null ? availableWidthPt : CONTENT_WIDTH_PT) - indentPt;
-    const segments = ruleSegmentsOf(node);
+    const breaks = [];
+    const segments = ruleSegmentsOf(node, breaks);
     const lastSegment = segments.length - 1;
     const blocks = [];
+    // Le tableau prend le retrait de l'item ou de la citation, mesuré sur lui, sur la largeur de la page (une page ne s'ouvre pas dans un item : PAGE_FLOW_BREAKERS).
+    const breakBlocks = el => (el.tagName === 'TABLE'
+      ? tableBlocksFrom(el, false, ctx.rootRect, availableWidthPt == null, 0, measureIndentPt(el, 'box'))
+      : [ruleBlock(false, rulePt, indentPt)]);
     segments.forEach((children, i) => {
-      if (i > 0) blocks.push(ruleBlock(false, rulePt, indentPt));
+      if (i > 0) breakBlocks(breaks[i - 1]).forEach(b => blocks.push(b));
       // Rien avant ou après un trait : pas de ligne vide. Un <li> garde son premier morceau, qui porte la puce.
       if (!segmentHasContent(children) && (i > 0 || tag !== 'LI')) return;
       const images = [];
@@ -2537,10 +2534,12 @@ const PdfExport = (function () {
     const runs = trimEdgeWhitespace(rawRuns.filter(r => !r._imageMarker));
     const block = textBlockFrom(node, tag, runs, headingMarkers, ctx.rulePart);
     const blocks = [];
+    // La suite d'un item après un trait ou un tableau qui ne porte que sa sous-liste n'a pas de ligne à elle : la sous-liste suit le trait ou le tableau.
+    const listOnlyTail = ctx.rulePart && ctx.rulePart.continued && !runs.length && !images.length && nestedLists.length;
     // Un bloc sans texte qui ne contient qu'une image dans le flux n'a pas besoin du bloc-texte de repli `text: ' '` : l'image fait sa hauteur, et le
     // pousser quand même décalerait tout le contenu suivant (et l'ancrage des images voisines, cf. resolvePendingImageAnchors). Celui qui ne porte
     // que des images en calque garde sa ligne (cf. imageParagraphBlocks).
-    if (runs.length || !images.length || images.every(img => img._pendingImgNode)) {
+    if (!listOnlyTail && (runs.length || !images.length || images.every(img => img._pendingImgNode))) {
       if (pageBreakBefore) block.pageBreak = 'before';
       blocks.push(block);
     } else if (pageBreakBefore && images[0]) {
