@@ -645,9 +645,10 @@
 .v2-hover-row.is-active { color: var(--accent, #2f6fed); font-weight: 700; }
 .v2-hover-row-disabled { color: var(--text-muted, #9aa3b2); cursor: not-allowed; }
 .v2-hover-row-disabled:hover { background: none; }
-/* Une ligne qu'un menu ne montre que dans un certain état (lignes du menu Exporter selon le type d'export, `data-export-for`) : `hidden` suffit, sauf pour une
-   ligne que le CSS passe en `display: flex` (clé d'un raccourci, css/shortcuts.css). */
-.v2-hover-row[hidden] { display: none; }
+/* Une ligne, un intitulé ou un filet qu'un menu ne montre que dans un certain état (la qualité du PDF du menu Type d'export et les options du menu Exporter, selon
+   le type d'export : `data-export-for`) : `hidden` suffit, sauf pour une ligne que le CSS passe en `display: flex` (clé d'un raccourci, css/shortcuts.css) ou un
+   intitulé en `display: block`. */
+.v2-hover-row[hidden], .v2-hover-flyout-label[hidden], .v2-hover-hsep[hidden] { display: none; }
 /* Lignes du menu « Lien, citation, bloc de code » (#v2-blocks-flyout) : de vrais boutons, atteignables au clavier (les `.v2-hover-row` sont des
    `<span>`), avec l'icône de la fonction devant et le raccourci à droite. Plus spécifique que `#v2-toolbar button` (30 × 28, centré), qui vise
    tout bouton de la barre. */
@@ -662,15 +663,17 @@
 .v2-hover-row:focus-visible { outline: 2px solid var(--accent, #2f6fed); outline-offset: -2px; }
 /* Ligne à cocher (« Enregistrement automatique ») : la coche est à droite du libellé et ne se voit que si la ligne est cochée
    (`aria-checked="true"`) ; le libellé reste aligné à gauche comme dans les autres menus. Trait sans remplissage, en `mask` comme les autres
-   icônes de la barre, à la couleur d'accent. */
+   icônes de la barre, à la couleur d'accent. `v2-hover-row-check-start` : la même coche DEVANT le libellé (menu Exporter, demande du
+   12/10 : « une petite coche devant ») ; sa place reste réservée quand elle est cachée, les libellés restent alignés. */
 .v2-hover-row-check { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
-.v2-hover-row-check::after {
+.v2-hover-row-check-start { display: flex; align-items: center; gap: 8px; }
+.v2-hover-row-check::after, .v2-hover-row-check-start::before {
   content: ''; flex: none; width: 13px; height: 13px; background-color: var(--accent, #2f6fed); visibility: hidden;
   -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center;
   -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 13l4 4L19 7'/%3E%3C/svg%3E");
   mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 13l4 4L19 7'/%3E%3C/svg%3E");
 }
-.v2-hover-row-check[aria-checked="true"]::after { visibility: visible; }
+.v2-hover-row-check[aria-checked="true"]::after, .v2-hover-row-check-start[aria-checked="true"]::before { visibility: visible; }
 /* Menu Page (#v2-page-flyout, js/orientation-toggle.js) : le nom de la ligne prend la place libre, les dimensions du format restent discrètes
    entre lui et la coche. */
 .v2-page-row-name { flex: 1; }

@@ -222,7 +222,7 @@ if (pdfDownload) {
   }
 }
 
-// Word : le type se choisit d'abord dans le menu « Type d'export » (survol du bouton à gauche d'« Exporter »), puis le menu Exporter s'ouvre au survol de son bouton et la ligne « Exporter en DOCX » se clique.
+// Word : le type se choisit d'abord dans le menu « Type d'export » (survol du bouton à gauche d'« Exporter »), puis le bouton Exporter (« Une seule ligne » est cochée au départ) exporte la ligne en .docx.
 await realMove('#v2-btn-quality');
 await sleep(500);
 const wordType = await center('#v2-quality-flyout .v2-hover-row[data-export-type="docx"]');
@@ -230,16 +230,11 @@ await page.mouse.move(wordType.x, wordType.y, { steps: 8 });
 await sleep(120);
 await page.mouse.click(wordType.x, wordType.y);
 await sleep(300);
-await realMove('#btn-export-pdf');
-await sleep(500);
-const docxRow = await center('#v2-btn-export-docx');
-await page.mouse.move(docxRow.x, docxRow.y, { steps: 8 });
-await sleep(120);
 const [docxDownload] = await Promise.all([
   page.waitForEvent('download', { timeout: 90000 }).catch(() => null),
-  page.mouse.click(docxRow.x, docxRow.y),
+  (async () => { const c = await realMove('#btn-export-pdf'); await page.mouse.click(c.x, c.y); })(),
 ]);
-check('la ligne « Exporter en DOCX » télécharge un fichier', !!docxDownload && /\.docx$/i.test(docxDownload.suggestedFilename()), docxDownload && docxDownload.suggestedFilename());
+check('le bouton « Exporter », type Word, télécharge un fichier', !!docxDownload && /\.docx$/i.test(docxDownload.suggestedFilename()), docxDownload && docxDownload.suggestedFilename());
 if (docxDownload) {
   const word = await page.evaluate(async b64 => {
     await ExportCommon.ensureJsZipLoaded();

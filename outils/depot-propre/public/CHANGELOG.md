@@ -22,7 +22,7 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   correspondance à choisir. Une zone n'a qu'une Boucle, et ne répète pas la table de la zone qui l'entoure
   (l'icône est alors grisée et dit pourquoi). Les renommages de tables et de colonnes dans Grist suivent
   aussi ces boucles ; la puce « N° de ligne » donne le rang de la zone la plus proche.
-- **PDF « Léger »** : le menu « Type d'export » (sous les trois types) propose « Léger (images réduites) ». C'est le même PDF
+- **PDF « Léger »** : le menu « Type d'export » (pour le type PDF) propose « Léger (images réduites) ». C'est le même PDF
   vectoriel, texte et mise en page intacts, dont les images sont ramenées à 150 points par pouce (la netteté
   d'un courrier ou de l'écran) : une photo de 4 Mo posée sur 10 cm n'en pèse plus que quelques dizaines de Ko.
   Une photo (JPEG ou PNG opaque) est recompressée en JPEG ; un logo à fond transparent reste un PNG
@@ -375,13 +375,16 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   être le modèle par défaut du document : leur étoile est grisée, avec l'info-bulle qui dit pourquoi (pour une vue :
   Réglages > Vue), comme en lecture seule.
 - **Le bouton « Qualité PDF » devient « Type d'export »** : le bouton à gauche d'« Exporter » choisit le type
-  d'export (PDF, Word ou Excel) et, sous les trois types, la qualité du PDF (Vectoriel, Impression navigateur,
-  Léger). Le bouton **Exporter** (Alt+P aussi) exporte la ligne affichée dans le type choisi, et son menu, titré
-  « Exporter », liste les lignes de ce type : l'export de la ligne affichée, puis les lots - PDF (archive ZIP, un
-  seul PDF, assemblage avant impression), Word (archive ZIP), Excel (archive ZIP, classeur unique). Rien n'est
-  retiré : les neuf lignes d'export d'avant sont là, avec les mêmes noms et le même effet ; Word reste grisé dans
-  une grille et Excel dans un document, et le type revient alors au PDF. La qualité du PDF se grise quand le type
-  n'est pas le PDF, et se retrouve choisie en revenant au PDF.
+  d'export (PDF, Word ou Excel) et, pour le PDF seulement, sa qualité (Vectoriel, Impression navigateur, Léger) :
+  la qualité choisie est gardée et revient avec le PDF. Le menu du bouton **Exporter**, titré « Exporter », ne
+  liste plus que les options de lignes et de classeur du type choisi, avec une petite coche devant celle qui est
+  cochée : une seule ligne, toutes les lignes (archive ZIP) et, pour le PDF, toutes les lignes en un seul PDF et
+  l'assemblage avant impression, pour Excel toutes les valeurs de la table dans un seul classeur. Un clic sur une
+  option la coche sans rien exporter ; le bouton **Exporter** (Alt+P aussi) lance l'option cochée dans le type
+  choisi, avec sa confirmation pour un lot. Rien n'est retiré : les neuf exports d'avant se font par ces choix,
+  avec la même confirmation et le même effet ; Word reste grisé dans une grille et Excel dans un document, et le
+  type revient alors au PDF. Une option que le type n'a pas (« un seul PDF » après un passage à Word) se lit
+  « Toutes les lignes (ZIP) » et revient avec son type.
 - **Marges d'un macro-modèle** : l'onglet Marges des Réglages dit, tant qu'un macro-modèle est chargé, que ses marges
   priment sur celles des modèles assemblés : elles valent pour toutes ses pages, dans la Lecture, le PDF, le Word et
   l'impression ; les marges propres à un modèle ne servent que lorsqu'on l'ouvre seul. Rien ne change dans le calcul des
@@ -654,7 +657,7 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   Loop only, and does not repeat the table of the zone around it (the icon is then greyed out and says why).
   Renames of tables and columns in Grist follow these loops too; the "Row number" chip gives the rank in the
   nearest zone.
-- **"Light" PDF**: the PDF button's Quality menu offers "Light (smaller images)". It is the same vector PDF,
+- **"Light" PDF**: the "Export type" menu (for the PDF type) offers "Light (smaller images)". It is the same vector PDF,
   text and layout untouched, with its images brought down to 150 points per inch (the sharpness of a letter
   or a screen): a 4 MB photo placed over 10 cm weighs only a few dozen KB. A photo (JPEG or opaque PNG) is
   recompressed as a JPEG; a logo on a transparent background stays a transparent PNG; a small image, a QR code
@@ -926,7 +929,7 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   redraws. When nothing can be drawn (no row selected for "linked", nothing to plot, chart deleted in Grist,
   library unreachable), the dotted frame and the chart's name stay. In a space narrower than the chart, it
   shrinks without distortion, as in Reading.
-- **Browser print**: the "Browser print" line of the PDF button's Quality menu, greyed out until now, prints the
+- **Browser print**: the "Browser print" line of the "Export type" menu (the PDF button's Quality menu before it was renamed), greyed out until now, prints the
   Reading view through the browser's print window ("Save as PDF" or a printer). The layout is the Reading
   view's: same page breaks, same headers, footers and page numbers, same fonts, tables, images and watermark,
   in the light theme whatever the widget's theme. The document is measured by the Reading view itself, then cut
@@ -978,6 +981,16 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   that will open at startup. The toolbar star stays. An e-mail and a macro template cannot be the document's default
   template: their star is greyed out, with a tooltip saying why (for a view: Settings > View), as it is in read-only
   mode.
+- **The "PDF quality" button becomes "Export type"**: the button to the left of "Export" chooses the export type
+  (PDF, Word or Excel) and, for the PDF only, its quality (Vector, Browser print, Light): the quality you chose is
+  kept and comes back with the PDF. The **Export** button's menu, titled "Export", now lists only the rows and
+  workbook options of the chosen type, with a small check mark in front of the ticked one: a single row, all rows
+  (ZIP archive) and, for the PDF, all rows as a single PDF and assembly before printing, for Excel all the table's
+  values in a single workbook. Clicking an option ticks it without exporting anything; the **Export** button
+  (Alt+P too) runs the ticked option in the chosen type, with its confirmation for a batch. Nothing is removed: the
+  nine exports from before are done with these choices, with the same confirmation and the same effect; Word stays
+  greyed out in a grid and Excel in a document, and the type then goes back to PDF. An option the type does not
+  have ("a single PDF" after switching to Word) reads "All rows (ZIP)" and comes back with its type.
 - **Margins of a macro template**: the Margins tab of Settings now says, while a macro template is loaded, that its margins
   take precedence over those of the assembled templates: they apply to every page of its Reading view, PDF, Word and
   print output, and a template's own margins only apply when it is opened on its own. The margins themselves are

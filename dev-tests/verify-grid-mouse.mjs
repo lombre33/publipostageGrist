@@ -632,7 +632,8 @@ async function runTheme(theme) {
   check(`${label} - retour à l'édition (vrai clic) : la grille est là avec ses 12 lettres et ses 3 numéros`, backInEdit.active && backInEdit.cols === 12 && backInEdit.rows === 3 && backInEdit.readerHidden, backInEdit);
 
   // 11) Export Excel (lot D) à la vraie souris : le menu « Type d'export » (au survol du bouton à gauche d'« Exporter ») garde ses trois types, Word grisé dans une grille et Excel grisé dans un
-  //     document ; le menu « Exporter » liste les lignes du type choisi ; dans une grille « Exporter en Excel… » télécharge le classeur de la ligne courante, et le type Word grisé ne se choisit pas.
+  //     document ; le menu « Exporter » ne liste que des options de lignes et de classeur, celles du type choisi (la coche devant l'option cochée) ; dans une grille le bouton « Exporter »
+  //     télécharge le classeur de la ligne courante, ou l'archive / le classeur unique de toutes les valeurs une fois l'option cochée ; le type Word grisé ne se choisit pas.
   await freshGrid(page);
   await page.evaluate(() => {
     const badge = `<span class="var-badge" data-table="GrilleSouris" data-column="Nom" data-key="GrilleSouris.Nom"></span>`;
@@ -650,13 +651,15 @@ async function runTheme(theme) {
   const TYPE_MENU = '#v2-btn-quality';
   const ROW = {
     typePdf: '#v2-quality-flyout .v2-hover-row[data-export-type="pdf"]', typeWord: '#v2-quality-flyout .v2-hover-row[data-export-type="docx"]', typeExcel: '#v2-quality-flyout .v2-hover-row[data-export-type="xlsx"]',
-    pdfOne: '#v2-btn-export-pdf', pdfZip: '#v2-btn-export-pdf-batch', pdfMerged: '#v2-btn-export-pdf-merged', pdfSheets: '#v2-btn-export-pdf-sheets',
-    word: '#v2-btn-export-docx', wordZip: '#v2-btn-export-docx-batch', excel: '#v2-btn-export-xlsx', excelZip: '#v2-btn-export-xlsx-batch', excelSingle: '#v2-btn-export-xlsx-single',
+    // Les options du menu « Exporter » (une coche chacune) ; les neuf lignes « Exporter en… » d'avant sont masquées pour de bon, leur grisé seul est vérifié plus bas.
+    linesOne: '#v2-export-pdf-flyout .v2-hover-row[data-export-lines="one"]', linesZip: '#v2-export-pdf-flyout .v2-hover-row[data-export-lines="zip"]',
+    linesMerged: '#v2-export-pdf-flyout .v2-hover-row[data-export-lines="merged"]', linesSheets: '#v2-export-pdf-flyout .v2-hover-row[data-export-lines="sheets"]',
+    linesWorkbook: '#v2-export-pdf-flyout .v2-hover-row[data-export-lines="workbook"]',
   };
   const TYPE_ROWS = ['typePdf', 'typeWord', 'typeExcel'];
-  const WORD_ROWS = ['word', 'wordZip'];
-  const EXCEL_ROWS = ['excel', 'excelZip', 'excelSingle'];
-  const PDF_ROWS = ['pdfOne', 'pdfZip', 'pdfMerged', 'pdfSheets'];
+  const WORD_ROWS = ['linesOne', 'linesZip'];
+  const EXCEL_ROWS = ['linesOne', 'linesZip', 'linesWorkbook'];
+  const PDF_ROWS = ['linesOne', 'linesZip', 'linesMerged', 'linesSheets'];
   const exportRows = (names) => page.evaluate(`(() => {
     const ratio = ${CONTRAST_FN};
     const opaque = el => { for (let e = el; e; e = e.parentElement) { const c = getComputedStyle(e).backgroundColor; if (!/rgba\\(0, 0, 0, 0\\)|transparent/.test(c)) return c; } return 'rgb(255, 255, 255)'; };
@@ -666,7 +669,7 @@ async function runTheme(theme) {
       const el = document.querySelector(rows[name]);
       const r = el.getBoundingClientRect();
       const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
-      out[name] = { greyed: el.classList.contains('v2-hover-row-disabled'), aria: el.getAttribute('aria-disabled'), active: el.classList.contains('is-active'), shown: r.width > 0 && r.height > 0, inPanel: r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight, reachable: !!top && el.contains(top),
+      out[name] = { greyed: el.classList.contains('v2-hover-row-disabled'), aria: el.getAttribute('aria-disabled'), active: el.classList.contains('is-active'), ticked: el.getAttribute('aria-checked') === 'true', shown: r.width > 0 && r.height > 0, inPanel: r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight, reachable: !!top && el.contains(top),
         contrast: Math.round(ratio(getComputedStyle(el).color, opaque(el)) * 100) / 100, text: el.textContent.trim() };
     }
     return out;
@@ -699,16 +702,21 @@ async function runTheme(theme) {
   await openExportMenu();
   const excelMenu = await exportRows(EXCEL_ROWS);
   const x = excelMenu;
-  check(`${label} - menu « Exporter » dans une grille, type Excel : les trois lignes Excel sont là, visibles dans le panneau (les deux plus longues comprises), atteignables et actives`,
-    Object.values(x).every(r => r.shown && r.inPanel && r.reachable && !r.greyed && r.aria === null), x);
-  const hiddenWhileExcel = await exportRows([...WORD_ROWS, ...PDF_ROWS]);
-  check(`${label} - menu « Exporter », type Excel : les lignes de Word et de PDF sont masquées (elles restent dans la page ; les deux lignes Word y restent grisées)`,
-    Object.values(hiddenWhileExcel).every(r => !r.shown) && WORD_ROWS.every(n => hiddenWhileExcel[n].greyed && hiddenWhileExcel[n].aria === 'true'), hiddenWhileExcel);
-  check(`${label} - menu « Exporter » dans une grille : les lignes « valeurs de la table » disent « valeurs de la table » (jamais « lignes »)`,
-    /valeurs de la table/.test(x.excelZip.text) && /valeurs de la table/.test(x.excelSingle.text) && !/lignes?/i.test(x.excelZip.text + x.excelSingle.text), { batch: x.excelZip.text, single: x.excelSingle.text });
-  check(`${label} - menu « Exporter » : le texte des lignes reste lisible, >= 4,5:1`, Object.values(x).every(r => r.contrast >= 4.5), Object.fromEntries(Object.entries(x).map(([k, v]) => [k, v.contrast])));
+  check(`${label} - menu « Exporter » dans une grille, type Excel : les trois options (une seule ligne, toutes les valeurs en ZIP, un seul classeur) sont là, visibles dans le panneau (les deux plus longues comprises), atteignables et actives ; « une seule ligne » est cochée`,
+    Object.values(x).every(r => r.shown && r.inPanel && r.reachable && !r.greyed && r.aria === null) && x.linesOne.ticked && !x.linesZip.ticked && !x.linesWorkbook.ticked, x);
+  const hiddenWhileExcel = await exportRows(['linesMerged', 'linesSheets']);
+  check(`${label} - menu « Exporter », type Excel : les options du PDF seul (un seul PDF, assemblage) sont masquées (elles restent dans la page)`,
+    Object.values(hiddenWhileExcel).every(r => !r.shown), hiddenWhileExcel);
+  const oldRowsShown = await page.evaluate(() => ['pdf', 'pdf-batch', 'pdf-merged', 'pdf-sheets', 'docx', 'docx-batch', 'xlsx', 'xlsx-batch', 'xlsx-single'].filter(n => { const r = document.getElementById('v2-btn-export-' + n).getBoundingClientRect(); return r.width > 0 || r.height > 0; }));
+  check(`${label} - menu « Exporter » : aucune des neuf lignes « Exporter en… » d'avant n'est montrée (elles restent dans la page, masquées)`, oldRowsShown.length === 0, oldRowsShown);
+  check(`${label} - menu « Exporter » dans une grille : les options « valeurs de la table » disent « valeurs de la table » (jamais « lignes »)`,
+    /valeurs de la table/.test(x.linesZip.text) && /valeurs de la table/.test(x.linesWorkbook.text) && !/lignes?/i.test(x.linesZip.text + x.linesWorkbook.text), { batch: x.linesZip.text, single: x.linesWorkbook.text });
+  check(`${label} - menu « Exporter » : le texte des options reste lisible, >= 4,5:1`, Object.values(x).every(r => r.contrast >= 4.5), Object.fromEntries(Object.entries(x).map(([k, v]) => [k, v.contrast])));
+  // Le bouton « Exporter », type Excel et « une seule ligne » : le classeur de la ligne courante (sans toucher au menu).
+  await page.mouse.move(WIDTH - 10, HEIGHT - 10);
+  await page.waitForTimeout(700);
   const downloadPromise = page.waitForEvent('download', { timeout: 20000 }).catch(() => null);
-  await realClick(page, ROW.excel);
+  await realClick(page, '#btn-export-pdf');
   const download = await downloadPromise;
   let xlsxInfo = null;
   if (download) {
@@ -719,22 +727,21 @@ async function runTheme(theme) {
   }
   await page.waitForTimeout(300);
   const statusAfter = await page.evaluate(() => document.getElementById('status-msg').textContent);
-  check(`${label} - vrai clic sur « Exporter en Excel… » : un fichier .xlsx est téléchargé (archive avec sa feuille), et le coin d'état annonce « Fichier Excel généré. »`,
+  check(`${label} - vrai clic sur le bouton « Exporter » (type Excel, une seule ligne) : un fichier .xlsx est téléchargé (archive avec sa feuille), et le coin d'état annonce « Fichier Excel généré. »`,
     !!xlsxInfo && /\.xlsx$/.test(xlsxInfo.name) && xlsxInfo.zip && xlsxInfo.size > 2000 && xlsxInfo.hasSheet && /Excel/.test(statusAfter), { xlsxInfo, statusAfter });
-  // Le bouton « Exporter » lui-même, type Excel : même classeur (sans passer par le menu).
-  await page.mouse.move(WIDTH - 10, HEIGHT - 10);
-  await page.waitForTimeout(700);
-  const mainDownload = page.waitForEvent('download', { timeout: 20000 }).catch(() => null);
-  await realClick(page, '#btn-export-pdf');
-  const mainFile = await mainDownload;
-  check(`${label} - vrai clic sur le bouton « Exporter » (type Excel) : le classeur .xlsx de la ligne courante est téléchargé`, !!mainFile && /\.xlsx$/.test(mainFile.suggestedFilename()), { name: mainFile && mainFile.suggestedFilename() });
   await page.mouse.move(WIDTH - 10, HEIGHT - 10);
   await page.waitForTimeout(300);
-  // Toutes les valeurs de la table (lot E), à la vraie souris : la confirmation s'ouvre dans le panneau, son bouton « Continuer » se clique, et le téléchargement est le bon fichier.
-  const downloadAfterConfirm = async (menuTrigger, rowSelector) => {
-    await openExportMenu(menuTrigger);
+  // Toutes les valeurs de la table (lot E), à la vraie souris : un clic sur l'option la coche sans rien exporter, puis le bouton Exporter ouvre la confirmation dans le panneau, son bouton « Continuer » se
+  // clique, et le téléchargement est le bon fichier. L'option est remise sur « une seule ligne » ensuite (un vrai clic).
+  const downloadAfterConfirm = async (optionSelector) => {
+    await openExportMenu('#btn-export-pdf');
+    await realClick(page, optionSelector);
+    await page.waitForTimeout(500);
+    const dialogAfterTick = await page.evaluate(() => { const ov = document.getElementById('pp-dialog-modal'); return !!ov && ov.style.display !== 'none'; });
+    await page.mouse.move(WIDTH - 10, HEIGHT - 10);
+    await page.waitForTimeout(500);
     const waiting = page.waitForEvent('download', { timeout: 30000 }).catch(() => null);
-    await realClick(page, rowSelector);
+    await realClick(page, '#btn-export-pdf');
     await page.waitForFunction(() => { const ov = document.getElementById('pp-dialog-modal'); return !!ov && ov.style.display !== 'none'; }, null, { timeout: 8000 }).catch(() => {});
     const dialog = await page.evaluate(() => {
       const ov = document.getElementById('pp-dialog-modal');
@@ -753,23 +760,30 @@ async function runTheme(theme) {
       info = { name: download.suggestedFilename(), size: bytes.length, zip: bytes.slice(0, 2).toString() === 'PK', hasSheet: bytes.includes(Buffer.from('xl/worksheets/sheet1.xml')), hasWorkbookInside: bytes.includes(Buffer.from('.xlsx')) };
     }
     await page.waitForTimeout(300);
-    return { dialog, info, status: await page.evaluate(() => document.getElementById('status-msg').textContent) };
+    const result = { dialogAfterTick, dialog, info, status: await page.evaluate(() => document.getElementById('status-msg').textContent) };
+    await page.mouse.move(WIDTH - 10, HEIGHT - 10);
+    await page.waitForTimeout(400);
+    await openExportMenu('#btn-export-pdf');
+    await realClick(page, ROW.linesOne);
+    await page.mouse.move(WIDTH - 10, HEIGHT - 10);
+    await page.waitForTimeout(400);
+    return result;
   };
-  const zipRun = await downloadAfterConfirm('#btn-export-pdf', ROW.excelZip);
-  check(`${label} - vrai clic sur « Exporter les valeurs de la table en Excel (ZIP)… » : la confirmation parle d'Excel et de valeurs, tient dans le panneau, et l'archive « -export-xlsx.zip » contient un classeur`,
-    !!zipRun.dialog && zipRun.dialog.boxInPanel && zipRun.dialog.okInPanel && /Excel/.test(zipRun.dialog.message) && /valeur/.test(zipRun.dialog.message) && !/ligne|PDF/i.test(zipRun.dialog.message + zipRun.dialog.title)
+  const zipRun = await downloadAfterConfirm(ROW.linesZip);
+  check(`${label} - vrai clic sur « Toutes les valeurs de la table (ZIP) » puis sur Exporter : la coche n'exporte rien, la confirmation parle d'Excel et de valeurs, tient dans le panneau, et l'archive « -export-xlsx.zip » contient un classeur`,
+    !zipRun.dialogAfterTick && !!zipRun.dialog && zipRun.dialog.boxInPanel && zipRun.dialog.okInPanel && /Excel/.test(zipRun.dialog.message) && /valeur/.test(zipRun.dialog.message) && !/ligne|PDF/i.test(zipRun.dialog.message + zipRun.dialog.title)
     && !!zipRun.info && /-export-xlsx\.zip$/.test(zipRun.info.name) && zipRun.info.zip && zipRun.info.hasWorkbookInside && /Excel/.test(zipRun.status), zipRun);
-  const singleRun = await downloadAfterConfirm('#btn-export-pdf', ROW.excelSingle);
-  check(`${label} - vrai clic sur « Exporter les valeurs de la table dans un seul classeur… » : la confirmation tient dans le panneau, et le fichier « -export.xlsx » est un classeur d'une feuille par valeur`,
-    !!singleRun.dialog && singleRun.dialog.boxInPanel && singleRun.dialog.okInPanel && /Excel/.test(singleRun.dialog.message) && !/ligne|PDF/i.test(singleRun.dialog.message)
+  const singleRun = await downloadAfterConfirm(ROW.linesWorkbook);
+  check(`${label} - vrai clic sur « Toutes les valeurs de la table dans un seul classeur » puis sur Exporter : la confirmation tient dans le panneau, et le fichier « -export.xlsx » est un classeur d'une feuille par valeur`,
+    !singleRun.dialogAfterTick && !!singleRun.dialog && singleRun.dialog.boxInPanel && singleRun.dialog.okInPanel && /Excel/.test(singleRun.dialog.message) && !/ligne|PDF/i.test(singleRun.dialog.message)
     && !!singleRun.info && /-export\.xlsx$/.test(singleRun.info.name) && singleRun.info.zip && singleRun.info.hasSheet && /Excel/.test(singleRun.status), singleRun);
   // Le type PDF dans une grille : les lignes du menu « Exporter » prennent les mots de la grille (lisibles, atteignables, sans « lignes »).
   await page.mouse.move(WIDTH - 10, HEIGHT - 10);
   check(`${label} - vrai clic sur le type PDF : PDF est de nouveau choisi, le bouton du type n'est plus allumé`, await pickType('typePdf') === 'pdf' && await page.evaluate(() => !document.getElementById('v2-btn-quality').classList.contains('active')));
   await openExportMenu('#btn-export-pdf');
   const pdfRows = await exportRows(PDF_ROWS);
-  check(`${label} - menu « Exporter » dans une grille, type PDF : l'export de la ligne, « Exporter les valeurs de la table (ZIP)… », « … en un seul PDF… » et l'assemblage sont visibles dans le panneau, atteignables, lisibles (>= 4,5:1) ; les deux lignes de lot disent « valeurs de la table », jamais « lignes »`,
-    Object.values(pdfRows).every(r => r.shown && r.inPanel && r.reachable && r.contrast >= 4.5) && [pdfRows.pdfZip, pdfRows.pdfMerged].every(r => /valeurs de la table/.test(r.text) && !/lignes?/i.test(r.text)), pdfRows);
+  check(`${label} - menu « Exporter » dans une grille, type PDF : « Une seule ligne », « Toutes les valeurs de la table (ZIP) », « … en un seul PDF » et l'assemblage sont visibles dans le panneau, atteignables, lisibles (>= 4,5:1), « une seule ligne » est cochée ; les deux options de lot disent « valeurs de la table », jamais « lignes »`,
+    Object.values(pdfRows).every(r => r.shown && r.inPanel && r.reachable && r.contrast >= 4.5) && pdfRows.linesOne.ticked && [pdfRows.linesZip, pdfRows.linesMerged].every(r => /valeurs de la table/.test(r.text) && !/lignes?/i.test(r.text)), pdfRows);
   await page.mouse.move(WIDTH - 10, HEIGHT - 10);
 
   // Dans un document : l'inverse - Excel grisé, Word actif.
@@ -795,10 +809,13 @@ async function runTheme(theme) {
   await page.mouse.move(WIDTH - 10, HEIGHT - 10);
   check(`${label} - vrai clic sur le type Word d'un document : Word est choisi`, await pickType('typeWord') === 'docx');
   await openExportMenu();
-  const inDocWord = await exportRows([...WORD_ROWS, ...EXCEL_ROWS, ...PDF_ROWS]);
-  check(`${label} - menu « Exporter » dans un document, type Word : les deux lignes Word sont visibles, atteignables, actives et lisibles ; les trois lignes Excel restent dans la page, masquées et grisées`,
-    WORD_ROWS.every(n => inDocWord[n].shown && inDocWord[n].inPanel && inDocWord[n].reachable && !inDocWord[n].greyed && inDocWord[n].contrast >= 4.5)
-    && EXCEL_ROWS.every(n => !inDocWord[n].shown && inDocWord[n].greyed && inDocWord[n].aria === 'true') && PDF_ROWS.every(n => !inDocWord[n].shown), inDocWord);
+  const inDocWord = await exportRows(['linesOne', 'linesZip', 'linesMerged', 'linesSheets', 'linesWorkbook']);
+  check(`${label} - menu « Exporter » dans un document, type Word : les deux options Word (une seule ligne, toutes les lignes en ZIP) sont visibles, atteignables, actives et lisibles ; les options du PDF seul et du classeur unique restent dans la page, masquées`,
+    WORD_ROWS.every(n => inDocWord[n].shown && inDocWord[n].inPanel && inDocWord[n].reachable && !inDocWord[n].greyed && inDocWord[n].contrast >= 4.5) && inDocWord.linesOne.ticked
+    && ['linesMerged', 'linesSheets', 'linesWorkbook'].every(n => !inDocWord[n].shown), inDocWord);
+  // Les lignes « Exporter en… » d'avant, masquées, gardent leur grisé selon le modèle : Excel grisé dans un document, Word actif.
+  const oldGrey = await page.evaluate(() => Object.fromEntries(['docx', 'docx-batch', 'xlsx', 'xlsx-batch', 'xlsx-single'].map(n => [n, document.getElementById('v2-btn-export-' + n).getAttribute('aria-disabled') === 'true'])));
+  check(`${label} - dans un document, les lignes Excel d'avant (masquées) restent grisées et celles de Word actives`, oldGrey.xlsx && oldGrey['xlsx-batch'] && oldGrey['xlsx-single'] && !oldGrey.docx && !oldGrey['docx-batch'], oldGrey);
 
   await context.close();
 }

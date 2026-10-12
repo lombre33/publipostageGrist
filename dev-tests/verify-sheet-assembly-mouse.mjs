@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// Assemblage avant impression (js/sheet-assembly-dialog.js, js/sheet-layout.js, css/sheet-assembly.css, ligne « Assemblage avant impression… » du menu Exporter en PDF) : le panneau de 700x400
+// Assemblage avant impression (js/sheet-assembly-dialog.js, js/sheet-layout.js, css/sheet-assembly.css, option « Assemblage avant impression » du menu Exporter) : le panneau de 700x400
 // d'Antoine, à la VRAIE souris (page.mouse) et au VRAI clavier (Tab, flèches, Entrée, Échap), en clair, en sombre et en anglais. Ce que scenarios-sheet-assembly.js ne peut pas voir depuis la page :
-//  - le survol du bouton « Exporter en PDF » ouvre son menu ; la ligne est la troisième, dans le panneau et au premier plan, son texte se lit (4,5:1) ;
-//  - un clic sur la ligne ouvre la fenêtre ; elle tient dans 700x400 SANS défiler dans ses états les plus hauts (A3 paysage, traits de coupe, note d'échelle), titre et boutons au premier plan ;
+//  - le survol du bouton « Exporter » ouvre son menu ; l'option « Assemblage avant impression » est la quatrième, dans le panneau et au premier plan, son texte se lit (4,5:1) ; un clic la coche, le bouton Exporter ouvre la fenêtre ;
+//  - le bouton Exporter, l'option cochée, ouvre la fenêtre ; elle tient dans 700x400 SANS défiler dans ses états les plus hauts (A3 paysage, traits de coupe, note d'échelle), titre et boutons au premier plan ;
 //  - un vrai clic sur A3, Paysage, Avec... change l'aperçu (autant d'emplacements numérotés et de repères que le fichier en portera, papier blanc dans les deux thèmes) ; les flèches du clavier
 //    changent la feuille et les nombres ; Tab tourne dans la fenêtre sans en sortir ;
 //  - un choix qui ne tient pas est grisé (texte à 4,5:1, info-bulle), un clic dessus ne change rien ;
@@ -130,7 +130,8 @@ const TABLE = 'SaClients';
 const NAMES = ['Alpha Durand', 'Bravo Martin', 'Charlie Petit', 'Delta Moreau', 'Echo Laurent', 'Foxtrot Blanc'];
 const EXPORT_BTN = '#btn-export-pdf';
 const FLYOUT = '#v2-export-pdf-flyout';
-const ROW = '#v2-btn-export-pdf-sheets';
+// L'option « Assemblage avant impression » du menu Exporter : un clic la coche, le bouton Exporter ouvre ensuite la fenêtre (la ligne « Assemblage avant impression… » d'avant est masquée).
+const ROW = '#v2-export-pdf-flyout .v2-hover-row[data-export-lines="sheets"]';
 const WIN = '#pp-sheets-modal';
 const BOX = `${WIN} .modal-content`;
 const OK = `${WIN} .var-modal-primary`;
@@ -209,10 +210,14 @@ async function closeMenu() {
   await page.mouse.move(WIDTH / 2, HEIGHT - 20, { steps: 3 });
   await page.waitForTimeout(250);
 }
-// Clic réel sur « Assemblage avant impression… », puis attente de la fenêtre (les lignes de la table sont lues d'abord).
+// Clic réel sur l'option « Assemblage avant impression » (elle se coche), puis clic réel sur le bouton Exporter, puis attente de la fenêtre (les lignes de la table sont lues d'abord). L'option est remise
+// sur « une seule ligne » aussitôt après (la liste cachée) : la coche n'est qu'un réglage du bouton, le prochain test repart d'un menu rangé.
 async function clickSheetsRow() {
   await openExportMenu();
   await clickCenter(ROW);
+  await closeMenu();
+  await clickCenter(EXPORT_BTN);
+  await page.evaluate(() => { document.getElementById('v2-export-lines').value = 'one'; });
   await page.waitForFunction(() => { const m = document.getElementById('pp-sheets-modal'); return !!m && m.style.display !== 'none'; }, null, { timeout: 8000 }).catch(() => {});
   await page.waitForTimeout(200);
 }
@@ -285,12 +290,12 @@ async function run(theme, full) {
   const T = theme;
   await seed('A6');
 
-  // 1) Le menu : un survol réel du bouton l'ouvre ; la ligne est la troisième, atteignable à la souris, son texte se lit.
+  // 1) Le menu : un survol réel du bouton l'ouvre ; l'option est la quatrième, atteignable à la souris, son texte se lit.
   await openExportMenu();
   const flyout = await hit(FLYOUT), row = await hit(ROW);
-  const rows = await page.evaluate(() => Array.from(document.querySelectorAll('#v2-export-pdf-flyout .v2-hover-row')).map(r => ({ id: r.id, text: r.textContent.trim() })));
-  check(`${T}, menu : au survol, le volet « Exporter en PDF » s'ouvre dans le panneau`, flyout.found && flyout.inPanel, flyout);
-  check(`${T}, menu : « Assemblage avant impression… » est la troisième ligne, après « un seul PDF », au premier plan et dans le panneau`, rows.length === 3 && rows[2].id === 'v2-btn-export-pdf-sheets' && rows[2].text === 'Assemblage avant impression…' && seen(row), { rows, row });
+  const rows = await page.evaluate(() => Array.from(document.querySelectorAll('#v2-export-pdf-flyout .v2-hover-row')).filter(r => r.getBoundingClientRect().width > 0).map(r => ({ lines: r.dataset.exportLines, text: r.textContent.trim() })));
+  check(`${T}, menu : au survol, le volet « Exporter » s'ouvre dans le panneau`, flyout.found && flyout.inPanel, flyout);
+  check(`${T}, menu : « Assemblage avant impression » est la quatrième option, après « un seul PDF », au premier plan et dans le panneau`, rows.length === 4 && rows[3].lines === 'sheets' && rows[3].text === 'Assemblage avant impression' && seen(row), { rows, row });
   const cRow = await contrastOf(ROW);
   check(`${T}, menu : le texte de la ligne se lit (contraste ${cRow}:1, au moins 4,5:1)`, cRow >= 4.5, cRow);
   await snap(`${T}-1-menu`);
@@ -303,7 +308,7 @@ async function run(theme, full) {
   const parts = [];
   for (const sel of [radio('pp-sheets-sheet', 'A4'), radio('pp-sheets-sheet', 'A3'), radio('pp-sheets-orientation', 'portrait'), radio('pp-sheets-orientation', 'landscape'), radio('pp-sheets-marks', 'off'), radio('pp-sheets-marks', 'on'), '#pp-sheets-cols', '#pp-sheets-rows', `${WIN} .pp-sheets-svg`, `${WIN} .pp-sheets-summary`]) parts.push(await hit(sel));
   const scroll = await fits();
-  check(`${T}, fenêtre : un clic sur la ligne l'ouvre`, opened, { opened });
+  check(`${T}, fenêtre : le bouton Exporter, l'option « Assemblage avant impression » cochée, l'ouvre`, opened, { opened });
   check(`${T}, fenêtre : elle tient dans ${WIDTH}x${HEIGHT} - titre, feuille, sens, traits de coupe, deux listes, aperçu, résumé, « Annuler » et « Générer » au premier plan, sans défiler (${scroll.scrollH}/${scroll.clientH})`, box.inPanel && seen(title) && seen(ok) && seen(cancel) && parts.every(seen) && scroll.ok, { box, title, ok, cancel, bad: parts.filter(p => !seen(p)), scroll });
   check(`${T}, fenêtre : le focus est sur la feuille cochée (A4)`, (await focusIn()) === 'sheet=A4', await focusIn());
   const s0 = await dialogState();
@@ -496,8 +501,8 @@ async function runEnglish() {
   await page.waitForTimeout(250);
   await seed('A6');
   await openExportMenu();
-  const rowEn = await page.evaluate(() => document.getElementById('v2-btn-export-pdf-sheets').textContent.trim());
-  check('anglais, menu : la ligne dit « Assemble before printing… »', rowEn === 'Assemble before printing…', rowEn);
+  const rowEn = await page.evaluate(() => document.getElementById('v2-export-lines-sheets').textContent.trim());
+  check('anglais, menu : l\'option dit « Assemble before printing »', rowEn === 'Assemble before printing', rowEn);
   await closeMenu();
   await clickSheetsRow();
   await clickCenter(optionLabel('pp-sheets-marks', 'on'));

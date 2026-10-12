@@ -13,7 +13,7 @@
 import { readFile, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
-import { open, stopServer, sleep, click, clickHoverRow, chooseExportType, fire, status, downloadOf, exportBatchOf, ROOT } from './load-lib.mjs';
+import { open, stopServer, sleep, click, clickHoverRow, chooseExportType, startExport, fire, status, downloadOf, exportBatchOf, ROOT } from './load-lib.mjs';
 
 const PORT = Number(process.env.LAZY_ENGINES_PORT || 8984);
 const require = createRequire(import.meta.url);
@@ -84,19 +84,10 @@ async function prepare(page, { grid = false } = {}) {
   else await page.evaluate(() => Editor.setHTML('<p>Bonjour</p>'));
   await fire(page, 'PbClients', 1);
 }
-// « Exporter » d'une ligne : le bouton Exporter (type PDF), ou la ligne Word ou Excel de son menu, une fois le type choisi dans le menu « Type d'export ».
-const SINGLE = {
-  pdf: { type: 'pdf', rows: null, button: '#btn-export-pdf' },
-  docx: { type: 'docx', rows: ['#btn-export-pdf', '#v2-btn-export-docx'] },
-  xlsx: { type: 'xlsx', rows: ['#btn-export-pdf', '#v2-btn-export-xlsx'] },
-};
+// « Exporter » d'une ligne, comme la personne : le type au menu « Type d'export » (PDF, Word ou Excel), « Une seule ligne » cochée au menu « Exporter », puis le bouton Exporter.
 // Un export de trois lignes prend quelques secondes : au-delà de DELAY, c'est qu'il n'aboutit pas (le test échoue au lieu d'attendre dix minutes).
 const DELAY = 45000;
-const exportSingle = (page, kind, name, timeout = DELAY) => saved(downloadOf(page, `lazy-${process.pid}-${name}`, async () => {
-  const { rows, button, type } = SINGLE[kind];
-  await chooseExportType(page, type);
-  if (rows) await clickHoverRow(page, rows[0], rows[1]); else await click(page, button);
-}, timeout));
+const exportSingle = (page, kind, name, timeout = DELAY) => saved(downloadOf(page, `lazy-${process.pid}-${name}`, () => startExport(page, kind), timeout));
 const exportBatch = (page, kind, name) => saved(exportBatchOf(page, kind, `lazy-${process.pid}-${name}`, { timeout: DELAY }));
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -108,7 +99,7 @@ await scenario('Ouverture : aucun moteur n\'est chargé', async ({ w, page, requ
   const tags = await page.evaluate(() => Array.from(document.querySelectorAll('script[type="text/x-lazy-engine"]'), tag => [tag.dataset.engine, tag.getAttribute('src')]));
   check('index.html : six balises inertes, une par moteur, chacune vers son fichier et avec une version de cache (?v=)',
     tags.length === 6 && NAMES.every(name => tags.filter(([engine, src]) => engine === name && new RegExp('^js/' + ENGINES[name].file + '\\.js\\?v=\\d+(\\.\\d+)*$').test(src)).length === 1), tags);
-  check('ouverture : les boutons d\'export existent et sont prêts (le clic ne dépend d\'aucun moteur chargé)', await page.evaluate(() => ['btn-export-pdf', 'v2-btn-export-pdf-batch', 'v2-btn-export-docx', 'v2-btn-export-xlsx-batch'].every(id => !!document.getElementById(id))));
+  check('ouverture : les boutons d\'export existent et sont prêts (le clic ne dépend d\'aucun moteur chargé)', await page.evaluate(() => ['btn-export-pdf', 'v2-export-lines-one', 'v2-export-lines-zip', 'v2-export-lines-merged'].every(id => !!document.getElementById(id))));
   check('ouverture : aucune erreur de page', w.errors.length === 0, w.errors);
 
 });
@@ -229,7 +220,7 @@ await scenario('Export sans réseau pour un moteur, puis avec : une ligne et un 
 
   // Un lot : le moteur de fusion est injoignable. Le lot s'arrête avant sa fenêtre de confirmation.
   await page.route('**/js/pdf-merge.js*', route => route.abort());
-  await clickHoverRow(page, '#btn-export-pdf', '#v2-btn-export-pdf-merged');
+  await startExport(page, 'pdfMerged');
   await sleep(2500);
   const expectedBatch = await page.evaluate(() => I18n.t('status.pdfLibsLoadError'));
   const confirmOpen = await modalOpen(page);

@@ -157,9 +157,10 @@ qui existent déjà** sans son accord explicite. Une barre d'outils jugée dense
 §3) reste telle quelle tant qu'il n'a pas validé un changement — la réponse à une UI qu'on n'ose pas retoucher
 n'est jamais de la retoucher quand même, c'est de proposer sans y toucher. Deux précisions :
 - Une fonction indisponible dans un contexte est **grisée, jamais masquée** : mode Lecture (la barre de mise en forme
-  est grisée), mode Email, droits par personne (opacité .35, plus de clic), export en cours. Il n'y a que deux exceptions : la Lecture épurée, demandée par Antoine le 02/10 (§3) : la barre
+  est grisée), mode Email, droits par personne (opacité .35, plus de clic), export en cours. Il n'y a que trois exceptions : la Lecture épurée, demandée par Antoine le 02/10 (§3) : la barre
   y disparaît tout entière, sur un geste, et revient à la sortie ; et le bouton « Changer la colonne de la variable… » de la barre d'une variable, demandé de même le 04/10 (§3) :
-  il n'y est que sur une variable cassée (bulle rouge), absent - pas grisé - d'une variable saine, d'un calcul, d'un bloc de texte, d'une valeur et d'une case conditionnelle.
+  il n'y est que sur une variable cassée (bulle rouge), absent - pas grisé - d'une variable saine, d'un calcul, d'un bloc de texte, d'une valeur et d'une case conditionnelle. Et le bloc « Qualité PDF » du menu « Type d'export » (intitulé, filet et trois lignes), demandé de même le 12/10 : il n'est montré que pour le type PDF
+  (§3, « Type d'export ») ; ses lignes restent dans la page, grisées, et la qualité choisie est gardée.
 - Un défaut qui revient se corrige **une fois pour toutes**, à sa cause commune, pas fenêtre par fenêtre ni menu par
   menu : c'est ce qui a donné la base commune des fenêtres et le pont de survol des menus (§3).
 
@@ -923,18 +924,23 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   modèle de nom de fichier), ou un seul classeur « <table>-export.xlsx » d'une feuille par valeur, nommée comme son fichier (31 caractères au plus, « nom (2) » quand deux
   feuilles s'appellent pareil). Chacune demande confirmation, annonce sa progression (« Export Excel en lot : 2/10... ») et dit sa fin en mots d'Excel, jamais de PDF.
 - Type d'export (demande d'Antoine du 12/10, « le bouton qualité PDF doit devenir le choix pour le type d'export - les options pour le pdf, word et exel - un choix une seule ligne ou toutes les lignes +
-  l'option liées au classeur pour les exel et mode assemblage - le bouton d'export pdf, son nom en haut de la dropdown devient juste "exporter" - attention à ne pas perdre de features ») : le bouton
-  « Qualité PDF » (`#v2-btn-quality`) se nomme « Type d'export » (`aria-label`, titre de son menu). Le menu a deux titres : « Type d'export » avec trois types - « PDF », « Word (bêta) », « Excel » -, puis
-  « Qualité PDF » avec les trois qualités (« Vectoriel (par défaut) », « Impression navigateur », « Léger (images réduites) »). Le type est un choix durable (liste cachée `#v2-export-type`, comme
-  `#v2-pdf-quality`) : sa ligne est la ligne active (gras bleu, comme une qualité choisie), le bouton s'allume (`.active`, comme un style de puce choisi) tant que le type n'est pas le PDF, et les trois
-  qualités se grisent hors du PDF (jamais retirées, un clic dessus ne change rien ; la qualité choisie est gardée et revient avec le PDF). Word se grise dans une grille et Excel dans un document : jamais
-  retirés (`aria-disabled`), un clic dessus ne choisit rien, et un type choisi qu'un autre modèle ne sait pas faire revient au PDF, pour de bon. Le bouton « Exporter » (nom accessible et titre de son menu :
-  « Exporter », suivi de « (Alt+P) » ; plus « Exporter en PDF ») exporte la ligne affichée dans le type choisi ; son menu ne liste que les lignes du type choisi, la ligne affichée d'abord, puis les lots :
-  PDF (« Exporter en PDF », « Exporter les lignes (ZIP)… », « … en un seul PDF… », « Assemblage avant impression… »), Word (« Exporter en DOCX (bêta)… », « Exporter les lignes en DOCX (ZIP)… »), Excel
-  (« Exporter en Excel… », « … en Excel (ZIP)… », « … dans un seul classeur… »). « Une seule ligne » et « toutes les lignes », le classeur unique d'Excel et l'assemblage sont des gestes ponctuels : ils
-  restent des lignes de ce menu, pas un réglage durable. Les lignes des autres types restent dans la page, masquées (`hidden`), avec leur identifiant, leur gestionnaire et leur grisé selon le modèle : aucune
-  des neuf lignes d'export d'avant n'est perdue et aucun de leurs textes n'a changé. Tout nouveau type d'export entre par une ligne `data-export-type` du menu des types, toute nouvelle ligne d'export par
-  `data-export-for` (elle se grise selon le modèle comme les autres : `syncExportRowsForModelType`). Tenu par `exportType` et `exportTypeMouse`.
+  l'option liées au classeur pour les exel et mode assemblage - le bouton d'export pdf, son nom en haut de la dropdown devient juste "exporter" - attention à ne pas perdre de features » ; puis, le même jour,
+  « le sous menu "qualité pdf" ne pourrait apparaitre que quand on sélectionne pdf », « il ne doit y avoir que les options de lignes/classeur dans le menu du bouton exporter » et « le bouton exporter c'est
+  toggle le choix, quand on met toutes les lignes le bouton par défaut devient toutes les lignes et une petite coche devant ») : le bouton « Qualité PDF » (`#v2-btn-quality`) se nomme « Type d'export »
+  (`aria-label`, titre de son menu). Le menu a trois lignes de type - « PDF », « Word (bêta) », « Excel » - sous le titre « Type d'export » ; pour le PDF seulement s'y ajoutent, sous un filet, l'intitulé
+  « Qualité PDF » et les trois qualités (« Vectoriel (par défaut) », « Impression navigateur », « Léger (images réduites) ») : avec Word ou Excel ce bloc n'est pas montré (`data-export-for="pdf"` + `hidden`, la
+  troisième exception à « on grise, on ne masque pas », voulue par Antoine) ; ses lignes restent dans la page, grisées, et la qualité choisie est gardée et revient avec le PDF. Le type est un choix durable (liste
+  cachée `#v2-export-type`, comme `#v2-pdf-quality`) : sa ligne est la ligne active (gras bleu, comme une qualité choisie) et le bouton s'allume (`.active`, comme un style de puce choisi) tant que le type n'est pas
+  le PDF. Word se grise dans une grille et Excel dans un document : jamais retirés (`aria-disabled`), un clic dessus ne choisit rien, et un type choisi qu'un autre modèle ne sait pas faire revient au PDF, pour de bon.
+  Le bouton « Exporter » (nom accessible et titre de son menu : « Exporter », suivi de « (Alt+P) » ; plus « Exporter en PDF ») exporte, dans le type choisi, l'option cochée de son menu. Ce menu ne liste que des
+  options de lignes et de classeur, celles du type choisi, et aucune ne nomme un format : PDF (« Une seule ligne », « Toutes les lignes (ZIP) », « Toutes les lignes en un seul PDF », « Assemblage avant impression »),
+  Word (« Une seule ligne », « Toutes les lignes (ZIP) »), Excel (« Une seule ligne », « Toutes les valeurs de la table (ZIP) », « Toutes les valeurs de la table dans un seul classeur » ; dans une grille « valeurs
+  de la table » remplace « lignes » pour le PDF aussi). Une option se coche d'un clic (ou Entrée, Espace) sans rien exporter ; la petite coche est DEVANT l'option cochée (`.v2-hover-row-check-start`,
+  `role="menuitemradio"`, `aria-checked` ; sa place est réservée aux autres options, les libellés restent alignés) et le bouton Exporter lance l'option cochée : la ligne affichée, ou le lot avec sa confirmation
+  (la fenêtre de réglage pour l'assemblage). L'option cochée est gardée dans la liste cachée `#v2-export-lines` ; une option que le type n'a pas (« un seul PDF » après un passage à Word) se lit « Toutes les lignes
+  (ZIP) » et revient avec son type. Les neuf lignes d'export d'avant (et « Exporter en PDF ») restent dans la page, masquées (`#v2-export-legacy-rows`), avec leur identifiant, leur gestionnaire, leur verrou et leur
+  grisé selon le modèle : aucune fonction n'est perdue et aucun de leurs textes n'a changé. Tout nouveau type d'export entre par une ligne `data-export-type` du menu des types, toute nouvelle option de lignes par
+  `data-export-for` et `data-export-lines` (`EXPORT_BATCH_OF`, `js/main.js`). Tenu par `exportType` et `exportTypeMouse`.
 - Feuille A4 : dans un panneau étroit, la page est réduite à la largeur disponible par un `zoom` CSS (`--pp-fit-zoom` : à
   700 px de panneau, 794 px de mise en page passent à 672 px) — à l'écran seulement. Les coupures de ligne de l'éditeur
   sont celles d'un grand panneau ; les PDF sont identiques quelle que soit la taille du panneau.

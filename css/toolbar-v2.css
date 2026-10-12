@@ -173,12 +173,12 @@
 #btn-create-email::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='22' y1='2' x2='11' y2='13'/%3E%3Cpolygon points='22 2 15 22 11 13 2 9 22 2'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='22' y1='2' x2='11' y2='13'/%3E%3Cpolygon points='22 2 15 22 11 13 2 9 22 2'/%3E%3C/svg%3E"); }
 
 /* Type d'export (ex-« Qualité PDF ») : bouton et panneau au survol (même mécanisme que les styles de puce et de numérotation de la ligne de mise en forme)
-   plutôt qu'un `<select>` toujours affiché ; js/main.js lit encore `v2-export-type.value` et `v2-pdf-quality.value` directement. Allumé (`.active`, comme
+   plutôt qu'un `<select>` toujours affiché ; js/main.js lit encore `v2-export-type.value` et `v2-pdf-quality.value` directement (et `v2-export-lines.value`, les lignes du menu Exporter). Allumé (`.active`, comme
    le bouton Portrait / Paysage en paysage) quand le type n'est pas le PDF. */
 /* Page (coin plié, même silhouette que l'icône « saut de page », qui ancre ce bouton comme propre au document) et trois lignes de texte (le type de
    document que le bouton Exporter produira). */
 #v2-btn-quality::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 2h8l4 4v16H6z'/%3E%3Cpath d='M14 2v4h4'/%3E%3Cpath d='M9 11.5h6M9 15h6M9 18.5h3.5'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 2h8l4 4v16H6z'/%3E%3Cpath d='M14 2v4h4'/%3E%3Cpath d='M9 11.5h6M9 15h6M9 18.5h3.5'/%3E%3C/svg%3E"); }
-#v2-export-type[hidden], #v2-pdf-quality[hidden] { display: none; }
+#v2-export-type[hidden], #v2-pdf-quality[hidden], #v2-export-lines[hidden] { display: none; }
 
 /* Fenêtre « Correspondance de tables » (#link-config-modal) : le cas normal (« Ligne correspondante », toujours affiché) et le cas rare (« Ligne
    fixe »), relégué à un simple lien texte, plutôt que deux radios à égalité. Les deux `<select>` portent chacun leur étiquette juste au-dessus

@@ -290,11 +290,13 @@ async function exportPdf(page, file) {
   await download.saveAs(file);
 }
 
-// « Assemblage avant impression… » du menu Exporter en PDF : les pages de toutes les lignes posées sur des feuilles A4 (les emplacements au maximum, traits de coupe
-// à la demande), par le vrai menu et la vraie fenêtre.
+// L'option « Assemblage avant impression » du menu Exporter, cochée puis lancée par le bouton Exporter : les pages de toutes les lignes posées sur des feuilles A4 (les emplacements au
+// maximum, traits de coupe à la demande), par le vrai menu et la vraie fenêtre. L'option est remise sur « une seule ligne » aussitôt après (la liste cachée).
 async function exportSheets(page, file, spec) {
   const [download] = await Promise.all([page.waitForEvent('download', { timeout: 300000 }), (async () => {
-    await clickMenuRow(page, '#btn-export-pdf', '#v2-btn-export-pdf-sheets');
+    await clickMenuRow(page, '#btn-export-pdf', '#v2-export-pdf-flyout .v2-hover-row[data-export-lines="sheets"]');
+    await click(page, '#btn-export-pdf', 100);
+    await page.evaluate(() => { document.getElementById('v2-export-lines').value = 'one'; });
     await page.waitForSelector('#pp-sheets-modal .var-modal-primary', { state: 'visible', timeout: 15000 });
     await sleep(400);
     await click(page, `#pp-sheets-modal input[name="pp-sheets-marks"][value="${spec.marks === false ? 'off' : 'on'}"]`, 200);

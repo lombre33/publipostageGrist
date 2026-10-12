@@ -172,13 +172,23 @@ const I18n = (function () {
     'grid.pageBreak': { fr: 'Saut de page · nouvelle page du PDF, nouvelle feuille de l’Excel', en: 'Page break · new page in the PDF, new sheet in the Excel file' },
     'grid.pageBreakDocument': { fr: 'Saut de page · nouvelle page du PDF et du Word', en: 'Page break · new page in the PDF and Word files' },
     'toolbar.autosave.aria': { fr: 'Enregistrement automatique — enregistre le modèle toutes les ~2,5 secondes pendant que vous éditez. Désactiver si vous préférez enregistrer vous-même.', en: 'Auto-save — saves the template roughly every 2.5 seconds while you edit. Turn off if you prefer to save manually.' },
-    // Type d'export (ex-« Qualité PDF ») : PDF, Word ou Excel ; la qualité du PDF reste un intitulé du même menu. « Exporter » nomme le bouton et son menu,
-    // quel que soit le type choisi ; « Exporter en PDF » est la ligne du menu qui exporte la ligne affichée en PDF.
+    // Type d'export (ex-« Qualité PDF ») : PDF, Word ou Excel ; la qualité du PDF reste un intitulé du même menu, montré pour le PDF seulement. « Exporter »
+    // nomme le bouton et son menu, quel que soit le type choisi ; ce menu liste les options de lignes et de classeur (`exportLines.*`, demande du
+    // 12/10) : une seule ligne, ou toutes (un ZIP, un seul PDF, l'assemblage avant impression, un seul classeur). L'option cochée est celle que le bouton lance.
+    // Les textes `toolbar.exportPdf` à `toolbar.exportXlsxSingle` plus bas sont ceux des neuf lignes d'export d'avant, qui ne sont plus montrées.
     'toolbar.exportType': { fr: 'Type d’export', en: 'Export type' },
     'exportType.pdf': { fr: 'PDF', en: 'PDF' },
     'exportType.docx': { fr: 'Word (bêta)', en: 'Word (beta)' },
     'exportType.xlsx': { fr: 'Excel', en: 'Excel' },
     'toolbar.export': { fr: 'Exporter', en: 'Export' },
+    'toolbar.exportLines': { fr: 'Lignes exportées', en: 'Exported rows' },
+    'exportLines.one': { fr: 'Une seule ligne', en: 'A single row' },
+    'exportLines.zip': { fr: 'Toutes les lignes (ZIP)', en: 'All rows (ZIP)' },
+    'exportLines.zipGrid': { fr: 'Toutes les valeurs de la table (ZIP)', en: 'All table values (ZIP)' },
+    'exportLines.merged': { fr: 'Toutes les lignes en un seul PDF', en: 'All rows as a single PDF' },
+    'exportLines.mergedGrid': { fr: 'Toutes les valeurs de la table en un seul PDF', en: 'All table values as a single PDF' },
+    'exportLines.sheets': { fr: 'Assemblage avant impression', en: 'Assemble before printing' },
+    'exportLines.workbook': { fr: 'Toutes les valeurs de la table dans un seul classeur', en: 'All table values in a single workbook' },
     'toolbar.quality.tip': { fr: 'Qualité PDF', en: 'PDF quality' },
     'toolbar.quality.aria': { fr: 'Qualité d’export PDF', en: 'PDF export quality' },
     'toolbar.exportPdf': { fr: 'Exporter en PDF', en: 'Export to PDF' },

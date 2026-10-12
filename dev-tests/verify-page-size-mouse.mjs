@@ -376,14 +376,18 @@ async function confirmByMouse(page) {
   await away(page);
 }
 const checkedKeys = menu => menu.rows.filter(r => r.checked === 'true').map(r => r.key).join();
-const exportRow = '#v2-btn-export-pdf-sheets';
-// Survol réel du bouton « Exporter en PDF », clic réel sur « Assemblage avant impression… », puis attente de la fenêtre.
+const exportRow = '#v2-export-pdf-flyout .v2-hover-row[data-export-lines="sheets"]';
+// Survol réel du bouton Exporter, clic réel sur l'option « Assemblage avant impression » (elle se coche, rien ne s'exporte), puis clic réel sur le bouton Exporter, puis attente de la fenêtre.
+// L'option est remise sur « une seule ligne » aussitôt après (la liste cachée), pour que les exports suivants exportent la ligne affichée.
 async function openAssemblyByMouse(page) {
   const c = await boxOf(page, '#btn-export-pdf');
   await page.mouse.move(c.x - 30, c.y + 5, { steps: 3 });
   await page.mouse.move(c.x, c.y, { steps: 6 });
   await page.waitForTimeout(450);
   await realClick(page, exportRow);
+  await page.waitForTimeout(300);
+  await realClick(page, '#btn-export-pdf');
+  await page.evaluate(() => { document.getElementById('v2-export-lines').value = 'one'; });
   await page.waitForFunction(() => { const m = document.getElementById('pp-sheets-modal'); return !!m && m.style.display !== 'none'; }, null, { timeout: 8000 }).catch(() => {});
   await page.waitForTimeout(250);
 }

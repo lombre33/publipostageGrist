@@ -17,10 +17,15 @@ de régression le jour même :
   de cohérence inter-étages (§7).
 
 **Mise à jour 2026-10-12 (menu d'export)** : le bouton « Qualité PDF » s'appelle « Type d'export » et choisit
-PDF, Word ou Excel (la qualité du PDF est dessous, grisée hors du PDF) ; le bouton « Exporter » (Alt+P aussi)
-exporte dans le type choisi et son menu, titré « Exporter », ne liste que les lignes de ce type. Pour essayer
-« Exporter en DOCX (bêta)… », « Exporter les lignes en DOCX (ZIP)… », « Exporter en Excel… », « …en Excel (ZIP)… » ou
-« …dans un seul classeur… » dans ce protocole, choisir d'abord le type Word ou Excel ; les noms des lignes n'ont pas changé.
+PDF, Word ou Excel (la qualité du PDF n'est montrée que pour le PDF, et gardée) ; le bouton « Exporter » (Alt+P aussi)
+exporte, dans le type choisi, l'option cochée de son menu. Ce menu, titré « Exporter », ne liste que des options de
+lignes et de classeur (une seule ligne, toutes les lignes en ZIP, en un seul PDF, assemblage avant impression, toutes
+les valeurs de la table dans un seul classeur), avec une petite coche devant l'option cochée ; un clic sur une option
+la coche sans rien exporter. Dans la suite de ce protocole, les noms « Exporter en PDF », « Exporter en DOCX (bêta)… »,
+« Exporter en Excel… » veulent dire : choisir le type, cocher « Une seule ligne », cliquer Exporter ; « Exporter les
+lignes (ZIP) », « …en un seul PDF… », « Assemblage avant impression… », « …en Excel (ZIP)… » et « …dans un seul
+classeur… » : choisir le type, cocher l'option du même nom, cliquer Exporter (la confirmation ou la fenêtre de
+l'assemblage s'ouvre alors comme avant).
 
 ## Principe directeur — la chaîne à 3 étages
 

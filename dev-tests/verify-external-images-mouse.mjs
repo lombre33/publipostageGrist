@@ -303,15 +303,21 @@ async function pickExportType(type) {
   await realHover('#v2-btn-quality');
   await realClick('#v2-quality-flyout .v2-hover-row[data-export-type="' + type + '"]', 250);
 }
-// Le bouton d'un export au vrai clic ; `type` : le type d'export à choisir d'abord (PDF par défaut) ; `menu` : le bouton à survoler d'abord pour ouvrir son menu (les lignes ne sont pas visibles sans survol).
-async function startExport({ id, menu, type = 'pdf' }) {
+// Un export au vrai clic, comme la personne le lance : `type` le type d'export à choisir d'abord (PDF par défaut), `lines` l'option de lignes à cocher dans le menu « Exporter » (une seule ligne
+// par défaut ; 'zip' pour toutes les lignes en archive), puis le bouton Exporter. Les lignes « Exporter en… » d'avant ne sont plus montrées. Le choix de lignes est remis à « une seule ligne »
+// aussitôt après (la liste cachée), pour que l'export suivant exporte la ligne affichée.
+async function startExport({ type = 'pdf', lines = 'one' }) {
   await pickExportType(type);
-  if (menu) await realHover(menu);
-  await realClick(id, 500);
+  if (lines !== 'one') {
+    await realHover('#btn-export-pdf');
+    await realClick('#v2-export-pdf-flyout .v2-hover-row[data-export-lines="' + lines + '"]', 250);
+  }
+  await realClick('#btn-export-pdf', 500);
+  await page.evaluate(() => { document.getElementById('v2-export-lines').value = 'one'; });
 }
 const EXPORTS = {
-  pdf: { id: '#btn-export-pdf', menu: null, button: 'btn-export-pdf', done: 'status.pdfGenerated', file: /\.pdf$/i },
-  docx: { id: '#v2-btn-export-docx', menu: '#btn-export-pdf', type: 'docx', button: 'v2-btn-export-docx', done: 'status.docxGenerated', file: /\.docx$/i },
+  pdf: { type: 'pdf', button: 'btn-export-pdf', done: 'status.pdfGenerated', file: /\.pdf$/i },
+  docx: { type: 'docx', button: 'btn-export-pdf', done: 'status.docxGenerated', file: /\.docx$/i },
 };
 
 // 1) et 2) Un export d'une ligne : la fenêtre au vrai clic, Annuler, Échap, Tab, puis Continuer.
@@ -378,7 +384,7 @@ async function runBatch(T) {
   await seed(documentHtml(HOSTS));
   net.fetch.length = 0; downloads.length = 0;
   await clearStatus();
-  await startExport({ id: '#v2-btn-export-pdf-batch', menu: '#btn-export-pdf' });
+  await startExport({ type: 'pdf', lines: 'zip' });
   const first = await windowState();
   check(`${NAME} : la première fenêtre est celle du lot (« Exporter les lignes »), pas celle des images`, first.open && first.title === 'Exporter les lignes', first);
   await click(OK);
@@ -396,7 +402,7 @@ async function runBatch(T) {
 
   await clearStatus();
   const windowsBefore = await windowsOpened();
-  await startExport({ id: '#v2-btn-export-pdf-batch', menu: '#btn-export-pdf' });
+  await startExport({ type: 'pdf', lines: 'zip' });
   await click(OK);
   await waitImagesWindow();
   await click(OK);

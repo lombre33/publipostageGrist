@@ -904,9 +904,10 @@
         await withPage('A6', 'portrait', async () => {
           await seed(h, `<p>${badge('Nom')}</p>`);
           const flyout = document.getElementById('v2-export-pdf-flyout');
-          // Le menu ne montre que les lignes du type choisi (PDF au départ) : la ligne affichée, puis les trois lots, l'assemblage en dernier.
-          const ids = Array.from(flyout.querySelectorAll('.v2-hover-row:not([hidden])')).map(r => r.id);
-          if (ids.join() !== 'v2-btn-export-pdf,v2-btn-export-pdf-batch,v2-btn-export-pdf-merged,v2-btn-export-pdf-sheets') bad.push('lignes du menu : ' + ids.join());
+          // Le menu ne montre que les options du type choisi (PDF au départ) : une seule ligne, puis les trois lots, l'assemblage en dernier. Les lignes « Exporter en… » d'avant restent dans
+          // la page (masquées), c'est elles que ce scénario clique et dont il lit le texte.
+          const options = Array.from(flyout.querySelectorAll('.v2-hover-row[data-export-lines]')).filter(r => !r.closest('[hidden]')).map(r => r.dataset.exportLines);
+          if (options.join() !== 'one,zip,merged,sheets') bad.push('options du menu : ' + options.join());
           const row = document.getElementById(ROW_ID);
           if (row.textContent.trim() !== 'Assemblage avant impression…') bad.push('texte de la ligne : ' + row.textContent);
           I18n.setLang('en');
