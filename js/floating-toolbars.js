@@ -940,9 +940,9 @@ const FloatingToolbars = (function () {
           '</div>',
           '<div data-var-panel="date" hidden>',
           '<span class="v2-varfmt-seg">',
-          `<button data-action="date-part:day" title="${I18n.t('varFmt.showDay')}">J</button>`,
-          `<button data-action="date-part:month" title="${I18n.t('varFmt.showMonth')}">M</button>`,
-          `<button data-action="date-part:year" title="${I18n.t('varFmt.showYear')}">A</button>`,
+          `<button data-action="date-part:day" title="${I18n.t('varFmt.showDay')}">${I18n.t('varFmt.dayLetter')}</button>`,
+          `<button data-action="date-part:month" title="${I18n.t('varFmt.showMonth')}">${I18n.t('varFmt.monthLetter')}</button>`,
+          `<button data-action="date-part:year" title="${I18n.t('varFmt.showYear')}">${I18n.t('varFmt.yearLetter')}</button>`,
           '</span>',
           `<select data-role="date-preset" title="${I18n.t('varFmt.datePreset')}">${dateOptions}</select>`,
           '<span class="v2-floating-sep"></span>',
@@ -1226,10 +1226,20 @@ const FloatingToolbars = (function () {
         }
       }
 
+      // Lettres et infobulles des trois boutons jour / mois / année : relues à chaque ouverture, comme celles des styles de case (syncBoolButtons) - la
+      // langue de l'interface a pu changer depuis la création de la barre (Réglages ne recharge pas la page).
+      const DATE_PART_LABELS = { day: ['varFmt.dayLetter', 'varFmt.showDay'], month: ['varFmt.monthLetter', 'varFmt.showMonth'], year: ['varFmt.yearLetter', 'varFmt.showYear'] };
       function syncDateFormat(ui, format) {
         const isDate = format.type === 'date';
         ui.setField('select[data-role="date-preset"]', isDate && format.preset ? format.preset : VariableFormat.DATE_PRESETS[0].key);
-        ['day', 'month', 'year'].forEach(part => ui.setActive('date-part:' + part, !isDate || format[part] !== false));
+        ['day', 'month', 'year'].forEach(part => {
+          ui.setActive('date-part:' + part, !isDate || format[part] !== false);
+          const btn = ui.button('date-part:' + part);
+          if (!btn) return;
+          const [letterKey, titleKey] = DATE_PART_LABELS[part];
+          if (btn.textContent !== I18n.t(letterKey)) btn.textContent = I18n.t(letterKey);
+          if (btn.title !== I18n.t(titleKey)) btn.title = I18n.t(titleKey);
+        });
         ui.setActive('date-words', isDate && format.words);
       }
 

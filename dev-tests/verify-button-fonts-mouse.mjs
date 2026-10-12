@@ -9,6 +9,8 @@
 // Réglages, la galerie, le macro-modèle, « Organiser mes modèles », la liste des modèles, « Enregistrer sous… » ; un guetteur de DOM contrôle aussi tout élément apparu pendant le parcours (les fenêtres montées par script).
 // Une seconde page (un en-tête et un pied remplis, assez de lignes pour une deuxième page) vérifie aussi que le TEXTE des en-têtes et pieds de page de la feuille est en Roboto, comme le document - « Oui, Roboto » d'Antoine
 // du 12/10, à la carte « Passer le texte des en-têtes et pieds de page en Roboto ? » : zones de bord, survol à la souris, bandes de couture. Ce texte est du contenu du modèle, pas de l'interface.
+// La même seconde page, en anglais, vérifie les lettres des boutons jour / mois / année de la barre d'une date - « Oui, D M Y » d'Antoine du 12/10, à la carte « Traduire les boutons J, M, A de la date en anglais ? » :
+// D, M, Y dès la première ouverture, puis J, M, A et D, M, Y après un changement de langue sans recharger la page, et un vrai clic sur « D ».
 // Les champs ont aussi leur script, plus détaillé : verify-field-fonts-mouse.mjs (groupe fieldFontsMouse).
 // Lancé par run-headless.mjs (groupe Node "buttonFontsMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-button-fonts-mouse.mjs
 import { createServer } from 'node:http';
@@ -372,8 +374,8 @@ check(`pendant tout le parcours, ${seen.length} boutons, champs et textes sont a
 
 // ===== 7) Le texte des en-têtes et pieds de page de la feuille : Roboto, comme le document =====
 // « Oui, Roboto » d'Antoine du 12/10, à la carte « Passer le texte des en-têtes et pieds de page en Roboto ? ». Ce texte est du contenu du modèle : le PDF l'écrit en Roboto, la Lecture aussi ; la feuille le laissait
-// dans l'Arial de `body` (le corps d'une zone est rattaché à la feuille, pas à `.tiptap`). Seconde page de test : un en-tête et un pied remplis, assez de lignes pour une deuxième page (donc une bande de couture).
-const second = await openWidget('light', { headerFooter: true });
+// dans l'Arial de `body` (le corps d'une zone est rattaché à la feuille, pas à `.tiptap`). Seconde page de test : interface en anglais, un en-tête et un pied remplis, assez de lignes pour une deuxième page (donc une bande de couture).
+const second = await openWidget('light', { headerFooter: true, lang: 'en' });
 const p2 = second.page;
 const docFont = await p2.evaluate(() => getComputedStyle(document.querySelector('.tiptap')).fontFamily);
 check('le document s\'écrit en Roboto : c\'est la référence du texte d\'un en-tête et d\'un pied', /^"?Roboto"?\s*,/.test(docFont), docFont);
@@ -407,6 +409,35 @@ const bandHead = await hfTexts(p2, '.v2-page-band-header');
 check('bande de couture, pied de la page 1 (visible dans le panneau) : le texte est en Roboto comme le document, à 14 px et 19,88 px de ligne', bandFoot.length >= 1 && bandFoot[0].shown && bandFoot[0].bottom > 0 && bandFoot[0].top < HEIGHT && /Pied de page/.test(bandFoot[0].text) && bandFoot[0].ff === docFont && bandFoot[0].own.every(f => f === docFont) && bandFoot[0].fs === '14px' && bandFoot[0].lh === '19.88px', bandFoot);
 check('bande de couture, en-tête de la page 2 (visible dans le panneau) : le texte est en Roboto comme le document, à 14 px et 19,88 px de ligne', bandHead.length >= 1 && bandHead[0].shown && bandHead[0].bottom > 0 && bandHead[0].top < HEIGHT && /En-tête/.test(bandHead[0].text) && bandHead[0].ff === docFont && bandHead[0].own.every(f => f === docFont) && bandHead[0].fs === '14px' && bandHead[0].lh === '19.88px', bandHead);
 
+// ===== 8) Les boutons de jour, de mois et d'année de la barre d'une date : D, M, Y en anglais =====
+// « Oui, D M Y » d'Antoine du 12/10, à la carte « Traduire les boutons J, M, A de la date en anglais ? ». Ils s'écrivaient J, M, A quelle que soit la langue, alors que leur info-bulle était traduite. La barre est bâtie à
+// la première ouverture : ici en anglais d'emblée, puis la langue change en cours de session (Réglages) sans recharger - les lettres et les info-bulles suivent à l'ouverture suivante.
+const ref2 = await p2.evaluate(() => getComputedStyle(document.getElementById('btn-save')).fontFamily);
+const dateParts = pg => pg.evaluate(() => {
+  const bar = Array.from(document.querySelectorAll('.v2-varfmt-toolbar')).find(el => el.getClientRects().length > 0);
+  if (!bar) return null;
+  const r = bar.getBoundingClientRect();
+  const parts = Array.from(bar.querySelectorAll('button[data-action^="date-part:"]')).map(b => { const cs = getComputedStyle(b); return { t: b.textContent.trim(), title: b.title, ff: cs.fontFamily, fs: cs.fontSize, h: Math.round(b.getBoundingClientRect().height * 10) / 10, active: b.classList.contains('is-active'), shown: b.getClientRects().length > 0 }; });
+  return { box: { left: Math.round(r.left), right: Math.round(r.right), height: Math.round(r.height) }, parts };
+});
+const openDateBar = async () => { await closeMenusOf(p2); await p2.evaluate(() => window.scrollTo(0, 0)); const sc = await p2.evaluate(() => { const c = document.getElementById('editor-container'); if (c) c.scrollTop = 0; return !!c; }); await p2.waitForTimeout(200); return sc && await clickBadge(p2, 2) && dateParts(p2); };
+const letters = d => d ? d.parts.map(x => x.t).join(' ') : null;
+const titles = d => d ? d.parts.map(x => x.title).join(' | ') : null;
+let dbar = await openDateBar();
+check('barre d\'une date, interface en anglais dès la première ouverture : les boutons s\'écrivent D, M, Y, avec leur info-bulle en anglais', !!dbar && letters(dbar) === 'D M Y' && titles(dbar) === 'Show/hide day | Show/hide month | Show/hide year', dbar);
+check('barre d\'une date en anglais : elle tient dans le panneau (700 px), garde sa hauteur de 36 px, et D, M, Y ont la police des boutons, 26 px de haut', !!dbar && dbar.box.left >= 0 && dbar.box.right <= WIDTH && dbar.box.height === 36 && dbar.parts.every(x => x.shown && x.ff === ref2 && x.h === 26), dbar);
+// Un vrai clic sur « D » éteint le jour, un second le rallume : les boutons marchent comme avant.
+await realClick(p2, '.v2-varfmt-toolbar.visible button[data-action="date-part:day"]', 400);
+const afterD = await dateParts(p2);
+await realClick(p2, '.v2-varfmt-toolbar.visible button[data-action="date-part:day"]', 400);
+const afterD2 = await dateParts(p2);
+check('barre d\'une date en anglais : un clic sur « D » éteint le jour, un second le rallume', !!afterD && !!afterD2 && afterD.parts[0].active === false && afterD.parts[1].active && afterD.parts[2].active && afterD2.parts.every(x => x.active), { afterD, afterD2 });
+await p2.evaluate(() => I18n.setLang('fr'));
+dbar = await openDateBar();
+check('on passe l\'interface en français sans recharger : à la réouverture de la barre, les boutons redeviennent J, M, A, avec leur info-bulle en français', !!dbar && letters(dbar) === 'J M A' && titles(dbar) === 'Afficher/masquer le jour | Afficher/masquer le mois | Afficher/masquer l’année', dbar);
+await p2.evaluate(() => I18n.setLang('en'));
+dbar = await openDateBar();
+check('puis de nouveau en anglais sans recharger : D, M, Y', !!dbar && letters(dbar) === 'D M Y' && titles(dbar) === 'Show/hide day | Show/hide month | Show/hide year', dbar);
 check('aucune erreur JavaScript pendant tout le parcours (les deux pages)', pageErrors.length === 0, pageErrors);
 
 await second.context.close();

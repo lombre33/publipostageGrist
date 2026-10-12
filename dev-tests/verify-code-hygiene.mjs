@@ -248,6 +248,14 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const macroSpelling = [...bad(t => /Macro modèle/.test(t), 'fr'), ...(htmlText.match(/Macro modèle/g) || [])];
   check('vocabulaire : « macro-modèle » s\'écrit avec un trait d\'union', macroSpelling.length === 0, macroSpelling.join(', '));
 
+  // Les lettres des trois boutons jour / mois / année de la barre d'une date suivent la langue de l'interface : J, M, A en français, D, M, Y en anglais (« Oui, D M Y » d'Antoine, 12/10). Elles ne sont jamais
+  // écrites en dur dans la barre, et celle-ci les relit à chaque ouverture (syncDateFormat) : Réglages change la langue sans recharger la page, la barre étant bâtie à sa première ouverture.
+  const toolbarsJs = read('js/floating-toolbars.js');
+  const letterKeys = ['varFmt.dayLetter', 'varFmt.monthLetter', 'varFmt.yearLetter'];
+  const letterEntries = letterKeys.map(key => entries.find(e => e.key === key));
+  check('vocabulaire : les boutons jour / mois / année d\'une date ont leurs lettres dans js/i18n.js (J M A en français, D M Y en anglais), jamais écrites en dur dans la barre', letterEntries.every(Boolean) && letterEntries.map(e => e.fr).join(' ') === 'J M A' && letterEntries.map(e => e.en).join(' ') === 'D M Y' && !/data-action="date-part:[a-z]+"[^>]*>[A-Z]</.test(toolbarsJs));
+  check('vocabulaire : la barre d\'une date relit ces lettres à chaque ouverture, pas seulement à sa création (chaque clé sert au gabarit et à syncDateFormat)', letterKeys.every(key => toolbarsJs.split(key).length - 1 >= 2));
+
   // Le pluriel lui-même : I18n.t choisit la forme selon le nombre, dans la langue en cours (0 et 1 au singulier en français, seul 1 en anglais), sans jamais
   // lire comme un pluriel le texte d'une variable (un nom de colonne, une valeur saisie).
   const ctx = { localStorage: { getItem: () => null, setItem() {} }, document: { documentElement: {}, querySelectorAll: () => [] }, console };

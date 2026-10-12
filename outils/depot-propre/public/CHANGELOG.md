@@ -687,6 +687,9 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   défaut du navigateur, alors que le PDF et le reste du document sont en Roboto. La feuille montre maintenant les mêmes
   lettres que le PDF, pour l'en-tête et le pied de la première page comme pour ceux qui se répètent entre deux pages ; la
   taille du texte et la place des zones ne changent pas.
+- **Les boutons jour, mois et année d'une date suivent la langue** : la barre d'une variable de date affichait « J »,
+  « M » et « A » même quand l'interface était en anglais. Elle affiche « D », « M » et « Y » en anglais, et reprend les
+  lettres et les infobulles de la langue choisie quand on change de langue dans les Réglages, sans recharger la page.
 
 ## [1.0.0-beta.1] - 2026-10-05
 
@@ -1413,6 +1416,9 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   font, while the PDF and the rest of the document use Roboto. The sheet now shows the same letters as the PDF, for the
   header and footer of the first page as well as for those repeated between two pages; the size of the text and the
   place of the zones do not change.
+- **The day, month and year buttons of a date follow the language**: a date variable's bar showed "J", "M" and "A"
+  even when the interface was in English. It now shows "D", "M" and "Y" in English, and picks up the letters and
+  tooltips of the chosen language when you change the language in Settings, without reloading the page.
 
 ## [1.0.0-beta.1] - 2026-10-05 (English)
 

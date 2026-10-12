@@ -1441,6 +1441,10 @@ const I18n = (function () {
     'varFmt.showDay': { fr: 'Afficher/masquer le jour', en: 'Show/hide day' },
     'varFmt.showMonth': { fr: 'Afficher/masquer le mois', en: 'Show/hide month' },
     'varFmt.showYear': { fr: 'Afficher/masquer l’année', en: 'Show/hide year' },
+    // Les lettres des trois boutons de la barre d'une date : jour, mois, année en français ; day, month, year en anglais (choix du 12/10).
+    'varFmt.dayLetter': { fr: 'J', en: 'D' },
+    'varFmt.monthLetter': { fr: 'M', en: 'M' },
+    'varFmt.yearLetter': { fr: 'A', en: 'Y' },
     'varFmt.datePreset': { fr: 'Format de date', en: 'Date format' },
     'varFmt.wordsDateTitle': { fr: 'Écriture en toutes lettres', en: 'Spelled out' },
     // Colonne Oui / Non : les quatre écritures de la barre d'une bulle. Les trois cases sont celles de la liste à cases (mêmes icônes, mêmes

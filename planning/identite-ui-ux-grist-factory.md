@@ -202,6 +202,13 @@ ajoutée ou modifiée doit avoir sa traduction anglaise dans le **même lot** �
 
 **Langue au premier lancement** (choix d'Antoine du 04/10, « Tout soigner »). Sans choix enregistré dans Réglages, la langue est la première des deux (français, anglais) que propose le navigateur, dans l'ordre de ses préférences ; l'anglais s'il n'en propose aucune des deux, le français s'il ne dit rien. Le choix fait dans Réglages l'emporte ensuite (`pp_lang`, `initialLang` de `js/i18n.js`) ; rien n'est enregistré tant que la personne n'a pas choisi.
 
+**Les lettres d'un bouton suivent la langue** (choix d'Antoine du 12/10, « Oui, D M Y »). Les trois boutons jour, mois et année de la barre d'une date
+s'écrivaient J, M, A quelle que soit la langue, alors que leur info-bulle était traduite : ils s'écrivent D, M, Y en anglais (`varFmt.dayLetter`,
+`varFmt.monthLetter`, `varFmt.yearLetter`), jamais en dur dans le gabarit. Une barre flottante est bâtie à sa première ouverture, et Réglages change la langue
+sans recharger la page : tout libellé que la barre porte doit donc être relu à chaque ouverture (`syncDateFormat` pour ces trois boutons et leurs
+info-bulles, `syncBoolButtons` pour les styles de case). Gardé par `codeHygiene` (les trois clés, rien en dur, relues à l'ouverture) et par `buttonFontsMouse`
+(D, M, Y à la première ouverture en anglais, puis J, M, A et D, M, Y après un changement de langue sans recharger, un vrai clic sur « D »).
+
 ### Vocabulaire et écriture des textes
 Arbitré le 29/09 (« Oui, partout », en ligne `fc44fb1`) après un relevé de neuf textes « template », treize pluriels
 entre parenthèses et trois écritures du vide :
@@ -1287,6 +1294,10 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   attendant).
 - Relevés par l'audit du 29/09 sans avoir fait l'objet d'une carte : deux sortes d'info-bulles, quatre crayons pour quatre
   fonctions, des tailles et couleurs écrites en dur dans le CSS, une lecture seule qui grise sans expliquer pourquoi (non revérifiés au 12/10).
+- Barre d'une variable : libellés figés dans la langue de sa première ouverture (relevé du 12/10). Après un changement de langue sans recharger la page, la barre
+  d'une variable de date garde en français la liste des formats (« 12/09/2026 » alors que l'anglais l'écrit « 09/12/2026 »), « Lettres » et le titre « Format de
+  date » ; celle d'un nombre garde les infobulles de FR, US et —, « Décimales », « Auto », « Devise » et « Lettres ». Les boutons d'action, les styles de case
+  et les trois boutons de date, eux, sont relus à l'ouverture. Question posée à Antoine sur une carte : rien n'est codé avant son choix.
 
 ---
 
@@ -1325,3 +1336,6 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
 - 2026-10-12 (suite 3) : le texte des en-têtes et des pieds de page de la feuille passe en Roboto, comme le PDF (« Oui, Roboto » d'Antoine, à la carte posée
   après la relecture des polices) : une règle de `css/editor-v2.css` commune au corps des zones de bord et aux bandes de couture (§1, « Base de la page »),
   gardée par `codeHygiene` et `buttonFontsMouse` ; aucune boîte ne bouge (relevé avant et après) ; §5 ne garde plus cette question.
+- 2026-10-12 (suite 4) : les boutons jour, mois et année de la barre d'une date s'écrivent D, M, Y en anglais (« Oui, D M Y » d'Antoine, seconde carte) et la
+  barre relit leurs lettres et leurs info-bulles à chaque ouverture, la langue pouvant changer sans recharger la page (§1, « Bilingue fr/en systématique »),
+  gardé par `codeHygiene` et `buttonFontsMouse` ; §5 note ce qui reste figé dans la barre d'une variable.
