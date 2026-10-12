@@ -67,8 +67,8 @@ const PdfMerge = (function () {
         embedded.forEach(page => {
           if (!sheet || used >= layout.count) openSheet();
           const slot = layout.slots[used++];
-          // La page tient dans son emplacement à l'échelle de la planche ; une page d'une autre taille que celle du modèle (aucune aujourd'hui) y est
-          // ajustée et centrée plutôt que rognée.
+          // La page tient dans son emplacement à l'échelle de la planche ; une page d'une autre taille que celle du modèle (la page paysage d'un macro-modèle
+          // « Selon chaque modèle », dont l'emplacement suit la page du macro-modèle) y est ajustée et centrée plutôt que rognée.
           const fit = Math.min(slot.width / page.width, slot.height / page.height);
           const width = page.width * fit;
           const height = page.height * fit;

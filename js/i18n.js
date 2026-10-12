@@ -88,12 +88,14 @@ const I18n = (function () {
     'toolbar.a4.aria': { fr: 'Aperçu {format} — limite la largeur de l’éditeur à celle du contenu d’une page {format}, pour que le texte se répartisse comme dans le PDF.', en: '{format} preview — limits the editor width to that of a {format} page’s content, so text wraps the same way as in the PDF.' },
     'toolbar.orientation.portrait': { fr: 'Page {format} en portrait (passer en paysage)', en: '{format} page in portrait (switch to landscape)' },
     'toolbar.orientation.landscape': { fr: 'Page {format} en paysage (passer en portrait)', en: '{format} page in landscape (switch to portrait)' },
+    'toolbar.orientation.auto': { fr: 'Page {format} selon chaque modèle (passer en paysage)', en: '{format} page following each template (switch to landscape)' },
     'toolbar.orientation.unavailable': { fr: 'Orientation de la page (pas disponible pour ce modèle)', en: 'Page orientation (not available for this template)' },
     // Menu au survol du bouton Portrait / Paysage : sens, puis format.
     'toolbar.page.label': { fr: 'Page', en: 'Page' },
     'toolbar.page.unavailable': { fr: 'Page (pas disponible pour ce modèle)', en: 'Page (not available for this template)' },
     'toolbar.page.portrait': { fr: 'Portrait', en: 'Portrait' },
     'toolbar.page.landscape': { fr: 'Paysage', en: 'Landscape' },
+    'toolbar.page.auto': { fr: 'Selon chaque modèle', en: 'Follow each template' },
     'toolbar.page.custom': { fr: 'Format libre…', en: 'Custom size…' },
     'toolbar.page.watermark': { fr: 'Filigrane…', en: 'Watermark…' },
     // Fenêtre « Filigrane… » du menu Page (js/watermark-dialog.js) : le texte écrit en grand, en travers de chaque page du modèle.

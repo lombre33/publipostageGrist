@@ -49,9 +49,9 @@ const Settings = (function () {
     const margins = PageLayout.getMarginsMm();
     // Plafond de chaque champ = dimension de la page dans son sens, moins la surface imprimable minimale (index.html garde les valeurs du portrait
     // : 277 en haut/bas, 190 à gauche/droite). En paysage les deux paires s'échangent - sans cela le sélecteur plafonnait à 190 un côté qui peut
-    // aller à 277.
-    const page = PageLayout.getPageSizeMm();
-    const maxBySide = { top: page.height, bottom: page.height, left: page.width, right: page.width };
+    // aller à 277. Un macro-modèle « Selon chaque modèle » plafonne les quatre sur le côté court du format (PageLayout.getMarginLimitsMm) : ses marges doivent tenir dans la page
+    // de chaque modèle, portrait ou paysage.
+    const maxBySide = PageLayout.getMarginLimitsMm();
     Object.keys(marginInputs).forEach(side => {
       const input = marginInputs[side];
       if (!input) return;

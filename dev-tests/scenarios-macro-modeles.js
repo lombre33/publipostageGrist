@@ -1277,13 +1277,18 @@
 
   cases.push({
     id: 'macro_page_menu_is_active_and_shows_the_page_of_the_macro',
-    description: 'Le bouton Page est actif pour un macro-modèle et son menu coche sa page (colonne Margins de sa ligne) : A4 portrait par défaut, A5 paysage une fois écrit ; revenir d\'un modèle classique la retrouve',
+    description: 'Le bouton Page est actif pour un macro-modèle et son menu coche sa page (colonne Margins de sa ligne) : « Selon chaque modèle » en A4 pour un macro-modèle neuf, A4 portrait pour un macro-modèle fait avant ce réglage (sa ligne n\'en dit rien), A5 paysage une fois écrit ; revenir d\'un modèle classique la retrouve',
     run: async (h) => {
       try {
         const { id, coverId } = await loadedMacro(h, 'Macro page menu');
         const problems = [];
         const first = pageState();
-        if (first.disabled || first.pressed !== 'false' || first.checked !== 'portrait,A4' || first.title !== 'Page' || first.grey !== 0 || first.label !== 'Page A4 en portrait (passer en paysage)') problems.push('macro sans réglage : ' + JSON.stringify(first));
+        if (first.disabled || first.pressed !== 'false' || first.checked !== 'auto,A4' || first.title !== 'Page' || first.grey !== 0 || first.label !== 'Page A4 selon chaque modèle (passer en paysage)') problems.push('macro-modèle neuf : ' + JSON.stringify(first));
+        if (JSON.parse(macroRow(id).Margins || '{}').orientationAuto !== true) problems.push('ligne d\'un macro-modèle neuf : ' + macroRow(id).Margins);
+        window.__gristStub.remoteWrite(MACRO_TABLE, id, { Margins: storedMargins({}) });
+        await reopen(h, id);
+        const legacy = pageState();
+        if (legacy.disabled || legacy.pressed !== 'false' || legacy.checked !== 'portrait,A4' || legacy.label !== 'Page A4 en portrait (passer en paysage)') problems.push('macro-modèle fait avant le réglage : ' + JSON.stringify(legacy));
         window.__gristStub.remoteWrite(MACRO_TABLE, id, { Margins: storedMargins({ orientation: 'landscape', format: 'A5' }) });
         await reopen(h, id);
         const stored = pageState();
@@ -1377,12 +1382,14 @@
 
   cases.push({
     id: 'macro_without_page_settings_keeps_a4_portrait_whatever_the_page_of_its_cover',
-    description: 'Un macro-modèle sans réglage de page reste en A4 portrait (Lecture, PDF, Word) même si sa page de garde est en A3 paysage : la page de garde n\'a aucune prise sur lui',
+    description: 'Un macro-modèle sans réglage de page (fait avant « Selon chaque modèle ») reste en A4 portrait (Lecture, PDF, Word) même si sa page de garde est en A3 paysage : son sens, imposé, est le seul qui compte',
     run: async (h) => {
       try {
         const { id, coverId } = await loadedMacro(h, 'Macro page défaut');
         await feedRecord(h);
         window.__gristStub.remoteWrite(MACRO_TABLE, coverId, { Margins: storedMargins({ orientation: 'landscape', format: 'A3' }) });
+        // Un macro-modèle fait avant « Selon chaque modèle » : sa ligne n\'en dit rien, son sens (portrait) est imposé à ses modèles.
+        window.__gristStub.remoteWrite(MACRO_TABLE, id, { Margins: storedMargins({}) });
         await reopen(h, id);
         const problems = [];
         const state = pageState();
@@ -1397,6 +1404,118 @@
         if (JSON.parse(row.Margins || '{}').orientation === 'landscape') problems.push('la ligne du macro-modèle a pris la page de sa page de garde : ' + row.Margins);
         return { pass: problems.length === 0, notes: JSON.stringify({ problems, pages, wordPage }) };
       } finally { await leaveMacro(h); }
+    },
+  });
+
+  // --- « Selon chaque modèle » (12/10, carte « Dans un macro-modèle, qui décide du sens des pages ? », réponse « Chaque modèle, ou imposé ») -----------------------------------------------------
+  // Le troisième choix du sens, dans le menu Page du macro-modèle : chaque modèle assemblé garde le sens de SA page (le format et les marges restent ceux du macro-modèle). C\'est le réglage d\'un
+  // macro-modèle neuf ; un macro-modèle fait avant lui garde son sens imposé. Il voyage avec la page du macro-modèle (clé `orientationAuto` de la colonne Margins).
+  cases.push({
+    id: 'macro_following_each_model_is_the_default_of_a_new_macro_and_travels_with_its_page',
+    description: '« Selon chaque modèle » est le réglage d\'un macro-modèle créé par la fenêtre de composition (clé orientationAuto de sa colonne Margins, sens portrait, format A4) ; Paysage l\'impose (la clé disparaît), « Selon chaque modèle » le rétablit en gardant format et marges, la composition reste intacte ; le macro-modèle rouvert montre ce qui est écrit',
+    run: async (h) => {
+      try {
+        const { id } = await loadedMacro(h, 'Macro selon chaque modèle');
+        const problems = [];
+        const before = macroRow(id);
+        const written = JSON.parse(before.Margins || '{}');
+        if (written.orientationAuto !== true || written.orientation !== 'portrait' || written.format !== 'A4') problems.push('ligne du macro-modèle neuf : ' + before.Margins);
+        const marginsBefore = ['top', 'right', 'bottom', 'left'].map(k => written[k]);
+        await pickPage(h, 'landscape');
+        await waitTicks(h, 2);
+        const imposed = JSON.parse(macroRow(id).Margins || '{}');
+        if (imposed.orientation !== 'landscape' || 'orientationAuto' in imposed) problems.push('Paysage imposé : ' + macroRow(id).Margins);
+        await reopen(h, id);
+        if (pageChecked() !== 'landscape,A4') problems.push('rouvert en paysage : ' + pageChecked());
+        await pickPage(h, 'auto', 'A5');
+        await waitTicks(h, 2);
+        const again = JSON.parse(macroRow(id).Margins || '{}');
+        if (again.orientationAuto !== true || again.orientation !== 'portrait' || again.format !== 'A5') problems.push('« Selon chaque modèle » rétabli en A5 : ' + macroRow(id).Margins);
+        if (!['top', 'right', 'bottom', 'left'].every((k, i) => near(again[k], marginsBefore[i], .001))) problems.push('marges changées : ' + macroRow(id).Margins);
+        if (macroRow(id).Contenu !== before.Contenu) problems.push('composition changée : ' + macroRow(id).Contenu);
+        await reopen(h, id);
+        const state = pageState();
+        if (state.checked !== 'auto,A5' || state.pressed !== 'false' || state.label !== 'Page A5 selon chaque modèle (passer en paysage)') problems.push('rouvert : ' + JSON.stringify(state));
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems, written: before.Margins, again: macroRow(id).Margins }) };
+      } finally { await leaveMacro(h); }
+    },
+  });
+
+  cases.push({
+    id: 'macro_following_each_model_takes_the_sense_of_its_cover_and_keeps_its_own_format',
+    description: 'Un macro-modèle « Selon chaque modèle » dont la page de garde est en A3 paysage donne une Lecture, un PDF, un PDF unique et un Word en paysage mais au FORMAT du macro-modèle (A4) : le modèle apporte son sens, jamais son format ; Portrait impose ensuite le portrait à tous',
+    run: async (h) => {
+      try {
+        const { id, coverId } = await loadedMacro(h, 'Macro selon la garde');
+        await feedRecord(h);
+        h.setA4Preview(true);
+        await h.sleep(300);
+        window.__gristStub.remoteWrite(MACRO_TABLE, coverId, { Margins: storedMargins({ orientation: 'landscape', format: 'A3' }) });
+        await reopen(h, id);
+        const problems = [];
+        const state = pageState();
+        if (state.checked !== 'auto,A4') problems.push('menu : ' + state.checked);
+        document.getElementById('btn-mode-read').click();
+        await h.sleep(900);
+        const sheet = sheetLayoutWidth();
+        if (sheet === null || !near(sheet, 1122.52, 2)) problems.push('feuille de la Lecture : ' + sheet + ' (1122.52 attendu)');
+        const exportPdf = async () => {
+          const blob = await pdfDownloaded(h, async () => { document.getElementById('btn-export-pdf').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); });
+          return blob ? pdfPages(h, blob) : [];
+        };
+        const pages = await exportPdf();
+        if (pages.length !== 1 || !near(pages[0].width, 841.89, .5) || !near(pages[0].height, 595.28, .5) || !/Page\s*de\s*garde/.test(pages[0].text)) problems.push('PDF : ' + JSON.stringify(pages));
+        const merged = await fileDownloaded(h, 'v2-btn-export-pdf-merged');
+        const mergedPages = merged && merged.blob ? await pdfPages(h, merged.blob) : [];
+        if (mergedPages.length !== 1 || !near(mergedPages[0].width, 841.89, .5) || !near(mergedPages[0].height, 595.28, .5)) problems.push('PDF unique : ' + JSON.stringify(mergedPages));
+        const word = await fileDownloaded(h, 'v2-btn-export-docx');
+        const wordPage = word && word.blob ? await docxPage(word.blob) : null;
+        if (!wordPage || wordPage.width !== 16838 || wordPage.height !== 11906 || wordPage.orient !== 'landscape') problems.push('Word : ' + JSON.stringify(wordPage));
+        // Portrait impose le portrait à tous, la page de garde en paysage comprise.
+        document.getElementById('btn-mode-edit').click();
+        await h.sleep(500);
+        await pickPage(h, 'portrait');
+        const portraitPages = await exportPdf();
+        if (portraitPages.length !== 1 || !near(portraitPages[0].width, 595.28, .5) || !near(portraitPages[0].height, 841.89, .5)) problems.push('PDF en portrait imposé : ' + JSON.stringify(portraitPages));
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems, sheet, pages, mergedPages, wordPage }) };
+      } finally {
+        const edit = document.getElementById('btn-mode-edit'); if (edit) edit.click();
+        await leaveMacro(h);
+      }
+    },
+  });
+
+  // Un modèle Grille entre dans un macro-modèle comme un document (12/10, « il faudrait qu\'un macro modèle puisse contenir des modèles paysage, portrait et grille ») : la fenêtre de composition le propose
+  // (page de garde, annexes, modèle par défaut), le macro-modèle assemble son tableau, et sa propre page lui donne le sens de ses pages (« Selon chaque modèle »).
+  cases.push({
+    id: 'macro_editor_offers_documents_and_grids_but_neither_emails_nor_macros',
+    description: 'La fenêtre de composition d\'un macro-modèle propose les documents et les modèles Grille (page de garde, modèle par défaut d\'une annexe) ; ni les modèles email ni les macro-modèles (pas d\'imbrication)',
+    run: async (h) => {
+      try {
+        setAutosave(true);
+        await h.clickButton('btn-new');
+        await h.sleep(300);
+        const table = '<table style="width: 200px;"><colgroup><col style="width: 200px;"></colgroup><tbody><tr data-row-height="28" style="height: 28px"><td colwidth="200"><p>Grille</p></td></tr></tbody></table>';
+        await Templates.save(null, 'Liste - document', '<p>Document</p>', '', null, null, 'document', null);
+        await Templates.save(null, 'Liste - grille', table, '', null, null, 'grille', null);
+        await Templates.save(null, 'Liste - email', '<p>Email</p>', '', null, null, 'email', { destinataires: '', cc: '', cci: '', objet: '' });
+        await Templates.save(null, 'Liste - macro', JSON.stringify({ slots: [] }), '', null, null, 'macro', null);
+        await Templates.loadAll();
+        MacroEditor.openModal(null);
+        document.getElementById('macro-editor-add-slot').click();
+        await h.sleep(150);
+        const ours = select => Array.from(select.options).map(option => option.textContent.replace(/^Utiliser\s+«\s*/i, '').replace(/\s*»\s*$/, '').trim()).filter(name => /^Liste - /.test(name)).sort();
+        const cover = ours(document.getElementById('macro-editor-cover'));
+        const annex = ours(document.querySelector('#macro-editor-slots .macro-slot-default-select'));
+        const want = ['Liste - document', 'Liste - grille'];
+        const problems = [];
+        if (cover.join('|') !== want.join('|')) problems.push('page de garde : ' + cover.join('|'));
+        if (annex.join('|') !== want.join('|')) problems.push('modèle par défaut d\'une annexe : ' + annex.join('|'));
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems, cover, annex }) };
+      } finally {
+        const cancel = document.getElementById('macro-editor-cancel'); if (cancel) cancel.click();
+        await leaveMacro(h);
+      }
     },
   });
 

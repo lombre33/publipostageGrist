@@ -539,7 +539,7 @@ impression navigateur), script Node `pageFormatMouse` (survol et vrai clic sur l
    tableau trop large pour A5 a été réduit pour de bon : à vérifier et à noter.
 5. Enregistrer, recharger la page du document Grist : le modèle revient dans son format et son sens ; un modèle enregistré avant ce réglage reste en A4 portrait.
 6. Un email : le bouton et son menu sont visibles et grisés (titre « Page (pas disponible pour ce modèle) »), un clic sur une ligne ne change rien.
-   Un macro-modèle : le bouton et son menu sont actifs ; choisir Paysage puis A5 allume le bouton et coche les deux lignes ; la Lecture, « Exporter en PDF », « Exporter en un seul PDF » et
+   Un macro-modèle (au sens imposé ; « Selon chaque modèle » est au § 24) : le bouton et son menu sont actifs ; choisir Paysage puis A5 allume le bouton et coche les deux lignes ; la Lecture, « Exporter en PDF », « Exporter en un seul PDF » et
    « Exporter en DOCX » sont en A5 paysage (le lecteur PDF annonce 210 × 148 mm, Word : Mise en page > Taille A5, Orientation Paysage), même si sa page de garde ou une annexe est en A4
    portrait ou en A3 ; rouvrir cette page de garde seule la montre toujours dans son propre format. Recharger la page du document Grist : le macro-modèle revient en A5 paysage.
    Enregistrement automatique coupé : la page n'est gardée que par « Enregistrer » dans la fenêtre du macro-modèle (et « Enregistrer sous… » en fait une copie qui la garde).
@@ -734,6 +734,35 @@ fichiers téléchargés sont relus par poppler et pypdf : refus sans mot de pass
 7. Passer à « PDF », exporter : aucune fenêtre, un PDF ordinaire (sans mot de passe) ; revenir à « PDF protégé » : l'option de lignes et la qualité choisies avant sont retrouvées.
 8. Panneau de 700 × 400, en clair, en sombre et en anglais (« Protected PDF », « Password to open the PDF », « Permissions for whoever opens the PDF ») : la fenêtre tient, titre et boutons visibles, le mot de passe et
    les droits sans défiler ; le groupe des propriétés, ouvert, fait défiler le contenu seul.
+
+---
+
+## 24. Macro-modèle aux modèles portrait, paysage et Grille (« Selon chaque modèle »)
+
+**Couverture automatisée** : groupe `mixedOrientation` (`scenarios-mixed-orientation.js`, 39 cas : le contrat des repères de sens, le PDF relu par pdf.js, le Word relu en XML, la Lecture, l'impression navigateur, l'assemblage par
+l'application, le réglage de page et le menu), les cas `macro_following_each_model_*` et `macro_editor_offers_documents_and_grids_*` de `macroModeles`, le scénario 8 de `browserPrintPdf` (le vrai PDF d'impression de Chromium) et le
+script Node `macroPageAutoMouse` (vraie souris et vrai clavier à 700×400, clair et sombre, français et anglais).
+**Non couvert** : un vrai Word (les cas lisent l'OOXML), Firefox et Safari (pages nommées de l'impression), les visionneuses de PDF du quotidien, un document Grist réel avec de vrais modèles.
+
+### Protocole
+1. Dans un document Grist, créer quatre modèles : une lettre en portrait, une annexe en paysage (bouton Page : « Paysage »), une page de fin en portrait et un modèle Grille aux colonnes larges (six colonnes de 200 px), en paysage.
+   Créer un macro-modèle (« + », « Macro-modèle ») : la lettre en page de garde, puis trois annexes dont le modèle est, dans l'ordre, l'annexe paysage, la page de fin et la Grille (la liste propose les modèles Grille ; elle ne
+   propose ni un email ni un autre macro-modèle). Enregistrer : le macro-modèle s'ouvre, le bouton Page n'est PAS allumé et son info-bulle dit « Page A4 selon chaque modèle (passer en paysage) ».
+2. Survoler le bouton Page : le menu a, en tête, « Selon chaque modèle » (cochée), puis « Portrait » et « Paysage » (décochées), les formats, « Format libre… » et « Filigrane… ». Panneau de 700 × 400 : le menu tient en entier.
+3. Lecture : quatre feuilles, portrait (la lettre), paysage (l'annexe), portrait (la page de fin), paysage (la Grille, entière dans sa page, sans colonne coupée) ; chaque modèle est sur la feuille de son sens ; avec un
+   en-tête et un pied numérotés « n / total », les numéros continuent d'une feuille à l'autre ; aucun défilement horizontal dans le panneau.
+4. « Exporter en PDF » : quatre pages, portrait, paysage, portrait, paysage (le lecteur PDF annonce 210 × 297 mm puis 297 × 210 mm), le texte de chaque modèle sur SA page, la Grille entière dans sa page paysage ; l'en-tête, le pied
+   « n / total » et le filigrane sont à la taille de chaque page. « Exporter en un seul PDF » et « Toutes les lignes (ZIP) » donnent les mêmes pages, ligne après ligne.
+5. « Exporter en DOCX » : dans Word, quatre sections (Mise en page > Orientation : portrait, paysage, portrait, paysage), la Grille dans sa page paysage ; le sommaire, s'il y en a un, compte toutes les sections.
+6. Qualité « Impression navigateur » puis « Exporter » : l'aperçu avant impression montre quatre feuilles, chacune sur le papier de son sens (Chrome ou Edge).
+7. Menu Page, « Paysage » : la ligne est cochée seule, le bouton s'allume ; la Lecture n'a plus qu'une feuille paysage avec les quatre modèles dessus, le PDF et le Word sont en paysage de bout en bout (comme avant ce réglage) ;
+   « Selon chaque modèle » rend les quatre feuilles. Cliquer le bouton depuis « Selon chaque modèle » impose le paysage, le clic suivant le portrait ; « Selon chaque modèle » revient par le menu (Tab depuis le bouton arrive
+   sur cette ligne, Entrée la choisit).
+8. Recharger la page du document Grist : le macro-modèle a gardé son réglage (« Selon chaque modèle » cochée, ou le sens imposé choisi en dernier). Un macro-modèle fait avant ce réglage reste au sens imposé (« Portrait » ou « Paysage »
+   cochée). Un modèle classique ou une Grille ouverts seuls : le menu n'a pas la ligne ; un email : le bouton reste grisé.
+9. Réglages > Marges d'un macro-modèle « Selon chaque modèle » : les marges se bornent sur le côté court de la page (190 mm au plus en A4), la mention « Macro-modèle : ces marges priment… » est là ; changer le format (A5) garde
+   « Selon chaque modèle ».
+10. Panneau de 700 × 400, en sombre et en anglais (« Follow each template ») : le menu, la Lecture et les boutons tiennent, rien n'est coupé.
 
 ---
 

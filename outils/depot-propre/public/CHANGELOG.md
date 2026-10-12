@@ -9,6 +9,21 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Un macro-modèle qui mêle portrait, paysage et Grille** : le menu du bouton Page d'un macro-modèle propose
+  « Selon chaque modèle », « Portrait » et « Paysage ». Avec « Selon chaque modèle » (le réglage d'un macro-modèle
+  neuf), chaque modèle assemblé garde le sens de sa propre page : un modèle en paysage entre deux modèles en
+  portrait tourne la page à son tour, dans la Lecture (une feuille par suite de modèles de même sens), dans
+  l'impression du navigateur (chaque feuille sur le papier de son sens), dans le PDF (une taille de page par
+  modèle) et dans le Word (une section par suite de modèles de même sens). L'en-tête, le pied de page, les
+  numéros « n / total » et le filigrane se refont à la taille de chaque page, et la numérotation continue d'un
+  modèle à l'autre. Le format et les marges restent ceux du macro-modèle pour tous ses modèles : seul le sens
+  change d'un modèle à l'autre. Un modèle Grille se pose dans un macro-modèle comme un document (la fenêtre de
+  composition le propose) : un tableau trop large pour une page en portrait tient sur la page en paysage de son
+  modèle. « Portrait » et « Paysage » imposent un sens à tous les modèles, comme avant ; un clic sur le bouton
+  depuis « Selon chaque modèle » impose le paysage (un second clic, le portrait). Les macro-modèles déjà faits
+  gardent leur sens, imposé : rien ne change pour eux tant qu'on ne choisit pas « Selon chaque modèle ». Un
+  macro-modèle dont tous les modèles ont le même sens sort comme avant.
+
 - **Rechercher / Remplacer par expression régulière** : le bouton « .* » de la barre de recherche lit ce qui est
   tapé comme un motif JavaScript (`\d+` trouve les nombres, `[A-Z]{2,}` les sigles, `(\w+) (\w+)` deux mots de
   suite) ; il s'ajoute à « Respecter la casse » et à « Mot entier ». Un motif ne traverse ni une bulle, ni un
@@ -755,6 +770,21 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 ## [{{VERSION}}] - {{DATE}} (English)
 
 ### Added
+
+- **A macro template that mixes portrait, landscape and Grid templates**: the menu of the Page button of a macro
+  template offers "Follow each template", "Portrait" and "Landscape". With "Follow each template" (the setting of
+  a new macro template), every assembled template keeps the orientation of its own page: a landscape template
+  between two portrait ones turns the page in turn, in Reading mode (one sheet per run of templates of the same
+  orientation), in browser printing (each sheet on the paper of its orientation), in the PDF (one page size per
+  template) and in the Word file (one section per run of templates of the same orientation). The header, the
+  footer, the "n / total" numbers and the watermark are redone at the size of each page, and the numbering carries
+  on from one template to the next. The format and the margins stay those of the macro template for all of its
+  templates: only the orientation changes from one template to another. A Grid template goes into a macro
+  template like a document (the composition window offers it): a table too wide for a portrait page fits on the
+  landscape page of its template. "Portrait" and "Landscape" impose one orientation on all templates, as before;
+  a click on the button from "Follow each template" imposes landscape (a second click, portrait). Macro templates
+  made before keep their imposed orientation: nothing changes for them until you choose "Follow each template". A
+  macro template whose templates all have the same orientation comes out as before.
 
 - **Find / Replace with a regular expression**: the ".*" button of the search bar reads what is typed as a
   JavaScript pattern (`\d+` finds numbers, `[A-Z]{2,}` acronyms, `(\w+) (\w+)` two words in a row); it

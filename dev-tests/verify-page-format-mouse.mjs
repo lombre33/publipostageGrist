@@ -506,8 +506,10 @@ async function runTheme(theme) {
   const macroBtn = await boxOf(page, '#btn-page-orientation');
   await page.mouse.move(macroBtn.x - 8, macroBtn.y - 4, { steps: 2 }); await page.mouse.move(macroBtn.x, macroBtn.y, { steps: 3 }); await page.waitForTimeout(300);
   const macroMenu = await pageMenu(page);
-  check(`${label} - sur un macro-modèle (résumé affiché, éditeur masqué) : le bouton est actif, le menu s'ouvre au survol, dit « ${macroMenu.title} », ses sept lignes sont actives, atteignables et tiennent dans le panneau ; Portrait et A4 cochés`,
-    !onMacro.disabled && onMacro.summary !== 'none' && onMacro.editor === 'none' && macroMenu.display === 'flex' && macroMenu.title === 'Page' && macroMenu.rows.length === 7
+  // Un macro-modèle a une ligne de plus, la première, « Selon chaque modèle » : celui-ci, posé sans réglage de page (fait avant ce réglage), a son sens imposé, la ligne est décochée (dev-tests/verify-macro-page-auto-mouse.mjs
+  // couvre le choix lui-même).
+  check(`${label} - sur un macro-modèle (résumé affiché, éditeur masqué) : le bouton est actif, le menu s'ouvre au survol, dit « ${macroMenu.title} », ses huit lignes (« Selon chaque modèle » en tête, décochée) sont actives, atteignables et tiennent dans le panneau ; Portrait et A4 cochés`,
+    !onMacro.disabled && onMacro.summary !== 'none' && onMacro.editor === 'none' && macroMenu.display === 'flex' && macroMenu.title === 'Page' && macroMenu.rows.length === 8 && macroMenu.rows[0].key === 'auto' && macroMenu.rows[0].checked === 'false'
       && macroMenu.rows.every(r => r.disabled === 'false' && r.tab === 0 && r.hit && r.h >= 24) && macroMenu.inside && macroMenu.rows.filter(r => r.checked === 'true').map(r => r.key).join() === 'portrait,A4', { onMacro, macroMenu });
   await away(page);
   const macroWrites0 = await page.evaluate(() => window.__gristStub.countActions('UpdateRecord', 'Publipostage_Modeles'));

@@ -130,7 +130,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 
 | Fichier | Rôle |
 |---|---|
-| `js/macro-templates.js` | Choisir et assembler les annexes d'un macro-modèle (aucun DOM). |
+| `js/macro-templates.js` | Choisir et assembler les annexes d'un macro-modèle (aucun DOM) ; en « Selon chaque modèle », écrire le sens de page de chaque modèle assemblé. |
 | `js/macro-editor.js` | L'écran de création d'un macro-modèle et son résumé. |
 
 ### Page et mise en page (11 fichiers, 3 600 lignes)
@@ -140,7 +140,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/page-layout.js` | Marges, orientation, format, filigrane et couleurs gardées de chaque modèle : la source unique de la largeur de contenu. |
 | `js/page-sections.js` | Lit les repères de sens d'un macro-modèle (portrait, paysage) pour que chaque modèle garde son sens de page dans le PDF, le Word, la Lecture et l'impression. |
 | `js/page-layer.js` | Les images « sur toutes les pages » et le filigrane. |
-| `js/orientation-toggle.js`, `js/page-size-dialog.js`, `js/watermark-dialog.js` | Le menu Page et ses fenêtres : sens et format, « Format libre… », « Filigrane… ». |
+| `js/orientation-toggle.js`, `js/page-size-dialog.js`, `js/watermark-dialog.js` | Le menu Page et ses fenêtres : sens (et « Selon chaque modèle » d'un macro-modèle) et format, « Format libre… », « Filigrane… ». |
 | `js/page-zoom.js` | Le zoom de la page à l'écran, en Édition et en Lecture (pastille du coin, Ajuster, Ctrl + molette) ; affichage seulement, les exports gardent les dimensions réelles. |
 | `js/header-footer-preview.js` | Édition de l'en-tête et du pied, aperçu paginé. |
 | `js/table-page-cut.js` | Où un tableau se coupe entre deux pages. |
@@ -403,7 +403,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 
 | File | Role |
 |---|---|
-| `js/macro-templates.js` | Choosing and assembling a macro-template's appendices (no DOM). |
+| `js/macro-templates.js` | Choosing and assembling a macro-template's appendices (no DOM); with "Follow each template", writing the page orientation of each assembled template. |
 | `js/macro-editor.js` | The screen for creating a macro-template, and its summary. |
 
 ### Page and layout (11 files, 3,600 lines)
@@ -413,7 +413,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/page-layout.js` | Margins, orientation, size, watermark and kept colors of each template: the single source of the content width. |
 | `js/page-sections.js` | Reads the page-orientation markers of a macro template (portrait, landscape) so that each template keeps its own page orientation in the PDF, Word, reading mode and print output. |
 | `js/page-layer.js` | "On every page" images and the watermark. |
-| `js/orientation-toggle.js`, `js/page-size-dialog.js`, `js/watermark-dialog.js` | The Page menu and its windows: orientation and size, "Custom size…", "Watermark…". |
+| `js/orientation-toggle.js`, `js/page-size-dialog.js`, `js/watermark-dialog.js` | The Page menu and its windows: orientation (and a macro template's "Follow each template") and size, "Custom size…", "Watermark…". |
 | `js/page-zoom.js` | On-screen page zoom, in Edit and Reading modes (corner pill, Fit, Ctrl + wheel); display only, the exports keep the real dimensions. |
 | `js/header-footer-preview.js` | Header and footer editing, paginated preview. |
 | `js/table-page-cut.js` | Where a table is cut between two pages. |

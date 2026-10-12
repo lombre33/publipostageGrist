@@ -7,6 +7,9 @@
 // - les quatre marges (mm) ;
 // - `orientation` : portrait ou paysage (absente = portrait). Les dimensions de la page courante se lisent par getPageSize*() et getContent*Mm() ;
 //   A4_WIDTH_MM / A4_HEIGHT_MM restent celles du A4 portrait ;
+// - `orientationAuto` : « Selon chaque modèle », le réglage d'un macro-modèle dont les pages suivent le sens de chaque modèle qu'il assemble (la clé n'existe que posée ;
+//   absente = le sens ci-dessus est imposé à tous les modèles, comme avant). `orientation` y reste portrait : le sens de chaque page est dit par le HTML assemblé
+//   (js/macro-templates.js, js/page-sections.js), le format et les marges restent ceux du macro-modèle ;
 // - `format` : A3, A4, A5 ou A6 (absente = A4). FORMATS est la seule table des formats : millimètres (l'écran), points (pdfmake) et twips (Word) y
 //   sont écrits côte à côte, dans le sens portrait, avec le nom que pdfmake et jsPDF donnent au format ; un format de plus est une ligne de cette
 //   table ;
@@ -216,6 +219,10 @@ const PageLayout = (function () {
     return { top: DEFAULT_MARGIN_MM, right: DEFAULT_MARGIN_MM, bottom: DEFAULT_MARGIN_MM, left: DEFAULT_MARGIN_MM, orientation: PORTRAIT, format: DEFAULT_FORMAT };
   }
 
+  // La page d'un macro-modèle neuf : les marges par défaut et « Selon chaque modèle » (chaque modèle assemblé garde le sens de sa page ; « Portrait » et « Paysage », dans le menu
+  // Page, l'imposent à tous). Un macro-modèle déjà enregistré n'est jamais réécrit ainsi : sa page, sans ce réglage, reste son sens imposé.
+  function newMacroMarginsMm() { return Object.assign(emptyMargins(), { orientationAuto: true }); }
+
   let marginsDraft = emptyMargins();
 
   function getMarginsMm() {
@@ -250,12 +257,18 @@ const PageLayout = (function () {
     // sans `format`, l'A4). Les valeurs sont bornées (cf. clampPair, sur les dimensions de la page de ce sens et de ce format) : `getMarginsMm()` peut
     // donc rendre autre chose que ce qui a été passé, et c'est cette valeur bornée qui fait foi partout (aperçu, exports, champs de l'onglet Réglages).
     const merged = data && typeof data === 'object' ? Object.assign(emptyMargins(), data) : emptyMargins();
-    const orientation = normalizeOrientation(merged.orientation);
+    // « Selon chaque modèle » (macro-modèle seulement, cf. isOrientationAuto) : la page du macro-modèle n'a pas de sens à elle, son brouillon reste en portrait ; ses marges sont
+    // bornées sur le côté COURT du format, pour qu'elles tiennent dans la page de chaque modèle assemblé, portrait ou paysage.
+    const auto = merged.orientationAuto === true;
+    const orientation = auto ? PORTRAIT : normalizeOrientation(merged.orientation);
     const format = normalizeFormat(merged.format);
     const page = pageSizeMm(orientation, format);
-    const [left, right] = clampPair(merged.left, merged.right, page.width);
-    const [top, bottom] = clampPair(merged.top, merged.bottom, page.height);
+    const limit = auto ? Math.min(page.width, page.height) : null;
+    const [left, right] = clampPair(merged.left, merged.right, limit || page.width);
+    const [top, bottom] = clampPair(merged.top, merged.bottom, limit || page.height);
     marginsDraft = { top, right, bottom, left, orientation, format };
+    // Comme le filigrane : la clé n'existe que pour un macro-modèle qui a ce réglage, un modèle enregistré avant lui se recharge à l'identique (sens imposé).
+    if (auto) marginsDraft.orientationAuto = true;
     // La clé n'existe que pour un modèle qui a un filigrane : l'objet d'un modèle sans filigrane ne porte aucune clé en plus.
     const watermark = normalizeWatermark(merged.watermark);
     if (watermark) marginsDraft.watermark = watermark;
@@ -267,6 +280,17 @@ const PageLayout = (function () {
 
   function getOrientation() { return marginsDraft.orientation; }
   function isLandscape() { return marginsDraft.orientation === LANDSCAPE; }
+  // « Selon chaque modèle » : le réglage d'un macro-modèle (js/macro-templates.js) dont les pages suivent le sens de chaque modèle assemblé, portrait, paysage ou grille, au lieu d'un sens
+  // imposé à tous. Sans ce réglage (un document, une grille, un macro-modèle fait avant lui), le sens de la page est le seul sens de tout le document, comme toujours. Le brouillon d'un macro-modèle
+  // dans ce mode reste en portrait (cf. setMarginsMm) : il ne dit rien du sens des pages, ce sont les repères du HTML assemblé qui le disent (js/page-sections.js).
+  function isOrientationAuto() { return marginsDraft.orientationAuto === true; }
+  // Les plafonds des marges, en mm : la dimension de la page dans son sens (haut et bas sur la hauteur, gauche et droite sur la largeur) ; « Selon chaque modèle » les plafonne sur le côté
+  // court du format, pour les deux paires. js/settings.js en fait le `max` de ses champs.
+  function getMarginLimitsMm() {
+    const page = getPageSizeMm();
+    const short = Math.min(page.width, page.height);
+    return isOrientationAuto() ? { top: short, bottom: short, left: short, right: short } : { top: page.height, bottom: page.height, left: page.width, right: page.width };
+  }
   function getFormat() { return marginsDraft.format; }
   function getFormatLabel() {
     // Le format de la page courante dans les phrases de l'interface (cf. formatLabel) : « A4 », ou « 7 × 3,7 cm » pour un format libre, dans le sens de
@@ -287,15 +311,26 @@ const PageLayout = (function () {
     // l'appelle alors que l'éditeur contient encore le modèle précédent, et js/main.js rafraîchit lui-même juste après avoir posé le nouveau).
     // js/main.js y rafraîchit le facteur d'ajustement, la pagination, la grille des images en calque et la Lecture ; le bouton et le menu
     // (js/orientation-toggle.js) ne rafraîchissent rien eux-mêmes.
-    document.dispatchEvent(new CustomEvent('pp:pageLayoutChanged', { detail: { orientation: marginsDraft.orientation, format: marginsDraft.format } }));
+    document.dispatchEvent(new CustomEvent('pp:pageLayoutChanged', { detail: { orientation: marginsDraft.orientation, format: marginsDraft.format, orientationAuto: marginsDraft.orientationAuto === true } }));
   }
   function setOrientation(orientation) {
     // Change l'orientation en gardant les 4 marges (re-bornées pour la nouvelle page). Ne touche ni à l'aperçu, ni à la pagination, ni aux exports :
     // l'appelant rafraîchit ce qu'il affiche (Editor.refreshLayout) et marque le brouillon modifié (événement pp:marginsChanged, cf. js/settings.js).
+    // Choisir un sens, c'est l'imposer : un macro-modèle « Selon chaque modèle » le quitte (setOrientationAuto le rétablit).
     const next = normalizeOrientation(orientation);
-    if (next === marginsDraft.orientation) return;
-    setMarginsMm(Object.assign({}, marginsDraft, { orientation: next }));
+    if (next === marginsDraft.orientation && !isOrientationAuto()) return;
+    setMarginsMm(Object.assign({}, marginsDraft, { orientation: next, orientationAuto: false }));
     announcePageLayoutChanged();
+  }
+  function setOrientationAuto(on) {
+    // Pose (ou retire) « Selon chaque modèle » en gardant les marges (re-bornées, cf. setMarginsMm) et le format. Même contrat que setOrientation : ne rafraîchit rien, annonce
+    // `pp:pageLayoutChanged` quand le réglage change (la Lecture et les exports assemblent un autre HTML), l'appelant marque le brouillon modifié (pp:marginsChanged). Retirer le réglage
+    // laisse la page en portrait : le sens qu'on lui impose ensuite est un choix de la personne (setOrientation). Rend vrai si quelque chose a changé.
+    const next = on === true;
+    if (next === isOrientationAuto()) return false;
+    setMarginsMm(Object.assign({}, marginsDraft, { orientationAuto: next }));
+    announcePageLayoutChanged();
+    return true;
   }
 
   function withOrientation(orientation, fn) {
@@ -333,6 +368,8 @@ const PageLayout = (function () {
     const orientation = a > b ? LANDSCAPE : a < b ? PORTRAIT : marginsDraft.orientation;
     if (next.id === marginsDraft.format && orientation === marginsDraft.orientation) return false;
     const margins = Object.assign({}, marginsDraft, { format: next.id, orientation });
+    // Une forme saisie qui n'est pas celle de la page en cours impose son sens : « Selon chaque modèle » est quitté (une forme semblable, seul le format change, le garde).
+    if (orientation !== marginsDraft.orientation) margins.orientationAuto = false;
     const untouched = ['top', 'right', 'bottom', 'left'].every(side => Math.abs(marginsDraft[side] - DEFAULT_MARGIN_MM) < 0.05);
     if (next.custom && next.widthMm < SMALL_PAGE_MM && untouched) {
       margins.top = margins.right = margins.bottom = margins.left = SMALL_PAGE_MARGIN_MM;
@@ -452,8 +489,8 @@ const PageLayout = (function () {
   return {
     A4_WIDTH_MM, A4_HEIGHT_MM, MM_TO_PT, MM_TO_TWIP, MM_TO_PX, COLUMN_GAP_PX, MIN_CONTENT_MM, DEFAULT_MARGIN_PT, DEFAULT_MARGIN_MM, PORTRAIT, LANDSCAPE, DEFAULT_FORMAT,
     HEADER_FOOTER_ZONE_PX, HEADER_FOOTER_GAP_PT, HEADER_FOOTER_GAP_PX, HEADER_FOOTER_BAND_PX, hasZoneContent,
-    getMarginsMm, setMarginsMm, getContentWidthMm, getContentHeightMm, getColumnGapMm, getMarginsPt, getMarginsPx, getMarginsTwip, applyToPreviewCss,
-    getOrientation, isLandscape, setOrientation, withOrientation, getPageSizeMm, getPageSizePt, getPageSizePx, getPageSizeTwip, getSheetWidthPx, pageSizePtFor, pageSizeTwipFor,
+    getMarginsMm, setMarginsMm, newMacroMarginsMm, getContentWidthMm, getContentHeightMm, getColumnGapMm, getMarginsPt, getMarginsPx, getMarginsTwip, applyToPreviewCss,
+    getOrientation, isLandscape, isOrientationAuto, setOrientation, setOrientationAuto, withOrientation, getMarginLimitsMm, getPageSizeMm, getPageSizePt, getPageSizePx, getPageSizeTwip, getSheetWidthPx, pageSizePtFor, pageSizeTwipFor,
     getFormats, getFormat, setFormat, normalizeFormat, pageSizeMmFor, pdfPageNameFor,
     CUSTOM_MIN_MM, CUSTOM_MAX_MM, isCustomFormat, cmText, formatLabel, getFormatLabel, setPageSize, fitsHeaderFooter,
     WATERMARK_MAX_CHARS, WATERMARK_DEFAULT, normalizeWatermark, getWatermark, setWatermark,

@@ -8,6 +8,8 @@
 // les formats, « Format libre… » (cochée, avec la taille en centimètres, quand la page n'est pas un format de la liste) ouvre la fenêtre de la taille
 // saisie (js/page-size-dialog.js), qui pose PageLayout.setPageSize par selectPageSize d'ici. Sa dernière ligne, « Filigrane… », ouvre la fenêtre du
 // filigrane de la page (js/watermark-dialog.js), un réglage de la page qui suit les mêmes règles (types suivis, lecture seule, export en cours).
+// Le menu d'un macro-modèle a une ligne de plus, la première : « Selon chaque modèle » (PageLayout.setOrientationAuto), où chaque modèle assemblé garde le sens de sa page ;
+// « Portrait » et « Paysage » l'imposent à tous, comme avant. Les autres types n'ont pas cette ligne : leur menu reste celui d'avant.
 const OrientationToggle = (function () {
   const BUTTON_ID = 'btn-page-orientation';
   const FLYOUT_ID = 'v2-page-flyout';
@@ -16,6 +18,9 @@ const OrientationToggle = (function () {
   const CUSTOM_ROW_ID = 'v2-btn-page-custom';
   // La clé (data-page-format) de la ligne « Format libre… » : pas un format de la liste, la ligne se coche quand la page n'en est aucun.
   const CUSTOM_KEY = 'custom';
+  // La clé (data-page-orientation) de la ligne « Selon chaque modèle » : le troisième choix du sens, propre au macro-modèle.
+  const AUTO_KEY = 'auto';
+  const MACRO_TYPE = 'macro';
   // Types de modèle (colonne TypeModele) dont les moteurs suivent le sens et le format de PageLayout. Le bouton et son menu sont grisés pour tous les
   // autres : un réglage qui ne change rien à ce qu'on voit ni à ce qu'on exporte ne doit pas se laisser tourner. Un type s'ajoute ici quand ses
   // moteurs suivent, sans toucher js/main.js.
@@ -46,8 +51,16 @@ const OrientationToggle = (function () {
   }
 
   function selectOrientation(orientation) {
-    if (!canChange() || PageLayout.getOrientation() === orientation) return;
+    // Un macro-modèle « Selon chaque modèle » est en portrait pour PageLayout : choisir « Portrait » l'impose quand même.
+    if (!canChange() || (PageLayout.getOrientation() === orientation && !PageLayout.isOrientationAuto())) return;
     PageLayout.setOrientation(orientation);
+    afterChange();
+  }
+
+  // « Selon chaque modèle » : chaque modèle du macro-modèle garde le sens de sa page. Réservé au macro-modèle ; les mêmes gardes que les autres gestes.
+  function selectAuto() {
+    if (!canChange() || currentType !== MACRO_TYPE || PageLayout.isOrientationAuto()) return;
+    PageLayout.setOrientationAuto(true);
     afterChange();
   }
 
@@ -165,18 +178,31 @@ const OrientationToggle = (function () {
     host.appendChild(watermark);
   }
 
-  function syncMenu(supported, landscape, format) {
+  // La ligne « Selon chaque modèle » : posée en tête du menu d'un macro-modèle, retirée des autres types (leur menu reste celui d'avant).
+  function syncAutoRow(host, macro) {
+    let row = host.querySelector('[data-page-orientation="' + AUTO_KEY + '"]');
+    if (macro && !row) {
+      row = makeRow('data-page-orientation', AUTO_KEY, selectAuto);
+      host.insertBefore(row, host.querySelector('[data-page-orientation="' + PageLayout.PORTRAIT + '"]'));
+    } else if (!macro && row) {
+      row.remove();
+    }
+  }
+
+  function syncMenu(supported, landscape, format, auto) {
     const host = menu();
     if (!host) return;
     buildMenu();
+    syncAutoRow(host, supported && currentType === MACRO_TYPE);
     const title = document.getElementById('v2-page-flyout-label');
     if (title) title.textContent = I18n.t(supported ? 'toolbar.page.label' : 'toolbar.page.unavailable');
     const enabled = supported && !busy;
     host.querySelectorAll('.v2-hover-row-check').forEach(row => {
       const orientation = row.getAttribute('data-page-orientation');
       const custom = row.getAttribute('data-page-format') === CUSTOM_KEY;
-      const checked = orientation ? (orientation === PageLayout.LANDSCAPE) === landscape : custom ? PageLayout.isCustomFormat(format) : row.getAttribute('data-page-format') === format;
-      if (orientation) row.querySelector('.v2-page-row-name').textContent = I18n.t(orientation === PageLayout.LANDSCAPE ? 'toolbar.page.landscape' : 'toolbar.page.portrait');
+      // Un sens imposé n'est coché que sans « Selon chaque modèle » ; celui-ci l'est seul quand il est posé.
+      const checked = orientation === AUTO_KEY ? auto : orientation ? !auto && (orientation === PageLayout.LANDSCAPE) === landscape : custom ? PageLayout.isCustomFormat(format) : row.getAttribute('data-page-format') === format;
+      if (orientation) row.querySelector('.v2-page-row-name').textContent = I18n.t(orientation === AUTO_KEY ? 'toolbar.page.auto' : orientation === PageLayout.LANDSCAPE ? 'toolbar.page.landscape' : 'toolbar.page.portrait');
       if (custom) {
         row.querySelector('.v2-page-row-name').textContent = I18n.t('toolbar.page.custom');
         row.querySelector('.v2-page-row-size').textContent = checked ? PageLayout.getFormatLabel() : '';
@@ -214,17 +240,19 @@ const OrientationToggle = (function () {
     if (!btn) return;
     const supported = isEnabledForType(currentType);
     const landscape = PageLayout.isLandscape();
+    // « Selon chaque modèle » : le bouton n'est pas allumé (aucun sens n'est imposé), son icône reste la page haute, un clic impose le paysage.
+    const auto = supported && currentType === MACRO_TYPE && PageLayout.isOrientationAuto();
     const format = PageLayout.getFormat();
     const formatName = PageLayout.getFormatLabel();
     const label = !supported ? I18n.t('toolbar.orientation.unavailable')
-      : I18n.t(landscape ? 'toolbar.orientation.landscape' : 'toolbar.orientation.portrait', { format: formatName });
-    btn.dataset.orientation = landscape ? 'landscape' : 'portrait';
+      : I18n.t(auto ? 'toolbar.orientation.auto' : landscape ? 'toolbar.orientation.landscape' : 'toolbar.orientation.portrait', { format: formatName });
+    btn.dataset.orientation = auto ? AUTO_KEY : landscape ? 'landscape' : 'portrait';
     btn.setAttribute('aria-pressed', landscape ? 'true' : 'false');
     btn.setAttribute('aria-label', label);
     btn.classList.toggle('active', supported && landscape);
     btn.disabled = !supported || busy;
     syncPreviewToggle(formatName);
-    syncMenu(supported, landscape, format);
+    syncMenu(supported, landscape, format, auto);
   }
 
   // Pendant un export : le sens et le format lus au départ d'un lot ne doivent pas changer sous lui (js/main.js:withExportLock).
@@ -245,5 +273,5 @@ const OrientationToggle = (function () {
     sync();
   }
 
-  return { TYPES, wire, sync, toggle, selectOrientation, selectFormat, selectPageSize, setBusy };
+  return { TYPES, wire, sync, toggle, selectOrientation, selectAuto, selectFormat, selectPageSize, setBusy };
 })();

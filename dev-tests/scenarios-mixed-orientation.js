@@ -7,6 +7,11 @@
 // macro-modèle au sens imposé), rien ne change. Ce fichier écrit les repères À LA MAIN, à dessein : il épingle le contrat du HTML assemblé, du côté de la sortie ; l'assemblage lui-même (les
 // repères que `MacroTemplates` pose) a ses scénarios plus bas dans le groupe, une fois l'interrupteur en place.
 //
+// Lot 5 (activation) : « Selon chaque modèle » est le réglage de page du macro-modèle (`PageLayout.isOrientationAuto`, clé `orientationAuto` de la colonne Margins ; le défaut d'un macro-modèle
+// neuf, un macro-modèle déjà fait garde son sens imposé). `MacroTemplates.buildConcatenatedHtml(…, { perModel: true })` écrit alors le sens de chaque modèle assemblé (celui de sa propre page,
+// Grille comprise) : les scénarios `mixed_assembly_*` épinglent ce HTML contre le contrat écrit à la main, `mixed_following_*` suivent le document jusqu'aux quatre sorties, et le menu Page
+// du macro-modèle (`OrientationToggle`) a ses cas `mixed_page_*`.
+//
 // Lot 3 (Lecture) : `js/reader-mode.js` range le document résolu en une feuille de lecture par section (`splitIntoSections`, `paginateSections`) : un `.reader-content` à part pour chaque suite de
 // modèles de même sens, de la largeur de SA page et paginé dans SON sens (`PageLayout.withOrientation`), les pages numérotées de bout en bout, une gouttière entre deux sections, les titres et les
 // notes qui continuent, le facteur d'ajustement pris sur la feuille la plus large (`js/page-zoom.js`). Sans repère, la Lecture garde son unique `.reader-content` : rien ne change.
@@ -33,6 +38,25 @@ window.EditorTestSuites.mixedOrientation = (function () {
   // `slots` : [{ sense, html }], un modèle chacun.
   const assemble = slots => start(slots[0].sense) + slots.map((slot, rank) => (rank ? slotBreak(rank, slot.sense) : '') + slot.html).join('');
   const slot = (sense, html) => ({ sense, html });
+  // Les modèles tels que `Templates` les rend à l'assemblage (lot 5) : `sense` est celui de leur page (colonne Margins), nul pour un modèle qui n'en dit pas.
+  const template = (id, sense, html, extra) => Object.assign({ id, nom: 'Modèle ' + id, contenu: html, typeModele: 'document', marginsMm: sense ? { orientation: sense } : null }, extra || {});
+  const fixedSlots = (...ids) => ({ slots: ids.map(id => ({ type: 'fixed', modeleId: id })) });
+  // Un élément et ses attributs triés, récursivement : de quoi comparer deux HTML par leur structure sans dépendre de l'ordre où les attributs sont écrits.
+  function canon(html) {
+    const root = document.createElement('div');
+    root.innerHTML = html;
+    const walk = node => (node.nodeType === 3 ? node.nodeValue : node.nodeType === 1
+      ? '<' + node.localName + Array.from(node.attributes).map(a => ' ' + a.name + '="' + a.value + '"').sort().join('') + '>' + Array.from(node.childNodes).map(walk).join('') + '</' + node.localName + '>' : '');
+    return Array.from(root.childNodes).map(walk).join('');
+  }
+  const assembleWith = (composition, templates, perModel, record) => MacroTemplates.buildConcatenatedHtml(composition, 'Clients', record || { id: 1 }, templates, perModel === undefined ? undefined : { perModel });
+  // Un modèle Grille : un seul tableau aux colonnes réglées en px (colgroup et colwidth), ici 4 x 230 px = 920 px : trop large pour la largeur utile d'une page portrait (719 px à 9,9 mm
+  // de marge), il tient dans une page paysage (1047 px).
+  function gridTable(tag) {
+    const widths = [230, 230, 230, 230];
+    const row = r => '<tr data-row-height="28" style="height: 28px">' + widths.map((w, c) => '<td colwidth="' + w + '"><p>' + tag + r + 'c' + c + '</p></td>').join('') + '</tr>';
+    return '<table style="width: 920px;"><colgroup>' + widths.map(w => '<col style="width: ' + w + 'px;">').join('') + '</colgroup><tbody>' + row(0) + row(1) + '</tbody></table>';
+  }
 
   // --- Les modèles ---
   const lines = (n, tag) => Array.from({ length: n }, (_, i) => '<p>' + tag + ' ' + i + ' du modèle de test.</p>').join('');
@@ -1092,6 +1116,324 @@ window.EditorTestSuites.mixedOrientation = (function () {
         PageLayout.setMarginsMm(Object.assign({}, PageLayout.getMarginsMm(), { orientation: 'landscape' }));
         await check('macro-modèle tout paysage', assemble([slot('landscape', lines(3, 'Alpha')), slot('landscape', lines(3, 'Bravo'))]), 'LL', '@page { size: 297mm 210mm; margin: 0; }');
         await plainPage(h);
+        return verdict(problems, {});
+      },
+    },
+
+    // ---------- L'assemblage : « Selon chaque modèle » (lot 5) ----------
+    {
+      id: 'mixed_assembly_following_each_model_writes_the_sense_of_every_model',
+      description: 'MacroTemplates.buildConcatenatedHtml avec perModel (« Selon chaque modèle ») écrit le sens de chaque modèle assemblé, celui de sa propre page : un repère de départ devant le premier, data-page-orientation sur le saut de page de chacun des autres, un modèle sans page en portrait, un modèle Grille avec la sienne - le HTML écrit à la main du contrat ; sans l\'option, ou avec perModel faux, le HTML d\'avant octet pour octet, sans aucun repère',
+      async run() {
+        const problems = [];
+        const templates = [
+          template('p', 'portrait', lines(2, 'Alpha')),
+          template('l', 'landscape', lines(2, 'Bravo')),
+          template('none', null, lines(2, 'Charlie')),
+          template('g', 'landscape', gridTable('Delta'), { typeModele: 'grille' }),
+        ];
+        const composition = fixedSlots('p', 'l', 'none', 'g');
+        const html = await assembleWith(composition, templates, true);
+        const want = assemble([slot('portrait', lines(2, 'Alpha')), slot('landscape', lines(2, 'Bravo')), slot('portrait', lines(2, 'Charlie')), slot('landscape', gridTable('Delta'))]);
+        if (canon(html) !== canon(want)) problems.push('HTML assemblé : ' + html.slice(0, 500) + ' … au lieu de ' + want.slice(0, 500) + ' …');
+        const root = document.createElement('div');
+        root.innerHTML = html;
+        const senses = PageSections.split(root.childNodes, 'portrait').map(section => section.orientation[0]).join('');
+        if (senses !== 'plpl') problems.push('sections lues : ' + senses + ' au lieu de plpl');
+        if (PageSections.firstSenseOf(html) !== 'portrait') problems.push('sens du repère de départ : ' + PageSections.firstSenseOf(html));
+        const ranks = Array.from(root.querySelectorAll('.page-break-marker')).map(el => el.getAttribute('data-macro-slot') + ':' + el.getAttribute('data-page-orientation')).join(',');
+        if (ranks !== '1:landscape,2:portrait,3:landscape') problems.push('sauts de page : ' + ranks);
+        // Sans l'option : le HTML d'avant, sans repère.
+        const legacy = templates.map(tpl => tpl.contenu).reduce((html2, content, rank) => html2 + (rank ? MacroTemplates.slotBreakHtml(rank) : '') + content, '');
+        [['sans option', await assembleWith(composition, templates)], ['perModel faux', await assembleWith(composition, templates, false)]].forEach(([label, got]) => {
+          if (got !== legacy) problems.push(label + ' : le HTML a changé (' + got.slice(0, 200) + ')');
+          if (PageSections.hasSenses(got)) problems.push(label + ' : des repères de sens sont écrits');
+        });
+        return verdict(problems, { senses, ranks });
+      },
+    },
+    {
+      id: 'mixed_assembly_follows_the_models_kept_for_the_row',
+      description: 'L\'assemblage « Selon chaque modèle » suit les modèles RETENUS : un premier modèle masqué (l\'œil) cède le repère de départ au suivant et les rangs se recomptent, un seul modèle retenu n\'a pas de saut de page, rien de retenu n\'écrit rien (pas même un repère), une annexe choisie par la ligne donne son sens à cette ligne',
+      async run() {
+        const problems = [];
+        const templates = [template('p', 'portrait', lines(1, 'Alpha')), template('l', 'landscape', lines(1, 'Bravo')), template('q', 'portrait', lines(1, 'Charlie'))];
+        const hidden = { slots: [{ type: 'fixed', modeleId: 'p', hiddenModeleIds: ['p'] }, { type: 'fixed', modeleId: 'l' }, { type: 'fixed', modeleId: 'q' }] };
+        const first = await assembleWith(hidden, templates, true);
+        if (canon(first) !== canon(assemble([slot('landscape', lines(1, 'Bravo')), slot('portrait', lines(1, 'Charlie'))]))) problems.push('premier modèle masqué : ' + first.slice(0, 400));
+        const one = await assembleWith(fixedSlots('l'), templates, true);
+        if (canon(one) !== canon(start('landscape') + lines(1, 'Bravo'))) problems.push('un seul modèle : ' + one.slice(0, 300));
+        const none = await assembleWith({ slots: [{ type: 'conditional', rules: [], defaultModeleId: null }] }, templates, true);
+        if (none !== '') problems.push('rien de retenu : ' + none.slice(0, 200));
+        const byRow = { slots: [{ type: 'fixed', modeleId: 'p' }, { type: 'conditional', rules: [{ column: 'Type', operator: '=', value: 'Large', modeleId: 'l' }], defaultModeleId: 'q' }] };
+        const sensesFor = async record => {
+          const html = await MacroTemplates.buildConcatenatedHtml(byRow, 'Dossiers', record, templates, { perModel: true });
+          const root = document.createElement('div');
+          root.innerHTML = html;
+          return PageSections.split(root.childNodes, 'portrait').map(section => section.orientation[0]).join('');
+        };
+        const large = await sensesFor({ id: 1, Type: 'Large' });
+        const small = await sensesFor({ id: 2, Type: 'Petit' });
+        if (large !== 'pl' || small !== 'p') problems.push('annexe selon la ligne : ' + large + ' / ' + small + ' au lieu de pl / p');
+        return verdict(problems, { large, small });
+      },
+    },
+    {
+      id: 'mixed_following_each_model_comes_out_turned_in_the_reading_the_pdf_the_word_and_the_print',
+      description: 'Un macro-modèle « Selon chaque modèle » assemblé par l\'application (portrait, paysage, Grille paysage, portrait) : la Lecture a trois feuilles (portrait, paysage de deux pages, portrait), le PDF quatre pages de la taille du sens de leur modèle, le Word trois sections, l\'impression quatre feuilles sur le papier de leur sens ; la grille de 920 px, trop large pour une page portrait, tient dans sa page paysage dans chacune des quatre sorties',
+      async run(h) {
+        const problems = [];
+        await plainPage(h);
+        const templates = [template('a', 'portrait', lines(2, 'Alpha')), template('b', 'landscape', lines(2, 'Bravo')), template('g', 'landscape', gridTable('Gri'), { typeModele: 'grille' }), template('d', 'portrait', lines(2, 'Delta'))];
+        const html = await assembleWith(fixedSlots('a', 'b', 'g', 'd'), templates, true);
+        const summary = {};
+        // La Lecture : trois feuilles, la grille entière dans la largeur utile de la page paysage.
+        const reading = await readSheets(h, html);
+        summary.lecture = reading.senses + ' ' + reading.pages;
+        if (reading.senses !== 'PLP' || reading.pages !== '1,2,1') problems.push('Lecture : feuilles ' + reading.senses + ', pages ' + reading.pages + ' au lieu de PLP, 1,2,1');
+        problems.push(...sheetProblems(reading.sheets, 'PLP'));
+        if (reading.sheets[1]) {
+          const sheet = reading.sheets[1];
+          const zoom = EditorCore.layoutZoom(sheet.el);
+          const table = sheet.el.querySelector('table');
+          const right = table ? (table.getBoundingClientRect().right - sheet.el.getBoundingClientRect().left) / zoom : null;
+          const limit = SHEET_PX.L - PageLayout.getMarginsPx().right + 1;
+          summary.grilleLecture = right === null ? null : Math.round(right);
+          if (right === null || right > limit) problems.push('Lecture : la grille dépasse la page paysage (' + right + ' px pour ' + limit + ')');
+        }
+        // Le PDF : quatre pages, chaque modèle sur la sienne, la grille dans la largeur de la page paysage.
+        const pdf = await pdfPages(h, html);
+        summary.pdf = pdf.sizes;
+        if (pdf.sizes !== 'PLLP') problems.push('PDF : pages ' + pdf.sizes + ' au lieu de PLLP');
+        else {
+          problems.push(...sizeProblems(pdf.pages, 'PLLP'));
+          const tags = ['Alpha', 'Bravo', 'Gri0c0', 'Gri1c3', 'Delta'];
+          const wantTags = [['Alpha'], ['Bravo'], ['Gri0c0', 'Gri1c3'], ['Delta']];
+          pdf.pages.forEach((page, i) => { const got = tagsOn(page, tags); if (got.join() !== wantTags[i].join()) problems.push('PDF page ' + (i + 1) + ' : ' + got.join(',') + ' au lieu de ' + wantTags[i].join(',')); });
+          const gridPage = pdf.pages[2];
+          const right = Math.max(...gridPage.items.filter(item => /^Gri\d/.test(item.str)).map(item => item.x + item.width));
+          summary.grillePdf = Math.round(right);
+          if (right > gridPage.width - PageLayout.getMarginsPt().right + 1) problems.push('PDF : la grille dépasse la page paysage (' + right.toFixed(1) + ' pt)');
+        }
+        // Le Word : trois sections, le tableau de la grille bâti à la largeur de sa page paysage (920 px = 13800 twips, non réduit comme sur une page portrait).
+        const sections = wordSections(await h.exportDocxParts(html, null, PageLayout.getMarginsTwip()));
+        summary.word = sections.map(section => section.orient[0]).join('');
+        if (sections.length !== 3) problems.push('Word : ' + sections.length + ' section(s) au lieu de 3');
+        else {
+          problems.push(...wordSizeProblems(sections, 'PLP'));
+          const table = sections[1].blocks.find(node => node.nodeName === 'w:tbl');
+          const width = table ? wordGridWidth(table) : null;
+          summary.grilleWord = width;
+          if (width === null || Math.abs(width - 13800) > 100) problems.push('Word : largeur de la grille ' + width + ' twips au lieu de 13800');
+        }
+        // L'impression : quatre feuilles, chacune sur le papier de son sens.
+        const job = await printJob(html);
+        try {
+          const printed = printSheets(job).map(printSense).join('');
+          summary.impression = printed;
+          if (printed !== 'PLLP') problems.push('impression : feuilles ' + printed + ' au lieu de PLLP');
+        } finally { job.dispose(); }
+        return verdict(problems, summary);
+      },
+    },
+    {
+      id: 'mixed_following_each_model_with_models_of_one_sense_comes_out_like_an_imposed_sense',
+      description: 'Un macro-modèle « Selon chaque modèle » dont tous les modèles ont le même sens sort comme avant : tous portrait, la Lecture, le PDF, le Word et l\'impression donnent ce que donne l\'assemblage sans repère (mêmes mots sur les mêmes pages, une feuille, une section, le papier par défaut) ; tous paysage, ce que donne un macro-modèle imposé en paysage',
+      async run(h) {
+        const problems = [];
+        const build = async (templates, perModel) => assembleWith(fixedSlots('a', 'b'), templates, perModel);
+        // Tout ce que les quatre sorties montrent d'un document : les feuilles de la Lecture, les pages du PDF (taille, mots), les sections du Word (sens, blocs), les feuilles imprimées.
+        const outputs = async html => {
+          const reading = await readSheets(h, html);
+          const pdf = await pdfPages(h, html);
+          const sections = wordSections(await h.exportDocxParts(html, null, PageLayout.getMarginsTwip()));
+          const job = await printJob(html);
+          try {
+            return {
+              lecture: reading.senses + ' ' + reading.pages,
+              pdf: pdf.sizes + ' ' + JSON.stringify(pdf.pages.map(bodyWords)),
+              word: sections.map(section => section.orient + ':' + section.blocks.map(wordText).filter(Boolean).join('|')).join(' ; '),
+              // Les feuilles et le papier de la première page (la règle `@page` sans nom) : un macro-modèle « Selon chaque modèle » ajoute des règles nommées, le papier ne change pas.
+              impression: printSheets(job).map(printSense).join('') + ' ' + (/@page\s*\{\s*size:\s*([^;]+);/.exec(job.frame.contentDocument.getElementById('pp-print-page').textContent) || [])[1],
+            };
+          } finally { job.dispose(); }
+        };
+        const compare = (label, got, want) => { Object.keys(want).forEach(key => { if (got[key] !== want[key]) problems.push(label + ' — ' + key + ' : ' + got[key] + ' au lieu de ' + want[key]); }); };
+        await plainPage(h);
+        const portraits = [template('a', 'portrait', lines(3, 'Alpha')), template('b', null, lines(3, 'Bravo'))];
+        const plainPortrait = await outputs(await build(portraits));
+        const followingPortrait = await outputs(await build(portraits, true));
+        compare('tout portrait', followingPortrait, plainPortrait);
+        if (plainPortrait.lecture !== 'P 2' || !/^PP /.test(plainPortrait.pdf)) problems.push('tout portrait : la référence a changé (' + plainPortrait.lecture + ', ' + plainPortrait.pdf.slice(0, 20) + ')');
+        // Tout paysage : le macro-modèle imposé en paysage (page du macro-modèle, aucun repère) est la référence.
+        const landscapes = [template('a', 'landscape', lines(3, 'Alpha')), template('b', 'landscape', lines(3, 'Bravo'))];
+        PageLayout.setMarginsMm(Object.assign({}, PageLayout.getMarginsMm(), { orientation: 'landscape' }));
+        const imposed = await outputs(await build(landscapes));
+        await plainPage(h);
+        const followingLandscape = await outputs(await build(landscapes, true));
+        compare('tout paysage', followingLandscape, imposed);
+        if (followingLandscape.lecture !== 'L 2' || !/^LL /.test(followingLandscape.pdf)) problems.push('tout paysage : ' + followingLandscape.lecture + ' / ' + followingLandscape.pdf.slice(0, 20));
+        await plainPage(h);
+        return verdict(problems, { portrait: followingPortrait.lecture, paysage: followingLandscape.lecture });
+      },
+    },
+
+    // ---------- Le réglage de page « Selon chaque modèle » et son menu (lot 5) ----------
+    {
+      id: 'mixed_page_layout_following_each_model_is_a_setting_of_the_macro_page',
+      description: 'PageLayout : « Selon chaque modèle » est la clé orientationAuto du JSON des marges, posée seulement quand le réglage l\'est (une page sans lui se recharge à l\'identique) ; le brouillon reste en portrait, les marges se bornent sur le côté court du format ; choisir un sens, ou saisir une forme de page qui change de sens, le quitte (pp:pageLayoutChanged), setOrientationAuto le rétablit ; changer le format le garde',
+      async run() {
+        const problems = [];
+        const events = [];
+        const onEvent = event => events.push(JSON.stringify(event.detail));
+        document.addEventListener('pp:pageLayoutChanged', onEvent);
+        const key = () => PageLayout.getOrientation() + ':' + PageLayout.isOrientationAuto() + ':' + ('orientationAuto' in PageLayout.getMarginsMm());
+        try {
+          PageLayout.setMarginsMm(null);
+          if (key() !== 'portrait:false:false') problems.push('une page ordinaire : ' + key());
+          // Rechargé tel qu'enregistré, même avec un sens paysage écrit : le réglage vaut, le brouillon est en portrait, le format est gardé.
+          PageLayout.setMarginsMm({ orientation: 'landscape', orientationAuto: true, format: 'A5' });
+          if (key() !== 'portrait:true:true' || PageLayout.getFormat() !== 'A5') problems.push('rechargé : ' + key() + ' ' + PageLayout.getFormat());
+          const saved = JSON.parse(JSON.stringify(PageLayout.getMarginsMm()));
+          if (saved.orientationAuto !== true || saved.orientation !== 'portrait') problems.push('JSON des marges : ' + JSON.stringify(saved));
+          PageLayout.setMarginsMm(saved);
+          if (key() !== 'portrait:true:true') problems.push('relu après l\'écriture : ' + key());
+          // Un modèle chargé ensuite, sans le réglage ou avec une valeur qui n'est pas « vrai », est un sens imposé.
+          PageLayout.setMarginsMm(null);
+          if (key() !== 'portrait:false:false') problems.push('modèle suivant sans réglage : ' + key());
+          PageLayout.setMarginsMm({ orientation: 'landscape', orientationAuto: 'oui' });
+          if (key() !== 'landscape:false:false') problems.push('valeur illisible : ' + key());
+          // Un macro-modèle neuf.
+          const fresh = PageLayout.newMacroMarginsMm();
+          PageLayout.setMarginsMm(fresh);
+          if (fresh.orientationAuto !== true || fresh.orientation !== 'portrait' || fresh.format !== 'A4' || key() !== 'portrait:true:true') problems.push('macro-modèle neuf : ' + JSON.stringify(fresh));
+          // Les marges se bornent sur le côté court (210 mm d'un A4), pas sur la hauteur de la page portrait (297 mm).
+          const sum = () => PageLayout.getMarginsMm().top + PageLayout.getMarginsMm().bottom;
+          PageLayout.setMarginsMm({ top: 150, bottom: 150, left: 10, right: 10, orientationAuto: true });
+          const autoSum = sum();
+          PageLayout.setMarginsMm({ top: 150, bottom: 150, left: 10, right: 10 });
+          const imposedSum = sum();
+          if (Math.abs(autoSum - 190) > 0.5 || Math.abs(imposedSum - 277) > 0.5) problems.push('bornes des marges : ' + autoSum.toFixed(1) + ' (190 attendu) et ' + imposedSum.toFixed(1) + ' (277 attendu)');
+          PageLayout.setMarginsMm(fresh);
+          const limits = PageLayout.getMarginLimitsMm();
+          if (!['top', 'bottom', 'left', 'right'].every(side => Math.abs(limits[side] - 210) < 0.01)) problems.push('plafonds « Selon chaque modèle » : ' + JSON.stringify(limits));
+          PageLayout.setMarginsMm(null);
+          const normal = PageLayout.getMarginLimitsMm();
+          if (Math.abs(normal.top - 297) > 0.01 || Math.abs(normal.left - 210) > 0.01) problems.push('plafonds d\'une page portrait : ' + JSON.stringify(normal));
+          // Choisir un sens le quitte, même « portrait » (le brouillon y est déjà) ; le rétablir garde le format.
+          PageLayout.setMarginsMm(Object.assign({}, fresh, { format: 'A3' }));
+          events.length = 0;
+          PageLayout.setOrientation('portrait');
+          if (key() !== 'portrait:false:false' || events.length !== 1 || JSON.parse(events[0]).orientationAuto !== false) problems.push('Portrait depuis « Selon chaque modèle » : ' + key() + ' ' + events.join('|'));
+          events.length = 0;
+          if (PageLayout.setOrientationAuto(true) !== true || key() !== 'portrait:true:true' || PageLayout.getFormat() !== 'A3' || events.length !== 1 || JSON.parse(events[0]).orientationAuto !== true) problems.push('rétabli : ' + key() + ' ' + PageLayout.getFormat() + ' ' + events.join('|'));
+          events.length = 0;
+          if (PageLayout.setOrientationAuto(true) !== false || events.length) problems.push('le rétablir deux fois annonce un changement');
+          PageLayout.setOrientation('landscape');
+          if (key() !== 'landscape:false:false') problems.push('Paysage depuis « Selon chaque modèle » : ' + key());
+          // Revenir à un sens imposé laisse le portrait (le sens qu'on impose ensuite est un choix).
+          PageLayout.setOrientationAuto(true);
+          if (PageLayout.setOrientationAuto(false) !== true || key() !== 'portrait:false:false') problems.push('retiré : ' + key());
+          // Une forme saisie : celle de la page en cours garde le réglage, une autre impose son sens.
+          PageLayout.setMarginsMm(fresh);
+          PageLayout.setPageSize(40, 80);
+          if (PageLayout.getFormat() !== '40x80' || !PageLayout.isOrientationAuto()) problems.push('forme semblable (40 x 80) : ' + key() + ' ' + PageLayout.getFormat());
+          PageLayout.setPageSize(80, 40);
+          if (PageLayout.isOrientationAuto() || PageLayout.getOrientation() !== 'landscape') problems.push('forme paysage (80 x 40) : ' + key());
+          // Le format se change sans quitter le réglage ; un calcul dans le sens d'un modèle ne touche pas au brouillon.
+          PageLayout.setMarginsMm(fresh);
+          PageLayout.setFormat('A3');
+          if (!PageLayout.isOrientationAuto() || PageLayout.getFormat() !== 'A3') problems.push('format changé : ' + key());
+          const inside = PageLayout.withOrientation('landscape', () => PageLayout.getPageSizeMm().width + 'x' + PageLayout.getPageSizeMm().height + ':' + PageLayout.isOrientationAuto());
+          if (inside !== '420x297:true' || key() !== 'portrait:true:true') problems.push('withOrientation : ' + inside + ' puis ' + key());
+        } finally {
+          document.removeEventListener('pp:pageLayoutChanged', onEvent);
+          PageLayout.setMarginsMm(null);
+        }
+        return verdict(problems, {});
+      },
+    },
+    {
+      id: 'mixed_page_menu_of_a_macro_has_the_row_following_each_model',
+      description: 'Le menu Page d\'un macro-modèle a une ligne de plus, la première, « Selon chaque modèle » (cochée quand le réglage l\'est, Portrait et Paysage alors décochés) : la choisir prévient l\'enregistrement et la Lecture, Portrait ou Paysage ou le clic sur le bouton imposent un sens, le bouton dit le réglage (libellé, non allumé) ; les autres types gardent le menu d\'avant, sans la ligne ; en anglais ; grisée pendant un export ; les champs de marge des Réglages plafonnent sur le côté court',
+      async run() {
+        const problems = [];
+        const button = document.getElementById('btn-page-orientation');
+        const rows = () => Array.from(document.querySelectorAll('#v2-page-flyout .v2-hover-row-check')).map(row => ({ key: row.getAttribute('data-page-orientation') || row.getAttribute('data-page-format'), name: row.querySelector('.v2-page-row-name').textContent, checked: row.getAttribute('aria-checked'), disabled: row.getAttribute('aria-disabled') }));
+        const keys = () => rows().map(row => row.key).join();
+        const checked = () => rows().filter(row => row.checked === 'true').map(row => row.key).join();
+        const row = key => document.querySelector('#v2-page-flyout [data-page-orientation="' + key + '"]');
+        const events = [];
+        const onEvent = event => events.push(event.type);
+        const settingsMax = () => {
+          document.getElementById('v2-btn-settings').click();
+          const max = ['top', 'bottom', 'left', 'right'].map(side => document.getElementById('settings-margin-' + side).max).join(',');
+          document.getElementById('settings-close').click();
+          return max;
+        };
+        try {
+          // Un document : le menu d'avant.
+          PageLayout.setMarginsMm(null);
+          OrientationToggle.sync('document');
+          const documentKeys = keys();
+          if (row('auto') || documentKeys.split(',').slice(0, 2).join() !== 'portrait,landscape') problems.push('document : ' + documentKeys);
+          // Un macro-modèle sans le réglage (fait avant lui) : la ligne est la première et décochée, Portrait est coché.
+          OrientationToggle.sync('macro');
+          if (keys() !== 'auto,' + documentKeys) problems.push('macro-modèle : ' + keys() + ' au lieu de auto,' + documentKeys);
+          if (rows()[0].name !== 'Selon chaque modèle' || rows()[0].checked !== 'false' || checked() !== 'portrait,A4') problems.push('macro-modèle sans réglage : ' + JSON.stringify(rows().slice(0, 3)) + ' ' + checked());
+          if (button.getAttribute('aria-label') !== 'Page A4 en portrait (passer en paysage)' || button.dataset.orientation !== 'portrait') problems.push('bouton sans réglage : ' + button.getAttribute('aria-label') + ' ' + button.dataset.orientation);
+          if (settingsMax() !== '277,277,190,190') problems.push('champs de marge sans réglage : ' + settingsMax());
+          // La choisir : coché seule, une annonce pour l'enregistrement et une pour la Lecture, le bouton dit le réglage et n'est pas allumé.
+          document.addEventListener('pp:marginsChanged', onEvent);
+          document.addEventListener('pp:pageLayoutChanged', onEvent);
+          row('auto').click();
+          if (checked() !== 'auto,A4' || !PageLayout.isOrientationAuto()) problems.push('« Selon chaque modèle » choisie : ' + checked());
+          if (events.filter(type => type === 'pp:marginsChanged').length !== 1 || events.filter(type => type === 'pp:pageLayoutChanged').length !== 1) problems.push('annonces : ' + events.join());
+          if (button.getAttribute('aria-label') !== 'Page A4 selon chaque modèle (passer en paysage)' || button.dataset.orientation !== 'auto' || button.getAttribute('aria-pressed') !== 'false' || button.classList.contains('active')) problems.push('bouton réglé : ' + button.getAttribute('aria-label') + ' ' + button.dataset.orientation + ' ' + button.getAttribute('aria-pressed'));
+          if (settingsMax() !== '190,190,190,190') problems.push('champs de marge « Selon chaque modèle » : ' + settingsMax());
+          events.length = 0;
+          row('auto').click();
+          if (events.length) problems.push('la choisir de nouveau annonce un changement : ' + events.join());
+          // Le clic sur le bouton impose le paysage ; la ligne rétablit ; Portrait impose le portrait.
+          button.click();
+          if (checked() !== 'landscape,A4' || PageLayout.isOrientationAuto() || button.dataset.orientation !== 'landscape' || button.getAttribute('aria-pressed') !== 'true') problems.push('clic sur le bouton : ' + checked());
+          row('auto').click();
+          if (checked() !== 'auto,A4') problems.push('rétablie : ' + checked());
+          row('portrait').click();
+          if (checked() !== 'portrait,A4' || PageLayout.isOrientationAuto() || 'orientationAuto' in PageLayout.getMarginsMm()) problems.push('Portrait depuis « Selon chaque modèle » : ' + checked());
+          row('auto').click();
+          row('landscape').click();
+          if (checked() !== 'landscape,A4' || PageLayout.isOrientationAuto()) problems.push('Paysage depuis « Selon chaque modèle » : ' + checked());
+          // Le format se change sans quitter le réglage.
+          row('auto').click();
+          document.querySelector('#v2-page-flyout [data-page-format="A5"]').click();
+          if (checked() !== 'auto,A5') problems.push('format A5 : ' + checked());
+          // En anglais.
+          I18n.setLang('en');
+          if (rows()[0].name !== 'Follow each template' || button.getAttribute('aria-label') !== 'A5 page following each template (switch to landscape)') problems.push('anglais : ' + rows()[0].name + ' / ' + button.getAttribute('aria-label'));
+          I18n.setLang('fr');
+          // Pendant un export (setBusy), la ligne est grisée et sans effet.
+          row('portrait').click();
+          OrientationToggle.setBusy(true);
+          if (row('auto').getAttribute('aria-disabled') !== 'true' || !row('auto').classList.contains('v2-hover-row-disabled')) problems.push('pendant un export, la ligne n\'est pas grisée');
+          events.length = 0;
+          row('auto').click();
+          OrientationToggle.selectAuto();
+          if (PageLayout.isOrientationAuto() || events.length) problems.push('pendant un export, un geste change la page : ' + events.join());
+          OrientationToggle.setBusy(false);
+          // Revenu à un document : le menu d'avant, la ligne retirée.
+          OrientationToggle.sync('document');
+          if (keys() !== documentKeys) problems.push('retour à un document : ' + keys());
+          OrientationToggle.selectAuto();
+          if (PageLayout.isOrientationAuto()) problems.push('« Selon chaque modèle » posée sur un document');
+        } finally {
+          document.removeEventListener('pp:marginsChanged', onEvent);
+          document.removeEventListener('pp:pageLayoutChanged', onEvent);
+          I18n.setLang('fr');
+          OrientationToggle.setBusy(false);
+          PageLayout.setMarginsMm(null);
+          OrientationToggle.sync('document');
+        }
         return verdict(problems, {});
       },
     },

@@ -17,10 +17,14 @@ const MacroEditor = (function () {
   // reporte ses modèles masqués (collectSlotsForSave).
   let coverKept = null;
 
+  // Les types de modèle qu'un macro-modèle assemble : un document, et une grille (son tableau devient une page du document, dans le sens de sa propre page - « Selon chaque modèle », cf.
+  // js/macro-templates.js).
+  const ASSEMBLED_TYPES = ['document', 'grille'];
+
   function availableTemplates() {
     // Un macro-modèle ne peut pas se référencer lui-même ni un autre macro-modèle (pas d'imbrication), ni un modèle email (pas un contenu de page).
     // Recalculé à chaque ouverture et chaque rendu plutôt que mis en cache : la liste des modèles peut changer pendant que la modale est ouverte.
-    return Templates.getCached().filter(t => (t.typeModele || 'document') === 'document');
+    return Templates.getCached().filter(t => ASSEMBLED_TYPES.indexOf(t.typeModele || 'document') !== -1);
   }
 
   function modal() { return document.getElementById('macro-editor-modal'); }
@@ -155,10 +159,10 @@ const MacroEditor = (function () {
   // Réglages du macro-modèle que cette fenêtre ne montre pas (nom du fichier PDF, en-tête et pied de page, page) : réécrits tels quels avec la
   // composition. Remis à zéro (nom de PDF vide, en-tête retiré, marges par défaut), ils se perdaient à chaque « Enregistrer ». Le macro-modèle chargé
   // donne ceux de l'écran (screenSettings, fourni par js/main.js : modifications pas encore enregistrées comprises), un autre ceux de Grist ; un
-  // nouveau macro-modèle repart des réglages par défaut.
+  // nouveau macro-modèle repart des réglages par défaut, avec des pages « Selon chaque modèle » (PageLayout.newMacroMarginsMm).
   let screenSettings = null;
   function settingsToKeep(id = editingId) {
-    const none = { nomFichierPDF: '', headerFooter: null, marginsMm: null };
+    const none = { nomFichierPDF: '', headerFooter: null, marginsMm: PageLayout.newMacroMarginsMm() };
     if (id == null) return none;
     if (screenSettings && Templates.isCurrent(id)) return screenSettings();
     const stored = Templates.byId(id);

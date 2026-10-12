@@ -49,7 +49,8 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 - Grille : un tableau de type tableur à la place de la page, où l'on peut coller un tableau d'Excel, de
   Google Sheets ou de LibreOffice Calc, importer un classeur `.xlsx`, puis l'exporter en Excel
 - Macro-modèle : une page de garde toujours incluse, suivie d'annexes (d'autres modèles) choisies selon
-  des règles évaluées sur la même ligne
+  des règles évaluées sur la même ligne ; des modèles en portrait, en paysage et des modèles Grille s'y
+  mêlent, chacun sur une page de son sens (ou un seul sens est imposé à tous), jusque dans le PDF
 
 **Mise en page**
 - Mise en forme complète : gras, italique, souligné, barré, exposant et indice, couleurs et surlignage, six
@@ -421,7 +422,8 @@ GitHub Pages, with no backend and no build step.
 - Grid: a spreadsheet-like table in place of the page, where you can paste a table from Excel, Google
   Sheets or LibreOffice Calc, import an `.xlsx` workbook, then export it to Excel
 - Macro template: a cover page that is always included, followed by appendices (other templates) chosen
-  by rules evaluated on the same row
+  by rules evaluated on the same row; portrait, landscape and Grid templates can be mixed in it, each on a
+  page of its own orientation (or one orientation imposed on all), down to the PDF
 
 **Layout**
 - Full formatting: bold, italic, underline, strikethrough, superscript and subscript, colors and highlighting,

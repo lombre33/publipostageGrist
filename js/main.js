@@ -1416,8 +1416,12 @@
   async function currentDocumentHtml(tableId, record) {
     if (currentTypeModele !== 'macro') return Editor.getHTML();
     if (!record || !tableId) return '';
-    return MacroTemplates.buildConcatenatedHtml(getCurrentMacroSlots(), tableId, record, LinkedTable.resolveTemplates(EditorCore.getEditor(), Templates.getCached()));
+    return MacroTemplates.buildConcatenatedHtml(getCurrentMacroSlots(), tableId, record, LinkedTable.resolveTemplates(EditorCore.getEditor(), Templates.getCached()), perModelOption());
   }
+
+  // « Selon chaque modèle » (PageLayout.isOrientationAuto) : le macro-modèle chargé laisse chaque modèle assemblé garder le sens de sa page. L'assemblage (MacroTemplates) le dit dans
+  // le HTML, d'où la Lecture, le PDF, le Word et l'impression tournent leurs pages ; un sens imposé n'ajoute rien.
+  function perModelOption(perModel = PageLayout.isOrientationAuto()) { return { perModel }; }
 
   async function renderReader(record, recordTableId) {
     if (typeof record === 'undefined') record = latestRecord || GristAPI.getCurrentRecord();
@@ -2014,7 +2018,7 @@
   function openTemplateSource(cfg) {
     const isMacro = currentTypeModele === 'macro';
     return {
-      typeModele: currentTypeModele, isMacro, html: isMacro ? null : Editor.getHTML(), macroSlots: isMacro ? getCurrentMacroSlots() : null,
+      typeModele: currentTypeModele, isMacro, html: isMacro ? null : Editor.getHTML(), macroSlots: isMacro ? getCurrentMacroSlots() : null, perModelSense: isMacro && PageLayout.isOrientationAuto(),
       headerFooterData: Editor.getHeaderFooterData(), filenameTemplate: getPdfFilenameTemplate(), margins: cfg.margins ? cfg.margins() : null, pageOptions: null,
     };
   }
@@ -2027,13 +2031,15 @@
     const onScreen = PageLayout.getMarginsMm();
     let margins = null;
     let pageOptions = null;
+    let perModelSense = false;
     PageLayout.setMarginsMm(tpl.marginsMm);
     try {
       margins = cfg.margins ? cfg.margins() : null;
       pageOptions = cfg.pageOptions ? cfg.pageOptions() : null;
+      perModelSense = isMacro && PageLayout.isOrientationAuto();
     } finally { PageLayout.setMarginsMm(onScreen); }
     return {
-      typeModele: tpl.typeModele || 'document', isMacro, html: isMacro ? null : LinkedTable.resolveHtml(EditorCore.getEditor(), tpl.contenu || ''), macroSlots: isMacro ? (tpl.macroSlots || { slots: [] }) : null,
+      typeModele: tpl.typeModele || 'document', isMacro, html: isMacro ? null : LinkedTable.resolveHtml(EditorCore.getEditor(), tpl.contenu || ''), macroSlots: isMacro ? (tpl.macroSlots || { slots: [] }) : null, perModelSense,
       headerFooterData: tpl.headerFooter, filenameTemplate: String(tpl.nomFichierPDF || '').trim(), margins, pageOptions,
     };
   }
@@ -2059,7 +2065,7 @@
 
   // Le HTML brut du document de cette ligne pour cette source (un macro-modèle : ses annexes, choisies avec les valeurs de la ligne).
   function sourceRowHtml(source, tableId, row, templatesCache) {
-    return source.isMacro ? MacroTemplates.buildConcatenatedHtml(source.macroSlots, tableId, row, templatesCache) : source.html;
+    return source.isMacro ? MacroTemplates.buildConcatenatedHtml(source.macroSlots, tableId, row, templatesCache, perModelOption(source.perModelSense)) : source.html;
   }
 
   // Cette source peut-elle se découper en plusieurs documents (« Un document par valeur ») ? Sans bulle réglée ainsi dans le modèle, ses en-têtes ni
