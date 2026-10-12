@@ -890,6 +890,40 @@
     },
   });
 
+  // L'étoile « modèle par défaut au démarrage du widget » des lignes de la liste et de « Organiser mes modèles » (demande du 2026-10-12) : la mention « au démarrage », l'icône (au repos, sur le
+  // défaut avec sa pastille, sur la ligne ouverte) et la légende du bas de la fenêtre. Les lignes sont fabriquées (survol et ligne ouverte ne se forcent pas dans le navigateur) ; la légende est l'élément réel.
+  cases.push({
+    id: 'contrast_default_star_note_icon_and_legend_reach_4_5_and_3_to_1_in_light_and_dark',
+    description: 'Mention « au démarrage » et légende de « Organiser mes modèles » : 4,5:1 au moins sur leur fond ; icône de l’étoile (au repos, modèle par défaut avec sa pastille, ligne ouverte, ligne survolée) et icône de la légende : 3:1 au moins ; en clair et en sombre',
+    run: async () => {
+      const legend = document.querySelector('.template-organize-legend');
+      const legendGlyph = document.querySelector('.template-organize-legend .tts-star-glyph');
+      const star = (cls) => '<button class="tts-star-btn' + cls + '"></button>';
+      const line = (attrs, inner) => '<div class="tts-popup is-open" style="position:static;"><div class="tts-row tts-row-leaf" ' + attrs + '><span class="tts-row-label">Bail</span>' + inner + '</div></div>';
+      const note = '<span class="tts-default-note">au démarrage</span>';
+      const hover = 'style="background:var(--surface-sunken)"';
+      // `behind` : l'élément dont le fond se voit derrière l'icône (par défaut, l'icône elle-même : un glyphe en masque peint `currentColor` comme fond, ce qui ferait 1:1 avec sa propre couleur).
+      const iconRatio = (el, behind) => { const bg = backgroundOf(behind || el); return ratio(over(parseColor(getComputedStyle(el).color), bg), bg); };
+      const textIn = (markup, sel) => withProbe(markup, (host) => round2(textRatio(host.querySelector(sel))));
+      const iconIn = (markup, sel) => withProbe(markup, (host) => round2(iconRatio(host.querySelector(sel))));
+      const texts = inBothThemes(() => ({
+        'mention sur une ligne': textIn(line('', note + star(' is-default')), '.tts-default-note'),
+        'mention sur la ligne ouverte': textIn(line('aria-selected="true"', note + star(' is-default')), '.tts-default-note'),
+        'mention sur une ligne survolée': textIn(line(hover, note + star(' is-default')), '.tts-default-note'),
+        'légende de Organiser mes modèles': round2(textRatio(legend)),
+      }));
+      const icons = inBothThemes(() => ({
+        'étoile au repos': iconIn(line('', star('')), '.tts-star-btn'),
+        'étoile au repos sur une ligne survolée': iconIn(line(hover, star('')), '.tts-star-btn'),
+        'étoile du modèle par défaut': iconIn(line('', note + star(' is-default')), '.tts-star-btn'),
+        'étoile du modèle par défaut sur la ligne ouverte': iconIn(line('aria-selected="true"', note + star(' is-default')), '.tts-star-btn'),
+        'icône de la légende': round2(iconRatio(legendGlyph, legend)),
+      }));
+      const bad = failing(texts, 4.5).concat(failing(icons, 3));
+      return { pass: bad.length === 0 && !!legend && !!legendGlyph, notes: JSON.stringify({ bad, texts, icons }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.contrast = cases;
 })();

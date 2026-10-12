@@ -56,7 +56,7 @@ La galerie **Créer à partir d'un modèle…** propose 21 modèles prêts à l'
 - **Calcul** : une formule avec des colonnes et les fonctions SOMME, MOYENNE, MIN, MAX, NB et ARRONDI, évaluée par un petit analyseur intégré (jamais par `eval`).
 - **Bulles prêtes à poser** : date du jour, heure actuelle, e-mail de la personne connectée.
 - **Renommages suivis** : quand une table ou une colonne est renommée dans Grist, les modèles sont réécrits à l'ouverture suivante ; une variable restée sans colonne devient rouge, et sa barre propose alors « Colonne… » pour choisir la bonne (le bouton n'est là que sur une variable rouge).
-- **Choix du modèle** : modèle par défaut à l'ouverture, modèle par défaut d'une vue, ou modèle choisi selon la ligne par des règles (Réglages > Vue).
+- **Choix du modèle** : modèle par défaut à l'ouverture du widget (l'étoile de la barre, de la liste des modèles et d'« Organiser mes modèles » : il vaut pour tout le document), modèle par défaut d'une vue, ou modèle choisi selon la ligne par des règles (Réglages > Vue).
 
 ### Lecture, enregistrement et collaboration
 

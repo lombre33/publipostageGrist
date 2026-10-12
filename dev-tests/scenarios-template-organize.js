@@ -54,10 +54,10 @@
   }
 
   // Même patron que dev-tests/scenarios-template-tree.js:createTemplate - toujours par le vrai flux UI.
-  async function createTemplate(h, nom) {
+  async function createTemplate(h, nom, typeModele) {
     await h.resetEditor();
     h.openFlyout('#v2-new-template-group');
-    await h.clickButton('v2-btn-new-document');
+    await h.clickButton(typeModele === 'email' ? 'v2-btn-new-email' : 'v2-btn-new-document');
     await h.sleep(50);
     Editor.setHTML('<p>Contenu de ' + nom + '</p>');
     document.getElementById('template-name').value = nom;
@@ -678,6 +678,195 @@
         restore();
         TemplateOrganizeModal.close();
       }
+    },
+  });
+
+  // --- L'étoile « modèle par défaut au démarrage du widget » sur chaque ligne de la fenêtre (demande du 2026-10-12 : « dans la dropdown et dans le menu d'organisation des modèles,
+  // en essayant de préciser son rôle pour que ça soit clair »). Même bouton que dans la liste déroulante (TemplateTreeSelect.defaultMarks), mêmes règles : dev-tests/scenarios-template-tree.js. ---
+  const starIn = (row) => row && row.querySelector('.tts-star-btn');
+  const flaggedIds = () => { const rows = stub().state.rows.Publipostage_Modeles; return rows.id.filter((_, i) => rows.EstParDefaut[i]).map(String); };
+  const toolbarStarOn = () => document.getElementById('btn-set-default-template').classList.contains('is-default');
+  const optionText = (id) => { const o = Array.from(document.getElementById('template-select').options).find((x) => String(x.value) === String(id)); return o ? o.textContent : null; };
+  // Les UpdateRecord envoyés à la table des modèles pendant `fn`.
+  async function countModelWrites(fn) {
+    const original = grist.docApi.applyUserActions;
+    let n = 0;
+    grist.docApi.applyUserActions = function (actions) { n += actions.filter((a) => a[0] === 'UpdateRecord' && a[1] === 'Publipostage_Modeles').length; return original.apply(this, arguments); };
+    try { await fn(); } finally { grist.docApi.applyUserActions = original; }
+    return n;
+  }
+
+  cases.push({
+    id: 'organize_row_star_sets_moves_and_clears_the_default_keeping_window_toolbar_and_dropdown_in_step',
+    description: 'L’étoile d’une ligne de « Organiser mes modèles » pose, déplace puis retire le modèle par défaut du document : la fenêtre reste ouverte, la ligne qui le porte dit « au démarrage », le bouton réel de la liste et l’étoile de la barre suivent, le modèle ouvert ne change pas',
+    run: async (h) => {
+      const idA = await createTemplate(h, 'Organiser étoile - A');
+      const idB = await createTemplate(h, 'Organiser étoile - B'); // B reste le modèle ouvert
+      await Templates.setDefault(null);
+      // La barre d'abord : son étoile pose B, la fenêtre doit le montrer.
+      await h.clickButton('btn-set-default-template');
+      await h.sleep(150);
+      TemplateOrganizeModal.open();
+      await h.sleep(40);
+      const read = () => ({
+        open: modalOpen(), selected: String(document.getElementById('template-select').value),
+        noteA: !!rowFor(idA).querySelector('.tts-default-note'), noteB: !!rowFor(idB).querySelector('.tts-default-note'),
+        pressedA: starIn(rowFor(idA)).getAttribute('aria-pressed'), pressedB: starIn(rowFor(idB)).getAttribute('aria-pressed'),
+        flags: flaggedIds(), toolbarStar: toolbarStarOn(), optionA: optionText(idA), optionB: optionText(idB),
+      });
+      const fromToolbar = read();
+      await clickEl(h, starIn(rowFor(idA))); await h.sleep(300);
+      const afterA = read();
+      await clickEl(h, starIn(rowFor(idB))); await h.sleep(300);
+      const afterB = read();
+      await clickEl(h, starIn(rowFor(idB))); await h.sleep(300);
+      const cleared = read();
+      TemplateOrganizeModal.close();
+      const pass = fromToolbar.flags.join() === String(idB) && fromToolbar.noteB && !fromToolbar.noteA && fromToolbar.pressedB === 'true' && fromToolbar.toolbarStar
+        && afterA.flags.join() === String(idA) && afterA.noteA && !afterA.noteB && afterA.pressedA === 'true' && afterA.pressedB === 'false' && afterA.open && !afterA.toolbarStar
+        && afterA.optionA === 'Organiser étoile - A ★' && afterA.optionB === 'Organiser étoile - B' && afterA.selected === String(idB)
+        && afterB.flags.join() === String(idB) && afterB.noteB && !afterB.noteA && afterB.toolbarStar && afterB.open && afterB.optionB === 'Organiser étoile - B ★'
+        && cleared.flags.length === 0 && !cleared.noteA && !cleared.noteB && !cleared.toolbarStar && cleared.open && cleared.selected === String(idB);
+      return { pass, notes: JSON.stringify({ fromToolbar, afterA, afterB, cleared }) };
+    },
+  });
+
+  cases.push({
+    id: 'organize_row_star_writes_one_batch_and_the_row_keeps_its_place_in_the_row',
+    description: 'Le ★ d’une ligne passe par UN lot (l’ancien est repassé à faux avec le nouveau), et sur la ligne l’ordre est : nom, « au démarrage » (seulement sur le défaut), étoile, punaise, « Déplacer vers… »',
+    run: async (h) => {
+      const idA = await createTemplate(h, 'Organiser lot - A');
+      const idB = await createTemplate(h, 'Organiser lot - B');
+      await Templates.setDefault(idA);
+      TemplateOrganizeModal.open();
+      await h.sleep(40);
+      const order = (row) => ['.tts-row-label', '.tts-default-note', '.tts-star-btn', '.tts-pin-btn', '.tom-move-btn']
+        .map((sel) => { const e = row.querySelector(sel); return e ? Array.from(row.children).indexOf(e) : -1; });
+      const increasing = (list) => list.filter((i) => i >= 0).every((v, i, all) => i === 0 || v > all[i - 1]);
+      const orderA = order(rowFor(idA)), orderB = order(rowFor(idB));
+      const batches = [];
+      const original = grist.docApi.applyUserActions;
+      grist.docApi.applyUserActions = function (actions) { batches.push(actions.filter((a) => a[0] === 'UpdateRecord' && a[1] === 'Publipostage_Modeles').length); return original.apply(this, arguments); };
+      try { await clickEl(h, starIn(rowFor(idB))); await h.sleep(300); } finally { grist.docApi.applyUserActions = original; }
+      const flagsAfter = flaggedIds();
+      await clickEl(h, starIn(rowFor(idB))); await h.sleep(300);
+      TemplateOrganizeModal.close();
+      const pass = orderA[1] >= 0 && orderB[1] === -1 && increasing(orderA) && increasing(orderB) && orderA[2] >= 0 && orderB[2] >= 0 && orderA[3] >= 0 && orderA[4] >= 0
+        && batches.join() === '2' && flagsAfter.join() === String(idB) && flaggedIds().length === 0;
+      return { pass, notes: JSON.stringify({ orderA, orderB, batches, flagsAfter }) };
+    },
+  });
+
+  cases.push({
+    id: 'organize_row_star_is_greyed_for_an_email_and_a_click_writes_nothing',
+    description: 'Un email porte l’étoile grisée (jamais retirée) avec l’info-bulle qui dit pourquoi ; un clic ne marque rien, la fenêtre reste ouverte et l’étoile d’un modèle document, elle, est active',
+    run: async (h) => {
+      const idMail = await createTemplate(h, 'Organiser étoile - Email', 'email');
+      const idDoc = await createTemplate(h, 'Organiser étoile - Document');
+      await Templates.setDefault(null);
+      TemplateOrganizeModal.open();
+      await h.sleep(40);
+      const mailStar = starIn(rowFor(idMail)), docStar = starIn(rowFor(idDoc));
+      const seen = {
+        there: !!mailStar, disabled: mailStar.classList.contains('is-disabled'), aria: mailStar.getAttribute('aria-disabled'), pressed: mailStar.getAttribute('aria-pressed'), title: mailStar.title,
+        docUsable: !docStar.classList.contains('is-disabled') && !docStar.hasAttribute('aria-disabled'),
+      };
+      const writes = await countModelWrites(async () => { await clickEl(h, mailStar); await h.sleep(250); });
+      const after = { open: modalOpen(), flags: flaggedIds(), note: !!rowFor(idMail).querySelector('.tts-default-note') };
+      TemplateOrganizeModal.close();
+      const pass = seen.there && seen.disabled && seen.aria === 'true' && seen.pressed === 'false' && seen.title === I18n.t('templateTree.default.unavailableTip') && seen.docUsable
+        && writes === 0 && after.open && after.flags.length === 0 && !after.note;
+      return { pass, notes: JSON.stringify({ seen, writes, after }) };
+    },
+  });
+
+  cases.push({
+    id: 'organize_row_star_locks_when_rights_turn_read_only_after_the_window_drew',
+    description: 'Les droits passent en lecture seule fenêtre ouverte : un clic sur l’étoile n’écrit rien, et la ligne se redessine avec l’étoile grisée ; avec les droits revenus elle fonctionne de nouveau',
+    run: async (h) => {
+      const id = await createTemplate(h, 'Organiser étoile - Droits');
+      await Templates.setDefault(null);
+      TemplateOrganizeModal.open();
+      await h.sleep(40);
+      const savedRights = AccessRights.get;
+      let writes, locked, again;
+      try {
+        AccessRights.get = () => ({ readOnly: true, canExport: false, canComment: false });
+        writes = await countModelWrites(async () => { await clickEl(h, starIn(rowFor(id))); await h.sleep(300); });
+        locked = { disabled: starIn(rowFor(id)).classList.contains('is-disabled'), aria: starIn(rowFor(id)).getAttribute('aria-disabled'), flags: flaggedIds().length };
+      } finally { AccessRights.get = savedRights; }
+      TemplateOrganizeModal.close();
+      TemplateOrganizeModal.open();
+      await h.sleep(40);
+      await clickEl(h, starIn(rowFor(id))); await h.sleep(300);
+      again = { flags: flaggedIds().join(), disabled: starIn(rowFor(id)).classList.contains('is-disabled') };
+      await clickEl(h, starIn(rowFor(id))); await h.sleep(300);
+      TemplateOrganizeModal.close();
+      const pass = writes === 0 && locked.disabled && locked.aria === 'true' && locked.flags === 0 && again.flags === String(id) && !again.disabled && flaggedIds().length === 0;
+      return { pass, notes: JSON.stringify({ writes, locked, again }) };
+    },
+  });
+
+  cases.push({
+    id: 'organize_row_star_keeps_the_keyboard_focus_on_the_section_it_was_pressed_in',
+    description: 'Étoile activée au clavier : après le redessin de la liste le focus revient sur CETTE étoile - et, pour un modèle épinglé qui figure dans « Épinglés » et dans « Tous les modèles », sur celle de la section où l’on était',
+    run: async (h) => {
+      const id = await createTemplate(h, 'Organiser étoile - Focus');
+      await Templates.setDefault(null);
+      await TemplatePreferences.setPinned(id, true);
+      TemplateOrganizeModal.open();
+      await h.sleep(40);
+      const rows = Array.from(list().querySelectorAll('.tts-row-leaf[data-template-id="' + id + '"]'));
+      const keys = rows.map((r) => starIn(r).dataset.focusKey);
+      // La seconde occurrence est celle de « Tous les modèles » (l'arbre vient après les épinglés).
+      const treeStar = starIn(rows[rows.length - 1]);
+      treeStar.focus();
+      await clickEl(h, treeStar);
+      await h.sleep(300);
+      const focusedKey = document.activeElement && document.activeElement.dataset.focusKey;
+      const inList = list().contains(document.activeElement);
+      const pinnedStar = starIn(list().querySelector('.tts-row-leaf[data-template-id="' + id + '"]'));
+      pinnedStar.focus();
+      await clickEl(h, pinnedStar);
+      await h.sleep(300);
+      const focusedKey2 = document.activeElement && document.activeElement.dataset.focusKey;
+      TemplateOrganizeModal.close();
+      await TemplatePreferences.setPinned(id, false);
+      const pass = rows.length === 2 && keys[0] !== keys[1] && inList && focusedKey === keys[1] && focusedKey2 === keys[0] && flaggedIds().length === 0;
+      return { pass, notes: JSON.stringify({ rows: rows.length, keys, focusedKey, focusedKey2, flags: flaggedIds() }) };
+    },
+  });
+
+  cases.push({
+    id: 'organize_legend_explains_the_default_star_in_both_languages_and_clears_the_close_button',
+    description: 'En bas de la fenêtre une légende dit le rôle de l’étoile (« s’ouvre au démarrage du widget, pour tout le document. Un seul à la fois. »), avec la même icône que les lignes, en français puis en anglais ; elle reste dans la fenêtre et ne recouvre pas « Fermer »',
+    run: async (h) => {
+      TemplateOrganizeModal.open();
+      await h.sleep(40);
+      const legend = modal().querySelector('.template-organize-legend');
+      const glyph = legend && legend.querySelector('.tts-star-glyph');
+      const closeBtn = document.getElementById('template-organize-close');
+      const content = modal().querySelector('.template-organize-modal-content');
+      const geometry = () => {
+        const l = legend.getBoundingClientRect(), c = closeBtn.getBoundingClientRect(), box = content.getBoundingClientRect();
+        return { inside: l.left >= box.left - 1 && l.right <= box.right + 1 && l.bottom <= box.bottom + 1 && l.top >= box.top - 1, clear: l.right <= c.left + 1, shown: l.width > 40 && l.height > 8 };
+      };
+      const mask = glyph && getComputedStyle(glyph).maskImage && getComputedStyle(glyph).maskImage !== 'none' ? getComputedStyle(glyph).maskImage : (glyph && getComputedStyle(glyph).webkitMaskImage);
+      const rowMask = (() => { const s = document.querySelector('#template-organize-list .tts-star-btn'); if (!s) return null; const cs = getComputedStyle(s, '::before'); return cs.maskImage && cs.maskImage !== 'none' ? cs.maskImage : cs.webkitMaskImage; })();
+      const fr = { text: legend.textContent.trim(), geo: geometry() };
+      const lang = I18n.getLang();
+      let en;
+      try {
+        I18n.setLang('en'); await h.sleep(100);
+        en = { text: legend.textContent.trim(), geo: geometry() };
+      } finally { I18n.setLang(lang); await h.sleep(60); }
+      const back = legend.textContent.trim();
+      TemplateOrganizeModal.close();
+      const ok = (x) => x.geo.inside && x.geo.clear && x.geo.shown;
+      const pass = !!legend && !!glyph && !!mask && mask !== 'none' && (!rowMask || mask === rowMask)
+        && fr.text === I18n.t('organize.modal.defaultLegend') && /démarrage du widget/.test(fr.text) && /tout le document/.test(fr.text) && /Un seul/.test(fr.text)
+        && /when the widget starts/.test(en.text) && /whole document/.test(en.text) && en.text !== fr.text && back === fr.text && ok(fr) && ok(en);
+      return { pass, notes: JSON.stringify({ fr, en, back, hasMask: !!mask, sameAsRows: !rowMask || mask === rowMask }) };
     },
   });
 

@@ -366,6 +366,14 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Modifié
 
+- **L'étoile du modèle par défaut dit son rôle, dans la liste et dans « Organiser mes modèles »** : chaque modèle
+  ordinaire de la liste déroulante et de la fenêtre « Organiser mes modèles » porte une étoile (visible au survol ou au
+  clavier) qui pose, déplace ou retire le modèle par défaut du document, celui qui s'ouvre au démarrage du widget, pour
+  toutes les personnes qui l'utilisent (la punaise reste un favori personnel). La ligne du modèle par défaut le dit en
+  toutes lettres (« au démarrage »), la fenêtre porte une légende qui explique l'étoile, et la ligne d'état nomme le
+  modèle qui s'ouvrira au démarrage. L'étoile de la barre d'outils reste. Un e-mail et un macro-modèle ne peuvent pas
+  être le modèle par défaut du document : leur étoile est grisée, avec l'info-bulle qui dit pourquoi (pour une vue :
+  Réglages > Vue), comme en lecture seule.
 - **Marges d'un macro-modèle** : l'onglet Marges des Réglages dit, tant qu'un macro-modèle est chargé, que ses marges
   priment sur celles des modèles assemblés : elles valent pour toutes ses pages, dans la Lecture, le PDF, le Word et
   l'impression ; les marges propres à un modèle ne servent que lorsqu'on l'ouvre seul. Rien ne change dans le calcul des
@@ -938,6 +946,14 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Changed
 
+- **The default-template star says what it does, in the list and in "Organize my templates"**: each ordinary
+  template in the drop-down list and in the "Organize my templates" window now carries a star (shown on hover or
+  from the keyboard) that sets, moves or removes the document's default template, the one that opens when the widget
+  starts, for everyone who uses the document (the pin stays a personal favourite). The default template's row says so
+  in words ("at startup"), the window carries a legend explaining the star, and the status line names the template
+  that will open at startup. The toolbar star stays. An e-mail and a macro template cannot be the document's default
+  template: their star is greyed out, with a tooltip saying why (for a view: Settings > View), as it is in read-only
+  mode.
 - **Margins of a macro template**: the Margins tab of Settings now says, while a macro template is loaded, that its margins
   take precedence over those of the assembled templates: they apply to every page of its Reading view, PDF, Word and
   print output, and a template's own margins only apply when it is opened on its own. The margins themselves are

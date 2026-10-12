@@ -127,19 +127,36 @@
     btn.disabled = currentId == null || !Templates.canBeDocumentDefault(currentTypeModele);
   }
 
+  // Le ★ du document, posé sur le modèle `id` ou retiré s'il le porte déjà. Trois endroits y mènent : le bouton de la barre (le modèle ouvert), une ligne de
+  // la liste des modèles et une ligne d'« Organiser mes modèles » (le modèle de la ligne, ouvert ou non). Un seul à la fois (Templates.setDefault) ; un email
+  // et un macro-modèle ne le portent jamais. Le cache est à jour quand setDefault rend la main : la liste se redessine sans relire la table. Un clic pendant
+  // une écriture est ignoré : le second lot partirait d'un cache qui ne porte pas encore le premier et laisserait deux modèles marqués dans Grist.
+  let defaultTemplateWriting = false;
+  async function toggleDefaultTemplate(id) {
+    const tpl = Templates.byId(id);
+    if (!tpl || isReadOnly() || defaultTemplateWriting || !Templates.canBeDocumentDefault(tpl.typeModele)) return;
+    defaultTemplateWriting = true;
+    try {
+      const wasDefault = Templates.isDefault(id);
+      await Templates.setDefault(wasDefault ? null : id);
+      await refreshTemplateList(Templates.getCached());
+      // Le modèle ouvert reste choisi dans la liste ; un modèle pas encore enregistré n'a pas d'identifiant : l'option « Nouveau modèle ».
+      const openId = Templates.getCurrentId();
+      templateSelect.value = openId == null ? '' : openId;
+      syncDefaultTemplateButton();
+      setStatus(I18n.t(wasDefault ? 'status.defaultTemplateCleared' : 'status.defaultTemplateSet', { name: tpl.nom }));
+    } catch (e) {
+      console.error('[main] modèle par défaut non enregistré', e);
+      setStatus(I18n.t('status.defaultTemplateError'), true);
+    } finally {
+      defaultTemplateWriting = false;
+    }
+  }
+
   function wireDefaultTemplateButton() {
     const btn = document.getElementById('btn-set-default-template');
     if (!btn) return;
-    btn.addEventListener('click', async () => {
-      const currentId = Templates.getCurrentId();
-      if (!currentId || isReadOnly()) return;
-      const wasDefault = Templates.isDefault(currentId);
-      await Templates.setDefault(wasDefault ? null : currentId);
-      await refreshTemplateList();
-      templateSelect.value = currentId;
-      syncDefaultTemplateButton();
-      setStatus(wasDefault ? I18n.t('status.defaultTemplateCleared') : I18n.t('status.defaultTemplateSet'));
-    });
+    btn.addEventListener('click', () => toggleDefaultTemplate(Templates.getCurrentId()));
     syncDefaultTemplateButton();
   }
 
@@ -2482,8 +2499,15 @@
     // Le try/catch garde le reste du démarrage : init() n'a ailleurs aucun filet, et une exception dans cette vue décorative empêcherait de brancher
     // tout ce qui suit (Enregistrer, Ctrl+S, enregistrement automatique, statut « Prêt ») sans aucun message. Un bug de rendu de l'arbre doit rester
     // dans l'arbre.
-    // `onOrganize` : « Organiser mes modèles » vit dans l'en-tête du panneau (js/template-tree-select.js).
-    try { TemplateTreeSelect.attach(templateSelect, { onOrganize: () => { if (!isReadOnly()) TemplateOrganizeModal.open(); } }); } catch (e) { console.error('[main] TemplateTreeSelect.attach a échoué, arbre non disponible', e); }
+    // `onOrganize` : « Organiser mes modèles » vit dans l'en-tête du panneau (js/template-tree-select.js). `onToggleDefault` et `isLocked` : l'étoile du modèle
+    // par défaut qu'une ligne de la liste et de « Organiser » porte (toggleDefaultTemplate).
+    try {
+      TemplateTreeSelect.attach(templateSelect, {
+        onOrganize: () => { if (!isReadOnly()) TemplateOrganizeModal.open(); },
+        onToggleDefault: toggleDefaultTemplate,
+        isLocked: isReadOnly,
+      });
+    } catch (e) { console.error('[main] TemplateTreeSelect.attach a échoué, arbre non disponible', e); }
     // Chargement non bloquant, comme Comments.loadForTemplate ci-dessous : l'identification de la personne (GristAPI.getCurrentUserEmail) est un
     // aller-retour réseau qui ne doit pas retarder le démarrage pour la section « Épinglés » de l'arbre.
     TemplatePreferences.loadForCurrentUser()

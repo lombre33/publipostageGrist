@@ -13,6 +13,11 @@
 .template-organize-modal-content .pp-modal-header h3 { margin-bottom: 12px; }
 
 .template-organize-intro { margin: 0; font-size: 11.5px; color: var(--text-faint); line-height: 1.4; }
+/* Légende de l'étoile (le modèle par défaut du document) : à gauche de « Fermer », dans la barre du bas, donc sans prendre de hauteur à la liste dans un
+   panneau de 400 px. Même corps et même couleur que l'explication du haut ; elle dit ce que l'intro ne dit pas : cette étoile n'est pas personnelle. */
+.template-organize-legend { flex: 1 1 auto; min-width: 0; margin: 0; font-size: 11.5px; line-height: 1.4; color: var(--text-faint); }
+/* Le tracé de l'étoile des lignes (.tts-star-glyph, css/template-tree-select.css), pas le caractère ★ : la légende montre l'icône qu'elle explique. */
+.template-organize-legend .tts-star-glyph { width: 13px; height: 13px; margin-right: 4px; vertical-align: -2px; color: var(--accent); }
 
 .template-organize-search { display: flex; gap: 6px; }
 .template-organize-search input { flex: 1; height: 30px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 0 10px; font-family: var(--font-ui); font-size: 12.5px; background: var(--surface); color: var(--text); }
@@ -25,7 +30,7 @@
    0 20px`, qu'une seule classe ne battrait pas. */
 .template-organize-modal-content .template-organize-list { min-height: 72px; margin: 0 20px; padding: 4px; }
 
-.template-organize-modal-content .modal-actions button { font-family: var(--font-ui); font-weight: 600; font-size: 13px; height: 30px; padding: 0 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; }
+.template-organize-modal-content .modal-actions button { flex: none; font-family: var(--font-ui); font-weight: 600; font-size: 13px; height: 30px; padding: 0 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; }
 .template-organize-modal-content .modal-actions button:hover { background: var(--surface-sunken); }
 
 /* Ces lignes ne sélectionnent rien au clic (contrairement à .tts-popup) : seul un dossier réagit (dépliage), d'où l'absence du curseur « pointer »

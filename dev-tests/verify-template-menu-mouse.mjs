@@ -9,7 +9,10 @@
 //   3) au clavier : Entrée ouvre la liste, Flèche haut depuis la première ligne atteint « Organiser » (anneau de focus visible), Entrée l'active ;
 //   4) 30 modèles : la molette fait défiler la liste, le panneau reste ouvert, l'en-tête reste en haut et « Organiser » reste cliquable ;
 //   5) renommer : le champ prend la place et la largeur du déclencheur (la barre ne change pas de hauteur), Entrée montre le nouveau nom, Enregistrer l'écrit dans Grist ;
-//   6) interface en anglais : « Templates » / « Organize ».
+//   6) interface en anglais : « Templates » / « Organize » ;
+//   7) l'étoile du modèle par défaut au démarrage du widget (demande du 2026-10-12), sur chaque ligne de la liste et de « Organiser mes modèles » : mention « au démarrage » et étoile appuyée
+//      sur le défaut, étoile des autres lignes au survol, vrai clic qui pose / déplace / retire (la liste reste ouverte, le modèle ouvert ne change pas, la barre suit), email et macro grisés,
+//      légende de la fenêtre dans 700x400 sans recouvrir « Fermer », étoile atteinte et activée au clavier, interface en anglais.
 // Lancé par run-headless.mjs (groupe Node "templateMenuMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-template-menu-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -251,6 +254,162 @@ for (const theme of ['light', 'dark']) {
     const en = await page.evaluate(() => { const b = document.getElementById('btn-organize-templates'); return { head: document.querySelector('.tts-head-title').textContent, label: b.textContent.trim(), title: b.title }; });
     check('anglais : en-tête « Templates », bouton « Organize », info-bulle « Organize my templates »', en.head === 'Templates' && en.label === 'Organize' && en.title === 'Organize my templates', en);
     await page.keyboard.press('Escape'); await page.waitForTimeout(150);
+    await page.evaluate(() => I18n.setLang('fr'));
+  }
+  await page.context().close();
+}
+
+// 7) l'étoile « modèle par défaut au démarrage du widget » : un faux Grist avec un email et un macro-modèle (colonne TypeModele ajoutée, les six premiers en « document »).
+const starSeed = `
+  m.TypeModele = m.id.map(() => 'document');
+  add(40, 'Relance par email', '<p>g</p>', false); m.TypeModele.push('email');
+  add(41, 'Courrier en lot', '{}', false); m.TypeModele.push('macro');
+  stub.state.nextRowId.Publipostage_Modeles = 42;
+`;
+const flagged = (page) => page.evaluate(() => { const m = window.__gristStub.state.rows.Publipostage_Modeles; return m.id.filter((_, i) => m.EstParDefaut[i]); });
+const listStar = (id) => `.tts-popup .tts-row-leaf[data-template-id="${id}"] .tts-star-btn`;
+const winStar = (id) => `#template-organize-list .tts-row-leaf[data-template-id="${id}"] .tts-star-btn`;
+const showRow = (page, sel) => page.evaluate((s) => document.querySelector(s).scrollIntoView({ block: 'nearest' }), sel);
+// Ce que la liste et la barre montrent après un geste.
+const nowShown = (page) => page.evaluate(() => ({
+  open: document.querySelector('.tts-popup').classList.contains('is-open'),
+  selected: document.getElementById('template-select').value,
+  trigger: document.querySelector('.tts-trigger-label').textContent,
+  toolbarStar: document.getElementById('btn-set-default-template').classList.contains('is-default'),
+  status: document.getElementById('status-msg').textContent,
+  noted: Array.from(document.querySelectorAll('.tts-popup .tts-default-note')).map((n) => n.closest('.tts-row').dataset.templateId),
+}));
+
+for (const theme of ['light', 'dark']) {
+  const T = theme === 'light' ? 'clair' : 'sombre';
+  console.log(`\n== L’étoile du modèle par défaut - thème ${T} ==`);
+  const page = await openPage(starSeed);
+  await page.evaluate(async () => {
+    await TemplatePreferences.setFolder(1, 'Contrats');
+    await TemplatePreferences.setPinned(5, true);
+    TemplateTreeSelect.refresh();
+  });
+  await page.evaluate((t) => Settings.setTheme(t), theme);
+  await page.waitForTimeout(200);
+
+  // La liste : le modèle par défaut (Contrat de vente, celui qui s'est ouvert au démarrage) dit son rôle au repos.
+  await realClick(page, '.tts-trigger');
+  const rest = await page.evaluate(() => {
+    const row = document.querySelector('.tts-popup .tts-row-leaf[data-template-id="2"]');
+    const star = row.querySelector('.tts-star-btn'), note = row.querySelector('.tts-default-note'), pin = row.querySelector('.tts-pin-btn'), label = row.querySelector('.tts-row-label');
+    const r = (e) => e.getBoundingClientRect(), pop = document.querySelector('.tts-popup');
+    return {
+      note: note && note.textContent, pressed: star.getAttribute('aria-pressed'), opacity: getComputedStyle(star).opacity, star: [Math.round(r(star).width), Math.round(r(star).height)],
+      noteRight: r(note).right, starLeft: r(star).left, starRight: r(star).right, pinLeft: r(pin).left, labelW: Math.round(r(label).width),
+      rowOverflow: row.scrollWidth - row.clientWidth, popOverflow: pop.scrollWidth - pop.clientWidth, title: star.title,
+      otherNoted: !!document.querySelector('.tts-popup .tts-row-leaf[data-template-id="1"] .tts-default-note'),
+      otherOpacity: getComputedStyle(document.querySelector('.tts-popup .tts-row-leaf[data-template-id="1"] .tts-star-btn')).opacity,
+    };
+  });
+  check(`${T} : la ligne du modèle par défaut dit « au démarrage », son étoile est appuyée, visible au repos et à taille de bouton`, rest.note === 'au démarrage' && rest.pressed === 'true' && rest.opacity === '1' && rest.star[0] >= 16 && rest.star[1] >= 16 && !rest.otherNoted, rest);
+  check(`${T} : ... l’ordre est nom, « au démarrage », étoile, punaise ; le nom garde sa place et rien ne déborde du panneau`, rest.noteRight <= rest.starLeft + 1 && rest.starRight <= rest.pinLeft + 1 && rest.labelW >= 60 && rest.rowOverflow <= 1 && rest.popOverflow <= 1, rest);
+  check(`${T} : ... l’info-bulle dit le rôle (au démarrage du widget, pour tout le document) et ce que fait le clic`, /démarrage du widget/.test(rest.title) && /tout le document/.test(rest.title) && /retirer/i.test(rest.title), rest.title);
+  check(`${T} : l’étoile d’une autre ligne est cachée au repos`, rest.otherOpacity === '0', rest.otherOpacity);
+  const row1 = await rectOf(page, '.tts-popup .tts-row-leaf[data-template-id="1"]');
+  await page.mouse.move(row1.l + 24, row1.y, { steps: 3 }); await page.waitForTimeout(150);
+  const hovered = await rectOf(page, listStar(1));
+  const hoveredOpacity = await page.evaluate((s) => getComputedStyle(document.querySelector(s)).opacity, listStar(1));
+  check(`${T} : ... elle apparaît au survol de la ligne, au premier plan, à taille de bouton`, hoveredOpacity === '1' && hovered.onTop && hovered.w >= 16 && hovered.h >= 16, { hoveredOpacity, hovered });
+  await page.screenshot({ path: SHOTS + `/etoile-liste-${theme}.png` });
+
+  // Au vrai clic : poser sur une autre ligne, retirer, poser sur le modèle ouvert.
+  await realClick(page, listStar(1), 400);
+  const set = await nowShown(page);
+  check(`${T} : un vrai clic sur l’étoile d’une autre ligne la pose là : un seul modèle marqué dans Grist, la liste reste ouverte, le modèle ouvert ne change pas`, JSON.stringify(await flagged(page)) === '[1]' && set.open && set.selected === '2', { flags: await flagged(page), set });
+  check(`${T} : ... la barre suit (plus d’étoile sur le modèle ouvert, plus de ★ sur le déclencheur), la mention passe à la nouvelle ligne`, !set.toolbarStar && set.trigger === 'Contrat de vente' && JSON.stringify(set.noted) === '["1"]', set);
+  check(`${T} : ... la ligne d’état dit quel modèle s’ouvrira au démarrage`, set.status === 'Modèle par défaut défini : « Bail habitation » s’ouvrira au démarrage du widget.', set.status);
+  await realClick(page, listStar(1), 400);
+  const cleared = await nowShown(page);
+  check(`${T} : un second clic sur la même étoile retire le modèle par défaut (aucun modèle marqué, plus de mention), la liste reste ouverte`, (await flagged(page)).length === 0 && cleared.open && cleared.noted.length === 0 && /ne s’ouvrira plus au démarrage/.test(cleared.status), { flags: await flagged(page), cleared });
+  await realClick(page, listStar(2), 400);
+  const onOpen = await nowShown(page);
+  check(`${T} : l’étoile du modèle ouvert le remet par défaut : ★ sur le déclencheur, étoile de la barre allumée`, JSON.stringify(await flagged(page)) === '[2]' && onOpen.toolbarStar && onOpen.trigger === 'Contrat de vente ★' && onOpen.open, { flags: await flagged(page), onOpen });
+
+  // Un email et un macro-modèle ne peuvent pas être le modèle par défaut du document : étoile grisée, jamais retirée.
+  for (const [id, kind] of [[40, 'email'], [41, 'macro-modèle']]) {
+    await showRow(page, listStar(id));
+    const rr = await rectOf(page, `.tts-popup .tts-row-leaf[data-template-id="${id}"]`);
+    await page.mouse.move(rr.l + 24, rr.y, { steps: 3 }); await page.waitForTimeout(120);
+    const grey = await page.evaluate((s) => { const e = document.querySelector(s); const cs = getComputedStyle(e); return { there: !!e, disabled: e.classList.contains('is-disabled'), aria: e.getAttribute('aria-disabled'), opacity: cs.opacity, title: e.title }; }, listStar(id));
+    check(`${T} : ${kind} : l’étoile reste là, grisée, avec l’info-bulle qui dit pourquoi`, grey.there && grey.disabled && grey.aria === 'true' && Number(grey.opacity) > 0.3 && Number(grey.opacity) < 0.6 && /ne peut pas être le modèle par défaut/.test(grey.title), grey);
+    await realClick(page, listStar(id), 300);
+    const after = await nowShown(page);
+    check(`${T} : ... un vrai clic dessus ne marque rien et ne ferme pas la liste`, JSON.stringify(await flagged(page)) === '[2]' && after.open && after.selected === '2', { flags: await flagged(page), after });
+  }
+  await page.keyboard.press('Escape'); await page.waitForTimeout(150);
+
+  // « Organiser mes modèles » : la même étoile sur chaque ligne et la légende, dans 700x400.
+  await realClick(page, '.tts-trigger');
+  await realClick(page, '#btn-organize-templates', 500);
+  const win = await page.evaluate(() => {
+    const m = document.querySelector('.template-organize-modal-content'), mr = m.getBoundingClientRect();
+    const legend = document.querySelector('.template-organize-legend'), lr = legend.getBoundingClientRect();
+    const close = document.getElementById('template-organize-close'), cr = close.getBoundingClientRect();
+    const hit = document.elementFromPoint(cr.left + cr.width / 2, cr.top + cr.height / 2);
+    const list = document.getElementById('template-organize-list');
+    const leaves = Array.from(list.querySelectorAll('.tts-row-leaf'));
+    const glyph = legend.querySelector('.tts-star-glyph'), gr = glyph.getBoundingClientRect();
+    return {
+      top: Math.round(mr.top), bottom: Math.round(mr.bottom), vh: innerHeight, legendText: legend.textContent.trim(),
+      legendLines: Math.round(lr.height / parseFloat(getComputedStyle(legend).lineHeight)), legendInside: lr.left >= mr.left && lr.right <= mr.right && lr.bottom <= mr.bottom + 1, legendClear: lr.right <= cr.left + 1,
+      closeOnTop: hit === close || close.contains(hit), listH: Math.round(list.clientHeight), listOverflowX: list.scrollWidth - list.clientWidth,
+      leaves: leaves.length, stars: leaves.filter((r) => r.querySelector('.tts-star-btn')).length, minLabel: Math.min(...leaves.map((r) => Math.round(r.querySelector('.tts-row-label').getBoundingClientRect().width))),
+      glyph: [Math.round(gr.width), Math.round(gr.height)], noted: leaves.filter((r) => r.querySelector('.tts-default-note')).map((r) => r.dataset.templateId),
+    };
+  });
+  check(`${T} : la fenêtre Organiser (avec sa légende) tient dans 700x400 et « Fermer » reste au premier plan`, win.top >= 0 && win.bottom <= win.vh && win.closeOnTop, win);
+  check(`${T} : ... la légende dit le rôle de l’étoile, tient dans la fenêtre sur trois lignes au plus et ne recouvre pas « Fermer »`, win.legendText === 'Modèle par défaut : il s’ouvre au démarrage du widget, pour tout le document. Un seul à la fois.' && win.legendLines <= 3 && win.legendInside && win.legendClear && win.glyph[0] >= 10, win);
+  check(`${T} : ... chaque modèle a son étoile (aucune ligne sans), le nom garde de la place et la liste ne déborde pas, assez haute pour défiler`, win.leaves >= 9 && win.stars === win.leaves && win.minLabel >= 40 && win.listOverflowX <= 1 && win.listH >= 90, win);
+  check(`${T} : ... seule la ligne du modèle par défaut dit « au démarrage »`, JSON.stringify(win.noted) === '["2"]', win.noted);
+  await page.screenshot({ path: SHOTS + `/etoile-organiser-${theme}.png` });
+
+  const rowWin = await rectOf(page, `#template-organize-list .tts-row-leaf[data-template-id="3"]`);
+  await page.mouse.move(rowWin.l + 24, rowWin.y, { steps: 3 }); await page.waitForTimeout(150);
+  const starWin = await rectOf(page, winStar(3));
+  check(`${T} : dans Organiser, l’étoile d’une ligne apparaît au survol, au premier plan`, starWin.onTop && starWin.w >= 16 && starWin.h >= 16, starWin);
+  await realClick(page, winStar(3), 450);
+  const afterWin = await page.evaluate(() => ({
+    open: getComputedStyle(document.getElementById('template-organize-modal')).display !== 'none',
+    noted: Array.from(document.querySelectorAll('#template-organize-list .tts-default-note')).map((n) => n.closest('.tts-row').dataset.templateId),
+    pressed: Array.from(document.querySelectorAll('#template-organize-list .tts-star-btn[aria-pressed="true"]')).map((n) => n.closest('.tts-row').dataset.templateId),
+    toolbarStar: document.getElementById('btn-set-default-template').classList.contains('is-default'), trigger: document.querySelector('.tts-trigger-label').textContent,
+  }));
+  check(`${T} : un vrai clic sur une étoile d’Organiser déplace le modèle par défaut (Grist : un seul), la fenêtre reste ouverte, la mention suit`, JSON.stringify(await flagged(page)) === '[3]' && afterWin.open && JSON.stringify(afterWin.noted) === '["3"]' && JSON.stringify(afterWin.pressed) === '["3"]', { flags: await flagged(page), afterWin });
+  check(`${T} : ... la barre et la liste suivent sans fermer la fenêtre (modèle ouvert sans ★, étoile de la barre éteinte)`, !afterWin.toolbarStar && afterWin.trigger === 'Contrat de vente', afterWin);
+
+  // Au clavier : l'étoile est dans l'ordre de tabulation d'Organiser, activée par Entrée, et elle garde le focus après le redessin.
+  // Un .focus() programmatique après un clic de souris n'allume pas :focus-visible : on arrive sur l'étoile par Tab, comme au clavier.
+  await page.focus(winStar(4));
+  await page.keyboard.press('Shift+Tab'); await page.keyboard.press('Tab'); await page.waitForTimeout(100);
+  const ringWin = await page.evaluate((s) => { const e = document.querySelector(s); return { active: document.activeElement === e, visible: e.matches(':focus-visible'), outline: getComputedStyle(e).outlineWidth, opacity: getComputedStyle(e).opacity }; }, winStar(4));
+  check(`${T} : au clavier, l’étoile d’une ligne d’Organiser s’atteint par Tab, avec son anneau de focus, et se montre`, ringWin.active && ringWin.visible && ringWin.outline === '2px' && ringWin.opacity === '1', ringWin);
+  await page.keyboard.press('Enter'); await page.waitForTimeout(450);
+  const kb = await page.evaluate(() => ({ key: document.activeElement && document.activeElement.dataset.focusKey, inList: document.getElementById('template-organize-list').contains(document.activeElement) }));
+  check(`${T} : ... Entrée la pose (un seul modèle marqué) et le focus reste sur cette étoile après le redessin`, JSON.stringify(await flagged(page)) === '[4]' && kb.inList && kb.key === 'default:all:4', { flags: await flagged(page), kb });
+  await page.keyboard.press('Escape'); await page.waitForTimeout(300);
+  check(`${T} : Échap ferme la fenêtre`, !(await modalShown(page)));
+
+  // L'anglais (une fois) : la mention, l'info-bulle et la légende.
+  if (theme === 'light') {
+    await page.evaluate(() => I18n.setLang('en'));
+    await page.waitForTimeout(300);
+    await realClick(page, '.tts-trigger');
+    const enList = await page.evaluate((s) => { const star = document.querySelector(s); const note = document.querySelector('.tts-popup .tts-default-note'); return { note: note && note.textContent, title: star.title }; }, listStar(4));
+    check('anglais : la ligne du modèle par défaut dit « at startup » et l’info-bulle de l’étoile dit son rôle', enList.note === 'at startup' && /when the widget starts/.test(enList.title) && /whole document/.test(enList.title), enList);
+    await realClick(page, '#btn-organize-templates', 500);
+    const enWin = await page.evaluate(() => {
+      const m = document.querySelector('.template-organize-modal-content').getBoundingClientRect(), legend = document.querySelector('.template-organize-legend'), lr = legend.getBoundingClientRect();
+      const cr = document.getElementById('template-organize-close').getBoundingClientRect();
+      return { text: legend.textContent.trim(), lines: Math.round(lr.height / parseFloat(getComputedStyle(legend).lineHeight)), inside: lr.left >= m.left && lr.right <= m.right && lr.bottom <= m.bottom + 1, clear: lr.right <= cr.left + 1, fits: m.top >= 0 && m.bottom <= innerHeight };
+    });
+    check('anglais : la légende d’Organiser est en anglais, tient dans la fenêtre sur trois lignes au plus et ne recouvre pas « Close »', /when the widget starts/.test(enWin.text) && /whole document/.test(enWin.text) && enWin.lines <= 3 && enWin.inside && enWin.clear && enWin.fits, enWin);
+    await page.screenshot({ path: SHOTS + '/etoile-organiser-en.png' });
+    await page.keyboard.press('Escape'); await page.waitForTimeout(300);
     await page.evaluate(() => I18n.setLang('fr'));
   }
   await page.context().close();

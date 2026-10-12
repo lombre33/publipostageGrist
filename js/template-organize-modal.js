@@ -9,6 +9,8 @@
 // personne (TemplatePreferences.setFolderCollapsed) et lu par js/template-tree-select.js à chaque ouverture. Cette fenêtre garde ses dossiers dépliés
 // (il faut tout voir pour ranger) : l'interrupteur ne règle que la liste déroulante. Celui d'un dossier en attente reste local (pendingCollapsed)
 // jusqu'au premier modèle rangé.
+// Chaque ligne de modèle porte aussi l'étoile du modèle par défaut du document (TemplateTreeSelect.defaultMarks, la même brique que la liste déroulante) :
+// ce réglage-là n'est pas personnel, c'est celui de tout le document, et la légende au bas de la fenêtre le dit à côté du rangement personnel.
 const TemplateOrganizeModal = (function () {
   const { el, button } = Dom;
   let modal, searchInput, list, newFolderBtn;
@@ -138,8 +140,8 @@ const TemplateOrganizeModal = (function () {
     });
   }
 
-  // folderLabel : seulement pour les lignes épinglées (à plat en tête, donc sans indentation qui indique leur dossier).
-  function makeLeafRow(node, depth, folderLabel) {
+  // folderLabel : seulement pour les lignes épinglées (à plat en tête, donc sans indentation qui indique leur dossier). inPinned : la ligne est dans la section « Épinglés ».
+  function makeLeafRow(node, depth, folderLabel, inPinned) {
     const row = TemplateTreeSelect.rowShell('leaf', depth, node.typeModele, node.nom);
     row.dataset.templateId = String(node.id);
 
@@ -160,7 +162,9 @@ const TemplateOrganizeModal = (function () {
     pinBtn.addEventListener('click', () => togglePin(node.id, pinned));
     const moveBtn = button('tom-move-btn', I18n.t('organize.modal.moveButton'));
     moveBtn.addEventListener('click', () => moveTemplate(node.id, TemplatePreferences.getFolder(node.id) || ''));
-    row.append(pinBtn, moveBtn);
+    // L'étoile du modèle par défaut est, elle, commune à toutes les personnes du document : la légende du bas de la fenêtre le dit. Posée par la même brique
+    // que celle de la liste déroulante ; la liste de cette fenêtre se redessine une fois le ★ écrit (celle de la barre le fait seule).
+    row.append(...TemplateTreeSelect.defaultMarks(node, { afterToggle: redraw, focusScope: inPinned ? 'pinned' : 'all' }), pinBtn, moveBtn);
 
     // Repli sans souris ni tactile tant qu'un dossier « en attente » existe (le glisser-déposer n'a pas d'équivalent clavier) : un bouton sur chaque
     // modèle.
@@ -247,7 +251,7 @@ const TemplateOrganizeModal = (function () {
     // Le dossier en attente est devenu réel (un modèle y a été rangé) : il apparaît à sa vraie place dans view.tree.
     if (pendingFolder && findFolderInTree(view.tree, pendingFolder)) pendingFolder = null;
 
-    TemplateTreeSelect.appendSections(list, view, (p) => makeLeafRow(p, 0, p.dossier), (n) => makeNode(n, 0));
+    TemplateTreeSelect.appendSections(list, view, (p) => makeLeafRow(p, 0, p.dossier, true), (n) => makeNode(n, 0));
     if (pendingFolder) list.appendChild(makePendingFolderRow(pendingFolder));
   }
 

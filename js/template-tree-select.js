@@ -1,9 +1,10 @@
 // Remplace visuellement #template-select (natif) par un arbre « épinglés + dossiers » (planning/feature-rangement-tri-modeles.md §7). Le <select>
 // réel reste l'unique source de vérité (.value, .options, .selectedIndex, évènement 'change') : les appels de js/main.js fonctionnent sans
 // modification ; ce module ajoute une couche visuelle synchronisée dans les deux sens (voir attach() pour les quatre pièges évités).
-// Périmètre : parcourir, choisir, épingler. Créer un dossier et y ranger un modèle se fait dans js/template-organize-modal.js ; son déclencheur,
-// #btn-organize-templates, est créé ici une seule fois (en-tête du panneau, en haut à droite) et js/main.js passe `onOrganize` à attach().
-// Les briques de ligne (rowShell, makeGroup, pinButton, appendSections) sont aussi celles de cette fenêtre : une seule structure pour
+// Périmètre : parcourir, choisir, épingler, poser le ★ du document (le modèle par défaut, ouvert au démarrage du widget). Créer un dossier et y
+// ranger un modèle se fait dans js/template-organize-modal.js ; son déclencheur, #btn-organize-templates, est créé ici une seule fois (en-tête du
+// panneau, en haut à droite) et js/main.js passe `onOrganize`, `onToggleDefault` et `isLocked` à attach().
+// Les briques de ligne (rowShell, makeGroup, pinButton, defaultMarks, appendSections) sont aussi celles de cette fenêtre : une seule structure pour
 // css/template-tree-select.css.
 const TemplateTreeSelect = (function () {
   const { el, button } = Dom;
@@ -13,6 +14,9 @@ const TemplateTreeSelect = (function () {
   // En-tête fixe du panneau (titre + « Organiser ») : créé une fois par attachInner(), render() ne redessine que les lignes en dessous.
   let head, headTitle, organizeBtn, organizeLabel;
   let onOrganize = null;
+  // ★ du document (js/main.js) : `onToggleDefault(id)` le pose sur ce modèle ou le retire, `isLocked()` dit si la lecture seule l'interdit.
+  let onToggleDefault = null;
+  let isLocked = null;
   let mo = null;
   let outsideClickHandler = null;
   // Dossiers dépliés ou repliés à la main pendant que le panneau est ouvert (chemin -> ouvert ?), pour qu'un redessin (clic sur une épingle...) ne
@@ -21,6 +25,8 @@ const TemplateTreeSelect = (function () {
 
   const iconSpan = typeModele => el('span', 'tts-icon tts-icon-' + (typeModele || 'document'));
 
+  // Le libellé du déclencheur quand son <option> manque : le nom, suivi de ★ pour le modèle par défaut (même convention que refreshTemplateList,
+  // js/main.js). Les lignes de la liste et d'« Organiser » ne l'écrivent plus : leur étoile est un bouton (defaultMarks).
   function labelFor(tpl) {
     return Templates.isDefault(tpl.id) ? (tpl.nom + ' ★') : tpl.nom;
   }
@@ -55,6 +61,40 @@ const TemplateTreeSelect = (function () {
     pin.setAttribute('aria-label', I18n.t('templateTree.pin.aria'));
     pin.title = I18n.t(pinned ? 'templateTree.unpin.tip' : 'templateTree.pin.tip');
     return pin;
+  }
+
+  function defaultMarks(tpl, { afterToggle, tabbable = true, focusScope = '' } = {}) {
+    // L'étoile d'une ligne de modèle : le modèle par défaut du document, celui qui s'ouvre au démarrage du widget. Elle vaut pour toutes les personnes
+    // qui utilisent le document (la punaise est un favori personnel) et il n'y en a qu'une : celle d'un autre modèle prend sa place. Le bouton est grisé,
+    // jamais retiré, pour un email, un macro-modèle (Templates.canBeDocumentDefault) et en lecture seule. La ligne qui la porte dit aussi « au
+    // démarrage » en toutes lettres : l'état se lit sans survol ni couleur. Rend les éléments à poser sur la ligne, avant la punaise.
+    // `afterToggle` : ce que la fenêtre qui montre la ligne refait une fois le ★ écrit (la liste déroulante se redessine seule, par l'observateur du
+    // <select>) ; `tabbable: false` pour la liste, dont les lignes tiennent le focus roulant ; `focusScope` : la section de la fenêtre où la ligne est posée
+    // (un modèle épinglé figure dans « Épinglés » et dans « Tous les modèles » : sans cette part, le focus rendu après le redessin irait toujours au premier).
+    const isDefault = Templates.isDefault(tpl.id);
+    const eligible = Templates.canBeDocumentDefault(tpl.typeModele);
+    const blocked = !eligible || !!(isLocked && isLocked());
+    const star = button('tts-star-btn');
+    star.classList.toggle('is-default', isDefault);
+    star.classList.toggle('is-disabled', blocked);
+    star.setAttribute('aria-pressed', String(isDefault));
+    star.setAttribute('aria-label', I18n.t('templateTree.default.aria'));
+    star.title = I18n.t(!eligible ? 'templateTree.default.unavailableTip' : (isDefault ? 'templateTree.default.clearTip' : 'templateTree.default.setTip'));
+    if (blocked) star.setAttribute('aria-disabled', 'true');
+    if (!tabbable) star.tabIndex = -1;
+    // « Organiser » retrouve le bouton après son redessin par cette clé (data-focus-key, js/template-organize-modal.js).
+    star.dataset.focusKey = 'default:' + (focusScope ? focusScope + ':' : '') + tpl.id;
+    star.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (blocked || !onToggleDefault) return;
+      try {
+        await onToggleDefault(tpl.id);
+        if (afterToggle) afterToggle();
+      } catch (err) {
+        console.error('[template-tree-select] échec du modèle par défaut', err);
+      }
+    });
+    return isDefault ? [el('span', 'tts-default-note', I18n.t('templateTree.default.note')), star] : [star];
   }
 
   function appendSections(container, view, makePinnedRow, makeTreeRow) {
@@ -109,7 +149,7 @@ const TemplateTreeSelect = (function () {
   }
 
   function makeLeafRow(node, depth) {
-    const row = rowShell('leaf', depth, node.typeModele, labelFor(node));
+    const row = rowShell('leaf', depth, node.typeModele, node.nom);
     row.setAttribute('role', 'treeitem');
     row.tabIndex = -1;
     row.dataset.templateId = String(node.id);
@@ -118,7 +158,8 @@ const TemplateTreeSelect = (function () {
     const pinned = TemplatePreferences.isPinned(node.id);
     const pinBtn = pinButton(pinned);
     // -1 : un <button> est un arrêt de tabulation natif, ce qui casserait le focus roulant de l'arbre (Tab sortirait de la ligne vers ce bouton au
-    // lieu de sortir du widget). Pas de raccourci clavier pour épingler : seule la souris y accède.
+    // lieu de sortir du widget). Pas de raccourci clavier pour épingler ni pour l'étoile : seule la souris y accède (la barre a le bouton « modèle
+    // par défaut » et son raccourci, la fenêtre « Organiser » ses boutons dans l'ordre de Tab).
     pinBtn.tabIndex = -1;
     pinBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -130,7 +171,7 @@ const TemplateTreeSelect = (function () {
         console.error('[template-tree-select] échec épinglage', err);
       }
     });
-    row.appendChild(pinBtn);
+    row.append(...defaultMarks(node, { tabbable: false }), pinBtn);
 
     row.addEventListener('click', () => selectValue(node.id));
     return row;
@@ -356,6 +397,8 @@ const TemplateTreeSelect = (function () {
     // Gardé d'un attach() à l'autre quand on n'en repasse pas : la même vue rattachée sans options (après un échec, dev-tests) continue d'ouvrir
     // « Organiser ».
     if (options && typeof options.onOrganize === 'function') onOrganize = options.onOrganize;
+    if (options && typeof options.onToggleDefault === 'function') onToggleDefault = options.onToggleDefault;
+    if (options && typeof options.isLocked === 'function') isLocked = options.isLocked;
 
     // Piège 4 : le <select> réel est masqué (classe, tabIndex, aria-hidden ci-dessous) avant que le reste d'attach() (construction de l'arbre,
     // render() qui lit Grist et peut lever sur une donnée inattendue) ait fini. Le try/catch de js/main.js empêche l'exception de casser init(), mais
@@ -479,5 +522,5 @@ const TemplateTreeSelect = (function () {
     if (popup) { popup.setAttribute('aria-label', I18n.t('template.select')); syncHeadTexts(); render(); }
   });
 
-  return { attach, refresh, iconSpan, rowShell, makeGroup, pinButton, appendSections };
+  return { attach, refresh, iconSpan, rowShell, makeGroup, pinButton, defaultMarks, appendSections };
 })();

@@ -18,6 +18,12 @@ const I18n = (function () {
     'templateTree.pin.aria': { fr: 'Épingler ce modèle', en: 'Pin this template' },
     'templateTree.pin.tip': { fr: 'Épingler en haut de la liste (favori personnel)', en: 'Pin to the top of the list (personal favorite)' },
     'templateTree.unpin.tip': { fr: 'Retirer des épinglés', en: 'Remove from pinned' },
+    // Étoile d'une ligne (liste déroulante et « Organiser ») : le modèle par défaut du document, ouvert au démarrage du widget, pour toutes les personnes.
+    'templateTree.default.aria': { fr: 'Modèle par défaut au démarrage du widget', en: 'Default template when the widget starts' },
+    'templateTree.default.setTip': { fr: 'Définir comme modèle par défaut : il s’ouvrira au démarrage du widget, pour tout le document', en: 'Set as the default template: it will open when the widget starts, for the whole document' },
+    'templateTree.default.clearTip': { fr: 'Modèle par défaut : il s’ouvre au démarrage du widget, pour tout le document. Cliquer pour le retirer', en: 'Default template: it opens when the widget starts, for the whole document. Click to remove it' },
+    'templateTree.default.unavailableTip': { fr: 'Un email ou un macro-modèle ne peut pas être le modèle par défaut du document (pour une vue : Réglages > Vue)', en: 'An email or a macro-template cannot be the document’s default template (for one view: Settings > View)' },
+    'templateTree.default.note': { fr: 'au démarrage', en: 'at startup' },
     'templateTree.pinnedSection': { fr: 'Épinglés', en: 'Pinned' },
     'templateTree.allSection': { fr: 'Tous les modèles', en: 'All templates' },
     // En-tête du panneau : titre et bouton « Organiser » (son info-bulle et son aria-label restent 'toolbar.organizeTemplates').
@@ -27,6 +33,7 @@ const I18n = (function () {
     // --- Modale "Organiser mes modèles" (créer des dossiers, y ranger des modèles), js/template-organize-modal.js ---
     'organize.modal.title': { fr: 'Organiser mes modèles', en: 'Organize my templates' },
     'organize.modal.intro': { fr: 'Ce rangement est personnel : les autres personnes qui utilisent ce document ne le voient pas.', en: 'This organization is personal: other people using this document don’t see it.' },
+    'organize.modal.defaultLegend': { fr: 'Modèle par défaut : il s’ouvre au démarrage du widget, pour tout le document. Un seul à la fois.', en: 'Default template: it opens when the widget starts, for the whole document. Only one at a time.' },
     'organize.modal.searchPlaceholder': { fr: 'Rechercher un modèle…', en: 'Search for a template…' },
     'organize.modal.noMatch': { fr: 'Aucun modèle ne correspond à cette recherche.', en: 'No template matches this search.' },
     'organize.modal.moveButton': { fr: 'Déplacer vers…', en: 'Move to…' },
@@ -938,8 +945,9 @@ const I18n = (function () {
     // Les tables du widget n'ont pas été créées (réponse de la personne à la fenêtre « tableConsent ») : Enregistrer ne peut rien écrire, et le dit.
     'status.saveDeclined': { fr: 'Non enregistré : les tables du widget n’ont pas été créées dans ce document.', en: 'Not saved: the widget’s tables were not created in this document.' },
     'status.noTemplateSelected': { fr: 'Aucun modèle sélectionné.', en: 'No template selected.' },
-    'status.defaultTemplateSet': { fr: 'Modèle par défaut défini : il s’ouvrira automatiquement.', en: 'Default template set: it will open automatically.' },
-    'status.defaultTemplateCleared': { fr: 'Modèle par défaut retiré.', en: 'Default template cleared.' },
+    'status.defaultTemplateSet': { fr: 'Modèle par défaut défini : « {name} » s’ouvrira au démarrage du widget.', en: 'Default template set: “{name}” will open when the widget starts.' },
+    'status.defaultTemplateCleared': { fr: 'Modèle par défaut retiré : « {name} » ne s’ouvrira plus au démarrage.', en: 'Default template removed: “{name}” will no longer open at startup.' },
+    'status.defaultTemplateError': { fr: 'Échec de l’enregistrement du modèle par défaut.', en: 'Saving the default template failed.' },
     'status.templateDeleted': { fr: 'Modèle supprimé.', en: 'Template deleted.' },
     'status.pdfGenerating': { fr: 'Génération du PDF en cours...', en: 'Generating PDF...' },
     'status.pdfGenerated': { fr: 'PDF généré.', en: 'PDF generated.' },

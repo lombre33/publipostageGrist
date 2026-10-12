@@ -276,15 +276,18 @@
 
   cases.push({
     id: 'tree_default_template_star_matches_toolbar_button',
-    description: 'Marquer un modèle "par défaut" via le vrai bouton de la barre fait apparaître l’étoile dans son libellé de l’arbre, même convention que refreshTemplateList',
+    description: 'Marquer un modèle "par défaut" via le vrai bouton de la barre fait apparaître, sur sa ligne de l’arbre, la mention « au démarrage » et l’étoile appuyée (le libellé de la ligne reste le nom ; l’option réelle et le bouton fermé gardent « ★ », convention de refreshTemplateList)',
     run: async (h) => {
       const id = await createTemplate(h, 'document', 'Arbre - Modèle par défaut');
       await h.clickButton('btn-set-default-template');
       await h.sleep(100);
       await openPopup(h);
+      // Depuis le 2026-10-12 la ligne n'écrit plus « ★ » dans son libellé : l'étoile est un vrai bouton (appuyé) et la ligne dit « au démarrage ». Le libellé de l'option réelle et celui du bouton fermé gardent « ★ ».
       const label = rowFor(id) && rowFor(id).querySelector('.tts-row-label').textContent;
-      const pass = label === 'Arbre - Modèle par défaut ★';
-      return { pass, notes: 'label=' + label };
+      const star = rowFor(id) && rowFor(id).querySelector('.tts-star-btn');
+      const note = rowFor(id) && rowFor(id).querySelector('.tts-default-note');
+      const pass = label === 'Arbre - Modèle par défaut' && !!star && star.getAttribute('aria-pressed') === 'true' && !!note && note.textContent === I18n.t('templateTree.default.note');
+      return { pass, notes: JSON.stringify({ label, pressed: star && star.getAttribute('aria-pressed'), note: note && note.textContent }) };
     },
   });
 
@@ -299,7 +302,7 @@
   // Noms en « Arbre - » : la liste est triée par nom, et tree_internal_list_scroll_does_not_close_popup suppose que ses propres lignes finissent en bas.
   cases.push({
     id: 'default_template_ignores_flagged_email_and_macro_and_tree_star_follows',
-    description: 'Plusieurs lignes EstParDefaut=true dont un modèle email en tête de table : getDefaultId() renvoie le premier modèle DOCUMENT marqué, jamais l’email, et l’arbre met l’étoile sur ce modèle seulement',
+    description: 'Plusieurs lignes EstParDefaut=true dont un modèle email en tête de table : getDefaultId() renvoie le premier modèle DOCUMENT marqué, jamais l’email, et l’arbre porte la mention « au démarrage » et l’étoile appuyée sur ce modèle seulement',
     run: async (h) => {
       const idMail = await createTemplate(h, 'email', 'Arbre - Défaut ancien email');
       const idB = await createTemplate(h, 'document', 'Arbre - Défaut Doc B');
@@ -309,13 +312,16 @@
       const got = Templates.getDefaultId();
       TemplateTreeSelect.refresh();
       await openPopup(h);
+      // La ligne du défaut est reconnue à son étoile appuyée et à sa mention « au démarrage » (plus à un « ★ » en fin de libellé, cf. le cas précédent).
       const label = (id) => rowFor(id) && rowFor(id).querySelector('.tts-row-label').textContent;
-      const labels = { mail: label(idMail), b: label(idB), c: label(idC) };
+      const marked = (id) => !!rowFor(id) && !!rowFor(id).querySelector('.tts-default-note') && rowFor(id).querySelector('.tts-star-btn').getAttribute('aria-pressed') === 'true';
+      const labels = { mail: label(idMail), b: label(idB), c: label(idC), markedMail: marked(idMail), markedB: marked(idB), markedC: marked(idC) };
       popup().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
       setDefaultFlags([]);
       await Templates.loadAll();
       const pass = String(got) === String(idB)
-        && labels.mail === 'Arbre - Défaut ancien email' && labels.b === 'Arbre - Défaut Doc B ★' && labels.c === 'Arbre - Défaut Doc C';
+        && labels.mail === 'Arbre - Défaut ancien email' && labels.b === 'Arbre - Défaut Doc B' && labels.c === 'Arbre - Défaut Doc C'
+        && !labels.markedMail && labels.markedB && !labels.markedC;
       return { pass, notes: JSON.stringify({ got, idMail, idB, idC, labels }) };
     },
   });
@@ -350,6 +356,205 @@
       await Templates.loadAll();
       const pass = onlyC && otherTrue.length === 0 && sent.length === 1 && sent[0] === 3;
       return { pass, notes: JSON.stringify({ flags, otherTrue, batches: sent }) };
+    },
+  });
+
+  // --- L'étoile « modèle par défaut au démarrage du widget » sur chaque ligne de la liste (demande du 2026-10-12 : « l'étoile pour le modèle par défaut au démarrage du widget dans la
+  // dropdown et dans le menu d'organisation des modèles, en essayant de préciser son rôle pour que ça soit clair »). Même bouton, mêmes règles dans « Organiser » (dev-tests/scenarios-template-organize.js). ---
+  const starOf = (root, id) => root.querySelector('.tts-row-leaf[data-template-id="' + id + '"] .tts-star-btn');
+  const flaggedNow = () => { const rows = stub().state.rows.Publipostage_Modeles; return rows.id.filter((_, i) => rows.EstParDefaut[i]).map(String); };
+  // Les lots envoyés à Grist pour la table des modèles : une entrée par applyUserActions, le nombre d'actions qu'il porte.
+  function recordBatches() {
+    const sent = [];
+    const original = grist.docApi.applyUserActions;
+    grist.docApi.applyUserActions = function (actions) { sent.push(actions.filter((a) => a[0] === 'UpdateRecord' && a[1] === 'Publipostage_Modeles').length); return original.apply(this, arguments); };
+    return { sent, stop: () => { grist.docApi.applyUserActions = original; } };
+  }
+  async function noDefaultYet() {
+    setDefaultFlags([]);
+    await Templates.loadAll();
+    TemplateTreeSelect.refresh();
+  }
+  const toolbarStarOn = () => document.getElementById('btn-set-default-template').classList.contains('is-default');
+  const click = (el) => el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+
+  cases.push({
+    id: 'tree_row_star_sets_moves_and_clears_the_document_default',
+    description: 'L’étoile d’une ligne de la liste pose le modèle par défaut du document sur CE modèle (ouvert ou non), l’ôte de l’autre dans le même lot, puis le retire à un second clic ; la liste reste ouverte, le modèle ouvert ne change pas, la barre suit, et la ligne qui la porte dit « au démarrage »',
+    run: async (h) => {
+      const idA = await createTemplate(h, 'document', 'Arbre - Étoile A');
+      const idB = await createTemplate(h, 'document', 'Arbre - Étoile B'); // B reste le modèle ouvert
+      await noDefaultYet();
+      await openPopup(h);
+      const rec = recordBatches();
+      const read = () => ({
+        open: popupOpen(), selected: String(realSelect().value),
+        noteA: !!rowFor(idA).querySelector('.tts-default-note'), noteB: !!rowFor(idB).querySelector('.tts-default-note'),
+        pressedA: starOf(popup(), idA).getAttribute('aria-pressed'), pressedB: starOf(popup(), idB).getAttribute('aria-pressed'),
+        labelA: rowFor(idA).querySelector('.tts-row-label').textContent, toolbarStar: toolbarStarOn(),
+        flags: flaggedNow(), defaultId: String(Templates.getDefaultId()),
+      });
+      let afterA, afterB, afterClear, optionA, status;
+      try {
+        await clickEl(h, starOf(popup(), idA)); await h.sleep(300);
+        afterA = read();
+        optionA = Array.from(realSelect().options).find((o) => String(o.value) === String(idA)).textContent;
+        status = document.getElementById('status-msg').textContent;
+        await clickEl(h, starOf(popup(), idB)); await h.sleep(300);
+        afterB = read();
+        await clickEl(h, starOf(popup(), idB)); await h.sleep(300);
+        afterClear = read();
+      } finally { rec.stop(); popup().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); }
+      const onA = afterA.flags.join() === String(idA) && afterA.defaultId === String(idA) && afterA.noteA && !afterA.noteB && afterA.pressedA === 'true' && afterA.pressedB === 'false'
+        && afterA.open && afterA.selected === String(idB) && !afterA.toolbarStar && afterA.labelA === 'Arbre - Étoile A'
+        && optionA === 'Arbre - Étoile A ★' && status === I18n.t('status.defaultTemplateSet', { name: 'Arbre - Étoile A' });
+      const onB = afterB.flags.join() === String(idB) && afterB.noteB && !afterB.noteA && afterB.toolbarStar && afterB.open && afterB.selected === String(idB);
+      const none = afterClear.flags.length === 0 && afterClear.defaultId === 'null' && !afterClear.noteA && !afterClear.noteB && !afterClear.toolbarStar && afterClear.open;
+      const pass = onA && onB && none && rec.sent.join() === '1,2,1';
+      return { pass, notes: JSON.stringify({ afterA, afterB, afterClear, optionA, status, batches: rec.sent }) };
+    },
+  });
+
+  cases.push({
+    id: 'tree_row_star_does_not_open_the_row_it_sits_on',
+    description: 'Cliquer l’étoile d’une ligne ne choisit pas le modèle de la ligne (le modèle ouvert reste le même) et ne ferme pas la liste',
+    run: async (h) => {
+      const idA = await createTemplate(h, 'document', 'Arbre - Étoile ligne non ouverte');
+      const idB = await createTemplate(h, 'document', 'Arbre - Étoile ligne ouverte');
+      await noDefaultYet();
+      await openPopup(h);
+      await clickEl(h, starOf(popup(), idA)); await h.sleep(300);
+      const result = { selected: String(realSelect().value), current: String(Templates.getCurrentId()), open: popupOpen(), triggerLabel: document.querySelector('.tts-trigger-label').textContent };
+      await clickEl(h, starOf(popup(), idA)); await h.sleep(300);
+      popup().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      const pass = result.selected === String(idB) && result.current === String(idB) && result.open && result.triggerLabel === 'Arbre - Étoile ligne ouverte' && flaggedNow().length === 0;
+      return { pass, notes: JSON.stringify(result) };
+    },
+  });
+
+  cases.push({
+    id: 'tree_row_star_is_greyed_for_email_and_macro_and_does_nothing',
+    description: 'Sur la ligne d’un email ou d’un macro-modèle l’étoile est grisée (jamais retirée), son info-bulle dit pourquoi ; un clic ne marque rien, ne choisit pas la ligne et laisse la liste ouverte',
+    run: async (h) => {
+      const idMail = await createTemplate(h, 'email', 'Arbre - Étoile email');
+      const idMacro = await createTemplate(h, 'macro', 'Arbre - Étoile macro');
+      const idDoc = await createTemplate(h, 'document', 'Arbre - Étoile document ouvert');
+      await noDefaultYet();
+      await openPopup(h);
+      const rec = recordBatches();
+      const seen = {};
+      try {
+        for (const [key, id] of [['mail', idMail], ['macro', idMacro]]) {
+          const star = starOf(popup(), id);
+          seen[key] = { there: !!star, disabled: !!star && star.classList.contains('is-disabled'), aria: star && star.getAttribute('aria-disabled'), pressed: star && star.getAttribute('aria-pressed'), title: star && star.title };
+          if (star) await clickEl(h, star);
+          await h.sleep(200);
+        }
+      } finally { rec.stop(); }
+      const docStar = starOf(popup(), idDoc);
+      const docUsable = !docStar.classList.contains('is-disabled') && !docStar.hasAttribute('aria-disabled');
+      const state = { selected: String(realSelect().value), open: popupOpen(), flags: flaggedNow(), batches: rec.sent };
+      popup().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      const grey = (x) => x.there && x.disabled && x.aria === 'true' && x.pressed === 'false' && x.title === I18n.t('templateTree.default.unavailableTip');
+      const pass = grey(seen.mail) && grey(seen.macro) && docUsable && state.selected === String(idDoc) && state.open && state.flags.length === 0 && state.batches.length === 0;
+      return { pass, notes: JSON.stringify({ seen, docUsable, state }) };
+    },
+  });
+
+  cases.push({
+    id: 'tree_row_star_is_locked_for_a_read_only_person',
+    description: 'En lecture seule l’étoile des lignes est grisée et un clic n’écrit rien ; elle redevient active avec les droits',
+    run: async (h) => {
+      const idA = await createTemplate(h, 'document', 'Arbre - Étoile lecture seule');
+      await noDefaultYet();
+      const savedRights = AccessRights.get;
+      const rec = recordBatches();
+      let locked, unlocked;
+      try {
+        AccessRights.get = () => ({ readOnly: true, canExport: false, canComment: false });
+        TemplateTreeSelect.refresh();
+        await openPopup(h);
+        const star = starOf(popup(), idA);
+        locked = { disabled: star.classList.contains('is-disabled'), aria: star.getAttribute('aria-disabled') };
+        await clickEl(h, star); await h.sleep(250);
+        locked.written = flaggedNow().length + rec.sent.length;
+        AccessRights.get = savedRights;
+        TemplateTreeSelect.refresh();
+        const again = starOf(popup(), idA);
+        unlocked = { disabled: again.classList.contains('is-disabled'), aria: again.getAttribute('aria-disabled') };
+      } finally { AccessRights.get = savedRights; rec.stop(); TemplateTreeSelect.refresh(); popup().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); }
+      const pass = locked.disabled && locked.aria === 'true' && locked.written === 0 && !unlocked.disabled && unlocked.aria === null;
+      return { pass, notes: JSON.stringify({ locked, unlocked }) };
+    },
+  });
+
+  cases.push({
+    id: 'tree_row_star_tooltip_says_what_the_click_does_and_has_the_toolbar_glyph',
+    description: 'L’info-bulle de l’étoile d’une ligne dit ce que fait le clic (« Définir comme modèle par défaut… » puis « … Cliquer pour le retirer ») et porte le rôle (« au démarrage du widget », « pour tout le document ») ; son tracé est celui du bouton de la barre, jamais celui de la punaise (une icône = une fonction)',
+    run: async (h) => {
+      const id = await createTemplate(h, 'document', 'Arbre - Info-bulle étoile');
+      await noDefaultYet();
+      await openPopup(h);
+      const maskOf = (el) => { const cs = getComputedStyle(el, '::before'); return cs.maskImage && cs.maskImage !== 'none' ? cs.maskImage : cs.webkitMaskImage; };
+      const star = () => starOf(popup(), id);
+      const before = { title: star().title, pressed: star().getAttribute('aria-pressed'), aria: star().getAttribute('aria-label') };
+      const glyph = maskOf(star());
+      const pinGlyph = maskOf(rowFor(id).querySelector('.tts-pin-btn'));
+      const toolbarGlyph = maskOf(document.getElementById('btn-set-default-template'));
+      await clickEl(h, star()); await h.sleep(300);
+      const after = { title: star().title, pressed: star().getAttribute('aria-pressed') };
+      await clickEl(h, star()); await h.sleep(300);
+      popup().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      const role = (text) => /démarrage/.test(text) && /document/.test(text);
+      const pass = before.title === I18n.t('templateTree.default.setTip') && after.title === I18n.t('templateTree.default.clearTip') && before.title !== after.title
+        && role(before.title) && role(after.title) && before.pressed === 'false' && after.pressed === 'true' && before.aria === I18n.t('templateTree.default.aria')
+        && !!glyph && glyph !== 'none' && glyph === toolbarGlyph && glyph !== pinGlyph;
+      return { pass, notes: JSON.stringify({ before, after, sameAsToolbar: glyph === toolbarGlyph, sameAsPin: glyph === pinGlyph }) };
+    },
+  });
+
+  cases.push({
+    id: 'tree_row_star_ignores_a_second_click_while_the_first_is_being_written',
+    description: 'Deux étoiles cliquées dans le même instant : seule la première part (le second lot partirait d’un cache qui ne porte pas encore le premier et laisserait deux modèles marqués dans Grist)',
+    run: async (h) => {
+      const idA = await createTemplate(h, 'document', 'Arbre - Étoile double clic A');
+      const idB = await createTemplate(h, 'document', 'Arbre - Étoile double clic B');
+      await noDefaultYet();
+      await openPopup(h);
+      const rec = recordBatches();
+      try {
+        const starA = starOf(popup(), idA), starB = starOf(popup(), idB);
+        click(starA); click(starB);
+        await h.sleep(400);
+      } finally { rec.stop(); }
+      const flags = flaggedNow();
+      const defaultId = String(Templates.getDefaultId());
+      await clickEl(h, starOf(popup(), idA)); await h.sleep(300);
+      popup().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      const pass = flags.join() === String(idA) && defaultId === String(idA) && rec.sent.join() === '1' && flaggedNow().length === 0;
+      return { pass, notes: JSON.stringify({ flags, defaultId, batches: rec.sent }) };
+    },
+  });
+
+  cases.push({
+    id: 'tree_row_star_texts_follow_the_interface_language',
+    description: 'En anglais, la mention de la ligne du modèle par défaut et les info-bulles de l’étoile sont celles de l’anglais, puis le français revient',
+    run: async (h) => {
+      const id = await createTemplate(h, 'document', 'Arbre - Étoile en anglais');
+      await noDefaultYet();
+      await openPopup(h);
+      await clickEl(h, starOf(popup(), id)); await h.sleep(300);
+      const lang = I18n.getLang();
+      let fr, en;
+      try {
+        fr = { note: rowFor(id).querySelector('.tts-default-note').textContent, title: starOf(popup(), id).title };
+        I18n.setLang('en'); await h.sleep(150);
+        en = { note: rowFor(id).querySelector('.tts-default-note').textContent, title: starOf(popup(), id).title, aria: starOf(popup(), id).getAttribute('aria-label') };
+      } finally { I18n.setLang(lang); await h.sleep(100); }
+      await clickEl(h, starOf(popup(), id)); await h.sleep(300);
+      popup().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      const pass = fr.note === 'au démarrage' && en.note === 'at startup' && /when the widget starts/.test(en.title) && /whole document/.test(en.title) && /widget starts/.test(en.aria) && fr.title !== en.title && /démarrage du widget/.test(fr.title);
+      return { pass, notes: JSON.stringify({ fr, en }) };
     },
   });
 
