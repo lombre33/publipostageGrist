@@ -113,18 +113,24 @@ contenu exportable :
   auto-hébergée (`css/roboto-fonts.css`) en regular/italique/gras/gras-italique — délibérément les MÊMES fichiers
   que ceux embarqués dans le PDF par `pdfmake`, pour que la pagination affichée à l'écran soit identique à celle
   du PDF. Ne jamais laisser la police du contenu dériver de celle réellement exportée. Dans le PDF, un caractère que la police du texte n'a pas (du grec, du cyrillique ou du vietnamien dans Arial ou en gras, un ✓ → ★ ① ₿ ✅) s'écrit dans une police de repli, Roboto de la même graisse puis PPSymbols (`js/pdf-glyph-fallback.js`), jamais en case vide ; le chinois, le japonais, l'arabe, l'hébreu et le thaï restent des cases vides (aucune police assez légère, et pdfmake ne dessine pas de droite à gauche).
-- **Les champs prennent la police des boutons** (choix d'Antoine du 12/10, « Oui, tous », à la carte sur les champs restés en Arial) :
-  `input`, `select`, `textarea` et les champs à bulles (Objet, À, Cc, Cci, nom du PDF) ont `--font-ui`, à la taille qu'ils avaient. Un champ ne
-  reprend pas la police de son parent : sans la règle de base de `css/style.css` (`input, select, textarea { font-family: var(--font-ui) }`)
-  il garde celle du navigateur, Arial, à côté de boutons dans la police du système. Tout champ nouveau la reçoit donc sans rien ajouter, et
-  aucune règle ne remet « Arial » sur un champ. Gardé par `codeHygiene` (section 12 : la règle de base existe, seule la base de la page écrit
-  « Arial ») et par le script Node `fieldFontsMouse` (chaque champ a exactement la police du bouton voisin, mesuré à 700×400 à la vraie
-  souris, fenêtres ouvertes comprises).
-- Base de la page (avant les tokens) : `html, body { font-family: Arial, sans-serif }`. Ce qui n'a pas de police à lui la reprend par héritage :
-  au 12/10, restent en Arial les lignes du menu des polices et des tailles (`.v2-format-panel button`, `font: inherit`), les boutons « FR »,
-  « US », « J », « M », « A »… de la barre d'une variable et les libellés « + Ajouter un en-tête » et « + Ajouter un pied de page » (relevé dans
-  Chromium ; les autres boutons restés sans règle sont des icônes sans texte, où la police ne se voit pas). Proposé à Antoine le 12/10, voir §5 ;
-  le contenu produit, en Roboto, n'en dépend pas.
+- **Les champs, les boutons et les libellés prennent la police des boutons** (choix d'Antoine du 12/10, « Oui, tous », aux deux cartes posées pendant
+  la relecture : d'abord les champs, puis les boutons et libellés restés en Arial) : `input`, `select`, `textarea`, `button` et les champs à bulles
+  (Objet, À, Cc, Cci, nom du PDF) ont `--font-ui`, à la taille de police qu'ils avaient. Un champ ou un bouton ne reprend pas la police de son parent :
+  sans la règle de base de `css/style.css` (`input, select, textarea, button { font-family: var(--font-ui) }`) il garde celle du navigateur, Arial, à
+  côté du reste de l'interface en police du système. Tout champ ou bouton nouveau la reçoit donc sans rien ajouter, et aucune règle ne remet « Arial »
+  sur l'un d'eux. Deux cas où la règle de base ne suffit pas : un bouton en `font: inherit` prend la police de son conteneur, et un conteneur rattaché à
+  `document.body` (le panneau des polices et des tailles `.v2-format-panel`, l'invitation `.v2-hf-zone-ghost`) sort de la cascade de la barre d'outils :
+  il porte lui-même `font-family: var(--font-ui)`. Les lignes du menu des polices et des tailles ont une hauteur de ligne fixée (`line-height: 14px`,
+  celle de l'Arial d'avant) : avec `normal`, chaque police du système donnerait la sienne et le menu grandirait. Gardé par `codeHygiene` (section 12 :
+  la règle de base existe, les deux conteneurs la portent, seule la base de la page écrit « Arial ») et par les scripts Node `fieldFontsMouse` (chaque
+  champ a exactement la police du bouton voisin) et `buttonFontsMouse` (tout bouton, champ ou texte de la page au repos, puis menus, barres de
+  variable, zones d'en-tête et fenêtres ouverts), mesurés à 700×400 à la vraie souris.
+- Base de la page (avant les tokens) : `html, body { font-family: Arial, sans-serif }`, la seule règle qui écrit encore « Arial » en première police
+  (gardé par `codeHygiene`). Ce qui n'a pas de police à lui la reprend par héritage. Depuis le 12/10, plus aucun bouton, champ ni libellé de
+  l'interface n'en dépend (relevé dans Chromium à la souris : au repos, menus, barres de variable, zones d'en-tête, fenêtres), et un nouvel élément
+  qui ferait exception est arrêté par `buttonFontsMouse`. Le contenu du document (`.tiptap`, la Lecture, les encadrés, le filigrane) a sa propre police,
+  Roboto, et n'en dépend pas ; le texte des en-têtes et pieds de page de la feuille (`.v2-hf-zone-body`, `.v2-page-band-header` et `-footer`), si : il s'y
+  écrit en Arial alors que le PDF l'écrit en Roboto, écart relevé le 12/10 et proposé à Antoine, voir §5.
 
 ### Thème sombre : uniquement le chrome, jamais le contenu produit
 Règle stricte, documentée en commentaire dans le CSS de Publipostage+ : le thème sombre change la couleur de la
@@ -1268,10 +1274,10 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   attendant).
 - Relevés par l'audit du 29/09 sans avoir fait l'objet d'une carte : deux sortes d'info-bulles, quatre crayons pour quatre
   fonctions, des tailles et couleurs écrites en dur dans le CSS, une lecture seule qui grise sans expliquer pourquoi (non revérifiés au 12/10).
-- Police du système, boutons et libellés restés en Arial (relevé du 12/10, §1 « Deux polices ») : les lignes du menu des polices et des
-  tailles, les boutons « FR », « US », « J », « M », « A »… de la barre d'une variable et les libellés « + Ajouter un en-tête » et « + Ajouter
-  un pied de page ». Les champs, eux, sont passés à la police du système le 12/10 (choix d'Antoine, « Oui, tous »). Question posée à Antoine
-  sur une carte : rien n'est codé avant son choix.
+- En-têtes et pieds de page de la feuille écrits en Arial (relevé du 12/10, §1 « Base de la page ») : le texte d'un en-tête ou d'un pied affiché dans
+  la feuille (`.v2-hf-zone-body`) et dans les bandes de couture (`.v2-page-band-header`, `.v2-page-band-footer`) n'a pas de police à lui et reprend l'Arial de
+  `body`, quand le PDF l'écrit en Roboto comme le reste du document (en Lecture, `#reader-container` est déjà en Roboto). Question posée à Antoine sur une
+  carte : rien n'est codé avant son choix.
 
 ---
 
@@ -1301,6 +1307,9 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
   export, tableaux, couleurs, contrastes…) se sont ajoutées à §1 et §3 sans ligne ici : l'historique complet est dans git
   (`planning/identite-ui-ux-grist-factory.md`).
 - 2026-10-12 (suite) : les champs de saisie passent à la police du système (« Oui, tous » d'Antoine, à la carte posée pendant la relecture) :
-  règle de base `input, select, textarea` et fin du « Arial » écrit en dur dans la barre du haut (§1, « Les champs prennent la police des
-  boutons »), gardé par `codeHygiene` et `fieldFontsMouse`. Des boutons et des libellés restent en Arial par héritage de la base de la page
-  (§1, §5) : question posée à Antoine.
+  règle de base `input, select, textarea` et fin du « Arial » écrit en dur dans la barre du haut, gardé par `codeHygiene` et `fieldFontsMouse`.
+  Des boutons et des libellés restaient en Arial par héritage de la base de la page : repris dans l'entrée suivante.
+- 2026-10-12 (suite 2) : les boutons et les libellés passent aussi à la police du système (« Oui, tous » d'Antoine, à la seconde carte) : la règle
+  de base couvre `button`, le panneau des polices et des tailles et l'invitation des zones d'en-tête et de pied portent la police eux-mêmes, et les
+  lignes du menu des polices ont une hauteur de ligne fixée (§1, « Les champs, les boutons et les libellés prennent la police des boutons »),
+  gardé par `codeHygiene` et `buttonFontsMouse` ; §5 ne garde plus cette question.
