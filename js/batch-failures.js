@@ -2,9 +2,10 @@
 // pas pu générer (à la fin du lot : quels documents manquent dans le fichier téléchargé, et pourquoi, sans ouvrir la console du navigateur) et les pages
 // blanches d'un PDF (avant d'enregistrer le PDF d'une ligne ; à la fin d'un lot, quelles lignes en ont).
 //  BatchFailures.show(failures, { ok?, format? }) -> Promise<void> (se résout à la fermeture ; rien à lister : la fenêtre ne s'ouvre pas)
-//    failures : [{ id, name?, wrongKind?, message? }] - le n° de la ligne dans Grist ; le nom que son fichier aurait porté (absent : le modèle n'en
-//    donne pas, la ligne se reconnaît à son n°) ; le genre de modèle que l'export ne fait pas ('grid' : une grille en Word ; 'document' : un document
-//    en Excel) ; sinon le texte de l'erreur levée pendant la génération.
+//    failures : [{ id, name?, wrongKind?, passwordProblem?, column?, message? }] - le n° de la ligne dans Grist ; le nom que son fichier aurait porté (absent :
+//    le modèle n'en donne pas, la ligne se reconnaît à son n°) ; le genre de modèle que l'export ne fait pas ('grid' : une grille en Word ; 'document' : un
+//    document en Excel) ; le mot de passe de sa ligne que la colonne `column` ne donne pas (« PDF protégé », « Un par ligne » : 'empty', 'type', 'tooLong' ou
+//    'missing', cf. PdfProtection.settingsForRow) ; sinon le texte de l'erreur levée pendant la génération.
 //    ok : le nombre de documents qui, eux, sont dans le fichier téléchargé (0 : rien n'a été téléchargé) ; format : le nom de l'export ('DOCX',
 //    'Excel'), repris par la raison « genre de modèle ».
 //  BatchFailures.confirmBlankPages(pages) -> Promise<boolean> (vrai : exporter quand même ; faux : « Annuler », Échap compris) - `pages` : les numéros,
@@ -20,6 +21,7 @@ const BatchFailures = (function () {
 
   function reasonText(failure, format) {
     if (failure.wrongKind) return I18n.t('batchFailures.wrongKind.' + failure.wrongKind, { format });
+    if (failure.passwordProblem) return I18n.t('batchFailures.password.' + failure.passwordProblem, { column: failure.column });
     const message = String(failure.message || '').replace(/\s+/g, ' ').trim();
     if (!message) return I18n.t('batchFailures.errorNoDetail');
     return I18n.t('batchFailures.error', { message: message.length > MAX_MESSAGE ? message.slice(0, MAX_MESSAGE - 1) + '…' : message });

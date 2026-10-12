@@ -716,30 +716,45 @@ la barre, fenêtre qui nomme les lignes de la zone et son aperçu, choix de la c
 
 ## 23. PDF protégé (type d'export, mot de passe, autorisations)
 
-**Couverture automatisée** : groupe `pdfProtection` (`scenarios-pdf-protection.js`, 8 cas : le module, le moteur, le fichier chiffré relu par pdf.js, le menu et ses grisés, le bouton Exporter, l'archive ZIP, la fenêtre),
-un cas d'`exportChoices` (le type se retient par personne et par modèle), `exportType` (quatre types) et le script Node `pdfProtectionMouse` (vraie souris et vraie frappe à 700×400, clair et sombre, français et anglais ; les
-fichiers téléchargés sont relus par poppler et pypdf : refus sans mot de passe ou avec un mauvais, ouverture avec le bon, texte, autorisations, propriétés).
-**Non couvert** : l'ouverture dans les visionneuses du quotidien (Adobe Acrobat, Aperçu de macOS, Edge, Chrome, un lecteur sur téléphone), qui n'appliquent pas toutes les autorisations de la même façon, et un document Grist réel.
+**Couverture automatisée** : groupe `pdfProtection` (`scenarios-pdf-protection.js`, 15 cas : le module et ses trois façons de donner le mot de passe, le moteur, le fichier chiffré relu par pdf.js, le menu et ses grisés, le bouton Exporter,
+l'archive ZIP, la fenêtre, le mot de passe de chaque ligne et le mot de passe commun écrit dans le document), `documentSettingsUnit` (la colonne et la ligne du mot de passe commun), un cas d'`exportChoices` (le type se retient par
+personne et par modèle), `exportType` (quatre types) et le script Node `pdfProtectionMouse` (vraie souris et vraie frappe à 700×400, clair et sombre, français et anglais ; les fichiers téléchargés sont relus par poppler et pypdf :
+refus sans mot de passe ou avec un mauvais, ouverture avec le bon, texte, autorisations, propriétés ; un PDF par ligne ouvert avec le mot de passe de sa ligne).
+**Non couvert** : l'ouverture dans les visionneuses du quotidien (Adobe Acrobat, Aperçu de macOS, Edge, Chrome, un lecteur sur téléphone), qui n'appliquent pas toutes les autorisations de la même façon, et un document Grist réel
+(en particulier les permissions avancées de Grist sur la colonne du mot de passe : la fenêtre en parle, seul un vrai document dit qui peut la lire).
 
 ### Protocole
 1. Dans un document Grist, ouvrir un modèle, choisir « PDF protégé » dans « Type d'export » : la ligne est active, le bouton du type est allumé ; la qualité du PDF (Vectoriel, Léger) est montrée, « Impression navigateur »
    est grisée (survol : « Pas disponible en PDF protégé : l'impression par le navigateur ne chiffre pas le fichier. »). Dans le menu « Exporter », « Toutes les lignes en un seul PDF » et « Assemblage avant impression » sont
    grisées avec leur raison ; « Une seule ligne » et « Toutes les lignes (ZIP) » sont actives.
-2. « Exporter » : la fenêtre « PDF protégé » s'ouvre, le focus est dans « Mot de passe pour ouvrir le PDF » (masqué) ; « Imprimer » et « Copier le texte et les images » sont cochés, « Modifier ou annoter » ne l'est pas,
-   « Exporter » est actif. Cocher « Modifier ou annoter » (tout est alors permis) sans mot de passe : « Exporter » se grise et la phrase « Rien n'est protégé : choisir un mot de passe ou retirer une autorisation. » le
-   dit. Taper un mot de passe avec un accent (« Sésame2026 ») : « Exporter » se dégrise ; « Afficher le mot de passe » le montre. Échap : rien n'est téléchargé, l'état dit « Export annulé. ».
+2. « Exporter » : la fenêtre « PDF protégé » s'ouvre avec trois façons de donner le mot de passe : « Saisi à chaque export (recommandé) » (cochée au départ), « Le même pour tous, enregistré dans le document » et « Un par ligne,
+   lu dans une colonne ». Avec la première, le focus est dans « Mot de passe pour ouvrir le PDF » (masqué) ; « Imprimer » et « Copier le texte et les images » sont cochés, « Modifier ou annoter » ne l'est pas, « Exporter » est
+   actif. Cocher « Modifier ou annoter » (tout est alors permis) sans mot de passe : « Exporter » se grise et la phrase « Rien n'est protégé : choisir un mot de passe ou retirer une autorisation. » le dit. Taper un mot de
+   passe avec un accent (« Sésame2026 ») : « Exporter » se dégrise ; « Afficher le mot de passe » le montre. Échap : rien n'est téléchargé, l'état dit « Export annulé. ».
 3. Taper le mot de passe, décocher « Copier le texte et les images », ouvrir « Propriétés du PDF (facultatif) » et saisir un auteur, un sujet et des mots-clés, puis « Exporter » : le PDF est téléchargé, l'état dit « PDF protégé
    généré. ». L'ouvrir dans Acrobat (ou Aperçu) : il demande le mot de passe, refuse un mauvais, s'ouvre avec le bon (accent compris) ; Fichier > Propriétés montre l'auteur, le sujet et les mots-clés ; la sélection de texte
    et la copie sont refusées ; l'impression reste permise. Le texte et la mise en page sont ceux du PDF ordinaire du même modèle.
-4. Rouvrir la fenêtre : le champ du mot de passe est vide et masqué (il n'est gardé nulle part), « Imprimer » est coché, « Copier » décoché et l'auteur est celui de tout à l'heure (retenus par navigateur) ; le sujet et les
-   mots-clés sont vides.
+4. Rouvrir la fenêtre : la façon choisie est retrouvée, le champ du mot de passe saisi est vide et masqué (il n'est gardé nulle part), « Imprimer » est coché, « Copier » décoché et l'auteur est celui de tout à l'heure
+   (retenus par navigateur) ; le sujet et les mots-clés sont vides.
 5. Champ du mot de passe vide, « Modifier ou annoter » décoché : « Exporter » est actif ; le PDF obtenu s'ouvre sans mot de passe, mais la visionneuse applique les droits (modifier, annoter ou remplir un formulaire
    refusés, selon l'application). Cocher les trois droits sans mot de passe grise « Exporter ».
-6. « Toutes les lignes (ZIP) » puis « Exporter » : la fenêtre commence par « N PDF protégés pour « Table », regroupés dans une archive ZIP avec le même mot de passe et les mêmes autorisations » et son bouton se nomme « Générer » ;
-   aucune autre confirmation ne suit. L'archive contient un PDF par ligne, chacun s'ouvre avec ce mot de passe. Annuler : rien n'est généré.
-7. Passer à « PDF », exporter : aucune fenêtre, un PDF ordinaire (sans mot de passe) ; revenir à « PDF protégé » : l'option de lignes et la qualité choisies avant sont retrouvées.
-8. Panneau de 700 × 400, en clair, en sombre et en anglais (« Protected PDF », « Password to open the PDF », « Permissions for whoever opens the PDF ») : la fenêtre tient, titre et boutons visibles, le mot de passe et
-   les droits sans défiler ; le groupe des propriétés, ouvert, fait défiler le contenu seul.
+6. « Le même pour tous, enregistré dans le document » : la fenêtre dit où le mot de passe s'écrit (« Enregistré dans la table « Publipostage_Modeles », colonne « MotDePassePdf » (« Mot de passe des PDF protégés »), ligne
+   « Réglages du document ». ») et le risque (« Risque : ce mot de passe est écrit en clair dans le document. Toute personne qui l'ouvre peut le lire, sauf si des permissions avancées de Grist en réservent l'accès. »).
+   Taper un mot de passe, « Exporter » : le PDF s'ouvre avec lui et pas sans. Dans Grist, la table « Publipostage_Modeles » a une colonne « Mot de passe des PDF protégés » et une seule ligne « Réglages du document » qui le
+   porte (cette ligne n'est pas un modèle : la liste des modèles ne change pas). Rouvrir la fenêtre : la façon et le mot de passe (masqué) reviennent ; l'exporter sans y toucher ne réécrit rien. Le changer : la même ligne est
+   mise à jour, jamais une seconde. Dans Grist, restreindre la colonne dans les permissions avancées à une personne : une autre personne qui ouvre la fenêtre ne voit pas le mot de passe (à vérifier sur un vrai document).
+7. « Un par ligne, lu dans une colonne » : une liste avec recherche propose les colonnes de la table qui peuvent porter un mot de passe (texte, choix, nombre ; ni les dates ni les cases à cocher) ; la fenêtre prévient que les mots
+   de passe sont écrits en clair dans la table et lisibles par toute personne qui ouvre le document, sauf permissions avancées de Grist ; « Exporter » reste grisé, avec la phrase « Choisir la colonne des mots de passe. »,
+   tant qu'aucune colonne n'est choisie. Choisir la colonne : le PDF de la ligne affichée s'ouvre avec le mot de passe de SA cellule (espaces autour retirés) et pas avec celui d'une autre ligne. Sur une ligne dont la cellule
+   est vide : rien n'est téléchargé et l'état dit « Pas de mot de passe pour cette ligne : la colonne « … » est vide. Aucun PDF n'a été généré. » ; le bouton Exporter se libère.
+8. « Toutes les lignes (ZIP) » puis « Exporter » : la fenêtre commence par « N PDF protégés pour « Table », regroupés dans une archive ZIP avec le même mot de passe et les mêmes autorisations » (ou « …chacun avec le mot de passe
+   de sa ligne… » pour « Un par ligne ») et son bouton se nomme « Générer » ; aucune autre confirmation ne suit. L'archive contient un PDF par ligne, chacun s'ouvre avec ce mot de passe (ou avec celui de sa ligne). Pour « Un par
+   ligne » avec une cellule vide : une fenêtre « Un document n'a pas été généré » liste « Ligne n° 3 : la colonne « … » est vide : pas de mot de passe pour ce PDF », l'archive contient les autres PDF et l'état dit
+   « N PDF protégés générés, 1 échec — archive ZIP téléchargée. ». Annuler : rien n'est généré.
+9. Passer à « PDF », exporter : aucune fenêtre, un PDF ordinaire (sans mot de passe) ; revenir à « PDF protégé » : l'option de lignes et la qualité choisies avant sont retrouvées.
+10. Panneau de 700 × 400, en clair, en sombre et en anglais (« Protected PDF », « Password to open the PDF », « Permissions for whoever opens the PDF ») : la fenêtre tient, titre et boutons visibles, les trois façons et le
+    bloc de celle qui est choisie sans défiler (le mot de passe et les droits pour « saisi à chaque export » ; le champ, l'endroit et le risque pour « le même pour tous » ; la liste, l'aide et le risque pour « un par ligne ») ;
+    le groupe des propriétés, ouvert, fait défiler le contenu seul. Fermer puis rouvrir la fenêtre : les propriétés sont repliées et le contenu est en haut, quelle que soit la façon de la fois d'avant.
 
 ---
 

@@ -1676,20 +1676,30 @@
     },
   };
 
+  // Les réglages de « PDF protégé » pour la ligne affichée : ceux de la fenêtre tels quels, sauf pour « Un par ligne », où le mot de passe est celui de la cellule de CETTE ligne. La ligne
+  // de l'écran (grist.onRecord) ne porte que les colonnes affichées : la ligne se relit en entier dans Grist, colonne des mots de passe comprise. Lève l'erreur de
+  // PdfProtection.settingsForRow (`passwordProblem`, `column`) quand la cellule ne donne pas un mot de passe utilisable.
+  async function protectionForRecord(protection, tableId, record) {
+    if (protection.mode !== 'column') return protection;
+    return PdfProtection.settingsForRow(protection, await GristAPI.fetchRowById(tableId, record.id, true));
+  }
+
   async function exportRecordAs(kind) {
     const spec = SINGLE_EXPORTS[kind];
     Editor.exitHeaderFooterModeIfActive();
     const record = GristAPI.getCurrentRecord();
     if (!record) { alert(exportText(spec.noRecord)); return; }
     // « PDF protégé » : la fenêtre du mot de passe d'abord, avant « Génération en cours… » - y renoncer ne lance rien. Elle vaut aussi pour le lot que découpe « Un document par valeur ».
+    const tableId = currentTableId || GristAPI.getCurrentTableId();
     let protection;
     if (spec.protect) {
-      protection = await PdfProtectionDialog.open({});
+      protection = await PdfProtectionDialog.open({ table: tableId });
       if (!protection) { setStatus(I18n.t('status.exportCancelled')); return; }
     }
     setStatus(I18n.t(spec.generating));
     try {
-      const tableId = currentTableId || GristAPI.getCurrentTableId();
+      // « Un par ligne » : le mot de passe de CETTE ligne, lu maintenant ; sa cellule inutilisable arrête l'export avant tout travail (jamais un PDF sans le mot de passe attendu).
+      if (protection) protection = await protectionForRecord(protection, tableId, record);
       const doc = await currentRecordDocument(tableId, record);
       if (doc.split) { await onExportBatch(spec.batch, doc.split, { protection }); return; }
       await ExportEngines.ensure(spec.engines);
@@ -1700,6 +1710,8 @@
     } catch (e) {
       // « Annuler » sur la fenêtre des images d'un site externe (js/external-images.js) : un choix, pas une erreur.
       if (ExternalImages.isCancel(e)) { setStatus(I18n.t('status.exportCancelled')); return; }
+      // « Un par ligne » : la cellule de mot de passe de cette ligne ne sert pas (vide, trop longue...) - la phrase dit laquelle et quelle colonne, rien n'a été généré.
+      if (e && e.passwordProblem) { setStatus(I18n.t('status.pdfPasswordProblem.' + e.passwordProblem, { column: e.column }), true); return; }
       // Un document de plus de PrintExport.MAX_PAGES pages : l'impression navigateur le refuse (son coût croît avec le carré du nombre de pages) ; ce n'est
       // pas une panne, la phrase dit quoi choisir à la place.
       if (PrintExport.isTooLong(e)) { setStatus(I18n.t('status.printTooLong', { n: e.pages, max: PrintExport.MAX_PAGES }), true); return; }
@@ -2140,9 +2152,10 @@
     }
     // La qualité choisie au départ de l'export vaut pour tout le lot : un changement de ligne dans le menu pendant qu'il tourne n'y change rien.
     const imageQuality = pdfImageQuality();
-    // Un lot protégé : le mot de passe et les autorisations de la fenêtre pour chaque PDF, chacun avec son propre mot de passe « propriétaire » tiré au hasard.
+    // Un lot protégé : le mot de passe et les autorisations de la fenêtre pour chaque PDF - le mot de passe de sa ligne en mode « Un par ligne », et c'est cette ligne qui échoue, jamais
+    // le lot, quand sa cellule ne sert pas -, chacun avec son propre mot de passe « propriétaire » tiré au hasard.
     const protection = sheetSetup && sheetSetup.protection;
-    const render = doc => cfg.renderRow(doc.html, tableId, doc.row, doc.source.filenameTemplate, doc.headerFooterData, doc.source.margins, doc.source.pageOptions, doc.source.typeModele, imageQuality, protection ? PdfProtection.docFields(protection) : undefined);
+    const render = doc => cfg.renderRow(doc.html, tableId, doc.row, doc.source.filenameTemplate, doc.headerFooterData, doc.source.margins, doc.source.pageOptions, doc.source.typeModele, imageQuality, protection ? PdfProtection.docFields(PdfProtection.settingsForRow(protection, doc.row)) : undefined);
     if (cfg.merged) {
       const pdf = await (cfg.sheets ? PdfMerge.createSheets(tableId, sheetSetup.layout) : PdfMerge.create(tableId));
       return {
@@ -2270,7 +2283,7 @@
         // « Annuler » sur la fenêtre des images d'un site externe arrête tout le lot, pas seulement cette ligne : rien n'est téléchargé.
         if (ExternalImages.isCancel(e)) { cancelled = true; break; }
         console.error('[main] export ' + cfg.label + ' en lot : échec pour la ligne', row.id, e);
-        failedJobs.push({ row, source, valueName, message: e && e.message });
+        failedJobs.push({ row, source, valueName, message: e && e.message, passwordProblem: e && e.passwordProblem, column: e && e.column });
         failedRows.add(row.id);
       }
     }
@@ -2287,12 +2300,12 @@
     if (!failedJobs.length) return [];
     return GristAPI.withReadPass(async () => {
       const failures = [];
-      for (const { row, source, valueName, wrongKind, message, pages } of failedJobs) {
+      for (const { row, source, valueName, wrongKind, message, pages, passwordProblem, column } of failedJobs) {
         let name = '';
         try {
           if (source && source.filenameTemplate) name = sanitizeFilenamePart(await ReaderMode.resolveFilename(source.filenameTemplate, tableId, row));
         } catch (e) { name = ''; }
-        failures.push({ id: row.id, name: valueName ? (name ? name + ' - ' : '') + valueName : name, wrongKind, message, pages });
+        failures.push({ id: row.id, name: valueName ? (name ? name + ' - ' : '') + valueName : name, wrongKind, message, pages, passwordProblem, column });
       }
       return failures;
     });

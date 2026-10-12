@@ -12,7 +12,9 @@
 //  4) une autre personne qui écrit apparaît à la lecture suivante, mais une lecture partie avant une écriture de ce widget ne la défait pas ;
 //  5) une écriture qui échoue (droit d'écriture absent, Grist injoignable) rend faux et laisse les lecteurs sur le dernier état confirmé, avec un avertissement ;
 //  6) une ligne écrite à la main (JSON illisible, tableau, plusieurs lignes) ne casse rien : première ligne, objet seulement ;
-//  7) un document créé avant la colonne TypeModele la reçoit avant la première écriture (jamais un AddRecord sur une colonne inconnue, qui annulerait le lot).
+//  7) un document créé avant la colonne TypeModele la reçoit avant la première écriture (jamais un AddRecord sur une colonne inconnue, qui annulerait le lot) ;
+//  9) le mot de passe commun des PDF protégés (demande du 12/10, « un mot de passe stocké dans grist pour l'ensemble des pdf ») : une colonne de plus de la même ligne
+//     réservée, créée à la première écriture seulement, jamais dans un cache du widget, écrite sans doubler la ligne des réglages dans aucun des deux ordres.
 // Lancer : node dev-tests/unit-document-settings.mjs
 import { createContext, loadScript, evalIn, check, summarizeAndExit } from './unit-harness.mjs';
 
@@ -34,6 +36,8 @@ class Doc {
     this.fetchDelay = 0;
     this.writeDelay = 0;
     this.failWrites = null; // (action) => Error | null
+    this.failFetch = false; // la table est illisible
+    this.hidden = [];       // des colonnes que les règles d'accès cachent à cette personne : fetchTable ne les rend pas, mais elles existent
   }
 
   addRow(row) { const full = Object.assign({ id: this.nextId++ }, row); this.rows.push(full); return full.id; }
@@ -43,8 +47,9 @@ class Doc {
 
   async fetchTable(table) {
     if (table !== 'Publipostage_Modeles') throw new Error('Invalid table ' + table);
+    if (this.failFetch) throw new Error('Table illisible');
     const out = { id: this.rows.map((r) => r.id) };
-    this.cols.forEach((c) => { out[c] = this.rows.map((r) => (r[c] === undefined ? null : r[c])); });
+    this.cols.filter((c) => !this.hidden.includes(c)).forEach((c) => { out[c] = this.rows.map((r) => (r[c] === undefined ? null : r[c])); });
     const snapshot = JSON.stringify(out); // le serveur lit à la demande : un changement fait pendant le trajet de la réponse n'y est pas
     if (this.fetchDelay) await sleep(this.fetchDelay);
     return JSON.parse(snapshot);
@@ -68,6 +73,8 @@ class Doc {
         if (unknown.length) throw new Error('AddRecord sur une colonne inconnue : ' + unknown.join(',')); // un vrai Grist annule tout le lot
         retValues.push(this.addRow(action[3]));
       } else if (type === 'UpdateRecord') {
+        const unknown = Object.keys(action[3]).filter((c) => !this.cols.includes(c));
+        if (unknown.length) throw new Error('UpdateRecord sur une colonne inconnue : ' + unknown.join(',')); // idem : un vrai Grist annule tout le lot
         Object.assign(this.rows.find((r) => r.id === action[2]), action[3]);
         retValues.push(null);
       } else {
@@ -247,6 +254,120 @@ async function main() {
     check('sans loadAll avant : la première écriture ajoute la colonne puis crée la ligne', (await direct.run('Templates.updateDocumentSettings({ colors: ["#abcdef"] })')) === true && bare.cols.includes('TypeModele') && bare.settingsRows().length === 1, direct.warnings.join());
     const order = bare.actions.map((a) => a[0] + (a[0] === 'AddVisibleColumn' ? ':' + a[2] : ''));
     check('la colonne est ajoutée avant la ligne', order.indexOf('AddVisibleColumn:TypeModele') !== -1 && order.indexOf('AddVisibleColumn:TypeModele') < order.indexOf('AddRecord'), order.join());
+  }
+
+  // 9. Le mot de passe commun des PDF protégés : une colonne de plus de la ligne réservée des réglages.
+  {
+    const COL = 'MotDePassePdf';
+    const SECRET = 'stub-token-Sésame ÿ 42';
+    const doc = documentWith([{ Nom: 'Contrat', Contenu: '<p>a</p>' }]);
+    const { run, warnings } = fresh(doc);
+    await run('Templates.loadAll()');
+    const writesBefore = doc.actions.length;
+    const first = await run('Templates.readPdfPassword()');
+    check('lire sans rien d\'enregistré : lu, vide, et rien n\'est créé (ni colonne, ni ligne)', first.ok === true && first.password === '' && doc.actions.length === writesBefore && !doc.cols.includes(COL) && doc.settingsRows().length === 0, JSON.stringify(first));
+    check('la place du mot de passe est dite : table, colonne, libellé et ligne', sameList(run('Templates.PDF_PASSWORD_LOCATION'), { table: 'Publipostage_Modeles', column: COL, label: 'Mot de passe des PDF protégés', row: 'Réglages du document' }));
+
+    check('écrire un mot de passe rend vrai', (await run('Templates.writePdfPassword(' + JSON.stringify(SECRET) + ')')) === true, warnings.join());
+    const rows = doc.settingsRows();
+    check('une seule ligne réservée, nommée comme les réglages, qui porte le mot de passe dans sa colonne', rows.length === 1 && rows[0].Nom === 'Réglages du document' && rows[0][COL] === SECRET, JSON.stringify(rows));
+    const order = doc.actions.slice(writesBefore).map((a) => a[0] + (a[0] === 'AddVisibleColumn' ? ':' + a[2] : ''));
+    check('la colonne est créée avant la ligne (jamais un AddRecord sur une colonne inconnue)', order.indexOf('AddVisibleColumn:' + COL) !== -1 && order.indexOf('AddVisibleColumn:' + COL) < order.indexOf('AddRecord'), order.join());
+    const added = doc.actions.find((a) => a[0] === 'AddVisibleColumn' && a[2] === COL);
+    check('la colonne est de type Texte, sans formule, avec son libellé', added && added[3].type === 'Text' && added[3].isFormula === false && added[3].label === 'Mot de passe des PDF protégés', JSON.stringify(added));
+    check('aucune table de plus', doc.count('AddTable') === 0);
+    check('relu : le même mot de passe', (await run('Templates.readPdfPassword()')).password === SECRET);
+
+    const templates = await run('Templates.loadAll()');
+    check('la ligne n\'est toujours pas un modèle, les réglages du document restent vides', templates.length === 1 && sameList(run('Templates.getDocumentSettings()'), {}));
+    const leaks = JSON.stringify(run('Templates.getCached()')) + JSON.stringify(run('Templates.getDocumentSettings()'));
+    check('le mot de passe n\'entre dans aucun cache du widget (liste des modèles, réglages du document)', !leaks.includes('Sésame'), leaks);
+
+    // Les réglages du document écrits ensuite vont dans la MÊME ligne : sinon la première (celle du mot de passe) ferait foi et les couleurs seraient perdues.
+    check('un réglage du document écrit après (sans relire la table) s\'écrit dans la même ligne', (await run('Templates.updateDocumentSettings({ colors: ["#1e8449"] })')) === true && doc.settingsRows().length === 1 && sameList(JSON.parse(doc.settingsRows()[0].Contenu), { colors: ['#1e8449'] }) && doc.settingsRows()[0][COL] === SECRET, JSON.stringify(doc.settingsRows()));
+    check('et relus ensemble : couleurs et mot de passe', sameList((await run('Templates.loadAll().then(() => Templates.getDocumentSettings())')).colors, ['#1e8449']) && (await run('Templates.readPdfPassword()')).password === SECRET);
+
+    // Un autre mot de passe, le même, puis aucun.
+    const countAfter = () => doc.actions.length;
+    const mark = countAfter();
+    check('un autre mot de passe : mis à jour dans la même ligne, seule cette colonne écrite', (await run('Templates.writePdfPassword("stub-token-autre")')) === true && doc.settingsRows().length === 1 && doc.settingsRows()[0][COL] === 'stub-token-autre' && sameList(doc.actions.slice(mark).map((a) => a[0]), ['UpdateRecord']) && sameList(Object.keys(doc.actions[mark][3]), [COL]), JSON.stringify(doc.actions.slice(mark)));
+    const mark2 = countAfter();
+    check('le même mot de passe : rien n\'est écrit', (await run('Templates.writePdfPassword("stub-token-autre")')) === true && countAfter() === mark2);
+    check('un mot de passe vide le retire', (await run('Templates.writePdfPassword("")')) === true && doc.settingsRows()[0][COL] === '' && (await run('Templates.readPdfPassword()')).password === '');
+    check('une valeur qui n\'est pas du texte est écrite comme un mot de passe vide', (await run('Templates.writePdfPassword(null)')) === true && doc.settingsRows()[0][COL] === '');
+  }
+  {
+    // L'autre ordre : le mot de passe d'abord (la ligne n'existe pas encore), puis les réglages - sans relire la table entre les deux.
+    const doc = documentWith([{ Nom: 'Contrat', Contenu: '<p>a</p>' }]);
+    const { run } = fresh(doc);
+    await run('Templates.loadAll()');
+    await run('Templates.writePdfPassword("stub-token-un")');
+    await run('Templates.updateDocumentSettings({ colors: ["#7c3aed"] })');
+    check('mot de passe puis réglages : une seule ligne réservée, les deux y sont', doc.settingsRows().length === 1 && doc.settingsRows()[0].MotDePassePdf === 'stub-token-un' && sameList(JSON.parse(doc.settingsRows()[0].Contenu), { colors: ['#7c3aed'] }), JSON.stringify(doc.settingsRows()));
+    // Réglages d'abord, mot de passe ensuite.
+    const other = documentWith([{ Nom: 'Contrat', Contenu: '<p>a</p>' }]);
+    const second = fresh(other);
+    await second.run('Templates.loadAll()');
+    await second.run('Templates.updateDocumentSettings({ colors: ["#7c3aed"] })');
+    await second.run('Templates.writePdfPassword("stub-token-deux")');
+    check('réglages puis mot de passe : une seule ligne réservée, les deux y sont', other.settingsRows().length === 1 && other.settingsRows()[0].MotDePassePdf === 'stub-token-deux' && sameList(JSON.parse(other.settingsRows()[0].Contenu), { colors: ['#7c3aed'] }) && other.count('AddRecord') === 1, JSON.stringify(other.settingsRows()));
+  }
+  {
+    // La ligne réservée créée par une autre personne depuis le dernier chargement est reprise, jamais doublée.
+    const doc = documentWith([{ Nom: 'Contrat', Contenu: '<p>a</p>' }]);
+    const { run } = fresh(doc);
+    await run('Templates.loadAll()');
+    doc.addRow({ Nom: 'Réglages du document', Contenu: JSON.stringify({ colors: ['#111111'] }), TypeModele: 'reglages' });
+    check('une ligne réservée apparue depuis le chargement : le mot de passe y est écrit', (await run('Templates.writePdfPassword("stub-token-trois")')) === true && doc.settingsRows().length === 1 && doc.settingsRows()[0].MotDePassePdf === 'stub-token-trois' && doc.count('AddRecord') === 0);
+    check('ses réglages sont intacts', sameList(JSON.parse(doc.settingsRows()[0].Contenu), { colors: ['#111111'] }));
+    // Deux lignes réservées : la première fait foi, en lecture comme en écriture.
+    const doubled = documentWith([
+      { Nom: 'Réglages du document', Contenu: '{}', TypeModele: 'reglages' },
+      { Nom: 'Réglages du document', Contenu: '{}', TypeModele: 'reglages' },
+    ]);
+    const twice = fresh(doubled);
+    await twice.run('Templates.loadAll()');
+    await twice.run('Templates.writePdfPassword("stub-token-premiere")');
+    check('deux lignes réservées : seule la première porte le mot de passe, la lecture le suit', doubled.rows[0].MotDePassePdf === 'stub-token-premiere' && !doubled.rows[1].MotDePassePdf && (await twice.run('Templates.readPdfPassword()')).password === 'stub-token-premiere');
+  }
+  {
+    // Plusieurs écritures de suite : le dernier mot de passe gagne, une seule ligne.
+    const doc = documentWith([{ Nom: 'Contrat', Contenu: '<p>a</p>' }]);
+    doc.writeDelay = 15;
+    const { run } = fresh(doc);
+    await run('Templates.loadAll()');
+    const all = await Promise.all(['stub-token-a', 'stub-token-b', 'stub-token-c'].map((p) => run('Templates.writePdfPassword("' + p + '")')));
+    check('trois écritures de suite : toutes vraies, une ligne, le dernier gagne', all.every((v) => v === true) && doc.settingsRows().length === 1 && doc.settingsRows()[0].MotDePassePdf === 'stub-token-c', JSON.stringify(doc.settingsRows()));
+    check('une colonne créée une fois', doc.actions.filter((a) => a[0] === 'AddVisibleColumn' && a[2] === 'MotDePassePdf').length === 1);
+  }
+  {
+    // Les refus : rien n'est écrit, la fenêtre l'apprend par un faux.
+    const doc = documentWith([{ Nom: 'Contrat', Contenu: '<p>a</p>' }]);
+    const { run, warnings } = fresh(doc);
+    await run('Templates.loadAll()');
+    doc.failWrites = (a) => (a[0] === 'AddRecord' ? new Error('Droit d\'écriture refusé') : null);
+    check('écriture refusée (compte sans droit) : faux, aucune ligne, un avertissement', (await run('Templates.writePdfPassword("stub-token-refus")')) === false && doc.settingsRows().length === 0 && warnings.some((w) => /mot de passe des PDF protégés non enregistré/.test(w)), warnings.join(' | '));
+    doc.failWrites = null;
+    check('Grist revenu : la suivante réussit', (await run('Templates.writePdfPassword("stub-token-refus")')) === true && doc.settingsRows().length === 1);
+
+    // Une colonne que les règles d'accès cachent : la lecture rend vide (rien à voir), l'écriture échoue sans rien casser.
+    const hiddenDoc = documentWith([{ Nom: 'Réglages du document', Contenu: '{}', TypeModele: 'reglages' }]);
+    hiddenDoc.cols.push('MotDePassePdf');
+    hiddenDoc.rows[0].MotDePassePdf = 'stub-token-cache';
+    hiddenDoc.hidden = ['MotDePassePdf'];
+    const hidden = fresh(hiddenDoc);
+    await hidden.run('Templates.loadAll()');
+    const seen = await hidden.run('Templates.readPdfPassword()');
+    check('colonne cachée par une règle d\'accès : lue sans erreur, vide', seen.ok === true && seen.password === '', JSON.stringify(seen));
+    check('colonne cachée : l\'écriture est refusée (faux), le mot de passe en place n\'est pas touché', (await hidden.run('Templates.writePdfPassword("stub-token-autre")')) === false && hiddenDoc.rows[0].MotDePassePdf === 'stub-token-cache');
+
+    // Table illisible : lire le dit (ok faux), et n'invente pas un mot de passe vide.
+    const broken = documentWith([{ Nom: 'Contrat', Contenu: '<p>a</p>' }]);
+    const unreadable = fresh(broken);
+    broken.failFetch = true;
+    const lost = await unreadable.run('Templates.readPdfPassword()');
+    check('table illisible : ok faux, mot de passe vide', lost.ok === false && lost.password === '');
+    check('table illisible : l\'écriture rend faux', (await unreadable.run('Templates.writePdfPassword("stub-token-x")')) === false);
   }
 
   // 8. Document sans table des modèles (neuf) : lire ne crée rien ; la table des modèles vient de ses propres chemins, jamais une table des réglages.

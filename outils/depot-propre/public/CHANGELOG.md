@@ -127,18 +127,27 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   aussi). Le choix vaut pour le PDF d'une ligne et pour les lots (archive ZIP, PDF unique, assemblage avant
   impression). « Vectoriel (par défaut) » reprend toujours les images telles quelles.
 - **PDF protégé** : le menu « Type d'export » propose « PDF protégé ». Un clic sur « Exporter » ouvre d'abord une
-  fenêtre : un mot de passe pour ouvrir le fichier (accents permis, 127 octets au plus), ce que la personne qui
+  fenêtre : le mot de passe pour ouvrir le fichier (accents permis, 127 octets au plus), ce que la personne qui
   l'ouvre a le droit de faire (imprimer, copier le texte et les images, modifier ou annoter : imprimer et copier
   sont permis, modifier est refusé au départ) et, dans un groupe replié, l'auteur, le sujet et les mots-clés du
   fichier. C'est le même PDF vectoriel que d'habitude, mise en page intacte, chiffré en AES-256 : sans le mot de
   passe, une visionneuse refuse de l'ouvrir. Sans mot de passe, le fichier s'ouvre tout seul et la visionneuse
   applique les droits choisis (ils ne tiennent que chez les lecteurs qui les respectent) ; la lecture par un
-  lecteur d'écran reste toujours permise. Le mot de passe n'est gardé nulle part : il se tape à chaque export ;
-  les droits et l'auteur sont retenus par navigateur. Le choix vaut pour le PDF d'une ligne et pour « Toutes les
-  lignes (ZIP) », où la fenêtre tient lieu de confirmation et dit combien de PDF partent avec ce mot de passe.
-  « Impression navigateur », « Toutes les lignes en un seul PDF » et « Assemblage avant impression » sont grisés
-  pour ce type, avec leur raison en info-bulle (le navigateur ne chiffre pas, un fichier qui réunit plusieurs
-  documents ne se protège pas) : rien n'est retiré, et le choix revient avec le PDF.
+  lecteur d'écran reste toujours permise. Le choix vaut pour le PDF d'une ligne et pour « Toutes les lignes
+  (ZIP) », où la fenêtre tient lieu de confirmation et dit combien de PDF partent. « Impression navigateur »,
+  « Toutes les lignes en un seul PDF » et « Assemblage avant impression » sont grisés pour ce type, avec leur
+  raison en info-bulle (le navigateur ne chiffre pas, un fichier qui réunit plusieurs documents ne se protège
+  pas) : rien n'est retiré, et le choix revient avec le PDF.
+- **Trois façons de donner le mot de passe d'un PDF protégé** : la fenêtre laisse le choix. « Saisi à chaque
+  export (recommandé) » : on le tape au moment d'exporter, il n'est écrit nulle part. « Le même pour tous,
+  enregistré dans le document » : un seul mot de passe pour tous les PDF, écrit en clair dans le document, table
+  « Publipostage_Modeles », colonne « MotDePassePdf », ligne « Réglages du document » ; la fenêtre le dit, avec le
+  risque (toute personne qui ouvre le document peut le lire, sauf si les permissions avancées de Grist en
+  restreignent l'accès). « Un par ligne, lu dans une colonne » : chaque PDF prend le mot de passe de sa ligne, dans
+  la colonne de la table que l'on choisit dans une liste avec recherche ; la fenêtre prévient qu'un mot de passe
+  écrit dans une table y est lisible en clair. Une ligne dont la cellule est vide (ou de plus de 127 octets) n'est
+  jamais exportée sans protection : elle échoue, la fenêtre de fin de lot la liste avec sa raison et les autres
+  PDF sortent. Le navigateur retient la façon choisie, les droits, l'auteur et la colonne, jamais un mot de passe.
 
 - **Numéro de ligne dans une boucle** : la liste « # » (onglet « Puces ») propose « N° de ligne ». Posée dans
   une ligne de tableau, un élément de liste ou un paragraphe qu'une Boucle répète, la puce s'écrit 1, 2, 3…
@@ -1039,18 +1048,27 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   and an image that is already light are left alone; an image is never enlarged. The page does not move (the
   image ratio is kept, the header and footer are lightened too). The choice applies to the PDF of one row and
   to batches (ZIP archive, single PDF, sheet assembly). "Vector (default)" still takes images as they are.
-- **Protected PDF**: the "Export type" menu offers "Protected PDF". Clicking "Export" first opens a window: a
+- **Protected PDF**: the "Export type" menu offers "Protected PDF". Clicking "Export" first opens a window: the
   password to open the file (accents allowed, 127 bytes at most), what the person who opens it may do (print,
   copy the text and images, edit or annotate: printing and copying are allowed, editing is refused by default) and,
   in a collapsed group, the file's author, subject and keywords. It is the same vector PDF as usual, layout
   untouched, encrypted with AES-256: without the password, a viewer refuses to open it. With no password, the
   file opens by itself and the viewer applies the chosen permissions (they only bind the viewers that honour
-  them); reading by a screen reader is always allowed. The password is kept nowhere: you type it at each export;
-  the permissions and the author are remembered per browser. The choice applies to the PDF of one row and to
-  "All rows (ZIP)", where the window replaces the confirmation and says how many PDFs leave with this password.
-  "Browser print", "All rows as a single PDF" and "Assemble before printing" are greyed out for this type, with
-  their reason in a tooltip (the browser does not encrypt, a file combining several documents cannot be
-  protected): nothing is removed, and the choice comes back with the PDF.
+  them); reading by a screen reader is always allowed. The choice applies to the PDF of one row and to
+  "All rows (ZIP)", where the window replaces the confirmation and says how many PDFs leave. "Browser print",
+  "All rows as a single PDF" and "Assemble before printing" are greyed out for this type, with their reason in a
+  tooltip (the browser does not encrypt, a file combining several documents cannot be protected): nothing is
+  removed, and the choice comes back with the PDF.
+- **Three ways to give the password of a protected PDF**: the window lets you choose. "Typed at each export
+  (recommended)": you type it when you export, it is written nowhere. "Same for all, saved in the document": a
+  single password for all the PDFs, written in plain text in the document, table "Publipostage_Modeles", column
+  "MotDePassePdf", row "Réglages du document"; the window says so, with the risk (anyone who opens the document can
+  read it, unless advanced Grist permissions restrict access). "One per row, read from a column": each PDF takes
+  the password of its own row, in the column of the table you choose from a searchable list; the window warns
+  that a password written in a table can be read there in plain text. A row whose cell is empty (or over 127 bytes)
+  is never exported unprotected: it fails, the window at the end of the batch lists it with its reason and the
+  other PDFs are delivered. The browser remembers the chosen way, the permissions, the author and the column,
+  never a password.
 
 - **Row number in a loop**: the "#" list ("Chips" tab) offers "Row number". Placed in a table row, a list
   item or a paragraph that a Loop repeats, the chip is written as 1, 2, 3… in Reading and in the exports

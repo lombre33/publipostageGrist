@@ -1,6 +1,9 @@
 // Module de gestion des modèles : CRUD sur la table Grist Publipostage_Modeles.
 const Templates = (function () {
   const TABLE_NAME = 'Publipostage_Modeles';
+  // La colonne où le document garde, quand la personne le choisit, le mot de passe commun des PDF protégés (cf. writePdfPassword plus bas).
+  const PDF_PASSWORD_COLUMN = 'MotDePassePdf';
+  const PDF_PASSWORD_LABEL = 'Mot de passe des PDF protégés';
   let templatesCache = [];
   // Les mises à jour du cache que les écritures de CE widget font (cf. settleWritten) : un compteur, et pour chaque ligne sa valeur à la dernière mise à jour. loadAll s'en sert pour ne pas
   // remettre dans le cache l'état d'avant d'une ligne que ce widget a écrite pendant sa lecture (cf. keepWrittenSince).
@@ -107,12 +110,16 @@ const Templates = (function () {
     // pas : un document qui ne lie aucun tableau n'a pas de colonne de plus ; elle se crée à la première pose d'un lien. Un enregistrement (saveRow) n'écrit jamais cette colonne :
     // un modèle enregistré garde son jeton.
     const ensureTokenColumn = ensureColumns([['Jeton', 'Text', 'Identité du modèle']]);
+
+    // Le mot de passe commun des PDF protégés (writePdfPassword). Comme le jeton, ni loadAll ni saveRow ne la lancent : un document qui ne garde aucun mot de passe n'a pas de
+    // colonne de plus ; elle se crée à la première écriture d'un mot de passe, jamais pour le lire.
+    const ensurePdfPasswordColumn = ensureColumns([[PDF_PASSWORD_COLUMN, 'Text', PDF_PASSWORD_LABEL]]);
     return {
-      ensureHeaderFooterColumn, ensureMarginsColumn, ensureDateModifColumn, ensureDefaultColumn, ensureEmailColumns, ensureTrackChangesColumn, ensureTokenColumn,
+      ensureHeaderFooterColumn, ensureMarginsColumn, ensureDateModifColumn, ensureDefaultColumn, ensureEmailColumns, ensureTrackChangesColumn, ensureTokenColumn, ensurePdfPasswordColumn,
     };
   }
   const {
-    ensureHeaderFooterColumn, ensureMarginsColumn, ensureDateModifColumn, ensureDefaultColumn, ensureEmailColumns, ensureTrackChangesColumn, ensureTokenColumn,
+    ensureHeaderFooterColumn, ensureMarginsColumn, ensureDateModifColumn, ensureDefaultColumn, ensureEmailColumns, ensureTrackChangesColumn, ensureTokenColumn, ensurePdfPasswordColumn,
   } = defineColumnMigrations();
 
   function safeParseHeaderFooter(json) {
@@ -334,6 +341,56 @@ const Templates = (function () {
       settingsEpoch++;
       if (!GristAPI.isTablesDeclined(e)) console.warn('[Templates] réglages du document non enregistrés', e);
       if (settingsPending === 0) documentSettings = settingsSaved;
+      return false;
+    });
+  }
+
+  // Le mot de passe commun des PDF protégés, quand la personne a choisi de le garder dans le document (mode « le même pour tous, enregistré dans le document » de la fenêtre
+  // js/pdf-protection-dialog.js ; demande du 12/10 : « un mot de passe stocké dans grist pour l'ensemble des pdf, bien indiqué dans quel table/colonne il sera stocké et le
+  // risque »). Il s'écrit dans la colonne PDF_PASSWORD_COLUMN de la même ligne réservée que les réglages du document, et non dans leur JSON : une règle d'accès de Grist peut ainsi
+  // masquer cette colonne seule. Il y est EN CLAIR - toute personne qui ouvre le document le lit, sauf règle d'accès -, et c'est ce que la fenêtre dit. Il n'entre dans aucun cache du
+  // widget (ni la liste des modèles, ni getDocumentSettings) : chaque lecture relit la table. PDF_PASSWORD_LOCATION dit où le chercher, pour que la fenêtre le nomme.
+  const PDF_PASSWORD_LOCATION = Object.freeze({ table: TABLE_NAME, column: PDF_PASSWORD_COLUMN, label: PDF_PASSWORD_LABEL, row: SETTINGS_NAME });
+
+  // Le rang de la ligne réservée dans `data` (la première s'il y en a plusieurs, comme loadAll), -1 quand la table n'en a pas.
+  const settingsRowAt = data => data.id.findIndex((id, i) => isSettingsRow(data, i));
+
+  // Rend { ok, password } : `ok` faux quand la table n'a pas pu être lue (refusée, absente, Grist injoignable) ; sinon le mot de passe gardé, '' quand il n'y en a pas - ni colonne, ni
+  // ligne, ou une colonne que les règles d'accès cachent à cette personne. Lire ne crée jamais rien.
+  async function readPdfPassword() {
+    const data = await readTable();
+    if (!data || !Array.isArray(data.id)) return { ok: false, password: '' };
+    const at = settingsRowAt(data);
+    const cell = at === -1 || !Array.isArray(data[PDF_PASSWORD_COLUMN]) ? '' : data[PDF_PASSWORD_COLUMN][at];
+    return { ok: true, password: typeof cell === 'string' ? cell : (typeof cell === 'number' ? String(cell) : '') };
+  }
+
+  // Écrit le mot de passe ('' le retire) : la colonne est créée au besoin (jamais un UpdateRecord ni un AddRecord sur une colonne inconnue, qui annulerait le lot), la ligne réservée
+  // relue juste avant - une autre personne a pu la créer depuis le dernier chargement - et créée seulement si aucune n'existe. Même file d'écritures et même garde de lecture que
+  // updateDocumentSettings : une lecture qui croise cette écriture n'écrase pas l'identifiant de la ligne que ce widget vient de créer. Rend vrai quand Grist l'a écrit, faux sinon
+  // (table refusée, droit d'écriture absent, colonne que les règles d'accès cachent, Grist injoignable) : la fenêtre n'exporte alors pas.
+  function writePdfPassword(password) {
+    const wanted = typeof password === 'string' ? password : '';
+    settingsPending++;
+    settingsEpoch++;
+    settingsQueue = settingsQueue || GristAPI.createWriteQueue();
+    return settingsQueue.enqueue(async () => {
+      await ensureEmailColumns(); // TypeModele : la colonne qui désigne la ligne
+      await ensurePdfPasswordColumn();
+      const data = await grist.docApi.fetchTable(TABLE_NAME);
+      if (!Array.isArray(data[PDF_PASSWORD_COLUMN])) throw new Error('Colonne ' + PDF_PASSWORD_COLUMN + ' absente ou cachée : le mot de passe n’est pas enregistré.');
+      const at = settingsRowAt(data);
+      if (at === -1) {
+        const result = await grist.docApi.applyUserActions([['AddRecord', TABLE_NAME, null, { Nom: SETTINGS_NAME, TypeModele: SETTINGS_TYPE, [PDF_PASSWORD_COLUMN]: wanted }]]);
+        if (settingsRowId == null) settingsRowId = result.retValues[0];
+        return;
+      }
+      if (settingsRowId == null) settingsRowId = data.id[at];
+      if (data[PDF_PASSWORD_COLUMN][at] !== wanted) await grist.docApi.applyUserActions([['UpdateRecord', TABLE_NAME, data.id[at], { [PDF_PASSWORD_COLUMN]: wanted }]]);
+    }).then(() => { settingsPending--; settingsEpoch++; return true; }, (e) => {
+      settingsPending--;
+      settingsEpoch++;
+      if (!GristAPI.isTablesDeclined(e)) console.warn('[Templates] mot de passe des PDF protégés non enregistré', e);
       return false;
     });
   }
@@ -663,6 +720,6 @@ const Templates = (function () {
   return {
     loadAll, getCached, byId, getCurrentId, setCurrentId, isCurrent, getDefaultId, isDefault, canBeDocumentDefault, setDefault, save, saveContent: saveContentTracked, ensureToken, remove, sameName, uniqueName,
     getWriteSeq: writes.seq, isWriting: writes.isWriting, whenIdle: writes.whenIdle, lastWritten: writes.lastWritten,
-    sameDateModif, getLoadedChars, TABLE_NAME, getDocumentSettings, updateDocumentSettings,
+    sameDateModif, getLoadedChars, TABLE_NAME, getDocumentSettings, updateDocumentSettings, readPdfPassword, writePdfPassword, PDF_PASSWORD_LOCATION,
   };
 })();

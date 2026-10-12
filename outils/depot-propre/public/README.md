@@ -103,7 +103,10 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
   une ligne comme pour les lots
 - PDF protégé : le même PDF vectoriel chiffré en AES-256, avec un mot de passe pour l'ouvrir (facultatif),
   des autorisations (imprimer, copier, modifier) et l'auteur, le sujet et les mots-clés du fichier, pour une
-  ligne comme pour l'archive ZIP ; le mot de passe n'est gardé nulle part
+  ligne comme pour l'archive ZIP. Le mot de passe se donne de trois façons, au choix : saisi à chaque export
+  (recommandé, il n'est écrit nulle part), le même pour tous les PDF et enregistré dans le document (en clair,
+  table « Publipostage_Modeles », colonne « MotDePassePdf » : la fenêtre dit où et le risque), ou un par ligne,
+  lu dans une colonne de la table (une ligne sans mot de passe utilisable n'est pas exportée et un lot la liste)
 - Export en lot en un clic : un PDF par ligne dans une archive ZIP, ou toutes les lignes dans un seul
   PDF. Il suit les lignes que le widget affiche dans Grist (ses filtres, son tri, le lien « Sélectionner
   par ») : quand il n'en affiche qu'une partie, il demande s'il faut exporter celles-ci ou toute la table
@@ -193,11 +196,16 @@ Grist, configurées sur le document par son propriétaire, continuent de s'appli
 utilisateur restreint à certaines tables ou colonnes le reste en utilisant le widget. C'est donc au
 niveau du document Grist lui-même que doit se faire une éventuelle restriction fine des données, pas
 dans la configuration du widget. Les « droits par personne » du widget (Réglages > Accès) ne sont qu'un
-verrou d'interface : ils grisent des commandes, ils ne protègent aucune donnée.
+verrou d'interface : ils grisent des commandes, ils ne protègent aucune donnée. Pour la même raison, un mot
+de passe de PDF protégé écrit dans le document (« Le même pour tous, enregistré dans le document », ou les mots de
+passe d'une colonne avec « Un par ligne ») y est lisible en clair par toute personne qui l'ouvre, sauf
+permissions avancées de Grist sur cette colonne : « Saisi à chaque export » est la façon la plus sûre, et la
+fenêtre le dit.
 
 Le widget écrit dans sept tables du document, toutes préfixées `Publipostage_` : `Publipostage_Modeles`
 (les modèles, et une ligne « Réglages du document » qui garde les couleurs partagées par tous les
-modèles), `Publipostage_Commentaires`, `Publipostage_PreferencesModeles` (épingles, dossiers et choix d'export
+modèles et, seulement si vous choisissez « Le même pour tous, enregistré dans le document » pour un PDF protégé,
+ce mot de passe commun, en clair, dans sa colonne `MotDePassePdf`), `Publipostage_Commentaires`, `Publipostage_PreferencesModeles` (épingles, dossiers et choix d'export
 de chaque personne), `Publipostage_Abreviations`, `Publipostage_FormatsPage`, `Publipostage_LiensTables`
 (les clés de correspondance entre tables) et `Publipostage_UserProbe` (qui sert à lire l'e-mail de la
 personne connectée). Il ne les crée qu'avec l'accord de la personne : avant la première création, une
@@ -236,7 +244,7 @@ confirmation.
 Aucune donnée n'est stockée hors de Grist. Les seules informations conservées dans le navigateur
 (`localStorage`) sont des préférences d'interface (langue, thème, touches, raccourcis et vue de leur
 panneau, messagerie du mode Email, état de l'enregistrement automatique, dernier choix de l'assemblage avant impression, autorisations
-et auteur du PDF protégé - jamais son mot de passe), le niveau
+et auteur du PDF protégé, façon de donner son mot de passe et colonne des mots de passe - jamais un mot de passe), le niveau
 de zoom de la page des derniers modèles ouverts (avec leur numéro et leur nom) et, pour suivre les
 renommages, les noms des tables et des colonnes de chaque document ouvert, jamais de donnée de ligne.
 
@@ -472,7 +480,10 @@ GitHub Pages, with no backend and no build step.
   a transparent logo stays a PNG, a small image and a QR code are left alone), for one row and for batches
 - Protected PDF: the same vector PDF encrypted with AES-256, with a password to open it (optional),
   permissions (print, copy, edit) and the file's author, subject and keywords, for one row and for the ZIP
-  archive; the password is kept nowhere
+  archive. The password comes in three ways, your choice: typed at each export (recommended, it is written
+  nowhere), the same for all the PDFs and saved in the document (in plain text, table "Publipostage_Modeles",
+  column "MotDePassePdf": the window says where and the risk), or one per row, read from a column of the table (a
+  row with no usable password is not exported and a batch lists it)
 - Batch export in one click: one PDF per row in a ZIP archive, or all rows in a single PDF. It follows
   the rows the widget shows in Grist (its filters, its sort, the "Select by" link): when it only shows
   part of the table, it asks whether to export those or the whole table
@@ -558,11 +569,15 @@ This access applies to the widget, not directly to each user: Grist's native Acc
 document by its owner, still apply as normal. A user restricted to certain tables or columns stays
 restricted while using the widget. Any fine-grained restriction of the data should therefore happen at
 the Grist document level, not in the widget's configuration. The widget's "per-person rights"
-(Settings > Access) are only an interface lock: they grey out commands, they don't protect any data.
+(Settings > Access) are only an interface lock: they grey out commands, they don't protect any data. For the same reason, a protected PDF's
+password written in the document ("Same for all, saved in the document", or the passwords of a column with "One
+per row") can be read there in plain text by anyone who opens it, unless advanced Grist permissions cover that
+column: "Typed at each export" is the safest way, and the window says so.
 
 The widget writes to seven tables of the document, all prefixed `Publipostage_`: `Publipostage_Modeles`
-(the templates, and a "Réglages du document" row that keeps the colors shared by every template),
-`Publipostage_Commentaires`, `Publipostage_PreferencesModeles` (each person's pins, folders and
+(the templates, and a "Réglages du document" row that keeps the colors shared by every template and, only if
+you choose "Same for all, saved in the document" for a protected PDF, that shared password, in plain text, in its
+`MotDePassePdf` column), `Publipostage_Commentaires`, `Publipostage_PreferencesModeles` (each person's pins, folders and
 export choices), `Publipostage_Abreviations`, `Publipostage_FormatsPage`, `Publipostage_LiensTables` (the
 matching keys between tables) and `Publipostage_UserProbe` (used to read the connected user's e-mail). It
 only creates them with the person's consent: before the first creation, a window asks "Create the
@@ -597,8 +612,8 @@ sites and asks for confirmation.
 
 No data is ever stored outside of Grist. The only things kept in the browser (`localStorage`) are
 interface preferences (language, theme, keys, shortcuts and the view of their panel, mail program of the Email mode, autosave state, last
-choice in the sheet assembly before printing, permissions and author of the protected PDF - never its
-password), the page zoom level of the last templates opened (with
+choice in the sheet assembly before printing, permissions and author of the protected PDF, the way its
+password is given and the password column - never a password), the page zoom level of the last templates opened (with
 their number and name) and, to follow renames, the names of the tables and columns of each open
 document, never any row data.
 
