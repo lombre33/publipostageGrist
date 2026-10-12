@@ -11,6 +11,7 @@
 //    filet, saut de page, alignement, notes de bas de page, colonnes ; en-têtes et pieds de page entre commentaires ;
 //  - les images : une adresse web reste une adresse, une pièce jointe de Grist part dans le fichier, la largeur est gardée, une image illisible est dite ; aucune image ne se charge pendant l'export ;
 //  - un vrai document passé par l'éditeur (liste à cases, lien, tableau, encadré, image : le HTML que l'éditeur écrit, pas celui qu'on lui donne).
+// Le sens inverse (un .md devient un document) est la suite « markdownImport » (dev-tests/scenarios-markdown-import.js), dont l'aller-retour relit ce que celle-ci vérifie.
 (function () {
   const cases = [];
   const TABLE = 'ExpMdClients';

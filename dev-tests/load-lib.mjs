@@ -55,6 +55,7 @@ const UMD_ROUTES = [
   [/^https:\/\/cdn\.jsdelivr\.net\/npm\/docx@.*$/, 'umd/docx.iife.js'],
   [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/exceljs\.min\.js$/, 'umd/exceljs.min.js'],
   [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/qrcode\.min\.js$/, 'umd/qrcode.min.js'],
+  [/^https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/marked\/[\d.]+\/marked\.min\.js$/, 'umd/marked.min.js'],
 ].filter(([, rel]) => existsSync(join(CACHE, rel)));
 const CHUNK_BASE = 'https://esm.sh/_offline-chunks/';
 const absoluteChunks = code => code.replace(/(from\s*|import\s*)"\.\/(chunk-[A-Z0-9]+\.js)"/g, (_, kw, file) => `${kw}"${CHUNK_BASE}${file}"`);

@@ -78,6 +78,12 @@ qrcode-generator 1.4.4
   Le mot « QR Code » est une marque déposée de DENSO WAVE INCORPORATED.
   The word "QR Code" is a registered trademark of DENSO WAVE INCORPORATED.
 
+marked 15.0.12
+  Licence / License : MIT
+  Droits / Copyright : Copyright (c) 2018+, MarkedJS (https://github.com/markedjs/) ; Copyright (c) 2011-2018, Christopher Jeffrey (https://github.com/chjj/)
+  Origine / Source : cdnjs.cloudflare.com
+  Le widget la charge à la première lecture d'un fichier Markdown seulement / The widget loads it on the first Markdown file read only.
+
 docx 9.7.1
   Licence / License : MIT
   Droits / Copyright : Copyright (c) 2016 Dolan

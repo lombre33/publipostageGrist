@@ -121,6 +121,10 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 
 **Modèles**
 - Gestion multi-modèles, sauvegardés directement dans le document Grist
+- Import d'un fichier Markdown (`.md`, ligne « Importer un Markdown… » du menu « + ») : il devient un nouveau
+  document ; les alertes GitHub deviennent des encadrés, les listes à cases des listes à cases, et le sommaire,
+  les notes de bas de page, les sauts de page, l'en-tête et le pied de page que l'export écrit sont relus ; une
+  image qui n'est ni en ligne ni dans le fichier n'est pas reprise (un mot le dit à sa place)
 - Galerie de 21 modèles prêts à l'emploi : facture, contrat de prestation de services, attestation,
   courrier de relance, quittance de loyer, bulletin scolaire, fiche recette, émargement, bon de commande,
   fiche d'inventaire, et des modèles à imprimer (flyer A6, invitation, affiche A3, carte de visite, badge,
@@ -207,8 +211,8 @@ réussi, le moment de l'export pour les lignes dont le PDF vient d'être produit
 export) ; sans colonne choisie, il n'y écrit rien. Un compte Lecteur de Grist n'écrit rien.
 
 Le widget charge des bibliothèques tierces à l'exécution, depuis `esm.sh` (moteur d'édition
-TipTap/ProseMirror), `cdnjs.cloudflare.com` et `cdn.jsdelivr.net` (exports PDF, Word, Excel, QR
-code et graphique de la page, chargés au premier usage) et `docs.getgrist.com` (API de Grist), à des versions figées, sauf le
+TipTap/ProseMirror), `cdnjs.cloudflare.com` et `cdn.jsdelivr.net` (exports PDF, Word, Excel, lecteur de
+l'import Markdown, QR code et graphique de la page, chargés au premier usage) et `docs.getgrist.com` (API de Grist), à des versions figées, sauf le
 script de l'API de Grist, que Grist sert dans sa version courante. Les fichiers venant de `cdnjs` et
 de `jsDelivr` sont protégés par une intégrité SRI, qui empêche le navigateur d'exécuter un fichier
 altéré ; ce n'est techniquement pas possible pour l'import map `esm.sh`. Aucune police ni feuille de
@@ -253,6 +257,7 @@ chargées à l'exécution, à des versions toujours figées (sauf le script de l
 | JSZip 3.10.1 | Export en lot (archive zip) | `cdnjs.cloudflare.com` |
 | ExcelJS 4.4.0 | Export Excel | `cdnjs.cloudflare.com` |
 | qrcode-generator 1.4.4 | QR code | `cdnjs.cloudflare.com` |
+| marked 15.0.12 | Import Markdown | `cdnjs.cloudflare.com` |
 | docx 9.7.1 | Export Word | `cdn.jsdelivr.net` |
 | Plotly.js 2.13.2 (`plotly.js-basic-dist-min`) | Graphique de la page | `cdn.jsdelivr.net` |
 
@@ -267,8 +272,8 @@ bibliothèques et polices sont dans [NOTICE](NOTICE).
   `requiredAccess: 'full'` (voir [Sécurité et permissions](#sécurité-et-permissions)). Il n'existe pas
   de version avec les dépendances embarquées, pour éviter tout appel externe.
 - **Réseau** : `esm.sh` (éditeur) et `docs.getgrist.com` (API de Grist) sont nécessaires au démarrage ;
-  `cdnjs.cloudflare.com` et `cdn.jsdelivr.net` le sont au premier export ou au premier graphique de la
-  page. Un pare-feu qui bloque l'un d'eux empêche le widget de démarrer ou l'export de se faire : il faut
+  `cdnjs.cloudflare.com` et `cdn.jsdelivr.net` le sont au premier export, au premier import Markdown ou au premier
+  graphique de la page. Un pare-feu qui bloque l'un d'eux empêche le widget de démarrer ou l'export de se faire : il faut
   les autoriser. Au démarrage, le widget le dit dans une fenêtre qui liste ces adresses.
 - **Audit externe** : un audit du code (outil gwaudit, 4 octobre 2026) conclut « NON CONFORME » et compte
   69 points bloquants. Tous tiennent à un seul choix : l'éditeur (TipTap et ProseMirror) se charge depuis
@@ -306,9 +311,13 @@ bibliothèques et polices sont dans [NOTICE](NOTICE).
 - **Modèles de la galerie** : ce sont des exemples de mise en page, écrits pour le droit français. Ils
   ne constituent ni un avis ni un conseil juridique et ne sont pas garantis conformes à la loi en
   vigueur (mentions obligatoires, pénalités de retard, clauses…) : faites-les relire avant tout usage.
+- **Import Markdown** : les variables ne sont pas reconnues (un `#Table.Colonne` écrit dans le fichier reste du
+  texte) ; une image qui n'est ni en ligne ni dans le fichier n'est pas reprise ; un fichier de plus de 10 Mo est
+  refusé. Le lecteur lit des fichiers de confiance : un texte fait pour le piéger (des milliers de crochets ou
+  d'étoiles jamais fermés) peut bloquer la page de longues secondes.
 - **Pas encore faits** : remplissage des tables d'un modèle avec des lignes d'exemple (l'aperçu de la
   galerie en montre en images, mais les tables créées restent vides), variantes multilingues d'un
-  modèle, codes-barres (le QR code est livré), import Markdown.
+  modèle, codes-barres (le QR code est livré).
 
 ## Note sur l'IA
 
@@ -333,7 +342,7 @@ prioriser.
 - Modèles multilingues : variantes d'un même modèle (V1)
 
 **Import / Export**
-- Import Markdown, avec une fiabilité totale sur les imports depuis Docs de La Suite (V1)
+- Import Markdown : fiabilité à confirmer sur des exports réels de Docs de La Suite (V1)
 
 **Confort d'utilisation**
 - Optimisation du chargement (V1)
@@ -479,6 +488,10 @@ GitHub Pages, with no backend and no build step.
 
 **Templates**
 - Multi-template management, saved directly in the Grist document
+- Import of a Markdown file (`.md`, the "Import from Markdown…" line of the "+" menu): it becomes a new document;
+  GitHub alerts become callouts, task lists become task lists, and the table of contents, footnotes, page breaks,
+  header and footer that the export writes are read back; an image that is neither online nor in the file is not
+  imported (a word says so in its place)
 - Gallery of 21 ready-to-use templates: invoice, service agreement, certificate, payment reminder letter,
   rent receipt, school report, recipe sheet, attendance sheet, purchase order, inventory sheet, and
   templates to print (A6 flyer, invitation, A3 poster, business card, badge, labels). A template can create
@@ -561,8 +574,8 @@ moment of the export for the rows whose PDF has just been made (a single write p
 column chosen, it writes nothing there. A Grist Viewer account writes nothing.
 
 The widget loads third-party libraries at runtime, from `esm.sh` (the TipTap/ProseMirror editing
-engine), `cdnjs.cloudflare.com` and `cdn.jsdelivr.net` (PDF, Word, Excel, QR code and chart from the page, loaded on first
-use) and `docs.getgrist.com` (the Grist API), at pinned versions, except the Grist API script, which
+engine), `cdnjs.cloudflare.com` and `cdn.jsdelivr.net` (PDF, Word, Excel, the Markdown import reader, QR code and chart from the page,
+loaded on first use) and `docs.getgrist.com` (the Grist API), at pinned versions, except the Grist API script, which
 Grist serves in its current version. Files from `cdnjs` and `jsDelivr` are protected by SRI integrity
 hashes, which stop the browser from running a tampered file; this isn't technically possible for the
 `esm.sh` import map. No font or stylesheet comes from another site.
@@ -604,6 +617,7 @@ pinned versions (except the Grist API script):
 | JSZip 3.10.1 | Batch export (zip archive) | `cdnjs.cloudflare.com` |
 | ExcelJS 4.4.0 | Excel export | `cdnjs.cloudflare.com` |
 | qrcode-generator 1.4.4 | QR code | `cdnjs.cloudflare.com` |
+| marked 15.0.12 | Markdown import | `cdnjs.cloudflare.com` |
 | docx 9.7.1 | Word export | `cdn.jsdelivr.net` |
 | Plotly.js 2.13.2 (`plotly.js-basic-dist-min`) | Chart from the page | `cdn.jsdelivr.net` |
 
@@ -618,8 +632,8 @@ libraries and fonts are in [NOTICE](NOTICE).
   `requiredAccess: 'full'` (see [Security and permissions](#security-and-permissions)). There is no
   version with bundled dependencies to avoid any external call.
 - **Network**: `esm.sh` (editor) and `docs.getgrist.com` (Grist API) are needed at startup;
-  `cdnjs.cloudflare.com` and `cdn.jsdelivr.net` are needed at the first export or the first chart from the
-  page. A firewall that blocks one of them prevents the widget from starting or the export from working:
+  `cdnjs.cloudflare.com` and `cdn.jsdelivr.net` are needed at the first export, the first Markdown import or the first
+  chart from the page. A firewall that blocks one of them prevents the widget from starting or the export from working:
   they must be allowed. At startup, the widget says so in a window that lists these addresses.
 - **External audit**: an audit of the code (gwaudit tool, October 4, 2026) concludes "NON CONFORME"
   (non-compliant) and counts 69 blocking points. They all come down to one choice: the editor (TipTap and
@@ -655,9 +669,13 @@ libraries and fonts are in [NOTICE](NOTICE).
 - **Gallery templates**: these are layout examples, written for French law. They are neither legal
   advice nor guaranteed to comply with current law (mandatory mentions, late-payment penalties,
   clauses…): have them reviewed before any real use.
+- **Markdown import**: variables are not recognized (a `#Table.Column` written in the file stays text); an image
+  that is neither online nor in the file is not imported; a file over 10 MB is refused. The reader is meant for
+  trusted files: a text built to trap it (thousands of brackets or asterisks never closed) can freeze the page for
+  long seconds.
 - **Not done yet**: filling a template's tables with sample rows (the gallery preview shows some as
   images, but the tables created stay empty), multilingual variants of a template,
-  barcodes (the QR code is delivered), Markdown import.
+  barcodes (the QR code is delivered).
 
 ## A note on AI
 
@@ -681,7 +699,7 @@ react to this repository's issues, or write to me on Tchap, to help me prioritiz
 - Multilingual templates: variants of the same template (V1)
 
 **Import / export**
-- Markdown import, with full reliability on imports from La Suite Docs (V1)
+- Markdown import: reliability to be confirmed on real La Suite Docs exports (V1)
 
 **Quality of life**
 - Loading time optimization (V1)

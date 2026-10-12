@@ -76,6 +76,7 @@ La galerie **Créer à partir d'un modèle…** propose 21 modèles prêts à l'
 - **Assemblage avant impression** : pose les pages de chaque ligne sur des feuilles A4 ou A3, avec ou sans traits de coupe, et une marge réglable autour de chaque page (quatre A6 sur une A4, par exemple).
 - **Word** (`.docx`, bêta) : listes et notes de bas de page natives, un fichier par ligne en lot.
 - **Markdown** (`.md`) : le document de la ligne, variables remplacées par leurs valeurs, en CommonMark et GFM (titres, gras, italique, barré, liens, listes imbriquées, numérotées et à cases, citations, code, tableaux, notes de bas de page, sommaire en liens, encadrés en alertes GitHub) ; ce que le Markdown ne sait pas écrire (souligné, couleur, taille, police, alignement, saut de page, tableau aux cases fusionnées, largeur d'une image) reste en HTML dans le fichier ; l'en-tête et le pied de page sont écrits une fois, entre des commentaires HTML. Ni les marges, ni le format de page, ni le filigrane, ni les numéros de page ne sont gardés. Une ligne, ou un fichier par ligne dans une archive ZIP.
+- **Import Markdown** (ligne « Importer un Markdown… » du menu « + », sous « Importer un Excel… ») : un fichier `.md` (10 Mo au plus ; UTF-8, UTF-16 avec BOM ou Windows-1252) devient un nouveau document, sans nom et pas encore enregistré ; la question « Modifications non enregistrées » ne vient qu'après la lecture du fichier. C'est le sens inverse de l'export : tout ce qu'il écrit est relu (alertes GitHub en encadrés de leur couleur, listes à cases, notes de bas de page, sommaire, saut de page, souligné, couleur, taille, alignement, largeur d'image, en-tête et pied de page entre commentaires), et un fichier de Docs de La Suite, de GitHub, de VS Code, d'Obsidian ou de Typora aussi. Une image qui n'est ni en ligne ni dans le fichier (un chemin vers le fichier d'à côté) n'est pas reprise : un mot le dit à sa place et le coin d'état compte celles qui manquent. Les variables ne sont pas reconnues (un `#Table.Colonne` reste du texte).
 - **Excel** (`.xlsx`) pour les grilles : une archive ZIP d'un classeur par ligne de la table, ou un seul classeur d'une feuille par ligne.
 - Avant un export, une fenêtre liste les sites externes dont des images seraient téléchargées.
 - **PDF par impression navigateur** (ligne « Impression navigateur » du menu « Type d'export », pour le type PDF) : la Lecture, page pour page, passe par la fenêtre d'impression du navigateur (« Enregistrer au format PDF » ou une imprimante), avec la même mise en page que la Lecture. Une ligne à la fois, 60 pages au plus ; le PDF vectoriel n'a pas cette limite.
@@ -123,7 +124,7 @@ Les réglages « Vue » et « Accès » sont des options du widget : Grist ne le
 
 **Ce que le widget écrit dans vos données** : aucune colonne existante de vos tables, sauf celle que vous choisissez dans Réglages > Vue > « Date du dernier export PDF ». Il y écrit alors, après chaque PDF réussi, le moment de l'export pour les lignes dont le PDF vient d'être produit (une seule écriture par export) ; sans colonne choisie, il n'y écrit rien. Un compte Lecteur de Grist n'écrit rien.
 
-**Dépendances externes** : le widget charge des bibliothèques depuis des serveurs tiers (`esm.sh` pour le moteur d'édition, `cdnjs.cloudflare.com` et `cdn.jsdelivr.net` pour les exports et le graphique de la page, `docs.getgrist.com` pour l'API de Grist), en version figée sauf le script de l'API de Grist ; aucune police ni feuille de style ne vient d'un autre site (l'interface prend la police du système) ; voir [Dépendances](#dépendances). Les fichiers de `cdnjs` et de `jsDelivr` sont protégés par une intégrité SRI : le navigateur refuse d'exécuter un fichier altéré. Ce n'est techniquement pas possible pour l'import map `esm.sh` (limite des imports ES). Le détail de cette analyse et la piste restante (auto-hébergement) sont dans [`AUDIT_CODE.md`](AUDIT_CODE.md#2-enjeu-majeur-rssi--périmètre-daccès-et-surface-dattaque).
+**Dépendances externes** : le widget charge des bibliothèques depuis des serveurs tiers (`esm.sh` pour le moteur d'édition, `cdnjs.cloudflare.com` et `cdn.jsdelivr.net` pour les exports, l'import Markdown et le graphique de la page, `docs.getgrist.com` pour l'API de Grist), en version figée sauf le script de l'API de Grist ; aucune police ni feuille de style ne vient d'un autre site (l'interface prend la police du système) ; voir [Dépendances](#dépendances). Les fichiers de `cdnjs` et de `jsDelivr` sont protégés par une intégrité SRI : le navigateur refuse d'exécuter un fichier altéré. Ce n'est techniquement pas possible pour l'import map `esm.sh` (limite des imports ES). Le détail de cette analyse et la piste restante (auto-hébergement) sont dans [`AUDIT_CODE.md`](AUDIT_CODE.md#2-enjeu-majeur-rssi--périmètre-daccès-et-surface-dattaque).
 
 **Aucune donnée n'est stockée hors de Grist.** Le navigateur ne garde (`localStorage`) que des préférences d'interface (langue, thème, caractères déclencheurs, raccourcis, dernier choix de l'assemblage avant impression, état de l'enregistrement automatique, autorisations et auteur du PDF protégé - jamais son mot de passe) et, pour suivre les renommages, les noms des tables et des colonnes de chaque document ouvert. Aucune donnée de ligne n'y est copiée.
 
@@ -133,7 +134,7 @@ Les réglages « Vue » et « Accès » sont des options du widget : Grist ne le
 
 ## Dépendances
 
-Aucune étape de build : tous les fichiers sont servis tels quels. Les bibliothèques tierces sont chargées à l'exécution, en version figée (jamais `@latest`), sauf le script de l'API de Grist, que son serveur sert dans sa version courante. Chaque export, comme le graphique de la page, ne charge sa bibliothèque qu'au premier usage.
+Aucune étape de build : tous les fichiers sont servis tels quels. Les bibliothèques tierces sont chargées à l'exécution, en version figée (jamais `@latest`), sauf le script de l'API de Grist, que son serveur sert dans sa version courante. Chaque export, comme l'import Markdown et le graphique de la page, ne charge sa bibliothèque qu'au premier usage.
 
 | Bibliothèque | Usage | Origine | Intégrité |
 |---|---|---|---|
@@ -145,6 +146,7 @@ Aucune étape de build : tous les fichiers sont servis tels quels. Les biblioth�
 | JSZip 3.10.1 | Exports en lot (archive ZIP) | `cdnjs.cloudflare.com` | SRI sha384 |
 | ExcelJS 4.4.0 | Export Excel | `cdnjs.cloudflare.com` | SRI sha384 |
 | qrcode-generator 1.4.4 | QR code | `cdnjs.cloudflare.com` | SRI sha384 |
+| marked 15.0.12 | Import Markdown | `cdnjs.cloudflare.com` | SRI sha384 |
 | docx 9.7.1 | Export Word | `cdn.jsdelivr.net` | SRI sha384 |
 | Plotly.js 2.13.2 (`plotly.js-basic-dist-min`) | Graphique de la page | `cdn.jsdelivr.net` | SRI sha384 |
 

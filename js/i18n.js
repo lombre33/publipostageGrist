@@ -56,6 +56,7 @@ const I18n = (function () {
     'toolbar.newMacro': { fr: 'Nouveau macro-modèle', en: 'New macro template' },
     'toolbar.newGrid': { fr: 'Nouvelle grille', en: 'New grid' },
     'toolbar.importXlsx': { fr: 'Importer un Excel…', en: 'Import from Excel…' },
+    'toolbar.importMd': { fr: 'Importer un Markdown…', en: 'Import from Markdown…' },
     'toolbar.newFromTemplate': { fr: 'Créer à partir d’un modèle…', en: 'Create from a template…' },
     'toolbar.save': { fr: 'Enregistrer', en: 'Save' },
     'toolbar.saveAs': { fr: 'Enregistrer sous (copie)', en: 'Save as (copy)' },
@@ -1023,6 +1024,14 @@ const I18n = (function () {
     'status.xlsxImportEmpty': { fr: 'Ce classeur ne contient aucune case à importer.', en: 'This workbook has no cells to import.' },
     'status.xlsxImportEmptySheet': { fr: 'La feuille « {sheet} » ne contient aucune case à importer.', en: 'The sheet “{sheet}” has no cells to import.' },
     'status.xlsxImportTooBig': { fr: 'Cette feuille est trop grande pour une grille : {rows} {rows|ligne|lignes} et {cols} {cols|colonne|colonnes} (au plus {maxRows} lignes, {maxCols} colonnes et {maxCells} cases).', en: 'This sheet is too big for a grid: {rows} {rows|row|rows} and {cols} {cols|column|columns} (at most {maxRows} rows, {maxCols} columns and {maxCells} cells).' },
+    // Import d'un fichier Markdown (js/markdown-import.js, js/main.js:onImportMd) : lecture, fin, ce qui n'a pas été repris, fichier refusé.
+    'status.mdImporting': { fr: 'Lecture du fichier Markdown…', en: 'Reading the Markdown file…' },
+    'status.mdImported': { fr: 'Markdown importé. Nommez le modèle puis enregistrez-le.', en: 'Markdown imported. Name the template, then save it.' },
+    'status.mdImportedImages': { fr: 'Markdown importé ; {n} {n|image locale non reprise|images locales non reprises}. Nommez le modèle puis enregistrez-le.', en: 'Markdown imported; {n} local {n|image|images} not imported. Name the template, then save it.' },
+    'status.mdImportUnreadable': { fr: 'Ce fichier n’est pas un texte Markdown lisible.', en: 'This file is not readable Markdown text.' },
+    'status.mdImportEmpty': { fr: 'Ce fichier Markdown est vide : il n’y a rien à importer.', en: 'This Markdown file is empty: there is nothing to import.' },
+    'status.mdImportTooBig': { fr: 'Ce fichier est trop gros pour être importé : {size} Mo (au plus {max} Mo).', en: 'This file is too big to import: {size} MB (at most {max} MB).' },
+    'status.mdImportLibrary': { fr: 'Le lecteur Markdown n’a pas pu se charger : vérifiez la connexion, puis réessayez.', en: 'The Markdown reader could not be loaded: check the connection, then try again.' },
     'status.batchExportProgressXlsx': { fr: 'Export Excel en lot : {current}/{total}...', en: 'Batch Excel export: {current}/{total}...' },
     'status.exportErrorXlsx': { fr: 'Échec de l’export : aucun classeur Excel généré.', en: 'Export failed: no Excel workbook generated.' },
     'status.batchExportDoneXlsx': { fr: '{ok} {ok|classeur Excel généré|classeurs Excel générés} — archive ZIP téléchargée.', en: '{ok} Excel {ok|workbook|workbooks} generated — ZIP archive downloaded.' },
@@ -1459,6 +1468,9 @@ const I18n = (function () {
     'docx.tocEmpty': { fr: '(aucun titre dans ce document)', en: '(no heading in this document)' },
     // Sommaire d'un export Markdown sans aucun titre (js/markdown-export.js:tocBlocks) : la même phrase, en italique.
     'markdown.tocEmpty': { fr: '(aucun titre dans ce document)', en: '(no heading in this document)' },
+    // Ce qui prend la place d'une image que l'import Markdown ne peut pas reprendre (js/markdown-import.js:images), suivi de son texte de remplacement.
+    'markdown.imageNotImported': { fr: 'image non reprise', en: 'image not imported' },
+    'markdown.imageNotImportedNamed': { fr: 'image non reprise : {alt}', en: 'image not imported: {alt}' },
 
     // --- Mode Email (planning/feature-email-mode.md) : bandeau Objet/À/Cc/Cci + action de création du mailto: ---
     'email.to.label': { fr: 'À', en: 'To' },

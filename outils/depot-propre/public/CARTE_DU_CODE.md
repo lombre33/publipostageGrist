@@ -23,7 +23,7 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
   vérifie.
 - **Les données** : les modèles et les réglages vivent dans des tables `Publipostage_*` du document Grist ;
   les préférences d'affichage (langue, thème, raccourcis…) dans le navigateur.
-- **Le volume** : 132 fichiers dans `js/` (51 700 lignes : 38 200 de code, 10 400 de commentaires, 3 100 de
+- **Le volume** : 133 fichiers dans `js/` (52 200 lignes : 38 600 de code, 10 500 de commentaires, 3 100 de
   blanc), 44 feuilles de style (3 600 lignes), une page de 830 lignes. Quatre fichiers de polices du PDF
   pèsent 2,5 Mo en quelques lignes (des données) ; `js/i18n.js` est du texte à traduire, pas de la logique.
 
@@ -165,7 +165,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/xlsx-number-format.js` | Le texte qu'Excel montrerait pour un format de nombre ou de date. |
 | `js/linked-table.js` | Le tableau d'un document lié à un modèle Grille : l'attribut du lien et le jeton du modèle qui le fait compter, le choix du modèle dans la liste, le repère dans la page, les règles du contenu des cases et les verrous (suivi des modifications, lecture seule), la mise à jour du tableau depuis le modèle, son envoi au modèle et l'ouverture du modèle (avec le retour au document, que `js/main.js` porte), puis le suivi du modèle par le document : la base du tableau (ce que le document et le modèle disaient à la dernière synchro), le plan qui en tire la mise à jour, l'envoi ou le désaccord, la synchro à l'ouverture et à chaque relecture de l'enregistrement automatique (`followLinkedModels` de `js/main.js`), l'envoi des tableaux changés à leurs modèles avec l'enregistrement du document - dans le même lot d'écriture que sa ligne (`Templates.save`), la base de l'éditeur n'avançant qu'une fois Grist d'accord - et la lecture du modèle par les sorties qui lisent les documents enregistrés. |
 
-### Exports (20 fichiers, 7 800 lignes)
+### Exports (21 fichiers, 8 200 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -180,6 +180,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/docx-export.js` | Le Word (docx). |
 | `js/xlsx-export.js` | L'Excel d'une grille (ExcelJS). |
 | `js/markdown-export.js` | Le Markdown (`.md`, CommonMark et GFM) : le HTML résolu d'une ligne lu nœud par nœud, ce que le Markdown écrit en Markdown et le reste en HTML en ligne, sans bibliothèque. |
+| `js/markdown-import.js` | L'import Markdown, le sens inverse du précédent : un `.md` lu par marked (chargé de cdnjs au premier import, avec son empreinte), remis dans la forme que l'éditeur écrit lui-même (listes à cases, encadrés, notes de bas de page, sommaire, saut de page, images, alignements) puis nettoyé par `HtmlSanitize` ; l'en-tête et le pied de page écrits entre commentaires deviennent ceux du document. |
 | `js/mailto-export.js` | Le lien `mailto:` du mode E-mail. |
 | `js/batch-failures.js` | La fenêtre qui s'ouvre à la fin d'un export en lot et liste les lignes qui n'ont pas pu être générées, avec leur raison (sur la fenêtre commune des saisies et des confirmations). |
 | `js/batch-scope.js` | Les lignes d'un export en lot : celles que le widget affiche dans Grist (ses filtres, son tri, le lien « Sélectionner par »), ou toute la table ; un widget qui n'en affiche qu'une partie fait poser la question. |
@@ -225,7 +226,7 @@ fenêtre de `js/` (`css/callout.css` pour `js/callout.js`) et le disent dans leu
   colonne. Dans les tables qui portent les données, une seule écriture : la date du dernier export PDF,
   dans la colonne que la personne a choisie (`js/export-date.js`, appelé par `js/main.js` après un export).
 - **Le réseau** : le script de l'API de Grist (`docs.getgrist.com`), l'éditeur (`esm.sh`), les
-  bibliothèques d'export au premier usage (`cdnjs.cloudflare.com`, `cdn.jsdelivr.net`) et les moteurs
+  bibliothèques d'export et le lecteur de l'import Markdown au premier usage (`cdnjs.cloudflare.com`, `cdn.jsdelivr.net`) et les moteurs
   d'export du widget (même site), tous chargés par `ExportCommon.loadScriptOnce`, le catalogue de la galerie (même site, `fetch` dans
   `js/template-gallery.js`), et la lecture d'une image (`fetch` ou `new Image()`, dans `js/image-io.js`
   seulement : l'insertion et les exports PDF, Word et Excel la prennent là ; une image d'un autre
@@ -260,6 +261,7 @@ notes de conception, qui ne sont pas publiés ici.
 | Changer ce que le « PDF protégé » protège (mot de passe, droits, propriétés) | `js/pdf-protection.js` (les réglages et les champs de pdfmake), `js/pdf-protection-dialog.js` et `css/pdf-protection.css` (la fenêtre), `js/pdf-export.js` (`withDocFields` : les champs ne se posent que sur le document fini), `js/main.js` (`SINGLE_EXPORTS.pdfProtected`, `BATCH_EXPORTS.pdfProtectedZip`). Un fichier qui réunit plusieurs PDF (un seul PDF, assemblage) ne se chiffre pas : ces sorties sont grisées pour ce type. |
 | Ajouter un chemin d'export PDF | `js/main.js` : l'appeler `stampExportDate` après le téléchargement (la colonne de Réglages > Vue qui garde la date du dernier export), avec les lignes dont le PDF est dans le fichier. |
 | Ajouter une bibliothèque d'export | `js/export-common.js` (chargeur, empreinte) et la politique de sécurité de `index.html`. |
+| Changer ce que l'import Markdown reconnaît, ou ce que l'export Markdown écrit | `js/markdown-import.js` et `js/markdown-export.js` vont ensemble : ce que l'un écrit, l'autre doit le relire. |
 | Changer ce que l'impression par le navigateur imprime (feuilles, page plus haute qu'une feuille, taille de la page) | `js/print-export.js` et `css/print.css` ; le rendu lui-même est celui de la Lecture (`ReaderMode.renderInto` de `js/reader-mode.js`) : le changer change aussi l'impression. |
 | Ajouter un moteur d'export du widget (un script que seul un export utilise) | Une balise inerte `<script type="text/x-lazy-engine" data-engine="…">` dans `index.html`, puis son nom dans la liste `engines` de l'export qui s'en sert (`js/main.js`) : `js/export-engines.js` le charge au premier besoin. |
 | Un nouvel élément de document (nœud, mise en forme) | `js/editor-nodes.js` (l'éditeur), sa feuille de `css/` (l'écran et la Lecture), puis `js/pdf-export.js` et `js/docx-export.js` : chaque export le convertit à part. |
@@ -295,7 +297,7 @@ For anyone reading the code: what is where, and where to start. Line counts are 
   **Each export** loads its library on first use, with an integrity hash (SRI) that the browser checks.
 - **The data**: templates and settings live in `Publipostage_*` tables of the Grist document; display
   preferences (language, theme, shortcuts…) in the browser.
-- **The size**: 132 files in `js/` (51,700 lines: 38,200 of code, 10,400 of comments, 3,100 blank), 44
+- **The size**: 133 files in `js/` (52,200 lines: 38,600 of code, 10,500 of comments, 3,100 blank), 44
   stylesheets (3,600 lines), an 830-line page. Four PDF font files weigh 2.5 MB in a few lines (data);
   `js/i18n.js` is text to translate, not logic.
 
@@ -436,7 +438,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/xlsx-number-format.js` | The text Excel would show for a number or date format. |
 | `js/linked-table.js` | A document's table linked to a Grid template: the link attribute and the template's token that makes it count, picking the template in the list, the marker in the page, the content rules for the cells and the locks (track changes, read-only), updating the table from the template, sending it to the template and opening the template (with the way back to the document, which `js/main.js` carries), then the document following its template: the table's base (what the document and the template said at the last sync), the plan drawn from it (update, send, or a disagreement), the sync on opening and at every read of the automatic save (`followLinkedModels` in `js/main.js`), the sending of the changed tables to their templates with the document's save - in the same write as its row (`Templates.save`), the editor's base moving only once Grist agrees - and the reading of the template by the outputs that read saved documents. |
 
-### Exports (20 files, 7,800 lines)
+### Exports (21 files, 8,200 lines)
 
 | File | Role |
 |---|---|
@@ -451,6 +453,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/docx-export.js` | The Word file (docx). |
 | `js/xlsx-export.js` | The Excel file of a grid (ExcelJS). |
 | `js/markdown-export.js` | Markdown (`.md`, CommonMark and GFM): a row's resolved HTML read node by node, what Markdown can write written as Markdown and the rest as inline HTML, with no library. |
+| `js/markdown-import.js` | Markdown import, the reverse of the previous one: an `.md` read by marked (loaded from cdnjs on the first import, with its integrity hash), put back into the form the editor itself writes (task lists, callouts, footnotes, table of contents, page break, images, alignments), then cleaned by `HtmlSanitize`; the header and footer written between comments become the document's. |
 | `js/mailto-export.js` | The `mailto:` link of E-mail mode. |
 | `js/batch-failures.js` | The window that opens at the end of a batch export and lists the rows that could not be generated, with their reason (on top of the shared input and confirmation window). |
 | `js/batch-scope.js` | The rows of a batch export: the ones the widget shows in Grist (its filters, its sort, the "Select by" link), or the whole table; a widget that only shows part of the table triggers the question. |
@@ -495,8 +498,8 @@ the documents' font.
   (`js/table-consent.js`); the widget neither deletes nor renames any table or column. In the tables that
   hold the data, a single write: the date of the last PDF export, in the column the person chose
   (`js/export-date.js`, called by `js/main.js` after an export).
-- **The network**: the Grist API script (`docs.getgrist.com`), the editor (`esm.sh`), the export libraries
-  on first use (`cdnjs.cloudflare.com`, `cdn.jsdelivr.net`) and the widget's own export engines (same
+- **The network**: the Grist API script (`docs.getgrist.com`), the editor (`esm.sh`), the export libraries and
+  the Markdown import reader on first use (`cdnjs.cloudflare.com`, `cdn.jsdelivr.net`) and the widget's own export engines (same
   site), all loaded by `ExportCommon.loadScriptOnce`, the gallery catalog (same site, `fetch` in `js/template-gallery.js`), and the reading of an image (`fetch` or
   `new Image()`, in `js/image-io.js` only: insertion and the PDF, Word and Excel exports take it from
   there; an image from another site waits for a "Show" click on screen, and for the window of
@@ -530,6 +533,7 @@ notes, which are not published here.
 | Change what the "Protected PDF" protects (password, permissions, properties) | `js/pdf-protection.js` (the settings and pdfmake's fields), `js/pdf-protection-dialog.js` and `css/pdf-protection.css` (the window), `js/pdf-export.js` (`withDocFields`: the fields are only set on the finished document), `js/main.js` (`SINGLE_EXPORTS.pdfProtected`, `BATCH_EXPORTS.pdfProtectedZip`). A file combining several PDFs (a single PDF, sheet assembly) cannot be encrypted: those outputs are greyed out for this type. |
 | Add a PDF export path | `js/main.js`: call `stampExportDate` after the download (the Settings > View column that keeps the last export date), with the rows whose PDF is in the file. |
 | Add an export library | `js/export-common.js` (loader, integrity hash) and the security policy of `index.html`. |
+| Change what the Markdown import recognizes, or what the Markdown export writes | `js/markdown-import.js` and `js/markdown-export.js` go together: what one writes, the other must read back. |
 | Change what browser print prints (sheets, a page taller than a sheet, the page size) | `js/print-export.js` and `css/print.css`; the rendering itself is the Reading view's (`ReaderMode.renderInto` in `js/reader-mode.js`): changing it changes the print too. |
 | Add an export engine of the widget (a script that only an export uses) | An inert `<script type="text/x-lazy-engine" data-engine="…">` tag in `index.html`, then its name in the `engines` list of the export that uses it (`js/main.js`): `js/export-engines.js` loads it when needed. |
 | A new document element (node, formatting) | `js/editor-nodes.js` (the editor), its sheet in `css/` (screen and Reading mode), then `js/pdf-export.js` and `js/docx-export.js`: each export converts it separately. |

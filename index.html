@@ -16,6 +16,7 @@
     https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.min.js
     https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js
     https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js
+    https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.12/marked.min.js
     https://cdn.jsdelivr.net/npm/docx@9.7.1/dist/index.iife.js https://cdn.jsdelivr.net/npm/plotly.js-basic-dist-min@2.13.2/plotly-basic.min.js
     'sha256-oL7hcWNReCnK8lxGRlbj0IXTGZm4dxBoOerWyA01uig=' 'sha256-QiCHlcX781nb04G2fDoZHC2TVBI4ztYMrMBu6LN+Vsk=' 'sha256-dr2nJ9qlSEpVpFpN01rgQ3bZHAcSZWrebqvX0xSlX7I=';
   object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'">
@@ -164,6 +165,7 @@
             <span class="v2-hover-row" id="v2-btn-new-macro" data-i18n="toolbar.newMacro">Nouveau macro-modèle</span>
             <span class="v2-hover-row" id="v2-btn-new-grid" data-i18n="toolbar.newGrid">Nouvelle grille</span>
             <span class="v2-hover-row" id="v2-btn-import-xlsx" data-i18n="toolbar.importXlsx">Importer un Excel…</span>
+            <span class="v2-hover-row" id="v2-btn-import-md" data-i18n="toolbar.importMd">Importer un Markdown…</span>
             <span class="v2-hover-hsep"></span>
             <span class="v2-hover-row" id="v2-btn-new-from-template" data-i18n="toolbar.newFromTemplate">Créer à partir d'un modèle…</span>
           </span>
@@ -742,7 +744,7 @@
 </script>
 <script src="js/reader-mode.js?v=0.144"></script>
 <script src="js/reader-guide.js?v=0.6"></script>
-<script src="js/i18n.js?v=0.166"></script>
+<script src="js/i18n.js?v=0.167"></script>
 <script src="js/shortcuts.js?v=0.15"></script>
 <script src="js/page-layout.js?v=0.15"></script>
 <script src="js/page-sections.js?v=0.1"></script>
@@ -793,8 +795,9 @@
 <script type="text/x-lazy-engine" data-engine="docx" src="js/docx-export.js?v=0.51"></script>
 <script type="text/x-lazy-engine" data-engine="xlsx" src="js/xlsx-export.js?v=0.18"></script>
 <script type="text/x-lazy-engine" data-engine="xlsxFormat" src="js/xlsx-number-format.js?v=0.3"></script>
-<script type="text/x-lazy-engine" data-engine="md" src="js/markdown-export.js?v=0.1"></script>
-<script src="js/grid-xlsx-import.js?v=0.7"></script>
+<script type="text/x-lazy-engine" data-engine="md" src="js/markdown-export.js?v=0.2"></script>
+<script src="js/grid-xlsx-import.js?v=0.8"></script>
+<script src="js/markdown-import.js?v=0.1"></script>
 <script src="js/mailto-export.js?v=0.14"></script>
 <script src="js/template-gallery.js?v=0.14"></script>
 <script src="js/template-pack.js?v=0.2"></script>
@@ -861,6 +864,6 @@
 <script src="js/page-zoom.js?v=0.6"></script>
 <script src="js/field-codec.js?v=0.4"></script>
 <script src="js/field-editor.js?v=0.3"></script>
-<script src="js/main.js?v=0.147"></script>
+<script src="js/main.js?v=0.148"></script>
 </body>
 </html>

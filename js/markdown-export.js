@@ -16,6 +16,8 @@
 // Ce qu'il ne garde pas, volontairement : les marges, le format et le sens de la page, le filigrane, les images « sur toutes les pages » ou derrière le texte,
 // les numéros de page, les paragraphes vides (le Markdown n'a pas d'espace vertical), la mise en colonnes (les deux colonnes se suivent), les styles de puces et
 // de numérotation (a, b, c...), le justifié, l'interligne, les couleurs de fond des cases. Les variables y sont les valeurs de la ligne, comme dans le PDF.
+// Le sens inverse (un .md devient un document) est js/markdown-import.js : il relit ce que ce fichier écrit (alertes, cases, notes, sommaire, saut de page, <div align>,
+// <img width>, en-têtes et pieds entre commentaires) ; changer l'écriture ici, c'est changer ce que l'import doit reconnaître (dev-tests/scenarios-markdown-import.js).
 const MarkdownExport = (function () {
   // Le repère d'un saut de ligne du paragraphe pendant la composition : remplacé à la fin (paragraphLines) par la barre oblique du Markdown, ou <br> dans une case.
   const BR = '\x01';

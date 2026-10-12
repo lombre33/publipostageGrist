@@ -11,7 +11,7 @@
 //   GridXlsxImport.importFile(file, { lang, sheetIndex? }) -> Promise<{ html, model, sheetName, sheetIndex, sheetCount, rows, cols }>
 //     rejette avec une Error dont `code` dit pourquoi
 //   GridXlsxImport.fromArrayBuffer(buffer, { lang, sheetIndex? }) -> idem, depuis les octets du fichier
-//   GridXlsxImport.chooseFile(onFile) -> ouvre le sélecteur de fichier ; `onFile(file)` n'est appelé que si un fichier est choisi
+//   GridXlsxImport.chooseFile(onFile[, accept]) -> ouvre le sélecteur de fichier (celui des classeurs, ou des types `accept`) ; `onFile(file)` n'est appelé que si un fichier est choisi
 // Codes d'erreur : 'oldFormat' (un .xls ou un classeur protégé par mot de passe : le fichier est un conteneur OLE, pas un zip), 'unreadable' (pas un
 // classeur), 'empty' (aucune case utile), 'tooBig' (plus de MAX_ROWS lignes, MAX_COLS colonnes ou MAX_CELLS cases : la grille serait inutilisable,
 // rien n'est coupé en silence).
@@ -456,10 +456,11 @@ const GridXlsxImport = (function () {
 
   // Le sélecteur de fichier du navigateur, appelé dans le geste de la personne (le clic sur la ligne du menu) : l'élément n'existe que le temps du
   // choix.
-  function chooseFile(onFile) {
+  // `accept` : les types du sélecteur, ceux d'un classeur par défaut (l'import d'un Markdown, js/main.js:onImportMd, y met les siens).
+  function chooseFile(onFile, accept) {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    input.accept = accept || '.xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     input.style.display = 'none';
     input.addEventListener('change', () => { const file = input.files && input.files[0]; input.remove(); if (file) onFile(file); }, { once: true });
     input.addEventListener('cancel', () => input.remove(), { once: true });

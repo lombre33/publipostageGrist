@@ -43,6 +43,16 @@ listes, le tableau et l'encadré (une alerte) doivent s'y lire comme dans la Lec
 laisse passer le HTML en ligne (GitHub le fait, d'autres le retirent : le texte reste lisible) ; « Toutes les lignes (ZIP) » rend une archive de `.md` nommés
 comme les PDF ; avec une image d'un autre site, la fenêtre qui la nomme s'ouvre d'abord, comme pour le PDF.
 
+**Mise à jour 2026-10-12 (import Markdown)** : la ligne « Importer un Markdown… » du menu « + » (sous « Importer un Excel… ») ouvre un `.md` en nouveau document, sans
+nom et pas encore enregistré. Les tests automatiques l'essaient avec des fichiers écrits d'après les formats connus ; ce qui reste à voir à la main, avec de VRAIS
+fichiers : un export de Docs de La Suite (un document qui a des titres, du gras, une liste à cases, un tableau, une image), le README d'un dépôt GitHub (alertes,
+tableaux, balises HTML), une note d'Obsidian (en-tête YAML, notes de bas de page) et un fichier de Typora ou de VS Code. Pour chacun : le texte, les listes, les cases
+cochées, le tableau (colonnes alignées), les alertes (encadrés de la bonne couleur), les images en ligne, les notes de bas de page et le sommaire doivent être ceux du
+fichier ; une image dont le chemin est celui d'un fichier d'à côté est remplacée par un mot et comptée dans le coin d'état ; le document s'enregistre ensuite sous un
+nom comme un nouveau document. Et le tour complet : exporter un modèle en Markdown (menu « Type d'export »), puis importer le `.md` obtenu : le même document revient,
+en-tête et pied de page compris. Un fichier énorme ou fait pour piéger le lecteur (limite connue, dite dans le README) peut bloquer la page quelques secondes : ne pas
+l'essayer sur un vrai document.
+
 Dans ces menus, la **ligne choisie** (le type, la qualité du PDF, un niveau de titre) est bleue et en gras ; à vérifier à
 l'œil, en clair puis en sombre : la souris sur cette ligne la laisse bleue et en gras, d'un bleu un peu plus soutenu, bien
 lisible sur le gris du survol (4,5:1 au moins) ; la souris ailleurs, elle reprend son bleu d'avant. Même vérification pour

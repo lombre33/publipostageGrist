@@ -61,6 +61,7 @@ const UMD_ROUTES = OFFLINE ? [
   [/^https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/exceljs\/[\d.]+\/exceljs\.min\.js$/, 'umd/exceljs.min.js'],
   [/^https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/qrcode-generator\/[\d.]+\/qrcode\.min\.js$/, 'umd/qrcode.min.js'],
   [/^https:\/\/cdn\.jsdelivr\.net\/npm\/plotly\.js-basic-dist-min@[\d.]+\/plotly-basic\.min\.js$/, 'umd/plotly-basic.min.js'],
+  [/^https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/marked\/[\d.]+\/marked\.min\.js$/, 'umd/marked.min.js'],
 ].filter(([, rel]) => existsSync(join(CACHE, rel))) : [];
 if (!OFFLINE) console.log('[verify-csp] miroir hors-ligne absent (dev-tests/offline-deps.sh) - les CDN seront appelés en direct.');
 
@@ -167,6 +168,8 @@ const exportsRun = await page.evaluate(async () => {
   await step('pdfMerge', async () => { const merged = await PdfMerge.create('t'); await merged.append(pdf); return (await merged.toBlob()).size > 1000; });
   await step('docx', async () => { await DocxExport.ensureDocxLibLoaded(); const r = await DocxExport.getDocxBlobForRecord('<p>Texte du Word</p>', null, {}, '', null, null); return r.blob.size > 1000; });
   await step('xlsx', async () => { await XlsxExport.ensureExcelLibLoaded(); const wb = new ExcelJS.Workbook(); wb.addWorksheet('a').getCell('A1').value = 'x'; return (await wb.xlsx.writeBuffer()).byteLength > 1000; });
+  // L'import Markdown (js/markdown-import.js) : le lecteur (marked, cdnjs, avec son empreinte) se charge au premier import, sous la politique, et lit un texte.
+  await step('markdownImport', async () => { await MarkdownImport.ensureLibLoaded(); const imported = MarkdownImport.toDocument('# Titre\n\nTexte **gras**\n'); return imported.html === '<h1>Titre</h1>\n<p>Texte <strong>gras</strong></p>' || imported.html; });
   await step('qr', async () => { await QrCode.ensureLibrary(); return /^data:image\/png/.test(await QrCode.dataUri('https://exemple.fr')); });
   await step('chart', async () => {
     const fig = ChartPlot.figure('bar', [{ label: 'Mois', values: ['Janvier', 'Février'], pureType: 'Text' }, { label: 'Montant', values: [3, 5], pureType: 'Numeric' }], {});
@@ -183,7 +186,7 @@ const exportsRun = await page.evaluate(async () => {
   });
   return out;
 });
-for (const [name, label] of [['moteurs', 'les moteurs du widget (PDF, fusion, feuilles, Word, Excel, format des nombres, Markdown : js/export-engines.js, au premier export)'], ['pdf', 'PDF (pdfmake, polices du dépôt)'], ['zip', 'archive ZIP (JSZip)'], ['pdfMerge', 'PDF unique (pdf-lib)'], ['docx', 'Word (docx)'], ['xlsx', 'Excel (ExcelJS)'], ['qr', 'QR code (qrcode-generator)'], ['chart', 'graphique de la page (Plotly)'], ['print', 'impression par le navigateur (cadre caché et feuilles prêts, sans fichier : la fenêtre du navigateur s\'ouvre ensuite)']]) {
+for (const [name, label] of [['moteurs', 'les moteurs du widget (PDF, fusion, feuilles, Word, Excel, format des nombres, Markdown : js/export-engines.js, au premier export)'], ['pdf', 'PDF (pdfmake, polices du dépôt)'], ['zip', 'archive ZIP (JSZip)'], ['pdfMerge', 'PDF unique (pdf-lib)'], ['docx', 'Word (docx)'], ['xlsx', 'Excel (ExcelJS)'], ['markdownImport', 'import Markdown (marked, avec son empreinte)'], ['qr', 'QR code (qrcode-generator)'], ['chart', 'graphique de la page (Plotly)'], ['print', 'impression par le navigateur (cadre caché et feuilles prêts, sans fichier : la fenêtre du navigateur s\'ouvre ensuite)']]) {
   check('export : ' + label + ' se charge et produit son fichier sous la politique', exportsRun[name] === true, exportsRun[name]);
 }
 check('rien n\'a été refusé pendant tout ce parcours (aucune violation, aucun message du navigateur)', (await violations()).length === 0 && consoleRefusals.length === 0, { violations: await violations(), consoleRefusals });

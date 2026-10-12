@@ -361,6 +361,27 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   numérotation (a, b, c), le justifié, l'interligne et les couleurs de fond des cases d'un tableau Markdown. Comme pour les
   autres types, une fenêtre liste avant l'export les sites externes dont des images seraient téléchargées. Le moteur
   (`js/markdown-export.js`) ne charge aucune bibliothèque et ne se charge qu'au premier export Markdown.
+- **Import Markdown** : la ligne « Importer un Markdown… » du menu « + », sous « Importer un Excel… », ouvre le sélecteur de
+  fichiers ; le fichier `.md` choisi devient un nouveau document, sans nom et pas encore enregistré, comme « Nouveau document ».
+  Si le document en cours a des modifications non enregistrées, la question « Modifications non enregistrées » vient après la
+  lecture du fichier, et jamais pour un fichier refusé. C'est le sens inverse de l'export : tout ce que l'export écrit est relu,
+  et un fichier venu de Docs de La Suite, de GitHub, de VS Code, d'Obsidian ou de Typora l'est de la même façon. Sont repris :
+  titres, paragraphes et retours à la ligne, gras, italique, barré, code en ligne et blocs de code (avec leur langage), liens
+  (adresses nues, e-mail, téléphone, liens par référence), listes à puces, numérotées et à cases (cochées ou non), citations,
+  filets, tableaux (GFM ou HTML, cases fusionnées, colonnes alignées), images (adresse web ou intégrée au fichier, avec leur
+  largeur et leur alignement), alertes GitHub (`> [!NOTE]`, TIP, IMPORTANT, WARNING, CAUTION) en encadrés de la couleur de
+  l'alerte, notes de bas de page (`[^1]`), sommaire (`[TOC]` ou la liste de liens que l'export écrit), saut de page (la `<div>`
+  de l'export, `\newpage`), souligné, exposant, indice, couleur, taille et alignement écrits en HTML, et l'en-tête et le pied de
+  page que l'export écrit entre des commentaires HTML. Le fichier est lu en UTF-8 (avec ou sans BOM), en UTF-16 (avec BOM) ou, à défaut,
+  en Windows-1252 ; l'en-tête YAML d'un fichier Jekyll, Hugo ou Obsidian n'est pas du texte. Une image qui n'est ni en ligne ni
+  dans le fichier (un chemin vers le fichier d'à côté) ne peut pas suivre le texte : un mot la remplace (« [image non reprise :
+  légende] ») et le coin d'état compte celles qui manquent. Ne sont pas repris : les variables (un `#Table.Colonne` reste du
+  texte), le titre d'une image ou d'un lien, le HTML que l'éditeur ne connaît pas (son texte reste), les listes à cases
+  emboîtées (mises à plat), la numérotation des titres écrite dans le texte (elle reste du texte) et les notes que rien
+  n'appelle. Un script, un gestionnaire d'événement, un cadre ou une adresse `javascript:` sont retirés. Un fichier binaire,
+  vide ou de plus de 10 Mo est refusé, avec un message clair. Le lecteur est marked 15.0.12 (MIT), chargé de
+  `cdnjs.cloudflare.com` avec son empreinte SRI au premier import seulement ; `js/markdown-import.js` remet son résultat dans la
+  forme que l'éditeur écrit lui-même.
 - **Impression par le navigateur** : la ligne « Impression navigateur » du menu « Type d'export » (le menu Qualité
   du bouton PDF, avant son renommage), jusque-là grisée, imprime la Lecture par la fenêtre d'impression du navigateur (« Enregistrer au format PDF » ou une
   imprimante). La mise en page est celle de la Lecture : mêmes coupures de page, mêmes en-têtes, pieds et numéros
@@ -1058,6 +1079,25 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   styles (a, b, c), justified text, line spacing and the background colours of a Markdown table's cells. As with the other
   types, a window lists the external sites that images would be downloaded from before the export. The engine
   (`js/markdown-export.js`) loads no library and loads only at the first Markdown export.
+- **Markdown import**: the "Import from Markdown…" line of the "+" menu, under "Import from Excel…", opens the file picker; the
+  chosen `.md` file becomes a new document, with no name and not yet saved, like "New document". If the current document has
+  unsaved changes, the "Unsaved changes" question comes after the file has been read, and never for a refused file. It is the
+  reverse of the export: everything the export writes is read back, and a file from La Suite Docs, GitHub, VS Code, Obsidian or
+  Typora is read the same way. Kept: headings, paragraphs and line breaks, bold, italic, strikethrough, inline code and code
+  blocks (with their language), links (bare addresses, e-mail, phone, reference links), bullet, numbered and task lists (checked
+  or not), quotes, rules, tables (GFM or HTML, merged cells, aligned columns), images (web address or embedded in the file, with
+  their width and alignment), GitHub alerts (`> [!NOTE]`, TIP, IMPORTANT, WARNING, CAUTION) as callouts of the alert's colour,
+  footnotes (`[^1]`), the table of contents (`[TOC]` or the list of links the export writes), the page break (the export's
+  `<div>`, `\newpage`), underline, superscript, subscript, colour, size and alignment written as HTML, and the header and footer
+  that the export writes between HTML comments. The file is read as UTF-8 (with or without BOM), UTF-16 (with BOM) or, failing that,
+  Windows-1252; the YAML front matter of a Jekyll, Hugo or Obsidian file is not text. An image that is neither online nor in the
+  file (a path to the file next to it) cannot follow the text: a word replaces it ("[image not imported: caption]") and the
+  status corner counts the ones that are missing. Not kept: variables (a `#Table.Column` stays text), the title of an image or a
+  link, HTML the editor does not know (its text stays), nested task lists (flattened), the numbering of headings written in the
+  text (it stays text) and footnotes that nothing calls. A script, an event handler, a frame or a `javascript:` address is
+  removed. A binary file, an empty file or one over 10 MB is refused, with a clear message. The reader is marked 15.0.12 (MIT),
+  loaded from `cdnjs.cloudflare.com` with its SRI hash on the first import only; `js/markdown-import.js` puts its result back
+  into the form the editor itself writes.
 - **Browser print**: the "Browser print" line of the "Export type" menu (the PDF button's Quality menu before it was renamed), greyed out until now, prints the
   Reading view through the browser's print window ("Save as PDF" or a printer). The layout is the Reading
   view's: same page breaks, same headers, footers and page numbers, same fonts, tables, images and watermark,

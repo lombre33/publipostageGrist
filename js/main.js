@@ -590,6 +590,51 @@
       : I18n.t('status.xlsxImported', counts));
   }
 
+  // Import d'un fichier Markdown (js/markdown-import.js), « Importer un Markdown… » du menu « + », sur le modèle de l'import d'un classeur : le sélecteur s'ouvre dans
+  // le clic, le fichier est lu et converti ensuite, et ce n'est qu'après (un fichier refusé ne coûte rien) qu'on demande de quitter le modèle courant s'il a des
+  // modifications non enregistrées. Le résultat est un nouveau document, sans nom et pas encore enregistré, comme « Nouveau document » ; l'en-tête et le pied de page
+  // que le fichier porte (ceux que l'export Markdown écrit) deviennent ceux du document.
+  const MD_IMPORT_ACCEPT = '.md,.markdown,.mdown,.mkd,.txt,text/markdown,text/plain';
+  const MD_IMPORT_ERRORS = { unreadable: 'status.mdImportUnreadable', empty: 'status.mdImportEmpty', tooBig: 'status.mdImportTooBig', library: 'status.mdImportLibrary' };
+  function onImportMd() {
+    if (isReadOnly()) return;
+    GridXlsxImport.chooseFile(async (file) => {
+      setStatus(I18n.t('status.mdImporting'));
+      const imported = await readMdForImport(file);
+      if (!imported) return;
+      if (hasEditsToConfirmBeforeLeaving()) {
+        updateSaveStatus(); // la lecture est finie : « Lecture… » serait faux pendant la question
+        if (!(await askBeforeLeaving())) return;
+      }
+      openImportedDocument(imported);
+    }, MD_IMPORT_ACCEPT);
+  }
+
+  // Lit le fichier et construit le document. null : le fichier est refusé (l'erreur est dite dans le coin d'état) ; rien d'autre ne se passe.
+  async function readMdForImport(file) {
+    try {
+      return await MarkdownImport.fromFile(file);
+    } catch (e) {
+      reportMdImportError(e);
+      return null;
+    }
+  }
+
+  function reportMdImportError(e) {
+    console.warn('[main] import Markdown impossible', e); // une erreur de la personne (mauvais fichier) ou du réseau, pas du widget
+    const megabytes = bytes => (Math.ceil(bytes / 104857.6) / 10).toLocaleString(I18n.getLang()); // vers le haut : « 10,1 Mo (au plus 10 Mo) », jamais « 10 Mo (au plus 10 Mo) »
+    const key = MD_IMPORT_ERRORS[e && e.code] || MD_IMPORT_ERRORS.unreadable;
+    setStatus(I18n.t(key, { size: e && e.size ? megabytes(e.size) : '', max: e && e.max ? megabytes(e.max) : '' }), true);
+  }
+
+  function openImportedDocument(imported) {
+    // Un nouveau document, sans nom et pas encore enregistré, comme « Nouveau document ».
+    templateSelect.value = '';
+    loadTemplateIntoEditor({ id: null, nom: '', contenu: imported.html, typeModele: 'document', marginsMm: null, suiviModifications: null, headerFooter: imported.headerFooter }, 'document');
+    markAutosaveDirty();
+    setStatus(imported.skippedImages ? I18n.t('status.mdImportedImages', { n: imported.skippedImages }) : I18n.t('status.mdImported'));
+  }
+
   // Un nouveau macro-modèle n'a rien à charger avant d'avoir été composé et enregistré : contrairement aux autres types, il ne vide pas l'éditeur, il
   // ouvre l'écran de composition, vide.
   function onNewMacro() {
@@ -2563,6 +2608,8 @@
     if (btnNewGrid) btnNewGrid.addEventListener('click', onNewGrid);
     const btnImportXlsx = document.getElementById('v2-btn-import-xlsx');
     if (btnImportXlsx) btnImportXlsx.addEventListener('click', onImportXlsx);
+    const btnImportMd = document.getElementById('v2-btn-import-md');
+    if (btnImportMd) btnImportMd.addEventListener('click', onImportMd);
     MacroEditor.wire(onMacroSaved, macroSettingsOnScreen, openTemplateFromMacro, onMacroModelVisibility);
     TemplateOrganizeModal.wire();
     document.getElementById('btn-delete').addEventListener('click', onDelete);

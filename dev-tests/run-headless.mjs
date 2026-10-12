@@ -73,6 +73,7 @@ const GROUPS = {
   docx: 'scenarios-docx',
   docxImages: 'scenarios-docx-images',
   markdown: 'scenarios-markdown', // export Markdown (js/markdown-export.js) : le .md généré lu tel qu'il est écrit - marques et protection du texte, liens, listes, citations et alertes, tableaux GFM ou HTML, code, titres et sommaire, notes, en-têtes et pieds entre commentaires, images (adresse, largeur, pièce jointe), un vrai document passé par l'éditeur
+  markdownImport: 'scenarios-markdown-import', // import Markdown (js/markdown-import.js) : un .md devient le HTML de l'éditeur - export de Docs de La Suite, marques et HTML en ligne, alertes en encadrés, listes à cases, notes, sommaire, sauts de page, images (reprises ou dites), alignements, tableaux, en-tête YAML, en-tête et pied entre commentaires, encodages et fichiers refusés, retrait du dangereux, aller-retour avec l'export
   comments: 'scenarios-comments',
   autosave: 'scenarios-autosave',
   autosaveRace: 'scenarios-autosave-race', // enregistrement automatique face à un Grist lent : passages qui se chevauchent, Enregistrer pendant un passage, changement de modèle pendant une lecture, relecture échouée
@@ -215,6 +216,7 @@ const NODE_SCRIPTS = {
   qrMouse: 'verify-qr-mouse.mjs', // QR code (js/qr-code.js) : ligne du menu de la chaîne, fenêtre sans défilement, liste des colonnes au-dessus de la fenêtre, cadre carré, menu devant la barre flottante, vraie souris et vrai clavier, 700x400 clair, sombre et anglais
   chartMouse: 'verify-chart-mouse.mjs', // Graphique de la page (js/chart-block.js) : ligne du menu de la chaîne, fenêtre sans défilement, liste avec recherche au-dessus de la fenêtre (graphiques grisés avec leur raison, par page), aperçu du vrai graphique, lignes à tracer, cadre sans image, poignée, liaison à régler au-dessus de la fenêtre, Lecture ; vraie souris et vrai clavier, 700x400 clair, sombre et anglais
   gridImportMouse: 'verify-grid-import-mouse.mjs', // import d'un classeur Excel (ligne « Importer un Excel… » du menu « + ») : vrai clic, vrai sélecteur de fichier, grille visible et message d'état entier, « Modifications non enregistrées » après le choix du fichier, fichier illisible, 700x400 clair, sombre et anglais
+  mdImportMouse: 'verify-md-import-mouse.mjs', // import d'un fichier Markdown (ligne « Importer un Markdown… » du menu « + ») : vrai clic, vrai sélecteur de fichier, document visible (encadré, cases, tableau, note, image, en-tête et pied), message d'état entier, « Modifications non enregistrées » après le choix du fichier, fichier binaire, vide ou trop gros, export Markdown puis import du même fichier, 700x400 clair, sombre et anglais
   docPasteMouse: 'verify-doc-paste-mouse.mjs', // tableau copié dans Excel, Google Sheets ou LibreOffice Calc et collé dans un DOCUMENT : le VRAI presse-papiers de Chromium (HTML tel quel, texte tabulé, image PNG), un vrai Ctrl+V, Ctrl+Maj+V et Ctrl+Z à 700x400 clair et sombre - un tableau du document sans l'image, titre fusionné lisible, un seul Annuler, texte seul avec Ctrl+Maj+V, Sheets et LibreOffice, une image seule toujours collée comme image ; un tableur de 301 colonnes collé tel quel et sa fenêtre (Fermer, Échap, anglais)
   gridMouse: 'verify-grid-mouse.mjs', // mode grille (js/grid-editor.js) : « Nouvelle grille » à la souris, tirer un trait de colonne ou de ligne (aperçu, un seul Annuler), bandeaux, flèches et Ctrl+A, défilement collé, contrastes, 700x400 clair et sombre
   tableSelectMouse: 'verify-table-select-mouse.mjs', // sélection de cases en glissant la souris, tableau de document et grille : rectangle exact dans tous les sens, voile visible sur une case colorée, défilement tenu au bord du panneau, barre de la case fixée dans sa bande (aucune case recouverte), clavier ; 700x400 clair et sombre
@@ -401,7 +403,8 @@ const UMD_ROUTES = OFFLINE ? [
   [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/exceljs\.min\.js$/, 'umd/exceljs.min.js'],
   [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/qrcode\.min\.js$/, 'umd/qrcode.min.js'],
   [/^https:\/\/cdn\.jsdelivr\.net\/npm\/plotly\.js-basic-dist-min@.*$/, 'umd/plotly-basic.min.js'],
-].filter(([, rel]) => (rel !== 'umd/exceljs.min.js' && rel !== 'umd/qrcode.min.js' && rel !== 'umd/plotly-basic.min.js') || existsSync(join(CACHE, rel))) : [];
+  [/^https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/marked\/[\d.]+\/marked\.min\.js$/, 'umd/marked.min.js'],
+].filter(([, rel]) => (rel !== 'umd/exceljs.min.js' && rel !== 'umd/qrcode.min.js' && rel !== 'umd/plotly-basic.min.js' && rel !== 'umd/marked.min.js') || existsSync(join(CACHE, rel))) : [];
 if (!OFFLINE) console.log('[run-headless] miroir hors-ligne absent (dev-tests/offline-deps.sh) - les CDN seront appelés en direct.');
 
 const require = createRequire(import.meta.url);
