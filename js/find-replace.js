@@ -17,7 +17,7 @@ const FindReplace = (function () {
   const el = Dom.el;
 
   // Le moteur : un document ProseMirror, une requête, des options
-  const { findMatches, compile, expandReplacement, escapeRegex, OBJECT } = (function () {
+  const { findMatches, compile, expandReplacement, isBubble, replaceInBubble, escapeRegex, OBJECT } = (function () {
     // Le texte d'un bloc est lu caractère pour caractère comme le document compte ses positions : un nœud qui n'est pas du texte (bulle, image,
     // pastille) vaut autant d'OBJECT que sa taille, qu'aucune requête ne trouve et qui coupe un mot ; un saut de ligne vaut « \n ». Le texte d'une
     // suppression suivie (marque `deletion`, encore dans le document tant qu'on ne l'a pas acceptée) vaut aussi des OBJECT : pour qui lit, il n'existe
@@ -94,62 +94,165 @@ const FindReplace = (function () {
       return unicode && code >= 0xD800 && code <= 0xDBFF && index + 1 < text.length ? index + 2 : index + 1;
     }
 
-    // Les résultats du motif dans le texte d'un bloc, dans l'ordre. `normalized` : texte comparé (recherche simple : espaces et guillemets unifiés). Le
-    // texte d'une expression régulière est lu tel quel (on peut chercher une espace insécable précise) et se découpe aux « objets » (bulle, image,
-    // suppression suivie) : un motif comme « \S+ » ou « .* » ne les traverse pas, un « remplacer » ne peut donc pas en effacer un. Un résultat vide
-    // (« ^ », « x* ») n'est pas un résultat : il n'a ni texte à surligner ni de quoi avancer.
+    // Visite les résultats du motif dans `input`, dans l'ordre : `visit(début, fin)` (rend faux pour s'arrêter). `input` est le texte comparé (recherche
+    // simple : espaces et guillemets unifiés). Un résultat vide (« ^ », « x* ») n'est pas un résultat : il n'a ni texte à surligner ni de quoi avancer.
+    function scan(compiled, input, opts, visit) {
+      const { regex } = compiled;
+      regex.lastIndex = 0;
+      let found;
+      while ((found = regex.exec(input))) {
+        const start = found.index;
+        const end = start + found[0].length;
+        if (end === start) { regex.lastIndex = advance(input, start, regex.unicode); continue; }
+        // « Mot entier » : un mot collé à la correspondance la disqualifie ; la recherche reprend à l'indice suivant (« ana » dans « banana ana »).
+        if (opts.wholeWord && (isWordCharAt(input, start - 1) || isWordCharAt(input, end))) { regex.lastIndex = start + 1; continue; }
+        if (visit(start, end) === false) return;
+      }
+    }
+
+    // Les résultats du motif dans le texte d'un bloc, dans l'ordre. Le texte d'une expression régulière est lu tel quel (on peut chercher une espace
+    // insécable précise) et se découpe aux « objets » (bulle, image, suppression suivie) : un motif comme « \S+ » ou « .* » ne les traverse pas, un
+    // « remplacer » ne peut donc pas en effacer un.
     function collect(compiled, text, spans, opts, matches, sticky) {
-      const { regex, pattern } = compiled;
+      const { pattern } = compiled;
       const parts = pattern ? Array.from(text.matchAll(SEGMENT), part => ({ at: part.index, input: part[0] })) : [{ at: 0, input: normalize(text) }];
       for (const { at, input } of parts) {
-        regex.lastIndex = 0;
-        let found;
-        while ((found = regex.exec(input))) {
-          const start = found.index;
-          const length = found[0].length;
-          const end = start + length;
-          if (!length) { regex.lastIndex = advance(input, start, regex.unicode); continue; }
-          // « Mot entier » : un mot collé à la correspondance la disqualifie ; la recherche reprend à l'indice suivant (« ana » dans « banana ana »).
-          if (opts.wholeWord && (isWordCharAt(input, start - 1) || isWordCharAt(input, end))) { regex.lastIndex = start + 1; continue; }
+        scan(compiled, input, opts, (start, end) => {
           const match = { from: positionAt(spans, at + start), to: positionAt(spans, at + end - 1) + 1 };
-          if (pattern) SOURCES.set(match, { input, index: start, length, sticky });
+          if (pattern) SOURCES.set(match, { input, index: start, length: end - start, sticky });
           matches.push(match);
-        }
+        });
       }
+    }
+
+    // Les bulles. Une bulle est un résultat quand l'un des textes qu'elle écrit à l'écran contient la requête : son nom (« #Nom », la touche de
+    // déclenchement comprise, comme on le lit), son « Avant » et son « Après », son « sinon » (nom, « Avant » et « Après »), la formule d'une bulle de
+    // calcul. UN résultat par bulle, de la taille de la bulle : jamais à cheval sur du texte ni sur une autre bulle (le texte d'à côté, lui, la lit
+    // toujours comme un OBJECT). Une bulle supprimée en suivi n'existe plus pour qui lit : elle n'est pas trouvée.
+    const BUBBLES = new WeakSet();
+    const isBubbleNode = node => node.type.name === 'varBadge' || node.type.name === 'calcBadge';
+    const isBubble = match => BUBBLES.has(match);
+
+    // Les textes d'une bulle : [{ id, text }], `id` dit lequel (name, before, after, otherwiseName, otherwiseBefore, otherwiseAfter, formula).
+    function bubbleParts(node) {
+      const attrs = node.attrs;
+      if (node.type.name === 'calcBadge') return attrs.formula ? [{ id: 'formula', text: EditorNodes.calcBadgeLabel(attrs.formula) }] : [];
+      const trigger = Variables.triggerChar();
+      const parts = [];
+      const add = (id, text) => { if (text) parts.push({ id, text }); };
+      if (attrs.key) add('name', trigger + attrs.key);
+      add('before', attrs.before);
+      add('after', attrs.after);
+      const other = attrs.otherwise;
+      if (other) {
+        if (other.key) add('otherwiseName', trigger + other.key);
+        add('otherwiseBefore', other.before);
+        add('otherwiseAfter', other.after);
+      }
+      return parts;
+    }
+
+    function hasMatch(compiled, text, opts) {
+      let hit = false;
+      scan(compiled, compiled.pattern ? text : normalize(text), opts, () => { hit = true; return false; });
+      return hit;
+    }
+
+    // Les bulles du bloc `block` (à la position `blockPos`) qui contiennent la requête, dans l'ordre.
+    function bubbleMatches(block, blockPos, compiled, opts) {
+      const found = [];
+      block.forEach((child, offset) => {
+        if (child.isText || !isBubbleNode(child) || child.marks.some(isDeletion)) return;
+        if (!bubbleParts(child).some(part => hasMatch(compiled, part.text, opts))) return;
+        const at = blockPos + 1 + offset;
+        const match = { from: at, to: at + child.nodeSize };
+        BUBBLES.add(match);
+        found.push(match);
+      });
+      return found;
     }
 
     // Les correspondances de `query` dans `doc`, dans l'ordre du document : [{ from, to }]. Chaque bloc de texte se cherche à part (une correspondance
     // ne traverse jamais deux paragraphes ni deux cases), à travers les changements de mise en forme dans le bloc (« bon<b>jour</b> » se trouve). Sans
     // chevauchement : « aa » dans « aaaa » vaut deux. options : { matchCase, wholeWord, regex }. Casse ignorée par défaut (`i` + `u` : « É » et « é » se
-    // valent, « e » et « é » non). Une expression régulière fausse ne trouve rien (`compile` dit pourquoi).
+    // valent, « e » et « é » non). Une expression régulière fausse ne trouve rien (`compile` dit pourquoi). Les bulles s'ajoutent à leur place
+    // (`isBubble`).
     function findMatches(doc, query, options) {
       const opts = options || {};
       const compiled = compile(query, opts);
       if (!compiled.regex) return [];
-      const sticky = compiled.pattern ? new RegExp(compiled.regex.source, compiled.regex.flags.replace('g', '') + 'y') : null;
+      const sticky = stickyOf(compiled);
       const matches = [];
       doc.descendants((node, pos) => {
         if (!node.isTextblock) return true;
         const { text, spans } = textOfBlock(node, pos);
-        if (spans.length) collect(compiled, text, spans, opts, matches, sticky);
+        if (!spans.length) return false;
+        const first = matches.length;
+        collect(compiled, text, spans, opts, matches, sticky);
+        const bubbles = bubbleMatches(node, pos, compiled, opts);
+        if (bubbles.length) {
+          const block = matches.splice(first).concat(bubbles).sort((a, b) => a.from - b.from);
+          for (const match of block) matches.push(match);
+        }
         return false;
       });
       return matches;
     }
 
-    // Le texte qui remplace `match` : `replacement` tel quel, ou, pour le résultat d'une expression régulière, avec ses « $1 », « $& », « $<nom> » et
+    // La copie « collante » du motif d'une expression régulière (rejouée à un endroit précis, expandAt), null pour une recherche simple.
+    const stickyOf = compiled => (compiled.pattern ? new RegExp(compiled.regex.source, compiled.regex.flags.replace('g', '') + 'y') : null);
+
+    // Le texte qu'écrit le motif `sticky` à `index` dans `input` (le résultat de `length` signes) : `replacement` avec ses « $1 », « $& », « $<nom> » et
     // « $$ ». La substitution est celle de String.replace : le motif est rejoué à l'endroit du résultat, sur le texte d'où il vient, pour que les
     // assertions (« (?<=…) ») voient la même chose qu'à la recherche.
-    function expandReplacement(match, replacement) {
-      const source = SOURCES.get(match);
-      if (!source) return replacement;
-      const { input, index, length, sticky } = source;
+    function expandAt(sticky, input, index, length, replacement) {
       sticky.lastIndex = index;
       const replaced = input.replace(sticky, replacement);
       return replaced.slice(index, replaced.length - (input.length - index - length));
     }
 
-    return { findMatches, compile, expandReplacement, escapeRegex, OBJECT };
+    // Le texte qui remplace `match` : `replacement` tel quel, ou, pour le résultat d'une expression régulière, avec ses groupes (expandAt).
+    function expandReplacement(match, replacement) {
+      const source = SOURCES.get(match);
+      return source ? expandAt(source.sticky, source.input, source.index, source.length, replacement) : replacement;
+    }
+
+    // `input` avec `replacement` à la place de chaque résultat du motif (le texte d'une bulle).
+    function replaceText(compiled, sticky, input, opts, replacement) {
+      let out = '';
+      let last = 0;
+      scan(compiled, compiled.pattern ? input : normalize(input), opts, (start, end) => {
+        out += input.slice(last, start) + (sticky ? expandAt(sticky, input, start, end - start, replacement) : replacement);
+        last = end;
+      });
+      return out + input.slice(last);
+    }
+
+    // Le remplacement dans une bulle : { attrs } - ceux de la bulle une fois `replacement` mis à la place de ce que `query` trouve dans son « Avant » et son
+    // « Après » (et dans ceux de son « sinon ») - ou { reason } quand rien ne change : 'name' (le résultat n'est que dans son nom ou celui de son « sinon » :
+    // la bulle suit une colonne), 'formula' (la formule d'un calcul), 'tooLong' (le nouveau texte dépasserait ce qu'un « Avant » ou un « Après » peut garder).
+    function replaceInBubble(node, query, options, replacement) {
+      const opts = options || {};
+      const compiled = compile(query, opts);
+      if (!compiled.regex) return { reason: 'name' };
+      if (node.type.name !== 'varBadge') return { reason: 'formula' };
+      const sticky = stickyOf(compiled);
+      let tooLong = false;
+      let changed = false;
+      const edit = value => {
+        if (!value) return value;
+        const out = replaceText(compiled, sticky, value, opts, replacement);
+        if (out === value) return value;
+        if (out.length > VariableFormat.AFFIX_MAX) { tooLong = true; return value; }
+        changed = true;
+        return VariableFormat.affix(out);
+      };
+      const attrs = Object.assign({}, node.attrs, { before: edit(node.attrs.before), after: edit(node.attrs.after) });
+      if (node.attrs.otherwise) attrs.otherwise = Object.assign({}, node.attrs.otherwise, { before: edit(node.attrs.otherwise.before), after: edit(node.attrs.otherwise.after) });
+      return changed ? { attrs } : { reason: tooLong ? 'tooLong' : 'name' };
+    }
+
+    return { findMatches, compile, expandReplacement, isBubble, replaceInBubble, escapeRegex, OBJECT };
   })();
 
   // L'état de la recherche
@@ -361,6 +464,20 @@ const FindReplace = (function () {
       else tr.delete(match.from, match.to);
     }
 
+    const KEPT_TEXT = { name: 'find.bubble.name', formula: 'find.bubble.formula', tooLong: 'find.bubble.tooLong', suggest: 'find.bubble.suggest' };
+    // Remplace `match` dans `tr` : rend null quand il l'est, sinon pourquoi il reste tel quel - 'name' (le résultat n'est que dans le nom d'une bulle, qui
+    // suit une colonne), 'formula' (la formule d'un calcul), 'tooLong' (un « Avant » ou un « Après » trop long), 'suggest' (une bulle ne se propose pas en
+    // suppression et insertion : en mode suivi elle reste). Une bulle ne change que par le texte qu'elle porte (« Avant », « Après »), par ses attributs :
+    // sa position et sa taille ne bougent pas, les résultats suivants non plus.
+    function replaceMatch(tr, doc, match, suggest) {
+      if (!isBubble(match)) { replaceInTransaction(tr, doc, match, expandReplacement(match, state.replacement), suggest); return null; }
+      const { attrs, reason } = replaceInBubble(doc.nodeAt(match.from), state.query, state, state.replacement);
+      if (!attrs) return reason;
+      if (suggest) return 'suggest';
+      tr.setNodeMarkup(match.from, null, attrs);
+      return null;
+    }
+
     // Envoie `tr` et rend la transaction réellement appliquée (celle que le pont du suivi a transformée en suggestions, le cas échéant), ou null si
     // elle a été refusée.
     function dispatchAndCapture(tr) {
@@ -382,7 +499,9 @@ const FindReplace = (function () {
       if (index < 0) return go(false);
       const match = matches[index];
       const tr = ed.state.tr;
-      replaceInTransaction(tr, ed.state.doc, match, expandReplacement(match, state.replacement), Editor.isTrackChangesOn());
+      const kept = replaceMatch(tr, ed.state.doc, match, Editor.isTrackChangesOn());
+      // Une bulle qui ne change pas : on le dit et on passe au résultat suivant, comme après un remplacement.
+      if (kept) { go(false); setFlash(I18n.t(KEPT_TEXT[kept], { max: VariableFormat.AFFIX_MAX })); return false; }
       const applied = dispatchAndCapture(tr);
       if (!applied) { setFlash(I18n.t('find.replaceFailed')); return false; }
       // Ce qui suit le texte qui vient d'être mis : la fin du remplacement dans le document final (en mode suivi, après l'insertion qui suit la
@@ -408,11 +527,15 @@ const FindReplace = (function () {
       const suggest = Editor.isTrackChangesOn();
       const doc = ed.state.doc;
       const tr = ed.state.tr;
-      for (let i = matches.length - 1; i >= 0; i--) replaceInTransaction(tr, doc, matches[i], expandReplacement(matches[i], state.replacement), suggest);
+      let kept = 0;
+      for (let i = matches.length - 1; i >= 0; i--) if (replaceMatch(tr, doc, matches[i], suggest)) kept++;
+      const count = matches.length - kept;
+      // Que des bulles qui ne changent pas : rien à envoyer, le document reste tel quel.
+      if (!count) { setFlash(I18n.t('find.kept', { kept })); return 0; }
       const applied = dispatchAndCapture(tr);
       if (!applied) { setFlash(I18n.t('find.replaceFailed')); return 0; }
-      setFlash(I18n.t('find.replaced', { count: matches.length }));
-      return matches.length;
+      setFlash(kept ? I18n.t('find.replacedKept', { count, kept }) : I18n.t('find.replaced', { count }));
+      return count;
     }
 
     return { go, applyQuery, replaceCurrent, replaceAll };
@@ -719,7 +842,7 @@ const FindReplace = (function () {
   })();
 
   return {
-    findMatches, createExtension, wireEditor, open, close: closePanel, toggle: toggleOpen,
+    findMatches, isBubble, createExtension, wireEditor, open, close: closePanel, toggle: toggleOpen,
     isOpen: () => state.open, queryError,
     next: () => go(false), prev: () => go(true), replaceCurrent, replaceAll,
     setQuery(query) { state.query = String(query == null ? '' : query); if (refs) refs.find.value = state.query; applyQuery(); },

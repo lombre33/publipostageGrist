@@ -220,8 +220,14 @@ const EditorNodes = (function () {
     return { createVarBadgeNode, varBadgeAttributes, varBadgeAttrsOf, varBadgeHtml };
   })();
 
-  const { createCalcBadgeNode, createCalcBadgeKeysExtension } = (function () {
+  const { createCalcBadgeNode, createCalcBadgeKeysExtension, calcBadgeLabel } = (function () {
     // La bulle de calcul et ses touches
+
+    // Le texte de la bulle : « = » puis la formule dans l'écriture saisie, × ÷ − à la place de * / - (régénéré à chaque rendu, jamais stocké). Rechercher /
+    // Remplacer (js/find-replace.js) cherche dans ce texte, celui que l'on lit à l'écran.
+    function calcBadgeLabel(formula) {
+      return '= ' + Formula.toDisplay(formula, { trigger: Variables.triggerChar(), lang: I18n.getLang(), pretty: true });
+    }
 
     // Bulle « Calcul » (js/variable-calc.js) : une formule à la place d'une colonne, posée depuis la ligne « Calcul » du menu des variables (onglet
     // Chips). Atome en ligne comme varBadge ; `formula` est l'écriture enregistrée de js/formula.js (variables {Table.Colonne}, décimales au point,
@@ -229,14 +235,10 @@ const EditorNodes = (function () {
     // moment. `format` : le réglage nombre de la barre flottante, comme une bulle de colonne numérique. Verte comme les chips (« valeur calculée, pas
     // une colonne Grist »). Résolue en lecture et à l'export par js/reader-mode.js, avec la ligne du tour dans une zone répétée.
     function createCalcBadgeNode(Node, mergeAttributes) {
-      // Le texte de la bulle : « = » puis la formule dans l'écriture saisie, × ÷ − à la place de * / - (régénéré à chaque rendu, jamais stocké).
-      function calcLabel(formula) {
-        return '= ' + Formula.toDisplay(formula, { trigger: Variables.triggerChar(), lang: I18n.getLang(), pretty: true });
-      }
       function badgeSpec(HTMLAttributes, node) {
         const attrs = mergeAttributes(HTMLAttributes, { class: 'calc-badge', contenteditable: 'false', 'data-formula': node.attrs.formula || '' });
         if (node.attrs.format) attrs['data-format'] = JSON.stringify(node.attrs.format);
-        return ['span', attrs, calcLabel(node.attrs.formula)];
+        return ['span', attrs, calcBadgeLabel(node.attrs.formula)];
       }
       return inlineAtom(Node, {
         name: 'calcBadge',
@@ -284,7 +286,7 @@ const EditorNodes = (function () {
         },
       });
     }
-    return { createCalcBadgeNode, createCalcBadgeKeysExtension };
+    return { createCalcBadgeNode, createCalcBadgeKeysExtension, calcBadgeLabel };
   })();
 
   const { createPageNumberBadgeNode, createSmartChipNode, smartChipAttrsOf, smartChipHtml, smartChipLabel } = (function () {
@@ -2083,7 +2085,7 @@ const EditorNodes = (function () {
 
 
   return {
-    createVarBadgeNode, varBadgeAttributes, varBadgeAttrsOf, varBadgeHtml, createCalcBadgeNode, createCalcBadgeKeysExtension, createPageNumberBadgeNode, createSmartChipNode, smartChipAttrsOf, smartChipHtml, smartChipLabel, createFootnoteRefNode, createCommentMark,
+    createVarBadgeNode, varBadgeAttributes, varBadgeAttrsOf, varBadgeHtml, createCalcBadgeNode, createCalcBadgeKeysExtension, calcBadgeLabel, createPageNumberBadgeNode, createSmartChipNode, smartChipAttrsOf, smartChipHtml, smartChipLabel, createFootnoteRefNode, createCommentMark,
     createFontSizeExtension, createTextColorExtension, createHighlightExtension,
     createBulletStyleExtension, createOrderedListStyleExtension, createTaskListStyleExtension,
     withCellBackground, withFastColwidth, parseColwidthOnce, createTableView, createTabNavigationExtension, createClearHistoryExtension,

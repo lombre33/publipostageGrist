@@ -8,6 +8,9 @@
 //  - « Mot entier » et « Respecter la casse » au clic ; le chevron montre la ligne de remplacement ;
 //  - « Expression régulière » au clic : le motif tapé au vrai clavier (« \d+ », « (\w+) (\w+) »), « Expression non valide » quand il est faux sans que la barre ne passe sur deux rangées,
 //    « Tout remplacer » avec « $2 $1 » (une étape d'annulation), l'option éteinte rend au motif son sens de texte ;
+//  - les bulles (variables et calculs) : une bulle trouvée est surlignée comme un texte (la courante en orange, son texte lisible), Entrée et Maj+Entrée s'y placent, « Remplacer » change son
+//    « Avant » et son « Après » mais jamais son nom ni sa formule, et le plus long des messages (« Avec le suivi, une bulle ne se remplace pas. ») tient sur la rangée du champ, en français
+//    comme en anglais ;
 //  - « Remplacer » puis Ctrl+Z (le clavier reste sur le bouton) : une seule étape d'annulation, Ctrl+Maj+Z ou Ctrl+Y la refait ; « Tout remplacer » : une seule étape pour tout ;
 //  - le suivi des modifications allumé : le remplacement devient une suppression et une insertion suggérées, une seule étape d'annulation ;
 //  - Échap ferme et rend le clavier au texte, Ctrl+F reprend le mot sélectionné, Ctrl+H ouvre sur le champ de remplacement ;
@@ -489,6 +492,144 @@ async function runRegex(T) {
   await closePanelIfOpen();
 }
 
+// Les bulles à la vraie souris et au vrai clavier : une bulle trouvée est surlignée comme un texte (la courante en orange) et reste lisible, Entrée et Maj+Entrée s'y placent, « Remplacer »
+// change son « Avant » mais jamais son nom ; chaque message de refus tient sur la rangée du champ dans 700 px (sinon le bouton « fermer » passerait sous le champ).
+const bubbleHtml = (key, extra) => `<span class="var-badge" data-table="MouseBulles" data-column="${key}" data-key="MouseBulles.${key}"${extra || ''}></span>`;
+const calcBubbleHtml = formula => `<span class="calc-badge" data-formula="${formula}"></span>`;
+const BUBBLE_DOC = `<p>Bonjour ${bubbleHtml('Client', ' data-before="Madame "')} de ${bubbleHtml('Ville')}, total ${calcBubbleHtml('{MouseBulles.Montant} * 2')}. Le client Dupont signe, un client fidèle.</p>`;
+const MESSAGES = {
+  fr: { name: 'Le nom d’une bulle ne se remplace pas.', formula: 'La formule d’un calcul ne se remplace pas.', tooLong: 'Trop long pour une bulle (40 signes au plus).', suggest: 'Avec le suivi, une bulle ne se remplace pas.' },
+  en: { name: 'A bubble’s name can’t be replaced.', formula: 'A calculation’s formula can’t be replaced.', tooLong: 'Too long for a bubble (40 characters at most).', suggest: 'With track changes on, bubbles aren’t replaced.' },
+};
+// Chaque bulle de la page : son genre, si elle est surlignée ou courante, son fond et le contraste de son texte sur ce fond.
+const bubbleColors = () => page.evaluate(() => {
+  const parse = s => { const m = s.match(/[\d.]+/g).map(Number); return { r: m[0], g: m[1], b: m[2] }; };
+  const lum = c => { const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b); };
+  const ratio = (a, b) => (Math.max(lum(a), lum(b)) + 0.05) / (Math.min(lum(a), lum(b)) + 0.05);
+  return Array.from(document.querySelectorAll('.tiptap .var-badge, .tiptap .calc-badge')).map(n => {
+    const s = getComputedStyle(n);
+    return { kind: n.classList.contains('calc-badge') ? 'calcul' : (n.getAttribute('data-column') || ''), match: n.classList.contains('pp-find-match'), current: n.classList.contains('pp-find-current'), bg: s.backgroundColor, ratio: Math.round(ratio(parse(s.color), parse(s.backgroundColor)) * 100) / 100 };
+  });
+});
+// Les bulles du document, telles que le modèle les enregistre : le nom (ou la formule), l'« Avant » et l'« Après ».
+const bubbleAttrs = () => page.evaluate(() => {
+  const found = [];
+  EditorCore.getEditor().state.doc.descendants(n => {
+    if (n.type.name === 'varBadge') found.push(`${n.attrs.column}|${n.attrs.before || ''}|${n.attrs.after || ''}`);
+    else if (n.type.name === 'calcBadge') found.push(`calcul|${n.attrs.formula}`);
+  });
+  return found;
+});
+// La sélection recouvre-t-elle exactement UNE bulle ? (le nom du genre de nœud, sinon null)
+const selectedBubble = () => page.evaluate(() => {
+  const ed = EditorCore.getEditor(), s = ed.state.selection, n = ed.state.doc.nodeAt(s.from);
+  return n && (n.type.name === 'varBadge' || n.type.name === 'calcBadge') && s.to === s.from + n.nodeSize ? n.type.name : null;
+});
+// La rangée du champ tient-elle sur une seule ligne, et le message n'est-il pas rogné ?
+const findRowFits = () => page.evaluate(() => {
+  const row = document.querySelector('#pp-find-bar .pp-find-row');
+  const tops = Array.from(row.children).filter(c => c.getClientRects().length).map(c => { const r = c.getBoundingClientRect(); return Math.round((r.top + r.bottom) / 2); });
+  const count = document.getElementById('pp-find-count');
+  return { single: Math.max.apply(null, tops) - Math.min.apply(null, tops) <= 1, field: Math.round(document.getElementById('pp-find-input').getBoundingClientRect().width), clipped: count.scrollWidth > count.clientWidth + 1, width: Math.round(count.getBoundingClientRect().width) };
+});
+async function typeInto(selector, text) {
+  await realClick(selector);
+  await page.keyboard.press('Control+a');
+  await page.keyboard.type(text);
+  await page.waitForTimeout(250);
+}
+// Les quatre messages de refus de « Remplacer », dans la langue donnée : chacun dit pourquoi la bulle reste telle quelle et tient sur la rangée du champ.
+async function bubbleMessages(label, lang) {
+  const M = MESSAGES[lang];
+  await resetPanel();
+  await page.evaluate(() => window.__gristStub.setVariables('MouseBulles', { Client: 'Text', Ville: 'Text', Montant: 'Numeric' }));
+  await setDoc(BUBBLE_DOC);
+  await caretAtStart();
+  await realClick(LOUPE);
+  await realClick('#pp-find-toggle-replace');
+  const start = await html();
+  const asked = async (query, replacement, expected) => {
+    await caretAtStart();
+    await typeInto(FIND, query);
+    await typeInto(REPL, replacement);
+    await realClick('#pp-find-replace-one');
+    const flash = await countText();
+    return { flash, ok: flash === expected, fits: await findRowFits(), overflow: await noHorizontalOverflow(), same: (await html()) === start };
+  };
+  const name = await asked('client', 'dossier', M.name);
+  const tooLong = await asked('madame', 'x'.repeat(45), M.tooLong);
+  await snap(`${label}-10-bulle-trop-long`);
+  const formula = await asked('montant', 'dossier', M.formula);
+  await realClick('#v2-btn-track-changes');
+  const suggest = await asked('madame', 'Mme', M.suggest);
+  await snap(`${label}-10-bulle-suivi`);
+  await realClick('#v2-btn-track-changes');
+  const traces = await page.evaluate(() => ({ track: Editor.isTrackChangesOn(), marks: document.querySelectorAll('.tiptap del, .tiptap ins').length }));
+  const all = { name, tooLong, formula, suggest };
+  check(`${label}, messages de refus : les quatre (nom, trop long, formule, suivi) disent leur raison, laissent le modèle tel quel et tiennent sur la rangée du champ dans 700 px (le champ garde 110 px au moins)`,
+    Object.values(all).every(r => r.ok && r.same && r.fits.single && !r.fits.clipped && r.fits.field >= 110 && r.overflow.page && r.overflow.bar) && !traces.track && traces.marks === 0, { all, traces });
+  await closePanelIfOpen();
+}
+async function runBubbles(T) {
+  await resetPanel();
+  await page.evaluate(() => window.__gristStub.setVariables('MouseBulles', { Client: 'Text', Ville: 'Text', Montant: 'Numeric' }));
+  await setDoc(BUBBLE_DOC);
+  const first = await pointOf('Bonjour', 0.05);
+  await page.mouse.click(first.x, first.y);
+  await page.waitForTimeout(150);
+  await caretAtStart();
+  await realClick(LOUPE);
+  await page.keyboard.type('client');
+  await page.waitForTimeout(250);
+  const typed = { count: await countText(), colors: await bubbleColors(), marks: await marksCount(), focus: await focusId() };
+  const client = typed.colors.find(b => b.kind === 'Client'), others = typed.colors.filter(b => b.kind !== 'Client');
+  check(`${T}, bulles : « client » trouve la bulle Client (par son nom) et deux textes (« 1 sur 3 »), la bulle est la courante : orange, texte lisible (4,5:1 au moins), les autres bulles ne sont pas surlignées`,
+    typed.count === '1 sur 3' && typed.marks === 3 && typed.focus === 'pp-find-input' && client.match && client.current && client.bg === 'rgb(255, 179, 71)' && client.ratio >= 4.5 && others.every(b => !b.match && !b.current), typed);
+  await snap(`${T}-9-bulle-courante`);
+  await pressKey('Enter');
+  const next = { count: await countText(), colors: await bubbleColors(), current: await currentText() };
+  const clientNext = next.colors.find(b => b.kind === 'Client');
+  check(`${T}, bulles : Entrée passe au texte « client » (2 sur 3) et la bulle reste surlignée en jaune pâle, texte lisible`,
+    next.count === '2 sur 3' && next.current === 'client' && clientNext.match && !clientNext.current && clientNext.bg === 'rgb(255, 229, 143)' && clientNext.ratio >= 4.5, next);
+  await snap(`${T}-9-bulle-trouvee`);
+  await pressKey('Shift+Enter');
+  const back = { count: await countText(), selected: await selectedBubble() };
+  check(`${T}, bulles : Maj+Entrée revient à la bulle (1 sur 3) : la sélection est la bulle`, back.count === '1 sur 3' && back.selected === 'varBadge', back);
+
+  // « Remplacer » : le nom reste, le texte suivant se remplace ; « Tout remplacer » sur l'« Avant » ; une seule étape d'annulation.
+  await realClick('#pp-find-toggle-replace');
+  await typeInto(REPL, 'dossier');
+  const before = await html();
+  await realClick('#pp-find-replace-one');
+  const refused = { flash: await countText(), same: (await html()) === before, selection: await selectionText(), fits: await findRowFits() };
+  check(`${T}, bulles : « Remplacer » sur le nom de la bulle ne change rien, le dit (« Le nom d’une bulle ne se remplace pas. ») et passe au texte suivant, sur une seule rangée`,
+    refused.flash === MESSAGES.fr.name && refused.same && refused.selection === 'client' && refused.fits.single && !refused.fits.clipped, refused);
+  await snap(`${T}-9-bulle-refus`);
+  await realClick('#pp-find-replace-one');
+  const replaced = { attrs: await bubbleAttrs(), line: await page.evaluate(() => EditorCore.getEditor().state.doc.firstChild.textContent) };
+  check(`${T}, bulles : le second « Remplacer » remplace le texte (« Le dossier Dupont ») sans toucher la bulle Client ni son « Avant »`,
+    /Le dossier Dupont signe, un client fidèle/.test(replaced.line) && replaced.attrs[0] === 'Client|Madame |', replaced);
+  await pressKey('Control+z');
+  const undone = await html();
+  check(`${T}, bulles : Ctrl+Z défait ce remplacement d'un seul coup`, undone === before, { undone: undone === before });
+
+  await typeInto(FIND, 'madame');
+  await typeInto(REPL, 'Mme');
+  const avant = { count: await countText(), colors: await bubbleColors() };
+  await realClick('#pp-find-replace-all');
+  const avantDone = { flash: await countText(), attrs: await bubbleAttrs(), html: await html() };
+  await pressKey('Control+z');
+  const avantUndone = await bubbleAttrs();
+  await pressKey('Control+Shift+z');
+  const avantRedone = await bubbleAttrs();
+  check(`${T}, bulles : « madame » trouve l'« Avant » de la bulle (1 sur 1, surlignée), « Tout remplacer » par « Mme » le change (« 1 remplacement »), le nom reste « Client » ; Ctrl+Z puis Ctrl+Maj+Z le défont et le refont`,
+    avant.count === '1 sur 1' && avant.colors.find(b => b.kind === 'Client').match && avantDone.flash === '1 remplacement' && avantDone.attrs[0] === 'Client|Mme |' && avantUndone[0] === 'Client|Madame |' && avantRedone[0] === 'Client|Mme |', { avant, avantDone: avantDone.attrs, avantUndone, avantRedone });
+  await snap(`${T}-9-bulle-avant`);
+  await pressKey('Control+z');
+  await closePanelIfOpen();
+  await bubbleMessages(T, 'fr');
+}
+
 // Beaucoup de résultats : 3 500 « foo » (2 000 en haut, un long passage sans rien, 1 500 en bas). Au-delà de 500 résultats, seuls l'écran et ses abords sont surlignés
 // (js/find-replace.js) : la fenêtre de surlignage doit suivre la vraie molette et les sauts du clavier.
 const bigLine = (i, per) => `<p>Ligne ${i}${per ? ' : ' + Array(per).fill('foo').join(' ') : ' sans rien à trouver'}.</p>`;
@@ -610,17 +751,20 @@ async function runEnglish() {
   const none = await countText();
   check('anglais, compteur : « 5 replacements » après « Replace all », « No results » pour un mot absent', done === '5 replacements' && none === 'No results', { done, none });
   await pressKey('Escape');
+  await bubbleMessages('anglais', 'en');
   await page.evaluate(() => I18n.setLang('fr'));
   await page.waitForTimeout(250);
 }
 
 await run('light');
 await runRegex('light');
+await runBubbles('light');
 await runManyResults('light');
 await page.evaluate(() => Settings.setTheme('dark'));
 await page.waitForTimeout(250);
 await run('dark');
 await runRegex('dark');
+await runBubbles('dark');
 await runManyResults('dark');
 await runEnglish();
 

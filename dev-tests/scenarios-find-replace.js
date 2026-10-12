@@ -11,6 +11,9 @@
 //  5) L'EXPRESSION RÉGULIÈRE (option « Expression régulière », demande d'Antoine du 12/10) : le motif, la casse et le mot entier, jamais à travers une bulle, une suppression suivie ou un
 //     bloc, résultats vides ignorés, motif faux (dit, sans résultat), « \- » toléré hors d'une classe, « $1 », « $& », « $<nom> » et « $$ » dans le remplacement (et rien de tout cela
 //     sans l'option), le bouton, le compteur, les textes français et anglais, le mot repris de la sélection, les contrastes de l'erreur.
+//  6) LE TEXTE DES BULLES (demande d'Antoine du 12/10, « texte des bulles » : une bulle de variable ou de calcul est UN résultat quand son nom, son « Avant », son « Après »,
+//     son « sinon » ou sa formule contient la requête ; jamais à cheval sur du texte ; surlignée en entier, atteinte par Entrée) et ce que « Remplacer » en fait : il change
+//     l'« Avant » et l'« Après », jamais le nom (la bulle suit une colonne) ni une formule, laisse les bulles avec le suivi des modifications, et le dit au compteur.
 // La frappe réelle (vrai clavier, vraie souris, 700x400, clair et sombre, anglais) est dans dev-tests/verify-find-replace-mouse.mjs : un KeyboardEvent synthétique n'est pas un geste
 // « trusted ». Aucun caractère spécial n'est écrit en séquence d'échappement dans ce fichier (String.fromCharCode) : un outil d'édition les remplace par le caractère lui-même.
 (function () {
@@ -872,15 +875,19 @@
     });
 
   scenario('fr_regex_engine_never_crosses_a_bubble_a_deleted_text_or_a_block',
-    'Moteur (expression régulière) : « \\S+ », « .+ » et « [^]+ » ne traversent ni une bulle, ni un texte supprimé en suivi, ni deux paragraphes : aucun résultat ne contient de bulle',
+    'Moteur (expression régulière) : « \\S+ », « .+ » et « [^]+ » ne traversent ni une bulle, ni un texte supprimé en suivi, ni deux paragraphes : aucun résultat de texte ne contient de bulle, et la bulle est un résultat à elle seule',
     async h => {
       await begin(h, '<p>abc' + badgeHtml + 'def ghi</p><p>x <del data-id="1">gone</del> y</p>');
-      const words = rxTexts('\\S+');
-      const lines = rxTexts('.+');
-      const everything = rx('[^]+');
-      const withObject = ['\\S+', '.+', '[^]+', '\\w+|\\W+'].some(q => rx(q).some(m => ed().state.doc.textBetween(m.from, m.to, '\n', OBJ).includes(OBJ)));
-      const pass = words.join('|') === 'abc|def|ghi|x|y' && lines.join('|') === 'abc|def ghi|x | y' && everything.length === 4 && !withObject;
-      return { pass, notes: JSON.stringify({ words, lines, everything: everything.length, withObject }) };
+      const texts = query => rx(query).filter(m => !FindReplace.isBubble(m)).map(textOf);
+      const words = texts('\\S+');
+      const lines = texts('.+');
+      const everything = rx('[^]+').filter(m => !FindReplace.isBubble(m));
+      const withObject = ['\\S+', '.+', '[^]+', '\\w+|\\W+'].some(q => rx(q).filter(m => !FindReplace.isBubble(m)).some(m => ed().state.doc.textBetween(m.from, m.to, '\n', OBJ).includes(OBJ)));
+      // La bulle (« #T.C ») est un résultat de ces motifs : exactement elle, un seul signe, jamais accolée au texte voisin.
+      const bubbles = rx('\\S+').filter(m => FindReplace.isBubble(m));
+      const bubbleOnly = bubbles.length === 1 && bubbles[0].to - bubbles[0].from === 1 && ed().state.doc.nodeAt(bubbles[0].from).type.name === 'varBadge';
+      const pass = words.join('|') === 'abc|def|ghi|x|y' && lines.join('|') === 'abc|def ghi|x | y' && everything.length === 4 && !withObject && bubbleOnly;
+      return { pass, notes: JSON.stringify({ words, lines, everything: everything.length, withObject, bubbles: bubbles.length, bubbleOnly }) };
     });
 
   scenario('fr_regex_engine_ignores_empty_matches_and_always_ends',
@@ -1109,6 +1116,315 @@
         return r.kind === 'error' && r.invalid === 'true' && r.text >= 4.5 && r.border >= 3 && r.inkText && r.inkBorder;
       });
       return { pass, notes: JSON.stringify(results) };
+    });
+
+
+  // === 6) Le texte des bulles ===============================================================================================================================================
+
+  const RSQ = String.fromCharCode(0x2019);
+  const bub = (key, extra) => '<span class="var-badge" data-table="T" data-column="' + key + '" data-key="' + key + '"' + (extra || '') + '></span>';
+  const calcBub = formula => '<span class="calc-badge" data-formula="' + formula + '"></span>';
+  const OTHERWISE = ' data-otherwise-table="T" data-otherwise-column="Societe" data-otherwise-key="Societe" data-otherwise-before="chez " data-otherwise-after="!"';
+  const nodeOf = m => ed().state.doc.nodeAt(m.from);
+  const bubbleNames = (query, options) => find(query, options).filter(m => FindReplace.isBubble(m)).map(m => nodeOf(m).attrs.key || nodeOf(m).type.name);
+  const bubbleNodes = () => { const found = []; ed().state.doc.descendants((n, pos) => { if (n.type.name === 'varBadge' || n.type.name === 'calcBadge') found.push({ node: n, pos }); }); return found; };
+  // Le texte du premier paragraphe, une bulle valant un OBJECT : le document garde toujours un paragraphe vide à sa fin.
+  const firstLine = () => { const p = ed().state.doc.firstChild; return p.textBetween(0, p.content.size, '', OBJ); };
+
+  scenario('fr_bubble_engine_finds_a_bubble_by_its_name_before_after_otherwise_and_formula',
+    'Moteur (bulles) : une bulle est un résultat quand son nom (« #Client », touche comprise), son « Avant », son « Après », son « sinon » ou la formule d\'un calcul contient la requête ; casse, mot entier et expression régulière s\'y appliquent ; un résultat = la bulle seule',
+    async h => {
+      await begin(h, '<p>Bonjour ' + bub('Client', ' data-before="Madame " data-after=","') + ' et ' + bub('Ville') + ' puis ' + bub('Contact', OTHERWISE) + ' enfin ' + calcBub('{T.Montant} * 2') + '</p>');
+      const names = (query, options) => bubbleNames(query, options).join('|');
+      const found = {
+        name: names('client'), exact: names('client', { matchCase: true }), withTrigger: names('#Ville'),
+        before: names('Madame'), after: names(','), otherwiseBefore: names('chez'), otherwiseName: names('Societe'), otherwiseAfter: names('!'),
+        formula: names('Montant'), whole: names('Client', { wholeWord: true }), wholeNot: names('Clien', { wholeWord: true }), part: names('lient'),
+        regexName: names('^#Ville$', { regex: true }), regexBefore: names('ma.ame', { regex: true }), none: names('introuvable'),
+      };
+      const oneSign = find('client').filter(m => FindReplace.isBubble(m)).every(m => m.to - m.from === 1);
+      const pass = found.name === 'Client' && found.exact === '' && found.withTrigger === 'Ville' && found.before === 'Client' && found.after === 'Client'
+        && found.otherwiseBefore === 'Contact' && found.otherwiseName === 'Contact' && found.otherwiseAfter === 'Contact' && found.formula === 'calcBadge'
+        && found.whole === 'Client' && found.wholeNot === '' && found.part === 'Client' && found.regexName === 'Ville' && found.regexBefore === 'Client' && found.none === '' && oneSign;
+      return { pass, notes: JSON.stringify({ found, oneSign }) };
+    });
+
+  scenario('fr_bubble_engine_keeps_document_order_and_never_joins_text_and_bubble',
+    'Moteur (bulles) : texte et bulles se suivent dans l\'ordre du document, une bulle reste UN résultat de sa taille, et une requête à cheval sur le texte et la bulle (« Client #Client ») ne trouve rien',
+    async h => {
+      await begin(h, '<p>Client ' + bub('Client') + ' client fin</p>');
+      const all = find('client');
+      const kinds = all.map(m => FindReplace.isBubble(m) ? 'bulle' : 'texte');
+      const ordered = all.every((m, i) => i === 0 || all[i - 1].to <= m.from);
+      const joined = find('Client #Client').length + rx('Client.#Client').length;
+      const hash = find('#').map(m => FindReplace.isBubble(m) ? 'bulle' : 'texte');
+      const pass = kinds.join('|') === 'texte|bulle|texte' && ordered && joined === 0 && hash.join('|') === 'bulle';
+      return { pass, notes: JSON.stringify({ kinds, ordered, joined, hash }) };
+    });
+
+  scenario('fr_bubble_engine_a_bubble_deleted_in_suggestion_mode_is_not_found',
+    'Moteur (bulles) : une bulle supprimée en suivi n\'existe plus pour qui lit : elle n\'est pas trouvée (comme un texte supprimé)',
+    async h => {
+      await begin(h, '<p>a <del data-id="1">' + bub('Client') + '</del> b ' + bub('Client') + '</p>');
+      const deleted = bubbleNodes().map(b => b.node.marks.some(m => m.type.name === 'deletion'));
+      const found = find('client').filter(m => FindReplace.isBubble(m));
+      const pass = deleted.join() === 'true,false' && found.length === 1 && !nodeOf(found[0]).marks.some(m => m.type.name === 'deletion');
+      return { pass, notes: JSON.stringify({ deleted, found: found.length }) };
+    });
+
+  scenario('fr_bubble_panel_counts_goes_to_and_highlights_a_bubble',
+    'Panneau (bulles) : la bulle compte dans « 2 sur 3 », Entrée / Maj+Entrée s\'y placent (la sélection est la bulle), toute bulle trouvée est surlignée et la courante marquée',
+    async h => {
+      await begin(h, '<p>Client ' + bub('Client') + ' fin</p><p>' + bub('Client') + '</p>');
+      FindReplace.open({ replace: false });
+      FindReplace.setQuery('client');
+      await sleep(50);
+      const steps = [];
+      const snap = () => {
+        const sel = ed().state.selection;
+        const node = ed().state.doc.nodeAt(sel.from);
+        steps.push(countText() + (node && node.type.name === 'varBadge' && sel.to - sel.from === 1 ? 'B' : 'T'));
+      };
+      snap();
+      FindReplace.next(); await sleep(40); snap();
+      const marked = tiptap().querySelectorAll('.var-badge.pp-find-match').length;
+      const current = tiptap().querySelectorAll('.var-badge.pp-find-current').length;
+      FindReplace.next(); await sleep(40); snap();
+      FindReplace.next(); await sleep(40); snap();
+      FindReplace.prev(); await sleep(40); snap();
+      const pass = steps.join(' ') === '1 sur 3T 2 sur 3B 3 sur 3B 1 sur 3T 3 sur 3B' && marked === 2 && current === 1;
+      return { pass, notes: JSON.stringify({ steps, marked, current }) };
+    });
+
+  scenario('fr_bubble_replace_changes_before_and_after_never_the_name_and_is_one_undo_step',
+    'Remplacement (bulles) : « Tout remplacer » change le texte et l\'« Avant » / l\'« Après » des bulles, jamais leur nom ni leurs réglages, en UNE étape d\'annulation (le rétablir la refait)',
+    async h => {
+      await begin(h, '<p>Madame ' + bub('Client', ' data-before="Madame " data-after=" Madame"') + ' fin Madame</p>');
+      FindReplace.open({ replace: true });
+      FindReplace.setReplacement('Mme');
+      FindReplace.setQuery('Madame');
+      await sleep(50);
+      const start = Editor.getHTML();
+      const replaced = FindReplace.replaceAll();
+      await sleep(40);
+      const flash = countText();
+      const attrs = bubbleNodes()[0].node.attrs;
+      const line = firstLine();
+      const after = Editor.getHTML();
+      undoOnce(); await sleep(40);
+      const undone = Editor.getHTML();
+      redoOnce(); await sleep(40);
+      const redone = Editor.getHTML();
+      const pass = replaced === 3 && flash === '3 remplacements' && attrs.before === 'Mme ' && attrs.after === ' Mme' && attrs.key === 'Client' && attrs.table === 'T' && attrs.column === 'Client'
+        && line === 'Mme ' + OBJ + ' fin Mme' && undone === start && redone === after;
+      return { pass, notes: JSON.stringify({ replaced, flash, before: attrs.before, after: attrs.after, key: attrs.key, line, undone: undone === start, redone: redone === after }) };
+    });
+
+  scenario('fr_bubble_replace_all_leaves_names_and_says_how_many',
+    'Remplacement (bulles) : « Tout remplacer » ne change jamais le nom d\'une bulle : le texte est remplacé, la bulle reste telle quelle et le compteur dit « 1 remplacement, 1 bulle laissée » ; quand il ne reste que des bulles, rien n\'est écrit (« 1 bulle laissée »)',
+    async h => {
+      await begin(h, '<p>' + bub('Client') + ' ' + bub('Ville') + ' Client</p>');
+      FindReplace.open({ replace: true });
+      FindReplace.setReplacement('Acheteur');
+      FindReplace.setQuery('client');
+      await sleep(50);
+      const replaced = FindReplace.replaceAll();
+      await sleep(40);
+      const flash = countText();
+      const keys = bubbleNodes().map(b => b.node.attrs.key).join('|');
+      const line = firstLine();
+      FindReplace.setQuery('ville');
+      await sleep(40);
+      const docBefore = ed().state.doc;
+      const none = FindReplace.replaceAll();
+      await sleep(40);
+      const flashNone = countText();
+      const same = ed().state.doc === docBefore;
+      const pass = replaced === 1 && flash === '1 remplacement, 1 bulle laissée' && keys === 'Client|Ville' && line === OBJ + ' ' + OBJ + ' Acheteur' && none === 0 && flashNone === '1 bulle laissée' && same;
+      return { pass, notes: JSON.stringify({ replaced, flash, keys, line, none, flashNone, same }) };
+    });
+
+  scenario('fr_bubble_replace_current_on_a_name_or_a_formula_says_so_and_moves_on',
+    'Remplacement (bulles) : « Remplacer » sur le nom d\'une bulle ne change rien, le dit (« Le nom d\'une bulle ne se remplace pas. ») et passe au résultat suivant ; sur un calcul : « La formule d\'un calcul ne se remplace pas. »',
+    async h => {
+      await begin(h, '<p>' + bub('Client') + ' client ' + calcBub('{T.Montant} + 1') + ' montant</p>');
+      FindReplace.open({ replace: true });
+      FindReplace.setReplacement('X');
+      FindReplace.setQuery('client');
+      await sleep(50);
+      const docBefore = ed().state.doc;
+      const startOnBubble = ed().state.doc.nodeAt(ed().state.selection.from).type.name === 'varBadge';
+      const first = FindReplace.replaceCurrent();
+      await sleep(40);
+      const afterName = { flash: countText(), selection: selectionText(), same: ed().state.doc === docBefore, returned: first };
+      FindReplace.setQuery('montant');
+      await sleep(50);
+      const onCalc = ed().state.doc.nodeAt(ed().state.selection.from).type.name === 'calcBadge';
+      const second = FindReplace.replaceCurrent();
+      await sleep(40);
+      const afterFormula = { flash: countText(), selection: selectionText(), same: ed().state.doc === docBefore, returned: second };
+      const pass = startOnBubble && afterName.flash === 'Le nom d' + RSQ + 'une bulle ne se remplace pas.' && afterName.selection === 'client' && afterName.same && afterName.returned === false
+        && onCalc && afterFormula.flash === 'La formule d' + RSQ + 'un calcul ne se remplace pas.' && afterFormula.selection === 'montant' && afterFormula.same && afterFormula.returned === false;
+      return { pass, notes: JSON.stringify({ startOnBubble, afterName, onCalc, afterFormula }) };
+    });
+
+  scenario('fr_bubble_replace_in_suggestion_mode_leaves_bubbles',
+    'Remplacement (bulles) : avec le suivi des modifications, le texte devient une suppression et une insertion suggérées et la bulle reste telle quelle (« 1 remplacement, 1 bulle laissée ») ; « Remplacer » sur la bulle dit « Avec le suivi, une bulle ne se remplace pas. »',
+    async h => {
+      await begin(h, '<p>Madame ' + bub('Client', ' data-before="Madame "') + '</p>');
+      Editor.setTrackChanges(true);
+      await sleep(60);
+      FindReplace.open({ replace: true });
+      FindReplace.setReplacement('Mme');
+      FindReplace.setQuery('Madame');
+      await sleep(50);
+      const replaced = FindReplace.replaceAll();
+      await sleep(60);
+      const flash = countText();
+      const before = bubbleNodes()[0].node.attrs.before;
+      const html = parse(Editor.getHTML());
+      const suggestions = { del: html.querySelectorAll('del').length, ins: html.querySelectorAll('ins').length };
+      // Il ne reste que la bulle comme résultat : « Remplacer » la laisse et le dit.
+      FindReplace.next();
+      await sleep(40);
+      FindReplace.replaceCurrent();
+      await sleep(40);
+      const flashBubble = countText();
+      const pass = replaced === 1 && flash === '1 remplacement, 1 bulle laissée' && before === 'Madame ' && suggestions.del === 1 && suggestions.ins === 1 && flashBubble === 'Avec le suivi, une bulle ne se remplace pas.';
+      return { pass, notes: JSON.stringify({ replaced, flash, before, suggestions, flashBubble }) };
+    });
+
+  scenario('fr_bubble_replace_too_long_for_a_before_or_after_is_left',
+    'Remplacement (bulles) : un « Avant » ou un « Après » garde 40 signes au plus : 40 passent, 41 laissent la bulle telle quelle et le disent (« Trop long pour une bulle (40 signes au plus). »)',
+    async h => {
+      await begin(h, '<p>' + bub('Client', ' data-before="Madame " data-after="Monsieur "') + '</p>');
+      FindReplace.open({ replace: true });
+      FindReplace.setQuery('Madame');
+      FindReplace.setReplacement('x'.repeat(41));
+      await sleep(50);
+      const docBefore = ed().state.doc;
+      FindReplace.replaceCurrent();
+      await sleep(40);
+      const long = { flash: countText(), same: ed().state.doc === docBefore, before: bubbleNodes()[0].node.attrs.before };
+      FindReplace.setReplacement('x'.repeat(39));
+      await sleep(40);
+      FindReplace.replaceCurrent();
+      await sleep(40);
+      const fits = bubbleNodes()[0].node.attrs.before;
+      const pass = long.flash === 'Trop long pour une bulle (40 signes au plus).' && long.same && long.before === 'Madame ' && fits === 'x'.repeat(39) + ' ';
+      return { pass, notes: JSON.stringify({ long, fitsLength: fits.length }) };
+    });
+
+  scenario('fr_bubble_replace_regex_groups_and_an_empty_result',
+    'Remplacement (bulles, expression régulière) : « $2 $1 » refait un « Avant » (« Jean Dupont » devient « Dupont Jean »), et un remplacement vide efface un « Avant » (l\'attribut disparaît)',
+    async h => {
+      await begin(h, '<p>' + bub('Client', ' data-before="Jean Dupont" data-after=" (M. Martin)"') + ' ' + bub('Ville', ' data-before="Madame "') + '</p>');
+      FindReplace.open({ replace: true });
+      FindReplace.setOptions({ regex: true });
+      FindReplace.setReplacement('$2 $1');
+      FindReplace.setQuery('(\\w+) (\\w+)');
+      await sleep(50);
+      const replaced = FindReplace.replaceAll();
+      await sleep(40);
+      const [client, ville] = bubbleNodes().map(b => b.node.attrs);
+      const swapped = { replaced, before: client.before, after: client.after, other: ville.before };
+      FindReplace.setOptions({ regex: false });
+      FindReplace.setReplacement('');
+      FindReplace.setQuery('Madame ');
+      await sleep(50);
+      const cleared = FindReplace.replaceAll();
+      await sleep(40);
+      const gone = bubbleNodes()[1].node.attrs.before;
+      const html = Editor.getHTML();
+      const pass = swapped.replaced === 1 && swapped.before === 'Dupont Jean' && swapped.after === ' (M. Martin)' && swapped.other === 'Madame '
+        && cleared === 1 && gone === null && !/data-before="Madame/.test(html);
+      return { pass, notes: JSON.stringify({ swapped, cleared, gone }) };
+    });
+
+
+  scenario('fr_bubble_texts_in_english',
+    'Textes (bulles) : en anglais, « 1 replacement, 2 bubbles left as is », « 1 bubble left as is », et les quatre raisons (nom, formule, suivi, trop long) au compteur',
+    async h => {
+      await begin(h, '<p>client ' + bub('Client') + ' ' + bub('Client') + ' ' + calcBub('{T.Montant}') + ' ' + bub('Ville', ' data-before="Madame "') + '</p>');
+      I18n.setLang('en');
+      await sleep(60);
+      FindReplace.open({ replace: true });
+      FindReplace.setReplacement('X');
+      FindReplace.setQuery('client');
+      await sleep(50);
+      const replaced = FindReplace.replaceAll();
+      await sleep(40);
+      const plural = countText();
+      FindReplace.setQuery('ville');
+      await sleep(40);
+      const only = FindReplace.replaceAll();
+      await sleep(40);
+      const single = countText();
+      const reasons = {};
+      const current = async (query, replacement) => {
+        FindReplace.setReplacement(replacement);
+        FindReplace.setQuery(query);
+        await sleep(50);
+        FindReplace.replaceCurrent();
+        await sleep(40);
+        return countText();
+      };
+      reasons.name = await current('Client', 'X');
+      reasons.formula = await current('Montant', 'X');
+      reasons.tooLong = await current('Madame', 'x'.repeat(41));
+      Editor.setTrackChanges(true);
+      await sleep(60);
+      reasons.suggest = await current('Madame', 'Mme');
+      const pass = replaced === 1 && plural === '1 replacement, 2 bubbles left as is' && only === 0 && single === '1 bubble left as is'
+        && reasons.name === 'A bubble' + RSQ + 's name can' + RSQ + 't be replaced.' && reasons.formula === 'A calculation' + RSQ + 's formula can' + RSQ + 't be replaced.'
+        && reasons.tooLong === 'Too long for a bubble (40 characters at most).' && reasons.suggest === 'With track changes on, bubbles aren' + RSQ + 't replaced.';
+      return { pass, notes: JSON.stringify({ replaced, plural, only, single, reasons }) };
+    });
+
+  scenario('fr_contrast_bubble_highlight_light_and_dark',
+    'Contrastes : une bulle trouvée (variable, variable cassée, calcul, calcul cassé), surlignée ou courante, garde son texte à 4,5:1 sur son fond de surlignage, en thème clair comme en sombre',
+    async h => {
+      await h.resetEditor();
+      window.__gristStub.setVariables('FrBulles', { Client: 'Text' });
+      const real = '<span class="var-badge" data-table="FrBulles" data-column="Client" data-key="FrBulles.Client"></span>';
+      const broken = '<span class="var-badge" data-table="Nope" data-column="Missing" data-key="Nope.Missing"></span>';
+      Editor.setHTML('<p>' + [real, broken, calcBub('{FrBulles.Client}'), calcBub('{Nope.Missing}')].join(' ') + '</p>');
+      await sleep(150);
+      const html = document.documentElement;
+      const before = html.getAttribute('data-theme');
+      const noMotion = document.createElement('style');
+      noMotion.textContent = '*, *::before, *::after { transition: none !important; }';
+      document.head.appendChild(noMotion);
+      const results = {};
+      const kindOf = node => (node.classList.contains('calc-badge') ? 'calcul' : 'variable') + (/-broken/.test(node.className) ? ' cassé' : '');
+      try {
+        FindReplace.open({ replace: false });
+        FindReplace.setQuery('#');
+        await sleep(80);
+        for (const theme of ['light', 'dark']) {
+          html.setAttribute('data-theme', theme);
+          await sleep(60);
+          const seen = [];
+          // Quatre tours : chaque bulle est « courante » une fois, les trois autres « trouvées ».
+          for (let turn = 0; turn < 4; turn++) {
+            for (const node of Array.from(tiptap().querySelectorAll('.var-badge, .calc-badge'))) {
+              const style = getComputedStyle(node);
+              const value = ratio(parseColor(style.color), parseColor(style.backgroundColor));
+              seen.push({ state: node.classList.contains('pp-find-current') ? 'courante' : 'trouvée', kind: kindOf(node), marked: node.classList.contains('pp-find-match'), ratio: Math.round(value * 100) / 100 });
+            }
+            FindReplace.next();
+            await sleep(40);
+          }
+          results[theme] = seen;
+        }
+      } finally {
+        if (before === null) html.removeAttribute('data-theme'); else html.setAttribute('data-theme', before);
+        noMotion.remove();
+      }
+      const covers = list => ['variable', 'variable cassé', 'calcul', 'calcul cassé'].every(kind => ['courante', 'trouvée'].every(state => list.some(r => r.kind === kind && r.state === state)));
+      const pass = ['light', 'dark'].every(theme => results[theme].length === 16 && covers(results[theme]) && results[theme].every(r => r.marked && r.ratio >= 4.5));
+      const worst = theme => Math.min.apply(null, results[theme].map(r => r.ratio));
+      return { pass, notes: JSON.stringify({ kinds: Array.from(new Set(results.light.map(r => r.kind))), worstLight: worst('light'), worstDark: worst('dark'), light: results.light.filter(r => !r.marked || r.ratio < 4.5) }) };
     });
 
   window.EditorTestSuites = window.EditorTestSuites || {};

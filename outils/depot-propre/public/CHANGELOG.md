@@ -33,6 +33,17 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   quel. Un motif faux (une parenthèse oubliée) ne trouve rien et le compteur dit « Expression non valide »
   (la raison du navigateur est dans son info-bulle). Un résultat vide (`^`, `x*`) n'est pas compté, et le mot
   sélectionné repris dans le champ est échappé quand l'option est allumée.
+- **Rechercher / Remplacer trouve aussi les bulles** : une bulle de variable ou de calcul est un résultat quand son
+  nom (`#Client`), son « Avant », son « Après », son « sinon » ou la formule du calcul contient ce qui est
+  tapé ; « Respecter la casse », « Mot entier » et l'expression régulière s'y appliquent. La bulle entière est
+  surlignée (en orange quand c'est la courante), elle compte pour un résultat dans « 2 sur 5 », et Entrée et
+  Maj+Entrée s'y placent. « Remplacer » ne change dans une bulle que son « Avant », son « Après » et ceux de
+  son « sinon » (« Madame » devient « Mme » dans toutes les bulles d'un coup, en une seule étape
+  d'annulation) ; le nom d'une bulle et la formule d'un calcul ne se remplacent jamais, et le compteur le dit
+  (« 3 remplacements, 1 bulle laissée »). Un « Avant » ou un « Après » garde 40 signes au plus (au-delà la
+  bulle reste telle quelle et le dit). Avec le suivi des modifications, les bulles restent telles quelles :
+  le texte, lui, devient une suppression et une insertion suggérées. Les numéros de page, les puces, les
+  images et l'en-tête et le pied de page hors édition ne sont pas cherchés.
 - **Boucle dans une boucle** : une Boucle se pose aussi sur une variable placée dans une zone qu'une autre
   Boucle répète déjà : pour chaque facture ses lignes, puis pour chaque ligne ses étapes (en tableau, en
   liste ou en paragraphes). La zone intérieure lit les lignes de la ligne en cours de la zone qui l'entoure.
@@ -795,6 +806,16 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   nothing and the counter says "Invalid expression" (the browser's reason is in its tooltip). An empty
   match (`^`, `x*`) is not counted, and the selected word carried into the field is escaped when the
   option is on.
+- **Find / Replace also finds bubbles**: a variable or calculation bubble is a result when its name
+  (`#Client`), its "Before", its "After", its "otherwise" or the formula of the calculation contains what is
+  typed; "Match case", "Whole word" and the regular expression apply to it. The whole bubble is highlighted
+  (orange when it is the current one), it counts as one result in "2 of 5", and Enter and Shift+Enter go to
+  it. "Replace" only changes a bubble's "Before", "After" and those of its "otherwise" ("Dear" becomes
+  "Hello" in every bubble at once, in a single undo step); a bubble's name and a calculation's formula are
+  never replaced, and the counter says so ("3 replacements, 1 bubble left as is"). A "Before" or an "After"
+  keeps 40 characters at most (beyond that the bubble stays as it is and says so). With track changes on,
+  bubbles stay as they are: the text becomes a suggested deletion and insertion. Page numbers, chips,
+  images and the header and footer outside editing are not searched.
 - **Loop in a loop**: a Loop can also be placed on a variable inside a zone that another Loop already
   repeats: for each invoice its lines, then for each line its steps (in a table, a list or paragraphs). The
   inner zone reads the rows of the current row of the zone around it. The data structure does not change:

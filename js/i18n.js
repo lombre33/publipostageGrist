@@ -496,6 +496,14 @@ const I18n = (function () {
     'find.count.total': { fr: '{count} {count|résultat|résultats}', en: '{count} {count|result|results}' },
     'find.replaced': { fr: '{count} {count|remplacement|remplacements}', en: '{count} {count|replacement|replacements}' },
     'find.replaceFailed': { fr: 'Remplacement impossible ici.', en: 'Can’t replace here.' },
+    // Les bulles : un résultat par bulle (son nom, son « Avant », son « Après », son « sinon », la formule d’un calcul) ; « Remplacer » ne change que son
+    // « Avant » et son « Après » (js/find-replace.js:replaceMatch). Ce que le compteur dit d’une bulle qui reste telle quelle, et de combien.
+    'find.bubble.name': { fr: 'Le nom d’une bulle ne se remplace pas.', en: 'A bubble’s name can’t be replaced.' },
+    'find.bubble.formula': { fr: 'La formule d’un calcul ne se remplace pas.', en: 'A calculation’s formula can’t be replaced.' },
+    'find.bubble.tooLong': { fr: 'Trop long pour une bulle ({max} signes au plus).', en: 'Too long for a bubble ({max} characters at most).' },
+    'find.bubble.suggest': { fr: 'Avec le suivi, une bulle ne se remplace pas.', en: 'With track changes on, bubbles aren’t replaced.' },
+    'find.kept': { fr: '{kept} {kept|bulle laissée|bulles laissées}', en: '{kept} {kept|bubble left as is|bubbles left as is}' },
+    'find.replacedKept': { fr: '{count} {count|remplacement|remplacements}, {kept} {kept|bulle laissée|bulles laissées}', en: '{count} {count|replacement|replacements}, {kept} {kept|bubble left as is|bubbles left as is}' },
 
     // --- Commentaires (js/comments.js) ---
     'comments.selectTextFirst': { fr: 'Sélectionnez du texte avant d’ajouter un commentaire.', en: 'Select some text before adding a comment.' },

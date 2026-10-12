@@ -42,3 +42,9 @@
    seule). Le texte garde sa couleur : au moins 8:1 sur ces deux fonds avec le noir bleuté du texte de la page. */
 .tiptap .pp-find-match { background: #ffe58f; border-radius: 2px; }
 .tiptap .pp-find-match.pp-find-current { background: #ffb347; box-shadow: 0 0 0 1.5px #8a4b00; }
+/* Une bulle trouvée (nom, « Avant », « Après », « sinon », formule d'un calcul) : toute la bulle prend le surlignage du texte, et son texte la couleur de la
+   page - le vert d'une bulle de calcul tombe à 3,6:1 sur l'orange du résultat courant, le rouge d'une bulle cassée à 4,2:1, la couleur de la page garde 8:1.
+   La classe répétée passe devant les couleurs propres des bulles : css/variable-calc.css se charge après celui-ci, et sa bulle cassée a le même poids
+   qu'un seul `.pp-find-match`. */
+.tiptap :is(.var-badge, .calc-badge).pp-find-match.pp-find-match { background: #ffe58f; color: inherit; border-color: #8a4b00; }
+.tiptap :is(.var-badge, .calc-badge).pp-find-match.pp-find-match.pp-find-current { background: #ffb347; box-shadow: 0 0 0 1.5px #8a4b00; }
