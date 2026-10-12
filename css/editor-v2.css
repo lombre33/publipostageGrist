@@ -643,6 +643,9 @@
 .v2-hover-row { padding: 6px 9px; border-radius: 5px; font-size: 12.5px; color: var(--text, #3a4452); cursor: pointer; white-space: nowrap; }
 .v2-hover-row:hover { background: var(--surface-sunken, #f2f4f7); }
 .v2-hover-row.is-active { color: var(--accent, #2f6fed); font-weight: 700; }
+/* La ligne choisie sous la souris, dans tout menu au survol (Type d'export, qualité du PDF, titres) : le bleu d'accent ne fait que 4,02:1 (clair) et 4,43:1
+   (sombre) sur le gris du survol. `--accent-ink`, le bleu des textes sur fond teinté, en fait 5,67 et 5,41. */
+.v2-hover-row.is-active:hover { color: var(--accent-ink, #2558c4); }
 .v2-hover-row-disabled { color: var(--text-muted, #9aa3b2); cursor: not-allowed; }
 .v2-hover-row-disabled:hover { background: none; }
 /* Une ligne, un intitulé ou un filet qu'un menu ne montre que dans un certain état (la qualité du PDF du menu Type d'export et les options du menu Exporter, selon
@@ -737,6 +740,7 @@
 .v2-format-panel button { display: block; width: 100%; text-align: left; padding: 6px 9px; border: none; border-radius: 5px; background: none; cursor: pointer; font-size: 12.5px; color: var(--text, #3a4452); font-family: inherit; }
 .v2-format-panel button:hover { background: var(--surface-sunken, #f2f4f7); }
 .v2-format-panel button.is-active { color: var(--accent, #2f6fed); font-weight: 700; }
+.v2-format-panel button.is-active:hover { color: var(--accent-ink, #2558c4); }
 
 /* Menu déroulant de couleur (bouton couleur ci-dessus) : le panneau seulement. Sa palette, ses rangées de couleurs gardées, son pied et la fenêtre
    « Couleur personnalisée » sont à css/color-palette.css (js/color-palette.js). */

@@ -554,6 +554,11 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   s'affichaient jamais, même pour un client dont les champs étaient remplis, parce que leur condition lisait
   la table de la page au lieu de celle du client. Les modèles de la galerie les affichent ; ceux qui ont déjà
   été créés ne changent pas.
+- **Ligne choisie d'un menu sous la souris** : dans un menu qui s'ouvre au survol (Type d'export, qualité du PDF,
+  niveaux de titre), la ligne choisie est en bleu et en gras, mais sous la souris ce bleu se posait sur le gris du
+  survol et n'y atteignait que 4,0:1 en thème clair et 4,4:1 en thème sombre, un peu pâle. Elle garde son bleu et son
+  gras, avec un bleu plus soutenu tant que la souris est dessus (5,7:1 en clair, 5,4:1 en sombre) ; au repos, rien ne
+  change.
 
 ## [1.0.0-beta.1] - 2026-10-05
 
@@ -1158,6 +1163,10 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 - **Client SIRET and VAT lines in the gallery's invoice and agreement**: these two lines never showed, even
   for a client whose fields were filled in, because their condition read the page's table instead of the
   client's. The gallery templates now show them; templates already created do not change.
+- **Chosen row of a menu under the mouse**: in a menu that opens on hover (Export type, PDF quality, heading
+  levels), the chosen row is blue and bold, but under the mouse that blue sat on the hover grey and only reached
+  4.0:1 in the light theme and 4.4:1 in the dark theme, a little pale. It keeps its blue and its bold, with a firmer
+  blue while the mouse is over it (5.7:1 in light, 5.4:1 in dark); at rest, nothing changes.
 
 ## [1.0.0-beta.1] - 2026-10-05 (English)
 

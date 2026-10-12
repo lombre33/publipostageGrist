@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Le menu « Type d'export » (ex-« Qualité PDF ») et le menu « Exporter » au VRAI clic, à 700x400 (le panneau de Grist) : ce qu'Antoine voit et fait, pas un état interne.
 //   1) le menu « Type d'export » : PDF, Word, Excel ; la qualité du PDF n'y est montrée que pour le PDF - entier dans le panneau, sans texte coupé, lisible (>= 4,5:1), en français
-//      clair puis en anglais sombre ; dans un document Excel est grisé (il reste là), dans une grille c'est Word ;
+//      clair puis en anglais sombre ; dans un document Excel est grisé (il reste là), dans une grille c'est Word ; la ligne choisie, sous la souris, garde un bleu lisible (>= 4,5:1) sur le gris du survol ;
 //   2) le menu « Exporter » : titre « Exporter », rien que des options de lignes et de classeur (PDF : une seule ligne, toutes les lignes en ZIP, en un seul PDF, assemblage ; Word : une
 //      seule ligne, ZIP ; Excel : une seule ligne, ZIP, un seul classeur), la coche DEVANT l'option cochée, entier dans le panneau, atteignable à la souris, aucune ligne « Exporter en… » ;
 //   3) un vrai clic sur un type grisé ne choisit rien, un vrai clic sur Word ou Excel le choisit (ligne active, bouton du type allumé, qualité du PDF cachée mais gardée) ;
@@ -88,6 +88,25 @@ const stateOf = (page, selectors) => page.evaluate(sels => {
     };
   });
 }, selectors);
+// Une ligne sous la VRAIE souris : survolée (:hover), peinte de son fond de survol (le contraste de son texte se mesure sur ce fond, jamais sur celui du menu derrière) et, quand elle est
+// choisie (is-active), toujours bleue et en gras.
+const hoveredRow = async (page, menu, row) => {
+  await hoverRow(page, menu, row);
+  return page.evaluate(sel => {
+    const el = document.querySelector(sel);
+    const cs = getComputedStyle(el);
+    const rgb = c => (c.match(/[\d.]+/g) || []).slice(0, 3).map(Number);
+    const lin = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+    const lum = c => { const [r, g, b] = rgb(c).map(lin); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+    const [r, g, b] = rgb(cs.color);
+    const la = lum(cs.color), lb = lum(cs.backgroundColor);
+    return {
+      sel, hovered: el.matches(':hover'), active: el.classList.contains('is-active'), painted: !/rgba\(0, 0, 0, 0\)|transparent/.test(cs.backgroundColor), blue: b > r && b > g,
+      bold: Number(cs.fontWeight) >= 700, color: cs.color, background: cs.backgroundColor, contrast: Math.round((Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05) * 100) / 100,
+    };
+  }, row);
+};
+const chosenReadable = s => s.hovered && s.active && s.painted && s.blue && s.bold && s.contrast >= 4.5;
 // Les intitulés que le menu montre (un intitulé masqué n'a pas de cadre) : le menu doit être ouvert (survolé) pour que la mise en page existe.
 const labelsOf = (page, flyout) => page.evaluate(sel => Array.from(document.querySelectorAll(sel + ' .v2-hover-flyout-label')).filter(l => l.getBoundingClientRect().width > 0).map(l => l.textContent.trim()), flyout);
 const typeValue = page => page.evaluate(() => document.getElementById('v2-export-type').value);
@@ -146,6 +165,13 @@ async function menus(page, lang, tag) {
   check(`${tag} : au départ « PDF » et la qualité par défaut sont les lignes actives, Excel est grisé (il reste dans le menu), PDF et Word sont actifs`,
     types[0].active && !types[1].active && !types[2].active && types[0].live && types[1].live && types[2].greyed && qualities.filter(r => r.active).map(r => r.sel).join() === QUALITY_ROW('native') && qualities.every(r => r.live), { types, qualities });
   check(`${tag} : le bouton du type n'est pas allumé pour le PDF`, !(await typeButtonLit(page)));
+
+  // La ligne CHOISIE sous la souris (les mesures du menu ci-dessus le survolent sur une autre ligne) : son bleu passe sur le gris du survol. Avant : 4,02:1 en clair, 4,43:1 en sombre.
+  console.log(`\n[${tag}] La ligne choisie d'un menu, sous la souris`);
+  const hoveredType = await hoveredRow(page, TYPE_MENU, TYPE_ROW('pdf'));
+  const hoveredQuality = await hoveredRow(page, TYPE_MENU, QUALITY_ROW('native'));
+  check(`${tag} : « ${W.types[0]} » (type choisi), sous la souris : sur son gris de survol, toujours bleue et en gras, lisible (>= 4,5:1)`, chosenReadable(hoveredType), hoveredType);
+  check(`${tag} : « ${W.qualities[0]} » (qualité choisie), sous la souris : sur son gris de survol, toujours bleue et en gras, lisible (>= 4,5:1)`, chosenReadable(hoveredQuality), hoveredQuality);
 
   console.log(`\n[${tag}] Le menu « ${W.exportLabel} » dans un document, type PDF : rien que des options de lignes`);
   await hoverRow(page, EXPORT_MENU, LINES_ROW('one'));

@@ -83,7 +83,9 @@ boutons pleins à 3,08:1 en sombre). Règles à suivre :
   plein s'ajoute à sa liste.
 - Un texte d'accent posé sur un fond teinté (`--accent-soft`, `--surface-sunken`) prend `--accent-ink`, jamais `--accent`
   (3,97 à 4,43:1 sur ces fonds) : c'est le cas du texte fantôme « Ajouter un en-tête / pied de page », visible au survol
-  sur le fond de sa zone. Un message de réussite prend `--good` sur `--good-soft`.
+  sur le fond de sa zone, et de la ligne choisie d'un menu sous la souris (`.v2-hover-row.is-active:hover`, `.v2-format-panel button.is-active:hover`) : elle garde le bleu d'accent au repos
+  et prend `--accent-ink` sur le gris du survol (5,67 et 5,41:1 au lieu de 4,02 et 4,43:1 ; carte « Rendre plus lisible la ligne choisie d'un menu sous la souris ? », Antoine, 12/10, « Corriger »).
+  Un message de réussite prend `--good` sur `--good-soft`.
 - La page (éditeur, Lecture) reste blanche dans les deux thèmes : un texte discret posé dessus prend `--paper-text-faint`,
   jamais `--text-faint`, qui s'éclaircit en sombre (2,46:1 sur blanc). Une zone qui prend le fond teinté du thème au
   survol (en-tête et pied de page remplis) y reprend le gris du thème. Dans le PDF et le Word, le texte barré d'un item

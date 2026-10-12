@@ -34,6 +34,10 @@ chaque modèle (chacun retrouve ses choix, le bouton du type est allumé pour Wo
 choisir Word sur un modèle : le choix tient pendant la séance, et la table `Publipostage_PreferencesModeles` n'a pas
 bougé.
 
+Dans ces menus, la **ligne choisie** (le type, la qualité du PDF, un niveau de titre) est bleue et en gras ; à vérifier à
+l'œil, en clair puis en sombre : la souris sur cette ligne la laisse bleue et en gras, d'un bleu un peu plus soutenu, bien
+lisible sur le gris du survol (4,5:1 au moins) ; la souris ailleurs, elle reprend son bleu d'avant.
+
 ## Principe directeur — la chaîne à 3 étages
 
 Le contenu d'un modèle passe par **3 moteurs de rendu indépendants**, chacun avec son propre

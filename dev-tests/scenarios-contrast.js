@@ -670,6 +670,32 @@
     },
   });
 
+  // Ligne choisie d'un menu sous la souris (demande d'Antoine du 12/10, carte « Rendre plus lisible la ligne choisie d'un menu sous la souris ? », réponse « Corriger ») : même technique,
+  // le survol ne se joue pas depuis la page. La couleur d'une ligne choisie et survolée est celle que déclare sa règle `…is-active:hover` ; à défaut, celle de la ligne choisie au repos.
+  // Avant : le bleu d'accent restait sur le gris du survol (4,02:1 en clair, 4,43:1 en sombre). Le vrai survol, à la souris, se mesure dans verify-export-type-mouse.mjs.
+  cases.push({
+    id: 'contrast_chosen_menu_row_keeps_4_5_under_the_mouse_on_the_hover_grey_in_light_and_dark',
+    description: 'Ligne choisie d’un menu (Type d’export, qualité du PDF, niveaux de titre, lignes du panneau de police et de taille) sous la souris : son bleu sur le gris du survol atteint 4,5:1 au moins, en clair et en sombre',
+    run: async () => {
+      const menus = [
+        ['ligne choisie d’un menu', '.v2-hover-row:hover', '.v2-hover-row.is-active:hover', '.v2-hover-row.is-active'],
+        ['ligne choisie du panneau de police et de taille', '.v2-format-panel button:hover', '.v2-format-panel button.is-active:hover', '.v2-format-panel button.is-active'],
+      ];
+      const byTheme = inBothThemes(() => {
+        const out = {};
+        for (const [name, hoverRule, chosenHoverRule, chosenRule] of menus) {
+          const band = hoverBand(hoverRule);
+          const declared = declaredOnHover(chosenHoverRule, 'color') || declaredOnHover(chosenRule, 'color');
+          const color = declared && computedFromDeclaration('color', declared);
+          out[name] = band && color ? round2(ratio(over(color, band), band)) : 0;
+        }
+        return out;
+      });
+      const bad = failing(byTheme, 4.5);
+      return { pass: bad.length === 0, notes: JSON.stringify({ bad, byTheme }) };
+    },
+  });
+
   // Texte inséré et texte supprimé du suivi des modifications (demande d'Antoine du 01/10, carte « Rendre lisibles les couleurs du texte inséré et supprimé du suivi ? », réponse
   // « Aligner ») : les teintes des cases d'une colonne suivie (css/track-changes.css), écrites en dur donc les mêmes en clair et en sombre - la page reste blanche en thème
   // sombre. Avant : le texte supprimé prenait --danger sur --danger-soft (3,7:1 en clair) et, en sombre, la pastille foncée de ces deux jetons sur la page blanche.
