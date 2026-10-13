@@ -1520,7 +1520,7 @@
     if (stale && stale()) return null;
     const content = readerContainer.querySelector('.reader-content');
     const bodyText = MailtoExport.plainTextFromHtml(content ? content.innerHTML : readerContainer.innerHTML);
-    return MailtoExport.buildMailtoUrl({ to: fields.destinataires, cc: fields.cc, bcc: fields.cci, subject: fields.objet, bodyText });
+    return MailtoExport.buildMailtoUrl({ to: fields.destinataires, cc: fields.cc, bcc: fields.cci, subject: fields.objet, bodyText, client: MailtoExport.getMailClient() });
   }
 
   // Jauge de longueur mailto:, permanente, sur l'URL résolue (to+cc+cci+objet+corps) et non sur le gabarit tapé : un accent ou un retour à la ligne
@@ -2586,6 +2586,8 @@
     document.addEventListener('pp:pageLayoutChanged', onPageLayoutChanged);
     // Émis par PageLayout.setWatermark (fenêtre « Filigrane… ») : la couche des pages est repeinte, la page ne change pas de forme.
     document.addEventListener('pp:watermarkChanged', onWatermarkChanged);
+    // Émis par MailtoExport.setMailClient (Réglages > Email) : le lien de l'email, donc sa longueur, change avec la messagerie choisie.
+    document.addEventListener('pp:mailClientChanged', scheduleEmailLengthGauge);
   }
 
   // La ligne sélectionnée dans Grist a changé : la Lecture, les champs de l'email et la jauge suivent.

@@ -235,7 +235,7 @@ confirmation.
 
 Aucune donnée n'est stockée hors de Grist. Les seules informations conservées dans le navigateur
 (`localStorage`) sont des préférences d'interface (langue, thème, touches, raccourcis et vue de leur
-panneau, état de l'enregistrement automatique, dernier choix de l'assemblage avant impression, autorisations
+panneau, messagerie du mode Email, état de l'enregistrement automatique, dernier choix de l'assemblage avant impression, autorisations
 et auteur du PDF protégé - jamais son mot de passe), le niveau
 de zoom de la page des derniers modèles ouverts (avec leur numéro et leur nom) et, pour suivre les
 renommages, les noms des tables et des colonnes de chaque document ouvert, jamais de donnée de ligne.
@@ -596,7 +596,7 @@ in the browser nor in the document. Before an export that would download such im
 sites and asks for confirmation.
 
 No data is ever stored outside of Grist. The only things kept in the browser (`localStorage`) are
-interface preferences (language, theme, keys, shortcuts and the view of their panel, autosave state, last
+interface preferences (language, theme, keys, shortcuts and the view of their panel, mail program of the Email mode, autosave state, last
 choice in the sheet assembly before printing, permissions and author of the protected PDF - never its
 password), the page zoom level of the last templates opened (with
 their number and name) and, to follow renames, the names of the tables and columns of each open

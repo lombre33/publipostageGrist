@@ -30,7 +30,7 @@ Moteur d'édition : [TipTap](https://tiptap.dev/)/ProseMirror. Le widget est une
 ### Quatre types de modèles
 
 - **Document** : texte riche sur une page A3, A4, A5 ou A6, en portrait ou en paysage, avec des marges réglables par modèle.
-- **E-mail** : objet, À, Cc, Cci et corps, avec les mêmes variables. « Créer l'email » ouvre un brouillon dans la messagerie par un lien `mailto:` : le corps est du texte brut (l'éditeur d'un modèle e-mail n'écrit ni gras, ni couleur, ni niveau de titre, ni image : le texte du lien a les lignes de l'éditeur), sans pièce jointe, et une jauge prévient quand le lien dépasse environ 2 000 caractères.
+- **E-mail** : objet, À, Cc, Cci et corps, avec les mêmes variables. « Créer l'email » ouvre un brouillon dans la messagerie par un lien `mailto:` : le corps est du texte brut (l'éditeur d'un modèle e-mail n'écrit ni gras, ni couleur, ni niveau de titre, ni image : le texte du lien a les lignes de l'éditeur), sans pièce jointe, et une jauge prévient quand le lien dépasse environ 2 000 caractères. Zimbra affichait `&amp;` pour « & » : choisir Zimbra dans Réglages > Email corrige l'objet et le corps (les quatre signes « & », « < », « > » et « + » s'y écrivent en forme large, ce qui allonge le lien).
 - **Grille** : un tableau de type tableur à la place de la page, aux colonnes et aux lignes redimensionnables. On peut y coller un tableau d'Excel, de Google Sheets ou de LibreOffice Calc, ou y importer un classeur `.xlsx`, puis l'exporter en Excel.
 - **Macro-modèle** : une page de garde toujours incluse, suivie d'annexes (d'autres modèles) choisies selon des règles évaluées sur la même ligne. Un œil à côté de chaque modèle du résumé le masque de la Lecture et des exports, sans le retirer de la composition.
 
@@ -99,7 +99,7 @@ La galerie **Créer à partir d'un modèle…** propose 21 modèles prêts à l'
 
 ## Réglages
 
-Le bouton **Réglages** de la barre du haut ouvre huit onglets :
+Le bouton **Réglages** de la barre du haut ouvre neuf onglets :
 
 | Onglet | Rôle |
 |---|---|
@@ -107,6 +107,7 @@ Le bouton **Réglages** de la barre du haut ouvre huit onglets :
 | Thème | Système, clair ou sombre. |
 | Déclencheur | Le caractère qui ouvre la liste des variables (`#` par défaut). |
 | Raccourcis | Les touches du clavier, une par action, modifiables ; les abréviations et leur caractère déclencheur (`§` par défaut). |
+| Email | La messagerie qui ouvre le lien du mode Email : Standard, ou Zimbra (qui lit mal « & », « < », « > » et « + » dans un lien : l'objet et le corps les écrivent alors en forme large). Propre à ce navigateur. |
 | Marges | Marges haut, droite, bas et gauche du modèle ouvert. |
 | Vue | Le modèle par défaut de cette vue, le choix du modèle selon la ligne, et la colonne qui garde la date du dernier export PDF. |
 | Accès | La table qui donne à chaque personne ses droits (lecture seule, export, commentaires). |
@@ -126,7 +127,7 @@ Les réglages « Vue » et « Accès » sont des options du widget : Grist ne le
 
 **Dépendances externes** : le widget charge des bibliothèques depuis des serveurs tiers (`esm.sh` pour le moteur d'édition, `cdnjs.cloudflare.com` et `cdn.jsdelivr.net` pour les exports, l'import Markdown et le graphique de la page, `docs.getgrist.com` pour l'API de Grist), en version figée sauf le script de l'API de Grist ; aucune police ni feuille de style ne vient d'un autre site (l'interface prend la police du système) ; voir [Dépendances](#dépendances). Les fichiers de `cdnjs` et de `jsDelivr` sont protégés par une intégrité SRI : le navigateur refuse d'exécuter un fichier altéré. Ce n'est techniquement pas possible pour l'import map `esm.sh` (limite des imports ES). Le détail de cette analyse et la piste restante (auto-hébergement) sont dans [`AUDIT_CODE.md`](AUDIT_CODE.md#2-enjeu-majeur-rssi--périmètre-daccès-et-surface-dattaque).
 
-**Aucune donnée n'est stockée hors de Grist.** Le navigateur ne garde (`localStorage`) que des préférences d'interface (langue, thème, caractères déclencheurs, raccourcis, dernier choix de l'assemblage avant impression, état de l'enregistrement automatique, autorisations et auteur du PDF protégé - jamais son mot de passe) et, pour suivre les renommages, les noms des tables et des colonnes de chaque document ouvert. Aucune donnée de ligne n'y est copiée.
+**Aucune donnée n'est stockée hors de Grist.** Le navigateur ne garde (`localStorage`) que des préférences d'interface (langue, thème, caractères déclencheurs, raccourcis, messagerie du mode Email, dernier choix de l'assemblage avant impression, état de l'enregistrement automatique, autorisations et auteur du PDF protégé - jamais son mot de passe) et, pour suivre les renommages, les noms des tables et des colonnes de chaque document ouvert. Aucune donnée de ligne n'y est copiée.
 
 **Contenus** : le HTML relu depuis le document (un modèle modifié par une autre personne) est assaini avant d'être affiché : scripts, gestionnaires `on…` et adresses `javascript:` sont retirés, et un lien ne garde que `http(s):`, `mailto:` ou `tel:`. Les formules de calcul ne passent jamais par `eval`. Avant un export, une fenêtre demande confirmation quand des images viennent d'un autre site que le widget ou Grist.
 

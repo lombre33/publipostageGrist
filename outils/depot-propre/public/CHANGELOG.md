@@ -452,6 +452,17 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   les tables créées restent vides. »), la page du modèle, les tables qu'il crée et ses « Fonctions
   montrées » (Code QR, Format de page, Boucle sur des lignes liées, Montant en toutes lettres…) : aucune
   ligne d'exemple n'est jamais écrite dans le document.
+- **Réglages > Email : choisir le logiciel de messagerie qui ouvre « Créer l'email »** : « Standard » (le réglage de
+  départ : le lien n'a pas changé d'un octet) ou « Zimbra ». Le client web de Zimbra relit mal le lien : un « & » de
+  l'objet ou du corps s'y affichait `&amp;`, un « + » devenait une espace, un « ? » coupait l'objet, et aucun codage
+  du lien n'y change rien (il envoie « & » en `%26`, comme le veut le format). Avec « Zimbra », le lien écrit les
+  signes « & », « < », « > » et « + » de l'objet et du corps en formes larges (＆ ＜ ＞ ＋), que Zimbra n'abîme
+  pas, et met un Cc vide en tête pour que l'objet, le texte, le Cc et le Cci ne soient lus qu'une fois : toutes les
+  touches d'un clavier AZERTY et QWERTY passent. Le lien est plus long (6 caractères de plus par signe) et la jauge
+  de longueur mesure le lien réel. Limites : dans le corps, une adresse web avec « & » et une adresse email avec
+  « + » passent aussi en formes larges (elles ne passaient pas mieux avant), « +33 » devient « ＋33 » ; une adresse
+  « À » qui contient « & » ou « ? » (très rare) reste mal lue par Zimbra. Le choix est propre à ce navigateur,
+  comme la langue et le thème, et n'est pas écrit dans le document.
 
 ### Modifié
 
@@ -1197,6 +1208,17 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   images made with the real widget (one per page, with "Preview with sample rows: the tables created stay
   empty."), the template's page, the tables it creates and its "Features shown" (QR code, Page size, Loop
   over linked rows, Amount spelled out…): no sample row is ever written into the document.
+- **Settings > Email: choose the mail program that opens "Create email"**: "Standard" (the default: the link has
+  not changed by a single byte) or "Zimbra". Zimbra's web client reads the link badly: an "&" in the subject or the
+  body showed up as `&amp;`, a "+" turned into a space, a "?" cut the subject, and no encoding of the link changes
+  that (it sends "&" as `%26`, as the format requires). With "Zimbra", the link writes the "&", "<", ">" and "+"
+  signs of the subject and the body as full-width forms (＆ ＜ ＞ ＋), which Zimbra does not damage, and puts an
+  empty Cc first so that the subject, the text, the Cc and the Bcc are read only once: every key of an AZERTY and
+  QWERTY keyboard comes through. The link is longer (6 more characters per sign) and the length gauge measures the
+  real link. Limits: in the body, a web address with "&" and an email address with "+" also turn into full-width
+  forms (they did not do better before), "+33" becomes "＋33"; a "To" address that contains "&" or "?" (very
+  rare) is still read badly by Zimbra. The choice belongs to this browser, like the language and the theme, and
+  is not written into the document.
 
 ### Changed
 

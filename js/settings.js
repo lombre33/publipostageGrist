@@ -1,6 +1,7 @@
 // Panneau Réglages : Langue (I18n.setLang), Thème (localStorage + data-theme sur <html>), Touche de déclenchement (localStorage, relue par
-// Variables.triggerChar), Marges de page (par modèle, avec la mention d'un macro-modèle) et Crédits (statique). Même convention d'ouverture et de fermeture que les autres fenêtres
-// (style.display, pas de fermeture au clic sur le fond).
+// Variables.triggerChar), Email (la messagerie qui ouvre le lien du mode Email, gardée par MailtoExport.setMailClient), Marges de page (par modèle, avec la
+// mention d'un macro-modèle) et Crédits (statique). Même convention d'ouverture et de fermeture que les autres fenêtres (style.display, pas de fermeture au
+// clic sur le fond).
 const Settings = (function () {
   const TRIGGER_KEY_STORAGE = 'pp_trigger_char';
   const THEME_STORAGE = 'pp_theme';
@@ -78,15 +79,17 @@ const Settings = (function () {
     });
   }
 
-  // Ouverture : les choix affichés sont ceux en vigueur (langue, thème, touche de déclenchement, marges) ; fermeture : un simple masquage.
+  // Ouverture : les choix affichés sont ceux en vigueur (langue, thème, touche de déclenchement, messagerie, marges) ; fermeture : un simple masquage.
   function wireOpenAndClose(modal, openBtn, closeBtn, marginInputs) {
     const langRadios = all('input[name="settings-lang"]');
     const themeRadios = all('input[name="settings-theme"]');
+    const mailClientRadios = all('input[name="settings-mail-client"]');
     const triggerSelect = byId('settings-trigger-char');
     const reloadNotice = byId('settings-trigger-reload-notice');
     openBtn.addEventListener('click', () => {
       langRadios.forEach(r => { r.checked = (r.value === I18n.getLang()); });
       themeRadios.forEach(r => { r.checked = (r.value === getTheme()); });
+      mailClientRadios.forEach(r => { r.checked = (r.value === MailtoExport.getMailClient()); });
       if (triggerSelect) triggerSelect.value = Variables.triggerChar();
       if (reloadNotice) reloadNotice.hidden = true;
       syncMarginInputs(marginInputs);
@@ -145,6 +148,7 @@ const Settings = (function () {
     wireTabs();
     wireRadios('settings-lang', value => I18n.setLang(value));
     wireRadios('settings-theme', setTheme);
+    wireRadios('settings-mail-client', MailtoExport.setMailClient);
     wireTriggerChar();
   }
 

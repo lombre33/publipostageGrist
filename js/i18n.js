@@ -701,6 +701,7 @@ const I18n = (function () {
     'settings.tab.credits': { fr: 'Crédits', en: 'Credits' },
     'settings.tab.access': { fr: 'Accès', en: 'Access' },
     'settings.tab.rowTemplate': { fr: 'Vue', en: 'View' },
+    'settings.tab.mailClient': { fr: 'Email', en: 'Email' },
     'settings.view.intro': {
       fr: 'Réglages propres à cette vue. Pour les appliquer à tout le monde, enregistrez ensuite la vue dans Grist (bouton Enregistrer en haut du widget).',
       en: 'Settings for this view. To apply them to everyone, then save the view in Grist (Save button at the top of the widget).',
@@ -822,6 +823,14 @@ const I18n = (function () {
     'settings.language.intro': { fr: 'Langue de l’interface (textes, infobulles, messages).', en: 'Interface language (text, tooltips, messages).' },
     'settings.language.fr': { fr: 'Français', en: 'French' },
     'settings.language.en': { fr: 'Anglais', en: 'English' },
+    'settings.mailClient.intro': { fr: 'Logiciel de messagerie qui ouvre le lien du mode Email. Gardez Standard, sauf si vos emails s’ouvrent dans Zimbra.', en: 'Mail program that opens the Email mode link. Keep Standard unless your emails open in Zimbra.' },
+    'settings.mailClient.standard': { fr: 'Standard', en: 'Standard' },
+    'settings.mailClient.zimbra': { fr: 'Zimbra', en: 'Zimbra' },
+    'settings.mailClient.zimbraNote': {
+      fr: 'Zimbra lit mal « & », « < », « > » et « + » dans le lien : « & » s’y affiche « &amp; » et « + » devient une espace. Avec Zimbra, l’objet et le corps les écrivent en forme large (＆ ＜ ＞ ＋) : ils s’affichent bien, mais le lien est un peu plus long. Dans le corps, une adresse web contenant « & » ou une adresse email contenant « + » n’est plus utilisable telle quelle.',
+      en: 'Zimbra misreads “&”, “<”, “>” and “+” in the link: “&” shows as “&amp;” and “+” becomes a space. With Zimbra, the subject and body write them in full-width form (＆ ＜ ＞ ＋): they display correctly, but the link is a little longer. In the body, a web address containing “&” or an email address containing “+” can no longer be used as is.',
+    },
+    'settings.mailClient.perBrowser': { fr: 'Ce choix est propre à ce navigateur, comme la langue et le thème.', en: 'This choice is specific to this browser, like the language and the theme.' },
     'settings.triggerKey.intro': { fr: 'Caractère qui ouvre le panneau #Variable/Puces en cours de frappe.', en: 'Character that opens the #Variable/Chips panel while typing.' },
     'settings.pageMargins.intro': { fr: 'Marges de page (mm) - propres à ce modèle, appliquées à l’aperçu et aux exports PDF/DOCX.', en: 'Page margins (mm) - specific to this template, applied to the preview and to PDF/DOCX exports.' },
     'settings.pageMargins.macroNote': { fr: 'Macro-modèle : ces marges priment sur celles des modèles assemblés, dans l’aperçu comme dans les exports. Les marges propres à un modèle ne servent que lorsqu’on l’ouvre seul.', en: 'Macro template: these margins take precedence over those of the assembled templates, in the preview and in the exports. A template’s own margins only apply when it is opened on its own.' },

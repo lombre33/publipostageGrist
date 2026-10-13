@@ -772,6 +772,27 @@ script Node `macroPageAutoMouse` (vraie souris et vrai clavier à 700×400, clai
 
 ---
 
+## 25. Lien « Créer l'email » ouvert dans Zimbra (Réglages > Email)
+
+**Couverture automatisée** : groupe `emailZimbra` (`scenarios-email-zimbra.js`, 8 cas : les défauts de Zimbra rejoués sur un modèle de sa lecture du lien, le lien Standard identique à celui d'avant sur 4 512 combinaisons, le lien
+Zimbra qui traverse tout le clavier AZERTY et QWERTY, les destinataires lus tels quels, un message réaliste qui garde ses lignes, les limites connues, le réglage propre au navigateur, l'onglet des Réglages), le script Node
+`emailMouse` (phase Zimbra : vraie frappe et vrais clics à 700×400, lien relu par le modèle, jauge) et `settingsWindowMouse` (l'onglet Email, clair et sombre, français et anglais, le choix gardé après rechargement).
+**Non couvert** : un vrai client web de Zimbra (le modèle de sa lecture a été comparé, hors du dépôt, au code de cinq versions du client sans écart), les autres logiciels de messagerie (Outlook, Thunderbird, Apple Mail) et un
+document Grist réel.
+
+### Protocole
+1. Dans un document Grist, ouvrir un modèle email (objet « Facture & Tom + 1 ? <ok> », un corps de deux lignes, une adresse en « À », une autre en « Cc » comme « prenom+tag@exemple.fr »). Réglages > Email : deux choix,
+   « Standard » (coché) et « Zimbra », une note sous le second ; l'onglet tient avec les huit autres sur une seule ligne.
+2. Réglage « Standard », le navigateur ouvrant les liens `mailto:` dans Zimbra : « Créer l'email » ouvre un brouillon où l'objet est abîmé (« & » écrit `&amp;`, « + » devenu une espace, objet coupé au « ? ») : c'est le défaut
+   connu de Zimbra, le comportement attendu en Standard. Avec Thunderbird, Outlook ou Apple Mail, le même lien donne l'objet et le corps exacts.
+3. Réglages > Email > « Zimbra », puis « Créer l'email » : l'objet du brouillon est « Facture ＆ Tom ＋ 1 ? ＜ok＞ » (les quatre signes en formes larges, le « ? » resté, rien de coupé, aucun `&amp;`), la même chose dans le corps, les
+   lignes du message sont celles de l'éditeur, « À » et « Cc » sont exacts (le « + » de l'adresse est resté).
+4. Un message long plein de « & » et de « + » : la jauge de longueur monte plus vite qu'en Standard (6 caractères de lien de plus par signe) et avertit comme avant ; le bouton reste actif.
+5. Recharger la page du document Grist : « Zimbra » est encore coché. Dans un autre navigateur, ou une fenêtre privée : « Standard » (le choix est propre au navigateur, il n'est pas dans le document).
+6. Panneau de 700 × 400, en sombre et en anglais (« Mail program », « Standard », « Zimbra ») : l'onglet « Email », ses deux choix et la note tiennent sans défilement horizontal, la note se lit en entier et « Fermer » reste visible.
+
+---
+
 ## Prochaines étapes (pistes d'amélioration de la suite automatisée)
 
 **Fait le 2026-09-14** : étage 2 (mode Lecture) comblé pour un premier socle de cas

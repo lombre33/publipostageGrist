@@ -2,7 +2,8 @@
 // Fenêtre Réglages à la VRAIE souris (page.mouse, Node/Playwright) et à la taille du panneau Grist d'Antoine (~700x400), en thème clair puis sombre, en
 // français puis en anglais - audit UX/UI du 2026-09-29, F2 : 360px pour six onglets (« Touche de déclenchement » sur deux lignes, « Marges de page » sur
 // trois, « Crédits » rogné) et, dans Accès, un contenu de 529px pour une fenêtre de 376px qui emportait « Fermer » 93px sous le bas du panneau.
-// Cible : 480px, sept onglets (six avant « Raccourcis ») sur UNE ligne aux libellés courts, titre et onglets fixes, SEUL le contenu de l'onglet défile, « Fermer » fixe en bas.
+// Cible : 480px, neuf onglets (six avant « Raccourcis », huit avant « Email ») sur UNE ligne aux libellés courts, titre et onglets fixes, SEUL le contenu de l'onglet défile, « Fermer » fixe en bas.
+// Onglet « Email » (13/10, la messagerie qui ouvre le lien du mode Email) : ses deux choix à la vraie souris, sa note lisible en entier, le choix gardé après un rechargement.
 // Lancé par run-headless.mjs (groupe Node "settingsWindowMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-settings-window-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -16,7 +17,7 @@ const CACHE = join(ROOT, 'dev-tests', '.offline-cache');
 const PORT = Number(process.env.SETTINGS_WINDOW_MOUSE_PORT || 8901);
 const WIDTH = 700;
 const HEIGHT = 400;
-const TABS = ['language', 'theme', 'triggerKey', 'pageMargins', 'access', 'credits'];
+const TABS = ['language', 'theme', 'triggerKey', 'mailClient', 'pageMargins', 'access', 'credits'];
 
 // Même régénération du harnais et même miroir hors-ligne que dev-tests/verify-read-mode-mouse.mjs.
 async function regenerateHarness() {
@@ -159,7 +160,7 @@ const measure = page => page.evaluate(() => {
   const panel = box.querySelector('.settings-panel:not([hidden])');
   const panelStyle = panel ? getComputedStyle(panel) : null;
   // Ce qui fait défiler le contenu de l'onglet : le premier ancêtre du panneau (lui compris) à défilement vertical, dans le cadre. Depuis la base commune des
-  // fenêtres c'est la zone de contenu (.settings-body, qui porte les sept panneaux) ; avant, c'était le panneau lui-même.
+  // fenêtres c'est la zone de contenu (.settings-body, qui porte les panneaux) ; avant, c'était le panneau lui-même.
   let scroller = panel;
   while (scroller && scroller !== box && !/auto|scroll/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement;
   if (scroller === box) scroller = null;
@@ -171,6 +172,17 @@ const measure = page => page.evaluate(() => {
     scroller: scroller ? Object.assign({ scrollHeight: scroller.scrollHeight, clientHeight: scroller.clientHeight, overflowY: getComputedStyle(scroller).overflowY, scrollTop: scroller.scrollTop, holdsTabs: box.querySelector('.settings-tab') ? scroller.contains(box.querySelector('.settings-tab')) : false }, rect(scroller)) : null,
     pageScrolls: document.scrollingElement.scrollHeight > document.scrollingElement.clientHeight || document.scrollingElement.scrollWidth > document.scrollingElement.clientWidth,
   };
+});
+
+// La dernière note (`.settings-access-hint`) de l'onglet affiché, vue depuis le cadre qui défile : entière dans ce que la fenêtre en montre ?
+const lastHintOf = page => page.evaluate(() => {
+  const hints = document.querySelectorAll('.settings-panel:not([hidden]) .settings-access-hint');
+  const h = hints[hints.length - 1];
+  let scroller = document.querySelector('.settings-panel:not([hidden])');
+  while (scroller && !/auto|scroll/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement;
+  if (!h || !scroller) return null;
+  const r = h.getBoundingClientRect(), pr = scroller.getBoundingClientRect();
+  return { top: r.top, bottom: r.bottom, scrollerTop: pr.top, scrollerBottom: pr.bottom, inside: r.top >= pr.top - 1 && r.bottom <= pr.bottom + 1 };
 });
 
 function tabsProblem(m) {
@@ -212,8 +224,8 @@ async function runTheme(theme) {
       if (m.boxScroll.scrollHeight > m.boxScroll.clientHeight + 1) bad.boxScroll.push({ name, boxScroll: m.boxScroll });
       if (!(m.close.top >= m.box.top && m.close.bottom <= m.box.bottom && m.close.bottom <= m.vh && m.closeTouched)) bad.close.push({ name, close: m.close, box: m.box, vh: m.vh, touched: m.closeTouched });
     }
-    check(`${tag} - la fenêtre fait 480px de large sur les sept onglets`, bad.size.length === 0, bad.size);
-    check(`${tag} - les sept onglets tiennent sur une ligne, aucun libellé coupé, « Crédits » dans la fenêtre`, bad.tabs.length === 0, bad.tabs);
+    check(`${tag} - la fenêtre fait 480px de large sur les neuf onglets`, bad.size.length === 0, bad.size);
+    check(`${tag} - les neuf onglets tiennent sur une ligne, aucun libellé coupé, « Crédits » dans la fenêtre`, bad.tabs.length === 0, bad.tabs);
     check(`${tag} - la fenêtre tient dans le panneau (ni la page ni la fenêtre ne défilent)`, bad.fits.length === 0 && bad.boxScroll.length === 0, { fits: bad.fits, boxScroll: bad.boxScroll });
     check(`${tag} - « Fermer » reste entier dans la fenêtre et dans le panneau, et reçoit un vrai point de contact, sur chaque onglet`, bad.close.length === 0, bad.close);
 
@@ -242,6 +254,29 @@ async function runTheme(theme) {
     });
     check(`${tag} - Accès : la molette fait défiler le contenu, « Fermer » ne bouge pas, la dernière note devient visible`,
       !!after.scroller && after.scroller.scrollTop > 0 && Math.abs(after.close.top - before.close.top) < 1 && after.closeTouched && !!lastHint && lastHint.inside, { scrollTop: after.scroller && after.scroller.scrollTop, closeBefore: before.close.top, closeAfter: after.close.top, lastHint });
+
+    // Email : « Standard » et « Zimbra » à la vraie souris ; la note sur Zimbra et la dernière ligne se lisent en entier (le cadre défile au besoin), « Fermer » ne bouge pas.
+    await realClick(page, '#settings-modal .settings-tab[data-settings-tab="mailClient"]');
+    await page.waitForTimeout(150);
+    const mailBefore = await measure(page);
+    const mailChoices = await page.evaluate(() => Array.from(document.querySelectorAll('input[name="settings-mail-client"]')).map(r => ({ value: r.value, checked: r.checked, label: r.closest('label').textContent.trim(), shown: r.getClientRects().length > 0 })));
+    check(`${tag} - Email : deux choix lisibles, « Standard » coché au départ`, mailChoices.length === 2 && mailChoices[0].value === 'standard' && mailChoices[0].checked && !mailChoices[1].checked && mailChoices[0].label === 'Standard' && mailChoices[1].label === 'Zimbra' && mailChoices.every(c => c.shown), mailChoices);
+    const mailScroller = mailBefore.scroller;
+    if (mailScroller && mailScroller.scrollHeight > mailScroller.clientHeight + 1) {
+      await page.mouse.move(mailScroller.left + mailScroller.width / 2, mailScroller.top + Math.min(20, mailScroller.height / 2), { steps: 3 });
+      for (let i = 0; i < 4; i++) await page.mouse.wheel(0, 250);
+      await page.waitForTimeout(250);
+    }
+    const mailAfter = await measure(page);
+    const mailHint = await lastHintOf(page);
+    check(`${tag} - Email : la note sur Zimbra se lit en entier (${mailScroller ? mailScroller.scrollHeight : '?'}px pour ${mailScroller ? Math.round(mailScroller.clientHeight) : '?'}px), « Fermer » ne bouge pas`,
+      !!mailHint && mailHint.inside && Math.abs(mailAfter.close.top - mailBefore.close.top) < 1 && mailAfter.closeTouched, { mailHint, closeBefore: mailBefore.close.top, closeAfter: mailAfter.close.top, scroller: mailScroller });
+    await realClick(page, 'input[name="settings-mail-client"][value="zimbra"]');
+    const chosen = await page.evaluate(() => ({ client: MailtoExport.getMailClient(), stored: localStorage.getItem('pp_mail_client'), zimbra: document.querySelector('input[name="settings-mail-client"][value="zimbra"]').checked, standard: document.querySelector('input[name="settings-mail-client"][value="standard"]').checked }));
+    check(`${tag} - Email : un vrai clic sur « Zimbra » le choisit à l'instant et le garde dans le navigateur`, chosen.client === 'zimbra' && chosen.stored === 'zimbra' && chosen.zimbra && !chosen.standard, chosen);
+    await realClick(page, 'input[name="settings-mail-client"][value="standard"]');
+    const back = await page.evaluate(() => ({ client: MailtoExport.getMailClient(), stored: localStorage.getItem('pp_mail_client'), standard: document.querySelector('input[name="settings-mail-client"][value="standard"]').checked }));
+    check(`${tag} - Email : un vrai clic sur « Standard » le rétablit`, back.client === 'standard' && back.standard, back);
   }
 
   // Vrai clic sur Fermer : la fenêtre se ferme.
@@ -252,8 +287,36 @@ async function runTheme(theme) {
   await context.close();
 }
 
+// Le choix de la messagerie survit au rechargement de la page : « Zimbra » choisi à la vraie souris, la page rechargée, l'onglet Email le montre encore coché.
+async function emailChoiceSurvivesReload() {
+  console.log(`\n=== Réglages > Email : le choix survit au rechargement, ${WIDTH}x${HEIGHT} ===`);
+  const { context, page } = await openWidget('light');
+  await realClick(page, '#v2-btn-settings');
+  await page.waitForTimeout(300);
+  await realClick(page, '#settings-modal .settings-tab[data-settings-tab="mailClient"]');
+  await realClick(page, 'input[name="settings-mail-client"][value="zimbra"]');
+  await realClick(page, '#settings-close');
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
+  await page.waitForFunction(() => { const el = document.getElementById('status-msg'); return !!el && /prêt|ready/i.test(el.textContent || ''); }, null, { timeout: 90000 });
+  await realClick(page, '#v2-btn-settings');
+  await page.waitForTimeout(300);
+  await realClick(page, '#settings-modal .settings-tab[data-settings-tab="mailClient"]');
+  await page.waitForTimeout(150);
+  const kept = await page.evaluate(() => ({ client: MailtoExport.getMailClient(), zimbra: document.querySelector('input[name="settings-mail-client"][value="zimbra"]').checked, standard: document.querySelector('input[name="settings-mail-client"][value="standard"]').checked }));
+  check('Email : après un rechargement de la page, « Zimbra » est toujours le choix en vigueur et reste coché dans la fenêtre', kept.client === 'zimbra' && kept.zimbra && !kept.standard, kept);
+  await realClick(page, 'input[name="settings-mail-client"][value="standard"]');
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
+  await page.waitForFunction(() => { const el = document.getElementById('status-msg'); return !!el && /prêt|ready/i.test(el.textContent || ''); }, null, { timeout: 90000 });
+  const reset = await page.evaluate(() => MailtoExport.getMailClient());
+  check('Email : « Standard » rechoisi, un rechargement le garde aussi', reset === 'standard', reset);
+  await context.close();
+}
+
 await runTheme('light');
 await runTheme('dark');
+await emailChoiceSurvivesReload();
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 
 await browser.close();

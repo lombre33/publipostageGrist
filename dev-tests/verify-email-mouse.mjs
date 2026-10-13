@@ -10,6 +10,9 @@
 // en forme dans un email et la garde dans un document, et la mise en forme restée d'un ancien modèle email n'est plus montrée.
 // Même jour, les niveaux de titre (choix « Griser » d'Antoine) : dans un email, Ctrl+Alt+1 à 6 et Alt+Maj+1 à 3 au vrai clavier ne posent aucun titre, « # Titre » tapé reste la ligne tapée, le menu
 // des titres est grisé (la souris ne l'ouvre pas, il reste à sa place), un titre d'un ancien modèle s'affiche comme une ligne simple ; un document garde le tout (touches, « # », menu à la souris).
+// Retour d'Antoine du 13/10 (« le charactère "&" est devenu "&amp;" » dans Zimbra) : le réglage Réglages > Email, à la vraie souris. Un objet et un corps qui portent « & », « + », « < », « > » et « ? »
+// donnent d'abord le lien d'avant (« Standard », chaque signe encodé comme toujours), puis, « Zimbra » choisi dans la fenêtre des Réglages, un lien relu sans écart par le modèle de Zimbra
+// (dev-tests/scenarios-email-zimbra.js, rejoué contre son vrai code), une jauge qui suit le nouveau lien, et le lien d'avant rétabli à l'octet près quand « Standard » est rechoisi.
 // Lancé par run-headless.mjs (groupe Node "emailMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-email-mouse.mjs
 // EMAIL_SHOTS=<dossier> : enregistre aussi une capture (à relire à l'œil) ; sans elle, rien n'est écrit.
 import { createServer } from 'node:http';
@@ -222,8 +225,70 @@ async function run() {
   check('le texte d’état annonce l’email créé et le bouton est de nouveau actif', (await statusText()) === 'Email créé, ouverture de votre logiciel de messagerie.' && await page.evaluate(() => !document.getElementById('btn-create-email').disabled), await statusText());
   if (SHOTS) await page.screenshot({ path: join(SHOTS, 'email-700x400.png') });
 
+  await zimbraClient(urls[0]);
   await linesTypedOnTheKeyboard();
   await formattingKeysAndPaste();
+}
+
+// 3 bis) Zimbra, à la vraie souris : le lien d'avant, puis le lien du réglage « Zimbra », puis le retour à « Standard ».
+const WIDE_SIGNS = { '&': '＆', '<': '＜', '>': '＞', '+': '＋' };
+const wideSigns = text => text.replace(/[&<>+]/g, sign => WIDE_SIGNS[sign]);
+const SIGNS_SUBJECT_TAIL = ' & Tom + 1 ? <ok>';
+const SIGNS_BODY_HTML = '<p>R&amp;D : 3 + 4 &lt; 10 &gt; 2 ?</p><p>Voir https://exemple.fr/?a=1&amp;b=2</p><p>Tél +33 6 12 34 56 78</p>';
+const SIGNS_BODY = 'R&D : 3 + 4 < 10 > 2 ?\nVoir https://exemple.fr/?a=1&b=2\nTél +33 6 12 34 56 78';
+const gaugeText = () => page.evaluate(() => document.getElementById('v2-email-char-counter').textContent.trim());
+const lastLink = async () => (await page.evaluate(() => window.__mailtos.slice())).pop() || '';
+async function chooseMailClient(value) {
+  await realClick('#v2-btn-settings', 400);
+  await realClick('#settings-modal .settings-tab[data-settings-tab="mailClient"]', 200);
+  await realClick(`input[name="settings-mail-client"][value="${value}"]`, 200);
+  await realClick('#settings-close', 900);
+}
+async function zimbraClient(firstStandardLink) {
+  await page.addScriptTag({ path: join(ROOT, 'dev-tests', 'scenarios-email-zimbra.js') });
+  // L'objet continue d'être tapé au vrai clavier, le corps change : les quatre signes que Zimbra lit mal, un « ? » et une adresse web avec « & ».
+  await realClick('#v2-email-subject', 150);
+  await page.keyboard.press('End');
+  await page.keyboard.type(SIGNS_SUBJECT_TAIL);
+  await page.evaluate(html => Editor.setHTML(html), SIGNS_BODY_HTML);
+  await page.waitForTimeout(900);
+  const subject = SUBJECT + SIGNS_SUBJECT_TAIL;
+
+  await realClick('#btn-create-email', 900);
+  const standardLink = await lastLink();
+  const standard = readMailto(standardLink || 'mailto:');
+  check('Standard : le lien porte l’objet et le corps tels que tapés, « & », « + », « < » et « > » encodés comme toujours (%26 %2B %3C %3E), sans « cc= » vide',
+    standard.subject === subject && (standard.body || '').replace(/\r\n/g, '\n') === SIGNS_BODY && JSON.stringify(standard.keys) === '["subject","body"]' && /%26/.test(standardLink) && /%2B/.test(standardLink) && /%3C/.test(standardLink) && /%3E/.test(standardLink) && !/%EF%BC/.test(standardLink),
+    { standardLink, subject: standard.subject, body: standard.body, keys: standard.keys });
+  const asZimbraSeesIt = await page.evaluate(link => ZimbraModel.read(link), standardLink);
+  check('et c’est ce lien-là que Zimbra lisait mal : « & » affiché « &amp; » dans le corps, l’objet coupé',
+    /&amp;/.test(asZimbraSeesIt.body) && asZimbraSeesIt.subject !== subject, asZimbraSeesIt);
+  const standardGauge = await gaugeText();
+  check('la jauge affiche la longueur de ce lien', standardGauge === `${standardLink.length} / 2000 caractères`, { standardGauge, length: standardLink.length });
+
+  await chooseMailClient('zimbra');
+  const zimbraGauge = await gaugeText();
+  await realClick('#btn-create-email', 900);
+  const zimbraLink = await lastLink();
+  const zimbra = readMailto(zimbraLink || 'mailto:');
+  const toEncoded = TO.replace('@', '%40');
+  check('Zimbra choisi dans Réglages > Email : le lien ne porte plus aucun « %26 », « %2B », « %3C » ni « %3E », il commence par un « cc= » vide, puis l’objet et le corps',
+    zimbraLink.startsWith(`mailto:${toEncoded}?cc=&subject=`) && !/%26|%2B|%3C|%3E/i.test(zimbraLink) && JSON.stringify(zimbra.keys) === '["cc","subject","body"]' && zimbra.cc === '', { zimbraLink, keys: zimbra.keys });
+  check('l’objet et le corps du lien portent les quatre signes en forme large (U+FF06, U+FF1C, U+FF1E, U+FF0B), tout le reste tel que tapé',
+    zimbra.subject === wideSigns(subject) && (zimbra.body || '').replace(/\r\n/g, '\n') === wideSigns(SIGNS_BODY), { subject: zimbra.subject, body: zimbra.body });
+  const readByZimbra = await page.evaluate(link => ZimbraModel.read(link), zimbraLink);
+  check('lu comme Zimbra le lit : destinataire, objet et corps arrivent sans écart (« ＆ » et non « &amp; »), l’objet n’est pas coupé et aucun Cc n’apparaît',
+    readByZimbra.to === TO && readByZimbra.cc === '' && readByZimbra.bcc === '' && readByZimbra.subject === wideSigns(subject) && readByZimbra.body.replace(/\r\n/g, '\n') === wideSigns(SIGNS_BODY) && !/&amp;|&lt;|&gt;/.test(readByZimbra.subject + readByZimbra.body), readByZimbra);
+  check('la jauge suit le choix : plus longue qu’avant, et égale à la longueur du lien ouvert',
+    zimbraGauge === `${zimbraLink.length} / 2000 caractères` && zimbraLink.length > standardLink.length, { zimbraGauge, zimbraLength: zimbraLink.length, standardLength: standardLink.length });
+
+  await chooseMailClient('standard');
+  const backGauge = await gaugeText();
+  await realClick('#btn-create-email', 900);
+  const backLink = await lastLink();
+  check('« Standard » rechoisi : le lien est celui d’avant, à l’octet près, et la jauge revient à sa valeur', backLink === standardLink && backGauge === standardGauge, { same: backLink === standardLink, backGauge, standardGauge });
+  check('et le lien du début de la séance (l’objet seul, sans ces signes) n’a pas changé de forme : aucun « cc= » vide', firstStandardLink.startsWith('mailto:') && !/cc=/.test(firstStandardLink), firstStandardLink);
+  if (SHOTS) await page.screenshot({ path: join(SHOTS, 'email-zimbra-700x400.png') });
 }
 
 // Le corps du dernier lien ouvert par « Créer l'email », CRLF ramenés à « \n ».

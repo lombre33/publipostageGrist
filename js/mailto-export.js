@@ -14,9 +14,13 @@
 //      `_showComposeView` ; le corps n'y passe que comme texte. En rédaction HTML, ZmComposeView `_setBody1` le passe par AjxStringUtil.convertToHtml
 //      : chaque retour à la ligne devient un <br>, deux espaces de suite et un espace en tête de ligne deviennent des espaces insécables. Les lignes
 //      et les retraits du texte brut survivent donc (c'est pourquoi une sous-liste s'aligne par des espaces), rien d'autre (ni vraie puce, ni gras,
-//      ni lien cliquable). Défauts de Zimbra lus au même endroit, hors de notre portée et jamais vus sur un vrai Zimbra : un « + » devient une espace
-//      dans l'objet et le corps (replace(/\+/g, ' ') après le décodage) ; « & », « < » et « > » sont encodés en HTML (htmlEncode) dès la lecture du
-//      lien et rien ne les décode ensuite, ils pourraient s'afficher « &amp; ».
+//      ni lien cliquable). Défauts de Zimbra lus au même endroit (versions 8.8.15, 9.0.0, 10.0.0, 10.1.0 et develop, qui s'y lisent pareil), vus sur un
+//      vrai Zimbra (le 13/10 : « & » devenu « &amp; ») et qu'aucun encodage du lien ne retire, « %26 » compris, parce que Zimbra décode
+//      tout le lien avant de le lire : il coupe chaque champ au premier « & » ; il encode en HTML « & », « < » et « > » (htmlEncode) et rien ne les décode
+//      ensuite, ils s'affichent « &amp; », « &lt; », « &gt; » ; un « + » devient une espace (replace(/\+/g, ' ') après le décodage). Il relit aussi une
+//      seconde fois le premier paramètre qui suit l'adresse, décodé une fois de plus et coupé au premier « ? » ou « & » : un objet ou un corps placé en
+//      premier en sort tronqué, un « + » d'une adresse en Cc ou Cci devient une espace. Le réglage « Zimbra » (Réglages > Email, personnel) répond aux
+//      deux (buildMailtoUrl, `forZimbra`) ; hors de ce réglage le lien reste celui de tous les autres clients, à l'octet près.
 //   5) Le texte a les lignes de l'éditeur, une pour une (Zimbra, voir 4, ne garde que les lignes) : un paragraphe vide, deux de suite ou un retour à
 //      la ligne tapé sont des lignes vides du lien, et des paragraphes qui se suivent restent collés. Ce que l'éditeur d'un email permet d'écrire est
 //      borné à ce que le texte porte (js/email-plain-text.js).
@@ -26,6 +30,27 @@ const MailtoExport = (function () {
   // Limite pratique, communément citée, d'un lien mailto: pour tous les clients (Outlook bureau surtout) : une marge sous le seuil dur plutôt que la
   // limite au plus juste.
   const SAFE_URL_LENGTH = 2000;
+
+  // La messagerie qui ouvre le lien : réglage personnel (Réglages > Email), gardé dans ce navigateur comme la langue et le thème. `standard` tant que rien
+  // n'est choisi : son lien est celui d'avant ce réglage, à l'octet près.
+  const MAIL_CLIENT_STORAGE = 'pp_mail_client';
+  const MAIL_CLIENTS = ['standard', 'zimbra'];
+  // Aussi gardé en mémoire : si le navigateur refuse son stockage, le choix vaut au moins jusqu'au rechargement.
+  let chosenClient = null;
+
+  function getMailClient() {
+    let stored = null;
+    try { stored = localStorage.getItem(MAIL_CLIENT_STORAGE); } catch (e) { /* stockage indisponible */ }
+    const value = MAIL_CLIENTS.indexOf(stored) !== -1 ? stored : chosenClient;
+    return MAIL_CLIENTS.indexOf(value) !== -1 ? value : 'standard';
+  }
+
+  function setMailClient(client) {
+    chosenClient = MAIL_CLIENTS.indexOf(client) !== -1 ? client : 'standard';
+    try { localStorage.setItem(MAIL_CLIENT_STORAGE, chosenClient); } catch (e) { /* stockage indisponible - le choix ne survivra pas au rechargement */ }
+    // Le lien, donc sa longueur, change avec la messagerie : js/main.js écoute cet évènement pour remettre la jauge à jour.
+    document.dispatchEvent(new CustomEvent('pp:mailClientChanged'));
+  }
 
   // Puces d'une liste : les mêmes signes que ceux que l'éditeur et le PDF montrent (css/editor-v2.css, `li::marker` ; js/pdf-export.js,
   // BULLET_MARKERS) : ce que la personne voit dans le modèle est ce que le destinataire lit. Les trois tiennent dans Windows-1252, comme les accents
@@ -220,15 +245,27 @@ const MailtoExport = (function () {
     return value.split(/[,;]/).map(a => a.trim()).filter(Boolean).map(a => encodeURIComponent(a)).join(',');
   }
 
+  // Zimbra (voir 4 plus haut) : « & », « < », « > » et « + » de l'objet et du corps ne passent par aucun encodage. Leur forme large (« ＆ » U+FF06, « ＜ »
+  // U+FF1C, « ＞ » U+FF1E, « ＋ » U+FF0B) est un autre caractère pour Zimbra, lu et affiché tel quel, et se lit presque comme l'original. Le prix : l'encodage du
+  // lien coûte 9 caractères par signe au lieu de 3 (la jauge mesure le vrai lien, elle le compte), et une adresse web contenant « & » ou une adresse email
+  // contenant « + » écrite dans le corps n'y est plus utilisable telle quelle - elle ne l'était pas non plus sans ce remplacement (« &amp; », espace).
+  // Les autres signes, accents compris, passent déjà tels quels.
+  const ZIMBRA_WIDE_FORMS = { '&': 0xFF06, '<': 0xFF1C, '>': 0xFF1E, '+': 0xFF0B };
+  const forZimbra = text => text.replace(/[&<>+]/g, sign => String.fromCharCode(ZIMBRA_WIDE_FORMS[sign]));
+
   // L'URL mailto: complète. to, cc, bcc, subject et bodyText arrivent déjà résolus (les #Variable sont substituées en amont, comme côté PDF par
-  // ReaderMode) : cette fonction n'assemble et n'encode que.
-  function buildMailtoUrl({ to, cc, bcc, subject, bodyText }) {
+  // ReaderMode) : cette fonction n'assemble et n'encode que. `client` : 'zimbra' pour Zimbra (voir 4 plus haut), sinon le lien de tous les autres clients.
+  function buildMailtoUrl({ to, cc, bcc, subject, bodyText, client }) {
+    const zimbra = client === 'zimbra';
     const params = [];
     if (cc) params.push('cc=' + encodeAddressList(cc));
     if (bcc) params.push('bcc=' + encodeAddressList(bcc));
-    if (subject) params.push('subject=' + encodeURIComponent(subject));
+    if (subject) params.push('subject=' + encodeURIComponent(zimbra ? forZimbra(subject) : subject));
     // CRLF requis par le protocole mailto: (RFC 6068) : Outlook bureau y est strict, un simple \n ne suffit pas toujours.
-    if (bodyText) params.push('body=' + encodeURIComponent(bodyText.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n')));
+    if (bodyText) params.push('body=' + encodeURIComponent((zimbra ? forZimbra(bodyText) : bodyText).replace(/\r\n/g, '\n').replace(/\n/g, '\r\n')));
+    // Zimbra relit le premier paramètre une seconde fois, en le coupant au premier « ? » ou « & » (voir 4) : un « cc » vide en tête reçoit cette seconde
+    // lecture à la place de l'objet, du corps ou des adresses en Cc et Cci, qui ne sont alors lus qu'une fois. Un « cc » vide ne change rien au brouillon.
+    if (zimbra && params.length) params.unshift('cc=');
     const query = params.length ? '?' + params.join('&') : '';
     return 'mailto:' + encodeAddressList(to) + query;
   }
@@ -239,5 +276,5 @@ const MailtoExport = (function () {
     return { length: url.length, safe: url.length <= SAFE_URL_LENGTH, limit: SAFE_URL_LENGTH };
   }
 
-  return { plainTextFromHtml, buildMailtoUrl, checkUrlLength };
+  return { plainTextFromHtml, buildMailtoUrl, checkUrlLength, getMailClient, setMailClient };
 })();

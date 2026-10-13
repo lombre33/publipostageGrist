@@ -181,7 +181,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/xlsx-export.js` | L'Excel d'une grille (ExcelJS). |
 | `js/markdown-export.js` | Le Markdown (`.md`, CommonMark et GFM) : le HTML résolu d'une ligne lu nœud par nœud, ce que le Markdown écrit en Markdown et le reste en HTML en ligne, sans bibliothèque. |
 | `js/markdown-import.js` | L'import Markdown, le sens inverse du précédent : un `.md` lu par marked (chargé de cdnjs au premier import, avec son empreinte), remis dans la forme que l'éditeur écrit lui-même (listes à cases, encadrés, notes de bas de page, sommaire, saut de page, images, alignements) puis nettoyé par `HtmlSanitize` ; l'en-tête et le pied de page écrits entre commentaires deviennent ceux du document. |
-| `js/mailto-export.js` | Le lien `mailto:` du mode E-mail. |
+| `js/mailto-export.js` | Le lien `mailto:` du mode E-mail, et la messagerie qui l'ouvre (Standard ou Zimbra, un réglage personnel de Réglages > Email). |
 | `js/batch-failures.js` | La fenêtre qui s'ouvre à la fin d'un export en lot et liste les lignes qui n'ont pas pu être générées, avec leur raison (sur la fenêtre commune des saisies et des confirmations). |
 | `js/batch-scope.js` | Les lignes d'un export en lot : celles que le widget affiche dans Grist (ses filtres, son tri, le lien « Sélectionner par »), ou toute la table ; un widget qui n'en affiche qu'une partie fait poser la question. |
 | `js/export-choices.js` | Les choix d'export de la personne, gardés par modèle : le type (PDF, PDF protégé, Word, Excel, Markdown), la qualité du PDF et « une seule ligne / toutes les lignes ». Les trois listes cachées de la barre restent ce que `js/main.js` lit pour exporter ; la table des préférences (`js/template-preferences.js`) les garde d'un ordinateur à l'autre, un compte en lecture seule ne les garde que pour la séance. |
@@ -198,7 +198,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/search-select.js` | La liste déroulante avec recherche, pour tout choix de colonne, de table ou de modèle, avec la descente dans les colonnes d'une Référence. |
 | `js/icons.js` | Les icônes SVG. |
 | `js/i18n.js` | Les traductions FR et EN. |
-| `js/settings.js` | Le panneau Réglages : langue, thème, touche de déclenchement, marges, crédits. |
+| `js/settings.js` | Le panneau Réglages : langue, thème, touche de déclenchement, messagerie du mode E-mail, marges, crédits. |
 | `js/save-reminder.js` | Le rappel « Enregistrer » des Réglages Vue et Accès : la ligne à gauche de « Fermer » après un changement, éteinte par le « Retour » de Grist (qui ne dit rien d'un clic sur « Enregistrer »), et les onglets reprennent alors le réglage enregistré. |
 | `js/shortcuts.js`, `js/shortcuts-panel.js` | Les raccourcis clavier personnalisables et leur liste. |
 | `js/first-contact.js` | La fenêtre de premier contact quand le widget ne démarre pas comme prévu. |
@@ -268,6 +268,7 @@ notes de conception, qui ne sont pas publiés ici.
 | Changer la palette de couleurs, ou ajouter un menu de couleur | `js/color-palette.js` (la palette et ses rangées ; un menu s'y branche par `createMenu`), `js/color-dialog.js` (la fenêtre « Couleur personnalisée »), `js/color-store.js` (les couleurs gardées : `PageLayout.getCustomColors` pour le modèle, `Templates.getDocumentSettings` pour le document), `css/color-palette.css`. |
 | Mettre des bulles de variable ou des puces (date, heure, email, nom de l'utilisateur) dans un champ texte (Objet, À, Cc, Cci, nom du PDF) | `js/field-editor.js` (un éditeur d'une ligne qui se comporte comme l'`<input>` qu'il remplace), `js/field-codec.js` (la valeur enregistrée : texte brut ou HTML), `ReaderMode.fieldText` et `ReaderMode.smartChipValue` dans `js/reader-mode.js` (la valeur résolue, celle des puces), `css/field-editor.css`. |
 | Changer ce qu'un modèle e-mail accepte d'écrire (une touche, un collage, une ancienne mise en forme) ou les lignes du texte du lien | `js/email-plain-text.js` et `css/email-plain-text.css` pour ce que l'éditeur accepte ; `js/mailto-export.js` pour le texte du lien, dont les lignes sont celles de l'éditeur, une pour une. |
+| Faire lire le lien à une messagerie qui le lit mal (Zimbra affiche `&amp;` pour « & » et change « + » en espace) | `js/mailto-export.js` (`forZimbra`, l'option `client` de `buildMailtoUrl`, `getMailClient` et `setMailClient`) et l'onglet Email de `js/settings.js` et d'`index.html`. |
 | Ajouter un modèle à la galerie | Un dossier de `templates-gallery/` (le texte du modèle, son `pack.json` : tables, colonnes, règles des Tables liées, page et type, et ses captures), puis sa ligne dans `templates-gallery/manifest.json` (nom, étiquettes, vignette, captures, « Fonctions montrées »). `js/template-pack.js` lit et contrôle le `pack.json` ; les tables que plusieurs modèles partagent se disent une fois, dans le dossier `families/`. |
 | Modifier un fichier de `css/` ou de `js/` | Monter son numéro `?v=` dans `index.html`, sinon le navigateur garde l'ancien. |
 
@@ -454,7 +455,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/xlsx-export.js` | The Excel file of a grid (ExcelJS). |
 | `js/markdown-export.js` | Markdown (`.md`, CommonMark and GFM): a row's resolved HTML read node by node, what Markdown can write written as Markdown and the rest as inline HTML, with no library. |
 | `js/markdown-import.js` | Markdown import, the reverse of the previous one: an `.md` read by marked (loaded from cdnjs on the first import, with its integrity hash), put back into the form the editor itself writes (task lists, callouts, footnotes, table of contents, page break, images, alignments), then cleaned by `HtmlSanitize`; the header and footer written between comments become the document's. |
-| `js/mailto-export.js` | The `mailto:` link of E-mail mode. |
+| `js/mailto-export.js` | The `mailto:` link of E-mail mode, and the mail program that opens it (Standard or Zimbra, a personal setting in Settings > Email). |
 | `js/batch-failures.js` | The window that opens at the end of a batch export and lists the rows that could not be generated, with their reason (on top of the shared input and confirmation window). |
 | `js/batch-scope.js` | The rows of a batch export: the ones the widget shows in Grist (its filters, its sort, the "Select by" link), or the whole table; a widget that only shows part of the table triggers the question. |
 | `js/export-choices.js` | The person's export choices, kept per template: the type (PDF, Protected PDF, Word, Excel, Markdown), the PDF quality and "a single row / all rows". The toolbar's three hidden lists remain what `js/main.js` reads to export; the preferences table (`js/template-preferences.js`) keeps them from one computer to the next, a read-only account keeps them for the session only. |
@@ -471,7 +472,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/search-select.js` | The drop-down list with search, for every choice of column, table or template, with the walk down into a Reference's columns. |
 | `js/icons.js` | The SVG icons. |
 | `js/i18n.js` | The French and English translations. |
-| `js/settings.js` | The Settings panel: language, theme, trigger key, margins, credits. |
+| `js/settings.js` | The Settings panel: language, theme, trigger key, mail program of E-mail mode, margins, credits. |
 | `js/save-reminder.js` | The "Save" reminder of the Settings View and Access tabs: the line to the left of "Close" after a change, switched off by Grist's "Revert" (which says nothing of a click on "Save"), and the tabs then take back the saved setting. |
 | `js/shortcuts.js`, `js/shortcuts-panel.js` | The customizable keyboard shortcuts and their list. |
 | `js/first-contact.js` | The first-contact window, when the widget doesn't start as expected. |
@@ -540,5 +541,6 @@ notes, which are not published here.
 | Change the color palette, or add a color menu | `js/color-palette.js` (the palette and its rows; a menu plugs in through `createMenu`), `js/color-dialog.js` (the "Custom color" window), `js/color-store.js` (the kept colors: `PageLayout.getCustomColors` for the template, `Templates.getDocumentSettings` for the document), `css/color-palette.css`. |
 | Put variable bubbles or chips (date, time, user's email and name) in a text field (Subject, To, Cc, Bcc, PDF name) | `js/field-editor.js` (a one-line editor that behaves like the `<input>` it replaces), `js/field-codec.js` (the saved value: plain text or HTML), `ReaderMode.fieldText` and `ReaderMode.smartChipValue` in `js/reader-mode.js` (the resolved value, and the chips' value), `css/field-editor.css`. |
 | Change what an e-mail template accepts (a key, a paste, formatting left over from an older template) or the lines of the link's text | `js/email-plain-text.js` and `css/email-plain-text.css` for what the editor accepts; `js/mailto-export.js` for the link's text, whose lines are the editor's lines, one for one. |
+| Make the link readable by a mail program that misreads it (Zimbra shows `&amp;` for "&" and turns "+" into a space) | `js/mailto-export.js` (`forZimbra`, the `client` option of `buildMailtoUrl`, `getMailClient` and `setMailClient`) and the Email tab of `js/settings.js` and `index.html`. |
 | Add a template to the gallery | A folder in `templates-gallery/` (the template's text, its `pack.json`: tables, columns, Linked tables rules, page and type, and its screenshots), then its line in `templates-gallery/manifest.json` (name, tags, thumbnail, screenshots, "Features shown"). `js/template-pack.js` reads and checks the `pack.json`; tables that several templates share are described once, in the `families/` folder. |
 | Modify a file in `css/` or `js/` | Bump its `?v=` number in `index.html`, otherwise the browser keeps the old one. |

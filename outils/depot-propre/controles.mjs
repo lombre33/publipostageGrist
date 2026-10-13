@@ -276,6 +276,7 @@ if (has('README.md')) {
     pp_expansion_char: ['touches', 'keys'],
     pp_shortcuts: ['raccourcis', 'shortcuts'],
     pp_shortcuts_view: ['vue de leur panneau', 'view of their panel'],
+    pp_mail_client: ['messagerie', 'mail program'],
     pp_autosave_enabled: ['enregistrement automatique', 'autosave'],
     pp_sheet_assembly: ['assemblage avant impression', 'sheet assembly before printing'],
     pp_page_zoom: ['niveau de zoom', 'zoom level'],
