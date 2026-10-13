@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"><title>Édition live (essai)</title><meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Essai ISOLÉ de l'édition collaborative en direct : du texte simple, TipTap 3 + Yjs, la table liée au widget comme canal.
+     Il n'utilise aucun fichier du widget Publipostage+ ni de sa page (index.html). Lisez README.md avant de le brancher dans Grist.
+     La politique ci-dessous est celle du widget (script-src), avec l'empreinte de la carte d'importation de CETTE page : si vous
+     modifiez la carte, recalculez l'empreinte (test-edition-live.mjs la vérifie). -->
+<meta http-equiv="Content-Security-Policy" content="
+  script-src 'self' 'unsafe-eval' https://esm.sh https://docs.getgrist.com/grist-plugin-api.js 'sha256-2EGMNnd636lnGkXCtFiarEWmNy91/EjscyCOIH2Gjog=';
+  object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'">
+<script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+<!-- Même carte que le widget pour ProseMirror (UNE seule instance de chaque paquet), plus Yjs, y-protocols, lib0 et les deux
+     extensions de collaboration de TipTap 3, construites par esm.sh avec « * » : leurs dépendances passent par cette carte. -->
+<script type="importmap">
+{
+  "imports": {
+    "prosemirror-model": "https://esm.sh/*prosemirror-model@1.25.11",
+    "orderedmap": "https://esm.sh/*orderedmap@2.1.1",
+    "prosemirror-state": "https://esm.sh/*prosemirror-state@1.4.4",
+    "prosemirror-transform": "https://esm.sh/*prosemirror-transform@1.12.0",
+    "prosemirror-view": "https://esm.sh/*prosemirror-view@1.42.3",
+    "rope-sequence": "https://esm.sh/*rope-sequence@1.3.4",
+    "prosemirror-history": "https://esm.sh/*prosemirror-history@1.5.0",
+    "prosemirror-keymap": "https://esm.sh/*prosemirror-keymap@1.2.3",
+    "w3c-keyname": "https://esm.sh/*w3c-keyname@2.2.8",
+    "prosemirror-commands": "https://esm.sh/*prosemirror-commands@1.7.1",
+    "prosemirror-schema-list": "https://esm.sh/*prosemirror-schema-list@1.5.1",
+    "@tiptap/core": "https://esm.sh/@tiptap/core@3.31.3",
+    "@tiptap/pm": "https://esm.sh/@tiptap/pm@3.31.3",
+    "https://esm.sh/@tiptap/pm@3.31.3/es2022/model.mjs": "https://esm.sh/*prosemirror-model@1.25.11",
+    "https://esm.sh/@tiptap/pm@3.31.3/es2022/state.mjs": "https://esm.sh/*prosemirror-state@1.4.4",
+    "https://esm.sh/@tiptap/pm@3.31.3/es2022/view.mjs": "https://esm.sh/*prosemirror-view@1.42.3",
+    "https://esm.sh/@tiptap/pm@3.31.3/es2022/transform.mjs": "https://esm.sh/*prosemirror-transform@1.12.0",
+    "https://esm.sh/@tiptap/pm@3.31.3/es2022/keymap.mjs": "https://esm.sh/*prosemirror-keymap@1.2.3",
+    "https://esm.sh/@tiptap/pm@3.31.3/es2022/commands.mjs": "https://esm.sh/*prosemirror-commands@1.7.1",
+    "https://esm.sh/@tiptap/pm@3.31.3/es2022/schema-list.mjs": "https://esm.sh/*prosemirror-schema-list@1.5.1",
+    "@tiptap/pm/state": "https://esm.sh/*prosemirror-state@1.4.4",
+    "@tiptap/extension-document": "https://esm.sh/@tiptap/extension-document@3.31.3",
+    "@tiptap/extension-paragraph": "https://esm.sh/@tiptap/extension-paragraph@3.31.3",
+    "@tiptap/extension-text": "https://esm.sh/@tiptap/extension-text@3.31.3",
+    "@tiptap/extension-collaboration": "https://esm.sh/*@tiptap/extension-collaboration@3.31.3",
+    "@tiptap/extension-collaboration-caret": "https://esm.sh/*@tiptap/extension-collaboration-caret@3.31.3",
+    "@tiptap/y-tiptap": "https://esm.sh/*@tiptap/y-tiptap@3.0.10",
+    "yjs": "https://esm.sh/*yjs@13.6.33",
+    "y-protocols/awareness": "https://esm.sh/*y-protocols@1.0.7/awareness",
+    "lib0/array": "https://esm.sh/lib0@0.2.119/array",
+    "lib0/binary": "https://esm.sh/lib0@0.2.119/binary",
+    "lib0/buffer": "https://esm.sh/lib0@0.2.119/buffer",
+    "lib0/decoding": "https://esm.sh/lib0@0.2.119/decoding",
+    "lib0/diff": "https://esm.sh/lib0@0.2.119/diff",
+    "lib0/dom": "https://esm.sh/lib0@0.2.119/dom",
+    "lib0/encoding": "https://esm.sh/lib0@0.2.119/encoding",
+    "lib0/environment": "https://esm.sh/lib0@0.2.119/environment",
+    "lib0/error": "https://esm.sh/lib0@0.2.119/error",
+    "lib0/eventloop": "https://esm.sh/lib0@0.2.119/eventloop",
+    "lib0/function": "https://esm.sh/lib0@0.2.119/function",
+    "lib0/hash/sha256": "https://esm.sh/lib0@0.2.119/hash/sha256",
+    "lib0/iterator": "https://esm.sh/lib0@0.2.119/iterator",
+    "lib0/logging": "https://esm.sh/lib0@0.2.119/logging",
+    "lib0/map": "https://esm.sh/lib0@0.2.119/map",
+    "lib0/math": "https://esm.sh/lib0@0.2.119/math",
+    "lib0/mutex": "https://esm.sh/lib0@0.2.119/mutex",
+    "lib0/object": "https://esm.sh/lib0@0.2.119/object",
+    "lib0/observable": "https://esm.sh/lib0@0.2.119/observable",
+    "lib0/promise": "https://esm.sh/lib0@0.2.119/promise",
+    "lib0/random": "https://esm.sh/lib0@0.2.119/random",
+    "lib0/set": "https://esm.sh/lib0@0.2.119/set",
+    "lib0/string": "https://esm.sh/lib0@0.2.119/string",
+    "lib0/time": "https://esm.sh/lib0@0.2.119/time"
+  }
+}
+</script>
+<link rel="stylesheet" href="style.css?v=1">
+</head>
+<body>
+<header class="bar">
+  <button id="live-toggle" type="button" class="toggle" aria-pressed="false"><span class="dot" aria-hidden="true"></span><span id="live-label"></span></button>
+  <label class="field"><span id="name-label"></span><input id="name" type="text" maxlength="24" autocomplete="off"></label>
+  <span id="peers" class="peers" aria-live="polite"></span>
+  <span class="spacer"></span>
+  <label class="field"><span id="flush-label"></span>
+    <select id="flush"><option value="50">50 ms</option><option value="150">150 ms</option><option value="300">300 ms</option><option value="600">600 ms</option><option value="1000">1000 ms</option></select></label>
+  <button id="compact" type="button"></button>
+</header>
+<p class="line"><span id="status" role="status"></span> · <span id="source"></span></p>
+<section id="setup" class="setup" hidden>
+  <strong id="setup-title"></strong>
+  <p id="setup-text"></p>
+  <button id="setup-btn" type="button"></button>
+</section>
+<main id="editor" class="editor"></main>
+<p id="stats" class="line stats"></p>
+<details class="journal"><summary id="log-title"></summary><pre id="log"></pre></details>
+<script type="module" src="app.js?v=1"></script>
+</body>
+</html>

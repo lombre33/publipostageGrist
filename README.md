@@ -165,7 +165,7 @@ L'interface prend la police du système (`--font-ui` de `css/style.css`) : aucun
 | `templates-gallery-dev/` | Des modèles de test, chargés seulement quand l'adresse du widget contient `?dev`. |
 | `dev-tests/` | La suite de tests, le harnais et le simulateur de Grist. |
 | `planning/` | Les notes de conception par chantier, la feuille de route et la charte UI/UX. |
-| `prototypes/` | Le prototype du suivi des modifications, avec ses tests. |
+| `prototypes/` | Le prototype du suivi des modifications, avec ses tests, et `edition-live/` : l'essai isolé d'édition collaborative en direct (texte simple, sa propre adresse, aucun fichier du widget ; voir son `README.md`). |
 | `outils/` | Les outils d'envoi d'une version vers le dépôt public (`outils/depot-propre/` : script, contrôles, essais, documents publics). Rien n'y est poussé sans geste manuel, et rien n'en part sur le dépôt public, sauf les documents de `outils/depot-propre/public/`, posés à sa racine. |
 | `outils/depot-propre/public/CARTE_DU_CODE.md` | La carte du code : quel fichier fait quoi, par où commencer (en français et en anglais). C'est un document public : il part à la racine du dépôt public. |
 | `AUDIT_CODE.md` | L'audit de code (qualité, sécurité, publication) du 12 septembre 2026. |
