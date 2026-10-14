@@ -5,8 +5,8 @@ Mis à jour le 2026-10-14, au commit `b044cab` (le dernier commit de code que ce
 ## Consignes
 - 001 · en cours · le fichier existe et `GFS-ETAT.md` est exclu de l'envoi public ; le relevé du guide et les écarts aux règles de la 1.1 viennent au prochain lot
 - 002 · faite · `b044cab` · un modèle d'un type inconnu n'est ni ouvert, ni réenregistré, ni ★ ; grisé avec sa raison dans le sélecteur et dans « Organiser »
-- 003 · à faire · attend la décision du porteur de l'app sur l'ordre avec la 005
-- 005 · à faire · attend la décision du porteur de l'app : le graphique marche aujourd'hui dans l'app seule, la consigne l'y grise
+- 003 · à faire · le porteur ne la veut pas (14/10) : GFS ouvre lui-même le bon modèle sans adapter l'app, qui garde son fonctionnement seule ; à retirer ou à remplacer de votre côté
+- 005 · en cours · voulue par le porteur (14/10) : le graphique est grisé hors GFS, avec une fenêtre simple « il faut passer par GFS » (instructions à compléter plus tard) ; seules les dépendances non natives (graphique, édition en direct, diapositives) sortent de l'app
 - 006 · faite · `b044cab` · la section « Demandes à GFS » est en place ; la fonction nouvelle annoncée n'est pas encore décrite, aucune demande pour l'instant
 
 ## Changements qui touchent GFS
