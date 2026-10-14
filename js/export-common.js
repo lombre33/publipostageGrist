@@ -177,6 +177,19 @@ const ExportCommon = (function () {
     return widths.map(w => Math.max(floor, w));
   }
 
+  // La place d'un tableau qui se trouve dans une colonne de zone à deux colonnes (`el` : le tableau, ou ce qui l'enveloppe dans l'éditeur) : le texte de la colonne,
+  // sa boîte sans bordure ni remplissage, en pixels de mise en page (`clientWidth` ne suit pas la réduction de la feuille). C'est pour lui ce que la page est pour un
+  // tableau du texte courant. 0 : pas dans une colonne, dans une case (un tableau de case se règle sur sa case), ou une colonne sans mise en page (éditeur masqué,
+  // zone détachée) : l'appelant garde alors la page.
+  function zoneColumnWidthPx(el) {
+    const column = el && el.closest ? el.closest('.two-columns-column') : null;
+    if (!column) return 0;
+    const cell = el.closest('td, th');
+    if (cell && column.contains(cell)) return 0;
+    const cs = getComputedStyle(column);
+    return Math.max(0, column.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0));
+  }
+
   // Un item de liste ou une citation qui porte un tableau (le bouton Tableau le pose dans l'item ou la citation où se trouve le curseur) : un tableau
   // n'est pas du texte, lu comme tel il perd ses cases (« Un itemL1AL1BL2A »).
   const hasTableChild = node => Array.from(node.children).some(child => child.tagName === 'TABLE');
@@ -349,6 +362,6 @@ const ExportCommon = (function () {
   function unreadImageCount() { return unreadImages.size; }
   function resetUnreadImages() { unreadImages.clear(); }
 
-  return { EDITOR_STYLE, hexOf, cssColorHex, scriptRefusal, loadScriptOnce, ensureJsZipLoaded, downloadBlob, attachMeasureHost, tableRows, cellsOf, spanOf, placeCells, measuredColumnWidthsPx, shownImageWidthPx, gridLinesHidden, rowHeightPx, cellVerticalAlign, cellBorderSides, gridRowSegments, fitColumnWidths, hasTableChild, segmentsAroundTables, isBlankSegment, resolveHeaderFooterVariables,
+  return { EDITOR_STYLE, hexOf, cssColorHex, scriptRefusal, loadScriptOnce, ensureJsZipLoaded, downloadBlob, attachMeasureHost, tableRows, cellsOf, spanOf, placeCells, measuredColumnWidthsPx, zoneColumnWidthPx, shownImageWidthPx, gridLinesHidden, rowHeightPx, cellVerticalAlign, cellBorderSides, gridRowSegments, fitColumnWidths, hasTableChild, segmentsAroundTables, isBlankSegment, resolveHeaderFooterVariables,
     resolveRecord, codeLinesOf, calloutMetricsPx, headerRowCount, noteUnreadImage, noteImageWithoutSource, unreadImageCount, resetUnreadImages };
 })();

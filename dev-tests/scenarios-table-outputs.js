@@ -517,6 +517,213 @@
     },
   });
 
+  // Un tableau plus large que SA COLONNE dans une zone à deux colonnes (point de la liste de polish du 12/10 : « rogné à la page, pas à la colonne, partout pareil ») :
+  // l'éditeur (Aperçu A4), la Lecture, le PDF et le Word le ramènent dans la colonne qui le porte, colonnes au prorata, comme ils ramènent dans la page un tableau plus
+  // large que la page. La limite est le texte de la colonne (sa boîte sans bordure ni remplissage), lue sur l'éditeur.
+  const zoneHtml = (split, left, right) => '<div class="two-columns-zone" style="--layout-left: ' + split + '%"><div class="two-columns-column">' + left + '</div><div class="two-columns-column">' + right + '</div></div>';
+  const BESIDE = '<p>Texte à côté</p>';
+  const columnTexts = root => Array.from(root.querySelectorAll('.two-columns-column')).map(c => {
+    const cs = c.ownerDocument.defaultView.getComputedStyle(c);
+    return c.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
+  });
+  // Ce que chaque sortie doit à la colonne de `colW` px (à 3 px près : le trait du tableau et l'arrondi de `clientWidth`, comme les 2 px de la page plus haut) : un tableau qui y
+  // tient, au bord gauche où l'éditeur le pose ; ses colonnes au prorata de celles qu'on lui a
+  // données ; un tableau qui tenait déjà reste tel qu'il était écrit.
+  function columnIssues(m, colW, widths) {
+    const bad = issuesOf(m);
+    const e = m.editor; const rd = m.reader; const p = m.pdf; const w = m.word;
+    if (!e || !rd || !p.cols.length || !w.cols) return bad;
+    if (e.table > colW + 3) bad.push('éditeur : tableau ' + e.table + ' plus large que sa colonne ' + r1(colW));
+    if (rd.table > colW + 3) bad.push('Lecture : tableau ' + rd.table + ' plus large que sa colonne ' + r1(colW));
+    if (p.right - p.left > colW + 3) bad.push('PDF : tableau ' + r1(p.right - p.left) + ' plus large que sa colonne ' + r1(colW));
+    if (sum(w.cols) > colW + 6) bad.push('Word : tableau ' + r1(sum(w.cols)) + ' plus large que sa colonne ' + r1(colW));
+    if (Math.abs(rd.rel - e.rel) > 1.5) bad.push('Lecture : bord gauche à ' + rd.rel + ' au lieu de ' + e.rel);
+    if (Math.abs(p.left - p.pageLeft - e.rel) > 2.5) bad.push('PDF : bord gauche à ' + r1(p.left - p.pageLeft) + ' au lieu de ' + e.rel);
+    if (sum(widths) > colW) {
+      const total = sum(e.cols);
+      if (!e.cols.every((c, i) => Math.abs(c / total - widths[i] / sum(widths)) < 0.02)) bad.push('éditeur : colonnes ' + JSON.stringify(e.cols) + ' pas au prorata de ' + JSON.stringify(widths));
+    } else if (!near(e.cols, widths, 0.5)) {
+      bad.push('un tableau qui tient dans sa colonne a bougé : ' + JSON.stringify(e.cols) + ' au lieu de ' + JSON.stringify(widths));
+    }
+    return bad;
+  }
+
+  const ZONE_TRIALS = [
+    { name: 'colonne gauche à 50 %, 600 px', split: 50, side: 0, widths: [200, 200, 200] },
+    { name: 'colonne gauche à 50 %, 450 px (plus étroit que la page)', split: 50, side: 0, widths: [150, 150, 150] },
+    { name: 'colonne gauche à 50 %, colonnes de 60, 150 et 300 px', split: 50, side: 0, widths: [60, 150, 300] },
+    { name: 'colonne droite à 50 %, 450 px', split: 50, side: 1, widths: [150, 150, 150] },
+    { name: 'colonne gauche à 30 %, 300 px', split: 30, side: 0, widths: [100, 100, 100] },
+    { name: 'colonne droite à 70 % (la plus étroite), 360 px', split: 70, side: 1, widths: [120, 120, 120] },
+    { name: 'colonne gauche à 50 %, 270 px (tient déjà)', split: 50, side: 0, widths: [90, 90, 90] },
+  ];
+  cases.push({
+    id: 'tableoutputs_a_table_wider_than_its_zone_column_fits_the_column_in_every_view_and_export',
+    description: 'Un tableau plus large que la colonne d\'une zone à deux colonnes (600 px, 450 px, colonnes inégales, colonne gauche ou droite, zone à 30, 50 ou 70 %) est ramené dans sa colonne, colonnes au prorata, dans l\'éditeur, la Lecture, le PDF et le Word ; un tableau qui y tient déjà ne bouge pas',
+    run: async (h) => {
+      const bad = [];
+      for (const trial of ZONE_TRIALS) {
+        const wrap = t => zoneHtml(trial.split, trial.side === 0 ? t : BESIDE, trial.side === 0 ? BESIDE : t);
+        const m = await measureAll(h, tableHtml({ widths: trial.widths }), { wrap });
+        const colW = columnTexts(h.tiptap())[trial.side];
+        const issues = columnIssues(m, colW, trial.widths);
+        if (issues.length) bad.push(trial.name + ' : ' + issues.join(' ; ') + ' | ' + compact(m));
+      }
+      return { pass: !bad.length, notes: bad.length ? '\n' + bad.join('\n') : ZONE_TRIALS.length + ' tableaux d\'accord avec leur colonne' };
+    },
+  });
+
+  // La colonne se rétrécit APRÈS la pose du tableau (le trait de séparation glissé : au lâcher la zone change de pourcentage) : le tableau suit, comme il suit un
+  // changement de marges de la page.
+  cases.push({
+    id: 'tableoutputs_a_table_follows_its_zone_column_when_the_zone_is_resized',
+    description: 'Un tableau qui tient dans la colonne gauche d\'une zone à 50 % est ramené dans la colonne quand la zone passe à 30 % (le trait de séparation lâché) : colonnes au prorata, mêmes colonnes dans la Lecture, le PDF et le Word ; remise à 50 %, le tableau n\'est pas élargi',
+    run: async (h) => {
+      const bad = [];
+      const widths = [110, 110, 110];
+      await h.resetEditor();
+      h.setA4Preview(true);
+      Editor.setHTML(zoneHtml(50, tableHtml({ widths }), BESIDE));
+      await sleep(350);
+      const setSplit = async (percent) => {
+        let zonePos = -1; let zoneNode = null;
+        ed().state.doc.descendants((node, pos) => { if (zonePos < 0 && node.type.name === 'twoColumnsZone') { zonePos = pos; zoneNode = node; } return zonePos < 0; });
+        ed().view.dispatch(ed().state.tr.setNodeMarkup(zonePos, undefined, Object.assign({}, zoneNode.attrs, { layoutLeft: percent })));
+        await sleep(450);
+      };
+      const wide = domGeometry(h.tiptap());
+      if (!near(wide.cols, widths, 0.5)) bad.push('50 % : le tableau qui tient a bougé ' + JSON.stringify(wide.cols));
+      await setSplit(30);
+      const m = await measureAllIn(h, null, { wrap: s => s });
+      const colW = columnTexts(h.tiptap())[0];
+      const issues = columnIssues(m, colW, widths);
+      if (issues.length) bad.push('zone passée à 30 % : ' + issues.join(' ; ') + ' | ' + compact(m));
+      const narrowed = m.editor ? m.editor.cols : [];
+      await setSplit(50);
+      const back = domGeometry(h.tiptap());
+      if (!near(back.cols, narrowed, 0.5)) bad.push('zone remise à 50 % : le tableau a changé ' + JSON.stringify(back.cols) + ' au lieu de ' + JSON.stringify(narrowed));
+      return { pass: !bad.length, notes: bad.length ? '\n' + bad.join('\n') : 'ok' };
+    },
+  });
+
+  // Un tableau enregistré sans l'Aperçu A4 (aucune limite à l'écran) : le PDF et le Word, eux, n'ont que la colonne de la page.
+  cases.push({
+    id: 'tableoutputs_a_table_stored_wider_than_its_zone_column_fits_the_column_in_pdf_and_word',
+    description: 'Un tableau de 600 px posé sans Aperçu A4 dans la colonne gauche ou droite d\'une zone à 50 % sort du PDF et du Word dans sa colonne, colonnes au prorata (le Word écrit la grille et chaque case à la même largeur) ; l\'éditeur, sans page, ne le touche pas',
+    run: async (h) => {
+      const bad = [];
+      const widths = [200, 200, 200];
+      // La largeur de chaque colonne se lit sur l'éditeur en Aperçu A4 (sans page elle suit la fenêtre).
+      await h.resetEditor();
+      h.setA4Preview(true);
+      Editor.setHTML(zoneHtml(50, BESIDE, BESIDE));
+      await sleep(350);
+      const colWs = columnTexts(h.tiptap());
+      for (const side of [0, 1]) {
+        await h.resetEditor();
+        h.setA4Preview(false);
+        const t = tableHtml({ widths });
+        Editor.setHTML(zoneHtml(50, side === 0 ? t : BESIDE, side === 0 ? BESIDE : t));
+        await sleep(350);
+        const saved = Editor.getHTML();
+        const stored = (saved.match(/width: (\d+)px/) || [])[1];
+        if (Number(stored) !== 600) { bad.push('colonne ' + side + ' : le tableau posé sans la page a été touché (' + stored + ')'); continue; }
+        const pdf = await h.exportPdfContent(saved, null, PageLayout.getMarginsPt());
+        const painted = (await h.extractPdfLines(pdf.base64)).pages[0];
+        const xs = painted.lines.filter(l => Math.abs(l.x1 - l.x2) < 0.01).map(l => l.x1).sort((a, b) => a - b);
+        const pdfWidth = ((xs[xs.length - 1] || 0) - (xs[0] || 0)) / 0.75;
+        const word = await h.exportDocxParts(saved, null, PageLayout.getMarginsTwip());
+        // Le tableau du texte (celui qui porte « L1A » et aucun autre), pas le tableau à trois cases qui range la zone.
+        const hasLabel = t => /L1A/.test(t.textContent);
+        const wTable = Array.from(word.doc.getElementsByTagName('w:tbl')).filter(t => hasLabel(t) && !Array.from(t.getElementsByTagName('w:tbl')).some(hasLabel))[0];
+        const wordCols = wTable ? Array.from(wTable.getElementsByTagName('w:tblGrid')[0].getElementsByTagName('w:gridCol')).map(g => Number(g.getAttribute('w:w')) / 15) : [];
+        const cellTwips = wTable ? Array.from(wTable.getElementsByTagName('w:tr')[0].children).filter(c => c.nodeName === 'w:tc').map(tc => Number(tc.getElementsByTagName('w:tcW')[0].getAttribute('w:w'))) : [];
+        const cellsMatchGrid = wordCols.length === 3 && cellTwips.length === 3 && cellTwips.every((tw, i) => Math.abs(tw - wordCols[i] * 15) <= 2);
+        const gotRatio = wordCols.map(x => x / sum(wordCols));
+        if (!(pdfWidth <= colWs[side] + 3)) bad.push('colonne ' + side + ' : PDF ' + r1(pdfWidth) + ' > colonne ' + r1(colWs[side]));
+        if (!(wordCols.length === 3 && sum(wordCols) <= colWs[side] + 6)) bad.push('colonne ' + side + ' : Word ' + r1(sum(wordCols)) + ' > colonne ' + r1(colWs[side]));
+        if (!cellsMatchGrid) bad.push('colonne ' + side + ' : les cases du Word ne suivent pas la grille');
+        if (!gotRatio.every(x => Math.abs(x - 1 / 3) < 0.02)) bad.push('colonne ' + side + ' : proportions du Word ' + JSON.stringify(gotRatio.map(x => r1(x * 100))));
+        // L'Aperçu A4 allumé après coup (Editor.fitTablesToPage, que la case « Aperçu A4 » rejoue) : le tableau rentre aussitôt dans sa colonne.
+        h.setA4Preview(true);
+        Editor.fitTablesToPage();
+        await sleep(350);
+        const fitted = domGeometry(h.tiptap());
+        if (!(fitted.table <= colWs[side] + 3)) bad.push('colonne ' + side + ' : l\'Aperçu A4 allumé laisse un tableau de ' + fitted.table + ' dans une colonne de ' + r1(colWs[side]));
+      }
+      return { pass: !bad.length, notes: bad.length ? '\n' + bad.join('\n') : 'ok' };
+    },
+  });
+
+  // La Lecture et l'impression d'un tableau enregistré plus large que sa colonne (sans Aperçu A4, ou repris d'un autre modèle) : comme l'éditeur avec l'Aperçu A4,
+  // elles le ramènent dans sa colonne ; la page ne suffit pas, la colonne de droite d'une zone à 50 % la dépasserait.
+  cases.push({
+    id: 'tableoutputs_reader_and_print_bring_a_stored_table_into_its_zone_column',
+    description: 'Lecture (Aperçu A4) et impression du navigateur : un tableau de 600 px enregistré dans la colonne gauche ou droite d\'une zone à 50 % est ramené dans le texte de sa colonne, colonnes au prorata ; un tableau de 270 px n\'est pas touché',
+    run: async (h) => {
+      const bad = [];
+      for (const [side, widths] of [[0, [200, 200, 200]], [1, [200, 200, 200]], [0, [90, 90, 90]]]) {
+        const t = tableHtml({ widths });
+        const html = zoneHtml(50, side === 0 ? t : BESIDE, side === 0 ? BESIDE : t);
+        const label = 'colonne ' + side + ', ' + sum(widths) + ' px';
+        const wantRatio = widths.map(w => w / sum(widths));
+        const check = (where, cols, colW) => {
+          const total = sum(cols);
+          if (sum(widths) > colW) {
+            if (!(total <= colW + 3 && cols.every((c, i) => Math.abs(c / total - wantRatio[i]) < 0.02))) bad.push(label + ' : ' + where + ' ' + JSON.stringify(cols.map(r1)) + ' dans une colonne de ' + r1(colW));
+          } else if (!near(cols.map(r1), widths, 0.5)) bad.push(label + ' : ' + where + ' a changé un tableau qui tient ' + JSON.stringify(cols.map(r1)));
+        };
+        await h.resetEditor();
+        h.setA4Preview(true);
+        const reader = await h.renderReaderMode(html, null);
+        await sleep(250);
+        const g = domGeometry(reader);
+        check('Lecture', g.cols, columnTexts(reader)[side]);
+        const job = await PrintExport.prepare(html, null, { id: 1 }, NO_HF(), 'essai');
+        try {
+          const sheet = job.frame.contentDocument.querySelector('.pp-print-sheet');
+          const printed = Array.from(sheet.querySelector('table').querySelectorAll(':scope > colgroup > col')).map(c => c.getBoundingClientRect().width);
+          check('impression', printed, columnTexts(sheet)[side]);
+        } finally { job.dispose(); }
+      }
+      return { pass: !bad.length, notes: bad.length ? '\n' + bad.join('\n') : 'ok' };
+    },
+  });
+
+  // Le plancher d'une colonne (25 px) : un tableau qui ne peut plus se resserrer reste tel qu'il est. La correction des largeurs est rejouée après chaque
+  // changement du document : si elle récrivait encore les mêmes largeurs, chaque frappe ferait une écriture de plus.
+  cases.push({
+    id: 'tableoutputs_a_table_already_at_its_narrowest_stays_put_in_a_narrow_zone_column',
+    description: 'Quinze colonnes de 25 px (le plancher, 375 px) dans la colonne gauche d\'une zone à 30 % (205 px de texte) : le tableau ne peut pas rentrer, il reste tel qu\'il est, la correction des largeurs ne récrit rien (une frappe n\'est qu\'une écriture) et l\'éditeur répond encore',
+    run: async (h) => {
+      const bad = [];
+      const widths = Array(15).fill(25);
+      const errors = [];
+      const onError = e => errors.push(e.message);
+      window.addEventListener('error', onError);
+      let writes = 0;
+      const onTransaction = ({ transaction }) => { if (transaction.docChanged) writes += 1; };
+      try {
+        await h.resetEditor();
+        h.setA4Preview(true);
+        try {
+          Editor.setHTML(zoneHtml(30, tableHtml({ widths, rows: 2 }), BESIDE));
+          await sleep(500);
+        } catch (e) { bad.push('la pose a levé : ' + e.message); }
+        const g = domGeometry(h.tiptap());
+        if (!g || !near(g.cols, widths, 0.5)) bad.push('les colonnes ont bougé : ' + JSON.stringify(g && g.cols));
+        await h.focusAtEnd();
+        ed().on('transaction', onTransaction);
+        await h.typeText('x');
+        await h.sleep(250);
+        if (!ed().getText().includes('x')) bad.push('l\'éditeur ne répond plus à la frappe');
+        if (writes !== 1) bad.push('une frappe a fait ' + writes + ' écritures : la correction a récrit les largeurs d\'un tableau qui ne peut pas rentrer');
+      } finally { ed().off('transaction', onTransaction); window.removeEventListener('error', onError); }
+      if (errors.length) bad.push('erreurs : ' + errors.slice(0, 3).join(' | '));
+      return { pass: !bad.length, notes: bad.length ? '\n' + bad.join('\n') : 'ok' };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.tableOutputs = cases;
 })();

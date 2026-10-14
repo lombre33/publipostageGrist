@@ -923,8 +923,11 @@ const PdfExport = (function () {
   // (cellWrapMarginPt), pas ici : une largeur retranchée à chaque colonne rétrécissait le tableau (près de 5 % pour sept colonnes) et les en-têtes
   // étroits se coupaient sur une ligne de plus que dans l'éditeur.
   function columnWidthsPt(node, columnCount, cellPaddingPt, indentPt) {
-    // `indentPt` : le retrait d'un tableau posé dans un item de liste ou une citation, pris sur la largeur de la page.
-    const usablePt = Math.max(MIN_COLUMN_WIDTH_PT * columnCount, CONTENT_WIDTH_PT - (indentPt || 0) - columnCount * (cellPaddingPt + TABLE_LINE_PT) - TABLE_LINE_PT);
+    // `indentPt` : le retrait d'un tableau posé dans un item de liste ou une citation, pris sur la largeur de la page. Un tableau d'une colonne de zone à
+    // deux colonnes est pris sur la largeur de sa colonne, celle de l'hôte de mesure de son contenu (htmlToPdfContent), plus étroite que la page.
+    const zoneHost = node.closest('[data-zone-column]');
+    const boxPt = zoneHost ? Math.min(CONTENT_WIDTH_PT, zoneHost.getBoundingClientRect().width * PX_TO_PT) : CONTENT_WIDTH_PT;
+    const usablePt = Math.max(MIN_COLUMN_WIDTH_PT * columnCount, boxPt - (indentPt || 0) - columnCount * (cellPaddingPt + TABLE_LINE_PT) - TABLE_LINE_PT);
     const measuredPx = ExportCommon.measuredColumnWidthsPx(node, columnCount);
     const measuredPt = measuredPx ? measuredPx.map(px => px * PX_TO_PT) : null;
     const measuredSum = measuredPt ? measuredPt.reduce((sum, w) => sum + w, 0) : 0;
@@ -1250,7 +1253,7 @@ const PdfExport = (function () {
       let blocks;
       // La largeur réelle de cette colonne, pour que l'hôte de mesure interne de htmlToPdfContent habille une image flottante à la bonne largeur
       // plutôt qu'à la pleine largeur de page.
-      try { blocks = await htmlToPdfContent(col.innerHTML, false, widthPt[colIdx], { keepWhole: true }); }
+      try { blocks = await htmlToPdfContent(col.innerHTML, false, widthPt[colIdx], { keepWhole: true, zoneColumn: true }); }
       catch (e) { console.warn('[PdfExport] contenu de colonne ignoré (structure inattendue), repli en texte brut :', e); blocks = [fallbackTextBlock(col, false)]; }
       // Pas de ré-application de l'alignement ici : blockFrom (via htmlToPdfContent) lit déjà `text-align` de chaque paragraphe, colonne ou non. Le
       // réaffecter par index au « bloc qui s'y trouve » appliquerait `alignment` par-dessus l'`absolutePosition` d'une image en calque seule dans un
@@ -3158,6 +3161,8 @@ const PdfExport = (function () {
   // mesure à part). `opts.floatsOverflow` : une image habillée dépasse le dernier bloc au lieu de lui donner sa hauteur (encadré).
   async function htmlToPdfContent(html, isTopLevel, availableWidthPt, opts) {
     const root = document.createElement('div'); root.innerHTML = html || '';
+    // Une colonne de zone à deux colonnes : ses tableaux se règlent sur sa largeur (columnWidthsPt), pas sur celle de la page.
+    if (opts && opts.zoneColumn) root.dataset.zoneColumn = '1';
     // Ni ligne vide ni saut de page orphelin en fin de document : quand le texte arrive à la marge du bas, ils ouvriraient une page blanche.
     if (isTopLevel) ReaderMode.trimTrailingBlankBlocks(root);
     insertTrailingBreaksForEmptyBlocks(root);

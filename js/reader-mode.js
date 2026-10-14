@@ -616,7 +616,8 @@ const ReaderMode = (function () {
     // Un tableau dont les colonnes dépassent la page (posé sans Aperçu A4, repris d'un modèle Grille, assemblé dans un macro-modèle aux marges plus
     // larges) y est ramené comme l'éditeur le fait en Aperçu A4 (js/editor.js:clampOverflowingTables) : colonne par colonne au prorata, avec le calcul du
     // PDF et du Word (ExportCommon.fitColumnWidths). Avant la pagination, qui mesure le rendu. Le modèle n'est pas touché, seul l'affichage l'est. Un
-    // tableau qui garde une colonne sans largeur la reçoit de la page : il n'a rien à ramener. Les tableaux d'une case se règlent sur leur case.
+    // tableau qui garde une colonne sans largeur la reçoit de la page : il n'a rien à ramener. Les tableaux d'une case se règlent sur leur case, ceux d'une
+    // colonne de zone à deux colonnes sur le texte de leur colonne, plus étroit que la page.
     const margins = PageLayout.getMarginsPx();
     const usablePx = PageLayout.getPageSizePx().width - margins.left - margins.right;
     if (!(usablePx > 0)) return;
@@ -624,8 +625,10 @@ const ReaderMode = (function () {
       if (table.parentElement.closest('table')) return;
       const cols = Array.from(table.querySelectorAll(':scope > colgroup > col'));
       const widths = cols.map(col => parseFloat(col.style.width));
-      if (!widths.length || widths.some(w => !(w > 0)) || widths.reduce((sum, w) => sum + w, 0) <= usablePx) return;
-      const fitted = ExportCommon.fitColumnWidths(widths, usablePx, MIN_TABLE_COLUMN_PX);
+      const columnPx = ExportCommon.zoneColumnWidthPx(table);
+      const limitPx = columnPx > 0 ? Math.min(usablePx, columnPx) : usablePx;
+      if (!widths.length || widths.some(w => !(w > 0)) || widths.reduce((sum, w) => sum + w, 0) <= limitPx) return;
+      const fitted = ExportCommon.fitColumnWidths(widths, limitPx, MIN_TABLE_COLUMN_PX);
       cols.forEach((col, index) => { col.style.width = fitted[index] + 'px'; });
       table.style.width = fitted.reduce((sum, w) => sum + w, 0) + 'px';
     });

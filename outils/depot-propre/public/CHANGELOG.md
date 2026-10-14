@@ -555,6 +555,12 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Un tableau plus large que sa colonne reste dans sa colonne, dans une zone à deux colonnes** : un tableau posé dans l'une des
+  deux colonnes d'une zone n'était ramené qu'à la largeur de la page : il passait sur le texte de l'autre colonne, et celui de
+  la colonne de droite sortait même de la page. Il est maintenant ramené à la largeur du texte de sa colonne, colonnes au
+  prorata (aucune sous 25 px), dans l'éditeur (Aperçu A4), la Lecture, l'impression, le PDF et le Word. Il suit la colonne
+  quand on déplace le trait de séparation de la zone. Un tableau qui tient déjà dans sa colonne n'est pas touché, et un tableau
+  déjà au plus étroit n'est plus récrit à chaque frappe.
 - **Les espaces tapés autour d'une valeur qui n'écrit rien ne s'additionnent plus** : quand une valeur conditionnelle
   n'était pas retenue (deux de suite, « Madame » puis « Monsieur » avant « Durand »), ou qu'une bulle de variable était vide, masquée
   par sa condition, à zéro masqué, sans valeur dans son « sinon » ou sans ligne dans sa boucle, elle disparaissait
@@ -1348,6 +1354,12 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Fixed
 
+- **A table wider than its column stays inside its column, in a two-column zone**: a table placed in one of the two columns
+  of a zone was only brought back to the width of the page: it ran over the text of the other column, and in the right
+  column it even left the page. It is now brought back to the width of its column's text, columns in proportion (none under
+  25 px), in the editor (A4 preview), Reading mode, print, PDF and Word. It follows the column when the zone's separator
+  is moved. A table that already fits its column is not touched, and a table already at its narrowest is no longer
+  rewritten on every keystroke.
 - **The spaces typed around a value that writes nothing no longer add up**: when a conditional value was not kept
   (two in a row, "Mrs" then "Mr" before "Durand"), or when a variable bubble was empty, hidden by its condition,
   zero-hidden, had no value in its "otherwise" or no row in its loop, it disappeared but the spaces typed on each

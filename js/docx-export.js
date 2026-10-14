@@ -543,7 +543,9 @@ const DocxExport = (function () {
     if (!rows.length) return [];
     const { keptRows, joinedRows } = rowsKeptWithNext(tableEl, rows, keepWithCaption);
     const columnCount = ExportCommon.cellsOf(rows[0]).reduce((sum, c) => sum + ExportCommon.spanOf(c, 'colspan'), 0) || 1;
-    const availableTwip = CONTENT_WIDTH_TWIP - indentTwip;
+    // Un tableau d'une colonne de zone à deux colonnes se règle sur le texte de sa colonne, plus étroit que la page.
+    const columnPx = ExportCommon.zoneColumnWidthPx(tableEl);
+    const availableTwip = (columnPx > 0 ? Math.min(CONTENT_WIDTH_TWIP, Math.round(columnPx * PX_TO_TWIP)) : CONTENT_WIDTH_TWIP) - indentTwip;
     const colWidthsTwip = tableColumnWidthsTwip(tableEl, columnCount, availableTwip);
     // Les lignes de titres (cases <th> en tête) : Word les reprend en haut de chaque page où le tableau se poursuit (`tblHeader`), comme le PDF.
     const headerRowCount = ExportCommon.headerRowCount(rows);

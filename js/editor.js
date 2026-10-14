@@ -136,12 +136,12 @@ const Editor = (function () {
   function fixColumnWidths(currentEditor, trigger, widthsFor) {
     // Pose sur les cases des tableaux du document les largeurs que choisit `widthsFor(table)` : pour un tableau, la fonction (case, position) ->
     // `colwidth` voulu (undefined : case laissée telle quelle), ou null pour ne pas toucher au tableau. Les tableaux imbriqués dans une case ne sont
-    // pas parcourus.
+    // pas parcourus. `widthsFor(table, pos)` reçoit aussi la position du tableau, pour le mesurer dans le DOM.
     const { state } = currentEditor;
     let tr = null;
     state.doc.descendants((table, pos) => {
       if (table.type.name !== 'table') return true;
-      const widthOf = table.firstChild && widthsFor(table);
+      const widthOf = table.firstChild && widthsFor(table, pos);
       if (widthOf) {
         table.forEach((row, rowOffset) => row.forEach((cell, cellOffset) => {
           const cellPos = pos + 2 + rowOffset + cellOffset;
@@ -184,25 +184,36 @@ const Editor = (function () {
 
   function clampOverflowingTables(currentEditor, trigger) {
     // Un <col> à largeur explicite n'a pas de plafond naturel (contrairement à min-width) : rétrécit après coup les colonnes redimensionnées quand le
-    // tableau dépasse la page en Aperçu A4 (léger rebond au relâcher, tolérable).
+    // tableau dépasse la page en Aperçu A4 (léger rebond au relâcher, tolérable). Un tableau d'une colonne de zone à deux colonnes se règle sur le texte de
+    // sa colonne, plus étroit que la page : il ne passe plus sur le texte de l'autre colonne.
     const editorContainer = document.getElementById('editor-container');
     if (!editorContainer || !editorContainer.classList.contains('a4-preview')) return;
     const containerWidth = EditorCore.editorContentWidthPx(currentEditor);
     // 0 : éditeur masqué (Lecture, macro-modèle), rien à mesurer - les largeurs restent celles du modèle. Rejoué quand l'éditeur redevient visible
     // (refreshLayout). Calculé sur une largeur négative, le facteur ci-dessous ramenait toutes les colonnes à 25 px.
     if (!containerWidth) return;
-    fixColumnWidths(currentEditor, trigger, table => {
+    fixColumnWidths(currentEditor, trigger, (table, pos) => {
       // Calculé sur la première ligne, mais appliqué à toutes : sinon prosemirror-tables (largeur cohérente par colonne exigée) annule la correction
       // pour la réaligner sur les lignes non corrigées.
-      let total = 0;
-      table.firstChild.forEach(cell => {
-        const colwidth = cell.attrs.colwidth;
-        total += colwidth ? colwidth.reduce((sum, w) => sum + (w || DEFAULT_COL_PX), 0) : DEFAULT_COL_PX * (cell.attrs.colspan || 1);
-      });
-      if (total <= containerWidth) return null;
-      const scale = containerWidth / total;
+      const rowWidth = widthOf => {
+        let sum = 0;
+        table.firstChild.forEach(cell => {
+          const colwidth = cell.attrs.colwidth;
+          sum += colwidth ? colwidth.reduce((acc, w) => acc + widthOf(w), 0) : DEFAULT_COL_PX * (cell.attrs.colspan || 1);
+        });
+        return sum;
+      };
+      const total = rowWidth(w => w || DEFAULT_COL_PX);
+      const columnWidth = ExportCommon.zoneColumnWidthPx(currentEditor.view.nodeDOM(pos));
+      const limit = columnWidth > 0 ? Math.min(containerWidth, columnWidth) : containerWidth;
+      if (total <= limit) return null;
+      const scale = limit / total;
       // Une colonne "auto" par défaut reste telle quelle.
-      return cell => cell.attrs.colwidth && cell.attrs.colwidth.map(w => (w ? Math.max(DEFAULT_COL_PX, Math.round(w * scale)) : w));
+      const scaled = w => (w ? Math.max(DEFAULT_COL_PX, Math.round(w * scale)) : w);
+      // Déjà au plus étroit (chaque colonne à son plancher de 25 px) : rien à ramener, et rien à écrire - la correction, rejouée par onUpdate à chaque
+      // écriture, ne finirait jamais.
+      if (rowWidth(w => scaled(w) || DEFAULT_COL_PX) >= total) return null;
+      return cell => cell.attrs.colwidth && cell.attrs.colwidth.map(scaled);
     });
   }
 
