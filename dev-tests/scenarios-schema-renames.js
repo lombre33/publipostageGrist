@@ -282,6 +282,48 @@
   });
 
   cases.push({
+    id: 'schemarenames_the_rules_of_a_condition_group_follow_a_rename_too',
+    description: 'Les règles d’un groupe de condition (les « parenthèses » : un élément { mode, rules } de la condition ou du filtre d’une boucle) suivent un renommage comme celles de la condition, à toute profondeur, comptées, sans toucher à la condition d’origine ; un groupe qui ne change pas reste le même objet ; une autre table nommée dans un groupe compte pour savoir si le modèle est celui de la page',
+    run: async () => {
+      const m = mapper();
+      const page = m.tableContext('Dossiers');
+      const ctx = { page, trigger: trigger() };
+      const rule = (column, operator, value) => ({ column, operator, value });
+      const compare = (column, operator, valueColumn) => ({ column, operator, value: '', valueColumn });
+      const stays = { mode: 'any', rules: [rule('Titre', '=', 'x')] };
+      const condition = { mode: 'all', rules: [
+        rule('Montant', '>', '100'),
+        { mode: 'any', rules: [rule('Projets.Nom', '=', 'A'), compare('Montant', '=', 'MontantTTC'), { mode: 'all', rules: [rule('Dossiers.Projet.Nom', '=', 'B')] }] },
+        stays,
+      ] };
+      const before = JSON.stringify(condition);
+      const c = SchemaRenames.rewriteCondition(condition, m, page);
+      const group = c.condition.rules[1];
+      const onlyStays = { mode: 'all', rules: [stays] };
+      const same0 = SchemaRenames.rewriteCondition(onlyStays, m, page);
+      const loop = SchemaRenames.rewriteLoop({ repeat: 'row', table: 'Projets', via: { table: 'Dossiers', column: 'Projet' }, filter: { mode: 'all', rules: [rule('Nom', '=', 'A'), { mode: 'any', rules: [rule('Projets.Chef', '=', 'z'), rule('Nom', '=', 'B')] }] } }, m);
+      const block = c2 => `<div class="conditional-text"${attr('data-condition', c2)}><p>Texte</p></div>`;
+      const noTable = SchemaRenames.rewriteHtml(block({ mode: 'all', rules: [{ mode: 'any', rules: [rule('Montant', '>', '1')] }] }), m, ctx);
+      const otherInGroup = SchemaRenames.rewriteHtml(block({ mode: 'all', rules: [rule('Montant', '>', '1'), { mode: 'any', rules: [rule('Annuaire.Email', '=', 'x')] }] }), m, ctx);
+      const checks = {
+        topLevelRule: c.condition.rules[0].column === 'Total' && c.condition.rules[0].value === '100',
+        groupRules: same(group.rules.slice(0, 2).map(r => r.column), ['Portefeuille.Intitule', 'Total']) && group.rules[1].valueColumn === 'MontantTTC',
+        groupInGroup: group.rules[2].rules[0].column === 'Dossiers.Programme.Intitule',
+        modesAndValuesKept: c.condition.mode === 'all' && group.mode === 'any' && group.rules[2].mode === 'all' && group.rules[0].value === 'A' && group.rules[0].operator === '=',
+        counted: c.count === 4,
+        sourceNotTouched: JSON.stringify(condition) === before,
+        untouchedGroupIsTheSameObject: c.condition.rules[2] === stays,
+        untouchedConditionIsTheSameObject: same0.count === 0 && same0.condition === onlyStays,
+        loopFilter: loop.count === 5 && same(loop.loop.filter.rules[0], rule('Intitule', '=', 'A')) && same(loop.loop.filter.rules[1].rules.map(r => r.column), ['Portefeuille.Responsable', 'Intitule']) && loop.loop.filter.rules[1].mode === 'any',
+        pageTableWhenNoTableIsNamed: noTable.count === 1 && noTable.html.indexOf('Total') !== -1,
+        anotherTableNamedInAGroup: otherInGroup.count === 1 && otherInGroup.html.indexOf('Courriel') !== -1 && otherInGroup.html.indexOf('Montant') !== -1 && otherInGroup.html.indexOf('Total') === -1,
+      };
+      const v = verdict(checks);
+      return { pass: v.pass, notes: v.failed.join(', ') || 'ok' };
+    },
+  });
+
+  cases.push({
     id: 'schemarenames_the_otherwise_of_a_bubble_follows_a_rename_too',
     description: 'Le sinon d’une bulle (data-otherwise-table, -column, -key ; « Sinon afficher » de la fenêtre de condition) suit un renommage comme la bulle : table, colonne et clé réécrites ensemble, la bulle intacte quand seul son sinon change et inversement, le texte de la bulle jamais touché, son « Avant » gardé ; un modèle qui ne nomme la table de la page que par un sinon est lu comme un modèle de cette page (ses colonnes sans nom de table suivent)',
     run: async () => {

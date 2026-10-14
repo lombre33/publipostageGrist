@@ -2,7 +2,8 @@
 // annexe) et les variables conditionnelles. Aucune dépendance DOM : seule elementHolds lit l'attribut de l'élément qu'on lui passe. Une règle =
 // { column, operator, value } ; `column` nue (table courante) ou qualifiée « Table.Colonne » (cf. parseColumnRef). Une règle peut aussi comparer la
 // colonne à UNE AUTRE COLONNE de la même ligne au lieu d'une valeur saisie : { column, operator, valueColumn } (voir inColumnMode et compareOperands) ;
-// une règle sans `valueColumn` se lit comme avant.
+// une règle sans `valueColumn` se lit comme avant. Une condition { mode, rules } combine ses règles par « toutes » ou « au moins une » ; un élément de `rules`
+// peut être un GROUPE { mode, rules } (« A et (B ou C) » : les parenthèses), qui compte pour un seul élément (voir isGroup, conditionHolds).
 const ConditionRules = (function () {
   // Opérateurs des fenêtres de règles (macro-modèles, variables conditionnelles), dans l'ordre des listes déroulantes.
   const OPERATORS = ['=', '≠', '>', '<', '≥', '≤', 'contient', 'vide', 'non vide'];
@@ -281,12 +282,31 @@ const ConditionRules = (function () {
   // Une règle complète a une colonne et, en mode « autre colonne », cette autre colonne (sauf pour « vide » / « non vide », qui n'en lisent aucune).
   const isCompleteRule = r => !!r && !!r.column && !(inColumnMode(r) && r.valueColumn === '' && !isValueless(r.operator));
 
+  // Une condition se compose de règles { column, operator, value } et de GROUPES { mode, rules } : les « parenthèses » de « A et (B ou C) ». Un groupe a sa propre
+  // combinaison (`mode`) et ses propres règles ; il peut en contenir d'autres (tout ce qui suit lit les groupes à toute profondeur), la fenêtre n'en propose
+  // qu'un niveau.
+  const isGroup = item => !!item && Array.isArray(item.rules);
+
+  // Ce qui reste d'une liste de règles et de groupes une fois les lignes vides ôtées : les règles complètes, et les groupes qui en gardent au moins une.
+  function keptItems(items) {
+    const kept = [];
+    for (const item of items) {
+      if (isGroup(item)) {
+        const inner = keptItems(item.rules);
+        if (inner.length) kept.push({ mode: item.mode === 'any' ? 'any' : 'all', rules: inner });
+      } else if (isCompleteRule(item)) {
+        kept.push(item);
+      }
+    }
+    return kept;
+  }
+
   function normalizeCondition(condition) {
-    // Condition d'affichage d'une bulle #Variable (attribut `condition` du nœud varBadge, js/editor-nodes.js) : { mode: 'all'|'any', rules: [...] }.
-    // Les règles sans colonne (ligne laissée vide dans la fenêtre), ou qui comparent à une autre colonne pas encore choisie, sont ignorées ; sans
-    // aucune règle complète, pas de condition (null).
+    // Condition d'affichage d'une bulle #Variable (attribut `condition` du nœud varBadge, js/editor-nodes.js) : { mode: 'all'|'any', rules: [...] }, où chaque
+    // élément de `rules` est une règle ou un groupe (isGroup). Les règles sans colonne (ligne laissée vide dans la fenêtre), ou qui comparent à une autre
+    // colonne pas encore choisie, sont ignorées, et avec elles le groupe qui n'en garde aucune ; sans aucune règle complète, pas de condition (null).
     if (!condition || !Array.isArray(condition.rules)) return null;
-    const rules = condition.rules.filter(isCompleteRule);
+    const rules = keptItems(condition.rules);
     if (!rules.length) return null;
     return { mode: condition.mode === 'any' ? 'any' : 'all', rules };
   }
@@ -300,20 +320,30 @@ const ConditionRules = (function () {
     return rule;
   }
 
+  const plainItem = item => (isGroup(item) ? { mode: item.mode, rules: item.rules.map(plainItem) } : plainRule(item));
+
   function plainCondition(condition) {
     // La condition sous la forme enregistrée dans un nœud, ou gardée en brouillon par une fenêtre : une copie neuve (jamais un lien vers les règles que
-    // la fenêtre modifie en place), sans les règles incomplètes (plainRule) ; null sans aucune règle complète.
+    // la fenêtre modifie en place), sans les règles incomplètes (plainRule) ni les groupes vides ; null sans aucune règle complète.
     const normalized = normalizeCondition(condition);
-    return normalized && { mode: normalized.mode, rules: normalized.rules.map(plainRule) };
+    return normalized && { mode: normalized.mode, rules: normalized.rules.map(plainItem) };
+  }
+
+  // Vrai si les règles et groupes de `items` se combinent selon `mode` : 'all' = tous, 'any' = au moins un. Un groupe se lit comme une condition : sa propre
+  // combinaison sur ses propres règles.
+  async function itemsHold(mode, items, tableId, record, opts) {
+    const results = await Promise.all(items.map(item => (isGroup(item)
+      ? itemsHold(item.mode === 'any' ? 'any' : 'all', item.rules, tableId, record, opts)
+      : matches(item, tableId, record, opts))));
+    return mode === 'any' ? results.some(Boolean) : results.every(Boolean);
   }
 
   async function conditionHolds(condition, tableId, record, opts) {
-    // Vrai si la variable doit s'afficher pour cette ligne : pas de condition = toujours ; 'all' = toutes les règles, 'any' = au moins une. Une règle
-    // illisible compte comme non remplie (comme pour les macro-modèles, cf. matches).
+    // Vrai si la variable doit s'afficher pour cette ligne : pas de condition = toujours ; 'all' = toutes les règles, 'any' = au moins une (un groupe compte
+    // pour une seule, vraie ou fausse selon sa propre combinaison). Une règle illisible compte comme non remplie (comme pour les macro-modèles, cf. matches).
     const c = normalizeCondition(condition);
     if (!c) return true;
-    const results = await Promise.all(c.rules.map(rule => matches(rule, tableId, record, opts)));
-    return c.mode === 'any' ? results.some(Boolean) : results.every(Boolean);
+    return itemsHold(c.mode, c.rules, tableId, record, opts);
   }
 
   async function elementHolds(el, tableId, record, whenNone) {
@@ -343,7 +373,7 @@ const ConditionRules = (function () {
   }
 
   return {
-    OPERATORS, VALUELESS_OPERATORS, compareValues, compareOperands, inColumnMode, comparesColumn, parseBoolExpected, parseColumnRef, matches, normalizeCondition, plainCondition,
-    conditionHolds, elementHolds, resolveElements,
+    OPERATORS, VALUELESS_OPERATORS, compareValues, compareOperands, inColumnMode, comparesColumn, parseBoolExpected, parseColumnRef, matches, isGroup, normalizeCondition,
+    plainCondition, conditionHolds, elementHolds, resolveElements,
   };
 })();

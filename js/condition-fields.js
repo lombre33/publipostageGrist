@@ -548,16 +548,22 @@ const ConditionFields = (function () {
 
   // Une règle sans colonne, telle que « + Ajouter une condition » la pose.
   const emptyRule = () => ({ column: '', operator: '=', value: '' });
+  // Un groupe sans colonne, tel que « + Groupe » le pose : les « parenthèses » d'une condition, { mode, rules } (js/condition-rules.js:isGroup), avec deux lignes vides
+  // et la combinaison inverse de celle de la condition qui l'entoure - on pose des parenthèses pour mêler « et » et « ou » : « A et (B ou C) ».
+  const emptyGroup = outerMode => ({ mode: outerMode === 'any' ? 'all' : 'any', rules: [emptyRule(), emptyRule()] });
 
-  function buildConnector(index, mode, onMode) {
-    // « Si » devant la première règle ; « Et » ou « Ou » devant les suivantes, selon `mode` ('all' ou 'any' : la condition n'a qu'UN mode, le même entre
-    // toutes ses règles). Avec `onMode`, ce mot est un bouton : un clic relie toutes les règles par l'autre mot et appelle `onMode('all' | 'any')`, que la
-    // fenêtre applique à son brouillon avant de se retracer. Sans `onMode` (ou devant la première règle), c'est un simple texte.
+  function buildConnector(index, mode, onMode, inGroup) {
+    // « Si » devant la première règle ; « Et » ou « Ou » devant les suivantes, selon `mode` ('all' ou 'any' : une condition, ou un groupe, n'a qu'UN mode, le même
+    // entre tous ses éléments). Avec `onMode`, ce mot est un bouton : un clic relie tous les éléments par l'autre mot et appelle `onMode('all' | 'any')`, que la
+    // fenêtre applique à son brouillon avant de se retracer. Sans `onMode` (ou devant la première règle), c'est un simple texte. `inGroup` : le bouton d'une ligne
+    // de groupe ne parle que des lignes du groupe.
     if (index === 0) return el('span', 'macro-rule-connector', I18n.t('macro.modal.ruleIf'));
     const word = I18n.t(mode === 'any' ? 'varCond.ruleOr' : 'varCond.ruleAnd');
     if (!onMode) return el('span', 'macro-rule-connector', word);
     const next = mode === 'any' ? 'all' : 'any';
-    const hint = I18n.t(next === 'any' ? 'varCond.connectorToOr' : 'varCond.connectorToAnd');
+    const hint = I18n.t(next === 'any'
+      ? (inGroup ? 'varCond.group.connectorToOr' : 'varCond.connectorToOr')
+      : (inGroup ? 'varCond.group.connectorToAnd' : 'varCond.connectorToAnd'));
     const toggle = el('button', 'macro-rule-connector macro-rule-connector-toggle', word);
     toggle.type = 'button';
     // Le nom accessible commence par le mot qu'on voit (« Et »), puis dit ce que fait le clic.
@@ -567,7 +573,7 @@ const ConditionFields = (function () {
     return toggle;
   }
 
-  function buildRuleRow(rule, index, { mode, options, onRemove, extra = [], onMode = null }) {
+  function buildRuleRow(rule, index, { mode, options, onRemove, extra = [], onMode = null, inGroup = false }) {
     // La ligne d'une règle de la condition d'une bulle ou du filtre d'une boucle (js/variable-condition.js, js/variable-loop.js), en une seule ligne :
     // le connecteur (« Si », puis « et » ou « ou » selon `mode` ; un bouton qui change `mode` quand la fenêtre donne `onMode`, cf. buildConnector), la
     // colonne, l'opérateur, la valeur, la croix qui retire la règle (`onRemove`), puis l'indication de type (puis celle de l'autre colonne, quand la règle
@@ -579,23 +585,126 @@ const ConditionFields = (function () {
     remove.title = I18n.t('varCond.removeRule');
     remove.addEventListener('click', onRemove);
     const row = el('div', 'macro-rule-row');
-    row.append(buildConnector(index, mode, onMode), fields.columnWrap, fields.operatorSelect, fields.valueSlot, remove, fields.typeHint,
+    row.append(buildConnector(index, mode, onMode, inGroup), fields.columnWrap, fields.operatorSelect, fields.valueSlot, remove, fields.typeHint,
       ...(fields.valueHint ? [fields.valueHint] : []), ...extra);
     return row;
   }
 
-  function buildAddRuleButton(box, rules, redraw) {
-    // « + Ajouter une condition » : ajoute une règle vide à `rules`, `redraw` redessine la fenêtre, puis la colonne de la dernière ligne de `box` prend
-    // le focus.
+  // Le champ Colonne de la règle `path` de `root`, une fois la fenêtre retracée : « 2 » est la 3e ligne de la condition, « 1.0 » la 1re ligne du groupe qui est en 2e.
+  function focusRule(root, path) {
+    const select = root.querySelector('[data-rule-path="' + path + '"] select.macro-rule-column:not(.macro-rule-value-column)');
+    if (select) select.focus();
+  }
+
+  function buildAddRuleButton(root, rules, redraw, pathPrefix = '') {
+    // « + Ajouter une condition » : ajoute une règle vide à `rules`, `redraw` redessine la fenêtre, puis la colonne de la nouvelle ligne prend le focus (`root` :
+    // ce qui reste en place d'un tracé à l'autre ; `pathPrefix` : « 2. » pour une ligne du groupe qui est en 3e, rien pour une ligne de la condition).
     const button = el('button', 'var-condition-add', I18n.t('varCond.addRule'));
     button.type = 'button';
     button.addEventListener('click', () => {
       rules.push(emptyRule());
       redraw();
-      const selects = box.querySelectorAll('select.macro-rule-column:not(.macro-rule-value-column)');
-      if (selects.length) selects[selects.length - 1].focus();
+      focusRule(root, pathPrefix + (rules.length - 1));
     });
     return button;
+  }
+
+  function buildAddGroupButton(root, rules, getMode, redraw) {
+    // « + Groupe » : ajoute à `rules` un groupe de deux lignes vides, combinées à l'inverse de `getMode()` (emptyGroup) ; la colonne de sa première ligne prend le
+    // focus. Le nom accessible commence par ce qu'on voit, puis dit ce que fait le bouton.
+    const button = el('button', 'var-condition-add var-condition-add-group', I18n.t('varCond.addGroup'));
+    button.type = 'button';
+    const title = I18n.t('varCond.addGroupTitle');
+    button.title = title;
+    button.setAttribute('aria-label', button.textContent + ' : ' + title);
+    button.addEventListener('click', () => {
+      rules.push(emptyGroup(getMode()));
+      redraw();
+      focusRule(root, (rules.length - 1) + '.0');
+    });
+    return button;
+  }
+
+  // Le bouton « Et » / « Ou » du chemin `path` de `root`, retracé : le focus lui revient, pour que le clavier garde sa place.
+  function focusToggle(root, path) {
+    const toggle = root.querySelector('[data-toggle-path="' + path + '"]');
+    if (toggle) toggle.focus();
+  }
+
+  function buildGroupRow(group, index, path, level, shared) {
+    // Un groupe de conditions : à gauche le connecteur du niveau (« Si », ou le bouton « Et » / « Ou » des lignes de ce niveau), puis un encadré avec sa propre
+    // combinaison (« Toutes ces conditions » / « Au moins une de ces conditions »), la croix qui retire le groupe et ses lignes, ses lignes (les mêmes que celles
+    // de la condition) et son « + Ajouter une condition ». Un groupe vidé de ses lignes disparaît. Le conteneur n'a PAS la classe `.macro-rule-row` : celle-ci ne
+    // désigne que des lignes de règle.
+    const { root, redraw } = shared;
+    const row = el('div', 'cond-group-row');
+    row.dataset.groupPath = path;
+    const connector = buildConnector(index, level.mode, level.onMode(index, path), level.inGroup);
+    if (connector.tagName === 'BUTTON') connector.dataset.togglePath = path;
+    const box = el('div', 'cond-group');
+    box.setAttribute('role', 'group');
+    box.setAttribute('aria-label', I18n.t('varCond.group.aria'));
+    const head = el('div', 'cond-group-head');
+    const modeSelect = el('select', 'cond-group-mode');
+    modeSelect.setAttribute('aria-label', I18n.t('varCond.group.modeAria'));
+    modeSelect.append(Dom.option('all', I18n.t('varCond.group.modeAll')), Dom.option('any', I18n.t('varCond.group.modeAny')));
+    modeSelect.value = group.mode === 'any' ? 'any' : 'all';
+    modeSelect.addEventListener('change', () => {
+      group.mode = modeSelect.value === 'any' ? 'any' : 'all';
+      redraw();
+      const next = root.querySelector('[data-group-path="' + path + '"] > .cond-group > .cond-group-head > select');
+      if (next) next.focus();
+    });
+    const remove = el('button', 'macro-rule-remove cond-group-remove');
+    remove.type = 'button';
+    remove.setAttribute('aria-label', I18n.t('varCond.group.remove'));
+    remove.title = I18n.t('varCond.group.remove');
+    remove.addEventListener('click', () => level.removeAt(index));
+    head.append(modeSelect, remove);
+    box.appendChild(head);
+    renderLevel(box, group.rules, {
+      mode: group.mode === 'any' ? 'any' : 'all',
+      setMode: next => { group.mode = next; },
+      removeAt: i => {
+        group.rules.splice(i, 1);
+        if (group.rules.length) redraw(); else level.removeAt(index);
+      },
+      inGroup: true,
+      prefix: path + '.',
+    }, shared);
+    box.appendChild(buildAddRuleButton(root, group.rules, redraw, path + '.'));
+    row.append(connector, box);
+    return row;
+  }
+
+  function renderLevel(container, items, level, shared) {
+    // Les éléments de `items` à la suite dans `container` : une ligne par règle (`shared.buildRow`), un encadré par groupe (buildGroupRow, à toute profondeur :
+    // un groupe dans un groupe, que la fenêtre ne pose pas mais qu'une condition collée peut porter, se trace de même). `level.onMode(index, path)` rend ce que
+    // le clic sur le « Et » / « Ou » du niveau fait : le mode du niveau change, la fenêtre se retrace, le focus revient au bouton.
+    const { root, redraw } = shared;
+    level.mode = level.mode === 'any' ? 'any' : 'all';
+    level.onMode = (index, path) => next => { level.setMode(next); redraw(); focusToggle(root, path); };
+    items.forEach((item, index) => {
+      const path = level.prefix + index;
+      if (ConditionRules.isGroup(item)) {
+        container.appendChild(buildGroupRow(item, index, path, level, shared));
+        return;
+      }
+      const row = shared.buildRow(item, { index, mode: level.mode, onMode: level.onMode(index, path), onRemove: () => level.removeAt(index), inGroup: level.inGroup });
+      row.dataset.rulePath = path;
+      const toggle = row.querySelector(':scope > .macro-rule-connector-toggle');
+      if (toggle) toggle.dataset.togglePath = path;
+      container.appendChild(row);
+    });
+  }
+
+  function renderItems(box, { items, mode, setMode, buildRow, removeItem, redraw, root = box }) {
+    // Les règles ET les groupes d'une condition, tracés dans `box` (la boîte des règles, déjà vidée) : la fenêtre de condition d'une variable et le filtre d'une
+    // boucle passent par ici. `items` : les règles `{ column, operator, value }` et les groupes `{ mode, rules }` ; `mode` : la combinaison du premier niveau, que
+    // le « Et » / « Ou » devant une ligne change par `setMode(next)` (la fenêtre l'écrit dans son brouillon) avant `redraw()`. `buildRow(rule, { index, mode, onMode,
+    // onRemove, inGroup })` construit la ligne d'une règle avec les options de la fenêtre (buildRuleRow). `removeItem(index)` retire un élément du premier niveau :
+    // la fenêtre seule sait si une ligne vide doit rester. `root` : ce qui reste en place quand `box` est remplacée (le focus y est cherché).
+    renderLevel(box, items, { mode, setMode, removeAt: removeItem, inGroup: false, prefix: '' }, { root, redraw, buildRow });
   }
 
   // Options de buildConditionFields pour une règle « condition → modèle » : la colonne se choisit dans une seule liste avec recherche qui réunit
@@ -637,5 +746,5 @@ const ConditionFields = (function () {
     return { row, modeleSelect };
   }
 
-  return { appendColumnOption, ensureTableLinked, emptyRule, buildRuleRow, buildAddRuleButton, buildTemplateRule };
+  return { appendColumnOption, ensureTableLinked, emptyRule, buildRuleRow, buildAddRuleButton, buildAddGroupButton, renderItems, buildTemplateRule };
 })();

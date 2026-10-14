@@ -902,6 +902,42 @@
   });
 
   cases.push({
+    id: 'contrast_condition_group_box_keeps_4_5_text_in_light_and_dark',
+    description: 'Encadré d’un groupe de conditions (js/condition-fields.js:buildGroupRow), posé sur --surface dans la boîte des règles (--surface-sunken) : la liste de son en-tête, le « Si » de sa première ligne, son « + Ajouter une condition », sa croix et le « + Groupe » du pied gardent 4,5:1 au moins, en clair et en sombre',
+    run: async () => {
+      const markup = '<div class="pp-modal-box modal-content"><div class="var-condition-rules">'
+        + '<div class="cond-group-row"><button type="button" class="macro-rule-connector macro-rule-connector-toggle">Et</button>'
+        + '<div class="cond-group"><div class="cond-group-head"><select class="cond-group-mode"><option>Au moins une de ces conditions</option></select>'
+        + '<button type="button" class="macro-rule-remove cond-group-remove" aria-label="Supprimer ce groupe"></button></div>'
+        + '<div class="macro-rule-row"><span class="macro-rule-connector">Si</span></div>'
+        + '<button type="button" class="var-condition-add">+ Ajouter une condition</button></div></div>'
+        + '<div class="var-condition-foot"><button type="button" class="var-condition-add var-condition-add-group">+ Groupe</button></div>'
+        + '</div></div>';
+      return withProbe(markup, root => {
+        const group = root.querySelector('.cond-group');
+        const things = {
+          'liste de l’en-tête': root.querySelector('.cond-group-mode'),
+          '« Si » du groupe': group.querySelector('.macro-rule-row .macro-rule-connector'),
+          '« + Ajouter une condition » du groupe': group.querySelector('.var-condition-add'),
+          'croix du groupe': root.querySelector('.cond-group-remove'),
+          '« + Groupe »': root.querySelector('.var-condition-add-group'),
+          '« Et » devant le groupe': root.querySelector('.cond-group-row > .macro-rule-connector-toggle'),
+        };
+        const byTheme = inBothThemes(() => Object.fromEntries(Object.entries(things).map(([name, el]) => [name, round2(textRatio(el))])));
+        const bad = failing(byTheme, 4.5);
+        // Les mesures ne valent que si l'encadré a bien son style : bord de 1 px, fond propre (autre que celui de la boîte des règles autour de lui), liste de 26 px comme celles de la fenêtre.
+        const outer = root.querySelector('.var-condition-rules');
+        const dressed = inBothThemes(() => {
+          const box = getComputedStyle(group), around = getComputedStyle(outer), list = getComputedStyle(things['liste de l’en-tête']);
+          return { border: box.borderTopWidth, boxBackground: box.backgroundColor, rulesBackground: around.backgroundColor, listHeight: list.height };
+        });
+        const undressed = Object.entries(dressed).filter(([, v]) => v.border !== '1px' || v.boxBackground === v.rulesBackground || v.listHeight !== '26px').map(([theme]) => theme);
+        return { pass: bad.length === 0 && undressed.length === 0, notes: JSON.stringify({ bad, undressed, dressed, byTheme }) };
+      });
+    },
+  });
+
+  cases.push({
     id: 'contrast_red_text_of_the_status_error_remove_buttons_counter_and_warnings_reaches_4_5_in_light_and_dark',
     description: 'Texte rouge (message d’erreur de la barre, « Retirer la condition », « Supprimer » des bulles de note et de commentaire, compteur d’email dépassé, avertissement de colonne du macro-modèle, ligne « accès verrouillé » de Réglages) : 4,5:1 au moins sur son fond, en clair et en sombre (--danger n’avait que 4,37:1 en clair)',
     run: async () => {

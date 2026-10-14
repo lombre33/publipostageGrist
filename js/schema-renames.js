@@ -282,12 +282,18 @@ const SchemaRenames = (function () {
   }
 
   // { mode, rules: [{ column, operator, value }] } - rend la condition elle-même quand rien ne change. Une règle qui compare à une autre colonne
-  // (`valueColumn`, js/condition-rules.js) la cite comme `column` : les deux suivent un renommage, chacune pour son compte.
+  // (`valueColumn`, js/condition-rules.js) la cite comme `column` : les deux suivent un renommage, chacune pour son compte. Un élément de `rules` peut
+  // être un groupe { mode, rules } (les « parenthèses » d'une condition) : ses règles se réécrivent comme les autres, à toute profondeur.
   function rewriteCondition(condition, m, ctx, ambiguous) {
     if (!condition || !Array.isArray(condition.rules)) return { condition, count: 0 };
     let count = 0;
     const rules = condition.rules.map(rule => {
       if (!rule) return rule;
+      if (Array.isArray(rule.rules)) {
+        const inner = rewriteCondition(rule, m, ctx, ambiguous);
+        count += inner.count;
+        return inner.condition;
+      }
       let next = rule;
       for (const key of ['column', 'valueColumn']) {
         if (typeof next[key] !== 'string' || !next[key]) continue;
@@ -389,6 +395,7 @@ const SchemaRenames = (function () {
     const tables = new Set();
     const addRules = condition => {
       for (const rule of (condition && Array.isArray(condition.rules) ? condition.rules : [])) {
+        if (rule && Array.isArray(rule.rules)) { addRules(rule); continue; } // un groupe de la condition
         for (const key of ['column', 'valueColumn']) {
           const dot = rule && typeof rule[key] === 'string' ? rule[key].indexOf('.') : -1;
           if (dot > 0) tables.add(rule[key].slice(0, dot));

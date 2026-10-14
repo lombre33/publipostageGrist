@@ -7,7 +7,8 @@
 // sélectionnée, de Référence en Référence (options.attributesWindow, js/variable-linked-attrs.js:pickColumn). Le champ Valeur a un bouton « autre colonne » : la règle compare alors la colonne à une autre colonne de la
 // même ligne, { column, operator, valueColumn } (options.compareColumn, js/condition-rules.js:compareOperands), au lieu d'une valeur saisie.
 // La combinaison des règles (`mode`, la même pour toutes) se choisit dans la liste « toutes / au moins une » du haut ou en cliquant le « Et » / « Ou » devant
-// une règle (js/condition-fields.js:buildConnector) : les deux se suivent.
+// une règle (js/condition-fields.js:buildConnector) : les deux se suivent. Pour mêler « et » et « ou » - « A et (B ou C) » - « + Groupe » pose un encadré, les
+// parenthèses : un élément de `rules` qui est lui-même { mode, rules }, avec sa propre combinaison (js/condition-fields.js:renderItems, ConditionRules.isGroup).
 // Aperçu en direct : la ligne sélectionnée, puis combien de lignes de la table remplissent la condition et la
 // première d'entre elles. « Copier » / « Coller » recolle la condition d'une fenêtre dans une autre, comme un brouillon : « Enregistrer » l'applique.
 // Ouverte depuis la barre flottante (js/floating-toolbars.js:wireVariableFloatingToolbar). La même fenêtre sert aux nœuds conditionnels - bloc de
@@ -102,17 +103,26 @@ const VariableCondition = (function () {
   const draftOtherwiseText = () => { const free = textField(); return free ? ConditionalText.otherwiseText(free.input.value) : null; };
 
   // « Statut = Urgent et VcContacts.Role = Avocat » : une condition sur une ligne, sans valeur pour « vide » / « non vide ». Une règle qui compare à une
-  // autre colonne la nomme entre accolades, comme une colonne dans un calcul : « Montant = {Paye} », qui ne se lit pas comme la valeur « Paye ». Ce que
-  // « Coller » va poser (info-bulle du bouton) et la condition que reprennent les attributs insérés (js/variable-linked-attrs.js), qui la donnent en
-  // entier (`full`) ; sinon coupée à 110 caractères.
+  // autre colonne la nomme entre accolades, comme une colonne dans un calcul : « Montant = {Paye} », qui ne se lit pas comme la valeur « Paye ». Un groupe
+  // s'écrit entre parenthèses : « Statut = Urgent et (Montant ≥ 100 ou Client = Dupont) » (sans elles quand il n'a qu'une ligne). Ce que « Coller » va poser
+  // (info-bulle du bouton) et la condition que reprennent les attributs insérés (js/variable-linked-attrs.js), qui la donnent en entier (`full`) ; sinon coupée
+  // à 110 caractères.
   function conditionSummary(condition, opts) {
-    const glue = ' ' + I18n.t(condition.mode === 'any' ? 'varCond.ruleOr' : 'varCond.ruleAnd').toLowerCase() + ' ';
-    const text = condition.rules.map(r => {
+    const ruleText = r => {
       const operator = r.operator || '=';
       const noValue = ConditionRules.VALUELESS_OPERATORS.indexOf(operator) !== -1 || (!ConditionRules.comparesColumn(r) && r.value == null);
       const shown = ConditionRules.comparesColumn(r) ? '{' + r.valueColumn + '}' : r.value;
       return (r.column + ' ' + operator + (noValue ? '' : ' ' + shown)).trim();
-    }).join(glue);
+    };
+    const itemsText = (mode, items) => {
+      const glue = ' ' + I18n.t(mode === 'any' ? 'varCond.ruleOr' : 'varCond.ruleAnd').toLowerCase() + ' ';
+      return items.map(item => {
+        if (!ConditionRules.isGroup(item)) return ruleText(item);
+        const inner = itemsText(item.mode, item.rules);
+        return item.rules.length > 1 ? '(' + inner + ')' : inner;
+      }).join(glue);
+    };
+    const text = itemsText(condition.mode, condition.rules);
     return opts && opts.full ? text : shorten(text, 110);
   }
 
@@ -269,53 +279,56 @@ const VariableCondition = (function () {
     previewRun.schedule();
   }
 
-  // Le bouton « Et » / « Ou » de la règle `index`, que redraw vient de retracer : le focus lui revient, pour que le clavier garde sa place.
-  function focusConnector(index) {
-    const row = refs && refs.rulesBox.children[index];
-    const toggle = row && row.querySelector('.macro-rule-connector-toggle');
-    if (toggle) toggle.focus();
+  // La ligne d'une règle de la fenêtre : les options de la condition d'une variable (toutes les tables, « autre colonne », « Autres attributs »), avec sous la
+  // règle le lien de la table de sa colonne, et celui de l'autre colonne quand la règle en compare une (bouton « autre colonne »). `row` : ce que
+  // ConditionFields.renderItems donne (index, mode, onMode, onRemove, inGroup).
+  function buildRuleRow(rule, row) {
+    const linkHint = el('span', 'var-condition-link-hint');
+    linkHint.hidden = true;
+    const valueLinkHint = el('span', 'var-condition-link-hint');
+    valueLinkHint.hidden = true;
+    return ConditionFields.buildRuleRow(rule, row.index, Object.assign({}, row, {
+      options: {
+        allTables: true,
+        compareColumn: true,
+        attributesWindow: true,
+        onColumnChosen: ref => ConditionFields.ensureTableLinked(ref, redraw, state ? VariableLoop.loopTablesAt(state.editor.state, state.pos) : null),
+        onColumnResolved: table => updateLinkHint(linkHint, table),
+        onValueColumnResolved: table => updateLinkHint(valueLinkHint, table),
+      },
+      extra: [linkHint, valueLinkHint],
+    }));
   }
 
   function renderRules() {
     if (!state || !refs) return;
     const { rulesBox, modeRow, modeSelect, clip } = refs;
     const { rules, mode } = state.working;
+    // Les règles et les groupes comptent chacun pour un élément : « toutes / au moins une » ne dit rien d'un seul.
     modeRow.hidden = rules.length < 2;
     modeSelect.value = mode;
     // Le groupe Copier / Coller est retiré puis replacé à chaque tracé : un de ses boutons qui avait le focus (Coller au clavier) le perdrait sans
     // ça.
     const clipFocus = clip.contains(document.activeElement) ? document.activeElement : null;
     rulesBox.replaceChildren();
-    rules.forEach((rule, index) => {
-      // Le lien de la table de la colonne de la règle, et celui de l'autre colonne quand la règle en compare une (bouton « autre colonne »).
-      const linkHint = el('span', 'var-condition-link-hint');
-      linkHint.hidden = true;
-      const valueLinkHint = el('span', 'var-condition-link-hint');
-      valueLinkHint.hidden = true;
-      rulesBox.appendChild(ConditionFields.buildRuleRow(rule, index, {
-        mode,
-        // « Et » / « Ou » devant une règle est un bouton : un clic relie toutes les règles par l'autre mot, comme la liste « toutes / au moins une » du haut,
-        // qui suit.
-        onMode: next => { if (state) { state.working.mode = next; redraw(); focusConnector(index); } },
-        options: {
-          allTables: true,
-          compareColumn: true,
-          attributesWindow: true,
-          onColumnChosen: ref => ConditionFields.ensureTableLinked(ref, redraw, state ? VariableLoop.loopTablesAt(state.editor.state, state.pos) : null),
-          onColumnResolved: table => updateLinkHint(linkHint, table),
-          onValueColumnResolved: table => updateLinkHint(valueLinkHint, table),
-        },
-        onRemove: () => {
-          rules.splice(index, 1);
-          if (!rules.length) rules.push(ConditionFields.emptyRule());
-          redraw();
-        },
-        extra: [linkHint, valueLinkHint],
-      }));
+    ConditionFields.renderItems(rulesBox, {
+      items: rules,
+      mode,
+      // « Et » / « Ou » devant une ligne est un bouton : un clic relie toutes les lignes du niveau par l'autre mot ; pour la condition entière, la liste
+      // « toutes / au moins une » du haut suit.
+      setMode: next => { if (state) state.working.mode = next; },
+      buildRow: buildRuleRow,
+      removeItem: index => {
+        rules.splice(index, 1);
+        if (!rules.length) rules.push(ConditionFields.emptyRule());
+        redraw();
+      },
+      redraw,
     });
-    // Copier / Coller portent sur l'ensemble des règles : sur la même ligne que « + Ajouter », à droite, sans hauteur en plus dans un panneau bas.
+    // Copier / Coller portent sur l'ensemble des règles : sur la même ligne que « + Ajouter une condition » et « + Groupe », à droite, sans hauteur en plus dans un
+    // panneau bas.
     const foot = el('div', 'var-condition-foot');
-    foot.append(ConditionFields.buildAddRuleButton(rulesBox, rules, redraw), clip);
+    foot.append(ConditionFields.buildAddRuleButton(rulesBox, rules, redraw), ConditionFields.buildAddGroupButton(rulesBox, rules, () => state.working.mode, redraw), clip);
     rulesBox.appendChild(foot);
     if (clipFocus) clipFocus.focus();
     syncClipboardButtons();

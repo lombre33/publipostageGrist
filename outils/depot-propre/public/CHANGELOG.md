@@ -48,6 +48,16 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   Lecture et les exports suivent aussi. Le bouton se prend au clavier (Tab, puis Entrée ou Espace) et son info-bulle dit
   ce qu'un clic change.
 
+- **Des groupes « A et (B ou C) » dans une condition** : dans la fenêtre de condition d'une variable, d'un bloc de texte,
+  d'une valeur ou d'une case conditionnels, et dans le filtre d'une boucle, le bouton « + Groupe » pose un encadré : les
+  parenthèses d'une condition. Ses lignes se combinent entre elles (« Et » / « Ou » au clic, ou la liste « toutes / au
+  moins une » de son en-tête) et l'encadré se combine avec les règles qui l'entourent par le « Et » / « Ou » placé devant
+  lui : « Statut = Urgent et (Montant ≥ 1000 ou Montant < 100) » s'écrit tel quel. L'encadré a son propre « + Ajouter
+  une condition » et sa croix, qui le retire avec ses lignes ; un encadré dont les lignes restent vides n'est pas
+  enregistré. L'aperçu, le résumé (avec ses parenthèses), l'enregistrement, Copier / Coller la condition, la Lecture et
+  les exports suivent aussi, et un renommage de colonne atteint les lignes de l'encadré. Une condition sans encadré se
+  lit et s'affiche comme avant.
+
 - **Un macro-modèle qui mêle portrait, paysage et Grille** : le menu du bouton Page d'un macro-modèle propose
   « Selon chaque modèle », « Portrait » et « Paysage ». Avec « Selon chaque modèle » (le réglage d'un macro-modèle
   neuf), chaque modèle assemblé garde le sens de sa propre page : un modèle en paysage entre deux modèles en
@@ -922,6 +932,15 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   "any". The "all / any" list at the top stays, and follows the button; the preview, the saved condition, Reading mode
   and the exports follow too. The button works from the keyboard (Tab, then Enter or Space) and its tooltip says what a
   click changes.
+
+- **Groups, "A and (B or C)", in a condition**: in the condition window of a variable, a conditional text block, a
+  conditional value or a conditional checkbox, and in the filter of a loop, the "+ Group" button adds a box: the brackets
+  of a condition. Its rows combine with each other ("And" / "Or" on a click, or the "all / any" list of its header) and
+  the box combines with the rules around it through the "And" / "Or" in front of it: "Status = Urgent and (Amount ≥ 1000
+  or Amount < 100)" is written just like that. The box has its own "+ Add a condition" and a cross that removes it with
+  its rows; a box whose rows stay empty is not saved. The preview, the summary (with its brackets), the saved condition,
+  Copy / Paste of the condition, Reading mode and the exports follow too, and a column rename reaches the rows of the
+  box. A condition without a box reads and shows as before.
 
 - **A macro template that mixes portrait, landscape and Grid templates**: the menu of the Page button of a macro
   template offers "Follow each template", "Portrait" and "Landscape". With "Follow each template" (the setting of

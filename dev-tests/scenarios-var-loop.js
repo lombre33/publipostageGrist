@@ -1376,6 +1376,94 @@
     },
   });
 
+  // Les parenthèses d'un filtre (demande d'Antoine du 2026-10-14) : « + Groupe », comme dans la fenêtre de condition d'une variable (js/condition-fields.js:renderItems).
+  // Sur les cinq participants de la facture 1 : Presence = Absent retient Petit et Morel, Nom = Petit retient Petit, Nom = Laurent retient Laurent - « Absent ET (Petit OU Laurent) »
+  // ne garde que Petit ; les mêmes trois règles à plat gardent trois lignes en « ou », aucune en « et ».
+  cases.push({
+    id: 'loop_window_filter_group_keeps_the_rows_of_a_and_b_or_c',
+    description: 'Fenêtre Boucle : « + Groupe » à côté de « + Ajouter une condition » du filtre (absent tant qu’il n’y a aucune condition) pose les parenthèses : Presence = Absent ET (Nom = Petit OU Nom = Laurent) garde 1 ligne sur 5 à l’aperçu, Enregistrer écrit { mode, rules: [règle, { mode, rules }] }, le déroulé (Lecture, exports) n’écrit que Marc Petit, la fenêtre rouverte retrouve l’encadré ; la croix de l’encadré le retire, celle de la dernière règle laisse « sans condition »',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML(`<p>Ont participé : ${badgeHtml('LpParticipants', 'NomComplet')}.</p>`);
+      const ed = await selectBadge(h, 'LpParticipants.NomComplet');
+      pressToolbarButton('var-loop');
+      await h.sleep(100);
+      const m = modal();
+      const filter = m.querySelector('.var-loop-filter');
+      const noCondition = { groupButton: !!filter.querySelector('.var-condition-add-group'), addButton: !!filter.querySelector('.var-condition-add'), emptyState: !!filter.querySelector('.var-loop-filter-empty') };
+      filter.querySelector('.var-condition-add').click();
+      await h.sleep(50);
+      setSelect(filter.querySelector('.macro-rule-row select.macro-rule-column'), 'Presence');
+      await h.sleep(50);
+      setSelect(filter.querySelector('.macro-rule-row select.macro-rule-value'), 'Absent');
+      await h.sleep(50);
+      const button = filter.querySelector('.var-condition-add-group');
+      if (!button) return { pass: false, notes: 'bouton « + Groupe » absent du filtre de la boucle' };
+      const foot = Array.from(filter.querySelector('.var-condition-foot').children).map(c => (c.classList.contains('var-condition-add-group') ? 'group' : c.classList.contains('var-condition-add') ? 'add' : '?'));
+      button.click();
+      await h.sleep(60);
+      const box = filter.querySelector('.cond-group');
+      if (!box) return { pass: false, notes: 'pas d’encadré après « + Groupe »' };
+      const groupRows = () => Array.from(filter.querySelectorAll('.cond-group > .macro-rule-row'));
+      const afterAdd = {
+        rows: groupRows().length, group: box.querySelector(':scope > .cond-group-head > select').value, mode: filter.querySelector('.var-condition-mode select').value,
+        words: Array.from(filter.querySelectorAll('.macro-rule-connector')).map(c => c.textContent), focus: (document.activeElement.closest('[data-rule-path]') || { dataset: {} }).dataset.rulePath || null,
+      };
+      for (const [index, name] of [[0, 'Petit'], [1, 'Laurent']]) {
+        setSelect(groupRows()[index].querySelector('select.macro-rule-column'), 'Nom');
+        await h.sleep(50);
+        const typed = groupRows()[index].querySelector('.macro-rule-value');
+        typed.value = name;
+        typed.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      await h.sleep(700);
+      const grouped = { line: previewLines()[0] };
+      actionButton(I18n.t('common.save')).click();
+      await h.sleep(100);
+      const savedNode = () => badgeNodes(ed).find(b => b.node.attrs.key === 'LpParticipants.NomComplet');
+      const saved = savedNode().node.attrs.loop;
+      const expected = { mode: 'all', rules: [{ column: 'Presence', operator: '=', value: 'Absent' }, { mode: 'any', rules: [{ column: 'Nom', operator: '=', value: 'Petit' }, { column: 'Nom', operator: '=', value: 'Laurent' }] }] };
+      // Déroulé : seule Marc Petit (absent, et Petit) ; à plat, « ou » en garderait trois.
+      const withFilter = f => `<p>Ont participé : ${badgeHtml('LpParticipants', 'NomComplet', { repeat: 'inline', table: 'LpParticipants', filter: f, sort: { column: 'Nom', direction: 'asc' }, empty: 'hide', separator: ', ', lastSeparator: ' et ' })}.</p>`;
+      const text = (await preview(withFilter(saved.filter), GristAPI.getCurrentRecord())).textContent;
+      const flatOr = (await preview(withFilter({ mode: 'any', rules: [expected.rules[0], ...expected.rules[1].rules] }), GristAPI.getCurrentRecord())).textContent;
+      // Rouverte : l'encadré est là, avec ses valeurs ; sa croix le retire ; celle de la règle qui reste laisse « sans condition ».
+      await selectBadge(h, 'LpParticipants.NomComplet');
+      VariableLoop.open(ed, savedNode().pos);
+      await h.sleep(300);
+      const reopened = {
+        boxes: filter.querySelectorAll('.cond-group').length, group: filter.querySelector('.cond-group-head select').value,
+        values: Array.from(filter.querySelectorAll('.macro-rule-row')).map(r => r.querySelector('.macro-rule-value').value),
+        mode: filter.querySelector('.var-condition-mode select').value,
+      };
+      await h.sleep(700);
+      const reopenedLine = previewLines()[0];
+      filter.querySelector('.cond-group-head .macro-rule-remove').click();
+      await h.sleep(700);
+      const groupGone = { boxes: filter.querySelectorAll('.cond-group').length, rows: filter.querySelectorAll('.macro-rule-row').length, line: previewLines()[0] };
+      filter.querySelector('.macro-rule-row .macro-rule-remove').click();
+      await h.sleep(60);
+      const nothingLeft = { emptyState: !!filter.querySelector('.var-loop-filter-empty'), groupButton: !!filter.querySelector('.var-condition-add-group') };
+      actionButton(I18n.t('common.cancel')).click();
+      await h.sleep(100);
+      const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+      const ok = {
+        noGroupButtonWithoutCondition: noCondition.emptyState && noCondition.addButton && !noCondition.groupButton,
+        footOrder: same(foot, ['add', 'group']),
+        boxOfTwoRowsInAny: afterAdd.rows === 2 && afterAdd.group === 'any' && afterAdd.mode === 'all' && same(afterAdd.words, ['Si', 'Et', 'Si', 'Ou']) && afterAdd.focus === '1.0',
+        previewKeepsOneRowOfFive: !!grouped.line && grouped.line.startsWith(I18n.t('varLoop.preview.kept', { id: 1, count: 1, total: 5 })),
+        saved: same(saved.filter, expected),
+        renderedOnlyPetit: text === 'Ont participé : Marc Petit.' && flatOr !== text,
+        reopened: reopened.boxes === 1 && reopened.group === 'any' && same(reopened.values, ['Absent', 'Petit', 'Laurent']) && reopened.mode === 'all'
+          && !!reopenedLine && reopenedLine.startsWith(I18n.t('varLoop.preview.kept', { id: 1, count: 1, total: 5 })),
+        groupCrossRemovesIt: groupGone.boxes === 0 && groupGone.rows === 1 && !!groupGone.line && groupGone.line.startsWith(I18n.t('varLoop.preview.kept', { id: 1, count: 2, total: 5 })),
+        lastRuleLeavesNoCondition: nothingLeft.emptyState && !nothingLeft.groupButton,
+      };
+      const failed = Object.keys(ok).filter(k => !ok[k]);
+      return { pass: failed.length === 0, notes: failed.length ? 'en échec : ' + failed.join(', ') + ' ' + JSON.stringify({ noCondition, foot, afterAdd, grouped, saved, text, flatOr, reopened, reopenedLine, groupGone, nothingLeft }) : 'ok' };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.varLoop = cases;
 })();

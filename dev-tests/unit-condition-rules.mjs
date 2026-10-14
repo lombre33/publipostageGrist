@@ -391,4 +391,113 @@ const seconds = (y, m, d, h, mi) => Date.UTC(y, m - 1, d, h || 0, mi || 0) / 100
     JSON.stringify([await verdict({ mode: 'all', rules: [{ column: 'Montant', operator: '=', value: '', valueColumn: '' }] }, true), await verdict({ mode: 'all', rules: [{ column: 'Montant', operator: '=', value: '', valueColumn: '' }] }, false)]) === '[true,false]');
 }
 
+// 15. Les groupes, les « parenthèses » de « A et (B ou C) » : un élément de `rules` peut être { mode, rules }, lu comme une condition à lui seul, à toute profondeur.
+// Les attendus sont les tables de vérité du texte logique (a && (b || c)...), calculées ici à partir des quatre faits de chaque ligne, pas par la fonction.
+{
+  const logged = [];
+  const gctx = createContext({
+    console: { log: console.log, warn: () => {}, error: (...args) => logged.push(args) },
+    Variables: {
+      resolveRawValue: async (table, column, tableId, record) => {
+        if (column === 'Boum') throw new Error('colonne illisible');
+        return { value: record[column] };
+      },
+    },
+    GristAPI: { getColumnType: () => 'Text' },
+    LoopRules: { bindingOf: () => null },
+  });
+  loadScript(gctx, 'js/condition-rules.js');
+  const rule = (column, value) => ({ column, operator: '=', value });
+  const group = (mode, ...rules) => ({ mode, rules });
+  const A = rule('Statut', 'Urgent'), B = rule('Zone', 'Nord'), C = rule('Niveau', 'Haut'), D = rule('Canal', 'Mail');
+  // Les seize lignes possibles : chaque règle A, B, C, D est vraie ou fausse sur la ligne.
+  const rows = [];
+  for (const a of [true, false]) for (const b of [true, false]) for (const c of [true, false]) for (const d of [true, false]) {
+    rows.push({ a, b, c, d, record: { Statut: a ? 'Urgent' : 'Normal', Zone: b ? 'Nord' : 'Sud', Niveau: c ? 'Haut' : 'Bas', Canal: d ? 'Mail' : 'Papier' } });
+  }
+  const verdicts = async condition => {
+    gctx.__COND = condition;
+    const out = [];
+    for (const row of rows) { gctx.__REC = row.record; out.push(await evalIn(gctx, 'ConditionRules.conditionHolds(__COND, "T", __REC)')); }
+    return out.join();
+  };
+  const expected = fact => rows.map(fact).join();
+  const normalized = condition => { gctx.__COND = condition; return evalIn(gctx, 'JSON.stringify(ConditionRules.normalizeCondition(__COND))'); };
+  const plain = condition => { gctx.__COND = condition; return evalIn(gctx, 'JSON.stringify(ConditionRules.plainCondition(__COND))'); };
+
+  check('isGroup : un élément { mode, rules } est un groupe, une règle, null et undefined ne le sont pas',
+    evalIn(gctx, `JSON.stringify([ConditionRules.isGroup({ mode: 'any', rules: [] }), ConditionRules.isGroup({ column: 'A' }), ConditionRules.isGroup(null), ConditionRules.isGroup(undefined)])`) === '[true,false,false,false]');
+  check('« A et (B ou C) » : vraie quand A l\'est et que B ou C l\'est, sur les seize lignes',
+    await verdicts(group('all', A, group('any', B, C))) === expected(r => r.a && (r.b || r.c)));
+  check('« A ou (B et C) » : vraie quand A l\'est ou quand B et C le sont ensemble',
+    await verdicts(group('any', A, group('all', B, C))) === expected(r => r.a || (r.b && r.c)));
+  check('« (A ou B) et (C ou D) » : deux groupes côte à côte, chacun sa combinaison',
+    await verdicts(group('all', group('any', A, B), group('any', C, D))) === expected(r => (r.a || r.b) && (r.c || r.d)));
+  check('« (A et B) ou (C et D) »', await verdicts(group('any', group('all', A, B), group('all', C, D))) === expected(r => (r.a && r.b) || (r.c && r.d)));
+  check('un groupe dans un groupe : « A et (B ou (C et D)) » (la fenêtre n\'en propose qu\'un niveau, le format les lit tous)',
+    await verdicts(group('all', A, group('any', B, group('all', C, D)))) === expected(r => r.a && (r.b || (r.c && r.d))));
+  check('les parenthèses changent le verdict : « A et B ou C » à plat (tout en « et », tout en « ou ») ne donne jamais « A et (B ou C) »',
+    await verdicts(group('all', A, B, C)) !== expected(r => r.a && (r.b || r.c)) && await verdicts(group('any', A, B, C)) !== expected(r => r.a && (r.b || r.c)));
+  check('une condition sans groupe se lit comme avant : « all » veut toutes les règles, « any » au moins une',
+    await verdicts(group('all', A, B, C)) === expected(r => r.a && r.b && r.c) && await verdicts(group('any', A, B, C)) === expected(r => r.a || r.b || r.c));
+  check('un groupe d\'une seule règle se lit comme cette règle, quelle que soit sa combinaison',
+    await verdicts(group('all', A, group('any', B))) === expected(r => r.a && r.b) && await verdicts(group('all', A, group('all', B))) === expected(r => r.a && r.b));
+  check('un groupe dont la combinaison n\'est ni « any » ni « all » se lit « all »', await verdicts(group('all', A, group('bof', B, C))) === expected(r => r.a && r.b && r.c));
+
+  // Ce qui reste de la condition une fois les lignes vides ôtées (normalizeCondition) : les groupes se vident comme la condition se vide.
+  const EMPTY = { column: '', operator: '=', value: '' };
+  check('normalizeCondition : un groupe garde ses règles complètes et perd ses lignes vides',
+    normalized(group('all', A, group('any', EMPTY, B, EMPTY))) === JSON.stringify(group('all', A, group('any', B))));
+  check('normalizeCondition : un groupe sans règle complète disparaît, la condition garde les autres',
+    normalized(group('all', A, group('any', EMPTY, EMPTY))) === JSON.stringify(group('all', A)) && normalized(group('all', A, group('any')) ) === JSON.stringify(group('all', A)));
+  check('normalizeCondition : une condition qui ne contient qu\'un groupe vide n\'est plus une condition (null), la variable s\'affiche',
+    normalized(group('all', group('any', EMPTY))) === 'null' && await verdicts(group('all', group('any', EMPTY))) === expected(() => true));
+  check('normalizeCondition : un groupe qui garde une règle comparant à une autre colonne pas encore choisie la perd, avec lui s\'il n\'a rien d\'autre',
+    normalized(group('all', A, group('any', { column: 'Zone', operator: '=', value: '', valueColumn: '' }))) === JSON.stringify(group('all', A)));
+  check('normalizeCondition : la combinaison d\'un groupe est « any » ou « all » seulement',
+    normalized(group('all', group('bof', A))) === JSON.stringify(group('all', group('all', A))) && normalized(group('all', group('any', A))) === JSON.stringify(group('all', group('any', A))));
+  check('normalizeCondition : les groupes sont lus à toute profondeur, ceux qui se vident aussi',
+    normalized(group('all', A, group('any', B, group('all', EMPTY)))) === JSON.stringify(group('all', A, group('any', B))));
+
+  // plainCondition : la forme enregistrée dans le nœud (et le brouillon d'une fenêtre), jamais un lien vers ce que la fenêtre modifie en place.
+  check('plainCondition : une copie de la condition avec ses groupes, règles complètes seulement',
+    plain(group('any', A, group('all', EMPTY, B, C))) === JSON.stringify(group('any', A, group('all', B, C))));
+  check('plainCondition : une règle d\'un groupe prend la forme enregistrée (opérateur « = » par défaut, valeur en texte)',
+    plain(group('all', group('any', { column: 'Montant', value: 12 }))) === JSON.stringify(group('all', group('any', { column: 'Montant', operator: '=', value: '12' }))));
+  check('plainCondition : sans règle complète dans aucun groupe, null', plain(group('all', group('any', EMPTY), EMPTY)) === 'null');
+  {
+    const source = group('all', A, group('any', B, C));
+    gctx.__COND = source;
+    const before = JSON.stringify(source);
+    const touched = evalIn(gctx, `(() => { const copy = ConditionRules.plainCondition(__COND); copy.rules[1].rules[0].value = 'ailleurs'; copy.rules[1].mode = 'all'; copy.rules.push({ column: 'X' }); return true; })()`);
+    check('plainCondition : la copie ne partage rien avec le brouillon, ni ses règles ni ses groupes', touched === true && JSON.stringify(source) === before, JSON.stringify(source));
+  }
+
+  // Une règle qui ne se lit pas ne laisse rien passer, dans un groupe comme ailleurs, sans empêcher les autres règles de se lire.
+  logged.length = 0;
+  {
+    const boum = rule('Boum', 'x');
+    check('une règle illisible dans un groupe « any » compte comme non remplie : les autres décident',
+      await verdicts(group('all', A, group('any', boum, B))) === expected(r => r.a && r.b));
+    check('une règle illisible dans un groupe « all » le rend faux', await verdicts(group('any', A, group('all', boum, B))) === expected(r => r.a));
+    check('chaque règle illisible écrit son erreur dans la console, une fois par ligne lue', logged.length === 2 * rows.length, 'journal : ' + logged.length);
+  }
+
+  // elementHolds : la condition d'un bloc, d'une valeur, d'une case ou d'une bulle lit ses groupes dans data-condition.
+  const verdictOf = async (condition, whenNone, record) => {
+    gctx.__EL = { getAttribute: name => (name === 'data-condition' ? JSON.stringify(condition) : null) };
+    gctx.__REC = record;
+    return evalIn(gctx, `ConditionRules.elementHolds(__EL, 'T', __REC, ${whenNone})`);
+  };
+  {
+    const urgent = { Statut: 'Urgent', Zone: 'Sud', Niveau: 'Haut' }, normal = { Statut: 'Normal', Zone: 'Nord', Niveau: 'Haut' };
+    const condition = group('all', A, group('any', B, C));
+    check('data-condition avec un groupe : le verdict suit les parenthèses, quel que soit `whenNone`',
+      JSON.stringify([await verdictOf(condition, true, urgent), await verdictOf(condition, false, urgent), await verdictOf(condition, true, normal), await verdictOf(condition, false, normal)]) === '[true,true,false,false]');
+    const emptyGroup = group('all', group('any', EMPTY));
+    check('data-condition dont le seul groupe est vide : pas de condition, le verdict `whenNone`',
+      JSON.stringify([await verdictOf(emptyGroup, true, urgent), await verdictOf(emptyGroup, false, urgent)]) === '[true,false]');
+  }
+}
+
 summarizeAndExit();

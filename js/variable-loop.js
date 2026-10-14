@@ -309,7 +309,8 @@ const VariableLoop = (function () {
     if (pressed) pressed.focus();
   }
   // Sans condition : le bouton d'ajout et « toutes les lignes liées ». Avec : « Garder les lignes où toutes / au moins une les conditions sont
-  // remplies », puis les lignes Colonne / Opérateur / Valeur sur les colonnes de la table parcourue.
+  // remplies », puis les lignes Colonne / Opérateur / Valeur sur les colonnes de la table parcourue, et des groupes (« + Groupe ») pour mêler « et » et
+  // « ou » : « A et (B ou C) » (ConditionFields.renderItems ; `working.rules` porte les règles et les groupes).
   function renderFilter() {
     const { filterBox } = refs;
     const rules = state.working.rules;
@@ -332,22 +333,21 @@ const VariableLoop = (function () {
     });
     modeRow.append(el('span', null, I18n.t('varLoop.filter.before')), modeSelect, el('span', null, I18n.t('varCond.modeAfter')));
     const rulesBox = el('div', 'var-condition-rules');
-    rules.forEach((rule, index) => {
-      rulesBox.appendChild(ConditionFields.buildRuleRow(rule, index, {
-        mode: state.working.filterMode,
-        // « Et » / « Ou » devant une règle : un clic relie toutes les règles par l'autre mot, la liste « toutes / au moins une » du haut suit ; le focus
-        // revient au bouton retracé de la même règle (le premier bouton est celui de la règle n° 2).
-        onMode: next => {
-          state.working.filterMode = next;
-          redraw();
-          const toggle = filterBox.querySelectorAll('.macro-rule-connector-toggle')[index - 1];
-          if (toggle) toggle.focus();
-        },
-        options: { table: state.source.table },
-        onRemove: () => { rules.splice(index, 1); redraw(); },
-      }));
+    ConditionFields.renderItems(rulesBox, {
+      items: rules,
+      mode: state.working.filterMode,
+      // « Et » / « Ou » devant une ligne : un clic relie toutes les lignes du niveau par l'autre mot, la liste « toutes / au moins une » du haut suit pour le filtre
+      // entier ; le focus revient au bouton retracé (`root` : `filterBox` reste en place quand `rulesBox` est remplacée).
+      setMode: next => { state.working.filterMode = next; },
+      buildRow: (rule, row) => ConditionFields.buildRuleRow(rule, row.index, Object.assign({}, row, { options: { table: state.source.table } })),
+      removeItem: index => { rules.splice(index, 1); redraw(); },
+      redraw,
+      root: filterBox,
     });
-    rulesBox.appendChild(ConditionFields.buildAddRuleButton(filterBox, rules, redraw));
+    // « + Groupe » : les parenthèses d'un filtre, « A et (B ou C) » (js/condition-fields.js:renderItems).
+    const foot = el('div', 'var-condition-foot');
+    foot.append(ConditionFields.buildAddRuleButton(filterBox, rules, redraw), ConditionFields.buildAddGroupButton(filterBox, rules, () => state.working.filterMode, redraw));
+    rulesBox.appendChild(foot);
     filterBox.append(modeRow, rulesBox);
   }
   function renderSort() {

@@ -571,8 +571,17 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   d'une bulle, d'un bloc, d'une valeur ou d'une case, filtre d'une boucle) est un **bouton**, de la hauteur des champs voisins (26 px) sur les 34 px du connecteur ; « Si » devant la première règle reste un
   texte. Un clic bascule « Et » / « Ou ». Une condition n'a qu'UN mode, le même entre toutes ses règles (« toutes » ou « au moins une ») : avec trois règles, le mot change pour toutes. La liste « toutes / au
   moins une » du haut reste, et suit le bouton comme le bouton la suit. Le focus reste sur le bouton après le clic (Tab, puis Entrée ou Espace) ; l'info-bulle dit ce que fait le clic (« Cliquer pour relier
-  toutes les conditions par « Ou » ») et le nom accessible commence par le mot qu'on voit. Pas fait : mélanger « Et » et « Ou » dans une même condition (le « Et » passerait avant le « Ou »), proposé à
-  Antoine sur une carte.
+  toutes les conditions par « Ou » ») et le nom accessible commence par le mot qu'on voit. Pas fait : mélanger « Et » et « Ou » sans parenthèses dans une même condition (le « Et » passerait avant le
+  « Ou ») ; Antoine a demandé les groupes à la place, ci-dessous.
+- Groupes de conditions, « A et (B ou C) » (demande d'Antoine du 14/10 : « des conditions plus complexes avec des parenthèses » ; il a choisi « Groupes » sur une carte) : le pied de la fenêtre de condition
+  (bulle, bloc, valeur, case) et du filtre d'une boucle porte, sur UNE seule ligne que la fenêtre garde à sa hauteur, « + Ajouter une condition », « + Groupe », puis Copier / Coller. « + Groupe » pose un **encadré**
+  (fond de la fenêtre, bord marqué, aucune couleur d'accent : monochrome) à droite du connecteur de son niveau (« Si » ou le bouton « Et » / « Ou » devant lui), avec en tête sa propre liste « Toutes ces conditions / Au
+  moins une de ces conditions » et sa croix (elle retire le groupe avec ses lignes), puis deux lignes vides, la combinaison OPPOSÉE à celle du dessus (« A et (B ou C) » d'emblée) et son « + Ajouter une condition ».
+  Ses lignes sont celles de la condition (même liste de colonnes avec recherche, mêmes opérateurs, même champ Valeur, « autre colonne ») ; le « Et » / « Ou » entre elles change le groupe seul, celui de devant l'encadré
+  change le premier niveau, chacun avec le focus gardé sur le bouton retracé. La fenêtre n'offre qu'UN niveau (« + Groupe » n'est que dans le pied du premier niveau) mais dessine et garde tous ceux d'un modèle déjà
+  enregistré. Un groupe sans règle complète n'est pas enregistré, un groupe d'une règle vaut cette règle, et le résumé et l'aperçu écrivent les parenthèses (« Statut = Urgent et (Montant ≥ 1000 ou Montant < 100) »).
+  Dans un panneau de 480 px et moins, le connecteur du groupe passe AU-DESSUS de l'encadré, qui prend toute la largeur (à côté de lui la colonne recouvrirait l'opérateur). Pas de groupes dans les macro-modèles
+  (« Si / Ou si ») ni dans « Selon la ligne ».
 - Sinon afficher (demande d'Antoine du 08/10 : un champ « sinon » dans la condition d'une variable, pour afficher une autre variable plutôt que de poser deux bulles aux conditions
   opposées - des conditions qui ne le sont pas toujours : pas d'opérateur « ne contient pas », une cellule vide rend faux tous les ordres d'une comparaison de deux colonnes) : une
   ligne **« Sinon afficher »**, la dernière de la fenêtre de condition d'une bulle (sous l'aperçu : dans un panneau de 700 × 400 la fenêtre défile déjà, et ce qui s'y voit à l'ouverture - les règles, « Avant » / « Après »,

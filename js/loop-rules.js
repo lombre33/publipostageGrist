@@ -196,11 +196,16 @@ const LoopRules = (function () {
     }
     return ConditionRules.compareValues(actual, rule.operator, rule.value, type);
   }
+  // Une règle ou un groupe du filtre : un groupe (ConditionRules.isGroup) se lit comme le filtre entier, avec sa propre combinaison sur ses propres règles.
+  function itemHolds(item, loop, row) {
+    if (!ConditionRules.isGroup(item)) return ruleHolds(item, loop, row);
+    const holds = inner => itemHolds(inner, loop, row);
+    return item.mode === 'any' ? item.rules.some(holds) : item.rules.every(holds);
+  }
   function filterHolds(loop, row) {
     const filter = loop.filter;
     if (!filter) return true;
-    const holds = rule => ruleHolds(rule, loop, row);
-    return filter.mode === 'any' ? filter.rules.some(holds) : filter.rules.every(holds);
+    return itemHolds(filter, loop, row);
   }
 
   function sortKey(value) {

@@ -2931,6 +2931,337 @@
     },
   });
 
+  // === Groupes de conditions : « A et (B ou C) » (demande d'Antoine du 2026-10-14) ===
+  // Un élément de `rules` peut être un groupe { mode, rules } - les parenthèses : « + Groupe » pose un encadré avec sa propre combinaison (« Toutes ces conditions » / « Au moins
+  // une de ces conditions »), ses lignes, son « + Ajouter une condition » et sa croix (js/condition-fields.js:renderItems). Les groupes s'évaluent (js/condition-rules.js:
+  // conditionHolds), s'enregistrent, se copient-collent et se retrouvent à la réouverture ; un groupe vidé de ses lignes disparaît, un groupe sans règle complète ne s'enregistre pas.
+  // Sur les trois lignes du jeu d'essai : Titre ≠ « Dossier A » vaut (non, oui, oui), Montant ≥ 1000 (oui, non, non), Montant < 20 (non, non, oui). « A et (B ou C) » ne retient que
+  // la 3 ; les mêmes trois règles à plat retiennent les trois lignes en « ou », aucune en « et ».
+  const GROUP_RULE = { column: 'Titre', operator: '≠', value: 'Dossier A' };
+  const GROUP_INNER = [{ column: 'Montant', operator: '≥', value: '1000' }, { column: 'Montant', operator: '<', value: '20' }];
+  const GROUP_COND = { mode: 'all', rules: [GROUP_RULE, { mode: 'any', rules: GROUP_INNER }] };
+  const EMPTY_RULE = { column: '', operator: '=', value: '' };
+  const sameTree = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const groupBoxes = modal => Array.from(modal.querySelectorAll('.cond-group'));
+  const addGroupButton = modal => modal.querySelector('.var-condition-foot .var-condition-add-group');
+  // Les lignes et les groupes de la fenêtre, sous la forme enregistrée : { column, operator, value } pour une ligne, { mode, rules } pour un groupe (la liste de son en-tête).
+  function windowTree(modal) {
+    const rowOf = row => ({
+      column: row.querySelector('select.macro-rule-column').value, operator: row.querySelector(':scope > select').value, value: row.querySelector('.macro-rule-value').value,
+    });
+    const levelOf = box => Array.from(box.children).filter(c => c.matches('.macro-rule-row, .cond-group-row')).map(c => {
+      if (!c.matches('.cond-group-row')) return rowOf(c);
+      const group = c.querySelector(':scope > .cond-group');
+      return { mode: group.querySelector(':scope > .cond-group-head > select').value, rules: levelOf(group) };
+    });
+    return levelOf(modal.querySelector('.var-condition-rules'));
+  }
+  // Les mots de tous les connecteurs, dans l'ordre de la fenêtre : « Si » en tête de chaque niveau, puis « Et » / « Ou ».
+  const connectorWords = modal => Array.from(modal.querySelectorAll('.var-condition-rules .macro-rule-connector')).map(c => c.textContent);
+  const focusedRulePath = () => { const row = document.activeElement && document.activeElement.closest('[data-rule-path]'); return row ? row.dataset.rulePath : null; };
+  const focusedTogglePath = () => (document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.togglePath || null : null);
+  const previewLinesOf = modal => Array.from(modal.querySelectorAll('.var-condition-debug-line')).map(l => l.textContent);
+  async function renderReaderFor(html, record) {
+    const reader = document.getElementById('reader-container');
+    reader.style.display = 'block';
+    await ReaderMode.render(html, 'VcDossiers', record, NO_HF);
+    return reader;
+  }
+  // Remplit la ligne `row` d'une fenêtre comme une personne : la colonne dans la liste avec recherche, l'opérateur, la valeur.
+  async function fillRule(h, row, rule) {
+    await pickColumn(h, row, rule.column);
+    setSelect(row.querySelector(':scope > select'), rule.operator);
+    setInput(row.querySelector('.macro-rule-value'), rule.value);
+  }
+
+  cases.push({
+    id: 'varcond_group_a_and_b_or_c_is_built_with_plus_group_then_read_saved_and_reloaded',
+    description: '« + Groupe », à côté de « + Ajouter une condition » et de Copier / Coller, pose un encadré de deux lignes vides combinées à l’inverse de la condition (les parenthèses) : un « Et » bouton devant lui, sa liste « Au moins une de ces conditions », sa croix, son « + Ajouter une condition », le focus sur sa première colonne ; « Titre ≠ Dossier A » ET (« Montant ≥ 1000 » OU « Montant < 20 ») donne à l’aperçu 1 ligne sur 3 (la 3), Enregistrer écrit { mode, rules: [règle, { mode, rules }] }, la Lecture suit ligne par ligne et la fenêtre rouverte retrouve l’encadré',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML(`<p>${badgeHtml('VcDossiers', 'Titre')}</p>`);
+      const ed = EditorCore.getEditor();
+      const modal = await openWindow(h, 'Titre');
+      const button = addGroupButton(modal);
+      if (!button) { cancelWindow(modal); return { pass: false, notes: 'bouton « + Groupe » absent de la fenêtre de condition' }; }
+      await fillRule(h, modal.querySelector('.macro-rule-row'), GROUP_RULE);
+      const kindOf = c => (c.classList.contains('var-condition-add-group') ? 'group' : c.classList.contains('var-condition-add') ? 'add' : c.classList.contains('var-condition-clip') ? 'clip' : '?');
+      const foot = Array.from(modal.querySelector('.var-condition-foot').children).map(kindOf);
+      const buttonFacts = { text: button.textContent, title: button.title, aria: button.getAttribute('aria-label') };
+      const beforeGroup = { boxes: groupBoxes(modal).length, mode: windowMode(modal) };
+      button.click();
+      await h.sleep(60);
+      const box = groupBoxes(modal)[0];
+      const head = box && box.querySelector(':scope > .cond-group-head > select');
+      const removeBtn = box && box.querySelector(':scope > .cond-group-head > .macro-rule-remove');
+      const outer = modal.querySelector('.cond-group-row > .macro-rule-connector');
+      const added = {
+        boxes: groupBoxes(modal).length, tree: windowTree(modal), mode: windowMode(modal), words: connectorWords(modal), focus: focusedRulePath(),
+        head: head && { value: head.value, options: Array.from(head.options).map(o => o.textContent), aria: head.getAttribute('aria-label') },
+        role: box && [box.getAttribute('role'), box.getAttribute('aria-label')],
+        remove: removeBtn && [removeBtn.title, removeBtn.getAttribute('aria-label')],
+        outer: outer && [outer.tagName, outer.textContent, outer.title, outer.getAttribute('aria-label')],
+        inner: box ? Array.from(box.querySelectorAll(':scope > .macro-rule-row > .macro-rule-connector')).map(c => [c.tagName, c.textContent, c.title, c.getAttribute('aria-label') || '']) : null,
+        addInside: !!(box && box.querySelector(':scope > .var-condition-add')),
+      };
+      if (!box) { cancelWindow(modal); return { pass: false, notes: JSON.stringify({ added }) }; }
+      const [inner0, inner1] = Array.from(box.querySelectorAll(':scope > .macro-rule-row'));
+      await fillRule(h, inner0, GROUP_INNER[0]);
+      await fillRule(h, inner1, GROUP_INNER[1]);
+      await h.sleep(700);
+      const filled = { tree: windowTree(modal), lines: previewLinesOf(modal) };
+      saveWindow(modal);
+      await h.sleep(80);
+      const saved = conditionOf(ed, 'Titre');
+      // La fenêtre rouverte retrouve l'encadré.
+      const html = Editor.getHTML();
+      const reopened = await openWindow(h, 'Titre');
+      const again = { tree: windowTree(reopened), mode: windowMode(reopened), words: connectorWords(reopened), boxes: groupBoxes(reopened).length };
+      cancelWindow(reopened);
+      await h.sleep(30);
+      // Lecture : la ligne 1 (« Dossier A ») est écartée par Titre ≠ Dossier A ; la ligne 3 (10 < 20) remplit B ou C avec A ; la ligne 2 ne remplit ni B ni C.
+      const shownFor1 = (await renderReader(html)).textContent;
+      const shownFor3 = (await renderReaderFor(html, { id: 3, Titre: 'Dossier C', Statut: 'Urgent', Responsable: 0, Montant: 10 })).textContent;
+      const shownFor2 = (await renderReaderFor(html, { id: 2, Titre: 'Dossier B', Statut: 'Normal', Responsable: 8, Montant: 50 })).textContent;
+      const toOr = I18n.t('varCond.connectorToOr'), toAndInGroup = I18n.t('varCond.group.connectorToAnd');
+      const ok = {
+        foot: sameTree(foot, ['add', 'group', 'clip']),
+        buttonFacts: buttonFacts.text === I18n.t('varCond.addGroup') && buttonFacts.title === I18n.t('varCond.addGroupTitle') && buttonFacts.aria === buttonFacts.text + ' : ' + buttonFacts.title,
+        noGroupAtFirst: beforeGroup.boxes === 0 && beforeGroup.mode.shown === false,
+        oneBoxOfTwoEmptyRows: added.boxes === 1 && sameTree(added.tree, [GROUP_RULE, { mode: 'any', rules: [EMPTY_RULE, EMPTY_RULE] }]),
+        modeListShownAndAll: added.mode.shown === true && added.mode.value === 'all',
+        words: sameTree(added.words, [I18n.t('macro.modal.ruleIf'), I18n.t('varCond.ruleAnd'), I18n.t('macro.modal.ruleIf'), I18n.t('varCond.ruleOr')]),
+        focusOnTheFirstColumnOfTheGroup: added.focus === '1.0',
+        head: !!added.head && added.head.value === 'any' && sameTree(added.head.options, [I18n.t('varCond.group.modeAll'), I18n.t('varCond.group.modeAny')]) && added.head.aria === I18n.t('varCond.group.modeAria'),
+        role: sameTree(added.role, ['group', I18n.t('varCond.group.aria')]),
+        remove: sameTree(added.remove, [I18n.t('varCond.group.remove'), I18n.t('varCond.group.remove')]),
+        outerConnector: !!added.outer && added.outer[0] === 'BUTTON' && added.outer[1] === I18n.t('varCond.ruleAnd') && added.outer[2] === toOr && added.outer[3] === I18n.t('varCond.ruleAnd') + ' : ' + toOr,
+        innerConnectors: !!added.inner && added.inner.length === 2 && sameTree(added.inner[0], ['SPAN', I18n.t('macro.modal.ruleIf'), '', ''])
+          && sameTree(added.inner[1], ['BUTTON', I18n.t('varCond.ruleOr'), toAndInGroup, I18n.t('varCond.ruleOr') + ' : ' + toAndInGroup]),
+        addInsideTheGroup: added.addInside,
+        filled: sameTree(filled.tree, GROUP_COND.rules),
+        previewCurrentRowOut: filled.lines[0] === I18n.t('varCond.debug.currentNotMet', { id: 1 }),
+        previewOneRowOfThree: !!filled.lines[1] && filled.lines[1].startsWith(I18n.t('varCond.debug.count', { table: 'VcDossiers', count: 1, total: 3 })) && filled.lines[1].includes('n° 3'),
+        saved: sameTree(saved, GROUP_COND),
+        reader: !shownFor1.includes('Dossier A') && shownFor3.includes('Dossier C') && !shownFor2.includes('Dossier B'),
+        reopened: again.boxes === 1 && sameTree(again.tree, GROUP_COND.rules) && again.mode.shown === true && again.mode.value === 'all'
+          && sameTree(again.words, [I18n.t('macro.modal.ruleIf'), I18n.t('varCond.ruleAnd'), I18n.t('macro.modal.ruleIf'), I18n.t('varCond.ruleOr')]),
+      };
+      const failed = Object.keys(ok).filter(k => !ok[k]);
+      return { pass: failed.length === 0, notes: failed.length ? 'en échec : ' + failed.join(', ') + ' ' + JSON.stringify({ foot, buttonFacts, added, filled, saved, shownFor1, shownFor2, shownFor3, again }) : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_group_controls_mode_of_the_group_outer_mode_add_remove_and_empty_group',
+    description: 'Les commandes d’un groupe : le « Ou » de ses lignes et sa liste ne changent que sa combinaison (le « Et » devant l’encadré et la liste du haut ne bougent pas), le « Et » devant l’encadré et la liste du haut ne changent que celle du premier niveau, et chacun garde le focus ; « + Ajouter une condition » de l’encadré ajoute une ligne dans l’encadré, celui du bas une ligne après lui ; la croix d’une ligne retire la ligne, celle de l’en-tête retire l’encadré et ses lignes, un encadré dont on retire toutes les lignes disparaît ; un encadré sans règle complète ne s’enregistre pas',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML(`<p>${badgeHtml('VcDossiers', 'Titre', GROUP_COND)}</p>`);
+      const ed = EditorCore.getEditor();
+      const modal = await openWindow(h, 'Titre');
+      const groupMode = () => (groupBoxes(modal)[0] ? groupBoxes(modal)[0].querySelector(':scope > .cond-group-head > select').value : null);
+      const toggle = path => modal.querySelector(`[data-toggle-path="${path}"]`);
+      const start = { tree: windowTree(modal), togglePaths: Array.from(modal.querySelectorAll('.macro-rule-connector-toggle')).map(b => b.dataset.togglePath) };
+      // 1) Le « Ou » de la deuxième ligne du groupe : le groupe passe en « toutes », le premier niveau reste en « toutes » et son « Et » aussi.
+      toggle('1.1').click();
+      await h.sleep(60);
+      const innerClick = { group: groupMode(), mode: windowMode(modal), words: connectorWords(modal), focus: focusedTogglePath() };
+      // 2) La liste de l'en-tête : le groupe repasse en « au moins une », le focus revient à la liste retracée.
+      const head = () => groupBoxes(modal)[0].querySelector(':scope > .cond-group-head > select');
+      setSelect(head(), 'any');
+      await h.sleep(60);
+      const headChange = { group: groupMode(), words: connectorWords(modal), focusOnHead: document.activeElement === head() };
+      // 3) Le « Et » devant l'encadré : le premier niveau passe en « au moins une » (la liste du haut suit), le groupe ne bouge pas.
+      toggle('1').click();
+      await h.sleep(60);
+      const outerClick = { group: groupMode(), mode: windowMode(modal), words: connectorWords(modal), focus: focusedTogglePath() };
+      toggle('1').click();
+      await h.sleep(60);
+      const outerBack = { group: groupMode(), mode: windowMode(modal), words: connectorWords(modal) };
+      // 4) La liste du haut : elle change le premier niveau, pas le groupe.
+      setSelect(modal.querySelector('.var-condition-mode select'), 'any');
+      await h.sleep(60);
+      const topList = { group: groupMode(), words: connectorWords(modal) };
+      setSelect(modal.querySelector('.var-condition-mode select'), 'all');
+      await h.sleep(60);
+      // 5) « + Ajouter une condition » de l'encadré : une ligne de plus DANS l'encadré ; celui du bas : une ligne APRÈS lui.
+      groupBoxes(modal)[0].querySelector(':scope > .var-condition-add').click();
+      await h.sleep(60);
+      const addInside = { tree: windowTree(modal), focus: focusedRulePath() };
+      modal.querySelector('.var-condition-foot .var-condition-add:not(.var-condition-add-group)').click();
+      await h.sleep(60);
+      const addOutside = { tree: windowTree(modal), focus: focusedRulePath() };
+      // 6) La croix d'une ligne retire la ligne : la dernière ligne de l'encadré, puis la ligne du premier niveau.
+      const crossOf = row => row.querySelector(':scope > .macro-rule-remove');
+      const innerRows = () => Array.from(groupBoxes(modal)[0].querySelectorAll(':scope > .macro-rule-row'));
+      crossOf(innerRows()[2]).click();
+      await h.sleep(40);
+      const lastOfTop = Array.from(modal.querySelector('.var-condition-rules').children).filter(c => c.matches('.macro-rule-row')).pop();
+      crossOf(lastOfTop).click();
+      await h.sleep(40);
+      const afterCrosses = { tree: windowTree(modal) };
+      // 7) La croix de l'en-tête retire l'encadré et ses lignes : il reste la première règle, et la liste du haut se masque.
+      groupBoxes(modal)[0].querySelector(':scope > .cond-group-head > .macro-rule-remove').click();
+      await h.sleep(40);
+      const groupGone = { tree: windowTree(modal), boxes: groupBoxes(modal).length, mode: windowMode(modal) };
+      // 8) Un encadré dont on retire toutes les lignes disparaît.
+      addGroupButton(modal).click();
+      await h.sleep(40);
+      const created = { boxes: groupBoxes(modal).length };
+      crossOf(innerRows()[0]).click();
+      await h.sleep(40);
+      const oneLeft = { boxes: groupBoxes(modal).length, rows: innerRows().length };
+      crossOf(innerRows()[0]).click();
+      await h.sleep(40);
+      const allRemoved = { boxes: groupBoxes(modal).length, tree: windowTree(modal) };
+      // 9) Un encadré de lignes vides ne s'enregistre pas : la condition garde sa règle.
+      addGroupButton(modal).click();
+      await h.sleep(40);
+      saveWindow(modal);
+      await h.sleep(80);
+      const saved = conditionOf(ed, 'Titre');
+      const ok = {
+        start: sameTree(start.tree, GROUP_COND.rules) && sameTree(start.togglePaths, ['1', '1.1']),
+        innerToggleOnlyChangesTheGroup: innerClick.group === 'all' && innerClick.mode.value === 'all' && innerClick.mode.shown === true
+          && sameTree(innerClick.words, ['Si', 'Et', 'Si', 'Et']) && innerClick.focus === '1.1',
+        headListOnlyChangesTheGroup: headChange.group === 'any' && sameTree(headChange.words, ['Si', 'Et', 'Si', 'Ou']) && headChange.focusOnHead,
+        outerToggleOnlyChangesTheFirstLevel: outerClick.group === 'any' && outerClick.mode.value === 'any' && sameTree(outerClick.words, ['Si', 'Ou', 'Si', 'Ou']) && outerClick.focus === '1'
+          && outerBack.group === 'any' && outerBack.mode.value === 'all' && sameTree(outerBack.words, ['Si', 'Et', 'Si', 'Ou']),
+        topListOnlyChangesTheFirstLevel: topList.group === 'any' && sameTree(topList.words, ['Si', 'Ou', 'Si', 'Ou']),
+        addInsideTheGroup: addInside.tree.length === 2 && addInside.tree[1].rules.length === 3 && sameTree(addInside.tree[1].rules[2], EMPTY_RULE) && addInside.focus === '1.2',
+        addAfterTheGroup: addOutside.tree.length === 3 && sameTree(addOutside.tree[2], EMPTY_RULE) && addOutside.tree[1].rules.length === 3 && addOutside.focus === '2',
+        crossesRemoveRows: sameTree(afterCrosses.tree, GROUP_COND.rules),
+        groupCrossRemovesTheBoxAndItsRows: groupGone.boxes === 0 && sameTree(groupGone.tree, [GROUP_RULE]) && groupGone.mode.shown === false,
+        emptiedGroupDisappears: created.boxes === 1 && oneLeft.boxes === 1 && oneLeft.rows === 1 && allRemoved.boxes === 0 && sameTree(allRemoved.tree, [GROUP_RULE]),
+        emptyGroupIsNotSaved: sameTree(saved, { mode: 'all', rules: [GROUP_RULE] }),
+      };
+      const failed = Object.keys(ok).filter(k => !ok[k]);
+      return { pass: failed.length === 0, notes: failed.length ? 'en échec : ' + failed.join(', ') + ' ' + JSON.stringify({ start, innerClick, headChange, outerClick, outerBack, topList, addInside, addOutside, afterCrosses, groupGone, created, oneLeft, allRemoved, saved }) : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_group_is_summed_up_in_parentheses_copied_pasted_and_translated',
+    description: 'Le résumé d’une condition à groupe met le groupe entre parenthèses (« Titre ≠ Dossier A et (Montant ≥ 1000 ou Montant < 20) », « and » / « or » en anglais, sans parenthèses pour un groupe d’une ligne, à toute profondeur) : c’est le texte de l’info-bulle de Coller ; Copier / Coller reprend les groupes d’une variable à l’autre ; en anglais, « + Group », « All of these conditions » et les info-bulles sont traduits ; la même fenêtre sert au bloc de texte conditionnel',
+    run: async (h) => {
+      await seed(h);
+      VariableCondition.clearClipboard();
+      const lang = I18n.getLang();
+      const summary = (cond, opts) => VariableCondition.describe(cond, opts);
+      const nested = { mode: 'all', rules: [GROUP_RULE, { mode: 'any', rules: [GROUP_INNER[0], { mode: 'all', rules: [GROUP_INNER[1], { column: 'Statut', operator: 'vide', value: '' }] }] }, { mode: 'any', rules: [{ column: 'Statut', operator: '=', value: 'Urgent' }] }] };
+      const fr = { grouped: summary(GROUP_COND, { full: true }), nested: summary(nested, { full: true }) };
+      let english = null;
+      try {
+        I18n.setLang('en');
+        const modal = await (async () => { Editor.setHTML(`<p>${badgeHtml('VcDossiers', 'Titre', GROUP_COND)}</p>`); return openWindow(h, 'Titre'); })();
+        const button = addGroupButton(modal);
+        const head = modal.querySelector('.cond-group-head select');
+        const remove = modal.querySelector('.cond-group-head .macro-rule-remove');
+        const inner = modal.querySelector('.cond-group .macro-rule-connector-toggle');
+        english = {
+          summary: summary(GROUP_COND, { full: true }),
+          button: button && [button.textContent, button.title, button.getAttribute('aria-label')],
+          head: head && [Array.from(head.options).map(o => o.textContent), head.getAttribute('aria-label')],
+          box: modal.querySelector('.cond-group').getAttribute('aria-label'),
+          remove: remove && remove.title,
+          inner: inner && [inner.textContent, inner.title],
+          words: connectorWords(modal),
+        };
+        cancelWindow(modal);
+        await h.sleep(30);
+      } finally {
+        I18n.setLang(lang);
+      }
+      // Copier dans la fenêtre d'une variable, Coller dans celle d'une autre : les groupes suivent ; l'info-bulle de Coller résume la condition copiée.
+      Editor.setHTML(`<p>${badgeHtml('VcDossiers', 'Titre', GROUP_COND)} ${badgeHtml('VcDossiers', 'Montant')}</p>`);
+      const ed = EditorCore.getEditor();
+      let modal = await openWindow(h, 'Titre');
+      const copy = clipButtons(modal).copy;
+      copy.click();
+      await h.sleep(30);
+      cancelWindow(modal);
+      await h.sleep(30);
+      modal = await openWindow(h, 'Montant');
+      const paste = clipButtons(modal).paste;
+      const pasteTitle = paste.title;
+      paste.click();
+      await h.sleep(60);
+      const pasted = { tree: windowTree(modal), boxes: groupBoxes(modal).length, mode: windowMode(modal) };
+      saveWindow(modal);
+      await h.sleep(80);
+      const savedOnAmount = conditionOf(ed, 'Montant');
+      // Le bloc de texte conditionnel ouvre la même fenêtre : « + Groupe » y pose aussi un encadré, enregistré dans data-condition.
+      Editor.setHTML(`<div class="conditional-text" data-condition="${JSON.stringify({ mode: 'all', rules: [GROUP_RULE] }).replace(/"/g, '&quot;')}"><p>Texte</p></div>`);
+      const bed = EditorCore.getEditor();
+      let pos = null;
+      bed.state.doc.descendants((node, p) => { if (pos == null && node.type.name === 'conditionalText') pos = p; });
+      let block = null;
+      if (pos != null) {
+        VariableCondition.open(bed, pos);
+        await h.sleep(100);
+        const bm = conditionModal();
+        addGroupButton(bm).click();
+        await h.sleep(60);
+        const [b0, b1] = Array.from(bm.querySelectorAll('.cond-group .macro-rule-row'));
+        await fillRule(h, b0, GROUP_INNER[0]);
+        await fillRule(h, b1, GROUP_INNER[1]);
+        block = { tree: windowTree(bm) };
+        saveWindow(bm);
+        await h.sleep(80);
+        let saved = null;
+        bed.state.doc.descendants(node => { if (saved == null && node.type.name === 'conditionalText') saved = node.attrs.condition; });
+        block.saved = saved;
+      }
+      const ok = {
+        summaryFr: fr.grouped === 'Titre ≠ Dossier A et (Montant ≥ 1000 ou Montant < 20)',
+        summaryDeep: fr.nested === 'Titre ≠ Dossier A et (Montant ≥ 1000 ou (Montant < 20 et Statut vide)) et Statut = Urgent',
+        summaryEnglish: !!english && english.summary === 'Titre ≠ Dossier A and (Montant ≥ 1000 or Montant < 20)',
+        englishWords: !!english && sameTree(english.words, ['If', 'And', 'If', 'Or']) && english.box === 'Group of conditions' && english.remove === 'Remove this group and its conditions'
+          && sameTree(english.button, ['+ Group', 'Add a group of conditions: the brackets of “A and (B or C)”', '+ Group : Add a group of conditions: the brackets of “A and (B or C)”'])
+          && sameTree(english.head, [['All of these conditions', 'Any of these conditions'], 'How the conditions of this group combine'])
+          && sameTree(english.inner, ['Or', 'Click to join all the conditions of this group with “And”']),
+        pasteTitleSaysTheGroup: pasteTitle === I18n.t('varCond.clip.pasteTitle', { summary: 'Titre ≠ Dossier A et (Montant ≥ 1000 ou Montant < 20)' }),
+        pastedWithItsGroup: pasted.boxes === 1 && sameTree(pasted.tree, GROUP_COND.rules) && pasted.mode.value === 'all',
+        savedOnAmount: sameTree(savedOnAmount, GROUP_COND),
+        block: !!block && sameTree(block.tree, [GROUP_RULE, { mode: 'any', rules: GROUP_INNER }]) && sameTree(block.saved, GROUP_COND),
+      };
+      const failed = Object.keys(ok).filter(k => !ok[k]);
+      return { pass: failed.length === 0, notes: failed.length ? 'en échec : ' + failed.join(', ') + ' ' + JSON.stringify({ fr, english, pasteTitle, pasted, savedOnAmount, block }) : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_group_inside_a_group_from_saved_data_is_drawn_and_kept',
+    description: 'Une condition enregistrée (ou collée) qui porte un groupe dans un groupe - que la fenêtre ne pose pas - se trace quand même, à toute profondeur, sans rien perdre à l’enregistrement ; l’aperçu et la Lecture la lisent',
+    run: async (h) => {
+      await seed(h);
+      // Titre ≠ Dossier A ET (Montant ≥ 1000 OU (Montant < 20 ET Statut = Urgent)) : la ligne 3 (Urgent, 10) seule la remplit.
+      const deep = { mode: 'all', rules: [GROUP_RULE, { mode: 'any', rules: [GROUP_INNER[0], { mode: 'all', rules: [GROUP_INNER[1], { column: 'Statut', operator: '=', value: 'Urgent' }] }] }] };
+      Editor.setHTML(`<p>${badgeHtml('VcDossiers', 'Titre', deep)}</p>`);
+      const ed = EditorCore.getEditor();
+      const modal = await openWindow(h, 'Titre');
+      const drawn = { boxes: groupBoxes(modal).length, tree: windowTree(modal), words: connectorWords(modal) };
+      await h.sleep(700);
+      const lines = previewLinesOf(modal);
+      saveWindow(modal);
+      await h.sleep(80);
+      const saved = conditionOf(ed, 'Titre');
+      const html = Editor.getHTML();
+      const shownFor3 = (await renderReaderFor(html, { id: 3, Titre: 'Dossier C', Statut: 'Urgent', Responsable: 0, Montant: 10 })).textContent;
+      const shownFor2 = (await renderReaderFor(html, { id: 2, Titre: 'Dossier B', Statut: 'Normal', Responsable: 8, Montant: 50 })).textContent;
+      const ok = {
+        drawnTwoBoxes: drawn.boxes === 2 && sameTree(drawn.tree, deep.rules),
+        words: sameTree(drawn.words, ['Si', 'Et', 'Si', 'Ou', 'Si', 'Et']),
+        preview: !!lines[1] && lines[1].startsWith(I18n.t('varCond.debug.count', { table: 'VcDossiers', count: 1, total: 3 })),
+        keptAsIs: sameTree(saved, deep),
+        reader: shownFor3.includes('Dossier C') && !shownFor2.includes('Dossier B'),
+      };
+      const failed = Object.keys(ok).filter(k => !ok[k]);
+      return { pass: failed.length === 0, notes: failed.length ? 'en échec : ' + failed.join(', ') + ' ' + JSON.stringify({ drawn, lines, saved, shownFor3, shownFor2 }) : 'ok' };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.varCondition = cases;
 })();

@@ -1734,6 +1734,178 @@ const readAnd = await readBubbleInReaderMode();
 check('Lecture : « Et » - une seule des deux règles est vraie - la variable disparaît', readAnd.text === null && readAnd.backToEdit && JSON.stringify(await conditionOn('Titre')) === JSON.stringify({ mode: 'all', rules: orRules }), { readAnd, saved: await conditionOn('Titre') });
 }
 
+// 2c) Groupes « A et (B ou C) » (demande d'Antoine du 2026-10-14 : « des conditions plus complexes avec des parenthèses ») à la vraie souris et au vrai clavier à 700x400 : « + Groupe »
+// partage la ligne de « + Ajouter une condition » et de Copier / Coller sans la faire passer à la suivante (la fenêtre d'une condition sans groupe garde sa hauteur) ; un vrai clic
+// pose l'encadré (« Et » bouton devant lui, sa liste, sa croix, ses deux lignes alignées, son « + Ajouter une condition »), dans la fenêtre et sans débordement latéral, y compris à
+// 360 px où le « Et » passe au-dessus de l'encadré ; les vrais clics sur le « Ou » du groupe, sur le « Et » de devant et sur « + Ajouter une condition » de l'encadré changent chacun
+// ce qu'ils disent (le groupe, le premier niveau, une ligne de plus), l'aperçu lit les parenthèses, Enregistrer les écrit et la Lecture les suit. Ligne 1 : Urgent, 1200 ; ligne 2 :
+// Normal, 50 ; « Statut = Urgent » (A), « Montant ≥ 1000 » (B), « Montant < 100 » (C) : « A et (B ou C) » retient la 1 seule, à plat « et » aucune, à plat « ou » les deux.
+{
+await fireDossier(1200);
+await page.evaluate(() => Editor.setHTML('<p>Titre : <span class="var-badge" data-table="VcDossiers" data-column="Titre" data-key="VcDossiers.Titre"></span></p>'));
+await page.waitForTimeout(300);
+const gw = await page.evaluate(() => ({
+  and: I18n.t('varCond.ruleAnd'), or: I18n.t('varCond.ruleOr'), first: I18n.t('macro.modal.ruleIf'), toOr: I18n.t('varCond.connectorToOr'), toAndInGroup: I18n.t('varCond.group.connectorToAnd'),
+  met: I18n.t('varCond.debug.currentMet', { id: 1, value: 'Dossier A' }), notMet: I18n.t('varCond.debug.currentNotMet', { id: 1 }),
+  count1: I18n.t('varCond.debug.count', { table: 'VcDossiers', count: 1, total: 2 }), count2: I18n.t('varCond.debug.count', { table: 'VcDossiers', count: 2, total: 2 }),
+  none: I18n.t('varCond.debug.none', { table: 'VcDossiers', total: 2 }),
+}));
+const GROUP_ROW = i => `${MODAL} [data-rule-path="1.${i}"]`;
+const rectOf = e => { if (!e) return null; const r = e.getBoundingClientRect(); return { l: r.left, r: r.right, t: r.top, b: r.bottom, mid: (r.top + r.bottom) / 2, w: r.width, h: r.height }; };
+// Fait défiler le corps de la fenêtre à la molette réelle, vers le bas ou vers le haut, jusqu'à ce que l'élément soit entièrement dans sa zone visible.
+async function bringIntoView(selector) {
+  for (let i = 0; i < 12; i++) {
+    const info = await page.evaluate(sel => {
+      const el = document.querySelector(sel), body = document.querySelector('#var-condition-modal .pp-modal-body');
+      if (!el || !body) return null;
+      const r = el.getBoundingClientRect(), b = body.getBoundingClientRect();
+      return { above: r.top < b.top + 2, below: r.bottom > b.bottom - 2, x: b.left + b.width / 2, y: b.top + b.height / 2 };
+    }, selector);
+    if (!info || (!info.above && !info.below)) break;
+    await page.mouse.move(info.x, info.y);
+    await page.mouse.wheel(0, info.below ? 90 : -90);
+    await page.waitForTimeout(80);
+  }
+  return hitTest(selector);
+}
+const clickOn = async selector => { const box = await bringIntoView(selector); if (box.found) await page.mouse.click(box.x, box.y); await page.waitForTimeout(200); return box; };
+const typeInto = async (selector, text) => { const box = await bringIntoView(selector); if (box.found) { await page.mouse.click(box.x, box.y); await page.keyboard.type(text); } return box; };
+const groupState = () => page.evaluate(() => {
+  const rectOf2 = e => { if (!e) return null; const r = e.getBoundingClientRect(); return { l: r.left, r: r.right, t: r.top, b: r.bottom, mid: (r.top + r.bottom) / 2, w: r.width, h: r.height }; };
+  const modal = document.getElementById('var-condition-modal');
+  const content = modal.querySelector('.var-modal-content');
+  const win = content.getBoundingClientRect();
+  const box = modal.querySelector('.cond-group');
+  const head = box && box.querySelector(':scope > .cond-group-head');
+  const outer = modal.querySelector('.cond-group-row > .macro-rule-connector');
+  const rows = box ? Array.from(box.querySelectorAll(':scope > .macro-rule-row')) : [];
+  const foot = modal.querySelector('.var-condition-foot');
+  const active = document.activeElement;
+  return {
+    window: { l: win.left, r: win.right },
+    rulesBox: rectOf2(modal.querySelector('.var-condition-rules')), box: rectOf2(box), outer: rectOf2(outer), outerWord: outer ? outer.textContent : null, outerTag: outer ? outer.tagName : null,
+    head: head && { select: rectOf2(head.querySelector('select')), cross: rectOf2(head.querySelector('.macro-rule-remove')) },
+    groupMode: head ? head.querySelector('select').value : null, groupModeText: head ? head.querySelector('select').selectedOptions[0].textContent : null,
+    rows: rows.map(r => ({
+      word: r.querySelector('.macro-rule-connector').textContent, tag: r.querySelector('.macro-rule-connector').tagName, connector: rectOf2(r.querySelector('.macro-rule-connector')),
+      column: rectOf2(r.querySelector('.macro-rule-column-wrap')), operator: rectOf2(r.querySelector(':scope > select')), value: rectOf2(r.querySelector('.macro-rule-value-slot')),
+      cross: rectOf2(r.querySelector(':scope > .macro-rule-remove')),
+    })),
+    foot: foot ? Array.from(foot.children).map(rectOf2) : [], footBox: rectOf2(foot), topMode: modal.querySelector('.var-condition-mode select').value, topModeShown: !modal.querySelector('.var-condition-mode').hidden,
+    lines: Array.from(modal.querySelectorAll('.var-condition-debug-line')).map(l => l.textContent),
+    allWords: Array.from(modal.querySelectorAll('.var-condition-rules .macro-rule-connector')).map(c => c.textContent),
+    focusedToggle: active && active.dataset ? active.dataset.togglePath || null : null, focusedHead: !!(head && active === head.querySelector('select')),
+    focusedRow: active && active.closest && active.closest('[data-rule-path]') ? active.closest('[data-rule-path]').dataset.rulePath : null,
+    overflowX: content.scrollWidth - content.clientWidth, docOverflowX: document.documentElement.scrollWidth - innerWidth,
+    body: { client: modal.querySelector('.pp-modal-body').clientHeight, scroll: modal.querySelector('.pp-modal-body').scrollHeight },
+  };
+});
+const sameLine = (a, b) => !!a && !!b && Math.abs(a.mid - b.mid) < 4;
+// Mise en page de l'encadré à large : le « Et » à gauche, à hauteur de la liste de l'en-tête ; la liste et la croix sur une ligne ; les deux lignes alignées sur 34 px de connecteur.
+const wideLayoutOk = st => !!st.box && !!st.head && st.rows.length >= 2 && st.box.l >= st.rulesBox.l - 0.5 && st.box.r <= st.rulesBox.r + 0.5 && st.box.r <= st.window.r && st.outer.r <= st.box.l
+  && sameLine(st.outer, st.head.select) && sameLine(st.head.select, st.head.cross) && st.head.cross.r <= st.box.r
+  && st.rows.every(r => Math.abs(r.connector.w - 34) < 1.5 && r.connector.r <= r.column.l && sameLine(r.connector, r.column) && r.cross.r <= st.box.r && r.value.r <= st.box.r)
+  && Math.abs(st.rows[0].column.l - st.rows[1].column.l) < 1.5 && st.overflowX <= 0 && st.docOverflowX <= 0;
+// Mise en page à 360 px : le « Et » au-dessus de l'encadré, qui prend toute la largeur ; la colonne, l'opérateur et la croix de chaque ligne sur une ligne sans se recouvrir.
+const narrowLayoutOk = st => !!st.box && !!st.head && st.rows.length >= 2 && st.outer.b <= st.box.t + 1 && st.outer.l >= st.window.l && st.box.l >= st.rulesBox.l - 0.5 && st.box.r <= st.rulesBox.r + 0.5
+  && st.box.r <= st.window.r && sameLine(st.head.select, st.head.cross) && st.head.cross.r <= st.box.r
+  && st.rows.every(r => sameLine(r.column, r.operator) && r.column.r <= r.operator.l + 1 && r.operator.r <= r.cross.l + 1 && r.cross.r <= st.box.r && r.value.r <= st.box.r && r.value.l >= st.box.l)
+  && Math.abs(st.rows[0].column.l - st.rows[1].column.l) < 1.5 && st.overflowX <= 0 && st.docOverflowX <= 0;
+
+await openConditionFor('Titre');
+check('colonne Statut choisie à la vraie souris (condition de « Titre »)', await pickColumn(MODAL, 'Statut'));
+await page.waitForTimeout(100);
+await typeInto(`${MODAL} .macro-rule-value`, 'Urgent');
+await page.waitForTimeout(150);
+// Sans groupe, la ligne du pied porte quatre commandes sur UNE ligne : « + Ajouter une condition », « + Groupe », Copier, Coller - la fenêtre garde sa hauteur.
+const plain = await groupState();
+const footKids = plain.foot;
+check('sans groupe : « + Ajouter une condition », « + Groupe » et Copier / Coller sont sur une seule ligne, dans la fenêtre, sans se recouvrir',
+  footKids.length === 3 && footKids.every(k => sameLine(k, footKids[0])) && footKids[0].r <= footKids[1].l && footKids[1].r <= footKids[2].l && plain.footBox.h < 32
+  && plain.footBox.r <= plain.window.r && plain.overflowX <= 0 && plain.docOverflowX <= 0 && plain.box === null && !plain.topModeShown, plain);
+const groupButton = await bringIntoView(`${MODAL} .var-condition-add-group`);
+check('« + Groupe » est visible, dans le panneau et au premier plan', groupButton.found && groupButton.inViewport && groupButton.onTop, groupButton);
+if (groupButton.found) await page.mouse.click(groupButton.x, groupButton.y);
+await page.waitForTimeout(250);
+const posed = await groupState();
+check('vrai clic sur « + Groupe » : un encadré de deux lignes, « Si » puis « Ou » dans l\'encadré, « Et » bouton devant lui, sa liste dit « au moins une », la liste du haut « toutes »',
+  !!posed.box && posed.rows.length === 2 && posed.outerTag === 'BUTTON' && posed.outerWord === gw.and && posed.rows[0].word === gw.first && posed.rows[0].tag === 'SPAN' && posed.rows[1].word === gw.or && posed.rows[1].tag === 'BUTTON'
+  && posed.groupMode === 'any' && posed.topMode === 'all' && posed.topModeShown, posed);
+check('... le focus est sur la colonne de la première ligne de l\'encadré', posed.focusedRow === '1.0', posed.focusedRow);
+await pickColumn(GROUP_ROW(0), 'Montant');
+await page.selectOption(`${GROUP_ROW(0)} > select`, '≥');
+await typeInto(`${GROUP_ROW(0)} .macro-rule-value`, '1000');
+await bringIntoView(`${GROUP_ROW(1)} .macro-rule-column-wrap .ss-trigger`);
+await pickColumn(GROUP_ROW(1), 'Montant');
+await page.selectOption(`${GROUP_ROW(1)} > select`, '<');
+await typeInto(`${GROUP_ROW(1)} .macro-rule-value`, '100');
+await page.waitForTimeout(800);
+const built = await groupState();
+check('les deux lignes de l\'encadré se remplissent à la vraie souris et au clavier ; l\'aperçu lit « A et (B ou C) » : la ligne 1 remplit la condition, 1 ligne sur 2 la remplit (et non les 2 d\'un « ou » à plat)',
+  built.lines[0] === gw.met && built.lines[1].startsWith(gw.count1), built.lines);
+check('l\'encadré à 700x400 : « Et » à hauteur de sa liste, liste et croix sur une ligne, lignes alignées sur 34 px de connecteur, tout dans la fenêtre, sans débordement latéral', wideLayoutOk(built), built);
+await page.setViewportSize({ width: 360, height: HEIGHT });
+await page.waitForTimeout(300);
+const narrow = await groupState();
+check('panneau de 360 px : le « Et » passe au-dessus de l\'encadré, qui prend toute la largeur ; colonne, opérateur et croix de chaque ligne sans recouvrement, pas de débordement latéral', narrowLayoutOk(narrow), narrow);
+const narrowGroupButton = await bringIntoView(`${MODAL} .var-condition-add-group`);
+check('... « + Groupe » et Copier / Coller passent à la ligne sans sortir de la fenêtre', narrowGroupButton.found && narrowGroupButton.onTop && narrowGroupButton.inViewport && narrow.foot.every(k => k.r <= narrow.window.r + 0.5 && k.l >= narrow.window.l - 0.5), narrow.foot);
+await page.setViewportSize({ width: WIDTH, height: HEIGHT });
+await page.waitForTimeout(300);
+// Le « Ou » de l'encadré : vrai clic - le groupe passe en « toutes », le premier niveau ne bouge pas ; l'aperçu lit « A et (B et C) » (aucune ligne).
+await clickOn(`${MODAL} [data-toggle-path="1.1"]`);
+await page.waitForTimeout(700);
+const innerAnd = await groupState();
+check('vrai clic sur le « Ou » de l\'encadré : « Et » entre ses lignes et dans sa liste (« toutes »), le « Et » de devant et la liste du haut ne bougent pas, le focus reste sur le bouton retracé',
+  innerAnd.rows[1].word === gw.and && innerAnd.groupMode === 'all' && innerAnd.outerWord === gw.and && innerAnd.topMode === 'all' && innerAnd.focusedToggle === '1.1', innerAnd);
+check('... l\'aperçu lit « A et (B et C) » : la condition n\'est remplie par aucune des 2 lignes', innerAnd.lines[0] === gw.notMet && innerAnd.lines[1] === gw.none, innerAnd.lines);
+await page.keyboard.press('Space');
+await page.waitForTimeout(500);
+const innerBack = await groupState();
+check('Espace sur le même bouton : retour à « Ou », le groupe repasse en « au moins une », le focus reste sur lui', innerBack.rows[1].word === gw.or && innerBack.groupMode === 'any' && innerBack.focusedToggle === '1.1', innerBack);
+// Le « Et » de devant l'encadré : le premier niveau passe en « au moins une » (la liste du haut suit), l'encadré ne bouge pas ; « A ou (B ou C) » retient les 2 lignes.
+await clickOn(`${MODAL} [data-toggle-path="1"]`);
+await page.waitForTimeout(700);
+const outerOr = await groupState();
+check('vrai clic sur le « Et » de devant l\'encadré : « Ou », la liste du haut dit « au moins une », l\'encadré garde sa combinaison, le focus reste sur le bouton',
+  outerOr.outerWord === gw.or && outerOr.topMode === 'any' && outerOr.groupMode === 'any' && outerOr.rows[1].word === gw.or && outerOr.focusedToggle === '1', outerOr);
+check('... l\'aperçu lit « A ou (B ou C) » : les 2 lignes remplissent la condition', outerOr.lines[1].startsWith(gw.count2), outerOr.lines);
+await clickOn(`${MODAL} [data-toggle-path="1"]`);
+await page.waitForTimeout(700);
+const outerBack = await groupState();
+check('un second clic remet « Et » devant l\'encadré et « toutes » dans la liste du haut', outerBack.outerWord === gw.and && outerBack.topMode === 'all' && outerBack.groupMode === 'any' && outerBack.lines[1].startsWith(gw.count1), outerBack);
+// « + Ajouter une condition » de l'encadré : une ligne de plus dans l'encadré, que sa croix retire.
+const innerAdd = await clickOn(`${MODAL} .cond-group > .var-condition-add`);
+const added = await groupState();
+check('vrai clic sur le « + Ajouter une condition » de l\'encadré : une troisième ligne DANS l\'encadré (« Ou »), le focus sur sa colonne', innerAdd.found && added.rows.length === 3 && added.rows[2].word === gw.or && added.focusedRow === '1.2', added);
+await clickOn(`${GROUP_ROW(2)} > .macro-rule-remove`);
+const removedRow = await groupState();
+check('la croix de la ligne ajoutée la retire : l\'encadré a de nouveau deux lignes', removedRow.rows.length === 2 && !!removedRow.box, removedRow);
+const saveGroup = await bringIntoView(`${MODAL} .var-modal-primary`);
+if (saveGroup.found) await page.mouse.click(saveGroup.x, saveGroup.y);
+await page.waitForTimeout(300);
+const groupRules = { mode: 'all', rules: [{ column: 'Statut', operator: '=', value: 'Urgent' }, { mode: 'any', rules: [{ column: 'Montant', operator: '≥', value: '1000' }, { column: 'Montant', operator: '<', value: '100' }] }] };
+check('Enregistrer (vrai clic) pose { mode, rules: [règle, { mode, rules }] } sur la bulle', JSON.stringify(await conditionOn('Titre')) === JSON.stringify(groupRules), await conditionOn('Titre'));
+// Lecture : 1200 (B) affiche, 500 (ni B ni C) masque - à plat en « ou » il s'afficherait -, 50 (C) affiche.
+const readAt = async montant => { await fireDossier(montant); await page.waitForTimeout(300); return readBubbleInReaderMode(); };
+const read1200 = await readAt(1200), read500 = await readAt(500), read50 = await readAt(50);
+check('Lecture : Statut = Urgent et (Montant ≥ 1000 ou Montant < 100) - 1200 affiche, 500 masque, 50 affiche', read1200.text === 'Dossier A' && read500.text === null && read50.text === 'Dossier A' && read1200.backToEdit && read500.backToEdit && read50.backToEdit, { read1200, read500, read50 });
+await fireDossier(1200);
+await page.waitForTimeout(300);
+// Rouverte : l'encadré est relu ; sa croix (vrai clic) le retire avec ses lignes, Annuler n'écrit rien.
+await openConditionFor('Titre');
+await page.waitForTimeout(300);
+const reopenedGroup = await groupState();
+check('fenêtre rouverte : l\'encadré et ses deux lignes sont relus de la bulle (« Ou » dans l\'encadré, « Et » devant lui)', !!reopenedGroup.box && reopenedGroup.rows.length === 2 && reopenedGroup.groupMode === 'any' && reopenedGroup.outerWord === gw.and && reopenedGroup.rows[1].word === gw.or && reopenedGroup.topMode === 'all', reopenedGroup);
+await clickOn(`${MODAL} .cond-group-head .macro-rule-remove`);
+const crossed = await groupState();
+check('vrai clic sur la croix de l\'en-tête : l\'encadré disparaît avec ses lignes, la règle reste et la liste du haut se masque', crossed.box === null && !crossed.topModeShown && crossed.allWords.length === 1, crossed);
+const cancelGroup = await bringIntoView(`${MODAL} .var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)`);
+if (cancelGroup.found) await page.mouse.click(cancelGroup.x, cancelGroup.y);
+await page.waitForTimeout(300);
+check('Annuler n\'écrit rien : la bulle garde son groupe', JSON.stringify(await conditionOn('Titre')) === JSON.stringify(groupRules), await conditionOn('Titre'));
+}
+
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 
 await browser.close();
