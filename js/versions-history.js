@@ -6,6 +6,10 @@
 // un e-mail ou une grille montre son texte sur une feuille (les images d'un autre site restent bloquées jusqu'au clic « Afficher », comme partout), un e-mail y ajoute son
 // objet et ses destinataires, un macro-modèle sa composition.
 //
+// « Comparer » (bouton à gauche, éteint à chaque ouverture) montre la version choisie avec, en vert, ce qu'elle a en plus de la version actuelle et, en rouge barré, ce que la version actuelle
+// a en plus d'elle (ce qu'une restauration retirerait) : le texte du document, l'objet et les destinataires d'un e-mail, les lignes de la composition d'un macro-modèle. Le calcul est dans
+// js/versions-compare.js, chargé au premier clic sur « Comparer » (VersionsStore.loadCompare) ; la restauration, elle, reprend toujours l'état gardé tel qu'il est, jamais la feuille marquée.
+//
 // La fenêtre n'écrit rien elle-même : « Restaurer cette version » demande confirmation puis passe l'état choisi à `restore` (js/main.js : enregistrer ce que l'écran
 // montre, Templates.restoreVersion, recharger l'éditeur). Une version dont les données ne se lisent pas (format inconnu, cellule abîmée à la main) le dit et ne se restaure pas.
 const VersionsHistory = (function () {
@@ -13,9 +17,9 @@ const VersionsHistory = (function () {
 
   let win = null;
   let refs = null;
-  let session = null; // le modèle ouvert : { id, name, restore, rows, states, selected, busy, loading, failed }
+  let session = null; // le modèle ouvert : { id, name, restore, rows, states, selected, busy, loading, compare }
   let openSeq = 0;    // monte à chaque ouverture et fermeture : une lecture qui revient après n'écrit plus dans la fenêtre
-  let previewSeq = 0; // monte à chaque version choisie : un aperçu qui revient après un autre choix est ignoré
+  let previewSeq = 0; // monte à chaque version choisie (ou comparaison allumée ou éteinte) : un aperçu qui revient après un autre choix est ignoré
 
   // Date et heure dans la langue de la page ; « — » quand la date n'est pas connue.
   function whenText(ms) {
@@ -57,6 +61,14 @@ const VersionsHistory = (function () {
     const headWho = el('span', 'pp-versions-head-who');
     const headTag = el('span', 'pp-versions-head-tag');
     head.append(headWhen, headWho, headTag);
+    // Le nombre de différences et la légende des couleurs, tant que « Comparer » est allumé.
+    const note = el('div', 'pp-versions-note');
+    note.setAttribute('role', 'status');
+    note.hidden = true;
+    const noteText = el('span', 'pp-versions-note-text');
+    const keyAdded = el('ins', 'pp-versions-added pp-versions-key');
+    const keyRemoved = el('del', 'pp-versions-removed pp-versions-key');
+    note.append(noteText, keyAdded, keyRemoved);
     const status = el('p', 'pp-versions-status');
     status.setAttribute('role', 'status');
     status.hidden = true;
@@ -66,10 +78,10 @@ const VersionsHistory = (function () {
     const tiptap = el('div', 'tiptap pp-versions-tiptap');
     sheet.appendChild(tiptap);
     paper.append(extra, sheet);
-    main.append(head, status, paper);
+    main.append(head, note, status, paper);
 
     win.body.append(side, main);
-    const { cancel, ok } = win.addButtons();
+    const { first: compare, cancel, ok } = win.addButtons('pp-versions-compare');
     // Les libellés qui ne changent pas s'écrivent ici, une fois, dans la langue de la page (changer de langue recharge la page) ; seuls le titre (le nom du modèle) et le texte du
     // bouton principal (« Restaurer » / « Restauration… ») varient d'une ouverture ou d'un moment à l'autre.
     listLabel.textContent = I18n.t('versions.list.label');
@@ -77,10 +89,16 @@ const VersionsHistory = (function () {
     cancel.textContent = I18n.t('common.close');
     const labels = { restore: I18n.t('versions.restore'), restoring: I18n.t('versions.restoring') };
     ok.textContent = labels.restore;
-    refs = { listLabel, listHost, empty, headWhen, headWho, headTag, status, paper, extra, sheet, tiptap, cancel, ok, labels, list: null };
+    compare.textContent = I18n.t('versions.compare');
+    compare.title = I18n.t('versions.compare.hint');
+    compare.setAttribute('aria-pressed', 'false');
+    keyAdded.textContent = I18n.t('versions.compare.keyAdded');
+    keyRemoved.textContent = I18n.t('versions.compare.keyRemoved');
+    refs = { listLabel, listHost, empty, headWhen, headWho, headTag, note, noteText, keyAdded, keyRemoved, status, paper, extra, sheet, tiptap, compare, cancel, ok, labels, list: null };
 
     cancel.addEventListener('click', close);
     ok.addEventListener('click', restoreSelected);
+    compare.addEventListener('click', toggleCompare);
   }
 
   function close() {
@@ -92,10 +110,12 @@ const VersionsHistory = (function () {
 
   // Les boutons d'après l'état : « Restaurer » demande une version lisible choisie, et attend la fin d'une lecture ou d'une restauration.
   function render() {
-    const { ok } = refs;
+    const { ok, compare } = refs;
     const row = session && selectedRow();
-    // Une version se restaure une fois lue : pendant qu'elle se décompresse (quelques instants), le bouton attend.
+    // Une version se restaure, et se compare, une fois lue : pendant qu'elle se décompresse (quelques instants), les boutons attendent. « Comparer » reste allumé ou éteint d'une version à l'autre,
+    // grisé sur « Version actuelle » (rien à comparer à elle-même).
     ok.disabled = !session || session.busy || session.loading || !row || row.current || row.unreadable || !session.states.has(row.value);
+    compare.disabled = ok.disabled;
     ok.textContent = refs.labels[session && session.busy ? 'restoring' : 'restore'];
   }
 
@@ -128,6 +148,7 @@ const VersionsHistory = (function () {
     extra.replaceChildren();
     extra.hidden = true;
     refs.sheet.hidden = false;
+    refs.note.hidden = true;
     status.hidden = true;
     status.textContent = '';
   }
@@ -138,11 +159,30 @@ const VersionsHistory = (function () {
     status.hidden = false;
   }
 
-  // Une ligne « Objet : … » : l'intitulé (une clé de texte, ou un texte déjà écrit) puis sa valeur.
+  // Une ligne « Objet : … » : l'intitulé (un texte déjà écrit) puis sa valeur : un texte, ou, en comparaison, des morceaux [{ kind: 'same' | 'added' | 'removed', text }] dont ce qui diffère est marqué.
   function line(label, value) {
     const p = el('p', 'pp-versions-line');
-    p.append(el('strong', null, I18n.t('versions.preview.label', { label }) + ' '), document.createTextNode(value));
+    p.append(el('strong', null, I18n.t('versions.preview.label', { label }) + ' '));
+    if (Array.isArray(value)) value.forEach(part => p.append(part.kind === 'same' ? document.createTextNode(part.text) : marked(part)));
+    else p.append(document.createTextNode(value));
     return p;
+  }
+
+  // Un morceau de texte de comparaison qui diffère : <ins> (la version seule l'a) ou <del> (la version actuelle seule l'a), de la classe que css/versions-history.css colore.
+  function marked(part) {
+    return part.kind === 'added' ? el('ins', 'pp-versions-added', part.text) : el('del', 'pp-versions-removed', part.text);
+  }
+
+  // Le nombre de différences d'une suite de morceaux : ce qui est retiré puis ajouté d'affilée (un mot remplacé) n'en fait qu'une.
+  function groupsOf(parts) {
+    let n = 0;
+    let inside = false;
+    parts.forEach(part => {
+      const changed = part.kind !== 'same';
+      if (changed && !inside) n++;
+      inside = changed;
+    });
+    return n;
   }
 
   // Les noms des modèles d'une position de macro-modèle, séparés par des virgules ; « modèle supprimé » pour un modèle qui n'existe plus.
@@ -152,42 +192,131 @@ const VersionsHistory = (function () {
     return ids.map(id => { const tpl = Templates.byId(id); return tpl ? tpl.nom : I18n.t('versions.preview.modelGone'); }).join(', ');
   }
 
-  // L'état d'une version dans la feuille : le texte d'un document, d'une grille ou d'un e-mail (avec son objet et ses destinataires), la composition d'un macro-modèle.
-  function renderState(state) {
+  // Les positions d'un macro-modèle, dans l'ordre : [{ cover, value }], `cover` pour une page de garde, `value` les noms de ses modèles.
+  function macroEntries(state) {
+    let slots = [];
+    try { const parsed = JSON.parse(state.contenu); slots = parsed && Array.isArray(parsed.slots) ? parsed.slots : []; } catch (e) { slots = []; }
+    return slots.map(slot => ({ cover: !!slot && slot.type === 'fixed', value: slotText(slot) }));
+  }
+
+  // L'état d'une version dans la feuille : le texte d'un document, d'une grille ou d'un e-mail (avec son objet et ses destinataires), la composition d'un macro-modèle. `compare` ({ base : l'état
+  // actuel, result : le texte comparé par VersionsCompare.compareHtml, absent pour un macro-modèle }) marque ce qui diffère de la version actuelle. Rend { changes, formatOnly, skipped }.
+  function renderState(state, compare) {
     const { tiptap, extra } = refs;
+    const summary = { changes: 0, formatOnly: 0, skipped: 0 };
     clearPreview();
+    refs.paper.scrollTop = 0;
     if (state.typeModele === 'macro') {
-      let slots = [];
-      try { const parsed = JSON.parse(state.contenu); slots = parsed && Array.isArray(parsed.slots) ? parsed.slots : []; } catch (e) { slots = []; }
-      let annex = 0;
-      if (!slots.length) extra.appendChild(el('p', 'pp-versions-line', I18n.t('versions.preview.macroEmpty')));
-      slots.forEach(slot => {
-        const cover = slot && slot.type === 'fixed';
-        if (!cover) annex++;
-        extra.appendChild(line(I18n.t(cover ? 'macro.modal.coverLabel' : 'macro.modal.annexeLabel', { n: annex }), slotText(slot)));
+      const mine = macroEntries(state);
+      let lines = mine.map(entry => ({ kind: 'same', cover: entry.cover, value: entry.value }));
+      if (compare) {
+        // Une position se reconnaît à son genre et à ses modèles, jamais à son numéro : retirer la première annexe ne change pas les suivantes.
+        const key = entry => (entry.cover ? 'C' : 'A') + entry.value;
+        lines = VersionsCompare.compareLines(macroEntries(compare.base).map(key), mine.map(key)).map(item => ({ kind: item.kind, cover: item.text.charAt(0) === 'C', value: item.text.slice(1) }));
+        summary.changes = groupsOf(lines);
+      }
+      if (!lines.length) extra.appendChild(el('p', 'pp-versions-line', I18n.t('versions.preview.macroEmpty')));
+      // Le numéro d'une annexe est son rang dans la composition qui la porte : la version, ou la version actuelle pour ce que seule elle a.
+      let annexOfVersion = 0;
+      let annexOfCurrent = 0;
+      lines.forEach(item => {
+        if (!item.cover) {
+          if (item.kind !== 'removed') annexOfVersion++;
+          if (item.kind !== 'added') annexOfCurrent++;
+        }
+        const label = I18n.t(item.cover ? 'macro.modal.coverLabel' : 'macro.modal.annexeLabel', { n: item.kind === 'removed' ? annexOfCurrent : annexOfVersion });
+        extra.appendChild(line(label, item.kind === 'same' ? item.value : [{ kind: item.kind, text: item.value }]));
       });
       extra.hidden = false;
       refs.sheet.hidden = true;
-      return;
+      return summary;
     }
     if (state.typeModele === 'email') {
-      if (state.objet) extra.appendChild(line(I18n.t('versions.preview.subject'), state.objet));
-      if (state.destinataires) extra.appendChild(line(I18n.t('versions.preview.to'), state.destinataires));
-      if (state.cc) extra.appendChild(line(I18n.t('versions.preview.cc'), state.cc));
-      if (state.cci) extra.appendChild(line(I18n.t('versions.preview.bcc'), state.cci));
+      [['versions.preview.subject', 'objet'], ['versions.preview.to', 'destinataires'], ['versions.preview.cc', 'cc'], ['versions.preview.bcc', 'cci']].forEach(([key, prop]) => {
+        const mine = state[prop] || '';
+        if (!compare) { if (mine) extra.appendChild(line(I18n.t(key), mine)); return; }
+        const theirs = compare.base[prop] || '';
+        if (!mine && !theirs) return;
+        const parts = VersionsCompare.compareText(theirs, mine);
+        summary.changes += groupsOf(parts);
+        extra.appendChild(line(I18n.t(key), parts));
+      });
       extra.hidden = !extra.childNodes.length;
     }
+    let html = state.contenu;
+    if (compare && compare.result) {
+      html = compare.result.html;
+      summary.changes += compare.result.changes;
+      summary.formatOnly = compare.result.formatOnly;
+      summary.skipped = compare.result.skipped;
+    }
     // Un aperçu s'affiche : une image d'un autre site y prend son cadre « Afficher » (le modèle enregistré garde son HTML).
-    tiptap.innerHTML = ExternalImages.block(HtmlSanitize.clean(state.contenu), { zoom: 1 });
+    tiptap.innerHTML = ExternalImages.block(HtmlSanitize.clean(html), { zoom: 1 });
     // Une image de pièce jointe ne garde que son identifiant : son adresse (un jeton qui expire) est demandée à Grist.
     Promise.resolve(GristAPI.hydrateAttachmentImages(tiptap)).catch(() => {});
+    return summary;
   }
 
-  // La version choisie : sa ligne en tête de l'aperçu, puis son contenu (décompressé à ce moment-là).
+  // Au-dessus de la feuille : le texte (le nombre de différences, ou pourquoi il n'y a rien à comparer) et, quand il y a des différences, la légende des deux couleurs.
+  function showNote(text, withKey) {
+    const { note, noteText, keyAdded, keyRemoved } = refs;
+    noteText.textContent = text;
+    keyAdded.hidden = !withKey;
+    keyRemoved.hidden = !withKey;
+    note.hidden = false;
+  }
+
+  function showSummary(summary) {
+    let text;
+    if (summary.changes) text = I18n.t('versions.compare.count', { n: summary.changes });
+    else if (summary.formatOnly) text = I18n.t('versions.compare.formatOnly', { n: summary.formatOnly });
+    else text = I18n.t('versions.compare.none');
+    if (summary.skipped) text += ' · ' + I18n.t('versions.compare.partial', { n: summary.skipped });
+    showNote(text, summary.changes > 0);
+  }
+
+  // Amène la première différence dans le quart haut de l'aperçu (sans faire défiler la page : seul l'aperçu bouge).
+  function revealFirstChange() {
+    const { paper } = refs;
+    const mark = paper.querySelector('ins.pp-versions-added, del.pp-versions-removed');
+    paper.scrollTop = 0;
+    if (!mark) return;
+    const delta = mark.getBoundingClientRect().top - paper.getBoundingClientRect().top - paper.clientHeight / 4;
+    if (delta > 0) paper.scrollTop = delta;
+  }
+
+  // La feuille de la version choisie : son texte, ou, « Comparer » allumé, ce qu'elle a de plus et de moins que la version actuelle. Un échec de la comparaison montre la version telle quelle,
+  // le dit, et éteint « Comparer » (le geste suivant réessaie).
+  async function present(row, state, seq) {
+    if (!session.compare || row.current) { renderState(state, null); return; }
+    const base = session.rows[0].state;
+    if (base.typeModele !== state.typeModele) { renderState(state, null); showNote(I18n.t('versions.compare.otherType'), false); return; }
+    try {
+      await VersionsStore.loadCompare();
+      const result = state.typeModele === 'macro' ? null : await VersionsCompare.compareHtml(base.contenu, state.contenu);
+      if (seq !== previewSeq || !session) return;
+      showSummary(renderState(state, { base, result }));
+      revealFirstChange();
+    } catch (e) {
+      console.warn('[versions] comparaison impossible', e);
+      if (seq !== previewSeq || !session) return;
+      session.compare = false;
+      refs.compare.setAttribute('aria-pressed', 'false');
+      renderState(state, null);
+      say('versions.compare.error');
+    }
+  }
+
+  // La version choisie dans la liste.
   async function pick(value) {
     if (!session) return;
     session.selected = value;
     refs.list.check(value);
+    await showSelected();
+  }
+
+  // La version choisie : sa ligne en tête de l'aperçu, puis son contenu (décompressé à ce moment-là), comparé à la version actuelle quand « Comparer » est allumé.
+  async function showSelected(keepSheet) {
     const row = selectedRow();
     if (!row) return;
     const seq = ++previewSeq;
@@ -196,9 +325,10 @@ const VersionsHistory = (function () {
     refs.headWho.textContent = ' · ' + who.text;
     refs.headWho.title = who.title;
     refs.headTag.textContent = row.kind === 'restauration' ? ' · ' + I18n.t('versions.kind.restore') : '';
-    clearPreview();
+    // « Comparer » allumé ou éteint sur la même version : la feuille reste à l'écran le temps que la nouvelle se prépare (le premier clic charge le module).
+    if (!keepSheet) clearPreview();
     render();
-    if (row.current) { renderState(row.state); return; }
+    if (row.current) { renderState(row.state, null); return; }
     let state = session.states.get(row.value);
     if (!state && !row.unreadable) {
       try {
@@ -212,8 +342,16 @@ const VersionsHistory = (function () {
       if (seq !== previewSeq || !session) return;
     }
     if (row.unreadable) { refs.sheet.hidden = true; say('versions.unreadable'); render(); return; }
-    renderState(state);
     render();
+    await present(row, state, seq);
+  }
+
+  // « Comparer » : allume ou éteint la comparaison de la version choisie avec la version actuelle.
+  async function toggleCompare() {
+    if (!session || refs.compare.disabled) return;
+    session.compare = !session.compare;
+    refs.compare.setAttribute('aria-pressed', session.compare ? 'true' : 'false');
+    await showSelected(true);
   }
 
   // « Restaurer cette version » : la question dit ce qui est remplacé et que l'état actuel reste dans la liste ; puis `restore` fait le travail. Un échec se dit dans la
@@ -258,8 +396,9 @@ const VersionsHistory = (function () {
     const current = {
       value: 'current', current: true, at: VersionsStore.toMs(tpl.dateModif), author: tpl.modifiePar || '', state: VersionsStore.snapshotOf(tpl), kind: '',
     };
-    session = { id, name, restore, rows: [current], states: new Map(), selected: 'current', busy: false, loading: true };
+    session = { id, name, restore, rows: [current], states: new Map(), selected: 'current', busy: false, loading: true, compare: false };
     const { cancel, empty } = refs;
+    refs.compare.setAttribute('aria-pressed', 'false');
     win.title.textContent = I18n.t('versions.titleFor', { name: name || tpl.nom });
     refs.listHost.replaceChildren();
     empty.hidden = true;

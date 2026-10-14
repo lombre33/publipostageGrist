@@ -6,7 +6,10 @@
 //    (document, e-mail avec objet et destinataires, macro-modèle avec sa composition), l'historique vide, la lecture qui échoue, la version illisible ;
 //  - « Restaurer cette version » : la question, le modèle et l'écran qui reprennent l'état choisi, l'état remplacé gardé, ce qui était tapé enregistré d'abord, l'échec dit dans
 //    la fenêtre qui reste ouverte, le refus qui n'écrit rien ;
-//  - la table fait partie des tables internes : jamais offerte comme table du document.
+//  - la table fait partie des tables internes : jamais offerte comme table du document ;
+//  - « Comparer » (js/versions-compare.js) : le bouton éteint à chaque ouverture et chargé au premier clic, un mot remplacé, des paragraphes ajoutés et retirés, une liste, un tableau, une
+//    pastille, une image, le texte seul ou la mise en forme seule, l'objet et les destinataires d'un e-mail, la composition d'un macro-modèle, un autre type de modèle, un échec, la
+//    première différence amenée à l'écran, et « Restaurer » qui reprend l'état gardé, jamais la feuille marquée. Le calcul lui-même se teste sans page : dev-tests/unit-versions-compare.mjs.
 (function () {
   const cases = [];
   const MODELS = 'Publipostage_Modeles';
@@ -36,7 +39,8 @@
   const statusText = () => { const node = document.querySelector('#pp-versions-modal .pp-versions-status'); return node && !node.hidden ? node.textContent : ''; };
   const emptyText = () => { const node = document.querySelector('#pp-versions-modal .pp-versions-empty'); return node && !node.hidden ? node.textContent : ''; };
   const restoreButton = () => document.querySelector('#pp-versions-modal .pp-modal-actions .var-modal-primary');
-  const closeButton = () => document.querySelector('#pp-versions-modal .pp-modal-actions button:not(.var-modal-primary)');
+  // « Fermer » : le bouton de la barre qui n'est ni le bouton principal ni l'un des boutons de la fenêtre (« Comparer »...).
+  const closeButton = () => document.querySelector('#pp-versions-modal .pp-modal-actions button:not(.var-modal-primary):not([class*="pp-versions-"])');
   const headText = () => (document.querySelector('#pp-versions-modal .pp-versions-head') || {}).textContent || '';
   const statusMsg = () => document.getElementById('status-msg').textContent;
 
@@ -741,6 +745,346 @@
         await waitFor(() => isOpen(), 4000);
         if (!isOpen()) problems.push('la fenêtre ne s\'ouvre pas avec les droits');
       } finally { fetches.restore(); stub().setWidgetOptions(null); }
+      return finish(h, problems);
+    },
+  });
+
+  // --- 6. « Comparer » -----------------------------------------------------------------------------------------------------------------------------------------------------------
+  const compareButton = () => document.querySelector('#pp-versions-modal .pp-versions-compare');
+  const comparing = () => !!compareButton() && compareButton().getAttribute('aria-pressed') === 'true';
+  const noteBox = () => document.querySelector('#pp-versions-modal .pp-versions-note');
+  const noteText = () => { const node = noteBox(); return node && !node.hidden ? node.querySelector('.pp-versions-note-text').textContent : ''; };
+  const keysShown = () => Array.from(document.querySelectorAll('#pp-versions-modal .pp-versions-note .pp-versions-key')).filter(node => !node.hidden).map(node => node.textContent);
+  const marksOf = (area, kind) => Array.from(document.querySelectorAll('#pp-versions-modal ' + area + ' ' + (kind === 'added' ? 'ins.pp-versions-added' : 'del.pp-versions-removed'))).map(node => node.textContent);
+  const sheetMarks = kind => marksOf('.pp-versions-tiptap', kind);
+  const extraMarks = kind => marksOf('.pp-versions-extra', kind);
+  const moduleScripts = () => document.head.querySelectorAll('script[src*="versions-compare.js"]').length;
+  const compareReady = () => !!compareButton() && !compareButton().disabled;
+
+  // L'historique d'un modèle enregistré (`html` : son état actuel) ouvert sur UNE version plus ancienne (`state`) ; « Comparer » est éteint. Rend l'identifiant du modèle.
+  async function openOnVersion(h, nom, html, state, prepare) {
+    resetVersions();
+    const id = await savedModel(h, nom, html);
+    if (prepare) await prepare(id);
+    await addVersion(id, { state, minutesAgo: 60 });
+    await openHistory();
+    await waitFor(() => rows().length === 2, 3000);
+    await pickRow(1);
+    await waitFor(() => compareReady() && (previewText() !== '' || extraText() !== ''), 3000);
+    return id;
+  }
+  // Allume ou éteint « Comparer » à la vraie souris (un clic) et attend que la feuille soit refaite : la note est là (ou le message d'échec), ou a disparu.
+  async function turnCompare(on) {
+    if (comparing() !== on) compareButton().click();
+    await waitFor(() => on ? (noteText() !== '' || statusText() !== '') : noteText() === '', 5000);
+    await sleep(80);
+  }
+  // Le modèle `id` devient un e-mail (objet, destinataires...) : sa ligne et le cache de la page le disent, comme après un enregistrement en mode e-mail.
+  async function makeEmail(id, fields) {
+    await grist.docApi.applyUserActions([['UpdateRecord', MODELS, id, { TypeModele: 'email', Objet: fields.objet || '', Destinataires: fields.destinataires || '', Cc: fields.cc || '', Cci: fields.cci || '' }]]);
+    await Templates.loadAll();
+  }
+
+  cases.push({
+    id: 'versions_compare_button_starts_off_loads_its_module_on_first_use_and_follows_the_chosen_version',
+    description: '« Comparer » : à gauche des boutons, éteint à chaque ouverture, grisé sur « Version actuelle », module chargé au premier clic seulement (une fois) ; le mode reste d\'une version à l\'autre',
+    async run(h) {
+      const problems = [];
+      if (typeof VersionsCompare !== 'undefined' || moduleScripts() !== 0) problems.push('la comparaison est chargée avant le premier clic');
+      const tag = document.querySelector('script[type="text/x-lazy-module"][data-module="versions-compare"]');
+      if (!tag || !/^js\/versions-compare\.js\?v=/.test(tag.getAttribute('src') || '')) problems.push('balise inerte : ' + (tag && tag.getAttribute('src')));
+      resetVersions();
+      const id = await savedModel(h, 'Comparer : premier clic', '<p>Bonjour Monsieur</p>');
+      await addVersion(id, { state: stateOf('<p>Bonjour Madame</p>'), minutesAgo: 60 });
+      await openHistory();
+      await waitFor(() => rows().length === 2, 3000);
+      const button = compareButton();
+      if (!button) return finish(h, problems.concat('pas de bouton « Comparer »'));
+      const actions = document.querySelector('#pp-versions-modal .pp-modal-actions');
+      if (button.textContent !== 'Comparer' || !button.title) problems.push('texte ou info-bulle : ' + button.textContent + ' / ' + button.title);
+      if (actions.firstElementChild !== button) problems.push('« Comparer » devrait être le premier bouton, à gauche');
+      if (comparing() || !button.disabled) problems.push('sur « Version actuelle » le bouton devrait être éteint et grisé : pressed ' + comparing() + ', grisé ' + button.disabled);
+      if (noteText() !== '') problems.push('une note sans comparaison : ' + noteText());
+      await pickRow(1);
+      await waitFor(compareReady, 3000);
+      if (!compareReady()) problems.push('le bouton reste grisé sur une version lue');
+      if (typeof VersionsCompare !== 'undefined' || moduleScripts() !== 0) problems.push('la comparaison s\'est chargée sans clic');
+      await turnCompare(true);
+      if (!comparing()) problems.push('le bouton n\'est pas enfoncé après le clic');
+      if (typeof VersionsCompare === 'undefined' || moduleScripts() !== 1) problems.push('chargement au premier clic : ' + typeof VersionsCompare + ', ' + moduleScripts() + ' script(s)');
+      if (sheetMarks('added').join('|') !== 'Madame' || sheetMarks('removed').join('|') !== 'Monsieur') problems.push('marques : +' + sheetMarks('added') + ' -' + sheetMarks('removed'));
+      // « Version actuelle » : rien à comparer à elle-même, le bouton se grise mais reste enfoncé ; la feuille est le texte, sans marque.
+      await pickRow(0);
+      await sleep(150);
+      if (!button.disabled || !comparing()) problems.push('sur « Version actuelle » le mode devrait rester enfoncé et grisé : ' + button.disabled + ' ' + comparing());
+      if (sheetMarks('added').length || sheetMarks('removed').length || noteText() !== '' || previewText() !== 'Bonjour Monsieur') problems.push('« Version actuelle » : ' + previewText() + ' / ' + noteText());
+      await pickRow(1);
+      await waitFor(() => noteText() !== '', 3000);
+      if (sheetMarks('added').length !== 1) problems.push('le mode ne reprend pas sur la version : ' + sheetMarks('added'));
+      // Éteint, la version redevient son texte.
+      await turnCompare(false);
+      if (comparing() || sheetMarks('added').length || sheetMarks('removed').length || previewText() !== 'Bonjour Madame') problems.push('éteint : ' + previewText());
+      // La fenêtre rouverte repart éteinte, sans recharger le module.
+      await turnCompare(true);
+      await closeHistory();
+      await openHistory();
+      await waitFor(() => rows().length === 2, 3000);
+      if (comparing() || noteText() !== '') problems.push('rouverte, la comparaison devrait être éteinte');
+      await pickRow(1);
+      await waitFor(compareReady, 3000);
+      if (sheetMarks('added').length || previewText() !== 'Bonjour Madame') problems.push('rouverte : la version devrait se lire sans marque : ' + previewText());
+      await turnCompare(true);
+      if (moduleScripts() !== 1) problems.push('le module s\'est rechargé : ' + moduleScripts());
+      return finish(h, problems);
+    },
+  });
+
+  cases.push({
+    id: 'versions_compare_marks_a_replaced_word_and_counts_one_difference',
+    description: 'Un mot remplacé : dans la version, le mot de la version actuelle barré en rouge puis celui de la version en vert, un seul « 1 différence avec la version actuelle » et la légende des deux couleurs ; le reste du texte est intact',
+    async run(h) {
+      const problems = [];
+      const id = await openOnVersion(h, 'Comparer : un mot', '<p>Bonjour Monsieur Dupont,</p><p>Merci de votre confiance.</p>', stateOf('<p>Bonjour Madame Dupont,</p><p>Merci de votre confiance.</p>'));
+      await turnCompare(true);
+      if (sheetMarks('removed').join('|') !== 'Monsieur' || sheetMarks('added').join('|') !== 'Madame') problems.push('marques : -' + sheetMarks('removed') + ' +' + sheetMarks('added'));
+      if (previewText() !== 'Bonjour MonsieurMadame Dupont,Merci de votre confiance.') problems.push('texte : ' + previewText());
+      if (noteText() !== '1 différence avec la version actuelle') problems.push('note : ' + noteText());
+      if (keysShown().join('|') !== 'Seulement dans cette version|Seulement dans la version actuelle') problems.push('légende : ' + keysShown());
+      const added = document.querySelector('#pp-versions-modal .pp-versions-tiptap ins.pp-versions-added');
+      const removed = document.querySelector('#pp-versions-modal .pp-versions-tiptap del.pp-versions-removed');
+      if (added && removed) {
+        const a = getComputedStyle(added);
+        const r = getComputedStyle(removed);
+        if (a.color !== 'rgb(20, 108, 72)' || a.backgroundColor !== 'rgb(229, 246, 238)') problems.push('couleurs du vert : ' + a.color + ' sur ' + a.backgroundColor);
+        if (r.color !== 'rgb(180, 35, 24)' || r.backgroundColor !== 'rgb(251, 233, 233)' || !/line-through/.test(r.textDecorationLine)) problems.push('couleurs du rouge : ' + r.color + ' sur ' + r.backgroundColor + ' ' + r.textDecorationLine);
+        if (!parseFloat(a.borderBottomWidth)) problems.push('le vert n\'a pas de trait dessous (la couleur seule ne dit rien)');
+      }
+      // Rien d'écrit nulle part : ni le modèle ni l'éditeur ne portent une marque.
+      if (/pp-versions/.test(Editor.getHTML()) || /pp-versions/.test(modelRow(id).Contenu)) problems.push('une marque de comparaison a atteint l\'éditeur ou le modèle');
+      return finish(h, problems);
+    },
+  });
+
+  cases.push({
+    id: 'versions_compare_marks_paragraphs_added_and_removed',
+    description: 'Des paragraphes en plus et en moins : celui que seule la version actuelle a est remis, barré en rouge, à sa place ; ceux que seule la version a sont en vert ; deux suites séparées = « 2 différences »',
+    async run(h) {
+      const problems = [];
+      await openOnVersion(h, 'Comparer : paragraphes', '<p>Premier</p><p>Deuxième ancien</p><p>Dernier</p>', stateOf('<p>Premier</p><p>Nouveau milieu</p><p>Dernier</p><p>Ajouté à la fin</p>'));
+      await turnCompare(true);
+      if (sheetMarks('removed').join('|') !== 'Deuxième ancien') problems.push('retiré : ' + sheetMarks('removed'));
+      if (sheetMarks('added').join('|') !== 'Nouveau milieu|Ajouté à la fin') problems.push('ajouté : ' + sheetMarks('added'));
+      if (previewText() !== 'PremierDeuxième ancienNouveau milieuDernierAjouté à la fin') problems.push('texte : ' + previewText());
+      if (noteText() !== '2 différences avec la version actuelle') problems.push('note : ' + noteText());
+      const paragraphs = document.querySelectorAll('#pp-versions-modal .pp-versions-tiptap > p');
+      if (paragraphs.length !== 5) problems.push('paragraphes : ' + paragraphs.length);
+      return finish(h, problems);
+    },
+  });
+
+  cases.push({
+    id: 'versions_compare_keeps_the_shape_of_a_list_and_a_table',
+    description: 'Un élément de liste, une case et une ligne de tableau : ce que seule la version actuelle a est remis dans sa liste, sa case ou sa ligne (la forme est gardée), barré en rouge ; une case changée est marquée dans la case',
+    async run(h) {
+      const problems = [];
+      const table = rowsHtml => '<table><tbody>' + rowsHtml.map(cells => '<tr>' + cells.map(text => '<td><p>' + text + '</p></td>').join('') + '</tr>').join('') + '</tbody></table>';
+      const current = '<ul><li><p>Pomme</p></li><li><p>Poire</p></li><li><p>Prune</p></li></ul>' + table([['A1', 'B1'], ['A2', 'B2']]);
+      const version = '<ul><li><p>Pomme</p></li><li><p>Prune</p></li></ul>' + table([['A1', 'B1 modifié']]);
+      await openOnVersion(h, 'Comparer : liste et tableau', current, stateOf(version));
+      await turnCompare(true);
+      const tiptap = document.querySelector('#pp-versions-modal .pp-versions-tiptap');
+      const items = Array.from(tiptap.querySelectorAll('li'));
+      if (items.length !== 3) problems.push('éléments de liste : ' + items.length);
+      else if (!items[1].querySelector('del.pp-versions-removed') || items[1].textContent !== 'Poire') problems.push('« Poire » devrait être le deuxième élément, barré : ' + items.map(item => item.textContent));
+      const rowsShown = Array.from(tiptap.querySelectorAll('tr'));
+      if (rowsShown.length !== 2) problems.push('lignes du tableau : ' + rowsShown.length);
+      else {
+        if (rowsShown[1].textContent !== 'A2B2' || rowsShown[1].querySelectorAll('del.pp-versions-removed').length !== 2) problems.push('la ligne retirée devrait être remise, barrée : ' + rowsShown[1].textContent);
+        if (rowsShown[0].querySelectorAll('td')[1].textContent.indexOf('modifié') === -1 || sheetMarks('added').join('').trim() !== 'modifié') problems.push('case changée : ' + rowsShown[0].textContent + ' / +' + sheetMarks('added'));
+      }
+      if (sheetMarks('removed').join('|') !== 'Poire|A2|B2') problems.push('retiré : ' + sheetMarks('removed'));
+      if (noteText() !== '3 différences avec la version actuelle') problems.push('note : ' + noteText());
+      return finish(h, problems);
+    },
+  });
+
+  cases.push({
+    id: 'versions_compare_marks_variable_bubbles_and_images_as_whole_items',
+    description: 'Une pastille de variable ou une image qui change est marquée en entier (la pastille et l\'image restent des pastille et image) : l\'ancienne barrée en rouge, la nouvelle en vert',
+    async run(h) {
+      const problems = [];
+      const badge = column => '<span class="var-badge" data-table="Clients" data-column="' + column + '" data-key="Clients.' + column + '"></span>';
+      const gifA = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+      const gifB = 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==';
+      // Une image se note comme l'éditeur la note (`img.editor-image`) : sans cette classe, le schéma ne la lit pas et elle disparaît des deux côtés.
+      const picture = src => '<img class="editor-image" src="' + src + '" alt="Logo" style="width: 40px" data-layer="normal" data-wrap="inline">';
+      const current = '<p>Bonjour ' + badge('Prenom') + '</p><p>Logo ' + picture(gifA) + '</p>';
+      const version = '<p>Bonjour ' + badge('Nom') + '</p><p>Logo ' + picture(gifB) + '</p>';
+      await openOnVersion(h, 'Comparer : pastille et image', current, stateOf(version));
+      await turnCompare(true);
+      const tiptap = document.querySelector('#pp-versions-modal .pp-versions-tiptap');
+      const inAdded = tiptap.querySelector('ins.pp-versions-added .var-badge');
+      const inRemoved = tiptap.querySelector('del.pp-versions-removed .var-badge');
+      if (!inAdded || inAdded.getAttribute('data-key') !== 'Clients.Nom') problems.push('la pastille de la version devrait être en vert : ' + (inAdded && inAdded.getAttribute('data-key')));
+      if (!inRemoved || inRemoved.getAttribute('data-key') !== 'Clients.Prenom') problems.push('la pastille de la version actuelle devrait être barrée : ' + (inRemoved && inRemoved.getAttribute('data-key')));
+      const imageAdded = tiptap.querySelector('ins.pp-versions-added img');
+      const imageRemoved = tiptap.querySelector('del.pp-versions-removed img');
+      if (!imageAdded || imageAdded.getAttribute('src') !== gifB) problems.push('l\'image de la version devrait être en vert');
+      if (!imageRemoved || imageRemoved.getAttribute('src') !== gifA) problems.push('l\'image de la version actuelle devrait être barrée');
+      if (noteText() !== '2 différences avec la version actuelle') problems.push('note : ' + noteText());
+      return finish(h, problems);
+    },
+  });
+
+  cases.push({
+    id: 'versions_compare_says_when_nothing_or_only_the_formatting_differs',
+    description: 'Même texte : « Aucune différence de texte », sans marque ni légende ; même texte mais gras ou titre autrement : « seule la mise en forme diffère dans N blocs », jamais « aucune différence » à tort',
+    async run(h) {
+      const problems = [];
+      await openOnVersion(h, 'Comparer : identique', '<p>Texte simple</p><p>Autre ligne</p>', stateOf('<p>Texte simple</p><p>Autre ligne</p>'));
+      await turnCompare(true);
+      if (noteText() !== 'Aucune différence de texte avec la version actuelle.') problems.push('identique : ' + noteText());
+      if (keysShown().length || sheetMarks('added').length || sheetMarks('removed').length) problems.push('identique : des marques ou une légende');
+      await closeHistory();
+      await openOnVersion(h, 'Comparer : mise en forme', '<p>Texte simple</p><p>Autre ligne</p>', stateOf('<p><strong>Texte simple</strong></p><h2>Autre ligne</h2>'));
+      await turnCompare(true);
+      if (noteText() !== 'Même texte que la version actuelle ; seule la mise en forme diffère dans 2 blocs.') problems.push('mise en forme seule : ' + noteText());
+      if (keysShown().length || sheetMarks('added').length || sheetMarks('removed').length) problems.push('mise en forme seule : des marques ou une légende');
+      if (previewText() !== 'Texte simpleAutre ligne') problems.push('texte : ' + previewText());
+      return finish(h, problems);
+    },
+  });
+
+  cases.push({
+    id: 'versions_compare_marks_the_subject_and_recipients_of_an_email',
+    description: 'Un e-mail : l\'objet et les destinataires se comparent mot à mot sur leur ligne (une ligne que seule la version a apparaît en vert), le corps comme un document ; une ligne vide des deux côtés reste absente',
+    async run(h) {
+      const problems = [];
+      await openOnVersion(h, 'Comparer : e-mail', '<p>Bonjour</p>', stateOf('<p>Bonjour</p>', { typeModele: 'email', objet: 'Facture d’avril', destinataires: 'a@exemple.fr, b@exemple.fr', cc: 'c@exemple.fr' }), id => makeEmail(id, { objet: 'Facture de mars', destinataires: 'a@exemple.fr' }));
+      await turnCompare(true);
+      const lines = Array.from(document.querySelectorAll('#pp-versions-modal .pp-versions-extra .pp-versions-line')).map(node => node.textContent);
+      if (lines.length !== 3) problems.push('lignes : ' + JSON.stringify(lines));
+      if (!/^Objet : /.test(lines[0] || '') || extraMarks('removed').join('').indexOf('mars') === -1 || extraMarks('added').join('').indexOf('avril') === -1) problems.push('objet : ' + lines[0] + ' / -' + extraMarks('removed') + ' +' + extraMarks('added'));
+      if (!/^À : a@exemple\.fr/.test(lines[1] || '') || extraMarks('added').join('').indexOf('b@exemple.fr') === -1) problems.push('destinataires : ' + lines[1]);
+      if (!/^Cc : c@exemple\.fr$/.test(lines[2] || '')) problems.push('Cc : ' + lines[2]);
+      if (noteText() !== '3 différences avec la version actuelle') problems.push('note : ' + noteText());
+      if (previewText() !== 'Bonjour' || sheetMarks('added').length || sheetMarks('removed').length) problems.push('corps : ' + previewText());
+      return finish(h, problems);
+    },
+  });
+
+  cases.push({
+    id: 'versions_compare_marks_the_composition_of_a_macro_model',
+    description: 'Un macro-modèle : ses lignes se comparent par genre et modèles (jamais par numéro), la ligne remplacée donne l\'ancienne barrée puis la nouvelle, l\'annexe en moins est remise avec son rang d\'origine',
+    async run(h) {
+      const problems = [];
+      resetVersions();
+      await identify();
+      await freshDocument(h);
+      await h.sleep(300);
+      const gardeA = await Templates.save(null, 'Comparer macro - garde A', '<p>Garde A</p>', '', null, null, 'document', null);
+      const gardeB = await Templates.save(null, 'Comparer macro - garde B', '<p>Garde B</p>', '', null, null, 'document', null);
+      const annexeX = await Templates.save(null, 'Comparer macro - annexe X', '<p>Annexe X</p>', '', null, null, 'document', null);
+      const annexeY = await Templates.save(null, 'Comparer macro - annexe Y', '<p>Annexe Y</p>', '', null, null, 'document', null);
+      await Templates.loadAll();
+      // Le macro-modèle, par la vraie fenêtre de composition (enregistré, choisi et chargé comme par une personne) avec sa seule page de garde, puis ses annexes écrites dans sa ligne.
+      MacroEditor.openModal(null);
+      document.getElementById('macro-editor-name').value = 'Comparer macro';
+      const select = document.getElementById('macro-editor-cover');
+      select.value = String(gardeA.id);
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      document.getElementById('macro-editor-save').click();
+      await h.sleep(900);
+      const macro = { id: Templates.getCurrentId() };
+      if (!macro.id || !modelRow(macro.id) || modelRow(macro.id).TypeModele !== 'macro') return { pass: false, notes: 'le macro-modèle n\'est pas chargé : ' + macro.id };
+      const annex = id => ({ type: 'conditional', rules: [], defaultModeleId: id });
+      await grist.docApi.applyUserActions([['UpdateRecord', MODELS, macro.id, { Contenu: JSON.stringify({ slots: [{ type: 'fixed', modeleId: gardeA.id }, annex(annexeX.id), annex(annexeY.id)] }) }]]);
+      await Templates.loadAll();
+      await addVersion(macro.id, { state: stateOf(JSON.stringify({ slots: [{ type: 'fixed', modeleId: gardeB.id }, annex(annexeX.id)] }), { typeModele: 'macro' }), minutesAgo: 60 });
+      await openHistory();
+      await waitFor(() => rows().length === 2, 3000);
+      await pickRow(1);
+      await waitFor(compareReady, 3000);
+      await turnCompare(true);
+      const lines = Array.from(document.querySelectorAll('#pp-versions-modal .pp-versions-extra .pp-versions-line')).map(node => node.textContent);
+      const expected = ['Page de garde : Comparer macro - garde A', 'Page de garde : Comparer macro - garde B', 'Annexe 1 : Comparer macro - annexe X', 'Annexe 2 : Comparer macro - annexe Y'];
+      if (JSON.stringify(lines) !== JSON.stringify(expected)) problems.push('lignes : ' + JSON.stringify(lines));
+      if (extraMarks('removed').join('|') !== 'Comparer macro - garde A|Comparer macro - annexe Y' || extraMarks('added').join('|') !== 'Comparer macro - garde B') problems.push('marques : -' + extraMarks('removed') + ' +' + extraMarks('added'));
+      if (noteText() !== '2 différences avec la version actuelle') problems.push('note : ' + noteText());
+      if (sheetShown()) problems.push('un macro-modèle n\'a pas de feuille');
+      return finish(h, problems);
+    },
+  });
+
+  cases.push({
+    id: 'versions_compare_says_when_the_version_is_of_another_type_or_the_calculation_fails',
+    description: 'Une version d\'un autre type de modèle n\'est pas comparée (la note le dit, la version se lit telle quelle) ; une comparaison qui échoue le dit, éteint le bouton, montre la version telle quelle, et le clic suivant réessaie',
+    async run(h) {
+      const problems = [];
+      await openOnVersion(h, 'Comparer : autre type', '<p>Texte du document</p>', stateOf('<p>Courrier</p>', { typeModele: 'email', objet: 'Un objet' }));
+      await turnCompare(true);
+      if (noteText() !== 'Cette version est celle d’un autre type de modèle : il n’y a rien à comparer.') problems.push('autre type : ' + noteText());
+      if (previewText() !== 'Courrier' || !extraText().includes('Objet : Un objet') || sheetMarks('added').length || keysShown().length) problems.push('autre type : la version devrait se lire telle quelle : ' + previewText() + ' / ' + extraText());
+      await closeHistory();
+      // Un échec du calcul : la version s'affiche, le message le dit, le bouton redevient éteint.
+      await openOnVersion(h, 'Comparer : échec', '<p>Bonjour Monsieur</p>', stateOf('<p>Bonjour Madame</p>'));
+      const real = VersionsCompare.compareHtml;
+      VersionsCompare.compareHtml = () => Promise.reject(new Error('essai'));
+      try {
+        await turnCompare(true);
+      } finally { VersionsCompare.compareHtml = real; }
+      if (statusText() !== 'La comparaison n’a pas pu se faire : la version s’affiche telle quelle.') problems.push('message : ' + statusText());
+      if (comparing()) problems.push('le bouton devrait être éteint après l\'échec');
+      if (previewText() !== 'Bonjour Madame' || sheetMarks('added').length || noteText() !== '') problems.push('la version devrait se lire telle quelle : ' + previewText());
+      await turnCompare(true);
+      if (sheetMarks('added').join('|') !== 'Madame' || statusText() !== '') problems.push('le clic suivant devrait réussir : +' + sheetMarks('added') + ' / ' + statusText());
+      return finish(h, problems);
+    },
+  });
+
+  cases.push({
+    id: 'versions_compare_restore_takes_the_kept_state_never_the_marked_sheet',
+    description: '« Restaurer cette version » depuis la comparaison remet l\'état gardé tel qu\'il est : ni le modèle ni l\'éditeur ne gardent <ins>, <del> ni le texte retiré ; l\'état remplacé reste dans la liste',
+    async run(h) {
+      const problems = [];
+      const id = await openOnVersion(h, 'Comparer : restaurer', '<p>Bonjour Monsieur Dupont</p>', stateOf('<p>Bonjour Madame Dupont</p>'));
+      await turnCompare(true);
+      if (sheetMarks('added').join('|') !== 'Madame') problems.push('avant : +' + sheetMarks('added'));
+      const dialogs = h.stubDialogs({ confirm: true });
+      try {
+        restoreButton().click();
+        await waitFor(() => !isOpen(), 6000);
+      } finally { dialogs.restore(); }
+      if (isOpen()) problems.push('la fenêtre devrait se fermer après la restauration');
+      const content = modelRow(id).Contenu;
+      if (content !== '<p>Bonjour Madame Dupont</p>' || /pp-versions|<ins|<del/.test(content)) problems.push('le modèle : ' + content);
+      if (!Editor.getHTML().includes('Madame') || Editor.getHTML().includes('Monsieur') || /pp-versions|<ins|<del/.test(Editor.getHTML())) problems.push('l\'éditeur : ' + Editor.getHTML());
+      const kept = versionRows().filter(row => row.Genre === 'restauration');
+      if (kept.length !== 1) problems.push('versions « avant une restauration » : ' + kept.length);
+      return finish(h, problems);
+    },
+  });
+
+  cases.push({
+    id: 'versions_compare_brings_the_first_difference_into_view',
+    description: 'Dans un long texte, la première différence est amenée dans l\'aperçu (seul l\'aperçu défile, la page ne bouge pas) ; éteinte, la feuille reprend le haut',
+    async run(h) {
+      const problems = [];
+      const paragraphs = changed => Array.from({ length: 90 }, (_, i) => '<p>Ligne numéro ' + (i + 1) + (changed && i === 70 ? ' modifiée en bas' : '') + ' du long texte.</p>').join('');
+      await openOnVersion(h, 'Comparer : long texte', paragraphs(false), stateOf(paragraphs(true)));
+      const paper = document.querySelector('#pp-versions-modal .pp-versions-paper');
+      const pageScroll = window.scrollY;
+      await turnCompare(true);
+      await sleep(120);
+      const mark = document.querySelector('#pp-versions-modal .pp-versions-tiptap ins.pp-versions-added');
+      if (!mark) return finish(h, problems.concat('pas de marque'));
+      const box = mark.getBoundingClientRect();
+      const view = paper.getBoundingClientRect();
+      if (paper.scrollTop <= 0) problems.push('l\'aperçu n\'a pas défilé');
+      if (box.top < view.top || box.bottom > view.bottom) problems.push('la première différence n\'est pas visible : ' + Math.round(box.top - view.top) + ' / ' + Math.round(view.height));
+      if (window.scrollY !== pageScroll) problems.push('la page a défilé');
+      await turnCompare(false);
+      if (paper.scrollTop !== 0) problems.push('éteinte, la feuille devrait reprendre le haut : ' + paper.scrollTop);
       return finish(h, problems);
     },
   });

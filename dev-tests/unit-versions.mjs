@@ -17,7 +17,9 @@
 //  9) le format : JSON canonique, gzip + base64 (« gz1: »), repli « raw1: » sans compression, version illisible refusée ;
 // 10) js/templates.js seul (page d'essai sans le magasin) enregistre comme avant ;
 // 11) les textes de la fonction (js/i18n.js) : chacun existe en français et en anglais avec les mêmes {trous}, tout texte demandé par le code existe, aucun n'est orphelin
-//     (la langue ne change qu'au rechargement de la page : un texte absent d'une des deux langues se verrait pour de bon).
+//     (la langue ne change qu'au rechargement de la page : un texte absent d'une des deux langues se verrait pour de bon) ;
+// 12) le chargement des modules de l'historique (la fenêtre, la comparaison) : une balise inerte chacun, chargé au premier besoin seulement et une seule fois, un module déjà là n'est pas
+//     rechargé, une balise absente ou un chargement qui échoue refuse sans rien garder (le geste suivant réessaie).
 // Lancer : node dev-tests/unit-versions.mjs
 import { randomBytes } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -689,6 +691,45 @@ async function main() {
     check('tout texte que le code demande existe dans js/i18n.js', used.size >= 20 && missing.length === 0, 'demandés ' + used.size + ', absents : ' + missing.join(', '));
     const orphans = keys.filter(k => !used.has(k));
     check('aucun texte de la fonction n\'est orphelin (tous sont demandés quelque part)', orphans.length === 0, orphans.join(', '));
+  }
+
+  // === 12. Le chargement des modules de l'historique ===
+  {
+    const loaders = () => {
+      const t = fresh(new Doc());
+      t.run(`globalThis.__loads = []; globalThis.__fail = false;
+        globalThis.__tags = { 'versions': 'js/versions-history.js?v=9', 'versions-compare': 'js/versions-compare.js?v=9' };
+        globalThis.document = { querySelector: (selector) => { const m = /data-module="([^"]+)"/.exec(selector); const src = m && __tags[m[1]]; return src ? { getAttribute: (name) => (name === 'src' ? src : null) } : null; } };
+        globalThis.ExportCommon = { loadScriptOnce: ({ src }) => { __loads.push(src); return __fail ? Promise.reject(new Error('hors ligne')) : Promise.resolve(); } };`);
+      return t;
+    };
+    const refused = async (t, call) => { try { await t.run(call); return null; } catch (e) { return String(e && e.message || e); } };
+    let t = loaders();
+    await t.run('VersionsStore.loadCompare()');
+    await t.run('VersionsStore.loadCompare()');
+    check('la comparaison se charge au premier besoin, une seule fois, depuis l\'adresse (et la version de cache) de sa balise', json(t.run('__loads')) === json(['js/versions-compare.js?v=9']), json(t.run('__loads')));
+    await t.run('VersionsStore.loadWindow()');
+    await t.run('VersionsStore.loadWindow()');
+    check('la fenêtre se charge à part, une seule fois, sans recharger la comparaison', json(t.run('__loads')) === json(['js/versions-compare.js?v=9', 'js/versions-history.js?v=9']), json(t.run('__loads')));
+    t = loaders();
+    t.run('globalThis.VersionsCompare = {}; globalThis.VersionsHistory = {};');
+    await t.run('VersionsStore.loadCompare()');
+    await t.run('VersionsStore.loadWindow()');
+    check('un module déjà présent n\'est pas rechargé', t.run('__loads.length') === 0, json(t.run('__loads')));
+    t = loaders();
+    t.run('__fail = true');
+    const failure = await refused(t, 'VersionsStore.loadCompare()');
+    t.run('__fail = false');
+    const retried = await refused(t, 'VersionsStore.loadCompare()');
+    const again = await refused(t, 'VersionsStore.loadCompare()');
+    check('un chargement qui échoue refuse, ne garde pas l\'échec, et le geste suivant réessaie (puis ne recharge plus)', failure === 'hors ligne' && retried === null && again === null && t.run('__loads.length') === 2, failure + ' / ' + retried + ' / ' + again + ' / ' + t.run('__loads.length'));
+    t = loaders();
+    t.run("delete __tags['versions-compare']");
+    const missing = await refused(t, 'VersionsStore.loadCompare()');
+    check('sans balise inerte, la comparaison refuse en nommant le module, sans rien charger', /versions-compare/.test(missing || '') && t.run('__loads.length') === 0, missing);
+    t.run("__tags['versions-compare'] = 'js/versions-compare.js?v=9'");
+    await t.run('VersionsStore.loadCompare()');
+    check('la balise revenue, le geste suivant charge', t.run('__loads.length') === 1, t.run('__loads.length'));
   }
 
   summarizeAndExit();

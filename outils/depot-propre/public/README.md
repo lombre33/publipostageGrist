@@ -89,8 +89,9 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 - Enregistrement automatique avec détection d'un conflit si quelqu'un d'autre a enregistré le modèle
   entre-temps
 - Historique des versions d'un modèle (menu du bouton Enregistrer) : qui a changé quoi et quand, aperçu de
-  chaque version et « Restaurer cette version » (l'état remplacé reste dans la liste), dans une table à part
-  que le widget ne lit qu'à l'ouverture de la fenêtre
+  chaque version, « Comparer » avec la version actuelle (en vert ce que la version a en plus, en rouge barré
+  ce qu'une restauration retirerait) et « Restaurer cette version » (l'état remplacé reste dans la liste),
+  dans une table à part que le widget ne lit qu'à l'ouverture de la fenêtre
 - Commentaires sur le texte sélectionné, avec réponses et résolution, partagés entre les personnes qui
   ouvrent le document
 - Suivi des modifications (bêta) : les changements sont proposés dans le texte, puis acceptés ou
@@ -484,9 +485,10 @@ GitHub Pages, with no backend and no build step.
 **Reading, saving and collaboration**
 - Reading mode (the document filled with the selected row) and clean reading, without the toolbar
 - Autosave with conflict detection if someone else saved the template in the meantime
-- Version history of a template (Save button menu): who changed what and when, a preview of each version
-  and "Restore this version" (the replaced state stays in the list), in a table of its own that the
-  widget only reads when the window is opened
+- Version history of a template (Save button menu): who changed what and when, a preview of each version,
+  "Compare" with the current version (green for what the version has in addition, struck-through red for
+  what a restore would remove) and "Restore this version" (the replaced state stays in the list), in a
+  table of its own that the widget only reads when the window is opened
 - Comments on the selected text, with replies and resolution, shared between the people who open the
   document
 - Track changes (beta): changes are proposed in the text, then accepted or rejected one by one or all

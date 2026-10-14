@@ -29,6 +29,20 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   Au plus 30 versions par modèle et 3 millions de signes pour le document. Le modèle porte aussi, dans `Publipostage_Modeles`, la
   personne qui l'a enregistré en dernier (colonne `ModifiePar`) et un jeton qui le reconnaît (colonne `Jeton`).
 
+- **« Comparer » une version avec la version actuelle** : la fenêtre « Historique des versions… » a un bouton « Comparer » (à gauche
+  de « Fermer », éteint à chaque ouverture, grisé sur « Version actuelle »). Allumé, il montre la version choisie avec, en vert, ce
+  qu'elle a en plus de la version actuelle et, en rouge barré, ce que la version actuelle a en plus d'elle (ce qu'une restauration
+  retirerait) ; le vert a un trait dessous et le rouge est barré : la couleur ne parle jamais seule. Au-dessus de la feuille : le
+  nombre de différences (« 2 différences avec la version actuelle »), « Aucune différence de texte » ou, quand seule la mise en forme
+  change, le nombre de blocs concernés, et la légende des deux couleurs ; la première différence est amenée dans l'aperçu. Un mot
+  remplacé ne compte que pour une différence (l'ancien barré, puis le nouveau) ; un paragraphe, un élément de liste, une case ou une
+  ligne de tableau ajoutés ou retirés gardent leur forme ; une pastille ou une image qui change est marquée en entier. Pour un
+  e-mail, l'objet et les destinataires se comparent mot à mot sur leur ligne ; pour un macro-modèle, les lignes de la composition
+  (jamais d'après le numéro d'une annexe). « Restaurer cette version » reprend toujours l'état gardé, jamais la feuille marquée. Le
+  calcul est écrit sans bibliothèque de plus et ne se charge qu'au premier clic sur « Comparer ». Limites : la mise en forme seule
+  (gras, alignement, niveau d'un titre) n'est pas marquée mais comptée à part, l'en-tête, le pied de page et les marges ne se
+  comparent pas, et un graphique ou un saut de page ne sont pas marqués.
+
 - **« Markdown (modèle) » : un modèle qui revient intact, variables comprises** : le menu « Type d'export » a une ligne de plus,
   « Markdown (modèle) », à côté de « Markdown » (qui écrit toujours le document d'une ligne, variables remplacées par leurs
   valeurs). « Exporter » écrit le modèle lui-même, tel que l'éditeur le montre, en un seul fichier `.md` nommé d'après le
@@ -1075,6 +1089,19 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   read when the window is opened: a document loads nothing more at startup or when saving, and a copy never prevents a save. At
   most 30 versions per template and 3 million characters for the document. The template also carries, in `Publipostage_Modeles`,
   the person who saved it last (`ModifiePar` column) and a token that recognises it (`Jeton` column).
+
+- **"Compare" a version with the current version**: the "Version history…" window has a "Compare" button (left of "Close", off every
+  time the window opens, greyed out on "Current version"). When on, it shows the chosen version with, in green, what it has in
+  addition to the current version and, in struck-through red, what the current version has in addition to it (what a restore would
+  remove); the green has a line under it and the red is struck through: colour never speaks alone. Above the sheet: the number of
+  differences ("2 differences from the current version"), "No text difference" or, when only the formatting changes, the number of
+  blocks concerned, and the key to the two colours; the first difference is brought into the preview. A replaced word counts as a
+  single difference (the old one struck, then the new one); a paragraph, list item, cell or table row added or removed keeps its
+  shape; a variable bubble or image that changes is marked as a whole. For an e-mail, the subject and recipients are compared word
+  by word on their line; for a macro-template, the lines of the composition (never by annex number). "Restore this version" always
+  takes the kept state, never the marked sheet. The calculation is written without any extra library and only loads on the first
+  click on "Compare". Limits: formatting alone (bold, alignment, heading level) is not marked but counted separately, the header,
+  footer and margins are not compared, and a chart or page break is not marked.
 
 - **"Markdown (template)": a template that comes back intact, variables included**: the "Export type" menu has one more line,
   "Markdown (template)", next to "Markdown" (which still writes a row's document, variables replaced by their values).

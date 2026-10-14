@@ -41,7 +41,7 @@ const VersionsStore = (function () {
   let tableKnown = false;
   let suspendedUntil = 0;
   let cleanupTimer = null;
-  let windowPromise = null;
+  const modulePromises = new Map(); // les modules de l'historique déjà demandés (loadModule) : nom -> promesse
   const writes = GristAPI.createWriteQueue();
 
   // JSON à clés triées : deux états égaux donnent le même texte, quel que soit l'ordre dans lequel leurs objets ont été construits.
@@ -333,16 +333,19 @@ const VersionsStore = (function () {
     }, CLEANUP_DELAY_MS);
   }
 
-  // La fenêtre de l'historique ne se charge qu'au premier clic : une balise inerte d'index.html porte son adresse et sa version de cache (`?v=`).
-  function loadWindow() {
-    if (typeof VersionsHistory !== 'undefined') return Promise.resolve();
-    if (!windowPromise) {
-      const tag = document.querySelector('script[type="text/x-lazy-module"][data-module="versions"]');
-      windowPromise = (tag ? ExportCommon.loadScriptOnce({ src: tag.getAttribute('src') }) : Promise.reject(new Error('Fenêtre de l’historique des versions introuvable.')))
-        .catch(e => { windowPromise = null; throw e; });
+  // Les modules de l'historique (la fenêtre, la comparaison) ne se chargent qu'au premier besoin : une balise inerte d'index.html porte l'adresse et la version de cache (`?v=`) de chacun.
+  // `loaded` dit si le module est déjà là (sa variable globale) ; un échec de chargement n'est pas gardé, le geste suivant réessaie.
+  function loadModule(name, loaded) {
+    if (loaded()) return Promise.resolve();
+    if (!modulePromises.has(name)) {
+      const tag = document.querySelector('script[type="text/x-lazy-module"][data-module="' + name + '"]');
+      modulePromises.set(name, (tag ? ExportCommon.loadScriptOnce({ src: tag.getAttribute('src') }) : Promise.reject(new Error('Module de l’historique des versions introuvable : ' + name)))
+        .catch(e => { modulePromises.delete(name); throw e; }));
     }
-    return windowPromise;
+    return modulePromises.get(name);
   }
+  const loadWindow = () => loadModule('versions', () => typeof VersionsHistory !== 'undefined');
+  const loadCompare = () => loadModule('versions-compare', () => typeof VersionsCompare !== 'undefined');
 
   // Oublie ce que la session sait (tests, changement de document).
   function reset() {
@@ -356,6 +359,6 @@ const VersionsStore = (function () {
   return {
     TABLE_NAME, TABLE_COLUMNS, FORMAT, KEEP_AFTER_MS, KEEP_EVERY_MS, MAX_AUTO_PER_MODEL, MAX_TOTAL_CHARS, CLEANUP_EVERY_ROWS,
     stable, keyOf, snapshotOf, pack, unpack, authorLabel, parseAuthor, emailOf, toMs,
-    usable, suspend, prepare, forget, readAll, planCleanup, open, removeRows, loadWindow, reset,
+    usable, suspend, prepare, forget, readAll, planCleanup, open, removeRows, loadWindow, loadCompare, reset,
   };
 })();

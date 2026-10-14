@@ -11,7 +11,10 @@
 //      fenêtre ; Échap la ferme et rend le focus au bouton Enregistrer ;
 //   4) « Restaurer cette version » : la question entre dans la fenêtre du panneau, au premier plan ; « Annuler » n'écrit rien ; « Restaurer » ferme tout, l'éditeur et le modèle reprennent la version
 //      choisie, le coin d'état le dit, et la version remplacée est dans la liste, à sa date (« Avant une restauration ») ;
-//   5) l'anglais : la ligne du menu, le titre, les lignes et les boutons ; un modèle jamais enregistré n'ouvre pas la fenêtre.
+//   5) l'anglais : la ligne du menu, le titre, les lignes et les boutons ; un modèle jamais enregistré n'ouvre pas la fenêtre ;
+//   6) « Comparer » : sur un long texte, un vrai clic allume la comparaison (bouton enfoncé, nombre de différences et légende, la première différence amenée dans l'aperçu qui défile seul, la fenêtre
+//      qui garde son cadre, son titre et ses boutons), contrastes d'au moins 4,5:1 du vert, du rouge barré et de la légende, Tab puis Espace et Entrée au clavier, la molette, une version sans
+//      différence, « Version actuelle » où le bouton se grise, « Restaurer cette version » qui reprend l'état gardé ; en anglais aussi.
 // Lancé par run-headless.mjs (groupe Node "versionsMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-versions-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -266,12 +269,13 @@ for (const theme of ['light', 'dark']) {
   await clickMenuRow(page, '#v2-btn-history', 900);
   check(`${T} : un vrai clic sur la ligne ouvre la fenêtre, et le menu s’est refermé sous la souris partie`, (await winOpen(page)), { open: await winOpen(page) });
   let look = await winLook(page);
-  check(`${T} : la fenêtre tient dans 700x400 : cadre, titre « Historique des versions : Contrat de vente » et deux boutons entiers et au premier plan`,
+  check(`${T} : la fenêtre tient dans 700x400 : cadre, titre « Historique des versions : Contrat de vente » et trois boutons entiers et au premier plan`,
     inViewport(look, look.box) && inViewport(look, look.title) && inViewport(look, look.actions) && look.titleOnTop && look.titleText === 'Historique des versions : Contrat de vente'
-      && look.buttons.length === 2 && look.buttons.every(b => b.onTop && b.t >= look.box.t && b.b <= look.box.b), look);
+      && look.buttons.length === 3 && look.buttons.every(b => b.onTop && b.t >= look.box.t && b.b <= look.box.b), look);
   check(`${T} : ni le cadre ni la page ne défilent (le défilement est dans la liste et dans l’aperçu)`, look.boxOver <= 1 && look.bodyScroll <= 0 && look.pageScroll === 0, look);
-  check(`${T} : sept lignes (la version actuelle et six versions), « Version actuelle » choisie, « Restaurer cette version » grisé, « Fermer » actif`, look.rows === 7 && (await checkedIndex(page)) === 0
-    && (await rowTexts(page))[0].startsWith('Version actuelle') && look.buttons[0].text === 'Fermer' && !look.buttons[0].disabled && look.buttons[1].text === 'Restaurer cette version' && look.buttons[1].disabled, { rows: look.rows, buttons: look.buttons });
+  check(`${T} : sept lignes (la version actuelle et six versions), « Version actuelle » choisie, « Comparer » et « Restaurer cette version » grisés, « Fermer » actif`, look.rows === 7 && (await checkedIndex(page)) === 0
+    && (await rowTexts(page))[0].startsWith('Version actuelle') && look.buttons[0].text === 'Comparer' && look.buttons[0].disabled && look.buttons[1].text === 'Fermer' && !look.buttons[1].disabled
+    && look.buttons[2].text === 'Restaurer cette version' && look.buttons[2].disabled, { rows: look.rows, buttons: look.buttons });
   check(`${T} : la liste est plus haute que sa colonne : elle défile seule (${look.hostOver} px de plus)`, look.hostOver > 20, look);
   await page.screenshot({ path: SHOTS + `/fenetre-${theme}.png` });
 
@@ -369,7 +373,7 @@ for (const theme of ['light', 'dark']) {
   await page.waitForTimeout(300);
   check(`${T} : Échap ferme la fenêtre`, !(await winOpen(page)));
   await clickMenuRow(page, '#v2-btn-history', 900);
-  await realClick(page, '#pp-versions-modal .pp-modal-actions button:not(.var-modal-primary)', 300);
+  await realClick(page, '#pp-versions-modal .pp-modal-actions button:not(.var-modal-primary):not([class*="pp-versions-"])', 300);
   check(`${T} : un vrai clic sur « Fermer » la ferme`, !(await winOpen(page)));
   await away(page);
 
@@ -394,6 +398,152 @@ for (const theme of ['light', 'dark']) {
   await page.context().close();
 }
 
+// --- « Comparer » -------------------------------------------------------------------------------------------------------------------------------------------------------
+// Un long contrat (60 articles) : une version diffère de l'état actuel par un mot à l'article 45 et un article de plus à la fin (2 différences), l'autre en rien.
+const COMPARE_SEED = `
+  const longHtml = Array.from({ length: 60 }, (_, i) => '<p>Article ' + (i + 1) + ' : le vendeur et l’acheteur conviennent de ce qui suit.</p>').join('');
+  add(4, 'Contrat long', longHtml, false);
+  stub.state.nextRowId.Publipostage_Modeles = 5;
+`;
+async function seedCompareVersions(page) {
+  await page.evaluate(async () => {
+    const id = Templates.getCurrentId();
+    const token = await Templates.ensureToken(id);
+    await GristAPI.ensureTable(VersionsStore.TABLE_NAME, VersionsStore.TABLE_COLUMNS);
+    const now = Date.now();
+    const article = (i, who) => '<p>Article ' + i + ' : le ' + who + ' et l’acheteur conviennent de ce qui suit.</p>';
+    const doc = (changed, extra) => Array.from({ length: 60 }, (_, i) => article(i + 1, changed && i === 44 ? 'bailleur' : 'vendeur')).join('') + (extra || '');
+    const one = async (minutesAgo, author, html) => grist.docApi.applyUserActions([['AddRecord', VersionsStore.TABLE_NAME, null, {
+      Jeton: token, Date: Math.floor((now - minutesAgo * 60000) / 1000), Auteur: author, Nom: '', Genre: '',
+      Donnees: await VersionsStore.pack(VersionsStore.stable({ v: 1, typeModele: 'document', contenu: html, nomFichierPDF: '', headerFooter: null, margins: null })),
+    }]]);
+    await one(300, 'Dan Roux <dan@exemple.fr>', doc(false));
+    await one(60, 'Claire Martin <claire@exemple.fr>', doc(true, '<p>Article 61 : clause ajoutée à la fin.</p>'));
+  });
+}
+// La comparaison telle que la fenêtre la montre.
+const compareLook = (page) => page.evaluate(() => {
+  const ov = document.getElementById('pp-versions-modal');
+  const btn = ov.querySelector('.pp-versions-compare');
+  const note = ov.querySelector('.pp-versions-note');
+  const paper = ov.querySelector('.pp-versions-paper');
+  const pr = paper.getBoundingClientRect();
+  const mark = ov.querySelector('.pp-versions-tiptap ins.pp-versions-added, .pp-versions-tiptap del.pp-versions-removed');
+  const mr = mark ? mark.getBoundingClientRect() : null;
+  const status = ov.querySelector('.pp-versions-status');
+  return {
+    text: btn.textContent, pressed: btn.getAttribute('aria-pressed'), disabled: btn.disabled, noteHidden: note.hidden, noteText: note.hidden ? '' : note.querySelector('.pp-versions-note-text').textContent,
+    keys: Array.from(note.querySelectorAll('.pp-versions-key')).filter(k => !k.hidden).map(k => k.textContent),
+    added: Array.from(ov.querySelectorAll('.pp-versions-tiptap ins.pp-versions-added')).map(n => n.textContent),
+    removed: Array.from(ov.querySelectorAll('.pp-versions-tiptap del.pp-versions-removed')).map(n => n.textContent),
+    paperTop: Math.round(paper.scrollTop), paperOver: Math.round(paper.scrollHeight - paper.clientHeight),
+    markVisible: !!mr && mr.top >= pr.top - 1 && mr.bottom <= pr.bottom + 1, status: status.hidden ? '' : status.textContent,
+  };
+});
+async function openCompareWindow(page) {
+  await page.evaluate(() => { const s = document.getElementById('template-select'); s.value = '4'; s.dispatchEvent(new Event('change', { bubbles: true })); });
+  await page.waitForTimeout(800);
+  await seedCompareVersions(page);
+  await clickMenuRow(page, '#v2-btn-history', 900);
+}
+
+for (const theme of ['light', 'dark']) {
+  const T = theme === 'light' ? 'clair' : 'sombre';
+  console.log(`\n== Comparer, thème ${T} ==`);
+  const page = await openPage(COMPARE_SEED);
+  await page.evaluate((t) => Settings.setTheme(t), theme);
+  await page.waitForTimeout(200);
+  await openCompareWindow(page);
+  let look = await winLook(page);
+  let cmp = await compareLook(page);
+  check(`${T} : sur « Version actuelle », trois boutons entiers et au premier plan, « Comparer » (le premier, à gauche) grisé et éteint, aucune note`,
+    look.buttons.length === 3 && look.buttons.every(b => b.onTop) && look.buttons[0].text === 'Comparer' && look.buttons[0].disabled && look.buttons[0].l < look.buttons[1].l && cmp.pressed === 'false' && cmp.noteHidden, { buttons: look.buttons, cmp });
+
+  // une version choisie : « Comparer » se dégrise, rien n'est marqué tant qu'il n'est pas allumé
+  await clickRowOf(page, 1);
+  cmp = await compareLook(page);
+  check(`${T} : une version choisie dégrise « Comparer », éteint, sans note ni marque`, !cmp.disabled && cmp.pressed === 'false' && cmp.noteHidden && cmp.added.length === 0 && cmp.removed.length === 0, cmp);
+
+  // un vrai clic allume la comparaison
+  await realClick(page, '#pp-versions-modal .pp-versions-compare', 800);
+  cmp = await compareLook(page);
+  check(`${T} : un vrai clic sur « Comparer » l'enfonce et dit « 2 différences avec la version actuelle » avec la légende des deux couleurs`,
+    cmp.pressed === 'true' && cmp.noteText === '2 différences avec la version actuelle' && cmp.keys.join('|') === 'Seulement dans cette version|Seulement dans la version actuelle', cmp);
+  check(`${T} : le mot remplacé (« vendeur » barré, « bailleur » en vert) et l'article ajouté à la fin sont marqués, rien d'autre`,
+    cmp.removed.join('|') === 'vendeur' && cmp.added.join('|') === 'bailleur|Article 61 : clause ajoutée à la fin.', cmp);
+  check(`${T} : la première différence (article 45) est amenée dans l'aperçu : il a défilé de ${cmp.paperTop} px et la marque est entièrement visible`, cmp.paperTop > 300 && cmp.markVisible, cmp);
+  look = await winLook(page);
+  check(`${T} : la fenêtre garde son cadre, son titre et ses boutons dans 700x400, sans défilement de la page ni du cadre`,
+    inViewport(look, look.box) && inViewport(look, look.title) && inViewport(look, look.actions) && look.titleOnTop && look.buttons.every(b => b.onTop && b.t >= look.box.t && b.b <= look.box.b) && look.boxOver <= 1 && look.bodyScroll <= 0 && look.pageScroll === 0, look);
+  await page.screenshot({ path: SHOTS + `/comparer-${theme}.png` });
+  const cAdded = await contrastOf(page, '#pp-versions-modal .pp-versions-tiptap ins.pp-versions-added');
+  const cRemoved = await contrastOf(page, '#pp-versions-modal .pp-versions-tiptap del.pp-versions-removed');
+  const cKeyAdded = await contrastOf(page, '#pp-versions-modal .pp-versions-note ins.pp-versions-key');
+  const cKeyRemoved = await contrastOf(page, '#pp-versions-modal .pp-versions-note del.pp-versions-key');
+  const cNote = await contrastOf(page, '#pp-versions-modal .pp-versions-note-text');
+  const cButton = await contrastOf(page, '#pp-versions-modal .pp-versions-compare');
+  check(`${T} : contraste d'au moins 4,5:1 : vert (${cAdded}), rouge barré (${cRemoved}), légende (${cKeyAdded} et ${cKeyRemoved}), nombre de différences (${cNote}), bouton enfoncé (${cButton})`,
+    [cAdded, cRemoved, cKeyAdded, cKeyRemoved, cNote, cButton].every(c => c !== null && c >= 4.5), { cAdded, cRemoved, cKeyAdded, cKeyRemoved, cNote, cButton });
+  const decoration = await page.evaluate(() => {
+    const a = getComputedStyle(document.querySelector('#pp-versions-modal .pp-versions-tiptap ins.pp-versions-added')), r = getComputedStyle(document.querySelector('#pp-versions-modal .pp-versions-tiptap del.pp-versions-removed'));
+    return { addedLine: a.borderBottomWidth, removedLine: r.textDecorationLine };
+  });
+  check(`${T} : le vert a un trait dessous et le rouge est barré (la couleur n'est pas seule à parler)`, parseFloat(decoration.addedLine) >= 1 && /line-through/.test(decoration.removedLine), decoration);
+
+  // la molette sur l'aperçu le fait défiler seul
+  const comparePaper = await rectOf(page, '#pp-versions-modal .pp-versions-paper');
+  await page.mouse.move(comparePaper.x, comparePaper.y, { steps: 3 });
+  await page.mouse.wheel(0, 250);
+  await page.waitForTimeout(250);
+  const afterPaperWheel = await winLook(page);
+  check(`${T} : la molette sur l'aperçu comparé le fait défiler (${afterPaperWheel.paperTop - cmp.paperTop} px de plus) sans toucher la page`, afterPaperWheel.paperTop > cmp.paperTop && afterPaperWheel.pageScroll === 0 && afterPaperWheel.boxOver <= 1, { afterPaperWheel, before: cmp.paperTop });
+
+  // le clavier : Espace éteint, Entrée rallume, l'anneau de focus se voit
+  await page.focus('#pp-versions-modal .pp-versions-compare');
+  await page.keyboard.press('Space');
+  await page.waitForTimeout(500);
+  cmp = await compareLook(page);
+  const ring = await page.evaluate(() => { const a = document.activeElement, cs = getComputedStyle(a); return { cls: a.className, visible: a.matches(':focus-visible'), outline: cs.outlineWidth }; });
+  check(`${T} : Espace sur « Comparer » l'éteint : plus de marque ni de note, l'aperçu revient en haut, le focus et son anneau restent sur le bouton`,
+    cmp.pressed === 'false' && cmp.noteHidden && cmp.added.length === 0 && cmp.removed.length === 0 && cmp.paperTop === 0 && /pp-versions-compare/.test(ring.cls) && ring.visible && ring.outline !== '0px', { cmp, ring });
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(600);
+  cmp = await compareLook(page);
+  check(`${T} : Entrée le rallume, et la première différence est de nouveau amenée à l'écran`, cmp.pressed === 'true' && cmp.noteText === '2 différences avec la version actuelle' && cmp.paperTop > 300 && cmp.markVisible, cmp);
+  const order = [];
+  await page.focus('#pp-versions-modal .pp-versions-row[aria-checked="true"]');
+  for (let i = 0; i < 4; i++) {
+    await page.keyboard.press('Tab');
+    order.push(await page.evaluate(() => { const a = document.activeElement; return a.closest && a.closest('.pp-modal-actions') ? a.textContent : (a.className || a.tagName); }));
+  }
+  // L'aperçu qui défile prend un arrêt de Tab (le navigateur le fait pour tout cadre qui défile, pour qu'on le fasse défiler aux flèches) : entre la liste et les boutons, jamais ailleurs.
+  const buttonsInOrder = order.filter(o => o === 'Comparer' || o === 'Fermer' || o === 'Restaurer cette version');
+  check(`${T} : Tab depuis la liste atteint « Comparer », « Fermer » puis « Restaurer cette version » (l'aperçu qui défile peut prendre un arrêt avant)`,
+    buttonsInOrder.join('|') === 'Comparer|Fermer|Restaurer cette version' && order.indexOf('Comparer') <= 1 && order.every(o => o !== 'BODY' && o !== 'HTML'), order);
+
+  // la version sans différence
+  await clickRowOf(page, 2);
+  cmp = await compareLook(page);
+  check(`${T} : une version identique : « Aucune différence de texte avec la version actuelle. », ni marque ni légende, le bouton reste enfoncé`, cmp.pressed === 'true' && cmp.noteText === 'Aucune différence de texte avec la version actuelle.' && cmp.keys.length === 0 && cmp.added.length === 0 && cmp.removed.length === 0, cmp);
+  // « Version actuelle » : grisé, enfoncé, rien d'écrit sur la feuille
+  await clickRowOf(page, 0);
+  cmp = await compareLook(page);
+  check(`${T} : sur « Version actuelle » le bouton se grise (toujours enfoncé), sans note ni marque`, cmp.disabled && cmp.pressed === 'true' && cmp.noteHidden && cmp.added.length === 0 && cmp.removed.length === 0, cmp);
+
+  // Restaurer depuis la comparaison : l'état gardé, jamais la feuille marquée
+  await clickRowOf(page, 1);
+  await page.waitForTimeout(400);
+  cmp = await compareLook(page);
+  check(`${T} : la version de nouveau choisie reprend la comparaison (le mode est resté)`, cmp.pressed === 'true' && cmp.noteText === '2 différences avec la version actuelle', cmp);
+  await realClick(page, '#pp-versions-modal .pp-modal-actions .var-modal-primary', 500);
+  await realClick(page, '#pp-dialog-modal .pp-modal-actions .var-modal-primary', 1200);
+  const content = await modelContent(page, 'Contrat long');
+  const editorNow = await page.evaluate(() => document.querySelector('.ProseMirror').innerHTML);
+  check(`${T} : « Restaurer » depuis la comparaison remet l'état gardé : le modèle et l'éditeur ont « bailleur » et l'article 61, aucune marque de comparaison`,
+    !(await winOpen(page)) && content.includes('bailleur') && content.includes('Article 61') && !/pp-versions|<ins|<del/.test(content) && /bailleur/.test(editorNow) && !/pp-versions|<ins|<del/.test(editorNow), { open: await winOpen(page), content: content.slice(0, 120) });
+  await page.context().close();
+}
+
 // L'anglais : une page chargée en anglais (changer de langue recharge la page, les libellés de la fenêtre s'écrivent à sa construction) ; la ligne du menu, le titre, les lignes et les boutons.
 {
   console.log('\n== Page en anglais ==');
@@ -406,8 +556,8 @@ for (const theme of ['light', 'dark']) {
     rows: Array.from(document.querySelectorAll('#pp-versions-modal .pp-versions-row')).map(r => r.textContent), buttons: Array.from(document.querySelectorAll('#pp-versions-modal .pp-modal-actions button')).map(b => b.textContent),
     label: document.querySelector('#pp-versions-modal .pp-versions-label').textContent, lang: document.documentElement.lang }));
   const look = await winLook(page);
-  check('anglais : ligne « Version history… », titre « Version history: Contrat de vente », « Current version », « Before a restore », boutons « Close » et « Restore this version », fenêtre dans 700x400',
-    en.lang === 'en' && en.row === 'Version history…' && en.title === 'Version history: Contrat de vente' && /^Current version/.test(en.rows[0]) && /Before a restore/.test(en.rows[1]) && en.buttons[0] === 'Close' && en.buttons[1] === 'Restore this version' && en.label === 'Versions'
+  check('anglais : ligne « Version history… », titre « Version history: Contrat de vente », « Current version », « Before a restore », boutons « Compare », « Close » et « Restore this version », fenêtre dans 700x400',
+    en.lang === 'en' && en.row === 'Version history…' && en.title === 'Version history: Contrat de vente' && /^Current version/.test(en.rows[0]) && /Before a restore/.test(en.rows[1]) && en.buttons[0] === 'Compare' && en.buttons[1] === 'Close' && en.buttons[2] === 'Restore this version' && en.label === 'Versions'
       && inViewport(look, look.box) && inViewport(look, look.actions) && look.boxOver <= 1, { en, look });
   await page.screenshot({ path: SHOTS + '/fenetre-en.png' });
   // La question de restauration (écrite au moment du clic, dans la langue de la page).
@@ -420,6 +570,24 @@ for (const theme of ['light', 'dark']) {
   await realClick(page, '#pp-dialog-modal .pp-modal-actions button:not(.var-modal-primary)', 400);
   await page.keyboard.press('Escape');
   await page.waitForTimeout(300);
+  await page.context().close();
+}
+
+{
+  console.log('\n== Comparer, page en anglais ==');
+  const page = await openPage(COMPARE_SEED, 'en');
+  await openCompareWindow(page);
+  await clickRowOf(page, 1);
+  await realClick(page, '#pp-versions-modal .pp-versions-compare', 800);
+  const cmp = await compareLook(page);
+  const look = await winLook(page);
+  check('anglais : « Compare » enfoncé, « 2 differences from the current version », légende « Only in this version » / « Only in the current version », première différence à l\'écran, fenêtre dans 700x400',
+    cmp.text === 'Compare' && cmp.pressed === 'true' && cmp.noteText === '2 differences from the current version' && cmp.keys.join('|') === 'Only in this version|Only in the current version' && cmp.paperTop > 300 && cmp.markVisible
+      && inViewport(look, look.box) && inViewport(look, look.actions) && look.boxOver <= 1 && look.buttons.every(b => b.onTop), { cmp, look });
+  await page.screenshot({ path: SHOTS + '/comparer-en.png' });
+  await clickRowOf(page, 2);
+  const same = await compareLook(page);
+  check('anglais : une version identique dit « No text difference from the current version. »', same.noteText === 'No text difference from the current version.' && same.keys.length === 0, same);
   await page.context().close();
 }
 

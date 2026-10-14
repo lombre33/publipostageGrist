@@ -584,6 +584,18 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   `Publipostage_Versions` (une table interne, jamais offerte comme table du document) n'est créée qu'à la première version gardée et n'est lue qu'à l'ouverture de la fenêtre, elle-même
   chargée au premier clic : un document ne charge rien de plus au démarrage. Plafonds : 30 versions par modèle, 3 millions de signes. Les libellés fixes de la fenêtre s'écrivent une fois, à sa
   construction, dans la langue de la page (changer de langue recharge la page, et rien d'autre).
+- Comparer une version à la version actuelle (lot 3 de l'historique, carte « Lancer » du 14/10) : dans la fenêtre « Historique des versions », « Comparer » est le premier bouton à gauche, avant
+  « Fermer » (un bouton à deux états, `aria-pressed`, dont l'info-bulle dit ce qu'il montre). Il est éteint à chaque ouverture de la fenêtre, reste allumé ou éteint d'une version à l'autre, et se grise
+  sur « Version actuelle » (rien à comparer avec elle-même), sur une version illisible et tant qu'une version se lit ou se restaure, sans jamais disparaître. Allumé, l'aperçu garde le document de la
+  version choisie et marque ce qui diffère : en vert souligné ce qu'elle a en plus, en rouge barré ce que la version actuelle a en plus (ce qu'une restauration retirerait) ; le souligné et le barré parlent
+  aussi, la couleur n'est jamais seule (vert 5,7:1 et rouge 5,6:1 sur la feuille blanche, dans les deux thèmes). Une note au-dessus de l'aperçu compte les différences (« N différences avec la version
+  actuelle »), dit « Aucune différence de texte… » ou « Même texte… seule la mise en forme diffère dans N blocs » quand c'est le cas, et la légende nomme les deux couleurs (« Seulement dans cette
+  version », « Seulement dans la version actuelle ») ; la première différence est amenée dans l'aperçu, qui défile seul. Une pastille ou une image qui change est marquée en entier ; l'objet et les
+  destinataires d'un e-mail se comparent mot à mot sur leur ligne, les lignes d'un macro-modèle par genre et modèles. Ce qui n'est pas marqué est dit, jamais caché : la mise en forme seule est comptée
+  dans la note sans être marquée, et l'en-tête, le pied de page, les marges, les graphiques et les sauts de page ne sont pas comparés. Une version d'un autre type de modèle dit qu'il n'y a rien à
+  comparer ; une comparaison qui échoue montre la version telle quelle, le dit et éteint le bouton. « Restaurer cette version » reprend toujours l'état gardé, jamais la feuille marquée ; la comparaison se
+  fait avec l'état ENREGISTRÉ, pas avec ce qui est tapé. Le module (`js/versions-compare.js`) n'est chargé qu'au premier clic sur « Comparer » ; les libellés s'écrivent à la construction, dans la langue
+  de la page.
 - Variables : cliquer une variable ouvre sa barre flottante (Condition, Autres attributs, Boucle, Liste, réglages nombre/date, et « Colonne… » sur une variable cassée seulement) ;
   en édition, une bulle à condition est en pointillés ; les fenêtres correspondantes reposent sur la base commune. Dans
   une règle, « = » sur une colonne à choix multiples ou une liste de références veut dire « contient ce choix » (arbitré

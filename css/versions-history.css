@@ -31,3 +31,15 @@
 .pp-versions-sheet { box-sizing: border-box; width: 100%; max-width: 793.71px; margin: 0 auto; background: #fff; box-shadow: 0 0 0 1px var(--border-strong), 0 2px 8px rgba(20, 28, 46, .1); }
 .pp-versions-sheet[hidden] { display: none; }
 .pp-versions-sheet .tiptap { box-sizing: border-box; min-height: 0; padding: 14px 18px; background: transparent; }
+
+/* « Comparer » : le bouton allumé prend le fond de la sélection des autres boutons à bascule ; au-dessus de la feuille, le nombre de différences et la légende des deux couleurs. En vert ce que
+   cette version a en plus, en rouge barré ce que la version actuelle a en plus : les teintes du suivi des modifications (css/track-changes.css), écrites en dur et les mêmes en clair et en sombre
+   (5,7:1 et 5,6:1 sur leur fond), car la feuille reste blanche ; le trait sous le vert et le barré du rouge disent la même chose que la couleur. */
+.var-modal-actions button.pp-versions-compare[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }
+.pp-versions-note { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0 0 6px; font-size: 12px; line-height: 1.45; color: var(--text); }
+.pp-versions-note[hidden] { display: none; }
+.pp-versions-note-text { font-weight: 600; overflow-wrap: anywhere; }
+ins.pp-versions-added { text-decoration: none; color: #146c48; background: #e5f6ee; border-bottom: 1px solid #8fd3aa; }
+del.pp-versions-removed { text-decoration: line-through; color: #b42318; background: #fbe9e9; }
+.pp-versions-key { padding: 0 6px; border-radius: 3px; font-weight: 600; }
+.pp-versions-key[hidden] { display: none; }
