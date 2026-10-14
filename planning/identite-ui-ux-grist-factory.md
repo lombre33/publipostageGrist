@@ -1225,6 +1225,11 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   lignes suivantes revenaient sous le marqueur). Le marqueur est le premier mot du bloc, avec un retrait de première ligne négatif de sa largeur (`leadingIndent` de pdfmake, largeur mesurée dans la
   police du document) ; un marqueur plus large que le retrait de la liste (« 100. ») sort à gauche du retrait, comme dans l'éditeur. Gardé par `pdfEditorGap` (deux cas : texte de chaque ligne et mots
   qui ouvrent les lignes, au premier niveau puis dans les trois colonnes d'un tableau).
+- Alignement d'un point de liste dans le PDF (carte d'Antoine du 14/10, « Dans le PDF, respecter l'alignement des points de liste (centré, à droite, justifié) ? » : « Respecter l'alignement ») : un point de
+  liste centré, à droite ou justifié dans l'éditeur (le bouton d'alignement pose `text-align` sur le paragraphe de l'élément, jamais sur le `<li>`) l'est de même dans le PDF, au premier niveau, dans une sous-liste,
+  dans une case de tableau et dans une liste de tâches : le texte s'aligne dans la boîte de l'élément, ses lignes se coupent aux mêmes mots, et la puce ou le numéro reste au bord GAUCHE de la boîte, hors d'elle,
+  où qu'aille le texte (comme `::marker` dans Chromium : la puce d'un point centré ne suit pas son texte). La dernière ligne d'un texte centré ou à droite finit une espace (moins d'1 mm) avant celle de l'éditeur,
+  comme tout paragraphe du PDF. Gardé par `pdfEditorGap` (trois cas : lignes de chaque point, cases de tableau, point coupé par une page).
 - Onglet « Raccourcis » et abréviations « § » (demande d'Antoine du 01/10, « un caractère qui flag et qui étend une valeur saisie » ; sa réponse à la carte : « Tout, par personne ») : un
   septième onglet des Réglages, « Raccourcis », après « Déclencheur ». Les sept onglets (huit depuis « Vue », voir plus bas) tiennent sur une seule ligne dans les 480 px de la fenêtre (`.settings-tabs` sans interstice,
   onglets à 7 px et 2 px de marge intérieure), jamais sur deux ; aucun `display` n'est posé sur `.settings-panel` (il battrait l'attribut `hidden` des panneaux masqués). La section «

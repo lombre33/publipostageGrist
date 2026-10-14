@@ -240,8 +240,15 @@ const PdfExport = (function () {
   }
 
   // TipTap (extension-text-align) pose toujours un style inline `text-align`, jamais une classe ql-align-* ni un attribut align="" : pas de repli à
-  // gérer ici.
+  // gérer ici. Il le pose sur le paragraphe, jamais sur le <li> : l'alignement d'un point de liste est celui de son premier paragraphe (ou de celui de sa
+  // zone de texte, dans une liste de tâches).
   function alignment(node) {
+    const own = textAlignOf(node);
+    if (own || node.tagName !== 'LI') return own;
+    const paragraph = node.querySelector(':scope > p, :scope > div > p');
+    return paragraph ? textAlignOf(paragraph) : undefined;
+  }
+  function textAlignOf(node) {
     const style = (node.getAttribute && node.getAttribute('style')) || '';
     const match = style.match(/text-align\s*:\s*(left|center|right|justify)/i);
     return match ? match[1].toLowerCase() : undefined;
@@ -544,6 +551,16 @@ const PdfExport = (function () {
   function listMarkerRun(marker) {
     return { text: marker, fontSize: DEFAULT_FONT_SIZE, leadingIndent: -markerWidthPt(marker) };
   }
+  // Un point de liste centré, à droite ou justifié : le texte s'aligne dans la boîte du point, mais la puce ou le numéro reste au bord gauche de cette boîte, hors
+  // d'elle, comme `::marker` (mesuré dans Chromium : la puce d'un point centré ne suit pas son texte). Deux colonnes : le marqueur, large comme lui, puis le texte avec
+  // son alignement et la marge de droite qui compense `white-space: break-spaces`. La rangée recule de la largeur du marqueur (listItemFields, cellTextObject) pour que
+  // le texte reste au retrait. Le retrait suspendu (listMarkerRun) ne convient pas ici : pdfmake aligne la première ligne avec son marqueur, qui suivrait le texte.
+  function listMarkerColumns(marker, runs, align) {
+    return [
+      { width: markerWidthPt(marker), text: marker, fontSize: DEFAULT_FONT_SIZE, noWrap: true, lineHeight: LINE_HEIGHT_RATIO },
+      { width: '*', text: runs, alignment: align, lineHeight: LINE_HEIGHT_RATIO, margin: [0, 0, spaceWidthPt(), 0] },
+    ];
+  }
 
   // Case à cocher dessinée en vectoriel via `canvas` plutôt qu'en glyphe de police (☑/☐ hors WinAnsi, même contrainte que les puces rondes/carrées) :
   // un rectangle + une coche ne dépendent d'aucune police embarquée.
@@ -782,6 +799,7 @@ const PdfExport = (function () {
     const indentPt = isLi ? measureIndentPt(node, 'box') : (isQuote ? measureIndentPt(node, 'text') : 0);
     const wrapMarginPt = !runs.length ? 0 : (isLi || hasRuleChild(node) ? spaceWidthPt() : cellWrapMarginPt(node, cellWidthPt - indentPt));
     const quoteGapPt = isQuote && !rulePart ? 4 : 0;
+    if (marker && runs.length && align && align !== 'left') return { columns: listMarkerColumns(marker, runs, align), margin: [indentPt - markerWidthPt(marker), 0, 0, 0] };
     const obj = { text, margin: [indentPt, quoteGapPt, wrapMarginPt, quoteGapPt] };
     if (isQuote) obj.italics = true;
     if (align) obj.alignment = align;
@@ -2666,6 +2684,15 @@ const PdfExport = (function () {
       delete block.text;
       delete block.alignment; // porté sur la colonne de texte, cf. taskListColumns
       block.columns = taskListColumns(node, taskListRuns(node, runs), align);
+    } else if (runs.length && align && align !== 'left') {
+      // La rangée de colonnes est dans une autre, sans marge : à un saut de page au milieu de la rangée, pdfmake 0.2.7 remet la largeur disponible du conteneur de
+      // premier niveau à celle de la page (initializePage), puis le retrait que le bloc rend en sortant s'y ajoute : tout ce qui suit sortirait à droite de la
+      // page de cette marge. La marge de la rangée intérieure est restituée par son propre instantané, que la remise à zéro ne touche pas.
+      const marker = listMarkerFor(node);
+      delete block.text;
+      delete block.alignment; // porté sur la colonne de texte, cf. listMarkerColumns
+      block.columns = [{ width: '*', columns: listMarkerColumns(marker, runs, align), margin: [block.margin[0] - markerWidthPt(marker), 0, 0, 0] }];
+      block.margin = [0, 0, 0, 0];
     } else {
       block.text = runs.length ? [listMarkerRun(listMarkerFor(node))].concat(runs) : ' ';
     }

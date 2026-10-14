@@ -617,6 +617,13 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Un point de liste centré, à droite ou justifié l'est aussi dans le PDF** : le bouton d'alignement de l'éditeur centre, aligne
+  à droite ou justifie le texte d'un point de liste, mais le PDF l'écrivait toujours à gauche. Il suit maintenant l'éditeur, au
+  premier niveau, dans une sous-liste, dans une case de tableau et dans une liste de tâches : le texte s'aligne dans la boîte
+  du point, ses lignes se coupent aux mêmes mots, et la puce ou le numéro reste au bord gauche de la boîte, comme dans l'éditeur
+  (elle ne suit pas le texte centré). Un point coupé par un saut de page garde ses lignes et ne décale rien derrière lui.
+  La dernière ligne d'un texte centré ou à droite finit une espace (moins d'1 mm) avant celle de l'éditeur, comme dans un
+  paragraphe ordinaire ; la case d'une liste de tâches reste plus étroite dans le PDF que dans l'éditeur (3 mm), comme avant.
 - **Le texte d'une liste commence au même endroit dans le PDF que dans l'éditeur** : dans le PDF, la puce ou le numéro était
   écrit en tête du texte, au bord de l'élément : la première ligne d'un point de liste partait 2 mm (une puce) à 4 mm (« 1. »)
   plus à droite que dans l'éditeur et avait d'autant moins de place, et les lignes suivantes revenaient sous la puce. La puce
@@ -1503,6 +1510,13 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Fixed
 
+- **A centered, right-aligned or justified list item is now aligned the same way in the PDF**: the editor's alignment button
+  centers, right-aligns or justifies a list item's text, but the PDF always wrote it on the left. It now follows the editor, at
+  the first level, in a sub-list, in a table cell and in a task list: the text is aligned inside the item's box, its lines
+  break at the same words, and the bullet or number stays at the box's left edge, as in the editor (it does not follow the
+  centered text). An item cut by a page break keeps its lines and shifts nothing behind it. The last line of a centered or
+  right-aligned text ends one space (under 1 mm) before the editor's, as in an ordinary paragraph; a task list's box stays
+  narrower in the PDF than in the editor (3 mm), as before.
 - **A list's text starts in the same place in the PDF as in the editor**: in the PDF, the bullet or number was written at the
   head of the text, at the item's edge: the first line of a list item started 2 mm (a bullet) to 4 mm ("1.") further right
   than in the editor and had that much less room, and the following lines went back under the bullet. The bullet or number

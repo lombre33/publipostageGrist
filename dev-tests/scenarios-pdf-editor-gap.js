@@ -26,6 +26,12 @@
 //
 // 7. Une liste dans une citation (14/10, « polish » avant la 1.0). Le PDF la lisait d'un seul tenant avec la citation : éléments collés sur une ligne, sans puce ni numéro, trait d'un élément jamais dessiné. Un cas compare les distances, le retrait, l'italique et le trait au PDF.
 //
+// 8. Le texte d'une liste commence où l'éditeur le fait commencer (14/10, carte « Aligner le texte des listes du PDF sur celui de l'éditeur ? », réponse « Aligner le PDF »). Le PDF écrivait la puce dans le texte, au bord de l'élément : la première ligne partait 6 à 11 pt trop à droite et les suivantes
+//    revenaient sous la puce. Deux cas comparent où l'éditeur et le PDF commencent le texte de chaque ligne, au premier niveau et dans les trois colonnes d'un tableau.
+//
+// 9. L'alignement d'un point de liste (14/10, carte « Dans le PDF, respecter l'alignement des points de liste (centré, à droite, justifié) ? », réponse « Respecter l'alignement »). L'éditeur pose `text-align` sur le paragraphe de l'élément ; le PDF ne lisait que le <li> et écrivait ces éléments à gauche.
+//    Trois cas comparent, ligne à ligne, le mot qui ouvre la ligne et ses bords gauche et droit : au premier niveau (puces, numéros à deux chiffres, deux niveaux, liste de tâches), dans les cases d'un tableau, et quand un point est coupé par une page.
+//
 // Comment la suite juge. Les capacités de page sont MESURÉES (jamais écrites en dur : elles dépendent des polices de la machine) sur le PDF, la référence de ce qui tient dans une page ; chaque moteur rend ensuite le
 // même document (éditeur en Aperçu A4, Lecture, impression navigateur, PDF relu par pdf.js) : mêmes pages, mêmes mots sur chacune.
 (function () {
@@ -1016,6 +1022,195 @@
             summary[name] = { editeur: wanted, pdf: got.at };
             judgeListStarts(name, wanted, got, firsts, problems);
           }
+        }
+      } finally { restorePage(); }
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems: compact(problems), summary }) };
+    },
+  });
+
+  // --- 9. L'alignement d'un point de liste (14/10, carte « Dans le PDF, respecter l'alignement des points de liste (centré, à droite, justifié) ? », réponse « Respecter l'alignement ») ---
+  // Le bouton d'alignement de l'éditeur pose `text-align` sur le PARAGRAPHE de l'élément de liste, jamais sur le <li> : le PDF ne lisait que le <li> et écrivait donc à gauche ce que l'éditeur centre, aligne à droite ou justifie. Il lit maintenant le premier paragraphe de l'élément
+  // (celui de sa zone de texte, dans une liste de tâches). La puce ou le numéro reste au bord gauche de la boîte de l'élément, hors d'elle, comme `::marker` dans Chromium (la puce d'un point centré ne suit pas son texte) : deux colonnes, le marqueur large comme lui, puis le texte aligné ;
+  // la rangée recule de la largeur du marqueur pour que le texte reste au retrait de la liste. Trois cas comparent, ligne à ligne, le mot qui ouvre la ligne et ses bords gauche et droit (pt depuis « Titre ») dans le PDF et dans l'éditeur : au premier niveau et en sous-liste, dans les trois
+  // colonnes d'un tableau, puis quand un point est coupé par une page. Ce dernier garde un piège de pdfmake 0.2.7 : une rangée de colonnes coupée par un saut de page remet la largeur du conteneur de premier niveau à celle de la page, puis la marge de la rangée s'y ajoute en sortant, et tout
+  // ce qui suit sort à droite de la page de cette marge (les points d'après et le paragraphe justifié qui les suit sont jugés eux aussi).
+  const TEXT_ALIGNS = ['center', 'right', 'justify'];
+  // L'alignement du sous-niveau : un autre que celui du parent, pour que les deux niveaux se jugent.
+  const OTHER_ALIGN = { left: 'left', center: 'right', right: 'justify', justify: 'center' };
+  const alignedItem = (align, word, long) => '<li><p style="text-align: ' + align + '">' + word + (long ? ' ' + LIST_LONG : '') + '</p></li>';
+  const taskItem = (align, word) => '<li data-checked="false" data-type="taskItem"><label><input type="checkbox"><span></span></label><div><p style="text-align: ' + align + '">' + word + ' ' + LIST_LONG + '</p></div></li>';
+  // [nom, liste pour un alignement, mots qui ouvrent ses éléments, liste de tâches]
+  const TEXT_ALIGN_FIXTURES = [
+    ['puces', a => '<ul>' + alignedItem(a, 'Alpha', true) + alignedItem(a, 'Beta') + '</ul>', ['Alpha', 'Beta']],
+    // « 10. » est plus large que le retrait de la liste : le numéro sort à gauche du retrait, la rangée recule d'une marge négative.
+    ['numérotée à deux chiffres', a => '<ol start="9">' + alignedItem(a, 'Alpha', true) + alignedItem(a, 'Beta', true) + '</ol>', ['Alpha', 'Beta']],
+    ['deux niveaux', a => '<ul><li><p style="text-align: ' + a + '">Alpha ' + LIST_LONG + '</p><ul>' + alignedItem(OTHER_ALIGN[a], 'Beta', true) + '</ul></li></ul>', ['Alpha', 'Beta']],
+    ['liste de tâches', a => '<ul data-type="taskList">' + taskItem(a, 'Alpha') + '</ul>', ['Alpha'], true],
+  ];
+  // Les lignes de chaque paragraphe de `firsts` (repéré par son premier mot) dans l'éditeur : le mot qui ouvre chacune, ses bords gauche et droit (pt depuis le premier caractère de « Titre »).
+  async function textLinesInEditor(h, html, firsts) {
+    Editor.setHeaderFooterData(NO_HF);
+    Editor.setHTML(html);
+    await h.sleep(250);
+    Editor.refreshPaginationPreview();
+    await h.sleep(60);
+    const root = document.querySelector('#editor-container .tiptap');
+    const zoom = EditorCore.layoutZoom(root);
+    const range = document.createRange();
+    const title = Array.from(root.querySelectorAll('p')).find(p => p.textContent.trim() === 'Titre');
+    range.setStart(title.firstChild, 0); range.setEnd(title.firstChild, 1);
+    const titleLeft = range.getBoundingClientRect().left;
+    const pt = px => round1((px - titleLeft) / zoom * 0.75);
+    const found = {};
+    firsts.forEach(word => {
+      const paragraph = Array.from(root.querySelectorAll('p')).find(p => p.textContent.trim().split(/\s+/)[0] === word);
+      if (!paragraph) { found[word] = null; return; }
+      const lines = [];
+      let lastTop = null;
+      const walker = document.createTreeWalker(paragraph, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const re = /\S+/g; let match;
+        while ((match = re.exec(node.textContent))) {
+          range.setStart(node, match.index); range.setEnd(node, match.index + match[0].length);
+          const rect = range.getBoundingClientRect();
+          if (lastTop === null || Math.abs(rect.top - lastTop) > 3) lines.push({ opener: match[0], left: pt(rect.left), right: pt(rect.right) });
+          else lines[lines.length - 1].right = pt(rect.right);
+          lastTop = rect.top;
+        }
+      }
+      found[word] = lines;
+    });
+    return found;
+  }
+  // Les mêmes lignes dans le PDF, page après page (les pages se lisent à la suite), avec le marqueur qui précède le premier mot et les pages que couvre le paragraphe.
+  async function textLinesInPdf(h, html, firsts) {
+    const view = await pdfView(h, html);
+    const PAGE = 100000;
+    const items = [];
+    view.truth.pages.forEach((page, p) => page.textItems.forEach(item => items.push({ str: item.str.trim(), x: item.x, y: item.y + p * PAGE, width: item.width, page: p })));
+    const title = items.find(item => item.str === 'Titre');
+    const end = items.find(item => item.str === 'Fin');
+    const ats = firsts.map(word => items.find(item => item.str === word));
+    const found = { lost: [], at: {} };
+    if (!title || !end || ats.some(at => !at)) { found.lost = ['Titre', 'Fin'].concat(firsts).filter(word => !items.some(item => item.str === word)); return found; }
+    firsts.forEach((word, k) => {
+      const at = ats[k];
+      const bottom = k + 1 < firsts.length ? ats[k + 1].y : end.y;
+      const groups = [];
+      items.filter(item => item.y >= at.y - 1 && item.y < bottom - 1).sort((a, b) => a.y - b.y || a.x - b.x).forEach(item => {
+        const group = groups[groups.length - 1];
+        if (group && Math.abs(item.y - group.y) < 2) group.items.push(item); else groups.push({ y: item.y, items: [item] });
+      });
+      const marker = items.filter(item => item !== at && Math.abs(item.y - at.y) < 1 && item.x < at.x).sort((a, b) => b.x - a.x)[0] || null;
+      const lines = groups.map(group => {
+        const row = group.items.filter(item => item !== marker).sort((a, b) => a.x - b.x);
+        return { opener: row[0].str, left: round1(row[0].x - title.x), right: round1(Math.max(...row.map(item => item.x + item.width)) - title.x) };
+      });
+      found.at[word] = { lines, marker: marker ? round1(marker.x - title.x) : null, pages: Array.from(new Set(groups.map(group => group.items[0].page))) };
+    });
+    return found;
+  }
+  const linesText = lines => lines.map(line => line.opener + '[' + line.left + '..' + line.right + ']').join(' ');
+  // Juge un document : le PDF contre l'éditeur, paragraphe par paragraphe, ligne par ligne. `ref` : le même document aligné à gauche dans le PDF, où la puce ne bouge pas ; `options.plain` : les paragraphes sans puce ; `options.taskBox` : une liste de tâches, dont la case
+  // est plus étroite dans le PDF (13 pt) que dans l'éditeur (21 pt) depuis toujours : seuls les bords droits se comparent, à 5,5 pt près (9,8 pt pour la dernière ligne, que la justification laisse à gauche : les 8 pt de la case s'y ajoutent).
+  function judgeTextLines(name, wanted, got, ref, firsts, problems, options = {}) {
+    if (got.lost.length) { problems.push(name + ' : le PDF n\'écrit pas ' + JSON.stringify(got.lost) + ' d\'un seul tenant'); return; }
+    firsts.forEach(word => {
+      const want = wanted[word]; const have = got.at[word];
+      if (!want) { problems.push(name + ' : « ' + word + ' » est introuvable dans l\'éditeur'); return; }
+      const openers = lines => JSON.stringify(lines.map(line => line.opener));
+      if (openers(want) !== openers(have.lines)) { problems.push(name + ' : « ' + word + ' » : le PDF ouvre ses lignes par ' + openers(have.lines) + ', l\'éditeur par ' + openers(want)); return; }
+      want.forEach((line, i) => {
+        const mine = have.lines[i];
+        // La dernière ligne d'un texte centré ou à droite : le PDF garde à droite la largeur d'une espace (cf. spaceWidthPt) que la dernière ligne de l'éditeur, sans espace de fin, n'a pas : 1,3 pt (centré), 2,6 pt (à droite).
+        const last = i === want.length - 1;
+        const tolerance = options.taskBox ? (last ? 9.8 : 5.5) : (last ? 3.3 : 1.5);
+        if (!options.taskBox && Math.abs(mine.left - line.left) > tolerance) problems.push(name + ' : la ligne ' + (i + 1) + ' de « ' + word + ' » (' + line.opener + ') commence à ' + mine.left + ' pt de « Titre » dans le PDF, à ' + line.left + ' pt dans l\'éditeur');
+        if (Math.abs(mine.right - line.right) > tolerance) problems.push(name + ' : la ligne ' + (i + 1) + ' de « ' + word + ' » (' + line.opener + ') finit à ' + mine.right + ' pt de « Titre » dans le PDF, à ' + line.right + ' pt dans l\'éditeur');
+      });
+      if (options.taskBox || (options.plain || []).includes(word)) return;
+      // Le marqueur reste au bord gauche de la boîte, où qu'aille le texte : là où il est quand le point est à gauche.
+      const base = ref && ref.at[word];
+      if (have.marker === null) problems.push(name + ' : « ' + word + ' » n\'a ni puce ni numéro avant lui sur sa ligne');
+      else if (base && base.marker !== null && Math.abs(have.marker - base.marker) > 0.6) problems.push(name + ' : le marqueur de « ' + word + ' » est à ' + have.marker + ' pt de « Titre », à ' + base.marker + ' pt quand le point est à gauche');
+    });
+  }
+  const summaryOf = (wanted, got, firsts) => {
+    const out = {};
+    firsts.forEach(word => { out[word] = { editeur: wanted[word] ? linesText(wanted[word]) : null, pdf: got.at[word] ? linesText(got.at[word].lines) + (got.at[word].marker === null ? '' : ' (marqueur ' + got.at[word].marker + ')') : null }; });
+    return out;
+  };
+
+  cases.push({
+    id: 'pdf_gap_aligned_list_text_lines_match_the_editor',
+    description: 'Une liste à puces, une numérotée à deux chiffres, une à deux niveaux et une liste de tâches dont le texte est centré, à droite ou justifié (le bouton d\'alignement le pose sur le paragraphe de l\'élément) : le PDF ouvre chaque ligne par le même mot que l\'éditeur et la commence et la finit au même endroit (1,5 pt près), la puce ou le numéro restant au bord gauche de la boîte',
+    run: async h => {
+      const problems = []; const summary = {};
+      try {
+        await applyPage(h);
+        for (const [label, build, firsts, taskBox] of TEXT_ALIGN_FIXTURES) {
+          const ref = await textLinesInPdf(h, '<p>Titre</p>' + build('left') + '<p>Fin</p>', firsts);
+          for (const align of TEXT_ALIGNS) {
+            const name = label + ', ' + align;
+            const html = '<p>Titre</p>' + build(align) + '<p>Fin</p>';
+            const wanted = await textLinesInEditor(h, html, firsts);
+            const got = await textLinesInPdf(h, html, firsts);
+            if (!got.lost.length) summary[name] = summaryOf(wanted, got, firsts);
+            judgeTextLines(name, wanted, got, ref, firsts, problems, { taskBox });
+          }
+        }
+      } finally { restorePage(); }
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems: compact(problems), summary }) };
+    },
+  });
+
+  cases.push({
+    id: 'pdf_gap_aligned_list_text_in_a_table_cell_matches_the_editor',
+    description: 'Une liste à puces (dans la première, la deuxième ou la troisième colonne d\'un tableau) et une liste numérotée à deux chiffres (deuxième colonne) dont le texte est centré, à droite ou justifié : le PDF ouvre chaque ligne par le même mot que l\'éditeur et la commence et la finit au même endroit depuis « Titre » (1,5 pt près), la puce ou le numéro restant au bord gauche',
+    run: async h => {
+      const problems = []; const summary = {};
+      try {
+        await applyPage(h);
+        const [bullets, numbered] = [TEXT_ALIGN_FIXTURES[0], TEXT_ALIGN_FIXTURES[1]];
+        for (const [label, build, firsts, columns] of [bullets.concat([[0, 1, 2]]), numbered.concat([[1]])]) {
+          for (const column of columns) {
+            const ref = await textLinesInPdf(h, threeColumns(column, build('left')) + '<p>Fin</p>', firsts);
+            for (const align of TEXT_ALIGNS) {
+              const name = label + ', colonne ' + (column + 1) + ', ' + align;
+              const html = threeColumns(column, build(align)) + '<p>Fin</p>';
+              const wanted = await textLinesInEditor(h, html, firsts);
+              const got = await textLinesInPdf(h, html, firsts);
+              if (!got.lost.length) summary[name] = summaryOf(wanted, got, firsts);
+              judgeTextLines(name, wanted, got, ref, firsts, problems);
+            }
+          }
+        }
+      } finally { restorePage(); }
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems: compact(problems), summary }) };
+    },
+  });
+
+  // Un point centré que la fin de la page coupe, un point d'après avec sa sous-liste à droite, un paragraphe justifié, un autre à droite : tout se juge, le décor étant choisi pour que le saut de page tombe dans un point (au 43e et au 45e paragraphe de remplissage il tombe dans « Suite », puis dans « Coupe »).
+  const BREAK_FILLERS = [43, 45];
+  cases.push({
+    id: 'pdf_gap_aligned_list_item_cut_by_a_page_keeps_its_lines_and_leaves_what_follows_alone',
+    description: 'Un point de liste centré que la fin de la page coupe, suivi d\'un point centré avec une sous-liste à droite, d\'un paragraphe justifié et d\'un paragraphe à droite : aucune ligne ne change de mot d\'ouverture ni de place par rapport à l\'éditeur, y compris derrière la coupe (pdfmake 0.2.7 élargit sinon ce qui suit la rangée coupée de la marge de la rangée)',
+    run: async h => {
+      const problems = []; const summary = {};
+      try {
+        await applyPage(h);
+        const firsts = ['Coupe', 'Suite', 'Sous', 'Apres', 'Dernier'];
+        for (const fillers of BREAK_FILLERS) {
+          const name = fillers + ' paragraphes de remplissage';
+          const html = '<p>Titre</p>' + rows(fillers, 'Remplissage')
+            + '<ul>' + alignedItem('center', 'Coupe ' + LIST_LONG + ' ' + LIST_LONG, true)
+            + '<li><p style="text-align: center">Suite ' + LIST_LONG + '</p><ul>' + alignedItem('right', 'Sous', true) + '</ul></li></ul>'
+            + '<p style="text-align: justify">Apres ' + LIST_LONG + ' ' + LIST_LONG + '</p><p style="text-align: right">Dernier ' + LIST_LONG + '</p><p>Fin</p>';
+          const wanted = await textLinesInEditor(h, html, firsts);
+          const got = await textLinesInPdf(h, html, firsts);
+          if (!got.lost.length) summary[name] = summaryOf(wanted, got, firsts);
+          judgeTextLines(name, wanted, got, null, firsts, problems, { plain: ['Apres', 'Dernier'] });
+          if (!got.lost.length && !['Coupe', 'Suite', 'Sous'].some(word => got.at[word].pages.length > 1)) problems.push(name + ' : aucun point de liste n\'est coupé par la page : le décor ne vérifie plus ce qu\'il doit');
         }
       } finally { restorePage(); }
       return { pass: problems.length === 0, notes: JSON.stringify({ problems: compact(problems), summary }) };
