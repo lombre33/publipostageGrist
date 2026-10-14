@@ -11,6 +11,8 @@
 //    filet, saut de page, alignement, notes de bas de page, colonnes ; en-têtes et pieds de page entre commentaires ;
 //  - les images : une adresse web reste une adresse, une pièce jointe de Grist part dans le fichier, la largeur est gardée, une image illisible est dite ; aucune image ne se charge pendant l'export ;
 //  - un vrai document passé par l'éditeur (liste à cases, lien, tableau, encadré, image : le HTML que l'éditeur écrit, pas celui qu'on lui donne).
+//  - le modèle (type « Markdown (modèle) », demande du 12/10 : « laisser le choix à l'export ») : ses bulles écrites {{Table.Colonne}}, ses autres éléments de fusion en HTML en ligne avec leurs attributs, ses blocs
+//    conditionnels, ses images de fusion et ses zones, sans ligne ni lecture de Grist ; les « {{ » du texte sont protégés dans les deux exports pour que l'import ne les prenne pas pour des variables.
 // Le sens inverse (un .md devient un document) est la suite « markdownImport » (dev-tests/scenarios-markdown-import.js), dont l'aller-retour relit ce que celle-ci vérifie.
 (function () {
   const cases = [];
@@ -303,6 +305,181 @@
       let quietText = '';
       try { quietText = (await h.exportMarkdown('<p><img class="editor-image" src="data:image/png;base64,iVBORw0KGgo=" alt="D"></p><p><img class="editor-image" src="' + location.origin + '/img/none.png" alt="O"></p>')).text; } finally { quiet.restore(); }
       if (quiet.asked.length || !/^!\[D\]\(data:image\/png;base64,iVBORw0KGgo=\)\n\n!\[O\]\(/.test(quietText)) bad.push('sans image externe : ' + quiet.asked.length + ' fenêtre, texte ' + JSON.stringify(quietText.slice(0, 120)));
+      return result(bad);
+    });
+
+  // --- Le modèle (« Markdown (modèle) ») ---------------------------------------------------------------------------------------------------------------
+  // Demande d'Antoine du 12/10 : « laisser le choix à l'export, dans le menu des types d'export » d'écrire les variables dans le Markdown pour qu'un modèle revienne intact. Ce
+  // type écrit le modèle tel que l'éditeur le garde, jamais une ligne : une bulle sans réglage est {{Table.Colonne}} ; tout autre élément de fusion (bulle à réglages, calcul, puce,
+  // numéro de page, case, valeur et bloc conditionnels, image liée à une colonne, code QR, graphique) est du HTML en ligne avec ses attributs, que l'import relit.
+  const COND = '{&quot;mode&quot;:&quot;all&quot;,&quot;rules&quot;:[{&quot;column&quot;:&quot;Nom&quot;,&quot;operator&quot;:&quot;equals&quot;,&quot;value&quot;:&quot;a&quot;}]}';
+  // La bulle comme l'éditeur l'écrit (libellé « #Table.Colonne » compris) et sa clé, telle qu'elle est écrite dans le Markdown.
+  const bubble = (column, extra) => `<span class="var-badge" contenteditable="false" data-table="${TABLE}" data-column="${column}" data-key="${TABLE}.${column}"${extra || ''}>#${TABLE}.${column}</span>`;
+  const token = column => `{{${TABLE}.${column}}}`;
+  const bubbleHtml = (column, extra) => `<span class="var-badge" data-table="${TABLE}" data-column="${column}" data-key="${TABLE}.${column}"${extra || ''}>#${TABLE}.${column}</span>`;
+  // Le modèle lui-même : ni ligne ni lecture de Grist ; la fenêtre des images d'un autre site, si elle s'ouvrait, serait refusée et dite.
+  async function model(h, html, headerFooterData, name) {
+    const dialogs = h.stubDialogs({ confirm: false });
+    try {
+      const { blob, filename } = await MarkdownExport.getMarkdownBlobForTemplate(html, headerFooterData || null, name || '');
+      return { text: await blob.text(), type: blob.type, filename, asked: dialogs.asked.length };
+    } finally { dialogs.restore(); }
+  }
+  async function expectModel(h, rows, extra) {
+    const bad = [];
+    for (const [label, html, want] of rows) {
+      let made;
+      try { made = await model(h, html, extra && extra.headerFooter); } catch (e) { bad.push(label + ' : exception ' + e); continue; }
+      if (made.asked) bad.push(label + ' : une fenêtre a été posée');
+      if (made.text !== want) bad.push(label + ' : ' + JSON.stringify(made.text) + ' au lieu de ' + JSON.stringify(want));
+    }
+    return result(bad);
+  }
+
+  add('markdown_model_file_is_the_template_itself_named_after_it',
+    'Le type « Markdown (modèle) » écrit le modèle ouvert, jamais une ligne : un texte Markdown (text/markdown, UTF-8) au nom du modèle (« publipostage » sans nom) avec « .md » au téléchargement, un seul saut de ligne final, rien pour un modèle vide ; ni la ligne, ni la Lecture, ni Grist ne sont lus, et la fenêtre des images d\'un autre site ne s\'ouvre pas (le modèle ne télécharge rien) ; une image à adresse web garde son adresse, une pièce jointe de Grist part dans le fichier comme pour une ligne',
+    async (h) => {
+      await seed(h);
+      const bad = [];
+      const named = await model(h, '<p>Bonjour</p><p>Au revoir</p>', null, 'Courrier client');
+      if (named.type !== 'text/markdown;charset=utf-8') bad.push('type=' + named.type);
+      if (named.filename !== 'Courrier client') bad.push('nom=' + named.filename);
+      if (named.text !== doc('Bonjour', '', 'Au revoir')) bad.push('texte=' + JSON.stringify(named.text));
+      if ((await model(h, '', null, 'Vide')).text !== '') bad.push('modèle vide non vide');
+      if ((await model(h, '<p></p><p>  </p>')).text !== '') bad.push('paragraphes vides non vides');
+      // Rien ne se lit : ni la ligne (résolution du document, Lecture), ni les tables de Grist ; la pièce jointe, elle, est lue (l'image fait partie du modèle).
+      const touched = [];
+      const spies = [[ExportCommon, 'resolveRecord'], [ReaderMode, 'preview'], [grist.docApi, 'fetchTable']].map(([object, name]) => {
+        const real = object[name];
+        object[name] = function () { touched.push(name); return real.apply(this, arguments); };
+        return () => { object[name] = real; };
+      });
+      const realFetchBlob = ImageIo.fetchBlob;
+      const blobs = [];
+      ImageIo.fetchBlob = async src => { blobs.push(src); return png(); };
+      const dialogs = h.stubDialogs({ confirm: false });
+      let text = '';
+      try {
+        text = (await MarkdownExport.getMarkdownBlobForTemplate('<p><img class="editor-image" src="https://photos.exemple.fr/a.png" alt="A"></p>'
+          + '<p><img class="editor-image" src="/api/docs/abc/attachments/12/download" alt="Pièce" data-attachment-id="12" style="width: 320px"></p>', null, 'x').then(made => made.blob.text()));
+      } finally { spies.forEach(restore => restore()); ImageIo.fetchBlob = realFetchBlob; dialogs.restore(); }
+      if (touched.length) bad.push('lectures faites : ' + touched.join());
+      if (dialogs.asked.length) bad.push('fenêtre posée : ' + JSON.stringify(dialogs.asked.map(a => a.message)));
+      const lines = text.split('\n').filter(Boolean);
+      if (lines.length !== 2 || lines[0] !== '![A](https://photos.exemple.fr/a.png)' || !/^!\[Pièce\]\(data:image\/png;base64,[A-Za-z0-9+/=]+\)$/.test(lines[1])) bad.push('images=' + JSON.stringify(text.slice(0, 160)));
+      if (blobs.length !== 1 || !/attachments\/12\/download/.test(blobs[0])) bad.push('lectures d\'image=' + JSON.stringify(blobs));
+      // Ce que fait le bouton : télécharge « nom.md », « publipostage.md » sans nom.
+      const downloads = [];
+      const realDownload = ExportCommon.downloadBlob;
+      ExportCommon.downloadBlob = (blob, name) => downloads.push({ blob, name });
+      try {
+        await MarkdownExport.exportTemplate('<p>Bonjour</p>', null, 'Courrier client');
+        await MarkdownExport.exportTemplate('<p>Bonjour</p>', null, '');
+      } finally { ExportCommon.downloadBlob = realDownload; }
+      if (downloads.map(d => d.name).join('|') !== 'Courrier client.md|publipostage.md' || (await downloads[0].blob.text()) !== 'Bonjour\n') bad.push('téléchargements=' + JSON.stringify(downloads.map(d => d.name)));
+      return result(bad);
+    });
+
+  add('markdown_model_a_bubble_without_settings_is_written_between_double_braces',
+    'Une bulle sans réglage s\'écrit {{Table.Colonne}} là où elle est : dans un paragraphe, un titre, un gras ou un italique (ou la balise HTML quand une lettre touche la marque), une liste, une case de tableau, le texte d\'un lien, une citation et un encadré ; une bulle seule dans son dernier paragraphe est gardée',
+    async (h) => expectModel(h, [
+      ['titre, texte, gras', `<h2>Dossier ${bubble('Nom')}</h2><p>Bonjour <strong>${bubble('Nom')}</strong>, de ${bubble('Ville')}.</p>`,
+        doc(`## Dossier ${token('Nom')}`, '', `Bonjour **${token('Nom')}**, de ${token('Ville')}.`)],
+      ['marque contre une lettre', `<p>a<strong>${bubble('Nom')}</strong>c et <em>${bubble('Nom')}</em>x</p>`, doc(`a<strong>${token('Nom')}</strong>c et <em>${token('Nom')}</em>x`)],
+      ['liste, tableau et lien', `<ul><li><p>${bubble('Nom')} (${bubble('Ville')})</p></li></ul>`
+        + `<table><tbody><tr><th><p>Client</p></th></tr><tr><td><p>${bubble('Nom')}</p></td></tr></tbody></table><p><a href="https://exemple.fr/doc">${bubble('Nom')}</a></p>`,
+        doc(`- ${token('Nom')} (${token('Ville')})`, '', '| Client |', '| --- |', `| ${token('Nom')} |`, '', `[${token('Nom')}](https://exemple.fr/doc)`)],
+      ['citation et encadré', `<blockquote><p>Cher ${bubble('Nom')}</p></blockquote><div class="callout" data-color="amber" data-icon="warning"><p>Pour ${bubble('Nom')}</p></div>`,
+        doc(`> Cher ${token('Nom')}`, '', '> [!WARNING]', `> Pour ${token('Nom')}`)],
+    ]));
+
+  add('markdown_model_a_bubble_with_settings_is_written_in_html_with_its_attributes',
+    'Une bulle qui a un réglage (format, texte avant ou après, valeur de remplacement, boucle...) s\'écrit en HTML en ligne avec sa classe et ses data-* : les guillemets, les chevrons et les « & » des valeurs sont protégés, un saut de ligne devient &#10; et une barre verticale dans une case de tableau &#124; (elle couperait la case)',
+    async (h) => expectModel(h, [
+      ['format, avant et après', `<p>${bubble('Ville', ' data-format="{&quot;type&quot;:&quot;date&quot;,&quot;preset&quot;:&quot;long&quot;}"')} et ${bubble('Nom', ' data-before="Dr " data-after="&#10;fin"')}</p>`,
+        doc(`${bubbleHtml('Ville', ' data-format="{&quot;type&quot;:&quot;date&quot;,&quot;preset&quot;:&quot;long&quot;}"')} et ${bubbleHtml('Nom', ' data-before="Dr " data-after="&#10;fin"')}`)],
+      ['caractères spéciaux', `<p>${bubble('Nom', ' data-before="&lt;b&gt; &amp; &quot;x&quot;"')}</p>`, doc(bubbleHtml('Nom', ' data-before="&lt;b&gt; &amp; &quot;x&quot;"'))],
+      ['barre verticale dans une case', `<table><tbody><tr><th><p>A</p></th></tr><tr><td><p>${bubble('Ville', ' data-before="a|b"')}</p></td></tr></tbody></table>`,
+        doc('| A |', '| --- |', `| ${bubbleHtml('Ville', ' data-before="a&#124;b"')} |`)],
+    ]));
+
+  add('markdown_model_calc_chip_page_number_and_checkbox_are_written_in_html',
+    'Un calcul, une puce (date du jour...), une pastille « @ », un numéro de page et une case conditionnelle s\'écrivent en HTML en ligne avec leurs attributs (formule et format, genre de puce, table, ligne et colonne de la fiche citée, format du numéro, condition et style de la case) et leur libellé ; les chevrons et les « & » d\'une formule sont protégés',
+    async (h) => expectModel(h, [
+      ['quatre éléments', `<p>= <span class="calc-badge" contenteditable="false" data-formula="{${TABLE}.Total} * 2" data-format="{&quot;type&quot;:&quot;number&quot;}">= 2 × Total</span> `
+        + `<span class="smart-chip" contenteditable="false" data-chip-kind="date">Date du jour</span> <span class="page-number-badge" contenteditable="false" data-format="page-n">Page #</span> `
+        + `<span class="conditional-checkbox" contenteditable="false" data-checkbox-style="boxes" data-condition="${COND}">☐</span></p>`,
+        doc(`= <span class="calc-badge" data-formula="{${TABLE}.Total} * 2" data-format="{&quot;type&quot;:&quot;number&quot;}">= 2 × Total</span> <span class="smart-chip" data-chip-kind="date">Date du jour</span> `
+          + `<span class="page-number-badge" data-format="page-n">Page #</span> <span class="conditional-checkbox" data-checkbox-style="boxes" data-condition="${COND}">☐</span>`)],
+      ['formule à chevrons', `<p><span class="calc-badge" contenteditable="false" data-formula="{${TABLE}.Total} &gt; 10 &amp;&amp; 1 &lt; 2">x</span></p>`,
+        doc(`<span class="calc-badge" data-formula="{${TABLE}.Total} &gt; 10 &amp;&amp; 1 &lt; 2">x</span>`)],
+      // La fiche que la pastille cite (table, ligne, colonne) est le réglage du modèle ; le nom d'aujourd'hui ne s'écrit que dans les exports d'une ligne.
+      ['pastille « @ »', `<p>Rédigé par <span class="mention-chip" contenteditable="false" data-mention-table="${TABLE}" data-mention-row="12" data-mention-column="Nom">Marie Martin</span>.</p>`,
+        doc(`Rédigé par <span class="mention-chip" data-mention-table="${TABLE}" data-mention-row="12" data-mention-column="Nom">Marie Martin</span>.`)],
+    ]));
+
+  add('markdown_model_conditional_values_and_blocks_keep_their_condition_and_content',
+    'Une valeur conditionnelle garde sa balise avec sa condition, sa valeur de remplacement et les espaces du bord de son texte ; un bloc conditionnel garde sa balise <div> avec une ligne vide avant et après son contenu écrit en Markdown (sans elles le Markdown ne serait plus lu), imbriqué, aligné ou vide (la condition est un réglage du modèle : le bloc vide reste)',
+    async (h) => expectModel(h, [
+      ['valeur conditionnelle', `<p>Valeur : <span class="conditional-value" data-condition="${COND}" data-otherwise="non"> urgent </span>ok</p>`,
+        doc(`Valeur : <span class="conditional-value" data-condition="${COND}" data-otherwise="non"> urgent </span>ok`)],
+      ['valeur avec du gras et une bulle', `<p>x<span class="conditional-value" data-condition="${COND}">Cher <strong>${bubble('Nom')}</strong></span> y</p>`,
+        doc(`x<span class="conditional-value" data-condition="${COND}">Cher **${token('Nom')}**</span> y`)],
+      ['bloc conditionnel', `<div class="conditional-text" data-condition="${COND}"><p>Bloc <em>conditionnel</em> pour ${bubble('Nom')}</p><ul><li><p>point ${bubble('Ville')}</p></li></ul></div>`,
+        doc(`<div class="conditional-text" data-condition="${COND}">`, '', `Bloc *conditionnel* pour ${token('Nom')}`, '', `- point ${token('Ville')}`, '', '</div>')],
+      ['blocs imbriqués, aligné et vide', `<div class="conditional-text" data-condition="${COND}"><p>Un</p><div class="conditional-text" data-condition="${COND}"><p style="text-align: center">Deux</p></div></div>`
+        + `<div class="conditional-text" data-condition="${COND}"></div><p>Fin</p>`,
+        doc(`<div class="conditional-text" data-condition="${COND}">`, '', 'Un', '', `<div class="conditional-text" data-condition="${COND}">`, '', '<div align="center">', '', 'Deux', '', '</div>', '', '</div>', '', '</div>', '',
+          `<div class="conditional-text" data-condition="${COND}">`, '</div>', '', 'Fin')],
+    ]));
+
+  add('markdown_model_merge_images_are_written_in_html_and_other_images_as_before',
+    'Une image liée à une colonne, un code QR dont le texte cite une colonne et un graphique de la page n\'ont pas d\'adresse : ils s\'écrivent en <img> avec leurs data-* (calque et habillage par défaut sous-entendus), même derrière le texte ; une image à adresse web s\'écrit comme pour une ligne, un fond derrière le texte n\'est pas écrit',
+    async (h) => expectModel(h, [
+      ['cinq images', `<p><img class="editor-image" src="" alt="Image" style="width: 200px" data-layer="normal" data-wrap="inline" data-var-table="${TABLE}" data-var-column="Nom" data-var-key="${TABLE}.Nom"></p>`
+        + `<p><img class="editor-image" alt="QR" data-qr-text="${TABLE}.Nom" data-layer="behind"></p>`
+        + '<p><img class="editor-image" alt="Graphique" data-chart-section="s1" data-chart-scope="all" data-chart-name="c"></p>'
+        + '<p><img class="editor-image" src="https://photos.exemple.fr/a.png" alt="A"></p>'
+        + '<p><img class="editor-image" src="https://exemple.fr/fond.png" alt="Fond" data-layer="behind"></p>',
+        doc(`<img class="editor-image" alt="Image" style="width: 200px" data-var-table="${TABLE}" data-var-column="Nom" data-var-key="${TABLE}.Nom">`, '',
+          `<img class="editor-image" alt="QR" data-qr-text="${TABLE}.Nom" data-layer="behind">`, '',
+          '<img class="editor-image" alt="Graphique" data-chart-section="s1" data-chart-scope="all" data-chart-name="c">', '', '![A](https://photos.exemple.fr/a.png)')],
+    ]));
+
+  add('markdown_model_header_and_footer_are_written_between_comments_with_their_elements',
+    'Les zones d\'en-tête et de pied du modèle s\'écrivent entre leurs commentaires comme pour une ligne, avec leurs bulles ({{...}}) et leur numéro de page (HTML en ligne, centré dans un <div align>) ; un en-tête désactivé n\'est pas écrit',
+    async (h) => {
+      const zones = enabled => ({ enabled, differentFirstPage: false, header: { default: `<p>En-tête ${bubble('Nom')}</p>`, first: '' },
+        footer: { default: '<p style="text-align: center"><span class="page-number-badge" contenteditable="false" data-format="n-slash-total">#/#</span></p>', first: '' } });
+      const withZones = await expectModel(h, [['avec zones', '<p>Corps</p>',
+        doc('<!-- publipostage:header -->', '', `En-tête ${token('Nom')}`, '', '<!-- /publipostage:header -->', '', 'Corps', '', '<!-- publipostage:footer -->', '', '<div align="center">', '',
+          '<span class="page-number-badge" data-format="n-slash-total">#/#</span>', '', '</div>', '', '<!-- /publipostage:footer -->')]], { headerFooter: zones(true) });
+      const without = await expectModel(h, [['zones désactivées', '<p>Corps</p>', doc('Corps')]], { headerFooter: zones(false) });
+      return result([withZones, without].filter(r => !r.pass).map(r => r.notes));
+    });
+
+  add('markdown_model_pending_suggestions_are_written_as_accepted',
+    'Les suggestions du suivi des modifications encore en attente dans le modèle sont écrites comme acceptées (le texte supprimé n\'est plus là, le texte ajouté est du texte), comme pour une ligne',
+    async (h) => expectModel(h, [
+      ['suggestions', `<p>Garde <del data-id="1">retiré </del><ins data-id="2">ajouté </ins>${bubble('Nom')}</p>`, doc(`Garde ajouté ${token('Nom')}`)],
+    ]));
+
+  add('markdown_literal_double_braces_are_protected_so_they_are_never_read_back_as_a_variable',
+    'Un « {{ » du texte (celui d\'un modèle ou d\'une valeur de Grist) s\'écrit \\{{ pour que l\'import ne le prenne pas pour une variable (une accolade seule reste telle quelle, une barre oblique inverse devant est doublée) ; un code en ligne ou un bloc de code ne le protège pas (le Markdown n\'y lit rien) ; dans un tableau écrit en HTML, c\'est une référence de caractère (&#123;{)',
+    async (h) => {
+      const rows = [
+        ['texte du modèle', '<p>{{ texte }} et {{' + TABLE + '.Nom}} en dur, {seul} et \\{{ déjà</p>', doc('\\{{ texte }} et \\{{' + TABLE + '.Nom}} en dur, {seul} et \\\\\\{{ déjà')],
+        ['trois accolades', '<p>{{{x}}}</p>', doc('\\{\\{{x}}}')],
+        ['code', '<pre><code>{{' + TABLE + '.Nom}}</code></pre><p><code>{{x}}</code></p>', doc('```', '{{' + TABLE + '.Nom}}', '```', '', '`{{x}}`')],
+      ];
+      const bad = [];
+      const forModel = await expectModel(h, rows);
+      if (!forModel.pass) bad.push(forModel.notes);
+      // L'export d'une ligne : la valeur d'une cellule qui contient « {{ » est protégée de la même façon.
+      const forRow = await expectAll(h, [['valeur de Grist', '<p>{{a}} et {b}</p>', doc('\\{{a}} et {b}')]]);
+      if (!forRow.pass) bad.push(forRow.notes);
+      const table = (await model(h, '<table><tbody><tr><td><ul><li><p>{{a}}</p></li></ul></td></tr></tbody></table>')).text;
+      if (!table.includes('&#123;{a}}') || table.includes('{{a}}')) bad.push('tableau en HTML=' + JSON.stringify(table));
       return result(bad);
     });
 

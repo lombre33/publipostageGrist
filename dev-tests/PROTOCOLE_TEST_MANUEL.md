@@ -17,7 +17,7 @@ de régression le jour même :
   de cohérence inter-étages (§7).
 
 **Mise à jour 2026-10-12 (menu d'export)** : le bouton « Qualité PDF » s'appelle « Type d'export » et choisit
-PDF, PDF protégé, Word, Excel ou Markdown (la qualité du PDF n'est montrée que pour les deux PDF, et gardée) ; le bouton « Exporter » (Alt+P aussi)
+PDF, PDF protégé, Word, Excel, Markdown ou Markdown (modèle) (la qualité du PDF n'est montrée que pour les deux PDF, et gardée) ; le bouton « Exporter » (Alt+P aussi)
 exporte, dans le type choisi, l'option cochée de son menu. Ce menu, titré « Exporter », ne liste que des options de
 lignes et de classeur (une seule ligne, toutes les lignes en ZIP, en un seul PDF, assemblage avant impression, toutes
 les valeurs de la table dans un seul classeur), avec une petite coche devant l'option cochée ; un clic sur une option
@@ -52,6 +52,16 @@ fichier ; une image dont le chemin est celui d'un fichier d'à côté est rempla
 nom comme un nouveau document. Et le tour complet : exporter un modèle en Markdown (menu « Type d'export »), puis importer le `.md` obtenu : le même document revient,
 en-tête et pied de page compris. Un fichier énorme ou fait pour piéger le lecteur (limite connue, dite dans le README) peut bloquer la page quelques secondes : ne pas
 l'essayer sur un vrai document.
+
+**Mise à jour 2026-10-14 (Markdown (modèle))** : le type « Markdown (modèle) » du menu « Type d'export » (ni pour une grille, ni pour un macro-modèle) écrit le modèle lui-même en
+un seul `.md`, ses variables écrites `{{Table.Colonne}}` ; avec lui, le menu « Exporter » ne montre que « Un seul fichier : le modèle ». Les tests automatiques comparent le fichier
+et l'aller-retour (exporté, importé, exporté de nouveau : le même texte). Ce qui reste à voir à la main, avec un VRAI modèle (un de la galerie, ou un des vôtres) dans le vrai
+document Grist : exporter un modèle qui a des variables dans le texte, un titre et un tableau, une variable à format, une condition, un calcul, une puce de date, une pastille « @ », un numéro
+de page, une valeur et un bloc conditionnels, une image liée à une colonne, un code QR, un en-tête et un pied de page ; ouvrir le `.md` (les `{{Table.Colonne}}` se lisent, le
+reste est du HTML en ligne que GitHub laisse passer) ; l'importer par « Importer un Markdown… » : le nouveau document doit avoir ses variables en bulles, les mêmes réglages
+(format, condition, boucle…) et, sur une ligne, le même aperçu dans la Lecture que le modèle d'origine ; une clé `{{…}}` fautive ou d'une autre table reste du texte et le coin
+d'état la compte. Ne reviennent pas : les marges, le format de page, le filigrane, l'objet et les destinataires d'un e-mail, et la numérotation automatique des titres (elle
+devient du texte).
 
 Dans ces menus, la **ligne choisie** (le type, la qualité du PDF, un niveau de titre) est bleue et en gras ; à vérifier à
 l'œil, en clair puis en sombre : la souris sur cette ligne la laisse bleue et en gras, d'un bleu un peu plus soutenu, bien

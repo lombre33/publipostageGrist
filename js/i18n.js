@@ -185,6 +185,7 @@ const I18n = (function () {
     'exportType.docx': { fr: 'Word (bêta)', en: 'Word (beta)' },
     'exportType.xlsx': { fr: 'Excel', en: 'Excel' },
     'exportType.md': { fr: 'Markdown', en: 'Markdown' },
+    'exportType.mdTemplate': { fr: 'Markdown (modèle)', en: 'Markdown (template)' },
     'toolbar.export': { fr: 'Exporter', en: 'Export' },
     'toolbar.exportLines': { fr: 'Lignes exportées', en: 'Exported rows' },
     'exportLines.one': { fr: 'Une seule ligne', en: 'A single row' },
@@ -218,6 +219,7 @@ const I18n = (function () {
 
     // --- PDF protégé (js/pdf-protection.js, js/pdf-protection-dialog.js) : l'explication des lignes grisées, puis la fenêtre du mot de passe ---
     'exportLines.protectedOff': { fr: 'Pas disponible en PDF protégé : un fichier qui réunit plusieurs documents ne se protège pas.', en: 'Not available for a protected PDF: a file combining several documents cannot be protected.' },
+    'exportLines.mdTemplate': { fr: 'Un seul fichier : le modèle', en: 'One file: the template' },
     'quality.protectedOff': { fr: 'Pas disponible en PDF protégé : l’impression par le navigateur ne chiffre pas le fichier.', en: 'Not available for a protected PDF: browser printing does not encrypt the file.' },
     'pdfProtect.title': { fr: 'PDF protégé', en: 'Protected PDF' },
     'pdfProtect.batch': { fr: '{count} {count|PDF protégé|PDF protégés} pour « {table} », {count|regroupé|regroupés} dans une archive ZIP avec le même mot de passe et les mêmes autorisations.', en: '{count} protected {count|PDF|PDFs} for “{table}”, bundled in a ZIP archive with the same password and the same permissions.' },
@@ -1076,6 +1078,7 @@ const I18n = (function () {
     'status.mdGenerating': { fr: 'Génération du Markdown en cours...', en: 'Generating Markdown...' },
     'status.mdGenerated': { fr: 'Markdown généré.', en: 'Markdown generated.' },
     'status.mdGenerationError': { fr: 'Erreur génération Markdown.', en: 'Markdown generation error.' },
+    'status.mdTemplateGenerated': { fr: 'Modèle exporté en Markdown, variables comprises.', en: 'Template exported to Markdown, variables included.' },
     'status.xlsxGenerating': { fr: 'Génération du fichier Excel en cours...', en: 'Generating the Excel file...' },
     'status.xlsxGenerated': { fr: 'Fichier Excel généré.', en: 'Excel file generated.' },
     'status.xlsxGenerationError': { fr: 'Erreur de génération du fichier Excel.', en: 'Excel file generation error.' },
@@ -1091,6 +1094,8 @@ const I18n = (function () {
     'status.mdImporting': { fr: 'Lecture du fichier Markdown…', en: 'Reading the Markdown file…' },
     'status.mdImported': { fr: 'Markdown importé. Nommez le modèle puis enregistrez-le.', en: 'Markdown imported. Name the template, then save it.' },
     'status.mdImportedImages': { fr: 'Markdown importé ; {n} {n|image locale non reprise|images locales non reprises}. Nommez le modèle puis enregistrez-le.', en: 'Markdown imported; {n} local {n|image|images} not imported. Name the template, then save it.' },
+    'status.mdImportedVariables': { fr: 'Markdown importé ; {n} {n|variable inconnue laissée|variables inconnues laissées} en texte. Nommez le modèle puis enregistrez-le.', en: 'Markdown imported; {n} unknown {n|variable|variables} left as text. Name the template, then save it.' },
+    'status.mdImportedImagesVariables': { fr: 'Markdown importé ; {images} {images|image locale non reprise|images locales non reprises}, {variables} {variables|variable inconnue|variables inconnues}.', en: 'Markdown imported; {images} local {images|image|images} not imported, {variables} unknown {variables|variable|variables}.' },
     'status.mdImportUnreadable': { fr: 'Ce fichier n’est pas un texte Markdown lisible.', en: 'This file is not readable Markdown text.' },
     'status.mdImportEmpty': { fr: 'Ce fichier Markdown est vide : il n’y a rien à importer.', en: 'This Markdown file is empty: there is nothing to import.' },
     'status.mdImportTooBig': { fr: 'Ce fichier est trop gros pour être importé : {size} Mo (au plus {max} Mo).', en: 'This file is too big to import: {size} MB (at most {max} MB).' },

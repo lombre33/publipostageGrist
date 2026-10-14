@@ -17,7 +17,16 @@
 // les numéros de page, les paragraphes vides (le Markdown n'a pas d'espace vertical), la mise en colonnes (les deux colonnes se suivent), les styles de puces et
 // de numérotation (a, b, c...), le justifié, l'interligne, les couleurs de fond des cases. Les variables y sont les valeurs de la ligne, comme dans le PDF.
 // Le sens inverse (un .md devient un document) est js/markdown-import.js : il relit ce que ce fichier écrit (alertes, cases, notes, sommaire, saut de page, <div align>,
-// <img width>, en-têtes et pieds entre commentaires) ; changer l'écriture ici, c'est changer ce que l'import doit reconnaître (dev-tests/scenarios-markdown-import.js).
+// <img width>, en-têtes et pieds entre commentaires, variables) ; changer l'écriture ici, c'est changer ce que l'import doit reconnaître (dev-tests/scenarios-markdown-import.js).
+//
+// Deux fichiers, deux types du menu « Type d'export » : « Markdown » écrit le document d'une ligne, variables remplacées par leurs valeurs ; « Markdown (modèle) » (template : true)
+// écrit le modèle lui-même, tel que l'éditeur le garde, pour qu'il revienne intact par l'import. Les mêmes règles d'écriture, avec en plus l'écriture des éléments de fusion :
+//  - une bulle de variable sans réglage s'écrit {{Table.Colonne}} (sa clé) ; l'import la retrouve quand la clé est une variable du document ;
+//  - tout ce qui porte un réglage ou qui n'a pas d'écriture en Markdown s'écrit en HTML en ligne, avec les attributs que l'éditeur lui donne (data-*) et son libellé comme texte :
+//    bulle réglée (format, condition, boucle, texte autour, sinon), calcul, puce (date, heure...), pastille « @ » (la fiche qu'elle cite, pas son nom d'aujourd'hui), numéro de page, case conditionnelle, valeur conditionnelle (<span>) et bloc
+//    conditionnel (<div>, une ligne vide autour de son contenu pour que le Markdown y soit encore lu), image liée à une colonne, code QR ou graphique de la page.
+// Rien n'est résolu : pas de ligne, pas de lecture de Grist, pas de fenêtre des images d'un autre site (le document n'est pas posé dans la page). Les suggestions du suivi des
+// modifications sont acceptées, comme pour tous les exports.
 const MarkdownExport = (function () {
   // Le repère d'un saut de ligne du paragraphe pendant la composition : remplacé à la fin (paragraphLines) par la barre oblique du Markdown, ou <br> dans une case.
   const BR = '\x01';
@@ -47,6 +56,8 @@ const MarkdownExport = (function () {
       else if (c === '<') out += /[A-Za-z/!?]/.test(next) ? '\\<' : c;
       else if (c === '&') out += /^&#?\w+;/.test(s.slice(i, i + 12)) ? '\\&' : c;
       else if (c === '|') out += ctx.inCell ? '\\|' : c;
+      // « {{ » du texte n'est pas une variable : sa première accolade est protégée, l'import ne lit {{Table.Colonne}} que sans elle.
+      else if (c === '{') out += next === '{' ? '\\{' : c;
       else out += c;
     }
     return out;
@@ -125,6 +136,8 @@ const MarkdownExport = (function () {
     const tag = node.tagName;
     const cl = node.classList;
     if (tag === 'STYLE' || tag === 'SCRIPT' || tag === 'TEMPLATE' || tag === 'INPUT' || tag === 'LABEL') return [];
+    // Le modèle garde ses éléments de fusion (le numéro de page compris) ; l'export d'une ligne les a déjà remplacés par leur valeur.
+    if (ctx.template && isAtom(node)) return [{ t: 'raw', s: atomPiece(node, ctx) }];
     if (cl.contains('page-number-badge') || cl.contains('page-break-marker') || cl.contains('heading-numbering-config') || cl.contains('toc-marker')) return [];
     if (cl.contains('footnote-ref-marker')) return [{ t: 'footnote', s: node.getAttribute('data-note-text') || '' }];
     if (tag === 'BR') return [{ t: 'br' }];
@@ -132,6 +145,8 @@ const MarkdownExport = (function () {
     if (tag === 'CODE' || tag === 'KBD' || tag === 'SAMP' || tag === 'TT') return node.textContent ? wrapInMarks(node, [{ t: 'code', s: node.textContent }], true) : [];
     const children = [];
     Array.from(node.childNodes).forEach(child => children.push(...inlineNodesOf(child, ctx)));
+    // La valeur conditionnelle d'un modèle : sa balise autour de son texte, espaces du bord compris (elle masque l'espace avec le mot).
+    if (ctx.template && cl.contains('conditional-value')) return [{ t: 'wrap', open: openTag(node, ctx), close: '</span>', children }];
     return children.length ? wrapInMarks(node, children, false) : [];
   }
   // Les enfants de l'élément sous les marques qu'il pose. Un code en ligne ne garde que les marques qui l'entourent (lien, gras, italique, barré), jamais celle de
@@ -158,9 +173,12 @@ const MarkdownExport = (function () {
   }
   const titleOf = title => (title ? ' "' + title.replace(/[\r\n]+/g, ' ').replace(/["\\]/g, '\\$&') + '"' : '');
   function imageNodes(img, ctx) {
-    const info = ctx.images.get(img);
+    // Une image de fusion du modèle s'écrit quel que soit son calque : ce type d'export sert justement à ne rien perdre de ce qui se fusionne.
+    if (ctx.template && isMergeImage(img)) return [{ t: 'raw', s: mergeImageHtml(img, ctx) }];
     // Une image « derrière le texte » (un fond) ou répétée sur toutes les pages (un papier à en-tête) n'est pas du contenu du texte.
-    if (!info || info.skip || img.getAttribute('data-layer') === 'behind' || PageLayer.isRepeatedEl(img)) return [];
+    if (img.getAttribute('data-layer') === 'behind' || PageLayer.isRepeatedEl(img)) return [];
+    const info = ctx.images.get(img);
+    if (!info || info.skip) return [];
     const alt = img.getAttribute('alt') || '';
     const width = shownWidthOf(img);
     if (width) return [{ t: 'raw', s: '<img src="' + escapeAttr(info.src) + '" alt="' + escapeAttr(alt) + '" width="' + escapeAttr(width) + '">' }];
@@ -180,6 +198,41 @@ const MarkdownExport = (function () {
     const pad = /^`|`$/.test(s) || (/^ .* $/.test(s) && s.trim()) ? ' ' : '';
     return fence + pad + s + pad + fence;
   }
+
+  // --- Les éléments de fusion du modèle (« Markdown (modèle) », ctx.template) -------------------------------------------------------------------------
+  // Une clé « Table.Colonne » (un chemin de références y ajoute des points) : ce que l'import sait relire entre deux paires d'accolades.
+  const KEY_PATTERN = /^[\p{L}\p{N}_]+(?:\.[\p{L}\p{N}_]+)+$/u;
+  const PLAIN_BADGE_ATTRS = new Set(['class', 'contenteditable', 'data-table', 'data-column', 'data-key']);
+  const ATOM_CLASSES = ['var-badge', 'calc-badge', 'smart-chip', 'mention-chip', 'page-number-badge', 'conditional-checkbox'];
+  const isAtom = el => ATOM_CLASSES.some(name => el.classList.contains(name));
+  // La valeur d'un attribut dans une balise écrite sur une seule ligne : « | » ne coupe pas la case d'un tableau, un saut de ligne ne coupe pas la balise.
+  const attrValue = (value, ctx) => escapeAttr(value).replace(/\r\n?|\n/g, '&#10;').replace(/\|/g, ctx.inCell ? '&#124;' : '|');
+  // Les attributs que l'éditeur écrit pour l'élément (la classe et les data-*, plus ceux de `extra`, sauf `omit` : les valeurs qui sont celles par défaut) : ce que l'import
+  // redonne tel quel à l'éditeur.
+  function mergeAttrs(el, ctx, extra, omit) {
+    return Array.from(el.attributes)
+      .filter(attr => attr.name !== 'data-pdf-skip' && (attr.name === 'class' || attr.name.indexOf('data-') === 0 || (extra && extra.indexOf(attr.name) !== -1))
+        && !(omit && omit[attr.name] === attr.value))
+      .map(attr => ' ' + attr.name + '="' + attrValue(attr.value, ctx) + '"').join('');
+  }
+  const openTag = (el, ctx) => '<' + el.localName + mergeAttrs(el, ctx) + '>';
+  // Une bulle sans aucun réglage, d'une clé que l'import saura relire : sa clé entre deux paires d'accolades. '' sinon (la bulle s'écrit alors en HTML).
+  function badgeToken(el) {
+    const key = el.getAttribute('data-key') || '';
+    if (!key || key !== (el.getAttribute('data-table') || '') + '.' + (el.getAttribute('data-column') || '') || !KEY_PATTERN.test(key)) return '';
+    return Array.from(el.attributes).every(attr => PLAIN_BADGE_ATTRS.has(attr.name)) ? '{{' + key + '}}' : '';
+  }
+  // Une bulle, un calcul, une puce, un numéro de page ou une case conditionnelle : un nœud sans contenu à lui, écrit d'un bloc.
+  // `html` : dans un morceau de HTML (un tableau aux cases fusionnées), le libellé s'écrit en HTML et non en Markdown.
+  function atomPiece(el, ctx, html) {
+    const token = el.classList.contains('var-badge') ? badgeToken(el) : '';
+    const label = html ? escapeHtml(collapse(el.textContent)) : escapeText(collapse(el.textContent), ctx);
+    return token || openTag(el, ctx) + label + '</' + el.localName + '>';
+  }
+  // Une image liée à une colonne, un graphique de la page ou un code QR dont le texte cite une colonne : sans adresse, dessinée à la lecture.
+  const isMergeImage = ExportCommon.isMergeImage;
+  const DEFAULT_IMAGE_ATTRS = { 'data-layer': 'normal', 'data-wrap': 'inline' };
+  const mergeImageHtml = (img, ctx) => '<img' + mergeAttrs(img, ctx, ['alt', 'style'], DEFAULT_IMAGE_ATTRS) + '>';
 
   // --- Mise en ordre de l'arbre avant l'écriture --------------------------------------------------------------------------------------------------
   // Deux marques voisines de même clé n'en font qu'une (<strong>a</strong><strong>b</strong> : **ab**), et les blancs et retours à la ligne qui bordent une marque
@@ -225,6 +278,8 @@ const MarkdownExport = (function () {
     });
     const out = [];
     merged.forEach(n => {
+      // Sa balise garde les blancs de son bord : ils font partie de la valeur.
+      if (n.t === 'wrap') { out.push({ t: 'wrap', open: n.open, close: n.close, children: normalise(n.children) }); return; }
       if (n.t !== 'mark') { pushNode(out, n.t === 'text' ? { t: 'text', s: n.s } : n); return; }
       const kids = normalise(n.children);
       const lead = takeEdge(kids, true);
@@ -243,6 +298,7 @@ const MarkdownExport = (function () {
     if (n.t === 'br') return { s: BR };
     if (n.t === 'code') return { s: codeSpan(n.s, ctx) };
     if (n.t === 'raw') return { s: n.s };
+    if (n.t === 'wrap') return { s: n.open + renderNodes(n.children, { prev: PUNCT, next: PUNCT }, ctx) + n.close };
     if (n.t === 'footnote') { ctx.footnotes.push(n.s); return { s: '[^' + ctx.footnotes.length + ']' }; }
     const isLink = !!n.mark.link;
     if (isLink) ctx.inLink += 1;
@@ -377,6 +433,12 @@ const MarkdownExport = (function () {
     if (!inner.length) return [];
     return [{ type: 'quote', lines: ['> [!' + (ALERT_OF_COLOR[el.getAttribute('data-color')] || 'NOTE') + ']'].concat(prefixQuote(joinBlocks(inner))) }];
   }
+  // Le bloc conditionnel d'un modèle : sa balise ouvrante, son contenu en Markdown entre deux lignes vides (sans elles, le Markdown ne serait plus lu dans une balise de bloc), sa
+  // balise fermante. Un bloc vide garde ses deux balises : la condition est un réglage du modèle.
+  function conditionalBlock(el, ctx) {
+    const inner = joinBlocks(wrapAligned(blocksOf(el, ctx)));
+    return [{ type: 'html', lines: [openTag(el, ctx)].concat(inner.length ? [''].concat(inner, ['']) : [], ['</div>']) }];
+  }
 
   // Une liste : la puce ou le numéro de chaque item, le contenu de l'item en retrait de la largeur du signe. Deux listes qui se suivent changent de signe (- puis *, 1. puis
   // 1)) : sans cela le Markdown n'en ferait qu'une.
@@ -406,7 +468,7 @@ const MarkdownExport = (function () {
   }
 
   // --- Les tableaux ---------------------------------------------------------------------------------------------------------------------------------
-  const COMPLEX_IN_CELL = 'ul, ol, pre, table, blockquote, hr, .callout, .two-columns-zone, .page-break-marker, .toc-marker';
+  const COMPLEX_IN_CELL = 'ul, ol, pre, table, blockquote, hr, .callout, .two-columns-zone, .page-break-marker, .toc-marker, .conditional-text';
   const spanAbove1 = (cell, name) => (parseInt(cell.getAttribute(name) || '1', 10) || 1) > 1;
   const isSimpleTable = rows => rows.every(tr => ExportCommon.cellsOf(tr).every(cell => !spanAbove1(cell, 'colspan') && !spanAbove1(cell, 'rowspan') && !cell.querySelector(COMPLEX_IN_CELL)));
   function cellMarkdown(cell, ctx) {
@@ -453,24 +515,30 @@ const MarkdownExport = (function () {
     return names.map(name => (el.hasAttribute(name) && el.getAttribute(name) ? ' ' + name + '="' + escapeAttr(el.getAttribute(name)) + '"' : '')).join('');
   }
   function htmlOf(node, ctx) {
-    if (node.nodeType === Node.TEXT_NODE) return escapeHtml(collapse(node.nodeValue));
+    // « {{ » du texte n'est pas une variable : une accolade en référence de caractère (la barre oblique inverse ne protège rien dans du HTML).
+    if (node.nodeType === Node.TEXT_NODE) return escapeHtml(collapse(node.nodeValue)).replace(/\{\{/g, '&#123;{');
     if (node.nodeType !== Node.ELEMENT_NODE || node.hasAttribute('data-pdf-skip')) return '';
     const tag = node.tagName;
     const cl = node.classList;
     if (tag === 'STYLE' || tag === 'SCRIPT' || tag === 'TEMPLATE' || tag === 'INPUT' || tag === 'LABEL') return '';
+    if (ctx.template && isAtom(node)) return atomPiece(node, ctx, true);
     if (cl.contains('page-number-badge') || cl.contains('page-break-marker') || cl.contains('heading-numbering-config') || cl.contains('toc-marker')) return '';
     if (cl.contains('footnote-ref-marker')) return '<sup>(' + escapeHtml(collapse(node.getAttribute('data-note-text') || '')) + ')</sup>';
     if (tag === 'BR') return '<br>';
     if (tag === 'HR') return '\n<hr>\n';
     if (tag === 'IMG') {
+      if (ctx.template && isMergeImage(node)) return mergeImageHtml(node, ctx);
+      if (node.getAttribute('data-layer') === 'behind' || PageLayer.isRepeatedEl(node)) return '';
       const info = ctx.images.get(node);
-      if (!info || info.skip || node.getAttribute('data-layer') === 'behind' || PageLayer.isRepeatedEl(node)) return '';
+      if (!info || info.skip) return '';
       const width = shownWidthOf(node);
       return '<img src="' + escapeAttr(info.src) + '" alt="' + escapeAttr(node.getAttribute('alt') || '') + '"' + (width ? ' width="' + escapeAttr(width) + '"' : '') + '>';
     }
     if (tag === 'PRE') return '\n<pre>' + escapeHtml(ExportCommon.codeLinesOf(node).join('\n')).replace(/\n/g, '&#10;') + '</pre>\n';
     if (tag === 'CODE' || tag === 'KBD' || tag === 'SAMP' || tag === 'TT') return '<code>' + escapeHtml(collapse(node.textContent)) + '</code>';
     const inner = () => Array.from(node.childNodes).map(child => htmlOf(child, ctx)).join('');
+    if (ctx.template && cl.contains('conditional-text')) return '\n' + openTag(node, ctx) + inner() + '</div>\n';
+    if (ctx.template && cl.contains('conditional-value')) return openTag(node, ctx) + inner() + '</span>';
     if (tag === 'TABLE' || tag === 'THEAD' || tag === 'TBODY' || tag === 'TFOOT' || tag === 'TR') {
       return '\n<' + tag.toLowerCase() + '>' + inner() + '\n</' + tag.toLowerCase() + '>\n';
     }
@@ -552,6 +620,7 @@ const MarkdownExport = (function () {
     if (cl.contains('heading-numbering-config')) return [];
     if (cl.contains('page-break-marker')) return ctx.inCell ? [] : [{ type: 'html', lines: ['<div style="page-break-after: always;"></div>'] }];
     if (cl.contains('toc-marker')) return ctx.inCell ? [] : tocBlocks(ctx);
+    if (ctx.template && cl.contains('conditional-text')) return conditionalBlock(el, ctx);
     if (cl.contains('callout')) return calloutBlock(el, ctx);
     if (tag === 'TABLE') return tableBlock(el, ctx);
     if (tag === 'UL' || tag === 'OL') return listBlock(el, ctx, previousList);
@@ -615,6 +684,7 @@ const MarkdownExport = (function () {
     roots.forEach(root => root.querySelectorAll('img').forEach(img => images.push(img)));
     for (const img of images) {
       if (img.hasAttribute('data-pdf-skip')) { ctx.images.set(img, { skip: true }); continue; }
+      if (ctx.template && isMergeImage(img)) continue; // sans adresse : elle est dessinée à la lecture, rien à lire ni à dire
       const src = (img.getAttribute('src') || '').trim();
       if (!src) { ExportCommon.noteImageWithoutSource(img); ctx.images.set(img, { skip: true }); continue; }
       const isAttachment = img.hasAttribute('data-attachment-id') || img.dataset.source === 'attachment' || /\/attachments\/\d+\/download/.test(src);
@@ -627,8 +697,15 @@ const MarkdownExport = (function () {
   }
 
   // --- Le document ------------------------------------------------------------------------------------------------------------------------------------
-  // Un document inerte (HtmlSanitize.parseInert) : aucune image ne charge pendant la lecture, ce que ferait un <div> de la page (js/external-images.js).
-  const rootOf = html => HtmlSanitize.parseInert(html || '');
+  // Un document inerte (HtmlSanitize.parseInert) : aucune image ne charge pendant la lecture, ce que ferait un <div> de la page (js/external-images.js). Les suggestions du suivi
+  // des modifications encore en attente y sont acceptées (le texte supprimé n'y est plus) : le HTML d'une ligne les a déjà vues acceptées (ReaderMode.preview), celui d'un
+  // modèle arrive tel que l'éditeur le garde.
+  function rootOf(html) {
+    const root = HtmlSanitize.parseInert(html || '');
+    // Si la vue échoue, le document reste tel qu'il est écrit (suggestions visibles) plutôt que perdu : même repli que ReaderMode.
+    try { TrackChanges.acceptedView(root, { tint: false }); } catch (e) { console.error('[markdown-export] vue « comme acceptée » impossible, les suggestions restent affichées', e); }
+    return root;
+  }
   const ZONES = [['header', 'default'], ['header-first', 'first'], ['footer', 'default'], ['footer-first', 'first']];
   function zonesOf(headerFooterData) {
     if (!headerFooterData || !headerFooterData.enabled) return [];
@@ -638,9 +715,10 @@ const MarkdownExport = (function () {
     }).filter(zone => PageLayout.hasZoneContent(zone.html) && (!zone.name.endsWith('-first') || headerFooterData.differentFirstPage));
   }
 
-  // Le Markdown d'un document déjà résolu (le HTML de ReaderMode.preview) et de ses zones d'en-tête et de pied (déjà résolues aussi, ExportCommon.resolveRecord).
-  async function htmlToMarkdown(resolvedHtml, headerFooterData) {
-    const ctx = { footnotes: [], images: new Map(), markers: new Map(), toc: [], inCell: 0, inLink: 0 };
+  // Le Markdown d'un document déjà résolu (le HTML de ReaderMode.preview) et de ses zones d'en-tête et de pied (déjà résolues aussi, ExportCommon.resolveRecord). Avec
+  // `options.template`, le HTML est celui du modèle, non résolu : ses éléments de fusion s'écrivent comme le dit l'en-tête du fichier.
+  async function htmlToMarkdown(resolvedHtml, headerFooterData, options) {
+    const ctx = { footnotes: [], images: new Map(), markers: new Map(), toc: [], inCell: 0, inLink: 0, template: !!(options && options.template) };
     const body = rootOf(resolvedHtml);
     // Ni ligne vide ni saut de page orphelin en fin de document.
     ReaderMode.trimTrailingBlankBlocks(body);
@@ -682,5 +760,15 @@ const MarkdownExport = (function () {
     ExportCommon.downloadBlob(blob, (filename || 'publipostage') + '.md');
   }
 
-  return { exportCurrentRecord, getMarkdownBlobForRecord, htmlToMarkdown };
+  // Le modèle lui-même (« Markdown (modèle) ») : le HTML et les en-têtes et pieds que l'éditeur garde, aucune ligne. Le fichier porte le nom du modèle.
+  async function getMarkdownBlobForTemplate(htmlContent, headerFooterData, name) {
+    const text = await htmlToMarkdown(htmlContent, headerFooterData, { template: true });
+    return { blob: new Blob([text], { type: 'text/markdown;charset=utf-8' }), filename: name };
+  }
+  async function exportTemplate(htmlContent, headerFooterData, name) {
+    const { blob, filename } = await getMarkdownBlobForTemplate(htmlContent, headerFooterData, name);
+    ExportCommon.downloadBlob(blob, (filename || 'publipostage') + '.md');
+  }
+
+  return { exportCurrentRecord, getMarkdownBlobForRecord, exportTemplate, getMarkdownBlobForTemplate, htmlToMarkdown };
 })();

@@ -9,6 +9,25 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **« Markdown (modèle) » : un modèle qui revient intact, variables comprises** : le menu « Type d'export » a une ligne de plus,
+  « Markdown (modèle) », à côté de « Markdown » (qui écrit toujours le document d'une ligne, variables remplacées par leurs
+  valeurs). « Exporter » écrit le modèle lui-même, tel que l'éditeur le montre, en un seul fichier `.md` nommé d'après le
+  modèle : le menu Exporter le dit à la place des lignes (« Un seul fichier : le modèle »), rien n'est lu dans Grist, et le
+  type n'est pas proposé dans une grille ni dans un macro-modèle (il est grisé, comme Word dans une grille). Une variable sans
+  réglage s'écrit `{{Table.Colonne}}` (la clé de la bulle, chemin de références compris : `{{Clients.Chef.Email}}`). Tout ce
+  qui se fusionne et que le Markdown ne sait pas écrire s'écrit en HTML en ligne avec ses réglages : une variable réglée
+  (format, condition, boucle, texte autour, sinon), un calcul, une puce (date, heure…), une pastille « @ » (la fiche qu'elle cite, table, ligne et colonne), un numéro de page, une case
+  conditionnelle, une valeur conditionnelle, un bloc de texte conditionnel (son contenu reste en Markdown, une ligne vide
+  autour), une image liée à une colonne, un code QR et un graphique de la page (même derrière le texte). Le reste s'écrit comme
+  dans « Markdown », en-tête et pied de page compris, et un « {{ » tapé dans le texte est protégé pour ne jamais être relu
+  comme une variable. Les suggestions du suivi des modifications y sont acceptées. À l'import, les `{{Table.Colonne}}`
+  redeviennent des bulles et les éléments en HTML reprennent leurs réglages : un modèle exporté puis importé, puis exporté de
+  nouveau, donne exactement le même fichier. Une clé `{{…}}` qui n'est pas une variable de ce document reste du texte, et le
+  coin d'état dit combien (« Markdown importé ; 2 variables inconnues laissées en texte. »). Ne sont pas gardés : les marges,
+  le format et le sens de la page, le filigrane, les images derrière le texte ou sur toutes les pages qui ne se fusionnent
+  pas, le lien d'un tableau avec un modèle Grille, l'objet et les destinataires d'un modèle d'e-mail ; la numérotation des
+  titres, écrite dans leur texte, revient comme du texte.
+
 - **Citer une fiche avec « @ »** : dans l'éditeur, « @ » ouvre la liste des fiches de toutes les tables du document, celles
   de la table de la page d'abord, chacune avec sa table à droite dès que le document a plusieurs tables à fiches. Les mots
   tapés se cherchent dans le nom de la fiche et dans celui de sa table, dans n'importe quel ordre, sans compter accents ni
@@ -514,8 +533,8 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   page que l'export écrit entre des commentaires HTML. Le fichier est lu en UTF-8 (avec ou sans BOM), en UTF-16 (avec BOM) ou, à défaut,
   en Windows-1252 ; l'en-tête YAML d'un fichier Jekyll, Hugo ou Obsidian n'est pas du texte. Une image qui n'est ni en ligne ni
   dans le fichier (un chemin vers le fichier d'à côté) ne peut pas suivre le texte : un mot la remplace (« [image non reprise :
-  légende] ») et le coin d'état compte celles qui manquent. Ne sont pas repris : les variables (un `#Table.Colonne` reste du
-  texte), le titre d'une image ou d'un lien, le HTML que l'éditeur ne connaît pas (son texte reste), les listes à cases
+  légende] ») et le coin d'état compte celles qui manquent. Les variables que « Markdown (modèle) » écrit (`{{Table.Colonne}}`)
+  redeviennent des bulles ; un `#Table.Colonne` écrit à la main reste du texte. Ne sont pas repris : le titre d'une image ou d'un lien, le HTML que l'éditeur ne connaît pas (son texte reste), les listes à cases
   emboîtées (mises à plat), la numérotation des titres écrite dans le texte (elle reste du texte) et les notes que rien
   n'appelle. Un script, un gestionnaire d'événement, un cadre ou une adresse `javascript:` sont retirés. Un fichier binaire,
   vide ou de plus de 10 Mo est refusé, avec un message clair. Le lecteur est marked 15.0.12 (MIT), chargé de
@@ -1005,6 +1024,23 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Added
 
+- **"Markdown (template)": a template that comes back intact, variables included**: the "Export type" menu has one more line,
+  "Markdown (template)", next to "Markdown" (which still writes a row's document, variables replaced by their values).
+  "Export" writes the template itself, as the editor shows it, in a single `.md` file named after the template: the Export
+  menu says so in place of the row options ("One file: the template"), nothing is read from Grist, and the type is not offered
+  in a grid or a macro template (it is greyed out, like Word in a grid). A variable with no settings is written
+  `{{Table.Column}}` (the bubble's key, reference path included: `{{Clients.Chef.Email}}`). Everything that merges and that
+  Markdown cannot write is written as inline HTML with its settings: a variable with settings (format, condition, loop,
+  surrounding text, otherwise), a calculation, a chip (date, time…), an "@" chip (the record it cites: table, row and column), a page number, a conditional checkbox, a conditional
+  value, a conditional text block (its content stays Markdown, with a blank line around it), an image linked to a column, a QR
+  code and a chart of the page (even behind the text). The rest is written as in "Markdown", header and footer included, and
+  a "{{" typed in the text is protected so it is never read back as a variable. The tracked-changes suggestions are accepted.
+  On import, `{{Table.Column}}` become bubbles again and the HTML elements get their settings back: a template exported,
+  imported and exported again gives exactly the same file. A `{{…}}` key that is not a variable of this document stays text,
+  and the status corner says how many ("Markdown imported; 2 unknown variables left as text."). Not kept: margins, page format
+  and orientation, watermark, images behind the text or on every page that are not merged, the link of a table with a Grid
+  template, the subject and recipients of an e-mail template; the heading numbering, written in their text, comes back as text.
+
 - **Cite a record with "@"**: in the editor, "@" opens the list of the records of every table in the document, the page's
   table first, each with its table on the right as soon as the document has several tables with records. The words typed
   are searched in the record's name and in its table's name, in any order, ignoring accents and case; the list shows at
@@ -1472,7 +1508,8 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   that the export writes between HTML comments. The file is read as UTF-8 (with or without BOM), UTF-16 (with BOM) or, failing that,
   Windows-1252; the YAML front matter of a Jekyll, Hugo or Obsidian file is not text. An image that is neither online nor in the
   file (a path to the file next to it) cannot follow the text: a word replaces it ("[image not imported: caption]") and the
-  status corner counts the ones that are missing. Not kept: variables (a `#Table.Column` stays text), the title of an image or a
+  status corner counts the ones that are missing. The variables that "Markdown (template)" writes (`{{Table.Column}}`) become
+  bubbles again; a `#Table.Column` typed by hand stays text. Not kept: the title of an image or a
   link, HTML the editor does not know (its text stays), nested task lists (flattened), the numbering of headings written in the
   text (it stays text) and footnotes that nothing calls. A script, an event handler, a frame or a `javascript:` address is
   removed. A binary file, an empty file or one over 10 MB is refused, with a clear message. The reader is marked 15.0.12 (MIT),

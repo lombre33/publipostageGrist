@@ -8,9 +8,12 @@
 //  - ceux que l'export Markdown du widget écrit (js/markdown-export.js) : ce qu'il garde en HTML en ligne (<u>, <sup>, <sub>, <mark>, <span style>, <div align>,
 //    <img width>, tableaux HTML), les alertes GitHub, les notes [^1], le sommaire en liens, le saut de page, les en-têtes et pieds de page entre commentaires ;
 //  - ceux de GitHub, VS Code, Obsidian, Typora et du reste du monde Markdown.
+// Les variables : l'export « Markdown (modèle) » écrit une bulle sans réglage {{Table.Colonne}} et le reste de ses éléments de fusion (bulle réglée, calcul, puce, numéro de page,
+// valeur et bloc conditionnels, image liée à une colonne) en HTML en ligne ; l'un et l'autre redeviennent ce qu'ils étaient. Une paire d'accolades dont la clé n'est pas une
+// variable de ce document reste du texte.
 // Ce qu'il ne garde pas, volontairement : une image dont l'adresse n'est pas une adresse web ni une data URI (le fichier d'à côté n'est pas envoyé avec le texte : un
-// mot le dit à sa place), les variables (rien n'est lu comme une bulle), le titre d'une image ou d'un lien, la numérotation des titres écrite dans le texte (elle reste
-// du texte), l'en-tête YAML d'un fichier Jekyll ou Hugo, les définitions de notes que rien n'appelle.
+// mot le dit à sa place), le titre d'une image ou d'un lien, la numérotation des titres écrite dans le texte (elle reste du texte), l'en-tête YAML d'un fichier Jekyll ou
+// Hugo, les définitions de notes que rien n'appelle.
 const MarkdownImport = (function () {
   // Au-delà, la page ne tiendrait pas le document (marked, puis l'éditeur, lisent tout en mémoire).
   const MAX_BYTES = 10 * 1024 * 1024;
@@ -152,6 +155,70 @@ const MarkdownImport = (function () {
     });
     doc.body.querySelectorAll('br').forEach(br => br.replaceWith(' '));
     return doc.body.textContent.replace(/\s+/g, ' ').trim();
+  }
+
+  // --- Les variables, avant marked --------------------------------------------------------------------------------------------------------------------
+  // {{Table.Colonne}} (espaces permis autour de la clé) : la bulle sans réglage que l'export d'un modèle écrit. Chaque paire dont la clé est une variable du document devient sa
+  // bulle, en HTML en ligne que marked laisse passer et que l'éditeur relit. Une clé qui n'en est pas une (une autre table, une colonne disparue) reste du texte et, quand elle
+  // a la forme d'une clé « Table.Colonne », se compte (`unknownVariables`) pour que le coin d'état le dise. Rien n'est lu dans du code (bloc délimité, code en ligne), dans une
+  // balise HTML (un attribut peut citer des accolades) ni derrière une barre oblique inverse : « \{{ » est du texte, ce que l'export écrit pour un « {{ » du document.
+  const TOKEN = /\{\{[ \t]*([^{}\n]*?)[ \t]*\}\}/y;
+  const KEY_SHAPE = /^[\p{L}\p{N}_]+(?:\.[\p{L}\p{N}_]+)+$/u;
+  // La bulle de la clé, quand la clé entière est une variable du document ('' sinon) : la même que celle de la liste « # » (EditorNodes.varBadgeHtml).
+  function badgeHtml(key) {
+    const found = Variables.findTextVariables(Variables.triggerChar() + key);
+    const whole = found.length === 1 && found[0].start === 0 && found[0].end === key.length + 1 ? found[0] : null;
+    return whole ? EditorNodes.varBadgeHtml({ table: whole.table, column: whole.column, key }) : '';
+  }
+  // La fin du code en ligne qui s'ouvre en `at` (une suite de n apostrophes inverses, fermée par une suite de la même longueur), ou -1 : le code en ligne qui ne se ferme pas est du texte.
+  function codeSpanEnd(line, at, n) {
+    for (let j = line.indexOf('`', at + n); j !== -1;) {
+      let k = j;
+      while (line[k] === '`') k += 1;
+      if (k - j === n) return k;
+      j = line.indexOf('`', k);
+    }
+    return -1;
+  }
+  // La fin de la balise HTML qui s'ouvre en `at`, ou -1 : jusqu'au « > » qui n'est pas dans une valeur entre guillemets.
+  function tagEnd(line, at) {
+    let quote = '';
+    for (let j = at + 1; j < line.length; j += 1) {
+      const c = line[j];
+      if (quote) { if (c === quote) quote = ''; } else if (c === '"' || c === "'") quote = c; else if (c === '>') return j + 1;
+    }
+    return -1;
+  }
+  function variablesOfLine(line, ctx) {
+    let out = '';
+    let i = 0;
+    while (i < line.length) {
+      const c = line[i];
+      let end = -1;
+      if (c === '\\') end = i + 2;
+      else if (c === '`') { let n = 1; while (line[i + n] === '`') n += 1; end = codeSpanEnd(line, i, n); if (end === -1) end = i + n; }
+      else if (c === '<' && /[A-Za-z/!?]/.test(line[i + 1] || '')) end = tagEnd(line, i);
+      else if (c === '{' && line[i + 1] === '{') {
+        TOKEN.lastIndex = i;
+        const m = TOKEN.exec(line);
+        if (m && m[1]) {
+          const badge = badgeHtml(m[1]);
+          if (!badge && KEY_SHAPE.test(m[1])) ctx.unknownVariables += 1;
+          out += badge || m[0];
+          i += m[0].length;
+          continue;
+        }
+      }
+      if (end === -1) end = i + 1;
+      out += line.slice(i, end);
+      i = end;
+    }
+    return out;
+  }
+  function variables(lines, ctx) {
+    if (!lines.some(line => line.indexOf('{{') !== -1)) return lines;
+    const code = codeMask(lines);
+    return lines.map((line, i) => (code[i] || line.indexOf('{{') === -1 ? line : variablesOfLine(line, ctx)));
   }
 
   // --- Le HTML de marked, remis dans la forme de l'éditeur ----------------------------------------------------------------------------------
@@ -300,6 +367,8 @@ const MarkdownImport = (function () {
   function images(root, ctx) {
     const doc = root.ownerDocument;
     Array.from(root.querySelectorAll('img')).forEach(img => {
+      // Une image que le modèle lie à une colonne (ce que l'export d'un modèle écrit en HTML) n'a pas d'adresse : elle est dessinée à la lecture, elle reste telle quelle.
+      if (ExportCommon.isMergeImage(img)) { img.classList.add('editor-image'); return; }
       let src = (img.getAttribute('src') || '').trim();
       if (/^\/\//.test(src)) src = 'https:' + src;
       const alt = (img.getAttribute('alt') || '').replace(/\s+/g, ' ').trim();
@@ -338,11 +407,14 @@ const MarkdownImport = (function () {
     setAlign(paragraph, align);
   }
   // Du texte ou une image posés directement dans un bloc (une image seule sur sa ligne que marked laisse en HTML, un <div align> sans paragraphe) : rangés en paragraphes,
-  // pour que l'alignement ait où se poser.
+  // pour que l'alignement ait où se poser. Une ligne vide entre deux blocs HTML finit le paragraphe (marked la laisse entre eux) : deux images écrites chacune dans son bloc
+  // restent deux paragraphes, comme l'export les a écrites, au lieu de tenir sur une même ligne.
+  const isBlankLine = node => node.nodeType === Node.TEXT_NODE && !node.nodeValue.trim() && /\n[ \t]*\n/.test(node.nodeValue);
   function wrapInlineRuns(box) {
     const doc = box.ownerDocument;
     let run = null;
     Array.from(box.childNodes).forEach(node => {
+      if (isBlankLine(node)) { run = null; return; }
       const inline = node.nodeType === Node.TEXT_NODE ? !!node.nodeValue.trim() || !!run : node.nodeType === Node.ELEMENT_NODE && !BLOCKS.has(node.tagName);
       if (!inline) { run = null; return; }
       if (!run) { run = doc.createElement('p'); box.insertBefore(run, node); }
@@ -385,7 +457,7 @@ const MarkdownImport = (function () {
     const { notes, body } = splitNotes(lines);
     state.notes = new Map();
     notes.forEach((text, label) => state.notes.set(label, plainNote(text)));
-    const rendered = markdownParser().parse(body.join('\n'));
+    const rendered = markdownParser().parse(variables(body, ctx).join('\n'));
     state.notes = new Map();
     const doc = new DOMParser().parseFromString('<body>' + rendered, 'text/html');
     const root = doc.body;
@@ -396,16 +468,17 @@ const MarkdownImport = (function () {
     pageBreaks(root);
     images(root, ctx);
     wrapInlineRuns(root);
+    root.querySelectorAll('div.conditional-text').forEach(wrapInlineRuns);
     alignments(root);
     codeBlocks(root);
     dropEmptyParagraphs(root);
     return HtmlSanitize.clean(root.innerHTML).trim();
   }
 
-  // Le document d'un texte Markdown : { html, headerFooter (ou null), skippedImages }. La bibliothèque doit être chargée (ensureLibLoaded).
+  // Le document d'un texte Markdown : { html, headerFooter (ou null), skippedImages, unknownVariables }. La bibliothèque doit être chargée (ensureLibLoaded).
   function toDocument(markdown) {
     const text = withoutFrontMatter(String(markdown == null ? '' : markdown).replace(/^﻿/, '').replace(/\r\n?/g, '\n'));
-    const ctx = { skippedImages: 0 };
+    const ctx = { skippedImages: 0, unknownVariables: 0 };
     const { zones, body } = splitZones(text.split('\n'));
     const html = convert(body, ctx);
     const zoneHtml = name => (zones[name] ? convert(zones[name], ctx) : '');
@@ -414,10 +487,10 @@ const MarkdownImport = (function () {
     if (!html && !filled) throw fail('empty');
     data.enabled = filled;
     data.differentFirstPage = PageLayout.hasZoneContent(data.header.first) || PageLayout.hasZoneContent(data.footer.first);
-    return { html, headerFooter: filled ? data : null, skippedImages: ctx.skippedImages };
+    return { html, headerFooter: filled ? data : null, skippedImages: ctx.skippedImages, unknownVariables: ctx.unknownVariables };
   }
 
-  // Le fichier choisi, lu et converti : { html, headerFooter, skippedImages }, ou une erreur à code (tooBig, unreadable, empty, library : la bibliothèque ne s'est pas chargée).
+  // Le fichier choisi, lu et converti : { html, headerFooter, skippedImages, unknownVariables }, ou une erreur à code (tooBig, unreadable, empty, library : la bibliothèque ne s'est pas chargée).
   async function fromFile(file) {
     const text = await readText(file);
     try { await ensureLibLoaded(); } catch (e) { throw fail('library', { cause: e }); }

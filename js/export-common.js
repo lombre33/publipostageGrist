@@ -362,6 +362,11 @@ const ExportCommon = (function () {
   function unreadImageCount() { return unreadImages.size; }
   function resetUnreadImages() { unreadImages.clear(); }
 
+  // Une image que le modèle lie à une donnée au lieu de lui donner une adresse : une pièce jointe de la ligne (data-var-*), un graphique de la page (data-chart-*) ou un code QR dont le
+  // texte cite une colonne (data-qr-text, sans adresse). La Lecture et les exports la dessinent pour la ligne (js/reader-mode.js). Partagé par l'export Markdown d'un modèle, qui l'écrit
+  // en HTML en ligne, et par son import, qui la reprend telle quelle.
+  const isMergeImage = img => img.hasAttribute('data-var-table') || img.hasAttribute('data-chart-section') || (img.hasAttribute('data-qr-text') && !(img.getAttribute('src') || '').trim());
+
   return { EDITOR_STYLE, hexOf, cssColorHex, scriptRefusal, loadScriptOnce, ensureJsZipLoaded, downloadBlob, attachMeasureHost, tableRows, cellsOf, spanOf, placeCells, measuredColumnWidthsPx, zoneColumnWidthPx, shownImageWidthPx, gridLinesHidden, rowHeightPx, cellVerticalAlign, cellBorderSides, gridRowSegments, fitColumnWidths, hasTableChild, segmentsAroundTables, isBlankSegment, resolveHeaderFooterVariables,
-    resolveRecord, codeLinesOf, calloutMetricsPx, headerRowCount, noteUnreadImage, noteImageWithoutSource, unreadImageCount, resetUnreadImages };
+    resolveRecord, codeLinesOf, calloutMetricsPx, headerRowCount, noteUnreadImage, noteImageWithoutSource, unreadImageCount, resetUnreadImages, isMergeImage };
 })();

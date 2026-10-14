@@ -12,6 +12,8 @@
 //   - un fichier binaire, vide ou de plus de 10 Mo : un message clair en rouge, rien ne change, aucune fenêtre ;
 //   - le geste complet, d'un bout à l'autre : le document exporté en Markdown (menu « Type d'export », bouton Exporter) puis importé redonne le même texte, le même HTML (à l'identifiant des notes près) et les
 //     mêmes en-tête et pied ;
+//   - le geste complet d'un modèle, variables comprises : le type « Markdown (modèle) » (menu « Type d'export », bouton Exporter) écrit les bulles {{Table.Colonne}} et leurs réglages, le fichier importé
+//     redonne les mêmes bulles ; une clé qui n'est pas une variable du document reste du texte et le coin d'état le dit (avec les images non reprises), en entier, sans être coupé ;
 //   - depuis une grille ou un email ouverts (« + » puis « Nouvelle grille » / « Nouvel email »), l'import quitte ce modèle et le document s'affiche sur sa page.
 // Lancé par run-headless.mjs (groupe Node « mdImportMouse », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-md-import-mouse.mjs
 // MD_IMPORT_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans elle, rien n'est écrit.
@@ -36,6 +38,9 @@ const TEXTS = {
     importedImages: 'Markdown importé ; 1 image locale non reprise. Nommez le modèle puis enregistrez-le.',
     unreadable: 'Ce fichier n’est pas un texte Markdown lisible.', empty: 'Ce fichier Markdown est vide : il n’y a rien à importer.',
     tooBig: /^Ce fichier est trop gros pour être importé : 10,1 Mo \(au plus 10 Mo\)\.$/, placeholder: '[image non reprise : Logo]',
+    mdTemplate: 'Markdown (modèle)', templateExported: 'Modèle exporté en Markdown, variables comprises.',
+    importedVariable: 'Markdown importé ; 1 variable inconnue laissée en texte. Nommez le modèle puis enregistrez-le.',
+    importedImageVariables: 'Markdown importé ; 1 image locale non reprise, 2 variables inconnues.',
   },
   en: {
     row: 'Import from Markdown…', excel: 'Import from Excel…', unsaved: 'Unsaved changes', discard: 'Discard', cancel: 'Cancel',
@@ -43,6 +48,9 @@ const TEXTS = {
     importedImages: 'Markdown imported; 1 local image not imported. Name the template, then save it.',
     unreadable: 'This file is not readable Markdown text.', empty: 'This Markdown file is empty: there is nothing to import.',
     tooBig: /^This file is too big to import: 10\.1 MB \(at most 10 MB\)\.$/, placeholder: '[image not imported: Logo]',
+    mdTemplate: 'Markdown (template)', templateExported: 'Template exported to Markdown, variables included.',
+    importedVariable: 'Markdown imported; 1 unknown variable left as text. Name the template, then save it.',
+    importedImageVariables: 'Markdown imported; 1 local image not imported, 2 unknown variables.',
   },
 };
 
@@ -293,6 +301,44 @@ async function run(theme, lang) {
     const back = await snapshot(page);
     check(`${label} - le fichier exporté, importé de nouveau, redonne le même texte, le même HTML (aux identifiants de notes près) et les mêmes en-tête et pied`,
       back.text === replaced.text && back.html === replaced.html && back.zones === replaced.zones, { sameText: back.text === replaced.text, sameHtml: back.html === replaced.html, sameZones: back.zones === replaced.zones });
+    // 6b) Le modèle, variables comprises : le type « Markdown (modèle) » écrit les bulles {{Table.Colonne}} (un réglage reste en HTML), le fichier importé redonne les mêmes bulles.
+    const bubble = (column, extra) => `<span class="var-badge" contenteditable="false" data-table="PbClients" data-column="${column}" data-key="PbClients.${column}"${extra || ''}>#PbClients.${column}</span>`;
+    await page.evaluate(html => {
+      Editor.setHTML(html);
+      Editor.setHeaderFooterData({ enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } });
+    }, `<h1>Contrat ${bubble('Nom')}</h1><p>Bonjour <strong>${bubble('Nom')}</strong>, ${bubble('Nom', ' data-before="Dr "')}.</p>`);
+    await sleep(300);
+    const modelBefore = await snapshot(page);
+    const modelExport = await downloadOf(page, `md-model-${lang}-${theme}`, async () => {
+      await chooseExportType(page, 'mdTemplate');
+      await click(page, '#btn-export-pdf');
+    });
+    const modelText = await readFile(modelExport.file, 'utf8');
+    check(`${label} - « ${T.mdTemplate} » puis Exporter : un .md du modèle, ses bulles écrites {{PbClients.Nom}} (dans le titre et le gras) et celle qui a un réglage en HTML, sans valeur de ligne`,
+      /\.md$/.test(modelExport.suggested) && /^# Contrat \{\{PbClients\.Nom\}\}$/m.test(modelText) && /\*\*\{\{PbClients\.Nom\}\}\*\*/.test(modelText) && /<span class="var-badge"[^>]* data-before="Dr ">/.test(modelText) && !/Alpha|Bravo/.test(modelText),
+      { suggested: modelExport.suggested, text: modelText });
+    const templateDone = await statusOf(page);
+    check(`${label} - le coin d'état dit « ${T.templateExported} », en entier, sans être coupé, dans le panneau`, templateDone.text === T.templateExported && !templateDone.error && !templateDone.clipped && templateDone.inPanel, templateDone);
+    const importModel = async (name, text, expected) => {
+      await pickFile(page, mdFile(name, text));
+      await settle(page, /^$/);
+      await clickDialogButton(page, T.discard);
+      await settle(page, /Markdown import/);
+      return { snap: await snapshot(page), state: await statusOf(page), expected };
+    };
+    const same = await importModel(modelExport.suggested, modelText);
+    check(`${label} - le fichier du modèle, importé de nouveau, redonne les mêmes bulles et le même HTML ; le coin d'état n'a rien à ajouter (« ${T.imported} »)`,
+      same.snap.html === modelBefore.html && same.snap.zones === modelBefore.zones && same.state.text === T.imported && !same.state.clipped, { sameHtml: same.snap.html === modelBefore.html, status: same.state.text });
+    const keys = await page.evaluate(() => Array.from(document.querySelectorAll('.tiptap span.var-badge')).map(b => b.dataset.key + (b.dataset.before ? '/' + b.dataset.before : '')).join('|'));
+    check(`${label} - les trois bulles sont dans l'éditeur (la troisième avec son « Dr »)`, keys === 'PbClients.Nom|PbClients.Nom|PbClients.Nom/Dr ', keys);
+    const oneUnknown = await importModel('inconnue.md', modelText + '\n{{AutreTable.Nom}}\n');
+    check(`${label} - une clé qui n'est pas une variable du document reste du texte et le coin d'état le dit : « ${T.importedVariable} », en entier, sans être coupé, dans le panneau`,
+      oneUnknown.state.text === T.importedVariable && !oneUnknown.state.error && !oneUnknown.state.clipped && oneUnknown.state.inPanel && /\{\{AutreTable\.Nom\}\}/.test(oneUnknown.snap.text), { status: oneUnknown.state, text: oneUnknown.snap.text.slice(-60) });
+    const mixed = await importModel('mixte.md', modelText + '\n{{AutreTable.Nom}} {{AutreTable.Ville}}\n\n![Logo](images/logo.png)\n');
+    check(`${label} - avec une image locale en plus, une seule phrase : « ${T.importedImageVariables} », en entier, sans être coupée, dans le panneau`,
+      mixed.state.text === T.importedImageVariables && !mixed.state.error && !mixed.state.clipped && mixed.state.inPanel, mixed.state);
+    await snap('model');
+
     // 7) Depuis une grille, puis depuis un email (« + » puis « Nouvelle grille » / « Nouvel email » au vrai clic) : l'import quitte ce modèle, rien de la grille ni de l'email ne reste et le document s'affiche
     //    sur sa page. (Un macro-modèle ouvert se modifie dans une fenêtre qui recouvre la barre d'outils : « + » n'est pas à portée tant qu'elle est là.)
     const modelState = () => page.evaluate(() => {

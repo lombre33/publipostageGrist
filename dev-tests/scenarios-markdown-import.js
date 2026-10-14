@@ -13,6 +13,8 @@
 //  - le fichier : UTF-8 avec ou sans BOM, UTF-16, Windows-1252, fins de ligne Windows, un fichier binaire, vide ou trop gros est refusé ;
 //  - ce qui est dangereux est retiré (script, gestionnaire, adresse javascript:, cadre) ;
 //  - l'aller-retour : un document de l'éditeur exporté en Markdown puis importé redonne le même Markdown, avec ses encadrés, cases, notes, sommaire, alignements, en-tête et pied.
+//  - les variables d'un modèle (type d'export « Markdown (modèle) », demande du 12/10) : {{Table.Colonne}} redevient la bulle, une clé qui n'est pas une variable reste du texte et se compte, rien n'est lu dans un code ni
+//    derrière une barre oblique inverse, le HTML en ligne des autres éléments de fusion revient avec ses réglages, et un modèle exporté puis importé puis exporté de nouveau donne le même Markdown.
 (function () {
   const cases = [];
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -369,6 +371,160 @@
       const zones2 = Editor.getHeaderFooterData();
       expect('en-tête, première page et pied', zones2.enabled && zones2.differentFirstPage && /Entête <strong>société<\/strong>/.test(zones2.header.default) && /Première page/.test(zones2.header.first) && /Pied/.test(zones2.footer.default), zones2);
       expect('rien n\'a été sauté', back.skippedImages === 0);
+      return result(bad);
+    });
+
+  // --- Les variables d'un modèle ----------------------------------------------------------------------------------------------------------------------
+  // Le type d'export « Markdown (modèle) » (demande d'Antoine du 12/10 : « laisser le choix à l'export ») écrit une bulle sans réglage {{Table.Colonne}} et tout autre élément de fusion en
+  // HTML en ligne : l'import les relit. Il lui faut les variables du document (Variables.findTextVariables) : une clé qui n'en est pas une reste du texte.
+  const CLIENTS = 'ExpMiClients';
+  const COND_ATTR = '{&quot;mode&quot;:&quot;all&quot;,&quot;rules&quot;:[{&quot;column&quot;:&quot;Nom&quot;,&quot;operator&quot;:&quot;equals&quot;,&quot;value&quot;:&quot;a&quot;}]}';
+  const COND_JSON = '{"mode":"all","rules":[{"column":"Nom","operator":"equals","value":"a"}]}';
+  async function seedModel() {
+    const stub = window.__gristStub;
+    stub.setVariables('ExpMiAnnuaire', { Nom: 'Text', Email: 'Text' });
+    stub.setVariables(CLIENTS, { Nom: 'Text', Ville: 'Text', Total: 'Numeric', Chef: 'Ref:ExpMiAnnuaire' });
+    await GristAPI.refreshSchema();
+  }
+  // Les bulles d'un HTML : table, colonne, clé et libellé de chacune, dans l'ordre du document.
+  const bubblesOf = html => all(html, 'span.var-badge').map(b => [b.getAttribute('data-table'), b.getAttribute('data-column'), b.getAttribute('data-key'), b.textContent]);
+
+  add('markdown_import_double_braces_become_merge_bubbles',
+    '{{Table.Colonne}} (espaces permis autour de la clé) devient la bulle de la variable, avec sa table, sa colonne et sa clé, là où elle est écrite : titre, gras, texte, puce, case de tableau ; un chemin de références (Table.Colonne.Colonne) est une seule bulle ; la touche de déclenchement réglée par la personne (« @ ») donne son préfixe au libellé ; aucune accolade ne reste',
+    async (h) => {
+      await seedModel();
+      const markdown = doc(`# Dossier {{${CLIENTS}.Nom}}`, '', `Bonjour **{{${CLIENTS}.Nom}}**, de {{ ${CLIENTS}.Ville }} ; contact {{${CLIENTS}.Chef.Email}}.`, '', `- point {{${CLIENTS}.Ville}}`, '',
+        '| Client | Total |', '| --- | --- |', `| {{${CLIENTS}.Nom}} | {{${CLIENTS}.Total}} |`);
+      const { bad, expect } = checker();
+      const { converted, edited } = await inEditor(h, markdown);
+      const want = [['Nom', 'Nom'], ['Nom', 'Nom'], ['Ville', 'Ville'], ['Chef.Email', 'Chef.Email'], ['Ville', 'Ville'], ['Nom', 'Nom'], ['Total', 'Total']];
+      expect('sept bulles dans l\'ordre du texte, avec table, colonne, clé et libellé', JSON.stringify(bubblesOf(edited)) === JSON.stringify(want.map(([column, key]) => [CLIENTS, column, CLIENTS + '.' + key, '#' + CLIENTS + '.' + key])), bubblesOf(edited));
+      expect('dans le titre, le gras, la puce et les deux cases', all(edited, 'h1 span.var-badge').length === 1 && all(edited, 'strong > span.var-badge').length === 1 && all(edited, 'li span.var-badge').length === 1 && all(edited, 'td span.var-badge').length === 2, edited.slice(0, 300));
+      expect('aucune accolade ne reste, aucune clé inconnue', !/\{\{|\}\}/.test(dom(edited).textContent) && converted.unknownVariables === 0, dom(edited).textContent);
+      // La touche de déclenchement réglée dans les Réglages donne son préfixe au libellé de la bulle (js/variables.js:triggerChar).
+      const before = localStorage.getItem('pp_trigger_char');
+      let at;
+      try {
+        localStorage.setItem('pp_trigger_char', '@');
+        at = (await inEditor(h, doc(`{{${CLIENTS}.Nom}}`))).edited;
+      } finally { if (before === null) localStorage.removeItem('pp_trigger_char'); else localStorage.setItem('pp_trigger_char', before); }
+      expect('touche « @ » : même bulle, libellé « @Table.Colonne »', JSON.stringify(bubblesOf(at)) === JSON.stringify([[CLIENTS, 'Nom', CLIENTS + '.Nom', '@' + CLIENTS + '.Nom']]), bubblesOf(at));
+      return result(bad);
+    });
+
+  add('markdown_import_a_key_that_is_not_a_variable_stays_text_and_is_counted',
+    'Une paire d\'accolades dont la clé n\'est pas une variable du document (une autre table, une colonne disparue) reste du texte tel qu\'il est écrit ; celles qui ont la forme d\'une clé « Table.Colonne » sont comptées (unknownVariables) pour que le coin d\'état le dise, pas un texte libre, des accolades vides ni une clé suivie d\'un mot ; la variable connue de la même ligne devient sa bulle',
+    async (h) => {
+      await seedModel();
+      await ready();
+      const converted = imp(doc(`{{${CLIENTS}.Inconnue}} et {{AutreTable.Nom}} et {{ texte libre }} et {{}} et {{a}} et {{${CLIENTS}.Nom suite}} et {{${CLIENTS}.Nom}}`));
+      const { bad, expect } = checker();
+      const text = dom(converted.html).textContent;
+      expect('deux clés inconnues comptées', converted.unknownVariables === 2, converted.unknownVariables);
+      expect('les cinq paires inconnues restent écrites', ['{{' + CLIENTS + '.Inconnue}}', '{{AutreTable.Nom}}', '{{ texte libre }}', '{{}}', '{{a}}', '{{' + CLIENTS + '.Nom suite}}'].every(part => text.includes(part)), text);
+      expect('une seule bulle : la variable connue', JSON.stringify(bubblesOf(converted.html).map(b => b[2])) === JSON.stringify([CLIENTS + '.Nom']), bubblesOf(converted.html));
+      expect('sans accolades doubles, rien n\'est compté', imp('Du texte {seul} et un code `{x}`\n').unknownVariables === 0);
+      return result(bad);
+    });
+
+  add('markdown_import_braces_after_a_backslash_in_code_or_in_a_tag_are_left_alone',
+    'Un « {{ » protégé par une barre oblique inverse (ce que l\'export écrit pour un « {{ » du texte), dans un code en ligne (simple ou double), dans un bloc de code délimité par ``` ou ~~~ et dans un attribut HTML reste du texte, même quand la clé est une variable du document : aucune bulle, aucune clé inconnue comptée',
+    async (h) => {
+      await seedModel();
+      const { bad, expect } = checker();
+      const key = `{{${CLIENTS}.Nom}}`;
+      const { converted, edited } = await inEditor(h, doc(`Échappé : \\${key}`, '', 'Code : `' + key + '` et ``a `' + key + '` b``', '', '```', key, '```', '', '~~~js', `const a = "${key}";`, '~~~', '', `<img alt="${key}" src="https://exemple.fr/a.png">`));
+      expect('aucune bulle', bubblesOf(edited).length === 0, bubblesOf(edited));
+      expect('texte échappé', textsOf(edited, 'p').some(t => t === 'Échappé : ' + key), textsOf(edited, 'p'));
+      expect('codes', JSON.stringify(textsOf(edited, 'code')) === JSON.stringify([key, 'a `' + key + '` b', key, `const a = "${key}";`]), textsOf(edited, 'code'));
+      expect('attribut', all(edited, 'img.editor-image')[0] && all(edited, 'img.editor-image')[0].getAttribute('alt') === key, edited.slice(-200));
+      expect('rien n\'est compté', converted.unknownVariables === 0);
+      return result(bad);
+    });
+
+  add('markdown_import_merge_elements_written_in_html_come_back_with_their_settings',
+    'Ce que l\'export d\'un modèle écrit en HTML en ligne revient avec ses réglages : bulle à format (JSON intact), calcul, puce, numéro de page, case et valeur conditionnelles (condition, valeur de remplacement, espaces du bord du texte), bloc conditionnel avec son contenu en Markdown (une bulle dedans devient sa bulle ; une image seule dedans est remise dans un paragraphe du bloc), image liée à une colonne et code QR chacun dans son paragraphe',
+    async (h) => {
+      await seedModel();
+      const format = '{&quot;type&quot;:&quot;date&quot;,&quot;preset&quot;:&quot;long&quot;}';
+      const { converted, edited } = await inEditor(h, doc(
+        `Valeur : <span class="conditional-value" data-condition="${COND_ATTR}" data-otherwise="non"> urgent </span>ok <span class="conditional-checkbox" data-checkbox-style="boxes" data-condition="${COND_ATTR}">☐</span> `
+        + `<span class="calc-badge" data-formula="{${CLIENTS}.Total} * 2">= x</span> <span class="smart-chip" data-chip-kind="date">Date du jour</span> <span class="page-number-badge" data-format="page-n">Page #</span> `
+        + `et <span class="var-badge" data-table="${CLIENTS}" data-column="Ville" data-key="${CLIENTS}.Ville" data-format="${format}" data-before="a&#124;b">#${CLIENTS}.Ville</span> `
+        + `par <span class="mention-chip" data-mention-table="${CLIENTS}" data-mention-row="2" data-mention-column="Nom">Marie Martin</span>`, '',
+        `<div class="conditional-text" data-condition="${COND_ATTR}">`, '', `Bloc *conditionnel* pour {{${CLIENTS}.Nom}}`, '', '- un point', '', '</div>', '',
+        `<div class="conditional-text" data-condition="${COND_ATTR}">`, '', `<img class="editor-image" alt="Logo" data-var-table="${CLIENTS}" data-var-column="Nom" data-var-key="${CLIENTS}.Nom" style="width: 80px;">`, '', '</div>', '',
+        `<img class="editor-image" alt="Image" data-var-table="${CLIENTS}" data-var-column="Nom" data-var-key="${CLIENTS}.Nom" style="width: 200px;">`, '',
+        `<img class="editor-image" alt="QR" data-qr-text="${CLIENTS}.Nom" style="width: 120px;">`));
+      const { bad, expect } = checker();
+      const root = dom(edited);
+      const value = root.querySelector('span.conditional-value');
+      expect('valeur conditionnelle : condition, remplacement et espaces du bord', !!value && value.getAttribute('data-condition') === COND_JSON && value.getAttribute('data-otherwise') === 'non' && value.textContent === ' urgent ', value && value.outerHTML);
+      const box = root.querySelector('span.conditional-checkbox');
+      expect('case conditionnelle : condition', !!box && box.getAttribute('data-condition') === COND_JSON, box && box.outerHTML);
+      const calc = root.querySelector('span.calc-badge');
+      expect('calcul : formule', !!calc && calc.getAttribute('data-formula') === `{${CLIENTS}.Total} * 2`, calc && calc.outerHTML);
+      const mention = root.querySelector('span.mention-chip');
+      expect('pastille « @ » : table, ligne, colonne et nom', !!mention && mention.getAttribute('data-mention-table') === CLIENTS && mention.getAttribute('data-mention-row') === '2' && mention.getAttribute('data-mention-column') === 'Nom' && mention.textContent === 'Marie Martin', mention && mention.outerHTML);
+      expect('puce et numéro de page', (root.querySelector('span.smart-chip') || document.createElement('i')).getAttribute('data-chip-kind') === 'date' && (root.querySelector('span.page-number-badge') || document.createElement('i')).getAttribute('data-format') === 'page-n');
+      const badge = root.querySelector('span.var-badge');
+      expect('bulle à réglages : format intact, texte avant avec sa barre verticale', !!badge && badge.getAttribute('data-format') === '{"type":"date","preset":"long"}' && badge.getAttribute('data-before') === 'a|b', badge && badge.outerHTML);
+      const block = root.querySelector('div.conditional-text');
+      expect('bloc conditionnel : condition, contenu en Markdown, bulle dedans', !!block && block.getAttribute('data-condition') === COND_JSON && !!block.querySelector('p > em') && block.querySelectorAll('li').length === 1 && bubblesOf(block.outerHTML).map(b => b[2]).join() === CLIENTS + '.Nom', block && block.outerHTML);
+      // Un bloc conditionnel dont le seul contenu est une image de fusion : l'image (une ligne de HTML sans rien d'autre, que marked laisse hors de tout paragraphe) est remise dans un paragraphe du bloc par l'import lui-même (le HTML qu'il rend, avant l'éditeur, qui la rangerait de toute façon).
+      const pictureBlock = dom(converted.html).querySelectorAll('div.conditional-text')[1];
+      expect('bloc conditionnel qui ne contient qu\'une image liée : l\'image est dans un paragraphe du bloc, pas posée sur le bloc', !!pictureBlock && !!pictureBlock.querySelector(':scope > p > img[data-var-key]') && !pictureBlock.querySelector(':scope > img'), pictureBlock && pictureBlock.outerHTML);
+      const pictures = all(edited, 'p').filter(p => p.querySelector('img') && !p.closest('div.conditional-text'));
+      expect('image liée et code QR : chacun dans son paragraphe', pictures.length === 2 && pictures[0].querySelector('img').getAttribute('data-var-key') === CLIENTS + '.Nom' && pictures[1].querySelector('img').getAttribute('data-qr-text') === CLIENTS + '.Nom', pictures.map(p => p.outerHTML.slice(0, 160)));
+      expect('rien d\'inconnu, aucune image sautée', converted.unknownVariables === 0 && converted.skippedImages === 0);
+      return result(bad);
+    });
+
+  add('markdown_import_a_template_exported_with_its_variables_comes_back_intact',
+    'Aller-retour du type « Markdown (modèle) » : un modèle (bulles dans le titre, le gras, une liste, un tableau et une zone ; bulle à format, chemin de références, calcul, puce, pastille « @ », numéro de page ; valeur, case et bloc conditionnels imbriqués ; image liée, code QR, graphique ; un « {{ » littéral ; en-tête et pied) exporté, importé dans l\'éditeur puis exporté de nouveau donne exactement le même Markdown, et les éléments de fusion de l\'éditeur gardent chacun leurs attributs',
+    async (h) => {
+      await seedModel();
+      await ready();
+      await h.resetEditor();
+      const bubble = (column, key, extra) => `<span class="var-badge" contenteditable="false" data-table="${CLIENTS}" data-column="${column}" data-key="${key}"${extra || ''}>#${key}</span>`;
+      const nom = bubble('Nom', CLIENTS + '.Nom');
+      const original = `<h1>Contrat ${nom}</h1><p style="text-align: right">Paris, le 12 octobre</p>`
+        + `<p>Bonjour <strong>${nom}</strong>, de ${bubble('Ville', CLIENTS + '.Ville', ' data-format="{&quot;type&quot;:&quot;date&quot;,&quot;preset&quot;:&quot;long&quot;}" data-before="Dr|X"')}. Chef : ${bubble('Chef.Email', CLIENTS + '.Chef.Email')}. Texte {{ libre }} et \\{{ déjà. `
+        + `Total : <span class="calc-badge" contenteditable="false" data-formula="{${CLIENTS}.Total} * 2">= 2 × Total</span> le <span class="smart-chip" contenteditable="false" data-chip-kind="date">Date du jour</span> page <span class="page-number-badge" contenteditable="false" data-format="page-n">Page #</span>. Rédigé par <span class="mention-chip" contenteditable="false" data-mention-table="${CLIENTS}" data-mention-row="2" data-mention-column="Nom">Marie Martin</span></p>`
+        + `<div class="conditional-text" data-condition="${COND_ATTR}"><p>Bloc <em>conditionnel</em> pour ${nom}</p><ul><li><p>point ${bubble('Ville', CLIENTS + '.Ville')}</p></li></ul>`
+        + `<div class="conditional-text" data-condition="${COND_ATTR}"><p style="text-align: center">Bloc imbriqué</p></div></div>`
+        + `<p>Valeur : <span class="conditional-value" data-condition="${COND_ATTR}" data-otherwise="non"> urgent </span>ok <span class="conditional-checkbox" contenteditable="false" data-checkbox-style="boxes" data-condition="${COND_ATTR}">☐</span></p>`
+        + `<table><tbody><tr><th><p>Client</p></th><th><p>Ville</p></th></tr><tr><td><p>${nom}</p></td><td><p>${bubble('Ville', CLIENTS + '.Ville', ' data-after="a|b"')}</p></td></tr></tbody></table>`
+        + `<p><img class="editor-image" draggable="false" src="" alt="Image" style="width: 200px; height: 100px" data-layer="normal" data-wrap="inline" data-var-table="${CLIENTS}" data-var-column="Nom" data-var-key="${CLIENTS}.Nom"></p>`
+        + `<p><img class="editor-image" draggable="false" alt="QR" style="width: 120px" data-layer="normal" data-wrap="inline" data-qr-text="${CLIENTS}.Nom"></p>`
+        + '<p><img class="editor-image" draggable="false" alt="Graphique" data-layer="normal" data-wrap="inline" data-chart-section="s1" data-chart-scope="all" data-chart-name="c"></p>';
+      const zones = { enabled: true, differentFirstPage: true, header: { default: `<p>Entête ${nom}</p>`, first: '<p>Première page</p>' },
+        footer: { default: '<p style="text-align: center"><span class="page-number-badge" contenteditable="false" data-format="n-slash-total">#/#</span></p>', first: '' } };
+      Editor.setHTML(original);
+      Editor.setHeaderFooterData(zones);
+      await sleep(300);
+      const edited1 = Editor.getHTML();
+      const first = (await (await MarkdownExport.getMarkdownBlobForTemplate(edited1, Editor.getHeaderFooterData(), 'Contrat')).blob.text());
+      const back = imp(first);
+      Editor.setHTML(back.html);
+      Editor.setHeaderFooterData(back.headerFooter);
+      await sleep(300);
+      const edited2 = Editor.getHTML();
+      const zones2 = Editor.getHeaderFooterData();
+      const second = (await (await MarkdownExport.getMarkdownBlobForTemplate(edited2, zones2, 'Contrat')).blob.text());
+      const { bad, expect } = checker();
+      expect('le Markdown ré-exporté est identique', second === first, second === first ? '' : { first, second });
+      // Les éléments de fusion de l'éditeur, un par un : balise, classe et attributs (triés), avant et après.
+      const MERGE = 'span.var-badge, span.calc-badge, span.smart-chip, span.mention-chip, span.page-number-badge, span.conditional-checkbox, span.conditional-value, div.conditional-text, img[data-var-key], img[data-qr-text], img[data-chart-section]';
+      const merge = html => all(html, MERGE).map(node => node.localName + '|' + Array.from(node.attributes).filter(a => a.name !== 'style').map(a => a.name + '=' + a.value).sort().join(';'));
+      const before = merge(edited1);
+      const after = merge(edited2);
+      expect('les 19 éléments de fusion du modèle (huit bulles, un calcul, une puce, une pastille « @ », un numéro de page, deux blocs, une valeur, une case, trois images) sont tous là, chacun avec ses attributs', before.length === 19 && JSON.stringify(before) === JSON.stringify(after), { before: before.length, after: after.length, diff: before.filter((x, i) => x !== after[i]).slice(0, 3) });
+      expect('un « {{ » littéral reste du texte, pas une bulle', /Texte \{\{ libre \}\} et \\\{\{ déjà/.test(dom(edited2).textContent) && !/\{\{ libre/.test(first.replace(/\\\{\{ libre/, '')), first.slice(0, 600));
+      expect('en-tête (avec sa bulle), première page et pied (avec son numéro de page, centré)', zones2.enabled && zones2.differentFirstPage && bubblesOf(zones2.header.default).length === 1 && /Première page/.test(zones2.header.first)
+        && /text-align: center/.test(zones2.footer.default) && all(zones2.footer.default, 'span.page-number-badge')[0].getAttribute('data-format') === 'n-slash-total', zones2);
+      expect('trois images de fusion, chacune dans son paragraphe', all(edited2, 'p').filter(p => p.querySelector('img[data-var-key], img[data-qr-text], img[data-chart-section]')).length === 3);
+      expect('rien d\'inconnu, aucune image sautée', back.unknownVariables === 0 && back.skippedImages === 0);
       return result(bad);
     });
 

@@ -269,7 +269,7 @@ const Shortcuts = (function () {
       { id: 'setDefault', group: 'templates', label: 'shortcuts.action.setDefault', key: '', scope: 'app', hint: tip('btn-set-default-template'), run: click('btn-set-default-template') },
       { id: 'templates', group: 'templates', label: 'shortcuts.action.templates', key: 'Alt+m', scope: 'app', aria: '#v2-title-cluster .tts-trigger', run: templatesList },
       { id: 'delete', group: 'templates', label: 'shortcuts.action.delete', key: '', scope: 'app', hint: tip('btn-delete'), run: click('btn-delete') },
-      { id: 'exportPdf', group: 'templates', label: 'toolbar.export', key: 'Alt+p', scope: 'app', hint: '#v2-export-pdf-flyout .v2-hover-flyout-label', aria: tip('btn-export-pdf'), run: click('btn-export-pdf') },
+      { id: 'exportPdf', group: 'templates', label: 'toolbar.export', key: 'Alt+p', scope: 'app', hint: '#v2-export-pdf-flyout .v2-hover-flyout-label:not([data-export-for])', aria: tip('btn-export-pdf'), run: click('btn-export-pdf') },
       // Affichage
       { id: 'modeEdit', group: 'view', label: 'toolbar.modeEdit', key: 'Alt+e', scope: 'app', hint: tip('btn-mode-edit'), run: editMode },
       { id: 'modeRead', group: 'view', label: 'toolbar.modeRead', key: 'Alt+l', scope: 'app', hint: '#v2-read-flyout .v2-hover-flyout-label', aria: tip('btn-mode-read'), run: click('btn-mode-read') },

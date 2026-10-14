@@ -123,13 +123,22 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
   tableaux, notes de bas de page, sommaire en liens, encadrés en alertes GitHub), le reste (souligné, couleur, taille,
   police, alignement, saut de page, largeur d'une image) reste en HTML dans le fichier ; un fichier, ou un par ligne dans
   une archive ZIP
+- Markdown (modèle) : le modèle lui-même, variables comprises, pour qu'il revienne intact par l'import. Un seul fichier,
+  nommé d'après le modèle ; rien n'est lu dans Grist. Une variable sans réglage s'écrit `{{Table.Colonne}}` ; une variable
+  réglée (format, condition, boucle, texte autour), un calcul, une puce de date, une pastille « @ », un numéro de page, une case ou un texte
+  conditionnel, une image liée à une colonne, un code QR et un graphique s'écrivent en HTML en ligne avec leurs réglages ;
+  l'en-tête et le pied de page sont écrits entre des commentaires. Les marges, le format de page, le filigrane, les images
+  derrière le texte ou sur toutes les pages et le lien d'un tableau avec un modèle Grille ne sont pas gardés. Pas dans une
+  grille ni dans un macro-modèle
 - Avant un export, une fenêtre liste les sites externes dont des images seraient téléchargées
 
 **Modèles**
 - Gestion multi-modèles, sauvegardés directement dans le document Grist
 - Import d'un fichier Markdown (`.md`, ligne « Importer un Markdown… » du menu « + ») : il devient un nouveau
   document ; les alertes GitHub deviennent des encadrés, les listes à cases des listes à cases, et le sommaire,
-  les notes de bas de page, les sauts de page, l'en-tête et le pied de page que l'export écrit sont relus ; une
+  les notes de bas de page, les sauts de page, l'en-tête et le pied de page que l'export écrit sont relus ; les
+  variables `{{Table.Colonne}}` et les éléments de fusion que « Markdown (modèle) » écrit en HTML redeviennent ce qu'ils
+  étaient (une clé qui n'est pas une variable du document reste du texte, et le coin d'état la compte) ; une
   image qui n'est ni en ligne ni dans le fichier n'est pas reprise (un mot le dit à sa place)
 - Galerie de 21 modèles prêts à l'emploi : facture, contrat de prestation de services, attestation,
   courrier de relance, quittance de loyer, bulletin scolaire, fiche recette, émargement, bon de commande,
@@ -301,7 +310,7 @@ bibliothèques et polices sont dans [NOTICE](NOTICE).
 - **Suivi des modifications** (bêta) : la version complète est prévue en V1.
 - **PDF** : les caractères chinois, arabes, hébreux, thaï et la plupart des émojis ne sont pas pris en
   charge (une case vide les remplace) ; le grec, le cyrillique, le vietnamien, les flèches, coches,
-  étoiles et monnaies le sont. Le menu « Type d'export » propose PDF, PDF protégé, Word, Excel et Markdown, puis, pour le PDF, « Vectoriel », « Impression navigateur » et « Léger » (le PDF
+  étoiles et monnaies le sont. Le menu « Type d'export » propose PDF, PDF protégé, Word, Excel, Markdown et Markdown (modèle), puis, pour le PDF, « Vectoriel », « Impression navigateur » et « Léger » (le PDF
   vectoriel aux images ramenées à 150 points par pouce). L'impression navigateur imprime une
   ligne à la fois, sur 60 pages au plus, et suppose que le navigateur ouvre sa fenêtre d'impression depuis le
   cadre du widget : si rien ne s'ouvre, choisissez « Vectoriel ». Un PDF protégé n'existe ni en un seul PDF pour
@@ -322,8 +331,11 @@ bibliothèques et polices sont dans [NOTICE](NOTICE).
 - **Modèles de la galerie** : ce sont des exemples de mise en page, écrits pour le droit français. Ils
   ne constituent ni un avis ni un conseil juridique et ne sont pas garantis conformes à la loi en
   vigueur (mentions obligatoires, pénalités de retard, clauses…) : faites-les relire avant tout usage.
-- **Import Markdown** : les variables ne sont pas reconnues (un `#Table.Colonne` écrit dans le fichier reste du
-  texte) ; une image qui n'est ni en ligne ni dans le fichier n'est pas reprise ; un fichier de plus de 10 Mo est
+- **Import Markdown** : seules les variables écrites `{{Table.Colonne}}` sont reconnues (un `#Table.Colonne` écrit
+  à la main dans le fichier reste du texte, comme une clé `{{…}}` qui n'est pas une variable du document) ; la
+  numérotation des titres, écrite dans leur texte par l'export (« 1) Titre »), revient comme du texte ; les marges,
+  le format de page, le filigrane, l'objet et les destinataires d'un e-mail ne sont pas écrits dans un fichier
+  Markdown, donc ne reviennent pas ; une image qui n'est ni en ligne ni dans le fichier n'est pas reprise ; un fichier de plus de 10 Mo est
   refusé. Le lecteur lit des fichiers de confiance : un texte fait pour le piéger (des milliers de crochets ou
   d'étoiles jamais fermés) peut bloquer la page de longues secondes.
 - **Pas encore faits** : remplissage des tables d'un modèle avec des lignes d'exemple (l'aperçu de la
@@ -501,13 +513,22 @@ GitHub Pages, with no backend and no build step.
   is written in Markdown (headings, bold, italic, strikethrough, links, nested, numbered and task lists, quotes, code,
   tables, footnotes, a linked table of contents, callouts as GitHub alerts), the rest (underline, colour, size, font,
   alignment, page break, image width) stays as HTML in the file; one file, or one per row in a ZIP archive
+- Markdown (template): the template itself, variables included, so that it comes back intact through the import. One
+  file, named after the template; nothing is read from Grist. A variable with no settings is written `{{Table.Column}}`;
+  a variable with settings (format, condition, loop, surrounding text), a calculation, a date chip, an "@" chip, a page number, a
+  conditional checkbox or text, an image linked to a column, a QR code and a chart are written as inline HTML with their
+  settings; the header and footer are written between comments. Margins, page format, watermark, images behind the text
+  or on every page and the link of a table with a Grid template are not kept. Not available in a grid or a
+  macro-template
 - Before an export, a window lists the external sites that images would be downloaded from
 
 **Templates**
 - Multi-template management, saved directly in the Grist document
 - Import of a Markdown file (`.md`, the "Import from Markdown…" line of the "+" menu): it becomes a new document;
   GitHub alerts become callouts, task lists become task lists, and the table of contents, footnotes, page breaks,
-  header and footer that the export writes are read back; an image that is neither online nor in the file is not
+  header and footer that the export writes are read back; the `{{Table.Column}}` variables and the merge elements that
+  "Markdown (template)" writes as HTML come back as they were (a key that is not a variable of the document stays
+  text, and the status corner counts it); an image that is neither online nor in the file is not
   imported (a word says so in its place)
 - Gallery of 21 ready-to-use templates: invoice, service agreement, certificate, payment reminder letter,
   rent receipt, school report, recipe sheet, attendance sheet, purchase order, inventory sheet, and
@@ -671,7 +692,7 @@ libraries and fonts are in [NOTICE](NOTICE).
 - **Track changes** (beta): the complete version is planned for V1.
 - **PDF**: Chinese, Arabic, Hebrew and Thai characters and most emoji are not supported (an empty box
   replaces them); Greek, Cyrillic, Vietnamese, arrows, check marks, stars and currencies are. The
-  "Export type" menu offers PDF, Protected PDF, Word, Excel and Markdown and, for the PDF, "Vector", "Browser print" and "Light" (the vector PDF with its images brought
+  "Export type" menu offers PDF, Protected PDF, Word, Excel, Markdown and Markdown (template) and, for the PDF, "Vector", "Browser print" and "Light" (the vector PDF with its images brought
   down to 150 points per inch). Browser print prints one row at a time, up to 60 pages, and assumes the browser opens its
   print window from the widget's frame: if nothing opens, choose "Vector". A protected PDF does not exist as a
   single PDF for all rows, as a sheet assembly or through browser print (those outputs cannot be encrypted); with
@@ -690,7 +711,10 @@ libraries and fonts are in [NOTICE](NOTICE).
 - **Gallery templates**: these are layout examples, written for French law. They are neither legal
   advice nor guaranteed to comply with current law (mandatory mentions, late-payment penalties,
   clauses…): have them reviewed before any real use.
-- **Markdown import**: variables are not recognized (a `#Table.Column` written in the file stays text); an image
+- **Markdown import**: only variables written `{{Table.Column}}` are recognized (a `#Table.Column` typed by hand in
+  the file stays text, like a `{{…}}` key that is not a variable of the document); the heading numbering, written in
+  their text by the export ("1) Title"), comes back as text; margins, page format, watermark, and an e-mail's subject
+  and recipients are not written in a Markdown file, so they do not come back; an image
   that is neither online nor in the file is not imported; a file over 10 MB is refused. The reader is meant for
   trusted files: a text built to trap it (thousands of brackets or asterisks never closed) can freeze the page for
   long seconds.

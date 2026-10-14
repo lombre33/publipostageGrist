@@ -10,6 +10,7 @@
 //  6) une valeur que les listes ne connaissent pas, un type que le modèle ne sait pas faire et la ligne d'une autre personne ne changent rien ;
 //  7) un document d'avant (colonnes absentes) reçoit ses trois colonnes une fois, avant la première ligne ;
 //  8) le type « PDF protégé » se garde comme les autres (une ligne « pdfProtected », rouverte avec ses menus sur un autre ordinateur).
+//  9) les types « Markdown » et « Markdown (modèle) » aussi (lignes « md » et « mdTemplate »), le second sans option de lignes à lui : le choix de lignes gardé ne change pas.
 // Le stockage seul (sans page) est dans dev-tests/unit-template-preferences.mjs ; le vrai clic à 700 x 400 et le rechargement de la page dans dev-tests/verify-export-type-mouse.mjs.
 (function () {
   const cases = [];
@@ -222,6 +223,30 @@
       await clean();
       const pass = same(written, [['md', '', 'zip']])
         && same(onA, { values: 'md|native|zip', menus: { type: 'md', ticked: 'zip', lit: true } })
+        && same(onB, { values: 'pdf|native|one', menus: { type: 'pdf', ticked: 'one', lit: false } });
+      return { pass, notes: JSON.stringify({ written, onA, onB }) };
+    },
+  });
+
+  cases.push({
+    id: 'export_choices_markdown_template_is_kept_like_the_other_types',
+    description: 'Le type « Markdown (modèle) » (le modèle lui-même, variables comprises) se garde comme les autres : écrit sur la ligne du modèle (« mdTemplate », avec le choix de lignes qui était là), retrouvé sur un autre ordinateur avec sa ligne active et le bouton du type allumé ; le modèle voisin repart de l\'origine',
+    run: async (h) => {
+      const a = await saved(h, 'Export Markdown modèle - A');
+      const b = await saved(h, 'Export Markdown modèle - B');
+      await open(a);
+      await pickType('md'); await pickLines('zip'); await pickType('mdTemplate'); // « toutes les lignes » se choisit sous Markdown : sous Markdown (modèle) ses lignes ne sont pas montrées
+      await sleep(400);
+      const written = prefRows(a).map(row => [row.type, row.quality, row.lines]);
+      await reload();
+      await pickType('pdf'); await pickQuality('native'); await pickLines('one');
+      await open(a);
+      const onA = { values: values(), menus: menus() };
+      await open(b);
+      const onB = { values: values(), menus: menus() };
+      await clean();
+      const pass = same(written, [['mdTemplate', '', 'zip']])
+        && same(onA, { values: 'mdTemplate|native|zip', menus: { type: 'mdTemplate', ticked: 'one', lit: true } })
         && same(onB, { values: 'pdf|native|one', menus: { type: 'pdf', ticked: 'one', lit: false } });
       return { pass, notes: JSON.stringify({ written, onA, onB }) };
     },
