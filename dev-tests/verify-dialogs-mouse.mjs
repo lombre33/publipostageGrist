@@ -909,7 +909,13 @@ async function runSites(theme) {
   // 7) Supprimer un fil de commentaires : la confirmation s'ouvre au clic et y RESTE (le bouton du fil réagit à l'appui, la fenêtre apparaît sous le pointeur).
   await page.evaluate(name => { Editor.setHTML('<p>Un paragraphe à commenter</p>'); document.getElementById('template-name').value = name; }, `Commentaires ${T}`);
   await realClick('#btn-save', 800);
+  // Le menu du bouton Enregistrer reste ouvert tant que le pointeur est dessus. Depuis « Historique des versions… » il descend jusque sur la première ligne du texte
+  // (et recouvre le bouton Commenter) : comme la personne qui s'éloigne du bouton, le pointeur le quitte, le menu se referme, et seulement alors il vise le paragraphe.
+  await page.mouse.move(40, HEIGHT - 30, { steps: 4 });
+  await page.waitForTimeout(250);
   const para = await centerOf('.tiptap p');
+  const saveMenuClosed = await page.evaluate(() => getComputedStyle(document.getElementById('v2-save-flyout')).display === 'none');
+  check(`${T}, commentaire : le pointeur parti du bouton Enregistrer, son menu s’est refermé et le paragraphe à commenter est au premier plan`, saveMenuClosed && para.onTop, { saveMenuClosed, onTop: para.onTop });
   await page.mouse.click(para.x, para.y, { clickCount: 3 });
   await page.waitForTimeout(150);
   await realClick('#v2-btn-comment', 500);
