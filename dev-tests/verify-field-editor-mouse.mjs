@@ -370,7 +370,8 @@ async function run() {
   const subjectRow1 = await page.evaluate(({ value, rec }) => Variables.resolveTextVariables(value, 'MfDossiers', rec), { value: subject.value, rec: REC_1 });
   const subjectRow2 = await page.evaluate(({ value, rec }) => Variables.resolveTextVariables(value, 'MfDossiers', rec), { value: subject.value, rec: REC_2 });
   check('ligne « Urgent » : l’Objet est écrit en entier, la valeur entre ses guillemets, avec le téléphone', subjectRow1 === 'Suivi « Dossier A » par Dupont Jean 06 11 22 33 44', subjectRow1);
-  check('ligne « Normal » : la condition retire la première bulle ET ses guillemets, le reste de l’Objet est écrit', subjectRow2 === 'Suivi  par Martin Anne 06 55 66 77 88', subjectRow2);
+  // Une bulle qui n'écrit rien (ici retirée par sa condition) ne laisse qu'UNE espace entre les mots tapés autour d'elle (js/space-gap.js, 14/10) : « Suivi par », pas « Suivi  par ».
+  check('ligne « Normal » : la condition retire la première bulle ET ses guillemets, une seule espace reste entre « Suivi » et « par », le reste de l’Objet est écrit', subjectRow2 === 'Suivi par Martin Anne 06 55 66 77 88', subjectRow2);
 
   // ===== 5) Le champ À au clavier : « # » seul, flèches, Échap, clé tapée en entier, Retour arrière sur une bulle =====
   const toEdge = await fieldEdge(TO, 'right');
@@ -503,7 +504,7 @@ async function run() {
   await realClick('#btn-create-email', 900);
   urls = await page.evaluate(() => window.__mailtos.slice());
   mail = readMailto(urls[1] || 'mailto:');
-  check('ligne « Normal » : autre adresse, et la condition retire le titre de l’objet', mail.to === 'anne@ex.fr' && mail.subject === 'Suivi  par Martin Anne 06 55 66 77 88', mail);
+  check('ligne « Normal » : autre adresse, et la condition retire le titre de l’objet', mail.to === 'anne@ex.fr' && mail.subject === 'Suivi par Martin Anne 06 55 66 77 88', mail);
   await page.evaluate(rec => window.__gristStub.fireRecord(rec, 'MfDossiers'), REC_1);
   await page.waitForTimeout(400);
 
@@ -521,7 +522,7 @@ async function run() {
   check('un clic puis une frappe dans un champ en Lecture ne change rien et n’ouvre aucune barre', (await fieldInfo(SUBJECT)).text === reading.subject.text && !(await page.evaluate(() => !!document.querySelector('.v2-varfmt-toolbar.visible'))));
   await page.evaluate(rec => window.__gristStub.fireRecord(rec, 'MfDossiers'), REC_2);
   await page.waitForTimeout(600);
-  check('changer de ligne met à jour les valeurs lues', (await fieldInfo(SUBJECT)).text === 'Suivi  par Martin Anne 06 55 66 77 88' && (await fieldInfo(TO)).text === 'anne@ex.fr', await fieldInfo(SUBJECT));
+  check('changer de ligne met à jour les valeurs lues', (await fieldInfo(SUBJECT)).text === 'Suivi par Martin Anne 06 55 66 77 88' && (await fieldInfo(TO)).text === 'anne@ex.fr', await fieldInfo(SUBJECT));
   await realClick('#btn-mode-edit', 700);
   const back = { subject: (await fieldInfo(SUBJECT)).value, to: (await fieldInfo(TO)).value, cc: (await fieldInfo(CC)).value };
   check('au retour à l’édition, les bulles reprennent leurs réglages : les trois valeurs enregistrées sont intactes', JSON.stringify(back) === JSON.stringify(editing) && (await fieldInfo(SUBJECT)).bubbles.length === 3 && !!conditionOf((await fieldInfo(SUBJECT)).bubbles[0]), { back, editing });
