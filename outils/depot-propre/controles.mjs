@@ -67,7 +67,7 @@ function report(level, label, hits, show = 4) {
 for (const required of ['index.html', 'LICENSE', 'README.md', 'SECURITY.md', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md', 'CHANGELOG.md', 'NOTICE', 'CARTE_DU_CODE.md']) {
   if (!has(required)) fail(`fichier absent : ${required}`);
 }
-const NEVER = ['dev-tests', 'planning', 'prototypes', 'templates-gallery-dev', 'outils', '.claude', 'AUDIT_CODE.md', 'CAHIER_DES_CHARGES.md'];
+const NEVER = ['dev-tests', 'planning', 'prototypes', 'templates-gallery-dev', 'outils', '.claude', 'AUDIT_CODE.md', 'CAHIER_DES_CHARGES.md', 'GFS-ETAT.md'];
 const topLevel = new Set(files.map(file => file.rel.split('/')[0]));
 for (const name of NEVER) if (topLevel.has(name)) fail(`entrée du dépôt de développement présente à la racine : ${name}`);
 const KNOWN = new Set(['index.html', 'css', 'js', 'img', 'templates-gallery', 'screenshots', 'LICENSE', 'README.md', 'SECURITY.md', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md', 'CHANGELOG.md', 'NOTICE', 'CARTE_DU_CODE.md', '.github', '.gitignore', '.gitattributes', '.nojekyll']);
