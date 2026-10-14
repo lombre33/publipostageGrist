@@ -284,9 +284,10 @@
     },
   });
 
-  cases.push({
+  // Les textes de l'onglet sont écrits dans la langue de la page : le cas se joue en français, puis dans une seconde page qui démarre en anglais (la copie `lang: 'en'`).
+  const mailClientTabCase = {
     id: 'email_settings_tab_email_chooses_the_client',
-    description: 'Réglages, onglet « Email » : un onglet de plus, « Standard » coché par défaut, « Zimbra » le choisit à l\'instant (et le garde), la fenêtre rouverte montre le choix en vigueur, les textes sont en français et en anglais',
+    description: 'Réglages, onglet « Email » : un onglet de plus, « Standard » coché par défaut, « Zimbra » le choisit à l\'instant (et le garde), la fenêtre rouverte montre le choix en vigueur, les textes sont dans la langue de la page',
     run: async () => {
       const el = id => document.getElementById(id);
       const KEY = 'pp_mail_client';
@@ -297,7 +298,6 @@
       const tab = () => document.querySelector('#settings-modal .settings-tab[data-settings-tab="mailClient"]');
       const panel = () => document.querySelector('#settings-modal .settings-panel[data-settings-panel="mailClient"]');
       const checks = {};
-      const lang = I18n.getLang();
       try {
         localStorage.removeItem(KEY);
         MailtoExport.setMailClient('standard');
@@ -320,24 +320,26 @@
         close();
         open();
         checks.reopenedKeepsZimbra = radio('zimbra').checked && !radio('standard').checked;
-        const note = () => panel().querySelector('[data-i18n="settings.mailClient.zimbraNote"]').textContent;
-        const frNote = note();
-        I18n.setLang('en');
-        await sleep(80);
-        const enNote = note();
-        checks.textsFrenchAndEnglish = /Zimbra lit mal/.test(frNote) && /&amp;/.test(frNote) && /＆ ＜ ＞ ＋/.test(frNote) && /Zimbra misreads/.test(enNote) && /&amp;/.test(enNote) && tab().textContent.trim() === 'Email'
-          && /Mail program|mail program/.test(panel().querySelector('[data-i18n="settings.mailClient.intro"]').textContent);
+        const note = panel().querySelector('[data-i18n="settings.mailClient.zimbraNote"]').textContent;
+        checks.textsInThePageLanguage = I18n.getLang() === 'en'
+          ? /Zimbra misreads/.test(note) && /&amp;/.test(note) && tab().textContent.trim() === 'Email' && /Mail program|mail program/.test(panel().querySelector('[data-i18n="settings.mailClient.intro"]').textContent)
+          : /Zimbra lit mal/.test(note) && /&amp;/.test(note) && /＆ ＜ ＞ ＋/.test(note) && tab().textContent.trim() === 'Email';
       } finally {
         close();
-        I18n.setLang(lang);
         MailtoExport.setMailClient('standard');
         if (saved === null) localStorage.removeItem(KEY); else localStorage.setItem(KEY, saved);
         document.querySelector('#settings-modal .settings-tab[data-settings-tab="language"]').click();
       }
       const failed = Object.keys(checks).filter(k => !checks[k]);
-      return { pass: failed.length === 0, notes: JSON.stringify({ failed, checks }) };
+      return { pass: failed.length === 0, notes: JSON.stringify({ lang: I18n.getLang(), failed, checks }) };
     },
-  });
+  };
+  cases.push(mailClientTabCase);
+  cases.push(Object.assign({}, mailClientTabCase, {
+    id: 'email_settings_tab_email_chooses_the_client_in_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : l\'onglet « Email » de Réglages écrit sa présentation et la note sur Zimbra en anglais ; le choix du programme de messagerie marche comme en français',
+  }));
 
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.emailZimbra = cases;

@@ -123,12 +123,12 @@ const Settings = (function () {
 
   // Changer de langue recharge la page, rien d'autre (demande du 14/10) : aucun libellé n'est retraduit à chaud, la langue choisie est relue au démarrage
   // (I18n.storeLang). Ce qui attendait d'être enregistré passe d'abord par la question « Enregistrer / Abandonner / Annuler » de js/main.js, comme pour tout
-  // ce qui remplace le contenu de l'éditeur ; « Annuler » laisse la langue d'avant. Stockage refusé (la langue ne survivrait pas au rechargement) : elle
-  // change sur place, comme avant.
+  // ce qui remplace le contenu de l'éditeur ; « Annuler » laisse la langue d'avant. Stockage refusé (la langue ne survivrait pas au rechargement) : la case
+  // revient sur la langue de la page, rien ne change.
   async function changeLanguage(next, leave) {
     if (leave && leave.hasEditsToConfirmBeforeLeaving() && !(await leave.askBeforeLeaving())) { checkLangRadios(); return; }
-    if (I18n.storeLang(next)) location.reload();
-    else I18n.setLang(next);
+    if (!I18n.storeLang(next)) { checkLangRadios(); return; }
+    location.reload();
   }
 
   function wireTriggerChar() {

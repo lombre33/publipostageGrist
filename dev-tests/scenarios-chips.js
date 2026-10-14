@@ -184,37 +184,34 @@
   });
 
   // L'onglet des puces du panneau « # » (demande d'Antoine du 05/10 : corriger « Chips » en « puces » en français) : « Puces » en français, « Chips » en anglais, et le même mot partout où l'interface
-  // française en parle - le nom du bouton « Insérer une variable » et l'aide du caractère déclencheur (Réglages). Les onglets sont créés une seule fois avec la liste : ils doivent suivre un changement
-  // de langue (data-i18n) sans rouvrir la page, ce que personne ne voyait tant que les deux langues écrivaient « Chips ». Le test ouvre la liste, puis change de langue devant elle, dans les deux sens.
-  cases.push({
+  // française en parle - le nom du bouton « Insérer une variable » et l'aide du caractère déclencheur (Réglages). La page écrit ces textes une fois, dans sa langue de départ (changer de langue
+  // recharge la page) : le cas lit la page où il joue, en français, puis une seconde fois dans une page qui démarre en anglais.
+  const chipTabCase = {
     id: 'chip_tab_is_called_puces_in_french_and_chips_in_english',
-    description: 'L\'onglet des puces du panneau « # » se lit « Puces » en français et « Chips » en anglais (« Variables » dans les deux), la liste déjà créée suit un changement de langue dans les deux sens, et le nom du bouton « Insérer une variable » (« puce » / « chip ») comme l\'aide du caractère déclencheur (« Puces » / « Chips ») disent le même mot',
+    description: 'L\'onglet des puces du panneau « # » se lit « Puces » dans une page française (« Variables » aussi), et le nom du bouton « Insérer une variable » et l\'aide du caractère déclencheur de Réglages disent le même mot',
     run: async (h) => {
-      const previousLang = I18n.getLang();
       try {
         await h.resetEditor();
-        I18n.setLang('fr');
         await openHashPanel(h);
-        const read = () => ({
+        const got = {
           tabs: Array.from(document.querySelectorAll('#autocomplete-box .ac-tab')).map(t => t.dataset.tab + '=' + t.textContent).join(' | '),
           button: document.getElementById('v2-btn-insert-variable').getAttribute('aria-label'),
           help: document.getElementById('settings-trigger-intro').textContent,
-        });
-        const fr = read();
-        I18n.setLang('en');
-        const en = read();
-        I18n.setLang('fr');
-        const back = read();
-        const wantFr = { tabs: 'variables=Variables | chips=Puces', button: 'Insérer une variable (#Variable ou puce)', help: 'Caractère qui ouvre le panneau #Variable/Puces en cours de frappe.' };
-        const wantEn = { tabs: 'variables=Variables | chips=Chips', button: 'Insert a variable (#Variable or chip)', help: 'Character that opens the #Variable/Chips panel while typing.' };
-        const same = (got, want) => Object.keys(want).every(key => got[key] === want[key]);
-        return { pass: same(fr, wantFr) && same(en, wantEn) && same(back, wantFr), notes: JSON.stringify({ fr, en, back }) };
+        };
+        const want = I18n.getLang() === 'en'
+          ? { tabs: 'variables=Variables | chips=Chips', button: 'Insert a variable (#Variable or chip)', help: 'Character that opens the #Variable/Chips panel while typing.' }
+          : { tabs: 'variables=Variables | chips=Puces', button: 'Insérer une variable (#Variable ou puce)', help: 'Caractère qui ouvre le panneau #Variable/Puces en cours de frappe.' };
+        return { pass: Object.keys(want).every(key => got[key] === want[key]), notes: JSON.stringify({ lang: I18n.getLang(), got, want }) };
       } finally {
-        I18n.setLang(previousLang);
         await h.resetEditor();
       }
     },
-  });
+  };
+  cases.push(chipTabCase, Object.assign({}, chipTabCase, {
+    id: 'chip_tab_is_called_chips_in_an_english_page',
+    lang: 'en',
+    description: 'Dans une page qui démarre en anglais, l\'onglet des puces du panneau « # » se lit « Chips » (« Variables » aussi), comme le nom du bouton « Insert a variable » et l\'aide du caractère déclencheur de Réglages',
+  }));
 
   // La puce « N° de ligne » (point 5.1 d'Antoine, 09/10) : proposée par l'onglet Puces de la liste « # » du document, posée comme les autres puces, libellée dans
   // les deux langues, et relue telle quelle depuis le HTML enregistré. Son rang vient d'une zone répétée (suite varLoop) ; elle n'entre pas dans un champ texte (suite

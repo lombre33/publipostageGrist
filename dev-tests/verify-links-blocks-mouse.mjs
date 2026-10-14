@@ -359,8 +359,19 @@ async function run(theme) {
   await closeMenu();
 }
 
+// La page ne change plus de langue en route : Réglages garde le choix et la recharge. Le script fait pareil - il garde la langue, recharge, attend le widget.
+async function restartIn(lang) {
+  await page.evaluate(next => I18n.storeLang(next), lang);
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
+  await page.waitForFunction(() => {
+    const el = document.getElementById('status-msg');
+    return !!el && /prêt|ready/i.test(el.textContent || '');
+  }, null, { timeout: 90000 });
+}
+
 async function runEnglish() {
-  await page.evaluate(() => I18n.setLang('en'));
+  await restartIn('en');
   await page.waitForTimeout(250);
   await setDoc('<p>Hello big world</p>');
   const word = await pointOf('big');
@@ -386,8 +397,6 @@ async function runEnglish() {
   await snap('en-2-fenetre');
   await page.keyboard.press('Escape');
   await page.waitForTimeout(200);
-  await page.evaluate(() => I18n.setLang('fr'));
-  await page.waitForTimeout(250);
 }
 
 await run('light');

@@ -922,9 +922,23 @@ async function run(theme) {
   await followScenario(T, 'fr');
 }
 
+// La page ne change plus de langue en route : Réglages garde le choix et la recharge. Le script fait pareil - il garde la langue, recharge, attend le widget.
+async function restartIn(lang) {
+  await page.evaluate(next => I18n.storeLang(next), lang);
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
+  await page.waitForFunction(() => {
+    const el = document.getElementById('status-msg');
+    return !!el && /prêt|ready/i.test(el.textContent || '');
+  }, null, { timeout: 90000 });
+}
+
 async function runEnglish() {
-  await page.evaluate(() => I18n.setLang('en'));
+  await restartIn('en');
   await page.waitForTimeout(250);
+  // Le rechargement repart d'un document neuf : les modèles de la liste sont à refaire.
+  modelsMade = false;
+  await makeModels();
   await setDoc(DOC);
   await clickInText('entier', 0.98);
   await openMenu();
@@ -1057,8 +1071,6 @@ async function runEnglish() {
   });
   await page.evaluate(async id => { await Templates.remove(id); await Templates.loadAll(); }, enDoc.id);
   await followScenario('anglais', 'en');
-  await page.evaluate(() => I18n.setLang('fr'));
-  await page.waitForTimeout(250);
 }
 
 await run('light');

@@ -169,35 +169,30 @@
     },
   });
 
-  cases.push({
+  // La ligne écrit son libellé, son nom accessible et la raison de son grisage dans la langue de la page : le cas se joue en français, puis dans une seconde page qui démarre en anglais (la copie `lang: 'en'`).
+  const rowTextsCase = {
     id: 'keepnext_menu_row_follows_the_language_label_name_and_reason',
-    description: 'La ligne du menu, son nom accessible et la raison de son grisage suivent la langue de l\'interface (« Keep with next » en anglais), y compris quand la langue change pendant que la ligne est grisée',
+    description: 'La ligne du menu, son nom accessible et la raison de son grisage sont dans la langue de la page (« Garder avec le suivant » ici)',
     run: async (h) => {
-      const lang = I18n.getLang();
-      const out = {};
-      try {
-        for (const code of ['fr', 'en']) {
-          I18n.setLang(code);
-          await setDoc(h, '<table><tbody><tr><td><p>Dd</p></td></tr></tbody></table><p>Ee</p>');
-          await cursorIn('Ee');
-          const free = { label: row().textContent.trim(), aria: row().getAttribute('aria-label') };
-          await cursorIn('Dd');
-          const greyedTitle = row().title;
-          I18n.setLang(code === 'fr' ? 'en' : 'fr');
-          await sleep(150);
-          const switched = row().title;
-          I18n.setLang(code);
-          await sleep(150);
-          out[code] = { free, greyedTitle, switchedTitle: switched, backTitle: row().title };
-        }
-      } finally { I18n.setLang(lang); }
-      const pass = out.fr.free.label === 'Garder avec le suivant' && out.fr.free.aria === 'Garder avec le suivant : le paragraphe reste sur la même page que le bloc qui le suit'
-        && out.en.free.label === 'Keep with next' && out.en.free.aria === 'Keep with next: the paragraph stays on the same page as the block that follows it'
-        && out.fr.greyedTitle.indexOf('Seulement pour les paragraphes du texte') === 0 && out.en.greyedTitle.indexOf('Only for text paragraphs') === 0
-        && out.fr.switchedTitle === out.en.greyedTitle && out.en.switchedTitle === out.fr.greyedTitle && out.fr.backTitle === out.fr.greyedTitle && out.en.backTitle === out.en.greyedTitle;
-      return { pass, notes: JSON.stringify(out) };
+      const code = I18n.getLang();
+      const want = code === 'en'
+        ? { label: 'Keep with next', aria: 'Keep with next: the paragraph stays on the same page as the block that follows it', greyed: 'Only for text paragraphs' }
+        : { label: 'Garder avec le suivant', aria: 'Garder avec le suivant : le paragraphe reste sur la même page que le bloc qui le suit', greyed: 'Seulement pour les paragraphes du texte' };
+      await setDoc(h, '<table><tbody><tr><td><p>Dd</p></td></tr></tbody></table><p>Ee</p>');
+      await cursorIn('Ee');
+      const free = { label: row().textContent.trim(), aria: row().getAttribute('aria-label') };
+      await cursorIn('Dd');
+      const greyedTitle = row().title;
+      const pass = free.label === want.label && free.aria === want.aria && greyedTitle.indexOf(want.greyed) === 0;
+      return { pass, notes: JSON.stringify({ code, free, greyedTitle }) };
     },
-  });
+  };
+  cases.push(rowTextsCase);
+  cases.push(Object.assign({}, rowTextsCase, {
+    id: 'keepnext_menu_row_follows_the_language_label_name_and_reason_in_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : la ligne du menu (« Keep with next »), son nom accessible et la raison de son grisage sont en anglais',
+  }));
 
   cases.push({
     id: 'keepnext_in_track_changes_the_setting_is_a_tracked_modification_accept_all_keeps_it_refusing_it_removes_it',

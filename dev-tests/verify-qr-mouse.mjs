@@ -481,8 +481,21 @@ async function run(theme) {
   check(`${T}, clavier : Échap ferme sans toucher au document, le clavier revient dans l'éditeur au même endroit`, !(await winOpen()) && (await qrNodes()).length === 0 && (await focusIn()) === 'editor' && caretBack === 'Deuxième ligne', { focus: await focusIn(), caretBack });
 }
 
+// La page ne change plus de langue en route : Réglages garde le choix et la recharge. Le script fait pareil - il garde la langue, recharge, attend le widget.
+async function restartIn(lang) {
+  await page.evaluate(next => I18n.storeLang(next), lang);
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
+  await page.waitForFunction(() => {
+    const el = document.getElementById('status-msg');
+    return !!el && /prêt|ready/i.test(el.textContent || '');
+  }, null, { timeout: 90000 });
+  // Le lecteur de QR code est ajouté à la page une fois chargée (plus haut) : il faut le reposer sur la page rechargée.
+  await page.addScriptTag({ url: OFFLINE ? `${BASE}/dev-tests/.offline-cache/umd/jsqr.js` : 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js' });
+}
+
 async function runEnglish() {
-  await page.evaluate(() => I18n.setLang('en'));
+  await restartIn('en');
   await page.waitForTimeout(250);
   await setDoc('<p>Hello big world</p>');
   await seedRecord();
@@ -524,8 +537,6 @@ async function runEnglish() {
   const editLabel = (await rowLabels())[QR_ROW_INDEX];
   check('anglais, modification : la ligne devient « Edit QR code… » quand le cadre est sélectionné', editLabel === 'Edit QR code…', editLabel);
   await closeMenu();
-  await page.evaluate(() => I18n.setLang('fr'));
-  await page.waitForTimeout(250);
   await closeWindowWithEscape();
 }
 

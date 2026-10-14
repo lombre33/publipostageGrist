@@ -141,24 +141,24 @@
     },
   });
 
-  cases.push({
+  // Les icônes écrivent leur nom accessible et leur infobulle dans la langue de la page : le cas se joue en français, puis dans une seconde page qui démarre en anglais (la copie `lang: 'en'`).
+  const namesCase = {
     id: 'sm_icons_and_names_follow_the_interface_language',
-    description: 'Les deux icônes passent en anglais avec l\'interface (Superscript, Subscript) et reviennent en français',
+    description: 'Les deux icônes portent leur nom accessible et leur infobulle dans la langue de la page (Exposant, Indice ; Superscript, Subscript en anglais)',
     run: async (h) => {
       await h.resetEditor();
-      const read = () => [SUP, SUB].map(id => [byId(id).getAttribute('aria-label'), byId(id).getAttribute('data-tip')].join('|'));
-      const fr = read();
-      I18n.setLang('en');
-      await sleep(100);
-      let en;
-      try { en = read(); } finally { I18n.setLang('fr'); }
-      await sleep(100);
-      const back = read();
-      const pass = JSON.stringify(fr) === JSON.stringify(['Exposant|Exposant', 'Indice|Indice']) && JSON.stringify(en) === JSON.stringify(['Superscript|Superscript', 'Subscript|Subscript'])
-        && JSON.stringify(back) === JSON.stringify(fr);
-      return { pass, notes: JSON.stringify({ fr, en, back }) };
+      const got = [SUP, SUB].map(id => [byId(id).getAttribute('aria-label'), byId(id).getAttribute('data-tip')].join('|'));
+      const want = I18n.getLang() === 'en' ? ['Superscript|Superscript', 'Subscript|Subscript'] : ['Exposant|Exposant', 'Indice|Indice'];
+      const pass = JSON.stringify(got) === JSON.stringify(want);
+      return { pass, notes: JSON.stringify({ lang: I18n.getLang(), got }) };
     },
-  });
+  };
+  cases.push(namesCase);
+  cases.push(Object.assign({}, namesCase, {
+    id: 'sm_icons_and_names_speak_english_on_a_page_that_starts_in_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : les deux icônes s\'appellent Superscript et Subscript, nom accessible et infobulle',
+  }));
 
   // --- 2) Poser, retirer, changer --------------------------------------------------------------------------------------------------------------------------------------
   cases.push({

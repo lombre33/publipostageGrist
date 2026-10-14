@@ -6,8 +6,7 @@ const MacroEditor = (function () {
   // Copie de travail des slots conditionnels (le slot fixe « page de garde » est géré à part par #macro-editor-cover, voir collectSlotsForSave) :
   // jamais la même référence que tpl.macroSlots.slots, pour ne modifier le modèle enregistré qu'au clic sur « Enregistrer ».
   let slots = [];
-  // Le macro-modèle dont le résumé est à l'écran (redessiné au changement de langue) et le rappel de js/main.js qui ouvre un de ses modèles dans
-  // l'éditeur (stylo d'une ligne du résumé).
+  // Le macro-modèle dont le résumé est à l'écran et le rappel de js/main.js qui ouvre un de ses modèles dans l'éditeur (stylo d'une ligne du résumé).
   let summaryTpl = null;
   let openTemplate = null;
   // Rappel de js/main.js quand l'œil d'un modèle du résumé a fini d'écrire la composition dans Grist (voir toggleModelHidden) : { name, hidden, ok },
@@ -355,7 +354,7 @@ const MacroEditor = (function () {
   }
 
   function eyesShow(macroSlots) {
-    // Les yeux à l'écran disent-ils cette composition ? Faux seulement quand un redessin du résumé (changement de langue, relecture après l'échec d'une
+    // Les yeux à l'écran disent-ils cette composition ? Faux seulement quand un redessin du résumé (changement de mise en page, relecture après l'échec d'une
     // autre écriture) les a faits partir d'un cache des modèles qu'une relecture croisant l'écriture avait remis à l'état d'avant.
     const list = document.getElementById('macro-summary-parts');
     if (!list) return true;

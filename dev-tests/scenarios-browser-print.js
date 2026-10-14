@@ -60,21 +60,15 @@
     try { return await fn(job); } finally { job.dispose(); }
   }
 
-  cases.push({
+  // Les lignes du menu sont écrites dans la langue de la page : le cas se joue en français, puis dans une seconde page qui démarre en anglais (la copie `lang: 'en'`).
+  const qualityMenuCase = {
     id: 'bprint_quality_menu_offers_browser_print',
-    description: 'Menu « Qualité PDF » : la ligne « Impression navigateur » (ex « Impr. navigateur (bientôt) ») n’est plus grisée, ni dans la liste cachée ni dans le panneau, se nomme ainsi en français et « Browser print » en anglais, et un clic dessus la choisit (les autres lignes du menu : groupe pdfLight)',
+    description: 'Menu « Qualité PDF » : la ligne « Impression navigateur » (ex « Impr. navigateur (bientôt) ») n’est plus grisée, ni dans la liste cachée ni dans le panneau, se nomme ainsi dans la langue de la page (« Browser print » en anglais), et un clic dessus la choisit (les autres lignes du menu : groupe pdfLight)',
     run: async () => {
       const select = document.getElementById('v2-pdf-quality');
       const row = name => document.querySelector('#v2-quality-flyout .v2-hover-row[data-quality="' + name + '"]');
       const option = name => select.querySelector('option[value="' + name + '"]');
-      const lang = I18n.getLang();
-      const seen = {};
-      try {
-        I18n.setLang('fr');
-        seen.fr = [option('browser-print').textContent, row('browser-print').textContent];
-        I18n.setLang('en');
-        seen.en = [option('browser-print').textContent, row('browser-print').textContent];
-      } finally { I18n.setLang(lang); }
+      const seen = { lang: I18n.getLang(), names: [option('browser-print').textContent, row('browser-print').textContent] };
       seen.optionDisabled = option('browser-print').disabled;
       seen.rowDisabled = row('browser-print').classList.contains('v2-hover-row-disabled');
       const before = select.value;
@@ -84,11 +78,18 @@
       row('native').click();
       seen.back = select.value;
       select.value = before;
-      const pass = seen.fr[0] === 'Impression navigateur' && seen.fr[1] === 'Impression navigateur' && seen.en[0] === 'Browser print' && seen.en[1] === 'Browser print'
+      const wanted = seen.lang === 'en' ? 'Browser print' : 'Impression navigateur';
+      const pass = seen.names[0] === wanted && seen.names[1] === wanted
         && !seen.optionDisabled && !seen.rowDisabled && seen.chosen === 'browser-print' && seen.active && seen.back === 'native';
       return { pass, notes: JSON.stringify(seen) };
     },
-  });
+  };
+  cases.push(qualityMenuCase);
+  cases.push(Object.assign({}, qualityMenuCase, {
+    id: 'bprint_quality_menu_offers_browser_print_in_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : la ligne « Browser print » du menu « Qualité PDF » n’est pas grisée, dans la liste cachée comme dans le panneau, et un clic dessus la choisit',
+  }));
 
   cases.push({
     id: 'bprint_frame_is_hidden_sandboxed_and_single',

@@ -48,14 +48,13 @@ try {
   check('chaque ligne est entière dans le panneau, sans texte coupé', fr.every(r => r.inside && !r.cut), fr);
   check('au départ, « Vectoriel » est la ligne choisie, seule', fr.filter(r => r.active).map(r => r.quality).join() === 'native' && (await picked(page)) === 'native', fr.filter(r => r.active));
 
-  await page.evaluate(() => I18n.setLang('en'));
-  await sleep(200);
-  await hoverRow(page, '#v2-btn-quality', QUALITY_ROW('light'));
-  const en = await menuRows(page);
+  // La page ne change plus de langue en route (Réglages garde le choix et la recharge) : l'anglais se lit dans une page qui démarre en anglais.
+  const english = await open({ spec: SPEC, port: PORT, settleMs: 1500, lang: 'en' });
+  await hoverRow(english.page, '#v2-btn-quality', QUALITY_ROW('light'));
+  const en = await menuRows(english.page);
+  await english.close();
   check('les textes anglais : « Vector (default) », « Browser print », « Light (smaller images) », entiers dans le panneau',
     JSON.stringify(en.map(r => r.text)) === JSON.stringify(['Vector (default)', 'Browser print', 'Light (smaller images)']) && en.every(r => r.inside && !r.cut && !r.greyed), en);
-  await page.evaluate(() => I18n.setLang('fr'));
-  await sleep(200);
 
   console.log('\n2) Un vrai clic sur « Léger » la choisit');
   await clickHoverRow(page, '#v2-btn-quality', QUALITY_ROW('light'));

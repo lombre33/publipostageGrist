@@ -86,9 +86,11 @@ function check(name, pass, notes) {
 const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hinting=none'] });
 const pageErrors = [];
 
-async function openWidget(colorScheme) {
+async function openWidget(colorScheme, lang) {
   const context = await browser.newContext({ bypassCSP: true, viewport: { width: WIDTH, height: HEIGHT }, colorScheme });
   const page = await context.newPage();
+  // La page ne change plus de langue en route : l'anglais est une page qui DÉMARRE en anglais (la langue choisie est lue au démarrage, `pp_lang`).
+  if (lang === 'en') await page.addInitScript(() => { try { localStorage.setItem('pp_lang', 'en'); } catch (e) { /* stockage refusé : la page reste en français */ } });
   page.on('pageerror', e => { pageErrors.push(e.message); console.log('[pageerror]', e.message); });
   // Boîtes du navigateur (alert/confirm) : acceptées et consignées, jamais bloquantes.
   const dialogs = [];
@@ -478,13 +480,21 @@ async function runTheme(theme) {
   const emailAfter = await formatNow(page);
   check(`${label} - sur un email : un vrai clic sur la ligne A5 ne change ni le format ni le sens`, emailAfter.format === 'A4' && !emailAfter.landscape, emailAfter);
   await away(page);
-  await page.evaluate(() => I18n.setLang('en'));
-  await page.waitForTimeout(300);
-  await page.mouse.move(btn2.x - 8, btn2.y - 4, { steps: 2 }); await page.mouse.move(btn2.x, btn2.y, { steps: 3 }); await page.waitForTimeout(300);
-  const englishMenu = await pageMenu(page);
+  // L'anglais se lit dans une seconde page qui démarre en anglais, ouverte sur un nouvel email par le même geste.
+  const english = await openWidget(theme, 'en');
+  const plusEn = await boxOf(english.page, '#btn-new');
+  await english.page.mouse.move(plusEn.x - 8, plusEn.y - 4, { steps: 2 }); await english.page.mouse.move(plusEn.x, plusEn.y, { steps: 3 }); await english.page.waitForTimeout(250);
+  const emailRowEn = await boxOf(english.page, '#v2-btn-new-email');
+  await english.page.mouse.move(plusEn.x, emailRowEn.y, { steps: 10 });
+  await english.page.mouse.move(emailRowEn.x, emailRowEn.y, { steps: 4 });
+  await english.page.mouse.click(emailRowEn.x, emailRowEn.y);
+  await english.page.waitForTimeout(700);
+  await away(english.page);
+  const btnEn = await boxOf(english.page, '#btn-page-orientation');
+  await english.page.mouse.move(btnEn.x - 8, btnEn.y - 4, { steps: 2 }); await english.page.mouse.move(btnEn.x, btnEn.y, { steps: 3 }); await english.page.waitForTimeout(300);
+  const englishMenu = await pageMenu(english.page);
   check(`${label} - en anglais : « ${englishMenu.title} », Portrait / Landscape, le menu tient dans le panneau`, englishMenu.title === 'Page (not available for this template)' && englishMenu.rows.slice(0, 2).map(r => r.name).join('|') === 'Portrait|Landscape' && englishMenu.inside, englishMenu);
-  await away(page);
-  await page.evaluate(() => I18n.setLang('fr'));
+  await english.context.close();
 
   // 11) Un macro-modèle a son bouton Page : le menu est actif, un vrai clic y pose le sens et le format (Paysage puis A5), la Lecture suit, et l'enregistrement automatique les écrit dans SA ligne,
   // composition intacte. Le macro-modèle est posé par la page (rien à tester dans sa création : sa fenêtre est couverte par macroModeles) puis ouvert par la liste ; chaque geste qui suit est réel.

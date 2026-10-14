@@ -1529,8 +1529,7 @@ const I18n = (function () {
     'toc.placeholder': { fr: 'Sommaire (généré automatiquement à partir des titres)', en: 'Table of contents (generated automatically from headings)' },
 
     // --- Placeholder du corps de l'éditeur, document principal vide (@tiptap/extension-placeholder, cf. js/editor.js) - lu via une fonction plutôt
-    // qu'une chaîne figée (cf. commentaire à l'appel), donc pas besoin de I18n.onChange pour suivre un changement de langue en cours de session : ce
-    // n'est pas affiché en mode édition d'en-tête/pied (cf. js/header-footer-preview.js), une zone vide n'y montre aucun texte.
+    // qu'une chaîne figée : ce n'est pas affiché en mode édition d'en-tête/pied (cf. js/header-footer-preview.js), une zone vide n'y montre aucun texte.
     'editor.placeholder': { fr: 'Commencez à écrire votre modèle ici…', en: 'Start writing your template here…' },
 
     // --- Nom de la zone où l'on écrit, lu par un lecteur d'écran (aria-label de `.ProseMirror`, cf. editorAttributes de js/editor.js) : le même éditeur sert à écrire le document, puis un en-tête ou un pied de page.
@@ -2106,41 +2105,29 @@ const I18n = (function () {
 
   function getLang() { return lang; }
 
-  // Abonnés notifiés après chaque changement de langue. Nécessaire pour les libellés qu'aucun attribut data-i18n-* ne peut porter parce qu'ils se
-  // composent à l'exécution (ex. l'infobulle « Enregistrer (⌘S) » du bouton Enregistrer, dont le raccourci dépend de la plateforme) : sans ce
-  // crochet, applyTranslations() les réécrirait à leur version brute au premier changement de langue.
-  const changeListeners = [];
-  function onChange(fn) { if (typeof fn === 'function') changeListeners.push(fn); }
-
   // Garde la langue pour le prochain chargement (initialLang la relit au démarrage). false : stockage indisponible, la langue ne survivrait pas au rechargement.
+  // C'est ainsi que le produit change de langue : js/settings.js:changeLanguage garde le choix, puis recharge la page ; rien n'est retraduit en route.
   function storeLang(next) {
     try { localStorage.setItem('pp_lang', next === 'en' ? 'en' : 'fr'); return true; } catch (e) { return false; }
   }
 
-  // Changement de langue sur place. Réglages recharge la page à la place (js/settings.js:changeLanguage) et ne s'en sert que si le stockage est refusé.
-  function setLang(next) {
-    lang = next === 'en' ? 'en' : 'fr';
-    storeLang(lang);
-    document.documentElement.lang = lang;
-    applyTranslations();
-    changeListeners.forEach(fn => { try { fn(lang); } catch (e) { console.warn('[I18n] un abonné au changement de langue a levé une exception', e); } });
+  // Fixe la langue dans laquelle t() répond, sans toucher à la page ni au stockage. Réservé aux tests (dev-tests/), qui lisent les textes d'un écran dans l'autre
+  // langue ; le produit ne l'appelle jamais (gardé par codeHygiene, section 24).
+  function setLang(next) { lang = next === 'en' ? 'en' : 'fr'; }
+
+  // Traduit la page statique : les 4 variantes d'attribut de traduction déclarative - le texte français d'origine reste en dur dans le HTML comme repli si
+  // ce fichier n'a pas encore chargé.
+  function applyTranslations() {
+    document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); });
+    document.querySelectorAll('[data-i18n-tip]').forEach(el => { el.setAttribute('data-tip', t(el.getAttribute('data-i18n-tip'))); });
+    document.querySelectorAll('[data-i18n-aria]').forEach(el => { el.setAttribute('aria-label', t(el.getAttribute('data-i18n-aria'))); });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.setAttribute('placeholder', t(el.getAttribute('data-i18n-placeholder'))); });
   }
 
-  // Parcourt le DOM (ou un sous-arbre `root`, ex. un nœud injecté après coup par un module qui ne connaît pas I18n) et applique les 4 variantes
-  // d'attribut de traduction déclarative - le texte français d'origine reste en dur dans le HTML comme repli si ce fichier n'a pas encore chargé.
-  function applyTranslations(root) {
-    const scope = root || document;
-    scope.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); });
-    scope.querySelectorAll('[data-i18n-tip]').forEach(el => { el.setAttribute('data-tip', t(el.getAttribute('data-i18n-tip'))); });
-    scope.querySelectorAll('[data-i18n-aria]').forEach(el => { el.setAttribute('aria-label', t(el.getAttribute('data-i18n-aria'))); });
-    scope.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.setAttribute('placeholder', t(el.getAttribute('data-i18n-placeholder'))); });
-  }
-
-  // Applique tout de suite (pas seulement lors d'un futur setLang) : ce script est placé après tout le HTML du bandeau/des modales (les <script> sont
-  // en fin de <body>), donc le DOM à traduire existe déjà - un utilisateur ayant déjà choisi EN voit l'anglais dès l'ouverture, pas après avoir
-  // rouvert Réglages.
+  // Appliqué une seule fois, au chargement : ce script est placé après tout le HTML du bandeau/des modales (les <script> sont en fin de <body>), donc le DOM
+  // à traduire existe déjà - un utilisateur ayant déjà choisi EN voit l'anglais dès l'ouverture. Changer de langue recharge la page, qui repasse ici.
   document.documentElement.lang = lang;
   applyTranslations();
 
-  return { t, getLang, setLang, storeLang, applyTranslations, onChange };
+  return { t, getLang, setLang, storeLang };
 })();

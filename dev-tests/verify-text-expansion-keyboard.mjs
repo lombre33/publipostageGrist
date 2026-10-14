@@ -178,12 +178,15 @@ async function focusEnd() {
 }
 
 // Abréviations de la personne, posées par l'API du module (la table est créée à la première, comme pour une vraie personne).
-await page.evaluate(async () => {
-  await TextExpansion.add('ub', 'université de Bordeaux');
-  await TextExpansion.add('adr', '12 rue des Lilas, 33000 Bordeaux');
-  await TextExpansion.add('sig', 'Cordialement,\nAntoine');
-  await TextExpansion.add('bj', 'Bonjour,');
-});
+async function seedAbbreviations() {
+  await page.evaluate(async () => {
+    await TextExpansion.add('ub', 'université de Bordeaux');
+    await TextExpansion.add('adr', '12 rue des Lilas, 33000 Bordeaux');
+    await TextExpansion.add('sig', 'Cordialement,\nAntoine');
+    await TextExpansion.add('bj', 'Bonjour,');
+  });
+}
+await seedAbbreviations();
 
 
 // === Réglages > Raccourcis : abréviations, à la vraie souris et au vrai clavier ===============================================================================
@@ -626,8 +629,21 @@ async function run(theme) {
   await beyondFiftyPart(T);
 }
 
+// La page ne change plus de langue en route : Réglages garde le choix et la recharge. Le script fait pareil - il garde la langue, recharge, attend le widget.
+async function restartIn(lang) {
+  await page.evaluate(next => I18n.storeLang(next), lang);
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
+  await page.waitForFunction(() => {
+    const el = document.getElementById('status-msg');
+    return !!el && /prêt|ready/i.test(el.textContent || '');
+  }, null, { timeout: 90000 });
+  // Le faux Grist est neuf après le rechargement : les abréviations de la personne sont à reposer.
+  await seedAbbreviations();
+}
+
 async function runEnglish() {
-  await page.evaluate(() => I18n.setLang('en'));
+  await restartIn('en');
   await page.waitForTimeout(250);
   await setDoc('<p></p>');
   await focusEnd();
@@ -645,8 +661,6 @@ async function runEnglish() {
   await dropQ();
   await settingsPart('anglais', false);
   await closeSettings();
-  await page.evaluate(() => I18n.setLang('fr'));
-  await page.waitForTimeout(250);
 }
 
 await run('clair');

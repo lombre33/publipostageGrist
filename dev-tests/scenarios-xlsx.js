@@ -1043,15 +1043,15 @@
   // --- 12) Dans une grille, « lignes » devient « valeurs de la table » (les autres modèles gardent leurs mots) --------------------------------------------------------------
   const BATCH_LABEL_IDS = ['v2-btn-export-pdf-batch', 'v2-btn-export-pdf-merged', 'v2-btn-export-xlsx-batch', 'v2-btn-export-xlsx-single'];
   const labelsNow = () => Object.fromEntries(BATCH_LABEL_IDS.map(id => [id, document.getElementById(id).textContent.trim()]));
-  ['fr', 'en'].forEach(lang => cases.push({
+  // Le cas « en » se joue dans une page qui démarre en anglais : les lignes du menu sont écrites dans la langue de la page quand le modèle (grille ou document) s'ouvre.
+  ['fr', 'en'].forEach(lang => cases.push(Object.assign({
     id: 'xlsx_grid_wording_says_values_of_the_table_not_rows_' + lang,
-    description: 'Dans une grille (' + lang + '), les quatre lignes « valeurs de la table » du menu, la confirmation du ZIP de PDF et le message d\'une table vide parlent de « valeurs de la table », jamais de lignes ; dans un document les lignes PDF gardent « lignes » et le texte suit un changement de langue',
+    description: 'Dans une grille (' + lang + '), les quatre lignes « valeurs de la table » du menu, la confirmation du ZIP de PDF et le message d\'une table vide parlent de « valeurs de la table », jamais de lignes ; dans un document les lignes PDF gardent « lignes »',
     run: async (h) => {
       await seedValues(h, VALUES);
       const bad = [];
-      const previous = I18n.getLang();
       try {
-        I18n.setLang(lang);
+        if (I18n.getLang() !== lang) bad.push('la page ne démarre pas en ' + lang);
         const words = lang === 'fr' ? /valeurs? de la table/ : /table values?/;
         const rowWord = lang === 'fr' ? /lignes?/i : /\brows?\b/i;
         const inGrid = labelsNow();
@@ -1084,19 +1084,16 @@
         const emptyDoc = await (async () => { window.__gristStub.setRows(TABLE, []); const r = await clickExportRow(h, 'v2-btn-export-pdf-batch', false); window.__gristStub.setRows(TABLE, VALUES); return r; })();
         if (!rowWord.test(emptyDoc.status)) bad.push('document, table vide=' + JSON.stringify(emptyDoc.status));
         await enterGrid(h);
-        I18n.setLang(lang === 'fr' ? 'en' : 'fr');
-        const switched = labelsNow();
-        const otherWords = lang === 'fr' ? /table values?/ : /valeurs? de la table/;
-        BATCH_LABEL_IDS.forEach(id => { if (!otherWords.test(switched[id])) bad.push('changement de langue : ' + id + '=' + switched[id]); });
+        const backInGrid = labelsNow();
+        BATCH_LABEL_IDS.forEach(id => { if (!words.test(backInGrid[id])) bad.push('retour dans la grille : ' + id + '=' + backInGrid[id]); });
       } finally {
-        I18n.setLang(previous);
         window.__gristStub.setRows(TABLE, VALUES);
         await leaveGrid(h);
         GridEditor.setActive(false);
       }
       return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
     },
-  }));
+  }, lang === 'en' ? { lang: 'en' } : {})));
 
   cases.push({
     id: 'xlsx_grid_merged_pdf_says_values_when_done',

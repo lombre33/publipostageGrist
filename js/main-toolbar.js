@@ -358,10 +358,8 @@ const MainToolbar = (function () {
     if (!button) return;
     const rowMode = GridEditor.pageBreakInTable(editor);
     const keys = rowMode ? ['insert.pageBreak.gridTip', inGridMode ? 'insert.pageBreak.gridAria' : 'insert.pageBreak.rowAria'] : ['insert.pageBreak.tip', 'insert.pageBreak.aria'];
-    if (button.getAttribute('data-i18n-tip') !== keys[0] || button.getAttribute('data-i18n-aria') !== keys[1]) {
-      button.setAttribute('data-i18n-tip', keys[0]); button.setAttribute('data-i18n-aria', keys[1]);
-      button.setAttribute('aria-label', I18n.t(keys[1]));
-    }
+    const aria = I18n.t(keys[1]);
+    if (button.getAttribute('aria-label') !== aria) button.setAttribute('aria-label', aria);
     const reason = rowMode && !inGridMode && !(inEmailMode || inMacroMode) ? GridEditor.pageBreakBlock(editor) : null;
     const tip = I18n.t(reason || keys[0]);
     if (button.getAttribute('data-tip') !== tip) button.setAttribute('data-tip', tip);
@@ -480,9 +478,7 @@ const MainToolbar = (function () {
     // Le nom accessible porte le même verbe que le libellé (« Modifier » ou « Insérer »).
     const row = byId('v2-btn-qr');
     if (row) {
-      const key = selected ? 'insert.qr.ariaEdit' : 'insert.qr.aria';
-      row.setAttribute('data-i18n-aria', key);
-      row.setAttribute('aria-label', I18n.t(key));
+      row.setAttribute('aria-label', I18n.t(selected ? 'insert.qr.ariaEdit' : 'insert.qr.aria'));
     }
   }
   // Ligne « Graphique de la page… » : « Modifier le graphique… » quand un graphique est sélectionné, comme « QR code… » ci-dessus.
@@ -491,9 +487,7 @@ const MainToolbar = (function () {
     if (label) label.textContent = I18n.t(selected ? 'insert.chart.rowEdit' : 'insert.chart.row');
     const row = byId('v2-btn-chart');
     if (row) {
-      const key = selected ? 'insert.chart.ariaEdit' : 'insert.chart.aria';
-      row.setAttribute('data-i18n-aria', key);
-      row.setAttribute('aria-label', I18n.t(key));
+      row.setAttribute('aria-label', I18n.t(selected ? 'insert.chart.ariaEdit' : 'insert.chart.aria'));
     }
   }
   // La touche de la loupe (Ctrl+F, ⌘F, ou celle choisie dans Réglages > Raccourcis, js/shortcuts.js) est posée sur l'infobulle et l'aria-label,

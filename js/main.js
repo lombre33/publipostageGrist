@@ -1929,7 +1929,7 @@
 
   // Les exports qui n'ont de sens que pour un seul genre de modèle : Word pour un document, Excel pour une grille. La ligne de l'autre genre reste
   // dans la page, grisée (même masquée) ; son clic ne fait rien (cf. onExportRow, au câblage des boutons). Les deux lignes PDF « toutes les lignes » et
-  // leurs options du menu Exporter prennent aussi les mots de la grille (`data-i18n` change, pour que le texte suive un changement de langue). Les menus
+  // leurs options du menu Exporter prennent aussi les mots de la grille. Les menus
   // d'export suivent ensuite (syncExportMenus) : le type Word ou Excel que le nouveau modèle ne sait pas faire revient au PDF.
   function syncExportRowsForModelType() {
     const grid = GridEditor.isGridType(currentTypeModele);
@@ -1946,7 +1946,6 @@
       const row = document.getElementById(id);
       if (!row) return;
       const wanted = grid ? GRID_WORDING[key] : key;
-      row.setAttribute('data-i18n', wanted);
       row.textContent = I18n.t(wanted);
     });
     syncExportMenus();

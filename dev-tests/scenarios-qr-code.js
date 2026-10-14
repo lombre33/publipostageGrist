@@ -303,10 +303,22 @@
     },
   });
 
-  cases.push({
+  // La ligne et la fenêtre écrivent leurs textes dans la langue de la page : le cas se joue en français, puis dans une seconde page qui démarre en anglais (la copie `lang: 'en'`).
+  const rowAndTextsCase = {
     id: 'qr_row_reads_edit_when_a_qr_code_is_selected_and_texts_follow_the_interface_language',
-    description: 'La ligne devient « Modifier le QR code… » (son nom accessible aussi) quand un QR code est sélectionné, pas pour une image ordinaire ; la ligne, la fenêtre (insertion puis modification) et ses messages passent en anglais avec l\'interface puis reviennent en français',
+    description: 'La ligne devient « Modifier le QR code… » (son nom accessible aussi) quand un QR code est sélectionné, pas pour une image ordinaire ; la ligne, la fenêtre (insertion puis modification) et ses messages sont dans la langue de la page (français ici)',
     run: async (h) => {
+      const want = I18n.getLang() === 'en'
+        ? {
+          plain: { label: 'QR code…', aria: 'Insert a QR code' }, edit: { label: 'Edit QR code…', aria: 'Edit the QR code' },
+          title: 'Insert a QR code', label: 'Address or text', column: 'Insert a column…', placeholder: 'https://example.com', hint: 'A column gives each row its own QR code.', preview: 'Preview',
+          ok: 'Insert', cancel: 'Cancel', empty: 'Enter an address or text.', titleEdit: 'Edit the QR code', okEdit: 'Confirm',
+        }
+        : {
+          plain: { label: 'QR code…', aria: 'Insérer un QR code' }, edit: { label: 'Modifier le QR code…', aria: 'Modifier le QR code' },
+          title: 'Insérer un QR code', label: 'Adresse ou texte', column: 'Insérer une colonne…', placeholder: 'https://exemple.fr', hint: 'Une colonne donne un QR code propre à chaque ligne.', preview: 'Aperçu',
+          ok: 'Insérer', cancel: 'Annuler', empty: 'Saisissez une adresse ou un texte.', titleEdit: 'Modifier le QR code', okEdit: 'Valider',
+        };
       await seed(h);
       Editor.setHTML('<p>Avant</p><p><img class="editor-image" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="Image" style="width: 40px"></p>');
       await sleep(150);
@@ -320,41 +332,36 @@
       await selectQr();
       const onQr = { label: qrRow().textContent.trim(), aria: qrRow().getAttribute('aria-label'), active: qrRow().classList.contains('is-active') };
       await placeCursorAtEnd();
-      I18n.setLang('en');
-      await sleep(150);
       const text = sel => (document.querySelector(sel) || {}).textContent;
-      const en = {};
+      const got = {};
       try {
-        en.row = qrRow().textContent.trim();
-        en.aria = qrRow().getAttribute('aria-label');
         await openWindow();
-        Object.assign(en, { title: text('#pp-qr-title'), label: text('#pp-qr-modal .pp-dialog-label'), column: text('#pp-qr-modal .pp-qr-column'), placeholder: field().placeholder, hint: text('#pp-qr-hint'), preview: text('#pp-qr-modal .pp-qr-side .pp-dialog-label'), ok: okButton().textContent, cancel: cancelButton().textContent });
+        Object.assign(got, { title: text('#pp-qr-title'), label: text('#pp-qr-modal .pp-dialog-label'), column: text('#pp-qr-modal .pp-qr-column'), placeholder: field().placeholder, hint: text('#pp-qr-hint'), preview: text('#pp-qr-modal .pp-qr-side .pp-dialog-label'), ok: okButton().textContent, cancel: cancelButton().textContent });
         await typeInField('');
-        en.empty = previewMessage().textContent;
+        got.empty = previewMessage().textContent;
         await closeWindowIfOpen();
         await selectQr();
-        en.rowEdit = qrRow().textContent.trim();
-        en.ariaEdit = qrRow().getAttribute('aria-label');
         await openWindow();
-        en.titleEdit = text('#pp-qr-title');
-        en.okEdit = okButton().textContent;
+        got.titleEdit = text('#pp-qr-title');
+        got.okEdit = okButton().textContent;
         await closeWindowIfOpen();
       } finally {
         await closeWindowIfOpen();
-        I18n.setLang('fr');
-        await sleep(150);
       }
-      const back = { label: qrRow().textContent.trim(), aria: qrRow().getAttribute('aria-label') };
+      const wanted = ['title', 'label', 'column', 'placeholder', 'hint', 'preview', 'ok', 'cancel', 'empty', 'titleEdit', 'okEdit'];
+      const wrong = wanted.filter(k => got[k] !== want[k]);
       return {
-        pass: onPlain.label === 'QR code…' && onPlain.aria === 'Insérer un QR code' && !onPlain.active && onQr.label === 'Modifier le QR code…' && onQr.aria === 'Modifier le QR code' && onQr.active
-          && en.row === 'QR code…' && en.aria === 'Insert a QR code' && en.title === 'Insert a QR code' && en.label === 'Address or text' && en.column === 'Insert a column…' && en.placeholder === 'https://example.com'
-          && en.hint === 'A column gives each row its own QR code.' && en.preview === 'Preview' && en.ok === 'Insert' && en.cancel === 'Cancel' && en.empty === 'Enter an address or text.'
-          && en.rowEdit === 'Edit QR code…' && en.ariaEdit === 'Edit the QR code' && en.titleEdit === 'Edit the QR code' && en.okEdit === 'Confirm'
-          && back.label === 'Modifier le QR code…' && back.aria === 'Modifier le QR code',
-        notes: JSON.stringify({ onPlain, onQr, en, back }),
+        pass: onPlain.label === want.plain.label && onPlain.aria === want.plain.aria && !onPlain.active && onQr.label === want.edit.label && onQr.aria === want.edit.aria && onQr.active && wrong.length === 0,
+        notes: JSON.stringify({ lang: I18n.getLang(), onPlain, onQr, got, wrong }),
       };
     },
-  });
+  };
+  cases.push(rowAndTextsCase);
+  cases.push(Object.assign({}, rowAndTextsCase, {
+    id: 'qr_row_reads_edit_when_a_qr_code_is_selected_and_texts_follow_the_interface_language_in_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : la ligne (« Edit QR code… » et son nom accessible), la fenêtre d\'insertion puis de modification et ses messages sont en anglais',
+  }));
 
   // === 3) La fenêtre et l'insertion ========================================================================================================================
   cases.push({

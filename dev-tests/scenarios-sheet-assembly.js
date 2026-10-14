@@ -895,6 +895,17 @@
 
   // --- 14) Annuler ne lance rien, la ligne et ses voisines sont grisées pendant la fenêtre ---------------------------------------------------------------------------------------
   cases.push({
+    id: 'sheetassembly_menu_row_speaks_english_in_an_english_page',
+    lang: 'en',
+    description: 'Dans une page qui démarre en anglais, la ligne « Assemblage avant impression… » du menu Exporter se lit « Assemble before printing… »',
+    run: async () => {
+      const row = document.getElementById(ROW_ID);
+      const text = row ? row.textContent.trim() : null;
+      return { pass: text === 'Assemble before printing…', notes: 'texte de la ligne : ' + text };
+    },
+  });
+
+  cases.push({
     id: 'sheetassembly_menu_row_cancel_downloads_nothing_and_locks_the_exports_while_open',
     description: 'Pendant que la fenêtre est ouverte, les lignes PDF du menu Exporter (la ligne, le ZIP, le PDF unique, l’assemblage) sont inactives (pas de second export par-dessus) ; « Annuler » et Échap ne téléchargent rien, ne chargent aucune bibliothèque (aucun message d’état), ne posent aucune seconde question, et rendent les lignes ; la ligne est dans le menu Exporter après « un seul PDF », en français et en anglais',
     run: async (h) => {
@@ -910,10 +921,6 @@
           if (options.join() !== 'one,zip,merged,sheets') bad.push('options du menu : ' + options.join());
           const row = document.getElementById(ROW_ID);
           if (row.textContent.trim() !== 'Assemblage avant impression…') bad.push('texte de la ligne : ' + row.textContent);
-          I18n.setLang('en');
-          const en = row.textContent.trim();
-          I18n.setLang('fr');
-          if (en !== 'Assemble before printing…' || row.textContent.trim() !== 'Assemblage avant impression…') bad.push('texte anglais : ' + en);
           const viaButton = await exportSheets(h, async () => { cancelButton().click(); }, false);
           if (!viaButton.opened || viaButton.downloads.length || viaButton.statuses.length || viaButton.confirms.length) bad.push('Annuler : ' + JSON.stringify({ opened: viaButton.opened, downloads: viaButton.downloads.length, statuses: viaButton.statuses, confirms: viaButton.confirms.length }));
           if (!viaButton.during || Object.values(viaButton.during).some(v => v !== 'none')) bad.push('lignes non verrouillées pendant la fenêtre : ' + JSON.stringify(viaButton.during));

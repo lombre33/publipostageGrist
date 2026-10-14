@@ -122,12 +122,11 @@
 
   cases.push({
     id: 'co_menu_and_window_texts_follow_the_interface_language',
-    description: 'Les deux lignes, la fenêtre (titre, libellés, types, couleurs, icônes, aperçu, boutons) et les légendes de la signature passent en anglais avec l\'interface, puis reviennent en français',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : les deux lignes, la fenêtre (titre, libellés, types, couleurs, icônes, aperçu, boutons) et les légendes de la signature sont en anglais',
     run: async (h) => {
       await setDoc(h, '<p>Hello world</p>');
       await selectText('world');
-      I18n.setLang('en');
-      await sleep(100);
       let en;
       try {
         const labels = [calloutRow().textContent.trim(), signatureRow().textContent.trim()];
@@ -145,11 +144,9 @@
         en.signature = Array.from(tiptap().querySelectorAll('.two-columns-column > p:last-child')).map(p => p.textContent);
       } finally {
         await closeWindowIfOpen();
-        I18n.setLang('fr');
-        await sleep(100);
       }
       return {
-        pass: JSON.stringify(en.labels) === JSON.stringify(['Callout…', 'Signature block']) && en.title === 'Insert a callout' && JSON.stringify(en.field) === JSON.stringify(['Type', 'Color', 'Icon'])
+        pass: I18n.getLang() === 'en' && JSON.stringify(en.labels) === JSON.stringify(['Callout…', 'Signature block']) && en.title === 'Insert a callout' && JSON.stringify(en.field) === JSON.stringify(['Type', 'Color', 'Icon'])
           && JSON.stringify(en.types) === JSON.stringify(['Note', 'Warning', 'Important']) && JSON.stringify(en.colors) === JSON.stringify(['Blue', 'Green', 'Orange', 'Red', 'Purple', 'Gray'])
           && en.icons.length === 6 && en.icons.includes('Light bulb') && en.sample === 'Your text will appear here.' && JSON.stringify(en.buttons) === JSON.stringify(['Cancel', 'Insert'])
           && JSON.stringify(en.signature) === JSON.stringify(['Name and signature', 'Date']),
@@ -191,29 +188,31 @@
     },
   });
 
-  cases.push({
+  // Le libellé de la ligne s'écrit dans la langue de la page : le cas se joue en français, puis dans une seconde page qui démarre en anglais (la copie `lang: 'en'`).
+  const editRowCase = {
     id: 'co_row_says_edit_and_is_active_inside_a_callout_and_goes_back_outside',
-    description: 'Le curseur dans un encadré : la ligne devient « Modifier l\'encadré… » et s\'allume ; hors de l\'encadré elle redevient « Encadré… » ; le libellé suit aussi la langue',
+    description: 'Le curseur dans un encadré : la ligne devient « Modifier l\'encadré… » et s\'allume ; hors de l\'encadré elle redevient « Encadré… »',
     run: async (h) => {
+      const want = I18n.getLang() === 'en' ? { out: 'Callout…', edit: 'Edit callout…' } : { out: 'Encadré…', edit: 'Modifier l’encadré…' };
       await setDoc(h, '<p>Dehors</p><div class="callout" data-color="green" data-icon="check"><p>Dedans</p></div>');
       await selectText('Dehors', 1);
       const outside = { label: calloutRow().textContent.trim(), active: calloutRow().classList.contains('is-active') };
       await selectText('Dedans', 1);
       const inside = { label: calloutRow().textContent.trim(), active: calloutRow().classList.contains('is-active') };
-      I18n.setLang('en');
-      await sleep(100);
-      const insideEn = calloutRow().textContent.trim();
-      I18n.setLang('fr');
-      await sleep(100);
-      const insideFr = calloutRow().textContent.trim();
       await selectText('Dehors', 1);
       const outsideAgain = calloutRow().textContent.trim();
       return {
-        pass: outside.label === 'Encadré…' && !outside.active && inside.label === 'Modifier l’encadré…' && inside.active && insideEn === 'Edit callout…' && insideFr === 'Modifier l’encadré…' && outsideAgain === 'Encadré…',
-        notes: JSON.stringify({ outside, inside, insideEn, insideFr, outsideAgain }),
+        pass: outside.label === want.out && !outside.active && inside.label === want.edit && inside.active && outsideAgain === want.out,
+        notes: JSON.stringify({ lang: I18n.getLang(), outside, inside, outsideAgain }),
       };
     },
-  });
+  };
+  cases.push(editRowCase);
+  cases.push(Object.assign({}, editRowCase, {
+    id: 'co_row_says_edit_and_is_active_inside_a_callout_and_goes_back_outside_in_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : le curseur dans un encadré, la ligne devient « Edit callout… » et s\'allume ; hors de l\'encadré elle redevient « Callout… »',
+  }));
 
   // === 2) Insérer, modifier, retirer ========================================================================================================================
 

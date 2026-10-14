@@ -1633,41 +1633,37 @@
     },
   });
 
+  // Ce que la personne voit : Réglages, onglet Marges ; la mention compte comme vue si rien ne la cache.
+  const marginsNoteSeen = h => async () => {
+    document.getElementById('v2-btn-settings').click();
+    await h.sleep(150);
+    document.querySelector('.settings-tab[data-settings-tab="pageMargins"]').click();
+    await h.sleep(150);
+    const el = document.getElementById('settings-margins-macro-note');
+    const panel = el && el.closest('.settings-panel');
+    const out = !el ? null : {
+      shown: !el.hidden && !panel.hidden && getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().height > 0,
+      text: el.textContent,
+    };
+    document.getElementById('settings-close').click();
+    await h.sleep(100);
+    return out;
+  };
+
   cases.push({
     id: 'macro_margins_tab_says_the_macro_margins_take_precedence',
-    description: 'L\'onglet Marges des Réglages dit, tant qu\'un macro-modèle est chargé, que ses marges priment sur celles des modèles assemblés (français et anglais) ; la mention est cachée avec un modèle ouvert par le stylo du macro-modèle et avec un nouveau document, revient au retour au macro-modèle, et l\'ouvrir n\'écrit rien',
+    description: 'L\'onglet Marges des Réglages dit, tant qu\'un macro-modèle est chargé, que ses marges priment sur celles des modèles assemblés (en français ici ; une copie dans une page qui démarre en anglais la lit en anglais) ; la mention est cachée avec un modèle ouvert par le stylo du macro-modèle et avec un nouveau document, revient au retour au macro-modèle, et l\'ouvrir n\'écrit rien',
     run: async (h) => {
       try {
         const macro = await composedMacro(h, 'Macro mention marges');
         const problems = [];
-        // Ce que la personne voit : Réglages, onglet Marges ; la mention compte comme vue si rien ne la cache.
-        const seen = async () => {
-          document.getElementById('v2-btn-settings').click();
-          await h.sleep(150);
-          document.querySelector('.settings-tab[data-settings-tab="pageMargins"]').click();
-          await h.sleep(150);
-          const el = document.getElementById('settings-margins-macro-note');
-          const panel = el && el.closest('.settings-panel');
-          const out = !el ? null : {
-            shown: !el.hidden && !panel.hidden && getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().height > 0,
-            text: el.textContent,
-          };
-          document.getElementById('settings-close').click();
-          await h.sleep(100);
-          return out;
-        };
+        const seen = marginsNoteSeen(h);
         // Les écritures de modèles : les enregistrements du contenu (countSaves) et les créations, pas l'écriture du jeton qui accompagne la première copie de version (Templates.ensureToken).
         const writesNow = () => window.__gristStub.countSaves(MACRO_TABLE) + window.__gristStub.countActions('AddRecord', MACRO_TABLE);
         const writesBefore = writesNow();
         const inMacro = await seen();
         if (!inMacro) problems.push('la mention est absente de l\'onglet Marges');
         else if (!inMacro.shown || !/priment sur celles des modèles assemblés/.test(inMacro.text)) problems.push('macro-modèle chargé, en français : ' + JSON.stringify(inMacro));
-        I18n.setLang('en');
-        await h.sleep(200);
-        const inMacroEnglish = await seen();
-        if (!inMacroEnglish || !inMacroEnglish.shown || !/take precedence over those of the assembled templates/.test(inMacroEnglish.text)) problems.push('macro-modèle chargé, en anglais : ' + JSON.stringify(inMacroEnglish));
-        I18n.setLang('fr');
-        await h.sleep(200);
         // Le modèle ouvert par son stylo a SES marges : pas de mention.
         pencilOf(macro.otherId).click();
         await h.sleep(900);
@@ -1682,7 +1678,22 @@
         if (!inNew || inNew.shown) problems.push('nouveau document : ' + JSON.stringify(inNew));
         if (writesNow() !== writesBefore) problems.push('ouvrir l\'onglet a écrit ' + (writesNow() - writesBefore) + ' fois dans la table des modèles');
         return { pass: problems.length === 0, notes: JSON.stringify({ problems, inMacro, inModel, inNew }) };
-      } finally { I18n.setLang('fr'); await leaveMacro(h); }
+      } finally { await leaveMacro(h); }
+    },
+  });
+
+  cases.push({
+    id: 'macro_margins_tab_says_the_macro_margins_take_precedence_in_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : tant qu\'un macro-modèle est chargé, l\'onglet Marges des Réglages dit que ses marges priment (« take precedence over those of the assembled templates »)',
+    run: async (h) => {
+      try {
+        await composedMacro(h, 'Macro mention marges');
+        const seen = marginsNoteSeen(h);
+        const inMacro = await seen();
+        const ok = I18n.getLang() === 'en' && !!inMacro && inMacro.shown && /take precedence over those of the assembled templates/.test(inMacro.text);
+        return { pass: ok, notes: JSON.stringify({ lang: I18n.getLang(), inMacro }) };
+      } finally { await leaveMacro(h); }
     },
   });
 

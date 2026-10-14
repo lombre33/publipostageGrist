@@ -648,7 +648,7 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   d'une variable, celle du tableau) gardaient quelques textes dans la langue d'avant. Si le document a des modifications
   qui attendent d'être enregistrées, la question « Enregistrer / Abandonner / Annuler » passe d'abord, comme quand on
   change de modèle : « Annuler » laisse la langue d'avant. Si le navigateur refuse de garder le choix (stockage bloqué),
-  la langue change sur place, sans recharger, comme avant.
+  la langue ne change pas et la case revient sur la langue en cours.
 
 - **L'étoile du modèle par défaut dit son rôle, dans la liste et dans « Organiser mes modèles »** : chaque modèle
   ordinaire de la liste déroulante et de la fenêtre « Organiser mes modèles » porte une étoile (visible au survol ou au
@@ -1683,8 +1683,8 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   restarts in the chosen language; nothing is retranslated live any more. Before, some bars that were already built
   (the variable bar, the table bar) kept a few texts in the previous language. If the document has changes waiting to be
   saved, the "Save / Discard / Cancel" question comes first, as when you switch template: "Cancel" keeps the previous
-  language. If the browser refuses to keep the choice (storage blocked), the language changes in place, without a
-  reload, as before.
+  language. If the browser refuses to keep the choice (storage blocked), the language does not change and the choice
+  goes back to the current language.
 
 - **The default-template star says what it does, in the list and in "Organize my templates"**: each ordinary
   template in the drop-down list and in the "Organize my templates" window now carries a star (shown on hover or

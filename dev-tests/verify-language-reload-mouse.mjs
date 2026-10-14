@@ -7,7 +7,7 @@
 //   2. une modification attend d'être enregistrée (l'enregistrement automatique est coupé) : la question « Modifications non enregistrées » (Annuler / Abandonner / Enregistrer) passe
 //      devant Réglages avant tout rechargement ; « Annuler » laisse la page, sa langue, la case cochée d'avant et le texte tapé ; « Enregistrer » écrit le modèle avant que la page
 //      parte ; « Abandonner » la laisse partir sans l'écrire ;
-//   3. stockage refusé (la langue ne survivrait pas au rechargement) : la langue change sur place, sans rechargement.
+//   3. stockage refusé (la langue ne survivrait pas au rechargement) : rien ne change, ni la langue ni un rechargement, et la case revient sur la langue de la page.
 // Lancé par run-headless.mjs (groupe Node "languageReloadMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-language-reload-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -320,17 +320,17 @@ console.log(`\n=== 2. Une modification attend d'être enregistrée : la question
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------
-console.log(`\n=== 3. Stockage refusé : la langue change sur place, ${WIDTH}x${HEIGHT} ===`);
+console.log(`\n=== 3. Stockage refusé : rien ne change, ${WIDTH}x${HEIGHT} ===`);
 {
   const { context, page } = await openWidget({ refuseStorage: true });
   await page.evaluate(() => { window.__marker = 'avant'; });
   await openSettings(page);
   await realClick(page, 'input[name="settings-lang"][value="en"]');
   const stayed = await staysPut(page, 1500);
-  const swapped = await snapshot(page);
-  check('sans stockage, la langue ne survivrait pas au rechargement : la page ne recharge pas', stayed && swapped.marker === 'avant', swapped);
-  check('la page passe en anglais sur place (<html lang>, info-bulle de la barre, case cochée)',
-    swapped.lang === 'en' && swapped.htmlLang === 'en' && /table of contents/i.test(swapped.tip) && /en:true/.test(swapped.radios), swapped);
+  const same = await snapshot(page);
+  check('sans stockage, la langue ne survivrait pas au rechargement : la page ne recharge pas', stayed && same.marker === 'avant', same);
+  check('... et rien ne change : la page reste en français (<html lang>, info-bulle de la barre) et la case « Français » est de nouveau cochée',
+    same.lang === 'fr' && same.htmlLang === 'fr' && /sommaire/i.test(same.tip) && /fr:true/.test(same.radios) && /en:false/.test(same.radios), same);
   await context.close();
 }
 

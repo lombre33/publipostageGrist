@@ -73,27 +73,22 @@
     return gaps;
   }
 
-  cases.push({
+  // Les lignes du menu sont écrites dans la langue de la page : le cas se joue en français, puis dans une seconde page qui démarre en anglais (la copie `lang: 'en'`).
+  const threeRowsCase = {
     id: 'pdflight_menu_has_three_live_rows',
-    description: 'Menu « Qualité PDF » : trois lignes (Vectoriel, Impression navigateur, Léger), toutes choisissables, nommées en français et en anglais ; plus de « Basse qualité » ni d\'« Ultra HD » ; un clic sur « Léger » la choisit',
+    description: 'Menu « Qualité PDF » : trois lignes (Vectoriel, Impression navigateur, Léger), toutes choisissables, nommées dans la langue de la page ; plus de « Basse qualité » ni d\'« Ultra HD » ; un clic sur « Léger » la choisit',
     run: async () => {
       const select = document.getElementById('v2-pdf-quality');
       const flyout = document.getElementById('v2-quality-flyout');
       const options = Array.from(select.options);
       const rows = Array.from(flyout.querySelectorAll('.v2-hover-row[data-quality]'));
       const lang = I18n.getLang();
-      const labels = {};
-      try {
-        ['fr', 'en'].forEach(code => {
-          I18n.setLang(code);
-          labels[code] = { options: options.map(o => o.textContent.trim()), rows: rows.map(r => r.textContent.trim()) };
-        });
-      } finally { I18n.setLang(lang); }
-      const expected = { fr: ['Vectoriel (par défaut)', 'Impression navigateur', 'Léger (images réduites)'], en: ['Vector (default)', 'Browser print', 'Light (smaller images)'] };
+      const labels = { options: options.map(o => o.textContent.trim()), rows: rows.map(r => r.textContent.trim()) };
+      const expected = lang === 'en' ? ['Vector (default)', 'Browser print', 'Light (smaller images)'] : ['Vectoriel (par défaut)', 'Impression navigateur', 'Léger (images réduites)'];
       const values = options.map(o => o.value);
       const rowValues = rows.map(r => r.dataset.quality);
       const live = options.every(o => !o.disabled) && rows.every(r => !r.classList.contains('v2-hover-row-disabled') && r.getAttribute('aria-disabled') !== 'true');
-      const wordsLeft = [labels.fr, labels.en].some(l => l.options.concat(l.rows).some(text => /ultra|basse|low quality|bientôt|soon/i.test(text)));
+      const wordsLeft = labels.options.concat(labels.rows).some(text => /ultra|basse|low quality|bientôt|soon/i.test(text));
       const before = select.value;
       const light = rows.find(r => r.dataset.quality === 'light');
       let chosen = null;
@@ -102,12 +97,17 @@
         chosen = { value: select.value, active: flyout.querySelector('.v2-hover-row[data-quality].is-active').dataset.quality };
       } finally { rows.find(r => r.dataset.quality === before).click(); }
       const pass = JSON.stringify(values) === JSON.stringify(['native', 'browser-print', 'light']) && JSON.stringify(rowValues) === JSON.stringify(values)
-        && JSON.stringify(labels.fr.options) === JSON.stringify(expected.fr) && JSON.stringify(labels.fr.rows) === JSON.stringify(expected.fr)
-        && JSON.stringify(labels.en.options) === JSON.stringify(expected.en) && JSON.stringify(labels.en.rows) === JSON.stringify(expected.en)
+        && JSON.stringify(labels.options) === JSON.stringify(expected) && JSON.stringify(labels.rows) === JSON.stringify(expected)
         && live && !wordsLeft && chosen && chosen.value === 'light' && chosen.active === 'light' && select.value === before;
-      return { pass, notes: JSON.stringify({ values, rowValues, labels, live, wordsLeft, chosen }) };
+      return { pass, notes: JSON.stringify({ lang, values, rowValues, labels, live, wordsLeft, chosen }) };
     },
-  });
+  };
+  cases.push(threeRowsCase);
+  cases.push(Object.assign({}, threeRowsCase, {
+    id: 'pdflight_menu_has_three_live_rows_in_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : le menu « Qualité PDF » a trois lignes (Vector, Browser print, Light), toutes choisissables ; un clic sur « Light » la choisit',
+  }));
 
   cases.push({
     id: 'pdflight_light_images_weigh_a_fraction_and_keep_150_ppi',

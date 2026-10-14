@@ -35,7 +35,6 @@
   const shownRows = flyout => Array.from(document.querySelectorAll(flyout + ' .v2-hover-row')).filter(shown);
   const shownLines = () => shownRows(EXPORT_FLYOUT).map(row => row.dataset.exportLines).join();
   const tickedLines = () => Array.from(document.querySelectorAll(EXPORT_FLYOUT + ' .v2-hover-row[aria-checked="true"]')).map(row => row.dataset.exportLines).join();
-  const inLang = async (lang, fn) => { const before = I18n.getLang(); I18n.setLang(lang); try { return await fn(); } finally { I18n.setLang(before); } };
 
   async function seed(h) {
     await h.resetEditor();
@@ -113,9 +112,22 @@
   }
   const result = bad => ({ pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' });
 
+  // Ce que le menu « Type d'export » écrit, dans la langue de la page : intitulés, types, qualités du PDF, options du sélecteur caché.
+  const readTypeMenu = () => {
+    const flyout = document.querySelector(TYPE_FLYOUT);
+    return {
+      label: flyout.querySelector('.v2-hover-flyout-label').textContent.trim(),
+      aria: document.getElementById('v2-btn-quality').getAttribute('aria-label'),
+      types: Array.from(flyout.querySelectorAll('.v2-hover-row[data-export-type]')).map(row => row.textContent.trim()),
+      qualityLabel: flyout.querySelectorAll('.v2-hover-flyout-label')[1].textContent.trim(),
+      qualities: Array.from(flyout.querySelectorAll('.v2-hover-row[data-quality]')).map(row => row.textContent.trim()),
+      options: Array.from(typeSelect().options).map(o => o.textContent.trim()),
+    };
+  };
+
   cases.push({
     id: 'exporttype_menu_lists_pdf_word_excel_and_shows_the_pdf_quality_only_for_pdf',
-    description: 'Le menu du bouton à gauche d\'Exporter s\'appelle « Type d\'export » et a six lignes de type (PDF, PDF protégé, Word, Excel, Markdown, Markdown (modèle)) nommées en français et en anglais ; la qualité du PDF (intitulé, filet, Vectoriel, Impression navigateur, Léger) n\'est montrée que pour les deux PDF ; au départ PDF et Vectoriel sont les lignes actives, Excel est grisé dans un document',
+    description: 'Le menu du bouton à gauche d\'Exporter s\'appelle « Type d\'export » et a six lignes de type (PDF, PDF protégé, Word, Excel, Markdown, Markdown (modèle)) nommées dans la langue de la page (français ici) ; la qualité du PDF (intitulé, filet, Vectoriel, Impression navigateur, Léger) n\'est montrée que pour les deux PDF ; au départ PDF et Vectoriel sont les lignes actives, Excel est grisé dans un document',
     run: async (h) => {
       await seed(h);
       await reset(h);
@@ -123,20 +135,9 @@
       try {
         const flyout = document.querySelector(TYPE_FLYOUT);
         const labels = () => Array.from(flyout.querySelectorAll('.v2-hover-flyout-label')).filter(shown).map(el => el.textContent.trim());
-        const read = () => ({
-          label: flyout.querySelector('.v2-hover-flyout-label').textContent.trim(),
-          aria: document.getElementById('v2-btn-quality').getAttribute('aria-label'),
-          types: Array.from(flyout.querySelectorAll('.v2-hover-row[data-export-type]')).map(row => row.textContent.trim()),
-          qualityLabel: flyout.querySelectorAll('.v2-hover-flyout-label')[1].textContent.trim(),
-          qualities: Array.from(flyout.querySelectorAll('.v2-hover-row[data-quality]')).map(row => row.textContent.trim()),
-          options: Array.from(typeSelect().options).map(o => o.textContent.trim()),
-        });
-        const fr = read();
-        const en = await inLang('en', async () => read());
+        const fr = readTypeMenu();
         const wantFr = { label: 'Type d’export', aria: 'Type d’export', types: ['PDF', 'PDF protégé', 'Word (bêta)', 'Excel', 'Markdown', 'Markdown (modèle)'], qualityLabel: 'Qualité PDF', qualities: ['Vectoriel (par défaut)', 'Impression navigateur', 'Léger (images réduites)'], options: ['PDF', 'PDF protégé', 'Word (bêta)', 'Excel', 'Markdown', 'Markdown (modèle)'] };
-        const wantEn = { label: 'Export type', aria: 'Export type', types: ['PDF', 'Protected PDF', 'Word (beta)', 'Excel', 'Markdown', 'Markdown (template)'], qualityLabel: 'PDF quality', qualities: ['Vector (default)', 'Browser print', 'Light (smaller images)'], options: ['PDF', 'Protected PDF', 'Word (beta)', 'Excel', 'Markdown', 'Markdown (template)'] };
         if (JSON.stringify(fr) !== JSON.stringify(wantFr)) bad.push('français=' + JSON.stringify(fr));
-        if (JSON.stringify(en) !== JSON.stringify(wantEn)) bad.push('anglais=' + JSON.stringify(en));
         const order = Array.from(flyout.querySelectorAll('.v2-hover-row')).map(row => row.dataset.exportType || row.dataset.quality).join();
         if (order !== 'pdf,pdfProtected,docx,xlsx,md,mdTemplate,native,browser-print,light') bad.push('ordre=' + order);
         const active = Array.from(flyout.querySelectorAll('.v2-hover-row.is-active')).map(row => row.dataset.exportType || row.dataset.quality).join();
@@ -168,6 +169,23 @@
         if (typeSelect().value !== 'xlsx') bad.push('Markdown (modèle) grisé a été choisi dans une grille : ' + typeSelect().value);
         await pickType('pdf');
         if (shownRows(TYPE_FLYOUT).length !== 9 || labels().length !== 2) bad.push('retour au PDF : ' + shownRows(TYPE_FLYOUT).length + ' lignes, ' + labels().length + ' intitulés');
+      } finally { await reset(h); }
+      return result(bad);
+    },
+  });
+
+  cases.push({
+    id: 'exporttype_menu_wording_is_english_on_a_page_that_starts_in_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : le menu « Export type » nomme ses six types (PDF, Protected PDF, Word (beta), Excel, Markdown, Markdown (template)) et la qualité du PDF (Vector, Browser print, Light) en anglais',
+    run: async (h) => {
+      await seed(h);
+      await reset(h);
+      const bad = [];
+      try {
+        const wantEn = { label: 'Export type', aria: 'Export type', types: ['PDF', 'Protected PDF', 'Word (beta)', 'Excel', 'Markdown', 'Markdown (template)'], qualityLabel: 'PDF quality', qualities: ['Vector (default)', 'Browser print', 'Light (smaller images)'], options: ['PDF', 'Protected PDF', 'Word (beta)', 'Excel', 'Markdown', 'Markdown (template)'] };
+        const en = readTypeMenu();
+        if (JSON.stringify(en) !== JSON.stringify(wantEn)) bad.push('anglais=' + JSON.stringify(en));
       } finally { await reset(h); }
       return result(bad);
     },
@@ -214,9 +232,10 @@
     },
   });
 
-  cases.push({
+  // Les mots du menu sont écrits dans la langue de la page : le cas se joue en français, puis dans une seconde page qui démarre en anglais (la copie `lang: 'en'`).
+  const exportMenuCase = {
     id: 'exporttype_export_menu_has_only_the_lines_and_workbook_options_with_the_check_in_front',
-    description: 'Le menu du bouton Exporter a pour titre « Exporter » (« Export ») et, rien d\'autre que les options de lignes et de classeur du type choisi : PDF (une seule ligne, toutes les lignes en ZIP, en un seul PDF, assemblage), Word (une seule ligne, ZIP), Excel dans une grille (une seule ligne, ZIP, un seul classeur), en français et en anglais, sans aucune ligne « Exporter en… » ; la coche est devant l\'option cochée (« une seule ligne » au départ)',
+    description: 'Le menu du bouton Exporter a pour titre « Exporter » et, rien d\'autre que les options de lignes et de classeur du type choisi : PDF (une seule ligne, toutes les lignes en ZIP, en un seul PDF, assemblage), Word (une seule ligne, ZIP), Excel dans une grille (une seule ligne, ZIP, un seul classeur), en français et en anglais, sans aucune ligne « Exporter en… » ; la coche est devant l\'option cochée (« une seule ligne » au départ)',
     run: async (h) => {
       await seed(h);
       await reset(h);
@@ -225,13 +244,12 @@
       try {
         const labelOf = () => document.querySelector(EXPORT_FLYOUT + ' .v2-hover-flyout-label').textContent.trim();
         const ariaOf = () => document.getElementById('btn-export-pdf').getAttribute('aria-label');
-        if (labelOf() !== 'Exporter' || ariaOf() !== 'Exporter') bad.push('titre français=' + labelOf() + ' / ' + ariaOf());
-        const en = await inLang('en', async () => ({ label: labelOf(), aria: ariaOf() }));
-        if (en.label !== 'Export' || en.aria !== 'Export') bad.push('titre anglais=' + JSON.stringify(en));
-        const texts = lang => inLang(lang, async () => shownRows(EXPORT_FLYOUT).map(row => row.textContent.trim()));
+        const english = I18n.getLang() === 'en';
+        const title = english ? 'Export' : 'Exporter';
+        if (labelOf() !== title || ariaOf() !== title) bad.push('titre=' + labelOf() + ' / ' + ariaOf());
         const expectTexts = async (label, fr, enTexts) => {
-          if (JSON.stringify(await texts('fr')) !== JSON.stringify(fr)) bad.push(label + ' en français=' + JSON.stringify(await texts('fr')));
-          if (JSON.stringify(await texts('en')) !== JSON.stringify(enTexts)) bad.push(label + ' en anglais=' + JSON.stringify(await texts('en')));
+          const got = shownRows(EXPORT_FLYOUT).map(row => row.textContent.trim());
+          if (JSON.stringify(got) !== JSON.stringify(english ? enTexts : fr)) bad.push(label + ' (' + I18n.getLang() + ')=' + JSON.stringify(got));
         };
         // Aucune ligne montrée ne porte l'identifiant ni le nom d'un export d'avant : le menu ne dit que les lignes exportées.
         const noOldRow = label => {
@@ -283,7 +301,13 @@
       } finally { await reset(h); }
       return result(bad);
     },
-  });
+  };
+  cases.push(exportMenuCase);
+  cases.push(Object.assign({}, exportMenuCase, {
+    id: 'exporttype_export_menu_has_only_the_lines_and_workbook_options_in_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : le menu du bouton Export a pour titre « Export » et ses options (A single row, All rows (ZIP), All rows as a single PDF, Assemble before printing, All table values…) sont en anglais pour le PDF, Word, Markdown et Excel',
+  }));
 
   cases.push({
     id: 'exporttype_ticking_an_option_only_ticks_it_and_exports_nothing',
@@ -518,8 +542,6 @@
         // Le menu Exporter : aucune option de lignes, un mot qui dit ce qui part.
         if (shownLines() !== '') bad.push('options de lignes montrées=' + shownLines());
         if (!note() || !shown(note()) || note().textContent.trim() !== 'Un seul fichier : le modèle') bad.push('mot du menu Exporter en français=' + (note() && shown(note()) ? note().textContent.trim() : 'absent'));
-        const en = await inLang('en', async () => (note() && shown(note()) ? note().textContent.trim() : 'absent'));
-        if (en !== 'One file: the template') bad.push('mot du menu Exporter en anglais=' + en);
         if (linesSelect().value !== 'zip') bad.push('le choix de lignes gardé a été touché : ' + linesSelect().value);
         // La touche du bouton (« (Alt+P) ») va au titre « Exporter » (js/shortcuts.js), pas au mot : il ne nomme pas le bouton.
         const title = document.querySelector(EXPORT_FLYOUT + ' .v2-hover-flyout-label:not([data-export-for])');
@@ -570,6 +592,24 @@
           if (spies.calls.pdf.length !== 1 || downloads.length !== 2) bad.push('export d\'un macro-modèle avec le type posé de l\'extérieur : ' + JSON.stringify(spies.calls) + ' / fichiers ' + downloads.length);
         }
       } finally { ExportCommon.downloadBlob = realDownload; nameInput.value = ''; batches.restore(); spies.restore(); await reset(h); }
+      return result(bad);
+    },
+  });
+
+  cases.push({
+    id: 'exporttype_markdown_template_word_is_english_on_a_page_that_starts_in_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : avec le type « Markdown (template) », le menu Export dit « One file: the template » au lieu des options de lignes',
+    run: async (h) => {
+      await seed(h);
+      await reset(h);
+      const bad = [];
+      try {
+        await pickType('mdTemplate');
+        const note = document.querySelector(EXPORT_FLYOUT + ' .v2-hover-flyout-label[data-export-for="mdTemplate"]');
+        if (!note || !shown(note) || note.textContent.trim() !== 'One file: the template') bad.push('mot du menu Export en anglais=' + (note && shown(note) ? note.textContent.trim() : 'absent'));
+        if (shownLines() !== '') bad.push('options de lignes montrées=' + shownLines());
+      } finally { await reset(h); }
       return result(bad);
     },
   });

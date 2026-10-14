@@ -112,7 +112,7 @@ const TemplateGalleryModal = (function () {
   }
 
   // La ligne sous le nom (les tables que « Créer avec ses tables » ajoutera, la page), les fonctions montrées et le bouton « Créer avec ses tables » :
-  // tout ce qui dépend du pack et de la langue. Appelée à l'ouverture (vide), quand le pack est lu et au changement de langue.
+  // tout ce qui dépend du pack et de la langue. Appelée à l'ouverture (vide) et quand le pack est lu.
   function renderPreviewMeta() {
     const entry = currentEntry;
     const pack = currentPack;

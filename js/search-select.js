@@ -137,8 +137,8 @@ const SearchSelect = (function () {
     return { value: String(entry.value), name, hint, search, haystack: searchKey(name, hint, search), group: '', pinned: false, empty: false, expand: entry.expand || '', unavailable: '' };
   }
 
-  // Textes de la zone de recherche et du message « aucun résultat » : une chaîne, ou une fonction relue à chaque ouverture, pour qu'une liste posée
-  // une fois sur une fenêtre qui reste (Réglages, « Trier par ») suive un changement de langue.
+  // Textes de la zone de recherche et du message « aucun résultat » : une chaîne, ou une fonction relue à chaque ouverture quand le texte dépend de l'état de
+  // la fenêtre (une liste vide ou sans résultat).
   const textOf = (value, key) => (typeof value === 'function' ? value() : value) || I18n.t(key);
 
   // Une liste, c'est un objet `s` : le <select>, les options, les éléments de la page et ce qui change à l'usage. Les fonctions qui suivent le prennent en

@@ -58,7 +58,6 @@
   // Le compte redevient un compte qui modifie : adresse sans `readonly=true`, écritures permises, droits relus, mode Édition rendu.
   async function finish() {
     await closeSettings();
-    I18n.setLang('fr');
     stub().setViewer(false);
     stub().setWidgetOptions(null);
     await AccessRights.refresh();
@@ -190,9 +189,10 @@
     },
   });
 
-  cases.push({
+  // L'onglet Accès écrit son texte dans la langue de la page : le cas se joue en français, puis dans une seconde page qui démarre en anglais (la copie `lang: 'en'`).
+  const settingsTabsCase = {
     id: 'viewer_account_settings_tabs_are_locked_and_the_access_tab_says_why',
-    description: 'Réglages d’un Lecteur : l’onglet Accès (listes, case de la Lecture épurée) et l’onglet Vue sont verrouillés avec leur ligne « lecture seule », et l’onglet Accès dit « Compte Lecteur dans Grist : lecture seule, export, sans commentaires » (français, anglais) ; ni rappel « Enregistrer » ni rien d’écrit',
+    description: 'Réglages d’un Lecteur : l’onglet Accès (listes, case de la Lecture épurée) et l’onglet Vue sont verrouillés avec leur ligne « lecture seule », et l’onglet Accès dit « Compte Lecteur dans Grist : lecture seule, export, sans commentaires » dans la langue de la page ; ni rappel « Enregistrer » ni rien d’écrit',
     run: async (h) => {
       await savedTemplate(h, 'Lecteur réglages');
       try {
@@ -200,13 +200,8 @@
         await openSettings('access');
         const selects = ['settings-access-table', 'settings-access-email', 'settings-access-readonly', 'settings-access-export', 'settings-access-comments'];
         const disabled = ids => ids.every(id => el(id).disabled);
-        const statusFr = el('settings-access-status');
-        const fr = { text: statusFr.textContent, hidden: statusFr.hidden, lockedHint: shown('settings-access-locked'), selects: disabled(selects), cleanBox: el('settings-access-clean-reading').disabled };
-        I18n.setLang('en');
-        await sleep(200);
-        const en = { text: statusFr.textContent, lockedHint: shown('settings-access-locked') };
-        I18n.setLang('fr');
-        await sleep(200);
+        const status = el('settings-access-status');
+        const access = { text: status.textContent, hidden: status.hidden, lockedHint: shown('settings-access-locked'), selects: disabled(selects), cleanBox: el('settings-access-clean-reading').disabled };
         await openSettings('rowTemplate');
         const viewTab = {
           rowTemplateEnable: el('settings-rowtemplate-enabled').disabled,
@@ -217,11 +212,10 @@
         };
         const reminder = el('settings-save-reminder');
         const checks = {
-          frStatus: fr.text === VIEWER_TEXT_FR && !fr.hidden,
-          enStatus: en.text === VIEWER_TEXT_EN,
-          accessLockedHint: fr.lockedHint && en.lockedHint,
-          accessListsDisabled: fr.selects,
-          cleanBoxDisabled: fr.cleanBox,
+          status: access.text === (I18n.getLang() === 'en' ? VIEWER_TEXT_EN : VIEWER_TEXT_FR) && !access.hidden,
+          accessLockedHint: access.lockedHint,
+          accessListsDisabled: access.selects,
+          cleanBoxDisabled: access.cleanBox,
           viewControlsDisabled: viewTab.rowTemplateEnable && viewTab.viewTemplateSet && viewTab.viewTemplateClear,
           viewHints: viewTab.rowTemplateHint && viewTab.viewTemplateHint,
           noReminder: !!reminder && reminder.hidden,
@@ -231,7 +225,13 @@
         return { pass: v.pass, notes: v.failed.join(', ') || 'ok' };
       } finally { await finish(); }
     },
-  });
+  };
+  cases.push(settingsTabsCase);
+  cases.push(Object.assign({}, settingsTabsCase, {
+    id: 'viewer_account_settings_tabs_are_locked_and_the_access_tab_says_why_in_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : l’onglet Accès d’un Lecteur dit « Viewer account in Grist: read-only, export, no comments. » et les onglets Accès et Vue restent verrouillés',
+  }));
 
   cases.push({
     id: 'viewer_account_opens_the_clean_reading_when_the_box_is_ticked_like_a_person_found_read_only',

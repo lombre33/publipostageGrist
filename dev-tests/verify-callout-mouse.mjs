@@ -371,8 +371,19 @@ async function run(theme) {
   check(`${T}, signature : Ctrl+Z annule la frappe puis retire tout le bloc`, !(await html()).includes('two-columns-zone'), (await html()).slice(0, 300));
 }
 
+// La page ne change plus de langue en route : Réglages garde le choix et la recharge. Le script fait pareil - il garde la langue, recharge, attend le widget.
+async function restartIn(lang) {
+  await page.evaluate(next => I18n.storeLang(next), lang);
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
+  await page.waitForFunction(() => {
+    const el = document.getElementById('status-msg');
+    return !!el && /prêt|ready/i.test(el.textContent || '');
+  }, null, { timeout: 90000 });
+}
+
 async function runEnglish() {
-  await page.evaluate(() => I18n.setLang('en'));
+  await restartIn('en');
   await page.waitForTimeout(250);
   await setDoc('<p>Hello big world</p>');
   await caretAtEnd('Hello');
@@ -400,8 +411,6 @@ async function runEnglish() {
   check('anglais, signature : les légendes sont « Name and signature » et « Date »', (await html()).includes('<p>Name and signature</p>') && (await html()).includes('<p>Date</p>'), (await html()).slice(0, 400));
   await openMenu();
   await page.mouse.move(WIDTH - 30, HEIGHT - 20, { steps: 3 });
-  await page.waitForTimeout(250);
-  await page.evaluate(() => I18n.setLang('fr'));
   await page.waitForTimeout(250);
   await closeWindowWithEscape();
 }

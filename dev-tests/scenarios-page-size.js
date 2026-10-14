@@ -528,11 +528,25 @@ window.EditorTestSuites.pageSize = (function () {
           field('height').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, isComposing: true }));
           await h.sleep(150);
           if (!isOpen() || PageLayout.getFormat() !== 'A4') problems.push('Entrée pendant une composition : ouverte=' + isOpen() + ' ' + PageLayout.getFormat());
-          // L'anglais.
-          I18n.setLang('en');
-          await h.sleep(100);
-          closeWindowIfOpen();
-          await openWindowByRow(h);
+        } finally {
+          await h.sleep(150);
+          document.removeEventListener('pp:pageLayoutChanged', onLayout);
+          document.removeEventListener('pp:marginsChanged', onMargins);
+          resetPage();
+        }
+        return { pass: problems.length === 0, notes: JSON.stringify(problems) };
+      },
+    },
+    {
+      id: 'psize_window_texts_bounds_and_numbers_in_english_on_a_page_that_starts_in_english',
+      lang: 'en',
+      description: 'Page qui démarre en anglais : la fenêtre « Format libre… » (titre, libellés, boutons, indication de 2 à 55.88 cm, champs au point, bornes, nombre illisible, virgule acceptée) sans {min} ni {max} resté dans le texte',
+      async run(h) {
+        await setup(h);
+        const problems = [];
+        try {
+          if (I18n.getLang() !== 'en') problems.push('la page ne démarre pas en anglais');
+          if (!(await openWindowByRow(h))) return { pass: false, notes: 'la fenêtre ne s\'ouvre pas' };
           const en = windowState();
           if (en.title !== 'Custom page size' || en.labels.join() !== 'Format,Width,Height' || en.buttons.join() !== 'Cancel,Confirm' && en.buttons.join() !== 'Cancel,OK') problems.push('anglais, textes : ' + JSON.stringify([en.title, en.labels, en.buttons]));
           if (en.hint !== 'From 2 to 55.88 cm, the Word limit. Wider than tall, the page is in landscape.') problems.push('anglais, indication : ' + en.hint);
@@ -545,10 +559,7 @@ window.EditorTestSuites.pageSize = (function () {
           if (windowState().caption !== '7.5 × 29.7 cm') problems.push('anglais, virgule acceptée : ' + windowState().caption);
           if (/\{(min|max|format)\}/.test(JSON.stringify(en))) problems.push('un {min} ou {max} non remplacé');
         } finally {
-          I18n.setLang('fr');
           await h.sleep(150);
-          document.removeEventListener('pp:pageLayoutChanged', onLayout);
-          document.removeEventListener('pp:marginsChanged', onMargins);
           resetPage();
         }
         return { pass: problems.length === 0, notes: JSON.stringify(problems) };

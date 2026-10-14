@@ -45,10 +45,10 @@
 //  22. la feuille de route du README public qui promet encore ce que le widget livre (« Export PDF : impression full HD, PDF compressé (V1) » : l'impression par le navigateur et le PDF « Léger » sont livrés
 //      et décrits plus haut ; relevé du 12/10, retiré dans les deux langues).
 //  23. un changement de langue de Réglages qui retraduit l'écran sur place au lieu de recharger la page (demande du 14/10 : « quand on change de langue, on recharge la page et uniquement ça, pour ne
-//      pas alourdir ») : les cases de langue passent par changeLanguage (la question « Enregistrer / Abandonner / Annuler » d'abord, puis I18n.storeLang et location.reload()), et seul un stockage refusé
-//      change la langue sur place.
-//  24. un écran qui s'inscrit à I18n.onChange pour se retraduire en direct (même demande du 14/10, « on simplifie le code ») : la page ne change plus de langue en route, un écran écrit ses libellés quand
-//      il se bâtit ou s'ouvre et ne les relit pas. Le code qui retraduisait en direct est retiré par lots ; la liste des fichiers qui s'inscrivent encore (STILL_LISTENING) ne fait que raccourcir.
+//      pas alourdir ») : les cases de langue passent par changeLanguage (la question « Enregistrer / Abandonner / Annuler » d'abord, puis I18n.storeLang et location.reload()), et un stockage refusé
+//      laisse la langue telle quelle (la case revient sur celle de la page).
+//  24. un retour du code qui retraduisait en direct (même demande du 14/10, « on simplifie le code ») : I18n n'a plus de crochet de changement de langue (ni onChange, ni abonnés, ni applyTranslations
+//      exporté), aucun fichier de js/ n'appelle I18n.onChange ni I18n.setLang (réservé aux tests) ; un écran écrit ses libellés quand il se bâtit ou s'ouvre et ne les relit pas.
 //
 // Volontairement PERMISSIF : un nom cité seulement dans un commentaire compte comme utilisé, un préfixe construit (`'toc-level-' + n`) couvre toute la
 // famille. Le but est de ne jamais faire échouer un changement légitime, seulement d'attraper ce qui n'a plus AUCUN point d'entrée. Une classe posée
@@ -832,8 +832,8 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 // 23. Changer de langue dans Réglages recharge la page, rien d'autre (demande du 14/10)
 // ============================================================================
 // « Quand on change de langue, on recharge la page et uniquement ça, pour ne pas alourdir » : Réglages ne retraduit plus rien sur place. Le choix passe par I18n.storeLang puis location.reload(), après la
-// question « Enregistrer / Abandonner / Annuler » quand une modification attend (comme tout ce qui remplace le contenu de l'éditeur) ; seul un stockage refusé change la langue sur place. Un retour de
-// l'ancien comportement (I18n.setLang appelé par les cases de langue) ne casserait rien à l'écran : les libellés qu'une barre déjà bâtie ne relit pas gardent seulement leur vieille langue.
+// question « Enregistrer / Abandonner / Annuler » quand une modification attend (comme tout ce qui remplace le contenu de l'éditeur) ; un stockage refusé ne change rien : la case revient sur la langue de
+// la page. Un retour de l'ancien comportement (I18n.setLang appelé par les cases de langue) ne casserait rien à l'écran, il ne changerait simplement plus la page : ce contrôle le garde.
 {
   const settings = noCommentsJs(read('js/settings.js'));
   const i18n = noCommentsJs(read('js/i18n.js'));
@@ -845,31 +845,30 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('langue : changeLanguage pose la question (hasEditsToConfirmBeforeLeaving, askBeforeLeaving) AVANT de garder la langue et de recharger',
     fn !== '' && at('hasEditsToConfirmBeforeLeaving') !== -1 && at('askBeforeLeaving') > at('hasEditsToConfirmBeforeLeaving') && at('I18n.storeLang(') > at('askBeforeLeaving') && at('location.reload()') > at('I18n.storeLang('), fn);
   check('langue : « Annuler » rend la case de la langue de la page (checkLangRadios) et ne recharge pas', /askBeforeLeaving\(\)\)\) \{ checkLangRadios\(\); return; \}/.test(fn), fn);
-  check('langue : seul un stockage refusé change la langue sur place (I18n.setLang quand storeLang rend faux)', /if \(I18n\.storeLang\(next\)\) location\.reload\(\);\s*else I18n\.setLang\(next\);/.test(fn), fn);
+  check('langue : un stockage refusé ne change rien : la case revient sur la langue de la page (checkLangRadios), sans rechargement ni I18n.setLang',
+    /if \(!I18n\.storeLang\(next\)\) \{ checkLangRadios\(\); return; \}\s*location\.reload\(\);/.test(fn) && !/I18n\.setLang/.test(fn), fn);
   check('langue : js/main.js donne à Réglages la question « Enregistrer / Abandonner / Annuler »', /Settings\.wireSettingsModal\(\{ hasEditsToConfirmBeforeLeaving, askBeforeLeaving \}\)/.test(main), 'js/main.js');
-  check('langue : I18n garde le choix par storeLang (faux si le stockage est refusé), que setLang réutilise au lieu de réécrire pp_lang',
-    /function storeLang\(next\)[\s\S]*?return true;[\s\S]*?return false;/.test(i18n) && /storeLang\(lang\);/.test(i18n) && (i18n.match(/localStorage\.setItem\('pp_lang'/g) || []).length === 1 && /return \{ t, getLang, setLang, storeLang,/.test(i18n), 'js/i18n.js');
+  check('langue : I18n garde le choix par storeLang (faux si le stockage est refusé), seul endroit qui écrit pp_lang ; setLang (réservé aux tests) ne touche ni la page ni le stockage',
+    /function storeLang\(next\)[\s\S]*?return true;[\s\S]*?return false;/.test(i18n) && /function setLang\(next\) \{ lang = next === 'en' \? 'en' : 'fr'; \}/.test(i18n) && (i18n.match(/localStorage\.setItem\('pp_lang'/g) || []).length === 1 && /return \{ t, getLang, setLang, storeLang \};/.test(i18n), 'js/i18n.js');
 }
 
 // ============================================================================
 // 24. Plus aucun écran ne se retraduit en direct (demande du 14/10)
 // ============================================================================
 // Réglages recharge la page pour changer de langue : un écran écrit ses libellés, ses infobulles et ses noms accessibles quand il se bâtit ou s'ouvre, dans la langue de la page, et ne les relit pas.
-// Les inscriptions à I18n.onChange qui le faisaient sont retirées par lots (« Oui, retirer », 14/10) ; STILL_LISTENING garde, par fichier, celles qui restent à retirer. Un fichier qui n'y est pas et qui
-// s'inscrit fait échouer le contrôle (la règle est écrite dans la charte UX/UI, §1) ; un fichier qui y est et en a moins ou plus aussi : la liste ne fait que raccourcir, jamais s'élargir.
+// Les inscriptions à I18n.onChange ont été retirées par lots (« Oui, retirer », 14/10) ; ce contrôle garde le résultat : I18n n'a plus de crochet de changement de langue, aucun fichier de js/ n'en demande
+// un (la règle est écrite dans la charte UX/UI, §1), et aucun n'appelle I18n.setLang, que seuls les tests utilisent.
 {
-  const STILL_LISTENING = {};
-  const found = {};
+  const i18n = noCommentsJs(read('js/i18n.js'));
+  const listening = [], setting = [];
   for (const file of jsFiles) {
-    const n = (noCommentsJs(read(file)).match(/\bI18n\.onChange\(/g) || []).length;
-    if (n) found[file] = n;
+    const code = noCommentsJs(read(file));
+    if (/\bI18n\.onChange\(/.test(code)) listening.push(file);
+    if (/\bI18n\.setLang\(/.test(code)) setting.push(file);
   }
-  const strangers = Object.keys(found).filter(f => !(f in STILL_LISTENING));
-  const moved = Object.keys(STILL_LISTENING).filter(f => found[f] !== STILL_LISTENING[f]);
-  check('langue : l\'analyse lit bien les inscriptions à I18n.onChange (garde-fou de l\'analyse elle-même)', Object.keys(STILL_LISTENING).length === 0 || Object.keys(found).length > 0, JSON.stringify(found));
-  check('langue : aucun fichier hors de la liste ne s\'inscrit à I18n.onChange (un écran écrit ses libellés quand il se bâtit ou s\'ouvre, la page ne change plus de langue en route)',
-    strangers.length === 0, strangers.map(f => `${f} (${found[f]})`).join(', '));
-  check('langue : la liste des fichiers qui s\'inscrivent encore est à jour (en retirer ce qui est retiré, jamais en ajouter)', moved.length === 0, moved.map(f => `${f} : ${found[f] || 0} au lieu de ${STILL_LISTENING[f]}`).join(', '));
+  check('langue : I18n n\'offre plus de crochet de changement de langue (ni onChange, ni liste d\'abonnés, ni applyTranslations en export)', !/\bonChange\b/.test(i18n) && !/changeListeners/.test(i18n) && !/return \{[^}]*applyTranslations/.test(i18n), 'js/i18n.js');
+  check('langue : aucun fichier de js/ ne s\'inscrit à I18n.onChange (un écran écrit ses libellés quand il se bâtit ou s\'ouvre, la page ne change plus de langue en route)', listening.length === 0, listening.join(', '));
+  check('langue : aucun fichier de js/ n\'appelle I18n.setLang (réservé aux tests : le produit garde la langue par storeLang puis recharge la page)', setting.length === 0, setting.join(', '));
 }
 
 summarizeAndExit();

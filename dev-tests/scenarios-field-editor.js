@@ -134,7 +134,7 @@
   // d'avant sont remis, et `templates` remet aussi la table des modèles comme elle était.
   function scenario(id, description, body, options) {
     const opts = options || {};
-    cases.push({
+    const entry = {
       id, description,
       run: async (h) => {
         const lang = I18n.getLang();
@@ -162,7 +162,9 @@
           await h.resetEditor();
         }
       },
-    });
+    };
+    if (opts.lang) entry.lang = opts.lang; // le cas se joue dans une page qui démarre dans cette langue
+    cases.push(entry);
   }
 
   // ============================================================================================================
@@ -205,38 +207,41 @@
     },
   );
 
+  // L'indication est écrite dans la langue de la page : le cas se joue en français, puis dans une seconde page qui démarre en anglais.
+  const emptyHintBody = async (h) => {
+    const keys = { [SUBJECT]: 'email.subject.placeholder', [TO]: 'email.to.placeholder', [CC]: 'email.cc.placeholder', [CCI]: 'email.cci.placeholder', [FILE]: 'toolbar.pdfFilename.placeholder' };
+    const seen = {};
+    for (const id of ALL_FIELDS) {
+      const host = field(id);
+      const wanted = I18n.t(keys[id]);
+      const visible = [SUBJECT, TO, CC].includes(id);
+      seen[id] = {
+        attribute: host.getAttribute('placeholder') === wanted,
+        aria: editorOf(id).view.dom.getAttribute('aria-placeholder') === wanted,
+        empty: host.classList.contains('is-empty'),
+        drawn: visible ? getComputedStyle(host, '::before').content === JSON.stringify(wanted) : null,
+      };
+    }
+    const subject = field(SUBJECT);
+    subject.value = 'x';
+    const filled = { empty: subject.classList.contains('is-empty'), drawn: getComputedStyle(subject, '::before').content };
+    subject.value = '';
+    const emptied = subject.classList.contains('is-empty');
+    const lang = I18n.getLang();
+    const ok = ALL_FIELDS.every(id => { const s = seen[id]; return s.attribute && s.aria && s.empty && (s.drawn === null || s.drawn === true); });
+    return { pass: ok && !filled.empty && filled.drawn !== JSON.stringify(I18n.t(keys[SUBJECT])) && emptied, notes: JSON.stringify({ lang, seen, filled, emptied }) };
+  };
   scenario(
     'fieldeditor_empty_field_shows_its_hint_in_the_language_of_the_interface',
-    'Un champ vide montre son indication (l’attribut placeholder de l’élément, repris en aria-placeholder par la zone de saisie), qui change avec la langue de l’interface sans que le champ soit retouché ; elle disparaît dès qu’il contient quelque chose',
-    async (h) => {
-      const keys = { [SUBJECT]: 'email.subject.placeholder', [TO]: 'email.to.placeholder', [CC]: 'email.cc.placeholder', [CCI]: 'email.cci.placeholder', [FILE]: 'toolbar.pdfFilename.placeholder' };
-      const seen = {};
-      for (const lang of ['fr', 'en']) {
-        I18n.setLang(lang);
-        await h.sleep(80);
-        seen[lang] = {};
-        for (const id of ALL_FIELDS) {
-          const host = field(id);
-          const wanted = I18n.t(keys[id]);
-          const visible = [SUBJECT, TO, CC].includes(id);
-          seen[lang][id] = {
-            attribute: host.getAttribute('placeholder') === wanted,
-            aria: editorOf(id).view.dom.getAttribute('aria-placeholder') === wanted,
-            empty: host.classList.contains('is-empty'),
-            drawn: visible ? getComputedStyle(host, '::before').content === JSON.stringify(wanted) : null,
-          };
-        }
-      }
-      const subject = field(SUBJECT);
-      subject.value = 'x';
-      const filled = { empty: subject.classList.contains('is-empty'), drawn: getComputedStyle(subject, '::before').content };
-      subject.value = '';
-      const emptied = subject.classList.contains('is-empty');
-      const english = I18n.t(keys[SUBJECT]) !== (I18n.setLang('fr'), I18n.t(keys[SUBJECT]));
-      const ok = ['fr', 'en'].every(lang => ALL_FIELDS.every(id => { const s = seen[lang][id]; return s.attribute && s.aria && s.empty && (s.drawn === null || s.drawn === true); }));
-      return { pass: ok && !filled.empty && filled.drawn !== JSON.stringify(I18n.t(keys[SUBJECT])) && emptied && english, notes: JSON.stringify({ seen, filled, emptied, english }) };
-    },
+    'Un champ vide montre son indication (l’attribut placeholder de l’élément, repris en aria-placeholder par la zone de saisie) dans la langue de l’interface ; elle disparaît dès qu’il contient quelque chose',
+    emptyHintBody,
     { email: true },
+  );
+  scenario(
+    'fieldeditor_empty_field_shows_its_hint_in_english_on_a_page_that_starts_in_english',
+    'Page qui démarre en anglais : un champ vide montre son indication en anglais (placeholder, aria-placeholder, texte dessiné), qui disparaît dès qu’il contient quelque chose',
+    emptyHintBody,
+    { email: true, lang: 'en' },
   );
 
   // ============================================================================================================

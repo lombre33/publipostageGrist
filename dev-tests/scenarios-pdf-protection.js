@@ -381,12 +381,12 @@
         await pickLines('one');
         linesRow('merged').click();
         if (linesSelect().value !== 'one' || tickedLines() !== 'one') bad.push('un clic sur « un seul PDF » grisée l\'a choisi : ' + linesSelect().value + ' / ' + tickedLines());
-        // Les raisons, dites en anglais au survol suivant.
+        // Les raisons, dites en anglais au survol suivant (le nom des lignes est écrit dans la langue de la page : cas « Export type » en anglais, groupe exportType).
         const english = await inLang('en', async () => {
           hover();
-          return { quality: qualityRow('browser-print').title, lines: linesRow('merged').title, type: typeRow('pdfProtected').textContent.trim(), wantQuality: I18n.t('quality.protectedOff'), wantLines: I18n.t('exportLines.protectedOff') };
+          return { quality: qualityRow('browser-print').title, lines: linesRow('merged').title, wantQuality: I18n.t('quality.protectedOff'), wantLines: I18n.t('exportLines.protectedOff') };
         });
-        if (english.quality !== english.wantQuality || english.lines !== english.wantLines || !/^Not available/.test(english.quality) || !/^Not available/.test(english.lines) || english.type !== 'Protected PDF') bad.push('info-bulles et nom en anglais=' + JSON.stringify(english));
+        if (english.quality !== english.wantQuality || english.lines !== english.wantLines || !/^Not available/.test(english.quality) || !/^Not available/.test(english.lines)) bad.push('info-bulles en anglais=' + JSON.stringify(english));
         hover();
         if (linesRow('merged').title !== I18n.t('exportLines.protectedOff') || /^Not available/.test(linesRow('merged').title)) bad.push('l\'info-bulle n\'est pas revenue en français : ' + linesRow('merged').title);
         // Le retour au PDF rend tout : l'impression navigateur et « un seul PDF » choisis avant, plus aucun grisé ni info-bulle.

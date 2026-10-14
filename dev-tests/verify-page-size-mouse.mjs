@@ -86,9 +86,11 @@ function check(name, pass, notes) {
 const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hinting=none'] });
 const pageErrors = [];
 
-async function openWidget(colorScheme) {
+async function openWidget(colorScheme, lang) {
   const context = await browser.newContext({ bypassCSP: true, viewport: { width: WIDTH, height: HEIGHT }, colorScheme });
   const page = await context.newPage();
+  // La page ne change plus de langue en route : l'anglais est une page qui DÉMARRE en anglais (la langue choisie est lue au démarrage, `pp_lang`).
+  if (lang === 'en') await page.addInitScript(() => { try { localStorage.setItem('pp_lang', 'en'); } catch (e) { /* stockage refusé : la page reste en français */ } });
   page.on('pageerror', e => { pageErrors.push(e.message); console.log('[pageerror]', e.message); });
   // Boîtes du navigateur (alert/confirm) : acceptées et consignées, jamais bloquantes.
   const dialogs = [];
@@ -643,29 +645,34 @@ async function runTheme(theme) {
   await away(page);
 
   // 10) L'anglais : la fenêtre, ses messages et l'indication tiennent dans le panneau, la virgule est acceptée, la taille s'écrit avec le point.
-  await page.evaluate(() => I18n.setLang('en'));
-  await page.waitForTimeout(300);
-  await openWindowByMouse(page);
-  const en = await winState(page);
-  const enFit = await winFits(page);
+  // La page ne change plus de langue en route : l'anglais se lit dans une seconde page qui démarre en anglais, mise sur 40 x 50 cm par les mêmes gestes (A4, fenêtre, frappe, « Confirm »).
+  const english = await openWidget(theme, 'en');
+  const enPage = english.page;
+  const enA4On = await enPage.evaluate(() => document.getElementById('editor-container').classList.contains('a4-preview'));
+  if (!enA4On) await realClick(enPage, '#v2-a4-toggle');
+  await enPage.waitForTimeout(700);
+  await openWindowByMouse(enPage);
+  await typeSizeByKeyboard(enPage, '40', '50');
+  await confirmByMouse(enPage);
+  await openWindowByMouse(enPage);
+  const en = await winState(enPage);
+  const enFit = await winFits(enPage);
   check(`${label} - anglais : « ${en.title} », Width / Height, « ${en.cancelText} » et « ${en.okText} », taille « ${en.caption} », la fenêtre tient sans défiler`,
     en.title === 'Custom page size' && en.labels.join() === 'Format,Width,Height' && en.cancelText === 'Cancel' && en.okText === 'Confirm' && en.width === '40' && en.height === '50' && en.caption === '40 × 50 cm' && enFit.ok, { en, enFit });
-  await typeSizeByKeyboard(page, '7,5', 'abc');
-  const enBad = await winState(page);
-  const enBadFit = await winFits(page);
+  await typeSizeByKeyboard(enPage, '7,5', 'abc');
+  const enBad = await winState(enPage);
+  const enBadFit = await winFits(enPage);
   check(`${label} - anglais : « ${enBad.error} », la virgule est acceptée (« 7,5 » -> ${enBad.caption}), la fenêtre tient sans défiler (${enBadFit.scrollH}/${enBadFit.clientH})`,
     enBad.error === 'Enter a number in centimeters, for example 10.5.' && enBad.invalid[1] && !enBad.invalid[0] && enBad.caption === '7.5 × 50 cm' && enBadFit.ok, { enBad, enBadFit });
-  await typeSizeByKeyboard(page, '7,5', '60');
-  const enRange = await winState(page);
+  await typeSizeByKeyboard(enPage, '7,5', '60');
+  const enRange = await winState(enPage);
   check(`${label} - anglais : « ${enRange.error} »`, enRange.error === 'The size must be between 2 and 55.88 cm.', enRange);
-  await typeSizeByKeyboard(page, '7,5', '10');
-  const enOk = await winState(page);
+  await typeSizeByKeyboard(enPage, '7,5', '10');
+  const enOk = await winState(enPage);
   check(`${label} - anglais : « 7,5 » et « 10 » s'écrivent « ${enOk.caption} » (point décimal)`, enOk.caption === '7.5 × 10 cm' && !enOk.okDisabled, enOk);
-  await page.keyboard.press('Escape');
-  await page.waitForTimeout(300);
-  await page.evaluate(() => I18n.setLang('fr'));
-  await page.waitForTimeout(300);
-  await away(page);
+  await enPage.keyboard.press('Escape');
+  await enPage.waitForTimeout(300);
+  await english.context.close();
 
   // 11) Retour à l'A4 par un vrai clic sur sa ligne : la feuille, les sauts et la ligne « Format libre… » (décochée, sans taille) comme au départ.
   await pickRow(page, 'portrait');

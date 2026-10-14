@@ -2,7 +2,7 @@
    la barre, le commutateur Touches / Abréviations de Réglages > Raccourcis, et la liste des touches. */
 
 /* La touche, là où le bouton se nomme : js/shortcuts.js pose `data-keytip` (« (Ctrl+B) ») et `data-keyhint` (« Ctrl+B ») sur l'élément qui nomme
-   l'action ; ni l'un ni l'autre n'est réécrit par un changement de langue (applyTranslations ne touche que les attributs data-i18n*). */
+   l'action. */
 /* Infobulle d'un bouton : la touche après son texte (css/toolbar-v2.css pose le texte, `fitTooltip` de js/viewport-fit.js mesure ensuite la largeur
    réelle). */
 .bar-row [data-tip][data-keytip]::after, #v2-toolbar [data-tip][data-keytip]::after { content: attr(data-tip) attr(data-keytip); }

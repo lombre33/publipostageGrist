@@ -1270,13 +1270,12 @@
 
   cases.push({
     id: 'chart_window_and_row_follow_the_interface_language',
-    description: 'La ligne du menu, la fenêtre (insertion puis modification), la liste (« Page : … »), les raisons grisées et les messages passent en anglais avec la langue de l\'interface, puis reviennent en français',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : la ligne du menu, la fenêtre (insertion puis modification), la liste (« Page : … »), les raisons grisées et les messages sont en anglais (le français est vérifié par les cas de la ligne et de la fenêtre plus haut)',
     run: async (h) => {
       await seed(h);
       await setDoc(h, '<p>Avant</p><p>' + chartHtml(101, 'linked', 'Ventes par mois') + '</p>');
       await placeCursorAtEnd();
-      I18n.setLang('en');
-      await sleep(150);
       const en = {};
       try {
         en.row = chartRow().textContent.trim();
@@ -1299,15 +1298,12 @@
         await closeWindowIfOpen();
       } finally {
         await closeWindowIfOpen();
-        I18n.setLang('fr');
-        await sleep(150);
       }
-      const back = { label: chartRow().textContent.trim(), aria: chartRow().getAttribute('aria-label') };
       return {
-        pass: en.row === 'Chart from the page…' && en.aria === 'Insert a chart from the page' && en.title === 'Insert a chart from the page' && en.label === 'Chart' && en.placeholder === '— Choose a chart —' && en.group === 'Page: Ventes'
+        pass: I18n.getLang() === 'en' && en.row === 'Chart from the page…' && en.aria === 'Insert a chart from the page' && en.title === 'Insert a chart from the page' && en.label === 'Chart' && en.placeholder === '— Choose a chart —' && en.group === 'Page: Ventes'
           && en.kaplan === 'Kaplan-Meier: not redrawn yet.' && /^Custom widget/.test(en.custom) && en.type === 'Ventes par mois (Bars · GfVentes)' && en.empty === 'Choose a chart.' && en.ok === 'Insert' && en.cancel === 'Cancel' && en.rows === 'Rows to plot' && en.caption === 'For the current row.'
-          && en.rowEdit === 'Edit chart…' && en.ariaEdit === 'Edit the chart' && en.titleEdit === 'Edit the chart' && en.okEdit === 'Confirm' && back.label === 'Modifier le graphique…' && back.aria === 'Modifier le graphique',
-        notes: JSON.stringify({ en, back }),
+          && en.rowEdit === 'Edit chart…' && en.ariaEdit === 'Edit the chart' && en.titleEdit === 'Edit the chart' && en.okEdit === 'Confirm',
+        notes: JSON.stringify({ en }),
       };
     },
   });

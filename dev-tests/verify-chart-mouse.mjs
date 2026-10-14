@@ -493,8 +493,21 @@ async function run(theme) {
   await snap(`${T}-10-cadre`);
 }
 
+// La page ne change plus de langue en route : Réglages garde le choix et la recharge. Le script fait pareil - il garde la langue, recharge, attend le widget.
+async function restartIn(lang) {
+  await page.evaluate(next => I18n.storeLang(next), lang);
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
+  await page.waitForFunction(() => {
+    const el = document.getElementById('status-msg');
+    return !!el && /prêt|ready/i.test(el.textContent || '');
+  }, null, { timeout: 90000 });
+  // Le document de Grist des graphiques est ajouté à la page une fois chargée (plus haut) : il faut le reposer sur la page rechargée.
+  await page.addScriptTag({ path: join(ROOT, 'dev-tests', 'scenarios-chart-block.js') });
+}
+
 async function runEnglish() {
-  await page.evaluate(() => I18n.setLang('en'));
+  await restartIn('en');
   await page.waitForTimeout(250);
   await setDoc('<p>Hello big world</p>');
   await seedDocument();
@@ -542,8 +555,6 @@ async function runEnglish() {
   const editLabel = (await rowLabels())[ROW_INDEX];
   check('anglais, modification : la ligne devient « Edit chart… » quand le cadre est sélectionné', editLabel === 'Edit chart…', editLabel);
   await closeMenu();
-  await page.evaluate(() => I18n.setLang('fr'));
-  await page.waitForTimeout(250);
   await closeWindowWithEscape();
 }
 

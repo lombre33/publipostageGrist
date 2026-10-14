@@ -78,7 +78,7 @@ Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Le
   Lecture relue sur de vrais pixels).
 - Saut de page, lot C (01/10) : attribut `pageBreakBefore` de `tableRow` (`data-page-break-before="true"` sur le `<tr>`, faux par défaut et hors grille). Le bouton « Saut de page » de la barre d'outils le pose AVANT la
   première ligne de la sélection (`GridEditor.togglePageBreak` : un `setNodeMarkup` sur la ligne, un seul Annuler) et s'enfonce quand cette ligne en porte un ; son info-bulle et son nom accessible changent avec le mode
-  (`insert.pageBreak.gridTip` / `gridAria`, relus par `I18n.applyTranslations`). Il est grisé sur la première ligne et là où une case fusionnée couvre la limite (`boundaryCrossed` : la même case sur les lignes r - 1
+  (`insert.pageBreak.gridTip` / `gridAria`, lus par `I18n.t` à chaque changement de sélection : `syncPageBreakButton`). Il est grisé sur la première ligne et là où une case fusionnée couvre la limite (`boundaryCrossed` : la même case sur les lignes r - 1
   et r) ; `fixPageBreaks` (au chargement et dans `appendTransaction`) retire un saut devenu impossible (ligne du dessus supprimée, HTML collé) ; `canMerge` refuse de fusionner à travers un saut (un saut sur le bord
   haut de la sélection ne gêne pas). Marqueur : un trait en tirets en `background-image` des cases de la ligne (`css/grid.css`, `--accent-solid`, sous le texte et la voile de sélection) et une pastille
   `.v2-grid-break` à cheval sur le bord haut du numéro de ligne (`pointer-events: none` : la poignée de la ligne du dessus reste atteignable) ; rien en Lecture. Exports : `ExportCommon.gridRowSegments(rows)` rend les

@@ -215,16 +215,16 @@
     },
   });
 
-  cases.push({
+  // Le menu et la fenêtre de lien écrivent leurs textes dans la langue de la page : le cas se joue en français, puis dans une seconde page qui démarre en anglais (la copie `lang: 'en'`).
+  const menuTextsCase = {
     id: 'lb_menu_texts_follow_the_interface_language',
-    description: 'Le menu, la fenêtre de lien et ses erreurs passent en anglais avec l\'interface, puis reviennent en français',
+    description: 'Le menu, la fenêtre de lien et ses erreurs sont dans la langue de la page (français ici)',
     run: async (h) => {
+      const english = I18n.getLang() === 'en';
       await h.resetEditor();
       Editor.setHTML('<p>Hello world</p>');
       await sleep(100);
-      I18n.setLang('en');
-      await sleep(100);
-      let en;
+      let got;
       try {
         const flyout = document.getElementById('v2-blocks-flyout');
         const labels = Array.from(flyout.querySelectorAll('.v2-menu-row')).map(r => r.textContent.replace(/(Ctrl\+K|⌘K)$/, '').trim());
@@ -238,21 +238,36 @@
         const error = document.getElementById('pp-link-error').textContent;
         const buttons = Array.from(document.querySelectorAll('#pp-link-modal .var-modal-actions button')).map(b => b.textContent);
         const urlLabel = document.querySelector('#pp-link-modal label[for="pp-link-url"]').textContent;
-        await closeWindowIfOpen();
-        en = { labels, flyoutLabel, aria, title, error, buttons, urlLabel };
+        got = { labels, flyoutLabel, aria, title, error, buttons, urlLabel };
       } finally {
         await closeWindowIfOpen();
-        I18n.setLang('fr');
-        await sleep(100);
       }
-      const frTitle = (await (async () => { await selectText('world'); await h.clickButton('v2-btn-link'); const t = document.getElementById('pp-link-title').textContent; await closeWindowIfOpen(); return t; })());
-      return {
-        pass: JSON.stringify(en.labels) === JSON.stringify(['Link…', 'Quote', 'Code block', 'Callout…', 'Signature block', 'QR code…', 'Chart from the page…']) && en.flyoutLabel === 'Link and content blocks' && /Insert a link/.test(en.aria)
-          && en.title === 'Insert a link' && /address|valid/i.test(en.error) && !/[éèà]/.test(en.error) && en.urlLabel !== 'Adresse' && frTitle === 'Insérer un lien',
-        notes: JSON.stringify({ en, frTitle }),
-      };
+      const want = english
+        ? {
+          labels: ['Link…', 'Quote', 'Code block', 'Callout…', 'Signature block', 'QR code…', 'Chart from the page…'], flyoutLabel: 'Link and content blocks', aria: /^Insert a link/,
+          title: 'Insert a link', error: 'This address is not recognized. Examples: https://example.com, name@example.com, +1 555 123 4567.', buttons: ['Remove link', 'Cancel', 'Insert'], urlLabel: 'Link address',
+        }
+        : {
+          labels: ['Lien…', 'Citation', 'Bloc de code', 'Encadré…', 'Bloc de signature', 'QR code…', 'Graphique de la page…'], flyoutLabel: 'Lien et blocs de contenu', aria: /^Insérer un lien/,
+          title: 'Insérer un lien', error: 'Cette adresse n’est pas reconnue. Exemples : https://exemple.fr, nom@exemple.fr, 01 23 45 67 89.', buttons: ['Retirer le lien', 'Annuler', 'Insérer'], urlLabel: 'Adresse du lien',
+        };
+      const problems = [];
+      if (JSON.stringify(got.labels) !== JSON.stringify(want.labels)) problems.push('lignes du menu');
+      if (got.flyoutLabel !== want.flyoutLabel) problems.push('titre du groupe');
+      if (!want.aria.test(got.aria || '')) problems.push('nom accessible du bouton');
+      if (got.title !== want.title) problems.push('titre de la fenêtre');
+      if (got.error !== want.error) problems.push('erreur');
+      if (JSON.stringify(got.buttons) !== JSON.stringify(want.buttons)) problems.push('boutons');
+      if (got.urlLabel !== want.urlLabel) problems.push('libellé de l\'adresse');
+      return { pass: problems.length === 0, notes: JSON.stringify({ english, problems, got }) };
     },
-  });
+  };
+  cases.push(menuTextsCase);
+  cases.push(Object.assign({}, menuTextsCase, {
+    id: 'lb_menu_texts_follow_the_interface_language_in_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : le menu, la fenêtre de lien et ses erreurs sont en anglais',
+  }));
 
   cases.push({
     id: 'lb_menu_is_greyed_for_a_macro_template_not_removed',

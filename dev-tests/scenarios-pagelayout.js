@@ -176,7 +176,7 @@ window.EditorTestSuites.pageLayout = (function () {
     },
     {
       id: 'settings_choices_apply_at_once',
-      description: 'Dans les Réglages, un thème s\'applique à l\'instant, une langue recharge la page (la langue de la page ne bouge pas sur place, le choix est gardé pour le chargement suivant ; elle ne change sur place que si le stockage est refusé), une touche de déclenchement se retient, une case décochée ne change rien, le choix de la touche fait apparaître l\'avis de rechargement que la réouverture masque, et « Recharger maintenant » recharge la page',
+      description: 'Dans les Réglages, un thème s\'applique à l\'instant, une langue recharge la page (la langue de la page ne bouge pas sur place, le choix est gardé pour le chargement suivant ; si le stockage est refusé, rien ne change et la case revient sur la langue de la page), une touche de déclenchement se retient, une case décochée ne change rien, le choix de la touche fait apparaître l\'avis de rechargement que la réouverture masque, et « Recharger maintenant » recharge la page',
       async run(h) {
         const saved = { theme: stored('pp_theme'), trigger: stored('pp_trigger_char'), langKey: stored('pp_lang'), lang: I18n.getLang() };
         const p = settingsParts();
@@ -208,11 +208,11 @@ window.EditorTestSuites.pageLayout = (function () {
             radio(p.langRadios, 'fr').click();
             await h.sleep(80);
             out.langFr = { page: I18n.getLang(), stored: stored('pp_lang'), reloads };
-            // Stockage refusé : la langue ne survivrait pas au rechargement, elle change donc sur place et la page ne recharge pas.
+            // Stockage refusé : la langue ne survivrait pas au rechargement, rien ne change (ni la langue, ni un rechargement) et la case revient sur la langue de la page.
             Storage.prototype.setItem = function (key, value) { if (key === 'pp_lang') throw new Error('stockage refusé'); return setItem.apply(this, arguments); };
             radio(p.langRadios, 'en').click();
             await h.sleep(80);
-            out.langRefused = { page: I18n.getLang(), reloads };
+            out.langRefused = { page: I18n.getLang(), reloads, checked: p.langRadios.filter(r => r.checked).map(r => r.value).join(',') };
             Storage.prototype.setItem = setItem;
           }
           p.trigger.value = '!';
@@ -233,7 +233,6 @@ window.EditorTestSuites.pageLayout = (function () {
         } finally {
           Storage.prototype.setItem = setItem;
           if (typeof navigation !== 'undefined') navigation.removeEventListener('navigate', guard);
-          if (I18n.getLang() !== saved.lang) I18n.setLang(saved.lang);
           restoreStored('pp_lang', saved.langKey);
           Settings.setTheme(saved.theme || 'system');
           restoreStored('pp_theme', saved.theme);
@@ -246,7 +245,7 @@ window.EditorTestSuites.pageLayout = (function () {
             || (out.langEn.page === saved.lang && out.langEn.stored === 'en' && out.langEn.reloads === 1
               && out.langUnchecked.stored === 'en' && out.langUnchecked.reloads === 1
               && out.langFr.page === saved.lang && out.langFr.stored === 'fr' && out.langFr.reloads === 2
-              && out.langRefused.page === 'en' && out.langRefused.reloads === 2))
+              && out.langRefused.page === saved.lang && out.langRefused.reloads === 2 && out.langRefused.checked === saved.lang))
           && out.trigger.stored === '!' && out.trigger.char === '!' && out.trigger.noticeHidden === false
           && (out.reload === 1 || typeof out.reload === 'string')
           && out.reopened.noticeHidden === true && out.reopened.trigger === '!';

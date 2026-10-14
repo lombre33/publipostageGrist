@@ -46,7 +46,7 @@ const Variables = (function () {
     // La boîte de la liste : les entrées fixes de l'onglet des puces et la création de la boîte
 
     // Entrées fixes de l'onglet des puces (jamais issues de GristAPI) : `kind: 'chip'` les distingue d'une #Variable ; `i18nKey` est résolu à
-    // l'affichage (displayKey), pour suivre un changement de langue. `inField` : la puce se pose aussi dans un champ texte (Objet, À, Cc, Cci, nom du PDF),
+    // l'affichage (displayKey). `inField` : la puce se pose aussi dans un champ texte (Objet, À, Cc, Cci, nom du PDF),
     // où elle s'écrit en texte - une valeur du moment, pas un bloc ni une note.
     const SMART_CHIP_ITEMS = [
       { key: 'Note de bas de page', i18nKey: 'chips.footnote', kind: 'chip', chipKind: 'footnote' },
@@ -81,8 +81,6 @@ const Variables = (function () {
       [['variables', 'panel.tabVariables'], ['chips', 'panel.tabChips']].forEach(([name, label]) => {
         const tab = Dom.el('div', 'ac-tab', I18n.t(label));
         tab.dataset.tab = name;
-        // La liste n'est créée qu'une fois : data-i18n fait relire le libellé à I18n.applyTranslations quand la personne change de langue (« Puces » / « Chips »).
-        tab.setAttribute('data-i18n', label);
         // mousedown + preventDefault (pas click) : un blur du focus de l'éditeur ne perturbe pas le changement d'onglet.
         tab.addEventListener('mousedown', e => {
           e.preventDefault();

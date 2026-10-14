@@ -166,6 +166,15 @@ async function pickOption(triggerSelector, text) {
   await page.waitForTimeout(350);
 }
 
+// La largeur du texte de chaque onglet de Réglages contre la place qu'il a : un libellé coupé se voit ici.
+const measureTabs = () => page.evaluate(() => Array.from(document.querySelectorAll('.settings-tab')).map(t => {
+  const range = document.createRange();
+  range.selectNodeContents(t);
+  const style = getComputedStyle(t);
+  const content = t.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+  return { text: t.textContent.trim(), textW: Math.round(range.getBoundingClientRect().width * 10) / 10, boxW: Math.round(content * 10) / 10, cut: range.getBoundingClientRect().width > content + 0.5 };
+}));
+
 async function run() {
   // Table des lignes, trois modèles créés par l'interface (le premier est ★).
   await page.evaluate(async () => {
@@ -193,24 +202,11 @@ async function run() {
   await page.waitForTimeout(300);
   check('avant tout réglage, la ligne ne change pas le modèle ouvert', String(await current()) === String(ids.C), { current: await current(), ids });
 
-  // 1) Réglages > Selon la ligne : l'onglet se lit en entier, en français puis en anglais.
+  // 1) Réglages > Selon la ligne : l'onglet se lit en entier, en français ici, en anglais à la fin (runEnglish, dans une page qui repart en anglais).
   await realClick('#v2-btn-settings', 500);
   await realClick('.settings-tab[data-settings-tab="rowTemplate"]', 300);
-  const measureTabs = () => page.evaluate(() => Array.from(document.querySelectorAll('.settings-tab')).map(t => {
-    const range = document.createRange();
-    range.selectNodeContents(t);
-    const style = getComputedStyle(t);
-    const content = t.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-    return { text: t.textContent.trim(), textW: Math.round(range.getBoundingClientRect().width * 10) / 10, boxW: Math.round(content * 10) / 10, cut: range.getBoundingClientRect().width > content + 0.5 };
-  }));
   const tabsFr = await measureTabs();
   check('aucun libellé d’onglet n’est coupé (français)', tabsFr.every(t => !t.cut), tabsFr);
-  await page.evaluate(() => I18n.setLang('en'));
-  await page.waitForTimeout(250);
-  const tabsEn = await measureTabs();
-  check('aucun libellé d’onglet n’est coupé (anglais)', tabsEn.every(t => !t.cut) && tabsEn.some(t => t.text === 'View'), tabsEn);
-  await page.evaluate(() => I18n.setLang('fr'));
-  await page.waitForTimeout(250);
   const off = await page.evaluate(() => {
     const body = document.getElementById('settings-rowtemplate-body');
     return { grey: body.classList.contains('is-off'), inert: body.inert, visible: body.getBoundingClientRect().height > 0, intro: document.querySelector('[data-settings-panel="rowTemplate"] .settings-panel-intro').textContent.length > 20 };
@@ -357,7 +353,29 @@ async function run() {
   }
 }
 
+// La page ne change plus de langue en route : Réglages garde le choix et la recharge. Le script fait pareil - il garde la langue, recharge, attend le widget -,
+// puis lit les onglets de Réglages dans une page qui repart en anglais.
+async function restartIn(lang) {
+  await page.evaluate(next => I18n.storeLang(next), lang);
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
+  await page.waitForFunction(() => {
+    const el = document.getElementById('status-msg');
+    return !!el && /prêt|ready/i.test(el.textContent || '');
+  }, null, { timeout: 90000 });
+}
+
+async function runEnglish() {
+  await restartIn('en');
+  await realClick('#v2-btn-settings', 500);
+  await realClick('.settings-tab[data-settings-tab="rowTemplate"]', 300);
+  const tabsEn = await measureTabs();
+  check('aucun libellé d’onglet n’est coupé (anglais)', tabsEn.every(t => !t.cut) && tabsEn.some(t => t.text === 'View'), tabsEn);
+  await realClick('#settings-close', 500);
+}
+
 await run();
+await runEnglish();
 
 check('aucune boîte native (prompt, confirm, alert) ne s’est ouverte', nativeDialogs.length === 0, nativeDialogs);
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);

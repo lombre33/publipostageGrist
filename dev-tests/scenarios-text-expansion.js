@@ -495,9 +495,23 @@
 
   // === 3) L'écran Réglages > Raccourcis ====================================================================================================================
 
-  cases.push({
+  // Les textes de l'onglet sont écrits dans la langue de la page : le cas se joue en français, puis dans une seconde page qui démarre en anglais (la copie `lang: 'en'`).
+  const FR_TAB_TEXTS = {
+    tab: 'Raccourcis',
+    title: 'Abréviations',
+    intro: 'Tapez le caractère déclencheur puis une abréviation, par exemple « §ub », et un espace : elle est remplacée par son texte.',
+    char: 'Caractère déclencheur',
+    abbr: 'Abréviation',
+    text: 'Texte à écrire',
+    placeholder: 'université de Bordeaux',
+    add: 'Ajouter',
+    cancel: 'Annuler',
+    empty: 'Aucune abréviation pour l’instant.',
+    note: 'Chaque personne a les siennes, enregistrées dans le document (table Publipostage_Abreviations).',
+  };
+  const settingsTabCase = {
     id: 'te_settings_tab_is_listed_and_translated',
-    description: 'Réglages compte neuf onglets dont « Raccourcis » (« Shortcuts » en anglais), son panneau est masqué tant qu\'on ne l\'ouvre pas, et tous ses textes - titre, libellés, boutons, message vide, notes - suivent la langue',
+    description: 'Réglages compte neuf onglets dont « Raccourcis » (« Shortcuts » en anglais), son panneau est masqué tant qu\'on ne l\'ouvre pas, et tous ses textes - titre, libellés, boutons, message vide, notes - sont dans la langue de la page',
     run: async () => {
       wipe();
       const tabs = Array.from(document.querySelectorAll('.settings-tab')).map(t => t.getAttribute('data-settings-tab'));
@@ -516,23 +530,25 @@
         empty: document.getElementById('settings-expansion-empty').textContent,
         note: document.getElementById('settings-expansion-empty').nextElementSibling.textContent,
       });
-      // La page ne change plus de langue en route : l'explication se compose à l'ouverture de l'onglet, on l'ouvre donc de nouveau après chaque changement.
-      const openTab = async () => { document.querySelector('.settings-tab[data-settings-tab="shortcuts"]').click(); await sleep(80); };
-      const fr = snapshot();
-      I18n.setLang('en');
-      await openTab();
-      const en = snapshot();
-      I18n.setLang('fr');
-      await openTab();
-      const back = snapshot();
-      const same = Object.keys(fr).filter(k => fr[k] === en[k]);
-      return {
-        pass: tabs.length === 9 && tabs[3] === 'shortcuts' && hiddenAtStart && fr.tab === 'Raccourcis' && en.tab === 'Shortcuts' && en.title === 'Abbreviations' && en.add === 'Add'
-          && fr.add === 'Ajouter' && fr.intro.indexOf('§ub') !== -1 && en.intro.indexOf('§ub') !== -1 && same.length === 0 && JSON.stringify(back) === JSON.stringify(fr),
-        notes: JSON.stringify({ tabs, hiddenAtStart, same, fr, en }),
-      };
+      // L'explication se compose à l'ouverture de l'onglet.
+      document.querySelector('.settings-tab[data-settings-tab="shortcuts"]').click();
+      await sleep(80);
+      const got = snapshot();
+      const english = I18n.getLang() === 'en';
+      const same = Object.keys(FR_TAB_TEXTS).filter(k => got[k] === FR_TAB_TEXTS[k]);
+      const shape = tabs.length === 9 && tabs[3] === 'shortcuts' && hiddenAtStart;
+      const pass = english
+        ? shape && got.tab === 'Shortcuts' && got.title === 'Abbreviations' && got.add === 'Add' && got.intro.indexOf('§ub') !== -1 && same.length === 0
+        : shape && JSON.stringify(got) === JSON.stringify(FR_TAB_TEXTS);
+      return { pass, notes: JSON.stringify({ lang: I18n.getLang(), tabs, hiddenAtStart, same, got }) };
     },
-  });
+  };
+  cases.push(settingsTabCase);
+  cases.push(Object.assign({}, settingsTabCase, {
+    id: 'te_settings_tab_is_listed_and_translated_in_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : l\'onglet « Shortcuts » de Réglages écrit tous ses textes en anglais (« Abbreviations », « Add »), aucun n\'est resté en français',
+  }));
 
   // L'onglet piloté comme le fait la personne, par ses boutons : relecture à l'ouverture, Modifier, Supprimer, échecs d'écriture.
   // La frappe et la souris réelles de ce même onglet sont dans dev-tests/verify-text-expansion-keyboard.mjs.

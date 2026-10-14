@@ -297,29 +297,35 @@
 
   // --- 1) Le menu --------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-  cases.push({
+  // Le libellé de la ligne est écrit dans la langue de la page : le cas se joue en français, puis dans une seconde page qui démarre en anglais (la copie `lang: 'en'`).
+  const menuRowCase = {
     id: 'gridImport_menu_row_sits_after_new_grid_and_opens_a_chooser_for_xlsx_files_only',
-    description: 'Le menu « + » a une ligne « Importer un Excel… » (« Import from Excel… » en anglais) juste après « Nouvelle grille » ; un clic ouvre le sélecteur de fichier réduit aux classeurs .xlsx / .xlsm (un seul fichier) ; « Annuler » dans le sélecteur ne change rien et ne laisse aucun champ caché dans la page.',
+    description: 'Le menu « + » a une ligne « Importer un Excel… » juste après « Nouvelle grille » ; un clic ouvre le sélecteur de fichier réduit aux classeurs .xlsx / .xlsm (un seul fichier) ; « Annuler » dans le sélecteur ne change rien et ne laisse aucun champ caché dans la page.',
     run: async (h) => {
       await h.resetEditor();
       const rows = Array.from(document.querySelectorAll('#v2-new-template-flyout .v2-hover-row')).map(r => r.id);
       const at = rows.indexOf('v2-btn-import-xlsx');
       const row = document.getElementById('v2-btn-import-xlsx');
-      const labels = {};
-      ['fr', 'en'].forEach((lang) => { const before = I18n.getLang(); I18n.setLang(lang); labels[lang] = row.textContent; I18n.setLang(before); });
+      const label = row.textContent;
       const htmlBefore = Editor.getHTML();
       const inputsBefore = document.querySelectorAll('input[type=file]').length;
       const cancelled = await importThroughMenu(h, null);
       const inputsAfter = document.querySelectorAll('input[type=file]').length;
       const checks = {
         placed: at > 0 && rows[at - 1] === 'v2-btn-new-grid',
-        labels: labels.fr === 'Importer un Excel…' && labels.en === 'Import from Excel…',
+        labels: label === (I18n.getLang() === 'en' ? 'Import from Excel…' : 'Importer un Excel…'),
         chooser: cancelled.opened && /\.xlsx/.test(cancelled.accept) && /\.xlsm/.test(cancelled.accept) && cancelled.accept.includes(XLSX_MIME) && cancelled.multiple === false && cancelled.attached,
         cancelledLeavesNothing: cancelled.removed && inputsAfter === inputsBefore && Editor.getHTML() === htmlBefore && !GridEditor.isActive(),
       };
-      return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, rows, labels, cancelled }) };
+      return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, rows, label, cancelled }) };
     },
-  });
+  };
+  cases.push(menuRowCase);
+  cases.push(Object.assign({}, menuRowCase, {
+    id: 'gridImport_menu_row_sits_after_new_grid_and_opens_a_chooser_for_xlsx_files_only_in_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : la ligne « Import from Excel… » du menu « + » est juste après « Nouvelle grille » et ouvre le même sélecteur de fichier',
+  }));
 
   // --- 2) La lecture -----------------------------------------------------------------------------------------------------------------------------------------------------------
 

@@ -208,10 +208,11 @@ démarrage. Pour toute UI nouvelle : un libellé, une info-bulle, un nom accessi
 page, et n'a PAS à être relu, retraduit ni suivi à chaud (ni `I18n.onChange`, ni relecture à chaque ouverture d'une barre) ; on n'ajoute pas de code qui retraduit en direct.
 Les trois boutons jour, mois et année de la barre d'une date s'écrivent J, M, A en français et D, M, Y en anglais (`varFmt.dayLetter`, `varFmt.monthLetter`,
 `varFmt.yearLetter`), jamais en dur dans le gabarit. S'il y a des modifications qui attendent d'être enregistrées, la question « Enregistrer / Abandonner / Annuler » passe
-d'abord (celle de tout ce qui remplace le contenu de l'éditeur) : « Annuler » laisse la langue d'avant. Seul un stockage refusé (le choix ne survivrait pas au rechargement)
-change la langue sur place. Gardé par `languageReloadMouse` (les cases de langue à la vraie souris : rechargement, question, « Annuler » / « Enregistrer » / « Abandonner »,
-stockage refusé), `pageLayout` (`settings_choices_apply_at_once`) et `codeHygiene` (section 23). Le code qui retraduisait à chaud (les abonnés `I18n.onChange`,
-`I18n.setLang` sur place, les relectures à l'ouverture) reste en place pour l'instant : §5.
+d'abord (celle de tout ce qui remplace le contenu de l'éditeur) : « Annuler » laisse la langue d'avant. Un stockage refusé (le choix ne survivrait pas au rechargement)
+ne change rien : la case revient sur la langue de la page. Gardé par `languageReloadMouse` (les cases de langue à la vraie souris : rechargement, question, « Annuler » /
+« Enregistrer » / « Abandonner », stockage refusé), `pageLayout` (`settings_choices_apply_at_once`) et `codeHygiene` (sections 23 et 24). Le code qui retraduisait à chaud
+est retiré (« Oui, retirer » d'Antoine, 14/10) : `I18n` n'a plus de crochet de changement de langue (ni `onChange`, ni `applyTranslations` exporté), et `I18n.setLang`, qui ne
+touche ni la page ni le stockage, ne sert plus qu'aux tests ; la section 24 de `codeHygiene` en refuse le retour.
 
 ### Vocabulaire et écriture des textes
 Arbitré le 29/09 (« Oui, partout », en ligne `fc44fb1`) après un relevé de neuf textes « template », treize pluriels
@@ -1457,9 +1458,6 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   attendant).
 - Relevés par l'audit du 29/09 sans avoir fait l'objet d'une carte : deux sortes d'info-bulles, quatre crayons pour quatre
   fonctions, des tailles et couleurs écrites en dur dans le CSS, une lecture seule qui grise sans expliquer pourquoi (non revérifiés au 12/10).
-- Code du changement de langue à chaud, devenu inutile (14/10, depuis que Réglages recharge la page) : les abonnés `I18n.onChange` (36 appels dans 25 fichiers de `js/`),
-  `I18n.setLang` et `applyTranslations` au changement, et les relectures à l'ouverture (`syncDateFormat`, `syncBoolButtons`...) ne servent plus qu'aux tests, qui basculent la
-  langue dans la page (près de 500 appels de `I18n.setLang`), et au repli du stockage refusé. Question posée à Antoine sur une carte : rien n'est retiré avant son choix.
 
 ---
 
@@ -1505,3 +1503,8 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
   uniquement ça, pour ne pas alourdir », qui remplace son « Oui, tout relire » du même jour : le lot qui relisait tous les libellés de la barre d'une variable à chaque
   ouverture, en ligne quelques minutes, est retiré). §1 pose la règle (« Changer de langue recharge la page, et rien d'autre »), §5 note le code du changement à chaud devenu
   inutile ; gardé par `languageReloadMouse`, `pageLayout` et `codeHygiene` (section 23).
+- 2026-10-14 (suite 6) : le code qui retraduisait la page à chaud est retiré (« Oui, retirer » d'Antoine, carte du même jour, après sa décision de recharger la page), en cinq
+  lots testés : les abonnés `I18n.onChange` (36 appels dans 25 fichiers de `js/`), le changement de langue sur place de `I18n.setLang` (qui ne sert plus qu'aux tests et ne
+  touche ni la page ni le stockage), `applyTranslations` (plus de paramètre, plus d'export), les relectures à l'ouverture et les attributs `data-i18n*` réécrits en route.
+  Quand le navigateur refuse de garder la langue, Réglages ne la change plus : la case revient sur celle de la page. Rien ne change dans le document. §1 le dit, §5 ne garde plus
+  ce code ; gardé par `languageReloadMouse`, `pageLayout` et `codeHygiene` (sections 23 et 24).

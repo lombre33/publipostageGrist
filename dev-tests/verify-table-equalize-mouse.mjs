@@ -90,9 +90,11 @@ function check(name, pass, notes) {
 const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hinting=none'] });
 const pageErrors = [];
 
-async function openWidget(colorScheme, size = { width: WIDTH, height: HEIGHT }) {
+async function openWidget(colorScheme, size = { width: WIDTH, height: HEIGHT }, lang) {
   const context = await browser.newContext({ bypassCSP: true, viewport: size, colorScheme });
   const page = await context.newPage();
+  // La page ne change plus de langue en route : l'anglais est une page qui DÉMARRE en anglais (la langue choisie est lue au démarrage, `pp_lang`).
+  if (lang === 'en') await page.addInitScript(() => { try { localStorage.setItem('pp_lang', 'en'); } catch (e) { /* stockage refusé : la page reste en français */ } });
   page.on('pageerror', e => { pageErrors.push(e.message); console.log('[pageerror]', e.message); });
   page.on('dialog', d => { d.accept().catch(() => {}); });
   if (OFFLINE) {
@@ -434,16 +436,17 @@ async function runTheme(theme, size, tag) {
   // ---------- 7) Les mots : français et anglais ----------
   await load(page, SIZED);
   await clickCell(page, 'B2');
-  await page.evaluate(() => I18n.setLang('en'));
-  await page.waitForTimeout(300);
-  await clickCell(page, 'B2');
-  bar = await barState(page);
+  // La barre du tableau est bâtie une fois, dans la langue de la page : l'anglais se lit dans une seconde page qui démarre en anglais.
+  const english = await openWidget(theme, size, 'en');
+  await setA4(english.page, false);
+  await load(english.page, SIZED);
+  await clickCell(english.page, 'B2');
+  bar = await barState(english.page);
   check(`${label} - en anglais : les deux boutons grisés disent leur raison en anglais`, !!bar && grey(bar.buttons['rows-equalize'], EN.rowsNeed) && grey(bar.buttons['cols-equalize'], EN.colsNeed), bar && [bar.buttons['rows-equalize'].title, bar.buttons['cols-equalize'].title]);
-  await chooseLines(page, DOC_STRIPS, 'row', 1, 3);
-  bar = await barState(page);
+  await chooseLines(english.page, DOC_STRIPS, 'row', 1, 3);
+  bar = await barState(english.page);
   check(`${label} - en anglais : libres, ils disent « Make rows the same height (average) » et « Make columns the same width (average) »`, !!bar && free(bar.buttons['rows-equalize'], EN.rows) && free(bar.buttons['cols-equalize'], EN.cols), bar && [bar.buttons['rows-equalize'].title, bar.buttons['cols-equalize'].title]);
-  await page.evaluate(() => I18n.setLang('fr'));
-  await page.waitForTimeout(300);
+  await english.context.close();
 
   // ---------- 8) Lisibilité : l'icône d'un bouton libre se lit sur la barre ----------
   await clickCell(page, 'B2');

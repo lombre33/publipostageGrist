@@ -137,6 +137,44 @@ window.EditorTestSuites.pageFormat = (function () {
     return { ed, gridOf };
   }
 
+  // Les textes de la case d'aperçu et du bouton de sens : écrits dans la langue de la page (changer de langue recharge la page), donc lus une fois en français ici et une fois
+  // dans une page qui démarre en anglais (la copie `lang: 'en'` plus bas).
+  const previewTextsCase = {
+    id: 'fmt_preview_toggle_and_button_texts_follow_format_and_language',
+    description: 'La case « Aperçu A4 » devient « Aperçu A5 », le nom accessible du bouton dit le format, et rien ne montre un `{format}` non remplacé, avant comme après un changement de format',
+    async run(h) {
+      await setup(h, 'portrait', 'A5');
+      const problems = [];
+      const en = I18n.getLang() === 'en';
+      const read = () => ({
+        tip: document.getElementById('v2-a4-toggle').getAttribute('data-tip'), aria: document.getElementById('v2-a4-toggle').getAttribute('aria-label'),
+        button: document.getElementById('btn-page-orientation').getAttribute('aria-label'), title: document.getElementById('v2-page-flyout-label').textContent,
+        names: menuRows().slice(0, 2).map(r => r.name),
+      });
+      const want = (format, orientation) => (en
+        ? { tip: format + ' preview', aria: new RegExp('^' + format + ' preview — .*' + format + ' page'), button: format + ' page in ' + orientation + ' (switch to ' + (orientation === 'portrait' ? 'landscape' : 'portrait') + ')', names: 'Portrait,Landscape' }
+        : { tip: 'Aperçu ' + format, aria: new RegExp('^Aperçu ' + format + ' — .*page ' + format), button: 'Page ' + format + ' en ' + (orientation === 'portrait' ? 'portrait (passer en paysage)' : 'paysage (passer en portrait)'), names: 'Portrait,Paysage' });
+      const check = (label, got, w) => {
+        if (got.tip !== w.tip || !w.aria.test(got.aria)) problems.push(label + ', case : ' + got.tip + ' | ' + got.aria);
+        if (got.button !== w.button) problems.push(label + ', bouton : ' + got.button);
+        if (w.names && (got.title !== 'Page' || got.names.join() !== w.names)) problems.push(label + ', menu : ' + got.title + ' ' + got.names);
+        if (/\{format\}/.test(JSON.stringify(got))) problems.push(label + ' : un {format} non remplacé');
+      };
+      try {
+        check(en ? 'anglais' : 'français', read(), want('A5', 'portrait'));
+        // Un changement de format réécrit les textes dans la langue de la page.
+        apply('landscape', 'A3');
+        await h.sleep(200);
+        check(en ? 'anglais, A3 paysage' : 'français, A3 paysage', read(), Object.assign(want('A3', 'landscape'), { names: null }));
+      } finally {
+        resetPage();
+      }
+      const back = read();
+      if (back.tip !== (en ? 'A4 preview' : 'Aperçu A4') || back.button !== (en ? 'A4 page in portrait (switch to landscape)' : 'Page A4 en portrait (passer en paysage)')) problems.push('retour au format d\'origine : ' + back.tip + ' | ' + back.button);
+      return { pass: problems.length === 0, notes: JSON.stringify(problems) };
+    },
+  };
+
   return [
     {
       id: 'fmt_pagelayout_table_matches_pdfmake_and_word',
@@ -356,44 +394,12 @@ window.EditorTestSuites.pageFormat = (function () {
         return { pass: problems.length === 0, notes: JSON.stringify({ problems, seen }) };
       },
     },
-    {
-      id: 'fmt_preview_toggle_and_button_texts_follow_format_and_language',
-      description: 'La case « Aperçu A4 » devient « Aperçu A5 » (« A5 preview » en anglais), le nom accessible du bouton dit le format, et rien ne montre un `{format}` non remplacé, avant comme après un changement de langue',
-      async run(h) {
-        await setup(h, 'portrait', 'A5');
-        const problems = [];
-        const read = () => ({
-          tip: document.getElementById('v2-a4-toggle').getAttribute('data-tip'), aria: document.getElementById('v2-a4-toggle').getAttribute('aria-label'),
-          button: document.getElementById('btn-page-orientation').getAttribute('aria-label'), title: document.getElementById('v2-page-flyout-label').textContent,
-          names: menuRows().slice(0, 2).map(r => r.name),
-        });
-        try {
-          const fr = read();
-          if (fr.tip !== 'Aperçu A5' || !/^Aperçu A5 — /.test(fr.aria) || !/page A5/.test(fr.aria)) problems.push('français, case : ' + fr.tip + ' | ' + fr.aria);
-          if (fr.button !== 'Page A5 en portrait (passer en paysage)') problems.push('français, bouton : ' + fr.button);
-          if (fr.title !== 'Page' || fr.names.join() !== 'Portrait,Paysage') problems.push('français, menu : ' + fr.title + ' ' + fr.names);
-          I18n.setLang('en');
-          await h.sleep(150);
-          const en = read();
-          if (en.tip !== 'A5 preview' || !/^A5 preview — /.test(en.aria) || !/A5 page/.test(en.aria)) problems.push('anglais, case : ' + en.tip + ' | ' + en.aria);
-          if (en.button !== 'A5 page in portrait (switch to landscape)') problems.push('anglais, bouton : ' + en.button);
-          if (en.title !== 'Page' || en.names.join() !== 'Portrait,Landscape') problems.push('anglais, menu : ' + en.title + ' ' + en.names);
-          // Un changement de format en anglais réécrit les textes en anglais.
-          apply('landscape', 'A3');
-          await h.sleep(200);
-          const en3 = read();
-          if (en3.tip !== 'A3 preview' || en3.button !== 'A3 page in landscape (switch to portrait)') problems.push('anglais, A3 paysage : ' + en3.tip + ' | ' + en3.button);
-          [fr, en, en3].forEach((r, i) => { if (/\{format\}/.test(JSON.stringify(r))) problems.push('un {format} non remplacé (' + i + ')'); });
-        } finally {
-          I18n.setLang('fr');
-          await h.sleep(150);
-          resetPage();
-        }
-        const back = read();
-        if (back.tip !== 'Aperçu A4' || back.button !== 'Page A4 en portrait (passer en paysage)') problems.push('retour en français : ' + back.tip + ' | ' + back.button);
-        return { pass: problems.length === 0, notes: JSON.stringify(problems) };
-      },
-    },
+    previewTextsCase,
+    Object.assign({}, previewTextsCase, {
+      id: 'fmt_preview_toggle_and_button_texts_speak_english_in_an_english_page',
+      lang: 'en',
+      description: 'Dans une page qui démarre en anglais, la case « A5 preview », le nom accessible du bouton (« A5 page in portrait (switch to landscape) ») et le menu Page (Portrait, Landscape) sont en anglais, avant comme après un changement de format, sans `{format}` non remplacé',
+    }),
     {
       id: 'fmt_reader_sheet_width_follows_format',
       description: 'En Lecture, la feuille et les espaceurs d\'en-tête / de pied prennent la largeur de la page de chaque format',

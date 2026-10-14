@@ -443,9 +443,20 @@ async function readingPart(T) {
   check(`${T} : de retour en Édition le bouton est libre et le pinceau au repos`, sameState(await painter(), READY), await painter());
 }
 
+// La page ne change plus de langue en route : Réglages garde le choix et la recharge. Le script fait pareil - il garde la langue, recharge, attend le widget.
+async function restartIn(lang) {
+  await page.evaluate(next => I18n.storeLang(next), lang);
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
+  await page.waitForFunction(() => {
+    const el = document.getElementById('status-msg');
+    return !!el && /prêt|ready/i.test(el.textContent || '');
+  }, null, { timeout: 90000 });
+}
+
 async function englishPart() {
   const T = 'anglais';
-  await page.evaluate(() => I18n.setLang('en'));
+  await restartIn('en');
   await page.waitForTimeout(250);
   await setDoc(DOC);
   await hover('v2-btn-format-painter');
@@ -454,8 +465,6 @@ async function englishPart() {
   const aria = await page.evaluate(() => document.getElementById('v2-btn-format-painter').getAttribute('aria-label'));
   check(`${T} : le nom accessible est en anglais`, /^Format painter: copies the formatting/.test(aria), aria);
   await page.mouse.move(400, 300);
-  await page.evaluate(() => I18n.setLang('fr'));
-  await page.waitForTimeout(200);
 }
 
 async function run(T) {

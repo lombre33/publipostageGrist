@@ -5,7 +5,7 @@
 //
 //   SuggestionList.create({ id, label, row, status })
 //     id      l'identifiant de la boîte (css/text-expansion.css la dessine par cet identifiant) ;
-//     label() son nom accessible, relu à chaque ouverture : une liste suit la langue ;
+//     label() son nom accessible, lu à chaque ouverture de la liste ;
 //     row(entry) les nœuds d'une ligne (texte déjà posé) ;
 //     status(props) facultatif : le texte d'une liste qui n'a aucune ligne à montrer (« Recherche… », « Aucune fiche »), '' pour la fermer. Sans lui, une
 //       liste vide se ferme. Ce texte n'est pas une ligne qu'on choisit : Entrée, Tab et les flèches gardent leur sens dans le texte.

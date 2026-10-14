@@ -296,7 +296,7 @@
   // Réglages > Accès : la case « Ouvrir les personnes en lecture seule sur la Lecture épurée » (choix d'Antoine du 2026-10-02, carte « Un réglage »).
   cases.push({
     id: 'clean_reading_access_checkbox_is_off_greyed_then_follows_the_read_only_column',
-    description: 'Réglages > Accès : la case est décochée et grisée au départ ; une colonne « Lecture seule » choisie, elle s’active, se coche et écrit cleanReading dans l’option du widget ; retirer la colonne la décoche ; les textes suivent la langue',
+    description: 'Réglages > Accès : la case est décochée et grisée au départ ; une colonne « Lecture seule » choisie, elle s’active, se coche et écrit cleanReading dans l’option du widget ; retirer la colonne la décoche ; ses textes sont en français (l’anglais : cas suivant)',
     run: async (h) => {
       await setup(h);
       const RIGHTS = 'PpDroitsEpure';
@@ -320,11 +320,6 @@
       box.click();
       await sleep(450);
       const ticked = state();
-      I18n.setLang('en');
-      await sleep(150);
-      const en = texts();
-      I18n.setLang('fr');
-      await sleep(150);
       box.click();
       await sleep(450);
       const unticked = state();
@@ -341,9 +336,26 @@
         && ticked.checked === true && ticked.stored === true && ticked.config === true
         && unticked.checked === false && unticked.stored === false && unticked.config === false
         && afterRemoval.disabled === true && afterRemoval.checked === false && afterRemoval.stored == null
-        && startTexts.label === 'Ouvrir les personnes en lecture seule sur la Lecture épurée' && /Choisissez d’abord la colonne « Lecture seule »/.test(startTexts.hint)
-        && en.label === 'Open read-only people on Clean reading' && /Choose the “Read-only” column first/.test(en.hint);
-      return { pass, notes: JSON.stringify({ start, startTexts, afterTable, afterColumn, ticked, en, unticked, afterRemoval }) };
+        && startTexts.label === 'Ouvrir les personnes en lecture seule sur la Lecture épurée' && /Choisissez d’abord la colonne « Lecture seule »/.test(startTexts.hint);
+      return { pass, notes: JSON.stringify({ start, startTexts, afterTable, afterColumn, ticked, unticked, afterRemoval }) };
+    },
+  });
+
+  // La case et son indication sont écrites dans la langue de la page : l'anglais se lit dans une page qui démarre en anglais.
+  cases.push({
+    id: 'clean_reading_access_checkbox_texts_are_in_english_on_a_page_that_starts_in_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : Réglages > Accès écrit la case « Open read-only people on Clean reading » et son indication (« Choose the “Read-only” column first ») en anglais',
+    run: async (h) => {
+      await setup(h);
+      el('v2-btn-settings').click();
+      await sleep(300);
+      const box = el('settings-access-clean-reading');
+      const en = { label: box.parentElement.querySelector('span').textContent, hint: box.parentElement.nextElementSibling.textContent };
+      el('settings-close').click();
+      await finish();
+      const pass = I18n.getLang() === 'en' && en.label === 'Open read-only people on Clean reading' && /Choose the “Read-only” column first/.test(en.hint);
+      return { pass, notes: JSON.stringify({ en }) };
     },
   });
 

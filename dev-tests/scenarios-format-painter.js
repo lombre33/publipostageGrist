@@ -57,34 +57,38 @@
 
   const STYLED = '<strong><em><u><s><span style="color: #c0392b; background-color: #fff3a3; font-size: 14pt; font-family: Georgia">Modèle</span></s></u></em></strong>';
 
-  cases.push({
+  // Le bouton écrit son infobulle et son nom accessible dans la langue de la page : le cas se joue en français, puis dans une seconde page qui démarre en anglais (la copie `lang: 'en'`).
+  const buttonCase = {
     id: 'fp_button_is_in_the_toolbar_after_the_highlight_with_an_icon_a_name_and_the_key_in_both_languages',
-    description: 'Le bouton du pinceau suit le surlignage dans la barre, porte une icône, son nom et la touche de départ (Alt+Maj+C) dans l\'infobulle, son nom accessible, en français et en anglais ; les deux actions de la liste des touches existent',
+    description: 'Le bouton du pinceau suit le surlignage dans la barre, porte une icône, son nom et la touche de départ (Alt+Maj+C) dans l\'infobulle, son nom accessible, dans la langue de la page ; les deux actions de la liste des touches existent',
     run: async (h) => {
       await h.resetEditor();
-      if (I18n.getLang() !== 'fr') I18n.setLang('fr');
+      const english = I18n.getLang() === 'en';
       const b = button();
       const out = { exists: !!b };
       if (b) {
         out.afterHighlight = b.previousElementSibling && b.previousElementSibling.id === 'v2-highlight-split';
         out.icon = !!b.querySelector('svg path, svg rect');
         out.pressed = b.getAttribute('aria-pressed');
-        out.fr = { tip: b.getAttribute('data-tip'), keytip: b.getAttribute('data-keytip'), aria: b.getAttribute('aria-label'), keys: b.getAttribute('aria-keyshortcuts') };
-        I18n.setLang('en');
-        out.en = { tip: b.getAttribute('data-tip'), keytip: b.getAttribute('data-keytip'), aria: b.getAttribute('aria-label') };
-        I18n.setLang('fr');
+        out.texts = { tip: b.getAttribute('data-tip'), keytip: b.getAttribute('data-keytip'), aria: b.getAttribute('aria-label'), keys: b.getAttribute('aria-keyshortcuts') };
       }
       const keys = { painter: Shortcuts.keyFor('formatPainter'), paste: Shortcuts.keyFor('formatPaste') };
-      const names = ['fr', 'en'].map(lang => { I18n.setLang(lang); return ['formatPainter', 'formatPaste'].map(id => I18n.t(Shortcuts.action(id).label)).join(' / '); });
-      I18n.setLang('fr');
-      const pass = out.exists && out.afterHighlight && out.icon && out.pressed === 'false'
-        && out.fr.tip === 'Reproduire la mise en forme' && out.fr.keytip === ' (Alt+Maj+C)' && /double-clic/.test(out.fr.aria) && out.fr.keys === 'Alt+Shift+C'
-        && out.en.tip === 'Format painter' && out.en.keytip === ' (Alt+Shift+C)' && /double-click/.test(out.en.aria)
+      const names = ['formatPainter', 'formatPaste'].map(id => I18n.t(Shortcuts.action(id).label)).join(' / ');
+      const textsOk = !!out.texts && (english
+        ? out.texts.tip === 'Format painter' && out.texts.keytip === ' (Alt+Shift+C)' && /double-click/.test(out.texts.aria)
+        : out.texts.tip === 'Reproduire la mise en forme' && out.texts.keytip === ' (Alt+Maj+C)' && /double-clic/.test(out.texts.aria));
+      const pass = out.exists && out.afterHighlight && out.icon && out.pressed === 'false' && textsOk && out.texts.keys === 'Alt+Shift+C'
         && keys.painter === 'Alt+Shift+c' && keys.paste === 'Alt+Shift+v'
-        && names[0] === 'Reproduire la mise en forme / Appliquer la mise en forme' && names[1] === 'Format painter / Apply the copied formatting';
-      return { pass, notes: JSON.stringify({ out, keys, names }) };
+        && names === (english ? 'Format painter / Apply the copied formatting' : 'Reproduire la mise en forme / Appliquer la mise en forme');
+      return { pass, notes: JSON.stringify({ lang: I18n.getLang(), out, keys, names }) };
     },
-  });
+  };
+  cases.push(buttonCase);
+  cases.push(Object.assign({}, buttonCase, {
+    id: 'fp_button_is_in_the_toolbar_after_the_highlight_with_an_icon_a_name_and_the_key_in_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : le bouton du pinceau porte « Format painter » et la touche (Alt+Shift+C) dans l\'infobulle, son nom accessible parle du double-clic, les deux actions s\'appellent « Format painter » et « Apply the copied formatting »',
+  }));
 
   cases.push({
     id: 'fp_character_formatting_replaces_the_targets_and_keeps_links',

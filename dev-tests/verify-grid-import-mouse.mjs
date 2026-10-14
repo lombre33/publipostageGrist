@@ -94,9 +94,11 @@ function check(name, pass, notes) {
 const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hinting=none'] });
 const pageErrors = [];
 
-async function openWidget(colorScheme) {
+async function openWidget(colorScheme, lang) {
   const context = await browser.newContext({ bypassCSP: true, viewport: { width: WIDTH, height: HEIGHT }, colorScheme });
   const page = await context.newPage();
+  // La page ne change plus de langue en route : l'anglais est une page qui DÉMARRE en anglais (la langue choisie est lue au démarrage, `pp_lang`).
+  if (lang === 'en') await page.addInitScript(() => { try { localStorage.setItem('pp_lang', 'en'); } catch (e) { /* stockage refusé : la page reste en français */ } });
   page.on('pageerror', e => { pageErrors.push(e.message); console.log('[pageerror]', e.message); });
   page.on('dialog', d => { d.accept().catch(() => {}); });
   if (OFFLINE) {
@@ -313,8 +315,7 @@ async function run(theme, lang) {
   const label = (lang === 'en' ? 'anglais' : theme === 'dark' ? 'sombre' : 'clair');
   const T = TEXTS[lang];
   console.log(`\n=== Import d'un classeur Excel à la vraie souris, ${WIDTH}x${HEIGHT}, ${label} ===`);
-  const { context, page } = await openWidget(theme);
-  if (lang === 'en') await page.evaluate(() => I18n.setLang('en'));
+  const { context, page } = await openWidget(theme, lang);
   const dir = await mkdtemp(join(tmpdir(), 'grid-import-'));
   const invoicePath = join(dir, 'facture.xlsx');
   await writeFile(invoicePath, await buildInvoice(page));

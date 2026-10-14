@@ -575,13 +575,13 @@ window.EditorTestSuites.savedFormats = (function () {
     },
     {
       id: 'savedfmt_texts_follow_the_language',
-      description: 'Libellés, invite, recherche, messages vides, boutons, saisie du nom, confirmation et états de la liste des formats suivent la langue (dimensions au point en anglais) ; aucune clé sans traduction',
+      lang: 'en',
+      description: 'Page qui démarre en anglais : libellés, invite, recherche, messages vides, boutons, saisie du nom, confirmation et états de la liste des formats sont dans la langue de la page (dimensions au point) ; aucune clé sans traduction',
       async run(h) {
         await setup(h);
         const problems = [];
         try {
-          I18n.setLang('en');
-          await h.sleep(100);
+          if (I18n.getLang() !== 'en') problems.push('la page ne démarre pas en anglais');
           // Un document sans format : la liste dit qu'il n'y en a pas.
           await openWindow(h);
           trigger().click();
@@ -621,7 +621,6 @@ window.EditorTestSuites.savedFormats = (function () {
           if (status() !== 'Format “Label” deleted.') problems.push('état après suppression : ' + status());
           if (/\{(name|size|min|max)\}/.test(JSON.stringify([asked, confirm, status()]))) problems.push('un {…} non remplacé');
         } finally {
-          I18n.setLang('fr');
           await h.sleep(150);
           resetPage();
         }

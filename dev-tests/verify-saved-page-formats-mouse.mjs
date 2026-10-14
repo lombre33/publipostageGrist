@@ -87,9 +87,11 @@ function check(name, pass, notes) {
 const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hinting=none'] });
 const pageErrors = [];
 
-async function openWidget(colorScheme) {
+async function openWidget(colorScheme, lang) {
   const context = await browser.newContext({ bypassCSP: true, viewport: { width: WIDTH, height: HEIGHT }, colorScheme });
   const page = await context.newPage();
+  // La page ne change plus de langue en route : l'anglais est une page qui DÉMARRE en anglais (la langue choisie est lue au démarrage, `pp_lang`).
+  if (lang === 'en') await page.addInitScript(() => { try { localStorage.setItem('pp_lang', 'en'); } catch (e) { /* stockage refusé : la page reste en français */ } });
   page.on('pageerror', e => { pageErrors.push(e.message); console.log('[pageerror]', e.message); });
   // Boîtes du navigateur (alert/confirm) : acceptées et consignées, jamais bloquantes.
   const dialogs = [];
@@ -569,39 +571,45 @@ async function runTheme(theme) {
   await away(page);
 
   // 10) L'anglais : textes de la fenêtre, de la liste, de la saisie et de la confirmation ; tout tient encore.
-  await page.evaluate(() => I18n.setLang('en'));
-  await page.waitForTimeout(300);
-  await openWindowByMouse(page);
-  const en = await winState(page);
-  const enFit = await winFits(page);
+  // La page ne change plus de langue en route : l'anglais se lit dans une seconde page qui démarre en anglais, mise dans le même état par les mêmes gestes (formats gardés, « Étiquette 70 × 37 » validée).
+  const english = await openWidget(theme, 'en');
+  const enPage = english.page;
+  await seedFormats(enPage, [['Étiquette 70 × 37', 70, 37], ['Carte de visite 85 × 55', 85, 55], ['Flyer', 100, 210]]);
+  await openWindowByMouse(enPage);
+  await chooseByMouse(enPage, 'Étiquette 70 × 37');
+  await realClick(enPage, OK_BUTTON);
+  await enPage.waitForTimeout(800);
+  await away(enPage);
+  await openWindowByMouse(enPage);
+  const en = await winState(enPage);
+  const enFit = await winFits(enPage);
   check(`${label} - anglais : « ${en.labels.join(' / ')} », liste « ${en.shown} », bouton « ${en.saveText} », corbeille « ${en.trashTitle} », dimensions au point (${en.width} x ${en.height}), tout tient (${enFit.scrollH}/${enFit.clientH})`,
     en.labels.join() === 'Format,Width,Height' && en.shown === '— Choose a format —' && en.saveText === 'Save this format…' && en.trashTitle === 'Delete the saved format' && en.width === '7' && en.height === '3.7' && enFit.ok, { en, enFit });
-  await realClick(page, LIST);
-  await page.waitForTimeout(200);
-  const enOpen = await panelInfo(page);
+  await realClick(enPage, LIST);
+  await enPage.waitForTimeout(200);
+  const enOpen = await panelInfo(enPage);
   check(`${label} - anglais : la liste propose « ${enOpen.search} » et dit les tailles au point (« ${enOpen.hints[0]} »)`, enOpen.search === 'Search formats…' && /^\(\d+(\.\d+)? × \d+(\.\d+)? cm\)$/.test(enOpen.hints[0]), enOpen);
-  await page.keyboard.type('zzz');
-  await page.waitForTimeout(150);
-  check(`${label} - anglais : sans résultat, « ${(await panelInfo(page)).empty} »`, (await panelInfo(page)).empty === 'No format matches.', await panelInfo(page));
-  await page.keyboard.press('Escape');
-  await page.waitForTimeout(200);
-  await realClick(page, SAVE);
-  await page.waitForTimeout(250);
-  const enAsk = await dlgInfo(page);
+  await enPage.keyboard.type('zzz');
+  await enPage.waitForTimeout(150);
+  check(`${label} - anglais : sans résultat, « ${(await panelInfo(enPage)).empty} »`, (await panelInfo(enPage)).empty === 'No format matches.', await panelInfo(enPage));
+  await enPage.keyboard.press('Escape');
+  await enPage.waitForTimeout(200);
+  await realClick(enPage, SAVE);
+  await enPage.waitForTimeout(250);
+  const enAsk = await dlgInfo(enPage);
   check(`${label} - anglais : la saisie du nom dit « ${enAsk.title} » / « ${enAsk.label} », propose « ${enAsk.value} » et « ${enAsk.ok} »`, enAsk.title === 'Save this format' && enAsk.label === 'Format name' && enAsk.value === '7 × 3.7 cm' && enAsk.ok === 'Save' && enAsk.cancel === 'Cancel', enAsk);
-  await page.keyboard.press('Escape');
-  await page.waitForTimeout(250);
-  await chooseByMouse(page, 'Flyer');
-  await realClick(page, TRASH);
-  await page.waitForTimeout(300);
-  const enConf = await dlgInfo(page);
+  await enPage.keyboard.press('Escape');
+  await enPage.waitForTimeout(250);
+  await chooseByMouse(enPage, 'Flyer');
+  await realClick(enPage, TRASH);
+  await enPage.waitForTimeout(300);
+  const enConf = await dlgInfo(enPage);
   check(`${label} - anglais : la confirmation dit « ${enConf.title} » et « ${enConf.message} »`, enConf.title === 'Delete this format?' && enConf.message === 'The format “Flyer” (10 × 21 cm) will be removed from the list. Templates that use it keep their size.' && enConf.ok === 'Delete', enConf);
-  await page.keyboard.press('Escape');
-  await page.waitForTimeout(250);
-  await page.keyboard.press('Escape');
-  await page.waitForTimeout(250);
-  await page.evaluate(() => I18n.setLang('fr'));
-  await page.waitForTimeout(300);
+  await enPage.keyboard.press('Escape');
+  await enPage.waitForTimeout(250);
+  await enPage.keyboard.press('Escape');
+  await enPage.waitForTimeout(250);
+  await english.context.close();
   check(`${label} - aucune boîte native (alert, confirm, prompt) n'a été ouverte`, nativeDialogs.length === 0, nativeDialogs);
   await context.close();
 }

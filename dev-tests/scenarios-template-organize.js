@@ -837,9 +837,10 @@
     },
   });
 
-  cases.push({
+  // La légende est écrite dans la langue de la page : le cas se joue en français, puis dans une seconde page qui démarre en anglais (la copie `lang: 'en'`).
+  const legendCase = {
     id: 'organize_legend_explains_the_default_star_in_both_languages_and_clears_the_close_button',
-    description: 'En bas de la fenêtre une légende dit le rôle de l’étoile (« s’ouvre au démarrage du widget, pour tout le document. Un seul à la fois. »), avec la même icône que les lignes, en français puis en anglais ; elle reste dans la fenêtre et ne recouvre pas « Fermer »',
+    description: 'En bas de la fenêtre une légende dit le rôle de l’étoile (« s’ouvre au démarrage du widget, pour tout le document. Un seul à la fois. »), avec la même icône que les lignes, dans la langue de la page ; elle reste dans la fenêtre et ne recouvre pas « Fermer »',
     run: async (h) => {
       TemplateOrganizeModal.open();
       await h.sleep(40);
@@ -853,22 +854,24 @@
       };
       const mask = glyph && getComputedStyle(glyph).maskImage && getComputedStyle(glyph).maskImage !== 'none' ? getComputedStyle(glyph).maskImage : (glyph && getComputedStyle(glyph).webkitMaskImage);
       const rowMask = (() => { const s = document.querySelector('#template-organize-list .tts-star-btn'); if (!s) return null; const cs = getComputedStyle(s, '::before'); return cs.maskImage && cs.maskImage !== 'none' ? cs.maskImage : cs.webkitMaskImage; })();
-      const fr = { text: legend.textContent.trim(), geo: geometry() };
       const lang = I18n.getLang();
-      let en;
-      try {
-        I18n.setLang('en'); await h.sleep(100);
-        en = { text: legend.textContent.trim(), geo: geometry() };
-      } finally { I18n.setLang(lang); await h.sleep(60); }
-      const back = legend.textContent.trim();
+      const here = { text: legend.textContent.trim(), geo: geometry() };
       TemplateOrganizeModal.close();
       const ok = (x) => x.geo.inside && x.geo.clear && x.geo.shown;
+      const wording = lang === 'en'
+        ? /when the widget starts/.test(here.text) && /whole document/.test(here.text)
+        : /démarrage du widget/.test(here.text) && /tout le document/.test(here.text) && /Un seul/.test(here.text);
       const pass = !!legend && !!glyph && !!mask && mask !== 'none' && (!rowMask || mask === rowMask)
-        && fr.text === I18n.t('organize.modal.defaultLegend') && /démarrage du widget/.test(fr.text) && /tout le document/.test(fr.text) && /Un seul/.test(fr.text)
-        && /when the widget starts/.test(en.text) && /whole document/.test(en.text) && en.text !== fr.text && back === fr.text && ok(fr) && ok(en);
-      return { pass, notes: JSON.stringify({ fr, en, back, hasMask: !!mask, sameAsRows: !rowMask || mask === rowMask }) };
+        && here.text === I18n.t('organize.modal.defaultLegend') && wording && ok(here);
+      return { pass, notes: JSON.stringify({ lang, here, hasMask: !!mask, sameAsRows: !rowMask || mask === rowMask }) };
     },
-  });
+  };
+  cases.push(legendCase);
+  cases.push(Object.assign({}, legendCase, {
+    id: 'organize_legend_explains_the_default_star_in_english_on_a_page_that_starts_in_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : la légende de l’étoile dit « when the widget starts », « whole document », avec la même icône que les lignes, et ne recouvre pas « Fermer »',
+  }));
 
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.templateOrganize = cases;

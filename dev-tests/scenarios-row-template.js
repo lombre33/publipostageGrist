@@ -394,24 +394,31 @@
   });
 
   // Le texte d'aide du bas de l'onglet : depuis qu'un export en lot donne à chaque ligne son modèle (js/main.js rowSourceResolver), il ne dit plus « garde le modèle ouvert ».
-  cases.push({
+  // Le texte d'aide est écrit dans la langue de la page : le cas se joue en français, puis dans une seconde page qui démarre en anglais (la copie `lang: 'en'`).
+  const exportHintCase = {
     id: 'row_template_panel_export_hint_says_a_batch_export_follows_the_rules_in_both_languages',
-    description: "Le texte d'aide de l'onglet « Selon la ligne » dit qu'un export en lot rend chaque ligne avec le modèle que les règles lui désignent (et non plus qu'il garde le modèle ouvert), en français comme en anglais",
+    description: "Le texte d'aide de l'onglet « Selon la ligne » dit qu'un export en lot rend chaque ligne avec le modèle que les règles lui désignent (et non plus qu'il garde le modèle ouvert), dans la langue de la page",
     run: async (h) => {
       await ensureFixture(h);
-      const lang = I18n.getLang();
+      const english = I18n.getLang() === 'en';
       const hint = () => (document.querySelector('[data-settings-panel="rowTemplate"] [data-i18n="settings.rowTemplate.exportHint"]') || {}).textContent || '';
       await openPanel();
-      const out = {};
+      let text;
       try {
-        I18n.setLang('fr'); await sleep(100); out.fr = hint();
-        I18n.setLang('en'); await sleep(100); out.en = hint();
-      } finally { I18n.setLang(lang); await sleep(100); await closeSettings(); }
-      const pass = /chaque ligne/.test(out.fr) && /règles/.test(out.fr) && !/garde le modèle ouvert/.test(out.fr)
-        && /each (exported )?row/.test(out.en) && /rules/.test(out.en) && !/keeps the open template/.test(out.en);
-      return { pass, notes: JSON.stringify(out) };
+        text = hint();
+      } finally { await closeSettings(); }
+      const pass = english
+        ? /each (exported )?row/.test(text) && /rules/.test(text) && !/keeps the open template/.test(text)
+        : /chaque ligne/.test(text) && /règles/.test(text) && !/garde le modèle ouvert/.test(text);
+      return { pass, notes: JSON.stringify({ lang: I18n.getLang(), text }) };
     },
-  });
+  };
+  cases.push(exportHintCase);
+  cases.push(Object.assign({}, exportHintCase, {
+    id: 'row_template_panel_export_hint_says_a_batch_export_follows_the_rules_in_english',
+    lang: 'en',
+    description: "Page qui démarre en anglais : le texte d'aide de l'onglet « Selon la ligne » dit qu'un export en lot rend chaque ligne avec le modèle que les règles lui désignent",
+  }));
 
   cases.push({
     id: 'row_template_panel_fills_a_rule_with_the_real_fields_writes_the_option_and_opens_the_row_template_on_close',
