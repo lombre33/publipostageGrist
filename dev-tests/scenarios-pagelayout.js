@@ -176,7 +176,7 @@ window.EditorTestSuites.pageLayout = (function () {
     },
     {
       id: 'settings_choices_apply_at_once',
-      description: 'Dans les Réglages, un thème, une langue ou une touche de déclenchement choisis s\'appliquent à l\'instant (et se retiennent), une case décochée ne change rien, le choix de la touche fait apparaître l\'avis de rechargement que la réouverture masque, et « Recharger maintenant » recharge la page',
+      description: 'Dans les Réglages, un thème s\'applique à l\'instant, une langue recharge la page (la langue de la page ne bouge pas sur place, le choix est gardé pour le chargement suivant ; elle ne change sur place que si le stockage est refusé), une touche de déclenchement se retient, une case décochée ne change rien, le choix de la touche fait apparaître l\'avis de rechargement que la réouverture masque, et « Recharger maintenant » recharge la page',
       async run(h) {
         const saved = { theme: stored('pp_theme'), trigger: stored('pp_trigger_char'), langKey: stored('pp_lang'), lang: I18n.getLang() };
         const p = settingsParts();
@@ -187,34 +187,51 @@ window.EditorTestSuites.pageLayout = (function () {
         const out = { themes: [] };
         let reloads = 0;
         const guard = e => { if (e.navigationType === 'reload') { reloads++; e.preventDefault(); } };
+        const setItem = Storage.prototype.setItem;
         try {
           p.open.click();
           await h.sleep(60);
           ['dark', 'light', 'system'].forEach(value => { radio(p.themeRadios, value).click(); out.themes.push(value + ' -> ' + themeNow()); });
           unchecked(radio(p.themeRadios, 'light'));
           out.themeUnchecked = themeNow();
-          radio(p.langRadios, 'en').click();
-          out.langEn = I18n.getLang();
-          unchecked(radio(p.langRadios, 'fr'));
-          out.langUnchecked = I18n.getLang();
-          radio(p.langRadios, 'fr').click();
-          out.langFr = I18n.getLang();
+          if (typeof navigation === 'undefined') {
+            out.lang = 'non mesuré (API Navigation absente : le clic rechargerait le harnais)';
+          } else {
+            // Changer de langue recharge la page : le « navigate » est retenu pour que le harnais reste en place.
+            navigation.addEventListener('navigate', guard);
+            radio(p.langRadios, 'en').click();
+            await h.sleep(80);
+            out.langEn = { page: I18n.getLang(), stored: stored('pp_lang'), reloads };
+            unchecked(radio(p.langRadios, 'fr'));
+            await h.sleep(40);
+            out.langUnchecked = { stored: stored('pp_lang'), reloads };
+            radio(p.langRadios, 'fr').click();
+            await h.sleep(80);
+            out.langFr = { page: I18n.getLang(), stored: stored('pp_lang'), reloads };
+            // Stockage refusé : la langue ne survivrait pas au rechargement, elle change donc sur place et la page ne recharge pas.
+            Storage.prototype.setItem = function (key, value) { if (key === 'pp_lang') throw new Error('stockage refusé'); return setItem.apply(this, arguments); };
+            radio(p.langRadios, 'en').click();
+            await h.sleep(80);
+            out.langRefused = { page: I18n.getLang(), reloads };
+            Storage.prototype.setItem = setItem;
+          }
           p.trigger.value = '!';
           p.trigger.dispatchEvent(new Event('change', { bubbles: true }));
           out.trigger = { stored: stored('pp_trigger_char'), char: Variables.triggerChar(), noticeHidden: p.notice.hidden };
           if (typeof navigation === 'undefined') {
             out.reload = 'non mesuré (API Navigation absente)';
           } else {
-            navigation.addEventListener('navigate', guard);
+            const before = reloads;
             p.reload.click();
             await h.sleep(80);
-            out.reload = reloads;
+            out.reload = reloads - before;
           }
           p.close.click();
           p.open.click();
           await h.sleep(60);
           out.reopened = { noticeHidden: p.notice.hidden, trigger: p.trigger.value };
         } finally {
+          Storage.prototype.setItem = setItem;
           if (typeof navigation !== 'undefined') navigation.removeEventListener('navigate', guard);
           if (I18n.getLang() !== saved.lang) I18n.setLang(saved.lang);
           restoreStored('pp_lang', saved.langKey);
@@ -225,7 +242,11 @@ window.EditorTestSuites.pageLayout = (function () {
         }
         const pass = JSON.stringify(out.themes) === JSON.stringify(['dark -> dark:dark', 'light -> light:light', 'system -> aucun:system'])
           && out.themeUnchecked === 'aucun:system'
-          && out.langEn === 'en' && out.langUnchecked === 'en' && out.langFr === 'fr'
+          && (typeof out.lang === 'string'
+            || (out.langEn.page === saved.lang && out.langEn.stored === 'en' && out.langEn.reloads === 1
+              && out.langUnchecked.stored === 'en' && out.langUnchecked.reloads === 1
+              && out.langFr.page === saved.lang && out.langFr.stored === 'fr' && out.langFr.reloads === 2
+              && out.langRefused.page === 'en' && out.langRefused.reloads === 2))
           && out.trigger.stored === '!' && out.trigger.char === '!' && out.trigger.noticeHidden === false
           && (out.reload === 1 || typeof out.reload === 'string')
           && out.reopened.noticeHidden === true && out.reopened.trigger === '!';

@@ -4,6 +4,8 @@
 // trois, « Crédits » rogné) et, dans Accès, un contenu de 529px pour une fenêtre de 376px qui emportait « Fermer » 93px sous le bas du panneau.
 // Cible : 480px, neuf onglets (six avant « Raccourcis », huit avant « Email ») sur UNE ligne aux libellés courts, titre et onglets fixes, SEUL le contenu de l'onglet défile, « Fermer » fixe en bas.
 // Onglet « Email » (13/10, la messagerie qui ouvre le lien du mode Email) : ses deux choix à la vraie souris, sa note lisible en entier, le choix gardé après un rechargement.
+// La page démarre en français (langue semée au premier chargement : le navigateur de test est en anglais) ; passer à l'anglais par Réglages recharge la page (14/10) : le script attend le
+// rechargement et rouvre la fenêtre. Le parcours du changement de langue lui-même (question « Enregistrer / Abandonner / Annuler », stockage refusé) : verify-language-reload-mouse.mjs.
 // Lancé par run-headless.mjs (groupe Node "settingsWindowMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-settings-window-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -83,6 +85,14 @@ const pageErrors = [];
 
 async function openWidget(colorScheme) {
   const context = await browser.newContext({ bypassCSP: true, viewport: { width: WIDTH, height: HEIGHT }, colorScheme });
+  // Français au premier chargement seulement (le script d'initialisation rejoue à chaque rechargement : la page rechargée par Réglages doit garder l'anglais choisi).
+  await context.addInitScript(() => {
+    try {
+      if (sessionStorage.getItem('e2e_lang_seeded')) return;
+      sessionStorage.setItem('e2e_lang_seeded', '1');
+      localStorage.setItem('pp_lang', 'fr');
+    } catch (e) { /* stockage indisponible */ }
+  });
   const page = await context.newPage();
   page.on('pageerror', e => { pageErrors.push(e.message); console.log('[pageerror]', e.message); });
   page.on('dialog', d => d.accept().catch(() => {}));
@@ -205,8 +215,14 @@ async function runTheme(theme) {
   for (const lang of ['fr', 'en']) {
     if (lang === 'en') {
       await realClick(page, '#settings-modal .settings-tab[data-settings-tab="language"]');
+      const reloaded = page.waitForNavigation({ waitUntil: 'load', timeout: 60000 });
       await realClick(page, 'input[name="settings-lang"][value="en"]');
-      await page.waitForTimeout(400);
+      await reloaded;
+      await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
+      await page.waitForFunction(() => { const el = document.getElementById('status-msg'); return !!el && /prêt|ready/i.test(el.textContent || ''); }, null, { timeout: 90000 });
+      await realClick(page, '#v2-btn-settings');
+      await page.waitForFunction(() => getComputedStyle(document.getElementById('settings-modal')).display !== 'none', null, { timeout: 5000 }).catch(() => {});
+      await page.waitForTimeout(300);
     }
     const tag = `${label}, ${lang === 'fr' ? 'français' : 'anglais'}`;
     const bad = { size: [], tabs: [], fits: [], boxScroll: [], close: [] };

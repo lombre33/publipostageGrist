@@ -44,6 +44,9 @@
 //      local et répond 404 en ligne (le dossier des tables de famille, templates-gallery/_tables, a fait ouvrir 17 modèles de la galerie sur une erreur le 09/10 ; il s'appelle `families/`).
 //  22. la feuille de route du README public qui promet encore ce que le widget livre (« Export PDF : impression full HD, PDF compressé (V1) » : l'impression par le navigateur et le PDF « Léger » sont livrés
 //      et décrits plus haut ; relevé du 12/10, retiré dans les deux langues).
+//  23. un changement de langue de Réglages qui retraduit l'écran sur place au lieu de recharger la page (demande du 14/10 : « quand on change de langue, on recharge la page et uniquement ça, pour ne
+//      pas alourdir ») : les cases de langue passent par changeLanguage (la question « Enregistrer / Abandonner / Annuler » d'abord, puis I18n.storeLang et location.reload()), et seul un stockage refusé
+//      change la langue sur place.
 //
 // Volontairement PERMISSIF : un nom cité seulement dans un commentaire compte comme utilisé, un préfixe construit (`'toc-level-' + n`) couvre toute la
 // famille. Le but est de ne jamais faire échouer un changement légitime, seulement d'attraper ce qui n'a plus AUCUN point d'entrée. Une classe posée
@@ -249,19 +252,12 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('vocabulaire : « macro-modèle » s\'écrit avec un trait d\'union', macroSpelling.length === 0, macroSpelling.join(', '));
 
   // Les lettres des trois boutons jour / mois / année de la barre d'une date suivent la langue de l'interface : J, M, A en français, D, M, Y en anglais (« Oui, D M Y » d'Antoine, 12/10). Elles ne sont jamais
-  // écrites en dur dans la barre. Réglages change la langue sans recharger la page et la barre d'une variable est bâtie une fois, à la création de l'éditeur : son gabarit n'écrit donc aucun libellé, et chacun
-  // est écrit à l'ouverture de la barre (« Oui, tout relire » d'Antoine, 14/10) - les libellés fixes d'après la liste FIXED_LABELS, ceux qui suivent la sélection par les fonctions syncVariable* / syncConditionalState.
+  // écrites en dur dans la barre, et celle-ci les relit à chaque ouverture (syncDateFormat) : Réglages change la langue sans recharger la page, la barre étant bâtie à sa première ouverture.
   const toolbarsJs = read('js/floating-toolbars.js');
   const letterKeys = ['varFmt.dayLetter', 'varFmt.monthLetter', 'varFmt.yearLetter'];
   const letterEntries = letterKeys.map(key => entries.find(e => e.key === key));
   check('vocabulaire : les boutons jour / mois / année d\'une date ont leurs lettres dans js/i18n.js (J M A en français, D M Y en anglais), jamais écrites en dur dans la barre', letterEntries.every(Boolean) && letterEntries.map(e => e.fr).join(' ') === 'J M A' && letterEntries.map(e => e.en).join(' ') === 'D M Y' && !/data-action="date-part:[a-z]+"[^>]*>[A-Z]</.test(toolbarsJs));
-  const barTemplate = toolbarsJs.slice(toolbarsJs.indexOf('function variableToolbarHtml()'), toolbarsJs.indexOf('const FIXED_LABELS'));
-  check('vocabulaire : le gabarit de la barre d\'une variable n\'écrit aucun libellé (aucun I18n.t) : une barre bâtie en français resterait en français après un changement de langue sans rechargement', barTemplate.length > 1000 && !/I18n\.t\(/.test(barTemplate), barTemplate.length);
-  const fixedStart = toolbarsJs.indexOf('const FIXED_LABELS = [');
-  const fixedLabels = [...toolbarsJs.slice(fixedStart, toolbarsJs.indexOf('];', fixedStart)).matchAll(/\['\[data-(action|role)="([^"]+)"\]([^']*)', '(text|title|aria-label|placeholder)', '([^']+)'\]/g)].map(m => ({ attr: m[1], name: m[2], what: m[4], key: m[5] }));
-  const fixedProblems = fixedLabels.filter(l => !barTemplate.includes(`data-${l.attr}="${l.name}"`) || !entries.some(e => e.key === l.key));
-  check('vocabulaire : la liste FIXED_LABELS de la barre d\'une variable vise des contrôles du gabarit et des clés de js/i18n.js qui existent, et elle porte les lettres jour / mois / année avec leurs info-bulles', fixedLabels.length >= 20 && fixedProblems.length === 0 && letterKeys.every(key => fixedLabels.some(l => l.key === key && l.what === 'text')) && ['varFmt.showDay', 'varFmt.showMonth', 'varFmt.showYear'].every(key => fixedLabels.some(l => l.key === key && l.what === 'title')), JSON.stringify({ total: fixedLabels.length, fixedProblems }));
-  check('vocabulaire : chaque ouverture de la barre d\'une variable relit ses libellés fixes (relabelVariableToolbar, avant syncVariableState et syncConditionalState)', /relabelVariableToolbar\(panel\);\s*\n\s*if \(isFormatKind\(kind\)\) syncVariableState/.test(toolbarsJs));
+  check('vocabulaire : la barre d\'une date relit ces lettres à chaque ouverture, pas seulement à sa création (chaque clé sert au gabarit et à syncDateFormat)', letterKeys.every(key => toolbarsJs.split(key).length - 1 >= 2));
 
   // Le pluriel lui-même : I18n.t choisit la forme selon le nombre, dans la langue en cours (0 et 1 au singulier en français, seul 1 en anglais), sans jamais
   // lire comme un pluriel le texte d'une variable (un nom de colonne, une valeur saisie).
@@ -828,6 +824,29 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('README public : la feuille de route ne promet plus un « PDF full HD » ni un « PDF compressé » (livrés : l\'impression par le navigateur et le PDF « Léger », décrits plus haut)', promised.length === 0, promised.join(', '));
   check('README public : l\'impression par le navigateur et le PDF « Léger » sont décrits, en français et en anglais (ce que la feuille de route promettait)',
     /Impression par le navigateur/.test(readme) && /PDF « Léger »/.test(readme) && /Browser print/.test(readme) && /Light PDF/.test(readme), 'README.md');
+}
+
+// ============================================================================
+// 23. Changer de langue dans Réglages recharge la page, rien d'autre (demande du 14/10)
+// ============================================================================
+// « Quand on change de langue, on recharge la page et uniquement ça, pour ne pas alourdir » : Réglages ne retraduit plus rien sur place. Le choix passe par I18n.storeLang puis location.reload(), après la
+// question « Enregistrer / Abandonner / Annuler » quand une modification attend (comme tout ce qui remplace le contenu de l'éditeur) ; seul un stockage refusé change la langue sur place. Un retour de
+// l'ancien comportement (I18n.setLang appelé par les cases de langue) ne casserait rien à l'écran : les libellés qu'une barre déjà bâtie ne relit pas gardent seulement leur vieille langue.
+{
+  const settings = noCommentsJs(read('js/settings.js'));
+  const i18n = noCommentsJs(read('js/i18n.js'));
+  const main = noCommentsJs(read('js/main.js'));
+  const fn = (settings.match(/async function changeLanguage\(next, leave\) \{[\s\S]*?\n  \}/) || [''])[0];
+  const at = needle => fn.indexOf(needle);
+  check('langue : les cases de langue de Réglages passent par changeLanguage, jamais directement par I18n.setLang',
+    /wireRadios\('settings-lang', value => changeLanguage\(value, leave\)\)/.test(settings) && !/wireRadios\('settings-lang', value => I18n\.setLang/.test(settings), 'js/settings.js');
+  check('langue : changeLanguage pose la question (hasEditsToConfirmBeforeLeaving, askBeforeLeaving) AVANT de garder la langue et de recharger',
+    fn !== '' && at('hasEditsToConfirmBeforeLeaving') !== -1 && at('askBeforeLeaving') > at('hasEditsToConfirmBeforeLeaving') && at('I18n.storeLang(') > at('askBeforeLeaving') && at('location.reload()') > at('I18n.storeLang('), fn);
+  check('langue : « Annuler » rend la case de la langue de la page (checkLangRadios) et ne recharge pas', /askBeforeLeaving\(\)\)\) \{ checkLangRadios\(\); return; \}/.test(fn), fn);
+  check('langue : seul un stockage refusé change la langue sur place (I18n.setLang quand storeLang rend faux)', /if \(I18n\.storeLang\(next\)\) location\.reload\(\);\s*else I18n\.setLang\(next\);/.test(fn), fn);
+  check('langue : js/main.js donne à Réglages la question « Enregistrer / Abandonner / Annuler »', /Settings\.wireSettingsModal\(\{ hasEditsToConfirmBeforeLeaving, askBeforeLeaving \}\)/.test(main), 'js/main.js');
+  check('langue : I18n garde le choix par storeLang (faux si le stockage est refusé), que setLang réutilise au lieu de réécrire pp_lang',
+    /function storeLang\(next\)[\s\S]*?return true;[\s\S]*?return false;/.test(i18n) && /storeLang\(lang\);/.test(i18n) && (i18n.match(/localStorage\.setItem\('pp_lang'/g) || []).length === 1 && /return \{ t, getLang, setLang, storeLang,/.test(i18n), 'js/i18n.js');
 }
 
 summarizeAndExit();

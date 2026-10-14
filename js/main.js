@@ -2713,7 +2713,7 @@
     wireDefaultTemplateButton();
     wirePdfFilenameToggle();
     wireExportMenus();
-    Settings.wireSettingsModal();
+    Settings.wireSettingsModal({ hasEditsToConfirmBeforeLeaving, askBeforeLeaving }); // changer de langue recharge la page : la question « Enregistrer / Abandonner / Annuler » d'abord
     RowTemplatePanel.wire();
     ViewTemplate.wirePanel();
     ExportDate.wirePanel();

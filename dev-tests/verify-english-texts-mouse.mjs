@@ -11,8 +11,8 @@
 //     carte d'Antoine du 29/09 « Oui, les deux »). L'avertissement ci-dessus doit rester affiché : la Lecture repère l'erreur par un drapeau, plus par les premiers mots du message ;
 //   - « [Email unavailable] » : le chip « Email de l'utilisateur » quand l'adresse ne se lit pas (js/reader-mode.js, carte d'Antoine du 30/09 « Traduire ») - le faux Grist du
 //     harnais ne donne aucune adresse, c'est donc l'état normal ici.
-// Le passage en français par Réglages, sans recharger, doit tout remettre en français (zones fantômes et ligne Roboto suivent la langue, le reste au rendu suivant), avec les
-// textes d'origine : le français ne bouge pas (seule l'apostrophe de l'avertissement devient typographique, comme dans les autres textes de js/i18n.js).
+// Le passage en français par Réglages recharge la page (14/10 : rien n'est retraduit sur place) ; une fois rechargée, tout est en français (zones fantômes et ligne Roboto, le reste
+// au rendu suivant), avec les textes d'origine : le français ne bouge pas (seule l'apostrophe de l'avertissement devient typographique, comme dans les autres textes de js/i18n.js).
 // Le titre du sommaire des exports DOCX et PDF, la phrase « aucun titre » du sommaire DOCX et les autres messages d'erreur d'une variable sont vérifiés dans les groupes en page
 // (docx, pageBreakToc, varPath, chips).
 // Lancé par run-headless.mjs (groupe Node "englishTextsMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-english-texts-mouse.mjs
@@ -114,17 +114,32 @@ if (OFFLINE) {
   await page.route('**://fonts.googleapis.com/**', route => route.fulfill({ status: 200, contentType: 'text/css', body: '' }));
   await page.route('**://fonts.gstatic.com/**', route => route.fulfill({ status: 200, body: '' }));
 }
-// Le widget d'un utilisateur qui a choisi l'anglais dans Réglages : la langue est lue dans le stockage local avant tout autre script.
-await page.addInitScript(() => { try { localStorage.setItem('pp_lang', 'en'); } catch (e) { /* stockage indisponible */ } });
+// Le widget d'un utilisateur qui a choisi l'anglais dans Réglages : la langue est lue dans le stockage local avant tout autre script, au PREMIER chargement seulement
+// (le script d'initialisation rejoue à chaque rechargement : sans ce drapeau, la page rechargée par Réglages repartirait en anglais).
+await page.addInitScript(() => {
+  try {
+    if (sessionStorage.getItem('e2e_lang_seeded')) return;
+    sessionStorage.setItem('e2e_lang_seeded', '1');
+    localStorage.setItem('pp_lang', 'en');
+  } catch (e) { /* stockage indisponible */ }
+});
+
+const waitForReady = async () => {
+  await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
+  await page.waitForFunction(() => {
+    const el = document.getElementById('status-msg');
+    return !!el && /prêt|ready/i.test(el.textContent || '');
+  }, null, { timeout: 90000 });
+};
+// Ce que le test pose dans la page : aperçu A4, le réglage d'Antoine (page réduite dans le panneau), et l'écouteur du presse-papiers (lu après Ctrl+C). À refaire après un rechargement.
+const preparePage = () => page.evaluate(() => {
+  document.getElementById('editor-container').classList.add('a4-preview');
+  window.__copied = null;
+  document.addEventListener('copy', e => { window.__copied = { html: e.clipboardData.getData('text/html'), text: e.clipboardData.getData('text/plain') }; });
+});
 
 await page.goto(`${BASE}/_test-harness.html`, { waitUntil: 'load' });
-await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
-await page.waitForFunction(() => {
-  const el = document.getElementById('status-msg');
-  return !!el && /prêt|ready/i.test(el.textContent || '');
-}, null, { timeout: 90000 });
-// Aperçu A4, le réglage d'Antoine (page réduite dans le panneau).
-await page.evaluate(() => { document.getElementById('editor-container').classList.add('a4-preview'); });
+await waitForReady();
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const settle = () => sleep(600);
@@ -168,10 +183,7 @@ async function loadDoc(html) {
 const refreshPreview = async () => { await page.evaluate(() => Editor.refreshPaginationPreview()); await settle(); };
 
 // Ce que le presse-papiers reçoit à Ctrl+C (lu par un écouteur du document, qui passe après celui de l'éditeur).
-await page.evaluate(() => {
-  window.__copied = null;
-  document.addEventListener('copy', e => { window.__copied = { html: e.clipboardData.getData('text/html'), text: e.clipboardData.getData('text/plain') }; });
-});
+await preparePage();
 
 const EN = {
   addHeader: '+ Add a header', addFooter: '+ Add a footer', roboto: 'Roboto (default)',
@@ -288,18 +300,21 @@ check('sans titre, le sommaire d\'un modèle enregistré en français s\'affiche
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------
 console.log('5. Mode Lecture : titre du sommaire, sommaire vide et avertissement de variable non résolue');
-await page.evaluate(async () => {
-  window.__gristStub.setVariables('Clients', { Nom: 'Text' });
-  window.__gristStub.setVariables('Contrats', { Objet: 'Text' });
-  window.__gristStub.setRows('Clients', [{ id: 1, Nom: 'Dupont' }]);
-  await GristAPI.refreshSchema();
-});
+// Les tables du faux Grist et la ligne sélectionnée (une ligne est sélectionnée dans Grist : le mode Lecture montre le document rempli). Posées dans la page : à refaire après un rechargement.
+async function seedStub() {
+  await page.evaluate(async () => {
+    window.__gristStub.setVariables('Clients', { Nom: 'Text' });
+    window.__gristStub.setVariables('Contrats', { Objet: 'Text' });
+    window.__gristStub.setRows('Clients', [{ id: 1, Nom: 'Dupont' }]);
+    await GristAPI.refreshSchema();
+  });
+  await page.evaluate(() => window.__gristStub.fireRecord({ id: 1, Nom: 'Dupont' }, 'Clients'));
+  await sleep(300);
+}
+await seedStub();
 const BROKEN = '<span class="var-badge" data-table="Contrats" data-column="Objet" data-key="Contrats.Objet">#Contrats.Objet</span>';
 const TOC = '<div class="toc-marker"></div>';
 const EMAIL_CHIP = '<span class="smart-chip" contenteditable="false" data-chip-kind="email">Email</span>';
-// Une ligne est sélectionnée dans Grist : le mode Lecture montre le document rempli.
-await page.evaluate(() => window.__gristStub.fireRecord({ id: 1, Nom: 'Dupont' }, 'Clients'));
-await sleep(300);
 async function openReader() {
   await page.evaluate(() => { document.getElementById('reader-container').innerHTML = ''; });
   const btn = await clickOn('#btn-mode-read');
@@ -330,18 +345,32 @@ check('sans variable cassée : pas d\'avertissement', await page.evaluate(() => 
 await backToEditor();
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------
-console.log('6. Passage en français par Réglages, sans recharger : tout suit, avec les textes d\'origine');
+console.log('6. Passage en français par Réglages : la page se recharge et repart en français, avec les textes d\'origine');
 await loadDoc('<p>Dear customer,</p>');
 await refreshPreview();
 await clickOn('#v2-btn-settings');
 await sleep(300);
 check('la fenêtre Réglages s\'ouvre', await page.evaluate(() => getComputedStyle(document.getElementById('settings-modal')).display !== 'none'));
+// Changer de langue recharge la page, rien d'autre (demande du 14/10) : plus rien n'est retraduit sur place.
+const reloaded = page.waitForNavigation({ waitUntil: 'load', timeout: 60000 });
 const frRadio = await clickOn('input[name="settings-lang"][value="fr"] + span');
-await sleep(300);
-check('le choix "Français" est pris en compte', await page.evaluate(() => I18n.getLang() === 'fr' && document.documentElement.lang === 'fr'), frRadio);
-await clickOn('#settings-close');
-await sleep(400);
-check('zone du haut : "+ Ajouter un en-tête" sans rien retaper', await textOf('.v2-page-edge-top .v2-hf-zone-ghost') === FR.addHeader, await textOf('.v2-page-edge-top .v2-hf-zone-ghost'));
+await sleep(500);
+// Ce document de test n'est pas un modèle enregistré : la question « Discard / Cancel » (nouveau modèle sans nom) passe d'abord, « Discard » laisse la page se recharger.
+const asked = await page.evaluate(() => {
+  const b = Array.from(document.querySelectorAll('#pp-dialog-modal .var-modal-actions button')).find(x => /^(Abandonner|Discard)$/.test(x.textContent.trim()) && x.getClientRects().length > 0);
+  if (b) b.setAttribute('data-e2e', 'discard');
+  return !!b;
+});
+check('un document pas enregistré : la question passe devant Réglages avant le rechargement', asked);
+if (asked) await clickOn('[data-e2e="discard"]');
+await reloaded;
+await waitForReady();
+await preparePage();
+await seedStub();
+check('le choix "Français" recharge la page, qui repart en français et le garde (fenêtre Réglages refermée)', await page.evaluate(() => I18n.getLang() === 'fr' && document.documentElement.lang === 'fr' && localStorage.getItem('pp_lang') === 'fr' && getComputedStyle(document.getElementById('settings-modal')).display === 'none'), frRadio);
+await loadDoc('<p>Chère cliente,</p>');
+await refreshPreview();
+check('zone du haut : "+ Ajouter un en-tête"', await textOf('.v2-page-edge-top .v2-hf-zone-ghost') === FR.addHeader, await textOf('.v2-page-edge-top .v2-hf-zone-ghost'));
 check('zone du bas : "+ Ajouter un pied de page"', await textOf('.v2-page-edge-bottom .v2-hf-zone-ghost') === FR.addFooter, await textOf('.v2-page-edge-bottom .v2-hf-zone-ghost'));
 await clickOn('#v2-font-chip');
 await sleep(300);

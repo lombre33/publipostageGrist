@@ -1,4 +1,4 @@
-// Panneau Réglages : Langue (I18n.setLang), Thème (localStorage + data-theme sur <html>), Touche de déclenchement (localStorage, relue par
+// Panneau Réglages : Langue (rechargement de la page, I18n.storeLang), Thème (localStorage + data-theme sur <html>), Touche de déclenchement (localStorage, relue par
 // Variables.triggerChar), Email (la messagerie qui ouvre le lien du mode Email, gardée par MailtoExport.setMailClient), Marges de page (par modèle, avec la
 // mention d'un macro-modèle) et Crédits (statique). Même convention d'ouverture et de fermeture que les autres fenêtres (style.display, pas de fermeture au
 // clic sur le fond).
@@ -79,15 +79,19 @@ const Settings = (function () {
     });
   }
 
+  // La case cochée est la langue de la page (à l'ouverture de Réglages, et quand « Annuler » laisse la langue d'avant).
+  function checkLangRadios() {
+    all('input[name="settings-lang"]').forEach(r => { r.checked = (r.value === I18n.getLang()); });
+  }
+
   // Ouverture : les choix affichés sont ceux en vigueur (langue, thème, touche de déclenchement, messagerie, marges) ; fermeture : un simple masquage.
   function wireOpenAndClose(modal, openBtn, closeBtn, marginInputs) {
-    const langRadios = all('input[name="settings-lang"]');
     const themeRadios = all('input[name="settings-theme"]');
     const mailClientRadios = all('input[name="settings-mail-client"]');
     const triggerSelect = byId('settings-trigger-char');
     const reloadNotice = byId('settings-trigger-reload-notice');
     openBtn.addEventListener('click', () => {
-      langRadios.forEach(r => { r.checked = (r.value === I18n.getLang()); });
+      checkLangRadios();
       themeRadios.forEach(r => { r.checked = (r.value === getTheme()); });
       mailClientRadios.forEach(r => { r.checked = (r.value === MailtoExport.getMailClient()); });
       if (triggerSelect) triggerSelect.value = Variables.triggerChar();
@@ -117,6 +121,16 @@ const Settings = (function () {
     });
   }
 
+  // Changer de langue recharge la page, rien d'autre (demande du 14/10) : aucun libellé n'est retraduit à chaud, la langue choisie est relue au démarrage
+  // (I18n.storeLang). Ce qui attendait d'être enregistré passe d'abord par la question « Enregistrer / Abandonner / Annuler » de js/main.js, comme pour tout
+  // ce qui remplace le contenu de l'éditeur ; « Annuler » laisse la langue d'avant. Stockage refusé (la langue ne survivrait pas au rechargement) : elle
+  // change sur place, comme avant.
+  async function changeLanguage(next, leave) {
+    if (leave && leave.hasEditsToConfirmBeforeLeaving() && !(await leave.askBeforeLeaving())) { checkLangRadios(); return; }
+    if (I18n.storeLang(next)) location.reload();
+    else I18n.setLang(next);
+  }
+
   function wireTriggerChar() {
     const triggerSelect = byId('settings-trigger-char');
     const reloadNotice = byId('settings-trigger-reload-notice');
@@ -132,7 +146,7 @@ const Settings = (function () {
     reloadBtn.addEventListener('click', () => location.reload());
   }
 
-  function wireSettingsModal() {
+  function wireSettingsModal(leave) {
     const openBtn = byId('v2-btn-settings');
     const modal = byId('settings-modal');
     const closeBtn = byId('settings-close');
@@ -146,7 +160,7 @@ const Settings = (function () {
     wireOpenAndClose(modal, openBtn, closeBtn, marginInputs);
     wireMarginInputs(marginInputs);
     wireTabs();
-    wireRadios('settings-lang', value => I18n.setLang(value));
+    wireRadios('settings-lang', value => changeLanguage(value, leave));
     wireRadios('settings-theme', setTheme);
     wireRadios('settings-mail-client', MailtoExport.setMailClient);
     wireTriggerChar();

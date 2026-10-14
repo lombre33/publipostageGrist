@@ -10,9 +10,7 @@
 // Une seconde page (un en-tête et un pied remplis, assez de lignes pour une deuxième page) vérifie aussi que le TEXTE des en-têtes et pieds de page de la feuille est en Roboto, comme le document - « Oui, Roboto » d'Antoine
 // du 12/10, à la carte « Passer le texte des en-têtes et pieds de page en Roboto ? » : zones de bord, survol à la souris, bandes de couture. Ce texte est du contenu du modèle, pas de l'interface.
 // La même seconde page, en anglais, vérifie les lettres des boutons jour / mois / année de la barre d'une date - « Oui, D M Y » d'Antoine du 12/10, à la carte « Traduire les boutons J, M, A de la date en anglais ? » :
-// D, M, Y dès l'ouverture, puis J, M, A et D, M, Y après un changement de langue sans recharger la page, et un vrai clic sur « D ».
-// Enfin la seconde page et une troisième (française) vérifient que TOUS les libellés de la barre d'une variable (texte, info-bulle, nom accessible, texte d'exemple, lignes des listes, dont les formats de date) suivent la langue après un changement
-// sans recharger, dans les deux sens, et sont exactement ceux d'une barre bâtie dans cette langue - « Oui, tout relire » d'Antoine du 14/10, à la carte « Relire les libellés de la barre d'une variable à chaque ouverture ? ».
+// D, M, Y dès la première ouverture, puis J, M, A et D, M, Y après un changement de langue sans recharger la page, et un vrai clic sur « D ».
 // Les champs ont aussi leur script, plus détaillé : verify-field-fonts-mouse.mjs (groupe fieldFontsMouse).
 // Lancé par run-headless.mjs (groupe Node "buttonFontsMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-button-fonts-mouse.mjs
 import { createServer } from 'node:http';
@@ -412,54 +410,9 @@ check('bande de couture, pied de la page 1 (visible dans le panneau) : le texte 
 check('bande de couture, en-tête de la page 2 (visible dans le panneau) : le texte est en Roboto comme le document, à 14 px et 19,88 px de ligne', bandHead.length >= 1 && bandHead[0].shown && bandHead[0].bottom > 0 && bandHead[0].top < HEIGHT && /En-tête/.test(bandHead[0].text) && bandHead[0].ff === docFont && bandHead[0].own.every(f => f === docFont) && bandHead[0].fs === '14px' && bandHead[0].lh === '19.88px', bandHead);
 
 // ===== 8) Les boutons de jour, de mois et d'année de la barre d'une date : D, M, Y en anglais =====
-// « Oui, D M Y » d'Antoine du 12/10, à la carte « Traduire les boutons J, M, A de la date en anglais ? ». Ils s'écrivaient J, M, A quelle que soit la langue, alors que leur info-bulle était traduite. La barre est bâtie une
-// fois, à la création de l'éditeur : ici en anglais d'emblée, puis la langue change en cours de session (Réglages) sans recharger - les lettres et les info-bulles suivent à l'ouverture suivante.
+// « Oui, D M Y » d'Antoine du 12/10, à la carte « Traduire les boutons J, M, A de la date en anglais ? ». Ils s'écrivaient J, M, A quelle que soit la langue, alors que leur info-bulle était traduite. La barre est bâtie à
+// la première ouverture : ici en anglais d'emblée, puis la langue change en cours de session (Réglages) sans recharger - les lettres et les info-bulles suivent à l'ouverture suivante.
 const ref2 = await p2.evaluate(() => getComputedStyle(document.getElementById('btn-save')).fontFamily);
-// Ouvre la barre de la bulle n° `index` du document (0 : texte, 1 : nombre, 2 : date, 3 : oui/non), en haut de la feuille : un menu ouvert, la molette ou une bande de couture ne la gênent plus.
-const openBar = async (pg, index) => {
-  await closeMenusOf(pg);
-  const top = await pg.evaluate(() => { window.scrollTo(0, 0); const c = document.getElementById('editor-container'); if (c) c.scrollTop = 0; return !!c; });
-  await pg.waitForTimeout(200);
-  return top && await clickBadge(pg, index);
-};
-// Tout ce que la barre ouverte écrit, contrôle par contrôle (cachés compris) : texte d'un bouton, info-bulle, nom accessible, texte d'exemple, et pour une liste ses lignes (valeur = texte) et celle qui est choisie ; avec la boîte de la barre.
-const barLabels = pg => pg.evaluate(() => {
-  const bar = Array.from(document.querySelectorAll('.v2-varfmt-toolbar')).find(el => el.getClientRects().length > 0);
-  if (!bar) return null;
-  const r = bar.getBoundingClientRect();
-  const controls = Array.from(bar.querySelectorAll('button, select, input')).map(el => ({
-    key: el.dataset.action || el.dataset.role,
-    text: el.tagName === 'BUTTON' ? el.textContent.trim() : null,
-    title: el.getAttribute('title') || '',
-    aria: el.getAttribute('aria-label') || '',
-    placeholder: el.getAttribute('placeholder') || '',
-    options: el.tagName === 'SELECT' ? Array.from(el.options).map(o => `${o.value}=${o.textContent.trim()}`) : null,
-    chosen: el.tagName === 'SELECT' && el.selectedOptions[0] ? el.selectedOptions[0].textContent.trim() : null,
-  }));
-  return { box: { right: Math.round(r.right), width: Math.round(r.width), height: Math.round(r.height) }, controls };
-});
-const BAR_KINDS = [[0, 'texte'], [1, 'nombre'], [2, 'date'], [3, 'oui/non']];
-// Les quatre barres, ouvertes à la vraie souris l'une après l'autre : { type de bulle: libellés }.
-const allBars = async pg => { const out = {}; for (const [index, kind] of BAR_KINDS) out[kind] = await openBar(pg, index) && await barLabels(pg); await closeMenusOf(pg); return out; };
-// Ce qui diffère d'une référence, une ligne par écart : « type / contrôle / champ : lu au lieu d'attendu ».
-const labelDiffs = (got, want) => {
-  const diffs = [];
-  for (const [, kind] of BAR_KINDS) {
-    const g = got[kind], w = want[kind];
-    if (!g || !w) { diffs.push(`${kind} : barre absente`); continue; }
-    if (g.controls.length !== w.controls.length) diffs.push(`${kind} : ${g.controls.length} contrôles au lieu de ${w.controls.length}`);
-    const byKey = new Map(g.controls.map(c => [c.key, c]));
-    for (const wc of w.controls) {
-      const gc = byKey.get(wc.key);
-      if (!gc) { diffs.push(`${kind} / ${wc.key} : absent`); continue; }
-      for (const field of ['text', 'title', 'aria', 'placeholder', 'chosen']) if (gc[field] !== wc[field]) diffs.push(`${kind} / ${wc.key} / ${field} : « ${gc[field]} » au lieu de « ${wc[field]} »`);
-      if (JSON.stringify(gc.options) !== JSON.stringify(wc.options)) diffs.push(`${kind} / ${wc.key} / lignes : ${JSON.stringify(gc.options)} au lieu de ${JSON.stringify(wc.options)}`);
-    }
-  }
-  return diffs;
-};
-// Référence anglaise : les quatre barres de la seconde page, bâties en anglais, relevées AVANT tout changement de langue.
-const EN0 = await allBars(p2);
 const dateParts = pg => pg.evaluate(() => {
   const bar = Array.from(document.querySelectorAll('.v2-varfmt-toolbar')).find(el => el.getClientRects().length > 0);
   if (!bar) return null;
@@ -467,11 +420,11 @@ const dateParts = pg => pg.evaluate(() => {
   const parts = Array.from(bar.querySelectorAll('button[data-action^="date-part:"]')).map(b => { const cs = getComputedStyle(b); return { t: b.textContent.trim(), title: b.title, ff: cs.fontFamily, fs: cs.fontSize, h: Math.round(b.getBoundingClientRect().height * 10) / 10, active: b.classList.contains('is-active'), shown: b.getClientRects().length > 0 }; });
   return { box: { left: Math.round(r.left), right: Math.round(r.right), height: Math.round(r.height) }, parts };
 });
-const openDateBar = async () => await openBar(p2, 2) && dateParts(p2);
+const openDateBar = async () => { await closeMenusOf(p2); await p2.evaluate(() => window.scrollTo(0, 0)); const sc = await p2.evaluate(() => { const c = document.getElementById('editor-container'); if (c) c.scrollTop = 0; return !!c; }); await p2.waitForTimeout(200); return sc && await clickBadge(p2, 2) && dateParts(p2); };
 const letters = d => d ? d.parts.map(x => x.t).join(' ') : null;
 const titles = d => d ? d.parts.map(x => x.title).join(' | ') : null;
 let dbar = await openDateBar();
-check('barre d\'une date, interface en anglais dès l\'ouverture : les boutons s\'écrivent D, M, Y, avec leur info-bulle en anglais', !!dbar && letters(dbar) === 'D M Y' && titles(dbar) === 'Show/hide day | Show/hide month | Show/hide year', dbar);
+check('barre d\'une date, interface en anglais dès la première ouverture : les boutons s\'écrivent D, M, Y, avec leur info-bulle en anglais', !!dbar && letters(dbar) === 'D M Y' && titles(dbar) === 'Show/hide day | Show/hide month | Show/hide year', dbar);
 check('barre d\'une date en anglais : elle tient dans le panneau (700 px), garde sa hauteur de 36 px, et D, M, Y ont la police des boutons, 26 px de haut', !!dbar && dbar.box.left >= 0 && dbar.box.right <= WIDTH && dbar.box.height === 36 && dbar.parts.every(x => x.shown && x.ff === ref2 && x.h === 26), dbar);
 // Un vrai clic sur « D » éteint le jour, un second le rallume : les boutons marchent comme avant.
 await realClick(p2, '.v2-varfmt-toolbar.visible button[data-action="date-part:day"]', 400);
@@ -485,55 +438,8 @@ check('on passe l\'interface en français sans recharger : à la réouverture de
 await p2.evaluate(() => I18n.setLang('en'));
 dbar = await openDateBar();
 check('puis de nouveau en anglais sans recharger : D, M, Y', !!dbar && letters(dbar) === 'D M Y' && titles(dbar) === 'Show/hide day | Show/hide month | Show/hide year', dbar);
+check('aucune erreur JavaScript pendant tout le parcours (les deux pages)', pageErrors.length === 0, pageErrors);
 
-// ===== 9) Tous les libellés de la barre d'une variable suivent la langue, à l'ouverture =====
-// « Oui, tout relire » d'Antoine du 14/10, à la carte « Relire les libellés de la barre d'une variable à chaque ouverture ? ». La barre est bâtie une fois, à la création de l'éditeur, et Réglages change la langue sans
-// recharger : ce qu'elle écrit (les formats de date, « Lettres » / « Words », les info-bulles de FR, US, —, des décimales et de la devise, les noms accessibles...) restait dans la langue d'origine. Références : une barre BÂTIE
-// dans la langue - en anglais, la seconde page (relevée plus haut, avant ses changements de langue) ; en français, une troisième page neuve (la première a ouvert un email, un macro-modèle... : plus de bulles). Épreuve : la même barre
-// passée à l'autre langue en cours de session porte exactement les mêmes libellés que la barre bâtie dans cette langue, pour chaque type de bulle, et revient à l'identique.
-const third = await openWidget('light');
-const p3 = third.page;
-const FR0 = await allBars(p3);
-const BARS_LOADED = BAR_KINDS.every(([, kind]) => EN0[kind] && FR0[kind] && EN0[kind].controls.length > 10 && FR0[kind].controls.length === EN0[kind].controls.length);
-check('les références : les quatre barres (texte, nombre, date, oui/non) s\'ouvrent à la souris dans les deux langues, avec les mêmes contrôles', BARS_LOADED, BAR_KINDS.map(([, kind]) => `${kind} : ${EN0[kind] && EN0[kind].controls.length} / ${FR0[kind] && FR0[kind].controls.length}`));
-const valueOf = (bars, kind, key, field) => { const c = bars[kind] && bars[kind].controls.find(x => x.key === key); return c ? c[field] : undefined; };
-// Français -> anglais sur la troisième page, bâtie en français.
-await p3.evaluate(() => I18n.setLang('en'));
-const EN1 = await allBars(p3);
-const enDiffs = labelDiffs(EN1, EN0);
-check('page bâtie en français, passée à l\'anglais sans recharger : les quatre barres ont exactement les libellés d\'une barre bâtie en anglais', enDiffs.length === 0, enDiffs.slice(0, 12));
-check('en anglais après le changement : la barre d\'un nombre écrit « Words », « Decimals », « Currency » et les infobulles de FR, US, —', valueOf(EN1, 'nombre', 'num-words', 'text') === 'Words' && valueOf(EN1, 'nombre', 'num-words', 'title') === 'Spelled out (whole numbers)' && valueOf(EN1, 'nombre', 'num-decimals', 'title') === 'Decimals' && valueOf(EN1, 'nombre', 'num-currency', 'placeholder') === 'Currency' && valueOf(EN1, 'nombre', 'num-currency', 'title') === 'Currency (€, $, custom…)' && valueOf(EN1, 'nombre', 'num-style:fr', 'title') === 'French: 1 234,56' && valueOf(EN1, 'nombre', 'num-style:us', 'title') === 'Anglo-Saxon: 1,234.56' && valueOf(EN1, 'nombre', 'num-style:none', 'title') === 'No thousands separator', EN1.nombre && EN1.nombre.controls.map(c => `${c.key} : ${c.text || ''} | ${c.title} | ${c.placeholder}`));
-check('en anglais après le changement : la barre d\'une date écrit « Date format », « Words », et sa liste de formats lit 09/12/2026 (l\'anglais met le mois avant le jour), la ligne choisie aussi', valueOf(EN1, 'date', 'date-preset', 'title') === 'Date format' && valueOf(EN1, 'date', 'date-words', 'text') === 'Words' && valueOf(EN1, 'date', 'date-words', 'title') === 'Spelled out' && (valueOf(EN1, 'date', 'date-preset', 'options') || [])[0] === 'dmy_slash_full=09/12/2026' && valueOf(EN1, 'date', 'date-preset', 'chosen') === '09/12/2026', EN1.date && EN1.date.controls.filter(c => c.key === 'date-preset' || c.key === 'date-words'));
-check('en anglais après le changement : « Modifier le calcul », « Autres attributs » et « Boucle » portent leur nom accessible en anglais dans les quatre barres, même cachés', BAR_KINDS.every(([, kind]) => valueOf(EN1, kind, 'calc-edit', 'title') === 'Edit the calculation' && valueOf(EN1, kind, 'calc-edit', 'aria') === 'Edit the calculation' && valueOf(EN1, kind, 'var-linked', 'aria') === 'Other attributes of the same row' && valueOf(EN1, kind, 'var-loop', 'aria') === 'Loop: repeat for each linked row'), BAR_KINDS.map(([, kind]) => `${kind} : ${valueOf(EN1, kind, 'calc-edit', 'aria')} | ${valueOf(EN1, kind, 'var-linked', 'aria')} | ${valueOf(EN1, kind, 'var-loop', 'aria')}`));
-// Retour au français sur la même page : à l'identique de la barre bâtie en français.
-await p3.evaluate(() => I18n.setLang('fr'));
-const FR2 = await allBars(p3);
-const frBack = labelDiffs(FR2, FR0);
-check('page remise en français : les quatre barres reviennent exactement à celles du départ', frBack.length === 0, frBack.slice(0, 12));
-// Anglais -> français sur la seconde page, bâtie en anglais (déjà passée en français puis en anglais plus haut).
-await p2.evaluate(() => I18n.setLang('fr'));
-const FR1 = await allBars(p2);
-const frDiffs = labelDiffs(FR1, FR0);
-check('page bâtie en anglais, passée au français sans recharger : les quatre barres ont exactement les libellés d\'une barre bâtie en français', frDiffs.length === 0, frDiffs.slice(0, 12));
-check('en français après le changement : la barre d\'un nombre écrit « Lettres », « Décimales », « Devise » ; celle d\'une date « Format de date », « Lettres » et ses formats 12/09/2026 (le français met le jour avant le mois)', valueOf(FR1, 'nombre', 'num-words', 'text') === 'Lettres' && valueOf(FR1, 'nombre', 'num-decimals', 'title') === 'Décimales' && valueOf(FR1, 'nombre', 'num-currency', 'placeholder') === 'Devise' && valueOf(FR1, 'nombre', 'num-style:none', 'title') === 'Sans séparateur de milliers' && valueOf(FR1, 'date', 'date-preset', 'title') === 'Format de date' && valueOf(FR1, 'date', 'date-words', 'text') === 'Lettres' && (valueOf(FR1, 'date', 'date-preset', 'options') || [])[0] === 'dmy_slash_full=12/09/2026' && valueOf(FR1, 'date', 'date-preset', 'chosen') === '12/09/2026', { nombre: FR1.nombre && FR1.nombre.controls.filter(c => /^num-/.test(c.key)).map(c => `${c.key} : ${c.text || ''} | ${c.title} | ${c.placeholder}`), date: FR1.date && FR1.date.controls.filter(c => c.key === 'date-preset' || c.key === 'date-words') });
-await p2.evaluate(() => I18n.setLang('en'));
-const EN2 = await allBars(p2);
-const enBack = labelDiffs(EN2, EN0);
-check('page remise en anglais : les quatre barres reviennent exactement à celles du départ', enBack.length === 0, enBack.slice(0, 12));
-// Les barres gardent leur taille : la même que celle d'une barre bâtie dans cette langue (réf.), et toutes tiennent dans le panneau.
-const boxes = [['EN1', EN1, EN0], ['FR2', FR2, FR0], ['FR1', FR1, FR0], ['EN2', EN2, EN0]].flatMap(([name, bars, ref]) => BAR_KINDS.map(([, kind]) => ({ name, kind, box: bars[kind] && bars[kind].box, ref: ref[kind] && ref[kind].box })));
-const boxProblems = boxes.filter(b => !b.box || !b.ref || b.box.right > WIDTH || b.box.width !== b.ref.width || b.box.height !== b.ref.height);
-check('après chaque changement de langue, les quatre barres tiennent encore dans le panneau (700 px) et gardent la taille d\'une barre bâtie dans cette langue', boxes.length === 16 && boxProblems.length === 0, boxProblems);
-// Les boutons marchent comme avant, avec le texte relu : un vrai clic sur « Words » (anglais, après deux changements de langue) allume le bouton, un second l'éteint.
-await openBar(p2, 1);
-await realClick(p2, '.v2-varfmt-toolbar.visible button[data-action="num-words"]', 400);
-const wordsOn = await p2.evaluate(() => { const b = document.querySelector('.v2-varfmt-toolbar.visible button[data-action="num-words"]'); return b ? { on: b.classList.contains('is-active'), text: b.textContent.trim() } : null; });
-await realClick(p2, '.v2-varfmt-toolbar.visible button[data-action="num-words"]', 400);
-const wordsOff = await p2.evaluate(() => { const b = document.querySelector('.v2-varfmt-toolbar.visible button[data-action="num-words"]'); return b ? { on: b.classList.contains('is-active'), text: b.textContent.trim() } : null; });
-check('barre d\'un nombre après les changements de langue : un clic sur « Words » allume le bouton, un second l\'éteint', !!wordsOn && !!wordsOff && wordsOn.on && !wordsOff.on && wordsOn.text === 'Words' && wordsOff.text === 'Words', { wordsOn, wordsOff });
-check('aucune erreur JavaScript pendant tout le parcours (les trois pages)', pageErrors.length === 0, pageErrors);
-
-await third.context.close();
 await second.context.close();
 await context.close();
 await browser.close();

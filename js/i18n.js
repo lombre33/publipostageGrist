@@ -2060,9 +2060,15 @@ const I18n = (function () {
   const changeListeners = [];
   function onChange(fn) { if (typeof fn === 'function') changeListeners.push(fn); }
 
+  // Garde la langue pour le prochain chargement (initialLang la relit au démarrage). false : stockage indisponible, la langue ne survivrait pas au rechargement.
+  function storeLang(next) {
+    try { localStorage.setItem('pp_lang', next === 'en' ? 'en' : 'fr'); return true; } catch (e) { return false; }
+  }
+
+  // Changement de langue sur place. Réglages recharge la page à la place (js/settings.js:changeLanguage) et ne s'en sert que si le stockage est refusé.
   function setLang(next) {
     lang = next === 'en' ? 'en' : 'fr';
-    try { localStorage.setItem('pp_lang', lang); } catch (e) { /* stockage indisponible : la langue ne survivra pas au rechargement */ }
+    storeLang(lang);
     document.documentElement.lang = lang;
     applyTranslations();
     changeListeners.forEach(fn => { try { fn(lang); } catch (e) { console.warn('[I18n] un abonné au changement de langue a levé une exception', e); } });
@@ -2084,5 +2090,5 @@ const I18n = (function () {
   document.documentElement.lang = lang;
   applyTranslations();
 
-  return { t, getLang, setLang, applyTranslations, onChange };
+  return { t, getLang, setLang, storeLang, applyTranslations, onChange };
 })();

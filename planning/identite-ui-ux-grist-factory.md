@@ -202,18 +202,16 @@ ajoutée ou modifiée doit avoir sa traduction anglaise dans le **même lot** �
 
 **Langue au premier lancement** (choix d'Antoine du 04/10, « Tout soigner »). Sans choix enregistré dans Réglages, la langue est la première des deux (français, anglais) que propose le navigateur, dans l'ordre de ses préférences ; l'anglais s'il n'en propose aucune des deux, le français s'il ne dit rien. Le choix fait dans Réglages l'emporte ensuite (`pp_lang`, `initialLang` de `js/i18n.js`) ; rien n'est enregistré tant que la personne n'a pas choisi.
 
-**Tout libellé de la barre d'une variable suit la langue** (choix d'Antoine du 12/10, « Oui, D M Y », étendu le 14/10, « Oui, tout relire »). Les trois boutons
-jour, mois et année de la barre d'une date s'écrivaient J, M, A quelle que soit la langue, alors que leur info-bulle était traduite : ils s'écrivent D, M, Y en
-anglais (`varFmt.dayLetter`, `varFmt.monthLetter`, `varFmt.yearLetter`), jamais en dur dans le gabarit. La barre d'une variable est bâtie une fois, à la création
-de l'éditeur ou du champ, et Réglages change la langue sans recharger la page : tout ce qu'elle écrit - texte d'un bouton, info-bulle, nom accessible, texte
-d'exemple d'un champ, lignes d'une liste (les formats de date : « 09/12/2026 » en anglais, « 12/09/2026 » en français) - doit donc s'écrire à chaque ouverture,
-jamais à la construction. Son gabarit (`variableToolbarHtml`) n'écrit aucun libellé : les libellés fixes sont une seule liste (`FIXED_LABELS`), écrite par
-`relabelVariableToolbar` à chaque ouverture, et ceux qui suivent la sélection (condition, autres attributs, boucle, liste, colonne, zéro, styles de case) le sont
-par `syncVariableState` et `syncConditionalState` : une barre ouverte en anglais d'emblée et une barre passée à l'anglais en cours de session ne peuvent pas
-différer. Gardé par `codeHygiene` (le gabarit sans `I18n.t`, la liste vise des contrôles et des clés qui existent, la relecture à l'ouverture) et par
-`buttonFontsMouse` (les quatre barres - texte, nombre, date, oui/non - passées du français à l'anglais et de l'anglais au français sans recharger ont exactement les
-libellés d'une barre bâtie dans cette langue ; un vrai clic sur « D » et sur « Words » après les changements). Les barres du tableau et de l'image n'en sont pas
-encore là (§5).
+**Changer de langue recharge la page, et rien d'autre** (demande d'Antoine du 14/10 : « quand on change de langue, on recharge la page et uniquement ça, pour ne pas alourdir »,
+qui remplace son « Oui, tout relire » du même jour). Réglages > Langue garde le choix (`pp_lang`, `I18n.storeLang`) puis recharge la page ; la langue est lue une fois, au
+démarrage. Pour toute UI nouvelle : un libellé, une info-bulle, un nom accessible, un texte d'exemple ou une ligne de liste s'écrit à la construction, dans la langue de la
+page, et n'a PAS à être relu, retraduit ni suivi à chaud (ni `I18n.onChange`, ni relecture à chaque ouverture d'une barre) ; on n'ajoute pas de code qui retraduit en direct.
+Les trois boutons jour, mois et année de la barre d'une date s'écrivent J, M, A en français et D, M, Y en anglais (`varFmt.dayLetter`, `varFmt.monthLetter`,
+`varFmt.yearLetter`), jamais en dur dans le gabarit. S'il y a des modifications qui attendent d'être enregistrées, la question « Enregistrer / Abandonner / Annuler » passe
+d'abord (celle de tout ce qui remplace le contenu de l'éditeur) : « Annuler » laisse la langue d'avant. Seul un stockage refusé (le choix ne survivrait pas au rechargement)
+change la langue sur place. Gardé par `languageReloadMouse` (les cases de langue à la vraie souris : rechargement, question, « Annuler » / « Enregistrer » / « Abandonner »,
+stockage refusé), `pageLayout` (`settings_choices_apply_at_once`) et `codeHygiene` (section 23). Le code qui retraduisait à chaud (les abonnés `I18n.onChange`,
+`I18n.setLang` sur place, les relectures à l'ouverture) reste en place pour l'instant : §5.
 
 ### Vocabulaire et écriture des textes
 Arbitré le 29/09 (« Oui, partout », en ligne `fc44fb1`) après un relevé de neuf textes « template », treize pluriels
@@ -1411,10 +1409,9 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   attendant).
 - Relevés par l'audit du 29/09 sans avoir fait l'objet d'une carte : deux sortes d'info-bulles, quatre crayons pour quatre
   fonctions, des tailles et couleurs écrites en dur dans le CSS, une lecture seule qui grise sans expliquer pourquoi (non revérifiés au 12/10).
-- Barres du tableau et de l'image : infobulles figées dans la langue de leur création (relevé du 14/10, en cherchant le même défaut après « Oui, tout relire » pour la
-  barre d'une variable). Après un changement de langue sans recharger la page, la barre du tableau garde en français (ou en anglais) neuf infobulles : ligne et colonne
-  avant / après, supprimer le tableau, fond de cellule, aligner en haut / au milieu / en bas ; celle de l'image est bâtie de la même façon (infobulles écrites une fois dans
-  le gabarit, `imageToolbarHtml` : non mesurée). Question posée à Antoine sur une carte : rien n'est codé avant son choix.
+- Code du changement de langue à chaud, devenu inutile (14/10, depuis que Réglages recharge la page) : les abonnés `I18n.onChange` (36 appels dans 25 fichiers de `js/`),
+  `I18n.setLang` et `applyTranslations` au changement, et les relectures à l'ouverture (`syncDateFormat`, `syncBoolButtons`...) ne servent plus qu'aux tests, qui basculent la
+  langue dans la page (près de 500 appels de `I18n.setLang`), et au repli du stockage refusé. Question posée à Antoine sur une carte : rien n'est retiré avant son choix.
 
 ---
 
@@ -1456,7 +1453,7 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
 - 2026-10-12 (suite 4) : les boutons jour, mois et année de la barre d'une date s'écrivent D, M, Y en anglais (« Oui, D M Y » d'Antoine, seconde carte) et la
   barre relit leurs lettres et leurs info-bulles à chaque ouverture, la langue pouvant changer sans recharger la page (§1, « Bilingue fr/en systématique »),
   gardé par `codeHygiene` et `buttonFontsMouse` ; §5 note ce qui reste figé dans la barre d'une variable.
-- 2026-10-14 (suite 5) : la barre d'une variable relit TOUS ses libellés à chaque ouverture (« Oui, tout relire » d'Antoine, à la carte posée avec l'entrée précédente) :
-  le gabarit n'écrit plus aucun libellé, une seule liste (`FIXED_LABELS`) écrit les libellés fixes et les fonctions de synchronisation ceux qui suivent la sélection
-  (§1, « Tout libellé de la barre d'une variable suit la langue »), gardé par `codeHygiene` et `buttonFontsMouse` ; §5 ne garde plus cette question et note les
-  barres du tableau et de l'image, qui gardent leurs infobulles dans la langue de leur création.
+- 2026-10-14 (suite 5) : changer de langue recharge la page, et rien d'autre (demande d'Antoine : « on simplifie le code, quand on change de langue, on recharge la page et
+  uniquement ça, pour ne pas alourdir », qui remplace son « Oui, tout relire » du même jour : le lot qui relisait tous les libellés de la barre d'une variable à chaque
+  ouverture, en ligne quelques minutes, est retiré). §1 pose la règle (« Changer de langue recharge la page, et rien d'autre »), §5 note le code du changement à chaud devenu
+  inutile ; gardé par `languageReloadMouse`, `pageLayout` et `codeHygiene` (section 23).
