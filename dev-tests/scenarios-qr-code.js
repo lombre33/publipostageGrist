@@ -264,8 +264,8 @@
   });
 
   cases.push({
-    id: 'qr_row_is_greyed_in_header_email_and_macro_modes_never_removed_and_stays_active_in_a_grid',
-    description: 'En-tête/pied et e-mail : la ligne se grise (jamais retirée), comme « Encadré… » ; macro-modèle : tout le menu de la chaîne se grise avec elle ; grille : elle reste active (l\'image se pose sur sa case) pendant que « Encadré… » se grise ; elle redevient active en quittant chaque mode',
+    id: 'qr_row_is_greyed_in_email_and_macro_modes_never_removed_and_stays_active_in_a_header_a_footer_and_a_grid',
+    description: 'E-mail : la ligne se grise (jamais retirée), comme « Encadré… » ; macro-modèle : tout le menu de la chaîne se grise avec elle ; en-tête ou pied de page : elle reste ACTIVE (le QR code y est une image comme une autre, la Lecture et les exports en dessinent les colonnes) pendant que « Encadré… » et « Graphique de la page… » se grisent ; grille : elle reste active (l\'image se pose sur sa case) pendant que « Encadré… » se grise',
     run: async (h) => {
       await setDoc(h, '<p>Texte</p>');
       MainToolbar.syncToolbarState();
@@ -275,7 +275,7 @@
       try {
         HeaderFooterPreview.getHfMode = () => 'header';
         MainToolbar.syncToolbarState();
-        inHf = isLocked('v2-btn-qr') && isLocked('v2-btn-callout');
+        inHf = !isLocked('v2-btn-qr') && isLocked('v2-btn-callout') && isLocked('v2-btn-chart') && !isLocked('v2-image-group');
       } finally {
         HeaderFooterPreview.getHfMode = realGetHfMode;
         MainToolbar.syncToolbarState();
@@ -999,6 +999,191 @@
       const frame = qrNodes()[0];
       const text = tiptap().textContent;
       return { pass: !!frame && frame.getAttribute('data-qr-text') === '#QrClients.Site' && !frame.hasAttribute('src') && text.includes('puis du texte'), notes: JSON.stringify({ text: text.slice(0, 60), frame: !!frame }) };
+    },
+  });
+
+  // === 6) Un QR code dans un en-tête ou un pied de page (relance du 14/10) ==================================================================================
+  // La bande d'une page fait 60 px ; la zone d'édition, avec ses marges de 8 px, ne laisse que 44 px de haut à son contenu et refuse tout ce qui la fait déborder
+  // (HeaderFooterPreview.enforceZoneHeightLimit) : le QR code s'y pose à 36 px au lieu de 120 (la poignée l'agrandit jusqu'à 60), et la zone pleine le refuse en le disant.
+  // La Lecture et les exports dessinent ses colonnes pour la ligne affichée, comme dans le corps. La vraie souris, à 700x400, est dans dev-tests/verify-qr-mouse.mjs.
+  const hfData = (header, footer) => ({ enabled: true, differentFirstPage: false, header: { default: header || '', first: '' }, footer: { default: footer || '', first: '' } });
+  const errorShown = () => { const e = document.getElementById('pp-qr-error'); return e && !e.hidden ? e.textContent : null; };
+  async function enterHeader(html) {
+    document.getElementById('editor-container').classList.add('a4-preview'); // les zones de marge ne se dessinent que sous a4-preview (resetEditor la retire)
+    Editor.setHeaderFooterData(hfData(html, ''));
+    await sleep(150);
+    HeaderFooterPreview.enterHeaderFooterMode('header', 'default');
+    await sleep(300);
+  }
+  async function leaveZone() {
+    await closeWindowIfOpen();
+    HeaderFooterPreview.exitHeaderFooterModeIfActive();
+    await sleep(200);
+  }
+
+  cases.push({
+    id: 'qr_header_zone_takes_a_36_px_qr_code_a_column_frame_stays_square_and_the_zone_keeps_both',
+    description: 'En-tête : « QR code… » y insère le QR code d\'une colonne (cadre sans image) puis celui d\'une adresse (image complète), tous deux à 36 px - ce que la zone d\'édition accepte, 120 px y serait refusé - ; le cadre reste carré à cette taille (le texte de remplacement « QR code » de son image masquée ne le rend plus haut que large) ; la zone garde les deux en sortant',
+    run: async (h) => {
+      await seed(h);
+      await enterHeader('<p>En-tête</p>');
+      try {
+        MainToolbar.syncToolbarState();
+        const rowActive = !isLocked('v2-btn-qr');
+        await openWindow();
+        await typeInField('#QrClients.Site');
+        okButton().click();
+        await sleep(400);
+        const frame = tiptap().querySelector('.editor-image-qr-placeholder');
+        const box = frame ? frame.getBoundingClientRect() : null;
+        const afterFrame = qrNodes();
+        EditorCore.getEditor().chain().focus('end').run();
+        await openWindow();
+        await typeInField('https://exemple.fr/entete');
+        okButton().click();
+        await sleep(400);
+        const nodes = qrNodes();
+        const read = nodes[1] && nodes[1].getAttribute('src') ? await decode(nodes[1].getAttribute('src')) : null;
+        HeaderFooterPreview.exitHeaderFooterModeIfActive();
+        await sleep(250);
+        const kept = parse(Editor.getHeaderFooterData().header.default);
+        const keptNodes = Array.from(kept.querySelectorAll('img[data-qr-text]'));
+        return {
+          pass: rowActive && afterFrame.length === 1 && afterFrame[0].getAttribute('data-qr-text') === '#QrClients.Site' && !afterFrame[0].hasAttribute('src') && /width: 36px/.test(afterFrame[0].getAttribute('style') || '')
+            && !!box && Math.abs(box.width - box.height) < 1.5 && Math.abs(box.width - 38) < 1.5
+            && nodes.length === 2 && /width: 36px/.test(nodes[1].getAttribute('style') || '') && read === 'https://exemple.fr/entete'
+            && keptNodes.length === 2 && keptNodes.map(n => n.getAttribute('data-qr-text')).join('|') === '#QrClients.Site|https://exemple.fr/entete',
+          notes: JSON.stringify({ rowActive, afterFrame: afterFrame.length, box: box && [box.width, box.height], nodes: nodes.map(n => [n.getAttribute('data-qr-text'), n.hasAttribute('src'), n.getAttribute('style')]), read, kept: keptNodes.length }),
+        };
+      } finally { await leaveZone(); }
+    },
+  });
+
+  cases.push({
+    id: 'qr_header_zone_that_is_full_refuses_the_qr_code_says_so_in_both_languages_and_keeps_the_keyboard_in_the_window',
+    description: 'En-tête déjà plein (deux lignes) : le QR code est refusé - rien n\'est posé, la fenêtre reste ouverte avec le texte tapé, dit « Pas assez de place dans cette zone… » (« Not enough room in this area… » en anglais) sans déclarer le champ invalide, et le clavier reste dans le champ (Échap ferme)',
+    run: async (h) => {
+      await seed(h);
+      await enterHeader('<p>Ligne un</p><p>Ligne deux</p>');
+      try {
+        // La première frappe qui agrandit une zone fraîchement ouverte passe toujours le garde-fou (suppressHeightGuardOnce) : une lettre l'épuise d'abord.
+        const editor = EditorCore.getEditor();
+        editor.chain().focus('end').insertContent('x').run();
+        await sleep(80);
+        editor.chain().focus('start').run();
+        const attempt = async () => {
+          await openWindow();
+          await typeInField('https://exemple.fr/trop');
+          okButton().click();
+          await sleep(350);
+          return { open: modalOpen(), nodes: qrNodes().length, error: errorShown(), invalid: field().hasAttribute('aria-invalid'), value: field().value, focus: document.activeElement === field() };
+        };
+        const fr = await attempt();
+        await closeWindowIfOpen();
+        I18n.setLang('en');
+        await sleep(150);
+        editor.chain().focus('start').run();
+        const en = await attempt();
+        document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+        await sleep(200);
+        const closedByEscape = !modalOpen();
+        return {
+          pass: fr.open && fr.nodes === 0 && /^Pas assez de place dans cette zone/.test(fr.error || '') && !fr.invalid && fr.value === 'https://exemple.fr/trop' && fr.focus
+            && en.open && en.nodes === 0 && /^Not enough room in this area/.test(en.error || '') && en.focus && closedByEscape,
+          notes: JSON.stringify({ fr, en, closedByEscape }),
+        };
+      } finally { I18n.setLang('fr'); await sleep(100); await leaveZone(); }
+    },
+  });
+
+  cases.push({
+    id: 'qr_header_and_footer_bands_show_a_dashed_square_for_a_column_qr_code_as_big_as_the_image',
+    description: 'Bandes de la feuille : le QR code d\'une colonne n\'a pas d\'image avant la Lecture, il y est un carré pointillé de la taille de l\'image du QR code voisin (36 px) - sans règle, un texte de remplacement de 68 x 20 px, et la bande se mesure plus basse que le PDF -, en en-tête comme en pied',
+    run: async (h) => {
+      await seed(h);
+      document.getElementById('editor-container').classList.add('a4-preview');
+      Editor.setHeaderFooterData(hfData('<p>Haut ' + await qrHtml('#QrClients.Site', 36) + await qrHtml('https://exemple.fr/haut', 36) + '</p>', '<p>Bas ' + await qrHtml('#QrClients.Site', 36) + '</p>'));
+      await sleep(400);
+      const look = Array.from(document.querySelectorAll('#editor-container .v2-hf-zone-body img[data-qr-text]')).map(i => {
+        const r = i.getBoundingClientRect();
+        return { zone: i.closest('.v2-hf-zone').className.includes('v2-page-edge-top') || i.closest('.v2-page-edge-top') ? 'haut' : 'bas', hasSrc: i.hasAttribute('src'), w: Math.round(r.width * 10) / 10, h: Math.round(r.height * 10) / 10, border: getComputedStyle(i).borderTopStyle };
+      });
+      const bodies = Array.from(document.querySelectorAll('#editor-container .v2-hf-zone-body')).map(b => Math.round(b.getBoundingClientRect().height));
+      return {
+        pass: look.length === 3 && look.every(i => Math.abs(i.w - 36) < 1.5 && Math.abs(i.h - 36) < 1.5) && look.filter(i => !i.hasSrc).length === 2 && look.filter(i => !i.hasSrc).every(i => i.border === 'dashed') && bodies.length === 2 && bodies.every(b => b <= 60),
+        notes: JSON.stringify({ look, bodies }),
+      };
+    },
+  });
+
+  cases.push({
+    id: 'qr_reader_header_and_footer_zones_draw_the_qr_code_of_the_row_and_drop_it_for_an_empty_column',
+    description: 'Lecture : le QR code d\'une colonne placé dans l\'en-tête et dans le pied est dessiné pour la ligne affichée (relu : son adresse), celui d\'un texte seul est inchangé ; la ligne dont la colonne est vide n\'a que ce dernier - aucun cadre sans image ne reste dans les bandes',
+    run: async (h) => {
+      const rows = await seed(h);
+      h.setA4Preview(true);
+      const column = await qrHtml('#QrClients.Site', 36);
+      const fixed = await qrHtml('https://exemple.fr/pied', 36);
+      const hf = hfData('<p>Haut ' + column + fixed + '</p>', '<p>Bas ' + column + '</p>');
+      const reader = document.getElementById('reader-container');
+      reader.style.display = 'block';
+      const read = async id => {
+        await ReaderMode.render('<p>Corps</p>', PAGE_TABLE, recordOf(rows, id), hf);
+        await sleep(200);
+        const imgs = Array.from(reader.querySelectorAll('img[data-qr-text]'));
+        const reads = [];
+        for (const img of imgs) reads.push(img.getAttribute('src') ? await decode(img.getAttribute('src')) : null);
+        return { count: imgs.length, withoutImage: imgs.filter(i => !i.getAttribute('src')).length, reads };
+      };
+      const one = await read(1);
+      const empty = await read(3);
+      return {
+        pass: one.count === 3 && one.withoutImage === 0 && JSON.stringify(one.reads) === JSON.stringify(['https://durand.example/accueil', 'https://exemple.fr/pied', 'https://durand.example/accueil'])
+          && empty.count === 1 && empty.withoutImage === 0 && JSON.stringify(empty.reads) === JSON.stringify(['https://exemple.fr/pied']),
+        notes: JSON.stringify({ one, empty }),
+      };
+    },
+  });
+
+  async function docxWithZones(hf, record) {
+    await ExportCommon.ensureJsZipLoaded();
+    await DocxExport.ensureDocxLibLoaded();
+    const { blob } = await DocxExport.getDocxBlobForRecord('<p>Corps</p>', PAGE_TABLE, record, '', hf, null);
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const media = [];
+    for (const name of Object.keys(zip.files).filter(n => n.startsWith('word/media/') && !zip.files[n].dir)) {
+      media.push(await decode(URL.createObjectURL(new Blob([await zip.file(name).async('uint8array')], { type: 'image/png' }))));
+    }
+    const parts = {};
+    for (const name of Object.keys(zip.files).filter(n => /^word\/(header|footer)\d*\.xml$/.test(n))) {
+      parts[name] = (await zip.file(name).async('string')).split('<w:drawing').length - 1;
+    }
+    return { media, parts };
+  }
+
+  cases.push({
+    id: 'qr_pdf_and_docx_header_and_footer_carry_a_readable_qr_code_of_the_row_and_none_for_an_empty_column',
+    description: 'PDF : le QR code d\'une colonne du pied de page se lit sur la page rendue (l\'adresse de la ligne), la ligne dont la colonne est vide n\'en a pas ; Word : l\'en-tête et le pied portent chacun leur image (colonne : adresse de la ligne ; texte seul : le sien), relues par le décodeur, et la ligne à colonne vide n\'a que celle du texte seul',
+    run: async (h) => {
+      const rows = await seed(h);
+      const column = await qrHtml('#QrClients.Site', 36);
+      const fixed = await qrHtml('https://exemple.fr/entete', 36);
+      const pdfFor = async id => {
+        const out = await h.exportPdfContent('<p>Corps</p>', hfData('', '<p>Pied ' + column + '</p>'), null, { tableId: PAGE_TABLE, record: recordOf(rows, id) });
+        return decodeCanvas(await pdfCanvas(out.base64));
+      };
+      const pdf1 = await pdfFor(1);
+      const pdf3 = await pdfFor(3);
+      const zones = hfData('<p>Haut ' + fixed + '</p>', '<p>Bas ' + column + '</p>');
+      const docx1 = await docxWithZones(zones, recordOf(rows, 1));
+      const docx3 = await docxWithZones(zones, recordOf(rows, 3));
+      const drawings = docx => Object.values(docx.parts).reduce((a, b) => a + b, 0);
+      return {
+        pass: pdf1 === 'https://durand.example/accueil' && pdf3 === null
+          && docx1.media.length === 2 && docx1.media.includes('https://exemple.fr/entete') && docx1.media.includes('https://durand.example/accueil') && drawings(docx1) === 2
+          && docx3.media.length === 1 && docx3.media[0] === 'https://exemple.fr/entete' && drawings(docx3) === 1,
+        notes: JSON.stringify({ pdf1, pdf3, docx1, docx3 }),
+      };
     },
   });
 

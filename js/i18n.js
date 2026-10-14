@@ -420,6 +420,7 @@ const I18n = (function () {
     'qr.preview.unresolved': { fr: 'Colonne illisible pour la ligne en cours.', en: 'Column unreadable for the current row.' },
     'qr.preview.tooLong': { fr: 'Texte trop long pour un QR code.', en: 'Text too long for a QR code.' },
     'qr.preview.unavailable': { fr: 'QR code indisponible : la bibliothèque n’a pas pu se charger.', en: 'QR code unavailable: the library could not be loaded.' },
+    'qr.zone.full': { fr: 'Pas assez de place dans cette zone : la bande de la page est pleine. Retirez du texte ou une image, puis réessayez.', en: 'Not enough room in this area: the page band is full. Remove some text or an image, then try again.' },
     'qr.doc.unavailable': { fr: '[QR code indisponible]', en: '[QR code unavailable]' },
     'qr.doc.tooLong': { fr: '[QR code : texte trop long]', en: '[QR code: text too long]' },
     // --- Graphique de la page (js/chart-block.js, js/chart-source.js) : la fenêtre, la liste des graphiques de Grist (ceux que le widget ne sait pas redessiner

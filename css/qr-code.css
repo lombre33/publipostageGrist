@@ -27,9 +27,22 @@
    avec l'icône d'un QR code et son texte. */
 /* Le texte du cadre est en --text, comme celui d'une image de variable (css/editor-v2.css : le gris n'y faisait que 4,39:1 sur le fond du cadre en
    clair) ; l'icône, un tracé et non du texte, garde le gris (≥ 3:1). */
+/* L'<img> du cadre est masquée mais garde son texte de remplacement (« QR code ») : à moins de 60 px de large il se coupe sur plusieurs lignes, plus hautes
+   que le carré (`min-height: auto` d'une image sans source prend la hauteur de ce texte), et le cadre cesse d'être carré (38 x 42 px pour un QR code de
+   36 px dans un en-tête, 32 x 82 à 30 px). Sans minimum de hauteur, le texte est rogné et le cadre reste carré. */
+.editor-image-qr-placeholder .editor-image { min-height: 0; overflow: hidden; }
 .editor-image-qr-placeholder .editor-image-var-label { font-size: 10.5px; overflow-wrap: anywhere; line-height: 1.25; color: var(--text); }
 .editor-image-qr-placeholder .editor-image-var-label::before {
   width: 28px; height: 28px; color: var(--text-muted);
   -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'%3E%3Crect x='3' y='3' width='7' height='7' rx='1'/%3E%3Crect x='14' y='3' width='7' height='7' rx='1'/%3E%3Crect x='3' y='14' width='7' height='7' rx='1'/%3E%3Cpath d='M14 14h3v3h-3zM20 14v.01M14 20v.01M17 20h4v-3'/%3E%3C/svg%3E");
   mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'%3E%3Crect x='3' y='3' width='7' height='7' rx='1'/%3E%3Crect x='14' y='3' width='7' height='7' rx='1'/%3E%3Crect x='3' y='14' width='7' height='7' rx='1'/%3E%3Cpath d='M14 14h3v3h-3zM20 14v.01M14 20v.01M17 20h4v-3'/%3E%3C/svg%3E");
+}
+
+/* Dans la bande d'un en-tête ou d'un pied de page (le fragment du modèle s'y écrit tel quel, sans l'éditeur ni ses vues) : un QR code dont le texte contient une
+   colonne n'a pas d'image avant la Lecture. Sans règle, l'<img> sans source s'écrirait en texte de remplacement (68x20 px) et la bande se mesurerait plus
+   basse que ce que le PDF y peint, un carré de la taille du QR code. Le même cadre carré que dans l'éditeur, posé sur la feuille : trait pointillé et icône au
+   gris du texte d'attente de la feuille (--paper-text-faint, 5,0:1 sur le blanc), texte de remplacement muet. La largeur et le carré viennent de son style. */
+:is(.v2-hf-zone-body, .v2-page-band-header, .v2-page-band-footer) img.editor-image[data-qr-text]:not([src]) {
+  display: inline-block; box-sizing: border-box; border: 1.5px dashed var(--paper-text-faint, #667085); border-radius: 4px; font-size: 0; color: transparent;
+  background: #f2f4f7 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23667085' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'%3E%3Crect x='3' y='3' width='7' height='7' rx='1'/%3E%3Crect x='14' y='3' width='7' height='7' rx='1'/%3E%3Crect x='3' y='14' width='7' height='7' rx='1'/%3E%3Cpath d='M14 14h3v3h-3zM20 14v.01M14 20v.01M17 20h4v-3'/%3E%3C/svg%3E") center / 46% no-repeat;
 }

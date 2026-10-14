@@ -9,6 +9,9 @@
 //  - taper « # » dans le champ ouvre la liste des colonnes, visible et cliquable par-dessus la fenêtre ; Entrée choisit sans valider la fenêtre ;
 //  - le cadre d'un QR code à colonne (sans image) reste carré, se sélectionne à la souris et se redimensionne par la barre flottante de l'image ;
 //  - Tab ne sort pas de la fenêtre, Échap la ferme sans toucher au texte ; les contrastes des textes de la fenêtre et du cadre (≥ 4,5:1) en clair et en sombre ;
+//  - dans un en-tête de page (clic dans la marge, relance du 14/10) : la ligne « QR code… » reste active alors qu'« Encadré… » et « Graphique de la page… » se grisent ; le QR code se pose à 36 px
+//    (ce que la zone d'édition accepte), une zone pleine le refuse en le disant, la bande montre l'image et le cadre carré d'une colonne à la même taille, et la Lecture dessine
+//    celui de la colonne pour la ligne affichée (relu par un décodeur) ;
 //  - l'interface en anglais.
 // Lancé par run-headless.mjs (groupe Node "qrMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-qr-mouse.mjs
 // QR_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans elle, rien n'est écrit.
@@ -526,11 +529,138 @@ async function runEnglish() {
   await closeWindowWithEscape();
 }
 
+// Un QR code dans l'en-tête de la page (relance du 14/10) : la ligne du menu reste active, le QR code se pose à 36 px (ce que la zone d'édition accepte), une zone pleine le
+// refuse en le disant, la bande et la Lecture le montrent.
+async function runHeaderFooter(T) {
+  const EMPTY = { enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } };
+  const ERROR = `${WIN} .pp-qr-error`;
+  const zone = '#editor-container .v2-page-edge-top';
+  const headerWith = html => page.evaluate(h => Editor.setHeaderFooterData({ enabled: true, differentFirstPage: false, header: { default: h, first: '' }, footer: { default: '', first: '' } }), html);
+  // Le clic réel dans la marge du haut de la feuille ouvre l'en-tête (js/header-footer-preview.js:zoneUnderPointer).
+  const openHeaderByMouse = async () => {
+    await page.evaluate(sel => document.querySelector(sel).scrollIntoView({ block: 'center' }), zone);
+    await page.waitForTimeout(250);
+    const margin = await centerOf(zone);
+    await page.mouse.move(margin.x, margin.y);
+    await page.waitForTimeout(80);
+    await page.mouse.click(margin.x, margin.y);
+    await page.waitForTimeout(450);
+    return page.evaluate(() => Editor.isEditingHeaderFooter());
+  };
+  const caretInZone = async () => {
+    await page.click('#editor-container .tiptap p >> nth=0');
+    await page.keyboard.press('End');
+    await page.waitForTimeout(150);
+  };
+  const clickDone = async () => {
+    const done = await centerOf('#v2-hf-btn-done');
+    await page.mouse.move(done.x, done.y);
+    await page.waitForTimeout(80);
+    await page.mouse.click(done.x, done.y);
+    await page.waitForTimeout(500);
+  };
+  await setDoc('<p>Corps du document</p>');
+  await seedRecord();
+  await headerWith('<p>En-tête</p>');
+  await page.waitForTimeout(400);
+  check(`${T}, en-tête : un clic réel dans la marge du haut ouvre l'en-tête`, await openHeaderByMouse());
+  await caretInZone();
+
+  // Le menu : « QR code… » reste active, « Encadré… », « Bloc de signature » et « Graphique de la page… » se grisent (jamais retirées).
+  await openMenu();
+  const locks = await page.evaluate(ids => Object.fromEntries(ids.map(id => [id, document.getElementById(id).classList.contains('v2-hf-locked')])), ['v2-btn-callout', 'v2-btn-signature', 'v2-btn-qr', 'v2-btn-chart']);
+  const rowBox = await hit(ROW);
+  check(`${T}, en-tête : dans le menu, « QR code… » est active (au premier plan, dans le panneau) alors qu'« Encadré… », « Bloc de signature » et « Graphique de la page… » sont grisées`, !locks['v2-btn-qr'] && locks['v2-btn-callout'] && locks['v2-btn-signature'] && locks['v2-btn-chart'] && seen(rowBox), { locks, rowBox });
+  await closeMenu();
+
+  // Un QR code à colonne d'abord : « Insérer une colonne… », le cadre carré de 36 px (la zone d'édition ne laisse que 44 px de haut).
+  await openWindowByMouse();
+  check(`${T}, en-tête : un clic sur « QR code… » ouvre la fenêtre`, await winOpen());
+  await clickCenter(COLUMN);
+  await page.waitForTimeout(250);
+  await page.keyboard.type('site', { delay: 12 });
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(500);
+  await clickCenter(OK);
+  await page.waitForTimeout(400);
+  const zoom = await sheetZoom();
+  const framed = await qrNodes();
+  const framePlaced = await page.evaluate(sel => { const f = document.querySelector(sel); if (!f) return null; const r = f.getBoundingClientRect(); return { w: r.width, h: r.height }; }, FRAME);
+  check(`${T}, en-tête : le QR code d'une colonne se pose en cadre carré de 36 px sans image (« #QrClients.Site » gardé), la fenêtre se ferme`, !(await winOpen()) && framed.length === 1 && framed[0].text === '#QrClients.Site' && !framed[0].hasSrc && framed[0].width === '36px' && !!framePlaced && Math.abs(framePlaced.w - framePlaced.h) < 1.5 && Math.abs(framePlaced.w / zoom - 38) < 3, { framed: framed.map(n => [n.text, n.hasSrc, n.width]), framePlaced, zoom });
+  await snap(`${T}-hf-1-cadre`);
+
+  // Puis un QR code d'adresse, à côté : complet, de 36 px, relu par le décodeur (la zone d'édition le laisse entrer : la ligne ne grandit pas de plus de 6 px).
+  await caretInZone();
+  await openWindowByMouse();
+  await typeSlowly('https://exemple.fr/entete');
+  await clickCenter(OK);
+  await page.waitForTimeout(400);
+  const both = await qrNodes();
+  check(`${T}, en-tête : le QR code d'une adresse se pose à côté, complet, de 36 px, dont le décodeur relit l'adresse`, !(await winOpen()) && both.length === 2 && both[1].text === 'https://exemple.fr/entete' && both[1].hasSrc && both[1].width === '36px' && (await decode(both[1].src)) === 'https://exemple.fr/entete', both.map(n => [n.text, n.hasSrc, n.width]));
+  await snap(`${T}-hf-2-deux`);
+
+  // « Terminer » à la souris, puis la bande de la feuille : le cadre et l'image y ont la même taille (36 px), dans le panneau.
+  await clickDone();
+  await page.evaluate(sel => document.querySelector(sel).scrollIntoView({ block: 'center' }), zone);
+  await page.waitForTimeout(250);
+  const band = await page.evaluate(() => {
+    const body = document.querySelector('#editor-container .v2-hf-zone-body');
+    if (!body) return null;
+    const imgs = Array.from(body.querySelectorAll('img[data-qr-text]')).map(i => { const r = i.getBoundingClientRect(); return { hasSrc: i.hasAttribute('src'), w: Math.round(r.width * 10) / 10, h: Math.round(r.height * 10) / 10, border: getComputedStyle(i).borderTopStyle, left: r.left, right: r.right, top: r.top, bottom: r.bottom }; });
+    const b = body.getBoundingClientRect();
+    return { imgs, bodyHeight: Math.round(b.height * 10) / 10, panel: { w: innerWidth, h: innerHeight } };
+  });
+  const bandInPanel = !!band && band.imgs.every(i => i.left >= -0.5 && i.right <= band.panel.w + 0.5 && i.top >= -0.5 && i.bottom <= band.panel.h + 0.5);
+  check(`${T}, bande : l'en-tête de la feuille montre le cadre pointillé de la colonne et l'image du QR code, carrés et de la même taille (36 px), dans le panneau, sans bande plus haute que 60 px`, !!band && band.imgs.length === 2 && !band.imgs[0].hasSrc && band.imgs[0].border === 'dashed' && band.imgs[1].hasSrc && Math.abs(band.imgs[0].w - band.imgs[1].w) < 1.5 && Math.abs(band.imgs[0].h - band.imgs[1].h) < 1.5 && Math.abs(band.imgs[1].w - band.imgs[1].h) < 1.5 && Math.abs(band.imgs[1].h / zoom - 36) < 3 && band.bodyHeight / zoom <= 61 && bandInPanel, band);
+  await snap(`${T}-hf-3-bande`);
+
+  // La Lecture sur la ligne affichée : le QR code de la colonne est dessiné (relu : l'adresse de la ligne), l'autre est inchangé.
+  await page.click('#btn-mode-read');
+  await page.waitForSelector('#reader-container .reader-content', { timeout: 10000 }).catch(() => {});
+  await page.waitForTimeout(900);
+  const reader = await page.evaluate(() => Array.from(document.querySelectorAll('#reader-container img[data-qr-text]')).map(i => { const r = i.getBoundingClientRect(); return { text: i.getAttribute('data-qr-text'), src: i.getAttribute('src'), w: Math.round(r.width * 10) / 10, h: Math.round(r.height * 10) / 10 }; }));
+  const readerReads = [];
+  for (const i of reader) readerReads.push(i.src && i.src.startsWith('data:image') ? await decode(i.src) : null);
+  check(`${T}, Lecture : l'en-tête montre les deux QR code, carrés, relus : l'adresse de la ligne affichée pour la colonne, puis celle de l'autre`, reader.length === 2 && readerReads[0] === 'https://durand.example/accueil' && readerReads[1] === 'https://exemple.fr/entete' && reader.every(i => Math.abs(i.w - i.h) < 1.5), { reader: reader.map(i => [i.text, i.w, i.h]), readerReads });
+  await snap(`${T}-hf-4-lecture`);
+  await page.click('#btn-mode-edit');
+  await page.waitForTimeout(700);
+
+  // Une zone pleine (deux lignes de texte) : un QR code serait refusé - rien de posé, la fenêtre reste ouverte avec le texte tapé et le dit. La première frappe qui agrandit une
+  // zone fraîchement ouverte passe toujours le garde-fou (js/header-footer-preview.js:suppressHeightGuardOnce) : une lettre tapée puis effacée l'épuise d'abord.
+  await headerWith('<p>Ligne un</p><p>Ligne deux</p>');
+  await page.waitForTimeout(400);
+  await openHeaderByMouse();
+  await caretInZone();
+  await page.keyboard.type('x');
+  await page.keyboard.press('Backspace');
+  await page.waitForTimeout(150);
+  await openWindowByMouse();
+  await typeSlowly('https://exemple.fr/trop');
+  await clickCenter(OK);
+  await page.waitForTimeout(400);
+  const refused = await qrNodes();
+  const errorBox = await hit(ERROR);
+  const errorText = await textOf(ERROR);
+  const contrast = await contrastOf(ERROR);
+  const onField = await page.evaluate(() => document.getElementById('pp-qr-text').hasAttribute('aria-invalid'));
+  check(`${T}, en-tête : zone pleine, le QR code est refusé - rien de posé, la fenêtre reste ouverte avec le texte tapé et dit « Pas assez de place dans cette zone… » (dans le panneau, contraste ≥ 4,5:1, le champ n'est pas déclaré invalide)`, (await winOpen()) && refused.length === 0 && (await fieldValue()) === 'https://exemple.fr/trop' && /^Pas assez de place dans cette zone/.test(errorText || '') && seen(errorBox) && contrast >= 4.5 && !onField, { open: await winOpen(), n: refused.length, errorText, errorBox, contrast, onField });
+  await snap(`${T}-hf-5-pleine`);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(250);
+  check(`${T}, en-tête : Échap ferme la fenêtre, le texte de l'en-tête est intact`, !(await winOpen()) && (await html()) === '<p>Ligne un</p><p>Ligne deux</p>', await html());
+  await clickDone();
+  await page.evaluate(empty => Editor.setHeaderFooterData(empty), EMPTY);
+  await page.waitForTimeout(300);
+}
+
 await seedRecord();
 await run('light');
+await runHeaderFooter('light');
 await page.evaluate(() => Settings.setTheme('dark'));
 await page.waitForTimeout(200);
 await run('dark');
+await runHeaderFooter('dark');
 await runEnglish();
 
 check('aucune boîte native (prompt, confirm, alert) ne s’est ouverte', nativeDialogs.length === 0, nativeDialogs);

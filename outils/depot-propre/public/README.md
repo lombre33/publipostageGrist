@@ -61,7 +61,7 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 - Images, y compris flottantes (habillage de texte, calque devant ou derrière, opacité, légende),
   collées, ajoutées par adresse ou prises dans une colonne Pièces jointes de Grist ; une image
   hébergée sur un autre site n'apparaît qu'après un clic sur « Afficher »
-- En-têtes et pieds de page (première page différente, numéro de page), notes de bas de page, sommaire
+- En-têtes et pieds de page (première page différente, numéro de page, QR code), notes de bas de page, sommaire
   généré, sauts de page, filigrane
 - Citation, bloc de code, encadré (Note, Attention, Important), bloc de signature, QR code, graphique de la
   page (un graphique réglé dans Grist, redessiné dans le document)
@@ -185,7 +185,7 @@ Passez en mode lecture pour voir le document rempli avec la ligne sélectionnée
   configurer une fois pour toutes la correspondance entre deux tables (la « clé de correspondance »),
   valable pour tous les modèles du document.
 - **En-tête et pied de page** : cliquez sur une marge en haut ou en bas de la page pour entrer dans
-  l'édition dédiée.
+  l'édition dédiée. Le QR code (adresse ou colonne) s'y pose comme dans le corps, à 36 px (60 px au plus : la bande de la page).
 - **Réglages** (bouton de la barre du haut) : langue (celle du navigateur au premier lancement), thème, touche déclenchant le panneau `#`,
   raccourcis clavier, marges du modèle, modèle par défaut de la vue, colonne de la date du dernier export PDF,
   droits par personne, crédits.
@@ -455,7 +455,7 @@ GitHub Pages, with no backend and no build step.
 - Images, including floating ones (text wrap, layered in front of/behind, opacity, caption), pasted,
   added by address or taken from a Grist Attachments column; an image hosted on another site only
   appears after a click on "Show"
-- Headers and footers (different first page, page number), footnotes, generated table of contents,
+- Headers and footers (different first page, page number, QR code), footnotes, generated table of contents,
   page breaks, watermark
 - Quote, code block, callout (Note, Warning, Important), signature block, QR code, chart from the page (a
   chart set up in Grist, redrawn in the document)
@@ -574,7 +574,7 @@ see the document filled with the selected row, then export it.
 - **Variables from another table**: the `#` panel has a dedicated button ("Linked tables") to set up the
   relationship between two tables once, for good (the "matching key"), valid for every template in the
   document.
-- **Header and footer**: click a margin at the top or bottom of the page to enter dedicated editing.
+- **Header and footer**: click a margin at the top or bottom of the page to enter dedicated editing. A QR code (an address or a column) goes in like in the body, at 36 px (60 px at most: the page band).
 - **Settings** (button in the top bar): language (the browser's at first launch), theme, the key that triggers the `#` panel, keyboard
   shortcuts, the template's margins, the view's default template, the column that keeps the date of the
   last PDF export, per-person rights, credits. The

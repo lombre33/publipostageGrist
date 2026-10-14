@@ -332,11 +332,12 @@ const MainToolbar = (function () {
       // de bloc de code qui effacerait une variable ou une image.
       [!LinkDialog.canLinkHere(editor), ['v2-btn-link', 'v2-row-link']],
       [!editor.isActive('codeBlock') && codeBlockWouldDropContent(), ['v2-btn-code-block']],
-      // Encadré et signature (une zone 2 colonnes) : sans objet dans un e-mail (texte brut) ni dans un en-tête ou un pied de page. QR code et graphique de
-      // la page : des images, donc pas dans un e-mail, ni dans un en-tête ou un pied de page tant que la Lecture n'y résout pas les colonnes
-      // (ReaderMode.resolveHeaderFooterZone). Dans une grille la ligne reste active : l'image se pose sur sa case, résolue par ReaderMode.preview
-      // comme à la Lecture.
-      [inEmailMode || inHfMode, ['v2-btn-callout', 'v2-btn-signature', 'v2-btn-qr', 'v2-btn-chart']],
+      // Encadré et signature (une zone 2 colonnes) : sans objet dans un e-mail (texte brut) ni dans un en-tête ou un pied de page. Graphique de la
+      // page : une image que la Lecture ne résout pas dans un en-tête ou un pied de page. QR code : une image, donc pas dans un e-mail ; dans un en-tête
+      // ou un pied de page, la Lecture et les exports en résolvent les colonnes (ReaderMode.resolveHeaderFooterZone, ReaderMode.preview). Dans une grille
+      // la ligne reste active : l'image se pose sur sa case, résolue par ReaderMode.preview comme à la Lecture.
+      [inEmailMode || inHfMode, ['v2-btn-callout', 'v2-btn-signature', 'v2-btn-chart']],
+      [inEmailMode, ['v2-btn-qr']],
     ];
     const lockedNow = new Set();
     groups.forEach(([locked, ids]) => ids.forEach(id => {

@@ -694,7 +694,7 @@
 
   cases.push({
     id: 'chart_row_is_greyed_in_header_email_and_macro_modes_never_removed_and_stays_active_in_a_grid',
-    description: 'En-tête/pied et e-mail : la ligne se grise (jamais retirée) comme « QR code… » ; macro-modèle : tout le menu de la chaîne se grise avec elle ; grille : elle reste active (l\'image se pose sur sa case) pendant que « Encadré… » se grise',
+    description: 'En-tête/pied et e-mail : la ligne se grise (jamais retirée) comme « Encadré… » (« QR code… » reste active en en-tête et en pied depuis la relance du 14/10, grisée en e-mail seulement) ; macro-modèle : tout le menu de la chaîne se grise avec elle ; grille : elle reste active (l\'image se pose sur sa case) pendant que « Encadré… » se grise',
     run: async (h) => {
       await setDoc(h, '<p>Texte</p>');
       MainToolbar.syncToolbarState();
@@ -704,7 +704,7 @@
       try {
         HeaderFooterPreview.getHfMode = () => 'header';
         MainToolbar.syncToolbarState();
-        inHf = isLocked('v2-btn-chart') && isLocked('v2-btn-qr') && isLocked('v2-btn-callout');
+        inHf = isLocked('v2-btn-chart') && isLocked('v2-btn-callout') && !isLocked('v2-btn-qr');
       } finally {
         HeaderFooterPreview.getHfMode = realGetHfMode;
         MainToolbar.syncToolbarState();

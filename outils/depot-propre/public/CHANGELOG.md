@@ -9,6 +9,14 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Un QR code dans l'en-tête et le pied de page** : la ligne « QR code… » du menu « Lien et blocs de contenu » reste active quand on
+  modifie un en-tête ou un pied de page (« Encadré… », « Bloc de signature » et « Graphique de la page… » y restent grisés). Le
+  QR code s'y pose à 36 px - la zone d'édition ne laisse que 44 px de haut à son contenu - ; la poignée de l'image
+  l'agrandit jusqu'à 60 px, la hauteur de la bande. Son texte peut contenir une colonne (« #Clients.Site ») : la bande de la
+  feuille montre alors un carré pointillé de la même taille, et la Lecture, le PDF, le Word et l'impression dessinent le
+  QR code de la ligne affichée (sans valeur, il disparaît). Une zone déjà pleine (deux lignes de texte, par exemple) le
+  refuse sans rien poser : la fenêtre reste ouverte et dit « Pas assez de place dans cette zone… ».
+
 - **« Markdown (modèle) » : un modèle qui revient intact, variables comprises** : le menu « Type d'export » a une ligne de plus,
   « Markdown (modèle) », à côté de « Markdown » (qui écrit toujours le document d'une ligne, variables remplacées par leurs
   valeurs). « Exporter » écrit le modèle lui-même, tel que l'éditeur le montre, en un seul fichier `.md` nommé d'après le
@@ -686,12 +694,17 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Le cadre d'un QR code à colonne reste carré à toute taille** : en dessous de 60 px de large, le texte de remplacement « QR code » de son image
+  masquée se coupait sur plusieurs lignes et rendait le cadre plus haut que large (38 x 42 px pour un QR code de 36 px, 32 x 82 px pour 30 px) ;
+  le cadre garde maintenant sa forme carrée dans le corps du document comme dans un en-tête ou un pied de page.
+
 - **Une liste de tâches a, dans le PDF, la case et le texte de l'éditeur** : la case du PDF était plus petite que celle de
   l'éditeur (3 mm de côté au lieu de 4) et le texte partait trop à gauche (4,6 mm après le bord de l'élément, 7,4 mm dans
   l'éditeur ; 5,6 mm avec le style « Classique »). La case prend maintenant la taille et la place de celle de l'éditeur dans
   les trois styles, cochée ou non, et le texte commence au même endroit, au premier niveau comme dans une case de tableau :
   ses lignes se coupent aux mêmes mots, à gauche, centrées, à droite ou justifiées. Un élément coupé par un saut de page
   n'élargit plus de 1 mm tout ce qui le suit (le paragraphe justifié d'après sortait de la marge de droite).
+
 - **Une citation centrée, à droite ou justifiée l'est aussi dans le PDF** : le bouton d'alignement de l'éditeur centre, aligne
   à droite ou justifie le texte d'une citation, mais le PDF l'écrivait toujours à gauche. Il suit maintenant l'éditeur, au
   premier niveau et dans une case de tableau : le texte s'aligne dans la boîte de la citation (italique, retrait et espaces
@@ -1031,6 +1044,14 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 ## [{{VERSION}}] - {{DATE}} (English)
 
 ### Added
+
+- **A QR code in the header and footer**: the "QR code…" row of the "Link and content blocks" menu stays active when you edit a
+  header or a footer ("Callout…", "Signature block" and "Chart from the page…" stay greyed there). The QR code goes in at
+  36 px - the editing area leaves only 44 px of height for its content - ; the image handle enlarges it up to 60 px, the
+  height of the band. Its text can contain a column ("#Clients.Site"): the sheet's band then shows a dashed square of the
+  same size, and the Reading view, the PDF, the Word file and printing draw the QR code of the row shown (with no value it
+  disappears). An area that is already full (two lines of text, for instance) refuses it without adding anything: the
+  window stays open and says "Not enough room in this area…".
 
 - **"Markdown (template)": a template that comes back intact, variables included**: the "Export type" menu has one more line,
   "Markdown (template)", next to "Markdown" (which still writes a row's document, variables replaced by their values).
@@ -1662,12 +1683,17 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Fixed
 
+- **The frame of a QR code with a column stays square at any size**: below 60 px wide, the "QR code" replacement text of its hidden image
+  wrapped onto several lines and made the frame taller than wide (38 x 42 px for a 36 px QR code, 32 x 82 px for 30 px); the frame
+  now keeps its square shape in the body of the document as well as in a header or a footer.
+
 - **A task list now has the editor's box and text in the PDF**: the PDF's box was smaller than the editor's (3 mm wide
   instead of 4) and the text started too far left (4.6 mm after the item's edge, 7.4 mm in the editor; 5.6 mm with the
   "Classic" style). The box now takes the size and place of the editor's in all three styles, ticked or not, and the text
   starts in the same place, at the first level and in a table cell: its lines break at the same words, whether left,
   centered, right-aligned or justified. An item cut by a page break no longer widens everything behind it by 1 mm (the
   justified paragraph after it stuck out of the right margin).
+
 - **A centered, right-aligned or justified quote is now aligned the same way in the PDF**: the editor's alignment button
   centers, right-aligns or justifies a quote's text, but the PDF always wrote it on the left. It now follows the editor, at
   the first level and in a table cell: the text is aligned inside the quote's box (italics, indent and the space above and

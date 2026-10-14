@@ -337,6 +337,8 @@ const ReaderMode = (function () {
       catch (e) { console.warn('[reader-mode] variable d\'en-tête ou de pied illisible, sa bulle reste telle quelle', e); }
     }));
     LoopRules.removeHiddenBlocks(wrapper);
+    // Un QR code dont le texte contient une colonne : dessiné pour la ligne affichée, comme dans le corps.
+    await resolveQrCodes(wrapper, tableId, record);
     // La note de bas de page n'est volontairement pas insérable en en-tête ni en pied (aucun repère de page dans une zone répétée sur chaque page) :
     // resolveSmartChips ne trouve donc jamais de .footnote-ref-marker ici.
     await resolveSmartChips(wrapper);
