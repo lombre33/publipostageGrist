@@ -22,8 +22,9 @@ const VersionsCompare = (function () {
   const LEAF = '\uFFFC';       // une pastille, une image ou un saut de ligne dans le texte à plat d'un bloc (et l'ouverture d'un nœud en ligne qui contient du texte)
   const CLOSE = '\uE001';      // la fermeture d'un nœud en ligne qui contient du texte
   const TOKEN_RE = /[\uFFFC\uE001]|[\p{L}\p{N}_]+|\s+|[^\s\p{L}\p{N}_\uFFFC\uE001]/gu;
-  const MARK_ADDED = 'pp_versions_added';
-  const MARK_REMOVED = 'pp_versions_removed';
+  // Les deux marques de la feuille de comparaison, qui n'est jamais enregistrée (`parseDOM` vide) : leur nom ne commence pas par « pp_ », le préfixe des clés que le widget garde dans le navigateur.
+  const MARK_ADDED = 'versionsAdded';
+  const MARK_REMOVED = 'versionsRemoved';
 
   // ---- La partie pure ---------------------------------------------------------------------------------------------------------------------------------------------------
 
