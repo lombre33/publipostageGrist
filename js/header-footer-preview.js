@@ -254,6 +254,20 @@ const HeaderFooterPreview = (function () {
     } catch (e) { return false; }
   }
 
+  // Les rangs des lignes vides qui précèdent un saut de page posé à la main (la suite de lignes vides juste devant lui, le premier bloc de la page exclu : celui
+  // du document ou celui qui suit un saut) : quand le texte arrive à la marge du bas elles n'y tiennent plus et ouvriraient une page que le saut referme
+  // aussitôt, une page blanche. La Lecture et les exports les retirent (ReaderMode.trimTrailingBlankBlocks) ; l'éditeur les garde (il faut pouvoir écrire sur
+  // ces lignes) : elles dépassent simplement la page.
+  function blanksBeforeBreaks(children) {
+    const ranks = new Set();
+    const isBreak = el => el.classList.contains('page-break-marker');
+    children.forEach((child, index) => {
+      if (!isBreak(child)) return;
+      for (let i = index - 1; i > 0 && isBlankParagraph(children[i]) && !isBreak(children[i - 1]); i--) ranks.add(i);
+    });
+    return ranks;
+  }
+
   // Les tranches de hauteur d'un tableau de premier niveau que TablePageCut sait couper entre deux lignes, `null` pour tout autre bloc.
   function cuttableTable(el, pageContentHeightPx, zoom, captionPx) {
     if (!el.classList.contains('tableWrapper')) return null;
@@ -265,7 +279,8 @@ const HeaderFooterPreview = (function () {
   // bloc qui ne tient pas passe entier à la page suivante, sauf pour ne pas afficher une coupure que l'export ni la Lecture n'ont :
   //  - un bloc que l'export coupe (isSplittableByExport) reste sur la page où sa plus grande partie tient, le repère tombe derrière lui : le déplacer
   //    en entier se tromperait de tout ce qui tenait dans la page au lieu de ce qui déborde ;
-  //  - les lignes vides de fin de document ne comptent pas (trailingBlankStart) : elles ouvriraient une page pour elles seules.
+  //  - les lignes vides de fin de document ne comptent pas (trailingBlankStart) : elles ouvriraient une page pour elles seules ; ni celles qui précèdent un
+  //    saut de page posé à la main (blanksBeforeBreaks), que la Lecture et les exports retirent aussi : le saut referme aussitôt la page qu'elles ouvriraient.
   // Un tableau de premier niveau se coupe entre deux lignes (js/table-page-cut.js), comme le PDF (dontBreakRows) et le Word (cantSplit) : la coupure
   // porte `rowIndex` (rang de la première ligne de la nouvelle page) et `afterEl` est l'enveloppe du tableau. Les lignes qu'une case fusionnée sur
   // plusieurs lignes lie ne se séparent pas : elles passent ensemble à la page suivante, comme une seule ligne. Un tableau qu'on ne sait pas couper
@@ -285,6 +300,7 @@ const HeaderFooterPreview = (function () {
     const children = Array.from(tiptapEl.children);
     const blankTailStart = trailingBlankStart(children);
     const tailEl = children[blankTailStart];
+    const blankBeforeBreak = blanksBeforeBreaks(children);
     let consumed = 0;
     let lastBlock = null;
     // Les légendes d'un bloc sont comptées avec lui : on saute leurs rangs.
@@ -365,7 +381,7 @@ const HeaderFooterPreview = (function () {
         lastBlock = child;
         return;
       }
-      if (index >= blankTailStart) return;
+      if (index >= blankTailStart || blankBeforeBreak.has(index)) return;
       keepRunTogether(index);
       const captions = Caption.captionsAfter(child, tailEl);
       const captionPx = totalHeight(captions);

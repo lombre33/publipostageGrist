@@ -586,6 +586,13 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Des lignes vides juste avant un saut de page ne font plus de page blanche** : quand le texte arrivait à la marge du bas d'une
+  page et qu'une ou plusieurs lignes vides (une Entrée de trop) précédaient un saut de page posé à la main, ces lignes ne tenaient
+  plus sur la page et ouvraient une page pour elles seules, que le saut refermait aussitôt : une page blanche au milieu du
+  document, dans l'éditeur (Aperçu A4), la Lecture, l'impression, le PDF et le Word. Ces lignes vides ne comptent plus : le texte qui
+  suit le saut commence en haut de la page suivante, comme sans elles. L'éditeur les garde (on peut y écrire, et une ligne
+  écrite dessus compte pour sa page), les autres lignes vides du texte gardent leur hauteur, et deux sauts de page de suite
+  laissent toujours leur page blanche, voulue.
 - **Un tableau plus large que sa colonne reste dans sa colonne, dans une zone à deux colonnes** : un tableau posé dans l'une des
   deux colonnes d'une zone n'était ramené qu'à la largeur de la page : il passait sur le texte de l'autre colonne, et celui de
   la colonne de droite sortait même de la page. Il est maintenant ramené à la largeur du texte de sa colonne, colonnes au
@@ -1415,6 +1422,13 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Fixed
 
+- **Blank lines just before a page break no longer make a blank page**: when the text reached the bottom margin of a page and
+  one or more blank lines (an extra Enter) came before a page break set by hand, those lines no longer fitted on the page and
+  opened a page of their own, which the break closed at once: a blank page in the middle of the document, in the editor
+  (A4 preview), Reading mode, print, PDF and Word. Those blank lines no longer count: the text after the break starts at the
+  top of the next page, as without them. The editor keeps them (you can write on them, and a line written on one counts for
+  its page), the other blank lines in the text keep their height, and two page breaks in a row still leave their blank page,
+  which is intended.
 - **A table wider than its column stays inside its column, in a two-column zone**: a table placed in one of the two columns
   of a zone was only brought back to the width of the page: it ran over the text of the other column, and in the right
   column it even left the page. It is now brought back to the width of its column's text, columns in proportion (none under

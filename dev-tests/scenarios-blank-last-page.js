@@ -28,11 +28,19 @@
 // rognée : la ligne vide que l'éditeur laisse derrière la dernière zone ou le dernier tableau d'un modèle, ou une Entrée de trop, restait au milieu du document, et quand la lettre arrive à la marge du
 // bas (le PDF compte les marges de blocs que la Lecture ignore, donc la Lecture tient plus de lignes) elle ouvre une page blanche entre deux modèles, avant le saut de page du suivant.
 // ReaderMode.trimTrailingBlankBlocks rogne maintenant la fin de chaque modèle comme celle du document (lignes vides, lignes de calque de la page 1, lignes vides au bas des colonnes d'une dernière zone).
+//
+// DES LIGNES VIDES AVANT UN SAUT DE PAGE POSÉ À LA MAIN (écart n° 4 de la batterie macroPages, 09/10 ; polish d'Antoine du 12/10 puis « pages blanches vides à l'export » du 13/10) : même cause qu'en fin de
+// document, au milieu - le texte arrive à la marge du bas, une Entrée ou deux de trop, puis le saut de page : les lignes vides n'y tiennent plus, ouvrent une page, et le saut la referme aussitôt. Une page
+// blanche dans l'éditeur, la Lecture, le PDF et le Word. ReaderMode.trimTrailingBlankBlocks retire maintenant la suite de lignes vides juste devant un saut (le premier bloc reste, et un saut n'est jamais retiré :
+// deux sauts de suite laissent leur page blanche, voulue - carte du 09/10) ; l'éditeur ne les compte pas non plus dans le repère « Page N » (HeaderFooterPreview.blanksBeforeBreaks) et les garde pour y écrire.
+// Le Markdown, qui ne met rien en pages, garde ses lignes vides.
 window.EditorTestSuites = window.EditorTestSuites || {};
 window.EditorTestSuites.blankLastPage = (function () {
   const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
   const TABLE_HTML = '<table><tbody><tr><td><p>un</p></td><td><p>deux</p></td><td><p>trois</p></td></tr></tbody></table>';
   // En-tête et pied de page : ils réduisent la zone de texte de chaque page, donc la capacité change - c'est pourquoi elle est mesurée, jamais écrite en dur.
+  // Un saut de page posé à la main, tel que l'éditeur l'écrit dans le modèle.
+  const MANUAL_BREAK = '<div class="page-break-marker" contenteditable="false">Saut de page</div>';
   const HEADER_FOOTER = { enabled: true, differentFirstPage: false, header: { default: '<p>EN-TETE</p>', first: '' }, footer: { default: '<p>PIED DE PAGE</p>', first: '' } };
 
   function lines(n) { return Array.from({ length: n }, (_, i) => '<p>Ligne ' + i + ' du document de test de pagination.</p>').join(''); }
@@ -895,6 +903,167 @@ window.EditorTestSuites.blankLastPage = (function () {
         const middleTexts = bodyOf(middle).map(textOf);
         if (middleTexts.join('|') !== 'A||B|Le modèle suivant.') problems.push('ligne vide du milieu : [' + middleTexts.join('|') + '] (A||B|Le modèle suivant. attendu)');
         return { pass: problems.length === 0, notes: JSON.stringify({ texts, middleTexts, problems }) };
+      },
+    },
+    {
+      id: 'blank_page_blank_lines_before_a_manual_break_open_no_page_in_the_editor_the_reader_and_the_pdf',
+      description: 'Éditeur, Lecture et PDF, avec et sans en-tête et pied : le texte arrive à la marge du bas, une ou plusieurs lignes vides puis un saut de page posé à la main ne laissent pas de page blanche (autant de pages que sans les lignes vides) ; deux sauts de suite gardent leur page blanche',
+      async run(h) {
+        await setup(h);
+        const problems = [];
+        const summary = {};
+        for (const [label, hf] of [['sans en-tête', null], ['avec en-tête et pied', HEADER_FOOTER]]) {
+          const seen = {};
+          for (const [engine, measure] of Object.entries(enginesOf(h, hf))) {
+            const n = await fullPage(measure);
+            const reference = await measure(lines(n) + MANUAL_BREAK + '<p>Suite</p>');
+            const rows = [];
+            if (reference !== 2) problems.push(label + ', ' + engine + ' : la référence (texte pleine page, saut, suite) donne ' + reference + ' pages (2 attendues)');
+            const variants = [
+              ['une ligne vide', lines(n) + blankLines(1) + MANUAL_BREAK + '<p>Suite</p>'],
+              ['trois lignes vides', lines(n) + blankLines(3) + MANUAL_BREAK + '<p>Suite</p>'],
+              ['une ligne de moins et trois lignes vides (la première tient, les autres non)', lines(n - 1) + blankLines(3) + MANUAL_BREAK + '<p>Suite</p>'],
+              ['espace insécable et saut de ligne seul', lines(n) + '<p>&nbsp;</p><p><br></p>' + MANUAL_BREAK + '<p>Suite</p>'],
+            ];
+            for (const [name, html] of variants) {
+              const pages = await measure(html);
+              rows.push(name + ' : ' + pages + '/' + reference);
+              if (pages !== reference) problems.push(label + ', ' + engine + ', ' + name + ' : ' + pages + ' pages, ' + reference + ' sans les lignes vides');
+              if (engine === 'pdf') {
+                const blank = (await pdfPages(h, html, hf)).blank;
+                if (blank) problems.push(label + ', PDF, ' + name + ' : ' + blank + ' page(s) blanche(s)');
+              }
+            }
+            // Deux sauts de suite, même avec une ligne vide entre eux : la page blanche est voulue (carte du 09/10), elle reste.
+            const doubles = [
+              ['deux sauts de suite', lines(n) + MANUAL_BREAK + MANUAL_BREAK + '<p>Suite</p>'],
+              ['deux sauts et deux lignes vides entre eux', lines(n) + MANUAL_BREAK + blankLines(2) + MANUAL_BREAK + '<p>Suite</p>'],
+            ];
+            for (const [name, html] of doubles) {
+              const pages = await measure(html);
+              rows.push(name + ' : ' + pages + ' (3 attendues)');
+              if (pages !== 3) problems.push(label + ', ' + engine + ', ' + name + ' : ' + pages + ' pages (3 attendues : la page blanche entre deux sauts est voulue)');
+            }
+            seen[engine] = { lignesParPage: n, 'pages/référence': rows };
+          }
+          summary[label] = seen;
+        }
+        return { pass: problems.length === 0, notes: JSON.stringify({ summary, problems }) };
+      },
+    },
+    {
+      id: 'blank_page_the_text_after_the_break_starts_at_the_top_of_its_page_pdf',
+      description: 'PDF : avec des lignes vides ras la marge avant le saut, le texte qui suit le saut commence en haut de la page suivante, à la même place que sans ces lignes vides ; des lignes vides au milieu d\'une page, loin d\'un saut, gardent leur hauteur',
+      async run(h) {
+        await setup(h);
+        const problems = [];
+        const yOf = (result, page, str) => { const item = result.gt.pages[page] && result.gt.pages[page].textItems.find(t => t.str.indexOf(str) !== -1); return item ? item.y : null; };
+        const pageOf = (result, str) => result.gt.pages.findIndex(page => page.textItems.some(t => t.str.indexOf(str) !== -1));
+        const n = await fullPage(async html => (await pdfPages(h, html)).count);
+        const reference = await pdfPages(h, lines(n) + MANUAL_BREAK + '<p>SUITE</p>');
+        const withBlanks = await pdfPages(h, lines(n) + blankLines(3) + MANUAL_BREAK + '<p>SUITE</p>');
+        if (pageOf(reference, 'SUITE') !== 1 || pageOf(withBlanks, 'SUITE') !== 1) problems.push('SUITE est sur la page ' + (pageOf(withBlanks, 'SUITE') + 1) + ' avec trois lignes vides, sur la page ' + (pageOf(reference, 'SUITE') + 1) + ' sans (la page 2 attendue des deux côtés)');
+        else if (Math.abs(yOf(withBlanks, 1, 'SUITE') - yOf(reference, 1, 'SUITE')) > 0.5) problems.push('SUITE à ' + yOf(withBlanks, 1, 'SUITE') + ' pt avec trois lignes vides, ' + yOf(reference, 1, 'SUITE') + ' pt sans');
+        // Au milieu d'une page rien ne bouge non plus : les lignes vides d'avant le saut ne s'impriment pas, et le texte d'après est en haut de sa page.
+        const shortReference = await pdfPages(h, lines(5) + MANUAL_BREAK + '<p>SUITE</p>');
+        const shortWithBlanks = await pdfPages(h, lines(5) + blankLines(4) + MANUAL_BREAK + '<p>SUITE</p>');
+        if (shortWithBlanks.count !== shortReference.count || Math.abs(yOf(shortWithBlanks, 1, 'SUITE') - yOf(shortReference, 1, 'SUITE')) > 0.5) problems.push('milieu de page : ' + shortWithBlanks.count + ' pages, SUITE à ' + yOf(shortWithBlanks, 1, 'SUITE') + ' pt (' + shortReference.count + ' pages, ' + yOf(shortReference, 1, 'SUITE') + ' pt sans les lignes vides)');
+        // Des lignes vides qui ne sont pas devant un saut gardent leur hauteur : ici deux lignes vides entre deux paragraphes, loin du saut.
+        const kept = await pdfPages(h, '<p>AVANT</p><p></p><p></p><p>APRES</p>' + MANUAL_BREAK + '<p>SUITE</p>');
+        const tight = await pdfPages(h, '<p>AVANT</p><p>APRES</p>' + MANUAL_BREAK + '<p>SUITE</p>');
+        const gapKept = yOf(kept, 0, 'APRES') - yOf(kept, 0, 'AVANT');
+        const gapTight = yOf(tight, 0, 'APRES') - yOf(tight, 0, 'AVANT');
+        if (!(gapKept - gapTight > 20)) problems.push('les deux lignes vides du milieu n\'ajoutent plus leur hauteur entre AVANT et APRES (' + gapKept + ' pt contre ' + gapTight + ' pt sans elles)');
+        return { pass: problems.length === 0, notes: JSON.stringify({ lignesParPage: n, suite: { reference: yOf(reference, 1, 'SUITE'), troisLignesVides: yOf(withBlanks, 1, 'SUITE') }, ecartDuMilieu: { avec: gapKept, sans: gapTight }, problems }) };
+      },
+    },
+    {
+      id: 'blank_page_trim_blank_lines_before_a_manual_break',
+      description: 'ReaderMode.trimTrailingBlankBlocks : retire la suite de lignes vides juste devant un saut de page posé à la main (paragraphes vides, espace, insécable, saut de ligne seul, zone vide), garde le premier bloc de la page, ne retire jamais un saut, ne touche ni les lignes vides du milieu ni images, titres, tableaux, listes',
+      async run() {
+        const problems = [];
+        const normalize = html => { const root = document.createElement('div'); root.innerHTML = html; return root.innerHTML; };
+        const trim = html => { const root = document.createElement('div'); root.innerHTML = html; ReaderMode.trimTrailingBlankBlocks(root); return root.innerHTML; };
+        const IMAGE_LINE = '<p><img class="editor-image" src="' + TINY_PNG + '" alt="" data-layer="normal" data-wrap="inline"></p>';
+        const emptyZone = zone('<p></p>', '<p></p>');
+        const B = MANUAL_BREAK;
+        const cases = [
+          ['une ligne vide devant le saut', '<p>A</p><p></p>' + B + '<p>B</p>', '<p>A</p>' + B + '<p>B</p>'],
+          ['trois lignes vides', '<p>A</p><p></p><p></p><p></p>' + B + '<p>B</p>', '<p>A</p>' + B + '<p>B</p>'],
+          ['espace, insécable, saut de ligne seul et espace de largeur nulle', '<p>A</p><p> </p><p>&nbsp;</p><p><br></p><p>​</p>' + B + '<p>B</p>', '<p>A</p>' + B + '<p>B</p>'],
+          ['une zone vide et une ligne vide devant le saut', '<p>A</p>' + emptyZone + '<p></p>' + B + '<p>B</p>', '<p>A</p>' + B + '<p>B</p>'],
+          ['une ligne vide du milieu, loin du saut, reste', '<p>A</p><p></p><p>B</p><p></p>' + B + '<p>C</p>', '<p>A</p><p></p><p>B</p>' + B + '<p>C</p>'],
+          ['une ligne vide derrière le saut reste', '<p>A</p>' + B + '<p></p><p>B</p>', '<p>A</p>' + B + '<p></p><p>B</p>'],
+          ['chaque saut dégage ses propres lignes vides', '<p>A</p><p></p>' + B + '<p>B</p><p></p><p></p>' + B + '<p>C</p>', '<p>A</p>' + B + '<p>B</p>' + B + '<p>C</p>'],
+          ['le premier bloc du document reste', '<p></p>' + B + '<p>B</p>', '<p></p>' + B + '<p>B</p>'],
+          ['le premier bloc reste, les autres lignes vides partent', '<p></p><p></p><p></p>' + B + '<p>B</p>', '<p></p>' + B + '<p>B</p>'],
+          ['deux sauts de suite : aucun ne part', '<p>A</p>' + B + B + '<p>B</p>', '<p>A</p>' + B + B + '<p>B</p>'],
+          ['deux sauts séparés par une ligne vide : la page garde sa ligne', '<p>A</p>' + B + '<p></p>' + B + '<p>B</p>', '<p>A</p>' + B + '<p></p>' + B + '<p>B</p>'],
+          ['deux sauts séparés par des lignes vides : la première reste, les autres partent', '<p>A</p>' + B + '<p></p><p></p><p></p>' + B + '<p>B</p>', '<p>A</p>' + B + '<p></p>' + B + '<p>B</p>'],
+          ['une image devant le saut reste', '<p>A</p>' + IMAGE_LINE + B + '<p>B</p>', '<p>A</p>' + IMAGE_LINE + B + '<p>B</p>'],
+          ['un titre vide devant le saut reste', '<p>A</p><h2></h2>' + B + '<p>B</p>', '<p>A</p><h2></h2>' + B + '<p>B</p>'],
+          ['un tableau, ses lignes vides, puis le saut', '<p>A</p>' + TABLE_HTML + '<p></p><p></p>' + B + '<p>B</p>', '<p>A</p>' + TABLE_HTML + B + '<p>B</p>'],
+          ['une liste devant le saut reste', '<p>A</p><ul><li><p></p></li></ul>' + B + '<p>B</p>', '<p>A</p><ul><li><p></p></li></ul>' + B + '<p>B</p>'],
+          ['le saut final part avec sa queue vide (la fin du document garde sa règle)', '<p>A</p><p></p>' + B + '<p></p>', '<p>A</p>'],
+          ['un modèle vide d\'un macro-modèle garde sa ligne', '<p>A</p>' + MacroTemplates.slotBreakHtml(1) + '<p></p><p></p>' + MacroTemplates.slotBreakHtml(2) + '<p>C</p>', '<p>A</p>' + MacroTemplates.slotBreakHtml(1) + '<p></p>' + MacroTemplates.slotBreakHtml(2) + '<p>C</p>'],
+          ['sans saut, rien ne change', '<p>A</p><p></p><p></p><p>B</p>', '<p>A</p><p></p><p></p><p>B</p>'],
+        ];
+        for (const [name, html, expected] of cases) {
+          const got = trim(html);
+          if (got !== normalize(expected)) problems.push(name + ' : ' + got + ' (attendu ' + normalize(expected) + ')');
+          else if (trim(got) !== got) problems.push(name + ' : un second rognage change encore le document');
+        }
+        const breaks = html => (html.match(/page-break-marker/g) || []).length;
+        const many = '<p>A</p><p></p>' + B + '<p></p><p></p>' + B + '<p></p>' + B + '<p>B</p>';
+        if (breaks(trim(many)) !== 3) problems.push('un saut de page a disparu : ' + trim(many));
+        return { pass: problems.length === 0, notes: JSON.stringify({ cas: cases.length, problems }) };
+      },
+    },
+    {
+      id: 'blank_page_word_has_no_empty_paragraph_before_a_manual_break_which_keeps_its_page_break',
+      description: 'Word : les lignes vides juste devant un saut de page posé à la main ne sont plus écrites (elles ouvriraient une page de plus quand le texte arrive à la marge du bas), le paragraphe qui suit le saut garde son saut de page ; celles du milieu restent',
+      async run(h) {
+        await setup(h);
+        const problems = [];
+        const margins = PageLayout.getMarginsTwip();
+        const bodyOf = parts => Array.from(parts.doc.getElementsByTagName('w:body')[0].children).filter(n => n.nodeName !== 'w:sectPr');
+        const textOf = el => Array.from(el.getElementsByTagName('w:t')).map(t => t.textContent).join('');
+        const parts = await h.exportDocxParts('<p>A</p><p></p><p></p>' + MANUAL_BREAK + '<p>B</p>', null, margins);
+        const body = bodyOf(parts);
+        const texts = body.map(textOf);
+        if (texts.join('|') !== 'A|B') problems.push('paragraphes : [' + texts.join('|') + '] (A|B attendu : plus de paragraphe vide devant le saut)');
+        const next = body[body.length - 1];
+        if (!next || !next.getElementsByTagName('w:pageBreakBefore').length) problems.push('B n\'a plus son saut de page');
+        const middle = await h.exportDocxParts('<p>A</p><p></p><p>B</p><p></p>' + MANUAL_BREAK + '<p>C</p>', null, margins);
+        const middleTexts = bodyOf(middle).map(textOf);
+        if (middleTexts.join('|') !== 'A||B|C') problems.push('ligne vide du milieu : [' + middleTexts.join('|') + '] (A||B|C attendu)');
+        // Deux sauts de suite : la page blanche est voulue, elle reste (un paragraphe vide qui porte le premier saut, ou un second saut).
+        const doubled = await h.exportDocxParts('<p>A</p>' + MANUAL_BREAK + MANUAL_BREAK + '<p>B</p>', null, margins);
+        const pageBreaks = bodyOf(doubled).filter(el => el.getElementsByTagName('w:pageBreakBefore').length || /w:br[^>]*w:type="page"/.test(new XMLSerializer().serializeToString(el))).length;
+        if (pageBreaks < 2) problems.push('deux sauts de suite : ' + pageBreaks + ' saut(s) de page écrit(s) (2 au moins attendus : la page blanche est voulue)');
+        return { pass: problems.length === 0, notes: JSON.stringify({ texts, middleTexts, pageBreaks, problems }) };
+      },
+    },
+    {
+      id: 'blank_page_editor_keeps_the_blank_lines_before_a_break_but_does_not_count_them',
+      description: 'Éditeur : les lignes vides juste devant un saut de page posé à la main restent dans le document (on peut y écrire) mais n\'ouvrent pas de « Page N » à elles seules ; une ligne écrite dessus compte, et le texte derrière le saut est sur la page suivante',
+      async run(h) {
+        await setup(h);
+        const problems = [];
+        const n = await fullPage(html => editorPages(h, html, null));
+        const overlayLines = () => document.querySelectorAll('#editor-container .v2-pagination-overlay .v2-page-break-line, #editor-container .v2-pagination-overlay .v2-page-seam');
+        const pages = await editorPages(h, lines(n) + blankLines(3) + MANUAL_BREAK + '<p>SUITE</p>', null);
+        const kept = (Editor.getHTML().match(/<p><\/p>/g) || []).length;
+        if (pages !== 2) problems.push('éditeur : ' + pages + ' pages (2 attendues : la page pleine, un saut, la suivante)');
+        if (kept < 3) problems.push('le document ne garde plus que ' + kept + ' ligne(s) vide(s) (3 attendues : l\'éditeur les garde pour y écrire)');
+        const seams = Array.from(overlayLines());
+        const suite = Array.from(document.querySelectorAll('#editor-container .ProseMirror > p')).find(p => p.textContent.trim() === 'SUITE');
+        if (seams.length !== 1 || !suite) problems.push('repères : ' + seams.length + ' (1 attendu), « SUITE » ' + (suite ? 'trouvé' : 'absent'));
+        else if (suite.getBoundingClientRect().top < seams[0].getBoundingClientRect().top) problems.push('« SUITE » (' + Math.round(suite.getBoundingClientRect().top) + ') est au-dessus du repère de la page 2 (' + Math.round(seams[0].getBoundingClientRect().top) + ')');
+        // Une ligne écrite derrière la page pleine, avant le saut : elle compte, la page qu'elle ouvre apparaît (puis celle du saut).
+        const written = await editorPages(h, lines(n) + '<p>Écrit sur la ligne vide</p>' + blankLines(2) + MANUAL_BREAK + '<p>SUITE</p>', null);
+        if (written !== 3) problems.push('une ligne de texte derrière la page pleine : ' + written + ' pages (3 attendues : la page pleine, la ligne écrite, puis la page du saut)');
+        return { pass: problems.length === 0, notes: JSON.stringify({ lignesParPage: n, pages, lignesVidesGardees: kept, written, problems }) };
       },
     },
   ];

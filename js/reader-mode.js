@@ -277,9 +277,29 @@ const ReaderMode = (function () {
       start = index + 1;
     });
   }
+  // Des lignes vides juste avant un saut de page posé à la main (le saut d'un modèle de macro-modèle a déjà dégagé les siennes, trimSlotTails) : elles ne
+  // s'impriment pas, mais quand le texte arrive à la marge du bas elles n'y tiennent plus et ouvrent une page que le saut referme aussitôt, une page blanche
+  // au milieu du document comme en fin de document. Le saut sépare de toute façon ce qui précède de ce qui suit : ces lignes ne sont que de la place sous le
+  // texte, elles sont retirées aussi (celles du milieu d'une page, sans saut derrière, gardent leur hauteur). Seules les lignes vides partent, jamais un saut :
+  // deux sauts de suite laissent leur page blanche, voulue. Le premier bloc de chaque page reste toujours (celui du document, ou celui qui suit un saut) : une
+  // page qui n'a que des lignes vides, un modèle vide d'un macro-modèle, garde sa ligne.
+  function isPageBreak(node) {
+    return node.nodeType === Node.ELEMENT_NODE && node.classList.contains('page-break-marker');
+  }
+  function isBlankBlock(node) {
+    return node.nodeType === Node.ELEMENT_NODE && !isPageBreak(node) && hasNothingToShow(node);
+  }
+  function trimBlanksBeforeBreaks(root) {
+    const blocks = Array.from(root.childNodes).filter(node => !isDocumentFurniture(node));
+    blocks.forEach((block, index) => {
+      if (!isPageBreak(block)) return;
+      for (let i = index - 1; i > 0 && isBlankBlock(blocks[i]) && !isPageBreak(blocks[i - 1]); i--) root.removeChild(blocks[i]);
+    });
+  }
   function trimTrailingBlankBlocks(root) {
     trimSlotTails(root, Array.from(root.childNodes).filter(node => !isDocumentFurniture(node)));
     trimTail(root, Array.from(root.childNodes).filter(node => !isDocumentFurniture(node)));
+    trimBlanksBeforeBreaks(root);
   }
   function applyAcceptedView(wrapper, source, options) {
     // Les suggestions du suivi des modifications encore en attente (js/track-changes.js) : le document s'écrit comme si elles étaient toutes

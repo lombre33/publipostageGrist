@@ -3,6 +3,8 @@
 // et la liste des modèles, et le vrai clavier pour taper (Entrée, texte, Retour arrière). La référence est le dessin de l'éditeur lui-même : les bandes « Page N » de l'Aperçu A4.
 // Correction (01/10, carte « Faire ignorer les lignes vides de fin au repère « Page 2 » de l'éditeur ? » d'Antoine : Oui) : le texte arrivait à la marge du bas, deux Entrées de
 // trop suffisaient à faire apparaître « Page 2 » alors que la Lecture et les exports ne font pas de page de ces lignes vides (js/header-footer-preview.js:trailingBlankStart).
+// Même règle AVANT un saut de page posé à la main (14/10, écart n° 4 de la batterie macroPages) : des Entrées tapées sous un texte ras la marge, puis le bouton « Saut de page »
+// de la barre, ne font apparaître qu'un repère (js/header-footer-preview.js:blanksBeforeBreaks) ; sans cela, les lignes vides ouvraient une « Page 2 » que le saut refermait aussitôt.
 // Lancé par run-headless.mjs (groupe Node "editorBlankTailMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-editor-blank-tail-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -259,6 +261,44 @@ const afterBreakEnters = await blocks();
 check('plus d\'une page de lignes vides tapées derrière le saut de page', afterBreakEnters.blank >= capacity + 20, afterBreakEnters);
 check('elles n\'ouvrent pas de « Page 3 »', (await seams()) === 1, await seams());
 await shot('4-lignes-vides-derriere-le-saut');
+
+// --- Des Entrées de trop SOUS un texte ras la marge, puis le saut de page posé au bouton de la barre : le saut referme la page, les lignes vides ne font pas de page de plus.
+// Le texte ras la marge est posé dans l'éditeur (le premier modèle, modifié puis enregistré tout seul au repos, n'est plus ras la marge) ; les Entrées, le bouton de la barre et
+// la frappe qui suivent sont ceux de la vraie souris et du vrai clavier.
+await page.evaluate(html => Editor.setHTML(html), lines(capacity));
+await settle();
+check('le texte qui arrive à la marge du bas tient sur une seule page, aucun repère avant les Entrées', (await seams()) === 0, await seams());
+await clickAtEndOfDocument();
+for (let i = 0; i < 3; i++) { await page.keyboard.press('Enter'); await sleep(60); }
+await settle();
+check('trois Entrées au clavier ne font toujours pas de « Page 2 »', (await seams()) === 0, await seams());
+await page.evaluate(() => document.getElementById('v2-btn-page-break').scrollIntoView({ block: 'nearest', inline: 'center' }));
+const breakAfterEnters = await realMove('#v2-btn-page-break');
+await page.mouse.click(breakAfterEnters.x, breakAfterEnters.y);
+await settle();
+check('le saut de page est posé derrière les lignes vides', await page.evaluate(() => !!document.querySelector('#editor-container .ProseMirror .page-break-marker')));
+check('un seul repère « Page 2 » : les lignes vides d\'avant le saut n\'ouvrent pas de page', (await seams()) === 1, await seams());
+// Le saut posé reste sélectionné (une frappe le remplacerait) : la flèche droite emmène le curseur sur la ligne de derrière, comme le fait une personne avant de taper.
+await page.keyboard.press('ArrowRight');
+await page.keyboard.type('Suite');
+await settle();
+check('le saut de page est toujours là une fois « Suite » tapée derrière lui', (await page.evaluate(() => document.querySelectorAll('#editor-container .ProseMirror .page-break-marker').length)) === 1);
+check('du texte tapé derrière le saut ne fait pas de « Page 3 »', (await seams()) === 1, await seams());
+const suiteBelowSeam = await page.evaluate(sel => {
+  const seam = document.querySelector(sel);
+  const suite = Array.from(document.querySelectorAll('#editor-container .ProseMirror > p')).find(p => p.textContent.trim() === 'Suite');
+  return !!seam && !!suite && suite.getBoundingClientRect().top >= seam.getBoundingClientRect().top - 1;
+}, SEAMS);
+check('« Suite » est sous le repère, sur la page 2', suiteBelowSeam);
+// Le bouton de la barre pose le saut à la place de la ligne vide où se trouve le curseur : des trois Entrées, deux lignes vides restent devant lui.
+const blanksBeforeMarker = await page.evaluate(() => {
+  const marker = document.querySelector('#editor-container .ProseMirror .page-break-marker');
+  let count = 0;
+  for (let el = marker && marker.previousElementSibling; el && el.tagName === 'P' && !el.textContent.trim(); el = el.previousElementSibling) count++;
+  return count;
+});
+check('les lignes vides tapées devant le saut restent dans le document (on peut y écrire)', blanksBeforeMarker >= 2, blanksBeforeMarker);
+await shot('5-entrees-puis-saut-de-page');
 
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 
