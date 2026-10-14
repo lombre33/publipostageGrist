@@ -686,6 +686,12 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Une liste de tâches a, dans le PDF, la case et le texte de l'éditeur** : la case du PDF était plus petite que celle de
+  l'éditeur (3 mm de côté au lieu de 4) et le texte partait trop à gauche (4,6 mm après le bord de l'élément, 7,4 mm dans
+  l'éditeur ; 5,6 mm avec le style « Classique »). La case prend maintenant la taille et la place de celle de l'éditeur dans
+  les trois styles, cochée ou non, et le texte commence au même endroit, au premier niveau comme dans une case de tableau :
+  ses lignes se coupent aux mêmes mots, à gauche, centrées, à droite ou justifiées. Un élément coupé par un saut de page
+  n'élargit plus de 1 mm tout ce qui le suit (le paragraphe justifié d'après sortait de la marge de droite).
 - **Une citation centrée, à droite ou justifiée l'est aussi dans le PDF** : le bouton d'alignement de l'éditeur centre, aligne
   à droite ou justifie le texte d'une citation, mais le PDF l'écrivait toujours à gauche. Il suit maintenant l'éditeur, au
   premier niveau et dans une case de tableau : le texte s'aligne dans la boîte de la citation (italique, retrait et espaces
@@ -704,14 +710,14 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   du point, ses lignes se coupent aux mêmes mots, et la puce ou le numéro reste au bord gauche de la boîte, comme dans l'éditeur
   (elle ne suit pas le texte centré). Un point coupé par un saut de page garde ses lignes et ne décale rien derrière lui.
   La dernière ligne d'un texte centré ou à droite finit une espace (moins d'1 mm) avant celle de l'éditeur, comme dans un
-  paragraphe ordinaire ; la case d'une liste de tâches reste plus étroite dans le PDF que dans l'éditeur (3 mm), comme avant.
+  paragraphe ordinaire.
 - **Le texte d'une liste commence au même endroit dans le PDF que dans l'éditeur** : dans le PDF, la puce ou le numéro était
   écrit en tête du texte, au bord de l'élément : la première ligne d'un point de liste partait 2 mm (une puce) à 4 mm (« 1. »)
   plus à droite que dans l'éditeur et avait d'autant moins de place, et les lignes suivantes revenaient sous la puce. La puce
   ou le numéro pend maintenant à gauche du texte, comme dans l'éditeur, la Lecture et le Word : toutes les lignes d'un point
   commencent au même bord, au premier niveau, dans une sous-liste et dans une case de tableau, et la première ligne a autant
   de place que les suivantes. Un numéro plus large que le retrait de la liste (« 100. ») sort à gauche du retrait, comme dans
-  l'éditeur. Les listes de tâches n'ont pas changé.
+  l'éditeur. Les listes de tâches ont leur propre entrée, plus haut.
 - **Un saut de page qui termine le document n'ouvre plus de « Page 2 » vide dans l'éditeur** : un saut de page posé à la main à la
   fin du document (rien derrière lui que des lignes vides, ou d'autres sauts) gardait dans l'éditeur son repère « Page 2 » et
   comptait dans le « n/total » du pied de page, alors que la Lecture, le PDF et le Word le retirent avec sa queue : on voyait
@@ -1656,6 +1662,12 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Fixed
 
+- **A task list now has the editor's box and text in the PDF**: the PDF's box was smaller than the editor's (3 mm wide
+  instead of 4) and the text started too far left (4.6 mm after the item's edge, 7.4 mm in the editor; 5.6 mm with the
+  "Classic" style). The box now takes the size and place of the editor's in all three styles, ticked or not, and the text
+  starts in the same place, at the first level and in a table cell: its lines break at the same words, whether left,
+  centered, right-aligned or justified. An item cut by a page break no longer widens everything behind it by 1 mm (the
+  justified paragraph after it stuck out of the right margin).
 - **A centered, right-aligned or justified quote is now aligned the same way in the PDF**: the editor's alignment button
   centers, right-aligns or justifies a quote's text, but the PDF always wrote it on the left. It now follows the editor, at
   the first level and in a table cell: the text is aligned inside the quote's box (italics, indent and the space above and
@@ -1673,14 +1685,13 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   the first level, in a sub-list, in a table cell and in a task list: the text is aligned inside the item's box, its lines
   break at the same words, and the bullet or number stays at the box's left edge, as in the editor (it does not follow the
   centered text). An item cut by a page break keeps its lines and shifts nothing behind it. The last line of a centered or
-  right-aligned text ends one space (under 1 mm) before the editor's, as in an ordinary paragraph; a task list's box stays
-  narrower in the PDF than in the editor (3 mm), as before.
+  right-aligned text ends one space (under 1 mm) before the editor's, as in an ordinary paragraph.
 - **A list's text starts in the same place in the PDF as in the editor**: in the PDF, the bullet or number was written at the
   head of the text, at the item's edge: the first line of a list item started 2 mm (a bullet) to 4 mm ("1.") further right
   than in the editor and had that much less room, and the following lines went back under the bullet. The bullet or number
   now hangs to the left of the text, as in the editor, Reading mode and Word: every line of an item starts at the same
   edge, at the first level, in a sub-list and in a table cell, and the first line has as much room as the others. A number
-  wider than the list's indent ("100.") sticks out to the left of the indent, as in the editor. Task lists did not change.
+  wider than the list's indent ("100.") sticks out to the left of the indent, as in the editor. Task lists have their own entry, above.
 - **A page break that ends the document no longer opens an empty "Page 2" in the editor**: a page break set by hand at the
   end of the document (nothing behind it but blank lines, or other breaks) kept its "Page 2" marker in the editor and counted
   in the footer's "n/total", whereas Reading mode, PDF and Word remove it with its tail: you saw two pages where the export

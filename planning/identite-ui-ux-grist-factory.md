@@ -1246,6 +1246,10 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   niveau et dans une case de tableau : le texte s'aligne dans la boîte de la citation (italique, retrait et 4 pt de dessus et de dessous inchangés) et ses lignes se coupent aux mêmes mots.
   Une citation de plusieurs paragraphes prend l'alignement du premier ; la dernière ligne d'un texte centré ou à droite finit une espace (moins d'1 mm) avant celle de l'éditeur, comme tout
   paragraphe du PDF. Gardé par `pdfEditorGap` (deux cas : le premier niveau, les cases de tableau).
+- Liste de tâches dans le PDF (carte d'Antoine du 14/10, « Dans le PDF, aligner le texte des listes de tâches sur celui de l'éditeur ? » : « Aligner ») : la case du PDF a la taille et la place de celle de
+  l'éditeur (15 px, soit 11,25 pt ; case native de Chromium à 4 px du bord de l'élément et texte à 28 px, ou case dessinée à la main du style « classic » au bord et texte à 21 px) et le texte commence
+  au même endroit, au premier niveau comme dans une case de tableau ; ses lignes se coupent aux mêmes mots, à gauche, centrées, à droite ou justifiées. Un élément coupé par un saut de page n'élargit
+  rien derrière lui. Gardé par `pdfEditorGap` (trois cas : la case et le texte, les cases de tableau, l'élément coupé par une page).
 - Onglet « Raccourcis » et abréviations « § » (demande d'Antoine du 01/10, « un caractère qui flag et qui étend une valeur saisie » ; sa réponse à la carte : « Tout, par personne ») : un
   septième onglet des Réglages, « Raccourcis », après « Déclencheur ». Les sept onglets (huit depuis « Vue », voir plus bas) tiennent sur une seule ligne dans les 480 px de la fenêtre (`.settings-tabs` sans interstice,
   onglets à 7 px et 2 px de marge intérieure), jamais sur deux ; aucun `display` n'est posé sur `.settings-panel` (il battrait l'attribut `hidden` des panneaux masqués). La section «

@@ -522,6 +522,64 @@ window.TestHelpers = (function () {
     return { pages };
   }
 
+  // Les formes RÉELLEMENT peintes dans un PDF (même philosophie que extractPdfLines, qui ne garde que des segments droits : une case aux coins arrondis est faite de courbes). Une forme par
+  // opération de peinture : { kind: 'stroke' | 'fill' | 'fillStroke', x1, y1, x2, y2, stroke: '#rrggbb', fill: '#rrggbb', width }, la boîte englobante du tracé (courbes comprises) en pt,
+  // origine en HAUT à gauche de la page, `width` la largeur du trait (la forme peinte déborde de la moitié de `width` de chaque côté). Une page par entrée de `pages`.
+  async function extractPdfBoxes(base64) {
+    await ensurePdfJsLoaded();
+    const binStr = atob(base64);
+    const bytes = new Uint8Array(binStr.length);
+    for (let i = 0; i < binStr.length; i++) bytes[i] = binStr.charCodeAt(i);
+    const pdf = await window.pdfjsLib.getDocument({ data: bytes }).promise;
+    const OPS = window.pdfjsLib.OPS;
+    const mul = (a, b) => [a[0] * b[0] + a[2] * b[1], a[1] * b[0] + a[3] * b[1], a[0] * b[2] + a[2] * b[3], a[1] * b[2] + a[3] * b[3], a[0] * b[4] + a[2] * b[5] + a[4], a[1] * b[4] + a[3] * b[5] + a[5]];
+    const hex = rgb => '#' + Array.from(rgb).map(v => { const n = Math.round((Number(v) <= 1 ? Number(v) * 255 : Number(v))); return Math.max(0, Math.min(255, n)).toString(16).padStart(2, '0'); }).join('');
+    const round = n => Math.round(n * 100) / 100;
+    const pages = [];
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      const page = await pdf.getPage(pageNum);
+      const viewport = page.getViewport({ scale: 1 });
+      const opList = await page.getOperatorList();
+      let ctm = [1, 0, 0, 1, 0, 0];
+      const saved = [];
+      let stroke = [0, 0, 0]; let fill = [0, 0, 0]; let width = 1;
+      let path = [];
+      const shapes = [];
+      const at = (x, y) => [ctm[0] * x + ctm[2] * y + ctm[4], viewport.height - (ctm[1] * x + ctm[3] * y + ctm[5])];
+      const paint = kind => {
+        if (path.length) {
+          const points = path.map(point => at(point[0], point[1]));
+          const xs = points.map(point => point[0]); const ys = points.map(point => point[1]);
+          shapes.push({ kind, x1: round(Math.min(...xs)), y1: round(Math.min(...ys)), x2: round(Math.max(...xs)), y2: round(Math.max(...ys)), stroke: hex(stroke), fill: hex(fill), width });
+        }
+        path = [];
+      };
+      for (let i = 0; i < opList.fnArray.length; i++) {
+        const fn = opList.fnArray[i]; const args = opList.argsArray[i];
+        if (fn === OPS.save) saved.push({ ctm: ctm.slice() });
+        else if (fn === OPS.restore) { const top = saved.pop(); if (top) ctm = top.ctm; }
+        else if (fn === OPS.transform) ctm = mul(ctm, args);
+        else if (fn === OPS.setStrokeRGBColor) stroke = Array.from(args);
+        else if (fn === OPS.setFillRGBColor) fill = Array.from(args);
+        else if (fn === OPS.setLineWidth) width = args[0];
+        else if (fn === OPS.constructPath) {
+          const ops = args[0]; const co = args[1]; let k = 0;
+          ops.forEach(op => {
+            if (op === OPS.moveTo || op === OPS.lineTo) { path.push([co[k], co[k + 1]]); k += 2; }
+            else if (op === OPS.curveTo) { path.push([co[k], co[k + 1]], [co[k + 2], co[k + 3]], [co[k + 4], co[k + 5]]); k += 6; }
+            else if (op === OPS.curveTo2 || op === OPS.curveTo3) { path.push([co[k], co[k + 1]], [co[k + 2], co[k + 3]]); k += 4; }
+            else if (op === OPS.rectangle) { const [x, y, w, hgt] = [co[k], co[k + 1], co[k + 2], co[k + 3]]; k += 4; path.push([x, y], [x + w, y], [x + w, y + hgt], [x, y + hgt]); }
+          });
+        } else if (fn === OPS.stroke || fn === OPS.closeStroke) paint('stroke');
+        else if (fn === OPS.fill || fn === OPS.eoFill) paint('fill');
+        else if (fn === OPS.fillStroke || fn === OPS.eoFillStroke || fn === OPS.closeFillStroke || fn === OPS.closeEOFillStroke) paint('fillStroke');
+        else if (fn === OPS.endPath) path = [];
+      }
+      pages.push({ shapes, width: viewport.width, height: viewport.height });
+    }
+    return { pages };
+  }
+
   // --- Export DOCX : ouverture du .docx GÉNÉRÉ, jamais des objets docx.js intermédiaires ---
   // Même philosophie que extractPdfGroundTruth ci-dessus, et pour la même raison : un objet
   // `docx.ImageRun`/`docx.Paragraph` en mémoire n'est PAS le fichier que Word ouvrira. Entre les deux
@@ -832,7 +890,7 @@ window.TestHelpers = (function () {
     sleep, tiptap, resetEditor, stubDialogs, withRealChoose, choosePrompts, focusAtEnd, focusInElement, typeText, fieldEditor, fieldType, fieldKey, fieldSelect, fieldEnd,
     selectAllInEditor, selectAllInElement, clickButton, selectAtomNode, openFlyout, clickRow,
     dragFromTo, exportPdfContent, flattenPdfContent, findTextBlocks, findImages, blockPlainText,
-    ensurePdfJsLoaded, extractPdfGroundTruth, extractPdfLines, makeImage,
+    ensurePdfJsLoaded, extractPdfGroundTruth, extractPdfLines, extractPdfBoxes, makeImage,
     exportDocxParts, docxDrawings, docxParagraphs, docxTables, docxSectionProps,
     docxFields, docxNumbering, docxFootnotes, exportMarkdown,
     renderReaderMode, setA4Preview, findByText, compareEditorReaderPosition, compareEditorReaderImage,

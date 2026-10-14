@@ -572,15 +572,32 @@ const PdfExport = (function () {
 
   // Case à cocher dessinée en vectoriel via `canvas` plutôt qu'en glyphe de police (☑/☐ hors WinAnsi, même contrainte que les puces rondes/carrées) :
   // un rectangle + une coche ne dépendent d'aucune police embarquée.
-  const TASK_BOX_PT = 8;
+  // Prend la place et la taille de celle de l'éditeur (css/editor-v2.css, mesuré à 14 px de corps) : 15 px de côté (11,25 pt), le texte 6 px (4,5 pt) plus loin.
+  // Les styles « accent » posent la case native de Chromium, avec ses marges (4 px à gauche, 3 px à droite et au-dessus) et les .2em du label : case à 3 pt du bord
+  // de l'élément, texte à 21 pt. « classic » la dessine à la main, sans marge : case au bord, texte à 15,75 pt, case 3 px plus haut. `top` : le haut de la case sous
+  // le haut de la première ligne, réglé pour qu'elle ait, par rapport à la ligne de base, la même place que dans l'éditeur (la ligne de base du PDF est à 9,74 pt
+  // du haut de l'item, celle de l'éditeur à 10,5 pt).
+  const TASK_BOX_PT = 11.25;
+  const TASK_TEXT_GAP_PT = 4.5;
+  function taskBoxGeometry(style) {
+    return style === 'classic'
+      ? { left: 0, top: 1.3, width: TASK_BOX_PT + TASK_TEXT_GAP_PT }
+      : { left: 3, top: 3.6, width: 3 + TASK_BOX_PT + 2.25 + TASK_TEXT_GAP_PT };
+  }
   function taskCheckboxCanvas(checked, style) {
-    const rect = { type: 'rect', x: 0, y: 0, w: TASK_BOX_PT, h: TASK_BOX_PT, r: style === 'classic' ? 0.5 : 1.6, lineWidth: 1 };
+    const { left } = taskBoxGeometry(style);
+    // Le trait de 1 pt est centré sur le contour : il déborde de 0,5 pt de chaque côté, la case peinte fait donc TASK_BOX_PT. La coche a été dessinée pour une case de 8 pt.
+    const side = TASK_BOX_PT - 1;
+    const scale = side / 8;
+    const at = (x, y) => ({ x: Math.round((left + 0.5 + x * scale) * 100) / 100, y: Math.round((0.5 + y * scale) * 100) / 100 });
+    const check = [at(1.6, 4.6), at(3.3, 6.6), at(6.6, 2)];
+    const rect = { type: 'rect', x: left + 0.5, y: 0.5, w: side, h: side, r: style === 'classic' ? 0.5 : 1.6, lineWidth: 1 };
     if (style === 'classic') {
       const shapes = [Object.assign({}, rect, { lineColor: '#555' })];
-      if (checked) shapes.push({ type: 'polyline', lineWidth: 1.3, lineColor: '#222', points: [{ x: 1.6, y: 4.6 }, { x: 3.3, y: 6.6 }, { x: 6.6, y: 2 }] });
+      if (checked) shapes.push({ type: 'polyline', lineWidth: 1.7, lineColor: '#222', points: check });
       return shapes;
     }
-    if (checked) return [Object.assign({}, rect, { color: '#2f6fed', lineColor: '#2f6fed' }), { type: 'polyline', lineWidth: 1.4, lineColor: '#ffffff', points: [{ x: 1.6, y: 4.6 }, { x: 3.3, y: 6.6 }, { x: 6.6, y: 2 }] }];
+    if (checked) return [Object.assign({}, rect, { color: '#2f6fed', lineColor: '#2f6fed' }), { type: 'polyline', lineWidth: 1.8, lineColor: '#ffffff', points: check }];
     return [Object.assign({}, rect, { lineColor: '#98a2b3' })];
   }
 
@@ -603,14 +620,16 @@ const PdfExport = (function () {
     return !!(parent && parent.getAttribute('data-type') === 'taskList');
   }
 
-  // Structure `columns` commune aux deux points d'insertion d'un item de liste de tâches : case dans une colonne étroite, texte dans le reste.
+  // Structure `columns` commune aux deux points d'insertion d'un item de liste de tâches : case dans une colonne étroite, texte dans le reste, avec à droite la marge
+  // d'une espace des autres blocs de texte (`break-spaces`).
   function taskListColumns(node, runs, align) {
     const checked = node.getAttribute('data-checked') === 'true';
     const style = (node.parentElement && node.parentElement.getAttribute('data-tasklist-style')) || 'accentStrike';
-    const textCol = { width: '*', text: runs, lineHeight: LINE_HEIGHT_RATIO };
+    const { top, width } = taskBoxGeometry(style);
+    const textCol = { width: '*', text: runs, lineHeight: LINE_HEIGHT_RATIO, margin: [0, 0, spaceWidthPt(), 0] };
     if (align) textCol.alignment = align;
     return [
-      { width: TASK_BOX_PT + 5, margin: [0, 3, 0, 0], canvas: taskCheckboxCanvas(checked, style) },
+      { width, margin: [0, top, 0, 0], canvas: taskCheckboxCanvas(checked, style) },
       textCol,
     ];
   }
@@ -2689,20 +2708,22 @@ const PdfExport = (function () {
     block._headingText = (marker + (node.textContent || '')).replace(/\s+/g, ' ').trim();
   }
 
+  // La rangée de colonnes d'un point de liste (marqueur ou case, puis texte) est mise dans une autre, sans marge : à un saut de page au milieu de la rangée, pdfmake
+  // 0.2.7 remet la largeur disponible du conteneur de premier niveau à celle de la page (initializePage), puis le retrait que le bloc rend en sortant s'y ajoute : tout ce
+  // qui suit sortirait à droite de la page de cette marge. La marge de la rangée intérieure est restituée par son propre instantané, que la remise à zéro ne touche pas.
+  function marginFreeRow(block, row, leftPt) {
+    delete block.text;
+    delete block.alignment; // porté sur la colonne de texte, cf. listMarkerColumns et taskListColumns
+    block.columns = [{ width: '*', columns: row, margin: [leftPt, 0, 0, 0] }];
+    block.margin = [0, 0, 0, 0];
+  }
+
   function listItemFields(block, node, runs, align) {
     if (isTaskListItem(node)) {
-      delete block.text;
-      delete block.alignment; // porté sur la colonne de texte, cf. taskListColumns
-      block.columns = taskListColumns(node, taskListRuns(node, runs), align);
+      marginFreeRow(block, taskListColumns(node, taskListRuns(node, runs), align), block.margin[0]);
     } else if (runs.length && align && align !== 'left') {
-      // La rangée de colonnes est dans une autre, sans marge : à un saut de page au milieu de la rangée, pdfmake 0.2.7 remet la largeur disponible du conteneur de
-      // premier niveau à celle de la page (initializePage), puis le retrait que le bloc rend en sortant s'y ajoute : tout ce qui suit sortirait à droite de la
-      // page de cette marge. La marge de la rangée intérieure est restituée par son propre instantané, que la remise à zéro ne touche pas.
       const marker = listMarkerFor(node);
-      delete block.text;
-      delete block.alignment; // porté sur la colonne de texte, cf. listMarkerColumns
-      block.columns = [{ width: '*', columns: listMarkerColumns(marker, runs, align), margin: [block.margin[0] - markerWidthPt(marker), 0, 0, 0] }];
-      block.margin = [0, 0, 0, 0];
+      marginFreeRow(block, listMarkerColumns(marker, runs, align), block.margin[0] - markerWidthPt(marker));
     } else {
       block.text = runs.length ? [listMarkerRun(listMarkerFor(node))].concat(runs) : ' ';
     }
