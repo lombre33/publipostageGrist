@@ -240,12 +240,14 @@ const PdfExport = (function () {
   }
 
   // TipTap (extension-text-align) pose toujours un style inline `text-align`, jamais une classe ql-align-* ni un attribut align="" : pas de repli à
-  // gérer ici. Il le pose sur le paragraphe, jamais sur le <li> : l'alignement d'un point de liste est celui de son premier paragraphe (ou de celui de sa
-  // zone de texte, dans une liste de tâches).
+  // gérer ici. Il le pose sur le paragraphe, jamais sur le <li> ni sur la citation : l'alignement d'un point de liste est celui de son premier paragraphe
+  // (ou de celui de sa zone de texte, dans une liste de tâches), celui d'une citation est celui de son premier paragraphe.
+  const ALIGN_PARAGRAPH_OF = { LI: ':scope > p, :scope > div > p', BLOCKQUOTE: ':scope > p' };
   function alignment(node) {
     const own = textAlignOf(node);
-    if (own || node.tagName !== 'LI') return own;
-    const paragraph = node.querySelector(':scope > p, :scope > div > p');
+    const selector = ALIGN_PARAGRAPH_OF[node.tagName];
+    if (own || !selector) return own;
+    const paragraph = node.querySelector(selector);
     return paragraph ? textAlignOf(paragraph) : undefined;
   }
   function textAlignOf(node) {

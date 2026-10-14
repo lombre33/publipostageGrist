@@ -1217,6 +1217,63 @@
     },
   });
 
+  // --- 10. L'alignement d'une citation (14/10, carte « Dans le PDF, respecter l'alignement d'une citation (centrée, à droite, justifiée) ? », réponse « Respecter ») ---
+  // Comme un point de liste (9) : le bouton d'alignement de l'éditeur pose `text-align` sur le PARAGRAPHE de la citation, jamais sur le <blockquote>, et le PDF ne lisait que lui. Il lit maintenant le premier paragraphe de la citation, au premier niveau comme dans une case de tableau.
+  // Deux cas comparent, ligne à ligne, le mot qui ouvre la ligne et ses bords gauche et droit (pt depuis « Titre ») dans le PDF et dans l'éditeur : une citation d'un paragraphe, de deux et une que coupe un trait, au premier niveau, puis dans les trois colonnes d'un tableau.
+  const quoteOf = (align, word) => '<blockquote><p style="text-align: ' + align + '">' + word + ' ' + LIST_LONG + '</p></blockquote>';
+  // [nom, citations pour un alignement, mots qui ouvrent leurs paragraphes]
+  const QUOTE_ALIGN_FIXTURES = [
+    ['citation d\'un paragraphe', a => quoteOf(a, 'Alpha') + quoteOf(a, 'Beta'), ['Alpha', 'Beta']],
+    ['citation de deux paragraphes', a => '<blockquote><p style="text-align: ' + a + '">Alpha ' + LIST_LONG + '</p><p style="text-align: ' + a + '">Beta ' + LIST_LONG + '</p></blockquote>', ['Alpha', 'Beta']],
+    ['citation coupée par un trait', a => '<blockquote><p style="text-align: ' + a + '">Alpha ' + LIST_LONG + '</p><hr><p style="text-align: ' + a + '">Beta ' + LIST_LONG + '</p></blockquote>', ['Alpha', 'Beta']],
+  ];
+
+  cases.push({
+    id: 'pdf_gap_aligned_quote_text_lines_match_the_editor',
+    description: 'Une citation d\'un paragraphe, une de deux paragraphes et une que coupe un trait, dont le texte est centré, à droite ou justifié (le bouton d\'alignement le pose sur le paragraphe de la citation) : le PDF ouvre chaque ligne par le même mot que l\'éditeur et la commence et la finit au même endroit (1,5 pt près)',
+    run: async h => {
+      const problems = []; const summary = {};
+      try {
+        await applyPage(h);
+        for (const [label, build, firsts] of QUOTE_ALIGN_FIXTURES) {
+          for (const align of TEXT_ALIGNS) {
+            const name = label + ', ' + align;
+            const html = '<p>Titre</p>' + build(align) + '<p>Fin</p>';
+            const wanted = await textLinesInEditor(h, html, firsts);
+            const got = await textLinesInPdf(h, html, firsts);
+            if (!got.lost.length) summary[name] = summaryOf(wanted, got, firsts);
+            judgeTextLines(name, wanted, got, null, firsts, problems, { plain: firsts });
+          }
+        }
+      } finally { restorePage(); }
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems: compact(problems), summary }) };
+    },
+  });
+
+  cases.push({
+    id: 'pdf_gap_aligned_quote_text_in_a_table_cell_matches_the_editor',
+    description: 'Une citation (dans la première, la deuxième ou la troisième colonne d\'un tableau) et une citation que coupe un trait (deuxième colonne) dont le texte est centré, à droite ou justifié : le PDF ouvre chaque ligne par le même mot que l\'éditeur et la commence et la finit au même endroit depuis « Titre » (1,5 pt près)',
+    run: async h => {
+      const problems = []; const summary = {};
+      try {
+        await applyPage(h);
+        for (const [[label, build, firsts], columns] of [[QUOTE_ALIGN_FIXTURES[0], [0, 1, 2]], [QUOTE_ALIGN_FIXTURES[2], [1]]]) {
+          for (const column of columns) {
+            for (const align of TEXT_ALIGNS) {
+              const name = label + ', colonne ' + (column + 1) + ', ' + align;
+              const html = threeColumns(column, build(align)) + '<p>Fin</p>';
+              const wanted = await textLinesInEditor(h, html, firsts);
+              const got = await textLinesInPdf(h, html, firsts);
+              if (!got.lost.length) summary[name] = summaryOf(wanted, got, firsts);
+              judgeTextLines(name, wanted, got, null, firsts, problems, { plain: firsts });
+            }
+          }
+        }
+      } finally { restorePage(); }
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems: compact(problems), summary }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.pdfEditorGap = cases;
 })();
