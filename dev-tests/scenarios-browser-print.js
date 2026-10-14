@@ -467,6 +467,107 @@
     },
   });
 
+  // Un document qui montre chaque fonction de la barre d'outils, au HTML tel que l'éditeur l'enregistre (sans bulle de colonne : la page d'essai n'a pas de table à lire) : mise en forme du
+  // texte, les trois sortes de liste, tableau aux cases fusionnées et colorées, citation, code, lien, encadrés, zone à deux colonnes et signature, images (dans le texte, qui flotte, derrière et
+  // devant), pastilles, note de bas de page, sommaire, titres numérotés, « garder avec le suivant », trait, légendes, saut de page.
+  function featureDocument(img) {
+    const lorem = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.';
+    const task = (style, label) => '<ul data-type="taskList"' + (style === 'accentStrike' ? '' : ' data-tasklist-style="' + style + '"') + '>'
+      + [[true, 'faite'], [false, 'à faire']].map(([done, word]) => '<li data-type="taskItem" data-checked="' + done + '"><label><input type="checkbox"' + (done ? ' checked="checked"' : '') + '><span></span></label><div><p>' + label + ' ' + word + '</p></div></li>').join('') + '</ul>';
+    const callout = (color, icon, inner) => '<div class="callout" data-color="' + color + '" data-icon="' + icon + '" role="note">' + inner + '</div>';
+    const picture = (attrs, style) => '<img class="editor-image" draggable="false" src="' + img + '" alt="" ' + attrs + ' style="' + style + '">';
+    return '<div class="heading-numbering-config" data-style="numeric"></div><h1>Document de contrôle</h1>'
+      + '<h2>Texte</h2><p><strong>Gras</strong>, <em>italique</em>, <u>souligné</u>, <s>barré</s>, x<sup>2</sup>, H<sub>2</sub>O, <span style="color: rgb(192, 57, 43)">rouge</span>, <span style="background-color: rgb(255, 242, 168)">surligné</span>, <span style="font-size: 18pt">grand</span>, <span style="font-family: Georgia, serif">Georgia</span>, <span style="font-family: \'Courier New\', monospace">Courier</span>.</p>'
+      + '<p style="text-align:center">Centré : ' + lorem + '</p><p style="text-align:right">À droite : ' + lorem + '</p><p style="text-align:justify">Justifié : ' + lorem + ' ' + lorem + '</p>'
+      + '<h2>Listes</h2><ul><li><p>Disque un</p></li><li><p>Disque deux</p><ul><li><p>Imbriqué</p></li></ul></li></ul>'
+      + '<ul data-bullet-style="circle"><li><p>Cercle</p></li></ul><ul data-bullet-style="square"><li><p>Carré</p></li></ul>'
+      + '<ol><li><p>Numéro</p></li></ol><ol data-number-style="alpha"><li><p>Lettre</p></li></ol><ol data-number-style="roman"><li><p>Romain</p></li></ol>'
+      + task('accentStrike', 'Tâche') + task('classic', 'Tâche') + task('accentPlain', 'Tâche')
+      + '<h2>Tableau</h2><table><tr><th>Indicateur</th><th>Résultat</th><th>Évolution</th></tr>'
+      + '<tr><td style="background-color: #fde9d9">Fond orangé</td><td style="text-align:right">78 %</td><td style="text-align:right"><strong style="color: rgb(30, 132, 73)">+8 pts</strong></td></tr>'
+      + '<tr><td colspan="2">Cellule fusionnée sur deux colonnes</td><td>Fin</td></tr><tr><td rowspan="2">Fusion verticale</td><td>A</td><td>B</td></tr><tr><td>C</td><td>D</td></tr></table>'
+      + '<h2>Citation, code, lien</h2><blockquote><p>Une citation qui montre la barre de gauche.</p></blockquote><pre><code>const x = 1;\nfunction f() { return x; }</code></pre>'
+      + '<p>Du <code>code en ligne</code> et un <a href="https://example.com/page">lien hypertexte</a>.</p>'
+      + '<h2>Encadrés</h2>' + [['blue', 'info'], ['green', 'check'], ['amber', 'warning'], ['red', 'alert'], ['purple', 'bulb'], ['gray', 'star']].map(([c, i]) => callout(c, i, '<p>Encadré ' + c + '. ' + lorem + '</p>')).join('')
+      + callout('blue', 'info', '<p>Encadré avec liste :</p><ul><li><p>un</p></li><li><p>deux</p></li></ul>')
+      + '<h2>Signature</h2><div class="two-columns-zone"><div class="two-columns-column"><p></p><p>______________________</p><p>Nom et signature</p></div><div class="two-columns-column"><p></p><p>______________________</p><p>Date</p></div></div>'
+      + '<h2>Deux colonnes</h2><div class="two-columns-zone" style="--layout-left: 55%;"><div class="two-columns-column"><p><strong>Colonne gauche</strong></p><p>' + lorem + '</p></div><div class="two-columns-column"><p>' + picture('data-layer="normal" data-wrap="inline"', 'width: 100%') + '</p></div></div>'
+      + '<h2>Images</h2><p>Dans le texte' + picture('data-layer="normal" data-wrap="inline" data-align="left"', 'width: 120px') + ' suivie de texte qui l’habille : ' + lorem + ' ' + lorem + '</p>'
+      + picture('data-layer="behind" data-wrap="inline"', 'width: 300px; position: absolute; left: 37px; top: 1500px; z-index: -1; opacity: 0.35') + picture('data-layer="front" data-wrap="inline"', 'width: 70px; position: absolute; left: 437px; top: 1520px; z-index: 5')
+      + '<h2>Pastilles</h2><p>Date <span class="smart-chip" data-chip-kind="date">Date</span>, heure <span class="smart-chip" data-chip-kind="time">Heure</span>, e-mail <span class="smart-chip" data-chip-kind="email">Email</span>.</p>'
+      + '<p>Note<sup class="footnote-ref-marker" data-note-id="n1" data-note-text="Texte de la note de bas de page."></sup> de bas de page.</p>'
+      + '<div class="toc-marker">Sommaire</div><h1>Titre un</h1><h2>Titre deux</h2><h3>Titre trois</h3><h4>Titre quatre</h4><p data-keep-next="true">Paragraphe gardé avec le suivant.</p><p>Paragraphe suivant.</p><hr><p>Après le trait.</p>'
+      + '<h2>Légende</h2><p>' + picture('data-layer="normal" data-wrap="inline"', 'width: 160px') + '</p><p data-caption="true">Légende sous l’image</p><table><tr><td>Cellule</td></tr></table><p data-caption="true">Légende sous le tableau</p>'
+      + '<div class="page-break-marker">Saut de page</div><h2>Après le saut</h2><p>Texte de la page suivante.</p>';
+  }
+  // Ce qu'un élément du document doit montrer pour que la comparaison prouve quelque chose : une fonction de la liste absente du document ne serait comparée à rien.
+  const FEATURE_SELECTORS = ['strong', 'em', 'u', 's', 'sup:not(.footnote-ref-marker)', 'sub', 'a[href]', 'code', 'pre code', 'blockquote', 'hr', 'ul[data-bullet-style="circle"]', 'ul[data-bullet-style="square"]', 'ol[data-number-style="alpha"]', 'ol[data-number-style="roman"]',
+    'ul[data-type="taskList"]:not([data-tasklist-style])', 'ul[data-tasklist-style="classic"]', 'ul[data-tasklist-style="accentPlain"]', 'td[colspan="2"]', 'td[rowspan="2"]', '.callout[data-color="amber"]', '.callout[data-color="gray"]', '.callout ul',
+    '.two-columns-zone .two-columns-column', 'img[data-align="left"]', 'img[data-layer="behind"]', 'img[data-layer="front"]', '.footnote-ref-marker', '.toc-resolved .toc-entry', 'p[data-caption="true"]', 'h4', 'p[data-keep-next="true"]', '.v2-page-watermark'];
+
+  // Ce que le navigateur calcule pour chaque élément du document et ses pseudo-éléments (`::before`, `::after` qui écrivent un contenu), vu de la fenêtre `view` : toutes les propriétés, sauf les mesures
+  // (les positions se comparent dans bprint_text_is_laid_out_exactly_like_the_reading), les variables CSS (les valeurs du thème) et `print-color-adjust` (que le cadre pose exprès). Trois éléments
+  // ne se comparent pas parce que leur mise en forme est celle de l'écran par construction : le conteneur de la Lecture (gouttière, remplissage), la feuille de papier (son ombre) et les entretoises
+  // des bords de page (centrées sur l'écran). Tout ce qu'ils contiennent se compare.
+  const SIZES = /^(width|height|inline-size|block-size|min-.*|max-.*|perspective-origin|transform-origin|top|left|right|bottom|inset.*|margin-block.*|margin-inline.*|padding-block.*|padding-inline.*|border-block.*|border-inline.*|zoom|(-webkit-)?print-color-adjust)$/;
+  function looksOf(root, view) {
+    const list = [];
+    // Les marges du texte du document (`.reader-content`) sont celles de son centrage sur l'écran, en pixels : elles dépendent de la largeur du panneau, pas du document.
+    const read = (cs, el) => { const out = {}; for (let i = 0; i < cs.length; i++) { const name = cs[i]; if (name.indexOf('--') !== 0 && !SIZES.test(name) && !(el.matches('.reader-content') && /^margin-(left|right)$/.test(name))) out[name] = cs.getPropertyValue(name); } return out; };
+    const walk = (el, path) => {
+      const screenOnly = el === root || el.matches('.v2-reader-paper, .v2-page-edge-spacer');
+      const entry = { path, tag: el.tagName, own: screenOnly ? {} : read(view.getComputedStyle(el), el), pseudo: {} };
+      if (!screenOnly) ['::before', '::after'].forEach(side => { const cs = view.getComputedStyle(el, side); if (cs.content && cs.content !== 'none' && cs.content !== 'normal') entry.pseudo[side] = read(cs, el); });
+      list.push(entry);
+      Array.from(el.children).forEach((child, i) => walk(child, path + '>' + child.tagName.toLowerCase() + '.' + String(child.getAttribute('class') || '').split(/\s+/)[0] + '[' + i + ']'));
+    };
+    walk(root, 'racine');
+    return list;
+  }
+  function lookDiffs(reading, printed) {
+    const diffs = [];
+    if (reading.length !== printed.length) diffs.push('éléments : ' + reading.length + ' contre ' + printed.length);
+    for (let i = 0; i < Math.min(reading.length, printed.length); i++) {
+      const a = reading[i]; const b = printed[i];
+      if (a.tag !== b.tag) { diffs.push('structure à ' + a.path + ' : ' + a.tag + ' contre ' + b.tag); break; }
+      const compare = (pa, pb, where) => Object.keys(pa).forEach(name => { if (pa[name] !== pb[name]) diffs.push(where + a.path + ' ' + name + ' : ' + String(pa[name]).slice(0, 50) + ' => ' + String(pb[name]).slice(0, 50)); });
+      compare(a.own, b.own, '');
+      Object.keys(a.pseudo).forEach(side => { if (b.pseudo[side]) compare(a.pseudo[side], b.pseudo[side], side + ' '); else diffs.push(side + ' absent de l’impression à ' + a.path); });
+      Object.keys(b.pseudo).forEach(side => { if (!a.pseudo[side]) diffs.push(side + ' seulement dans l’impression à ' + a.path); });
+    }
+    return diffs;
+  }
+
+  cases.push({
+    id: 'bprint_every_document_feature_looks_the_same_in_the_print_as_in_the_reading',
+    description: 'Chaque fonction du document (texte, listes, tableau, citation, code, lien, encadrés, colonnes, images en calque, pastilles, note, sommaire, titres numérotés, légendes, filigrane, en-tête et pied) a, dans le cadre d’impression, les mêmes propriétés calculées - couleur, fond, bordures, police, puces, contenu et masque des pseudo-éléments - que dans la Lecture de la page : aucune fonction ne perd son aspect à l’impression, comme l’encadré avant le 14/10',
+    run: async (h) => {
+      const seen = {};
+      const theme = document.documentElement.getAttribute('data-theme');
+      document.documentElement.setAttribute('data-theme', 'light');
+      try {
+        const canvas = document.createElement('canvas'); canvas.width = 240; canvas.height = 96;
+        const paint = canvas.getContext('2d'); paint.fillStyle = '#2f6fed'; paint.fillRect(0, 0, 240, 96);
+        const html = featureDocument(canvas.toDataURL('image/png'));
+        const rc = await readAt(h, html, HF, () => PageLayout.setWatermark({ text: 'CONFIDENTIEL', angle: 'diagonal', color: '#c0392b', opacity: 0.18 }));
+        const reading = looksOf(rc, window);
+        await withJob(html, HF, async job => {
+          const copy = sheetsOf(job)[0].querySelector('#reader-container');
+          const printed = looksOf(copy, job.frame.contentWindow);
+          seen.elements = [reading.length, printed.length];
+          seen.sheets = [overlayBands(rc).length + 1, job.pageCount];
+          seen.missing = FEATURE_SELECTORS.filter(selector => !rc.querySelector(selector) || !copy.querySelector(selector));
+          seen.diffs = lookDiffs(reading, printed);
+        });
+      } finally {
+        if (theme === null) document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', theme);
+        PageLayout.setMarginsMm(null); h.setA4Preview(false); restoreContainers();
+      }
+      const shown = seen.diffs.length > 12 ? seen.diffs.slice(0, 12).concat(['… et ' + (seen.diffs.length - 12) + ' autres']) : seen.diffs;
+      return { pass: seen.elements[0] > 250 && seen.sheets[0] >= 3 && seen.sheets[0] === seen.sheets[1] && seen.missing.length === 0 && seen.diffs.length === 0, notes: JSON.stringify(Object.assign({}, seen, { diffs: shown })) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.browserPrint = cases;
 })();

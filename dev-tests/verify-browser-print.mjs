@@ -258,6 +258,10 @@ async function analysePdf(page, pdf, shots) {
       // L'encadré ambre (palette de js/callout.js) : son fond (#fffbeb) et sa barre (#b45309), qu'un cadre sans le style de la palette n'a pas.
       const near = (r, g, b, tol) => { let count = 0; for (let k = 0; k < px.length; k += 4) if (Math.abs(px[k] - r) <= tol && Math.abs(px[k + 1] - g) <= tol && Math.abs(px[k + 2] - b) <= tol) count++; return count; };
       entry.callout = { tint: near(255, 251, 235, 1), bar: near(180, 83, 9, 10) };
+      // Son icône : un masque, que le PDF peint autrement qu'un fond. Les pixels de la couleur d'accent hors des colonnes de la barre (plus de 30 pixels de haut) sont ceux de l'icône.
+      const accentByColumn = new Array(canvas.width).fill(0);
+      for (let k = 0; k < px.length; k += 4) if (Math.abs(px[k] - 180) <= 10 && Math.abs(px[k + 1] - 83) <= 10 && Math.abs(px[k + 2] - 9) <= 10) accentByColumn[(k / 4) % canvas.width]++;
+      entry.callout.icon = accentByColumn.filter(count => count < 30).reduce((sum, count) => sum + count, 0);
       if (shots && shots[n - 1]) {
         const blob = await (await fetch('data:image/png;base64,' + shots[n - 1])).blob();
         const bitmap = await createImageBitmap(blob);
@@ -326,7 +330,7 @@ await scenario('2) Le PDF d\'impression contre la Lecture : pages, mots, lignes,
   const png = await w.page.evaluate(() => { const c = document.createElement('canvas'); c.width = 240; c.height = 96; const g = c.getContext('2d'); g.fillStyle = '#2f6fed'; g.fillRect(0, 0, 240, 96); g.fillStyle = '#fff'; g.font = '28px sans-serif'; g.fillText('IMAGE', 70, 58); return c.toDataURL('image/png'); });
   const run = await compareWithLecture(w, 'a4', richHtml(png), HF, 'a4');
   check('A4 : le fond coloré d\'une case de tableau est imprimé sans « graphiques d\'arrière-plan » (printBackground: false)', run.result.pages[0].tintedPixels > 300, run.result.pages.map(p => p.tintedPixels));
-  check('A4 : l\'encadré ambre est imprimé avec son fond teinté et sa barre de couleur (la palette est dans un style posé par un script, que le cadre doit reprendre)', run.result.pages.reduce((n, p) => n + p.callout.tint, 0) > 8000 && run.result.pages.reduce((n, p) => n + p.callout.bar, 0) > 100, run.result.pages.map(p => p.callout));
+  check('A4 : l\'encadré ambre est imprimé avec son fond teinté, sa barre de couleur et son icône (la palette est dans un style posé par un script, que le cadre doit reprendre)', run.result.pages.reduce((n, p) => n + p.callout.tint, 0) > 8000 && run.result.pages.reduce((n, p) => n + p.callout.bar, 0) > 100 && run.result.pages.reduce((n, p) => n + p.callout.icon, 0) > 10, run.result.pages.map(p => p.callout));
   check('A4 : pas de page blanche de trop à la fin : la dernière page porte du texte', run.result.pages[run.result.pages.length - 1].baselines.length > 5, run.result.pages.map(p => p.baselines.length));
   await compareWithLecture(w, 'a4-sans-entete', richHtml(png), NO_HF, 'a4');
   const a5 = await compareWithLecture(w, 'a5-paysage', richHtml(null), HF, 'a5-landscape');
