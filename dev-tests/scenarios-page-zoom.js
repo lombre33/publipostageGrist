@@ -12,6 +12,8 @@
   const STORAGE = 'pp_page_zoom';
   const PAGE_LINES = n => Array.from({ length: n }, (_, i) => '<p>Ligne ' + i + ' du document de test de pagination, assez longue pour occuper la largeur de la page.</p>').join('');
   const SHORT_HTML = '<p>Un petit document de test.</p><p>Second paragraphe.</p>';
+  // La langue de la page au chargement du fichier : la française, ou l'anglaise pour un cas `lang: 'en'` (la page démarre alors en anglais). Aucun scénario ne change la langue en route.
+  const PAGE_LANG = I18n.getLang();
 
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
   const el = id => document.getElementById(id);
@@ -28,6 +30,7 @@
   // La feuille telle que la mise en page la connaît (pixels de la page) et telle qu'elle est à l'écran (zoom compris).
   const layoutWidth = box => { const s = sheetOf(box); return s ? s.offsetWidth : null; };
   const screenWidth = box => { const s = sheetOf(box); return s ? s.getBoundingClientRect().width : null; };
+  const readPillTexts = () => ({ out: part('out').title, outAria: part('out').getAttribute('aria-label'), inn: part('in').title, value: part('value').title, valueText: shown(), fit: part('fit').textContent, fitTip: part('fit').title, group: el('pp-page-zoom').getAttribute('aria-label') });
   const savedLevels = () => { try { return JSON.parse(localStorage.getItem(STORAGE) || '[]'); } catch (e) { return null; } };
 
   function key(init) {
@@ -52,7 +55,7 @@
   async function setup(h, html) {
     await toOriginal();
     await h.resetEditor();
-    I18n.setLang('fr');
+    I18n.setLang(PAGE_LANG);
     PageLayout.setMarginsMm(null);
     h.setA4Preview(true);
     Editor.setHTML(html || SHORT_HTML);
@@ -61,7 +64,7 @@
   async function finish(h) {
     await toOriginal();
     if (inRead()) { el('btn-mode-edit').click(); await sleep(500); }
-    I18n.setLang('fr');
+    I18n.setLang(PAGE_LANG);
     const toggle = el('v2-toggle-a4-preview');
     if (toggle && !toggle.disabled && !toggle.checked) { toggle.click(); await sleep(200); }
     document.querySelectorAll('.pp-modal').forEach(m => { if (m.dataset.testOpened) { m.style.display = 'none'; delete m.dataset.testOpened; } });
@@ -179,29 +182,38 @@
   });
 
   cases.push({
-    id: 'page_zoom_texts_are_in_both_languages',
-    description: 'Infobulles, étiquettes et pourcentage en français et en anglais, avec le raccourci de la plateforme ; chaque clé pageZoom.* existe dans les deux langues avec les mêmes variables',
+    id: 'page_zoom_texts_are_in_french_and_every_key_exists_in_both_languages',
+    description: 'Infobulles, étiquettes et pourcentage en français, avec le raccourci de la plateforme (l\'anglais se lit dans la page qui démarre en anglais, plus bas) ; chaque clé pageZoom.* existe dans les deux langues avec les mêmes variables',
     run: async (h) => {
       try {
         await setup(h);
         const mod = /Mac|iPhone|iPad/i.test(navigator.platform || '') ? '⌘' : 'Ctrl';
-        const read = () => ({ out: part('out').title, outAria: part('out').getAttribute('aria-label'), inn: part('in').title, value: part('value').title, valueText: shown(), fit: part('fit').textContent, fitTip: part('fit').title, group: el('pp-page-zoom').getAttribute('aria-label') });
-        const fr = read();
-        I18n.setLang('en');
-        await sleep(100);
-        const en = read();
-        I18n.setLang('fr');
+        const fr = readPillTexts();
         const expectFr = { out: 'Zoom arrière (' + mod + ' −)', outAria: 'Zoom arrière (' + mod + ' −)', inn: 'Zoom avant (' + mod + ' +)', value: 'Revenir à l’affichage d’origine (' + mod + ' 0)', valueText: '100 %', fit: 'Ajuster', fitTip: 'Ajuster la page à la largeur du panneau', group: 'Zoom de la page' };
-        const expectEn = { out: 'Zoom out (' + mod + ' −)', outAria: 'Zoom out (' + mod + ' −)', inn: 'Zoom in (' + mod + ' +)', value: 'Back to the original view (' + mod + ' 0)', valueText: '100%', fit: 'Fit', fitTip: 'Fit the page to the panel width', group: 'Page zoom' };
         const sameFr = JSON.stringify(fr) === JSON.stringify(expectFr);
-        const sameEn = JSON.stringify(en) === JSON.stringify(expectEn);
         // Toutes les clés, dans les deux langues, avec les mêmes {variables} : relues par l'API publique (t) avec des valeurs repérables.
         const keys = ['pageZoom.group', 'pageZoom.value', 'pageZoom.out', 'pageZoom.in', 'pageZoom.reset', 'pageZoom.fit', 'pageZoom.fit.tip', 'pageZoom.unavailable.preview', 'pageZoom.unavailable.none'];
         const vars = { n: 'N1', keys: 'K1', format: 'F1' };
         const placeholders = text => (text.match(/\b(N1|K1|F1)\b/g) || []).sort().join(',');
         const complete = keys.map(k => { I18n.setLang('fr'); const a = I18n.t(k, vars); I18n.setLang('en'); const b = I18n.t(k, vars); I18n.setLang('fr'); return { k, a, b, same: placeholders(a) === placeholders(b), blank: !a || !b || a === k || b === k }; });
         const bad = complete.filter(c => !c.same || c.blank);
-        return { pass: sameFr && sameEn && bad.length === 0, notes: JSON.stringify({ fr, en, bad }) };
+        return { pass: sameFr && bad.length === 0, notes: JSON.stringify({ fr, bad }) };
+      } finally { await finish(h); }
+    },
+  });
+
+  // La pastille est bâtie une fois, au démarrage : l'anglais se lit dans une page qui démarre en anglais.
+  cases.push({
+    id: 'page_zoom_texts_are_in_english_on_a_page_that_starts_in_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : infobulles, étiquettes et pourcentage de la pastille en anglais (« Fit », « Zoom out », « Back to the original view », « 100% »), avec le raccourci de la plateforme',
+    run: async (h) => {
+      try {
+        await setup(h);
+        const mod = /Mac|iPhone|iPad/i.test(navigator.platform || '') ? '⌘' : 'Ctrl';
+        const en = readPillTexts();
+        const expectEn = { out: 'Zoom out (' + mod + ' −)', outAria: 'Zoom out (' + mod + ' −)', inn: 'Zoom in (' + mod + ' +)', value: 'Back to the original view (' + mod + ' 0)', valueText: '100%', fit: 'Fit', fitTip: 'Fit the page to the panel width', group: 'Page zoom' };
+        return { pass: I18n.getLang() === 'en' && JSON.stringify(en) === JSON.stringify(expectEn), notes: JSON.stringify({ en }) };
       } finally { await finish(h); }
     },
   });
@@ -388,7 +400,7 @@
 
   cases.push({
     id: 'page_zoom_is_greyed_with_its_reason_when_there_is_no_page_and_never_removed',
-    description: 'Aperçu de la page décoché, grille ou résumé d’un macro-modèle : la pastille reste là, grisée, avec la raison dans l’infobulle (anglais compris) ; un clic n’y change rien et les touches laissent le navigateur zoomer ; elle se dégrise avec la page',
+    description: 'Aperçu de la page décoché, grille ou résumé d’un macro-modèle : la pastille reste là, grisée, avec la raison dans l’infobulle (l’anglais : page qui démarre en anglais, juste après) ; un clic n’y change rien et les touches laissent le navigateur zoomer ; elle se dégrise avec la page',
     run: async (h) => {
       try {
         await setup(h);
@@ -404,17 +416,12 @@
         const keyEvent = key({ key: '=', code: 'Equal', ctrlKey: true });
         await sleep(100);
         const afterClicks = states();
-        I18n.setLang('en');
-        await sleep(80);
-        const previewEn = states();
-        I18n.setLang('fr');
         toggle.click();
         await sleep(350);
         const back = states();
         if (!allOff(preview)) problems.push('aperçu décoché : ' + JSON.stringify(preview));
         if (!/aperçu A4 est décoché/.test(preview.title || '')) problems.push('raison (aperçu) : ' + preview.title);
         if (afterClicks.value !== '100 %' || keyEvent.defaultPrevented) problems.push('clics ou touche pris en compte sans page : ' + JSON.stringify({ afterClicks, prevented: keyEvent.defaultPrevented }));
-        if (!/A4 preview is turned off/.test(previewEn.title || '')) problems.push('raison en anglais : ' + previewEn.title);
         if (back.off.some(Boolean)) problems.push('dégrisé avec la page : ' + JSON.stringify(back));
         // 2) Une grille n’a pas de page : la case de l’aperçu est grisée, la pastille aussi.
         const gridId = await savedTemplate(h, 'Zoom grille', '<table><tbody><tr><td><p></p></td><td><p></p></td></tr></tbody></table>', GridEditor.TYPE);
@@ -431,7 +438,25 @@
         await selectTemplate(h, plainId);
         const plain = states();
         if (plain.off.some(Boolean)) problems.push('modèle ordinaire : ' + JSON.stringify(plain));
-        return { pass: problems.length === 0, notes: JSON.stringify({ problems, preview, previewEn: previewEn.title, grid, macroState }) };
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems, preview, grid, macroState }) };
+      } finally { await finish(h); }
+    },
+  });
+
+  cases.push({
+    id: 'page_zoom_reason_is_in_english_on_a_page_that_starts_in_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : l’aperçu de la page décoché, la pastille grisée dit sa raison en anglais (« the A4 preview is turned off »)',
+    run: async (h) => {
+      try {
+        await setup(h);
+        const toggle = el('v2-toggle-a4-preview');
+        toggle.click();
+        await sleep(350);
+        const title = part('in') && part('in').title;
+        toggle.click();
+        await sleep(350);
+        return { pass: I18n.getLang() === 'en' && /A4 preview is turned off/.test(title || ''), notes: JSON.stringify({ title }) };
       } finally { await finish(h); }
     },
   });

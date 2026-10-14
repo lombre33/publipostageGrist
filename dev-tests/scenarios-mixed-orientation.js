@@ -1408,10 +1408,7 @@ window.EditorTestSuites.mixedOrientation = (function () {
           row('auto').click();
           document.querySelector('#v2-page-flyout [data-page-format="A5"]').click();
           if (checked() !== 'auto,A5') problems.push('format A5 : ' + checked());
-          // En anglais.
-          I18n.setLang('en');
-          if (rows()[0].name !== 'Follow each template' || button.getAttribute('aria-label') !== 'A5 page following each template (switch to landscape)') problems.push('anglais : ' + rows()[0].name + ' / ' + button.getAttribute('aria-label'));
-          I18n.setLang('fr');
+          if (rows()[0].name !== 'Selon chaque modèle' || button.getAttribute('aria-label') !== 'Page A5 selon chaque modèle (passer en paysage)') problems.push('format A5 : ' + rows()[0].name + ' / ' + button.getAttribute('aria-label'));
           // Pendant un export (setBusy), la ligne est grisée et sans effet.
           row('portrait').click();
           OrientationToggle.setBusy(true);
@@ -1429,8 +1426,28 @@ window.EditorTestSuites.mixedOrientation = (function () {
         } finally {
           document.removeEventListener('pp:marginsChanged', onEvent);
           document.removeEventListener('pp:pageLayoutChanged', onEvent);
-          I18n.setLang('fr');
           OrientationToggle.setBusy(false);
+          PageLayout.setMarginsMm(null);
+          OrientationToggle.sync('document');
+        }
+        return verdict(problems, {});
+      },
+    },
+    {
+      id: 'mixed_page_menu_of_a_macro_says_follow_each_template_on_a_page_that_starts_in_english',
+      lang: 'en',
+      description: 'Page qui démarre en anglais : la première ligne du menu Page d\'un macro-modèle dit « Follow each template » et le bouton « A5 page following each template (switch to landscape) »',
+      async run() {
+        const problems = [];
+        const button = document.getElementById('btn-page-orientation');
+        const firstRow = () => document.querySelector('#v2-page-flyout .v2-hover-row-check .v2-page-row-name').textContent;
+        try {
+          PageLayout.setMarginsMm(null);
+          OrientationToggle.sync('macro');
+          document.querySelector('#v2-page-flyout [data-page-orientation="auto"]').click();
+          document.querySelector('#v2-page-flyout [data-page-format="A5"]').click();
+          if (I18n.getLang() !== 'en' || firstRow() !== 'Follow each template' || button.getAttribute('aria-label') !== 'A5 page following each template (switch to landscape)') problems.push('anglais : ' + firstRow() + ' / ' + button.getAttribute('aria-label'));
+        } finally {
           PageLayout.setMarginsMm(null);
           OrientationToggle.sync('document');
         }

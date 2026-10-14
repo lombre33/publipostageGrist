@@ -407,8 +407,7 @@ const Shortcuts = (function () {
 
     // La touche se montre là où le bouton se nomme : `data-keytip` (« (Ctrl+B) ») après le texte de l'infobulle d'un bouton [data-tip], `data-keyhint`
     // (« Ctrl+B ») à droite d'une ligne de menu ou après le titre d'un menu - css/shortcuts.css les lit - et se dit aux lecteurs d'écran
-    // (`aria-keyshortcuts`). Des attributs à eux, qu'aucun changement de langue ne réécrit : un « (Ctrl+B) » ajouté au data-tip s'effacerait au premier
-    // applyTranslations().
+    // (`aria-keyshortcuts`). Des attributs à eux : le texte de l'infobulle (data-tip) n'est jamais touché, css/shortcuts.css y ajoute la touche à l'affichage.
     function setAttr(el, name, value) { if (value) el.setAttribute(name, value); else el.removeAttribute(name); }
     function decorate() {
       ACTIONS.forEach(action => {
@@ -510,7 +509,6 @@ const Shortcuts = (function () {
   })();
   document.addEventListener('keydown', onKeydown, true);
 
-  if (typeof I18n !== 'undefined') I18n.onChange(() => changed());
   window.addEventListener('storage', event => { if (event.key === STORAGE || event.key === null) { custom = readStorage(); changed(); } });
   decorate();
 

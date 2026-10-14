@@ -367,8 +367,8 @@ const FindReplace = (function () {
       });
     }
 
-    // Redessine le surlignage et le compteur sans toucher au document : une transaction vide, comme partout ailleurs dans l'éditeur (cf. Editor.init,
-    // I18n.onChange). `windowOnly` : la demande vient de placeWindow, qui n'a pas à se remesurer après elle-même.
+    // Redessine le surlignage et le compteur sans toucher au document : une transaction vide, comme partout ailleurs dans l'éditeur (cf. Editor.setHTML).
+    // `windowOnly` : la demande vient de placeWindow, qui n'a pas à se remesurer après elle-même.
     function refresh(windowOnly) {
       const ed = editor();
       if (ed) ed.view.dispatch(ed.state.tr.setMeta(META, windowOnly ? 'window' : true));
@@ -717,10 +717,9 @@ const FindReplace = (function () {
       refs = { toggle, find, count, prev, next, matchCase, wholeWord, regex, close, replaceRow, replacement, one, all };
       wirePanel();
       applyTexts();
-      I18n.onChange(() => { if (bar) { applyTexts(); updateCount(); } });
     }
 
-    // Textes du panneau, relus à chaque changement de langue. Info-bulle native (title) : le panneau vit hors de #toolbar-top, où s'applique le
+    // Textes du panneau, écrits quand il se bâtit. Info-bulle native (title) : le panneau vit hors de #toolbar-top, où s'applique le
     // [data-tip] de la barre.
     function applyTexts() {
       const t = key => I18n.t(key);

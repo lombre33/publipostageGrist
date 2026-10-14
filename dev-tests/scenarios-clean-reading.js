@@ -6,6 +6,8 @@
 (function () {
   const cases = [];
   const stub = () => window.__gristStub;
+  // La langue de la page au chargement du fichier : la française, ou l'anglaise pour un cas `lang: 'en'` (la page démarre alors en anglais). Aucun scénario ne change la langue en route.
+  const PAGE_LANG = I18n.getLang();
   const TABLE = 'PpClientsEpure';
   const SHORT_HTML = '<p>Bonjour <span class="var-badge" data-table="' + TABLE + '" data-column="Nom" data-key="' + TABLE + '.Nom"></span>, voici le contrat de location.</p><p>Second paragraphe.</p>';
   const LONG_HTML = '<p>Bonjour <span class="var-badge" data-table="' + TABLE + '" data-column="Nom" data-key="' + TABLE + '.Nom"></span>.</p>'
@@ -38,7 +40,7 @@
 
   async function setup(h, html) {
     await h.resetEditor();
-    I18n.setLang('fr');
+    I18n.setLang(PAGE_LANG);
     stub().setVariables(TABLE, { Nom: 'Text' });
     stub().setRows(TABLE, [{ id: 1, Nom: 'Dupont' }, { id: 2, Nom: 'Martin' }]);
     await GristAPI.refreshSchema();
@@ -51,7 +53,7 @@
 
   async function finish() {
     if (CleanReading.isActive()) await CleanReading.exit();
-    I18n.setLang('fr');
+    I18n.setLang(PAGE_LANG);
     if (!inEdit()) { el('btn-mode-edit').click(); await sleep(400); }
     document.querySelectorAll('#v2-comment-popup[data-test-fake]').forEach(p => p.remove());
   }
@@ -197,8 +199,8 @@
   });
 
   cases.push({
-    id: 'clean_reading_keyboard_entry_gives_the_focus_back_and_texts_follow_the_language',
-    description: 'Entrée au clavier (Entrée sur la ligne) : à la sortie, le focus revient au bouton Mode lecture ; entrée à la souris : il n’y revient pas (le menu s’ouvrirait) ; la ligne, le bouton de sortie et son info-bulle suivent la langue',
+    id: 'clean_reading_keyboard_entry_gives_the_focus_back_and_texts_are_in_french',
+    description: 'Entrée au clavier (Entrée sur la ligne) : à la sortie, le focus revient au bouton Mode lecture ; entrée à la souris : il n’y revient pas (le menu s’ouvrirait) ; la ligne, le bouton de sortie et son info-bulle sont en français (l’anglais : page qui démarre en anglais, plus bas)',
     run: async (h) => {
       await setup(h);
       el('btn-mode-read').click();
@@ -224,18 +226,26 @@
       await sleep(200);
       const mouseBack = { active: CleanReading.isActive(), focus: document.activeElement && document.activeElement.id, reading: inRead() };
       // Langue : la ligne et le titre du menu, puis le bouton de sortie (aria-label et title).
-      I18n.setLang('en');
-      await sleep(150);
-      const en = { row: el('v2-btn-clean-reading').textContent, exitTitle: exitButton().title, exitAria: exitButton().getAttribute('aria-label') };
-      I18n.setLang('fr');
-      await sleep(150);
       const fr = { row: el('v2-btn-clean-reading').textContent, exitTitle: exitButton().title, exitAria: exitButton().getAttribute('aria-label') };
       await finish();
       const pass = keyboardOn && !keyboardBack.active && keyboardBack.focus === 'btn-mode-read' && keyboardBack.reading
         && mouseOn && !mouseBack.active && mouseBack.focus !== 'btn-mode-read' && mouseBack.reading
-        && en.row === 'Clean reading' && en.exitTitle === 'Exit clean reading (Esc)' && en.exitAria === 'Exit clean reading (Esc)'
         && fr.row === 'Lecture épurée' && fr.exitTitle === 'Quitter la lecture épurée (Échap)' && fr.exitAria === 'Quitter la lecture épurée (Échap)';
-      return { pass, notes: JSON.stringify({ keyboardOn, keyboardBack, mouseOn, mouseBack, en, fr }) };
+      return { pass, notes: JSON.stringify({ keyboardOn, keyboardBack, mouseOn, mouseBack, fr }) };
+    },
+  });
+
+  // Le bouton de sortie reçoit son info-bulle quand la page se bâtit : l'anglais se lit dans une page qui démarre en anglais.
+  cases.push({
+    id: 'clean_reading_texts_are_in_english_on_a_page_that_starts_in_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : la ligne du menu (« Clean reading »), le bouton de sortie, son info-bulle et son nom accessible (« Exit clean reading (Esc) ») sont en anglais',
+    run: async (h) => {
+      await setup(h);
+      const en = { row: el('v2-btn-clean-reading').textContent, exitTitle: exitButton().title, exitAria: exitButton().getAttribute('aria-label') };
+      await finish();
+      const pass = I18n.getLang() === 'en' && en.row === 'Clean reading' && en.exitTitle === 'Exit clean reading (Esc)' && en.exitAria === 'Exit clean reading (Esc)';
+      return { pass, notes: JSON.stringify({ en }) };
     },
   });
 

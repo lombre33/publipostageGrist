@@ -277,7 +277,7 @@
 
   cases.push({
     id: 'sc_buttons_tooltips_menu_rows_and_screen_readers_show_the_key',
-    description: 'La touche s\'affiche dans l\'infobulle des boutons (« Gras (Ctrl+B) »), à droite des lignes de menu (Citation, Titre 1), après le titre des menus (« Exporter en PDF (Alt+P) ») et se dit aux lecteurs d\'écran (aria-keyshortcuts) ; elle suit une touche changée, la langue et une touche retirée',
+    description: 'La touche s\'affiche dans l\'infobulle des boutons (« Gras (Ctrl+B) »), à droite des lignes de menu (Citation, Titre 1), après le titre des menus (« Exporter en PDF (Alt+P) ») et se dit aux lecteurs d\'écran (aria-keyshortcuts) ; elle suit une touche changée et une touche retirée (l\'anglais se lit dans la page qui démarre en anglais, plus bas)',
     run: async (h) => {
       await reset(h);
       const bold = document.getElementById('v2-btn-bold');
@@ -293,10 +293,6 @@
       const start = read();
       Shortcuts.setKey('bold', 'Alt+b');
       const moved = read();
-      I18n.setLang('en');
-      const english = read();
-      I18n.setLang('fr');
-      const afterLang = read();
       Shortcuts.setKey('bold', '');
       const removed = read();
       Shortcuts.resetKey('bold');
@@ -304,12 +300,10 @@
       const pass = start.tip === 'Gras (Ctrl+B)' && start.keytip === ' (Ctrl+B)' && start.aria === 'Control+B' && start.row === 'Ctrl+Maj+B' && start.rowShown === 'Ctrl+Maj+B'
         && start.heading === 'Alt+Maj+2' && start.menuTitle === ' (Alt+P)' && start.pdfAria === 'Alt+P' && start.listAria === 'Control+Shift+8' && start.linkAria === 'Control+K'
         && moved.tip === 'Gras (Alt+B)' && moved.aria === 'Alt+B'
-        && english.tip === 'Bold (Alt+B)' && english.row === 'Ctrl+Shift+B' && english.heading === 'Alt+Shift+2'
-        && afterLang.tip === 'Gras (Alt+B)'
         && removed.tip === 'Gras' && removed.keytip === null && removed.aria === null
         && back.tip === 'Gras (Ctrl+B)' && back.aria === 'Control+B';
       await reset(h);
-      return { pass, notes: JSON.stringify({ start, moved, english, afterLang, removed, back }) };
+      return { pass, notes: JSON.stringify({ start, moved, removed, back }) };
     },
   });
 
@@ -513,9 +507,6 @@
       Shortcuts.setKey('find', 'Alt+f');
       Shortcuts.setKey('replace', 'Alt+h');
       out.tipChosen = tip() + ' | ' + loupe().getAttribute('aria-keyshortcuts');
-      I18n.setLang('en'); await sleep(80);
-      out.tipEnglish = tip() + ' | ' + /\(Alt\+F\)$/.test(aria());
-      I18n.setLang('fr'); await sleep(80);
       // La nouvelle touche ouvre la barre (le clavier dans son champ) ; une seconde fois, elle ne la referme pas ; l'ancienne ne fait plus rien et arrive à personne.
       await withText(h);
       await hideReplaceRow();
@@ -547,7 +538,7 @@
       const pass = out.defaults === 'Mod+f|Mod+h|Ctrl+F|Ctrl+H' && out.mac === 'Mod+Shift+h|⌘F|⇧⌘H|Meta+F'
         && out.nativeFind.open && !out.nativeFind.replaceRow && !out.nativeFind.isOurs && out.nativeReplace.open && out.nativeReplace.replaceRow
         && out.tipDefault === 'Rechercher / Remplacer (Ctrl+F) | Control+F' && out.dupe === 'duplicate:find' && out.dupeAlias === 'duplicate:replace'
-        && out.tipChosen === 'Rechercher / Remplacer (Alt+F) | Alt+F' && out.tipEnglish === 'Find / Replace (Alt+F) | true'
+        && out.tipChosen === 'Rechercher / Remplacer (Alt+F) | Alt+F'
         && out.chosenFind.open && !out.chosenFind.replaceRow && out.chosenFind.focus === 'pp-find-input' && out.chosenFind.taken === true && out.chosenFindTwice === true
         && out.oldFind.open === false && out.oldFind.taken === true
         && out.chosenReplace.open && out.chosenReplace.replaceRow && out.chosenReplace.taken === true
@@ -777,7 +768,7 @@
 
   cases.push({
     id: 'sc_save_and_link_labels_follow_the_keys',
-    description: 'La touche d\'Enregistrer (titre du menu et nom accessible du bouton) et celle du lien (nom du bouton, ligne « Lien… ») viennent des Réglages : écrites ⌘ sur Mac, changées avec la touche, sans parenthèses quand elle est retirée, gardées au changement de langue',
+    description: 'La touche d\'Enregistrer (titre du menu et nom accessible du bouton) et celle du lien (nom du bouton, ligne « Lien… ») viennent des Réglages : écrites ⌘ sur Mac, changées avec la touche, sans parenthèses quand elle est retirée',
     run: async (h) => {
       await reset(h);
       const save = document.getElementById('btn-save');
@@ -789,9 +780,6 @@
       Shortcuts.setKey('save', 'Alt+s');
       Shortcuts.setKey('link', 'Alt+k');
       out.moved = read();
-      I18n.setLang('en');
-      out.english = read();
-      I18n.setLang('fr');
       Shortcuts.setKey('save', '');
       Shortcuts.setKey('link', '');
       out.removed = read();
@@ -802,7 +790,6 @@
       out.back = read();
       const pass = out.start.saveAria === 'Enregistrer (Ctrl+S)' && out.start.saveTitle === 'Enregistrer (Ctrl+S)' && out.start.linkAria.endsWith('(Ctrl+K)') && out.start.kbd === 'Ctrl+K' && out.start.dialog === 'Ctrl+K'
         && out.moved.saveAria === 'Enregistrer (Alt+S)' && out.moved.saveTitle === 'Enregistrer (Alt+S)' && out.moved.linkAria.endsWith('(Alt+K)') && out.moved.kbd === 'Alt+K'
-        && out.english.saveAria === 'Save (Alt+S)' && out.english.saveTitle === 'Save (Alt+S)' && out.english.kbd === 'Alt+K'
         && out.removed.saveAria === 'Enregistrer' && out.removed.saveTitle === 'Enregistrer' && !/\(/.test(out.removed.linkAria) && out.removed.kbd === '' && out.removed.dialog === ''
         && out.mac.saveAria === 'Enregistrer (⌘S)' && out.mac.kbd === '⌘K'
         && out.back.saveAria === 'Enregistrer (Ctrl+S)' && out.back.kbd === 'Ctrl+K';
@@ -981,6 +968,43 @@
         && enError === 'Alt+L is already the key for “Read mode”.' && enAlone === 'Add Ctrl (⌘ on Mac) or Alt: a key on its own would be typed into the text.';
       await reset(h, 'en');
       return { pass, notes: JSON.stringify({ en, enError, enAlone }) };
+    },
+  });
+
+  // La touche est écrite avec le texte du bouton quand la page se bâtit (et à chaque changement de touche) : l'anglais (« Shift » et non « Maj ») se lit dans une page qui démarre en anglais.
+  cases.push({
+    id: 'sc_keys_are_written_in_english_on_a_page_that_starts_in_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : l\'infobulle de Gras (« Bold (Ctrl+B) », « Bold (Alt+B) » une fois la touche changée), la touche des lignes de menu (« Ctrl+Shift+B », « Alt+Shift+2 »), l\'infobulle de la loupe (« Find / Replace (Ctrl+F) », puis « (Alt+F) ») et les touches d\'Enregistrer et du lien (« Save (Alt+S) ») sont écrites en anglais',
+    run: async (h) => {
+      await reset(h, 'en');
+      const bold = document.getElementById('v2-btn-bold');
+      const loupe = document.getElementById('v2-btn-find');
+      const save = document.getElementById('btn-save');
+      const saveTitle = document.getElementById('v2-save-flyout-label');
+      const kbd = document.getElementById('v2-row-link-kbd');
+      const read = () => ({
+        tip: afterContent(bold), row: document.getElementById('v2-btn-citation').getAttribute('data-keyhint'),
+        heading: document.querySelector('#v2-heading-flyout .v2-hover-row[data-level="2"]').getAttribute('data-keyhint'),
+        loupe: loupe.getAttribute('data-tip') + ' | ' + loupe.getAttribute('aria-keyshortcuts') + ' | ' + loupe.getAttribute('aria-label'),
+        saveAria: save.getAttribute('aria-label'), saveTitle: saveTitle.textContent, kbd: kbd.textContent,
+      });
+      const start = read();
+      Shortcuts.setKey('bold', 'Alt+b');
+      Shortcuts.setKey('find', 'Alt+f');
+      Shortcuts.setKey('save', 'Alt+s');
+      Shortcuts.setKey('link', 'Alt+k');
+      const moved = read();
+      Shortcuts.setKey('bold', '');
+      const removed = read();
+      await reset(h, 'en');
+      const pass = I18n.getLang() === 'en'
+        && start.tip === 'Bold (Ctrl+B)' && start.row === 'Ctrl+Shift+B' && start.heading === 'Alt+Shift+2'
+        && start.loupe === 'Find / Replace (Ctrl+F) | Control+F | Find and replace in the template (Ctrl+F)' && start.saveAria === 'Save (Ctrl+S)' && start.saveTitle === 'Save (Ctrl+S)' && start.kbd === 'Ctrl+K'
+        && moved.tip === 'Bold (Alt+B)' && moved.loupe.startsWith('Find / Replace (Alt+F) | Alt+F | ') && /\(Alt\+F\)$/.test(moved.loupe)
+        && moved.saveAria === 'Save (Alt+S)' && moved.saveTitle === 'Save (Alt+S)' && moved.kbd === 'Alt+K'
+        && removed.tip === 'Bold';
+      return { pass, notes: JSON.stringify({ start, moved, removed }) };
     },
   });
 

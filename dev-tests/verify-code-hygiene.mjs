@@ -859,9 +859,8 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 // s'inscrit fait échouer le contrôle (la règle est écrite dans la charte UX/UI, §1) ; un fichier qui y est et en a moins ou plus aussi : la liste ne fait que raccourcir, jamais s'élargir.
 {
   const STILL_LISTENING = {
-    'js/clean-reading.js': 1, 'js/editor-nodes.js': 2, 'js/editor.js': 1, 'js/external-images.js': 1, 'js/find-replace.js': 1, 'js/first-contact.js': 1, 'js/floating-toolbars.js': 1, 'js/grid-editor.js': 1,
-    'js/header-footer-preview.js': 1, 'js/macro-editor.js': 1, 'js/main-toolbar.js': 6, 'js/main.js': 4, 'js/orientation-toggle.js': 1, 'js/page-zoom.js': 1, 'js/reader-guide.js': 2, 'js/shortcuts.js': 1,
-    'js/template-gallery-modal.js': 1, 'js/template-tree-select.js': 1,
+    'js/editor-nodes.js': 2, 'js/editor.js': 1, 'js/external-images.js': 1, 'js/first-contact.js': 1, 'js/floating-toolbars.js': 1, 'js/grid-editor.js': 1, 'js/header-footer-preview.js': 1,
+    'js/macro-editor.js': 1, 'js/reader-guide.js': 2, 'js/template-gallery-modal.js': 1, 'js/template-tree-select.js': 1,
   };
   const found = {};
   for (const file of jsFiles) {

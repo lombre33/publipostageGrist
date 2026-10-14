@@ -33,6 +33,14 @@ window.EditorTestSuites.pageSize = (function () {
     document.dispatchEvent(new CustomEvent('pp:pageLayoutChanged'));
     await h.sleep(300);
   }
+  // Ce que la page dit de son format : la case Aperçu, le bouton d'orientation et la ligne « Format libre » du menu Page.
+  function readLabels() {
+    return {
+      tip: document.getElementById('v2-a4-toggle').getAttribute('data-tip'), aria: document.getElementById('v2-a4-toggle').getAttribute('aria-label'),
+      button: document.getElementById('btn-page-orientation').getAttribute('aria-label'), row: menuRows().find(r => r.key === 'custom'),
+    };
+  }
+  function watermarkHint() { WatermarkDialog.open(); const text = document.getElementById('pp-watermark-hint').textContent; escape(); return text; }
   function resetPage() {
     closeWindowIfOpen();
     PageLayout.setMarginsMm(null);
@@ -286,16 +294,12 @@ window.EditorTestSuites.pageSize = (function () {
       },
     },
     {
-      id: 'psize_labels_in_centimeters_follow_the_language',
-      description: 'Le format libre se dit en centimètres dans les phrases de l\'interface (« Aperçu 7 × 3,7 cm », « Page 7 × 3,7 cm en paysage », le texte du filigrane), avec la virgule en français et le point en anglais, dans le sens de la page ; un format de la liste garde son nom ; aucun {format} ni {min} non remplacé',
+      id: 'psize_labels_in_centimeters_are_in_french',
+      description: 'Le format libre se dit en centimètres dans les phrases de l\'interface (« Aperçu 7 × 3,7 cm », « Page 7 × 3,7 cm en paysage », le texte du filigrane), avec la virgule, dans le sens de la page ; un format de la liste garde son nom ; aucun {format} ni {min} non remplacé (l\'anglais, avec le point : page qui démarre en anglais, juste après)',
       async run(h) {
         await setup(h);
         const problems = [];
-        const read = () => ({
-          tip: document.getElementById('v2-a4-toggle').getAttribute('data-tip'), aria: document.getElementById('v2-a4-toggle').getAttribute('aria-label'),
-          button: document.getElementById('btn-page-orientation').getAttribute('aria-label'), row: menuRows().find(r => r.key === 'custom'),
-        });
-        const watermarkHint = () => { WatermarkDialog.open(); const text = document.getElementById('pp-watermark-hint').textContent; escape(); return text; };
+        const read = readLabels;
         try {
           applySize(70, 37);
           await h.sleep(200);
@@ -306,9 +310,30 @@ window.EditorTestSuites.pageSize = (function () {
           if (fr.button !== 'Page 7 × 3,7 cm en paysage (passer en portrait)') problems.push('français, bouton : ' + fr.button);
           if (fr.row.name !== 'Format libre…' || fr.row.size !== '7 × 3,7 cm' || fr.row.checked !== 'true') problems.push('français, ligne du menu : ' + JSON.stringify(fr.row));
           if (!/7 × 3,7 cm/.test(watermarkHint())) problems.push('français, filigrane : ' + watermarkHint());
-          I18n.setLang('en');
+          // Un format de la liste : son nom, ligne « Format libre » décochée et sans taille.
+          applySize(210, 297);
           await h.sleep(200);
-          const en = read();
+          const back = read();
+          if (back.tip !== 'Aperçu A4' || back.button !== 'Page A4 en portrait (passer en paysage)' || back.row.checked !== 'false' || back.row.size !== '') problems.push('A4 en français : ' + JSON.stringify(back));
+          [fr, back].forEach((r, i) => { if (/\{(format|min|max)\}/.test(JSON.stringify(r))) problems.push('un {format} non remplacé (' + i + ')'); });
+        } finally {
+          await h.sleep(150);
+          resetPage();
+        }
+        return { pass: problems.length === 0, notes: JSON.stringify(problems) };
+      },
+    },
+    {
+      id: 'psize_labels_in_centimeters_are_in_english_on_a_page_that_starts_in_english',
+      lang: 'en',
+      description: 'Page qui démarre en anglais : le format libre se dit en centimètres avec le point (« 7 × 3.7 cm preview », « 7 × 3.7 cm page in landscape »), « Custom size… » dans le menu, le texte du filigrane ; un format de la liste garde son nom ; aucun {format} ni {min} non remplacé',
+      async run(h) {
+        await setup(h);
+        const problems = [];
+        try {
+          applySize(70, 37);
+          await h.sleep(200);
+          const en = readLabels();
           if (PageLayout.getFormatLabel() !== '7 × 3.7 cm' || PageLayout.formatLabel('105.5x148.3') !== '10.55 × 14.83 cm') problems.push('étiquettes en anglais : ' + PageLayout.getFormatLabel());
           if (en.tip !== '7 × 3.7 cm preview' || !/^7 × 3.7 cm preview — /.test(en.aria)) problems.push('anglais, case : ' + en.tip + ' | ' + en.aria);
           if (en.button !== '7 × 3.7 cm page in landscape (switch to portrait)') problems.push('anglais, bouton : ' + en.button);
@@ -317,11 +342,11 @@ window.EditorTestSuites.pageSize = (function () {
           // Un format de la liste en anglais : son nom, ligne « Format libre » décochée et sans taille.
           applySize(210, 297);
           await h.sleep(200);
-          const back = read();
+          const back = readLabels();
           if (back.tip !== 'A4 preview' || back.button !== 'A4 page in portrait (switch to landscape)' || back.row.checked !== 'false' || back.row.size !== '') problems.push('A4 en anglais : ' + JSON.stringify(back));
-          [fr, en, back].forEach((r, i) => { if (/\{(format|min|max)\}/.test(JSON.stringify(r))) problems.push('un {format} non remplacé (' + i + ')'); });
+          [en, back].forEach((r, i) => { if (/\{(format|min|max)\}/.test(JSON.stringify(r))) problems.push('un {format} non remplacé (' + i + ')'); });
+          if (I18n.getLang() !== 'en') problems.push('la page ne démarre pas en anglais');
         } finally {
-          I18n.setLang('fr');
           await h.sleep(150);
           resetPage();
         }

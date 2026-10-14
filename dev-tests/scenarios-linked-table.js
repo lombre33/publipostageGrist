@@ -947,45 +947,42 @@
     }),
   });
 
-  cases.push({
+  const tableButtonNameCase = {
     id: 'linked_table_button_is_named_by_its_menu_title_and_its_key_is_written_there',
-    description: 'Le bouton Tableau, devenu un bouton à menu au survol (comme Image, Enregistrer et Exporter), n\'a pas d\'info-bulle propre : elle se retirerait dès l\'ouverture du menu. Il se nomme par son aria-label et par le titre de son menu (« Insérer un tableau », « Insert a table »), et la touche qu\'on lui donne s\'écrit sur ce titre (dans la langue en cours) et se dit aux lecteurs d\'écran sur le bouton ; la rendre la retire des deux',
+    description: 'Le bouton Tableau, devenu un bouton à menu au survol (comme Image, Enregistrer et Exporter), n\'a pas d\'info-bulle propre : elle se retirerait dès l\'ouverture du menu. Il se nomme par son aria-label et par le titre de son menu (« Insérer un tableau » ; « Insert a table » dans la page qui démarre en anglais), et la touche qu\'on lui donne s\'écrit sur ce titre (dans la langue en cours) et se dit aux lecteurs d\'écran sur le bouton ; la rendre la retire des deux',
     run: async (h) => {
       await h.resetEditor();
       const bad = [];
       const button = document.getElementById('v2-btn-table');
       const title = document.querySelector('#v2-table-flyout .v2-hover-flyout-label');
-      const lang = I18n.getLang();
+      const code = I18n.getLang();
       const shown = () => getComputedStyle(title, '::after').content.replace(/^"|"$/g, '');
       const aria = () => button.getAttribute('aria-keyshortcuts');
       try {
         if (button.hasAttribute('data-tip')) bad.push('le bouton garde une info-bulle propre : ' + button.getAttribute('data-tip'));
-        for (const code of ['fr', 'en']) {
-          I18n.setLang(code); await sleep(60);
-          const name = I18n.t('insert.table');
-          if (button.getAttribute('aria-label') !== name || title.textContent.trim() !== name) bad.push(code + ' : ' + JSON.stringify([button.getAttribute('aria-label'), title.textContent.trim()]) + ' au lieu de « ' + name + ' »');
-        }
-        I18n.setLang('fr'); await sleep(60);
+        const name = I18n.t('insert.table');
+        if (button.getAttribute('aria-label') !== name || title.textContent.trim() !== name) bad.push(code + ' : ' + JSON.stringify([button.getAttribute('aria-label'), title.textContent.trim()]) + ' au lieu de « ' + name + ' »');
         if (title.getAttribute('data-keytip') || aria()) bad.push('une touche que personne n\'a donnée : ' + JSON.stringify([title.getAttribute('data-keytip'), aria()]));
         const given = Shortcuts.setKey('table', 'Alt+Shift+t');
         if (given.problem) bad.push('la touche est refusée : ' + given.problem);
-        const french = [shown(), aria()];
+        const written = [shown(), aria()];
         const onButton = [button.getAttribute('data-keytip'), button.getAttribute('data-keyhint')];
-        I18n.setLang('en');
-        const english = [shown(), aria()];
-        I18n.setLang('fr');
-        if (french.join('|') !== ' (Alt+Maj+T)|Alt+Shift+T') bad.push('en français : ' + JSON.stringify(french));
-        if (english.join('|') !== ' (Alt+Shift+T)|Alt+Shift+T') bad.push('en anglais : ' + JSON.stringify(english));
+        const expected = code === 'en' ? ' (Alt+Shift+T)|Alt+Shift+T' : ' (Alt+Maj+T)|Alt+Shift+T';
+        if (written.join('|') !== expected) bad.push('la touche écrite (' + code + ') : ' + JSON.stringify(written));
         Shortcuts.resetKey('table');
         if (onButton.some(Boolean)) bad.push('la touche s\'écrit sur le bouton, qui n\'a pas d\'info-bulle pour la porter : ' + JSON.stringify(onButton));
         if (title.getAttribute('data-keytip') || aria()) bad.push('la touche rendue reste écrite : ' + JSON.stringify([title.getAttribute('data-keytip'), aria()]));
       } finally {
         Shortcuts.resetKey('table');
-        I18n.setLang(lang);
       }
       return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
     },
-  });
+  };
+  cases.push(tableButtonNameCase, Object.assign({}, tableButtonNameCase, {
+    id: 'linked_table_button_is_named_by_its_menu_title_on_a_page_that_starts_in_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : le bouton Tableau se nomme « Insert a table » (aria-label et titre de son menu) et la touche qu\'on lui donne s\'écrit « (Alt+Shift+T) »',
+  }));
 
   // === 7) Les sorties ==================================================================================================================================================
 
@@ -1579,13 +1576,6 @@
       if (menuOpen()) bad.push('le menu reste ouvert');
       if (modelWrites().length) bad.push('ouvrir a écrit dans Grist : ' + JSON.stringify(modelWrites()));
       if (textsOf(tablesOf()[0].node) !== labels('O', 3, 2)) bad.push('la grille ne montre pas les cases du modèle : ' + textsOf(tablesOf()[0].node));
-      // Le texte du bandeau suit la langue de l'interface.
-      const lang = I18n.getLang();
-      try {
-        I18n.setLang('en'); await sleep(80);
-        const en = screenOf();
-        if (en.barText !== 'Grid template opened from the document “' + d.nom + '”.' || en.barButton !== 'Back to the document' || document.getElementById('linked-return-bar').getAttribute('aria-label') !== 'Back to the document') bad.push('anglais : ' + JSON.stringify(en));
-      } finally { I18n.setLang(lang); await sleep(80); }
       say('');
       // Un clic de souris donne d'abord le focus au bouton : le clavier doit revenir dans le document.
       document.getElementById('btn-linked-return').focus();
@@ -1598,6 +1588,25 @@
       if (!ed().view.hasFocus() || !barShown()) bad.push('focus ou barre du tableau : ' + JSON.stringify([ed().view.hasFocus(), barShown()]));
       if (/diffère|differs/.test(statusLine().text)) bad.push('message d\'écart alors que le tableau est celui du modèle : ' + statusLine().text);
       if (modelWrites().length) bad.push('revenir a écrit dans Grist : ' + JSON.stringify(modelWrites()));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  // Le bandeau s'écrit avec la langue de la page, au moment où le modèle s'ouvre : l'anglais se lit dans une page qui démarre en anglais.
+  cases.push({
+    id: 'linked_open_return_bar_is_in_english_on_a_page_that_starts_in_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : le bandeau d\'un modèle Grille ouvert depuis le document dit « Grid template opened from the document “…” », son bouton « Back to the document » et son nom accessible',
+    run: async (h) => withApp(h, async () => {
+      const bad = [];
+      const m = await model('OpenEn', gridHtml('E', 3, 2));
+      const d = await openedDoc(m, 'E', 3, 2);
+      if (!(await openFromMenu(1, 1))) return { pass: false, notes: 'la ligne « Open the template » est introuvable' };
+      const en = screenOf();
+      if (en.barText !== 'Grid template opened from the document “' + d.nom + '”.' || en.barButton !== 'Back to the document' || document.getElementById('linked-return-bar').getAttribute('aria-label') !== 'Back to the document') bad.push('anglais : ' + JSON.stringify(en));
+      if (I18n.getLang() !== 'en') bad.push('la page ne démarre pas en anglais');
+      document.getElementById('btn-linked-return').click();
+      await sleep(900);
       return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
     }),
   });

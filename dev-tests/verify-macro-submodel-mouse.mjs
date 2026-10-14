@@ -287,38 +287,43 @@ const paintOf = (sel, bgSel) => page.evaluate(([s, b]) => {
 }, [sel, bgSel || null]);
 
 // === Modèles de la démonstration ===
-// La ligne courante : Nom = « a », donc l'annexe 1 du macro-modèle donne « Annexe CDI » dans la Lecture.
-await page.evaluate(async () => {
-  const stub = window.__gristStub;
-  stub.setVariables('Clients', { Nom: 'Text' });
-  stub.setRows('Clients', [{ id: 1, Nom: 'a' }]);
-  await GristAPI.refreshSchema();
-  stub.fireRecord({ id: 1, Nom: 'a' }, 'Clients');
-});
-const idCover = await makeTemplate('Contrat client', '<p>Page de garde du contrat</p>');
-const idCdi = await makeTemplate('Annexe CDI', '<p>Texte de l’annexe CDI</p>');
-const idCdd = await makeTemplate('Annexe CDD', '<p>Texte de l’annexe CDD</p>');
-const idMentions = await makeTemplate('Mentions légales', '<p>Mentions légales du dossier</p>');
+// Écrits dans le faux Grist à chaque chargement de la page : la partie anglaise recharge la page (elle ne change plus de langue en route) et les rebâtit.
 const rule = (value, modeleId) => ({ column: 'Nom', operator: '=', value, modeleId });
 const MACRO = 'Dossier salarié';
-const idMacro = await makeTemplate(MACRO, JSON.stringify({ slots: [
-  { type: 'fixed', modeleId: idCover },
-  { type: 'conditional', rules: [rule('a', idCdi), rule('b', idCdd)], defaultModeleId: idMentions },
-  { type: 'conditional', rules: [rule('c', idMentions)], defaultModeleId: null },
-] }), 'macro');
 const LONG = 'Dossier salarié : contrat, avenants, annexes et mentions légales de toutes les filiales du groupe, version complète';
-const idLong = await makeTemplate(LONG, JSON.stringify({ slots: [{ type: 'fixed', modeleId: idCover }] }), 'macro');
-const avenants = [];
-for (let n = 1; n <= 7; n++) avenants.push(await makeTemplate('Avenant ' + n, '<p>Texte de l’avenant ' + n + '</p>'));
-const idMany = await makeTemplate('Dossier complet', JSON.stringify({ slots: [
-  { type: 'fixed', modeleId: idCover },
-  ...avenants.map((id, i) => ({ type: 'conditional', rules: [rule('x' + (i + 1), id)], defaultModeleId: null })),
-] }), 'macro');
 const GONE = 987654;
-const idGone = await makeTemplate('Dossier à trou', JSON.stringify({ slots: [
-  { type: 'fixed', modeleId: idCover },
-  { type: 'conditional', rules: [rule('a', GONE)], defaultModeleId: idMentions },
-] }), 'macro');
+async function seedDemo() {
+  // La ligne courante : Nom = « a », donc l'annexe 1 du macro-modèle donne « Annexe CDI » dans la Lecture.
+  await page.evaluate(async () => {
+    const stub = window.__gristStub;
+    stub.setVariables('Clients', { Nom: 'Text' });
+    stub.setRows('Clients', [{ id: 1, Nom: 'a' }]);
+    await GristAPI.refreshSchema();
+    stub.fireRecord({ id: 1, Nom: 'a' }, 'Clients');
+  });
+  const idCover = await makeTemplate('Contrat client', '<p>Page de garde du contrat</p>');
+  const idCdi = await makeTemplate('Annexe CDI', '<p>Texte de l’annexe CDI</p>');
+  const idCdd = await makeTemplate('Annexe CDD', '<p>Texte de l’annexe CDD</p>');
+  const idMentions = await makeTemplate('Mentions légales', '<p>Mentions légales du dossier</p>');
+  const idMacro = await makeTemplate(MACRO, JSON.stringify({ slots: [
+    { type: 'fixed', modeleId: idCover },
+    { type: 'conditional', rules: [rule('a', idCdi), rule('b', idCdd)], defaultModeleId: idMentions },
+    { type: 'conditional', rules: [rule('c', idMentions)], defaultModeleId: null },
+  ] }), 'macro');
+  const idLong = await makeTemplate(LONG, JSON.stringify({ slots: [{ type: 'fixed', modeleId: idCover }] }), 'macro');
+  const avenants = [];
+  for (let n = 1; n <= 7; n++) avenants.push(await makeTemplate('Avenant ' + n, '<p>Texte de l’avenant ' + n + '</p>'));
+  const idMany = await makeTemplate('Dossier complet', JSON.stringify({ slots: [
+    { type: 'fixed', modeleId: idCover },
+    ...avenants.map((id, i) => ({ type: 'conditional', rules: [rule('x' + (i + 1), id)], defaultModeleId: null })),
+  ] }), 'macro');
+  const idGone = await makeTemplate('Dossier à trou', JSON.stringify({ slots: [
+    { type: 'fixed', modeleId: idCover },
+    { type: 'conditional', rules: [rule('a', GONE)], defaultModeleId: idMentions },
+  ] }), 'macro');
+  return { idCover, idCdi, idCdd, idMentions, idMacro, idLong, avenants, idMany, idGone };
+}
+const { idCover, idCdi, idCdd, idMentions, idMacro, idLong, avenants, idMany, idGone } = await seedDemo();
 
 // Rien n'écrit tout seul pendant les parcours (le minuteur de l'enregistrement automatique relit la liste) : coupé par le vrai menu, rallumé pour le cas 5.
 const autoOff = await setAutosave(false);
@@ -553,29 +558,29 @@ const g1s = await snap();
 check('modèle supprimé : un clic sur son stylo grisé ne fait rien (même macro-modèle, pas de bandeau)', g1s.current === String(idGone) && g1s.summaryShown && !g1s.barShown, g1s);
 await away();
 
-// 7) Anglais : résumé, info-bulle du stylo, bandeau, et réécriture en direct au changement de langue.
+// 7) Anglais : résumé, info-bulle du stylo, bandeau. La page ne change plus de langue en route : le script garde l'anglais et recharge, comme Réglages > Langue.
 console.log('\n=== Anglais ===');
-await page.evaluate(() => I18n.setLang('en'));
+await page.evaluate(() => I18n.storeLang('en'));
+await page.reload({ waitUntil: 'load' });
+await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
+await page.waitForFunction(() => { const el = document.getElementById('status-msg'); return !!el && /prêt|ready/i.test(el.textContent || ''); }, null, { timeout: 90000 });
 await sleep(400);
-check('en anglais le macro-modèle s\'ouvre par la liste', await pickTemplate(MACRO, idMacro));
+const en = await seedDemo();
+check('en anglais le macro-modèle s\'ouvre par la liste', await pickTemplate(MACRO, en.idMacro));
 const en0 = await summaryOf();
 check('anglais : « Cover page », « Annex 1 », « Annex 2 » et l\'info-bulle « Edit the template “…” » sur chaque stylo',
   JSON.stringify(en0.rows.map(r => r.label)) === JSON.stringify(['Cover page', 'Annex 1', 'Annex 2']) && en0.rows.flatMap(r => r.models).every(m => m.label === `Edit the template “${m.name}”` && m.title === m.label), en0.rows);
-await realClick(PENCIL(idCdd), 900);
-await waitCurrent(idCdd);
+await realClick(PENCIL(en.idCdd), 900);
+await waitCurrent(en.idCdd);
 const en1 = await snap(), eg = await barOf();
 check('anglais : le bandeau dit « Template opened from the macro template “…”. » et propose « Back to the macro template »',
   en1.barShown && en1.barText === `Template opened from the macro template “${MACRO}”.` && en1.buttonText === 'Back to the macro template', en1);
 check('anglais : le bouton du bandeau reste entier, au premier plan, dans le panneau', eg.btnOnTop && !eg.btnClipped && eg.btn.r <= WIDTH + 0.5 && eg.bar.h <= 40, eg);
 await shot('anglais');
-await page.evaluate(() => I18n.setLang('fr'));
-await sleep(400);
-const fr1 = await snap();
-check('changement de langue en route : la phrase et le bouton du bandeau sont réécrits en français', fr1.barText === `Modèle ouvert depuis le macro-modèle « ${MACRO} ».` && fr1.buttonText === 'Revenir au macro-modèle', fr1);
 await realClick(BAR_BUTTON, 900);
-await waitCurrent(idMacro);
-const fr2 = await snap();
-check('le bouton ramène au macro-modèle', fr2.current === String(idMacro) && fr2.summaryShown && !fr2.barShown, fr2);
+await waitCurrent(en.idMacro);
+const en2 = await snap();
+check('anglais : le bouton ramène au macro-modèle', en2.current === String(en.idMacro) && en2.summaryShown && !en2.barShown, en2);
 
 check('aucune boîte native (prompt, confirm, alert) ne s\'est ouverte', nativeDialogs.length === 0, nativeDialogs);
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);

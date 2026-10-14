@@ -435,14 +435,15 @@ for (const theme of ['light', 'dark']) {
     check('clair : un clic la recoche (état de départ rétabli)', (await autoState(page)).checked === 'true');
     const recheckedLook = await saveLook(page);
     check('clair : ... et le bouton Enregistrer est de nouveau bleu et blanc', !recheckedLook.off && recheckedLook.bg === recheckedLook.blue, recheckedLook);
-    await page.evaluate(() => I18n.setLang('en'));
-    await page.waitForTimeout(300);
+    // La page ne change plus de langue en route : le script garde l'anglais et recharge, comme Réglages > Langue.
+    await page.evaluate(() => I18n.storeLang('en'));
+    await page.reload({ waitUntil: 'load' });
+    await page.waitForFunction(() => { const el = document.getElementById('status-msg'); return !!el && /prêt|ready/i.test(el.textContent || ''); }, null, { timeout: 90000 });
     await hoverSave(page);
     const en = await page.evaluate(() => ({ title: document.getElementById('v2-save-flyout-label').textContent, saveAs: document.getElementById('v2-btn-save-as').textContent, auto: document.getElementById('v2-btn-autosave').textContent,
       aria: document.getElementById('btn-save').getAttribute('aria-label'), autoAria: document.getElementById('v2-btn-autosave').getAttribute('aria-label') }));
     check('anglais : « Save (Ctrl+S) », « Save as… », « Auto-save »', en.title === 'Save (Ctrl+S)' && en.saveAs === 'Save as…' && en.auto === 'Auto-save' && en.aria === 'Save (Ctrl+S)' && /^Auto-save/.test(en.autoAria), en);
     await page.screenshot({ path: SHOTS + '/menu-en.png', clip: { x: 0, y: 0, width: 700, height: 150 } });
-    await page.evaluate(() => I18n.setLang('fr'));
   }
   await page.context().close();
 }

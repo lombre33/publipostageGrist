@@ -480,8 +480,8 @@
   });
 
   cases.push({
-    id: 'autosave_status_unsaved_changes_wins_when_switched_off_with_a_pending_edit_follows_the_language_and_yields_to_the_never_saved_warning',
-    description: "Coupé avec une modification déjà en attente, l'indicateur passe tout de suite devant « Enregistrement automatique désactivé. » ; il suit la langue de l'interface ; rallumé, la modification part et il s'efface ; un brouillon jamais enregistré garde son avertissement rouge",
+    id: 'autosave_status_unsaved_changes_wins_when_switched_off_with_a_pending_edit_and_yields_to_the_never_saved_warning',
+    description: "Coupé avec une modification déjà en attente, l'indicateur passe tout de suite devant « Enregistrement automatique désactivé. » ; rallumé, la modification part et il s'efface ; un brouillon jamais enregistré garde son avertissement rouge",
     run: async (h) => {
       await clearConflictIfAny(h);
       const id = await saveTemplate(h, 'AutoSave indicateur 2', '<p>Départ</p>');
@@ -492,12 +492,6 @@
         await h.typeText(' en attente');
         await h.clickButton('v2-btn-autosave'); // coupé avant le passage de l'enregistrement automatique
         const offPending = statusNow();
-        I18n.setLang('en');
-        await h.sleep(60);
-        const english = statusNow();
-        I18n.setLang('fr');
-        await h.sleep(60);
-        const french = statusNow();
         await h.clickButton('v2-btn-autosave'); // rallumé : la modification en attente part
         await waitTicks(h, 2);
         const afterOn = statusNow();
@@ -509,12 +503,10 @@
         await h.typeText('brouillon');
         await h.sleep(60);
         const draft = statusNow();
-        const pass = UNSAVED_RE.test(offPending.text) && offPending.unsaved
-          && english.text === 'Unsaved changes.' && english.unsaved
-          && french.text === 'Modifications non enregistrées.' && french.unsaved
+        const pass = UNSAVED_RE.test(offPending.text) && offPending.unsaved && offPending.text === 'Modifications non enregistrées.'
           && SAVED_RE.test(afterOn.text) && !afterOn.unsaved && stored
           && /^(Modèle non enregistré|Template not saved)/.test(draft.text) && draft.error && !draft.unsaved;
-        return { pass, notes: JSON.stringify({ offPending, english, french, afterOn, stored, draft }) };
+        return { pass, notes: JSON.stringify({ offPending, afterOn, stored, draft }) };
       } finally {
         I18n.setLang('fr');
         await ensureAutosave(h, true);

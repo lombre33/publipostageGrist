@@ -352,7 +352,7 @@ const MainToolbar = (function () {
   // Dans une grille et dans un tableau de document (le curseur dans une case), le bouton « Saut de page » a le sens d'une ligne : il est enfoncé sur une
   // ligne qui porte un saut et son libellé le dit (autre texte, même icône). Grisé dans un tableau de document, il dit pourquoi en info-bulle
   // (`pp-row-break` lui rend le pointeur, que le grisé lui prend : css/grid.css ; le clic, lui, ne fait rien : GridEditor.togglePageBreak) ; celui d'une
-  // grille garde l'info-bulle d'avant. Les clés i18n suivent le mode : I18n.applyTranslations les relit au changement de langue.
+  // grille garde l'info-bulle d'avant. Les clés i18n suivent le mode.
   function syncPageBreakButton() {
     const button = byId('v2-btn-page-break');
     if (!button) return;
@@ -465,17 +465,17 @@ const MainToolbar = (function () {
     if (!editor.isActive('codeBlock') && mergeSelectionIntoCodeBlock()) return;
     editor.chain().focus().toggleCodeBlock().run();
   }
-  // Ligne « Encadré… » : « Modifier l'encadré… » quand le curseur est dans un encadré. Réécrite à chaque changement d'état et de langue (data-i18n ne
+  // Ligne « Encadré… » : « Modifier l'encadré… » quand le curseur est dans un encadré. Réécrite à chaque changement d'état (data-i18n ne
   // porte que la version « insérer »).
   function relabelCallout(inside) {
     const label = byId('v2-btn-callout-label');
     if (label) label.textContent = I18n.t(inside ? 'insert.callout.rowEdit' : 'insert.callout.row');
   }
-  // Ligne « QR code… » : « Modifier le QR code… » quand un QR code est sélectionné. Réécrite à chaque changement d'état et de langue.
+  // Ligne « QR code… » : « Modifier le QR code… » quand un QR code est sélectionné. Réécrite à chaque changement d'état.
   function relabelQr(selected) {
     const label = byId('v2-btn-qr-label');
     if (label) label.textContent = I18n.t(selected ? 'insert.qr.rowEdit' : 'insert.qr.row');
-    // Le nom accessible porte le même verbe que le libellé (« Modifier » ou « Insérer ») ; data-i18n-aria le garde juste au changement de langue.
+    // Le nom accessible porte le même verbe que le libellé (« Modifier » ou « Insérer »).
     const row = byId('v2-btn-qr');
     if (row) {
       const key = selected ? 'insert.qr.ariaEdit' : 'insert.qr.aria';
@@ -495,7 +495,7 @@ const MainToolbar = (function () {
     }
   }
   // La touche de la loupe (Ctrl+F, ⌘F, ou celle choisie dans Réglages > Raccourcis, js/shortcuts.js) est posée sur l'infobulle et l'aria-label,
-  // réécrits à chaque changement de langue ou de touche ; sans touche, pas de parenthèses.
+  // réécrits à chaque changement de touche ; sans touche, pas de parenthèses.
   function decorateFindShortcut() {
     const button = byId('v2-btn-find');
     if (!button) return;
@@ -505,7 +505,7 @@ const MainToolbar = (function () {
     button.setAttribute('aria-label', I18n.t('find.button.aria') + suffix);
   }
   // Le raccourci du lien dépend de la plateforme (Ctrl+K ou ⌘K) : posé sur l'aria-label du bouton et dans la ligne « Lien… » du menu, réécrit à
-  // chaque changement de langue (applyTranslations remet sinon l'aria-label sans lui), comme decorateSaveButtonShortcut dans js/main.js.
+  // chaque changement de touche, comme decorateSaveButtonShortcut dans js/main.js.
   function decorateLinkShortcut() {
     const label = LinkDialog.shortcutLabel();
     const button = byId('v2-btn-link');
@@ -541,7 +541,6 @@ const MainToolbar = (function () {
         event.preventDefault();
         toggleKeepNext();
       });
-      I18n.onChange(() => KeepWithNext.syncRow(keepNextRow, editor));
     }
     // Une liste se pose dans toutes les cases d'une sélection de cases, ou s'en retire (EditorCore.toggleList, aussi derrière Ctrl+Maj+8 et
     // Ctrl+Maj+7, js/shortcuts.js).
@@ -605,15 +604,10 @@ const MainToolbar = (function () {
     // Tableau d'un modèle Grille : une liste avec recherche des modèles Grille ; le choix pose la copie de leur tableau, liée au modèle (js/linked-table.js).
     bind('v2-btn-linked-table', () => LinkedTable.openPicker(editor, byId('v2-btn-linked-table')));
     decorateLinkShortcut();
-    I18n.onChange(decorateLinkShortcut);
     Shortcuts.onChange(decorateLinkShortcut);
     decorateFindShortcut();
-    I18n.onChange(decorateFindShortcut);
     Shortcuts.onChange(decorateFindShortcut);
     bind('v2-btn-find', () => FindReplace.toggle());
-    I18n.onChange(() => relabelCallout(Callout.isInside(editor)));
-    I18n.onChange(() => relabelQr(QrCode.isSelected(editor)));
-    I18n.onChange(() => relabelChart(ChartBlock.isSelected(editor)));
     // On insère seulement le caractère déclencheur : @tiptap/suggestion (Variables.createExtension) surveille le document, pas les frappes, donc le
     // caractère inséré par le code rouvre la même autocomplétion que s'il était tapé. Un texte sélectionné n'est pas remplacé par le « # » : la liste
     // s'ouvre devant lui, sur l'onglet Chips, pour l'entourer d'un bloc « Texte conditionnel » (js/conditional-text.js:startFromSelection).
@@ -697,9 +691,8 @@ const MainToolbar = (function () {
   function wireCompactFontSizeControls() {
     const { captureSelection, withSavedSelection } = EditorCore.createSelectionPreserver();
 
-    // data-i18n : le panneau flotte dans <body>, I18n.setLang() retraduit donc ce bouton sans rebâtir le panneau.
     const fontHtml = FONT_FAMILY_PRESETS.map(o => o.labelKey
-      ? `<button data-action="${o.value}" data-i18n="${o.labelKey}">${I18n.t(o.labelKey)}</button>`
+      ? `<button data-action="${o.value}">${I18n.t(o.labelKey)}</button>`
       : `<button data-action="${o.value}">${o.label}</button>`).join('');
     const fontPanel = EditorCore.createFloatingPanel('v2-format-panel', fontHtml, (value) => {
       withSavedSelection(chain => chain.setFontFamily(value));

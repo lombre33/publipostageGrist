@@ -39,6 +39,8 @@
   const selectionText = () => { const s = ed().state.selection; return ed().state.doc.textBetween(s.from, s.to); };
   const isDisabled = id => document.getElementById(id).getAttribute('aria-disabled') === 'true';
   const parse = html => new DOMParser().parseFromString(html, 'text/html').body;
+  // La langue de la page au chargement du fichier : la française, ou l'anglaise pour un cas `lang: 'en'` (la page démarre alors en anglais). Aucun scénario ne change la langue en route.
+  const PAGE_LANG = I18n.getLang();
 
   async function begin(h, html) {
     await h.resetEditor();
@@ -53,17 +55,18 @@
     FindReplace.setOptions({ matchCase: false, wholeWord: false, regex: false });
     FindReplace.setQuery('');
     if (Editor.isTrackChangesOn()) Editor.setTrackChanges(false);
-    I18n.setLang('fr');
+    if (I18n.getLang() !== PAGE_LANG) I18n.setLang(PAGE_LANG);
     await sleep(40);
   }
   // Le test passe son corps ; le nettoyage a lieu quoi qu'il arrive.
-  function scenario(id, description, body) {
-    cases.push({
+  // `options` : { lang: 'en' } pour un scénario qui se joue dans une page qui démarre en anglais.
+  function scenario(id, description, body, options) {
+    cases.push(Object.assign({
       id, description,
       run: async h => {
         try { return await body(h); } finally { await cleanup(); }
       },
-    });
+    }, options));
   }
   function key(target, init) {
     const ev = new KeyboardEvent('keydown', Object.assign({ bubbles: true, cancelable: true }, init));
@@ -394,8 +397,8 @@
       return { pass, notes: JSON.stringify({ read, refused, edit }) };
     });
 
-  scenario('fr_panel_texts_in_french_and_english',
-    'Panneau : libellés, infobulles et compteur (singulier et pluriel) en français puis en anglais',
+  scenario('fr_panel_texts_in_french',
+    'Panneau : libellés, infobulles et compteur (singulier et pluriel) en français',
     async h => {
       await begin(h, '<p>foo bar foo</p>');
       FindReplace.open({ replace: true });
@@ -407,24 +410,32 @@
       };
       FindReplace.setQuery('bar'); await sleep(30);
       const frOne = countText();
-      I18n.setLang('en');
-      await sleep(60);
-      // La recherche se place sur le résultat le plus proche du curseur : on remet le curseur au début pour retrouver « 1 of 2 ».
-      selectRange(1, 1);
-      FindReplace.setQuery('foo'); await sleep(30);
+      const pass = fr.find === 'Rechercher' && fr.placeholder === 'Rechercher dans le modèle' && fr.next === 'Résultat suivant (Entrée)' && fr.one === 'Remplacer' && fr.all === 'Tout remplacer'
+        && fr.count === '1 sur 2' && frOne === '1 sur 1';
+      return { pass, notes: JSON.stringify({ fr, frOne }) };
+    });
+
+  // Le panneau est bâti une fois, avec la langue de la page : l'anglais se lit dans une page qui démarre en anglais.
+  scenario('fr_panel_texts_in_english_on_a_page_that_starts_in_english',
+    'Page qui démarre en anglais : libellés, infobulles et compteur du panneau (« 1 of 2 », « No results »)',
+    async h => {
+      await begin(h, '<p>foo bar foo</p>');
+      FindReplace.open({ replace: true });
+      FindReplace.setQuery('foo'); await sleep(40);
       const en = {
         find: findInput().getAttribute('aria-label'), placeholder: findInput().placeholder, next: document.getElementById('pp-find-next').title,
         one: document.getElementById('pp-find-replace-one').textContent, all: document.getElementById('pp-find-replace-all').textContent, count: countText(),
         tip: document.getElementById('v2-btn-find').getAttribute('data-tip'),
       };
+      FindReplace.setQuery('bar'); await sleep(30);
+      const enOne = countText();
       FindReplace.setQuery('introuvable'); await sleep(30);
       const enNone = countText();
-      const pass = fr.find === 'Rechercher' && fr.placeholder === 'Rechercher dans le modèle' && fr.next === 'Résultat suivant (Entrée)' && fr.one === 'Remplacer' && fr.all === 'Tout remplacer'
-        && fr.count === '1 sur 2' && frOne === '1 sur 1'
+      const pass = I18n.getLang() === 'en'
         && en.find === 'Find' && en.placeholder === 'Find in the template' && en.next === 'Next result (Enter)' && en.one === 'Replace' && en.all === 'Replace all'
-        && en.count === '1 of 2' && /^Find \/ Replace \(/.test(en.tip) && enNone === 'No results';
-      return { pass, notes: JSON.stringify({ fr, frOne, en, enNone }) };
-    });
+        && en.count === '1 of 2' && /^Find \/ Replace \(/.test(en.tip) && enOne === '1 of 1' && enNone === 'No results';
+      return { pass, notes: JSON.stringify({ en, enOne, enNone }) };
+    }, { lang: 'en' });
 
   // === 3) Le remplacement ===================================================================================================================================================
 
@@ -1016,7 +1027,7 @@
     });
 
   scenario('fr_regex_panel_button_error_and_placeholder',
-    'Panneau : le bouton « Expression régulière » (aria-pressed) allume l\'option, un motif faux met « Expression non valide » au compteur (champ aria-invalid, raison en info-bulle, Suivant et Remplacer grisés), « Remplacer par ($1 = groupe) » ; puis en anglais',
+    'Panneau : le bouton « Expression régulière » (aria-pressed) allume l\'option, un motif faux met « Expression non valide » au compteur (champ aria-invalid, raison en info-bulle, Suivant et Remplacer grisés), « Remplacer par ($1 = groupe) »',
     async h => {
       await begin(h, '<p>Réf 12 et 34</p>');
       FindReplace.open({ replace: true });
@@ -1033,20 +1044,35 @@
       };
       FindReplace.setQuery('\\d+'); await sleep(40);
       const fixed = { invalid: findInput().hasAttribute('aria-invalid'), reason: counter.hasAttribute('title'), count: countText() };
-      I18n.setLang('en'); await sleep(60);
-      const en = { label: button.getAttribute('aria-label'), placeholder: replacementInput().placeholder };
       FindReplace.setQuery('(\\d+'); await sleep(40);
-      en.count = countText();
       button.click(); await sleep(40);
       const back = { pressed: button.getAttribute('aria-pressed'), count: countText(), placeholder: replacementInput().placeholder, invalid: findInput().hasAttribute('aria-invalid') };
       const pass = off.pressed === 'false' && off.label === 'Expression régulière' && off.title === 'Expression régulière' && off.placeholder === 'Remplacer par'
         && good.pressed === 'true' && good.count === '1 sur 2' && good.invalid === false && good.placeholder === 'Remplacer par ($1 = groupe)'
         && bad.count === 'Expression non valide' && bad.kind === 'error' && bad.invalid === 'true' && bad.reason === true && bad.replaceOff === true && bad.navOff === true
         && fixed.invalid === false && fixed.reason === false && fixed.count === '1 sur 2'
-        && en.label === 'Regular expression' && en.placeholder === 'Replace with ($1 = group)' && en.count === 'Invalid expression'
-        && back.pressed === 'false' && back.count === 'No results' && back.placeholder === 'Replace with' && back.invalid === false;
-      return { pass, notes: JSON.stringify({ off, good, bad, fixed, en, back }) };
+        && back.pressed === 'false' && back.count === 'Aucun résultat' && back.placeholder === 'Remplacer par' && back.invalid === false;
+      return { pass, notes: JSON.stringify({ off, good, bad, fixed, back }) };
     });
+
+  scenario('fr_regex_panel_button_error_and_placeholder_in_english',
+    'Page qui démarre en anglais : le bouton « Regular expression », « Invalid expression » au compteur, « Replace with ($1 = group) »',
+    async h => {
+      await begin(h, '<p>Réf 12 et 34</p>');
+      FindReplace.open({ replace: true });
+      const button = document.getElementById('pp-find-regex');
+      const en = { label: button.getAttribute('aria-label'), title: button.title, placeholder: replacementInput().placeholder };
+      button.click(); await sleep(30);
+      en.placeholderOn = replacementInput().placeholder;
+      FindReplace.setQuery('(\\d+'); await sleep(40);
+      en.count = countText();
+      button.click(); await sleep(40);
+      const back = { count: countText(), placeholder: replacementInput().placeholder };
+      const pass = I18n.getLang() === 'en'
+        && en.label === 'Regular expression' && en.title === 'Regular expression' && en.placeholder === 'Replace with' && en.placeholderOn === 'Replace with ($1 = group)' && en.count === 'Invalid expression'
+        && back.count === 'No results' && back.placeholder === 'Replace with';
+      return { pass, notes: JSON.stringify({ en, back }) };
+    }, { lang: 'en' });
 
   scenario('fr_regex_panel_prefill_is_escaped_when_the_option_is_on',
     'Panneau : en expression régulière, le mot repris de la sélection est échappé (« 3.14 » devient « 3\\.14 ») et ne trouve que « 3.14 », pas « 3x14 »',
@@ -1350,8 +1376,6 @@
     'Textes (bulles) : en anglais, « 1 replacement, 2 bubbles left as is », « 1 bubble left as is », et les quatre raisons (nom, formule, suivi, trop long) au compteur',
     async h => {
       await begin(h, '<p>client ' + bub('Client') + ' ' + bub('Client') + ' ' + calcBub('{T.Montant}') + ' ' + bub('Ville', ' data-before="Madame "') + '</p>');
-      I18n.setLang('en');
-      await sleep(60);
       FindReplace.open({ replace: true });
       FindReplace.setReplacement('X');
       FindReplace.setQuery('client');
@@ -1383,7 +1407,7 @@
         && reasons.name === 'A bubble' + RSQ + 's name can' + RSQ + 't be replaced.' && reasons.formula === 'A calculation' + RSQ + 's formula can' + RSQ + 't be replaced.'
         && reasons.tooLong === 'Too long for a bubble (40 characters at most).' && reasons.suggest === 'With track changes on, bubbles aren' + RSQ + 't replaced.';
       return { pass, notes: JSON.stringify({ replaced, plural, only, single, reasons }) };
-    });
+    }, { lang: 'en' });
 
   scenario('fr_contrast_bubble_highlight_light_and_dark',
     'Contrastes : une bulle trouvée (variable, variable cassée, calcul, calcul cassé), surlignée ou courante, garde son texte à 4,5:1 sur son fond de surlignage, en thème clair comme en sombre',
@@ -1891,8 +1915,6 @@
     'En-tête et pied (anglais) : « 2 replacements, 1 other elsewhere » puis « 1 replacement » ; le compteur dit « 2 of 3 »',
     async h => {
       await beginWithZones(h, '<p>One ABC and ABC</p>', '<p>ABC header</p>', '');
-      I18n.setLang('en');
-      await sleep(60);
       FindReplace.open({ replace: true });
       FindReplace.setReplacement('X');
       FindReplace.setQuery('abc');
@@ -1908,7 +1930,7 @@
       const flashHeader = countText();
       const pass = counter === '2 of 3' && first === 2 && flashBody === '2 replacements, 1 other elsewhere' && second === 1 && flashHeader === '1 replacement';
       return { pass, notes: JSON.stringify({ counter, first, flashBody, second, flashHeader }) };
-    });
+    }, { lang: 'en' });
 
 
   window.EditorTestSuites = window.EditorTestSuites || {};

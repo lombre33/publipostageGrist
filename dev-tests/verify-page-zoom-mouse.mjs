@@ -554,7 +554,13 @@ async function runContract(theme, lang) {
   const opened = await openWidget(theme, 'Contrat');
   page = opened.page;
   await recordEvents();
-  if (lang === 'en') { await page.evaluate(() => I18n.setLang('en')); await sleep(300); }
+  // La page ne change plus de langue en route : le script garde l'anglais, recharge, et repart d'une page qui démarre en anglais (comme Réglages > Langue).
+  if (lang === 'en') {
+    await page.evaluate(() => I18n.storeLang('en'));
+    await page.reload({ waitUntil: 'load' });
+    await waitReady(page);
+    await recordEvents();
+  }
   await parkMouse();
 
   // 1) L'affichage d'origine d'un A4 est celui d'avant : la feuille réduite pour tenir dans le panneau.

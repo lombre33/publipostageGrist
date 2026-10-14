@@ -114,7 +114,7 @@ const CleanReading = (function () {
   }
 
   // Le bouton de sortie n'est pas dans #toolbar-top : le [data-tip] de la barre ne s'y applique pas, l'info-bulle est un title natif (même choix que
-  // js/find-replace.js), relu à chaque changement de langue ; son aria-label vient de data-i18n-aria (index.html).
+  // js/find-replace.js), écrit au câblage ; son aria-label vient de data-i18n-aria (index.html).
   function applyTexts() {
     const exitButton = document.getElementById(EXIT_ID);
     if (exitButton) exitButton.title = I18n.t('cleanReading.exit');
@@ -138,7 +138,6 @@ const CleanReading = (function () {
     if (exitButton) exitButton.addEventListener('click', exit);
     document.addEventListener('keydown', onKeydown);
     applyTexts();
-    I18n.onChange(applyTexts);
   }
 
   return { wire, exit, isActive, onModeChange, isAnswered, wouldOpenForReadOnly, openForReadOnly };

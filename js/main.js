@@ -737,7 +737,6 @@
   function wireMacroReturn() {
     const button = document.getElementById('btn-macro-return');
     if (button) button.addEventListener('click', returnToMacro);
-    I18n.onChange(syncMacroReturnBar); // le nom du macro-modèle est dans la phrase du bandeau
   }
 
   // Ouvrir le modèle d'un tableau lié, et revenir au document
@@ -801,7 +800,6 @@
   function wireLinkedReturn() {
     const button = document.getElementById('btn-linked-return');
     if (button) button.addEventListener('click', returnFromLinkedModel);
-    I18n.onChange(syncLinkedReturnBar); // le nom du document est dans la phrase du bandeau
   }
 
   // Un seul enregistrement manuel à la fois. Avec Grist lent, un deuxième clic sur Enregistrer (ou Ctrl+S) pendant la première écriture partait
@@ -2627,7 +2625,7 @@
   // Le libellé du raccourci dépend de la plateforme (⌘S sur macOS, Ctrl+S ailleurs) et de la touche choisie dans Réglages > Raccourcis
   // (js/shortcuts.js ; '' quand elle a été retirée) : impossible à écrire dans index.html. Posé sur le titre du menu du bouton Enregistrer (qui
   // remplace son info-bulle : un bouton à menu n'a pas de data-tip, les deux se superposeraient) et sur son aria-label. Réappliqué à chaque
-  // changement de langue et de touche, sinon I18n.applyTranslations() le réécrirait sans le raccourci.
+  // changement de touche.
   function decorateSaveButtonShortcut() {
     const btn = document.getElementById('btn-save');
     if (!btn) return;
@@ -2781,11 +2779,7 @@
     wireSaveShortcut();
     wirePageFitZoom();
     decorateSaveButtonShortcut();
-    I18n.onChange(decorateSaveButtonShortcut);
     Shortcuts.onChange(decorateSaveButtonShortcut);
-    // Le message « Modifications non enregistrées » dure tant que rien n'est enregistré : il suit un changement de langue au lieu de rester dans
-    // l'ancienne.
-    I18n.onChange(() => { if (statusMsg.classList.contains('is-unsaved')) statusMsg.textContent = I18n.t('status.unsavedChanges'); });
     wireAutosaveConflictBanner();
     wirePasteTooBigNotice();
     wireMacroReturn();

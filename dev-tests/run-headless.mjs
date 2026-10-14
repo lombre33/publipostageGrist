@@ -7,6 +7,7 @@
 //   node dev-tests/run-headless.mjs                      # tous les groupes, un navigateur par groupe
 //   node dev-tests/run-headless.mjs comments formatting  # seulement ces groupes
 //   node dev-tests/run-headless.mjs --port 8899 formatting
+//   node dev-tests/run-headless.mjs pageZoom --case texts --case greyed   # seulement les scénarios dont l'identifiant contient « texts » ou « greyed »
 //   node dev-tests/run-headless.mjs load [sections] [--quick]   # banc de charge (dev-tests/load-tests.mjs), à la demande seulement
 //
 // Un navigateur NEUF par groupe, à dessein : le README documente des fuites d'état entre suites
@@ -346,8 +347,10 @@ let preseedFile = null;
 let viewportWidth = 1400;
 let viewportHeight = 1000;
 const wanted = [];
+const onlyCases = []; // --case <mot> : ne joue que les scénarios dont l'identifiant contient ce mot (répétable)
 for (let i = 0; i < argv.length; i++) {
   if (argv[i] === '--port') { port = Number(argv[++i]); continue; }
+  if (argv[i] === '--case') { onlyCases.push(argv[++i]); continue; }
   if (argv[i] === '--probe') { probe = argv[++i]; continue; }
   if (argv[i] === '--preseed') { preseedFile = argv[++i]; continue; }
   if (argv[i] === '--width') { viewportWidth = Number(argv[++i]); continue; }
@@ -481,6 +484,7 @@ async function runGroup(name, probeExpr, lang) {
   // Une page qui démarre en anglais (les cas `lang: 'en'` d'un groupe) : le navigateur de test se dit anglais avant le chargement, comme le fait un test de la langue par défaut
   // (dev-tests/grist-stub.js lit window.__browserLanguages). Réglages recharge la page pour changer de langue : aucun scénario ne passe en anglais en cours de route.
   if (lang === 'en') await page.addInitScript(() => { window.__browserLanguages = ['en-US', 'en']; });
+  if (onlyCases.length) await page.addInitScript(words => { window.__onlyCases = words; }, onlyCases);
   if (preseedCode) await page.addInitScript({ content: preseedCode });
   await page.goto(`${BASE}/_test-harness.html`, { waitUntil: 'load' });
   // L'éditeur se construit par import() dynamiques (js/editor.js) - attendre le vrai signe de vie,

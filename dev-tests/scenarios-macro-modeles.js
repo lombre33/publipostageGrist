@@ -1941,34 +1941,32 @@
     },
   });
 
-  cases.push({
-    id: 'macro_pencil_and_return_bar_follow_the_language',
-    description: 'En anglais, le résumé (Cover page, Annex 1, infobulle du stylo) et le bandeau de retour sont traduits, et un changement de langue en cours de route les réécrit',
+  // Le résumé et le bandeau de retour s'écrivent avec la langue de la page, au moment où ils se dessinent : le même parcours en français, puis dans une page qui démarre en anglais.
+  const macroTextsCase = {
+    id: 'macro_pencil_and_return_bar_texts_are_in_the_page_language',
+    description: 'En français, le résumé (Page de garde, Annexe 1, infobulle du stylo) et le bandeau de retour sont en français ; dans la page qui démarre en anglais (Cover page, Annex 1, « Edit the template … », « Back to the macro template ») ils sont en anglais',
     run: async (h) => {
       try {
         const macro = await composedMacro(h, 'Macro langue');
         const problems = [];
-        I18n.setLang('en');
-        await h.sleep(200);
+        const en = I18n.getLang() === 'en';
+        const want = en
+          ? { cover: 'Cover page', annex: 'Annex 1', pencil: 'Edit the template “Macro langue - garde”', barText: 'Template opened from the macro template “Macro langue”.', barButton: 'Back to the macro template', barAria: 'Back to the macro template' }
+          : { cover: 'Page de garde', annex: 'Annexe 1', pencil: 'Modifier le modèle « Macro langue - garde »', barText: 'Modèle ouvert depuis le macro-modèle « Macro langue ».', barButton: 'Revenir au macro-modèle', barAria: 'Retour au macro-modèle' };
         const rows = summaryRows();
-        if (rows[0].label !== 'Cover page' || rows[1].label !== 'Annex 1' || rows[0].pencils[0].label !== 'Edit the template “Macro langue - garde”') problems.push('résumé en anglais : ' + JSON.stringify(rows[0]));
+        if (rows[0].label !== want.cover || rows[1].label !== want.annex || rows[0].pencils[0].label !== want.pencil) problems.push('résumé : ' + JSON.stringify(rows[0]));
         pencilOf(macro.otherId).click();
         await h.sleep(800);
-        const en = screenState();
-        if (en.barText !== 'Template opened from the macro template “Macro langue”.' || en.barButton !== 'Back to the macro template' || document.getElementById('macro-return-bar').getAttribute('aria-label') !== 'Back to the macro template') problems.push('bandeau en anglais : ' + JSON.stringify(en));
-        I18n.setLang('fr');
-        await h.sleep(200);
-        const fr = screenState();
-        if (fr.barText !== 'Modèle ouvert depuis le macro-modèle « Macro langue ».' || fr.barButton !== 'Revenir au macro-modèle') problems.push('bandeau repassé en français : ' + JSON.stringify(fr));
+        const bar = screenState();
+        if (bar.barText !== want.barText || bar.barButton !== want.barButton || document.getElementById('macro-return-bar').getAttribute('aria-label') !== want.barAria) problems.push('bandeau : ' + JSON.stringify(bar));
         document.getElementById('btn-macro-return').click();
         await h.sleep(800);
-        I18n.setLang('en');
-        await h.sleep(200);
-        if (summaryRows()[0].label !== 'Cover page' || !summaryRows()[0].pencils[0].label.startsWith('Edit the template')) problems.push('résumé déjà à l\'écran, repassé en anglais : ' + JSON.stringify(summaryRows()[0]));
+        if (summaryRows()[0].label !== want.cover || summaryRows()[0].pencils[0].label !== want.pencil) problems.push('résumé de retour : ' + JSON.stringify(summaryRows()[0]));
         return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
-      } finally { I18n.setLang('fr'); await leaveMacro(h); }
+      } finally { await leaveMacro(h); }
     },
-  });
+  };
+  cases.push(macroTextsCase, Object.assign({}, macroTextsCase, { id: 'macro_pencil_and_return_bar_texts_are_in_english_on_a_page_that_starts_in_english', lang: 'en' }));
 
   // --- L'œil d'un modèle du résumé (04/10, demande d'Antoine : « dans l'interface d'édition du macro-modèle, une icône œil pour masquer l'un des modèles : il ne s'applique plus en Lecture ni aux exports ») ---
   // Le résumé (js/macro-editor.js:renderParts) met un œil après le stylo de chaque modèle. Un clic le masque de la Lecture et de toutes les sorties du macro-modèle (js/macro-templates.js:pickModeleId, le seul

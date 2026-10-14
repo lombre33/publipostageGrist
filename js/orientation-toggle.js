@@ -233,7 +233,7 @@ const OrientationToggle = (function () {
   }
 
   // Recopie l'état réel (sens et format de PageLayout, type du modèle chargé, droits) dans le bouton et son menu : rappelée après chaque chargement
-  // de modèle, chaque changement et chaque changement de langue, jamais mise à jour « à la main » ailleurs.
+  // de modèle, chaque changement, jamais mise à jour « à la main » ailleurs.
   function sync(typeModele) {
     if (typeModele !== undefined) currentType = typeModele || 'document';
     const btn = button();
@@ -265,7 +265,6 @@ const OrientationToggle = (function () {
     if (!btn) return;
     buildMenu();
     btn.addEventListener('click', toggle);
-    I18n.onChange(() => sync());
     // Le filigrane change depuis sa fenêtre : la ligne du menu en montre le texte.
     document.addEventListener('pp:watermarkChanged', () => sync());
     // La page change de taille depuis la fenêtre « Format libre… » (ou d'un autre module) : le bouton, la case Aperçu et le menu la relisent.

@@ -12,9 +12,12 @@ window.TestRunner = (function () {
     // en anglais. Les autres sont français. Ceux de l'autre langue sont mis de côté et comptés dans `results.deferred` : dev-tests/run-headless.mjs lance la seconde page
     // quand la française en a mis de côté.
     const pageLang = typeof I18n !== 'undefined' && I18n.getLang ? I18n.getLang() : 'fr';
+    // `--case mot` de dev-tests/run-headless.mjs (window.__onlyCases) : seuls les scénarios dont l'identifiant contient l'un de ces mots sont joués.
+    const only = Array.isArray(window.__onlyCases) && window.__onlyCases.length ? window.__onlyCases : null;
     const results = [];
     results.deferred = { fr: 0, en: 0 };
     for (const c of cases) {
+      if (only && !only.some(word => String(c.id).includes(word))) continue;
       const caseLang = c.lang === 'en' ? 'en' : 'fr';
       if (caseLang !== pageLang) { results.deferred[caseLang]++; continue; }
       let result;

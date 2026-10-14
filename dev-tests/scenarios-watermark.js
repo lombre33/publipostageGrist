@@ -763,8 +763,8 @@ window.EditorTestSuites.watermark = (function () {
   });
 
   cases.push({
-    id: 'wm_menu_row_follows_the_page_menu_rules_type_export_and_language',
-    description: 'La ligne « Filigrane… » du menu Page : dernière ligne après un filet, montre le texte en cours à droite, grisée et inactive pour un type de modèle que le menu ne suit pas (email) et pendant un export, active pour un macro-modèle ; suit la langue ; sa touche Entrée ouvre la fenêtre',
+    id: 'wm_menu_row_follows_the_page_menu_rules_type_and_export',
+    description: 'La ligne « Filigrane… » du menu Page : dernière ligne après un filet, montre le texte en cours à droite, grisée et inactive pour un type de modèle que le menu ne suit pas (email) et pendant un export, active pour un macro-modèle ; sa touche Entrée ouvre la fenêtre',
     run: async (h) => {
       await setup(h);
       try {
@@ -806,23 +806,35 @@ window.EditorTestSuites.watermark = (function () {
         const macro = state();
         if (macro.grey || macro.aria !== 'false' || macro.tab !== 0) problems.push('macro-modèle : ' + JSON.stringify(macro));
         OrientationToggle.sync('document');
-        // La langue : le nom suit, le texte du filigrane reste celui de la personne.
-        I18n.setLang('en');
-        await h.sleep(150);
-        const en = state();
-        I18n.setLang('fr');
-        await h.sleep(150);
-        if (en.name !== 'Watermark…' || en.value !== 'CONFIDENTIEL') problems.push('en anglais : ' + JSON.stringify(en));
         PageLayout.setWatermark(null);
         const s2 = state();
         if (s2.value !== '') problems.push('filigrane retiré : le texte reste dans le menu : ' + JSON.stringify(s2));
         return { pass: problems.length === 0, notes: JSON.stringify(problems) };
       } finally {
-        I18n.setLang('fr');
         OrientationToggle.setBusy(false);
         OrientationToggle.sync('document');
         const m = document.getElementById('pp-watermark-modal');
         if (m && m.style.display !== 'none') m.querySelector('.var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)').click();
+        await restore(h);
+      }
+    },
+  });
+
+  // Le nom de la ligne s'écrit avec la page : l'anglais se lit dans une page qui démarre en anglais ; le texte du filigrane reste celui de la personne.
+  cases.push({
+    id: 'wm_menu_row_says_watermark_on_a_page_that_starts_in_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : la ligne du menu Page se nomme « Watermark… » et montre à droite le texte de la personne, tel quel',
+    run: async (h) => {
+      await setup(h);
+      try {
+        const row = document.getElementById('v2-btn-watermark');
+        PageLayout.setWatermark({ text: 'CONFIDENTIEL' });
+        const en = { name: row.querySelector('.v2-page-row-name').textContent, value: row.querySelector('.v2-page-row-size').textContent };
+        PageLayout.setWatermark(null);
+        return { pass: I18n.getLang() === 'en' && en.name === 'Watermark…' && en.value === 'CONFIDENTIEL', notes: JSON.stringify(en) };
+      } finally {
+        OrientationToggle.sync('document');
         await restore(h);
       }
     },

@@ -12,6 +12,8 @@
 // démarrage elle-même.
 (function () {
   const cases = [];
+  // La langue de la page au chargement du fichier : la française, ou l'anglaise pour un cas `lang: 'en'` (la page démarre alors en anglais). Aucun scénario ne change la langue en route.
+  const PAGE_LANG = I18n.getLang();
 
   // La propriété .hidden reflète seulement l'ATTRIBUT posé par le JS, pas le rendu réel : une règle CSS
   // auteur qui fixe `display` sur l'élément (ex. #v2-email-fields-row { display:flex }) gagne contre la
@@ -353,9 +355,9 @@
   // .settings-panel battrait [hidden] et montrerait les sept panneaux ensemble - piège déjà rencontré sur #v2-email-fields-row), le défilement porté par la
   // zone de contenu (.settings-body, celle de la base commune des fenêtres, qui contient le panneau affiché) et non par la fenêtre ni par les onglets, « Fermer »
   // sous cette zone et dans la fenêtre. Français et anglais : les libellés d'onglet sont dans les deux langues.
-  cases.push({
+  const settingsWindowCase = {
     id: 'settings_window_holds_seven_tabs_on_one_row_and_only_the_panel_scrolls',
-    description: 'La fenêtre Réglages fait 480 px, ses sept onglets tiennent sur une ligne sans être coupés (français et anglais), un seul panneau s\'affiche à la fois, le défilement est porté par la zone de contenu (le titre et les onglets n\'y sont pas) et « Fermer » reste sous elle, dans la fenêtre (audit du 2026-09-29, défaut F2)',
+    description: 'La fenêtre Réglages fait 480 px, ses sept onglets tiennent sur une ligne sans être coupés (en français ; en anglais dans la page qui démarre en anglais, juste après), un seul panneau s\'affiche à la fois, le défilement est porté par la zone de contenu (le titre et les onglets n\'y sont pas) et « Fermer » reste sous elle, dans la fenêtre (audit du 2026-09-29, défaut F2)',
     run: async (h) => {
       const modal = document.getElementById('settings-modal');
       const content = modal.querySelector('.settings-modal-content');
@@ -366,8 +368,7 @@
       const problems = [];
       const checked = [];
       try {
-        for (const lang of ['fr', 'en']) {
-          I18n.setLang(lang);
+        for (const lang of [PAGE_LANG]) {
           await h.clickButton('v2-btn-settings');
           if (getComputedStyle(modal).display === 'none') { problems.push(lang + ' : la fenêtre ne s\'ouvre pas'); continue; }
           for (const tab of tabs) {
@@ -398,31 +399,35 @@
           if (getComputedStyle(modal).display !== 'none') problems.push(lang + ' : « Fermer » ne ferme pas la fenêtre');
         }
       } finally {
-        I18n.setLang('fr');
         modal.style.display = 'none';
         tabs[0].click();
       }
-      return { pass: problems.length === 0 && checked.length === 2 * tabs.length, notes: JSON.stringify({ expectedWidth, viewport: [window.innerWidth, window.innerHeight], problems: problems.slice(0, 8), sample: checked[0] }) };
+      return { pass: problems.length === 0 && checked.length === tabs.length, notes: JSON.stringify({ expectedWidth, viewport: [window.innerWidth, window.innerHeight], problems: problems.slice(0, 8), sample: checked[0] }) };
     },
-  });
+  };
+  // Le même parcours dans la langue de la page : en français, puis dans une page qui démarre en anglais (les libellés d'onglet de l'anglais sont plus longs ou plus courts).
+  cases.push(settingsWindowCase, Object.assign({}, settingsWindowCase, {
+    id: 'settings_window_holds_seven_tabs_on_one_row_on_a_page_that_starts_in_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : la fenêtre Réglages fait 480 px, ses sept onglets tiennent sur une ligne sans être coupés, un seul panneau s\'affiche à la fois et « Close » reste sous la zone de contenu',
+  }));
 
   // --- Bascule portrait / paysage (js/orientation-toggle.js, bouton #btn-page-orientation à côté d'Aperçu A4) ---
   // Le bouton ne s'allume que pour les types listés dans OrientationToggle.TYPES (les modèles classiques, depuis que l'éditeur, la Lecture, le PDF et le
-  // Word suivent l'orientation) ; ces cas règlent la liste le temps d'un scénario (vide pour simuler « aucun type accepté ») et remettent la liste,
-  // l'orientation et la langue d'origine.
+  // Word suivent l'orientation) ; ces cas règlent la liste le temps d'un scénario (vide pour simuler « aucun type accepté ») et remettent la liste
+  // et l'orientation d'origine.
   const orientationButton = () => document.getElementById('btn-page-orientation');
   const maskImageOf = el => { const cs = getComputedStyle(el, '::before'); return cs.webkitMaskImage || cs.maskImage || ''; };
   async function restoreOrientationState(typesBefore) {
     OrientationToggle.TYPES.splice(0, OrientationToggle.TYPES.length, ...typesBefore);
     PageLayout.setOrientation('portrait');
     PageLayout.setFormat('A4');
-    I18n.setLang('fr');
     OrientationToggle.sync();
   }
 
-  cases.push({
+  const orientationUnavailableCase = {
     id: 'toolbar_orientation_button_next_to_a4_and_grayed_when_the_type_does_not_follow_it',
-    description: 'Le bouton d\'orientation est à côté d\'Aperçu A4, visible et grisé (jamais retiré) pour un document et un email tant que leur type n\'est pas accepté, avec son libellé (aria-label, sans data-tip) dans les deux langues ; cliquer ne change rien',
+    description: 'Le bouton d\'orientation est à côté d\'Aperçu A4, visible et grisé (jamais retiré) pour un document et un email tant que leur type n\'est pas accepté, avec son libellé (aria-label, sans data-tip) dans la langue de la page (français ici, anglais dans la page qui démarre en anglais, juste après) ; cliquer ne change rien',
     run: async (h) => {
       const typesBefore = OrientationToggle.TYPES.slice();
       const problems = [];
@@ -442,14 +447,9 @@
           if (!pageGroup || !pageGroup.previousElementSibling || pageGroup.previousElementSibling.id !== 'v2-a4-toggle') problems.push(name + ' : pas juste après Aperçu A4');
           if (!btn.disabled) problems.push(name + ' : pas grisé (disabled)');
           if (parseFloat(getComputedStyle(btn).opacity) > 0.5) problems.push(name + ' : opacité ' + getComputedStyle(btn).opacity);
-          for (const lang of ['fr', 'en']) {
-            I18n.setLang(lang);
-            await h.sleep(30);
-            const want = I18n.t('toolbar.orientation.unavailable');
-            if (btn.getAttribute('aria-label') !== want) problems.push(name + '/' + lang + ' : libellé (aria-label) « ' + btn.getAttribute('aria-label') + ' » au lieu de « ' + want + ' »');
-            if (btn.hasAttribute('data-tip')) problems.push(name + '/' + lang + ' : le bouton d\'un menu au survol porte un data-tip');
-          }
-          I18n.setLang('fr');
+          const want = I18n.t('toolbar.orientation.unavailable');
+          if (btn.getAttribute('aria-label') !== want) problems.push(name + ' : libellé (aria-label) « ' + btn.getAttribute('aria-label') + ' » au lieu de « ' + want + ' »');
+          if (btn.hasAttribute('data-tip')) problems.push(name + ' : le bouton d\'un menu au survol porte un data-tip');
           btn.click();
           OrientationToggle.toggle();
           await h.sleep(60);
@@ -463,7 +463,12 @@
       }
       return { pass: problems.length === 0, notes: JSON.stringify({ problems, typesBefore }) };
     },
-  });
+  };
+  cases.push(orientationUnavailableCase, Object.assign({}, orientationUnavailableCase, {
+    id: 'toolbar_orientation_button_next_to_a4_and_grayed_on_a_page_that_starts_in_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : le bouton d\'orientation, visible et grisé tant que le type n\'est pas accepté, porte son libellé anglais (aria-label, sans data-tip) ; cliquer ne change rien',
+  }));
 
   cases.push({
     id: 'toolbar_orientation_button_toggles_the_page_and_signals_the_draft',

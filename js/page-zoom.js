@@ -387,7 +387,6 @@ const PageZoom = (function () {
       const sizes = new ResizeObserver(placePill);
       [containerOf(EDITOR_ID), containerOf(READER_ID)].forEach(c => { if (c) sizes.observe(c); });
     } else window.addEventListener('resize', placePill);
-    I18n.onChange(updatePill);
     updatePill();
   }
 

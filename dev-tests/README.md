@@ -199,6 +199,7 @@ groupes.
 bash dev-tests/generate-harness.sh          # régénère _test-harness.html depuis index.html
 node dev-tests/run-headless.mjs             # tous les groupes
 node dev-tests/run-headless.mjs comments formatting # seulement ces groupes
+node dev-tests/run-headless.mjs pageZoom --case texts --case greyed # seulement les scénarios dont l'identifiant contient ces mots
 ```
 
 `run-headless.mjs` sert le dépôt, ouvre `_test-harness.html` dans un Chromium
