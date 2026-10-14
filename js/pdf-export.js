@@ -285,6 +285,9 @@ const PdfExport = (function () {
     let leftPx;
     if (mode === 'box') {
       leftPx = node.getBoundingClientRect().left;
+    } else if (mode === 'content') {
+      const own = getComputedStyle(node);
+      leftPx = node.getBoundingClientRect().left + (parseFloat(own.borderLeftWidth) || 0) + (parseFloat(own.paddingLeft) || 0);
     } else {
       // Case d'une variable Oui / Non (`.resolved-checkbox`) : le premier « caractère rendu » d'un paragraphe qui commence par elle est la case, pas
       // son ☑ / ☐ (poussé hors de sa boîte par `text-indent` : le mesurer décalait tout le paragraphe d'une quarantaine de pt) ni le texte qui la
@@ -2344,7 +2347,7 @@ const PdfExport = (function () {
     if (tag === 'HR') return [ruleBlock(pageBreakBefore, availableWidthPt)];
     if (tag === 'PRE') return [codeBlockFrom(node, pageBreakBefore)];
     const ctx = { node, tag, pageBreakBefore, headingMarkers, availableWidthPt, rootRect, floatCarry };
-    if (RULE_HOSTS.test(tag) && (hasRuleChild(node) || ExportCommon.hasTableChild(node) || hasQuoteChild(node))) return ruleSplitBlocks(ctx);
+    if (RULE_HOSTS.test(tag) && (hasRuleChild(node) || ExportCommon.hasTableChild(node) || hasQuoteChild(node) || hasQuoteListChild(node))) return ruleSplitBlocks(ctx);
     return isFlowText(node, tag, headingMarkers) ? flowTextBlocks(ctx) : ordinaryBlocks(ctx, blockRunsOf(node, tag));
   }
 
@@ -2377,13 +2380,18 @@ const PdfExport = (function () {
   const RULE_HOSTS = /^(LI|BLOCKQUOTE)$/;
   const hasRuleChild = node => Array.from(node.children).some(child => child.tagName === 'HR');
   const hasQuoteChild = node => Array.from(node.children).some(child => child.tagName === 'BLOCKQUOTE');
+  // Une liste posée dans une citation (jamais dans un <li> : la sous-liste d'un item est déjà ses propres blocs, cf. nestedLists).
+  // Le retrait d'un bloc de texte : le bord de la boîte d'un <li>, le premier caractère d'un paragraphe ou d'une citation - le bord de CONTENU de la citation
+  // quand elle porte une liste, dont le premier caractère est celui de la liste, plus à droite.
+  const quoteIndentMode = (node, tag) => (tag === 'LI' ? 'box' : (hasQuoteListChild(node) ? 'content' : 'text'));
+  const hasQuoteListChild = node => node.tagName === 'BLOCKQUOTE' && Array.from(node.children).some(child => /^(UL|OL)$/.test(child.tagName));
 
   // Les enfants d'un nœud rangés par morceaux, un nouveau morceau après chaque trait. Avec `breaks`, après chaque tableau et chaque citation aussi : ce qui a
   // coupé (le trait, le tableau ou la citation) y est rangé, dans l'ordre, `breaks[i]` entre le morceau i et le suivant.
   function ruleSegmentsOf(node, breaks) {
     const segments = [[]];
     node.childNodes.forEach(child => {
-      const isBreak = child.nodeType === Node.ELEMENT_NODE && (child.tagName === 'HR' || (breaks && /^(TABLE|BLOCKQUOTE)$/.test(child.tagName)));
+      const isBreak = child.nodeType === Node.ELEMENT_NODE && (child.tagName === 'HR' || (breaks && (/^(TABLE|BLOCKQUOTE)$/.test(child.tagName) || (node.tagName === 'BLOCKQUOTE' && /^(UL|OL)$/.test(child.tagName)))));
       if (isBreak) { segments.push([]); if (breaks) breaks.push(child); }
       else segments[segments.length - 1].push(child);
     });
@@ -2396,7 +2404,7 @@ const PdfExport = (function () {
   function ruleSplitBlocks(ctx) {
     const { node, tag, availableWidthPt } = ctx;
     const style = inheritedStyle(node, { fontSize: DEFAULT_FONT_SIZE });
-    const indentPt = measureIndentPt(node, tag === 'LI' ? 'box' : 'text');
+    const indentPt = measureIndentPt(node, quoteIndentMode(node, tag));
     const rulePt = (availableWidthPt != null ? availableWidthPt : CONTENT_WIDTH_PT) - indentPt;
     const breaks = [];
     const segments = ruleSegmentsOf(node, breaks);
@@ -2407,6 +2415,11 @@ const PdfExport = (function () {
     const breakBlocks = el => {
       if (el.tagName === 'TABLE') return tableBlocksFrom(el, false, ctx.rootRect, availableWidthPt == null, 0, measureIndentPt(el, 'box'));
       if (el.tagName === 'BLOCKQUOTE') return blockFrom(el, false, ctx.headingMarkers, availableWidthPt, ctx.rootRect);
+      // Une liste de citation : un bloc par élément (puce, retrait et trait de l'élément, mesurés sur lui), en italique comme le reste de la citation.
+      if (/^(UL|OL)$/.test(el.tagName)) {
+        return Array.from(el.children).filter(c => c.tagName === 'LI').flatMap(li => blockFrom(li, false, ctx.headingMarkers, availableWidthPt, ctx.rootRect))
+          .map(b => (b.text !== undefined || b.columns ? Object.assign(b, { italics: true }) : b));
+      }
       return [ruleBlock(false, rulePt, indentPt)];
     };
     segments.forEach((children, i) => {
@@ -2420,10 +2433,12 @@ const PdfExport = (function () {
       const part = { continued: i > 0, beforeRule: i < lastSegment };
       ordinaryBlocks({ ...ctx, pageBreakBefore: i === 0 && ctx.pageBreakBefore, rulePart: part }, { rawRuns, images, nestedLists }).forEach(b => blocks.push(b));
     });
-    // Les marges de dessus et de dessous de la citation, quand le trait est son premier ou son dernier bloc.
+    // Les marges de dessus et de dessous de la citation, quand son premier ou son dernier bloc n'est pas un texte qui les porte déjà (textBlockFrom) : un trait,
+    // un élément de liste.
     if (tag === 'BLOCKQUOTE' && blocks.length) {
-      if (blocks[0].canvas) addTopMargin(blocks[0], 4);
-      if (blocks[blocks.length - 1].canvas) addBottomMargin(blocks[blocks.length - 1], 4);
+      const first = blocks[0]; const last = blocks[blocks.length - 1];
+      if (first.canvas || !(first.italics && first.margin && first.margin[1] === 4)) addTopMargin(first, 4);
+      if (last.canvas || !(last.italics && last.margin && last.margin[3] === 4)) addBottomMargin(last, 4);
     }
     if (ctx.pageBreakBefore && blocks.length && !blocks[0].pageBreak) blocks[0].pageBreak = 'before';
     return blocks;
@@ -2599,7 +2614,7 @@ const PdfExport = (function () {
   // trait (ruleSplitBlocks) ; `continued` : celui d'après le trait, sans puce ni marge de dessus, `beforeRule` : celui d'avant, sans marge de dessous.
   function textBlockFrom(node, tag, runs, headingMarkers, rulePart) {
     const isHeading = /^H[1-6]$/.test(tag);
-    const indentPt = measureIndentPt(node, (tag === 'LI' || isHeading) ? 'box' : 'text');
+    const indentPt = measureIndentPt(node, isHeading ? 'box' : quoteIndentMode(node, tag));
     // Marge verticale nulle entre blocs (mesuré : .tiptap p/h1-6/li/ol/ul { margin: 0 }) - une marge fictive ici dériverait de la vraie mise en page.
     // Marge droite = spaceWidthPt() : compense white-space:break-spaces.
     const block = { text: runs.length ? runs : ' ', margin: [indentPt, 0, spaceWidthPt(), 0], lineHeight: LINE_HEIGHT_RATIO };

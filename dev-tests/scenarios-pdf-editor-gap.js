@@ -24,6 +24,8 @@
 //
 // 6. Une citation dans une case de tableau (14/10, « polish » avant la 1.0). Elle sortait à plat, sans italique, sans retrait et sans les 4 pt de dessus et de dessous du flux : un cas la pose dans les trois colonnes d'un tableau et la compare à la même citation hors tableau, puis à la coupe de lignes de l'éditeur.
 //
+// 7. Une liste dans une citation (14/10, « polish » avant la 1.0). Le PDF la lisait d'un seul tenant avec la citation : éléments collés sur une ligne, sans puce ni numéro, trait d'un élément jamais dessiné. Un cas compare les distances, le retrait, l'italique et le trait au PDF.
+//
 // Comment la suite juge. Les capacités de page sont MESURÉES (jamais écrites en dur : elles dépendent des polices de la machine) sur le PDF, la référence de ce qui tient dans une page ; chaque moteur rend ensuite le
 // même document (éditeur en Aperçu A4, Lecture, impression navigateur, PDF relu par pdf.js) : mêmes pages, mêmes mots sur chacune.
 (function () {
@@ -808,6 +810,68 @@
           const lines = got.lost.length ? ['(repères absents : ' + got.lost.join(', ') + ')'] : quoteLinesInPdf(got);
           summary['coupe, colonne ' + (column + 1)] = { editeur: wanted, pdf: lines };
           if (JSON.stringify(wanted) !== JSON.stringify(lines)) problems.push('citation longue, colonne ' + (column + 1) + ' : le PDF commence ses lignes par ' + JSON.stringify(lines) + ', l\'éditeur par ' + JSON.stringify(wanted));
+        }
+      } finally { restorePage(); }
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems: compact(problems), summary }) };
+    },
+  });
+
+  // --- 7. Une liste dans une citation (14/10, « polish » avant la 1.0 : « trait d'une liste placée dans une citation ») ---
+  // Le PDF lisait la citation d'un seul tenant, liste comprise : les éléments se collaient sur une même ligne, sans puce ni numéro, et le trait d'un élément ne se dessinait pas. La liste est maintenant ses propres blocs (un par
+  // élément, avec sa puce, son retrait et son trait), en italique comme le reste de la citation, entre le texte d'avant et le texte d'après.
+  cases.push({
+    id: 'pdf_gap_list_inside_a_quote_keeps_its_items_bullets_indent_and_rule',
+    description: 'Une liste à puces ou numérotée dans une citation (avec un trait dans un élément, entre un texte d\'avant et un texte d\'après) : le PDF met chaque élément sur sa ligne avec sa puce ou son numéro, à la même distance du bord que l\'éditeur, en italique, pose les paragraphes à la même distance que l\'éditeur et peint le trait d\'un élément (un seul, de la puce au bord droit de la page)',
+    run: async h => {
+      const problems = []; const summary = {};
+      try {
+        await applyPage(h);
+        const margins = PageLayout.getMarginsPt();
+        // [libellé, HTML de la citation, repères (un par paragraphe), éléments qui portent une puce ou un numéro, traits attendus, repère de l'élément qui porte le trait]
+        const fixtures = [
+          ['liste à puces', '<blockquote><ul><li><p>Alpha</p></li><li><p>Beta</p></li></ul></blockquote><p>Gamma</p>', ['Alpha', 'Beta', 'Gamma'], ['Alpha', 'Beta'], 0, null],
+          ['liste avec un trait', '<blockquote><ul><li><p>Alpha</p><hr><p>Beta</p></li></ul></blockquote><p>Gamma</p>', ['Alpha', 'Beta', 'Gamma'], ['Alpha'], 1, 'Alpha'],
+          ['liste numérotée entre deux textes', '<blockquote><p>Avant</p><ol><li><p>Alpha</p><hr><p>Beta</p></li><li><p>Gamma</p></li></ol><p>Apres</p></blockquote><p>Fin</p>', ['Avant', 'Alpha', 'Beta', 'Gamma', 'Apres', 'Fin'], ['Alpha', 'Gamma'], 1, 'Alpha'],
+        ];
+        for (const [label, quoteHtml, markers, bulleted, expectedRules, ruleItem] of fixtures) {
+          const d = await distancesBetween(h, '<p>Titre</p>' + quoteHtml, ['Titre'].concat(markers));
+          const rules = await paintedRules(h, d.view);
+          const title = d.items.find(it => it.str === 'Titre');
+          const markerOf = word => { const at = d.items.find(it => it.str === word); return at ? d.items.filter(it => it !== at && Math.abs(it.y - at.y) < 1 && it.x < at.x).sort((a, b) => b.x - a.x)[0] : null; };
+          summary[label] = { editor: d.editor, pdf: d.pdf, rules };
+          d.pdf.forEach((gap, i) => {
+            const want = d.editor[i];
+            const pair = (i === 0 ? 'Titre' : markers[i - 1]) + ' à ' + markers[i];
+            if (gap == null || want == null) problems.push(label + ' : un repère de ' + pair + ' manque (PDF ' + gap + ', éditeur ' + want + ')');
+            else if (Math.abs(gap - want) > 1.5) problems.push(label + ' : de ' + pair + ', ' + gap + ' px dans le PDF contre ' + want + ' px dans l\'éditeur');
+          });
+          // Chaque élément a sa puce ou son numéro, sur sa ligne, au retrait que lui donne l'éditeur depuis « Titre ».
+          const root = document.querySelector('#editor-container .tiptap');
+          const zoom = EditorCore.layoutZoom(root);
+          const titleParagraph = Array.from(root.querySelectorAll('p')).find(p => p.textContent.trim() === 'Titre');
+          const textLeft = el => { const range = document.createRange(); range.selectNodeContents(el.firstChild); return range.getBoundingClientRect().left; };
+          const itemAt = word => Array.from(root.querySelectorAll('li')).find(li => li.querySelector('p') && li.querySelector('p').textContent.trim() === word);
+          bulleted.forEach(word => {
+            const marker = markerOf(word);
+            if (!marker) { problems.push(label + ' : « ' + word + ' » n\'a ni puce ni numéro avant lui sur sa ligne'); return; }
+            const li = itemAt(word);
+            const want = round1((li.getBoundingClientRect().left - textLeft(titleParagraph)) / zoom * 0.75);
+            const have = round1(marker.x - title.x);
+            summary[label][word] = { puce: have, editeur: want };
+            if (Math.abs(have - want) > 2) problems.push(label + ' : la puce de « ' + word + ' » est à ' + have + ' pt de « Titre », l\'élément de l\'éditeur à ' + want + ' pt');
+          });
+          // L'italique de la citation : « Alpha » aussi large que dans une citation d'un paragraphe.
+          const reference = await pdfView(h, '<p>Titre</p><blockquote><p>' + markers[bulleted[0] === 'Alpha' ? markers.indexOf('Alpha') : 0] + '</p></blockquote>');
+          const italicWidth = reference.truth.pages[0].textItems.find(it => it.str === bulleted[0]);
+          const itemWidth = d.items.find(it => it.str === bulleted[0]);
+          if (italicWidth && itemWidth && Math.abs(italicWidth.width - itemWidth.width) > 0.15) problems.push(label + ' : « ' + bulleted[0] + ' » fait ' + round2(itemWidth.width) + ' pt de large, ' + round2(italicWidth.width) + ' pt en italique');
+          if (rules.length !== expectedRules) { problems.push(label + ' : le PDF peint ' + rules.length + ' trait(s) au lieu de ' + expectedRules + ' : ' + JSON.stringify(rules)); continue; }
+          if (expectedRules) {
+            const rule = rules[0]; const marker = markerOf(ruleItem);
+            if (marker && Math.abs(rule.x1 - marker.x) > 1.5) problems.push(label + ' : le trait part de ' + rule.x1 + ' pt, la puce de l\'élément de ' + round2(marker.x) + ' pt');
+            const pageRight = d.view.truth.pages[0].width - margins.right;
+            if (Math.abs(rule.x2 - pageRight) > 1) problems.push(label + ' : le trait finit à ' + rule.x2 + ' pt, la marge de droite est à ' + round2(pageRight) + ' pt');
+          }
         }
       } finally { restorePage(); }
       return { pass: problems.length === 0, notes: JSON.stringify({ problems: compact(problems), summary }) };

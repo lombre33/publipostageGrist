@@ -555,6 +555,11 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Une liste dans une citation s'écrit dans le PDF avec ses puces, chaque élément sur sa ligne, et son trait** : dans le
+  PDF, une liste posée dans une citation sortait d'un seul tenant avec elle : ses éléments se collaient sur une même
+  ligne, sans puce ni numéro, et le trait posé dans un élément ne se dessinait pas. Chaque élément a maintenant sa
+  ligne, sa puce ou son numéro au retrait de l'éditeur, en italique comme la citation ; le trait va de la puce au
+  bord droit de la page ; le texte d'avant et d'après la liste reste dans la citation.
 - **Une citation dans une case de tableau s'écrit dans le PDF comme une citation du texte** : dans le PDF, une citation
   posée dans une case sortait à plat, comme le texte de la case : sans italique, sans son retrait et sans
   l'espace de 4 points qu'elle a au-dessus et en dessous hors tableau. Elle est maintenant en italique, au même
@@ -1332,6 +1337,11 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Fixed
 
+- **A list in a quote is written in the PDF with its bullets, each item on its line, and its rule**: in the PDF, a list
+  placed in a quote came out in one piece with it: its items were glued on the same line, without bullet or number,
+  and a rule placed in an item was not drawn. Each item now has its line, its bullet or number at the editor's
+  indent, in italics like the quote; the rule goes from the bullet to the right edge of the page; the text before
+  and after the list stays in the quote.
 - **A quote in a table cell is written in the PDF like a quote in the text**: in the PDF, a quote placed in a cell came
   out flat, like the cell's text: without italics, without its indent and without the 4-point space it has
   above and below outside a table. It is now in italics, with the same indent and the same spaces as outside a table,
