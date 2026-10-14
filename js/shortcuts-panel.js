@@ -159,7 +159,6 @@ const ShortcutsPanel = (function () {
     if (!listEl) return;
     build();
     Shortcuts.onChange(renderAll);
-    I18n.onChange(() => { stopRecording(); build(); });
     VIEWS.forEach(name => { const tab = byId('settings-switch-' + name); if (tab) tab.addEventListener('click', () => showView(name)); });
     if (resetAllButton) {
       resetAllButton.addEventListener('click', async () => {

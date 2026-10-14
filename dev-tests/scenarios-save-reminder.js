@@ -210,9 +210,11 @@
       got.onView = shown();
       tab('access').click(); await sleep(150);
       got.backOnAccess = shown();
-      I18n.setLang('en'); await sleep(150);
+      // La page ne change plus de langue en route : la ligne s'écrit quand l'onglet s'affiche, on le rouvre donc après chaque changement.
+      const reshowAccess = async () => { tab('language').click(); await sleep(150); tab('access').click(); await sleep(150); };
+      I18n.setLang('en'); await reshowAccess();
       got.english = box().textContent;
-      I18n.setLang('fr'); await sleep(150);
+      I18n.setLang('fr'); await reshowAccess();
       got.french = box().textContent;
       // « Enregistrer » dans Grist : aucun message, la ligne reste (une consigne, vraie aussi après le clic).
       stub().saveOptions(); await sleep(150);

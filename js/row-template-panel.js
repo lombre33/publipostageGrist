@@ -156,7 +156,6 @@ const RowTemplatePanel = (function () {
         wasOpen = open;
       }).observe(modal, { attributes: true, attributeFilter: ['style'] });
     }
-    I18n.onChange(() => { if (draft) render(); });
     // « Retour » de Grist (js/save-reminder.js) : Grist rend les options enregistrées, l'onglet les reprend. Sans cela il gardait le réglage annulé (case
     // encore cochée) et la fermeture des Réglages l'écrivait de nouveau, ce qui refaisait apparaître « Enregistrer » pour un changement qu'on venait d'annuler.
     // Une écriture en attente (250 ms) du réglage annulé est abandonnée avec lui. Sans brouillon (Réglages jamais ouverts), rien à faire : l'ouverture relit.

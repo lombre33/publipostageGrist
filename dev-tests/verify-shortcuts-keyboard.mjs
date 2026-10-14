@@ -127,16 +127,30 @@ const nativeDialogs = [];
 page.on('dialog', async d => { nativeDialogs.push(d.type() + ' : ' + d.message()); await d.dismiss(); });
 
 // Un export, un nouveau modèle ou une suppression ne sont pas ce qu'on mesure : le clic est compté et avalé avant d'aller au bout.
-await page.evaluate(() => {
-  window.__spy = {};
-  document.addEventListener('click', event => {
-    const el = event.target && event.target.closest && event.target.closest('#btn-export-pdf, #btn-new, #btn-delete');
-    if (!el) return;
-    window.__spy[el.id] = (window.__spy[el.id] || 0) + 1;
-    event.stopImmediatePropagation();
-    event.preventDefault();
-  }, true);
-});
+async function installSpy() {
+  await page.evaluate(() => {
+    window.__spy = {};
+    document.addEventListener('click', event => {
+      const el = event.target && event.target.closest && event.target.closest('#btn-export-pdf, #btn-new, #btn-delete');
+      if (!el) return;
+      window.__spy[el.id] = (window.__spy[el.id] || 0) + 1;
+      event.stopImmediatePropagation();
+      event.preventDefault();
+    }, true);
+  });
+}
+await installSpy();
+// La page ne change plus de langue en route : Réglages garde le choix et la recharge. Le script fait pareil - il garde la langue, recharge, attend le widget et repose son espion.
+async function restartIn(lang) {
+  await page.evaluate(next => I18n.storeLang(next), lang);
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
+  await page.waitForFunction(() => {
+    const el = document.getElementById('status-msg');
+    return !!el && /prêt|ready/i.test(el.textContent || '');
+  }, null, { timeout: 90000 });
+  await installSpy();
+}
 const spied = id => page.evaluate(id => window.__spy[id] || 0, id);
 
 async function snap(name) { if (SHOTS) await page.screenshot({ path: join(SHOTS, name + '.png') }); }
@@ -625,7 +639,7 @@ async function run(theme, fr) {
 // === Anglais : la liste, les refus, les infobulles =============================================================================================================
 async function englishPart() {
   const T = 'anglais';
-  await page.evaluate(() => I18n.setLang('en'));
+  await restartIn('en');
   await page.waitForTimeout(300);
   await resetAll();
   await openKeys();
@@ -643,7 +657,7 @@ async function englishPart() {
   await keyboardOnlyPart(T);
   await layoutPart(T);
   await tooltipsPart(T, false);
-  await page.evaluate(() => I18n.setLang('fr'));
+  await restartIn('fr');
   await page.waitForTimeout(250);
 }
 

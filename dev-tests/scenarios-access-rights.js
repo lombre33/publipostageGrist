@@ -655,8 +655,9 @@
         out.tab = accessTabState();
         out.tableShown = document.getElementById('settings-access-table').nextElementSibling.querySelector('.ss-trigger').textContent;
         const lang = I18n.getLang();
-        try { I18n.setLang('en'); await sleep(100); out.english = document.getElementById('settings-access-status').textContent; }
-        finally { I18n.setLang(lang); await sleep(100); }
+        // La page ne change plus de langue en route : l'onglet se redessine à l'ouverture de Réglages, on les rouvre donc après chaque changement.
+        try { I18n.setLang('en'); await openSettings(); out.english = document.getElementById('settings-access-status').textContent; }
+        finally { I18n.setLang(lang); await openSettings(); }
         await chooseInAccessTab('settings-access-table', OTHER_RIGHTS_TABLE);
         out.afterTable = {
           config: AccessRights.getConfig(),

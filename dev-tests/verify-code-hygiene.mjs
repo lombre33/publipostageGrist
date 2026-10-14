@@ -47,6 +47,8 @@
 //  23. un changement de langue de Réglages qui retraduit l'écran sur place au lieu de recharger la page (demande du 14/10 : « quand on change de langue, on recharge la page et uniquement ça, pour ne
 //      pas alourdir ») : les cases de langue passent par changeLanguage (la question « Enregistrer / Abandonner / Annuler » d'abord, puis I18n.storeLang et location.reload()), et seul un stockage refusé
 //      change la langue sur place.
+//  24. un écran qui s'inscrit à I18n.onChange pour se retraduire en direct (même demande du 14/10, « on simplifie le code ») : la page ne change plus de langue en route, un écran écrit ses libellés quand
+//      il se bâtit ou s'ouvre et ne les relit pas. Le code qui retraduisait en direct est retiré par lots ; la liste des fichiers qui s'inscrivent encore (STILL_LISTENING) ne fait que raccourcir.
 //
 // Volontairement PERMISSIF : un nom cité seulement dans un commentaire compte comme utilisé, un préfixe construit (`'toc-level-' + n`) couvre toute la
 // famille. Le but est de ne jamais faire échouer un changement légitime, seulement d'attraper ce qui n'a plus AUCUN point d'entrée. Une classe posée
@@ -847,6 +849,31 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('langue : js/main.js donne à Réglages la question « Enregistrer / Abandonner / Annuler »', /Settings\.wireSettingsModal\(\{ hasEditsToConfirmBeforeLeaving, askBeforeLeaving \}\)/.test(main), 'js/main.js');
   check('langue : I18n garde le choix par storeLang (faux si le stockage est refusé), que setLang réutilise au lieu de réécrire pp_lang',
     /function storeLang\(next\)[\s\S]*?return true;[\s\S]*?return false;/.test(i18n) && /storeLang\(lang\);/.test(i18n) && (i18n.match(/localStorage\.setItem\('pp_lang'/g) || []).length === 1 && /return \{ t, getLang, setLang, storeLang,/.test(i18n), 'js/i18n.js');
+}
+
+// ============================================================================
+// 24. Plus aucun écran ne se retraduit en direct (demande du 14/10)
+// ============================================================================
+// Réglages recharge la page pour changer de langue : un écran écrit ses libellés, ses infobulles et ses noms accessibles quand il se bâtit ou s'ouvre, dans la langue de la page, et ne les relit pas.
+// Les inscriptions à I18n.onChange qui le faisaient sont retirées par lots (« Oui, retirer », 14/10) ; STILL_LISTENING garde, par fichier, celles qui restent à retirer. Un fichier qui n'y est pas et qui
+// s'inscrit fait échouer le contrôle (la règle est écrite dans la charte UX/UI, §1) ; un fichier qui y est et en a moins ou plus aussi : la liste ne fait que raccourcir, jamais s'élargir.
+{
+  const STILL_LISTENING = {
+    'js/clean-reading.js': 1, 'js/editor-nodes.js': 2, 'js/editor.js': 1, 'js/external-images.js': 1, 'js/find-replace.js': 1, 'js/first-contact.js': 1, 'js/floating-toolbars.js': 1, 'js/grid-editor.js': 1,
+    'js/header-footer-preview.js': 1, 'js/macro-editor.js': 1, 'js/main-toolbar.js': 6, 'js/main.js': 4, 'js/orientation-toggle.js': 1, 'js/page-zoom.js': 1, 'js/reader-guide.js': 2, 'js/shortcuts.js': 1,
+    'js/template-gallery-modal.js': 1, 'js/template-tree-select.js': 1,
+  };
+  const found = {};
+  for (const file of jsFiles) {
+    const n = (noCommentsJs(read(file)).match(/\bI18n\.onChange\(/g) || []).length;
+    if (n) found[file] = n;
+  }
+  const strangers = Object.keys(found).filter(f => !(f in STILL_LISTENING));
+  const moved = Object.keys(STILL_LISTENING).filter(f => found[f] !== STILL_LISTENING[f]);
+  check('langue : l\'analyse lit bien les inscriptions à I18n.onChange (garde-fou de l\'analyse elle-même)', Object.keys(STILL_LISTENING).length === 0 || Object.keys(found).length > 0, JSON.stringify(found));
+  check('langue : aucun fichier hors de la liste ne s\'inscrit à I18n.onChange (un écran écrit ses libellés quand il se bâtit ou s\'ouvre, la page ne change plus de langue en route)',
+    strangers.length === 0, strangers.map(f => `${f} (${found[f]})`).join(', '));
+  check('langue : la liste des fichiers qui s\'inscrivent encore est à jour (en retirer ce qui est retiré, jamais en ajouter)', moved.length === 0, moved.map(f => `${f} : ${found[f] || 0} au lieu de ${STILL_LISTENING[f]}`).join(', '));
 }
 
 summarizeAndExit();

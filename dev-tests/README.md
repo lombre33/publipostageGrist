@@ -210,6 +210,21 @@ fichier absent de la branche est annoncé et sauté. **Un navigateur neuf par gr
 des fuites d'état entre suites, un processus par groupe rend chaque verdict
 indépendant de l'ordre de lancement.
 
+**Une page en français, et au besoin une seconde en anglais** (14/10 : la page ne
+se retraduit plus en route, elle écrit ses textes une fois, dans sa langue de
+départ). Le faux Grist (`grist-stub.js`) fait dire `fr-FR` au navigateur de test,
+sauf si `window.__browserLanguages` est posé avant le chargement. Un scénario qui
+doit lire des textes ÉCRITS À LA CONSTRUCTION en anglais (une barre, un bandeau,
+une liste bâtis au démarrage) porte `lang: 'en'` : `runner.js` le saute dans la page
+française et le compte (`results.deferred.en`), puis `run-headless.mjs` rouvre le
+même groupe dans une seconde page qui démarre en anglais (`addInitScript` pose
+`['en-US', 'en']`) et y joue ces seuls cas ; le verdict additionne les deux pages.
+Pour un écran qui se bâtit quand on l'ouvre (une fenêtre, un panneau de Réglages),
+`I18n.setLang('en')` puis la réouverture de l'écran suffisent, sans seconde page.
+N'écris plus de scénario qui attend d'un écran qu'il se retraduise après
+`I18n.setLang` : la page ne le fait plus (le nettoyage du 14/10 retire ce code lot par lot ;
+un écran qui s'y inscrit encore est dans la liste de la section 24 de `codeHygiene`).
+
 Il attend **« Widget prêt. »** dans `#status-msg` avant de charger le moindre
 scénario, et pas seulement l'existence de l'éditeur : `.tiptap` existe déjà en
 0×0 pendant que `main.js:init()` tourne encore, et `execCommand('insertText')`
@@ -342,7 +357,7 @@ Deux options utiles :
   un seul panneau affiché à la fois (un `display` posé sur `.settings-panel` battrait `[hidden]`), défilement porté par la zone de contenu (`.settings-body`, qui
   contient le panneau affiché) et non par la fenêtre ni par les onglets. Le script Node mesure « ce qui fait défiler l'onglet » (le premier ancêtre du panneau à
   défilement vertical), donc reste valable quelle que soit la structure de la fenêtre. Passer à l'anglais par Réglages recharge la page (14/10) : le script démarre en français (`pp_lang` semée au premier chargement, le navigateur de test étant en anglais), attend le rechargement et rouvre la fenêtre ; le parcours du changement de langue lui-même est dans `languageReloadMouse`.
-- `languageReloadMouse` (`dev-tests/verify-language-reload-mouse.mjs`, 20 vérifications) change la langue par les cases de Réglages à la vraie souris, à 700×400 (demande du 14/10 : « quand on change de langue, on recharge la page et uniquement ça, pour ne pas alourdir »). Rien n'attend d'être enregistré : « English » recharge la page (le repère posé dans la page avant le clic a disparu), qui part avec sa langue d'avant (relevée à l'événement `navigate`, avant qu'elle ne soit déchargée : rien n'est retraduit sur place) et repart en anglais (`<html lang>`, langue gardée, info-bulle du bouton Sommaire, fenêtre refermée, case « English » cochée à la réouverture) ; « Français » fait le chemin inverse. Une modification attend d'être enregistrée (enregistrement automatique coupé, un texte tapé au vrai clavier) : la question « Modifications non enregistrées » s'ouvre devant Réglages, dans le panneau, avec « Annuler », « Abandonner » et « Enregistrer », et la page n'a pas bougé ; « Annuler » laisse la page, sa langue, la case « Français » de nouveau cochée et le texte tapé ; « Enregistrer » écrit le modèle dans le faux Grist avant que la page parte ; « Abandonner » la laisse partir sans l'écrire. Stockage refusé (`Storage.prototype.setItem` lève pour `pp_lang`) : la page ne recharge pas, la langue change sur place. Sur l'ancien code (Réglages retraduisait sur place), 13 des 20 vérifications échouent : aucun rechargement, aucune question. Le script démarre en français (`pp_lang` semée au premier chargement : le navigateur de test est en anglais, et un script d'initialisation rejoue à chaque rechargement). Le cas `settings_choices_apply_at_once` (groupe `pageLayout`) en garde la mécanique en page (le rechargement est retenu par l'API Navigation) et la section 23 de `codeHygiene` le câblage.
+- `languageReloadMouse` (`dev-tests/verify-language-reload-mouse.mjs`, 20 vérifications) change la langue par les cases de Réglages à la vraie souris, à 700×400 (demande du 14/10 : « quand on change de langue, on recharge la page et uniquement ça, pour ne pas alourdir »). Rien n'attend d'être enregistré : « English » recharge la page (le repère posé dans la page avant le clic a disparu), qui part avec sa langue d'avant (relevée à l'événement `navigate`, avant qu'elle ne soit déchargée : rien n'est retraduit sur place) et repart en anglais (`<html lang>`, langue gardée, info-bulle du bouton Sommaire, fenêtre refermée, case « English » cochée à la réouverture) ; « Français » fait le chemin inverse. Une modification attend d'être enregistrée (enregistrement automatique coupé, un texte tapé au vrai clavier) : la question « Modifications non enregistrées » s'ouvre devant Réglages, dans le panneau, avec « Annuler », « Abandonner » et « Enregistrer », et la page n'a pas bougé ; « Annuler » laisse la page, sa langue, la case « Français » de nouveau cochée et le texte tapé ; « Enregistrer » écrit le modèle dans le faux Grist avant que la page parte ; « Abandonner » la laisse partir sans l'écrire. Stockage refusé (`Storage.prototype.setItem` lève pour `pp_lang`) : la page ne recharge pas, la langue change sur place. Sur l'ancien code (Réglages retraduisait sur place), 13 des 20 vérifications échouent : aucun rechargement, aucune question. Le script démarre en français (`pp_lang` semée au premier chargement : le navigateur de test est en anglais, et un script d'initialisation rejoue à chaque rechargement). Le cas `settings_choices_apply_at_once` (groupe `pageLayout`) en garde la mécanique en page (le rechargement est retenu par l'API Navigation) et la section 23 de `codeHygiene` le câblage. La section 24 (« Oui, retirer » du 14/10) refuse qu'un fichier de `js/` s'inscrive à `I18n.onChange` sans figurer dans une liste qui ne fait que rétrécir (`STILL_LISTENING`) : un écran écrit ses libellés quand il se bâtit ou s'ouvre, la page ne change plus de langue en route ; contre l'arbre d'avant le premier lot, le contrôle « aucun fichier hors de la liste » échoue (7 fichiers).
 - `activeTabMouse` (`dev-tests/verify-active-tab-mouse.mjs`) survole à la vraie souris, à 700×400, en français clair puis en anglais sombre, l'onglet CHOISI des Réglages (celui du départ, puis
   « Marges » choisi au vrai clic) et celui de la liste « # » (Variables, puis Puces choisi au vrai clic) : il doit rester sous la souris, peint de son gris de survol, bleu, souligné
   (le liseré de l'onglet choisi) et lisible (>= 4,5:1 sur le fond de SON survol, pas sur celui de la fenêtre). Avant le correctif du 12/10 (carte « Rendre plus lisible l'onglet choisi quand la
@@ -2284,7 +2299,8 @@ balises `<script>`/`<link>` de `index.html`.
   la remplace, `withRealChoose(fn)` rend la vraie fenêtre le temps de `fn` (le scénario clique alors ses boutons), `choosePrompts` garde les demandes reçues par la réponse par défaut.
 - `runner.js` (`window.TestRunner`) — exécute une liste de scénarios,
   capture toute exception (jamais silencieusement avalée), produit un
-  rapport texte.
+  rapport texte. Un scénario `lang: 'en'` ne tourne que dans une page qui démarre en
+  anglais (`results.deferred` compte ceux qu'une page de l'autre langue a sautés).
 - `scenarios-*.js` — un fichier par domaine fonctionnel, chacun enregistre
   ses cas dans `window.EditorTestSuites.<nom>`.
 - `BUGS.md` — liste des anomalies RÉELLES trouvées en construisant/passant

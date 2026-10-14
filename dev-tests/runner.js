@@ -8,8 +8,15 @@
 // silencieusement avalée).
 window.TestRunner = (function () {
   async function runGroup(groupName, cases) {
+    // Une page ne change plus de langue en route (Réglages recharge la page) : un scénario qui veut l'anglais porte `lang: 'en'` et tourne dans une page qui démarre
+    // en anglais. Les autres sont français. Ceux de l'autre langue sont mis de côté et comptés dans `results.deferred` : dev-tests/run-headless.mjs lance la seconde page
+    // quand la française en a mis de côté.
+    const pageLang = typeof I18n !== 'undefined' && I18n.getLang ? I18n.getLang() : 'fr';
     const results = [];
+    results.deferred = { fr: 0, en: 0 };
     for (const c of cases) {
+      const caseLang = c.lang === 'en' ? 'en' : 'fr';
+      if (caseLang !== pageLang) { results.deferred[caseLang]++; continue; }
       let result;
       const startedAt = performance.now();
       try {

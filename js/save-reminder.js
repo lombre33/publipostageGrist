@@ -122,7 +122,6 @@ const SaveReminder = (function () {
     if (tabs && typeof MutationObserver === 'function') {
       new MutationObserver(render).observe(tabs, { attributes: true, attributeFilter: ['class'], subtree: true });
     }
-    I18n.onChange(render);
     render();
   }
 

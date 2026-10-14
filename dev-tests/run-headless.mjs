@@ -431,7 +431,7 @@ const absoluteChunks = code => code.replace(/(from\s*|import\s*)"\.\/(chunk-[A-Z
 
 const DEV_FILES = ['helpers', 'runner'];
 
-async function runGroup(name, probeExpr) {
+async function runGroup(name, probeExpr, lang) {
   const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hinting=none'] });
   const context = await browser.newContext({ bypassCSP: true, viewport: { width: viewportWidth, height: viewportHeight } });
   const page = await context.newPage();
@@ -474,6 +474,9 @@ async function runGroup(name, probeExpr) {
     await page.route('**://fonts.gstatic.com/**', route => route.fulfill({ status: 200, body: '' }));
   }
 
+  // Une page qui démarre en anglais (les cas `lang: 'en'` d'un groupe) : le navigateur de test se dit anglais avant le chargement, comme le fait un test de la langue par défaut
+  // (dev-tests/grist-stub.js lit window.__browserLanguages). Réglages recharge la page pour changer de langue : aucun scénario ne passe en anglais en cours de route.
+  if (lang === 'en') await page.addInitScript(() => { window.__browserLanguages = ['en-US', 'en']; });
   if (preseedCode) await page.addInitScript({ content: preseedCode });
   await page.goto(`${BASE}/_test-harness.html`, { waitUntil: 'load' });
   // L'éditeur se construit par import() dynamiques (js/editor.js) - attendre le vrai signe de vie,
@@ -520,13 +523,13 @@ async function runGroup(name, probeExpr) {
     const suite = window.EditorTestSuites[groupName];
     if (!suite) return { missing: true };
     const results = await window.TestRunner.runGroup(groupName, suite);
-    return { report: window.TestRunner.report(results), results: results.map(r => ({ name: r.id || r.name, pass: r.pass, notes: r.notes })) };
+    return { report: window.TestRunner.report(results), results: results.map(r => ({ name: r.id || r.name, pass: r.pass, notes: r.notes })), deferred: results.deferred };
   }, name);
 
   await browser.close();
   if (result.missing) return { name, pass: 0, fail: 0, missing: true, consoleErrors };
   const fail = result.results.filter(r => !r.pass);
-  return { name, pass: result.results.length - fail.length, fail: fail.length, failures: fail, report: result.report, consoleErrors };
+  return { name, pass: result.results.length - fail.length, fail: fail.length, failures: fail, report: result.report, deferredEn: (result.deferred && result.deferred.en) || 0, consoleErrors };
 }
 
 if (probe) {
@@ -559,6 +562,15 @@ for (const g of runnable) {
     console.log(r.report);
     if (r.fail) { failing.push(g); r.failures.forEach(f => console.log(`  ECHEC ${f.name}: ${f.notes || ''}`)); }
     if (r.consoleErrors.length) console.log(`  (${r.consoleErrors.length} erreur(s) console)\n    ` + r.consoleErrors.slice(0, 5).join('\n    '));
+    // Les cas `lang: 'en'` du groupe : une seconde page, qui démarre en anglais (la première les a mis de côté).
+    if (r.deferredEn) {
+      process.stdout.write(`\n=== ${g} (page qui démarre en anglais : ${r.deferredEn} cas) ===\n`);
+      const e = await runGroup(g, null, 'en');
+      totalPass += e.pass; totalFail += e.fail;
+      console.log(e.report);
+      if (e.fail) { if (!failing.includes(g)) failing.push(g); e.failures.forEach(f => console.log(`  ECHEC ${f.name}: ${f.notes || ''}`)); }
+      if (e.consoleErrors.length) console.log(`  (${e.consoleErrors.length} erreur(s) console)\n    ` + e.consoleErrors.slice(0, 5).join('\n    '));
+    }
   } catch (e) {
     totalFail++; failing.push(g);
     console.log(`  EXCEPTION sur le groupe ${g} : ${e.message}`);

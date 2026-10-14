@@ -516,12 +516,14 @@
         empty: document.getElementById('settings-expansion-empty').textContent,
         note: document.getElementById('settings-expansion-empty').nextElementSibling.textContent,
       });
+      // La page ne change plus de langue en route : l'explication se compose à l'ouverture de l'onglet, on l'ouvre donc de nouveau après chaque changement.
+      const openTab = async () => { document.querySelector('.settings-tab[data-settings-tab="shortcuts"]').click(); await sleep(80); };
       const fr = snapshot();
       I18n.setLang('en');
-      await sleep(80);
+      await openTab();
       const en = snapshot();
       I18n.setLang('fr');
-      await sleep(80);
+      await openTab();
       const back = snapshot();
       const same = Object.keys(fr).filter(k => fr[k] === en[k]);
       return {
@@ -532,7 +534,7 @@
     },
   });
 
-  // L'onglet piloté comme le fait la personne, par ses boutons : relecture à l'ouverture, Modifier, Supprimer, échecs d'écriture, changement de langue.
+  // L'onglet piloté comme le fait la personne, par ses boutons : relecture à l'ouverture, Modifier, Supprimer, échecs d'écriture.
   // La frappe et la souris réelles de ce même onglet sont dans dev-tests/verify-text-expansion-keyboard.mjs.
   const ALICE = 'alice@example.fr';
   const byId = id => document.getElementById(id);
@@ -797,46 +799,6 @@
         warned: ['[text-expansion] enregistrement impossible', '[text-expansion] enregistrement impossible', '[text-expansion] enregistrement impossible'],
       };
       return { pass: failed === 'L’enregistrement dans le document a échoué.' && duplicate !== failed && JSON.stringify(results) === JSON.stringify(wanted), notes: JSON.stringify(results) };
-    },
-  });
-
-  cases.push({
-    id: 'te_settings_pane_follows_a_language_change_even_while_a_line_is_being_edited',
-    description: 'Un changement de langue en pleine modification refait le texte d\'explication, les boutons des lignes et le bouton d\'envoi, et ramène le formulaire à un ajout vide',
-    run: async () => {
-      wipe();
-      stub().setUserEmail(ALICE);
-      await seed([[ALICE, 'ub', 'université de Bordeaux']]);
-      const results = {};
-      try {
-        await openExpansionPane();
-        rowButton('§ub', 0).click();
-        await sleep(30);
-        results.editingFr = paneForm();
-        I18n.setLang('en');
-        await sleep(120);
-        results.en = {
-          form: paneForm(),
-          intro: byId('settings-expansion-intro').textContent,
-          buttons: Array.from(document.querySelectorAll('#settings-expansion-list .settings-expansion-row button')).map(b => b.textContent + '|' + b.getAttribute('aria-label')),
-        };
-      } finally {
-        I18n.setLang('fr');
-        await sleep(120);
-        closeSettings();
-      }
-      results.back = { form: paneForm(), intro: byId('settings-expansion-intro').textContent };
-      const adding = (submit) => ({ abbr: '', text: '', submit, cancelShown: false, status: '' });
-      const pass = JSON.stringify(results) === JSON.stringify({
-        editingFr: { abbr: 'ub', text: 'université de Bordeaux', submit: 'Enregistrer', cancelShown: true, status: '' },
-        en: {
-          form: adding('Add'),
-          intro: 'Type the trigger character and an abbreviation, for example “§ub”, then a space: it is replaced by its text.',
-          buttons: ['Edit|Edit abbreviation §ub', 'Delete|Delete abbreviation §ub'],
-        },
-        back: { form: adding('Ajouter'), intro: 'Tapez le caractère déclencheur puis une abréviation, par exemple « §ub », et un espace : elle est remplacée par son texte.' },
-      });
-      return { pass, notes: JSON.stringify(results) };
     },
   });
 

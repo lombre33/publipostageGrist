@@ -31,11 +31,12 @@
   const inEditor = () => document.querySelector('.tiptap');
 
   // Remet tout à zéro : touches d'origine, plateforme, langue, thème, fenêtre Réglages fermée sur l'onglet Langue, éditeur vide.
-  async function reset(h) {
+  // `lang` : la langue de la page du cas (français sauf un cas `lang: 'en'`, dont la page démarre en anglais).
+  async function reset(h, lang) {
     Shortcuts.setPlatform(null);
     Shortcuts.resetAll();
     try { localStorage.removeItem('pp_shortcuts'); localStorage.removeItem('pp_shortcuts_view'); } catch (e) { /* stockage indisponible */ }
-    if (I18n.getLang() !== 'fr') I18n.setLang('fr');
+    if (I18n.getLang() !== (lang || 'fr')) I18n.setLang(lang || 'fr');
     html.removeAttribute('data-theme');
     const modal = document.getElementById('settings-modal');
     if (modal && modal.style.display !== 'none') {
@@ -920,31 +921,52 @@
     },
   });
 
+  // Les textes du panneau (onglet, commutateur, liste, groupes, noms d'action, infobulles). La liste est bâtie une fois, au démarrage : la page ne change plus de langue en route
+  // (Réglages la recharge), l'anglais se lit donc dans une page qui démarre en anglais (cas `lang: 'en'`).
+  const panelSnapshot = () => {
+    const row = id => document.querySelector('.settings-key-row[data-action="' + id + '"]');
+    return {
+      tab: document.querySelector('.settings-tab[data-settings-tab="shortcuts"]').textContent,
+      switchKeys: document.getElementById('settings-switch-keys').textContent, switchExpansion: document.getElementById('settings-switch-expansion').textContent,
+      switchAria: document.querySelector('.settings-switch').getAttribute('aria-label'),
+      title: document.getElementById('settings-keys-title').textContent, intro: document.querySelector('#settings-keys-section .settings-panel-intro').textContent,
+      resetAll: document.getElementById('settings-keys-reset-all').textContent, reset: row('bold').querySelector('.settings-key-reset').textContent,
+      group: document.querySelector('.settings-keys-group').textContent, groups: document.querySelectorAll('.settings-keys-group').length,
+      name: row('modeRead').querySelector('.settings-key-name').textContent, key: row('heading1').querySelector('.settings-key-btn').textContent,
+      keyAria: row('modeRead').querySelector('.settings-key-btn').getAttribute('aria-label'), noneAria: row('table').querySelector('.settings-key-btn').getAttribute('aria-label'),
+      resetAria: row('bold').querySelector('.settings-key-reset').getAttribute('aria-label'),
+    };
+  };
+
   cases.push({
-    id: 'sc_panel_texts_follow_the_language_and_the_platform',
-    description: 'L\'onglet, le commutateur, la liste, les groupes, les noms d\'action, les refus et les infobulles sont traduits en anglais (« Shift », « Esc ») et la liste suit la plateforme (⌥L, ⌘B sur Mac) sans recharger',
+    id: 'sc_panel_texts_are_french_and_follow_the_platform',
+    description: 'L\'onglet, le commutateur, la liste, les groupes, les noms d\'action et les infobulles sont en français (« Alt+Maj+1 ») et la liste suit la plateforme (⌥L, ⌘B sur Mac) sans recharger',
     run: async (h) => {
       await reset(h);
-      const snapshot = () => {
-        const row = id => document.querySelector('.settings-key-row[data-action="' + id + '"]');
-        return {
-          tab: document.querySelector('.settings-tab[data-settings-tab="shortcuts"]').textContent,
-          switchKeys: document.getElementById('settings-switch-keys').textContent, switchExpansion: document.getElementById('settings-switch-expansion').textContent,
-          switchAria: document.querySelector('.settings-switch').getAttribute('aria-label'),
-          title: document.getElementById('settings-keys-title').textContent, intro: document.querySelector('#settings-keys-section .settings-panel-intro').textContent,
-          resetAll: document.getElementById('settings-keys-reset-all').textContent, reset: row('bold').querySelector('.settings-key-reset').textContent,
-          group: document.querySelector('.settings-keys-group').textContent, groups: document.querySelectorAll('.settings-keys-group').length,
-          name: row('modeRead').querySelector('.settings-key-name').textContent, key: row('heading1').querySelector('.settings-key-btn').textContent,
-          keyAria: row('modeRead').querySelector('.settings-key-btn').getAttribute('aria-label'), noneAria: row('table').querySelector('.settings-key-btn').getAttribute('aria-label'),
-          resetAria: row('bold').querySelector('.settings-key-reset').getAttribute('aria-label'),
-        };
-      };
       openKeysPanel();
       await sleep(200);
-      const fr = snapshot();
-      I18n.setLang('en');
-      await sleep(150);
-      const en = snapshot();
+      const fr = panelSnapshot();
+      Shortcuts.setPlatform('mac');
+      const mac = { modeRead: document.querySelector('.settings-key-row[data-action="modeRead"] .settings-key-btn').textContent, bold: document.querySelector('.settings-key-row[data-action="bold"] .settings-key-btn').textContent, heading: document.querySelector('.settings-key-row[data-action="heading1"] .settings-key-btn').textContent };
+      Shortcuts.setPlatform(null);
+      const pass = fr.tab === 'Raccourcis' && fr.switchKeys === 'Touches' && fr.switchExpansion === 'Abréviations' && fr.switchAria === 'Sections des raccourcis' && fr.title === 'Touches du clavier'
+        && fr.resetAll === 'Tout remettre par défaut' && fr.reset === 'Par défaut' && fr.group === 'Modèles' && fr.groups === 5 && fr.name === 'Mode lecture' && fr.key === 'Alt+Maj+1'
+        && fr.keyAria === 'Mode lecture : touche Alt+L. Appuyer pour la changer' && fr.noneAria === 'Insérer un tableau : aucune touche. Appuyer pour en choisir une' && fr.resetAria === 'Remettre la touche d’origine de « Gras »'
+        && mac.modeRead === '⌥L' && mac.bold === '⌘B' && mac.heading === '⌥⇧1';
+      await reset(h);
+      return { pass, notes: JSON.stringify({ fr, mac }) };
+    },
+  });
+
+  cases.push({
+    id: 'sc_panel_texts_are_english_on_a_page_that_starts_in_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : l\'onglet, le commutateur, la liste, les groupes, les noms d\'action, les refus et les infobulles sont en anglais (« Shift », « Esc »)',
+    run: async (h) => {
+      await reset(h, 'en');
+      openKeysPanel();
+      await sleep(200);
+      const en = panelSnapshot();
       // Refus en anglais.
       document.querySelector('.settings-key-row[data-action="bold"] .settings-key-btn').click();
       press('Alt+l', document.activeElement);
@@ -952,19 +974,13 @@
       press('a', document.activeElement);
       const enAlone = document.querySelector('.settings-key-row[data-action="bold"] .settings-key-error').textContent;
       ShortcutsPanel.stopRecording();
-      Shortcuts.setPlatform('mac');
-      const mac = { modeRead: document.querySelector('.settings-key-row[data-action="modeRead"] .settings-key-btn').textContent, bold: document.querySelector('.settings-key-row[data-action="bold"] .settings-key-btn').textContent, heading: document.querySelector('.settings-key-row[data-action="heading1"] .settings-key-btn').textContent };
-      Shortcuts.setPlatform(null);
-      const pass = fr.tab === 'Raccourcis' && fr.switchKeys === 'Touches' && fr.switchExpansion === 'Abréviations' && fr.switchAria === 'Sections des raccourcis' && fr.title === 'Touches du clavier'
-        && fr.resetAll === 'Tout remettre par défaut' && fr.reset === 'Par défaut' && fr.group === 'Modèles' && fr.groups === 5 && fr.name === 'Mode lecture' && fr.key === 'Alt+Maj+1'
-        && fr.keyAria === 'Mode lecture : touche Alt+L. Appuyer pour la changer' && fr.noneAria === 'Insérer un tableau : aucune touche. Appuyer pour en choisir une' && fr.resetAria === 'Remettre la touche d’origine de « Gras »'
+      const pass = I18n.getLang() === 'en'
         && en.tab === 'Shortcuts' && en.switchKeys === 'Keys' && en.switchExpansion === 'Abbreviations' && en.switchAria === 'Shortcut sections' && en.title === 'Keyboard keys'
-        && en.resetAll === 'Reset all to default' && en.reset === 'Default' && en.group === 'Templates' && en.name === 'Read mode' && en.key === 'Alt+Shift+1'
+        && en.resetAll === 'Reset all to default' && en.reset === 'Default' && en.group === 'Templates' && en.groups === 5 && en.name === 'Read mode' && en.key === 'Alt+Shift+1'
         && en.keyAria === 'Read mode: key Alt+L. Press to change it' && en.resetAria === 'Restore the default key for “Bold”'
-        && enError === 'Alt+L is already the key for “Read mode”.' && enAlone === 'Add Ctrl (⌘ on Mac) or Alt: a key on its own would be typed into the text.'
-        && mac.modeRead === '⌥L' && mac.bold === '⌘B' && mac.heading === '⌥⇧1';
-      await reset(h);
-      return { pass, notes: JSON.stringify({ fr, en, enError, enAlone, mac }) };
+        && enError === 'Alt+L is already the key for “Read mode”.' && enAlone === 'Add Ctrl (⌘ on Mac) or Alt: a key on its own would be typed into the text.';
+      await reset(h, 'en');
+      return { pass, notes: JSON.stringify({ en, enError, enAlone }) };
     },
   });
 

@@ -21,7 +21,7 @@
 //     (aucune colonne choisie, compte Lecteur, aucune ligne). reason : 'missing' (la colonne n'existe plus), 'unusable' (ni Date, ni Date et heure, ni Texte, ou
 //     devenue une colonne à formule), 'failed' (Grist a refusé l'écriture).
 //   ExportDate.valueFor(kind, now) -> la valeur que reçoit une colonne de ce genre ('date', 'datetime' ou 'text'), `now` étant une Date
-//   ExportDate.wirePanel() -> branche la section de Réglages (redessinée à l'ouverture, puis tant que la fenêtre est ouverte à chaque changement de langue, de droits ou
+//   ExportDate.wirePanel() -> branche la section de Réglages (redessinée à l'ouverture, puis tant que la fenêtre est ouverte à chaque changement de droits ou
 //     d'option ; grisée en lecture seule)
 //   ExportDate.render() -> redessine la section tout de suite, fenêtre ouverte ou non
 const ExportDate = (function () {
@@ -192,7 +192,6 @@ const ExportDate = (function () {
       renderPanel(true);
       GristAPI.refreshSchema().then(() => renderPanel(true)).catch(() => {});
     });
-    I18n.onChange(() => renderPanel());
     // Les droits changent aussi Réglages ouverts (onglet Accès, case cochée dans la table des droits, relecture de 10 s) : la liste se grise ou se dégrise sans rouvrir.
     if (typeof AccessRights !== 'undefined') AccessRights.onChange(() => renderPanel());
     renderPanel(true);

@@ -16,7 +16,8 @@
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   const verdict = checks => { const failed = Object.keys(checks).filter(k => !checks[k]); return { pass: failed.length === 0, failed }; };
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-  const inLang = async (lang, fn) => { const before = I18n.getLang(); I18n.setLang(lang); try { return await fn(); } finally { I18n.setLang(before); } };
+  // La page ne change plus de langue en route (Réglages la recharge) : la section est redessinée après chaque changement, comme elle l'est à l'ouverture de la page.
+  const inLang = async (lang, fn) => { const before = I18n.getLang(); I18n.setLang(lang); ExportDate.render(); try { return await fn(); } finally { I18n.setLang(before); ExportDate.render(); } };
 
   // Les colonnes de la table : l'ordre est celui de la liste. `Calcul` est une vraie colonne à formule, `Vide` une colonne ajoutée dans Grist et pas encore remplie.
   const COLUMNS = { Nom: 'Text', Dernier: 'DateTime:Europe/Paris', Jour: 'Date', Quand: 'Text', Montant: 'Numeric', Calcul: 'DateTime:Europe/Paris', Vide: 'Date' };

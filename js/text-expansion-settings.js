@@ -172,7 +172,6 @@
     const openButton = document.getElementById('v2-btn-settings');
     // L'onglet reste celui qu'on avait laissé à la fermeture : rouvrir Réglages dessus doit aussi relire.
     if (openButton) openButton.addEventListener('click', () => { if (!ui.panel.hidden) refresh(ui); });
-    I18n.onChange(() => { renderIntro(ui); renderList(ui); resetForm(ui); setFormStatus(ui, ''); });
     resetForm(ui);
     syncChar(ui);
   }

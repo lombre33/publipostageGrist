@@ -111,7 +111,6 @@ const ViewTemplate = (function () {
     // Relu à chaque ouverture des Réglages : le modèle ouvert, la liste des modèles et les droits ont pu changer depuis.
     const openBtn = el('v2-btn-settings');
     if (openBtn) openBtn.addEventListener('click', renderPanel);
-    I18n.onChange(renderPanel);
     // Les droits changent aussi Réglages ouverts (onglet Accès, case cochée dans la table des droits, relecture de 10 s) : les boutons se grisent ou
     // se dégrisent sans rouvrir. Rien à préserver ici : l'écran n'a aucune saisie.
     if (typeof AccessRights !== 'undefined') AccessRights.onChange(renderPanel);
