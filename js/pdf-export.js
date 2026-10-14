@@ -593,7 +593,7 @@ const PdfExport = (function () {
     });
   }
   // Découpe les enfants directs d'une cellule en "lignes" pdfmake : <p>/<div>/<h1-6> direct = sa propre ligne, comme un trait (<hr>) ; <ul>/<ol>
-  // direct = une ligne par <li> (listLinesOf) ; une citation qui porte un trait = sa propre ligne ; tout le reste s'accumule dans un groupe "inline".
+  // direct = une ligne par <li> (listLinesOf) ; une citation = sa propre ligne ; tout le reste s'accumule dans un groupe "inline".
   function collectCellLines(container, lines) {
     let pending = [];
     function flushPending() { if (pending.length) { lines.push({ inline: pending }); pending = []; } }
@@ -601,8 +601,8 @@ const PdfExport = (function () {
       if (node.nodeType === Node.TEXT_NODE) { if (node.nodeValue) pending.push(node); return; }
       if (node.nodeType !== Node.ELEMENT_NODE) return;
       if (/^(P|DIV|H[1-6]|PRE|HR)$/.test(node.tagName)) { flushPending(); lines.push(node); return; }
-      // Une citation que traverse un trait est une ligne à elle : cellRuleSplitObjects la coupe au trait (sans trait, elle reste du texte en ligne).
-      if (node.tagName === 'BLOCKQUOTE' && hasRuleChild(node)) { flushPending(); lines.push(node); return; }
+      // Une citation est une ligne à elle (retrait, italique, 4 pt de dessus et de dessous, comme dans le flux) ; un trait qui la traverse la coupe : cellRuleSplitObjects.
+      if (node.tagName === 'BLOCKQUOTE') { flushPending(); lines.push(node); return; }
       if (/^(UL|OL)$/.test(node.tagName)) { flushPending(); listLinesOf(node, lines); return; }
       pending.push(node);
     });
@@ -743,17 +743,23 @@ const PdfExport = (function () {
     return cellWidthPt - wrapPt;
   }
 
-  // Un élément de liste ou un paragraphe de la case, en un bloc de texte (une case à cocher et ses colonnes pour un élément de liste de tâches).
-  function cellTextObject(node, runs, cellAlign, cellWidthPt, continued) {
+  // Un élément de liste, une citation ou un paragraphe de la case, en un bloc de texte (une case à cocher et ses colonnes pour un élément de liste de tâches).
+  // Une citation s'écrit comme dans le flux (textBlockFrom) : en italique, retrait mesuré sur son texte, 4 pt de dessus et de dessous ; `rulePart` : le morceau
+  // d'une citation que coupe un trait, dont cellRuleSplitObjects pose seule les marges des deux bouts.
+  function cellTextObject(node, runs, cellAlign, cellWidthPt, continued, rulePart) {
     const isLi = node.tagName === 'LI';
+    const isQuote = node.tagName === 'BLOCKQUOTE';
     const align = alignment(node) || cellAlign;
     if (isLi && isTaskListItem(node)) {
       return { columns: taskListColumns(node, taskListRuns(node, runs), align), margin: [measureIndentPt(node, 'box'), 0, 0, 0] };
     }
     const marker = isLi && !continued ? listMarkerFor(node) : '';
     const text = marker ? [{ text: marker, fontSize: DEFAULT_FONT_SIZE }].concat(runs.length ? runs : [{ text: ' ' }]) : (runs.length ? runs : ' ');
-    const wrapMarginPt = !runs.length ? 0 : (isLi || hasRuleChild(node) ? spaceWidthPt() : cellWrapMarginPt(node, cellWidthPt));
-    const obj = { text, margin: [isLi ? measureIndentPt(node, 'box') : 0, 0, wrapMarginPt, 0] };
+    const indentPt = isLi ? measureIndentPt(node, 'box') : (isQuote ? measureIndentPt(node, 'text') : 0);
+    const wrapMarginPt = !runs.length ? 0 : (isLi || hasRuleChild(node) ? spaceWidthPt() : cellWrapMarginPt(node, cellWidthPt - indentPt));
+    const quoteGapPt = isQuote && !rulePart ? 4 : 0;
+    const obj = { text, margin: [indentPt, quoteGapPt, wrapMarginPt, quoteGapPt] };
+    if (isQuote) obj.italics = true;
     if (align) obj.alignment = align;
     if (!runs.length && node.tagName === 'P' && node.hasAttribute('data-caption')) obj.fontSize = Caption.SIZE_PT;
     return obj;
@@ -784,20 +790,20 @@ const PdfExport = (function () {
     return obj;
   }
   // Un <li> ou une citation de case que traverse un trait (<hr>, enfant direct) : le texte d'avant avec la puce, le trait, le texte d'après sans puce, comme
-  // ruleSplitBlocks dans le flux. Les sous-listes sont des lignes de la case à part (collectCellLines), pas du texte du <li>. Une citation de case est du
-  // texte de la case, sans retrait ni puce (comme sans trait) : le trait va d'un bord de la case à l'autre, et la citation garde ses 4 pt de dessus et de
-  // dessous aux deux bouts seulement.
+  // ruleSplitBlocks dans le flux. Les sous-listes sont des lignes de la case à part (collectCellLines), pas du texte du <li>. Une citation de case est en
+  // italique, avec le retrait de son texte (sans puce) : le trait part de ce retrait et va jusqu'au bord de la case, et la citation garde ses 4 pt de dessus
+  // et de dessous aux deux bouts seulement.
   function cellRuleSplitObjects(node, cellAlign, cellBaseStyle, images, cellWidthPt) {
     const style = inheritedStyle(node, cellBaseStyle);
     const isQuote = node.tagName === 'BLOCKQUOTE';
-    const indentPt = isQuote ? 0 : measureIndentPt(node, 'box');
+    const indentPt = measureIndentPt(node, isQuote ? 'text' : 'box');
     const isList = child => child.nodeType === Node.ELEMENT_NODE && /^(UL|OL)$/.test(child.tagName);
     const objects = [];
     ruleSegmentsOf(node).forEach((children, i) => {
       if (i > 0) objects.push(ruleBlock(false, cellWidthPt - indentPt, indentPt));
       if (i > 0 && !segmentHasContent(children)) return;
       const runs = trimEdgeWhitespace(stripImageMarkers(runsOfNodes(children, style, images, isList)));
-      objects.push(cellTextObject(node, runs, cellAlign, cellWidthPt, i > 0));
+      objects.push(cellTextObject(node, runs, cellAlign, cellWidthPt, i > 0, true));
     });
     if (isQuote && objects.length) { addTopMargin(objects[0], 4); addBottomMargin(objects[objects.length - 1], 4); }
     return objects;

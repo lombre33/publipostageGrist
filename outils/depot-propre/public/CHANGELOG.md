@@ -547,6 +547,11 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Une citation dans une case de tableau s'écrit dans le PDF comme une citation du texte** : dans le PDF, une citation
+  posée dans une case sortait à plat, comme le texte de la case : sans italique, sans son retrait et sans
+  l'espace de 4 points qu'elle a au-dessus et en dessous hors tableau. Elle est maintenant en italique, au même
+  retrait et avec les mêmes espaces que hors tableau, dans toutes les colonnes, et ses lignes se coupent aux mêmes
+  mots que dans l'éditeur ; le trait d'une citation de case part de ce retrait.
 - **Un modèle quitté puis rouvert aussitôt montre ce qui vient d'y être écrit** : après une modification (un mot, le
   sens de la page, l'en-tête), l'enregistrement automatique l'écrivait bien dans Grist, mais le modèle qu'on quittait
   puis rouvrait dans les secondes qui suivaient s'affichait avec son état d'avant, comme si la modification était
@@ -1311,6 +1316,11 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Fixed
 
+- **A quote in a table cell is written in the PDF like a quote in the text**: in the PDF, a quote placed in a cell came
+  out flat, like the cell's text: without italics, without its indent and without the 4-point space it has
+  above and below outside a table. It is now in italics, with the same indent and the same spaces as outside a table,
+  in every column, and its lines break at the same words as in the editor; the rule of a quote in a cell starts at that
+  indent.
 - **A template left and reopened right away shows what was just written to it**: after a change (a word, the page
   orientation, the header), automatic saving did write it to Grist, but a template you left and reopened within the
   next few seconds appeared with its earlier state, as if the change were lost; the next change, saved from that

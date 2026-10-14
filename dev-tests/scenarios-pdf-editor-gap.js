@@ -22,6 +22,8 @@
 // 5. Une liste dans une case de tableau (14/10, « polish » avant la 1.0 voulu par Antoine). Son retrait était mesuré depuis l'hôte de mesure, pas depuis la case : dans la deuxième colonne la liste partait à 591 pt avec une lettre par ligne, dans la première
 //    elle était décalée de la bordure et du remplissage de la case, et une sous-liste de case sortait sans puce ni retrait. Un cas la pose dans les trois colonnes d'un tableau et la compare à la même liste hors tableau.
 //
+// 6. Une citation dans une case de tableau (14/10, « polish » avant la 1.0). Elle sortait à plat, sans italique, sans retrait et sans les 4 pt de dessus et de dessous du flux : un cas la pose dans les trois colonnes d'un tableau et la compare à la même citation hors tableau, puis à la coupe de lignes de l'éditeur.
+//
 // Comment la suite juge. Les capacités de page sont MESURÉES (jamais écrites en dur : elles dépendent des polices de la machine) sur le PDF, la référence de ce qui tient dans une page ; chaque moteur rend ensuite le
 // même document (éditeur en Aperçu A4, Lecture, impression navigateur, PDF relu par pdf.js) : mêmes pages, mêmes mots sur chacune.
 (function () {
@@ -713,6 +715,99 @@
               if (want.marker != null && (have.marker == null || Math.abs(have.marker - want.marker) > 1.5)) problems.push(name + ' : la puce de « ' + word + ' » est à ' + have.marker + ' pt du bord de la case, ' + want.marker + ' pt hors tableau');
             });
           }
+        }
+      } finally { restorePage(); }
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems: compact(problems), summary }) };
+    },
+  });
+
+  // --- 6. Une citation dans une case de tableau (14/10, « polish » avant la 1.0 : « citation de case mise à plat dans le PDF ») ---
+  // Une citation de case sortait du PDF comme du texte de la case : sans l'italique, sans son retrait et sans les 4 pt de dessus et de dessous qu'elle a hors tableau. Elle s'écrit maintenant comme celle du flux, depuis le bord
+  // de sa case, dans chaque colonne ; sa coupe de lignes est celle de l'éditeur (le texte tient dans la case moins le retrait).
+  const QUOTE_LONG = 'Un texte de citation assez long pour passer sur deux ou trois lignes dans une colonne de tableau étroite, et vérifier la coupe.';
+  const QUOTE_FIXTURES = [
+    ['citation', '<blockquote><p>Citation</p></blockquote><p>Suite</p>', ['Citation']],
+    ['citation de deux paragraphes', '<blockquote><p>Un</p><p>Deux</p></blockquote><p>Suite</p>', ['Un', 'Deux']],
+  ];
+  // Où le PDF pose chaque mot repère par rapport à « Titre » (pt, vers la droite et vers le bas) et la largeur de son texte (l'italique est plus étroit que le romain).
+  async function quoteOffsets(h, html, words) {
+    const view = await pdfView(h, html);
+    const items = view.truth.pages[0].textItems;
+    const title = items.find(item => item.str === 'Titre');
+    const found = { lost: [], at: {}, items, title };
+    words.concat(['Suite']).forEach(word => {
+      const at = items.find(item => item.str === word);
+      if (!at || !title) { found.lost.push(word); return; }
+      found.at[word] = { x: round1(at.x - title.x), y: round1(at.y - title.y), w: round2(at.width) };
+    });
+    return found;
+  }
+  // Le premier mot de chaque ligne de la citation, dans l'éditeur (un mot par plage, ses lignes lues à leur hauteur) et dans le PDF (les mots écrits entre « Titre » et « Suite »).
+  async function quoteLinesInEditor(h, html) {
+    Editor.setHeaderFooterData(NO_HF);
+    Editor.setHTML(html);
+    await h.sleep(250);
+    Editor.refreshPaginationPreview();
+    await h.sleep(60);
+    const quote = document.querySelector('#editor-container .tiptap blockquote');
+    const firsts = [];
+    let lastTop = null;
+    const walker = document.createTreeWalker(quote, NodeFilter.SHOW_TEXT);
+    const range = document.createRange();
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const re = /\S+/g;
+      let match;
+      while ((match = re.exec(node.textContent))) {
+        range.setStart(node, match.index);
+        range.setEnd(node, match.index + match[0].length);
+        const top = range.getBoundingClientRect().top;
+        if (lastTop === null || Math.abs(top - lastTop) > 3) firsts.push(match[0]);
+        lastTop = top;
+      }
+    }
+    return firsts;
+  }
+  function quoteLinesInPdf(found) {
+    const after = found.at.Suite;
+    const body = found.items.filter(item => item.y > found.title.y + 1 && item.y < found.title.y + after.y - 1).sort((a, b) => a.y - b.y || a.x - b.x);
+    const firsts = [];
+    let lastY = null;
+    body.forEach(item => { if (lastY === null || Math.abs(item.y - lastY) > 2) firsts.push(item.str); lastY = item.y; });
+    return firsts;
+  }
+
+  cases.push({
+    id: 'pdf_gap_quote_in_a_table_cell_keeps_its_indent_italics_and_spacing_in_every_column',
+    description: 'Une citation (d\'un paragraphe, de deux, longue) dans la première, la deuxième ou la troisième colonne d\'un tableau : le PDF l\'écrit en italique, avec son retrait et les 4 pt de dessus et de dessous, à la même distance du bord de la case que la même citation hors tableau, et coupe ses lignes aux mêmes mots que l\'éditeur',
+    run: async h => {
+      const problems = []; const summary = {};
+      try {
+        await applyPage(h);
+        for (const [label, quote, words] of QUOTE_FIXTURES) {
+          const reference = await quoteOffsets(h, '<p>Titre</p>' + quote, words);
+          summary[label] = { flux: reference.at };
+          if (reference.lost.length) { problems.push(label + ' : hors tableau, le PDF n\'écrit pas ' + JSON.stringify(reference.lost)); continue; }
+          for (const column of [0, 1, 2]) {
+            const name = label + ', colonne ' + (column + 1);
+            const got = await quoteOffsets(h, threeColumns(column, quote), words);
+            summary[label]['colonne ' + (column + 1)] = got.at;
+            if (got.lost.length) { problems.push(name + ' : le PDF n\'écrit pas ' + JSON.stringify(got.lost)); continue; }
+            words.concat(['Suite']).forEach(word => {
+              const want = reference.at[word]; const have = got.at[word];
+              if (Math.abs(have.x - want.x) > 1.5) problems.push(name + ' : « ' + word + ' » est à ' + have.x + ' pt du bord de la case, ' + want.x + ' pt hors tableau');
+              if (Math.abs(have.y - want.y) > 1) problems.push(name + ' : « ' + word + ' » est à ' + have.y + ' pt sous « Titre », ' + want.y + ' pt hors tableau (les 4 pt de la citation)');
+              if (Math.abs(have.w - want.w) > 0.15) problems.push(name + ' : « ' + word + ' » fait ' + have.w + ' pt de large, ' + want.w + ' pt hors tableau (italique attendu pour une citation)');
+            });
+          }
+        }
+        // La coupe des lignes d'une citation longue, dans chaque colonne, est celle de l'éditeur.
+        for (const column of [0, 1, 2]) {
+          const html = threeColumns(column, '<blockquote><p>' + QUOTE_LONG + '</p></blockquote><p>Suite</p>');
+          const wanted = await quoteLinesInEditor(h, html);
+          const got = await quoteOffsets(h, html, ['Un']);
+          const lines = got.lost.length ? ['(repères absents : ' + got.lost.join(', ') + ')'] : quoteLinesInPdf(got);
+          summary['coupe, colonne ' + (column + 1)] = { editeur: wanted, pdf: lines };
+          if (JSON.stringify(wanted) !== JSON.stringify(lines)) problems.push('citation longue, colonne ' + (column + 1) + ' : le PDF commence ses lignes par ' + JSON.stringify(lines) + ', l\'éditeur par ' + JSON.stringify(wanted));
         }
       } finally { restorePage(); }
       return { pass: problems.length === 0, notes: JSON.stringify({ problems: compact(problems), summary }) };
